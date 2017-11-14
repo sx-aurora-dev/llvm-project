@@ -44,9 +44,13 @@ void FindTargetCodeVisitor::addTargetRegionArgs(clang::CapturedStmt *S,
 bool  RewriteTargetRegionsVisitor::VisitStmt (clang::Stmt *S) {
     if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
         if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+            // check if this DeclRefExpr belongs to a variable we captured 
+            // and check if we have already rewritten this DeclRefExpr
             if (std::find(TargetRegion.getCapturedVarsBegin(),
-                          TargetRegion.getCapturedVarsEnd(), VD) != TargetRegion.getCapturedVarsEnd()) {
+                          TargetRegion.getCapturedVarsEnd(), VD) != TargetRegion.getCapturedVarsEnd() &&
+                RewrittenRefs.find(DRE->getLocation().getRawEncoding()) == RewrittenRefs.end()) {
                 rewriteVar(DRE);
+                RewrittenRefs.insert(DRE->getLocation().getRawEncoding());
             }
         }
     }
