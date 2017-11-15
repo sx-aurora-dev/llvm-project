@@ -1,6 +1,6 @@
 # SOTOC - Source Transformation for OpenMP Code (suggestions for a better name are greatly appreciated)
 
-Extracts OpenMP target code from a source file and rewrites it into functions
+Extracts OpenMP target code from a source file and rewrites it into functions. _Only really works for C code_
 
 
 ## Building
@@ -21,20 +21,10 @@ make
 
 ## What currently worrks
 
-Target code of the form
-
-```c
-    #pragma omp target
-    {
-        // your code here
-    }
-```
-
+Most code with target regions.
 
 ## What currently doesnt work
 
 * Everything else, including but not limited to
-    - Correct Function names
-    - `#pragma omp target for` construct
     - `#pragma declare target` constructs
     - Global variables

@@ -4,6 +4,7 @@
 
 namespace clang {
     class Stmt;
+    class FunctionDecl;
     class SourceManager;
     class SourceRange;
     class VarDecl;
@@ -54,9 +55,12 @@ private:
 class TargetRegionLocation : public TargetLocation {
     /* this will hold the arguments to the implicit function of the target region */
     std::vector<clang::VarDecl*> CapturedVars;
+    clang::SourceLocation TargetDirectiveLocation;
+    clang::FunctionDecl *ParentFuncDecl;
 public:
-    TargetRegionLocation(clang::Stmt *Node)
-        : TargetLocation(Node, TLK_TargetRegionLocation) {};
+    TargetRegionLocation(clang::Stmt *Node, clang::SourceLocation TDL, clang::FunctionDecl *ParentFuncDecl)
+        : TargetLocation(Node, TLK_TargetRegionLocation),
+          TargetDirectiveLocation(TDL), ParentFuncDecl(ParentFuncDecl) {};
     void addCapturedVar(clang::VarDecl *Var);
     std::vector<clang::VarDecl*>::const_iterator getCapturedVarsBegin() {
         return CapturedVars.begin();
@@ -65,9 +69,13 @@ public:
         return CapturedVars.end();
     };
     clang::SourceRange getInnerRange() override;
+    std::string getParentFuncName();
     // llvm's RTTI replacement
     static bool classof(const TargetLocation *TL) {
         return TL->getKind() == TLK_TargetRegionLocation;
+    };
+    clang::SourceLocation getTargetDirectiveLocation() {
+        return TargetDirectiveLocation;
     };
 };
 
@@ -94,5 +102,6 @@ public:
     }
 private:
     void generateFunctionPrologue(TargetRegionLocation *TRL,
-                                  llvm::raw_ostream &ouz);
+                                  llvm::raw_ostream &out);
+    std::string generateFunctionName(TargetRegionLocation *TRL);
 };

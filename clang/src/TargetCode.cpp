@@ -1,4 +1,7 @@
+#include <sstream>
+
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Format.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/Decl.h"
@@ -72,6 +75,11 @@ void TargetRegionLocation::addCapturedVar(clang::VarDecl *Var) {
 }
 
 
+std::string TargetRegionLocation::getParentFuncName() {
+    return ParentFuncDecl->getNameAsString();
+}
+
+
 bool TargetCode::addCodeLocation(std::shared_ptr<TargetLocation> Location) {
     for (const auto &r : CodeLocations) {
         if (SM.isBeforeInTranslationUnit(r->getRealRange().getBegin(),
@@ -109,7 +117,7 @@ void TargetCode::generateCode(llvm::raw_ostream &out) {
 
 void TargetCode::generateFunctionPrologue(TargetRegionLocation *TRL, llvm::raw_ostream &out) {
     bool first = true;
-    out << "void funcNameHere(";
+    out << "void " << generateFunctionName(TRL) << "(";
     for (auto i = TRL->getCapturedVarsBegin(),
               e = TRL->getCapturedVarsEnd(); i != e; ++i) {
         if (!first) {
@@ -121,4 +129,24 @@ void TargetCode::generateFunctionPrologue(TargetRegionLocation *TRL, llvm::raw_o
         // todo: use `Name.print` instead
     }
     out << ")\n{\n";
+}
+
+
+std::string TargetCode::generateFunctionName(TargetRegionLocation *TRL) {
+    //TODO: this function needs error handling
+    llvm::sys::fs::UniqueID ID;
+    clang::PresumedLoc PLoc = SM.getPresumedLoc(TRL->getTargetDirectiveLocation());
+    llvm::sys::fs::getUniqueID(PLoc.getFilename(), ID);
+    uint64_t DeviceID = ID.getDevice();
+    uint64_t FileID = ID.getFile();
+    unsigned LineNum = PLoc.getLine();
+    std::string FunctionName;
+
+    llvm::raw_string_ostream fns(FunctionName);
+    fns << "__omp_offloading"
+        << llvm::format("_%x", DeviceID)
+        << llvm::format("_%x_", FileID)
+        << TRL->getParentFuncName()
+        << "_l" << LineNum;
+    return FunctionName;
 }
