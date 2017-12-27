@@ -646,7 +646,7 @@ void Filter::emitTableEntry(DecoderTableInfo &TableInfo) const {
     } else {
       Table.push_back(MCD::OPC_FilterValue);
       // Encode and emit the value to filter against.
-      uint8_t Buffer[8];
+      uint8_t Buffer[10];
       unsigned Len = encodeULEB128(Filter.first, Buffer);
       Table.insert(Table.end(), Buffer, Buffer + Len);
       // Reserve space for the NumToSkip entry. We'll backpatch the value
@@ -797,7 +797,7 @@ void FixedLenDecoderEmitter::emitTable(formatted_raw_ostream &OS,
       bool IsTry = *I == MCD::OPC_TryDecode;
       ++I;
       // Extract the ULEB128 encoded Opcode to a buffer.
-      uint8_t Buffer[8], *p = Buffer;
+      uint8_t Buffer[10], *p = Buffer;
       while ((*p++ = *I++) >= 128)
         assert((p - Buffer) <= (ptrdiff_t)sizeof(Buffer)
                && "ULEB128 value too large!");
@@ -1311,7 +1311,7 @@ void FilterChooser::emitSingletonTableEntry(DecoderTableInfo &TableInfo,
     TableInfo.Table.push_back(MCD::OPC_CheckField);
     TableInfo.Table.push_back(StartBits[I-1]);
     TableInfo.Table.push_back(NumBits);
-    uint8_t Buffer[8], *p;
+    uint8_t Buffer[10], *p;
     encodeULEB128(FieldVals[I-1], Buffer);
     for (p = Buffer; *p >= 128 ; ++p)
       TableInfo.Table.push_back(*p);
@@ -1342,7 +1342,7 @@ void FilterChooser::emitSingletonTableEntry(DecoderTableInfo &TableInfo,
   // can decode it.
   TableInfo.Table.push_back(HasCompleteDecoder ? MCD::OPC_Decode :
       MCD::OPC_TryDecode);
-  uint8_t Buffer[8], *p;
+  uint8_t Buffer[10], *p;
   encodeULEB128(Opc, Buffer);
   for (p = Buffer; *p >= 128 ; ++p)
     TableInfo.Table.push_back(*p);
