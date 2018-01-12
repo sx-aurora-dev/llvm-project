@@ -64,6 +64,7 @@ target_link_libraries(${PROJECT_NAME}
   LLVMObject # BitReader, Core, Support
   LLVMBitReader # Core, Support
   LLVMCore # Support
-  LLVMSupport
-   
+  LLVMSupport 
 )
+
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
