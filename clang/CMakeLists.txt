@@ -2,20 +2,52 @@ cmake_minimum_required(VERSION 2.8.8)
 
 project("NEC Aurora Offloading Build Wrappers")
 
+
+option(USE_TOOLCHAIN_WRAPPERS
+       "build and install executable wrapper around ncc/gcc for easy switching"
+       OFF)
+
+option(INSTALL_TOOLCHAIN_SYMLINK
+       "install linker and asm wrapper as an symlink to TOOLCHAIN_SYMLINK_PATH
+        incompatible with USE_TOLCHAIN_WRAPPERS"
+       OFF)
+
+if(INSTALL_TOOLCHAIN_SYMLINK AND USE_TOOLCHAIN_WRAPPERS)
+    message(SEND__ERROR "Options: INSTALL_TOOLCHAIN_SYMLINK and USE_TOOLCHAIN_WRAPPERS are mutually exclusive" )
+endif()
+
+if(INSTALL_TOOLCHAIN_SYMLINK)
+    set(TOOLCHAIN_SYMLINK_PATH "/usr/bin/ncc" CACHE FILEPATH "")
+endif()
+
+
 add_executable(necaurora-ofld-cc1-wrapper necaurora-ofld-cc1-wrapper.cpp)
-add_executable(necaurora-ofld-tool-wrapper necaurora-ofld-tool-wrapper.cpp)
+
+if(USE_TOOLCHAIN_WRAPPERS)
+    add_executable(necaurora-ofld-tool-wrapper necaurora-ofld-tool-wrapper.cpp)
+endif()
 
 macro(install_symlink filepath sympath)
     install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${filepath} ${sympath})")
     install(CODE "message(\"-- Created symlink: ${sympath} -> ${filepath}\")")
 endmacro(install_symlink)
 
-install(TARGETS necaurora-ofld-tool-wrapper
-                necaurora-ofld-cc1-wrapper
-        DESTINATION bin)
+install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
 
-install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
-                ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
+if(USE_TOOLCHAIN_WRAPPERS)
+    install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
+    install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
+                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
 
-install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
-                ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
+    install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
+                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
+endif()
+
+
+if(INSTALL_TOOLCHAIN_SYMLINK)#
+    install_symlink(${TOOLCHAIN_SYMLINK_PATH}
+                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
+
+    install_symlink(${TOOLCHAIN_SYMLINK_PATH}
+                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
+endif()
