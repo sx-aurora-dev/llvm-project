@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
   if (compiler_path) {
     cmdLine << compiler_path;
   } else {
-    cmdLine << "gcc";
+    cmdLine << "ncc";
   }
 
   cmdLine << " -x c " << additionalArgsStream.str()
