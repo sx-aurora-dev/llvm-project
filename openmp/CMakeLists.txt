@@ -6,6 +6,8 @@ add_library(veoshim SHARED veoshim.cpp)
 
 set_target_properties(veoshim PROPERTIES PUBLIC_HEADER "veoshim.h")
 
+target_link_libraries(veoshim ffi dl)
+
 install(TARGETS veoshim 
         LIBRARY DESTINATION lib
         PUBLIC_HEADER DESTINATION include)
