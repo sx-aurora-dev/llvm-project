@@ -3,6 +3,7 @@
 #include <ffi.h>
 #include <list>
 #include <vector>
+#include <cstring>
 
 
 class ShimInfoTy {
