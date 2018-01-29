@@ -125,7 +125,11 @@ void TargetCode::generateFunctionPrologue(TargetRegionLocation *TRL, llvm::raw_o
         }
         first = false;
 
-        out << (*i)->getType().getAsString() << "* " << (*i)->getDeclName().getAsString();
+        out << (*i)->getType().getAsString();
+        if (!(*i)->getType().getTypePtr()->isPointerType()) {
+            out << "*";
+        }
+        out << " "  << (*i)->getDeclName().getAsString();
         // todo: use `Name.print` instead
     }
     out << ")\n{\n";

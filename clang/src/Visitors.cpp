@@ -54,7 +54,8 @@ bool  RewriteTargetRegionsVisitor::VisitStmt (clang::Stmt *S) {
         if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
             // check if this DeclRefExpr belongs to a variable we captured
             // and check if we have already rewritten this DeclRefExpr
-            if (std::find(TargetRegion.getCapturedVarsBegin(),
+            if (!VD->getType().getTypePtr()->isPointerType() &&
+                std::find(TargetRegion.getCapturedVarsBegin(),
                           TargetRegion.getCapturedVarsEnd(), VD) != TargetRegion.getCapturedVarsEnd() &&
                 RewrittenRefs.find(DRE->getLocation().getRawEncoding()) == RewrittenRefs.end()) {
                 rewriteVar(DRE);
