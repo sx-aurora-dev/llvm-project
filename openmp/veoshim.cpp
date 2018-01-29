@@ -1,6 +1,9 @@
 #include "veoshim.h"
 #include <dlfcn.h>
+#include <ffi.h>
 #include <list>
+#include <vector>
+
 
 class ShimInfoTy {
   std::list<struct veo_proc_handle> proc_handles;
@@ -48,11 +51,26 @@ uint64_t veo_load_library(struct ve_thr_ctxt *request, const char *filename) {
 uint64_t veo_get_sym(struct ve_thr_ctxt *request, uint64_t lib_handle,
                      const char *symbol_name) {
   return (uint64_t)dlsym((void*)lib_handle, symbol_name);
-} 
+}
 
 void *veo_call_async(struct ve_thr_ctxt *request, uint64_t entry_point,
                      uint64_t args) {
-  return NULL;
+  ffi_cif cif;
+
+  std::vector<ffi_type *> args_types(8, &ffi_type_pointer);
+
+  ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 8, &ffi_type_void,
+                                   &args_types[0]);
+
+  if (status != FFI_OK) {
+    return NULL;
+  }
+
+  void (*entry)(void);
+  *((void**) &entry) = (void*)entry_point;
+  ffi_call(&cif, entry, NULL, (void **)((struct veo_call_args *)args)->arguments[0]);
+
+  return ShimInfo.getNewProcHandle();
 }
 
 int veo_call_wait_result(struct ve_thr_ctxt *request, void *call_async_handle,

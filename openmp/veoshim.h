@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 
+
 struct veo_proc_handle {
   uint64_t reserved;
 };
@@ -16,6 +17,11 @@ struct veo_proc_handle {
 struct ve_thr_ctxt {
   void *veoshim_dlhandle;
   uint64_t last_return_value;
+};
+
+
+struct veo_call_args {
+  uint64_t arguments[8];
 };
 
 
