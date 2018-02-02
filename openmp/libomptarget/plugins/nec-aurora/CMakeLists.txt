@@ -8,15 +8,15 @@ option(NECAURORA_OFFLOAD_RUN_ON_HOST OFF)
 
 set(tmachine_name "necaurora")
 
-if (NECAURORA_OFFLOAD_RUN_X86)
+if (NECAURORA_OFFLOAD_RUN_ON_HOST)
   set(elf_machine_id 62)
 else()
   set(elf_machine_id 14198)
 endif()
 
 set(additonal_libs "")
-if(NECAURORA_OFFLOAD_RUN_X86)
-  set(additional_libs "dl veoshim")
+if(NECAURORA_OFFLOAD_RUN_ON_HOST)
+  set(additional_libs dl veoshim)
 endif()
 
 set(tmachine_libname "necaurora")

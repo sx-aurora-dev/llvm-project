@@ -8,7 +8,7 @@
 #include <ve_offload.h>
 
 #ifndef TARGET_ELF_ID
-#define TARGET_ELF_ID 0 //TODO: find out which ELF_ID we need to use
+#define TARGET_ELF_ID 0
 #endif
 
 #ifdef OMPTARGET_DEBUG
@@ -26,7 +26,9 @@ static int DebugLevel = 0;
 #define DP(...) {}
 #endif // OMPTARGET_DEBUG
 
+
 #include "../../common/elf_common.c"
+
 
 #define NUMBER_OF_DEVICES 1 //TODO: find out how many nodes we can have
 
@@ -75,7 +77,7 @@ public:
       __tgt_offload_entry Entry;
 
       if (!SymbolTargetAddr) {
-        // report Error
+        DP("Symbol %s not found in target image\n", SymbolName);
         Entry = { NULL, NULL, 0, 0, 0 };
       } else {
         Entry = { (void*)SymbolTargetAddr, i->name, i->size, i->flags, 0 };
@@ -133,6 +135,7 @@ static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
 
 static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
                                     struct veo_call_args *args, uint64_t *RetVal) {
+  DP("Running function with entry point %p\n", reinterpret_cast<void *>(FuncAddr));
   void *RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr,
                                        reinterpret_cast<uint64_t>(args));
   if (!RequestHandle) {
@@ -258,7 +261,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
   if(!MallocSymbol) {
     DP("veo_get_sym() failed: could not find __devmemwrap_mm_malloc\n");
-    //TODO: report error
     return NULL;
   }
 
@@ -266,7 +268,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
                                     "__devmemwrap_mm_free");
 
   if(!FreeSymbol) {
-    //TODO: report error;
     DP("veo_get_sym() failed: could not find __devmemwrap_mm_free\n");
     return NULL;
   }
