@@ -16,16 +16,25 @@ endif()
 
 set(additonal_libs "")
 if(NECAURORA_OFFLOAD_RUN_ON_HOST)
+  libomptarget_say("Building NEC Aurora offloading plugin for host only")
   set(additional_libs dl veoshim)
 endif()
 
 set(tmachine_libname "necaurora")
 set(tmachine_triple "aurora-nec-veort-unknown")
 
-libomptarget_say("Building NEC Aurora offloading plugin.")
 
 include_directories(${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})
 include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
+
+if (${LIBOMPTARGET_DEP_VEO_FOUND})
+  libomptarget_say("Building NEC Aurora offloading plugin.")
+  include_directories(${LIBOMPTARGET_DEP_VEO_INCLUDE_DIR})
+  set(additional_libs ${LIBOMPTARGET_DEP_VEO_LIBRARIES})
+else ()
+  libomptarget_say("Not building Aurora offloading plugin: VEO not found in system.")
+endif ()
+
 
 # Define macro to be used as prefix of the runtime messages for this target.
 add_definitions("-DTARGET_NAME=${tmachine_name}")
