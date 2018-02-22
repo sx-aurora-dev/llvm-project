@@ -1,107 +1,41 @@
 #pragma once
 
+#include <memory>
+
 #include "clang/Rewrite/Core/Rewriter.h"
 
+#include "TargetCodeFragment.h"
+
+
 namespace clang {
-    class Stmt;
-    class FunctionDecl;
     class SourceManager;
-    class SourceRange;
-    class VarDecl;
 };
 
 
-/* we use this for declare target functions and variables
- * as those do not need to be rewritten
- */
-class TargetLocation {
-public:
-    // code for llvm's RTTI replacement
-    enum TargetLocationKind {
-        TLK_TargetLocation,
-        TLK_TargetRegionLocation,
-    };
-    TargetLocationKind getKind() const { return Kind; };
-    static bool classof(const TargetLocation *TL) {
-        return TL->getKind() == TLK_TargetLocation;
-    };
-private:
-    /* Node holds the AST node to describe the code location
-     * in case of declare target functions and variables this ist the
-     * top level node for that function/variable
-     * in case of a target region, this should be its CapturedStmt
-     */
-    clang::Stmt *Node;
-
-public:
-    TargetLocation(clang::Stmt *Node, TargetLocationKind Kind)
-        : Node(Node), Kind(Kind) {};
-    const clang::Stmt *getNode() {
-        return Node;
-    };
-    TargetLocation(clang::Stmt *Node)
-        : Node(Node), Kind(TLK_TargetLocation) {};
-    clang::SourceRange getRealRange();
-    virtual clang::SourceRange getInnerRange() {
-        return getRealRange();
-    };
-
-private:
-    const TargetLocationKind Kind;
-};
-
-
-/* We need to rewrite target regions and need more info for that */
-class TargetRegionLocation : public TargetLocation {
-    /* this will hold the arguments to the implicit function of the target region */
-    std::vector<clang::VarDecl*> CapturedVars;
-    clang::SourceLocation TargetDirectiveLocation;
-    clang::FunctionDecl *ParentFuncDecl;
-public:
-    TargetRegionLocation(clang::Stmt *Node, clang::SourceLocation TDL, clang::FunctionDecl *ParentFuncDecl)
-        : TargetLocation(Node, TLK_TargetRegionLocation),
-          TargetDirectiveLocation(TDL), ParentFuncDecl(ParentFuncDecl) {};
-    void addCapturedVar(clang::VarDecl *Var);
-    std::vector<clang::VarDecl*>::const_iterator getCapturedVarsBegin() {
-        return CapturedVars.begin();
-    };
-    std::vector<clang::VarDecl*>::const_iterator getCapturedVarsEnd() {
-        return CapturedVars.end();
-    };
-    clang::SourceRange getInnerRange() override;
-    std::string getParentFuncName();
-    // llvm's RTTI replacement
-    static bool classof(const TargetLocation *TL) {
-        return TL->getKind() == TLK_TargetRegionLocation;
-    };
-    clang::SourceLocation getTargetDirectiveLocation() {
-        return TargetDirectiveLocation;
-    };
-};
-
-
-typedef std::vector<std::shared_ptr<TargetLocation>> TargetLocationVector;
+using TargetCodeFragmentDeque = std::deque<std::shared_ptr<TargetCodeFragment>>;
 
 
 class TargetCode {
     //std::unordered_set<VarDecl*> GlobalVarialesDecl; //TODO: we will use this to avoid capturing global vars
-    TargetLocationVector CodeLocations;
+    TargetCodeFragmentDeque CodeFragments;
+
     clang::Rewriter &TargetCodeRewriter;
     clang::SourceManager &SM;
 public:
     TargetCode(clang::Rewriter &TargetCodeRewriter)
         : TargetCodeRewriter(TargetCodeRewriter),
           SM(TargetCodeRewriter.getSourceMgr()) {};
-    bool addCodeLocation(std::shared_ptr<TargetLocation> loc);
-    void generateCode(llvm::raw_ostream &out);
-    TargetLocationVector::const_iterator getCodeLocationsBegin() {
-        return CodeLocations.begin();
+
+    bool addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag);
+    void generateCode(llvm::raw_ostream &Out);
+    TargetCodeFragmentDeque::const_iterator getCodeFragmentsBegin() {
+        return CodeFragments.begin();
     }
-    TargetLocationVector::const_iterator getCodeLocationsEnd() {
-        return CodeLocations.end();
+    TargetCodeFragmentDeque::const_iterator getCodeFragmentsEnd() {
+        return CodeFragments.end();
     }
 private:
-    void generateFunctionPrologue(TargetRegionLocation *TRL,
-                                  llvm::raw_ostream &out);
-    std::string generateFunctionName(TargetRegionLocation *TRL);
+    void generateFunctionPrologue(TargetCodeRegion *TCR,
+                                  llvm::raw_ostream &Out);
+    std::string generateFunctionName(TargetCodeRegion *TCR);
 };

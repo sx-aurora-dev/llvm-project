@@ -11,10 +11,12 @@ namespace clang {
     class OMPTargetDirective;
     class SourceLocation;
     class FunctionDecl;
+    class Attr;
 }
 
 class TargetCode;
-class TargetRegionLocation;
+class TargetCodeFragment;
+class TargetCodeRegion;
 
 
 class FindTargetCodeVisitor
@@ -22,6 +24,7 @@ class FindTargetCodeVisitor
 
     TargetCode &TargetCodeInfo;
     clang::FunctionDecl* LastVisitedFuncDecl;
+    std::unordered_set<std::string> FuncDeclWithoutBody;
 public:
     FindTargetCodeVisitor(TargetCode &Code) : TargetCodeInfo(Code) {};
     bool VisitStmt(clang::Stmt *S);
@@ -29,7 +32,7 @@ public:
 private:
     bool processTargetRegion(clang::OMPTargetDirective *TargetDirective);
     void addTargetRegionArgs(clang::CapturedStmt *S,
-                             std::shared_ptr<TargetRegionLocation> TRL);
+                             std::shared_ptr<TargetCodeRegion> TCR);
 };
 
 
@@ -37,7 +40,7 @@ class RewriteTargetRegionsVisitor
     : public clang::RecursiveASTVisitor<RewriteTargetRegionsVisitor> {
 
     clang::Rewriter &TargetCodeRewriter;
-    TargetRegionLocation &TargetRegion;
+    TargetCodeRegion &TargetRegion;
     // We store the result of SourceLocation::getRawEncoding() here because we
     // cannot store SourceLocation of the DeclRefExpr themselves.
     // There care cases were one source location has multiple DeclRefExpr and
@@ -45,8 +48,8 @@ class RewriteTargetRegionsVisitor
     std::unordered_set<unsigned> RewrittenRefs;
 public:
     RewriteTargetRegionsVisitor(clang::Rewriter &TargetCodeRewriter,
-                                TargetRegionLocation &TRL)
-        : TargetCodeRewriter(TargetCodeRewriter), TargetRegion(TRL) {};
+                                TargetCodeRegion &TCR)
+        : TargetCodeRewriter(TargetCodeRewriter), TargetRegion(TCR) {};
     bool  VisitStmt (clang::Stmt *S);
 private:
     void rewriteVar(clang::DeclRefExpr *Var);

@@ -11,135 +11,69 @@
 #include "TargetCode.h"
 
 
-clang::SourceRange TargetLocation::getRealRange() {
-    return Node->getSourceRange();
-}
 
 
-static bool hasRegionCompoundStmt(const clang::Stmt* S) {
-    if (const auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
-        if (llvm::isa<clang::CompoundStmt>(SS->getCapturedStmt())) {
-            return true;
-        }
-    }
-    return false;
-}
-
-
-static bool hasRegionOMPStmt(const clang::Stmt *S) {
-    if (const auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
-        if (llvm::isa<clang::OMPExecutableDirective>(SS->getCapturedStmt())) {
-            return true;
-        }
-    }
-    return false;
-}
-
-
-static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
-    if (auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
-        if (auto *SSS = llvm::dyn_cast<clang::OMPExecutableDirective>(SS->getCapturedStmt())) {
-            const clang::OMPExecutableDirective *cur = SSS;
-            const clang::OMPExecutableDirective *last = nullptr;
-
-            do {
-                last = cur;
-            } while((cur = llvm::dyn_cast<clang::OMPExecutableDirective>(cur->getAssociatedStmt())));
-
-            if (last) {
-                return last->getAssociatedStmt()->getLocEnd().getLocWithOffset(1);
-            }
-        }
-    }
-    return S->getLocEnd().getLocWithOffset(1);
-}
-
-
-clang::SourceRange TargetRegionLocation::getInnerRange() {
-    if (hasRegionCompoundStmt(getNode())) {
-        return clang::SourceRange(getNode()->getLocStart().getLocWithOffset(1),
-                                  getNode()->getLocEnd().getLocWithOffset(-1));
-    } else if (hasRegionOMPStmt(getNode())) {
-        return clang::SourceRange(getNode()->getLocStart().getLocWithOffset(-8), //try to get #pragma into source range
-                                  getOMPStmtSourceLocEnd(getNode()));
-    } else {
-        // I'm not quite sure why this is necessary, but it is
-        return clang::SourceRange(getNode()->getLocStart(),
-                                  getNode()->getLocEnd().getLocWithOffset(2));
-    }
-}
-
-
-void TargetRegionLocation::addCapturedVar(clang::VarDecl *Var) {
-    CapturedVars.push_back(Var);
-}
-
-
-std::string TargetRegionLocation::getParentFuncName() {
-    return ParentFuncDecl->getNameAsString();
-}
-
-
-bool TargetCode::addCodeLocation(std::shared_ptr<TargetLocation> Location) {
-    for (const auto &r : CodeLocations) {
+bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag) {
+    for (const auto &r : CodeFragments) {
         if (SM.isBeforeInTranslationUnit(r->getRealRange().getBegin(),
-                                         Location->getNode()->getLocStart()) &&
-            SM.isBeforeInTranslationUnit(Location->getNode()->getLocStart(),
+                                         Frag->getRealRange().getBegin()) &&
+            SM.isBeforeInTranslationUnit(Frag->getRealRange().getEnd(),
                                          r->getRealRange().getEnd())) {
             return false;
         }
     }
-    CodeLocations.push_back(Location);
+    CodeFragments.push_back(Frag);
     return true;
 }
 
 
-void TargetCode::generateCode(llvm::raw_ostream &out) {
-    for (auto i = CodeLocations.begin(),
-              e = CodeLocations.end();
+void TargetCode::generateCode(llvm::raw_ostream &Out) {
+    for (auto i = CodeFragments.begin(),
+              e = CodeFragments.end();
           i != e; ++i) {
 
-        std::shared_ptr<TargetLocation> TL = *i;
-        TargetRegionLocation *TRL = llvm::dyn_cast<TargetRegionLocation>(&(*TL));
+        std::shared_ptr<TargetCodeFragment> Frag = *i;
+        auto *TCR = llvm::dyn_cast<TargetCodeRegion>(Frag.get());
 
-        if (TRL) {
-            generateFunctionPrologue(TRL, out);
+        if (TCR) {
+            generateFunctionPrologue(TCR, Out);
         }
 
-        out << TargetCodeRewriter.getRewrittenText(TL->getInnerRange());
+        Out << TargetCodeRewriter.getRewrittenText(Frag->getInnerRange());
 
-        if (TRL) {
-            out << "\n}\n";
+        if (TCR) {
+            Out << "\n}";
         }
+        Out << "\n";
     }
 }
 
 
-void TargetCode::generateFunctionPrologue(TargetRegionLocation *TRL, llvm::raw_ostream &out) {
+void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR, llvm::raw_ostream &Out) {
     bool first = true;
-    out << "void " << generateFunctionName(TRL) << "(";
-    for (auto i = TRL->getCapturedVarsBegin(),
-              e = TRL->getCapturedVarsEnd(); i != e; ++i) {
+    Out << "void " << generateFunctionName(TCR) << "(";
+    for (auto i = TCR->getCapturedVarsBegin(),
+              e = TCR->getCapturedVarsEnd(); i != e; ++i) {
         if (!first) {
-            out << ", ";
+            Out << ", ";
         }
         first = false;
 
-        out << (*i)->getType().getAsString();
+        Out << (*i)->getType().getAsString();
         if (!(*i)->getType().getTypePtr()->isPointerType()) {
-            out << "*";
+            Out << "*";
         }
-        out << " "  << (*i)->getDeclName().getAsString();
+        Out << " "  << (*i)->getDeclName().getAsString();
         // todo: use `Name.print` instead
     }
-    out << ")\n{\n";
+    Out << ")\n{\n";
 }
 
 
-std::string TargetCode::generateFunctionName(TargetRegionLocation *TRL) {
+std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
     //TODO: this function needs error handling
     llvm::sys::fs::UniqueID ID;
-    clang::PresumedLoc PLoc = SM.getPresumedLoc(TRL->getTargetDirectiveLocation());
+    clang::PresumedLoc PLoc = SM.getPresumedLoc(TCR->getTargetDirectiveLocation());
     llvm::sys::fs::getUniqueID(PLoc.getFilename(), ID);
     uint64_t DeviceID = ID.getDevice();
     uint64_t FileID = ID.getFile();
@@ -150,7 +84,7 @@ std::string TargetCode::generateFunctionName(TargetRegionLocation *TRL) {
     fns << "__omp_offloading"
         << llvm::format("_%x", DeviceID)
         << llvm::format("_%x_", FileID)
-        << TRL->getParentFuncName()
+        << TCR->getParentFuncName()
         << "_l" << LineNum;
     return FunctionName;
 }

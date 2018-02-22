@@ -16,6 +16,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "TargetCode.h"
+#include "TargetCodeFragment.h"
 #include "Visitors.h"
 
 
@@ -39,13 +40,13 @@ public:
         FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
 
         // rewrite capture variables in all target regions into pointers
-        for (auto i = Code.getCodeLocationsBegin(),
-                  e = Code.getCodeLocationsEnd();
+        for (auto i = Code.getCodeFragmentsBegin(),
+                  e = Code.getCodeFragmentsEnd();
              i != e; ++i) {
-            if (auto *TRL = llvm::dyn_cast<TargetRegionLocation>(&(**i))) {
-                RewriteTargetRegionsVisitor RegionRewriteVisitor(TargetCodeRewriter, *TRL);
+            if (auto *TCR = llvm::dyn_cast<TargetCodeRegion>(i->get())) {
+                RewriteTargetRegionsVisitor RegionRewriteVisitor(TargetCodeRewriter, *TCR);
                 RegionRewriteVisitor.TraverseStmt(
-                    ((clang::CapturedStmt*)TRL->getNode())->getCapturedStmt());
+                    TCR->getNode()->getCapturedStmt());
                 // TODO: fix this ^
             }
         }

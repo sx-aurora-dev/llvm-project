@@ -5,8 +5,10 @@
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/Attr.h"
 
 #include "TargetCode.h"
+#include "TargetCodeFragment.h"
 #include "Visitors.h"
 
 
@@ -21,11 +23,11 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
 bool FindTargetCodeVisitor::processTargetRegion(clang::OMPTargetDirective *TargetDirective) {
     for (auto i = TargetDirective->child_begin(), e = TargetDirective->child_end(); i != e; ++i) {
         if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(*i)) {
-            auto TRL = std::make_shared<TargetRegionLocation>(CS, TargetDirective->getLocStart(), LastVisitedFuncDecl);
+            auto TCR = std::make_shared<TargetCodeRegion>(CS, TargetDirective->getLocStart(), LastVisitedFuncDecl);
             // if the target region cannot be added we dont want to parse its args
-            if (TargetCodeInfo.addCodeLocation(TRL))
+            if (TargetCodeInfo.addCodeFragment(TCR))
             {
-                addTargetRegionArgs(CS, TRL);
+                addTargetRegionArgs(CS, TCR);
             }
         }
     }
@@ -34,16 +36,39 @@ bool FindTargetCodeVisitor::processTargetRegion(clang::OMPTargetDirective *Targe
 
 
 void FindTargetCodeVisitor::addTargetRegionArgs(clang::CapturedStmt *S,
-                                                std::shared_ptr<TargetRegionLocation> TRL) {
+                                                std::shared_ptr<TargetCodeRegion> TCR) {
     for (const auto &i : S->captures()) {
-        TRL->addCapturedVar(i.getCapturedVar());
+        TCR->addCapturedVar(i.getCapturedVar());
     }
 }
 
 
 bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
-    if(auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
+    auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D);
+    if (FD) {
         LastVisitedFuncDecl = FD;
+
+        auto search = FuncDeclWithoutBody.find(FD->getNameAsString());
+        if (search != FuncDeclWithoutBody.end()) {
+            TargetCodeInfo.addCodeFragment(
+                std::make_shared<TargetCodeDecl>(D));
+            FuncDeclWithoutBody.erase(search);
+        }
+    }
+
+    // search Decl attributes for 'omp declare target' attr
+    for (auto &attr : D->attrs()) {
+        if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
+            auto TCD = std::make_shared<TargetCodeDecl>(D);
+            TargetCodeInfo.addCodeFragment(TCD);
+            if (FD) {
+                if (FD->hasBody() && 
+                    !FD->doesThisDeclarationHaveABody()) {
+                    FuncDeclWithoutBody.insert(FD->getNameAsString());
+                }
+            }
+            break;
+        }
     }
     return true;
 }

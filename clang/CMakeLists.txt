@@ -39,7 +39,10 @@ add_definitions(
 -D__STDC_CONSTANT_MACROS
 )
 
-add_executable(${PROJECT_NAME} src/main.cpp src/TargetCode.cpp src/TargetCode.h src/Visitors.cpp src/Visitors.h)
+add_executable(${PROJECT_NAME} src/main.cpp
+                               src/TargetCode.cpp
+                               src/TargetCodeFragment.cpp
+                               src/Visitors.cpp)
 
 target_link_libraries(${PROJECT_NAME} ${LIBRARY_LIST})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-unused-parameter -fno-strict-aliasing -fno-exceptions -fno-rtti")
