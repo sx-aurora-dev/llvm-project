@@ -55,7 +55,8 @@ class RTLDeviceInfoTy {
   std::vector<FuncOrGblEntryTy> FuncOrGblEntry;
 
 public:
-  std::vector<struct ve_thr_ctxt *> Contexts;
+  std::vector<struct veo_proc_handle *> ProcHandles;
+  std::vector<struct veo_thr_ctxt *> Contexts;
   std::vector<uint64_t> LibraryHandles;
   std::vector<MemWrapFuncsTy> MemWrapFuncs;
   std::list<DynLibTy> DynLibs;
@@ -71,7 +72,7 @@ public:
       // we have not enough access to the target memory to conveniently parse the
       // offload table there so we need to lookup every symbol with the host table
       DP("Looking up symbol: %s\n", SymbolName);
-      uint64_t SymbolTargetAddr = veo_get_sym(Contexts[device_id],
+      uint64_t SymbolTargetAddr = veo_get_sym(ProcHandles[device_id],
                                                VeoLibHandle,
                                                SymbolName);
       __tgt_offload_entry Entry;
@@ -104,7 +105,8 @@ public:
   }
 
   RTLDeviceInfoTy(int32_t num_devices)
-      : Contexts(num_devices, NULL), FuncOrGblEntry(num_devices),
+      : ProcHandles(num_devices, NULL), 
+        Contexts(num_devices, NULL), FuncOrGblEntry(num_devices),
         LibraryHandles(num_devices), MemWrapFuncs(num_devices) {
     //TODO: some debug code here
 #ifdef OMPTARGET_DEBUG
@@ -115,6 +117,10 @@ public:
   }
 
   ~RTLDeviceInfoTy() {
+    for (auto &hdl : ProcHandles) {
+        // TODO: Do we need to destroch the proc handles?
+    }
+
     for (auto &ctx : Contexts) {
       if (veo_context_close(ctx) != 0) {
         // report error
@@ -136,8 +142,7 @@ static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
 static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
                                     struct veo_call_args *args, uint64_t *RetVal) {
   DP("Running function with entry point %p\n", reinterpret_cast<void *>(FuncAddr));
-  void *RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr,
-                                       reinterpret_cast<uint64_t>(args));
+  uint64_t RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
   if (!RequestHandle) {
     // TODO: report error
     return -1;
@@ -187,12 +192,13 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
     return 1; //TODO: better error reporting
   }
 
-  struct ve_thr_ctxt *ctx = veo_context_open(proc_handle);
+  struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
   if (!ctx) {
     DP("veo_context_open() failed\n");
     return 2;
   }
 
+  DeviceInfo.ProcHandles[ID] = proc_handle;
   DeviceInfo.Contexts[ID] = ctx;
 
   return 0;
@@ -244,7 +250,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   fwrite(Image->ImageStart, ImageSize, 1, ftmp);
   fclose(ftmp);
 
-  uint64_t LibHandle = veo_load_library(DeviceInfo.Contexts[ID], tmp_name);
+  uint64_t LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
 
   if (!LibHandle) {
     DP("veo_load_library() failed\n");
@@ -256,7 +262,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   DeviceInfo.DynLibs.push_back(Lib);
   DeviceInfo.LibraryHandles[ID] = LibHandle;
 
-  uint64_t MallocSymbol = veo_get_sym(DeviceInfo.Contexts[ID], LibHandle,
+  uint64_t MallocSymbol = veo_get_sym(DeviceInfo.ProcHandles[ID], LibHandle,
                                       "__devmemwrap_mm_malloc");
 
   if(!MallocSymbol) {
@@ -264,7 +270,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     return NULL;
   }
 
-  uint64_t FreeSymbol = veo_get_sym(DeviceInfo.Contexts[ID], LibHandle,
+  uint64_t FreeSymbol = veo_get_sym(DeviceInfo.ProcHandles[ID], LibHandle,
                                     "__devmemwrap_mm_free");
 
   if(!FreeSymbol) {
@@ -308,14 +314,14 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
 // In case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
                               int64_t Size) {
-  return veo_write_mem(DeviceInfo.Contexts[ID], TargetPtr, HostPtr, Size);
+  return (int32_t)veo_write_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr, HostPtr, (size_t)Size);
 }
 
 // Retrieve the data content from the target device using its address.
 // In case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
                                 int64_t Size) {
-  return veo_read_mem(DeviceInfo.Contexts[ID], HostPtr, TargetPtr, Size);
+  return veo_read_mem(DeviceInfo.ProcHandles[ID], HostPtr, (uint64_t)TargetPtr, Size);
 }
 
 // De-allocate the data referenced by target ptr on the device. In case of
