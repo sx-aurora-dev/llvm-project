@@ -28,6 +28,10 @@ bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag) {
 
 
 void TargetCode::generateCode(llvm::raw_ostream &Out) {
+    for (auto &i : SystemHeaders) {
+        Out << "#include <" << i << ">\n";
+    }
+
     for (auto i = CodeFragments.begin(),
               e = CodeFragments.end();
           i != e; ++i) {

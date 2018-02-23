@@ -1,4 +1,5 @@
 #include <sstream>
+#include <string>
 
 #include "clang/Basic/SourceLocation.h"
 #include "clang/AST/Stmt.h"
@@ -6,10 +7,38 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/ASTContext.h"
+#include "clang/Basic/SourceManager.h"
 
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
+
+
+static std::string getSystemHeaderForDecl(clang::Decl *D) {
+    // we dont want to include the original system header in which D was
+    // declared, but the system header which exposes D to the user's file
+    // (the last system header in the include stack)
+    clang::SourceManager &SM = D->getASTContext().getSourceManager();
+
+    auto IncludedFile = SM.getFileID(D->getLocStart());
+    auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+
+    while (SM.isInSystemHeader(SM.getLocForStartOfFile(IncludingFile.first))) {
+        IncludedFile = IncludingFile.first;
+        IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+    }
+
+    return std::string(SM.getFilename(SM.getLocForStartOfFile(
+        IncludedFile)));
+}
+
+
+static bool isInSystemHeader(clang::Decl *D) {
+    clang::SourceManager &SM = D->getASTContext().getSourceManager();
+    clang::SourceLocation Loc = D->getLocStart();
+    return SM.isInSystemHeader(Loc);
+}
 
 
 bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
@@ -23,7 +52,8 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
 bool FindTargetCodeVisitor::processTargetRegion(clang::OMPTargetDirective *TargetDirective) {
     for (auto i = TargetDirective->child_begin(), e = TargetDirective->child_end(); i != e; ++i) {
         if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(*i)) {
-            auto TCR = std::make_shared<TargetCodeRegion>(CS, TargetDirective->getLocStart(), LastVisitedFuncDecl);
+            auto TCR = std::make_shared<TargetCodeRegion>(CS,
+                TargetDirective->getLocStart(), LastVisitedFuncDecl);
             // if the target region cannot be added we dont want to parse its args
             if (TargetCodeInfo.addCodeFragment(TCR))
             {
@@ -59,15 +89,20 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
     // search Decl attributes for 'omp declare target' attr
     for (auto &attr : D->attrs()) {
         if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
+            if (isInSystemHeader(D)) {
+                TargetCodeInfo.addHeader(getSystemHeaderForDecl(D));
+                return true;
+            }
+
             auto TCD = std::make_shared<TargetCodeDecl>(D);
             TargetCodeInfo.addCodeFragment(TCD);
             if (FD) {
-                if (FD->hasBody() && 
+                if (FD->hasBody() &&
                     !FD->doesThisDeclarationHaveABody()) {
                     FuncDeclWithoutBody.insert(FD->getNameAsString());
                 }
             }
-            break;
+            return true;;
         }
     }
     return true;

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <deque>
+#include <set>
+#include <string>
 
 #include "clang/Rewrite/Core/Rewriter.h"
 
@@ -18,7 +21,7 @@ using TargetCodeFragmentDeque = std::deque<std::shared_ptr<TargetCodeFragment>>;
 class TargetCode {
     //std::unordered_set<VarDecl*> GlobalVarialesDecl; //TODO: we will use this to avoid capturing global vars
     TargetCodeFragmentDeque CodeFragments;
-
+    std::set<std::string> SystemHeaders;
     clang::Rewriter &TargetCodeRewriter;
     clang::SourceManager &SM;
 public:
@@ -33,6 +36,9 @@ public:
     }
     TargetCodeFragmentDeque::const_iterator getCodeFragmentsEnd() {
         return CodeFragments.end();
+    }
+    void addHeader(std::string Header) {
+        SystemHeaders.insert(Header);
     }
 private:
     void generateFunctionPrologue(TargetCodeRegion *TCR,
