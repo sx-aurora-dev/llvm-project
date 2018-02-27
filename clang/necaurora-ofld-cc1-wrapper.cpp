@@ -16,10 +16,11 @@ static bool Verbose = false;
 int runSourceTransformation(const std::string &InputPath,
                             std::string &OutputPath) {
   std::stringstream CmdLine;
+  std::stringstream TmpPath;
 
-  std::string TmpPath = std::string(std::getenv("TMP"));
+  TmpPath << std::getenv("TMP");
 
-  if (TmpPath == "") {
+  if (TmpPath.str().size() == 0) {
     std::cerr << "necauroa-ofld-cc1-wrapper: $TMP not set" << std::endl;
     return -1;
   }
@@ -34,7 +35,7 @@ int runSourceTransformation(const std::string &InputPath,
   // find last '.' in string so we can get the filename extension
   size_t PosLastDotInPath = InputPath.find_last_of(".");
 
-  if (PosLastDotInPath == InputPath.length()) {
+  if (PosLastDotInPath == std::string::npos) {
     std::cerr << "necaurora-ofld-cc1-wrapper: Input file has no file extension (1)"
               << " (neeeds to be .c or .cpp)" << std::endl;
     return -1;
@@ -56,7 +57,7 @@ int runSourceTransformation(const std::string &InputPath,
   // extension laster
 
   std::stringstream TmpFilePathTemplate;
-  TmpFilePathTemplate << TmpPath
+  TmpFilePathTemplate << TmpPath.str()
                       << "/" << InputFileNameWE << "-XXXXXX"
                       << InputFileExt;
 
@@ -66,12 +67,11 @@ int runSourceTransformation(const std::string &InputPath,
                                 TmpFilePathTemplateStr.end());
   TmpFilePath.push_back('\0');
 
-
   // generate tmp name
   int fd = mkstemps(&TmpFilePath[0], InputFileExt.length());
 
   if(fd < 0) {
-    std::cout << "necaurora-ofld-cc1-wrapper: mkstemp(" << &TmpFilePath[0] << ") failed "
+    std::cerr << "necaurora-ofld-cc1-wrapper: mkstemp(" << &TmpFilePath[0] << ") failed "
               << " with message: \"" << strerror(errno) << "\""
               << std::endl;
     return -1;
@@ -109,6 +109,8 @@ int runTargetCompiler(const std::string &Compiler, const std::string &InputPath,
   int ret =  system(CmdLine.str().c_str());
 
   std::remove(InputPath.c_str());
+
+  return ret;
 }
 
 int main(int argc, char **argv) {
@@ -143,12 +145,16 @@ int main(int argc, char **argv) {
   rc = runSourceTransformation(InputPath, SotocOutputPath);
 
   if (rc != 0) {
+    std::cerr << "necaurora-ofld-cc1-wrapper: "
+              << "source code transformation failed\n";
     return EXIT_FAILURE;
   }
 
   rc = runTargetCompiler(Compiler, SotocOutputPath, ArgsStream.str());
 
   if (rc != 0) {
+    std::cerr << "necaurora-ofld-cc1-wrapper: "
+              << "execution of target compiler failed\n";
     return EXIT_FAILURE;
   }
 }
