@@ -4,6 +4,8 @@
 #include <list>
 #include <cassert>
 #include <string>
+#include <cstring>
+#include <cerrno>
 
 #include <ve_offload.h>
 
@@ -81,6 +83,8 @@ public:
         DP("Symbol %s not found in target image\n", SymbolName);
         Entry = { NULL, NULL, 0, 0, 0 };
       } else {
+        DP("Found symbol %s successfully in target image (addr: %p)\n", 
+           SymbolName, (void*)SymbolTargetAddr);
         Entry = { (void*)SymbolTargetAddr, i->name, i->size, i->flags, 0 };
       }
 
@@ -143,17 +147,23 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
                                     struct veo_call_args *args, uint64_t *RetVal) {
   DP("Running function with entry point %p\n", reinterpret_cast<void *>(FuncAddr));
   uint64_t RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
-  if (!RequestHandle) {
-    // TODO: report error
+  if (RequestHandle == VEO_REQUEST_ID_INVALID) {
+    DP("Execution of entry point %p failed\n", reinterpret_cast<void *>(FuncAddr));
     return -1;
+  } else {
+    DP("Function at address %p called (VEO request ID: %ld)\n", 
+       reinterpret_cast<void *>(FuncAddr), RequestHandle);
   }
 
   int ret = veo_call_wait_result(DeviceInfo.Contexts[DeviceID], RequestHandle,
                                  RetVal);
-  if(!ret) {
-    // TODO: report error
+  if(ret != 0) {
+    DP("Waiting for entry point %p failed (Error code %d)\n", 
+       reinterpret_cast<void *>(FuncAddr), ret);
+    //TODO: Do something with return value?
+    return -1;
   }
-  return ret;
+  return 0;
 }
 
 
@@ -188,18 +198,23 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
 
   struct veo_proc_handle *proc_handle = veo_proc_create(ID);
   if (!proc_handle) {
-    DP("veo_proc_create() failed\n");
-    return 1; //TODO: better error reporting
+    //TODO: errno does not seem to be set by VEO
+    DP("veo_proc_create() failed: %s\n", std::strerror(errno));
+    return 1; 
   }
 
   struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
   if (!ctx) {
-    DP("veo_context_open() failed\n");
+    //TODO: errno does not seem to be set by VEO
+    DP("veo_context_open() failed: %s\n", std::strerror(errno));
     return 2;
   }
 
   DeviceInfo.ProcHandles[ID] = proc_handle;
   DeviceInfo.Contexts[ID] = ctx;
+
+  DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n", 
+     proc_handle, ctx);
 
   return 0;
 }
@@ -233,6 +248,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   //
   // 1) Create tmp file with the library contents.
   // 2) Use dlopen to load the file and dlsym to retrieve the symbols.
+  // TODO: Remove hard-coded "/tmp"
   char tmp_name[] = "/tmp/tmpfile_XXXXXX";
   int tmp_fd = mkstemp(tmp_name);
 
@@ -253,7 +269,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   uint64_t LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
 
   if (!LibHandle) {
-    DP("veo_load_library() failed\n");
+    DP("veo_load_library() failed: LibHandle=%ld\n", LibHandle);
     //TODO: handle and report error
     return  NULL;
   }
@@ -314,14 +330,24 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
 // In case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
                               int64_t Size) {
-  return (int32_t)veo_write_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr, HostPtr, (size_t)Size);
+  int ret = veo_write_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr, 
+                          HostPtr, (size_t)Size);
+  if(ret != 0) {
+    DP("veo_write_mem() failed with error code %d\n", ret);
+  }
+  return ret;
 }
 
 // Retrieve the data content from the target device using its address.
 // In case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
                                 int64_t Size) {
-  return veo_read_mem(DeviceInfo.ProcHandles[ID], HostPtr, (uint64_t)TargetPtr, Size);
+  int ret = veo_read_mem(DeviceInfo.ProcHandles[ID], HostPtr,
+                         (uint64_t)TargetPtr, Size);
+  if(ret != 0) {
+    DP("veo_read_mem() failed with error code %d\n", ret);
+  }
+  return ret;
 }
 
 // De-allocate the data referenced by target ptr on the device. In case of
@@ -350,7 +376,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   void *FuncArgsBuffer = __tgt_rtl_data_alloc(ID, FuncArgsBufferSize, NULL);
 
   if (!FuncArgsBuffer) {
-    //TODO: report error
+    DP("__tgt_rtl_data_alloc() failed for function parameters\n");
     return OFFLOAD_FAIL;
   }
 
@@ -358,9 +384,11 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
     ptrs[i] = (void *)((intptr_t)Args[i] + Offsets[i]);
   }
 
-  if (__tgt_rtl_data_submit(ID, FuncArgsBuffer, ptrs.data(),
-                            FuncArgsBufferSize)) {
-    //TODO: report error
+  int32_t RetDataSubmit =__tgt_rtl_data_submit(ID, FuncArgsBuffer, ptrs.data(),
+                                               FuncArgsBufferSize);
+  if (RetDataSubmit != 0) {
+    DP("__tgt_rtl_data_submit() failed for function parameters: \
+        RetDataSubmit=%d\n", RetDataSubmit);
     return OFFLOAD_FAIL;
   }
 
@@ -375,7 +403,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
                                &TargetArgs, &RetVal) != 0) {
     return OFFLOAD_FAIL;
   }
-  return OFFLOAD_FAIL;
+  return OFFLOAD_SUCCESS;
 }
 
 // Transfer control to the offloaded entry Entry on the target device.
