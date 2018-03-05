@@ -371,6 +371,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
 
   assert(NumArgs <= 8); // the api can only handle 8 args at a time.
 
+  //TODO: I think this complete code block is wrong and/or unnecessay. 
+  //      We already have all arguments in Args, havent we?
+#if 0
   uint64_t FuncArgsBufferSize = NumArgs * sizeof(void*);
   // allocate buffer for function args
   void *FuncArgsBuffer = __tgt_rtl_data_alloc(ID, FuncArgsBufferSize, NULL);
@@ -397,6 +400,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   for (int32_t i = 0; i < NumArgs; ++i) {
     TargetArgs.arguments[i] = ((intptr_t)FuncArgsBuffer + i);
   }
+#else
+
+  struct veo_call_args TargetArgs;
+
+  for (int32_t i = 0; i < NumArgs; ++i) {
+    TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
+  }
+#endif 
 
   uint64_t RetVal;
   if (target_run_function_wait(ID, reinterpret_cast<uint64_t>(Entry),
