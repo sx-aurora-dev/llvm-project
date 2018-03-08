@@ -49,27 +49,21 @@ class RM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
   let Inst{63-32}  = imm32;
 }
 
+class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+         InstrItinClass itin = NoItinerary>
+   : RM<opVal, outs, ins, asmstr, pattern, itin> {
+  let imm32 = 0;
+}
+
 class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
          InstrItinClass itin = NoItinerary>
-   : InstVE<outs, ins, asmstr, pattern, itin> {
-  bits<2>  zero;
+   : RM<opVal, outs, ins, asmstr, pattern, itin> {
   bits<2>  bpf;
   bits<4>  cf;
-  bits<1>  cy;
-  bits<7>  sy;
-  bits<1>  cz;
-  bits<7>  sz;
-  bits<32> imm32;
-  let op = opVal;
-  let zero = 0;
-  let Inst{15-14} = zero;
-  let Inst{13-12} = bpf;
-  let Inst{11-8} = cf;
-  let Inst{23} = cy;
-  let Inst{22-16} = sy;
-  let Inst{31} = cz;
-  let Inst{30-24} = sz;
-  let Inst{63-32}  = imm32;
+  let cx = 0;
+  let sx{6} = 0;
+  let sx{5-4} = bpf;
+  let sx{3-0} = cf;
 }
 
 // Pseudo instructions.

@@ -134,29 +134,50 @@ def CC_AT    : CC_VAL<15>;  // Always true
 // Instructions
 //===----------------------------------------------------------------------===//
 
-// The NOP instruction
+// NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
 def NOP : RM<0x79, (outs), (ins), "nop", []>;
 
-// The LEA instruction (load 32 bit imm to high part)
+// LEA instruction (load 32 bit imm to high part)
 let cx = 0, cy = 0, sy = 0, cz = 1 in
 def LEA : RM<
     0x06, (outs IntRegs:$sx), (ins IntRegs:$sz, i32imm:$imm32),
     "lea.sl $sx, $sz, $imm32",
     [(set i32:$sx, (or i32:$sz, simm32:$imm32))]>;
 
-// The LEA.SL instruction (load 32 bit imm to high part)
+// LEA.SL instruction (load 32 bit imm to high part)
 let cx = 1, cy = 0, sy = 0, cz = 1 in
 def LEASL : RM<
     0x06, (outs IntRegs:$sx), (ins IntRegs:$sz, i32imm:$imm32),
     "lea.sl $sx, $sz, $imm32",
     [(set i32:$sx, (or i32:$sz, LEASLimm:$imm32))]>;
 
+// ADS instruction
+let cx = 0, cy = 1, cz = 1 in
+def ADSsrr : RR<
+    0x4A, (outs IntRegs:$sx), (ins IntRegs:$sy, IntRegs:$sz),
+    "adds.w.sx $sx, $sy, $sz",
+    [(set i32:$sx, (add i32:$sy, i32:$sz))]>;
+
+let cx = 1, cy = 0, sy = 0, cz = 1 in
+def ADSzrr : RR<
+    0x4A, (outs IntRegs:$sx), (ins IntRegs:$sy, IntRegs:$sz),
+    "adds.w.zx $sx, $sy, $sz",
+    [(set i32:$sx, (add i32:$sy, i32:$sz))]>;
+
+// LDS and STS instructions
+// As 1st step, only uses sz and imm32 to represent $addr
 let cx = 0, cy = 0, sy = 0, cz = 1 in
 def LDS : RM<
     0x01, (outs IntRegs:$sx), (ins MEMri:$addr),
-    "lds $sx, [$addr]",
+    "ld $sx, $addr",
     [(set i32:$sx, (load ADDRri:$addr))]>;
+
+let cx = 0, cy = 0, sy = 0, cz = 1 in
+def SDS : RM<
+    0x11, (outs), (ins MEMri:$addr, IntRegs:$sx),
+    "st $sx, $addr",
+    [(store i32:$sx, ADDRri:$addr)]>;
 
 let bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1, sz = 0x10 /* S10 */, imm32 = 0, Uses = [S10],
