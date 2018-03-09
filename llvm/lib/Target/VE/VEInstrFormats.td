@@ -58,10 +58,11 @@ class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
          InstrItinClass itin = NoItinerary>
    : RM<opVal, outs, ins, asmstr, pattern, itin> {
+  bits<1>  cx2;
   bits<2>  bpf;
   bits<4>  cf;
   let cx = 0;
-  let sx{6} = 0;
+  let sx{6} = cx2;
   let sx{5-4} = bpf;
   let sx{3-0} = cf;
 }
