@@ -114,11 +114,9 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Get the number of bytes to allocate from the FrameInfo
   int NumBytes = (int) MFI.getStackSize();
-  unsigned SAVEri = 0;
-  unsigned SAVErr = 0;
+  unsigned SAVEri = VE::ADXir;
+  unsigned SAVErr = VE::ADXrr;
 #if 0
-  unsigned SAVEri = VE::SAVEri;
-  unsigned SAVErr = VE::SAVErr;
   if (FuncInfo->isLeafProc()) {
     if (NumBytes == 0)
       return;
