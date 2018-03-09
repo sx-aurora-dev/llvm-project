@@ -61,15 +61,15 @@ foreach I = 0-3 in
 foreach I = 0-14 in
   def PMC#I : VEMiscReg<!add(16,I), "PMC"#I>;
 
-// Generic registers
+// Generic registers - 64 bits wide
 foreach I = 0-63 in
   def S#I : R<I, "S"#I>, DwarfRegNum<[I]>;
 
-// Vector registers
+// Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
   def V#I : VR<I, "V"#I>, DwarfRegNum<[!add(64,I)]>;
 
-// Vector mask registers
+// Vector mask registers - 256 bits wide
 foreach I = 0-15 in
   def VM#I : VM<I, "VM"#I>, DwarfRegNum<[!add(128,I)]>;
 
