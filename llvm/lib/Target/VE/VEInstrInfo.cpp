@@ -110,15 +110,11 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
   llvm_unreachable("Invalid cond code");
 }
 
-#if 0
-static bool isUncondBranchOpcode(int Opc) { return Opc == SP::BA; }
-#endif
+// Treat br.l [BCR AT] as unconditional branch
+static bool isUncondBranchOpcode(int Opc) { return Opc == VE::BCRa; }
 
 static bool isCondBranchOpcode(int Opc) {
-#if 0
-  return Opc == SP::FBCOND || Opc == SP::BCOND;
-#endif
-  report_fatal_error("isCondBranchOpcode is not implemented yet");
+  return Opc == VE::BCRrr || Opc == VE::BCRir;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -142,7 +138,6 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
                                    MachineBasicBlock *&FBB,
                                    SmallVectorImpl<MachineOperand> &Cond,
                                    bool AllowModify) const {
-#if 0
   MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
   if (I == MBB.end())
     return false;
@@ -219,8 +214,6 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
   // Otherwise, can't handle this.
   return true;
-#endif
-  report_fatal_error("analyzeBranch is not implemented yet");
 }
 
 unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
@@ -507,7 +500,6 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
   }
   }
-  return false;
 #endif
-  report_fatal_error("expandPostRAPseudo is not implemented yet");
+  return false;
 }
