@@ -25,6 +25,7 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
+def simm15  : PatLeaf<(imm), [{ return isInt<15>(N->getSExtValue()); }]>;
 def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 
 def LO32 : SDNodeXForm<imm, [{
@@ -68,6 +69,11 @@ def MEMri : Operand<iPTR> {
   let ParserMatchClass = VEMEMriAsmOperand;
 }
 
+// Branch targets have OtherVT type.
+def brtarget32 : Operand<OtherVT> {
+  let EncoderMethod = "getBranchTarget32OpValue";
+}
+
 def TLSSym : Operand<iPTR>;
 
 // Branch targets have OtherVT type.
@@ -78,6 +84,14 @@ def brtarget : Operand<OtherVT> {
 def calltarget : Operand<i32> {
   let EncoderMethod = "getCallTargetOpValue";
   let DecoderMethod = "DecodeCall";
+}
+
+def simm15Op32 : Operand<i32> {
+  let DecoderMethod = "DecodeSIMM15";
+}
+
+def simm15Op64 : Operand<i64> {
+  let DecoderMethod = "DecodeSIMM15";
 }
 
 // Operand for printing out a condition code.
@@ -131,6 +145,58 @@ def CC_LENAN : CC_VAL<14>;  // Less or Equal or NaN
 def CC_AT    : CC_VAL<15>;  // Always true
 
 //===----------------------------------------------------------------------===//
+// VE Multiclasses for common instruction formats
+//===----------------------------------------------------------------------===//
+
+// Operand multiclass
+multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
+               RegisterClass RC, ValueType Ty, Operand immOp> {
+  def rr : RM<
+    opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
+    !strconcat(opcStr, " $sx, $sy, $sz"),
+    [(set Ty:$sx, (OpNode Ty:$sy, Ty:$sz))]> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def ir : RM<
+    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
+    !strconcat(opcStr, " $sx, $sy, $sz"),
+    [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm15:$sy)))]> {
+    let cy = 0;
+    let cz = 1;
+  }
+}
+
+// Branch multiclass
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
+  isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+multiclass BCRm {
+  def rr : CF<
+    0x18, (outs),
+    (ins CCOp:$cf, IntRegs:$sy, IntRegs:$sz, brtarget32:$imm32),
+    "br.${cf}.l $sy, $sz, $imm32", []> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def ir : CF<
+    0x18, (outs),
+    (ins CCOp:$cf, IntRegs:$sz, i32imm:$sy, brtarget32:$imm32),
+    "br.${cf}.l $sy, $sz, $imm32", []> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def a : CF<
+    0x18, (outs), (ins brtarget32:$imm32),
+    "br.l $imm32", []> {
+    let cy = 0;
+    let sy = 0;
+    let cz = 0;
+    let sz = 0;
+    let cf = 15;  /* AT */
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Instructions
 //===----------------------------------------------------------------------===//
 
@@ -152,18 +218,21 @@ def LEASL : RM<
     "lea.sl $sx, $sz, $imm32",
     [(set i32:$sx, (or i32:$sz, LEASLimm:$imm32))]>;
 
-// ADS instruction
-let cx = 0, cy = 1, cz = 1 in
-def ADSsrr : RR<
-    0x4A, (outs IntRegs:$sx), (ins IntRegs:$sy, IntRegs:$sz),
-    "adds.w.sx $sx, $sy, $sz",
-    [(set i32:$sx, (add i32:$sy, i32:$sz))]>;
+// ADD instruction
+let cx = 0 in
+defm ADD : RMm<"addu.l", 0x48, add, IntRegs, i64, simm15Op64>;
+let cx = 1 in
+defm ADDUW : RMm<"addu.w", 0x48, add, IntRegs, i32, simm15Op32>;
 
-let cx = 1, cy = 0, sy = 0, cz = 1 in
-def ADSzrr : RR<
-    0x4A, (outs IntRegs:$sx), (ins IntRegs:$sy, IntRegs:$sz),
-    "adds.w.zx $sx, $sy, $sz",
-    [(set i32:$sx, (add i32:$sy, i32:$sz))]>;
+// ADS instruction
+let cx = 0 in
+defm ADS : RMm<"adds.w.sx", 0x4A, add, IntRegs, i32, simm15Op32>;
+let cx = 1 in
+defm ADSU : RMm<"adds.w.zx", 0x4A, add, IntRegs, i32, simm15Op32>;
+
+// ADX instruction
+let cx = 0 in
+defm ADX : RMm<"adds.l", 0x59, add, IntRegs, i64, simm15Op64>;
 
 // LDS and STS instructions
 // As 1st step, only uses sz and imm32 to represent $addr
@@ -179,7 +248,35 @@ def SDS : RM<
     "st $sx, $addr",
     [(store i32:$sx, ADDRri:$addr)]>;
 
-let bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
+// Jump instruction
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+def BC : CF<
+    0x19, (outs), (ins CCOp:$cf, IntRegs:$sy, brtarget32:$imm32),
+    "b.${cf}.l $sy, $imm32",
+    []>;
+
+// Jump always instruction is treated as a special case of jump in order
+// to make finding unconditional jump easy.
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
+    cz = 1,
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+def BA : CF<
+    0x19, (outs), (ins brtarget32:$imm32),
+    "b.l $imm32",
+    []>;
+
+// Jump never instruction is also a special case of jump.
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
+    cz = 1,
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+def BN : CF<
+    0x19, (outs), (ins brtarget32:$imm32),
+    "b.af.l $imm32",
+    []>;
+
+// Return instruction is also a special case of jump.
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1, sz = 0x10 /* S10 */, imm32 = 0, Uses = [S10],
     isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1,
     isCodeGenOnly = 1 in
@@ -187,6 +284,9 @@ def RET : CF<
     0x19, (outs), (ins),
     "b.l (,%lr)",
     [(retflag)]>;
+
+// Branch instruction
+defm BCR : BCRm;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
