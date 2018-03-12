@@ -462,6 +462,7 @@ private:
   Value *EvaluateInDifferentElementOrder(Value *V, ArrayRef<int> Mask);
   Instruction *foldCastedBitwiseLogic(BinaryOperator &I);
   Instruction *narrowBinOp(TruncInst &Trunc);
+  Instruction *narrowMaskedBinOp(BinaryOperator &And);
   Instruction *narrowRotate(TruncInst &Trunc);
   Instruction *optimizeBitCastFromPhi(CastInst &CI, PHINode *PN);
 
@@ -691,7 +692,7 @@ private:
   Instruction *FoldOpIntoSelect(Instruction &Op, SelectInst *SI);
 
   /// This is a convenience wrapper function for the above two functions.
-  Instruction *foldOpWithConstantIntoOperand(BinaryOperator &I);
+  Instruction *foldBinOpIntoSelectOrPhi(BinaryOperator &I);
 
   Instruction *foldAddWithConstant(BinaryOperator &Add);
 
@@ -789,8 +790,7 @@ private:
   Instruction *MatchBSwap(BinaryOperator &I);
   bool SimplifyStoreAtEndOfBlock(StoreInst &SI);
 
-  Instruction *
-  SimplifyElementUnorderedAtomicMemCpy(ElementUnorderedAtomicMemCpyInst *AMI);
+  Instruction *SimplifyElementUnorderedAtomicMemCpy(AtomicMemCpyInst *AMI);
   Instruction *SimplifyMemTransfer(MemIntrinsic *MI);
   Instruction *SimplifyMemSet(MemSetInst *MI);
 

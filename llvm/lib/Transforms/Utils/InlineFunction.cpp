@@ -72,6 +72,7 @@
 #include <vector>
 
 using namespace llvm;
+using ProfileCount = Function::ProfileCount;
 
 static cl::opt<bool>
 EnableNoAliasConversion("enable-noalias-to-md-conversion", cl::init(true),
@@ -1247,7 +1248,7 @@ static void HandleByValArgumentInit(Value *Dst, Value *Src, Module *M,
   // Always generate a memcpy of alignment 1 here because we don't know
   // the alignment of the src pointer.  Other optimizations can infer
   // better alignment.
-  Builder.CreateMemCpy(Dst, Src, Size, /*Align=*/1);
+  Builder.CreateMemCpy(Dst, /*DstAlign*/1, Src, /*SrcAlign*/1, Size);
 }
 
 /// When inlining a call site that has a byval argument,
@@ -1431,29 +1432,29 @@ static void updateCallerBFI(BasicBlock *CallSiteBlock,
 
 /// Update the branch metadata for cloned call instructions.
 static void updateCallProfile(Function *Callee, const ValueToValueMapTy &VMap,
-                              const Optional<uint64_t> &CalleeEntryCount,
+                              const ProfileCount &CalleeEntryCount,
                               const Instruction *TheCall,
                               ProfileSummaryInfo *PSI,
                               BlockFrequencyInfo *CallerBFI) {
-  if (!CalleeEntryCount.hasValue() || CalleeEntryCount.getValue() < 1)
+  if (!CalleeEntryCount.hasValue() || CalleeEntryCount.isSynthetic() ||
+      CalleeEntryCount.getCount() < 1)
     return;
-  Optional<uint64_t> CallSiteCount =
-      PSI ? PSI->getProfileCount(TheCall, CallerBFI) : None;
+  auto CallSiteCount = PSI ? PSI->getProfileCount(TheCall, CallerBFI) : None;
   uint64_t CallCount =
       std::min(CallSiteCount.hasValue() ? CallSiteCount.getValue() : 0,
-               CalleeEntryCount.getValue());
+               CalleeEntryCount.getCount());
 
   for (auto const &Entry : VMap)
     if (isa<CallInst>(Entry.first))
       if (auto *CI = dyn_cast_or_null<CallInst>(Entry.second))
-        CI->updateProfWeight(CallCount, CalleeEntryCount.getValue());
+        CI->updateProfWeight(CallCount, CalleeEntryCount.getCount());
   for (BasicBlock &BB : *Callee)
     // No need to update the callsite if it is pruned during inlining.
     if (VMap.count(&BB))
       for (Instruction &I : BB)
         if (CallInst *CI = dyn_cast<CallInst>(&I))
-          CI->updateProfWeight(CalleeEntryCount.getValue() - CallCount,
-                               CalleeEntryCount.getValue());
+          CI->updateProfWeight(CalleeEntryCount.getCount() - CallCount,
+                               CalleeEntryCount.getCount());
 }
 
 /// Update the entry count of callee after inlining.
@@ -1467,18 +1468,19 @@ static void updateCalleeCount(BlockFrequencyInfo *CallerBFI, BasicBlock *CallBB,
   // callsite is M, the new callee count is set to N - M. M is estimated from
   // the caller's entry count, its entry block frequency and the block frequency
   // of the callsite.
-  Optional<uint64_t> CalleeCount = Callee->getEntryCount();
+  auto CalleeCount = Callee->getEntryCount();
   if (!CalleeCount.hasValue() || !PSI)
     return;
-  Optional<uint64_t> CallCount = PSI->getProfileCount(CallInst, CallerBFI);
+  auto CallCount = PSI->getProfileCount(CallInst, CallerBFI);
   if (!CallCount.hasValue())
     return;
   // Since CallSiteCount is an estimate, it could exceed the original callee
   // count and has to be set to 0.
-  if (CallCount.getValue() > CalleeCount.getValue())
-    Callee->setEntryCount(0);
+  if (CallCount.getValue() > CalleeCount.getCount())
+    CalleeCount.setCount(0);
   else
-    Callee->setEntryCount(CalleeCount.getValue() - CallCount.getValue());
+    CalleeCount.setCount(CalleeCount.getCount() - CallCount.getValue());
+  Callee->setEntryCount(CalleeCount);
 }
 
 /// This function inlines the called function into the basic block of the
@@ -1490,7 +1492,8 @@ static void updateCalleeCount(BlockFrequencyInfo *CallerBFI, BasicBlock *CallBB,
 /// exists in the instruction stream.  Similarly this will inline a recursive
 /// function by one level.
 bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
-                          AAResults *CalleeAAR, bool InsertLifetime) {
+                          AAResults *CalleeAAR, bool InsertLifetime,
+                          Function *ForwardVarArgsTo) {
   Instruction *TheCall = CS.getInstruction();
   assert(TheCall->getParent() && TheCall->getFunction()
          && "Instruction not in function!");
@@ -1499,9 +1502,9 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
   IFI.reset();
 
   Function *CalledFunc = CS.getCalledFunction();
-  if (!CalledFunc ||              // Can't inline external function or indirect
-      CalledFunc->isDeclaration() || // call, or call to a vararg function!
-      CalledFunc->getFunctionType()->isVarArg()) return false;
+  if (!CalledFunc ||               // Can't inline external function or indirect
+      CalledFunc->isDeclaration()) // call!
+    return false;
 
   // The inliner does not know how to inline through calls with operand bundles
   // in general ...
@@ -1627,9 +1630,6 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
     SmallVector<std::pair<Value*, Value*>, 4> ByValInit;
 
     auto &DL = Caller->getParent()->getDataLayout();
-
-    assert(CalledFunc->arg_size() == CS.arg_size() &&
-           "No varargs calls can be inlined!");
 
     // Calculate the vector of arguments to pass into the function cloner, which
     // matches up the formal to the actual argument values.
@@ -1808,7 +1808,16 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
     // Move any dbg.declares describing the allocas into the entry basic block.
     DIBuilder DIB(*Caller->getParent());
     for (auto &AI : IFI.StaticAllocas)
-      replaceDbgDeclareForAlloca(AI, AI, DIB, /*Deref=*/false);
+      replaceDbgDeclareForAlloca(AI, AI, DIB, DIExpression::NoDeref, 0,
+                                 DIExpression::NoDeref);
+  }
+
+  SmallVector<Value*,4> VarArgsToForward;
+  SmallVector<AttributeSet, 4> VarArgsAttrs;
+  for (unsigned i = CalledFunc->getFunctionType()->getNumParams();
+       i < CS.getNumArgOperands(); i++) {
+    VarArgsToForward.push_back(CS.getArgOperand(i));
+    VarArgsAttrs.push_back(CS.getAttributes().getParamAttributes(i));
   }
 
   bool InlinedMustTailCalls = false, InlinedDeoptimizeCalls = false;
@@ -1819,10 +1828,45 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
 
     for (Function::iterator BB = FirstNewBlock, E = Caller->end(); BB != E;
          ++BB) {
-      for (Instruction &I : *BB) {
+      for (auto II = BB->begin(); II != BB->end();) {
+        Instruction &I = *II++;
         CallInst *CI = dyn_cast<CallInst>(&I);
         if (!CI)
           continue;
+
+        // Forward varargs from inlined call site to calls to the
+        // ForwardVarArgsTo function, if requested, and to musttail calls.
+        if (!VarArgsToForward.empty() &&
+            ((ForwardVarArgsTo &&
+              CI->getCalledFunction() == ForwardVarArgsTo) ||
+             CI->isMustTailCall())) {
+          // Collect attributes for non-vararg parameters.
+          AttributeList Attrs = CI->getAttributes();
+          SmallVector<AttributeSet, 8> ArgAttrs;
+          if (!Attrs.isEmpty() || !VarArgsAttrs.empty()) {
+            for (unsigned ArgNo = 0;
+                 ArgNo < CI->getFunctionType()->getNumParams(); ++ArgNo)
+              ArgAttrs.push_back(Attrs.getParamAttributes(ArgNo));
+          }
+
+          // Add VarArg attributes.
+          ArgAttrs.append(VarArgsAttrs.begin(), VarArgsAttrs.end());
+          Attrs = AttributeList::get(CI->getContext(), Attrs.getFnAttributes(),
+                                     Attrs.getRetAttributes(), ArgAttrs);
+          // Add VarArgs to existing parameters.
+          SmallVector<Value *, 6> Params(CI->arg_operands());
+          Params.append(VarArgsToForward.begin(), VarArgsToForward.end());
+          CallInst *NewCI =
+              CallInst::Create(CI->getCalledFunction() ? CI->getCalledFunction()
+                                                       : CI->getCalledValue(),
+                               Params, "", CI);
+          NewCI->setDebugLoc(CI->getDebugLoc());
+          NewCI->setAttributes(Attrs);
+          NewCI->setCallingConv(CI->getCallingConv());
+          CI->replaceAllUsesWith(NewCI);
+          CI->eraseFromParent();
+          CI = NewCI;
+        }
 
         if (Function *F = CI->getCalledFunction())
           InlinedDeoptimizeCalls |=
@@ -1842,7 +1886,8 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
         //    f ->          g -> musttail f  ==>  f ->          f
         //    f ->          g ->     tail f  ==>  f ->          f
         CallInst::TailCallKind ChildTCK = CI->getTailCallKind();
-        ChildTCK = std::min(CallSiteTailKind, ChildTCK);
+        if (ChildTCK != CallInst::TCK_NoTail)
+          ChildTCK = std::min(CallSiteTailKind, ChildTCK);
         CI->setTailCallKind(ChildTCK);
         InlinedMustTailCalls |= CI->isMustTailCall();
 

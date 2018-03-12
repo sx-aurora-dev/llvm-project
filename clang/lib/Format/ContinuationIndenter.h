@@ -29,6 +29,7 @@ class SourceManager;
 namespace format {
 
 class AnnotatedLine;
+class BreakableToken;
 struct FormatToken;
 struct LineState;
 struct ParenState;
@@ -37,10 +38,14 @@ class WhitespaceManager;
 
 struct RawStringFormatStyleManager {
   llvm::StringMap<FormatStyle> DelimiterStyle;
+  llvm::StringMap<FormatStyle> EnclosingFunctionStyle;
 
   RawStringFormatStyleManager(const FormatStyle &CodeStyle);
 
-  llvm::Optional<FormatStyle> get(StringRef Delimiter) const;
+  llvm::Optional<FormatStyle> getDelimiterStyle(StringRef Delimiter) const;
+
+  llvm::Optional<FormatStyle>
+  getEnclosingFunctionStyle(StringRef EnclosingFunction) const;
 };
 
 class ContinuationIndenter {
@@ -105,22 +110,48 @@ private:
   /// 
   /// \returns An extra penalty induced by reformatting the token.
   unsigned reformatRawStringLiteral(const FormatToken &Current,
-                                    unsigned StartColumn, LineState &State,
-                                    StringRef Delimiter,
+                                    LineState &State,
                                     const FormatStyle &RawStringStyle,
                                     bool DryRun);
+
+  /// \brief If the current token is at the end of the current line, handle
+  /// the transition to the next line.
+  unsigned handleEndOfLine(const FormatToken &Current, LineState &State,
+                           bool DryRun, bool AllowBreak);
+
+  /// \brief If \p Current is a raw string that is configured to be reformatted,
+  /// return the style to be used.
+  llvm::Optional<FormatStyle> getRawStringStyle(const FormatToken &Current,
+                                                const LineState &State);
 
   /// \brief If the current token sticks out over the end of the line, break
   /// it if possible.
   ///
-  /// \returns An extra penalty if a token was broken, otherwise 0.
+  /// \returns A pair (penalty, exceeded), where penalty is the extra penalty
+  /// when tokens are broken or lines exceed the column limit, and exceeded
+  /// indicates whether the algorithm purposefully left lines exceeding the
+  /// column limit.
   ///
   /// The returned penalty will cover the cost of the additional line breaks
   /// and column limit violation in all lines except for the last one. The
   /// penalty for the column limit violation in the last line (and in single
   /// line tokens) is handled in \c addNextStateToQueue.
-  unsigned breakProtrudingToken(const FormatToken &Current, LineState &State,
-                                bool DryRun);
+  ///
+  /// \p Strict indicates whether reflowing is allowed to leave characters
+  /// protruding the column limit; if true, lines will be split strictly within
+  /// the column limit where possible; if false, words are allowed to protrude
+  /// over the column limit as long as the penalty is less than the penalty
+  /// of a break.
+  std::pair<unsigned, bool> breakProtrudingToken(const FormatToken &Current,
+                                                 LineState &State,
+                                                 bool AllowBreak, bool DryRun,
+                                                 bool Strict);
+
+  /// \brief Returns the \c BreakableToken starting at \p Current, or nullptr
+  /// if the current token cannot be broken.
+  std::unique_ptr<BreakableToken>
+  createBreakableToken(const FormatToken &Current, LineState &State,
+                       bool AllowBreak);
 
   /// \brief Appends the next token to \p State and updates information
   /// necessary for indentation.
@@ -177,7 +208,8 @@ struct ParenState {
         NoLineBreakInOperand(false), LastOperatorWrapped(true),
         ContainsLineBreak(false), ContainsUnwrappedBuilder(false),
         AlignColons(true), ObjCSelectorNameFound(false),
-        HasMultipleNestedBlocks(false), NestedBlockInlined(false) {}
+        HasMultipleNestedBlocks(false), NestedBlockInlined(false),
+        IsInsideObjCArrayLiteral(false) {}
 
   /// \brief The position to which a specific parenthesis level needs to be
   /// indented.
@@ -283,9 +315,13 @@ struct ParenState {
   /// the same token.
   bool HasMultipleNestedBlocks : 1;
 
-  // \brief The start of a nested block (e.g. lambda introducer in C++ or
-  // "function" in JavaScript) is not wrapped to a new line.
+  /// \brief The start of a nested block (e.g. lambda introducer in C++ or
+  /// "function" in JavaScript) is not wrapped to a new line.
   bool NestedBlockInlined : 1;
+
+  /// \brief \c true if the current \c ParenState represents an Objective-C
+  /// array literal.
+  bool IsInsideObjCArrayLiteral : 1;
 
   bool operator<(const ParenState &Other) const {
     if (Indent != Other.Indent)

@@ -1342,6 +1342,7 @@ bool X86FastISel::X86SelectLoad(const Instruction *I) {
 }
 
 static unsigned X86ChooseCmpOpcode(EVT VT, const X86Subtarget *Subtarget) {
+  bool HasAVX512 = Subtarget->hasAVX512();
   bool HasAVX = Subtarget->hasAVX();
   bool X86ScalarSSEf32 = Subtarget->hasSSE1();
   bool X86ScalarSSEf64 = Subtarget->hasSSE2();
@@ -1353,9 +1354,15 @@ static unsigned X86ChooseCmpOpcode(EVT VT, const X86Subtarget *Subtarget) {
   case MVT::i32: return X86::CMP32rr;
   case MVT::i64: return X86::CMP64rr;
   case MVT::f32:
-    return X86ScalarSSEf32 ? (HasAVX ? X86::VUCOMISSrr : X86::UCOMISSrr) : 0;
+    return X86ScalarSSEf32
+               ? (HasAVX512 ? X86::VUCOMISSZrr
+                            : HasAVX ? X86::VUCOMISSrr : X86::UCOMISSrr)
+               : 0;
   case MVT::f64:
-    return X86ScalarSSEf64 ? (HasAVX ? X86::VUCOMISDrr : X86::UCOMISDrr) : 0;
+    return X86ScalarSSEf64
+               ? (HasAVX512 ? X86::VUCOMISDZrr
+                            : HasAVX ? X86::VUCOMISDrr : X86::UCOMISDrr)
+               : 0;
   }
 }
 
@@ -1426,9 +1433,6 @@ bool X86FastISel::X86SelectCmp(const Instruction *I) {
 
   MVT VT;
   if (!isTypeLegal(I->getOperand(0)->getType(), VT))
-    return false;
-
-  if (I->getType()->isIntegerTy(1) && Subtarget->hasAVX512())
     return false;
 
   // Try to optimize or fold the cmp.
@@ -1972,9 +1976,9 @@ bool X86FastISel::X86SelectDivRem(const Instruction *I) {
   // Generate the DIV/IDIV instruction.
   BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc,
           TII.get(OpEntry.OpDivRem)).addReg(Op1Reg);
-  // For i8 remainder, we can't reference AH directly, as we'll end
-  // up with bogus copies like %R9B = COPY %AH. Reference AX
-  // instead to prevent AH references in a REX instruction.
+  // For i8 remainder, we can't reference ah directly, as we'll end
+  // up with bogus copies like %r9b = COPY %ah. Reference ax
+  // instead to prevent ah references in a rex instruction.
   //
   // The current assumption of the fast register allocator is that isel
   // won't generate explicit references to the GR8_NOREX registers. If
@@ -2406,7 +2410,8 @@ bool X86FastISel::X86SelectSIToFP(const Instruction *I) {
   if (!Subtarget->hasAVX())
     return false;
 
-  if (!I->getOperand(0)->getType()->isIntegerTy(32))
+  Type *InTy = I->getOperand(0)->getType();
+  if (!InTy->isIntegerTy(32) && !InTy->isIntegerTy(64))
     return false;
 
   // Select integer to float/double conversion.
@@ -2419,11 +2424,11 @@ bool X86FastISel::X86SelectSIToFP(const Instruction *I) {
 
   if (I->getType()->isDoubleTy()) {
     // sitofp int -> double
-    Opcode = X86::VCVTSI2SDrr;
+    Opcode = InTy->isIntegerTy(64) ? X86::VCVTSI642SDrr : X86::VCVTSI2SDrr;
     RC = &X86::FR64RegClass;
   } else if (I->getType()->isFloatTy()) {
     // sitofp int -> float
-    Opcode = X86::VCVTSI2SSrr;
+    Opcode = InTy->isIntegerTy(64) ? X86::VCVTSI642SSrr : X86::VCVTSI2SSrr;
     RC = &X86::FR32RegClass;
   } else
     return false;
@@ -2670,7 +2675,7 @@ bool X86FastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
             (FrameReg == X86::EBP && VT == MVT::i32)) &&
            "Invalid Frame Register!");
 
-    // Always make a copy of the frame register to to a vreg first, so that we
+    // Always make a copy of the frame register to a vreg first, so that we
     // never directly reference the frame register (the TwoAddressInstruction-
     // Pass doesn't like that).
     unsigned SrcReg = createResultReg(RC);
@@ -2721,7 +2726,7 @@ bool X86FastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
     if (MCI->getSourceAddressSpace() > 255 || MCI->getDestAddressSpace() > 255)
       return false;
 
-    return lowerCallTo(II, "memcpy", II->getNumArgOperands() - 2);
+    return lowerCallTo(II, "memcpy", II->getNumArgOperands() - 1);
   }
   case Intrinsic::memset: {
     const MemSetInst *MSI = cast<MemSetInst>(II);
@@ -2736,7 +2741,7 @@ bool X86FastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
     if (MSI->getDestAddressSpace() > 255)
       return false;
 
-    return lowerCallTo(II, "memset", II->getNumArgOperands() - 2);
+    return lowerCallTo(II, "memset", II->getNumArgOperands() - 1);
   }
   case Intrinsic::stackprotector: {
     // Emit code to store the stack guard onto the stack.
@@ -3167,6 +3172,10 @@ bool X86FastISel::fastLowerCall(CallLoweringInfo &CLI) {
       (CalledFn && CalledFn->hasFnAttribute("no_caller_saved_registers")))
     return false;
 
+  // Functions using retpoline should use SDISel for calls.
+  if (Subtarget->useRetpoline())
+    return false;
+
   // Handle only C, fastcc, and webkit_js calling conventions for now.
   switch (CC) {
   default: return false;
@@ -3453,13 +3462,11 @@ bool X86FastISel::fastLowerCall(CallLoweringInfo &CLI) {
     assert(GV && "Not a direct call");
     // See if we need any target-specific flags on the GV operand.
     unsigned char OpFlags = Subtarget->classifyGlobalFunctionReference(GV);
-    // Ignore NonLazyBind attribute in FastISel
-    if (OpFlags == X86II::MO_GOTPCREL)
-      OpFlags = 0;
 
     // This will be a direct call, or an indirect call through memory for
     // NonLazyBind calls or dllimport calls.
-    bool NeedLoad = OpFlags == X86II::MO_DLLIMPORT;
+    bool NeedLoad =
+        OpFlags == X86II::MO_DLLIMPORT || OpFlags == X86II::MO_GOTPCREL;
     unsigned CallOpc = NeedLoad
                            ? (Is64Bit ? X86::CALL64m : X86::CALL32m)
                            : (Is64Bit ? X86::CALL64pcrel32 : X86::CALLpcrel32);
@@ -3872,14 +3879,15 @@ unsigned X86FastISel::fastMaterializeFloatZero(const ConstantFP *CF) {
     return 0;
 
   // Get opcode and regclass for the given zero.
+  bool HasAVX512 = Subtarget->hasAVX512();
   unsigned Opc = 0;
   const TargetRegisterClass *RC = nullptr;
   switch (VT.SimpleTy) {
   default: return 0;
   case MVT::f32:
     if (X86ScalarSSEf32) {
-      Opc = X86::FsFLD0SS;
-      RC  = &X86::FR32RegClass;
+      Opc = HasAVX512 ? X86::AVX512_FsFLD0SS : X86::FsFLD0SS;
+      RC  = HasAVX512 ? &X86::FR32XRegClass : &X86::FR32RegClass;
     } else {
       Opc = X86::LD_Fp032;
       RC  = &X86::RFP32RegClass;
@@ -3887,8 +3895,8 @@ unsigned X86FastISel::fastMaterializeFloatZero(const ConstantFP *CF) {
     break;
   case MVT::f64:
     if (X86ScalarSSEf64) {
-      Opc = X86::FsFLD0SD;
-      RC  = &X86::FR64RegClass;
+      Opc = HasAVX512 ? X86::AVX512_FsFLD0SD : X86::FsFLD0SD;
+      RC  = HasAVX512 ? &X86::FR64XRegClass : &X86::FR64RegClass;
     } else {
       Opc = X86::LD_Fp064;
       RC  = &X86::RFP64RegClass;

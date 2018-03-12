@@ -383,16 +383,6 @@ static void PrintCallingConv(unsigned cc, raw_ostream &Out) {
   }
 }
 
-void llvm::PrintEscapedString(StringRef Name, raw_ostream &Out) {
-  for (unsigned i = 0, e = Name.size(); i != e; ++i) {
-    unsigned char C = Name[i];
-    if (isprint(C) && C != '\\' && C != '"')
-      Out << C;
-    else
-      Out << '\\' << hexdigit(C >> 4) << hexdigit(C & 0x0F);
-  }
-}
-
 enum PrefixType {
   GlobalPrefix,
   ComdatPrefix,
@@ -1108,10 +1098,12 @@ static void writeAtomicRMWOperation(raw_ostream &Out,
 
 static void WriteOptimizationInfo(raw_ostream &Out, const User *U) {
   if (const FPMathOperator *FPO = dyn_cast<const FPMathOperator>(U)) {
-    // Unsafe algebra implies all the others, no need to write them all out
-    if (FPO->hasUnsafeAlgebra())
+    // 'Fast' is an abbreviation for all fast-math-flags.
+    if (FPO->isFast())
       Out << " fast";
     else {
+      if (FPO->hasAllowReassoc())
+        Out << " reassoc";
       if (FPO->hasNoNaNs())
         Out << " nnan";
       if (FPO->hasNoInfs())
@@ -1122,6 +1114,8 @@ static void WriteOptimizationInfo(raw_ostream &Out, const User *U) {
         Out << " arcp";
       if (FPO->hasAllowContract())
         Out << " contract";
+      if (FPO->hasApproxFunc())
+        Out << " afn";
     }
   }
 
@@ -1459,7 +1453,7 @@ struct MDFieldPrinter {
 
   void printTag(const DINode *N);
   void printMacinfoType(const DIMacroNode *N);
-  void printChecksumKind(const DIFile *N);
+  void printChecksum(const DIFile::ChecksumInfo<StringRef> &N);
   void printString(StringRef Name, StringRef Value,
                    bool ShouldSkipEmpty = true);
   void printMetadata(StringRef Name, const Metadata *MD,
@@ -1494,11 +1488,10 @@ void MDFieldPrinter::printMacinfoType(const DIMacroNode *N) {
     Out << N->getMacinfoType();
 }
 
-void MDFieldPrinter::printChecksumKind(const DIFile *N) {
-  if (N->getChecksumKind() == DIFile::CSK_None)
-    // Skip CSK_None checksum kind.
-    return;
-  Out << FS << "checksumkind: " << N->getChecksumKindAsString();
+void MDFieldPrinter::printChecksum(
+    const DIFile::ChecksumInfo<StringRef> &Checksum) {
+  Out << FS << "checksumkind: " << Checksum.getKindAsString();
+  printString("checksum", Checksum.Value, /* ShouldSkipEmpty */ false);
 }
 
 void MDFieldPrinter::printString(StringRef Name, StringRef Value,
@@ -1617,10 +1610,15 @@ static void writeDILocation(raw_ostream &Out, const DILocation *DL,
 }
 
 static void writeDISubrange(raw_ostream &Out, const DISubrange *N,
-                            TypePrinting *, SlotTracker *, const Module *) {
+                            TypePrinting *TypePrinter, SlotTracker *Machine,
+                            const Module *Context) {
   Out << "!DISubrange(";
-  MDFieldPrinter Printer(Out);
-  Printer.printInt("count", N->getCount(), /* ShouldSkipZero */ false);
+  MDFieldPrinter Printer(Out, TypePrinter, Machine, Context);
+  if (auto *CE = N->getCount().dyn_cast<ConstantInt*>())
+    Printer.printInt("count", CE->getSExtValue(), /* ShouldSkipZero */ false);
+  else
+    Printer.printMetadata("count", N->getCount().dyn_cast<DIVariable*>(),
+                          /*ShouldSkipNull */ false);
   Printer.printInt("lowerBound", N->getLowerBound());
   Out << ")";
 }
@@ -1630,7 +1628,13 @@ static void writeDIEnumerator(raw_ostream &Out, const DIEnumerator *N,
   Out << "!DIEnumerator(";
   MDFieldPrinter Printer(Out);
   Printer.printString("name", N->getName(), /* ShouldSkipEmpty */ false);
-  Printer.printInt("value", N->getValue(), /* ShouldSkipZero */ false);
+  if (N->isUnsigned()) {
+    auto Value = static_cast<uint64_t>(N->getValue());
+    Printer.printInt("value", Value, /* ShouldSkipZero */ false);
+    Printer.printBool("isUnsigned", true);
+  } else {
+    Printer.printInt("value", N->getValue(), /* ShouldSkipZero */ false);
+  }
   Out << ")";
 }
 
@@ -1692,6 +1696,7 @@ static void writeDICompositeType(raw_ostream &Out, const DICompositeType *N,
   Printer.printMetadata("vtableHolder", N->getRawVTableHolder());
   Printer.printMetadata("templateParams", N->getRawTemplateParams());
   Printer.printString("identifier", N->getIdentifier());
+  Printer.printMetadata("discriminator", N->getRawDiscriminator());
   Out << ")";
 }
 
@@ -1715,8 +1720,11 @@ static void writeDIFile(raw_ostream &Out, const DIFile *N, TypePrinting *,
                       /* ShouldSkipEmpty */ false);
   Printer.printString("directory", N->getDirectory(),
                       /* ShouldSkipEmpty */ false);
-  Printer.printChecksumKind(N);
-  Printer.printString("checksum", N->getChecksum(), /* ShouldSkipEmpty */ true);
+  // Print all values for checksum together, or not at all.
+  if (N->getChecksum())
+    Printer.printChecksum(*N->getChecksum());
+  Printer.printString("source", N->getSource().getValueOr(StringRef()),
+                      /* ShouldSkipEmpty */ true);
   Out << ")";
 }
 
@@ -2493,8 +2501,13 @@ static void PrintVisibility(GlobalValue::VisibilityTypes Vis,
   }
 }
 
-static void PrintDSOLocation(bool IsDSOLocal, formatted_raw_ostream &Out){
-  if (IsDSOLocal)
+static void PrintDSOLocation(const GlobalValue &GV,
+                             formatted_raw_ostream &Out) {
+  // GVs with local linkage or non default visibility are implicitly dso_local,
+  // so we don't print it.
+  bool Implicit = GV.hasLocalLinkage() ||
+                  (!GV.hasExternalWeakLinkage() && !GV.hasDefaultVisibility());
+  if (GV.isDSOLocal() && !Implicit)
     Out << "dso_local ";
 }
 
@@ -2568,7 +2581,7 @@ void AssemblyWriter::printGlobal(const GlobalVariable *GV) {
     Out << "external ";
 
   Out << getLinkagePrintName(GV->getLinkage());
-  PrintDSOLocation(GV->isDSOLocal(), Out);
+  PrintDSOLocation(*GV, Out);
   PrintVisibility(GV->getVisibility(), Out);
   PrintDLLStorageClass(GV->getDLLStorageClass(), Out);
   PrintThreadLocalModel(GV->getThreadLocalMode(), Out);
@@ -2615,7 +2628,7 @@ void AssemblyWriter::printIndirectSymbol(const GlobalIndirectSymbol *GIS) {
   Out << " = ";
 
   Out << getLinkagePrintName(GIS->getLinkage());
-  PrintDSOLocation(GIS->isDSOLocal(), Out);
+  PrintDSOLocation(*GIS, Out);
   PrintVisibility(GIS->getVisibility(), Out);
   PrintDLLStorageClass(GIS->getDLLStorageClass(), Out);
   PrintThreadLocalModel(GIS->getThreadLocalMode(), Out);
@@ -2727,7 +2740,7 @@ void AssemblyWriter::printFunction(const Function *F) {
     Out << "define ";
 
   Out << getLinkagePrintName(F->getLinkage());
-  PrintDSOLocation(F->isDSOLocal(), Out);
+  PrintDSOLocation(*F, Out);
   PrintVisibility(F->getVisibility(), Out);
   PrintDLLStorageClass(F->getDLLStorageClass(), Out);
 

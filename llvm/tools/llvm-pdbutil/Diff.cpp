@@ -23,7 +23,6 @@
 #include "llvm/DebugInfo/PDB/Native/PDBStringTable.h"
 #include "llvm/DebugInfo/PDB/Native/RawConstants.h"
 
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/FormatProviders.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -418,8 +417,8 @@ Error DiffStyle::diffInfoStream() {
                        IS2.getFeatureSignatures());
   D.print("Named Stream Size", IS1.getNamedStreamMapByteSize(),
           IS2.getNamedStreamMapByteSize());
-  StringMap<uint32_t> NSL = IS1.getNamedStreams().getStringMap();
-  StringMap<uint32_t> NSR = IS2.getNamedStreams().getStringMap();
+  StringMap<uint32_t> NSL = IS1.getNamedStreams().entries();
+  StringMap<uint32_t> NSR = IS2.getNamedStreams().entries();
   D.diffUnorderedMap<EquivalentDiffProvider>("Named Stream", NSL, NSR);
   return Error::success();
 }

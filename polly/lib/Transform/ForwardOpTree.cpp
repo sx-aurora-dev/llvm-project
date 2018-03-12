@@ -51,6 +51,11 @@ static cl::opt<bool>
                  cl::desc("Analyze array contents for load forwarding"),
                  cl::cat(PollyCategory), cl::init(true), cl::Hidden);
 
+static cl::opt<bool>
+    NormalizePHIs("polly-optree-normalize-phi",
+                  cl::desc("Replace PHIs by their incoming values"),
+                  cl::cat(PollyCategory), cl::init(false), cl::Hidden);
+
 static cl::opt<unsigned>
     MaxOps("polly-optree-max-ops",
            cl::desc("Maximum number of ISL operations to invest for known "
@@ -280,16 +285,19 @@ public:
       IslQuotaScope QuotaScope = MaxOpGuard.enter();
 
       computeCommon();
+      if (NormalizePHIs)
+        computeNormalizedPHIs();
       Known = computeKnown(true, true);
 
       // Preexisting ValInsts use the known content analysis of themselves.
       Translator = makeIdentityMap(Known.range(), false);
     }
 
-    if (!Known || !Translator) {
+    if (!Known || !Translator || !NormalizeMap) {
       assert(isl_ctx_last_error(IslCtx.get()) == isl_error_quota);
       Known = nullptr;
       Translator = nullptr;
+      NormalizeMap = nullptr;
       DEBUG(dbgs() << "Known analysis exceeded max_operations\n");
       return false;
     }
@@ -462,6 +470,7 @@ public:
 
     // { DomainDef[] -> ValInst[] }
     isl::map ExpectedVal = makeValInst(Inst, UseStmt, UseLoop);
+    assert(isNormalized(ExpectedVal) && "LoadInsts are always normalized");
 
     // { DomainTarget[] -> ValInst[] }
     isl::map TargetExpectedVal = ExpectedVal.apply_domain(UseToTarget);
@@ -567,7 +576,8 @@ public:
                                         Loop *DefLoop, isl::map DefToTarget,
                                         bool DoIt) {
     // Cannot do anything without successful known analysis.
-    if (Known.is_null())
+    if (Known.is_null() || Translator.is_null() || UseToTarget.is_null() ||
+        DefToTarget.is_null() || MaxOpGuard.hasQuotaExceeded())
       return FD_NotApplicable;
 
     MemoryAccess *Access = TargetStmt->lookupInputAccessOf(Inst);
@@ -577,8 +587,14 @@ public:
       return FD_CanForwardLeaf;
     }
 
+    // Don't spend too much time analyzing whether it can be reloaded. When
+    // carrying-out the forwarding, we cannot bail-out in the middle of the
+    // transformation. It also shouldn't take as long because some results are
+    // cached.
+    IslQuotaScope QuotaScope = MaxOpGuard.enter(!DoIt);
+
     // { DomainDef[] -> ValInst[] }
-    isl::union_map ExpectedVal = makeValInst(Inst, UseStmt, UseLoop);
+    isl::union_map ExpectedVal = makeNormalizedValInst(Inst, UseStmt, UseLoop);
 
     // { DomainTarget[] -> ValInst[] }
     isl::union_map TargetExpectedVal = ExpectedVal.apply_domain(UseToTarget);
@@ -946,7 +962,7 @@ public:
     LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
 
     {
-      IslMaxOperationsGuard MaxOpGuard(S.getIslCtx(), MaxOps, false);
+      IslMaxOperationsGuard MaxOpGuard(S.getIslCtx().get(), MaxOps, false);
       Impl = llvm::make_unique<ForwardOpTreeImpl>(&S, &LI, MaxOpGuard);
 
       if (AnalyzeKnown) {

@@ -552,6 +552,8 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(nsz);
   KEYWORD(arcp);
   KEYWORD(contract);
+  KEYWORD(reassoc);
+  KEYWORD(afn);
   KEYWORD(fast);
   KEYWORD(nuw);
   KEYWORD(nsw);
@@ -662,6 +664,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(strictfp);
   KEYWORD(safestack);
   KEYWORD(sanitize_address);
+  KEYWORD(sanitize_hwaddress);
   KEYWORD(sanitize_thread);
   KEYWORD(sanitize_memory);
   KEYWORD(swifterror);

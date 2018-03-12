@@ -266,13 +266,9 @@ the configuration (without a prefix: ``Auto``).
 
   .. code-block:: c++
 
-    true:
-    int a;     // My comment a
-    int b = 2; // comment  b
-
-    false:
-    int a; // My comment a
-    int b = 2; // comment about b
+    true:                                   false:
+    int a;     // My comment a      vs.     int a; // My comment a
+    int b = 2; // comment  b                int b = 2; // comment about b
 
 **AllowAllParametersOfDeclarationOnNextLine** (``bool``)
   If the function declaration doesn't fit on a line,
@@ -633,7 +629,9 @@ the configuration (without a prefix: ``Auto``).
       int bar();
       }
 
-  * ``bool AfterObjCDeclaration`` Wrap ObjC definitions (``@autoreleasepool``, interfaces, ..).
+  * ``bool AfterObjCDeclaration`` Wrap ObjC definitions (interfaces, implementations...).
+    @autoreleasepool and @synchronized blocks are wrapped
+    according to `AfterControlStatement` flag.
 
   * ``bool AfterStruct`` Wrap struct definitions.
 
@@ -1177,6 +1175,46 @@ the configuration (without a prefix: ``Auto``).
 
   For example: BOOST_FOREACH.
 
+**IncludeBlocks** (``IncludeBlocksStyle``)
+  Dependent on the value, multiple ``#include`` blocks can be sorted
+  as one and divided based on category.
+
+  Possible values:
+
+  * ``IBS_Preserve`` (in configuration: ``Preserve``)
+    Sort each ``#include`` block separately.
+
+    .. code-block:: c++
+
+       #include "b.h"               into      #include "b.h"
+
+       #include <lib/main.h>                  #include "a.h"
+       #include "a.h"                         #include <lib/main.h>
+
+  * ``IBS_Merge`` (in configuration: ``Merge``)
+    Merge multiple ``#include`` blocks together and sort as one.
+
+    .. code-block:: c++
+
+       #include "b.h"               into      #include "a.h"
+                                              #include "b.h"
+       #include <lib/main.h>                  #include <lib/main.h>
+       #include "a.h"
+
+  * ``IBS_Regroup`` (in configuration: ``Regroup``)
+    Merge multiple ``#include`` blocks together and sort as one.
+    Then split into groups based on category priority. See
+    ``IncludeCategories``.
+
+    .. code-block:: c++
+
+       #include "b.h"               into      #include "a.h"
+                                              #include "b.h"
+       #include <lib/main.h>
+       #include "a.h"                         #include <lib/main.h>
+
+
+
 **IncludeCategories** (``std::vector<IncludeCategory>``)
   Regular expressions denoting the different ``#include`` categories
   used for ordering ``#includes``.
@@ -1472,6 +1510,52 @@ the configuration (without a prefix: ``Auto``).
 
 
 
+**ObjCBinPackProtocolList** (``BinPackStyle``)
+  Controls bin-packing Objective-C protocol conformance list
+  items into as few lines as possible when they go over ``ColumnLimit``.
+
+  If ``Auto`` (the default), delegates to the value in
+  ``BinPackParameters``. If that is ``true``, bin-packs Objective-C
+  protocol conformance list items into as few lines as possible
+  whenever they go over ``ColumnLimit``.
+
+  If ``Always``, always bin-packs Objective-C protocol conformance
+  list items into as few lines as possible whenever they go over
+  ``ColumnLimit``.
+
+  If ``Never``, lays out Objective-C protocol conformance list items
+  onto individual lines whenever they go over ``ColumnLimit``.
+
+
+  .. code-block:: c++
+
+     Always (or Auto, if BinPackParameters=true):
+     @interface ccccccccccccc () <
+         ccccccccccccc, ccccccccccccc,
+         ccccccccccccc, ccccccccccccc> {
+     }
+
+     Never (or Auto, if BinPackParameters=false):
+     @interface ddddddddddddd () <
+         ddddddddddddd,
+         ddddddddddddd,
+         ddddddddddddd,
+         ddddddddddddd> {
+     }
+
+  Possible values:
+
+  * ``BPS_Auto`` (in configuration: ``Auto``)
+    Automatically determine parameter bin-packing behavior.
+
+  * ``BPS_Always`` (in configuration: ``Always``)
+    Always bin-pack parameters.
+
+  * ``BPS_Never`` (in configuration: ``Never``)
+    Never bin-pack parameters.
+
+
+
 **ObjCBlockIndentWidth** (``unsigned``)
   The number of characters to use for indentation of ObjC blocks.
 
@@ -1541,6 +1625,44 @@ the configuration (without a prefix: ``Auto``).
 
 
 
+**RawStringFormats** (``std::vector<RawStringFormat>``)
+  Defines hints for detecting supported languages code blocks in raw
+  strings.
+
+  A raw string with a matching delimiter or a matching enclosing function
+  name will be reformatted assuming the specified language based on the
+  style for that language defined in the .clang-format file. If no style has
+  been defined in the .clang-format file for the specific language, a
+  predefined style given by 'BasedOnStyle' is used. If 'BasedOnStyle' is not
+  found, the formatting is based on llvm style. A matching delimiter takes
+  precedence over a matching enclosing function name for determining the
+  language of the raw string contents.
+
+  If a canonical delimiter is specified, occurrences of other delimiters for
+  the same language will be updated to the canonical if possible.
+
+  There should be at most one specification per language and each delimiter
+  and enclosing function should not occur in multiple specifications.
+
+  To configure this in the .clang-format file, use:
+
+  .. code-block:: yaml
+
+    RawStringFormats:
+      - Language: TextProto
+          Delimiters:
+            - 'pb'
+            - 'proto'
+          EnclosingFunctions:
+            - 'PARSE_TEXT_PROTO'
+          BasedOnStyle: google
+      - Language: Cpp
+          Delimiters:
+            - 'cc'
+            - 'cpp'
+          BasedOnStyle: llvm
+          CanonicalDelimiter: 'cc'
+
 **ReflowComments** (``bool``)
   If ``true``, clang-format will attempt to re-flow comments.
 
@@ -1568,6 +1690,14 @@ the configuration (without a prefix: ``Auto``).
 **SortUsingDeclarations** (``bool``)
   If ``true``, clang-format will sort using declarations.
 
+  The order of using declarations is defined as follows:
+  Split the strings by "::" and discard any initial empty strings. The last
+  element of each list is a non-namespace name; all others are namespace
+  names. Sort the lists of names lexicographically, where the sort order of
+  individual names is that all non-namespace names come before all namespace
+  names, and within those groups, names are in case-insensitive
+  lexicographic order.
+
   .. code-block:: c++
 
      false:                                 true:
@@ -1580,7 +1710,7 @@ the configuration (without a prefix: ``Auto``).
   .. code-block:: c++
 
      true:                                  false:
-     (int)i;                        vs.     (int) i;
+     (int) i;                       vs.     (int)i;
 
 **SpaceAfterTemplateKeyword** (``bool``)
   If ``true``, a space will be inserted after the 'template' keyword.
@@ -1598,6 +1728,23 @@ the configuration (without a prefix: ``Auto``).
      true:                                  false:
      int a = 5;                     vs.     int a=5;
      a += 42                                a+=42;
+
+**SpaceBeforeCtorInitializerColon** (``bool``)
+  If ``false``, spaces will be removed before constructor initializer
+  colon.
+
+  .. code-block:: c++
+
+     true:                                  false:
+     Foo::Foo() : a(a) {}                   Foo::Foo(): a(a) {}
+
+**SpaceBeforeInheritanceColon** (``bool``)
+  If ``false``, spaces will be removed before inheritance colon.
+
+  .. code-block:: c++
+
+     true:                                  false:
+     class Foo : Bar {}             vs.     class Foo: Bar {}
 
 **SpaceBeforeParens** (``SpaceBeforeParensOptions``)
   Defines in which cases to put a space before opening parentheses.
@@ -1642,6 +1789,15 @@ the configuration (without a prefix: ``Auto``).
        }
 
 
+
+**SpaceBeforeRangeBasedForLoopColon** (``bool``)
+  If ``false``, spaces will be removed before range-based for loop
+  colon.
+
+  .. code-block:: c++
+
+     true:                                  false:
+     for (auto v : values) {}       vs.     for(auto v: values) {}
 
 **SpaceInEmptyParentheses** (``bool``)
   If ``true``, spaces may be inserted into ``()``.

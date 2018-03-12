@@ -20,6 +20,7 @@
 
 namespace llvm {
 
+class DWARFContext;
 class DWARFUnit;
 class raw_ostream;
 
@@ -50,6 +51,8 @@ struct DWARFFormParams {
     }
     llvm_unreachable("Invalid Format value");
   }
+
+  explicit operator bool() const { return Version && AddrSize; }
 };
 
 class DWARFFormValue {
@@ -83,7 +86,7 @@ private:
   dwarf::Form Form;             /// Form for this value.
   ValueType Value;              /// Contains all data for the form.
   const DWARFUnit *U = nullptr; /// Remember the DWARFUnit at extract time.
-
+  const DWARFContext *C = nullptr; /// Context for extract time.
 public:
   DWARFFormValue(dwarf::Form F = dwarf::Form(0)) : Form(F) {}
 
@@ -104,16 +107,19 @@ public:
   const DWARFUnit *getUnit() const { return U; }
   void dump(raw_ostream &OS, DIDumpOptions DumpOpts = DIDumpOptions()) const;
 
-  /// Extracts a value in \p Data at offset \p *OffsetPtr.
-  ///
-  /// The passed DWARFUnit is allowed to be nullptr, in which case some
-  /// kind of forms that depend on Unit information are disallowed.
-  /// \param Data The DWARFDataExtractor to use.
-  /// \param OffsetPtr The offset within \p Data where the data starts.
-  /// \param U The optional DWARFUnit supplying information for some forms.
-  /// \returns whether the extraction succeeded.
+  /// Extracts a value in \p Data at offset \p *OffsetPtr. The information
+  /// in \p FormParams is needed to interpret some forms. The optional
+  /// \p Context and \p Unit allows extracting information if the form refers
+  /// to other sections (e.g., .debug_str).
   bool extractValue(const DWARFDataExtractor &Data, uint32_t *OffsetPtr,
-                    const DWARFUnit *U);
+                    DWARFFormParams FormParams,
+                    const DWARFContext *Context = nullptr,
+                    const DWARFUnit *Unit = nullptr);
+
+  bool extractValue(const DWARFDataExtractor &Data, uint32_t *OffsetPtr,
+                    DWARFFormParams FormParams, const DWARFUnit *U) {
+    return extractValue(Data, OffsetPtr, FormParams, nullptr, U);
+  }
 
   bool isInlinedCStr() const {
     return Value.data != nullptr && Value.data == (const uint8_t *)Value.cstr;

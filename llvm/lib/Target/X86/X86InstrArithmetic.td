@@ -104,7 +104,8 @@ def MUL32m : I<0xF7, MRM4m, (outs), (ins i32mem:$src),
 // RAX,RDX = RAX*[mem64]
 let Defs = [RAX,RDX,EFLAGS], Uses = [RAX] in
 def MUL64m : RI<0xF7, MRM4m, (outs), (ins i64mem:$src),
-                "mul{q}\t$src", [], IIC_MUL64>, SchedLoadReg<WriteIMulLd>;
+                "mul{q}\t$src", [], IIC_MUL64>, SchedLoadReg<WriteIMulLd>,
+                Requires<[In64BitMode]>;
 }
 
 let hasSideEffects = 0 in {
@@ -143,7 +144,8 @@ def IMUL32m : I<0xF7, MRM5m, (outs), (ins i32mem:$src),
 // RAX,RDX = RAX*[mem64]
 let Defs = [RAX,RDX,EFLAGS], Uses = [RAX] in
 def IMUL64m : RI<0xF7, MRM5m, (outs), (ins i64mem:$src),
-                 "imul{q}\t$src", [], IIC_IMUL64>, SchedLoadReg<WriteIMulLd>;
+                 "imul{q}\t$src", [], IIC_IMUL64>, SchedLoadReg<WriteIMulLd>,
+                 Requires<[In64BitMode]>;
 }
 } // hasSideEffects
 
@@ -326,7 +328,7 @@ def DIV32m : I<0xF7, MRM6m, (outs), (ins i32mem:$src),
 let Defs = [RAX,RDX,EFLAGS], Uses = [RAX,RDX] in
 def DIV64m : RI<0xF7, MRM6m, (outs), (ins i64mem:$src),
                 "div{q}\t$src", [], IIC_DIV64>,
-             SchedLoadReg<WriteIDivLd>;
+             SchedLoadReg<WriteIDivLd>, Requires<[In64BitMode]>;
 }
 
 // Signed division/remainder.
@@ -362,7 +364,7 @@ def IDIV32m: I<0xF7, MRM7m, (outs), (ins i32mem:$src),
 let Defs = [RAX,RDX,EFLAGS], Uses = [RAX,RDX] in // RDX:RAX/[mem64] = RAX,RDX
 def IDIV64m: RI<0xF7, MRM7m, (outs), (ins i64mem:$src),
                 "idiv{q}\t$src", [], IIC_IDIV64>,
-             SchedLoadReg<WriteIDivLd>;
+             SchedLoadReg<WriteIDivLd>, Requires<[In64BitMode]>;
 }
 } // hasSideEffects = 0
 
@@ -407,7 +409,8 @@ def NEG32m : I<0xF7, MRM3m, (outs), (ins i32mem:$dst),
                 (implicit EFLAGS)], IIC_UNARY_MEM>, OpSize32;
 def NEG64m : RI<0xF7, MRM3m, (outs), (ins i64mem:$dst), "neg{q}\t$dst",
                 [(store (ineg (loadi64 addr:$dst)), addr:$dst),
-                 (implicit EFLAGS)], IIC_UNARY_MEM>;
+                 (implicit EFLAGS)], IIC_UNARY_MEM>,
+                Requires<[In64BitMode]>;
 } // SchedRW
 } // Defs = [EFLAGS]
 
@@ -444,7 +447,8 @@ def NOT32m : I<0xF7, MRM2m, (outs), (ins i32mem:$dst),
                [(store (not (loadi32 addr:$dst)), addr:$dst)], IIC_UNARY_MEM>,
                OpSize32;
 def NOT64m : RI<0xF7, MRM2m, (outs), (ins i64mem:$dst), "not{q}\t$dst",
-                [(store (not (loadi64 addr:$dst)), addr:$dst)], IIC_UNARY_MEM>;
+                [(store (not (loadi64 addr:$dst)), addr:$dst)], IIC_UNARY_MEM>,
+                Requires<[In64BitMode]>;
 } // SchedRW
 } // CodeSize
 
@@ -481,7 +485,8 @@ def INC32r_alt : I<0x40, AddRegFrm, (outs GR32:$dst), (ins GR32:$src1),
 } // CodeSize = 1, hasSideEffects = 0
 } // Constraints = "$src1 = $dst", SchedRW
 
-let CodeSize = 2, SchedRW = [WriteALULd, WriteRMW], Predicates = [UseIncDec] in {
+let CodeSize = 2, SchedRW = [WriteALULd, WriteRMW] in {
+let Predicates = [UseIncDec] in {
   def INC8m  : I<0xFE, MRM0m, (outs), (ins i8mem :$dst), "inc{b}\t$dst",
                [(store (add (loadi8 addr:$dst), 1), addr:$dst),
                 (implicit EFLAGS)], IIC_UNARY_MEM>;
@@ -491,9 +496,12 @@ let CodeSize = 2, SchedRW = [WriteALULd, WriteRMW], Predicates = [UseIncDec] in 
   def INC32m : I<0xFF, MRM0m, (outs), (ins i32mem:$dst), "inc{l}\t$dst",
                [(store (add (loadi32 addr:$dst), 1), addr:$dst),
                 (implicit EFLAGS)], IIC_UNARY_MEM>, OpSize32;
+} // Predicates
+let Predicates = [UseIncDec, In64BitMode] in {
   def INC64m : RI<0xFF, MRM0m, (outs), (ins i64mem:$dst), "inc{q}\t$dst",
                   [(store (add (loadi64 addr:$dst), 1), addr:$dst),
                    (implicit EFLAGS)], IIC_UNARY_MEM>;
+} // Predicates
 } // CodeSize = 2, SchedRW
 
 let Constraints = "$src1 = $dst", SchedRW = [WriteALU] in {
@@ -528,7 +536,8 @@ def DEC32r_alt : I<0x48, AddRegFrm, (outs GR32:$dst), (ins GR32:$src1),
 } // Constraints = "$src1 = $dst", SchedRW
 
 
-let CodeSize = 2, SchedRW = [WriteALULd, WriteRMW], Predicates = [UseIncDec] in {
+let CodeSize = 2, SchedRW = [WriteALULd, WriteRMW] in {
+let Predicates = [UseIncDec] in {
   def DEC8m  : I<0xFE, MRM1m, (outs), (ins i8mem :$dst), "dec{b}\t$dst",
                [(store (add (loadi8 addr:$dst), -1), addr:$dst),
                 (implicit EFLAGS)], IIC_UNARY_MEM>;
@@ -538,9 +547,12 @@ let CodeSize = 2, SchedRW = [WriteALULd, WriteRMW], Predicates = [UseIncDec] in 
   def DEC32m : I<0xFF, MRM1m, (outs), (ins i32mem:$dst), "dec{l}\t$dst",
                [(store (add (loadi32 addr:$dst), -1), addr:$dst),
                 (implicit EFLAGS)], IIC_UNARY_MEM>, OpSize32;
+} // Predicates
+let Predicates = [UseIncDec, In64BitMode] in {
   def DEC64m : RI<0xFF, MRM1m, (outs), (ins i64mem:$dst), "dec{q}\t$dst",
                   [(store (add (loadi64 addr:$dst), -1), addr:$dst),
                    (implicit EFLAGS)], IIC_UNARY_MEM>;
+} // Predicates
 } // CodeSize = 2, SchedRW
 } // Defs = [EFLAGS]
 
@@ -838,7 +850,8 @@ class BinOpMR_RMW_FF<bits<8> opcode, string mnemonic, X86TypeInfo typeinfo,
 class BinOpMR_F<bits<8> opcode, string mnemonic, X86TypeInfo typeinfo,
                 SDPatternOperator opnode>
   : BinOpMR<opcode, mnemonic, typeinfo,
-            [(set EFLAGS, (opnode (load addr:$dst), typeinfo.RegClass:$src))]>;
+            [(set EFLAGS, (opnode (typeinfo.LoadNode addr:$dst),
+                                   typeinfo.RegClass:$src))]>;
 
 // BinOpMI - Instructions like "add [mem], imm".
 class BinOpMI<bits<8> opcode, string mnemonic, X86TypeInfo typeinfo,
@@ -870,8 +883,8 @@ class BinOpMI_RMW_FF<bits<8> opcode, string mnemonic, X86TypeInfo typeinfo,
 class BinOpMI_F<bits<8> opcode, string mnemonic, X86TypeInfo typeinfo,
                 SDPatternOperator opnode, Format f>
   : BinOpMI<opcode, mnemonic, typeinfo, f,
-            [(set EFLAGS, (opnode (typeinfo.VT (load addr:$dst)),
-                                               typeinfo.ImmOperator:$src))]>;
+            [(set EFLAGS, (opnode (typeinfo.LoadNode addr:$dst),
+                                  typeinfo.ImmOperator:$src))]>;
 
 // BinOpMI8 - Instructions like "add [mem], imm8".
 class BinOpMI8<string mnemonic, X86TypeInfo typeinfo,
@@ -904,7 +917,7 @@ class BinOpMI8_RMW_FF<string mnemonic, X86TypeInfo typeinfo,
 class BinOpMI8_F<string mnemonic, X86TypeInfo typeinfo,
                  SDPatternOperator opnode, Format f>
   : BinOpMI8<mnemonic, typeinfo, f,
-             [(set EFLAGS, (opnode (load addr:$dst),
+             [(set EFLAGS, (opnode (typeinfo.LoadNode addr:$dst),
                                    typeinfo.Imm8Operator:$src))]>;
 
 // BinOpAI - Instructions like "add %eax, %eax, imm", that imp-def EFLAGS.
@@ -992,11 +1005,13 @@ multiclass ArithBinOp_RF<bits<8> BaseOpc, bits<8> BaseOpc2, bits<8> BaseOpc4,
     // first so that they are slightly preferred to the mi forms.
     def NAME#16mi8  : BinOpMI8_RMW<mnemonic, Xi16, opnode, MemMRM>;
     def NAME#32mi8  : BinOpMI8_RMW<mnemonic, Xi32, opnode, MemMRM>;
+    let Predicates = [In64BitMode] in
     def NAME#64mi8  : BinOpMI8_RMW<mnemonic, Xi64, opnode, MemMRM>;
 
     def NAME#8mi    : BinOpMI_RMW<0x80, mnemonic, Xi8 , opnode, MemMRM>;
     def NAME#16mi   : BinOpMI_RMW<0x80, mnemonic, Xi16, opnode, MemMRM>;
     def NAME#32mi   : BinOpMI_RMW<0x80, mnemonic, Xi32, opnode, MemMRM>;
+    let Predicates = [In64BitMode] in
     def NAME#64mi32 : BinOpMI_RMW<0x80, mnemonic, Xi64, opnode, MemMRM>;
 
     // These are for the disassembler since 0x82 opcode behaves like 0x80, but
@@ -1075,11 +1090,13 @@ multiclass ArithBinOp_RFF<bits<8> BaseOpc, bits<8> BaseOpc2, bits<8> BaseOpc4,
     // first so that they are slightly preferred to the mi forms.
     def NAME#16mi8  : BinOpMI8_RMW_FF<mnemonic, Xi16, opnode, MemMRM>;
     def NAME#32mi8  : BinOpMI8_RMW_FF<mnemonic, Xi32, opnode, MemMRM>;
+    let Predicates = [In64BitMode] in
     def NAME#64mi8  : BinOpMI8_RMW_FF<mnemonic, Xi64, opnode, MemMRM>;
 
     def NAME#8mi    : BinOpMI_RMW_FF<0x80, mnemonic, Xi8 , opnode, MemMRM>;
     def NAME#16mi   : BinOpMI_RMW_FF<0x80, mnemonic, Xi16, opnode, MemMRM>;
     def NAME#32mi   : BinOpMI_RMW_FF<0x80, mnemonic, Xi32, opnode, MemMRM>;
+    let Predicates = [In64BitMode] in
     def NAME#64mi32 : BinOpMI_RMW_FF<0x80, mnemonic, Xi64, opnode, MemMRM>;
 
     // These are for the disassembler since 0x82 opcode behaves like 0x80, but
@@ -1154,11 +1171,13 @@ multiclass ArithBinOp_F<bits<8> BaseOpc, bits<8> BaseOpc2, bits<8> BaseOpc4,
     // first so that they are slightly preferred to the mi forms.
     def NAME#16mi8  : BinOpMI8_F<mnemonic, Xi16, opnode, MemMRM>;
     def NAME#32mi8  : BinOpMI8_F<mnemonic, Xi32, opnode, MemMRM>;
+    let Predicates = [In64BitMode] in
     def NAME#64mi8  : BinOpMI8_F<mnemonic, Xi64, opnode, MemMRM>;
 
     def NAME#8mi    : BinOpMI_F<0x80, mnemonic, Xi8 , opnode, MemMRM>;
     def NAME#16mi   : BinOpMI_F<0x80, mnemonic, Xi16, opnode, MemMRM>;
     def NAME#32mi   : BinOpMI_F<0x80, mnemonic, Xi32, opnode, MemMRM>;
+    let Predicates = [In64BitMode] in
     def NAME#64mi32 : BinOpMI_F<0x80, mnemonic, Xi64, opnode, MemMRM>;
 
     // These are for the disassembler since 0x82 opcode behaves like 0x80, but
@@ -1231,20 +1250,14 @@ let isCompare = 1 in {
     def TEST8ri    : BinOpRI_F<0xF6, "test", Xi8 , X86testpat, MRM0r>;
     def TEST16ri   : BinOpRI_F<0xF6, "test", Xi16, X86testpat, MRM0r>;
     def TEST32ri   : BinOpRI_F<0xF6, "test", Xi32, X86testpat, MRM0r>;
+    let Predicates = [In64BitMode] in
     def TEST64ri32 : BinOpRI_F<0xF6, "test", Xi64, X86testpat, MRM0r>;
 
     def TEST8mi    : BinOpMI_F<0xF6, "test", Xi8 , X86testpat, MRM0m>;
     def TEST16mi   : BinOpMI_F<0xF6, "test", Xi16, X86testpat, MRM0m>;
     def TEST32mi   : BinOpMI_F<0xF6, "test", Xi32, X86testpat, MRM0m>;
+    let Predicates = [In64BitMode] in
     def TEST64mi32 : BinOpMI_F<0xF6, "test", Xi64, X86testpat, MRM0m>;
-
-    // When testing the result of EXTRACT_SUBREG sub_8bit_hi, make sure the
-    // register class is constrained to GR8_NOREX. This pseudo is explicitly
-    // marked side-effect free, since it doesn't have an isel pattern like
-    // other test instructions.
-    let isPseudo = 1, hasSideEffects = 0 in
-    def TEST8ri_NOREX : I<0, Pseudo, (outs), (ins GR8_NOREX:$src, i8imm:$mask),
-                          "", [], IIC_BIN_NONMEM>, Sched<[WriteALU]>;
   } // Defs = [EFLAGS]
 
   def TEST8i8    : BinOpAI_F<0xA8, "test", Xi8 , AL,
@@ -1273,12 +1286,13 @@ multiclass bmi_andn<string mnemonic, RegisterClass RC, X86MemOperand x86memop,
            Sched<[WriteALULd, ReadAfterLd]>;
 }
 
-let Predicates = [HasBMI], Defs = [EFLAGS] in {
+// Complexity is reduced to give and with immediate a chance to match first.
+let Predicates = [HasBMI], Defs = [EFLAGS], AddedComplexity = -6 in {
   defm ANDN32 : bmi_andn<"andn{l}", GR32, i32mem, loadi32>, T8PS, VEX_4V;
   defm ANDN64 : bmi_andn<"andn{q}", GR64, i64mem, loadi64>, T8PS, VEX_4V, VEX_W;
 }
 
-let Predicates = [HasBMI] in {
+let Predicates = [HasBMI], AddedComplexity = -6 in {
   def : Pat<(and (not GR32:$src1), GR32:$src2),
             (ANDN32rr GR32:$src1, GR32:$src2)>;
   def : Pat<(and (not GR64:$src1), GR64:$src2),

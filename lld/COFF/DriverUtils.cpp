@@ -15,9 +15,9 @@
 
 #include "Config.h"
 #include "Driver.h"
-#include "Memory.h"
 #include "Symbols.h"
 #include "lld/Common/ErrorHandler.h"
+#include "lld/Common/Memory.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/COFF.h"
@@ -126,6 +126,21 @@ void parseVersion(StringRef Arg, uint32_t *Major, uint32_t *Minor) {
   *Minor = 0;
   if (!S2.empty() && S2.getAsInteger(0, *Minor))
     fatal("invalid number: " + S2);
+}
+
+void parseGuard(StringRef FullArg) {
+  SmallVector<StringRef, 1> SplitArgs;
+  FullArg.split(SplitArgs, ",");
+  for (StringRef Arg : SplitArgs) {
+    if (Arg.equals_lower("no"))
+      Config->GuardCF = GuardCFLevel::Off;
+    else if (Arg.equals_lower("nolongjmp"))
+      Config->GuardCF = GuardCFLevel::NoLongJmp;
+    else if (Arg.equals_lower("cf") || Arg.equals_lower("longjmp"))
+      Config->GuardCF = GuardCFLevel::Full;
+    else
+      fatal("invalid argument to /guard: " + Arg);
+  }
 }
 
 // Parses a string in the form of "<subsystem>[,<integer>[.<integer>]]".
@@ -317,7 +332,7 @@ public:
   // is called (you cannot remove an opened file on Windows.)
   std::unique_ptr<MemoryBuffer> getMemoryBuffer() {
     // IsVolatileSize=true forces MemoryBuffer to not use mmap().
-    return check(MemoryBuffer::getFile(Path, /*FileSize=*/-1,
+    return CHECK(MemoryBuffer::getFile(Path, /*FileSize=*/-1,
                                        /*RequiresNullTerminator=*/false,
                                        /*IsVolatileSize=*/true),
                  "could not open " + Path);
@@ -402,7 +417,7 @@ static std::string createManifestXmlWithExternalMt(StringRef DefaultXml) {
   E.add("/out:" + StringRef(User.Path));
   E.run();
 
-  return check(MemoryBuffer::getFile(User.Path), "could not open " + User.Path)
+  return CHECK(MemoryBuffer::getFile(User.Path), "could not open " + User.Path)
       .get()
       ->getBuffer();
 }
@@ -418,15 +433,15 @@ static std::string createManifestXml() {
   return createManifestXmlWithExternalMt(DefaultXml);
 }
 
-static std::unique_ptr<MemoryBuffer>
+static std::unique_ptr<WritableMemoryBuffer>
 createMemoryBufferForManifestRes(size_t ManifestSize) {
   size_t ResSize = alignTo(
       object::WIN_RES_MAGIC_SIZE + object::WIN_RES_NULL_ENTRY_SIZE +
           sizeof(object::WinResHeaderPrefix) + sizeof(object::WinResIDs) +
           sizeof(object::WinResHeaderSuffix) + ManifestSize,
       object::WIN_RES_DATA_ALIGNMENT);
-  return MemoryBuffer::getNewMemBuffer(ResSize,
-                                       Config->OutputFile + ".manifest.res");
+  return WritableMemoryBuffer::getNewMemBuffer(ResSize, Config->OutputFile +
+                                                            ".manifest.res");
 }
 
 static void writeResFileHeader(char *&Buf) {
@@ -465,16 +480,16 @@ static void writeResEntryHeader(char *&Buf, size_t ManifestSize) {
 std::unique_ptr<MemoryBuffer> createManifestRes() {
   std::string Manifest = createManifestXml();
 
-  std::unique_ptr<MemoryBuffer> Res =
+  std::unique_ptr<WritableMemoryBuffer> Res =
       createMemoryBufferForManifestRes(Manifest.size());
 
-  char *Buf = const_cast<char *>(Res->getBufferStart());
+  char *Buf = Res->getBufferStart();
   writeResFileHeader(Buf);
   writeResEntryHeader(Buf, Manifest.size());
 
   // Copy the manifest data into the .res file.
   std::copy(Manifest.begin(), Manifest.end(), Buf);
-  return Res;
+  return std::move(Res);
 }
 
 void createSideBySideManifest() {
@@ -558,6 +573,12 @@ err:
 static StringRef undecorate(StringRef Sym) {
   if (Config->Machine != I386)
     return Sym;
+  // In MSVC mode, a fully decorated stdcall function is exported
+  // as-is with the leading underscore (with type IMPORT_NAME).
+  // In MinGW mode, a decorated stdcall function gets the underscore
+  // removed, just like normal cdecl functions.
+  if (Sym.startswith("_") && Sym.contains('@') && !Config->MinGW)
+    return Sym;
   return Sym.startswith("_") ? Sym.substr(1) : Sym;
 }
 
@@ -574,7 +595,7 @@ void fixupExports() {
   }
 
   for (Export &E : Config->Exports) {
-    SymbolBody *Sym = E.Sym;
+    Symbol *Sym = E.Sym;
     if (!E.ForwardTo.empty() || !Sym) {
       E.SymbolName = E.Name;
     } else {
@@ -594,7 +615,7 @@ void fixupExports() {
   }
 
   // Uniquefy by name.
-  std::map<StringRef, Export *> Map;
+  DenseMap<StringRef, Export *> Map(Config->Exports.size());
   std::vector<Export> V;
   for (Export &E : Config->Exports) {
     auto Pair = Map.insert(std::make_pair(E.ExportName, &E));
@@ -642,7 +663,7 @@ void checkFailIfMismatch(StringRef Arg) {
 }
 
 // Convert Windows resource files (.res files) to a .obj file.
-MemoryBufferRef convertResToCOFF(const std::vector<MemoryBufferRef> &MBs) {
+MemoryBufferRef convertResToCOFF(ArrayRef<MemoryBufferRef> MBs) {
   object::WindowsResourceParser Parser;
 
   for (MemoryBufferRef MB : MBs) {
@@ -750,6 +771,33 @@ opt::InputArgList ArgParser::parse(ArrayRef<const char *> Argv) {
   return Args;
 }
 
+// Tokenizes and parses a given string as command line in .drective section.
+// /EXPORT options are processed in fastpath.
+std::pair<opt::InputArgList, std::vector<StringRef>>
+ArgParser::parseDirectives(StringRef S) {
+  std::vector<StringRef> Exports;
+  SmallVector<const char *, 16> Rest;
+
+  for (StringRef Tok : tokenize(S)) {
+    if (Tok.startswith_lower("/export:") || Tok.startswith_lower("-export:"))
+      Exports.push_back(Tok.substr(strlen("/export:")));
+    else
+      Rest.push_back(Tok.data());
+  }
+
+  // Make InputArgList from unparsed string vectors.
+  unsigned MissingIndex;
+  unsigned MissingCount;
+
+  opt::InputArgList Args = Table.ParseArgs(Rest, MissingIndex, MissingCount);
+
+  if (MissingCount)
+    fatal(Twine(Args.getArgString(MissingIndex)) + ": missing argument");
+  for (auto *Arg : Args.filtered(OPT_UNKNOWN))
+    warn("ignoring unknown argument: " + Arg->getSpelling());
+  return {std::move(Args), std::move(Exports)};
+}
+
 // link.exe has an interesting feature. If LINK or _LINK_ environment
 // variables exist, their contents are handled as command line strings.
 // So you can pass extra arguments using them.
@@ -773,8 +821,7 @@ std::vector<const char *> ArgParser::tokenize(StringRef S) {
 }
 
 void printHelp(const char *Argv0) {
-  COFFOptTable Table;
-  Table.PrintHelp(outs(), Argv0, "LLVM Linker", false);
+  COFFOptTable().PrintHelp(outs(), Argv0, "LLVM Linker", false);
 }
 
 } // namespace coff

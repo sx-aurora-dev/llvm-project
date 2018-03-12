@@ -400,7 +400,7 @@ bool AMDGPUCodeGenPrepare::visitFDiv(BinaryOperator &FDiv) {
     return false;
 
   FastMathFlags FMF = FPOp->getFastMathFlags();
-  bool UnsafeDiv = HasUnsafeFPMath || FMF.unsafeAlgebra() ||
+  bool UnsafeDiv = HasUnsafeFPMath || FMF.isFast() ||
                                       FMF.allowReciprocal();
 
   // With UnsafeDiv node will be optimized to just rcp and mul.
@@ -466,7 +466,8 @@ bool AMDGPUCodeGenPrepare::visitBinaryOperator(BinaryOperator &I) {
 }
 
 bool AMDGPUCodeGenPrepare::visitLoadInst(LoadInst  &I) {
-  if (I.getPointerAddressSpace() == AMDGPUASI.CONSTANT_ADDRESS &&
+  if ((I.getPointerAddressSpace() == AMDGPUASI.CONSTANT_ADDRESS ||
+       I.getPointerAddressSpace() == AMDGPUASI.CONSTANT_ADDRESS_32BIT) &&
       canWidenScalarExtLoad(I)) {
     IRBuilder<> Builder(&I);
     Builder.SetCurrentDebugLocation(I.getDebugLoc());

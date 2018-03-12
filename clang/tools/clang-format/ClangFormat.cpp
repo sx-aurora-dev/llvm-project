@@ -289,7 +289,7 @@ static bool format(StringRef FileName) {
               "xml:space='preserve' incomplete_format='"
            << (Status.FormatComplete ? "false" : "true") << "'";
     if (!Status.FormatComplete)
-      outs() << " line=" << Status.Line;
+      outs() << " line='" << Status.Line << "'";
     outs() << ">\n";
     if (Cursor.getNumOccurrences() != 0)
       outs() << "<cursor>"
@@ -357,10 +357,27 @@ int main(int argc, const char **argv) {
   }
 
   if (DumpConfig) {
+    StringRef FileName;
+    std::unique_ptr<llvm::MemoryBuffer> Code;
+    if (FileNames.empty()) {
+      // We can't read the code to detect the language if there's no
+      // file name, so leave Code empty here.
+      FileName = AssumeFileName;
+    } else {
+      // Read in the code in case the filename alone isn't enough to
+      // detect the language.
+      ErrorOr<std::unique_ptr<MemoryBuffer>> CodeOrErr =
+          MemoryBuffer::getFileOrSTDIN(FileNames[0]);
+      if (std::error_code EC = CodeOrErr.getError()) {
+        llvm::errs() << EC.message() << "\n";
+        return 1;
+      }
+      FileName = (FileNames[0] == "-") ? AssumeFileName : FileNames[0];
+      Code = std::move(CodeOrErr.get());
+    }
     llvm::Expected<clang::format::FormatStyle> FormatStyle =
-        clang::format::getStyle(
-            Style, FileNames.empty() ? AssumeFileName : FileNames[0],
-            FallbackStyle);
+        clang::format::getStyle(Style, FileName, FallbackStyle,
+                                Code ? Code->getBuffer() : "");
     if (!FormatStyle) {
       llvm::errs() << llvm::toString(FormatStyle.takeError()) << "\n";
       return 1;

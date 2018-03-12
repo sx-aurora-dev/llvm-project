@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <set>
 
 #if defined(__has_include)
@@ -69,15 +70,39 @@ struct MallocFreeTracer {
   std::atomic<size_t> Mallocs;
   std::atomic<size_t> Frees;
   int TraceLevel = 0;
+
+  std::recursive_mutex TraceMutex;
+  bool TraceDisabled = false;
 };
 
 static MallocFreeTracer AllocTracer;
+
+// Locks printing and avoids nested hooks triggered from mallocs/frees in
+// sanitizer.
+class TraceLock {
+public:
+  TraceLock() : Lock(AllocTracer.TraceMutex) {
+    AllocTracer.TraceDisabled = !AllocTracer.TraceDisabled;
+  }
+  ~TraceLock() { AllocTracer.TraceDisabled = !AllocTracer.TraceDisabled; }
+
+  bool IsDisabled() const {
+    // This is already inverted value.
+    return !AllocTracer.TraceDisabled;
+  }
+
+private:
+  std::lock_guard<std::recursive_mutex> Lock;
+};
 
 ATTRIBUTE_NO_SANITIZE_MEMORY
 void MallocHook(const volatile void *ptr, size_t size) {
   size_t N = AllocTracer.Mallocs++;
   F->HandleMalloc(size);
   if (int TraceLevel = AllocTracer.TraceLevel) {
+    TraceLock Lock;
+    if (Lock.IsDisabled())
+      return;
     Printf("MALLOC[%zd] %p %zd\n", N, ptr, size);
     if (TraceLevel >= 2 && EF)
       EF->__sanitizer_print_stack_trace();
@@ -88,6 +113,9 @@ ATTRIBUTE_NO_SANITIZE_MEMORY
 void FreeHook(const volatile void *ptr) {
   size_t N = AllocTracer.Frees++;
   if (int TraceLevel = AllocTracer.TraceLevel) {
+    TraceLock Lock;
+    if (Lock.IsDisabled())
+      return;
     Printf("FREE[%zd]   %p\n", N, ptr);
     if (TraceLevel >= 2 && EF)
       EF->__sanitizer_print_stack_trace();
@@ -96,7 +124,7 @@ void FreeHook(const volatile void *ptr) {
 
 // Crash on a single malloc that exceeds the rss limit.
 void Fuzzer::HandleMalloc(size_t Size) {
-  if (!Options.RssLimitMb || (Size >> 20) < (size_t)Options.RssLimitMb)
+  if (!Options.MallocLimitMb || (Size >> 20) < (size_t)Options.MallocLimitMb)
     return;
   Printf("==%d== ERROR: libFuzzer: out-of-memory (malloc(%zd))\n", GetPid(),
          Size);
@@ -188,6 +216,12 @@ void Fuzzer::StaticInterruptCallback() {
   F->InterruptCallback();
 }
 
+void Fuzzer::StaticGracefulExitCallback() {
+  assert(F);
+  F->GracefulExitRequested = true;
+  Printf("INFO: signal received, trying to exit gracefully\n");
+}
+
 void Fuzzer::StaticFileSizeExceedCallback() {
   Printf("==%lu== ERROR: libFuzzer: file size exceeded\n", GetPid());
   exit(1);
@@ -216,6 +250,13 @@ void Fuzzer::ExitCallback() {
   DumpCurrentUnit("crash-");
   PrintFinalStats();
   _Exit(Options.ErrorExitCode);
+}
+
+void Fuzzer::MaybeExitGracefully() {
+  if (!GracefulExitRequested) return;
+  Printf("==%lu== INFO: libFuzzer: exiting as requested\n", GetPid());
+  PrintFinalStats();
+  _Exit(0);
 }
 
 void Fuzzer::InterruptCallback() {
@@ -288,6 +329,8 @@ void Fuzzer::PrintStats(const char *Where, const char *End, size_t Units) {
         Printf("/%zdMb", N >> 20);
     }
   }
+  if (TmpMaxMutationLen)
+    Printf(" lim: %zd", TmpMaxMutationLen);
   if (Units)
     Printf(" units: %zd", Units);
 
@@ -392,7 +435,7 @@ void Fuzzer::PrintPulseAndReportSlowInput(const uint8_t *Data, size_t Size) {
 }
 
 bool Fuzzer::RunOne(const uint8_t *Data, size_t Size, bool MayDeleteFile,
-                    InputInfo *II) {
+                    InputInfo *II, bool *FoundUniqFeatures) {
   if (!Size)
     return false;
 
@@ -402,7 +445,8 @@ bool Fuzzer::RunOne(const uint8_t *Data, size_t Size, bool MayDeleteFile,
   size_t FoundUniqFeaturesOfII = 0;
   size_t NumUpdatesBefore = Corpus.NumFeatureUpdates();
   TPC.CollectFeatures([&](size_t Feature) {
-    Corpus.UpdateFeatureFrequency(Feature);
+    if (Options.UseFeatureFrequency)
+      Corpus.UpdateFeatureFrequency(Feature);
     if (Corpus.AddFeature(Feature, Size, Options.Shrink))
       UniqFeatureSetTmp.push_back(Feature);
     if (Options.ReduceInputs && II)
@@ -410,6 +454,8 @@ bool Fuzzer::RunOne(const uint8_t *Data, size_t Size, bool MayDeleteFile,
                              II->UniqFeatureSet.end(), Feature))
         FoundUniqFeaturesOfII++;
   });
+  if (FoundUniqFeatures)
+    *FoundUniqFeatures = FoundUniqFeaturesOfII;
   PrintPulseAndReportSlowInput(Data, Size);
   size_t NumNewFeatures = Corpus.NumFeatureUpdates() - NumUpdatesBefore;
   if (NumNewFeatures) {
@@ -523,7 +569,6 @@ void Fuzzer::ReportNewCoverage(InputInfo *II, const Unit &U) {
   NumberOfNewUnitsAdded++;
   CheckExitOnSrcPosOrItem(); // Check only after the unit is saved to corpus.
   LastCorpusUpdateRun = TotalNumberOfRuns;
-  LastCorpusUpdateTime = system_clock::now();
 }
 
 // Tries detecting a memory leak on the particular input that we have just
@@ -593,17 +638,25 @@ void Fuzzer::MutateAndTestOne() {
   for (int i = 0; i < Options.MutateDepth; i++) {
     if (TotalNumberOfRuns >= Options.MaxNumberOfRuns)
       break;
+    MaybeExitGracefully();
     size_t NewSize = 0;
     NewSize = MD.Mutate(CurrentUnitData, Size, CurrentMaxMutationLen);
     assert(NewSize > 0 && "Mutator returned empty unit");
     assert(NewSize <= CurrentMaxMutationLen && "Mutator return oversized unit");
     Size = NewSize;
     II.NumExecutedMutations++;
-    if (RunOne(CurrentUnitData, Size, /*MayDeleteFile=*/true, &II))
-      ReportNewCoverage(&II, {CurrentUnitData, CurrentUnitData + Size});
 
+    bool FoundUniqFeatures = false;
+    bool NewCov = RunOne(CurrentUnitData, Size, /*MayDeleteFile=*/true, &II,
+                         &FoundUniqFeatures);
     TryDetectingAMemoryLeak(CurrentUnitData, Size,
                             /*DuringInitialCorpusExecution*/ false);
+    if (NewCov) {
+      ReportNewCoverage(&II, {CurrentUnitData, CurrentUnitData + Size});
+      break;  // We will mutate this input more in the next rounds.
+    }
+    if (Options.ReduceDepth && !FoundUniqFeatures)
+        break;
   }
 }
 
@@ -704,18 +757,13 @@ void Fuzzer::Loop(const Vector<std::string> &CorpusDirs) {
       break;
 
     // Update TmpMaxMutationLen
-    if (Options.ExperimentalLenControl) {
+    if (Options.LenControl) {
       if (TmpMaxMutationLen < MaxMutationLen &&
-          (TotalNumberOfRuns - LastCorpusUpdateRun > 1000 &&
-           duration_cast<seconds>(Now - LastCorpusUpdateTime).count() >= 1)) {
-        LastCorpusUpdateRun = TotalNumberOfRuns;
-        LastCorpusUpdateTime = Now;
+          TotalNumberOfRuns - LastCorpusUpdateRun >
+              Options.LenControl * Log(TmpMaxMutationLen)) {
         TmpMaxMutationLen =
-            Min(MaxMutationLen,
-                TmpMaxMutationLen + Max(size_t(4), TmpMaxMutationLen / 8));
-        if (TmpMaxMutationLen <= MaxMutationLen)
-          Printf("#%zd\tTEMP_MAX_LEN: %zd\n", TotalNumberOfRuns,
-                 TmpMaxMutationLen);
+            Min(MaxMutationLen, TmpMaxMutationLen + Log(TmpMaxMutationLen));
+        LastCorpusUpdateRun = TotalNumberOfRuns;
       }
     } else {
       TmpMaxMutationLen = MaxMutationLen;
@@ -776,13 +824,15 @@ void Fuzzer::AnnounceOutput(const uint8_t *Data, size_t Size) {
 
 extern "C" {
 
-size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
+__attribute__((visibility("default"))) size_t
+LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
   assert(fuzzer::F);
   return fuzzer::F->GetMD().DefaultMutate(Data, Size, MaxSize);
 }
 
 // Experimental
-void LLVMFuzzerAnnounceOutput(const uint8_t *Data, size_t Size) {
+__attribute__((visibility("default"))) void
+LLVMFuzzerAnnounceOutput(const uint8_t *Data, size_t Size) {
   assert(fuzzer::F);
   fuzzer::F->AnnounceOutput(Data, Size);
 }

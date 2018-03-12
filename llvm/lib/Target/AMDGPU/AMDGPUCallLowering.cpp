@@ -43,7 +43,7 @@ unsigned AMDGPUCallLowering::lowerParameterPtr(MachineIRBuilder &MIRBuilder,
   MachineFunction &MF = MIRBuilder.getMF();
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
   MachineRegisterInfo &MRI = MF.getRegInfo();
-  const Function &F = *MF.getFunction();
+  const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
   PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUASI.CONSTANT_ADDRESS);
   LLT PtrType = getLLTForType(*PtrTy, DL);
@@ -64,7 +64,7 @@ void AMDGPUCallLowering::lowerParameter(MachineIRBuilder &MIRBuilder,
                                         Type *ParamTy, unsigned Offset,
                                         unsigned DstReg) const {
   MachineFunction &MF = MIRBuilder.getMF();
-  const Function &F = *MF.getFunction();
+  const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
   PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUASI.CONSTANT_ADDRESS);
   MachinePointerInfo PtrInfo(UndefValue::get(PtrTy));
@@ -116,7 +116,7 @@ bool AMDGPUCallLowering::lowerFormalArguments(MachineIRBuilder &MIRBuilder,
 
   if (Info->hasKernargSegmentPtr()) {
     unsigned InputPtrReg = Info->addKernargSegmentPtr(*TRI);
-    const LLT P2 = LLT::pointer(2, 64);
+    const LLT P2 = LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64);
     unsigned VReg = MRI.createGenericVirtualRegister(P2);
     MRI.addLiveIn(InputPtrReg, VReg);
     MIRBuilder.getMBB().addLiveIn(InputPtrReg);

@@ -91,7 +91,8 @@ Intrinsic::ID llvm::getVectorIntrinsicIDForCall(const CallInst *CI,
     return Intrinsic::not_intrinsic;
 
   if (isTriviallyVectorizable(ID) || ID == Intrinsic::lifetime_start ||
-      ID == Intrinsic::lifetime_end || ID == Intrinsic::assume)
+      ID == Intrinsic::lifetime_end || ID == Intrinsic::assume ||
+      ID == Intrinsic::sideeffect)
     return ID;
   return Intrinsic::not_intrinsic;
 }
@@ -162,7 +163,7 @@ Value *llvm::getStrideFromPointer(Value *Ptr, ScalarEvolution *SE, Loop *Lp) {
     return nullptr;
 
   // Try to remove a gep instruction to make the pointer (actually index at this
-  // point) easier analyzable. If OrigPtr is equal to Ptr we are analzying the
+  // point) easier analyzable. If OrigPtr is equal to Ptr we are analyzing the
   // pointer, otherwise, we are analyzing the index.
   Value *OrigPtr = Ptr;
 

@@ -23,11 +23,13 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
@@ -43,16 +45,22 @@
 
 using namespace llvm;
 
-void llvm::DeleteDeadBlock(BasicBlock *BB) {
+void llvm::DeleteDeadBlock(BasicBlock *BB, DeferredDominance *DDT) {
   assert((pred_begin(BB) == pred_end(BB) ||
          // Can delete self loop.
          BB->getSinglePredecessor() == BB) && "Block is not dead!");
   TerminatorInst *BBTerm = BB->getTerminator();
+  std::vector<DominatorTree::UpdateType> Updates;
 
   // Loop through all of our successors and make sure they know that one
   // of their predecessors is going away.
-  for (BasicBlock *Succ : BBTerm->successors())
+  if (DDT)
+    Updates.reserve(BBTerm->getNumSuccessors());
+  for (BasicBlock *Succ : BBTerm->successors()) {
     Succ->removePredecessor(BB);
+    if (DDT)
+      Updates.push_back({DominatorTree::Delete, BB, Succ});
+  }
 
   // Zap all the instructions in the block.
   while (!BB->empty()) {
@@ -67,8 +75,12 @@ void llvm::DeleteDeadBlock(BasicBlock *BB) {
     BB->getInstList().pop_back();
   }
 
-  // Zap the block!
-  BB->eraseFromParent();
+  if (DDT) {
+    DDT->applyUpdates(Updates);
+    DDT->deleteBB(BB); // Deferred deletion of BB.
+  } else {
+    BB->eraseFromParent(); // Zap the block!
+  }
 }
 
 void llvm::FoldSingleEntryPHINodes(BasicBlock *BB,
@@ -92,9 +104,8 @@ bool llvm::DeleteDeadPHIs(BasicBlock *BB, const TargetLibraryInfo *TLI) {
   // Recursively deleting a PHI may cause multiple PHIs to be deleted
   // or RAUW'd undef, so use an array of WeakTrackingVH for the PHIs to delete.
   SmallVector<WeakTrackingVH, 8> PHIs;
-  for (BasicBlock::iterator I = BB->begin();
-       PHINode *PN = dyn_cast<PHINode>(I); ++I)
-    PHIs.push_back(PN);
+  for (PHINode &PN : BB->phis())
+    PHIs.push_back(&PN);
 
   bool Changed = false;
   for (unsigned i = 0, e = PHIs.size(); i != e; ++i)
@@ -132,18 +143,19 @@ bool llvm::MergeBlockIntoPredecessor(BasicBlock *BB, DominatorTree *DT,
   if (!OnlySucc) return false;
 
   // Can't merge if there is PHI loop.
-  for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI) {
-    if (PHINode *PN = dyn_cast<PHINode>(BI)) {
-      for (Value *IncValue : PN->incoming_values())
-        if (IncValue == PN)
-          return false;
-    } else
-      break;
-  }
+  for (PHINode &PN : BB->phis())
+    for (Value *IncValue : PN.incoming_values())
+      if (IncValue == &PN)
+        return false;
 
   // Begin by getting rid of unneeded PHIs.
-  if (isa<PHINode>(BB->front()))
+  SmallVector<Value *, 4> IncomingValues;
+  if (isa<PHINode>(BB->front())) {
+    for (PHINode &PN : BB->phis())
+      if (PN.getIncomingValue(0) != &PN)
+        IncomingValues.push_back(PN.getIncomingValue(0));
     FoldSingleEntryPHINodes(BB, MemDep);
+  }
 
   // Delete the unconditional branch from the predecessor...
   PredBB->getInstList().pop_back();
@@ -154,6 +166,21 @@ bool llvm::MergeBlockIntoPredecessor(BasicBlock *BB, DominatorTree *DT,
 
   // Move all definitions in the successor to the predecessor...
   PredBB->getInstList().splice(PredBB->end(), BB->getInstList());
+
+  // Eliminate duplicate dbg.values describing the entry PHI node post-splice.
+  for (auto *Incoming : IncomingValues) {
+    if (isa<Instruction>(Incoming)) {
+      SmallVector<DbgValueInst *, 2> DbgValues;
+      SmallDenseSet<std::pair<DILocalVariable *, DIExpression *>, 2>
+          DbgValueSet;
+      llvm::findDbgValues(DbgValues, Incoming);
+      for (auto &DVI : DbgValues) {
+        auto R = DbgValueSet.insert({DVI->getVariable(), DVI->getExpression()});
+        if (!R.second)
+          DVI->eraseFromParent();
+      }
+    }
+  }
 
   // Inherit predecessors name if it exists.
   if (!PredBB->hasName())
@@ -292,13 +319,21 @@ static void UpdateAnalysisInformation(BasicBlock *OldBB, BasicBlock *NewBB,
                                       DominatorTree *DT, LoopInfo *LI,
                                       bool PreserveLCSSA, bool &HasLoopExit) {
   // Update dominator tree if available.
-  if (DT)
-    DT->splitBlock(NewBB);
+  if (DT) {
+    if (OldBB == DT->getRootNode()->getBlock()) {
+      assert(NewBB == &NewBB->getParent()->getEntryBlock());
+      DT->setNewRoot(NewBB);
+    } else {
+      // Split block expects NewBB to have a non-empty set of predecessors.
+      DT->splitBlock(NewBB);
+    }
+  }
 
   // The rest of the logic is only relevant for updating the loop structures.
   if (!LI)
     return;
 
+  assert(DT && "DT should be available to update LoopInfo!");
   Loop *L = LI->getLoopFor(OldBB);
 
   // If we need to preserve loop analyses, collect some information about how
@@ -306,6 +341,12 @@ static void UpdateAnalysisInformation(BasicBlock *OldBB, BasicBlock *NewBB,
   bool IsLoopEntry = !!L;
   bool SplitMakesNewLoopHeader = false;
   for (BasicBlock *Pred : Preds) {
+    // Preds that are not reachable from entry should not be used to identify if
+    // OldBB is a loop entry or if SplitMakesNewLoopHeader. Unreachable blocks
+    // are not within any loops, so we incorrectly mark SplitMakesNewLoopHeader
+    // as true and make the NewBB the header of some loop. This breaks LI.
+    if (!DT->isReachableFromEntry(Pred))
+      continue;
     // If we need to preserve LCSSA, determine if any of the preds is a loop
     // exit.
     if (PreserveLCSSA)
@@ -470,7 +511,6 @@ BasicBlock *llvm::SplitBlockPredecessors(BasicBlock *BB,
     // Insert dummy values as the incoming value.
     for (BasicBlock::iterator I = BB->begin(); isa<PHINode>(I); ++I)
       cast<PHINode>(I)->addIncoming(UndefValue::get(I->getType()), NewBB);
-    return NewBB;
   }
 
   // Update DominatorTree, LoopInfo, and LCCSA analysis information.
@@ -478,8 +518,11 @@ BasicBlock *llvm::SplitBlockPredecessors(BasicBlock *BB,
   UpdateAnalysisInformation(BB, NewBB, Preds, DT, LI, PreserveLCSSA,
                             HasLoopExit);
 
-  // Update the PHI nodes in BB with the values coming from NewBB.
-  UpdatePHINodes(BB, NewBB, Preds, BI, HasLoopExit);
+  if (!Preds.empty()) {
+    // Update the PHI nodes in BB with the values coming from NewBB.
+    UpdatePHINodes(BB, NewBB, Preds, BI, HasLoopExit);
+  }
+
   return NewBB;
 }
 

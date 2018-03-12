@@ -289,8 +289,8 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
   if (!ER)
     return state;
 
-  assert(ER->getValueType() == C.getASTContext().CharTy &&
-    "CheckLocation should only be called with char* ElementRegions");
+  if (ER->getValueType() != C.getASTContext().CharTy)
+    return state;
 
   // Get the size of the array.
   const SubRegion *superReg = cast<SubRegion>(ER->getSuperRegion());
@@ -309,9 +309,19 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
     if (!N)
       return nullptr;
 
+    CheckName Name;
+    // These checks are either enabled by the CString out-of-bounds checker
+    // explicitly or the "basic" CStringNullArg checker support that Malloc
+    // checker enables.
+    assert(Filter.CheckCStringOutOfBounds || Filter.CheckCStringNullArg);
+    if (Filter.CheckCStringOutOfBounds)
+      Name = Filter.CheckNameCStringOutOfBounds;
+    else
+      Name = Filter.CheckNameCStringNullArg;
+
     if (!BT_Bounds) {
       BT_Bounds.reset(new BuiltinBug(
-          Filter.CheckNameCStringOutOfBounds, "Out-of-bound array access",
+          Name, "Out-of-bound array access",
           "Byte string function accesses out-of-bound array element"));
     }
     BuiltinBug *BT = static_cast<BuiltinBug*>(BT_Bounds.get());
@@ -366,7 +376,7 @@ ProgramStateRef CStringChecker::CheckBufferAccess(CheckerContext &C,
   QualType PtrTy = Ctx.getPointerType(Ctx.CharTy);
 
   // Check that the first buffer is non-null.
-  SVal BufVal = state->getSVal(FirstBuf, LCtx);
+  SVal BufVal = C.getSVal(FirstBuf);
   state = checkNonNull(C, state, FirstBuf, BufVal);
   if (!state)
     return nullptr;
@@ -378,7 +388,7 @@ ProgramStateRef CStringChecker::CheckBufferAccess(CheckerContext &C,
   // Get the access length and make sure it is known.
   // FIXME: This assumes the caller has already checked that the access length
   // is positive. And that it's unsigned.
-  SVal LengthVal = state->getSVal(Size, LCtx);
+  SVal LengthVal = C.getSVal(Size);
   Optional<NonLoc> Length = LengthVal.getAs<NonLoc>();
   if (!Length)
     return state;
@@ -874,6 +884,8 @@ bool CStringChecker::IsFirstBufInBound(CheckerContext &C,
   if (!ER)
     return true; // cf top comment.
 
+  // FIXME: Does this crash when a non-standard definition
+  // of a library function is encountered?
   assert(ER->getValueType() == C.getASTContext().CharTy &&
          "IsFirstBufInBound should only be called with char* ElementRegions");
 
@@ -1020,21 +1032,6 @@ void CStringChecker::evalCopyCommon(CheckerContext &C,
   // If the size can be nonzero, we have to check the other arguments.
   if (stateNonZeroSize) {
     state = stateNonZeroSize;
-
-    // Ensure the destination is not null. If it is NULL there will be a
-    // NULL pointer dereference.
-    state = checkNonNull(C, state, Dest, destVal);
-    if (!state)
-      return;
-
-    // Get the value of the Src.
-    SVal srcVal = state->getSVal(Source, LCtx);
-
-    // Ensure the source is not null. If it is NULL there will be a
-    // NULL pointer dereference.
-    state = checkNonNull(C, state, Source, srcVal);
-    if (!state)
-      return;
 
     // Ensure the accesses are valid and that the buffers do not overlap.
     const char * const writeWarning =
@@ -2021,12 +2018,6 @@ void CStringChecker::evalMemset(CheckerContext &C, const CallExpr *CE) const {
     return;
   }
 
-  // Ensure the memory area is not null.
-  // If it is NULL there will be a NULL pointer dereference.
-  State = checkNonNull(C, StateNonZeroSize, Mem, MemVal);
-  if (!State)
-    return;
-
   State = CheckBufferAccess(C, State, Size, Mem);
   if (!State)
     return;
@@ -2147,7 +2138,7 @@ void CStringChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
     if (!MR)
       continue;
 
-    SVal StrVal = state->getSVal(Init, C.getLocationContext());
+    SVal StrVal = C.getSVal(Init);
     assert(StrVal.isValid() && "Initializer string is unknown or undefined");
     DefinedOrUnknownSVal strLength =
         getCStringLength(C, state, Init, StrVal).castAs<DefinedOrUnknownSVal>();

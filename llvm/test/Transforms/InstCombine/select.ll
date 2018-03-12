@@ -54,21 +54,30 @@ define i32 @test6(i1 %C) {
 ; CHECK: ret i32 %V
 }
 
-define i1 @test7(i1 %C, i1 %X) {
-; CHECK-LABEL: @test7(
-; CHECK-NEXT:    [[R:%.*]] = or i1 %C, %X
+define i1 @trueval_is_true(i1 %C, i1 %X) {
+; CHECK-LABEL: @trueval_is_true(
+; CHECK-NEXT:    [[R:%.*]] = or i1 [[C:%.*]], [[X:%.*]]
 ; CHECK-NEXT:    ret i1 [[R]]
 ;
   %R = select i1 %C, i1 true, i1 %X
   ret i1 %R
 }
 
-define <2 x i1> @test7vec(<2 x i1> %C, <2 x i1> %X) {
-; CHECK-LABEL: @test7vec(
-; CHECK-NEXT:    [[R:%.*]] = or <2 x i1> %C, %X
+define <2 x i1> @trueval_is_true_vec(<2 x i1> %C, <2 x i1> %X) {
+; CHECK-LABEL: @trueval_is_true_vec(
+; CHECK-NEXT:    [[R:%.*]] = or <2 x i1> [[C:%.*]], [[X:%.*]]
 ; CHECK-NEXT:    ret <2 x i1> [[R]]
 ;
   %R = select <2 x i1> %C, <2 x i1> <i1 true, i1 true>, <2 x i1> %X
+  ret <2 x i1> %R
+}
+
+define <2 x i1> @trueval_is_true_vec_undef_elt(<2 x i1> %C, <2 x i1> %X) {
+; CHECK-LABEL: @trueval_is_true_vec_undef_elt(
+; CHECK-NEXT:    [[R:%.*]] = or <2 x i1> [[C:%.*]], [[X:%.*]]
+; CHECK-NEXT:    ret <2 x i1> [[R]]
+;
+  %R = select <2 x i1> %C, <2 x i1> <i1 undef, i1 true>, <2 x i1> %X
   ret <2 x i1> %R
 }
 
@@ -1240,7 +1249,7 @@ define i8* @test83(i1 %flag) {
 ; CHECK:         %[[V:.*]] = load i64, i64* %[[X2]]
 ; CHECK-NEXT:    store i64 %[[V]], i64* %[[Y2]]
 ; CHECK-NEXT:    %[[C:.*]] = inttoptr i64 %[[V]] to i8*
-; CHECK-NEXT:    ret i8* %[[S]]
+; CHECK-NEXT:    ret i8* %[[C]]
 entry:
   %x = alloca i8*
   %y = alloca i64
@@ -1489,4 +1498,56 @@ entry:
   %0 = fcmp ole <4 x float> %w, zeroinitializer
   %1 = select <4 x i1> %0, <4 x float> <float 0xFFFFFFFFE0000000, float 0xFFFFFFFFE0000000, float 0xFFFFFFFFE0000000, float 0xFFFFFFFFE0000000>, <4 x float> zeroinitializer
   ret <4 x float> %1
+}
+
+; select(C, binop(select(C, X, Y), W), Z) -> select(C, binop(X, W), Z)
+define i8 @test87(i1 %cond, i8 %w, i8 %x, i8 %y, i8 %z) {
+; CHECK-LABEL: @test87(
+; CHECK-NEXT:    [[B:%.*]] = add i8 [[X:%.*]], [[W:%.*]]
+; CHECK-NEXT:    [[C:%.*]] = select i1 [[COND:%.*]], i8 [[B]], i8 [[Z:%.*]]
+; CHECK-NEXT:    ret i8 [[C]]
+;
+  %a = select i1 %cond, i8 %x, i8 %y
+  %b = add i8 %a, %w
+  %c = select i1 %cond, i8 %b, i8 %z
+  ret i8 %c
+}
+
+; select(C, binop(select(C, X, Y), W), Z) -> select(C, Z, binop(Y, W))
+define i8 @test88(i1 %cond, i8 %w, i8 %x, i8 %y, i8 %z) {
+; CHECK-LABEL: @test88(
+; CHECK-NEXT:    [[B:%.*]] = sub i8 [[Y:%.*]], [[W:%.*]]
+; CHECK-NEXT:    [[C:%.*]] = select i1 [[COND:%.*]], i8 [[Z:%.*]], i8 [[B]]
+; CHECK-NEXT:    ret i8 [[C]]
+;
+  %a = select i1 %cond, i8 %x, i8 %y
+  %b = sub i8 %a, %w
+  %c = select i1 %cond, i8 %z, i8 %b
+  ret i8 %c
+}
+
+; select(C, Z, binop(W, select(C, X, Y))) -> select(C, binop(X, W), Z)
+define i8 @test89(i1 %cond, i8 %w, i8 %x, i8 %y, i8 %z) {
+; CHECK-LABEL: @test89(
+; CHECK-NEXT:    [[B:%.*]] = and i8 [[X:%.*]], [[W:%.*]]
+; CHECK-NEXT:    [[C:%.*]] = select i1 [[COND:%.*]], i8 [[B]], i8 [[Z:%.*]]
+; CHECK-NEXT:    ret i8 [[C]]
+;
+  %a = select i1 %cond, i8 %x, i8 %y
+  %b = and i8 %w, %a
+  %c = select i1 %cond, i8 %b, i8 %z
+  ret i8 %c
+}
+
+; select(C, Z, binop(W, select(C, X, Y))) -> select(C, Z, binop(W, Y))
+define i8 @test90(i1 %cond, i8 %w, i8 %x, i8 %y, i8 %z) {
+; CHECK-LABEL: @test90(
+; CHECK-NEXT:    [[B:%.*]] = or i8 [[Y:%.*]], [[W:%.*]]
+; CHECK-NEXT:    [[C:%.*]] = select i1 [[COND:%.*]], i8 [[Z:%.*]], i8 [[B]]
+; CHECK-NEXT:    ret i8 [[C]]
+;
+  %a = select i1 %cond, i8 %x, i8 %y
+  %b = or i8 %w, %a
+  %c = select i1 %cond, i8 %z, i8 %b
+  ret i8 %c
 }

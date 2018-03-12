@@ -23,10 +23,9 @@
 #include "llvm/MC/MCParser/AsmLexer.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.h"
+#include "llvm/MC/MCTargetOptionsCommandFlags.def"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/FileUtilities.h"
@@ -239,144 +238,10 @@ static int AsLexInput(SourceMgr &SrcMgr, MCAsmInfo &MAI,
 
   bool Error = false;
   while (Lexer.Lex().isNot(AsmToken::Eof)) {
-    const AsmToken &Tok = Lexer.getTok();
-
-    switch (Tok.getKind()) {
-    default:
-      SrcMgr.PrintMessage(Lexer.getLoc(), SourceMgr::DK_Warning,
-                          "unknown token");
+    Lexer.getTok().dump(OS);
+    OS << "\n";
+    if (Lexer.getTok().getKind() == AsmToken::Error)
       Error = true;
-      break;
-    case AsmToken::Error:
-      Error = true; // error already printed.
-      break;
-    case AsmToken::Identifier:
-      OS << "identifier: " << Lexer.getTok().getString();
-      break;
-    case AsmToken::Integer:
-      OS << "int: " << Lexer.getTok().getString();
-      break;
-    case AsmToken::Real:
-      OS << "real: " << Lexer.getTok().getString();
-      break;
-    case AsmToken::String:
-      OS << "string: " << Lexer.getTok().getString();
-      break;
-
-    case AsmToken::Amp:            OS << "Amp"; break;
-    case AsmToken::AmpAmp:         OS << "AmpAmp"; break;
-    case AsmToken::At:             OS << "At"; break;
-    case AsmToken::Caret:          OS << "Caret"; break;
-    case AsmToken::Colon:          OS << "Colon"; break;
-    case AsmToken::Comma:          OS << "Comma"; break;
-    case AsmToken::Dollar:         OS << "Dollar"; break;
-    case AsmToken::Dot:            OS << "Dot"; break;
-    case AsmToken::EndOfStatement: OS << "EndOfStatement"; break;
-    case AsmToken::Eof:            OS << "Eof"; break;
-    case AsmToken::Equal:          OS << "Equal"; break;
-    case AsmToken::EqualEqual:     OS << "EqualEqual"; break;
-    case AsmToken::Exclaim:        OS << "Exclaim"; break;
-    case AsmToken::ExclaimEqual:   OS << "ExclaimEqual"; break;
-    case AsmToken::Greater:        OS << "Greater"; break;
-    case AsmToken::GreaterEqual:   OS << "GreaterEqual"; break;
-    case AsmToken::GreaterGreater: OS << "GreaterGreater"; break;
-    case AsmToken::Hash:           OS << "Hash"; break;
-    case AsmToken::LBrac:          OS << "LBrac"; break;
-    case AsmToken::LCurly:         OS << "LCurly"; break;
-    case AsmToken::LParen:         OS << "LParen"; break;
-    case AsmToken::Less:           OS << "Less"; break;
-    case AsmToken::LessEqual:      OS << "LessEqual"; break;
-    case AsmToken::LessGreater:    OS << "LessGreater"; break;
-    case AsmToken::LessLess:       OS << "LessLess"; break;
-    case AsmToken::Minus:          OS << "Minus"; break;
-    case AsmToken::Percent:        OS << "Percent"; break;
-    case AsmToken::Pipe:           OS << "Pipe"; break;
-    case AsmToken::PipePipe:       OS << "PipePipe"; break;
-    case AsmToken::Plus:           OS << "Plus"; break;
-    case AsmToken::RBrac:          OS << "RBrac"; break;
-    case AsmToken::RCurly:         OS << "RCurly"; break;
-    case AsmToken::RParen:         OS << "RParen"; break;
-    case AsmToken::Slash:          OS << "Slash"; break;
-    case AsmToken::Star:           OS << "Star"; break;
-    case AsmToken::Tilde:          OS << "Tilde"; break;
-    case AsmToken::PercentCall16:
-      OS << "PercentCall16";
-      break;
-    case AsmToken::PercentCall_Hi:
-      OS << "PercentCall_Hi";
-      break;
-    case AsmToken::PercentCall_Lo:
-      OS << "PercentCall_Lo";
-      break;
-    case AsmToken::PercentDtprel_Hi:
-      OS << "PercentDtprel_Hi";
-      break;
-    case AsmToken::PercentDtprel_Lo:
-      OS << "PercentDtprel_Lo";
-      break;
-    case AsmToken::PercentGot:
-      OS << "PercentGot";
-      break;
-    case AsmToken::PercentGot_Disp:
-      OS << "PercentGot_Disp";
-      break;
-    case AsmToken::PercentGot_Hi:
-      OS << "PercentGot_Hi";
-      break;
-    case AsmToken::PercentGot_Lo:
-      OS << "PercentGot_Lo";
-      break;
-    case AsmToken::PercentGot_Ofst:
-      OS << "PercentGot_Ofst";
-      break;
-    case AsmToken::PercentGot_Page:
-      OS << "PercentGot_Page";
-      break;
-    case AsmToken::PercentGottprel:
-      OS << "PercentGottprel";
-      break;
-    case AsmToken::PercentGp_Rel:
-      OS << "PercentGp_Rel";
-      break;
-    case AsmToken::PercentHi:
-      OS << "PercentHi";
-      break;
-    case AsmToken::PercentHigher:
-      OS << "PercentHigher";
-      break;
-    case AsmToken::PercentHighest:
-      OS << "PercentHighest";
-      break;
-    case AsmToken::PercentLo:
-      OS << "PercentLo";
-      break;
-    case AsmToken::PercentNeg:
-      OS << "PercentNeg";
-      break;
-    case AsmToken::PercentPcrel_Hi:
-      OS << "PercentPcrel_Hi";
-      break;
-    case AsmToken::PercentPcrel_Lo:
-      OS << "PercentPcrel_Lo";
-      break;
-    case AsmToken::PercentTlsgd:
-      OS << "PercentTlsgd";
-      break;
-    case AsmToken::PercentTlsldm:
-      OS << "PercentTlsldm";
-      break;
-    case AsmToken::PercentTprel_Hi:
-      OS << "PercentTprel_Hi";
-      break;
-    case AsmToken::PercentTprel_Lo:
-      OS << "PercentTprel_Lo";
-      break;
-    }
-
-    // Print the token string.
-    OS << " (\"";
-    OS.write_escaped(Tok.getString());
-    OS << "\")\n";
   }
 
   return Error;
@@ -568,7 +433,7 @@ int main(int argc, char **argv) {
     MCAsmBackend *MAB = nullptr;
     if (ShowEncoding) {
       CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
-      MAB = TheTarget->createMCAsmBackend(*MRI, TripleName, MCPU, MCOptions);
+      MAB = TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions);
     }
     auto FOut = llvm::make_unique<formatted_raw_ostream>(*OS);
     Str.reset(TheTarget->createAsmStreamer(
@@ -589,8 +454,7 @@ int main(int argc, char **argv) {
     }
 
     MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
-    MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*MRI, TripleName, MCPU,
-                                                      MCOptions);
+    MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions);
     Str.reset(TheTarget->createMCObjectStreamer(
         TheTriple, Ctx, std::unique_ptr<MCAsmBackend>(MAB), *OS,
         std::unique_ptr<MCCodeEmitter>(CE), *STI, MCOptions.MCRelaxAll,

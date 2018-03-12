@@ -47,6 +47,7 @@ set(LLVM_TEST_DEPENDS
           llvm-bcanalyzer
           llvm-c-test
           llvm-cat
+          llvm-cfi-verify
           llvm-cxxfilt
           llvm-config
           llvm-cov
@@ -60,10 +61,12 @@ set(LLVM_TEST_DEPENDS
           llvm-dwp
           llvm-extract
           llvm-isel-fuzzer
+          llvm-opt-fuzzer
           llvm-lib
           llvm-link
           llvm-lto2
           llvm-mc
+          llvm-mca
           llvm-mcmarkup
           llvm-modextract
           llvm-mt

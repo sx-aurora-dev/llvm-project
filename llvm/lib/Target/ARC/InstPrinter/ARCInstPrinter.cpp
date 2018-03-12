@@ -66,6 +66,10 @@ static const char *ARCCondCodeToString(ARCCC::CondCode CC) {
     return "gt";
   case ARCCC::GE:
     return "ge";
+  case ARCCC::VS:
+    return "vs";
+  case ARCCC::VC:
+    return "vc";
   case ARCCC::LT:
     return "lt";
   case ARCCC::LE:
@@ -100,6 +104,12 @@ static void printExpr(const MCExpr *Expr, const MCAsmInfo *MAI,
                       raw_ostream &OS) {
   int Offset = 0;
   const MCSymbolRefExpr *SRE;
+
+  if (const auto *CE = dyn_cast<MCConstantExpr>(Expr)) {
+    OS << "0x";
+    OS.write_hex(CE->getValue());
+    return;
+  }
 
   if (const auto *BE = dyn_cast<MCBinaryExpr>(Expr)) {
     SRE = dyn_cast<MCSymbolRefExpr>(BE->getLHS());

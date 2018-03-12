@@ -30,27 +30,25 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Config/config.h"
+#include "llvm/DebugInfo/CodeView/AppendingTypeTableBuilder.h"
 #include "llvm/DebugInfo/CodeView/DebugChecksumsSubsection.h"
 #include "llvm/DebugInfo/CodeView/DebugInlineeLinesSubsection.h"
 #include "llvm/DebugInfo/CodeView/DebugLinesSubsection.h"
 #include "llvm/DebugInfo/CodeView/LazyRandomTypeCollection.h"
+#include "llvm/DebugInfo/CodeView/MergingTypeTableBuilder.h"
 #include "llvm/DebugInfo/CodeView/StringsAndChecksums.h"
 #include "llvm/DebugInfo/CodeView/TypeStreamMerger.h"
-#include "llvm/DebugInfo/CodeView/TypeTableBuilder.h"
 #include "llvm/DebugInfo/MSF/MSFBuilder.h"
 #include "llvm/DebugInfo/PDB/GenericError.h"
 #include "llvm/DebugInfo/PDB/IPDBEnumChildren.h"
 #include "llvm/DebugInfo/PDB/IPDBRawSymbol.h"
 #include "llvm/DebugInfo/PDB/IPDBSession.h"
 #include "llvm/DebugInfo/PDB/Native/DbiModuleDescriptorBuilder.h"
-#include "llvm/DebugInfo/PDB/Native/DbiStream.h"
 #include "llvm/DebugInfo/PDB/Native/DbiStreamBuilder.h"
-#include "llvm/DebugInfo/PDB/Native/InfoStream.h"
 #include "llvm/DebugInfo/PDB/Native/InfoStreamBuilder.h"
 #include "llvm/DebugInfo/PDB/Native/NativeSession.h"
 #include "llvm/DebugInfo/PDB/Native/PDBFile.h"
@@ -84,7 +82,6 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <set>
 
 using namespace llvm;
 using namespace llvm::codeview;
@@ -727,8 +724,9 @@ static void yamlToPdb(StringRef Path) {
   auto &TpiBuilder = Builder.getTpiBuilder();
   const auto &Tpi = YamlObj.TpiStream.getValueOr(DefaultTpiStream);
   TpiBuilder.setVersionHeader(Tpi.Version);
+  AppendingTypeTableBuilder TS(Allocator);
   for (const auto &R : Tpi.Records) {
-    CVType Type = R.toCodeViewRecord(Allocator);
+    CVType Type = R.toCodeViewRecord(TS);
     TpiBuilder.addTypeRecord(Type.RecordData, None);
   }
 
@@ -736,7 +734,7 @@ static void yamlToPdb(StringRef Path) {
   auto &IpiBuilder = Builder.getIpiBuilder();
   IpiBuilder.setVersionHeader(Ipi.Version);
   for (const auto &R : Ipi.Records) {
-    CVType Type = R.toCodeViewRecord(Allocator);
+    CVType Type = R.toCodeViewRecord(TS);
     IpiBuilder.addTypeRecord(Type.RecordData, None);
   }
 
@@ -859,6 +857,8 @@ static void dumpPretty(StringRef Path) {
   LinePrinter Printer(2, UseColor, Stream);
 
   auto GlobalScope(Session->getGlobalScope());
+  if (!GlobalScope)
+    return;
   std::string FileName(GlobalScope->getSymbolsFileName());
 
   WithColor(Printer, PDB_ColorItem::None).get() << "Summary for ";
@@ -895,15 +895,16 @@ static void dumpPretty(StringRef Path) {
     Printer.NewLine();
     WithColor(Printer, PDB_ColorItem::SectionHeader).get()
         << "---COMPILANDS---";
-    Printer.Indent();
-    auto Compilands = GlobalScope->findAllChildren<PDBSymbolCompiland>();
-    CompilandDumper Dumper(Printer);
-    CompilandDumpFlags options = CompilandDumper::Flags::None;
-    if (opts::pretty::Lines)
-      options = options | CompilandDumper::Flags::Lines;
-    while (auto Compiland = Compilands->getNext())
-      Dumper.start(*Compiland, options);
-    Printer.Unindent();
+    if (auto Compilands = GlobalScope->findAllChildren<PDBSymbolCompiland>()) {
+      Printer.Indent();
+      CompilandDumper Dumper(Printer);
+      CompilandDumpFlags options = CompilandDumper::Flags::None;
+      if (opts::pretty::Lines)
+        options = options | CompilandDumper::Flags::Lines;
+      while (auto Compiland = Compilands->getNext())
+        Dumper.start(*Compiland, options);
+      Printer.Unindent();
+    }
   }
 
   if (opts::pretty::Classes || opts::pretty::Enums || opts::pretty::Typedefs) {
@@ -918,12 +919,13 @@ static void dumpPretty(StringRef Path) {
   if (opts::pretty::Symbols) {
     Printer.NewLine();
     WithColor(Printer, PDB_ColorItem::SectionHeader).get() << "---SYMBOLS---";
-    Printer.Indent();
-    auto Compilands = GlobalScope->findAllChildren<PDBSymbolCompiland>();
-    CompilandDumper Dumper(Printer);
-    while (auto Compiland = Compilands->getNext())
-      Dumper.start(*Compiland, true);
-    Printer.Unindent();
+    if (auto Compilands = GlobalScope->findAllChildren<PDBSymbolCompiland>()) {
+      Printer.Indent();
+      CompilandDumper Dumper(Printer);
+      while (auto Compiland = Compilands->getNext())
+        Dumper.start(*Compiland, true);
+      Printer.Unindent();
+    }
   }
 
   if (opts::pretty::Globals) {
@@ -931,45 +933,49 @@ static void dumpPretty(StringRef Path) {
     WithColor(Printer, PDB_ColorItem::SectionHeader).get() << "---GLOBALS---";
     Printer.Indent();
     if (shouldDumpSymLevel(opts::pretty::SymLevel::Functions)) {
-      FunctionDumper Dumper(Printer);
-      auto Functions = GlobalScope->findAllChildren<PDBSymbolFunc>();
-      if (opts::pretty::SymbolOrder == opts::pretty::SymbolSortMode::None) {
-        while (auto Function = Functions->getNext()) {
-          Printer.NewLine();
-          Dumper.start(*Function, FunctionDumper::PointerType::None);
-        }
-      } else {
-        std::vector<std::unique_ptr<PDBSymbolFunc>> Funcs;
-        while (auto Func = Functions->getNext())
-          Funcs.push_back(std::move(Func));
-        std::sort(Funcs.begin(), Funcs.end(),
-                  opts::pretty::compareFunctionSymbols);
-        for (const auto &Func : Funcs) {
-          Printer.NewLine();
-          Dumper.start(*Func, FunctionDumper::PointerType::None);
+      if (auto Functions = GlobalScope->findAllChildren<PDBSymbolFunc>()) {
+        FunctionDumper Dumper(Printer);
+        if (opts::pretty::SymbolOrder == opts::pretty::SymbolSortMode::None) {
+          while (auto Function = Functions->getNext()) {
+            Printer.NewLine();
+            Dumper.start(*Function, FunctionDumper::PointerType::None);
+          }
+        } else {
+          std::vector<std::unique_ptr<PDBSymbolFunc>> Funcs;
+          while (auto Func = Functions->getNext())
+            Funcs.push_back(std::move(Func));
+          std::sort(Funcs.begin(), Funcs.end(),
+                    opts::pretty::compareFunctionSymbols);
+          for (const auto &Func : Funcs) {
+            Printer.NewLine();
+            Dumper.start(*Func, FunctionDumper::PointerType::None);
+          }
         }
       }
     }
     if (shouldDumpSymLevel(opts::pretty::SymLevel::Data)) {
-      auto Vars = GlobalScope->findAllChildren<PDBSymbolData>();
-      VariableDumper Dumper(Printer);
-      if (opts::pretty::SymbolOrder == opts::pretty::SymbolSortMode::None) {
-        while (auto Var = Vars->getNext())
-          Dumper.start(*Var);
-      } else {
-        std::vector<std::unique_ptr<PDBSymbolData>> Datas;
-        while (auto Var = Vars->getNext())
-          Datas.push_back(std::move(Var));
-        std::sort(Datas.begin(), Datas.end(), opts::pretty::compareDataSymbols);
-        for (const auto &Var : Datas)
-          Dumper.start(*Var);
+      if (auto Vars = GlobalScope->findAllChildren<PDBSymbolData>()) {
+        VariableDumper Dumper(Printer);
+        if (opts::pretty::SymbolOrder == opts::pretty::SymbolSortMode::None) {
+          while (auto Var = Vars->getNext())
+            Dumper.start(*Var);
+        } else {
+          std::vector<std::unique_ptr<PDBSymbolData>> Datas;
+          while (auto Var = Vars->getNext())
+            Datas.push_back(std::move(Var));
+          std::sort(Datas.begin(), Datas.end(),
+                    opts::pretty::compareDataSymbols);
+          for (const auto &Var : Datas)
+            Dumper.start(*Var);
+        }
       }
     }
     if (shouldDumpSymLevel(opts::pretty::SymLevel::Thunks)) {
-      auto Thunks = GlobalScope->findAllChildren<PDBSymbolThunk>();
-      CompilandDumper Dumper(Printer);
-      while (auto Thunk = Thunks->getNext())
-        Dumper.dump(*Thunk);
+      if (auto Thunks = GlobalScope->findAllChildren<PDBSymbolThunk>()) {
+        CompilandDumper Dumper(Printer);
+        while (auto Thunk = Thunks->getNext())
+          Dumper.dump(*Thunk);
+      }
     }
     Printer.Unindent();
   }
@@ -988,8 +994,8 @@ static void dumpPretty(StringRef Path) {
 
 static void mergePdbs() {
   BumpPtrAllocator Allocator;
-  TypeTableBuilder MergedTpi(Allocator);
-  TypeTableBuilder MergedIpi(Allocator);
+  MergingTypeTableBuilder MergedTpi(Allocator);
+  MergingTypeTableBuilder MergedIpi(Allocator);
 
   // Create a Tpi and Ipi type table with all types from all input files.
   for (const auto &Path : opts::merge::InputFilenames) {
@@ -1019,11 +1025,11 @@ static void mergePdbs() {
 
   auto &DestTpi = Builder.getTpiBuilder();
   auto &DestIpi = Builder.getIpiBuilder();
-  MergedTpi.ForEachRecord([&DestTpi](TypeIndex TI, ArrayRef<uint8_t> Data) {
-    DestTpi.addTypeRecord(Data, None);
+  MergedTpi.ForEachRecord([&DestTpi](TypeIndex TI, const CVType &Type) {
+    DestTpi.addTypeRecord(Type.RecordData, None);
   });
-  MergedIpi.ForEachRecord([&DestIpi](TypeIndex TI, ArrayRef<uint8_t> Data) {
-    DestIpi.addTypeRecord(Data, None);
+  MergedIpi.ForEachRecord([&DestIpi](TypeIndex TI, const CVType &Type) {
+    DestIpi.addTypeRecord(Type.RecordData, None);
   });
   Builder.getInfoBuilder().addFeature(PdbRaw_FeatureSig::VC140);
 
@@ -1202,14 +1208,11 @@ int main(int argc_, const char *argv_[]) {
       opts::pretty::ExcludeCompilands.push_back(
           "d:\\\\th.obj.x86fre\\\\minkernel");
     }
-    std::for_each(opts::pretty::InputFilenames.begin(),
-                  opts::pretty::InputFilenames.end(), dumpPretty);
+    llvm::for_each(opts::pretty::InputFilenames, dumpPretty);
   } else if (opts::DumpSubcommand) {
-    std::for_each(opts::dump::InputFilenames.begin(),
-                  opts::dump::InputFilenames.end(), dumpRaw);
+    llvm::for_each(opts::dump::InputFilenames, dumpRaw);
   } else if (opts::BytesSubcommand) {
-    std::for_each(opts::bytes::InputFilenames.begin(),
-                  opts::bytes::InputFilenames.end(), dumpBytes);
+    llvm::for_each(opts::bytes::InputFilenames, dumpBytes);
   } else if (opts::DiffSubcommand) {
     for (StringRef S : opts::diff::RawModiEquivalences) {
       StringRef Left;

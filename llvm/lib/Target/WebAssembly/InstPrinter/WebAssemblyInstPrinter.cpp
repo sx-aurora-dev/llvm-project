@@ -18,6 +18,7 @@
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -25,7 +26,6 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -176,10 +176,10 @@ void WebAssemblyInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
     if (Info.OperandType == WebAssembly::OPERAND_F32IMM) {
       // TODO: MC converts all floating point immediate operands to double.
       // This is fine for numeric values, but may cause NaNs to change bits.
-      O << toString(APFloat(float(Op.getFPImm())));
+      O << ::toString(APFloat(float(Op.getFPImm())));
     } else {
       assert(Info.OperandType == WebAssembly::OPERAND_F64IMM);
-      O << toString(APFloat(Op.getFPImm()));
+      O << ::toString(APFloat(Op.getFPImm()));
     }
   } else {
     assert((OpNo < MII.get(MI->getOpcode()).getNumOperands() ||
@@ -220,6 +220,7 @@ WebAssemblyInstPrinter::printWebAssemblySignatureOperand(const MCInst *MI,
   case WebAssembly::ExprType::B8x16: O << "b8x16"; break;
   case WebAssembly::ExprType::B16x8: O << "b16x8"; break;
   case WebAssembly::ExprType::B32x4: O << "b32x4"; break;
+  case WebAssembly::ExprType::ExceptRef: O << "except_ref"; break;
   }
 }
 
@@ -238,6 +239,8 @@ const char *llvm::WebAssembly::TypeToString(MVT Ty) {
   case MVT::v4i32:
   case MVT::v4f32:
     return "v128";
+  case MVT::ExceptRef:
+    return "except_ref";
   default:
     llvm_unreachable("unsupported type");
   }
@@ -253,6 +256,8 @@ const char *llvm::WebAssembly::TypeToString(wasm::ValType Type) {
     return "f32";
   case wasm::ValType::F64:
     return "f64";
+  case wasm::ValType::EXCEPT_REF:
+    return "except_ref";
   }
   llvm_unreachable("unsupported type");
 }

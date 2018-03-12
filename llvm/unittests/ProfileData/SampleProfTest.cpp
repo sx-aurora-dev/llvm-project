@@ -13,7 +13,6 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/ProfileData/ProfileCommon.h"
 #include "llvm/ProfileData/SampleProfReader.h"
 #include "llvm/ProfileData/SampleProfWriter.h"
 #include "llvm/Support/Casting.h"
@@ -21,12 +20,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
-#include <algorithm>
-#include <cstdint>
-#include <limits>
-#include <memory>
 #include <string>
-#include <system_error>
 #include <vector>
 
 using namespace llvm;
@@ -83,6 +77,9 @@ struct SampleProfTest : ::testing::Test {
     BarSamples.addTotalSamples(20301);
     BarSamples.addHeadSamples(1437);
     BarSamples.addBodySamples(1, 0, 1437);
+    BarSamples.addCalledTargetSamples(1, 0, "_M_construct<char *>", 1000);
+    BarSamples.addCalledTargetSamples(
+        1, 0, "string_view<std::allocator<char> >", 437);
 
     StringMap<FunctionSamples> Profiles;
     Profiles[FooName] = std::move(FooSamples);
@@ -110,6 +107,11 @@ struct SampleProfTest : ::testing::Test {
     FunctionSamples &ReadBarSamples = ReadProfiles[BarName];
     ASSERT_EQ(20301u, ReadBarSamples.getTotalSamples());
     ASSERT_EQ(1437u, ReadBarSamples.getHeadSamples());
+    ErrorOr<SampleRecord::CallTargetMap> CTMap =
+        ReadBarSamples.findCallTargetMapAt(1, 0);
+    ASSERT_FALSE(CTMap.getError());
+    ASSERT_EQ(1000u, CTMap.get()["_M_construct<char *>"]);
+    ASSERT_EQ(437u, CTMap.get()["string_view<std::allocator<char> >"]);
 
     auto VerifySummary = [](ProfileSummary &Summary) mutable {
       ASSERT_EQ(ProfileSummary::PSK_Sample, Summary.getKind());

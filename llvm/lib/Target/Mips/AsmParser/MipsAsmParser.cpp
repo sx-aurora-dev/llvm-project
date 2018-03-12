@@ -304,6 +304,9 @@ class MipsAsmParser : public MCTargetAsmParser {
   bool expandSeqI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                   const MCSubtargetInfo *STI);
 
+  bool expandMXTRAlias(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
+                       const MCSubtargetInfo *STI);
+
   bool reportParseError(Twine ErrorMsg);
   bool reportParseError(SMLoc Loc, Twine ErrorMsg);
 
@@ -463,6 +466,7 @@ public:
     Match_RequiresSameSrcAndDst,
     Match_NoFCCRegisterForCurrentISA,
     Match_NonZeroOperandForSync,
+    Match_NonZeroOperandForMTCX,
     Match_RequiresPosSizeRange0_32,
     Match_RequiresPosSizeRange33_64,
     Match_RequiresPosSizeUImm6,
@@ -509,6 +513,9 @@ public:
       IsLittleEndian = false;
     else
       IsLittleEndian = true;
+
+    if (getSTI().getCPU() == "mips64r6" && inMicroMipsMode())
+      report_fatal_error("microMIPS64R6 is not supported", false);
   }
 
   /// True if all of $fcc0 - $fcc7 exist for the current ISA.
@@ -1984,9 +1991,7 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   case Mips::DDIV:
   case Mips::DDIVU:
   case Mips::DIVU_MMR6:
-  case Mips::DDIVU_MM64R6:
   case Mips::DIV_MMR6:
-  case Mips::DDIV_MM64R6:
     if (Inst.getOperand(SecondOp).getReg() == Mips::ZERO ||
         Inst.getOperand(SecondOp).getReg() == Mips::ZERO_64) {
       if (Inst.getOperand(FirstOp).getReg() == Mips::ZERO ||
@@ -2270,8 +2275,10 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
 
   // We know we emitted an instruction on the MER_NotAMacro or MER_Success path.
   // If we're in microMIPS mode then we must also set EF_MIPS_MICROMIPS.
-  if (inMicroMipsMode())
+  if (inMicroMipsMode()) {
     TOut.setUsesMicroMips();
+    TOut.updateABIInfo(*this);
+  }
 
   // If this instruction has a delay slot and .set reorder is active,
   // emit a NOP after it.
@@ -2514,6 +2521,16 @@ MipsAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
     return expandSeq(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
   case Mips::SEQIMacro:
     return expandSeqI(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+  case Mips::MFTC0:   case Mips::MTTC0:
+  case Mips::MFTGPR:  case Mips::MTTGPR:
+  case Mips::MFTLO:   case Mips::MTTLO:
+  case Mips::MFTHI:   case Mips::MTTHI:
+  case Mips::MFTACX:  case Mips::MTTACX:
+  case Mips::MFTDSP:  case Mips::MTTDSP:
+  case Mips::MFTC1:   case Mips::MTTC1:
+  case Mips::MFTHC1:  case Mips::MTTHC1:
+  case Mips::CFTC1:   case Mips::CTTC1:
+    return expandMXTRAlias(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
   }
 }
 
@@ -3869,7 +3886,7 @@ bool MipsAsmParser::expandCondBranches(MCInst &Inst, SMLoc IDLoc,
   // This is accomplished by using a BNEZ with the result of the SLT.
   //
   // The other 2 pseudo-branches are opposites of the above 2 (BGE with BLT
-  // and BLE with BGT), so we change the BNEZ into a a BEQZ.
+  // and BLE with BGT), so we change the BNEZ into a BEQZ.
   // Because only BGE and BLE branch on equality, we can use the
   // AcceptsEquality variable to decide when to emit the BEQZ.
   // Note that the order of the SLT arguments doesn't change between
@@ -4885,6 +4902,212 @@ bool MipsAsmParser::expandSeqI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   return false;
 }
 
+// Map the DSP accumulator and control register to the corresponding gpr
+// operand. Unlike the other alias, the m(f|t)t(lo|hi|acx) instructions
+// do not map the DSP registers contigously to gpr registers.
+static unsigned getRegisterForMxtrDSP(MCInst &Inst, bool IsMFDSP) {
+  switch (Inst.getOpcode()) {
+    case Mips::MFTLO:
+    case Mips::MTTLO:
+      switch (Inst.getOperand(IsMFDSP ? 1 : 0).getReg()) {
+        case Mips::AC0:
+          return Mips::ZERO;
+        case Mips::AC1:
+          return Mips::A0;
+        case Mips::AC2:
+          return Mips::T0;
+        case Mips::AC3:
+          return Mips::T4;
+        default:
+          llvm_unreachable("Unknown register for 'mttr' alias!");
+    }
+    case Mips::MFTHI:
+    case Mips::MTTHI:
+      switch (Inst.getOperand(IsMFDSP ? 1 : 0).getReg()) {
+        case Mips::AC0:
+          return Mips::AT;
+        case Mips::AC1:
+          return Mips::A1;
+        case Mips::AC2:
+          return Mips::T1;
+        case Mips::AC3:
+          return Mips::T5;
+        default:
+          llvm_unreachable("Unknown register for 'mttr' alias!");
+    }
+    case Mips::MFTACX:
+    case Mips::MTTACX:
+      switch (Inst.getOperand(IsMFDSP ? 1 : 0).getReg()) {
+        case Mips::AC0:
+          return Mips::V0;
+        case Mips::AC1:
+          return Mips::A2;
+        case Mips::AC2:
+          return Mips::T2;
+        case Mips::AC3:
+          return Mips::T6;
+        default:
+          llvm_unreachable("Unknown register for 'mttr' alias!");
+    }
+    case Mips::MFTDSP:
+    case Mips::MTTDSP:
+      return Mips::S0;
+    default:
+      llvm_unreachable("Unknown instruction for 'mttr' dsp alias!");
+  }
+}
+
+// Map the floating point register operand to the corresponding register
+// operand.
+static unsigned getRegisterForMxtrFP(MCInst &Inst, bool IsMFTC1) {
+  switch (Inst.getOperand(IsMFTC1 ? 1 : 0).getReg()) {
+    case Mips::F0:  return Mips::ZERO;
+    case Mips::F1:  return Mips::AT;
+    case Mips::F2:  return Mips::V0;
+    case Mips::F3:  return Mips::V1;
+    case Mips::F4:  return Mips::A0;
+    case Mips::F5:  return Mips::A1;
+    case Mips::F6:  return Mips::A2;
+    case Mips::F7:  return Mips::A3;
+    case Mips::F8:  return Mips::T0;
+    case Mips::F9:  return Mips::T1;
+    case Mips::F10: return Mips::T2;
+    case Mips::F11: return Mips::T3;
+    case Mips::F12: return Mips::T4;
+    case Mips::F13: return Mips::T5;
+    case Mips::F14: return Mips::T6;
+    case Mips::F15: return Mips::T7;
+    case Mips::F16: return Mips::S0;
+    case Mips::F17: return Mips::S1;
+    case Mips::F18: return Mips::S2;
+    case Mips::F19: return Mips::S3;
+    case Mips::F20: return Mips::S4;
+    case Mips::F21: return Mips::S5;
+    case Mips::F22: return Mips::S6;
+    case Mips::F23: return Mips::S7;
+    case Mips::F24: return Mips::T8;
+    case Mips::F25: return Mips::T9;
+    case Mips::F26: return Mips::K0;
+    case Mips::F27: return Mips::K1;
+    case Mips::F28: return Mips::GP;
+    case Mips::F29: return Mips::SP;
+    case Mips::F30: return Mips::FP;
+    case Mips::F31: return Mips::RA;
+    default: llvm_unreachable("Unknown register for mttc1 alias!");
+  }
+}
+
+// Map the coprocessor operand the corresponding gpr register operand.
+static unsigned getRegisterForMxtrC0(MCInst &Inst, bool IsMFTC0) {
+  switch (Inst.getOperand(IsMFTC0 ? 1 : 0).getReg()) {
+    case Mips::COP00:  return Mips::ZERO;
+    case Mips::COP01:  return Mips::AT;
+    case Mips::COP02:  return Mips::V0;
+    case Mips::COP03:  return Mips::V1;
+    case Mips::COP04:  return Mips::A0;
+    case Mips::COP05:  return Mips::A1;
+    case Mips::COP06:  return Mips::A2;
+    case Mips::COP07:  return Mips::A3;
+    case Mips::COP08:  return Mips::T0;
+    case Mips::COP09:  return Mips::T1;
+    case Mips::COP010: return Mips::T2;
+    case Mips::COP011: return Mips::T3;
+    case Mips::COP012: return Mips::T4;
+    case Mips::COP013: return Mips::T5;
+    case Mips::COP014: return Mips::T6;
+    case Mips::COP015: return Mips::T7;
+    case Mips::COP016: return Mips::S0;
+    case Mips::COP017: return Mips::S1;
+    case Mips::COP018: return Mips::S2;
+    case Mips::COP019: return Mips::S3;
+    case Mips::COP020: return Mips::S4;
+    case Mips::COP021: return Mips::S5;
+    case Mips::COP022: return Mips::S6;
+    case Mips::COP023: return Mips::S7;
+    case Mips::COP024: return Mips::T8;
+    case Mips::COP025: return Mips::T9;
+    case Mips::COP026: return Mips::K0;
+    case Mips::COP027: return Mips::K1;
+    case Mips::COP028: return Mips::GP;
+    case Mips::COP029: return Mips::SP;
+    case Mips::COP030: return Mips::FP;
+    case Mips::COP031: return Mips::RA;
+    default: llvm_unreachable("Unknown register for mttc0 alias!");
+  }
+}
+
+/// Expand an alias of 'mftr' or 'mttr' into the full instruction, by producing
+/// an mftr or mttr with the correctly mapped gpr register, u, sel and h bits.
+bool MipsAsmParser::expandMXTRAlias(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
+                                    const MCSubtargetInfo *STI) {
+  MipsTargetStreamer &TOut = getTargetStreamer();
+  unsigned rd = 0;
+  unsigned u = 1;
+  unsigned sel = 0;
+  unsigned h = 0;
+  bool IsMFTR = false;
+  switch (Inst.getOpcode()) {
+    case Mips::MFTC0:
+      IsMFTR = true;
+      LLVM_FALLTHROUGH;
+    case Mips::MTTC0:
+      u = 0;
+      rd = getRegisterForMxtrC0(Inst, IsMFTR);
+      sel = Inst.getOperand(2).getImm();
+      break;
+    case Mips::MFTGPR:
+      IsMFTR = true;
+      LLVM_FALLTHROUGH;
+    case Mips::MTTGPR:
+      rd = Inst.getOperand(IsMFTR ? 1 : 0).getReg();
+      break;
+    case Mips::MFTLO:
+    case Mips::MFTHI:
+    case Mips::MFTACX:
+    case Mips::MFTDSP:
+      IsMFTR = true;
+      LLVM_FALLTHROUGH;
+    case Mips::MTTLO:
+    case Mips::MTTHI:
+    case Mips::MTTACX:
+    case Mips::MTTDSP:
+      rd = getRegisterForMxtrDSP(Inst, IsMFTR);
+      sel = 1;
+      break;
+    case Mips::MFTHC1:
+      h = 1;
+      LLVM_FALLTHROUGH;
+    case Mips::MFTC1:
+      IsMFTR = true;
+      rd = getRegisterForMxtrFP(Inst, IsMFTR);
+      sel = 2;
+      break;
+    case Mips::MTTHC1:
+      h = 1;
+      LLVM_FALLTHROUGH;
+    case Mips::MTTC1:
+      rd = getRegisterForMxtrFP(Inst, IsMFTR);
+      sel = 2;
+      break;
+    case Mips::CFTC1:
+      IsMFTR = true;
+      LLVM_FALLTHROUGH;
+    case Mips::CTTC1:
+      rd = getRegisterForMxtrFP(Inst, IsMFTR);
+      sel = 3;
+      break;
+  }
+  unsigned Op0 = IsMFTR ? Inst.getOperand(0).getReg() : rd;
+  unsigned Op1 =
+      IsMFTR ? rd
+             : (Inst.getOpcode() != Mips::MTTDSP ? Inst.getOperand(1).getReg()
+                                                 : Inst.getOperand(0).getReg());
+
+  TOut.emitRRIII(IsMFTR ? Mips::MFTR : Mips::MTTR, Op0, Op1, u, sel, h, IDLoc,
+                 STI);
+  return false;
+}
+
 unsigned
 MipsAsmParser::checkEarlyTargetMatchPredicate(MCInst &Inst,
                                               const OperandVector &Operands) {
@@ -4893,8 +5116,6 @@ MipsAsmParser::checkEarlyTargetMatchPredicate(MCInst &Inst,
     return Match_Success;
   case Mips::DATI:
   case Mips::DAHI:
-  case Mips::DATI_MM64R6:
-  case Mips::DAHI_MM64R6:
     if (static_cast<MipsOperand &>(*Operands[1])
             .isValidForTie(static_cast<MipsOperand &>(*Operands[2])))
       return Match_Success;
@@ -4907,7 +5128,6 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   // As described by the MIPSR6 spec, daui must not use the zero operand for
   // its source operand.
   case Mips::DAUI:
-  case Mips::DAUI_MM64R6:
     if (Inst.getOperand(1).getReg() == Mips::ZERO ||
         Inst.getOperand(1).getReg() == Mips::ZERO_64)
       return Match_RequiresNoZeroRegister;
@@ -4917,6 +5137,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   // It also applies for registers Rt and Rs of microMIPSr6 jalrc.hb instruction
   // and registers Rd and Base for microMIPS lwp instruction
   case Mips::JALR_HB:
+  case Mips::JALR_HB64:
   case Mips::JALRC_HB_MMR6:
   case Mips::JALRC_MMR6:
     if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
@@ -4930,6 +5151,13 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   case Mips::SYNC:
     if (Inst.getOperand(0).getImm() != 0 && !hasMips32())
       return Match_NonZeroOperandForSync;
+    return Match_Success;
+  case Mips::MFC0:
+  case Mips::MTC0:
+  case Mips::MTC2:
+  case Mips::MFC2:
+    if (Inst.getOperand(2).getImm() != 0 && !hasMips32())
+      return Match_NonZeroOperandForMTCX;
     return Match_Success;
   // As described the MIPSR6 spec, the compact branches that compare registers
   // must:
@@ -4980,8 +5208,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
     if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
       return Match_RequiresDifferentOperands;
     return Match_Success;
-  case Mips::DINS:
-  case Mips::DINS_MM64R6: {
+  case Mips::DINS: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for dins!");
     const signed Pos = Inst.getOperand(2).getImm();
@@ -4991,9 +5218,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
     return Match_Success;
   }
   case Mips::DINSM:
-  case Mips::DINSM_MM64R6:
-  case Mips::DINSU:
-  case Mips::DINSU_MM64R6: {
+  case Mips::DINSU: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for dinsm/dinsu!");
     const signed Pos = Inst.getOperand(2).getImm();
@@ -5002,8 +5227,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
       return Match_RequiresPosSizeRange33_64;
     return Match_Success;
   }
-  case Mips::DEXT:
-  case Mips::DEXT_MM64R6: {
+  case Mips::DEXT: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for DEXTM!");
     const signed Pos = Inst.getOperand(2).getImm();
@@ -5013,9 +5237,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
     return Match_Success;
   }
   case Mips::DEXTM:
-  case Mips::DEXTU:
-  case Mips::DEXTM_MM64R6:
-  case Mips::DEXTU_MM64R6: {
+  case Mips::DEXTU: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for dextm/dextu!");
     const signed Pos = Inst.getOperand(2).getImm();
@@ -5078,6 +5300,8 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   }
   case Match_NonZeroOperandForSync:
     return Error(IDLoc, "s-type must be zero or unspecified for pre-MIPS32 ISAs");
+  case Match_NonZeroOperandForMTCX:
+    return Error(IDLoc, "selector must be zero for pre-MIPS32 ISAs");
   case Match_MnemonicFail:
     return Error(IDLoc, "invalid instruction");
   case Match_RequiresDifferentSrcAndDst:
@@ -6573,6 +6797,9 @@ bool MipsAsmParser::parseSetArchDirective() {
   if (ArchFeatureName.empty())
     return reportParseError("unsupported architecture");
 
+  if (ArchFeatureName == "mips64r6" && inMicroMipsMode())
+    return reportParseError("mips64r6 does not support microMIPS");
+
   selectArch(ArchFeatureName);
   getTargetStreamer().emitDirectiveSetArch(Arch);
   return false;
@@ -6904,6 +7131,10 @@ bool MipsAsmParser::parseDirectiveSet() {
     Parser.eatToEndOfStatement();
     return false;
   } else if (Tok.getString() == "micromips") {
+    if (hasMips64r6()) {
+      Error(Tok.getLoc(), ".set micromips directive is not supported with MIPS64R6");
+      return false;
+    }
     return parseSetFeature(Mips::FeatureMicroMips);
   } else if (Tok.getString() == "mips0") {
     return parseSetMips0Directive();
@@ -6936,6 +7167,10 @@ bool MipsAsmParser::parseDirectiveSet() {
   } else if (Tok.getString() == "mips64r5") {
     return parseSetFeature(Mips::FeatureMips64r5);
   } else if (Tok.getString() == "mips64r6") {
+    if (inMicroMipsMode()) {
+      Error(Tok.getLoc(), "MIPS64R6 is not supported with microMIPS");
+      return false;
+    }
     return parseSetFeature(Mips::FeatureMips64r6);
   } else if (Tok.getString() == "dsp") {
     return parseSetFeature(Mips::FeatureDSP);

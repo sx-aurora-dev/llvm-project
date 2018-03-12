@@ -38,9 +38,6 @@ SectionChunk::SectionChunk(ObjFile *F, const coff_section *H)
 
   Alignment = Header->getAlignment();
 
-  // Chunks may be discarded during comdat merging.
-  Discarded = false;
-
   // If linker GC is disabled, every chunk starts out alive.  If linker GC is
   // enabled, treat non-comdat sections as roots. Generally optimized object
   // files will be built with -ffunction-sections or /Gy, so most things worth
@@ -54,13 +51,21 @@ static void add64(uint8_t *P, int64_t V) { write64le(P, read64le(P) + V); }
 static void or16(uint8_t *P, uint16_t V) { write16le(P, read16le(P) | V); }
 static void or32(uint8_t *P, uint32_t V) { write32le(P, read32le(P) | V); }
 
+// Verify that given sections are appropriate targets for SECREL
+// relocations. This check is relaxed because unfortunately debug
+// sections have section-relative relocations against absolute symbols.
+static bool checkSecRel(const SectionChunk *Sec, OutputSection *OS) {
+  if (OS)
+    return true;
+  if (Sec->isCodeView())
+    return false;
+  fatal("SECREL relocation cannot be applied to absolute symbols");
+}
+
 static void applySecRel(const SectionChunk *Sec, uint8_t *Off,
                         OutputSection *OS, uint64_t S) {
-  if (!OS) {
-    if (Sec->isCodeView())
-      return;
-    fatal("SECREL relocation cannot be applied to absolute symbols");
-  }
+  if (!checkSecRel(Sec, OS))
+    return;
   uint64_t SecRel = S - OS->getRVA();
   if (SecRel > UINT32_MAX) {
     error("overflow in SECREL relocation in section: " + Sec->getSectionName());
@@ -70,10 +75,13 @@ static void applySecRel(const SectionChunk *Sec, uint8_t *Off,
 }
 
 static void applySecIdx(uint8_t *Off, OutputSection *OS) {
-  // If we have no output section, this must be an absolute symbol. Use the
-  // sentinel absolute symbol section index.
-  uint16_t SecIdx = OS ? OS->SectionIndex : DefinedAbsolute::OutputSectionIndex;
-  add16(Off, SecIdx);
+  // Absolute symbol doesn't have section index, but section index relocation
+  // against absolute symbol should be resolved to one plus the last output
+  // section index. This is required for compatibility with MSVC.
+  if (OS)
+    add16(Off, OS->SectionIndex);
+  else
+    add16(Off, DefinedAbsolute::NumOutputSections + 1);
 }
 
 void SectionChunk::applyRelX64(uint8_t *Off, uint16_t Type, OutputSection *OS,
@@ -115,11 +123,10 @@ static void applyMOV(uint8_t *Off, uint16_t V) {
 }
 
 static uint16_t readMOV(uint8_t *Off) {
-  uint16_t Opcode1 = read16le(Off);
-  uint16_t Opcode2 = read16le(Off + 2);
-  uint16_t Imm = (Opcode2 & 0x00ff) | ((Opcode2 >> 4) & 0x0700);
-  Imm |= ((Opcode1 << 1) & 0x0800) | ((Opcode1 & 0x000f) << 12);
-  return Imm;
+  uint16_t Op1 = read16le(Off);
+  uint16_t Op2 = read16le(Off + 2);
+  return (Op2 & 0x00ff) | ((Op2 >> 4) & 0x0700) | ((Op1 << 1) & 0x0800) |
+         ((Op1 & 0x000f) << 12);
 }
 
 void applyMOV32T(uint8_t *Off, uint32_t V) {
@@ -132,6 +139,8 @@ void applyMOV32T(uint8_t *Off, uint32_t V) {
 }
 
 static void applyBranch20T(uint8_t *Off, int32_t V) {
+  if (!isInt<21>(V))
+    fatal("relocation out of range");
   uint32_t S = V < 0 ? 1 : 0;
   uint32_t J1 = (V >> 19) & 1;
   uint32_t J2 = (V >> 18) & 1;
@@ -214,6 +223,31 @@ static void applyArm64Ldr(uint8_t *Off, uint64_t Imm) {
   applyArm64Imm(Off, Imm >> Size, Size);
 }
 
+static void applySecRelLow12A(const SectionChunk *Sec, uint8_t *Off,
+                              OutputSection *OS, uint64_t S) {
+  if (checkSecRel(Sec, OS))
+    applyArm64Imm(Off, (S - OS->getRVA()) & 0xfff, 0);
+}
+
+static void applySecRelHigh12A(const SectionChunk *Sec, uint8_t *Off,
+                               OutputSection *OS, uint64_t S) {
+  if (!checkSecRel(Sec, OS))
+    return;
+  uint64_t SecRel = (S - OS->getRVA()) >> 12;
+  if (0xfff < SecRel) {
+    error("overflow in SECREL_HIGH12A relocation in section: " +
+          Sec->getSectionName());
+    return;
+  }
+  applyArm64Imm(Off, SecRel & 0xfff, 0);
+}
+
+static void applySecRelLdr(const SectionChunk *Sec, uint8_t *Off,
+                           OutputSection *OS, uint64_t S) {
+  if (checkSecRel(Sec, OS))
+    applyArm64Ldr(Off, (S - OS->getRVA()) & 0xfff);
+}
+
 void SectionChunk::applyRelARM64(uint8_t *Off, uint16_t Type, OutputSection *OS,
                                  uint64_t S, uint64_t P) const {
   switch (Type) {
@@ -224,6 +258,10 @@ void SectionChunk::applyRelARM64(uint8_t *Off, uint16_t Type, OutputSection *OS,
   case IMAGE_REL_ARM64_ADDR32:         add32(Off, S + Config->ImageBase); break;
   case IMAGE_REL_ARM64_ADDR32NB:       add32(Off, S); break;
   case IMAGE_REL_ARM64_ADDR64:         add64(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_ARM64_SECREL:         applySecRel(this, Off, OS, S); break;
+  case IMAGE_REL_ARM64_SECREL_LOW12A:  applySecRelLow12A(this, Off, OS, S); break;
+  case IMAGE_REL_ARM64_SECREL_HIGH12A: applySecRelHigh12A(this, Off, OS, S); break;
+  case IMAGE_REL_ARM64_SECREL_LOW12L:  applySecRelLdr(this, Off, OS, S); break;
   default:
     fatal("unsupported relocation type 0x" + Twine::utohexstr(Type));
   }
@@ -251,8 +289,19 @@ void SectionChunk::writeTo(uint8_t *Buf) const {
     // Get the output section of the symbol for this relocation.  The output
     // section is needed to compute SECREL and SECTION relocations used in debug
     // info.
-    SymbolBody *Body = File->getSymbolBody(Rel.SymbolTableIndex);
-    Defined *Sym = cast<Defined>(Body);
+    auto *Sym =
+        dyn_cast_or_null<Defined>(File->getSymbol(Rel.SymbolTableIndex));
+    if (!Sym) {
+      if (isCodeView() || isDWARF())
+        continue;
+      // Symbols in early discarded sections are represented using null pointers,
+      // so we need to retrieve the name from the object file.
+      COFFSymbolRef Sym =
+          check(File->getCOFFObj()->getSymbol(Rel.SymbolTableIndex));
+      StringRef Name;
+      File->getCOFFObj()->getSymbolName(Sym, Name);
+      fatal("relocation against symbol in discarded section: " + Name);
+    }
     Chunk *C = Sym->getChunk();
     OutputSection *OS = C ? C->getOutputSection() : nullptr;
 
@@ -328,8 +377,8 @@ void SectionChunk::getBaserels(std::vector<Baserel> *Res) {
     uint8_t Ty = getBaserelType(Rel);
     if (Ty == IMAGE_REL_BASED_ABSOLUTE)
       continue;
-    SymbolBody *Body = File->getSymbolBody(Rel.SymbolTableIndex);
-    if (isa<DefinedAbsolute>(Body))
+    Symbol *Target = File->getSymbol(Rel.SymbolTableIndex);
+    if (!Target || isa<DefinedAbsolute>(Target))
       continue;
     Res->emplace_back(RVA + Rel.VirtualAddress, Ty);
   }
@@ -350,12 +399,8 @@ bool SectionChunk::isCOMDAT() const {
 void SectionChunk::printDiscardedMessage() const {
   // Removed by dead-stripping. If it's removed by ICF, ICF already
   // printed out the name, so don't repeat that here.
-  if (Sym && this == Repl) {
-    if (Discarded)
-      message("Discarded comdat symbol " + Sym->getName());
-    else if (!Live)
-      message("Discarded " + Sym->getName());
-  }
+  if (Sym && this == Repl)
+    message("Discarded " + Sym->getName());
 }
 
 StringRef SectionChunk::getDebugName() {
@@ -446,12 +491,14 @@ void LocalImportChunk::writeTo(uint8_t *Buf) const {
   }
 }
 
-void SEHTableChunk::writeTo(uint8_t *Buf) const {
+void RVATableChunk::writeTo(uint8_t *Buf) const {
   ulittle32_t *Begin = reinterpret_cast<ulittle32_t *>(Buf + OutputSectionOff);
   size_t Cnt = 0;
-  for (Defined *D : Syms)
-    Begin[Cnt++] = D->getRVA();
+  for (const ChunkAndOffset &CO : Syms)
+    Begin[Cnt++] = CO.InputChunk->getRVA() + CO.Offset;
   std::sort(Begin, Begin + Cnt);
+  assert(std::unique(Begin, Begin + Cnt) == Begin + Cnt &&
+         "RVA tables should be de-duplicated");
 }
 
 // Windows-specific. This class represents a block in .reloc section.
@@ -514,6 +561,7 @@ void BaserelChunk::writeTo(uint8_t *Buf) const {
 uint8_t Baserel::getDefaultType() {
   switch (Config->Machine) {
   case AMD64:
+  case ARM64:
     return IMAGE_REL_BASED_DIR64;
   case I386:
   case ARMNT:

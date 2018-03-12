@@ -12,17 +12,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CodeGenInstruction.h"
 #include "CodeGenSchedule.h"
+#include "CodeGenInstruction.h"
 #include "CodeGenTarget.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Regex.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Error.h"
 #include <algorithm>
 #include <iterator>
@@ -50,36 +50,91 @@ struct InstrsOp : public SetTheory::Operator {
 };
 
 // (instregex "OpcPat",...) Find all instructions matching an opcode pattern.
-//
-// TODO: Since this is a prefix match, perform a binary search over the
-// instruction names using lower_bound. Note that the predefined instrs must be
-// scanned linearly first. However, this is only safe if the regex pattern has
-// no top-level bars. The DAG already has a list of patterns, so there's no
-// reason to use top-level bars, but we need a way to verify they don't exist
-// before implementing the optimization.
 struct InstRegexOp : public SetTheory::Operator {
   const CodeGenTarget &Target;
   InstRegexOp(const CodeGenTarget &t): Target(t) {}
 
+  /// Remove any text inside of parentheses from S.
+  static std::string removeParens(llvm::StringRef S) {
+    std::string Result;
+    unsigned Paren = 0;
+    // NB: We don't care about escaped parens here.
+    for (char C : S) {
+      switch (C) {
+      case '(':
+        ++Paren;
+        break;
+      case ')':
+        --Paren;
+        break;
+      default:
+        if (Paren == 0)
+          Result += C;
+      }
+    }
+    return Result;
+  }
+
   void apply(SetTheory &ST, DagInit *Expr, SetTheory::RecSet &Elts,
              ArrayRef<SMLoc> Loc) override {
-    SmallVector<Regex, 4> RegexList;
+    SmallVector<std::pair<StringRef, Optional<Regex>>, 4> RegexList;
     for (Init *Arg : make_range(Expr->arg_begin(), Expr->arg_end())) {
       StringInit *SI = dyn_cast<StringInit>(Arg);
       if (!SI)
-        PrintFatalError(Loc, "instregex requires pattern string: "
-          + Expr->getAsString());
-      std::string pat = SI->getValue();
-      // Implement a python-style prefix match.
+        PrintFatalError(Loc, "instregex requires pattern string: " +
+                                 Expr->getAsString());
+      // Extract a prefix that we can binary search on.
+      static const char RegexMetachars[] = "()^$|*+?.[]\\{}";
+      auto FirstMeta = SI->getValue().find_first_of(RegexMetachars);
+      // Look for top-level | or ?. We cannot optimize them to binary search.
+      if (removeParens(SI->getValue()).find_first_of("|?") != std::string::npos)
+        FirstMeta = 0;
+      StringRef Prefix = SI->getValue().substr(0, FirstMeta);
+      std::string pat = SI->getValue().substr(FirstMeta);
+      if (pat.empty()) {
+        RegexList.push_back(std::make_pair(Prefix, None));
+        continue;
+      }
+      // For the rest use a python-style prefix match.
       if (pat[0] != '^') {
         pat.insert(0, "^(");
         pat.insert(pat.end(), ')');
       }
-      RegexList.push_back(Regex(pat));
+      RegexList.push_back(std::make_pair(Prefix, Regex(pat)));
     }
-    for (const CodeGenInstruction *Inst : Target.getInstructionsByEnumValue()) {
-      for (auto &R : RegexList) {
-        if (R.match(Inst->TheDef->getName()))
+    for (auto &R : RegexList) {
+      unsigned NumGeneric = Target.getNumFixedInstructions();
+      // The generic opcodes are unsorted, handle them manually.
+      for (auto *Inst :
+           Target.getInstructionsByEnumValue().slice(0, NumGeneric + 1)) {
+        if (Inst->TheDef->getName().startswith(R.first) &&
+            (!R.second ||
+             R.second->match(Inst->TheDef->getName().substr(R.first.size()))))
+          Elts.insert(Inst->TheDef);
+      }
+
+      ArrayRef<const CodeGenInstruction *> Instructions =
+          Target.getInstructionsByEnumValue().slice(NumGeneric + 1);
+
+      // Target instructions are sorted. Find the range that starts with our
+      // prefix.
+      struct Comp {
+        bool operator()(const CodeGenInstruction *LHS, StringRef RHS) {
+          return LHS->TheDef->getName() < RHS;
+        }
+        bool operator()(StringRef LHS, const CodeGenInstruction *RHS) {
+          return LHS < RHS->TheDef->getName() &&
+                 !RHS->TheDef->getName().startswith(LHS);
+        }
+      };
+      auto Range = std::equal_range(Instructions.begin(), Instructions.end(),
+                                    R.first, Comp());
+
+      // For this range we know that it starts with the prefix. Check if there's
+      // a regex that needs to be checked.
+      for (auto *Inst : make_range(Range)) {
+        if (!R.second ||
+            R.second->match(Inst->TheDef->getName().substr(R.first.size())))
           Elts.insert(Inst->TheDef);
       }
     }
@@ -1509,6 +1564,14 @@ void CodeGenSchedModels::collectProcResources() {
     if (!is_contained(PM.ProcResourceDefs, PRG))
       PM.ProcResourceDefs.push_back(PRG);
   }
+  // Add ProcResourceUnits unconditionally.
+  for (Record *PRU : Records.getAllDerivedDefinitions("ProcResourceUnits")) {
+    if (!PRU->getValueInit("SchedModel")->isComplete())
+      continue;
+    CodeGenProcModel &PM = getProcModel(PRU->getValueAsDef("SchedModel"));
+    if (!is_contained(PM.ProcResourceDefs, PRU))
+      PM.ProcResourceDefs.push_back(PRU);
+  }
   // Finalize each ProcModel by sorting the record arrays.
   for (CodeGenProcModel &PM : ProcModels) {
     std::sort(PM.WriteResDefs.begin(), PM.WriteResDefs.end(),
@@ -1672,7 +1735,8 @@ void CodeGenSchedModels::collectRWResources(ArrayRef<unsigned> Writes,
 
 // Find the processor's resource units for this kind of resource.
 Record *CodeGenSchedModels::findProcResUnits(Record *ProcResKind,
-                                             const CodeGenProcModel &PM) const {
+                                             const CodeGenProcModel &PM,
+                                             ArrayRef<SMLoc> Loc) const {
   if (ProcResKind->isSubClassOf("ProcResourceUnits"))
     return ProcResKind;
 
@@ -1684,7 +1748,7 @@ Record *CodeGenSchedModels::findProcResUnits(Record *ProcResKind,
     if (ProcResDef->getValueAsDef("Kind") == ProcResKind
         && ProcResDef->getValueAsDef("SchedModel") == PM.ModelDef) {
       if (ProcUnitDef) {
-        PrintFatalError(ProcResDef->getLoc(),
+        PrintFatalError(Loc,
                         "Multiple ProcessorResourceUnits associated with "
                         + ProcResKind->getName());
       }
@@ -1695,7 +1759,7 @@ Record *CodeGenSchedModels::findProcResUnits(Record *ProcResKind,
     if (ProcResGroup == ProcResKind
         && ProcResGroup->getValueAsDef("SchedModel") == PM.ModelDef) {
       if (ProcUnitDef) {
-        PrintFatalError((ProcResGroup)->getLoc(),
+        PrintFatalError(Loc,
                         "Multiple ProcessorResourceUnits associated with "
                         + ProcResKind->getName());
       }
@@ -1703,7 +1767,7 @@ Record *CodeGenSchedModels::findProcResUnits(Record *ProcResKind,
     }
   }
   if (!ProcUnitDef) {
-    PrintFatalError(ProcResKind->getLoc(),
+    PrintFatalError(Loc,
                     "No ProcessorResources associated with "
                     + ProcResKind->getName());
   }
@@ -1712,9 +1776,10 @@ Record *CodeGenSchedModels::findProcResUnits(Record *ProcResKind,
 
 // Iteratively add a resource and its super resources.
 void CodeGenSchedModels::addProcResource(Record *ProcResKind,
-                                         CodeGenProcModel &PM) {
+                                         CodeGenProcModel &PM,
+                                         ArrayRef<SMLoc> Loc) {
   while (true) {
-    Record *ProcResUnits = findProcResUnits(ProcResKind, PM);
+    Record *ProcResUnits = findProcResUnits(ProcResKind, PM, Loc);
 
     // See if this ProcResource is already associated with this processor.
     if (is_contained(PM.ProcResourceDefs, ProcResUnits))
@@ -1744,7 +1809,7 @@ void CodeGenSchedModels::addWriteRes(Record *ProcWriteResDef, unsigned PIdx) {
   RecVec ProcResDefs = ProcWriteResDef->getValueAsListOfDefs("ProcResources");
   for (RecIter WritePRI = ProcResDefs.begin(), WritePRE = ProcResDefs.end();
        WritePRI != WritePRE; ++WritePRI) {
-    addProcResource(*WritePRI, ProcModels[PIdx]);
+    addProcResource(*WritePRI, ProcModels[PIdx], ProcWriteResDef->getLoc());
   }
 }
 

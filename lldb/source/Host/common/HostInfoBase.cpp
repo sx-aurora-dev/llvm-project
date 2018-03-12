@@ -9,11 +9,11 @@
 
 #include "lldb/Host/Config.h"
 
-#include "lldb/Core/ArchSpec.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Host/HostInfoBase.h"
+#include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -101,6 +101,14 @@ const ArchSpec &HostInfoBase::GetArchitecture(ArchitectureKind arch_kind) {
   // Otherwise prefer the 64-bit architecture if it is valid.
   return (g_fields->m_host_arch_64.IsValid()) ? g_fields->m_host_arch_64
                                               : g_fields->m_host_arch_32;
+}
+
+llvm::Optional<HostInfoBase::ArchitectureKind> HostInfoBase::ParseArchitectureKind(llvm::StringRef kind) {
+  return llvm::StringSwitch<llvm::Optional<ArchitectureKind>>(kind)
+      .Case(LLDB_ARCH_DEFAULT, eArchKindDefault)
+      .Case(LLDB_ARCH_DEFAULT_32BIT, eArchKind32)
+      .Case(LLDB_ARCH_DEFAULT_64BIT, eArchKind64)
+      .Default(llvm::None);
 }
 
 bool HostInfoBase::GetLLDBPath(lldb::PathType type, FileSpec &file_spec) {
@@ -251,12 +259,31 @@ bool HostInfoBase::GetLLDBPath(lldb::PathType type, FileSpec &file_spec) {
   return true;
 }
 
+ArchSpec HostInfoBase::GetAugmentedArchSpec(llvm::StringRef triple) {
+  if (triple.empty())
+    return ArchSpec();
+  llvm::Triple normalized_triple(llvm::Triple::normalize(triple));
+  if (!ArchSpec::ContainsOnlyArch(normalized_triple))
+    return ArchSpec(triple);
+
+  if (auto kind = HostInfo::ParseArchitectureKind(triple))
+    return HostInfo::GetArchitecture(*kind);
+
+  llvm::Triple host_triple(llvm::sys::getDefaultTargetTriple());
+
+  if (normalized_triple.getVendorName().empty())
+    normalized_triple.setVendor(host_triple.getVendor());
+  if (normalized_triple.getOSName().empty())
+    normalized_triple.setOS(host_triple.getOS());
+  if (normalized_triple.getEnvironmentName().empty())
+    normalized_triple.setEnvironment(host_triple.getEnvironment());
+  return ArchSpec(normalized_triple);
+}
+
 bool HostInfoBase::ComputeSharedLibraryDirectory(FileSpec &file_spec) {
   // To get paths related to LLDB we get the path to the executable that
-  // contains this function. On MacOSX this will be "LLDB.framework/.../LLDB",
-  // on linux this is assumed to be the "lldb" main executable. If LLDB on
-  // linux is actually in a shared library (liblldb.so) then this function will
-  // need to be modified to "do the right thing".
+  // contains this function. On MacOSX this will be "LLDB.framework/.../LLDB".
+  // On other posix systems, we will get .../lib(64|32)?/liblldb.so.
 
   FileSpec lldb_file_spec(
       Host::GetModuleFileSpecForHostAddress(reinterpret_cast<void *>(
@@ -346,6 +373,7 @@ void HostInfoBase::ComputeHostArchitectureSupport(ArchSpec &arch_32,
 
   case llvm::Triple::aarch64:
   case llvm::Triple::ppc64:
+  case llvm::Triple::ppc64le:
   case llvm::Triple::x86_64:
     arch_64.SetTriple(triple);
     arch_32.SetTriple(triple.get32BitArchVariant());

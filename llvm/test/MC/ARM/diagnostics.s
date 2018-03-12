@@ -736,3 +736,16 @@ foo2:
 @ CHECK-ERRORS: error: immediate operand must an even number in the range [0, 30]
 @ CHECK-ERRORS: error: immediate operand must a number in the range [0, 255]
 @ CHECK-ERRORS: error: immediate operand must an even number in the range [0, 30]
+
+        @ Generic error for too few operands
+        adds
+        adds r0
+@ CHECK-ERRORS: error: too few operands for instruction
+@ CHECK-ERRORS: error: too few operands for instruction
+
+        @ Using pc for MVN
+	mvn pc, r6, lsl r7
+@ CHECK-ERRORS: error: invalid instruction, any one of the following would fix this:
+@ CHECK-ERRORS: note: operand must be a register in range [r0, r14]
+@ CHECK-ERRORS:         mvn pc, r6, lsl r7
+@ CHECK-ERRORS:             ^

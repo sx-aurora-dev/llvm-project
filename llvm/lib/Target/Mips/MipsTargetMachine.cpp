@@ -23,6 +23,10 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/CodeGen/GlobalISel/IRTranslator.h"
+#include "llvm/CodeGen/GlobalISel/Legalizer.h"
+#include "llvm/CodeGen/GlobalISel/RegBankSelect.h"
+#include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/Passes.h"
@@ -46,6 +50,9 @@ extern "C" void LLVMInitializeMipsTarget() {
   RegisterTargetMachine<MipselTargetMachine> Y(getTheMipselTarget());
   RegisterTargetMachine<MipsebTargetMachine> A(getTheMips64Target());
   RegisterTargetMachine<MipselTargetMachine> B(getTheMips64elTarget());
+
+  PassRegistry *PR = PassRegistry::getPassRegistry();
+  initializeGlobalISel(*PR);
 }
 
 static std::string computeDataLayout(const Triple &TT, StringRef CPU,
@@ -200,7 +207,7 @@ MipsTargetMachine::getSubtargetImpl(const Function &F) const {
 void MipsTargetMachine::resetSubtarget(MachineFunction *MF) {
   DEBUG(dbgs() << "resetSubtarget\n");
 
-  Subtarget = const_cast<MipsSubtarget *>(getSubtargetImpl(*MF->getFunction()));
+  Subtarget = const_cast<MipsSubtarget *>(getSubtargetImpl(MF->getFunction()));
   MF->setSubtarget(Subtarget);
 }
 
@@ -230,6 +237,10 @@ public:
   bool addInstSelector() override;
   void addPreEmitPass() override;
   void addPreRegAlloc() override;
+  bool addIRTranslator() override;
+  bool addLegalizeMachineIR() override;
+  bool addRegBankSelect() override;
+  bool addGlobalInstructionSelect() override;
 };
 
 } // end anonymous namespace
@@ -259,17 +270,16 @@ void MipsPassConfig::addPreRegAlloc() {
   addPass(createMipsOptimizePICCallPass());
 }
 
-TargetIRAnalysis MipsTargetMachine::getTargetIRAnalysis() {
-  return TargetIRAnalysis([this](const Function &F) {
-    if (Subtarget->allowMixed16_32()) {
-      DEBUG(errs() << "No Target Transform Info Pass Added\n");
-      // FIXME: This is no longer necessary as the TTI returned is per-function.
-      return TargetTransformInfo(F.getParent()->getDataLayout());
-    }
+TargetTransformInfo
+MipsTargetMachine::getTargetTransformInfo(const Function &F) {
+  if (Subtarget->allowMixed16_32()) {
+    DEBUG(errs() << "No Target Transform Info Pass Added\n");
+    // FIXME: This is no longer necessary as the TTI returned is per-function.
+    return TargetTransformInfo(F.getParent()->getDataLayout());
+  }
 
-    DEBUG(errs() << "Target Transform Info Pass Added\n");
-    return TargetTransformInfo(BasicTTIImpl(this, F));
-  });
+  DEBUG(errs() << "Target Transform Info Pass Added\n");
+  return TargetTransformInfo(BasicTTIImpl(this, F));
 }
 
 // Implemented by targets that want to run passes immediately before
@@ -278,12 +288,31 @@ TargetIRAnalysis MipsTargetMachine::getTargetIRAnalysis() {
 void MipsPassConfig::addPreEmitPass() {
   addPass(createMicroMipsSizeReductionPass());
 
-  // The delay slot filler pass can potientially create forbidden slot (FS)
-  // hazards for MIPSR6 which the hazard schedule pass (HSP) will fix. Any
-  // (new) pass that creates compact branches after the HSP must handle FS
-  // hazards itself or be pipelined before the HSP.
+  // The delay slot filler and the long branch passes can potientially create
+  // forbidden slot/ hazards for MIPSR6 which the hazard schedule pass will
+  // fix. Any new pass must come before the hazard schedule pass.
   addPass(createMipsDelaySlotFillerPass());
-  addPass(createMipsHazardSchedule());
   addPass(createMipsLongBranchPass());
+  addPass(createMipsHazardSchedule());
   addPass(createMipsConstantIslandPass());
+}
+
+bool MipsPassConfig::addIRTranslator() {
+  addPass(new IRTranslator());
+  return false;
+}
+
+bool MipsPassConfig::addLegalizeMachineIR() {
+  addPass(new Legalizer());
+  return false;
+}
+
+bool MipsPassConfig::addRegBankSelect() {
+  addPass(new RegBankSelect());
+  return false;
+}
+
+bool MipsPassConfig::addGlobalInstructionSelect() {
+  addPass(new InstructionSelect());
+  return false;
 }

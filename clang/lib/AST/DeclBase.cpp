@@ -1,4 +1,4 @@
-//===--- DeclBase.cpp - Declaration AST Node Implementation ---------------===//
+//===- DeclBase.cpp - Declaration AST Node Implementation -----------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -15,6 +15,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/AttrIterator.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclContextInternals.h"
@@ -25,11 +26,30 @@
 #include "clang/AST/DependentDiagnostic.h"
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/Stmt.h"
-#include "clang/AST/StmtCXX.h"
 #include "clang/AST/Type.h"
+#include "clang/Basic/IdentifierTable.h"
+#include "clang/Basic/LLVM.h"
+#include "clang/Basic/LangOptions.h"
+#include "clang/Basic/ObjCRuntime.h"
+#include "clang/Basic/PartialDiagnostic.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Basic/VersionTuple.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <string>
+#include <tuple>
+#include <utility>
+
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
@@ -216,8 +236,21 @@ TemplateDecl *Decl::getDescribedTemplate() const {
     return RD->getDescribedClassTemplate();
   else if (auto *VD = dyn_cast<VarDecl>(this))
     return VD->getDescribedVarTemplate();
+  else if (auto *AD = dyn_cast<TypeAliasDecl>(this))
+    return AD->getDescribedAliasTemplate();
 
   return nullptr;
+}
+
+bool Decl::isTemplated() const {
+  // A declaration is dependent if it is a template or a template pattern, or
+  // is within (lexcially for a friend, semantically otherwise) a dependent
+  // context.
+  // FIXME: Should local extern declarations be treated like friends?
+  if (auto *AsDC = dyn_cast<DeclContext>(this))
+    return AsDC->isDependentContext();
+  auto *DC = getFriendObjectKind() ? getLexicalDeclContext() : getDeclContext();
+  return DC->isDependentContext() || isTemplateDecl() || getDescribedTemplate();
 }
 
 const DeclContext *Decl::getParentFunctionOrMethod() const {
@@ -229,7 +262,6 @@ const DeclContext *Decl::getParentFunctionOrMethod() const {
 
   return nullptr;
 }
-
 
 //===----------------------------------------------------------------------===//
 // PrettyStackTraceDecl Implementation
@@ -260,7 +292,7 @@ void PrettyStackTraceDecl::print(raw_ostream &OS) const {
 //===----------------------------------------------------------------------===//
 
 // Out-of-line virtual method providing a home for Decl.
-Decl::~Decl() { }
+Decl::~Decl() = default;
 
 void Decl::setDeclContext(DeclContext *DC) {
   DeclCtx = DC;
@@ -872,12 +904,14 @@ bool Decl::AccessDeclContextSanity() const {
   // 4. the context is not a record
   // 5. it's invalid
   // 6. it's a C++0x static_assert.
+  // 7. it's a block literal declaration
   if (isa<TranslationUnitDecl>(this) ||
       isa<TemplateTypeParmDecl>(this) ||
       isa<NonTypeTemplateParmDecl>(this) ||
       !isa<CXXRecordDecl>(getDeclContext()) ||
       isInvalidDecl() ||
       isa<StaticAssertDecl>(this) ||
+      isa<BlockDecl>(this) ||
       // FIXME: a ParmVarDecl can have ClassTemplateSpecialization
       // as DeclContext (?).
       isa<ParmVarDecl>(this) ||
@@ -912,7 +946,6 @@ const FunctionType *Decl::getFunctionType(bool BlocksToo) const {
 
   return Ty->getAs<FunctionType>();
 }
-
 
 /// Starting at a given context (a Decl or DeclContext), look for a
 /// code context that is not a closure (a lambda, block, etc.).
@@ -966,7 +999,7 @@ bool DeclContext::classof(const Decl *D) {
   }
 }
 
-DeclContext::~DeclContext() { }
+DeclContext::~DeclContext() = default;
 
 /// \brief Find the parent context of this context that will be
 /// used for unqualified name lookup.
@@ -1057,15 +1090,14 @@ static bool isLinkageSpecContext(const DeclContext *DC,
 }
 
 bool DeclContext::isExternCContext() const {
-  return isLinkageSpecContext(this, clang::LinkageSpecDecl::lang_c);
+  return isLinkageSpecContext(this, LinkageSpecDecl::lang_c);
 }
 
 const LinkageSpecDecl *DeclContext::getExternCContext() const {
   const DeclContext *DC = this;
   while (DC->getDeclKind() != Decl::TranslationUnit) {
     if (DC->getDeclKind() == Decl::LinkageSpec &&
-        cast<LinkageSpecDecl>(DC)->getLanguage() ==
-            clang::LinkageSpecDecl::lang_c)
+        cast<LinkageSpecDecl>(DC)->getLanguage() == LinkageSpecDecl::lang_c)
       return cast<LinkageSpecDecl>(DC);
     DC = DC->getLexicalParent();
   }
@@ -1073,7 +1105,7 @@ const LinkageSpecDecl *DeclContext::getExternCContext() const {
 }
 
 bool DeclContext::isExternCXXContext() const {
-  return isLinkageSpecContext(this, clang::LinkageSpecDecl::lang_cxx);
+  return isLinkageSpecContext(this, LinkageSpecDecl::lang_cxx);
 }
 
 bool DeclContext::Encloses(const DeclContext *DC) const {
@@ -1108,13 +1140,11 @@ DeclContext *DeclContext::getPrimaryContext() {
   case Decl::ObjCInterface:
     if (ObjCInterfaceDecl *Def = cast<ObjCInterfaceDecl>(this)->getDefinition())
       return Def;
-      
     return this;
       
   case Decl::ObjCProtocol:
     if (ObjCProtocolDecl *Def = cast<ObjCProtocolDecl>(this)->getDefinition())
       return Def;
-    
     return this;
       
   case Decl::ObjCCategory:
@@ -1573,17 +1603,7 @@ DeclContext::noload_lookup(DeclarationName Name) {
   if (PrimaryContext != this)
     return PrimaryContext->noload_lookup(Name);
 
-  // If we have any lazy lexical declarations not in our lookup map, add them
-  // now. Don't import any external declarations, not even if we know we have
-  // some missing from the external visible lookups.
-  if (HasLazyLocalLexicalLookups) {
-    SmallVector<DeclContext *, 2> Contexts;
-    collectAllContexts(Contexts);
-    for (unsigned I = 0, N = Contexts.size(); I != N; ++I)
-      buildLookupImpl(Contexts[I], hasExternalVisibleStorage());
-    HasLazyLocalLexicalLookups = false;
-  }
-
+  loadLazyLocalLexicalLookups();
   StoredDeclsMap *Map = LookupPtr;
   if (!Map)
     return lookup_result();
@@ -1591,6 +1611,19 @@ DeclContext::noload_lookup(DeclarationName Name) {
   StoredDeclsMap::iterator I = Map->find(Name);
   return I != Map->end() ? I->second.getLookupResult()
                          : lookup_result();
+}
+
+// If we have any lazy lexical declarations not in our lookup map, add them
+// now. Don't import any external declarations, not even if we know we have
+// some missing from the external visible lookups.
+void DeclContext::loadLazyLocalLexicalLookups() {
+  if (HasLazyLocalLexicalLookups) {
+    SmallVector<DeclContext *, 2> Contexts;
+    collectAllContexts(Contexts);
+    for (unsigned I = 0, N = Contexts.size(); I != N; ++I)
+      buildLookupImpl(Contexts[I], hasExternalVisibleStorage());
+    HasLazyLocalLexicalLookups = false;
+  }
 }
 
 void DeclContext::localUncachedLookup(DeclarationName Name,

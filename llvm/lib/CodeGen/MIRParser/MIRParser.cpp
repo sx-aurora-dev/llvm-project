@@ -237,7 +237,7 @@ std::unique_ptr<Module> MIRParserImpl::parseIRModule() {
           dyn_cast_or_null<yaml::BlockScalarNode>(In.getCurrentNode())) {
     SMDiagnostic Error;
     M = parseAssembly(MemoryBufferRef(BSN->getValue(), Filename), Error,
-                      Context, &IRSlots);
+                      Context, &IRSlots, /*UpgradeDebugInfo=*/false);
     if (!M) {
       reportDiagnostic(diagFromBlockStringDiag(Error, BSN->getSourceRange()));
       return nullptr;
@@ -362,6 +362,8 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
         MachineFunctionProperties::Property::RegBankSelected);
   if (YamlMF.Selected)
     MF.getProperties().set(MachineFunctionProperties::Property::Selected);
+  if (YamlMF.FailedISel)
+    MF.getProperties().set(MachineFunctionProperties::Property::FailedISel);
 
   PerFunctionMIParsingState PFS(MF, SM, IRSlots, Names2RegClasses,
                                 Names2RegBanks);
@@ -417,6 +419,8 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
 
   computeFunctionProperties(MF);
 
+  MF.getSubtarget().mirFileLoaded(MF);
+
   MF.verify();
   return false;
 }
@@ -441,6 +445,7 @@ bool MIRParserImpl::parseRegisterInfo(PerFunctionMIParsingState &PFS,
 
     if (StringRef(VReg.Class.Value).equals("_")) {
       Info.Kind = VRegInfo::GENERIC;
+      Info.D.RegBank = nullptr;
     } else {
       const auto *RC = getRegClass(MF, VReg.Class.Value);
       if (RC) {
@@ -550,7 +555,7 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
                                         const yaml::MachineFunction &YamlMF) {
   MachineFunction &MF = PFS.MF;
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  const Function &F = *MF.getFunction();
+  const Function &F = MF.getFunction();
   const yaml::MachineFrameInfo &YamlMFI = YamlMF.FrameInfo;
   MFI.setFrameAddressIsTaken(YamlMFI.IsFrameAddressTaken);
   MFI.setReturnAddressIsTaken(YamlMFI.IsReturnAddressTaken);
@@ -721,7 +726,7 @@ bool MIRParserImpl::initializeConstantPool(PerFunctionMIParsingState &PFS,
     MachineConstantPool &ConstantPool, const yaml::MachineFunction &YamlMF) {
   DenseMap<unsigned, unsigned> &ConstantPoolSlots = PFS.ConstantPoolSlots;
   const MachineFunction &MF = PFS.MF;
-  const auto &M = *MF.getFunction()->getParent();
+  const auto &M = *MF.getFunction().getParent();
   SMDiagnostic Error;
   for (const auto &YamlConstant : YamlMF.Constants) {
     if (YamlConstant.IsTargetSpecific)

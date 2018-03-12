@@ -53,18 +53,23 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachinePostDominators.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -73,11 +78,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -248,6 +249,9 @@ bool ShrinkWrap::useOrDefCSROrFI(const MachineInstr &MI,
   for (const MachineOperand &MO : MI.operands()) {
     bool UseOrDefCSR = false;
     if (MO.isReg()) {
+      // Ignore instructions like DBG_VALUE which don't read/def the register.
+      if (!MO.isDef() && !MO.readsReg())
+        continue;
       unsigned PhysReg = MO.getReg();
       if (!PhysReg)
         continue;
@@ -263,7 +267,8 @@ bool ShrinkWrap::useOrDefCSROrFI(const MachineInstr &MI,
         }
       }
     }
-    if (UseOrDefCSR || MO.isFI()) {
+    // Skip FrameIndex operands in DBG_VALUE instructions.
+    if (UseOrDefCSR || (MO.isFI() && !MI.isDebugValue())) {
       DEBUG(dbgs() << "Use or define CSR(" << UseOrDefCSR << ") or FI("
                    << MO.isFI() << "): " << MI << '\n');
       return true;
@@ -409,50 +414,16 @@ void ShrinkWrap::updateSaveRestorePoints(MachineBasicBlock &MBB,
   }
 }
 
-/// Check whether the edge (\p SrcBB, \p DestBB) is a backedge according to MLI.
-/// I.e., check if it exists a loop that contains SrcBB and where DestBB is the
-/// loop header.
-static bool isProperBackedge(const MachineLoopInfo &MLI,
-                             const MachineBasicBlock *SrcBB,
-                             const MachineBasicBlock *DestBB) {
-  for (const MachineLoop *Loop = MLI.getLoopFor(SrcBB); Loop;
-       Loop = Loop->getParentLoop()) {
-    if (Loop->getHeader() == DestBB)
-      return true;
-  }
-  return false;
-}
-
-/// Check if the CFG of \p MF is irreducible.
-static bool isIrreducibleCFG(const MachineFunction &MF,
-                             const MachineLoopInfo &MLI) {
-  const MachineBasicBlock *Entry = &*MF.begin();
-  ReversePostOrderTraversal<const MachineBasicBlock *> RPOT(Entry);
-  BitVector VisitedBB(MF.getNumBlockIDs());
-  for (const MachineBasicBlock *MBB : RPOT) {
-    VisitedBB.set(MBB->getNumber());
-    for (const MachineBasicBlock *SuccBB : MBB->successors()) {
-      if (!VisitedBB.test(SuccBB->getNumber()))
-        continue;
-      // We already visited SuccBB, thus MBB->SuccBB must be a backedge.
-      // Check that the head matches what we have in the loop information.
-      // Otherwise, we have an irreducible graph.
-      if (!isProperBackedge(MLI, MBB, SuccBB))
-        return true;
-    }
-  }
-  return false;
-}
-
 bool ShrinkWrap::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(*MF.getFunction()) || MF.empty() || !isShrinkWrapEnabled(MF))
+  if (skipFunction(MF.getFunction()) || MF.empty() || !isShrinkWrapEnabled(MF))
     return false;
 
   DEBUG(dbgs() << "**** Analysing " << MF.getName() << '\n');
 
   init(MF);
 
-  if (isIrreducibleCFG(MF, *MLI)) {
+  ReversePostOrderTraversal<MachineBasicBlock *> RPOT(&*MF.begin());
+  if (containsIrreducibleCFG<MachineBasicBlock *>(RPOT, *MLI)) {
     // If MF is irreducible, a block may be in a loop without
     // MachineLoopInfo reporting it. I.e., we may use the
     // post-dominance property in loops, which lead to incorrect
@@ -558,16 +529,17 @@ bool ShrinkWrap::isShrinkWrapEnabled(const MachineFunction &MF) {
   switch (EnableShrinkWrapOpt) {
   case cl::BOU_UNSET:
     return TFI->enableShrinkWrapping(MF) &&
-      // Windows with CFI has some limitations that make it impossible
-      // to use shrink-wrapping.
-      !MF.getTarget().getMCAsmInfo()->usesWindowsCFI() &&
-      // Sanitizers look at the value of the stack at the location
-      // of the crash. Since a crash can happen anywhere, the
-      // frame must be lowered before anything else happen for the
-      // sanitizers to be able to get a correct stack frame.
-      !(MF.getFunction()->hasFnAttribute(Attribute::SanitizeAddress) ||
-        MF.getFunction()->hasFnAttribute(Attribute::SanitizeThread) ||
-        MF.getFunction()->hasFnAttribute(Attribute::SanitizeMemory));
+           // Windows with CFI has some limitations that make it impossible
+           // to use shrink-wrapping.
+           !MF.getTarget().getMCAsmInfo()->usesWindowsCFI() &&
+           // Sanitizers look at the value of the stack at the location
+           // of the crash. Since a crash can happen anywhere, the
+           // frame must be lowered before anything else happen for the
+           // sanitizers to be able to get a correct stack frame.
+           !(MF.getFunction().hasFnAttribute(Attribute::SanitizeAddress) ||
+             MF.getFunction().hasFnAttribute(Attribute::SanitizeThread) ||
+             MF.getFunction().hasFnAttribute(Attribute::SanitizeMemory) ||
+             MF.getFunction().hasFnAttribute(Attribute::SanitizeHWAddress));
   // If EnableShrinkWrap is set, it takes precedence on whatever the
   // target sets. The rational is that we assume we want to test
   // something related to shrink-wrapping.

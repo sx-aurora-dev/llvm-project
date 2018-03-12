@@ -76,6 +76,7 @@
 #include "ICF.h"
 #include "Config.h"
 #include "SymbolTable.h"
+#include "Symbols.h"
 #include "lld/Common/Threads.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/BinaryFormat/ELF.h"
@@ -160,11 +161,16 @@ template <class ELFT> static uint32_t getHash(InputSection *S) {
 
 // Returns true if section S is subject of ICF.
 static bool isEligible(InputSection *S) {
+  // Don't merge read only data sections unless
+  // --ignore-data-address-equality was passed.
+  if (!(S->Flags & SHF_EXECINSTR) && !Config->IgnoreDataAddressEquality)
+    return false;
+
   // .init and .fini contains instructions that must be executed to
   // initialize and finalize the process. They cannot and should not
   // be merged.
-  return S->Live && (S->Flags & SHF_ALLOC) && (S->Flags & SHF_EXECINSTR) &&
-         !(S->Flags & SHF_WRITE) && S->Name != ".init" && S->Name != ".fini";
+  return S->Live && (S->Flags & SHF_ALLOC) && !(S->Flags & SHF_WRITE) &&
+         S->Name != ".init" && S->Name != ".fini";
 }
 
 // Split an equivalence class into smaller classes.
@@ -220,16 +226,16 @@ bool ICF<ELFT>::constantEq(const InputSection *SecA, ArrayRef<RelTy> RA,
     uint64_t AddA = getAddend<ELFT>(RA[I]);
     uint64_t AddB = getAddend<ELFT>(RB[I]);
 
-    SymbolBody &SA = SecA->template getFile<ELFT>()->getRelocTargetSym(RA[I]);
-    SymbolBody &SB = SecB->template getFile<ELFT>()->getRelocTargetSym(RB[I]);
+    Symbol &SA = SecA->template getFile<ELFT>()->getRelocTargetSym(RA[I]);
+    Symbol &SB = SecB->template getFile<ELFT>()->getRelocTargetSym(RB[I]);
     if (&SA == &SB) {
       if (AddA == AddB)
         continue;
       return false;
     }
 
-    auto *DA = dyn_cast<DefinedRegular>(&SA);
-    auto *DB = dyn_cast<DefinedRegular>(&SB);
+    auto *DA = dyn_cast<Defined>(&SA);
+    auto *DB = dyn_cast<Defined>(&SB);
     if (!DA || !DB)
       return false;
 
@@ -295,13 +301,13 @@ bool ICF<ELFT>::variableEq(const InputSection *SecA, ArrayRef<RelTy> RA,
 
   for (size_t I = 0; I < RA.size(); ++I) {
     // The two sections must be identical.
-    SymbolBody &SA = SecA->template getFile<ELFT>()->getRelocTargetSym(RA[I]);
-    SymbolBody &SB = SecB->template getFile<ELFT>()->getRelocTargetSym(RB[I]);
+    Symbol &SA = SecA->template getFile<ELFT>()->getRelocTargetSym(RA[I]);
+    Symbol &SB = SecB->template getFile<ELFT>()->getRelocTargetSym(RB[I]);
     if (&SA == &SB)
       continue;
 
-    auto *DA = cast<DefinedRegular>(&SA);
-    auto *DB = cast<DefinedRegular>(&SB);
+    auto *DA = cast<Defined>(&SA);
+    auto *DB = cast<Defined>(&SB);
 
     // We already dealt with absolute and non-InputSection symbols in
     // constantEq, and for InputSections we have already checked everything
@@ -385,6 +391,11 @@ void ICF<ELFT>::forEachClass(std::function<void(size_t, size_t)> Fn) {
   ++Cnt;
 }
 
+static void print(const Twine &S) {
+  if (Config->PrintIcfSections)
+    message(S);
+}
+
 // The main function of ICF.
 template <class ELFT> void ICF<ELFT>::run() {
   // Collect sections to merge.
@@ -419,25 +430,21 @@ template <class ELFT> void ICF<ELFT>::run() {
   log("ICF needed " + Twine(Cnt) + " iterations");
 
   // Merge sections by the equivalence class.
-  forEachClass([&](size_t Begin, size_t End) {
+  forEachClassRange(0, Sections.size(), [&](size_t Begin, size_t End) {
     if (End - Begin == 1)
       return;
-
-    log("selected " + Sections[Begin]->Name);
+    print("selected section " + toString(Sections[Begin]));
     for (size_t I = Begin + 1; I < End; ++I) {
-      log("  removed " + Sections[I]->Name);
+      print("  removing identical section " + toString(Sections[I]));
       Sections[Begin]->replace(Sections[I]);
+
+      // At this point we know sections merged are fully identical and hence
+      // we want to remove duplicate implicit dependencies such as link order
+      // and relocation sections.
+      for (InputSection *IS : Sections[I]->DependentSections)
+        IS->Live = false;
     }
   });
-
-  // Mark ARM Exception Index table sections that refer to folded code
-  // sections as not live. These sections have an implict dependency
-  // via the link order dependency.
-  if (Config->EMachine == EM_ARM)
-    for (InputSectionBase *Sec : InputSections)
-      if (auto *S = dyn_cast<InputSection>(Sec))
-        if (S->Flags & SHF_LINK_ORDER)
-          S->Live = S->getLinkOrderDep()->Live;
 }
 
 // ICF entry point function.

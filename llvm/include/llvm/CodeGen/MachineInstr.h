@@ -22,11 +22,11 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/Support/ArrayRecycler.h"
-#include "llvm/Target/TargetOpcodes.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -44,6 +44,7 @@ class MachineRegisterInfo;
 class ModuleSlotTracker;
 class raw_ostream;
 template <typename T> class SmallVectorImpl;
+class SmallBitVector;
 class StringRef;
 class TargetInstrInfo;
 class TargetRegisterClass;
@@ -67,7 +68,9 @@ public:
   /// otherwise easily derivable from the IR text.
   ///
   enum CommentFlag {
-    ReloadReuse = 0x1 // higher bits are reserved for target dep comments.
+    ReloadReuse = 0x1,    // higher bits are reserved for target dep comments.
+    NoSchedComment = 0x2,
+    TAsmComments = 0x4    // Target Asm comments should start from this value.
   };
 
   enum MIFlag {
@@ -301,6 +304,21 @@ public:
     return Operands[i];
   }
 
+  /// Return true if operand \p OpIdx is a subregister index.
+  bool isOperandSubregIdx(unsigned OpIdx) const {
+    assert(getOperand(OpIdx).getType() == MachineOperand::MO_Immediate &&
+           "Expected MO_Immediate operand type.");
+    if (isExtractSubreg() && OpIdx == 2)
+      return true;
+    if (isInsertSubreg() && OpIdx == 3)
+      return true;
+    if (isRegSequence() && OpIdx > 1 && (OpIdx % 2) == 0)
+      return true;
+    if (isSubregToReg() && OpIdx == 3)
+      return true;
+    return false;
+  }
+
   /// Returns the number of non-implicit operands.
   unsigned getNumExplicitOperands() const;
 
@@ -373,7 +391,7 @@ public:
   /// Access to memory operands of the instruction
   mmo_iterator memoperands_begin() const { return MemRefs; }
   mmo_iterator memoperands_end() const { return MemRefs + NumMemRefs; }
-  /// Return true if we don't have any memory operands which described the the
+  /// Return true if we don't have any memory operands which described the
   /// memory access done by this instruction.  If this is true, calling code
   /// must be conservative.
   bool memoperands_empty() const { return NumMemRefs == 0; }
@@ -782,9 +800,14 @@ public:
 
   bool isEHLabel() const { return getOpcode() == TargetOpcode::EH_LABEL; }
   bool isGCLabel() const { return getOpcode() == TargetOpcode::GC_LABEL; }
+  bool isAnnotationLabel() const {
+    return getOpcode() == TargetOpcode::ANNOTATION_LABEL;
+  }
 
   /// Returns true if the MachineInstr represents a label.
-  bool isLabel() const { return isEHLabel() || isGCLabel(); }
+  bool isLabel() const {
+    return isEHLabel() || isGCLabel() || isAnnotationLabel();
+  }
 
   bool isCFIInstruction() const {
     return getOpcode() == TargetOpcode::CFI_INSTRUCTION;
@@ -870,6 +893,8 @@ public:
     case TargetOpcode::EH_LABEL:
     case TargetOpcode::GC_LABEL:
     case TargetOpcode::DBG_VALUE:
+    case TargetOpcode::LIFETIME_START:
+    case TargetOpcode::LIFETIME_END:
       return true;
     }
   }
@@ -1200,16 +1225,29 @@ public:
 
   /// Debugging support
   /// @{
+  /// Determine the generic type to be printed (if needed) on uses and defs.
+  LLT getTypeToPrint(unsigned OpIdx, SmallBitVector &PrintedTypes,
+                     const MachineRegisterInfo &MRI) const;
+
+  /// Return true when an instruction has tied register that can't be determined
+  /// by the instruction's descriptor. This is useful for MIR printing, to
+  /// determine whether we need to print the ties or not.
+  bool hasComplexRegisterTies() const;
+
   /// Print this MI to \p OS.
+  /// Don't print information that can be inferred from other instructions if
+  /// \p IsStandalone is false. It is usually true when only a fragment of the
+  /// function is printed.
   /// Only print the defs and the opcode if \p SkipOpers is true.
   /// Otherwise, also print operands if \p SkipDebugLoc is true.
   /// Otherwise, also print the debug loc, with a terminating newline.
   /// \p TII is used to print the opcode name.  If it's not present, but the
   /// MI is in a function, the opcode will be printed using the function's TII.
-  void print(raw_ostream &OS, bool SkipOpers = false, bool SkipDebugLoc = false,
-             const TargetInstrInfo *TII = nullptr) const;
-  void print(raw_ostream &OS, ModuleSlotTracker &MST, bool SkipOpers = false,
+  void print(raw_ostream &OS, bool IsStandalone = true, bool SkipOpers = false,
              bool SkipDebugLoc = false,
+             const TargetInstrInfo *TII = nullptr) const;
+  void print(raw_ostream &OS, ModuleSlotTracker &MST, bool IsStandalone = true,
+             bool SkipOpers = false, bool SkipDebugLoc = false,
              const TargetInstrInfo *TII = nullptr) const;
   void dump() const;
   /// @}

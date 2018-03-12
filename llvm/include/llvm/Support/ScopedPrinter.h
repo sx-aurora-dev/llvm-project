@@ -80,6 +80,8 @@ public:
 
   void resetIndent() { IndentLevel = 0; }
 
+  int getIndentLevel() { return IndentLevel; }
+
   void setPrefix(StringRef P) { Prefix = P; }
 
   void printIndent() {
@@ -261,7 +263,11 @@ public:
   }
 
   void printString(StringRef Label, const std::string &Value) {
-    startLine() << Label << ": " << Value << "\n";
+    printString(Label, StringRef(Value));
+  }
+
+  void printString(StringRef Label, const char* Value) {
+    printString(Label, StringRef(Value));
   }
 
   template <typename T>

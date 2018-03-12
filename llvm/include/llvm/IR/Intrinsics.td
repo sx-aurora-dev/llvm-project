@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 include "llvm/CodeGen/ValueTypes.td"
+include "llvm/CodeGen/SDNodeProperties.td"
 
 //===----------------------------------------------------------------------===//
 //  Properties we keep track of for intrinsics.
@@ -264,16 +265,17 @@ def llvm_vararg_ty     : LLVMType<isVoid>;   // this means vararg here
 //    intrinsic.
 //  * Properties can be set to describe the behavior of the intrinsic.
 //
-class SDPatternOperator;
 class Intrinsic<list<LLVMType> ret_types,
                 list<LLVMType> param_types = [],
-                list<IntrinsicProperty> properties = [],
-                string name = ""> : SDPatternOperator {
+                list<IntrinsicProperty> intr_properties = [],
+                string name = "",
+                list<SDNodeProperty> sd_properties = []> : SDPatternOperator {
   string LLVMName = name;
   string TargetPrefix = "";   // Set to a prefix for target-specific intrinsics.
   list<LLVMType> RetTypes = ret_types;
   list<LLVMType> ParamTypes = param_types;
-  list<IntrinsicProperty> IntrProperties = properties;
+  list<IntrinsicProperty> IntrProperties = intr_properties;
+  let Properties = sd_properties;
 
   bit isTarget = 0;
 }
@@ -388,17 +390,17 @@ def int_instrprof_value_profile : Intrinsic<[],
 
 def int_memcpy  : Intrinsic<[],
                              [llvm_anyptr_ty, llvm_anyptr_ty, llvm_anyint_ty,
-                              llvm_i32_ty, llvm_i1_ty],
+                              llvm_i1_ty],
                             [IntrArgMemOnly, NoCapture<0>, NoCapture<1>,
                              WriteOnly<0>, ReadOnly<1>]>;
 def int_memmove : Intrinsic<[],
                             [llvm_anyptr_ty, llvm_anyptr_ty, llvm_anyint_ty,
-                             llvm_i32_ty, llvm_i1_ty],
+                             llvm_i1_ty],
                             [IntrArgMemOnly, NoCapture<0>, NoCapture<1>,
                              ReadOnly<1>]>;
 def int_memset  : Intrinsic<[],
                             [llvm_anyptr_ty, llvm_i8_ty, llvm_anyint_ty,
-                             llvm_i32_ty, llvm_i1_ty],
+                             llvm_i1_ty],
                             [IntrArgMemOnly, NoCapture<0>, WriteOnly<0>]>;
 
 // FIXME: Add version of these floating point intrinsics which allow non-default
@@ -711,8 +713,8 @@ def int_invariant_end   : Intrinsic<[],
 // which is valid.
 // The argument also can't be marked with 'returned' attribute, because
 // it would remove barrier.
-def int_invariant_group_barrier : Intrinsic<[llvm_ptr_ty],
-                                            [llvm_ptr_ty],
+def int_invariant_group_barrier : Intrinsic<[llvm_anyptr_ty],
+                                            [LLVMMatchType<0>],
                                             [IntrReadMem, IntrArgMemOnly]>;
 
 //===------------------------ Stackmap Intrinsics -------------------------===//
@@ -810,6 +812,12 @@ def int_experimental_guard : Intrinsic<[], [llvm_i1_ty, llvm_vararg_ty],
 // NOP: calls/invokes to this intrinsic are removed by codegen
 def int_donothing : Intrinsic<[], [], [IntrNoMem]>;
 
+// This instruction has no actual effect, though it is treated by the optimizer
+// has having opaque side effects. This may be inserted into loops to ensure
+// that they are not removed even if they turn out to be empty, for languages
+// which specify that infinite loops must be preserved.
+def int_sideeffect : Intrinsic<[], [], [IntrInaccessibleMemOnly]>;
+
 // Intrisics to support half precision floating point format
 let IntrProperties = [IntrNoMem] in {
 def int_convert_to_fp16   : Intrinsic<[llvm_i16_ty], [llvm_anyfloat_ty]>;
@@ -865,6 +873,10 @@ def int_type_test : Intrinsic<[llvm_i1_ty], [llvm_ptr_ty, llvm_metadata_ty],
 def int_type_checked_load : Intrinsic<[llvm_ptr_ty, llvm_i1_ty],
                                       [llvm_ptr_ty, llvm_i32_ty, llvm_metadata_ty],
                                       [IntrNoMem]>;
+
+// Create a branch funnel that implements an indirect call to a limited set of
+// callees. This needs to be a musttail call.
+def int_icall_branch_funnel : Intrinsic<[], [llvm_vararg_ty], []>;
 
 def int_load_relative: Intrinsic<[llvm_ptr_ty], [llvm_ptr_ty, llvm_anyint_ty],
                                  [IntrReadMem, IntrArgMemOnly]>;

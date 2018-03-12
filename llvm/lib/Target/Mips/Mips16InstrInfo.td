@@ -369,14 +369,14 @@ class FRxRxRy16_ins<bits<5> f, string asmstr,
 let rx=0 in
 class FRR16_JALRC_RA_only_ins<bits<1> nd_, bits<1> l_,
                               string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd_, l_, 1, (outs), (ins), !strconcat(asmstr, "\t $$ra"),
+  FRR16_JALRC<nd_, l_, 1, (outs), (ins), !strconcat(asmstr, "\t$$ra"),
               [], itin> ;
 
 
 class FRR16_JALRC_ins<bits<1> nd, bits<1> l, bits<1> ra,
                       string asmstr, InstrItinClass itin>:
   FRR16_JALRC<nd, l, ra, (outs), (ins CPU16Regs:$rx),
-              !strconcat(asmstr, "\t $rx"), [], itin> ;
+              !strconcat(asmstr, "\t$rx"), [], itin> ;
 
 class FRR_SF16_ins
   <bits<5> _funct, bits<3> _subfunc,
@@ -1376,7 +1376,7 @@ def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
 let isCall=1, hasDelaySlot=0 in
 def JumpLinkReg16:
   FRR16_JALRC<0, 0, 0, (outs), (ins CPU16Regs:$rs),
-              "jalrc \t$rs", [(MipsJmpLink CPU16Regs:$rs)], II_JALRC> {
+              "jalrc\t$rs", [(MipsJmpLink CPU16Regs:$rs)], II_JALRC> {
   let Defs = [RA];
 }
 
@@ -1424,7 +1424,7 @@ def : Mips16Pat<(addc  CPU16Regs:$src, immSExt16:$imm),
 // setcc instead and earlier I had implemented setcc first so may have masked
 // the problem. The setcc variants are suboptimal for mips16 so I may wantto
 // figure out how to enable the brcond patterns or else possibly new
-// combinations of of brcond and setcc.
+// combinations of brcond and setcc.
 //
 //
 // bcond-seteq

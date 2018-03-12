@@ -9,12 +9,15 @@ add_clang_unittest(FrontendTests
   CodeGenActionTest.cpp
   ParsedSourceLocationTest.cpp
   PCHPreambleTest.cpp
+  OutputStreamTest.cpp
   )
 target_link_libraries(FrontendTests
+  PRIVATE
   clangAST
   clangBasic
   clangFrontend
   clangLex
   clangSema
   clangCodeGen
+  clangFrontendTool
   )

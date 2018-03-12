@@ -129,11 +129,8 @@ class SM_Time_Pseudo<string opName, SDPatternOperator node> : SM_Pseudo<
   opName, (outs SReg_64_XEXEC:$sdst), (ins),
   " $sdst", [(set i64:$sdst, (node))]> {
   let hasSideEffects = 1;
-  // FIXME: mayStore = ? is a workaround for tablegen bug for different
-  // inferred mayStore flags for the instruction pattern vs. standalone
-  // Pat. Each considers the other contradictory.
-  let mayStore = ?;
-  let mayLoad = ?;
+  let mayStore = 0;
+  let mayLoad = 1;
   let has_sbase = 0;
   let has_offset = 0;
 }
@@ -226,11 +223,9 @@ def S_MEMREALTIME   : SM_Time_Pseudo <"s_memrealtime", int_amdgcn_s_memrealtime>
 def smrd_load : PatFrag <(ops node:$ptr), (load node:$ptr), [{
   auto Ld = cast<LoadSDNode>(N);
   return Ld->getAlignment() >= 4  &&
-    ((Ld->getAddressSpace() == AMDGPUASI.CONSTANT_ADDRESS &&
-    static_cast<const SITargetLowering *>(getTargetLowering())->isMemOpUniform(N)) ||
+    ((((Ld->getAddressSpace() == AMDGPUASI.CONSTANT_ADDRESS) || (Ld->getAddressSpace() == AMDGPUASI.CONSTANT_ADDRESS_32BIT)) && !N->isDivergent()) ||
     (Subtarget->getScalarizeGlobalBehavior() && Ld->getAddressSpace() == AMDGPUASI.GLOBAL_ADDRESS &&
-    !Ld->isVolatile() &&
-    static_cast<const SITargetLowering *>(getTargetLowering())->isMemOpUniform(N) &&
+     !Ld->isVolatile() && !N->isDivergent() &&
     static_cast<const SITargetLowering *>(getTargetLowering())->isMemOpHasNoClobberedMemOperand(N)));
 }]>;
 
@@ -239,7 +234,6 @@ def SMRDImm32       : ComplexPattern<i64, 2, "SelectSMRDImm32">;
 def SMRDSgpr        : ComplexPattern<i64, 2, "SelectSMRDSgpr">;
 def SMRDBufferImm   : ComplexPattern<i32, 1, "SelectSMRDBufferImm">;
 def SMRDBufferImm32 : ComplexPattern<i32, 1, "SelectSMRDBufferImm32">;
-def SMRDBufferSgpr  : ComplexPattern<i32, 1, "SelectSMRDBufferSgpr">;
 
 multiclass SMRD_Pattern <string Instr, ValueType vt> {
 
@@ -282,7 +276,7 @@ def SM_LOAD_PATTERN : GCNPat <  // name this pattern to reuse AddedComplexity on
 
 // 2. Offset loaded in an 32bit SGPR
 def : GCNPat <
-  (SIload_constant v4i32:$sbase, (SMRDBufferSgpr i32:$offset)),
+  (SIload_constant v4i32:$sbase, i32:$offset),
   (S_BUFFER_LOAD_DWORD_SGPR $sbase, $offset, 0)
 >;
 

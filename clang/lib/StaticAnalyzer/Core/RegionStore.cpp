@@ -134,7 +134,9 @@ namespace llvm {
   };
 } // end llvm namespace
 
+#ifndef NDEBUG
 LLVM_DUMP_METHOD void BindingKey::dump() const { llvm::errs() << *this; }
+#endif
 
 //===----------------------------------------------------------------------===//
 // Actual Store type.
@@ -823,7 +825,7 @@ collectSubRegionBindings(SmallVectorImpl<BindingPair> &Bindings,
   FieldVector FieldsInSymbolicSubregions;
   if (TopKey.hasSymbolicOffset()) {
     getSymbolicOffsetFields(TopKey, FieldsInSymbolicSubregions);
-    Top = cast<SubRegion>(TopKey.getConcreteOffsetRegion());
+    Top = TopKey.getConcreteOffsetRegion();
     TopKey = BindingKey::Make(Top, BindingKey::Default);
   }
 
@@ -869,7 +871,7 @@ collectSubRegionBindings(SmallVectorImpl<BindingPair> &Bindings,
 
     } else if (NextKey.hasSymbolicOffset()) {
       const MemRegion *Base = NextKey.getConcreteOffsetRegion();
-      if (Top->isSubRegionOf(Base)) {
+      if (Top->isSubRegionOf(Base) && Top != Base) {
         // Case 3: The next key is symbolic and we just changed something within
         // its concrete region. We don't know if the binding is still valid, so
         // we'll be conservative and include it.
@@ -879,7 +881,7 @@ collectSubRegionBindings(SmallVectorImpl<BindingPair> &Bindings,
       } else if (const SubRegion *BaseSR = dyn_cast<SubRegion>(Base)) {
         // Case 4: The next key is symbolic, but we changed a known
         // super-region. In this case the binding is certainly included.
-        if (Top == Base || BaseSR->isSubRegionOf(Top))
+        if (BaseSR->isSubRegionOf(Top))
           if (isCompatibleWithFields(NextKey, FieldsInSymbolicSubregions))
             Bindings.push_back(*I);
       }
@@ -1399,15 +1401,12 @@ SVal RegionStoreManager::getBinding(RegionBindingsConstRef B, Loc L, QualType T)
         T = TR->getLocationType()->getPointeeType();
       else if (const SymbolicRegion *SR = dyn_cast<SymbolicRegion>(MR))
         T = SR->getSymbol()->getType()->getPointeeType();
-      else if (isa<AllocaRegion>(MR))
-        T = Ctx.VoidTy;
     }
     assert(!T.isNull() && "Unable to auto-detect binding type!");
-    if (T->isVoidType()) {
-      // When trying to dereference a void pointer, read the first byte.
-      T = Ctx.CharTy;
-    }
+    assert(!T->isVoidType() && "Attempting to dereference a void pointer!");
     MR = GetElementZeroRegion(cast<SubRegion>(MR), T);
+  } else {
+    T = cast<TypedValueRegion>(MR)->getValueType();
   }
 
   // FIXME: Perhaps this method should just take a 'const MemRegion*' argument
@@ -1777,7 +1776,7 @@ RegionStoreManager::getBindingForFieldOrElementCommon(RegionBindingsConstRef B,
   // quickly result in a warning.
   bool hasPartialLazyBinding = false;
 
-  const SubRegion *SR = dyn_cast<SubRegion>(R);
+  const SubRegion *SR = R;
   while (SR) {
     const MemRegion *Base = SR->getSuperRegion();
     if (Optional<SVal> D = getBindingForDerivedDefaultValue(B, Base, R, Ty)) {
@@ -1862,10 +1861,17 @@ SVal RegionStoreManager::getBindingForVar(RegionBindingsConstRef B,
     return svalBuilder.getRegionValueSymbolVal(R);
 
   // Is 'VD' declared constant?  If so, retrieve the constant value.
-  if (VD->getType().isConstQualified())
-    if (const Expr *Init = VD->getInit())
+  if (VD->getType().isConstQualified()) {
+    if (const Expr *Init = VD->getInit()) {
       if (Optional<SVal> V = svalBuilder.getConstantVal(Init))
         return *V;
+
+      // If the variable is const qualified and has an initializer but
+      // we couldn't evaluate initializer to a value, treat the value as
+      // unknown.
+      return UnknownVal();
+    }
+  }
 
   // This must come after the check for constants because closure-captured
   // constant variables may appear in UnknownSpaceRegion.
@@ -2126,9 +2132,10 @@ RegionStoreManager::bindArray(RegionBindingsConstRef B,
       NewB = bind(NewB, loc::MemRegionVal(ER), *VI);
   }
 
-  // If the init list is shorter than the array length, set the
-  // array default value.
-  if (Size.hasValue() && i < Size.getValue())
+  // If the init list is shorter than the array length (or the array has
+  // variable length), set the array default value. Values that are already set
+  // are not overwritten.
+  if (!Size.hasValue() || i < Size.getValue())
     NewB = setImplicitDefaultValue(NewB, R, ElementTy);
 
   return NewB;

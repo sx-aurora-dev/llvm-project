@@ -16,15 +16,15 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/MC/MCSchedule.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -274,14 +274,12 @@ unsigned TargetSchedModel::computeInstrLatency(unsigned Opcode) const {
   unsigned SCIdx = TII->get(Opcode).getSchedClass();
   const MCSchedClassDesc *SCDesc = SchedModel.getSchedClassDesc(SCIdx);
 
-  if (SCDesc->isValid() && !SCDesc->isVariant())
+  if (!SCDesc->isValid())
+    return 0;
+  if (!SCDesc->isVariant())
     return computeInstrLatency(*SCDesc);
 
-  if (SCDesc->isValid()) {
-    assert (!SCDesc->isVariant() && "No MI sched latency: SCDesc->isVariant()");
-    return computeInstrLatency(*SCDesc);
-  }
-  return 0;
+  llvm_unreachable("No MI sched latency");
 }
 
 unsigned

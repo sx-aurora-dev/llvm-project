@@ -30,9 +30,9 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -197,7 +197,7 @@ bool R600InstrInfo::usesVertexCache(unsigned Opcode) const {
 
 bool R600InstrInfo::usesVertexCache(const MachineInstr &MI) const {
   const MachineFunction *MF = MI.getParent()->getParent();
-  return !AMDGPU::isCompute(MF->getFunction()->getCallingConv()) &&
+  return !AMDGPU::isCompute(MF->getFunction().getCallingConv()) &&
          usesVertexCache(MI.getOpcode());
 }
 
@@ -207,7 +207,7 @@ bool R600InstrInfo::usesTextureCache(unsigned Opcode) const {
 
 bool R600InstrInfo::usesTextureCache(const MachineInstr &MI) const {
   const MachineFunction *MF = MI.getParent()->getParent();
-  return (AMDGPU::isCompute(MF->getFunction()->getCallingConv()) &&
+  return (AMDGPU::isCompute(MF->getFunction().getCallingConv()) &&
           usesVertexCache(MI.getOpcode())) ||
           usesTextureCache(MI.getOpcode());
 }
@@ -1082,7 +1082,8 @@ bool R600InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 }
 
 void R600InstrInfo::reserveIndirectRegisters(BitVector &Reserved,
-                                             const MachineFunction &MF) const {
+                                             const MachineFunction &MF,
+                                             const R600RegisterInfo &TRI) const {
   const R600Subtarget &ST = MF.getSubtarget<R600Subtarget>();
   const R600FrameLowering *TFL = ST.getFrameLowering();
 
@@ -1093,11 +1094,9 @@ void R600InstrInfo::reserveIndirectRegisters(BitVector &Reserved,
     return;
 
   for (int Index = getIndirectIndexBegin(MF); Index <= End; ++Index) {
-    unsigned SuperReg = AMDGPU::R600_Reg128RegClass.getRegister(Index);
-    Reserved.set(SuperReg);
     for (unsigned Chan = 0; Chan < StackWidth; ++Chan) {
       unsigned Reg = AMDGPU::R600_TReg32RegClass.getRegister((4 * Index) + Chan);
-      Reserved.set(Reg);
+      TRI.reserveRegisterTuples(Reserved, Reg);
     }
   }
 }
@@ -1492,4 +1491,22 @@ void R600InstrInfo::clearFlag(MachineInstr &MI, unsigned Operand,
     InstFlags &= ~(Flag << (NUM_MO_FLAGS * Operand));
     FlagOp.setImm(InstFlags);
   }
+}
+
+unsigned R600InstrInfo::getAddressSpaceForPseudoSourceKind(
+    PseudoSourceValue::PSVKind Kind) const {
+  switch (Kind) {
+  case PseudoSourceValue::Stack:
+  case PseudoSourceValue::FixedStack:
+    return AMDGPUASI.PRIVATE_ADDRESS;
+  case PseudoSourceValue::ConstantPool:
+  case PseudoSourceValue::GOT:
+  case PseudoSourceValue::JumpTable:
+  case PseudoSourceValue::GlobalValueCallEntry:
+  case PseudoSourceValue::ExternalSymbolCallEntry:
+  case PseudoSourceValue::TargetCustom:
+    return AMDGPUASI.CONSTANT_ADDRESS;
+  }
+  llvm_unreachable("Invalid pseudo source kind");
+  return AMDGPUASI.PRIVATE_ADDRESS;
 }

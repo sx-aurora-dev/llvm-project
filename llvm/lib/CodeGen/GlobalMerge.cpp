@@ -70,6 +70,7 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
@@ -88,12 +89,11 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -386,7 +386,7 @@ bool GlobalMerge::doMerge(SmallVectorImpl<GlobalVariable*> &Globals,
   //
   // Multiply that by the size of the set to give us a crude profitability
   // metric.
-  std::sort(UsedGlobalSets.begin(), UsedGlobalSets.end(),
+  std::stable_sort(UsedGlobalSets.begin(), UsedGlobalSets.end(),
             [](const UsedGlobalSet &UGS1, const UsedGlobalSet &UGS2) {
               return UGS1.Globals.count() * UGS1.UsageCount <
                      UGS2.Globals.count() * UGS2.UsageCount;
@@ -497,6 +497,8 @@ bool GlobalMerge::doMerge(const SmallVectorImpl<GlobalVariable *> &Globals,
     for (ssize_t k = i, idx = 0; k != j; k = GlobalSet.find_next(k), ++idx) {
       GlobalValue::LinkageTypes Linkage = Globals[k]->getLinkage();
       std::string Name = Globals[k]->getName();
+      GlobalValue::DLLStorageClassTypes DLLStorage =
+          Globals[k]->getDLLStorageClass();
 
       // Copy metadata while adjusting any debug info metadata by the original
       // global's offset within the merged global.
@@ -517,7 +519,9 @@ bool GlobalMerge::doMerge(const SmallVectorImpl<GlobalVariable *> &Globals,
       // It's not safe on Mach-O as the alias (and thus the portion of the
       // MergedGlobals variable) may be dead stripped at link time.
       if (Linkage != GlobalValue::InternalLinkage || !IsMachO) {
-        GlobalAlias::create(Tys[idx], AddrSpace, Linkage, Name, GEP, &M);
+        GlobalAlias *GA =
+            GlobalAlias::create(Tys[idx], AddrSpace, Linkage, Name, GEP, &M);
+        GA->setDLLStorageClass(DLLStorage);
       }
 
       NumMerged++;

@@ -41,6 +41,7 @@ class MiniDumpTestCase(TestBase):
         stop_description = thread.GetStopDescription(256)
         self.assertTrue("0xc0000005" in stop_description)
 
+    @expectedFailureAll(bugnumber="llvm.org/pr35193", hostoslist=["windows"])
     def test_stack_info_in_mini_dump(self):
         """Test that we can see a trivial stack in a VS-generate mini dump."""
         # target create -c fizzbuzz_no_heap.dmp
@@ -62,8 +63,8 @@ class MiniDumpTestCase(TestBase):
     def test_deeper_stack_in_mini_dump(self):
         """Test that we can examine a more interesting stack in a mini dump."""
         self.build()
-        exe = os.path.join(os.getcwd(), "a.out")
-        core = os.path.join(os.getcwd(), "core.dmp")
+        exe = self.getBuildArtifact("a.out")
+        core = self.getBuildArtifact("core.dmp")
         try:
             # Set a breakpoint and capture a mini dump.
             target = self.dbg.CreateTarget(exe)
@@ -98,8 +99,8 @@ class MiniDumpTestCase(TestBase):
     def test_local_variables_in_mini_dump(self):
         """Test that we can examine local variables in a mini dump."""
         self.build()
-        exe = os.path.join(os.getcwd(), "a.out")
-        core = os.path.join(os.getcwd(), "core.dmp")
+        exe = self.getBuildArtifact("a.out")
+        core = self.getBuildArtifact("core.dmp")
         try:
             # Set a breakpoint and capture a mini dump.
             target = self.dbg.CreateTarget(exe)

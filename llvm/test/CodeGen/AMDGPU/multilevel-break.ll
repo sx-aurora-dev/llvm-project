@@ -34,7 +34,7 @@
 ; GCN-NEXT: s_andn2_b64 exec, exec, [[OR_BREAK]]
 ; GCN-NEXT: s_cbranch_execnz [[INNER_LOOP]]
 
-; GCN: ; BB#{{[0-9]+}}: ; %Flow1{{$}}
+; GCN: ; %bb.{{[0-9]+}}: ; %Flow1{{$}}
 ; GCN-NEXT: ; in Loop: Header=[[OUTER_LOOP]] Depth=1
 
 ; Ensure copy is eliminated
@@ -78,7 +78,7 @@ ENDIF:                                            ; preds = %LOOP
 
 ; Uses a copy intsead of an or
 ; GCN: s_mov_b64 [[COPY:s\[[0-9]+:[0-9]+\]]], [[BREAK_REG]]
-; GCN: s_or_b64 [[BREAK_REG]], exec, [[COPY]]
+; GCN: s_or_b64 [[BREAK_REG]], exec, [[BREAK_REG]]
 define amdgpu_kernel void @multi_if_break_loop(i32 %arg) #0 {
 bb:
   %id = call i32 @llvm.amdgcn.workitem.id.x()

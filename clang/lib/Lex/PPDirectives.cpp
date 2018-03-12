@@ -115,6 +115,24 @@ static bool isReservedId(StringRef Text, const LangOptions &Lang) {
   return false;
 }
 
+// The -fmodule-name option (represented here by \p CurrentModule) tells the
+// compiler to textually include headers in the specified module, meaning clang
+// won't build the specified module. This is useful in a number of situations,
+// for instance, when building a library that vends a module map, one might want
+// to avoid hitting intermediate build products containig the the module map or
+// avoid finding the system installed modulemap for that library.
+static bool isForModuleBuilding(Module *M, StringRef CurrentModule) {
+  StringRef TopLevelName = M->getTopLevelModuleName();
+
+  // When building framework Foo, we wanna make sure that Foo *and* Foo_Private
+  // are textually included and no modules are built for both.
+  if (M->getTopLevelModule()->IsFramework &&
+      !CurrentModule.endswith("_Private") && TopLevelName.endswith("_Private"))
+    TopLevelName = TopLevelName.drop_back(8);
+
+  return TopLevelName == CurrentModule;
+}
+
 static MacroDiag shouldWarnOnMacroDef(Preprocessor &PP, IdentifierInfo *II) {
   const LangOptions &Lang = PP.getLangOpts();
   StringRef Text = II->getName();
@@ -350,7 +368,7 @@ void Preprocessor::CheckEndOfDirective(const char *DirType, bool EnableMacros) {
 /// If ElseOk is true, then \#else directives are ok, if not, then we have
 /// already seen one so a \#else directive is a duplicate.  When this returns,
 /// the caller can lex the first valid token.
-void Preprocessor::SkipExcludedConditionalBlock(const Token &HashToken,
+void Preprocessor::SkipExcludedConditionalBlock(SourceLocation HashTokenLoc,
                                                 SourceLocation IfTokenLoc,
                                                 bool FoundNonSkipPortion,
                                                 bool FoundElse,
@@ -358,8 +376,11 @@ void Preprocessor::SkipExcludedConditionalBlock(const Token &HashToken,
   ++NumSkipped;
   assert(!CurTokenLexer && CurPPLexer && "Lexing a macro, not a file?");
 
-  CurPPLexer->pushConditionalLevel(IfTokenLoc, /*isSkipping*/false,
-                                 FoundNonSkipPortion, FoundElse);
+  if (PreambleConditionalStack.reachedEOFWhileSkipping())
+    PreambleConditionalStack.clearSkipInfo();
+  else
+    CurPPLexer->pushConditionalLevel(IfTokenLoc, /*isSkipping*/ false,
+                                     FoundNonSkipPortion, FoundElse);
 
   if (CurPTHLexer) {
     PTHSkipExcludedConditionalBlock();
@@ -385,6 +406,9 @@ void Preprocessor::SkipExcludedConditionalBlock(const Token &HashToken,
       // We don't emit errors for unterminated conditionals here,
       // Lexer::LexEndOfFile can do that propertly.
       // Just return and let the caller lex after this #include.
+      if (PreambleConditionalStack.isRecording())
+        PreambleConditionalStack.SkipInfo.emplace(
+            HashTokenLoc, IfTokenLoc, FoundNonSkipPortion, FoundElse, ElseLoc);
       break;
     }
 
@@ -552,9 +576,11 @@ void Preprocessor::SkipExcludedConditionalBlock(const Token &HashToken,
   // the #if block.
   CurPPLexer->LexingRawMode = false;
 
-  if (Callbacks)
+  // The last skipped range isn't actually skipped yet if it's truncated
+  // by the end of the preamble; we'll resume parsing after the preamble.
+  if (Callbacks && (Tok.isNot(tok::eof) || !isRecordingPreamble()))
     Callbacks->SourceRangeSkipped(
-        SourceRange(HashToken.getLocation(), CurPPLexer->getSourceLocation()),
+        SourceRange(HashTokenLoc, CurPPLexer->getSourceLocation()),
         Tok.getLocation());
 }
 
@@ -1649,12 +1675,18 @@ bool Preprocessor::checkModuleIsAvailable(const LangOptions &LangOpts,
                                           DiagnosticsEngine &Diags, Module *M) {
   Module::Requirement Requirement;
   Module::UnresolvedHeaderDirective MissingHeader;
-  if (M->isAvailable(LangOpts, TargetInfo, Requirement, MissingHeader))
+  Module *ShadowingModule = nullptr;
+  if (M->isAvailable(LangOpts, TargetInfo, Requirement, MissingHeader,
+                     ShadowingModule))
     return false;
 
   if (MissingHeader.FileNameLoc.isValid()) {
     Diags.Report(MissingHeader.FileNameLoc, diag::err_module_header_missing)
         << MissingHeader.IsUmbrella << MissingHeader.FileName;
+  } else if (ShadowingModule) {
+    Diags.Report(M->DefinitionLoc, diag::err_module_shadowed) << M->Name;
+    Diags.Report(ShadowingModule->DefinitionLoc,
+                 diag::note_previous_definition);
   } else {
     // FIXME: Track the location at which the requirement was specified, and
     // use it here.
@@ -1842,8 +1874,8 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   // there is one. Don't do so if precompiled module support is disabled or we
   // are processing this module textually (because we're building the module).
   if (ShouldEnter && File && SuggestedModule && getLangOpts().Modules &&
-      SuggestedModule.getModule()->getTopLevelModuleName() !=
-          getLangOpts().CurrentModule) {
+      !isForModuleBuilding(SuggestedModule.getModule(),
+                           getLangOpts().CurrentModule)) {
     // If this include corresponds to a module but that module is
     // unavailable, diagnose the situation and bail out.
     // FIXME: Remove this; loadModule does the same check (but produces
@@ -1990,7 +2022,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
       // ShouldEnter is false because we are skipping the header. In that
       // case, We are not importing the specified module.
       if (SkipHeader && getLangOpts().CompilingPCH &&
-          M->getTopLevelModuleName() == getLangOpts().CurrentModule)
+          isForModuleBuilding(M, getLangOpts().CurrentModule))
         return;
 
       makeModuleVisible(M, HashLoc);
@@ -2018,11 +2050,20 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
 
   // Determine if we're switching to building a new submodule, and which one.
   if (auto *M = SuggestedModule.getModule()) {
+    if (M->getTopLevelModule()->ShadowingModule) {
+      // We are building a submodule that belongs to a shadowed module. This
+      // means we find header files in the shadowed module.
+      Diag(M->DefinitionLoc, diag::err_module_build_shadowed_submodule)
+        << M->getFullModuleName();
+      Diag(M->getTopLevelModule()->ShadowingModule->DefinitionLoc,
+           diag::note_previous_definition);
+      return;
+    }
     // When building a pch, -fmodule-name tells the compiler to textually
     // include headers in the specified module. We are not building the
     // specified module.
     if (getLangOpts().CompilingPCH &&
-        M->getTopLevelModuleName() == getLangOpts().CurrentModule)
+        isForModuleBuilding(M, getLangOpts().CurrentModule))
       return;
 
     assert(!CurLexerSubmodule && "should not have marked this as a module yet");
@@ -2676,7 +2717,8 @@ void Preprocessor::HandleIfdefDirective(Token &Result,
   if (MacroNameTok.is(tok::eod)) {
     // Skip code until we get to #endif.  This helps with recovery by not
     // emitting an error when the #endif is reached.
-    SkipExcludedConditionalBlock(HashToken, DirectiveTok.getLocation(),
+    SkipExcludedConditionalBlock(HashToken.getLocation(),
+                                 DirectiveTok.getLocation(),
                                  /*Foundnonskip*/ false, /*FoundElse*/ false);
     return;
   }
@@ -2725,7 +2767,8 @@ void Preprocessor::HandleIfdefDirective(Token &Result,
                                      /*foundelse*/false);
   } else {
     // No, skip the contents of this block.
-    SkipExcludedConditionalBlock(HashToken, DirectiveTok.getLocation(),
+    SkipExcludedConditionalBlock(HashToken.getLocation(),
+                                 DirectiveTok.getLocation(),
                                  /*Foundnonskip*/ false,
                                  /*FoundElse*/ false);
   }
@@ -2772,7 +2815,7 @@ void Preprocessor::HandleIfDirective(Token &IfToken,
                                    /*foundnonskip*/true, /*foundelse*/false);
   } else {
     // No, skip the contents of this block.
-    SkipExcludedConditionalBlock(HashToken, IfToken.getLocation(),
+    SkipExcludedConditionalBlock(HashToken.getLocation(), IfToken.getLocation(),
                                  /*Foundnonskip*/ false,
                                  /*FoundElse*/ false);
   }
@@ -2837,7 +2880,8 @@ void Preprocessor::HandleElseDirective(Token &Result, const Token &HashToken) {
   }
 
   // Finally, skip the rest of the contents of this block.
-  SkipExcludedConditionalBlock(HashToken, CI.IfLoc, /*Foundnonskip*/ true,
+  SkipExcludedConditionalBlock(HashToken.getLocation(), CI.IfLoc,
+                               /*Foundnonskip*/ true,
                                /*FoundElse*/ true, Result.getLocation());
 }
 
@@ -2881,7 +2925,7 @@ void Preprocessor::HandleElifDirective(Token &ElifToken,
   }
 
   // Finally, skip the rest of the contents of this block.
-  SkipExcludedConditionalBlock(HashToken, CI.IfLoc, /*Foundnonskip*/ true,
-                               /*FoundElse*/ CI.FoundElse,
-                               ElifToken.getLocation());
+  SkipExcludedConditionalBlock(
+      HashToken.getLocation(), CI.IfLoc, /*Foundnonskip*/ true,
+      /*FoundElse*/ CI.FoundElse, ElifToken.getLocation());
 }

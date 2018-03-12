@@ -130,17 +130,18 @@ static MemoryAccessKind checkFunctionMemoryAccess(Function &F, bool ThisBody,
           SCCNodes.count(CS.getCalledFunction()))
         continue;
       FunctionModRefBehavior MRB = AAR.getModRefBehavior(CS);
+      ModRefInfo MRI = createModRefInfo(MRB);
 
       // If the call doesn't access memory, we're done.
-      if (!(MRB & MRI_ModRef))
+      if (isNoModRef(MRI))
         continue;
 
       if (!AliasAnalysis::onlyAccessesArgPointees(MRB)) {
         // The call could access any memory. If that includes writes, give up.
-        if (MRB & MRI_Mod)
+        if (isModSet(MRI))
           return MAK_MayWrite;
         // If it reads, note it.
-        if (MRB & MRI_Ref)
+        if (isRefSet(MRI))
           ReadsMemory = true;
         continue;
       }
@@ -162,10 +163,10 @@ static MemoryAccessKind checkFunctionMemoryAccess(Function &F, bool ThisBody,
         if (AAR.pointsToConstantMemory(Loc, /*OrLocal=*/true))
           continue;
 
-        if (MRB & MRI_Mod)
+        if (isModSet(MRI))
           // Writes non-local memory.  Give up.
           return MAK_MayWrite;
-        if (MRB & MRI_Ref)
+        if (isRefSet(MRI))
           // Ok, it reads non-local memory.
           ReadsMemory = true;
       }
@@ -1135,7 +1136,8 @@ PreservedAnalyses PostOrderFunctionAttrsPass::run(LazyCallGraph::SCC &C,
   bool HasUnknownCall = false;
   for (LazyCallGraph::Node &N : C) {
     Function &F = N.getFunction();
-    if (F.hasFnAttribute(Attribute::OptimizeNone)) {
+    if (F.hasFnAttribute(Attribute::OptimizeNone) ||
+        F.hasFnAttribute(Attribute::Naked)) {
       // Treat any function we're trying not to optimize as if it were an
       // indirect call and omit it from the node set used below.
       HasUnknownCall = true;
@@ -1220,7 +1222,8 @@ static bool runImpl(CallGraphSCC &SCC, AARGetterT AARGetter) {
   bool ExternalNode = false;
   for (CallGraphNode *I : SCC) {
     Function *F = I->getFunction();
-    if (!F || F->hasFnAttribute(Attribute::OptimizeNone)) {
+    if (!F || F->hasFnAttribute(Attribute::OptimizeNone) ||
+        F->hasFnAttribute(Attribute::Naked)) {
       // External node or function we're trying not to optimize - we both avoid
       // transform them and avoid leveraging information they provide.
       ExternalNode = true;

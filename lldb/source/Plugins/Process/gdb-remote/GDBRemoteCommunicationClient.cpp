@@ -822,6 +822,15 @@ int GDBRemoteCommunicationClient::SendArgumentsPacket(
   return -1;
 }
 
+int GDBRemoteCommunicationClient::SendEnvironment(const Environment &env) {
+  for (const auto &KV : env) {
+    int r = SendEnvironmentPacket(Environment::compose(KV).c_str());
+    if (r != 0)
+      return r;
+  }
+  return 0;
+}
+
 int GDBRemoteCommunicationClient::SendEnvironmentPacket(
     char const *name_equal_value) {
   if (name_equal_value && name_equal_value[0]) {
@@ -1022,10 +1031,7 @@ void GDBRemoteCommunicationClient::MaybeEnableCompression(
   std::string avail_name;
 
 #if defined(HAVE_LIBCOMPRESSION)
-  // libcompression is weak linked so test if compression_decode_buffer() is
-  // available
-  if (compression_decode_buffer != NULL &&
-      avail_type == CompressionType::None) {
+  if (avail_type == CompressionType::None) {
     for (auto compression : supported_compressions) {
       if (compression == "lzfse") {
         avail_type = CompressionType::LZFSE;
@@ -1037,10 +1043,7 @@ void GDBRemoteCommunicationClient::MaybeEnableCompression(
 #endif
 
 #if defined(HAVE_LIBCOMPRESSION)
-  // libcompression is weak linked so test if compression_decode_buffer() is
-  // available
-  if (compression_decode_buffer != NULL &&
-      avail_type == CompressionType::None) {
+  if (avail_type == CompressionType::None) {
     for (auto compression : supported_compressions) {
       if (compression == "zlib-deflate") {
         avail_type = CompressionType::ZlibDeflate;
@@ -1064,10 +1067,7 @@ void GDBRemoteCommunicationClient::MaybeEnableCompression(
 #endif
 
 #if defined(HAVE_LIBCOMPRESSION)
-  // libcompression is weak linked so test if compression_decode_buffer() is
-  // available
-  if (compression_decode_buffer != NULL &&
-      avail_type == CompressionType::None) {
+  if (avail_type == CompressionType::None) {
     for (auto compression : supported_compressions) {
       if (compression == "lz4") {
         avail_type = CompressionType::LZ4;
@@ -1079,10 +1079,7 @@ void GDBRemoteCommunicationClient::MaybeEnableCompression(
 #endif
 
 #if defined(HAVE_LIBCOMPRESSION)
-  // libcompression is weak linked so test if compression_decode_buffer() is
-  // available
-  if (compression_decode_buffer != NULL &&
-      avail_type == CompressionType::None) {
+  if (avail_type == CompressionType::None) {
     for (auto compression : supported_compressions) {
       if (compression == "lzma") {
         avail_type = CompressionType::LZMA;
@@ -3454,7 +3451,9 @@ ParseModuleSpec(StructuredData::Dictionary *dict) {
 
   if (!dict->GetValueForKeyAsString("uuid", string))
     return llvm::None;
-  result.GetUUID().SetFromStringRef(string, string.size());
+  if (result.GetUUID().SetFromStringRef(string, string.size() / 2) !=
+      string.size())
+    return llvm::None;
 
   if (!dict->GetValueForKeyAsInteger("file_offset", integer))
     return llvm::None;

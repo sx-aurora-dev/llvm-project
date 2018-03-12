@@ -27,8 +27,6 @@ namespace {
 constexpr char XRayInstrumentOption[] = "-fxray-instrument";
 constexpr char XRayInstructionThresholdOption[] =
     "-fxray-instruction-threshold=";
-constexpr char XRayAlwaysInstrumentOption[] = "-fxray-always-instrument=";
-constexpr char XRayNeverInstrumentOption[] = "-fxray-never-instrument=";
 } // namespace
 
 XRayArgs::XRayArgs(const ToolChain &TC, const ArgList &Args) {
@@ -36,7 +34,7 @@ XRayArgs::XRayArgs(const ToolChain &TC, const ArgList &Args) {
   const llvm::Triple &Triple = TC.getTriple();
   if (Args.hasFlag(options::OPT_fxray_instrument,
                    options::OPT_fnoxray_instrument, false)) {
-    if (Triple.getOS() == llvm::Triple::Linux)
+    if (Triple.getOS() == llvm::Triple::Linux) {
       switch (Triple.getArch()) {
       case llvm::Triple::x86_64:
       case llvm::Triple::arm:
@@ -51,9 +49,15 @@ XRayArgs::XRayArgs(const ToolChain &TC, const ArgList &Args) {
         D.Diag(diag::err_drv_clang_unsupported)
             << (std::string(XRayInstrumentOption) + " on " + Triple.str());
       }
-    else
+    } else if (Triple.getOS() == llvm::Triple::FreeBSD) {
+        if (Triple.getArch() != llvm::Triple::x86_64) {
+          D.Diag(diag::err_drv_clang_unsupported)
+              << (std::string(XRayInstrumentOption) + " on " + Triple.str());
+        }
+    } else {
       D.Diag(diag::err_drv_clang_unsupported)
-          << (std::string(XRayInstrumentOption) + " on non-Linux target OS");
+          << (std::string(XRayInstrumentOption) + " on non-supported target OS");
+    }
     XRayInstrument = true;
     if (const Arg *A =
             Args.getLastArg(options::OPT_fxray_instruction_threshold_,
@@ -62,6 +66,14 @@ XRayArgs::XRayArgs(const ToolChain &TC, const ArgList &Args) {
       if (S.getAsInteger(0, InstructionThreshold) || InstructionThreshold < 0)
         D.Diag(clang::diag::err_drv_invalid_value) << A->getAsString(Args) << S;
     }
+
+    // By default, the back-end will not emit the lowering for XRay customevent
+    // calls if the function is not instrumented. In the future we will change
+    // this default to be the reverse, but in the meantime we're going to
+    // introduce the new functionality behind a flag.
+    if (Args.hasFlag(options::OPT_fxray_always_emit_customevents,
+                     options::OPT_fnoxray_always_emit_customevents, false))
+      XRayAlwaysEmitCustomEvents = true;
 
     // Validate the always/never attribute files. We also make sure that they
     // are treated as actual dependencies.
@@ -91,17 +103,21 @@ void XRayArgs::addArgs(const ToolChain &TC, const ArgList &Args,
     return;
 
   CmdArgs.push_back(XRayInstrumentOption);
+
+  if (XRayAlwaysEmitCustomEvents)
+    CmdArgs.push_back("-fxray-always-emit-customevents");
+
   CmdArgs.push_back(Args.MakeArgString(Twine(XRayInstructionThresholdOption) +
                                        Twine(InstructionThreshold)));
 
   for (const auto &Always : AlwaysInstrumentFiles) {
-    SmallString<64> AlwaysInstrumentOpt(XRayAlwaysInstrumentOption);
+    SmallString<64> AlwaysInstrumentOpt("-fxray-always-instrument=");
     AlwaysInstrumentOpt += Always;
     CmdArgs.push_back(Args.MakeArgString(AlwaysInstrumentOpt));
   }
 
   for (const auto &Never : NeverInstrumentFiles) {
-    SmallString<64> NeverInstrumentOpt(XRayNeverInstrumentOption);
+    SmallString<64> NeverInstrumentOpt("-fxray-never-instrument=");
     NeverInstrumentOpt += Never;
     CmdArgs.push_back(Args.MakeArgString(NeverInstrumentOpt));
   }

@@ -342,7 +342,7 @@ public:
   CXTranslationUnit getCXTU() const { return CXTU; }
 
   void setASTContext(ASTContext &ctx);
-  void setPreprocessor(std::shared_ptr<Preprocessor> PP);
+  void setPreprocessor(std::shared_ptr<Preprocessor> PP) override;
 
   bool shouldSuppressRefs() const {
     return IndexOptions & CXIndexOpt_SuppressRedundantRefs;
@@ -436,13 +436,15 @@ public:
                        const NamedDecl *Parent,
                        const DeclContext *DC,
                        const Expr *E = nullptr,
-                       CXIdxEntityRefKind Kind = CXIdxEntityRef_Direct);
+                       CXIdxEntityRefKind Kind = CXIdxEntityRef_Direct,
+                       CXSymbolRole Role = CXSymbolRole_None);
 
   bool handleReference(const NamedDecl *D, SourceLocation Loc,
                        const NamedDecl *Parent,
                        const DeclContext *DC,
                        const Expr *E = nullptr,
-                       CXIdxEntityRefKind Kind = CXIdxEntityRef_Direct);
+                       CXIdxEntityRefKind Kind = CXIdxEntityRef_Direct,
+                       CXSymbolRole Role = CXSymbolRole_None);
 
   bool isNotFromSourceFile(SourceLocation Loc) const;
 

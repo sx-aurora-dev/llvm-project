@@ -23,12 +23,12 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/iterator_range.h"
-#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/StackMaps.h"
+#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Mangler.h"
@@ -41,12 +41,9 @@
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionELF.h"
-#include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/Support/TargetRegistry.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
 
 using namespace llvm;
 
@@ -103,7 +100,9 @@ void X86AsmPrinter::StackMapShadowTracker::emitShadowPadding(
 }
 
 void X86AsmPrinter::EmitAndCountInstruction(MCInst &Inst) {
-  OutStreamer->EmitInstruction(Inst, getSubtargetInfo(), EnablePrintSchedInfo);
+  OutStreamer->EmitInstruction(Inst, getSubtargetInfo(),
+                               EnablePrintSchedInfo &&
+                                   !(Inst.getFlags() & X86::NO_SCHED_INFO));
   SMShadowTracker.count(Inst, getSubtargetInfo(), CodeEmitter.get());
 }
 
@@ -875,6 +874,10 @@ void X86AsmPrinter::LowerSTATEPOINT(const MachineInstr &MI,
       // address is to far away. (TODO: support non-relative addressing)
       break;
     case MachineOperand::MO_Register:
+      // FIXME: Add retpoline support and remove this.
+      if (Subtarget->useRetpoline())
+        report_fatal_error("Lowering register statepoints with retpoline not "
+                           "yet implemented.");
       CallTargetMCOp = MCOperand::createReg(CallTarget.getReg());
       CallOpcode = X86::CALL64r;
       break;
@@ -961,7 +964,7 @@ void X86AsmPrinter::LowerPATCHABLE_OP(const MachineInstr &MI,
       // This is an optimization that lets us get away without emitting a nop in
       // many cases.
       //
-      // NB! In some cases the encoding for PUSH64r (e.g. PUSH64r %R9) takes two
+      // NB! In some cases the encoding for PUSH64r (e.g. PUSH64r %r9) takes two
       // bytes too, so the check on MinSize is important.
       MCI.setOpcode(X86::PUSH64rmr);
     } else {
@@ -1029,6 +1032,10 @@ void X86AsmPrinter::LowerPATCHPOINT(const MachineInstr &MI,
 
     EmitAndCountInstruction(
         MCInstBuilder(X86::MOV64ri).addReg(ScratchReg).addOperand(CalleeMCOp));
+    // FIXME: Add retpoline support and remove this.
+    if (Subtarget->useRetpoline())
+      report_fatal_error(
+          "Lowering patchpoint with retpoline not yet implemented.");
     EmitAndCountInstruction(MCInstBuilder(X86::CALL64r).addReg(ScratchReg));
   }
 
@@ -1447,7 +1454,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   // Add a comment about EVEX-2-VEX compression for AVX-512 instrs that
   // are compressed from EVEX encoding to VEX encoding.
   if (TM.Options.MCOptions.ShowMCEncoding) {
-    if (MI->getAsmPrinterFlags() & AC_EVEX_2_VEX)
+    if (MI->getAsmPrinterFlags() & X86::AC_EVEX_2_VEX)
       OutStreamer->AddComment("EVEX TO VEX Compression ", false);
   }
 
@@ -1815,6 +1822,24 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
     break;
   }
 
+  case X86::MMX_MOVQ64rm: {
+    if (!OutStreamer->isVerboseAsm())
+      break;
+    if (MI->getNumOperands() <= 4)
+      break;
+    if (auto *C = getConstantFromPool(*MI, MI->getOperand(4))) {
+      std::string Comment;
+      raw_string_ostream CS(Comment);
+      const MachineOperand &DstOp = MI->getOperand(0);
+      CS << X86ATTInstPrinter::getRegisterName(DstOp.getReg()) << " = ";
+      if (auto *CF = dyn_cast<ConstantFP>(C)) {
+        CS << "0x" << CF->getValueAPF().bitcastToAPInt().toString(16, false);
+        OutStreamer->AddComment(CS.str(), !EnablePrintSchedInfo);
+      }
+    }
+    break;
+  }
+
 #define MOV_CASE(Prefix, Suffix)        \
   case X86::Prefix##MOVAPD##Suffix##rm: \
   case X86::Prefix##MOVAPS##Suffix##rm: \
@@ -2003,6 +2028,8 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
   MCInst TmpInst;
   MCInstLowering.Lower(MI, TmpInst);
+  if (MI->getAsmPrinterFlag(MachineInstr::NoSchedComment))
+    TmpInst.setFlags(TmpInst.getFlags() | X86::NO_SCHED_INFO);
 
   // Stackmap shadows cannot include branch targets, so we can count the bytes
   // in a call towards the shadow, but must ensure that the no thread returns

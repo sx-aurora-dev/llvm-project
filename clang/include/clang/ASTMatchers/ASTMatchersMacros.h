@@ -359,13 +359,29 @@
               ::clang::ast_matchers::internal::BoundNodesTreeBuilder *Builder) \
           const
 
-/// \brief Creates a variadic matcher for both a specific \c Type as well as
-/// the corresponding \c TypeLoc.
-#define AST_TYPE_MATCHER(NodeType, MatcherName)                                \
-  const ::clang::ast_matchers::internal::VariadicDynCastAllOfMatcher<          \
-      Type, NodeType> MatcherName
 // FIXME: add a matcher for TypeLoc derived classes using its custom casting
 // API (no longer dyn_cast) if/when we need such matching
+
+#define AST_TYPE_TRAVERSE_MATCHER_DECL(MatcherName, FunctionName,              \
+                                       ReturnTypesF)                           \
+  namespace internal {                                                         \
+  template <typename T> struct TypeMatcher##MatcherName##Getter {              \
+    static QualType (T::*value())() const { return &T::FunctionName; }         \
+  };                                                                           \
+  }                                                                            \
+  extern const ::clang::ast_matchers::internal::                               \
+      TypeTraversePolymorphicMatcher<                                          \
+          QualType,                                                            \
+          ::clang::ast_matchers::internal::TypeMatcher##MatcherName##Getter,   \
+          ::clang::ast_matchers::internal::TypeTraverseMatcher,                \
+          ReturnTypesF>::Func MatcherName
+
+#define AST_TYPE_TRAVERSE_MATCHER_DEF(MatcherName, ReturnTypesF)               \
+  const ::clang::ast_matchers::internal::TypeTraversePolymorphicMatcher<       \
+      QualType,                                                                \
+      ::clang::ast_matchers::internal::TypeMatcher##MatcherName##Getter,       \
+      ::clang::ast_matchers::internal::TypeTraverseMatcher,                    \
+      ReturnTypesF>::Func MatcherName
 
 /// \brief AST_TYPE_TRAVERSE_MATCHER(MatcherName, FunctionName) defines
 /// the matcher \c MatcherName that can be used to traverse from one \c Type
@@ -385,6 +401,30 @@
       ::clang::ast_matchers::internal::TypeMatcher##MatcherName##Getter,       \
       ::clang::ast_matchers::internal::TypeTraverseMatcher,                    \
       ReturnTypesF>::Func MatcherName
+
+#define AST_TYPELOC_TRAVERSE_MATCHER_DECL(MatcherName, FunctionName,           \
+                                          ReturnTypesF)                        \
+  namespace internal {                                                         \
+  template <typename T> struct TypeLocMatcher##MatcherName##Getter {           \
+    static TypeLoc (T::*value())() const { return &T::FunctionName##Loc; }     \
+  };                                                                           \
+  }                                                                            \
+  extern const ::clang::ast_matchers::internal::                               \
+      TypeTraversePolymorphicMatcher<                                          \
+          TypeLoc,                                                             \
+          ::clang::ast_matchers::internal::                                    \
+              TypeLocMatcher##MatcherName##Getter,                             \
+          ::clang::ast_matchers::internal::TypeLocTraverseMatcher,             \
+          ReturnTypesF>::Func MatcherName##Loc;                                \
+  AST_TYPE_TRAVERSE_MATCHER_DECL(MatcherName, FunctionName##Type, ReturnTypesF)
+
+#define AST_TYPELOC_TRAVERSE_MATCHER_DEF(MatcherName, ReturnTypesF)            \
+  const ::clang::ast_matchers::internal::TypeTraversePolymorphicMatcher<       \
+      TypeLoc,                                                                 \
+      ::clang::ast_matchers::internal::TypeLocMatcher##MatcherName##Getter,    \
+      ::clang::ast_matchers::internal::TypeLocTraverseMatcher,                 \
+      ReturnTypesF>::Func MatcherName##Loc;                                    \
+  AST_TYPE_TRAVERSE_MATCHER_DEF(MatcherName, ReturnTypesF)
 
 /// \brief AST_TYPELOC_TRAVERSE_MATCHER(MatcherName, FunctionName) works
 /// identical to \c AST_TYPE_TRAVERSE_MATCHER but operates on \c TypeLocs.

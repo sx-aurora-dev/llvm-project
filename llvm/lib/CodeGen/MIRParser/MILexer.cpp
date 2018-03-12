@@ -208,14 +208,25 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("internal", MIToken::kw_internal)
       .Case("early-clobber", MIToken::kw_early_clobber)
       .Case("debug-use", MIToken::kw_debug_use)
+      .Case("renamable", MIToken::kw_renamable)
       .Case("tied-def", MIToken::kw_tied_def)
       .Case("frame-setup", MIToken::kw_frame_setup)
+      .Case("frame-destroy", MIToken::kw_frame_destroy)
       .Case("debug-location", MIToken::kw_debug_location)
       .Case("same_value", MIToken::kw_cfi_same_value)
       .Case("offset", MIToken::kw_cfi_offset)
+      .Case("rel_offset", MIToken::kw_cfi_rel_offset)
       .Case("def_cfa_register", MIToken::kw_cfi_def_cfa_register)
       .Case("def_cfa_offset", MIToken::kw_cfi_def_cfa_offset)
+      .Case("adjust_cfa_offset", MIToken::kw_cfi_adjust_cfa_offset)
+      .Case("escape", MIToken::kw_cfi_escape)
       .Case("def_cfa", MIToken::kw_cfi_def_cfa)
+      .Case("remember_state", MIToken::kw_cfi_remember_state)
+      .Case("restore", MIToken::kw_cfi_restore)
+      .Case("restore_state", MIToken::kw_cfi_restore_state)
+      .Case("undefined", MIToken::kw_cfi_undefined)
+      .Case("register", MIToken::kw_cfi_register)
+      .Case("window_save", MIToken::kw_cfi_window_save)
       .Case("blockaddress", MIToken::kw_blockaddress)
       .Case("intrinsic", MIToken::kw_intrinsic)
       .Case("target-index", MIToken::kw_target_index)
@@ -231,6 +242,7 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("dereferenceable", MIToken::kw_dereferenceable)
       .Case("invariant", MIToken::kw_invariant)
       .Case("align", MIToken::kw_align)
+      .Case("addrspace", MIToken::kw_addrspace)
       .Case("stack", MIToken::kw_stack)
       .Case("got", MIToken::kw_got)
       .Case("jump-table", MIToken::kw_jump_table)
@@ -276,6 +288,9 @@ static Cursor maybeLexMachineBasicBlock(Cursor C, MIToken &Token,
     C.advance();
   StringRef Number = NumberRange.upto(C);
   unsigned StringOffset = PrefixLength + Number.size(); // Drop '%bb.<id>'
+  // TODO: The format bb.<id>.<irname> is supported only when it's not a
+  // reference. Once we deprecate the format where the irname shows up, we
+  // should only lex forward if it is a reference.
   if (C.peek() == '.') {
     C.advance(); // Skip '.'
     ++StringOffset;
@@ -395,17 +410,26 @@ static bool isRegisterChar(char C) {
   return isIdentifierChar(C) && C != '.';
 }
 
-static Cursor maybeLexRegister(Cursor C, MIToken &Token) {
-  if (C.peek() != '%')
+static Cursor maybeLexRegister(Cursor C, MIToken &Token,
+                               ErrorCallbackType ErrorCallback) {
+  if (C.peek() != '%' && C.peek() != '$')
     return None;
-  if (isdigit(C.peek(1)))
-    return lexVirtualRegister(C, Token);
+
+  if (C.peek() == '%') {
+    if (isdigit(C.peek(1)))
+      return lexVirtualRegister(C, Token);
+
+    // ErrorCallback(Token.location(), "Named vregs are not yet supported.");
+    return None;
+  }
+
+  assert(C.peek() == '$');
   auto Range = C;
-  C.advance(); // Skip '%'
+  C.advance(); // Skip '$'
   while (isRegisterChar(C.peek()))
     C.advance();
   Token.reset(MIToken::NamedRegister, Range.upto(C))
-      .setStringValue(Range.upto(C).drop_front(1)); // Drop the '%'
+      .setStringValue(Range.upto(C).drop_front(1)); // Drop the '$'
   return C;
 }
 
@@ -428,7 +452,7 @@ static Cursor maybeLexGlobalValue(Cursor C, MIToken &Token,
 
 static Cursor maybeLexExternalSymbol(Cursor C, MIToken &Token,
                                      ErrorCallbackType ErrorCallback) {
-  if (C.peek() != '$')
+  if (C.peek() != '&')
     return None;
   return lexName(C, Token, MIToken::ExternalSymbol, /*PrefixLength=*/1,
                  ErrorCallback);
@@ -627,7 +651,7 @@ StringRef llvm::lexMIToken(StringRef Source, MIToken &Token,
     return R.remaining();
   if (Cursor R = maybeLexIRValue(C, Token, ErrorCallback))
     return R.remaining();
-  if (Cursor R = maybeLexRegister(C, Token))
+  if (Cursor R = maybeLexRegister(C, Token, ErrorCallback))
     return R.remaining();
   if (Cursor R = maybeLexGlobalValue(C, Token, ErrorCallback))
     return R.remaining();

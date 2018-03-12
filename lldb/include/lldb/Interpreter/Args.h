@@ -21,13 +21,12 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 // Project includes
+#include "lldb/Utility/Environment.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/lldb-private-types.h"
 #include "lldb/lldb-types.h"
 
 namespace lldb_private {
-
-struct Option;
 
 typedef std::vector<std::tuple<std::string, int, std::string>> OptionArgVector;
 typedef std::shared_ptr<OptionArgVector> OptionArgVectorSP;
@@ -86,6 +85,7 @@ public:
   Args(llvm::StringRef command = llvm::StringRef());
 
   Args(const Args &rhs);
+  explicit Args(const StringList &list);
 
   Args &operator=(const Args &rhs);
 
@@ -93,6 +93,12 @@ public:
   /// Destructor.
   //------------------------------------------------------------------
   ~Args();
+
+  explicit Args(const Environment &env) : Args() {
+    SetArguments(const_cast<const char **>(env.getEnvp().get()));
+  }
+
+  explicit operator Environment() const { return GetConstArgumentVector(); }
 
   //------------------------------------------------------------------
   /// Dump all entries to the stream \a s using label \a label_name.
@@ -153,10 +159,10 @@ public:
   llvm::ArrayRef<ArgEntry> entries() const { return m_entries; }
   char GetArgumentQuoteCharAtIndex(size_t idx) const;
 
-  std::vector<ArgEntry>::const_iterator begin() const {
-    return m_entries.begin();
-  }
-  std::vector<ArgEntry>::const_iterator end() const { return m_entries.end(); }
+  using const_iterator = std::vector<ArgEntry>::const_iterator;
+
+  const_iterator begin() const { return m_entries.begin(); }
+  const_iterator end() const { return m_entries.end(); }
 
   size_t size() const { return GetArgumentCount(); }
   const ArgEntry &operator[](size_t n) const { return m_entries[n]; }
@@ -302,44 +308,6 @@ public:
   void Unshift(llvm::StringRef arg_str, char quote_char = '\0');
 
   //------------------------------------------------------------------
-  /// Parse the arguments in the contained arguments.
-  ///
-  /// The arguments that are consumed by the argument parsing process
-  /// will be removed from the argument vector. The arguments that
-  /// get processed start at the second argument. The first argument
-  /// is assumed to be the command and will not be touched.
-  ///
-  /// param[in] platform_sp
-  ///   The platform used for option validation.  This is necessary
-  ///   because an empty execution_context is not enough to get us
-  ///   to a reasonable platform.  If the platform isn't given,
-  ///   we'll try to get it from the execution context.  If we can't
-  ///   get it from the execution context, we'll skip validation.
-  ///
-  /// param[in] require_validation
-  ///   When true, it will fail option parsing if validation could
-  ///   not occur due to not having a platform.
-  ///
-  /// @see class Options
-  //------------------------------------------------------------------
-  Status ParseOptions(Options &options, ExecutionContext *execution_context,
-                      lldb::PlatformSP platform_sp, bool require_validation);
-
-  bool IsPositionalArgument(const char *arg);
-
-  // The following works almost identically to ParseOptions, except that no
-  // option is required to have arguments, and it builds up the
-  // option_arg_vector as it parses the options.
-
-  std::string ParseAliasOptions(Options &options, CommandReturnObject &result,
-                                OptionArgVector *option_arg_vector,
-                                llvm::StringRef raw_input_line);
-
-  void ParseArgsForCompletion(Options &options,
-                              OptionElementVector &option_element_vector,
-                              uint32_t cursor_index);
-
-  //------------------------------------------------------------------
   // Clear the arguments.
   //
   // For re-setting or blanking out the list of arguments.
@@ -432,46 +400,9 @@ public:
   static std::string EscapeLLDBCommandArgument(const std::string &arg,
                                                char quote_char);
 
-  //------------------------------------------------------------------
-  /// Add or replace an environment variable with the given value.
-  ///
-  /// This command adds the environment variable if it is not already
-  /// present using the given value.  If the environment variable is
-  /// already in the list, it replaces the first such occurrence
-  /// with the new value.
-  //------------------------------------------------------------------
-  void AddOrReplaceEnvironmentVariable(llvm::StringRef env_var_name,
-                                       llvm::StringRef new_value);
-
-  /// Return whether a given environment variable exists.
-  ///
-  /// This command treats Args like a list of environment variables,
-  /// as used in ProcessLaunchInfo.  It treats each argument as
-  /// an {env_var_name}={value} or an {env_var_name} entry.
-  ///
-  /// @param[in] env_var_name
-  ///     Specifies the name of the environment variable to check.
-  ///
-  /// @param[out] argument_index
-  ///     If non-null, then when the environment variable is found,
-  ///     the index of the argument position will be returned in
-  ///     the size_t pointed to by this argument.
-  ///
-  /// @return
-  ///     true if the specified env var name exists in the list in
-  ///     either of the above-mentioned formats; otherwise, false.
-  //------------------------------------------------------------------
-  bool ContainsEnvironmentVariable(llvm::StringRef env_var_name,
-                                   size_t *argument_index = nullptr) const;
-
 private:
-  size_t FindArgumentIndexForOption(Option *long_options,
-                                    int long_options_index) const;
-
   std::vector<ArgEntry> m_entries;
   std::vector<char *> m_argv;
-
-  void UpdateArgsAfterOptionParsing();
 };
 
 } // namespace lldb_private

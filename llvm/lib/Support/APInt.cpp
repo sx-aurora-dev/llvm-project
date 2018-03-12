@@ -428,11 +428,12 @@ APInt APInt::extractBits(unsigned numBits, unsigned bitPosition) const {
   unsigned NumSrcWords = getNumWords();
   unsigned NumDstWords = Result.getNumWords();
 
+  uint64_t *DestPtr = Result.isSingleWord() ? &Result.U.VAL : Result.U.pVal;
   for (unsigned word = 0; word < NumDstWords; ++word) {
     uint64_t w0 = U.pVal[loWord + word];
     uint64_t w1 =
         (loWord + word + 1) < NumSrcWords ? U.pVal[loWord + word + 1] : 0;
-    Result.U.pVal[word] = (w0 >> loBit) | (w1 << (APINT_BITS_PER_WORD - loBit));
+    DestPtr[word] = (w0 >> loBit) | (w1 << (APINT_BITS_PER_WORD - loBit));
   }
 
   return Result.clearUnusedBits();
@@ -1252,6 +1253,14 @@ static void KnuthDiv(uint32_t *u, uint32_t *v, uint32_t *q, uint32_t* r,
   // b denotes the base of the number system. In our case b is 2^32.
   const uint64_t b = uint64_t(1) << 32;
 
+// The DEBUG macros here tend to be spam in the debug output if you're not
+// debugging this code. Disable them unless KNUTH_DEBUG is defined.
+#pragma push_macro("DEBUG")
+#ifndef KNUTH_DEBUG
+#undef DEBUG
+#define DEBUG(X) do {} while (false)
+#endif
+
   DEBUG(dbgs() << "KnuthDiv: m=" << m << " n=" << n << '\n');
   DEBUG(dbgs() << "KnuthDiv: original:");
   DEBUG(for (int i = m+n; i >=0; i--) dbgs() << " " << u[i]);
@@ -1391,6 +1400,8 @@ static void KnuthDiv(uint32_t *u, uint32_t *v, uint32_t *q, uint32_t* r,
     DEBUG(dbgs() << '\n');
   }
   DEBUG(dbgs() << '\n');
+
+#pragma pop_macro("DEBUG")
 }
 
 void APInt::divide(const WordType *LHS, unsigned lhsWords, const WordType *RHS,

@@ -23,7 +23,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
-#include "llvm/CodeGen/CommandFlags.h"
+#include "llvm/CodeGen/CommandFlags.def"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfo.h"
@@ -202,6 +202,11 @@ QuietA("quiet", cl::desc("Alias for -q"), cl::aliasopt(Quiet));
 
 static cl::opt<bool>
 AnalyzeOnly("analyze", cl::desc("Only perform analysis, no optimization"));
+
+static cl::opt<bool> EnableDebugify(
+    "enable-debugify",
+    cl::desc(
+        "Start the pipeline with debugify and end it with check-debugify"));
 
 static cl::opt<bool>
 PrintBreakpoints("print-breakpoints-for-testing",
@@ -387,10 +392,12 @@ int main(int argc, char **argv) {
   initializeAnalysis(Registry);
   initializeTransformUtils(Registry);
   initializeInstCombine(Registry);
+  initializeAggressiveInstCombinerLegacyPassPass(Registry);
   initializeInstrumentation(Registry);
   initializeTarget(Registry);
   // For codegen passes, only passes that do IR to IR transformation are
   // supported.
+  initializeExpandMemCmpPassPass(Registry);
   initializeScalarizeMaskedMemIntrinPass(Registry);
   initializeCodeGenPreparePass(Registry);
   initializeAtomicExpandPass(Registry);
@@ -401,8 +408,10 @@ int main(int argc, char **argv) {
   initializeSjLjEHPreparePass(Registry);
   initializePreISelIntrinsicLoweringLegacyPassPass(Registry);
   initializeGlobalMergePass(Registry);
+  initializeIndirectBrExpandPassPass(Registry);
   initializeInterleavedAccessPass(Registry);
-  initializeCountingFunctionInserterPass(Registry);
+  initializeEntryExitInstrumenterPass(Registry);
+  initializePostInlineEntryExitInstrumenterPass(Registry);
   initializeUnreachableBlockElimLegacyPassPass(Registry);
   initializeExpandReductionsPass(Registry);
   initializeWriteBitcodePassPass(Registry);
@@ -446,7 +455,7 @@ int main(int argc, char **argv) {
 
   // Load the input module...
   std::unique_ptr<Module> M =
-      parseIRFile(InputFilename, Err, Context, !NoVerify);
+      parseIRFile(InputFilename, Err, Context, !NoVerify, ClDataLayout);
 
   if (!M) {
     Err.print(argv[0], errs());
@@ -457,6 +466,10 @@ int main(int argc, char **argv) {
   if (StripDebug)
     StripDebugInfo(*M);
 
+  // If we are supposed to override the target triple or data layout, do so now.
+  if (!TargetTriple.empty())
+    M->setTargetTriple(Triple::normalize(TargetTriple));
+
   // Immediately run the verifier to catch any problems before starting up the
   // pass pipelines.  Otherwise we can crash on broken code during
   // doInitialization().
@@ -465,12 +478,6 @@ int main(int argc, char **argv) {
            << ": error: input module is broken!\n";
     return 1;
   }
-
-  // If we are supposed to override the target triple or data layout, do so now.
-  if (!TargetTriple.empty())
-    M->setTargetTriple(Triple::normalize(TargetTriple));
-  if (!ClDataLayout.empty())
-    M->setDataLayout(ClDataLayout);
 
   // Figure out what stream we are supposed to write to...
   std::unique_ptr<ToolOutputFile> Out;
@@ -545,7 +552,7 @@ int main(int argc, char **argv) {
                            OptRemarkFile.get(), PassPipeline, OK, VK,
                            PreserveAssemblyUseListOrder,
                            PreserveBitcodeUseListOrder, EmitSummaryIndex,
-                           EmitModuleHash)
+                           EmitModuleHash, EnableDebugify)
                ? 0
                : 1;
   }
@@ -566,6 +573,9 @@ int main(int argc, char **argv) {
   // Add internal analysis passes from the target machine.
   Passes.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis()
                                                      : TargetIRAnalysis()));
+
+  if (EnableDebugify)
+    Passes.add(createDebugifyPass());
 
   std::unique_ptr<legacy::FunctionPassManager> FPasses;
   if (OptLevelO0 || OptLevelO1 || OptLevelO2 || OptLevelOs || OptLevelOz ||
@@ -712,6 +722,9 @@ int main(int argc, char **argv) {
   if (!NoVerify && !VerifyEach)
     Passes.add(createVerifierPass());
 
+  if (EnableDebugify)
+    Passes.add(createCheckDebugifyPass());
+
   // In run twice mode, we want to make sure the output is bit-by-bit
   // equivalent if we run the pass manager again, so setup two buffers and
   // a stream to write to them. Note that llc does something similar and it
@@ -749,10 +762,10 @@ int main(int argc, char **argv) {
   // If requested, run all passes again with the same pass manager to catch
   // bugs caused by persistent state in the passes
   if (RunTwice) {
-      std::unique_ptr<Module> M2(CloneModule(M.get()));
-      Passes.run(*M2);
-      CompileTwiceBuffer = Buffer;
-      Buffer.clear();
+    std::unique_ptr<Module> M2(CloneModule(*M));
+    Passes.run(*M2);
+    CompileTwiceBuffer = Buffer;
+    Buffer.clear();
   }
 
   // Now that we have all of the passes ready, run them.

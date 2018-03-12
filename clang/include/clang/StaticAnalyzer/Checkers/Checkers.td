@@ -86,7 +86,7 @@ def LLVM : Package<"llvm">;
 
 // The APIModeling package is for checkers that model APIs and don't perform
 // any diagnostics. These checkers are always turned on; this package is
-// intended for API modeling that is not controlled by the the target triple.
+// intended for API modeling that is not controlled by the target triple.
 def APIModeling : Package<"apiModeling">, Hidden;
 def GoogleAPIModeling : Package<"google">, InPackage<APIModeling>;
 
@@ -187,6 +187,10 @@ def TestAfterDivZeroChecker : Checker<"TestAfterDivZero">,
 def DynamicTypeChecker : Checker<"DynamicTypeChecker">,
   HelpText<"Check for cases where the dynamic and the static type of an object are unrelated.">,
   DescFile<"DynamicTypeChecker.cpp">;
+
+def StackAddrAsyncEscapeChecker : Checker<"StackAddressAsyncEscape">,
+  HelpText<"Check that addresses to stack memory do not escape the function">,
+  DescFile<"StackAddrEscapeChecker.cpp">;
 
 } // end "alpha.core"
 
@@ -410,6 +414,13 @@ def MallocOverflowSecurityChecker : Checker<"MallocOverflow">,
   HelpText<"Check for overflows in the arguments to malloc()">,
   DescFile<"MallocOverflowSecurityChecker.cpp">;
 
+// Operating systems specific PROT_READ/PROT_WRITE values is not implemented,
+// the defaults are correct for several common operating systems though, 
+// but may need to be overridden via the related analyzer-config flags.
+def MmapWriteExecChecker : Checker<"MmapWriteExec">,
+  HelpText<"Warn on mmap() calls that are both writable and executable">,
+  DescFile<"MmapWriteExecChecker.cpp">;
+
 } // end "alpha.security"
 
 //===----------------------------------------------------------------------===//
@@ -598,6 +609,13 @@ def ObjCSuperDeallocChecker : Checker<"SuperDealloc">,
   DescFile<"ObjCSuperDeallocChecker.cpp">;
 
 } // end "osx.cocoa"
+
+let ParentPackage = OSXAlpha in {
+
+def GCDAsyncSemaphoreChecker : Checker<"GCDAsyncSemaphore">,
+  HelpText<"Checker for performance anti-pattern when using semaphors from async API">,
+  DescFile<"GCDAsyncSemaphoreChecker.cpp">;
+} // end "alpha.osx"
 
 let ParentPackage = CocoaAlpha in {
 

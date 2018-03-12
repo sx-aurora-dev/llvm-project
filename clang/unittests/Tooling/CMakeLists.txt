@@ -25,6 +25,7 @@ add_clang_unittest(ToolingTests
   RecursiveASTVisitorTestCallVisitor.cpp
   RecursiveASTVisitorTestDeclVisitor.cpp
   RecursiveASTVisitorTestExprVisitor.cpp
+  RecursiveASTVisitorTestPostOrderVisitor.cpp
   RecursiveASTVisitorTestTypeLocVisitor.cpp
   RefactoringActionRulesTest.cpp
   RefactoringCallbacksTest.cpp
@@ -35,6 +36,7 @@ add_clang_unittest(ToolingTests
   )
 
 target_link_libraries(ToolingTests
+  PRIVATE
   clangAST
   clangASTMatchers
   clangBasic

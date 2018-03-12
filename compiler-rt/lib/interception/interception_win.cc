@@ -125,9 +125,9 @@
 //                                      addr2:  .bytes <body>
 //===----------------------------------------------------------------------===//
 
-#ifdef _WIN32
-
 #include "interception.h"
+
+#if SANITIZER_WINDOWS
 #include "sanitizer_common/sanitizer_platform.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -835,6 +835,7 @@ bool OverrideFunction(
 static void **InterestingDLLsAvailable() {
   static const char *InterestingDLLs[] = {
       "kernel32.dll",
+      "msvcr100.dll",      // VS2010
       "msvcr110.dll",      // VS2012
       "msvcr120.dll",      // VS2013
       "vcruntime140.dll",  // VS2015
@@ -1012,4 +1013,4 @@ bool OverrideImportedFunction(const char *module_to_patch,
 
 }  // namespace __interception
 
-#endif  // _WIN32
+#endif  // SANITIZER_MAC

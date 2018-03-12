@@ -30,7 +30,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/LexicalScopes.h"
 #include "llvm/CodeGen/LiveInterval.h"
-#include "llvm/CodeGen/LiveIntervalAnalysis.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -39,6 +39,10 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SlotIndexes.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DebugLoc.h"
@@ -51,10 +55,6 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetOpcodes.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <iterator>
@@ -242,8 +242,11 @@ public:
     // We are storing a MachineOperand outside a MachineInstr.
     locations.back().clearParent();
     // Don't store def operands.
-    if (locations.back().isReg())
+    if (locations.back().isReg()) {
+      if (locations.back().isDef())
+        locations.back().setIsDead(false);
       locations.back().setIsUse();
+    }
     return locations.size() - 1;
   }
 
@@ -511,6 +514,39 @@ bool LDVImpl::handleDebugValue(MachineInstr &MI, SlotIndex Idx) {
     return false;
   }
 
+  // Detect invalid DBG_VALUE instructions, with a debug-use of a virtual
+  // register that hasn't been defined yet. If we do not remove those here, then
+  // the re-insertion of the DBG_VALUE instruction after register allocation
+  // will be incorrect.
+  // TODO: If earlier passes are corrected to generate sane debug information
+  // (and if the machine verifier is improved to catch this), then these checks
+  // could be removed or replaced by asserts.
+  bool Discard = false;
+  if (MI.getOperand(0).isReg() &&
+      TargetRegisterInfo::isVirtualRegister(MI.getOperand(0).getReg())) {
+    const unsigned Reg = MI.getOperand(0).getReg();
+    if (!LIS->hasInterval(Reg)) {
+      // The DBG_VALUE is described by a virtual register that does not have a
+      // live interval. Discard the DBG_VALUE.
+      Discard = true;
+      DEBUG(dbgs() << "Discarding debug info (no LIS interval): "
+            << Idx << " " << MI);
+    } else {
+      // The DBG_VALUE is only valid if either Reg is live out from Idx, or Reg
+      // is defined dead at Idx (where Idx is the slot index for the instruction
+      // preceeding the DBG_VALUE).
+      const LiveInterval &LI = LIS->getInterval(Reg);
+      LiveQueryResult LRQ = LI.Query(Idx);
+      if (!LRQ.valueOutOrDead()) {
+        // We have found a DBG_VALUE with the value in a virtual register that
+        // is not live. Discard the DBG_VALUE.
+        Discard = true;
+        DEBUG(dbgs() << "Discarding debug info (reg not live): "
+              << Idx << " " << MI);
+      }
+    }
+  }
+
   // Get or create the UserValue for (variable,offset) here.
   bool IsIndirect = MI.getOperand(1).isImm();
   if (IsIndirect)
@@ -519,7 +555,13 @@ bool LDVImpl::handleDebugValue(MachineInstr &MI, SlotIndex Idx) {
   const DIExpression *Expr = MI.getDebugExpression();
   UserValue *UV =
       getUserValue(Var, Expr, MI.getDebugLoc());
-  UV->addDef(Idx, MI.getOperand(0), IsIndirect);
+  if (!Discard)
+    UV->addDef(Idx, MI.getOperand(0), IsIndirect);
+  else {
+    MachineOperand MO = MachineOperand::CreateReg(0U, false);
+    MO.setIsDebug();
+    UV->addDef(Idx, MO, false);
+  }
   return true;
 }
 
@@ -833,7 +875,7 @@ static void removeDebugValues(MachineFunction &mf) {
 bool LiveDebugVariables::runOnMachineFunction(MachineFunction &mf) {
   if (!EnableLDV)
     return false;
-  if (!mf.getFunction()->getSubprogram()) {
+  if (!mf.getFunction().getSubprogram()) {
     removeDebugValues(mf);
     return false;
   }
@@ -1094,7 +1136,7 @@ findNextInsertLocation(MachineBasicBlock *MBB,
   unsigned Reg = LocMO.getReg();
 
   // Find the next instruction in the MBB that define the register Reg.
-  while (I != MBB->end()) {
+  while (I != MBB->end() && !I->isTerminator()) {
     if (!LIS.isNotInMIMap(*I) &&
         SlotIndex::isEarlierEqualInstr(StopIdx, LIS.getInstructionIndex(*I)))
       break;
@@ -1174,7 +1216,7 @@ void UserValue::emitDebugValues(VirtRegMap *VRM, LiveIntervals &LIS,
     MachineFunction::iterator MBB = LIS.getMBBFromIndex(Start)->getIterator();
     SlotIndex MBBEnd = LIS.getMBBEndIdx(&*MBB);
 
-    DEBUG(dbgs() << " BB#" << MBB->getNumber() << '-' << MBBEnd);
+    DEBUG(dbgs() << ' ' << printMBBReference(*MBB) << '-' << MBBEnd);
     insertDebugValue(&*MBB, Start, Stop, Loc, Spilled, LIS, TII, TRI);
     // This interval may span multiple basic blocks.
     // Insert a DBG_VALUE into each one.
@@ -1184,7 +1226,7 @@ void UserValue::emitDebugValues(VirtRegMap *VRM, LiveIntervals &LIS,
       if (++MBB == MFEnd)
         break;
       MBBEnd = LIS.getMBBEndIdx(&*MBB);
-      DEBUG(dbgs() << " BB#" << MBB->getNumber() << '-' << MBBEnd);
+      DEBUG(dbgs() << ' ' << printMBBReference(*MBB) << '-' << MBBEnd);
       insertDebugValue(&*MBB, Start, Stop, Loc, Spilled, LIS, TII, TRI);
     }
     DEBUG(dbgs() << '\n');

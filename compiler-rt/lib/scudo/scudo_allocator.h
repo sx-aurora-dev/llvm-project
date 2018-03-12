@@ -39,16 +39,15 @@ enum ChunkState : u8 {
 typedef u64 PackedHeader;
 struct UnpackedHeader {
   u64 Checksum          : 16;
-  u64 SizeOrUnusedBytes : 19;  // Size for Primary backed allocations, amount of
+  u64 ClassId           : 8;
+  u64 SizeOrUnusedBytes : 20;  // Size for Primary backed allocations, amount of
                                // unused bytes in the chunk for Secondary ones.
-  u64 FromPrimary       : 1;
   u64 State             : 2;   // available, allocated, or quarantined
   u64 AllocType         : 2;   // malloc, new, new[], or memalign
   u64 Offset            : 16;  // Offset from the beginning of the backend
                                // allocation to the beginning of the chunk
                                // itself, in multiples of MinAlignment. See
                                // comment about its maximum value and in init().
-  u64 Salt              : 8;
 };
 
 typedef atomic_uint64_t AtomicPackedHeader;
@@ -60,9 +59,17 @@ const uptr MaxAlignmentLog = 24;  // 16 MB
 const uptr MinAlignment = 1 << MinAlignmentLog;
 const uptr MaxAlignment = 1 << MaxAlignmentLog;
 
-const uptr ChunkHeaderSize = sizeof(PackedHeader);
-const uptr AlignedChunkHeaderSize =
-    (ChunkHeaderSize + MinAlignment - 1) & ~(MinAlignment - 1);
+// constexpr version of __sanitizer::RoundUp without the extraneous CHECK.
+// This way we can use it in constexpr variables and functions declarations.
+constexpr uptr RoundUpTo(uptr Size, uptr Boundary) {
+  return (Size + Boundary - 1) & ~(Boundary - 1);
+}
+
+namespace Chunk {
+  constexpr uptr getHeaderSize() {
+    return RoundUpTo(sizeof(PackedHeader), MinAlignment);
+  }
+}
 
 #if SANITIZER_CAN_USE_ALLOCATOR64
 const uptr AllocatorSpace = ~0ULL;
@@ -97,11 +104,6 @@ struct AP32 {
 };
 typedef SizeClassAllocator32<AP32> PrimaryAllocator;
 #endif  // SANITIZER_CAN_USE_ALLOCATOR64
-
-// __sanitizer::RoundUp has a CHECK that is extraneous for us. Use our own.
-INLINE uptr RoundUpTo(uptr Size, uptr Boundary) {
-  return (Size + Boundary - 1) & ~(Boundary - 1);
-}
 
 #include "scudo_allocator_secondary.h"
 #include "scudo_allocator_combined.h"

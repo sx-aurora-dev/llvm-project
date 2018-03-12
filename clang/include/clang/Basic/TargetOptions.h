@@ -54,14 +54,15 @@ public:
   /// be a list of strings starting with by '+' or '-'.
   std::vector<std::string> Features;
 
-  std::vector<std::string> Reciprocals;
-
   /// Supported OpenCL extensions and optional core features.
   OpenCLOptions SupportedOpenCLOptions;
 
   /// \brief The list of OpenCL extensions to enable or disable, as written on
   /// the command line.
   std::vector<std::string> OpenCLExtensionsAsWritten;
+
+  /// \brief If given, enables support for __int128_t and __uint128_t types.
+  bool ForceEnableInt128 = false;
 };
 
 }  // end namespace clang

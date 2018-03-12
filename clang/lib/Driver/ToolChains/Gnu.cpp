@@ -8,13 +8,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "Gnu.h"
-#include "Linux.h"
 #include "Arch/ARM.h"
 #include "Arch/Mips.h"
 #include "Arch/PPC.h"
+#include "Arch/RISCV.h"
 #include "Arch/Sparc.h"
 #include "Arch/SystemZ.h"
 #include "CommonArgs.h"
+#include "Linux.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Config/config.h" // for GCC_INSTALL_PREFIX
 #include "clang/Driver/Compilation.h"
@@ -40,6 +41,22 @@ static bool forwardToGCC(const Option &O) {
   // InputInfoList.
   return O.getKind() != Option::InputClass &&
          !O.hasFlag(options::DriverOption) && !O.hasFlag(options::LinkerInput);
+}
+
+// Switch CPU names not recognized by GNU assembler to a close CPU that it does
+// recognize, instead of a lower march from being picked in the absence of a cpu
+// flag.
+static void normalizeCPUNamesForAssembler(const ArgList &Args,
+                                          ArgStringList &CmdArgs) {
+  if (Arg *A = Args.getLastArg(options::OPT_mcpu_EQ)) {
+    StringRef CPUArg(A->getValue());
+    if (CPUArg.equals_lower("krait"))
+      CmdArgs.push_back("-mcpu=cortex-a15");
+    else if(CPUArg.equals_lower("kryo"))
+      CmdArgs.push_back("-mcpu=cortex-a57");
+    else
+      Args.AddLastArg(CmdArgs, options::OPT_mcpu_EQ);
+  }
 }
 
 void tools::gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
@@ -225,10 +242,13 @@ static void linkXRayRuntimeDeps(const ToolChain &TC, const ArgList &Args,
                                 ArgStringList &CmdArgs) {
   CmdArgs.push_back("--no-as-needed");
   CmdArgs.push_back("-lpthread");
-  CmdArgs.push_back("-lrt");
+  if (TC.getTriple().getOS() != llvm::Triple::OpenBSD)
+    CmdArgs.push_back("-lrt");
   CmdArgs.push_back("-lm");
 
-  if (TC.getTriple().getOS() != llvm::Triple::FreeBSD)
+  if (TC.getTriple().getOS() != llvm::Triple::FreeBSD &&
+      TC.getTriple().getOS() != llvm::Triple::NetBSD &&
+      TC.getTriple().getOS() != llvm::Triple::OpenBSD)
     CmdArgs.push_back("-ldl");
 }
 
@@ -254,6 +274,10 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
     return "elf64ppc";
   case llvm::Triple::ppc64le:
     return "elf64lppc";
+  case llvm::Triple::riscv32:
+    return "elf32lriscv";
+  case llvm::Triple::riscv64:
+    return "elf64lriscv";
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:
     return "elf32_sparc";
@@ -283,7 +307,8 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
 }
 
 static bool getPIE(const ArgList &Args, const toolchains::Linux &ToolChain) {
-  if (Args.hasArg(options::OPT_shared) || Args.hasArg(options::OPT_static))
+  if (Args.hasArg(options::OPT_shared) || Args.hasArg(options::OPT_static) ||
+      Args.hasArg(options::OPT_r))
     return false;
 
   Arg *A = Args.getLastArg(options::OPT_pie, options::OPT_no_pie,
@@ -356,9 +381,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   for (const auto &Opt : ToolChain.ExtraOpts)
     CmdArgs.push_back(Opt.c_str());
 
-  if (!Args.hasArg(options::OPT_static)) {
-    CmdArgs.push_back("--eh-frame-hdr");
-  }
+  CmdArgs.push_back("--eh-frame-hdr");
 
   if (const char *LDMOption = getLDMOption(ToolChain.getTriple(), Args)) {
     CmdArgs.push_back("-m");
@@ -607,6 +630,18 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
       ppc::getPPCAsmModeForCPU(getCPUName(Args, getToolChain().getTriple())));
     break;
   }
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64: {
+    StringRef ABIName = riscv::getRISCVABI(Args, getToolChain().getTriple());
+    CmdArgs.push_back("-mabi");
+    CmdArgs.push_back(ABIName.data());
+    if (const Arg *A = Args.getLastArg(options::OPT_march_EQ)) {
+      StringRef MArch = A->getValue();
+      CmdArgs.push_back("-march");
+      CmdArgs.push_back(MArch.data());
+    }
+    break;
+  }
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel: {
     CmdArgs.push_back("-32");
@@ -652,23 +687,16 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
     }
 
     Args.AddLastArg(CmdArgs, options::OPT_march_EQ);
+    normalizeCPUNamesForAssembler(Args, CmdArgs);
 
-    // FIXME: remove krait check when GNU tools support krait cpu
-    // for now replace it with -mcpu=cortex-a15 to avoid a lower
-    // march from being picked in the absence of a cpu flag.
-    Arg *A;
-    if ((A = Args.getLastArg(options::OPT_mcpu_EQ)) &&
-        StringRef(A->getValue()).equals_lower("krait"))
-      CmdArgs.push_back("-mcpu=cortex-a15");
-    else
-      Args.AddLastArg(CmdArgs, options::OPT_mcpu_EQ);
     Args.AddLastArg(CmdArgs, options::OPT_mfpu_EQ);
     break;
   }
   case llvm::Triple::aarch64:
   case llvm::Triple::aarch64_be: {
     Args.AddLastArg(CmdArgs, options::OPT_march_EQ);
-    Args.AddLastArg(CmdArgs, options::OPT_mcpu_EQ);
+    normalizeCPUNamesForAssembler(Args, CmdArgs);
+
     break;
   }
   case llvm::Triple::mips:
@@ -844,6 +872,10 @@ static bool isMips16(const ArgList &Args) {
 static bool isMicroMips(const ArgList &Args) {
   Arg *A = Args.getLastArg(options::OPT_mmicromips, options::OPT_mno_micromips);
   return A && A->getOption().matches(options::OPT_mmicromips);
+}
+
+static bool isRISCV(llvm::Triple::ArchType Arch) {
+  return Arch == llvm::Triple::riscv32 || Arch == llvm::Triple::riscv64;
 }
 
 static Multilib makeMultilib(StringRef commonSuffix) {
@@ -1391,11 +1423,48 @@ static void findAndroidArmMultilibs(const Driver &D,
     Result.Multilibs = AndroidArmMultilibs;
 }
 
+static void findRISCVMultilibs(const Driver &D,
+                               const llvm::Triple &TargetTriple, StringRef Path,
+                               const ArgList &Args, DetectedMultilibs &Result) {
+
+  FilterNonExistent NonExistent(Path, "/crtbegin.o", D.getVFS());
+  Multilib Ilp32 = makeMultilib("lib32/ilp32").flag("+m32").flag("+mabi=ilp32");
+  Multilib Ilp32f =
+      makeMultilib("lib32/ilp32f").flag("+m32").flag("+mabi=ilp32f");
+  Multilib Ilp32d =
+      makeMultilib("lib32/ilp32d").flag("+m32").flag("+mabi=ilp32d");
+  Multilib Lp64 = makeMultilib("lib64/lp64").flag("+m64").flag("+mabi=lp64");
+  Multilib Lp64f = makeMultilib("lib64/lp64f").flag("+m64").flag("+mabi=lp64f");
+  Multilib Lp64d = makeMultilib("lib64/lp64d").flag("+m64").flag("+mabi=lp64d");
+  MultilibSet RISCVMultilibs =
+      MultilibSet()
+          .Either({Ilp32, Ilp32f, Ilp32d, Lp64, Lp64f, Lp64d})
+          .FilterOut(NonExistent);
+
+  Multilib::flags_list Flags;
+  bool IsRV64 = TargetTriple.getArch() == llvm::Triple::riscv64;
+  StringRef ABIName = tools::riscv::getRISCVABI(Args, TargetTriple);
+
+  addMultilibFlag(!IsRV64, "m32", Flags);
+  addMultilibFlag(IsRV64, "m64", Flags);
+  addMultilibFlag(ABIName == "ilp32", "mabi=ilp32", Flags);
+  addMultilibFlag(ABIName == "ilp32f", "mabi=ilp32f", Flags);
+  addMultilibFlag(ABIName == "ilp32d", "mabi=ilp32d", Flags);
+  addMultilibFlag(ABIName == "lp64", "mabi=lp64", Flags);
+  addMultilibFlag(ABIName == "lp64f", "mabi=lp64f", Flags);
+  addMultilibFlag(ABIName == "lp64d", "mabi=lp64d", Flags);
+
+  if (RISCVMultilibs.select(Flags, Result.SelectedMultilib))
+    Result.Multilibs = RISCVMultilibs;
+}
+
 static bool findBiarchMultilibs(const Driver &D,
                                 const llvm::Triple &TargetTriple,
                                 StringRef Path, const ArgList &Args,
                                 bool NeedsBiarchSuffix,
                                 DetectedMultilibs &Result) {
+  Multilib Default;
+
   // Some versions of SUSE and Fedora on ppc64 put 32-bit libs
   // in what would normally be GCCInstallPath and put the 64-bit
   // libs in a subdirectory named 64. The simple logic we follow is that
@@ -1403,10 +1472,26 @@ static bool findBiarchMultilibs(const Driver &D,
   // we use that. If not, and if not a biarch triple alias, we look for
   // crtbegin.o without the subdirectory.
 
-  Multilib Default;
+  StringRef Suff64 = "/64";
+  // Solaris uses platform-specific suffixes instead of /64.
+  if (TargetTriple.getOS() == llvm::Triple::Solaris) {
+    switch (TargetTriple.getArch()) {
+    case llvm::Triple::x86:
+    case llvm::Triple::x86_64:
+      Suff64 = "/amd64";
+      break;
+    case llvm::Triple::sparc:
+    case llvm::Triple::sparcv9:
+      Suff64 = "/sparcv9";
+      break;
+    default:
+      break;
+    }
+  }
+
   Multilib Alt64 = Multilib()
-                       .gccSuffix("/64")
-                       .includeSuffix("/64")
+                       .gccSuffix(Suff64)
+                       .includeSuffix(Suff64)
                        .flag("-m32")
                        .flag("+m64")
                        .flag("-mx32");
@@ -1603,21 +1688,17 @@ void Generic_GCC::GCCInstallationDetector::init(
     // If we have a SysRoot, try that first.
     if (!D.SysRoot.empty()) {
       Prefixes.push_back(D.SysRoot);
-      Prefixes.push_back(D.SysRoot + "/usr");
+      AddDefaultGCCPrefixes(TargetTriple, Prefixes, D.SysRoot);
     }
 
     // Then look for gcc installed alongside clang.
     Prefixes.push_back(D.InstalledDir + "/..");
 
-    // Then look for distribution supplied gcc installations.
+    // Next, look for prefix(es) that correspond to distribution-supplied gcc
+    // installations.
     if (D.SysRoot.empty()) {
-      // Look for RHEL devtoolsets.
-      Prefixes.push_back("/opt/rh/devtoolset-6/root/usr");
-      Prefixes.push_back("/opt/rh/devtoolset-4/root/usr");
-      Prefixes.push_back("/opt/rh/devtoolset-3/root/usr");
-      Prefixes.push_back("/opt/rh/devtoolset-2/root/usr");
-      // And finally in /usr.
-      Prefixes.push_back("/usr");
+      // Typically /usr.
+      AddDefaultGCCPrefixes(TargetTriple, Prefixes, D.SysRoot);
     }
   }
 
@@ -1686,6 +1767,48 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
     return true;
   }
   return false;
+}
+
+void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
+    const llvm::Triple &TargetTriple, SmallVectorImpl<std::string> &Prefixes,
+    StringRef SysRoot) {
+  if (TargetTriple.getOS() == llvm::Triple::Solaris) {
+    // Solaris is a special case.
+    // The GCC installation is under
+    //   /usr/gcc/<major>.<minor>/lib/gcc/<triple>/<major>.<minor>.<patch>/
+    // so we need to find those /usr/gcc/*/lib/gcc libdirs and go with
+    // /usr/gcc/<version> as a prefix.
+
+    std::string PrefixDir = SysRoot.str() + "/usr/gcc";
+    std::error_code EC;
+    for (vfs::directory_iterator LI = D.getVFS().dir_begin(PrefixDir, EC), LE;
+         !EC && LI != LE; LI = LI.increment(EC)) {
+      StringRef VersionText = llvm::sys::path::filename(LI->getName());
+      GCCVersion CandidateVersion = GCCVersion::Parse(VersionText);
+
+      // Filter out obviously bad entries.
+      if (CandidateVersion.Major == -1 || CandidateVersion.isOlderThan(4, 1, 1))
+        continue;
+
+      std::string CandidatePrefix = PrefixDir + "/" + VersionText.str();
+      std::string CandidateLibPath = CandidatePrefix + "/lib/gcc";
+      if (!D.getVFS().exists(CandidateLibPath))
+        continue;
+
+      Prefixes.push_back(CandidatePrefix);
+    }
+    return;
+  }
+
+  // Non-Solaris is much simpler - most systems just go with "/usr".
+  if (SysRoot.empty() && TargetTriple.getOS() == llvm::Triple::Linux) {
+    // Yet, still look for RHEL devtoolsets.
+    Prefixes.push_back("/opt/rh/devtoolset-6/root/usr");
+    Prefixes.push_back("/opt/rh/devtoolset-4/root/usr");
+    Prefixes.push_back("/opt/rh/devtoolset-3/root/usr");
+    Prefixes.push_back("/opt/rh/devtoolset-2/root/usr");
+  }
+  Prefixes.push_back(SysRoot.str() + "/usr");
 }
 
 /*static*/ void Generic_GCC::GCCInstallationDetector::CollectLibDirsAndTriples(
@@ -1773,6 +1896,10 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
       "powerpc64le-linux-gnu", "powerpc64le-unknown-linux-gnu",
       "powerpc64le-suse-linux", "ppc64le-redhat-linux"};
 
+  static const char *const RISCV32LibDirs[] = {"/lib", "/lib32"};
+  static const char *const RISCVTriples[] = {"riscv32-unknown-linux-gnu",
+                                             "riscv64-unknown-linux-gnu"};
+
   static const char *const SPARCv8LibDirs[] = {"/lib32", "/lib"};
   static const char *const SPARCv8Triples[] = {"sparc-linux-gnu",
                                                "sparcv8-linux-gnu"};
@@ -1785,17 +1912,49 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
       "s390x-linux-gnu", "s390x-unknown-linux-gnu", "s390x-ibm-linux-gnu",
       "s390x-suse-linux", "s390x-redhat-linux"};
 
-  // Solaris.
-  static const char *const SolarisSPARCLibDirs[] = {"/gcc"};
-  static const char *const SolarisSPARCTriples[] = {"sparc-sun-solaris2.11",
-                                                    "i386-pc-solaris2.11"};
 
   using std::begin;
   using std::end;
 
   if (TargetTriple.getOS() == llvm::Triple::Solaris) {
-    LibDirs.append(begin(SolarisSPARCLibDirs), end(SolarisSPARCLibDirs));
-    TripleAliases.append(begin(SolarisSPARCTriples), end(SolarisSPARCTriples));
+    static const char *const SolarisLibDirs[] = {"/lib"};
+    static const char *const SolarisSparcV8Triples[] = {
+        "sparc-sun-solaris2.11", "sparc-sun-solaris2.12"};
+    static const char *const SolarisSparcV9Triples[] = {
+        "sparcv9-sun-solaris2.11", "sparcv9-sun-solaris2.12"};
+    static const char *const SolarisX86Triples[] = {"i386-pc-solaris2.11",
+                                                    "i386-pc-solaris2.12"};
+    static const char *const SolarisX86_64Triples[] = {"x86_64-pc-solaris2.11",
+                                                       "x86_64-pc-solaris2.12"};
+    LibDirs.append(begin(SolarisLibDirs), end(SolarisLibDirs));
+    BiarchLibDirs.append(begin(SolarisLibDirs), end(SolarisLibDirs));
+    switch (TargetTriple.getArch()) {
+    case llvm::Triple::x86:
+      TripleAliases.append(begin(SolarisX86Triples), end(SolarisX86Triples));
+      BiarchTripleAliases.append(begin(SolarisX86_64Triples),
+                                 end(SolarisX86_64Triples));
+      break;
+    case llvm::Triple::x86_64:
+      TripleAliases.append(begin(SolarisX86_64Triples),
+                           end(SolarisX86_64Triples));
+      BiarchTripleAliases.append(begin(SolarisX86Triples),
+                                 end(SolarisX86Triples));
+      break;
+    case llvm::Triple::sparc:
+      TripleAliases.append(begin(SolarisSparcV8Triples),
+                           end(SolarisSparcV8Triples));
+      BiarchTripleAliases.append(begin(SolarisSparcV9Triples),
+                                 end(SolarisSparcV9Triples));
+      break;
+    case llvm::Triple::sparcv9:
+      TripleAliases.append(begin(SolarisSparcV9Triples),
+                           end(SolarisSparcV9Triples));
+      BiarchTripleAliases.append(begin(SolarisSparcV8Triples),
+                                 end(SolarisSparcV8Triples));
+      break;
+    default:
+      break;
+    }
     return;
   }
 
@@ -1918,6 +2077,12 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
     LibDirs.append(begin(PPC64LELibDirs), end(PPC64LELibDirs));
     TripleAliases.append(begin(PPC64LETriples), end(PPC64LETriples));
     break;
+  case llvm::Triple::riscv32:
+    LibDirs.append(begin(RISCV32LibDirs), end(RISCV32LibDirs));
+    BiarchLibDirs.append(begin(RISCV32LibDirs), end(RISCV32LibDirs));
+    TripleAliases.append(begin(RISCVTriples), end(RISCVTriples));
+    BiarchTripleAliases.append(begin(RISCVTriples), end(RISCVTriples));
+    break;
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:
     LibDirs.append(begin(SPARCv8LibDirs), end(SPARCv8LibDirs));
@@ -1950,56 +2115,6 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
     BiarchTripleAliases.push_back(BiarchTriple.str());
 }
 
-void Generic_GCC::GCCInstallationDetector::scanLibDirForGCCTripleSolaris(
-    const llvm::Triple &TargetArch, const llvm::opt::ArgList &Args,
-    const std::string &LibDir, StringRef CandidateTriple,
-    bool NeedsBiarchSuffix) {
-  // Solaris is a special case. The GCC installation is under
-  // /usr/gcc/<major>.<minor>/lib/gcc/<triple>/<major>.<minor>.<patch>/, so we
-  // need to iterate twice.
-  std::error_code EC;
-  for (vfs::directory_iterator LI = D.getVFS().dir_begin(LibDir, EC), LE;
-       !EC && LI != LE; LI = LI.increment(EC)) {
-    StringRef VersionText = llvm::sys::path::filename(LI->getName());
-    GCCVersion CandidateVersion = GCCVersion::Parse(VersionText);
-
-    if (CandidateVersion.Major != -1) // Filter obviously bad entries.
-      if (!CandidateGCCInstallPaths.insert(LI->getName()).second)
-        continue; // Saw this path before; no need to look at it again.
-    if (CandidateVersion.isOlderThan(4, 1, 1))
-      continue;
-    if (CandidateVersion <= Version)
-      continue;
-
-    GCCInstallPath =
-        LibDir + "/" + VersionText.str() + "/lib/gcc/" + CandidateTriple.str();
-    if (!D.getVFS().exists(GCCInstallPath))
-      continue;
-
-    // If we make it here there has to be at least one GCC version, let's just
-    // use the latest one.
-    std::error_code EEC;
-    for (vfs::directory_iterator
-             LLI = D.getVFS().dir_begin(GCCInstallPath, EEC),
-             LLE;
-         !EEC && LLI != LLE; LLI = LLI.increment(EEC)) {
-
-      StringRef SubVersionText = llvm::sys::path::filename(LLI->getName());
-      GCCVersion CandidateSubVersion = GCCVersion::Parse(SubVersionText);
-
-      if (CandidateSubVersion > Version)
-        Version = CandidateSubVersion;
-    }
-
-    GCCTriple.setTriple(CandidateTriple);
-
-    GCCInstallPath += "/" + Version.Text;
-    GCCParentLibPath = GCCInstallPath + "/../../../../";
-
-    IsValid = true;
-  }
-}
-
 bool Generic_GCC::GCCInstallationDetector::ScanGCCForMultilibs(
     const llvm::Triple &TargetTriple, const ArgList &Args,
     StringRef Path, bool NeedsBiarchSuffix) {
@@ -2015,6 +2130,8 @@ bool Generic_GCC::GCCInstallationDetector::ScanGCCForMultilibs(
   } else if (tools::isMipsArch(TargetArch)) {
     if (!findMIPSMultilibs(D, TargetTriple, Path, Args, Detected))
       return false;
+  } else if (isRISCV(TargetArch)) {
+    findRISCVMultilibs(D, TargetTriple, Path, Args, Detected);
   } else if (!findBiarchMultilibs(D, TargetTriple, Path, Args,
                                   NeedsBiarchSuffix, Detected)) {
     return false;
@@ -2031,12 +2148,6 @@ void Generic_GCC::GCCInstallationDetector::ScanLibDirForGCCTriple(
     const llvm::Triple &TargetTriple, const ArgList &Args,
     const std::string &LibDir, StringRef CandidateTriple,
     bool NeedsBiarchSuffix) {
-  if (TargetTriple.getOS() == llvm::Triple::Solaris) {
-    scanLibDirForGCCTripleSolaris(TargetTriple, Args, LibDir, CandidateTriple,
-                                  NeedsBiarchSuffix);
-    return;
-  }
-
   llvm::Triple::ArchType TargetArch = TargetTriple.getArch();
   // Locations relative to the system lib directory where GCC's triple-specific
   // directories might reside.
@@ -2049,31 +2160,33 @@ void Generic_GCC::GCCInstallationDetector::ScanLibDirForGCCTriple(
     // Whether this library suffix is relevant for the triple.
     bool Active;
   } Suffixes[] = {
-    // This is the normal place.
-    {"gcc/" + CandidateTriple.str(), "../..", true},
+      // This is the normal place.
+      {"gcc/" + CandidateTriple.str(), "../..", true},
 
-    // Debian puts cross-compilers in gcc-cross.
-    {"gcc-cross/" + CandidateTriple.str(), "../..", true},
+      // Debian puts cross-compilers in gcc-cross.
+      {"gcc-cross/" + CandidateTriple.str(), "../..",
+       TargetTriple.getOS() != llvm::Triple::Solaris},
 
-    // The Freescale PPC SDK has the gcc libraries in
-    // <sysroot>/usr/lib/<triple>/x.y.z so have a look there as well. Only do
-    // this on Freescale triples, though, since some systems put a *lot* of
-    // files in that location, not just GCC installation data.
-    {CandidateTriple.str(), "..",
-      TargetTriple.getVendor() == llvm::Triple::Freescale},
+      // The Freescale PPC SDK has the gcc libraries in
+      // <sysroot>/usr/lib/<triple>/x.y.z so have a look there as well. Only do
+      // this on Freescale triples, though, since some systems put a *lot* of
+      // files in that location, not just GCC installation data.
+      {CandidateTriple.str(), "..",
+       TargetTriple.getVendor() == llvm::Triple::Freescale},
 
-    // Natively multiarch systems sometimes put the GCC triple-specific
-    // directory within their multiarch lib directory, resulting in the
-    // triple appearing twice.
-    {CandidateTriple.str() + "/gcc/" + CandidateTriple.str(), "../../..", true},
+      // Natively multiarch systems sometimes put the GCC triple-specific
+      // directory within their multiarch lib directory, resulting in the
+      // triple appearing twice.
+      {CandidateTriple.str() + "/gcc/" + CandidateTriple.str(), "../../..",
+       TargetTriple.getOS() != llvm::Triple::Solaris},
 
-    // Deal with cases (on Ubuntu) where the system architecture could be i386
-    // but the GCC target architecture could be (say) i686.
-    // FIXME: It may be worthwhile to generalize this and look for a second
-    // triple.
-    {"i386-linux-gnu/gcc/" + CandidateTriple.str(), "../../..",
-      TargetArch == llvm::Triple::x86}
-  };
+      // Deal with cases (on Ubuntu) where the system architecture could be i386
+      // but the GCC target architecture could be (say) i686.
+      // FIXME: It may be worthwhile to generalize this and look for a second
+      // triple.
+      {"i386-linux-gnu/gcc/" + CandidateTriple.str(), "../../..",
+       (TargetArch == llvm::Triple::x86 &&
+        TargetTriple.getOS() != llvm::Triple::Solaris)}};
 
   for (auto &Suffix : Suffixes) {
     if (!Suffix.Active)
@@ -2230,6 +2343,8 @@ bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   case llvm::Triple::ppc:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
   case llvm::Triple::systemz:
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:

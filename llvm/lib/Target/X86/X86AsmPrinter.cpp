@@ -23,12 +23,10 @@
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
 #include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
-#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -65,7 +63,7 @@ bool X86AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   SetupMachineFunction(MF);
 
   if (Subtarget->isTargetCOFF()) {
-    bool Local = MF.getFunction()->hasLocalLinkage();
+    bool Local = MF.getFunction().hasLocalLinkage();
     OutStreamer->BeginCOFFSymbolDef(CurrentFnSym);
     OutStreamer->EmitCOFFSymbolStorageClass(
         Local ? COFF::IMAGE_SYM_CLASS_STATIC : COFF::IMAGE_SYM_CLASS_EXTERNAL);
@@ -372,6 +370,8 @@ static void printIntelMemReference(X86AsmPrinter &P, const MachineInstr *MI,
 static bool printAsmMRegister(X86AsmPrinter &P, const MachineOperand &MO,
                               char Mode, raw_ostream &O) {
   unsigned Reg = MO.getReg();
+  bool EmitPercent = true;
+
   switch (Mode) {
   default: return true;  // Unknown mode.
   case 'b': // Print QImode register
@@ -386,6 +386,9 @@ static bool printAsmMRegister(X86AsmPrinter &P, const MachineOperand &MO,
   case 'k': // Print SImode register
     Reg = getX86SubSuperRegister(Reg, 32);
     break;
+  case 'V':
+    EmitPercent = false;
+    LLVM_FALLTHROUGH;
   case 'q':
     // Print 64-bit register names if 64-bit integer registers are available.
     // Otherwise, print 32-bit register names.
@@ -393,7 +396,10 @@ static bool printAsmMRegister(X86AsmPrinter &P, const MachineOperand &MO,
     break;
   }
 
-  O << '%' << X86ATTInstPrinter::getRegisterName(Reg);
+  if (EmitPercent)
+    O << '%';
+
+  O << X86ATTInstPrinter::getRegisterName(Reg);
   return false;
 }
 
@@ -466,6 +472,7 @@ bool X86AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
     case 'w': // Print HImode register
     case 'k': // Print SImode register
     case 'q': // Print DImode register
+    case 'V': // Print native register without '%'
       if (MO.isReg())
         return printAsmMRegister(*this, MO, ExtraCode[0], O);
       printOperand(*this, MI, OpNo, O);
@@ -475,7 +482,7 @@ bool X86AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
       printPCRelImm(*this, MI, OpNo, O);
       return false;
 
-    case 'n':  // Negate the immediate or print a '-' before the operand.
+    case 'n': // Negate the immediate or print a '-' before the operand.
       // Note: this is a temporary solution. It should be handled target
       // independently as part of the 'MC' work.
       if (MO.isImm()) {
@@ -648,27 +655,6 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 
   if (TT.isOSBinFormatCOFF()) {
-    const TargetLoweringObjectFileCOFF &TLOFCOFF =
-        static_cast<const TargetLoweringObjectFileCOFF&>(getObjFileLowering());
-
-    std::string Flags;
-    raw_string_ostream FlagsOS(Flags);
-
-    for (const auto &Function : M)
-      TLOFCOFF.emitLinkerFlagsForGlobal(FlagsOS, &Function);
-    for (const auto &Global : M.globals())
-      TLOFCOFF.emitLinkerFlagsForGlobal(FlagsOS, &Global);
-    for (const auto &Alias : M.aliases())
-      TLOFCOFF.emitLinkerFlagsForGlobal(FlagsOS, &Alias);
-
-    FlagsOS.flush();
-
-    // Output collected flags.
-    if (!Flags.empty()) {
-      OutStreamer->SwitchSection(TLOFCOFF.getDrectveSection());
-      OutStreamer->EmitBytes(Flags);
-    }
-
     SM.serializeToStackMapSection();
   }
 

@@ -465,6 +465,7 @@ void ASTDeclWriter::VisitRecordDecl(RecordDecl *D) {
   Record.push_back(D->isAnonymousStructOrUnion());
   Record.push_back(D->hasObjectMember());
   Record.push_back(D->hasVolatileMember());
+  Record.push_back(D->canPassInRegisters());
 
   if (D->getDeclContext() == D->getLexicalDeclContext() &&
       !D->hasAttrs() &&
@@ -528,15 +529,19 @@ void ASTDeclWriter::VisitFunctionDecl(FunctionDecl *D) {
   Record.push_back(D->HasWrittenPrototype);
   Record.push_back(D->IsDeleted);
   Record.push_back(D->IsTrivial);
+  Record.push_back(D->IsTrivialForCall);
   Record.push_back(D->IsDefaulted);
   Record.push_back(D->IsExplicitlyDefaulted);
   Record.push_back(D->HasImplicitReturnZero);
   Record.push_back(D->IsConstexpr);
   Record.push_back(D->UsesSEHTry);
   Record.push_back(D->HasSkippedBody);
+  Record.push_back(D->IsMultiVersion);
   Record.push_back(D->IsLateTemplateParsed);
   Record.push_back(D->getLinkageInternal());
   Record.AddSourceLocation(D->getLocEnd());
+
+  Record.push_back(D->getODRHash());
 
   Record.push_back(D->getTemplatedKind());
   switch (D->getTemplatedKind()) {
@@ -612,7 +617,7 @@ void ASTDeclWriter::VisitFunctionDecl(FunctionDecl *D) {
 
 void ASTDeclWriter::VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D) {
   VisitFunctionDecl(D);
-  Record.push_back(D->isCopyDeductionCandidate());
+  Record.push_back(D->IsCopyDeductionCandidate);
   Code = serialization::DECL_CXX_DEDUCTION_GUIDE;
 }
 
@@ -1190,6 +1195,7 @@ void ASTDeclWriter::VisitUsingShadowDecl(UsingShadowDecl *D) {
   VisitRedeclarable(D);
   VisitNamedDecl(D);
   Record.AddDeclRef(D->getTargetDecl());
+  Record.push_back(D->getIdentifierNamespace());
   Record.AddDeclRef(D->UsingOrNextShadow);
   Record.AddDeclRef(Context.getInstantiatedFromUsingShadowDecl(D));
   Code = serialization::DECL_USING_SHADOW;
@@ -1267,10 +1273,8 @@ void ASTDeclWriter::VisitCXXMethodDecl(CXXMethodDecl *D) {
   VisitFunctionDecl(D);
   if (D->isCanonicalDecl()) {
     Record.push_back(D->size_overridden_methods());
-    for (CXXMethodDecl::method_iterator
-           I = D->begin_overridden_methods(), E = D->end_overridden_methods();
-           I != E; ++I)
-      Record.AddDeclRef(*I);
+    for (const CXXMethodDecl *MD : D->overridden_methods())
+      Record.AddDeclRef(MD);
   } else {
     // We only need to record overridden methods once for the canonical decl.
     Record.push_back(0);
@@ -1494,6 +1498,7 @@ void ASTDeclWriter::VisitVarTemplateSpecializationDecl(
   Record.AddTemplateArgumentList(&D->getTemplateArgs());
   Record.AddSourceLocation(D->getPointOfInstantiation());
   Record.push_back(D->getSpecializationKind());
+  Record.push_back(D->IsCompleteDefinition);
   Record.push_back(D->isCanonicalDecl());
 
   if (D->isCanonicalDecl()) {
@@ -1895,6 +1900,7 @@ void ASTWriter::WriteDeclAbbrevs() {
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // AnonymousStructUnion
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // hasObjectMember
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // hasVolatileMember
+  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // canPassInRegisters
   // DC
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // LexicalOffset
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // VisibleOffset
@@ -2064,15 +2070,18 @@ void ASTWriter::WriteDeclAbbrevs() {
   Abv->Add(BitCodeAbbrevOp(1));                         // HasWrittenProto
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // Deleted
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // Trivial
+  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // TrivialForCall
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // Defaulted
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // ExplicitlyDefaulted
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // ImplicitReturnZero
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // Constexpr
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // UsesSEHTry
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // SkippedBody
+  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // MultiVersion
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // LateParsed
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 3)); // Linkage
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // LocEnd
+  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32)); // ODRHash
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 3)); // TemplateKind
   // This Array slurps the rest of the record. Fortunately we want to encode
   // (nearly) all the remaining (variable number of) fields in the same way.
@@ -2258,15 +2267,24 @@ void ASTRecordWriter::AddFunctionDefinition(const FunctionDecl *FD) {
   assert(FD->doesThisDeclarationHaveABody());
   bool ModulesCodegen = false;
   if (Writer->WritingModule && !FD->isDependentContext()) {
-    // Under -fmodules-codegen, codegen is performed for all defined functions.
-    // When building a C++ Modules TS module interface unit, a strong definition
-    // in the module interface is provided by the compilation of that module
-    // interface unit, not by its users. (Inline functions are still emitted
-    // in module users.)
-    ModulesCodegen =
-        Writer->Context->getLangOpts().ModulesCodegen ||
-        (Writer->WritingModule->Kind == Module::ModuleInterfaceUnit &&
-         Writer->Context->GetGVALinkageForFunction(FD) == GVA_StrongExternal);
+    Optional<GVALinkage> Linkage;
+    if (Writer->WritingModule->Kind == Module::ModuleInterfaceUnit) {
+      // When building a C++ Modules TS module interface unit, a strong
+      // definition in the module interface is provided by the compilation of
+      // that module interface unit, not by its users. (Inline functions are
+      // still emitted in module users.)
+      Linkage = Writer->Context->GetGVALinkageForFunction(FD);
+      ModulesCodegen = *Linkage == GVA_StrongExternal;
+    }
+    if (Writer->Context->getLangOpts().ModulesCodegen) {
+      // Under -fmodules-codegen, codegen is performed for all non-internal,
+      // non-always_inline functions.
+      if (!FD->hasAttr<AlwaysInlineAttr>()) {
+        if (!Linkage)
+          Linkage = Writer->Context->GetGVALinkageForFunction(FD);
+        ModulesCodegen = *Linkage != GVA_Internal;
+      }
+    }
   }
   Record->push_back(ModulesCodegen);
   if (ModulesCodegen)

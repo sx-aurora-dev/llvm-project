@@ -19,13 +19,12 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetOpcodes.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 
 #include <algorithm> // For std::max.
 
@@ -432,16 +431,20 @@ void RegisterBankInfo::applyDefaultMapping(const OperandsMapper &OpdMapper) {
     }
     unsigned OrigReg = MO.getReg();
     unsigned NewReg = *NewRegs.begin();
-    DEBUG(dbgs() << " changed, replace " << PrintReg(OrigReg, nullptr));
+    DEBUG(dbgs() << " changed, replace " << printReg(OrigReg, nullptr));
     MO.setReg(NewReg);
-    DEBUG(dbgs() << " with " << PrintReg(NewReg, nullptr));
+    DEBUG(dbgs() << " with " << printReg(NewReg, nullptr));
 
     // The OperandsMapper creates plain scalar, we may have to fix that.
     // Check if the types match and if not, fix that.
     LLT OrigTy = MRI.getType(OrigReg);
     LLT NewTy = MRI.getType(NewReg);
     if (OrigTy != NewTy) {
-      assert(OrigTy.getSizeInBits() == NewTy.getSizeInBits() &&
+      // The default mapping is not supposed to change the size of
+      // the storage. However, right now we don't necessarily bump all
+      // the types to storage size. For instance, we can consider
+      // s16 G_AND legal whereas the storage size is going to be 32.
+      assert(OrigTy.getSizeInBits() <= NewTy.getSizeInBits() &&
              "Types with difference size cannot be handled by the default "
              "mapping");
       DEBUG(dbgs() << "\nChange type of new opd from " << NewTy << " to "
@@ -455,24 +458,16 @@ void RegisterBankInfo::applyDefaultMapping(const OperandsMapper &OpdMapper) {
 unsigned RegisterBankInfo::getSizeInBits(unsigned Reg,
                                          const MachineRegisterInfo &MRI,
                                          const TargetRegisterInfo &TRI) const {
-  const TargetRegisterClass *RC = nullptr;
   if (TargetRegisterInfo::isPhysicalRegister(Reg)) {
     // The size is not directly available for physical registers.
     // Instead, we need to access a register class that contains Reg and
     // get the size of that register class.
-    RC = &getMinimalPhysRegClass(Reg, TRI);
-  } else {
-    LLT Ty = MRI.getType(Reg);
-    unsigned RegSize = Ty.isValid() ? Ty.getSizeInBits() : 0;
-    // If Reg is not a generic register, query the register class to
-    // get its size.
-    if (RegSize)
-      return RegSize;
-    // Since Reg is not a generic register, it must have a register class.
-    RC = MRI.getRegClass(Reg);
+    // Because this is expensive, we'll cache the register class by calling
+    auto *RC = &getMinimalPhysRegClass(Reg, TRI);
+    assert(RC && "Expecting Register class");
+    return TRI.getRegSizeInBits(*RC);
   }
-  assert(RC && "Unable to deduce the register class");
-  return TRI.getRegSizeInBits(*RC);
+  return TRI.getRegSizeInBits(Reg, MRI);
 }
 
 //------------------------------------------------------------------------------
@@ -749,13 +744,13 @@ void RegisterBankInfo::OperandsMapper::print(raw_ostream &OS,
     if (!IsFirst)
       OS << ", ";
     IsFirst = false;
-    OS << '(' << PrintReg(getMI().getOperand(Idx).getReg(), TRI) << ", [";
+    OS << '(' << printReg(getMI().getOperand(Idx).getReg(), TRI) << ", [";
     bool IsFirstNewVReg = true;
     for (unsigned VReg : getVRegs(Idx)) {
       if (!IsFirstNewVReg)
         OS << ", ";
       IsFirstNewVReg = false;
-      OS << PrintReg(VReg, TRI);
+      OS << printReg(VReg, TRI);
     }
     OS << "])";
   }

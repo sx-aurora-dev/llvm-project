@@ -83,9 +83,25 @@ MCCodeEmitter *llvm::createRISCVMCCodeEmitter(const MCInstrInfo &MCII,
 void RISCVMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
-  // For now, we only support RISC-V instructions with 32-bit length
-  uint32_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);
-  support::endian::Writer<support::little>(OS).write(Bits);
+  const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
+  // Get byte count of instruction.
+  unsigned Size = Desc.getSize();
+
+  switch (Size) {
+  default:
+    llvm_unreachable("Unhandled encodeInstruction length!");
+  case 2: {
+    uint16_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);
+    support::endian::Writer<support::little>(OS).write<uint16_t>(Bits);
+    break;
+  }
+  case 4: {
+    uint32_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);
+    support::endian::Writer<support::little>(OS).write(Bits);
+    break;
+  }
+  }
+
   ++MCNumEmitted; // Keep track of the # of mi's emitted.
 }
 
@@ -145,11 +161,24 @@ unsigned RISCVMCCodeEmitter::getImmOpValue(const MCInst &MI, unsigned OpNo,
     case RISCVMCExpr::VK_RISCV_Invalid:
       llvm_unreachable("Unhandled fixup kind!");
     case RISCVMCExpr::VK_RISCV_LO:
-      FixupKind = MIFrm == RISCVII::InstFormatI ? RISCV::fixup_riscv_lo12_i
-                                                : RISCV::fixup_riscv_lo12_s;
+      if (MIFrm == RISCVII::InstFormatI)
+        FixupKind = RISCV::fixup_riscv_lo12_i;
+      else if (MIFrm == RISCVII::InstFormatS)
+        FixupKind = RISCV::fixup_riscv_lo12_s;
+      else
+        llvm_unreachable("VK_RISCV_LO used with unexpected instruction format");
       break;
     case RISCVMCExpr::VK_RISCV_HI:
       FixupKind = RISCV::fixup_riscv_hi20;
+      break;
+    case RISCVMCExpr::VK_RISCV_PCREL_LO:
+      if (MIFrm == RISCVII::InstFormatI)
+        FixupKind = RISCV::fixup_riscv_pcrel_lo12_i;
+      else if (MIFrm == RISCVII::InstFormatS)
+        FixupKind = RISCV::fixup_riscv_pcrel_lo12_s;
+      else
+        llvm_unreachable(
+            "VK_RISCV_PCREL_LO used with unexpected instruction format");
       break;
     case RISCVMCExpr::VK_RISCV_PCREL_HI:
       FixupKind = RISCV::fixup_riscv_pcrel_hi20;
@@ -161,6 +190,10 @@ unsigned RISCVMCCodeEmitter::getImmOpValue(const MCInst &MI, unsigned OpNo,
       FixupKind = RISCV::fixup_riscv_jal;
     } else if (MIFrm == RISCVII::InstFormatB) {
       FixupKind = RISCV::fixup_riscv_branch;
+    } else if (MIFrm == RISCVII::InstFormatCJ) {
+      FixupKind = RISCV::fixup_riscv_rvc_jump;
+    } else if (MIFrm == RISCVII::InstFormatCB) {
+      FixupKind = RISCV::fixup_riscv_rvc_branch;
     }
   }
 

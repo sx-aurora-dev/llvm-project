@@ -305,6 +305,14 @@ static bool ParseAnalyzerArgs(AnalyzerOptions &Opts, ArgList &Args,
     }
   }
 
+  llvm::raw_string_ostream os(Opts.FullCompilerInvocation);
+  for (unsigned i=0; i<Args.getNumInputArgStrings(); i++) {
+    if (i != 0)
+      os << " ";
+    os << Args.getArgString(i);
+  }
+  os.flush();
+
   return Success;
 }
 
@@ -330,15 +338,23 @@ static StringRef getCodeModel(ArgList &Args, DiagnosticsEngine &Diags) {
   return "default";
 }
 
-static StringRef getRelocModel(ArgList &Args, DiagnosticsEngine &Diags) {
+static llvm::Reloc::Model getRelocModel(ArgList &Args,
+                                        DiagnosticsEngine &Diags) {
   if (Arg *A = Args.getLastArg(OPT_mrelocation_model)) {
     StringRef Value = A->getValue();
-    if (Value == "static" || Value == "pic" || Value == "ropi" ||
-        Value == "rwpi" || Value == "ropi-rwpi" || Value == "dynamic-no-pic")
-      return Value;
+    auto RM = llvm::StringSwitch<llvm::Optional<llvm::Reloc::Model>>(Value)
+                  .Case("static", llvm::Reloc::Static)
+                  .Case("pic", llvm::Reloc::PIC_)
+                  .Case("ropi", llvm::Reloc::ROPI)
+                  .Case("rwpi", llvm::Reloc::RWPI)
+                  .Case("ropi-rwpi", llvm::Reloc::ROPI_RWPI)
+                  .Case("dynamic-no-pic", llvm::Reloc::DynamicNoPIC)
+                  .Default(None);
+    if (RM.hasValue())
+      return *RM;
     Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Value;
   }
-  return "pic";
+  return llvm::Reloc::PIC_;
 }
 
 /// \brief Create a new Regex instance out of the string value in \p RpassArg.
@@ -529,6 +545,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.DebugTypeExtRefs = Args.hasArg(OPT_dwarf_ext_refs);
   Opts.DebugExplicitImport = Args.hasArg(OPT_dwarf_explicit_import);
   Opts.DebugFwdTemplateParams = Args.hasArg(OPT_debug_forward_template_params);
+  Opts.EmbedSource = Args.hasArg(OPT_gembed_source);
 
   for (const auto &Arg : Args.getAllArgValues(OPT_fdebug_prefix_map_EQ))
     Opts.DebugPrefixMap.insert(StringRef(Arg).split('='));
@@ -546,6 +563,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
     OPT_fuse_register_sized_bitfield_access);
   Opts.RelaxedAliasing = Args.hasArg(OPT_relaxed_aliasing);
   Opts.StructPathTBAA = !Args.hasArg(OPT_no_struct_path_tbaa);
+  Opts.NewStructPathTBAA = !Args.hasArg(OPT_no_struct_path_tbaa) &&
+                           Args.hasArg(OPT_new_struct_path_tbaa);
   Opts.FineGrainedBitfieldAccesses =
       Args.hasFlag(OPT_ffine_grained_bitfield_accesses,
                    OPT_fno_fine_grained_bitfield_accesses, false);
@@ -621,6 +640,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.DisableFree = Args.hasArg(OPT_disable_free);
   Opts.DiscardValueNames = Args.hasArg(OPT_discard_value_names);
   Opts.DisableTailCalls = Args.hasArg(OPT_mdisable_tail_calls);
+  Opts.NoEscapingBlockTailCalls =
+      Args.hasArg(OPT_fno_escaping_block_tail_calls);
   Opts.FloatABI = Args.getLastArgValue(OPT_mfloat_abi);
   Opts.LessPreciseFPMAD = Args.hasArg(OPT_cl_mad_enable) ||
                           Args.hasArg(OPT_cl_unsafe_math_optimizations) ||
@@ -637,9 +658,13 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
                         Args.hasArg(OPT_cl_no_signed_zeros) ||
                         Args.hasArg(OPT_cl_unsafe_math_optimizations) ||
                         Args.hasArg(OPT_cl_fast_relaxed_math));
+  Opts.Reassociate = Args.hasArg(OPT_mreassociate);
   Opts.FlushDenorm = Args.hasArg(OPT_cl_denorms_are_zero);
   Opts.CorrectlyRoundedDivSqrt =
       Args.hasArg(OPT_cl_fp32_correctly_rounded_divide_sqrt);
+  Opts.UniformWGSize =
+      Args.hasArg(OPT_cl_uniform_work_group_size);
+  Opts.Reciprocals = Args.getAllArgValues(OPT_mrecip_EQ);
   Opts.ReciprocalMath = Args.hasArg(OPT_freciprocal_math);
   Opts.NoTrappingMath = Args.hasArg(OPT_fno_trapping_math);
   Opts.NoZeroInitializedInBSS = Args.hasArg(OPT_mno_zero_initialized_in_bss);
@@ -653,6 +678,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       Args.hasArg(OPT_mincremental_linker_compatible);
   Opts.PIECopyRelocations =
       Args.hasArg(OPT_mpie_copy_relocations);
+  Opts.NoPLT = Args.hasArg(OPT_fno_plt);
   Opts.OmitLeafFramePointer = Args.hasArg(OPT_momit_leaf_frame_pointer);
   Opts.SaveTempLabels = Args.hasArg(OPT_msave_temp_labels);
   Opts.NoDwarfDirectoryAsm = Args.hasArg(OPT_fno_dwarf_directory_asm);
@@ -677,6 +703,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
                                        OPT_fno_function_sections, false);
   Opts.DataSections = Args.hasFlag(OPT_fdata_sections,
                                    OPT_fno_data_sections, false);
+  Opts.StackSizeSection =
+      Args.hasFlag(OPT_fstack_size_section, OPT_fno_stack_size_section, false);
   Opts.UniqueSectionNames = Args.hasFlag(OPT_funique_section_names,
                                          OPT_fno_unique_section_names, true);
 
@@ -709,8 +737,12 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.VectorizeLoop = Args.hasArg(OPT_vectorize_loops);
   Opts.VectorizeSLP = Args.hasArg(OPT_vectorize_slp);
 
+  Opts.PreferVectorWidth = Args.getLastArgValue(OPT_mprefer_vector_width_EQ);
+
   Opts.MainFileName = Args.getLastArgValue(OPT_main_file_name);
   Opts.VerifyModule = !Args.hasArg(OPT_disable_llvm_verifier);
+
+  Opts.ControlFlowGuard = Args.hasArg(OPT_cfguard);
 
   Opts.DisableGCov = Args.hasArg(OPT_test_coverage);
   Opts.EmitGcovArcs = Args.hasArg(OPT_femit_coverage_data);
@@ -776,12 +808,33 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
 
   Opts.PreserveVec3Type = Args.hasArg(OPT_fpreserve_vec3_type);
   Opts.InstrumentFunctions = Args.hasArg(OPT_finstrument_functions);
+  Opts.InstrumentFunctionsAfterInlining =
+      Args.hasArg(OPT_finstrument_functions_after_inlining);
+  Opts.InstrumentFunctionEntryBare =
+      Args.hasArg(OPT_finstrument_function_entry_bare);
   Opts.XRayInstrumentFunctions = Args.hasArg(OPT_fxray_instrument);
+  Opts.XRayAlwaysEmitCustomEvents =
+      Args.hasArg(OPT_fxray_always_emit_customevents);
   Opts.XRayInstructionThreshold =
       getLastArgIntValue(Args, OPT_fxray_instruction_threshold_EQ, 200, Diags);
   Opts.InstrumentForProfiling = Args.hasArg(OPT_pg);
   Opts.CallFEntry = Args.hasArg(OPT_mfentry);
   Opts.EmitOpenCLArgMetadata = Args.hasArg(OPT_cl_kernel_arg_info);
+
+  if (const Arg *A = Args.getLastArg(OPT_fcf_protection_EQ)) {
+    StringRef Name = A->getValue();
+    if (Name == "full") {
+      Opts.CFProtectionReturn = 1;
+      Opts.CFProtectionBranch = 1;
+    } else if (Name == "return")
+      Opts.CFProtectionReturn = 1;
+    else if (Name == "branch")
+      Opts.CFProtectionBranch = 1;
+    else if (Name != "none") {
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Name;
+      Success = false;
+    }
+  }
 
   if (const Arg *A = Args.getLastArg(OPT_compress_debug_sections,
                                      OPT_compress_debug_sections_EQ)) {
@@ -839,7 +892,16 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
                    false);
   Opts.SanitizeMinimalRuntime = Args.hasArg(OPT_fsanitize_minimal_runtime);
   Opts.SanitizeCfiCrossDso = Args.hasArg(OPT_fsanitize_cfi_cross_dso);
+  Opts.SanitizeCfiICallGeneralizePointers =
+      Args.hasArg(OPT_fsanitize_cfi_icall_generalize_pointers);
   Opts.SanitizeStats = Args.hasArg(OPT_fsanitize_stats);
+  if (Arg *A = Args.getLastArg(
+          OPT_fsanitize_address_poison_class_member_array_new_cookie,
+          OPT_fno_sanitize_address_poison_class_member_array_new_cookie)) {
+    Opts.SanitizeAddressPoisonClassMemberArrayNewCookie =
+        A->getOption().getID() ==
+        OPT_fsanitize_address_poison_class_member_array_new_cookie;
+  }
   if (Arg *A = Args.getLastArg(OPT_fsanitize_address_use_after_scope,
                                OPT_fno_sanitize_address_use_after_scope)) {
     Opts.SanitizeAddressUseAfterScope =
@@ -864,6 +926,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
     Opts.StackProbeSize = StackProbeSize;
   }
 
+  Opts.NoStackArgProbe = Args.hasArg(OPT_mno_stack_arg_probe);
+
   if (Arg *A = Args.getLastArg(OPT_fobjc_dispatch_method_EQ)) {
     StringRef Name = A->getValue();
     unsigned Method = llvm::StringSwitch<unsigned>(Name)
@@ -880,8 +944,12 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
     }
   }
 
-  Opts.EmulatedTLS =
-      Args.hasFlag(OPT_femulated_tls, OPT_fno_emulated_tls, false);
+  if (Args.getLastArg(OPT_femulated_tls) ||
+      Args.getLastArg(OPT_fno_emulated_tls)) {
+    Opts.ExplicitEmulatedTLS = true;
+    Opts.EmulatedTLS =
+        Args.hasFlag(OPT_femulated_tls, OPT_fno_emulated_tls, false);
+  }
 
   if (Arg *A = Args.getLastArg(OPT_ftlsmodel_EQ)) {
     StringRef Name = A->getValue();
@@ -984,8 +1052,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
                       Args.getAllArgValues(OPT_fsanitize_trap_EQ), Diags,
                       Opts.SanitizeTrap);
 
-  Opts.CudaGpuBinaryFileNames =
-      Args.getAllArgValues(OPT_fcuda_include_gpubinary);
+  Opts.CudaGpuBinaryFileName =
+      Args.getLastArgValue(OPT_fcuda_include_gpubinary);
 
   Opts.Backchain = Args.hasArg(OPT_mbackchain);
 
@@ -1055,6 +1123,26 @@ static bool parseShowColorsArgs(const ArgList &Args, bool DefaultColor) {
   return ShowColors == Colors_On ||
          (ShowColors == Colors_Auto &&
           llvm::sys::Process::StandardErrHasColors());
+}
+
+static bool checkVerifyPrefixes(const std::vector<std::string> &VerifyPrefixes,
+                                DiagnosticsEngine *Diags) {
+  bool Success = true;
+  for (const auto &Prefix : VerifyPrefixes) {
+    // Every prefix must start with a letter and contain only alphanumeric
+    // characters, hyphens, and underscores.
+    auto BadChar = std::find_if(Prefix.begin(), Prefix.end(),
+                                [](char C){return !isAlphanumeric(C)
+                                                  && C != '-' && C != '_';});
+    if (BadChar != Prefix.end() || !isLetter(Prefix[0])) {
+      Success = false;
+      if (Diags) {
+        Diags->Report(diag::err_drv_invalid_value) << "-verify=" << Prefix;
+        Diags->Report(diag::note_drv_verify_prefix_spelling);
+      }
+    }
+  }
+  return Success;
 }
 
 bool clang::ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
@@ -1144,7 +1232,18 @@ bool clang::ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
   Opts.ShowSourceRanges = Args.hasArg(OPT_fdiagnostics_print_source_range_info);
   Opts.ShowParseableFixits = Args.hasArg(OPT_fdiagnostics_parseable_fixits);
   Opts.ShowPresumedLoc = !Args.hasArg(OPT_fno_diagnostics_use_presumed_location);
-  Opts.VerifyDiagnostics = Args.hasArg(OPT_verify);
+  Opts.VerifyDiagnostics = Args.hasArg(OPT_verify) || Args.hasArg(OPT_verify_EQ);
+  Opts.VerifyPrefixes = Args.getAllArgValues(OPT_verify_EQ);
+  if (Args.hasArg(OPT_verify))
+    Opts.VerifyPrefixes.push_back("expected");
+  // Keep VerifyPrefixes in its original order for the sake of diagnostics, and
+  // then sort it to prepare for fast lookup using std::binary_search.
+  if (!checkVerifyPrefixes(Opts.VerifyPrefixes, Diags)) {
+    Opts.VerifyDiagnostics = false;
+    Success = false;
+  }
+  else
+    std::sort(Opts.VerifyPrefixes.begin(), Opts.VerifyPrefixes.end());
   DiagnosticLevelMask DiagMask = DiagnosticLevelMask::None;
   Success &= parseDiagnosticLevelMask("-verify-ignore-unexpected=",
     Args.getAllArgValues(OPT_verify_ignore_unexpected_EQ),
@@ -1277,6 +1376,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       Opts.ProgramAction = frontend::PrintPreamble; break;
     case OPT_E:
       Opts.ProgramAction = frontend::PrintPreprocessedInput; break;
+    case OPT_templight_dump:
+      Opts.ProgramAction = frontend::TemplightDump; break;
     case OPT_rewrite_macros:
       Opts.ProgramAction = frontend::RewriteMacros; break;
     case OPT_rewrite_objc:
@@ -1366,6 +1467,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     = Args.hasArg(OPT_code_completion_patterns);
   Opts.CodeCompleteOpts.IncludeGlobals
     = !Args.hasArg(OPT_no_code_completion_globals);
+  Opts.CodeCompleteOpts.IncludeNamespaceLevelDecls
+    = !Args.hasArg(OPT_no_code_completion_ns_level_decls);
   Opts.CodeCompleteOpts.IncludeBriefComments
     = Args.hasArg(OPT_code_completion_brief_comments);
 
@@ -1706,22 +1809,30 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
       break;
     case InputKind::Asm:
     case InputKind::C:
+#if defined(CLANG_DEFAULT_STD_C)
+      LangStd = CLANG_DEFAULT_STD_C;
+#else
       // The PS4 uses C99 as the default C standard.
       if (T.isPS4())
         LangStd = LangStandard::lang_gnu99;
       else
         LangStd = LangStandard::lang_gnu11;
+#endif
       break;
     case InputKind::ObjC:
+#if defined(CLANG_DEFAULT_STD_C)
+      LangStd = CLANG_DEFAULT_STD_C;
+#else
       LangStd = LangStandard::lang_gnu11;
+#endif
       break;
     case InputKind::CXX:
     case InputKind::ObjCXX:
-      // The PS4 uses C++11 as the default C++ standard.
-      if (T.isPS4())
-        LangStd = LangStandard::lang_gnucxx11;
-      else
-        LangStd = LangStandard::lang_gnucxx98;
+#if defined(CLANG_DEFAULT_STD_CXX)
+      LangStd = CLANG_DEFAULT_STD_CXX;
+#else
+      LangStd = LangStandard::lang_gnucxx14;
+#endif
       break;
     case InputKind::RenderScript:
       LangStd = LangStandard::lang_c99;
@@ -1733,10 +1844,11 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
   Opts.LineComment = Std.hasLineComments();
   Opts.C99 = Std.isC99();
   Opts.C11 = Std.isC11();
+  Opts.C17 = Std.isC17();
   Opts.CPlusPlus = Std.isCPlusPlus();
   Opts.CPlusPlus11 = Std.isCPlusPlus11();
   Opts.CPlusPlus14 = Std.isCPlusPlus14();
-  Opts.CPlusPlus1z = Std.isCPlusPlus1z();
+  Opts.CPlusPlus17 = Std.isCPlusPlus17();
   Opts.CPlusPlus2a = Std.isCPlusPlus2a();
   Opts.Digraphs = Std.hasDigraphs();
   Opts.GNUMode = Std.isGNUMode();
@@ -1792,7 +1904,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
   Opts.GNUKeywords = Opts.GNUMode;
   Opts.CXXOperatorNames = Opts.CPlusPlus;
 
-  Opts.AlignedAllocation = Opts.CPlusPlus1z;
+  Opts.AlignedAllocation = Opts.CPlusPlus17;
 
   Opts.DollarIdents = !Opts.AsmPreprocessor;
 }
@@ -1992,6 +2104,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Opts.CUDAIsDevice && Args.hasArg(OPT_fcuda_approx_transcendentals))
     Opts.CUDADeviceApproxTranscendentals = 1;
 
+  Opts.CUDARelocatableDeviceCode = Args.hasArg(OPT_fcuda_rdc);
+
   if (Opts.ObjC1) {
     if (Arg *arg = Args.getLastArg(OPT_fobjc_runtime_EQ)) {
       StringRef value = arg->getValue();
@@ -2111,7 +2225,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   // Mimicing gcc's behavior, trigraphs are only enabled if -trigraphs
   // is specified, or -std is set to a conforming mode.
   // Trigraphs are disabled by default in c++1z onwards.
-  Opts.Trigraphs = !Opts.GNUMode && !Opts.MSVCCompat && !Opts.CPlusPlus1z;
+  Opts.Trigraphs = !Opts.GNUMode && !Opts.MSVCCompat && !Opts.CPlusPlus17;
   Opts.Trigraphs =
       Args.hasFlag(OPT_ftrigraphs, OPT_fno_trigraphs, Opts.Trigraphs);
 
@@ -2131,7 +2245,18 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.Exceptions = Args.hasArg(OPT_fexceptions);
   Opts.ObjCExceptions = Args.hasArg(OPT_fobjc_exceptions);
   Opts.CXXExceptions = Args.hasArg(OPT_fcxx_exceptions);
-  Opts.SjLjExceptions = Args.hasArg(OPT_fsjlj_exceptions);
+
+  // Handle exception personalities
+  Arg *A = Args.getLastArg(options::OPT_fsjlj_exceptions,
+                           options::OPT_fseh_exceptions,
+                           options::OPT_fdwarf_exceptions);
+  if (A) {
+    const Option &Opt = A->getOption();
+    Opts.SjLjExceptions = Opt.matches(options::OPT_fsjlj_exceptions);
+    Opts.SEHExceptions = Opt.matches(options::OPT_fseh_exceptions);
+    Opts.DWARFExceptions = Opt.matches(options::OPT_fdwarf_exceptions);
+  }
+
   Opts.ExternCNoUnwind = Args.hasArg(OPT_fexternc_nounwind);
   Opts.TraditionalCPP = Args.hasArg(OPT_traditional_cpp);
 
@@ -2141,7 +2266,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     && Opts.OpenCLVersion >= 200);
   Opts.BlocksRuntimeOptional = Args.hasArg(OPT_fblocks_runtime_optional);
   Opts.CoroutinesTS = Args.hasArg(OPT_fcoroutines_ts);
-  
+
   // Enable [[]] attributes in C++11 by default.
   Opts.DoubleSquareBracketAttributes =
       Args.hasFlag(OPT_fdouble_square_bracket_attributes,
@@ -2308,12 +2433,12 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   // Check for MS default calling conventions being specified.
   if (Arg *A = Args.getLastArg(OPT_fdefault_calling_conv_EQ)) {
     LangOptions::DefaultCallingConvention DefaultCC =
-        llvm::StringSwitch<LangOptions::DefaultCallingConvention>(
-            A->getValue())
+        llvm::StringSwitch<LangOptions::DefaultCallingConvention>(A->getValue())
             .Case("cdecl", LangOptions::DCC_CDecl)
             .Case("fastcall", LangOptions::DCC_FastCall)
             .Case("stdcall", LangOptions::DCC_StdCall)
             .Case("vectorcall", LangOptions::DCC_VectorCall)
+            .Case("regcall", LangOptions::DCC_RegCall)
             .Default(LangOptions::DCC_None);
     if (DefaultCC == LangOptions::DCC_None)
       Diags.Report(diag::err_drv_invalid_value)
@@ -2324,7 +2449,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     bool emitError = (DefaultCC == LangOptions::DCC_FastCall ||
                       DefaultCC == LangOptions::DCC_StdCall) &&
                      Arch != llvm::Triple::x86;
-    emitError |= DefaultCC == LangOptions::DCC_VectorCall &&
+    emitError |= (DefaultCC == LangOptions::DCC_VectorCall ||
+                  DefaultCC == LangOptions::DCC_RegCall) &&
                  !(Arch == llvm::Triple::x86 || Arch == llvm::Triple::x86_64);
     if (emitError)
       Diags.Report(diag::err_drv_argument_not_allowed_with)
@@ -2350,16 +2476,22 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
 
   // Check if -fopenmp is specified.
   Opts.OpenMP = Args.hasArg(options::OPT_fopenmp) ? 1 : 0;
+  // Check if -fopenmp-simd is specified.
+  Opts.OpenMPSimd = !Opts.OpenMP && Args.hasFlag(options::OPT_fopenmp_simd,
+                                                 options::OPT_fno_openmp_simd,
+                                                 /*Default=*/false);
   Opts.OpenMPUseTLS =
       Opts.OpenMP && !Args.hasArg(options::OPT_fnoopenmp_use_tls);
   Opts.OpenMPIsDevice =
       Opts.OpenMP && Args.hasArg(options::OPT_fopenmp_is_device);
 
-  if (Opts.OpenMP) {
-    int Version =
-        getLastArgIntValue(Args, OPT_fopenmp_version_EQ, Opts.OpenMP, Diags);
-    if (Version != 0)
+  if (Opts.OpenMP || Opts.OpenMPSimd) {
+    if (int Version =
+            getLastArgIntValue(Args, OPT_fopenmp_version_EQ,
+                               Opts.OpenMPSimd ? 45 : Opts.OpenMP, Diags))
       Opts.OpenMP = Version;
+    else if (Opts.OpenMPSimd)
+      Opts.OpenMP = 45;
     // Provide diagnostic when a given target is not expected to be an OpenMP
     // device or host.
     if (!Opts.OpenMPIsDevice) {
@@ -2412,6 +2544,10 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Diags.Report(clang::diag::err_drv_omp_host_ir_file_not_found)
           << Opts.OMPHostIRFile;
   }
+
+  // set CUDA mode for OpenMP target NVPTX if specified in options
+  Opts.OpenMPCUDAMode = Opts.OpenMPIsDevice && T.isNVPTX() &&
+                        Args.hasArg(options::OPT_fopenmp_cuda_mode);
 
   // Record whether the __DEPRECATED define was requested.
   Opts.Deprecated = Args.hasFlag(OPT_fdeprecated_macro,
@@ -2482,6 +2618,11 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.XRayInstrument =
       Args.hasFlag(OPT_fxray_instrument, OPT_fnoxray_instrument, false);
 
+  // -fxray-always-emit-customevents
+  Opts.XRayAlwaysEmitCustomEvents =
+      Args.hasFlag(OPT_fxray_always_emit_customevents,
+                   OPT_fnoxray_always_emit_customevents, false);
+
   // -fxray-{always,never}-instrument= filenames.
   Opts.XRayAlwaysInstrumentFiles =
       Args.getAllArgValues(OPT_fxray_always_instrument);
@@ -2518,6 +2659,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::RewriteObjC:
   case frontend::RewriteTest:
   case frontend::RunAnalysis:
+  case frontend::TemplightDump:
   case frontend::MigrateSource:
     return false;
 
@@ -2534,7 +2676,6 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
 }
 
 static void ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
-                                  FileManager &FileMgr,
                                   DiagnosticsEngine &Diags,
                                   frontend::ActionKind Action) {
   using namespace options;
@@ -2660,11 +2801,11 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   Opts.FeaturesAsWritten = Args.getAllArgValues(OPT_target_feature);
   Opts.LinkerVersion = Args.getLastArgValue(OPT_target_linker_version);
   Opts.Triple = llvm::Triple::normalize(Args.getLastArgValue(OPT_triple));
-  Opts.Reciprocals = Args.getAllArgValues(OPT_mrecip_EQ);
   // Use the default target triple if unspecified.
   if (Opts.Triple.empty())
     Opts.Triple = llvm::sys::getDefaultTargetTriple();
   Opts.OpenCLExtensionsAsWritten = Args.getAllArgValues(OPT_cl_ext_EQ);
+  Opts.ForceEnableInt128 = Args.hasArg(OPT_fforce_enable_int128);
 }
 
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
@@ -2691,7 +2832,13 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
 
   // Issue errors on unknown arguments.
   for (const Arg *A : Args.filtered(OPT_UNKNOWN)) {
-    Diags.Report(diag::err_drv_unknown_argument) << A->getAsString(Args);
+    auto ArgString = A->getAsString(Args);
+    std::string Nearest;
+    if (Opts->findNearest(ArgString, Nearest, IncludedFlagsBitmask) > 1)
+      Diags.Report(diag::err_drv_unknown_argument) << ArgString;
+    else
+      Diags.Report(diag::err_drv_unknown_argument_with_suggestion)
+          << ArgString << Nearest;
     Success = false;
   }
 
@@ -2751,12 +2898,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
       !LangOpts.Sanitize.has(SanitizerKind::Address) &&
       !LangOpts.Sanitize.has(SanitizerKind::Memory);
 
-  // FIXME: ParsePreprocessorArgs uses the FileManager to read the contents of
-  // PCH file and find the original header name. Remove the need to do that in
-  // ParsePreprocessorArgs and remove the FileManager
-  // parameters from the function and the "FileManager.h" #include.
-  FileManager FileMgr(Res.getFileSystemOpts());
-  ParsePreprocessorArgs(Res.getPreprocessorOpts(), Args, FileMgr, Diags,
+  ParsePreprocessorArgs(Res.getPreprocessorOpts(), Args, Diags,
                         Res.getFrontendOpts().ProgramAction);
   ParsePreprocessorOutputArgs(Res.getPreprocessorOutputOpts(), Args,
                               Res.getFrontendOpts().ProgramAction);

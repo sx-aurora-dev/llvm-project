@@ -24,28 +24,39 @@ def execute_command(command):
 
 class ExecTestCase(TestBase):
 
+    NO_DEBUG_INFO_TESTCASE = True
+
     mydir = TestBase.compute_mydir(__file__)
 
     @skipUnlessDarwin
     @expectedFailureAll(archs=['i386'], bugnumber="rdar://28656532")
     @expectedFailureAll(oslist=["ios", "tvos", "watchos", "bridgeos"], bugnumber="rdar://problem/34559552") # this exec test has problems on ios systems
-    def test(self):
+    def test_hitting_exec (self):
+        self.do_test(False)
+
+    @skipUnlessDarwin
+    @expectedFailureAll(archs=['i386'], bugnumber="rdar://28656532")
+    @expectedFailureAll(oslist=["ios", "tvos", "watchos", "bridgeos"], bugnumber="rdar://problem/34559552") # this exec test has problems on ios systems
+    def test_skipping_exec (self):
+        self.do_test(True)
+
+    def do_test(self, skip_exec):
+        self.makeBuildDir()
+        exe = self.getBuildArtifact("a.out")
         if self.getArchitecture() == 'x86_64':
-            source = os.path.join(os.getcwd(), "main.cpp")
-            o_file = os.path.join(os.getcwd(), "main.o")
+            source = self.getSourcePath("main.cpp")
+            o_file = self.getBuildArtifact("main.o")
             execute_command(
                 "'%s' -g -O0 -arch i386 -arch x86_64 '%s' -c -o '%s'" %
                 (os.environ["CC"], source, o_file))
             execute_command(
-                "'%s' -g -O0 -arch i386 -arch x86_64 '%s'" %
-                (os.environ["CC"], o_file))
-            if self.debug_info != "dsym":
-                dsym_path = os.path.join(os.getcwd(), "a.out.dSYM")
+                "'%s' -g -O0 -arch i386 -arch x86_64 '%s' -o '%s'" %
+                (os.environ["CC"], o_file, exe))
+            if self.getDebugInfo() != "dsym":
+                dsym_path = self.getBuildArtifact("a.out.dSYM")
                 execute_command("rm -rf '%s'" % (dsym_path))
         else:
             self.build()
-
-        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create the target
         target = self.dbg.CreateTarget(exe)
@@ -60,6 +71,16 @@ class ExecTestCase(TestBase):
             None, None, self.get_process_working_directory())
         self.assertTrue(process, PROCESS_IS_VALID)
 
+        if skip_exec:
+            self.dbg.HandleCommand("settings set target.process.stop-on-exec false")
+            def cleanup():
+                self.runCmd("settings set target.process.stop-on-exec false",
+                            check=False)
+
+            # Execute the cleanup function during test case tear down.
+            self.addTearDownHook(cleanup)
+
+            
         for i in range(6):
             # The stop reason of the thread should be breakpoint.
             self.assertTrue(process.GetState() == lldb.eStateStopped,
@@ -84,17 +105,18 @@ class ExecTestCase(TestBase):
             # Run and we should stop due to exec
             process.Continue()
 
-            self.assertTrue(process.GetState() == lldb.eStateStopped,
-                            "Process should be stopped at __dyld_start")
+            if not skip_exec:
+                self.assertTrue(process.GetState() == lldb.eStateStopped,
+                                "Process should be stopped at __dyld_start")
+                
+                threads = lldbutil.get_stopped_threads(
+                    process, lldb.eStopReasonExec)
+                self.assertTrue(
+                    len(threads) == 1,
+                    "We got a thread stopped for exec.")
 
-            threads = lldbutil.get_stopped_threads(
-                process, lldb.eStopReasonExec)
-            self.assertTrue(
-                len(threads) == 1,
-                "We got a thread stopped for exec.")
-
-            # Run and we should stop at breakpoint in main after exec
-            process.Continue()
+                # Run and we should stop at breakpoint in main after exec
+                process.Continue()
 
             threads = lldbutil.get_threads_stopped_at_breakpoint(
                 process, breakpoint)

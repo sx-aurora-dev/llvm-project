@@ -93,17 +93,19 @@ NativeProcessNetBSD::Factory::Launch(ProcessLaunchInfo &launch_info,
   }
   LLDB_LOG(log, "inferior started, now in stopped state");
 
-  ArchSpec arch;
-  if ((status = ResolveProcessArchitecture(pid, arch)).Fail())
-    return status.ToError();
+  ProcessInstanceInfo Info;
+  if (!Host::GetProcessInfo(pid, Info)) {
+    return llvm::make_error<StringError>("Cannot get process architecture",
+                                         llvm::inconvertibleErrorCode());
+  }
 
   // Set the architecture to the exe architecture.
   LLDB_LOG(log, "pid = {0:x}, detected architecture {1}", pid,
-           arch.GetArchitectureName());
+           Info.GetArchitecture().GetArchitectureName());
 
   std::unique_ptr<NativeProcessNetBSD> process_up(new NativeProcessNetBSD(
       pid, launch_info.GetPTY().ReleaseMasterFileDescriptor(), native_delegate,
-      arch, mainloop));
+      Info.GetArchitecture(), mainloop));
 
   status = process_up->ReinitializeThreads();
   if (status.Fail())
@@ -111,7 +113,7 @@ NativeProcessNetBSD::Factory::Launch(ProcessLaunchInfo &launch_info,
 
   for (const auto &thread : process_up->m_threads)
     static_cast<NativeThreadNetBSD &>(*thread).SetStoppedBySignal(SIGSTOP);
-  process_up->SetState(StateType::eStateStopped);
+  process_up->SetState(StateType::eStateStopped, false);
 
   return std::move(process_up);
 }
@@ -124,15 +126,16 @@ NativeProcessNetBSD::Factory::Attach(
   LLDB_LOG(log, "pid = {0:x}", pid);
 
   // Retrieve the architecture for the running process.
-  ArchSpec arch;
-  Status status = ResolveProcessArchitecture(pid, arch);
-  if (!status.Success())
-    return status.ToError();
+  ProcessInstanceInfo Info;
+  if (!Host::GetProcessInfo(pid, Info)) {
+    return llvm::make_error<StringError>("Cannot get process architecture",
+                                         llvm::inconvertibleErrorCode());
+  }
 
-  std::unique_ptr<NativeProcessNetBSD> process_up(
-      new NativeProcessNetBSD(pid, -1, native_delegate, arch, mainloop));
+  std::unique_ptr<NativeProcessNetBSD> process_up(new NativeProcessNetBSD(
+      pid, -1, native_delegate, Info.GetArchitecture(), mainloop));
 
-  status = process_up->Attach();
+  Status status = process_up->Attach();
   if (!status.Success())
     return status.ToError();
 
@@ -249,7 +252,7 @@ void NativeProcessNetBSD::MonitorSIGTRAP(lldb::pid_t pid) {
     uint32_t wp_index;
     Status error = static_cast<NativeThreadNetBSD &>(*m_threads[info.psi_lwpid])
                        .GetRegisterContext()
-                       ->GetWatchpointHitIndex(
+                       .GetWatchpointHitIndex(
                            wp_index, (uintptr_t)info.psi_siginfo.si_addr);
     if (error.Fail())
       LLDB_LOG(log,
@@ -268,7 +271,7 @@ void NativeProcessNetBSD::MonitorSIGTRAP(lldb::pid_t pid) {
     uint32_t bp_index;
     error = static_cast<NativeThreadNetBSD &>(*m_threads[info.psi_lwpid])
                 .GetRegisterContext()
-                ->GetHardwareBreakHitIndex(bp_index,
+                .GetHardwareBreakHitIndex(bp_index,
                                            (uintptr_t)info.psi_siginfo.si_addr);
     if (error.Fail())
       LLDB_LOG(log,
@@ -341,12 +344,7 @@ NativeProcessNetBSD::FixupBreakpointPCAsNeeded(NativeThreadNetBSD &thread) {
   Status error;
   // Find out the size of a breakpoint (might depend on where we are in the
   // code).
-  NativeRegisterContextSP context_sp = thread.GetRegisterContext();
-  if (!context_sp) {
-    error.SetErrorString("cannot get a NativeRegisterContext for the thread");
-    LLDB_LOG(log, "failed: {0}", error);
-    return error;
-  }
+  NativeRegisterContext& context = thread.GetRegisterContext();
   uint32_t breakpoint_size = 0;
   error = GetSoftwareBreakpointPCOffset(breakpoint_size);
   if (error.Fail()) {
@@ -357,7 +355,7 @@ NativeProcessNetBSD::FixupBreakpointPCAsNeeded(NativeThreadNetBSD &thread) {
   // First try probing for a breakpoint at a software breakpoint location: PC
   // - breakpoint size.
   const lldb::addr_t initial_pc_addr =
-      context_sp->GetPCfromBreakpointLocation();
+      context.GetPCfromBreakpointLocation();
   lldb::addr_t breakpoint_addr = initial_pc_addr;
   if (breakpoint_size > 0) {
     // Do not allow breakpoint probe to wrap around.
@@ -410,7 +408,7 @@ NativeProcessNetBSD::FixupBreakpointPCAsNeeded(NativeThreadNetBSD &thread) {
   // Change the program counter.
   LLDB_LOG(log, "pid {0} tid {1}: changing PC from {2:x} to {3:x}", GetID(),
            thread.GetID(), initial_pc_addr, breakpoint_addr);
-  error = context_sp->SetPC(breakpoint_addr);
+  error = context.SetPC(breakpoint_addr);
   if (error.Fail()) {
     LLDB_LOG(log, "pid {0} tid {1}: failed to set PC: {2}", GetID(),
              thread.GetID(), error);
@@ -678,11 +676,6 @@ lldb::addr_t NativeProcessNetBSD::GetSharedLibraryInfoAddress() {
 
 size_t NativeProcessNetBSD::UpdateThreads() { return m_threads.size(); }
 
-bool NativeProcessNetBSD::GetArchitecture(ArchSpec &arch) const {
-  arch = m_arch;
-  return true;
-}
-
 Status NativeProcessNetBSD::SetBreakpoint(lldb::addr_t addr, uint32_t size,
                                           bool hardware) {
   if (hardware)
@@ -881,13 +874,13 @@ NativeProcessNetBSD::GetAuxvData() const {
    */
   size_t auxv_size = 100 * sizeof(AuxInfo);
 
-  ErrorOr<std::unique_ptr<MemoryBuffer>> buf =
-      llvm::MemoryBuffer::getNewMemBuffer(auxv_size);
+  ErrorOr<std::unique_ptr<WritableMemoryBuffer>> buf =
+      llvm::WritableMemoryBuffer::getNewMemBuffer(auxv_size);
 
   struct ptrace_io_desc io;
   io.piod_op = PIOD_READ_AUXV;
   io.piod_offs = 0;
-  io.piod_addr = const_cast<void *>(static_cast<const void *>(buf.get()->getBufferStart()));
+  io.piod_addr = static_cast<void *>(buf.get()->getBufferStart());
   io.piod_len = auxv_size;
 
   Status error = NativeProcessNetBSD::PtraceWrapper(PT_IO, GetID(), &io);
@@ -898,7 +891,7 @@ NativeProcessNetBSD::GetAuxvData() const {
   if (io.piod_len < 1)
     return std::error_code(ECANCELED, std::generic_category());
 
-  return buf;
+  return std::move(buf);
 }
 
 Status NativeProcessNetBSD::ReinitializeThreads() {

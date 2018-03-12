@@ -49,15 +49,15 @@ class ReturnInst;
 
 /// Return an exact copy of the specified module
 ///
-std::unique_ptr<Module> CloneModule(const Module *M);
-std::unique_ptr<Module> CloneModule(const Module *M, ValueToValueMapTy &VMap);
+std::unique_ptr<Module> CloneModule(const Module &M);
+std::unique_ptr<Module> CloneModule(const Module &M, ValueToValueMapTy &VMap);
 
 /// Return a copy of the specified module. The ShouldCloneDefinition function
 /// controls whether a specific GlobalValue's definition is cloned. If the
 /// function returns false, the module copy will contain an external reference
 /// in place of the global definition.
 std::unique_ptr<Module>
-CloneModule(const Module *M, ValueToValueMapTy &VMap,
+CloneModule(const Module &M, ValueToValueMapTy &VMap,
             function_ref<bool(const GlobalValue *)> ShouldCloneDefinition);
 
 /// ClonedCodeInfo - This struct can be used to capture information about code
@@ -227,12 +227,18 @@ public:
 /// *inlined* code to minimize the actual inserted code, it must not delete
 /// code in the caller as users of this routine may have pointers to
 /// instructions in the caller that need to remain stable.
+///
+/// If ForwardVarArgsTo is passed, inlining a function with varargs is allowed
+/// and all varargs at the callsite will be passed to any calls to
+/// ForwardVarArgsTo. The caller of InlineFunction has to make sure any varargs
+/// are only used by ForwardVarArgsTo.
 bool InlineFunction(CallInst *C, InlineFunctionInfo &IFI,
                     AAResults *CalleeAAR = nullptr, bool InsertLifetime = true);
 bool InlineFunction(InvokeInst *II, InlineFunctionInfo &IFI,
                     AAResults *CalleeAAR = nullptr, bool InsertLifetime = true);
 bool InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
-                    AAResults *CalleeAAR = nullptr, bool InsertLifetime = true);
+                    AAResults *CalleeAAR = nullptr, bool InsertLifetime = true,
+                    Function *ForwardVarArgsTo = nullptr);
 
 /// \brief Clones a loop \p OrigLoop.  Returns the loop and the blocks in \p
 /// Blocks.

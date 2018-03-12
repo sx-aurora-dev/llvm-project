@@ -185,6 +185,7 @@ void MCObjectFileInfo::initMachOMCObjectFileInfo(const Triple &T) {
 
   COFFDebugSymbolsSection = nullptr;
   COFFDebugTypesSection = nullptr;
+  COFFGlobalTypeHashesSection = nullptr;
 
   if (useCompactUnwind(T)) {
     CompactUnwindSection =
@@ -227,6 +228,9 @@ void MCObjectFileInfo::initMachOMCObjectFileInfo(const Triple &T) {
   DwarfLineSection =
       Ctx->getMachOSection("__DWARF", "__debug_line", MachO::S_ATTR_DEBUG,
                            SectionKind::getMetadata(), "section_line");
+  DwarfLineStrSection =
+      Ctx->getMachOSection("__DWARF", "__debug_line_str", MachO::S_ATTR_DEBUG,
+                           SectionKind::getMetadata(), "section_line_str");
   DwarfFrameSection =
       Ctx->getMachOSection("__DWARF", "__debug_frame", MachO::S_ATTR_DEBUG,
                            SectionKind::getMetadata());
@@ -526,6 +530,9 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T, bool Large) {
       Ctx->getELFSection(".debug_abbrev", DebugSecType, 0);
   DwarfInfoSection = Ctx->getELFSection(".debug_info", DebugSecType, 0);
   DwarfLineSection = Ctx->getELFSection(".debug_line", DebugSecType, 0);
+  DwarfLineStrSection =
+      Ctx->getELFSection(".debug_line_str", DebugSecType,
+                         ELF::SHF_MERGE | ELF::SHF_STRINGS, 1, "");
   DwarfFrameSection = Ctx->getELFSection(".debug_frame", DebugSecType, 0);
   DwarfPubNamesSection =
       Ctx->getELFSection(".debug_pubnames", DebugSecType, 0);
@@ -594,6 +601,8 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T, bool Large) {
 
   EHFrameSection =
       Ctx->getELFSection(".eh_frame", EHSectionType, EHSectionFlags);
+
+  StackSizesSection = Ctx->getELFSection(".stack_sizes", ELF::SHT_PROGBITS, 0);
 }
 
 void MCObjectFileInfo::initCOFFMCObjectFileInfo(const Triple &T) {
@@ -653,6 +662,11 @@ void MCObjectFileInfo::initCOFFMCObjectFileInfo(const Triple &T) {
                                        COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
                                        COFF::IMAGE_SCN_MEM_READ),
                           SectionKind::getMetadata());
+  COFFGlobalTypeHashesSection = Ctx->getCOFFSection(
+      ".debug$H",
+      (COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+       COFF::IMAGE_SCN_MEM_READ),
+      SectionKind::getMetadata());
 
   DwarfAbbrevSection = Ctx->getCOFFSection(
       ".debug_abbrev",
@@ -669,7 +683,11 @@ void MCObjectFileInfo::initCOFFMCObjectFileInfo(const Triple &T) {
       COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
           COFF::IMAGE_SCN_MEM_READ,
       SectionKind::getMetadata(), "section_line");
-
+  DwarfLineStrSection = Ctx->getCOFFSection(
+      ".debug_line_str",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_line_str");
   DwarfFrameSection = Ctx->getCOFFSection(
       ".debug_frame",
       COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
@@ -811,6 +829,11 @@ void MCObjectFileInfo::initCOFFMCObjectFileInfo(const Triple &T) {
   SXDataSection = Ctx->getCOFFSection(".sxdata", COFF::IMAGE_SCN_LNK_INFO,
                                       SectionKind::getMetadata());
 
+  GFIDsSection = Ctx->getCOFFSection(".gfids$y",
+                                     COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+                                         COFF::IMAGE_SCN_MEM_READ,
+                                     SectionKind::getMetadata());
+
   TLSDataSection = Ctx->getCOFFSection(
       ".tls$", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
                    COFF::IMAGE_SCN_MEM_WRITE,
@@ -829,6 +852,8 @@ void MCObjectFileInfo::initWasmMCObjectFileInfo(const Triple &T) {
 
   // TODO: Set the section types and flags.
   DwarfLineSection = Ctx->getWasmSection(".debug_line", SectionKind::getMetadata());
+  DwarfLineStrSection =
+      Ctx->getWasmSection(".debug_line_str", SectionKind::getMetadata());
   DwarfStrSection = Ctx->getWasmSection(".debug_str", SectionKind::getMetadata());
   DwarfLocSection = Ctx->getWasmSection(".debug_loc", SectionKind::getMetadata());
   DwarfAbbrevSection = Ctx->getWasmSection(".debug_abbrev", SectionKind::getMetadata(), "section_abbrev");

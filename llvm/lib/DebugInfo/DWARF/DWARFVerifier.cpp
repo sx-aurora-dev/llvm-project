@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SyntaxHighlighting.h"
 #include "llvm/DebugInfo/DWARF/DWARFVerifier.h"
+#include "llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h"
 #include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
@@ -16,8 +16,8 @@
 #include "llvm/DebugInfo/DWARF/DWARFExpression.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/DebugInfo/DWARF/DWARFSection.h"
-#include "llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <map>
 #include <set>
@@ -26,7 +26,6 @@
 using namespace llvm;
 using namespace dwarf;
 using namespace object;
-using namespace syntax;
 
 DWARFVerifier::DieRangeInfo::address_range_iterator
 DWARFVerifier::DieRangeInfo::insert(const DWARFAddressRange &R) {
@@ -410,22 +409,27 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
     ReportError("DIE has invalid DW_AT_stmt_list encoding:");
     break;
   case DW_AT_location: {
-    Optional<ArrayRef<uint8_t>> Expr = AttrValue.Value.getAsBlock();
-    if (!Expr) {
-      ReportError("DIE has invalid DW_AT_location encoding:");
-      break;
+    auto VerifyLocation = [&](StringRef D) {
+      DWARFUnit *U = Die.getDwarfUnit();
+      DataExtractor Data(D, DCtx.isLittleEndian(), 0);
+      DWARFExpression Expression(Data, U->getVersion(),
+                                 U->getAddressByteSize());
+      bool Error = llvm::any_of(Expression, [](DWARFExpression::Operation &Op) {
+        return Op.isError();
+      });
+      if (Error)
+        ReportError("DIE contains invalid DWARF expression:");
+    };
+    if (Optional<ArrayRef<uint8_t>> Expr = AttrValue.Value.getAsBlock()) {
+      // Verify inlined location.
+      VerifyLocation(llvm::toStringRef(*Expr));
+    } else if (auto LocOffset = AttrValue.Value.getAsUnsignedConstant()) {
+      // Verify location list.
+      if (auto DebugLoc = DCtx.getDebugLoc())
+        if (auto LocList = DebugLoc->getLocationListAtOffset(*LocOffset))
+          for (const auto &Entry : LocList->Entries)
+            VerifyLocation({Entry.Loc.data(), Entry.Loc.size()});
     }
-
-    DWARFUnit *U = Die.getDwarfUnit();
-    DataExtractor Data(
-        StringRef(reinterpret_cast<const char *>(Expr->data()), Expr->size()),
-        DCtx.isLittleEndian(), 0);
-    DWARFExpression Expression(Data, U->getVersion(), U->getAddressByteSize());
-    bool Error = llvm::any_of(Expression, [](DWARFExpression::Operation &Op) {
-      return Op.isError();
-    });
-    if (Error)
-      ReportError("DIE contains invalid DWARF expression:");
     break;
   }
 
@@ -669,13 +673,13 @@ bool DWARFVerifier::handleDebugLine() {
   return NumDebugLineErrors == 0;
 }
 
-unsigned DWARFVerifier::verifyAccelTable(const DWARFSection *AccelSection,
-                                         DataExtractor *StrData,
-                                         const char *SectionName) {
+unsigned DWARFVerifier::verifyAppleAccelTable(const DWARFSection *AccelSection,
+                                              DataExtractor *StrData,
+                                              const char *SectionName) {
   unsigned NumErrors = 0;
   DWARFDataExtractor AccelSectionData(DCtx.getDWARFObj(), *AccelSection,
                                       DCtx.isLittleEndian(), 0);
-  DWARFAcceleratorTable AccelTable(AccelSectionData, *StrData);
+  AppleAcceleratorTable AccelTable(AccelSectionData, *StrData);
 
   OS << "Verifying " << SectionName << "...\n";
 
@@ -686,8 +690,8 @@ unsigned DWARFVerifier::verifyAccelTable(const DWARFSection *AccelSection,
   }
 
   // Verify that the section is not too short.
-  if (!AccelTable.extract()) {
-    error() << "Section is smaller than size described in section header.\n";
+  if (Error E = AccelTable.extract()) {
+    error() << toString(std::move(E)) << '\n';
     return 1;
   }
 
@@ -773,33 +777,120 @@ unsigned DWARFVerifier::verifyAccelTable(const DWARFSection *AccelSection,
   return NumErrors;
 }
 
+unsigned
+DWARFVerifier::verifyDebugNamesCULists(const DWARFDebugNames &AccelTable) {
+  // A map from CU offset to the (first) Name Index offset which claims to index
+  // this CU.
+  DenseMap<uint32_t, uint32_t> CUMap;
+  const uint32_t NotIndexed = std::numeric_limits<uint32_t>::max();
+
+  CUMap.reserve(DCtx.getNumCompileUnits());
+  for (const auto &CU : DCtx.compile_units())
+    CUMap[CU->getOffset()] = NotIndexed;
+
+  unsigned NumErrors = 0;
+  for (const DWARFDebugNames::NameIndex &NI : AccelTable) {
+    if (NI.getCUCount() == 0) {
+      error() << formatv("Name Index @ {0:x} does not index any CU\n",
+                         NI.getUnitOffset());
+      ++NumErrors;
+      continue;
+    }
+    for (uint32_t CU = 0, End = NI.getCUCount(); CU < End; ++CU) {
+      uint32_t Offset = NI.getCUOffset(CU);
+      auto Iter = CUMap.find(Offset);
+
+      if (Iter == CUMap.end()) {
+        error() << formatv(
+            "Name Index @ {0:x} references a non-existing CU @ {1:x}\n",
+            NI.getUnitOffset(), Offset);
+        ++NumErrors;
+        continue;
+      }
+
+      if (Iter->second != NotIndexed) {
+        error() << formatv("Name Index @ {0:x} references a CU @ {1:x}, but "
+                          "this CU is already indexed by Name Index @ {2:x}\n",
+                          NI.getUnitOffset(), Offset, Iter->second);
+        continue;
+      }
+      Iter->second = NI.getUnitOffset();
+    }
+  }
+
+  for (const auto &KV : CUMap) {
+    if (KV.second == NotIndexed)
+      warn() << formatv("CU @ {0:x} not covered by any Name Index\n", KV.first);
+  }
+
+  return NumErrors;
+}
+
+unsigned DWARFVerifier::verifyDebugNames(const DWARFSection &AccelSection,
+                                         const DataExtractor &StrData) {
+  unsigned NumErrors = 0;
+  DWARFDataExtractor AccelSectionData(DCtx.getDWARFObj(), AccelSection,
+                                      DCtx.isLittleEndian(), 0);
+  DWARFDebugNames AccelTable(AccelSectionData, StrData);
+
+  OS << "Verifying .debug_names...\n";
+
+  // This verifies that we can read individual name indices and their
+  // abbreviation tables.
+  if (Error E = AccelTable.extract()) {
+    error() << toString(std::move(E)) << '\n';
+    return 1;
+  }
+
+  NumErrors += verifyDebugNamesCULists(AccelTable);
+
+  for (const DWARFDebugNames::NameIndex &NI : AccelTable) {
+    for (uint32_t Bucket = 0, End = NI.getBucketCount(); Bucket < End;
+         ++Bucket) {
+      uint32_t Index = NI.getBucketArrayEntry(Bucket);
+      if (Index > NI.getNameCount()) {
+        error() << formatv("Bucket {0} of Name Index @ {1:x} contains invalid "
+                           "value {2}. Valid range is [0, {3}].\n",
+                           Bucket, NI.getUnitOffset(), Index,
+                           NI.getNameCount());
+        ++NumErrors;
+      }
+    }
+  }
+
+  return NumErrors;
+}
+
 bool DWARFVerifier::handleAccelTables() {
   const DWARFObject &D = DCtx.getDWARFObj();
   DataExtractor StrData(D.getStringSection(), DCtx.isLittleEndian(), 0);
   unsigned NumErrors = 0;
   if (!D.getAppleNamesSection().Data.empty())
     NumErrors +=
-        verifyAccelTable(&D.getAppleNamesSection(), &StrData, ".apple_names");
+        verifyAppleAccelTable(&D.getAppleNamesSection(), &StrData, ".apple_names");
   if (!D.getAppleTypesSection().Data.empty())
     NumErrors +=
-        verifyAccelTable(&D.getAppleTypesSection(), &StrData, ".apple_types");
+        verifyAppleAccelTable(&D.getAppleTypesSection(), &StrData, ".apple_types");
   if (!D.getAppleNamespacesSection().Data.empty())
-    NumErrors += verifyAccelTable(&D.getAppleNamespacesSection(), &StrData,
+    NumErrors += verifyAppleAccelTable(&D.getAppleNamespacesSection(), &StrData,
                                   ".apple_namespaces");
   if (!D.getAppleObjCSection().Data.empty())
     NumErrors +=
-        verifyAccelTable(&D.getAppleObjCSection(), &StrData, ".apple_objc");
+        verifyAppleAccelTable(&D.getAppleObjCSection(), &StrData, ".apple_objc");
+
+  if (!D.getDebugNamesSection().Data.empty())
+    NumErrors += verifyDebugNames(D.getDebugNamesSection(), StrData);
   return NumErrors == 0;
 }
 
 raw_ostream &DWARFVerifier::error() const {
-  return WithColor(OS, syntax::Error).get() << "error: ";
+  return WithColor(OS, HighlightColor::Error).get() << "error: ";
 }
 
 raw_ostream &DWARFVerifier::warn() const {
-  return WithColor(OS, syntax::Warning).get() << "warning: ";
+  return WithColor(OS, HighlightColor::Warning).get() << "warning: ";
 }
 
 raw_ostream &DWARFVerifier::note() const {
-  return WithColor(OS, syntax::Note).get() << "note: ";
+  return WithColor(OS, HighlightColor::Note).get() << "note: ";
 }
