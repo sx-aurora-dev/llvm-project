@@ -126,8 +126,10 @@ public:
     }
 
     for (auto &ctx : Contexts) {
-      if (veo_context_close(ctx) != 0) {
-        // report error
+      if (ctx != NULL) {
+        if (veo_context_close(ctx) != 0) {
+          DP("Failed to close VEO context.\n");
+        }
       }
     }
 
