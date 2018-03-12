@@ -13,7 +13,6 @@
 #include <cassert>
 #include <unordered_map>
 
-#include "lldb/Core/ArchSpec.h"
 #include "lldb/Core/FileSpecList.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
@@ -23,7 +22,8 @@
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataBufferLLVM.h"
+#include "lldb/Utility/ArchSpec.h"
+#include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/Stream.h"
@@ -31,6 +31,7 @@
 
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Object/Decompressor.h"
 #include "llvm/Support/ARMBuildAttributes.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -404,8 +405,7 @@ ObjectFile *ObjectFileELF::CreateInstance(const lldb::ModuleSP &module_sp,
                                           lldb::offset_t file_offset,
                                           lldb::offset_t length) {
   if (!data_sp) {
-    data_sp =
-        DataBufferLLVM::CreateSliceFromPath(file->GetPath(), length, file_offset, true);
+    data_sp = MapFileData(*file, length, file_offset);
     if (!data_sp)
       return nullptr;
     data_offset = 0;
@@ -422,8 +422,7 @@ ObjectFile *ObjectFileELF::CreateInstance(const lldb::ModuleSP &module_sp,
 
   // Update the data to contain the entire file if it doesn't already
   if (data_sp->GetByteSize() < length) {
-    data_sp =
-        DataBufferLLVM::CreateSliceFromPath(file->GetPath(), length, file_offset, true);
+    data_sp = MapFileData(*file, length, file_offset);
     if (!data_sp)
       return nullptr;
     data_offset = 0;
@@ -675,31 +674,16 @@ size_t ObjectFileELF::GetModuleSpecifications(
                           __FUNCTION__, file.GetPath().c_str());
           }
 
+          data_sp = MapFileData(file, -1, file_offset);
+          if (data_sp)
+            data.SetData(data_sp);
           // In case there is header extension in the section #0, the header
           // we parsed above could have sentinel values for e_phnum, e_shnum,
           // and e_shstrndx.  In this case we need to reparse the header
           // with a bigger data source to get the actual values.
-          size_t section_header_end = header.e_shoff + header.e_shentsize;
-          if (header.HasHeaderExtension() &&
-            section_header_end > data_sp->GetByteSize()) {
-            data_sp = DataBufferLLVM::CreateSliceFromPath(
-                file.GetPath(), section_header_end, file_offset);
-            if (data_sp) {
-              data.SetData(data_sp);
-              lldb::offset_t header_offset = data_offset;
-              header.Parse(data, &header_offset);
-            }
-          }
-
-          // Try to get the UUID from the section list. Usually that's at the
-          // end, so map the file in if we don't have it already.
-          section_header_end =
-              header.e_shoff + header.e_shnum * header.e_shentsize;
-          if (section_header_end > data_sp->GetByteSize()) {
-            data_sp = DataBufferLLVM::CreateSliceFromPath(
-                file.GetPath(), section_header_end, file_offset);
-            if (data_sp)
-              data.SetData(data_sp);
+          if (header.HasHeaderExtension()) {
+            lldb::offset_t header_offset = data_offset;
+            header.Parse(data, &header_offset);
           }
 
           uint32_t gnu_debuglink_crc = 0;
@@ -736,42 +720,14 @@ size_t ObjectFileELF::GetModuleSpecifications(
               // contents crc32 would be too much of luxury.  Thus we will need
               // to fallback to something simpler.
               if (header.e_type == llvm::ELF::ET_CORE) {
-                size_t program_headers_end =
-                    header.e_phoff + header.e_phnum * header.e_phentsize;
-                if (program_headers_end > data_sp->GetByteSize()) {
-                  data_sp = DataBufferLLVM::CreateSliceFromPath(
-                      file.GetPath(), program_headers_end, file_offset);
-                  if (data_sp)
-                    data.SetData(data_sp);
-                }
                 ProgramHeaderColl program_headers;
                 GetProgramHeaderInfo(program_headers, data, header);
-
-                size_t segment_data_end = 0;
-                for (ProgramHeaderCollConstIter I = program_headers.begin();
-                     I != program_headers.end(); ++I) {
-                  segment_data_end = std::max<unsigned long long>(
-                      I->p_offset + I->p_filesz, segment_data_end);
-                }
-
-                if (segment_data_end > data_sp->GetByteSize()) {
-                  data_sp = DataBufferLLVM::CreateSliceFromPath(
-                      file.GetPath(), segment_data_end, file_offset);
-                  if (data_sp)
-                    data.SetData(data_sp);
-                }
 
                 core_notes_crc =
                     CalculateELFNotesSegmentsCRC32(program_headers, data);
               } else {
-                // Need to map entire file into memory to calculate the crc.
-                data_sp = DataBufferLLVM::CreateSliceFromPath(file.GetPath(), -1,
-                                                         file_offset);
-                if (data_sp) {
-                  data.SetData(data_sp);
-                  gnu_debuglink_crc = calc_gnu_debuglink_crc32(
-                      data.GetDataStart(), data.GetByteSize());
-                }
+                gnu_debuglink_crc = calc_gnu_debuglink_crc32(
+                    data.GetDataStart(), data.GetByteSize());
               }
             }
             if (gnu_debuglink_crc) {
@@ -2030,38 +1986,10 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
     }
   }
 
-  if (m_sections_ap.get()) {
-    if (GetType() == eTypeDebugInfo) {
-      static const SectionType g_sections[] = {
-          eSectionTypeDWARFDebugAbbrev,   eSectionTypeDWARFDebugAddr,
-          eSectionTypeDWARFDebugAranges,  eSectionTypeDWARFDebugCuIndex,
-          eSectionTypeDWARFDebugFrame,    eSectionTypeDWARFDebugInfo,
-          eSectionTypeDWARFDebugLine,     eSectionTypeDWARFDebugLoc,
-          eSectionTypeDWARFDebugMacInfo,  eSectionTypeDWARFDebugPubNames,
-          eSectionTypeDWARFDebugPubTypes, eSectionTypeDWARFDebugRanges,
-          eSectionTypeDWARFDebugStr,      eSectionTypeDWARFDebugStrOffsets,
-          eSectionTypeELFSymbolTable,
-      };
-      SectionList *elf_section_list = m_sections_ap.get();
-      for (size_t idx = 0; idx < sizeof(g_sections) / sizeof(g_sections[0]);
-           ++idx) {
-        SectionType section_type = g_sections[idx];
-        SectionSP section_sp(
-            elf_section_list->FindSectionByType(section_type, true));
-        if (section_sp) {
-          SectionSP module_section_sp(
-              unified_section_list.FindSectionByType(section_type, true));
-          if (module_section_sp)
-            unified_section_list.ReplaceSection(module_section_sp->GetID(),
-                                                section_sp);
-          else
-            unified_section_list.AddSection(section_sp);
-        }
-      }
-    } else {
-      unified_section_list = *m_sections_ap;
-    }
-  }
+  // For eTypeDebugInfo files, the Symbol Vendor will take care of updating the
+  // unified section list.
+  if (GetType() != eTypeDebugInfo)
+    unified_section_list = *m_sections_ap;
 }
 
 // Find the arm/aarch64 mapping symbol character in the given symbol name.
@@ -2764,6 +2692,14 @@ unsigned ObjectFileELF::ApplyRelocations(
       case R_386_32:
       case R_386_PC32:
       default:
+        // FIXME: This asserts with this input:
+        //
+        // foo.cpp
+        // int main(int argc, char **argv) { return 0; }
+        //
+        // clang++.exe --target=i686-unknown-linux-gnu -g -c foo.cpp -o foo.o
+        //
+        // and running this on the foo.o module.
         assert(false && "unexpected relocation type");
       }
     } else {
@@ -3451,4 +3387,58 @@ ObjectFile::Strata ObjectFileELF::CalculateStrata() {
     break;
   }
   return eStrataUnknown;
+}
+
+size_t ObjectFileELF::ReadSectionData(Section *section,
+                       lldb::offset_t section_offset, void *dst,
+                       size_t dst_len) {
+  // If some other objectfile owns this data, pass this to them.
+  if (section->GetObjectFile() != this)
+    return section->GetObjectFile()->ReadSectionData(section, section_offset,
+                                                     dst, dst_len);
+
+  if (!section->Test(SHF_COMPRESSED))
+    return ObjectFile::ReadSectionData(section, section_offset, dst, dst_len);
+
+  // For compressed sections we need to read to full data to be able to
+  // decompress.
+  DataExtractor data;
+  ReadSectionData(section, data);
+  return data.CopyData(section_offset, dst_len, dst);
+}
+
+size_t ObjectFileELF::ReadSectionData(Section *section,
+                                      DataExtractor &section_data) {
+  // If some other objectfile owns this data, pass this to them.
+  if (section->GetObjectFile() != this)
+    return section->GetObjectFile()->ReadSectionData(section, section_data);
+
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_MODULES);
+
+  size_t result = ObjectFile::ReadSectionData(section, section_data);
+  if (result == 0 || !section->Test(SHF_COMPRESSED))
+    return result;
+
+  auto Decompressor = llvm::object::Decompressor::create(
+      section->GetName().GetStringRef(),
+      {reinterpret_cast<const char *>(section_data.GetDataStart()),
+       size_t(section_data.GetByteSize())},
+      GetByteOrder() == eByteOrderLittle, GetAddressByteSize() == 8);
+  if (!Decompressor) {
+    LLDB_LOG_ERROR(log, Decompressor.takeError(),
+                   "Unable to initialize decompressor for section {0}",
+                   section->GetName());
+    return result;
+  }
+  auto buffer_sp =
+      std::make_shared<DataBufferHeap>(Decompressor->getDecompressedSize(), 0);
+  if (auto Error = Decompressor->decompress(
+          {reinterpret_cast<char *>(buffer_sp->GetBytes()),
+           size_t(buffer_sp->GetByteSize())})) {
+    LLDB_LOG_ERROR(log, std::move(Error), "Decompression of section {0} failed",
+                   section->GetName());
+    return result;
+  }
+  section_data.SetData(buffer_sp);
+  return buffer_sp->GetByteSize();
 }

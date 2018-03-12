@@ -103,6 +103,10 @@ static ARCCC::CondCode GetOppositeBranchCondition(ARCCC::CondCode CC) {
     return ARCCC::LE;
   case ARCCC::GE:
     return ARCCC::LT;
+  case ARCCC::VS:
+    return ARCCC::VC;
+  case ARCCC::VC:
+    return ARCCC::VS;
   case ARCCC::LT:
     return ARCCC::GE;
   case ARCCC::LE:
@@ -294,7 +298,7 @@ void ARCInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
          "Only support 4-byte stores to stack now.");
   assert(ARC::GPR32RegClass.hasSubClassEq(RC) &&
          "Only support GPR32 stores to stack now.");
-  DEBUG(dbgs() << "Created store reg=" << PrintReg(SrcReg, TRI)
+  DEBUG(dbgs() << "Created store reg=" << printReg(SrcReg, TRI)
                << " to FrameIndex=" << FrameIndex << "\n");
   BuildMI(MBB, I, dl, get(ARC::ST_rs9))
       .addReg(SrcReg, getKillRegState(isKill))
@@ -321,7 +325,7 @@ void ARCInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
          "Only support 4-byte loads from stack now.");
   assert(ARC::GPR32RegClass.hasSubClassEq(RC) &&
          "Only support GPR32 stores to stack now.");
-  DEBUG(dbgs() << "Created load reg=" << PrintReg(DestReg, TRI)
+  DEBUG(dbgs() << "Created load reg=" << printReg(DestReg, TRI)
                << " from FrameIndex=" << FrameIndex << "\n");
   BuildMI(MBB, I, dl, get(ARC::LD_rs9))
       .addReg(DestReg, RegState::Define)

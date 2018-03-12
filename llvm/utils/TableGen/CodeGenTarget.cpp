@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "CodeGenTarget.h"
+#include "CodeGenDAGPatterns.h"
 #include "CodeGenIntrinsics.h"
 #include "CodeGenSchedule.h"
 #include "llvm/ADT/STLExtras.h"
@@ -82,6 +83,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v16i1:    return "MVT::v16i1";
   case MVT::v32i1:    return "MVT::v32i1";
   case MVT::v64i1:    return "MVT::v64i1";
+  case MVT::v128i1:   return "MVT::v128i1";
   case MVT::v512i1:   return "MVT::v512i1";
   case MVT::v1024i1:  return "MVT::v1024i1";
   case MVT::v1i8:     return "MVT::v1i8";
@@ -172,6 +174,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::iPTR:     return "MVT::iPTR";
   case MVT::iPTRAny:  return "MVT::iPTRAny";
   case MVT::Untyped:  return "MVT::Untyped";
+  case MVT::ExceptRef: return "MVT::ExceptRef";
   default: llvm_unreachable("ILLEGAL VALUE TYPE!");
   }
 }
@@ -222,6 +225,9 @@ Record *CodeGenTarget::getInstructionSet() const {
   return TargetRec->getValueAsDef("InstructionSet");
 }
 
+bool CodeGenTarget::getAllowRegisterRenaming() const {
+  return TargetRec->getValueAsInt("AllowRegisterRenaming");
+}
 
 /// getAsmParser - Return the AssemblyParser definition for this target.
 ///
@@ -343,13 +349,18 @@ GetInstByName(const char *Name,
   return I->second.get();
 }
 
+static const char *const FixedInstrs[] = {
+#define HANDLE_TARGET_OPCODE(OPC) #OPC,
+#include "llvm/CodeGen/TargetOpcodes.def"
+    nullptr};
+
+unsigned CodeGenTarget::getNumFixedInstructions() {
+  return array_lengthof(FixedInstrs) - 1;
+}
+
 /// \brief Return all of the instructions defined by the target, ordered by
 /// their enum value.
 void CodeGenTarget::ComputeInstrsByEnum() const {
-  static const char *const FixedInstrs[] = {
-#define HANDLE_TARGET_OPCODE(OPC) #OPC,
-#include "llvm/Target/TargetOpcodes.def"
-      nullptr};
   const auto &Insts = getInstructions();
   for (const char *const *p = FixedInstrs; *p; ++p) {
     const CodeGenInstruction *Instr = GetInstByName(*p, Insts, Records);
@@ -358,6 +369,8 @@ void CodeGenTarget::ComputeInstrsByEnum() const {
     InstrsByEnum.push_back(Instr);
   }
   unsigned EndOfPredefines = InstrsByEnum.size();
+  assert(EndOfPredefines == getNumFixedInstructions() &&
+         "Missing generic opcode");
 
   for (const auto &I : Insts) {
     const CodeGenInstruction *CGI = I.second.get();
@@ -449,6 +462,7 @@ ComplexPattern::ComplexPattern(Record *R) {
   else
     Complexity = RawComplexity;
 
+  // FIXME: Why is this different from parseSDPatternOperatorProperties?
   // Parse the properties.
   Properties = 0;
   std::vector<Record*> PropList = R->getValueAsListOfDefs("Properties");
@@ -511,6 +525,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
   TheDef = R;
   std::string DefName = R->getName();
   ModRef = ReadWriteMem;
+  Properties = 0;
   isOverloaded = false;
   isCommutative = false;
   canThrow = false;
@@ -680,6 +695,10 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
       llvm_unreachable("Unknown property!");
   }
 
+  // Also record the SDPatternOperator Properties.
+  Properties = parseSDPatternOperatorProperties(R);
+
   // Sort the argument attributes for later benefit.
   std::sort(ArgumentAttributes.begin(), ArgumentAttributes.end());
 }
+

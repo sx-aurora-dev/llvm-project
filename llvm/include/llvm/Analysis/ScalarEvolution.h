@@ -678,7 +678,7 @@ public:
                                 const SCEV *LHS, const SCEV *RHS);
 
   /// Test whether the backedge of the loop is protected by a conditional
-  /// between LHS and RHS.  This is used to to eliminate casts.
+  /// between LHS and RHS.  This is used to eliminate casts.
   bool isLoopBackedgeGuardedByCond(const Loop *L, ICmpInst::Predicate Pred,
                                    const SCEV *LHS, const SCEV *RHS);
 
@@ -833,6 +833,11 @@ public:
   /// by Pred, LHS, and RHS.
   bool isKnownPredicate(ICmpInst::Predicate Pred, const SCEV *LHS,
                         const SCEV *RHS);
+
+  /// Test if the condition described by Pred, LHS, RHS is known to be true on
+  /// every iteration of the loop of the recurrency LHS.
+  bool isKnownOnEveryIteration(ICmpInst::Predicate Pred,
+                               const SCEVAddRecExpr *LHS, const SCEV *RHS);
 
   /// Return true if, for all loop invariant X, the predicate "LHS `Pred` X"
   /// is monotonically increasing or decreasing.  In the former case set
@@ -1094,6 +1099,9 @@ private:
   /// Mark predicate values currently being processed by isImpliedCond.
   SmallPtrSet<Value *, 6> PendingLoopPredicates;
 
+  /// Mark SCEVUnknown Phis currently being processed by getRangeRef.
+  SmallPtrSet<const PHINode *, 6> PendingPhiRanges;
+
   /// Set to true by isLoopBackedgeGuardedByCond when we're walking the set of
   /// conditions dominating the backedge of a loop.
   bool WalkingBEDominatingConds = false;
@@ -1272,9 +1280,6 @@ private:
   /// function as they are computed.
   DenseMap<const Loop *, BackedgeTakenInfo> PredicatedBackedgeTakenCounts;
 
-  // Cache the calculated exit limits for the loops.
-  DenseMap<ExitLimitQuery, ExitLimit> ExitLimits;
-
   /// This map contains entries for all of the PHI instructions that we
   /// attempt to compute constant evolutions for.  This allows us to avoid
   /// potentially expensive recomputation of these properties.  An instruction
@@ -1425,9 +1430,6 @@ private:
   /// return an exact answer.
   ExitLimit computeExitLimit(const Loop *L, BasicBlock *ExitingBlock,
                              bool AllowPredicates = false);
-
-  ExitLimit computeExitLimitImpl(const Loop *L, BasicBlock *ExitingBlock,
-                                 bool AllowPredicates = false);
 
   /// Compute the number of times the backedge of the specified loop will
   /// execute if its exit condition were a conditional branch of ExitCond,
@@ -1597,8 +1599,8 @@ private:
 
   /// Test whether the condition described by Pred, LHS, and RHS is true.
   /// Use only simple non-recursive types of checks, such as range analysis etc.
-  bool isKnownViaSimpleReasoning(ICmpInst::Predicate Pred,
-                                 const SCEV *LHS, const SCEV *RHS);
+  bool isKnownViaNonRecursiveReasoning(ICmpInst::Predicate Pred,
+                                       const SCEV *LHS, const SCEV *RHS);
 
   /// Test whether the condition described by Pred, LHS, and RHS is true
   /// whenever the condition described by Pred, FoundLHS, and FoundRHS is
@@ -1668,9 +1670,8 @@ private:
   /// to be a constant.
   Optional<APInt> computeConstantDifference(const SCEV *LHS, const SCEV *RHS);
 
-  /// Drop memoized information computed for S. Only erase Exit Limits info if
-  /// we expect that the operation we have made is going to change it.
-  void forgetMemoizedResults(const SCEV *S, bool EraseExitLimit = true);
+  /// Drop memoized information computed for S.
+  void forgetMemoizedResults(const SCEV *S);
 
   /// Return an existing SCEV for V if there is one, otherwise return nullptr.
   const SCEV *getExistingSCEV(Value *V);
@@ -1770,6 +1771,11 @@ private:
   /// Get mul expr already created or create a new one.
   const SCEV *getOrCreateMulExpr(SmallVectorImpl<const SCEV *> &Ops,
                                  SCEV::NoWrapFlags Flags);
+
+  /// Find all of the loops transitively used in \p S, and fill \p LoopsUsed.
+  /// A loop is considered "used" by an expression if it contains
+  /// an add rec on said loop.
+  void getUsedLoops(const SCEV *S, SmallPtrSetImpl<const Loop *> &LoopsUsed);
 
   /// Find all of the loops transitively used in \p S, and update \c LoopUsers
   /// accordingly.
@@ -1890,6 +1896,11 @@ public:
   /// Print the SCEV mappings done by the Predicated Scalar Evolution.
   /// The printed text is indented by \p Depth.
   void print(raw_ostream &OS, unsigned Depth) const;
+
+  /// Check if \p AR1 and \p AR2 are equal, while taking into account
+  /// Equal predicates in Preds.
+  bool areAddRecsEqualWithPreds(const SCEVAddRecExpr *AR1,
+                                const SCEVAddRecExpr *AR2) const;
 
 private:
   /// Increments the version number of the predicate.  This needs to be called

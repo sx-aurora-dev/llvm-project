@@ -14,10 +14,12 @@
 
 #include "sanitizer_platform.h"
 
-#if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD
+#if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
+    SANITIZER_SOLARIS
 
 #include "sanitizer_common.h"
 #include "sanitizer_flags.h"
+#include "sanitizer_getauxval.h"
 #include "sanitizer_internal_defs.h"
 #include "sanitizer_libc.h"
 #include "sanitizer_linux.h"
@@ -54,7 +56,9 @@
 #include <pthread.h>
 #include <sched.h>
 #include <sys/mman.h>
+#if !SANITIZER_SOLARIS
 #include <sys/ptrace.h>
+#endif
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -80,6 +84,7 @@ extern "C" {
 // FreeBSD 9.2 and 10.0.
 #include <sys/umtx.h>
 }
+#include <sys/thr.h>
 extern char **environ;  // provided by crt1
 #endif  // SANITIZER_FREEBSD
 
@@ -91,22 +96,16 @@ extern char **environ;  // provided by crt1
 extern struct ps_strings *__ps_strings;
 #endif  // SANITIZER_NETBSD
 
+#if SANITIZER_SOLARIS
+#include <stdlib.h>
+#include <thread.h>
+
+extern char **_environ;
+#define environ _environ
+#endif
+
 #if !SANITIZER_ANDROID
 #include <sys/signal.h>
-#endif
-
-#ifndef __GLIBC_PREREQ
-#define __GLIBC_PREREQ(x, y) 0
-#endif
-
-#if SANITIZER_LINUX && __GLIBC_PREREQ(2, 16)
-# define SANITIZER_USE_GETAUXVAL 1
-#else
-# define SANITIZER_USE_GETAUXVAL 0
-#endif
-
-#if SANITIZER_USE_GETAUXVAL
-#include <sys/auxv.h>
 #endif
 
 #if SANITIZER_LINUX
@@ -152,11 +151,14 @@ namespace __sanitizer {
 #include "sanitizer_syscall_linux_x86_64.inc"
 #elif SANITIZER_LINUX && defined(__aarch64__)
 #include "sanitizer_syscall_linux_aarch64.inc"
+#elif SANITIZER_LINUX && defined(__arm__)
+#include "sanitizer_syscall_linux_arm.inc"
 #else
 #include "sanitizer_syscall_generic.inc"
 #endif
 
 // --------------- sanitizer_libc.h
+#if !SANITIZER_SOLARIS
 #if !SANITIZER_S390
 uptr internal_mmap(void *addr, uptr length, int prot, int flags, int fd,
                    OFF_T offset) {
@@ -435,6 +437,7 @@ uptr internal_execve(const char *filename, char *const argv[],
   return internal_syscall_ptr(SYSCALL(execve), (uptr)filename, (uptr)argv,
                           (uptr)envp);
 }
+#endif // !SANITIZER_SOLARIS
 
 // ----------------- sanitizer_common.h
 bool FileExists(const char *filename) {
@@ -451,14 +454,19 @@ bool FileExists(const char *filename) {
 
 tid_t GetTid() {
 #if SANITIZER_FREEBSD
-  return (uptr)pthread_self();
+  long Tid;
+  thr_self(&Tid);
+  return Tid;
 #elif SANITIZER_NETBSD
   return _lwp_self();
+#elif SANITIZER_SOLARIS
+  return thr_self();
 #else
   return internal_syscall(SYSCALL(gettid));
 #endif
 }
 
+#if !SANITIZER_SOLARIS
 u64 NanoTime() {
 #if SANITIZER_FREEBSD || SANITIZER_NETBSD
   timeval tv;
@@ -470,11 +478,16 @@ u64 NanoTime() {
   return (u64)tv.tv_sec * 1000*1000*1000 + tv.tv_usec * 1000;
 }
 
+uptr internal_clock_gettime(__sanitizer_clockid_t clk_id, void *tp) {
+  return internal_syscall_ptr(SYSCALL(clock_gettime), clk_id, tp);
+}
+#endif // !SANITIZER_SOLARIS
+
 // Like getenv, but reads env directly from /proc (on Linux) or parses the
-// 'environ' array (on FreeBSD) and does not use libc. This function should be
-// called first inside __asan_init.
+// 'environ' array (on some others) and does not use libc. This function
+// should be called first inside __asan_init.
 const char *GetEnv(const char *name) {
-#if SANITIZER_FREEBSD || SANITIZER_NETBSD
+#if SANITIZER_FREEBSD || SANITIZER_NETBSD || SANITIZER_SOLARIS
   if (::environ != 0) {
     uptr NameLen = internal_strlen(name);
     for (char **Env = ::environ; *Env != 0; Env++) {
@@ -558,7 +571,7 @@ static void GetArgsAndEnv(char ***argv, char ***envp) {
   *envp = pss->ps_envstr;
 #elif SANITIZER_NETBSD
   *argv = __ps_strings->ps_argvstr;
-  *argv = __ps_strings->ps_envstr;
+  *envp = __ps_strings->ps_envstr;
 #else
 #if !SANITIZER_GO
   if (&__libc_stack_end) {
@@ -597,6 +610,9 @@ void ReExec() {
   len = sizeof(path);
   if (sysctl(name, ARRAY_SIZE(name), path, &len, NULL, 0) != -1)
     pathname = path;
+#elif SANITIZER_SOLARIS
+  pathname = getexecname();
+  CHECK_NE(pathname, NULL);
 #endif
 
   GetArgsAndEnv(&argv, &envp);
@@ -607,6 +623,7 @@ void ReExec() {
   Die();
 }
 
+#if !SANITIZER_SOLARIS
 enum MutexState {
   MtxUnlocked = 0,
   MtxLocked = 1,
@@ -626,7 +643,7 @@ void BlockingMutex::Lock() {
 #if SANITIZER_FREEBSD
     _umtx_op(m, UMTX_OP_WAIT_UINT, MtxSleeping, 0, 0);
 #elif SANITIZER_NETBSD
-    sched_yield(); /* No userspace futex-like synchromization */
+    sched_yield(); /* No userspace futex-like synchronization */
 #else
     internal_syscall(SYSCALL(futex), (uptr)m, FUTEX_WAIT, MtxSleeping, 0, 0, 0);
 #endif
@@ -641,7 +658,7 @@ void BlockingMutex::Unlock() {
 #if SANITIZER_FREEBSD
     _umtx_op(m, UMTX_OP_WAKE, 1, 0, 0);
 #elif SANITIZER_NETBSD
-                   /* No userspace futex-like synchromization */
+                   /* No userspace futex-like synchronization */
 #else
     internal_syscall(SYSCALL(futex), (uptr)m, FUTEX_WAKE, 1, 0, 0, 0);
 #endif
@@ -652,6 +669,7 @@ void BlockingMutex::CheckLocked() {
   atomic_uint32_t *m = reinterpret_cast<atomic_uint32_t *>(&opaque_storage_);
   CHECK_NE(MtxUnlocked, atomic_load(m, memory_order_relaxed));
 }
+#endif // !SANITIZER_SOLARIS
 
 // ----------------- sanitizer_linux.h
 // The actual size of this structure is specified by d_reclen.
@@ -684,6 +702,7 @@ struct linux_dirent {
 };
 #endif
 
+#if !SANITIZER_SOLARIS
 // Syscall wrappers.
 uptr internal_ptrace(int request, int pid, void *addr, void *data) {
 #if SANITIZER_NETBSD
@@ -861,6 +880,7 @@ bool internal_sigismember(__sanitizer_sigset_t *set, int signum) {
   return k_set->sig[idx] & (1 << bit);
 }
 #endif  // SANITIZER_LINUX
+#endif // !SANITIZER_SOLARIS
 
 // ThreadLister implementation.
 ThreadLister::ThreadLister(int pid)
@@ -989,13 +1009,19 @@ uptr GetMaxVirtualAddress() {
 # if defined(__s390__)
   return (1ULL << 31) - 1;  // 0x7fffffff;
 # else
-  uptr res = (1ULL << 32) - 1;  // 0xffffffff;
-  if (!common_flags()->full_address_space)
-    res -= GetKernelAreaSize();
-  CHECK_LT(reinterpret_cast<uptr>(&res), res);
-  return res;
+  return (1ULL << 32) - 1;  // 0xffffffff;
 # endif
 #endif  // SANITIZER_WORDSIZE
+}
+
+uptr GetMaxUserVirtualAddress() {
+  uptr addr = GetMaxVirtualAddress();
+#if SANITIZER_WORDSIZE == 32 && !defined(__s390__)
+  if (!common_flags()->full_address_space)
+    addr -= GetKernelAreaSize();
+  CHECK_LT(reinterpret_cast<uptr>(&addr), addr);
+#endif
+  return addr;
 }
 
 uptr GetPageSize() {
@@ -1012,6 +1038,11 @@ uptr GetPageSize() {
 }
 
 uptr ReadBinaryName(/*out*/char *buf, uptr buf_len) {
+#if SANITIZER_SOLARIS
+  const char *default_module_name = getexecname();
+  CHECK_NE(default_module_name, NULL);
+  return internal_snprintf(buf, buf_len, "%s", default_module_name);
+#else
 #if SANITIZER_FREEBSD || SANITIZER_NETBSD
 #if SANITIZER_FREEBSD
   const int Mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
@@ -1029,7 +1060,7 @@ uptr ReadBinaryName(/*out*/char *buf, uptr buf_len) {
       default_module_name, buf, buf_len);
   int readlink_error;
   bool IsErr = internal_iserror(module_name_len, &readlink_error);
-#endif
+#endif  // SANITIZER_SOLARIS
   if (IsErr) {
     // We can't read binary name for some reason, assume it's unknown.
     Report("WARNING: reading executable name failed with errno %d, "
@@ -1039,6 +1070,7 @@ uptr ReadBinaryName(/*out*/char *buf, uptr buf_len) {
     CHECK_LT(module_name_len, buf_len);
   }
   return module_name_len;
+#endif
 }
 
 uptr ReadLongProcessName(/*out*/ char *buf, uptr buf_len) {
@@ -1589,6 +1621,8 @@ static HandleSignalMode GetHandleSignalModeImpl(int signum) {
       return common_flags()->handle_abort;
     case SIGILL:
       return common_flags()->handle_sigill;
+    case SIGTRAP:
+      return common_flags()->handle_sigtrap;
     case SIGFPE:
       return common_flags()->handle_sigfpe;
     case SIGSEGV:
@@ -1663,6 +1697,9 @@ SignalContext::WriteFlag SignalContext::GetWriteFlag() const {
   uptr err = ucontext->uc_mcontext.mc_err;
 #elif SANITIZER_NETBSD
   uptr err = ucontext->uc_mcontext.__gregs[_REG_ERR];
+#elif SANITIZER_SOLARIS && defined(__i386__)
+# define ERR 13
+  uptr err = ucontext->uc_mcontext.gregs[ERR];
 #else
   uptr err = ucontext->uc_mcontext.gregs[REG_ERR];
 #endif
@@ -1676,6 +1713,12 @@ SignalContext::WriteFlag SignalContext::GetWriteFlag() const {
   u64 esr;
   if (!Aarch64GetESR(ucontext, &esr)) return UNKNOWN;
   return esr & ESR_ELx_WNR ? WRITE : READ;
+#elif SANITIZER_SOLARIS && defined(__sparc__)
+  // Decode the instruction to determine the access type.
+  // From OpenSolaris $SRC/uts/sun4/os/trap.c (get_accesstype).
+  uptr pc = ucontext->uc_mcontext.gregs[REG_PC];
+  u32 instr = *(u32 *)pc;
+  return (instr >> 21) & 1 ? WRITE: READ;
 #else
   (void)ucontext;
   return UNKNOWN;  // FIXME: Implement.
@@ -1687,7 +1730,13 @@ void SignalContext::DumpAllRegisters(void *context) {
 }
 
 static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
-#if defined(__arm__)
+#if SANITIZER_NETBSD
+  // This covers all NetBSD architectures
+  ucontext_t *ucontext = (ucontext_t *)context;
+  *pc = _UC_MACHINE_PC(ucontext);
+  *bp = _UC_MACHINE_FP(ucontext);
+  *sp = _UC_MACHINE_SP(ucontext);
+#elif defined(__arm__)
   ucontext_t *ucontext = (ucontext_t*)context;
   *pc = ucontext->uc_mcontext.arm_pc;
   *bp = ucontext->uc_mcontext.arm_fp;
@@ -1709,11 +1758,6 @@ static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
   *pc = ucontext->uc_mcontext.mc_rip;
   *bp = ucontext->uc_mcontext.mc_rbp;
   *sp = ucontext->uc_mcontext.mc_rsp;
-#elif SANITIZER_NETBSD
-  ucontext_t *ucontext = (ucontext_t *)context;
-  *pc = ucontext->uc_mcontext.__gregs[_REG_RIP];
-  *bp = ucontext->uc_mcontext.__gregs[_REG_RBP];
-  *sp = ucontext->uc_mcontext.__gregs[_REG_RSP];
 # else
   ucontext_t *ucontext = (ucontext_t*)context;
   *pc = ucontext->uc_mcontext.gregs[REG_RIP];
@@ -1726,13 +1770,21 @@ static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
   *pc = ucontext->uc_mcontext.mc_eip;
   *bp = ucontext->uc_mcontext.mc_ebp;
   *sp = ucontext->uc_mcontext.mc_esp;
-#elif SANITIZER_NETBSD
-  ucontext_t *ucontext = (ucontext_t *)context;
-  *pc = ucontext->uc_mcontext.__gregs[_REG_EIP];
-  *bp = ucontext->uc_mcontext.__gregs[_REG_EBP];
-  *sp = ucontext->uc_mcontext.__gregs[_REG_ESP];
 # else
   ucontext_t *ucontext = (ucontext_t*)context;
+# if SANITIZER_SOLARIS
+  /* Use the numeric values: the symbolic ones are undefined by llvm
+     include/llvm/Support/Solaris.h.  */
+# ifndef REG_EIP
+#  define REG_EIP 14 // REG_PC
+# endif
+# ifndef REG_EBP
+#  define REG_EBP  6 // REG_FP
+# endif
+# ifndef REG_ESP
+#  define REG_ESP 17 // REG_SP
+# endif
+# endif
   *pc = ucontext->uc_mcontext.gregs[REG_EIP];
   *bp = ucontext->uc_mcontext.gregs[REG_EBP];
   *sp = ucontext->uc_mcontext.gregs[REG_ESP];
@@ -1747,7 +1799,16 @@ static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
 #elif defined(__sparc__)
   ucontext_t *ucontext = (ucontext_t*)context;
   uptr *stk_ptr;
-# if defined (__arch64__)
+# if defined (__sparcv9)
+# ifndef MC_PC
+#  define MC_PC REG_PC
+# endif
+# ifndef MC_O6
+#  define MC_O6 REG_O6
+# endif
+# ifdef SANITIZER_SOLARIS
+#  define mc_gregs gregs
+# endif
   *pc = ucontext->uc_mcontext.mc_gregs[MC_PC];
   *sp = ucontext->uc_mcontext.mc_gregs[MC_O6];
   stk_ptr = (uptr *) (*sp + 2047);
@@ -1801,7 +1862,8 @@ void CheckNoDeepBind(const char *filename, int flag) {
 }
 
 uptr FindAvailableMemoryRange(uptr size, uptr alignment, uptr left_padding,
-                              uptr *largest_gap_found) {
+                              uptr *largest_gap_found,
+                              uptr *max_occupied_addr) {
   UNREACHABLE("FindAvailableMemoryRange is not available");
   return 0;
 }
@@ -1836,4 +1898,5 @@ bool GetRandom(void *buffer, uptr length, bool blocking) {
 
 } // namespace __sanitizer
 
-#endif  // SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD
+#endif  // SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD ||
+        // SANITIZER_SOLARIS

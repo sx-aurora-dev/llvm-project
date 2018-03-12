@@ -248,7 +248,7 @@ static StoreInst *findSafeStoreForStoreStrongContraction(LoadInst *Load,
 
     // Ok, now we know we have not seen a store yet. See if Inst can write to
     // our load location, if it can not, just ignore the instruction.
-    if (!(AA->getModRefInfo(Inst, Loc) & MRI_Mod))
+    if (!isModSet(AA->getModRefInfo(Inst, Loc)))
       continue;
 
     Store = dyn_cast<StoreInst>(Inst);
@@ -618,8 +618,17 @@ bool ObjCARCContract::runOnFunction(Function &F) {
       else if (isa<GlobalAlias>(Arg) &&
                !cast<GlobalAlias>(Arg)->isInterposable())
         Arg = cast<GlobalAlias>(Arg)->getAliasee();
-      else
+      else {
+        // If Arg is a PHI node, get PHIs that are equivalent to it and replace
+        // their uses.
+        if (PHINode *PN = dyn_cast<PHINode>(Arg)) {
+          SmallVector<Value *, 1> PHIList;
+          getEquivalentPHIs(*PN, PHIList);
+          for (Value *PHI : PHIList)
+            ReplaceArgUses(PHI);
+        }
         break;
+      }
     }
 
     // Replace bitcast users of Arg that are dominated by Inst.

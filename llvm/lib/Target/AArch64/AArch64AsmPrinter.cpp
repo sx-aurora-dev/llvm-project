@@ -33,6 +33,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/StackMaps.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -46,7 +47,6 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -209,29 +209,6 @@ void AArch64AsmPrinter::EmitEndOfAsmFile(Module &M) {
     // generates code that does this, it is always safe to set.
     OutStreamer->EmitAssemblerFlag(MCAF_SubsectionsViaSymbols);
     SM.serializeToStackMapSection();
-  }
-
-  if (TT.isOSBinFormatCOFF()) {
-    const auto &TLOF =
-        static_cast<const TargetLoweringObjectFileCOFF &>(getObjFileLowering());
-
-    std::string Flags;
-    raw_string_ostream OS(Flags);
-
-    for (const auto &Function : M)
-      TLOF.emitLinkerFlagsForGlobal(OS, &Function);
-    for (const auto &Global : M.globals())
-      TLOF.emitLinkerFlagsForGlobal(OS, &Global);
-    for (const auto &Alias : M.aliases())
-      TLOF.emitLinkerFlagsForGlobal(OS, &Alias);
-
-    OS.flush();
-
-    // Output collected flags
-    if (!Flags.empty()) {
-      OutStreamer->SwitchSection(TLOF.getDrectveSection());
-      OutStreamer->EmitBytes(Flags);
-    }
   }
 }
 
@@ -523,7 +500,7 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
 
 void AArch64AsmPrinter::EmitFMov0(const MachineInstr &MI) {
   unsigned DestReg = MI.getOperand(0).getReg();
-  if (STI->hasZeroCycleZeroing()) {
+  if (STI->hasZeroCycleZeroing() && !STI->hasZeroCycleZeroingFPWorkaround()) {
     // Convert H/S/D register to corresponding Q register
     if (AArch64::H0 <= DestReg && DestReg <= AArch64::H31)
       DestReg = AArch64::Q0 + (DestReg - AArch64::H0);
@@ -583,6 +560,20 @@ void AArch64AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
     break;
+  case AArch64::MOVIv2d_ns:
+    // If the target has <rdar://problem/16473581>, lower this
+    // instruction to movi.16b instead.
+    if (STI->hasZeroCycleZeroingFPWorkaround() &&
+        MI->getOperand(1).getImm() == 0) {
+      MCInst TmpInst;
+      TmpInst.setOpcode(AArch64::MOVIv16b_ns);
+      TmpInst.addOperand(MCOperand::createReg(MI->getOperand(0).getReg()));
+      TmpInst.addOperand(MCOperand::createImm(MI->getOperand(1).getImm()));
+      EmitToStreamer(*OutStreamer, TmpInst);
+      return;
+    }
+    break;
+
   case AArch64::DBG_VALUE: {
     if (isVerbose() && OutStreamer->hasRawTextSupport()) {
       SmallString<128> TmpStr;

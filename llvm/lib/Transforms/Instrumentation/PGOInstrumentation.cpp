@@ -119,6 +119,7 @@
 #include <vector>
 
 using namespace llvm;
+using ProfileCount = Function::ProfileCount;
 
 #define DEBUG_TYPE "pgo-instrumentation"
 
@@ -462,7 +463,7 @@ struct PGOEdge {
   bool Removed = false;
   bool IsCritical = false;
 
-  PGOEdge(const BasicBlock *Src, const BasicBlock *Dest, unsigned W = 1)
+  PGOEdge(const BasicBlock *Src, const BasicBlock *Dest, uint64_t W = 1)
       : SrcBB(Src), DestBB(Dest), Weight(W) {}
 
   // Return the information string of an edge.
@@ -716,6 +717,9 @@ BasicBlock *FuncPGOInstrumentation<Edge, BBInfo>::getInstrBB(Edge *E) {
 static void instrumentOneFunc(
     Function &F, Module *M, BranchProbabilityInfo *BPI, BlockFrequencyInfo *BFI,
     std::unordered_multimap<Comdat *, GlobalValue *> &ComdatMembers) {
+  // Split indirectbr critical edges here before computing the MST rather than
+  // later in getInstrBB() to avoid invalidating it.
+  SplitIndirectBrCriticalEdges(F, BPI, BFI);
   FuncPGOInstrumentation<PGOEdge, BBInfo> FuncInfo(F, ComdatMembers, true, BPI,
                                                    BFI);
   unsigned NumCounters = FuncInfo.getNumCounters();
@@ -776,7 +780,7 @@ struct PGOUseEdge : public PGOEdge {
   bool CountValid = false;
   uint64_t CountValue = 0;
 
-  PGOUseEdge(const BasicBlock *Src, const BasicBlock *Dest, unsigned W = 1)
+  PGOUseEdge(const BasicBlock *Src, const BasicBlock *Dest, uint64_t W = 1)
       : PGOEdge(Src, Dest, W) {}
 
   // Set edge count value
@@ -844,8 +848,9 @@ public:
   PGOUseFunc(Function &Func, Module *Modu,
              std::unordered_multimap<Comdat *, GlobalValue *> &ComdatMembers,
              BranchProbabilityInfo *BPI = nullptr,
-             BlockFrequencyInfo *BFI = nullptr)
-      : F(Func), M(Modu), FuncInfo(Func, ComdatMembers, false, BPI, BFI),
+             BlockFrequencyInfo *BFIin = nullptr)
+      : F(Func), M(Modu), BFI(BFIin),
+        FuncInfo(Func, ComdatMembers, false, BPI, BFIin),
         FreqAttr(FFA_Normal) {}
 
   // Read counts for the instrumented BB from profile.
@@ -862,6 +867,9 @@ public:
 
   // Annotate the value profile call sites for one value kind.
   void annotateValueSites(uint32_t Kind);
+
+  // Annotate the irreducible loop header weights.
+  void annotateIrrLoopHeaderWeights();
 
   // The hotness of the function from the profile count.
   enum FuncFreqAttr { FFA_Normal, FFA_Cold, FFA_Hot };
@@ -894,6 +902,7 @@ public:
 private:
   Function &F;
   Module *M;
+  BlockFrequencyInfo *BFI;
 
   // This member stores the shared information with class PGOGenFunc.
   FuncPGOInstrumentation<PGOUseEdge, UseBBInfo> FuncInfo;
@@ -1131,7 +1140,7 @@ void PGOUseFunc::populateCounters() {
   }
 #endif
   uint64_t FuncEntryCount = getBBInfo(&*F.begin()).CountValue;
-  F.setEntryCount(FuncEntryCount);
+  F.setEntryCount(ProfileCount(FuncEntryCount, Function::PCT_Real));
   uint64_t FuncMaxCount = FuncEntryCount;
   for (auto &BB : F) {
     auto BI = findBBInfo(&BB);
@@ -1180,6 +1189,29 @@ void PGOUseFunc::setBranchWeights() {
       EdgeCounts[SuccNum] = EdgeCount;
     }
     setProfMetadata(M, TI, EdgeCounts, MaxCount);
+  }
+}
+
+static bool isIndirectBrTarget(BasicBlock *BB) {
+  for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
+    if (isa<IndirectBrInst>((*PI)->getTerminator()))
+      return true;
+  }
+  return false;
+}
+
+void PGOUseFunc::annotateIrrLoopHeaderWeights() {
+  DEBUG(dbgs() << "\nAnnotating irreducible loop header weights.\n");
+  // Find irr loop headers
+  for (auto &BB : F) {
+    // As a heuristic also annotate indrectbr targets as they have a high chance
+    // to become an irreducible loop header after the indirectbr tail
+    // duplication.
+    if (BFI->isIrrLoopHeader(&BB) || isIndirectBrTarget(&BB)) {
+      TerminatorInst *TI = BB.getTerminator();
+      const UseBBInfo &BBCountInfo = getBBInfo(&BB);
+      setIrrLoopHeaderMetadata(M, TI, BBCountInfo.CountValue);
+    }
   }
 }
 
@@ -1435,12 +1467,16 @@ static bool annotateAllFunctions(
       continue;
     auto *BPI = LookupBPI(F);
     auto *BFI = LookupBFI(F);
+    // Split indirectbr critical edges here before computing the MST rather than
+    // later in getInstrBB() to avoid invalidating it.
+    SplitIndirectBrCriticalEdges(F, BPI, BFI);
     PGOUseFunc Func(F, &M, ComdatMembers, BPI, BFI);
     if (!Func.readCounters(PGOReader.get()))
       continue;
     Func.populateCounters();
     Func.setBranchWeights();
     Func.annotateValueSites();
+    Func.annotateIrrLoopHeaderWeights();
     PGOUseFunc::FuncFreqAttr FreqAttr = Func.getFuncFreqAttr();
     if (FreqAttr == PGOUseFunc::FFA_Cold)
       ColdFunctions.push_back(&F);
@@ -1581,6 +1617,12 @@ void llvm::setProfMetadata(Module *M, Instruction *TI,
 }
 
 namespace llvm {
+
+void setIrrLoopHeaderMetadata(Module *M, Instruction *TI, uint64_t Count) {
+  MDBuilder MDB(M->getContext());
+  TI->setMetadata(llvm::LLVMContext::MD_irr_loop,
+                  MDB.createIrrLoopHeaderWeight(Count));
+}
 
 template <> struct GraphTraits<PGOUseFunc *> {
   using NodeRef = const BasicBlock *;

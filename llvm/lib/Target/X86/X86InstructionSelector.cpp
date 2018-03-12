@@ -31,6 +31,8 @@
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/Support/AtomicOrdering.h"
@@ -40,8 +42,6 @@
 #include "llvm/Support/LowLevelTypeImpl.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetOpcodes.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 #include <cassert>
 #include <cstdint>
 #include <tuple>
@@ -61,13 +61,13 @@ public:
   X86InstructionSelector(const X86TargetMachine &TM, const X86Subtarget &STI,
                          const X86RegisterBankInfo &RBI);
 
-  bool select(MachineInstr &I) const override;
+  bool select(MachineInstr &I, CodeGenCoverage &CoverageInfo) const override;
   static const char *getName() { return DEBUG_TYPE; }
 
 private:
   /// tblgen-erated 'select' implementation, used as the initial selector for
   /// the patterns that don't require complex C++.
-  bool selectImpl(MachineInstr &I) const;
+  bool selectImpl(MachineInstr &I, CodeGenCoverage &CoverageInfo) const;
 
   // TODO: remove after supported by Tablegen-erated instruction selection.
   unsigned getLoadStoreOp(const LLT &Ty, const RegisterBank &RB, unsigned Opc,
@@ -81,8 +81,8 @@ private:
                          MachineFunction &MF) const;
   bool selectConstant(MachineInstr &I, MachineRegisterInfo &MRI,
                       MachineFunction &MF) const;
-  bool selectTrunc(MachineInstr &I, MachineRegisterInfo &MRI,
-                   MachineFunction &MF) const;
+  bool selectTruncOrPtrToInt(MachineInstr &I, MachineRegisterInfo &MRI,
+                             MachineFunction &MF) const;
   bool selectZext(MachineInstr &I, MachineRegisterInfo &MRI,
                   MachineFunction &MF) const;
   bool selectAnyext(MachineInstr &I, MachineRegisterInfo &MRI,
@@ -93,15 +93,22 @@ private:
                    MachineFunction &MF) const;
   bool selectCopy(MachineInstr &I, MachineRegisterInfo &MRI) const;
   bool selectUnmergeValues(MachineInstr &I, MachineRegisterInfo &MRI,
-                           MachineFunction &MF) const;
+                           MachineFunction &MF,
+                           CodeGenCoverage &CoverageInfo) const;
   bool selectMergeValues(MachineInstr &I, MachineRegisterInfo &MRI,
-                         MachineFunction &MF) const;
+                         MachineFunction &MF,
+                         CodeGenCoverage &CoverageInfo) const;
   bool selectInsert(MachineInstr &I, MachineRegisterInfo &MRI,
                     MachineFunction &MF) const;
   bool selectExtract(MachineInstr &I, MachineRegisterInfo &MRI,
                      MachineFunction &MF) const;
   bool selectCondBranch(MachineInstr &I, MachineRegisterInfo &MRI,
                         MachineFunction &MF) const;
+  bool selectTurnIntoCOPY(MachineInstr &I, MachineRegisterInfo &MRI,
+                          const unsigned DstReg,
+                          const TargetRegisterClass *DstRC,
+                          const unsigned SrcReg,
+                          const TargetRegisterClass *SrcRC) const;
   bool materializeFP(MachineInstr &I, MachineRegisterInfo &MRI,
                      MachineFunction &MF) const;
   bool selectImplicitDefOrPHI(MachineInstr &I, MachineRegisterInfo &MRI) const;
@@ -294,7 +301,8 @@ bool X86InstructionSelector::selectCopy(MachineInstr &I,
   return true;
 }
 
-bool X86InstructionSelector::select(MachineInstr &I) const {
+bool X86InstructionSelector::select(MachineInstr &I,
+                                    CodeGenCoverage &CoverageInfo) const {
   assert(I.getParent() && "Instruction should be in a basic block!");
   assert(I.getParent()->getParent() && "Instruction should be in a function!");
 
@@ -318,7 +326,7 @@ bool X86InstructionSelector::select(MachineInstr &I) const {
   assert(I.getNumOperands() == I.getNumExplicitOperands() &&
          "Generic instruction has unexpected implicit operands\n");
 
-  if (selectImpl(I))
+  if (selectImpl(I, CoverageInfo))
     return true;
 
   DEBUG(dbgs() << " C++ instruction selection: "; I.print(dbgs()));
@@ -339,8 +347,11 @@ bool X86InstructionSelector::select(MachineInstr &I) const {
     return selectConstant(I, MRI, MF);
   case TargetOpcode::G_FCONSTANT:
     return materializeFP(I, MRI, MF);
+  case TargetOpcode::G_PTRTOINT:
   case TargetOpcode::G_TRUNC:
-    return selectTrunc(I, MRI, MF);
+    return selectTruncOrPtrToInt(I, MRI, MF);
+  case TargetOpcode::G_INTTOPTR:
+    return selectCopy(I, MRI);
   case TargetOpcode::G_ZEXT:
     return selectZext(I, MRI, MF);
   case TargetOpcode::G_ANYEXT:
@@ -350,9 +361,9 @@ bool X86InstructionSelector::select(MachineInstr &I) const {
   case TargetOpcode::G_UADDE:
     return selectUadde(I, MRI, MF);
   case TargetOpcode::G_UNMERGE_VALUES:
-    return selectUnmergeValues(I, MRI, MF);
+    return selectUnmergeValues(I, MRI, MF, CoverageInfo);
   case TargetOpcode::G_MERGE_VALUES:
-    return selectMergeValues(I, MRI, MF);
+    return selectMergeValues(I, MRI, MF, CoverageInfo);
   case TargetOpcode::G_EXTRACT:
     return selectExtract(I, MRI, MF);
   case TargetOpcode::G_INSERT:
@@ -637,10 +648,37 @@ bool X86InstructionSelector::selectConstant(MachineInstr &I,
   return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
 }
 
-bool X86InstructionSelector::selectTrunc(MachineInstr &I,
-                                         MachineRegisterInfo &MRI,
-                                         MachineFunction &MF) const {
-  assert((I.getOpcode() == TargetOpcode::G_TRUNC) && "unexpected instruction");
+// Helper function for selectTruncOrPtrToInt and selectAnyext.
+// Returns true if DstRC lives on a floating register class and
+// SrcRC lives on a 128-bit vector class.
+static bool canTurnIntoCOPY(const TargetRegisterClass *DstRC,
+                            const TargetRegisterClass *SrcRC) {
+  return (DstRC == &X86::FR32RegClass || DstRC == &X86::FR32XRegClass ||
+          DstRC == &X86::FR64RegClass || DstRC == &X86::FR64XRegClass) &&
+         (SrcRC == &X86::VR128RegClass || SrcRC == &X86::VR128XRegClass);
+}
+
+bool X86InstructionSelector::selectTurnIntoCOPY(
+    MachineInstr &I, MachineRegisterInfo &MRI, const unsigned DstReg,
+    const TargetRegisterClass *DstRC, const unsigned SrcReg,
+    const TargetRegisterClass *SrcRC) const {
+
+  if (!RBI.constrainGenericRegister(SrcReg, *SrcRC, MRI) ||
+      !RBI.constrainGenericRegister(DstReg, *DstRC, MRI)) {
+    DEBUG(dbgs() << "Failed to constrain " << TII.getName(I.getOpcode())
+                 << " operand\n");
+    return false;
+  }
+  I.setDesc(TII.get(X86::COPY));
+  return true;
+}
+
+bool X86InstructionSelector::selectTruncOrPtrToInt(MachineInstr &I,
+                                                   MachineRegisterInfo &MRI,
+                                                   MachineFunction &MF) const {
+  assert((I.getOpcode() == TargetOpcode::G_TRUNC ||
+          I.getOpcode() == TargetOpcode::G_PTRTOINT) &&
+         "unexpected instruction");
 
   const unsigned DstReg = I.getOperand(0).getReg();
   const unsigned SrcReg = I.getOperand(1).getReg();
@@ -652,19 +690,24 @@ bool X86InstructionSelector::selectTrunc(MachineInstr &I,
   const RegisterBank &SrcRB = *RBI.getRegBank(SrcReg, MRI, TRI);
 
   if (DstRB.getID() != SrcRB.getID()) {
-    DEBUG(dbgs() << "G_TRUNC input/output on different banks\n");
+    DEBUG(dbgs() << TII.getName(I.getOpcode())
+                 << " input/output on different banks\n");
     return false;
   }
 
-  if (DstRB.getID() != X86::GPRRegBankID)
-    return false;
-
   const TargetRegisterClass *DstRC = getRegClass(DstTy, DstRB);
-  if (!DstRC)
+  const TargetRegisterClass *SrcRC = getRegClass(SrcTy, SrcRB);
+
+  if (!DstRC || !SrcRC)
     return false;
 
-  const TargetRegisterClass *SrcRC = getRegClass(SrcTy, SrcRB);
-  if (!SrcRC)
+  // If that's truncation of the value that lives on the vector class and goes
+  // into the floating class, just replace it with copy, as we are able to
+  // select it as a regular move.
+  if (canTurnIntoCOPY(DstRC, SrcRC))
+    return selectTurnIntoCOPY(I, MRI, DstReg, DstRC, SrcReg, SrcRC);
+
+  if (DstRB.getID() != X86::GPRRegBankID)
     return false;
 
   unsigned SubIdx;
@@ -685,7 +728,8 @@ bool X86InstructionSelector::selectTrunc(MachineInstr &I,
 
   if (!RBI.constrainGenericRegister(SrcReg, *SrcRC, MRI) ||
       !RBI.constrainGenericRegister(DstReg, *DstRC, MRI)) {
-    DEBUG(dbgs() << "Failed to constrain G_TRUNC\n");
+    DEBUG(dbgs() << "Failed to constrain " << TII.getName(I.getOpcode())
+                 << "\n");
     return false;
   }
 
@@ -762,11 +806,17 @@ bool X86InstructionSelector::selectAnyext(MachineInstr &I,
   assert(DstTy.getSizeInBits() > SrcTy.getSizeInBits() &&
          "G_ANYEXT incorrect operand size");
 
-  if (DstRB.getID() != X86::GPRRegBankID)
-    return false;
-
   const TargetRegisterClass *DstRC = getRegClass(DstTy, DstRB);
   const TargetRegisterClass *SrcRC = getRegClass(SrcTy, SrcRB);
+
+  // If that's ANY_EXT of the value that lives on the floating class and goes
+  // into the vector class, just replace it with copy, as we are able to select
+  // it as a regular move.
+  if (canTurnIntoCOPY(SrcRC, DstRC))
+    return selectTurnIntoCOPY(I, MRI, SrcReg, SrcRC, DstReg, DstRC);
+
+  if (DstRB.getID() != X86::GPRRegBankID)
+    return false;
 
   if (!RBI.constrainGenericRegister(SrcReg, *SrcRC, MRI) ||
       !RBI.constrainGenericRegister(DstReg, *DstRC, MRI)) {
@@ -1093,9 +1143,9 @@ bool X86InstructionSelector::selectInsert(MachineInstr &I,
   return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
 }
 
-bool X86InstructionSelector::selectUnmergeValues(MachineInstr &I,
-                                                 MachineRegisterInfo &MRI,
-                                                 MachineFunction &MF) const {
+bool X86InstructionSelector::selectUnmergeValues(
+    MachineInstr &I, MachineRegisterInfo &MRI, MachineFunction &MF,
+    CodeGenCoverage &CoverageInfo) const {
   assert((I.getOpcode() == TargetOpcode::G_UNMERGE_VALUES) &&
          "unexpected instruction");
 
@@ -1111,7 +1161,7 @@ bool X86InstructionSelector::selectUnmergeValues(MachineInstr &I,
              .addReg(SrcReg)
              .addImm(Idx * DefSize);
 
-    if (!select(ExtrInst))
+    if (!select(ExtrInst, CoverageInfo))
       return false;
   }
 
@@ -1119,9 +1169,9 @@ bool X86InstructionSelector::selectUnmergeValues(MachineInstr &I,
   return true;
 }
 
-bool X86InstructionSelector::selectMergeValues(MachineInstr &I,
-                                               MachineRegisterInfo &MRI,
-                                               MachineFunction &MF) const {
+bool X86InstructionSelector::selectMergeValues(
+    MachineInstr &I, MachineRegisterInfo &MRI, MachineFunction &MF,
+    CodeGenCoverage &CoverageInfo) const {
   assert((I.getOpcode() == TargetOpcode::G_MERGE_VALUES) &&
          "unexpected instruction");
 
@@ -1153,7 +1203,7 @@ bool X86InstructionSelector::selectMergeValues(MachineInstr &I,
 
     DefReg = Tmp;
 
-    if (!select(InsertInst))
+    if (!select(InsertInst, CoverageInfo))
       return false;
   }
 
@@ -1161,7 +1211,7 @@ bool X86InstructionSelector::selectMergeValues(MachineInstr &I,
                                     TII.get(TargetOpcode::COPY), DstReg)
                                 .addReg(DefReg);
 
-  if (!select(CopyInst))
+  if (!select(CopyInst, CoverageInfo))
     return false;
 
   I.eraseFromParent();

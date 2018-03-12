@@ -26,7 +26,7 @@
 #include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/Target/TargetOptions.h"
 
 using namespace llvm;
@@ -42,22 +42,22 @@ AArch64RegisterInfo::AArch64RegisterInfo(const Triple &TT)
 const MCPhysReg *
 AArch64RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   assert(MF && "Invalid MachineFunction pointer.");
-  if (MF->getFunction()->getCallingConv() == CallingConv::GHC)
+  if (MF->getFunction().getCallingConv() == CallingConv::GHC)
     // GHC set of callee saved regs is empty as all those regs are
     // used for passing STG regs around
     return CSR_AArch64_NoRegs_SaveList;
-  if (MF->getFunction()->getCallingConv() == CallingConv::AnyReg)
+  if (MF->getFunction().getCallingConv() == CallingConv::AnyReg)
     return CSR_AArch64_AllRegs_SaveList;
-  if (MF->getFunction()->getCallingConv() == CallingConv::CXX_FAST_TLS)
+  if (MF->getFunction().getCallingConv() == CallingConv::CXX_FAST_TLS)
     return MF->getInfo<AArch64FunctionInfo>()->isSplitCSR() ?
            CSR_AArch64_CXX_TLS_Darwin_PE_SaveList :
            CSR_AArch64_CXX_TLS_Darwin_SaveList;
   if (MF->getSubtarget<AArch64Subtarget>().getTargetLowering()
           ->supportSwiftError() &&
-      MF->getFunction()->getAttributes().hasAttrSomewhere(
+      MF->getFunction().getAttributes().hasAttrSomewhere(
           Attribute::SwiftError))
     return CSR_AArch64_AAPCS_SwiftError_SaveList;
-  if (MF->getFunction()->getCallingConv() == CallingConv::PreserveMost)
+  if (MF->getFunction().getCallingConv() == CallingConv::PreserveMost)
     return CSR_AArch64_RT_MostRegs_SaveList;
   else
     return CSR_AArch64_AAPCS_SaveList;
@@ -66,7 +66,7 @@ AArch64RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 const MCPhysReg *AArch64RegisterInfo::getCalleeSavedRegsViaCopy(
     const MachineFunction *MF) const {
   assert(MF && "Invalid MachineFunction pointer.");
-  if (MF->getFunction()->getCallingConv() == CallingConv::CXX_FAST_TLS &&
+  if (MF->getFunction().getCallingConv() == CallingConv::CXX_FAST_TLS &&
       MF->getInfo<AArch64FunctionInfo>()->isSplitCSR())
     return CSR_AArch64_CXX_TLS_Darwin_ViaCopy_SaveList;
   return nullptr;
@@ -84,7 +84,7 @@ AArch64RegisterInfo::getCallPreservedMask(const MachineFunction &MF,
     return CSR_AArch64_CXX_TLS_Darwin_RegMask;
   if (MF.getSubtarget<AArch64Subtarget>().getTargetLowering()
           ->supportSwiftError() &&
-      MF.getFunction()->getAttributes().hasAttrSomewhere(Attribute::SwiftError))
+      MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
     return CSR_AArch64_AAPCS_SwiftError_RegMask;
   if (CC == CallingConv::PreserveMost)
     return CSR_AArch64_RT_MostRegs_RegMask;
@@ -112,6 +112,10 @@ AArch64RegisterInfo::getThisReturnPreservedMask(const MachineFunction &MF,
   // both, the function should return NULL (does not currently apply)
   assert(CC != CallingConv::GHC && "should not be GHC calling convention.");
   return CSR_AArch64_AAPCS_ThisReturn_RegMask;
+}
+
+const uint32_t *AArch64RegisterInfo::getWindowsStackProbePreservedMask() const {
+  return CSR_AArch64_StackProbe_Windows_RegMask;
 }
 
 BitVector
@@ -225,11 +229,13 @@ bool AArch64RegisterInfo::requiresVirtualBaseRegisters(
 
 bool
 AArch64RegisterInfo::useFPForScavengingIndex(const MachineFunction &MF) const {
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
-  // AArch64FrameLowering::resolveFrameIndexReference() can always fall back
-  // to the stack pointer, so only put the emergency spill slot next to the
-  // FP when there's no better way to access it (SP or base pointer).
-  return MFI.hasVarSizedObjects() && !hasBasePointer(MF);
+  // This function indicates whether the emergency spillslot should be placed
+  // close to the beginning of the stackframe (closer to FP) or the end
+  // (closer to SP).
+  //
+  // The beginning works most reliably if we have a frame pointer.
+  const AArch64FrameLowering &TFI = *getFrameLowering(MF);
+  return TFI.hasFP(MF);
 }
 
 bool AArch64RegisterInfo::requiresFrameIndexScavenging(

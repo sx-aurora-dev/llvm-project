@@ -211,7 +211,8 @@ public:
 
   /// \brief Reserve the registers that may be accesed using indirect addressing.
   void reserveIndirectRegisters(BitVector &Reserved,
-                                const MachineFunction &MF) const;
+                                const MachineFunction &MF,
+                                const R600RegisterInfo &TRI) const;
 
   /// Calculate the "Indirect Address" for the given \p RegIndex and
   /// \p Channel
@@ -318,6 +319,9 @@ public:
   bool isRegisterLoad(const MachineInstr &MI) const {
     return get(MI.getOpcode()).TSFlags & R600InstrFlags::REGISTER_LOAD;
   }
+
+  unsigned getAddressSpaceForPseudoSourceKind(
+      PseudoSourceValue::PSVKind Kind) const override;
 };
 
 namespace AMDGPU {

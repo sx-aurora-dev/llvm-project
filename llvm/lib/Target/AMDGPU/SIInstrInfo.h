@@ -44,7 +44,7 @@ private:
   const SIRegisterInfo RI;
   const SISubtarget &ST;
 
-  // The the inverse predicate should have the negative value.
+  // The inverse predicate should have the negative value.
   enum BranchPredicate {
     INVALID_BR = 0,
     SCC_TRUE = 1,
@@ -60,6 +60,7 @@ private:
   static unsigned getBranchOpcode(BranchPredicate Cond);
   static BranchPredicate getBranchPredicate(unsigned Opcode);
 
+public:
   unsigned buildExtractSubReg(MachineBasicBlock::iterator MI,
                               MachineRegisterInfo &MRI,
                               MachineOperand &SuperReg,
@@ -72,8 +73,11 @@ private:
                                          const TargetRegisterClass *SuperRC,
                                          unsigned SubIdx,
                                          const TargetRegisterClass *SubRC) const;
-
+private:
   void swapOperands(MachineInstr &Inst) const;
+
+  bool moveScalarAddSub(SetVectorType &Worklist,
+                        MachineInstr &Inst) const;
 
   void lowerScalarAbs(SetVectorType &Worklist,
                       MachineInstr &Inst) const;
@@ -83,6 +87,9 @@ private:
 
   void splitScalar64BitUnaryOp(SetVectorType &Worklist,
                                MachineInstr &Inst, unsigned Opcode) const;
+
+  void splitScalar64BitAddSub(SetVectorType &Worklist,
+                              MachineInstr &Inst) const;
 
   void splitScalar64BitBinaryOp(SetVectorType &Worklist,
                                 MachineInstr &Inst, unsigned Opcode) const;
@@ -412,6 +419,19 @@ public:
     return get(Opcode).TSFlags & SIInstrFlags::SMRD;
   }
 
+  bool isBufferSMRD(const MachineInstr &MI) const {
+    if (!isSMRD(MI))
+      return false;
+
+    // Check that it is using a buffer resource.
+    int Idx = AMDGPU::getNamedOperandIdx(MI.getOpcode(), AMDGPU::OpName::sbase);
+    if (Idx == -1) // e.g. s_memtime
+      return false;
+
+    const auto RCID = MI.getDesc().OpInfo[Idx].RegClass;
+    return RCID == AMDGPU::SReg_128RegClassID;
+  }
+
   static bool isDS(const MachineInstr &MI) {
     return MI.getDesc().TSFlags & SIInstrFlags::DS;
   }
@@ -434,6 +454,14 @@ public:
 
   bool isGather4(uint16_t Opcode) const {
     return get(Opcode).TSFlags & SIInstrFlags::Gather4;
+  }
+
+  static bool isD16(const MachineInstr &MI) {
+    return MI.getDesc().TSFlags & SIInstrFlags::D16;
+  }
+
+  bool isD16(uint16_t Opcode) const {
+    return get(Opcode).TSFlags & SIInstrFlags::D16;
   }
 
   static bool isFLAT(const MachineInstr &MI) {
@@ -674,9 +702,7 @@ public:
   bool verifyInstruction(const MachineInstr &MI,
                          StringRef &ErrInfo) const override;
 
-  static unsigned getVALUOp(const MachineInstr &MI);
-
-  bool isSALUOpSupportedOnVALU(const MachineInstr &MI) const;
+  unsigned getVALUOp(const MachineInstr &MI) const;
 
   /// \brief Return the correct register class for \p OpNo.  For target-specific
   /// instructions, this will return the register class that has been defined
@@ -860,6 +886,10 @@ public:
 
   static bool isKillTerminator(unsigned Opcode);
   const MCInstrDesc &getKillTerminatorFromPseudo(unsigned Opcode) const;
+
+  static bool isLegalMUBUFImmOffset(unsigned Imm) {
+    return isUInt<12>(Imm);
+  }
 };
 
 namespace AMDGPU {
@@ -884,6 +914,9 @@ namespace AMDGPU {
 
   LLVM_READONLY
   int getAddr64Inst(uint16_t Opcode);
+
+  LLVM_READONLY
+  int getMUBUFNoLdsInst(uint16_t Opcode);
 
   LLVM_READONLY
   int getAtomicRetOp(uint16_t Opcode);

@@ -62,6 +62,9 @@ COMMON_FLAG(
 COMMON_FLAG(
     int, verbosity, 0,
     "Verbosity level (0 - silent, 1 - a bit of output, 2+ - more output).")
+COMMON_FLAG(bool, strip_env, 1,
+            "Whether to remove the sanitizer from DYLD_INSERT_LIBRARIES to "
+            "avoid passing it to children. Default is true.")
 COMMON_FLAG(bool, detect_leaks, !SANITIZER_MAC, "Enable memory leak detection.")
 COMMON_FLAG(
     bool, leak_check_at_exit, true,
@@ -90,6 +93,8 @@ COMMON_FLAG(HandleSignalMode, handle_abort, kHandleSignalNo,
             COMMON_FLAG_HANDLE_SIGNAL_HELP(SIGABRT))
 COMMON_FLAG(HandleSignalMode, handle_sigill, kHandleSignalNo,
             COMMON_FLAG_HANDLE_SIGNAL_HELP(SIGILL))
+COMMON_FLAG(HandleSignalMode, handle_sigtrap, kHandleSignalNo,
+            COMMON_FLAG_HANDLE_SIGNAL_HELP(SIGTRAP))
 COMMON_FLAG(HandleSignalMode, handle_sigfpe, kHandleSignalYes,
             COMMON_FLAG_HANDLE_SIGNAL_HELP(SIGFPE))
 #undef COMMON_FLAG_HANDLE_SIGNAL_HELP
@@ -129,7 +134,8 @@ COMMON_FLAG(uptr, soft_rss_limit_mb, 0,
             " This limit does not affect memory allocations other than"
             " malloc/new.")
 COMMON_FLAG(bool, heap_profile, false, "Experimental heap profiler, asan-only")
-COMMON_FLAG(s32, allocator_release_to_os_interval_ms, 5000,
+COMMON_FLAG(s32, allocator_release_to_os_interval_ms,
+            (SANITIZER_FUCHSIA || SANITIZER_WINDOWS) ? -1 : 5000,
             "Only affects a 64-bit allocator. If set, tries to release unused "
             "memory to the OS, but not more often than this interval (in "
             "milliseconds). Negative values mean do not attempt to release "

@@ -73,6 +73,14 @@ FunctionPass *createDeadCodeEliminationPass();
 //
 FunctionPass *createDeadStoreEliminationPass();
 
+
+//===----------------------------------------------------------------------===//
+//
+// CallSiteSplitting - This pass split call-site based on its known argument
+// values.
+FunctionPass *createCallSiteSplittingPass();
+
+
 //===----------------------------------------------------------------------===//
 //
 // AggressiveDCE - This pass uses the SSA based Aggressive DCE algorithm.  This
@@ -131,6 +139,13 @@ Pass *createIndVarSimplifyPass();
 //    %Z = add int 2, %X
 //
 FunctionPass *createInstructionCombiningPass(bool ExpensiveCombines = true);
+
+//===----------------------------------------------------------------------===//
+//
+// AggressiveInstCombiner - Combine expression patterns to form expressions with
+// fewer, simple instructions. This pass does not modify the CFG.
+//
+FunctionPass *createAggressiveInstCombinerPass();
 
 //===----------------------------------------------------------------------===//
 //
@@ -259,7 +274,7 @@ FunctionPass *createJumpThreadingPass(int Threshold = -1);
 //
 FunctionPass *createCFGSimplificationPass(
     unsigned Threshold = 1, bool ForwardSwitchCond = false,
-    bool ConvertSwitch = false, bool KeepLoops = true,
+    bool ConvertSwitch = false, bool KeepLoops = true, bool SinkCommon = false,
     std::function<bool(const Function &)> Ftor = nullptr);
 
 //===----------------------------------------------------------------------===//
@@ -422,7 +437,7 @@ Pass *createLowerGuardIntrinsicPass();
 
 //===----------------------------------------------------------------------===//
 //
-// MergeICmps - Merge integer comparison chains
+// MergeICmps - Merge integer comparison chains into a memcmp
 //
 Pass *createMergeICmpsPass();
 
@@ -513,7 +528,7 @@ FunctionPass *createPlaceSafepointsPass();
 // RewriteStatepointsForGC - Rewrite any gc.statepoints which do not yet have
 // explicit relocations to include explicit relocations.
 //
-ModulePass *createRewriteStatepointsForGCPass();
+ModulePass *createRewriteStatepointsForGCLegacyPass();
 
 //===----------------------------------------------------------------------===//
 //
@@ -574,6 +589,16 @@ ModulePass *createNameAnonGlobalPass();
 // used.
 //
 FunctionPass *createLibCallsShrinkWrapPass();
+
+//===----------------------------------------------------------------------===//
+//
+// EntryExitInstrumenter pass - Instrument function entry/exit with calls to
+// mcount(), @__cyg_profile_func_{enter,exit} and the like. There are two
+// variants, intended to run pre- and post-inlining, respectively.
+//
+FunctionPass *createEntryExitInstrumenterPass();
+FunctionPass *createPostInlineEntryExitInstrumenterPass();
+
 } // End llvm namespace
 
 #endif

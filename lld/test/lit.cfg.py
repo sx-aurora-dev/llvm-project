@@ -39,8 +39,8 @@ llvm_config.use_default_substitutions()
 llvm_config.use_lld()
 
 tool_patterns = [
-    'llvm-as', 'llvm-mc', 'llvm-nm',
-    'llvm-objdump', 'llvm-pdbutil', 'llvm-readobj', 'obj2yaml', 'yaml2obj']
+    'llc', 'llvm-as', 'llvm-mc', 'llvm-nm', 'llvm-objdump', 'llvm-pdbutil',
+    'llvm-readelf', 'llvm-readobj', 'obj2yaml', 'yaml2obj']
 
 llvm_config.add_tool_substitutions(tool_patterns)
 
@@ -67,11 +67,13 @@ llvm_config.feature_config(
                           'Mips': 'mips',
                           'PowerPC': 'ppc',
                           'Sparc': 'sparc',
+                          'WebAssembly': 'wasm',
                           'X86': 'x86'})
      ])
 
 # Set a fake constant version so that we get consitent output.
 config.environment['LLD_VERSION'] = 'LLD 1.0'
+config.environment['LLD_IN_TEST'] = '1'
 
 # Indirectly check if the mt.exe Microsoft utility exists by searching for
 # cvtres, which always accompanies it.  Alternatively, check if we can use

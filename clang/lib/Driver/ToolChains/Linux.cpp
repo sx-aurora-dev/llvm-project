@@ -11,6 +11,7 @@
 #include "Arch/ARM.h"
 #include "Arch/Mips.h"
 #include "Arch/PPC.h"
+#include "Arch/RISCV.h"
 #include "CommonArgs.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Config/config.h"
@@ -176,6 +177,9 @@ static StringRef getOSLibDir(const llvm::Triple &Triple, const ArgList &Args) {
       Triple.getEnvironment() == llvm::Triple::GNUX32)
     return "libx32";
 
+  if (Triple.getArch() == llvm::Triple::riscv32)
+    return "lib32";
+
   return Triple.isArch32Bit() ? "lib" : "lib64";
 }
 
@@ -210,7 +214,12 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
 
   Distro Distro(D.getVFS());
 
-  if (Distro.IsOpenSUSE() || Distro.IsUbuntu()) {
+  if (Distro.IsAlpineLinux()) {
+    ExtraOpts.push_back("-z");
+    ExtraOpts.push_back("now");
+  }
+
+  if (Distro.IsOpenSUSE() || Distro.IsUbuntu() || Distro.IsAlpineLinux()) {
     ExtraOpts.push_back("-z");
     ExtraOpts.push_back("relro");
   }
@@ -221,6 +230,8 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   const bool IsAndroid = Triple.isAndroid();
   const bool IsMips = tools::isMipsArch(Arch);
   const bool IsHexagon = Arch == llvm::Triple::hexagon;
+  const bool IsRISCV =
+      Arch == llvm::Triple::riscv32 || Arch == llvm::Triple::riscv64;
 
   if (IsMips && !SysRoot.empty())
     ExtraOpts.push_back("--sysroot=" + SysRoot);
@@ -232,7 +243,7 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   // Android loader does not support .gnu.hash.
   // Hexagon linker/loader does not support .gnu.hash
   if (!IsMips && !IsAndroid && !IsHexagon) {
-    if (Distro.IsRedhat() || Distro.IsOpenSUSE() ||
+    if (Distro.IsRedhat() || Distro.IsOpenSUSE() || Distro.IsAlpineLinux() ||
         (Distro.IsUbuntu() && Distro >= Distro::UbuntuMaverick))
       ExtraOpts.push_back("--hash-style=gnu");
 
@@ -328,6 +339,11 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   addPathIfExists(D, SysRoot + "/lib/../" + OSLibDir, Paths);
   addPathIfExists(D, SysRoot + "/usr/lib/" + MultiarchTriple, Paths);
   addPathIfExists(D, SysRoot + "/usr/lib/../" + OSLibDir, Paths);
+  if (IsRISCV) {
+    StringRef ABIName = tools::riscv::getRISCVABI(Args, Triple);
+    addPathIfExists(D, SysRoot + "/" + OSLibDir + "/" + ABIName, Paths);
+    addPathIfExists(D, SysRoot + "/usr/" + OSLibDir + "/" + ABIName, Paths);
+  }
 
   // Try walking via the GCC triple path in case of biarch or multiarch GCC
   // installations with strange symlinks.
@@ -506,6 +522,18 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     Loader =
         (tools::ppc::hasPPCAbiArg(Args, "elfv1")) ? "ld64.so.1" : "ld64.so.2";
     break;
+  case llvm::Triple::riscv32: {
+    StringRef ABIName = tools::riscv::getRISCVABI(Args, Triple);
+    LibDir = "lib";
+    Loader = ("ld-linux-riscv32-" + ABIName + ".so.1").str();
+    break;
+  }
+  case llvm::Triple::riscv64: {
+    StringRef ABIName = tools::riscv::getRISCVABI(Args, Triple);
+    LibDir = "lib";
+    Loader = ("ld-linux-riscv64-" + ABIName + ".so.1").str();
+    break;
+  }
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:
     LibDir = "lib";
@@ -812,12 +840,14 @@ void Linux::AddIAMCUIncludeArgs(const ArgList &DriverArgs,
 
 bool Linux::isPIEDefault() const {
   return (getTriple().isAndroid() && !getTriple().isAndroidVersionLT(16)) ||
-         getSanitizerArgs().requiresPIE();
+          getTriple().isMusl() || getSanitizerArgs().requiresPIE();
 }
 
 SanitizerMask Linux::getSupportedSanitizers() const {
   const bool IsX86 = getTriple().getArch() == llvm::Triple::x86;
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
+  const bool IsMIPS = getTriple().getArch() == llvm::Triple::mips ||
+                      getTriple().getArch() == llvm::Triple::mipsel;
   const bool IsMIPS64 = getTriple().getArch() == llvm::Triple::mips64 ||
                         getTriple().getArch() == llvm::Triple::mips64el;
   const bool IsPowerPC64 = getTriple().getArch() == llvm::Triple::ppc64 ||
@@ -845,9 +875,12 @@ SanitizerMask Linux::getSupportedSanitizers() const {
     Res |= SanitizerKind::Memory;
   if (IsX86_64 || IsMIPS64)
     Res |= SanitizerKind::Efficiency;
-  if (IsX86 || IsX86_64) {
+  if (IsX86 || IsX86_64)
     Res |= SanitizerKind::Function;
-  }
+  if (IsX86_64 || IsMIPS64 || IsAArch64 || IsX86 || IsMIPS || IsArmArch)
+    Res |= SanitizerKind::Scudo;
+  if (IsAArch64)
+    Res |= SanitizerKind::HWAddress;
   return Res;
 }
 

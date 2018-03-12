@@ -39,15 +39,15 @@ void X86IntelInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
                                     const MCSubtargetInfo &STI) {
   const MCInstrDesc &Desc = MII.get(MI->getOpcode());
   uint64_t TSFlags = Desc.TSFlags;
-
-  if (TSFlags & X86II::LOCK)
-    OS << "\tlock\n";
-
   unsigned Flags = MI->getFlags();
+
+  if ((TSFlags & X86II::LOCK) || (Flags & X86::IP_HAS_LOCK))
+    OS << "\tlock\t";
+
   if (Flags & X86::IP_HAS_REPEAT_NE)
-    OS << "\trepne\n";
+    OS << "\trepne\t";
   else if (Flags & X86::IP_HAS_REPEAT)
-    OS << "\trep\n";
+    OS << "\trep\t";
 
   printInstruction(MI, OS);
 
@@ -56,7 +56,7 @@ void X86IntelInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
 
   // If verbose assembly is enabled, we can print some informative comments.
   if (CommentStream)
-    EmitAnyX86InstComments(MI, *CommentStream, getRegisterName);
+    EmitAnyX86InstComments(MI, *CommentStream, MII, getRegisterName);
 }
 
 void X86IntelInstPrinter::printSSEAVXCC(const MCInst *MI, unsigned Op,

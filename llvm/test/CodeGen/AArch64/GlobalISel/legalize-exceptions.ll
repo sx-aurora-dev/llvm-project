@@ -10,15 +10,15 @@ declare void @_Unwind_Resume(i8*)
 ; CHECK: name: bar
 ; CHECK: body:
 ; CHECK-NEXT:   bb.1 (%ir-block.0):
-; CHECK:     successors: %{{bb.[0-9]+.continue.*}}%[[LP:bb.[0-9]+.cleanup]]
+; CHECK:     successors: %{{bb.[0-9]+.*}}%[[LP:bb.[0-9]+]]
 
-; CHECK:   [[LP]] (landing-pad):
+; CHECK:   [[LP]].{{[a-z]+}} (landing-pad):
 ; CHECK:     EH_LABEL
 
-; CHECK:     [[PTR:%[0-9]+]]:_(p0) = COPY %x0
+; CHECK:     [[PTR:%[0-9]+]]:_(p0) = COPY $x0
 ; CHECK:     [[STRUCT_PTR:%[0-9]+]]:_(s64) = G_PTRTOINT [[PTR]](p0)
 
-; CHECK:     [[SEL_PTR:%[0-9]+]]:_(p0) = COPY %x1
+; CHECK:     [[SEL_PTR:%[0-9]+]]:_(p0) = COPY $x1
 ; CHECK:     [[SEL:%[0-9]+]]:_(s32) = G_PTRTOINT [[SEL_PTR]]
 ; CHECK:     [[STRUCT_SEL:%[0-9]+]]:_(s64) = G_INSERT {{%[0-9]+}}, [[SEL]](s32), 0
 

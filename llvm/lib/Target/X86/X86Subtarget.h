@@ -24,10 +24,10 @@
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <memory>
 
 #define GET_SUBTARGETINFO_HEADER
@@ -51,17 +51,9 @@ enum Style {
 } // end namespace PICStyles
 
 class X86Subtarget final : public X86GenSubtargetInfo {
-protected:
-  enum X86SSEEnum {
-    NoSSE, SSE1, SSE2, SSE3, SSSE3, SSE41, SSE42, AVX, AVX2, AVX512F
-  };
-
-  enum X863DNowEnum {
-    NoThreeDNow, MMX, ThreeDNow, ThreeDNowA
-  };
-
+public:  
   enum X86ProcFamilyEnum {
-    Others, 
+    Others,
     IntelAtom,
     IntelSLM,
     IntelGLM,
@@ -70,7 +62,17 @@ protected:
     IntelSkylake,
     IntelKNL,
     IntelSKX,
-    IntelCannonlake
+    IntelCannonlake,
+    IntelIcelake,
+  };
+
+protected:
+  enum X86SSEEnum {
+    NoSSE, SSE1, SSE2, SSE3, SSSE3, SSE41, SSE42, AVX, AVX2, AVX512F
+  };
+
+  enum X863DNowEnum {
+    NoThreeDNow, MMX, ThreeDNow, ThreeDNowA
   };
 
   /// X86 processor family: Intel Atom, and others
@@ -90,6 +92,10 @@ protected:
   /// True if the processor supports X87 instructions.
   bool HasX87;
 
+  /// True if this processor has NOPL instruction
+  /// (generally pentium pro+).
+  bool HasNOPL;
+
   /// True if this processor has conditional move instructions
   /// (generally pentium pro+).
   bool HasCMov;
@@ -105,6 +111,7 @@ protected:
 
   /// Target has AES instructions
   bool HasAES;
+  bool HasVAES;
 
   /// Target has FXSAVE/FXRESTOR instructions
   bool HasFXSR;
@@ -123,6 +130,10 @@ protected:
 
   /// Target has carry-less multiplication
   bool HasPCLMUL;
+  bool HasVPCLMULQDQ;
+
+  /// Target has Galois Field Arithmetic instructions
+  bool HasGFNI;
 
   /// Target has 3-operand fused multiply-add
   bool HasFMA;
@@ -163,6 +174,9 @@ protected:
   /// Processor has VBMI instructions.
   bool HasVBMI;
 
+  /// Processor has VBMI2 instructions.
+  bool HasVBMI2;
+
   /// Processor has Integer Fused Multiply Add
   bool HasIFMA;
 
@@ -191,7 +205,7 @@ protected:
   bool HasCLZERO;
 
   /// Processor has Prefetch with intent to Write instruction
-  bool HasPFPREFETCHWT1;
+  bool HasPREFETCHWT1;
 
   /// True if SHLD instructions are slow.
   bool IsSHLDSlow;
@@ -218,9 +232,31 @@ protected:
   /// the stack pointer. This is an optimization for Intel Atom processors.
   bool UseLeaForSP;
 
+  /// True if POPCNT instruction has a false dependency on the destination register.
+  bool HasPOPCNTFalseDeps;
+
+  /// True if LZCNT/TZCNT instructions have a false dependency on the destination register.
+  bool HasLZCNTFalseDeps;
+
+  /// True if its preferable to combine to a single shuffle using a variable
+  /// mask over multiple fixed shuffles.
+  bool HasFastVariableShuffle;
+
   /// True if there is no performance penalty to writing only the lower parts
   /// of a YMM or ZMM register without clearing the upper part.
   bool HasFastPartialYMMorZMMWrite;
+
+  /// True if there is no performance penalty for writing NOPs with up to
+  /// 11 bytes.
+  bool HasFast11ByteNOP;
+
+  /// True if there is no performance penalty for writing NOPs with up to
+  /// 15 bytes.
+  bool HasFast15ByteNOP;
+
+  /// True if gather is reasonably fast. This is true for Skylake client and
+  /// all AVX-512 CPUs.
+  bool HasFastGather;
 
   /// True if hardware SQRTSS instruction is at least as fast (latency) as
   /// RSQRTSS followed by a Newton-Raphson iteration.
@@ -297,8 +333,22 @@ protected:
   /// Processor has PKU extenstions
   bool HasPKU;
 
+  /// Processor has AVX-512 Vector Neural Network Instructions
+  bool HasVNNI;
+
+  /// Processor has AVX-512 Bit Algorithms instructions
+  bool HasBITALG;
+
   /// Processor supports MPX - Memory Protection Extensions
   bool HasMPX;
+
+  /// Processor supports CET SHSTK - Control-Flow Enforcement Technology
+  /// using Shadow Stack
+  bool HasSHSTK;
+
+  /// Processor supports CET IBT - Control-Flow Enforcement Technology
+  /// using Indirect Branch Tracking
+  bool HasIBT;
 
   /// Processor has Software Guard Extensions
   bool HasSGX;
@@ -308,6 +358,17 @@ protected:
 
   /// Processor supports Cache Line Write Back instruction
   bool HasCLWB;
+
+  /// Processor support RDPID instruction
+  bool HasRDPID;
+
+  /// Use a retpoline thunk rather than indirect calls to block speculative
+  /// execution.
+  bool UseRetpoline;
+
+  /// When using a retpoline thunk, call an externally provided thunk rather
+  /// than emitting one inside the compiler.
+  bool UseRetpolineExternalThunk;
 
   /// Use software floating point for code generation.
   bool UseSoftFloat;
@@ -319,6 +380,9 @@ protected:
   /// Max. memset / memcpy size that is turned into rep/movs, rep/stos ops.
   ///
   unsigned MaxInlineSizeThreshold;
+
+  /// Indicates target prefers 256 bit instructions.
+  bool Prefer256Bit;
 
   /// What processor and OS we're targeting.
   Triple TargetTriple;
@@ -335,6 +399,16 @@ protected:
 private:
   /// Override the stack alignment.
   unsigned StackAlignOverride;
+
+  /// Preferred vector width from function attribute.
+  unsigned PreferVectorWidthOverride;
+
+  /// Resolved preferred vector width from function attribute and subtarget
+  /// features.
+  unsigned PreferVectorWidth;
+
+  /// Required vector width from function attribute.
+  unsigned RequiredVectorWidth;
 
   /// True if compiling for 64-bit, false for 16-bit or 32-bit.
   bool In64BitMode;
@@ -361,7 +435,9 @@ public:
   /// of the specified triple.
   ///
   X86Subtarget(const Triple &TT, StringRef CPU, StringRef FS,
-               const X86TargetMachine &TM, unsigned StackAlignOverride);
+               const X86TargetMachine &TM, unsigned StackAlignOverride,
+               unsigned PreferVectorWidthOverride,
+               unsigned RequiredVectorWidth);
 
   const X86TargetLowering *getTargetLowering() const override {
     return &TLInfo;
@@ -437,6 +513,7 @@ public:
   void setPICStyle(PICStyles::Style Style)  { PICStyle = Style; }
 
   bool hasX87() const { return HasX87; }
+  bool hasNOPL() const { return HasNOPL; }
   bool hasCMov() const { return HasCMov; }
   bool hasSSE1() const { return X86SSELevel >= SSE1; }
   bool hasSSE2() const { return X86SSELevel >= SSE2; }
@@ -447,7 +524,6 @@ public:
   bool hasAVX() const { return X86SSELevel >= AVX; }
   bool hasAVX2() const { return X86SSELevel >= AVX2; }
   bool hasAVX512() const { return X86SSELevel >= AVX512F; }
-  bool hasFp256() const { return hasAVX(); }
   bool hasInt256() const { return hasAVX2(); }
   bool hasSSE4A() const { return HasSSE4A; }
   bool hasMMX() const { return X863DNowLevel >= MMX; }
@@ -455,15 +531,18 @@ public:
   bool has3DNowA() const { return X863DNowLevel >= ThreeDNowA; }
   bool hasPOPCNT() const { return HasPOPCNT; }
   bool hasAES() const { return HasAES; }
+  bool hasVAES() const { return HasVAES; }
   bool hasFXSR() const { return HasFXSR; }
   bool hasXSAVE() const { return HasXSAVE; }
   bool hasXSAVEOPT() const { return HasXSAVEOPT; }
   bool hasXSAVEC() const { return HasXSAVEC; }
   bool hasXSAVES() const { return HasXSAVES; }
   bool hasPCLMUL() const { return HasPCLMUL; }
+  bool hasVPCLMULQDQ() const { return HasVPCLMULQDQ; }
+  bool hasGFNI() const { return HasGFNI; }
   // Prefer FMA4 to FMA - its better for commutation/memory folding and
   // has equal or better performance on all supported targets.
-  bool hasFMA() const { return (HasFMA || hasAVX512()) && !HasFMA4; }
+  bool hasFMA() const { return HasFMA; }
   bool hasFMA4() const { return HasFMA4; }
   bool hasAnyFMA() const { return hasFMA() || hasFMA4(); }
   bool hasXOP() const { return HasXOP; }
@@ -477,11 +556,19 @@ public:
   bool hasBMI() const { return HasBMI; }
   bool hasBMI2() const { return HasBMI2; }
   bool hasVBMI() const { return HasVBMI; }
+  bool hasVBMI2() const { return HasVBMI2; }
   bool hasIFMA() const { return HasIFMA; }
   bool hasRTM() const { return HasRTM; }
   bool hasADX() const { return HasADX; }
   bool hasSHA() const { return HasSHA; }
-  bool hasPRFCHW() const { return HasPRFCHW; }
+  bool hasPRFCHW() const { return HasPRFCHW || HasPREFETCHWT1; }
+  bool hasPREFETCHWT1() const { return HasPREFETCHWT1; }
+  bool hasSSEPrefetch() const {
+    // We implicitly enable these when we have a write prefix supporting cache
+    // level OR if we have prfchw, but don't already have a read prefetch from
+    // 3dnow.
+    return hasSSE1() || (hasPRFCHW() && !has3DNow()) || hasPREFETCHWT1();
+  }
   bool hasRDSEED() const { return HasRDSEED; }
   bool hasLAHFSAHF() const { return HasLAHFSAHF; }
   bool hasMWAITX() const { return HasMWAITX; }
@@ -495,9 +582,15 @@ public:
   bool hasSSEUnalignedMem() const { return HasSSEUnalignedMem; }
   bool hasCmpxchg16b() const { return HasCmpxchg16b; }
   bool useLeaForSP() const { return UseLeaForSP; }
+  bool hasPOPCNTFalseDeps() const { return HasPOPCNTFalseDeps; }
+  bool hasLZCNTFalseDeps() const { return HasLZCNTFalseDeps; }
+  bool hasFastVariableShuffle() const {
+    return HasFastVariableShuffle;
+  }
   bool hasFastPartialYMMorZMMWrite() const {
     return HasFastPartialYMMorZMMWrite;
   }
+  bool hasFastGather() const { return HasFastGather; }
   bool hasFastScalarFSQRT() const { return HasFastScalarFSQRT; }
   bool hasFastVectorFSQRT() const { return HasFastVectorFSQRT; }
   bool hasFastLZCNT() const { return HasFastLZCNT; }
@@ -520,9 +613,40 @@ public:
   bool hasBWI() const { return HasBWI; }
   bool hasVLX() const { return HasVLX; }
   bool hasPKU() const { return HasPKU; }
+  bool hasVNNI() const { return HasVNNI; }
+  bool hasBITALG() const { return HasBITALG; }
   bool hasMPX() const { return HasMPX; }
+  bool hasSHSTK() const { return HasSHSTK; }
+  bool hasIBT() const { return HasIBT; }
   bool hasCLFLUSHOPT() const { return HasCLFLUSHOPT; }
   bool hasCLWB() const { return HasCLWB; }
+  bool hasRDPID() const { return HasRDPID; }
+  bool useRetpoline() const { return UseRetpoline; }
+  bool useRetpolineExternalThunk() const { return UseRetpolineExternalThunk; }
+
+  unsigned getPreferVectorWidth() const { return PreferVectorWidth; }
+  unsigned getRequiredVectorWidth() const { return RequiredVectorWidth; }
+
+  // Helper functions to determine when we should allow widening to 512-bit
+  // during codegen.
+  // TODO: Currently we're always allowing widening on CPUs without VLX,
+  // because for many cases we don't have a better option.
+  bool canExtendTo512DQ() const {
+    return hasAVX512() && (!hasVLX() || getPreferVectorWidth() >= 512);
+  }
+  bool canExtendTo512BW() const  {
+    return hasBWI() && canExtendTo512DQ();
+  }
+
+  // If there are no 512-bit vectors and we prefer not to use 512-bit registers,
+  // disable them in the legalizer.
+  bool useAVX512Regs() const {
+    return hasAVX512() && (canExtendTo512DQ() || RequiredVectorWidth > 256);
+  }
+
+  bool useBWIRegs() const {
+    return hasBWI() && useAVX512Regs();
+  }
 
   bool isXRaySupported() const override { return is64Bit(); }
 
@@ -645,16 +769,9 @@ public:
   /// Return true if the subtarget allows calls to immediate address.
   bool isLegalToCallImmediateAddr() const;
 
-  /// This function returns the name of a function which has an interface
-  /// like the non-standard bzero function, if such a function exists on
-  /// the current subtarget and it is considered prefereable over
-  /// memset with zero passed as the second argument. Otherwise it
-  /// returns null.
-  const char *getBZeroEntry() const;
-
-  /// This function returns true if the target has sincos() routine in its
-  /// compiler runtime or math libraries.
-  bool hasSinCos() const;
+  /// If we are using retpolines, we need to expand indirectbr to avoid it
+  /// lowering to an actual indirect jump.
+  bool enableIndirectBrExpand() const override { return useRetpoline(); }
 
   /// Enable the MachineScheduler pass for all X86 subtargets.
   bool enableMachineScheduler() const override { return true; }

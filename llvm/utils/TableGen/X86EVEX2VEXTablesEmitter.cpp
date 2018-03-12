@@ -67,7 +67,6 @@ private:
         "VPMULLQ",
         "VPSRAQ",
         "VDBPSADBW",
-        "VRNDSCALE",
         "VSCALEFPS"
     };
     // Instruction's name starts with one of the entries in the exception list
@@ -148,7 +147,40 @@ void X86EVEX2VEXTablesEmitter::printTable(const std::vector<Entry> &Table,
       {"VINSERTF64x2Z256rm",  "VINSERTF128rm",   false},
       {"VINSERTF64x2Z256rr",  "VINSERTF128rr",   false},
       {"VINSERTI64x2Z256rm",  "VINSERTI128rm",   false},
-      {"VINSERTI64x2Z256rr",  "VINSERTI128rr",   false}
+      {"VINSERTI64x2Z256rr",  "VINSERTI128rr",   false},
+
+      // These will require some custom adjustment in the conversion pass.
+      {"VALIGNDZ128rri",      "VPALIGNRrri",     true},
+      {"VALIGNQZ128rri",      "VPALIGNRrri",     true},
+      {"VALIGNDZ128rmi",      "VPALIGNRrmi",     true},
+      {"VALIGNQZ128rmi",      "VPALIGNRrmi",     true},
+      {"VSHUFF32X4Z256rmi",   "VPERM2F128rm",    false},
+      {"VSHUFF32X4Z256rri",   "VPERM2F128rr",    false},
+      {"VSHUFF64X2Z256rmi",   "VPERM2F128rm",    false},
+      {"VSHUFF64X2Z256rri",   "VPERM2F128rr",    false},
+      {"VSHUFI32X4Z256rmi",   "VPERM2I128rm",    false},
+      {"VSHUFI32X4Z256rri",   "VPERM2I128rr",    false},
+      {"VSHUFI64X2Z256rmi",   "VPERM2I128rm",    false},
+      {"VSHUFI64X2Z256rri",   "VPERM2I128rr",    false},
+
+      // These can be replaced if we verify the scale part of the immediate is
+      // zero.
+      {"VRNDSCALEPDZ128rri",  "VROUNDPDr",       true},
+      {"VRNDSCALEPDZ128rmi",  "VROUNDPDm",       true},
+      {"VRNDSCALEPSZ128rri",  "VROUNDPSr",       true},
+      {"VRNDSCALEPSZ128rmi",  "VROUNDPSm",       true},
+      {"VRNDSCALEPDZ256rri",  "VROUNDYPDr",      false},
+      {"VRNDSCALEPDZ256rmi",  "VROUNDYPDm",      false},
+      {"VRNDSCALEPSZ256rri",  "VROUNDYPSr",      false},
+      {"VRNDSCALEPSZ256rmi",  "VROUNDYPSm",      false},
+      {"VRNDSCALESDr",        "VROUNDSDr",       true},
+      {"VRNDSCALESDm",        "VROUNDSDm",       true},
+      {"VRNDSCALESSr",        "VROUNDSSr",       true},
+      {"VRNDSCALESSm",        "VROUNDSSm",       true},
+      {"VRNDSCALESDr_Int",    "VROUNDSDr_Int",   true},
+      {"VRNDSCALESDm_Int",    "VROUNDSDm_Int",   true},
+      {"VRNDSCALESSr_Int",    "VROUNDSSr_Int",   true},
+      {"VRNDSCALESSm_Int",    "VROUNDSSm_Int",   true},
   };
 
   // Print the manually added entries

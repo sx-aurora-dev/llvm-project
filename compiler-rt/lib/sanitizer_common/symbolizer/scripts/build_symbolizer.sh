@@ -2,7 +2,7 @@
 #
 # Run as: CLANG=bin/clang ZLIB_SRC=src/zlib \
 #             build_symbolizer.sh runtime_build/lib/clang/4.0.0/lib/linux/
-# zlib can be downloaded from from http://www.zlib.net.
+# zlib can be downloaded from http://www.zlib.net.
 #
 # Script compiles self-contained object file with symbolization code and injects
 # it into the given set of runtime libraries. Script updates only libraries
@@ -129,7 +129,7 @@ if [[ ! -d ${LLVM_BUILD} ]]; then
   $LLVM_SRC
 fi
 cd ${LLVM_BUILD}
-ninja LLVMSymbolize LLVMObject LLVMBinaryFormat LLVMDebugInfoDWARF LLVMSupport LLVMDebugInfoPDB LLVMMC
+ninja LLVMSymbolize LLVMObject LLVMBinaryFormat LLVMDebugInfoDWARF LLVMSupport LLVMDebugInfoPDB LLVMMC LLVMDemangle
 
 cd ${BUILD_DIR}
 rm -rf ${SYMBOLIZER_BUILD}
@@ -152,6 +152,7 @@ $SCRIPT_DIR/ar_to_bc.sh $LIBCXX_BUILD/lib/libc++.a \
                         $LLVM_BUILD/lib/libLLVMDebugInfoDWARF.a \
                         $LLVM_BUILD/lib/libLLVMSupport.a \
                         $LLVM_BUILD/lib/libLLVMDebugInfoPDB.a \
+                        $LLVM_BUILD/lib/libLLVMDemangle.a \
                         $LLVM_BUILD/lib/libLLVMMC.a \
                         $ZLIB_BUILD/libz.a \
                         symbolizer.a \

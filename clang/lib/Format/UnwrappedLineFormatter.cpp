@@ -304,9 +304,23 @@ private:
     if (TheLine->First->is(tok::l_brace) && TheLine->First == TheLine->Last &&
         I != AnnotatedLines.begin() &&
         I[-1]->First->isOneOf(tok::kw_if, tok::kw_while, tok::kw_for)) {
-      return Style.AllowShortBlocksOnASingleLine
-                 ? tryMergeSimpleBlock(I - 1, E, Limit)
-                 : 0;
+      unsigned MergedLines = 0;
+      if (Style.AllowShortBlocksOnASingleLine) {
+        MergedLines = tryMergeSimpleBlock(I - 1, E, Limit);
+        // If we managed to merge the block, discard the first merged line
+        // since we are merging starting from I.
+        if (MergedLines > 0)
+          --MergedLines;
+      }
+      return MergedLines;
+    }
+    // Don't merge block with left brace wrapped after ObjC special blocks
+    if (TheLine->First->is(tok::l_brace) && I != AnnotatedLines.begin() &&
+        I[-1]->First->is(tok::at) && I[-1]->First->Next) {
+      tok::ObjCKeywordKind kwId = I[-1]->First->Next->Tok.getObjCKeywordID();
+      if (kwId == clang::tok::objc_autoreleasepool ||
+          kwId == clang::tok::objc_synchronized)
+        return 0;
     }
     // Try to merge a block with left brace wrapped that wasn't yet covered
     if (TheLine->Last->is(tok::l_brace)) {
@@ -517,8 +531,13 @@ private:
       } else if (Limit != 0 && !Line.startsWith(tok::kw_namespace) &&
                  !startsExternCBlock(Line)) {
         // We don't merge short records.
-        FormatToken *RecordTok =
-            Line.First->is(tok::kw_typedef) ? Line.First->Next : Line.First;
+        FormatToken *RecordTok = Line.First;
+        // Skip record modifiers.
+        while (RecordTok->Next &&
+               RecordTok->isOneOf(tok::kw_typedef, tok::kw_export,
+                                  Keywords.kw_declare, Keywords.kw_abstract,
+                                  tok::kw_default))
+          RecordTok = RecordTok->Next;
         if (RecordTok &&
             RecordTok->isOneOf(tok::kw_class, tok::kw_union, tok::kw_struct,
                                Keywords.kw_interface))
@@ -1116,6 +1135,9 @@ void UnwrappedLineFormatter::formatFirstToken(const AnnotatedLine &Line,
   if (RootToken.is(tok::r_brace) &&
       (!RootToken.Next ||
        (RootToken.Next->is(tok::semi) && !RootToken.Next->Next)))
+    Newlines = std::min(Newlines, 1u);
+  // Remove empty lines at the start of nested blocks (lambdas/arrow functions)
+  if (PreviousLine == nullptr && Line.Level > 0)
     Newlines = std::min(Newlines, 1u);
   if (Newlines == 0 && !RootToken.IsFirst)
     Newlines = 1;

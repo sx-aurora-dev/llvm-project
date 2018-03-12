@@ -15,7 +15,6 @@
 #include "llvm/DebugInfo/CodeView/TypeCollection.h"
 #include "llvm/DebugInfo/CodeView/TypeIndex.h"
 #include "llvm/DebugInfo/CodeView/TypeRecord.h"
-#include "llvm/Support/BinaryByteStream.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/ScopedPrinter.h"
 
@@ -371,6 +370,7 @@ Error TypeDumpVisitor::visitKnownRecord(CVType &CVR, PointerRecord &Ptr) {
   W->printNumber("IsConst", Ptr.isConst());
   W->printNumber("IsVolatile", Ptr.isVolatile());
   W->printNumber("IsUnaligned", Ptr.isUnaligned());
+  W->printNumber("IsRestrict", Ptr.isRestrict());
   W->printNumber("SizeOf", Ptr.getSize());
 
   if (Ptr.isPointerToMember()) {

@@ -27,6 +27,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/TargetParser.h"
 #include "llvm/Support/TargetRegistry.h"
 
@@ -79,6 +81,12 @@ ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
     getFilePaths().push_back(CandidateLibPath);
 }
 
+void ToolChain::setTripleEnvironment(llvm::Triple::EnvironmentType Env) {
+  Triple.setEnvironment(Env);
+  if (EffectiveTriple != llvm::Triple())
+    EffectiveTriple.setEnvironment(Env);
+}
+
 ToolChain::~ToolChain() {
 }
 
@@ -88,6 +96,10 @@ bool ToolChain::useIntegratedAs() const {
   return Args.hasFlag(options::OPT_fintegrated_as,
                       options::OPT_fno_integrated_as,
                       IsIntegratedAssemblerDefault());
+}
+
+bool ToolChain::useRelaxRelocations() const {
+  return ENABLE_X86_RELAX_RELOCATIONS;
 }
 
 const SanitizerArgs& ToolChain::getSanitizerArgs() const {
@@ -215,6 +227,10 @@ StringRef ToolChain::getDefaultUniversalArchName() const {
   }
 }
 
+std::string ToolChain::getInputFilename(const InputInfo &Input) const {
+  return Input.getFilename();
+}
+
 bool ToolChain::IsUnwindTablesDefault(const ArgList &Args) const {
   return false;
 }
@@ -307,13 +323,27 @@ static StringRef getArchNameForCompilerRTLib(const ToolChain &TC,
   return llvm::Triple::getArchTypeName(TC.getArch());
 }
 
+StringRef ToolChain::getOSLibName() const {
+  switch (Triple.getOS()) {
+  case llvm::Triple::FreeBSD:
+    return "freebsd";
+  case llvm::Triple::NetBSD:
+    return "netbsd";
+  case llvm::Triple::OpenBSD:
+    return "openbsd";
+  case llvm::Triple::Solaris:
+    return "sunos";
+  default:
+    return getOS();
+  }
+}
+
 std::string ToolChain::getCompilerRTPath() const {
   SmallString<128> Path(getDriver().ResourceDir);
   if (Triple.isOSUnknown()) {
     llvm::sys::path::append(Path, "lib");
   } else {
-    StringRef OSLibName = Triple.isOSFreeBSD() ? "freebsd" : getOS();
-    llvm::sys::path::append(Path, "lib", OSLibName);
+    llvm::sys::path::append(Path, "lib", getOSLibName());
   }
   return Path.str();
 }
@@ -344,8 +374,7 @@ const char *ToolChain::getCompilerRTArgString(const llvm::opt::ArgList &Args,
 
 std::string ToolChain::getArchSpecificLibPath() const {
   SmallString<128> Path(getDriver().ResourceDir);
-  StringRef OSLibName = getTriple().isOSFreeBSD() ? "freebsd" : getOS();
-  llvm::sys::path::append(Path, "lib", OSLibName,
+  llvm::sys::path::append(Path, "lib", getOSLibName(),
                           llvm::Triple::getArchTypeName(getArch()));
   return Path.str();
 }
@@ -387,7 +416,7 @@ std::string ToolChain::GetLinkerPath() const {
   if (llvm::sys::path::is_absolute(UseLinker)) {
     // If we're passed what looks like an absolute path, don't attempt to
     // second-guess that.
-    if (llvm::sys::fs::exists(UseLinker))
+    if (llvm::sys::fs::can_execute(UseLinker))
       return UseLinker;
   } else if (UseLinker.empty() || UseLinker == "ld") {
     // If we're passed -fuse-ld= with no argument, or with the argument ld,
@@ -402,7 +431,7 @@ std::string ToolChain::GetLinkerPath() const {
     LinkerName.append(UseLinker);
 
     std::string LinkerPath(GetProgramPath(LinkerName.c_str()));
-    if (llvm::sys::fs::exists(LinkerPath))
+    if (llvm::sys::fs::can_execute(LinkerPath))
       return LinkerPath;
   }
 
@@ -439,6 +468,13 @@ bool ToolChain::isCrossCompiling() const {
 ObjCRuntime ToolChain::getDefaultObjCRuntime(bool isNonFragile) const {
   return ObjCRuntime(isNonFragile ? ObjCRuntime::GNUstep : ObjCRuntime::GCC,
                      VersionTuple());
+}
+
+llvm::ExceptionHandling
+ToolChain::GetExceptionModel(const llvm::opt::ArgList &Args) const {
+  if (Triple.isOSWindows() && Triple.getArch() != llvm::Triple::x86)
+    return llvm::ExceptionHandling::WinEH;
+  return llvm::ExceptionHandling::None;
 }
 
 bool ToolChain::isThreadModelSupported(const StringRef Model) const {
@@ -541,11 +577,30 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
           << tools::arm::getARMArch(MArch, getTriple()) << "ARM";
     }
 
-    // Assembly files should start in ARM mode, unless arch is M-profile.
-    // Windows is always thumb.
-    if ((InputType != types::TY_PP_Asm && Args.hasFlag(options::OPT_mthumb,
-         options::OPT_mno_thumb, ThumbDefault)) || IsMProfile ||
-         getTriple().isOSWindows()) {
+    // Check to see if an explicit choice to use thumb has been made via
+    // -mthumb. For assembler files we must check for -mthumb in the options
+    // passed to the assember via -Wa or -Xassembler.
+    bool IsThumb = false;
+    if (InputType != types::TY_PP_Asm)
+      IsThumb = Args.hasFlag(options::OPT_mthumb, options::OPT_mno_thumb,
+                              ThumbDefault);
+    else {
+      // Ideally we would check for these flags in
+      // CollectArgsForIntegratedAssembler but we can't change the ArchName at
+      // that point. There is no assembler equivalent of -mno-thumb, -marm, or
+      // -mno-arm.
+      for (const Arg *A :
+           Args.filtered(options::OPT_Wa_COMMA, options::OPT_Xassembler)) {
+        for (StringRef Value : A->getValues()) {
+          if (Value == "-mthumb")
+            IsThumb = true;
+        }
+      }
+    }
+    // Assembly files should start in ARM mode, unless arch is M-profile, or
+    // -mthumb has been passed explicitly to the assembler. Windows is always
+    // thumb.
+    if (IsThumb || IsMProfile || getTriple().isOSWindows()) {
       if (IsBigEndian)
         ArchName = "thumbeb";
       else

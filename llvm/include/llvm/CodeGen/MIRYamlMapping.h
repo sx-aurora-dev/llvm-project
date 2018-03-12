@@ -56,7 +56,7 @@ template <> struct ScalarTraits<StringValue> {
     return "";
   }
 
-  static bool mustQuote(StringRef Scalar) { return needsQuotes(Scalar); }
+  static QuotingType mustQuote(StringRef S) { return needsQuotes(S); }
 };
 
 struct FlowStringValue : StringValue {
@@ -73,7 +73,7 @@ template <> struct ScalarTraits<FlowStringValue> {
     return ScalarTraits<StringValue>::input(Scalar, Ctx, S);
   }
 
-  static bool mustQuote(StringRef Scalar) { return needsQuotes(Scalar); }
+  static QuotingType mustQuote(StringRef S) { return needsQuotes(S); }
 };
 
 struct BlockStringValue {
@@ -120,7 +120,7 @@ template <> struct ScalarTraits<UnsignedValue> {
     return ScalarTraits<unsigned>::input(Scalar, Ctx, Value.Value);
   }
 
-  static bool mustQuote(StringRef Scalar) {
+  static QuotingType mustQuote(StringRef Scalar) {
     return ScalarTraits<unsigned>::mustQuote(Scalar);
   }
 };
@@ -472,6 +472,7 @@ struct MachineFunction {
   bool Legalized = false;
   bool RegBankSelected = false;
   bool Selected = false;
+  bool FailedISel = false;
   // Register information
   bool TracksRegLiveness = false;
   std::vector<VirtualRegisterDefinition> VirtualRegisters;
@@ -495,6 +496,7 @@ template <> struct MappingTraits<MachineFunction> {
     YamlIO.mapOptional("legalized", MF.Legalized, false);
     YamlIO.mapOptional("regBankSelected", MF.RegBankSelected, false);
     YamlIO.mapOptional("selected", MF.Selected, false);
+    YamlIO.mapOptional("failedISel", MF.FailedISel, false);
     YamlIO.mapOptional("tracksRegLiveness", MF.TracksRegLiveness, false);
     YamlIO.mapOptional("registers", MF.VirtualRegisters,
                        std::vector<VirtualRegisterDefinition>());

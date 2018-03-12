@@ -15,6 +15,7 @@
 #define LLVM_OBJECT_OBJECTFILE_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/MC/SubtargetFeature.h"
@@ -279,18 +280,12 @@ public:
   virtual uint8_t getBytesInAddress() const = 0;
 
   virtual StringRef getFileFormatName() const = 0;
-  virtual /* Triple::ArchType */ unsigned getArch() const = 0;
+  virtual Triple::ArchType getArch() const = 0;
   virtual SubtargetFeatures getFeatures() const = 0;
   virtual void setARMSubArch(Triple &TheTriple) const { }
 
   /// @brief Create a triple from the data in this object file.
   Triple makeTriple() const;
-
-  /// Returns platform-specific object flags, if any.
-  virtual std::error_code getPlatformFlags(unsigned &Result) const {
-    Result = 0;
-    return object_error::invalid_file_type;
-  }
 
   virtual std::error_code
     getBuildAttributes(ARMAttributeParser &Attributes) const {

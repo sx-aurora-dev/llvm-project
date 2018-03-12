@@ -700,7 +700,6 @@ void BlockGenerator::generateScalarStores(
                 Address, Val->getType()->getPointerTo());
 
           Builder.CreateStore(Val, Address);
-
         });
   }
 }
@@ -1041,11 +1040,11 @@ void VectorBlockGenerator::generateLoad(
   extractScalarValues(Load, VectorMap, ScalarMaps);
 
   Value *NewLoad;
-  if (Access.isStrideZero(isl::manage(isl_map_copy(Schedule))))
+  if (Access.isStrideZero(isl::manage_copy(Schedule)))
     NewLoad = generateStrideZeroLoad(Stmt, Load, ScalarMaps[0], NewAccesses);
-  else if (Access.isStrideOne(isl::manage(isl_map_copy(Schedule))))
+  else if (Access.isStrideOne(isl::manage_copy(Schedule)))
     NewLoad = generateStrideOneLoad(Stmt, Load, ScalarMaps, NewAccesses);
-  else if (Access.isStrideX(isl::manage(isl_map_copy(Schedule)), -1))
+  else if (Access.isStrideX(isl::manage_copy(Schedule), -1))
     NewLoad = generateStrideOneLoad(Stmt, Load, ScalarMaps, NewAccesses, true);
   else
     NewLoad = generateUnknownStrideLoad(Stmt, Load, ScalarMaps, NewAccesses);
@@ -1096,7 +1095,7 @@ void VectorBlockGenerator::copyStore(
   // the data location.
   extractScalarValues(Store, VectorMap, ScalarMaps);
 
-  if (Access.isStrideOne(isl::manage(isl_map_copy(Schedule)))) {
+  if (Access.isStrideOne(isl::manage_copy(Schedule))) {
     Type *VectorPtrType = getVectorPtrTy(Pointer, getVectorWidth());
     Value *NewPointer = generateLocationAccessed(Stmt, Store, ScalarMaps[0],
                                                  VLTS[0], NewAccesses);
@@ -1597,7 +1596,6 @@ void RegionGenerator::generateScalarStores(
     std::string Subject = MA->getId().get_name();
     generateConditionalExecution(
         Stmt, AccDom, Subject.c_str(), [&, this, MA]() {
-
           Value *NewVal = getExitScalar(MA, LTS, BBMap);
           Value *Address = getImplicitAddress(*MA, getLoopForStmt(Stmt), LTS,
                                               BBMap, NewAccesses);

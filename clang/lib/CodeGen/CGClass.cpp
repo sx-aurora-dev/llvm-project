@@ -406,8 +406,8 @@ CodeGenFunction::GetAddressOfDerivedClass(Address BaseAddr,
 
   // Apply the offset.
   llvm::Value *Value = Builder.CreateBitCast(BaseAddr.getPointer(), Int8PtrTy);
-  Value = Builder.CreateGEP(Value, Builder.CreateNeg(NonVirtualOffset),
-                            "sub.ptr");
+  Value = Builder.CreateInBoundsGEP(Value, Builder.CreateNeg(NonVirtualOffset),
+                                    "sub.ptr");
 
   // Just cast.
   Value = Builder.CreateBitCast(Value, DerivedPtrTy);
@@ -615,7 +615,14 @@ static void EmitMemberInitializer(CodeGenFunction &CGF,
 
   llvm::Value *ThisPtr = CGF.LoadCXXThis();
   QualType RecordTy = CGF.getContext().getTypeDeclType(ClassDecl);
-  LValue LHS = CGF.MakeNaturalAlignAddrLValue(ThisPtr, RecordTy);
+  LValue LHS;
+
+  // If a base constructor is being emitted, create an LValue that has the
+  // non-virtual alignment.
+  if (CGF.CurGD.getCtorType() == Ctor_Base)
+    LHS = CGF.MakeNaturalAlignPointeeAddrLValue(ThisPtr, RecordTy);
+  else
+    LHS = CGF.MakeNaturalAlignAddrLValue(ThisPtr, RecordTy);
 
   EmitLValueForAnyFieldInitialization(CGF, MemberInit, LHS);
 
@@ -640,8 +647,7 @@ static void EmitMemberInitializer(CodeGenFunction &CGF,
       LValue Src = CGF.EmitLValueForFieldInitialization(ThisRHSLV, Field);
 
       // Copy the aggregate.
-      CGF.EmitAggregateCopy(LHS.getAddress(), Src.getAddress(), FieldType,
-                            LHS.isVolatileQualified());
+      CGF.EmitAggregateCopy(LHS, Src, FieldType, LHS.isVolatileQualified());
       // Ensure that we destroy the objects if an exception is thrown later in
       // the constructor.
       QualType::DestructionKind dtorKind = FieldType.isDestructedType();
@@ -2002,10 +2008,10 @@ void CodeGenFunction::EmitCXXConstructorCall(const CXXConstructorDecl *D,
     assert(E->getNumArgs() == 1 && "unexpected argcount for trivial ctor");
 
     const Expr *Arg = E->getArg(0);
-    QualType SrcTy = Arg->getType();
-    Address Src = EmitLValue(Arg).getAddress();
+    LValue Src = EmitLValue(Arg);
     QualType DestTy = getContext().getTypeDeclType(D->getParent());
-    EmitAggregateCopyCtor(This, Src, DestTy, SrcTy);
+    LValue Dest = MakeAddrLValue(This, DestTy);
+    EmitAggregateCopyCtor(Dest, Src);
     return;
   }
 
@@ -2072,8 +2078,10 @@ void CodeGenFunction::EmitCXXConstructorCall(const CXXConstructorDecl *D,
 
     QualType SrcTy = D->getParamDecl(0)->getType().getNonReferenceType();
     Address Src(Args[1].RV.getScalarVal(), getNaturalTypeAlignment(SrcTy));
+    LValue SrcLVal = MakeAddrLValue(Src, SrcTy);
     QualType DestTy = getContext().getTypeDeclType(ClassDecl);
-    EmitAggregateCopyCtor(This, Src, DestTy, SrcTy);
+    LValue DestLVal = MakeAddrLValue(This, DestTy);
+    EmitAggregateCopyCtor(DestLVal, SrcLVal);
     return;
   }
 
@@ -2423,7 +2431,8 @@ void CodeGenFunction::InitializeVTablePointer(const VPtr &Vptr) {
   VTableAddressPoint = Builder.CreateBitCast(VTableAddressPoint, VTablePtrTy);
 
   llvm::StoreInst *Store = Builder.CreateStore(VTableAddressPoint, VTableField);
-  CGM.DecorateInstructionWithTBAA(Store, CGM.getTBAAVTablePtrAccessInfo());
+  TBAAAccessInfo TBAAInfo = CGM.getTBAAVTablePtrAccessInfo(VTablePtrTy);
+  CGM.DecorateInstructionWithTBAA(Store, TBAAInfo);
   if (CGM.getCodeGenOpts().OptimizationLevel > 0 &&
       CGM.getCodeGenOpts().StrictVTablePointers)
     CGM.DecorateInstructionWithInvariantGroup(Store, Vptr.VTableClass);
@@ -2517,7 +2526,8 @@ llvm::Value *CodeGenFunction::GetVTablePtr(Address This,
                                            const CXXRecordDecl *RD) {
   Address VTablePtrSrc = Builder.CreateElementBitCast(This, VTableTy);
   llvm::Instruction *VTable = Builder.CreateLoad(VTablePtrSrc, "vtable");
-  CGM.DecorateInstructionWithTBAA(VTable, CGM.getTBAAVTablePtrAccessInfo());
+  TBAAAccessInfo TBAAInfo = CGM.getTBAAVTablePtrAccessInfo(VTableTy);
+  CGM.DecorateInstructionWithTBAA(VTable, TBAAInfo);
 
   if (CGM.getCodeGenOpts().OptimizationLevel > 0 &&
       CGM.getCodeGenOpts().StrictVTablePointers)
@@ -2625,8 +2635,9 @@ void CodeGenFunction::EmitVTablePtrCheckForCast(QualType T,
     EmitBlock(CheckBlock);
   }
 
-  llvm::Value *VTable =
-    GetVTablePtr(Address(Derived, getPointerAlign()), Int8PtrTy, ClassDecl);
+  llvm::Value *VTable;
+  std::tie(VTable, ClassDecl) = CGM.getCXXABI().LoadVTablePtr(
+      *this, Address(Derived, getPointerAlign()), ClassDecl);
 
   EmitVTablePtrCheck(ClassDecl, VTable, TCK, Loc);
 
@@ -2774,9 +2785,12 @@ void CodeGenFunction::EmitForwardingCallToLambda(
   RValue RV = EmitCall(calleeFnInfo, callee, returnSlot, callArgs);
 
   // If necessary, copy the returned value into the slot.
-  if (!resultType->isVoidType() && returnSlot.isNull())
+  if (!resultType->isVoidType() && returnSlot.isNull()) {
+    if (getLangOpts().ObjCAutoRefCount && resultType->isObjCRetainableType()) {
+      RV = RValue::get(EmitARCRetainAutoreleasedReturnValue(RV.getScalarVal()));
+    }
     EmitReturnOfRValue(RV, resultType);
-  else
+  } else
     EmitBranchThroughCleanup(ReturnBlock);
 }
 

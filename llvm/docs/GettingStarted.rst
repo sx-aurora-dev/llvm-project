@@ -57,7 +57,7 @@ Here's the short story for getting up and running quickly with LLVM:
    * ``cd where-you-want-llvm-to-live``
    * ``cd llvm/tools/clang/tools``
    * ``svn co http://llvm.org/svn/llvm-project/clang-tools-extra/trunk extra``
-   
+
 #. Checkout LLD linker **[Optional]**:
 
    * ``cd where-you-want-llvm-to-live``
@@ -324,7 +324,7 @@ However, some Linux distributions and some other or older BSDs sometimes have
 extremely old versions of GCC. These steps attempt to help you upgrade you
 compiler even on such a system. However, if at all possible, we encourage you
 to use a recent version of a distribution with a modern system compiler that
-meets these requirements. Note that it is tempting to to install a prior
+meets these requirements. Note that it is tempting to install a prior
 version of Clang and libc++ to be the host compiler, however libc++ was not
 well tested or set up to build on Linux until relatively recently. As
 a consequence, this guide suggests just using libstdc++ and a modern GCC as the
@@ -466,34 +466,13 @@ populate it with the LLVM source code, Makefiles, test directories, and local
 copies of documentation files.
 
 If you want to get a specific release (as opposed to the most recent revision),
-you can checkout it from the '``tags``' directory (instead of '``trunk``'). The
+you can check it out from the '``tags``' directory (instead of '``trunk``'). The
 following releases are located in the following subdirectories of the '``tags``'
 directory:
 
-* Release 3.4: **RELEASE_34/final**
-* Release 3.3: **RELEASE_33/final**
-* Release 3.2: **RELEASE_32/final**
-* Release 3.1: **RELEASE_31/final**
-* Release 3.0: **RELEASE_30/final**
-* Release 2.9: **RELEASE_29/final**
-* Release 2.8: **RELEASE_28**
-* Release 2.7: **RELEASE_27**
-* Release 2.6: **RELEASE_26**
-* Release 2.5: **RELEASE_25**
-* Release 2.4: **RELEASE_24**
-* Release 2.3: **RELEASE_23**
-* Release 2.2: **RELEASE_22**
-* Release 2.1: **RELEASE_21**
-* Release 2.0: **RELEASE_20**
-* Release 1.9: **RELEASE_19**
-* Release 1.8: **RELEASE_18**
-* Release 1.7: **RELEASE_17**
-* Release 1.6: **RELEASE_16**
-* Release 1.5: **RELEASE_15**
-* Release 1.4: **RELEASE_14**
-* Release 1.3: **RELEASE_13**
-* Release 1.2: **RELEASE_12**
-* Release 1.1: **RELEASE_11**
+* Release 3.5.0 and later: **RELEASE_350/final** and so on
+* Release 2.9 through 3.4: **RELEASE_29/final** and so on
+* Release 1.1 through 2.8: **RELEASE_11** and so on
 * Release 1.0: **RELEASE_1**
 
 If you would like to get the LLVM test suite (a separate package as of 1.4), you
@@ -933,7 +912,7 @@ where they are built (a Canadian Cross build). To generate build files for
 cross-compiling CMake provides a variable ``CMAKE_TOOLCHAIN_FILE`` which can
 define compiler flags and variables used during the CMake test operations.
 
-The result of such a build is executables that are not runnable on on the build
+The result of such a build is executables that are not runnable on the build
 host but can be executed on the target. As an example the following CMake
 invocation can generate build files targeting iOS. This will work on Mac OS X
 with the latest Xcode:

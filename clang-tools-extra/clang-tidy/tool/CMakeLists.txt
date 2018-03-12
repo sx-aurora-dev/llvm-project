@@ -12,15 +12,18 @@ add_dependencies(clang-tidy
   clang-headers
   )
 target_link_libraries(clang-tidy
+  PRIVATE
   clangAST
   clangASTMatchers
   clangBasic
   clangTidy
   clangTidyAndroidModule
+  clangTidyAbseilModule
   clangTidyBoostModule
   clangTidyBugproneModule
   clangTidyCERTModule
   clangTidyCppCoreGuidelinesModule
+  clangTidyFuchsiaModule
   clangTidyGoogleModule
   clangTidyHICPPModule
   clangTidyLLVMModule
@@ -29,13 +32,15 @@ target_link_libraries(clang-tidy
   clangTidyMPIModule
   clangTidyObjCModule
   clangTidyPerformanceModule
+  clangTidyPortabilityModule
   clangTidyReadabilityModule
   clangTooling
   clangToolingCore
   )
 
-install(TARGETS clang-tidy
-  RUNTIME DESTINATION bin)
-
-install(PROGRAMS clang-tidy-diff.py DESTINATION share/clang)
-install(PROGRAMS run-clang-tidy.py DESTINATION share/clang)
+install(PROGRAMS clang-tidy-diff.py
+  DESTINATION share/clang
+  COMPONENT clang-tidy)
+install(PROGRAMS run-clang-tidy.py
+  DESTINATION share/clang
+  COMPONENT clang-tidy)

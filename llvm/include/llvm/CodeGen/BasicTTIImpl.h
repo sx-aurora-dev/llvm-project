@@ -27,6 +27,8 @@
 #include "llvm/Analysis/TargetTransformInfoImpl.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineValueType.h"
+#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CallSite.h"
@@ -46,8 +48,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -240,7 +240,7 @@ public:
     bool IsJTAllowed = TLI->areJTsAllowed(SI.getParent()->getParent());
 
     // Early exit if both a jump table and bit test are not allowed.
-    if (N < 1 || (!IsJTAllowed && DL.getPointerSizeInBits() < N))
+    if (N < 1 || (!IsJTAllowed && DL.getIndexSizeInBits(0u) < N))
       return N;
 
     APInt MaxCaseVal = SI.case_begin()->getCaseValue()->getValue();
@@ -254,7 +254,7 @@ public:
     }
 
     // Check if suitable for a bit test
-    if (N <= DL.getPointerSizeInBits()) {
+    if (N <= DL.getIndexSizeInBits(0u)) {
       SmallPtrSet<const BasicBlock *, 4> Dests;
       for (auto I : SI.cases())
         Dests.insert(I.getCaseSuccessor());
@@ -297,10 +297,18 @@ public:
            TLI->isOperationLegalOrCustom(ISD::FSQRT, VT);
   }
 
+  bool isFCmpOrdCheaperThanFCmpZero(Type *Ty) {
+    return true;
+  }
+
   unsigned getFPOpCost(Type *Ty) {
-    // By default, FP instructions are no more expensive since they are
-    // implemented in HW.  Target specific TTI can override this.
-    return TargetTransformInfo::TCC_Basic;
+    // Check whether FADD is available, as a proxy for floating-point in
+    // general.
+    const TargetLoweringBase *TLI = getTLI();
+    EVT VT = TLI->getValueType(DL, Ty);
+    if (TLI->isOperationLegalOrCustomOrPromote(ISD::FADD, VT))
+      return TargetTransformInfo::TCC_Basic;
+    return TargetTransformInfo::TCC_Expensive;
   }
 
   unsigned getOperationCost(unsigned Opcode, Type *Ty, Type *OpTy) {
@@ -1023,6 +1031,7 @@ public:
     // FIXME: We should return 0 whenever getIntrinsicCost == TCC_Free.
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end:
+    case Intrinsic::sideeffect:
       return 0;
     case Intrinsic::masked_store:
       return static_cast<T *>(this)

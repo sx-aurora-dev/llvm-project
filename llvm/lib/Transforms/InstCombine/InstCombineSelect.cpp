@@ -47,49 +47,10 @@ using namespace PatternMatch;
 
 #define DEBUG_TYPE "instcombine"
 
-static SelectPatternFlavor
-getInverseMinMaxSelectPattern(SelectPatternFlavor SPF) {
-  switch (SPF) {
-  default:
-    llvm_unreachable("unhandled!");
-
-  case SPF_SMIN:
-    return SPF_SMAX;
-  case SPF_UMIN:
-    return SPF_UMAX;
-  case SPF_SMAX:
-    return SPF_SMIN;
-  case SPF_UMAX:
-    return SPF_UMIN;
-  }
-}
-
-static CmpInst::Predicate getCmpPredicateForMinMax(SelectPatternFlavor SPF,
-                                                   bool Ordered=false) {
-  switch (SPF) {
-  default:
-    llvm_unreachable("unhandled!");
-
-  case SPF_SMIN:
-    return ICmpInst::ICMP_SLT;
-  case SPF_UMIN:
-    return ICmpInst::ICMP_ULT;
-  case SPF_SMAX:
-    return ICmpInst::ICMP_SGT;
-  case SPF_UMAX:
-    return ICmpInst::ICMP_UGT;
-  case SPF_FMINNUM:
-    return Ordered ? FCmpInst::FCMP_OLT : FCmpInst::FCMP_ULT;
-  case SPF_FMAXNUM:
-    return Ordered ? FCmpInst::FCMP_OGT : FCmpInst::FCMP_UGT;
-  }
-}
-
-static Value *generateMinMaxSelectPattern(InstCombiner::BuilderTy &Builder,
-                                          SelectPatternFlavor SPF, Value *A,
-                                          Value *B) {
-  CmpInst::Predicate Pred = getCmpPredicateForMinMax(SPF);
-  assert(CmpInst::isIntPredicate(Pred));
+static Value *createMinMax(InstCombiner::BuilderTy &Builder,
+                           SelectPatternFlavor SPF, Value *A, Value *B) {
+  CmpInst::Predicate Pred = getMinMaxPred(SPF);
+  assert(CmpInst::isIntPredicate(Pred) && "Expected integer predicate");
   return Builder.CreateSelect(Builder.CreateICmp(Pred, A, B), A, B);
 }
 
@@ -300,12 +261,13 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
                             TI->getType());
   }
 
-  // Only handle binary operators with one-use here. As with the cast case
-  // above, it may be possible to relax the one-use constraint, but that needs
-  // be examined carefully since it may not reduce the total number of
-  // instructions.
-  BinaryOperator *BO = dyn_cast<BinaryOperator>(TI);
-  if (!BO || !TI->hasOneUse() || !FI->hasOneUse())
+  // Only handle binary operators (including two-operand getelementptr) with
+  // one-use here. As with the cast case above, it may be possible to relax the
+  // one-use constraint, but that needs be examined carefully since it may not
+  // reduce the total number of instructions.
+  if (TI->getNumOperands() != 2 || FI->getNumOperands() != 2 ||
+      (!isa<BinaryOperator>(TI) && !isa<GetElementPtrInst>(TI)) ||
+      !TI->hasOneUse() || !FI->hasOneUse())
     return nullptr;
 
   // Figure out if the operations have any operands in common.
@@ -342,7 +304,18 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
                                       SI.getName() + ".v", &SI);
   Value *Op0 = MatchIsOpZero ? MatchOp : NewSI;
   Value *Op1 = MatchIsOpZero ? NewSI : MatchOp;
-  return BinaryOperator::Create(BO->getOpcode(), Op0, Op1);
+  if (auto *BO = dyn_cast<BinaryOperator>(TI)) {
+    return BinaryOperator::Create(BO->getOpcode(), Op0, Op1);
+  }
+  if (auto *TGEP = dyn_cast<GetElementPtrInst>(TI)) {
+    auto *FGEP = cast<GetElementPtrInst>(FI);
+    Type *ElementType = TGEP->getResultElementType();
+    return TGEP->isInBounds() && FGEP->isInBounds()
+               ? GetElementPtrInst::CreateInBounds(ElementType, Op0, {Op1})
+               : GetElementPtrInst::Create(ElementType, Op0, {Op1});
+  }
+  llvm_unreachable("Expected BinaryOperator or GEP");
+  return nullptr;
 }
 
 static bool isSelect01(const APInt &C1I, const APInt &C2I) {
@@ -526,6 +499,59 @@ static Value *foldSelectICmpAndOr(const ICmpInst *IC, Value *TrueVal,
   return Builder.CreateOr(V, Y);
 }
 
+/// Transform patterns such as: (a > b) ? a - b : 0
+/// into: ((a > b) ? a : b) - b)
+/// This produces a canonical max pattern that is more easily recognized by the
+/// backend and converted into saturated subtraction instructions if those
+/// exist.
+/// There are 8 commuted/swapped variants of this pattern.
+/// TODO: Also support a - UMIN(a,b) patterns.
+static Value *canonicalizeSaturatedSubtract(const ICmpInst *ICI,
+                                            const Value *TrueVal,
+                                            const Value *FalseVal,
+                                            InstCombiner::BuilderTy &Builder) {
+  ICmpInst::Predicate Pred = ICI->getPredicate();
+  if (!ICmpInst::isUnsigned(Pred))
+    return nullptr;
+
+  // (b > a) ? 0 : a - b -> (b <= a) ? a - b : 0
+  if (match(TrueVal, m_Zero())) {
+    Pred = ICmpInst::getInversePredicate(Pred);
+    std::swap(TrueVal, FalseVal);
+  }
+  if (!match(FalseVal, m_Zero()))
+    return nullptr;
+
+  Value *A = ICI->getOperand(0);
+  Value *B = ICI->getOperand(1);
+  if (Pred == ICmpInst::ICMP_ULE || Pred == ICmpInst::ICMP_ULT) {
+    // (b < a) ? a - b : 0 -> (a > b) ? a - b : 0
+    std::swap(A, B);
+    Pred = ICmpInst::getSwappedPredicate(Pred);
+  }
+
+  assert((Pred == ICmpInst::ICMP_UGE || Pred == ICmpInst::ICMP_UGT) &&
+         "Unexpected isUnsigned predicate!");
+
+  // Account for swapped form of subtraction: ((a > b) ? b - a : 0).
+  bool IsNegative = false;
+  if (match(TrueVal, m_Sub(m_Specific(B), m_Specific(A))))
+    IsNegative = true;
+  else if (!match(TrueVal, m_Sub(m_Specific(A), m_Specific(B))))
+    return nullptr;
+
+  // If sub is used anywhere else, we wouldn't be able to eliminate it
+  // afterwards.
+  if (!TrueVal->hasOneUse())
+    return nullptr;
+
+  // All checks passed, convert to canonical unsigned saturated subtraction
+  // form: sub(max()).
+  // (a > b) ? a - b : 0 -> ((a > b) ? a : b) - b)
+  Value *Max = Builder.CreateSelect(Builder.CreateICmp(Pred, A, B), A, B);
+  return IsNegative ? Builder.CreateSub(B, Max) : Builder.CreateSub(Max, B);
+}
+
 /// Attempt to fold a cttz/ctlz followed by a icmp plus select into a single
 /// call to cttz/ctlz with flag 'is_zero_undef' cleared.
 ///
@@ -687,23 +713,18 @@ canonicalizeMinMaxWithConstant(SelectInst &Sel, ICmpInst &Cmp,
 
   // Canonicalize the compare predicate based on whether we have min or max.
   Value *LHS, *RHS;
-  ICmpInst::Predicate NewPred;
   SelectPatternResult SPR = matchSelectPattern(&Sel, LHS, RHS);
-  switch (SPR.Flavor) {
-  case SPF_SMIN: NewPred = ICmpInst::ICMP_SLT; break;
-  case SPF_UMIN: NewPred = ICmpInst::ICMP_ULT; break;
-  case SPF_SMAX: NewPred = ICmpInst::ICMP_SGT; break;
-  case SPF_UMAX: NewPred = ICmpInst::ICMP_UGT; break;
-  default: return nullptr;
-  }
+  if (!SelectPatternResult::isMinOrMax(SPR.Flavor))
+    return nullptr;
 
   // Is this already canonical?
+  ICmpInst::Predicate CanonicalPred = getMinMaxPred(SPR.Flavor);
   if (Cmp.getOperand(0) == LHS && Cmp.getOperand(1) == RHS &&
-      Cmp.getPredicate() == NewPred)
+      Cmp.getPredicate() == CanonicalPred)
     return nullptr;
 
   // Create the canonical compare and plug it into the select.
-  Sel.setCondition(Builder.CreateICmp(NewPred, LHS, RHS));
+  Sel.setCondition(Builder.CreateICmp(CanonicalPred, LHS, RHS));
 
   // If the select operands did not change, we're done.
   if (Sel.getTrueValue() == LHS && Sel.getFalseValue() == RHS)
@@ -848,9 +869,11 @@ Instruction *InstCombiner::foldSelectInstWithICmp(SelectInst &SI,
   if (Value *V = foldSelectCttzCtlz(ICI, TrueVal, FalseVal, Builder))
     return replaceInstUsesWith(SI, V);
 
+  if (Value *V = canonicalizeSaturatedSubtract(ICI, TrueVal, FalseVal, Builder))
+    return replaceInstUsesWith(SI, V);
+
   return Changed ? &SI : nullptr;
 }
-
 
 /// SI is a select whose condition is a PHI node (but the two may be in
 /// different blocks). See if the true/false values (V) are live in all of the
@@ -992,10 +1015,10 @@ Instruction *InstCombiner::foldSPFofSPF(Instruction *Inner,
     if (!NotC)
       NotC = Builder.CreateNot(C);
 
-    Value *NewInner = generateMinMaxSelectPattern(
-        Builder, getInverseMinMaxSelectPattern(SPF1), NotA, NotB);
-    Value *NewOuter = Builder.CreateNot(generateMinMaxSelectPattern(
-        Builder, getInverseMinMaxSelectPattern(SPF2), NewInner, NotC));
+    Value *NewInner = createMinMax(Builder, getInverseMinMaxFlavor(SPF1), NotA,
+                                   NotB);
+    Value *NewOuter = Builder.CreateNot(
+        createMinMax(Builder, getInverseMinMaxFlavor(SPF2), NewInner, NotC));
     return replaceInstUsesWith(Outer, NewOuter);
   }
 
@@ -1215,6 +1238,135 @@ static Instruction *foldSelectCmpBitcasts(SelectInst &Sel,
     return nullptr;
   }
   return CastInst::CreateBitOrPointerCast(NewSel, Sel.getType());
+}
+
+/// Try to eliminate select instructions that test the returned flag of cmpxchg
+/// instructions.
+///
+/// If a select instruction tests the returned flag of a cmpxchg instruction and
+/// selects between the returned value of the cmpxchg instruction its compare
+/// operand, the result of the select will always be equal to its false value.
+/// For example:
+///
+///   %0 = cmpxchg i64* %ptr, i64 %compare, i64 %new_value seq_cst seq_cst
+///   %1 = extractvalue { i64, i1 } %0, 1
+///   %2 = extractvalue { i64, i1 } %0, 0
+///   %3 = select i1 %1, i64 %compare, i64 %2
+///   ret i64 %3
+///
+/// The returned value of the cmpxchg instruction (%2) is the original value
+/// located at %ptr prior to any update. If the cmpxchg operation succeeds, %2
+/// must have been equal to %compare. Thus, the result of the select is always
+/// equal to %2, and the code can be simplified to:
+///
+///   %0 = cmpxchg i64* %ptr, i64 %compare, i64 %new_value seq_cst seq_cst
+///   %1 = extractvalue { i64, i1 } %0, 0
+///   ret i64 %1
+///
+static Instruction *foldSelectCmpXchg(SelectInst &SI) {
+  // A helper that determines if V is an extractvalue instruction whose
+  // aggregate operand is a cmpxchg instruction and whose single index is equal
+  // to I. If such conditions are true, the helper returns the cmpxchg
+  // instruction; otherwise, a nullptr is returned.
+  auto isExtractFromCmpXchg = [](Value *V, unsigned I) -> AtomicCmpXchgInst * {
+    auto *Extract = dyn_cast<ExtractValueInst>(V);
+    if (!Extract)
+      return nullptr;
+    if (Extract->getIndices()[0] != I)
+      return nullptr;
+    return dyn_cast<AtomicCmpXchgInst>(Extract->getAggregateOperand());
+  };
+
+  // If the select has a single user, and this user is a select instruction that
+  // we can simplify, skip the cmpxchg simplification for now.
+  if (SI.hasOneUse())
+    if (auto *Select = dyn_cast<SelectInst>(SI.user_back()))
+      if (Select->getCondition() == SI.getCondition())
+        if (Select->getFalseValue() == SI.getTrueValue() ||
+            Select->getTrueValue() == SI.getFalseValue())
+          return nullptr;
+
+  // Ensure the select condition is the returned flag of a cmpxchg instruction.
+  auto *CmpXchg = isExtractFromCmpXchg(SI.getCondition(), 1);
+  if (!CmpXchg)
+    return nullptr;
+
+  // Check the true value case: The true value of the select is the returned
+  // value of the same cmpxchg used by the condition, and the false value is the
+  // cmpxchg instruction's compare operand.
+  if (auto *X = isExtractFromCmpXchg(SI.getTrueValue(), 0))
+    if (X == CmpXchg && X->getCompareOperand() == SI.getFalseValue()) {
+      SI.setTrueValue(SI.getFalseValue());
+      return &SI;
+    }
+
+  // Check the false value case: The false value of the select is the returned
+  // value of the same cmpxchg used by the condition, and the true value is the
+  // cmpxchg instruction's compare operand.
+  if (auto *X = isExtractFromCmpXchg(SI.getFalseValue(), 0))
+    if (X == CmpXchg && X->getCompareOperand() == SI.getTrueValue()) {
+      SI.setTrueValue(SI.getFalseValue());
+      return &SI;
+    }
+
+  return nullptr;
+}
+
+/// Reduce a sequence of min/max with a common operand.
+static Instruction *factorizeMinMaxTree(SelectPatternFlavor SPF, Value *LHS,
+                                        Value *RHS,
+                                        InstCombiner::BuilderTy &Builder) {
+  assert(SelectPatternResult::isMinOrMax(SPF) && "Expected a min/max");
+  // TODO: Allow FP min/max with nnan/nsz.
+  if (!LHS->getType()->isIntOrIntVectorTy())
+    return nullptr;
+
+  // Match 3 of the same min/max ops. Example: umin(umin(), umin()).
+  Value *A, *B, *C, *D;
+  SelectPatternResult L = matchSelectPattern(LHS, A, B);
+  SelectPatternResult R = matchSelectPattern(RHS, C, D);
+  if (SPF != L.Flavor || L.Flavor != R.Flavor)
+    return nullptr;
+
+  // Look for a common operand. The use checks are different than usual because
+  // a min/max pattern typically has 2 uses of each op: 1 by the cmp and 1 by
+  // the select.
+  Value *MinMaxOp = nullptr;
+  Value *ThirdOp = nullptr;
+  if (LHS->getNumUses() <= 2 && RHS->getNumUses() > 2) {
+    // If the LHS is only used in this chain and the RHS is used outside of it,
+    // reuse the RHS min/max because that will eliminate the LHS.
+    if (D == A || C == A) {
+      // min(min(a, b), min(c, a)) --> min(min(c, a), b)
+      // min(min(a, b), min(a, d)) --> min(min(a, d), b)
+      MinMaxOp = RHS;
+      ThirdOp = B;
+    } else if (D == B || C == B) {
+      // min(min(a, b), min(c, b)) --> min(min(c, b), a)
+      // min(min(a, b), min(b, d)) --> min(min(b, d), a)
+      MinMaxOp = RHS;
+      ThirdOp = A;
+    }
+  } else if (RHS->getNumUses() <= 2) {
+    // Reuse the LHS. This will eliminate the RHS.
+    if (D == A || D == B) {
+      // min(min(a, b), min(c, a)) --> min(min(a, b), c)
+      // min(min(a, b), min(c, b)) --> min(min(a, b), c)
+      MinMaxOp = LHS;
+      ThirdOp = C;
+    } else if (C == A || C == B) {
+      // min(min(a, b), min(b, d)) --> min(min(a, b), d)
+      // min(min(a, b), min(c, b)) --> min(min(a, b), d)
+      MinMaxOp = LHS;
+      ThirdOp = D;
+    }
+  }
+  if (!MinMaxOp || !ThirdOp)
+    return nullptr;
+
+  CmpInst::Predicate P = getMinMaxPred(SPF);
+  Value *CmpABC = Builder.CreateICmp(P, MinMaxOp, ThirdOp);
+  return SelectInst::Create(CmpABC, MinMaxOp, ThirdOp);
 }
 
 Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
@@ -1460,7 +1612,7 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
           (LHS->getType()->isFPOrFPVectorTy() &&
            ((CmpLHS != LHS && CmpLHS != RHS) ||
             (CmpRHS != LHS && CmpRHS != RHS)))) {
-        CmpInst::Predicate Pred = getCmpPredicateForMinMax(SPF, SPR.Ordered);
+        CmpInst::Predicate Pred = getMinMaxPred(SPF, SPR.Ordered);
 
         Value *Cmp;
         if (CmpInst::isIntPredicate(Pred)) {
@@ -1479,6 +1631,20 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
         Value *NewCast = Builder.CreateCast(CastOp, NewSI, SelType);
         return replaceInstUsesWith(SI, NewCast);
       }
+
+      // MAX(~a, ~b) -> ~MIN(a, b)
+      // MIN(~a, ~b) -> ~MAX(a, b)
+      Value *A, *B;
+      if (match(LHS, m_Not(m_Value(A))) && match(RHS, m_Not(m_Value(B))) &&
+          (LHS->getNumUses() <= 2 || RHS->getNumUses() <= 2)) {
+        CmpInst::Predicate InvertedPred = getInverseMinMaxPred(SPF);
+        Value *InvertedCmp = Builder.CreateICmp(InvertedPred, A, B);
+        Value *NewSel = Builder.CreateSelect(InvertedCmp, A, B);
+        return BinaryOperator::CreateNot(NewSel);
+      }
+
+      if (Instruction *I = factorizeMinMaxTree(SPF, LHS, RHS, Builder))
+        return I;
     }
 
     if (SPF) {
@@ -1496,28 +1662,6 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
         if (Instruction *R = foldSPFofSPF(cast<Instruction>(RHS),SPF2,LHS2,RHS2,
                                           SI, SPF, LHS))
           return R;
-    }
-
-    // MAX(~a, ~b) -> ~MIN(a, b)
-    if ((SPF == SPF_SMAX || SPF == SPF_UMAX) &&
-        IsFreeToInvert(LHS, LHS->hasNUses(2)) &&
-        IsFreeToInvert(RHS, RHS->hasNUses(2))) {
-      // For this transform to be profitable, we need to eliminate at least two
-      // 'not' instructions if we're going to add one 'not' instruction.
-      int NumberOfNots =
-          (LHS->hasNUses(2) && match(LHS, m_Not(m_Value()))) +
-          (RHS->hasNUses(2) && match(RHS, m_Not(m_Value()))) +
-          (SI.hasOneUse() && match(*SI.user_begin(), m_Not(m_Value())));
-
-      if (NumberOfNots >= 2) {
-        Value *NewLHS = Builder.CreateNot(LHS);
-        Value *NewRHS = Builder.CreateNot(RHS);
-        Value *NewCmp = SPF == SPF_SMAX ? Builder.CreateICmpSLT(NewLHS, NewRHS)
-                                        : Builder.CreateICmpULT(NewLHS, NewRHS);
-        Value *NewSI =
-            Builder.CreateNot(Builder.CreateSelect(NewCmp, NewLHS, NewRHS));
-        return replaceInstUsesWith(SI, NewSI);
-      }
     }
 
     // TODO.
@@ -1566,6 +1710,61 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
         Value *Or = Builder.CreateOr(CondVal, FalseSI->getCondition());
         SI.setOperand(0, Or);
         SI.setOperand(2, FalseSI->getFalseValue());
+        return &SI;
+      }
+    }
+  }
+
+  auto canMergeSelectThroughBinop = [](BinaryOperator *BO) {
+    // The select might be preventing a division by 0.
+    switch (BO->getOpcode()) {
+    default:
+      return true;
+    case Instruction::SRem:
+    case Instruction::URem:
+    case Instruction::SDiv:
+    case Instruction::UDiv:
+      return false;
+    }
+  };
+
+  // Try to simplify a binop sandwiched between 2 selects with the same
+  // condition.
+  // select(C, binop(select(C, X, Y), W), Z) -> select(C, binop(X, W), Z)
+  BinaryOperator *TrueBO;
+  if (match(TrueVal, m_OneUse(m_BinOp(TrueBO))) &&
+      canMergeSelectThroughBinop(TrueBO)) {
+    if (auto *TrueBOSI = dyn_cast<SelectInst>(TrueBO->getOperand(0))) {
+      if (TrueBOSI->getCondition() == CondVal) {
+        TrueBO->setOperand(0, TrueBOSI->getTrueValue());
+        Worklist.Add(TrueBO);
+        return &SI;
+      }
+    }
+    if (auto *TrueBOSI = dyn_cast<SelectInst>(TrueBO->getOperand(1))) {
+      if (TrueBOSI->getCondition() == CondVal) {
+        TrueBO->setOperand(1, TrueBOSI->getTrueValue());
+        Worklist.Add(TrueBO);
+        return &SI;
+      }
+    }
+  }
+
+  // select(C, Z, binop(select(C, X, Y), W)) -> select(C, Z, binop(Y, W))
+  BinaryOperator *FalseBO;
+  if (match(FalseVal, m_OneUse(m_BinOp(FalseBO))) &&
+      canMergeSelectThroughBinop(FalseBO)) {
+    if (auto *FalseBOSI = dyn_cast<SelectInst>(FalseBO->getOperand(0))) {
+      if (FalseBOSI->getCondition() == CondVal) {
+        FalseBO->setOperand(0, FalseBOSI->getFalseValue());
+        Worklist.Add(FalseBO);
+        return &SI;
+      }
+    }
+    if (auto *FalseBOSI = dyn_cast<SelectInst>(FalseBO->getOperand(1))) {
+      if (FalseBOSI->getCondition() == CondVal) {
+        FalseBO->setOperand(1, FalseBOSI->getFalseValue());
+        Worklist.Add(FalseBO);
         return &SI;
       }
     }
@@ -1623,6 +1822,10 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
 
   if (Instruction *BitCastSel = foldSelectCmpBitcasts(SI, Builder))
     return BitCastSel;
+
+  // Simplify selects that test the returned flag of cmpxchg instructions.
+  if (Instruction *Select = foldSelectCmpXchg(SI))
+    return Select;
 
   return nullptr;
 }

@@ -27,6 +27,7 @@
 // Project includes
 #include "ClangModulesDeclVendor.h"
 
+#include "lldb/Core/ModuleList.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Symbol/CompileUnit.h"
@@ -590,14 +591,11 @@ ClangModulesDeclVendor::Create(Target &target) {
   // Add additional search paths with { "-I", path } or { "-F", path } here.
 
   {
-    llvm::SmallString<128> DefaultModuleCache;
-    const bool erased_on_reboot = false;
-    llvm::sys::path::system_temp_directory(erased_on_reboot,
-                                           DefaultModuleCache);
-    llvm::sys::path::append(DefaultModuleCache, "org.llvm.clang");
-    llvm::sys::path::append(DefaultModuleCache, "ModuleCache");
+    llvm::SmallString<128> path;
+    auto props = ModuleList::GetGlobalModuleListProperties();
+    props.GetClangModulesCachePath().GetPath(path);
     std::string module_cache_argument("-fmodules-cache-path=");
-    module_cache_argument.append(DefaultModuleCache.str().str());
+    module_cache_argument.append(path.str());
     compiler_invocation_arguments.push_back(module_cache_argument);
   }
 

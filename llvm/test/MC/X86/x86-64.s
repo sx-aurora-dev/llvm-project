@@ -100,6 +100,11 @@
         sall $2, %eax
 
 // CHECK: rep
+// CHECK-NEXT: movsb
+rep     # comment
+movsb
+
+// CHECK: rep
 // CHECK: insb
         rep;insb
 
@@ -283,9 +288,6 @@ inl	(%dx), %eax
 
 //PR15455
 
-// permitted invalid memory forms	
-outs	(%rsi), (%dx) 
-// CHECK: outsw	(%rsi), %dx
 outsb	(%rsi), (%dx)
 // CHECK: outsb	(%rsi), %dx
 outsw	(%rsi), (%dx)
@@ -293,8 +295,6 @@ outsw	(%rsi), (%dx)
 outsl	(%rsi), (%dx)
 // CHECK: outsl	(%rsi), %dx
 
-ins	(%dx), %es:(%rdi)
-// CHECK: insw	%dx, %es:(%rdi)
 insb	(%dx), %es:(%rdi)
 // CHECK: insb	%dx, %es:(%rdi)
 insw	(%dx), %es:(%rdi)
@@ -417,7 +417,7 @@ enter $0x7ace,$0x7f
 
 // rdar://8456364
 // CHECK: movw	%cs, %ax
-mov %CS, %ax
+mov %cs, %ax
 
 // rdar://8456391
 fcmovb %st(1), %st(0)   // CHECK: fcmovb	%st(1), %st(0)
@@ -452,6 +452,12 @@ mov %rdx, %cr8
 mov %rdx, %cr15
 // CHECK: movq	%rdx, %cr15
 // CHECK: encoding: [0x44,0x0f,0x22,0xfa]
+mov %rdx, %dr15
+// CHECK: movq	%rdx, %dr15
+// CHECK: encoding: [0x44,0x0f,0x23,0xfa]
+mov %rdx, %db15
+// CHECK: movq	%rdx, %dr15
+// CHECK: encoding: [0x44,0x0f,0x23,0xfa]
 
 // rdar://8456371 - Handle commutable instructions written backward.
 // CHECK: 	faddp	%st(1)
@@ -583,8 +589,8 @@ movmskpd	%xmm6, %eax
 fdivrp %st(0), %st(1) // CHECK: encoding: [0xde,0xf9]
 fdivrp %st(1), %st(0) // CHECK: encoding: [0xde,0xf9]
 
-fsubrp %ST(0), %ST(1) // CHECK: encoding: [0xde,0xe9]
-fsubrp %ST(1), %ST(0) // CHECK: encoding: [0xde,0xe9]
+fsubrp %st(0), %st(1) // CHECK: encoding: [0xde,0xe9]
+fsubrp %st(1), %st(0) // CHECK: encoding: [0xde,0xe9]
 
 // also PR8861
 fdivp %st(0), %st(1) // CHECK: encoding: [0xde,0xf1]
@@ -610,6 +616,11 @@ movl	$12, foo(%rip)
 // CHECK: movl	$12, foo(%rip)
 // CHECK: encoding: [0xc7,0x05,A,A,A,A,0x0c,0x00,0x00,0x00]
 // CHECK:    fixup A - offset: 2, value: foo-8, kind: reloc_riprel_4byte
+
+// rdar://37247000
+movl	$12, 1024(%rip)
+// CHECK: movl	$12, 1024(%rip)
+// CHECK: encoding: [0xc7,0x05,0x00,0x04,0x00,0x00,0x0c,0x00,0x00,0x00]
 
 movq	$12, foo(%rip)
 // CHECK:  movq	$12, foo(%rip)
@@ -1082,8 +1093,8 @@ decl %eax // CHECK:	decl	%eax # encoding: [0xff,0xc8]
 
 
 // rdar://8208615
-mov (%rsi), %gs  // CHECK: movl	(%rsi), %gs # encoding: [0x8e,0x2e]
-mov %gs, (%rsi)  // CHECK: movl	%gs, (%rsi) # encoding: [0x8c,0x2e]
+mov (%rsi), %gs  // CHECK: movw	(%rsi), %gs # encoding: [0x8e,0x2e]
+mov %gs, (%rsi)  // CHECK: movw	%gs, (%rsi) # encoding: [0x8c,0x2e]
 
 
 // rdar://8431864
@@ -1121,10 +1132,10 @@ mov %gs, (%rsi)  // CHECK: movl	%gs, (%rsi) # encoding: [0x8c,0x2e]
 	idiv	0x12345678,%eax
 
 // PR8524
-movd	%rax, %mm5 // CHECK: movd %rax, %mm5 # encoding: [0x48,0x0f,0x6e,0xe8]
-movd	%mm5, %rbx // CHECK: movd %mm5, %rbx # encoding: [0x48,0x0f,0x7e,0xeb]
-movq	%rax, %mm5 // CHECK: movd %rax, %mm5 # encoding: [0x48,0x0f,0x6e,0xe8]
-movq	%mm5, %rbx // CHECK: movd %mm5, %rbx # encoding: [0x48,0x0f,0x7e,0xeb]
+movd	%rax, %mm5 // CHECK: movq %rax, %mm5 # encoding: [0x48,0x0f,0x6e,0xe8]
+movd	%mm5, %rbx // CHECK: movq %mm5, %rbx # encoding: [0x48,0x0f,0x7e,0xeb]
+movq	%rax, %mm5 // CHECK: movq %rax, %mm5 # encoding: [0x48,0x0f,0x6e,0xe8]
+movq	%mm5, %rbx // CHECK: movq %mm5, %rbx # encoding: [0x48,0x0f,0x7e,0xeb]
 
 rex64 // CHECK: rex64 # encoding: [0x48]
 data16 // CHECK: data16 # encoding: [0x66]
@@ -1344,8 +1355,8 @@ pclmullqhqdq (%rdi), %xmm1
 pclmulqdq $0, (%rdi), %xmm1
 
 // PR10345
-// CHECK: xchgq %rax, %rax
-// CHECK: encoding: [0x48,0x90]
+// CHECK: nop
+// CHECK: encoding: [0x90]
 xchgq %rax, %rax
 
 // CHECK: xchgl %eax, %eax
@@ -1547,3 +1558,38 @@ ptwriteq 0xdeadbeef(%rbx,%rcx,8)
 // CHECK: ptwriteq %rax
 // CHECK:  encoding: [0xf3,0x48,0x0f,0xae,0xe0]
 ptwriteq %rax
+
+//  __asm __volatile(
+//    "pushf        \n\t"
+//    "popf       \n\t"
+//    "rep        \n\t"
+//    ".byte  0x0f, 0xa7, 0xd0"
+//  );
+// CHECK: pushfq
+// CHECK-NEXT: popfq
+// CHECK-NEXT: rep
+// CHECK-NEXT: .byte 15
+// CHECK-NEXT: .byte 167
+// CHECK-NEXT: .byte 208
+pushfq
+popfq
+rep
+.byte 15
+.byte 167
+.byte 208
+
+// CHECK: lock
+// CHECK: cmpxchgl
+        cmp $0, %edx
+        je 1f
+        lock
+1:      cmpxchgl %ecx,(%rdi)
+
+// CHECK: rep
+// CHECK-NEXT: byte
+rep
+.byte 0xa4      # movsb
+
+// CHECK: lock
+// This line has to be the last one in the file
+lock

@@ -29,7 +29,6 @@
 #include <sstream>
 
 #include "lldb/Breakpoint/Watchpoint.h"
-#include "lldb/Core/ArchSpec.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
@@ -244,7 +243,7 @@ bool ProcessGDBRemote::CanDebug(lldb::TargetSP target_sp,
 //----------------------------------------------------------------------
 ProcessGDBRemote::ProcessGDBRemote(lldb::TargetSP target_sp,
                                    ListenerSP listener_sp)
-    : Process(target_sp, listener_sp), m_flags(0), m_gdb_comm(),
+    : Process(target_sp, listener_sp),
       m_debugserver_pid(LLDB_INVALID_PROCESS_ID), m_last_stop_packet_mutex(),
       m_register_info(),
       m_async_broadcaster(NULL, "lldb.process.gdb-remote.async-broadcaster"),
@@ -818,7 +817,7 @@ Status ProcessGDBRemote::DoLaunch(Module *exe_module,
   if (object_file) {
     error = EstablishConnectionIfNeeded(launch_info);
     if (error.Success()) {
-      lldb_utility::PseudoTerminal pty;
+      PseudoTerminal pty;
       const bool disable_stdio = (launch_flags & eLaunchFlagDisableSTDIO) != 0;
 
       PlatformSP platform_sp(GetTarget().GetPlatform());
@@ -889,16 +888,7 @@ Status ProcessGDBRemote::DoLaunch(Module *exe_module,
       }
 
       // Send the environment and the program + arguments after we connect
-      const Args &environment = launch_info.GetEnvironmentEntries();
-      if (environment.GetArgumentCount()) {
-        size_t num_environment_entries = environment.GetArgumentCount();
-        for (size_t i = 0; i < num_environment_entries; ++i) {
-          const char *env_entry = environment.GetArgumentAtIndex(i);
-          if (env_entry == NULL ||
-              m_gdb_comm.SendEnvironmentPacket(env_entry) != 0)
-            break;
-        }
-      }
+      m_gdb_comm.SendEnvironment(launch_info.GetEnvironment());
 
       {
         // Scope for the scoped timeout object
@@ -947,8 +937,7 @@ Status ProcessGDBRemote::DoLaunch(Module *exe_module,
         SetPrivateState(SetThreadStopInfo(response));
 
         if (!disable_stdio) {
-          if (pty.GetMasterFileDescriptor() !=
-              lldb_utility::PseudoTerminal::invalid_fd)
+          if (pty.GetMasterFileDescriptor() != PseudoTerminal::invalid_fd)
             SetSTDIOFileDescriptor(pty.ReleaseMasterFileDescriptor());
         }
       }
@@ -3255,7 +3244,6 @@ Status ProcessGDBRemote::DisableWatchpoint(Watchpoint *wp, bool notify) {
 }
 
 void ProcessGDBRemote::Clear() {
-  m_flags = 0;
   m_thread_list_real.Clear();
   m_thread_list.Clear();
 }
@@ -3328,27 +3316,22 @@ Status ProcessGDBRemote::LaunchAndConnectToDebugserver(
 
     int communication_fd = -1;
 #ifdef USE_SOCKETPAIR_FOR_LOCAL_CONNECTION
-    // Auto close the sockets we might open up unless everything goes OK. This
-    // helps us not leak file descriptors when things go wrong.
-    lldb_utility::CleanUp<int, int> our_socket(-1, -1, close);
-    lldb_utility::CleanUp<int, int> gdb_socket(-1, -1, close);
-
     // Use a socketpair on non-Windows systems for security and performance
     // reasons.
-    {
-      int sockets[2]; /* the pair of socket descriptors */
-      if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == -1) {
-        error.SetErrorToErrno();
-        return error;
-      }
-
-      our_socket.set(sockets[0]);
-      gdb_socket.set(sockets[1]);
+    int sockets[2]; /* the pair of socket descriptors */
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == -1) {
+      error.SetErrorToErrno();
+      return error;
     }
 
+    int our_socket = sockets[0];
+    int gdb_socket = sockets[1];
+    CleanUp cleanup_our(close, our_socket);
+    CleanUp cleanup_gdb(close, gdb_socket);
+
     // Don't let any child processes inherit our communication socket
-    SetCloexecFlag(our_socket.get());
-    communication_fd = gdb_socket.get();
+    SetCloexecFlag(our_socket);
+    communication_fd = gdb_socket;
 #endif
 
     error = m_gdb_comm.StartDebugserverProcess(
@@ -3364,8 +3347,8 @@ Status ProcessGDBRemote::LaunchAndConnectToDebugserver(
 #ifdef USE_SOCKETPAIR_FOR_LOCAL_CONNECTION
       // Our process spawned correctly, we can now set our connection to use our
       // end of the socket pair
-      m_gdb_comm.SetConnection(
-          new ConnectionFileDescriptor(our_socket.release(), true));
+      cleanup_our.disable();
+      m_gdb_comm.SetConnection(new ConnectionFileDescriptor(our_socket, true));
 #endif
       StartAsyncThread();
     }
@@ -4412,6 +4395,19 @@ bool ProcessGDBRemote::GetGDBServerRegisterInfo(ArchSpec &arch_to_use) {
         return true; // Keep iterating through all children of the target_node
       });
 
+      // If the target.xml includes an architecture entry like
+      //   <architecture>i386:x86-64</architecture> (seen from VMWare ESXi)
+      //   <architecture>arm</architecture> (seen from Segger JLink on unspecified arm board)
+      // use that if we don't have anything better.
+      if (!arch_to_use.IsValid() && !target_info.arch.empty()) {
+        if (target_info.arch == "i386:x86-64")
+        {
+          // We don't have any information about vendor or OS.
+          arch_to_use.SetTriple("x86_64--");
+          GetTarget().MergeArchitecture(arch_to_use);
+        }
+      }
+
       // Initialize these outside of ParseRegisters, since they should not be
       // reset inside each include feature
       uint32_t cur_reg_num = 0;
@@ -5157,10 +5153,11 @@ public:
 
       bool send_async = true;
       StringExtractorGDBRemote response;
-      process->GetGDBRemote().SendPacketAndWaitForResponse(
-          packet.GetString(), response, send_async);
-      result.SetStatus(eReturnStatusSuccessFinishResult);
       Stream &output_strm = result.GetOutputStream();
+      process->GetGDBRemote().SendPacketAndReceiveResponseWithOutputSupport(
+          packet.GetString(), response, send_async,
+          [&output_strm](llvm::StringRef output) { output_strm << output; });
+      result.SetStatus(eReturnStatusSuccessFinishResult);
       output_strm.Printf("  packet: %s\n", packet.GetData());
       const std::string &response_str = response.GetStringRef();
 

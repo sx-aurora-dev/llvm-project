@@ -2225,6 +2225,7 @@ void constructible_checks() {
 
   // PR25513
   { int arr[F(__is_constructible(int(int)))]; }
+  { int arr[T(__is_constructible(int const &, long))]; }
 
   { int arr[T(__is_constructible(ACompleteType))]; }
   { int arr[T(__is_nothrow_constructible(ACompleteType))]; }
@@ -2273,6 +2274,47 @@ void is_trivially_constructible_test() {
   { int arr[F(__is_trivially_constructible(AnIncompleteType[1]))]; } // expected-error {{incomplete type}}
   { int arr[F(__is_trivially_constructible(void))]; }
   { int arr[F(__is_trivially_constructible(const volatile void))]; }
+}
+
+template <class T, class RefType = T &>
+struct ConvertsToRef {
+  operator RefType() const { return static_cast<RefType>(obj); }
+  mutable T obj = 42;
+};
+
+void reference_binds_to_temporary_checks() {
+  { int arr[F((__reference_binds_to_temporary(int &, int &)))]; }
+  { int arr[F((__reference_binds_to_temporary(int &, int &&)))]; }
+
+  { int arr[F((__reference_binds_to_temporary(int const &, int &)))]; }
+  { int arr[F((__reference_binds_to_temporary(int const &, int const &)))]; }
+  { int arr[F((__reference_binds_to_temporary(int const &, int &&)))]; }
+
+  { int arr[F((__reference_binds_to_temporary(int &, long &)))]; } // doesn't construct
+  { int arr[T((__reference_binds_to_temporary(int const &, long &)))]; }
+  { int arr[T((__reference_binds_to_temporary(int const &, long &&)))]; }
+  { int arr[T((__reference_binds_to_temporary(int &&, long &)))]; }
+
+  using LRef = ConvertsToRef<int, int &>;
+  using RRef = ConvertsToRef<int, int &&>;
+  using CLRef = ConvertsToRef<int, const int &>;
+  using LongRef = ConvertsToRef<long, long &>;
+  { int arr[T((__is_constructible(int &, LRef)))]; }
+  { int arr[F((__reference_binds_to_temporary(int &, LRef)))]; }
+
+  { int arr[T((__is_constructible(int &&, RRef)))]; }
+  { int arr[F((__reference_binds_to_temporary(int &&, RRef)))]; }
+
+  { int arr[T((__is_constructible(int const &, CLRef)))]; }
+  { int arr[F((__reference_binds_to_temporary(int &&, CLRef)))]; }
+
+  { int arr[T((__is_constructible(int const &, LongRef)))]; }
+  { int arr[T((__reference_binds_to_temporary(int const &, LongRef)))]; }
+
+  // Test that it doesn't accept non-reference types as input.
+  { int arr[F((__reference_binds_to_temporary(int, long)))]; }
+
+  { int arr[T((__reference_binds_to_temporary(const int &, long)))]; }
 }
 
 void array_rank() {
@@ -2447,7 +2489,7 @@ struct Padding {
   int b;
 };
 
-static_assert(!has_unique_object_representations<Padding>::value, "but not with padding");
+//static_assert(!has_unique_object_representations<Padding>::value, "but not with padding");
 
 struct InheritsFromPadding : Padding {
   int c;
@@ -2518,13 +2560,13 @@ enum class LLEnumClass : long long { xLongExample,
 static_assert(has_unique_object_representations<ExampleEnumClass>::value, "Enums are integrals, so unique!");
 static_assert(has_unique_object_representations<LLEnumClass>::value, "Enums are integrals, so unique!");
 
-// because reference types aren't object types
+// because references aren't trivially copyable.
 static_assert(!has_unique_object_representations<int &>::value, "No references!");
 static_assert(!has_unique_object_representations<const int &>::value, "No references!");
 static_assert(!has_unique_object_representations<volatile int &>::value, "No references!");
 static_assert(!has_unique_object_representations<const volatile int &>::value, "No references!");
-
 static_assert(!has_unique_object_representations<Empty>::value, "No empty types!");
+static_assert(!has_unique_object_representations<EmptyUnion>::value, "No empty types!");
 
 class Compressed : Empty {
   int x;
@@ -2556,6 +2598,16 @@ static_assert(!has_unique_object_representations<double[42]>::value, "So no arra
 static_assert(!has_unique_object_representations<double[]>::value, "So no array of doubles!");
 static_assert(!has_unique_object_representations<double[][42]>::value, "So no array of doubles!");
 
+struct __attribute__((aligned(16))) WeirdAlignment {
+  int i;
+};
+union __attribute__((aligned(16))) WeirdAlignmentUnion {
+  int i;
+};
+static_assert(!has_unique_object_representations<WeirdAlignment>::value, "Alignment causes padding");
+static_assert(!has_unique_object_representations<WeirdAlignmentUnion>::value, "Alignment causes padding");
+static_assert(!has_unique_object_representations<WeirdAlignment[42]>::value, "Also no arrays that have padding");
+
 static_assert(!has_unique_object_representations<int(int)>::value, "Functions are not unique");
 static_assert(!has_unique_object_representations<int(int) const>::value, "Functions are not unique");
 static_assert(!has_unique_object_representations<int(int) volatile>::value, "Functions are not unique");
@@ -2582,6 +2634,81 @@ static_assert(!has_unique_object_representations<int(int, ...) const &&>::value,
 static_assert(!has_unique_object_representations<int(int, ...) volatile &&>::value, "Functions are not unique");
 static_assert(!has_unique_object_representations<int(int, ...) const volatile &&>::value, "Functions are not unique");
 
-static auto lambda = []() {};
-static_assert(!has_unique_object_representations<decltype(lambda)>::value, "Lambdas are not unique");
+void foo(){
+  static auto lambda = []() {};
+  static_assert(!has_unique_object_representations<decltype(lambda)>::value, "Lambdas follow struct rules");
+  int i;
+  static auto lambda2 = [i]() {};
+  static_assert(has_unique_object_representations<decltype(lambda2)>::value, "Lambdas follow struct rules");
+}
 
+struct PaddedBitfield {
+  char c : 6;
+  char d : 1;
+};
+
+struct UnPaddedBitfield {
+  char c : 6;
+  char d : 2;
+};
+
+struct AlignedPaddedBitfield {
+  char c : 6;
+  __attribute__((aligned(1)))
+  char d : 2;
+};
+
+static_assert(!has_unique_object_representations<PaddedBitfield>::value, "Bitfield padding");
+static_assert(has_unique_object_representations<UnPaddedBitfield>::value, "Bitfield padding");
+static_assert(!has_unique_object_representations<AlignedPaddedBitfield>::value, "Bitfield padding");
+
+struct BoolBitfield {
+  bool b : 8;
+};
+
+static_assert(has_unique_object_representations<BoolBitfield>::value, "Bitfield bool");
+
+struct BoolBitfield2 {
+  bool b : 16;
+};
+
+static_assert(!has_unique_object_representations<BoolBitfield2>::value, "Bitfield bool");
+
+struct GreaterSizeBitfield {
+  //expected-warning@+1 {{width of bit-field 'n'}}
+  int n : 1024;
+};
+
+static_assert(sizeof(GreaterSizeBitfield) == 128, "Bitfield Size");
+static_assert(!has_unique_object_representations<GreaterSizeBitfield>::value, "Bitfield padding");
+
+struct StructWithRef {
+  int &I;
+};
+
+static_assert(has_unique_object_representations<StructWithRef>::value, "References are still unique");
+
+struct NotUniqueBecauseTailPadding {
+  int &r;
+  char a;
+};
+struct CanBeUniqueIfNoPadding : NotUniqueBecauseTailPadding {
+  char b[7];
+};
+
+static_assert(!has_unique_object_representations<NotUniqueBecauseTailPadding>::value, 
+              "non trivial");
+// Can be unique on Itanium, since the is child class' data is 'folded' into the
+// parent's tail padding.
+static_assert(sizeof(CanBeUniqueIfNoPadding) != 16 ||
+              has_unique_object_representations<CanBeUniqueIfNoPadding>::value,
+              "inherit from std layout");
+
+namespace ErrorType {
+  struct S; //expected-note{{forward declaration of 'ErrorType::S'}}
+
+  struct T {
+        S t; //expected-error{{field has incomplete type 'ErrorType::S'}}
+  };
+  bool b = __has_unique_object_representations(T);
+};

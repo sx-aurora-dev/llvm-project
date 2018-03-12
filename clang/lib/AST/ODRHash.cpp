@@ -33,6 +33,15 @@ void ODRHash::AddIdentifierInfo(const IdentifierInfo *II) {
 }
 
 void ODRHash::AddDeclarationName(DeclarationName Name) {
+  // Index all DeclarationName and use index numbers to refer to them.
+  auto Result = DeclNameMap.insert(std::make_pair(Name, DeclNameMap.size()));
+  ID.AddInteger(Result.first->second);
+  if (!Result.second) {
+    // If found in map, the the DeclarationName has previously been processed.
+    return;
+  }
+
+  // First time processing each DeclarationName, also process its details.
   AddBoolean(Name.isEmpty());
   if (Name.isEmpty())
     return;
@@ -168,7 +177,7 @@ void ODRHash::AddTemplateParameterList(const TemplateParameterList *TPL) {
 }
 
 void ODRHash::clear() {
-  DeclMap.clear();
+  DeclNameMap.clear();
   TypeMap.clear();
   Bools.clear();
   ID.clear();
@@ -418,7 +427,6 @@ bool ODRHash::isWhitelistedDecl(const Decl *D, const CXXRecordDecl *Parent) {
 
 void ODRHash::AddSubDecl(const Decl *D) {
   assert(D && "Expecting non-null pointer.");
-  AddDecl(D);
 
   ODRDeclVisitor(ID, *this).Visit(D);
 }
@@ -466,21 +474,47 @@ void ODRHash::AddCXXRecordDecl(const CXXRecordDecl *Record) {
   }
 }
 
+void ODRHash::AddFunctionDecl(const FunctionDecl *Function) {
+  assert(Function && "Expecting non-null pointer.");
+
+  // Skip hashing these kinds of function.
+  if (Function->isImplicit()) return;
+  if (Function->isDefaulted()) return;
+  if (Function->isDeleted()) return;
+  if (!Function->hasBody()) return;
+  if (!Function->getBody()) return;
+
+  // Skip functions that are specializations or in specialization context.
+  const DeclContext *DC = Function;
+  while (DC) {
+    if (isa<ClassTemplateSpecializationDecl>(DC)) return;
+    if (auto *F = dyn_cast<FunctionDecl>(DC))
+      if (F->isFunctionTemplateSpecialization()) return;
+    DC = DC->getParent();
+  }
+
+  AddDecl(Function);
+
+  AddQualType(Function->getReturnType());
+
+  ID.AddInteger(Function->param_size());
+  for (auto Param : Function->parameters())
+    AddSubDecl(Param);
+
+  AddStmt(Function->getBody());
+}
+
 void ODRHash::AddDecl(const Decl *D) {
   assert(D && "Expecting non-null pointer.");
-  auto Result = DeclMap.insert(std::make_pair(D, DeclMap.size()));
-  ID.AddInteger(Result.first->second);
-  // On first encounter of a Decl pointer, process it.  Every time afterwards,
-  // only the index value is needed.
-  if (!Result.second) {
+  D = D->getCanonicalDecl();
+
+  if (const NamedDecl *ND = dyn_cast<NamedDecl>(D)) {
+    AddDeclarationName(ND->getDeclName());
     return;
   }
 
   ID.AddInteger(D->getKind());
-
-  if (const NamedDecl *ND = dyn_cast<NamedDecl>(D)) {
-    AddDeclarationName(ND->getDeclName());
-  }
+  // TODO: Handle non-NamedDecl here.
 }
 
 namespace {

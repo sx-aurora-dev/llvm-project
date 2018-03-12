@@ -63,16 +63,20 @@ struct SimplifyCFGOptions {
   bool ForwardSwitchCondToPhi;
   bool ConvertSwitchToLookupTable;
   bool NeedCanonicalLoop;
+  bool SinkCommonInsts;
   AssumptionCache *AC;
 
   SimplifyCFGOptions(unsigned BonusThreshold = 1,
                      bool ForwardSwitchCond = false,
                      bool SwitchToLookup = false, bool CanonicalLoops = true,
+                     bool SinkCommon = false,
                      AssumptionCache *AssumpCache = nullptr)
       : BonusInstThreshold(BonusThreshold),
         ForwardSwitchCondToPhi(ForwardSwitchCond),
         ConvertSwitchToLookupTable(SwitchToLookup),
-        NeedCanonicalLoop(CanonicalLoops), AC(AssumpCache) {}
+        NeedCanonicalLoop(CanonicalLoops),
+        SinkCommonInsts(SinkCommon),
+        AC(AssumpCache) {}
 
   // Support 'builder' pattern to set members by name at construction time.
   SimplifyCFGOptions &bonusInstThreshold(int I) {
@@ -89,6 +93,10 @@ struct SimplifyCFGOptions {
   }
   SimplifyCFGOptions &needCanonicalLoops(bool B) {
     NeedCanonicalLoop = B;
+    return *this;
+  }
+  SimplifyCFGOptions &sinkCommonInsts(bool B) {
+    SinkCommonInsts = B;
     return *this;
   }
   SimplifyCFGOptions &setAssumptionCache(AssumptionCache *Cache) {
@@ -109,7 +117,8 @@ struct SimplifyCFGOptions {
 /// conditions and indirectbr addresses this might make dead if
 /// DeleteDeadConditions is true.
 bool ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions = false,
-                            const TargetLibraryInfo *TLI = nullptr);
+                            const TargetLibraryInfo *TLI = nullptr,
+                            DeferredDominance *DDT = nullptr);
 
 //===----------------------------------------------------------------------===//
 //  Local dead code elimination.
@@ -163,18 +172,21 @@ bool SimplifyInstructionsInBlock(BasicBlock *BB,
 ///
 /// .. and delete the predecessor corresponding to the '1', this will attempt to
 /// recursively fold the 'and' to 0.
-void RemovePredecessorAndSimplify(BasicBlock *BB, BasicBlock *Pred);
+void RemovePredecessorAndSimplify(BasicBlock *BB, BasicBlock *Pred,
+                                  DeferredDominance *DDT = nullptr);
 
 /// BB is a block with one predecessor and its predecessor is known to have one
 /// successor (BB!). Eliminate the edge between them, moving the instructions in
 /// the predecessor into BB. This deletes the predecessor block.
-void MergeBasicBlockIntoOnlyPred(BasicBlock *BB, DominatorTree *DT = nullptr);
+void MergeBasicBlockIntoOnlyPred(BasicBlock *BB, DominatorTree *DT = nullptr,
+                                 DeferredDominance *DDT = nullptr);
 
 /// BB is known to contain an unconditional branch, and contains no instructions
 /// other than PHI nodes, potential debug intrinsics and the branch. If
 /// possible, eliminate BB by rewriting all the predecessors to branch to the
 /// successor block and return true. If we can't transform, return false.
-bool TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB);
+bool TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
+                                             DeferredDominance *DDT = nullptr);
 
 /// Check for and eliminate duplicate PHI nodes in this block. This doesn't try
 /// to be clever about PHI nodes which differ only in the order of the incoming
@@ -327,6 +339,10 @@ void ConvertDebugDeclareToDebugValue(DbgInfoIntrinsic *DII,
 /// llvm.dbg.value intrinsics.
 bool LowerDbgDeclare(Function &F);
 
+/// Propagate dbg.value intrinsics through the newly inserted PHIs.
+void insertDebugValuesForPHIs(BasicBlock *BB,
+                              SmallVectorImpl<PHINode *> &InsertedPHIs);
+
 /// Finds all intrinsics declaring local variables as living in the memory that
 /// 'V' points to. This may include a mix of dbg.declare and
 /// dbg.addr intrinsics.
@@ -335,22 +351,27 @@ TinyPtrVector<DbgInfoIntrinsic *> FindDbgAddrUses(Value *V);
 /// Finds the llvm.dbg.value intrinsics describing a value.
 void findDbgValues(SmallVectorImpl<DbgValueInst *> &DbgValues, Value *V);
 
-/// Replaces llvm.dbg.declare instruction when the address it describes
-/// is replaced with a new value. If Deref is true, an additional DW_OP_deref is
-/// prepended to the expression. If Offset is non-zero, a constant displacement
-/// is added to the expression (after the optional Deref). Offset can be
-/// negative.
+/// Finds the debug info intrinsics describing a value.
+void findDbgUsers(SmallVectorImpl<DbgInfoIntrinsic *> &DbgInsts, Value *V);
+
+/// Replaces llvm.dbg.declare instruction when the address it
+/// describes is replaced with a new value. If Deref is true, an
+/// additional DW_OP_deref is prepended to the expression. If Offset
+/// is non-zero, a constant displacement is added to the expression
+/// (between the optional Deref operations). Offset can be negative.
 bool replaceDbgDeclare(Value *Address, Value *NewAddress,
                        Instruction *InsertBefore, DIBuilder &Builder,
-                       bool Deref, int Offset);
+                       bool DerefBefore, int Offset, bool DerefAfter);
 
 /// Replaces llvm.dbg.declare instruction when the alloca it describes
-/// is replaced with a new value. If Deref is true, an additional DW_OP_deref is
-/// prepended to the expression. If Offset is non-zero, a constant displacement
-/// is added to the expression (after the optional Deref). Offset can be
-/// negative. New llvm.dbg.declare is inserted immediately before AI.
+/// is replaced with a new value. If Deref is true, an additional
+/// DW_OP_deref is prepended to the expression. If Offset is non-zero,
+/// a constant displacement is added to the expression (between the
+/// optional Deref operations). Offset can be negative. The new
+/// llvm.dbg.declare is inserted immediately before AI.
 bool replaceDbgDeclareForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
-                                DIBuilder &Builder, bool Deref, int Offset = 0);
+                                DIBuilder &Builder, bool DerefBefore,
+                                int Offset, bool DerefAfter);
 
 /// Replaces multiple llvm.dbg.value instructions when the alloca it describes
 /// is replaced with a new value. If Offset is non-zero, a constant displacement
@@ -372,7 +393,8 @@ unsigned removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB);
 /// Insert an unreachable instruction before the specified
 /// instruction, making it and the rest of the code in the block dead.
 unsigned changeToUnreachable(Instruction *I, bool UseLLVMTrap,
-                             bool PreserveLCSSA = false);
+                             bool PreserveLCSSA = false,
+                             DeferredDominance *DDT = nullptr);
 
 /// Convert the CallInst to InvokeInst with the specified unwind edge basic
 /// block.  This also splits the basic block where CI is located, because
@@ -387,12 +409,13 @@ BasicBlock *changeToInvokeAndSplitBasicBlock(CallInst *CI,
 ///
 /// \param BB  Block whose terminator will be replaced.  Its terminator must
 ///            have an unwind successor.
-void removeUnwindEdge(BasicBlock *BB);
+void removeUnwindEdge(BasicBlock *BB, DeferredDominance *DDT = nullptr);
 
 /// Remove all blocks that can not be reached from the function's entry.
 ///
 /// Returns true if any basic block was removed.
-bool removeUnreachableBlocks(Function &F, LazyValueInfo *LVI = nullptr);
+bool removeUnreachableBlocks(Function &F, LazyValueInfo *LVI = nullptr,
+                             DeferredDominance *DDT = nullptr);
 
 /// Combine the metadata of two instructions so that K can replace J
 ///
@@ -445,7 +468,7 @@ void copyRangeMetadata(const DataLayout &DL, const LoadInst &OldLI, MDNode *N,
 //  Intrinsic pattern matching
 //
 
-/// Try and match a bswap or bitreverse idiom.
+/// Try to match a bswap or bitreverse idiom.
 ///
 /// If an idiom is matched, an intrinsic call is inserted before \c I. Any added
 /// instructions are returned in \c InsertedInsts. They will all have been added

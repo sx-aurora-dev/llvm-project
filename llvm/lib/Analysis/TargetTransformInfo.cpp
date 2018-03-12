@@ -26,11 +26,6 @@ using namespace PatternMatch;
 
 #define DEBUG_TYPE "tti"
 
-static cl::opt<bool> UseWideMemcpyLoopLowering(
-    "use-wide-memcpy-loop-lowering", cl::init(false),
-    cl::desc("Enables the new wide memcpy loop lowering in Transforms/Utils."),
-    cl::Hidden);
-
 static cl::opt<bool> EnableReduxCost("costmodel-reduxcost", cl::init(false),
                                      cl::Hidden,
                                      cl::desc("Recognize reduction patterns."));
@@ -160,6 +155,10 @@ bool TargetTransformInfo::isLSRCostLess(LSRCost &C1, LSRCost &C2) const {
   return TTIImpl->isLSRCostLess(C1, C2);
 }
 
+bool TargetTransformInfo::canMacroFuseCmp() const {
+  return TTIImpl->canMacroFuseCmp();
+}
+
 bool TargetTransformInfo::isLegalMaskedStore(Type *DataType) const {
   return TTIImpl->isLegalMaskedStore(DataType);
 }
@@ -231,6 +230,10 @@ bool TargetTransformInfo::shouldBuildLookupTablesForConstant(Constant *C) const 
   return TTIImpl->shouldBuildLookupTablesForConstant(C);
 }
 
+bool TargetTransformInfo::useColdCCForColdCall(Function &F) const {
+  return TTIImpl->useColdCCForColdCall(F);
+}
+
 unsigned TargetTransformInfo::
 getScalarizationOverhead(Type *Ty, bool Insert, bool Extract) const {
   return TTIImpl->getScalarizationOverhead(Ty, Insert, Extract);
@@ -279,6 +282,10 @@ TargetTransformInfo::getPopcntSupport(unsigned IntTyWidthInBit) const {
 
 bool TargetTransformInfo::haveFastSqrt(Type *Ty) const {
   return TTIImpl->haveFastSqrt(Ty);
+}
+
+bool TargetTransformInfo::isFCmpOrdCheaperThanFCmpZero(Type *Ty) const {
+  return TTIImpl->isFCmpOrdCheaperThanFCmpZero(Ty);
 }
 
 int TargetTransformInfo::getFPOpCost(Type *Ty) const {
@@ -541,10 +548,6 @@ void TargetTransformInfo::getMemcpyLoopResidualLoweringType(
     unsigned RemainingBytes, unsigned SrcAlign, unsigned DestAlign) const {
   TTIImpl->getMemcpyLoopResidualLoweringType(OpsOut, Context, RemainingBytes,
                                              SrcAlign, DestAlign);
-}
-
-bool TargetTransformInfo::useWideIRMemcpyLoopLowering() const {
-  return UseWideMemcpyLoopLowering;
 }
 
 bool TargetTransformInfo::areInlineCompatible(const Function *Caller,

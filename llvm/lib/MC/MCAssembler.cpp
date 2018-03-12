@@ -88,7 +88,7 @@ MCAssembler::MCAssembler(MCContext &Context, MCAsmBackend &Backend,
     : Context(Context), Backend(Backend), Emitter(Emitter), Writer(Writer),
       BundleAlignSize(0), RelaxAll(false), SubsectionsViaSymbols(false),
       IncrementalLinkerCompatible(false), ELFHeaderEFlags(0) {
-  VersionMinInfo.Major = 0; // Major version == 0 for "none specified"
+  VersionInfo.Major = 0; // Major version == 0 for "none specified"
 }
 
 MCAssembler::~MCAssembler() = default;
@@ -107,7 +107,7 @@ void MCAssembler::reset() {
   IncrementalLinkerCompatible = false;
   ELFHeaderEFlags = 0;
   LOHContainer.reset();
-  VersionMinInfo.Major = 0;
+  VersionInfo.Major = 0;
 
   // reset objects owned by us
   getBackend().reset();
@@ -281,8 +281,18 @@ uint64_t MCAssembler::computeFragmentSize(const MCAsmLayout &Layout,
     return cast<MCRelaxableFragment>(F).getContents().size();
   case MCFragment::FT_CompactEncodedInst:
     return cast<MCCompactEncodedInstFragment>(F).getContents().size();
-  case MCFragment::FT_Fill:
-    return cast<MCFillFragment>(F).getSize();
+  case MCFragment::FT_Fill: {
+    auto &FF = cast<MCFillFragment>(F);
+    int64_t Size = 0;
+    if (!FF.getSize().evaluateAsAbsolute(Size, Layout))
+      getContext().reportError(FF.getLoc(),
+                               "expected assembly-time absolute expression");
+    if (Size < 0) {
+      getContext().reportError(FF.getLoc(), "invalid number of bytes");
+      return 0;
+    }
+    return Size;
+  }
 
   case MCFragment::FT_LEB:
     return cast<MCLEBFragment>(F).getContents().size();
@@ -290,7 +300,7 @@ uint64_t MCAssembler::computeFragmentSize(const MCAsmLayout &Layout,
   case MCFragment::FT_Padding:
     return cast<MCPaddingFragment>(F).getSize();
 
-  case MCFragment::FT_SafeSEH:
+  case MCFragment::FT_SymbolId:
     return 4;
 
   case MCFragment::FT_Align: {
@@ -540,7 +550,7 @@ static void writeFragment(const MCAssembler &Asm, const MCAsmLayout &Layout,
     for (unsigned I = 1; I < MaxChunkSize; ++I)
       Data[I] = Data[0];
 
-    uint64_t Size = FF.getSize();
+    uint64_t Size = FragmentSize;
     for (unsigned ChunkSize = MaxChunkSize; ChunkSize; ChunkSize /= 2) {
       StringRef Ref(Data, ChunkSize);
       for (uint64_t I = 0, E = Size / ChunkSize; I != E; ++I)
@@ -563,8 +573,8 @@ static void writeFragment(const MCAssembler &Asm, const MCAsmLayout &Layout,
     break;
   }
 
-  case MCFragment::FT_SafeSEH: {
-    const MCSafeSEHFragment &SF = cast<MCSafeSEHFragment>(F);
+  case MCFragment::FT_SymbolId: {
+    const MCSymbolIdFragment &SF = cast<MCSymbolIdFragment>(F);
     OW->write32(SF.getSymbol()->getIndex());
     break;
   }
@@ -858,10 +868,14 @@ bool MCAssembler::relaxLEB(MCAsmLayout &Layout, MCLEBFragment &LF) {
   SmallString<8> &Data = LF.getContents();
   Data.clear();
   raw_svector_ostream OSE(Data);
+  // The compiler can generate EH table assembly that is impossible to assemble
+  // without either adding padding to an LEB fragment or adding extra padding
+  // to a later alignment fragment. To accommodate such tables, relaxation can
+  // only increase an LEB fragment size here, not decrease it. See PR35809.
   if (LF.isSigned())
-    encodeSLEB128(Value, OSE);
+    encodeSLEB128(Value, OSE, OldSize);
   else
-    encodeULEB128(Value, OSE);
+    encodeULEB128(Value, OSE, OldSize);
   return OldSize != LF.getContents().size();
 }
 

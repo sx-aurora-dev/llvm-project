@@ -4179,10 +4179,6 @@ void FragileHazards::emitHazardsInNewBlocks() {
   }
 }
 
-static void addIfPresent(llvm::DenseSet<llvm::Value*> &S, llvm::Value *V) {
-  if (V) S.insert(V);
-}
-
 static void addIfPresent(llvm::DenseSet<llvm::Value*> &S, Address V) {
   if (V.isValid()) S.insert(V.getPointer());
 }
@@ -4885,10 +4881,7 @@ void CGObjCCommonMac::EmitImageInfo() {
   }
 
   // Indicate whether we're compiling this to run on a simulator.
-  const llvm::Triple &Triple = CGM.getTarget().getTriple();
-  if ((Triple.isiOS() || Triple.isWatchOS()) &&
-      (Triple.getArch() == llvm::Triple::x86 ||
-       Triple.getArch() == llvm::Triple::x86_64))
+  if (CGM.getTarget().getTriple().isSimulatorEnvironment())
     Mod.addModuleFlag(llvm::Module::Error, "Objective-C Is Simulated",
                       eImageInfo_ImageIsSimulated);
 
@@ -6312,9 +6305,7 @@ void CGObjCNonFragileABIMac::GenerateClass(const ObjCImplementationDecl *ID) {
   llvm::GlobalVariable *MetaTClass =
     BuildClassObject(CI, /*metaclass*/ true,
                      IsAGV, SuperClassGV, CLASS_RO_GV, classIsHidden);
-  if (CGM.getTriple().isOSBinFormatCOFF())
-    if (CI->hasAttr<DLLExportAttr>())
-      MetaTClass->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+  CGM.setGVProperties(MetaTClass, CI);
   DefinedMetaClasses.push_back(MetaTClass);
 
   // Metadata for the class
@@ -6354,9 +6345,7 @@ void CGObjCNonFragileABIMac::GenerateClass(const ObjCImplementationDecl *ID) {
   llvm::GlobalVariable *ClassMD =
     BuildClassObject(CI, /*metaclass*/ false,
                      MetaTClass, SuperClassGV, CLASS_RO_GV, classIsHidden);
-  if (CGM.getTriple().isOSBinFormatCOFF())
-    if (CI->hasAttr<DLLExportAttr>())
-      ClassMD->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+  CGM.setGVProperties(ClassMD, CI);
   DefinedClasses.push_back(ClassMD);
   ImplementedClasses.push_back(CI);
 
@@ -6406,7 +6395,7 @@ llvm::Value *CGObjCNonFragileABIMac::GenerateProtocolRef(CodeGenFunction &CGF,
   PTGV->setAlignment(Align.getQuantity());
   if (!CGM.getTriple().isOSBinFormatMachO())
     PTGV->setComdat(CGM.getModule().getOrInsertComdat(ProtocolName));
-  CGM.addCompilerUsedGlobal(PTGV);
+  CGM.addUsedGlobal(PTGV);
   return CGF.Builder.CreateAlignedLoad(PTGV, Align);
 }
 
@@ -6850,7 +6839,7 @@ llvm::Constant *CGObjCNonFragileABIMac::GetOrEmitProtocol(
     Protocols[PD->getIdentifier()] = Entry;
   }
   Entry->setVisibility(llvm::GlobalValue::HiddenVisibility);
-  CGM.addCompilerUsedGlobal(Entry);
+  CGM.addUsedGlobal(Entry);
 
   // Use this protocol meta-data to build protocol list table in section
   // __DATA, __objc_protolist
@@ -6869,7 +6858,7 @@ llvm::Constant *CGObjCNonFragileABIMac::GetOrEmitProtocol(
   PTGV->setSection(GetSectionName("__objc_protolist",
                                   "coalesced,no_dead_strip"));
   PTGV->setVisibility(llvm::GlobalValue::HiddenVisibility);
-  CGM.addCompilerUsedGlobal(PTGV);
+  CGM.addUsedGlobal(PTGV);
   return Entry;
 }
 
@@ -7531,12 +7520,7 @@ CGObjCNonFragileABIMac::GetInterfaceEHType(const ObjCInterfaceDecl *ID,
       Entry = new llvm::GlobalVariable(CGM.getModule(), ObjCTypes.EHTypeTy,
                                        false, llvm::GlobalValue::ExternalLinkage,
                                        nullptr, EHTypeName);
-      if (CGM.getTriple().isOSBinFormatCOFF()) {
-        if (ID->hasAttr<DLLExportAttr>())
-          Entry->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
-        else if (ID->hasAttr<DLLImportAttr>())
-          Entry->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
-      }
+      CGM.setGVProperties(Entry, ID);
       return Entry;
     }
   }
@@ -7558,8 +7542,9 @@ CGObjCNonFragileABIMac::GetInterfaceEHType(const ObjCInterfaceDecl *ID,
   llvm::Value *VTableIdx = llvm::ConstantInt::get(CGM.Int32Ty, 2);
   ConstantInitBuilder builder(CGM);
   auto values = builder.beginStruct(ObjCTypes.EHTypeTy);
-  values.add(llvm::ConstantExpr::getGetElementPtr(VTableGV->getValueType(),
-                                                  VTableGV, VTableIdx));
+  values.add(
+    llvm::ConstantExpr::getInBoundsGetElementPtr(VTableGV->getValueType(),
+                                                 VTableGV, VTableIdx));
   values.add(GetClassName(ClassName));
   values.add(GetClassGlobal(ID, /*metaclass*/ false, NotForDefinition));
 
@@ -7574,10 +7559,8 @@ CGObjCNonFragileABIMac::GetInterfaceEHType(const ObjCInterfaceDecl *ID,
                                          CGM.getPointerAlign(),
                                          /*constant*/ false,
                                          L);
-    if (CGM.getTriple().isOSBinFormatCOFF())
-      if (hasObjCExceptionAttribute(CGM.getContext(), ID))
-        if (ID->hasAttr<DLLExportAttr>())
-          Entry->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+    if (hasObjCExceptionAttribute(CGM.getContext(), ID))
+      CGM.setGVProperties(Entry, ID);
   }
   assert(Entry->getLinkage() == L);
 

@@ -43,6 +43,10 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
@@ -72,12 +76,8 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOpcodes.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 #include <cassert>
 #include <cstdint>
 #include <utility>
@@ -1416,7 +1416,7 @@ bool ARMFastISel::ARMEmitCmp(const Value *Src1Value, const Value *Src2Value,
     case MVT::i8:
     case MVT::i16:
       needsExt = true;
-    // Intentional fall-through.
+      LLVM_FALLTHROUGH;
     case MVT::i32:
       if (isThumb2) {
         if (!UseImm)
@@ -2352,8 +2352,8 @@ bool ARMFastISel::SelectCall(const Instruction *I,
   for (ImmutableCallSite::arg_iterator i = CS.arg_begin(), e = CS.arg_end();
        i != e; ++i) {
     // If we're lowering a memory intrinsic instead of a regular call, skip the
-    // last two arguments, which shouldn't be passed to the underlying function.
-    if (IntrMemName && e-i <= 2)
+    // last argument, which shouldn't be passed to the underlying function.
+    if (IntrMemName && e - i <= 1)
       break;
 
     ISD::ArgFlagsTy Flags;
@@ -2546,7 +2546,8 @@ bool ARMFastISel::SelectIntrinsicCall(const IntrinsicInst &I) {
         if (!ARMComputeAddress(MTI.getRawDest(), Dest) ||
             !ARMComputeAddress(MTI.getRawSource(), Src))
           return false;
-        unsigned Alignment = MTI.getAlignment();
+        unsigned Alignment = MinAlign(MTI.getDestAlignment(),
+                                      MTI.getSourceAlignment());
         if (ARMTryEmitSmallMemCpy(Dest, Src, Len, Alignment))
           return true;
       }
@@ -2958,7 +2959,7 @@ unsigned ARMFastISel::ARMLowerPICELF(const GlobalValue *GV,
                                      unsigned Align, MVT VT) {
   bool UseGOT_PREL = !TM.shouldAssumeDSOLocal(*GV->getParent(), GV);
 
-  LLVMContext *Context = &MF->getFunction()->getContext();
+  LLVMContext *Context = &MF->getFunction().getContext();
   unsigned ARMPCLabelIndex = AFI->createPICLabelUId();
   unsigned PCAdj = Subtarget->isThumb() ? 4 : 8;
   ARMConstantPoolValue *CPV = ARMConstantPoolConstant::Create(

@@ -20,15 +20,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MarkLive.h"
 #include "InputSection.h"
 #include "LinkerScript.h"
-#include "Memory.h"
 #include "OutputSections.h"
-#include "Strings.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "Target.h"
-#include "Writer.h"
+#include "lld/Common/Memory.h"
+#include "lld/Common/Strings.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Object/ELF.h"
 #include <functional>
@@ -62,19 +62,26 @@ static DenseMap<StringRef, std::vector<InputSectionBase *>> CNamedSections;
 template <class ELFT, class RelT>
 static void resolveReloc(InputSectionBase &Sec, RelT &Rel,
                          std::function<void(InputSectionBase *, uint64_t)> Fn) {
-  SymbolBody &B = Sec.getFile<ELFT>()->getRelocTargetSym(Rel);
+  Symbol &B = Sec.getFile<ELFT>()->getRelocTargetSym(Rel);
 
-  if (auto *D = dyn_cast<DefinedRegular>(&B)) {
-    if (!D->Section)
+  // If a symbol is referenced in a live section, it is used.
+  B.Used = true;
+  if (auto *SS = dyn_cast<SharedSymbol>(&B))
+    if (!SS->isWeak())
+      SS->getFile<ELFT>().IsNeeded = true;
+
+  if (auto *D = dyn_cast<Defined>(&B)) {
+    auto *RelSec = dyn_cast_or_null<InputSectionBase>(D->Section);
+    if (!RelSec)
       return;
     uint64_t Offset = D->Value;
     if (D->isSection())
       Offset += getAddend<ELFT>(Sec, Rel);
-    Fn(cast<InputSectionBase>(D->Section), Offset);
+    Fn(RelSec, Offset);
     return;
   }
 
-  if (!B.isInCurrentOutput())
+  if (!B.isDefined())
     for (InputSectionBase *Sec : CNamedSections.lookup(B.getName()))
       Fn(Sec, 0);
 }
@@ -211,9 +218,9 @@ template <class ELFT> static void doGcSections() {
       Q.push_back(S);
   };
 
-  auto MarkSymbol = [&](SymbolBody *Sym) {
-    if (auto *D = dyn_cast_or_null<DefinedRegular>(Sym))
-      if (auto *IS = cast_or_null<InputSectionBase>(D->Section))
+  auto MarkSymbol = [&](Symbol *Sym) {
+    if (auto *D = dyn_cast_or_null<Defined>(Sym))
+      if (auto *IS = dyn_cast_or_null<InputSectionBase>(D->Section))
         Enqueue(IS, D->Value);
   };
 
@@ -230,16 +237,20 @@ template <class ELFT> static void doGcSections() {
   // file can interrupt other ELF file's symbols at runtime.
   for (Symbol *S : Symtab->getSymbols())
     if (S->includeInDynsym())
-      MarkSymbol(S->body());
+      MarkSymbol(S);
 
   // Preserve special sections and those which are specified in linker
   // script KEEP command.
   for (InputSectionBase *Sec : InputSections) {
-    // .eh_frame is always marked as live now, but also it can reference to
-    // sections that contain personality. We preserve all non-text sections
-    // referred by .eh_frame here.
-    if (auto *EH = dyn_cast_or_null<EhInputSection>(Sec))
+    // Mark .eh_frame sections as live because there are usually no relocations
+    // that point to .eh_frames. Otherwise, the garbage collector would drop
+    // all of them. We also want to preserve personality routines and LSDA
+    // referenced by .eh_frame sections, so we scan them for that here.
+    if (auto *EH = dyn_cast<EhInputSection>(Sec)) {
+      EH->Live = true;
       scanEhFrameSection<ELFT>(*EH, Enqueue);
+    }
+
     if (Sec->Flags & SHF_LINK_ORDER)
       continue;
     if (isReserved<ELFT>(Sec) || Script->shouldKeep(Sec))
@@ -294,8 +305,7 @@ template <class ELFT> void elf::markLive() {
   if (Config->PrintGcSections)
     for (InputSectionBase *Sec : InputSections)
       if (!Sec->Live)
-        message("removing unused section from '" + Sec->Name + "' in file '" +
-                Sec->File->getName() + "'");
+        message("removing unused section " + toString(Sec));
 }
 
 template void elf::markLive<ELF32LE>();

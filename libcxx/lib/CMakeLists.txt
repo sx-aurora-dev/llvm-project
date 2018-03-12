@@ -222,6 +222,9 @@ set(LIBCXX_TARGETS)
 # Build the shared library.
 if (LIBCXX_ENABLE_SHARED)
   add_library(cxx_shared SHARED $<TARGET_OBJECTS:cxx_objects>)
+  if(COMMAND llvm_setup_rpath)
+    llvm_setup_rpath(cxx_shared)
+  endif()
   target_link_libraries(cxx_shared ${LIBCXX_LIBRARIES})
   set_target_properties(cxx_shared
     PROPERTIES
@@ -280,7 +283,7 @@ if (LIBCXX_ENABLE_STATIC)
 endif()
 
 # Add a meta-target for both libraries.
-add_custom_target(cxx DEPENDS ${LIBCXX_TARGETS})
+add_custom_target(cxx DEPENDS ${LIBCXX_TARGETS} ${generated_config_deps})
 
 if (LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY)
   file(GLOB LIBCXX_EXPERIMENTAL_SOURCES ../src/experimental/*.cpp)
@@ -388,6 +391,14 @@ if (NOT CMAKE_CONFIGURATION_TYPES AND (LIBCXX_INSTALL_LIBRARY OR
                               ${header_install_target}
                       COMMAND "${CMAKE_COMMAND}"
                       -DCMAKE_INSTALL_COMPONENT=cxx
+                      -P "${LIBCXX_BINARY_DIR}/cmake_install.cmake")
+    add_custom_target(install-cxx-stripped
+                      DEPENDS ${lib_install_target}
+                              ${experimental_lib_install_target}
+                              ${header_install_target}
+                      COMMAND "${CMAKE_COMMAND}"
+                      -DCMAKE_INSTALL_COMPONENT=cxx
+                      -DCMAKE_INSTALL_DO_STRIP=1
                       -P "${LIBCXX_BINARY_DIR}/cmake_install.cmake")
     add_custom_target(install-libcxx DEPENDS install-cxx)
 endif()

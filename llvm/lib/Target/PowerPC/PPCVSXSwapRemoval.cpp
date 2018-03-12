@@ -191,7 +191,7 @@ private:
 public:
   // Main entry point for this pass.
   bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(*MF.getFunction()))
+    if (skipFunction(MF.getFunction()))
       return false;
 
     // If we don't have VSX on the subtarget, don't do anything.
@@ -353,6 +353,8 @@ bool PPCVSXSwapRemoval::gatherVectorInstructions() {
         break;
       case PPC::LXSDX:
       case PPC::LXSSPX:
+      case PPC::XFLOADf64:
+      case PPC::XFLOADf32:
         // A load of a floating-point value into the high-order half of
         // a vector register is safe, provided that we introduce a swap
         // following the load, which will be done by the SUBREG_TO_REG
@@ -517,6 +519,8 @@ bool PPCVSXSwapRemoval::gatherVectorInstructions() {
       // permute control vectors (for shift values 1, 2, 3).  However,
       // VPERM has a more restrictive register class.
       case PPC::XXSLDWI:
+      case PPC::XSCVDPSPN:
+      case PPC::XSCVSPDPN:
         break;
       }
     }
@@ -964,7 +968,7 @@ LLVM_DUMP_METHOD void PPCVSXSwapRemoval::dumpSwapVector() {
 
     dbgs() << format("%6d", ID);
     dbgs() << format("%6d", EC->getLeaderValue(ID));
-    dbgs() << format(" BB#%3d", MI->getParent()->getNumber());
+    dbgs() << format(" %bb.%3d", MI->getParent()->getNumber());
     dbgs() << format("  %14s  ", TII->getName(MI->getOpcode()).str().c_str());
 
     if (SwapVector[EntryIdx].IsLoad)

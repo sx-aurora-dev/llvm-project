@@ -43,6 +43,7 @@
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/DataFormatters/DataVisualization.h"
+#include "lldb/Host/XML.h"
 #include "lldb/Initialization/SystemLifetimeManager.h"
 #include "lldb/Interpreter/Args.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
@@ -491,6 +492,26 @@ const char *SBDebugger::StateAsCString(StateType state) {
   return lldb_private::StateAsCString(state);
 }
 
+static void AddBoolConfigEntry(StructuredData::Dictionary &dict,
+                               llvm::StringRef name, bool value,
+                               llvm::StringRef description) {
+  auto entry_up = llvm::make_unique<StructuredData::Dictionary>();
+  entry_up->AddBooleanItem("value", value);
+  entry_up->AddStringItem("description", description);
+  dict.AddItem(name, std::move(entry_up));
+}
+
+SBStructuredData SBDebugger::GetBuildConfiguration() {
+  auto config_up = llvm::make_unique<StructuredData::Dictionary>();
+  AddBoolConfigEntry(
+      *config_up, "xml", XMLDocument::XMLEnabled(),
+      "A boolean value that indicates if XML support is enabled in LLDB");
+
+  SBStructuredData data;
+  data.m_impl_up->SetObjectSP(std::move(config_up));
+  return data;
+}
+
 bool SBDebugger::StateIsRunningState(StateType state) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_API));
 
@@ -694,8 +715,8 @@ SBTarget SBDebugger::FindTargetWithFileAndArch(const char *filename,
   SBTarget sb_target;
   if (m_opaque_sp && filename && filename[0]) {
     // No need to lock, the target list is thread safe
-    ArchSpec arch(arch_name,
-                  m_opaque_sp->GetPlatformList().GetSelectedPlatform().get());
+    ArchSpec arch = Platform::GetAugmentedArchSpec(
+        m_opaque_sp->GetPlatformList().GetSelectedPlatform().get(), arch_name);
     TargetSP target_sp(
         m_opaque_sp->GetTargetList().FindTargetWithExecutableAndArchitecture(
             FileSpec(filename, false), arch_name ? &arch : nullptr));

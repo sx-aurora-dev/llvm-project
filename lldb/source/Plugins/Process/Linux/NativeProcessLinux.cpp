@@ -177,7 +177,7 @@ void PtraceDisplayBytes(int &req, void *data, size_t data_size) {
     break;
   }
   case PTRACE_SETREGSET: {
-    // Extract iov_base from data, which is a pointer to the struct IOVEC
+    // Extract iov_base from data, which is a pointer to the struct iovec
     DisplayBytes(buf, *(void **)data, data_size);
     LLDB_LOGV(log, "PTRACE_SETREGSET {0}", buf.GetData());
     break;
@@ -245,13 +245,15 @@ NativeProcessLinux::Factory::Launch(ProcessLaunchInfo &launch_info,
   }
   LLDB_LOG(log, "inferior started, now in stopped state");
 
-  ArchSpec arch;
-  if ((status = ResolveProcessArchitecture(pid, arch)).Fail())
-    return status.ToError();
+  ProcessInstanceInfo Info;
+  if (!Host::GetProcessInfo(pid, Info)) {
+    return llvm::make_error<StringError>("Cannot get process architecture",
+                                         llvm::inconvertibleErrorCode());
+  }
 
   // Set the architecture to the exe architecture.
   LLDB_LOG(log, "pid = {0:x}, detected architecture {1}", pid,
-           arch.GetArchitectureName());
+           Info.GetArchitecture().GetArchitectureName());
 
   status = SetDefaultPtraceOpts(pid);
   if (status.Fail()) {
@@ -261,7 +263,7 @@ NativeProcessLinux::Factory::Launch(ProcessLaunchInfo &launch_info,
 
   return std::unique_ptr<NativeProcessLinux>(new NativeProcessLinux(
       pid, launch_info.GetPTY().ReleaseMasterFileDescriptor(), native_delegate,
-      arch, mainloop, {pid}));
+      Info.GetArchitecture(), mainloop, {pid}));
 }
 
 llvm::Expected<std::unique_ptr<NativeProcessProtocol>>
@@ -272,17 +274,18 @@ NativeProcessLinux::Factory::Attach(
   LLDB_LOG(log, "pid = {0:x}", pid);
 
   // Retrieve the architecture for the running process.
-  ArchSpec arch;
-  Status status = ResolveProcessArchitecture(pid, arch);
-  if (!status.Success())
-    return status.ToError();
+  ProcessInstanceInfo Info;
+  if (!Host::GetProcessInfo(pid, Info)) {
+    return llvm::make_error<StringError>("Cannot get process architecture",
+                                         llvm::inconvertibleErrorCode());
+  }
 
   auto tids_or = NativeProcessLinux::Attach(pid);
   if (!tids_or)
     return tids_or.takeError();
 
   return std::unique_ptr<NativeProcessLinux>(new NativeProcessLinux(
-      pid, -1, native_delegate, arch, mainloop, *tids_or));
+      pid, -1, native_delegate, Info.GetArchitecture(), mainloop, *tids_or));
 }
 
 // -----------------------------------------------------------------------------
@@ -412,46 +415,20 @@ void NativeProcessLinux::MonitorCallback(lldb::pid_t pid, bool exited,
 
   // Handle when the thread exits.
   if (exited) {
-    LLDB_LOG(log, "got exit signal({0}) , tid = {1} ({2} main thread)", signal,
-             pid, is_main_thread ? "is" : "is not");
+    LLDB_LOG(log,
+             "got exit signal({0}) , tid = {1} ({2} main thread), process "
+             "state = {3}",
+             signal, pid, is_main_thread ? "is" : "is not", GetState());
 
     // This is a thread that exited.  Ensure we're not tracking it anymore.
-    const bool thread_found = StopTrackingThread(pid);
+    StopTrackingThread(pid);
 
     if (is_main_thread) {
-      // We only set the exit status and notify the delegate if we haven't
-      // already set the process
-      // state to an exited state.  We normally should have received a SIGTRAP |
-      // (PTRACE_EVENT_EXIT << 8)
-      // for the main thread.
-      const bool already_notified = (GetState() == StateType::eStateExited) ||
-                                    (GetState() == StateType::eStateCrashed);
-      if (!already_notified) {
-        LLDB_LOG(
-            log,
-            "tid = {0} handling main thread exit ({1}), expected exit state "
-            "already set but state was {2} instead, setting exit state now",
-            pid,
-            thread_found ? "stopped tracking thread metadata"
-                         : "thread metadata not found",
-            GetState());
-        // The main thread exited.  We're done monitoring.  Report to delegate.
-        SetExitStatus(status, true);
+      // The main thread exited.  We're done monitoring.  Report to delegate.
+      SetExitStatus(status, true);
 
-        // Notify delegate that our process has exited.
-        SetState(StateType::eStateExited, true);
-      } else
-        LLDB_LOG(log, "tid = {0} main thread now exited (%s)", pid,
-                 thread_found ? "stopped tracking thread metadata"
-                              : "thread metadata not found");
-    } else {
-      // Do we want to report to the delegate in this case?  I think not.  If
-      // this was an orderly thread exit, we would already have received the
-      // SIGTRAP | (PTRACE_EVENT_EXIT << 8) signal, and we would have done an
-      // all-stop then.
-      LLDB_LOG(log, "tid = {0} handling non-main thread exit (%s)", pid,
-               thread_found ? "stopped tracking thread metadata"
-                            : "thread metadata not found");
+      // Notify delegate that our process has exited.
+      SetState(StateType::eStateExited, true);
     }
     return;
   }
@@ -662,10 +639,8 @@ void NativeProcessLinux::MonitorSIGTRAP(const siginfo_t &info,
   case (SIGTRAP | (PTRACE_EVENT_EXIT << 8)): {
     // The inferior process or one of its threads is about to exit.
     // We don't want to do anything with the thread so we just resume it. In
-    // case we
-    // want to implement "break on thread exit" functionality, we would need to
-    // stop
-    // here.
+    // case we want to implement "break on thread exit" functionality, we would
+    // need to stop here.
 
     unsigned long data = 0;
     if (GetEventMessage(thread.GetID(), &data).Fail())
@@ -677,18 +652,14 @@ void NativeProcessLinux::MonitorSIGTRAP(const siginfo_t &info,
              data, WIFEXITED(data), WIFSIGNALED(data), thread.GetID(),
              is_main_thread);
 
-    if (is_main_thread)
-      SetExitStatus(WaitStatus::Decode(data), true);
 
     StateType state = thread.GetState();
     if (!StateIsRunningState(state)) {
       // Due to a kernel bug, we may sometimes get this stop after the inferior
-      // gets a
-      // SIGKILL. This confuses our state tracking logic in ResumeThread(),
-      // since normally,
-      // we should not be receiving any ptrace events while the inferior is
-      // stopped. This
-      // makes sure that the inferior is resumed and exits normally.
+      // gets a SIGKILL. This confuses our state tracking logic in
+      // ResumeThread(), since normally, we should not be receiving any ptrace
+      // events while the inferior is stopped. This makes sure that the inferior
+      // is resumed and exits normally.
       state = eStateRunning;
     }
     ResumeThread(thread, state, LLDB_INVALID_SIGNAL_NUMBER);
@@ -702,7 +673,7 @@ void NativeProcessLinux::MonitorSIGTRAP(const siginfo_t &info,
   {
     // If a watchpoint was hit, report it
     uint32_t wp_index;
-    Status error = thread.GetRegisterContext()->GetWatchpointHitIndex(
+    Status error = thread.GetRegisterContext().GetWatchpointHitIndex(
         wp_index, (uintptr_t)info.si_addr);
     if (error.Fail())
       LLDB_LOG(log,
@@ -716,7 +687,7 @@ void NativeProcessLinux::MonitorSIGTRAP(const siginfo_t &info,
 
     // If a breakpoint was hit, report it
     uint32_t bp_index;
-    error = thread.GetRegisterContext()->GetHardwareBreakHitIndex(
+    error = thread.GetRegisterContext().GetHardwareBreakHitIndex(
         bp_index, (uintptr_t)info.si_addr);
     if (error.Fail())
       LLDB_LOG(log, "received error while checking for hardware "
@@ -739,7 +710,7 @@ void NativeProcessLinux::MonitorSIGTRAP(const siginfo_t &info,
     {
       // If a watchpoint was hit, report it
       uint32_t wp_index;
-      Status error = thread.GetRegisterContext()->GetWatchpointHitIndex(
+      Status error = thread.GetRegisterContext().GetWatchpointHitIndex(
           wp_index, LLDB_INVALID_ADDRESS);
       if (error.Fail())
         LLDB_LOG(log,
@@ -910,13 +881,13 @@ void NativeProcessLinux::MonitorSignal(const siginfo_t &info,
 namespace {
 
 struct EmulatorBaton {
-  NativeProcessLinux *m_process;
-  NativeRegisterContext *m_reg_context;
+  NativeProcessLinux &m_process;
+  NativeRegisterContext &m_reg_context;
 
   // eRegisterKindDWARF -> RegsiterValue
   std::unordered_map<uint32_t, RegisterValue> m_register_values;
 
-  EmulatorBaton(NativeProcessLinux *process, NativeRegisterContext *reg_context)
+  EmulatorBaton(NativeProcessLinux &process, NativeRegisterContext &reg_context)
       : m_process(process), m_reg_context(reg_context) {}
 };
 
@@ -928,7 +899,7 @@ static size_t ReadMemoryCallback(EmulateInstruction *instruction, void *baton,
   EmulatorBaton *emulator_baton = static_cast<EmulatorBaton *>(baton);
 
   size_t bytes_read;
-  emulator_baton->m_process->ReadMemory(addr, dst, length, bytes_read);
+  emulator_baton->m_process.ReadMemory(addr, dst, length, bytes_read);
   return bytes_read;
 }
 
@@ -948,11 +919,11 @@ static bool ReadRegisterCallback(EmulateInstruction *instruction, void *baton,
   // the generic register numbers). Get the full register info from the
   // register context based on the dwarf register numbers.
   const RegisterInfo *full_reg_info =
-      emulator_baton->m_reg_context->GetRegisterInfo(
+      emulator_baton->m_reg_context.GetRegisterInfo(
           eRegisterKindDWARF, reg_info->kinds[eRegisterKindDWARF]);
 
   Status error =
-      emulator_baton->m_reg_context->ReadRegister(full_reg_info, reg_value);
+      emulator_baton->m_reg_context.ReadRegister(full_reg_info, reg_value);
   if (error.Success())
     return true;
 
@@ -976,17 +947,17 @@ static size_t WriteMemoryCallback(EmulateInstruction *instruction, void *baton,
   return length;
 }
 
-static lldb::addr_t ReadFlags(NativeRegisterContext *regsiter_context) {
-  const RegisterInfo *flags_info = regsiter_context->GetRegisterInfo(
+static lldb::addr_t ReadFlags(NativeRegisterContext &regsiter_context) {
+  const RegisterInfo *flags_info = regsiter_context.GetRegisterInfo(
       eRegisterKindGeneric, LLDB_REGNUM_GENERIC_FLAGS);
-  return regsiter_context->ReadRegisterAsUnsigned(flags_info,
-                                                  LLDB_INVALID_ADDRESS);
+  return regsiter_context.ReadRegisterAsUnsigned(flags_info,
+                                                 LLDB_INVALID_ADDRESS);
 }
 
 Status
 NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
   Status error;
-  NativeRegisterContextSP register_context_sp = thread.GetRegisterContext();
+  NativeRegisterContext& register_context = thread.GetRegisterContext();
 
   std::unique_ptr<EmulateInstruction> emulator_ap(
       EmulateInstruction::FindPlugin(m_arch, eInstructionTypePCModifying,
@@ -995,7 +966,7 @@ NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
   if (emulator_ap == nullptr)
     return Status("Instruction emulator not found!");
 
-  EmulatorBaton baton(this, register_context_sp.get());
+  EmulatorBaton baton(*this, register_context);
   emulator_ap->SetBaton(&baton);
   emulator_ap->SetReadMemCallback(&ReadMemoryCallback);
   emulator_ap->SetReadRegCallback(&ReadRegisterCallback);
@@ -1008,9 +979,9 @@ NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
   bool emulation_result =
       emulator_ap->EvaluateInstruction(eEmulateInstructionOptionAutoAdvancePC);
 
-  const RegisterInfo *reg_info_pc = register_context_sp->GetRegisterInfo(
+  const RegisterInfo *reg_info_pc = register_context.GetRegisterInfo(
       eRegisterKindGeneric, LLDB_REGNUM_GENERIC_PC);
-  const RegisterInfo *reg_info_flags = register_context_sp->GetRegisterInfo(
+  const RegisterInfo *reg_info_flags = register_context.GetRegisterInfo(
       eRegisterKindGeneric, LLDB_REGNUM_GENERIC_FLAGS);
 
   auto pc_it =
@@ -1028,15 +999,14 @@ NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
     if (flags_it != baton.m_register_values.end())
       next_flags = flags_it->second.GetAsUInt64();
     else
-      next_flags = ReadFlags(register_context_sp.get());
+      next_flags = ReadFlags(register_context);
   } else if (pc_it == baton.m_register_values.end()) {
     // Emulate instruction failed and it haven't changed PC. Advance PC
     // with the size of the current opcode because the emulation of all
     // PC modifying instruction should be successful. The failure most
     // likely caused by a not supported instruction which don't modify PC.
-    next_pc =
-        register_context_sp->GetPC() + emulator_ap->GetOpcode().GetByteSize();
-    next_flags = ReadFlags(register_context_sp.get());
+    next_pc = register_context.GetPC() + emulator_ap->GetOpcode().GetByteSize();
+    next_flags = ReadFlags(register_context);
   } else {
     // The instruction emulation failed after it modified the PC. It is an
     // unknown error where we can't continue because the next instruction is
@@ -1542,18 +1512,12 @@ size_t NativeProcessLinux::UpdateThreads() {
   return m_threads.size();
 }
 
-bool NativeProcessLinux::GetArchitecture(ArchSpec &arch) const {
-  arch = m_arch;
-  return true;
-}
-
 Status NativeProcessLinux::GetSoftwareBreakpointPCOffset(
     uint32_t &actual_opcode_size) {
   // FIXME put this behind a breakpoint protocol class that can be
   // set per architecture.  Need ARM, MIPS support here.
   static const uint8_t g_i386_opcode[] = {0xCC};
   static const uint8_t g_s390x_opcode[] = {0x00, 0x01};
-  static const uint8_t g_ppc64le_opcode[] = {0x08, 0x00, 0xe0, 0x7f}; // trap
 
   switch (m_arch.GetMachine()) {
   case llvm::Triple::x86:
@@ -1565,16 +1529,13 @@ Status NativeProcessLinux::GetSoftwareBreakpointPCOffset(
     actual_opcode_size = static_cast<uint32_t>(sizeof(g_s390x_opcode));
     return Status();
 
-  case llvm::Triple::ppc64le:
-    actual_opcode_size = static_cast<uint32_t>(sizeof(g_ppc64le_opcode));
-    return Status();
-
   case llvm::Triple::arm:
   case llvm::Triple::aarch64:
   case llvm::Triple::mips64:
   case llvm::Triple::mips64el:
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:
+  case llvm::Triple::ppc64le:
     // On these architectures the PC don't get updated for breakpoint hits
     actual_opcode_size = 0;
     return Status();
@@ -2017,12 +1978,7 @@ NativeProcessLinux::FixupBreakpointPCAsNeeded(NativeThreadLinux &thread) {
 
   // Find out the size of a breakpoint (might depend on where we are in the
   // code).
-  NativeRegisterContextSP context_sp = thread.GetRegisterContext();
-  if (!context_sp) {
-    error.SetErrorString("cannot get a NativeRegisterContext for the thread");
-    LLDB_LOG(log, "failed: {0}", error);
-    return error;
-  }
+  NativeRegisterContext &context = thread.GetRegisterContext();
 
   uint32_t breakpoint_size = 0;
   error = GetSoftwareBreakpointPCOffset(breakpoint_size);
@@ -2034,8 +1990,7 @@ NativeProcessLinux::FixupBreakpointPCAsNeeded(NativeThreadLinux &thread) {
 
   // First try probing for a breakpoint at a software breakpoint location: PC -
   // breakpoint size.
-  const lldb::addr_t initial_pc_addr =
-      context_sp->GetPCfromBreakpointLocation();
+  const lldb::addr_t initial_pc_addr = context.GetPCfromBreakpointLocation();
   lldb::addr_t breakpoint_addr = initial_pc_addr;
   if (breakpoint_size > 0) {
     // Do not allow breakpoint probe to wrap around.
@@ -2082,7 +2037,7 @@ NativeProcessLinux::FixupBreakpointPCAsNeeded(NativeThreadLinux &thread) {
   LLDB_LOG(log, "pid {0} tid {1}: changing PC from {2:x} to {3:x}", GetID(),
            thread.GetID(), initial_pc_addr, breakpoint_addr);
 
-  error = context_sp->SetPC(breakpoint_addr);
+  error = context.SetPC(breakpoint_addr);
   if (error.Fail()) {
     LLDB_LOG(log, "pid {0} tid {1}: failed to set PC: {2}", GetID(),
              thread.GetID(), error);

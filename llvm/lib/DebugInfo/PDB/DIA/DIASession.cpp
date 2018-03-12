@@ -11,6 +11,7 @@
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumDebugStreams.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumLineNumbers.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumSourceFiles.h"
+#include "llvm/DebugInfo/PDB/DIA/DIAEnumTables.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAError.h"
 #include "llvm/DebugInfo/PDB/DIA/DIARawSymbol.h"
 #include "llvm/DebugInfo/PDB/DIA/DIASourceFile.h"
@@ -147,8 +148,8 @@ uint64_t DIASession::getLoadAddress() const {
   return (success) ? LoadAddress : 0;
 }
 
-void DIASession::setLoadAddress(uint64_t Address) {
-  Session->put_loadAddress(Address);
+bool DIASession::setLoadAddress(uint64_t Address) {
+  return (S_OK == Session->put_loadAddress(Address));
 }
 
 std::unique_ptr<PDBSymbolExe> DIASession::getGlobalScope() {
@@ -300,4 +301,12 @@ std::unique_ptr<IPDBEnumDataStreams> DIASession::getDebugStreams() const {
     return nullptr;
 
   return llvm::make_unique<DIAEnumDebugStreams>(DiaEnumerator);
+}
+
+std::unique_ptr<IPDBEnumTables> DIASession::getEnumTables() const {
+  CComPtr<IDiaEnumTables> DiaEnumerator;
+  if (S_OK != Session->getEnumTables(&DiaEnumerator))
+    return nullptr;
+
+  return llvm::make_unique<DIAEnumTables>(DiaEnumerator);
 }

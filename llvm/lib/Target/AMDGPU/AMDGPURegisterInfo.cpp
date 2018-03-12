@@ -37,13 +37,20 @@ unsigned AMDGPURegisterInfo::getSubRegFromChannel(unsigned Channel) const {
   return SubRegs[Channel];
 }
 
+void AMDGPURegisterInfo::reserveRegisterTuples(BitVector &Reserved, unsigned Reg) const {
+  MCRegAliasIterator R(Reg, this, true);
+
+  for (; R.isValid(); ++R)
+    Reserved.set(*R);
+}
+
 #define GET_REGINFO_TARGET_DESC
 #include "AMDGPUGenRegisterInfo.inc"
 
 // Forced to be here by one .inc
 const MCPhysReg *SIRegisterInfo::getCalleeSavedRegs(
   const MachineFunction *MF) const {
-  CallingConv::ID CC = MF->getFunction()->getCallingConv();
+  CallingConv::ID CC = MF->getFunction().getCallingConv();
   switch (CC) {
   case CallingConv::C:
   case CallingConv::Fast:

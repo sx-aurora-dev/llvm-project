@@ -18,9 +18,9 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetInstrInfo.h"
 
 #define GET_REGINFO_TARGET_DESC
 #include "RISCVGenRegisterInfo.inc"
@@ -50,12 +50,61 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
+const uint32_t *RISCVRegisterInfo::getNoPreservedMask() const {
+  return CSR_NoRegs_RegMask;
+}
+
 void RISCVRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                             int SPAdj, unsigned FIOperandNum,
                                             RegScavenger *RS) const {
-  report_fatal_error("Subroutines not supported yet");
+  assert(SPAdj == 0 && "Unexpected non-zero SPAdj value");
+
+  MachineInstr &MI = *II;
+  MachineFunction &MF = *MI.getParent()->getParent();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const RISCVInstrInfo *TII = MF.getSubtarget<RISCVSubtarget>().getInstrInfo();
+  DebugLoc DL = MI.getDebugLoc();
+
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
+  unsigned FrameReg;
+  int Offset =
+      getFrameLowering(MF)->getFrameIndexReference(MF, FrameIndex, FrameReg) +
+      MI.getOperand(FIOperandNum + 1).getImm();
+
+  if (!isInt<32>(Offset)) {
+    report_fatal_error(
+        "Frame offsets outside of the signed 32-bit range not supported");
+  }
+
+  MachineBasicBlock &MBB = *MI.getParent();
+  bool FrameRegIsKill = false;
+
+  if (!isInt<12>(Offset)) {
+    assert(isInt<32>(Offset) && "Int32 expected");
+    // The offset won't fit in an immediate, so use a scratch register instead
+    // Modify Offset and FrameReg appropriately
+    unsigned ScratchReg = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+    TII->movImm32(MBB, II, DL, ScratchReg, Offset);
+    BuildMI(MBB, II, DL, TII->get(RISCV::ADD), ScratchReg)
+        .addReg(FrameReg)
+        .addReg(ScratchReg, RegState::Kill);
+    Offset = 0;
+    FrameReg = ScratchReg;
+    FrameRegIsKill = true;
+  }
+
+  MI.getOperand(FIOperandNum)
+      .ChangeToRegister(FrameReg, false, false, FrameRegIsKill);
+  MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
 }
 
 unsigned RISCVRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  return RISCV::X8;
+  const TargetFrameLowering *TFI = getFrameLowering(MF);
+  return TFI->hasFP(MF) ? RISCV::X8 : RISCV::X2;
+}
+
+const uint32_t *
+RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & /*MF*/,
+                                        CallingConv::ID /*CC*/) const {
+  return CSR_RegMask;
 }

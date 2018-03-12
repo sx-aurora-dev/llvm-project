@@ -163,6 +163,67 @@ static bool usesExtendedRegister(const MachineInstr &MI) {
   return false;
 }
 
+// Do any custom cleanup needed to finalize the conversion.
+static bool performCustomAdjustments(MachineInstr &MI, unsigned NewOpc) {
+  (void)NewOpc;
+  unsigned Opc = MI.getOpcode();
+  switch (Opc) {
+  case X86::VALIGNDZ128rri:
+  case X86::VALIGNDZ128rmi:
+  case X86::VALIGNQZ128rri:
+  case X86::VALIGNQZ128rmi: {
+    assert((NewOpc == X86::VPALIGNRrri || NewOpc == X86::VPALIGNRrmi) &&
+           "Unexpected new opcode!");
+    unsigned Scale = (Opc == X86::VALIGNQZ128rri ||
+                      Opc == X86::VALIGNQZ128rmi) ? 8 : 4;
+    MachineOperand &Imm = MI.getOperand(MI.getNumExplicitOperands()-1);
+    Imm.setImm(Imm.getImm() * Scale);
+    break;
+  }
+  case X86::VSHUFF32X4Z256rmi:
+  case X86::VSHUFF32X4Z256rri:
+  case X86::VSHUFF64X2Z256rmi:
+  case X86::VSHUFF64X2Z256rri:
+  case X86::VSHUFI32X4Z256rmi:
+  case X86::VSHUFI32X4Z256rri:
+  case X86::VSHUFI64X2Z256rmi:
+  case X86::VSHUFI64X2Z256rri: {
+    assert((NewOpc == X86::VPERM2F128rr || NewOpc == X86::VPERM2I128rr ||
+            NewOpc == X86::VPERM2F128rm || NewOpc == X86::VPERM2I128rm) &&
+           "Unexpected new opcode!");
+    MachineOperand &Imm = MI.getOperand(MI.getNumExplicitOperands()-1);
+    int64_t ImmVal = Imm.getImm();
+    // Set bit 5, move bit 1 to bit 4, copy bit 0.
+    Imm.setImm(0x20 | ((ImmVal & 2) << 3) | (ImmVal & 1));
+    break;
+  }
+  case X86::VRNDSCALEPDZ128rri:
+  case X86::VRNDSCALEPDZ128rmi:
+  case X86::VRNDSCALEPSZ128rri:
+  case X86::VRNDSCALEPSZ128rmi:
+  case X86::VRNDSCALEPDZ256rri:
+  case X86::VRNDSCALEPDZ256rmi:
+  case X86::VRNDSCALEPSZ256rri:
+  case X86::VRNDSCALEPSZ256rmi:
+  case X86::VRNDSCALESDr:
+  case X86::VRNDSCALESDm:
+  case X86::VRNDSCALESSr:
+  case X86::VRNDSCALESSm:
+  case X86::VRNDSCALESDr_Int:
+  case X86::VRNDSCALESDm_Int:
+  case X86::VRNDSCALESSr_Int:
+  case X86::VRNDSCALESSm_Int:
+    const MachineOperand &Imm = MI.getOperand(MI.getNumExplicitOperands()-1);
+    int64_t ImmVal = Imm.getImm();
+    // Ensure that only bits 3:0 of the immediate are used.
+    if ((ImmVal & 0xf) != ImmVal)
+      return false;
+    break;
+  }
+
+  return true;
+}
+
 
 // For EVEX instructions that can be encoded using VEX encoding
 // replace them by the VEX encoding in order to reduce size.
@@ -223,8 +284,11 @@ bool EvexToVexInstPass::CompressEvexToVexImpl(MachineInstr &MI) const {
   if (usesExtendedRegister(MI))
     return false;
 
+  if (!performCustomAdjustments(MI, NewOpc))
+    return false;
+
   MI.setDesc(TII->get(NewOpc));
-  MI.setAsmPrinterFlag(AC_EVEX_2_VEX);
+  MI.setAsmPrinterFlag(X86::AC_EVEX_2_VEX);
   return true;
 }
 

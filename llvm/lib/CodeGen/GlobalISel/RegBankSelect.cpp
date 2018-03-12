@@ -26,9 +26,12 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
-#include "llvm/IR/Function.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Attributes.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/BlockFrequency.h"
 #include "llvm/Support/CommandLine.h"
@@ -36,9 +39,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetOpcodes.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -159,7 +159,7 @@ bool RegBankSelect::repairReg(
   // same types because the type is a placeholder when this function is called.
   MachineInstr *MI =
       MIRBuilder.buildInstrNoInsert(TargetOpcode::COPY).addDef(Dst).addUse(Src);
-  DEBUG(dbgs() << "Copy: " << PrintReg(Src) << " to: " << PrintReg(Dst)
+  DEBUG(dbgs() << "Copy: " << printReg(Src) << " to: " << printReg(Dst)
                << '\n');
   // TODO:
   // Check if MI is legal. if not, we need to legalize all the
@@ -601,29 +601,22 @@ bool RegBankSelect::runOnMachineFunction(MachineFunction &MF) {
     return false;
 
   DEBUG(dbgs() << "Assign register banks for: " << MF.getName() << '\n');
-  const Function *F = MF.getFunction();
+  const Function &F = MF.getFunction();
   Mode SaveOptMode = OptMode;
-  if (F->hasFnAttribute(Attribute::OptimizeNone))
+  if (F.hasFnAttribute(Attribute::OptimizeNone))
     OptMode = Mode::Fast;
   init(MF);
 
 #ifndef NDEBUG
   // Check that our input is fully legal: we require the function to have the
   // Legalized property, so it should be.
-  // FIXME: This should be in the MachineVerifier, but it can't use the
-  // LegalizerInfo as it's currently in the separate GlobalISel library.
-  const MachineRegisterInfo &MRI = MF.getRegInfo();
-  if (const LegalizerInfo *MLI = MF.getSubtarget().getLegalizerInfo()) {
-    for (MachineBasicBlock &MBB : MF) {
-      for (MachineInstr &MI : MBB) {
-        if (isPreISelGenericOpcode(MI.getOpcode()) && !MLI->isLegal(MI, MRI)) {
-          reportGISelFailure(MF, *TPC, *MORE, "gisel-regbankselect",
-                             "instruction is not legal", MI);
-          return false;
-        }
-      }
+  // FIXME: This should be in the MachineVerifier.
+  if (!DisableGISelLegalityCheck)
+    if (const MachineInstr *MI = machineFunctionIsIllegal(MF)) {
+      reportGISelFailure(MF, *TPC, *MORE, "gisel-regbankselect",
+                         "instruction is not legal", *MI);
+      return false;
     }
-  }
 #endif
 
   // Walk the function and assign register banks to all operands.

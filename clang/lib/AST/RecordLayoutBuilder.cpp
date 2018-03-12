@@ -1504,9 +1504,10 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     FieldAlign = TypeSize;
 
     // If the previous field was not a bitfield, or was a bitfield
-    // with a different storage unit size, we're done with that
-    // storage unit.
-    if (LastBitfieldTypeSize != TypeSize) {
+    // with a different storage unit size, or if this field doesn't fit into
+    // the current storage unit, we're done with that storage unit.
+    if (LastBitfieldTypeSize != TypeSize ||
+        UnfilledBitsInLastUnit < FieldSize) {
       // Also, ignore zero-length bitfields after non-bitfields.
       if (!LastBitfieldTypeSize && !FieldSize)
         FieldAlign = 1;
@@ -1751,7 +1752,34 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
       QualType T = Context.getBaseElementType(D->getType());
       if (const BuiltinType *BTy = T->getAs<BuiltinType>()) {
         CharUnits TypeSize = Context.getTypeSizeInChars(BTy);
-        if (TypeSize > FieldAlign)
+
+        if (!llvm::isPowerOf2_64(TypeSize.getQuantity())) {
+          assert(
+              !Context.getTargetInfo().getTriple().isWindowsMSVCEnvironment() &&
+              "Non PowerOf2 size in MSVC mode");
+          // Base types with sizes that aren't a power of two don't work
+          // with the layout rules for MS structs. This isn't an issue in
+          // MSVC itself since there are no such base data types there.
+          // On e.g. x86_32 mingw and linux, long double is 12 bytes though.
+          // Any structs involving that data type obviously can't be ABI
+          // compatible with MSVC regardless of how it is laid out.
+
+          // Since ms_struct can be mass enabled (via a pragma or via the
+          // -mms-bitfields command line parameter), this can trigger for
+          // structs that don't actually need MSVC compatibility, so we
+          // need to be able to sidestep the ms_struct layout for these types.
+
+          // Since the combination of -mms-bitfields together with structs
+          // like max_align_t (which contains a long double) for mingw is
+          // quite comon (and GCC handles it silently), just handle it
+          // silently there. For other targets that have ms_struct enabled
+          // (most probably via a pragma or attribute), trigger a diagnostic
+          // that defaults to an error.
+          if (!Context.getTargetInfo().getTriple().isWindowsGNUEnvironment())
+            Diag(D->getLocation(), diag::warn_npot_ms_struct);
+        }
+        if (TypeSize > FieldAlign &&
+            llvm::isPowerOf2_64(TypeSize.getQuantity()))
           FieldAlign = TypeSize;
       }
     }
@@ -2895,13 +2923,12 @@ void MicrosoftRecordLayoutBuilder::computeVtorDispSet(
       Work.insert(MD);
   while (!Work.empty()) {
     const CXXMethodDecl *MD = *Work.begin();
-    CXXMethodDecl::method_iterator i = MD->begin_overridden_methods(),
-                                   e = MD->end_overridden_methods();
+    auto MethodRange = MD->overridden_methods();
     // If a virtual method has no-overrides it lives in its parent's vtable.
-    if (i == e)
+    if (MethodRange.begin() == MethodRange.end())
       BasesWithOverriddenMethods.insert(MD->getParent());
     else
-      Work.insert(i, e);
+      Work.insert(MethodRange.begin(), MethodRange.end());
     // We've finished processing this element, remove it from the working set.
     Work.erase(MD);
   }
@@ -3011,7 +3038,7 @@ const CXXMethodDecl *ASTContext::getCurrentKeyFunction(const CXXRecordDecl *RD) 
     return nullptr;
 
   assert(RD->getDefinition() && "Cannot get key function for forward decl!");
-  RD = cast<CXXRecordDecl>(RD->getDefinition());
+  RD = RD->getDefinition();
 
   // Beware:
   //  1) computing the key function might trigger deserialization, which might

@@ -363,12 +363,9 @@ unsigned tools::getLTOParallelism(const ArgList &Args, const Driver &D) {
   return Parallelism;
 }
 
-// CloudABI and WebAssembly use -ffunction-sections and -fdata-sections by
-// default.
+// CloudABI uses -ffunction-sections and -fdata-sections by default.
 bool tools::isUseSeparateSections(const llvm::Triple &Triple) {
-  return Triple.getOS() == llvm::Triple::CloudABI ||
-         Triple.getArch() == llvm::Triple::wasm32 ||
-         Triple.getArch() == llvm::Triple::wasm64;
+  return Triple.getOS() == llvm::Triple::CloudABI;
 }
 
 void tools::AddGoldPlugin(const ToolChain &ToolChain, const ArgList &Args,
@@ -419,8 +416,8 @@ void tools::AddGoldPlugin(const ToolChain &ToolChain, const ArgList &Args,
     CmdArgs.push_back("-plugin-opt=thinlto");
 
   if (unsigned Parallelism = getLTOParallelism(Args, D))
-    CmdArgs.push_back(Args.MakeArgString(Twine("-plugin-opt=jobs=") +
-                                         llvm::to_string(Parallelism)));
+    CmdArgs.push_back(
+        Args.MakeArgString("-plugin-opt=jobs=" + Twine(Parallelism)));
 
   // If an explicit debugger tuning argument appeared, pass it along.
   if (Arg *A = Args.getLastArg(options::OPT_gTune_Group,
@@ -511,9 +508,9 @@ static void addSanitizerRuntime(const ToolChain &TC, const ArgList &Args,
                                 bool IsShared, bool IsWhole) {
   // Wrap any static runtimes that must be forced into executable in
   // whole-archive.
-  if (IsWhole) CmdArgs.push_back("-whole-archive");
+  if (IsWhole) CmdArgs.push_back("--whole-archive");
   CmdArgs.push_back(TC.getCompilerRTArgString(Args, Sanitizer, IsShared));
-  if (IsWhole) CmdArgs.push_back("-no-whole-archive");
+  if (IsWhole) CmdArgs.push_back("--no-whole-archive");
 
   if (IsShared) {
     addArchSpecificRPath(TC, Args, CmdArgs);
@@ -525,6 +522,10 @@ static void addSanitizerRuntime(const ToolChain &TC, const ArgList &Args,
 static bool addSanitizerDynamicList(const ToolChain &TC, const ArgList &Args,
                                     ArgStringList &CmdArgs,
                                     StringRef Sanitizer) {
+  // Solaris ld defaults to --export-dynamic behaviour but doesn't support
+  // the option, so don't try to pass it.
+  if (TC.getTriple().getOS() == llvm::Triple::Solaris)
+    return true;
   SmallString<128> SanRT(TC.getCompilerRT(Args, Sanitizer));
   if (llvm::sys::fs::exists(SanRT + ".syms")) {
     CmdArgs.push_back(Args.MakeArgString("--dynamic-list=" + SanRT + ".syms"));
@@ -541,14 +542,20 @@ void tools::linkSanitizerRuntimeDeps(const ToolChain &TC,
   // There's no libpthread or librt on RTEMS.
   if (TC.getTriple().getOS() != llvm::Triple::RTEMS) {
     CmdArgs.push_back("-lpthread");
-    CmdArgs.push_back("-lrt");
+    if (TC.getTriple().getOS() != llvm::Triple::OpenBSD)
+      CmdArgs.push_back("-lrt");
   }
   CmdArgs.push_back("-lm");
-  // There's no libdl on FreeBSD or RTEMS.
+  // There's no libdl on all OSes.
   if (TC.getTriple().getOS() != llvm::Triple::FreeBSD &&
       TC.getTriple().getOS() != llvm::Triple::NetBSD &&
+      TC.getTriple().getOS() != llvm::Triple::OpenBSD &&
       TC.getTriple().getOS() != llvm::Triple::RTEMS)
     CmdArgs.push_back("-ldl");
+  // Required for backtrace on some OSes
+  if (TC.getTriple().getOS() == llvm::Triple::NetBSD ||
+      TC.getTriple().getOS() == llvm::Triple::FreeBSD)
+    CmdArgs.push_back("-lexecinfo");
 }
 
 static void
@@ -566,7 +573,6 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
       if (!Args.hasArg(options::OPT_shared) && !TC.getTriple().isAndroid())
         HelperStaticRuntimes.push_back("asan-preinit");
     }
-
     if (SanArgs.needsUbsanRt()) {
       if (SanArgs.requiresMinimalRuntime()) {
         SharedRuntimes.push_back("ubsan_minimal");
@@ -574,6 +580,10 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
         SharedRuntimes.push_back("ubsan_standalone");
       }
     }
+    if (SanArgs.needsScudoRt())
+      SharedRuntimes.push_back("scudo");
+    if (SanArgs.needsHwasanRt())
+      SharedRuntimes.push_back("hwasan");
   }
 
   // The stats_client library is also statically linked into DSOs.
@@ -589,6 +599,12 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
     StaticRuntimes.push_back("asan");
     if (SanArgs.linkCXXRuntimes())
       StaticRuntimes.push_back("asan_cxx");
+  }
+
+  if (SanArgs.needsHwasanRt()) {
+    StaticRuntimes.push_back("hwasan");
+    if (SanArgs.linkCXXRuntimes())
+      StaticRuntimes.push_back("hwasan_cxx");
   }
   if (SanArgs.needsDfsanRt())
     StaticRuntimes.push_back("dfsan");
@@ -630,6 +646,11 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   }
   if (SanArgs.needsEsanRt())
     StaticRuntimes.push_back("esan");
+  if (SanArgs.needsScudoRt()) {
+    StaticRuntimes.push_back("scudo");
+    if (SanArgs.linkCXXRuntimes())
+      StaticRuntimes.push_back("scudo_cxx");
+  }
 }
 
 // Should be called before we add system libraries (C++ ABI, libstdc++/libc++,
@@ -671,7 +692,7 @@ bool tools::addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   // If there is a static runtime with no dynamic list, force all the symbols
   // to be dynamic to be sure we export sanitizer interface functions.
   if (AddExportDynamic)
-    CmdArgs.push_back("-export-dynamic");
+    CmdArgs.push_back("--export-dynamic");
 
   const SanitizerArgs &SanArgs = TC.getSanitizerArgs();
   if (SanArgs.hasCrossDsoCfi() && !AddExportDynamic)
@@ -719,7 +740,8 @@ void tools::SplitDebugInfo(const ToolChain &TC, Compilation &C, const Tool &T,
   ExtractArgs.push_back(Output.getFilename());
   ExtractArgs.push_back(OutFile);
 
-  const char *Exec = Args.MakeArgString(TC.GetProgramPath("objcopy"));
+  const char *Exec =
+      Args.MakeArgString(TC.GetProgramPath(CLANG_DEFAULT_OBJCOPY));
   InputInfo II(types::TY_Object, Output.getFilename(), Output.getFilename());
 
   // First extract the dwo sections.
@@ -837,6 +859,10 @@ tools::ParsePICArgs(const ToolChain &ToolChain, const ArgList &Args) {
       break;
     }
   }
+
+  // AMDGPU-specific defaults for PIC.
+  if (Triple.getArch() == llvm::Triple::amdgcn)
+    PIC = true;
 
   // The last argument relating to either PIC or PIE wins, and no
   // other argument is used. If the last argument is any flavor of the

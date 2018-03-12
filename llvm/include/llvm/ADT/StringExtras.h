@@ -17,6 +17,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -46,6 +47,11 @@ inline StringRef toStringRef(ArrayRef<uint8_t> Input) {
   return StringRef(reinterpret_cast<const char *>(Input.begin()), Input.size());
 }
 
+/// Construct a string ref from an array ref of unsigned chars.
+inline ArrayRef<uint8_t> arrayRefFromStringRef(StringRef Input) {
+  return {Input.bytes_begin(), Input.bytes_end()};
+}
+
 /// Interpret the given character \p C as a hexadecimal digit and return its
 /// value.
 ///
@@ -71,6 +77,20 @@ inline bool isAlpha(char C) {
 /// Checks whether character \p C is either a decimal digit or an uppercase or
 /// lowercase letter as classified by "C" locale.
 inline bool isAlnum(char C) { return isAlpha(C) || isDigit(C); }
+
+/// Returns the corresponding lowercase character if \p x is uppercase.
+inline char toLower(char x) {
+  if (x >= 'A' && x <= 'Z')
+    return x - 'A' + 'a';
+  return x;
+}
+
+/// Returns the corresponding uppercase character if \p x is lowercase.
+inline char toUpper(char x) {
+  if (x >= 'a' && x <= 'z')
+    return x - 'a' + 'A';
+  return x;
+}
 
 inline std::string utohexstr(uint64_t X, bool LowerCase = false) {
   char Buffer[17];
@@ -212,19 +232,6 @@ void SplitString(StringRef Source,
                  SmallVectorImpl<StringRef> &OutFragments,
                  StringRef Delimiters = " \t\n\v\f\r");
 
-/// HashString - Hash function for strings.
-///
-/// This is the Bernstein hash function.
-//
-// FIXME: Investigate whether a modified bernstein hash function performs
-// better: http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
-//   X*33+c -> X*33^c
-inline unsigned HashString(StringRef Str, unsigned Result = 0) {
-  for (StringRef::size_type i = 0, e = Str.size(); i != e; ++i)
-    Result = Result * 33 + (unsigned char)Str[i];
-  return Result;
-}
-
 /// Returns the English suffix for an ordinal integer (-st, -nd, -rd, -th).
 inline StringRef getOrdinalSuffix(unsigned Val) {
   // It is critically important that we do this perfectly for
@@ -247,6 +254,9 @@ inline StringRef getOrdinalSuffix(unsigned Val) {
 /// PrintEscapedString - Print each character of the specified string, escaping
 /// it if it is not printable or if it is an escape char.
 void PrintEscapedString(StringRef Name, raw_ostream &Out);
+
+/// printLowerCase - Print each character as lowercase if it is uppercase.
+void printLowerCase(StringRef String, raw_ostream &Out);
 
 namespace detail {
 

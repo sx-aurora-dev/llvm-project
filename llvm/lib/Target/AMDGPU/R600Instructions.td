@@ -81,6 +81,7 @@ def ADDRDWord : ComplexPattern<i32, 1, "SelectADDRDWord", [], []>;
 def ADDRVTX_READ : ComplexPattern<i32, 2, "SelectADDRVTX_READ", [], []>;
 def ADDRGA_CONST_OFFSET : ComplexPattern<i32, 1, "SelectGlobalValueConstantOffset", [], []>;
 def ADDRGA_VAR_OFFSET : ComplexPattern<i32, 2, "SelectGlobalValueVariableOffset", [], []>;
+def ADDRIndirect : ComplexPattern<iPTR, 2, "SelectADDRIndirect", [], []>;
 
 
 def R600_Pred : PredicateOperand<i32, (ops R600_Predicate),
@@ -989,7 +990,10 @@ class MULADD_IEEE_Common <bits<5> inst> : R600_3OP <
 class FMA_Common <bits<5> inst> : R600_3OP <
   inst, "FMA",
   [(set f32:$dst, (fma f32:$src0, f32:$src1, f32:$src2))], VecALU
->;
+>
+{
+  let OtherPredicates = [FMA];
+}
 
 class CNDE_Common <bits<5> inst> : R600_3OP <
   inst, "CNDE",

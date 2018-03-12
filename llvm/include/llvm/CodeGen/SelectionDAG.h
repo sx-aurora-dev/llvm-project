@@ -28,8 +28,10 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/DivergenceAnalysis.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineValueType.h"
@@ -73,6 +75,7 @@ class OptimizationRemarkEmitter;
 class SDDbgValue;
 class SelectionDAG;
 class SelectionDAGTargetInfo;
+class TargetLibraryInfo;
 class TargetLowering;
 class TargetMachine;
 class TargetSubtargetInfo;
@@ -210,10 +213,14 @@ class SelectionDAG {
   const TargetMachine &TM;
   const SelectionDAGTargetInfo *TSI = nullptr;
   const TargetLowering *TLI = nullptr;
+  const TargetLibraryInfo *LibInfo = nullptr;
   MachineFunction *MF;
   Pass *SDAGISelPass = nullptr;
   LLVMContext *Context;
   CodeGenOpt::Level OptLevel;
+
+  DivergenceAnalysis * DA = nullptr;
+  FunctionLoweringInfo * FLI = nullptr;
 
   /// The function-level optimization remark emitter.  Used to emit remarks
   /// whenever manipulating the DAG.
@@ -344,19 +351,7 @@ private:
          .getRawSubclassData();
   }
 
-  void createOperands(SDNode *Node, ArrayRef<SDValue> Vals) {
-    assert(!Node->OperandList && "Node already has operands");
-    SDUse *Ops = OperandRecycler.allocate(
-        ArrayRecycler<SDUse>::Capacity::get(Vals.size()), OperandAllocator);
-
-    for (unsigned I = 0; I != Vals.size(); ++I) {
-      Ops[I].setUser(Node);
-      Ops[I].setInitial(Vals[I]);
-    }
-    Node->NumOperands = Vals.size();
-    Node->OperandList = Ops;
-    checkForCycles(Node);
-  }
+  void createOperands(SDNode *Node, ArrayRef<SDValue> Vals);
 
   void removeOperands(SDNode *Node) {
     if (!Node->OperandList)
@@ -367,7 +362,7 @@ private:
     Node->NumOperands = 0;
     Node->OperandList = nullptr;
   }
-
+  void CreateTopologicalOrder(std::vector<SDNode*>& Order);
 public:
   explicit SelectionDAG(const TargetMachine &TM, CodeGenOpt::Level);
   SelectionDAG(const SelectionDAG &) = delete;
@@ -376,7 +371,12 @@ public:
 
   /// Prepare this SelectionDAG to process code in the given MachineFunction.
   void init(MachineFunction &NewMF, OptimizationRemarkEmitter &NewORE,
-            Pass *PassPtr);
+            Pass *PassPtr, const TargetLibraryInfo *LibraryInfo,
+            DivergenceAnalysis * DA);
+
+  void setFunctionLoweringInfo(FunctionLoweringInfo * FuncInfo) {
+    FLI = FuncInfo;
+  }
 
   /// Clear state and free memory necessary to make this
   /// SelectionDAG ready to process a new block.
@@ -389,6 +389,7 @@ public:
   const TargetMachine &getTarget() const { return TM; }
   const TargetSubtargetInfo &getSubtarget() const { return MF->getSubtarget(); }
   const TargetLowering &getTargetLoweringInfo() const { return *TLI; }
+  const TargetLibraryInfo &getLibInfo() const { return *LibInfo; }
   const SelectionDAGTargetInfo &getSelectionDAGInfo() const { return *TSI; }
   LLVMContext *getContext() const {return Context; }
   OptimizationRemarkEmitter &getORE() const { return *ORE; }
@@ -459,6 +460,8 @@ public:
       checkForCycles(this);
     return Root;
   }
+
+  void VerifyDAGDiverence();
 
   /// This iterates over the nodes in the SelectionDAG, folding
   /// certain types of nodes together, or eliminating superfluous nodes.  The
@@ -567,6 +570,10 @@ public:
                             bool isOpaque = false) {
     return getConstant(Val, DL, VT, true, isOpaque);
   }
+
+  /// \brief Create a true or false constant of type \p VT using the target's
+  /// BooleanContent for type \p OpVT.
+  SDValue getBoolConstant(bool V, const SDLoc &DL, EVT VT, EVT OpVT);
   /// @}
 
   /// \brief Create a ConstantFPSDNode wrapping a constant value.
@@ -796,6 +803,24 @@ public:
   /// \brief Create a logical NOT operation as (XOR Val, BooleanOne).
   SDValue getLogicalNOT(const SDLoc &DL, SDValue Val, EVT VT);
 
+  /// \brief Create an add instruction with appropriate flags when used for
+  /// addressing some offset of an object. i.e. if a load is split into multiple
+  /// components, create an add nuw from the base pointer to the offset.
+  SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Op, int64_t Offset) {
+    EVT VT = Op.getValueType();
+    return getObjectPtrOffset(SL, Op, getConstant(Offset, SL, VT));
+  }
+
+  SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Op, SDValue Offset) {
+    EVT VT = Op.getValueType();
+
+    // The object itself can't wrap around the address space, so it shouldn't be
+    // possible for the adds of the offsets to the split parts to overflow.
+    SDNodeFlags Flags;
+    Flags.setNoUnsignedWrap(true);
+    return getNode(ISD::ADD, SL, VT, Op, Offset, Flags);
+  }
+
   /// Return a new CALLSEQ_START node, that starts new call frame, in which
   /// InSize bytes are set up inside CALLSEQ_START..CALLSEQ_END sequence and
   /// OutSize specifies part of the frame set up prior to the sequence.
@@ -970,11 +995,14 @@ public:
   /// result and takes a list of operands. Opcode may be INTRINSIC_VOID,
   /// INTRINSIC_W_CHAIN, or a target-specific opcode with a value not
   /// less than FIRST_TARGET_MEMORY_OPCODE.
-  SDValue getMemIntrinsicNode(unsigned Opcode, const SDLoc &dl, SDVTList VTList,
-                              ArrayRef<SDValue> Ops, EVT MemVT,
-                              MachinePointerInfo PtrInfo, unsigned Align = 0,
-                              bool Vol = false, bool ReadMem = true,
-                              bool WriteMem = true, unsigned Size = 0);
+  SDValue getMemIntrinsicNode(
+    unsigned Opcode, const SDLoc &dl, SDVTList VTList,
+    ArrayRef<SDValue> Ops, EVT MemVT,
+    MachinePointerInfo PtrInfo,
+    unsigned Align = 0,
+    MachineMemOperand::Flags Flags
+    = MachineMemOperand::MOLoad | MachineMemOperand::MOStore,
+    unsigned Size = 0);
 
   SDValue getMemIntrinsicNode(unsigned Opcode, const SDLoc &dl, SDVTList VTList,
                               ArrayRef<SDValue> Ops, EVT MemVT,
@@ -1100,6 +1128,9 @@ public:
                                SDValue Op3, SDValue Op4, SDValue Op5);
   SDNode *UpdateNodeOperands(SDNode *N, ArrayRef<SDValue> Ops);
 
+  // Propagates the change in divergence to users
+  void updateDivergence(SDNode * N);
+
   /// These are used for target selectors to *mutate* the
   /// specified node to have the specified return type, Target opcode, and
   /// operands.  Note that target opcodes are stored as
@@ -1184,15 +1215,21 @@ public:
                           unsigned R, bool IsIndirect, const DebugLoc &DL,
                           unsigned O);
 
-  /// Constant
+  /// Creates a constant SDDbgValue node.
   SDDbgValue *getConstantDbgValue(DIVariable *Var, DIExpression *Expr,
                                   const Value *C, const DebugLoc &DL,
                                   unsigned O);
 
-  /// FrameIndex
+  /// Creates a FrameIndex SDDbgValue node.
   SDDbgValue *getFrameIndexDbgValue(DIVariable *Var, DIExpression *Expr,
                                     unsigned FI, const DebugLoc &DL,
                                     unsigned O);
+
+  /// Transfer debug values from one node to another, while optionally
+  /// generating fragment expressions for split-up values. If \p InvalidateDbg
+  /// is set, debug values are invalidated after they are transferred.
+  void transferDbgValues(SDValue From, SDValue To, unsigned OffsetInBits = 0,
+                         unsigned SizeInBits = 0, bool InvalidateDbg = true);
 
   /// Remove the specified node from the system. If any of its
   /// operands then becomes dead, remove them as well. Inform UpdateListener
@@ -1223,7 +1260,7 @@ public:
   void ReplaceAllUsesWith(SDNode *From, const SDValue *To);
 
   /// Replace any uses of From with To, leaving
-  /// uses of other values produced by From.Val alone.
+  /// uses of other values produced by From.getNode() alone.
   void ReplaceAllUsesOfValueWith(SDValue From, SDValue To);
 
   /// Like ReplaceAllUsesOfValueWith, but for multiple values at once.
@@ -1273,10 +1310,6 @@ public:
   ArrayRef<SDDbgValue*> GetDbgValues(const SDNode* SD) {
     return DbgInfo->getSDDbgValues(SD);
   }
-
-private:
-  /// Transfer SDDbgValues. Called via ReplaceAllUses{OfValue}?With
-  void TransferDbgValues(SDValue From, SDValue To);
 
 public:
   /// Return true if there are any SDDbgValue nodes associated

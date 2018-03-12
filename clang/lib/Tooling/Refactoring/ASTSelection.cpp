@@ -115,6 +115,11 @@ public:
       return true;
     if (auto *Opaque = dyn_cast<OpaqueValueExpr>(S))
       return TraverseOpaqueValueExpr(Opaque);
+    // Avoid selecting implicit 'this' expressions.
+    if (auto *TE = dyn_cast<CXXThisExpr>(S)) {
+      if (TE->isImplicit())
+        return true;
+    }
     // FIXME (Alex Lorenz): Improve handling for macro locations.
     SourceSelectionKind SelectionKind =
         selectionKindFor(CharSourceRange::getTokenRange(S->getSourceRange()));
@@ -249,8 +254,70 @@ struct SelectedNodeWithParents {
   SelectedNodeWithParents &operator=(SelectedNodeWithParents &&) = default;
   SelectedASTNode::ReferenceType Node;
   llvm::SmallVector<SelectedASTNode::ReferenceType, 8> Parents;
+
+  /// Canonicalizes the given selection by selecting different related AST nodes
+  /// when it makes sense to do so.
+  void canonicalize();
 };
+
+enum SelectionCanonicalizationAction { KeepSelection, SelectParent };
+
+/// Returns the canonicalization action which should be applied to the
+/// selected statement.
+SelectionCanonicalizationAction
+getSelectionCanonizalizationAction(const Stmt *S, const Stmt *Parent) {
+  // Select the parent expression when:
+  // - The string literal in ObjC string literal is selected, e.g.:
+  //     @"test"   becomes   @"test"
+  //      ~~~~~~             ~~~~~~~
+  if (isa<StringLiteral>(S) && isa<ObjCStringLiteral>(Parent))
+    return SelectParent;
+  // The entire call should be selected when just the member expression
+  // that refers to the method or the decl ref that refers to the function
+  // is selected.
+  //    f.call(args)  becomes  f.call(args)
+  //      ~~~~                 ~~~~~~~~~~~~
+  //    func(args)  becomes  func(args)
+  //    ~~~~                 ~~~~~~~~~~
+  else if (const auto *CE = dyn_cast<CallExpr>(Parent)) {
+    if ((isa<MemberExpr>(S) || isa<DeclRefExpr>(S)) &&
+        CE->getCallee()->IgnoreImpCasts() == S)
+      return SelectParent;
+  }
+  // FIXME: Syntactic form -> Entire pseudo-object expr.
+  return KeepSelection;
+}
+
 } // end anonymous namespace
+
+void SelectedNodeWithParents::canonicalize() {
+  const Stmt *S = Node.get().Node.get<Stmt>();
+  assert(S && "non statement selection!");
+  const Stmt *Parent = Parents[Parents.size() - 1].get().Node.get<Stmt>();
+  if (!Parent)
+    return;
+
+  // Look through the implicit casts in the parents.
+  unsigned ParentIndex = 1;
+  for (; (ParentIndex + 1) <= Parents.size() && isa<ImplicitCastExpr>(Parent);
+       ++ParentIndex) {
+    const Stmt *NewParent =
+        Parents[Parents.size() - ParentIndex - 1].get().Node.get<Stmt>();
+    if (!NewParent)
+      break;
+    Parent = NewParent;
+  }
+
+  switch (getSelectionCanonizalizationAction(S, Parent)) {
+  case SelectParent:
+    Node = Parents[Parents.size() - ParentIndex];
+    for (; ParentIndex != 0; --ParentIndex)
+      Parents.pop_back();
+    break;
+  case KeepSelection:
+    break;
+  }
+}
 
 /// Finds the set of bottom-most selected AST nodes that are in the selection
 /// tree with the specified selection kind.
@@ -279,11 +346,23 @@ static void findDeepestWithKind(
     llvm::SmallVectorImpl<SelectedNodeWithParents> &MatchingNodes,
     SourceSelectionKind Kind,
     llvm::SmallVectorImpl<SelectedASTNode::ReferenceType> &ParentStack) {
-  if (!hasAnyDirectChildrenWithKind(ASTSelection, Kind)) {
-    // This node is the bottom-most.
-    MatchingNodes.push_back(SelectedNodeWithParents{
-        std::cref(ASTSelection), {ParentStack.begin(), ParentStack.end()}});
-    return;
+  if (ASTSelection.Node.get<DeclStmt>()) {
+    // Select the entire decl stmt when any of its child declarations is the
+    // bottom-most.
+    for (const auto &Child : ASTSelection.Children) {
+      if (!hasAnyDirectChildrenWithKind(Child, Kind)) {
+        MatchingNodes.push_back(SelectedNodeWithParents{
+            std::cref(ASTSelection), {ParentStack.begin(), ParentStack.end()}});
+        return;
+      }
+    }
+  } else {
+    if (!hasAnyDirectChildrenWithKind(ASTSelection, Kind)) {
+      // This node is the bottom-most.
+      MatchingNodes.push_back(SelectedNodeWithParents{
+          std::cref(ASTSelection), {ParentStack.begin(), ParentStack.end()}});
+      return;
+    }
   }
   // Search in the children.
   ParentStack.push_back(std::cref(ASTSelection));
@@ -318,7 +397,7 @@ CodeRangeASTSelection::create(SourceRange SelectionRange,
     return None;
   const Stmt *CodeRangeStmt = Selected.Node.get().Node.get<Stmt>();
   if (!isa<CompoundStmt>(CodeRangeStmt)) {
-    // FIXME (Alex L): Canonicalize.
+    Selected.canonicalize();
     return CodeRangeASTSelection(Selected.Node, Selected.Parents,
                                  /*AreChildrenSelected=*/false);
   }
@@ -335,6 +414,11 @@ CodeRangeASTSelection::create(SourceRange SelectionRange,
                                /*AreChildrenSelected=*/true);
 }
 
+static bool isFunctionLikeDeclaration(const Decl *D) {
+  // FIXME (Alex L): Test for BlockDecl.
+  return isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D);
+}
+
 bool CodeRangeASTSelection::isInFunctionLikeBodyOfCode() const {
   bool IsPrevCompound = false;
   // Scan through the parents (bottom-to-top) and check if the selection is
@@ -343,13 +427,14 @@ bool CodeRangeASTSelection::isInFunctionLikeBodyOfCode() const {
   for (const auto &Parent : llvm::reverse(Parents)) {
     const DynTypedNode &Node = Parent.get().Node;
     if (const auto *D = Node.get<Decl>()) {
-      // FIXME (Alex L): Test for BlockDecl && ObjCMethodDecl.
-      if (isa<FunctionDecl>(D))
+      if (isFunctionLikeDeclaration(D))
         return IsPrevCompound;
-      // FIXME (Alex L): We should return false on top-level decls in functions
-      // e.g. we don't want to extract:
+      // Stop the search at any type declaration to avoid returning true for
+      // expressions in type declarations in functions, like:
       // function foo() { struct X {
       //   int m = /*selection:*/ 1 + 2 /*selection end*/; }; };
+      if (isa<TypeDecl>(D))
+        return false;
     }
     IsPrevCompound = Node.get<CompoundStmt>() != nullptr;
   }
@@ -360,8 +445,7 @@ const Decl *CodeRangeASTSelection::getFunctionLikeNearestParent() const {
   for (const auto &Parent : llvm::reverse(Parents)) {
     const DynTypedNode &Node = Parent.get().Node;
     if (const auto *D = Node.get<Decl>()) {
-      // FIXME (Alex L): Test for BlockDecl && ObjCMethodDecl.
-      if (isa<FunctionDecl>(D))
+      if (isFunctionLikeDeclaration(D))
         return D;
     }
   }

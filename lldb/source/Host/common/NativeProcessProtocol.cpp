@@ -8,15 +8,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Host/common/NativeProcessProtocol.h"
-
-#include "lldb/Core/ArchSpec.h"
-#include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/State.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/common/NativeRegisterContext.h"
 #include "lldb/Host/common/NativeThreadProtocol.h"
 #include "lldb/Host/common/SoftwareBreakpoint.h"
-#include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
@@ -116,14 +112,6 @@ bool NativeProcessProtocol::IsAlive() const {
          m_state != eStateInvalid && m_state != eStateUnloaded;
 }
 
-bool NativeProcessProtocol::GetByteOrder(lldb::ByteOrder &byte_order) const {
-  ArchSpec process_arch;
-  if (!GetArchitecture(process_arch))
-    return false;
-  byte_order = process_arch.GetByteOrder();
-  return true;
-}
-
 const NativeWatchpointList::WatchpointMap &
 NativeProcessProtocol::GetWatchpointMap() const {
   return m_watchpoint_list.GetWatchpointMap();
@@ -141,16 +129,9 @@ NativeProcessProtocol::GetHardwareDebugSupportInfo() const {
     return llvm::None;
   }
 
-  NativeRegisterContextSP reg_ctx_sp(thread->GetRegisterContext());
-  if (!reg_ctx_sp) {
-    LLDB_LOG(
-        log,
-        "failed to get a RegisterContextNativeProcess from the first thread!");
-    return llvm::None;
-  }
-
-  return std::make_pair(reg_ctx_sp->NumSupportedHardwareBreakpoints(),
-                        reg_ctx_sp->NumSupportedHardwareWatchpoints());
+  NativeRegisterContext &reg_ctx = thread->GetRegisterContext();
+  return std::make_pair(reg_ctx.NumSupportedHardwareBreakpoints(),
+                        reg_ctx.NumSupportedHardwareWatchpoints());
 }
 
 Status NativeProcessProtocol::SetWatchpoint(lldb::addr_t addr, size_t size,
@@ -446,28 +427,6 @@ uint32_t NativeProcessProtocol::GetStopID() const {
 
 void NativeProcessProtocol::DoStopIDBumped(uint32_t /* newBumpId */) {
   // Default implementation does nothing.
-}
-
-Status NativeProcessProtocol::ResolveProcessArchitecture(lldb::pid_t pid,
-                                                         ArchSpec &arch) {
-  // Grab process info for the running process.
-  ProcessInstanceInfo process_info;
-  if (!Host::GetProcessInfo(pid, process_info))
-    return Status("failed to get process info");
-
-  // Resolve the executable module.
-  ModuleSpecList module_specs;
-  if (!ObjectFile::GetModuleSpecifications(process_info.GetExecutableFile(), 0,
-                                           0, module_specs))
-    return Status("failed to get module specifications");
-  lldbassert(module_specs.GetSize() == 1);
-
-  arch = module_specs.GetModuleSpecRefAtIndex(0).GetArchitecture();
-  if (arch.IsValid())
-    return Status();
-  else
-    return Status(
-        "failed to retrieve a valid architecture from the exe module");
 }
 
 NativeProcessProtocol::Factory::~Factory() = default;

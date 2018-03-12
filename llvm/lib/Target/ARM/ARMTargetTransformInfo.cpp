@@ -13,6 +13,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/CodeGen/CostTable.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/ValueTypes.h"
@@ -25,7 +26,6 @@
 #include "llvm/IR/Type.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Target/CostTable.h"
 #include "llvm/Target/TargetMachine.h"
 #include <algorithm>
 #include <cassert>
@@ -125,6 +125,10 @@ int ARMTTIImpl::getIntImmCost(unsigned Opcode, unsigned Idx, const APInt &Imm,
       // icmp X, #-C -> adds X, #C
       return 0;
   }
+
+  // xor a, -1 can always be folded to MVN
+  if (Opcode == Instruction::Xor && Imm.isAllOnesValue())
+    return 0;
 
   return getIntImmCost(Imm, Ty);
 }
@@ -351,7 +355,7 @@ int ARMTTIImpl::getVectorInstrCost(unsigned Opcode, Type *ValTy,
 int ARMTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy,
                                    const Instruction *I) {
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
-  // On NEON a a vector select gets lowered to vbsl.
+  // On NEON a vector select gets lowered to vbsl.
   if (ST->hasNEON() && ValTy->isVectorTy() && ISD == ISD::SELECT) {
     // Lowering of some vector selects is currently far from perfect.
     static const TypeConversionCostTblEntry NEONVectorSelectTbl[] = {
@@ -392,25 +396,6 @@ int ARMTTIImpl::getAddressComputationCost(Type *Ty, ScalarEvolution *SE,
   // In many cases the address computation is not merged into the instruction
   // addressing mode.
   return 1;
-}
-
-int ARMTTIImpl::getFPOpCost(Type *Ty) {
-  // Use similar logic that's in ARMISelLowering:
-  // Any ARM CPU with VFP2 has floating point, but Thumb1 didn't have access
-  // to VFP.
-
-  if (ST->hasVFP2() && !ST->isThumb1Only()) {
-    if (Ty->isFloatTy()) {
-      return TargetTransformInfo::TCC_Basic;
-    }
-
-    if (Ty->isDoubleTy()) {
-      return ST->isFPOnlySP() ? TargetTransformInfo::TCC_Expensive :
-        TargetTransformInfo::TCC_Basic;
-    }
-  }
-
-  return TargetTransformInfo::TCC_Expensive;
 }
 
 int ARMTTIImpl::getShuffleCost(TTI::ShuffleKind Kind, Type *Tp, int Index,

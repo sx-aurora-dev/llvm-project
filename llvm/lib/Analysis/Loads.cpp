@@ -80,7 +80,7 @@ static bool isDereferenceableAndAlignedPointer(
   if (const GEPOperator *GEP = dyn_cast<GEPOperator>(V)) {
     const Value *Base = GEP->getPointerOperand();
 
-    APInt Offset(DL.getPointerTypeSizeInBits(GEP->getType()), 0);
+    APInt Offset(DL.getIndexTypeSizeInBits(GEP->getType()), 0);
     if (!GEP->accumulateConstantOffset(DL, Offset) || Offset.isNegative() ||
         !Offset.urem(APInt(Offset.getBitWidth(), Align)).isMinValue())
       return false;
@@ -146,7 +146,7 @@ bool llvm::isDereferenceableAndAlignedPointer(const Value *V, unsigned Align,
 
   SmallPtrSet<const Value *, 32> Visited;
   return ::isDereferenceableAndAlignedPointer(
-      V, Align, APInt(DL.getTypeSizeInBits(VTy), DL.getTypeStoreSize(Ty)), DL,
+      V, Align, APInt(DL.getIndexTypeSizeInBits(VTy), DL.getTypeStoreSize(Ty)), DL,
       CtxI, DT, Visited);
 }
 
@@ -414,7 +414,7 @@ Value *llvm::FindAvailablePtrLoadStore(Value *Ptr, Type *AccessTy,
 
       // If we have alias analysis and it says the store won't modify the loaded
       // value, ignore the store.
-      if (AA && (AA->getModRefInfo(SI, StrippedPtr, AccessSize) & MRI_Mod) == 0)
+      if (AA && !isModSet(AA->getModRefInfo(SI, StrippedPtr, AccessSize)))
         continue;
 
       // Otherwise the store that may or may not alias the pointer, bail out.
@@ -426,8 +426,7 @@ Value *llvm::FindAvailablePtrLoadStore(Value *Ptr, Type *AccessTy,
     if (Inst->mayWriteToMemory()) {
       // If alias analysis claims that it really won't modify the load,
       // ignore it.
-      if (AA &&
-          (AA->getModRefInfo(Inst, StrippedPtr, AccessSize) & MRI_Mod) == 0)
+      if (AA && !isModSet(AA->getModRefInfo(Inst, StrippedPtr, AccessSize)))
         continue;
 
       // May modify the pointer, bail out.

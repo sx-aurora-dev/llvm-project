@@ -739,6 +739,7 @@ ASTDeclReader::VisitRecordDeclImpl(RecordDecl *RD) {
   RD->setAnonymousStructOrUnion(Record.readInt());
   RD->setHasObjectMember(Record.readInt());
   RD->setHasVolatileMember(Record.readInt());
+  RD->setCanPassInRegisters(Record.readInt());
   return Redecl;
 }
 
@@ -786,15 +787,20 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
   FD->HasWrittenPrototype = Record.readInt();
   FD->IsDeleted = Record.readInt();
   FD->IsTrivial = Record.readInt();
+  FD->IsTrivialForCall = Record.readInt();
   FD->IsDefaulted = Record.readInt();
   FD->IsExplicitlyDefaulted = Record.readInt();
   FD->HasImplicitReturnZero = Record.readInt();
   FD->IsConstexpr = Record.readInt();
   FD->UsesSEHTry = Record.readInt();
   FD->HasSkippedBody = Record.readInt();
+  FD->IsMultiVersion = Record.readInt();
   FD->IsLateTemplateParsed = Record.readInt();
   FD->setCachedLinkage(Linkage(Record.readInt()));
   FD->EndRangeLoc = ReadSourceLocation();
+
+  FD->ODRHash = Record.readInt();
+  FD->HasODRHash = true;
 
   switch ((FunctionDecl::TemplatedKind)Record.readInt()) {
   case FunctionDecl::TK_NonTemplate:
@@ -1497,7 +1503,8 @@ void ASTDeclReader::VisitUsingPackDecl(UsingPackDecl *D) {
 void ASTDeclReader::VisitUsingShadowDecl(UsingShadowDecl *D) {
   RedeclarableResult Redecl = VisitRedeclarable(D);
   VisitNamedDecl(D);
-  D->setTargetDecl(ReadDeclAs<NamedDecl>());
+  D->Underlying = ReadDeclAs<NamedDecl>();
+  D->IdentifierNamespace = Record.readInt();
   D->UsingOrNextShadow = ReadDeclAs<NamedDecl>();
   UsingShadowDecl *Pattern = ReadDeclAs<UsingShadowDecl>();
   if (Pattern)
@@ -1572,11 +1579,12 @@ void ASTDeclReader::ReadCXXDefinitionData(
   Data.DefaultedMoveAssignmentIsDeleted = Record.readInt();
   Data.DefaultedDestructorIsDeleted = Record.readInt();
   Data.HasTrivialSpecialMembers = Record.readInt();
+  Data.HasTrivialSpecialMembersForCall = Record.readInt();
   Data.DeclaredNonTrivialSpecialMembers = Record.readInt();
+  Data.DeclaredNonTrivialSpecialMembersForCall = Record.readInt();
   Data.HasIrrelevantDestructor = Record.readInt();
   Data.HasConstexprNonCopyMoveConstructor = Record.readInt();
   Data.HasDefaultedDefaultConstructor = Record.readInt();
-  Data.CanPassInRegisters = Record.readInt();
   Data.DefaultedDefaultConstructorIsConstexpr = Record.readInt();
   Data.HasConstexprDefaultConstructor = Record.readInt();
   Data.HasNonLiteralTypeFieldsOrBases = Record.readInt();
@@ -1710,11 +1718,12 @@ void ASTDeclReader::MergeDefinitionData(
   MATCH_FIELD(DefaultedMoveAssignmentIsDeleted)
   MATCH_FIELD(DefaultedDestructorIsDeleted)
   OR_FIELD(HasTrivialSpecialMembers)
+  OR_FIELD(HasTrivialSpecialMembersForCall)
   OR_FIELD(DeclaredNonTrivialSpecialMembers)
+  OR_FIELD(DeclaredNonTrivialSpecialMembersForCall)
   MATCH_FIELD(HasIrrelevantDestructor)
   OR_FIELD(HasConstexprNonCopyMoveConstructor)
   OR_FIELD(HasDefaultedDefaultConstructor)
-  MATCH_FIELD(CanPassInRegisters)
   MATCH_FIELD(DefaultedDefaultConstructorIsConstexpr)
   OR_FIELD(HasConstexprDefaultConstructor)
   MATCH_FIELD(HasNonLiteralTypeFieldsOrBases)
@@ -1863,8 +1872,7 @@ ASTDeclReader::VisitCXXRecordDeclImpl(CXXRecordDecl *D) {
 
 void ASTDeclReader::VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D) {
   VisitFunctionDecl(D);
-  if (Record.readInt())
-    D->setIsCopyDeductionCandidate();
+  D->IsCopyDeductionCandidate = Record.readInt();
 }
 
 void ASTDeclReader::VisitCXXMethodDecl(CXXMethodDecl *D) {
@@ -1902,7 +1910,7 @@ void ASTDeclReader::VisitCXXDestructorDecl(CXXDestructorDecl *D) {
   VisitCXXMethodDecl(D);
 
   if (auto *OperatorDelete = ReadDeclAs<FunctionDecl>()) {
-    auto *Canon = cast<CXXDestructorDecl>(D->getCanonicalDecl());
+    CXXDestructorDecl *Canon = D->getCanonicalDecl();
     auto *ThisArg = Record.readExpr();
     // FIXME: Check consistency if we have an old and new operator delete.
     if (!Canon->OperatorDelete) {
@@ -2199,6 +2207,7 @@ ASTDeclReader::VisitVarTemplateSpecializationDeclImpl(
   D->TemplateArgs = TemplateArgumentList::CreateCopy(C, TemplArgs);
   D->PointOfInstantiation = ReadSourceLocation();
   D->SpecializationKind = (TemplateSpecializationKind)Record.readInt();
+  D->IsCompleteDefinition = Record.readInt();
 
   bool writtenAsCanonicalDecl = Record.readInt();
   if (writtenAsCanonicalDecl) {
@@ -2814,6 +2823,21 @@ static bool isSameEntity(NamedDecl *X, NamedDecl *Y) {
                         CtorY->getInheritedConstructor().getConstructor()))
         return false;
     }
+
+    if (FuncX->isMultiVersion() != FuncY->isMultiVersion())
+      return false;
+
+    // Multiversioned functions with different feature strings are represented
+    // as separate declarations.
+    if (FuncX->isMultiVersion()) {
+      const auto *TAX = FuncX->getAttr<TargetAttr>();
+      const auto *TAY = FuncY->getAttr<TargetAttr>();
+      assert(TAX && TAY && "Multiversion Function without target attribute");
+
+      if (TAX->getFeaturesStr() != TAY->getFeaturesStr())
+        return false;
+    }
+
     ASTContext &C = FuncX->getASTContext();
     if (!C.hasSameType(FuncX->getType(), FuncY->getType())) {
       // We can get functions with different types on the redecl chain in C++17
@@ -2822,7 +2846,7 @@ static bool isSameEntity(NamedDecl *X, NamedDecl *Y) {
       // FIXME: Do we need to check for C++14 deduced return types here too?
       auto *XFPT = FuncX->getType()->getAs<FunctionProtoType>();
       auto *YFPT = FuncY->getType()->getAs<FunctionProtoType>();
-      if (C.getLangOpts().CPlusPlus1z && XFPT && YFPT &&
+      if (C.getLangOpts().CPlusPlus17 && XFPT && YFPT &&
           (isUnresolvedExceptionSpec(XFPT->getExceptionSpecType()) ||
            isUnresolvedExceptionSpec(YFPT->getExceptionSpecType())) &&
           C.hasSameFunctionTypeIgnoringExceptionSpec(FuncX->getType(),
@@ -3984,10 +4008,10 @@ void ASTDeclReader::UpdateDecl(Decl *D,
       break;
     }
 
-    case UPD_CXX_INSTANTIATED_STATIC_DATA_MEMBER: {
+    case UPD_CXX_ADDED_VAR_DEFINITION: {
       VarDecl *VD = cast<VarDecl>(D);
-      VD->getMemberSpecializationInfo()->setPointOfInstantiation(
-          ReadSourceLocation());
+      VD->NonParmVarDeclBits.IsInline = Record.readInt();
+      VD->NonParmVarDeclBits.IsInlineSpecified = Record.readInt();
       uint64_t Val = Record.readInt();
       if (Val && !VD->getInit()) {
         VD->setInit(Record.readExpr());
@@ -3996,6 +4020,25 @@ void ASTDeclReader::UpdateDecl(Decl *D,
           Eval->CheckedICE = true;
           Eval->IsICE = Val == 3;
         }
+      }
+      break;
+    }
+
+    case UPD_CXX_POINT_OF_INSTANTIATION: {
+      SourceLocation POI = Record.readSourceLocation();
+      if (VarTemplateSpecializationDecl *VTSD =
+              dyn_cast<VarTemplateSpecializationDecl>(D)) {
+        VTSD->setPointOfInstantiation(POI);
+      } else if (auto *VD = dyn_cast<VarDecl>(D)) {
+        VD->getMemberSpecializationInfo()->setPointOfInstantiation(POI);
+      } else {
+        auto *FD = cast<FunctionDecl>(D);
+        if (auto *FTSInfo = FD->TemplateOrSpecialization
+                    .dyn_cast<FunctionTemplateSpecializationInfo *>())
+          FTSInfo->setPointOfInstantiation(POI);
+        else
+          FD->TemplateOrSpecialization.get<MemberSpecializationInfo *>()
+              ->setPointOfInstantiation(POI);
       }
       break;
     }

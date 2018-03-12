@@ -29,8 +29,8 @@ namespace {
 
 #define TWO_STATISTICS(VARNAME, DESC)                                          \
   static llvm::Statistic VARNAME[2] = {                                        \
-      {DEBUG_TYPE, #VARNAME "0", DESC " (first)", {0}, false},                 \
-      {DEBUG_TYPE, #VARNAME "1", DESC " (second)", {0}, false}}
+      {DEBUG_TYPE, #VARNAME "0", DESC " (first)", {0}, {false}},               \
+      {DEBUG_TYPE, #VARNAME "1", DESC " (second)", {0}, {false}}}
 
 /// Number of max disjuncts we allow in removeOverwrites(). This is to avoid
 /// that the analysis of accesses in a statement is becoming too complex. Chosen
@@ -234,11 +234,11 @@ private:
         assert(V);
         isl::set &Result = ValueSets[V];
         if (Result.is_null()) {
-          isl_ctx *Ctx = S->getIslCtx();
+          isl::ctx Ctx = S->getIslCtx();
           std::string Name =
               getIslCompatibleName("Val", V, ValueSets.size() - 1,
                                    std::string(), UseInstructionNames);
-          isl::id Id = give(isl_id_alloc(Ctx, Name.c_str(), V));
+          isl::id Id = isl::id::alloc(Ctx, Name, V);
           Result = isl::set::universe(
               isl::space(Ctx, 0, 0).set_tuple_id(isl::dim::set, Id));
         }
@@ -404,7 +404,7 @@ private:
         assert(V);
         isl::set &Result = ValueSets[V];
         if (Result.is_null()) {
-          isl_ctx *Ctx = S->getIslCtx();
+          isl_ctx *Ctx = S->getIslCtx().get();
           std::string Name =
               getIslCompatibleName("Val", V, ValueSets.size() - 1,
                                    std::string(), UseInstructionNames);

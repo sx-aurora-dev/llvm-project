@@ -12,24 +12,34 @@
 
 #include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
+#include "llvm/Support/TargetRegistry.h"
 
 #define DEBUG_TYPE "instruction-select"
 
 using namespace llvm;
+
+#ifdef LLVM_GISEL_COV_PREFIX
+static cl::opt<std::string>
+    CoveragePrefix("gisel-coverage-prefix", cl::init(LLVM_GISEL_COV_PREFIX),
+                   cl::desc("Record GlobalISel rule coverage files of this "
+                            "prefix if instrumentation was generated"));
+#else
+static const std::string CoveragePrefix = "";
+#endif
 
 char InstructionSelect::ID = 0;
 INITIALIZE_PASS_BEGIN(InstructionSelect, DEBUG_TYPE,
@@ -50,13 +60,6 @@ void InstructionSelect::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
-  const MachineRegisterInfo &MRI = MF.getRegInfo();
-
-  // No matter what happens, whether we successfully select the function or not,
-  // nothing is going to use the vreg types after us.  Make sure they disappear.
-  auto ClearVRegTypesOnReturn =
-      make_scope_exit([&]() { MRI.getVRegToType().clear(); });
-
   // If the ISel pipeline failed, do not bother running that pass.
   if (MF.getProperties().hasProperty(
           MachineFunctionProperties::Property::FailedISel))
@@ -66,6 +69,7 @@ bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
 
   const TargetPassConfig &TPC = getAnalysis<TargetPassConfig>();
   const InstructionSelector *ISel = MF.getSubtarget().getInstructionSelector();
+  CodeGenCoverage CoverageInfo;
   assert(ISel && "Cannot work without InstructionSelector");
 
   // An optimization remark emitter. Used to report failures.
@@ -73,23 +77,18 @@ bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
 
   // FIXME: There are many other MF/MFI fields we need to initialize.
 
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
 #ifndef NDEBUG
   // Check that our input is fully legal: we require the function to have the
   // Legalized property, so it should be.
-  // FIXME: This should be in the MachineVerifier, but it can't use the
-  // LegalizerInfo as it's currently in the separate GlobalISel library.
-  // The RegBankSelected property is already checked in the verifier. Note
-  // that it has the same layering problem, but we only use inline methods so
-  // end up not needing to link against the GlobalISel library.
-  if (const LegalizerInfo *MLI = MF.getSubtarget().getLegalizerInfo())
-    for (MachineBasicBlock &MBB : MF)
-      for (MachineInstr &MI : MBB)
-        if (isPreISelGenericOpcode(MI.getOpcode()) && !MLI->isLegal(MI, MRI)) {
-          reportGISelFailure(MF, TPC, MORE, "gisel-select",
-                             "instruction is not legal", MI);
-          return false;
-        }
-
+  // FIXME: This should be in the MachineVerifier, as the RegBankSelected
+  // property check already is.
+  if (!DisableGISelLegalityCheck)
+    if (const MachineInstr *MI = machineFunctionIsIllegal(MF)) {
+      reportGISelFailure(MF, TPC, MORE, "gisel-select",
+                         "instruction is not legal", *MI);
+      return false;
+    }
 #endif
   // FIXME: We could introduce new blocks and will need to fix the outer loop.
   // Until then, keep track of the number of blocks to assert that we don't.
@@ -127,7 +126,7 @@ bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
 
-      if (!ISel->select(MI)) {
+      if (!ISel->select(MI, CoverageInfo)) {
         // FIXME: It would be nice to dump all inserted instructions.  It's
         // not obvious how, esp. considering select() can insert after MI.
         reportGISelFailure(MF, TPC, MORE, "gisel-select", "cannot select", MI);
@@ -146,6 +145,38 @@ bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
   }
 
   const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
+
+  for (MachineBasicBlock &MBB : MF) {
+    if (MBB.empty())
+      continue;
+
+    // Try to find redundant copies b/w vregs of the same register class.
+    bool ReachedBegin = false;
+    for (auto MII = std::prev(MBB.end()), Begin = MBB.begin(); !ReachedBegin;) {
+      // Select this instruction.
+      MachineInstr &MI = *MII;
+
+      // And have our iterator point to the next instruction, if there is one.
+      if (MII == Begin)
+        ReachedBegin = true;
+      else
+        --MII;
+      if (MI.getOpcode() != TargetOpcode::COPY)
+        continue;
+      unsigned SrcReg = MI.getOperand(1).getReg();
+      unsigned DstReg = MI.getOperand(0).getReg();
+      if (TargetRegisterInfo::isVirtualRegister(SrcReg) &&
+          TargetRegisterInfo::isVirtualRegister(DstReg)) {
+        MachineRegisterInfo &MRI = MF.getRegInfo();
+        auto SrcRC = MRI.getRegClass(SrcReg);
+        auto DstRC = MRI.getRegClass(DstReg);
+        if (SrcRC == DstRC) {
+          MRI.replaceRegWith(DstReg, SrcReg);
+          MI.eraseFromParentAndMarkDBGValuesForRemoval();
+        }
+      }
+    }
+  }
 
   // Now that selection is complete, there are no more generic vregs.  Verify
   // that the size of the now-constrained vreg is unchanged and that it has a
@@ -177,7 +208,7 @@ bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
 
   if (MF.size() != NumBlocks) {
     MachineOptimizationRemarkMissed R("gisel-select", "GISelFailure",
-                                      MF.getFunction()->getSubprogram(),
+                                      MF.getFunction().getSubprogram(),
                                       /*MBB=*/nullptr);
     R << "inserting blocks is not supported yet";
     reportGISelFailure(MF, TPC, MORE, R);
@@ -186,6 +217,18 @@ bool InstructionSelect::runOnMachineFunction(MachineFunction &MF) {
 
   auto &TLI = *MF.getSubtarget().getTargetLowering();
   TLI.finalizeLowering(MF);
+
+  CoverageInfo.emit(CoveragePrefix,
+                    MF.getSubtarget()
+                        .getTargetLowering()
+                        ->getTargetMachine()
+                        .getTarget()
+                        .getBackendName());
+
+  // If we successfully selected the function nothing is going to use the vreg
+  // types after us (otherwise MIRPrinter would need them). Make sure the types
+  // disappear.
+  MRI.getVRegToType().clear();
 
   // FIXME: Should we accurately track changes?
   return true;

@@ -24,6 +24,7 @@
 
 namespace llvm {
 
+class Function;
 class GlobalValue;
 class MachineModuleInfo;
 class Mangler;
@@ -38,6 +39,7 @@ class PassManagerBuilder;
 class Target;
 class TargetIntrinsicInfo;
 class TargetIRAnalysis;
+class TargetTransformInfo;
 class TargetLoweringObjectFile;
 class TargetPassConfig;
 class TargetSubtargetInfo;
@@ -170,6 +172,9 @@ public:
 
   bool shouldAssumeDSOLocal(const Module &M, const GlobalValue *GV) const;
 
+  /// Returns true if this target uses emulated TLS.
+  bool useEmulatedTLS() const;
+
   /// Returns the TLS model which should be used for the given global variable.
   TLSModel::Model getTLSModel(const GlobalValue *GV) const;
 
@@ -182,6 +187,7 @@ public:
   void setFastISel(bool Enable) { Options.EnableFastISel = Enable; }
   bool getO0WantsFastISel() { return O0WantsFastISel; }
   void setO0WantsFastISel(bool Enable) { O0WantsFastISel = Enable; }
+  void setGlobalISel(bool Enable) { Options.EnableGlobalISel = Enable; }
 
   bool shouldPrintMachineCode() const { return Options.PrintMachineCode; }
 
@@ -204,7 +210,13 @@ public:
   /// This is used to construct the new pass manager's target IR analysis pass,
   /// set up appropriately for this target machine. Even the old pass manager
   /// uses this to answer queries about the IR.
-  virtual TargetIRAnalysis getTargetIRAnalysis();
+  TargetIRAnalysis getTargetIRAnalysis();
+
+  /// \brief Return a TargetTransformInfo for a given function.
+  ///
+  /// The returned TargetTransformInfo is specialized to the subtarget
+  /// corresponding to \p F.
+  virtual TargetTransformInfo getTargetTransformInfo(const Function &F);
 
   /// Allow the target to modify the pass manager, e.g. by calling
   /// PassManagerBuilder::addExtension.
@@ -280,11 +292,11 @@ protected: // Can only create subclasses.
   void initAsmInfo();
 
 public:
-  /// \brief Get a TargetIRAnalysis implementation for the target.
+  /// \brief Get a TargetTransformInfo implementation for the target.
   ///
-  /// This analysis will produce a TTI result which uses the common code
-  /// generator to answer queries about the IR.
-  TargetIRAnalysis getTargetIRAnalysis() override;
+  /// The TTI returned uses the common code generator to answer queries about
+  /// the IR.
+  TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 
   /// Create a pass configuration object to be used by addPassToEmitX methods
   /// for generating a pipeline of CodeGen passes.

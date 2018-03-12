@@ -308,6 +308,9 @@ def BND1 : X86Reg<"bnd1",   1>;
 def BND2 : X86Reg<"bnd2",   2>;
 def BND3 : X86Reg<"bnd3",   3>;
 
+// CET registers - Shadow Stack Pointer
+def SSP : X86Reg<"ssp", 0>;
+
 //===----------------------------------------------------------------------===//
 // Register Class Definitions... now that we have all of the pieces, define the
 // top-level register classes.  The order specified in the register list is
@@ -357,7 +360,7 @@ def GR64 : RegisterClass<"X86", [i64], 64,
 def SEGMENT_REG : RegisterClass<"X86", [i16], 16, (add CS, DS, SS, ES, FS, GS)>;
 
 // Debug registers.
-def DEBUG_REG : RegisterClass<"X86", [i32], 32, (sequence "DR%u", 0, 7)>;
+def DEBUG_REG : RegisterClass<"X86", [i32], 32, (sequence "DR%u", 0, 15)>;
 
 // Control registers.
 def CONTROL_REG : RegisterClass<"X86", [i64], 64, (sequence "CR%u", 0, 15)>;
@@ -396,11 +399,6 @@ def GR32_NOREX : RegisterClass<"X86", [i32], 32,
 // GR64_NOREX - GR64 registers which do not require a REX prefix.
 def GR64_NOREX : RegisterClass<"X86", [i64], 64,
                             (add RAX, RCX, RDX, RSI, RDI, RBX, RBP, RSP, RIP)>;
-
-// GR32_NOAX - GR32 registers except EAX. Used by AddRegFrm of XCHG32 in 64-bit
-// mode to prevent encoding using the 0x90 NOP encoding. xchg %eax, %eax needs
-// to clear upper 32-bits of RAX so is not a NOP.
-def GR32_NOAX : RegisterClass<"X86", [i32], 32, (sub GR32, EAX)>;
 
 // GR32_NOSP - GR32 registers except ESP.
 def GR32_NOSP : RegisterClass<"X86", [i32], 32, (sub GR32, ESP)>;

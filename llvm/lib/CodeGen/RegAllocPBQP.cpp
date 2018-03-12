@@ -43,9 +43,9 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/CalcSpillWeights.h"
 #include "llvm/CodeGen/LiveInterval.h"
-#include "llvm/CodeGen/LiveIntervalAnalysis.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/LiveRangeEdit.h"
-#include "llvm/CodeGen/LiveStackAnalysis.h"
+#include "llvm/CodeGen/LiveStacks.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -59,6 +59,8 @@
 #include "llvm/CodeGen/PBQPRAConstraint.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/SlotIndexes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -70,8 +72,6 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Printable.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -561,16 +561,7 @@ void RegAllocPBQP::findVRegIntervalsToAlloc(const MachineFunction &MF,
     unsigned Reg = TargetRegisterInfo::index2VirtReg(I);
     if (MRI.reg_nodbg_empty(Reg))
       continue;
-    LiveInterval &LI = LIS.getInterval(Reg);
-
-    // If this live interval is non-empty we will use pbqp to allocate it.
-    // Empty intervals we allocate in a simple post-processing stage in
-    // finalizeAlloc.
-    if (!LI.empty()) {
-      VRegsToAlloc.insert(LI.reg);
-    } else {
-      EmptyIntervalVRegs.insert(LI.reg);
-    }
+    VRegsToAlloc.insert(Reg);
   }
 }
 
@@ -594,12 +585,23 @@ void RegAllocPBQP::initializeGraph(PBQPRAGraph &G, VirtRegMap &VRM,
 
   std::vector<unsigned> Worklist(VRegsToAlloc.begin(), VRegsToAlloc.end());
 
+  std::map<unsigned, std::vector<unsigned>> VRegAllowedMap;
+
   while (!Worklist.empty()) {
     unsigned VReg = Worklist.back();
     Worklist.pop_back();
 
-    const TargetRegisterClass *TRC = MRI.getRegClass(VReg);
     LiveInterval &VRegLI = LIS.getInterval(VReg);
+
+    // If this is an empty interval move it to the EmptyIntervalVRegs set then
+    // continue.
+    if (VRegLI.empty()) {
+      EmptyIntervalVRegs.insert(VRegLI.reg);
+      VRegsToAlloc.erase(VRegLI.reg);
+      continue;
+    }
+
+    const TargetRegisterClass *TRC = MRI.getRegClass(VReg);
 
     // Record any overlaps with regmask operands.
     BitVector RegMaskOverlaps;
@@ -639,7 +641,21 @@ void RegAllocPBQP::initializeGraph(PBQPRAGraph &G, VirtRegMap &VRM,
       spillVReg(VReg, NewVRegs, MF, LIS, VRM, VRegSpiller);
       Worklist.insert(Worklist.end(), NewVRegs.begin(), NewVRegs.end());
       continue;
+    } else
+      VRegAllowedMap[VReg] = std::move(VRegAllowed);
+  }
+
+  for (auto &KV : VRegAllowedMap) {
+    auto VReg = KV.first;
+
+    // Move empty intervals to the EmptyIntervalVReg set.
+    if (LIS.getInterval(VReg).empty()) {
+      EmptyIntervalVRegs.insert(VReg);
+      VRegsToAlloc.erase(VReg);
+      continue;
     }
+
+    auto &VRegAllowed = KV.second;
 
     PBQPRAGraph::RawVector NodeCosts(VRegAllowed.size() + 1, 0);
 
@@ -668,7 +684,7 @@ void RegAllocPBQP::spillVReg(unsigned VReg,
 
   const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
   (void)TRI;
-  DEBUG(dbgs() << "VREG " << PrintReg(VReg, &TRI) << " -> SPILLED (Cost: "
+  DEBUG(dbgs() << "VREG " << printReg(VReg, &TRI) << " -> SPILLED (Cost: "
                << LRE.getParent().weight << ", New vregs: ");
 
   // Copy any newly inserted live intervals into the list of regs to
@@ -677,7 +693,7 @@ void RegAllocPBQP::spillVReg(unsigned VReg,
        I != E; ++I) {
     const LiveInterval &LI = LIS.getInterval(*I);
     assert(!LI.empty() && "Empty spill range.");
-    DEBUG(dbgs() << PrintReg(LI.reg, &TRI) << " ");
+    DEBUG(dbgs() << printReg(LI.reg, &TRI) << " ");
     VRegsToAlloc.insert(LI.reg);
   }
 
@@ -707,7 +723,7 @@ bool RegAllocPBQP::mapPBQPToRegAlloc(const PBQPRAGraph &G,
 
     if (AllocOption != PBQP::RegAlloc::getSpillOptionIdx()) {
       unsigned PReg = G.getNodeMetadata(NId).getAllowedRegs()[AllocOption - 1];
-      DEBUG(dbgs() << "VREG " << PrintReg(VReg, &TRI) << " -> "
+      DEBUG(dbgs() << "VREG " << printReg(VReg, &TRI) << " -> "
             << TRI.getName(PReg) << "\n");
       assert(PReg != 0 && "Invalid preg selected.");
       VRM.assignVirt2Phys(VReg, PReg);
@@ -799,7 +815,7 @@ bool RegAllocPBQP::runOnMachineFunction(MachineFunction &MF) {
   findVRegIntervalsToAlloc(MF, LIS);
 
 #ifndef NDEBUG
-  const Function &F = *MF.getFunction();
+  const Function &F = MF.getFunction();
   std::string FullyQualifiedName =
     F.getParent()->getModuleIdentifier() + "." + F.getName().str();
 #endif
@@ -864,7 +880,7 @@ static Printable PrintNodeInfo(PBQP::RegAlloc::PBQPRAGraph::NodeId NId,
     const TargetRegisterInfo *TRI = MRI.getTargetRegisterInfo();
     unsigned VReg = G.getNodeMetadata(NId).getVReg();
     const char *RegClassName = TRI->getRegClassName(MRI.getRegClass(VReg));
-    OS << NId << " (" << RegClassName << ':' << PrintReg(VReg, TRI) << ')';
+    OS << NId << " (" << RegClassName << ':' << printReg(VReg, TRI) << ')';
   });
 }
 

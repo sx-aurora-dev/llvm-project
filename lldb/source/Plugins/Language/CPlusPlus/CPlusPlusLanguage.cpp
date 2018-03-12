@@ -251,13 +251,17 @@ std::string CPlusPlusLanguage::MethodName::GetScopeQualifiedName() {
 }
 
 bool CPlusPlusLanguage::IsCPPMangledName(const char *name) {
-  // FIXME, we should really run through all the known C++ Language plugins and
-  // ask each one if
-  // this is a C++ mangled name, but we can put that off till there is actually
-  // more than one
-  // we care about.
-
-  return (name != nullptr && name[0] == '_' && name[1] == 'Z');
+  // FIXME!! we should really run through all the known C++ Language
+  // plugins and ask each one if this is a C++ mangled name
+  
+  if (name == nullptr)
+    return false;
+  
+  // MSVC style mangling 
+  if (name[0] == '?')
+    return true;
+  
+  return (name[0] != '\0' && name[0] == '_' && name[1] == 'Z');
 }
 
 bool CPlusPlusLanguage::ExtractContextAndIdentifier(
@@ -422,10 +426,22 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
 
   AddCXXSynthetic(
       cpp_category_sp,
+      lldb_private::formatters::LibcxxBitsetSyntheticFrontEndCreator,
+      "libc++ std::bitset synthetic children",
+      ConstString("^std::__(ndk)?1::bitset<.+>(( )?&)?$"), stl_synth_flags,
+      true);
+  AddCXXSynthetic(
+      cpp_category_sp,
       lldb_private::formatters::LibcxxStdVectorSyntheticFrontEndCreator,
       "libc++ std::vector synthetic children",
       ConstString("^std::__(ndk)?1::vector<.+>(( )?&)?$"), stl_synth_flags,
       true);
+  AddCXXSynthetic(
+      cpp_category_sp,
+      lldb_private::formatters::LibcxxStdForwardListSyntheticFrontEndCreator,
+      "libc++ std::forward_list synthetic children",
+      ConstString("^std::__(ndk)?1::forward_list<.+>(( )?&)?$"),
+      stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdListSyntheticFrontEndCreator,
@@ -467,6 +483,14 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       "libc++ std::initializer_list synthetic children",
       ConstString("^std::initializer_list<.+>(( )?&)?$"), stl_synth_flags,
       true);
+  AddCXXSynthetic(cpp_category_sp, LibcxxQueueFrontEndCreator,
+                  "libc++ std::queue synthetic children",
+                  ConstString("^std::__(ndk)?1::queue<.+>(( )?&)?$"),
+                  stl_synth_flags, true);
+  AddCXXSynthetic(cpp_category_sp, LibcxxTupleFrontEndCreator,
+                  "libc++ std::tuple synthetic children",
+                  ConstString("^std::__(ndk)?1::tuple<.*>(( )?&)?$"), stl_synth_flags,
+                  true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxAtomicSyntheticFrontEndCreator,
@@ -497,8 +521,18 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
   stl_summary_flags.SetSkipPointers(false);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
+                "libc++ std::bitset summary provider",
+                ConstString("^std::__(ndk)?1::bitset<.+>(( )?&)?$"),
+                stl_summary_flags, true);
+  AddCXXSummary(cpp_category_sp,
+                lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::vector summary provider",
                 ConstString("^std::__(ndk)?1::vector<.+>(( )?&)?$"),
+                stl_summary_flags, true);
+  AddCXXSummary(cpp_category_sp,
+                lldb_private::formatters::LibcxxContainerSummaryProvider,
+                "libc++ std::list summary provider",
+                ConstString("^std::__(ndk)?1::forward_list<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
@@ -514,6 +548,11 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::deque summary provider",
                 ConstString("^std::__(ndk)?1::deque<.+>(( )?&)?$"),
+                stl_summary_flags, true);
+  AddCXXSummary(cpp_category_sp,
+                lldb_private::formatters::LibcxxContainerSummaryProvider,
+                "libc++ std::queue summary provider",
+                ConstString("^std::__(ndk)?1::queue<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
@@ -535,6 +574,10 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       "libc++ std::unordered containers summary provider",
       ConstString("^(std::__(ndk)?1::)unordered_(multi)?(map|set)<.+> >$"),
       stl_summary_flags, true);
+  AddCXXSummary(cpp_category_sp, LibcxxContainerSummaryProvider,
+                "libc++ std::tuple summary provider",
+                ConstString("^std::__(ndk)?1::tuple<.*>(( )?&)?$"), stl_summary_flags,
+                true);
   AddCXXSummary(
       cpp_category_sp, lldb_private::formatters::LibCxxAtomicSummaryProvider,
       "libc++ std::atomic summary provider",

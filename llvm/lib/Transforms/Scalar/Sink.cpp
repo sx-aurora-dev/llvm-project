@@ -68,7 +68,7 @@ static bool isSafeToMove(Instruction *Inst, AliasAnalysis &AA,
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
     MemoryLocation Loc = MemoryLocation::get(L);
     for (Instruction *S : Stores)
-      if (AA.getModRefInfo(S, Loc) & MRI_Mod)
+      if (isModSet(AA.getModRefInfo(S, Loc)))
         return false;
   }
 
@@ -83,7 +83,7 @@ static bool isSafeToMove(Instruction *Inst, AliasAnalysis &AA,
       return false;
 
     for (Instruction *S : Stores)
-      if (AA.getModRefInfo(S, CS) & MRI_Mod)
+      if (isModSet(AA.getModRefInfo(S, CS)))
         return false;
   }
 
@@ -114,7 +114,7 @@ static bool IsAcceptableTarget(Instruction *Inst, BasicBlock *SuccToSinkTo,
   if (SuccToSinkTo->getUniquePredecessor() != Inst->getParent()) {
     // We cannot sink a load across a critical edge - there may be stores in
     // other code paths.
-    if (isa<LoadInst>(Inst))
+    if (Inst->mayReadFromMemory())
       return false;
 
     // We don't want to sink across a critical edge if we don't dominate the

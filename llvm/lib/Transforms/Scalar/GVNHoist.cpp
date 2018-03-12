@@ -570,7 +570,7 @@ private:
   // The ides is inspired from:
   // "Partial Redundancy Elimination in SSA Form"
   // ROBERT KENNEDY, SUN CHAN, SHIN-MING LIU, RAYMOND LO, PENG TU and FRED CHOW
-  // They use similar idea in the forward graph to to find fully redundant and
+  // They use similar idea in the forward graph to find fully redundant and
   // partially redundant expressions, here it is used in the inverse graph to
   // find fully anticipable instructions at merge point (post-dominator in
   // the inverse CFG).
@@ -578,7 +578,7 @@ private:
 
   // Returns true when the values are flowing out to each edge.
   bool valueAnticipable(CHIArgs C, TerminatorInst *TI) const {
-    if (TI->getNumSuccessors() > std::distance(C.begin(), C.end()))
+    if (TI->getNumSuccessors() > (unsigned)std::distance(C.begin(), C.end()))
       return false; // Not enough args in this CHI.
 
     for (auto CHI : C) {
@@ -648,7 +648,7 @@ private:
           // track in a CHI. In the PDom walk, there can be values in the
           // stack which are not control dependent e.g., nested loop.
           if (si != RenameStack.end() && si->second.size() &&
-              DT->dominates(Pred, si->second.back()->getParent())) {
+              DT->properlyDominates(Pred, si->second.back()->getParent())) {
             C.Dest = BB;                     // Assign the edge
             C.I = si->second.pop_back_val(); // Assign the argument
             DEBUG(dbgs() << "\nCHI Inserted in BB: " << C.Dest->getName()
@@ -703,7 +703,7 @@ private:
       // Vector of PHIs contains PHIs for different instructions.
       // Sort the args according to their VNs, such that identical
       // instructions are together.
-      std::sort(CHIs.begin(), CHIs.end(), cmpVN);
+      std::stable_sort(CHIs.begin(), CHIs.end(), cmpVN);
       auto TI = BB->getTerminator();
       auto B = CHIs.begin();
       // [PreIt, PHIIt) form a range of CHIs which have identical VNs.
@@ -795,8 +795,8 @@ private:
       for (auto IDFB : IDFBlocks) { // TODO: Prune out useless CHI insertions.
         for (unsigned i = 0; i < V.size(); ++i) {
           CHIArg C = {VN, nullptr, nullptr};
-          if (DT->dominates(IDFB, V[i]->getParent())) { // Ignore spurious PDFs.
-            // InValue[V[i]->getParent()].push_back(std::make_pair(VN, V[i]));
+           // Ignore spurious PDFs.
+          if (DT->properlyDominates(IDFB, V[i]->getParent())) {
             OutValue[IDFB].push_back(C);
             DEBUG(dbgs() << "\nInsertion a CHI for BB: " << IDFB->getName()
                          << ", for Insn: " << *V[i]);
@@ -1110,7 +1110,8 @@ private:
         else if (auto *Call = dyn_cast<CallInst>(&I1)) {
           if (auto *Intr = dyn_cast<IntrinsicInst>(Call)) {
             if (isa<DbgInfoIntrinsic>(Intr) ||
-                Intr->getIntrinsicID() == Intrinsic::assume)
+                Intr->getIntrinsicID() == Intrinsic::assume ||
+                Intr->getIntrinsicID() == Intrinsic::sideeffect)
               continue;
           }
           if (Call->mayHaveSideEffects())
@@ -1199,6 +1200,7 @@ INITIALIZE_PASS_BEGIN(GVNHoistLegacyPass, "gvn-hoist",
 INITIALIZE_PASS_DEPENDENCY(MemoryDependenceWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MemorySSAWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(PostDominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_END(GVNHoistLegacyPass, "gvn-hoist",
                     "Early GVN Hoisting of Expressions", false, false)

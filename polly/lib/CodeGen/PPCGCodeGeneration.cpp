@@ -287,7 +287,7 @@ static __isl_give isl_id_to_ast_expr *pollyBuildAstExprForStmt(
   if (!Stmt || !Build_C)
     return NULL;
 
-  isl::ast_build Build = isl::manage(isl_ast_build_copy(Build_C));
+  isl::ast_build Build = isl::manage_copy(Build_C);
   isl::ctx Ctx = Build.get_ctx();
   isl::id_to_ast_expr RefToExpr = isl::id_to_ast_expr::alloc(Ctx, 0);
 
@@ -1103,8 +1103,7 @@ Value *GPUNodeBuilder::getArraySize(gpu_array_info *Array) {
   Value *ArraySize = ConstantInt::get(Builder.getInt64Ty(), Array->size);
 
   if (!gpu_array_is_scalar(Array)) {
-    isl::multi_pw_aff ArrayBound =
-        isl::manage(isl_multi_pw_aff_copy(Array->bound));
+    isl::multi_pw_aff ArrayBound = isl::manage_copy(Array->bound);
 
     isl::pw_aff OffsetDimZero = ArrayBound.get_pw_aff(0);
     isl::ast_expr Res = Build.expr_from(OffsetDimZero);
@@ -1129,7 +1128,7 @@ Value *GPUNodeBuilder::getArrayOffset(gpu_array_info *Array) {
 
   isl::ast_build Build = isl::ast_build::from_context(S.getContext());
 
-  isl::set Min = isl::manage(isl_set_copy(Array->extent)).lexmin();
+  isl::set Min = isl::manage_copy(Array->extent).lexmin();
 
   isl::set ZeroSet = isl::set::universe(Min.get_space());
 
@@ -1286,7 +1285,6 @@ void GPUNodeBuilder::createUser(__isl_take isl_ast_node *UserStmt) {
 
   isl_ast_expr_free(Expr);
   isl_ast_node_free(UserStmt);
-  return;
 }
 
 void GPUNodeBuilder::createFor(__isl_take isl_ast_node *Node) {
@@ -1577,8 +1575,7 @@ std::tuple<Value *, Value *> GPUNodeBuilder::getGridSizes(ppcg_kernel *Kernel) {
   std::vector<Value *> Sizes;
   isl::ast_build Context = isl::ast_build::from_context(S.getContext());
 
-  isl::multi_pw_aff GridSizePwAffs =
-      isl::manage(isl_multi_pw_aff_copy(Kernel->grid_size));
+  isl::multi_pw_aff GridSizePwAffs = isl::manage_copy(Kernel->grid_size);
   for (long i = 0; i < Kernel->n_grid; i++) {
     isl::pw_aff Size = GridSizePwAffs.get_pw_aff(i);
     isl::ast_expr GridSize = Context.expr_from(Size);
@@ -2013,8 +2010,7 @@ GPUNodeBuilder::createKernelFunctionDecl(ppcg_kernel *Kernel,
     Arg->setName(Kernel->array[i].array->name);
 
     isl_id *Id = isl_space_get_tuple_id(Prog->array[i].space, isl_dim_set);
-    const ScopArrayInfo *SAI =
-        ScopArrayInfo::getFromId(isl::manage(isl_id_copy(Id)));
+    const ScopArrayInfo *SAI = ScopArrayInfo::getFromId(isl::manage_copy(Id));
     Type *EleTy = SAI->getElementType();
     Value *Val = &*Arg;
     SmallVector<const SCEV *, 4> Sizes;
@@ -2145,8 +2141,7 @@ void GPUNodeBuilder::prepareKernelArguments(ppcg_kernel *Kernel, Function *FN) {
       continue;
 
     isl_id *Id = isl_space_get_tuple_id(Prog->array[i].space, isl_dim_set);
-    const ScopArrayInfo *SAI =
-        ScopArrayInfo::getFromId(isl::manage(isl_id_copy(Id)));
+    const ScopArrayInfo *SAI = ScopArrayInfo::getFromId(isl::manage_copy(Id));
     isl_id_free(Id);
 
     if (SAI->getNumberOfDimensions() > 0) {
@@ -2179,8 +2174,7 @@ void GPUNodeBuilder::finalizeKernelArguments(ppcg_kernel *Kernel) {
       continue;
 
     isl_id *Id = isl_space_get_tuple_id(Prog->array[i].space, isl_dim_set);
-    const ScopArrayInfo *SAI =
-        ScopArrayInfo::getFromId(isl::manage(isl_id_copy(Id)));
+    const ScopArrayInfo *SAI = ScopArrayInfo::getFromId(isl::manage_copy(Id));
     isl_id_free(Id);
 
     if (SAI->getNumberOfDimensions() > 0) {
@@ -2262,7 +2256,7 @@ void GPUNodeBuilder::createKernelVariables(ppcg_kernel *Kernel, Function *FN) {
     }
     SAI =
         S.getOrCreateScopArrayInfo(Allocation, EleTy, Sizes, MemoryKind::Array);
-    Id = isl_id_alloc(S.getIslCtx(), Var.name, nullptr);
+    Id = isl_id_alloc(S.getIslCtx().get(), Var.name, nullptr);
     IDToValue[Id] = Allocation;
     LocalArrays.push_back(Allocation);
     KernelIds.push_back(Id);
@@ -2685,9 +2679,9 @@ public:
   /// @returns Retun a map from collected ids to 'zero' ast expressions.
   __isl_give isl_id_to_ast_expr *getNames() {
     auto *Names = isl_id_to_ast_expr_alloc(
-        S->getIslCtx(),
+        S->getIslCtx().get(),
         S->getNumParams() + std::distance(S->array_begin(), S->array_end()));
-    auto *Zero = isl_ast_expr_from_val(isl_val_zero(S->getIslCtx()));
+    auto *Zero = isl_ast_expr_from_val(isl_val_zero(S->getIslCtx().get()));
 
     for (const SCEV *P : S->parameters()) {
       isl_id *Id = S->getIdForParam(P).release();
@@ -2774,7 +2768,8 @@ public:
     gpu_stmt_access *Accesses = nullptr;
 
     for (MemoryAccess *Acc : Stmt) {
-      auto Access = isl_alloc_type(S->getIslCtx(), struct gpu_stmt_access);
+      auto Access =
+          isl_alloc_type(S->getIslCtx().get(), struct gpu_stmt_access);
       Access->read = Acc->isRead();
       Access->write = Acc->isWrite();
       Access->access = Acc->getAccessRelation().release();
@@ -2807,7 +2802,7 @@ public:
   ///
   /// @returns A linked-list of statements.
   gpu_stmt *getStatements() {
-    gpu_stmt *Stmts = isl_calloc_array(S->getIslCtx(), struct gpu_stmt,
+    gpu_stmt *Stmts = isl_calloc_array(S->getIslCtx().get(), struct gpu_stmt,
                                        std::distance(S->begin(), S->end()));
 
     int i = 0;
@@ -2979,7 +2974,7 @@ public:
     assert(AlignSpace && "alignPwAffs did not initialise AlignSpace");
 
     isl_pw_aff_list *BoundsList =
-        createPwAffList(S->getIslCtx(), std::move(AlignedBounds));
+        createPwAffList(S->getIslCtx().get(), std::move(AlignedBounds));
 
     isl_space *BoundsSpace = isl_set_get_space(PPCGArray.extent);
     BoundsSpace = isl_space_align_params(BoundsSpace, AlignSpace);
@@ -3060,9 +3055,9 @@ public:
     if (!PPCGScop)
       return nullptr;
 
-    auto PPCGProg = isl_calloc_type(S->getIslCtx(), struct gpu_prog);
+    auto PPCGProg = isl_calloc_type(S->getIslCtx().get(), struct gpu_prog);
 
-    PPCGProg->ctx = S->getIslCtx();
+    PPCGProg->ctx = S->getIslCtx().get();
     PPCGProg->scop = PPCGScop;
     PPCGProg->context = isl_set_copy(PPCGScop->context);
     PPCGProg->read = isl_union_map_copy(PPCGScop->reads);
@@ -3091,8 +3086,8 @@ public:
 
     PPCGProg->n_array =
         ValidSAIs.size(); // std::distance(S->array_begin(), S->array_end());
-    PPCGProg->array = isl_calloc_array(S->getIslCtx(), struct gpu_array_info,
-                                       PPCGProg->n_array);
+    PPCGProg->array = isl_calloc_array(
+        S->getIslCtx().get(), struct gpu_array_info, PPCGProg->n_array);
 
     createArrays(PPCGProg, ValidSAIs);
 
@@ -3156,9 +3151,9 @@ public:
   ///
   /// @param Kernel The kernel to print
   void printKernel(ppcg_kernel *Kernel) {
-    auto *P = isl_printer_to_str(S->getIslCtx());
+    auto *P = isl_printer_to_str(S->getIslCtx().get());
     P = isl_printer_set_output_format(P, ISL_FORMAT_C);
-    auto *Options = isl_ast_print_options_alloc(S->getIslCtx());
+    auto *Options = isl_ast_print_options_alloc(S->getIslCtx().get());
     P = isl_ast_node_print(Kernel->tree, P, Options);
     char *String = isl_printer_get_str(P);
     printf("%s\n", String);
@@ -3171,13 +3166,13 @@ public:
   /// @param Tree An AST describing GPU code
   /// @param PPCGProg The PPCG program from which @Tree has been constructed.
   void printGPUTree(isl_ast_node *Tree, gpu_prog *PPCGProg) {
-    auto *P = isl_printer_to_str(S->getIslCtx());
+    auto *P = isl_printer_to_str(S->getIslCtx().get());
     P = isl_printer_set_output_format(P, ISL_FORMAT_C);
 
     PrintGPUUserData Data;
     Data.PPCGProg = PPCGProg;
 
-    auto *Options = isl_ast_print_options_alloc(S->getIslCtx());
+    auto *Options = isl_ast_print_options_alloc(S->getIslCtx().get());
     Options =
         isl_ast_print_options_set_print_user(Options, printHostUser, &Data);
     P = isl_ast_node_print(Tree, P, Options);
@@ -3206,9 +3201,9 @@ public:
   // strategy directly from this pass.
   gpu_gen *generateGPU(ppcg_scop *PPCGScop, gpu_prog *PPCGProg) {
 
-    auto PPCGGen = isl_calloc_type(S->getIslCtx(), struct gpu_gen);
+    auto PPCGGen = isl_calloc_type(S->getIslCtx().get(), struct gpu_gen);
 
-    PPCGGen->ctx = S->getIslCtx();
+    PPCGGen->ctx = S->getIslCtx().get();
     PPCGGen->options = PPCGScop->options;
     PPCGGen->print = nullptr;
     PPCGGen->print_user = nullptr;
@@ -3244,7 +3239,7 @@ public:
     }
 
     if (DumpSchedule) {
-      isl_printer *P = isl_printer_to_str(S->getIslCtx());
+      isl_printer *P = isl_printer_to_str(S->getIslCtx().get());
       P = isl_printer_set_yaml_style(P, ISL_YAML_STYLE_BLOCK);
       P = isl_printer_print_str(P, "Schedule\n");
       P = isl_printer_print_str(P, "========\n");
@@ -3356,7 +3351,7 @@ public:
       }
     }
 
-    isl_val *InstVal = isl_val_int_from_si(S->getIslCtx(), InstCount);
+    isl_val *InstVal = isl_val_int_from_si(S->getIslCtx().get(), InstCount);
     auto *InstExpr = isl_ast_expr_from_val(InstVal);
     return isl_ast_expr_mul(InstExpr, Iterations);
   }
@@ -3372,7 +3367,7 @@ public:
   getNumberOfIterations(Scop &S, __isl_keep isl_ast_build *Build) {
     isl_ast_expr *Instructions;
 
-    isl_val *Zero = isl_val_int_from_si(S.getIslCtx(), 0);
+    isl_val *Zero = isl_val_int_from_si(S.getIslCtx().get(), 0);
     Instructions = isl_ast_expr_from_val(Zero);
 
     for (ScopStmt &Stmt : S) {
@@ -3392,7 +3387,7 @@ public:
   __isl_give isl_ast_expr *
   createSufficientComputeCheck(Scop &S, __isl_keep isl_ast_build *Build) {
     auto Iterations = getNumberOfIterations(S, Build);
-    auto *MinComputeVal = isl_val_int_from_si(S.getIslCtx(), MinCompute);
+    auto *MinComputeVal = isl_val_int_from_si(S.getIslCtx().get(), MinCompute);
     auto *MinComputeExpr = isl_ast_expr_from_val(MinComputeVal);
     return isl_ast_expr_ge(Iterations, MinComputeExpr);
   }
@@ -3478,7 +3473,7 @@ public:
     auto SplitBlock = StartBlock->getSinglePredecessor();
     Builder.SetInsertPoint(SplitBlock->getTerminator());
 
-    isl_ast_build *Build = isl_ast_build_alloc(S->getIslCtx());
+    isl_ast_build *Build = isl_ast_build_alloc(S->getIslCtx().get());
     isl_ast_expr *Condition = IslAst::buildRunCondition(*S, Build);
     isl_ast_expr *SufficientCompute = createSufficientComputeCheck(*S, Build);
     Condition = isl_ast_expr_and(Condition, SufficientCompute);

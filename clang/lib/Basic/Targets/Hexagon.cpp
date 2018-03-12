@@ -52,6 +52,9 @@ void HexagonTargetInfo::getTargetDefines(const LangOptions &Opts,
   } else if (CPU == "hexagonv62") {
     Builder.defineMacro("__HEXAGON_V62__");
     Builder.defineMacro("__HEXAGON_ARCH__", "62");
+  } else if (CPU == "hexagonv65") {
+    Builder.defineMacro("__HEXAGON_V65__");
+    Builder.defineMacro("__HEXAGON_ARCH__", "65");
   }
 
   if (hasFeature("hvx-length64b")) {
@@ -138,14 +141,29 @@ bool HexagonTargetInfo::hasFeature(StringRef Feature) const {
       .Default(false);
 }
 
+struct CPUSuffix {
+  llvm::StringLiteral Name;
+  llvm::StringLiteral Suffix;
+};
+
+static constexpr CPUSuffix Suffixes[] = {
+    {{"hexagonv4"}, {"4"}},   {{"hexagonv5"}, {"5"}},
+    {{"hexagonv55"}, {"55"}}, {{"hexagonv60"}, {"60"}},
+    {{"hexagonv62"}, {"62"}}, {{"hexagonv65"}, {"65"}},
+};
+
 const char *HexagonTargetInfo::getHexagonCPUSuffix(StringRef Name) {
-  return llvm::StringSwitch<const char *>(Name)
-      .Case("hexagonv4", "4")
-      .Case("hexagonv5", "5")
-      .Case("hexagonv55", "55")
-      .Case("hexagonv60", "60")
-      .Case("hexagonv62", "62")
-      .Default(nullptr);
+  const CPUSuffix *Item = llvm::find_if(
+      Suffixes, [Name](const CPUSuffix &S) { return S.Name == Name; });
+  if (Item == std::end(Suffixes))
+    return nullptr;
+  return Item->Suffix.data();
+}
+
+void HexagonTargetInfo::fillValidCPUList(
+    SmallVectorImpl<StringRef> &Values) const {
+  for (const CPUSuffix &Suffix : Suffixes)
+    Values.push_back(Suffix.Name);
 }
 
 ArrayRef<Builtin::Info> HexagonTargetInfo::getTargetBuiltins() const {

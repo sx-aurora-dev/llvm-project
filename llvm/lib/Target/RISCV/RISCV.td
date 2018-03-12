@@ -13,11 +13,47 @@ include "llvm/Target/Target.td"
 // RISC-V subtarget features and instruction predicates.
 //===----------------------------------------------------------------------===//
 
-def Feature64Bit : SubtargetFeature<"64bit", "HasRV64", "true",
-                                    "Implements RV64">;
+def FeatureStdExtM
+    : SubtargetFeature<"m", "HasStdExtM", "true",
+                       "'M' (Integer Multiplication and Division)">;
+def HasStdExtM : Predicate<"Subtarget->hasStdExtM()">,
+                           AssemblerPredicate<"FeatureStdExtM">;
 
-def RV64         : HwMode<"+64bit">;
-def RV32         : HwMode<"-64bit">;
+def FeatureStdExtA
+    : SubtargetFeature<"a", "HasStdExtA", "true",
+                       "'A' (Atomic Instructions)">;
+def HasStdExtA : Predicate<"Subtarget->hasStdExtA()">,
+                           AssemblerPredicate<"FeatureStdExtA">;
+
+def FeatureStdExtF
+    : SubtargetFeature<"f", "HasStdExtF", "true",
+                       "'F' (Single-Precision Floating-Point)">;
+def HasStdExtF : Predicate<"Subtarget->hasStdExtF()">,
+                           AssemblerPredicate<"FeatureStdExtF">;
+
+def FeatureStdExtD
+    : SubtargetFeature<"d", "HasStdExtD", "true",
+                       "'D' (Double-Precision Floating-Point)",
+                       [FeatureStdExtF]>;
+def HasStdExtD : Predicate<"Subtarget->hasStdExtD()">,
+                           AssemblerPredicate<"FeatureStdExtD">;
+
+def FeatureStdExtC
+    : SubtargetFeature<"c", "HasStdExtC", "true",
+                       "'C' (Compressed Instructions)">;
+def HasStdExtC : Predicate<"Subtarget->hasStdExtC()">,
+                           AssemblerPredicate<"FeatureStdExtC">;
+
+
+def Feature64Bit
+    : SubtargetFeature<"64bit", "HasRV64", "true", "Implements RV64">;
+def IsRV64 : Predicate<"Subtarget->is64Bit()">,
+                       AssemblerPredicate<"Feature64Bit">;
+def IsRV32 : Predicate<"!Subtarget->is64Bit()">,
+                       AssemblerPredicate<"!Feature64Bit">;
+
+def RV64           : HwMode<"+64bit">;
+def RV32           : HwMode<"-64bit">;
 
 //===----------------------------------------------------------------------===//
 // Registers, calling conventions, instruction descriptions.
@@ -40,16 +76,21 @@ def : ProcessorModel<"generic-rv64", NoSchedModel, [Feature64Bit]>;
 //===----------------------------------------------------------------------===//
 
 def RISCVInstrInfo : InstrInfo {
-  // TODO: disable guessInstructionProperties when
-  // https://reviews.llvm.org/D37065 lands.
-  let guessInstructionProperties = 1;
+  let guessInstructionProperties = 0;
 }
 
 def RISCVAsmParser : AsmParser {
   let ShouldEmitMatchRegisterAltName = 1;
+  let AllowDuplicateRegisterNames = 1;
+}
+
+def RISCVAsmWriter : AsmWriter {
+  int PassSubtarget = 1;
 }
 
 def RISCV : Target {
   let InstructionSet = RISCVInstrInfo;
   let AssemblyParsers = [RISCVAsmParser];
+  let AssemblyWriters = [RISCVAsmWriter];
+  let AllowRegisterRenaming = 1;
 }

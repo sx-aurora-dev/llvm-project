@@ -72,6 +72,17 @@
 ///     // deal with the error here, if it is an error.
 ///   }
 ///
+///   // Alternatively, we can go through the buffers ourselves without
+///   // relying on the implementations' flushing semantics (if the
+///   // implementation supports exporting this data directly).
+///   auto MyBufferProcessor = +[](const char* mode, XRayBuffer buffer) {
+///     // Check the "mode" to see if it's something we know how to handle...
+///     // and/or do something with an XRayBuffer instance.
+///   };
+///   auto process_status = __xray_log_process_buffers(MyBufferProcessor);
+///   if (process_status != XRayLogFlushStatus::XRAY_LOG_FLUSHED) {
+///     // deal with the error here, if it is an error.
+///   }
 ///
 /// NOTE: Before calling __xray_patch() again, consider re-initializing the
 /// implementation first. Some implementations might stay in an "off" state when
@@ -126,6 +137,16 @@ enum XRayLogFlushStatus {
   XRAY_LOG_NOT_FLUSHING = 0,
   XRAY_LOG_FLUSHING = 1,
   XRAY_LOG_FLUSHED = 2,
+};
+
+/// This enum indicates the installation state of a logging implementation, when
+/// associating a mode to a particular logging implementation through
+/// `__xray_log_register_impl(...)` or through `__xray_log_select_mode(...`.
+enum XRayLogRegisterStatus {
+  XRAY_REGISTRATION_OK = 0,
+  XRAY_DUPLICATE_MODE = 1,
+  XRAY_MODE_NOT_FOUND = 2,
+  XRAY_INCOMPLETE_IMPL = 3,
 };
 
 /// A valid XRay logging implementation MUST provide all of the function
@@ -189,6 +210,39 @@ struct XRayLogImpl {
 /// called while in any other states.
 void __xray_set_log_impl(XRayLogImpl Impl);
 
+/// This function registers a logging implementation against a "mode"
+/// identifier. This allows multiple modes to be registered, and chosen at
+/// runtime using the same mode identifier through
+/// `__xray_log_select_mode(...)`.
+///
+/// We treat the Mode identifier as a null-terminated byte string, as the
+/// identifier used when retrieving the log impl.
+///
+/// Returns:
+///   - XRAY_REGISTRATION_OK on success.
+///   - XRAY_DUPLICATE_MODE when an implementation is already associated with
+///     the provided Mode; does not update the already-registered
+///     implementation.
+XRayLogRegisterStatus __xray_log_register_mode(const char *Mode,
+                                               XRayLogImpl Impl);
+
+/// This function selects the implementation associated with Mode that has been
+/// registered through __xray_log_register_mode(...) and installs that
+/// implementation (as if through calling __xray_set_log_impl(...)). The same
+/// caveats apply to __xray_log_select_mode(...) as with
+/// __xray_log_set_log_impl(...).
+///
+/// Returns:
+///   - XRAY_REGISTRATION_OK on success.
+///   - XRAY_MODE_NOT_FOUND if there is no implementation associated with Mode;
+///     does not update the currently installed implementation.
+XRayLogRegisterStatus __xray_log_select_mode(const char *Mode);
+
+/// Returns an identifier for the currently selected XRay mode chosen through
+/// the __xray_log_select_mode(...) function call. Returns nullptr if there is
+/// no currently installed mode.
+const char *__xray_log_get_current_mode();
+
 /// This function removes the currently installed implementation. It will also
 /// uninstall any handlers that have been previously installed. It does NOT
 /// unpatch the instrumentation sleds.
@@ -219,14 +273,69 @@ XRayLogInitStatus __xray_log_finalize();
 /// XRayLogFlushStatus for what the return values mean.
 XRayLogFlushStatus __xray_log_flushLog();
 
+/// An XRayBuffer represents a section of memory which can be treated by log
+/// processing functions as bytes stored in the logging implementation's
+/// buffers.
+struct XRayBuffer {
+  const void *Data;
+  size_t Size;
+};
+
+/// Registers an iterator function which takes an XRayBuffer argument, then
+/// returns another XRayBuffer function representing the next buffer. When the
+/// Iterator function returns an empty XRayBuffer (Data = nullptr, Size = 0),
+/// this signifies the end of the buffers.
+///
+/// The first invocation of this Iterator function will always take an empty
+/// XRayBuffer (Data = nullptr, Size = 0).
+void __xray_log_set_buffer_iterator(XRayBuffer (*Iterator)(XRayBuffer));
+
+/// Removes the currently registered buffer iterator function.
+void __xray_log_remove_buffer_iterator();
+
+/// Invokes the provided handler to process data maintained by the logging
+/// handler. This API will be provided raw access to the data available in
+/// memory from the logging implementation. The callback function must:
+///
+/// 1) Not modify the data, to avoid running into undefined behaviour.
+///
+/// 2) Either know the data layout, or treat the data as raw bytes for later
+///    interpretation.
+///
+/// This API is best used in place of the `__xray_log_flushLog()` implementation
+/// above to enable the caller to provide an alternative means of extracting the
+/// data from the XRay implementation.
+///
+/// Implementations MUST then provide:
+///
+/// 1) A function that will return an XRayBuffer. Functions that return an
+///    "empty" XRayBuffer signifies that there are no more buffers to be
+///    processed. This function should be registered through the
+///    `__xray_log_set_buffer_iterator(...)` function.
+///
+/// 2) Its own means of converting data it holds in memory into an XRayBuffer
+///    structure.
+///
+/// See XRayLogFlushStatus for what the return values mean.
+///
+XRayLogFlushStatus __xray_log_process_buffers(void (*Processor)(const char *,
+                                                                XRayBuffer));
+
 } // extern "C"
 
 namespace __xray {
 
-// Options used by the LLVM XRay FDR implementation.
+/// Options used by the LLVM XRay FDR logging implementation.
 struct FDRLoggingOptions {
   bool ReportErrors = false;
   int Fd = -1;
+};
+
+/// Options used by the LLVM XRay Basic (Naive) logging implementation.
+struct BasicLoggingOptions {
+  int DurationFilterMicros = 0;
+  size_t MaxStackDepth = 0;
+  size_t ThreadBufferSize = 0;
 };
 
 } // namespace __xray

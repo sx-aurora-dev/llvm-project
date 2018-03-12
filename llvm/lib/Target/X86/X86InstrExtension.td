@@ -12,31 +12,29 @@
 //===----------------------------------------------------------------------===//
 
 let hasSideEffects = 0 in {
-  let Defs = [AX], Uses = [AL] in
+  let Defs = [AX], Uses = [AL] in // AX = signext(AL)
   def CBW : I<0x98, RawFrm, (outs), (ins),
-              "{cbtw|cbw}", [], IIC_CBW>, OpSize16;  // AX = signext(AL)
-  let Defs = [EAX], Uses = [AX] in
+              "{cbtw|cbw}", [], IIC_CBW>, OpSize16, Sched<[WriteALU]>;
+  let Defs = [EAX], Uses = [AX] in // EAX = signext(AX)
   def CWDE : I<0x98, RawFrm, (outs), (ins),
-              "{cwtl|cwde}", [], IIC_CBW>, OpSize32; // EAX = signext(AX)
+              "{cwtl|cwde}", [], IIC_CBW>, OpSize32, Sched<[WriteALU]>;
 
-  let Defs = [AX,DX], Uses = [AX] in
+  let Defs = [AX,DX], Uses = [AX] in // DX:AX = signext(AX)
   def CWD : I<0x99, RawFrm, (outs), (ins),
-              "{cwtd|cwd}", [], IIC_CBW>, OpSize16; // DX:AX = signext(AX)
-  let Defs = [EAX,EDX], Uses = [EAX] in
+              "{cwtd|cwd}", [], IIC_CBW>, OpSize16, Sched<[WriteALU]>;
+  let Defs = [EAX,EDX], Uses = [EAX] in // EDX:EAX = signext(EAX)
   def CDQ : I<0x99, RawFrm, (outs), (ins),
-              "{cltd|cdq}", [], IIC_CBW>, OpSize32; // EDX:EAX = signext(EAX)
+              "{cltd|cdq}", [], IIC_CBW>, OpSize32, Sched<[WriteALU]>;
 
 
-  let Defs = [RAX], Uses = [EAX] in
+  let Defs = [RAX], Uses = [EAX] in // RAX = signext(EAX)
   def CDQE : RI<0x98, RawFrm, (outs), (ins),
-               "{cltq|cdqe}", [], IIC_CBW>;     // RAX = signext(EAX)
+               "{cltq|cdqe}", [], IIC_CBW>, Sched<[WriteALU]>;
 
-  let Defs = [RAX,RDX], Uses = [RAX] in
+  let Defs = [RAX,RDX], Uses = [RAX] in // RDX:RAX = signext(RAX)
   def CQO  : RI<0x99, RawFrm, (outs), (ins),
-                "{cqto|cqo}", [], IIC_CBW>; // RDX:RAX = signext(RAX)
+                "{cqto|cqo}", [], IIC_CBW>, Sched<[WriteALU]>;
 }
-
-
 
 // Sign/Zero extenders
 let hasSideEffects = 0 in {
@@ -97,22 +95,22 @@ def MOVZX32rm16: I<0xB7, MRMSrcMem, (outs GR32:$dst), (ins i16mem:$src),
 let hasSideEffects = 0, isCodeGenOnly = 1 in {
 def MOVZX32_NOREXrr8 : I<0xB6, MRMSrcReg,
                          (outs GR32_NOREX:$dst), (ins GR8_NOREX:$src),
-                         "movz{bl|x}\t{$src, $dst|$dst, $src}  # NOREX",
+                         "movz{bl|x}\t{$src, $dst|$dst, $src}",
                          [], IIC_MOVZX>, TB, OpSize32, Sched<[WriteALU]>;
 let mayLoad = 1 in
 def MOVZX32_NOREXrm8 : I<0xB6, MRMSrcMem,
                          (outs GR32_NOREX:$dst), (ins i8mem_NOREX:$src),
-                         "movz{bl|x}\t{$src, $dst|$dst, $src}  # NOREX",
+                         "movz{bl|x}\t{$src, $dst|$dst, $src}",
                          [], IIC_MOVZX>, TB, OpSize32, Sched<[WriteALULd]>;
 
 def MOVSX32_NOREXrr8 : I<0xBE, MRMSrcReg,
                          (outs GR32_NOREX:$dst), (ins GR8_NOREX:$src),
-                         "movs{bl|x}\t{$src, $dst|$dst, $src}  # NOREX",
+                         "movs{bl|x}\t{$src, $dst|$dst, $src}",
                          [], IIC_MOVSX>, TB, OpSize32, Sched<[WriteALU]>;
 let mayLoad = 1 in
 def MOVSX32_NOREXrm8 : I<0xBE, MRMSrcMem,
                          (outs GR32_NOREX:$dst), (ins i8mem_NOREX:$src),
-                         "movs{bl|x}\t{$src, $dst|$dst, $src}  # NOREX",
+                         "movs{bl|x}\t{$src, $dst|$dst, $src}",
                          [], IIC_MOVSX>, TB, OpSize32, Sched<[WriteALULd]>;
 }
 

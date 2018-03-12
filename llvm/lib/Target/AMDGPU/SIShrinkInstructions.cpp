@@ -92,7 +92,8 @@ static bool canShrink(MachineInstr &MI, const SIInstrInfo *TII,
 
       case AMDGPU::V_ADDC_U32_e64:
       case AMDGPU::V_SUBB_U32_e64:
-        if (TII->getNamedOperand(MI, AMDGPU::OpName::src1)->isImm())
+      case AMDGPU::V_SUBBREV_U32_e64:
+        if (!isVGPR(TII->getNamedOperand(MI, AMDGPU::OpName::src1), TRI, MRI))
           return false;
         // Additional verification is needed for sdst/src2.
         return true;
@@ -286,7 +287,7 @@ static void shrinkScalarCompare(const SIInstrInfo *TII, MachineInstr &MI) {
 }
 
 bool SIShrinkInstructions::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(*MF.getFunction()))
+  if (skipFunction(MF.getFunction()))
     return false;
 
   MachineRegisterInfo &MRI = MF.getRegInfo();

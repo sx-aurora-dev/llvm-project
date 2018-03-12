@@ -907,20 +907,13 @@ void AArch64InstPrinter::printAddSubImm(const MCInst *MI, unsigned OpNum,
   }
 }
 
-void AArch64InstPrinter::printLogicalImm32(const MCInst *MI, unsigned OpNum,
-                                           const MCSubtargetInfo &STI,
-                                           raw_ostream &O) {
+template <typename T>
+void AArch64InstPrinter::printLogicalImm(const MCInst *MI, unsigned OpNum,
+                                         const MCSubtargetInfo &STI,
+                                         raw_ostream &O) {
   uint64_t Val = MI->getOperand(OpNum).getImm();
   O << "#0x";
-  O.write_hex(AArch64_AM::decodeLogicalImmediate(Val, 32));
-}
-
-void AArch64InstPrinter::printLogicalImm64(const MCInst *MI, unsigned OpNum,
-                                           const MCSubtargetInfo &STI,
-                                           raw_ostream &O) {
-  uint64_t Val = MI->getOperand(OpNum).getImm();
-  O << "#0x";
-  O.write_hex(AArch64_AM::decodeLogicalImmediate(Val, 64));
+  O.write_hex(AArch64_AM::decodeLogicalImmediate(Val, 8 * sizeof(T)));
 }
 
 void AArch64InstPrinter::printShifter(const MCInst *MI, unsigned OpNum,
@@ -1340,3 +1333,33 @@ void AArch64InstPrinter::printComplexRotationOp(const MCInst *MI, unsigned OpNo,
   O << "#" << (Val * Angle) + Remainder;
 }
 
+void AArch64InstPrinter::printSVEPattern(const MCInst *MI, unsigned OpNum,
+                                         const MCSubtargetInfo &STI,
+                                         raw_ostream &O) {
+  unsigned Val = MI->getOperand(OpNum).getImm();
+  if (auto Pat = AArch64SVEPredPattern::lookupSVEPREDPATByEncoding(Val))
+    O << Pat->Name;
+  else
+    O << '#' << formatImm(Val);
+}
+
+template <char suffix>
+void AArch64InstPrinter::printSVERegOp(const MCInst *MI, unsigned OpNum,
+                                       const MCSubtargetInfo &STI,
+                                       raw_ostream &O) {
+  switch (suffix) {
+  case 0:
+  case 'b':
+  case 'h':
+  case 's':
+  case 'd':
+  case 'q':
+    break;
+  default: llvm_unreachable("Invalid kind specifier.");
+  }
+
+  unsigned Reg = MI->getOperand(OpNum).getReg();
+  O << getRegisterName(Reg);
+  if (suffix != 0)
+    O << '.' << suffix;
+}

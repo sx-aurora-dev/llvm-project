@@ -334,13 +334,6 @@ bool LoopIdiomRecognize::runOnCountableLoop() {
   return MadeChange;
 }
 
-static unsigned getStoreSizeInBytes(StoreInst *SI, const DataLayout *DL) {
-  uint64_t SizeInBits = DL->getTypeSizeInBits(SI->getValueOperand()->getType());
-  assert(((SizeInBits & 7) || (SizeInBits >> 32) == 0) &&
-         "Don't overflow unsigned.");
-  return (unsigned)SizeInBits >> 3;
-}
-
 static APInt getStoreStride(const SCEVAddRecExpr *StoreEv) {
   const SCEVConstant *ConstStride = cast<SCEVConstant>(StoreEv->getOperand(1));
   return ConstStride->getAPInt();
@@ -458,7 +451,7 @@ LoopIdiomRecognize::isLegalStore(StoreInst *SI) {
     // Check to see if the stride matches the size of the store.  If so, then we
     // know that every byte is touched in the loop.
     APInt Stride = getStoreStride(StoreEv);
-    unsigned StoreSize = getStoreSizeInBytes(SI, DL);
+    unsigned StoreSize = DL->getTypeStoreSize(SI->getValueOperand()->getType());
     if (StoreSize != Stride && StoreSize != -Stride)
       return LegalStoreKind::None;
 
@@ -597,7 +590,7 @@ bool LoopIdiomRecognize::processLoopStores(SmallVectorImpl<StoreInst *> &SL,
     const SCEVAddRecExpr *FirstStoreEv =
         cast<SCEVAddRecExpr>(SE->getSCEV(FirstStorePtr));
     APInt FirstStride = getStoreStride(FirstStoreEv);
-    unsigned FirstStoreSize = getStoreSizeInBytes(SL[i], DL);
+    unsigned FirstStoreSize = DL->getTypeStoreSize(SL[i]->getValueOperand()->getType());
 
     // See if we can optimize just this store in isolation.
     if (FirstStride == FirstStoreSize || -FirstStride == FirstStoreSize) {
@@ -690,7 +683,7 @@ bool LoopIdiomRecognize::processLoopStores(SmallVectorImpl<StoreInst *> &SL,
         break;
       AdjacentStores.insert(I);
 
-      StoreSize += getStoreSizeInBytes(I, DL);
+      StoreSize += DL->getTypeStoreSize(I->getValueOperand()->getType());
       // Move to the next value in the chain.
       I = ConsecutiveChain[I];
     }
@@ -763,8 +756,8 @@ bool LoopIdiomRecognize::processLoopMemSet(MemSetInst *MSI,
   MSIs.insert(MSI);
   bool NegStride = SizeInBytes == -Stride;
   return processLoopStridedStore(Pointer, (unsigned)SizeInBytes,
-                                 MSI->getAlignment(), SplatValue, MSI, MSIs, Ev,
-                                 BECount, NegStride, /*IsLoopMemset=*/true);
+                                 MSI->getDestAlignment(), SplatValue, MSI, MSIs,
+                                 Ev, BECount, NegStride, /*IsLoopMemset=*/true);
 }
 
 /// mayLoopAccessLocation - Return true if the specified loop might access the
@@ -795,7 +788,8 @@ mayLoopAccessLocation(Value *Ptr, ModRefInfo Access, Loop *L,
        ++BI)
     for (Instruction &I : **BI)
       if (IgnoredStores.count(&I) == 0 &&
-          (AA.getModRefInfo(&I, StoreLoc) & Access))
+          isModOrRefSet(
+              intersectModRef(AA.getModRefInfo(&I, StoreLoc), Access)))
         return true;
 
   return false;
@@ -893,8 +887,8 @@ bool LoopIdiomRecognize::processLoopStridedStore(
   // base pointer and checking the region.
   Value *BasePtr =
       Expander.expandCodeFor(Start, DestInt8PtrTy, Preheader->getTerminator());
-  if (mayLoopAccessLocation(BasePtr, MRI_ModRef, CurLoop, BECount, StoreSize,
-                            *AA, Stores)) {
+  if (mayLoopAccessLocation(BasePtr, ModRefInfo::ModRef, CurLoop, BECount,
+                            StoreSize, *AA, Stores)) {
     Expander.clear();
     // If we generated new code for the base pointer, clean up.
     RecursivelyDeleteTriviallyDeadInstructions(BasePtr, TLI);
@@ -964,7 +958,7 @@ bool LoopIdiomRecognize::processLoopStoreOfLoopLoad(StoreInst *SI,
   Value *StorePtr = SI->getPointerOperand();
   const SCEVAddRecExpr *StoreEv = cast<SCEVAddRecExpr>(SE->getSCEV(StorePtr));
   APInt Stride = getStoreStride(StoreEv);
-  unsigned StoreSize = getStoreSizeInBytes(SI, DL);
+  unsigned StoreSize = DL->getTypeStoreSize(SI->getValueOperand()->getType());
   bool NegStride = StoreSize == -Stride;
 
   // The store must be feeding a non-volatile load.
@@ -1003,7 +997,7 @@ bool LoopIdiomRecognize::processLoopStoreOfLoopLoad(StoreInst *SI,
 
   SmallPtrSet<Instruction *, 1> Stores;
   Stores.insert(SI);
-  if (mayLoopAccessLocation(StoreBasePtr, MRI_ModRef, CurLoop, BECount,
+  if (mayLoopAccessLocation(StoreBasePtr, ModRefInfo::ModRef, CurLoop, BECount,
                             StoreSize, *AA, Stores)) {
     Expander.clear();
     // If we generated new code for the base pointer, clean up.
@@ -1023,8 +1017,8 @@ bool LoopIdiomRecognize::processLoopStoreOfLoopLoad(StoreInst *SI,
   Value *LoadBasePtr = Expander.expandCodeFor(
       LdStart, Builder.getInt8PtrTy(LdAS), Preheader->getTerminator());
 
-  if (mayLoopAccessLocation(LoadBasePtr, MRI_Mod, CurLoop, BECount, StoreSize,
-                            *AA, Stores)) {
+  if (mayLoopAccessLocation(LoadBasePtr, ModRefInfo::Mod, CurLoop, BECount,
+                            StoreSize, *AA, Stores)) {
     Expander.clear();
     // If we generated new code for the base pointer, clean up.
     RecursivelyDeleteTriviallyDeadInstructions(LoadBasePtr, TLI);
@@ -1043,16 +1037,17 @@ bool LoopIdiomRecognize::processLoopStoreOfLoopLoad(StoreInst *SI,
   Value *NumBytes =
       Expander.expandCodeFor(NumBytesS, IntPtrTy, Preheader->getTerminator());
 
-  unsigned Align = std::min(SI->getAlignment(), LI->getAlignment());
   CallInst *NewCall = nullptr;
   // Check whether to generate an unordered atomic memcpy:
   //  If the load or store are atomic, then they must neccessarily be unordered
   //  by previous checks.
   if (!SI->isAtomic() && !LI->isAtomic())
-    NewCall = Builder.CreateMemCpy(StoreBasePtr, LoadBasePtr, NumBytes, Align);
+    NewCall = Builder.CreateMemCpy(StoreBasePtr, SI->getAlignment(),
+                                   LoadBasePtr, LI->getAlignment(), NumBytes);
   else {
     // We cannot allow unaligned ops for unordered load/store, so reject
     // anything where the alignment isn't at least the element size.
+    unsigned Align = std::min(SI->getAlignment(), LI->getAlignment());
     if (Align < StoreSize)
       return false;
 
@@ -1063,16 +1058,12 @@ bool LoopIdiomRecognize::processLoopStoreOfLoopLoad(StoreInst *SI,
     if (StoreSize > TTI->getAtomicMemIntrinsicMaxElementSize())
       return false;
 
+    // Create the call.
+    // Note that unordered atomic loads/stores are *required* by the spec to
+    // have an alignment but non-atomic loads/stores may not.
     NewCall = Builder.CreateElementUnorderedAtomicMemCpy(
-        StoreBasePtr, LoadBasePtr, NumBytes, StoreSize);
-
-    // Propagate alignment info onto the pointer args. Note that unordered
-    // atomic loads/stores are *required* by the spec to have an alignment
-    // but non-atomic loads/stores may not.
-    NewCall->addParamAttr(0, Attribute::getWithAlignment(NewCall->getContext(),
-                                                         SI->getAlignment()));
-    NewCall->addParamAttr(1, Attribute::getWithAlignment(NewCall->getContext(),
-                                                         LI->getAlignment()));
+        StoreBasePtr, SI->getAlignment(), LoadBasePtr, LI->getAlignment(),
+        NumBytes, StoreSize);
   }
   NewCall->setDebugLoc(SI->getDebugLoc());
 
@@ -1326,9 +1317,9 @@ static bool detectCTLZIdiom(Loop *CurLoop, PHINode *&PhiX,
   // step 2: detect instructions corresponding to "x.next = x >> 1"
   if (!DefX || DefX->getOpcode() != Instruction::AShr)
     return false;
-  if (ConstantInt *Shft = dyn_cast<ConstantInt>(DefX->getOperand(1)))
-    if (!Shft || !Shft->isOne())
-      return false;
+  ConstantInt *Shft = dyn_cast<ConstantInt>(DefX->getOperand(1));
+  if (!Shft || !Shft->isOne())
+    return false;
   VarX = DefX->getOperand(0);
 
   // step 3: Check the recurrence of variable X
@@ -1685,7 +1676,7 @@ void LoopIdiomRecognize::transformLoopToPopcount(BasicBlock *PreCondBB,
   }
 
   // Step 3: Note that the population count is exactly the trip count of the
-  // loop in question, which enable us to to convert the loop from noncountable
+  // loop in question, which enable us to convert the loop from noncountable
   // loop into a countable one. The benefit is twofold:
   //
   //  - If the loop only counts population, the entire loop becomes dead after

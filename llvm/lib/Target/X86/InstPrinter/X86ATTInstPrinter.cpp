@@ -48,18 +48,16 @@ void X86ATTInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
   // If verbose assembly is enabled, we can print some informative comments.
   if (CommentStream)
     HasCustomInstComment =
-        EmitAnyX86InstComments(MI, *CommentStream, getRegisterName);
+        EmitAnyX86InstComments(MI, *CommentStream, MII, getRegisterName);
 
   unsigned Flags = MI->getFlags();
-  if (TSFlags & X86II::LOCK)
+  if ((TSFlags & X86II::LOCK) || (Flags & X86::IP_HAS_LOCK))
     OS << "\tlock\t";
-  if (!(TSFlags & X86II::LOCK) && Flags & X86::IP_HAS_LOCK)
-    OS << "\tlock\n";
 
   if (Flags & X86::IP_HAS_REPEAT_NE)
-    OS << "\trepne\n";
+    OS << "\trepne\t";
   else if (Flags & X86::IP_HAS_REPEAT)
-    OS << "\trep\n";
+    OS << "\trep\t";
 
   // Output CALLpcrel32 as "callq" in 64-bit mode.
   // In Intel annotation it's always emitted as "call".

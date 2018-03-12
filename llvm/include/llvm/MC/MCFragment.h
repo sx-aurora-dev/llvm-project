@@ -17,6 +17,7 @@
 #include "llvm/ADT/ilist_node.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/SMLoc.h"
 #include <cstdint>
 #include <utility>
@@ -42,7 +43,7 @@ public:
     FT_DwarfFrame,
     FT_LEB,
     FT_Padding,
-    FT_SafeSEH,
+    FT_SymbolId,
     FT_CVInlineLines,
     FT_CVDefRange,
     FT_Dummy
@@ -421,14 +422,21 @@ class MCFillFragment : public MCFragment {
   uint8_t Value;
 
   /// The number of bytes to insert.
-  uint64_t Size;
+  const MCExpr &Size;
+
+  /// Source location of the directive that this fragment was created for.
+  SMLoc Loc;
 
 public:
-  MCFillFragment(uint8_t Value, uint64_t Size, MCSection *Sec = nullptr)
-      : MCFragment(FT_Fill, false, 0, Sec), Value(Value), Size(Size) {}
+  MCFillFragment(uint8_t Value, const MCExpr &Size, SMLoc Loc,
+                 MCSection *Sec = nullptr)
+      : MCFragment(FT_Fill, false, 0, Sec), Value(Value), Size(Size), Loc(Loc) {
+  }
 
   uint8_t getValue() const { return Value; }
-  uint64_t getSize() const { return Size; }
+  const MCExpr &getSize() const { return Size; }
+
+  SMLoc getLoc() const { return Loc; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Fill;
@@ -436,13 +444,13 @@ public:
 };
 
 class MCOrgFragment : public MCFragment {
-  /// Offset - The offset this fragment should start at.
+  /// The offset this fragment should start at.
   const MCExpr *Offset;
 
-  /// Value - Value to use for filling bytes.
+  /// Value to use for filling bytes.
   int8_t Value;
 
-  /// Loc - Source location of the directive that this fragment was created for.
+  /// Source location of the directive that this fragment was created for.
   SMLoc Loc;
 
 public:
@@ -562,12 +570,13 @@ public:
   }
 };
 
-class MCSafeSEHFragment : public MCFragment {
+/// Represents a symbol table index fragment.
+class MCSymbolIdFragment : public MCFragment {
   const MCSymbol *Sym;
 
 public:
-  MCSafeSEHFragment(const MCSymbol *Sym, MCSection *Sec = nullptr)
-      : MCFragment(FT_SafeSEH, false, 0, Sec), Sym(Sym) {}
+  MCSymbolIdFragment(const MCSymbol *Sym, MCSection *Sec = nullptr)
+      : MCFragment(FT_SymbolId, false, 0, Sec), Sym(Sym) {}
 
   /// \name Accessors
   /// @{
@@ -578,7 +587,7 @@ public:
   /// @}
 
   static bool classof(const MCFragment *F) {
-    return F->getKind() == MCFragment::FT_SafeSEH;
+    return F->getKind() == MCFragment::FT_SymbolId;
   }
 };
 

@@ -333,7 +333,7 @@ Value *InstCombiner::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     KnownBits InputKnown(SrcBitWidth);
     if (SimplifyDemandedBits(I, 0, InputDemandedMask, InputKnown, Depth + 1))
       return I;
-    Known = Known.zextOrTrunc(BitWidth);
+    Known = InputKnown.zextOrTrunc(BitWidth);
     // Any top bits are known to be zero.
     if (BitWidth > SrcBitWidth)
       Known.Zero.setBitsFrom(SrcBitWidth);
@@ -435,12 +435,11 @@ Value *InstCombiner::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     const APInt *SA;
     if (match(I->getOperand(1), m_APInt(SA))) {
       const APInt *ShrAmt;
-      if (match(I->getOperand(0), m_Shr(m_Value(), m_APInt(ShrAmt)))) {
-        Instruction *Shr = cast<Instruction>(I->getOperand(0));
-        if (Value *R = simplifyShrShlDemandedBits(
-                Shr, *ShrAmt, I, *SA, DemandedMask, Known))
-          return R;
-      }
+      if (match(I->getOperand(0), m_Shr(m_Value(), m_APInt(ShrAmt))))
+        if (Instruction *Shr = dyn_cast<Instruction>(I->getOperand(0)))
+          if (Value *R = simplifyShrShlDemandedBits(Shr, *ShrAmt, I, *SA,
+                                                    DemandedMask, Known))
+            return R;
 
       uint64_t ShiftAmt = SA->getLimitedValue(BitWidth-1);
       APInt DemandedMaskIn(DemandedMask.lshr(ShiftAmt));
@@ -1188,7 +1187,6 @@ Value *InstCombiner::SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
       break;
     }
 
-    // div/rem demand all inputs, because they don't want divide by zero.
     TmpV = SimplifyDemandedVectorElts(I->getOperand(0), InputDemandedElts,
                                       UndefElts2, Depth + 1);
     if (TmpV) {

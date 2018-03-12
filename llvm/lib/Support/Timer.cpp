@@ -336,10 +336,14 @@ void TimerGroup::prepareToPrintList() {
   // reset them.
   for (Timer *T = FirstTimer; T; T = T->Next) {
     if (!T->hasTriggered()) continue;
+    bool WasRunning = T->isRunning();
+    if (WasRunning)
+      T->stopTimer();
+
     TimersToPrint.emplace_back(T->Time, T->Name, T->Description);
 
-    // Clear out the time.
-    T->clear();
+    if (WasRunning)
+      T->startTimer();
   }
 }
 
@@ -362,8 +366,10 @@ void TimerGroup::printAll(raw_ostream &OS) {
 
 void TimerGroup::printJSONValue(raw_ostream &OS, const PrintRecord &R,
                                 const char *suffix, double Value) {
-  assert(!yaml::needsQuotes(Name) && "TimerGroup name needs no quotes");
-  assert(!yaml::needsQuotes(R.Name) && "Timer name needs no quotes");
+  assert(yaml::needsQuotes(Name) == yaml::QuotingType::None &&
+         "TimerGroup name needs no quotes");
+  assert(yaml::needsQuotes(R.Name) == yaml::QuotingType::None &&
+         "Timer name needs no quotes");
   OS << "\t\"time." << Name << '.' << R.Name << suffix << "\": " << Value;
 }
 
@@ -379,6 +385,10 @@ const char *TimerGroup::printJSONValues(raw_ostream &OS, const char *delim) {
     printJSONValue(OS, R, ".user", T.getUserTime());
     OS << delim;
     printJSONValue(OS, R, ".sys", T.getSystemTime());
+    if (T.getMemUsed()) {
+      OS << delim;
+      printJSONValue(OS, R, ".sys", T.getMemUsed());
+    }
   }
   TimersToPrint.clear();
   return delim;

@@ -242,8 +242,7 @@ bool CPlusPlusNameParser::ConsumeTemplateArgs() {
     }
   }
 
-  assert(template_counter >= 0);
-  if (template_counter > 0) {
+  if (template_counter != 0) {
     return false;
   }
   start_position.Remove();
@@ -628,7 +627,7 @@ static const clang::LangOptions &GetLangOptions() {
     g_options.CPlusPlus = true;
     g_options.CPlusPlus11 = true;
     g_options.CPlusPlus14 = true;
-    g_options.CPlusPlus1z = true;
+    g_options.CPlusPlus17 = true;
   });
   return g_options;
 }

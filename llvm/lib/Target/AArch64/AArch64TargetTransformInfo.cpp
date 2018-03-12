@@ -12,10 +12,10 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
+#include "llvm/CodeGen/CostTable.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Target/CostTable.h"
-#include "llvm/Target/TargetLowering.h"
 #include <algorithm>
 using namespace llvm;
 
@@ -277,7 +277,7 @@ int AArch64TTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
       // same as the second operand. In this case, we will generate a "long"
       // version of the widening instruction.
       if (auto *Cast = dyn_cast<CastInst>(SingleUser->getOperand(1)))
-        if (I->getOpcode() == Cast->getOpcode() &&
+        if (I->getOpcode() == unsigned(Cast->getOpcode()) &&
             cast<CastInst>(I)->getSrcTy() == Cast->getSrcTy())
           return 0;
     }
@@ -493,32 +493,48 @@ int AArch64TTIImpl::getArithmeticInstrCost(
 
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
 
-  if (ISD == ISD::SDIV &&
-      Opd2Info == TargetTransformInfo::OK_UniformConstantValue &&
-      Opd2PropInfo == TargetTransformInfo::OP_PowerOf2) {
-    // On AArch64, scalar signed division by constants power-of-two are
-    // normally expanded to the sequence ADD + CMP + SELECT + SRA.
-    // The OperandValue properties many not be same as that of previous
-    // operation; conservatively assume OP_None.
-    Cost += getArithmeticInstrCost(Instruction::Add, Ty, Opd1Info, Opd2Info,
-                                   TargetTransformInfo::OP_None,
-                                   TargetTransformInfo::OP_None);
-    Cost += getArithmeticInstrCost(Instruction::Sub, Ty, Opd1Info, Opd2Info,
-                                   TargetTransformInfo::OP_None,
-                                   TargetTransformInfo::OP_None);
-    Cost += getArithmeticInstrCost(Instruction::Select, Ty, Opd1Info, Opd2Info,
-                                   TargetTransformInfo::OP_None,
-                                   TargetTransformInfo::OP_None);
-    Cost += getArithmeticInstrCost(Instruction::AShr, Ty, Opd1Info, Opd2Info,
-                                   TargetTransformInfo::OP_None,
-                                   TargetTransformInfo::OP_None);
-    return Cost;
-  }
-
   switch (ISD) {
   default:
     return Cost + BaseT::getArithmeticInstrCost(Opcode, Ty, Opd1Info, Opd2Info,
                                                 Opd1PropInfo, Opd2PropInfo);
+  case ISD::SDIV:
+    if (Opd2Info == TargetTransformInfo::OK_UniformConstantValue &&
+        Opd2PropInfo == TargetTransformInfo::OP_PowerOf2) {
+      // On AArch64, scalar signed division by constants power-of-two are
+      // normally expanded to the sequence ADD + CMP + SELECT + SRA.
+      // The OperandValue properties many not be same as that of previous
+      // operation; conservatively assume OP_None.
+      Cost += getArithmeticInstrCost(Instruction::Add, Ty, Opd1Info, Opd2Info,
+                                     TargetTransformInfo::OP_None,
+                                     TargetTransformInfo::OP_None);
+      Cost += getArithmeticInstrCost(Instruction::Sub, Ty, Opd1Info, Opd2Info,
+                                     TargetTransformInfo::OP_None,
+                                     TargetTransformInfo::OP_None);
+      Cost += getArithmeticInstrCost(Instruction::Select, Ty, Opd1Info, Opd2Info,
+                                     TargetTransformInfo::OP_None,
+                                     TargetTransformInfo::OP_None);
+      Cost += getArithmeticInstrCost(Instruction::AShr, Ty, Opd1Info, Opd2Info,
+                                     TargetTransformInfo::OP_None,
+                                     TargetTransformInfo::OP_None);
+      return Cost;
+    }
+    LLVM_FALLTHROUGH;
+  case ISD::UDIV:
+    Cost += BaseT::getArithmeticInstrCost(Opcode, Ty, Opd1Info, Opd2Info,
+                                          Opd1PropInfo, Opd2PropInfo);
+    if (Ty->isVectorTy()) {
+      // On AArch64, vector divisions are not supported natively and are
+      // expanded into scalar divisions of each pair of elements.
+      Cost += getArithmeticInstrCost(Instruction::ExtractElement, Ty, Opd1Info,
+                                     Opd2Info, Opd1PropInfo, Opd2PropInfo);
+      Cost += getArithmeticInstrCost(Instruction::InsertElement, Ty, Opd1Info,
+                                     Opd2Info, Opd1PropInfo, Opd2PropInfo);
+      // TODO: if one of the arguments is scalar, then it's not necessary to
+      // double the cost of handling the vector elements.
+      Cost += Cost;
+    }
+    return Cost;
+
   case ISD::ADD:
   case ISD::MUL:
   case ISD::XOR:

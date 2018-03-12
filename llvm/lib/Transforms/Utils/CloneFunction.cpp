@@ -493,17 +493,13 @@ void llvm::CloneAndPruneIntoFromInst(Function *NewFunc, const Function *OldFunc,
 
     // Handle PHI nodes specially, as we have to remove references to dead
     // blocks.
-    for (BasicBlock::const_iterator I = BI.begin(), E = BI.end(); I != E; ++I) {
+    for (const PHINode &PN : BI.phis()) {
       // PHI nodes may have been remapped to non-PHI nodes by the caller or
       // during the cloning process.
-      if (const PHINode *PN = dyn_cast<PHINode>(I)) {
-        if (isa<PHINode>(VMap[PN]))
-          PHIToResolve.push_back(PN);
-        else
-          break;
-      } else {
+      if (isa<PHINode>(VMap[&PN]))
+        PHIToResolve.push_back(&PN);
+      else
         break;
-      }
     }
 
     // Finally, remap the terminator instructions, as those can't be remapped
@@ -815,7 +811,9 @@ llvm::DuplicateInstructionsInSplitBetween(BasicBlock *BB, BasicBlock *PredBB,
 
   // Clone the non-phi instructions of BB into NewBB, keeping track of the
   // mapping and using it to remap operands in the cloned instructions.
-  for (; StopAt != &*BI; ++BI) {
+  // Stop once we see the terminator too. This covers the case where BB's
+  // terminator gets replaced and StopAt == BB's terminator.
+  for (; StopAt != &*BI && BB->getTerminator() != &*BI; ++BI) {
     Instruction *New = BI->clone();
     New->setName(BI->getName());
     New->insertBefore(NewTerm);

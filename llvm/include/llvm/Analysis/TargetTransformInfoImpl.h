@@ -152,6 +152,7 @@ public:
 
     case Intrinsic::annotation:
     case Intrinsic::assume:
+    case Intrinsic::sideeffect:
     case Intrinsic::dbg_declare:
     case Intrinsic::dbg_value:
     case Intrinsic::invariant_start:
@@ -245,6 +246,8 @@ public:
                     C2.ScaleCost, C2.ImmCost, C2.SetupCost);
   }
 
+  bool canMacroFuseCmp() { return false; }
+
   bool isLegalMaskedStore(Type *DataType) { return false; }
 
   bool isLegalMaskedLoad(Type *DataType) { return false; }
@@ -283,6 +286,8 @@ public:
   bool shouldBuildLookupTables() { return true; }
   bool shouldBuildLookupTablesForConstant(Constant *C) { return true; }
 
+  bool useColdCCForColdCall(Function &F) { return false; }
+
   unsigned getScalarizationOverhead(Type *Ty, bool Insert, bool Extract) {
     return 0;
   }
@@ -315,6 +320,8 @@ public:
 
   bool haveFastSqrt(Type *Ty) { return false; }
 
+  bool isFCmpOrdCheaperThanFCmpZero(Type *Ty) { return true; }
+  
   unsigned getFPOpCost(Type *Ty) { return TargetTransformInfo::TCC_Basic; }
 
   int getIntImmCodeSizeCost(unsigned Opcode, unsigned Idx, const APInt &Imm,

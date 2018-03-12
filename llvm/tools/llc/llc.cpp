@@ -13,17 +13,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/CodeGen/CommandFlags.h"
+#include "llvm/CodeGen/CommandFlags.def"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
 #include "llvm/CodeGen/MIRParser/MIRParser.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/IR/AutoUpgrade.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
@@ -49,7 +50,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include <memory>
 using namespace llvm;
@@ -291,7 +291,8 @@ int main(int argc, char **argv) {
   initializeCodeGen(*Registry);
   initializeLoopStrengthReducePass(*Registry);
   initializeLowerIntrinsicsPass(*Registry);
-  initializeCountingFunctionInserterPass(*Registry);
+  initializeEntryExitInstrumenterPass(*Registry);
+  initializePostInlineEntryExitInstrumenterPass(*Registry);
   initializeUnreachableBlockElimLegacyPassPass(*Registry);
   initializeConstantHoistingLegacyPassPass(*Registry);
   initializeScalarOpts(*Registry);
@@ -395,17 +396,9 @@ static int compileModule(char **argv, LLVMContext &Context) {
       if (MIR)
         M = MIR->parseIRModule();
     } else
-      M = parseIRFile(InputFilename, Err, Context);
+      M = parseIRFile(InputFilename, Err, Context, false);
     if (!M) {
       Err.print(argv[0], errs());
-      return 1;
-    }
-
-    // Verify module immediately to catch problems before doInitialization() is
-    // called on any passes.
-    if (!NoVerify && verifyModule(*M, &errs())) {
-      errs() << argv[0] << ": " << InputFilename
-             << ": error: input module is broken!\n";
       return 1;
     }
 
@@ -487,6 +480,18 @@ static int compileModule(char **argv, LLVMContext &Context) {
   // Add the target data from the target machine, if it exists, or the module.
   M->setDataLayout(Target->createDataLayout());
 
+  // This needs to be done after setting datalayout since it calls verifier
+  // to check debug info whereas verifier relies on correct datalayout.
+  UpgradeDebugInfo(*M);
+
+  // Verify module immediately to catch problems before doInitialization() is
+  // called on any passes.
+  if (!NoVerify && verifyModule(*M, &errs())) {
+    errs() << argv[0] << ": " << InputFilename
+           << ": error: input module is broken!\n";
+    return 1;
+  }
+
   // Override function attributes based on CPUStr, FeaturesStr, and command line
   // flags.
   setFunctionAttributes(CPUStr, FeaturesStr, *M);
@@ -560,7 +565,7 @@ static int compileModule(char **argv, LLVMContext &Context) {
     // in the future.
     SmallVector<char, 0> CompileTwiceBuffer;
     if (CompileTwice) {
-      std::unique_ptr<Module> M2(llvm::CloneModule(M.get()));
+      std::unique_ptr<Module> M2(llvm::CloneModule(*M));
       PM.run(*M2);
       CompileTwiceBuffer = Buffer;
       Buffer.clear();
