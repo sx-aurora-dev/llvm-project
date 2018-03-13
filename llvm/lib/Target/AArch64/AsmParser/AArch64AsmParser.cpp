@@ -518,7 +518,9 @@ public:
         ELFRefKind == AArch64MCExpr::VK_TPREL_LO12 ||
         ELFRefKind == AArch64MCExpr::VK_TPREL_LO12_NC ||
         ELFRefKind == AArch64MCExpr::VK_GOTTPREL_LO12_NC ||
-        ELFRefKind == AArch64MCExpr::VK_TLSDESC_LO12) {
+        ELFRefKind == AArch64MCExpr::VK_TLSDESC_LO12 ||
+        ELFRefKind == AArch64MCExpr::VK_SECREL_LO12 ||
+        ELFRefKind == AArch64MCExpr::VK_SECREL_HI12) {
       // Note that we don't range-check the addend. It's adjusted modulo page
       // size when converted, so there is no "out of range" condition when using
       // @pageoff.
@@ -555,45 +557,23 @@ public:
     return (Val >= N && Val <= M);
   }
 
-  bool isLogicalImm32() const {
+  // NOTE: Also used for isLogicalImmNot as anything that can be represented as
+  // a logical immediate can always be represented when inverted.
+  template <typename T>
+  bool isLogicalImm() const {
     if (!isImm())
       return false;
     const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(getImm());
     if (!MCE)
       return false;
+
     int64_t Val = MCE->getValue();
-    if (Val >> 32 != 0 && Val >> 32 != ~0LL)
+    int64_t SVal = typename std::make_signed<T>::type(Val);
+    int64_t UVal = typename std::make_unsigned<T>::type(Val);
+    if (Val != SVal && Val != UVal)
       return false;
-    Val &= 0xFFFFFFFF;
-    return AArch64_AM::isLogicalImmediate(Val, 32);
-  }
 
-  bool isLogicalImm64() const {
-    if (!isImm())
-      return false;
-    const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(getImm());
-    if (!MCE)
-      return false;
-    return AArch64_AM::isLogicalImmediate(MCE->getValue(), 64);
-  }
-
-  bool isLogicalImm32Not() const {
-    if (!isImm())
-      return false;
-    const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(getImm());
-    if (!MCE)
-      return false;
-    int64_t Val = ~MCE->getValue() & 0xFFFFFFFF;
-    return AArch64_AM::isLogicalImmediate(Val, 32);
-  }
-
-  bool isLogicalImm64Not() const {
-    if (!isImm())
-      return false;
-    const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(getImm());
-    if (!MCE)
-      return false;
-    return AArch64_AM::isLogicalImmediate(~MCE->getValue(), 64);
+    return AArch64_AM::isLogicalImmediate(UVal, sizeof(T) * 8);
   }
 
   bool isShiftedImm() const { return Kind == k_ShiftedImm; }
@@ -629,7 +609,9 @@ public:
           || ELFRefKind == AArch64MCExpr::VK_TPREL_HI12
           || ELFRefKind == AArch64MCExpr::VK_TPREL_LO12
           || ELFRefKind == AArch64MCExpr::VK_TPREL_LO12_NC
-          || ELFRefKind == AArch64MCExpr::VK_TLSDESC_LO12;
+          || ELFRefKind == AArch64MCExpr::VK_TLSDESC_LO12
+          || ELFRefKind == AArch64MCExpr::VK_SECREL_HI12
+          || ELFRefKind == AArch64MCExpr::VK_SECREL_LO12;
     }
 
     // If it's a constant, it should be a real immediate in range:
@@ -1378,34 +1360,21 @@ public:
     Inst.addOperand(MCOperand::createImm(MCE->getValue()));
   }
 
-  void addLogicalImm32Operands(MCInst &Inst, unsigned N) const {
+  template <typename T>
+  void addLogicalImmOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
     const MCConstantExpr *MCE = cast<MCConstantExpr>(getImm());
-    uint64_t encoding =
-        AArch64_AM::encodeLogicalImmediate(MCE->getValue() & 0xFFFFFFFF, 32);
+    typename std::make_unsigned<T>::type Val = MCE->getValue();
+    uint64_t encoding = AArch64_AM::encodeLogicalImmediate(Val, sizeof(T) * 8);
     Inst.addOperand(MCOperand::createImm(encoding));
   }
 
-  void addLogicalImm64Operands(MCInst &Inst, unsigned N) const {
+  template <typename T>
+  void addLogicalImmNotOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
     const MCConstantExpr *MCE = cast<MCConstantExpr>(getImm());
-    uint64_t encoding = AArch64_AM::encodeLogicalImmediate(MCE->getValue(), 64);
-    Inst.addOperand(MCOperand::createImm(encoding));
-  }
-
-  void addLogicalImm32NotOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    const MCConstantExpr *MCE = cast<MCConstantExpr>(getImm());
-    int64_t Val = ~MCE->getValue() & 0xFFFFFFFF;
-    uint64_t encoding = AArch64_AM::encodeLogicalImmediate(Val, 32);
-    Inst.addOperand(MCOperand::createImm(encoding));
-  }
-
-  void addLogicalImm64NotOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    const MCConstantExpr *MCE = cast<MCConstantExpr>(getImm());
-    uint64_t encoding =
-        AArch64_AM::encodeLogicalImmediate(~MCE->getValue(), 64);
+    typename std::make_unsigned<T>::type Val = ~MCE->getValue();
+    uint64_t encoding = AArch64_AM::encodeLogicalImmediate(Val, sizeof(T) * 8);
     Inst.addOperand(MCOperand::createImm(encoding));
   }
 
@@ -2889,6 +2858,8 @@ bool AArch64AsmParser::parseSymbolicImmVal(const MCExpr *&ImmVal) {
                   .Case("gottprel_g1", AArch64MCExpr::VK_GOTTPREL_G1)
                   .Case("gottprel_g0_nc", AArch64MCExpr::VK_GOTTPREL_G0_NC)
                   .Case("tlsdesc", AArch64MCExpr::VK_TLSDESC_PAGE)
+                  .Case("secrel_lo12", AArch64MCExpr::VK_SECREL_LO12)
+                  .Case("secrel_hi12", AArch64MCExpr::VK_SECREL_HI12)
                   .Default(AArch64MCExpr::VK_INVALID);
 
     if (RefKind == AArch64MCExpr::VK_INVALID)
@@ -3501,7 +3472,9 @@ bool AArch64AsmParser::validateInstruction(MCInst &Inst,
              ELFRefKind == AArch64MCExpr::VK_TPREL_HI12 ||
              ELFRefKind == AArch64MCExpr::VK_TPREL_LO12 ||
              ELFRefKind == AArch64MCExpr::VK_TPREL_LO12_NC ||
-             ELFRefKind == AArch64MCExpr::VK_TLSDESC_LO12) &&
+             ELFRefKind == AArch64MCExpr::VK_TLSDESC_LO12 ||
+             ELFRefKind == AArch64MCExpr::VK_SECREL_LO12 ||
+             ELFRefKind == AArch64MCExpr::VK_SECREL_HI12) &&
             (Inst.getOpcode() == AArch64::ADDXri ||
              Inst.getOpcode() == AArch64::ADDWri))
           return false;

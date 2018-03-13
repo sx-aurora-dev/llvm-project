@@ -327,7 +327,8 @@ bool LLParser::ParseTargetDefinition() {
     if (ParseToken(lltok::equal, "expected '=' after target datalayout") ||
         ParseStringConstant(Str))
       return true;
-    M->setDataLayout(Str);
+    if (DataLayoutStr.empty())
+      M->setDataLayout(Str);
     return false;
   }
 }
@@ -2611,11 +2612,24 @@ bool LLParser::PerFunctionState::FinishFunction() {
   return false;
 }
 
+static bool isValidVariableType(Module *M, Type *Ty, Value *Val, bool IsCall) {
+  if (Val->getType() == Ty)
+    return true;
+  // For calls we also accept variables in the program address space
+  if (IsCall && isa<PointerType>(Ty)) {
+    Type *TyInProgAS = cast<PointerType>(Ty)->getElementType()->getPointerTo(
+        M->getDataLayout().getProgramAddressSpace());
+    if (Val->getType() == TyInProgAS)
+      return true;
+  }
+  return false;
+}
+
 /// GetVal - Get a value with the specified name or ID, creating a
 /// forward reference record if needed.  This can return null if the value
 /// exists but does not have the right type.
 Value *LLParser::PerFunctionState::GetVal(const std::string &Name, Type *Ty,
-                                          LocTy Loc) {
+                                          LocTy Loc, bool IsCall) {
   // Look this name up in the normal function symbol table.
   Value *Val = F.getValueSymbolTable()->lookup(Name);
 
@@ -2629,7 +2643,8 @@ Value *LLParser::PerFunctionState::GetVal(const std::string &Name, Type *Ty,
 
   // If we have the value in the symbol table or fwd-ref table, return it.
   if (Val) {
-    if (Val->getType() == Ty) return Val;
+    if (isValidVariableType(P.M, Ty, Val, IsCall))
+      return Val;
     if (Ty->isLabelTy())
       P.Error(Loc, "'%" + Name + "' is not a basic block");
     else
@@ -2656,7 +2671,8 @@ Value *LLParser::PerFunctionState::GetVal(const std::string &Name, Type *Ty,
   return FwdVal;
 }
 
-Value *LLParser::PerFunctionState::GetVal(unsigned ID, Type *Ty, LocTy Loc) {
+Value *LLParser::PerFunctionState::GetVal(unsigned ID, Type *Ty, LocTy Loc,
+                                          bool IsCall) {
   // Look this name up in the normal function symbol table.
   Value *Val = ID < NumberedVals.size() ? NumberedVals[ID] : nullptr;
 
@@ -2670,7 +2686,8 @@ Value *LLParser::PerFunctionState::GetVal(unsigned ID, Type *Ty, LocTy Loc) {
 
   // If we have the value in the symbol table or fwd-ref table, return it.
   if (Val) {
-    if (Val->getType() == Ty) return Val;
+    if (isValidVariableType(P.M, Ty, Val, IsCall))
+      return Val;
     if (Ty->isLabelTy())
       P.Error(Loc, "'%" + Twine(ID) + "' is not a basic block");
     else
@@ -2761,13 +2778,13 @@ bool LLParser::PerFunctionState::SetInstName(int NameID,
 /// forward reference record if needed.
 BasicBlock *LLParser::PerFunctionState::GetBB(const std::string &Name,
                                               LocTy Loc) {
-  return dyn_cast_or_null<BasicBlock>(GetVal(Name,
-                                      Type::getLabelTy(F.getContext()), Loc));
+  return dyn_cast_or_null<BasicBlock>(
+      GetVal(Name, Type::getLabelTy(F.getContext()), Loc, /*IsCall=*/false));
 }
 
 BasicBlock *LLParser::PerFunctionState::GetBB(unsigned ID, LocTy Loc) {
-  return dyn_cast_or_null<BasicBlock>(GetVal(ID,
-                                      Type::getLabelTy(F.getContext()), Loc));
+  return dyn_cast_or_null<BasicBlock>(
+      GetVal(ID, Type::getLabelTy(F.getContext()), Loc, /*IsCall=*/false));
 }
 
 /// DefineBB - Define the specified basic block, which is either named or
@@ -3386,7 +3403,7 @@ bool LLParser::ParseGlobalValue(Type *Ty, Constant *&C) {
   ValID ID;
   Value *V = nullptr;
   bool Parsed = ParseValID(ID) ||
-                ConvertValIDToValue(Ty, ID, V, nullptr);
+                ConvertValIDToValue(Ty, ID, V, nullptr, /*IsCall=*/false);
   if (V && !(C = dyn_cast<Constant>(V)))
     return Error(ID.Loc, "global values must be constants");
   return Parsed;
@@ -3611,7 +3628,6 @@ struct MDFieldList : public MDFieldImpl<SmallVector<Metadata *, 4>> {
 };
 
 struct ChecksumKindField : public MDFieldImpl<DIFile::ChecksumKind> {
-  ChecksumKindField() : ImplTy(DIFile::CSK_None) {}
   ChecksumKindField(DIFile::ChecksumKind CSKind) : ImplTy(CSKind) {}
 };
 
@@ -3631,6 +3647,22 @@ struct MDSignedOrMDField : MDEitherFieldImpl<MDSignedField, MDField> {
   }
   Metadata *getMDFieldValue() const {
     assert(isMDField() && "Wrong field type");
+    return B.Val;
+  }
+};
+
+struct MDSignedOrUnsignedField
+    : MDEitherFieldImpl<MDSignedField, MDUnsignedField> {
+  MDSignedOrUnsignedField() : ImplTy(MDSignedField(0), MDUnsignedField(0)) {}
+
+  bool isMDSignedField() const { return WhatIs == IsTypeA; }
+  bool isMDUnsignedField() const { return WhatIs == IsTypeB; }
+  int64_t getMDSignedValue() const {
+    assert(isMDSignedField() && "Wrong field type");
+    return A.Val;
+  }
+  uint64_t getMDUnsignedValue() const {
+    assert(isMDUnsignedField() && "Wrong field type");
     return B.Val;
   }
 };
@@ -3912,6 +3944,27 @@ bool LLParser::ParseMDField(LocTy Loc, StringRef Name,
 }
 
 template <>
+bool LLParser::ParseMDField(LocTy Loc, StringRef Name,
+                            MDSignedOrUnsignedField &Result) {
+  if (Lex.getKind() != lltok::APSInt)
+    return false;
+
+  if (Lex.getAPSIntVal().isSigned()) {
+    MDSignedField Res = Result.A;
+    if (ParseMDField(Loc, Name, Res))
+      return true;
+    Result.assign(Res);
+    return false;
+  }
+
+  MDUnsignedField Res = Result.B;
+  if (ParseMDField(Loc, Name, Res))
+    return true;
+  Result.assign(Res);
+  return false;
+}
+
+template <>
 bool LLParser::ParseMDField(LocTy Loc, StringRef Name, MDStringField &Result) {
   LocTy ValueLoc = Lex.getLoc();
   std::string S;
@@ -3938,13 +3991,14 @@ bool LLParser::ParseMDField(LocTy Loc, StringRef Name, MDFieldList &Result) {
 template <>
 bool LLParser::ParseMDField(LocTy Loc, StringRef Name,
                             ChecksumKindField &Result) {
-  if (Lex.getKind() != lltok::ChecksumKind)
+  Optional<DIFile::ChecksumKind> CSKind =
+      DIFile::getChecksumKind(Lex.getStrVal());
+
+  if (Lex.getKind() != lltok::ChecksumKind || !CSKind)
     return TokError(
         "invalid checksum kind" + Twine(" '") + Lex.getStrVal() + "'");
 
-  DIFile::ChecksumKind CSKind = DIFile::getChecksumKind(Lex.getStrVal());
-
-  Result.assign(CSKind);
+  Result.assign(*CSKind);
   Lex.Lex();
   return false;
 }
@@ -4076,15 +4130,24 @@ bool LLParser::ParseDISubrange(MDNode *&Result, bool IsDistinct) {
 }
 
 /// ParseDIEnumerator:
-///   ::= !DIEnumerator(value: 30, name: "SomeKind")
+///   ::= !DIEnumerator(value: 30, isUnsigned: true, name: "SomeKind")
 bool LLParser::ParseDIEnumerator(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(name, MDStringField, );                                             \
-  REQUIRED(value, MDSignedField, );
+  REQUIRED(value, MDSignedOrUnsignedField, );                                  \
+  OPTIONAL(isUnsigned, MDBoolField, (false));
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
-  Result = GET_OR_DISTINCT(DIEnumerator, (Context, value.Val, name.Val));
+  if (isUnsigned.Val && value.isMDSignedField())
+    return TokError("unsigned enumerator with negative value");
+
+  int64_t Value = value.isMDSignedField()
+                      ? value.getMDSignedValue()
+                      : static_cast<int64_t>(value.getMDUnsignedValue());
+  Result =
+      GET_OR_DISTINCT(DIEnumerator, (Context, Value, isUnsigned.Val, name.Val));
+
   return false;
 }
 
@@ -4155,7 +4218,8 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(runtimeLang, DwarfLangField, );                                     \
   OPTIONAL(vtableHolder, MDField, );                                           \
   OPTIONAL(templateParams, MDField, );                                         \
-  OPTIONAL(identifier, MDStringField, );
+  OPTIONAL(identifier, MDStringField, );                                       \
+  OPTIONAL(discriminator, MDField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
@@ -4165,7 +4229,7 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
             Context, *identifier.Val, tag.Val, name.Val, file.Val, line.Val,
             scope.Val, baseType.Val, size.Val, align.Val, offset.Val, flags.Val,
             elements.Val, runtimeLang.Val, vtableHolder.Val,
-            templateParams.Val)) {
+            templateParams.Val, discriminator.Val)) {
       Result = CT;
       return false;
     }
@@ -4176,7 +4240,8 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
       DICompositeType,
       (Context, tag.Val, name.Val, file.Val, line.Val, scope.Val, baseType.Val,
        size.Val, align.Val, offset.Val, flags.Val, elements.Val,
-       runtimeLang.Val, vtableHolder.Val, templateParams.Val, identifier.Val));
+       runtimeLang.Val, vtableHolder.Val, templateParams.Val, identifier.Val,
+       discriminator.Val));
   return false;
 }
 
@@ -4194,20 +4259,34 @@ bool LLParser::ParseDISubroutineType(MDNode *&Result, bool IsDistinct) {
 }
 
 /// ParseDIFileType:
-///   ::= !DIFileType(filename: "path/to/file", directory: "/path/to/dir"
+///   ::= !DIFileType(filename: "path/to/file", directory: "/path/to/dir",
 ///                   checksumkind: CSK_MD5,
-///                   checksum: "000102030405060708090a0b0c0d0e0f")
+///                   checksum: "000102030405060708090a0b0c0d0e0f",
+///                   source: "source file contents")
 bool LLParser::ParseDIFile(MDNode *&Result, bool IsDistinct) {
+  // The default constructed value for checksumkind is required, but will never
+  // be used, as the parser checks if the field was actually Seen before using
+  // the Val.
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(filename, MDStringField, );                                         \
   REQUIRED(directory, MDStringField, );                                        \
-  OPTIONAL(checksumkind, ChecksumKindField, );                                 \
-  OPTIONAL(checksum, MDStringField, );
+  OPTIONAL(checksumkind, ChecksumKindField, (DIFile::CSK_MD5));                \
+  OPTIONAL(checksum, MDStringField, );                                         \
+  OPTIONAL(source, MDStringField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
+  Optional<DIFile::ChecksumInfo<MDString *>> OptChecksum;
+  if (checksumkind.Seen && checksum.Seen)
+    OptChecksum.emplace(checksumkind.Val, checksum.Val);
+  else if (checksumkind.Seen || checksum.Seen)
+    return Lex.Error("'checksumkind' and 'checksum' must be provided together");
+
+  Optional<MDString *> OptSource;
+  if (source.Seen)
+    OptSource = source.Val;
   Result = GET_OR_DISTINCT(DIFile, (Context, filename.Val, directory.Val,
-                                    checksumkind.Val, checksum.Val));
+                                    OptChecksum, OptSource));
   return false;
 }
 
@@ -4666,18 +4745,18 @@ bool LLParser::ParseMetadata(Metadata *&MD, PerFunctionState *PFS) {
 //===----------------------------------------------------------------------===//
 
 bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
-                                   PerFunctionState *PFS) {
+                                   PerFunctionState *PFS, bool IsCall) {
   if (Ty->isFunctionTy())
     return Error(ID.Loc, "functions are not values, refer to them as pointers");
 
   switch (ID.Kind) {
   case ValID::t_LocalID:
     if (!PFS) return Error(ID.Loc, "invalid use of function-local name");
-    V = PFS->GetVal(ID.UIntVal, Ty, ID.Loc);
+    V = PFS->GetVal(ID.UIntVal, Ty, ID.Loc, IsCall);
     return V == nullptr;
   case ValID::t_LocalName:
     if (!PFS) return Error(ID.Loc, "invalid use of function-local name");
-    V = PFS->GetVal(ID.StrVal, Ty, ID.Loc);
+    V = PFS->GetVal(ID.StrVal, Ty, ID.Loc, IsCall);
     return V == nullptr;
   case ValID::t_InlineAsm: {
     if (!ID.FTy || !InlineAsm::Verify(ID.FTy, ID.StrVal2))
@@ -4793,7 +4872,7 @@ bool LLParser::parseConstantValue(Type *Ty, Constant *&C) {
   case ValID::t_ConstantStruct:
   case ValID::t_PackedConstantStruct: {
     Value *V;
-    if (ConvertValIDToValue(Ty, ID, V, /*PFS=*/nullptr))
+    if (ConvertValIDToValue(Ty, ID, V, /*PFS=*/nullptr, /*IsCall=*/false))
       return true;
     assert(isa<Constant>(V) && "Expected a constant value");
     C = cast<Constant>(V);
@@ -4810,7 +4889,8 @@ bool LLParser::parseConstantValue(Type *Ty, Constant *&C) {
 bool LLParser::ParseValue(Type *Ty, Value *&V, PerFunctionState *PFS) {
   V = nullptr;
   ValID ID;
-  return ParseValID(ID, PFS) || ConvertValIDToValue(Ty, ID, V, PFS);
+  return ParseValID(ID, PFS) ||
+         ConvertValIDToValue(Ty, ID, V, PFS, /*IsCall=*/false);
 }
 
 bool LLParser::ParseTypeAndValue(Value *&V, PerFunctionState *PFS) {
@@ -5563,7 +5643,8 @@ bool LLParser::ParseInvoke(Instruction *&Inst, PerFunctionState &PFS) {
 
   // Look up the callee.
   Value *Callee;
-  if (ConvertValIDToValue(PointerType::getUnqual(Ty), CalleeID, Callee, &PFS))
+  if (ConvertValIDToValue(PointerType::getUnqual(Ty), CalleeID, Callee, &PFS,
+                          /*IsCall=*/true))
     return true;
 
   // Set up the Attribute for the function.
@@ -6154,7 +6235,8 @@ bool LLParser::ParseCall(Instruction *&Inst, PerFunctionState &PFS,
 
   // Look up the callee.
   Value *Callee;
-  if (ConvertValIDToValue(PointerType::getUnqual(Ty), CalleeID, Callee, &PFS))
+  if (ConvertValIDToValue(PointerType::getUnqual(Ty), CalleeID, Callee, &PFS,
+                          /*IsCall=*/true))
     return true;
 
   // Set up the Attribute for the function.
@@ -6261,14 +6343,7 @@ int LLParser::ParseAlloc(Instruction *&Inst, PerFunctionState &PFS) {
   if (Size && !Size->getType()->isIntegerTy())
     return Error(SizeLoc, "element count must have integer type");
 
-  const DataLayout &DL = M->getDataLayout();
-  unsigned AS = DL.getAllocaAddrSpace();
-  if (AS != AddrSpace) {
-    // TODO: In the future it should be possible to specify addrspace per-alloca.
-    return Error(ASLoc, "address space must match datalayout");
-  }
-
-  AllocaInst *AI = new AllocaInst(Ty, AS, Size, Alignment);
+  AllocaInst *AI = new AllocaInst(Ty, AddrSpace, Size, Alignment);
   AI->setUsedWithInAlloca(IsInAlloca);
   AI->setSwiftError(IsSwiftError);
   Inst = AI;

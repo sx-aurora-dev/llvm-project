@@ -73,9 +73,16 @@ namespace HexagonISD {
                    // [*] The equivalence is defined as "Q <=> (V != 0)",
                    //     where the != operation compares bytes.
                    // Note: V != 0 is implemented as V >u 0.
+      QCAT,
+      QTRUE,
+      QFALSE,
       VZERO,
       TYPECAST,    // No-op that's used to convert between different legal
                    // types in a register.
+      VALIGN,      // Align two vectors (in Op0, Op1) to one that would have
+                   // been loaded from address in Op2.
+      VALIGNADDR,  // Align vector address: Op0 & -Op1, except when it is
+                   // an address in a vector load, then it's a no-op.
       OP_END
     };
 
@@ -148,6 +155,7 @@ namespace HexagonISD {
     SDValue LowerANY_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerSIGN_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerZERO_EXTEND(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerUnalignedLoad(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINLINEASM(SDValue Op, SelectionDAG &DAG) const;
@@ -295,6 +303,9 @@ namespace HexagonISD {
     }
 
   private:
+    void initializeHVXLowering();
+    std::pair<SDValue,int> getBaseAndOffset(SDValue Addr) const;
+
     bool getBuildVectorConstInts(ArrayRef<SDValue> Values, MVT VecTy,
                                  SelectionDAG &DAG,
                                  MutableArrayRef<ConstantInt*> Consts) const;
@@ -310,14 +321,15 @@ namespace HexagonISD {
                             SelectionDAG &DAG) const;
     SDValue contractPredicate(SDValue Vec64, const SDLoc &dl,
                               SelectionDAG &DAG) const;
+    SDValue getVectorShiftByInt(SDValue Op, SelectionDAG &DAG) const;
 
     bool isUndef(SDValue Op) const {
       if (Op.isMachineOpcode())
         return Op.getMachineOpcode() == TargetOpcode::IMPLICIT_DEF;
       return Op.getOpcode() == ISD::UNDEF;
     }
-    SDValue getNode(unsigned MachineOpc, const SDLoc &dl, MVT Ty,
-                    ArrayRef<SDValue> Ops, SelectionDAG &DAG) const {
+    SDValue getInstr(unsigned MachineOpc, const SDLoc &dl, MVT Ty,
+                     ArrayRef<SDValue> Ops, SelectionDAG &DAG) const {
       SDNode *N = DAG.getMachineNode(MachineOpc, dl, Ty, Ops);
       return SDValue(N, 0);
     }
@@ -360,6 +372,8 @@ namespace HexagonISD {
     VectorPair opSplit(SDValue Vec, const SDLoc &dl, SelectionDAG &DAG) const;
     SDValue opCastElem(SDValue Vec, MVT ElemTy, SelectionDAG &DAG) const;
 
+    bool isHvxSingleTy(MVT Ty) const;
+    bool isHvxPairTy(MVT Ty) const;
     SDValue convertToByteIndex(SDValue ElemIdx, MVT ElemTy,
                                SelectionDAG &DAG) const;
     SDValue getIndexInWord32(SDValue Idx, MVT ElemTy, SelectionDAG &DAG) const;
@@ -398,14 +412,25 @@ namespace HexagonISD {
     SDValue LowerHvxInsertElement(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxExtractSubvector(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxInsertSubvector(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerHvxAnyExt(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerHvxSignExt(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerHvxZeroExt(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxMul(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxMulh(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxSetCC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxExtend(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerHvxShift(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue SplitHvxPairOp(SDValue Op, SelectionDAG &DAG) const;
+    SDValue SplitHvxMemOp(SDValue Op, SelectionDAG &DAG) const;
 
     std::pair<const TargetRegisterClass*, uint8_t>
     findRepresentativeClass(const TargetRegisterInfo *TRI, MVT VT)
         const override;
+
+    bool isHvxOperation(SDValue Op) const;
+    SDValue LowerHvxOperation(SDValue Op, SelectionDAG &DAG) const;
   };
 
 } // end namespace llvm

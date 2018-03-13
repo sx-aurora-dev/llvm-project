@@ -242,11 +242,13 @@ static void linkXRayRuntimeDeps(const ToolChain &TC, const ArgList &Args,
                                 ArgStringList &CmdArgs) {
   CmdArgs.push_back("--no-as-needed");
   CmdArgs.push_back("-lpthread");
-  CmdArgs.push_back("-lrt");
+  if (TC.getTriple().getOS() != llvm::Triple::OpenBSD)
+    CmdArgs.push_back("-lrt");
   CmdArgs.push_back("-lm");
 
   if (TC.getTriple().getOS() != llvm::Triple::FreeBSD &&
-      TC.getTriple().getOS() != llvm::Triple::NetBSD)
+      TC.getTriple().getOS() != llvm::Triple::NetBSD &&
+      TC.getTriple().getOS() != llvm::Triple::OpenBSD)
     CmdArgs.push_back("-ldl");
 }
 
@@ -305,7 +307,8 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
 }
 
 static bool getPIE(const ArgList &Args, const toolchains::Linux &ToolChain) {
-  if (Args.hasArg(options::OPT_shared) || Args.hasArg(options::OPT_static))
+  if (Args.hasArg(options::OPT_shared) || Args.hasArg(options::OPT_static) ||
+      Args.hasArg(options::OPT_r))
     return false;
 
   Arg *A = Args.getLastArg(options::OPT_pie, options::OPT_no_pie,
@@ -378,9 +381,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   for (const auto &Opt : ToolChain.ExtraOpts)
     CmdArgs.push_back(Opt.c_str());
 
-  if (!Args.hasArg(options::OPT_static)) {
-    CmdArgs.push_back("--eh-frame-hdr");
-  }
+  CmdArgs.push_back("--eh-frame-hdr");
 
   if (const char *LDMOption = getLDMOption(ToolChain.getTriple(), Args)) {
     CmdArgs.push_back("-m");
@@ -627,6 +628,18 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
     CmdArgs.push_back("-mlittle-endian");
     CmdArgs.push_back(
       ppc::getPPCAsmModeForCPU(getCPUName(Args, getToolChain().getTriple())));
+    break;
+  }
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64: {
+    StringRef ABIName = riscv::getRISCVABI(Args, getToolChain().getTriple());
+    CmdArgs.push_back("-mabi");
+    CmdArgs.push_back(ABIName.data());
+    if (const Arg *A = Args.getLastArg(options::OPT_march_EQ)) {
+      StringRef MArch = A->getValue();
+      CmdArgs.push_back("-march");
+      CmdArgs.push_back(MArch.data());
+    }
     break;
   }
   case llvm::Triple::sparc:

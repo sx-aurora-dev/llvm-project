@@ -1,6 +1,6 @@
 ; RUN: llc -filetype=obj %p/Inputs/ret32.ll -o %t.ret32.o
 ; RUN: llc -filetype=obj %s -o %t.o
-; RUN: lld -flavor wasm -o %t.wasm %t.o %t.ret32.o
+; RUN: wasm-ld --check-signatures -o %t.wasm %t.o %t.ret32.o
 ; RUN: obj2yaml %t.wasm | FileCheck %s
 
 target triple = "wasm32-unknown-unknown-wasm"
@@ -36,9 +36,6 @@ declare i32 @ret32(float) local_unnamed_addr #1
 ; CHECK-NEXT:      - Index:           2
 ; CHECK-NEXT:        Locals:
 ; CHECK-NEXT:        Body:            0B
-; CHECK-NEXT:   - Type:            CUSTOM
-; CHECK-NEXT:     Name:            linking
-; CHECK-NEXT:     DataSize:        0
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:

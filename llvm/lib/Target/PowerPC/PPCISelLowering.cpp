@@ -2571,7 +2571,7 @@ SDValue PPCTargetLowering::LowerGlobalTLSAddress(SDValue Op,
   // large models could be added if users need it, at the cost of
   // additional complexity.
   GlobalAddressSDNode *GA = cast<GlobalAddressSDNode>(Op);
-  if (DAG.getTarget().Options.EmulatedTLS)
+  if (DAG.getTarget().useEmulatedTLS())
     return LowerToTLSEmulatedModel(GA, DAG);
 
   SDLoc dl(GA);
@@ -4939,7 +4939,11 @@ SDValue PPCTargetLowering::LowerCallResult(
   SmallVector<CCValAssign, 16> RVLocs;
   CCState CCRetInfo(CallConv, isVarArg, DAG.getMachineFunction(), RVLocs,
                     *DAG.getContext());
-  CCRetInfo.AnalyzeCallResult(Ins, RetCC_PPC);
+
+  CCRetInfo.AnalyzeCallResult(
+      Ins, (Subtarget.isSVR4ABI() && CallConv == CallingConv::Cold)
+               ? RetCC_PPC_Cold
+               : RetCC_PPC);
 
   // Copy all of the result registers out of their specified physreg.
   for (unsigned i = 0, e = RVLocs.size(); i != e; ++i) {
@@ -5159,6 +5163,7 @@ SDValue PPCTargetLowering::LowerCall_32SVR4(
   // of the 32-bit SVR4 ABI stack frame layout.
 
   assert((CallConv == CallingConv::C ||
+          CallConv == CallingConv::Cold ||
           CallConv == CallingConv::Fast) && "Unknown calling convention!");
 
   unsigned PtrByteSize = 4;
@@ -5462,6 +5467,11 @@ SDValue PPCTargetLowering::LowerCall_64SVR4(
   // arguments that will be in registers.
   unsigned NumGPRsUsed = 0, NumFPRsUsed = 0, NumVRsUsed = 0;
 
+  // Avoid allocating parameter area for fastcc functions if all the arguments
+  // can be passed in the registers.
+  if (CallConv == CallingConv::Fast)
+    HasParameterArea = false;
+
   // Add up all the space actually used.
   for (unsigned i = 0; i != NumOps; ++i) {
     ISD::ArgFlagsTy Flags = Outs[i].Flags;
@@ -5472,9 +5482,11 @@ SDValue PPCTargetLowering::LowerCall_64SVR4(
       continue;
 
     if (CallConv == CallingConv::Fast) {
-      if (Flags.isByVal())
+      if (Flags.isByVal()) {
         NumGPRsUsed += (Flags.getByValSize()+7)/8;
-      else
+        if (NumGPRsUsed > NumGPRs)
+          HasParameterArea = true;
+      } else {
         switch (ArgVT.getSimpleVT().SimpleTy) {
         default: llvm_unreachable("Unexpected ValueType for argument!");
         case MVT::i1:
@@ -5511,6 +5523,8 @@ SDValue PPCTargetLowering::LowerCall_64SVR4(
             continue;
           break;
         }
+        HasParameterArea = true;
+      }
     }
 
     /* Respect alignment of argument on the stack.  */
@@ -6420,7 +6434,10 @@ PPCTargetLowering::CanLowerReturn(CallingConv::ID CallConv,
                                   LLVMContext &Context) const {
   SmallVector<CCValAssign, 16> RVLocs;
   CCState CCInfo(CallConv, isVarArg, MF, RVLocs, Context);
-  return CCInfo.CheckReturn(Outs, RetCC_PPC);
+  return CCInfo.CheckReturn(
+      Outs, (Subtarget.isSVR4ABI() && CallConv == CallingConv::Cold)
+                ? RetCC_PPC_Cold
+                : RetCC_PPC);
 }
 
 SDValue
@@ -6432,7 +6449,10 @@ PPCTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   SmallVector<CCValAssign, 16> RVLocs;
   CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), RVLocs,
                  *DAG.getContext());
-  CCInfo.AnalyzeReturn(Outs, RetCC_PPC);
+  CCInfo.AnalyzeReturn(Outs,
+                       (Subtarget.isSVR4ABI() && CallConv == CallingConv::Cold)
+                           ? RetCC_PPC_Cold
+                           : RetCC_PPC);
 
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
@@ -10962,7 +10982,7 @@ SDValue PPCTargetLowering::ConvertSETCCToSubtract(SDNode *N,
 
   // Size of integers being compared has a critical role in the following
   // analysis, so we prefer to do this when all types are legal.
-  if (!DCI.isAfterLegalizeVectorOps())
+  if (!DCI.isAfterLegalizeDAG())
     return SDValue();
 
   // If all users of SETCC extend its value to a legal integer type

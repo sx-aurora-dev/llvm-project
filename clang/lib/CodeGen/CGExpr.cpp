@@ -187,7 +187,7 @@ RValue CodeGenFunction::EmitAnyExpr(const Expr *E,
   llvm_unreachable("bad evaluation kind");
 }
 
-/// EmitAnyExprToTemp - Similary to EmitAnyExpr(), however, the result will
+/// EmitAnyExprToTemp - Similar to EmitAnyExpr(), however, the result will
 /// always be accessible even if no aggregate location is provided.
 RValue CodeGenFunction::EmitAnyExprToTemp(const Expr *E) {
   AggValueSlot AggSlot = AggValueSlot::ignored();
@@ -873,7 +873,7 @@ static llvm::Value *getArrayIndexingBound(
       if (const auto *CAT = dyn_cast<ConstantArrayType>(AT))
         return CGF.Builder.getInt(CAT->getSize());
       else if (const auto *VAT = dyn_cast<VariableArrayType>(AT))
-        return CGF.getVLASize(VAT).first;
+        return CGF.getVLASize(VAT).NumElts;
       // Ignore pass_object_size here. It's not applicable on decayed pointers.
     }
   }
@@ -3313,7 +3313,7 @@ LValue CodeGenFunction::EmitArraySubscriptExpr(const ArraySubscriptExpr *E,
     auto *Idx = EmitIdxAfterBase(/*Promote*/true);
 
     // The element count here is the total number of non-VLA elements.
-    llvm::Value *numElements = getVLASize(vla).first;
+    llvm::Value *numElements = getVLASize(vla).NumElts;
 
     // Effectively, the multiply by the VLA size is part of the GEP.
     // GEP indexes are signed, and scaling an index isn't permitted to
@@ -3547,7 +3547,7 @@ LValue CodeGenFunction::EmitOMPArraySectionExpr(const OMPArraySectionExpr *E,
         emitOMPArraySectionBase(*this, E->getBase(), BaseInfo, TBAAInfo,
                                 BaseTy, VLA->getElementType(), IsLowerBound);
     // The element count here is the total number of non-VLA elements.
-    llvm::Value *NumElements = getVLASize(VLA).first;
+    llvm::Value *NumElements = getVLASize(VLA).NumElts;
 
     // Effectively, the multiply by the VLA size is part of the GEP.
     // GEP indexes are signed, and scaling an index isn't permitted to

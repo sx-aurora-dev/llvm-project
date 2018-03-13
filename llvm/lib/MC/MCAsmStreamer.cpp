@@ -7,6 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -129,6 +130,9 @@ public:
 
   void ChangeSection(MCSection *Section, const MCExpr *Subsection) override;
 
+  void emitELFSymverDirective(StringRef AliasName,
+                              const MCSymbol *Aliasee) override;
+
   void EmitLOHDirective(MCLOHType Kind, const MCLOHArgs &Args) override;
   void EmitLabel(MCSymbol *Symbol, SMLoc Loc = SMLoc()) override;
 
@@ -211,10 +215,12 @@ public:
                          SMLoc Loc) override;
 
   void EmitFileDirective(StringRef Filename) override;
-  unsigned EmitDwarfFileDirective(unsigned FileNo, StringRef Directory,
-                                  StringRef Filename,
-                                  MD5::MD5Result *Checksum = 0,
-                                  unsigned CUID = 0) override;
+  Expected<unsigned> tryEmitDwarfFileDirective(unsigned FileNo,
+                                               StringRef Directory,
+                                               StringRef Filename,
+                                               MD5::MD5Result *Checksum = 0,
+                                               Optional<StringRef> Source = None,
+                                               unsigned CUID = 0) override;
   void EmitDwarfLocDirective(unsigned FileNo, unsigned Line,
                              unsigned Column, unsigned Flags,
                              unsigned Isa, unsigned Discriminator,
@@ -411,6 +417,14 @@ void MCAsmStreamer::ChangeSection(MCSection *Section,
   }
 }
 
+void MCAsmStreamer::emitELFSymverDirective(StringRef AliasName,
+                                           const MCSymbol *Aliasee) {
+  OS << ".symver ";
+  Aliasee->print(OS, MAI);
+  OS << ", " << AliasName;
+  EmitEOL();
+}
+
 void MCAsmStreamer::EmitLabel(MCSymbol *Symbol, SMLoc Loc) {
   MCStreamer::EmitLabel(Symbol, Loc);
 
@@ -565,7 +579,7 @@ bool MCAsmStreamer::EmitSymbolAttribute(MCSymbol *Symbol,
     case MCSA_ELF_TypeObject:      OS << "object"; break;
     case MCSA_ELF_TypeTLS:         OS << "tls_object"; break;
     case MCSA_ELF_TypeCommon:      OS << "common"; break;
-    case MCSA_ELF_TypeNoType:      OS << "no_type"; break;
+    case MCSA_ELF_TypeNoType:      OS << "notype"; break;
     case MCSA_ELF_TypeGnuUniqueObject: OS << "gnu_unique_object"; break;
     }
     EmitEOL();
@@ -910,7 +924,7 @@ void MCAsmStreamer::EmitULEB128Value(const MCExpr *Value) {
     EmitULEB128IntValue(IntValue);
     return;
   }
-  OS << ".uleb128 ";
+  OS << "\t.uleb128 ";
   Value->print(OS, MAI);
   EmitEOL();
 }
@@ -921,7 +935,7 @@ void MCAsmStreamer::EmitSLEB128Value(const MCExpr *Value) {
     EmitSLEB128IntValue(IntValue);
     return;
   }
-  OS << ".sleb128 ";
+  OS << "\t.sleb128 ";
   Value->print(OS, MAI);
   EmitEOL();
 }
@@ -1073,18 +1087,18 @@ void MCAsmStreamer::EmitFileDirective(StringRef Filename) {
   EmitEOL();
 }
 
-unsigned MCAsmStreamer::EmitDwarfFileDirective(unsigned FileNo,
-                                               StringRef Directory,
-                                               StringRef Filename,
-                                               MD5::MD5Result *Checksum,
-                                               unsigned CUID) {
+Expected<unsigned> MCAsmStreamer::tryEmitDwarfFileDirective(
+    unsigned FileNo, StringRef Directory, StringRef Filename,
+    MD5::MD5Result *Checksum, Optional<StringRef> Source, unsigned CUID) {
   assert(CUID == 0);
 
   MCDwarfLineTable &Table = getContext().getMCDwarfLineTable(CUID);
   unsigned NumFiles = Table.getMCDwarfFiles().size();
-  FileNo = Table.getFile(Directory, Filename, Checksum, FileNo);
-  if (FileNo == 0)
-    return 0;
+  Expected<unsigned> FileNoOrErr =
+      Table.tryGetFile(Directory, Filename, Checksum, Source, FileNo);
+  if (!FileNoOrErr)
+    return FileNoOrErr.takeError();
+  FileNo = FileNoOrErr.get();
   if (NumFiles == Table.getMCDwarfFiles().size())
     return FileNo;
 
@@ -1112,6 +1126,10 @@ unsigned MCAsmStreamer::EmitDwarfFileDirective(unsigned FileNo,
   if (Checksum) {
     OS1 << " md5 ";
     PrintQuotedString(Checksum->digest(), OS1);
+  }
+  if (Source) {
+    OS1 << " source ";
+    PrintQuotedString(*Source, OS1);
   }
   if (MCTargetStreamer *TS = getTargetStreamer()) {
     TS->emitDwarfFileDirective(OS1.str());

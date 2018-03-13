@@ -3,10 +3,10 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_clang_library(clangDaemon
+  AST.cpp
   ClangdLSPServer.cpp
   ClangdServer.cpp
   ClangdUnit.cpp
-  ClangdUnitStore.cpp
   CodeComplete.cpp
   CodeCompletionStrings.cpp
   CompileArgsCache.cpp
@@ -15,15 +15,19 @@ add_clang_library(clangDaemon
   DraftStore.cpp
   FuzzyMatch.cpp
   GlobalCompilationDatabase.cpp
+  Headers.cpp
   JSONExpr.cpp
   JSONRPCDispatcher.cpp
   Logger.cpp
   Protocol.cpp
   ProtocolHandlers.cpp
   SourceCode.cpp
+  Threading.cpp
   Trace.cpp
+  TUScheduler.cpp
   URI.cpp
   XRefs.cpp
+  index/CanonicalIncludes.cpp
   index/FileIndex.cpp
   index/Index.cpp
   index/MemIndex.cpp

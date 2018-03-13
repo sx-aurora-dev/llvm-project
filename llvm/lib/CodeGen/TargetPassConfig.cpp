@@ -654,6 +654,9 @@ void TargetPassConfig::addPassesToHandleExceptions() {
     addPass(createWinEHPass());
     addPass(createDwarfEHPass());
     break;
+  case ExceptionHandling::Wasm:
+    // TODO to prevent warning
+    break;
   case ExceptionHandling::None:
     addPass(createLowerInvokePass());
 
@@ -746,7 +749,7 @@ bool TargetPassConfig::addCoreISelPasses() {
 }
 
 bool TargetPassConfig::addISelPasses() {
-  if (TM->Options.EmulatedTLS)
+  if (TM->useEmulatedTLS())
     addPass(createLowerEmuTLSPass());
 
   addPass(createPreISelIntrinsicLoweringPass());
@@ -1080,6 +1083,10 @@ void TargetPassConfig::addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
     // FIXME: Re-enable coloring with register when it's capable of adding
     // kill markers.
     addPass(&StackSlotColoringID);
+
+    // Copy propagate to forward register uses and try to eliminate COPYs that
+    // were not coalesced.
+    addPass(&MachineCopyPropagationID);
 
     // Run post-ra machine LICM to hoist reloads / remats.
     //

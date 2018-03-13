@@ -410,6 +410,9 @@ def sextloadi16_glue : PatFrag<(ops node:$ptr), (sextload_glue node:$ptr), [{
 def load_glue_align8 : Aligned8Bytes <
   (ops node:$ptr), (load_glue node:$ptr)
 >;
+def load_glue_align16 : Aligned16Bytes <
+  (ops node:$ptr), (load_glue node:$ptr)
+>;
 
 
 def load_local_m0 : LoadFrag<load_glue>, LocalAddress;
@@ -418,6 +421,7 @@ def sextloadi16_local_m0 : LoadFrag<sextloadi16_glue>, LocalAddress;
 def az_extloadi8_local_m0 : LoadFrag<az_extloadi8_glue>, LocalAddress;
 def az_extloadi16_local_m0 : LoadFrag<az_extloadi16_glue>, LocalAddress;
 def load_align8_local_m0 : LoadFrag <load_glue_align8>, LocalAddress;
+def load_align16_local_m0 : LoadFrag <load_glue_align16>, LocalAddress;
 
 
 def AMDGPUst_glue : SDNode <"ISD::STORE", SDTStore,
@@ -836,6 +840,7 @@ def tfe : NamedOperandBit<"TFE", NamedMatchClass<"TFE">>;
 def unorm : NamedOperandBit<"UNorm", NamedMatchClass<"UNorm">>;
 def da : NamedOperandBit<"DA", NamedMatchClass<"DA">>;
 def r128 : NamedOperandBit<"R128", NamedMatchClass<"R128">>;
+def D16 : NamedOperandBit<"D16", NamedMatchClass<"D16">>;
 def lwe : NamedOperandBit<"LWE", NamedMatchClass<"LWE">>;
 def exp_compr : NamedOperandBit<"ExpCompr", NamedMatchClass<"ExpCompr">>;
 def exp_vm : NamedOperandBit<"ExpVM", NamedMatchClass<"ExpVM">>;
@@ -2040,6 +2045,22 @@ def getMaskedMIMGOp4 : InstrMapping {
   let ValueCols = [["1"], ["2"], ["3"] ];
 }
 
+def getMIMGAtomicOp1 : InstrMapping {
+  let FilterClass = "MIMG_Atomic_Size";
+  let RowFields = ["Op"];
+  let ColFields = ["AtomicSize"];
+  let KeyCol = ["1"];
+  let ValueCols = [["2"]];
+}
+
+def getMIMGAtomicOp2 : InstrMapping {
+  let FilterClass = "MIMG_Atomic_Size";
+  let RowFields = ["Op"];
+  let ColFields = ["AtomicSize"];
+  let KeyCol = ["2"];
+  let ValueCols = [["1"]];
+}
+
 // Maps an commuted opcode to its original version
 def getCommuteOrig : InstrMapping {
   let FilterClass = "Commutable_REV";
@@ -2090,6 +2111,14 @@ def getAddr64Inst : InstrMapping {
   let ColFields = ["IsAddr64"];
   let KeyCol = ["0"];
   let ValueCols = [["1"]];
+}
+
+def getMUBUFNoLdsInst : InstrMapping {
+  let FilterClass = "MUBUFLdsTable";
+  let RowFields = ["OpName"];
+  let ColFields = ["IsLds"];
+  let KeyCol = ["1"];
+  let ValueCols = [["0"]];
 }
 
 // Maps an atomic opcode to its version with a return value.

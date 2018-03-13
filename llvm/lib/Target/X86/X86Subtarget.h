@@ -246,6 +246,14 @@ protected:
   /// of a YMM or ZMM register without clearing the upper part.
   bool HasFastPartialYMMorZMMWrite;
 
+  /// True if there is no performance penalty for writing NOPs with up to
+  /// 11 bytes.
+  bool HasFast11ByteNOP;
+
+  /// True if there is no performance penalty for writing NOPs with up to
+  /// 15 bytes.
+  bool HasFast15ByteNOP;
+
   /// True if gather is reasonably fast. This is true for Skylake client and
   /// all AVX-512 CPUs.
   bool HasFastGather;
@@ -399,6 +407,9 @@ private:
   /// features.
   unsigned PreferVectorWidth;
 
+  /// Required vector width from function attribute.
+  unsigned RequiredVectorWidth;
+
   /// True if compiling for 64-bit, false for 16-bit or 32-bit.
   bool In64BitMode;
 
@@ -425,7 +436,8 @@ public:
   ///
   X86Subtarget(const Triple &TT, StringRef CPU, StringRef FS,
                const X86TargetMachine &TM, unsigned StackAlignOverride,
-               unsigned PreferVectorWidthOverride);
+               unsigned PreferVectorWidthOverride,
+               unsigned RequiredVectorWidth);
 
   const X86TargetLowering *getTargetLowering() const override {
     return &TLInfo;
@@ -512,7 +524,6 @@ public:
   bool hasAVX() const { return X86SSELevel >= AVX; }
   bool hasAVX2() const { return X86SSELevel >= AVX2; }
   bool hasAVX512() const { return X86SSELevel >= AVX512F; }
-  bool hasFp256() const { return hasAVX(); }
   bool hasInt256() const { return hasAVX2(); }
   bool hasSSE4A() const { return HasSSE4A; }
   bool hasMMX() const { return X863DNowLevel >= MMX; }
@@ -614,6 +625,7 @@ public:
   bool useRetpolineExternalThunk() const { return UseRetpolineExternalThunk; }
 
   unsigned getPreferVectorWidth() const { return PreferVectorWidth; }
+  unsigned getRequiredVectorWidth() const { return RequiredVectorWidth; }
 
   // Helper functions to determine when we should allow widening to 512-bit
   // during codegen.
@@ -624,6 +636,16 @@ public:
   }
   bool canExtendTo512BW() const  {
     return hasBWI() && canExtendTo512DQ();
+  }
+
+  // If there are no 512-bit vectors and we prefer not to use 512-bit registers,
+  // disable them in the legalizer.
+  bool useAVX512Regs() const {
+    return hasAVX512() && (canExtendTo512DQ() || RequiredVectorWidth > 256);
+  }
+
+  bool useBWIRegs() const {
+    return hasBWI() && useAVX512Regs();
   }
 
   bool isXRaySupported() const override { return is64Bit(); }

@@ -11,9 +11,9 @@
 #define LLD_ELF_LINKER_SCRIPT_H
 
 #include "Config.h"
-#include "Strings.h"
 #include "Writer.h"
 #include "lld/Common/LLVM.h"
+#include "lld/Common/Strings.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -215,14 +215,12 @@ class LinkerScript final {
   void addSymbol(SymbolAssignment *Cmd);
   void assignSymbol(SymbolAssignment *Cmd, bool InSec);
   void setDot(Expr E, const Twine &Loc, bool InSec);
+  void expandOutputSection(uint64_t Size);
 
   std::vector<InputSection *>
-  computeInputSections(const InputSectionDescription *,
-                       const llvm::DenseMap<SectionBase *, int> &Order);
+  computeInputSections(const InputSectionDescription *);
 
-  std::vector<InputSection *>
-  createInputSectionList(OutputSection &Cmd,
-                         const llvm::DenseMap<SectionBase *, int> &Order);
+  std::vector<InputSection *> createInputSectionList(OutputSection &Cmd);
 
   std::vector<size_t> getPhdrIndices(OutputSection *Sec);
 
@@ -257,7 +255,6 @@ public:
   ExprValue getSymbolValue(StringRef Name, const Twine &Loc);
 
   void addOrphanSections();
-  void removeEmptyCommands();
   void adjustSectionsBeforeSorting();
   void adjustSectionsAfterSorting();
 
@@ -268,6 +265,10 @@ public:
   void assignAddresses();
   void allocateHeaders(std::vector<PhdrEntry *> &Phdrs);
   void processSectionCommands();
+  void declareSymbols();
+
+  // Used to handle INSERT AFTER statements.
+  void processInsertCommands();
 
   // SECTIONS command list.
   std::vector<BaseCommand *> SectionCommands;
@@ -287,6 +288,10 @@ public:
 
   // A list of symbols referenced by the script.
   std::vector<llvm::StringRef> ReferencedSymbols;
+
+  // Used to implement INSERT AFTER. Contains commands that need
+  // to be inserted into SECTIONS commands list.
+  llvm::DenseMap<StringRef, std::vector<BaseCommand *>> InsertAfterCommands;
 };
 
 extern LinkerScript *Script;

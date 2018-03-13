@@ -1264,9 +1264,10 @@ static Value *SimplifyAShrInst(Value *Op0, Value *Op1, bool isExact,
                                     MaxRecurse))
     return V;
 
-  // all ones >>a X -> all ones
+  // all ones >>a X -> -1
+  // Do not return Op0 because it may contain undef elements if it's a vector.
   if (match(Op0, m_AllOnes()))
-    return Op0;
+    return Constant::getAllOnesValue(Op0->getType());
 
   // (X << A) >> A -> X
   Value *X;
@@ -1783,20 +1784,15 @@ static Value *SimplifyOrInst(Value *Op0, Value *Op1, const SimplifyQuery &Q,
     return C;
 
   // X | undef -> -1
-  if (match(Op1, m_Undef()))
+  // X | -1 = -1
+  // Do not return Op1 because it may contain undef elements if it's a vector.
+  if (match(Op1, m_Undef()) || match(Op1, m_AllOnes()))
     return Constant::getAllOnesValue(Op0->getType());
 
   // X | X = X
-  if (Op0 == Op1)
-    return Op0;
-
   // X | 0 = X
-  if (match(Op1, m_Zero()))
+  if (Op0 == Op1 || match(Op1, m_Zero()))
     return Op0;
-
-  // X | -1 = -1
-  if (match(Op1, m_AllOnes()))
-    return Op1;
 
   // A | ~A  =  ~A | A  =  -1
   if (match(Op0, m_Not(m_Specific(Op1))) ||
@@ -3359,6 +3355,12 @@ static Value *SimplifyFCmpInst(unsigned Predicate, Value *LHS, Value *RHS,
       return getTrue(RetTy);
   }
 
+  // NaN is unordered; NaN is not ordered.
+  assert((FCmpInst::isOrdered(Pred) || FCmpInst::isUnordered(Pred)) &&
+         "Comparison must be either ordered or unordered");
+  if (match(RHS, m_NaN()))
+    return ConstantInt::get(RetTy, CmpInst::isUnordered(Pred));
+
   // fcmp pred x, undef  and  fcmp pred undef, x
   // fold to true if unordered, false if ordered
   if (isa<UndefValue>(LHS) || isa<UndefValue>(RHS)) {
@@ -3378,15 +3380,6 @@ static Value *SimplifyFCmpInst(unsigned Predicate, Value *LHS, Value *RHS,
   // Handle fcmp with constant RHS.
   const APFloat *C;
   if (match(RHS, m_APFloat(C))) {
-    // If the constant is a nan, see if we can fold the comparison based on it.
-    if (C->isNaN()) {
-      if (FCmpInst::isOrdered(Pred)) // True "if ordered and foo"
-        return getFalse(RetTy);
-      assert(FCmpInst::isUnordered(Pred) &&
-             "Comparison must be either ordered or unordered!");
-      // True if unordered.
-      return getTrue(RetTy);
-    }
     // Check whether the constant is an infinity.
     if (C->isInfinity()) {
       if (C->isNegative()) {
@@ -3631,24 +3624,6 @@ static Value *simplifySelectWithICmpCond(Value *CondVal, Value *TrueVal,
                                               TrueVal, FalseVal))
     return V;
 
-  if (CondVal->hasOneUse()) {
-    const APInt *C;
-    if (match(CmpRHS, m_APInt(C))) {
-      // X < MIN ? T : F  -->  F
-      if (Pred == ICmpInst::ICMP_SLT && C->isMinSignedValue())
-        return FalseVal;
-      // X < MIN ? T : F  -->  F
-      if (Pred == ICmpInst::ICMP_ULT && C->isMinValue())
-        return FalseVal;
-      // X > MAX ? T : F  -->  F
-      if (Pred == ICmpInst::ICMP_SGT && C->isMaxSignedValue())
-        return FalseVal;
-      // X > MAX ? T : F  -->  F
-      if (Pred == ICmpInst::ICMP_UGT && C->isMaxValue())
-        return FalseVal;
-    }
-  }
-
   // If we have an equality comparison, then we know the value in one of the
   // arms of the select. See if substituting this value into the arm and
   // simplifying the result yields the same value as the other arm.
@@ -3681,37 +3656,38 @@ static Value *simplifySelectWithICmpCond(Value *CondVal, Value *TrueVal,
 
 /// Given operands for a SelectInst, see if we can fold the result.
 /// If not, this returns null.
-static Value *SimplifySelectInst(Value *CondVal, Value *TrueVal,
-                                 Value *FalseVal, const SimplifyQuery &Q,
-                                 unsigned MaxRecurse) {
-  // select true, X, Y  -> X
-  // select false, X, Y -> Y
-  if (Constant *CB = dyn_cast<Constant>(CondVal)) {
-    if (Constant *CT = dyn_cast<Constant>(TrueVal))
-      if (Constant *CF = dyn_cast<Constant>(FalseVal))
-        return ConstantFoldSelectInstruction(CB, CT, CF);
-    if (CB->isAllOnesValue())
+static Value *SimplifySelectInst(Value *Cond, Value *TrueVal, Value *FalseVal,
+                                 const SimplifyQuery &Q, unsigned MaxRecurse) {
+  if (auto *CondC = dyn_cast<Constant>(Cond)) {
+    if (auto *TrueC = dyn_cast<Constant>(TrueVal))
+      if (auto *FalseC = dyn_cast<Constant>(FalseVal))
+        return ConstantFoldSelectInstruction(CondC, TrueC, FalseC);
+
+    // select undef, X, Y -> X or Y
+    if (isa<UndefValue>(CondC))
+      return isa<Constant>(FalseVal) ? FalseVal : TrueVal;
+
+    // TODO: Vector constants with undef elements don't simplify.
+
+    // select true, X, Y  -> X
+    if (CondC->isAllOnesValue())
       return TrueVal;
-    if (CB->isNullValue())
+    // select false, X, Y -> Y
+    if (CondC->isNullValue())
       return FalseVal;
   }
 
-  // select C, X, X -> X
+  // select ?, X, X -> X
   if (TrueVal == FalseVal)
     return TrueVal;
 
-  if (isa<UndefValue>(CondVal)) {  // select undef, X, Y -> X or Y
-    if (isa<Constant>(FalseVal))
-      return FalseVal;
-    return TrueVal;
-  }
-  if (isa<UndefValue>(TrueVal))   // select C, undef, X -> X
+  if (isa<UndefValue>(TrueVal))   // select ?, undef, X -> X
     return FalseVal;
-  if (isa<UndefValue>(FalseVal))   // select C, X, undef -> X
+  if (isa<UndefValue>(FalseVal))   // select ?, X, undef -> X
     return TrueVal;
 
   if (Value *V =
-          simplifySelectWithICmpCond(CondVal, TrueVal, FalseVal, Q, MaxRecurse))
+          simplifySelectWithICmpCond(Cond, TrueVal, FalseVal, Q, MaxRecurse))
     return V;
 
   return nullptr;
@@ -3762,7 +3738,7 @@ static Value *SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops,
       // The following transforms are only safe if the ptrtoint cast
       // doesn't truncate the pointers.
       if (Ops[1]->getType()->getScalarSizeInBits() ==
-          Q.DL.getPointerSizeInBits(AS)) {
+          Q.DL.getIndexSizeInBits(AS)) {
         auto PtrToIntOrZero = [GEPTy](Value *P) -> Value * {
           if (match(P, m_Zero()))
             return Constant::getNullValue(GEPTy);
@@ -3802,10 +3778,10 @@ static Value *SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops,
   if (Q.DL.getTypeAllocSize(LastType) == 1 &&
       all_of(Ops.slice(1).drop_back(1),
              [](Value *Idx) { return match(Idx, m_Zero()); })) {
-    unsigned PtrWidth =
-        Q.DL.getPointerSizeInBits(Ops[0]->getType()->getPointerAddressSpace());
-    if (Q.DL.getTypeSizeInBits(Ops.back()->getType()) == PtrWidth) {
-      APInt BasePtrOffset(PtrWidth, 0);
+    unsigned IdxWidth =
+        Q.DL.getIndexSizeInBits(Ops[0]->getType()->getPointerAddressSpace());
+    if (Q.DL.getTypeSizeInBits(Ops.back()->getType()) == IdxWidth) {
+      APInt BasePtrOffset(IdxWidth, 0);
       Value *StrippedBasePtr =
           Ops[0]->stripAndAccumulateInBoundsConstantOffsets(Q.DL,
                                                             BasePtrOffset);
@@ -4180,6 +4156,9 @@ static Value *SimplifyFAddInst(Value *Op0, Value *Op1, FastMathFlags FMF,
   if (Constant *C = foldOrCommuteConstant(Instruction::FAdd, Op0, Op1, Q))
     return C;
 
+  if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+    return ConstantFP::getNaN(Op0->getType());
+
   // fadd X, -0 ==> X
   if (match(Op1, m_NegZero()))
     return Op0;
@@ -4214,6 +4193,9 @@ static Value *SimplifyFSubInst(Value *Op0, Value *Op1, FastMathFlags FMF,
   if (Constant *C = foldOrCommuteConstant(Instruction::FSub, Op0, Op1, Q))
     return C;
 
+  if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+    return ConstantFP::getNaN(Op0->getType());
+
   // fsub X, 0 ==> X
   if (match(Op1, m_Zero()))
     return Op0;
@@ -4246,6 +4228,9 @@ static Value *SimplifyFMulInst(Value *Op0, Value *Op1, FastMathFlags FMF,
   if (Constant *C = foldOrCommuteConstant(Instruction::FMul, Op0, Op1, Q))
     return C;
 
+  if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+    return ConstantFP::getNaN(Op0->getType());
+
   // fmul X, 1.0 ==> X
   if (match(Op1, m_FPOne()))
     return Op0;
@@ -4253,6 +4238,12 @@ static Value *SimplifyFMulInst(Value *Op0, Value *Op1, FastMathFlags FMF,
   // fmul nnan nsz X, 0 ==> 0
   if (FMF.noNaNs() && FMF.noSignedZeros() && match(Op1, m_AnyZero()))
     return Op1;
+
+  // sqrt(X) * sqrt(X) --> X
+  Value *X;
+  if (FMF.isFast() && Op0 == Op1 &&
+      match(Op0, m_Intrinsic<Intrinsic::sqrt>(m_Value(X))))
+    return X;
 
   return nullptr;
 }
@@ -4278,13 +4269,8 @@ static Value *SimplifyFDivInst(Value *Op0, Value *Op1, FastMathFlags FMF,
   if (Constant *C = foldOrCommuteConstant(Instruction::FDiv, Op0, Op1, Q))
     return C;
 
-  // undef / X -> undef    (the undef could be a snan).
-  if (match(Op0, m_Undef()))
-    return Op0;
-
-  // X / undef -> undef
-  if (match(Op1, m_Undef()))
-    return Op1;
+  if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+    return ConstantFP::getNaN(Op0->getType());
 
   // X / 1.0 -> X
   if (match(Op1, m_FPOne()))
@@ -4298,8 +4284,14 @@ static Value *SimplifyFDivInst(Value *Op0, Value *Op1, FastMathFlags FMF,
 
   if (FMF.noNaNs()) {
     // X / X -> 1.0 is legal when NaNs are ignored.
+    // We can ignore infinities because INF/INF is NaN.
     if (Op0 == Op1)
       return ConstantFP::get(Op0->getType(), 1.0);
+
+    // (X * Y) / Y --> X if we can reassociate to the above form.
+    Value *X;
+    if (FMF.allowReassoc() && match(Op0, m_c_FMul(m_Value(X), m_Specific(Op1))))
+      return X;
 
     // -X /  X -> -1.0 and
     //  X / -X -> -1.0 are legal when NaNs are ignored.
@@ -4324,13 +4316,8 @@ static Value *SimplifyFRemInst(Value *Op0, Value *Op1, FastMathFlags FMF,
   if (Constant *C = foldOrCommuteConstant(Instruction::FRem, Op0, Op1, Q))
     return C;
 
-  // undef % X -> undef    (the undef could be a snan).
-  if (match(Op0, m_Undef()))
-    return Op0;
-
-  // X % undef -> undef
-  if (match(Op1, m_Undef()))
-    return Op1;
+  if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+    return ConstantFP::getNaN(Op0->getType());
 
   // 0 % X -> 0
   // Requires that NaNs are off (X could be zero) and signed zeroes are
@@ -4565,28 +4552,28 @@ static Value *SimplifyIntrinsic(Function *F, IterTy ArgBegin, IterTy ArgEnd,
     }
     case Intrinsic::exp: {
       // exp(log(x)) -> x
-      if (Q.CxtI->isFast() &&
+      if (Q.CxtI->hasAllowReassoc() &&
           match(IIOperand, m_Intrinsic<Intrinsic::log>(m_Value(X))))
         return X;
       return nullptr;
     }
     case Intrinsic::exp2: {
       // exp2(log2(x)) -> x
-      if (Q.CxtI->isFast() &&
+      if (Q.CxtI->hasAllowReassoc() &&
           match(IIOperand, m_Intrinsic<Intrinsic::log2>(m_Value(X))))
         return X;
       return nullptr;
     }
     case Intrinsic::log: {
       // log(exp(x)) -> x
-      if (Q.CxtI->isFast() &&
+      if (Q.CxtI->hasAllowReassoc() &&
           match(IIOperand, m_Intrinsic<Intrinsic::exp>(m_Value(X))))
         return X;
       return nullptr;
     }
     case Intrinsic::log2: {
       // log2(exp2(x)) -> x
-      if (Q.CxtI->isFast() &&
+      if (Q.CxtI->hasAllowReassoc() &&
           match(IIOperand, m_Intrinsic<Intrinsic::exp2>(m_Value(X)))) {
         return X;
       }

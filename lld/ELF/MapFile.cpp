@@ -23,10 +23,10 @@
 #include "InputFiles.h"
 #include "LinkerScript.h"
 #include "OutputSections.h"
-#include "Strings.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "SyntheticSections.h"
+#include "lld/Common/Strings.h"
 #include "lld/Common/Threads.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -38,14 +38,15 @@ using namespace lld::elf;
 
 typedef DenseMap<const SectionBase *, SmallVector<Symbol *, 4>> SymbolMapTy;
 
+static const std::string Indent8 = "        ";          // 8 spaces
+static const std::string Indent16 = "                "; // 16 spaces
+
 // Print out the first three columns of a line.
 static void writeHeader(raw_ostream &OS, uint64_t Addr, uint64_t Size,
                         uint64_t Align) {
   int W = Config->Is64 ? 16 : 8;
   OS << format("%0*llx %0*llx %5lld ", W, Addr, W, Size, Align);
 }
-
-static std::string indent(int Depth) { return std::string(Depth * 8, ' '); }
 
 // Returns a list of all symbols that we want to print out.
 static std::vector<Symbol *> getSymbols() {
@@ -100,7 +101,7 @@ getSymbolStrings(ArrayRef<Symbol *> Syms) {
   parallelForEachN(0, Syms.size(), [&](size_t I) {
     raw_string_ostream OS(Str[I]);
     writeHeader(OS, Syms[I]->getVA(), Syms[I]->getSize(), 0);
-    OS << indent(2) << toString(*Syms[I]);
+    OS << Indent16 << toString(*Syms[I]);
   });
 
   DenseMap<Symbol *, std::string> Ret;
@@ -137,17 +138,11 @@ void elf::writeMapFile() {
     OS << OSec->Name << '\n';
 
     // Dump symbols for each input section.
-    for (BaseCommand *Base : OSec->SectionCommands) {
-      auto *ISD = dyn_cast<InputSectionDescription>(Base);
-      if (!ISD)
-        continue;
-      for (InputSection *IS : ISD->Sections) {
-        writeHeader(OS, OSec->Addr + IS->OutSecOff, IS->getSize(),
-                    IS->Alignment);
-        OS << indent(1) << toString(IS) << '\n';
-        for (Symbol *Sym : SectionSyms[IS])
-          OS << SymStr[Sym] << '\n';
-      }
+    for (InputSection *IS : getInputSections(OSec)) {
+      writeHeader(OS, OSec->Addr + IS->OutSecOff, IS->getSize(), IS->Alignment);
+      OS << Indent8 << toString(IS) << '\n';
+      for (Symbol *Sym : SectionSyms[IS])
+        OS << SymStr[Sym] << '\n';
     }
   }
 }

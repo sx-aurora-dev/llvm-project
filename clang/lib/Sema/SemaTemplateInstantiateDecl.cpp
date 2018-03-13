@@ -23,6 +23,7 @@
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/PrettyDeclStackTrace.h"
 #include "clang/Sema/Template.h"
+#include "clang/Sema/TemplateInstCallback.h"
 
 using namespace clang;
 
@@ -1040,8 +1041,7 @@ Decl *TemplateDeclInstantiator::VisitEnumDecl(EnumDecl *D) {
         SemaRef.SubstType(TI->getType(), TemplateArgs,
                           UnderlyingLoc, DeclarationName());
       SemaRef.CheckEnumRedeclaration(Def->getLocation(), Def->isScoped(),
-                                     DefnUnderlying,
-                                     /*EnumUnderlyingIsImplicit=*/false, Enum);
+                                     DefnUnderlying, /*IsFixed=*/true, Enum);
     }
   }
 
@@ -1806,45 +1806,24 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
     //   apply to non-template function declarations and definitions also apply
     //   to these implicit definitions.
     if (D->isThisDeclarationADefinition()) {
-      // Check for a function body.
-      const FunctionDecl *Definition = nullptr;
-      if (Function->isDefined(Definition) &&
-          Definition->getTemplateSpecializationKind() == TSK_Undeclared) {
-        SemaRef.Diag(Function->getLocation(), diag::err_redefinition)
-            << Function->getDeclName();
-        SemaRef.Diag(Definition->getLocation(), diag::note_previous_definition);
-      }
-      // Check for redefinitions due to other instantiations of this or
-      // a similar friend function.
-      else for (auto R : Function->redecls()) {
-        if (R == Function)
-          continue;
+      SemaRef.CheckForFunctionRedefinition(Function);
+      if (!Function->isInvalidDecl()) {
+        for (auto R : Function->redecls()) {
+          if (R == Function)
+            continue;
 
-        // If some prior declaration of this function has been used, we need
-        // to instantiate its definition.
-        if (!QueuedInstantiation && R->isUsed(false)) {
-          if (MemberSpecializationInfo *MSInfo =
-                  Function->getMemberSpecializationInfo()) {
-            if (MSInfo->getPointOfInstantiation().isInvalid()) {
-              SourceLocation Loc = R->getLocation(); // FIXME
-              MSInfo->setPointOfInstantiation(Loc);
-              SemaRef.PendingLocalImplicitInstantiations.push_back(
-                                               std::make_pair(Function, Loc));
-              QueuedInstantiation = true;
-            }
-          }
-        }
-
-        // If some prior declaration of this function was a friend with an
-        // uninstantiated definition, reject it.
-        if (R->getFriendObjectKind()) {
-          if (const FunctionDecl *RPattern =
-                  R->getTemplateInstantiationPattern()) {
-            if (RPattern->isDefined(RPattern)) {
-              SemaRef.Diag(Function->getLocation(), diag::err_redefinition)
-                << Function->getDeclName();
-              SemaRef.Diag(R->getLocation(), diag::note_previous_definition);
-              break;
+          // If some prior declaration of this function has been used, we need
+          // to instantiate its definition.
+          if (!QueuedInstantiation && R->isUsed(false)) {
+            if (MemberSpecializationInfo *MSInfo =
+                Function->getMemberSpecializationInfo()) {
+              if (MSInfo->getPointOfInstantiation().isInvalid()) {
+                SourceLocation Loc = R->getLocation(); // FIXME
+                MSInfo->setPointOfInstantiation(Loc);
+                SemaRef.PendingLocalImplicitInstantiations.push_back(
+                    std::make_pair(Function, Loc));
+                QueuedInstantiation = true;
+              }
             }
           }
         }
@@ -2688,9 +2667,9 @@ Decl *TemplateDeclInstantiator::VisitUnresolvedUsingValueDecl(
 Decl *TemplateDeclInstantiator::VisitUsingPackDecl(UsingPackDecl *D) {
   SmallVector<NamedDecl*, 8> Expansions;
   for (auto *UD : D->expansions()) {
-    if (auto *NewUD =
+    if (NamedDecl *NewUD =
             SemaRef.FindInstantiatedDecl(D->getLocation(), UD, TemplateArgs))
-      Expansions.push_back(cast<NamedDecl>(NewUD));
+      Expansions.push_back(NewUD);
     else
       return nullptr;
   }
@@ -3137,6 +3116,13 @@ TemplateDeclInstantiator::SubstTemplateParams(TemplateParameterList *L) {
                                     L->getRAngleLoc(),
                                     UninstantiatedRequiresClause);
   return InstL;
+}
+
+TemplateParameterList *
+Sema::SubstTemplateParams(TemplateParameterList *Params, DeclContext *Owner,
+                          const MultiLevelTemplateArgumentList &TemplateArgs) {
+  TemplateDeclInstantiator Instantiator(*this, Owner, TemplateArgs);
+  return Instantiator.SubstTemplateParams(Params);
 }
 
 /// \brief Instantiate the declaration of a class template partial
@@ -3648,8 +3634,10 @@ TemplateDeclInstantiator::InitFunctionInstantiation(FunctionDecl *New,
       assert(FunTmpl->getTemplatedDecl() == Tmpl &&
              "Deduction from the wrong function template?");
       (void) FunTmpl;
+      atTemplateEnd(SemaRef.TemplateInstCallbacks, SemaRef, ActiveInst);
       ActiveInst.Kind = ActiveInstType::TemplateInstantiation;
       ActiveInst.Entity = New;
+      atTemplateBegin(SemaRef.TemplateInstCallbacks, SemaRef, ActiveInst);
     }
   }
 

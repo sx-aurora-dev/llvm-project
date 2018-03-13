@@ -4591,8 +4591,7 @@ define <16 x i16> @PR34369(<16 x i16> %vec, <16 x i16> %mask) {
 ; AVX512VL-LABEL: PR34369:
 ; AVX512VL:       # %bb.0:
 ; AVX512VL-NEXT:    vmovdqa {{.*#+}} ymm2 = [3,0,0,13,5,2,2,10,15,8,14,8,9,10,12,12]
-; AVX512VL-NEXT:    vpxor %xmm3, %xmm3, %xmm3
-; AVX512VL-NEXT:    vpcmpeqw %ymm3, %ymm1, %k1
+; AVX512VL-NEXT:    vptestnmw %ymm1, %ymm1, %k1
 ; AVX512VL-NEXT:    vpermw %ymm0, %ymm2, %ymm0 {%k1} {z}
 ; AVX512VL-NEXT:    retq
   %shuf = shufflevector <16 x i16> %vec, <16 x i16> undef, <16 x i32> <i32 3, i32 0, i32 0, i32 13, i32 5, i32 2, i32 2, i32 10, i32 15, i32 8, i32 14, i32 8, i32 9, i32 10, i32 12, i32 12>
@@ -4605,7 +4604,8 @@ define <16 x i16> @insert_dup_mem_v16i16_i32(i32* %ptr) {
 ; AVX1-LABEL: insert_dup_mem_v16i16_i32:
 ; AVX1:       # %bb.0:
 ; AVX1-NEXT:    vmovd {{.*#+}} xmm0 = mem[0],zero,zero,zero
-; AVX1-NEXT:    vpshufb {{.*#+}} xmm0 = xmm0[0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1]
+; AVX1-NEXT:    vpshuflw {{.*#+}} xmm0 = xmm0[0,0,2,3,4,5,6,7]
+; AVX1-NEXT:    vpshufd {{.*#+}} xmm0 = xmm0[0,0,0,0]
 ; AVX1-NEXT:    vinsertf128 $1, %xmm0, %ymm0, %ymm0
 ; AVX1-NEXT:    retq
 ;
@@ -4625,7 +4625,8 @@ define <16 x i16> @insert_dup_mem_v16i16_sext_i16(i16* %ptr) {
 ; AVX1:       # %bb.0:
 ; AVX1-NEXT:    movswl (%rdi), %eax
 ; AVX1-NEXT:    vmovd %eax, %xmm0
-; AVX1-NEXT:    vpshufb {{.*#+}} xmm0 = xmm0[0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1]
+; AVX1-NEXT:    vpshuflw {{.*#+}} xmm0 = xmm0[0,0,2,3,4,5,6,7]
+; AVX1-NEXT:    vpshufd {{.*#+}} xmm0 = xmm0[0,0,0,0]
 ; AVX1-NEXT:    vinsertf128 $1, %xmm0, %ymm0, %ymm0
 ; AVX1-NEXT:    retq
 ;
@@ -4653,7 +4654,8 @@ define <16 x i16> @insert_dup_elt1_mem_v16i16_i32(i32* %ptr) #0 {
 ; AVX1-LABEL: insert_dup_elt1_mem_v16i16_i32:
 ; AVX1:       # %bb.0:
 ; AVX1-NEXT:    vmovd {{.*#+}} xmm0 = mem[0],zero,zero,zero
-; AVX1-NEXT:    vpshufb {{.*#+}} xmm0 = xmm0[2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3]
+; AVX1-NEXT:    vpshuflw {{.*#+}} xmm0 = xmm0[1,1,2,3,4,5,6,7]
+; AVX1-NEXT:    vpshufd {{.*#+}} xmm0 = xmm0[0,0,0,0]
 ; AVX1-NEXT:    vinsertf128 $1, %xmm0, %ymm0, %ymm0
 ; AVX1-NEXT:    retq
 ;

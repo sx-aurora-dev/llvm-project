@@ -40,47 +40,39 @@ public:
         .str();
   }
 
-  llvm::Expected<FileURI>
+  llvm::Expected<URI>
   uriFromAbsolutePath(llvm::StringRef AbsolutePath) const override {
     auto Pos = AbsolutePath.find(TestRoot);
     assert(Pos != llvm::StringRef::npos);
-    return FileURI::create(
-        Scheme, /*Authority=*/"",
-        AbsolutePath.substr(Pos + llvm::StringRef(TestRoot).size()));
+    return URI(Scheme, /*Authority=*/"",
+               AbsolutePath.substr(Pos + llvm::StringRef(TestRoot).size()));
   }
 };
 
-const char *TestScheme::Scheme = "test";
+const char *TestScheme::Scheme = "unittest";
 const char *TestScheme::TestRoot = "/test-root/";
 
 static URISchemeRegistry::Add<TestScheme> X(TestScheme::Scheme, "Test schema");
 
 std::string createOrDie(llvm::StringRef AbsolutePath,
                         llvm::StringRef Scheme = "file") {
-  auto Uri = FileURI::create(AbsolutePath, Scheme);
+  auto Uri = URI::create(AbsolutePath, Scheme);
   if (!Uri)
     llvm_unreachable(llvm::toString(Uri.takeError()).c_str());
   return Uri->toString();
 }
 
-std::string createOrDie(llvm::StringRef Scheme, llvm::StringRef Authority,
-                        llvm::StringRef Body) {
-  auto Uri = FileURI::create(Scheme, Authority, Body);
-  if (!Uri)
-    llvm_unreachable(llvm::toString(Uri.takeError()).c_str());
-  return Uri->toString();
-}
-
-FileURI parseOrDie(llvm::StringRef Uri) {
-  auto U = FileURI::parse(Uri);
+URI parseOrDie(llvm::StringRef Uri) {
+  auto U = URI::parse(Uri);
   if (!U)
     llvm_unreachable(llvm::toString(U.takeError()).c_str());
   return *U;
 }
 
 TEST(PercentEncodingTest, Encode) {
-  EXPECT_EQ(createOrDie("x", /*Authority=*/"", "a/b/c"), "x:a/b/c");
-  EXPECT_EQ(createOrDie("x", /*Authority=*/"", "a!b;c~"), "x:a%21b%3bc~");
+  EXPECT_EQ(URI("x", /*Authority=*/"", "a/b/c").toString(), "x:a/b/c");
+  EXPECT_EQ(URI("x", /*Authority=*/"", "a!b;c~").toString(), "x:a%21b%3bc~");
+  EXPECT_EQ(URI("x", /*Authority=*/"", "a123b").toString(), "x:a123b");
 }
 
 TEST(PercentEncodingTest, Decode) {
@@ -93,8 +85,8 @@ TEST(PercentEncodingTest, Decode) {
   EXPECT_EQ(parseOrDie("x:a%21b%3ac~").body(), "a!b:c~");
 }
 
-std::string resolveOrDie(const FileURI &U, llvm::StringRef HintPath = "") {
-  auto Path = FileURI::resolve(U, HintPath);
+std::string resolveOrDie(const URI &U, llvm::StringRef HintPath = "") {
+  auto Path = URI::resolve(U, HintPath);
   if (!Path)
     llvm_unreachable(llvm::toString(Path.takeError()).c_str());
   return *Path;
@@ -110,25 +102,16 @@ TEST(URITest, Create) {
 }
 
 TEST(URITest, FailedCreate) {
-  auto Fail = [](llvm::Expected<FileURI> U) {
+  auto Fail = [](llvm::Expected<URI> U) {
     if (!U) {
       llvm::consumeError(U.takeError());
       return true;
     }
     return false;
   };
-  // Create from scheme+authority+body:
-  //
-  // Scheme must be provided.
-  EXPECT_TRUE(Fail(FileURI::create("", "auth", "/a")));
-  // Body must start with '/' if authority is present.
-  EXPECT_TRUE(Fail(FileURI::create("scheme", "auth", "x/y/z")));
-
-  // Create from scheme registry:
-  //
-  EXPECT_TRUE(Fail(FileURI::create("/x/y/z", "no")));
+  EXPECT_TRUE(Fail(URI::create("/x/y/z", "no")));
   // Path has to be absolute.
-  EXPECT_TRUE(Fail(FileURI::create("x/y/z")));
+  EXPECT_TRUE(Fail(URI::create("x/y/z", "file")));
 }
 
 TEST(URITest, Parse) {
@@ -163,7 +146,7 @@ TEST(URITest, Parse) {
 
 TEST(URITest, ParseFailed) {
   auto FailedParse = [](llvm::StringRef U) {
-    auto URI = FileURI::parse(U);
+    auto URI = URI::parse(U);
     if (!URI) {
       llvm::consumeError(URI.takeError());
       return true;
@@ -184,7 +167,7 @@ TEST(URITest, Resolve) {
 #else
   EXPECT_EQ(resolveOrDie(parseOrDie("file:/a/b/c")), "/a/b/c");
   EXPECT_EQ(resolveOrDie(parseOrDie("file://auth/a/b/c")), "/a/b/c");
-  EXPECT_EQ(resolveOrDie(parseOrDie("test:a/b/c"), "/dir/test-root/x/y/z"),
+  EXPECT_EQ(resolveOrDie(parseOrDie("unittest:a/b/c"), "/dir/test-root/x/y/z"),
             "/dir/test-root/a/b/c");
   EXPECT_THAT(resolveOrDie(parseOrDie("file://au%3dth/%28x%29/y/%20z")),
               "/(x)/y/ z");
@@ -193,15 +176,15 @@ TEST(URITest, Resolve) {
 }
 
 TEST(URITest, Platform) {
-  auto Path = getVirtualTestFilePath("x");
-  auto U = FileURI::create(Path, "file");
+  auto Path = testPath("x");
+  auto U = URI::create(Path, "file");
   EXPECT_TRUE(static_cast<bool>(U));
-  EXPECT_THAT(resolveOrDie(*U), Path.str());
+  EXPECT_THAT(resolveOrDie(*U), Path);
 }
 
 TEST(URITest, ResolveFailed) {
   auto FailedResolve = [](llvm::StringRef Uri) {
-    auto Path = FileURI::resolve(parseOrDie(Uri));
+    auto Path = URI::resolve(parseOrDie(Uri));
     if (!Path) {
       llvm::consumeError(Path.takeError());
       return true;

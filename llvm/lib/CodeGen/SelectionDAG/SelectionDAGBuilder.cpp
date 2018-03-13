@@ -3424,10 +3424,9 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
                         DAG.getConstant(Offset, dl, N.getValueType()), Flags);
       }
     } else {
-      MVT PtrTy =
-          DAG.getTargetLoweringInfo().getPointerTy(DAG.getDataLayout(), AS);
-      unsigned PtrSize = PtrTy.getSizeInBits();
-      APInt ElementSize(PtrSize, DL->getTypeAllocSize(GTI.getIndexedType()));
+      unsigned IdxSize = DAG.getDataLayout().getIndexSizeInBits(AS);
+      MVT IdxTy = MVT::getIntegerVT(IdxSize);
+      APInt ElementSize(IdxSize, DL->getTypeAllocSize(GTI.getIndexedType()));
 
       // If this is a scalar constant or a splat vector of constants,
       // handle it quickly.
@@ -3439,11 +3438,11 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
       if (CI) {
         if (CI->isZero())
           continue;
-        APInt Offs = ElementSize * CI->getValue().sextOrTrunc(PtrSize);
+        APInt Offs = ElementSize * CI->getValue().sextOrTrunc(IdxSize);
         LLVMContext &Context = *DAG.getContext();
         SDValue OffsVal = VectorWidth ?
-          DAG.getConstant(Offs, dl, EVT::getVectorVT(Context, PtrTy, VectorWidth)) :
-          DAG.getConstant(Offs, dl, PtrTy);
+          DAG.getConstant(Offs, dl, EVT::getVectorVT(Context, IdxTy, VectorWidth)) :
+          DAG.getConstant(Offs, dl, IdxTy);
 
         // In an inbouds GEP with an offset that is nonnegative even when
         // interpreted as signed, assume there is no unsigned overflow.
@@ -6044,6 +6043,60 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
   case Intrinsic::experimental_vector_reduce_fmin:
     visitVectorReduce(I, Intrinsic);
     return nullptr;
+
+  case Intrinsic::icall_branch_funnel: {
+    SmallVector<SDValue, 16> Ops;
+    Ops.push_back(DAG.getRoot());
+    Ops.push_back(getValue(I.getArgOperand(0)));
+
+    int64_t Offset;
+    auto *Base = dyn_cast<GlobalObject>(GetPointerBaseWithConstantOffset(
+        I.getArgOperand(1), Offset, DAG.getDataLayout()));
+    if (!Base)
+      report_fatal_error(
+          "llvm.icall.branch.funnel operand must be a GlobalValue");
+    Ops.push_back(DAG.getTargetGlobalAddress(Base, getCurSDLoc(), MVT::i64, 0));
+
+    struct BranchFunnelTarget {
+      int64_t Offset;
+      SDValue Target;
+    };
+    SmallVector<BranchFunnelTarget, 8> Targets;
+
+    for (unsigned Op = 1, N = I.getNumArgOperands(); Op != N; Op += 2) {
+      auto *ElemBase = dyn_cast<GlobalObject>(GetPointerBaseWithConstantOffset(
+          I.getArgOperand(Op), Offset, DAG.getDataLayout()));
+      if (ElemBase != Base)
+        report_fatal_error("all llvm.icall.branch.funnel operands must refer "
+                           "to the same GlobalValue");
+
+      SDValue Val = getValue(I.getArgOperand(Op + 1));
+      auto *GA = dyn_cast<GlobalAddressSDNode>(Val);
+      if (!GA)
+        report_fatal_error(
+            "llvm.icall.branch.funnel operand must be a GlobalValue");
+      Targets.push_back({Offset, DAG.getTargetGlobalAddress(
+                                     GA->getGlobal(), getCurSDLoc(),
+                                     Val.getValueType(), GA->getOffset())});
+    }
+    std::sort(Targets.begin(), Targets.end(),
+              [](const BranchFunnelTarget &T1, const BranchFunnelTarget &T2) {
+                return T1.Offset < T2.Offset;
+              });
+
+    for (auto &T : Targets) {
+      Ops.push_back(DAG.getTargetConstant(T.Offset, getCurSDLoc(), MVT::i32));
+      Ops.push_back(T.Target);
+    }
+
+    SDValue N(DAG.getMachineNode(TargetOpcode::ICALL_BRANCH_FUNNEL,
+                                 getCurSDLoc(), MVT::Other, Ops),
+              0);
+    DAG.setRoot(N);
+    setValue(&I, N);
+    HasTailCall = true;
+    return nullptr;
+  }
   }
 }
 
@@ -7267,7 +7320,7 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
       continue;
 
     // If this is a memory input, and if the operand is not indirect, do what we
-    // need to to provide an address for the memory input.
+    // need to provide an address for the memory input.
     if (OpInfo.ConstraintType == TargetLowering::C_Memory &&
         !OpInfo.isIndirect) {
       assert((OpInfo.isMultipleAlternative ||
@@ -7701,7 +7754,7 @@ void SelectionDAGBuilder::populateCallLoweringInfo(
     TargetLowering::ArgListEntry Entry;
     Entry.Node = getValue(V);
     Entry.Ty = V->getType();
-    Entry.setAttributes(&CS, ArgIdx);
+    Entry.setAttributes(&CS, ArgI);
     Args.push_back(Entry);
   }
 
@@ -8241,8 +8294,10 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
       else if (Args[i].IsZExt)
         ExtendKind = ISD::ZERO_EXTEND;
 
-      // Conservatively only handle 'returned' on non-vectors for now
-      if (Args[i].IsReturned && !Op.getValueType().isVector()) {
+      // Conservatively only handle 'returned' on non-vectors that can be lowered,
+      // for now.
+      if (Args[i].IsReturned && !Op.getValueType().isVector() &&
+          CanLowerReturn) {
         assert(CLI.RetTy == Args[i].Ty && RetTys.size() == NumValues &&
                "unexpected use of 'returned'");
         // Before passing 'returned' to the target lowering code, ensure that

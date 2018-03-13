@@ -337,8 +337,8 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
   DiagRuntimeBehavior(Loc, nullptr, PDiag(DiagID) << R1 << R2);
 }
 
-void Sema::ActOnStartOfCompoundStmt() {
-  PushCompoundScope();
+void Sema::ActOnStartOfCompoundStmt(bool IsStmtExpr) {
+  PushCompoundScope(IsStmtExpr);
 }
 
 void Sema::ActOnFinishOfCompoundStmt() {
@@ -2025,7 +2025,7 @@ void NoteForRangeBeginEndFunction(Sema &SemaRef, Expr *E,
 
 /// Build a variable declaration for a for-range statement.
 VarDecl *BuildForRangeVarDecl(Sema &SemaRef, SourceLocation Loc,
-                              QualType Type, const char *Name) {
+                              QualType Type, StringRef Name) {
   DeclContext *DC = SemaRef.CurContext;
   IdentifierInfo *II = &SemaRef.PP.getIdentifierTable().get(Name);
   TypeSourceInfo *TInfo = SemaRef.Context.getTrivialTypeSourceInfo(Type, Loc);
@@ -2094,10 +2094,12 @@ StmtResult Sema::ActOnCXXForRangeStmt(Scope *S, SourceLocation ForLoc,
   }
 
   // Build  auto && __range = range-init
+  // Divide by 2, since the variables are in the inner scope (loop body).
+  const auto DepthStr = std::to_string(S->getDepth() / 2);
   SourceLocation RangeLoc = Range->getLocStart();
   VarDecl *RangeVar = BuildForRangeVarDecl(*this, RangeLoc,
                                            Context.getAutoRRefDeductType(),
-                                           "__range");
+                                           std::string("__range") + DepthStr);
   if (FinishForRangeVarDecl(*this, RangeVar, Range, RangeLoc,
                             diag::err_for_range_deduction_failure)) {
     LoopVar->setInvalidDecl();
@@ -2340,10 +2342,12 @@ Sema::BuildCXXForRangeStmt(SourceLocation ForLoc, SourceLocation CoawaitLoc,
       return StmtError();
 
     // Build auto __begin = begin-expr, __end = end-expr.
+    // Divide by 2, since the variables are in the inner scope (loop body).
+    const auto DepthStr = std::to_string(S->getDepth() / 2);
     VarDecl *BeginVar = BuildForRangeVarDecl(*this, ColonLoc, AutoType,
-                                             "__begin");
+                                             std::string("__begin") + DepthStr);
     VarDecl *EndVar = BuildForRangeVarDecl(*this, ColonLoc, AutoType,
-                                           "__end");
+                                           std::string("__end") + DepthStr);
 
     // Build begin-expr and end-expr and attach to __begin and __end variables.
     ExprResult BeginExpr, EndExpr;
@@ -4036,32 +4040,29 @@ Sema::CreateCapturedStmtRecordDecl(CapturedDecl *&CD, SourceLocation Loc,
   return RD;
 }
 
-static void buildCapturedStmtCaptureList(
-    SmallVectorImpl<CapturedStmt::Capture> &Captures,
-    SmallVectorImpl<Expr *> &CaptureInits,
-    ArrayRef<CapturingScopeInfo::Capture> Candidates) {
-
-  typedef ArrayRef<CapturingScopeInfo::Capture>::const_iterator CaptureIter;
-  for (CaptureIter Cap = Candidates.begin(); Cap != Candidates.end(); ++Cap) {
-
-    if (Cap->isThisCapture()) {
-      Captures.push_back(CapturedStmt::Capture(Cap->getLocation(),
+static void
+buildCapturedStmtCaptureList(SmallVectorImpl<CapturedStmt::Capture> &Captures,
+                             SmallVectorImpl<Expr *> &CaptureInits,
+                             ArrayRef<sema::Capture> Candidates) {
+  for (const sema::Capture &Cap : Candidates) {
+    if (Cap.isThisCapture()) {
+      Captures.push_back(CapturedStmt::Capture(Cap.getLocation(),
                                                CapturedStmt::VCK_This));
-      CaptureInits.push_back(Cap->getInitExpr());
+      CaptureInits.push_back(Cap.getInitExpr());
       continue;
-    } else if (Cap->isVLATypeCapture()) {
+    } else if (Cap.isVLATypeCapture()) {
       Captures.push_back(
-          CapturedStmt::Capture(Cap->getLocation(), CapturedStmt::VCK_VLAType));
+          CapturedStmt::Capture(Cap.getLocation(), CapturedStmt::VCK_VLAType));
       CaptureInits.push_back(nullptr);
       continue;
     }
 
-    Captures.push_back(CapturedStmt::Capture(Cap->getLocation(),
-                                             Cap->isReferenceCapture()
+    Captures.push_back(CapturedStmt::Capture(Cap.getLocation(),
+                                             Cap.isReferenceCapture()
                                                  ? CapturedStmt::VCK_ByRef
                                                  : CapturedStmt::VCK_ByCopy,
-                                             Cap->getVariable()));
-    CaptureInits.push_back(Cap->getInitExpr());
+                                             Cap.getVariable()));
+    CaptureInits.push_back(Cap.getInitExpr());
   }
 }
 

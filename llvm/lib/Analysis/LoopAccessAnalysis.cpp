@@ -1087,16 +1087,6 @@ int64_t llvm::getPtrStride(PredicatedScalarEvolution &PSE, Value *Ptr,
   return Stride;
 }
 
-/// Take the pointer operand from the Load/Store instruction.
-/// Returns NULL if this is not a valid Load/Store instruction.
-static Value *getPointerOperand(Value *I) {
-  if (auto *LI = dyn_cast<LoadInst>(I))
-    return LI->getPointerOperand();
-  if (auto *SI = dyn_cast<StoreInst>(I))
-    return SI->getPointerOperand();
-  return nullptr;
-}
-
 /// Take the address space operand from the Load/Store instruction.
 /// Returns -1 if this is not a valid Load/Store instruction.
 static unsigned getAddressSpaceOperand(Value *I) {
@@ -1110,8 +1100,8 @@ static unsigned getAddressSpaceOperand(Value *I) {
 /// Returns true if the memory operations \p A and \p B are consecutive.
 bool llvm::isConsecutiveAccess(Value *A, Value *B, const DataLayout &DL,
                                ScalarEvolution &SE, bool CheckType) {
-  Value *PtrA = getPointerOperand(A);
-  Value *PtrB = getPointerOperand(B);
+  Value *PtrA = getLoadStorePointerOperand(A);
+  Value *PtrB = getLoadStorePointerOperand(B);
   unsigned ASA = getAddressSpaceOperand(A);
   unsigned ASB = getAddressSpaceOperand(B);
 
@@ -1127,11 +1117,11 @@ bool llvm::isConsecutiveAccess(Value *A, Value *B, const DataLayout &DL,
   if (CheckType && PtrA->getType() != PtrB->getType())
     return false;
 
-  unsigned PtrBitWidth = DL.getPointerSizeInBits(ASA);
+  unsigned IdxWidth = DL.getIndexSizeInBits(ASA);
   Type *Ty = cast<PointerType>(PtrA->getType())->getElementType();
-  APInt Size(PtrBitWidth, DL.getTypeStoreSize(Ty));
+  APInt Size(IdxWidth, DL.getTypeStoreSize(Ty));
 
-  APInt OffsetA(PtrBitWidth, 0), OffsetB(PtrBitWidth, 0);
+  APInt OffsetA(IdxWidth, 0), OffsetB(IdxWidth, 0);
   PtrA = PtrA->stripAndAccumulateInBoundsConstantOffsets(DL, OffsetA);
   PtrB = PtrB->stripAndAccumulateInBoundsConstantOffsets(DL, OffsetB);
 

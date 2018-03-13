@@ -566,9 +566,14 @@ void Verifier::visitGlobalValue(const GlobalValue &GV) {
   if (GV.isDeclarationForLinker())
     Assert(!GV.hasComdat(), "Declaration may not be in a Comdat!", &GV);
 
-  if (GV.hasDLLImportStorageClass())
+  if (GV.hasDLLImportStorageClass()) {
     Assert(!GV.isDSOLocal(),
            "GlobalValue with DLLImport Storage is dso_local!", &GV);
+
+    Assert((GV.isDeclaration() && GV.hasExternalLinkage()) ||
+               GV.hasAvailableExternallyLinkage(),
+           "Global is marked as dllimport, but not external", &GV);
+  }
 
   if (GV.hasLocalLinkage())
     Assert(GV.isDSOLocal(),
@@ -664,11 +669,6 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
       }
     }
   }
-
-  Assert(!GV.hasDLLImportStorageClass() ||
-             (GV.isDeclaration() && GV.hasExternalLinkage()) ||
-             GV.hasAvailableExternallyLinkage(),
-         "Global is marked as dllimport, but not external", &GV);
 
   // Visit any debug info attachments.
   SmallVector<MDNode *, 1> MDs;
@@ -945,7 +945,8 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
                N.getTag() == dwarf::DW_TAG_structure_type ||
                N.getTag() == dwarf::DW_TAG_union_type ||
                N.getTag() == dwarf::DW_TAG_enumeration_type ||
-               N.getTag() == dwarf::DW_TAG_class_type,
+               N.getTag() == dwarf::DW_TAG_class_type ||
+               N.getTag() == dwarf::DW_TAG_variant_part,
            "invalid tag", &N);
 
   AssertDI(isScope(N.getRawScope()), "invalid scope", &N, N.getRawScope());
@@ -958,6 +959,14 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
            N.getRawVTableHolder());
   AssertDI(!hasConflictingReferenceFlags(N.getFlags()),
            "invalid reference flags", &N);
+
+  if (N.isVector()) {
+    const DINodeArray Elements = N.getElements();
+    AssertDI(Elements.size() == 1 &&
+             Elements[0]->getTag() == dwarf::DW_TAG_subrange_type,
+             "invalid vector, expected one element of type subrange", &N);
+  }
+
   if (auto *Params = N.getRawTemplateParams())
     visitTemplateParams(N, *Params);
 
@@ -965,6 +974,11 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
       N.getTag() == dwarf::DW_TAG_union_type) {
     AssertDI(N.getFile() && !N.getFile()->getFilename().empty(),
              "class/union requires a filename", &N, N.getFile());
+  }
+
+  if (auto *D = N.getRawDiscriminator()) {
+    AssertDI(isa<DIDerivedType>(D) && N.getTag() == dwarf::DW_TAG_variant_part,
+             "discriminator can only appear on variant part");
   }
 }
 
@@ -982,23 +996,23 @@ void Verifier::visitDISubroutineType(const DISubroutineType &N) {
 
 void Verifier::visitDIFile(const DIFile &N) {
   AssertDI(N.getTag() == dwarf::DW_TAG_file_type, "invalid tag", &N);
-  AssertDI(N.getChecksumKind() <= DIFile::CSK_Last, "invalid checksum kind",
-           &N);
-  size_t Size;
-  switch (N.getChecksumKind()) {
-  case DIFile::CSK_None:
-    Size = 0;
-    break;
-  case DIFile::CSK_MD5:
-    Size = 32;
-    break;
-  case DIFile::CSK_SHA1:
-    Size = 40;
-    break;
+  Optional<DIFile::ChecksumInfo<StringRef>> Checksum = N.getChecksum();
+  if (Checksum) {
+    AssertDI(Checksum->Kind <= DIFile::ChecksumKind::CSK_Last,
+             "invalid checksum kind", &N);
+    size_t Size;
+    switch (Checksum->Kind) {
+    case DIFile::CSK_MD5:
+      Size = 32;
+      break;
+    case DIFile::CSK_SHA1:
+      Size = 40;
+      break;
+    }
+    AssertDI(Checksum->Value.size() == Size, "invalid checksum length", &N);
+    AssertDI(Checksum->Value.find_if_not(llvm::isHexDigit) == StringRef::npos,
+             "invalid checksum", &N);
   }
-  AssertDI(N.getChecksum().size() == Size, "invalid checksum length", &N);
-  AssertDI(N.getChecksum().find_if_not(llvm::isHexDigit) == StringRef::npos,
-           "invalid checksum", &N);
 }
 
 void Verifier::visitDICompileUnit(const DICompileUnit &N) {
@@ -2187,11 +2201,6 @@ void Verifier::visitFunction(const Function &F) {
       Assert(false, "Invalid user of intrinsic instruction!", U);
   }
 
-  Assert(!F.hasDLLImportStorageClass() ||
-             (F.isDeclaration() && F.hasExternalLinkage()) ||
-             F.hasAvailableExternallyLinkage(),
-         "Function is marked as dllimport, but not external.", &F);
-
   auto *N = F.getSubprogram();
   HasDebugInfo = (N != nullptr);
   if (!HasDebugInfo)
@@ -2855,17 +2864,20 @@ void Verifier::verifyMustTailCall(CallInst &CI) {
   Function *F = CI.getParent()->getParent();
   FunctionType *CallerTy = F->getFunctionType();
   FunctionType *CalleeTy = CI.getFunctionType();
-  Assert(CallerTy->getNumParams() == CalleeTy->getNumParams(),
-         "cannot guarantee tail call due to mismatched parameter counts", &CI);
+  if (!CI.getCalledFunction() || !CI.getCalledFunction()->isIntrinsic()) {
+    Assert(CallerTy->getNumParams() == CalleeTy->getNumParams(),
+           "cannot guarantee tail call due to mismatched parameter counts",
+           &CI);
+    for (int I = 0, E = CallerTy->getNumParams(); I != E; ++I) {
+      Assert(
+          isTypeCongruent(CallerTy->getParamType(I), CalleeTy->getParamType(I)),
+          "cannot guarantee tail call due to mismatched parameter types", &CI);
+    }
+  }
   Assert(CallerTy->isVarArg() == CalleeTy->isVarArg(),
          "cannot guarantee tail call due to mismatched varargs", &CI);
   Assert(isTypeCongruent(CallerTy->getReturnType(), CalleeTy->getReturnType()),
          "cannot guarantee tail call due to mismatched return types", &CI);
-  for (int I = 0, E = CallerTy->getNumParams(); I != E; ++I) {
-    Assert(
-        isTypeCongruent(CallerTy->getParamType(I), CalleeTy->getParamType(I)),
-        "cannot guarantee tail call due to mismatched parameter types", &CI);
-  }
 
   // - The calling conventions of the caller and callee must match.
   Assert(F->getCallingConv() == CI.getCallingConv(),
@@ -4064,10 +4076,6 @@ void Verifier::visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS) {
       Assert(IsValidAlignment(MTI->getSourceAlignment()),
              "alignment of arg 1 of memory intrinsic must be 0 or a power of 2",
              CS);
-      // TODO: Remove this assert when we enhance IRBuilder API to create
-      //  memcpy/memmove with separate source & dest alignments.
-      Assert(MTI->getSourceAlignment() == MTI->getDestAlignment(),
-             "TEMPORARY: source and dest alignments must be the same");
     }
     Assert(isa<ConstantInt>(CS.getArgOperand(3)),
            "isvolatile argument of memory intrinsics must be a constant int",

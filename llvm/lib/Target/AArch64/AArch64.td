@@ -91,6 +91,11 @@ def FeatureCustomCheapAsMoveHandling : SubtargetFeature<"custom-cheap-as-move",
     "CustomAsCheapAsMove", "true",
     "Use custom code for TargetInstrInfo::isAsCheapAsAMove()">;
 
+def FeatureExynosCheapAsMoveHandling : SubtargetFeature<"exynos-cheap-as-move",
+    "ExynosAsCheapAsMove", "true",
+    "Use Exynos specific code in TargetInstrInfo::isAsCheapAsAMove()",
+    [FeatureCustomCheapAsMoveHandling]>;
+
 def FeaturePostRAScheduler : SubtargetFeature<"use-postra-scheduler",
     "UsePostRAScheduler", "true", "Schedule again after register allocation">;
 
@@ -115,9 +120,17 @@ def FeatureArithmeticCbzFusion : SubtargetFeature<
     "arith-cbz-fusion", "HasArithmeticCbzFusion", "true",
     "CPU fuses arithmetic + cbz/cbnz operations">;
 
+def FeatureFuseAddress : SubtargetFeature<
+    "fuse-address", "HasFuseAddress", "true",
+    "CPU fuses address generation and memory operations">;
+
 def FeatureFuseAES : SubtargetFeature<
     "fuse-aes", "HasFuseAES", "true",
     "CPU fuses AES crypto operations">;
+
+def FeatureFuseCCSelect : SubtargetFeature<
+    "fuse-csel", "HasFuseCCSelect", "true",
+    "CPU fuses conditional select operations">;
 
 def FeatureFuseLiterals : SubtargetFeature<
     "fuse-literals", "HasFuseLiterals", "true",
@@ -199,7 +212,8 @@ include "AArch64SchedA57.td"
 include "AArch64SchedCyclone.td"
 include "AArch64SchedFalkor.td"
 include "AArch64SchedKryo.td"
-include "AArch64SchedM1.td"
+include "AArch64SchedExynosM1.td"
+include "AArch64SchedExynosM3.td"
 include "AArch64SchedThunderX.td"
 include "AArch64SchedThunderX2T99.td"
 
@@ -310,7 +324,7 @@ def ProcExynosM1 : SubtargetFeature<"exynosm1", "ARMProcFamily", "ExynosM1",
                                     [FeatureSlowPaired128,
                                      FeatureCRC,
                                      FeatureCrypto,
-                                     FeatureCustomCheapAsMoveHandling,
+                                     FeatureExynosCheapAsMoveHandling,
                                      FeatureFPARMv8,
                                      FeatureFuseAES,
                                      FeatureNEON,
@@ -325,7 +339,7 @@ def ProcExynosM2 : SubtargetFeature<"exynosm2", "ARMProcFamily", "ExynosM1",
                                     [FeatureSlowPaired128,
                                      FeatureCRC,
                                      FeatureCrypto,
-                                     FeatureCustomCheapAsMoveHandling,
+                                     FeatureExynosCheapAsMoveHandling,
                                      FeatureFPARMv8,
                                      FeatureFuseAES,
                                      FeatureNEON,
@@ -334,19 +348,21 @@ def ProcExynosM2 : SubtargetFeature<"exynosm2", "ARMProcFamily", "ExynosM1",
                                      FeatureSlowMisaligned128Store,
                                      FeatureZCZeroing]>;
 
-def ProcExynosM3 : SubtargetFeature<"exynosm3", "ARMProcFamily", "ExynosM1",
+def ProcExynosM3 : SubtargetFeature<"exynosm3", "ARMProcFamily", "ExynosM3",
                                     "Samsung Exynos-M3 processors",
                                     [FeatureCRC,
                                      FeatureCrypto,
-                                     FeatureCustomCheapAsMoveHandling,
+                                     FeatureExynosCheapAsMoveHandling,
                                      FeatureFPARMv8,
+                                     FeatureFuseAddress,
                                      FeatureFuseAES,
+                                     FeatureFuseCCSelect,
                                      FeatureFuseLiterals,
+                                     FeatureLSLFast,
                                      FeatureNEON,
                                      FeaturePerfMon,
                                      FeaturePostRAScheduler,
-                                     FeatureSlowMisaligned128Store,
-                                     FeatureSlowPaired128,
+                                     FeaturePredictableSelectIsExpensive,
                                      FeatureZCZeroing]>;
 
 def ProcKryo    : SubtargetFeature<"kryo", "ARMProcFamily", "Kryo",
@@ -470,7 +486,7 @@ def : ProcessorModel<"cortex-a75", CortexA57Model, [ProcA75]>;
 def : ProcessorModel<"cyclone", CycloneModel, [ProcCyclone]>;
 def : ProcessorModel<"exynos-m1", ExynosM1Model, [ProcExynosM1]>;
 def : ProcessorModel<"exynos-m2", ExynosM1Model, [ProcExynosM2]>;
-def : ProcessorModel<"exynos-m3", ExynosM1Model, [ProcExynosM3]>;
+def : ProcessorModel<"exynos-m3", ExynosM3Model, [ProcExynosM3]>;
 def : ProcessorModel<"falkor", FalkorModel, [ProcFalkor]>;
 def : ProcessorModel<"saphira", FalkorModel, [ProcSaphira]>;
 def : ProcessorModel<"kryo", KryoModel, [ProcKryo]>;
@@ -527,4 +543,5 @@ def AArch64 : Target {
   let InstructionSet = AArch64InstrInfo;
   let AssemblyParserVariants = [GenericAsmParserVariant, AppleAsmParserVariant];
   let AssemblyWriters = [GenericAsmWriter, AppleAsmWriter];
+  let AllowRegisterRenaming = 1;
 }

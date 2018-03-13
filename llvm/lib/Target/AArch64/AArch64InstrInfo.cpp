@@ -675,9 +675,13 @@ static bool canBeExpandedToORR(const MachineInstr &MI, unsigned BitSize) {
 bool AArch64InstrInfo::isAsCheapAsAMove(const MachineInstr &MI) const {
   if (!Subtarget.hasCustomCheapAsMoveHandling())
     return MI.isAsCheapAsAMove();
-  if (Subtarget.getProcFamily() == AArch64Subtarget::ExynosM1 &&
-      isExynosShiftLeftFast(MI))
-    return true;
+
+  if (Subtarget.hasExynosCheapAsMoveHandling()) {
+    if (isExynosResetFast(MI) || isExynosShiftLeftFast(MI))
+      return true;
+    else
+      return MI.isAsCheapAsAMove();
+  }
 
   switch (MI.getOpcode()) {
   default:
@@ -734,6 +738,35 @@ bool AArch64InstrInfo::isAsCheapAsAMove(const MachineInstr &MI) const {
   }
 
   llvm_unreachable("Unknown opcode to check as cheap as a move!");
+}
+
+bool AArch64InstrInfo::isExynosResetFast(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  default:
+    return false;
+
+  case AArch64::ADR:
+  case AArch64::ADRP:
+
+  case AArch64::MOVNWi:
+  case AArch64::MOVNXi:
+  case AArch64::MOVZWi:
+  case AArch64::MOVZXi:
+    return true;
+
+  case AArch64::MOVID:
+  case AArch64::MOVIv2d_ns:
+  case AArch64::MOVIv8b_ns:
+  case AArch64::MOVIv16b_ns:
+    return (MI.getOperand(1).getImm() == 0);
+
+  case AArch64::MOVIv2i32:
+  case AArch64::MOVIv4i32:
+  case AArch64::MOVIv4i16:
+  case AArch64::MOVIv8i16:
+    return (MI.getOperand(1).getImm() == 0 &&
+            MI.getOperand(2).getImm() == 0);
+  }
 }
 
 bool AArch64InstrInfo::isExynosShiftLeftFast(const MachineInstr &MI) const {
@@ -1574,7 +1607,7 @@ bool AArch64InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 }
 
 /// Return true if this is this instruction has a non-zero immediate
-bool AArch64InstrInfo::hasShiftedReg(const MachineInstr &MI) const {
+bool AArch64InstrInfo::hasShiftedReg(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
@@ -1612,7 +1645,7 @@ bool AArch64InstrInfo::hasShiftedReg(const MachineInstr &MI) const {
 }
 
 /// Return true if this is this instruction has a non-zero immediate
-bool AArch64InstrInfo::hasExtendedReg(const MachineInstr &MI) const {
+bool AArch64InstrInfo::hasExtendedReg(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
@@ -1640,7 +1673,7 @@ bool AArch64InstrInfo::hasExtendedReg(const MachineInstr &MI) const {
 
 // Return true if this instruction simply sets its single destination register
 // to zero. This is equivalent to a register rename of the zero-register.
-bool AArch64InstrInfo::isGPRZero(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isGPRZero(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
@@ -1664,7 +1697,7 @@ bool AArch64InstrInfo::isGPRZero(const MachineInstr &MI) const {
 
 // Return true if this instruction simply renames a general register without
 // modifying bits.
-bool AArch64InstrInfo::isGPRCopy(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isGPRCopy(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
@@ -1694,7 +1727,7 @@ bool AArch64InstrInfo::isGPRCopy(const MachineInstr &MI) const {
 
 // Return true if this instruction simply renames a general register without
 // modifying bits.
-bool AArch64InstrInfo::isFPRCopy(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isFPRCopy(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
@@ -1763,7 +1796,7 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
 /// Return true if this is load/store scales or extends its register offset.
 /// This refers to scaling a dynamic index as opposed to scaled immediates.
 /// MI should be a memory op that allows scaled addressing.
-bool AArch64InstrInfo::isScaledAddr(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isScaledAddr(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
@@ -1822,27 +1855,27 @@ bool AArch64InstrInfo::isScaledAddr(const MachineInstr &MI) const {
 }
 
 /// Check all MachineMemOperands for a hint to suppress pairing.
-bool AArch64InstrInfo::isLdStPairSuppressed(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isLdStPairSuppressed(const MachineInstr &MI) {
   return llvm::any_of(MI.memoperands(), [](MachineMemOperand *MMO) {
     return MMO->getFlags() & MOSuppressPair;
   });
 }
 
 /// Set a flag on the first MachineMemOperand to suppress pairing.
-void AArch64InstrInfo::suppressLdStPair(MachineInstr &MI) const {
+void AArch64InstrInfo::suppressLdStPair(MachineInstr &MI) {
   if (MI.memoperands_empty())
     return;
   (*MI.memoperands_begin())->setFlags(MOSuppressPair);
 }
 
 /// Check all MachineMemOperands for a hint that the load/store is strided.
-bool AArch64InstrInfo::isStridedAccess(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isStridedAccess(const MachineInstr &MI) {
   return llvm::any_of(MI.memoperands(), [](MachineMemOperand *MMO) {
     return MMO->getFlags() & MOStridedAccess;
   });
 }
 
-bool AArch64InstrInfo::isUnscaledLdSt(unsigned Opc) const {
+bool AArch64InstrInfo::isUnscaledLdSt(unsigned Opc) {
   switch (Opc) {
   default:
     return false;
@@ -1867,8 +1900,124 @@ bool AArch64InstrInfo::isUnscaledLdSt(unsigned Opc) const {
   }
 }
 
-bool AArch64InstrInfo::isUnscaledLdSt(MachineInstr &MI) const {
-  return isUnscaledLdSt(MI.getOpcode());
+bool AArch64InstrInfo::isPairableLdStInst(const MachineInstr &MI) {
+  switch (MI.getOpcode()) {
+  default:
+    return false;
+  // Scaled instructions.
+  case AArch64::STRSui:
+  case AArch64::STRDui:
+  case AArch64::STRQui:
+  case AArch64::STRXui:
+  case AArch64::STRWui:
+  case AArch64::LDRSui:
+  case AArch64::LDRDui:
+  case AArch64::LDRQui:
+  case AArch64::LDRXui:
+  case AArch64::LDRWui:
+  case AArch64::LDRSWui:
+  // Unscaled instructions.
+  case AArch64::STURSi:
+  case AArch64::STURDi:
+  case AArch64::STURQi:
+  case AArch64::STURWi:
+  case AArch64::STURXi:
+  case AArch64::LDURSi:
+  case AArch64::LDURDi:
+  case AArch64::LDURQi:
+  case AArch64::LDURWi:
+  case AArch64::LDURXi:
+  case AArch64::LDURSWi:
+    return true;
+  }
+}
+
+unsigned AArch64InstrInfo::convertToFlagSettingOpc(unsigned Opc,
+                                                   bool &Is64Bit) {
+  switch (Opc) {
+  default:
+    llvm_unreachable("Opcode has no flag setting equivalent!");
+  // 32-bit cases:
+  case AArch64::ADDWri:
+    Is64Bit = false;
+    return AArch64::ADDSWri;
+  case AArch64::ADDWrr:
+    Is64Bit = false;
+    return AArch64::ADDSWrr;
+  case AArch64::ADDWrs:
+    Is64Bit = false;
+    return AArch64::ADDSWrs;
+  case AArch64::ADDWrx:
+    Is64Bit = false;
+    return AArch64::ADDSWrx;
+  case AArch64::ANDWri:
+    Is64Bit = false;
+    return AArch64::ANDSWri;
+  case AArch64::ANDWrr:
+    Is64Bit = false;
+    return AArch64::ANDSWrr;
+  case AArch64::ANDWrs:
+    Is64Bit = false;
+    return AArch64::ANDSWrs;
+  case AArch64::BICWrr:
+    Is64Bit = false;
+    return AArch64::BICSWrr;
+  case AArch64::BICWrs:
+    Is64Bit = false;
+    return AArch64::BICSWrs;
+  case AArch64::SUBWri:
+    Is64Bit = false;
+    return AArch64::SUBSWri;
+  case AArch64::SUBWrr:
+    Is64Bit = false;
+    return AArch64::SUBSWrr;
+  case AArch64::SUBWrs:
+    Is64Bit = false;
+    return AArch64::SUBSWrs;
+  case AArch64::SUBWrx:
+    Is64Bit = false;
+    return AArch64::SUBSWrx;
+  // 64-bit cases:
+  case AArch64::ADDXri:
+    Is64Bit = true;
+    return AArch64::ADDSXri;
+  case AArch64::ADDXrr:
+    Is64Bit = true;
+    return AArch64::ADDSXrr;
+  case AArch64::ADDXrs:
+    Is64Bit = true;
+    return AArch64::ADDSXrs;
+  case AArch64::ADDXrx:
+    Is64Bit = true;
+    return AArch64::ADDSXrx;
+  case AArch64::ANDXri:
+    Is64Bit = true;
+    return AArch64::ANDSXri;
+  case AArch64::ANDXrr:
+    Is64Bit = true;
+    return AArch64::ANDSXrr;
+  case AArch64::ANDXrs:
+    Is64Bit = true;
+    return AArch64::ANDSXrs;
+  case AArch64::BICXrr:
+    Is64Bit = true;
+    return AArch64::BICSXrr;
+  case AArch64::BICXrs:
+    Is64Bit = true;
+    return AArch64::BICSXrs;
+  case AArch64::SUBXri:
+    Is64Bit = true;
+    return AArch64::SUBSXri;
+  case AArch64::SUBXrr:
+    Is64Bit = true;
+    return AArch64::SUBSXrr;
+  case AArch64::SUBXrs:
+    Is64Bit = true;
+    return AArch64::SUBSXrs;
+  case AArch64::SUBXrx:
+    Is64Bit = true;
+    return AArch64::SUBSXrx;
+  }
 }
 
 // Is this a candidate for ld/st merging or pairing?  For example, we don't
@@ -2592,6 +2741,16 @@ void AArch64InstrInfo::storeRegToStackSlot(
       assert(Subtarget.hasNEON() && "Unexpected register store without NEON");
       Opc = AArch64::ST1Twov1d;
       Offset = false;
+    } else if (AArch64::XSeqPairsClassRegClass.hasSubClassEq(RC)) {
+      BuildMI(MBB, MBBI, DL, get(AArch64::STPXi))
+          .addReg(TRI->getSubReg(SrcReg, AArch64::sube64),
+                  getKillRegState(isKill))
+          .addReg(TRI->getSubReg(SrcReg, AArch64::subo64),
+                  getKillRegState(isKill))
+          .addFrameIndex(FI)
+          .addImm(0)
+          .addMemOperand(MMO);
+      return;
     }
     break;
   case 24:
@@ -2690,6 +2849,16 @@ void AArch64InstrInfo::loadRegFromStackSlot(
       assert(Subtarget.hasNEON() && "Unexpected register load without NEON");
       Opc = AArch64::LD1Twov1d;
       Offset = false;
+    } else if (AArch64::XSeqPairsClassRegClass.hasSubClassEq(RC)) {
+      BuildMI(MBB, MBBI, DL, get(AArch64::LDPXi))
+          .addReg(TRI->getSubReg(DestReg, AArch64::sube64),
+                  getDefRegState(true))
+          .addReg(TRI->getSubReg(DestReg, AArch64::subo64),
+                  getDefRegState(true))
+          .addFrameIndex(FI)
+          .addImm(0)
+          .addMemOperand(MMO);
+      return;
     }
     break;
   case 24:

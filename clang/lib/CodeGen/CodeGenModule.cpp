@@ -555,6 +555,9 @@ void CodeGenModule::Release() {
       getModule().setPIELevel(static_cast<llvm::PIELevel::Level>(PLevel));
   }
 
+  if (CodeGenOpts.NoPLT)
+    getModule().setRtLibUseGOT();
+
   SimplifyPersonality();
 
   if (getCodeGenOpts().EmitDeclMetadata)
@@ -602,13 +605,9 @@ llvm::MDNode *CodeGenModule::getTBAATypeInfo(QualType QTy) {
 }
 
 TBAAAccessInfo CodeGenModule::getTBAAAccessInfo(QualType AccessType) {
-  // Pointee values may have incomplete types, but they shall never be
-  // dereferenced.
-  if (AccessType->isIncompleteType())
-    return TBAAAccessInfo::getIncompleteInfo();
-
-  uint64_t Size = Context.getTypeSizeInChars(AccessType).getQuantity();
-  return TBAAAccessInfo(getTBAATypeInfo(AccessType), Size);
+  if (!TBAA)
+    return TBAAAccessInfo();
+  return TBAA->getAccessInfo(AccessType);
 }
 
 TBAAAccessInfo
@@ -700,8 +699,7 @@ llvm::ConstantInt *CodeGenModule::getSize(CharUnits size) {
 }
 
 void CodeGenModule::setGlobalVisibility(llvm::GlobalValue *GV,
-                                        const NamedDecl *D,
-                                        ForDefinition_t IsForDefinition) const {
+                                        const NamedDecl *D) const {
   if (GV->hasDLLImportStorageClass())
     return;
   // Internal definitions always have default visibility.
@@ -712,9 +710,117 @@ void CodeGenModule::setGlobalVisibility(llvm::GlobalValue *GV,
 
   // Set visibility for definitions.
   LinkageInfo LV = D->getLinkageAndVisibility();
-  if (LV.isVisibilityExplicit() ||
-      (IsForDefinition && !GV->hasAvailableExternallyLinkage()))
+  if (LV.isVisibilityExplicit() || !GV->isDeclarationForLinker())
     GV->setVisibility(GetLLVMVisibility(LV.getVisibility()));
+}
+
+static bool shouldAssumeDSOLocal(const CodeGenModule &CGM,
+                                 llvm::GlobalValue *GV) {
+  if (GV->hasLocalLinkage())
+    return true;
+
+  if (!GV->hasDefaultVisibility() && !GV->hasExternalWeakLinkage())
+    return true;
+
+  // DLLImport explicitly marks the GV as external.
+  if (GV->hasDLLImportStorageClass())
+    return false;
+
+  const llvm::Triple &TT = CGM.getTriple();
+  // Every other GV is local on COFF.
+  // Make an exception for windows OS in the triple: Some firmware builds use
+  // *-win32-macho triples. This (accidentally?) produced windows relocations
+  // without GOT tables in older clang versions; Keep this behaviour.
+  // FIXME: even thread local variables?
+  if (TT.isOSBinFormatCOFF() || (TT.isOSWindows() && TT.isOSBinFormatMachO()))
+    return true;
+
+  // Only handle COFF and ELF for now.
+  if (!TT.isOSBinFormatELF())
+    return false;
+
+  // If this is not an executable, don't assume anything is local.
+  const auto &CGOpts = CGM.getCodeGenOpts();
+  llvm::Reloc::Model RM = CGOpts.RelocationModel;
+  const auto &LOpts = CGM.getLangOpts();
+  if (RM != llvm::Reloc::Static && !LOpts.PIE)
+    return false;
+
+  // A definition cannot be preempted from an executable.
+  if (!GV->isDeclarationForLinker())
+    return true;
+
+  // Most PIC code sequences that assume that a symbol is local cannot produce a
+  // 0 if it turns out the symbol is undefined. While this is ABI and relocation
+  // depended, it seems worth it to handle it here.
+  if (RM == llvm::Reloc::PIC_ && GV->hasExternalWeakLinkage())
+    return false;
+
+  // PPC has no copy relocations and cannot use a plt entry as a symbol address.
+  llvm::Triple::ArchType Arch = TT.getArch();
+  if (Arch == llvm::Triple::ppc || Arch == llvm::Triple::ppc64 ||
+      Arch == llvm::Triple::ppc64le)
+    return false;
+
+  // If we can use copy relocations we can assume it is local.
+  if (auto *Var = dyn_cast<llvm::GlobalVariable>(GV))
+    if (!Var->isThreadLocal() &&
+        (RM == llvm::Reloc::Static || CGOpts.PIECopyRelocations))
+      return true;
+
+  // If we can use a plt entry as the symbol address we can assume it
+  // is local.
+  // FIXME: This should work for PIE, but the gold linker doesn't support it.
+  if (isa<llvm::Function>(GV) && !CGOpts.NoPLT && RM == llvm::Reloc::Static)
+    return true;
+
+  // Otherwise don't assue it is local.
+  return false;
+}
+
+void CodeGenModule::setDSOLocal(llvm::GlobalValue *GV) const {
+  GV->setDSOLocal(shouldAssumeDSOLocal(*this, GV));
+}
+
+void CodeGenModule::setDLLImportDLLExport(llvm::GlobalValue *GV,
+                                          GlobalDecl GD) const {
+  const auto *D = dyn_cast<NamedDecl>(GD.getDecl());
+  if (const auto *Dtor = dyn_cast_or_null<CXXDestructorDecl>(D)) {
+    if (getCXXABI().useThunkForDtorVariant(Dtor, GD.getDtorType())) {
+      // Don't dllexport/import destructor thunks.
+      GV->setDLLStorageClass(llvm::GlobalValue::DefaultStorageClass);
+      return;
+    }
+  }
+  setDLLImportDLLExport(GV, D);
+}
+
+void CodeGenModule::setDLLImportDLLExport(llvm::GlobalValue *GV,
+                                          const NamedDecl *D) const {
+  if (D->isExternallyVisible()) {
+    if (D->hasAttr<DLLImportAttr>())
+      GV->setDLLStorageClass(llvm::GlobalVariable::DLLImportStorageClass);
+    else if (D->hasAttr<DLLExportAttr>() && !GV->isDeclarationForLinker())
+      GV->setDLLStorageClass(llvm::GlobalVariable::DLLExportStorageClass);
+  }
+}
+
+void CodeGenModule::setGVProperties(llvm::GlobalValue *GV,
+                                    GlobalDecl GD) const {
+  setDLLImportDLLExport(GV, GD);
+  setGlobalVisibilityAndLocal(GV, dyn_cast<NamedDecl>(GD.getDecl()));
+}
+
+void CodeGenModule::setGVProperties(llvm::GlobalValue *GV,
+                                    const NamedDecl *D) const {
+  setDLLImportDLLExport(GV, D);
+  setGlobalVisibilityAndLocal(GV, D);
+}
+
+void CodeGenModule::setGlobalVisibilityAndLocal(llvm::GlobalValue *GV,
+                                                const NamedDecl *D) const {
+  setGlobalVisibility(GV, D);
+  setDSOLocal(GV);
 }
 
 static llvm::GlobalVariable::ThreadLocalMode GetLLVMTLSModel(StringRef S) {
@@ -988,35 +1094,11 @@ CodeGenModule::getFunctionLinkage(GlobalDecl GD) {
   return getLLVMLinkageForDeclarator(D, Linkage, /*isConstantVariable=*/false);
 }
 
-void CodeGenModule::setFunctionDLLStorageClass(GlobalDecl GD, llvm::Function *F) {
-  const auto *FD = cast<FunctionDecl>(GD.getDecl());
-
-  if (const auto *Dtor = dyn_cast_or_null<CXXDestructorDecl>(FD)) {
-    if (getCXXABI().useThunkForDtorVariant(Dtor, GD.getDtorType())) {
-      // Don't dllexport/import destructor thunks.
-      F->setDLLStorageClass(llvm::GlobalValue::DefaultStorageClass);
-      return;
-    }
-  }
-
-  if (FD->hasAttr<DLLImportAttr>())
-    F->setDLLStorageClass(llvm::GlobalVariable::DLLImportStorageClass);
-  else if (FD->hasAttr<DLLExportAttr>())
-    F->setDLLStorageClass(llvm::GlobalVariable::DLLExportStorageClass);
-  else
-    F->setDLLStorageClass(llvm::GlobalVariable::DefaultStorageClass);
-}
-
 llvm::ConstantInt *CodeGenModule::CreateCrossDsoCfiTypeId(llvm::Metadata *MD) {
   llvm::MDString *MDS = dyn_cast<llvm::MDString>(MD);
   if (!MDS) return nullptr;
 
   return llvm::ConstantInt::get(Int64Ty, llvm::MD5Hash(MDS->getString()));
-}
-
-void CodeGenModule::setFunctionDefinitionAttributes(const FunctionDecl *D,
-                                                    llvm::Function *F) {
-  setNonAliasAttributes(D, F);
 }
 
 void CodeGenModule::SetLLVMFunctionAttributes(const Decl *D,
@@ -1171,10 +1253,10 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
       CreateFunctionTypeMetadata(FD, F);
 }
 
-void CodeGenModule::SetCommonAttributes(const Decl *D,
-                                        llvm::GlobalValue *GV) {
-  if (const auto *ND = dyn_cast_or_null<NamedDecl>(D))
-    setGlobalVisibility(GV, ND, ForDefinition);
+void CodeGenModule::SetCommonAttributes(GlobalDecl GD, llvm::GlobalValue *GV) {
+  const Decl *D = GD.getDecl();
+  if (dyn_cast_or_null<NamedDecl>(D))
+    setGVProperties(GV, GD);
   else
     GV->setVisibility(llvm::GlobalValue::DefaultVisibility);
 
@@ -1182,19 +1264,56 @@ void CodeGenModule::SetCommonAttributes(const Decl *D,
     addUsedGlobal(GV);
 }
 
-void CodeGenModule::setAliasAttributes(const Decl *D,
-                                       llvm::GlobalValue *GV) {
-  SetCommonAttributes(D, GV);
+bool CodeGenModule::GetCPUAndFeaturesAttributes(const Decl *D,
+                                                llvm::AttrBuilder &Attrs) {
+  // Add target-cpu and target-features attributes to functions. If
+  // we have a decl for the function and it has a target attribute then
+  // parse that and add it to the feature set.
+  StringRef TargetCPU = getTarget().getTargetOpts().CPU;
+  std::vector<std::string> Features;
+  const auto *FD = dyn_cast_or_null<FunctionDecl>(D);
+  FD = FD ? FD->getMostRecentDecl() : FD;
+  const auto *TD = FD ? FD->getAttr<TargetAttr>() : nullptr;
+  bool AddedAttr = false;
+  if (TD) {
+    llvm::StringMap<bool> FeatureMap;
+    getFunctionFeatureMap(FeatureMap, FD);
 
-  // Process the dllexport attribute based on whether the original definition
-  // (not necessarily the aliasee) was exported.
-  if (D->hasAttr<DLLExportAttr>())
-    GV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+    // Produce the canonical string for this set of features.
+    for (const llvm::StringMap<bool>::value_type &Entry : FeatureMap)
+      Features.push_back((Entry.getValue() ? "+" : "-") + Entry.getKey().str());
+
+    // Now add the target-cpu and target-features to the function.
+    // While we populated the feature map above, we still need to
+    // get and parse the target attribute so we can get the cpu for
+    // the function.
+    TargetAttr::ParsedTargetAttr ParsedAttr = TD->parse();
+    if (ParsedAttr.Architecture != "" &&
+        getTarget().isValidCPUName(ParsedAttr.Architecture))
+      TargetCPU = ParsedAttr.Architecture;
+  } else {
+    // Otherwise just add the existing target cpu and target features to the
+    // function.
+    Features = getTarget().getTargetOpts().Features;
+  }
+
+  if (TargetCPU != "") {
+    Attrs.addAttribute("target-cpu", TargetCPU);
+    AddedAttr = true;
+  }
+  if (!Features.empty()) {
+    std::sort(Features.begin(), Features.end());
+    Attrs.addAttribute("target-features", llvm::join(Features, ","));
+    AddedAttr = true;
+  }
+
+  return AddedAttr;
 }
 
-void CodeGenModule::setNonAliasAttributes(const Decl *D,
+void CodeGenModule::setNonAliasAttributes(GlobalDecl GD,
                                           llvm::GlobalObject *GO) {
-  SetCommonAttributes(D, GO);
+  const Decl *D = GD.getDecl();
+  SetCommonAttributes(GD, GO);
 
   if (D) {
     if (auto *GV = dyn_cast<llvm::GlobalVariable>(GO)) {
@@ -1208,46 +1327,48 @@ void CodeGenModule::setNonAliasAttributes(const Decl *D,
 
     if (auto *F = dyn_cast<llvm::Function>(GO)) {
       if (auto *SA = D->getAttr<PragmaClangTextSectionAttr>())
-       if (!D->getAttr<SectionAttr>())
-         F->addFnAttr("implicit-section-name", SA->getName());
+        if (!D->getAttr<SectionAttr>())
+          F->addFnAttr("implicit-section-name", SA->getName());
+
+      llvm::AttrBuilder Attrs;
+      if (GetCPUAndFeaturesAttributes(D, Attrs)) {
+        // We know that GetCPUAndFeaturesAttributes will always have the
+        // newest set, since it has the newest possible FunctionDecl, so the
+        // new ones should replace the old.
+        F->removeFnAttr("target-cpu");
+        F->removeFnAttr("target-features");
+        F->addAttributes(llvm::AttributeList::FunctionIndex, Attrs);
+      }
     }
 
     if (const SectionAttr *SA = D->getAttr<SectionAttr>())
       GO->setSection(SA->getName());
   }
 
-  getTargetCodeGenInfo().setTargetAttributes(D, GO, *this, ForDefinition);
+  getTargetCodeGenInfo().setTargetAttributes(D, GO, *this);
 }
 
-void CodeGenModule::SetInternalFunctionAttributes(const Decl *D,
+void CodeGenModule::SetInternalFunctionAttributes(GlobalDecl GD,
                                                   llvm::Function *F,
                                                   const CGFunctionInfo &FI) {
+  const Decl *D = GD.getDecl();
   SetLLVMFunctionAttributes(D, FI, F);
   SetLLVMFunctionAttributesForDefinition(D, F);
 
   F->setLinkage(llvm::Function::InternalLinkage);
 
-  setNonAliasAttributes(D, F);
+  setNonAliasAttributes(GD, F);
 }
 
-static void setLinkageForGV(llvm::GlobalValue *GV,
-                            const NamedDecl *ND) {
+static void setLinkageForGV(llvm::GlobalValue *GV, const NamedDecl *ND) {
   // Set linkage and visibility in case we never see a definition.
   LinkageInfo LV = ND->getLinkageAndVisibility();
-  if (!isExternallyVisible(LV.getLinkage())) {
-    // Don't set internal linkage on declarations.
-  } else {
-    if (ND->hasAttr<DLLImportAttr>()) {
-      GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
-      GV->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
-    } else if (ND->hasAttr<DLLExportAttr>()) {
-      GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
-    } else if (ND->hasAttr<WeakAttr>() || ND->isWeakImported()) {
-      // "extern_weak" is overloaded in LLVM; we probably should have
-      // separate linkage types for this.
-      GV->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
-    }
-  }
+  // Don't set internal linkage on declarations.
+  // "extern_weak" is overloaded in LLVM; we probably should have
+  // separate linkage types for this.
+  if (isExternallyVisible(LV.getLinkage()) &&
+      (ND->hasAttr<WeakAttr>() || ND->isWeakImported()))
+    GV->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
 }
 
 void CodeGenModule::CreateFunctionTypeMetadata(const FunctionDecl *FD,
@@ -1280,8 +1401,7 @@ void CodeGenModule::CreateFunctionTypeMetadata(const FunctionDecl *FD,
 
 void CodeGenModule::SetFunctionAttributes(GlobalDecl GD, llvm::Function *F,
                                           bool IsIncompleteFunction,
-                                          bool IsThunk,
-                                          ForDefinition_t IsForDefinition) {
+                                          bool IsThunk) {
 
   if (llvm::Intrinsic::ID IID = F->getIntrinsicID()) {
     // If this is an intrinsic function, set the function's attributes
@@ -1295,9 +1415,8 @@ void CodeGenModule::SetFunctionAttributes(GlobalDecl GD, llvm::Function *F,
   if (!IsIncompleteFunction) {
     SetLLVMFunctionAttributes(FD, getTypes().arrangeGlobalDeclaration(GD), F);
     // Setup target-specific attributes.
-    if (!IsForDefinition)
-      getTargetCodeGenInfo().setTargetAttributes(FD, F, *this,
-                                                 NotForDefinition);
+    if (F->isDeclaration())
+      getTargetCodeGenInfo().setTargetAttributes(FD, F, *this);
   }
 
   // Add the Returned attribute for "this", except for iOS 5 and earlier
@@ -1316,7 +1435,7 @@ void CodeGenModule::SetFunctionAttributes(GlobalDecl GD, llvm::Function *F,
   // overridden by a definition.
 
   setLinkageForGV(F, FD);
-  setGlobalVisibility(F, FD, NotForDefinition);
+  setGVProperties(F, FD);
 
   if (FD->getAttr<PragmaClangTextSectionAttr>()) {
     F->addFnAttr("implicit-section-name");
@@ -1409,6 +1528,12 @@ void CodeGenModule::AddDetectMismatch(StringRef Name, StringRef Value) {
   getTargetCodeGenInfo().getDetectMismatchOption(Name, Value, Opt);
   auto *MDOpts = llvm::MDString::get(getLLVMContext(), Opt);
   LinkerOptionsMetadata.push_back(llvm::MDNode::get(getLLVMContext(), MDOpts));
+}
+
+void CodeGenModule::AddELFLibDirective(StringRef Lib) {
+  auto &C = getLLVMContext();
+  LinkerOptionsMetadata.push_back(llvm::MDNode::get(
+      C, {llvm::MDString::get(C, "lib"), llvm::MDString::get(C, Lib)}));
 }
 
 void CodeGenModule::AddDependentLib(StringRef Lib) {
@@ -2350,8 +2475,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
 
   assert(F->getName() == MangledName && "name was uniqued!");
   if (D)
-    SetFunctionAttributes(GD, F, IsIncompleteFunction, IsThunk,
-                          IsForDefinition);
+    SetFunctionAttributes(GD, F, IsIncompleteFunction, IsThunk);
   if (ExtraAttrs.hasAttributes(llvm::AttributeList::FunctionIndex)) {
     llvm::AttrBuilder B(ExtraAttrs, llvm::AttributeList::FunctionIndex);
     F->addAttributes(llvm::AttributeList::FunctionIndex, B);
@@ -2638,13 +2762,14 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
     GV->setAlignment(getContext().getDeclAlign(D).getQuantity());
 
     setLinkageForGV(GV, D);
-    setGlobalVisibility(GV, D, NotForDefinition);
 
     if (D->getTLSKind()) {
       if (D->getTLSKind() == VarDecl::TLS_Dynamic)
         CXXThreadLocals.push_back(D);
       setTLSMode(GV, *D);
     }
+
+    setGVProperties(GV, D);
 
     // If required by the ABI, treat declarations of static data members with
     // inline initializers as definitions.
@@ -2694,7 +2819,7 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
                   GetAddrOfGlobalVar(D, InitType, IsForDefinition));
 
               // Erase the old global, since it is no longer used.
-              cast<llvm::GlobalValue>(GV)->eraseFromParent();
+              GV->eraseFromParent();
               GV = NewGV;
             } else {
               GV->setInitializer(Init);
@@ -3454,10 +3579,9 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
   // declarations).
   auto *Fn = cast<llvm::Function>(GV);
   setFunctionLinkage(GD, Fn);
-  setFunctionDLLStorageClass(GD, Fn);
 
   // FIXME: this is redundant with part of setFunctionDefinitionAttributes
-  setGlobalVisibility(Fn, D, ForDefinition);
+  setGVProperties(Fn, GD);
 
   MaybeHandleStaticInExternC(D, Fn);
 
@@ -3465,7 +3589,7 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
 
   CodeGenFunction(*this).GenerateCode(D, Fn, FI);
 
-  setFunctionDefinitionAttributes(D, Fn);
+  setNonAliasAttributes(GD, Fn);
   SetLLVMFunctionAttributesForDefinition(D, Fn);
 
   if (const ConstructorAttr *CA = D->getAttr<ConstructorAttr>())
@@ -3549,7 +3673,7 @@ void CodeGenModule::EmitAliasDefinition(GlobalDecl GD) {
     if (VD->getTLSKind())
       setTLSMode(GA, *VD);
 
-  setAliasAttributes(D, GA);
+  SetCommonAttributes(GD, GA);
 }
 
 void CodeGenModule::emitIFuncDefinition(GlobalDecl GD) {
@@ -3608,7 +3732,7 @@ void CodeGenModule::emitIFuncDefinition(GlobalDecl GD) {
   } else
     GIF->setName(MangledName);
 
-  SetCommonAttributes(D, GIF);
+  SetCommonAttributes(GD, GIF);
 }
 
 llvm::Function *CodeGenModule::getIntrinsic(unsigned IID,
@@ -4053,7 +4177,7 @@ ConstantAddress CodeGenModule::GetAddrOfGlobalTemporary(
       getModule(), Type, Constant, Linkage, InitialValue, Name.c_str(),
       /*InsertBefore=*/nullptr, llvm::GlobalVariable::NotThreadLocal, TargetAS);
   if (emitter) emitter->finalize(GV);
-  setGlobalVisibility(GV, VD, ForDefinition);
+  setGVProperties(GV, VD);
   GV->setAlignment(Align.getQuantity());
   if (supportsCOMDAT() && GV->isWeakForLinker())
     GV->setComdat(TheModule.getOrInsertComdat(GV->getName()));
@@ -4190,18 +4314,13 @@ void CodeGenModule::EmitDeclContext(const DeclContext *DC) {
 /// EmitTopLevelDecl - Emit code for a single top level declaration.
 void CodeGenModule::EmitTopLevelDecl(Decl *D) {
   // Ignore dependent declarations.
-  if (D->getDeclContext() && D->getDeclContext()->isDependentContext())
+  if (D->isTemplated())
     return;
 
   switch (D->getKind()) {
   case Decl::CXXConversion:
   case Decl::CXXMethod:
   case Decl::Function:
-    // Skip function templates
-    if (cast<FunctionDecl>(D)->getDescribedFunctionTemplate() ||
-        cast<FunctionDecl>(D)->isLateTemplateParsed())
-      return;
-
     EmitGlobal(cast<FunctionDecl>(D));
     // Always provide some coverage mapping
     // even for the functions that aren't emitted.
@@ -4214,10 +4333,6 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
 
   case Decl::Var:
   case Decl::Decomposition:
-    // Skip variable templates
-    if (cast<VarDecl>(D)->getDescribedVarTemplate())
-      return;
-    LLVM_FALLTHROUGH;
   case Decl::VarTemplateSpecialization:
     EmitGlobal(cast<VarDecl>(D));
     if (auto *DD = dyn_cast<DecompositionDecl>(D))
@@ -4276,16 +4391,9 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
       DI->EmitUsingDirective(cast<UsingDirectiveDecl>(*D));
     return;
   case Decl::CXXConstructor:
-    // Skip function templates
-    if (cast<FunctionDecl>(D)->getDescribedFunctionTemplate() ||
-        cast<FunctionDecl>(D)->isLateTemplateParsed())
-      return;
-
     getCXXABI().EmitCXXConstructors(cast<CXXConstructorDecl>(D));
     break;
   case Decl::CXXDestructor:
-    if (cast<FunctionDecl>(D)->isLateTemplateParsed())
-      return;
     getCXXABI().EmitCXXDestructors(cast<CXXDestructorDecl>(D));
     break;
 
@@ -4345,7 +4453,11 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
       AppendLinkerOptions(PCD->getArg());
       break;
     case PCK_Lib:
-      AddDependentLib(PCD->getArg());
+      if (getTarget().getTriple().isOSBinFormatELF() &&
+          !getTarget().getTriple().isPS4())
+        AddELFLibDirective(PCD->getArg());
+      else
+        AddDependentLib(PCD->getArg());
       break;
     case PCK_Compiler:
     case PCK_ExeStr:

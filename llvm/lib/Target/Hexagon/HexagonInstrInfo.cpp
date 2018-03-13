@@ -1124,6 +1124,20 @@ bool HexagonInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       MBB.erase(MI);
       return true;
     }
+    case Hexagon::PS_qtrue: {
+      BuildMI(MBB, MI, DL, get(Hexagon::V6_veqw), MI.getOperand(0).getReg())
+        .addReg(Hexagon::V0, RegState::Undef)
+        .addReg(Hexagon::V0, RegState::Undef);
+      MBB.erase(MI);
+      return true;
+    }
+    case Hexagon::PS_qfalse: {
+      BuildMI(MBB, MI, DL, get(Hexagon::V6_vgtw), MI.getOperand(0).getReg())
+        .addReg(Hexagon::V0, RegState::Undef)
+        .addReg(Hexagon::V0, RegState::Undef);
+      MBB.erase(MI);
+      return true;
+    }
     case Hexagon::PS_vmulw: {
       // Expand a 64-bit vector multiply into 2 32-bit scalar multiplies.
       unsigned DstReg = MI.getOperand(0).getReg();
@@ -2508,6 +2522,11 @@ bool HexagonInstrInfo::isValidAutoIncImm(const EVT VT, int Offset) const {
     case MVT::i16:
     case MVT::i32:
     case MVT::i64:
+    case MVT::v2i16:
+    case MVT::v2i32:
+    case MVT::v4i8:
+    case MVT::v4i16:
+    case MVT::v8i8:
       return isInt<4>(Count);
     // For HVX vectors the auto-inc is s3
     case MVT::v64i8:

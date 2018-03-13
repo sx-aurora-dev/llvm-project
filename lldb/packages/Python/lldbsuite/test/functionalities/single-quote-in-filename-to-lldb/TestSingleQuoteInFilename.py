@@ -35,6 +35,7 @@ class SingleQuoteInCommandLineTestCase(TestBase):
         """Test that 'lldb my_file_name' works where my_file_name is a string with a single quote char in it."""
         import pexpect
         self.buildDefault()
+        lldbutil.mkdir_p(self.getBuildArtifact("path with '09"))
         system([["cp",
                  self.getBuildArtifact("a.out"),
                  "\"%s\"" % self.getBuildArtifact(self.myexe)]])

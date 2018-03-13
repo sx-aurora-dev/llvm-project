@@ -39,13 +39,25 @@ using namespace llvm;
 namespace {
 
 class BPFDAGToDAGISel : public SelectionDAGISel {
+
+  /// Subtarget - Keep a pointer to the BPFSubtarget around so that we can
+  /// make the right decision when generating code for different subtargets.
+  const BPFSubtarget *Subtarget;
+
 public:
-  explicit BPFDAGToDAGISel(BPFTargetMachine &TM) : SelectionDAGISel(TM) {
+  explicit BPFDAGToDAGISel(BPFTargetMachine &TM)
+      : SelectionDAGISel(TM), Subtarget(nullptr) {
     curr_func_ = nullptr;
   }
 
   StringRef getPassName() const override {
     return "BPF DAG->DAG Pattern Instruction Selection";
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    // Reset the subtarget each time through.
+    Subtarget = &MF.getSubtarget<BPFSubtarget>();
+    return SelectionDAGISel::runOnMachineFunction(MF);
   }
 
   void PreprocessISelDAG() override;
@@ -65,9 +77,9 @@ private:
   bool SelectFIAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
 
   // Node preprocessing cases
-  void PreprocessLoad(SDNode *Node, SelectionDAG::allnodes_iterator I);
+  void PreprocessLoad(SDNode *Node, SelectionDAG::allnodes_iterator &I);
   void PreprocessCopyToReg(SDNode *Node);
-  void PreprocessTrunc(SDNode *Node, SelectionDAG::allnodes_iterator I);
+  void PreprocessTrunc(SDNode *Node, SelectionDAG::allnodes_iterator &I);
 
   // Find constants from a constant structure
   typedef std::vector<unsigned char> val_vec_type;
@@ -176,9 +188,6 @@ bool BPFDAGToDAGISel::SelectInlineAsmMemoryOperand(
 void BPFDAGToDAGISel::Select(SDNode *Node) {
   unsigned Opcode = Node->getOpcode();
 
-  // Dump information about the Node being selected
-  DEBUG(dbgs() << "Selecting: "; Node->dump(CurDAG); dbgs() << '\n');
-
   // If we have a custom node, we already have selected!
   if (Node->isMachineOpcode()) {
     DEBUG(dbgs() << "== "; Node->dump(CurDAG); dbgs() << '\n');
@@ -241,7 +250,7 @@ void BPFDAGToDAGISel::Select(SDNode *Node) {
 }
 
 void BPFDAGToDAGISel::PreprocessLoad(SDNode *Node,
-                                     SelectionDAG::allnodes_iterator I) {
+                                     SelectionDAG::allnodes_iterator &I) {
   union {
     uint8_t c[8];
     uint16_t s;
@@ -514,7 +523,7 @@ void BPFDAGToDAGISel::PreprocessCopyToReg(SDNode *Node) {
 }
 
 void BPFDAGToDAGISel::PreprocessTrunc(SDNode *Node,
-                                      SelectionDAG::allnodes_iterator I) {
+                                      SelectionDAG::allnodes_iterator &I) {
   ConstantSDNode *MaskN = dyn_cast<ConstantSDNode>(Node->getOperand(1));
   if (!MaskN)
     return;

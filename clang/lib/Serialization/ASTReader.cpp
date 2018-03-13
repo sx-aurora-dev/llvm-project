@@ -106,6 +106,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/DJB.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -870,7 +871,7 @@ ASTSelectorLookupTrait::ReadData(Selector, const unsigned char* d,
 }
 
 unsigned ASTIdentifierLookupTraitBase::ComputeHash(const internal_key_type& a) {
-  return llvm::HashString(a);
+  return llvm::djbHash(a);
 }
 
 std::pair<unsigned, unsigned>
@@ -3226,7 +3227,7 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
         PP.getPreprocessingRecord()->SetExternalSource(*this);
       F.BasePreprocessedSkippedRangeID = PP.getPreprocessingRecord()
           ->allocateSkippedRanges(F.NumPreprocessedSkippedRanges);
-      
+
       if (F.NumPreprocessedSkippedRanges > 0)
         GlobalSkippedRangeMap.insert(
             std::make_pair(F.BasePreprocessedSkippedRangeID, &F));
@@ -5761,6 +5762,8 @@ void ASTReader::ReadPragmaDiagnosticMappings(DiagnosticsEngine &Diag) {
       Initial.ExtBehavior = (diag::Severity)Flags;
       FirstState = ReadDiagState(Initial, SourceLocation(), true);
 
+      assert(F.OriginalSourceFileID.isValid());
+
       // Set up the root buffer of the module to start with the initial
       // diagnostic state of the module itself, to cover files that contain no
       // explicit transitions (for which we did not serialize anything).
@@ -5781,6 +5784,7 @@ void ASTReader::ReadPragmaDiagnosticMappings(DiagnosticsEngine &Diag) {
              "Invalid data, missing pragma diagnostic states");
       SourceLocation Loc = ReadSourceLocation(F, Record[Idx++]);
       auto IDAndOffset = SourceMgr.getDecomposedLoc(Loc);
+      assert(IDAndOffset.first.isValid() && "invalid FileID for transition");
       assert(IDAndOffset.second == 0 && "not a start location for a FileID");
       unsigned Transitions = Record[Idx++];
 
@@ -9064,8 +9068,7 @@ void ASTReader::ReadComments() {
         bool IsTrailingComment = Record[Idx++];
         bool IsAlmostTrailingComment = Record[Idx++];
         Comments.push_back(new (Context) RawComment(
-            SR, Kind, IsTrailingComment, IsAlmostTrailingComment,
-            Context.getLangOpts().CommentOpts.ParseAllComments));
+            SR, Kind, IsTrailingComment, IsAlmostTrailingComment));
         break;
       }
       }

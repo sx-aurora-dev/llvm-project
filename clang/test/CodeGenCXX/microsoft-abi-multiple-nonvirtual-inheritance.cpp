@@ -19,7 +19,7 @@ struct ChildOverride : Left, Right {
 extern "C" void foo(void *);
 
 void call_left_no_override(ChildNoOverride *child) {
-// CHECK-LABEL: define void @"\01?call_left_no_override
+// CHECK-LABEL: define dso_local void @"\01?call_left_no_override
 // CHECK: %[[CHILD:.*]] = load %struct.ChildNoOverride
 
   child->left();
@@ -34,7 +34,7 @@ void call_left_no_override(ChildNoOverride *child) {
 }
 
 void ChildOverride::left() {
-// CHECK-LABEL: define x86_thiscallcc void @"\01?left@ChildOverride@@UAEXXZ"
+// CHECK-LABEL: define dso_local x86_thiscallcc void @"\01?left@ChildOverride@@UAEXXZ"
 // CHECK-SAME: (%struct.ChildOverride* %[[THIS:.*]])
 //
 // No need to adjust 'this' as the ChildOverride's layout begins with Left.
@@ -49,7 +49,7 @@ void ChildOverride::left() {
 }
 
 void call_left_override(ChildOverride *child) {
-// CHECK-LABEL: define void @"\01?call_left_override
+// CHECK-LABEL: define dso_local void @"\01?call_left_override
 // CHECK: %[[CHILD:.*]] = load %struct.ChildOverride
 
   child->left();
@@ -63,7 +63,7 @@ void call_left_override(ChildOverride *child) {
 }
 
 void call_right_no_override(ChildNoOverride *child) {
-// CHECK-LABEL: define void @"\01?call_right_no_override
+// CHECK-LABEL: define dso_local void @"\01?call_right_no_override
 // CHECK: %[[CHILD:.*]] = load %struct.ChildNoOverride
 
   child->right();
@@ -83,7 +83,7 @@ void call_right_no_override(ChildNoOverride *child) {
 }
 
 void ChildOverride::right() {
-// CHECK-LABEL: define x86_thiscallcc void @"\01?right@ChildOverride@@UAEXXZ"(i8*
+// CHECK-LABEL: define dso_local x86_thiscallcc void @"\01?right@ChildOverride@@UAEXXZ"(i8*
 //
 // ChildOverride::right gets 'this' cast to Right* in ECX (i.e. this+4) so we
 // need to adjust 'this' before use.
@@ -106,7 +106,7 @@ void ChildOverride::right() {
 }
 
 void call_right_override(ChildOverride *child) {
-// CHECK-LABEL: define void @"\01?call_right_override
+// CHECK-LABEL: define dso_local void @"\01?call_right_override
 // CHECK: %[[CHILD:.*]] = load %struct.ChildOverride
 
   child->right();
@@ -114,15 +114,14 @@ void call_right_override(ChildOverride *child) {
 // the caller site.
 //
 // CHECK: %[[CHILD_i8:.*]] = bitcast %struct.ChildOverride* %[[CHILD]] to i8*
+// CHECK: %[[RIGHT:.*]] = getelementptr inbounds i8, i8* %[[CHILD_i8]], i32 4
 //
+// CHECK: %[[CHILD_i8:.*]] = bitcast %struct.ChildOverride* %[[CHILD]] to i8*
 // CHECK: %[[VFPTR_i8:.*]] = getelementptr inbounds i8, i8* %[[CHILD_i8]], i32 4
 // CHECK: %[[VFPTR:.*]] = bitcast i8* %[[VFPTR_i8]] to void (i8*)***
 // CHECK: %[[VFTABLE:.*]] = load void (i8*)**, void (i8*)*** %[[VFPTR]]
 // CHECK: %[[VFUN:.*]] = getelementptr inbounds void (i8*)*, void (i8*)** %[[VFTABLE]], i64 0
 // CHECK: %[[VFUN_VALUE:.*]] = load void (i8*)*, void (i8*)** %[[VFUN]]
-//
-// CHECK: %[[CHILD_i8:.*]] = bitcast %struct.ChildOverride* %[[CHILD]] to i8*
-// CHECK: %[[RIGHT:.*]] = getelementptr inbounds i8, i8* %[[CHILD_i8]], i32 4
 //
 // CHECK: call x86_thiscallcc void %[[VFUN_VALUE]](i8* %[[RIGHT]])
 // CHECK: ret
@@ -133,7 +132,7 @@ struct GrandchildOverride : ChildOverride {
 };
 
 void GrandchildOverride::right() {
-// CHECK-LABEL: define x86_thiscallcc void @"\01?right@GrandchildOverride@@UAEXXZ"(i8*
+// CHECK-LABEL: define dso_local x86_thiscallcc void @"\01?right@GrandchildOverride@@UAEXXZ"(i8*
 //
 // CHECK: %[[THIS_STORE:.*]] = alloca %struct.GrandchildOverride*, align 4
 // CHECK: %[[THIS_ADDR:.*]] = alloca %struct.GrandchildOverride*, align 4
@@ -203,7 +202,7 @@ struct AsymmetricChild : LeftWithNonVirtualDtor, Right {
 };
 
 void call_asymmetric_child_complete_dtor() {
-  // CHECK-LABEL: define void @"\01?call_asymmetric_child_complete_dtor@@YAXXZ"
+  // CHECK-LABEL: define dso_local void @"\01?call_asymmetric_child_complete_dtor@@YAXXZ"
   AsymmetricChild obj;
   // CHECK: call x86_thiscallcc %struct.AsymmetricChild* @"\01??0AsymmetricChild@@QAE@XZ"(%struct.AsymmetricChild* %[[OBJ:.*]])
   // CHECK-NOT: getelementptr

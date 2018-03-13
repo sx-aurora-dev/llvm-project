@@ -466,6 +466,7 @@ public:
     Match_RequiresSameSrcAndDst,
     Match_NoFCCRegisterForCurrentISA,
     Match_NonZeroOperandForSync,
+    Match_NonZeroOperandForMTCX,
     Match_RequiresPosSizeRange0_32,
     Match_RequiresPosSizeRange33_64,
     Match_RequiresPosSizeUImm6,
@@ -3885,7 +3886,7 @@ bool MipsAsmParser::expandCondBranches(MCInst &Inst, SMLoc IDLoc,
   // This is accomplished by using a BNEZ with the result of the SLT.
   //
   // The other 2 pseudo-branches are opposites of the above 2 (BGE with BLT
-  // and BLE with BGT), so we change the BNEZ into a a BEQZ.
+  // and BLE with BGT), so we change the BNEZ into a BEQZ.
   // Because only BGE and BLE branch on equality, we can use the
   // AcceptsEquality variable to decide when to emit the BEQZ.
   // Note that the order of the SLT arguments doesn't change between
@@ -5136,6 +5137,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   // It also applies for registers Rt and Rs of microMIPSr6 jalrc.hb instruction
   // and registers Rd and Base for microMIPS lwp instruction
   case Mips::JALR_HB:
+  case Mips::JALR_HB64:
   case Mips::JALRC_HB_MMR6:
   case Mips::JALRC_MMR6:
     if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
@@ -5149,6 +5151,13 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   case Mips::SYNC:
     if (Inst.getOperand(0).getImm() != 0 && !hasMips32())
       return Match_NonZeroOperandForSync;
+    return Match_Success;
+  case Mips::MFC0:
+  case Mips::MTC0:
+  case Mips::MTC2:
+  case Mips::MFC2:
+    if (Inst.getOperand(2).getImm() != 0 && !hasMips32())
+      return Match_NonZeroOperandForMTCX;
     return Match_Success;
   // As described the MIPSR6 spec, the compact branches that compare registers
   // must:
@@ -5291,6 +5300,8 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   }
   case Match_NonZeroOperandForSync:
     return Error(IDLoc, "s-type must be zero or unspecified for pre-MIPS32 ISAs");
+  case Match_NonZeroOperandForMTCX:
+    return Error(IDLoc, "selector must be zero for pre-MIPS32 ISAs");
   case Match_MnemonicFail:
     return Error(IDLoc, "invalid instruction");
   case Match_RequiresDifferentSrcAndDst:

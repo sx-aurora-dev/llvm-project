@@ -191,6 +191,8 @@ public:
   }
   /// Returns the base declaration of the reduction item.
   const VarDecl *getBaseDecl(unsigned N) const { return BaseDecls[N]; }
+  /// Returns the base declaration of the reduction item.
+  const Expr *getRefExpr(unsigned N) const { return ClausesData[N].Ref; }
   /// Returns true if the initialization of the reduction item uses initializer
   /// from declare reduction construct.
   bool usesReductionInitializer(unsigned N) const;
@@ -251,9 +253,8 @@ protected:
   virtual StringRef getOutlinedHelperName() const { return ".omp_outlined."; }
 
   /// Emits \p Callee function call with arguments \p Args with location \p Loc.
-  void emitCall(CodeGenFunction &CGF, llvm::Value *Callee,
-                ArrayRef<llvm::Value *> Args = llvm::None,
-                SourceLocation Loc = SourceLocation()) const;
+  void emitCall(CodeGenFunction &CGF, SourceLocation Loc, llvm::Value *Callee,
+                ArrayRef<llvm::Value *> Args = llvm::None) const;
 
 private:
   /// \brief Default const ident_t object used for initialization of all other

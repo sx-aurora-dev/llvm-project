@@ -693,57 +693,107 @@ public:
 
   typedef llvm::DenseMap<const Decl *, Address> DeclMapTy;
 
-  /// \brief The scope used to remap some variables as private in the OpenMP
-  /// loop body (or other captured region emitted without outlining), and to
-  /// restore old vars back on exit.
-  class OMPPrivateScope : public RunCleanupsScope {
+  /// The class used to assign some variables some temporarily addresses.
+  class OMPMapVars {
     DeclMapTy SavedLocals;
-    DeclMapTy SavedPrivates;
-
-  private:
-    OMPPrivateScope(const OMPPrivateScope &) = delete;
-    void operator=(const OMPPrivateScope &) = delete;
+    DeclMapTy SavedTempAddresses;
+    OMPMapVars(const OMPMapVars &) = delete;
+    void operator=(const OMPMapVars &) = delete;
 
   public:
-    /// \brief Enter a new OpenMP private scope.
-    explicit OMPPrivateScope(CodeGenFunction &CGF) : RunCleanupsScope(CGF) {}
+    explicit OMPMapVars() = default;
+    ~OMPMapVars() {
+      assert(SavedLocals.empty() && "Did not restored original addresses.");
+    };
 
-    /// \brief Registers \a LocalVD variable as a private and apply \a
-    /// PrivateGen function for it to generate corresponding private variable.
-    /// \a PrivateGen returns an address of the generated private variable.
-    /// \return true if the variable is registered as private, false if it has
-    /// been privatized already.
-    bool
-    addPrivate(const VarDecl *LocalVD,
-               llvm::function_ref<Address()> PrivateGen) {
-      assert(PerformCleanup && "adding private to dead scope");
-
+    /// Sets the address of the variable \p LocalVD to be \p TempAddr in
+    /// function \p CGF.
+    /// \return true if at least one variable was set already, false otherwise.
+    bool setVarAddr(CodeGenFunction &CGF, const VarDecl *LocalVD,
+                    Address TempAddr) {
       LocalVD = LocalVD->getCanonicalDecl();
       // Only save it once.
       if (SavedLocals.count(LocalVD)) return false;
 
       // Copy the existing local entry to SavedLocals.
       auto it = CGF.LocalDeclMap.find(LocalVD);
-      if (it != CGF.LocalDeclMap.end()) {
-        SavedLocals.insert({LocalVD, it->second});
-      } else {
-        SavedLocals.insert({LocalVD, Address::invalid()});
-      }
+      if (it != CGF.LocalDeclMap.end())
+        SavedLocals.try_emplace(LocalVD, it->second);
+      else
+        SavedLocals.try_emplace(LocalVD, Address::invalid());
 
       // Generate the private entry.
-      Address Addr = PrivateGen();
       QualType VarTy = LocalVD->getType();
       if (VarTy->isReferenceType()) {
         Address Temp = CGF.CreateMemTemp(VarTy);
-        CGF.Builder.CreateStore(Addr.getPointer(), Temp);
-        Addr = Temp;
+        CGF.Builder.CreateStore(TempAddr.getPointer(), Temp);
+        TempAddr = Temp;
       }
-      SavedPrivates.insert({LocalVD, Addr});
+      SavedTempAddresses.try_emplace(LocalVD, TempAddr);
 
       return true;
     }
 
-    /// \brief Privatizes local variables previously registered as private.
+    /// Applies new addresses to the list of the variables.
+    /// \return true if at least one variable is using new address, false
+    /// otherwise.
+    bool apply(CodeGenFunction &CGF) {
+      copyInto(SavedTempAddresses, CGF.LocalDeclMap);
+      SavedTempAddresses.clear();
+      return !SavedLocals.empty();
+    }
+
+    /// Restores original addresses of the variables.
+    void restore(CodeGenFunction &CGF) {
+      if (!SavedLocals.empty()) {
+        copyInto(SavedLocals, CGF.LocalDeclMap);
+        SavedLocals.clear();
+      }
+    }
+
+  private:
+    /// Copy all the entries in the source map over the corresponding
+    /// entries in the destination, which must exist.
+    static void copyInto(const DeclMapTy &Src, DeclMapTy &Dest) {
+      for (auto &Pair : Src) {
+        if (!Pair.second.isValid()) {
+          Dest.erase(Pair.first);
+          continue;
+        }
+
+        auto I = Dest.find(Pair.first);
+        if (I != Dest.end())
+          I->second = Pair.second;
+        else
+          Dest.insert(Pair);
+      }
+    }
+  };
+
+  /// The scope used to remap some variables as private in the OpenMP loop body
+  /// (or other captured region emitted without outlining), and to restore old
+  /// vars back on exit.
+  class OMPPrivateScope : public RunCleanupsScope {
+    OMPMapVars MappedVars;
+    OMPPrivateScope(const OMPPrivateScope &) = delete;
+    void operator=(const OMPPrivateScope &) = delete;
+
+  public:
+    /// Enter a new OpenMP private scope.
+    explicit OMPPrivateScope(CodeGenFunction &CGF) : RunCleanupsScope(CGF) {}
+
+    /// Registers \p LocalVD variable as a private and apply \p PrivateGen
+    /// function for it to generate corresponding private variable. \p
+    /// PrivateGen returns an address of the generated private variable.
+    /// \return true if the variable is registered as private, false if it has
+    /// been privatized already.
+    bool addPrivate(const VarDecl *LocalVD,
+                    llvm::function_ref<Address()> PrivateGen) {
+      assert(PerformCleanup && "adding private to dead scope");
+      return MappedVars.setVarAddr(CGF, LocalVD, PrivateGen());
+    }
+
+    /// Privatizes local variables previously registered as private.
     /// Registration is separate from the actual privatization to allow
     /// initializers use values of the original variables, not the private one.
     /// This is important, for example, if the private variable is a class
@@ -751,19 +801,14 @@ public:
     /// variables. But at initialization original variables must be used, not
     /// private copies.
     /// \return true if at least one variable was privatized, false otherwise.
-    bool Privatize() {
-      copyInto(SavedPrivates, CGF.LocalDeclMap);
-      SavedPrivates.clear();
-      return !SavedLocals.empty();
-    }
+    bool Privatize() { return MappedVars.apply(CGF); }
 
     void ForceCleanup() {
       RunCleanupsScope::ForceCleanup();
-      copyInto(SavedLocals, CGF.LocalDeclMap);
-      SavedLocals.clear();
+      MappedVars.restore(CGF);
     }
 
-    /// \brief Exit scope - all the mapped variables are restored.
+    /// Exit scope - all the mapped variables are restored.
     ~OMPPrivateScope() {
       if (PerformCleanup)
         ForceCleanup();
@@ -773,25 +818,6 @@ public:
     bool isGlobalVarCaptured(const VarDecl *VD) const {
       VD = VD->getCanonicalDecl();
       return !VD->isLocalVarDeclOrParm() && CGF.LocalDeclMap.count(VD) > 0;
-    }
-
-  private:
-    /// Copy all the entries in the source map over the corresponding
-    /// entries in the destination, which must exist.
-    static void copyInto(const DeclMapTy &src, DeclMapTy &dest) {
-      for (auto &pair : src) {
-        if (!pair.second.isValid()) {
-          dest.erase(pair.first);
-          continue;
-        }
-
-        auto it = dest.find(pair.first);
-        if (it != dest.end()) {
-          it->second = pair.second;
-        } else {
-          dest.insert(pair);
-        }
-      }
     }
   };
 
@@ -1536,6 +1562,7 @@ public:
       return false;
     case QualType::DK_cxx_destructor:
     case QualType::DK_objc_weak_lifetime:
+    case QualType::DK_nontrivial_c_struct:
       return getLangOpts().Exceptions;
     case QualType::DK_objc_strong_lifetime:
       return getLangOpts().Exceptions &&
@@ -1583,10 +1610,7 @@ public:
   /// \return an LLVM value which is a pointer to a struct which contains
   /// information about the block, including the block invoke function, the
   /// captured variables, etc.
-  /// \param InvokeF will contain the block invoke function if it is not
-  /// nullptr.
-  llvm::Value *EmitBlockLiteral(const BlockExpr *,
-                                llvm::Function **InvokeF = nullptr);
+  llvm::Value *EmitBlockLiteral(const BlockExpr *);
   static void destroyBlockInfos(CGBlockInfo *info);
 
   llvm::Function *GenerateBlockFunction(GlobalDecl GD,
@@ -1849,11 +1873,7 @@ public:
   llvm::BasicBlock *createBasicBlock(const Twine &name = "",
                                      llvm::Function *parent = nullptr,
                                      llvm::BasicBlock *before = nullptr) {
-#ifdef NDEBUG
-    return llvm::BasicBlock::Create(getLLVMContext(), "", parent, before);
-#else
     return llvm::BasicBlock::Create(getLLVMContext(), name, parent, before);
-#endif
   }
 
   /// getBasicBlockForLabel - Return the LLVM basicblock that the specified
@@ -2198,12 +2218,24 @@ public:
   /// This function can be called with a null (unreachable) insert point.
   void EmitVariablyModifiedType(QualType Ty);
 
-  /// getVLASize - Returns an LLVM value that corresponds to the size,
+  struct VlaSizePair {
+    llvm::Value *NumElts;
+    QualType Type;
+
+    VlaSizePair(llvm::Value *NE, QualType T) : NumElts(NE), Type(T) {}
+  };
+
+  /// Return the number of elements for a single dimension
+  /// for the given array type.
+  VlaSizePair getVLAElements1D(const VariableArrayType *vla);
+  VlaSizePair getVLAElements1D(QualType vla);
+
+  /// Returns an LLVM value that corresponds to the size,
   /// in non-variably-sized elements, of a variable length array type,
   /// plus that largest non-variably-sized element type.  Assumes that
   /// the type has already been emitted with EmitVariablyModifiedType.
-  std::pair<llvm::Value*,QualType> getVLASize(const VariableArrayType *vla);
-  std::pair<llvm::Value*,QualType> getVLASize(QualType vla);
+  VlaSizePair getVLASize(const VariableArrayType *vla);
+  VlaSizePair getVLASize(QualType vla);
 
   /// LoadCXXThis - Load the value of 'this'. This function is only valid while
   /// generating code for an C++ member function.
@@ -2510,6 +2542,15 @@ public:
   void EmitAutoVarCleanups(const AutoVarEmission &emission);
   void emitAutoVarTypeCleanup(const AutoVarEmission &emission,
                               QualType::DestructionKind dtorKind);
+
+  /// Emits the alloca and debug information for the size expressions for each
+  /// dimension of an array. It registers the association of its (1-dimensional)
+  /// QualTypes and size expression's debug node, so that CGDebugInfo can
+  /// reference this node when creating the DISubrange object to describe the
+  /// array types.
+  void EmitAndRegisterVariableArrayDimensions(CGDebugInfo *DI,
+                                              const VarDecl &D,
+                                              bool EmitDebugInfo);
 
   void EmitStaticVarDecl(const VarDecl &D,
                          llvm::GlobalValue::LinkageTypes Linkage);
@@ -2993,11 +3034,8 @@ public:
   LValue EmitOMPSharedLValue(const Expr *E);
 
 private:
-  /// Helpers for blocks. Returns invoke function by \p InvokeF if it is not
-  /// nullptr. It should be called without \p InvokeF if the caller does not
-  /// need invoke function to be returned.
-  llvm::Value *EmitBlockLiteral(const CGBlockInfo &Info,
-                                llvm::Function **InvokeF = nullptr);
+  /// Helpers for blocks.
+  llvm::Value *EmitBlockLiteral(const CGBlockInfo &Info);
 
   /// struct with the values to be passed to the OpenMP loop-related functions
   struct OMPLoopArguments {
@@ -3350,6 +3388,9 @@ public:
                                           ArrayRef<llvm::Value*> args,
                                           const Twine &name = "");
 
+  SmallVector<llvm::OperandBundleDef, 1>
+  getBundlesForFunclet(llvm::Value *Callee);
+
   llvm::CallSite EmitCallOrInvoke(llvm::Value *Callee,
                                   ArrayRef<llvm::Value *> Args,
                                   const Twine &Name = "");
@@ -3368,6 +3409,16 @@ public:
   CGCallee BuildAppleKextVirtualDestructorCall(const CXXDestructorDecl *DD,
                                                CXXDtorType Type,
                                                const CXXRecordDecl *RD);
+
+  // These functions emit calls to the special functions of non-trivial C
+  // structs.
+  void defaultInitNonTrivialCStructVar(LValue Dst);
+  void callCStructDefaultConstructor(LValue Dst);
+  void callCStructDestructor(LValue Dst);
+  void callCStructCopyConstructor(LValue Dst, LValue Src);
+  void callCStructMoveConstructor(LValue Dst, LValue Src);
+  void callCStructCopyAssignmentOperator(LValue Dst, LValue Src);
+  void callCStructMoveAssignmentOperator(LValue Dst, LValue Src);
 
   RValue
   EmitCXXMemberOrOperatorCall(const CXXMethodDecl *Method,
@@ -3430,8 +3481,7 @@ public:
                                              const llvm::CmpInst::Predicate Fp,
                                              const llvm::CmpInst::Predicate Ip,
                                              const llvm::Twine &Name = "");
-  llvm::Value *EmitARMBuiltinExpr(unsigned BuiltinID, const CallExpr *E,
-                                  llvm::Triple::ArchType Arch);
+  llvm::Value *EmitARMBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
 
   llvm::Value *EmitCommonNeonBuiltinExpr(unsigned BuiltinID,
                                          unsigned LLVMIntrinsic,
@@ -3440,8 +3490,7 @@ public:
                                          unsigned Modifier,
                                          const CallExpr *E,
                                          SmallVectorImpl<llvm::Value *> &Ops,
-                                         Address PtrOp0, Address PtrOp1,
-                                         llvm::Triple::ArchType Arch);
+                                         Address PtrOp0, Address PtrOp1);
   llvm::Function *LookupNeonLLVMIntrinsic(unsigned IntrinsicID,
                                           unsigned Modifier, llvm::Type *ArgTy,
                                           const CallExpr *E);
@@ -3455,8 +3504,7 @@ public:
   llvm::Value *EmitNeonRShiftImm(llvm::Value *Vec, llvm::Value *Amt,
                                  llvm::Type *Ty, bool usgn, const char *name);
   llvm::Value *vectorWrapScalar16(llvm::Value *Op);
-  llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E,
-                                      llvm::Triple::ArchType Arch);
+  llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
 
   llvm::Value *BuildVector(ArrayRef<llvm::Value*> Ops);
   llvm::Value *EmitX86BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
@@ -3500,6 +3548,8 @@ public:
   llvm::Value *EmitARCLoadWeak(Address addr);
   llvm::Value *EmitARCLoadWeakRetained(Address addr);
   llvm::Value *EmitARCStoreWeak(Address addr, llvm::Value *value, bool ignored);
+  void emitARCCopyAssignWeak(QualType Ty, Address DstAddr, Address SrcAddr);
+  void emitARCMoveAssignWeak(QualType Ty, Address DstAddr, Address SrcAddr);
   void EmitARCCopyWeak(Address dst, Address src);
   void EmitARCMoveWeak(Address dst, Address src);
   llvm::Value *EmitARCRetainAutorelease(QualType type, llvm::Value *value);
@@ -3543,6 +3593,7 @@ public:
   static Destroyer destroyARCStrongPrecise;
   static Destroyer destroyARCWeak;
   static Destroyer emitARCIntrinsicUse;
+  static Destroyer destroyNonTrivialCStruct;
 
   void EmitObjCAutoreleasePoolPop(llvm::Value *Ptr);
   llvm::Value *EmitObjCAutoreleasePoolPush();

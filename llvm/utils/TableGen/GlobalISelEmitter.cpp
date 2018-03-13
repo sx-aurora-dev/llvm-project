@@ -610,8 +610,8 @@ public:
 /// Generates code to check that a match rule matches.
 class RuleMatcher : public Matcher {
 public:
-  using ActionVec = std::vector<std::unique_ptr<MatchAction>>;
-  using action_iterator = ActionVec::iterator;
+  using ActionList = std::list<std::unique_ptr<MatchAction>>;
+  using action_iterator = ActionList::iterator;
 
 protected:
   /// A list of matchers that all need to succeed for the current rule to match.
@@ -622,7 +622,7 @@ protected:
 
   /// A list of actions that need to be taken when all predicates in this rule
   /// have succeeded.
-  ActionVec Actions;
+  ActionList Actions;
 
   using DefinedInsnVariablesMap =
       std::map<const InstructionMatcher *, unsigned>;
@@ -2125,6 +2125,7 @@ public:
   BuildMIAction(unsigned InsnID, const CodeGenInstruction *I)
       : InsnID(InsnID), I(I), Matched(nullptr) {}
 
+  unsigned getInsnID() const { return InsnID; }
   const CodeGenInstruction *getCGI() const { return I; }
 
   void chooseInsnToMutate(RuleMatcher &Rule) {
@@ -2592,6 +2593,10 @@ private:
   /// GICustomOperandRenderer. Map entries are specified by subclassing
   /// GISDNodeXFormEquiv.
   DenseMap<const Record *, const Record *> SDNodeXFormEquivs;
+
+  /// Keep track of Scores of PatternsToMatch similar to how the DAG does.
+  /// This adds compatibility for RuleMatchers to use this for ordering rules.
+  DenseMap<uint64_t, int> RuleMatcherScores;
 
   // Map of predicates to their subtarget features.
   SubtargetFeatureInfoMap SubtargetFeatures;
@@ -3199,7 +3204,7 @@ Expected<BuildMIAction &> GlobalISelEmitter::createAndImportInstructionRenderer(
 
 Expected<action_iterator>
 GlobalISelEmitter::createAndImportSubInstructionRenderer(
-    action_iterator InsertPt, RuleMatcher &M, const TreePatternNode *Dst,
+    const action_iterator InsertPt, RuleMatcher &M, const TreePatternNode *Dst,
     unsigned TempRegID) {
   auto InsertPtOrError = createInstructionRenderer(InsertPt, M, Dst);
 
@@ -3207,7 +3212,6 @@ GlobalISelEmitter::createAndImportSubInstructionRenderer(
 
   if (auto Error = InsertPtOrError.takeError())
     return std::move(Error);
-  InsertPt = InsertPtOrError.get();
 
   BuildMIAction &DstMIBuilder =
       *static_cast<BuildMIAction *>(InsertPtOrError.get()->get());
@@ -3215,10 +3219,13 @@ GlobalISelEmitter::createAndImportSubInstructionRenderer(
   // Assign the result to TempReg.
   DstMIBuilder.addRenderer<TempRegRenderer>(TempRegID, true);
 
-  InsertPtOrError = importExplicitUseRenderers(InsertPt, M, DstMIBuilder, Dst);
+  InsertPtOrError =
+      importExplicitUseRenderers(InsertPtOrError.get(), M, DstMIBuilder, Dst);
   if (auto Error = InsertPtOrError.takeError())
     return std::move(Error);
 
+  M.insertAction<ConstrainOperandsToDefinitionAction>(InsertPt,
+                                                      DstMIBuilder.getInsnID());
   return InsertPtOrError.get();
 }
 
@@ -3375,7 +3382,9 @@ Error GlobalISelEmitter::importImplicitDefRenderers(
 
 Expected<RuleMatcher> GlobalISelEmitter::runOnPattern(const PatternToMatch &P) {
   // Keep track of the matchers and actions to emit.
+  int Score = P.getPatternComplexity(CGP);
   RuleMatcher M(P.getSrcRecord()->getLoc());
+  RuleMatcherScores[M.getRuleID()] = Score;
   M.addAction<DebugCommentAction>(llvm::to_string(*P.getSrcPattern()) +
                                   "  =>  " +
                                   llvm::to_string(*P.getDstPattern()));
@@ -3931,6 +3940,12 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
 
   std::stable_sort(Rules.begin(), Rules.end(), [&](const RuleMatcher &A,
                                                    const RuleMatcher &B) {
+    int ScoreA = RuleMatcherScores[A.getRuleID()];
+    int ScoreB = RuleMatcherScores[B.getRuleID()];
+    if (ScoreA > ScoreB)
+      return true;
+    if (ScoreB > ScoreA)
+      return false;
     if (A.isHigherPriorityThan(B)) {
       assert(!B.isHigherPriorityThan(A) && "Cannot be more important "
                                            "and less important at "

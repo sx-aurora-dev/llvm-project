@@ -12,7 +12,6 @@
 
 #include "Config.h"
 #include "lld/Common/ErrorHandler.h"
-
 #include "lld/Common/LLVM.h"
 #include "lld/Common/Reproduce.h"
 #include "llvm/ADT/CachedHashString.h"
@@ -23,7 +22,6 @@
 #include "llvm/Object/ELF.h"
 #include "llvm/Object/IRObjectFile.h"
 #include "llvm/Support/Threading.h"
-
 #include <map>
 
 namespace llvm {
@@ -90,15 +88,15 @@ public:
   // Returns object file symbols. It is a runtime error to call this
   // function on files of other types.
   ArrayRef<Symbol *> getSymbols() {
-    assert(FileKind == ObjKind || FileKind == BitcodeKind ||
-           FileKind == ArchiveKind);
+    assert(FileKind == BinaryKind || FileKind == ObjKind ||
+           FileKind == BitcodeKind);
     return Symbols;
   }
 
   // Filename of .a which contained this file. If this file was
   // not in an archive file, it is the empty string. We use this
   // string for creating error messages.
-  StringRef ArchiveName;
+  std::string ArchiveName;
 
   // If this is an architecture-specific file, the following members
   // have ELF type (i.e. ELF{32,64}{LE,BE}) and target machine type.
@@ -244,9 +242,7 @@ public:
   InputFile *fetch();
 
 private:
-  std::vector<StringRef> getSymbolNames();
-  template <class ELFT> std::vector<StringRef> getElfSymbols();
-  std::vector<StringRef> getBitcodeSymbols();
+  template <class ELFT> void addElfSymbols();
 
   bool Seen = false;
   uint64_t OffsetInArchive;
@@ -290,15 +286,12 @@ template <class ELFT> class SharedFile : public ELFFileBase<ELFT> {
   typedef typename ELFT::Verdef Elf_Verdef;
   typedef typename ELFT::Versym Elf_Versym;
 
-  std::vector<StringRef> Undefs;
   const Elf_Shdr *VersymSec = nullptr;
   const Elf_Shdr *VerdefSec = nullptr;
 
 public:
   std::vector<const Elf_Verdef *> Verdefs;
   std::string SoName;
-
-  llvm::ArrayRef<StringRef> getUndefinedSymbols() { return Undefs; }
 
   static bool classof(const InputFile *F) {
     return F->kind() == Base::SharedKind;
@@ -336,6 +329,9 @@ public:
 InputFile *createObjectFile(MemoryBufferRef MB, StringRef ArchiveName = "",
                             uint64_t OffsetInArchive = 0);
 InputFile *createSharedFile(MemoryBufferRef MB, StringRef DefaultSoName);
+
+// For --just-symbols
+template <class ELFT> void readJustSymbolsFile(MemoryBufferRef MB);
 
 extern std::vector<BinaryFile *> BinaryFiles;
 extern std::vector<BitcodeFile *> BitcodeFiles;

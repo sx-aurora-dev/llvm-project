@@ -425,6 +425,7 @@ bool JumpThreadingPass::runImpl(Function &F, TargetLibraryInfo *TLI_,
 
   LoopHeaders.clear();
   DDT->flush();
+  LVI->enableDT();
   return EverChanged;
 }
 
@@ -617,6 +618,10 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
     // "X < 4" and "X < 3" is known true but "X < 4" itself is not available.
     // Perhaps getConstantOnEdge should be smart enough to do this?
 
+    if (DDT->pending())
+      LVI->disableDT();
+    else
+      LVI->enableDT();
     for (BasicBlock *P : predecessors(BB)) {
       // If the value is known by LazyValueInfo to be a constant in a
       // predecessor, use that information to try to thread this block.
@@ -630,6 +635,10 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
 
   /// If I is a PHI node, then we know the incoming values for any constants.
   if (PHINode *PN = dyn_cast<PHINode>(I)) {
+    if (DDT->pending())
+      LVI->disableDT();
+    else
+      LVI->enableDT();
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *InVal = PN->getIncomingValue(i);
       if (Constant *KC = getKnownConstant(InVal, Preference)) {
@@ -647,11 +656,9 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
   }
 
   // Handle Cast instructions.  Only see through Cast when the source operand is
-  // PHI or Cmp and the source type is i1 to save the compilation time.
+  // PHI or Cmp to save the compilation time.
   if (CastInst *CI = dyn_cast<CastInst>(I)) {
     Value *Source = CI->getOperand(0);
-    if (!Source->getType()->isIntegerTy(1))
-      return false;
     if (!isa<PHINode>(Source) && !isa<CmpInst>(Source))
       return false;
     ComputeValueKnownInPredecessors(Source, BB, Result, Preference, CxtI);
@@ -759,6 +766,10 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
       const DataLayout &DL = PN->getModule()->getDataLayout();
       // We can do this simplification if any comparisons fold to true or false.
       // See if any do.
+      if (DDT->pending())
+        LVI->disableDT();
+      else
+        LVI->enableDT();
       for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
         BasicBlock *PredBB = PN->getIncomingBlock(i);
         Value *LHS = PN->getIncomingValue(i);
@@ -792,6 +803,10 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
 
       if (!isa<Instruction>(CmpLHS) ||
           cast<Instruction>(CmpLHS)->getParent() != BB) {
+        if (DDT->pending())
+          LVI->disableDT();
+        else
+          LVI->enableDT();
         for (BasicBlock *P : predecessors(BB)) {
           // If the value is known by LazyValueInfo to be a constant in a
           // predecessor, use that information to try to thread this block.
@@ -820,6 +835,10 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
             match(CmpLHS, m_Add(m_Value(AddLHS), m_ConstantInt(AddConst)))) {
           if (!isa<Instruction>(AddLHS) ||
               cast<Instruction>(AddLHS)->getParent() != BB) {
+            if (DDT->pending())
+              LVI->disableDT();
+            else
+              LVI->enableDT();
             for (BasicBlock *P : predecessors(BB)) {
               // If the value is known by LazyValueInfo to be a ConstantRange in
               // a predecessor, use that information to try to thread this
@@ -901,6 +920,10 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
   }
 
   // If all else fails, see if LVI can figure out a constant value for us.
+  if (DDT->pending())
+    LVI->disableDT();
+  else
+    LVI->enableDT();
   Constant *CI = LVI->getConstant(V, BB, CxtI);
   if (Constant *KC = getKnownConstant(CI, Preference)) {
     for (BasicBlock *Pred : predecessors(BB))
@@ -994,9 +1017,7 @@ bool JumpThreadingPass::ProcessBlock(BasicBlock *BB) {
 
       // Invalidate LVI information for BB if the LVI is not provably true for
       // all of BB.
-      if (any_of(*BB, [](Instruction &I) {
-            return !isGuaranteedToTransferExecutionToSuccessor(&I);
-          }))
+      if (!isGuaranteedToTransferExecutionToSuccessor(BB))
         LVI->eraseBlock(BB);
       return true;
     }
@@ -1102,6 +1123,10 @@ bool JumpThreadingPass::ProcessBlock(BasicBlock *BB) {
       // threading is concerned.
       assert(CondBr->isConditional() && "Threading on unconditional terminator");
 
+      if (DDT->pending())
+        LVI->disableDT();
+      else
+        LVI->enableDT();
       LazyValueInfo::Tristate Ret =
         LVI->getPredicateAt(CondCmp->getPredicate(), CondCmp->getOperand(0),
                             CondConst, CondBr);
@@ -1149,8 +1174,8 @@ bool JumpThreadingPass::ProcessBlock(BasicBlock *BB) {
 
   // TODO: There are other places where load PRE would be profitable, such as
   // more complex comparisons.
-  if (LoadInst *LI = dyn_cast<LoadInst>(SimplifyValue))
-    if (SimplifyPartiallyRedundantLoad(LI))
+  if (LoadInst *LoadI = dyn_cast<LoadInst>(SimplifyValue))
+    if (SimplifyPartiallyRedundantLoad(LoadI))
       return true;
 
   // Before threading, try to propagate profile data backwards:
@@ -1229,17 +1254,17 @@ static bool isOpDefinedInBlock(Value *Op, BasicBlock *BB) {
   return false;
 }
 
-/// SimplifyPartiallyRedundantLoad - If LI is an obviously partially redundant
-/// load instruction, eliminate it by replacing it with a PHI node.  This is an
-/// important optimization that encourages jump threading, and needs to be run
-/// interlaced with other jump threading tasks.
-bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
+/// SimplifyPartiallyRedundantLoad - If LoadI is an obviously partially
+/// redundant load instruction, eliminate it by replacing it with a PHI node.
+/// This is an important optimization that encourages jump threading, and needs
+/// to be run interlaced with other jump threading tasks.
+bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LoadI) {
   // Don't hack volatile and ordered loads.
-  if (!LI->isUnordered()) return false;
+  if (!LoadI->isUnordered()) return false;
 
   // If the load is defined in a block with exactly one predecessor, it can't be
   // partially redundant.
-  BasicBlock *LoadBB = LI->getParent();
+  BasicBlock *LoadBB = LoadI->getParent();
   if (LoadBB->getSinglePredecessor())
     return false;
 
@@ -1249,7 +1274,7 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
   if (LoadBB->isEHPad())
     return false;
 
-  Value *LoadedPtr = LI->getOperand(0);
+  Value *LoadedPtr = LoadI->getOperand(0);
 
   // If the loaded operand is defined in the LoadBB and its not a phi,
   // it can't be available in predecessors.
@@ -1258,26 +1283,27 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
 
   // Scan a few instructions up from the load, to see if it is obviously live at
   // the entry to its block.
-  BasicBlock::iterator BBIt(LI);
+  BasicBlock::iterator BBIt(LoadI);
   bool IsLoadCSE;
   if (Value *AvailableVal = FindAvailableLoadedValue(
-          LI, LoadBB, BBIt, DefMaxInstsToScan, AA, &IsLoadCSE)) {
+          LoadI, LoadBB, BBIt, DefMaxInstsToScan, AA, &IsLoadCSE)) {
     // If the value of the load is locally available within the block, just use
     // it.  This frequently occurs for reg2mem'd allocas.
 
     if (IsLoadCSE) {
-      LoadInst *NLI = cast<LoadInst>(AvailableVal);
-      combineMetadataForCSE(NLI, LI);
+      LoadInst *NLoadI = cast<LoadInst>(AvailableVal);
+      combineMetadataForCSE(NLoadI, LoadI);
     };
 
     // If the returned value is the load itself, replace with an undef. This can
     // only happen in dead loops.
-    if (AvailableVal == LI) AvailableVal = UndefValue::get(LI->getType());
-    if (AvailableVal->getType() != LI->getType())
-      AvailableVal =
-          CastInst::CreateBitOrPointerCast(AvailableVal, LI->getType(), "", LI);
-    LI->replaceAllUsesWith(AvailableVal);
-    LI->eraseFromParent();
+    if (AvailableVal == LoadI)
+      AvailableVal = UndefValue::get(LoadI->getType());
+    if (AvailableVal->getType() != LoadI->getType())
+      AvailableVal = CastInst::CreateBitOrPointerCast(
+          AvailableVal, LoadI->getType(), "", LoadI);
+    LoadI->replaceAllUsesWith(AvailableVal);
+    LoadI->eraseFromParent();
     return true;
   }
 
@@ -1290,7 +1316,7 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
   // If all of the loads and stores that feed the value have the same AA tags,
   // then we can propagate them onto any newly inserted loads.
   AAMDNodes AATags;
-  LI->getAAMetadata(AATags);
+  LoadI->getAAMetadata(AATags);
 
   SmallPtrSet<BasicBlock*, 8> PredsScanned;
 
@@ -1312,13 +1338,14 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
     Value *PredAvailable = nullptr;
     // NOTE: We don't CSE load that is volatile or anything stronger than
     // unordered, that should have been checked when we entered the function.
-    assert(LI->isUnordered() && "Attempting to CSE volatile or atomic loads");
+    assert(LoadI->isUnordered() &&
+           "Attempting to CSE volatile or atomic loads");
     // If this is a load on a phi pointer, phi-translate it and search
     // for available load/store to the pointer in predecessors.
     Value *Ptr = LoadedPtr->DoPHITranslation(LoadBB, PredBB);
     PredAvailable = FindAvailablePtrLoadStore(
-        Ptr, LI->getType(), LI->isAtomic(), PredBB, BBIt, DefMaxInstsToScan,
-        AA, &IsLoadCSE, &NumScanedInst);
+        Ptr, LoadI->getType(), LoadI->isAtomic(), PredBB, BBIt,
+        DefMaxInstsToScan, AA, &IsLoadCSE, &NumScanedInst);
 
     // If PredBB has a single predecessor, continue scanning through the
     // single precessor.
@@ -1329,7 +1356,7 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
       if (SinglePredBB) {
         BBIt = SinglePredBB->end();
         PredAvailable = FindAvailablePtrLoadStore(
-            Ptr, LI->getType(), LI->isAtomic(), SinglePredBB, BBIt,
+            Ptr, LoadI->getType(), LoadI->isAtomic(), SinglePredBB, BBIt,
             (DefMaxInstsToScan - NumScanedInst), AA, &IsLoadCSE,
             &NumScanedInst);
       }
@@ -1361,15 +1388,15 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
 
   // If the value is unavailable in one of predecessors, we will end up
   // inserting a new instruction into them. It is only valid if all the
-  // instructions before LI are guaranteed to pass execution to its successor,
-  // or if LI is safe to speculate.
+  // instructions before LoadI are guaranteed to pass execution to its
+  // successor, or if LoadI is safe to speculate.
   // TODO: If this logic becomes more complex, and we will perform PRE insertion
   // farther than to a predecessor, we need to reuse the code from GVN's PRE.
   // It requires domination tree analysis, so for this simple case it is an
   // overkill.
   if (PredsScanned.size() != AvailablePreds.size() &&
-      !isSafeToSpeculativelyExecute(LI))
-    for (auto I = LoadBB->begin(); &*I != LI; ++I)
+      !isSafeToSpeculativelyExecute(LoadI))
+    for (auto I = LoadBB->begin(); &*I != LoadI; ++I)
       if (!isGuaranteedToTransferExecutionToSuccessor(&*I))
         return false;
 
@@ -1408,11 +1435,12 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
   if (UnavailablePred) {
     assert(UnavailablePred->getTerminator()->getNumSuccessors() == 1 &&
            "Can't handle critical edge here!");
-    LoadInst *NewVal = new LoadInst(
-        LoadedPtr->DoPHITranslation(LoadBB, UnavailablePred),
-        LI->getName() + ".pr", false, LI->getAlignment(), LI->getOrdering(),
-        LI->getSyncScopeID(), UnavailablePred->getTerminator());
-    NewVal->setDebugLoc(LI->getDebugLoc());
+    LoadInst *NewVal =
+        new LoadInst(LoadedPtr->DoPHITranslation(LoadBB, UnavailablePred),
+                     LoadI->getName() + ".pr", false, LoadI->getAlignment(),
+                     LoadI->getOrdering(), LoadI->getSyncScopeID(),
+                     UnavailablePred->getTerminator());
+    NewVal->setDebugLoc(LoadI->getDebugLoc());
     if (AATags)
       NewVal->setAAMetadata(AATags);
 
@@ -1425,10 +1453,10 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
 
   // Create a PHI node at the start of the block for the PRE'd load value.
   pred_iterator PB = pred_begin(LoadBB), PE = pred_end(LoadBB);
-  PHINode *PN = PHINode::Create(LI->getType(), std::distance(PB, PE), "",
+  PHINode *PN = PHINode::Create(LoadI->getType(), std::distance(PB, PE), "",
                                 &LoadBB->front());
-  PN->takeName(LI);
-  PN->setDebugLoc(LI->getDebugLoc());
+  PN->takeName(LoadI);
+  PN->setDebugLoc(LoadI->getDebugLoc());
 
   // Insert new entries into the PHI for each predecessor.  A single block may
   // have multiple entries here.
@@ -1446,19 +1474,19 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LI) {
     // AvailablePreds vector as we go so that all of the PHI entries for this
     // predecessor use the same bitcast.
     Value *&PredV = I->second;
-    if (PredV->getType() != LI->getType())
-      PredV = CastInst::CreateBitOrPointerCast(PredV, LI->getType(), "",
+    if (PredV->getType() != LoadI->getType())
+      PredV = CastInst::CreateBitOrPointerCast(PredV, LoadI->getType(), "",
                                                P->getTerminator());
 
     PN->addIncoming(PredV, I->first);
   }
 
-  for (LoadInst *PredLI : CSELoads) {
-    combineMetadataForCSE(PredLI, LI);
+  for (LoadInst *PredLoadI : CSELoads) {
+    combineMetadataForCSE(PredLoadI, LoadI);
   }
 
-  LI->replaceAllUsesWith(PN);
-  LI->eraseFromParent();
+  LoadI->replaceAllUsesWith(PN);
+  LoadI->eraseFromParent();
 
   return true;
 }
@@ -1899,6 +1927,10 @@ bool JumpThreadingPass::ThreadEdge(BasicBlock *BB,
         << ", across block:\n    "
         << *BB << "\n");
 
+  if (DDT->pending())
+    LVI->disableDT();
+  else
+    LVI->enableDT();
   LVI->threadEdge(PredBB, BB, SuccBB);
 
   // We are going to have to map operands from the original BB block to the new
@@ -2368,6 +2400,10 @@ bool JumpThreadingPass::TryToUnfoldSelect(CmpInst *CondCmp, BasicBlock *BB) {
     // Now check if one of the select values would allow us to constant fold the
     // terminator in BB. We don't do the transform if both sides fold, those
     // cases will be threaded in any case.
+    if (DDT->pending())
+      LVI->disableDT();
+    else
+      LVI->enableDT();
     LazyValueInfo::Tristate LHSFolds =
         LVI->getPredicateOnEdge(CondCmp->getPredicate(), SI->getOperand(1),
                                 CondRHS, Pred, BB, CondCmp);

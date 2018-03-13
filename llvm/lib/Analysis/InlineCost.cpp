@@ -372,7 +372,7 @@ void CallAnalyzer::disableLoadElimination() {
 /// Returns false if unable to compute the offset for any reason. Respects any
 /// simplified values known during the analysis of this callsite.
 bool CallAnalyzer::accumulateGEPOffset(GEPOperator &GEP, APInt &Offset) {
-  unsigned IntPtrWidth = DL.getPointerTypeSizeInBits(GEP.getType());
+  unsigned IntPtrWidth = DL.getIndexTypeSizeInBits(GEP.getType());
   assert(IntPtrWidth == Offset.getBitWidth());
 
   for (gep_type_iterator GTI = gep_type_begin(GEP), GTE = gep_type_end(GEP);
@@ -1619,7 +1619,7 @@ ConstantInt *CallAnalyzer::stripAndComputeInBoundsConstantOffsets(Value *&V) {
     return nullptr;
 
   unsigned AS = V->getType()->getPointerAddressSpace();
-  unsigned IntPtrWidth = DL.getPointerSizeInBits(AS);
+  unsigned IntPtrWidth = DL.getIndexSizeInBits(AS);
   APInt Offset = APInt::getNullValue(IntPtrWidth);
 
   // Even though we don't look through PHI nodes, we could be called on an
@@ -2040,12 +2040,18 @@ bool llvm::isInlineViable(Function &F) {
           cast<CallInst>(CS.getInstruction())->canReturnTwice())
         return false;
 
-      // Disallow inlining functions that call @llvm.localescape. Doing this
-      // correctly would require major changes to the inliner.
-      if (CS.getCalledFunction() &&
-          CS.getCalledFunction()->getIntrinsicID() ==
-              llvm::Intrinsic::localescape)
-        return false;
+      if (CS.getCalledFunction())
+        switch (CS.getCalledFunction()->getIntrinsicID()) {
+        default:
+          break;
+        // Disallow inlining functions that call @llvm.localescape. Doing this
+        // correctly would require major changes to the inliner.
+        case llvm::Intrinsic::localescape:
+        // Disallow inlining of functions that access VarArgs.
+        case llvm::Intrinsic::vastart:
+        case llvm::Intrinsic::vaend:
+          return false;
+        }
     }
   }
 

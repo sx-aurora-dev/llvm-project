@@ -5399,18 +5399,7 @@ MachineInstr *X86InstrInfo::commuteInstructionImpl(MachineInstr &MI, bool NewMI,
   case X86::VPCMPWZrrik:    case X86::VPCMPUWZrrik: {
     // Flip comparison mode immediate (if necessary).
     unsigned Imm = MI.getOperand(MI.getNumOperands() - 1).getImm() & 0x7;
-    switch (Imm) {
-    default: llvm_unreachable("Unreachable!");
-    case 0x01: Imm = 0x06; break; // LT  -> NLE
-    case 0x02: Imm = 0x05; break; // LE  -> NLT
-    case 0x05: Imm = 0x02; break; // NLT -> LE
-    case 0x06: Imm = 0x01; break; // NLE -> LT
-    case 0x00: // EQ
-    case 0x03: // FALSE
-    case 0x04: // NE
-    case 0x07: // TRUE
-      break;
-    }
+    Imm = X86::getSwappedVPCMPImm(Imm);
     auto &WorkingMI = cloneIfNew(MI);
     WorkingMI.getOperand(MI.getNumOperands() - 1).setImm(Imm);
     return TargetInstrInfo::commuteInstructionImpl(WorkingMI, /*NewMI=*/false,
@@ -5422,18 +5411,7 @@ MachineInstr *X86InstrInfo::commuteInstructionImpl(MachineInstr &MI, bool NewMI,
   case X86::VPCOMWri: case X86::VPCOMUWri: {
     // Flip comparison mode immediate (if necessary).
     unsigned Imm = MI.getOperand(3).getImm() & 0x7;
-    switch (Imm) {
-    default: llvm_unreachable("Unreachable!");
-    case 0x00: Imm = 0x02; break; // LT -> GT
-    case 0x01: Imm = 0x03; break; // LE -> GE
-    case 0x02: Imm = 0x00; break; // GT -> LT
-    case 0x03: Imm = 0x01; break; // GE -> LE
-    case 0x04: // EQ
-    case 0x05: // NE
-    case 0x06: // FALSE
-    case 0x07: // TRUE
-      break;
-    }
+    Imm = X86::getSwappedVPCOMImm(Imm);
     auto &WorkingMI = cloneIfNew(MI);
     WorkingMI.getOperand(3).setImm(Imm);
     return TargetInstrInfo::commuteInstructionImpl(WorkingMI, /*NewMI=*/false,
@@ -6133,6 +6111,42 @@ unsigned X86::getCMovFromCond(CondCode CC, unsigned RegBytes,
   }
 }
 
+/// \brief Get the VPCMP immediate if the opcodes are swapped.
+unsigned X86::getSwappedVPCMPImm(unsigned Imm) {
+  switch (Imm) {
+  default: llvm_unreachable("Unreachable!");
+  case 0x01: Imm = 0x06; break; // LT  -> NLE
+  case 0x02: Imm = 0x05; break; // LE  -> NLT
+  case 0x05: Imm = 0x02; break; // NLT -> LE
+  case 0x06: Imm = 0x01; break; // NLE -> LT
+  case 0x00: // EQ
+  case 0x03: // FALSE
+  case 0x04: // NE
+  case 0x07: // TRUE
+    break;
+  }
+
+  return Imm;
+}
+
+/// \brief Get the VPCOM immediate if the opcodes are swapped.
+unsigned X86::getSwappedVPCOMImm(unsigned Imm) {
+  switch (Imm) {
+  default: llvm_unreachable("Unreachable!");
+  case 0x00: Imm = 0x02; break; // LT -> GT
+  case 0x01: Imm = 0x03; break; // LE -> GE
+  case 0x02: Imm = 0x00; break; // GT -> LT
+  case 0x03: Imm = 0x01; break; // GE -> LE
+  case 0x04: // EQ
+  case 0x05: // NE
+  case 0x06: // FALSE
+  case 0x07: // TRUE
+    break;
+  }
+
+  return Imm;
+}
+
 bool X86InstrInfo::isUnpredicatedTerminator(const MachineInstr &MI) const {
   if (!MI.isTerminator()) return false;
 
@@ -6634,7 +6648,7 @@ static bool isHReg(unsigned Reg) {
 }
 
 // Try and copy between VR128/VR64 and GR64 registers.
-static unsigned CopyToFromAsymmetricReg(unsigned &DestReg, unsigned &SrcReg,
+static unsigned CopyToFromAsymmetricReg(unsigned DestReg, unsigned SrcReg,
                                         const X86Subtarget &Subtarget) {
   bool HasAVX = Subtarget.hasAVX();
   bool HasAVX512 = Subtarget.hasAVX512();
@@ -6919,8 +6933,10 @@ static unsigned getLoadStoreRegOpcode(unsigned Reg,
         (HasAVX512 ? X86::VMOVSSZmr : HasAVX ? X86::VMOVSSmr : X86::MOVSSmr);
     if (X86::RFP32RegClass.hasSubClassEq(RC))
       return load ? X86::LD_Fp32m : X86::ST_Fp32m;
-    if (X86::VK32RegClass.hasSubClassEq(RC))
+    if (X86::VK32RegClass.hasSubClassEq(RC)) {
+      assert(STI.hasBWI() && "KMOVD requires BWI");
       return load ? X86::KMOVDkm : X86::KMOVDmk;
+    }
     llvm_unreachable("Unknown 4-byte regclass");
   case 8:
     if (X86::GR64RegClass.hasSubClassEq(RC))
@@ -6933,8 +6949,10 @@ static unsigned getLoadStoreRegOpcode(unsigned Reg,
       return load ? X86::MMX_MOVQ64rm : X86::MMX_MOVQ64mr;
     if (X86::RFP64RegClass.hasSubClassEq(RC))
       return load ? X86::LD_Fp64m : X86::ST_Fp64m;
-    if (X86::VK64RegClass.hasSubClassEq(RC))
+    if (X86::VK64RegClass.hasSubClassEq(RC)) {
+      assert(STI.hasBWI() && "KMOVQ requires BWI");
       return load ? X86::KMOVQkm : X86::KMOVQmk;
+    }
     llvm_unreachable("Unknown 8-byte regclass");
   case 10:
     assert(X86::RFP80RegClass.hasSubClassEq(RC) && "Unknown 10-byte regclass");
@@ -8018,9 +8036,6 @@ bool X86InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case X86::VMOVUPSZ256mr_NOVLX:
     return expandNOVLXStore(MIB, &getRegisterInfo(), get(X86::VMOVUPSYmr),
                             get(X86::VEXTRACTF64x4Zmr), X86::sub_ymm);
-  case X86::TEST8ri_NOREX:
-    MI.setDesc(get(X86::TEST8ri));
-    return true;
   case X86::MOV32ri64:
     MI.setDesc(get(X86::MOV32ri));
     return true;
@@ -8532,6 +8547,14 @@ MachineInstr *X86InstrInfo::foldMemoryOperandImpl(
   // X86II::MO_GOT_ABSOLUTE_ADDRESS after folding.
   if (MI.getOpcode() == X86::ADD32ri &&
       MI.getOperand(2).getTargetFlags() == X86II::MO_GOT_ABSOLUTE_ADDRESS)
+    return nullptr;
+
+  // GOTTPOFF relocation loads can only be folded into add instructions.
+  // FIXME: Need to exclude other relocations that only support specific
+  // instructions.
+  if (MOs.size() == X86::AddrNumOperands &&
+      MOs[X86::AddrDisp].getTargetFlags() == X86II::MO_GOTTPOFF &&
+      MI.getOpcode() != X86::ADD64rr)
     return nullptr;
 
   MachineInstr *NewMI = nullptr;
@@ -9226,6 +9249,30 @@ X86InstrInfo::unfoldMemoryOperand(SelectionDAG &DAG, SDNode *N,
   if (Load)
     BeforeOps.push_back(SDValue(Load, 0));
   BeforeOps.insert(BeforeOps.end(), AfterOps.begin(), AfterOps.end());
+  // Change CMP32ri r, 0 back to TEST32rr r, r, etc.
+  switch (Opc) {
+    default: break;
+    case X86::CMP64ri32:
+    case X86::CMP64ri8:
+    case X86::CMP32ri:
+    case X86::CMP32ri8:
+    case X86::CMP16ri:
+    case X86::CMP16ri8:
+    case X86::CMP8ri:
+      if (isNullConstant(BeforeOps[1])) {
+        switch (Opc) {
+          default: llvm_unreachable("Unreachable!");
+          case X86::CMP64ri8:
+          case X86::CMP64ri32: Opc = X86::TEST64rr; break;
+          case X86::CMP32ri8:
+          case X86::CMP32ri:   Opc = X86::TEST32rr; break;
+          case X86::CMP16ri8:
+          case X86::CMP16ri:   Opc = X86::TEST16rr; break;
+          case X86::CMP8ri:    Opc = X86::TEST8rr; break;
+        }
+        BeforeOps[1] = BeforeOps[0];
+      }
+  }
   SDNode *NewNode= DAG.getMachineNode(Opc, dl, VTs, BeforeOps);
   NewNodes.push_back(NewNode);
 

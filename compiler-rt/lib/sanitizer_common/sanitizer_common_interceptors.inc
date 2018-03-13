@@ -34,6 +34,7 @@
 //   COMMON_INTERCEPTOR_MEMSET_IMPL
 //   COMMON_INTERCEPTOR_MEMMOVE_IMPL
 //   COMMON_INTERCEPTOR_MEMCPY_IMPL
+//   COMMON_INTERCEPTOR_MMAP_IMPL
 //   COMMON_INTERCEPTOR_COPY_STRING
 //   COMMON_INTERCEPTOR_STRNDUP_IMPL
 //===----------------------------------------------------------------------===//
@@ -75,6 +76,7 @@
 #define clock_settime __clock_settime50
 #define ctime __ctime50
 #define ctime_r __ctime_r50
+#define devname __devname50
 #define getitimer __getitimer50
 #define getpwent __getpwent50
 #define getpwnam __getpwnam50
@@ -91,6 +93,7 @@
 #define localtime __locatime50
 #define localtime_r __localtime_r50
 #define mktime __mktime50
+#define lstat __lstat50
 #define opendir __opendir30
 #define readdir __readdir30
 #define readdir_r __readdir_r30
@@ -108,6 +111,9 @@
 #define times __times13
 #define wait3 __wait350
 #define wait4 __wait450
+extern const unsigned short *_ctype_tab_;
+extern const short *_toupper_tab_;
+extern const short *_tolower_tab_;
 #endif
 
 // Platform-specific options.
@@ -260,6 +266,12 @@ bool PlatformHasDifferentMemcpyAndMemmove();
     }                                                       \
     return REAL(memcpy)(dst, src, size);                    \
   }
+#endif
+
+#ifndef COMMON_INTERCEPTOR_MMAP_IMPL
+#define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd, \
+                                     off)                                  \
+  { return REAL(mmap)(addr, sz, prot, flags, fd, off); }
 #endif
 
 #ifndef COMMON_INTERCEPTOR_COPY_STRING
@@ -1704,6 +1716,7 @@ FORMAT_INTERCEPTOR_IMPL(__isoc99_snprintf, __isoc99_vsnprintf, str, size,
 
 #if SANITIZER_INTERCEPT_IOCTL
 #include "sanitizer_common_interceptors_ioctl.inc"
+#include "sanitizer_interceptors_ioctl_netbsd.inc"
 INTERCEPTOR(int, ioctl, int d, unsigned long request, ...) {
   // We need a frame pointer, because we call into ioctl_common_[pre|post] which
   // can trigger a report and we need to be able to unwind through this
@@ -3183,13 +3196,25 @@ INTERCEPTOR(uptr, ptrace, int request, int pid, void *addr, void *data) {
 #endif
 
 #if SANITIZER_INTERCEPT_SETLOCALE
+static void unpoison_ctype_arrays(void *ctx) {
+#if SANITIZER_NETBSD
+  // These arrays contain 256 regular elements in unsigned char range + 1 EOF
+  COMMON_INTERCEPTOR_WRITE_RANGE(ctx, _ctype_tab_, 257 * sizeof(short));
+  COMMON_INTERCEPTOR_WRITE_RANGE(ctx, _toupper_tab_, 257 * sizeof(short));
+  COMMON_INTERCEPTOR_WRITE_RANGE(ctx, _tolower_tab_, 257 * sizeof(short));
+#endif
+}
+
 INTERCEPTOR(char *, setlocale, int category, char *locale) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, setlocale, category, locale);
   if (locale)
     COMMON_INTERCEPTOR_READ_RANGE(ctx, locale, REAL(strlen)(locale) + 1);
   char *res = REAL(setlocale)(category, locale);
-  if (res) COMMON_INTERCEPTOR_WRITE_RANGE(ctx, res, REAL(strlen)(res) + 1);
+  if (res) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, res, REAL(strlen)(res) + 1);
+    unpoison_ctype_arrays(ctx);
+  }
   return res;
 }
 
@@ -3572,7 +3597,7 @@ INTERCEPTOR(char *, strerror, int errnum) {
 //  * GNU version returns message pointer, which points to either buf or some
 //    static storage.
 #if ((_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && !_GNU_SOURCE) || \
-    SANITIZER_MAC || SANITIZER_ANDROID || SANITIZER_NETBSD
+    SANITIZER_MAC || SANITIZER_ANDROID || SANITIZER_NETBSD || SANITIZER_FREEBSD
 // POSIX version. Spec is not clear on whether buf is NULL-terminated.
 // At least on OSX, buf contents are valid even when the call fails.
 INTERCEPTOR(int, strerror_r, int errnum, char *buf, SIZE_T buflen) {
@@ -6276,6 +6301,22 @@ INTERCEPTOR(int, stat, const char *path, void *buf) {
 #define INIT_STAT
 #endif
 
+#if SANITIZER_INTERCEPT_LSTAT
+INTERCEPTOR(int, lstat, const char *path, void *buf) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, lstat, path, buf);
+  if (common_flags()->intercept_stat)
+    COMMON_INTERCEPTOR_READ_STRING(ctx, path, 0);
+  int res = REAL(lstat)(path, buf);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, __sanitizer::struct_stat_sz);
+  return res;
+}
+#define INIT_LSTAT COMMON_INTERCEPT_FUNCTION(lstat)
+#else
+#define INIT_LSTAT
+#endif
+
 #if SANITIZER_INTERCEPT___XSTAT
 INTERCEPTOR(int, __xstat, int version, const char *path, void *buf) {
   void *ctx;
@@ -6488,6 +6529,78 @@ INTERCEPTOR(wchar_t *, wcsncat, wchar_t *dst, const wchar_t *src, SIZE_T n) {
 #define INIT_WCSCAT
 #endif
 
+static SIZE_T RealStrLen(const char *str) { return REAL(strlen)(str); }
+
+static SIZE_T RealStrLen(const wchar_t *str) { return REAL(wcslen)(str); }
+
+#define STRXFRM_INTERCEPTOR_IMPL(strxfrm, dest, src, len, ...)             \
+  {                                                                        \
+    void *ctx;                                                             \
+    COMMON_INTERCEPTOR_ENTER(ctx, strxfrm, dest, src, len, ##__VA_ARGS__); \
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, src,                                \
+                                  sizeof(*src) * (RealStrLen(src) + 1));   \
+    SIZE_T res = REAL(strxfrm)(dest, src, len, ##__VA_ARGS__);             \
+    if (res < len)                                                         \
+      COMMON_INTERCEPTOR_WRITE_RANGE(ctx, dest, sizeof(*src) * (res + 1)); \
+    return res;                                                            \
+  }
+
+#if SANITIZER_INTERCEPT_STRXFRM
+INTERCEPTOR(SIZE_T, strxfrm, char *dest, const char *src, SIZE_T len) {
+  STRXFRM_INTERCEPTOR_IMPL(strxfrm, dest, src, len);
+}
+
+INTERCEPTOR(SIZE_T, strxfrm_l, char *dest, const char *src, SIZE_T len,
+            void *locale) {
+  STRXFRM_INTERCEPTOR_IMPL(strxfrm_l, dest, src, len, locale);
+}
+
+#define INIT_STRXFRM                  \
+  COMMON_INTERCEPT_FUNCTION(strxfrm); \
+  COMMON_INTERCEPT_FUNCTION(strxfrm_l);
+#else
+#define INIT_STRXFRM
+#endif
+
+#if SANITIZER_INTERCEPT___STRXFRM_L
+INTERCEPTOR(SIZE_T, __strxfrm_l, char *dest, const char *src, SIZE_T len,
+            void *locale) {
+  STRXFRM_INTERCEPTOR_IMPL(__strxfrm_l, dest, src, len, locale);
+}
+
+#define INIT___STRXFRM_L COMMON_INTERCEPT_FUNCTION(__strxfrm_l);
+#else
+#define INIT___STRXFRM_L
+#endif
+
+#if SANITIZER_INTERCEPT_WCSXFRM
+INTERCEPTOR(SIZE_T, wcsxfrm, wchar_t *dest, const wchar_t *src, SIZE_T len) {
+  STRXFRM_INTERCEPTOR_IMPL(wcsxfrm, dest, src, len);
+}
+
+INTERCEPTOR(SIZE_T, wcsxfrm_l, wchar_t *dest, const wchar_t *src, SIZE_T len,
+            void *locale) {
+  STRXFRM_INTERCEPTOR_IMPL(wcsxfrm_l, dest, src, len, locale);
+}
+
+#define INIT_WCSXFRM                  \
+  COMMON_INTERCEPT_FUNCTION(wcsxfrm); \
+  COMMON_INTERCEPT_FUNCTION(wcsxfrm_l);
+#else
+#define INIT_WCSXFRM
+#endif
+
+#if SANITIZER_INTERCEPT___WCSXFRM_L
+INTERCEPTOR(SIZE_T, __wcsxfrm_l, wchar_t *dest, const wchar_t *src, SIZE_T len,
+            void *locale) {
+  STRXFRM_INTERCEPTOR_IMPL(__wcsxfrm_l, dest, src, len, locale);
+}
+
+#define INIT___WCSXFRM_L COMMON_INTERCEPT_FUNCTION(__wcsxfrm_l);
+#else
+#define INIT___WCSXFRM_L
+#endif
+
 #if SANITIZER_INTERCEPT_ACCT
 INTERCEPTOR(int, acct, const char *file) {
   void *ctx;
@@ -6632,10 +6745,399 @@ INTERCEPTOR(int, getgroupmembership, const char *name, u32 basegid, u32 *groups,
 #define INIT_GETGROUPLIST
 #endif
 
+#if SANITIZER_INTERCEPT_READLINK
+INTERCEPTOR(SSIZE_T, readlink, const char *path, char *buf, SIZE_T bufsiz) {
+  void* ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, readlink, path, buf, bufsiz);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, path, REAL(strlen)(path) + 1);
+  SSIZE_T res = REAL(readlink)(path, buf, bufsiz);
+  if (res > 0)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, res);
+  return res;
+}
+
+#define INIT_READLINK COMMON_INTERCEPT_FUNCTION(readlink)
+#else
+#define INIT_READLINK
+#endif
+
+#if SANITIZER_INTERCEPT_READLINKAT
+INTERCEPTOR(SSIZE_T, readlinkat, int dirfd, const char *path, char *buf,
+            SIZE_T bufsiz) {
+  void* ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, readlinkat, dirfd, path, buf, bufsiz);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, path, REAL(strlen)(path) + 1);
+  SSIZE_T res = REAL(readlinkat)(dirfd, path, buf, bufsiz);
+  if (res > 0)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, res);
+  return res;
+}
+
+#define INIT_READLINKAT COMMON_INTERCEPT_FUNCTION(readlinkat)
+#else
+#define INIT_READLINKAT
+#endif
+
+#if SANITIZER_INTERCEPT_NAME_TO_HANDLE_AT
+INTERCEPTOR(int, name_to_handle_at, int dirfd, const char *pathname,
+            struct file_handle *handle, int *mount_id, int flags) {
+  void* ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, name_to_handle_at, dirfd, pathname, handle,
+                           mount_id, flags);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, pathname, REAL(strlen)(pathname) + 1);
+
+  __sanitizer_file_handle *sanitizer_handle =
+      reinterpret_cast<__sanitizer_file_handle*>(handle);
+  COMMON_INTERCEPTOR_READ_RANGE(
+      ctx, &sanitizer_handle->handle_bytes,
+      sizeof(sanitizer_handle->handle_bytes));
+
+  int res = REAL(name_to_handle_at)(dirfd, pathname, handle, mount_id, flags);
+  if (!res) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(
+        ctx, &sanitizer_handle->handle_bytes,
+        sizeof(sanitizer_handle->handle_bytes));
+    COMMON_INTERCEPTOR_WRITE_RANGE(
+        ctx, &sanitizer_handle->handle_type,
+        sizeof(sanitizer_handle->handle_type));
+    COMMON_INTERCEPTOR_WRITE_RANGE(
+        ctx, &sanitizer_handle->f_handle, sanitizer_handle->handle_bytes);
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, mount_id, sizeof(*mount_id));
+  }
+  return res;
+}
+
+#define INIT_NAME_TO_HANDLE_AT COMMON_INTERCEPT_FUNCTION(name_to_handle_at)
+#else
+#define INIT_NAME_TO_HANDLE_AT
+#endif
+
+#if SANITIZER_INTERCEPT_OPEN_BY_HANDLE_AT
+INTERCEPTOR(int, open_by_handle_at, int mount_fd, struct file_handle* handle,
+            int flags) {
+  void* ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, open_by_handle_at, mount_fd, handle, flags);
+
+  __sanitizer_file_handle *sanitizer_handle =
+      reinterpret_cast<__sanitizer_file_handle*>(handle);
+  COMMON_INTERCEPTOR_READ_RANGE(
+      ctx, &sanitizer_handle->handle_bytes,
+      sizeof(sanitizer_handle->handle_bytes));
+  COMMON_INTERCEPTOR_READ_RANGE(
+      ctx, &sanitizer_handle->handle_type,
+      sizeof(sanitizer_handle->handle_type));
+  COMMON_INTERCEPTOR_READ_RANGE(
+      ctx, &sanitizer_handle->f_handle, sanitizer_handle->handle_bytes);
+
+  return REAL(open_by_handle_at)(mount_fd, handle, flags);
+}
+
+#define INIT_OPEN_BY_HANDLE_AT COMMON_INTERCEPT_FUNCTION(open_by_handle_at)
+#else
+#define INIT_OPEN_BY_HANDLE_AT
+#endif
+
+#if SANITIZER_INTERCEPT_STRLCPY
+INTERCEPTOR(SIZE_T, strlcpy, char *dst, char *src, SIZE_T size) {
+  void *ctx;
+  SIZE_T res;
+  COMMON_INTERCEPTOR_ENTER(ctx, strlcpy, dst, src, size);
+  if (src) {
+    // Keep strnlen as macro argument, as macro may ignore it.
+    COMMON_INTERCEPTOR_READ_STRING(ctx, src,
+      Min(REAL(strnlen)(src, size), size - 1) + 1);
+  }
+  res = REAL(strlcpy)(dst, src, size);
+  COMMON_INTERCEPTOR_COPY_STRING(ctx, dst, src, REAL(strlen)(dst) + 1);
+  return res;
+}
+
+INTERCEPTOR(SIZE_T, strlcat, char *dst, char *src, SIZE_T size) {
+  void *ctx;
+  SIZE_T len = 0;
+  COMMON_INTERCEPTOR_ENTER(ctx, strlcat, dst, src, size);
+  // src is checked in the strlcpy() interceptor
+  if (dst) {
+    len = REAL(strnlen)(dst, size);
+    COMMON_INTERCEPTOR_READ_STRING(ctx, dst, Min(len, size - 1) + 1);
+  }
+  // Reuse the rest of the code in the strlcpy() interceptor
+  return WRAP(strlcpy)(dst + len, src, size - len) + len;
+}
+#define INIT_STRLCPY \
+  COMMON_INTERCEPT_FUNCTION(strlcpy); \
+  COMMON_INTERCEPT_FUNCTION(strlcat);
+#else
+#define INIT_STRLCPY
+#endif
+
+#if SANITIZER_INTERCEPT_MMAP
+INTERCEPTOR(void *, mmap, void *addr, SIZE_T sz, int prot, int flags, int fd,
+            OFF_T off) {
+  void *ctx;
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return (void *)internal_mmap(addr, sz, prot, flags, fd, off);
+  COMMON_INTERCEPTOR_ENTER(ctx, mmap, addr, sz, prot, flags, fd, off);
+  COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd, off);
+}
+#define INIT_MMAP COMMON_INTERCEPT_FUNCTION(mmap);
+#else
+#define INIT_MMAP
+#endif
+
+#if SANITIZER_INTERCEPT_MMAP64
+INTERCEPTOR(void *, mmap64, void *addr, SIZE_T sz, int prot, int flags, int fd,
+            OFF_T off) {
+  void *ctx;
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return (void *)internal_mmap(addr, sz, prot, flags, fd, off);
+  COMMON_INTERCEPTOR_ENTER(ctx, mmap64, addr, sz, prot, flags, fd, off);
+  COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap64, addr, sz, prot, flags, fd, off);
+}
+#define INIT_MMAP64 COMMON_INTERCEPT_FUNCTION(mmap64);
+#else
+#define INIT_MMAP64
+#endif
+
+#if SANITIZER_INTERCEPT_DEVNAME
+INTERCEPTOR(char *, devname, u64 dev, u32 type) {
+  void *ctx;
+  char *name;
+  COMMON_INTERCEPTOR_ENTER(ctx, devname, dev, type);
+  name = REAL(devname)(dev, type);
+  if (name)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, name, REAL(strlen)(name) + 1);
+  return name;
+}
+#define INIT_DEVNAME COMMON_INTERCEPT_FUNCTION(devname);
+#else
+#define INIT_DEVNAME
+#endif
+
+#if SANITIZER_INTERCEPT_DEVNAME_R
+INTERCEPTOR(int, devname_r, u64 dev, u32 type, char *path, uptr len) {
+  void *ctx;
+  int res;
+  COMMON_INTERCEPTOR_ENTER(ctx, devname_r, dev, type, path, len);
+  res = REAL(devname_r)(dev, type, path, len);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, path, REAL(strlen)(path) + 1);
+  return res;
+}
+#define INIT_DEVNAME_R COMMON_INTERCEPT_FUNCTION(devname_r);
+#else
+#define INIT_DEVNAME_R
+#endif
+
+#if SANITIZER_INTERCEPT_FGETLN
+INTERCEPTOR(char *, fgetln, __sanitizer_FILE *stream, SIZE_T *len) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, fgetln, stream, len);
+  char *str = REAL(fgetln)(stream, len);
+  if (str && len) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, len, sizeof(*len));
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, str, *len);
+  }
+  return str;
+}
+#define INIT_FGETLN COMMON_INTERCEPT_FUNCTION(fgetln)
+#else
+#define INIT_FGETLN
+#endif
+
+#if SANITIZER_INTERCEPT_STRMODE
+INTERCEPTOR(void, strmode, u32 mode, char *bp) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, strmode, mode, bp);
+  REAL(strmode)(mode, bp);
+  if (bp)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, bp, REAL(strlen)(bp) + 1);
+}
+#define INIT_STRMODE COMMON_INTERCEPT_FUNCTION(strmode)
+#else
+#define INIT_STRMODE
+#endif
+
+#if SANITIZER_INTERCEPT_TTYENT
+INTERCEPTOR(struct __sanitizer_ttyent *, getttyent, void) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getttyent);
+  struct __sanitizer_ttyent *ttyent = REAL(getttyent)();
+  if (ttyent)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ttyent, struct_ttyent_sz);
+  return ttyent;
+}
+INTERCEPTOR(struct __sanitizer_ttyent *, getttynam, char *name) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getttynam, name);
+  if (name)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, name, REAL(strlen)(name) + 1);
+  struct __sanitizer_ttyent *ttyent = REAL(getttynam)(name);
+  if (ttyent)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ttyent, struct_ttyent_sz);
+  return ttyent;
+}
+INTERCEPTOR(int, setttyentpath, char *path) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, setttyentpath, path);
+  if (path)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, path, REAL(strlen)(path) + 1);
+  return REAL(setttyentpath)(path);
+}
+#define INIT_TTYENT \
+  COMMON_INTERCEPT_FUNCTION(getttyent); \
+  COMMON_INTERCEPT_FUNCTION(getttynam); \
+  COMMON_INTERCEPT_FUNCTION(setttyentpath)
+#else
+#define INIT_TTYENT
+#endif
+
+#if SANITIZER_INTERCEPT_PROTOENT
+INTERCEPTOR(struct __sanitizer_protoent *, getprotoent) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getprotoent);
+  struct __sanitizer_protoent *p = REAL(getprotoent)();
+  if (p) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p, sizeof(*p));
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->p_name, REAL(strlen)(p->p_name) + 1);
+
+    SIZE_T pp_size = 1; // One handles the trailing \0
+
+    for (char **pp = p->p_aliases; *pp; ++pp, ++pp_size)
+       COMMON_INTERCEPTOR_WRITE_RANGE(ctx, *pp, REAL(strlen)(*pp) + 1);
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->p_aliases,
+                                   pp_size * sizeof(char **));
+  }
+  return p;
+}
+
+INTERCEPTOR(struct __sanitizer_protoent *, getprotobyname, const char *name) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getprotobyname, name);
+  if (name)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, name, REAL(strlen)(name) + 1);
+  struct __sanitizer_protoent *p = REAL(getprotobyname)(name);
+  if (p) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p, sizeof(*p));
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->p_name, REAL(strlen)(p->p_name) + 1);
+
+    SIZE_T pp_size = 1; // One handles the trailing \0
+
+    for (char **pp = p->p_aliases; *pp; ++pp, ++pp_size)
+       COMMON_INTERCEPTOR_WRITE_RANGE(ctx, *pp, REAL(strlen)(*pp) + 1);
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->p_aliases,
+                                   pp_size * sizeof(char **));
+  }
+  return p;
+}
+
+INTERCEPTOR(struct __sanitizer_protoent *, getprotobynumber, int proto) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getprotobynumber, proto);
+  struct __sanitizer_protoent *p = REAL(getprotobynumber)(proto);
+  if (p) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p, sizeof(*p));
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->p_name, REAL(strlen)(p->p_name) + 1);
+
+    SIZE_T pp_size = 1; // One handles the trailing \0
+
+    for (char **pp = p->p_aliases; *pp; ++pp, ++pp_size)
+       COMMON_INTERCEPTOR_WRITE_RANGE(ctx, *pp, REAL(strlen)(*pp) + 1);
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->p_aliases,
+                                   pp_size * sizeof(char **));
+  }
+  return p;
+}
+#define INIT_PROTOENT \
+  COMMON_INTERCEPT_FUNCTION(getprotoent); \
+  COMMON_INTERCEPT_FUNCTION(getprotobyname); \
+  COMMON_INTERCEPT_FUNCTION(getprotobynumber)
+#else
+#define INIT_PROTOENT
+#endif
+
+#if SANITIZER_INTERCEPT_NETENT
+INTERCEPTOR(struct __sanitizer_netent *, getnetent) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getnetent);
+  struct __sanitizer_netent *n = REAL(getnetent)();
+  if (n) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n, sizeof(*n));
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n->n_name, REAL(strlen)(n->n_name) + 1);
+
+    SIZE_T nn_size = 1; // One handles the trailing \0
+
+    for (char **nn = n->n_aliases; *nn; ++nn, ++nn_size)
+      COMMON_INTERCEPTOR_WRITE_RANGE(ctx, *nn, REAL(strlen)(*nn) + 1);
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n->n_aliases,
+                                   nn_size * sizeof(char **));
+  }
+  return n;
+}
+
+INTERCEPTOR(struct __sanitizer_netent *, getnetbyname, const char *name) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getnetbyname, name);
+  if (name)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, name, REAL(strlen)(name) + 1);
+  struct __sanitizer_netent *n = REAL(getnetbyname)(name);
+  if (n) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n, sizeof(*n));
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n->n_name, REAL(strlen)(n->n_name) + 1);
+
+    SIZE_T nn_size = 1; // One handles the trailing \0
+
+    for (char **nn = n->n_aliases; *nn; ++nn, ++nn_size)
+      COMMON_INTERCEPTOR_WRITE_RANGE(ctx, *nn, REAL(strlen)(*nn) + 1);
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n->n_aliases,
+                                   nn_size * sizeof(char **));
+  }
+  return n;
+}
+
+INTERCEPTOR(struct __sanitizer_netent *, getnetbyaddr, u32 net, int type) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getnetbyaddr, net, type);
+  struct __sanitizer_netent *n = REAL(getnetbyaddr)(net, type);
+  if (n) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n, sizeof(*n));
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n->n_name, REAL(strlen)(n->n_name) + 1);
+
+    SIZE_T nn_size = 1; // One handles the trailing \0
+
+    for (char **nn = n->n_aliases; *nn; ++nn, ++nn_size)
+      COMMON_INTERCEPTOR_WRITE_RANGE(ctx, *nn, REAL(strlen)(*nn) + 1);
+
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, n->n_aliases,
+                                   nn_size * sizeof(char **));
+  }
+  return n;
+}
+#define INIT_NETENT \
+  COMMON_INTERCEPT_FUNCTION(getnetent); \
+  COMMON_INTERCEPT_FUNCTION(getnetbyname); \
+  COMMON_INTERCEPT_FUNCTION(getnetbyaddr)
+#else
+#define INIT_NETENT
+#endif
+
 static void InitializeCommonInterceptors() {
   static u64 metadata_mem[sizeof(MetadataHashMap) / sizeof(u64) + 1];
   interceptor_metadata_map = new((void *)&metadata_mem) MetadataHashMap();
 
+  INIT_MMAP;
+  INIT_MMAP64;
   INIT_TEXTDOMAIN;
   INIT_STRLEN;
   INIT_STRNLEN;
@@ -6653,6 +7155,8 @@ static void InitializeCommonInterceptors() {
   INIT_STRSPN;
   INIT_STRTOK;
   INIT_STRPBRK;
+  INIT_STRXFRM;
+  INIT___STRXFRM_L;
   INIT_MEMSET;
   INIT_MEMMOVE;
   INIT_MEMCPY;
@@ -6834,6 +7338,7 @@ static void InitializeCommonInterceptors() {
   INIT_SEND_SENDTO;
   INIT_STAT;
   INIT_EVENTFD_READ_WRITE;
+  INIT_LSTAT;
   INIT___XSTAT;
   INIT___XSTAT64;
   INIT___LXSTAT;
@@ -6844,6 +7349,8 @@ static void InitializeCommonInterceptors() {
   INIT_GETLOADAVG;
   INIT_WCSLEN;
   INIT_WCSCAT;
+  INIT_WCSXFRM;
+  INIT___WCSXFRM_L;
   INIT_ACCT;
   INIT_USER_FROM_UID;
   INIT_UID_FROM_USER;
@@ -6852,6 +7359,18 @@ static void InitializeCommonInterceptors() {
   INIT_ACCESS;
   INIT_FACCESSAT;
   INIT_GETGROUPLIST;
+  INIT_READLINK;
+  INIT_READLINKAT;
+  INIT_NAME_TO_HANDLE_AT;
+  INIT_OPEN_BY_HANDLE_AT;
+  INIT_STRLCPY;
+  INIT_DEVNAME;
+  INIT_DEVNAME_R;
+  INIT_FGETLN;
+  INIT_STRMODE;
+  INIT_TTYENT;
+  INIT_PROTOENT;
+  INIT_NETENT;
 
 #if SANITIZER_NETBSD
   COMMON_INTERCEPT_FUNCTION(__libc_mutex_lock);

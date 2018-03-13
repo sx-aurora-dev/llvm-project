@@ -569,10 +569,8 @@ TSAN_INTERCEPTOR(int, sigsetjmp, void *env);
 #define TSAN_INTERCEPTOR_SETJMP TSAN_INTERCEPTOR_SETJMP__(setjmp_symname)
 #define TSAN_INTERCEPTOR_SIGSETJMP TSAN_INTERCEPTOR_SETJMP__(sigsetjmp_symname)
 
-#define TSAN_STRING_SETJMP_(x) # x
-#define TSAN_STRING_SETJMP__(x) TSAN_STRING_SETJMP_(x)
-#define TSAN_STRING_SETJMP TSAN_STRING_SETJMP__(setjmp_symname)
-#define TSAN_STRING_SIGSETJMP TSAN_STRING_SETJMP__(sigsetjmp_symname)
+#define TSAN_STRING_SETJMP SANITIZER_STRINGIFY(setjmp_symname)
+#define TSAN_STRING_SIGSETJMP SANITIZER_STRINGIFY(sigsetjmp_symname)
 
 // Not called.  Merely to satisfy TSAN_INTERCEPT().
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
@@ -762,16 +760,14 @@ static bool fix_mmap_addr(void **addr, long_t sz, int flags) {
   return true;
 }
 
-TSAN_INTERCEPTOR(void *, mmap, void *addr, SIZE_T sz, int prot, int flags,
-                 int fd, OFF_T off) {
-  SCOPED_TSAN_INTERCEPTOR(mmap, addr, sz, prot, flags, fd, off);
-  if (!fix_mmap_addr(&addr, sz, flags))
-    return MAP_FAILED;
-  void *res = REAL(mmap)(addr, sz, prot, flags, fd, off);
+template <class Mmap>
+static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
+                              void *addr, SIZE_T sz, int prot, int flags,
+                              int fd, OFF64_T off) {
+  if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+  void *res = real_mmap(addr, sz, prot, flags, fd, off);
   if (res != MAP_FAILED) {
-    if (fd > 0)
-      FdAccess(thr, pc, fd);
-
+    if (fd > 0) FdAccess(thr, pc, fd);
     if (thr->ignore_reads_and_writes == 0)
       MemoryRangeImitateWrite(thr, pc, (uptr)res, sz);
     else
@@ -779,29 +775,6 @@ TSAN_INTERCEPTOR(void *, mmap, void *addr, SIZE_T sz, int prot, int flags,
   }
   return res;
 }
-
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(void *, mmap64, void *addr, SIZE_T sz, int prot, int flags,
-                 int fd, OFF64_T off) {
-  SCOPED_TSAN_INTERCEPTOR(mmap64, addr, sz, prot, flags, fd, off);
-  if (!fix_mmap_addr(&addr, sz, flags))
-    return MAP_FAILED;
-  void *res = REAL(mmap64)(addr, sz, prot, flags, fd, off);
-  if (res != MAP_FAILED) {
-    if (fd > 0)
-      FdAccess(thr, pc, fd);
-
-    if (thr->ignore_reads_and_writes == 0)
-      MemoryRangeImitateWrite(thr, pc, (uptr)res, sz);
-    else
-      MemoryResetRange(thr, pc, (uptr)res, sz);
-  }
-  return res;
-}
-#define TSAN_MAYBE_INTERCEPT_MMAP64 TSAN_INTERCEPT(mmap64)
-#else
-#define TSAN_MAYBE_INTERCEPT_MMAP64
-#endif
 
 TSAN_INTERCEPTOR(int, munmap, void *addr, long_t sz) {
   SCOPED_TSAN_INTERCEPTOR(munmap, addr, sz);
@@ -2313,6 +2286,13 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
   MutexInvalidAccess(((TsanInterceptorContext *)ctx)->thr, \
                      ((TsanInterceptorContext *)ctx)->pc, (uptr)m)
 
+#define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd,  \
+                                     off)                                   \
+  do {                                                                      \
+    return mmap_interceptor(thr, pc, REAL(mmap), addr, sz, prot, flags, fd, \
+                            off);                                           \
+  } while (false)
+
 #if !SANITIZER_MAC
 #define COMMON_INTERCEPTOR_HANDLE_RECVMSG(ctx, msg) \
   HandleRecvmsg(((TsanInterceptorContext *)ctx)->thr, \
@@ -2426,7 +2406,7 @@ struct ScopedSyscall {
   }
 };
 
-#if !SANITIZER_FREEBSD && !SANITIZER_MAC && !SANITIZER_NETBSD
+#if !SANITIZER_FREEBSD && !SANITIZER_MAC
 static void syscall_access_range(uptr pc, uptr p, uptr s, bool write) {
   TSAN_SYSCALL();
   MemoryAccessRange(thr, pc, p, s, write);
@@ -2519,6 +2499,7 @@ static void syscall_post_fork(uptr pc, int pid) {
   syscall_post_fork(GET_CALLER_PC(), res)
 
 #include "sanitizer_common/sanitizer_common_syscalls.inc"
+#include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
 
 #ifdef NEED_TLS_GET_ADDR
 // Define own interceptor instead of sanitizer_common's for three reasons:
@@ -2536,7 +2517,8 @@ TSAN_INTERCEPTOR(void *, __tls_get_addr, void *arg) {
   ThreadState *thr = cur_thread();
   if (!thr)
     return res;
-  DTLS::DTV *dtv = DTLS_on_tls_get_addr(arg, res, thr->tls_addr, thr->tls_size);
+  DTLS::DTV *dtv = DTLS_on_tls_get_addr(arg, res, thr->tls_addr,
+                                        thr->tls_addr + thr->tls_size);
   if (!dtv)
     return res;
   // New DTLS block has been allocated.
@@ -2635,8 +2617,6 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(realloc);
   TSAN_INTERCEPT(free);
   TSAN_INTERCEPT(cfree);
-  TSAN_INTERCEPT(mmap);
-  TSAN_MAYBE_INTERCEPT_MMAP64;
   TSAN_INTERCEPT(munmap);
   TSAN_MAYBE_INTERCEPT_MEMALIGN;
   TSAN_INTERCEPT(valloc);

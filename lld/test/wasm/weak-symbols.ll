@@ -1,7 +1,7 @@
 ; RUN: llc -filetype=obj %p/Inputs/weak-symbol1.ll -o %t1.o
 ; RUN: llc -filetype=obj %p/Inputs/weak-symbol2.ll -o %t2.o
 ; RUN: llc -filetype=obj %s -o %t.o
-; RUN: lld -flavor wasm -o %t.wasm %t.o %t1.o %t2.o
+; RUN: wasm-ld -no-gc-sections --check-signatures -o %t.wasm %t.o %t1.o %t2.o
 ; RUN: obj2yaml %t.wasm | FileCheck %s
 
 target triple = "wasm32-unknown-unknown-wasm"
@@ -9,11 +9,11 @@ target triple = "wasm32-unknown-unknown-wasm"
 declare i32 @weakFn() local_unnamed_addr
 @weakGlobal = external global i32
 
-define i32 @_start() local_unnamed_addr {
+define void @_start() local_unnamed_addr {
 entry:
   %call = call i32 @weakFn()
   %val = load i32, i32* @weakGlobal, align 4
-  ret i32 %val
+  ret void
 }
 
 ; CHECK:      --- !WASM
@@ -23,13 +23,13 @@ entry:
 ; CHECK-NEXT:   - Type:            TYPE
 ; CHECK-NEXT:     Signatures:
 ; CHECK-NEXT:       - Index:           0
-; CHECK-NEXT:         ReturnType:      I32
-; CHECK-NEXT:         ParamTypes:
-; CHECK-NEXT:       - Index:           1
 ; CHECK-NEXT:         ReturnType:      NORESULT
 ; CHECK-NEXT:         ParamTypes:
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         ReturnType:      I32
+; CHECK-NEXT:         ParamTypes:
 ; CHECK-NEXT:   - Type:            FUNCTION
-; CHECK-NEXT:     FunctionTypes:   [ 0, 0, 0, 0, 0, 1 ]
+; CHECK-NEXT:     FunctionTypes:   [ 0, 1, 1, 1, 1, 0 ]
 ; CHECK-NEXT:   - Type:            TABLE
 ; CHECK-NEXT:     Tables:
 ; CHECK-NEXT:       - ElemType:        ANYFUNC
@@ -54,11 +54,29 @@ entry:
 ; CHECK-NEXT:         InitExpr:
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           66576
+; CHECK-NEXT:       - Index:           2
+; CHECK-NEXT:         Type:            I32
+; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         InitExpr:
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1032
+; CHECK-NEXT:       - Index:           3
+; CHECK-NEXT:         Type:            I32
+; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         InitExpr:
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1024
 ; CHECK-NEXT:   - Type:            EXPORT
 ; CHECK-NEXT:     Exports:
 ; CHECK-NEXT:       - Name:            memory
 ; CHECK-NEXT:         Kind:            MEMORY
 ; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:       - Name:            __heap_base
+; CHECK-NEXT:         Kind:            GLOBAL
+; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:       - Name:            __data_end
+; CHECK-NEXT:         Kind:            GLOBAL
+; CHECK-NEXT:         Index:           2
 ; CHECK-NEXT:       - Name:            _start
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           0
@@ -68,12 +86,12 @@ entry:
 ; CHECK-NEXT:       - Name:            exportWeak1
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           2
+; CHECK-NEXT:       - Name:            weakGlobal
+; CHECK-NEXT:         Kind:            GLOBAL
+; CHECK-NEXT:         Index:           3
 ; CHECK-NEXT:       - Name:            exportWeak2
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           4
-; CHECK-NEXT:       - Name:            __heap_base
-; CHECK-NEXT:         Kind:            GLOBAL
-; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:   - Type:            ELEM
 ; CHECK-NEXT:     Segments:
 ; CHECK-NEXT:       - Offset:
@@ -84,7 +102,7 @@ entry:
 ; CHECK-NEXT:     Functions:
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         Locals:
-; CHECK-NEXT:         Body:            1081808080001A4100280280888080000B
+; CHECK-NEXT:         Body:            1081808080001A0B
 ; CHECK-NEXT:       - Index:           1
 ; CHECK-NEXT:         Locals:
 ; CHECK-NEXT:         Body:            41010B
@@ -108,9 +126,6 @@ entry:
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           1024
 ; CHECK-NEXT:         Content:         '0100000002000000'
-; CHECK-NEXT:   - Type:            CUSTOM
-; CHECK-NEXT:     Name:            linking
-; CHECK-NEXT:     DataSize:        8
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:

@@ -107,6 +107,9 @@ lldb_platform_name = None
 lldb_platform_url = None
 lldb_platform_working_dir = None
 
+# The base directory in which the tests are being built.
+test_build_dir = None
+
 # Parallel execution settings
 is_inferior_test_runner = False
 multiprocess_test_subdir = None
@@ -129,10 +132,6 @@ rerun_max_file_threhold = 0
 # The names of all tests. Used to assert we don't have two tests with the
 # same base name.
 all_tests = set()
-
-# safe default
-setCrashInfoHook = lambda x: None
-
 
 def shouldSkipBecauseOfCategories(test_categories):
     if useCategories:

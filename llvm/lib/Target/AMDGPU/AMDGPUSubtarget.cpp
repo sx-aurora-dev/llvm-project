@@ -136,6 +136,7 @@ AMDGPUSubtarget::AMDGPUSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
 
     FP64(false),
     FMA(false),
+    MIMG_R128(false),
     IsGCN(false),
     GCN3Encoding(false),
     CIInsts(false),
@@ -366,12 +367,12 @@ R600Subtarget::R600Subtarget(const Triple &TT, StringRef GPU, StringRef FS,
   TLInfo(TM, *this) {}
 
 SISubtarget::SISubtarget(const Triple &TT, StringRef GPU, StringRef FS,
-                         const TargetMachine &TM)
+                         const GCNTargetMachine &TM)
     : AMDGPUSubtarget(TT, GPU, FS, TM), InstrInfo(*this),
       FrameLowering(TargetFrameLowering::StackGrowsUp, getStackAlignment(), 0),
       TLInfo(TM, *this) {
   CallLoweringInfo.reset(new AMDGPUCallLowering(*getTargetLowering()));
-  Legalizer.reset(new AMDGPULegalizerInfo());
+  Legalizer.reset(new AMDGPULegalizerInfo(*this, TM));
 
   RegBankInfo.reset(new AMDGPURegisterBankInfo(*getRegisterInfo()));
   InstSelector.reset(new AMDGPUInstructionSelector(

@@ -685,12 +685,13 @@ MVT TargetLoweringBase::getScalarShiftAmountTy(const DataLayout &DL,
   return MVT::getIntegerVT(8 * DL.getPointerSize(0));
 }
 
-EVT TargetLoweringBase::getShiftAmountTy(EVT LHSTy,
-                                         const DataLayout &DL) const {
+EVT TargetLoweringBase::getShiftAmountTy(EVT LHSTy, const DataLayout &DL,
+                                         bool LegalTypes) const {
   assert(LHSTy.isInteger() && "Shift amount is not an integer type!");
   if (LHSTy.isVector())
     return LHSTy;
-  return getScalarShiftAmountTy(DL, LHSTy);
+  return LegalTypes ? getScalarShiftAmountTy(DL, LHSTy)
+                    : getPointerTy(DL);
 }
 
 bool TargetLoweringBase::canOpTrap(unsigned Op, EVT VT) const {
@@ -982,6 +983,21 @@ TargetLoweringBase::emitPatchPoint(MachineInstr &InitialMI,
     MI->eraseFromParent();
     MI = MIB;
   }
+  return MBB;
+}
+
+MachineBasicBlock *
+TargetLoweringBase::emitXRayCustomEvent(MachineInstr &MI,
+                                        MachineBasicBlock *MBB) const {
+  assert(MI.getOpcode() == TargetOpcode::PATCHABLE_EVENT_CALL &&
+         "Called emitXRayCustomEvent on the wrong MI!");
+  auto &MF = *MI.getMF();
+  auto MIB = BuildMI(MF, MI.getDebugLoc(), MI.getDesc());
+  for (unsigned OpIdx = 0; OpIdx != MI.getNumOperands(); ++OpIdx)
+    MIB.add(MI.getOperand(OpIdx));
+
+  MBB->insert(MachineBasicBlock::iterator(MI), MIB);
+  MI.eraseFromParent();
   return MBB;
 }
 

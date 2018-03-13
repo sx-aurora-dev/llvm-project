@@ -305,8 +305,16 @@ def FeatureFastLZCNT
     : SubtargetFeature<
           "fast-lzcnt", "HasFastLZCNT", "true",
           "LZCNT instructions are as fast as most simple integer ops">;
-
-
+// If the target can efficiently decode NOPs upto 11-bytes in length.
+def FeatureFast11ByteNOP
+    : SubtargetFeature<
+          "fast-11bytenop", "HasFast11ByteNOP", "true",
+          "Target can quickly decode up to 11 byte NOPs">;
+// If the target can efficiently decode NOPs upto 15-bytes in length.
+def FeatureFast15ByteNOP
+    : SubtargetFeature<
+          "fast-15bytenop", "HasFast15ByteNOP", "true",
+          "Target can quickly decode up to 15 byte NOPs">;
 // Sandy Bridge and newer processors can use SHLD with the same source on both
 // inputs to implement rotate to avoid the partial flag update of the normal
 // rotate instructions.
@@ -544,6 +552,7 @@ class SilvermontProc<string Name> : ProcessorModel<Name, SLMModel, [
   FeatureSlowLEA,
   FeatureSlowIncDec,
   FeatureSlowPMULLD,
+  FeatureRDRAND,
   FeatureLAHFSAHF
 ]>;
 def : SilvermontProc<"silvermont">;
@@ -766,12 +775,19 @@ def SKXFeatures : ProcessorFeatures<SKLFeatures.Value, [
 class SkylakeServerProc<string Name> : ProcModel<Name, SkylakeServerModel,
                                                  SKXFeatures.Value, [
   ProcIntelSKX,
-  FeatureHasFastGather
+  FeatureHasFastGather,
+  FeaturePOPCNTFalseDeps
 ]>;
 def : SkylakeServerProc<"skylake-avx512">;
 def : SkylakeServerProc<"skx">; // Legacy alias.
 
-def CNLFeatures : ProcessorFeatures<SKXFeatures.Value, [
+def CNLFeatures : ProcessorFeatures<SKLFeatures.Value, [
+  FeatureAVX512,
+  FeatureCDI,
+  FeatureDQI,
+  FeatureBWI,
+  FeatureVLX,
+  FeaturePKU,
   FeatureVBMI,
   FeatureIFMA,
   FeatureSHA
@@ -848,7 +864,8 @@ def : Proc<"btver1", [
   FeatureLZCNT,
   FeaturePOPCNT,
   FeatureSlowSHLD,
-  FeatureLAHFSAHF
+  FeatureLAHFSAHF,
+  FeatureFast15ByteNOP
 ]>;
 
 // Jaguar
@@ -873,6 +890,7 @@ def : ProcessorModel<"btver2", BtVer2Model, [
   FeatureXSAVEOPT,
   FeatureSlowSHLD,
   FeatureLAHFSAHF,
+  FeatureFast15ByteNOP,
   FeatureFastPartialYMMorZMMWrite
 ]>;
 
@@ -896,6 +914,7 @@ def : Proc<"bdver1", [
   FeatureLWP,
   FeatureSlowSHLD,
   FeatureLAHFSAHF,
+  FeatureFast11ByteNOP,
   FeatureMacroFusion
 ]>;
 // Piledriver
@@ -922,6 +941,7 @@ def : Proc<"bdver2", [
   FeatureFMA,
   FeatureSlowSHLD,
   FeatureLAHFSAHF,
+  FeatureFast11ByteNOP,
   FeatureMacroFusion
 ]>;
 
@@ -951,6 +971,7 @@ def : Proc<"bdver3", [
   FeatureSlowSHLD,
   FeatureFSGSBase,
   FeatureLAHFSAHF,
+  FeatureFast11ByteNOP,
   FeatureMacroFusion
 ]>;
 
@@ -980,6 +1001,7 @@ def : Proc<"bdver4", [
   FeatureSlowSHLD,
   FeatureFSGSBase,
   FeatureLAHFSAHF,
+  FeatureFast11ByteNOP,
   FeatureMWAITX,
   FeatureMacroFusion
 ]>;
@@ -1002,6 +1024,7 @@ def: ProcessorModel<"znver1", Znver1Model, [
   FeatureFastLZCNT,
   FeatureLAHFSAHF,
   FeatureLZCNT,
+  FeatureFast15ByteNOP,
   FeatureMacroFusion,
   FeatureMMX,
   FeatureMOVBE,
@@ -1107,4 +1130,5 @@ def X86 : Target {
   let InstructionSet = X86InstrInfo;
   let AssemblyParserVariants = [ATTAsmParserVariant, IntelAsmParserVariant];
   let AssemblyWriters = [ATTAsmWriter, IntelAsmWriter];
+  let AllowRegisterRenaming = 1;
 }

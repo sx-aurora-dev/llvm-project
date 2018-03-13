@@ -60,8 +60,7 @@ protected:
                          const DWARFDebugAbbrev *DA, const DWARFSection *RS,
                          StringRef SS, const DWARFSection &SOS,
                          const DWARFSection *AOS, const DWARFSection &LS,
-                         StringRef LSS, bool isLittleEndian, bool isDWO,
-                         bool Lazy) = 0;
+                         bool isLittleEndian, bool isDWO, bool Lazy) = 0;
 };
 
 const DWARFUnitIndex &getDWARFUnitIndex(DWARFContext &Context,
@@ -120,7 +119,7 @@ private:
   void parseImpl(DWARFContext &Context, const DWARFSection &Section,
                  const DWARFDebugAbbrev *DA, const DWARFSection *RS,
                  StringRef SS, const DWARFSection &SOS, const DWARFSection *AOS,
-                 const DWARFSection &LS, StringRef LSS, bool LE, bool IsDWO,
+                 const DWARFSection &LS, bool LE, bool IsDWO,
                  bool Lazy) override {
     if (Parsed)
       return;
@@ -134,7 +133,7 @@ private:
         if (!Data.isValidOffset(Offset))
           return nullptr;
         auto U = llvm::make_unique<UnitType>(
-            Context, Section, DA, RS, SS, SOS, AOS, LS, LSS, LE, IsDWO, *this,
+            Context, Section, DA, RS, SS, SOS, AOS, LS, LE, IsDWO, *this,
             Index ? Index->getFromOffset(Offset) : nullptr);
         if (!U->extract(Data, &Offset))
           return nullptr;
@@ -198,7 +197,6 @@ class DWARFUnit {
   const DWARFSection *RangeSection;
   uint32_t RangeSectionBase;
   const DWARFSection &LineSection;
-  StringRef LineStringSection;
   StringRef StringSection;
   const DWARFSection &StringOffsetSection;
   const DWARFSection *AddrOffsetSection;
@@ -222,40 +220,10 @@ class DWARFUnit {
   /// The compile unit debug information entry items.
   std::vector<DWARFDebugInfoEntry> DieArray;
 
-  /// The vector of inlined subroutine DIEs that we can map directly to from
-  /// their subprogram below.
-  std::vector<DWARFDie> InlinedSubroutineDIEs;
-
-  /// A type representing a subprogram DIE and a map (built using a sorted
-  /// vector) into that subprogram's inlined subroutine DIEs.
-  struct SubprogramDIEAddrInfo {
-    DWARFDie SubprogramDIE;
-
-    uint64_t SubprogramBasePC;
-
-    /// A vector sorted to allow mapping from a relative PC to the inlined
-    /// subroutine DIE with the most specific address range covering that PC.
-    ///
-    /// The PCs are relative to the `SubprogramBasePC`.
-    ///
-    /// The vector is sorted in ascending order of the first int which
-    /// represents the relative PC for an interval in the map. The second int
-    /// represents the index into the `InlinedSubroutineDIEs` vector of the DIE
-    /// that interval maps to. An index of '-1` indicates an empty mapping. The
-    /// interval covered is from the `.first` relative PC to the next entry's
-    /// `.first` relative PC.
-    std::vector<std::pair<uint32_t, int32_t>> InlinedSubroutineDIEAddrMap;
-  };
-
-  /// Vector of the subprogram DIEs and their subroutine address maps.
-  std::vector<SubprogramDIEAddrInfo> SubprogramDIEAddrInfos;
-
-  /// A vector sorted to allow mapping from a PC to the subprogram DIE (and
-  /// associated addr map) index. Subprograms with overlapping PC ranges aren't
-  /// supported here. Nothing will crash, but the mapping may be inaccurate.
-  /// This vector may also contain "empty" ranges marked by an address with
-  /// a DIE index of '-1'.
-  std::vector<std::pair<uint64_t, int64_t>> SubprogramDIEAddrMap;
+  /// Map from range's start address to end address and corresponding DIE.
+  /// IntervalMap does not support range removal, as a result, we use the
+  /// std::map::upper_bound for address range lookup.
+  std::map<uint64_t, std::pair<uint64_t, DWARFDie>> AddrDieMap;
 
   using die_iterator_range =
       iterator_range<std::vector<DWARFDebugInfoEntry>::iterator>;
@@ -295,7 +263,7 @@ public:
   DWARFUnit(DWARFContext &Context, const DWARFSection &Section,
             const DWARFDebugAbbrev *DA, const DWARFSection *RS, StringRef SS,
             const DWARFSection &SOS, const DWARFSection *AOS,
-            const DWARFSection &LS, StringRef LSS, bool LE, bool IsDWO,
+            const DWARFSection &LS, bool LE, bool IsDWO,
             const DWARFUnitSectionBase &UnitSection,
             const DWARFUnitIndex::Entry *IndexEntry = nullptr);
 
@@ -304,7 +272,6 @@ public:
   DWARFContext& getContext() const { return Context; }
 
   const DWARFSection &getLineSection() const { return LineSection; }
-  StringRef getLineStringSection() const { return LineStringSection; }
   StringRef getStringSection() const { return StringSection; }
   const DWARFSection &getStringOffsetSection() const {
     return StringOffsetSection;
@@ -314,6 +281,9 @@ public:
     AddrOffsetSection = AOS;
     AddrOffsetSectionBase = Base;
   }
+
+  /// Recursively update address to Die map.
+  void updateAddressDieMap(DWARFDie Die);
 
   void setRangesSection(const DWARFSection *RS, uint32_t Base) {
     RangeSection = RS;
@@ -325,9 +295,6 @@ public:
 
   DWARFDataExtractor getDebugInfoExtractor() const;
 
-  DataExtractor getLineStringExtractor() const {
-    return DataExtractor(LineStringSection, false, 0);
-  }
   DataExtractor getStringExtractor() const {
     return DataExtractor(StringSection, false, 0);
   }
@@ -512,9 +479,6 @@ private:
   /// parseDWO - Parses .dwo file for current compile unit. Returns true if
   /// it was actually constructed.
   bool parseDWO();
-
-  void buildSubprogramDIEAddrMap();
-  void buildInlinedSubroutineDIEAddrMap(SubprogramDIEAddrInfo &SPInfo);
 };
 
 } // end namespace llvm

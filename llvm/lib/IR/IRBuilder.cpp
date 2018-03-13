@@ -59,8 +59,11 @@ Value *IRBuilderBase::getCastedInt8PtrValue(Value *Ptr) {
 
 static CallInst *createCallHelper(Value *Callee, ArrayRef<Value *> Ops,
                                   IRBuilderBase *Builder,
-                                  const Twine& Name="") {
+                                  const Twine &Name = "",
+                                  Instruction *FMFSource = nullptr) {
   CallInst *CI = CallInst::Create(Callee, Ops, Name);
+  if (FMFSource)
+    CI->copyFastMathFlags(FMFSource);
   Builder->GetInsertBlock()->getInstList().insert(Builder->GetInsertPoint(),CI);
   Builder->SetInstDebugLocation(CI);
   return CI;  
@@ -108,10 +111,11 @@ CreateMemSet(Value *Ptr, Value *Val, Value *Size, unsigned Align,
 }
 
 CallInst *IRBuilderBase::
-CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align,
-             bool isVolatile, MDNode *TBAATag, MDNode *TBAAStructTag,
-             MDNode *ScopeTag, MDNode *NoAliasTag) {
-  assert((Align == 0 || isPowerOf2_32(Align)) && "Must be 0 or a power of 2");
+CreateMemCpy(Value *Dst, unsigned DstAlign, Value *Src, unsigned SrcAlign,
+             Value *Size, bool isVolatile, MDNode *TBAATag,
+             MDNode *TBAAStructTag, MDNode *ScopeTag, MDNode *NoAliasTag) {
+  assert((DstAlign == 0 || isPowerOf2_32(DstAlign)) && "Must be 0 or a power of 2");
+  assert((SrcAlign == 0 || isPowerOf2_32(SrcAlign)) && "Must be 0 or a power of 2");
   Dst = getCastedInt8PtrValue(Dst);
   Src = getCastedInt8PtrValue(Src);
 
@@ -122,8 +126,11 @@ CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align,
   
   CallInst *CI = createCallHelper(TheFn, Ops, this);
 
-  if (Align > 0)
-    cast<MemCpyInst>(CI)->setAlignment(Align);
+  auto* MCI = cast<MemCpyInst>(CI);
+  if (DstAlign > 0)
+    MCI->setDestAlignment(DstAlign);
+  if (SrcAlign > 0)
+    MCI->setSourceAlignment(SrcAlign);
 
   // Set the TBAA info if present.
   if (TBAATag)
@@ -184,10 +191,11 @@ CallInst *IRBuilderBase::CreateElementUnorderedAtomicMemCpy(
 }
 
 CallInst *IRBuilderBase::
-CreateMemMove(Value *Dst, Value *Src, Value *Size, unsigned Align,
-              bool isVolatile, MDNode *TBAATag, MDNode *ScopeTag,
+CreateMemMove(Value *Dst, unsigned DstAlign, Value *Src, unsigned SrcAlign,
+              Value *Size, bool isVolatile, MDNode *TBAATag, MDNode *ScopeTag,
               MDNode *NoAliasTag) {
-  assert((Align == 0 || isPowerOf2_32(Align)) && "Must be 0 or a power of 2");
+  assert((DstAlign == 0 || isPowerOf2_32(DstAlign)) && "Must be 0 or a power of 2");
+  assert((SrcAlign == 0 || isPowerOf2_32(SrcAlign)) && "Must be 0 or a power of 2");
   Dst = getCastedInt8PtrValue(Dst);
   Src = getCastedInt8PtrValue(Src);
 
@@ -199,8 +207,10 @@ CreateMemMove(Value *Dst, Value *Src, Value *Size, unsigned Align,
   CallInst *CI = createCallHelper(TheFn, Ops, this);
 
   auto *MMI = cast<MemMoveInst>(CI);
-  if (Align > 0)
-    MMI->setAlignment(Align);
+  if (DstAlign > 0)
+    MMI->setDestAlignment(DstAlign);
+  if (SrcAlign > 0)
+    MMI->setSourceAlignment(SrcAlign);
 
   // Set the TBAA info if present.
   if (TBAATag)
@@ -639,7 +649,18 @@ CallInst *IRBuilderBase::CreateGCRelocate(Instruction *Statepoint,
 CallInst *IRBuilderBase::CreateBinaryIntrinsic(Intrinsic::ID ID,
                                                Value *LHS, Value *RHS,
                                                const Twine &Name) {
-  Module *M = BB->getParent()->getParent();
-  Function *Fn =  Intrinsic::getDeclaration(M, ID, { LHS->getType() });
+  Module *M = BB->getModule();
+  Function *Fn = Intrinsic::getDeclaration(M, ID, { LHS->getType() });
   return createCallHelper(Fn, { LHS, RHS }, this, Name);
 }
+
+CallInst *IRBuilderBase::CreateIntrinsic(Intrinsic::ID ID,
+                                         ArrayRef<Value *> Args,
+                                         Instruction *FMFSource,
+                                         const Twine &Name) {
+  assert(!Args.empty() && "Expected at least one argument to intrinsic");
+  Module *M = BB->getModule();
+  Function *Fn = Intrinsic::getDeclaration(M, ID, { Args.front()->getType() });
+  return createCallHelper(Fn, Args, this, Name, FMFSource);
+}
+

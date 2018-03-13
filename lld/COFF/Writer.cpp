@@ -26,7 +26,9 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/Parallel.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/RandomNumberGenerator.h"
+#include "llvm/Support/xxhash.h"
 #include <algorithm>
 #include <cstdio>
 #include <map>
@@ -41,8 +43,40 @@ using namespace llvm::support::endian;
 using namespace lld;
 using namespace lld::coff;
 
+/* To re-generate DOSProgram:
+$ cat > /tmp/DOSProgram.asm
+org 0
+        ; Copy cs to ds.
+        push cs
+        pop ds
+        ; Point ds:dx at the $-terminated string.
+        mov dx, str
+        ; Int 21/AH=09h: Write string to standard output.
+        mov ah, 0x9
+        int 0x21
+        ; Int 21/AH=4Ch: Exit with return code (in AL).
+        mov ax, 0x4C01
+        int 0x21
+str:
+        db 'This program cannot be run in DOS mode.$'
+align 8, db 0
+$ nasm -fbin /tmp/DOSProgram.asm -o /tmp/DOSProgram.bin
+$ xxd -i /tmp/DOSProgram.bin
+*/
+static unsigned char DOSProgram[] = {
+  0x0e, 0x1f, 0xba, 0x0e, 0x00, 0xb4, 0x09, 0xcd, 0x21, 0xb8, 0x01, 0x4c,
+  0xcd, 0x21, 0x54, 0x68, 0x69, 0x73, 0x20, 0x70, 0x72, 0x6f, 0x67, 0x72,
+  0x61, 0x6d, 0x20, 0x63, 0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x20, 0x62, 0x65,
+  0x20, 0x72, 0x75, 0x6e, 0x20, 0x69, 0x6e, 0x20, 0x44, 0x4f, 0x53, 0x20,
+  0x6d, 0x6f, 0x64, 0x65, 0x2e, 0x24, 0x00, 0x00
+};
+static_assert(sizeof(DOSProgram) % 8 == 0,
+              "DOSProgram size must be multiple of 8");
+
 static const int SectorSize = 512;
-static const int DOSStubSize = 64;
+static const int DOSStubSize = sizeof(dos_header) + sizeof(DOSProgram);
+static_assert(DOSStubSize % 8 == 0, "DOSStub size must be multiple of 8");
+
 static const int NumberfOfDataDirectory = 16;
 
 namespace {
@@ -70,11 +104,18 @@ public:
       uint64_t Offs = OS->getFileOff() + (Record->getRVA() - OS->getRVA());
       D->PointerToRawData = Offs;
 
+      TimeDateStamps.push_back(&D->TimeDateStamp);
       ++D;
     }
   }
 
+  void setTimeDateStamp(uint32_t TimeDateStamp) {
+    for (support::ulittle32_t *TDS : TimeDateStamps)
+      *TDS = TimeDateStamp;
+  }
+
 private:
+  mutable std::vector<support::ulittle32_t *> TimeDateStamps;
   const std::vector<Chunk *> &Records;
 };
 
@@ -123,6 +164,13 @@ private:
   void openFile(StringRef OutputPath);
   template <typename PEHeaderTy> void writeHeader();
   void createSEHTable(OutputSection *RData);
+  void createGuardCFTables(OutputSection *RData);
+  void createGLJmpTable(OutputSection *RData);
+  void markSymbolsForRVATable(ObjFile *File,
+                              ArrayRef<SectionChunk *> SymIdxChunks,
+                              SymbolRVASet &TableSymbols);
+  void maybeAddRVATable(OutputSection *RData, SymbolRVASet TableSymbols,
+                        StringRef TableSym, StringRef CountSym);
   void setSectionPermissions();
   void writeSections();
   void writeBuildId();
@@ -146,9 +194,10 @@ private:
   IdataContents Idata;
   DelayLoadContents DelayIdata;
   EdataContents Edata;
-  SEHTableChunk *SEHTable = nullptr;
+  RVATableChunk *GuardFidsTable = nullptr;
+  RVATableChunk *SEHTable = nullptr;
 
-  Chunk *DebugDirectory = nullptr;
+  DebugDirectoryChunk *DebugDirectory = nullptr;
   std::vector<Chunk *> DebugRecords;
   CVDebugRecordChunk *BuildId = nullptr;
   Optional<codeview::DebugInfo> PreviousBuildId;
@@ -348,6 +397,21 @@ static StringRef getOutputSection(StringRef Name) {
   return It->second;
 }
 
+// For /order.
+static void sortBySectionOrder(std::vector<Chunk *> &Chunks) {
+  auto GetPriority = [](const Chunk *C) {
+    if (auto *Sec = dyn_cast<SectionChunk>(C))
+      if (Sec->Sym)
+        return Config->Order.lookup(Sec->Sym->getName());
+    return 0;
+  };
+
+  std::stable_sort(Chunks.begin(), Chunks.end(),
+                   [=](const Chunk *A, const Chunk *B) {
+                     return GetPriority(A) < GetPriority(B);
+                   });
+}
+
 // Create output section objects and add them to OutputSections.
 void Writer::createSections() {
   // First, bin chunks by name.
@@ -361,6 +425,11 @@ void Writer::createSections() {
     }
     Map[C->getSectionName()].push_back(C);
   }
+
+  // Process an /order option.
+  if (!Config->Order.empty())
+    for (auto &Pair : Map)
+      sortBySectionOrder(Pair.second);
 
   // Then create an OutputSection for each section.
   // '$' and all following characters in input section names are
@@ -408,7 +477,13 @@ void Writer::createMiscChunks() {
       RData->addChunk(C);
   }
 
-  createSEHTable(RData);
+  // Create SEH table. x86-only.
+  if (Config->Machine == I386)
+    createSEHTable(RData);
+
+  // Create /guard:cf tables if requested.
+  if (Config->GuardCF != GuardCFLevel::Off)
+    createGuardCFTables(RData);
 }
 
 // Create .idata section for the DLL-imported symbol table.
@@ -561,9 +636,8 @@ void Writer::createSymbolAndStringTable() {
       continue;
     // If a section isn't discardable (i.e. will be mapped at runtime),
     // prefer a truncated section name over a long section name in
-    // the string table that is unavailable at runtime. This is different from
-    // what link.exe does, but finding ".eh_fram" instead of "/4" is useful
-    // to libunwind.
+    // the string table that is unavailable at runtime. Note that link.exe
+    // always truncates, even for discardable sections.
     if ((Sec->getPermissions() & IMAGE_SCN_MEM_DISCARDABLE) == 0)
       continue;
     Sec->setStringTableOff(addEntryToStringTable(Name));
@@ -623,14 +697,26 @@ void Writer::assignAddresses() {
 }
 
 template <typename PEHeaderTy> void Writer::writeHeader() {
-  // Write DOS stub
+  // Write DOS header. For backwards compatibility, the first part of a PE/COFF
+  // executable consists of an MS-DOS MZ executable. If the executable is run
+  // under DOS, that program gets run (usually to just print an error message).
+  // When run under Windows, the loader looks at AddressOfNewExeHeader and uses
+  // the PE header instead.
   uint8_t *Buf = Buffer->getBufferStart();
   auto *DOS = reinterpret_cast<dos_header *>(Buf);
-  Buf += DOSStubSize;
+  Buf += sizeof(dos_header);
   DOS->Magic[0] = 'M';
   DOS->Magic[1] = 'Z';
+  DOS->UsedBytesInTheLastPage = DOSStubSize % 512;
+  DOS->FileSizeInPages = divideCeil(DOSStubSize, 512);
+  DOS->HeaderSizeInParagraphs = sizeof(dos_header) / 16;
+
   DOS->AddressOfRelocationTable = sizeof(dos_header);
   DOS->AddressOfNewExeHeader = DOSStubSize;
+
+  // Write DOS program.
+  memcpy(Buf, DOSProgram, sizeof(DOSProgram));
+  Buf += sizeof(DOSProgram);
 
   // Write PE magic
   memcpy(Buf, PEMagic, sizeof(PEMagic));
@@ -701,6 +787,8 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
     PE->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_NX_COMPAT;
   if (!Config->AllowIsolation)
     PE->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_NO_ISOLATION;
+  if (Config->GuardCF != GuardCFLevel::Off)
+    PE->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_GUARD_CF;
   if (Config->Machine == I386 && !SEHTable &&
       !Symtab->findUnderscore("_load_config_used"))
     PE->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_NO_SEH;
@@ -806,34 +894,157 @@ void Writer::openFile(StringRef Path) {
 }
 
 void Writer::createSEHTable(OutputSection *RData) {
-  // Create SEH table. x86-only.
-  if (Config->Machine != I386)
-    return;
-
-  std::set<Defined *> Handlers;
-
+  SymbolRVASet Handlers;
   for (ObjFile *File : ObjFile::Instances) {
-    if (!File->SEHCompat)
+    // FIXME: We should error here instead of earlier unless /safeseh:no was
+    // passed.
+    if (!File->hasSafeSEH())
       return;
-    for (uint32_t I : File->SXData)
-      if (Symbol *B = File->getSymbol(I))
-        if (B->isLive())
-          Handlers.insert(cast<Defined>(B));
+
+    markSymbolsForRVATable(File, File->getSXDataChunks(), Handlers);
   }
 
-  if (Handlers.empty())
+  maybeAddRVATable(RData, std::move(Handlers), "__safe_se_handler_table",
+                   "__safe_se_handler_count");
+}
+
+// Add a symbol to an RVA set. Two symbols may have the same RVA, but an RVA set
+// cannot contain duplicates. Therefore, the set is uniqued by Chunk and the
+// symbol's offset into that Chunk.
+static void addSymbolToRVASet(SymbolRVASet &RVASet, Defined *S) {
+  Chunk *C = S->getChunk();
+  if (auto *SC = dyn_cast<SectionChunk>(C))
+    C = SC->Repl; // Look through ICF replacement.
+  uint32_t Off = S->getRVA() - (C ? C->getRVA() : 0);
+  RVASet.insert({C, Off});
+}
+
+// Visit all relocations from all section contributions of this object file and
+// mark the relocation target as address-taken.
+static void markSymbolsWithRelocations(ObjFile *File,
+                                       SymbolRVASet &UsedSymbols) {
+  for (Chunk *C : File->getChunks()) {
+    // We only care about live section chunks. Common chunks and other chunks
+    // don't generally contain relocations.
+    SectionChunk *SC = dyn_cast<SectionChunk>(C);
+    if (!SC || !SC->isLive())
+      continue;
+
+    // Look for relocations in this section against symbols in executable output
+    // sections.
+    for (Symbol *Ref : SC->symbols()) {
+      // FIXME: Do further testing to see if the relocation type matters,
+      // especially for 32-bit where taking the address of something usually
+      // uses an absolute relocation instead of a relative one.
+      if (auto *D = dyn_cast_or_null<Defined>(Ref)) {
+        Chunk *RefChunk = D->getChunk();
+        OutputSection *OS = RefChunk ? RefChunk->getOutputSection() : nullptr;
+        if (OS && OS->getPermissions() & IMAGE_SCN_MEM_EXECUTE)
+          addSymbolToRVASet(UsedSymbols, D);
+      }
+    }
+  }
+}
+
+// Create the guard function id table. This is a table of RVAs of all
+// address-taken functions. It is sorted and uniqued, just like the safe SEH
+// table.
+void Writer::createGuardCFTables(OutputSection *RData) {
+  SymbolRVASet AddressTakenSyms;
+  SymbolRVASet LongJmpTargets;
+  for (ObjFile *File : ObjFile::Instances) {
+    // If the object was compiled with /guard:cf, the address taken symbols
+    // are in .gfids$y sections, and the longjmp targets are in .gljmp$y
+    // sections. If the object was not compiled with /guard:cf, we assume there
+    // were no setjmp targets, and that all code symbols with relocations are
+    // possibly address-taken.
+    if (File->hasGuardCF()) {
+      markSymbolsForRVATable(File, File->getGuardFidChunks(), AddressTakenSyms);
+      markSymbolsForRVATable(File, File->getGuardLJmpChunks(), LongJmpTargets);
+    } else {
+      markSymbolsWithRelocations(File, AddressTakenSyms);
+    }
+  }
+
+  // Mark the image entry as address-taken.
+  if (Config->Entry)
+    addSymbolToRVASet(AddressTakenSyms, cast<Defined>(Config->Entry));
+
+  maybeAddRVATable(RData, std::move(AddressTakenSyms), "__guard_fids_table",
+                   "__guard_fids_count");
+
+  // Add the longjmp target table unless the user told us not to.
+  if (Config->GuardCF == GuardCFLevel::Full)
+    maybeAddRVATable(RData, std::move(LongJmpTargets), "__guard_longjmp_table",
+                     "__guard_longjmp_count");
+
+  // Set __guard_flags, which will be used in the load config to indicate that
+  // /guard:cf was enabled.
+  uint32_t GuardFlags = uint32_t(coff_guard_flags::CFInstrumented) |
+                        uint32_t(coff_guard_flags::HasFidTable);
+  if (Config->GuardCF == GuardCFLevel::Full)
+    GuardFlags |= uint32_t(coff_guard_flags::HasLongJmpTable);
+  Symbol *FlagSym = Symtab->findUnderscore("__guard_flags");
+  cast<DefinedAbsolute>(FlagSym)->setVA(GuardFlags);
+}
+
+// Take a list of input sections containing symbol table indices and add those
+// symbols to an RVA table. The challenge is that symbol RVAs are not known and
+// depend on the table size, so we can't directly build a set of integers.
+void Writer::markSymbolsForRVATable(ObjFile *File,
+                                    ArrayRef<SectionChunk *> SymIdxChunks,
+                                    SymbolRVASet &TableSymbols) {
+  for (SectionChunk *C : SymIdxChunks) {
+    // Skip sections discarded by linker GC. This comes up when a .gfids section
+    // is associated with something like a vtable and the vtable is discarded.
+    // In this case, the associated gfids section is discarded, and we don't
+    // mark the virtual member functions as address-taken by the vtable.
+    if (!C->isLive())
+      continue;
+
+    // Validate that the contents look like symbol table indices.
+    ArrayRef<uint8_t> Data = C->getContents();
+    if (Data.size() % 4 != 0) {
+      warn("ignoring " + C->getSectionName() +
+           " symbol table index section in object " + toString(File));
+      continue;
+    }
+
+    // Read each symbol table index and check if that symbol was included in the
+    // final link. If so, add it to the table symbol set.
+    ArrayRef<ulittle32_t> SymIndices(
+        reinterpret_cast<const ulittle32_t *>(Data.data()), Data.size() / 4);
+    ArrayRef<Symbol *> ObjSymbols = File->getSymbols();
+    for (uint32_t SymIndex : SymIndices) {
+      if (SymIndex >= ObjSymbols.size()) {
+        warn("ignoring invalid symbol table index in section " +
+             C->getSectionName() + " in object " + toString(File));
+        continue;
+      }
+      if (Symbol *S = ObjSymbols[SymIndex]) {
+        if (S->isLive())
+          addSymbolToRVASet(TableSymbols, cast<Defined>(S));
+      }
+    }
+  }
+}
+
+// Replace the absolute table symbol with a synthetic symbol pointing to
+// TableChunk so that we can emit base relocations for it and resolve section
+// relative relocations.
+void Writer::maybeAddRVATable(OutputSection *RData,
+                              SymbolRVASet TableSymbols,
+                              StringRef TableSym, StringRef CountSym) {
+  if (TableSymbols.empty())
     return;
 
-  SEHTable = make<SEHTableChunk>(Handlers);
-  RData->addChunk(SEHTable);
+  RVATableChunk *TableChunk = make<RVATableChunk>(std::move(TableSymbols));
+  RData->addChunk(TableChunk);
 
-  // Replace the absolute table symbol with a synthetic symbol pointing to the
-  // SEHTable chunk so that we can emit base relocations for it and resolve
-  // section relative relocations.
-  Symbol *T = Symtab->find("___safe_se_handler_table");
-  Symbol *C = Symtab->find("___safe_se_handler_count");
-  replaceSymbol<DefinedSynthetic>(T, T->getName(), SEHTable);
-  cast<DefinedAbsolute>(C)->setVA(SEHTable->getSize() / 4);
+  Symbol *T = Symtab->findUnderscore(TableSym);
+  Symbol *C = Symtab->findUnderscore(CountSym);
+  replaceSymbol<DefinedSynthetic>(T, T->getName(), TableChunk);
+  cast<DefinedAbsolute>(C)->setVA(TableChunk->getSize() / 4);
 }
 
 // Handles /section options to allow users to overwrite
@@ -849,9 +1060,9 @@ void Writer::setSectionPermissions() {
 
 // Write section contents to a mmap'ed file.
 void Writer::writeSections() {
-  // Record the section index that should be used when resolving a section
-  // relocation against an absolute symbol.
-  DefinedAbsolute::OutputSectionIndex = OutputSections.size() + 1;
+  // Record the number of sections to apply section index relocations
+  // against absolute symbols. See applySecIdx in Chunks.cpp..
+  DefinedAbsolute::NumOutputSections = OutputSections.size();
 
   uint8_t *Buf = Buffer->getBufferStart();
   for (OutputSection *Sec : OutputSections) {
@@ -867,22 +1078,50 @@ void Writer::writeSections() {
 }
 
 void Writer::writeBuildId() {
-  // If we're not writing a build id (e.g. because /debug is not specified),
-  // then just return;
-  if (!Config->Debug)
-    return;
-
-  assert(BuildId && "BuildId is not set!");
-
-  if (PreviousBuildId.hasValue()) {
-    *BuildId->BuildId = *PreviousBuildId;
-    BuildId->BuildId->PDB70.Age = BuildId->BuildId->PDB70.Age + 1;
-    return;
+  // There are two important parts to the build ID.
+  // 1) If building with debug info, the COFF debug directory contains a
+  //    timestamp as well as a Guid and Age of the PDB.
+  // 2) In all cases, the PE COFF file header also contains a timestamp.
+  // For reproducibility, instead of a timestamp we want to use a hash of the
+  // binary, however when building with debug info the hash needs to take into
+  // account the debug info, since it's possible to add blank lines to a file
+  // which causes the debug info to change but not the generated code.
+  //
+  // To handle this, we first set the Guid and Age in the debug directory (but
+  // only if we're doing a debug build).  Then, we hash the binary (thus causing
+  // the hash to change if only the debug info changes, since the Age will be
+  // different).  Finally, we write that hash into the debug directory (if
+  // present) as well as the COFF file header (always).
+  if (Config->Debug) {
+    assert(BuildId && "BuildId is not set!");
+    if (PreviousBuildId.hasValue()) {
+      *BuildId->BuildId = *PreviousBuildId;
+      BuildId->BuildId->PDB70.Age = BuildId->BuildId->PDB70.Age + 1;
+    } else {
+      BuildId->BuildId->Signature.CVSignature = OMF::Signature::PDB70;
+      BuildId->BuildId->PDB70.Age = 1;
+      llvm::getRandomBytes(BuildId->BuildId->PDB70.Signature, 16);
+    }
   }
 
-  BuildId->BuildId->Signature.CVSignature = OMF::Signature::PDB70;
-  BuildId->BuildId->PDB70.Age = 1;
-  llvm::getRandomBytes(BuildId->BuildId->PDB70.Signature, 16);
+  // At this point the only fields in the COFF file which remain unset are the
+  // "timestamp" in the COFF file header, and the ones in the coff debug
+  // directory.  Now we can hash the file and write that hash to the various
+  // timestamp fields in the file.
+  StringRef OutputFileData(
+      reinterpret_cast<const char *>(Buffer->getBufferStart()),
+      Buffer->getBufferSize());
+
+  uint32_t Hash = static_cast<uint32_t>(xxHash64(OutputFileData));
+
+  if (DebugDirectory)
+    DebugDirectory->setTimeDateStamp(Hash);
+
+  uint8_t *Buf = Buffer->getBufferStart();
+  Buf += DOSStubSize + sizeof(PEMagic);
+  object::coff_file_header *CoffHeader =
+      reinterpret_cast<coff_file_header *>(Buf);
+  CoffHeader->TimeDateStamp = Hash;
 }
 
 // Sort .pdata section contents according to PE/COFF spec 5.5.

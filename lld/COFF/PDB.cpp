@@ -107,10 +107,11 @@ public:
   /// If the object does not use a type server PDB (compiled with /Z7), we merge
   /// all the type and item records from the .debug$S stream and fill in the
   /// caller-provided ObjectIndexMap.
-  const CVIndexMap &mergeDebugT(ObjFile *File, CVIndexMap &ObjectIndexMap);
+  Expected<const CVIndexMap&> mergeDebugT(ObjFile *File,
+                                          CVIndexMap &ObjectIndexMap);
 
-  const CVIndexMap &maybeMergeTypeServerPDB(ObjFile *File,
-                                            TypeServer2Record &TS);
+  Expected<const CVIndexMap&> maybeMergeTypeServerPDB(ObjFile *File,
+                                                      TypeServer2Record &TS);
 
   /// Add the section map and section contributions to the PDB.
   void addSections(ArrayRef<OutputSection *> OutputSections,
@@ -147,10 +148,19 @@ private:
 
   llvm::SmallString<128> NativePath;
 
+  /// A list of other PDBs which are loaded during the linking process and which
+  /// we need to keep around since the linking operation may reference pointers
+  /// inside of these PDBs.
+  llvm::SmallVector<std::unique_ptr<pdb::NativeSession>, 2> LoadedPDBs;
+
   std::vector<pdb::SecMapEntry> SectionMap;
 
   /// Type index mappings of type server PDBs that we've loaded so far.
   std::map<GUID, CVIndexMap> TypeServerIndexMappings;
+
+  /// List of TypeServer PDBs which cannot be loaded.
+  /// Cached to prevent repeated load attempts.
+  std::set<GUID> MissingTypeServerPDBs;
 };
 }
 
@@ -241,8 +251,8 @@ maybeReadTypeServerRecord(CVTypeArray &Types) {
   return std::move(TS);
 }
 
-const CVIndexMap &PDBLinker::mergeDebugT(ObjFile *File,
-                                         CVIndexMap &ObjectIndexMap) {
+Expected<const CVIndexMap&> PDBLinker::mergeDebugT(ObjFile *File,
+                                                   CVIndexMap &ObjectIndexMap) {
   ScopedTimer T(TypeMergingTimer);
 
   ArrayRef<uint8_t> Data = getDebugSection(File, ".debug$T");
@@ -317,11 +327,19 @@ tryToLoadPDB(const GUID &GuidFromObj, StringRef TSPath) {
   return std::move(NS);
 }
 
-const CVIndexMap &PDBLinker::maybeMergeTypeServerPDB(ObjFile *File,
-                                                     TypeServer2Record &TS) {
-  // First, check if we already loaded a PDB with this GUID. Return the type
+Expected<const CVIndexMap&> PDBLinker::maybeMergeTypeServerPDB(ObjFile *File,
+                                                               TypeServer2Record &TS) {
+  const GUID& TSId = TS.getGuid();
+  StringRef TSPath = TS.getName();
+
+  // First, check if the PDB has previously failed to load.
+  if (MissingTypeServerPDBs.count(TSId))
+    return make_error<pdb::GenericError>(
+      pdb::generic_error_code::type_server_not_found, TSPath);
+
+  // Second, check if we already loaded a PDB with this GUID. Return the type
   // index mapping if we have it.
-  auto Insertion = TypeServerIndexMappings.insert({TS.getGuid(), CVIndexMap()});
+  auto Insertion = TypeServerIndexMappings.insert({TSId, CVIndexMap()});
   CVIndexMap &IndexMap = Insertion.first->second;
   if (!Insertion.second)
     return IndexMap;
@@ -332,23 +350,32 @@ const CVIndexMap &PDBLinker::maybeMergeTypeServerPDB(ObjFile *File,
   // Check for a PDB at:
   // 1. The given file path
   // 2. Next to the object file or archive file
-  auto ExpectedSession = tryToLoadPDB(TS.getGuid(), TS.getName());
+  auto ExpectedSession = tryToLoadPDB(TSId, TSPath);
   if (!ExpectedSession) {
     consumeError(ExpectedSession.takeError());
     StringRef LocalPath =
         !File->ParentName.empty() ? File->ParentName : File->getName();
     SmallString<128> Path = sys::path::parent_path(LocalPath);
     sys::path::append(
-        Path, sys::path::filename(TS.getName(), sys::path::Style::windows));
-    ExpectedSession = tryToLoadPDB(TS.getGuid(), Path);
+        Path, sys::path::filename(TSPath, sys::path::Style::windows));
+    ExpectedSession = tryToLoadPDB(TSId, Path);
   }
-  if (auto E = ExpectedSession.takeError())
-    fatal("Type server PDB was not found: " + toString(std::move(E)));
+  if (auto E = ExpectedSession.takeError()) {
+    TypeServerIndexMappings.erase(TSId);
+    MissingTypeServerPDBs.emplace(TSId);
+    return std::move(E);
+  }
 
-  auto ExpectedTpi = (*ExpectedSession)->getPDBFile().getPDBTpiStream();
+  pdb::NativeSession *Session = ExpectedSession->get();
+
+  // Keep a strong reference to this PDB, so that it's safe to hold pointers
+  // into the file.
+  LoadedPDBs.push_back(std::move(*ExpectedSession));
+
+  auto ExpectedTpi = Session->getPDBFile().getPDBTpiStream();
   if (auto E = ExpectedTpi.takeError())
     fatal("Type server does not have TPI stream: " + toString(std::move(E)));
-  auto ExpectedIpi = (*ExpectedSession)->getPDBFile().getPDBIpiStream();
+  auto ExpectedIpi = Session->getPDBFile().getPDBIpiStream();
   if (auto E = ExpectedIpi.takeError())
     fatal("Type server does not have TPI stream: " + toString(std::move(E)));
 
@@ -764,7 +791,16 @@ void PDBLinker::addObjFile(ObjFile *File) {
   // the PDB first, so that we can get the map from object file type and item
   // indices to PDB type and item indices.
   CVIndexMap ObjectIndexMap;
-  const CVIndexMap &IndexMap = mergeDebugT(File, ObjectIndexMap);
+  auto IndexMapResult = mergeDebugT(File, ObjectIndexMap);
+
+  // If the .debug$T sections fail to merge, assume there is no debug info.
+  if (!IndexMapResult) {
+    warn("Type server PDB for " + Name + " is invalid, ignoring debug info. " +
+         toString(IndexMapResult.takeError()));
+    return;
+  }
+
+  const CVIndexMap &IndexMap = *IndexMapResult;
 
   ScopedTimer T(SymbolMergingTimer);
 
@@ -1020,12 +1056,10 @@ void PDBLinker::initialize(const llvm::codeview::DebugInfo &BuildId) {
 
   // Add an Info stream.
   auto &InfoBuilder = Builder.getInfoBuilder();
-  InfoBuilder.setAge(BuildId.PDB70.Age);
-
   GUID uuid;
   memcpy(&uuid, &BuildId.PDB70.Signature, sizeof(uuid));
+  InfoBuilder.setAge(BuildId.PDB70.Age);
   InfoBuilder.setGuid(uuid);
-  InfoBuilder.setSignature(time(nullptr));
   InfoBuilder.setVersion(pdb::PdbRaw_ImplVer::PdbImplVC70);
 
   // Add an empty DBI stream.

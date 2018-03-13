@@ -747,6 +747,9 @@ HANDLE_DW_LNCT(0x02, directory_index)
 HANDLE_DW_LNCT(0x03, timestamp)
 HANDLE_DW_LNCT(0x04, size)
 HANDLE_DW_LNCT(0x05, MD5)
+// A vendor extension until http://dwarfstd.org/ShowIssue.php?issue=180201.1 is
+// accepted and incorporated into the next DWARF standard.
+HANDLE_DW_LNCT(0x2001, LLVM_source)
 
 // DWARF v5 Macro information.
 HANDLE_DW_MACRO(0x01, define)
@@ -845,11 +848,12 @@ HANDLE_DWARF_SECTION(DebugLoc, ".debug_loc", "debug-loc")
 HANDLE_DWARF_SECTION(DebugFrame, ".debug_frame", "debug-frame")
 HANDLE_DWARF_SECTION(DebugMacro, ".debug_macro", "debug-macro")
 HANDLE_DWARF_SECTION(DebugNames, ".debug_names", "debug-names")
-HANDLE_DWARF_SECTION(DebugRanges, ".debug_ranges", "debug-ranges")
 HANDLE_DWARF_SECTION(DebugPubnames, ".debug_pubnames", "debug-pubnames")
 HANDLE_DWARF_SECTION(DebugPubtypes, ".debug_pubtypes", "debug-pubtypes")
 HANDLE_DWARF_SECTION(DebugGnuPubnames, ".debug_gnu_pubnames", "debug-gnu-pubnames")
 HANDLE_DWARF_SECTION(DebugGnuPubtypes, ".debug_gnu_pubtypes", "debug-gnu-pubtypes")
+HANDLE_DWARF_SECTION(DebugRanges, ".debug_ranges", "debug-ranges")
+HANDLE_DWARF_SECTION(DebugRnglists, ".debug_rnglists", "debug-rnglists")
 HANDLE_DWARF_SECTION(DebugStr, ".debug_str", "debug-str")
 HANDLE_DWARF_SECTION(DebugStrOffsets, ".debug_str_offsets", "debug-str-offsets")
 HANDLE_DWARF_SECTION(DebugCUIndex, ".debug_cu_index", "debug-cu-index")

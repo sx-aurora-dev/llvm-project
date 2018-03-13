@@ -37,6 +37,7 @@
 #include "clang/Sema/SemaConsumer.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/TemplateDeduction.h"
+#include "clang/Sema/TemplateInstCallback.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 using namespace clang;
@@ -1393,8 +1394,8 @@ void Sema::PopFunctionScopeInfo(const AnalysisBasedWarnings::Policy *WP,
     delete Scope;
 }
 
-void Sema::PushCompoundScope() {
-  getCurFunction()->CompoundScopes.push_back(CompoundScopeInfo());
+void Sema::PushCompoundScope(bool IsStmtExpr) {
+  getCurFunction()->CompoundScopes.push_back(CompoundScopeInfo(IsStmtExpr));
 }
 
 void Sema::PopCompoundScope() {
@@ -1423,6 +1424,18 @@ BlockScopeInfo *Sema::getCurBlock() {
   }
 
   return CurBSI;
+}
+
+FunctionScopeInfo *Sema::getEnclosingFunction() const {
+  if (FunctionScopes.empty())
+    return nullptr;
+
+  for (int e = FunctionScopes.size() - 1; e >= 0; --e) {
+    if (isa<sema::BlockScopeInfo>(FunctionScopes[e]))
+      continue;
+    return FunctionScopes[e];
+  }
+  return nullptr;
 }
 
 LambdaScopeInfo *Sema::getCurLambda(bool IgnoreNonLambdaCapturingScope) {
@@ -1462,8 +1475,7 @@ void Sema::ActOnComment(SourceRange Comment) {
   if (!LangOpts.RetainCommentsFromSystemHeaders &&
       SourceMgr.isInSystemHeader(Comment.getBegin()))
     return;
-  RawComment RC(SourceMgr, Comment, false,
-                LangOpts.CommentOpts.ParseAllComments);
+  RawComment RC(SourceMgr, Comment, LangOpts.CommentOpts, false);
   if (RC.isAlmostTrailingComment()) {
     SourceRange MagicMarkerRange(Comment.getBegin(),
                                  Comment.getBegin().getLocWithOffset(3));

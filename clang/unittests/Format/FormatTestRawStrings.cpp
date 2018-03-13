@@ -186,7 +186,7 @@ TEST_F(FormatTestRawStrings, ReformatsShortRawStringsOnSingleLine) {
           R"test(P p = TP(R"pb(item_1:1 item_2:2)pb");)test",
           getRawStringPbStyleWithColumns(40)));
   expect_eq(
-      R"test(P p = TP(R"pb(item_1 <1> item_2: {2})pb");)test",
+      R"test(P p = TP(R"pb(item_1 < 1 > item_2: { 2 })pb");)test",
       format(
           R"test(P p = TP(R"pb(item_1<1> item_2:{2})pb");)test",
           getRawStringPbStyleWithColumns(40)));
@@ -225,8 +225,8 @@ P p = TPPPPPPPPPPPPPPP(R"pb(item_1: 1, item_2: 2, item_3: 3)pb");)test",
                    getRawStringPbStyleWithColumns(40)));
 
   expect_eq(R"test(
-P p = TP(R"pb(item_1 <1>
-              item_2: <2>
+P p = TP(R"pb(item_1 < 1 >
+              item_2: < 2 >
               item_3 {})pb");)test",
       format(R"test(
 P p = TP(R"pb(item_1<1> item_2:<2> item_3{ })pb");)test",
@@ -245,10 +245,10 @@ P p = TP(R"pb(item_1: 1, item_2: 2, item_3: 3, item_4: 4)pb");)test",
 
   expect_eq(R"test(
 P p = TPPPPPPPPPPPPPPP(
-    R"pb(item_1 <1>,
-         item_2: {2},
-         item_3: <3>,
-         item_4: {4})pb");)test",
+    R"pb(item_1 < 1 >,
+         item_2: { 2 },
+         item_3: < 3 >,
+         item_4: { 4 })pb");)test",
             format(R"test(
 P p = TPPPPPPPPPPPPPPP(R"pb(item_1<1>, item_2: {2}, item_3: <3>, item_4:{4})pb");)test",
                    getRawStringPbStyleWithColumns(40)));
@@ -295,7 +295,7 @@ int f(string s) {
 
 TEST_F(FormatTestRawStrings, FormatsRawStringArguments) {
   expect_eq(R"test(
-P p = TP(R"pb(key {1})pb", param_2);)test",
+P p = TP(R"pb(key { 1 })pb", param_2);)test",
             format(R"test(
 P p = TP(R"pb(key{1})pb",param_2);)test",
                    getRawStringPbStyleWithColumns(40)));
@@ -308,9 +308,9 @@ PPPPPPPPPPPPP(R"pb(keykeyk)pb", param_2);)test",
                    getRawStringPbStyleWithColumns(40)));
 
   expect_eq(R"test(
-P p =
-    TP(R"pb(item: {i: 1, s: 's'}
-            item: {i: 2, s: 't'})pb");)test",
+P p = TP(
+    R"pb(item: { i: 1, s: 's' }
+         item: { i: 2, s: 't' })pb");)test",
             format(R"test(
 P p = TP(R"pb(item: {i: 1, s: 's'} item: {i: 2, s: 't'})pb");)test",
                    getRawStringPbStyleWithColumns(40)));
@@ -681,15 +681,14 @@ int s() {
 })test",
                    getRawStringPbStyleWithColumns(20)));
 
-  // Align the suffix with the surrounding FirstIndent if the prefix is not on
+  // Align the suffix with the surrounding indent if the prefix is not on
   // a line of its own.
   expect_eq(R"test(
 int s() {
-  auto S = PTP(
-      R"pb(
-        item_1: 1,
-        item_2: 2
-      )pb");
+  auto S = PTP(R"pb(
+    item_1: 1,
+    item_2: 2
+  )pb");
 })test",
             format(R"test(
 int s() {

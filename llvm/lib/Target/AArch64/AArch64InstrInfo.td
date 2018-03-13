@@ -420,6 +420,7 @@ def : InstAlias<"wfi",  (HINT 0b011)>;
 def : InstAlias<"sev",  (HINT 0b100)>;
 def : InstAlias<"sevl", (HINT 0b101)>;
 def : InstAlias<"esb",  (HINT 0b10000)>, Requires<[HasRAS]>;
+def : InstAlias<"csdb", (HINT 20)>;
 
 // v8.2a Statistical Profiling extension
 def : InstAlias<"psb $op",  (HINT psbhint_op:$op)>, Requires<[HasSPE]>;
@@ -1330,6 +1331,7 @@ def ADRP : ADRI<1, "adrp", adrplabel,
 // page address of a constant pool entry, block address
 def : Pat<(AArch64adrp tconstpool:$cp), (ADRP tconstpool:$cp)>;
 def : Pat<(AArch64adrp tblockaddress:$cp), (ADRP tblockaddress:$cp)>;
+def : Pat<(AArch64adrp texternalsym:$sym), (ADRP texternalsym:$sym)>;
 
 //===----------------------------------------------------------------------===//
 // Unconditional branch (register) instructions.
@@ -2716,7 +2718,7 @@ defm FMOV : UnscaledConversion<"fmov">;
 // Add pseudo ops for FMOV 0 so we can mark them as isReMaterializable
 let isReMaterializable = 1, isCodeGenOnly = 1, isAsCheapAsAMove = 1 in {
 def FMOVH0 : Pseudo<(outs FPR16:$Rd), (ins), [(set f16:$Rd, (fpimm0))]>,
-    Sched<[WriteF]>;
+    Sched<[WriteF]>, Requires<[HasFullFP16]>;
 def FMOVS0 : Pseudo<(outs FPR32:$Rd), (ins), [(set f32:$Rd, (fpimm0))]>,
     Sched<[WriteF]>;
 def FMOVD0 : Pseudo<(outs FPR64:$Rd), (ins), [(set f64:$Rd, (fpimm0))]>,
@@ -3529,6 +3531,8 @@ def : Pat<(v1i64 (int_aarch64_neon_fcvtps (v1f64 FPR64:$Rn))),
 def : Pat<(v1i64 (int_aarch64_neon_fcvtpu (v1f64 FPR64:$Rn))),
           (FCVTPUv1i64 FPR64:$Rn)>;
 
+def : Pat<(f16 (int_aarch64_neon_frecpe (f16 FPR16:$Rn))),
+          (FRECPEv1f16 FPR16:$Rn)>;
 def : Pat<(f32 (int_aarch64_neon_frecpe (f32 FPR32:$Rn))),
           (FRECPEv1i32 FPR32:$Rn)>;
 def : Pat<(f64 (int_aarch64_neon_frecpe (f64 FPR64:$Rn))),
@@ -3560,11 +3564,15 @@ def : Pat<(f64 (AArch64frecps (f64 FPR64:$Rn), (f64 FPR64:$Rm))),
 def : Pat<(v2f64 (AArch64frecps (v2f64 FPR128:$Rn), (v2f64 FPR128:$Rm))),
           (FRECPSv2f64 FPR128:$Rn, FPR128:$Rm)>;
 
+def : Pat<(f16 (int_aarch64_neon_frecpx (f16 FPR16:$Rn))),
+          (FRECPXv1f16 FPR16:$Rn)>;
 def : Pat<(f32 (int_aarch64_neon_frecpx (f32 FPR32:$Rn))),
           (FRECPXv1i32 FPR32:$Rn)>;
 def : Pat<(f64 (int_aarch64_neon_frecpx (f64 FPR64:$Rn))),
           (FRECPXv1i64 FPR64:$Rn)>;
 
+def : Pat<(f16 (int_aarch64_neon_frsqrte (f16 FPR16:$Rn))),
+          (FRSQRTEv1f16 FPR16:$Rn)>;
 def : Pat<(f32 (int_aarch64_neon_frsqrte (f32 FPR32:$Rn))),
           (FRSQRTEv1i32 FPR32:$Rn)>;
 def : Pat<(f64 (int_aarch64_neon_frsqrte (f64 FPR64:$Rn))),
@@ -4636,21 +4644,6 @@ def MOVIv16b_ns  : SIMDModifiedImmVectorNoShift<1, 0, 0, 0b1110, V128, imm0_255,
                                                  "movi", ".16b",
                        [(set (v16i8 V128:$Rd), (AArch64movi imm0_255:$imm8))]>;
 }
-
-// Use the more efficient MOVI instead of DUP from ZR to zero up vectors
-def : Pat<(v2f32 (AArch64dup (f32 fpimm0))), (MOVIv2i32  (i32 0), (i32 0))>;
-
-def : Pat<(v2i32 (AArch64dup (i32 0))), (MOVIv2i32  (i32 0), (i32 0))>;
-def : Pat<(v4i16 (AArch64dup (i32 0))), (MOVIv4i16  (i32 0), (i32 0))>;
-def : Pat<(v8i8  (AArch64dup (i32 0))), (MOVIv8b_ns (i32 0))>;
-
-def : Pat<(v2f64 (AArch64dup (f64 fpimm0))), (MOVIv2d_ns (i32 0))>;
-def : Pat<(v4f32 (AArch64dup (f32 fpimm0))), (MOVIv4i32  (i32 0), (i32 0))>;
-
-def : Pat<(v2i64 (AArch64dup (i64 0))), (MOVIv2d_ns  (i32 0))>;
-def : Pat<(v4i32 (AArch64dup (i32 0))), (MOVIv4i32   (i32 0), (i32 0))>;
-def : Pat<(v8i16 (AArch64dup (i32 0))), (MOVIv8i16   (i32 0), (i32 0))>;
-def : Pat<(v16i8 (AArch64dup (i32 0))), (MOVIv16b_ns (i32 0))>;
 
 // AdvSIMD MVNI
 
@@ -6191,20 +6184,25 @@ def : Pat<(v1i64 (extract_subvector (v2i64 FPR128:$Rn), (i64 1))),
 
 // A 64-bit subvector insert to the first 128-bit vector position
 // is a subregister copy that needs no instruction.
-def : Pat<(insert_subvector undef, (v1i64 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v2i64 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
-def : Pat<(insert_subvector undef, (v1f64 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v2f64 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
-def : Pat<(insert_subvector undef, (v2i32 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v4i32 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
-def : Pat<(insert_subvector undef, (v2f32 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v4f32 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
-def : Pat<(insert_subvector undef, (v4i16 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v8i16 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
-def : Pat<(insert_subvector undef, (v4f16 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v8f16 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
-def : Pat<(insert_subvector undef, (v8i8 FPR64:$src), (i32 0)),
-          (INSERT_SUBREG (v16i8 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+multiclass InsertSubvectorUndef<ValueType Ty> {
+  def : Pat<(insert_subvector undef, (v1i64 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v2i64 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+  def : Pat<(insert_subvector undef, (v1f64 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v2f64 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+  def : Pat<(insert_subvector undef, (v2i32 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v4i32 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+  def : Pat<(insert_subvector undef, (v2f32 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v4f32 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+  def : Pat<(insert_subvector undef, (v4i16 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v8i16 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+  def : Pat<(insert_subvector undef, (v4f16 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v8f16 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+  def : Pat<(insert_subvector undef, (v8i8 FPR64:$src), (Ty 0)),
+            (INSERT_SUBREG (v16i8 (IMPLICIT_DEF)), FPR64:$src, dsub)>;
+}
+
+defm : InsertSubvectorUndef<i32>;
+defm : InsertSubvectorUndef<i64>;
 
 // Use pair-wise add instructions when summing up the lanes for v2f64, v2i64
 // or v2f32.

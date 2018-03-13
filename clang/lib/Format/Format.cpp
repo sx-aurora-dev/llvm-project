@@ -105,6 +105,14 @@ template <> struct ScalarEnumerationTraits<FormatStyle::ShortFunctionStyle> {
   }
 };
 
+template <> struct ScalarEnumerationTraits<FormatStyle::BinPackStyle> {
+  static void enumeration(IO &IO, FormatStyle::BinPackStyle &Value) {
+    IO.enumCase(Value, "Auto", FormatStyle::BPS_Auto);
+    IO.enumCase(Value, "Always", FormatStyle::BPS_Always);
+    IO.enumCase(Value, "Never", FormatStyle::BPS_Never);
+  }
+};
+
 template <> struct ScalarEnumerationTraits<FormatStyle::BinaryOperatorStyle> {
   static void enumeration(IO &IO, FormatStyle::BinaryOperatorStyle &Value) {
     IO.enumCase(Value, "All", FormatStyle::BOS_All);
@@ -378,6 +386,7 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("MacroBlockEnd", Style.MacroBlockEnd);
     IO.mapOptional("MaxEmptyLinesToKeep", Style.MaxEmptyLinesToKeep);
     IO.mapOptional("NamespaceIndentation", Style.NamespaceIndentation);
+    IO.mapOptional("ObjCBinPackProtocolList", Style.ObjCBinPackProtocolList);
     IO.mapOptional("ObjCBlockIndentWidth", Style.ObjCBlockIndentWidth);
     IO.mapOptional("ObjCSpaceAfterProperty", Style.ObjCSpaceAfterProperty);
     IO.mapOptional("ObjCSpaceBeforeProtocolList",
@@ -402,7 +411,13 @@ template <> struct MappingTraits<FormatStyle> {
                    Style.SpaceAfterTemplateKeyword);
     IO.mapOptional("SpaceBeforeAssignmentOperators",
                    Style.SpaceBeforeAssignmentOperators);
+    IO.mapOptional("SpaceBeforeCtorInitializerColon",
+                   Style.SpaceBeforeCtorInitializerColon);
+    IO.mapOptional("SpaceBeforeInheritanceColon",
+                   Style.SpaceBeforeInheritanceColon);
     IO.mapOptional("SpaceBeforeParens", Style.SpaceBeforeParens);
+    IO.mapOptional("SpaceBeforeRangeBasedForLoopColon",
+                   Style.SpaceBeforeRangeBasedForLoopColon);
     IO.mapOptional("SpaceInEmptyParentheses", Style.SpaceInEmptyParentheses);
     IO.mapOptional("SpacesBeforeTrailingComments",
                    Style.SpacesBeforeTrailingComments);
@@ -637,6 +652,7 @@ FormatStyle getLLVMStyle() {
   LLVMStyle.MaxEmptyLinesToKeep = 1;
   LLVMStyle.KeepEmptyLinesAtTheStartOfBlocks = true;
   LLVMStyle.NamespaceIndentation = FormatStyle::NI_None;
+  LLVMStyle.ObjCBinPackProtocolList = FormatStyle::BPS_Auto;
   LLVMStyle.ObjCBlockIndentWidth = 2;
   LLVMStyle.ObjCSpaceAfterProperty = false;
   LLVMStyle.ObjCSpaceBeforeProtocolList = true;
@@ -652,7 +668,10 @@ FormatStyle getLLVMStyle() {
   LLVMStyle.SpacesInCStyleCastParentheses = false;
   LLVMStyle.SpaceAfterCStyleCast = false;
   LLVMStyle.SpaceAfterTemplateKeyword = true;
+  LLVMStyle.SpaceBeforeCtorInitializerColon = true;
+  LLVMStyle.SpaceBeforeInheritanceColon = true;
   LLVMStyle.SpaceBeforeParens = FormatStyle::SBPO_ControlStatements;
+  LLVMStyle.SpaceBeforeRangeBasedForLoopColon = true;
   LLVMStyle.SpaceBeforeAssignmentOperators = true;
   LLVMStyle.SpacesInAngles = false;
 
@@ -676,11 +695,6 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
     FormatStyle GoogleStyle = getGoogleStyle(FormatStyle::LK_Proto);
     GoogleStyle.Language = FormatStyle::LK_TextProto;
 
-    // Text protos are currently mostly formatted inside C++ raw string literals
-    // and often the current breaking behavior of string literals is not
-    // beneficial there. Investigate turning this on once proper string reflow
-    // has been implemented.
-    GoogleStyle.BreakStringLiterals = false;
     return GoogleStyle;
   }
 
@@ -700,6 +714,7 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
   GoogleStyle.IncludeIsMainRegex = "([-_](test|unittest))?$";
   GoogleStyle.IndentCaseLabels = true;
   GoogleStyle.KeepEmptyLinesAtTheStartOfBlocks = false;
+  GoogleStyle.ObjCBinPackProtocolList = FormatStyle::BPS_Never;
   GoogleStyle.ObjCSpaceAfterProperty = false;
   GoogleStyle.ObjCSpaceBeforeProtocolList = true;
   GoogleStyle.PointerAlignment = FormatStyle::PAS_Left;
@@ -711,15 +726,9 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
           "PB",
           "proto",
           "PROTO",
-          "textproto",
-          "TEXTPROTO",
       },
       /*EnclosingFunctionNames=*/
-       {
-           "EqualsProto",
-           "PARSE_TEXT_PROTO",
-           "ParseTextProto",
-       },
+      {},
       /*CanonicalDelimiter=*/"",
       /*BasedOnStyle=*/"google",
   }};
@@ -758,6 +767,13 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
   } else if (Language == FormatStyle::LK_Proto) {
     GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
     GoogleStyle.SpacesInContainerLiterals = false;
+    GoogleStyle.Cpp11BracedListStyle = false;
+    // This affects protocol buffer options specifications and text protos.
+    // Text protos are currently mostly formatted inside C++ raw string literals
+    // and often the current breaking behavior of string literals is not
+    // beneficial there. Investigate turning this on once proper string reflow
+    // has been implemented.
+    GoogleStyle.BreakStringLiterals = false;
   } else if (Language == FormatStyle::LK_ObjC) {
     GoogleStyle.ColumnLimit = 100;
   }
@@ -1435,7 +1451,9 @@ private:
         "NSAffineTransform",
         "NSArray",
         "NSAttributedString",
+        "NSBundle",
         "NSCache",
+        "NSCalendar",
         "NSCharacterSet",
         "NSCountedSet",
         "NSData",
@@ -1461,6 +1479,7 @@ private:
         "NSMutableString",
         "NSNumber",
         "NSNumberFormatter",
+        "NSObject",
         "NSOrderedSet",
         "NSPoint",
         "NSPointerArray",
@@ -1470,17 +1489,19 @@ private:
         "NSSet",
         "NSSize",
         "NSString",
+        "NSTimeZone",
         "NSUInteger",
         "NSURL",
         "NSURLComponents",
         "NSURLQueryItem",
         "NSUUID",
+        "NSValue",
     };
 
     for (auto &Line : AnnotatedLines) {
-      for (FormatToken *FormatTok = Line->First->Next; FormatTok;
+      for (FormatToken *FormatTok = Line->First; FormatTok;
            FormatTok = FormatTok->Next) {
-        if ((FormatTok->Previous->is(tok::at) &&
+        if ((FormatTok->Previous && FormatTok->Previous->is(tok::at) &&
              (FormatTok->isObjCAtKeyword(tok::objc_interface) ||
               FormatTok->isObjCAtKeyword(tok::objc_implementation) ||
               FormatTok->isObjCAtKeyword(tok::objc_protocol) ||
@@ -2282,6 +2303,25 @@ static FormatStyle::LanguageKind getLanguageByFileName(StringRef FileName) {
   return FormatStyle::LK_Cpp;
 }
 
+FormatStyle::LanguageKind guessLanguage(StringRef FileName, StringRef Code) {
+  const auto GuessedLanguage = getLanguageByFileName(FileName);
+  if (GuessedLanguage == FormatStyle::LK_Cpp) {
+    auto Extension = llvm::sys::path::extension(FileName);
+    // If there's no file extension (or it's .h), we need to check the contents
+    // of the code to see if it contains Objective-C.
+    if (Extension.empty() || Extension == ".h") {
+      auto NonEmptyFileName = FileName.empty() ? "guess.h" : FileName;
+      std::unique_ptr<Environment> Env =
+          Environment::CreateVirtualEnvironment(Code, NonEmptyFileName, /*Ranges=*/{});
+      ObjCHeaderStyleGuesser Guesser(*Env, getLLVMStyle());
+      Guesser.process();
+      if (Guesser.isObjC())
+        return FormatStyle::LK_ObjC;
+    }
+  }
+  return GuessedLanguage;
+}
+
 llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
                                      StringRef FallbackStyleName,
                                      StringRef Code, vfs::FileSystem *FS) {
@@ -2289,17 +2329,7 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
     FS = vfs::getRealFileSystem().get();
   }
   FormatStyle Style = getLLVMStyle();
-  Style.Language = getLanguageByFileName(FileName);
-
-  if (Style.Language == FormatStyle::LK_Cpp && FileName.endswith(".h")) {
-    std::unique_ptr<Environment> Env =
-        Environment::CreateVirtualEnvironment(Code, FileName, /*Ranges=*/{});
-    ObjCHeaderStyleGuesser Guesser(*Env, Style);
-    Guesser.process();
-    if (Guesser.isObjC()) {
-      Style.Language = FormatStyle::LK_ObjC;
-    }
-  }
+  Style.Language = guessLanguage(FileName, Code);
 
   FormatStyle FallbackStyle = getNoStyle();
   if (!getPredefinedStyle(FallbackStyleName, Style.Language, &FallbackStyle))

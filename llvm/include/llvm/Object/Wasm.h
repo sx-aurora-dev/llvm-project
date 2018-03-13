@@ -34,59 +34,45 @@ namespace object {
 
 class WasmSymbol {
 public:
-  enum class SymbolType {
-    FUNCTION_IMPORT,
-    FUNCTION_EXPORT,
-    GLOBAL_IMPORT,
-    GLOBAL_EXPORT,
-  };
+  WasmSymbol(const wasm::WasmSymbolInfo &Info,
+             const wasm::WasmSignature *FunctionType,
+             const wasm::WasmGlobalType *GlobalType)
+      : Info(Info), FunctionType(FunctionType), GlobalType(GlobalType) {}
 
-  WasmSymbol(StringRef Name, SymbolType Type, uint32_t Section,
-             uint32_t ElementIndex, uint32_t FunctionType = 0)
-      : Name(Name), Type(Type), Section(Section), ElementIndex(ElementIndex),
-        FunctionType(FunctionType) {}
+  const wasm::WasmSymbolInfo &Info;
+  const wasm::WasmSignature *FunctionType;
+  const wasm::WasmGlobalType *GlobalType;
 
-  StringRef Name;
-  SymbolType Type;
-  uint32_t Section;
-  uint32_t Flags = 0;
-
-  // Index into either the function or global index space.
-  uint32_t ElementIndex;
-
-  // For function, the type index
-  uint32_t FunctionType;
-
-  // Symbols can be both exported and imported (in the case of the weakly
-  // defined symbol).  In this the import index is stored as AltIndex.
-  uint32_t AltIndex = 0;
-  bool HasAltIndex = false;
-
-  void setAltIndex(uint32_t Index) {
-    HasAltIndex = true;
-    AltIndex = Index;
+  bool isTypeFunction() const {
+    return Info.Kind == wasm::WASM_SYMBOL_TYPE_FUNCTION;
   }
 
-  bool isFunction() const {
-    return Type == WasmSymbol::SymbolType::FUNCTION_IMPORT ||
-           Type == WasmSymbol::SymbolType::FUNCTION_EXPORT;
+  bool isTypeData() const { return Info.Kind == wasm::WASM_SYMBOL_TYPE_DATA; }
+
+  bool isTypeGlobal() const {
+    return Info.Kind == wasm::WASM_SYMBOL_TYPE_GLOBAL;
   }
 
+  bool isDefined() const { return !isUndefined(); }
 
-  bool isWeak() const {
+  bool isUndefined() const {
+    return (Info.Flags & wasm::WASM_SYMBOL_UNDEFINED) != 0;
+  }
+
+  bool isBindingWeak() const {
     return getBinding() == wasm::WASM_SYMBOL_BINDING_WEAK;
   }
 
-  bool isGlobal() const {
+  bool isBindingGlobal() const {
     return getBinding() == wasm::WASM_SYMBOL_BINDING_GLOBAL;
   }
 
-  bool isLocal() const {
+  bool isBindingLocal() const {
     return getBinding() == wasm::WASM_SYMBOL_BINDING_LOCAL;
   }
 
   unsigned getBinding() const {
-    return Flags & wasm::WASM_SYMBOL_BINDING_MASK;
+    return Info.Flags & wasm::WASM_SYMBOL_BINDING_MASK;
   }
 
   bool isHidden() const {
@@ -94,12 +80,19 @@ public:
   }
 
   unsigned getVisibility() const {
-    return Flags & wasm::WASM_SYMBOL_VISIBILITY_MASK;
+    return Info.Flags & wasm::WASM_SYMBOL_VISIBILITY_MASK;
   }
 
   void print(raw_ostream &Out) const {
-    Out << "Name=" << Name << ", Type=" << static_cast<int>(Type)
-        << ", Flags=" << Flags << " ElemIndex=" << ElementIndex;
+    Out << "Name=" << Info.Name << ", Kind=" << Info.Kind
+        << ", Flags=" << Info.Flags;
+    if (!isTypeData()) {
+      Out << ", ElemIndex=" << Info.ElementIndex;
+    } else if (isDefined()) {
+      Out << ", Segment=" << Info.DataRef.Segment;
+      Out << ", Offset=" << Info.DataRef.Offset;
+      Out << ", Size=" << Info.DataRef.Size;
+    }
   }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
@@ -142,6 +135,7 @@ public:
   ArrayRef<wasm::WasmLimits> memories() const { return Memories; }
   ArrayRef<wasm::WasmGlobal> globals() const { return Globals; }
   ArrayRef<wasm::WasmExport> exports() const { return Exports; }
+  ArrayRef<WasmSymbol> syms() const { return Symbols; }
   const wasm::WasmLinkingData& linkingData() const { return LinkingData; }
   uint32_t getNumberOfSymbols() const { return Symbols.size(); }
   ArrayRef<wasm::WasmElemSegment> elements() const { return ElemSegments; }
@@ -150,6 +144,8 @@ public:
   ArrayRef<StringRef> comdats() const { return Comdats; }
   ArrayRef<wasm::WasmFunctionName> debugNames() const { return DebugNames; }
   uint32_t startFunction() const { return StartFunction; }
+  uint32_t getNumImportedGlobals() const { return NumImportedGlobals; }
+  uint32_t getNumImportedFunctions() const { return NumImportedFunctions; }
 
   void moveSymbolNext(DataRefImpl &Symb) const override;
 
@@ -206,7 +202,13 @@ public:
 private:
   bool isValidFunctionIndex(uint32_t Index) const;
   bool isDefinedFunctionIndex(uint32_t Index) const;
-  wasm::WasmFunction& getDefinedFunction(uint32_t Index);
+  bool isValidGlobalIndex(uint32_t Index) const;
+  bool isDefinedGlobalIndex(uint32_t Index) const;
+  bool isValidFunctionSymbol(uint32_t Index) const;
+  bool isValidGlobalSymbol(uint32_t Index) const;
+  bool isValidDataSymbol(uint32_t Index) const;
+  wasm::WasmFunction &getDefinedFunction(uint32_t Index);
+  wasm::WasmGlobal &getDefinedGlobal(uint32_t Index);
 
   const WasmSection &getWasmSection(DataRefImpl Ref) const;
   const wasm::WasmRelocation &getWasmRelocation(DataRefImpl Ref) const;
@@ -235,11 +237,10 @@ private:
   // Custom section types
   Error parseNameSection(const uint8_t *Ptr, const uint8_t *End);
   Error parseLinkingSection(const uint8_t *Ptr, const uint8_t *End);
+  Error parseLinkingSectionSymtab(const uint8_t *&Ptr, const uint8_t *End);
   Error parseLinkingSectionComdat(const uint8_t *&Ptr, const uint8_t *End);
   Error parseRelocSection(StringRef Name, const uint8_t *Ptr,
                           const uint8_t *End);
-
-  void populateSymbolTable();
 
   wasm::WasmObjectHeader Header;
   std::vector<WasmSection> Sections;
@@ -261,10 +262,9 @@ private:
   wasm::WasmLinkingData LinkingData;
   uint32_t NumImportedGlobals = 0;
   uint32_t NumImportedFunctions = 0;
-  uint32_t ImportSection = 0;
-  uint32_t ExportSection = 0;
-
-  StringMap<uint32_t> SymbolMap;
+  uint32_t CodeSection = 0;
+  uint32_t DataSection = 0;
+  uint32_t GlobalSection = 0;
 };
 
 } // end namespace object

@@ -257,9 +257,6 @@ static cl::opt<std::string>
                     cl::desc("YAML output filename for pass remarks"),
                     cl::value_desc("filename"));
 
-extern ModulePass *createDebugifyPass();
-extern ModulePass *createCheckDebugifyPass();
-
 static inline void addPass(legacy::PassManagerBase &PM, Pass *P) {
   // Add the pass to the pass manager...
   PM.add(P);
@@ -458,7 +455,7 @@ int main(int argc, char **argv) {
 
   // Load the input module...
   std::unique_ptr<Module> M =
-      parseIRFile(InputFilename, Err, Context, !NoVerify);
+      parseIRFile(InputFilename, Err, Context, !NoVerify, ClDataLayout);
 
   if (!M) {
     Err.print(argv[0], errs());
@@ -469,6 +466,10 @@ int main(int argc, char **argv) {
   if (StripDebug)
     StripDebugInfo(*M);
 
+  // If we are supposed to override the target triple or data layout, do so now.
+  if (!TargetTriple.empty())
+    M->setTargetTriple(Triple::normalize(TargetTriple));
+
   // Immediately run the verifier to catch any problems before starting up the
   // pass pipelines.  Otherwise we can crash on broken code during
   // doInitialization().
@@ -477,12 +478,6 @@ int main(int argc, char **argv) {
            << ": error: input module is broken!\n";
     return 1;
   }
-
-  // If we are supposed to override the target triple or data layout, do so now.
-  if (!TargetTriple.empty())
-    M->setTargetTriple(Triple::normalize(TargetTriple));
-  if (!ClDataLayout.empty())
-    M->setDataLayout(ClDataLayout);
 
   // Figure out what stream we are supposed to write to...
   std::unique_ptr<ToolOutputFile> Out;
@@ -557,7 +552,7 @@ int main(int argc, char **argv) {
                            OptRemarkFile.get(), PassPipeline, OK, VK,
                            PreserveAssemblyUseListOrder,
                            PreserveBitcodeUseListOrder, EmitSummaryIndex,
-                           EmitModuleHash)
+                           EmitModuleHash, EnableDebugify)
                ? 0
                : 1;
   }
@@ -767,10 +762,10 @@ int main(int argc, char **argv) {
   // If requested, run all passes again with the same pass manager to catch
   // bugs caused by persistent state in the passes
   if (RunTwice) {
-      std::unique_ptr<Module> M2(CloneModule(M.get()));
-      Passes.run(*M2);
-      CompileTwiceBuffer = Buffer;
-      Buffer.clear();
+    std::unique_ptr<Module> M2(CloneModule(*M));
+    Passes.run(*M2);
+    CompileTwiceBuffer = Buffer;
+    Buffer.clear();
   }
 
   // Now that we have all of the passes ready, run them.

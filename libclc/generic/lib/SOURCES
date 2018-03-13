@@ -70,6 +70,7 @@ integer/mad24.cl
 integer/mad_sat.cl
 integer/mul24.cl
 integer/mul_hi.cl
+integer/popcount.cl
 integer/rhadd.cl
 integer/rotate.cl
 integer/sub_sat.cl
@@ -112,6 +113,7 @@ math/half_exp2.cl
 math/half_log.cl
 math/half_log10.cl
 math/half_log2.cl
+math/half_powr.cl
 math/half_recip.cl
 math/half_rsqrt.cl
 math/half_sin.cl
@@ -188,6 +190,7 @@ relational/isnormal.cl
 relational/isnotequal.cl
 relational/isordered.cl
 relational/isunordered.cl
+relational/select.cl
 relational/signbit.cl
 shared/clamp.cl
 shared/max.cl

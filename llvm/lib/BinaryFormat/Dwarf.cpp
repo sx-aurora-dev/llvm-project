@@ -393,16 +393,6 @@ StringRef llvm::dwarf::ArrayOrderString(unsigned Order) {
   return StringRef();
 }
 
-StringRef llvm::dwarf::DiscriminantString(unsigned Discriminant) {
-  switch (Discriminant) {
-  case DW_DSC_label:
-    return "DW_DSC_label";
-  case DW_DSC_range:
-    return "DW_DSC_range";
-  }
-  return StringRef();
-}
-
 StringRef llvm::dwarf::LNStandardString(unsigned Standard) {
   switch (Standard) {
   default:
@@ -452,6 +442,17 @@ unsigned llvm::dwarf::getMacinfo(StringRef MacinfoString) {
       .Case("DW_MACINFO_end_file", DW_MACINFO_end_file)
       .Case("DW_MACINFO_vendor_ext", DW_MACINFO_vendor_ext)
       .Default(DW_MACINFO_invalid);
+}
+
+StringRef llvm::dwarf::RangeListEncodingString(unsigned Encoding) {
+  switch (Encoding) {
+  default:
+    return StringRef();
+#define HANDLE_DW_RLE(ID, NAME)                                                \
+  case DW_RLE_##NAME:                                                          \
+    return "DW_RLE_" #NAME;
+#include "llvm/BinaryFormat/Dwarf.def"
+  }
 }
 
 StringRef llvm::dwarf::CallFrameString(unsigned Encoding) {
@@ -563,8 +564,6 @@ StringRef llvm::dwarf::AttributeValueString(uint16_t Attr, unsigned Val) {
     return InlineCodeString(Val);
   case DW_AT_ordering:
     return ArrayOrderString(Val);
-  case DW_AT_discr_value:
-    return DiscriminantString(Val);
   }
 
   return StringRef();
@@ -588,10 +587,4 @@ bool llvm::dwarf::isValidFormForVersion(Form F, unsigned Version,
     return FV > 0 && FV <= Version;
   }
   return ExtensionsOk;
-}
-
-uint32_t llvm::dwarf::djbHash(StringRef Buffer, uint32_t H) {
-  for (char C : Buffer.bytes())
-    H = ((H << 5) + H) + C;
-  return H;
 }

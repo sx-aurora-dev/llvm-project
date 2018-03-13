@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
-#include "SyntaxHighlighting.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
@@ -19,6 +18,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cinttypes>
 #include <cstdint>
@@ -26,7 +26,6 @@
 
 using namespace llvm;
 using namespace dwarf;
-using namespace syntax;
 
 static const DWARFFormValue::FormClass DWARF5FormClasses[] = {
     DWARFFormValue::FC_Unknown,  // 0x0
@@ -284,16 +283,20 @@ bool DWARFFormValue::isFormClass(DWARFFormValue::FormClass FC) const {
   }
   // In DWARF3 DW_FORM_data4 and DW_FORM_data8 served also as a section offset.
   // Don't check for DWARF version here, as some producers may still do this
-  // by mistake. Also accept DW_FORM_strp since this is .debug_str section
-  // offset.
+  // by mistake. Also accept DW_FORM_[line_]strp since these are
+  // .debug_[line_]str section offsets.
   return (Form == DW_FORM_data4 || Form == DW_FORM_data8 ||
-          Form == DW_FORM_strp) &&
+          Form == DW_FORM_strp || Form == DW_FORM_line_strp) &&
          FC == FC_SectionOffset;
 }
 
 bool DWARFFormValue::extractValue(const DWARFDataExtractor &Data,
                                   uint32_t *OffsetPtr, DWARFFormParams FP,
+                                  const DWARFContext *Ctx,
                                   const DWARFUnit *CU) {
+  if (!Ctx && CU)
+    Ctx = &CU->getContext();
+  C = Ctx;
   U = CU;
   bool Indirect = false;
   bool IsBlock = false;
@@ -417,8 +420,9 @@ bool DWARFFormValue::extractValue(const DWARFDataExtractor &Data,
 void DWARFFormValue::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
   uint64_t UValue = Value.uval;
   bool CURelativeOffset = false;
-  raw_ostream &AddrOS =
-      DumpOpts.ShowAddresses ? WithColor(OS, syntax::Address).get() : nulls();
+  raw_ostream &AddrOS = DumpOpts.ShowAddresses
+                            ? WithColor(OS, HighlightColor::Address).get()
+                            : nulls();
   switch (Form) {
   case DW_FORM_addr:
     AddrOS << format("0x%016" PRIx64, UValue);
@@ -509,6 +513,11 @@ void DWARFFormValue::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
       OS << format(" .debug_str[0x%8.8x] = ", (uint32_t)UValue);
     dumpString(OS);
     break;
+  case DW_FORM_line_strp:
+    if (DumpOpts.Verbose)
+      OS << format(" .debug_line_str[0x%8.8x] = ", (uint32_t)UValue);
+    dumpString(OS);
+    break;
   case DW_FORM_strx:
   case DW_FORM_strx1:
   case DW_FORM_strx2:
@@ -529,23 +538,28 @@ void DWARFFormValue::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
     break;
   case DW_FORM_ref1:
     CURelativeOffset = true;
-    AddrOS << format("cu + 0x%2.2x", (uint8_t)UValue);
+    if (DumpOpts.Verbose)
+      AddrOS << format("cu + 0x%2.2x", (uint8_t)UValue);
     break;
   case DW_FORM_ref2:
     CURelativeOffset = true;
-    AddrOS << format("cu + 0x%4.4x", (uint16_t)UValue);
+    if (DumpOpts.Verbose)
+      AddrOS << format("cu + 0x%4.4x", (uint16_t)UValue);
     break;
   case DW_FORM_ref4:
     CURelativeOffset = true;
-    AddrOS << format("cu + 0x%4.4x", (uint32_t)UValue);
+    if (DumpOpts.Verbose)
+      AddrOS << format("cu + 0x%4.4x", (uint32_t)UValue);
     break;
   case DW_FORM_ref8:
     CURelativeOffset = true;
-    AddrOS << format("cu + 0x%8.8" PRIx64, UValue);
+    if (DumpOpts.Verbose)
+      AddrOS << format("cu + 0x%8.8" PRIx64, UValue);
     break;
   case DW_FORM_ref_udata:
     CURelativeOffset = true;
-    AddrOS << format("cu + 0x%" PRIx64, UValue);
+    if (DumpOpts.Verbose)
+      AddrOS << format("cu + 0x%" PRIx64, UValue);
     break;
   case DW_FORM_GNU_ref_alt:
     AddrOS << format("<alt 0x%" PRIx64 ">", UValue);
@@ -567,21 +581,23 @@ void DWARFFormValue::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
     break;
   }
 
-  if (CURelativeOffset && DumpOpts.Verbose) {
-    OS << " => {";
-    WithColor(OS, syntax::Address).get()
+  if (CURelativeOffset) {
+    if (DumpOpts.Verbose)
+      OS << " => {";
+    WithColor(OS, HighlightColor::Address).get()
         << format("0x%8.8" PRIx64, UValue + (U ? U->getOffset() : 0));
-    OS << "}";
+    if (DumpOpts.Verbose)
+      OS << "}";
   }
 }
 
 void DWARFFormValue::dumpString(raw_ostream &OS) const {
   Optional<const char *> DbgStr = getAsCString();
   if (DbgStr.hasValue()) {
-    raw_ostream &COS = WithColor(OS, syntax::String);
-    COS << '"';
-    COS.write_escaped(DbgStr.getValue());
-    COS << '"';
+    auto COS = WithColor(OS, HighlightColor::String);
+    COS.get() << '"';
+    COS.get().write_escaped(DbgStr.getValue());
+    COS.get() << '"';
   }
 }
 
@@ -591,11 +607,12 @@ Optional<const char *> DWARFFormValue::getAsCString() const {
   if (Form == DW_FORM_string)
     return Value.cstr;
   // FIXME: Add support for DW_FORM_GNU_strp_alt
-  if (Form == DW_FORM_GNU_strp_alt || U == nullptr)
+  if (Form == DW_FORM_GNU_strp_alt || C == nullptr)
     return None;
   uint32_t Offset = Value.uval;
   if (Form == DW_FORM_line_strp) {
-    if (const char *Str = U->getLineStringExtractor().getCStr(&Offset))
+    // .debug_line_str is tracked in the Context.
+    if (const char *Str = C->getLineStringExtractor().getCStr(&Offset))
       return Str;
     return None;
   }
@@ -603,13 +620,19 @@ Optional<const char *> DWARFFormValue::getAsCString() const {
       Form == DW_FORM_strx1 || Form == DW_FORM_strx2 || Form == DW_FORM_strx3 ||
       Form == DW_FORM_strx4) {
     uint64_t StrOffset;
-    if (!U->getStringOffsetSectionItem(Offset, StrOffset))
+    if (!U || !U->getStringOffsetSectionItem(Offset, StrOffset))
       return None;
     Offset = StrOffset;
   }
-  if (const char *Str = U->getStringExtractor().getCStr(&Offset)) {
-    return Str;
+  // Prefer the Unit's string extractor, because for .dwo it will point to
+  // .debug_str.dwo, while the Context's extractor always uses .debug_str.
+  if (U) {
+    if (const char *Str = U->getStringExtractor().getCStr(&Offset))
+      return Str;
+    return None;
   }
+  if (const char *Str = C->getStringExtractor().getCStr(&Offset))
+    return Str;
   return None;
 }
 

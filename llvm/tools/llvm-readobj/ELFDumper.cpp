@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ARMEHABIPrinter.h"
+#include "DwarfCFIEHPrinter.h"
 #include "Error.h"
 #include "ObjDumper.h"
 #include "StackMapPrinter.h"
@@ -163,6 +164,8 @@ public:
   void printHashHistogram() override;
 
   void printNotes() override;
+
+  void printELFLinkerOptions() override;
 
 private:
   std::unique_ptr<DumpStyle<ELFT>> ELFDumperStyle;
@@ -316,6 +319,7 @@ public:
   virtual void printProgramHeaders(const ELFFile<ELFT> *Obj) = 0;
   virtual void printHashHistogram(const ELFFile<ELFT> *Obj) = 0;
   virtual void printNotes(const ELFFile<ELFT> *Obj) = 0;
+  virtual void printELFLinkerOptions(const ELFFile<ELFT> *Obj) = 0;
   virtual void printMipsGOT(const MipsGOTParser<ELFT> &Parser) = 0;
   virtual void printMipsPLT(const MipsGOTParser<ELFT> &Parser) = 0;
   const ELFDumper<ELFT> *dumper() const { return Dumper; }
@@ -345,6 +349,7 @@ public:
   void printProgramHeaders(const ELFO *Obj) override;
   void printHashHistogram(const ELFFile<ELFT> *Obj) override;
   void printNotes(const ELFFile<ELFT> *Obj) override;
+  void printELFLinkerOptions(const ELFFile<ELFT> *Obj) override;
   void printMipsGOT(const MipsGOTParser<ELFT> &Parser) override;
   void printMipsPLT(const MipsGOTParser<ELFT> &Parser) override;
 
@@ -405,6 +410,7 @@ public:
   void printProgramHeaders(const ELFO *Obj) override;
   void printHashHistogram(const ELFFile<ELFT> *Obj) override;
   void printNotes(const ELFFile<ELFT> *Obj) override;
+  void printELFLinkerOptions(const ELFFile<ELFT> *Obj) override;
   void printMipsGOT(const MipsGOTParser<ELFT> &Parser) override;
   void printMipsPLT(const MipsGOTParser<ELFT> &Parser) override;
 
@@ -1255,9 +1261,37 @@ static const EnumEntry<unsigned> ElfHeaderMipsFlags[] = {
 };
 
 static const EnumEntry<unsigned> ElfHeaderAMDGPUFlags[] = {
-  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_ARCH_NONE),
-  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_ARCH_R600),
-  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_ARCH_GCN)
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_NONE),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_R600),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_R630),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_RS880),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_RV670),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_RV710),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_RV730),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_RV770),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_CEDAR),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_CYPRESS),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_JUNIPER),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_REDWOOD),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_SUMO),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_BARTS),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_CAICOS),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_CAYMAN),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_R600_TURKS),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX600),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX601),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX700),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX701),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX702),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX703),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX704),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX801),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX802),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX803),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX810),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX900),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX902),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_XNACK)
 };
 
 static const EnumEntry<unsigned> ElfHeaderRISCVFlags[] = {
@@ -1499,6 +1533,10 @@ template <class ELFT> void ELFDumper<ELFT>::printHashHistogram() {
 
 template <class ELFT> void ELFDumper<ELFT>::printNotes() {
   ELFDumperStyle->printNotes(Obj);
+}
+
+template <class ELFT> void ELFDumper<ELFT>::printELFLinkerOptions() {
+  ELFDumperStyle->printELFLinkerOptions(Obj);
 }
 
 #define LLVM_READOBJ_TYPE_CASE(name) \
@@ -1771,6 +1809,11 @@ void ELFDumper<ELFT>::printValue(uint64_t Type, uint64_t Value) {
 
 template<class ELFT>
 void ELFDumper<ELFT>::printUnwindInfo() {
+  const unsigned Machine = Obj->getHeader()->e_machine;
+  if (Machine == EM_386 || Machine == EM_X86_64) {
+    DwarfCFIEH::PrinterContext<ELFT> Ctx(W, Obj);
+    return Ctx.printUnwindInformation();
+  }
   W.startLine() << "UnwindInfo not implemented.\n";
 }
 
@@ -2694,6 +2737,8 @@ std::string getSectionTypeString(unsigned Arch, unsigned Type) {
     return "SYMTAB SECTION INDICES";
   case SHT_LLVM_ODRTAB:
     return "LLVM_ODRTAB";
+  case SHT_LLVM_LINKER_OPTIONS:
+    return "LLVM_LINKER_OPTIONS";
   // FIXME: Parse processor specific GNU attributes
   case SHT_GNU_ATTRIBUTES:
     return "ATTRIBUTES";
@@ -3555,6 +3600,11 @@ void GNUStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
 }
 
 template <class ELFT>
+void GNUStyle<ELFT>::printELFLinkerOptions(const ELFFile<ELFT> *Obj) {
+  OS << "printELFLinkerOptions not implemented!\n";
+}
+
+template <class ELFT>
 void GNUStyle<ELFT>::printMipsGOT(const MipsGOTParser<ELFT> &Parser) {
   size_t Bias = ELFT::Is64Bits ? 8 : 0;
   auto PrintEntry = [&](const Elf_Addr *E, StringRef Purpose) {
@@ -3711,7 +3761,7 @@ template <class ELFT> void LLVMStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
                    unsigned(ELF::EF_MIPS_MACH));
     else if (e->e_machine == EM_AMDGPU)
       W.printFlags("Flags", e->e_flags, makeArrayRef(ElfHeaderAMDGPUFlags),
-                   unsigned(ELF::EF_AMDGPU_ARCH));
+                   unsigned(ELF::EF_AMDGPU_MACH));
     else if (e->e_machine == EM_RISCV)
       W.printFlags("Flags", e->e_flags, makeArrayRef(ElfHeaderRISCVFlags));
     else
@@ -4060,6 +4110,27 @@ void LLVMStyle<ELFT>::printHashHistogram(const ELFFile<ELFT> *Obj) {
 template <class ELFT>
 void LLVMStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
   W.startLine() << "printNotes not implemented!\n";
+}
+
+template <class ELFT>
+void LLVMStyle<ELFT>::printELFLinkerOptions(const ELFFile<ELFT> *Obj) {
+  ListScope L(W, "LinkerOptions");
+
+  for (const Elf_Shdr &Shdr : unwrapOrError(Obj->sections())) {
+    if (Shdr.sh_type != ELF::SHT_LLVM_LINKER_OPTIONS)
+      continue;
+
+    ArrayRef<uint8_t> Contents = unwrapOrError(Obj->getSectionContents(&Shdr));
+    for (const uint8_t *P = Contents.begin(), *E = Contents.end(); P < E; ) {
+      StringRef Key = StringRef(reinterpret_cast<const char *>(P));
+      StringRef Value =
+          StringRef(reinterpret_cast<const char *>(P) + Key.size() + 1);
+
+      W.printString(Key, Value);
+
+      P = P + Key.size() + Value.size() + 2;
+    }
+  }
 }
 
 template <class ELFT>

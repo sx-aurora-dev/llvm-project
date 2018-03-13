@@ -776,6 +776,13 @@ struct ShuffleMask {
     size_t H = Mask.size()/2;
     return ShuffleMask(Mask.take_back(H));
   }
+
+  void print(raw_ostream &OS) const {
+    OS << "MinSrc:" << MinSrc << ", MaxSrc:" << MaxSrc << " {";
+    for (int M : Mask)
+      OS << ' ' << M;
+    OS << " }";
+  }
 };
 } // namespace
 
@@ -813,6 +820,7 @@ namespace llvm {
 
     void selectShuffle(SDNode *N);
     void selectRor(SDNode *N);
+    void selectVAlign(SDNode *N);
 
   private:
     void materialize(const ResultStack &Results);
@@ -911,18 +919,29 @@ static bool isPermutation(ArrayRef<int> Mask) {
 }
 
 bool HvxSelector::selectVectorConstants(SDNode *N) {
-  // Constant vectors are generated as loads from constant pools.
+  // Constant vectors are generated as loads from constant pools or
+  // as VSPLATs of a constant value.
   // Since they are generated during the selection process, the main
   // selection algorithm is not aware of them. Select them directly
   // here.
-  SmallVector<SDNode*,4> Loads;
+  SmallVector<SDNode*,4> Nodes;
   SetVector<SDNode*> WorkQ;
 
   // The DAG can change (due to CSE) during selection, so cache all the
   // unselected nodes first to avoid traversing a mutating DAG.
 
-  auto IsLoadToSelect = [] (SDNode *N) {
-    if (!N->isMachineOpcode() && N->getOpcode() == ISD::LOAD) {
+  auto IsNodeToSelect = [] (SDNode *N) {
+    if (N->isMachineOpcode())
+      return false;
+    unsigned Opc = N->getOpcode();
+    if (Opc == HexagonISD::VSPLAT || Opc == HexagonISD::VZERO)
+      return true;
+    if (Opc == ISD::BITCAST) {
+      // Only select bitcasts of VSPLATs.
+      if (N->getOperand(0).getOpcode() == HexagonISD::VSPLAT)
+        return true;
+    }
+    if (Opc == ISD::LOAD) {
       SDValue Addr = cast<LoadSDNode>(N)->getBasePtr();
       unsigned AddrOpc = Addr.getOpcode();
       if (AddrOpc == HexagonISD::AT_PCREL || AddrOpc == HexagonISD::CP)
@@ -935,18 +954,16 @@ bool HvxSelector::selectVectorConstants(SDNode *N) {
   WorkQ.insert(N);
   for (unsigned i = 0; i != WorkQ.size(); ++i) {
     SDNode *W = WorkQ[i];
-    if (IsLoadToSelect(W)) {
-      Loads.push_back(W);
-      continue;
-    }
+    if (IsNodeToSelect(W))
+      Nodes.push_back(W);
     for (unsigned j = 0, f = W->getNumOperands(); j != f; ++j)
       WorkQ.insert(W->getOperand(j).getNode());
   }
 
-  for (SDNode *L : Loads)
+  for (SDNode *L : Nodes)
     ISel.Select(L);
 
-  return !Loads.empty();
+  return !Nodes.empty();
 }
 
 void HvxSelector::materialize(const ResultStack &Results) {
@@ -1033,19 +1050,36 @@ OpRef HvxSelector::packs(ShuffleMask SM, OpRef Va, OpRef Vb,
   int VecLen = SM.Mask.size();
   MVT Ty = getSingleVT(MVT::i8);
 
-  if (SM.MaxSrc - SM.MinSrc < int(HwLen)) {
-    if (SM.MaxSrc < int(HwLen)) {
-      memcpy(NewMask.data(), SM.Mask.data(), sizeof(int)*VecLen);
-      return Va;
+  auto IsSubvector = [] (ShuffleMask M) {
+    assert(M.MinSrc >= 0 && M.MaxSrc >= 0);
+    for (int I = 0, E = M.Mask.size(); I != E; ++I) {
+      if (M.Mask[I] >= 0 && M.Mask[I]-I != M.MinSrc)
+        return false;
     }
-    if (SM.MinSrc >= int(HwLen)) {
-      for (int I = 0; I != VecLen; ++I) {
-        int M = SM.Mask[I];
-        if (M != -1)
-          M -= HwLen;
-        NewMask[I] = M;
+    return true;
+  };
+
+  if (SM.MaxSrc - SM.MinSrc < int(HwLen)) {
+    if (SM.MinSrc == 0 || SM.MinSrc == int(HwLen) || !IsSubvector(SM)) {
+      if (SM.MaxSrc < int(HwLen)) {
+        memcpy(NewMask.data(), SM.Mask.data(), sizeof(int)*VecLen);
+        return Va;
       }
-      return Vb;
+      if (SM.MinSrc >= int(HwLen)) {
+        for (int I = 0; I != VecLen; ++I) {
+          int M = SM.Mask[I];
+          if (M != -1)
+            M -= HwLen;
+          NewMask[I] = M;
+        }
+        return Vb;
+      }
+    }
+    if (SM.MaxSrc < int(HwLen)) {
+      Vb = Va;
+    } else if (SM.MinSrc > int(HwLen)) {
+      Va = Vb;
+      SM.MinSrc -= HwLen;
     }
     const SDLoc &dl(Results.InpNode);
     SDValue S = DAG.getTargetConstant(SM.MinSrc, dl, MVT::i32);
@@ -1262,6 +1296,8 @@ OpRef HvxSelector::shuffp2(ShuffleMask SM, OpRef Va, OpRef Vb,
     return shuffp1(ShuffleMask(PackedMask), P, Results);
 
   SmallVector<int,256> MaskL(VecLen), MaskR(VecLen);
+  splitMask(SM.Mask, MaskL, MaskR);
+
   OpRef L = shuffp1(ShuffleMask(MaskL), Va, Results);
   OpRef R = shuffp1(ShuffleMask(MaskR), Vb, Results);
   if (!L.isValid() || !R.isValid())
@@ -1976,12 +2012,26 @@ void HvxSelector::selectRor(SDNode *N) {
   DAG.RemoveDeadNode(N);
 }
 
+void HvxSelector::selectVAlign(SDNode *N) {
+  SDValue Vv = N->getOperand(0);
+  SDValue Vu = N->getOperand(1);
+  SDValue Rt = N->getOperand(2);
+  SDNode *NewN = DAG.getMachineNode(Hexagon::V6_valignb, SDLoc(N),
+                                    N->getValueType(0), {Vv, Vu, Rt});
+  ISel.ReplaceNode(N, NewN);
+  DAG.RemoveDeadNode(N);
+}
+
 void HexagonDAGToDAGISel::SelectHvxShuffle(SDNode *N) {
   HvxSelector(*this, *CurDAG).selectShuffle(N);
 }
 
 void HexagonDAGToDAGISel::SelectHvxRor(SDNode *N) {
   HvxSelector(*this, *CurDAG).selectRor(N);
+}
+
+void HexagonDAGToDAGISel::SelectHvxVAlign(SDNode *N) {
+  HvxSelector(*this, *CurDAG).selectVAlign(N);
 }
 
 void HexagonDAGToDAGISel::SelectV65GatherPred(SDNode *N) {

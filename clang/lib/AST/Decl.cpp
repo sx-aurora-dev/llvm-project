@@ -312,12 +312,12 @@ LinkageComputer::getLVForTemplateArgumentList(ArrayRef<TemplateArgument> Args,
       LV.merge(getLVForType(*Arg.getAsType(), computation));
       continue;
 
-    case TemplateArgument::Declaration:
-      if (const auto *ND = dyn_cast<NamedDecl>(Arg.getAsDecl())) {
-        assert(!usesTypeVisibility(ND));
-        LV.merge(getLVForDecl(ND, computation));
-      }
+    case TemplateArgument::Declaration: {
+      const NamedDecl *ND = Arg.getAsDecl();
+      assert(!usesTypeVisibility(ND));
+      LV.merge(getLVForDecl(ND, computation));
       continue;
+    }
 
     case TemplateArgument::NullPtr:
       LV.merge(getTypeLinkageAndVisibility(Arg.getNullPtrType()));
@@ -1497,9 +1497,10 @@ void NamedDecl::printQualifiedName(raw_ostream &OS,
   using ContextsTy = SmallVector<const DeclContext *, 8>;
   ContextsTy Contexts;
 
-  // Collect contexts.
-  while (Ctx && isa<NamedDecl>(Ctx)) {
-    Contexts.push_back(Ctx);
+  // Collect named contexts.
+  while (Ctx) {
+    if (isa<NamedDecl>(Ctx))
+      Contexts.push_back(Ctx);
     Ctx = Ctx->getParent();
   }
 
@@ -3624,6 +3625,12 @@ unsigned FunctionDecl::getODRHash() {
     }
   }
 
+  if (auto *FT = getInstantiatedFromMemberFunction()) {
+    HasODRHash = true;
+    ODRHash = FT->getODRHash();
+    return ODRHash;
+  }
+
   class ODRHash Hash;
   Hash.AddFunctionDecl(this);
   HasODRHash = true;
@@ -3922,7 +3929,10 @@ RecordDecl::RecordDecl(Kind DK, TagKind TK, const ASTContext &C,
     : TagDecl(DK, TK, C, DC, IdLoc, Id, PrevDecl, StartLoc),
       HasFlexibleArrayMember(false), AnonymousStructOrUnion(false),
       HasObjectMember(false), HasVolatileMember(false),
-      LoadedFieldsFromExternalStorage(false) {
+      LoadedFieldsFromExternalStorage(false),
+      NonTrivialToPrimitiveDefaultInitialize(false),
+      NonTrivialToPrimitiveCopy(false), NonTrivialToPrimitiveDestroy(false),
+      CanPassInRegisters(true) {
   assert(classof(static_cast<Decl*>(this)) && "Invalid Kind!");
 }
 

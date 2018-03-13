@@ -20,13 +20,13 @@
 #include "InputFiles.h"
 #include "LinkerScript.h"
 #include "OutputSections.h"
-#include "Strings.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "Target.h"
 #include "Writer.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
+#include "lld/Common/Strings.h"
 #include "lld/Common/Threads.h"
 #include "lld/Common/Version.h"
 #include "llvm/BinaryFormat/Dwarf.h"
@@ -47,16 +47,14 @@ using namespace llvm::dwarf;
 using namespace llvm::ELF;
 using namespace llvm::object;
 using namespace llvm::support;
-using namespace llvm::support::endian;
 
 using namespace lld;
 using namespace lld::elf;
 
-constexpr size_t MergeNoTailSection::NumShards;
+using llvm::support::endian::write32le;
+using llvm::support::endian::write64le;
 
-static void write32(void *Buf, uint32_t Val) {
-  endian::write32(Buf, Val, Config->Endianness);
-}
+constexpr size_t MergeNoTailSection::NumShards;
 
 uint64_t SyntheticSection::getVA() const {
   if (OutputSection *Sec = getParent())
@@ -381,7 +379,7 @@ EhFrameSection::EhFrameSection()
 template <class ELFT, class RelTy>
 CieRecord *EhFrameSection::addCie(EhSectionPiece &Cie, ArrayRef<RelTy> Rels) {
   auto *Sec = cast<EhInputSection>(Cie.Sec);
-  if (read32(Cie.data().data() + 4, Config->Endianness) != 0)
+  if (read32(Cie.data().data() + 4) != 0)
     fatal(toString(Sec) + ": CIE expected at beginning of .eh_frame");
 
   Symbol *Personality = nullptr;
@@ -440,7 +438,7 @@ void EhFrameSection::addSectionAux(EhInputSection *Sec, ArrayRef<RelTy> Rels) {
       return;
 
     size_t Offset = Piece.InputOff;
-    uint32_t ID = read32(Piece.data().data() + 4, Config->Endianness);
+    uint32_t ID = read32(Piece.data().data() + 4);
     if (ID == 0) {
       OffsetToCie[Offset] = addCie<ELFT>(Piece, Rels);
       continue;
@@ -538,11 +536,11 @@ std::vector<EhFrameSection::FdeData> EhFrameSection::getFdeData() const {
 static uint64_t readFdeAddr(uint8_t *Buf, int Size) {
   switch (Size) {
   case DW_EH_PE_udata2:
-    return read16(Buf, Config->Endianness);
+    return read16(Buf);
   case DW_EH_PE_udata4:
-    return read32(Buf, Config->Endianness);
+    return read32(Buf);
   case DW_EH_PE_udata8:
-    return read64(Buf, Config->Endianness);
+    return read64(Buf);
   case DW_EH_PE_absptr:
     return readUint(Buf);
   }
@@ -1046,6 +1044,8 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
     DtFlags |= DF_ORIGIN;
     DtFlags1 |= DF_1_ORIGIN;
   }
+  if (!Config->ZText)
+    DtFlags |= DF_TEXTREL;
 
   if (DtFlags)
     addInt(DT_FLAGS, DtFlags);
@@ -1184,7 +1184,7 @@ uint64_t DynamicReloc::getOffset() const {
   return InputSec->getOutputSection()->Addr + InputSec->getOffset(OffsetInSec);
 }
 
-int64_t DynamicReloc::getAddend() const {
+int64_t DynamicReloc::computeAddend() const {
   if (UseSymVA)
     return Sym->getVA(Addend);
   return Addend;
@@ -1202,17 +1202,21 @@ RelocationBaseSection::RelocationBaseSection(StringRef Name, uint32_t Type,
     : SyntheticSection(SHF_ALLOC, Type, Config->Wordsize, Name),
       DynamicTag(DynamicTag), SizeDynamicTag(SizeDynamicTag) {}
 
-void RelocationBaseSection::addReloc(uint32_t DynType,
+void RelocationBaseSection::addReloc(RelType DynType, InputSectionBase *IS,
+                                     uint64_t OffsetInSec, Symbol *Sym) {
+  addReloc({DynType, IS, OffsetInSec, false, Sym, 0});
+}
+
+void RelocationBaseSection::addReloc(RelType DynType,
                                      InputSectionBase *InputSec,
-                                     uint64_t OffsetInSec, bool UseSymVA,
-                                     Symbol *Sym, int64_t Addend, RelExpr Expr,
+                                     uint64_t OffsetInSec, Symbol *Sym,
+                                     int64_t Addend, RelExpr Expr,
                                      RelType Type) {
-  // REL type relocations don't have addend fields unlike RELAs, and
-  // their addends are stored to the section to which they are applied.
-  // So, store addends if we need to.
-  if (!Config->IsRela && UseSymVA)
+  // Write the addends to the relocated address if required. We skip
+  // it if the written value would be zero.
+  if (Config->WriteAddends && (Expr != R_ADDEND || Addend != 0))
     InputSec->Relocations.push_back({Expr, Type, OffsetInSec, Addend, Sym});
-  addReloc({DynType, InputSec, OffsetInSec, UseSymVA, Sym, Addend});
+  addReloc({DynType, InputSec, OffsetInSec, Expr != R_ADDEND, Sym, Addend});
 }
 
 void RelocationBaseSection::addReloc(const DynamicReloc &Reloc) {
@@ -1235,7 +1239,7 @@ template <class ELFT>
 static void encodeDynamicReloc(typename ELFT::Rela *P,
                                const DynamicReloc &Rel) {
   if (Config->IsRela)
-    P->r_addend = Rel.getAddend();
+    P->r_addend = Rel.computeAddend();
   P->r_offset = Rel.getOffset();
   if (Config->EMachine == EM_MIPS && Rel.getInputSec() == InX::MipsGot)
     // The MIPS GOT section contains dynamic relocations that correspond to TLS
@@ -1260,31 +1264,21 @@ RelocationSection<ELFT>::RelocationSection(StringRef Name, bool Sort)
   this->Entsize = Config->IsRela ? sizeof(Elf_Rela) : sizeof(Elf_Rel);
 }
 
-template <class ELFT, class RelTy>
-static bool compRelocations(const RelTy &A, const RelTy &B) {
-  bool AIsRel = A.getType(Config->IsMips64EL) == Target->RelativeRel;
-  bool BIsRel = B.getType(Config->IsMips64EL) == Target->RelativeRel;
+static bool compRelocations(const DynamicReloc &A, const DynamicReloc &B) {
+  bool AIsRel = A.Type == Target->RelativeRel;
+  bool BIsRel = B.Type == Target->RelativeRel;
   if (AIsRel != BIsRel)
     return AIsRel;
-
-  return A.getSymbol(Config->IsMips64EL) < B.getSymbol(Config->IsMips64EL);
+  return A.getSymIndex() < B.getSymIndex();
 }
 
 template <class ELFT> void RelocationSection<ELFT>::writeTo(uint8_t *Buf) {
-  uint8_t *BufBegin = Buf;
+  if (Sort)
+    std::stable_sort(Relocs.begin(), Relocs.end(), compRelocations);
+
   for (const DynamicReloc &Rel : Relocs) {
     encodeDynamicReloc<ELFT>(reinterpret_cast<Elf_Rela *>(Buf), Rel);
     Buf += Config->IsRela ? sizeof(Elf_Rela) : sizeof(Elf_Rel);
-  }
-
-  if (Sort) {
-    if (Config->IsRela)
-      std::stable_sort((Elf_Rela *)BufBegin,
-                       (Elf_Rela *)BufBegin + Relocs.size(),
-                       compRelocations<ELFT, Elf_Rela>);
-    else
-      std::stable_sort((Elf_Rel *)BufBegin, (Elf_Rel *)BufBegin + Relocs.size(),
-                       compRelocations<ELFT, Elf_Rel>);
   }
 }
 
@@ -2491,11 +2485,11 @@ static MergeSyntheticSection *createMergeSynthetic(StringRef Name,
   return make<MergeNoTailSection>(Name, Type, Flags, Alignment);
 }
 
-// Debug sections may be compressed by zlib. Uncompress if exists.
+// Debug sections may be compressed by zlib. Decompress if exists.
 void elf::decompressSections() {
   parallelForEach(InputSections, [](InputSectionBase *Sec) {
     if (Sec->Live)
-      Sec->maybeUncompress();
+      Sec->maybeDecompress();
   });
 }
 
@@ -2585,12 +2579,9 @@ void ARMExidxSentinelSection::writeTo(uint8_t *Buf) {
 
 // The sentinel has to be removed if there are no other .ARM.exidx entries.
 bool ARMExidxSentinelSection::empty() const {
-  OutputSection *OS = getParent();
-  for (auto *B : OS->SectionCommands)
-    if (auto *ISD = dyn_cast<InputSectionDescription>(B))
-      for (auto *S : ISD->Sections)
-        if (!isa<ARMExidxSentinelSection>(S))
-          return false;
+  for (InputSection *IS : getInputSections(getParent()))
+    if (!isa<ARMExidxSentinelSection>(IS))
+      return false;
   return true;
 }
 

@@ -2169,19 +2169,19 @@ public:
   void setRHS(Expr *E) { SubExprs[RHS] = E; }
 
   Expr *getBase() {
-    return cast<Expr>(getRHS()->getType()->isIntegerType() ? getLHS():getRHS());
+    return getRHS()->getType()->isIntegerType() ? getLHS() : getRHS();
   }
 
   const Expr *getBase() const {
-    return cast<Expr>(getRHS()->getType()->isIntegerType() ? getLHS():getRHS());
+    return getRHS()->getType()->isIntegerType() ? getLHS() : getRHS();
   }
 
   Expr *getIdx() {
-    return cast<Expr>(getRHS()->getType()->isIntegerType() ? getRHS():getLHS());
+    return getRHS()->getType()->isIntegerType() ? getRHS() : getLHS();
   }
 
   const Expr *getIdx() const {
-    return cast<Expr>(getRHS()->getType()->isIntegerType() ? getRHS():getLHS());
+    return getRHS()->getType()->isIntegerType() ? getRHS() : getLHS();
   }
 
   SourceLocation getLocStart() const LLVM_READONLY {
@@ -2356,6 +2356,10 @@ public:
 
   SourceLocation getLocStart() const LLVM_READONLY;
   SourceLocation getLocEnd() const LLVM_READONLY;
+
+  /// Return true if this is a call to __assume() or __builtin_assume() with
+  /// a non-value-dependent constant parameter evaluating as false.
+  bool isBuiltinAssumeFalse(const ASTContext &Ctx) const;
 
   bool isCallToStdMove() const {
     const FunctionDecl* FD = getDirectCallee();

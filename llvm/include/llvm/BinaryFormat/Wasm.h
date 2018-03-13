@@ -33,24 +33,24 @@ struct WasmObjectHeader {
 };
 
 struct WasmSignature {
-  std::vector<int32_t> ParamTypes;
-  int32_t ReturnType;
+  std::vector<uint8_t> ParamTypes;
+  uint8_t ReturnType;
 };
 
 struct WasmExport {
   StringRef Name;
-  uint32_t Kind;
+  uint8_t Kind;
   uint32_t Index;
 };
 
 struct WasmLimits {
-  uint32_t Flags;
+  uint8_t Flags;
   uint32_t Initial;
   uint32_t Maximum;
 };
 
 struct WasmTable {
-  int32_t ElemType;
+  uint8_t ElemType;
   WasmLimits Limits;
 };
 
@@ -65,27 +65,32 @@ struct WasmInitExpr {
   } Value;
 };
 
+struct WasmGlobalType {
+  uint8_t Type;
+  bool Mutable;
+};
+
 struct WasmGlobal {
   uint32_t Index;
-  int32_t Type;
-  bool Mutable;
+  WasmGlobalType Type;
   WasmInitExpr InitExpr;
+  StringRef Name; // from the "linking" or "names" section
 };
 
 struct WasmImport {
   StringRef Module;
   StringRef Field;
-  uint32_t Kind;
+  uint8_t Kind;
   union {
     uint32_t SigIndex;
-    WasmGlobal Global;
+    WasmGlobalType Global;
     WasmTable Table;
     WasmLimits Memory;
   };
 };
 
 struct WasmLocalDecl {
-  int32_t Type;
+  uint8_t Type;
   uint32_t Count;
 };
 
@@ -95,7 +100,7 @@ struct WasmFunction {
   ArrayRef<uint8_t> Body;
   uint32_t CodeSectionOffset;
   uint32_t Size;
-  StringRef Name; // from the "names" section
+  StringRef Name; // from the "linking" or "names" section
   StringRef Comdat; // from the "comdat info" section
 };
 
@@ -115,16 +120,37 @@ struct WasmElemSegment {
   std::vector<uint32_t> Functions;
 };
 
+// Represents the location of a Wasm data symbol within a WasmDataSegment, as
+// the index of the segment, and the offset and size within the segment.
+struct WasmDataReference {
+  uint32_t Segment;
+  uint32_t Offset;
+  uint32_t Size;
+};
+
 struct WasmRelocation {
-  uint32_t Type;   // The type of the relocation.
-  uint32_t Index;  // Index into function or global index space.
+  uint8_t Type;    // The type of the relocation.
+  uint32_t Index;  // Index into either symbol or type index space.
   uint64_t Offset; // Offset from the start of the section.
   int64_t Addend;  // A value to add to the symbol.
 };
 
 struct WasmInitFunc {
   uint32_t Priority;
-  uint32_t FunctionIndex;
+  uint32_t Symbol;
+};
+
+struct WasmSymbolInfo {
+  StringRef Name;
+  uint8_t Kind;
+  uint32_t Flags;
+  union {
+    // For function or global symbols, the index in function of global index
+    // space.
+    uint32_t ElementIndex;
+    // For a data symbols, the address of the data relative to segment.
+    WasmDataReference DataRef;
+  };
 };
 
 struct WasmFunctionName {
@@ -133,8 +159,8 @@ struct WasmFunctionName {
 };
 
 struct WasmLinkingData {
-  uint32_t DataSize;
   std::vector<WasmInitFunc> InitFunctions;
+  std::vector<WasmSymbolInfo> SymbolTable;
 };
 
 enum : unsigned {
@@ -153,14 +179,15 @@ enum : unsigned {
 };
 
 // Type immediate encodings used in various contexts.
-enum {
-  WASM_TYPE_I32 = -0x01,
-  WASM_TYPE_I64 = -0x02,
-  WASM_TYPE_F32 = -0x03,
-  WASM_TYPE_F64 = -0x04,
-  WASM_TYPE_ANYFUNC = -0x10,
-  WASM_TYPE_FUNC = -0x20,
-  WASM_TYPE_NORESULT = -0x40, // for blocks with no result values
+enum : unsigned {
+  WASM_TYPE_I32 = 0x7F,
+  WASM_TYPE_I64 = 0x7E,
+  WASM_TYPE_F32 = 0x7D,
+  WASM_TYPE_F64 = 0x7C,
+  WASM_TYPE_ANYFUNC = 0x70,
+  WASM_TYPE_EXCEPT_REF = 0x68,
+  WASM_TYPE_FUNC = 0x60,
+  WASM_TYPE_NORESULT = 0x40, // for blocks with no result values
 };
 
 // Kinds of externals (for imports and exports).
@@ -191,6 +218,7 @@ enum class ValType {
   I64 = WASM_TYPE_I64,
   F32 = WASM_TYPE_F32,
   F64 = WASM_TYPE_F64,
+  EXCEPT_REF = WASM_TYPE_EXCEPT_REF,
 };
 
 // Kind codes used in the custom "name" section
@@ -201,11 +229,10 @@ enum : unsigned {
 
 // Kind codes used in the custom "linking" section
 enum : unsigned {
-  WASM_SYMBOL_INFO    = 0x2,
-  WASM_DATA_SIZE      = 0x3,
   WASM_SEGMENT_INFO   = 0x5,
   WASM_INIT_FUNCS     = 0x6,
   WASM_COMDAT_INFO    = 0x7,
+  WASM_SYMBOL_TABLE   = 0x8,
 };
 
 // Kind codes used in the custom "linking" section in the WASM_COMDAT_INFO
@@ -214,14 +241,22 @@ enum : unsigned {
   WASM_COMDAT_FUNCTION    = 0x1,
 };
 
+// Kind codes used in the custom "linking" section in the WASM_SYMBOL_TABLE
+enum WasmSymbolType : unsigned {
+  WASM_SYMBOL_TYPE_FUNCTION = 0x0,
+  WASM_SYMBOL_TYPE_DATA     = 0x1,
+  WASM_SYMBOL_TYPE_GLOBAL   = 0x2,
+};
+
 const unsigned WASM_SYMBOL_BINDING_MASK       = 0x3;
-const unsigned WASM_SYMBOL_VISIBILITY_MASK    = 0x4;
+const unsigned WASM_SYMBOL_VISIBILITY_MASK    = 0xc;
 
 const unsigned WASM_SYMBOL_BINDING_GLOBAL     = 0x0;
 const unsigned WASM_SYMBOL_BINDING_WEAK       = 0x1;
 const unsigned WASM_SYMBOL_BINDING_LOCAL      = 0x2;
 const unsigned WASM_SYMBOL_VISIBILITY_DEFAULT = 0x0;
 const unsigned WASM_SYMBOL_VISIBILITY_HIDDEN  = 0x4;
+const unsigned WASM_SYMBOL_UNDEFINED          = 0x10;
 
 #define WASM_RELOC(name, value) name = value,
 
@@ -230,19 +265,6 @@ enum : unsigned {
 };
 
 #undef WASM_RELOC
-
-struct Global {
-  ValType Type;
-  bool Mutable;
-
-  // The initial value for this global is either the value of an imported
-  // global, in which case InitialModule and InitialName specify the global
-  // import, or a value, in which case InitialModule is empty and InitialValue
-  // holds the value.
-  StringRef InitialModule;
-  StringRef InitialName;
-  uint64_t InitialValue;
-};
 
 } // end namespace wasm
 } // end namespace llvm

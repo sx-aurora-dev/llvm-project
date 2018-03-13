@@ -9,11 +9,14 @@
 
 #include "Driver.h"
 #include "Config.h"
+#include "ICF.h"
 #include "InputFiles.h"
+#include "MarkLive.h"
 #include "MinGW.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "Writer.h"
+#include "lld/Common/Args.h"
 #include "lld/Common/Driver.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
@@ -36,9 +39,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ToolDrivers/llvm-lib/LibDriver.h"
 #include <algorithm>
-#include <memory>
-
 #include <future>
+#include <memory>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -122,39 +124,46 @@ MemoryBufferRef LinkerDriver::takeBuffer(std::unique_ptr<MemoryBuffer> MB) {
 
 void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> MB,
                              bool WholeArchive) {
+  StringRef Filename = MB->getBufferIdentifier();
+
   MemoryBufferRef MBRef = takeBuffer(std::move(MB));
-  FilePaths.push_back(MBRef.getBufferIdentifier());
+  FilePaths.push_back(Filename);
 
   // File type is detected by contents, not by file extension.
   switch (identify_magic(MBRef.getBuffer())) {
   case file_magic::windows_resource:
     Resources.push_back(MBRef);
     break;
-
   case file_magic::archive:
     if (WholeArchive) {
       std::unique_ptr<Archive> File =
-          CHECK(Archive::create(MBRef),
-                MBRef.getBufferIdentifier() + ": failed to parse archive");
+          CHECK(Archive::create(MBRef), Filename + ": failed to parse archive");
 
       for (MemoryBufferRef M : getArchiveMembers(File.get()))
-        addArchiveBuffer(M, "<whole-archive>", MBRef.getBufferIdentifier());
+        addArchiveBuffer(M, "<whole-archive>", Filename);
       return;
     }
     Symtab->addFile(make<ArchiveFile>(MBRef));
     break;
-
   case file_magic::bitcode:
     Symtab->addFile(make<BitcodeFile>(MBRef));
     break;
-
-  case file_magic::coff_cl_gl_object:
-    error(MBRef.getBufferIdentifier() + ": is not a native COFF file. "
-          "Recompile without /GL");
-    break;
-
-  default:
+  case file_magic::coff_object:
+  case file_magic::coff_import_library:
     Symtab->addFile(make<ObjFile>(MBRef));
+    break;
+  case file_magic::coff_cl_gl_object:
+    error(Filename + ": is not a native COFF file. Recompile without /GL");
+    break;
+  case file_magic::pecoff_executable:
+    if (Filename.endswith_lower(".dll")) {
+      error(Filename + ": bad file type. Did you specify a DLL instead of an "
+                       "import library?");
+      break;
+    }
+    LLVM_FALLTHROUGH;
+  default:
+    error(MBRef.getBufferIdentifier() + ": unknown file type");
     break;
   }
 }
@@ -546,6 +555,12 @@ static void createImportLibrary(bool AsLib) {
   std::string LibName = getImportName(AsLib);
   std::string Path = getImplibPath();
 
+  if (!Config->Incremental) {
+    HandleError(writeImportLibrary(LibName, Path, Exports, Config->Machine,
+                                   false, Config->MinGW));
+    return;
+  }
+
   // If the import library already exists, replace it only if the contents
   // have changed.
   ErrorOr<std::unique_ptr<MemoryBuffer>> OldBuf = MemoryBuffer::getFile(Path);
@@ -571,6 +586,8 @@ static void createImportLibrary(bool AsLib) {
   if ((*OldBuf)->getBuffer() != NewBuf->getBuffer()) {
     OldBuf->reset();
     HandleError(errorCodeToError(sys::fs::rename(TmpName, Path)));
+  } else {
+    sys::fs::remove(TmpName);
   }
 }
 
@@ -756,6 +773,46 @@ bool LinkerDriver::run() {
   return DidWork;
 }
 
+// Parse an /order file. If an option is given, the linker places
+// COMDAT sections in the same order as their names appear in the
+// given file.
+static void parseOrderFile(StringRef Arg) {
+  // For some reason, the MSVC linker requires a filename to be
+  // preceded by "@".
+  if (!Arg.startswith("@")) {
+    error("malformed /order option: '@' missing");
+    return;
+  }
+
+  // Get a list of all comdat sections for error checking.
+  DenseSet<StringRef> Set;
+  for (Chunk *C : Symtab->getChunks())
+    if (auto *Sec = dyn_cast<SectionChunk>(C))
+      if (Sec->Sym)
+        Set.insert(Sec->Sym->getName());
+
+  // Open a file.
+  StringRef Path = Arg.substr(1);
+  std::unique_ptr<MemoryBuffer> MB = CHECK(
+      MemoryBuffer::getFile(Path, -1, false, true), "could not open " + Path);
+
+  // Parse a file. An order file contains one symbol per line.
+  // All symbols that were not present in a given order file are
+  // considered to have the lowest priority 0 and are placed at
+  // end of an output section.
+  for (std::string S : args::getLines(MB->getMemBufferRef())) {
+    if (Config->Machine == I386 && !isDecorated(S))
+      S = "_" + S;
+
+    if (Set.count(S) == 0) {
+      if (Config->WarnMissingOrderSymbol)
+        warn("/order:" + Arg + ": missing symbol: " + S);
+    }
+    else
+      Config->Order[S] = INT_MIN + Config->Order.size();
+  }
+}
+
 void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // If the first command line argument is "/lib", link.exe acts like lib.exe.
   // We call our own implementation of lib.exe that understands bitcode files.
@@ -771,7 +828,6 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   InitializeAllTargetMCs();
   InitializeAllAsmParsers();
   InitializeAllAsmPrinters();
-  InitializeAllDisassemblers();
 
   // Parse command line options.
   ArgParser Parser;
@@ -845,7 +901,9 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   // Handle /ignore
   for (auto *Arg : Args.filtered(OPT_ignore)) {
-    if (StringRef(Arg->getValue()) == "4217")
+    if (StringRef(Arg->getValue()) == "4037")
+      Config->WarnMissingOrderSymbol = false;
+    else if (StringRef(Arg->getValue()) == "4217")
       Config->WarnLocallyDefinedImported = false;
     // Other warning numbers are ignored.
   }
@@ -866,6 +924,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /debug
   if (Args.hasArg(OPT_debug, OPT_debug_dwarf, OPT_debug_ghash)) {
     Config->Debug = true;
+    Config->Incremental = true;
     if (auto *Arg = Args.getLastArg(OPT_debugtype))
       Config->DebugTypes = parseDebugType(Arg->getValue());
     else
@@ -934,6 +993,10 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /stack
   if (auto *Arg = Args.getLastArg(OPT_stack))
     parseNumbers(Arg->getValue(), &Config->StackReserve, &Config->StackCommit);
+
+  // Handle /guard:cf
+  if (auto *Arg = Args.getLastArg(OPT_guard))
+    parseGuard(Arg->getValue());
 
   // Handle /heap
   if (auto *Arg = Args.getLastArg(OPT_heap))
@@ -1072,12 +1135,32 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->AllowBind = Args.hasFlag(OPT_allowbind, OPT_allowbind_no, true);
   Config->AllowIsolation =
       Args.hasFlag(OPT_allowisolation, OPT_allowisolation_no, true);
+  Config->Incremental =
+      Args.hasFlag(OPT_incremental, OPT_incremental_no,
+                   !Config->DoGC && !Config->DoICF && !Args.hasArg(OPT_order));
   Config->NxCompat = Args.hasFlag(OPT_nxcompat, OPT_nxcompat_no, true);
   Config->TerminalServerAware = Args.hasFlag(OPT_tsaware, OPT_tsaware_no, true);
   Config->DebugDwarf = Args.hasArg(OPT_debug_dwarf);
   Config->DebugGHashes = Args.hasArg(OPT_debug_ghash);
 
   Config->MapFile = getMapFile(Args);
+
+  if (Config->Incremental && Config->DoGC) {
+    warn("ignoring '/INCREMENTAL' because REF is enabled; use '/OPT:NOREF' to "
+         "disable");
+    Config->Incremental = false;
+  }
+
+  if (Config->Incremental && Config->DoICF) {
+    warn("ignoring '/INCREMENTAL' because ICF is enabled; use '/OPT:NOICF' to "
+         "disable");
+    Config->Incremental = false;
+  }
+
+  if (Config->Incremental && Args.hasArg(OPT_order)) {
+    warn("ignoring '/INCREMENTAL' due to '/ORDER' specification");
+    Config->Incremental = false;
+  }
 
   if (errorCount())
     return;
@@ -1217,11 +1300,9 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     Symtab->addAbsolute("___safe_se_handler_count", 0);
   }
 
-  // We do not support /guard:cf (control flow protection) yet.
-  // Define CFG symbols anyway so that we can link MSVC 2015 CRT.
   Symtab->addAbsolute(mangle("__guard_fids_count"), 0);
   Symtab->addAbsolute(mangle("__guard_fids_table"), 0);
-  Symtab->addAbsolute(mangle("__guard_flags"), 0x100);
+  Symtab->addAbsolute(mangle("__guard_flags"), 0);
   Symtab->addAbsolute(mangle("__guard_iat_count"), 0);
   Symtab->addAbsolute(mangle("__guard_iat_table"), 0);
   Symtab->addAbsolute(mangle("__guard_longjmp_count"), 0);
@@ -1296,7 +1377,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /safeseh.
   if (Args.hasFlag(OPT_safeseh, OPT_safeseh_no, false)) {
     for (ObjFile *File : ObjFile::Instances)
-      if (!File->SEHCompat)
+      if (!File->hasSafeSEH())
         error("/safeseh: " + File->getName() + " is not compatible with SEH");
     if (errorCount())
       return;
@@ -1333,7 +1414,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /output-def (MinGW specific).
   if (auto *Arg = Args.getLastArg(OPT_output_def))
     writeDefFile(Arg->getValue());
-  
+
   // Set extra alignment for .comm symbols
   for (auto Pair : Config->AlignComm) {
     StringRef Name = Pair.first;
@@ -1358,6 +1439,12 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Windows specific -- Create a side-by-side manifest file.
   if (Config->Manifest == Configuration::SideBySide)
     createSideBySideManifest();
+
+  // Handle /order. We want to do this at this moment because we
+  // need a complete list of comdat sections to warn on nonexistent
+  // functions.
+  if (auto *Arg = Args.getLastArg(OPT_order))
+    parseOrderFile(Arg->getValue());
 
   // Identify unreferenced COMDAT sections.
   if (Config->DoGC)

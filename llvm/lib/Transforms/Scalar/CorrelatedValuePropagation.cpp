@@ -14,7 +14,6 @@
 #include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/GlobalsModRef.h"
@@ -59,6 +58,7 @@ STATISTIC(NumCmps,      "Number of comparisons propagated");
 STATISTIC(NumReturns,   "Number of return values propagated");
 STATISTIC(NumDeadCases, "Number of switch cases removed");
 STATISTIC(NumSDivs,     "Number of sdiv converted to udiv");
+STATISTIC(NumUDivs,     "Number of udivs whose width was decreased");
 STATISTIC(NumAShrs,     "Number of ashr converted to lshr");
 STATISTIC(NumSRems,     "Number of srem converted to urem");
 STATISTIC(NumOverflows, "Number of overflow checks removed");
@@ -123,8 +123,8 @@ static bool processSelect(SelectInst *S, LazyValueInfo *LVI) {
   return true;
 }
 
-static bool processPHI(PHINode *P, LazyValueInfo *LVI, const SimplifyQuery &SQ,
-                       DenseSet<BasicBlock *> &ReachableBlocks) {
+static bool processPHI(PHINode *P, LazyValueInfo *LVI,
+                       const SimplifyQuery &SQ) {
   bool Changed = false;
 
   BasicBlock *BB = P->getParent();
@@ -132,18 +132,7 @@ static bool processPHI(PHINode *P, LazyValueInfo *LVI, const SimplifyQuery &SQ,
     Value *Incoming = P->getIncomingValue(i);
     if (isa<Constant>(Incoming)) continue;
 
-    // If the incoming value is coming from an unreachable block, replace
-    // it with undef and go on. This is good for two reasons:
-    // 1) We skip an LVI query for an unreachable block
-    // 2) We transform the incoming value so that the code below doesn't
-    //    mess around with IR in unreachable blocks.
-    BasicBlock *IncomingBB = P->getIncomingBlock(i);
-    if (!ReachableBlocks.count(IncomingBB)) {
-      P->setIncomingValue(i, UndefValue::get(P->getType()));
-      continue;
-    }
-
-    Value *V = LVI->getConstantOnEdge(Incoming, IncomingBB, BB, P);
+    Value *V = LVI->getConstantOnEdge(Incoming, P->getIncomingBlock(i), BB, P);
 
     // Look if the incoming value is a select with a scalar condition for which
     // LVI can tells us the value. In that case replace the incoming value with
@@ -444,9 +433,50 @@ static bool hasPositiveOperands(BinaryOperator *SDI, LazyValueInfo *LVI) {
   return true;
 }
 
+/// Try to shrink a udiv/urem's width down to the smallest power of two that's
+/// sufficient to contain its operands.
+static bool processUDivOrURem(BinaryOperator *Instr, LazyValueInfo *LVI) {
+  assert(Instr->getOpcode() == Instruction::UDiv ||
+         Instr->getOpcode() == Instruction::URem);
+  if (Instr->getType()->isVectorTy())
+    return false;
+
+  // Find the smallest power of two bitwidth that's sufficient to hold Instr's
+  // operands.
+  auto OrigWidth = Instr->getType()->getIntegerBitWidth();
+  ConstantRange OperandRange(OrigWidth, /*isFullset=*/false);
+  for (Value *Operand : Instr->operands()) {
+    OperandRange = OperandRange.unionWith(
+        LVI->getConstantRange(Operand, Instr->getParent()));
+  }
+  // Don't shrink below 8 bits wide.
+  unsigned NewWidth = std::max<unsigned>(
+      PowerOf2Ceil(OperandRange.getUnsignedMax().getActiveBits()), 8);
+  // NewWidth might be greater than OrigWidth if OrigWidth is not a power of
+  // two.
+  if (NewWidth >= OrigWidth)
+    return false;
+
+  ++NumUDivs;
+  auto *TruncTy = Type::getIntNTy(Instr->getContext(), NewWidth);
+  auto *LHS = CastInst::Create(Instruction::Trunc, Instr->getOperand(0), TruncTy,
+                               Instr->getName() + ".lhs.trunc", Instr);
+  auto *RHS = CastInst::Create(Instruction::Trunc, Instr->getOperand(1), TruncTy,
+                               Instr->getName() + ".rhs.trunc", Instr);
+  auto *BO =
+      BinaryOperator::Create(Instr->getOpcode(), LHS, RHS, Instr->getName(), Instr);
+  auto *Zext = CastInst::Create(Instruction::ZExt, BO, Instr->getType(),
+                                Instr->getName() + ".zext", Instr);
+  if (BO->getOpcode() == Instruction::UDiv)
+    BO->setIsExact(Instr->isExact());
+
+  Instr->replaceAllUsesWith(Zext);
+  Instr->eraseFromParent();
+  return true;
+}
+
 static bool processSRem(BinaryOperator *SDI, LazyValueInfo *LVI) {
-  if (SDI->getType()->isVectorTy() ||
-      !hasPositiveOperands(SDI, LVI))
+  if (SDI->getType()->isVectorTy() || !hasPositiveOperands(SDI, LVI))
     return false;
 
   ++NumSRems;
@@ -454,6 +484,10 @@ static bool processSRem(BinaryOperator *SDI, LazyValueInfo *LVI) {
                                         SDI->getName(), SDI);
   SDI->replaceAllUsesWith(BO);
   SDI->eraseFromParent();
+
+  // Try to process our new urem.
+  processUDivOrURem(BO, LVI);
+
   return true;
 }
 
@@ -463,8 +497,7 @@ static bool processSRem(BinaryOperator *SDI, LazyValueInfo *LVI) {
 /// conditions, this can sometimes prove conditions instcombine can't by
 /// exploiting range information.
 static bool processSDiv(BinaryOperator *SDI, LazyValueInfo *LVI) {
-  if (SDI->getType()->isVectorTy() ||
-      !hasPositiveOperands(SDI, LVI))
+  if (SDI->getType()->isVectorTy() || !hasPositiveOperands(SDI, LVI))
     return false;
 
   ++NumSDivs;
@@ -473,6 +506,9 @@ static bool processSDiv(BinaryOperator *SDI, LazyValueInfo *LVI) {
   BO->setIsExact(SDI->isExact());
   SDI->replaceAllUsesWith(BO);
   SDI->eraseFromParent();
+
+  // Try to simplify our new udiv.
+  processUDivOrURem(BO, LVI);
 
   return true;
 }
@@ -575,14 +611,6 @@ static Constant *getConstantAt(Value *V, Instruction *At, LazyValueInfo *LVI) {
 
 static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
   bool FnChanged = false;
-
-  // Compute reachability from the entry block of this function via an RPO
-  // walk. We use this information when processing PHIs.
-  DenseSet<BasicBlock *> ReachableBlocks;
-  ReversePostOrderTraversal<Function *> RPOT(&F);
-  for (BasicBlock *BB : RPOT)
-    ReachableBlocks.insert(BB);
-
   // Visiting in a pre-order depth-first traversal causes us to simplify early
   // blocks before querying later blocks (which require us to analyze early
   // blocks).  Eagerly simplifying shallow blocks means there is strictly less
@@ -597,7 +625,7 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
         BBChanged |= processSelect(cast<SelectInst>(II), LVI);
         break;
       case Instruction::PHI:
-        BBChanged |= processPHI(cast<PHINode>(II), LVI, SQ, ReachableBlocks);
+        BBChanged |= processPHI(cast<PHINode>(II), LVI, SQ);
         break;
       case Instruction::ICmp:
       case Instruction::FCmp:
@@ -616,6 +644,10 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
         break;
       case Instruction::SDiv:
         BBChanged |= processSDiv(cast<BinaryOperator>(II), LVI);
+        break;
+      case Instruction::UDiv:
+      case Instruction::URem:
+        BBChanged |= processUDivOrURem(cast<BinaryOperator>(II), LVI);
         break;
       case Instruction::AShr:
         BBChanged |= processAShr(cast<BinaryOperator>(II), LVI);

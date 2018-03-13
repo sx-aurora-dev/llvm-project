@@ -22,7 +22,7 @@
 ; RUN:     --plugin-opt=save-temps \
 ; RUN:     -o %t3.o %t.o %t2.o
 ; Check results of internalization
-; RUN: llvm-dis %t.o.2.internalize.bc -o - | FileCheck %s
+; RUN: llvm-dis %t.o.2.internalize.bc -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-THINLTO
 ; RUN: llvm-dis %t2.o.2.internalize.bc -o - | FileCheck %s --check-prefix=CHECK2-THINLTO
 
 ; SYMTAB: deadfunc_with_section
@@ -45,7 +45,9 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Confirm via a variable with a non-C identifier section that we are getting
 ; the expected internalization.
-; CHECK-DAG: @var_with_nonC_section = internal global i32 0, section ".nonCsection"
+; CHECK-REGULARLTO-DAG: @var_with_nonC_section = internal global i32 0, section ".nonCsection"
+; Check we dropped definition of dead variable.
+; CHECK-THINLTO-NOT: @var_with_nonC_section
 @var_with_nonC_section = global i32 0, section ".nonCsection"
 
 ; We should not internalize @deadfunc_with_section due to section
@@ -57,7 +59,9 @@ define void @deadfunc_with_section() section "some_other_section" {
 
 ; Confirm via a function with a non-C identifier section that we are getting
 ; the expected internalization.
-; CHECK-DAG: define internal void @deadfunc_with_nonC_section() section ".nonCsection"
+; CHECK2-REGULARLTO-DAG: define internal void @deadfunc_with_nonC_section() section ".nonCsection"
+; Check dead function converted to declaration.
+; CHECK-THINLTO-NOT: @deadfunc_with_nonC_section()
 define void @deadfunc_with_nonC_section() section ".nonCsection" {
   call void @deadfunc2_called_from_nonC_section()
   ret void
@@ -75,5 +79,6 @@ declare void @deadfunc2_called_from_section()
 ; Confirm when called from a function with a non-C identifier section that we
 ; are getting the expected internalization.
 ; CHECK2-REGULARLTO: define internal void @deadfunc2_called_from_nonC_section
-; CHECK2-THINLTO: define internal void @deadfunc2_called_from_nonC_section
+; Check dead function converted to declaration.
+; CHECK2-THINLTO-NOT: @deadfunc2_called_from_nonC_section
 declare void @deadfunc2_called_from_nonC_section()

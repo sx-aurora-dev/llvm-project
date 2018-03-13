@@ -10,6 +10,7 @@
 #ifndef LLD_COFF_CONFIG_H
 #define LLD_COFF_CONFIG_H
 
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Support/CachePruning.h"
@@ -71,6 +72,12 @@ enum class DebugType {
   Fixup = 0x4,  /// Relocation Table
 };
 
+enum class GuardCFLevel {
+  Off,
+  NoLongJmp, // Emit gfids but no longjmp tables
+  Full,      // Enable all protections.
+};
+
 // Global configuration.
 struct Configuration {
   enum ManifestKind { SideBySide, Embed, No };
@@ -110,6 +117,9 @@ struct Configuration {
   Symbol *DelayLoadHelper = nullptr;
 
   bool SaveTemps = false;
+
+  // /guard:cf
+  GuardCFLevel GuardCF = GuardCFLevel::Off;
 
   // Used for SafeSEH.
   Symbol *SEHTable = nullptr;
@@ -153,6 +163,9 @@ struct Configuration {
   // Used for /alternatename.
   std::map<StringRef, StringRef> AlternateNames;
 
+  // Used for /order.
+  llvm::StringMap<int> Order;
+
   // Used for /lldmap.
   std::string MapFile;
 
@@ -174,7 +187,9 @@ struct Configuration {
   bool HighEntropyVA = false;
   bool AppContainer = false;
   bool MinGW = false;
+  bool WarnMissingOrderSymbol = true;
   bool WarnLocallyDefinedImported = true;
+  bool Incremental = true;
 };
 
 extern Configuration *Config;

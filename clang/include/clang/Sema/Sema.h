@@ -30,7 +30,6 @@
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/ExpressionTraits.h"
-#include "clang/Basic/LangOptions.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/PragmaKinds.h"
@@ -45,7 +44,6 @@
 #include "clang/Sema/ObjCMethodList.h"
 #include "clang/Sema/Ownership.h"
 #include "clang/Sema/Scope.h"
-#include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/TypoCorrection.h"
 #include "clang/Sema/Weak.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -172,6 +170,7 @@ namespace clang {
   class TemplateArgumentList;
   class TemplateArgumentLoc;
   class TemplateDecl;
+  class TemplateInstantiationCallback;
   class TemplateParameterList;
   class TemplatePartialOrderingContext;
   class TemplateTemplateParmDecl;
@@ -200,6 +199,7 @@ namespace clang {
 namespace sema {
   class AccessedEntity;
   class BlockScopeInfo;
+  class Capture;
   class CapturedRegionScopeInfo;
   class CapturingScopeInfo;
   class CompoundScopeInfo;
@@ -1321,25 +1321,9 @@ public:
     return FunctionScopes.back();
   }
 
-  sema::FunctionScopeInfo *getEnclosingFunction() const {
-    if (FunctionScopes.empty())
-      return nullptr;
+  sema::FunctionScopeInfo *getEnclosingFunction() const;
 
-    for (int e = FunctionScopes.size()-1; e >= 0; --e) {
-      if (isa<sema::BlockScopeInfo>(FunctionScopes[e]))
-        continue;
-      return FunctionScopes[e];
-    }
-    return nullptr;
-  }
-
-  template <typename ExprT>
-  void recordUseOfEvaluatedWeak(const ExprT *E, bool IsRead=true) {
-    if (!isUnevaluatedContext())
-      getCurFunction()->recordUseOfWeak(E, IsRead);
-  }
-
-  void PushCompoundScope();
+  void PushCompoundScope(bool IsStmtExpr);
   void PopCompoundScope();
 
   sema::CompoundScopeInfo &getCurCompoundScope() const;
@@ -2236,7 +2220,17 @@ public:
 
   bool CheckNontrivialField(FieldDecl *FD);
   void DiagnoseNontrivial(const CXXRecordDecl *Record, CXXSpecialMember CSM);
+
+  enum TrivialABIHandling {
+    /// The triviality of a method unaffected by "trivial_abi".
+    TAH_IgnoreTrivialABI,
+
+    /// The triviality of a method affected by "trivial_abi".
+    TAH_ConsiderTrivialABI
+  };
+
   bool SpecialMemberIsTrivial(CXXMethodDecl *MD, CXXSpecialMember CSM,
+                              TrivialABIHandling TAH = TAH_IgnoreTrivialABI,
                               bool Diagnose = false);
   CXXSpecialMember getSpecialMember(const CXXMethodDecl *MD);
   void ActOnLastBitfield(SourceLocation DeclStart,
@@ -2304,8 +2298,7 @@ public:
                                       Expr *val);
   bool CheckEnumUnderlyingType(TypeSourceInfo *TI);
   bool CheckEnumRedeclaration(SourceLocation EnumLoc, bool IsScoped,
-                              QualType EnumUnderlyingTy,
-                              bool EnumUnderlyingIsImplicit,
+                              QualType EnumUnderlyingTy, bool IsFixed,
                               const EnumDecl *Prev);
 
   /// Determine whether the body of an anonymous enumeration should be skipped.
@@ -3667,7 +3660,7 @@ public:
   StmtResult ActOnNullStmt(SourceLocation SemiLoc,
                            bool HasLeadingEmptyMacro = false);
 
-  void ActOnStartOfCompoundStmt();
+  void ActOnStartOfCompoundStmt(bool IsStmtExpr);
   void ActOnFinishOfCompoundStmt();
   StmtResult ActOnCompoundStmt(SourceLocation L, SourceLocation R,
                                ArrayRef<Stmt *> Elts, bool isStmtExpr);
@@ -3675,8 +3668,8 @@ public:
   /// \brief A RAII object to enter scope of a compound statement.
   class CompoundScopeRAII {
   public:
-    CompoundScopeRAII(Sema &S): S(S) {
-      S.ActOnStartOfCompoundStmt();
+    CompoundScopeRAII(Sema &S, bool IsStmtExpr = false) : S(S) {
+      S.ActOnStartOfCompoundStmt(IsStmtExpr);
     }
 
     ~CompoundScopeRAII() {
@@ -5141,7 +5134,8 @@ public:
                                bool UseGlobal, QualType AllocType, bool IsArray,
                                bool &PassAlignment, MultiExprArg PlaceArgs,
                                FunctionDecl *&OperatorNew,
-                               FunctionDecl *&OperatorDelete);
+                               FunctionDecl *&OperatorDelete,
+                               bool Diagnose = true);
   void DeclareGlobalNewDelete();
   void DeclareGlobalAllocationFunction(DeclarationName Name, QualType Return,
                                        ArrayRef<QualType> Params);
@@ -5542,10 +5536,10 @@ public:
                              Scope *CurScope);
 
   /// \brief Does copying/destroying the captured variable have side effects?
-  bool CaptureHasSideEffects(const sema::LambdaScopeInfo::Capture &From);
+  bool CaptureHasSideEffects(const sema::Capture &From);
 
   /// \brief Diagnose if an explicit lambda capture is unused.
-  void DiagnoseUnusedLambdaCapture(const sema::LambdaScopeInfo::Capture &From);
+  void DiagnoseUnusedLambdaCapture(const sema::Capture &From);
 
   /// \brief Complete a lambda-expression having processed and attached the
   /// lambda body.
@@ -5796,6 +5790,11 @@ public:
       SourceLocation BaseLoc);
 
   void CheckCompletedCXXClass(CXXRecordDecl *Record);
+
+  /// Check that the C++ class annoated with "trivial_abi" satisfies all the
+  /// conditions that are needed for the attribute to have an effect.
+  void checkIllFormedTrivialABIStruct(CXXRecordDecl &RD);
+
   void ActOnFinishCXXMemberSpecification(Scope* S, SourceLocation RLoc,
                                          Decl *TagDecl,
                                          SourceLocation LBrac,
@@ -6152,6 +6151,8 @@ public:
   void translateTemplateArguments(const ASTTemplateArgsPtr &In,
                                   TemplateArgumentListInfo &Out);
 
+  ParsedTemplateArgument ActOnTemplateTypeArgument(TypeResult ParsedType);
+
   void NoteAllFoundTemplates(TemplateName Name);
 
   QualType CheckTemplateIdType(TemplateName Template,
@@ -6359,9 +6360,8 @@ public:
                                    QualType InstantiatedParamType, Expr *Arg,
                                    TemplateArgument &Converted,
                                CheckTemplateArgumentKind CTAK = CTAK_Specified);
-  bool CheckTemplateArgument(TemplateTemplateParmDecl *Param,
-                             TemplateArgumentLoc &Arg,
-                             unsigned ArgumentPackIndex);
+  bool CheckTemplateTemplateArgument(TemplateParameterList *Params,
+                                     TemplateArgumentLoc &Arg);
 
   ExprResult
   BuildExpressionFromDeclTemplateArgument(const TemplateArgument &Arg,
@@ -7112,6 +7112,12 @@ public:
       /// We are defining a synthesized function (such as a defaulted special
       /// member).
       DefiningSynthesizedFunction,
+
+      /// Added for Template instantiation observation.
+      /// Memoization means we are _not_ instantiating a template because
+      /// it is already instantiated (but we entered a context where we
+      /// would have had to if it was not already instantiated).
+      Memoization
     } Kind;
 
     /// \brief Was the enclosing context a non-instantiation SFINAE context?
@@ -7219,6 +7225,14 @@ public:
   /// when there are multiple errors or warnings in the same instantiation.
   // FIXME: Does this belong in Sema? It's tough to implement it anywhere else.
   unsigned LastEmittedCodeSynthesisContextDepth = 0;
+
+  /// \brief The template instantiation callbacks to trace or track
+  /// instantiations (objects can be chained).
+  ///
+  /// This callbacks is used to print, trace or track template
+  /// instantiations as they are being constructed.
+  std::vector<std::unique_ptr<TemplateInstantiationCallback>>
+      TemplateInstCallbacks;
 
   /// \brief The current index into pack expansion arguments that will be
   /// used for substitution of parameter packs.
@@ -7682,6 +7696,10 @@ public:
 
   StmtResult SubstStmt(Stmt *S,
                        const MultiLevelTemplateArgumentList &TemplateArgs);
+
+  TemplateParameterList *
+  SubstTemplateParams(TemplateParameterList *Params, DeclContext *Owner,
+                      const MultiLevelTemplateArgumentList &TemplateArgs);
 
   Decl *SubstDecl(Decl *D, DeclContext *Owner,
                   const MultiLevelTemplateArgumentList &TemplateArgs);

@@ -1815,22 +1815,6 @@ void CodeGenFunction::EmitARCIntrinsicUse(ArrayRef<llvm::Value*> values) {
 }
 
 
-static bool IsForwarding(StringRef Name) {
-  return llvm::StringSwitch<bool>(Name)
-      .Cases("objc_autoreleaseReturnValue",             // ARCInstKind::AutoreleaseRV
-             "objc_autorelease",                        // ARCInstKind::Autorelease
-             "objc_retainAutoreleaseReturnValue",       // ARCInstKind::FusedRetainAutoreleaseRV
-             "objc_retainAutoreleasedReturnValue",      // ARCInstKind::RetainRV
-             "objc_retainAutorelease",                  // ARCInstKind::FusedRetainAutorelease
-             "objc_retainedObject",                     // ARCInstKind::NoopCast
-             "objc_retain",                             // ARCInstKind::Retain
-             "objc_unretainedObject",                   // ARCInstKind::NoopCast
-             "objc_unretainedPointer",                  // ARCInstKind::NoopCast
-             "objc_unsafeClaimAutoreleasedReturnValue", // ARCInstKind::ClaimRV
-             true)
-      .Default(false);
-}
-
 static llvm::Constant *createARCRuntimeFunction(CodeGenModule &CGM,
                                                 llvm::FunctionType *FTy,
                                                 StringRef Name) {
@@ -1848,9 +1832,6 @@ static llvm::Constant *createARCRuntimeFunction(CodeGenModule &CGM,
       // performance.
       F->addFnAttr(llvm::Attribute::NonLazyBind);
     }
-
-    if (IsForwarding(Name))
-      F->arg_begin()->addAttr(llvm::Attribute::Returned);
   }
 
   return RTF;
@@ -2324,6 +2305,21 @@ void CodeGenFunction::EmitARCCopyWeak(Address dst, Address src) {
   emitARCCopyOperation(*this, dst, src,
                        CGM.getObjCEntrypoints().objc_copyWeak,
                        "objc_copyWeak");
+}
+
+void CodeGenFunction::emitARCCopyAssignWeak(QualType Ty, Address DstAddr,
+                                            Address SrcAddr) {
+  llvm::Value *Object = EmitARCLoadWeakRetained(SrcAddr);
+  Object = EmitObjCConsumeObject(Ty, Object);
+  EmitARCStoreWeak(DstAddr, Object, false);
+}
+
+void CodeGenFunction::emitARCMoveAssignWeak(QualType Ty, Address DstAddr,
+                                            Address SrcAddr) {
+  llvm::Value *Object = EmitARCLoadWeakRetained(SrcAddr);
+  Object = EmitObjCConsumeObject(Ty, Object);
+  EmitARCStoreWeak(DstAddr, Object, false);
+  EmitARCDestroyWeak(SrcAddr);
 }
 
 /// Produce the code to do a objc_autoreleasepool_push.
@@ -3262,7 +3258,7 @@ CodeGenFunction::GenerateObjCAtomicSetterCopyHelperFunction(
                            "__assign_helper_atomic_property_",
                            &CGM.getModule());
 
-  CGM.SetInternalFunctionAttributes(nullptr, Fn, FI);
+  CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, FI);
 
   StartFunction(FD, C.VoidTy, Fn, FI, args);
   
@@ -3343,8 +3339,8 @@ CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
   llvm::Function *Fn =
   llvm::Function::Create(LTy, llvm::GlobalValue::InternalLinkage,
                          "__copy_helper_atomic_property_", &CGM.getModule());
-  
-  CGM.SetInternalFunctionAttributes(nullptr, Fn, FI);
+
+  CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, FI);
 
   StartFunction(FD, C.VoidTy, Fn, FI, args);
   

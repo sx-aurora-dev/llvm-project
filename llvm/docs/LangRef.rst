@@ -1065,7 +1065,7 @@ Currently, only the following parameter attributes are defined:
     for return values.
 
 .. _attr_align:
-    
+
 ``align <n>``
     This indicates that the pointer value may be assumed by the optimizer to
     have the specified alignment.
@@ -1561,6 +1561,8 @@ example:
     inlined into a function that has no ``"stack-probe-size"`` attribute
     at all, the resulting function has the ``"stack-probe-size"`` attribute
     of the callee.
+``"no-stack-arg-probe"``
+    This attribute disables ABI-required stack probes, if any.
 ``writeonly``
     On a function, this attribute indicates that the function may write to but
     does not read from memory.
@@ -1905,13 +1907,22 @@ as follows:
     must be a multiple of 8-bits. If omitted, the natural stack
     alignment defaults to "unspecified", which does not prevent any
     alignment promotions.
+``P<address space>``
+    Specifies the address space that corresponds to program memory.
+    Harvard architectures can use this to specify what space LLVM
+    should place things such as functions into. If omitted, the
+    program memory space defaults to the default address space of 0,
+    which corresponds to a Von Neumann architecture that has code
+    and data in the same space.
 ``A<address space>``
-    Specifies the address space of  objects created by '``alloca``'.
+    Specifies the address space of objects created by '``alloca``'.
     Defaults to the default address space of 0.
-``p[n]:<size>:<abi>:<pref>``
+``p[n]:<size>:<abi>:<pref>:<idx>``
     This specifies the *size* of a pointer and its ``<abi>`` and
-    ``<pref>``\erred alignments for address space ``n``. All sizes are in
-    bits. The address space, ``n``, is optional, and if not specified,
+    ``<pref>``\erred alignments for address space ``n``. The fourth parameter
+    ``<idx>`` is a size of index that used for address calculation. If not
+    specified, the default index size is equal to the pointer size. All sizes
+    are in bits. The address space, ``n``, is optional, and if not specified,
     denotes the default address space 0. The value of ``n`` must be
     in the range [1,2^23).
 ``i<size>:<abi>:<pref>``
@@ -2281,7 +2292,7 @@ Fast-Math Flags
 LLVM IR floating-point operations (:ref:`fadd <i_fadd>`,
 :ref:`fsub <i_fsub>`, :ref:`fmul <i_fmul>`, :ref:`fdiv <i_fdiv>`,
 :ref:`frem <i_frem>`, :ref:`fcmp <i_fcmp>`) and :ref:`call <i_call>`
-may use the following flags to enable otherwise unsafe 
+may use the following flags to enable otherwise unsafe
 floating-point transformations.
 
 ``nnan``
@@ -2308,11 +2319,11 @@ floating-point transformations.
 
 ``afn``
    Approximate functions - Allow substitution of approximate calculations for
-   functions (sin, log, sqrt, etc). See floating-point intrinsic definitions 
-   for places where this can apply to LLVM's intrinsic math functions. 
+   functions (sin, log, sqrt, etc). See floating-point intrinsic definitions
+   for places where this can apply to LLVM's intrinsic math functions.
 
 ``reassoc``
-   Allow reassociation transformations for floating-point instructions. 
+   Allow reassociation transformations for floating-point instructions.
    This may dramatically change results in floating point.
 
 ``fast``
@@ -3026,17 +3037,17 @@ uses with" concept would not hold.
 
 .. code-block:: llvm
 
-      %A = fdiv undef, %X
-      %B = fdiv %X, undef
+      %A = sdiv undef, %X
+      %B = sdiv %X, undef
     Safe:
-      %A = undef
+      %A = 0
     b: unreachable
 
 These examples show the crucial difference between an *undefined value*
 and *undefined behavior*. An undefined value (like '``undef``') is
 allowed to have an arbitrary bit-pattern. This means that the ``%A``
-operation can be constant folded to '``undef``', because the '``undef``'
-could be an SNaN, and ``fdiv`` is not (currently) defined on SNaN's.
+operation can be constant folded to '``0``', because the '``undef``'
+could be zero, and zero divided by any value is zero.
 However, in the second example, we can make a more aggressive
 assumption: because the ``undef`` is allowed to be an arbitrary value,
 we are allowed to assume that it could be zero. Since a divide by zero
@@ -3053,11 +3064,11 @@ optimizer can assume that it occurs in dead code.
     a: <deleted>
     b: unreachable
 
-These examples reiterate the ``fdiv`` example: a store *of* an undefined
-value can be assumed to not have any effect; we can assume that the
-value is overwritten with bits that happen to match what was already
-there. However, a store *to* an undefined location could clobber
-arbitrary memory, therefore, it has undefined behavior.
+A store *of* an undefined value can be assumed to not have any effect;
+we can assume that the value is overwritten with bits that happen to
+match what was already there. However, a store *to* an undefined
+location could clobber arbitrary memory, therefore, it has undefined
+behavior.
 
 .. _poisonvalues:
 
@@ -3652,8 +3663,8 @@ ARM and ARM's Thumb2 mode:
   ``d0-d31``, or ``q0-q15``.
 - ``x``: A 32, 64, or 128-bit floating-point/SIMD register: ``s0-s15``,
   ``d0-d7``, or ``q0-q3``.
-- ``t``: A floating-point/SIMD register, only supports 32-bit values:
-  ``s0-s31``.
+- ``t``: A low floating-point/SIMD register: ``s0-s31``, ``d0-d16``, or
+  ``q0-q8``.
 
 ARM's Thumb1 mode:
 
@@ -3672,8 +3683,8 @@ ARM's Thumb1 mode:
   ``d0-d31``, or ``q0-q15``.
 - ``x``: A 32, 64, or 128-bit floating-point/SIMD register: ``s0-s15``,
   ``d0-d7``, or ``q0-q3``.
-- ``t``: A floating-point/SIMD register, only supports 32-bit values:
-  ``s0-s31``.
+- ``t``: A low floating-point/SIMD register: ``s0-s31``, ``d0-d16``, or
+  ``q0-q8``.
 
 
 Hexagon:
@@ -6392,10 +6403,13 @@ Both arguments must have identical types.
 Semantics:
 """"""""""
 
-The value produced is the floating point sum of the two operands. This
-instruction can also take any number of :ref:`fast-math flags <fastmath>`,
-which are optimization hints to enable otherwise unsafe floating point
-optimizations:
+The value produced is the floating-point sum of the two operands.
+This instruction is assumed to execute in the default floating-point
+environment. It has no side effects. Users can not assume that any 
+floating-point exception state is updated by this instruction.
+This instruction can also take any number of :ref:`fast-math
+flags <fastmath>`, which are optimization hints to enable otherwise
+unsafe floating-point optimizations:
 
 Example:
 """"""""
@@ -6487,10 +6501,13 @@ Both arguments must have identical types.
 Semantics:
 """"""""""
 
-The value produced is the floating point difference of the two operands.
+The value produced is the floating-point difference of the two operands.
+This instruction is assumed to execute in the default floating-point
+environment. It has no side effects. Users can not assume that any 
+floating-point exception state is updated by this instruction.
 This instruction can also take any number of :ref:`fast-math
 flags <fastmath>`, which are optimization hints to enable otherwise
-unsafe floating point optimizations:
+unsafe floating-point optimizations:
 
 Example:
 """"""""
@@ -6580,10 +6597,13 @@ Both arguments must have identical types.
 Semantics:
 """"""""""
 
-The value produced is the floating point product of the two operands.
+The value produced is the floating-point product of the two operands.
+This instruction is assumed to execute in the default floating-point
+environment. It has no side effects. Users can not assume that any 
+floating-point exception state is updated by this instruction.
 This instruction can also take any number of :ref:`fast-math
 flags <fastmath>`, which are optimization hints to enable otherwise
-unsafe floating point optimizations:
+unsafe floating-point optimizations:
 
 Example:
 """"""""
@@ -6712,10 +6732,13 @@ Both arguments must have identical types.
 Semantics:
 """"""""""
 
-The value produced is the floating point quotient of the two operands.
+The value produced is the floating-point quotient of the two operands.
+This instruction is assumed to execute in the default floating-point
+environment. It has no side effects. Users can not assume that any 
+floating-point exception state is updated by this instruction.
 This instruction can also take any number of :ref:`fast-math
 flags <fastmath>`, which are optimization hints to enable otherwise
-unsafe floating point optimizations:
+unsafe floating-point optimizations:
 
 Example:
 """"""""
@@ -6853,12 +6876,16 @@ Both arguments must have identical types.
 Semantics:
 """"""""""
 
-Return the same value as a libm '``fmod``' function but without trapping or 
-setting ``errno``.
-
-The remainder has the same sign as the dividend. This instruction can also 
-take any number of :ref:`fast-math flags <fastmath>`, which are optimization
-hints to enable otherwise unsafe floating-point optimizations:
+The value produced is the floating-point remainder of the two operands.
+This is the same output as a libm '``fmod``' function, but without any
+possibility of setting ``errno``. The remainder has the same sign as the 
+dividend.
+This instruction is assumed to execute in the default floating-point
+environment. It has no side effects. Users can not assume that any 
+floating-point exception state is updated by this instruction.
+This instruction can also take any number of :ref:`fast-math
+flags <fastmath>`, which are optimization hints to enable otherwise
+unsafe floating-point optimizations:
 
 Example:
 """"""""
@@ -10189,7 +10216,7 @@ time library.
 This instrinsic does *not* empty the instruction pipeline. Modifications
 of the current function are outside the scope of the intrinsic.
 
-'``llvm.instrprof_increment``' Intrinsic
+'``llvm.instrprof.increment``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
@@ -10197,13 +10224,13 @@ Syntax:
 
 ::
 
-      declare void @llvm.instrprof_increment(i8* <name>, i64 <hash>,
+      declare void @llvm.instrprof.increment(i8* <name>, i64 <hash>,
                                              i32 <num-counters>, i32 <index>)
 
 Overview:
 """""""""
 
-The '``llvm.instrprof_increment``' intrinsic can be emitted by a
+The '``llvm.instrprof.increment``' intrinsic can be emitted by a
 frontend for use with instrumentation based profiling. These will be
 lowered by the ``-instrprof`` pass to generate execution counts of a
 program at runtime.
@@ -10219,7 +10246,7 @@ The second argument is a hash value that can be used by the consumer
 of the profile data to detect changes to the instrumented source, and
 the third is the number of counters associated with ``name``. It is an
 error if ``hash`` or ``num-counters`` differ between two instances of
-``instrprof_increment`` that refer to the same name.
+``instrprof.increment`` that refer to the same name.
 
 The last argument refers to which of the counters for ``name`` should
 be incremented. It should be a value between 0 and ``num-counters``.
@@ -10233,7 +10260,7 @@ structures and the code to increment the appropriate value, in a
 format that can be written out by a compiler runtime and consumed via
 the ``llvm-profdata`` tool.
 
-'``llvm.instrprof_increment_step``' Intrinsic
+'``llvm.instrprof.increment.step``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
@@ -10241,30 +10268,30 @@ Syntax:
 
 ::
 
-      declare void @llvm.instrprof_increment_step(i8* <name>, i64 <hash>,
+      declare void @llvm.instrprof.increment.step(i8* <name>, i64 <hash>,
                                                   i32 <num-counters>,
                                                   i32 <index>, i64 <step>)
 
 Overview:
 """""""""
 
-The '``llvm.instrprof_increment_step``' intrinsic is an extension to
-the '``llvm.instrprof_increment``' intrinsic with an additional fifth
+The '``llvm.instrprof.increment.step``' intrinsic is an extension to
+the '``llvm.instrprof.increment``' intrinsic with an additional fifth
 argument to specify the step of the increment.
 
 Arguments:
 """"""""""
-The first four arguments are the same as '``llvm.instrprof_increment``'
+The first four arguments are the same as '``llvm.instrprof.increment``'
 intrinsic.
 
 The last argument specifies the value of the increment of the counter variable.
 
 Semantics:
 """"""""""
-See description of '``llvm.instrprof_increment``' instrinsic.
+See description of '``llvm.instrprof.increment``' instrinsic.
 
 
-'``llvm.instrprof_value_profile``' Intrinsic
+'``llvm.instrprof.value.profile``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
@@ -10272,14 +10299,14 @@ Syntax:
 
 ::
 
-      declare void @llvm.instrprof_value_profile(i8* <name>, i64 <hash>,
+      declare void @llvm.instrprof.value.profile(i8* <name>, i64 <hash>,
                                                  i64 <value>, i32 <value_kind>,
                                                  i32 <index>)
 
 Overview:
 """""""""
 
-The '``llvm.instrprof_value_profile``' intrinsic can be emitted by a
+The '``llvm.instrprof.value.profile``' intrinsic can be emitted by a
 frontend for use with instrumentation based profiling. This will be
 lowered by the ``-instrprof`` pass to find out the target values,
 instrumented expressions take in a program at runtime.
@@ -10294,7 +10321,7 @@ name of the entity being instrumented. ``name`` should generally be the
 The second argument is a hash value that can be used by the consumer
 of the profile data to detect changes to the instrumented source. It
 is an error if ``hash`` differs between two instances of
-``llvm.instrprof_*`` that refer to the same name.
+``llvm.instrprof.*`` that refer to the same name.
 
 The third argument is the value of the expression being profiled. The profiled
 expression's value should be representable as an unsigned 64-bit value. The
@@ -10310,7 +10337,7 @@ Semantics:
 This intrinsic represents the point where a call to a runtime routine
 should be inserted for value profiling of target expressions. ``-instrprof``
 pass will generate the appropriate data structures and replace the
-``llvm.instrprof_value_profile`` intrinsic with the call to the profile
+``llvm.instrprof.value.profile`` intrinsic with the call to the profile
 runtime library with proper arguments.
 
 '``llvm.thread.pointer``' Intrinsic
@@ -10504,7 +10531,7 @@ Semantics:
 """"""""""
 
 The '``llvm.memset.*``' intrinsics fill "len" bytes of memory starting
-at the destination location. 
+at the destination location.
 
 '``llvm.sqrt.*``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -10538,10 +10565,10 @@ Semantics:
 """"""""""
 
 Return the same value as a corresponding libm '``sqrt``' function but without
-trapping or setting ``errno``. For types specified by IEEE-754, the result 
+trapping or setting ``errno``. For types specified by IEEE-754, the result
 matches a conforming libm implementation.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.powi.*``' Intrinsic
@@ -10616,7 +10643,7 @@ Semantics:
 Return the same value as a corresponding libm '``sin``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.cos.*``' Intrinsic
@@ -10653,7 +10680,7 @@ Semantics:
 Return the same value as a corresponding libm '``cos``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.pow.*``' Intrinsic
@@ -10691,7 +10718,7 @@ Semantics:
 Return the same value as a corresponding libm '``pow``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.exp.*``' Intrinsic
@@ -10729,7 +10756,7 @@ Semantics:
 Return the same value as a corresponding libm '``exp``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.exp2.*``' Intrinsic
@@ -10767,7 +10794,7 @@ Semantics:
 Return the same value as a corresponding libm '``exp2``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.log.*``' Intrinsic
@@ -10805,7 +10832,7 @@ Semantics:
 Return the same value as a corresponding libm '``log``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.log10.*``' Intrinsic
@@ -10843,7 +10870,7 @@ Semantics:
 Return the same value as a corresponding libm '``log10``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.log2.*``' Intrinsic
@@ -10881,7 +10908,7 @@ Semantics:
 Return the same value as a corresponding libm '``log2``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.fma.*``' Intrinsic
@@ -10918,7 +10945,7 @@ Semantics:
 Return the same value as a corresponding libm '``fma``' function but without
 trapping or setting ``errno``.
 
-When specified with the fast-math-flag 'afn', the result may be approximated 
+When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
 
 '``llvm.fabs.*``' Intrinsic
@@ -14558,4 +14585,3 @@ lowered to a call to the symbol ``__llvm_memset_element_unordered_atomic_*``. Wh
 is replaced with an actual element size.
 
 The optimizer is allowed to inline the memory assignment when it's profitable to do so.
-

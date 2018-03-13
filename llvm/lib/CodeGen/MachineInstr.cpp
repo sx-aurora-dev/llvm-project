@@ -928,8 +928,7 @@ void MachineInstr::clearKillInfo() {
   }
 }
 
-void MachineInstr::substituteRegister(unsigned FromReg,
-                                      unsigned ToReg,
+void MachineInstr::substituteRegister(unsigned FromReg, unsigned ToReg,
                                       unsigned SubIdx,
                                       const TargetRegisterInfo &RegInfo) {
   if (TargetRegisterInfo::isPhysicalRegister(ToReg)) {
@@ -1236,6 +1235,8 @@ void MachineInstr::print(raw_ostream &OS, bool IsStandalone, bool SkipOpers,
   if (const MachineFunction *MF = getMFIfAvailable(*this)) {
     F = &MF->getFunction();
     M = F->getParent();
+    if (!TII)
+      TII = MF->getSubtarget().getInstrInfo();
   }
 
   ModuleSlotTracker MST(M);

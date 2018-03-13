@@ -455,13 +455,16 @@ bool PPCCTRLoops::mightUseCTR(BasicBlock *BB) {
         return true;
     }
 
+    // FREM is always a call.
+    if (J->getOpcode() == Instruction::FRem)
+      return true;
+
     if (STI->useSoftFloat()) {
       switch(J->getOpcode()) {
       case Instruction::FAdd:
       case Instruction::FSub:
       case Instruction::FMul:
       case Instruction::FDiv:
-      case Instruction::FRem:
       case Instruction::FPTrunc:
       case Instruction::FPExt:
       case Instruction::FPToUI:
@@ -527,6 +530,27 @@ bool PPCCTRLoops::convertToCTRLoop(Loop *L) {
 
   SmallVector<BasicBlock*, 4> ExitingBlocks;
   L->getExitingBlocks(ExitingBlocks);
+
+  // If there is an exit edge known to be frequently taken,
+  // we should not transform this loop.
+  for (auto &BB : ExitingBlocks) {
+    Instruction *TI = BB->getTerminator();
+    if (!TI) continue;
+
+    if (BranchInst *BI = dyn_cast<BranchInst>(TI)) {
+      uint64_t TrueWeight = 0, FalseWeight = 0;
+      if (!BI->isConditional() ||
+          !BI->extractProfMetadata(TrueWeight, FalseWeight))
+        continue;
+
+      // If the exit path is more frequent than the loop path,
+      // we return here without further analysis for this loop.
+      bool TrueIsExit = !L->contains(BI->getSuccessor(0));
+      if (( TrueIsExit && FalseWeight < TrueWeight) ||
+          (!TrueIsExit && FalseWeight > TrueWeight))
+        return MadeChange;
+    }
+  }
 
   BasicBlock *CountedExitBlock = nullptr;
   const SCEV *ExitCount = nullptr;

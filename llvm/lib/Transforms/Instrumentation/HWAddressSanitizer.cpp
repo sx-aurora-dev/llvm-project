@@ -133,6 +133,8 @@ public:
 
   bool isInterestingAlloca(const AllocaInst &AI);
   bool tagAlloca(IRBuilder<> &IRB, AllocaInst *AI, Value *Tag);
+  Value *tagPointer(IRBuilder<> &IRB, Type *Ty, Value *PtrLong, Value *Tag);
+  Value *untagPointer(IRBuilder<> &IRB, Value *PtrLong);
   bool instrumentStack(SmallVectorImpl<AllocaInst *> &Allocas,
                        SmallVectorImpl<Instruction *> &RetVec);
   Value *getNextTagWithCall(IRBuilder<> &IRB);
@@ -290,9 +292,7 @@ void HWAddressSanitizer::instrumentMemAccessInline(Value *PtrLong, bool IsWrite,
                                                    Instruction *InsertBefore) {
   IRBuilder<> IRB(InsertBefore);
   Value *PtrTag = IRB.CreateTrunc(IRB.CreateLShr(PtrLong, kPointerTagShift), IRB.getInt8Ty());
-  Value *AddrLong =
-      IRB.CreateAnd(PtrLong, ConstantInt::get(PtrLong->getType(),
-                                              ~(0xFFULL << kPointerTagShift)));
+  Value *AddrLong = untagPointer(IRB, PtrLong);
   Value *ShadowLong = IRB.CreateLShr(AddrLong, kShadowScale);
   if (ClMappingOffset)
     ShadowLong = IRB.CreateAdd(
@@ -310,8 +310,8 @@ void HWAddressSanitizer::instrumentMemAccessInline(Value *PtrLong, bool IsWrite,
   // The signal handler will find the data address in x0.
   InlineAsm *Asm = InlineAsm::get(
       FunctionType::get(IRB.getVoidTy(), {PtrLong->getType()}, false),
-      "hlt #" +
-          itostr(0x100 + Recover * 0x20 + IsWrite * 0x10 + AccessSizeIndex),
+      "brk #" +
+          itostr(0x900 + Recover * 0x20 + IsWrite * 0x10 + AccessSizeIndex),
       "{x0}",
       /*hasSideEffects=*/true);
   IRB.CreateCall(Asm, PtrLong);
@@ -442,6 +442,39 @@ Value *HWAddressSanitizer::getUARTag(IRBuilder<> &IRB, Value *StackTag) {
   return IRB.CreateXor(StackTag, ConstantInt::get(IntptrTy, 0xFFU));
 }
 
+// Add a tag to an address.
+Value *HWAddressSanitizer::tagPointer(IRBuilder<> &IRB, Type *Ty, Value *PtrLong,
+                                      Value *Tag) {
+  Value *TaggedPtrLong;
+  if (ClEnableKhwasan) {
+    // Kernel addresses have 0xFF in the most significant byte.
+    Value *ShiftedTag = IRB.CreateOr(
+        IRB.CreateShl(Tag, kPointerTagShift),
+        ConstantInt::get(IntptrTy, (1ULL << kPointerTagShift) - 1));
+    TaggedPtrLong = IRB.CreateAnd(PtrLong, ShiftedTag);
+  } else {
+    // Userspace can simply do OR (tag << 56);
+    Value *ShiftedTag = IRB.CreateShl(Tag, kPointerTagShift);
+    TaggedPtrLong = IRB.CreateOr(PtrLong, ShiftedTag);
+  }
+  return IRB.CreateIntToPtr(TaggedPtrLong, Ty);
+}
+
+// Remove tag from an address.
+Value *HWAddressSanitizer::untagPointer(IRBuilder<> &IRB, Value *PtrLong) {
+  Value *UntaggedPtrLong;
+  if (ClEnableKhwasan) {
+    // Kernel addresses have 0xFF in the most significant byte.
+    UntaggedPtrLong = IRB.CreateOr(PtrLong,
+        ConstantInt::get(PtrLong->getType(), 0xFFULL << kPointerTagShift));
+  } else {
+    // Userspace addresses have 0x00.
+    UntaggedPtrLong = IRB.CreateAnd(PtrLong,
+        ConstantInt::get(PtrLong->getType(), ~(0xFFULL << kPointerTagShift)));
+  }
+  return UntaggedPtrLong;
+}
+
 bool HWAddressSanitizer::instrumentStack(
     SmallVectorImpl<AllocaInst *> &Allocas,
     SmallVectorImpl<Instruction *> &RetVec) {
@@ -463,11 +496,10 @@ bool HWAddressSanitizer::instrumentStack(
     // Replace uses of the alloca with tagged address.
     Value *Tag = getAllocaTag(IRB, StackTag, AI, N);
     Value *AILong = IRB.CreatePointerCast(AI, IntptrTy);
+    Value *Replacement = tagPointer(IRB, AI->getType(), AILong, Tag);
     std::string Name =
         AI->hasName() ? AI->getName().str() : "alloca." + itostr(N);
-    Value *Replacement = IRB.CreateIntToPtr(
-        IRB.CreateOr(AILong, IRB.CreateShl(Tag, kPointerTagShift)),
-        AI->getType(), Name + ".hwasan");
+    Replacement->setName(Name + ".hwasan");
 
     for (auto UI = AI->use_begin(), UE = AI->use_end(); UI != UE;) {
       Use &U = *UI++;

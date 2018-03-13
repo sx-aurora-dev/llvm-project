@@ -168,6 +168,9 @@ public:
   bool isCheapToSpeculateCttz() const override;
   bool isCheapToSpeculateCtlz() const override;
 
+  bool isSDNodeSourceOfDivergence(const SDNode *N,
+    FunctionLoweringInfo *FLI, DivergenceAnalysis *DA) const override;
+  bool isSDNodeAlwaysUniform(const SDNode *N) const override;
   static CCAssignFn *CCAssignFnForCall(CallingConv::ID CC, bool IsVarArg);
   static CCAssignFn *CCAssignFnForReturn(CallingConv::ID CC, bool IsVarArg);
 
@@ -417,6 +420,10 @@ enum NodeType : unsigned {
   // Convert two float 32 numbers into a single register holding two packed f16
   // with round to zero.
   CVT_PKRTZ_F16_F32,
+  CVT_PKNORM_I16_F32,
+  CVT_PKNORM_U16_F32,
+  CVT_PK_I16_I32,
+  CVT_PK_U16_U32,
 
   // Same as the standard node, except the high bits of the resulting integer
   // are known 0.

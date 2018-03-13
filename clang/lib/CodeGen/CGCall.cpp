@@ -1479,7 +1479,8 @@ void ClangToLLVMArgMapping::construct(const ASTContext &Context,
 /***/
 
 bool CodeGenModule::ReturnTypeUsesSRet(const CGFunctionInfo &FI) {
-  return FI.getReturnInfo().isIndirect();
+  const auto &RI = FI.getReturnInfo();
+  return RI.isIndirect() || (RI.isInAlloca() && RI.getInAllocaSRet());
 }
 
 bool CodeGenModule::ReturnSlotInterferesWithArgs(const CGFunctionInfo &FI) {
@@ -1870,53 +1871,40 @@ void CodeGenModule::ConstructAttributeList(
     }
   }
 
+  if (TargetDecl && TargetDecl->hasAttr<OpenCLKernelAttr>()) {
+    if (getLangOpts().OpenCLVersion <= 120) {
+      // OpenCL v1.2 Work groups are always uniform
+      FuncAttrs.addAttribute("uniform-work-group-size", "true");
+    } else {
+      // OpenCL v2.0 Work groups may be whether uniform or not.
+      // '-cl-uniform-work-group-size' compile option gets a hint
+      // to the compiler that the global work-size be a multiple of
+      // the work-group size specified to clEnqueueNDRangeKernel
+      // (i.e. work groups are uniform).
+      FuncAttrs.addAttribute("uniform-work-group-size",
+                             llvm::toStringRef(CodeGenOpts.UniformWGSize));
+    }
+  }
+
   if (!AttrOnCallSite) {
-    bool DisableTailCalls =
-        CodeGenOpts.DisableTailCalls ||
-        (TargetDecl && (TargetDecl->hasAttr<DisableTailCallsAttr>() ||
-                        TargetDecl->hasAttr<AnyX86InterruptAttr>()));
+    bool DisableTailCalls = false;
+
+    if (CodeGenOpts.DisableTailCalls)
+      DisableTailCalls = true;
+    else if (TargetDecl) {
+      if (TargetDecl->hasAttr<DisableTailCallsAttr>() ||
+          TargetDecl->hasAttr<AnyX86InterruptAttr>())
+        DisableTailCalls = true;
+      else if (CodeGenOpts.NoEscapingBlockTailCalls) {
+        if (const auto *BD = dyn_cast<BlockDecl>(TargetDecl))
+          if (!BD->doesNotEscape())
+            DisableTailCalls = true;
+      }
+    }
+
     FuncAttrs.addAttribute("disable-tail-calls",
                            llvm::toStringRef(DisableTailCalls));
-
-    // Add target-cpu and target-features attributes to functions. If
-    // we have a decl for the function and it has a target attribute then
-    // parse that and add it to the feature set.
-    StringRef TargetCPU = getTarget().getTargetOpts().CPU;
-    std::vector<std::string> Features;
-    const FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(TargetDecl);
-    if (FD && FD->hasAttr<TargetAttr>()) {
-      llvm::StringMap<bool> FeatureMap;
-      getFunctionFeatureMap(FeatureMap, FD);
-
-      // Produce the canonical string for this set of features.
-      for (llvm::StringMap<bool>::const_iterator it = FeatureMap.begin(),
-                                                 ie = FeatureMap.end();
-           it != ie; ++it)
-        Features.push_back((it->second ? "+" : "-") + it->first().str());
-
-      // Now add the target-cpu and target-features to the function.
-      // While we populated the feature map above, we still need to
-      // get and parse the target attribute so we can get the cpu for
-      // the function.
-      const auto *TD = FD->getAttr<TargetAttr>();
-      TargetAttr::ParsedTargetAttr ParsedAttr = TD->parse();
-      if (ParsedAttr.Architecture != "" &&
-          getTarget().isValidCPUName(ParsedAttr.Architecture))
-        TargetCPU = ParsedAttr.Architecture;
-    } else {
-      // Otherwise just add the existing target cpu and target features to the
-      // function.
-      Features = getTarget().getTargetOpts().Features;
-    }
-
-    if (TargetCPU != "")
-      FuncAttrs.addAttribute("target-cpu", TargetCPU);
-    if (!Features.empty()) {
-      std::sort(Features.begin(), Features.end());
-      FuncAttrs.addAttribute(
-          "target-features",
-          llvm::join(Features, ","));
-    }
+    GetCPUAndFeaturesAttributes(TargetDecl, FuncAttrs);
   }
 
   ClangToLLVMArgMapping IRFunctionArgs(getContext(), FI);
@@ -3144,7 +3132,6 @@ static void emitWritebacks(CodeGenFunction &CGF,
 
 static void deactivateArgCleanupsBeforeCall(CodeGenFunction &CGF,
                                             const CallArgList &CallArgs) {
-  assert(CGF.getTarget().getCXXABI().areArgsDestroyedLeftToRightInCallee());
   ArrayRef<CallArgList::CallArgCleanup> Cleanups =
     CallArgs.getCleanupsToDeactivate();
   // Iterate in reverse to increase the likelihood of popping the cleanup.
@@ -3457,10 +3444,15 @@ struct DestroyUnpassedArg final : EHScopeStack::Cleanup {
   QualType Ty;
 
   void Emit(CodeGenFunction &CGF, Flags flags) override {
-    const CXXDestructorDecl *Dtor = Ty->getAsCXXRecordDecl()->getDestructor();
-    assert(!Dtor->isTrivial());
-    CGF.EmitCXXDestructorCall(Dtor, Dtor_Complete, /*for vbase*/ false,
-                              /*Delegating=*/false, Addr);
+    QualType::DestructionKind DtorKind = Ty.isDestructedType();
+    if (DtorKind == QualType::DK_cxx_destructor) {
+      const CXXDestructorDecl *Dtor = Ty->getAsCXXRecordDecl()->getDestructor();
+      assert(!Dtor->isTrivial());
+      CGF.EmitCXXDestructorCall(Dtor, Dtor_Complete, /*for vbase*/ false,
+                                /*Delegating=*/false, Addr);
+    } else {
+      CGF.callCStructDestructor(CGF.MakeAddrLValue(Addr, Ty));
+    }
   }
 };
 
@@ -3501,8 +3493,7 @@ void CodeGenFunction::EmitCallArg(CallArgList &args, const Expr *E,
   // In the Microsoft C++ ABI, aggregate arguments are destructed by the callee.
   // However, we still have to push an EH-only cleanup in case we unwind before
   // we make it to the call.
-  if (HasAggregateEvalKind &&
-      CGM.getTarget().getCXXABI().areArgsDestroyedLeftToRightInCallee()) {
+  if (HasAggregateEvalKind && getContext().isParamDestroyedInCallee(type)) {
     // If we're using inalloca, use the argument memory.  Otherwise, use a
     // temporary.
     AggValueSlot Slot;
@@ -3511,10 +3502,16 @@ void CodeGenFunction::EmitCallArg(CallArgList &args, const Expr *E,
     else
       Slot = CreateAggTemp(type, "agg.tmp");
 
-    const CXXRecordDecl *RD = type->getAsCXXRecordDecl();
-    bool DestroyedInCallee =
-        RD && RD->hasNonTrivialDestructor() &&
-        CGM.getCXXABI().getRecordArgABI(RD) != CGCXXABI::RAA_Default;
+    bool DestroyedInCallee = true, NeedsEHCleanup = true;
+    if (const auto *RD = type->getAsCXXRecordDecl()) {
+      DestroyedInCallee =
+          RD && RD->hasNonTrivialDestructor() &&
+          (CGM.getCXXABI().getRecordArgABI(RD) != CGCXXABI::RAA_Default ||
+           RD->hasTrivialABIOverride());
+    } else {
+      NeedsEHCleanup = needsEHCleanup(type.isDestructedType());
+    }
+
     if (DestroyedInCallee)
       Slot.setExternallyDestructed();
 
@@ -3522,7 +3519,7 @@ void CodeGenFunction::EmitCallArg(CallArgList &args, const Expr *E,
     RValue RV = Slot.asRValue();
     args.add(RV, type);
 
-    if (DestroyedInCallee) {
+    if (DestroyedInCallee && NeedsEHCleanup) {
       // Create a no-op GEP between the placeholder and the cleanup so we can
       // RAUW it successfully.  It also serves as a marker of the first
       // instruction where the cleanup is active.
@@ -3609,20 +3606,21 @@ CodeGenFunction::EmitRuntimeCall(llvm::Value *callee,
 
 // Calls which may throw must have operand bundles indicating which funclet
 // they are nested within.
-static void
-getBundlesForFunclet(llvm::Value *Callee, llvm::Instruction *CurrentFuncletPad,
-                     SmallVectorImpl<llvm::OperandBundleDef> &BundleList) {
+SmallVector<llvm::OperandBundleDef, 1>
+CodeGenFunction::getBundlesForFunclet(llvm::Value *Callee) {
+  SmallVector<llvm::OperandBundleDef, 1> BundleList;
   // There is no need for a funclet operand bundle if we aren't inside a
   // funclet.
   if (!CurrentFuncletPad)
-    return;
+    return BundleList;
 
   // Skip intrinsics which cannot throw.
   auto *CalleeFn = dyn_cast<llvm::Function>(Callee->stripPointerCasts());
   if (CalleeFn && CalleeFn->isIntrinsic() && CalleeFn->doesNotThrow())
-    return;
+    return BundleList;
 
   BundleList.emplace_back("funclet", CurrentFuncletPad);
+  return BundleList;
 }
 
 /// Emits a simple call (never an invoke) to the given runtime function.
@@ -3630,10 +3628,8 @@ llvm::CallInst *
 CodeGenFunction::EmitRuntimeCall(llvm::Value *callee,
                                  ArrayRef<llvm::Value*> args,
                                  const llvm::Twine &name) {
-  SmallVector<llvm::OperandBundleDef, 1> BundleList;
-  getBundlesForFunclet(callee, CurrentFuncletPad, BundleList);
-
-  llvm::CallInst *call = Builder.CreateCall(callee, args, BundleList, name);
+  llvm::CallInst *call =
+      Builder.CreateCall(callee, args, getBundlesForFunclet(callee), name);
   call->setCallingConv(getRuntimeCC());
   return call;
 }
@@ -3641,8 +3637,8 @@ CodeGenFunction::EmitRuntimeCall(llvm::Value *callee,
 /// Emits a call or invoke to the given noreturn runtime function.
 void CodeGenFunction::EmitNoreturnRuntimeCallOrInvoke(llvm::Value *callee,
                                                ArrayRef<llvm::Value*> args) {
-  SmallVector<llvm::OperandBundleDef, 1> BundleList;
-  getBundlesForFunclet(callee, CurrentFuncletPad, BundleList);
+  SmallVector<llvm::OperandBundleDef, 1> BundleList =
+      getBundlesForFunclet(callee);
 
   if (getInvokeDest()) {
     llvm::InvokeInst *invoke = 
@@ -3685,8 +3681,8 @@ CodeGenFunction::EmitCallOrInvoke(llvm::Value *Callee,
                                   ArrayRef<llvm::Value *> Args,
                                   const Twine &Name) {
   llvm::BasicBlock *InvokeDest = getInvokeDest();
-  SmallVector<llvm::OperandBundleDef, 1> BundleList;
-  getBundlesForFunclet(Callee, CurrentFuncletPad, BundleList);
+  SmallVector<llvm::OperandBundleDef, 1> BundleList =
+      getBundlesForFunclet(Callee);
 
   llvm::Instruction *Inst;
   if (!InvokeDest)
@@ -3729,7 +3725,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
                                  SourceLocation Loc) {
   // FIXME: We no longer need the types from CallArgs; lift up and simplify.
 
-  assert(Callee.isOrdinary());
+  assert(Callee.isOrdinary() || Callee.isVirtual());
 
   // Handle struct-return functions by passing a pointer to the
   // location that we would like to return into.
@@ -3776,7 +3772,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   // If the call returns a temporary with struct return, create a temporary
   // alloca to hold the result, unless one is given to us.
   Address SRetPtr = Address::invalid();
-  size_t UnusedReturnSize = 0;
+  llvm::Value *UnusedReturnSizePtr = nullptr;
   if (RetAI.isIndirect() || RetAI.isInAlloca() || RetAI.isCoerceAndExpand()) {
     if (!ReturnValue.isNull()) {
       SRetPtr = ReturnValue.getValue();
@@ -3785,8 +3781,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
       if (HaveInsertPoint() && ReturnValue.isUnused()) {
         uint64_t size =
             CGM.getDataLayout().getTypeAllocSize(ConvertTypeForMem(RetTy));
-        if (EmitLifetimeStart(size, SRetPtr.getPointer()))
-          UnusedReturnSize = size;
+        UnusedReturnSizePtr = EmitLifetimeStart(size, SRetPtr.getPointer());
       }
     }
     if (IRFunctionArgs.hasSRetArg()) {
@@ -4015,13 +4010,11 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
         auto scalarSize = CGM.getDataLayout().getTypeAllocSize(scalarType);
         auto scalarAlign = CGM.getDataLayout().getPrefTypeAlignment(scalarType);
 
-        tempSize = llvm::ConstantInt::get(CGM.Int64Ty, scalarSize);
-
         // Materialize to a temporary.
         addr = CreateTempAlloca(RV.getScalarVal()->getType(),
                  CharUnits::fromQuantity(std::max(layout->getAlignment(),
                                                   scalarAlign)));
-        EmitLifetimeStart(scalarSize, addr.getPointer());
+        tempSize = EmitLifetimeStart(scalarSize, addr.getPointer());
 
         Builder.CreateStore(RV.getScalarVal(), addr);
       }
@@ -4053,7 +4046,8 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
     }
   }
 
-  llvm::Value *CalleePtr = Callee.getFunctionPointer();
+  const CGCallee &ConcreteCallee = Callee.prepareConcreteCallee(*this);
+  llvm::Value *CalleePtr = ConcreteCallee.getFunctionPointer();
 
   // If we're using inalloca, set up that argument.
   if (ArgMemory.isValid()) {
@@ -4194,10 +4188,19 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
     CannotThrow = Attrs.hasAttribute(llvm::AttributeList::FunctionIndex,
                                      llvm::Attribute::NoUnwind);
   }
+
+  // If we made a temporary, be sure to clean up after ourselves. Note that we
+  // can't depend on being inside of an ExprWithCleanups, so we need to manually
+  // pop this cleanup later on. Being eager about this is OK, since this
+  // temporary is 'invisible' outside of the callee.
+  if (UnusedReturnSizePtr)
+    pushFullExprCleanup<CallLifetimeEnd>(NormalEHLifetimeMarker, SRetPtr,
+                                         UnusedReturnSizePtr);
+
   llvm::BasicBlock *InvokeDest = CannotThrow ? nullptr : getInvokeDest();
 
-  SmallVector<llvm::OperandBundleDef, 1> BundleList;
-  getBundlesForFunclet(CalleePtr, CurrentFuncletPad, BundleList);
+  SmallVector<llvm::OperandBundleDef, 1> BundleList =
+      getBundlesForFunclet(CalleePtr);
 
   // Emit the actual call/invoke instruction.
   llvm::CallSite CS;
@@ -4247,9 +4250,8 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   // insertion point; this allows the rest of IRGen to discard
   // unreachable code.
   if (CS.doesNotReturn()) {
-    if (UnusedReturnSize)
-      EmitLifetimeEnd(llvm::ConstantInt::get(Int64Ty, UnusedReturnSize),
-                      SRetPtr.getPointer());
+    if (UnusedReturnSizePtr)
+      PopCleanupBlock();
 
     // Strip away the noreturn attribute to better diagnose unreachable UB.
     if (SanOpts.has(SanitizerKind::Unreachable)) {
@@ -4318,9 +4320,8 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
     case ABIArgInfo::InAlloca:
     case ABIArgInfo::Indirect: {
       RValue ret = convertTempToRValue(SRetPtr, RetTy, SourceLocation());
-      if (UnusedReturnSize)
-        EmitLifetimeEnd(llvm::ConstantInt::get(Int64Ty, UnusedReturnSize),
-                        SRetPtr.getPointer());
+      if (UnusedReturnSizePtr)
+        PopCleanupBlock();
       return ret;
     }
 
@@ -4404,6 +4405,17 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   }
 
   return Ret;
+}
+
+CGCallee CGCallee::prepareConcreteCallee(CodeGenFunction &CGF) const {
+  if (isVirtual()) {
+    const CallExpr *CE = getVirtualCallExpr();
+    return CGF.CGM.getCXXABI().getVirtualFunctionPointer(
+        CGF, getVirtualMethodDecl(), getThisAddress(),
+        getFunctionType(), CE ? CE->getLocStart() : SourceLocation());
+  }
+
+  return *this;
 }
 
 /* VarArg handling */

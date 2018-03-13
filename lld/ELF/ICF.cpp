@@ -391,6 +391,11 @@ void ICF<ELFT>::forEachClass(std::function<void(size_t, size_t)> Fn) {
   ++Cnt;
 }
 
+static void print(const Twine &S) {
+  if (Config->PrintIcfSections)
+    message(S);
+}
+
 // The main function of ICF.
 template <class ELFT> void ICF<ELFT>::run() {
   // Collect sections to merge.
@@ -425,25 +430,21 @@ template <class ELFT> void ICF<ELFT>::run() {
   log("ICF needed " + Twine(Cnt) + " iterations");
 
   // Merge sections by the equivalence class.
-  forEachClass([&](size_t Begin, size_t End) {
+  forEachClassRange(0, Sections.size(), [&](size_t Begin, size_t End) {
     if (End - Begin == 1)
       return;
-
-    log("selected " + Sections[Begin]->Name);
+    print("selected section " + toString(Sections[Begin]));
     for (size_t I = Begin + 1; I < End; ++I) {
-      log("  removed " + Sections[I]->Name);
+      print("  removing identical section " + toString(Sections[I]));
       Sections[Begin]->replace(Sections[I]);
+
+      // At this point we know sections merged are fully identical and hence
+      // we want to remove duplicate implicit dependencies such as link order
+      // and relocation sections.
+      for (InputSection *IS : Sections[I]->DependentSections)
+        IS->Live = false;
     }
   });
-
-  // Mark ARM Exception Index table sections that refer to folded code
-  // sections as not live. These sections have an implict dependency
-  // via the link order dependency.
-  if (Config->EMachine == EM_ARM)
-    for (InputSectionBase *Sec : InputSections)
-      if (auto *S = dyn_cast<InputSection>(Sec))
-        if (S->Flags & SHF_LINK_ORDER)
-          S->Live = S->getLinkOrderDep()->Live;
 }
 
 // ICF entry point function.

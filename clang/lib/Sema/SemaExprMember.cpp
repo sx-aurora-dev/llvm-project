@@ -1479,8 +1479,9 @@ static ExprResult LookupMemberExpr(Sema &S, LookupResult &R,
         IsArrow);
 
     if (IV->getType().getObjCLifetime() == Qualifiers::OCL_Weak) {
-      if (!S.Diags.isIgnored(diag::warn_arc_repeated_use_of_weak, MemberLoc))
-        S.recordUseOfEvaluatedWeak(Result);
+      if (!S.isUnevaluatedContext() &&
+          !S.Diags.isIgnored(diag::warn_arc_repeated_use_of_weak, MemberLoc))
+        S.getCurFunction()->recordUseOfWeak(Result);
     }
 
     return Result;
@@ -1623,10 +1624,14 @@ static ExprResult LookupMemberExpr(Sema &S, LookupResult &R,
       else
         VK = BaseExpr.get()->getValueKind();
     }
+
     QualType ret = CheckExtVectorComponent(S, BaseType, VK, OpLoc,
                                            Member, MemberLoc);
     if (ret.isNull())
       return ExprError();
+    Qualifiers BaseQ =
+        S.Context.getCanonicalType(BaseExpr.get()->getType()).getQualifiers();
+    ret = S.Context.getQualifiedType(ret, BaseQ);
 
     return new (S.Context)
         ExtVectorElementExpr(ret, VK, BaseExpr.get(), *Member, MemberLoc);

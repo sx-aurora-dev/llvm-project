@@ -329,8 +329,6 @@ namespace llvm {
 
       // Vector integer comparisons.
       PCMPEQ, PCMPGT,
-      // Vector integer comparisons, the result is in a mask vector.
-      PCMPEQM, PCMPGTM,
 
       // v8i16 Horizontal minimum and position.
       PHMINPOS,
@@ -347,6 +345,9 @@ namespace llvm {
       // Arithmetic operations with FLAGS results.
       ADD, SUB, ADC, SBB, SMUL,
       INC, DEC, OR, XOR, AND,
+
+      // Bit field extract.
+      BEXTR,
 
       // LOW, HI, FLAGS = umul LHS, RHS.
       UMUL,
@@ -370,13 +371,12 @@ namespace llvm {
       // Vector packed fp sign bitwise comparisons.
       TESTP,
 
-      // Vector "test" in AVX-512, the result is in a mask vector.
-      TESTM,
-      TESTNM,
-
       // OR/AND test for masks.
       KORTEST,
       KTEST,
+
+      // ADD for masks.
+      KADD,
 
       // Several flavors of instructions with vector shuffle behaviors.
       // Saturated signed/unnsigned packing.
@@ -1097,6 +1097,8 @@ namespace llvm {
     bool supportSwiftError() const override;
 
     StringRef getStackProbeSymbolName(MachineFunction &MF) const override;
+
+    bool hasVectorBlend() const override { return true; }
 
     unsigned getMaxSupportedInterleaveFactor() const override { return 4; }
 

@@ -238,6 +238,7 @@ public:
   Segment *ParentSegment = nullptr;
 
   Segment(ArrayRef<uint8_t> Data) : Contents(Data) {}
+  Segment() {}
 
   const SectionBase *firstSection() const {
     if (!Sections.empty())
@@ -342,6 +343,8 @@ struct Symbol {
 class SymbolTableSection : public SectionBase {
   MAKE_SEC_WRITER_FRIEND
 
+  void setStrTab(StringTableSection *StrTab) { SymbolNames = StrTab; }
+
 protected:
   std::vector<std::unique_ptr<Symbol>> Symbols;
   StringTableSection *SymbolNames = nullptr;
@@ -349,7 +352,6 @@ protected:
   using SymPtr = std::unique_ptr<Symbol>;
 
 public:
-  void setStrTab(StringTableSection *StrTab) { SymbolNames = StrTab; }
   void addSymbol(StringRef Name, uint8_t Bind, uint8_t Type,
                  SectionBase *DefinedIn, uint64_t Value, uint8_t Visibility,
                  uint16_t Shndx, uint64_t Sz);
@@ -402,12 +404,12 @@ template <class SymTabType>
 class RelocSectionWithSymtabBase : public RelocationSectionBase {
 private:
   SymTabType *Symbols = nullptr;
+  void setSymTab(SymTabType *SymTab) { Symbols = SymTab; }
 
 protected:
   RelocSectionWithSymtabBase() = default;
 
 public:
-  void setSymTab(SymTabType *StrTab) { Symbols = StrTab; }
   void removeSectionReferences(const SectionBase *Sec) override;
   void initialize(SectionTableRef SecTable) override;
   void finalize() override;
@@ -511,11 +513,14 @@ using object::ELFObjectFile;
 
 template <class ELFT> class ELFBuilder {
 private:
+  using Elf_Addr = typename ELFT::Addr;
   using Elf_Shdr = typename ELFT::Shdr;
+  using Elf_Ehdr = typename ELFT::Ehdr;
 
   const ELFFile<ELFT> &ElfFile;
   Object &Obj;
 
+  void setParentSegment(Segment &Child);
   void readProgramHeaders();
   void initSymbolTable(SymbolTableSection *SymTab);
   void readSectionHeaders();
@@ -556,6 +561,15 @@ public:
   template <class T>
   using ConstRange = iterator_range<pointee_iterator<
       typename std::vector<std::unique_ptr<T>>::const_iterator>>;
+
+  // It is often the case that the ELF header and the program header table are
+  // not present in any segment. This could be a problem during file layout,
+  // because other segments may get assigned an offset where either of the
+  // two should reside, which will effectively corrupt the resulting binary.
+  // Other than that we use these segments to track program header offsets
+  // when they may not follow the ELF header.
+  Segment ElfHdrSegment;
+  Segment ProgramHdrSegment;
 
   uint8_t Ident[16];
   uint64_t Entry;

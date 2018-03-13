@@ -17,6 +17,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SubEngine.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/TaintManager.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
@@ -254,7 +255,7 @@ SVal ProgramState::getSValAsScalarOrLoc(const MemRegion *R) const {
 }
 
 SVal ProgramState::getSVal(Loc location, QualType T) const {
-  SVal V = getRawSVal(cast<Loc>(location), T);
+  SVal V = getRawSVal(location, T);
 
   // If 'V' is a symbolic value that is *perfectly* constrained to
   // be a constant value, use that value instead to lessen the burden
@@ -437,24 +438,30 @@ void ProgramState::setStore(const StoreRef &newStore) {
 //  State pretty-printing.
 //===----------------------------------------------------------------------===//
 
-void ProgramState::print(raw_ostream &Out,
-                         const char *NL, const char *Sep) const {
+void ProgramState::print(raw_ostream &Out, const char *NL, const char *Sep,
+                         const LocationContext *LC) const {
   // Print the store.
   ProgramStateManager &Mgr = getStateManager();
   Mgr.getStoreManager().print(getStore(), Out, NL, Sep);
 
   // Print out the environment.
-  Env.print(Out, NL, Sep);
+  Env.print(Out, NL, Sep, LC);
 
   // Print out the constraints.
   Mgr.getConstraintManager().print(this, Out, NL, Sep);
 
+  // Print out the tracked dynamic types.
+  printDynamicTypeInfo(this, Out, NL, Sep);
+
+  // Print out tainted symbols.
+  printTaint(Out, NL, Sep);
+
   // Print checker-specific data.
-  Mgr.getOwningEngine()->printState(Out, this, NL, Sep);
+  Mgr.getOwningEngine()->printState(Out, this, NL, Sep, LC);
 }
 
-void ProgramState::printDOT(raw_ostream &Out) const {
-  print(Out, "\\l", "\\|");
+void ProgramState::printDOT(raw_ostream &Out, const LocationContext *LC) const {
+  print(Out, "\\l", "\\|", LC);
 }
 
 LLVM_DUMP_METHOD void ProgramState::dump() const {
@@ -466,7 +473,7 @@ void ProgramState::printTaint(raw_ostream &Out,
   TaintMapImpl TM = get<TaintMap>();
 
   if (!TM.isEmpty())
-    Out <<"Tainted Symbols:" << NL;
+    Out <<"Tainted symbols:" << NL;
 
   for (TaintMapImpl::iterator I = TM.begin(), E = TM.end(); I != E; ++I) {
     Out << I->first << " : " << I->second << NL;

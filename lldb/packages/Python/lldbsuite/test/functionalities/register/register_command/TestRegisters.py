@@ -69,6 +69,7 @@ class RegisterCommandsTestCase(TestBase):
     @expectedFailureAndroid(archs=["i386"])
     @skipIfFreeBSD  # llvm.org/pr25057
     @skipIf(archs=no_match(['amd64', 'i386', 'x86_64']))
+    @skipIfOutOfTreeDebugserver
     def test_fp_special_purpose_register_read(self):
         """Test commands that read fpu special purpose registers."""
         self.build()
@@ -149,7 +150,7 @@ class RegisterCommandsTestCase(TestBase):
             self.platform = "posix"
 
         if self.platform != "":
-            self.log_file = os.path.join(os.getcwd(), 'TestRegisters.log')
+            self.log_file = self.getBuildArtifact('TestRegisters.log')
             self.runCmd(
                 "log enable " +
                 self.platform +

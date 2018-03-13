@@ -31,6 +31,7 @@
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRBuilder.h"
 using namespace llvm;
 
@@ -316,6 +317,7 @@ void TruncInstCombine::ReduceExpressionDag(Type *SclTy) {
       // just return the source.  There's no need to insert it because it is not
       // new.
       if (I->getOperand(0)->getType() == Ty) {
+        assert(!isa<TruncInst>(I) && "Cannot reach here with TruncInst");
         NodeInfo.NewValue = I->getOperand(0);
         continue;
       }
@@ -325,11 +327,18 @@ void TruncInstCombine::ReduceExpressionDag(Type *SclTy) {
                                   Opc == Instruction::SExt);
 
       // Update Worklist entries with new value if needed.
-      if (auto *NewCI = dyn_cast<TruncInst>(Res)) {
-        auto Entry = find(Worklist, I);
-        if (Entry != Worklist.end())
+      // There are three possible changes to the Worklist:
+      // 1. Update Old-TruncInst -> New-TruncInst.
+      // 2. Remove Old-TruncInst (if New node is not TruncInst).
+      // 3. Add New-TruncInst (if Old node was not TruncInst).
+      auto Entry = find(Worklist, I);
+      if (Entry != Worklist.end()) {
+        if (auto *NewCI = dyn_cast<TruncInst>(Res))
           *Entry = NewCI;
-      }
+        else
+          Worklist.erase(Entry);
+      } else if (auto *NewCI = dyn_cast<TruncInst>(Res))
+          Worklist.push_back(NewCI);
       break;
     }
     case Instruction::Add:
@@ -371,7 +380,7 @@ void TruncInstCombine::ReduceExpressionDag(Type *SclTy) {
     // We still need to check that the instruction has no users before we erase
     // it, because {SExt, ZExt}Inst Instruction might have other users that was
     // not reduced, in such case, we need to keep that instruction.
-    if (!I->first->getNumUses())
+    if (I->first->use_empty())
       I->first->eraseFromParent();
   }
 }
@@ -380,10 +389,14 @@ bool TruncInstCombine::run(Function &F) {
   bool MadeIRChange = false;
 
   // Collect all TruncInst in the function into the Worklist for evaluating.
-  for (auto &BB : F)
+  for (auto &BB : F) {
+    // Ignore unreachable basic block.
+    if (!DT.isReachableFromEntry(&BB))
+      continue;
     for (auto &I : BB)
       if (auto *CI = dyn_cast<TruncInst>(&I))
         Worklist.push_back(CI);
+  }
 
   // Process all TruncInst in the Worklist, for each instruction:
   //   1. Check if it dominates an eligible expression dag to be reduced.

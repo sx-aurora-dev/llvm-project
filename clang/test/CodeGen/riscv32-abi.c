@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -triple riscv32 -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -triple riscv32 -emit-llvm -fforce-enable-int128 %s -o - \
+// RUN: | FileCheck %s -check-prefixes=CHECK,CHECK-FORCEINT128
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,6 +25,11 @@ int32_t f_scalar_3(int32_t x) { return x; }
 
 // CHECK-LABEL: define i64 @f_scalar_4(i64 %x)
 int64_t f_scalar_4(int64_t x) { return x; }
+
+#ifdef __SIZEOF_INT128__
+// CHECK-FORCEINT128-LABEL: define i128 @f_scalar_5(i128 %x)
+__int128_t f_scalar_5(__int128_t x) { return x; }
+#endif
 
 // CHECK-LABEL: define float @f_fp_scalar_1(float %x)
 float f_fp_scalar_1(float x) { return x; }
@@ -385,7 +392,7 @@ double f_va_3(char *fmt, ...) {
 // CHECK-NEXT:    [[TMP5:%.*]] = bitcast i8* [[ARGP_CUR4]] to %struct.tiny*
 // CHECK-NEXT:    [[TMP6:%.*]] = bitcast %struct.tiny* [[TS]] to i8*
 // CHECK-NEXT:    [[TMP7:%.*]] = bitcast %struct.tiny* [[TMP5]] to i8*
-// CHECK-NEXT:    call void @llvm.memcpy.p0i8.p0i8.i32(i8* align 1 [[TMP6]], i8* align 1 [[TMP7]], i32 4, i1 false)
+// CHECK-NEXT:    call void @llvm.memcpy.p0i8.p0i8.i32(i8* align 1 [[TMP6]], i8* align 4 [[TMP7]], i32 4, i1 false)
 // CHECK-NEXT:    [[ARGP_CUR6:%.*]] = load i8*, i8** [[VA]], align 4
 // CHECK-NEXT:    [[ARGP_NEXT7:%.*]] = getelementptr inbounds i8, i8* [[ARGP_CUR6]], i32 8
 // CHECK-NEXT:    store i8* [[ARGP_NEXT7]], i8** [[VA]], align 4

@@ -993,7 +993,8 @@ bool SystemZDAGToDAGISel::tryRISBGZero(SDNode *N) {
         N = New.getNode();
       }
       // Now, select the machine opcode to implement this operation.
-      SelectCode(N);
+      if (!N->isMachineOpcode())
+        SelectCode(N);
       return true;
     }
   }
@@ -1249,9 +1250,6 @@ bool SystemZDAGToDAGISel::storeLoadCanUseBlockBinary(SDNode *N,
 }
 
 void SystemZDAGToDAGISel::Select(SDNode *Node) {
-  // Dump information about the Node being selected
-  DEBUG(errs() << "Selecting: "; Node->dump(CurDAG); errs() << "\n");
-
   // If we have a custom node, we already have selected!
   if (Node->isMachineOpcode()) {
     DEBUG(errs() << "== "; Node->dump(CurDAG); errs() << "\n");

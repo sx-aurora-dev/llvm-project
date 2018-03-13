@@ -36,12 +36,6 @@ using llvm::COFF::MachineTypes;
 using llvm::COFF::WindowsSubsystem;
 using llvm::Optional;
 
-// Implemented in MarkLive.cpp.
-void markLive(ArrayRef<Chunk *> Chunks);
-
-// Implemented in ICF.cpp.
-void doICF(ArrayRef<Chunk *> Chunks);
-
 class COFFOptTable : public llvm::opt::OptTable {
 public:
   COFFOptTable();
@@ -144,6 +138,8 @@ StringRef machineToStr(MachineTypes MT);
 
 // Parses a string in the form of "<integer>[,<integer>]".
 void parseNumbers(StringRef Arg, uint64_t *Addr, uint64_t *Size = nullptr);
+
+void parseGuard(StringRef Arg);
 
 // Parses a string in the form of "<integer>[.<integer>]".
 // Minor's default value is 0.
