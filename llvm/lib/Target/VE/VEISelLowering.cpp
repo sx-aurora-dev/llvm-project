@@ -242,7 +242,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
       if (VA.needsCustom()) {
         assert(VA.getLocVT() == MVT::f64 || VA.getLocVT() == MVT::v2i32);
 
-        unsigned VRegHi = RegInfo.createVirtualRegister(&VE::IntRegsRegClass);
+        unsigned VRegHi = RegInfo.createVirtualRegister(&VE::I32RegClass);
         MF.getRegInfo().addLiveIn(VA.getLocReg(), VRegHi);
         SDValue HiVal = DAG.getCopyFromReg(Chain, dl, VRegHi, MVT::i32);
 
@@ -257,7 +257,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
           LoVal = DAG.getLoad(MVT::i32, dl, Chain, FIPtr, MachinePointerInfo());
         } else {
           unsigned loReg = MF.addLiveIn(NextVA.getLocReg(),
-                                        &VE::IntRegsRegClass);
+                                        &VE::I32RegClass);
           LoVal = DAG.getCopyFromReg(Chain, dl, loReg, MVT::i32);
         }
 
@@ -270,7 +270,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
         InVals.push_back(WholeValue);
         continue;
       }
-      unsigned VReg = RegInfo.createVirtualRegister(&VE::IntRegsRegClass);
+      unsigned VReg = RegInfo.createVirtualRegister(&VE::I32RegClass);
       MF.getRegInfo().addLiveIn(VA.getLocReg(), VReg);
       SDValue Arg = DAG.getCopyFromReg(Chain, dl, VReg, MVT::i32);
       if (VA.getLocVT() == MVT::f32)
@@ -349,7 +349,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
     VEMachineFunctionInfo *SFI = MF.getInfo<VEMachineFunctionInfo>();
     unsigned Reg = SFI->getSRetReturnReg();
     if (!Reg) {
-      Reg = MF.getRegInfo().createVirtualRegister(&VE::IntRegsRegClass);
+      Reg = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
       SFI->setSRetReturnReg(Reg);
     }
     SDValue Copy = DAG.getCopyToReg(DAG.getEntryNode(), dl, Reg, InVals[0]);
@@ -377,7 +377,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
     std::vector<SDValue> OutChains;
 
     for (; CurArgReg != ArgRegEnd; ++CurArgReg) {
-      unsigned VReg = RegInfo.createVirtualRegister(&VE::IntRegsRegClass);
+      unsigned VReg = RegInfo.createVirtualRegister(&VE::I32RegClass);
       MF.getRegInfo().addLiveIn(*CurArgReg, VReg);
       SDValue Arg = DAG.getCopyFromReg(DAG.getRoot(), dl, VReg, MVT::i32);
 
@@ -492,7 +492,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
   // of how many arguments were actually passed.
   SmallVector<SDValue, 8> OutChains;
   for (; ArgOffset < 8*8; ArgOffset += 8) {
-    unsigned VReg = MF.addLiveIn(VE::S0 + ArgOffset/8, &VE::IntRegsRegClass);
+    unsigned VReg = MF.addLiveIn(VE::S0 + ArgOffset/8, &VE::I64RegClass);
     SDValue VArg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i64);
     int FI = MF.getFrameInfo().CreateFixedObject(8, ArgOffset + ArgArea, true);
     auto PtrVT = getPointerTy(MF.getDataLayout());
@@ -510,7 +510,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
 SDValue
 VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                SmallVectorImpl<SDValue> &InVals) const {
-  if (1)
+  if (0)
     return LowerCall_64(CLI, InVals);
   return LowerCall_32(CLI, InVals);
 }
@@ -1213,11 +1213,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   // Set up the register classes.
-  addRegisterClass(MVT::i32, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::i64, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::f32, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::f64, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::f128, &VE::QFPRegsRegClass);
+  addRegisterClass(MVT::i32, &VE::I32RegClass);
+  addRegisterClass(MVT::i64, &VE::I64RegClass);
+  addRegisterClass(MVT::f32, &VE::F32RegClass);
+  addRegisterClass(MVT::f64, &VE::F64RegClass);
+  addRegisterClass(MVT::f128, &VE::F128RegClass);
 
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {
@@ -2723,7 +2723,7 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   assert(PVT == MVT::i32 && "Invalid Pointer Size!");
 
   unsigned Buf = MI.getOperand(0).getReg();
-  unsigned JmpLoc = MRI.createVirtualRegister(&SP::IntRegsRegClass);
+  unsigned JmpLoc = MRI.createVirtualRegister(&SP::I64RegClass);
 
   // TO DO: If we do 64-bit handling, this perhaps should be FLUSHW, not TA 3
   MIB = BuildMI(*MBB, MI, DL, TII->get(SP::TRAPri), SP::G0).addImm(3).addImm(SPCC::ICC_A);
@@ -2822,8 +2822,8 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
                   MBB->end());
   sinkMBB->transferSuccessorsAndUpdatePHIs(MBB);
 
-  unsigned LabelReg = MRI.createVirtualRegister(&SP::IntRegsRegClass);
-  unsigned LabelReg2 = MRI.createVirtualRegister(&SP::IntRegsRegClass);
+  unsigned LabelReg = MRI.createVirtualRegister(&SP::I64RegClass);
+  unsigned LabelReg2 = MRI.createVirtualRegister(&SP::I64RegClass);
   unsigned BufReg = MI.getOperand(1).getReg();
 
   // Instruction to store FP
@@ -2997,19 +2997,19 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
     case 'r':
-      return std::make_pair(0U, &VE::IntRegsRegClass);
+      return std::make_pair(0U, &VE::I64RegClass);
     case 'f':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::FPRegsRegClass);
+        return std::make_pair(0U, &VE::F64RegClass);
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::QFPRegsRegClass);
+        return std::make_pair(0U, &VE::F128RegClass);
       llvm_unreachable("Unknown ValueType for f-register-type!");
       break;
     case 'e':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::FPRegsRegClass);
+        return std::make_pair(0U, &VE::F64RegClass);
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::QFPRegsRegClass);
+        return std::make_pair(0U, &VE::F128RegClass);
       llvm_unreachable("Unknown ValueType for e-register-type!");
       break;
     }

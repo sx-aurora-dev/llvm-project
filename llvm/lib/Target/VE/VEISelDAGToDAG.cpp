@@ -218,7 +218,7 @@ bool VEDAGToDAGISel::tryInlineAsm(SDNode *N){
 
     unsigned RC;
     bool HasRC = InlineAsm::hasRegClassConstraint(Flag, RC);
-    if ((!IsTiedToChangedOp && (!HasRC || RC != VE::IntRegsRegClassID))
+    if ((!IsTiedToChangedOp && (!HasRC || RC != VE::I64RegClassID))
         || NumRegs != 2)
       continue;
 

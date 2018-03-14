@@ -70,7 +70,7 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 const TargetRegisterClass*
 VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
                                       unsigned Kind) const {
-  return &VE::IntRegsRegClass;
+  return &VE::I64RegClass;
 }
 
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,

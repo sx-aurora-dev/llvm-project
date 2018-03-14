@@ -87,16 +87,22 @@ foreach I = 0-31 in
 //
 // FIXME: the register order should be defined in terms of the preferred
 // allocation order...
-def IntRegs : RegisterClass<"VE", [i32, i64], 64,
-                            (sequence "S%u", 0, 63)>;
+def I32 : RegisterClass<"VE", [i32], 32,
+                          (sequence "S%u", 0, 63)>;
 
-def FPRegs : RegisterClass<"VE", [f32, f64], 64,
-                            (sequence "S%u", 0, 63)>;
+def I64 : RegisterClass<"VE", [i64], 64,
+                          (sequence "S%u", 0, 63)>;
 
-def QFPRegs : RegisterClass<"VE", [f128], 128, (sequence "Q%u", 0, 31)>;
+def F32 : RegisterClass<"VE", [f32], 32,
+                          (sequence "S%u", 0, 63)>;
 
-def MiscRegs : RegisterClass<"VE", [i64], 64,
-                             (add UCC, PSW, SAR, PMMR,
-                                  (sequence "PMCR%u", 0, 3),
-                                  (sequence "PMC%u", 0, 14))>;
+def F64 : RegisterClass<"VE", [f64], 64,
+                          (sequence "S%u", 0, 63)>;
+
+def F128 : RegisterClass<"VE", [f128], 128, (sequence "Q%u", 0, 31)>;
+
+def Misc : RegisterClass<"VE", [i64], 64,
+                         (add UCC, PSW, SAR, PMMR,
+                              (sequence "PMCR%u", 0, 3),
+                              (sequence "PMC%u", 0, 14))>;
 
