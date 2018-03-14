@@ -114,7 +114,7 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
 static bool isUncondBranchOpcode(int Opc) { return Opc == VE::BCRa; }
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == VE::BCRrr || Opc == VE::BCRir;
+  return Opc == VE::BCRrr || Opc == VE::BCRri;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {

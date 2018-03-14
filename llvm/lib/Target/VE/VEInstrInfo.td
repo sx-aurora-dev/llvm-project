@@ -27,6 +27,8 @@ include "VEInstrFormats.td"
 
 def simm15  : PatLeaf<(imm), [{ return isInt<15>(N->getSExtValue()); }]>;
 def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
+def uimm7   : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
+def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((unsigned)(N->getZExtValue() & 0xffffffff),
@@ -94,6 +96,14 @@ def simm15Op64 : Operand<i64> {
   let DecoderMethod = "DecodeSIMM15";
 }
 
+def simm32Op64 : Operand<i64> {
+  let DecoderMethod = "DecodeSIMM32";
+}
+
+def uimm7Op64 : Operand<i64> {
+  let DecoderMethod = "DecodeUIMM7";
+}
+
 // Operand for printing out a condition code.
 let PrintMethod = "printCCOperand" in
   def CCOp : Operand<i32>;
@@ -148,22 +158,87 @@ def CC_AT    : CC_VAL<15>;  // Always true
 // VE Multiclasses for common instruction formats
 //===----------------------------------------------------------------------===//
 
-// Operand multiclass
 multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
                RegisterClass RC, ValueType Ty, Operand immOp> {
-  def rr : RM<
+  def rri : RM<
+    opc, (outs RC:$sx), (ins RC:$sy, RC:$sz, simm32Op64:$imm32),
+    !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
+    [(set Ty:$sx, (OpNode (OpNode Ty:$sy, Ty:$sz), (Ty simm32:$imm32)))]> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def rii : RM<
+    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, simm32Op64:$imm32),
+    !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
+    [(set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm15:$sy)), (Ty simm32:$imm32)))]> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def rzi : RM<
+    opc, (outs RC:$sx), (ins RC:$sz, simm32Op64:$imm32),
+    !strconcat(opcStr, " $sx, ${imm32}(${sz})"),
+    [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm32:$imm32)))]> {
+    let cy = 0;
+    let sy = 0;
+    let cz = 1;
+  }
+  def zii : RM<
+    opc, (outs RC:$sx), (ins immOp:$sy, simm32Op64:$imm32),
+    !strconcat(opcStr, " $sx, ${imm32}(${sy})"),
+    [(set Ty:$sx, (OpNode (Ty simm15:$sy), (Ty simm32:$imm32)))]> {
+    let cy = 0;
+    let cz = 0;
+    let sz = 0;
+  }
+  def zzi : RM<
+    opc, (outs RC:$sx), (ins simm32Op64:$imm32),
+    !strconcat(opcStr, " $sx, $imm32"),
+    [(set Ty:$sx, (Ty simm32:$imm32))]> {
+    let cy = 0;
+    let sy = 0;
+    let cz = 0;
+    let sz = 0;
+  }
+}
+
+multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
+               RegisterClass RC, ValueType Ty, Operand immOp> {
+  def rr : RR<
     opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
     !strconcat(opcStr, " $sx, $sy, $sz"),
     [(set Ty:$sx, (OpNode Ty:$sy, Ty:$sz))]> {
     let cy = 1;
     let cz = 1;
   }
-  def ir : RM<
+  def ri : RR<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
     !strconcat(opcStr, " $sx, $sy, $sz"),
     [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm15:$sy)))]> {
     let cy = 0;
     let cz = 1;
+  }
+  def rm0 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, uimm7Op64:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})0"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+  }
+  def rm1 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, uimm7Op64:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})1"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+  }
+  def zi : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy),
+    !strconcat(opcStr, " $sx, $sy"),
+    [(set Ty:$sx, (OpNode 0, (Ty simm15:$sy)))]> {
+    let cy = 0;
+    let cz = 0;
+    let sz = 0;
   }
 }
 
@@ -178,7 +253,7 @@ multiclass BCRm {
     let cy = 1;
     let cz = 1;
   }
-  def ir : CF<
+  def ri : CF<
     0x18, (outs),
     (ins CCOp:$cf, IntRegs:$sz, i32imm:$sy, brtarget32:$imm32),
     "br.${cf}.l $sy, $sz, $imm32", []> {
@@ -202,37 +277,57 @@ multiclass BCRm {
 
 // NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
-def NOP : RM<0x79, (outs), (ins), "nop", []>;
+def NOP : RR<0x79, (outs), (ins), "nop", []>;
 
+// LEA and LEASL instruction (load 32 bit imm to low or high part)
+let cx = 0 in
+defm LEA : RMm<"lea", 0x06, add, IntRegs, i64, simm15Op64>;
+let cx = 1 in
+defm LEASL : RMm<"lea.sl", 0x06, add, IntRegs, i64, simm15Op64>;
+
+/*
 // LEA instruction (load 32 bit imm to high part)
 let cx = 0, cy = 0, sy = 0, cz = 1 in
-def LEA : RM<
+def LEA : RR<
     0x06, (outs IntRegs:$sx), (ins IntRegs:$sz, i32imm:$imm32),
     "lea.sl $sx, $sz, $imm32",
     [(set i32:$sx, (or i32:$sz, simm32:$imm32))]>;
 
 // LEA.SL instruction (load 32 bit imm to high part)
 let cx = 1, cy = 0, sy = 0, cz = 1 in
-def LEASL : RM<
+def LEASL : RR<
     0x06, (outs IntRegs:$sx), (ins IntRegs:$sz, i32imm:$imm32),
     "lea.sl $sx, $sz, $imm32",
     [(set i32:$sx, (or i32:$sz, LEASLimm:$imm32))]>;
+*/
 
 // ADD instruction
 let cx = 0 in
-defm ADD : RMm<"addu.l", 0x48, add, IntRegs, i64, simm15Op64>;
+defm ADD : RRm<"addu.l", 0x48, add, IntRegs, i64, simm15Op64>;
 let cx = 1 in
-defm ADDUW : RMm<"addu.w", 0x48, add, IntRegs, i32, simm15Op32>;
+defm ADDUW : RRm<"addu.w", 0x48, add, IntRegs, i32, simm15Op32>;
 
 // ADS instruction
 let cx = 0 in
-defm ADS : RMm<"adds.w.sx", 0x4A, add, IntRegs, i32, simm15Op32>;
+defm ADS : RRm<"adds.w.sx", 0x4A, add, IntRegs, i32, simm15Op32>;
 let cx = 1 in
-defm ADSU : RMm<"adds.w.zx", 0x4A, add, IntRegs, i32, simm15Op32>;
+defm ADSU : RRm<"adds.w.zx", 0x4A, add, IntRegs, i32, simm15Op32>;
 
 // ADX instruction
 let cx = 0 in
-defm ADX : RMm<"adds.l", 0x59, add, IntRegs, i64, simm15Op64>;
+defm ADX : RRm<"adds.l", 0x59, add, IntRegs, i64, simm15Op64>;
+
+// AND, OR, XOR, EQV, NND, and MRG instruction
+let cx = 0 in {
+defm AND : RRm<"and", 0x44, and, IntRegs, i64, simm15Op64>;
+defm OR : RRm<"or", 0x45, or, IntRegs, i64, simm15Op64>;
+defm XOR : RRm<"xor", 0x46, xor, IntRegs, i64, simm15Op64>;
+/*
+defm EQV : RRm<"eqv", 0x47, eqv, IntRegs, i64, simm15Op64>;
+defm NND : RRm<"nnd", 0x54, nnd, IntRegs, i64, simm15Op64>;
+defm MRG : RRm<"mrg", 0x56, mrg, IntRegs, i64, simm15Op64>;
+*/
+}
 
 // LDS and STS instructions
 // As 1st step, only uses sz and imm32 to represent $addr

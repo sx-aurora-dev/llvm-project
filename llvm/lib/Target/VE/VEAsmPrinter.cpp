@@ -122,7 +122,7 @@ static void EmitLEASL(MCStreamer &OutStreamer,
                       const MCSubtargetInfo &STI)
 {
   MCInst LEASLInst;
-  LEASLInst.setOpcode(VE::LEASL);
+  LEASLInst.setOpcode(VE::LEASLrzi);
   LEASLInst.addOperand(RD);
   LEASLInst.addOperand(Imm);
   OutStreamer.EmitInstruction(LEASLInst, STI);

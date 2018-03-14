@@ -47,42 +47,23 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
-  if (NumBytes >= -4096 && NumBytes < 4096) {
+  if (NumBytes >= -64 && NumBytes < 63) {
     BuildMI(MBB, MBBI, dl, TII.get(ADDri), VE::S11)
       .addReg(VE::S11).addImm(NumBytes);
     return;
   }
 
-  // Emit this the hard way.  This clobbers G1 which we always know is
+  // Emit following codes.  This clobbers S13 which we always know is
   // available here.
-  if (NumBytes >= 0) {
-    // Emit nonnegative numbers with sethi + or.
-    // sethi %hi(NumBytes), %g1
-    // or %g1, %lo(NumBytes), %g1
-    // add %sp, %g1, %sp
-#if 0
-    BuildMI(MBB, MBBI, dl, TII.get(VE::SETHIi), VE::G1)
-      .addImm(HI22(NumBytes));
-    BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::G1)
-      .addReg(VE::G1).addImm(LO10(NumBytes));
-#endif
-    BuildMI(MBB, MBBI, dl, TII.get(ADDrr), VE::S11)
-      .addReg(VE::S11).addReg(VE::S34);
-    return ;
-  }
-
-  // Emit negative numbers with sethi + xor.
-  // sethi %hix(NumBytes), %g1
-  // xor %g1, %lox(NumBytes), %g1
-  // add %sp, %g1, %sp
-#if 0
-  BuildMI(MBB, MBBI, dl, TII.get(VE::SETHIi), VE::G1)
-    .addImm(HIX22(NumBytes));
-  BuildMI(MBB, MBBI, dl, TII.get(VE::XORri), VE::G1)
-    .addReg(VE::G1).addImm(LOX10(NumBytes));
-#endif
-  BuildMI(MBB, MBBI, dl, TII.get(ADDrr), VE::S11)
-    .addReg(VE::S11).addReg(VE::S34);
+  //   lea     %s13,%lo(NumBytes)
+  //   and     %s13,%s13,(32)0
+  //   lea.sl  %sp,%hi(NumBytes)(%sp, %s13)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LEAzzi), VE::S13)
+    .addImm(LO32(NumBytes));
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm0), VE::S13)
+    .addReg(VE::S13).addImm(0);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::S11)
+    .addReg(VE::S11).addReg(VE::S13).addImm(HI32(NumBytes));
 }
 
 void VEFrameLowering::emitPrologue(MachineFunction &MF,
@@ -114,7 +95,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Get the number of bytes to allocate from the FrameInfo
   int NumBytes = (int) MFI.getStackSize();
-  unsigned SAVEri = VE::ADXir;
+  unsigned SAVEri = VE::ADXri;
   unsigned SAVErr = VE::ADXrr;
 #if 0
   if (FuncInfo->isLeafProc()) {
