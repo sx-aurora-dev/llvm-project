@@ -25,7 +25,7 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
-def simm15  : PatLeaf<(imm), [{ return isInt<15>(N->getSExtValue()); }]>;
+def simm7   : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm7   : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
 def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
@@ -88,12 +88,12 @@ def calltarget : Operand<i32> {
   let DecoderMethod = "DecodeCall";
 }
 
-def simm15Op32 : Operand<i32> {
-  let DecoderMethod = "DecodeSIMM15";
+def simm7Op32 : Operand<i32> {
+  let DecoderMethod = "DecodeSIMM7";
 }
 
-def simm15Op64 : Operand<i64> {
-  let DecoderMethod = "DecodeSIMM15";
+def simm7Op64 : Operand<i64> {
+  let DecoderMethod = "DecodeSIMM7";
 }
 
 def simm32Op64 : Operand<i64> {
@@ -170,7 +170,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
   def rii : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, simm32Op64:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
-    [(set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm15:$sy)), (Ty simm32:$imm32)))]> {
+    [(set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm7:$sy)), (Ty simm32:$imm32)))]> {
     let cy = 0;
     let cz = 1;
   }
@@ -185,7 +185,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
   def zii : RM<
     opc, (outs RC:$sx), (ins immOp:$sy, simm32Op64:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}(${sy})"),
-    [(set Ty:$sx, (OpNode (Ty simm15:$sy), (Ty simm32:$imm32)))]> {
+    [(set Ty:$sx, (OpNode (Ty simm7:$sy), (Ty simm32:$imm32)))]> {
     let cy = 0;
     let cz = 0;
     let sz = 0;
@@ -213,7 +213,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
   def ri : RR<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
     !strconcat(opcStr, " $sx, $sy, $sz"),
-    [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm15:$sy)))]> {
+    [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm7:$sy)))]> {
     let cy = 0;
     let cz = 1;
   }
@@ -232,10 +232,25 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 1;
     let cz = 0;
   }
+  def im0 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, uimm7Op64:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})0"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz{6} = 1;
+  }
+  def im1 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, uimm7Op64:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})1"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+  }
   def zi : RR<
     opc, (outs RC:$sx), (ins immOp:$sy),
     !strconcat(opcStr, " $sx, $sy"),
-    [(set Ty:$sx, (OpNode 0, (Ty simm15:$sy)))]> {
+    [(set Ty:$sx, (OpNode 0, (Ty simm7:$sy)))]> {
     let cy = 0;
     let cz = 0;
     let sz = 0;
@@ -281,9 +296,9 @@ def NOP : RR<0x79, (outs), (ins), "nop", []>;
 
 // LEA and LEASL instruction (load 32 bit imm to low or high part)
 let cx = 0 in
-defm LEA : RMm<"lea", 0x06, add, IntRegs, i64, simm15Op64>;
+defm LEA : RMm<"lea", 0x06, add, IntRegs, i64, simm7Op64>;
 let cx = 1 in
-defm LEASL : RMm<"lea.sl", 0x06, add, IntRegs, i64, simm15Op64>;
+defm LEASL : RMm<"lea.sl", 0x06, add, IntRegs, i64, simm7Op64>;
 
 /*
 // LEA instruction (load 32 bit imm to high part)
@@ -303,29 +318,29 @@ def LEASL : RR<
 
 // ADD instruction
 let cx = 0 in
-defm ADD : RRm<"addu.l", 0x48, add, IntRegs, i64, simm15Op64>;
+defm ADD : RRm<"addu.l", 0x48, add, IntRegs, i64, simm7Op64>;
 let cx = 1 in
-defm ADDUW : RRm<"addu.w", 0x48, add, IntRegs, i32, simm15Op32>;
+defm ADDUW : RRm<"addu.w", 0x48, add, IntRegs, i32, simm7Op32>;
 
 // ADS instruction
 let cx = 0 in
-defm ADS : RRm<"adds.w.sx", 0x4A, add, IntRegs, i32, simm15Op32>;
+defm ADS : RRm<"adds.w.sx", 0x4A, add, IntRegs, i32, simm7Op32>;
 let cx = 1 in
-defm ADSU : RRm<"adds.w.zx", 0x4A, add, IntRegs, i32, simm15Op32>;
+defm ADSU : RRm<"adds.w.zx", 0x4A, add, IntRegs, i32, simm7Op32>;
 
 // ADX instruction
 let cx = 0 in
-defm ADX : RRm<"adds.l", 0x59, add, IntRegs, i64, simm15Op64>;
+defm ADX : RRm<"adds.l", 0x59, add, IntRegs, i64, simm7Op64>;
 
 // AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
-defm AND : RRm<"and", 0x44, and, IntRegs, i64, simm15Op64>;
-defm OR : RRm<"or", 0x45, or, IntRegs, i64, simm15Op64>;
-defm XOR : RRm<"xor", 0x46, xor, IntRegs, i64, simm15Op64>;
+defm AND : RRm<"and", 0x44, and, IntRegs, i64, simm7Op64>;
+defm OR : RRm<"or", 0x45, or, IntRegs, i64, simm7Op64>;
+defm XOR : RRm<"xor", 0x46, xor, IntRegs, i64, simm7Op64>;
 /*
-defm EQV : RRm<"eqv", 0x47, eqv, IntRegs, i64, simm15Op64>;
-defm NND : RRm<"nnd", 0x54, nnd, IntRegs, i64, simm15Op64>;
-defm MRG : RRm<"mrg", 0x56, mrg, IntRegs, i64, simm15Op64>;
+defm EQV : RRm<"eqv", 0x47, eqv, IntRegs, i64, simm7Op64>;
+defm NND : RRm<"nnd", 0x54, nnd, IntRegs, i64, simm7Op64>;
+defm MRG : RRm<"mrg", 0x56, mrg, IntRegs, i64, simm7Op64>;
 */
 }
 
