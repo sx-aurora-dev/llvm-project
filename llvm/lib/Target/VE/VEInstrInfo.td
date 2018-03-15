@@ -32,13 +32,13 @@ def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((unsigned)(N->getZExtValue() & 0xffffffff),
-                                   SDLoc(N), MVT::i32);
+                                   SDLoc(N), MVT::i64);
 }]>;
 
 def HI32 : SDNodeXForm<imm, [{
   // Transformation function: shift the immediate value down into the low bits.
   return CurDAG->getTargetConstant((unsigned)(N->getZExtValue() >> 32),
-                                   SDLoc(N), MVT::i32);
+                                   SDLoc(N), MVT::i64);
 }]>;
 
 def LEASLimm : PatLeaf<(imm), [{
@@ -67,7 +67,7 @@ def MEMrr : Operand<iPTR> {
 }
 def MEMri : Operand<iPTR> {
   let PrintMethod = "printMemOperand";
-  let MIOperandInfo = (ops ptr_rc, i32imm);
+  let MIOperandInfo = (ops ptr_rc, i64imm);
   let ParserMatchClass = VEMEMriAsmOperand;
 }
 
@@ -83,7 +83,7 @@ def brtarget : Operand<OtherVT> {
   let EncoderMethod = "getBranchTargetOpValue";
 }
 
-def calltarget : Operand<i32> {
+def calltarget : Operand<i64> {
   let EncoderMethod = "getCallTargetOpValue";
   let DecoderMethod = "DecodeCall";
 }
@@ -120,17 +120,17 @@ def VEhi    : SDNode<"VEISD::Hi", SDTIntUnaryOp>;
 def VElo    : SDNode<"VEISD::Lo", SDTIntUnaryOp>;
 
 //  These are target-independent nodes, but have target-specific formats.
-def SDT_SPCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32>,
-                                          SDTCisVT<1, i32> ]>;
-def SDT_SPCallSeqEnd   : SDCallSeqEnd<[ SDTCisVT<0, i32>,
-                                        SDTCisVT<1, i32> ]>;
+def SDT_SPCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i64>,
+                                          SDTCisVT<1, i64> ]>;
+def SDT_SPCallSeqEnd   : SDCallSeqEnd<[ SDTCisVT<0, i64>,
+                                        SDTCisVT<1, i64> ]>;
 
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_SPCallSeqStart,
                            [SDNPHasChain, SDNPOutGlue]>;
 def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_SPCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
-def SDT_SPCall    : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def SDT_SPCall    : SDTypeProfile<0, -1, [SDTCisVT<0, i64>]>;
 def call          : SDNode<"VEISD::CALL", SDT_SPCall,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                             SDNPVariadic]>;
@@ -474,10 +474,10 @@ def : Pat<(call texternalsym:$dst),
 //===----------------------------------------------------------------------===//
 
 let Defs = [S11], Uses = [S11] in {
-def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt, i32imm:$amt2),
+def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i64imm:$amt, i64imm:$amt2),
                               "# ADJCALLSTACKDOWN $amt, $amt2",
                               [(callseq_start timm:$amt, timm:$amt2)]>;
-def ADJCALLSTACKUP : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
+def ADJCALLSTACKUP : Pseudo<(outs), (ins i64imm:$amt1, i64imm:$amt2),
                             "# ADJCALLSTACKUP $amt1",
                             [(callseq_end timm:$amt1, timm:$amt2)]>;
 }

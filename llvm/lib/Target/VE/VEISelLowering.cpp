@@ -510,7 +510,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
 SDValue
 VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                SmallVectorImpl<SDValue> &InVals) const {
-  if (0)
+  if (1)
     return LowerCall_64(CLI, InVals);
   return LowerCall_32(CLI, InVals);
 }
