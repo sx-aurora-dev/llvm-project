@@ -350,7 +350,7 @@ defm MRG : RRm<"mrg", 0x56, mrg, I64, i64, simm7Op64, uimm6Op64>;
 */
 }
 
-// LDS and STS instructions
+// Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
 let cx = 0, cy = 0, sy = 0, cz = 1 in
 def LDS : RM<
@@ -363,6 +363,18 @@ def SDS : RM<
     0x11, (outs), (ins MEMri:$addr, I64:$sx),
     "st $sx, $addr",
     [(store i64:$sx, ADDRri:$addr)]>;
+
+let cx = 0, cy = 0, sy = 0, cz = 1 in
+def LDL : RM<
+    0x03, (outs I32:$sx), (ins MEMri:$addr),
+    "ldl.sx $sx, $addr",
+    [(set i32:$sx, (load ADDRri:$addr))]>;
+
+let cx = 0, cy = 0, sy = 0, cz = 1 in
+def SDL : RM<
+    0x13, (outs), (ins MEMri:$addr, I32:$sx),
+    "stl.sx $sx, $addr",
+    [(store i32:$sx, ADDRri:$addr)]>;
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
