@@ -411,7 +411,7 @@ defm BCR : BCRm;
 let isCodeGenOnly = 1 in {
 
 // Call instruction
-let Uses = [S10], hasDelaySlot = 1, isCall = 1 in {
+let Defs = [S10], Uses = [S11], hasDelaySlot = 1, isCall = 1 in {
 let cx = 0, sx = 10, cy = 0, sy = 0, cz = 0, sz = 0 in
 def CALL : RM<
     0x08, (outs), (ins calltarget:$imm32, variable_ops),

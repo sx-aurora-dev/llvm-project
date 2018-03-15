@@ -61,6 +61,16 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(VE::S16);        // procedure linkage table register
   Reserved.set(VE::S17);        // linkage-area register
 
+  // Also reserve the register pair aliases covering the above
+  // registers, with the same conditions.  This is required since
+  // LiveIntervals treat a register as a non reserved register if any
+  // of its aliases are not reserved.
+  Reserved.set(VE::Q4);         // S8_S9
+  Reserved.set(VE::Q5);         // S10_S11
+  Reserved.set(VE::Q6);         // S12_S13
+  Reserved.set(VE::Q7);         // S14_S15
+  Reserved.set(VE::Q8);         // S16_S17
+
   // s18-s33 are callee-saved registers
   // s34-s63 are temporary registers
 
