@@ -56,7 +56,7 @@ private:
   void emitSPAdjustment(MachineFunction &MF,
                         MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator MBBI,
-                        int NumBytes, unsigned ADDrr, unsigned ADDri) const;
+                        int NumBytes) const;
 
 };
 

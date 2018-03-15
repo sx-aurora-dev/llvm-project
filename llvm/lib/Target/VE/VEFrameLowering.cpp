@@ -40,15 +40,13 @@ VEFrameLowering::VEFrameLowering(const VESubtarget &ST)
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                           MachineBasicBlock &MBB,
                                           MachineBasicBlock::iterator MBBI,
-                                          int NumBytes,
-                                          unsigned ADDrr,
-                                          unsigned ADDri) const {
+                                          int NumBytes) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
   if (NumBytes >= -64 && NumBytes < 63) {
-    BuildMI(MBB, MBBI, dl, TII.get(ADDri), VE::S11)
+    BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::S11)
       .addReg(VE::S11).addImm(NumBytes);
     return;
   }
@@ -95,14 +93,10 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Get the number of bytes to allocate from the FrameInfo
   int NumBytes = (int) MFI.getStackSize();
-  unsigned SAVEri = VE::ADXri;
-  unsigned SAVErr = VE::ADXrr;
 #if 0
   if (FuncInfo->isLeafProc()) {
     if (NumBytes == 0)
       return;
-    SAVEri = VE::ADDri;
-    SAVErr = VE::ADDrr;
   }
 #endif
   // The SPARC ABI is a bit odd in that it requires a reserved 92-byte
@@ -137,7 +131,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // Update stack size with corrected value.
   MFI.setStackSize(NumBytes);
 
-  emitSPAdjustment(MF, MBB, MBBI, -NumBytes, SAVErr, SAVEri);
+  emitSPAdjustment(MF, MBB, MBBI, -NumBytes);
 
   unsigned regFP = RegInfo.getDwarfRegNum(VE::S9, true);
 
@@ -174,7 +168,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
     if (Bias) {
       // add %g1, -BIAS, %o6
-      BuildMI(MBB, MBBI, dl, TII.get(VE::ADDri), VE::S11)
+      BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::S11)
         .addReg(regUnbiased).addImm(-Bias);
     }
 #endif
@@ -190,10 +184,8 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     if (MI.getOpcode() == VE::ADJCALLSTACKDOWN)
       Size = -Size;
 
-#if 0
     if (Size)
-      emitSPAdjustment(MF, MBB, I, Size, VE::ADDrr, VE::ADDri);
-#endif
+      emitSPAdjustment(MF, MBB, I, Size);
   }
   return MBB.erase(I);
 }
@@ -221,9 +213,7 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
   if (NumBytes == 0)
     return;
 
-#if 0
-  emitSPAdjustment(MF, MBB, MBBI, NumBytes, SP::ADDrr, SP::ADDri);
-#endif
+  emitSPAdjustment(MF, MBB, MBBI, NumBytes);
 }
 
 bool VEFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
