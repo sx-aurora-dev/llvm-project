@@ -59,7 +59,7 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
   BuildMI(MBB, MBBI, dl, TII.get(VE::LEAzzi), VE::S13)
     .addImm(LO32(NumBytes));
   BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm0), VE::S13)
-    .addReg(VE::S13).addImm(0);
+    .addReg(VE::S13).addImm(32);
   BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::S11)
     .addReg(VE::S11).addReg(VE::S13).addImm(HI32(NumBytes));
 }
