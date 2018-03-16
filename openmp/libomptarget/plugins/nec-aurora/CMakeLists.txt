@@ -11,7 +11,7 @@ set(tmachine_name "necaurora")
 if (NECAURORA_OFFLOAD_RUN_ON_HOST)
   set(elf_machine_id 62)
 else()
-  set(elf_machine_id 14198)
+  set(elf_machine_id 251)
 endif()
 
 set(additonal_libs "")
