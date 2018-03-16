@@ -57,7 +57,9 @@ VETargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
                                     const SmallVectorImpl<ISD::OutputArg> &Outs,
                                     const SmallVectorImpl<SDValue> &OutVals,
                                     const SDLoc &DL, SelectionDAG &DAG) const {
+#if 0
   MachineFunction &MF = DAG.getMachineFunction();
+#endif
 
   // CCValAssign - represent the assignment of the return value to locations.
   SmallVector<CCValAssign, 16> RVLocs;
@@ -1577,6 +1579,7 @@ void VETargetLowering::computeKnownBitsForTargetNode
   }
 }
 
+#if 0
 // Look at LHS/RHS/CC and see if they are a lowered setcc instruction.  If so
 // set LHS/RHS and VECC to the LHS/RHS of the setcc and VECC to the condition.
 static void LookThroughSetCC(SDValue &LHS, SDValue &RHS,
@@ -1596,6 +1599,7 @@ static void LookThroughSetCC(SDValue &LHS, SDValue &RHS,
     RHS = CMPCC.getOperand(1);
   }
 }
+#endif
 
 // Convert to a target node and set target flags.
 SDValue VETargetLowering::withTargetFlags(SDValue Op, unsigned TF,
@@ -1984,7 +1988,6 @@ SDValue VETargetLowering::LowerF128Compare(SDValue LHS, SDValue RHS,
   }
   }
 }
-#endif
 
 static SDValue
 LowerF128_FPEXTEND(SDValue Op, SelectionDAG &DAG,
@@ -2206,6 +2209,7 @@ static SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG,
   SDValue Ops[2] = { NewVal, Chain };
   return DAG.getMergeValues(Ops, dl);
 }
+#endif
 
 static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
                               const VETargetLowering &TLI,
@@ -2317,7 +2321,6 @@ static SDValue LowerF64Op(SDValue SrcReg64, const SDLoc &dl, SelectionDAG &DAG,
                                        DstReg64, Lo32);
   return DstReg64;
 }
-#endif
 
 // Lower a f128 load into two f64 loads.
 static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
@@ -2432,6 +2435,7 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
 
   return SDValue();
 }
+#endif
 
 #if 0
 static SDValue LowerFNEGorFABS(SDValue Op, SelectionDAG &DAG, bool isV9) {

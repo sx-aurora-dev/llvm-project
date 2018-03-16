@@ -74,6 +74,7 @@ namespace {
   };
 } // end of anonymous namespace
 
+#if 0
 static MCOperand createVEMCOperand(VEMCExpr::VariantKind Kind,
                                       MCSymbol *Sym, MCContext &OutContext) {
   const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Sym,
@@ -110,9 +111,7 @@ static void EmitCall(MCStreamer &OutStreamer,
                      const MCSubtargetInfo &STI)
 {
   MCInst CallInst;
-#if 0
   CallInst.setOpcode(SP::CALL);
-#endif
   CallInst.addOperand(Callee);
   OutStreamer.EmitInstruction(CallInst, STI);
 }
@@ -143,19 +142,19 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
 static void EmitOR(MCStreamer &OutStreamer,
                    MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
                    const MCSubtargetInfo &STI) {
-//  EmitBinary(OutStreamer, SP::ORri, RS1, Imm, RD, STI);
+  EmitBinary(OutStreamer, SP::ORri, RS1, Imm, RD, STI);
 }
 
 static void EmitADD(MCStreamer &OutStreamer,
                     MCOperand &RS1, MCOperand &RS2, MCOperand &RD,
                     const MCSubtargetInfo &STI) {
-//  EmitBinary(OutStreamer, SP::ADDrr, RS1, RS2, RD, STI);
+  EmitBinary(OutStreamer, SP::ADDrr, RS1, RS2, RD, STI);
 }
 
 static void EmitSHL(MCStreamer &OutStreamer,
                     MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
                     const MCSubtargetInfo &STI) {
-//  EmitBinary(OutStreamer, SP::SLLri, RS1, Imm, RD, STI);
+  EmitBinary(OutStreamer, SP::SLLri, RS1, Imm, RD, STI);
 }
 
 
@@ -172,7 +171,6 @@ static void EmitHiLo(MCStreamer &OutStreamer,  MCSymbol *GOTSym,
   EmitOR(OutStreamer, RD, lo, RD, STI);
 }
 
-#if 0
 void VEAsmPrinter::LowerGETPCXAndEmitMCInsts(const MachineInstr *MI,
                                                 const MCSubtargetInfo &STI)
 {

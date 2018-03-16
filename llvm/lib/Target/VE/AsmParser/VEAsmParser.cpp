@@ -101,8 +101,10 @@ class VEAsmParser : public MCTargetAsmParser {
     return getSTI().getTargetTriple().getArch() == Triple::sparcv9;
   }
 
+#if 0
   bool expandSET(MCInst &Inst, SMLoc IDLoc,
                  SmallVectorImpl<MCInst> &Instructions);
+#endif
 
 public:
   VEAsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
@@ -491,6 +493,7 @@ public:
 
 } // end anonymous namespace
 
+#if 0
 bool VEAsmParser::expandSET(MCInst &Inst, SMLoc IDLoc,
                                SmallVectorImpl<MCInst> &Instructions) {
   MCOperand MCRegOp = Inst.getOperand(0);
@@ -526,7 +529,6 @@ bool VEAsmParser::expandSET(MCInst &Inst, SMLoc IDLoc,
   MCOperand PrevReg = MCOperand::createReg(VE::S31);
 
   // FIXME: need lea.sl
-#if 0
   // If not just a signed imm13 value, then either we use a 'sethi' with a
   // following 'or', or a 'sethi' by itself if there are no more 1 bits.
   // In either case, start with the 'sethi'.
@@ -540,7 +542,6 @@ bool VEAsmParser::expandSET(MCInst &Inst, SMLoc IDLoc,
     Instructions.push_back(TmpInst);
     PrevReg = MCRegOp;
   }
-#endif
 
   // The low bits require touching in 3 cases:
   // * A non-immediate value will always require both instructions.
@@ -552,7 +553,6 @@ bool VEAsmParser::expandSET(MCInst &Inst, SMLoc IDLoc,
   // bits of the immediate value via the %lo() assembler function.
   // Note also, the 'or' instruction doesn't mind a large value in the case
   // where the operand to 'set' was 0xFFFFFzzz - it does exactly what you mean.
-#if 0
   if (!IsImm || IsEffectivelyImm13 || (ImmValue & 0x3ff)) {
     MCInst TmpInst;
     const MCExpr *Expr;
@@ -567,9 +567,9 @@ bool VEAsmParser::expandSET(MCInst &Inst, SMLoc IDLoc,
     TmpInst.addOperand(MCOperand::createExpr(Expr));
     Instructions.push_back(TmpInst);
   }
-#endif
   return false;
 }
+#endif
 
 bool VEAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                              OperandVector &Operands,
@@ -642,8 +642,10 @@ bool VEAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
   return Error(StartLoc, "invalid register name");
 }
 
+#if 0
 static void applyMnemonicAliases(StringRef &Mnemonic, uint64_t Features,
                                  unsigned VariantID);
+#endif
 
 bool VEAsmParser::ParseInstruction(ParseInstructionInfo &Info,
                                       StringRef Name, SMLoc NameLoc,
@@ -652,9 +654,9 @@ bool VEAsmParser::ParseInstruction(ParseInstructionInfo &Info,
   // First operand in MCInst is instruction mnemonic.
   Operands.push_back(VEOperand::CreateToken(Name, NameLoc));
 
-  // FIXME: need to define some instructions require applyMnemonicAliases
 #if 0
-  // apply mnemonic aliases, if any, so that we can parse operands correctly.
+  // If the target architecture uses MnemonicAlias, call it here to parse
+  // operands correctly.
   applyMnemonicAliases(Name, getAvailableFeatures(), 0);
 #endif
 
@@ -871,7 +873,9 @@ VEAsmParser::parseVEAsmOperand(std::unique_ptr<VEOperand> &Op,
     unsigned RegNo;
     unsigned RegKind;
     if (matchRegisterName(Parser.getTok(), RegNo, RegKind)) {
+#if 0
       StringRef name = Parser.getTok().getString();
+#endif
       Parser.Lex(); // Eat the identifier token.
       E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
       switch (RegNo) {

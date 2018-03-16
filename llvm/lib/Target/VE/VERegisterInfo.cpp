@@ -46,7 +46,6 @@ VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
 
 BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
-  const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
   Reserved.set(VE::S8);         // stack limit
   Reserved.set(VE::S9);         // frame pointer
   Reserved.set(VE::S10);        // link register (return address)
@@ -148,7 +147,9 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   DebugLoc dl = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   MachineFunction &MF = *MI.getParent()->getParent();
+#if 0
   const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
+#endif
   const VEFrameLowering *TFI = getFrameLowering(MF);
 
   unsigned FrameReg;

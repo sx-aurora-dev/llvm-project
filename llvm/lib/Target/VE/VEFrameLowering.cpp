@@ -98,7 +98,9 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
 
 void VEFrameLowering::emitPrologue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
+#if 0
   VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
+#endif
 
   assert(&MF.front() == &MBB && "Shrink-wrapping not yet supported");
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -193,10 +195,10 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 #endif
 
   if (NeedsStackRealignment) {
+#if 0
     unsigned regUnbiased;
     regUnbiased = VE::S11; // %sp
 
-#if 0
     // andn %regUnbiased, MaxAlign-1, %regUnbiased
     int MaxAlign = MFI.getMaxAlignment();
     BuildMI(MBB, MBBI, dl, TII.get(VE::ANDNri), regUnbiased)
@@ -229,10 +231,12 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
 
 void VEFrameLowering::emitEpilogue(MachineFunction &MF,
                                   MachineBasicBlock &MBB) const {
-  VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
+#if 0
+  VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+#endif
   DebugLoc dl = MBBI->getDebugLoc();
 #if 0
   assert(MBBI->getOpcode() == SP::RETL &&
