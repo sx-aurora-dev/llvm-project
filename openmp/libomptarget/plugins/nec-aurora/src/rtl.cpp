@@ -146,7 +146,7 @@ static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
 
 
 static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
-                                    struct veo_call_args *args, uint64_t *RetVal) {
+                                    const struct veo_args *args, uint64_t *RetVal) {
   DP("Running function with entry point %p\n", reinterpret_cast<void *>(FuncAddr));
   uint64_t RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
   if (RequestHandle == VEO_REQUEST_ID_INVALID) {
@@ -318,14 +318,18 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 // case an error occurred on the target device.
 void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   uint64_t ret;
-  struct veo_call_args Args;
-  Args.arguments[0] = Size;
-
+  void* addr;
+  struct veo_args* Args;
+  Args = veo_args_alloc();
+  veo_args_set_i64(Args, 0, Size);
+ 
   if (target_run_function_wait(ID, DeviceInfo.MemWrapFuncs[ID].MallocSymbol,
-                               &Args, &ret)) {
-    return NULL;
+                               Args, &ret)) {
+    addr = NULL;
   }
-  return reinterpret_cast<void*>(ret);
+  addr = reinterpret_cast<void*>(ret);
+  veo_args_free(Args);
+  return addr;
 }
 
 // Pass the data content to the target device using the target address.
@@ -356,10 +360,16 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
   uint64_t ret;
-  struct veo_call_args Args;
-  Args.arguments[0] = reinterpret_cast<uint64_t>(TargetPtr);
-  return target_run_function_wait(ID, DeviceInfo.MemWrapFuncs[ID].FreeSymbol,
-                                  &Args, &ret);
+  struct veo_args* Args;
+  Args = veo_args_alloc();
+  veo_args_set_i64(Args, 0, (int64_t)TargetPtr);
+
+  int32_t success = target_run_function_wait(ID, 
+                    DeviceInfo.MemWrapFuncs[ID].FreeSymbol,Args, &ret);
+
+  veo_args_free(Args);
+
+  return success;
 }
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
@@ -404,18 +414,22 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   }
 #else
 
-  struct veo_call_args TargetArgs;
+  struct veo_args* TargetArgs;
+  TargetArgs = veo_args_alloc();
 
   for (int32_t i = 0; i < NumArgs; ++i) {
-    TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
+    //TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
+    veo_args_set_i64(TargetArgs, i, (intptr_t)Args[i]);
   }
 #endif 
 
   uint64_t RetVal;
   if (target_run_function_wait(ID, reinterpret_cast<uint64_t>(Entry),
-                               &TargetArgs, &RetVal) != 0) {
+                               TargetArgs, &RetVal) != 0) {
+    veo_args_free(TargetArgs);
     return OFFLOAD_FAIL;
   }
+  veo_args_free(TargetArgs);
   return OFFLOAD_SUCCESS;
 }
 
