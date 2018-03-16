@@ -467,11 +467,12 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
 }
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
-#if 0
   switch (MI.getOpcode()) {
   case TargetOpcode::LOAD_STACK_GUARD: {
     assert(Subtarget.isTargetLinux() &&
            "Only Linux target is expected to contain LOAD_STACK_GUARD");
+    report_fatal_error("expandPostRAPseudo for LOAD_STACK_GUARD is not implemented yet");
+#if 0
     // offsetof(tcbhead_t, stack_guard) from sysdeps/sparc/nptl/tls.h in glibc.
     const int64_t Offset = Subtarget.is64Bit() ? 0x28 : 0x14;
     MI.setDesc(get(Subtarget.is64Bit() ? SP::LDXri : SP::LDri));
@@ -479,8 +480,8 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
         .addReg(SP::G7)
         .addImm(Offset);
     return true;
-  }
-  }
 #endif
+  }
+  }
   return false;
 }
