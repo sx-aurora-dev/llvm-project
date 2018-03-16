@@ -352,29 +352,73 @@ defm MRG : RRm<"mrg", 0x56, mrg, I64, i64, simm7Op64, uimm6Op64>;
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
-let cx = 0, cy = 0, sy = 0, cz = 1 in
-def LDS : RM<
+let cy = 0, sy = 0, cz = 1 in {
+let cx = 0 in
+def LDSri : RM<
     0x01, (outs I64:$sx), (ins MEMri:$addr),
     "ld $sx, $addr",
     [(set i64:$sx, (load ADDRri:$addr))]>;
-
-let cx = 0, cy = 0, sy = 0, cz = 1 in
-def SDS : RM<
-    0x11, (outs), (ins MEMri:$addr, I64:$sx),
-    "st $sx, $addr",
-    [(store i64:$sx, ADDRri:$addr)]>;
-
-let cx = 0, cy = 0, sy = 0, cz = 1 in
-def LDL : RM<
+let cx = 0 in
+def LDUri : RM<
+    0x02, (outs I32:$sx), (ins MEMri:$addr),
+    "ldu $sx, $addr",
+    [/* FIXME: load into only upper part of $sx here
+     (set i32:$sx, (load ADDRri:$addr)) */]>;
+let cx = 0 in
+def LDLri : RM<
     0x03, (outs I32:$sx), (ins MEMri:$addr),
     "ldl.sx $sx, $addr",
     [(set i32:$sx, (load ADDRri:$addr))]>;
+let cx = 1 in
+def LDLUri : RM<
+    0x03, (outs I32:$sx), (ins MEMri:$addr),
+    "ldl.zx $sx, $addr",
+    [(set i32:$sx, (load ADDRri:$addr))]>;
+let cx = 0 in
+def LD2Bri : RM<
+    0x04, (outs I16:$sx), (ins MEMri:$addr),
+    "ld2b.sx $sx, $addr",
+    [(set i16:$sx, (load ADDRri:$addr))]>;
+let cx = 1 in
+def LD2BUri : RM<
+    0x04, (outs I16:$sx), (ins MEMri:$addr),
+    "ld2b.zx $sx, $addr",
+    [(set i16:$sx, (load ADDRri:$addr))]>;
+let cx = 0 in
+def LD1Bri : RM<
+    0x05, (outs I8:$sx), (ins MEMri:$addr),
+    "ld1b.sx $sx, $addr",
+    [(set i8:$sx, (load ADDRri:$addr))]>;
+let cx = 1 in
+def LD1BUri : RM<
+    0x05, (outs I8:$sx), (ins MEMri:$addr),
+    "ld1b.zx $sx, $addr",
+    [(set i8:$sx, (load ADDRri:$addr))]>;
+}
 
-let cx = 0, cy = 0, sy = 0, cz = 1 in
-def SDL : RM<
+let cx = 0, cy = 0, sy = 0, cz = 1 in {
+def STSri : RM<
+    0x11, (outs), (ins MEMri:$addr, I64:$sx),
+    "st $sx, $addr",
+    [(store i64:$sx, ADDRri:$addr)]>;
+def STUri : RM<
+    0x12, (outs), (ins MEMri:$addr, I32:$sx),
+    "stu $sx, $addr",
+    [/* FIXME: store only upper part of $sx here
+     (store i32:$sx, ADDRri:$addr) */]>;
+def STLri : RM<
     0x13, (outs), (ins MEMri:$addr, I32:$sx),
-    "stl.sx $sx, $addr",
+    "stl $sx, $addr",
     [(store i32:$sx, ADDRri:$addr)]>;
+def ST2Bri : RM<
+    0x14, (outs), (ins MEMri:$addr, I16:$sx),
+    "st2b $sx, $addr",
+    [(store i16:$sx, ADDRri:$addr)]>;
+def ST1Bri : RM<
+    0x15, (outs), (ins MEMri:$addr, I8:$sx),
+    "st1b $sx, $addr",
+    [(store i8:$sx, ADDRri:$addr)]>;
+}
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
