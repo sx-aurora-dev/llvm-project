@@ -978,6 +978,40 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // call instruction itself.
   SmallVector<SDValue, 8> MemOpChains;
 
+#if 1
+  // VE needs to get address of callee function in a register
+  // So, prepare to copy it to S12 here.
+
+  // If the callee is a GlobalAddress node (quite common, every direct call is)
+  // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
+  // Likewise ExternalSymbol -> TargetExternalSymbol.
+  SDValue Callee = CLI.Callee;
+  unsigned TF = isPositionIndependent() ? VEMCExpr::VK_VE_WPLT30 : 0;
+
+  bool IsPICCall = 1; /* isPositionIndependent(); */
+        // true if calls are translated to bsic %lr, (,%s12)
+
+  // Turn GlobalAddress/ExternalSymbol node into a value node
+  // contining the address of them here.
+  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
+    if (IsPICCall) {
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
+                             VEMCExpr::VK_VE_LO, DAG);
+    } else {
+      Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, TF);
+    }
+  } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
+    if (IsPICCall) {
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
+                             VEMCExpr::VK_VE_LO, DAG);
+    } else {
+      Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
+    }
+  }
+
+  RegsToPass.push_back(std::make_pair(VE::S12, Callee));
+#endif
+
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     const CCValAssign &VA = ArgLocs[i];
     SDValue Arg = CLI.OutVals[i];
@@ -1082,6 +1116,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     InGlue = Chain.getValue(1);
   }
 
+#if 0
   // If the callee is a GlobalAddress node (quite common, every direct call is)
   // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
   // Likewise ExternalSymbol -> TargetExternalSymbol.
@@ -1091,11 +1126,14 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, TF);
   else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
     Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
+#endif
 
   // Build the operands for the call instruction itself.
   SmallVector<SDValue, 8> Ops;
   Ops.push_back(Chain);
+#if 0
   Ops.push_back(Callee);
+#endif
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i)
     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
                                   RegsToPass[i].second.getValueType()));

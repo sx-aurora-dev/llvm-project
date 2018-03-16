@@ -429,6 +429,7 @@ def CALL : RM<
     0x08, (outs), (ins calltarget:$imm32, variable_ops),
     "bsic %lr, $imm32",
     []>;
+/*
 // use sy and sz to represent 2 registers
 let cx = 0, sx = 10, cy = 1, cz = 1, imm32 = 0 in
 def CALLrr : RM<
@@ -441,6 +442,13 @@ def CALLri : RM<
     0x08, (outs), (ins MEMri:$ptr, variable_ops),
     "bsic %lr, $ptr",
     [(call ADDRri:$ptr)]>;
+*/
+// use sz to represent a register
+let cx = 0, sx = 10, cy = 0, sy = 0, cz = 1, imm32 = 0 in
+def CALLr : RM<
+    0x08, (outs), (ins I64:$sz, variable_ops),
+    "bsic %lr, (,$sz)",
+    []>;
 }
 
 }
@@ -471,15 +479,27 @@ def : Pat<(i64 (zext i32:$val)), (i64 (ADSUri $val, 0))>;
 def : Pat<(i64 (sext i32:$val)), (i64 (ADSri $val, 0))>;
 */
 
+// Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzzi tglobaladdr:$in)>;
 def : Pat<(VElo tglobaladdr:$in), (ANDrm0 (LEAzzi tglobaladdr:$in), 32)>;
+def : Pat<(add (VEhi tglobaladdr:$in1), (VElo tglobaladdr:$in2)),
+          (LEASLrzi (ANDrm0 (LEAzzi tglobaladdr:$in2), 32),
+                    (tglobaladdr:$in1))>;
+
+// Address calculation and its optimization
 def : Pat<(VEhi tconstpool:$in), (LEASLzzi tconstpool:$in)>;
 def : Pat<(VElo tconstpool:$in), (ANDrm0 (LEAzzi tconstpool:$in), 32)>;
+def : Pat<(add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
+          (LEASLrzi (ANDrm0 (LEAzzi tconstpool:$in2), 32),
+                    (tconstpool:$in1))>;
 
+// Calls
 def : Pat<(call tglobaladdr:$dst),
           (CALL tglobaladdr:$dst)>;
 def : Pat<(call texternalsym:$dst),
           (CALL texternalsym:$dst)>;
+def : Pat<(call i64:$dst),
+          (CALLr i64:$dst)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
