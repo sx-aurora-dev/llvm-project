@@ -392,21 +392,23 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
 
 void VEAsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
                                       raw_ostream &O, const char *Modifier) {
-  printOperand(MI, opNum, O);
-
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
+    printOperand(MI, opNum, O);
     O << ", ";
     printOperand(MI, opNum+1, O);
     return;
   }
 
   if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0)
-    return;   // don't print "+0"
-
-  O << "+";
-  printOperand(MI, opNum+1, O);
+      MI->getOperand(opNum+1).getImm() == 0) {
+    // don't print "+0"
+  } else {
+    printOperand(MI, opNum+1, O);
+  }
+  O << "(,";
+  printOperand(MI, opNum, O);
+  O << ")";
 }
 
 /// PrintAsmOperand - Print out an operand for an inline asm expression.
