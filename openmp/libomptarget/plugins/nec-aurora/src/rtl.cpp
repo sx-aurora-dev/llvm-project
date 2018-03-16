@@ -381,38 +381,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   // ignore team num and thread limit.
   std::vector<void*> ptrs(NumArgs);
 
+  //TODO: Do we still need this?
   assert(NumArgs <= 8); // the api can only handle 8 args at a time.
-
-  //TODO: I think this complete code block is wrong and/or unnecessay. 
-  //      We already have all arguments in Args, havent we?
-#if 0
-  uint64_t FuncArgsBufferSize = NumArgs * sizeof(void*);
-  // allocate buffer for function args
-  void *FuncArgsBuffer = __tgt_rtl_data_alloc(ID, FuncArgsBufferSize, NULL);
-
-  if (!FuncArgsBuffer) {
-    DP("__tgt_rtl_data_alloc() failed for function parameters\n");
-    return OFFLOAD_FAIL;
-  }
-
-  for (int32_t i = 0; i < NumArgs; ++i) {
-    ptrs[i] = (void *)((intptr_t)Args[i] + Offsets[i]);
-  }
-
-  int32_t RetDataSubmit =__tgt_rtl_data_submit(ID, FuncArgsBuffer, ptrs.data(),
-                                               FuncArgsBufferSize);
-  if (RetDataSubmit != 0) {
-    DP("__tgt_rtl_data_submit() failed for function parameters: \
-        RetDataSubmit=%d\n", RetDataSubmit);
-    return OFFLOAD_FAIL;
-  }
-
-  struct veo_call_args TargetArgs;
-
-  for (int32_t i = 0; i < NumArgs; ++i) {
-    TargetArgs.arguments[i] = ((intptr_t)FuncArgsBuffer + i);
-  }
-#else
 
   struct veo_args* TargetArgs;
   TargetArgs = veo_args_alloc();
@@ -421,7 +391,6 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
     //TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
     veo_args_set_i64(TargetArgs, i, (intptr_t)Args[i]);
   }
-#endif 
 
   uint64_t RetVal;
   if (target_run_function_wait(ID, reinterpret_cast<uint64_t>(Entry),
