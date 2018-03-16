@@ -43,10 +43,10 @@ VEInstrInfo::VEInstrInfo(VESubtarget &ST)
 /// any side effects other than loading from the stack slot.
 unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                              int &FrameIndex) const {
-#if 0
-  if (MI.getOpcode() == SP::LDri || MI.getOpcode() == SP::LDXri ||
-      MI.getOpcode() == SP::LDFri || MI.getOpcode() == SP::LDDFri ||
-      MI.getOpcode() == SP::LDQFri) {
+  if (MI.getOpcode() == VE::LDSri || MI.getOpcode() == VE::LDUri ||
+      MI.getOpcode() == VE::LDLri || MI.getOpcode() == VE::LDLUri ||
+      MI.getOpcode() == VE::LD2Bri || MI.getOpcode() == VE::LD2BUri ||
+      MI.getOpcode() == VE::LD1Bri || MI.getOpcode() == VE::LD1BUri) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -54,8 +54,6 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
     }
   }
   return 0;
-#endif
-  report_fatal_error("isLoadFromStackSlot is not implemented yet");
 }
 
 /// isStoreToStackSlot - If the specified machine instruction is a direct
@@ -65,10 +63,9 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 /// any side effects other than storing to the stack slot.
 unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
-#if 0
-  if (MI.getOpcode() == SP::STri || MI.getOpcode() == SP::STXri ||
-      MI.getOpcode() == SP::STFri || MI.getOpcode() == SP::STDFri ||
-      MI.getOpcode() == SP::STQFri) {
+  if (MI.getOpcode() == VE::STSri || MI.getOpcode() == VE::STUri ||
+      MI.getOpcode() == VE::STLri || MI.getOpcode() == VE::ST2Bri ||
+      MI.getOpcode() == VE::ST1Bri) {
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
@@ -76,8 +73,6 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
     }
   }
   return 0;
-#endif
-  report_fatal_error("isStoreToStackSlot is not implemented yet");
 }
 
 #if 0
@@ -381,7 +376,6 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                     unsigned SrcReg, bool isKill, int FI,
                     const TargetRegisterClass *RC,
                     const TargetRegisterInfo *TRI) const {
-#if 0
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
 
@@ -392,30 +386,24 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
   // On the order of operands here: think "[FrameIdx + 0] = SrcReg".
-  if (RC == &SP::I64RegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::STXri)).addFrameIndex(FI).addImm(0)
+  if (RC == &VE::I64RegClass || RC == &VE::F64RegClass)
+    BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &SP::IntRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::STri)).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::I32RegClass)
+    BuildMI(MBB, I, DL, get(VE::STLri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &SP::IntPairRegClass)
-    BuildMI(MBB, I, DL, get(SP::STDri)).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::F32RegClass)
+    BuildMI(MBB, I, DL, get(VE::STUri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &SP::FPRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::STFri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
-  else if (SP::DFPRegsRegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(SP::STDFri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
-  else if (SP::QFPRegsRegClass.hasSubClassEq(RC))
+#if 0
+  else if (SP::F128RegClass.hasSubClassEq(RC))
     // Use STQFri irrespective of its legality. If STQ is not legal, it will be
     // lowered into two STDs in eliminateFrameIndex.
     BuildMI(MBB, I, DL, get(SP::STQFri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
+#endif
   else
     llvm_unreachable("Can't store this register to stack slot");
-#endif
-  report_fatal_error("storeRegToStackSlot is not implemented yet");
 }
 
 void VEInstrInfo::
@@ -423,7 +411,6 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                      unsigned DestReg, int FI,
                      const TargetRegisterClass *RC,
                      const TargetRegisterInfo *TRI) const {
-#if 0
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
 
@@ -433,30 +420,24 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
-  if (RC == &SP::I64RegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDXri), DestReg).addFrameIndex(FI).addImm(0)
+  if (RC == &VE::I64RegClass || RC == &VE::F64RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDSri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (RC == &SP::IntRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDri), DestReg).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::I32RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDLri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (RC == &SP::IntPairRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDDri), DestReg).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::F32RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDUri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (RC == &SP::FPRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDFri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (SP::DFPRegsRegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(SP::LDDFri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (SP::QFPRegsRegClass.hasSubClassEq(RC))
+#if 0
+  else if (VE::F128RegClass.hasSubClassEq(RC))
     // Use LDQFri irrespective of its legality. If LDQ is not legal, it will be
     // lowered into two LDDs in eliminateFrameIndex.
     BuildMI(MBB, I, DL, get(SP::LDQFri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
+#endif
   else
     llvm_unreachable("Can't load this register from stack slot");
-#endif
-  report_fatal_error("loadRegFromStackSlot is not implemented yet");
 }
 
 unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const

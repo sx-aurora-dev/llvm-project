@@ -86,7 +86,6 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, unsigned FramePtr) {
-#if 0
   // Replace frame index with a frame pointer reference.
   if (Offset >= -4096 && Offset <= 4095) {
     // If the offset is small enough to fit in the immediate field, directly
@@ -96,6 +95,8 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     return;
   }
 
+  report_fatal_error("replaceFI for large number is not implemented yet");
+#if 0
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
   // FIXME: it would be better to scavenge a register here instead of
@@ -141,7 +142,6 @@ void
 VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                        int SPAdj, unsigned FIOperandNum,
                                        RegScavenger *RS) const {
-#if 0
   assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
@@ -157,6 +157,7 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
 
+#if 0
   if (!Subtarget.isV9() || !Subtarget.hasHardQuad()) {
     if (MI.getOpcode() == SP::STQFri) {
       const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
@@ -185,9 +186,9 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       Offset += 8;
     }
   }
+#endif
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
-#endif
 }
 
 unsigned VERegisterInfo::getFrameRegister(const MachineFunction &MF) const {

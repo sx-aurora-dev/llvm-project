@@ -37,6 +37,38 @@ VEFrameLowering::VEFrameLowering(const VESubtarget &ST)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown,
                           16, 0, 16) {}
 
+void VEFrameLowering::emitPrologueInsns(
+    MachineFunction &MF, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator MBBI,
+    int NumBytes, bool RequireFPUpdate) const {
+
+  DebugLoc dl;
+  const VEInstrInfo &TII =
+      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+  // Insert following codes here as prologue
+  //
+  //    st %lr, 8(,%sp)
+
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+    .addReg(VE::S11).addImm(8).addReg(VE::S10);
+}
+
+void VEFrameLowering::emitEpilogueInsns(
+    MachineFunction &MF, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator MBBI,
+    int NumBytes, bool RequireFPUpdate) const {
+
+  DebugLoc dl;
+  const VEInstrInfo &TII =
+      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+  // Insert following codes here as epilogue
+  //
+  //    ld %lr, 8(,%sp)
+
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S10)
+    .addReg(VE::S11).addImm(8);
+}
+
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                           MachineBasicBlock &MBB,
                                           MachineBasicBlock::iterator MBBI,
@@ -131,6 +163,10 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // Update stack size with corrected value.
   MFI.setStackSize(NumBytes);
 
+  // emit Prologue instructions to save %lr
+  emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
+
+  // emit stack adjust instructions
   emitSPAdjustment(MF, MBB, MBBI, -NumBytes);
 
   unsigned regFP = RegInfo.getDwarfRegNum(VE::S9, true);
@@ -213,7 +249,11 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
   if (NumBytes == 0)
     return;
 
+  // emit stack adjust instructions
   emitSPAdjustment(MF, MBB, MBBI, NumBytes);
+
+  // emit Epilogue instructions to restore %lr
+  emitEpilogueInsns(MF, MBB, MBBI, NumBytes, true);
 }
 
 bool VEFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
