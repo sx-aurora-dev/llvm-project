@@ -43,7 +43,12 @@ bool TargetCode::addCodeFragmentFront(std::shared_ptr<TargetCodeFragment> Frag) 
 
 void TargetCode::generateCode(llvm::raw_ostream &Out) {
     for (auto &i : SystemHeaders) {
-        Out << "#include <" << i << ">\n";
+        std::string Header(i);
+        size_t include_pos = Header.rfind("nclude/");
+        if (include_pos != std::string::npos) {
+            Header.erase(0, include_pos + strlen("nclude/"));
+        }
+        Out << "#include <" << Header << ">\n";
     }
 
     for (auto i = CodeFragments.begin(),
