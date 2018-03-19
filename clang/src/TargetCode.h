@@ -30,6 +30,7 @@ public:
           SM(TargetCodeRewriter.getSourceMgr()) {};
 
     bool addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag);
+    bool addCodeFragmentFront(std::shared_ptr<TargetCodeFragment> Fag);
     void generateCode(llvm::raw_ostream &Out);
     TargetCodeFragmentDeque::const_iterator getCodeFragmentsBegin() {
         return CodeFragments.begin();
@@ -37,11 +38,12 @@ public:
     TargetCodeFragmentDeque::const_iterator getCodeFragmentsEnd() {
         return CodeFragments.end();
     }
-    void addHeader(std::string Header) {
+    void addHeader(const std::string &Header) {
         SystemHeaders.insert(Header);
     }
 private:
     void generateFunctionPrologue(TargetCodeRegion *TCR,
                                   llvm::raw_ostream &Out);
     std::string generateFunctionName(TargetCodeRegion *TCR);
+    bool isCodeAlreadyInFragments(TargetCodeFragment *Frag);
 };

@@ -3,30 +3,57 @@
 #include <unordered_set>
 
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "llvm/ADT/Optional.h"
 
 namespace clang {
     class Stmt;
     class Decl;
+    class Type;
     class CapturedStmt;
     class OMPTargetDirective;
     class SourceLocation;
     class FunctionDecl;
     class Attr;
+    class Rewriter;
 }
 
 class TargetCode;
 class TargetCodeFragment;
 class TargetCodeRegion;
 
+class TypeDeclResolver;
+
+
+llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
+
+
+class DiscoverTypesInDeclVisitor
+    : public clang::RecursiveASTVisitor<DiscoverTypesInDeclVisitor> {
+
+    std::function<void(clang::TypeDecl *)> OnEachTypeRef;
+    void processType(const clang::Type *D);
+public:
+    DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
+        : OnEachTypeRef(F) {}
+    DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
+    bool VisitDecl(clang::Decl *D);
+    bool VisitExpr(clang::Expr *D);
+    bool VisitType(clang::Type *T);
+};
+
 
 class FindTargetCodeVisitor
     : public clang::RecursiveASTVisitor<FindTargetCodeVisitor> {
 
     TargetCode &TargetCodeInfo;
+    TypeDeclResolver &Types;
+    DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
+
     clang::FunctionDecl* LastVisitedFuncDecl;
     std::unordered_set<std::string> FuncDeclWithoutBody;
 public:
-    FindTargetCodeVisitor(TargetCode &Code) : TargetCodeInfo(Code) {};
+    FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types)
+        : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types) {}
     bool VisitStmt(clang::Stmt *S);
     bool VisitDecl(clang::Decl *D);
 private:

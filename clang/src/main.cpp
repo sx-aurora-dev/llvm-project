@@ -18,6 +18,7 @@
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
+#include "TypeDeclResolver.h"
 
 
 using namespace clang::tooling;
@@ -29,10 +30,11 @@ class TargetRegionTransformer : public clang::ASTConsumer
     TargetCode &Code;
     clang::Rewriter &TargetCodeRewriter;
     FindTargetCodeVisitor FindCodeVisitor;
+    TypeDeclResolver Types;
 public:
     TargetRegionTransformer(TargetCode &Code, clang::Rewriter &TargetCodeRewriter)
-        :  Code(Code), TargetCodeRewriter(TargetCodeRewriter),
-           FindCodeVisitor(Code) {}
+        :  Types(), Code(Code), TargetCodeRewriter(TargetCodeRewriter),
+           FindCodeVisitor(Code, Types) {}
 
     void HandleTranslationUnit(clang::ASTContext &Context) final
     {
@@ -50,6 +52,7 @@ public:
                 // TODO: fix this ^
             }
         }
+        Types.orderAndWriteCodeFragments(Code);
     }
 };
 

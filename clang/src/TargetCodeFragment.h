@@ -30,13 +30,14 @@ private:
     const TargetCodeFragmentKind Kind;
 // Actual class content
 public:
+    bool NeedsSemicolon;
     TargetCodeFragmentKind getKind() const { return Kind; };
     static bool classof(const TargetCodeFragment *TCF) {
        return TCF->getKind() == TCFK_TargetCodeFragment;
     }
 public:
     TargetCodeFragment(TargetCodeFragmentKind Kind)
-        : Kind(Kind) {}
+        : Kind(Kind), NeedsSemicolon(false) {}
     virtual clang::SourceRange getRealRange() = 0;
     virtual clang::SourceRange getInnerRange() {
         return getRealRange();

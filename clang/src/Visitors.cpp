@@ -13,14 +13,19 @@
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
+#include "TypeDeclResolver.h"
 
 
-static std::string getSystemHeaderForDecl(clang::Decl *D) {
+llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
+    clang::SourceManager &SM = D->getASTContext().getSourceManager();
+
+    if (!SM.isInSystemHeader(D->getLocStart())) {
+        return llvm::Optional<std::string>();
+    }
+
     // we dont want to include the original system header in which D was
     // declared, but the system header which exposes D to the user's file
     // (the last system header in the include stack)
-    clang::SourceManager &SM = D->getASTContext().getSourceManager();
-
     auto IncludedFile = SM.getFileID(D->getLocStart());
     auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
 
@@ -29,8 +34,8 @@ static std::string getSystemHeaderForDecl(clang::Decl *D) {
         IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
     }
 
-    return std::string(SM.getFilename(SM.getLocForStartOfFile(
-        IncludedFile)));
+    return llvm::Optional<std::string>(
+        std::string(SM.getFilename(SM.getLocForStartOfFile(IncludedFile))));
 }
 
 
@@ -57,6 +62,7 @@ bool FindTargetCodeVisitor::processTargetRegion(clang::OMPTargetDirective *Targe
             // if the target region cannot be added we dont want to parse its args
             if (TargetCodeInfo.addCodeFragment(TCR))
             {
+                DiscoverTypeVisitor.TraverseStmt(CS);
                 addTargetRegionArgs(CS, TCR);
             }
         }
@@ -89,27 +95,29 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
     // search Decl attributes for 'omp declare target' attr
     for (auto &attr : D->attrs()) {
         if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
-            if (isInSystemHeader(D)) {
-                TargetCodeInfo.addHeader(getSystemHeaderForDecl(D));
+            auto SystemHeader = getSystemHeaderForDecl(D);
+            if (SystemHeader.hasValue()) {
+                TargetCodeInfo.addHeader(SystemHeader.getValue());
                 return true;
             }
 
             auto TCD = std::make_shared<TargetCodeDecl>(D);
             TargetCodeInfo.addCodeFragment(TCD);
+            DiscoverTypeVisitor.TraverseDecl(D);
             if (FD) {
                 if (FD->hasBody() &&
                     !FD->doesThisDeclarationHaveABody()) {
                     FuncDeclWithoutBody.insert(FD->getNameAsString());
                 }
             }
-            return true;;
+            return true;
         }
     }
     return true;
 }
 
 
-bool  RewriteTargetRegionsVisitor::VisitStmt (clang::Stmt *S) {
+bool  RewriteTargetRegionsVisitor::VisitStmt(clang::Stmt *S) {
     if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
         if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
             // check if this DeclRefExpr belongs to a variable we captured
@@ -133,4 +141,44 @@ void RewriteTargetRegionsVisitor::rewriteVar(clang::DeclRefExpr *Var) {
     VarNameReplacement << "(*" << VarName << ")";
     TargetCodeRewriter.ReplaceText(clang::SourceRange(Var->getLocStart(), Var->getLocEnd()),
                          VarNameReplacement.str());
+}
+
+
+bool DiscoverTypesInDeclVisitor::VisitDecl(clang::Decl *D) {
+    if (auto VD = llvm::dyn_cast<clang::ValueDecl>(D)) {
+        if (const clang::Type *TP = VD->getType().getTypePtrOrNull()) {
+            processType(TP);
+        }
+    }
+    return true;
+}
+
+
+bool DiscoverTypesInDeclVisitor::VisitExpr(clang::Expr *E) {
+    if (const clang::Type *TP = E->getType().getTypePtrOrNull()) {
+        processType(TP);
+    }
+    return true;
+}
+
+
+bool DiscoverTypesInDeclVisitor::VisitType(clang::Type *T) {
+    processType(T);
+    return true;
+}
+
+
+void DiscoverTypesInDeclVisitor::processType(const clang::Type *TP) {
+    if (auto *TD = TP->getAsTagDecl()) {
+        OnEachTypeRef(TD);
+    } else if (const clang::TypedefType *TDT = TP->getAs<clang::TypedefType>()) {
+        OnEachTypeRef(TDT->getDecl());
+    }
+}
+
+
+DiscoverTypesInDeclVisitor::DiscoverTypesInDeclVisitor(TypeDeclResolver &Types) {
+    OnEachTypeRef = [&Types](clang::TypeDecl *D) {
+        Types.addTypeDecl(D);
+    };
 }
