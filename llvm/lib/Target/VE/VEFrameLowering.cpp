@@ -47,10 +47,22 @@ void VEFrameLowering::emitPrologueInsns(
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
   // Insert following codes here as prologue
   //
+  //    st %fp, 0(,%sp)
   //    st %lr, 8(,%sp)
+  //    st %got, 24(,%sp)
+  //    st %plt, 32(,%sp)
+  //    or %fp, 0, %sp
 
   BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+    .addReg(VE::S11).addImm(0).addReg(VE::S9);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
     .addReg(VE::S11).addImm(8).addReg(VE::S10);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+    .addReg(VE::S11).addImm(24).addReg(VE::S15);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+    .addReg(VE::S11).addImm(32).addReg(VE::S16);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ORri))
+    .addReg(VE::S9).addReg(VE::S11).addImm(0);
 }
 
 void VEFrameLowering::emitEpilogueInsns(
@@ -63,10 +75,22 @@ void VEFrameLowering::emitEpilogueInsns(
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
   // Insert following codes here as epilogue
   //
+  //    or %sp, 0, %fp
+  //    ld %got, 32(,%sp)
+  //    ld %plt, 24(,%sp)
   //    ld %lr, 8(,%sp)
+  //    ld %fp, 0(,%sp)
 
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ORri))
+    .addReg(VE::S11).addReg(VE::S9).addImm(0);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S16)
+    .addReg(VE::S11).addImm(32);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S15)
+    .addReg(VE::S11).addImm(24);
   BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S10)
     .addReg(VE::S11).addImm(8);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S9)
+    .addReg(VE::S11).addImm(0);
 }
 
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
@@ -250,11 +274,15 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
   MachineFrameInfo &MFI = MF.getFrameInfo();
 
   int NumBytes = (int) MFI.getStackSize();
+#if 0
   if (NumBytes == 0)
     return;
+#endif
 
+#if 0
   // emit stack adjust instructions
   emitSPAdjustment(MF, MBB, MBBI, NumBytes);
+#endif
 
   // emit Epilogue instructions to restore %lr
   emitEpilogueInsns(MF, MBB, MBBI, NumBytes, true);
