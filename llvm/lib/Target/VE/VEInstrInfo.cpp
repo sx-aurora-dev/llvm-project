@@ -121,11 +121,10 @@ static bool isIndirectBranchOpcode(int Opc) {
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
                             SmallVectorImpl<MachineOperand> &Cond) {
-#if 0
-  Cond.push_back(MachineOperand::CreateImm(LastInst->getOperand(1).getImm()));
-  Target = LastInst->getOperand(0).getMBB();
-#endif
-  report_fatal_error("parseCondBranch is not implemented yet");
+  Cond.push_back(MachineOperand::CreateImm(LastInst->getOperand(0).getImm()));
+  Cond.push_back(LastInst->getOperand(1));
+  Cond.push_back(LastInst->getOperand(2));
+  Target = LastInst->getOperand(3).getMBB();
 }
 
 bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
@@ -468,6 +467,13 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
+  case VE::EXTEND_STACK: {
+    return expandExtendStackPseudo(MI);
+  }
+  case VE::EXTEND_STACK_GUARD: {
+    MI.eraseFromParent(); // The pseudo instruction is gone now.
+    return true;
+  }
   case TargetOpcode::LOAD_STACK_GUARD: {
     assert(Subtarget.isTargetLinux() &&
            "Only Linux target is expected to contain LOAD_STACK_GUARD");
@@ -484,4 +490,76 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
   }
   return false;
+}
+
+bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineFunction &MF = *MBB.getParent();
+  const VEInstrInfo &TII =
+      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+  DebugLoc dl = MBB.findDebugLoc(MI);
+
+  // Create following instructions and multiple basic blocks.
+  //
+  // thisBB:
+  //   brge.l.t %sp, %sl, sinkBB
+  // syscallBB:
+  //   ld      %s61, 0x18(, %tp)        // load param area
+  //   or      %s62, 0, %s0             // spill the value of %s0
+  //   lea     %s63, 0x13b              // syscall # of grow
+  //   shm.l   %s63, 0x0(%s61)          // store syscall # at addr:0
+  //   shm.l   %sl, 0x8(%s61)           // store old limit at addr:8
+  //   shm.l   %sp, 0x10(%s61)          // store new limit at addr:16
+  //   monc                             // call monitor
+  //   or      %s0, 0, %s62             // restore the value of %s0
+  // sinkBB:
+
+  // Create new MBB
+  MachineBasicBlock *BB = &MBB;
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+  MachineBasicBlock *syscallMBB = MF.CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *sinkMBB = MF.CreateMachineBasicBlock(LLVM_BB);
+  MachineFunction::iterator It = ++(BB->getIterator());
+  MF.insert(It, syscallMBB);
+  MF.insert(It, sinkMBB);
+
+  // Transfer the remainder of BB and its successor edges to sinkMBB.
+  sinkMBB->splice(sinkMBB->begin(), BB,
+                  std::next(std::next(MachineBasicBlock::iterator(MI))),
+                  BB->end());
+  sinkMBB->transferSuccessorsAndUpdatePHIs(BB);
+
+  // Next, add the true and fallthrough blocks as its successors.
+  BB->addSuccessor(syscallMBB);
+  BB->addSuccessor(sinkMBB);
+  BuildMI(BB, dl, TII.get(VE::BCRrr))
+      .addImm(5)
+      .addReg(VE::S11)                          // %sp
+      .addReg(VE::S8)                           // %sl
+      .addMBB(sinkMBB);
+
+  BB = syscallMBB;
+
+  // Update machine-CFG edges
+  BB->addSuccessor(sinkMBB);
+
+  BuildMI(BB, dl, TII.get(VE::LDSri), VE::S61)
+    .addReg(VE::S14).addImm(0x18);
+  BuildMI(BB, dl, TII.get(VE::ORri), VE::S62)
+    .addReg(VE::S0).addImm(0);
+  BuildMI(BB, dl, TII.get(VE::LEAzzi), VE::S63)
+    .addImm(0x13b);
+  BuildMI(BB, dl, TII.get(VE::SHMri))
+    .addReg(VE::S61).addImm(0).addReg(VE::S63);
+  BuildMI(BB, dl, TII.get(VE::SHMri))
+    .addReg(VE::S61).addImm(8).addReg(VE::S8);
+  BuildMI(BB, dl, TII.get(VE::SHMri))
+    .addReg(VE::S61).addImm(16).addReg(VE::S11);
+  BuildMI(BB, dl, TII.get(VE::MONC));
+
+  BuildMI(BB, dl, TII.get(VE::ORri), VE::S0)
+    .addReg(VE::S62).addImm(0);
+
+  MI.eraseFromParent(); // The pseudo instruction is gone now.
+  return true;
 }

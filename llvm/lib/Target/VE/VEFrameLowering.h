@@ -64,6 +64,12 @@ private:
                         MachineBasicBlock::iterator MBBI,
                         int NumBytes) const;
 
+  // Emits code for extending SP in function prologue/epilogue.
+  void emitSPExtend(MachineFunction &MF,
+                    MachineBasicBlock &MBB,
+                    MachineBasicBlock::iterator MBBI,
+                    int NumBytes) const;
+
 };
 
 } // End llvm namespace

@@ -275,14 +275,14 @@ multiclass BCRm {
   def rr : CF<
     0x18, (outs),
     (ins CCOp:$cf, I64:$sy, I64:$sz, brtarget32:$imm32),
-    "br.${cf}.l $sy, $sz, $imm32", []> {
+    "br${cf}.l $sy, $sz, $imm32", []> {
     let cy = 1;
     let cz = 1;
   }
   def ri : CF<
     0x18, (outs),
     (ins CCOp:$cf, I64:$sz, i64imm:$sy, brtarget32:$imm32),
-    "br.${cf}.l $sy, $sz, $imm32", []> {
+    "br${cf}.l $sy, $sz, $imm32", []> {
     let cy = 0;
     let cz = 1;
   }
@@ -460,6 +460,65 @@ def RET : CF<
 // Branch instruction
 defm BCR : BCRm;
 
+// Load and Store host memory instructions
+let cx = 0, cy = 0, cz = 1 in {
+let sy = 3 in
+def LHMri : RM<
+    0x21, (outs I64:$sx), (ins MEMri:$addr),
+    "lhm.l $sx, $addr",
+    []>;
+let sy = 2 in
+def LHMLri : RM<
+    0x21, (outs I32:$sx), (ins MEMri:$addr),
+    "lhm.w $sx, $addr",
+    []>;
+let sy = 1 in
+def LHM2Bri : RM<
+    0x21, (outs I16:$sx), (ins MEMri:$addr),
+    "lhm.h $sx, $addr",
+    []>;
+let sy = 0 in
+def LHM1Bri : RM<
+    0x21, (outs I8:$sx), (ins MEMri:$addr),
+    "lhm.b $sx, $addr",
+    []>;
+}
+
+let cx = 0, cy = 0, cz = 1 in {
+let sy = 3 in
+def SHMri : RM<
+    0x31, (outs), (ins MEMri:$addr, I64:$sx),
+    "shm.l $sx, $addr",
+    []>;
+let sy = 2 in
+def SHMLri : RM<
+    0x31, (outs), (ins MEMri:$addr, I32:$sx),
+    "shm.l $sx, $addr",
+    []>;
+let sy = 1 in
+def SHM2Bri : RM<
+    0x31, (outs), (ins MEMri:$addr, I16:$sx),
+    "shm.l $sx, $addr",
+    []>;
+let sy = 0 in
+def SHM1Bri : RM<
+    0x31, (outs), (ins MEMri:$addr, I8:$sx),
+    "shm.l $sx, $addr",
+    []>;
+}
+
+let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0 in
+def MONC : RR<
+    0x3F, (outs), (ins),
+    "monc",
+    []>;
+
+let cx = 1, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0 in
+def MONCT : RR<
+    0x3F, (outs), (ins),
+    "monc.hdb",
+    []>;
+
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
 //===----------------------------------------------------------------------===//
@@ -557,3 +616,11 @@ def ADJCALLSTACKUP : Pseudo<(outs), (ins i64imm:$amt1, i64imm:$amt2),
                             "# ADJCALLSTACKUP $amt1",
                             [(callseq_end timm:$amt1, timm:$amt2)]>;
 }
+
+let Defs = [S8], Uses = [S8, S11] in
+def EXTEND_STACK : Pseudo<(outs), (ins),
+                          "# EXTEND STACK",
+                          []>;
+def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
+                                "# EXTEND STACK GUARD",
+                                []>;

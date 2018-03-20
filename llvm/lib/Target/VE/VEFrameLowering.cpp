@@ -94,9 +94,9 @@ void VEFrameLowering::emitEpilogueInsns(
 }
 
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
-                                          MachineBasicBlock &MBB,
-                                          MachineBasicBlock::iterator MBBI,
-                                          int NumBytes) const {
+                                       MachineBasicBlock &MBB,
+                                       MachineBasicBlock::iterator MBBI,
+                                       int NumBytes) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
@@ -118,6 +118,44 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
     .addReg(VE::S13).addImm(32);
   BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::S11)
     .addReg(VE::S11).addReg(VE::S13).addImm(HI32(NumBytes));
+}
+
+void VEFrameLowering::emitSPExtend(MachineFunction &MF,
+                                   MachineBasicBlock &MBB,
+                                   MachineBasicBlock::iterator MBBI,
+                                   int NumBytes) const {
+  DebugLoc dl;
+  const VEInstrInfo &TII =
+      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+
+  // Emit following codes.  It is not possible to insert multiple
+  // BasicBlocks in PEI pass, so we emit two pseudo instructions here.
+  //      
+  //   EXTEND_STACK                     // pseudo instrcution
+  //   EXTEND_STACK_GUARD               // pseudo instrcution
+  //      
+  // EXTEND_STACK pseudo will be converted by ExpandPostRA pass into
+  // following instructions with multiple basic blocks later.
+  //
+  // thisBB:
+  //   brge.l.t %sp, %sl, sinkBB
+  // syscallBB:
+  //   ld      %s61, 0x18(, %tp)        // load param area
+  //   or      %s62, 0, %s0             // spill the value of %s0
+  //   lea     %s63, 0x13b              // syscall # of grow
+  //   shm.l   %s63, 0x0(%s61)          // store syscall # at addr:0
+  //   shm.l   %sl, 0x8(%s61)           // store old limit at addr:8
+  //   shm.l   %sp, 0x10(%s61)          // store new limit at addr:16
+  //   monc                             // call monitor
+  //   or      %s0, 0, %s62             // restore the value of %s0
+  // sinkBB:
+  //
+  // EXTEND_STACK_GUARD pseudo will be simply eliminated by ExpandPostRA
+  // pass.  This pseudo is required to be at the next of EXTEND_STACK
+  // pseudo in order to protect iteration loop in ExpandPostRA.
+
+  BuildMI(MBB, MBBI, dl, TII.get(VE::EXTEND_STACK));
+  BuildMI(MBB, MBBI, dl, TII.get(VE::EXTEND_STACK_GUARD));
 }
 
 void VEFrameLowering::emitPrologue(MachineFunction &MF,
@@ -194,6 +232,9 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // emit stack adjust instructions
   emitSPAdjustment(MF, MBB, MBBI, -NumBytes);
+
+  // emit stack extend instructions
+  emitSPExtend(MF, MBB, MBBI, -NumBytes);
 
   unsigned regFP = RegInfo.getDwarfRegNum(VE::S9, true);
 
