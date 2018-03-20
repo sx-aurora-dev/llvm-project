@@ -1,0 +1,24 @@
+//===--- BuiltinsVE.def - VE Builtin function database ----------*- C++ -*-===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the VE-specific builtin function database.  Users of
+// this file must define the BUILTIN macro to make use of this information.
+//
+//===----------------------------------------------------------------------===//
+
+// The format of this database matches clang/Basic/Builtins.def.
+
+// dummy builtins (needs to define at least one here)
+BUILTIN(__builtin_dummy, "Si", "nc")
+// BUILTIN(__builtin_bitrev, "UiUi", "nc")
+// BUILTIN(__builtin_getid, "Si", "nc")
+// BUILTIN(__builtin_getps, "UiUi", "n")
+// BUILTIN(__builtin_setps, "vUiUi", "n")
+
+#undef BUILTIN
