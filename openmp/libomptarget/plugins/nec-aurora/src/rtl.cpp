@@ -41,12 +41,6 @@ struct DynLibTy {
 };
 
 
-struct MemWrapFuncsTy {
-  uint64_t MallocSymbol;
-  uint64_t FreeSymbol;
-};
-
-
 /// Keep entries table per device.
 struct FuncOrGblEntryTy {
   __tgt_target_table Table;
@@ -60,7 +54,6 @@ public:
   std::vector<struct veo_proc_handle *> ProcHandles;
   std::vector<struct veo_thr_ctxt *> Contexts;
   std::vector<uint64_t> LibraryHandles;
-  std::vector<MemWrapFuncsTy> MemWrapFuncs;
   std::list<DynLibTy> DynLibs;
 
   void buildOffloadTableFromHost(int32_t device_id, uint64_t VeoLibHandle,
@@ -111,7 +104,7 @@ public:
   RTLDeviceInfoTy(int32_t num_devices)
       : ProcHandles(num_devices, NULL), 
         Contexts(num_devices, NULL), FuncOrGblEntry(num_devices),
-        LibraryHandles(num_devices), MemWrapFuncs(num_devices) {
+        LibraryHandles(num_devices) {
     //TODO: some debug code here
 #ifdef OMPTARGET_DEBUG
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
@@ -280,26 +273,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   DeviceInfo.DynLibs.push_back(Lib);
   DeviceInfo.LibraryHandles[ID] = LibHandle;
 
-  uint64_t MallocSymbol = veo_get_sym(DeviceInfo.ProcHandles[ID], LibHandle,
-                                      "__devmemwrap_mm_malloc");
-
-  if(!MallocSymbol) {
-    DP("veo_get_sym() failed: could not find __devmemwrap_mm_malloc\n");
-    return NULL;
-  }
-
-  uint64_t FreeSymbol = veo_get_sym(DeviceInfo.ProcHandles[ID], LibHandle,
-                                    "__devmemwrap_mm_free");
-
-  if(!FreeSymbol) {
-    DP("veo_get_sym() failed: could not find __devmemwrap_mm_free\n");
-    return NULL;
-  }
-
-  MemWrapFuncsTy MemWrap = { MallocSymbol, FreeSymbol };
-
-  DeviceInfo.MemWrapFuncs[ID] = MemWrap;
-
   DeviceInfo.buildOffloadTableFromHost(ID, LibHandle, Image->EntriesBegin,
                                        Image->EntriesEnd);
 
@@ -318,18 +291,17 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 // case an error occurred on the target device.
 void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   uint64_t ret;
-  void* addr;
-  struct veo_args* Args;
-  Args = veo_args_alloc();
-  veo_args_set_i64(Args, 0, Size);
- 
-  if (target_run_function_wait(ID, DeviceInfo.MemWrapFuncs[ID].MallocSymbol,
-                               Args, &ret)) {
-    addr = NULL;
+  uint64_t addr;
+
+  DP("Allocate target memory: device=%d, target addr=%p, size=%d\n",
+      ID, (void*)addr, Size);
+  ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
+  if(ret != 0) {
+    DP("veo_alloc_mem(%d, %p, %d) failed with error code %d\n",
+       ID, addr, Size, ret);
+    return NULL;
   }
-  addr = reinterpret_cast<void*>(ret);
-  veo_args_free(Args);
-  return addr;
+  return (void*)addr;
 }
 
 // Pass the data content to the target device using the target address.
@@ -360,16 +332,8 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
   uint64_t ret;
-  struct veo_args* Args;
-  Args = veo_args_alloc();
-  veo_args_set_i64(Args, 0, (int64_t)TargetPtr);
 
-  int32_t success = target_run_function_wait(ID, 
-                    DeviceInfo.MemWrapFuncs[ID].FreeSymbol,Args, &ret);
-
-  veo_args_free(Args);
-
-  return success;
+  return veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
 }
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
