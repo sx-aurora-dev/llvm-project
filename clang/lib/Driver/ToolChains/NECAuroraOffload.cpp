@@ -85,12 +85,6 @@ void necauroratools::Common::anchor() {}
 void necauroratools::Linker::RenderExtraToolArgs(const JobAction &JA,
                                                  llvm::opt::ArgStringList &CmdArgs) const {
   // no extra args, just hope for the best
-  //
-  // except the runtime
-  CmdArgs.push_back("-ldevmemwrap");
-  // this is rather ugly
-  CmdArgs.push_back("-Wl,-u,__devmemwrap_mm_malloc");
-  CmdArgs.push_back("-Wl,-u,__devmemwrap_mm_free");
 }
 
 void necauroratools::OffloadCompilerWrapper::RenderExtraToolArgs(const JobAction &JA,
