@@ -80,6 +80,8 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
+void necauroratools::Common::anchor() {}
+
 void necauroratools::Linker::RenderExtraToolArgs(const JobAction &JA,
                                                  llvm::opt::ArgStringList &CmdArgs) const {
   // no extra args, just hope for the best
@@ -143,3 +145,5 @@ Tool *toolchains::NECAuroraOffloadToolChain::buildLinker() const {
 Tool *toolchains::NECAuroraOffloadToolChain::buildAssembler() const {
   return new necauroratools::Assembler(*this);
 }
+
+void toolchains::NECAuroraOffloadToolChain::anchor() {}

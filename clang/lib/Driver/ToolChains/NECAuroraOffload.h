@@ -15,6 +15,7 @@ namespace necauroratools {
 // we will use ncc (and for testing purposes gcc) for everything,
 // so, like gcc, we can create a common base class
 class LLVM_LIBRARY_VISIBILITY Common : public Tool {
+  virtual void anchor();
 public:
   Common(const char *Name, const char *ShortName, const char *BinaryName,
          const ToolChain &TC)
@@ -58,18 +59,6 @@ public:
 
 class LLVM_LIBRARY_VISIBILITY OffloadCompilerWrapper : public Common {
 public:
-/*  OffloadCompilerWrapper(const ToolChain &TC)
-    : Tool("NECAurora::Compiler", "necaurora-wrap", TC) {}
-
-  bool hasIntegratedCPP() const override { return true; }
-
-  bool hasIntegratedAssembler() const override { return true; }
-
-  void ConstructJob(Compilation &C, const JobAction &JA,
-                    const InputInfo &Output, const InputInfoList &Inputs,
-                    const llvm::opt::ArgList &TCArgs,
-                    const char *LinkingOutput) const override;*/
-
   OffloadCompilerWrapper(const ToolChain &TC)
     : Common("NECAurora::OffloadCompiler", "Offload Compiler (via ncc)",
              "necaurora-ofld-cc1-wrapper", TC) {}
@@ -100,6 +89,7 @@ public:
 namespace toolchains {
 
 class LLVM_LIBRARY_VISIBILITY NECAuroraOffloadToolChain : public Generic_ELF {
+  virtual void anchor();
 public:
   NECAuroraOffloadToolChain(const Driver &D, const llvm::Triple &Triple,
                             const ToolChain &HostTC,
