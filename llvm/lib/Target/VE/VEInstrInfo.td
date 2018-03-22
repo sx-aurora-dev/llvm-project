@@ -580,14 +580,21 @@ def : Pat<(i64 imm:$val),
 
 // The same integer registers are used for i32 and i64 values.
 // When registers hold i32 values, the high bits are don't care.
+
 // This give us free trunc and anyext.
-def : Pat<(i64 (anyext i32:$val)), (COPY_TO_REGCLASS $val, I64)>;
+// def : Pat<(i64 (anyext i32:$val)), (COPY_TO_REGCLASS $val, I64)>;
+// def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
+
+// Or free trunc, but 1 instruction for anyext.
+def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri i32:$val, 0), I64)>;
+def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
 def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
-/*
-def : Pat<(i64 (zext i32:$val)), (i64 (ADSUri $val, 0))>;
-def : Pat<(i64 (sext i32:$val)), (i64 (ADSri $val, 0))>;
-*/
+// sextload and zextload stuff
+def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
+          (COPY_TO_REGCLASS (LDLri MEMri:$addr), I64)>;
+def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
+          (COPY_TO_REGCLASS (LDLUri MEMri:$addr), I64)>;
 
 // Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzzi tglobaladdr:$in)>;
