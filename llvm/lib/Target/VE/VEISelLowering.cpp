@@ -1510,7 +1510,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
-  setMinFunctionAlignment(2);
+  // Set function alignment to 16 bytes (4 bits)
+  setMinFunctionAlignment(4);
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 }

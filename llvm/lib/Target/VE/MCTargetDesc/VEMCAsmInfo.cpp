@@ -24,23 +24,17 @@ using namespace llvm;
 void VEELFMCAsmInfo::anchor() {}
 
 VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
-  IsLittleEndian = (TheTriple.getArch() == Triple::sparcel);
 
   CodePointerSize = CalleeSaveStackSlotSize = 8;
+  MaxInstLength = MinInstAlignment = 8;
 
-  Data16bitsDirective = "\t.half\t";
+  ZeroDirective = nullptr;
   Data32bitsDirective = "\t.word\t";
-  Data64bitsDirective = "\t.xword\t";
-  ZeroDirective = "\t.skip\t";
-  CommentString = "#";
-  SupportsDebugInformation = true;
 
-  ExceptionsType = ExceptionHandling::DwarfCFI;
-
-  SunStyleELFSectionSwitchSyntax = true;
-  UsesELFSectionDirectiveForBSS = true;
-
-  UseIntegratedAssembler = true;
+  // ExceptionsType = ExceptionHandling::DwarfCFI;
+  // SupportsDebugInformation = true;
+  // SunStyleELFSectionSwitchSyntax = true;
+  // UseIntegratedAssembler = true;
 }
 
 const MCExpr*
