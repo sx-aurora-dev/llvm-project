@@ -1311,9 +1311,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
 
-  setOperationAction(ISD::BITCAST, MVT::f32, Expand);
-  setOperationAction(ISD::BITCAST, MVT::i32, Expand);
-
   // VE has no select or setcc: expand to SELECT_CC.
   setOperationAction(ISD::SELECT, MVT::i32, Expand);
   setOperationAction(ISD::SELECT, MVT::f32, Expand);
@@ -1347,8 +1344,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::ADDE, MVT::i64, Custom);
     setOperationAction(ISD::SUBC, MVT::i64, Custom);
     setOperationAction(ISD::SUBE, MVT::i64, Custom);
-    setOperationAction(ISD::BITCAST, MVT::f64, Expand);
-    setOperationAction(ISD::BITCAST, MVT::i64, Expand);
     setOperationAction(ISD::SELECT, MVT::i64, Expand);
     setOperationAction(ISD::SETCC, MVT::i64, Expand);
     setOperationAction(ISD::BR_CC, MVT::i64, Custom);
@@ -2617,52 +2612,74 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                                                        Subtarget);
   case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG, *this,
                                                       Subtarget);
-#if 0
-  case ISD::GlobalTLSAddress:   return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::GlobalTLSAddress:   // return LowerGlobalTLSAddress(Op, DAG);
+    report_fatal_error("GlobalTLSAddress expansion is not implemented yet");
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-  case ISD::FP_TO_SINT:         return LowerFP_TO_SINT(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::SINT_TO_FP:         return LowerSINT_TO_FP(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::FP_TO_UINT:         return LowerFP_TO_UINT(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::UINT_TO_FP:         return LowerUINT_TO_FP(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::EH_SJLJ_SETJMP:     return LowerEH_SJLJ_SETJMP(Op, DAG, *this);
-  case ISD::EH_SJLJ_LONGJMP:    return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
-  case ISD::VASTART:            return LowerVASTART(Op, DAG, *this);
-  case ISD::VAARG:              return LowerVAARG(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG,
-                                                               Subtarget);
+  case ISD::FP_TO_SINT:         // return LowerFP_TO_SINT(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("FP_TO_SINT expansion is not implemented yet");
+  case ISD::SINT_TO_FP:         // return LowerSINT_TO_FP(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("SINT_TO_FP expansion is not implemented yet");
+  case ISD::FP_TO_UINT:         // return LowerFP_TO_UINT(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("FP_TO_UINT expansion is not implemented yet");
+  case ISD::UINT_TO_FP:         // return LowerUINT_TO_FP(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("UINT_TO_FP expansion is not implemented yet");
+  case ISD::EH_SJLJ_SETJMP:     // return LowerEH_SJLJ_SETJMP(Op, DAG, *this);
+    report_fatal_error("EH_SJLJ_SETJMP expansion is not implemented yet");
+  case ISD::EH_SJLJ_LONGJMP:    // return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
+    report_fatal_error("EH_SJLJ_LONGJMP expansion is not implemented yet");
+  case ISD::VASTART:            // return LowerVASTART(Op, DAG, *this);
+    report_fatal_error("VASTART expansion is not implemented yet");
+  case ISD::VAARG:              // return LowerVAARG(Op, DAG);
+    report_fatal_error("VAARG expansion is not implemented yet");
+  case ISD::DYNAMIC_STACKALLOC: // return LowerDYNAMIC_STACKALLOC(Op, DAG,
+                                //                                Subtarget);
+    report_fatal_error("DYNAMIC_STACKALLOC expansion is not implemented yet");
 
-  case ISD::LOAD:               return LowerLOAD(Op, DAG);
-  case ISD::STORE:              return LowerSTORE(Op, DAG);
-  case ISD::FADD:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::ADD_F128), 2);
-  case ISD::FSUB:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::SUB_F128), 2);
-  case ISD::FMUL:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::MUL_F128), 2);
-  case ISD::FDIV:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::DIV_F128), 2);
-  case ISD::FSQRT:              return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::SQRT_F128),1);
+  case ISD::LOAD:               // return LowerLOAD(Op, DAG);
+    report_fatal_error("LOAD expansion is not implemented yet");
+  case ISD::STORE:              // return LowerSTORE(Op, DAG);
+    report_fatal_error("STORE expansion is not implemented yet");
+  case ISD::FADD:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::ADD_F128), 2);
+    report_fatal_error("FADD expansion is not implemented yet");
+  case ISD::FSUB:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::SUB_F128), 2);
+    report_fatal_error("FSUB expansion is not implemented yet");
+  case ISD::FMUL:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::MUL_F128), 2);
+    report_fatal_error("FMUL expansion is not implemented yet");
+  case ISD::FDIV:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::DIV_F128), 2);
+    report_fatal_error("FDIV expansion is not implemented yet");
+  case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::SQRT_F128),1);
+    report_fatal_error("FSQRT expansion is not implemented yet");
   case ISD::FABS:
-  case ISD::FNEG:               return LowerFNEGorFABS(Op, DAG, isV9);
-  case ISD::FP_EXTEND:          return LowerF128_FPEXTEND(Op, DAG, *this);
-  case ISD::FP_ROUND:           return LowerF128_FPROUND(Op, DAG, *this);
+  case ISD::FNEG:               // return LowerFNEGorFABS(Op, DAG, isV9);
+    report_fatal_error("FABS or FNEG expansion is not implemented yet");
+  case ISD::FP_EXTEND:          // return LowerF128_FPEXTEND(Op, DAG, *this);
+    report_fatal_error("FP_EXTEND expansion is not implemented yet");
+  case ISD::FP_ROUND:           // return LowerF128_FPROUND(Op, DAG, *this);
+    report_fatal_error("FP_ROUND expansion is not implemented yet");
   case ISD::ADDC:
   case ISD::ADDE:
   case ISD::SUBC:
-  case ISD::SUBE:               return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
+  case ISD::SUBE:               // return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
+    report_fatal_error("ADDC, ADDE, SUBC, or SUBE expansion is not implemented yet");
   case ISD::UMULO:
-  case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
+  case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
+    report_fatal_error("UMULO or SMULO expansion is not implemented yet");
   case ISD::ATOMIC_LOAD:
-  case ISD::ATOMIC_STORE:       return LowerATOMIC_LOAD_STORE(Op, DAG);
-  case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-#endif
+  case ISD::ATOMIC_STORE:       // return LowerATOMIC_LOAD_STORE(Op, DAG);
+    report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
+  case ISD::INTRINSIC_WO_CHAIN: // return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+    report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
   }
 }
 
