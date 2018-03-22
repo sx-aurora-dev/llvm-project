@@ -294,19 +294,23 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   const unsigned QFP_FP_SubRegsIdx[]  = { SP::sub_even, SP::sub_odd,
                                           SP::sub_odd64_then_sub_even,
                                           SP::sub_odd64_then_sub_odd };
+#endif
 
-  if (SP::IntRegsRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(SP::ORrr), DestReg).addReg(SP::G0)
-      .addReg(SrcReg, getKillRegState(KillSrc));
+  // For the case of VE, I32, I64, F32, and F64 uses the identical
+  // registers %s0-%s63, so no need to check other register classes
+  // here
+  if (VE::I32RegClass.contains(DestReg, SrcReg))
+    BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
+      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
+  else
+    llvm_unreachable("Impossible reg-to-reg copy");
+#if 0
   else if (SP::IntPairRegClass.contains(DestReg, SrcReg)) {
     subRegIdx  = DW_SubRegsIdx;
     numSubRegs = 2;
     movOpc     = SP::ORrr;
     ExtraG0 = true;
-  } else if (SP::FPRegsRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(SP::FMOVS), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc));
-  else if (SP::DFPRegsRegClass.contains(DestReg, SrcReg)) {
+  } else if (SP::DFPRegsRegClass.contains(DestReg, SrcReg)) {
     if (Subtarget.isV9()) {
       BuildMI(MBB, I, DL, get(SP::FMOVD), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc));
@@ -367,7 +371,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (KillSrc)
     MovMI->addRegisterKilled(SrcReg, TRI);
 #endif
-  report_fatal_error("copyPhysReg is not implemented yet");
 }
 
 void VEInstrInfo::
