@@ -51,6 +51,8 @@ namespace {
     void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
     void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
+    void printMemHmOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
+                           const char *Modifier = nullptr);
 
     void EmitFunctionBodyStart() override;
     void EmitInstruction(const MachineInstr *MI) override;
@@ -405,6 +407,27 @@ void VEAsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
     printOperand(MI, opNum+1, O);
   }
   O << "(,";
+  printOperand(MI, opNum, O);
+  O << ")";
+}
+
+void VEAsmPrinter::printMemHmOperand(const MachineInstr *MI, int opNum,
+                                      raw_ostream &O, const char *Modifier) {
+  // If this is an ADD operand, emit it like normal operands.
+  if (Modifier && !strcmp(Modifier, "arith")) {
+    printOperand(MI, opNum, O);
+    O << ", ";
+    printOperand(MI, opNum+1, O);
+    return;
+  }
+
+  if (MI->getOperand(opNum+1).isImm() &&
+      MI->getOperand(opNum+1).getImm() == 0) {
+    // don't print "+0"
+  } else {
+    printOperand(MI, opNum+1, O);
+  }
+  O << "(";
   printOperand(MI, opNum, O);
   O << ")";
 }

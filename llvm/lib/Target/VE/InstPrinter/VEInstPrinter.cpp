@@ -161,6 +161,28 @@ void VEInstPrinter::printMemOperand(const MCInst *MI, int opNum,
   O << ")";
 }
 
+void VEInstPrinter::printMemHmOperand(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo &STI,
+                                       raw_ostream &O, const char *Modifier) {
+  // If this is an ADD operand, emit it like normal operands.
+  if (Modifier && !strcmp(Modifier, "arith")) {
+    printOperand(MI, opNum, STI, O);
+    O << ", ";
+    printOperand(MI, opNum+1, STI, O);
+    return;
+  }
+
+  const MCOperand &MO = MI->getOperand(opNum+1);
+  if (MO.isImm() && MO.getImm() == 0) {
+    // don't print "+0"
+  } else {
+    printOperand(MI, opNum+1, STI, O);
+  }
+  O << "(";
+  printOperand(MI, opNum, STI, O);
+  O << ")";
+}
+
 void VEInstPrinter::printCCOperand(const MCInst *MI, int opNum,
                                       const MCSubtargetInfo &STI,
                                       raw_ostream &O) {

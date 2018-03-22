@@ -65,8 +65,15 @@ def MEMrr : Operand<iPTR> {
   let MIOperandInfo = (ops ptr_rc, ptr_rc);
   let ParserMatchClass = VEMEMrrAsmOperand;
 }
+
 def MEMri : Operand<iPTR> {
   let PrintMethod = "printMemOperand";
+  let MIOperandInfo = (ops ptr_rc, i64imm);
+  let ParserMatchClass = VEMEMriAsmOperand;
+}
+
+def MEMhm : Operand<iPTR> {
+  let PrintMethod = "printMemHmOperand";
   let MIOperandInfo = (ops ptr_rc, i64imm);
   let ParserMatchClass = VEMEMriAsmOperand;
 }
@@ -464,22 +471,22 @@ defm BCR : BCRm;
 let cx = 0, cy = 0, cz = 1 in {
 let sy = 3 in
 def LHMri : RM<
-    0x21, (outs I64:$sx), (ins MEMri:$addr),
+    0x21, (outs I64:$sx), (ins MEMhm:$addr),
     "lhm.l $sx, $addr",
     []>;
 let sy = 2 in
 def LHMLri : RM<
-    0x21, (outs I32:$sx), (ins MEMri:$addr),
+    0x21, (outs I32:$sx), (ins MEMhm:$addr),
     "lhm.w $sx, $addr",
     []>;
 let sy = 1 in
 def LHM2Bri : RM<
-    0x21, (outs I16:$sx), (ins MEMri:$addr),
+    0x21, (outs I16:$sx), (ins MEMhm:$addr),
     "lhm.h $sx, $addr",
     []>;
 let sy = 0 in
 def LHM1Bri : RM<
-    0x21, (outs I8:$sx), (ins MEMri:$addr),
+    0x21, (outs I8:$sx), (ins MEMhm:$addr),
     "lhm.b $sx, $addr",
     []>;
 }
@@ -487,22 +494,22 @@ def LHM1Bri : RM<
 let cx = 0, cy = 0, cz = 1 in {
 let sy = 3 in
 def SHMri : RM<
-    0x31, (outs), (ins MEMri:$addr, I64:$sx),
+    0x31, (outs), (ins MEMhm:$addr, I64:$sx),
     "shm.l $sx, $addr",
     []>;
 let sy = 2 in
 def SHMLri : RM<
-    0x31, (outs), (ins MEMri:$addr, I32:$sx),
+    0x31, (outs), (ins MEMhm:$addr, I32:$sx),
     "shm.l $sx, $addr",
     []>;
 let sy = 1 in
 def SHM2Bri : RM<
-    0x31, (outs), (ins MEMri:$addr, I16:$sx),
+    0x31, (outs), (ins MEMhm:$addr, I16:$sx),
     "shm.l $sx, $addr",
     []>;
 let sy = 0 in
 def SHM1Bri : RM<
-    0x31, (outs), (ins MEMri:$addr, I8:$sx),
+    0x31, (outs), (ins MEMhm:$addr, I8:$sx),
     "shm.l $sx, $addr",
     []>;
 }
