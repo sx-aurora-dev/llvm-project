@@ -16,6 +16,7 @@
 #include "Arch/Sparc.h"
 #include "Arch/SystemZ.h"
 #include "Arch/X86.h"
+#include "Arch/VE.h"
 #include "AMDGPU.h"
 #include "CommonArgs.h"
 #include "Hexagon.h"
@@ -358,6 +359,9 @@ static void getTargetFeatures(const ToolChain &TC, const llvm::Triple &Triple,
   case llvm::Triple::r600:
   case llvm::Triple::amdgcn:
     amdgpu::getAMDGPUTargetFeatures(D, Args, Features);
+    break;
+  case llvm::Triple::ve:
+    ve::getVETargetFeatures(D, Args, Features);
     break;
   }
 
@@ -1440,6 +1444,10 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
   case llvm::Triple::wasm64:
     AddWebAssemblyTargetArgs(Args, CmdArgs);
     break;
+
+  case llvm::Triple::ve:
+    AddVETargetArgs(Args, CmdArgs);
+    break;
   }
 }
 
@@ -1827,6 +1835,24 @@ void Clang::AddWebAssemblyTargetArgs(const ArgList &Args,
                    options::OPT_fvisibility_ms_compat)) {
     CmdArgs.push_back("-fvisibility");
     CmdArgs.push_back("hidden");
+  }
+}
+
+void Clang::AddVETargetArgs(const ArgList &Args,
+                            ArgStringList &CmdArgs) const {
+  ve::FloatABI FloatABI =
+      ve::getVEFloatABI(getToolChain().getDriver(), Args);
+
+  if (FloatABI == ve::FloatABI::Soft) {
+    // Floating point operations and argument passing are soft.
+    CmdArgs.push_back("-msoft-float");
+    CmdArgs.push_back("-mfloat-abi");
+    CmdArgs.push_back("soft");
+  } else {
+    // Floating point operations and argument passing are hard.
+    assert(FloatABI == ve::FloatABI::Hard && "Invalid float abi!");
+    CmdArgs.push_back("-mfloat-abi");
+    CmdArgs.push_back("hard");
   }
 }
 

@@ -40,6 +40,7 @@
 #include "ToolChains/TCE.h"
 #include "ToolChains/WebAssembly.h"
 #include "ToolChains/XCore.h"
+#include "ToolChains/VE.h"
 #include "clang/Basic/Version.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Config/config.h"
@@ -4197,6 +4198,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         break;
       case llvm::Triple::avr:
         TC = llvm::make_unique<toolchains::AVRToolChain>(*this, Target, Args);
+        break;
+      case llvm::Triple::ve:
+        TC = llvm::make_unique<toolchains::VEToolChain>(*this, Target, Args);
         break;
       default:
         if (Target.getVendor() == llvm::Triple::Myriad)
