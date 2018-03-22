@@ -51,6 +51,8 @@ namespace {
     void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
     void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
+    void printMemHmOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
+                           const char *Modifier = nullptr);
 
     void EmitFunctionBodyStart() override;
     void EmitInstruction(const MachineInstr *MI) override;
@@ -74,6 +76,7 @@ namespace {
   };
 } // end of anonymous namespace
 
+#if 0
 static MCOperand createVEMCOperand(VEMCExpr::VariantKind Kind,
                                       MCSymbol *Sym, MCContext &OutContext) {
   const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Sym,
@@ -110,9 +113,7 @@ static void EmitCall(MCStreamer &OutStreamer,
                      const MCSubtargetInfo &STI)
 {
   MCInst CallInst;
-#if 0
   CallInst.setOpcode(SP::CALL);
-#endif
   CallInst.addOperand(Callee);
   OutStreamer.EmitInstruction(CallInst, STI);
 }
@@ -122,7 +123,7 @@ static void EmitLEASL(MCStreamer &OutStreamer,
                       const MCSubtargetInfo &STI)
 {
   MCInst LEASLInst;
-  LEASLInst.setOpcode(VE::LEASL);
+  LEASLInst.setOpcode(VE::LEASLrzi);
   LEASLInst.addOperand(RD);
   LEASLInst.addOperand(Imm);
   OutStreamer.EmitInstruction(LEASLInst, STI);
@@ -143,19 +144,19 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
 static void EmitOR(MCStreamer &OutStreamer,
                    MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
                    const MCSubtargetInfo &STI) {
-//  EmitBinary(OutStreamer, SP::ORri, RS1, Imm, RD, STI);
+  EmitBinary(OutStreamer, SP::ORri, RS1, Imm, RD, STI);
 }
 
 static void EmitADD(MCStreamer &OutStreamer,
                     MCOperand &RS1, MCOperand &RS2, MCOperand &RD,
                     const MCSubtargetInfo &STI) {
-//  EmitBinary(OutStreamer, SP::ADDrr, RS1, RS2, RD, STI);
+  EmitBinary(OutStreamer, SP::ADDrr, RS1, RS2, RD, STI);
 }
 
 static void EmitSHL(MCStreamer &OutStreamer,
                     MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
                     const MCSubtargetInfo &STI) {
-//  EmitBinary(OutStreamer, SP::SLLri, RS1, Imm, RD, STI);
+  EmitBinary(OutStreamer, SP::SLLri, RS1, Imm, RD, STI);
 }
 
 
@@ -172,7 +173,6 @@ static void EmitHiLo(MCStreamer &OutStreamer,  MCSymbol *GOTSym,
   EmitOR(OutStreamer, RD, lo, RD, STI);
 }
 
-#if 0
 void VEAsmPrinter::LowerGETPCXAndEmitMCInsts(const MachineInstr *MI,
                                                 const MCSubtargetInfo &STI)
 {
@@ -392,21 +392,44 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
 
 void VEAsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
                                       raw_ostream &O, const char *Modifier) {
-  printOperand(MI, opNum, O);
-
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
+    printOperand(MI, opNum, O);
     O << ", ";
     printOperand(MI, opNum+1, O);
     return;
   }
 
   if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0)
-    return;   // don't print "+0"
+      MI->getOperand(opNum+1).getImm() == 0) {
+    // don't print "+0"
+  } else {
+    printOperand(MI, opNum+1, O);
+  }
+  O << "(,";
+  printOperand(MI, opNum, O);
+  O << ")";
+}
 
-  O << "+";
-  printOperand(MI, opNum+1, O);
+void VEAsmPrinter::printMemHmOperand(const MachineInstr *MI, int opNum,
+                                      raw_ostream &O, const char *Modifier) {
+  // If this is an ADD operand, emit it like normal operands.
+  if (Modifier && !strcmp(Modifier, "arith")) {
+    printOperand(MI, opNum, O);
+    O << ", ";
+    printOperand(MI, opNum+1, O);
+    return;
+  }
+
+  if (MI->getOperand(opNum+1).isImm() &&
+      MI->getOperand(opNum+1).getImm() == 0) {
+    // don't print "+0"
+  } else {
+    printOperand(MI, opNum+1, O);
+  }
+  O << "(";
+  printOperand(MI, opNum, O);
+  O << ")";
 }
 
 /// PrintAsmOperand - Print out an operand for an inline asm expression.

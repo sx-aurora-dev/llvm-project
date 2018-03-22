@@ -30,7 +30,5 @@ def RetCC_VE : CallingConv<[
            CCAssignToReg<[S0, S1, S2, S3, S4, S5, S6, S7]>>
 ]>;
 
-// Callee-saved registers are handled by the register window mechanism.
-def CSR : CalleeSavedRegs<(add)> {
-  let OtherPreserved = (sequence "S%u", 18, 33);
-}
+// Callee-saved registers
+def CSR : CalleeSavedRegs<(add (sequence "S%u", 18, 33))>;

@@ -43,10 +43,10 @@ VEInstrInfo::VEInstrInfo(VESubtarget &ST)
 /// any side effects other than loading from the stack slot.
 unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                              int &FrameIndex) const {
-#if 0
-  if (MI.getOpcode() == SP::LDri || MI.getOpcode() == SP::LDXri ||
-      MI.getOpcode() == SP::LDFri || MI.getOpcode() == SP::LDDFri ||
-      MI.getOpcode() == SP::LDQFri) {
+  if (MI.getOpcode() == VE::LDSri || MI.getOpcode() == VE::LDUri ||
+      MI.getOpcode() == VE::LDLri || MI.getOpcode() == VE::LDLUri ||
+      MI.getOpcode() == VE::LD2Bri || MI.getOpcode() == VE::LD2BUri ||
+      MI.getOpcode() == VE::LD1Bri || MI.getOpcode() == VE::LD1BUri) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -54,8 +54,6 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
     }
   }
   return 0;
-#endif
-  report_fatal_error("isLoadFromStackSlot is not implemented yet");
 }
 
 /// isStoreToStackSlot - If the specified machine instruction is a direct
@@ -65,10 +63,9 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 /// any side effects other than storing to the stack slot.
 unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
-#if 0
-  if (MI.getOpcode() == SP::STri || MI.getOpcode() == SP::STXri ||
-      MI.getOpcode() == SP::STFri || MI.getOpcode() == SP::STDFri ||
-      MI.getOpcode() == SP::STQFri) {
+  if (MI.getOpcode() == VE::STSri || MI.getOpcode() == VE::STUri ||
+      MI.getOpcode() == VE::STLri || MI.getOpcode() == VE::ST2Bri ||
+      MI.getOpcode() == VE::ST1Bri) {
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
@@ -76,8 +73,6 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
     }
   }
   return 0;
-#endif
-  report_fatal_error("isStoreToStackSlot is not implemented yet");
 }
 
 #if 0
@@ -110,15 +105,11 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
   llvm_unreachable("Invalid cond code");
 }
 
-#if 0
-static bool isUncondBranchOpcode(int Opc) { return Opc == SP::BA; }
-#endif
+// Treat br.l [BCR AT] as unconditional branch
+static bool isUncondBranchOpcode(int Opc) { return Opc == VE::BCRa; }
 
 static bool isCondBranchOpcode(int Opc) {
-#if 0
-  return Opc == SP::FBCOND || Opc == SP::BCOND;
-#endif
-  report_fatal_error("isCondBranchOpcode is not implemented yet");
+  return Opc == VE::BCRrr || Opc == VE::BCRri;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -130,11 +121,10 @@ static bool isIndirectBranchOpcode(int Opc) {
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
                             SmallVectorImpl<MachineOperand> &Cond) {
-#if 0
-  Cond.push_back(MachineOperand::CreateImm(LastInst->getOperand(1).getImm()));
-  Target = LastInst->getOperand(0).getMBB();
-#endif
-  report_fatal_error("parseCondBranch is not implemented yet");
+  Cond.push_back(MachineOperand::CreateImm(LastInst->getOperand(0).getImm()));
+  Cond.push_back(LastInst->getOperand(1));
+  Cond.push_back(LastInst->getOperand(2));
+  Target = LastInst->getOperand(3).getMBB();
 }
 
 bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
@@ -142,7 +132,6 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
                                    MachineBasicBlock *&FBB,
                                    SmallVectorImpl<MachineOperand> &Cond,
                                    bool AllowModify) const {
-#if 0
   MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
   if (I == MBB.end())
     return false;
@@ -219,8 +208,6 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
   // Otherwise, can't handle this.
   return true;
-#endif
-  report_fatal_error("analyzeBranch is not implemented yet");
 }
 
 unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
@@ -307,19 +294,23 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   const unsigned QFP_FP_SubRegsIdx[]  = { SP::sub_even, SP::sub_odd,
                                           SP::sub_odd64_then_sub_even,
                                           SP::sub_odd64_then_sub_odd };
+#endif
 
-  if (SP::IntRegsRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(SP::ORrr), DestReg).addReg(SP::G0)
-      .addReg(SrcReg, getKillRegState(KillSrc));
+  // For the case of VE, I32, I64, F32, and F64 uses the identical
+  // registers %s0-%s63, so no need to check other register classes
+  // here
+  if (VE::I32RegClass.contains(DestReg, SrcReg))
+    BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
+      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
+  else
+    llvm_unreachable("Impossible reg-to-reg copy");
+#if 0
   else if (SP::IntPairRegClass.contains(DestReg, SrcReg)) {
     subRegIdx  = DW_SubRegsIdx;
     numSubRegs = 2;
     movOpc     = SP::ORrr;
     ExtraG0 = true;
-  } else if (SP::FPRegsRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(SP::FMOVS), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc));
-  else if (SP::DFPRegsRegClass.contains(DestReg, SrcReg)) {
+  } else if (SP::DFPRegsRegClass.contains(DestReg, SrcReg)) {
     if (Subtarget.isV9()) {
       BuildMI(MBB, I, DL, get(SP::FMOVD), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc));
@@ -380,7 +371,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (KillSrc)
     MovMI->addRegisterKilled(SrcReg, TRI);
 #endif
-  report_fatal_error("copyPhysReg is not implemented yet");
 }
 
 void VEInstrInfo::
@@ -388,7 +378,6 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                     unsigned SrcReg, bool isKill, int FI,
                     const TargetRegisterClass *RC,
                     const TargetRegisterInfo *TRI) const {
-#if 0
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
 
@@ -399,30 +388,24 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
   // On the order of operands here: think "[FrameIdx + 0] = SrcReg".
-  if (RC == &SP::I64RegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::STXri)).addFrameIndex(FI).addImm(0)
+  if (RC == &VE::I64RegClass || RC == &VE::F64RegClass)
+    BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &SP::IntRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::STri)).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::I32RegClass)
+    BuildMI(MBB, I, DL, get(VE::STLri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &SP::IntPairRegClass)
-    BuildMI(MBB, I, DL, get(SP::STDri)).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::F32RegClass)
+    BuildMI(MBB, I, DL, get(VE::STUri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &SP::FPRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::STFri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
-  else if (SP::DFPRegsRegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(SP::STDFri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
-  else if (SP::QFPRegsRegClass.hasSubClassEq(RC))
+#if 0
+  else if (SP::F128RegClass.hasSubClassEq(RC))
     // Use STQFri irrespective of its legality. If STQ is not legal, it will be
     // lowered into two STDs in eliminateFrameIndex.
     BuildMI(MBB, I, DL, get(SP::STQFri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
+#endif
   else
     llvm_unreachable("Can't store this register to stack slot");
-#endif
-  report_fatal_error("storeRegToStackSlot is not implemented yet");
 }
 
 void VEInstrInfo::
@@ -430,7 +413,6 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                      unsigned DestReg, int FI,
                      const TargetRegisterClass *RC,
                      const TargetRegisterInfo *TRI) const {
-#if 0
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
 
@@ -440,30 +422,24 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
-  if (RC == &SP::I64RegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDXri), DestReg).addFrameIndex(FI).addImm(0)
+  if (RC == &VE::I64RegClass || RC == &VE::F64RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDSri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (RC == &SP::IntRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDri), DestReg).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::I32RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDLri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (RC == &SP::IntPairRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDDri), DestReg).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::F32RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDUri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (RC == &SP::FPRegsRegClass)
-    BuildMI(MBB, I, DL, get(SP::LDFri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (SP::DFPRegsRegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(SP::LDDFri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (SP::QFPRegsRegClass.hasSubClassEq(RC))
+#if 0
+  else if (VE::F128RegClass.hasSubClassEq(RC))
     // Use LDQFri irrespective of its legality. If LDQ is not legal, it will be
     // lowered into two LDDs in eliminateFrameIndex.
     BuildMI(MBB, I, DL, get(SP::LDQFri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
+#endif
   else
     llvm_unreachable("Can't load this register from stack slot");
-#endif
-  report_fatal_error("loadRegFromStackSlot is not implemented yet");
 }
 
 unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
@@ -493,11 +469,19 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
 }
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
-#if 0
   switch (MI.getOpcode()) {
+  case VE::EXTEND_STACK: {
+    return expandExtendStackPseudo(MI);
+  }
+  case VE::EXTEND_STACK_GUARD: {
+    MI.eraseFromParent(); // The pseudo instruction is gone now.
+    return true;
+  }
   case TargetOpcode::LOAD_STACK_GUARD: {
     assert(Subtarget.isTargetLinux() &&
            "Only Linux target is expected to contain LOAD_STACK_GUARD");
+    report_fatal_error("expandPostRAPseudo for LOAD_STACK_GUARD is not implemented yet");
+#if 0
     // offsetof(tcbhead_t, stack_guard) from sysdeps/sparc/nptl/tls.h in glibc.
     const int64_t Offset = Subtarget.is64Bit() ? 0x28 : 0x14;
     MI.setDesc(get(Subtarget.is64Bit() ? SP::LDXri : SP::LDri));
@@ -505,9 +489,80 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
         .addReg(SP::G7)
         .addImm(Offset);
     return true;
+#endif
   }
   }
   return false;
-#endif
-  report_fatal_error("expandPostRAPseudo is not implemented yet");
+}
+
+bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineFunction &MF = *MBB.getParent();
+  const VEInstrInfo &TII =
+      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+  DebugLoc dl = MBB.findDebugLoc(MI);
+
+  // Create following instructions and multiple basic blocks.
+  //
+  // thisBB:
+  //   brge.l.t %sp, %sl, sinkBB
+  // syscallBB:
+  //   ld      %s61, 0x18(, %tp)        // load param area
+  //   or      %s62, 0, %s0             // spill the value of %s0
+  //   lea     %s63, 0x13b              // syscall # of grow
+  //   shm.l   %s63, 0x0(%s61)          // store syscall # at addr:0
+  //   shm.l   %sl, 0x8(%s61)           // store old limit at addr:8
+  //   shm.l   %sp, 0x10(%s61)          // store new limit at addr:16
+  //   monc                             // call monitor
+  //   or      %s0, 0, %s62             // restore the value of %s0
+  // sinkBB:
+
+  // Create new MBB
+  MachineBasicBlock *BB = &MBB;
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+  MachineBasicBlock *syscallMBB = MF.CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *sinkMBB = MF.CreateMachineBasicBlock(LLVM_BB);
+  MachineFunction::iterator It = ++(BB->getIterator());
+  MF.insert(It, syscallMBB);
+  MF.insert(It, sinkMBB);
+
+  // Transfer the remainder of BB and its successor edges to sinkMBB.
+  sinkMBB->splice(sinkMBB->begin(), BB,
+                  std::next(std::next(MachineBasicBlock::iterator(MI))),
+                  BB->end());
+  sinkMBB->transferSuccessorsAndUpdatePHIs(BB);
+
+  // Next, add the true and fallthrough blocks as its successors.
+  BB->addSuccessor(syscallMBB);
+  BB->addSuccessor(sinkMBB);
+  BuildMI(BB, dl, TII.get(VE::BCRrr))
+      .addImm(5)
+      .addReg(VE::S11)                          // %sp
+      .addReg(VE::S8)                           // %sl
+      .addMBB(sinkMBB);
+
+  BB = syscallMBB;
+
+  // Update machine-CFG edges
+  BB->addSuccessor(sinkMBB);
+
+  BuildMI(BB, dl, TII.get(VE::LDSri), VE::S61)
+    .addReg(VE::S14).addImm(0x18);
+  BuildMI(BB, dl, TII.get(VE::ORri), VE::S62)
+    .addReg(VE::S0).addImm(0);
+  BuildMI(BB, dl, TII.get(VE::LEAzzi), VE::S63)
+    .addImm(0x13b);
+  BuildMI(BB, dl, TII.get(VE::SHMri))
+    .addReg(VE::S61).addImm(0).addReg(VE::S63);
+  BuildMI(BB, dl, TII.get(VE::SHMri))
+    .addReg(VE::S61).addImm(8).addReg(VE::S8);
+  BuildMI(BB, dl, TII.get(VE::SHMri))
+    .addReg(VE::S61).addImm(16).addReg(VE::S11);
+  BuildMI(BB, dl, TII.get(VE::MONC));
+
+  BuildMI(BB, dl, TII.get(VE::ORri), VE::S0)
+    .addReg(VE::S62).addImm(0);
+
+  MI.eraseFromParent(); // The pseudo instruction is gone now.
+  return true;
 }

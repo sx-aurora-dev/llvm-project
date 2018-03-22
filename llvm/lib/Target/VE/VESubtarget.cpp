@@ -52,7 +52,7 @@ int VESubtarget::getAdjustedFrameSize(int frameSize) const {
   //         +----------------------------------------+
   //         | Locals and temporaries                 |
   //         +----------------------------------------+
-  //         | Parameter Area for callee              |
+  //         | Parameter area for callee              |
   // 176(fp) |                                        |
   //         +----------------------------------------+
   //         | Register save area (RSA) for callee    |
@@ -61,13 +61,13 @@ int VESubtarget::getAdjustedFrameSize(int frameSize) const {
   //         +----------------------------------------+
   //   8(fp) | Return address                         |
   //         +----------------------------------------+
-  //   0(fp) | Frame pointer of callee                |
+  //   0(fp) | Frame pointer of caller                |
   // --------+----------------------------------------+--------
   //         | Locals and temporaries for callee      |
   //         +----------------------------------------+
-  //         | Parameter Area                         |
+  //         | Parameter area for callee of callee    |
   //         +----------------------------------------+
-  //  16(sp) | RSA                                    |
+  //  16(sp) | RSA for callee of callee               |
   //         +----------------------------------------+
   //   8(sp) | Return address                         |
   //         +----------------------------------------+

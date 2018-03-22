@@ -28,6 +28,12 @@ public:
   /// the function.
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
+  void emitPrologueInsns(MachineFunction &MF, MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator MBBI,
+                         int NumBytes, bool RequireFPUpdate) const;
+  void emitEpilogueInsns(MachineFunction &MF, MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator MBBI,
+                         int NumBytes, bool RequireFPUpdate) const;
 
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF,
@@ -56,7 +62,13 @@ private:
   void emitSPAdjustment(MachineFunction &MF,
                         MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator MBBI,
-                        int NumBytes, unsigned ADDrr, unsigned ADDri) const;
+                        int NumBytes) const;
+
+  // Emits code for extending SP in function prologue/epilogue.
+  void emitSPExtend(MachineFunction &MF,
+                    MachineBasicBlock &MBB,
+                    MachineBasicBlock::iterator MBBI,
+                    int NumBytes) const;
 
 };
 

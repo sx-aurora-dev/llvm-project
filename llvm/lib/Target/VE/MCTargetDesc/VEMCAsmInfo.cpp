@@ -24,27 +24,17 @@ using namespace llvm;
 void VEELFMCAsmInfo::anchor() {}
 
 VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
-  bool isV9 = (TheTriple.getArch() == Triple::sparcv9);
-  IsLittleEndian = (TheTriple.getArch() == Triple::sparcel);
 
-  if (isV9) {
-    CodePointerSize = CalleeSaveStackSlotSize = 8;
-  }
+  CodePointerSize = CalleeSaveStackSlotSize = 8;
+  MaxInstLength = MinInstAlignment = 8;
 
-  Data16bitsDirective = "\t.half\t";
+  ZeroDirective = nullptr;
   Data32bitsDirective = "\t.word\t";
-  // .xword is only supported by V9.
-  Data64bitsDirective = (isV9) ? "\t.xword\t" : nullptr;
-  ZeroDirective = "\t.skip\t";
-  CommentString = "!";
-  SupportsDebugInformation = true;
 
-  ExceptionsType = ExceptionHandling::DwarfCFI;
-
-  SunStyleELFSectionSwitchSyntax = true;
-  UsesELFSectionDirectiveForBSS = true;
-
-  UseIntegratedAssembler = true;
+  // ExceptionsType = ExceptionHandling::DwarfCFI;
+  // SupportsDebugInformation = true;
+  // SunStyleELFSectionSwitchSyntax = true;
+  // UseIntegratedAssembler = true;
 }
 
 const MCExpr*

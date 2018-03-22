@@ -18,6 +18,6 @@ Target &llvm::getTheVETarget() {
 }
 
 extern "C" void LLVMInitializeVETargetInfo() {
-  RegisterTarget<Triple::sparc, /*HasJIT=*/false> X(getTheVETarget(), "ve",
-                                                    "VE", "VE");
+  RegisterTarget<Triple::ve, /*HasJIT=*/false> X(getTheVETarget(), "ve",
+                                                 "VE", "VE");
 }

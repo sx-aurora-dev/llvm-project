@@ -57,7 +57,9 @@ VETargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
                                     const SmallVectorImpl<ISD::OutputArg> &Outs,
                                     const SmallVectorImpl<SDValue> &OutVals,
                                     const SDLoc &DL, SelectionDAG &DAG) const {
+#if 0
   MachineFunction &MF = DAG.getMachineFunction();
+#endif
 
   // CCValAssign - represent the assignment of the return value to locations.
   SmallVector<CCValAssign, 16> RVLocs;
@@ -71,8 +73,6 @@ VETargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
 
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
-  // Make room for the return address offset.
-  RetOps.push_back(SDValue());
 
   // Copy the result values into the output registers.
   for (unsigned i = 0, realRVLocIdx = 0;
@@ -109,24 +109,7 @@ VETargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
-  unsigned RetAddrOffset = 8; // Call Inst + Delay Slot
-  // If the function returns a struct, copy the SRetReturnReg to I0
-  if (MF.getFunction().hasStructRetAttr()) {
-    VEMachineFunctionInfo *SFI = MF.getInfo<VEMachineFunctionInfo>();
-    unsigned Reg = SFI->getSRetReturnReg();
-    if (!Reg)
-      llvm_unreachable("sret virtual register not created in the entry block");
-    auto PtrVT = getPointerTy(DAG.getDataLayout());
-    SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
-    // put address of struct to %s0
-    Chain = DAG.getCopyToReg(Chain, DL, VE::S0, Val, Flag);
-    Flag = Chain.getValue(1);
-    RetOps.push_back(DAG.getRegister(VE::S0, PtrVT));
-    RetAddrOffset = 12; // CallInst + Delay Slot + Unimp
-  }
-
   RetOps[0] = Chain;  // Update chain.
-  RetOps[1] = DAG.getConstant(RetAddrOffset, DL, MVT::i32);
 
   // Add the flag if we have it.
   if (Flag.getNode())
@@ -155,10 +138,6 @@ VETargetLowering::LowerReturn_64(SDValue Chain, CallingConv::ID CallConv,
 
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
-
-  // The second operand on the return instruction is the return address offset.
-  // The return address is always %i7+8 with the 64-bit ABI.
-  RetOps.push_back(DAG.getConstant(8, DL, MVT::i32));
 
   // Copy the result values into the output registers.
   for (unsigned i = 0; i != RVLocs.size(); ++i) {
@@ -265,7 +244,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
       if (VA.needsCustom()) {
         assert(VA.getLocVT() == MVT::f64 || VA.getLocVT() == MVT::v2i32);
 
-        unsigned VRegHi = RegInfo.createVirtualRegister(&VE::IntRegsRegClass);
+        unsigned VRegHi = RegInfo.createVirtualRegister(&VE::I32RegClass);
         MF.getRegInfo().addLiveIn(VA.getLocReg(), VRegHi);
         SDValue HiVal = DAG.getCopyFromReg(Chain, dl, VRegHi, MVT::i32);
 
@@ -280,7 +259,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
           LoVal = DAG.getLoad(MVT::i32, dl, Chain, FIPtr, MachinePointerInfo());
         } else {
           unsigned loReg = MF.addLiveIn(NextVA.getLocReg(),
-                                        &VE::IntRegsRegClass);
+                                        &VE::I32RegClass);
           LoVal = DAG.getCopyFromReg(Chain, dl, loReg, MVT::i32);
         }
 
@@ -293,7 +272,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
         InVals.push_back(WholeValue);
         continue;
       }
-      unsigned VReg = RegInfo.createVirtualRegister(&VE::IntRegsRegClass);
+      unsigned VReg = RegInfo.createVirtualRegister(&VE::I32RegClass);
       MF.getRegInfo().addLiveIn(VA.getLocReg(), VReg);
       SDValue Arg = DAG.getCopyFromReg(Chain, dl, VReg, MVT::i32);
       if (VA.getLocVT() == MVT::f32)
@@ -372,7 +351,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
     VEMachineFunctionInfo *SFI = MF.getInfo<VEMachineFunctionInfo>();
     unsigned Reg = SFI->getSRetReturnReg();
     if (!Reg) {
-      Reg = MF.getRegInfo().createVirtualRegister(&VE::IntRegsRegClass);
+      Reg = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
       SFI->setSRetReturnReg(Reg);
     }
     SDValue Copy = DAG.getCopyToReg(DAG.getEntryNode(), dl, Reg, InVals[0]);
@@ -400,7 +379,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
     std::vector<SDValue> OutChains;
 
     for (; CurArgReg != ArgRegEnd; ++CurArgReg) {
-      unsigned VReg = RegInfo.createVirtualRegister(&VE::IntRegsRegClass);
+      unsigned VReg = RegInfo.createVirtualRegister(&VE::I32RegClass);
       MF.getRegInfo().addLiveIn(*CurArgReg, VReg);
       SDValue Arg = DAG.getCopyFromReg(DAG.getRoot(), dl, VReg, MVT::i32);
 
@@ -515,7 +494,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
   // of how many arguments were actually passed.
   SmallVector<SDValue, 8> OutChains;
   for (; ArgOffset < 8*8; ArgOffset += 8) {
-    unsigned VReg = MF.addLiveIn(VE::S0 + ArgOffset/8, &VE::IntRegsRegClass);
+    unsigned VReg = MF.addLiveIn(VE::S0 + ArgOffset/8, &VE::I64RegClass);
     SDValue VArg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i64);
     int FI = MF.getFrameInfo().CreateFixedObject(8, ArgOffset + ArgArea, true);
     auto PtrVT = getPointerTy(MF.getDataLayout());
@@ -1001,6 +980,40 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // call instruction itself.
   SmallVector<SDValue, 8> MemOpChains;
 
+#if 1
+  // VE needs to get address of callee function in a register
+  // So, prepare to copy it to S12 here.
+
+  // If the callee is a GlobalAddress node (quite common, every direct call is)
+  // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
+  // Likewise ExternalSymbol -> TargetExternalSymbol.
+  SDValue Callee = CLI.Callee;
+  unsigned TF = isPositionIndependent() ? VEMCExpr::VK_VE_WPLT30 : 0;
+
+  bool IsPICCall = 1; /* isPositionIndependent(); */
+        // true if calls are translated to bsic %lr, (,%s12)
+
+  // Turn GlobalAddress/ExternalSymbol node into a value node
+  // contining the address of them here.
+  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
+    if (IsPICCall) {
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
+                             VEMCExpr::VK_VE_LO, DAG);
+    } else {
+      Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, TF);
+    }
+  } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
+    if (IsPICCall) {
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
+                             VEMCExpr::VK_VE_LO, DAG);
+    } else {
+      Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
+    }
+  }
+
+  RegsToPass.push_back(std::make_pair(VE::S12, Callee));
+#endif
+
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     const CCValAssign &VA = ArgLocs[i];
     SDValue Arg = CLI.OutVals[i];
@@ -1105,6 +1118,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     InGlue = Chain.getValue(1);
   }
 
+#if 0
   // If the callee is a GlobalAddress node (quite common, every direct call is)
   // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
   // Likewise ExternalSymbol -> TargetExternalSymbol.
@@ -1114,11 +1128,14 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, TF);
   else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
     Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
+#endif
 
   // Build the operands for the call instruction itself.
   SmallVector<SDValue, 8> Ops;
   Ops.push_back(Chain);
+#if 0
   Ops.push_back(Callee);
+#endif
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i)
     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
                                   RegsToPass[i].second.getValueType()));
@@ -1236,11 +1253,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   // Set up the register classes.
-  addRegisterClass(MVT::i32, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::i64, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::f32, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::f64, &VE::IntRegsRegClass);
-  addRegisterClass(MVT::f128, &VE::QFPRegsRegClass);
+  addRegisterClass(MVT::i32, &VE::I32RegClass);
+  addRegisterClass(MVT::i64, &VE::I64RegClass);
+  addRegisterClass(MVT::f32, &VE::F32RegClass);
+  addRegisterClass(MVT::f64, &VE::F64RegClass);
+  addRegisterClass(MVT::f128, &VE::F128RegClass);
 
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {
@@ -1294,9 +1311,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
 
-  setOperationAction(ISD::BITCAST, MVT::f32, Expand);
-  setOperationAction(ISD::BITCAST, MVT::i32, Expand);
-
   // VE has no select or setcc: expand to SELECT_CC.
   setOperationAction(ISD::SELECT, MVT::i32, Expand);
   setOperationAction(ISD::SELECT, MVT::f32, Expand);
@@ -1330,8 +1344,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::ADDE, MVT::i64, Custom);
     setOperationAction(ISD::SUBC, MVT::i64, Custom);
     setOperationAction(ISD::SUBE, MVT::i64, Custom);
-    setOperationAction(ISD::BITCAST, MVT::f64, Expand);
-    setOperationAction(ISD::BITCAST, MVT::i64, Expand);
     setOperationAction(ISD::SELECT, MVT::i64, Expand);
     setOperationAction(ISD::SETCC, MVT::i64, Expand);
     setOperationAction(ISD::BR_CC, MVT::i64, Custom);
@@ -1493,7 +1505,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
-  setMinFunctionAlignment(2);
+  // Set function alignment to 16 bytes (4 bits)
+  setMinFunctionAlignment(4);
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 }
@@ -1562,6 +1575,7 @@ void VETargetLowering::computeKnownBitsForTargetNode
   }
 }
 
+#if 0
 // Look at LHS/RHS/CC and see if they are a lowered setcc instruction.  If so
 // set LHS/RHS and VECC to the LHS/RHS of the setcc and VECC to the condition.
 static void LookThroughSetCC(SDValue &LHS, SDValue &RHS,
@@ -1581,6 +1595,7 @@ static void LookThroughSetCC(SDValue &LHS, SDValue &RHS,
     RHS = CMPCC.getOperand(1);
   }
 }
+#endif
 
 // Convert to a target node and set target flags.
 SDValue VETargetLowering::withTargetFlags(SDValue Op, unsigned TF,
@@ -1969,7 +1984,6 @@ SDValue VETargetLowering::LowerF128Compare(SDValue LHS, SDValue RHS,
   }
   }
 }
-#endif
 
 static SDValue
 LowerF128_FPEXTEND(SDValue Op, SelectionDAG &DAG,
@@ -2191,6 +2205,7 @@ static SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG,
   SDValue Ops[2] = { NewVal, Chain };
   return DAG.getMergeValues(Ops, dl);
 }
+#endif
 
 static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
                               const VETargetLowering &TLI,
@@ -2302,7 +2317,6 @@ static SDValue LowerF64Op(SDValue SrcReg64, const SDLoc &dl, SelectionDAG &DAG,
                                        DstReg64, Lo32);
   return DstReg64;
 }
-#endif
 
 // Lower a f128 load into two f64 loads.
 static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
@@ -2417,6 +2431,7 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
 
   return SDValue();
 }
+#endif
 
 #if 0
 static SDValue LowerFNEGorFABS(SDValue Op, SelectionDAG &DAG, bool isV9) {
@@ -2597,52 +2612,74 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                                                        Subtarget);
   case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG, *this,
                                                       Subtarget);
-#if 0
-  case ISD::GlobalTLSAddress:   return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::GlobalTLSAddress:   // return LowerGlobalTLSAddress(Op, DAG);
+    report_fatal_error("GlobalTLSAddress expansion is not implemented yet");
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-  case ISD::FP_TO_SINT:         return LowerFP_TO_SINT(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::SINT_TO_FP:         return LowerSINT_TO_FP(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::FP_TO_UINT:         return LowerFP_TO_UINT(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::UINT_TO_FP:         return LowerUINT_TO_FP(Op, DAG, *this,
-                                                       hasHardQuad);
-  case ISD::EH_SJLJ_SETJMP:     return LowerEH_SJLJ_SETJMP(Op, DAG, *this);
-  case ISD::EH_SJLJ_LONGJMP:    return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
-  case ISD::VASTART:            return LowerVASTART(Op, DAG, *this);
-  case ISD::VAARG:              return LowerVAARG(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG,
-                                                               Subtarget);
+  case ISD::FP_TO_SINT:         // return LowerFP_TO_SINT(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("FP_TO_SINT expansion is not implemented yet");
+  case ISD::SINT_TO_FP:         // return LowerSINT_TO_FP(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("SINT_TO_FP expansion is not implemented yet");
+  case ISD::FP_TO_UINT:         // return LowerFP_TO_UINT(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("FP_TO_UINT expansion is not implemented yet");
+  case ISD::UINT_TO_FP:         // return LowerUINT_TO_FP(Op, DAG, *this,
+                                //                        hasHardQuad);
+    report_fatal_error("UINT_TO_FP expansion is not implemented yet");
+  case ISD::EH_SJLJ_SETJMP:     // return LowerEH_SJLJ_SETJMP(Op, DAG, *this);
+    report_fatal_error("EH_SJLJ_SETJMP expansion is not implemented yet");
+  case ISD::EH_SJLJ_LONGJMP:    // return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
+    report_fatal_error("EH_SJLJ_LONGJMP expansion is not implemented yet");
+  case ISD::VASTART:            // return LowerVASTART(Op, DAG, *this);
+    report_fatal_error("VASTART expansion is not implemented yet");
+  case ISD::VAARG:              // return LowerVAARG(Op, DAG);
+    report_fatal_error("VAARG expansion is not implemented yet");
+  case ISD::DYNAMIC_STACKALLOC: // return LowerDYNAMIC_STACKALLOC(Op, DAG,
+                                //                                Subtarget);
+    report_fatal_error("DYNAMIC_STACKALLOC expansion is not implemented yet");
 
-  case ISD::LOAD:               return LowerLOAD(Op, DAG);
-  case ISD::STORE:              return LowerSTORE(Op, DAG);
-  case ISD::FADD:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::ADD_F128), 2);
-  case ISD::FSUB:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::SUB_F128), 2);
-  case ISD::FMUL:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::MUL_F128), 2);
-  case ISD::FDIV:               return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::DIV_F128), 2);
-  case ISD::FSQRT:              return LowerF128Op(Op, DAG,
-                                       getLibcallName(RTLIB::SQRT_F128),1);
+  case ISD::LOAD:               // return LowerLOAD(Op, DAG);
+    report_fatal_error("LOAD expansion is not implemented yet");
+  case ISD::STORE:              // return LowerSTORE(Op, DAG);
+    report_fatal_error("STORE expansion is not implemented yet");
+  case ISD::FADD:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::ADD_F128), 2);
+    report_fatal_error("FADD expansion is not implemented yet");
+  case ISD::FSUB:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::SUB_F128), 2);
+    report_fatal_error("FSUB expansion is not implemented yet");
+  case ISD::FMUL:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::MUL_F128), 2);
+    report_fatal_error("FMUL expansion is not implemented yet");
+  case ISD::FDIV:               // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::DIV_F128), 2);
+    report_fatal_error("FDIV expansion is not implemented yet");
+  case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
+                                //        getLibcallName(RTLIB::SQRT_F128),1);
+    report_fatal_error("FSQRT expansion is not implemented yet");
   case ISD::FABS:
-  case ISD::FNEG:               return LowerFNEGorFABS(Op, DAG, isV9);
-  case ISD::FP_EXTEND:          return LowerF128_FPEXTEND(Op, DAG, *this);
-  case ISD::FP_ROUND:           return LowerF128_FPROUND(Op, DAG, *this);
+  case ISD::FNEG:               // return LowerFNEGorFABS(Op, DAG, isV9);
+    report_fatal_error("FABS or FNEG expansion is not implemented yet");
+  case ISD::FP_EXTEND:          // return LowerF128_FPEXTEND(Op, DAG, *this);
+    report_fatal_error("FP_EXTEND expansion is not implemented yet");
+  case ISD::FP_ROUND:           // return LowerF128_FPROUND(Op, DAG, *this);
+    report_fatal_error("FP_ROUND expansion is not implemented yet");
   case ISD::ADDC:
   case ISD::ADDE:
   case ISD::SUBC:
-  case ISD::SUBE:               return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
+  case ISD::SUBE:               // return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
+    report_fatal_error("ADDC, ADDE, SUBC, or SUBE expansion is not implemented yet");
   case ISD::UMULO:
-  case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
+  case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
+    report_fatal_error("UMULO or SMULO expansion is not implemented yet");
   case ISD::ATOMIC_LOAD:
-  case ISD::ATOMIC_STORE:       return LowerATOMIC_LOAD_STORE(Op, DAG);
-  case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-#endif
+  case ISD::ATOMIC_STORE:       // return LowerATOMIC_LOAD_STORE(Op, DAG);
+    report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
+  case ISD::INTRINSIC_WO_CHAIN: // return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+    report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
   }
 }
 
@@ -2746,7 +2783,7 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   assert(PVT == MVT::i32 && "Invalid Pointer Size!");
 
   unsigned Buf = MI.getOperand(0).getReg();
-  unsigned JmpLoc = MRI.createVirtualRegister(&SP::IntRegsRegClass);
+  unsigned JmpLoc = MRI.createVirtualRegister(&SP::I64RegClass);
 
   // TO DO: If we do 64-bit handling, this perhaps should be FLUSHW, not TA 3
   MIB = BuildMI(*MBB, MI, DL, TII->get(SP::TRAPri), SP::G0).addImm(3).addImm(SPCC::ICC_A);
@@ -2845,8 +2882,8 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
                   MBB->end());
   sinkMBB->transferSuccessorsAndUpdatePHIs(MBB);
 
-  unsigned LabelReg = MRI.createVirtualRegister(&SP::IntRegsRegClass);
-  unsigned LabelReg2 = MRI.createVirtualRegister(&SP::IntRegsRegClass);
+  unsigned LabelReg = MRI.createVirtualRegister(&SP::I64RegClass);
+  unsigned LabelReg2 = MRI.createVirtualRegister(&SP::I64RegClass);
   unsigned BufReg = MI.getOperand(1).getReg();
 
   // Instruction to store FP
@@ -3020,19 +3057,19 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
     case 'r':
-      return std::make_pair(0U, &VE::IntRegsRegClass);
+      return std::make_pair(0U, &VE::I64RegClass);
     case 'f':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::FPRegsRegClass);
+        return std::make_pair(0U, &VE::F64RegClass);
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::QFPRegsRegClass);
+        return std::make_pair(0U, &VE::F128RegClass);
       llvm_unreachable("Unknown ValueType for f-register-type!");
       break;
     case 'e':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::FPRegsRegClass);
+        return std::make_pair(0U, &VE::F64RegClass);
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::QFPRegsRegClass);
+        return std::make_pair(0U, &VE::F128RegClass);
       llvm_unreachable("Unknown ValueType for e-register-type!");
       break;
     }

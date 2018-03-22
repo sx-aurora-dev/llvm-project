@@ -101,6 +101,8 @@ public:
 
   // Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
+
+  bool expandExtendStackPseudo(MachineInstr &MI) const;
 };
 
 }

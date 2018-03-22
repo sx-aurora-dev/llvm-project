@@ -46,7 +46,6 @@ VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
 
 BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
-  const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
   Reserved.set(VE::S8);         // stack limit
   Reserved.set(VE::S9);         // frame pointer
   Reserved.set(VE::S10);        // link register (return address)
@@ -61,6 +60,16 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(VE::S16);        // procedure linkage table register
   Reserved.set(VE::S17);        // linkage-area register
 
+  // Also reserve the register pair aliases covering the above
+  // registers, with the same conditions.  This is required since
+  // LiveIntervals treat a register as a non reserved register if any
+  // of its aliases are not reserved.
+  Reserved.set(VE::Q4);         // S8_S9
+  Reserved.set(VE::Q5);         // S10_S11
+  Reserved.set(VE::Q6);         // S12_S13
+  Reserved.set(VE::Q7);         // S14_S15
+  Reserved.set(VE::Q8);         // S16_S17
+
   // s18-s33 are callee-saved registers
   // s34-s63 are temporary registers
 
@@ -70,13 +79,12 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 const TargetRegisterClass*
 VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
                                       unsigned Kind) const {
-  return &VE::IntRegsRegClass;
+  return &VE::I64RegClass;
 }
 
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, unsigned FramePtr) {
-#if 0
   // Replace frame index with a frame pointer reference.
   if (Offset >= -4096 && Offset <= 4095) {
     // If the offset is small enough to fit in the immediate field, directly
@@ -86,6 +94,8 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     return;
   }
 
+  report_fatal_error("replaceFI for large number is not implemented yet");
+#if 0
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
   // FIXME: it would be better to scavenge a register here instead of
@@ -131,14 +141,15 @@ void
 VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                        int SPAdj, unsigned FIOperandNum,
                                        RegScavenger *RS) const {
-#if 0
   assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
   DebugLoc dl = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   MachineFunction &MF = *MI.getParent()->getParent();
+#if 0
   const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
+#endif
   const VEFrameLowering *TFI = getFrameLowering(MF);
 
   unsigned FrameReg;
@@ -147,6 +158,7 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
 
+#if 0
   if (!Subtarget.isV9() || !Subtarget.hasHardQuad()) {
     if (MI.getOpcode() == SP::STQFri) {
       const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
@@ -175,9 +187,9 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       Offset += 8;
     }
   }
+#endif
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
-#endif
 }
 
 unsigned VERegisterInfo::getFrameRegister(const MachineFunction &MF) const {
