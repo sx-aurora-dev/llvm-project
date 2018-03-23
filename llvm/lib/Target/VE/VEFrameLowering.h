@@ -48,6 +48,19 @@ public:
   int getFrameIndexReference(const MachineFunction &MF, int FI,
                              unsigned &FrameReg) const override;
 
+  const SpillSlot *getCalleeSavedSpillSlots(unsigned &NumEntries)
+      const override {
+    static const SpillSlot Offsets[] = {
+      { VE::S17,  40 }, { VE::S18,  48 }, { VE::S19,  56 }, { VE::S20,  64 },
+      { VE::S21,  72 }, { VE::S22,  80 }, { VE::S23,  88 }, { VE::S24,  96 },
+      { VE::S25, 104 }, { VE::S26, 112 }, { VE::S27, 120 }, { VE::S28, 128 },
+      { VE::S29, 136 }, { VE::S30, 144 }, { VE::S31, 152 }, { VE::S32, 160 },
+      { VE::S33, 168 }
+    };
+    NumEntries = array_lengthof(Offsets);
+    return Offsets;
+  }
+
   /// targetHandlesStackFrameRounding - Returns true if the target is
   /// responsible for rounding up the stack frame (probably at emitPrologue
   /// time).
