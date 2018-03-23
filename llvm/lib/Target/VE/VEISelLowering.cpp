@@ -408,14 +408,20 @@ SDValue VETargetLowering::LowerFormalArguments_64(
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
 
+  // Get the base offset of the outgoing arguments stack space.
+  unsigned ArgsBaseOffset = 176;
+  // Get the size of the preserved arguments area
+  unsigned ArgsPreserved = 8*8u;
+
   // Analyze arguments according to CC_VE.
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, IsVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
+  // Allocate the preserved area first.
+  CCInfo.AllocateStack(ArgsPreserved, 8);
+  // We already allocated the preserved area, so the stack offset computed
+  // by CC_VE would be correct now.
   CCInfo.AnalyzeFormalArguments(Ins, CC_VE);
-
-  // The argument array begins at %fp+176, after the register save area.
-  const unsigned ArgArea = 176;
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     CCValAssign &VA = ArgLocs[i];
@@ -460,7 +466,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
     assert(VA.isMemLoc());
     // The CC_VE_Full/Half functions compute stack offsets relative to the
     // beginning of the arguments area at %fp+176.
-    unsigned Offset = VA.getLocMemOffset() + ArgArea;
+    unsigned Offset = VA.getLocMemOffset() + ArgsBaseOffset;
     unsigned ValSize = VA.getValVT().getSizeInBits() / 8;
     // Adjust offset for extended arguments, SPARC is big-endian.
     // The caller will have written the full slot with extended bytes, but we
@@ -478,25 +484,24 @@ SDValue VETargetLowering::LowerFormalArguments_64(
     return Chain;
 
   // This function takes variable arguments, some of which may have been passed
-  // in registers %i0-%i5. Variable floating point arguments are never passed
-  // in floating point registers. They go on %i0-%i5 or on the stack like
-  // integer arguments.
+  // in registers %s0-%s8.
   //
   // The va_start intrinsic needs to know the offset to the first variable
   // argument.
-  unsigned ArgOffset = CCInfo.getNextStackOffset();
+  // unsigned ArgOffset = CCInfo.getNextStackOffset();
+  unsigned ArgOffset = 0;
   VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
   // Skip the 176 bytes of register save area.
-  FuncInfo->setVarArgsFrameOffset(ArgOffset + ArgArea);
+  FuncInfo->setVarArgsFrameOffset(ArgOffset + ArgsBaseOffset);
 
   // Save the variable arguments that were passed in registers.
-  // The caller is required to reserve stack space for 6 arguments regardless
+  // The caller is required to reserve stack space for 8 arguments regardless
   // of how many arguments were actually passed.
   SmallVector<SDValue, 8> OutChains;
   for (; ArgOffset < 8*8; ArgOffset += 8) {
     unsigned VReg = MF.addLiveIn(VE::S0 + ArgOffset/8, &VE::I64RegClass);
     SDValue VArg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i64);
-    int FI = MF.getFrameInfo().CreateFixedObject(8, ArgOffset + ArgArea, true);
+    int FI = MF.getFrameInfo().CreateFixedObject(8, ArgOffset + ArgsBaseOffset, true);
     auto PtrVT = getPointerTy(MF.getDataLayout());
     OutChains.push_back(
         DAG.getStore(Chain, DL, VArg, DAG.getFrameIndex(FI, PtrVT),
@@ -946,17 +951,23 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // VE target does not yet support tail call optimization.
   CLI.IsTailCall = false;
 
+  // Get the base offset of the outgoing arguments stack space.
+  unsigned ArgsBaseOffset = 176;
+  // Get the size of the preserved arguments area
+  unsigned ArgsPreserved = 8*8u;
+
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CLI.CallConv, CLI.IsVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
+  // Allocate the preserved area first.
+  CCInfo.AllocateStack(ArgsPreserved, 8);
+  // We already allocated the preserved area, so the stack offset computed
+  // by CC_VE would be correct now.
   CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
 
   // Get the size of the outgoing arguments stack space requirement.
-  // The stack offset computed by CC_VE includes all arguments.
-  // Called functions expect 6 argument words to exist in the stack frame, used
-  // or not.
-  unsigned ArgsSize = std::max(6*8u, CCInfo.getNextStackOffset());
+  unsigned ArgsSize = CCInfo.getNextStackOffset();
 
   // Keep stack frames 16-byte aligned.
   ArgsSize = alignTo(ArgsSize, 16);
@@ -1047,7 +1058,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
           && VA.getLocVT() == MVT::i128) {
         // Store and reload into the integer register reg and reg+1.
         unsigned Offset = 8 * (VA.getLocReg() - VE::S0);
-        unsigned StackOffset = Offset + 176;
+        unsigned StackOffset = Offset + ArgsBaseOffset;
         SDValue StackPtr = DAG.getRegister(VE::S11, PtrVT);
         SDValue HiPtrOff = DAG.getIntPtrConstant(StackOffset, DL);
         HiPtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, HiPtrOff);
@@ -1097,7 +1108,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     // The argument area starts at %fp+176 in the callee frame,
     // %sp+176 in ours.
     SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset() +
-                                           176, DL);
+                                           ArgsBaseOffset, DL);
     PtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, PtrOff);
     MemOpChains.push_back(
         DAG.getStore(Chain, DL, Arg, PtrOff, MachinePointerInfo()));
