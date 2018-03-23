@@ -946,17 +946,23 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // VE target does not yet support tail call optimization.
   CLI.IsTailCall = false;
 
+  // Get the base offset of the outgoing arguments stack space.
+  unsigned ArgsBaseOffset = 176;
+  // Get the size of the preserved arguments area
+  unsigned ArgsPreserved = 8*8u;
+
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CLI.CallConv, CLI.IsVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
+  // Allocate the preserved area first.
+  CCInfo.AllocateStack(ArgsPreserved, 8);
+  // We already allocated the preserved area, so the stack offset computed
+  // by CC_VE would be correct now.
   CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
 
   // Get the size of the outgoing arguments stack space requirement.
-  // The stack offset computed by CC_VE includes all arguments.
-  // Called functions expect 6 argument words to exist in the stack frame, used
-  // or not.
-  unsigned ArgsSize = std::max(6*8u, CCInfo.getNextStackOffset());
+  unsigned ArgsSize = CCInfo.getNextStackOffset();
 
   // Keep stack frames 16-byte aligned.
   ArgsSize = alignTo(ArgsSize, 16);
@@ -1047,7 +1053,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
           && VA.getLocVT() == MVT::i128) {
         // Store and reload into the integer register reg and reg+1.
         unsigned Offset = 8 * (VA.getLocReg() - VE::S0);
-        unsigned StackOffset = Offset + 176;
+        unsigned StackOffset = Offset + ArgsBaseOffset;
         SDValue StackPtr = DAG.getRegister(VE::S11, PtrVT);
         SDValue HiPtrOff = DAG.getIntPtrConstant(StackOffset, DL);
         HiPtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, HiPtrOff);
@@ -1097,7 +1103,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     // The argument area starts at %fp+176 in the callee frame,
     // %sp+176 in ours.
     SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset() +
-                                           176, DL);
+                                           ArgsBaseOffset, DL);
     PtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, PtrOff);
     MemOpChains.push_back(
         DAG.getStore(Chain, DL, Arg, PtrOff, MachinePointerInfo()));
