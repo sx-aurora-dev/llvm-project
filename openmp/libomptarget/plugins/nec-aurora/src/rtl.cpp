@@ -94,7 +94,9 @@ public:
     }
 
     FuncOrGblEntry[device_id].Table.EntriesBegin = &T.front();
-    FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back();
+    // Libomptarget exptects the EntriesEnd pointer to point to the elmenet
+    // just behing the table (+1)
+    FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back() + 1;
   }
 
   __tgt_target_table *getOffloadTable(int32_t device_id) {
@@ -293,7 +295,7 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   uint64_t ret;
   uint64_t addr;
 
-  DP("Allocate target memory: device=%d, target addr=%p, size=%d\n",
+  DP("Allocate target memory: device=%d, target addr=%p, size=%lld\n",
       ID, (void*)addr, Size);
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   if(ret != 0) {
@@ -353,7 +355,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
 
   for (int32_t i = 0; i < NumArgs; ++i) {
     //TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
-    veo_args_set_i64(TargetArgs, i, (intptr_t)Args[i]);
+    veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
   }
 
   uint64_t RetVal;
