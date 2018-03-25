@@ -76,7 +76,7 @@ public:
         DP("Symbol %s not found in target image\n", SymbolName);
         Entry = { NULL, NULL, 0, 0, 0 };
       } else {
-        DP("Found symbol %s successfully in target image (addr: %p)\n", 
+        DP("Found symbol %s successfully in target image (addr: %p)\n",
            SymbolName, (void*)SymbolTargetAddr);
         Entry = { (void*)SymbolTargetAddr, i->name, i->size, i->flags, 0 };
       }
@@ -104,7 +104,7 @@ public:
   }
 
   RTLDeviceInfoTy(int32_t num_devices)
-      : ProcHandles(num_devices, NULL), 
+      : ProcHandles(num_devices, NULL),
         Contexts(num_devices, NULL), FuncOrGblEntry(num_devices),
         LibraryHandles(num_devices) {
     //TODO: some debug code here
@@ -148,14 +148,14 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
     DP("Execution of entry point %p failed\n", reinterpret_cast<void *>(FuncAddr));
     return -1;
   } else {
-    DP("Function at address %p called (VEO request ID: %ld)\n", 
+    DP("Function at address %p called (VEO request ID: %ld)\n",
        reinterpret_cast<void *>(FuncAddr), RequestHandle);
   }
 
   int ret = veo_call_wait_result(DeviceInfo.Contexts[DeviceID], RequestHandle,
                                  RetVal);
   if(ret != 0) {
-    DP("Waiting for entry point %p failed (Error code %d)\n", 
+    DP("Waiting for entry point %p failed (Error code %d)\n",
        reinterpret_cast<void *>(FuncAddr), ret);
     //TODO: Do something with return value?
     return -1;
@@ -197,7 +197,7 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
   if (!proc_handle) {
     //TODO: errno does not seem to be set by VEO
     DP("veo_proc_create() failed: %s\n", std::strerror(errno));
-    return 1; 
+    return 1;
   }
 
   struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
@@ -210,7 +210,7 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
   DeviceInfo.ProcHandles[ID] = proc_handle;
   DeviceInfo.Contexts[ID] = ctx;
 
-  DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n", 
+  DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
      proc_handle, ctx);
 
   return 0;
@@ -310,7 +310,7 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
 // In case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
                               int64_t Size) {
-  int ret = veo_write_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr, 
+  int ret = veo_write_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr,
                           HostPtr, (size_t)Size);
   if(ret != 0) {
     DP("veo_write_mem() failed with error code %d\n", ret);
