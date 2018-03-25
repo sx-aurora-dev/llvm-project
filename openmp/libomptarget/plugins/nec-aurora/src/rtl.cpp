@@ -148,7 +148,7 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
     DP("Execution of entry point %p failed\n", reinterpret_cast<void *>(FuncAddr));
     return -1;
   } else {
-    DP("Function at address %p called (VEO request ID: %ld)\n",
+    DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
        reinterpret_cast<void *>(FuncAddr), RequestHandle);
   }
 
@@ -266,7 +266,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   uint64_t LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
 
   if (!LibHandle) {
-    DP("veo_load_library() failed: LibHandle=%ld\n", LibHandle);
+    DP("veo_load_library() failed: LibHandle=%" PRIu64 "\n", LibHandle);
     //TODO: handle and report error
     return  NULL;
   }
@@ -295,12 +295,12 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   uint64_t ret;
   uint64_t addr;
 
-  DP("Allocate target memory: device=%d, target addr=%p, size=%lld\n",
+  DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
       ID, (void*)addr, Size);
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   if(ret != 0) {
-    DP("veo_alloc_mem(%d, %p, %d) failed with error code %d\n",
-       ID, addr, Size, ret);
+    DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %" PRIu64
+       "\n", ID, (void*)addr, Size, ret);
     return NULL;
   }
   return (void*)addr;
