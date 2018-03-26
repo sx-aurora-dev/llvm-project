@@ -5,7 +5,6 @@
 #include <vector>
 #include <cstring>
 
-
 class ShimInfoTy {
   std::list<struct veo_proc_handle> proc_handles;
 
@@ -60,19 +59,22 @@ uint64_t veo_get_sym(struct veo_proc_handle *request, uint64_t lib_handle,
 }
 
 uint64_t veo_call_async(struct veo_thr_ctxt *request, uint64_t entry_point,
-                     const struct veo_args *args){
+                        const struct veo_args *args){
   ffi_cif cif;
 
   std::vector<ffi_type *> args_types(8, &ffi_type_uint64);
 
-  std::vector<const void *> ptrs(8);
+  std::vector<uint64_t> arg_values = args->arg; // copy to avoid const
+
+  std::vector<void *> ptrs(args->arg.size());
+
 
   for(int i = 0; i < args->arg.size(); ++i) {
-    ptrs[i] = static_cast<const void *>(&args->arg[i]);
+    ptrs[i] = static_cast<void *>(&arg_values[i]);
   }
 
-  ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 8, &ffi_type_uint64,
-                                   &args_types[0]);
+  ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, arg_values.size(),
+                                   &ffi_type_uint64, &args_types[0]);
 
   if (status != FFI_OK) {
     return VEO_REQUEST_ID_INVALID;
@@ -83,8 +85,7 @@ uint64_t veo_call_async(struct veo_thr_ctxt *request, uint64_t entry_point,
 
   ffi_arg result_value;
 
-  //TODO: MAKE THIS CALL AGAIN
-  //ffi_call(&cif, entry, &result_value, &ptrs[0]);
+  ffi_call(&cif, entry, &result_value, &ptrs[0]);
 
   request->last_return_value = static_cast<uint64_t>(result_value);
 

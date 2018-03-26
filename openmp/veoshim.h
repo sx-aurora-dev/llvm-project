@@ -1,13 +1,14 @@
 #ifndef VEOSHIM_H
 #define VEOSHIM_H
 
+#include <stdint.h>
+
 #define VEO_REQUEST_ID_INVALID (~0UL)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <stdlib.h>
 
 
