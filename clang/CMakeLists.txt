@@ -16,12 +16,18 @@ if(INSTALL_TOOLCHAIN_SYMLINK AND USE_TOOLCHAIN_WRAPPERS)
     message(SEND__ERROR "Options: INSTALL_TOOLCHAIN_SYMLINK and USE_TOOLCHAIN_WRAPPERS are mutually exclusive" )
 endif()
 
+set(NECAURORA_TARGET_COMPILER "/opt/nec/ve/bin/ncc" CACHE FILEPATH "")
+
 if(INSTALL_TOOLCHAIN_SYMLINK)
-    set(TOOLCHAIN_SYMLINK_PATH "/usr/bin/ncc" CACHE FILEPATH "")
+    set(TOOLCHAIN_SYMLINK_PATH "${NECAURORA_TARGET_COMPILER}" CACHE FILEPATH "")
 endif()
 
 
+configure_file(config.h.in config.h @ONLY)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 add_executable(necaurora-ofld-cc1-wrapper necaurora-ofld-cc1-wrapper.cpp)
+
 
 if(USE_TOOLCHAIN_WRAPPERS)
     add_executable(necaurora-ofld-tool-wrapper necaurora-ofld-tool-wrapper.cpp)
@@ -31,6 +37,7 @@ macro(install_symlink filepath sympath)
     install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${filepath} ${sympath})")
     install(CODE "message(\"-- Created symlink: ${sympath} -> ${filepath}\")")
 endmacro(install_symlink)
+
 
 install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
 

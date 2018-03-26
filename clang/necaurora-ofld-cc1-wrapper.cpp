@@ -10,30 +10,34 @@
 #include <unistd.h>
 
 
+#include "config.h"
+
 static bool Verbose = false;
 
 
 int runSourceTransformation(const std::string &InputPath,
                             std::string &OutputPath) {
   std::stringstream CmdLine;
-  std::stringstream TmpPath;
+  std::string TmpPath;
 
-  TmpPath << std::getenv("TMP");
+  const char *TmpEnv =  std::getenv("TMP");
 
-  if (TmpPath.str().size() == 0) {
-    std::cerr << "necauroa-ofld-cc1-wrapper: $TMP not set" << std::endl;
-    return -1;
+  if (TmpEnv) {
+    TmpPath = TmpEnv;
+  } else {
+    TmpPath = "/tmp";
   }
 
+
   // find last '/' in string so we can get just the filename
-  size_t PosLastSlashInPath = InputPath.find_last_of("/");
+  size_t PosLastSlashInPath = InputPath.rfind("/");
 
   if (PosLastSlashInPath == InputPath.length()) {
     PosLastSlashInPath = 0;
   }
 
   // find last '.' in string so we can get the filename extension
-  size_t PosLastDotInPath = InputPath.find_last_of(".");
+  size_t PosLastDotInPath = InputPath.rfind(".");
 
   if (PosLastDotInPath == std::string::npos) {
     std::cerr << "necaurora-ofld-cc1-wrapper: Input file has no file extension (1)"
@@ -57,7 +61,7 @@ int runSourceTransformation(const std::string &InputPath,
   // extension laster
 
   std::stringstream TmpFilePathTemplate;
-  TmpFilePathTemplate << TmpPath.str()
+  TmpFilePathTemplate << TmpPath
                       << "/" << InputFileNameWE << "-XXXXXX"
                       << InputFileExt;
 
@@ -123,11 +127,9 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  std::string Compiler(std::getenv("NECAURORA_OFLD_COMPILER"));
+  const char *CompilerEnv = std::getenv("NECAURORA_OFLD_COMPILER");
 
-  if (Compiler == "") {
-    Compiler = "ncc";
-  }
+  std::string Compiler(CompilerEnv ? CompilerEnv : DEFAULT_TARGET_COMPILER);
 
   std::string InputPath(argv[1]);
   std::string SotocOutputPath;
