@@ -3,6 +3,8 @@
 #include <sstream>
 #include <string>
 
+#include "config.h"
+
 int main(int argc, char **argv) {
 
   if (argc < 2) {
@@ -16,7 +18,7 @@ int main(int argc, char **argv) {
   if (tool_path) {
     cmdLine << tool_path;
   } else {
-    cmdLine << "ncc";
+    cmdLine << DEFAULT_TARGET_COMPILER;
   }
 
   for (int i = 1; i < argc; ++i) {
