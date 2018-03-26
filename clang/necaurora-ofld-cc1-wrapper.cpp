@@ -1,33 +1,30 @@
-#include <string>
-#include <sstream>
-#include <iostream>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
+#include <iostream>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include <errno.h>
 #include <unistd.h>
 
-
 #include "config.h"
 
 static bool Verbose = false;
-
 
 int runSourceTransformation(const std::string &InputPath,
                             std::string &OutputPath) {
   std::stringstream CmdLine;
   std::string TmpPath;
 
-  const char *TmpEnv =  std::getenv("TMP");
+  const char *TmpEnv = std::getenv("TMP");
 
   if (TmpEnv) {
     TmpPath = TmpEnv;
   } else {
     TmpPath = "/tmp";
   }
-
 
   // find last '/' in string so we can get just the filename
   size_t PosLastSlashInPath = InputPath.rfind("/");
@@ -40,8 +37,9 @@ int runSourceTransformation(const std::string &InputPath,
   size_t PosLastDotInPath = InputPath.rfind(".");
 
   if (PosLastDotInPath == std::string::npos) {
-    std::cerr << "necaurora-ofld-cc1-wrapper: Input file has no file extension (1)"
-              << " (neeeds to be .c or .cpp)" << std::endl;
+    std::cerr
+        << "necaurora-ofld-cc1-wrapper: Input file has no file extension (1)"
+        << " (neeeds to be .c or .cpp)" << std::endl;
     return -1;
   }
 
@@ -50,7 +48,6 @@ int runSourceTransformation(const std::string &InputPath,
                               (PosLastDotInPath - (PosLastSlashInPath + 1)));
 
   std::string InputFileExt(InputPath, PosLastDotInPath);
-
 
   if (InputFileExt != ".c" && InputFileExt != ".cpp") {
     std::cerr << "necaurora-ofld-cc1-wrapper: Input file has no file extension"
@@ -61,8 +58,7 @@ int runSourceTransformation(const std::string &InputPath,
   // extension laster
 
   std::stringstream TmpFilePathTemplate;
-  TmpFilePathTemplate << TmpPath
-                      << "/" << InputFileNameWE << "-XXXXXX"
+  TmpFilePathTemplate << TmpPath << "/" << InputFileNameWE << "-XXXXXX"
                       << InputFileExt;
 
   std::string TmpFilePathTemplateStr = TmpFilePathTemplate.str();
@@ -74,20 +70,18 @@ int runSourceTransformation(const std::string &InputPath,
   // generate tmp name
   int fd = mkstemps(&TmpFilePath[0], InputFileExt.length());
 
-  if(fd < 0) {
-    std::cerr << "necaurora-ofld-cc1-wrapper: mkstemp(" << &TmpFilePath[0] << ") failed "
-              << " with message: \"" << strerror(errno) << "\""
+  if (fd < 0) {
+    std::cerr << "necaurora-ofld-cc1-wrapper: mkstemp(" << &TmpFilePath[0]
+              << ") failed with message: \"" << strerror(errno) << "\""
               << std::endl;
     return -1;
   }
   close(fd); // we get a warning for mktemp so we use mkstemp
 
-
   // We have our Tempfile
   std::string TmpFile(TmpFilePath.data());
 
-  CmdLine << "sotoc " << InputPath
-          << " -- -fopenmp "
+  CmdLine << "sotoc " << InputPath << " -- -fopenmp "
           << ">" << TmpFile;
 
   if (Verbose) {
@@ -97,7 +91,6 @@ int runSourceTransformation(const std::string &InputPath,
   OutputPath = TmpFile;
   return system(CmdLine.str().c_str());
 }
-
 
 int runTargetCompiler(const std::string &Compiler, const std::string &InputPath,
                       const std::string &Args) {
@@ -110,7 +103,7 @@ int runTargetCompiler(const std::string &Compiler, const std::string &InputPath,
     std::cout << "  \"" << CmdLine.str() << std::endl;
   }
 
-  int ret =  system(CmdLine.str().c_str());
+  int ret = system(CmdLine.str().c_str());
 
   std::remove(InputPath.c_str());
 
@@ -121,8 +114,7 @@ int main(int argc, char **argv) {
 
   int rc;
 
-  if (argc < 2)
-  {
+  if (argc < 2) {
     std::cerr << "Needs at least one argument\n";
     return EXIT_FAILURE;
   }
