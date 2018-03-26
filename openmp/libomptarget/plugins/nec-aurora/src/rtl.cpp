@@ -94,9 +94,7 @@ public:
     }
 
     FuncOrGblEntry[device_id].Table.EntriesBegin = &T.front();
-    // Libomptarget exptects the EntriesEnd pointer to point to the elmenet
-    // just behing the table (+1)
-    FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back() + 1;
+    FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back();
   }
 
   __tgt_target_table *getOffloadTable(int32_t device_id) {
