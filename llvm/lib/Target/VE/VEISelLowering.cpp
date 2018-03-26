@@ -1323,42 +1323,41 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
 
   // VE has no select or setcc: expand to SELECT_CC.
-  setOperationAction(ISD::SELECT, MVT::i32, Expand);
-  setOperationAction(ISD::SELECT, MVT::f32, Expand);
-  setOperationAction(ISD::SELECT, MVT::f64, Expand);
-  setOperationAction(ISD::SELECT, MVT::f128, Expand);
-
-  setOperationAction(ISD::SETCC, MVT::i32, Expand);
-  setOperationAction(ISD::SETCC, MVT::f32, Expand);
-  setOperationAction(ISD::SETCC, MVT::f64, Expand);
-  setOperationAction(ISD::SETCC, MVT::f128, Expand);
+  for (MVT VT : MVT::all_valuetypes()) {
+    setOperationAction(ISD::SETCC,  VT, Expand);
+    setOperationAction(ISD::SELECT, VT, Expand);
+  }
 
   // VE doesn't have BRCOND either, it has BR_CC.
-  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
-  setOperationAction(ISD::BRIND, MVT::Other, Expand);
-  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
+  for (MVT VT : MVT::all_valuetypes()) {
+    setOperationAction(ISD::BRCOND, VT, Expand);
+    setOperationAction(ISD::BRIND,  VT, Expand);
+    setOperationAction(ISD::BR_JT,  VT, Expand);
+  }
+
+#if 0
+  // Should we use EmitInstrWithCustomInserter()?  Not sure atm.
   setOperationAction(ISD::BR_CC, MVT::i32, Custom);
+  setOperationAction(ISD::BR_CC, MVT::i64, Custom);
   setOperationAction(ISD::BR_CC, MVT::f32, Custom);
   setOperationAction(ISD::BR_CC, MVT::f64, Custom);
   setOperationAction(ISD::BR_CC, MVT::f128, Custom);
 
   setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
+  setOperationAction(ISD::SELECT_CC, MVT::i64, Custom);
   setOperationAction(ISD::SELECT_CC, MVT::f32, Custom);
   setOperationAction(ISD::SELECT_CC, MVT::f64, Custom);
   setOperationAction(ISD::SELECT_CC, MVT::f128, Custom);
 
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
+#endif
 
   if (1) {
     setOperationAction(ISD::ADDC, MVT::i64, Custom);
     setOperationAction(ISD::ADDE, MVT::i64, Custom);
     setOperationAction(ISD::SUBC, MVT::i64, Custom);
     setOperationAction(ISD::SUBE, MVT::i64, Custom);
-    setOperationAction(ISD::SELECT, MVT::i64, Expand);
-    setOperationAction(ISD::SETCC, MVT::i64, Expand);
-    setOperationAction(ISD::BR_CC, MVT::i64, Custom);
-    setOperationAction(ISD::SELECT_CC, MVT::i64, Custom);
 
     setOperationAction(ISD::CTPOP, MVT::i64, Legal);
     setOperationAction(ISD::CTTZ , MVT::i64, Expand);

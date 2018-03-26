@@ -45,6 +45,39 @@ def LEASLimm : PatLeaf<(imm), [{
   return isShiftedUInt<32, 32>(N->getZExtValue());
 }], HI32>;
 
+def trunc_imm : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i32);
+}]>;
+
+def sext_imm : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getSExtValue(), SDLoc(N), MVT::i64);
+}]>;
+
+def zext_imm : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i64);
+}]>;
+
+def cond2cc : SDNodeXForm<cond, [{
+  VECC::CondCodes cc;
+  switch (N->get()) {
+  default:          llvm_unreachable("Unknown integer condition code!");
+  case ISD::SETEQ:  cc = VECC::CC_EQ; break;
+  case ISD::SETNE:  cc = VECC::CC_NE; break;
+  case ISD::SETLT:  cc = VECC::CC_L;  break;
+  case ISD::SETGT:  cc = VECC::CC_G;  break;
+  case ISD::SETLE:  cc = VECC::CC_LE; break;
+  case ISD::SETGE:  cc = VECC::CC_GE; break;
+/*
+  case ISD::SETULT: cc = VECC::CC_CS; break;
+  case ISD::SETULE: cc = VECC::CC_LEU; break;
+  case ISD::SETUGT: cc = VECC::CC_GU; break;
+  case ISD::SETUGE: cc = VECC::CC_CC; break;
+*/
+  }
+  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+}]>;
+
+
 // Addressing modes.
 def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
 def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
@@ -156,7 +189,7 @@ def CC_AF    : CC_VAL< 0>;  // Always false
 def CC_G     : CC_VAL< 1>;  // Greater
 def CC_L     : CC_VAL< 2>;  // Less
 def CC_NE    : CC_VAL< 3>;  // Not Equal
-def CC_E     : CC_VAL< 4>;  // Equal
+def CC_EQ    : CC_VAL< 4>;  // Equal
 def CC_GE    : CC_VAL< 5>;  // Greater or Equal
 def CC_LE    : CC_VAL< 6>;  // Less or Equal
 def CC_NUM   : CC_VAL< 7>;  // Number
@@ -596,6 +629,10 @@ def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
 def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
           (COPY_TO_REGCLASS (LDLUri MEMri:$addr), I64)>;
 
+// truncstore
+def : Pat<(truncstorei32 i64:$src, ADDRri:$addr),
+          (STLri MEMri:$addr, (COPY_TO_REGCLASS $src, I32))>;
+
 // Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzzi tglobaladdr:$in)>;
 def : Pat<(VElo tglobaladdr:$in), (ANDrm0 (LEAzzi tglobaladdr:$in), 32)>;
@@ -617,6 +654,17 @@ def : Pat<(call texternalsym:$dst),
           (CALL texternalsym:$dst)>;
 def : Pat<(call i64:$dst),
           (CALLr i64:$dst)>;
+
+// Branches
+def : Pat<(br bb:$addr), (BA bb:$addr)>;
+def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
+          (BCRri (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
+                 (i64 (sext_imm $rhs)), bb:$addr)>;
+def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
+          (BCRrr (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
+                 (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
+def : Pat<(brcc cond:$cond, i64:$lhs, i64:$rhs, bb:$addr),
+          (BCRrr (cond2cc $cond), $lhs, $rhs, bb:$addr)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
