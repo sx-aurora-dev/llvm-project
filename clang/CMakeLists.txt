@@ -72,3 +72,9 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+
+option(ENABLE_TESTS OFF)
+
+if(ENABLE_TESTS)
+  add_subdirectory(test)
+endif()
