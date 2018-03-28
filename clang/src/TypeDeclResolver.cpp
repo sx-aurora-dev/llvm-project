@@ -32,7 +32,7 @@ void TypeDeclResolver::addTypeDecl(clang::TypeDecl *TD) {
         } else {
             clang::TypeDecl *TypeElem = *TypeElemIter;
 
-            if (!AllTypes.count(TD)) {
+            if (!AllTypes.count(TypeElem)) {
                 AllTypes.emplace(std::make_pair(TypeElem,
                                                 TypeInfoTy(TypeElem, false)));
             }
