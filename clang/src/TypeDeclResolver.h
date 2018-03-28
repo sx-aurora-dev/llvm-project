@@ -1,9 +1,8 @@
 #pragma once
 
+#include <map>
 #include <set>
 #include <unordered_set>
-#include <map>
-
 
 namespace clang {
 class TypeDecl;
@@ -22,28 +21,27 @@ class TargetCode;
  */
 
 struct TypeInfoTy {
-    clang::TypeDecl *Decl;
-    std::set<clang::TypeDecl *> TypeDependencies;
-    bool isFromSystemHeader;
-    int InDegree;
+  clang::TypeDecl *Decl;
+  std::set<clang::TypeDecl *> TypeDependencies;
+  bool isFromSystemHeader;
+  int InDegree;
 
-    TypeInfoTy(clang::TypeDecl *D, bool isFromSystemHeader)
-        : Decl(D), isFromSystemHeader(isFromSystemHeader), InDegree(0) {};
+  TypeInfoTy(clang::TypeDecl *D, bool isFromSystemHeader)
+      : Decl(D), isFromSystemHeader(isFromSystemHeader), InDegree(0){};
 };
-
 
 using TypeMap = std::map<clang::TypeDecl *, TypeInfoTy>;
 
-
 class TypeDeclResolver {
-    TypeMap AllTypes;
-    // Types that no other Type depends on
-    std::set<clang::TypeDecl *> NonDependencyTypes;
-    std::set<std::string> SystemHeaders;
+  TypeMap AllTypes;
+  // Types that no other Type depends on
+  std::set<clang::TypeDecl *> NonDependencyTypes;
+  std::set<std::string> SystemHeaders;
 
 public:
-    void addTypeDecl(clang::TypeDecl *TD);
-    bool orderAndWriteCodeFragments(TargetCode &TC);
+  void addTypeDecl(clang::TypeDecl *TD);
+  bool orderAndWriteCodeFragments(TargetCode &TC);
+
 private:
-    void setInDegrees();
+  void setInDegrees();
 };
