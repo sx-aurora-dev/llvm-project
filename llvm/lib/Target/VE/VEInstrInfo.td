@@ -559,6 +559,33 @@ def MONCT : RR<
     "monc.hdb",
     []>;
 
+// vector instructions
+
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
+//    [(int_ve_lvl i32:$sy)]>;
+
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+def VLD : RR<0x81, (outs V64:$vx), (ins I64:$sy), "vld $vx,8,$sy", 
+        [(set v8f64:$vx, (int_ve_vld I64:$sy))]>;
+
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+def VST : RR<0x91, (outs), (ins I64:$sy, V64:$vx), "vst $vx,8,$sy", 
+        [(int_ve_vst I64:$sy, V64:$vx)]>;
+
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+def VFAD : RR<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
+        "vfadd.d $vx,$vy,$vz", 
+        [(set v8f64:$vx, (int_ve_vfadd v8f64:$vy, v8f64:$vz))]>;
+
+
+// Pattern Matchings for Vector Intrinsics
+
+def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
+
+//def : Pat<(set v8f64:$sx, (int_ve_vfadd v8f64:$sy, v8f64:$sz)), 
+        //(v8f64:$sx (VFAD v8f64:$sy, v8f64:$sz))>;
+
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
 //===----------------------------------------------------------------------===//
@@ -656,7 +683,7 @@ def : Pat<(call i64:$dst),
           (CALLr i64:$dst)>;
 
 // Branches
-def : Pat<(br bb:$addr), (BA bb:$addr)>;
+def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
           (BCRri (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
                  (i64 (sext_imm $rhs)), bb:$addr)>;

@@ -112,3 +112,4 @@ def Misc : RegisterClass<"VE", [i64], 64,
                               (sequence "PMCR%u", 0, 3),
                               (sequence "PMC%u", 0, 14))>;
 
+def V64 : RegisterClass<"VE", [v8f64], 512, (sequence "V%u", 0, 63)>;
