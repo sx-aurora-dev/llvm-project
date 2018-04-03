@@ -93,10 +93,10 @@ def I8 : RegisterClass<"VE", [i8], 8,
 def I16 : RegisterClass<"VE", [i16], 16,
                         (add (sequence "S%u", 34, 63),
                              (sequence "S%u", 0, 33))>;
-def I32 : RegisterClass<"VE", [i32], 32,
+def I32 : RegisterClass<"VE", [i32, f32], 32,
                         (add (sequence "S%u", 34, 63),
                              (sequence "S%u", 0, 33))>;
-def I64 : RegisterClass<"VE", [i64], 64,
+def I64 : RegisterClass<"VE", [i64, f64], 64,
                         (add (sequence "S%u", 34, 63),
                              (sequence "S%u", 0, 33))>;
 def F32 : RegisterClass<"VE", [f32], 32,

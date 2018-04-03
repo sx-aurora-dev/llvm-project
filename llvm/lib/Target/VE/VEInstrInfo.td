@@ -397,7 +397,8 @@ let cx = 0 in
 def LDSri : RM<
     0x01, (outs I64:$sx), (ins MEMri:$addr),
     "ld $sx, $addr",
-    [(set i64:$sx, (load ADDRri:$addr))]>;
+    []>;
+//    [(set i64:$sx, (load ADDRri:$addr))]>;
 let cx = 0 in
 def LDUri : RM<
     0x02, (outs I32:$sx), (ins MEMri:$addr),
@@ -440,7 +441,8 @@ let cx = 0, cy = 0, sy = 0, cz = 1 in {
 def STSri : RM<
     0x11, (outs), (ins MEMri:$addr, I64:$sx),
     "st $sx, $addr",
-    [(store i64:$sx, ADDRri:$addr)]>;
+    []>;
+    //[(store f64:$sx, ADDRri:$addr), (store i64:$sx, ADDRri:$addr)]>; // why don't work?
 def STUri : RM<
     0x12, (outs), (ins MEMri:$addr, I32:$sx),
     "stu $sx, $addr",
@@ -459,6 +461,13 @@ def ST1Bri : RM<
     "st1b $sx, $addr",
     [(store i8:$sx, ADDRri:$addr)]>;
 }
+
+def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
+def : Pat<(i64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
+def : Pat<(f32 (load ADDRri:$addr)), (LDUri ADDRri:$addr)>;
+def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, f64:$sx)>;
+def : Pat<(store i64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, i64:$sx)>;
+def : Pat<(store f32:$sx, ADDRri:$addr), (STUri ADDRri:$addr, f32:$sx)>;
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
@@ -571,7 +580,9 @@ def VLD : RR<0x81, (outs V64:$vx), (ins I64:$sy), "vld $vx,8,$sy",
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def VST : RR<0x91, (outs), (ins I64:$sy, V64:$vx), "vst $vx,8,$sy", 
-        [(int_ve_vst I64:$sy, V64:$vx)]>;
+        [(store V64:$vx, i64:$sy)]>;
+
+//        [(int_ve_vst I64:$sy, V64:$vx)]>;
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def VFAD : RR<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
