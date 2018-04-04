@@ -49,7 +49,7 @@ int runSourceTransformation(const std::string &InputPath,
 
   std::string InputFileExt(InputPath, PosLastDotInPath);
 
-  if (InputFileExt != ".c" && InputFileExt != ".cpp") {
+  if (InputFileExt != ".c" && InputFileExt != ".cpp" && InputFileExt != ".i") {
     std::cerr << "necaurora-ofld-cc1-wrapper: Input file has no file extension"
               << std::endl;
     return -1;
