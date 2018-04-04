@@ -103,6 +103,9 @@ void necauroratools::OffloadCompilerWrapper::RenderExtraToolArgs(const JobAction
   case types::TY_Object:
     CmdArgs.push_back("-c");
     break;
+  case types::TY_PP_C:
+    CmdArgs.push_back("-E");
+    break;
   case types::TY_PP_Asm:
     CmdArgs.push_back("-S");
     break;
