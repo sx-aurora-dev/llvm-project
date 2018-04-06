@@ -38,6 +38,7 @@ public:
     FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
 
     // rewrite capture variables in all target regions into pointers
+#if 0
     for (auto i = Code.getCodeFragmentsBegin(), e = Code.getCodeFragmentsEnd();
            i != e; ++i) {
       if (auto *TCR = llvm::dyn_cast<TargetCodeRegion>(i->get())) {
@@ -47,6 +48,7 @@ public:
         // TODO: fix this ^
       }
     }
+#endif
     Types.orderAndWriteCodeFragments(Code);
   }
 };

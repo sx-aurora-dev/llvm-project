@@ -67,6 +67,7 @@ private:
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
 
+#if 0
 class RewriteTargetRegionsVisitor
     : public clang::RecursiveASTVisitor<RewriteTargetRegionsVisitor> {
 
@@ -87,3 +88,4 @@ public:
 private:
   void rewriteVar(clang::DeclRefExpr *Var);
 };
+#endif

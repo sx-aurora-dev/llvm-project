@@ -114,6 +114,7 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
   return true;
 }
 
+#if 0
 bool RewriteTargetRegionsVisitor::VisitStmt(clang::Stmt *S) {
   if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
     if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
@@ -143,6 +144,7 @@ void RewriteTargetRegionsVisitor::rewriteVar(clang::DeclRefExpr *Var) {
       clang::SourceRange(Var->getLocStart(), Var->getLocEnd()),
       VarNameReplacement.str());
 }
+#endif
 
 bool DiscoverTypesInDeclVisitor::VisitDecl(clang::Decl *D) {
   if (auto VD = llvm::dyn_cast<clang::ValueDecl>(D)) {

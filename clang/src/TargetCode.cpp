@@ -65,7 +65,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     }
 
     if (TCR) {
-      Out << "\n}";
+      generateFunctionEpilogue(TCR, Out);
     }
     Out << "\n";
   }
@@ -82,14 +82,43 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     }
     first = false;
 
-    Out << (*i)->getType().getAsString();
+    Out << (*i)->getType().getAsString() << " ";
     if (!(*i)->getType().getTypePtr()->isPointerType()) {
-      Out << "*";
+      Out << "*__sotoc_var_";
     }
-    Out << " " << (*i)->getDeclName().getAsString();
+    Out << (*i)->getDeclName().getAsString();
     // todo: use `Name.print` instead
   }
   Out << ")\n{\n";
+
+  // bring captured scalars into scope
+  for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
+       I != E; ++I) {
+    if (!(*I)->getType().getTypePtr()->isPointerType()) {
+      auto VarName = (*I)->getDeclName().getAsString();
+      Out << "  " << (*I)->getType().getAsString() << " "
+          << VarName << " = "
+          << "*__sotoc_var_" << VarName
+          << ";\n";
+    }
+  }
+  Out << "\n";
+}
+
+void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
+                                          llvm::raw_ostream &Out) {
+  Out << "\n";
+  // copy values from scalars from scoped vars back into pointers
+  for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
+       I != E; ++I) {
+    if (!(*I)->getType().getTypePtr()->isPointerType()) {
+      auto VarName = (*I)->getDeclName().getAsString();
+      Out << "\n  *__sotoc_var_" << VarName
+          << " = " << VarName << ";";
+    }
+  }
+
+  Out << "\n}\n";
 }
 
 std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {

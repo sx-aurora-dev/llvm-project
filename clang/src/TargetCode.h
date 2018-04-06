@@ -41,6 +41,7 @@ public:
 
 private:
   void generateFunctionPrologue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
+  void generateFunctionEpilogue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
   std::string generateFunctionName(TargetCodeRegion *TCR);
   bool isCodeAlreadyInFragments(TargetCodeFragment *Frag);
 };
