@@ -2,6 +2,11 @@
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Lex/Lexer.h"
+#include "clang/Lex/Token.h"
+#include "clang/Basic/TokenKinds.h"
+#include "clang/AST/ASTContext.h"
+#include "clang/Basic/LangOptions.h"
 
 #include "TargetCodeFragment.h"
 
@@ -15,6 +20,8 @@ static bool hasRegionCompoundStmt(const clang::Stmt *S) {
   if (const auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
     if (llvm::isa<clang::CompoundStmt>(SS->getCapturedStmt())) {
       return true;
+    } else if (llvm::isa<clang::CapturedStmt>(SS->getCapturedStmt())) {
+        return hasRegionCompoundStmt(SS->getCapturedStmt());
     }
   }
   return false;
@@ -24,35 +31,48 @@ static bool hasRegionOMPStmt(const clang::Stmt *S) {
   if (const auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
     if (llvm::isa<clang::OMPExecutableDirective>(SS->getCapturedStmt())) {
       return true;
+    } else if (llvm::isa<clang::CapturedStmt>(SS->getCapturedStmt())) {
+      return hasRegionOMPStmt(SS->getCapturedStmt());
     }
   }
   return false;
 }
 
 static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
-  if (auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
-    if (auto *SSS = llvm::dyn_cast<clang::OMPExecutableDirective>(
-            SS->getCapturedStmt())) {
-      const clang::OMPExecutableDirective *cur = SSS;
-      const clang::OMPExecutableDirective *last = nullptr;
-
-      do {
-        last = cur;
-      } while ((cur = llvm::dyn_cast<clang::OMPExecutableDirective>(
-                    cur->getAssociatedStmt())));
-
-      if (last) {
-        return last->getAssociatedStmt()->getLocEnd().getLocWithOffset(1);
-      }
-    }
+  while (auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
+    S = SS->getCapturedStmt();
   }
+
+ if (auto *SSS = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
+   const clang::OMPExecutableDirective *cur = SSS;
+   const clang::OMPExecutableDirective *last = nullptr;
+
+   do {
+     last = cur;
+   } while ((cur = llvm::dyn_cast<clang::OMPExecutableDirective>(
+                 cur->getAssociatedStmt())));
+
+   if (last) {
+     return last->getAssociatedStmt()->getLocEnd().getLocWithOffset(1);
+   }
+ }
+
   return S->getLocEnd().getLocWithOffset(1);
 }
 
 clang::SourceRange TargetCodeRegion::getInnerRange() {
+  clang::SourceManager &SM = Context.getSourceManager();
+  const clang::LangOptions &LO = Context.getLangOpts();
   if (hasRegionCompoundStmt(getNode())) {
-    return clang::SourceRange(getNode()->getLocStart().getLocWithOffset(1),
-                              getNode()->getLocEnd().getLocWithOffset(-1));
+    // Use the lexer to determine the positions of the first and last tokens
+    // despite its name, getLocdForEndOfToken points just behind the token
+    auto InnerLocStart = clang::Lexer::getLocForEndOfToken(
+      getNode()->getLocStart(), 0, SM, LO);
+
+    clang::SourceLocation InnerLocEnd = clang::Lexer::GetBeginningOfToken(
+      getNode()->getLocEnd(), SM, LO).getLocWithOffset(-1);
+
+    return clang::SourceRange(InnerLocStart, InnerLocEnd);
   } else if (hasRegionOMPStmt(getNode())) {
     return clang::SourceRange(getNode()->getLocStart().getLocWithOffset(
                                   -8), // try to get #pragma into source range

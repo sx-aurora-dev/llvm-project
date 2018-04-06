@@ -10,6 +10,7 @@ class SourceRange;
 class Decl;
 class VarDecl;
 class CapturedStmt;
+class ASTContext;
 }; // namespace clang
 
 // This class only really exists because we need a common base class, so we
@@ -25,7 +26,7 @@ public:
     TCFK_TargetCodeTypeDefinitionRaw,
   };
 
-private:
+protected:
   const TargetCodeFragmentKind Kind;
   // Actual class content
 public:
@@ -34,10 +35,11 @@ public:
   static bool classof(const TargetCodeFragment *TCF) {
     return TCF->getKind() == TCFK_TargetCodeFragment;
   }
-
+protected:
+  clang::ASTContext &Context;
 public:
-  TargetCodeFragment(TargetCodeFragmentKind Kind)
-      : Kind(Kind), NeedsSemicolon(false) {}
+  TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
+      : Context(Context), Kind(Kind), NeedsSemicolon(false) {}
   virtual clang::SourceRange getRealRange() = 0;
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }
 };
@@ -51,8 +53,9 @@ protected:
   T Node;
 
 public:
-  TargetCodeSourceFragment(T Node, TargetCodeFragmentKind Kind)
-      : TargetCodeFragment(Kind), Node(Node) {}
+  TargetCodeSourceFragment(T Node, clang::ASTContext &Context,
+                           TargetCodeFragmentKind Kind)
+      : TargetCodeFragment(Context, Kind), Node(Node) {}
   virtual clang::SourceRange getRealRange() { return Node->getSourceRange(); }
 };
 
@@ -74,11 +77,13 @@ private:
 public:
   TargetCodeRegion(clang::CapturedStmt *Node,
                    clang::SourceLocation TargetDirectiveLocation,
-                   clang::FunctionDecl *ParentFuncDecl)
-      : TargetCodeSourceFragment<clang::CapturedStmt *>(Node,
-                                                        TCFK_TargetCodeRegion),
-        ParentFuncName(ParentFuncDecl->getNameAsString()),
-        TargetDirectiveLocation(TargetDirectiveLocation) {}
+                   clang::FunctionDecl *ParentFuncDecl,
+                   clang::ASTContext &Context)
+    : TargetCodeSourceFragment<clang::CapturedStmt *>(Node,
+        Context, TCFK_TargetCodeRegion),
+      ParentFuncName(ParentFuncDecl->getNameAsString()),
+      TargetDirectiveLocation(TargetDirectiveLocation) {}
+
   void addCapturedVar(clang::VarDecl *Var);
   clang::CapturedStmt *getNode() { return Node; }
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsBegin() {
@@ -104,6 +109,7 @@ public:
 
 public:
   TargetCodeDecl(clang::Decl *Node)
-      : TargetCodeSourceFragment<clang::Decl *>(Node, TCFK_TargetCodeDecl) {}
+      : TargetCodeSourceFragment<clang::Decl *>(Node, Node->getASTContext(),
+                                                TCFK_TargetCodeDecl) {}
   clang::SourceRange getInnerRange() override;
 };

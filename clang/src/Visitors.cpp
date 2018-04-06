@@ -56,8 +56,12 @@ bool FindTargetCodeVisitor::processTargetRegion(
             e = TargetDirective->child_end();
        i != e; ++i) {
     if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(*i)) {
+      while (auto *NCS = llvm::dyn_cast<clang::CapturedStmt>(
+        CS->getCapturedStmt())) {
+        CS = NCS;
+      }
       auto TCR = std::make_shared<TargetCodeRegion>(
-          CS, TargetDirective->getLocStart(), LastVisitedFuncDecl);
+          CS, TargetDirective->getLocStart(), LastVisitedFuncDecl, Context);
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
         DiscoverTypeVisitor.TraverseStmt(CS);
@@ -121,7 +125,9 @@ bool RewriteTargetRegionsVisitor::VisitStmt(clang::Stmt *S) {
                     VD) != TargetRegion.getCapturedVarsEnd() &&
           RewrittenRefs.find(DRE->getLocation().getRawEncoding()) ==
               RewrittenRefs.end()) {
-        rewriteVar(DRE);
+        if (DRE->refersToEnclosingVariableOrCapture()) {
+            rewriteVar(DRE);
+        }
         RewrittenRefs.insert(DRE->getLocation().getRawEncoding());
       }
     }

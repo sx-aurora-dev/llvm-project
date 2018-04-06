@@ -26,21 +26,20 @@ using namespace llvm;
 class TargetRegionTransformer : public clang::ASTConsumer {
   TargetCode &Code;
   clang::Rewriter &TargetCodeRewriter;
-  FindTargetCodeVisitor FindCodeVisitor;
   TypeDeclResolver Types;
 
 public:
   TargetRegionTransformer(TargetCode &Code, clang::Rewriter &TargetCodeRewriter)
-      : Types(), Code(Code), TargetCodeRewriter(TargetCodeRewriter),
-        FindCodeVisitor(Code, Types) {}
+      : Types(), Code(Code), TargetCodeRewriter(TargetCodeRewriter) {}
 
   void HandleTranslationUnit(clang::ASTContext &Context) final {
     // read target code information from AST into TargetCode
+    FindTargetCodeVisitor FindCodeVisitor(Code, Types, Context);
     FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
 
     // rewrite capture variables in all target regions into pointers
     for (auto i = Code.getCodeFragmentsBegin(), e = Code.getCodeFragmentsEnd();
-         i != e; ++i) {
+           i != e; ++i) {
       if (auto *TCR = llvm::dyn_cast<TargetCodeRegion>(i->get())) {
         RewriteTargetRegionsVisitor RegionRewriteVisitor(TargetCodeRewriter,
                                                          *TCR);

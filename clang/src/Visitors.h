@@ -15,6 +15,7 @@ class SourceLocation;
 class FunctionDecl;
 class Attr;
 class Rewriter;
+class ASTContext;
 } // namespace clang
 
 class TargetCode;
@@ -43,6 +44,8 @@ public:
 class FindTargetCodeVisitor
     : public clang::RecursiveASTVisitor<FindTargetCodeVisitor> {
 
+  clang::ASTContext &Context;
+
   TargetCode &TargetCodeInfo;
   TypeDeclResolver &Types;
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
@@ -51,8 +54,10 @@ class FindTargetCodeVisitor
   std::unordered_set<std::string> FuncDeclWithoutBody;
 
 public:
-  FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types)
-      : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types) {}
+  FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types,
+                        clang::ASTContext &Context)
+      : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types),
+        Context(Context) {}
   bool VisitStmt(clang::Stmt *S);
   bool VisitDecl(clang::Decl *D);
 
