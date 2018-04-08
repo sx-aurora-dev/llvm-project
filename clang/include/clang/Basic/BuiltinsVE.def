@@ -16,6 +16,10 @@
 
 // dummy builtins (needs to define at least one here)
 BUILTIN(__builtin_dummy, "Si", "nc")
+BUILTIN(__builtin_ve_lvl, "vUi", "nr")
+BUILTIN(__builtin_ve_vld, "V256ddC*", "n")
+BUILTIN(__builtin_ve_vst, "vdC*V256d", "n")
+BUILTIN(__builtin_ve_vfadd, "V256dV256dV256d", "n")
 // BUILTIN(__builtin_bitrev, "UiUi", "nc")
 // BUILTIN(__builtin_getid, "Si", "nc")
 // BUILTIN(__builtin_getps, "UiUi", "n")
