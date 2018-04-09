@@ -109,7 +109,7 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
 static bool isUncondBranchOpcode(int Opc) { return Opc == VE::BCRa; }
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == VE::BCRrr || Opc == VE::BCRri;
+  return Opc == VE::BCRrr || Opc == VE::BCRir;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -206,7 +206,7 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     return true;
   }
 
-  // Otherwise, can't handle this.
+  // 4AOtherwise, can't handle this.
   return true;
 }
 
@@ -217,35 +217,49 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
                                       int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
+#if 0
   assert((Cond.size() == 1 || Cond.size() == 0) &&
          "VE branch conditions should have one component!");
+#endif
   assert(!BytesAdded && "code size not handled");
-#if 0
   if (Cond.empty()) {
     assert(!FBB && "Unconditional branch with multiple successors!");
-    BuildMI(&MBB, DL, get(SP::BA)).addMBB(TBB);
+    BuildMI(&MBB, DL, get(VE::BCRa)).addMBB(TBB);
     return 1;
   }
 
   // Conditional branch
-  unsigned CC = Cond[0].getImm();
 
-  if (IsIntegerCC(CC))
-    BuildMI(&MBB, DL, get(SP::BCOND)).addMBB(TBB).addImm(CC);
-  else
-    BuildMI(&MBB, DL, get(SP::FBCOND)).addMBB(TBB).addImm(CC);
+  assert(Cond.size() == 3 && "Cond.size() == 3 is only implemented");
+
+  // (BCRir CC sy sz addr)
+
+  assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
+
+  if (Cond[1].isImm()) {
+      BuildMI(&MBB, DL, get(VE::BCRir))
+          .addImm(Cond[0].getImm()) // condition code
+          .addImm(Cond[1].getImm()) // lhs 
+          .addReg(Cond[2].getReg()) // rhs
+          .addMBB(TBB);
+  } else {
+      BuildMI(&MBB, DL, get(VE::BCRrr))
+          .addImm(Cond[0].getImm())
+          .addReg(Cond[1].getReg())
+          .addReg(Cond[2].getReg())
+          .addMBB(TBB);
+  }
+
   if (!FBB)
     return 1;
-
-  BuildMI(&MBB, DL, get(SP::BA)).addMBB(FBB);
+  BuildMI(&MBB, DL, get(VE::BCRa)).addMBB(FBB);
   return 2;
-#endif
-  report_fatal_error("insertBranch is not implemented yet");
+
+  //report_fatal_error("insertBranch is not implemented yet");
 }
 
 unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
                                       int *BytesRemoved) const {
-#if 0
   assert(!BytesRemoved && "code size not handled");
 
   MachineBasicBlock::iterator I = MBB.end();
@@ -256,9 +270,9 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
     if (I->isDebugValue())
       continue;
 
-    if (I->getOpcode() != SP::BA
-        && I->getOpcode() != SP::BCOND
-        && I->getOpcode() != SP::FBCOND)
+    if (I->getOpcode() != VE::BCRa
+        && I->getOpcode() != VE::BCRir
+        && I->getOpcode() != VE::BCRrr)
       break; // Not a branch
 
     I->eraseFromParent();
@@ -266,13 +280,15 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
     ++Count;
   }
   return Count;
-#endif
-  report_fatal_error("removeBranch is not implemented yet");
+
+  //report_fatal_error("removeBranch is not implemented yet");
 }
 
 bool VEInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
+#if 0
   assert(Cond.size() == 1);
+#endif
   VECC::CondCodes CC = static_cast<VECC::CondCodes>(Cond[0].getImm());
   Cond[0].setImm(GetOppositeBranchCondition(CC));
   return false;

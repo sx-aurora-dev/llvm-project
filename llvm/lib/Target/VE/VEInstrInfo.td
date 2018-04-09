@@ -77,6 +77,22 @@ def cond2cc : SDNodeXForm<cond, [{
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
 
+// reverse
+def cond2rcc : SDNodeXForm<cond, [{
+  VECC::CondCodes cc;
+  switch (N->get()) {
+  default:          llvm_unreachable("Unknown integer condition code!");
+  case ISD::SETEQ:  cc = VECC::CC_NE; break;
+  case ISD::SETNE:  cc = VECC::CC_EQ; break;
+  case ISD::SETLT:  cc = VECC::CC_GE;  break;
+  case ISD::SETGT:  cc = VECC::CC_LE;  break;
+  case ISD::SETLE:  cc = VECC::CC_G; break;
+  case ISD::SETGE:  cc = VECC::CC_L; break;
+  }
+  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+}]>;
+
+
 
 // Addressing modes.
 def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
@@ -319,9 +335,16 @@ multiclass BCRm {
     let cy = 1;
     let cz = 1;
   }
-  def ri : CF<
+//  def ri : CF<
+//    0x18, (outs),
+//    (ins CCOp:$cf, I64:$sz, i64imm:$sy, brtarget32:$imm32),
+//    "br${cf}.l $sy, $sz, $imm32", []> {
+//    let cy = 0;
+//    let cz = 1;
+//  }
+  def ir : CF<
     0x18, (outs),
-    (ins CCOp:$cf, I64:$sz, i64imm:$sy, brtarget32:$imm32),
+    (ins CCOp:$cf, i64imm:$sy, I64:$sz, brtarget32:$imm32),
     "br${cf}.l $sy, $sz, $imm32", []> {
     let cy = 0;
     let cz = 1;
@@ -363,6 +386,8 @@ let cx = 0, cy = 1, cz = 0, sz = 0 in {
       "lea $sx, $addr", []>;
 }
 
+// Fixed-Point Arithmetic Operation Instructions
+
 // ADD instruction
 let cx = 0 in
 defm ADD : RRm<"addu.l", 0x48, add, I64, i64, simm7Op64, uimm6Op64>;
@@ -384,6 +409,19 @@ let cx = 0 in
 defm SUB : RRm<"subu.l", 0x58, sub, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
 defm SUBUW : RRm<"subu.w", 0x58, sub, I32, i32, simm7Op32, uimm6Op32>;
+
+// SBS instruction
+let cx = 0 in
+defm SBS : RRm<"subs.w.sx", 0x5A, add, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 1 in
+defm SBSU : RRm<"subs.w.zx", 0x5A, add, I32, i32, simm7Op32, uimm6Op32>;
+
+// SBX instruction
+let cx = 0 in
+defm SBX : RRm<"subs.l", 0x5B, add, I64, i64, simm7Op64, uimm6Op64>;
+
+// MPY instruction (mul u64)
+defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
 
 // AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
@@ -724,9 +762,15 @@ def : Pat<(call i64:$dst),
 
 // Branches
 def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
+//def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
+//          (BCRri (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
+//                 (i64 (sext_imm $rhs)), bb:$addr)>;
+def : Pat<(brcc cond:$cond, simm7:$lhs, i32:$rhs, bb:$addr),
+          (BCRir (cond2cc $cond), (i64 (sext_imm $lhs)), 
+                 (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
-          (BCRri (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
-                 (i64 (sext_imm $rhs)), bb:$addr)>;
+          (BCRir (cond2rcc $cond), (i64 (sext_imm $rhs)), 
+                 (COPY_TO_REGCLASS $lhs, I64), bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
           (BCRrr (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
