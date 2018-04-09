@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
@@ -82,17 +83,31 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
   return &VE::I64RegClass;
 }
 
+#define DEBUG_TYPE "ve"
+
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, unsigned FramePtr) {
+  if (1) {
+      DEBUG(dbgs() << "replaceFI: "; MI.dump());
+  }
   // Replace frame index with a frame pointer reference.
-  if (Offset >= -4096 && Offset <= 4095) {
+  if (1) { //Offset >= -4096 && Offset <= 4095) {
     // If the offset is small enough to fit in the immediate field, directly
     // encode it.
     MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
     MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
     return;
   }
+
+#if 0
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  unsigned Reg = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
+  BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAzzi), Reg).addImm(Offset);
+  MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
+  MI.getOperand(FIOperandNum + 1).ChangeToRegister(Reg, false);
+  return;
+#endif
 
   report_fatal_error("replaceFI for large number is not implemented yet");
 #if 0

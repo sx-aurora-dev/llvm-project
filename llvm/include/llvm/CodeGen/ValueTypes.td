@@ -141,10 +141,12 @@ def nxv2f64  : ValueType<128, 106>; // n x  2 x f64 vector value
 def nxv4f64  : ValueType<256, 107>; // n x  4 x f64 vector value
 def nxv8f64  : ValueType<512, 108>; // n x  8 x f64 vector value
 
-def x86mmx : ValueType<64 , 109>;   // X86 MMX value
-def FlagVT : ValueType<0  , 110>;   // Pre-RA sched glue
-def isVoid : ValueType<0  , 111>;   // Produces no value
-def untyped: ValueType<8  , 112>;   // Produces an untyped value
+def v256f64 : ValueType<16384, 109>; // 256 x f64 vector value
+
+def x86mmx : ValueType<64 , 110>;   // X86 MMX value
+def FlagVT : ValueType<0  , 111>;   // Pre-RA sched glue
+def isVoid : ValueType<0  , 112>;   // Produces no value
+def untyped: ValueType<8  , 113>;   // Produces an untyped value
 def token  : ValueType<0  , 248>;   // TokenTy
 def MetadataVT: ValueType<0, 249>;  // Metadata
 

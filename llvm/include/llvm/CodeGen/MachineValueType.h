@@ -172,27 +172,29 @@ namespace llvm {
       nxv4f64        = 107,   // n x  4 x f64
       nxv8f64        = 108,   // n x  8 x f64
 
+      v256f64        = 109,
+
       FIRST_FP_VECTOR_VALUETYPE = v2f16,
-      LAST_FP_VECTOR_VALUETYPE = nxv8f64,
+      LAST_FP_VECTOR_VALUETYPE = v256f64,
 
       FIRST_FP_SCALABLE_VALUETYPE = nxv2f16,
       LAST_FP_SCALABLE_VALUETYPE = nxv8f64,
 
       FIRST_VECTOR_VALUETYPE = v1i1,
-      LAST_VECTOR_VALUETYPE  = nxv8f64,
+      LAST_VECTOR_VALUETYPE  = v256f64,
 
-      x86mmx         =  109,   // This is an X86 MMX value
+      x86mmx         =  110,   // This is an X86 MMX value
 
-      Glue           =  110,   // This glues nodes together during pre-RA sched
+      Glue           =  111,   // This glues nodes together during pre-RA sched
 
-      isVoid         =  111,   // This has no value
+      isVoid         =  112,   // This has no value
 
-      Untyped        =  112,   // This value takes a register, but has
+      Untyped        =  113,   // This value takes a register, but has
                                // unspecified type.  The register class
                                // will be determined by the opcode.
 
       FIRST_VALUETYPE = 1,     // This is always the beginning of the list.
-      LAST_VALUETYPE =  113,   // This always remains at the end of the list.
+      LAST_VALUETYPE =  114,   // This always remains at the end of the list.
 
       // This is the current maximum for LAST_VALUETYPE.
       // MVT::MAX_ALLOWED_VALUETYPE is used for asserts and to size bit vectors
@@ -510,6 +512,7 @@ namespace llvm {
       case nxv2f64:
       case nxv4f64:
       case nxv8f64: return f64;
+      case v256f64: return f64;
       }
     }
 
@@ -612,6 +615,7 @@ namespace llvm {
       case nxv1i64:
       case nxv1f32:
       case nxv1f64: return 1;
+      case v256f64: return 256;
       }
     }
 
@@ -746,6 +750,7 @@ namespace llvm {
       case v64i32:
       case v32i64:
       case nxv32i64: return 2048;
+      case v256f64: return 16384;
       }
     }
 
@@ -895,6 +900,7 @@ namespace llvm {
         if (NumElements == 2)  return MVT::v2f64;
         if (NumElements == 4)  return MVT::v4f64;
         if (NumElements == 8)  return MVT::v8f64;
+        if (NumElements == 256)  return MVT::v256f64;
         break;
       }
       return (MVT::SimpleValueType)(MVT::INVALID_SIMPLE_VALUE_TYPE);

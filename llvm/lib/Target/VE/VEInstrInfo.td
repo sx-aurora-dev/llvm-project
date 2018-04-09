@@ -379,6 +379,12 @@ defm ADSU : RRm<"adds.w.zx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 0 in
 defm ADX : RRm<"adds.l", 0x59, add, I64, i64, simm7Op64, uimm6Op64>;
 
+// SUB instruction
+let cx = 0 in
+defm SUB : RRm<"subu.l", 0x58, sub, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 1 in
+defm SUBUW : RRm<"subu.w", 0x58, sub, I32, i32, simm7Op32, uimm6Op32>;
+
 // AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
 defm AND : RRm<"and", 0x44, and, I64, i64, simm7Op64, uimm6Op64>;
@@ -584,8 +590,8 @@ def VLD : RR<
     0x81, (outs V64:$vx), (ins I64:$sy),
     "vld $vx, 8, $sy", 
     []>;
+
 //    [(set V64:$vx, (load I64:$sy))]>;
-          
 //        [(set v8f64:$vx, (int_ve_vld I64:$sy))]>;
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 1 in
@@ -597,17 +603,18 @@ def VST : RR<0x91, (outs), (ins I64:$sy, V64:$vx), "vst $vx, 8, $sy",
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def VFAD : RR<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
         "vfadd.d $vx,$vy,$vz", 
-//        []>;
+        []>;
+
 //        [(v8f64 (add V64:$vy, V64:$vz))]>;
 //        [(v8f64 (add v8f64:$vy, v8f64:$vz))]>;
-        [(set V64:$vx, (v8f64 (add V64:$vy, V64:$vz)))]>;
+//        [(set V64:$vx, (v8f64 (add V64:$vy, V64:$vz)))]>;
 //        [(set v8f64:$vx, (add v8f64:$vy, v8f64:$vz))]>;
 //      [(set v8f64:$vx, (int_ve_vfadd v8f64:$vy, v8f64:$vz))]>;
 
 // Pattern Matchings for Vector Instructions
 
-def : Pat<(v8f64 (load ADDRri:$addr)),
-          (v8f64 (VLD (LEAasx ADDRri:$addr)))>;
+def : Pat<(v256f64 (load ADDRri:$addr)),
+          (v256f64 (VLD (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(store V64:$vx, ADDRri:$addr), 
           (VST (LEAasx ADDRri:$addr), V64:$vx)>;
@@ -615,12 +622,9 @@ def : Pat<(store V64:$vx, ADDRri:$addr),
 // Pattern Matchings for Vector Intrinsics
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
-def : Pat<(int_ve_vld I64:$sy), (VLD I64:$sy)>;
-def : Pat<(int_ve_vst I64:$sy, V64:$vx), (VST I64:$sy, V64:$vx)>;
-def : Pat<(int_ve_vfadd v8f64:$vy, v8f64:$vz), (VFAD v8f64:$vy, v8f64:$vz)>;
-
-//def : Pat<(v8f64 (int_ve_vfadd v8f64:$vy, v8f64:$vz)), 
-//          (v8f64 (VFAD v8f64:$vy, v8f64:$vz))>;
+def : Pat<(int_ve_vld i64:$sy), (VLD i64:$sy)>;
+def : Pat<(int_ve_vst i64:$sy, v256f64:$vx), (VST i64:$sy, v256f64:$vx)>;
+def : Pat<(int_ve_vfadd v256f64:$vy, v256f64:$vz), (VFAD v256f64:$vy, v256f64:$vz)>;
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly

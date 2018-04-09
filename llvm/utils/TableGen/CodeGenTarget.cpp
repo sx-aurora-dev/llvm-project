@@ -169,6 +169,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::nxv2f64:  return "MVT::nxv2f64";
   case MVT::nxv4f64:  return "MVT::nxv4f64";
   case MVT::nxv8f64:  return "MVT::nxv8f64";
+  case MVT::v256f64:  return "MVT::v256f64";
   case MVT::token:    return "MVT::token";
   case MVT::Metadata: return "MVT::Metadata";
   case MVT::iPTR:     return "MVT::iPTR";
