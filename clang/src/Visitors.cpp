@@ -115,7 +115,7 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
 }
 
 bool DiscoverTypesInDeclVisitor::VisitDecl(clang::Decl *D) {
-  if (auto VD = llvm::dyn_cast<clang::ValueDecl>(D)) {
+  if (auto *VD = llvm::dyn_cast<clang::ValueDecl>(D)) {
     if (const clang::Type *TP = VD->getType().getTypePtrOrNull()) {
       processType(TP);
     }
@@ -136,10 +136,10 @@ bool DiscoverTypesInDeclVisitor::VisitType(clang::Type *T) {
 }
 
 void DiscoverTypesInDeclVisitor::processType(const clang::Type *TP) {
-  if (auto *TD = TP->getAsTagDecl()) {
-    OnEachTypeRef(TD);
-  } else if (const clang::TypedefType *TDT = TP->getAs<clang::TypedefType>()) {
+  if (const clang::TypedefType *TDT = TP->getAs<clang::TypedefType>()) {
     OnEachTypeRef(TDT->getDecl());
+  } else if (auto *TD = TP->getAsTagDecl()) {
+    OnEachTypeRef(TD);
   }
 }
 

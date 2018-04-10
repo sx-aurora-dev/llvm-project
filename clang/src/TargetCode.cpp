@@ -10,33 +10,32 @@
 
 #include "TargetCode.h"
 
-bool TargetCode::isCodeAlreadyInFragments(TargetCodeFragment *Frag) {
-  for (const auto &F : CodeFragments) {
-    if (SM.isBeforeInTranslationUnit(F->getRealRange().getBegin(),
-                                     Frag->getRealRange().getBegin()) &&
-        SM.isBeforeInTranslationUnit(Frag->getRealRange().getEnd(),
-                                     F->getRealRange().getEnd())) {
-      return true;
+
+bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
+                                 bool PushFront) {
+  for (auto &F : CodeFragments) {
+    // Reject Fragments which are inside Fragments which we already have
+    if (SM.isPointWithin(Frag->getRealRange().getBegin(),
+                         F->getRealRange().getBegin(),
+                         F->getRealRange().getEnd()) ||
+        SM.isPointWithin(Frag->getRealRange().getEnd(),
+                         F->getRealRange().getBegin(),
+                         F->getRealRange().getEnd())) {
+      return false;
     }
   }
-  return false;
-}
 
-bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag) {
-  if (isCodeAlreadyInFragments(Frag.get())) {
-    return false;
+  if (PushFront) {
+    CodeFragments.push_front(Frag);
+  } else {
+    CodeFragments.push_back(Frag);
   }
-  CodeFragments.push_back(Frag);
   return true;
 }
 
 bool TargetCode::addCodeFragmentFront(
     std::shared_ptr<TargetCodeFragment> Frag) {
-  if (isCodeAlreadyInFragments(Frag.get())) {
-    return false;
-  }
-  CodeFragments.push_front(Frag);
-  return true;
+  return addCodeFragment(Frag, true);
 }
 
 void TargetCode::generateCode(llvm::raw_ostream &Out) {
