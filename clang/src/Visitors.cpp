@@ -114,38 +114,6 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
   return true;
 }
 
-#if 0
-bool RewriteTargetRegionsVisitor::VisitStmt(clang::Stmt *S) {
-  if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
-    if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
-      // check if this DeclRefExpr belongs to a variable we captured
-      // and check if we have already rewritten this DeclRefExpr
-      if (!VD->getType().getTypePtr()->isPointerType() &&
-          std::find(TargetRegion.getCapturedVarsBegin(),
-                    TargetRegion.getCapturedVarsEnd(),
-                    VD) != TargetRegion.getCapturedVarsEnd() &&
-          RewrittenRefs.find(DRE->getLocation().getRawEncoding()) ==
-              RewrittenRefs.end()) {
-        if (DRE->refersToEnclosingVariableOrCapture()) {
-            rewriteVar(DRE);
-        }
-        RewrittenRefs.insert(DRE->getLocation().getRawEncoding());
-      }
-    }
-  }
-  return true;
-}
-
-void RewriteTargetRegionsVisitor::rewriteVar(clang::DeclRefExpr *Var) {
-  std::string VarName = Var->getNameInfo().getName().getAsString();
-  std::stringstream VarNameReplacement;
-  VarNameReplacement << "(*" << VarName << ")";
-  TargetCodeRewriter.ReplaceText(
-      clang::SourceRange(Var->getLocStart(), Var->getLocEnd()),
-      VarNameReplacement.str());
-}
-#endif
-
 bool DiscoverTypesInDeclVisitor::VisitDecl(clang::Decl *D) {
   if (auto VD = llvm::dyn_cast<clang::ValueDecl>(D)) {
     if (const clang::Type *TP = VD->getType().getTypePtrOrNull()) {
