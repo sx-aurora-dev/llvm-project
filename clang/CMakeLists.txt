@@ -1,77 +1,68 @@
-
-############################################################
-#   base
-############################################################
-
 cmake_minimum_required(VERSION 2.8.8)
 
+################################################################################
+# Base config
+################################################################################
 
-############################################################
-#   setting Project informations
-############################################################
+set(SOTOC_PROJECT_NAME sotoc)
 
-set(PROJECT_NAME sotoc)
+set(USE_CLANG_LIBS clangFrontend
+                   clangRewrite
+                   clangDriver
+                   clangSerialization
+                   clangParse
+                   clangRewriteFrontend
+                   clangSema
+                   clangAnalysis
+                   clangEdit
+                   clangAST
+                   clangLex
+                   clangBasic
+                   clangTooling)
 
-set(LIBRARY_LIST clangFrontend  clangRewrite clangSerialization clangDriver clangParse clangRewriteFrontend clangStaticAnalyzerFrontend clangSema)
-set(LIBRARY_LIST ${LIBRARY_LIST} clangAnalysis clangEdit clangAST clangLex clangBasic clangTooling )
-set(COMPONENT_LIST mcparser bitreader support mc option)
+#set(USE_LLVM_LIBS LLVMInstCombine
+#                  LLVMOption # Support
+#                  LLVMDemangle
+#                  LLVMSupport)
 
-############################################################
-#   generate makefiles
-############################################################
+set(SOTOC_SOURCES src/main.cpp
+                  src/TargetCode.cpp
+                  src/TargetCodeFragment.cpp
+                  src/Visitors.cpp
+                  src/TypeDeclResolver.cpp)
 
-project(${PROJECT_NAME})
+project(${SOTOC_PROJECT_NAME})
 
-find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+################################################################################
+# Find Clang and set definitions and include directories accordingly
+################################################################################
 
-include_directories(${LLVM_INCLUDE_DIRS})
-if(LLVM_BUILD_MAIN_SRC_DIR)
-  include_directories(${LLVM_BUILD_MAIN_SRC_DIR}/tools/clang/include)
-  include_directories(${LLVM_BUILD_BINARY_DIR}/tools/clang/include)
+if($ENV{CLANG_ROOT})
+  set(CLANG_CONFIG_HINT HINTS $ENV{CLANG_ROOT}/lib/cmake/clang)
 endif()
-link_directories(${LLVM_LIBRARY_DIRS})
-add_definitions(${LLVM_DEFINITIONS})
+
+find_package(Clang REQUIRED CONFIG HINTS ${CLANG_CONFIG_HINT})
+include_directories(${CLANG_INCLUDE_DIRS})
+link_directories(${CLANG_LIBRARY_DIRS})
+add_definitions(${CLANG_DEFINITIONS})
 
 add_definitions(
 -D__STDC_LIMIT_MACROS
 -D__STDC_CONSTANT_MACROS
 )
 
-add_executable(${PROJECT_NAME} src/main.cpp
-                               src/TargetCode.cpp
-                               src/TargetCodeFragment.cpp
-                               src/Visitors.cpp
-                               src/TypeDeclResolver.cpp)
 
-target_link_libraries(${PROJECT_NAME} ${LIBRARY_LIST})
+################################################################################
+# Add actual binary
+################################################################################
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-unused-parameter -fno-strict-aliasing -fno-exceptions -fno-rtti")
 
-#llvm_map_components_to_libnames(llvm_libs ${COMPONENT_LIST})
-#target_link_libraries(${PROJECT_NAME} ${llvm_libs})
-target_link_libraries(${PROJECT_NAME}
-  LLVMX86AsmParser # MC, MCParser, Support, X86Desc, X86Info
-  LLVMX86Desc # MC, Support, X86AsmPrinter, X86Info
-  LLVMX86AsmPrinter # MC, Support, X86Utils
-  LLVMX86Info # MC, Support, Target
-  LLVMX86Utils # Core, Support
-  LLVMipo
-  LLVMScalarOpts
-  LLVMInstCombine
-  LLVMTransformUtils
-  LLVMAnalysis
-  LLVMTarget
-  LLVMOption # Support
-  LLVMMCParser # MC, Support
-  LLVMMC # Object, Support
-  LLVMObject # BitReader, Core, Support
-  LLVMBitReader # Core, Support
-  LLVMCore # Support
-  LLVMSupport 
-)
+add_executable(${SOTOC_PROJECT_NAME} ${SOTOC_SOURCES})
 
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+target_link_libraries(${SOTOC_PROJECT_NAME} ${USE_LLVM_LIBS} ${USE_CLANG_LIBS})
+
+install(TARGETS ${SOTOC_PROJECT_NAME} DESTINATION bin)
 
 option(ENABLE_TESTS OFF)
 
