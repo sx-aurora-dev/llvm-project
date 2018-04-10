@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 2.8.8)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+# this is a standalone build
+  cmake_minimum_required(VERSION 2.8.8)
+endif()
 
 ################################################################################
 # Base config
@@ -20,18 +23,15 @@ set(USE_CLANG_LIBS clangFrontend
                    clangBasic
                    clangTooling)
 
-#set(USE_LLVM_LIBS LLVMInstCombine
-#                  LLVMOption # Support
-#                  LLVMDemangle
-#                  LLVMSupport)
-
 set(SOTOC_SOURCES src/main.cpp
                   src/TargetCode.cpp
                   src/TargetCodeFragment.cpp
                   src/Visitors.cpp
                   src/TypeDeclResolver.cpp)
 
-project(${SOTOC_PROJECT_NAME})
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  project(${SOTOC_PROJECT_NAME} CXX)
+endif()
 
 ################################################################################
 # Find Clang and set definitions and include directories accordingly
@@ -64,8 +64,8 @@ target_link_libraries(${SOTOC_PROJECT_NAME} ${USE_LLVM_LIBS} ${USE_CLANG_LIBS})
 
 install(TARGETS ${SOTOC_PROJECT_NAME} DESTINATION bin)
 
-option(ENABLE_TESTS OFF)
+option(SOTOC_ENABLE_TESTS OFF)
 
-if(ENABLE_TESTS)
+if(SOTOC_ENABLE_TESTS)
   add_subdirectory(test)
 endif()
