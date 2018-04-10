@@ -39,23 +39,16 @@ static bool hasRegionOMPStmt(const clang::Stmt *S) {
 }
 
 static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
-  while (auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
-    S = SS->getCapturedStmt();
+  while (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
+    S = CS->getCapturedStmt();
   }
 
- if (auto *SSS = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
-   const clang::OMPExecutableDirective *cur = SSS;
-   const clang::OMPExecutableDirective *last = nullptr;
-
-   do {
-     last = cur;
-   } while ((cur = llvm::dyn_cast<clang::OMPExecutableDirective>(
-                 cur->getAssociatedStmt())));
-
-   if (last) {
-     return last->getAssociatedStmt()->getLocEnd().getLocWithOffset(1);
-   }
- }
+  while (auto *OmpExecS = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
+    S = OmpExecS->getInnermostCapturedStmt();
+    if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
+      S = CS->getCapturedStmt();
+    }
+  }
 
   return S->getLocEnd().getLocWithOffset(1);
 }
