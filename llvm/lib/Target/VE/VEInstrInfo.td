@@ -93,7 +93,6 @@ def cond2rcc : SDNodeXForm<cond, [{
 }]>;
 
 
-
 // Addressing modes.
 def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
 def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
@@ -364,6 +363,10 @@ multiclass BCRm {
 // Instructions
 //===----------------------------------------------------------------------===//
 
+// SX = SZ if cf(sy)
+def CMOVrr : RR<0x3B, (outs I32:$sx), (ins CCOp:$cf, I32:$sy, I32:$sz),
+    "cmov.w.${cf} $sx,$sy,$sz", []>;
+
 // NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
 def NOP : RR<0x79, (outs), (ins), "nop", []>;
@@ -383,7 +386,7 @@ defm LEASL32 : RMm<"lea.sl", 0x06, add, I32, i32, simm7Op32, simm32Op32>;
 let cx = 0, cy = 1, cz = 0, sz = 0 in {
   def LEAasx : RM<
       0x06, (outs I64:$sx), (ins MEMri:$addr),
-      "lea $sx, $addr", []>;
+      "lea $sx,$addr", []>;
 }
 
 // Fixed-Point Arithmetic Operation Instructions
@@ -422,6 +425,15 @@ defm SBX : RRm<"subs.l", 0x5B, add, I64, i64, simm7Op64, uimm6Op64>;
 
 // MPY instruction (mul u64)
 defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
+
+let cx = 1, cy = 1, cz = 1 in {
+def CPSWZrr : RR<0x7A, (outs I32:$sx), (ins I32:$sy, I32:$sz),
+        "cmps.w.zx $sx,$sy,$sz", 
+        [(set i32:$sx, (setcc i32:$sy, i32:$sz, SETGT))]>;
+}
+
+//def : Pat<(set i1:$sx, (setcc i32:$sy, i32:$sz, SETGT)),
+//          (set I32:$sx, (CPSWZrr I32:$sy, I32:$sz))>;
 
 // AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
@@ -618,7 +630,46 @@ def MONCT : RR<
     "monc.hdb",
     []>;
 
-// vector instructions
+//===----------------------------------------------------------------------===//
+// Vector Instructions
+//===----------------------------------------------------------------------===//
+
+class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+        InstrItinClass itin = NoItinerary> 
+    : InstVE<outs, ins, asmstr, pattern, itin> {
+    bits<1> cx;
+    bits<1> cx2;
+    bits<1> cs;
+    bits<4> m;
+    bits<1> cy;
+    bits<7> sy;
+    bits<8> vx;
+    bits<8> vy;
+    bits<8> vz;
+    let op = opVal;
+    let Inst{8} = cx;
+    let Inst{9} = cx2;
+    let Inst{10} = cs;
+    let Inst{15-12} = m;
+    let Inst{16} = cy;
+    let Inst{23-17} = sy;
+    //let Inst{31-24};
+    let Inst{39-32} = vx;
+    let Inst{47-40} = vy;
+    let Inst{55-48} = vz;
+}
+
+multiclass RVm<string opcStr, bits<8>opc> {
+  def lr : RV<opc, (outs I64:$vx), (ins I64:$vy, I64:$vz),
+      !strconcat(opcStr, ".l $vx,$vy,$vz"), []> {
+      }
+  def wr : RV<opc, (outs I64:$vx), (ins I64:$vy, I64:$vz),
+      !strconcat(opcStr, ".w $vx,$vy,$vz"), []> {}
+  def dr : RV<opc, (outs I64:$vx), (ins I64:$vy, I64:$vz),
+      !strconcat(opcStr, ".d $vx,$vy,$vz"), []> {}
+  def sr : RV<opc, (outs I64:$vx), (ins I64:$vy, I64:$vz),
+      !strconcat(opcStr, ".s $vx,$vy,$vz"), []> {}
+}
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
@@ -626,7 +677,7 @@ def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 1 in
 def VLD : RR<
     0x81, (outs V64:$vx), (ins I64:$sy),
-    "vld $vx, 8, $sy", 
+    "vld $vx,8,$sy", 
     []>;
 
 //    [(set V64:$vx, (load I64:$sy))]>;
@@ -634,12 +685,15 @@ def VLD : RR<
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 1 in
 def VST : RR<0x91, (outs), (ins I64:$sy, V64:$vx), "vst $vx, 8, $sy", 
-        [(store V64:$vx, i64:$sy)]>;
+        [(store V64:$vx,i64:$sy)]>;
 
-//        [(int_ve_vst I64:$sy, V64:$vx)]>;
+//let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+//def VFAD : RR<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
+//        "vfadd.d $vx,$vy,$vz", 
+//        []>;
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
-def VFAD : RR<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
+let cx = 0, cx2 = 0, cs = 0, cy = 1 in
+def VFAD : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
         "vfadd.d $vx,$vy,$vz", 
         []>;
 
@@ -648,6 +702,11 @@ def VFAD : RR<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz),
 //        [(set V64:$vx, (v8f64 (add V64:$vy, V64:$vz)))]>;
 //        [(set v8f64:$vx, (add v8f64:$vy, v8f64:$vz))]>;
 //      [(set v8f64:$vx, (int_ve_vfadd v8f64:$vy, v8f64:$vz))]>;
+
+let cx = 0, cx2 = 1, cs = 0, cy = 1 in
+def PVFAD : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz), 
+    "pvfadd.d $vx,$vy,$vz", 
+    []>;
 
 // Pattern Matchings for Vector Instructions
 
@@ -663,6 +722,7 @@ def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 def : Pat<(int_ve_vld i64:$sy), (VLD i64:$sy)>;
 def : Pat<(int_ve_vst i64:$sy, v256f64:$vx), (VST i64:$sy, v256f64:$vx)>;
 def : Pat<(int_ve_vfadd v256f64:$vy, v256f64:$vz), (VFAD v256f64:$vy, v256f64:$vz)>;
+def : Pat<(int_ve_pvfadd v256f64:$vy, v256f64:$vz), (PVFAD v256f64:$vy, v256f64:$vz)>;
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
@@ -797,3 +857,42 @@ def EXTEND_STACK : Pseudo<(outs), (ins),
 def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
+
+//def VE_SELECT : Pseudo<(outs I32:$dst),
+//                       (ins I32:$cond, I32:$t, I32:$f),
+//                       "# SELECT",
+//                       [(set i32:$dst, (select i32:$cond, i32:$t, i32:$f))]>
+//                       {
+//                         let Constraints = "$dst = $f";
+//                       }
+
+
+def SDTVESelect : SDTypeProfile<1, 4, []>;
+def VESelect: SDNode<"VEISD::SELECT", SDTVESelect, [SDNPInGlue]>;
+
+def VE_SELECT : Pseudo<(outs I32:$dst),
+                       (ins I32:$cond, I32:$condVal, I32:$t, I32:$f),
+                       "# VE_SELECT",
+                       [(set i32:$dst, (VESelect i32:$cond, i32:$condVal, i32:$t, i32:$f))]>
+                       {
+                         let Constraints = "$dst = $f";
+                       }
+
+//def VESDTCMS : SDTypeProfile<1, 2, [SDTCisSameAs<0, 1>]>;
+//def CMS : SDNode<"VEISD::CMS", VESTDCMS>;
+//
+//def VESDTSelectCC : SDTypeProfile<1, 5, [     // select_cc
+//SDTCisSameAs<1, 2>, SDTCisSameAs<3, 4>, SDTCisSameAs<0, 3>,
+//  SDTCisVT<5, OtherVT>
+//  ]>;
+//
+//def VESDSelectCC    : SDNode<"VEISD::SELECT_CC", VESDTSelectCC>;
+//
+//
+//def VE_SELECT_CC : Pseudo<(outs I32:$dst), 
+//                      (ins i1:$cond, I32:$lhs, I32:$rhs, I32:$t, I32:$f),
+//                      "# SELECT_CC",
+//                      []>;
+//
+//def:  Pat<(i32 (selectcc i32:$lhs, i32:$rhs, i32:$t, i32:$f, cond:$cond)),
+//          (VE_SELECT_CC $lhs, $rhs, $t, $f, (i32 (cond2cc $cond)))>;

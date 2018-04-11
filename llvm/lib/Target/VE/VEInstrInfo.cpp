@@ -507,6 +507,65 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
 #endif
   }
+#if 1
+  case VE::VE_SELECT: {
+    // (VESelect $dst, $CC, $condVal, $trueVal, $dst)
+    //
+    // (CMOVrr $dst, condCode, $trueVal, $condVal)
+    // cmov.$df.$cf $dst, $trueval, $cond
+
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
+      .addReg(MI.getOperand(0).getReg())
+      .addImm(MI.getOperand(1).getImm())
+      .addReg(MI.getOperand(3).getReg())
+      .addReg(MI.getOperand(2).getReg());
+
+    MI.eraseFromParent();
+#if 0
+    // (select $dst, $condVal, $trueVal, $dst)
+    //
+    // (CMOVrr $dst, condCode, $trueVal, $condVal)
+    // cmov.$df.$cf $dst, $trueval, $cond
+
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
+      .addReg(MI.getOperand(0).getReg())
+      .addImm(VECC::CC_G)
+      .addReg(MI.getOperand(2).getReg())
+      .addReg(MI.getOperand(1).getReg());
+
+    MI.eraseFromParent();
+#endif
+
+#if 0
+      // select $dst, $cond, $trueVal, $falseVal
+      //
+      // cmov.$df.$cf, $dst, $trueVal, $cond
+      // cmov.$df.$cf, $dst, $falseVal, $cond  
+    MachineOperand& Dst = MI.getOperand(0);
+    MachineOperand& Cond = MI.getOperand(1);
+    MachineOperand& T = MI.getOperand(2);
+    MachineOperand& F = MI.getOperand(3);
+
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
+      .addReg(Dst.getReg())  // dst
+      .addImm(3)                            
+      .addReg(MI.getOperand(2).getReg())    // trueVal
+      .addReg(MI.getOperand(1).getReg());
+    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
+      .addReg(Dst.getReg())    // dst
+      .addImm(4)
+      .addReg(MI.getOperand(3).getReg())    //  falseVal
+      .addReg(MI.getOperand(1).getReg());   //
+    return true;
+#endif
+                      }
+#endif
   }
   return false;
 }

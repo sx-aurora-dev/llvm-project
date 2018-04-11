@@ -9,6 +9,9 @@ let TargetPrefix = "ve" in {
 
   def int_ve_vfadd : GCCBuiltin<"__builtin_ve_vfadd">, 
         Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>]>;
+
+  def int_ve_pvfadd : GCCBuiltin<"__builtin_ve_pvfadd">, 
+        Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>]>;
 }
 
 // vim::set sw=2:

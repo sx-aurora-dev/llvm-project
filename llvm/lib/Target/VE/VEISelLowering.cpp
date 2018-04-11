@@ -1250,6 +1250,25 @@ TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(
   return AtomicExpansionKind::CmpXChg;
 }
 
+static VECC::CondCodes IntCondCCodeToICC(ISD::CondCode CC) 
+{
+  switch (CC) {
+    default: llvm_unreachable("Unknown integer condition code!");
+    case ISD::SETEQ:  return VECC::CC_EQ;
+    case ISD::SETNE:  return VECC::CC_NE;
+    case ISD::SETLT:  return VECC::CC_L;
+    case ISD::SETGT:  return VECC::CC_G;
+    case ISD::SETLE:  return VECC::CC_LE;
+    case ISD::SETGE:  return VECC::CC_GE;
+#if 0
+    case ISD::SETULT: return VECC::CC_CS;
+    case ISD::SETULE: return VECC::CC_LEU;
+    case ISD::SETUGT: return VECC::CC_GU;
+    case ISD::SETUGE: return VECC::CC_CC;
+#endif
+  }
+}
+
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
@@ -1325,9 +1344,16 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // VE has no select or setcc: expand to SELECT_CC.
   for (MVT VT : MVT::all_valuetypes()) {
-    setOperationAction(ISD::SETCC,  VT, Expand);
-    setOperationAction(ISD::SELECT, VT, Expand);
+    //setOperationAction(ISD::SETCC,  VT, Expand);
+    //setOperationAction(ISD::SELECT, VT, Expand);
+    //setOperationAction(ISD::SELECT_CC, VT, Custom);
+    setOperationAction(ISD::SELECT, VT, Custom);
+    setOperationAction(ISD::SELECT_CC, VT, Expand);
   }
+  setOperationAction(ISD::SETCC,  MVT::i1, Promote);
+  //setOperationAction(ISD::SELECT, MVT::i1, Promote);
+  //setOperationAction(ISD::SELECT, MVT::i32, Promote);
+  //setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
 
   // VE doesn't have BRCOND either, it has BR_CC.
   for (MVT VT : MVT::all_valuetypes()) {
@@ -1530,6 +1556,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::BRICC:           return "VEISD::BRICC";
   case VEISD::BRXCC:           return "VEISD::BRXCC";
   case VEISD::BRFCC:           return "VEISD::BRFCC";
+  case VEISD::SELECT:          return "VEISD::SELECT";
   case VEISD::SELECT_ICC:      return "VEISD::SELECT_ICC";
   case VEISD::SELECT_XCC:      return "VEISD::SELECT_XCC";
   case VEISD::SELECT_FCC:      return "VEISD::SELECT_FCC";
@@ -2608,6 +2635,41 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 }
 #endif
 
+#if 1
+static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
+                           const VETargetLowering &TLI)
+{
+    SDValue CondVal = Op.getOperand(0);
+    SDValue TrueVal = Op.getOperand(1);
+    SDValue FalseVal = Op.getOperand(2);
+    SDLoc dl(Op);
+
+    assert(CondVal.getOpcode() == ISD::SETCC);
+
+    ISD::CondCode CC = cast<CondCodeSDNode>(CondVal.getOperand(2))->get();
+    VECC::CondCodes VECC = IntCondCCodeToICC(CC);
+
+    // (i32 (select $condVal, $TrueVal, $FalseVal))
+    //
+    // (i32 (VESD::SELECT $CC, $convVal, $TrueVal, $FalseVal))
+
+#if 1
+    EVT ValVT = CondVal.getValueType();
+    EVT BoolVT = MVT::i32;//getSetCCResultType(ValVT);
+    ISD::NodeType ExtendCode = TargetLowering::getExtendForContent(TLI.getBooleanContents(ValVT));
+    CondVal = DAG.getNode(ExtendCode, dl, BoolVT, CondVal);
+#endif
+
+    SmallVector<SDValue, 4> Ops;
+    Ops.push_back(DAG.getTargetConstant(VECC, dl, MVT::i32));
+    Ops.push_back(CondVal);
+    Ops.push_back(TrueVal);
+    Ops.push_back(FalseVal);
+
+    return DAG.getNode(VEISD::SELECT, dl, TrueVal.getValueType(), Ops);
+}
+#endif
+
 SDValue VETargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
@@ -2691,6 +2753,10 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
   case ISD::INTRINSIC_WO_CHAIN: // return LowerINTRINSIC_WO_CHAIN(Op, DAG);
     report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
+#if 1
+  case ISD::SELECT:           return LowerSELECT(Op, DAG, *this);
+  //case VEISD::SELECT:         return LowerVESELECT(Op, DAG, *this);
+#endif
   }
 }
 
