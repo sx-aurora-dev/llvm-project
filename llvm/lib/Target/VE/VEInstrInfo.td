@@ -437,20 +437,30 @@ def CPSWZrr : RR<0x7A, (outs I32:$sx), (ins I32:$sy, I32:$sz),
 
 // AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
-defm AND : RRm<"and", 0x44, and, I64, i64, simm7Op64, uimm6Op64>;
-defm OR : RRm<"or", 0x45, or, I64, i64, simm7Op64, uimm6Op64>;
-defm XOR : RRm<"xor", 0x46, xor, I64, i64, simm7Op64, uimm6Op64>;
-let isCodeGenOnly = 1 in {
-defm AND32 : RRm<"and", 0x44, and, I32, i32, simm7Op32, uimm6Op32>;
-defm OR32 : RRm<"or", 0x45, or, I32, i32, simm7Op32, uimm6Op32>;
-defm XOR32 : RRm<"xor", 0x46, xor, I32, i32, simm7Op32, uimm6Op32>;
+  defm AND : RRm<"and", 0x44, and, I64, i64, simm7Op64, uimm6Op64>;
+  defm OR : RRm<"or", 0x45, or, I64, i64, simm7Op64, uimm6Op64>;
+  defm XOR : RRm<"xor", 0x46, xor, I64, i64, simm7Op64, uimm6Op64>;
+  let isCodeGenOnly = 1 in {
+    defm AND32 : RRm<"and", 0x44, and, I32, i32, simm7Op32, uimm6Op32>;
+    defm OR32 : RRm<"or", 0x45, or, I32, i32, simm7Op32, uimm6Op32>;
+    defm XOR32 : RRm<"xor", 0x46, xor, I32, i32, simm7Op32, uimm6Op32>;
+  }
+  /*
+     defm EQV : RRm<"eqv", 0x47, eqv, I64, i64, simm7Op64, uimm6Op64>;
+     defm NND : RRm<"nnd", 0x54, nnd, I64, i64, simm7Op64, uimm6Op64>;
+     defm MRG : RRm<"mrg", 0x56, mrg, I64, i64, simm7Op64, uimm6Op64>;
+   */
 }
-/*
-defm EQV : RRm<"eqv", 0x47, eqv, I64, i64, simm7Op64, uimm6Op64>;
-defm NND : RRm<"nnd", 0x54, nnd, I64, i64, simm7Op64, uimm6Op64>;
-defm MRG : RRm<"mrg", 0x56, mrg, I64, i64, simm7Op64, uimm6Op64>;
-*/
-}
+
+// 5.3.2.4 Shift Instructions
+
+//defm SRA : RRm<"sra", 0x76, sra, I64, i64, simm7Op64, uimm6Op64>;
+
+// should be uimm5? (0-31)
+let cy = 0, cz = 1 in
+def SRAX : RR<0x76, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
+  "sra.l $sx,$sy,$sz",
+  [(set i32:$sx, (sra i32:$sy, (i32 uimm6:$sz)))]>;
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
@@ -659,83 +669,29 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Inst{55-48} = vz;
 }
 
-multiclass RVm0<string opcStr, bits<8> opc, string df> {
-  // LHS = simm7 or I64 or V64
+multiclass RVm0<string opcStr, bits<8> opc, string df, string packed> {
+  // V64:$vx = (simm7:$sy or I64:$sy or V64:$vz) opc V64:$vz
   def i : RV<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz),
-    !strconcat(opcStr, ".", df, " $vx,$sy,$vz"), []> {
+    !strconcat(packed, opcStr, df, " $vx,$sy,$vz"), []> {
       let cs = 0;
       let cy = 1;
     }
   def r : RV<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
-    !strconcat(opcStr, ".", df, " $vx,$sy,$vz"), []> {
+    !strconcat(packed, opcStr, df, " $vx,$sy,$vz"), []> {
       let cs = 1;
       let cy = 1;
     }
   def v : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
-    !strconcat(opcStr, ".", df, " $vx,$vy,$vz"), []> {
+    !strconcat(packed, opcStr, df, " $vx,$vy,$vz"), []> {
       let cs = 0;
       let cy = 0;
     }
 }
 
 multiclass RVm<string opcStr, bits<8> opc> {
-  // double (LHS = simm7 or I64 or V64)
-//  def di : RV<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz),
-//    !strconcat(opcStr, ".d $vx,$sy,$vz"), []> {
-//      let cx = 0;
-//      let cx2 = 0;
-//      let cs = 0;
-//      let cy = 1;
-//    }
-//  def dr : RV<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
-//    !strconcat(opcStr, ".d $vx,$sy,$vz"), []> {
-//      let cx = 0;
-//      let cx2 = 0;
-//      let cs = 1;
-//      let cy = 1;
-//    }
-//  def dv : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
-//    !strconcat(opcStr, ".d $vx,$vy,$vz"), []> {
-//      let cx = 0;
-//      let cx2 = 0;
-//      let cs = 0;
-//      let cy = 0;
-//    }
-
-  let cx = 0, cx2 = 0 in
-  defm d : RVm0<opcStr, opc, "d">;
-
-  // float
-  def si : RV<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz),
-    !strconcat(opcStr, ".s $vx,$sy,$vz"), []> {
-      let cx = 1;
-      let cx2 = 0;
-      let cs = 0;
-      let cy = 1;
-    }
-  def sr : RV<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
-    !strconcat(opcStr, ".s $vx,$sy,$vz"), []> {
-      let cx = 1;
-      let cx2 = 0;
-      let cs = 1;
-      let cy = 1;
-    }
-  def sv : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
-    !strconcat(opcStr, ".s $vx,$vy,$vz"), []> {
-      let cx = 1;
-      let cx2 = 0;
-      let cs = 0;
-      let cy = 0;
-    }
-
-  // packed float
-  def pv : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
-    !strconcat("p", opcStr, " $vx,$vy,$vz"), []> {
-      let cx = 1;
-      let cx2 = 1;
-      let cs = 0;
-      let cy = 0;
-    }
+  let cx = 0, cx2 = 0 in defm d : RVm0<opcStr, opc, ".d", "">; // double
+  let cx = 1, cx2 = 0 in defm s : RVm0<opcStr, opc, ".s", "">; // float
+  let cx = 1, cx2 = 1 in defm p : RVm0<opcStr, opc, "", "p">; // packed
 }
 
 class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
