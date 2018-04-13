@@ -50,7 +50,7 @@ static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
     }
   }
 
-  return S->getLocEnd(); //.getLocWithOffset(1);
+  return S->getLocEnd();
 }
 
 clang::SourceRange TargetCodeRegion::getInnerRange() {
@@ -82,8 +82,16 @@ clang::SourceRange TargetCodeDecl::getInnerRange() {
   } // Types have .NeedsSemicolon set to true
   auto *FD = Node->getAsFunction();
   if (!Node->hasBody() || (FD && !FD->doesThisDeclarationHaveABody())) {
-    return clang::SourceRange(Node->getLocStart(),
-                              Node->getLocEnd().getLocWithOffset(2));
+    clang::SourceManager &SM = Context.getSourceManager();
+    auto possibleNextToken = clang::Lexer::findNextToken(
+      Node->getLocEnd().getLocWithOffset(1), SM, Context.getLangOpts());
+    clang::SourceLocation endLoc;
+    if (possibleNextToken.hasValue()) {
+      endLoc = possibleNextToken.getValue().getEndLoc();
+    } else {
+      endLoc = Node->getLocEnd();
+    }
+    return clang::SourceRange(Node->getLocStart(), endLoc);
   }
   return getRealRange();
 }
