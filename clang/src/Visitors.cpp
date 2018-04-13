@@ -15,6 +15,23 @@
 #include "TypeDeclResolver.h"
 #include "Visitors.h"
 
+static bool stmtNeedsSemicolon(const clang::Stmt *S) {
+  while (1) {
+    if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
+      S = CS->getCapturedStmt();
+    } else if (auto *OS = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
+      S = OS->getInnermostCapturedStmt();
+    } else {
+      break;
+    }
+  }
+  if (llvm::isa<clang::CompoundStmt>(S) || llvm::isa<clang::ForStmt>(S) ||
+      llvm::isa<clang::IfStmt>(S)) {
+    return false;
+  }
+  return true;
+}
+
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
 
@@ -66,6 +83,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
       if (TargetCodeInfo.addCodeFragment(TCR)) {
         DiscoverTypeVisitor.TraverseStmt(CS);
         addTargetRegionArgs(CS, TCR);
+        TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
       }
     }
   }

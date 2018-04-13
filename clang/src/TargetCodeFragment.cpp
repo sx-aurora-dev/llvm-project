@@ -71,9 +71,7 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
                                   -8), // try to get #pragma into source range
                               getOMPStmtSourceLocEnd(getNode()));
   } else {
-    // I'm not quite sure why this is necessary, but it is
-    return clang::SourceRange(getNode()->getLocStart(),
-                              getNode()->getLocEnd().getLocWithOffset(2));
+    return getRealRange();
   }
 }
 
