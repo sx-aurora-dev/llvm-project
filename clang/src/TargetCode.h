@@ -29,7 +29,7 @@ public:
         SM(TargetCodeRewriter.getSourceMgr()){};
 
   bool addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
-                       bool PushFront=false);
+                       bool PushFront = false);
   bool addCodeFragmentFront(std::shared_ptr<TargetCodeFragment> Fag);
   void generateCode(llvm::raw_ostream &Out);
   TargetCodeFragmentDeque::const_iterator getCodeFragmentsBegin() {

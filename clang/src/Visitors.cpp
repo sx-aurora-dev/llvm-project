@@ -73,8 +73,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
             e = TargetDirective->child_end();
        i != e; ++i) {
     if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(*i)) {
-      while (auto *NCS = llvm::dyn_cast<clang::CapturedStmt>(
-        CS->getCapturedStmt())) {
+      while (auto *NCS =
+                 llvm::dyn_cast<clang::CapturedStmt>(CS->getCapturedStmt())) {
         CS = NCS;
       }
       auto TCR = std::make_shared<TargetCodeRegion>(

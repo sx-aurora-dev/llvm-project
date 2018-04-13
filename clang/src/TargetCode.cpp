@@ -10,7 +10,6 @@
 
 #include "TargetCode.h"
 
-
 bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
                                  bool PushFront) {
   for (auto &F : CodeFragments) {
@@ -95,10 +94,8 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
        I != E; ++I) {
     if (!(*I)->getType().getTypePtr()->isPointerType()) {
       auto VarName = (*I)->getDeclName().getAsString();
-      Out << "  " << (*I)->getType().getAsString() << " "
-          << VarName << " = "
-          << "*__sotoc_var_" << VarName
-          << ";\n";
+      Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
+          << "*__sotoc_var_" << VarName << ";\n";
     }
   }
   Out << "\n";
@@ -112,8 +109,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
        I != E; ++I) {
     if (!(*I)->getType().getTypePtr()->isPointerType()) {
       auto VarName = (*I)->getDeclName().getAsString();
-      Out << "\n  *__sotoc_var_" << VarName
-          << " = " << VarName << ";";
+      Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
     }
   }
 

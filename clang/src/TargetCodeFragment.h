@@ -35,8 +35,10 @@ public:
   static bool classof(const TargetCodeFragment *TCF) {
     return TCF->getKind() == TCFK_TargetCodeFragment;
   }
+
 protected:
   clang::ASTContext &Context;
+
 public:
   TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
       : Context(Context), Kind(Kind), NeedsSemicolon(false) {}
@@ -79,10 +81,10 @@ public:
                    clang::SourceLocation TargetDirectiveLocation,
                    clang::FunctionDecl *ParentFuncDecl,
                    clang::ASTContext &Context)
-    : TargetCodeSourceFragment<clang::CapturedStmt *>(Node,
-        Context, TCFK_TargetCodeRegion),
-      ParentFuncName(ParentFuncDecl->getNameAsString()),
-      TargetDirectiveLocation(TargetDirectiveLocation) {}
+      : TargetCodeSourceFragment<clang::CapturedStmt *>(Node, Context,
+                                                        TCFK_TargetCodeRegion),
+        ParentFuncName(ParentFuncDecl->getNameAsString()),
+        TargetDirectiveLocation(TargetDirectiveLocation) {}
 
   void addCapturedVar(clang::VarDecl *Var);
   clang::CapturedStmt *getNode() { return Node; }
