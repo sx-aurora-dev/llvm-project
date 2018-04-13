@@ -45,7 +45,7 @@ endmacro(install_symlink)
 
 install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
 
-if(NECAUROA_USE_TOOLCHAIN_WRAPPERS)
+if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
     install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
     install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
                     ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
