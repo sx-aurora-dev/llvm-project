@@ -30,7 +30,7 @@ set(SOTOC_SOURCES src/main.cpp
                   src/TypeDeclResolver.cpp)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-  project(${SOTOC_PROJECT_NAME} CXX)
+  project(${SOTOC_PROJECT_NAME} C CXX)
 endif()
 
 ################################################################################
