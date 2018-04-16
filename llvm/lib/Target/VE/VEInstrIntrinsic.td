@@ -31,9 +31,6 @@ def : Pat<(int_ve_vfdivd_vIv (i64 simm7:$sy), v256f64:$vz), (VFDVdi (i64 simm7:$
 def : Pat<(int_ve_vfdivs_vvv v256f64:$vy, v256f64:$vz), (VFDVsv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vfdivs_vsv f32:$sy, v256f64:$vz), (VFDVsr f32:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vfdivs_vIv (i64 simm7:$sy), v256f64:$vz), (VFDVsi (i64 simm7:$sy), v256f64:$vz)>;
-def : Pat<(int_ve_pvfdiv_vvv v256f64:$vy, v256f64:$vz), (VFDVpv v256f64:$vy, v256f64:$vz)>;
-def : Pat<(int_ve_pvfdiv_vsv f32:$sy, v256f64:$vz), (VFDVpr f32:$sy, v256f64:$vz)>;
-def : Pat<(int_ve_pvfdiv_vIv (i64 simm7:$sy), v256f64:$vz), (VFDVpi (i64 simm7:$sy), v256f64:$vz)>;
 def : Pat<(int_ve_vfmadd_vvvv v256f64:$vy, v256f64:$vz, v256f64:$vw), (VFMADdv v256f64:$vy, v256f64:$vz, v256f64:$vw)>;
 def : Pat<(int_ve_vfmadd_vsvv f64:$sy, v256f64:$vz, v256f64:$vw), (VFMADdr f64:$sy, v256f64:$vz, v256f64:$vw)>;
 def : Pat<(int_ve_vfmadd_vvsv v256f64:$vy, f64:$sy, v256f64:$vw), (VFMADdr2 v256f64:$vy, f64:$sy, v256f64:$vw)>;

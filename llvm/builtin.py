@@ -26,8 +26,8 @@ T_i64     = Type("i64",     "Li",     "long int")
 T_i32     = Type("i32",     "i",      "int")
 T_v256f64 = Type("v256f64", "V256d",  "double*", T_f64)
 T_v256f32 = Type("v256f64", "V256d",  "float*",  T_f32)
-T_v256i64 = Type("v256f64", "V256Li", "long int*", T_i64)
-T_v256i32 = Type("v256f64", "V256i",  "int*",  T_i32)
+T_v256i64 = Type("v256f64", "V256d",  "long int*", T_i64)
+T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
 
 class Op(object):
     def __init__(self, kind, ty, name):
@@ -116,7 +116,9 @@ class Inst:
 
     # to be included from BuiltinsVE.def
     def builtin(self):
-        tmp = "".join([i.ty.builtinCode for i in (self.outs + self.ins)])
+        #tmp = "".join([i.ty.builtinCode for i in (self.outs + self.ins)])
+        tmp = "".join([i.ty.builtinCode for i in self.outs])
+        tmp += "".join([i.ty.builtinCode + "C" for i in self.ins])
         return "BUILTIN(__builtin_ve_{}, \"{}\", \"n\")".format(self.intrinsicName, tmp)
 
     # to be included from veintrin.h
@@ -132,11 +134,16 @@ class Inst:
     def test(self):
         head = self.funcHeader()
 
+        if self.packed:
+            stride = 8
+        else:
+            stride = self.outs[0].ty.stride()
+
         body = ""
         args = []
         for op in self.ins:
             if op.isVReg():
-                body += "        __vr {} = _ve_vld(p{}, {});\n".format(op.name, op.name, op.ty.stride())
+                body += "        __vr {} = _ve_vld(p{}, {});\n".format(op.name, op.name, stride)
             if op.isReg():
                 args.append(op.regName())
             else: # imm
@@ -145,10 +152,12 @@ class Inst:
         indent = " " * 8
         out = self.outs[0]
         body += indent + "__vr {} = _ve_{}({});\n".format(out.name, self.intrinsicName, ', '.join(args))
-        body += indent + "_ve_vst(p, {}, {});\n".format(out.name, out.ty.stride())
+        body += indent + "_ve_vst({}, {}, {});\n".format(out.formalName(), out.regName(), stride)
 
-        for op in [i for i in (self.outs + self.ins) if i.ty == T_v256f64]:
-            body += indent + "p{} += 256;\n".format(op.name)
+        tmp = []
+        for op in [i for i in (self.outs + self.ins) if i.isVReg()]:
+            tmp.append(indent + "p{} += {};".format(op.name, "512" if self.packed else "256"))
+        body += "\n".join(tmp)
 
         func = '''#include "veintrin.h"
 {} {{
@@ -160,6 +169,10 @@ class Inst:
 }}'''
 
         return func.format(head, body)
+
+    def decl(self):
+        head = self.funcHeader()
+        return "extern {};".format(head)
         
     def reference(self):
         head = self.funcHeader()
@@ -185,6 +198,40 @@ class Inst:
 
         return func.format(head, body);
 
+class ManualInstPrinter:
+    def __init__(self):
+        pass
+
+    def printAll(self, insts):
+        for i in insts:
+            self.printI(i)
+
+    def printI(self, I):
+        outs = []
+        v = []
+
+        out = I.outs[0]
+        if not out.isVReg():
+            raise "output is not VReg"
+        v.append(out.regName())
+
+        ins = []
+        for op in I.ins:
+            v.append(op.regName())
+            if op.isVReg():
+                ins.append("const __vr " + op.regName())
+            elif op.isReg():
+                ins.append("{} {}".format(op.ty.ctype, op.regName()))
+            elif op.isImm():
+                ins.append("{} {}".format(op.ty.ctype, op.regName()))
+            else:
+                raise "unknown register kind"
+        func = "__vr _ve_{}({})".format(I.intrinsicName, ", ".join(ins))
+        line = "    {:<80} // {}".format(func, I.expr.format(*v))
+
+        print line
+
+
 class InstTable:
     def __init__(self):
         self.a = []
@@ -196,14 +243,16 @@ class InstTable:
         self.a.append(Inst(*arg))
 
     def Inst3(self, opc, name, instName, df, ex, tyV, tyS, tyI, packed, expr):
+        # name.df {%vx|%vix}, {%vy|%vix|%sy|I}, {%vz|%vix}[, %vm]
         self.Inst(opc, name, instName, df, ex, [VX(tyV)], [VY(tyV), VZ(tyV)], "v", packed, expr)   #_vvv
         self.Inst(opc, name, instName, df, ex, [VX(tyV)], [SY(tyS), VZ(tyV)], "r", packed, expr)   #_vsv
         self.Inst(opc, name, instName, df, ex, [VX(tyV)], [I, VZ(tyV)], "i", packed, expr)  #_vIv
 
-    def Inst3f(self, opc, name, instName, expr):
+    def Inst3f(self, opc, name, instName, expr, hasPacked = True):
         self.Inst3(opc, name, instName, "d", "", T_f64, T_f64, T_i64, False, expr)  # d
         self.Inst3(opc, name, instName, "s", "",  T_f32, T_f32, T_i64, False, expr)  # s
-        self.Inst3(opc, name, instName, "",  "", T_f32, T_f32, T_i64, True, expr)  # p
+        if hasPacked:
+            self.Inst3(opc, name, instName, "",  "", T_f32, T_f32, T_i64, True, expr) # p
 
     def Inst3u(self, opc, name, instName, expr):
         self.Inst3(opc, name, instName, "l", "", T_i64, T_i64, T_i64, False, expr)  # l
@@ -230,8 +279,12 @@ class InstTable:
         self.Inst4(opc, name, instName, "s", T_f32, T_f32, T_i64, False, expr)  # s
         self.Inst4(opc, name, instName, "",  T_f32, T_f32, T_i64, True, expr)  # p
 
-def gen_test(T, directory):
-    pass
+def gen_test(insts, directory):
+    for i in insts:
+        filename = "{}/test_{}.c".format(directory, i.intrinsicName)
+        #print filename
+        with open(filename, "w") as f:
+            f.write(i.test())
 
 import argparse
 
@@ -240,23 +293,74 @@ parser.add_argument('-i', dest="opt_intrin", action="store_true")
 parser.add_argument('-p', dest="opt_pat", action="store_true")
 parser.add_argument('-b', dest="opt_builtin", action="store_true")
 parser.add_argument('--header', dest="opt_header", action="store_true")
+parser.add_argument('--decl', dest="opt_decl", action="store_true")
 parser.add_argument('-t', dest="opt_test", action="store_true")
 parser.add_argument('-r', dest="opt_reference", action="store_true")
 parser.add_argument('-f', dest="opt_filter", action="store")
+parser.add_argument('-m', dest="opt_manual", action="store_true")
 args, others = parser.parse_known_args()
 
 T = InstTable()
+
+# 5.3.2.7. Vector Transfer Instructions
+
+# 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
+T.Inst3u(0xFF, "vaddu", "VADD", "{0} = {1} + {2}")
+T.Inst3w(0xFF, "vadds", "VADS", "{0} = {1} + {2}")
+# VADX
+# VSUB
+# VSBS
+# VSBX
+# VMPY
+# VMPS
+# VMPX
+# VMPD
+# VDIV
+# VDVS
+# VDVX
+# VCMP
+# VCPS
+# VCPX
+# VCMS
+# VCMX
+
+# 5.3.2.9. Vector Logical Arithmetic Operation Instructions
+#T.Inst3l(0xFF, "vand", "VAND", "{0} = {1} & {2}")
+
+# 5.3.2.10. Vector Shift Instructions
+
+# 5.3.2.11. Vector Floating-Point Operation Instructions
 T.Inst3f(0xFF, "vfadd", "VFAD", "{0} = {1} + {2}")
 T.Inst3f(0xFF, "vfsub", "VFSB", "{0} = {1} - {2}")
 T.Inst3f(0xFF, "vfmul", "VFMP", "{0} = {1} * {2}")
-T.Inst3f(0xFF, "vfdiv", "VFDV", "{0} = {1} / {2}")
-T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {1} * {2} + {3}")
+T.Inst3f(0xFF, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
+# VFSQRT
+# VFCP
+# VFCM
+T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
+# VFMSB
+# VFNMAD
+# VFNMSB
+# VRCP
+# VRSQRT
+# VFIX
+# VFIXX
+# VFLT
+# VFLTX
+# VCVD
+# VCVS
 
-T.Inst3u(0xFF, "vaddu", "VADD", "{0} = {1} + {2}")
-T.Inst3w(0xFF, "vadds", "VADS", "{0} = {1} + {2}")
-#T.Inst3l(0xFF, "vand", "VAND", "{0} = {1} & {2}")
+# 5.3.2.12. Vector Mask Arithmetic Instructions
+
+# 5.3.2.13. Vector Recursive Relation Instructions
+
+# 5.3.2.14. Vector Gatering/Scattering Instructions
+
+# 5.3.2.16. Vector Control Instructions
 
 insts = T.insts()
+
+test_dir = "../test/intrinsic/tests"
 
 if args.opt_filter:
     insts = [i for i in insts if re.search(args.opt_filter, i.intrinsicName)]
@@ -274,11 +378,19 @@ if args.opt_builtin:
 if args.opt_header:
     for i in insts:
         print i.header()
-if args.opt_test:
+if args.opt_decl:
     for i in insts:
-        print i.test()
+        print i.decl()
+if args.opt_test:
+    gen_test(insts, test_dir)
 if args.opt_reference:
     print 'namespace ref {'
     for i in insts:
         print i.reference()
     print '}'
+
+if args.opt_manual:
+    ManualInstPrinter().printAll(insts)
+
+ManualInstPrinter().printAll(insts) if args.opt_manual else None
+
