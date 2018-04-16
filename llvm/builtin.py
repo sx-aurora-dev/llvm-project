@@ -134,22 +134,29 @@ class Inst:
     def test(self):
         head = self.funcHeader()
 
+        body = ""
+        indent = " " * 8
+
         if self.packed:
             stride = 8
+            step = 512
+            body += indent + "int l = n - i < 512 ? (n - i) / 2UL : 256;\n"
         else:
             stride = self.outs[0].ty.stride()
+            step = 256
+            body += indent + "int l = n - i < 256 ? n - i : 256;\n"
 
-        body = ""
+        body += indent + "_ve_lvl(l);\n"
+
         args = []
         for op in self.ins:
             if op.isVReg():
-                body += "        __vr {} = _ve_vld(p{}, {});\n".format(op.name, op.name, stride)
+                body += indent + "__vr {} = _ve_vld(p{}, {});\n".format(op.name, op.name, stride)
             if op.isReg():
                 args.append(op.regName())
             else: # imm
                 args.append("3")
 
-        indent = " " * 8
         out = self.outs[0]
         body += indent + "__vr {} = _ve_{}({});\n".format(out.name, self.intrinsicName, ', '.join(args))
         body += indent + "_ve_vst({}, {}, {});\n".format(out.formalName(), out.regName(), stride)
@@ -161,14 +168,13 @@ class Inst:
 
         func = '''#include "veintrin.h"
 {} {{
-    for (int i = 0; i < n; i += 256) {{
-        int l = n - i < 256 ? n - i : 256;
-        _ve_lvl(l);
+    for (int i = 0; i < n; i += {}) {{
 {}
     }}
-}}'''
+}}
+'''
 
-        return func.format(head, body)
+        return func.format(head, step, body)
 
     def decl(self):
         head = self.funcHeader()
@@ -279,12 +285,24 @@ class InstTable:
         self.Inst4(opc, name, instName, "s", T_f32, T_f32, T_i64, False, expr)  # s
         self.Inst4(opc, name, instName, "",  T_f32, T_f32, T_i64, True, expr)  # p
 
+def cmpwrite(filename, data):
+    need_write = True
+    try:
+        with open(filename, "r") as f:
+            old = f.read()
+            need_write = old != data
+    except:
+        pass
+    if need_write:
+        print("write " + filename)
+        with open(filename, "w") as f:
+            f.write(data)
+
+
 def gen_test(insts, directory):
     for i in insts:
         filename = "{}/test_{}.c".format(directory, i.intrinsicName)
-        #print filename
-        with open(filename, "w") as f:
-            f.write(i.test())
+        cmpwrite(filename, i.test())
 
 import argparse
 
@@ -392,5 +410,5 @@ if args.opt_reference:
 if args.opt_manual:
     ManualInstPrinter().printAll(insts)
 
-ManualInstPrinter().printAll(insts) if args.opt_manual else None
+#ManualInstPrinter().printAll(insts) if args.opt_manual else None
 

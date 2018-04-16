@@ -840,6 +840,9 @@ multiclass VSTm<string opcStr, bits<8> opc> {
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+def LSVrr : RR<0x9E, (outs V64:$vx), (ins I64:$sy, I64:$sz), "lsv $vx,$sy,$sz", []>;
+
 let mayLoad = 1 in defm VLD : VLDm<"vld", 0x81>;
 let mayLoad = 1 in defm VLDU : VLDm<"vldu", 0x82>;
 let mayLoad = 1 in defm VLDL : VLDm<"vldl", 0x83>;
@@ -886,6 +889,9 @@ def : Pat<(store V64:$vx, ADDRri:$addr),
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
+def : Pat<(int_ve_lsv v256f64:$vx, i64:$sy, i64:$sz), 
+          (LSVrr v256f64:$vx, i64:%sy, i64:$sz)>;
+
 def : Pat<(int_ve_vld i64:$sz, i64:$sy), (VLDr i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vld i64:$sz, (i64 simm7:$sy)), (VLDi (i64 simm7:$sy), i64:$sz)>;
 def : Pat<(int_ve_vldu i64:$sz, i64:$sy), (VLDUr i64:$sy, i64:$sz)>;
@@ -906,49 +912,7 @@ def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, i64:$sy),
 def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, (i64 simm7:$sy)), 
           (VSTLi v256f64:$vx, (i64 simm7:$sy), i64:$sz)>;
 
-class VEInstPatStr<string name, string opc, ValueType ty0, ValueType ty1> :
-  Pat<(!cast<VEIntrinsic>(name) ty0:$op0, ty1:$op1),
-      (!cast<Instruction>(opc) ty0:$op0, ty1:$op1)>;
-
-multiclass VEIntr3<string name, string op, ValueType ty0, ValueType ty1>
-{
-  def : VEInstPatStr<"int_ve_"#name#"_vvv", op#"v", v256f64, v256f64>;
-  def : VEInstPatStr<"int_ve_"#name#"_vsv", op#"r", ty0, v256f64>;
-  def : VEInstPatStr<"int_ve_"#name#"_vIv", op#"i", ty1, v256f64>;
-}
-
-multiclass VEIntrFloatPat<string name, string op>
-{
-  defm : VEIntr3<name#"d", op#"d", f64, i64>;
-  //def : VEInstPatStr<"int_ve_"#name#"d_vvv", op#"dv", v256f64, v256f64>;
-  //def : VEInstPatStr<"int_ve_"#name#"d_vsv", op#"dr", f64, v256f64>;
-  //def : VEInstPatStr<"int_ve_"#name#"d_vIv", op#"di", i64, v256f64>;
-
-  def : VEInstPatStr<"int_ve_"#name#"s_vvv", op#"sv", v256f64, v256f64>;
-  def : VEInstPatStr<"int_ve_"#name#"s_vsv", op#"sr", f32, v256f64>;
-  def : VEInstPatStr<"int_ve_"#name#"s_vIv", op#"si", i64, v256f64>;
-
-  def : VEInstPatStr<"int_ve_p"#name#"_vvv", op#"pv", v256f64, v256f64>;
-  def : VEInstPatStr<"int_ve_p"#name#"_vsv", op#"pr", f32, v256f64>;
-  def : VEInstPatStr<"int_ve_p"#name#"_vIv", op#"pi", i64, v256f64>;
-}
-
 include "VEInstrIntrinsic.td"
-
-//defm: VEIntrFloatPat<"vfadd", "VFAD">;
-//defm: VEIntrFloatPat<"vfsub", "VFSB">;
-//defm: VEIntrFloatPat<"vfmul", "VFMP">;
-//defm: VEIntrFloatPat<"vfdiv", "VFDV">;
-
-
-//def : Pat<(int_ve_vfaddd_vvv v256f64:$vy, v256f64:$vz), (VFADdv v256f64:$vy, v256f64:$vz)>;
-//def : Pat<(int_ve_vfaddd_vsv f64:$sy, v256f64:$vz), (VFADdr f64:$sy, v256f64:$vz)>;
-//def : Pat<(int_ve_vfaddd_vIv (i64 simm7:$sy), v256f64:$vz), (VFADdi (i64 simm7:$sy), v256f64:$vz)>;
-
-//def : Pat<(int_ve_vfadd_v32v32 v256f64:$vy, v256f64:$vz), (VFADsv v256f64:$vy, v256f64:$vz)>;
-//def : Pat<(int_ve_vfadd_f32v32 f32:$sy, v256f64:$vz), (VFADsr f32:$sy, v256f64:$vz)>;
-
-//def : Pat<(int_ve_pvfadd v256f64:$vy, v256f64:$vz), (VFADpv v256f64:$vy, v256f64:$vz)>;
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
