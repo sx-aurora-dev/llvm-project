@@ -1,3 +1,9 @@
+class VEIntrinsic<string name, list<LLVMType> outs, list<LLVMType> ins> : 
+  GCCBuiltin<"__builtin_ve_" # name>, Intrinsic<outs, ins>
+{
+  let TargetPrefix = "ve";
+}
+
 let TargetPrefix = "ve" in {
   def int_ve_lvl : GCCBuiltin<"__builtin_ve_lvl">, Intrinsic<[], [llvm_i32_ty]>;
 
@@ -14,15 +20,8 @@ let TargetPrefix = "ve" in {
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty]>;
   def int_ve_vstl : GCCBuiltin<"__builtin_ve_vstl">, 
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty]>;
-
-  def int_ve_vfaddd : GCCBuiltin<"__builtin_ve_vfaddd">, 
-        Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>]>;
-
-  def int_ve_vfadds : GCCBuiltin<"__builtin_ve_vfadds">, 
-        Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>]>;
-
-  def int_ve_pvfadd : GCCBuiltin<"__builtin_ve_pvfadd">, 
-        Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>]>;
 }
+
+include "llvm/IR/IntrinsicsVE2.td"
 
 // vim::set sw=2:
