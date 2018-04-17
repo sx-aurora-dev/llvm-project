@@ -13,4 +13,8 @@ python builtin.py -t
 
 python builtin.py -r > ../test/intrinsic/ref.cc
 
+python builtin.py -m > m.txt
+
+touch include/llvm/IR/Intrinsics.td
+touch tools/clang/include/clang/Basic/Builtins.def
 

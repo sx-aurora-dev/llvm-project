@@ -14,7 +14,8 @@ class Type:
 
     def stride(self):
         if self.isVectorType():
-            if self.elemType == T_f64 or self.elemType == T_i64:
+            t = self.elemType
+            if t == T_f64 or t == T_i64 or t == T_u64:
                 return 8
             else:
                 return 4
@@ -24,10 +25,14 @@ T_f64     = Type("f64",     "d",      "double")
 T_f32     = Type("f32",     "f",      "float")
 T_i64     = Type("i64",     "Li",     "long int")
 T_i32     = Type("i32",     "i",      "int")
+T_u64     = Type("i64",     "LUi",    "unsigned long int")
+T_u32     = Type("i32",     "Ui",     "unsigned int")
 T_v256f64 = Type("v256f64", "V256d",  "double*", T_f64)
 T_v256f32 = Type("v256f64", "V256d",  "float*",  T_f32)
 T_v256i64 = Type("v256f64", "V256d",  "long int*", T_i64)
 T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
+T_v256u64 = Type("v256f64", "V256d",  "long int*", T_u64)
+T_v256u32 = Type("v256f64", "V256d",  "int*",  T_u32)
 
 class Op(object):
     def __init__(self, kind, ty, name):
@@ -74,6 +79,12 @@ def VOp(ty, name):
         return Op("v", T_v256i64, name)
     elif ty == T_i32:
         return Op("v", T_v256i32, name)
+    elif ty == T_u64:
+        return Op("v", T_v256u64, name)
+    elif ty == T_u32:
+        return Op("v", T_v256u32, name)
+    else:
+        raise "unknown type"
 
 def VX(ty):
     return VOp(ty, "vx")
@@ -248,30 +259,30 @@ class InstTable:
     def Inst(self, *arg):
         self.a.append(Inst(*arg))
 
-    def Inst3(self, opc, name, instName, df, ex, tyV, tyS, tyI, packed, expr):
+    def Inst3(self, opc, name, instName, df, ex, tyX, tyY, tyZ, packed, expr):
         # name.df {%vx|%vix}, {%vy|%vix|%sy|I}, {%vz|%vix}[, %vm]
-        self.Inst(opc, name, instName, df, ex, [VX(tyV)], [VY(tyV), VZ(tyV)], "v", packed, expr)   #_vvv
-        self.Inst(opc, name, instName, df, ex, [VX(tyV)], [SY(tyS), VZ(tyV)], "r", packed, expr)   #_vsv
-        self.Inst(opc, name, instName, df, ex, [VX(tyV)], [I, VZ(tyV)], "i", packed, expr)  #_vIv
+        self.Inst(opc, name, instName, df, ex, [VX(tyX)], [VY(tyY), VZ(tyZ)], "v", packed, expr)   #_vvv
+        self.Inst(opc, name, instName, df, ex, [VX(tyX)], [SY(tyY), VZ(tyZ)], "r", packed, expr)   #_vsv
+        self.Inst(opc, name, instName, df, ex, [VX(tyX)], [I, VZ(tyZ)], "i", packed, expr)  #_vIv
 
     def Inst3f(self, opc, name, instName, expr, hasPacked = True):
-        self.Inst3(opc, name, instName, "d", "", T_f64, T_f64, T_i64, False, expr)  # d
-        self.Inst3(opc, name, instName, "s", "",  T_f32, T_f32, T_i64, False, expr)  # s
+        self.Inst3(opc, name, instName, "d", "", T_f64, T_f64, T_f64, False, expr)  # d
+        self.Inst3(opc, name, instName, "s", "",  T_f32, T_f32, T_f32, False, expr)  # s
         if hasPacked:
-            self.Inst3(opc, name, instName, "",  "", T_f32, T_f32, T_i64, True, expr) # p
+            self.Inst3(opc, name, instName, "",  "", T_f32, T_f32, T_f32, True, expr) # p
 
     def Inst3u(self, opc, name, instName, expr):
-        self.Inst3(opc, name, instName, "l", "", T_i64, T_i64, T_i64, False, expr)  # l
-        self.Inst3(opc, name, instName, "w", "", T_f32, T_f32, T_i64, False, expr)  # w
-        self.Inst3(opc, name, instName, "",  "", T_f32, T_f32, T_i64, True, expr)  # p
+        self.Inst3(opc, name, instName, "l", "", T_u64, T_u64, T_u64, False, expr)  # l
+        self.Inst3(opc, name, instName, "w", "", T_u32, T_u32, T_u32, False, expr)  # w
+        self.Inst3(opc, name, instName, "",  "", T_u32, T_u32, T_u32, True, expr)  # p
 
     def Inst3l(self, opc, name, instName, expr):
-        self.Inst3(opc, name, instName, "", "", T_i64, T_i64, T_i64, False, expr)
+        self.Inst3(opc, name, instName, "l", "", T_i64, T_i64, T_i64, False, expr)
 
     def Inst3w(self, opc, name, instName, expr):
-        self.Inst3(opc, name, instName, "w", "sx", T_i32, T_i32, T_i64, False, expr)  # w.sx
-        self.Inst3(opc, name, instName, "w", "zx", T_i32, T_i32, T_i64, False, expr)  # w.zx
-        self.Inst3(opc, name, instName, "", "",    T_i32, T_i32, T_i64, True, expr)  # p
+        self.Inst3(opc, name, instName, "w", "sx", T_i64, T_i32, T_i32, False, expr)  # w.sx
+        self.Inst3(opc, name, instName, "w", "zx", T_i64, T_i32, T_i32, False, expr)  # w.zx
+        self.Inst3(opc, name, instName, "", "",    T_i32, T_i32, T_i32, True, expr)  # p
 
     def Inst4(self, opc, name, instName, df, tyV, tyS, tyI, packed, expr):
         self.Inst(opc, name, instName, df, "", [VX(tyV)], [VY(tyV), VZ(tyV), VW(tyV)], "v", packed, expr)   #_vvvv
@@ -301,7 +312,7 @@ def cmpwrite(filename, data):
 
 def gen_test(insts, directory):
     for i in insts:
-        filename = "{}/test_{}.c".format(directory, i.intrinsicName)
+        filename = "{}/{}.c".format(directory, i.intrinsicName)
         cmpwrite(filename, i.test())
 
 import argparse
@@ -323,12 +334,12 @@ T = InstTable()
 # 5.3.2.7. Vector Transfer Instructions
 
 # 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
-T.Inst3u(0xFF, "vaddu", "VADD", "{0} = {1} + {2}")
-T.Inst3w(0xFF, "vadds", "VADS", "{0} = {1} + {2}")
-# VADX
-# VSUB
-# VSBS
-# VSBX
+T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
+T.Inst3w(0xCA, "vadds", "VADS", "{0} = {1} + {2}") # i32
+T.Inst3l(0x8B, "vadds", "VADX", "{0} = {1} + {2}") # i64
+T.Inst3u(0xC8, "vsubu", "VSUB", "{0} = {1} + {2}") # u32, u64
+T.Inst3w(0xCA, "vsubs", "VSBS", "{0} = {1} + {2}") # i32
+T.Inst3l(0x8B, "vsubs", "VSBX", "{0} = {1} + {2}") # i64
 # VMPY
 # VMPS
 # VMPX
@@ -356,9 +367,9 @@ T.Inst3f(0xFF, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
 # VFCP
 # VFCM
 T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
-# VFMSB
-# VFNMAD
-# VFNMSB
+T.Inst4f(0xFF, "vfmsb", "VFMSB", "{0} = {2} * {3} - {1}")
+T.Inst4f(0xFF, "vfnmad", "VFNMAD", "{0} =  - {2} * {3} + {1}")
+T.Inst4f(0xFF, "vfnmsb", "VFNMAD", "{0} =  - {2} * {3} - {1}")
 # VRCP
 # VRSQRT
 # VFIX
@@ -378,7 +389,7 @@ T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
 
 insts = T.insts()
 
-test_dir = "../test/intrinsic/tests"
+test_dir = "../test/intrinsic/gen/tests"
 
 if args.opt_filter:
     insts = [i for i in insts if re.search(args.opt_filter, i.intrinsicName)]

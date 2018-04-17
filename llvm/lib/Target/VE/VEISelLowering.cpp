@@ -886,6 +886,7 @@ VETargetLowering::getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const
 }
 
 
+#if 0 // ishizaka
 // Fixup floating point arguments in the ... part of a varargs call.
 //
 // The SPARC v9 ABI requires that floating point arguments are treated the same
@@ -938,6 +939,33 @@ static void fixupVariableFloatArgs(SmallVectorImpl<CCValAssign> &ArgLocs,
     ArgLocs[i] = NewVA;
   }
 }
+#endif
+
+// allocate a parameter to both a register and a stack 
+// for variable number of arguments.
+static bool CC_VE2(unsigned ValNo, MVT ValVT,
+                  MVT LocVT, CCValAssign::LocInfo LocInfo,
+                  ISD::ArgFlagsTy ArgFlags, CCState &State) {
+
+    if (LocVT == MVT::i32 ||
+        LocVT == MVT::f32 ||
+        LocVT == MVT::i64 ||
+        LocVT == MVT::f64) {
+        static const MCPhysReg RegList1[] = {
+            VE::S0, VE::S1, VE::S2, VE::S3, VE::S4, VE::S5, VE::S6, VE::S7
+        };
+        if (unsigned Reg = State.AllocateReg(RegList1)) {
+            State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+        }
+    }
+
+    unsigned Offset2 = State.AllocateStack(8, 8);
+    State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset2, LocVT, LocInfo));
+    return false;
+
+    return true;  // CC didn't match.
+}
+
 
 // Lower a call for the 64-bit ABI.
 SDValue
@@ -960,11 +988,22 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CLI.CallConv, CLI.IsVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
+#if 0 // ishizaka
   // Allocate the preserved area first.
   CCInfo.AllocateStack(ArgsPreserved, 8);
   // We already allocated the preserved area, so the stack offset computed
   // by CC_VE would be correct now.
   CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
+#else
+
+  if (CLI.IsVarArg) {
+      CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE2);
+  } else {
+      CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
+  }
+  // Allocate parameters first.
+  CCInfo.AllocateStack(ArgsPreserved, 8);
+#endif
 
   // Get the size of the outgoing arguments stack space requirement.
   unsigned ArgsSize = CCInfo.getNextStackOffset();
@@ -972,9 +1011,11 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // Keep stack frames 16-byte aligned.
   ArgsSize = alignTo(ArgsSize, 16);
 
+#if 0 // ishizaka
   // Varargs calls require special treatment.
   if (CLI.IsVarArg)
     fixupVariableFloatArgs(ArgLocs, CLI.Outs);
+#endif
 
   // Adjust the stack pointer to make room for the arguments.
   // FIXME: Use hasReservedCallFrame to avoid %sp adjustments around all calls
@@ -1027,7 +1068,12 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     const CCValAssign &VA = ArgLocs[i];
+#if 0 // ishizaka
     SDValue Arg = CLI.OutVals[i];
+#else
+    // Varargs call uses a register and a stack for a parameters
+    SDValue Arg = CLI.IsVarArg ? CLI.OutVals[i/2] : CLI.OutVals[i];
+#endif
 
     // Promote the value if needed.
     switch (VA.getLocInfo()) {
@@ -1035,6 +1081,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
       llvm_unreachable("Unknown location info!");
     case CCValAssign::Full:
       break;
+#if 0 // ishizaka
     case CCValAssign::SExt:
       Arg = DAG.getNode(ISD::SIGN_EXTEND, DL, VA.getLocVT(), Arg);
       break;
@@ -1051,11 +1098,13 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
           || VA.getLocVT() != MVT::i128)
         Arg = DAG.getNode(ISD::BITCAST, DL, VA.getLocVT(), Arg);
       break;
+#endif
     }
 
     if (VA.isRegLoc()) {
       if (VA.needsCustom() && VA.getValVT() == MVT::f128
           && VA.getLocVT() == MVT::i128) {
+#if 0 // ishizaka
         // Store and reload into the integer register reg and reg+1.
         unsigned Offset = 8 * (VA.getLocReg() - VE::S0);
         unsigned StackOffset = Offset + ArgsBaseOffset;
@@ -1078,11 +1127,17 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
         RegsToPass.push_back(std::make_pair(VA.getLocReg()+1,
                                             Lo64));
         continue;
+#else
+      llvm_unreachable("f128 and i128 are not supported\n");
+#endif
       }
 
       // The custom bit on an i32 return value indicates that it should be
       // passed in the high bits of the register.
       if (VA.getValVT() == MVT::i32 && VA.needsCustom()) {
+#if 1 // ishizaka
+      llvm_unreachable("what's this?\n");
+#else
         Arg = DAG.getNode(ISD::SHL, DL, MVT::i64, Arg,
                           DAG.getConstant(32, DL, MVT::i32));
 
@@ -1096,6 +1151,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
           // Skip the next value, it's already done.
           ++i;
         }
+#endif
       }
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
       continue;

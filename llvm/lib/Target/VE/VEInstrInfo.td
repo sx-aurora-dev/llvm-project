@@ -735,18 +735,23 @@ multiclass RVEXm<string opcStr, bits<8> opc> {
   let cx2 = 1 in defm w : RVm<opcStr # ".zx", opc>; // 64b
 }
 
-// RVLWPm: unsigned (64b,32b,32b.packed)
-multiclass RVIm<string opcStr, bits<8> opc> {
+// RVUm: u64, u32, packed u32
+multiclass RVUm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 0 in defm l : RVm<opcStr # ".l", opc>; // 64b
   let cx = 0, cx2 = 1 in defm w : RVm<opcStr # ".w", opc>; // 32b
   let cx = 1, cx2 = 1 in defm p : RVm<"p" # opcStr, opc>; // packed
 }
 
-// RVWPm: i32 (sx,zx,packed)
+// RVWPm: i32-ex, i32-zx, packed i32
 multiclass RVWm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 0 in defm wsx : RVm<opcStr # ".w.sx", opc>;
   let cx = 0, cx2 = 1 in defm wzx : RVm<opcStr # ".w.zx", opc>;
   let cx = 1, cx2 = 1 in defm p : RVm<"p" # opcStr, opc>;
+}
+
+// i64
+multiclass RVLm<string opcStr, bits<8> opc> {
+  defm l : RVm<opcStr # ".l", opc>;
 }
 
 // RVDSPm: double,single,packed
@@ -840,8 +845,16 @@ multiclass VSTm<string opcStr, bits<8> opc> {
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
-def LSVrr : RR<0x9E, (outs V64:$vx), (ins I64:$sy, I64:$sz), "lsv $vx,$sy,$sz", []>;
+def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I64:$sy, I64:$sz), 
+  "lsv $vx,$sy,$sz", []> {
+    let Constraints = "$dst = $vx";
+}
+def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
+  "lsv $vx,$sy,$sz", []> {
+    let cy = 1;
+    let Constraints = "$dst = $vx";
+}
+
 
 let mayLoad = 1 in defm VLD : VLDm<"vld", 0x81>;
 let mayLoad = 1 in defm VLDU : VLDm<"vldu", 0x82>;
@@ -852,15 +865,15 @@ defm VSTU : VSTm<"vstu", 0x92>;
 defm VSTL : VSTm<"vstl", 0x93>;
 
 // 5.3.2.7 Vector Fixed-Point Arithmetic Operation Instructions
-defm VADD : RVIm<"vaddu", 0xC8>;
+defm VADD : RVUm<"vaddu", 0xC8>;
 defm VADS : RVWm<"vadds", 0xCA>;
-defm VADX : RVm<"vadds.l", 0x8B>;
-defm VSUB : RVIm<"vsubu", 0xD8>;
+defm VADX : RVLm<"vadds", 0x8B>;
+defm VSUB : RVUm<"vsubu", 0xD8>;
 defm VSBS : RVWm<"vsubs", 0xDA>;
-defm VSBX : RVm<"vsubs.l", 0x9B>;
+defm VSBX : RVLm<"vsubs", 0x9B>;
 defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
 defm VMPS : RVEXm<"vmuls.w", 0xCB>; // mul signed 32b sx/zx
-defm VMPX : RVm<"vmuls.l", 0xDB>;   // mul signed 64b
+defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
 defm VMPD : RVm<"vmuls.l.w", 0xD9>; // mul signed 32b -> 64b
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
@@ -889,8 +902,8 @@ def : Pat<(store V64:$vx, ADDRri:$addr),
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
-def : Pat<(int_ve_lsv v256f64:$vx, i64:$sy, i64:$sz), 
-          (LSVrr v256f64:$vx, i64:%sy, i64:$sz)>;
+def : Pat<(int_ve_lsv_vss v256f64:$vx, i32:$sy, i64:$sz), 
+          (LSVr v256f64:$vx, i32:$sy, i64:$sz)>;
 
 def : Pat<(int_ve_vld i64:$sz, i64:$sy), (VLDr i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vld i64:$sz, (i64 simm7:$sy)), (VLDi (i64 simm7:$sy), i64:$sz)>;

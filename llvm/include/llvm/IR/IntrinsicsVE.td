@@ -7,6 +7,9 @@ class VEIntrinsic<string name, list<LLVMType> outs, list<LLVMType> ins> :
 let TargetPrefix = "ve" in {
   def int_ve_lvl : GCCBuiltin<"__builtin_ve_lvl">, Intrinsic<[], [llvm_i32_ty]>;
 
+  def int_ve_lsv_vss : GCCBuiltin<"__builtin_ve_lsv_vss">, 
+        Intrinsic<[], [LLVMType<v256f64>, llvm_i32_ty, llvm_i64_ty]>;
+
   def int_ve_vld : GCCBuiltin<"__builtin_ve_vld">, 
         Intrinsic<[LLVMType<v256f64>], [llvm_ptr_ty, llvm_i64_ty]>;
   def int_ve_vldu : GCCBuiltin<"__builtin_ve_vldu">, 

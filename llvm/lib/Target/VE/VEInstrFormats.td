@@ -38,7 +38,7 @@ class RM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
   bits<7>  sy;
   bits<1>  cz;
   bits<7>  sz;
-  bits<32> imm32;
+  bits<32> imm32 = 0;
   let op = opVal;
   let Inst{15} = cx;
   let Inst{14-8} = sx;
