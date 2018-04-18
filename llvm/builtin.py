@@ -215,6 +215,7 @@ class Inst:
 
         return func.format(head, body);
 
+
 class ManualInstPrinter:
     def __init__(self):
         pass
@@ -248,6 +249,12 @@ class ManualInstPrinter:
 
         print line
 
+class InstBuilder:
+    def __init__(self):
+        self.param = {}
+
+    def build(self):
+        return Inst(self.param)
 
 class InstTable:
     def __init__(self):

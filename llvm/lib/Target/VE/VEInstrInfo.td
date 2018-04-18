@@ -768,6 +768,11 @@ multiclass RVFDSPm<string opcStr, bits<8> opc> {
   let cx = 1, cx2 = 1 in defm p : RVFm<"p" # opcStr, opc>; // packed
 }
 
+multiclass RVLogm<string opcStr, bits<8> opc> {
+  let cx = 0, cx2 = 0 in defm : RVFm<opcStr, opc>; // double
+  let cx = 1, cx2 = 1 in defm p : RVFm<"p"#opcStr, opc>; // double
+}
+
 class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
         InstrItinClass itin = NoItinerary> 
     : InstVE<outs, ins, asmstr, pattern, itin> {
@@ -846,15 +851,20 @@ let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
 def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I64:$sy, I64:$sz), 
-  "lsv $vx,$sy,$sz", []> {
-    let Constraints = "$dst = $vx";
-}
-def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
-  "lsv $vx,$sy,$sz", []> {
+  "lsv ${vx}(${sy}),$sz", []> {
     let cy = 1;
     let Constraints = "$dst = $vx";
 }
+def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
+  "lsv ${vx}(${sy}),$sz", []> {
+    let Constraints = "$dst = $vx";
+}
 
+let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0 in
+def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy), "lvs ${sx},${vx}(${sy})", []>;
+
+
+// 5.3.2.7 Vector Fixed-Point Arithmetic Operation Instructions
 
 let mayLoad = 1 in defm VLD : VLDm<"vld", 0x81>;
 let mayLoad = 1 in defm VLDU : VLDm<"vldu", 0x82>;
@@ -864,7 +874,8 @@ defm VST : VSTm<"vst", 0x91>;
 defm VSTU : VSTm<"vstu", 0x92>;
 defm VSTL : VSTm<"vstl", 0x93>;
 
-// 5.3.2.7 Vector Fixed-Point Arithmetic Operation Instructions
+
+// 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
 defm VADD : RVUm<"vaddu", 0xC8>;
 defm VADS : RVWm<"vadds", 0xCA>;
 defm VADX : RVLm<"vadds", 0x8B>;
@@ -875,6 +886,17 @@ defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
 defm VMPS : RVEXm<"vmuls.w", 0xCB>; // mul signed 32b sx/zx
 defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
 defm VMPD : RVm<"vmuls.l.w", 0xD9>; // mul signed 32b -> 64b
+// divs
+defm VCMP : RVUm<"vcmpu", 0xB9>;
+defm VCPS : RVWm<"vcmps", 0xFA>;
+defm VCPX : RVLm<"vcmps", 0xBA>;
+// CMS
+// CMX
+
+// 5.3.2.9. Vector Logical Arithmetic Operation Instructions
+defm VAND : RVm<"vand", 0xC4>;
+
+// 5.3.2.10. Vector Shift Instructions
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
