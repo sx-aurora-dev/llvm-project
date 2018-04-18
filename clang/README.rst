@@ -8,6 +8,8 @@ used to compile a target binary. **Only really works for C code**.
 Building
 --------
 
+You can build sotoc together with the rest of this repository or seperatly:
+
 .. code-block:: console
 
  $ mkdir BUILD && cd BUILD
@@ -29,6 +31,9 @@ What currently works
 --------------------
 
 * Target regions.
+
+  * Although unusual indentation is still a problem
+
 * Functions in ``#pragma omp declare target`` constructs.
 * Functions which are declared in ``#pragma omp declare target`` constructs and
   have their function bodies outside the construct if the function body comes
@@ -44,6 +49,8 @@ What currently does not work
 ----------------------------
 
 * Global variables in ``#pragma omp declare target`` constructs
+
+  * This is partly a Clang problem/bug
+
 * Anything involving macros (with the possible exception of those defined in a
   standard library/system header).
-* ``typedef struct``.
