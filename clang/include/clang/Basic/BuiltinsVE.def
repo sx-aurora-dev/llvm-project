@@ -15,14 +15,24 @@
 // The format of this database matches clang/Basic/Builtins.def.
 
 // dummy builtins (needs to define at least one here)
-BUILTIN(__builtin_dummy, "Si", "nc")
+//BUILTIN(__builtin_dummy, "Si", "nc")
+
 BUILTIN(__builtin_ve_lvl, "vUi", "nr")
-BUILTIN(__builtin_ve_vld, "V256ddC*", "n")
-BUILTIN(__builtin_ve_vst, "vdC*V256d", "n")
-BUILTIN(__builtin_ve_vfadd, "V256dV256dV256d", "n")
+BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "nr")
+
+BUILTIN(__builtin_ve_vld, "V256dvC*ULi", "n")
+BUILTIN(__builtin_ve_vldu, "V256dvC*ULi", "n")
+BUILTIN(__builtin_ve_vldl, "V256dvC*ULi", "n")
+
+BUILTIN(__builtin_ve_vst, "vv*V256dULi", "n")
+BUILTIN(__builtin_ve_vstu, "vv*V256dULi", "n")
+BUILTIN(__builtin_ve_vstl, "vv*V256dULi", "n")
+
 // BUILTIN(__builtin_bitrev, "UiUi", "nc")
 // BUILTIN(__builtin_getid, "Si", "nc")
 // BUILTIN(__builtin_getps, "UiUi", "n")
 // BUILTIN(__builtin_setps, "vUiUi", "n")
+
+#include "clang/Basic/BuiltinsVE2.def"
 
 #undef BUILTIN
