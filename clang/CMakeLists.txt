@@ -10,6 +10,7 @@ endif()
 set(SOTOC_PROJECT_NAME sotoc)
 
 set(USE_CLANG_LIBS clangFrontend
+                   LLVMSupport
                    clangRewrite
                    clangDriver
                    clangSerialization
