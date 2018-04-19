@@ -33,6 +33,8 @@ T_v256i64 = Type("v256f64", "V256d",  "long int*", T_i64)
 T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
 T_v256u64 = Type("v256f64", "V256d",  "long int*", T_u64)
 T_v256u32 = Type("v256f64", "V256d",  "int*",  T_u32)
+T_void    = Type("", "", "");
+T_voidp   = Type("v256f64", "V256d", "void*", T_void)
 
 class Op(object):
     def __init__(self, kind, ty, name):
@@ -265,6 +267,7 @@ class InstTable:
 
     def Inst(self, *arg):
         self.a.append(Inst(*arg))
+
 
     def Inst3(self, opc, name, instName, df, ex, tyX, tyY, tyZ, packed, expr):
         # name.df {%vx|%vix}, {%vy|%vix|%sy|I}, {%vz|%vix}[, %vm]

@@ -466,6 +466,11 @@ def SRAX : RR<0x76, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
   "sra.l $sx,$sy,$sz",
   [(set i32:$sx, (sra i32:$sy, (i32 uimm6:$sz)))]>;
 
+//defm SHL : RRm<"sll", 0x64, shl, I64, i32, simm7Op32, uimm6Op32>;
+def SHL : RR<0x64, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
+  "sll $sx,$sy,$sz",
+  [(set i64:$sx, (shl i64:$sy, (i32 uimm6:$sz)))]>;
+
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
 let cy = 0, sy = 0, cz = 1 in {
@@ -749,9 +754,9 @@ def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
 def : Pat<(brcc cond:$cond, simm7:$lhs, i32:$rhs, bb:$addr),
           (BCRir (cond2cc $cond), (i64 (sext_imm $lhs)), 
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
-def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
-          (BCRir (cond2rcc $cond), (i64 (sext_imm $rhs)), 
-                 (COPY_TO_REGCLASS $lhs, I64), bb:$addr)>;
+//def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
+//          (BCRir (cond2rcc $cond), (i64 (sext_imm $rhs)), 
+//                 (COPY_TO_REGCLASS $lhs, I64), bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
           (BCRrr (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
