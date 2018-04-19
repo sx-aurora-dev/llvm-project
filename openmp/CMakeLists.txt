@@ -14,3 +14,6 @@ target_link_libraries(veoshim ffi dl)
 install(TARGETS veoshim 
         LIBRARY DESTINATION lib
         PUBLIC_HEADER DESTINATION include)
+
+install_symlink(${CMAKE_INSTALL_PREFIX}/include/veoshim.h
+                ${CMAKE_INSTALL_PREFIX}/include/ve_offload.h)
