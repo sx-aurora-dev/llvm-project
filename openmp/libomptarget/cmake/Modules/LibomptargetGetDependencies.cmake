@@ -190,7 +190,7 @@ find_library (
     /opt/nec/ve/veos/lib64
     ENV LIBRARY_PATH
     ENV LD_LIBRARY_PATH)
-    
+
 set(LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VEO_INCLUDE_DIR})
 find_package_handle_standard_args(
   LIBOMPTARGET_DEP_VEO 
@@ -200,6 +200,5 @@ find_package_handle_standard_args(
 
 mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_FOUND
-  LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS 
-  LIBOMPTARGET_DEP_VEO_LIBRARIES)
+  LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS) 
  
