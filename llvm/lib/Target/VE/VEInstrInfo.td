@@ -67,12 +67,10 @@ def cond2cc : SDNodeXForm<cond, [{
   case ISD::SETGT:  cc = VECC::CC_G;  break;
   case ISD::SETLE:  cc = VECC::CC_LE; break;
   case ISD::SETGE:  cc = VECC::CC_GE; break;
-/*
-  case ISD::SETULT: cc = VECC::CC_CS; break;
-  case ISD::SETULE: cc = VECC::CC_LEU; break;
-  case ISD::SETUGT: cc = VECC::CC_GU; break;
-  case ISD::SETUGE: cc = VECC::CC_CC; break;
-*/
+  case ISD::SETULT: cc = VECC::CC_LNAN; break;
+  case ISD::SETULE: cc = VECC::CC_LENAN; break;
+  case ISD::SETUGT: cc = VECC::CC_GNAN; break;
+  case ISD::SETUGE: cc = VECC::CC_GENAN; break;
   }
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
@@ -405,9 +403,15 @@ defm ADDUW : RRm<"addu.w", 0x48, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // ADS instruction
 let cx = 0 in
-defm ADS : RRm<"adds.w.sx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
+defm ADS : RRm<"adds.w.sx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
 defm ADSU : RRm<"adds.w.zx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
+
+//def ADSir : RR<0x4A, (outs I64:$sx), (ins simm7Op32:$sy, I64:$sz),
+//  "adds.w.sx $sx,$sy,$sz", []>;
+
+//def ADSri0 : RR<0x4A, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sy),
+//  "adds.w.sx $sx,$sy,($sz)0", []>;
 
 // ADX instruction
 let cx = 0 in
@@ -466,10 +470,19 @@ def SRAX : RR<0x76, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
   "sra.l $sx,$sy,$sz",
   [(set i32:$sx, (sra i32:$sy, (i32 uimm6:$sz)))]>;
 
-//defm SHL : RRm<"sll", 0x64, shl, I64, i32, simm7Op32, uimm6Op32>;
-def SHL : RR<0x64, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
+def SLL : RR<0x64, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
   "sll $sx,$sy,$sz",
   [(set i64:$sx, (shl i64:$sy, (i32 uimm6:$sz)))]>;
+
+def : Pat<(i32 (shl i32:$sy, (i32 uimm6:$sz))),
+          (SLL i32:$sy, (i32 uimm6:$sz))>;
+
+def SRL : RR<0x75, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
+  "srl $sx,$sy,$sz",
+  [(set i64:$sx, (srl i64:$sy, (i32 uimm6:$sz)))]>;
+
+def : Pat<(srl i32:$sy, (i32 uimm6:$sz)),
+          (SRL i32:$sy, (i32 uimm6:$sz))>;
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
@@ -713,6 +726,9 @@ def : Pat<(i64 imm:$val),
 def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri i32:$val, 0), I64)>;
 def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
 def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
+
+def : Pat<(i64 (sext_inreg i64:$val, i32)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
+//def : Pat<(i64 (sext_inreg i64:$val, i32)), (i64 (ADSri $val, 0))>;
 
 // sextload and zextload stuff
 def : Pat<(i64 (sextloadi32 ADDRri:$addr)),

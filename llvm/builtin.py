@@ -85,6 +85,8 @@ def VOp(ty, name):
         return Op("v", T_v256u64, name)
     elif ty == T_u32:
         return Op("v", T_v256u32, name)
+    elif ty == T_void:
+        return Op("v", T_voidp, name)
     else:
         raise "unknown type"
 
@@ -268,6 +270,9 @@ class InstTable:
     def Inst(self, *arg):
         self.a.append(Inst(*arg))
 
+    def VBRDm(self, opc, name, instName, packed = False):
+        self.Inst(opc, name, instName, "", "", [VX(T_void)], [SY(T_i64)], "", packed, "{0}[0:255] = {1}")
+        self.Inst(opc, name, instName, "", "", [VX(T_void)], [I], "", packed, "{0}[0:255] = {1}")
 
     def Inst3(self, opc, name, instName, df, ex, tyX, tyY, tyZ, packed, expr):
         # name.df {%vx|%vix}, {%vy|%vix|%sy|I}, {%vz|%vix}[, %vm]
@@ -342,6 +347,10 @@ args, others = parser.parse_known_args()
 T = InstTable()
 
 # 5.3.2.7. Vector Transfer Instructions
+T.VBRDm(0x8C, "vbrd", "VBRD")
+T.VBRDm(0x8C, "vbrdl", "VBRDl")
+T.VBRDm(0x8C, "vbrdu", "VBRDu")
+T.VBRDm(0x8C, "pvbrd", "VBRD", True)
 
 # 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
 T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
