@@ -230,6 +230,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 1;
     let cz = 1;
   }
+  /*
   def rii : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
@@ -237,6 +238,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 1;
   }
+  */
   def rzi : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}(${sz})"),
@@ -245,6 +247,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let sy = 0;
     let cz = 1;
   }
+  /*
   def zii : RM<
     opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}(${sy})"),
@@ -253,6 +256,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let cz = 0;
     let sz = 0;
   }
+  */
   def zzi : RM<
     opc, (outs RC:$sx), (ins immOp2:$imm32),
     !strconcat(opcStr, " $sx, $imm32"),
@@ -313,6 +317,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
   }
+  /*
   def zi : RR<
     opc, (outs RC:$sx), (ins immOp:$sy),
     !strconcat(opcStr, " $sx, $sy"),
@@ -321,6 +326,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cz = 0;
     let sz = 0;
   }
+  */
 }
 
 // Branch multiclass

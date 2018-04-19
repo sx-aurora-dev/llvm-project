@@ -32,11 +32,11 @@ class InstVE<dag outs, dag ins, string asmstr, list<dag> pattern,
 class RM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
          InstrItinClass itin = NoItinerary>
    : InstVE<outs, ins, asmstr, pattern, itin> {
-  bits<1>  cx;
+  bits<1>  cx = 0;
   bits<7>  sx;
-  bits<1>  cy;
+  bits<1>  cy = 0;
   bits<7>  sy;
-  bits<1>  cz;
+  bits<1>  cz = 0;
   bits<7>  sz;
   bits<32> imm32 = 0;
   let op = opVal;
