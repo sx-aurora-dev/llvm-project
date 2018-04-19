@@ -37,12 +37,6 @@ if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
     add_executable(necaurora-ofld-tool-wrapper necaurora-ofld-tool-wrapper.cpp)
 endif()
 
-macro(install_symlink filepath sympath)
-    install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${filepath} ${sympath})")
-    install(CODE "message(\"-- Created symlink: ${sympath} -> ${filepath}\")")
-endmacro(install_symlink)
-
-
 install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
 
 if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
