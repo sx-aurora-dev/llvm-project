@@ -33,8 +33,6 @@ T_v256i64 = Type("v256f64", "V256d",  "long int*", T_i64)
 T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
 T_v256u64 = Type("v256f64", "V256d",  "unsigned long int*", T_u64)
 T_v256u32 = Type("v256f64", "V256d",  "int*",  T_u32)
-T_void    = Type("", "", "");
-T_voidp   = Type("v256f64", "V256d", "void*", T_void)
 
 class Op(object):
     def __init__(self, kind, ty, name):
@@ -49,11 +47,13 @@ class Op(object):
             return "{}:${}".format(self.ty.ValueType, self.name)
 
     def isImm(self):
-        return True if self.kind == 'I' else False
+        return self.kind == 'I'
     def isReg(self):
-        return True if (self.kind == 'v' or self.kind == 's') else False
+        return self.kind == 'v' or self.kind == 's'
+    def isSReg(self):
+        return self.kind == 's'
     def isVReg(self):
-        return True if self.kind == 'v' else False
+        return self.kind == 'v'
 
     def regName(self):
         return self.name
@@ -85,8 +85,6 @@ def VOp(ty, name):
         return Op("v", T_v256u64, name)
     elif ty == T_u32:
         return Op("v", T_v256u32, name)
-    elif ty == T_void:
-        return Op("v", T_voidp, name)
     else:
         raise "unknown type"
 
@@ -215,14 +213,24 @@ class Inst:
         body = self.expr.format(*tmp) + ";"
         #body = "{:<40} # {}".format(body, self.intrinsicName)
 
+        preprocess = ''
+        for op in self.ins:
+            if op.isSReg():
+                if self.packed:
+                    ctype = self.outs[0].ty.elemType.ctype
+                    preprocess = '{} sy0 = *({}*)&sy;'.format(ctype, ctype)
+                    body = re.sub('sy', "sy0", body)
+
+
         func = '''{}
 {{
+    {}
     for (int i = 0; i < n; ++i) {{
         {}
     }}
 }}'''
 
-        return func.format(head, body);
+        return func.format(head, preprocess, body);
 
 
 class ManualInstPrinter:
