@@ -31,7 +31,7 @@ T_v256f64 = Type("v256f64", "V256d",  "double*", T_f64)
 T_v256f32 = Type("v256f64", "V256d",  "float*",  T_f32)
 T_v256i64 = Type("v256f64", "V256d",  "long int*", T_i64)
 T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
-T_v256u64 = Type("v256f64", "V256d",  "long int*", T_u64)
+T_v256u64 = Type("v256f64", "V256d",  "unsigned long int*", T_u64)
 T_v256u32 = Type("v256f64", "V256d",  "int*",  T_u32)
 T_void    = Type("", "", "");
 T_voidp   = Type("v256f64", "V256d", "void*", T_void)
@@ -101,20 +101,25 @@ def VW(ty):
 
 I = Op("I", T_i64, "sy")
 
+def IN(n, df, ex, instArgSuffix, packed):
+    return "{}{}{}{}".format(n, "p" if packed else df, ex, instArgSuffix)
+
+def FN(n, df, ex, outs, ins, packed):
+        intrinsicArgSuffix = "_" + "".join([op.kind for op in (outs + ins)])
+        ex0 = "_" + ex if ex != "" else ""
+        return "{}{}{}{}{}".format("p" if packed else "", n, "" if packed else df, ex0, intrinsicArgSuffix)
 
 class Inst:
-    def __init__(self, opc, name, instName, df, ex, outs, ins, instArgSuffix, packed, expr):
+    def __init__(self, opc, ni, nf, outs, ins, packed, expr):
         #self.opc = opc
         self.outs = outs
         self.ins = ins
         self.packed = packed
         self.expr = expr
 
-        self.instName = "{}{}{}{}".format(instName, "p" if packed else df, ex, instArgSuffix)
+        self.instName = ni
+        self.intrinsicName = nf
 
-        intrinsicArgSuffix = "_" + "".join([op.kind for op in (outs + ins)])
-        ex0 = "_" + ex if ex != "" else ""
-        self.intrinsicName = "{}{}{}{}{}".format("p" if packed else "", name, "" if packed else df, ex0, intrinsicArgSuffix)
 
     # to be included from VEInstrInfo.td
     def intrinsicPattern(self):
@@ -267,12 +272,27 @@ class InstTable:
     def insts(self):
         return self.a
 
-    def Inst(self, *arg):
-        self.a.append(Inst(*arg))
+    def Inst(self, opc, name, instName, df, ex, outs, ins, instArgSuffix, packed, expr):
+        ni = IN(instName, df, ex, instArgSuffix, packed)
+        nf = FN(name, df, ex, outs, ins, packed)
+        self.a.append(Inst(opc, ni, nf, outs, ins, packed, expr))
+
+    def add(self, inst):
+        self.a.append(inst)
 
     def VBRDm(self, opc, name, instName, packed = False):
-        self.Inst(opc, name, instName, "", "", [VX(T_void)], [SY(T_i64)], "", packed, "{0}[0:255] = {1}")
-        self.Inst(opc, name, instName, "", "", [VX(T_void)], [I], "", packed, "{0}[0:255] = {1}")
+        self.add(Inst(opc, "VBRDr", "vbrd_s_f64", [VX(T_f64)], [SY(T_f64)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDr", "vbrd_s_i64", [VX(T_i64)], [SY(T_i64)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDi", "vbrd_I_i7", [VX(T_f32)], [I], False, "{0} = {1}"))
+
+        self.add(Inst(opc, "VBRDur", "vbrdu_s", [VX(T_f32)], [SY(T_f32)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDlr", "vbrdl_s", [VX(T_i32)], [SY(T_i32)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDli", "vbrdl_I", [VX(T_i32)], [I], False, "{0} = {1}"))
+
+        self.add(Inst(opc, "VBRDpr", "pvbrd_s_f32", [VX(T_f32)], [SY(T_f32)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDpr", "pvbrd_s_i32", [VX(T_i32)], [SY(T_i32)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDpr", "pvbrd_I", [VX(T_i32)], [I], False, "{0} = {1}"))
+
 
     def Inst3(self, opc, name, instName, df, ex, tyX, tyY, tyZ, packed, expr):
         # name.df {%vx|%vix}, {%vy|%vix|%sy|I}, {%vz|%vix}[, %vm]
@@ -299,7 +319,9 @@ class InstTable:
         self.Inst3(opc, name, instName, "w", "zx", T_i64, T_i32, T_i32, False, expr)  # w.zx
         self.Inst3(opc, name, instName, "", "",    T_i32, T_i32, T_i32, True, expr)  # p
 
-    def Inst4(self, opc, name, instName, df, tyV, tyS, tyI, packed, expr):
+    def Inst4(self, opc, name, instName, df, tyV, tyS_, tyI, packed, expr):
+        #tyS = tyS_
+        tyS = T_u64 if packed else tyS_;
         self.Inst(opc, name, instName, df, "", [VX(tyV)], [VY(tyV), VZ(tyV), VW(tyV)], "v", packed, expr)   #_vvvv
         self.Inst(opc, name, instName, df, "", [VX(tyV)], [SY(tyS), VZ(tyV), VW(tyV)], "r", packed, expr)   #_vsvv
         self.Inst(opc, name, instName, df, "", [VX(tyV)], [VY(tyV), SY(tyS), VW(tyV)], "r2", packed, expr)   #_vvsv
@@ -330,27 +352,13 @@ def gen_test(insts, directory):
         filename = "{}/{}.c".format(directory, i.intrinsicName)
         cmpwrite(filename, i.test())
 
-import argparse
-
-parser = argparse.ArgumentParser()
-parser.add_argument('-i', dest="opt_intrin", action="store_true")
-parser.add_argument('-p', dest="opt_pat", action="store_true")
-parser.add_argument('-b', dest="opt_builtin", action="store_true")
-parser.add_argument('--header', dest="opt_header", action="store_true")
-parser.add_argument('--decl', dest="opt_decl", action="store_true")
-parser.add_argument('-t', dest="opt_test", action="store_true")
-parser.add_argument('-r', dest="opt_reference", action="store_true")
-parser.add_argument('-f', dest="opt_filter", action="store")
-parser.add_argument('-m', dest="opt_manual", action="store_true")
-args, others = parser.parse_known_args()
-
 T = InstTable()
 
 # 5.3.2.7. Vector Transfer Instructions
 T.VBRDm(0x8C, "vbrd", "VBRD")
-T.VBRDm(0x8C, "vbrdl", "VBRDl")
-T.VBRDm(0x8C, "vbrdu", "VBRDu")
-T.VBRDm(0x8C, "pvbrd", "VBRD", True)
+#T.VBRDm(0x8C, "vbrdl", "VBRDl")
+#T.VBRDm(0x8C, "vbrdu", "VBRDu")
+#T.VBRDm(0x8C, "pvbrd", "VBRD", True)
 
 # 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
 T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
@@ -406,6 +414,22 @@ T.Inst4f(0xFF, "vfnmsb", "VFNMAD", "{0} =  - {2} * {3} - {1}")
 
 # 5.3.2.16. Vector Control Instructions
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-i', dest="opt_intrin", action="store_true")
+parser.add_argument('-p', dest="opt_pat", action="store_true")
+parser.add_argument('-b', dest="opt_builtin", action="store_true")
+parser.add_argument('--header', dest="opt_header", action="store_true")
+parser.add_argument('--decl', dest="opt_decl", action="store_true")
+parser.add_argument('-t', dest="opt_test", action="store_true")
+parser.add_argument('-r', dest="opt_reference", action="store_true")
+parser.add_argument('-f', dest="opt_filter", action="store")
+parser.add_argument('-m', dest="opt_manual", action="store_true")
+parser.add_argument('-a', dest="opt_all", action="store_true")
+args, others = parser.parse_known_args()
+
+
 insts = T.insts()
 
 test_dir = "../test/intrinsic/gen/tests"
@@ -413,6 +437,14 @@ test_dir = "../test/intrinsic/gen/tests"
 if args.opt_filter:
     insts = [i for i in insts if re.search(args.opt_filter, i.intrinsicName)]
     print "filter: {} -> {}".format(args.opt_filter, len(insts))
+
+if args.opt_all:
+    args.opt_intrin = True
+    args.opt_pat = True
+    args.opt_builtin = True
+    args.opt_header = True
+    args.opt_decl = True
+    args.opt_reference = True
 
 if args.opt_intrin:
     for i in insts:

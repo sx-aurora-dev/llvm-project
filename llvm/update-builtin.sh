@@ -1,19 +1,15 @@
 #! /bin/sh
 
-set -v
+#set -v
 
-python builtin.py -p > lib/Target/VE/VEInstrIntrinsic.td
-python builtin.py -i > include/llvm/IR/IntrinsicsVE2.td
-python builtin.py -b > tools/clang/include/clang/Basic/BuiltinsVE2.def
-python builtin.py --header > ../test/intrinsic/veintrin2.h
+cp -vf tmp/VEInstrIntrinsic.td  lib/Target/VE/VEInstrIntrinsic.td
+cp -vf tmp/IntrinsicsVE2.td     include/llvm/IR/IntrinsicsVE2.td
+cp -vf tmp/BuiltinsVE2.def      tools/clang/include/clang/Basic/BuiltinsVE2.def
+cp -vf tmp/veintrin2.h          ../test/intrinsic/veintrin2.h
+cp -vf tmp/ref.cc               ../test/intrinsic/gen/ref.cc
+cp -vf tmp/decl.h               ../test/intrinsic/decl.h
 
-dir=../test/intrinsic/tests
-#rm -f ${dir}/*.c
 python builtin.py -t
-
-python builtin.py -r > ../test/intrinsic/ref.cc
-
-python builtin.py -m > m.txt
 
 touch include/llvm/IR/Intrinsics.td
 touch tools/clang/include/clang/Basic/Builtins.def

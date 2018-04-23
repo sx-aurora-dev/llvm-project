@@ -779,6 +779,9 @@ def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
 def : Pat<(brcc cond:$cond, i64:$lhs, i64:$rhs, bb:$addr),
           (BCRrr (cond2cc $cond), $lhs, $rhs, bb:$addr)>;
 
+def : Pat<(i32 (bitconvert f32:$op)), (i32 I64:$op)>;
+
+
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
 //===----------------------------------------------------------------------===//

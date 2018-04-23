@@ -301,10 +301,10 @@ multiclass VBRDm<string opcStr, bits<8> opc> {
   }
 }
 
-let cx = 0, cx2 = 0 in defm VBRD : VBRDm<"vbrd", 0x8C>;
-let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C>;
-let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C>;
-let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C>;
+let cx = 0, cx2 = 0 in defm VBRD : VBRDm<"vbrd", 0x8C>;   // 64b
+let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C>; // 32b lower (= i32/u32)
+let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C>; // 32b uppper(= f32)
+let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C>; // 32b packed
 
 //def : Pat<(int_ve_vbrd v256f64:$vx, i64:$sy), (VBRD v256f64:$vx, i64:$sy)>;
 //def : Pat<(int_ve_vbrd v256f64:$vx, f64:$sy), (VBRD v256f64:$vx, f64:$sy)>;
@@ -463,6 +463,9 @@ def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, i64:$sy),
           (VSTLr v256f64:$vx, i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, (i64 simm7:$sy)), 
           (VSTLi v256f64:$vx, (i64 simm7:$sy), i64:$sz)>;
+
+
+//def : Pat<(int_ve_pvfmad_vvSv v256f64:$vy, f32:$sy0, f32:$sy1, 
 
 include "VEInstrIntrinsic.td"
 
