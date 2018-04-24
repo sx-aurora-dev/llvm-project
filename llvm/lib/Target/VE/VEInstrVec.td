@@ -376,14 +376,16 @@ def VFMK : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
 
 // 5.3.2.13. Vector Recursive Relation Instructions
 multiclass RVRECm<string opcStr, bits<8> opc> {
-  def : RV2<opc, (outs V64:$vx), (ins V64:$vy),
+  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy),
     !strconcat(opcStr, " $vx,$vy"), []> {
       let sy = 0;
     }
 }
-// VSUMS
-// VSUMX
-// VFSUM
+let cx2 = 0 in defm VSUMSsx : RVRECm<"vsum.w.sx", 0xEA>;
+let cx2 = 1 in defm VSUMSzx : RVRECm<"vsum.w.zx", 0xEA>;
+defm VSUMX : RVRECm<"vsum.l", 0xAA>;
+let cx = 0 in defm VFSUMd : RVRECm<"vfsum.d", 0xEC>;
+let cx = 1 in defm VFSUMs : RVRECm<"vfsum.s", 0xEC>;
 
 // 5.3.2.14. Vector Gatering/Scattering Instructions
 

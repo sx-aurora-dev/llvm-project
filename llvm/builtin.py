@@ -21,6 +21,19 @@ class Type:
                 return 4
         raise "not a vector type"
 
+    def df(self):
+        if self == T_f64: 
+            return "d"
+        elif self == T_f32: 
+            return "s"
+        elif self == T_i64 or self == T_u64:
+            return "l"
+        elif self == T_i32 or self == T_u32:
+            return "w"
+        else:
+            raise "df is unknown"
+
+
 T_f64     = Type("f64",     "d",      "double")
 T_f32     = Type("f32",     "f",      "float")
 T_i64     = Type("i64",     "Li",     "long int")
@@ -32,7 +45,10 @@ T_v256f32 = Type("v256f64", "V256d",  "float*",  T_f32)
 T_v256i64 = Type("v256f64", "V256d",  "long int*", T_i64)
 T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
 T_v256u64 = Type("v256f64", "V256d",  "unsigned long int*", T_u64)
-T_v256u32 = Type("v256f64", "V256d",  "int*",  T_u32)
+T_v256u32 = Type("v256f64", "V256d",  "unsigned int*",  T_u32)
+
+T_void    = Type(None,      None,     "void")
+T_v256v64 = Type("v256f64", "V256d",  "void*", T_void)
 
 class Op(object):
     def __init__(self, kind, ty, name):
@@ -85,6 +101,8 @@ def VOp(ty, name):
         return Op("v", T_v256u64, name)
     elif ty == T_u32:
         return Op("v", T_v256u32, name)
+    elif ty == T_void:
+        return Op("v", T_v256v64, name)
     else:
         raise "unknown type"
 
@@ -108,7 +126,7 @@ def FN(n, df, ex, outs, ins, packed):
         return "{}{}{}{}{}".format("p" if packed else "", n, "" if packed else df, ex0, intrinsicArgSuffix)
 
 class Inst:
-    def __init__(self, opc, ni, nf, outs, ins, packed, expr):
+    def __init__(self, opc, ni, nf, outs, ins, packed = False, expr = None):
         #self.opc = opc
         self.outs = outs
         self.ins = ins
@@ -152,6 +170,7 @@ class Inst:
     def test(self):
         head = self.funcHeader()
 
+        out = self.outs[0]
         body = ""
         indent = " " * 8
 
@@ -166,18 +185,27 @@ class Inst:
 
         body += indent + "_ve_lvl(l);\n"
 
+        vld = "vld"
+        vst = "vst"
+        if not self.packed:
+            if out.ty.elemType == T_f32:
+                vld = "vldu"
+                vst = "vstu"
+            elif out.ty.elemType == T_i32 or out.ty.elemType == T_u32:
+                vld = "vldl"
+                vst = "vstl"
+
         args = []
         for op in self.ins:
             if op.isVReg():
-                body += indent + "__vr {} = _ve_vld(p{}, {});\n".format(op.name, op.name, stride)
+                body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
             if op.isReg():
                 args.append(op.regName())
             else: # imm
                 args.append("3")
 
-        out = self.outs[0]
         body += indent + "__vr {} = _ve_{}({});\n".format(out.name, self.intrinsicName, ', '.join(args))
-        body += indent + "_ve_vst({}, {}, {});\n".format(out.formalName(), out.regName(), stride)
+        body += indent + "_ve_{}({}, {}, {});\n".format(vst, out.formalName(), out.regName(), stride)
 
         tmp = []
         for op in [i for i in (self.outs + self.ins) if i.isVReg()]:
@@ -197,6 +225,9 @@ class Inst:
     def decl(self):
         head = self.funcHeader()
         return "extern {};".format(head)
+
+    def hasReference(self):
+        return self.expr != None
         
     def reference(self):
         head = self.funcHeader()
@@ -242,6 +273,9 @@ class ManualInstPrinter:
             self.printI(i)
 
     def printI(self, I):
+        if not I.hasReference():
+            return
+
         outs = []
         v = []
 
@@ -266,13 +300,6 @@ class ManualInstPrinter:
 
         print line
 
-class InstBuilder:
-    def __init__(self):
-        self.param = {}
-
-    def build(self):
-        return Inst(self.param)
-
 class InstTable:
     def __init__(self):
         self.a = []
@@ -289,18 +316,41 @@ class InstTable:
         self.a.append(inst)
 
     def VBRDm(self, opc, name, instName, packed = False):
-        self.add(Inst(opc, "VBRDr", "vbrd_s_f64", [VX(T_f64)], [SY(T_f64)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDr", "vbrd_s_i64", [VX(T_i64)], [SY(T_i64)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDi", "vbrd_I_i7", [VX(T_f32)], [I], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDr", "vbrd_vs_f64", [VX(T_f64)], [SY(T_f64)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDr", "vbrd_vs_i64", [VX(T_i64)], [SY(T_i64)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDi", "vbrd_vI_i7", [VX(T_f32)], [I], False, "{0} = {1}"))
 
-        self.add(Inst(opc, "VBRDur", "vbrdu_s", [VX(T_f32)], [SY(T_f32)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDlr", "vbrdl_s", [VX(T_i32)], [SY(T_i32)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDli", "vbrdl_I", [VX(T_i32)], [I], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDur", "vbrdu_vs", [VX(T_f32)], [SY(T_f32)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDlr", "vbrdl_vs", [VX(T_i32)], [SY(T_i32)], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDli", "vbrdl_vI", [VX(T_i32)], [I], False, "{0} = {1}"))
 
-        self.add(Inst(opc, "VBRDpr", "pvbrd_s_f32", [VX(T_f32)], [SY(T_f32)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDpr", "pvbrd_s_i32", [VX(T_i32)], [SY(T_i32)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDpr", "pvbrd_I", [VX(T_i32)], [I], False, "{0} = {1}"))
+        self.add(Inst(opc, "VBRDpr", "pvbrd_vs", [VX(T_u32)], [SY(T_u64)], True, "{0} = {1}"))
+        #self.add(Inst(opc, "VBRDpr", "pvbrd_vs_f32", [VX(T_f32)], [SY(T_u64)], False, "{0} = {1}"))
+        #self.add(Inst(opc, "VBRDpr", "pvbrd_vs_i32", [VX(T_i32)], [SY(T_u64)], False, "{0} = {1}"))
 
+    def args_to_func_suffix(self, args):
+        return "_" + "".join([op.kind for op in args])
+
+    def args_to_inst_suffix(self, args):
+        if len(args) == 3 or len(args) == 2:
+            if args[1].kind == "v":
+                return "v"
+            elif args[1].kind == "s":
+                return "r"
+            elif args[1].kind == "I":
+                return "i"
+            else:
+                raise("unknown type")
+
+    def InstX(self, opc, ni, nf, ary, expr = None):
+        #print("InstX: ni={} nf={}".format(ni, nf))
+        for args in ary:
+            ni0 = ni + self.args_to_inst_suffix(args)
+            nf0 = nf + self.args_to_func_suffix(args)
+            outs = [args[0]]
+            ins = args[1:]
+            i = Inst(opc, ni0, nf0, outs, ins, nf[0] == 'p', expr)
+            self.add(i)
 
     def Inst3(self, opc, name, instName, df, ex, tyX, tyY, tyZ, packed, expr):
         # name.df {%vx|%vix}, {%vy|%vix|%sy|I}, {%vz|%vix}[, %vm]
@@ -309,10 +359,16 @@ class InstTable:
         self.Inst(opc, name, instName, df, ex, [VX(tyX)], [I, VZ(tyZ)], "i", packed, expr)  #_vIv
 
     def Inst3f(self, opc, name, instName, expr, hasPacked = True):
-        self.Inst3(opc, name, instName, "d", "", T_f64, T_f64, T_f64, False, expr)  # d
-        self.Inst3(opc, name, instName, "s", "",  T_f32, T_f32, T_f32, False, expr)  # s
+        A_f64_vvv = [VX(T_f64), VY(T_f64), VZ(T_f64)]
+        A_f64_vsv = [VX(T_f64), SY(T_f64), VZ(T_f64)]
+        A_f32_vvv = [VX(T_f32), VY(T_f32), VZ(T_f32)]
+        A_f32_vsv = [VX(T_f32), SY(T_f32), VZ(T_f32)]
+        A_pf32_vsv = [VX(T_f32), SY(T_u64), VZ(T_f32)]
+
+        self.InstX(opc, instName+"d", name+"d", [A_f64_vvv, A_f64_vsv], expr)
+        self.InstX(opc, instName+"s", name+"s", [A_f32_vvv, A_f32_vsv], expr)
         if hasPacked:
-            self.Inst3(opc, name, instName, "",  "", T_f32, T_f32, T_f32, True, expr) # p
+            self.InstX(opc, instName+"p", "p"+name, [A_f32_vvv, A_pf32_vsv], expr) 
 
     def Inst3u(self, opc, name, instName, expr):
         self.Inst3(opc, name, instName, "l", "", T_u64, T_u64, T_u64, False, expr)  # l
@@ -323,8 +379,8 @@ class InstTable:
         self.Inst3(opc, name, instName, "l", "", T_i64, T_i64, T_i64, False, expr)
 
     def Inst3w(self, opc, name, instName, expr):
-        self.Inst3(opc, name, instName, "w", "sx", T_i64, T_i32, T_i32, False, expr)  # w.sx
-        self.Inst3(opc, name, instName, "w", "zx", T_i64, T_i32, T_i32, False, expr)  # w.zx
+        self.Inst3(opc, name, instName, "w", "sx", T_i32, T_i32, T_i32, False, expr)  # w.sx
+        self.Inst3(opc, name, instName, "w", "zx", T_i32, T_i32, T_i32, False, expr)  # w.zx
         self.Inst3(opc, name, instName, "", "",    T_i32, T_i32, T_i32, True, expr)  # p
 
     def Inst4(self, opc, name, instName, df, tyV, tyS_, tyI, packed, expr):
@@ -372,9 +428,9 @@ T.VBRDm(0x8C, "vbrd", "VBRD")
 T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
 T.Inst3w(0xCA, "vadds", "VADS", "{0} = {1} + {2}") # i32
 T.Inst3l(0x8B, "vadds", "VADX", "{0} = {1} + {2}") # i64
-T.Inst3u(0xC8, "vsubu", "VSUB", "{0} = {1} + {2}") # u32, u64
-T.Inst3w(0xCA, "vsubs", "VSBS", "{0} = {1} + {2}") # i32
-T.Inst3l(0x8B, "vsubs", "VSBX", "{0} = {1} + {2}") # i64
+T.Inst3u(0xC8, "vsubu", "VSUB", "{0} = {1} - {2}") # u32, u64
+T.Inst3w(0xCA, "vsubs", "VSBS", "{0} = {1} - {2}") # i32
+T.Inst3l(0x8B, "vsubs", "VSBX", "{0} = {1} - {2}") # i64
 # VMPY
 # VMPS
 # VMPX
@@ -403,8 +459,8 @@ T.Inst3f(0xFF, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
 # VFCM
 T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
 T.Inst4f(0xFF, "vfmsb", "VFMSB", "{0} = {2} * {3} - {1}")
-T.Inst4f(0xFF, "vfnmad", "VFNMAD", "{0} =  - {2} * {3} + {1}")
-T.Inst4f(0xFF, "vfnmsb", "VFNMAD", "{0} =  - {2} * {3} - {1}")
+T.Inst4f(0xFF, "vfnmad", "VFNMAD", "{0} =  - ({2} * {3} + {1})")
+T.Inst4f(0xFF, "vfnmsb", "VFNMAD", "{0} =  - ({2} * {3} - {1})")
 # VRCP
 # VRSQRT
 # VFIX
@@ -414,7 +470,13 @@ T.Inst4f(0xFF, "vfnmsb", "VFNMAD", "{0} =  - {2} * {3} - {1}")
 # VCVD
 # VCVS
 
+    #def InstX(self, opc, ni, nf, ary, expr = None):
 # 5.3.2.12. Vector Mask Arithmetic Instructions
+T.InstX(0xEA, "VSUMSsx", "vsumw_sx", [[VX(T_i32), VY(T_i32)]])
+T.InstX(0xEA, "VSUMSzx", "vsumw_zx", [[VX(T_i32), VY(T_i32)]])
+T.InstX(0xAA, "VSUMX", "vsuml", [[VX(T_i64), VY(T_i64)]])
+T.InstX(0xEC, "VFSUMd", "vfsumd", [[VX(T_f64), VY(T_f64)]])
+T.InstX(0xEC, "VFSUMs", "vfsums", [[VX(T_f32), VY(T_f32)]])
 
 # 5.3.2.13. Vector Recursive Relation Instructions
 
@@ -474,7 +536,8 @@ if args.opt_test:
 if args.opt_reference:
     print 'namespace ref {'
     for i in insts:
-        print i.reference()
+        if i.hasReference():
+            print i.reference()
     print '}'
 
 if args.opt_manual:
