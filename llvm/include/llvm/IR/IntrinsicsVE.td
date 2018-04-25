@@ -23,16 +23,8 @@ let TargetPrefix = "ve" in {
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty]>;
   def int_ve_vstl : GCCBuiltin<"__builtin_ve_vstl">, 
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty]>;
-
-
-        
-
 }
 
 include "llvm/IR/IntrinsicsVE2.td"
-
-def int_ve_vfaddd_vvvm : VEIntrinsic<"vfaddd_vvvm", [LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>, LLVMType<v4i64>]>;
-
-def int_ve_vfmk : VEIntrinsic<"vfmk", [LLVMType<v4i64>], [llvm_i32_ty, LLVMType<v256f64>]>;
 
 // vim::set sw=2:

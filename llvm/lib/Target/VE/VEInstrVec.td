@@ -77,9 +77,10 @@ multiclass RVm<string opcStr, bits<8> opc> {
       let cy = 1;
       let vy = 0;
     }
-  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm),
+  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
       let sy = 0;
+      let Constraints = "$vx = $vd";
     }
 }
 
@@ -178,8 +179,78 @@ multiclass RV4DSPm<string opcStr, bits<8> opc> {
 }
 
 multiclass RVLOGm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm : RV4m<opcStr, opc>;       // 64b
-  let cx = 1, cx2 = 1 in defm p : RV4m<"p"#opcStr, opc>; // 32b
+  // does not work. why?
+  //defm : RV3RegisterMulti<opcStr, opc>;
+  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
+    !strconcat(opcStr, " $vx,$vy,$vz"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 0;
+  }
+
+  def r : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
+    !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 1;
+      let cy = 1;
+  }
+
+  def pv : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
+    !strconcat("p", opcStr, " $vx,$vy,$vz"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cs = 0;
+  }
+
+  def pr : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
+    !strconcat("p", opcStr, " $vx,$sy,$vz"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cs = 1;
+      let cy = 1;
+  }
+}
+
+multiclass RVShiftMulti<string opcStr, bits<8> opc> {
+  def v : RV3<opc, (outs V64:$vx), (ins V64:$vz, V64:$vy),
+    !strconcat(opcStr, " $vx,$vz,$vy"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 0;
+  }
+
+  def r : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy),
+    !strconcat(opcStr, " $vx,$vz,$sy"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 1;
+      let cy = 1;
+  }
+
+  // why uimm6Op32 does not work?
+  def i : RV3<opc, (outs V64:$vx), (ins V64:$vz, uimm6Op64:$sy),
+    !strconcat(opcStr, " $vx,$vz,$sy"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 1;
+      let cy = 0;
+  }
+
+  def pv : RV3<opc, (outs V64:$vx), (ins V64:$vz, V64:$vy),
+    !strconcat("p", opcStr, " $vx,$vz,$vy"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cs = 0;
+  }
+
+  def pr : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy),
+    !strconcat("p", opcStr, " $vx,$vz,$sy"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cs = 1;
+      let cy = 1;
+  }
 }
 
 class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
@@ -332,8 +403,20 @@ defm VCPX : RVLm<"vcmps", 0xBA>;
 
 // 5.3.2.9. Vector Logical Arithmetic Operation Instructions
 defm VAND : RVLOGm<"vand", 0xC4>;
+defm VOR  : RVLOGm<"vor", 0xC5>;
+defm VXOR : RVLOGm<"vxor", 0xC6>;
+defm VEQV : RVLOGm<"veqv", 0xC7>;
 
 // 5.3.2.10. Vector Shift Instructions
+defm VSLL : RVShiftMulti<"vsll", 0xE5>;
+// VSLD
+defm VSRL : RVShiftMulti<"vsrl", 0xF5>;
+// VSRD
+// VSLA
+// VSLAX
+// VSRA
+// VSRAX
+// VSFA
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
@@ -365,13 +448,47 @@ defm VFNMSB : RV4DSPm<"vfnmsb", 0xF3>;
 // VFMS
 // VFMF
 
-def VFMK : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
+def VFMKv : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "vfmk.l.${cf} $vm,$vz", []>
 {
   let sy = 0;
   let vw = 0;
-  let m = 0; // ok?
 }
+
+def VFMSv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
+  "vfms.w.${cf} $vm,$vz", []>
+{
+  let sy = 0;
+  let vw = 0;
+}
+
+def VFMFv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
+  "vfmf.l.${cf} $vm,$vz", []>
+{
+  let cx = 0;
+  let cx2 = 0;
+  let sy = 0;
+  let vw = 0;
+}
+
+def VFMFuv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
+  "pvfmf.s.up.${cf} $vm,$vz", []>
+{
+  let cx = 1;
+  let cx2 = 0;
+  let sy = 0;
+  let vw = 0;
+}
+
+def VFMFlv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
+  "pvfmf.s.lo.${cf} $vm,$vz", []>
+{
+  let cx = 0;
+  let cx2 = 1;
+  let sy = 0;
+  let vw = 0;
+}
+
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions
@@ -425,12 +542,6 @@ let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
 
-def : Pat<(int_ve_vfaddd_vvvm v256f64:$vy, v256f64:$vz, v4i64:$vm), 
-          (VFADdvm v256f64:$vy, v256f64:$vz, v4i64:$vm)>;
-
-def : Pat<(int_ve_vfmk simm7:$cf, v256f64:$vz),
-          (VFMK simm7:$cf, v256f64:$vz)>;
-
 // Pattern Matchings for Vector Instructions
 
 def : Pat<(v256f64 (load ADDRri:$addr)), 
@@ -443,8 +554,8 @@ def : Pat<(store V64:$vx, ADDRri:$addr),
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
-def : Pat<(int_ve_lsv_vss v256f64:$vx, i32:$sy, i64:$sz), 
-          (LSVr v256f64:$vx, i32:$sy, i64:$sz)>;
+def : Pat<(int_ve_lsv_vss V64:$vx, I64:$sy, I64:$sz),
+          (LSVr V64:$vx, I64:$sy, I64:$sz)>;
 
 def : Pat<(int_ve_vld i64:$sz, i64:$sy), (VLDr i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vld i64:$sz, (i64 simm7:$sy)), (VLDi (i64 simm7:$sy), i64:$sz)>;
