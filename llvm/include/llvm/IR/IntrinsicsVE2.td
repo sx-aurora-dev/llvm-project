@@ -1,3 +1,5 @@
+def int_ve_lsv_vvss : VEIntrinsic<"lsv_vvss", [LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<i32>, LLVMType<i64>]>;
+def int_ve_lvs_svs : VEIntrinsic<"lvs_svs", [LLVMType<i64>], [LLVMType<v256f64>, LLVMType<i32>]>;
 def int_ve_vbrd_vs_f64 : VEIntrinsic<"vbrd_vs_f64", [LLVMType<v256f64>], [LLVMType<f64>]>;
 def int_ve_vbrd_vs_i64 : VEIntrinsic<"vbrd_vs_i64", [LLVMType<v256f64>], [LLVMType<i64>]>;
 def int_ve_vbrd_vI : VEIntrinsic<"vbrd_vI", [LLVMType<v256f64>], [LLVMType<i64>]>;
@@ -131,11 +133,11 @@ def int_ve_vfnmsbs_vvsv : VEIntrinsic<"vfnmsbs_vvsv", [LLVMType<v256f64>], [LLVM
 def int_ve_pvfnmsb_vvvv : VEIntrinsic<"pvfnmsb_vvvv", [LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>, LLVMType<v256f64>]>;
 def int_ve_pvfnmsb_vsvv : VEIntrinsic<"pvfnmsb_vsvv", [LLVMType<v256f64>], [LLVMType<i64>, LLVMType<v256f64>, LLVMType<v256f64>]>;
 def int_ve_pvfnmsb_vvsv : VEIntrinsic<"pvfnmsb_vvsv", [LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<i64>, LLVMType<v256f64>]>;
-def int_ve_vfmk_mcv : VEIntrinsic<"vfmk_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
-def int_ve_vfms_mcv : VEIntrinsic<"vfms_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
-def int_ve_vfmf_mcv : VEIntrinsic<"vfmf_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
-def int_ve_pvfmfu_mcv : VEIntrinsic<"pvfmfu_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
-def int_ve_pvfmfl_mcv : VEIntrinsic<"pvfmfl_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
+def int_ve_vfmkl_mcv : VEIntrinsic<"vfmkl_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
+def int_ve_vfmkw_mcv : VEIntrinsic<"vfmkw_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
+def int_ve_vfmkd_mcv : VEIntrinsic<"vfmkd_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
+def int_ve_pvfmksup_mcv : VEIntrinsic<"pvfmksup_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
+def int_ve_pvfmkslo_mcv : VEIntrinsic<"pvfmkslo_mcv", [LLVMType<v4i64>], [LLVMType<i32>, LLVMType<v256f64>]>;
 def int_ve_vsumw_sx_vv : VEIntrinsic<"vsumw_sx_vv", [LLVMType<v256f64>], [LLVMType<v256f64>]>;
 def int_ve_vsumw_zx_vv : VEIntrinsic<"vsumw_zx_vv", [LLVMType<v256f64>], [LLVMType<v256f64>]>;
 def int_ve_vsuml_vv : VEIntrinsic<"vsuml_vv", [LLVMType<v256f64>], [LLVMType<v256f64>]>;

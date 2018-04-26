@@ -484,6 +484,8 @@ def SRL : RR<0x75, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
 def : Pat<(srl i32:$sy, (i32 uimm6:$sz)),
           (SRL i32:$sy, (i32 uimm6:$sz))>;
 
+// 5.3.2.5. Floating-point Arithmetic Operation Instructions
+
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
 let cy = 0, sy = 0, cz = 1 in {

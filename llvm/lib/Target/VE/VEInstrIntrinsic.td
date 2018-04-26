@@ -1,3 +1,5 @@
+def : Pat<(int_ve_lsv_vvss v256f64:$vx, i32:$sy, i64:$sz), (LSVr v256f64:$vx, i32:$sy, i64:$sz)>;
+def : Pat<(int_ve_lvs_svs v256f64:$vx, i32:$sy), (LVSr v256f64:$vx, i32:$sy)>;
 def : Pat<(int_ve_vbrd_vs_f64 f64:$sy), (VBRDr f64:$sy)>;
 def : Pat<(int_ve_vbrd_vs_i64 i64:$sy), (VBRDr i64:$sy)>;
 def : Pat<(int_ve_vbrd_vI (i64 simm7:$sy)), (VBRDi (i64 simm7:$sy))>;
@@ -131,11 +133,11 @@ def : Pat<(int_ve_vfnmsbs_vvsv v256f64:$vy, f32:$sy, v256f64:$vw), (VFNMSBsr2 v2
 def : Pat<(int_ve_pvfnmsb_vvvv v256f64:$vy, v256f64:$vz, v256f64:$vw), (VFNMSBpv v256f64:$vy, v256f64:$vz, v256f64:$vw)>;
 def : Pat<(int_ve_pvfnmsb_vsvv i64:$sy, v256f64:$vz, v256f64:$vw), (VFNMSBpr i64:$sy, v256f64:$vz, v256f64:$vw)>;
 def : Pat<(int_ve_pvfnmsb_vvsv v256f64:$vy, i64:$sy, v256f64:$vw), (VFNMSBpr2 v256f64:$vy, i64:$sy, v256f64:$vw)>;
-def : Pat<(int_ve_vfmk_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMKv (i32 uimm6:$cc), v256f64:$vz)>;
-def : Pat<(int_ve_vfms_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMSv (i32 uimm6:$cc), v256f64:$vz)>;
-def : Pat<(int_ve_vfmf_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMFv (i32 uimm6:$cc), v256f64:$vz)>;
-def : Pat<(int_ve_pvfmfu_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMFuv (i32 uimm6:$cc), v256f64:$vz)>;
-def : Pat<(int_ve_pvfmfl_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMFlv (i32 uimm6:$cc), v256f64:$vz)>;
+def : Pat<(int_ve_vfmkl_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMKv (i32 uimm6:$cc), v256f64:$vz)>;
+def : Pat<(int_ve_vfmkw_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMSv (i32 uimm6:$cc), v256f64:$vz)>;
+def : Pat<(int_ve_vfmkd_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMFv (i32 uimm6:$cc), v256f64:$vz)>;
+def : Pat<(int_ve_pvfmksup_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMFuv (i32 uimm6:$cc), v256f64:$vz)>;
+def : Pat<(int_ve_pvfmkslo_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMFlv (i32 uimm6:$cc), v256f64:$vz)>;
 def : Pat<(int_ve_vsumw_sx_vv v256f64:$vy), (VSUMSsxv v256f64:$vy)>;
 def : Pat<(int_ve_vsumw_zx_vv v256f64:$vy), (VSUMSzxv v256f64:$vy)>;
 def : Pat<(int_ve_vsuml_vv v256f64:$vy), (VSUMXv v256f64:$vy)>;

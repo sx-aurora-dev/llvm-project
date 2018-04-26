@@ -554,8 +554,11 @@ def : Pat<(store V64:$vx, ADDRri:$addr),
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
-def : Pat<(int_ve_lsv_vss V64:$vx, I64:$sy, I64:$sz),
-          (LSVr V64:$vx, I64:$sy, I64:$sz)>;
+//def : Pat<(int_ve_lsv_vss V64:$vx, I64:$sy, I64:$sz),
+//          (LSVr V64:$vx, I64:$sy, I64:$sz)>;
+
+def : Pat<(int_ve_lsv_vss v256f64:$vx, i32:$sy, i64:$sz),
+          (LSVr v256f64:$vx, i32:$sy, i64:$sz)>;
 
 def : Pat<(int_ve_vld i64:$sz, i64:$sy), (VLDr i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vld i64:$sz, (i64 simm7:$sy)), (VLDi (i64 simm7:$sy), i64:$sz)>;
