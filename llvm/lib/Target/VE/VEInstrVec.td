@@ -142,7 +142,7 @@ multiclass RVLWm<string opcStr, bits<8> opc> {
 // i32 (sz,zx)
 multiclass RVEXm<string opcStr, bits<8> opc> {
   let cx2 = 0 in defm wsx : RVm<opcStr # ".w.sx", opc>; // i32 sx
-  let cx2 = 1 in defm wze : RVm<opcStr # ".w.zx", opc>; // i32 zx
+  let cx2 = 1 in defm wzx : RVm<opcStr # ".w.zx", opc>; // i32 zx
 }
 
 // u64, u32, packed u32
@@ -530,8 +530,8 @@ multiclass VSCm<string opcStr, bits<8> opc> {
 
 defm VGT : VGTm<"vgt", 0xA1>;
 defm VGTU : VGTm<"vgtu", 0xA2>;
-let vo = 0 in defm VGTLsxv : VGTm<"vgtl.sx", 0xA3>;
-let vo = 1 in defm VGTLzxv : VGTm<"vgtl.zx", 0xA3>;
+let vo = 0 in defm VGTLsx : VGTm<"vgtl.sx", 0xA3>;
+let vo = 1 in defm VGTLzx : VGTm<"vgtl.zx", 0xA3>;
 defm VSC : VSTm<"vsc", 0xB1>;
 defm VSCU : VSTm<"vscu", 0xB2>;
 defm VSCL : VSTm<"vscl", 0xB3>;

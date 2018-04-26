@@ -230,6 +230,18 @@ class Inst:
         else:
             return op.ty.stride()
 
+    def get_vld_vst_inst(self, op):
+        vld = "vld"
+        vst = "vst"
+        if not self.packed:
+            if op.ty.elemType == T_f32:
+                vld = "vldu"
+                vst = "vstu"
+            elif op.ty.elemType == T_i32 or op.ty.elemType == T_u32:
+                vld = "vldl"
+                vst = "vstl"
+        return [vld, vst]
+
     def test(self):
         head = self.funcHeader()
 
@@ -250,16 +262,6 @@ class Inst:
 
         body += indent + "_ve_lvl(l);\n"
 
-        vld = "vld"
-        vst = "vst"
-        if not self.packed:
-            if out.ty.elemType == T_f32:
-                vld = "vldu"
-                vst = "vstu"
-            elif out.ty.elemType == T_i32 or out.ty.elemType == T_u32:
-                vld = "vldl"
-                vst = "vstl"
-
         cond = "CC_G"
 
         if self.hasMask():
@@ -269,9 +271,11 @@ class Inst:
         for op in self.ins:
             if op.isVReg():
                 stride = self.stride(op)
+                vld, vst = self.get_vld_vst_inst(op)
                 body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
             if op.isMask():
                 stride = self.stride(op)
+                vld, vst = self.get_vld_vst_inst(op)
                 body += indent + "__vr {}0 = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
                 body += indent + "__vm {} = _ve_vfmkl_mcv({}, {}0);\n".format(op.name, cond, op.name)
             if op.isReg() or op.isMask():
@@ -283,6 +287,7 @@ class Inst:
 
         if self.hasMask():
             op = self.outs[0]
+            vld, vst = self.get_vld_vst_inst(op)
             stride = self.stride(op)
             body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
             body += indent + "{} = _ve_{}({});\n".format(out.name, self.intrinsicName(), ', '.join(args + [op.name]))
@@ -291,6 +296,7 @@ class Inst:
 
         if out.isVReg():
             stride = self.stride(out)
+            vld, vst = self.get_vld_vst_inst(out)
             body += indent + "_ve_{}({}, {}, {});\n".format(vst, out.formalName(), out.regName(), stride)
 
         tmp = []
@@ -571,7 +577,7 @@ class InstTable:
             self.InstX(opc, instName+"p", "p"+name, [O_f32_vvv, O_pf32_vsv], expr) 
 
     # 3 operands, unsigned [long] int
-    def Inst3u(self, opc, name, instName, expr):
+    def Inst3u(self, opc, name, instName, expr, hasPacked = True):
         O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
         O_u64_vsv = [VX(T_u64), SY(T_u64), VZ(T_u64)]
         O_u64_vIv = [VX(T_u64), I, VZ(T_u64)]
@@ -582,7 +588,8 @@ class InstTable:
 
         self.InstX(opc, instName+"l", name+".l", [O_u64_vvv, O_u64_vsv, O_u64_vIv], expr)
         self.InstX(opc, instName+"w", name+".w", [O_u32_vvv, O_u32_vsv, O_u32_vIv], expr)
-        self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vsv], expr)
+        if hasPacked:
+            self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vsv], expr)
 
     # 3 operands, long int
     def Inst3l(self, opc, name, instName, expr):
@@ -593,14 +600,15 @@ class InstTable:
         self.InstX(opc, instName+"l", name+".l", [O_i64_vvv, O_i64_vsv, O_i64_vIv], expr)
 
     # 3 operands, int
-    def Inst3w(self, opc, name, instName, expr):
+    def Inst3w(self, opc, name, instName, expr, hasPacked = True):
         O_i32_vvv = [VX(T_i32), VY(T_i32), VZ(T_i32)]
         O_i32_vsv = [VX(T_i32), SY(T_i32), VZ(T_i32)]
         O_i32_vIv = [VX(T_i32), I, VZ(T_i32)]
 
         self.InstX(opc, instName+"wsx", name+".w_sx", [O_i32_vvv, O_i32_vsv, O_i32_vIv], expr)
         self.InstX(opc, instName+"wzx", name+".w_zx", [O_i32_vvv, O_i32_vsv, O_i32_vIv], expr)
-        self.InstX(opc, instName+"p", "p"+name, [O_i32_vvv, O_i32_vsv], expr)
+        if hasPacked:
+            self.InstX(opc, instName+"p", "p"+name, [O_i32_vvv, O_i32_vsv], expr)
 
     def Logical(self, opc, name, instName, expr):
         O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
@@ -690,6 +698,10 @@ T.NoImpl("SVM")
 T.VBRDm(0x8C, "vbrd", "VBRD")
 T.NoImpl("VMV")
 
+O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
+          [VX(T_i64), SY(T_i32), VZ(T_i32)], 
+          [VX(T_i64), I, VZ(T_i32)]]
+
 T.Section("5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions")
 T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
 T.Inst3w(0xCA, "vadds", "VADS", "{0} = {1} + {2}") # i32
@@ -697,10 +709,10 @@ T.Inst3l(0x8B, "vadds", "VADX", "{0} = {1} + {2}") # i64
 T.Inst3u(0xC8, "vsubu", "VSUB", "{0} = {1} - {2}") # u32, u64
 T.Inst3w(0xCA, "vsubs", "VSBS", "{0} = {1} - {2}") # i32
 T.Inst3l(0x8B, "vsubs", "VSBX", "{0} = {1} - {2}") # i64
-T.NoImpl("VMPY")
-T.NoImpl("VMPS")
-T.NoImpl("VMPX")
-T.NoImpl("VMPD")
+T.Inst3u(0xC9, "vmulu", "VMPY", "{0} = {1} * {2}", False)
+T.Inst3w(0xCB, "vmuls", "VMPS", "{0} = {1} * {2}", False)
+T.Inst3l(0xDB, "vmuls", "VMPX", "{0} = {1} * {2}")
+T.InstX(0xD9, "VMPD", "vmuls.l.w", O_VMPD, "{0} = {1} * {2}")
 T.NoImpl("VDIV")
 T.NoImpl("VDVS")
 T.NoImpl("VDVX")
