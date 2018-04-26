@@ -76,6 +76,7 @@ def cond2cc : SDNodeXForm<cond, [{
 }]>;
 
 // reverse
+/*
 def cond2rcc : SDNodeXForm<cond, [{
   VECC::CondCodes cc;
   switch (N->get()) {
@@ -89,6 +90,7 @@ def cond2rcc : SDNodeXForm<cond, [{
   }
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
+*/
 
 
 // Addressing modes.
@@ -327,6 +329,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
   */
 }
 
+
 // Branch multiclass
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
   isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
@@ -485,6 +488,24 @@ def : Pat<(srl i32:$sy, (i32 uimm6:$sz)),
           (SRL i32:$sy, (i32 uimm6:$sz))>;
 
 // 5.3.2.5. Floating-point Arithmetic Operation Instructions
+class RRF<string opcStr, bits<8>opc, SDNode OpNode, RegisterClass RC, ValueType Ty>
+  : RR<opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
+      !strconcat(opcStr, " $sx,$sy,$sz"), [(set Ty:$sx, (OpNode Ty:$sy, Ty:$sz))]> {
+        let cy = 0;
+        let cz = 0;
+}
+
+multiclass RRFm<string opcStr, bits<8> opc, SDNode OpNode>
+{
+  def d : RRF<opcStr#".d", opc, OpNode, I64, f64> { let cx = 0; }
+  def s : RRF<opcStr#".s", opc, OpNode, I64, f32> { let cx = 1; }
+}
+
+defm FAD : RRFm<"fadd", 0x4C, fadd>;
+defm FSB : RRFm<"fsub", 0x5C, fsub>;
+defm FMP : RRFm<"fmul", 0x4D, fmul>;
+defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
+
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
