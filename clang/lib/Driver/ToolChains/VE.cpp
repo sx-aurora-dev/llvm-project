@@ -114,6 +114,7 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc) ||
       DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
+#if 0
   if (const char *cl_include_dir = getenv("NCC_C_INCLUDE_PATH")) {
     SmallVector<StringRef, 4> Dirs;
     const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
@@ -121,6 +122,16 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
   }
+#else
+  const char *cl_include_dir = "/opt/nec/ve/musl/include";
+  if (const char* tmp = getenv("NCC_C_INCLUDE_PATH"))
+      cl_include_dir = tmp;
+  SmallVector<StringRef, 4> Dirs;
+  const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
+  StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
+  ArrayRef<StringRef> DirVec(Dirs);
+  addSystemIncludes(DriverArgs, CC1Args, DirVec);
+#endif
 }
 
 void VEToolChain::addClangTargetOptions(const ArgList &DriverArgs,
