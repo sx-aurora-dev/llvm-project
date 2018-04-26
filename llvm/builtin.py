@@ -133,7 +133,7 @@ VMx = Op("m", T_v4i64, "vmx")
 VM = Op("m", T_v4i64, "vm")
 CCOp = Op("c", T_u32, "cc")
 
-I = Op("I", T_u64, "sy")
+I = Op("I", T_u64, "I")
 N = Op("N", T_u64, "sy")
 
 class DummyInst:
@@ -218,6 +218,7 @@ class Inst:
 
     def noTest(self):
         self.hasTest_ = False
+        return self
 
     def hasTest(self):
         return self.hasTest_
@@ -530,6 +531,7 @@ class InstTable:
                "vIvv" : "i",
                "vvIv" : "i2",
                "mcv"  : "v",
+               "vvIs" : "i", # VSFA
                }
 
         tmp = "".join([op.kind for op in args])
@@ -729,7 +731,7 @@ T.NoImpl("VSLA")
 T.NoImpl("VSLAX")
 T.NoImpl("VSRA")
 T.NoImpl("VSRAX")
-T.NoImpl("VSFA")
+T.InstX(0xD7, "VSFA", "vsfa", [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), I, SZ(T_u64)]], "{0} = ({1} << {2}) + {3}")
 
 T.Section("5.3.2.11. Vector Floating-Point Operation Instructions")
 T.Inst3f(0xFF, "vfadd", "VFAD", "{0} = {1} + {2}")
@@ -772,9 +774,10 @@ T.InstX(0xEC, "VFSUMs", "vfsums", [[VX(T_f32), VY(T_f32)]])
 T.NoImpl("...")
 
 T.Section("5.3.2.14. Vector Gatering/Scattering Instructions")
-T.NoImpl("VGT")
-T.NoImpl("VGTU")
-T.NoImpl("VGTL")
+T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest()
+T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest()
+T.InstX(0xA3, "VGTLsx", "vgtl_sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest()
+T.InstX(0xA3, "VGTLzx", "vgtl_zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest()
 T.NoImpl("VSC")
 T.NoImpl("VSCU")
 T.NoImpl("VSCL")
@@ -852,7 +855,7 @@ if args.opt_test:
 if args.opt_reference:
     print 'namespace ref {'
     for i in insts:
-        if i.hasExpr():
+        if i.hasTest() and i.hasExpr():
             print i.reference()
     print '}'
 if args.opt_html:
