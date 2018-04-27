@@ -575,9 +575,13 @@ class InstTable:
         O_pf32_vsv = [VX(T_f32), SY(T_u64), VZ(T_f32)]
 
         O_f64_vvvmv = [VX(T_f64), VY(T_f64), VZ(T_f64), VM, VD(T_f64)]
+        O_f32_vvvmv = [VX(T_f32), VY(T_f32), VZ(T_f32), VM, VD(T_f32)]
 
-        self.InstX(opc, instName+"d", name+".d", [O_f64_vvv, O_f64_vsv, O_f64_vvvmv], expr)
-        self.InstX(opc, instName+"s", name+".s", [O_f32_vvv, O_f32_vsv], expr)
+        O_f64 = [O_f64_vvv, O_f64_vsv, O_f64_vvvmv]
+        O_f32 = [O_f32_vvv, O_f32_vsv, O_f32_vvvmv]
+
+        self.InstX(opc, instName+"d", name+".d", O_f64, expr)
+        self.InstX(opc, instName+"s", name+".s", O_f32, expr)
         if hasPacked:
             self.InstX(opc, instName+"p", "p"+name, [O_f32_vvv, O_pf32_vsv], expr) 
 

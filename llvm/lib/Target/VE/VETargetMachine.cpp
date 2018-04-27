@@ -13,6 +13,7 @@
 #include "VETargetMachine.h"
 #include "VE.h"
 // #include "VETargetObjectFile.h"
+#include "VETargetTransformInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -75,6 +76,10 @@ VETargetMachine::VETargetMachine(
 
 VETargetMachine::~VETargetMachine() {}
 
+TargetTransformInfo VETargetMachine::getTargetTransformInfo(const Function &F) {
+  return TargetTransformInfo(VETTIImpl(this, F));
+}
+
 namespace {
 /// VE Code Generator Pass Configuration Options.
 class VEPassConfig : public TargetPassConfig {
@@ -112,3 +117,4 @@ void VEPassConfig::addPreEmitPass(){
   addPass(createVEDelaySlotFillerPass());
 #endif
 }
+
