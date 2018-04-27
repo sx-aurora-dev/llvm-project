@@ -167,3 +167,6 @@ def : Pat<(int_ve_vgt_vv v256f64:$vy), (VGTv v256f64:$vy)>;
 def : Pat<(int_ve_vgtu_vv v256f64:$vy), (VGTUv v256f64:$vy)>;
 def : Pat<(int_ve_vgtl_sx_vv v256f64:$vy), (VGTLsxv v256f64:$vy)>;
 def : Pat<(int_ve_vgtl_zx_vv v256f64:$vy), (VGTLzxv v256f64:$vy)>;
+def : Pat<(int_ve_vsc_vv v256f64:$vx, v256f64:$vy), (VSCv v256f64:$vx, v256f64:$vy)>;
+def : Pat<(int_ve_vscu_vv v256f64:$vx, v256f64:$vy), (VSCUv v256f64:$vx, v256f64:$vy)>;
+def : Pat<(int_ve_vscl_vv v256f64:$vx, v256f64:$vy), (VSCLv v256f64:$vx, v256f64:$vy)>;

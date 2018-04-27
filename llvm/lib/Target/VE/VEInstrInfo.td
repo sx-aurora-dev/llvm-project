@@ -524,7 +524,7 @@ def LDUri : RM<
      (set i32:$sx, (load ADDRri:$addr)) */]>;
 let cx = 0 in
 def LDLri : RM<
-    0x03, (outs I32:$sx), (ins MEMri:$addr),
+    0x03, (outs I64:$sx), (ins MEMri:$addr),
     "ldl.sx $sx, $addr",
     [(set i32:$sx, (load ADDRri:$addr))]>;
 let cx = 1 in
@@ -758,6 +758,9 @@ def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
           (COPY_TO_REGCLASS (LDLri MEMri:$addr), I64)>;
 def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
           (COPY_TO_REGCLASS (LDLUri MEMri:$addr), I64)>;
+
+def : Pat<(i64 (extloadi32 ADDRri:$addr)),
+          (i64 (LDLri MEMri:$addr))>;
 
 // truncstore
 def : Pat<(truncstorei32 i64:$src, ADDRri:$addr),

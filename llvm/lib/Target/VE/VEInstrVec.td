@@ -532,9 +532,9 @@ defm VGT : VGTm<"vgt", 0xA1>;
 defm VGTU : VGTm<"vgtu", 0xA2>;
 let vo = 0 in defm VGTLsx : VGTm<"vgtl.sx", 0xA3>;
 let vo = 1 in defm VGTLzx : VGTm<"vgtl.zx", 0xA3>;
-defm VSC : VSTm<"vsc", 0xB1>;
-defm VSCU : VSTm<"vscu", 0xB2>;
-defm VSCL : VSTm<"vscl", 0xB3>;
+defm VSC : VSCm<"vsc", 0xB1>;
+defm VSCU : VSCm<"vscu", 0xB2>;
+defm VSCL : VSCm<"vscl", 0xB3>;
 
 // 5.3.2.15. Vector Mask Register Instructions
 // 5.3.2.16. Vector Control Instructions
@@ -559,12 +559,6 @@ def : Pat<(store V64:$vx, ADDRri:$addr),
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
-//def : Pat<(int_ve_lsv_vss V64:$vx, I64:$sy, I64:$sz),
-//          (LSVr V64:$vx, I64:$sy, I64:$sz)>;
-
-def : Pat<(int_ve_lsv_vss v256f64:$vx, i32:$sy, i64:$sz),
-          (LSVr v256f64:$vx, i32:$sy, i64:$sz)>;
-
 def : Pat<(int_ve_vld i64:$sz, i64:$sy), (VLDr i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vld i64:$sz, (i64 simm7:$sy)), (VLDi (i64 simm7:$sy), i64:$sz)>;
 def : Pat<(int_ve_vldu i64:$sz, i64:$sy), (VLDUr i64:$sy, i64:$sz)>;
@@ -585,8 +579,8 @@ def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, i64:$sy),
 def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, (i64 simm7:$sy)), 
           (VSTLi v256f64:$vx, (i64 simm7:$sy), i64:$sz)>;
 
-
-//def : Pat<(int_ve_pvfmad_vvSv v256f64:$vy, f32:$sy0, f32:$sy1, 
+def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
+          (ORrr (LDUri MEMri:$addr0), (LDLUri MEMri:$addr1))>;
 
 include "VEInstrIntrinsic.td"
 

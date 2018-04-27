@@ -23,6 +23,9 @@ let TargetPrefix = "ve" in {
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty]>;
   def int_ve_vstl : GCCBuiltin<"__builtin_ve_vstl">, 
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty]>;
+
+  def int_ve_pack_f32p : GCCBuiltin<"__builtin_ve_pack_f32p">,
+        Intrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_ptr_ty], [IntrReadMem]>;
 }
 
 include "llvm/IR/IntrinsicsVE2.td"

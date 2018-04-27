@@ -167,3 +167,6 @@ def int_ve_vgt_vv : VEIntrinsic<"vgt_vv", [LLVMType<v256f64>], [LLVMType<v256f64
 def int_ve_vgtu_vv : VEIntrinsic<"vgtu_vv", [LLVMType<v256f64>], [LLVMType<v256f64>]>;
 def int_ve_vgtl_sx_vv : VEIntrinsic<"vgtl_sx_vv", [LLVMType<v256f64>], [LLVMType<v256f64>]>;
 def int_ve_vgtl_zx_vv : VEIntrinsic<"vgtl_zx_vv", [LLVMType<v256f64>], [LLVMType<v256f64>]>;
+def int_ve_vsc_vv : VEIntrinsic<"vsc_vv", [], [LLVMType<v256f64>, LLVMType<v256f64>]>;
+def int_ve_vscu_vv : VEIntrinsic<"vscu_vv", [], [LLVMType<v256f64>, LLVMType<v256f64>]>;
+def int_ve_vscl_vv : VEIntrinsic<"vscl_vv", [], [LLVMType<v256f64>, LLVMType<v256f64>]>;

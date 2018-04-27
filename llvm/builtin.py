@@ -201,8 +201,10 @@ class Inst:
 
     # to be included from BuiltinsVE.def
     def builtin(self):
-        #tmp = "".join([i.ty.builtinCode for i in (self.outs + self.ins)])
-        tmp = "".join([i.ty.builtinCode for i in self.outs])
+        if len(self.outs) == 0:
+            tmp = "v"
+        else:
+            tmp = "".join([i.ty.builtinCode for i in self.outs])
         tmp += "".join([i.ty.builtinCode + "C" for i in self.ins])
         return "BUILTIN(__builtin_ve_{}, \"{}\", \"n\")".format(self.intrinsicName(), tmp)
 
@@ -378,21 +380,22 @@ class ManualInstPrinter:
     def make(self, I):
         v = []
 
-        out = I.outs[0]
-        if out.isVReg():
-            outType = "__vr"
-            v.append("{}[:]".format(out.regName()))
-        elif out.isMask():
-            outType = "__vm"
-        elif out.isSReg():
-            outType = "unsigned long int" # ok?
-        else:
-            raise Exception("unknown output operand type: {}".format(out.kind))
-            #v.append(out.regName())
+        outType = None
+        if len(I.outs) > 0:
+            out = I.outs[0]
+            if out.isVReg():
+                outType = "__vr"
+                v.append("{}[:]".format(out.regName()))
+            elif out.isMask():
+                outType = "__vm"
+            elif out.isSReg():
+                outType = "unsigned long int" # ok?
+            else:
+                raise Exception("unknown output operand type: {}".format(out.kind))
+                #v.append(out.regName())
 
         ins = []
         for op in I.ins:
-            #v.append(op.regName())
             if op.isVReg():
                 ins.append("__vr " + op.regName())
                 v.append("{}[:]".format(op.regName()))
@@ -410,11 +413,13 @@ class ManualInstPrinter:
                 v.append("{}".format(op.regName()))
             elif op.isCC():
                 ins.append("int cc".format(op.ty.ctype))
-                #v.append("{}".format(op.regName()))
             else:
                 raise Exception("unknown register kind: {}".format(op.kind))
 
-        func = "{} _ve_{}({})".format(outType, I.intrinsicName(), ", ".join(ins))
+        if outType:
+            func = "{} _ve_{}({})".format(outType, I.intrinsicName(), ", ".join(ins))
+        else:
+            func = "_ve_{}({})".format(I.intrinsicName(), ", ".join(ins))
 
         if I.hasExpr():
             if I.hasMask():
@@ -743,7 +748,7 @@ T.NoImpl("VSLA")
 T.NoImpl("VSLAX")
 T.NoImpl("VSRA")
 T.NoImpl("VSRAX")
-T.InstX(0xD7, "VSFA", "vsfa", [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), I, SZ(T_u64)]], "{0} = ({1} << {2}) + {3}")
+T.InstX(0xD7, "VSFA", "vsfa", [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), I, SZ(T_u64)]], "{0} = ({1} << ({2} & 0x7)) + {3}")
 
 T.Section("5.3.2.11. Vector Floating-Point Operation Instructions")
 T.Inst3f(0xFF, "vfadd", "VFAD", "{0} = {1} + {2}")
@@ -785,14 +790,18 @@ T.InstX(0xEC, "VFSUMd", "vfsumd", [[VX(T_f64), VY(T_f64)]])
 T.InstX(0xEC, "VFSUMs", "vfsums", [[VX(T_f32), VY(T_f32)]])
 T.NoImpl("...")
 
+O_u64_vv = [VX(T_u64), VY(T_u64)]
+O_f32_vv = [VX(T_f32), VY(T_f32)]
+O_i32_vv = [VX(T_i32), VY(T_i32)]
+
 T.Section("5.3.2.14. Vector Gatering/Scattering Instructions")
 T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest()
 T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest()
 T.InstX(0xA3, "VGTLsx", "vgtl_sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest()
 T.InstX(0xA3, "VGTLzx", "vgtl_zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest()
-T.NoImpl("VSC")
-T.NoImpl("VSCU")
-T.NoImpl("VSCL")
+T.add(Inst(0xB1, "VSCv", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noTest())
+T.add(Inst(0xB2, "VSCUv", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest())
+T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest())
 
 T.Section("5.3.2.15. Vector Mask Register Instructions")
 T.NoImpl("ANDM")
@@ -810,6 +819,9 @@ T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")
 T.NoImpl("SVL")
 T.NoImpl("SVML")
 T.NoImpl("LVIX")
+
+T.Section("Others")
+T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
 
 import argparse
 
