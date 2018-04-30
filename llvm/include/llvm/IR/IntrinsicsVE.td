@@ -4,6 +4,13 @@ class VEIntrinsic<string name, list<LLVMType> outs, list<LLVMType> ins> :
   let TargetPrefix = "ve";
 }
 
+class VEIntrinsic2<string name, list<LLVMType> outs, list<LLVMType> ins> : 
+  GCCBuiltin<"__builtin_ve_" # name>, Intrinsic<outs, ins, [IntrNoMem]>
+{
+  let TargetPrefix = "ve";
+}
+
+
 let TargetPrefix = "ve" in {
   def int_ve_lvl : GCCBuiltin<"__builtin_ve_lvl">, Intrinsic<[], [llvm_i32_ty]>;
 

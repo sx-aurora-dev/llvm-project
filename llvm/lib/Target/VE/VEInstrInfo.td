@@ -439,6 +439,12 @@ defm SBX : RRm<"subs.l", 0x5B, add, I64, i64, simm7Op64, uimm6Op64>;
 // MPY instruction (mul u64)
 defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
 
+// DIV
+
+let cx = 0, cy = 1, cz = 1 in
+def CMPlrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+        "cmpu.l $sx,$sy,$sz", []>;
+
 let cx = 1, cy = 1, cz = 1 in {
 def CPSWZrr : RR<0x7A, (outs I32:$sx), (ins I32:$sy, I32:$sz),
         "cmps.w.zx $sx,$sy,$sz", 
@@ -829,43 +835,22 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
 
-//def VE_SELECT : Pseudo<(outs I32:$dst),
-//                       (ins I32:$cond, I32:$t, I32:$f),
-//                       "# SELECT",
-//                       [(set i32:$dst, (select i32:$cond, i32:$t, i32:$f))]>
-//                       {
-//                         let Constraints = "$dst = $f";
-//                       }
-
 
 def SDTVESelect : SDTypeProfile<1, 4, []>;
 def VESelect: SDNode<"VEISD::SELECT", SDTVESelect, [SDNPInGlue]>;
 
-def VE_SELECT : Pseudo<(outs I32:$dst),
-                       (ins I32:$cond, I32:$condVal, I32:$t, I32:$f),
+def VE_SELECT : Pseudo<(outs I64:$dst),
+                       (ins I64:$cond, I64:$condVal, I64:$t, I64:$f),
                        "# VE_SELECT",
                        [(set i32:$dst, (VESelect i32:$cond, i32:$condVal, i32:$t, i32:$f))]>
                        {
                          let Constraints = "$dst = $f";
                        }
 
-//def VESDTCMS : SDTypeProfile<1, 2, [SDTCisSameAs<0, 1>]>;
-//def CMS : SDNode<"VEISD::CMS", VESTDCMS>;
-//
-//def VESDTSelectCC : SDTypeProfile<1, 5, [     // select_cc
-//SDTCisSameAs<1, 2>, SDTCisSameAs<3, 4>, SDTCisSameAs<0, 3>,
-//  SDTCisVT<5, OtherVT>
-//  ]>;
-//
-//def VESDSelectCC    : SDNode<"VEISD::SELECT_CC", VESDTSelectCC>;
-//
-//
-//def VE_SELECT_CC : Pseudo<(outs I32:$dst), 
-//                      (ins i1:$cond, I32:$lhs, I32:$rhs, I32:$t, I32:$f),
-//                      "# SELECT_CC",
-//                      []>;
-//
-//def:  Pat<(i32 (selectcc i32:$lhs, i32:$rhs, i32:$t, i32:$f, cond:$cond)),
-//          (VE_SELECT_CC $lhs, $rhs, $t, $f, (i32 (cond2cc $cond)))>;
+def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
+          (i32 (VE_SELECT (i32 (cond2cc $cond)), 
+                          (CMPlrr i64:$LHS, i64:$RHS), 
+                          (ORim1 1, 0), 
+                          (ORim1 0, 0)))>;
 
 include "VEInstrVec.td"

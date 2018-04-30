@@ -42,6 +42,9 @@ static std::string computeDataLayout(const Triple &T) {
   // Stack alignment is 64 bits
   Ret += "-S64";
 
+  // Vector alignment is 64 bits
+  Ret += "-v16384:64:64";
+
   return Ret;
 }
 

@@ -2677,6 +2677,7 @@ static SDValue LowerATOMIC_LOAD_STORE(SDValue Op, SelectionDAG &DAG) {
   // Monotonic load/stores are legal.
   return Op;
 }
+#endif
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                      SelectionDAG &DAG) const {
@@ -2685,12 +2686,14 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   case Intrinsic::thread_pointer: {
+    report_fatal_error("Intrinsic::thread_point is not yet implemented");
+#if 0
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getRegister(SP::G7, PtrVT);
+#endif
   }
   }
 }
-#endif
 
 #if 1
 static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
@@ -2808,8 +2811,8 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::ATOMIC_LOAD:
   case ISD::ATOMIC_STORE:       // return LowerATOMIC_LOAD_STORE(Op, DAG);
     report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
-  case ISD::INTRINSIC_WO_CHAIN: // return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-    report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
+  case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+    //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
 #if 1
   case ISD::SELECT:           return LowerSELECT(Op, DAG, *this);
   //case VEISD::SELECT:         return LowerVESELECT(Op, DAG, *this);

@@ -555,6 +555,8 @@ def : Pat<(v256f64 (load ADDRri:$addr)),
 def : Pat<(store V64:$vx, ADDRri:$addr), 
           (VSTi v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
 
+def : Pat<(fadd v256f64:$vy, v256f64:$vz), (VFADdv v256f64:$vy, v256f64:$vz)>;
+
 // Pattern Matchings for Vector Intrinsics
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
