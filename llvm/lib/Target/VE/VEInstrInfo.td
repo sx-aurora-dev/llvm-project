@@ -448,7 +448,8 @@ def CMPlrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
 let cx = 1, cy = 1, cz = 1 in {
 def CPSWZrr : RR<0x7A, (outs I32:$sx), (ins I32:$sy, I32:$sz),
         "cmps.w.zx $sx,$sy,$sz", 
-        [(set i32:$sx, (setcc i32:$sy, i32:$sz, cond))]>;
+        []>;
+        //[(set i32:$sx, (setcc i32:$sy, i32:$sz, cond))]>;
 }
 
 //def : Pat<(set i1:$sx, (setcc i32:$sy, i32:$sz, SETGT)),
@@ -839,17 +840,33 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
 def SDTVESelect : SDTypeProfile<1, 4, []>;
 def VESelect: SDNode<"VEISD::SELECT", SDTVESelect, [SDNPInGlue]>;
 
+//def VE_SELECT : Pseudo<(outs I64:$dst),
+//                       (ins I64:$cond, I64:$condVal, I64:$t, I64:$f),
+//                       "# VE_SELECT",
+//                       [(set i32:$dst, (VESelect i32:$cond, i32:$condVal, i32:$t, i32:$f))]>
+//                       {
+//                         let Constraints = "$dst = $f";
+//                       }
+
 def VE_SELECT : Pseudo<(outs I64:$dst),
-                       (ins I64:$cond, I64:$condVal, I64:$t, I64:$f),
-                       "# VE_SELECT",
-                       [(set i32:$dst, (VESelect i32:$cond, i32:$condVal, i32:$t, i32:$f))]>
+                       (ins uimm6Op32:$cond, I64:$condVal, I64:$t, I64:$f),
+                       "# VE_SELECT", []> 
                        {
                          let Constraints = "$dst = $f";
                        }
 
+def : Pat<(i32 (VESelect (i32 timm:$cc), i32:$condVal, i32:$t, i32:$f)),
+          (i32 (VE_SELECT $cc, i32:$condVal, i32:$t, i32:$f))>;
+
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
           (i32 (VE_SELECT (i32 (cond2cc $cond)), 
                           (CMPlrr i64:$LHS, i64:$RHS), 
+                          (ORim1 1, 0), 
+                          (ORim1 0, 0)))>;
+
+def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
+          (i32 (VE_SELECT (i32 (cond2cc $cond)), 
+                          (CMPlrr i32:$LHS, i32:$RHS), 
                           (ORim1 1, 0), 
                           (ORim1 0, 0)))>;
 

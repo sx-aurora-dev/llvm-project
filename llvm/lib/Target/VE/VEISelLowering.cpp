@@ -1306,7 +1306,7 @@ TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(
   return AtomicExpansionKind::CmpXChg;
 }
 
-static VECC::CondCodes IntCondCCodeToICC(ISD::CondCode CC) 
+static VECC::CondCodes IntCondCodeToICC(ISD::CondCode CC) 
 {
   switch (CC) {
     default: llvm_unreachable("Unknown integer condition code!");
@@ -2686,7 +2686,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   case Intrinsic::thread_pointer: {
-    report_fatal_error("Intrinsic::thread_point is not yet implemented");
+    report_fatal_error("Intrinsic::thread_point is not implemented yet");
 #if 0
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getRegister(SP::G7, PtrVT);
@@ -2699,6 +2699,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
                            const VETargetLowering &TLI)
 {
+#if 0
     SDValue CondVal = Op.getOperand(0);
     SDValue TrueVal = Op.getOperand(1);
     SDValue FalseVal = Op.getOperand(2);
@@ -2707,7 +2708,7 @@ static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
     assert(CondVal.getOpcode() == ISD::SETCC);
 
     ISD::CondCode CC = cast<CondCodeSDNode>(CondVal.getOperand(2))->get();
-    VECC::CondCodes VECC = IntCondCCodeToICC(CC);
+    VECC::CondCodes VECC = IntCondCodeToICC(CC);
 
     // (i32 (select $condVal, $TrueVal, $FalseVal))
     //
@@ -2727,6 +2728,37 @@ static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
     Ops.push_back(FalseVal);
 
     return DAG.getNode(VEISD::SELECT, dl, TrueVal.getValueType(), Ops);
+#else
+    SDValue CondVal = Op.getOperand(0);
+    SDValue TrueVal = Op.getOperand(1);
+    SDValue FalseVal = Op.getOperand(2);
+    SDLoc dl(Op);
+
+    assert(CondVal.getOpcode() == ISD::SETCC);
+
+    ISD::CondCode CC = cast<CondCodeSDNode>(CondVal.getOperand(2))->get();
+    VECC::CondCodes VECC = IntCondCodeToICC(CC);
+
+    // (i32 (select (setcc $LHR, $RHS, $cc), $TrueVal, $FalseVal))
+    //
+    // (i32 (VESD::SELECT (cond2cc $cc), (CMPWZrr $LHS, $RHS), $TrueVal, $FalseVal))
+
+#if 1
+    CondVal = SDValue(DAG.getMachineNode(VE::CPSWZrr, dl, 
+                                         MVT::i32, // ok?
+                                         CondVal.getOperand(0),
+                                         CondVal.getOperand(1)),
+                      0);
+#endif
+
+    SmallVector<SDValue, 4> Ops;
+    Ops.push_back(DAG.getTargetConstant(VECC, dl, MVT::i32));
+    Ops.push_back(CondVal);
+    Ops.push_back(TrueVal);
+    Ops.push_back(FalseVal);
+
+    return DAG.getNode(VEISD::SELECT, dl, TrueVal.getValueType(), Ops);
+#endif
 }
 #endif
 
