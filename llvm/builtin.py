@@ -162,6 +162,7 @@ class Inst:
         #self.intrinsicName = nf
         self.nf = nf
         self.hasTest_ = True
+        self.prop_ = ["IntrNoMem"]
 
     def isDummy(self):
         return False
@@ -186,6 +187,18 @@ class Inst:
                 return True
         return False
 
+    def readMem(self):
+        self.prop_ = ["IntrReadMem"]
+        return self
+
+    def writeMem(self):
+        self.prop_ = ["IntrWriteMem"]
+        return self
+
+    def prop(self):
+        return self.prop_
+
+
     # to be included from VEInstrInfo.td
     def intrinsicPattern(self):
         args = ", ".join([op.dagOp() for op in self.ins])
@@ -197,7 +210,12 @@ class Inst:
     def intrinsicDefine(self):
         outs = ", ".join(["LLVMType<{}>".format(i.ty.ValueType) for i in self.outs])
         ins = ", ".join(["LLVMType<{}>".format(i.ty.ValueType) for i in self.ins])
-        return "def int_ve_{} : VEIntrinsic<\"{}\", [{}], [{}]>;".format(self.intrinsicName(), self.intrinsicName(), outs, ins)
+        #return "def int_ve_{} : VEIntrinsic<\"{}\", [{}], [{}]>;".format(self.intrinsicName(), self.intrinsicName(), outs, ins)
+
+        #return "def int_ve_{} : VEIntrinsic2<\"{}\", [{}], [{}]>;".format(self.intrinsicName(), self.intrinsicName(), outs, ins)
+
+        prop = ', '.join(self.prop())
+        return "let TargetPrefix = \"ve\" in def int_ve_{} : GCCBuiltin<\"__builtin_ve_{}\">, Intrinsic<[{}], [{}], [{}]>;".format(self.intrinsicName(), self.intrinsicName(), outs, ins, prop)
 
     # to be included from BuiltinsVE.def
     def builtin(self):
@@ -479,6 +497,15 @@ class InstList:
     def noTest(self):
         for I in self.a:
             I.noTest()
+        return self
+    def readMem(self):
+        for I in self.a:
+            I.readMem()
+        return self
+    def writeMem(self):
+        for I in self.a:
+            I.writeMem()
+        return self
 
 class Section:
     def __init__(self, name):
@@ -799,13 +826,13 @@ O_f32_vv = [VX(T_f32), VY(T_f32)]
 O_i32_vv = [VX(T_i32), VY(T_i32)]
 
 T.Section("5.3.2.14. Vector Gatering/Scattering Instructions")
-T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest()
-T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest()
-T.InstX(0xA3, "VGTLsx", "vgtl_sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest()
-T.InstX(0xA3, "VGTLzx", "vgtl_zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest()
-T.add(Inst(0xB1, "VSCv", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noTest())
-T.add(Inst(0xB2, "VSCUv", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest())
-T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest())
+T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest().readMem()
+T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest().readMem()
+T.InstX(0xA3, "VGTLsx", "vgtl_sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
+T.InstX(0xA3, "VGTLzx", "vgtl_zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
+T.add(Inst(0xB1, "VSCv", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noTest().writeMem())
+T.add(Inst(0xB2, "VSCUv", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest().writeMem())
+T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
 
 T.Section("5.3.2.15. Vector Mask Register Instructions")
 T.NoImpl("ANDM")

@@ -47,6 +47,9 @@ class VR<bits<7> Enc, string n> : VEReg<Enc, n>;
 // VM - 256-bit wide mask registers
 class VM<bits<7> Enc, string n> : VEReg<Enc, n>;
 
+// Vector Lenght Register
+def VL : VEReg<0, "VL">;
+
 // Miscellaneous Registers
 def UCC : VEMiscReg<0, "UCC">;       // User clock counter
 def PSW : VEMiscReg<1, "PSW">;       // Program status word

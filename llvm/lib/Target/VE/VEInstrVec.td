@@ -29,6 +29,7 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Inst{47-40} = vy;
     let Inst{55-48} = vz;
     let Inst{63-56} = vw;
+    let Uses = [VL]; // vector length register
 }
 
 class RV2<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
@@ -274,6 +275,7 @@ class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Inst{39-32} = vx;
     let Inst{47-40} = vy;
     let Inst{63-57} = sw;
+    let Uses = [VL]; // vector length register
 }
 
 // VLD, VST
@@ -336,9 +338,9 @@ multiclass VSTm<string opcStr, bits<8> opc> {
   }
 }
 
-let mayLoad = 1 in defm VLD : VLDm<"vld", 0x81>;
-let mayLoad = 1 in defm VLDU : VLDm<"vldu", 0x82>;
-let mayLoad = 1 in defm VLDL : VLDm<"vldl", 0x83>;
+defm VLD : VLDm<"vld", 0x81>;
+defm VLDU : VLDm<"vldu", 0x82>;
+defm VLDL : VLDm<"vldl", 0x83>;
 
 defm VST : VSTm<"vst", 0x91>;
 defm VSTU : VSTm<"vstu", 0x92>;
@@ -543,7 +545,7 @@ defm VSCL : VSCm<"vscl", 0xB3>;
 // SMVL
 // LVIX
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, Defs = [VL] in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
 
