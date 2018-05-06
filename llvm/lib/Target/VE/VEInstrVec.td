@@ -46,6 +46,7 @@ class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 }
 
 multiclass RVm<string opcStr, bits<8> opc> {
+  // (set V64:$vx, (op (simm7:$sy or I64:$sy or V64:$vz), V64:$vz))
   // V64:$vx = (simm7:$sy or I64:$sy or V64:$vz) opc V64:$vz
   def i : RV3<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz),
     !strconcat(opcStr, " $vx,$sy,$vz"), []> {
@@ -67,12 +68,12 @@ multiclass RVm<string opcStr, bits<8> opc> {
       let sy = 0;
       let m = 0;
     }
-  def im : RV3<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz, VM:$vm),
+  def im : RV3<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz, VM:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cs = 1;
       let vy = 0;
     }
-  def rm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm),
+  def rm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cs = 1;
       let cy = 1;
@@ -424,6 +425,23 @@ def VSFAi : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz),
   "vsfa $vx,$vz,$sy,$sz", []>;
 
 
+def VFADpvm2 : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz, VMP:$vm, V64:$vd),
+  "pvfadd $vx,$vy,$vz,$vm", []> {
+    let cx = 1;
+    let cx2 = 1;
+    let sy = 0;
+    let vw = 0;
+    let Constraints = "$vx = $vd";
+}
+
+def : Pat<(int_ve_pvfadd_vvvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd),
+          (VFADpvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
+
+def VFMSpv : Pseudo<(outs VMP:$vm), (ins CCOp:$cf, V64:$vz), 
+                    "# pvfms.w.${cf} $vm,$vz", []>;
+
+def : Pat<(int_ve_pvfmks_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMSpv (i32 uimm6:$cc), v256f64:$vz)>;
+
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
 defm VFSB : RVDSPm<"vfsub", 0xDC>;
@@ -462,11 +480,28 @@ def VFMKv : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
 }
 
 def VFMSv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
-  "vfms.w.${cf} $vm,$vz", []>
+  "vfmk.w.${cf} $vm,$vz", []>
 {
   let sy = 0;
   let vw = 0;
 }
+
+def VFMSuv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
+  "pvfmk.w.up.${cf} $vm,$vz", []>
+{
+  let cx = 0;
+  let sy = 0;
+  let vw = 0;
+}
+
+def VFMSlv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
+  "pvfmk.w.lo.${cf} $vm,$vz", []>
+{
+  let cx = 1;
+  let sy = 0;
+  let vw = 0;
+}
+
 
 def VFMFv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "vfmf.l.${cf} $vm,$vz", []>

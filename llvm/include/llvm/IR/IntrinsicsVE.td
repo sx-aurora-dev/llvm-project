@@ -1,16 +1,3 @@
-class VEIntrinsic<string name, list<LLVMType> outs, list<LLVMType> ins> : 
-  GCCBuiltin<"__builtin_ve_" # name>, Intrinsic<outs, ins>
-{
-  let TargetPrefix = "ve";
-}
-
-class VEIntrinsic2<string name, list<LLVMType> outs, list<LLVMType> ins> : 
-  GCCBuiltin<"__builtin_ve_" # name>, Intrinsic<outs, ins, [IntrNoMem]>
-{
-  let TargetPrefix = "ve";
-}
-
-
 let TargetPrefix = "ve" in {
   def int_ve_lvl : GCCBuiltin<"__builtin_ve_lvl">, Intrinsic<[], [llvm_i32_ty]>;
 
@@ -30,6 +17,11 @@ let TargetPrefix = "ve" in {
 
   def int_ve_pack_f32p : GCCBuiltin<"__builtin_ve_pack_f32p">,
         Intrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_ptr_ty], [IntrReadMem]>;
+
+  def int_ve_pvfadd_vvvm2 : GCCBuiltin<"__builtin_ve_pvfadd_vvvm2">,
+        Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<v256f64>, LLVMType<v8i64>, LLVMType<v256f64>], [IntrReadMem]>;
+
+  def int_ve_pvfmks_mcv : GCCBuiltin<"__builtin_ve_pvfmks_mcv">, Intrinsic<[LLVMType<v8i64>], [LLVMType<i32>, LLVMType<v256f64>], [IntrNoMem]>;
 }
 
 include "llvm/IR/IntrinsicsVE2.td"

@@ -1346,6 +1346,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f128, &VE::F128RegClass);
   addRegisterClass(MVT::v256f64, &VE::V64RegClass);
   addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+  addRegisterClass(MVT::v8i64, &VE::VMPRegClass);
 
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {

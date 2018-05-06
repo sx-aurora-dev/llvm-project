@@ -23,6 +23,9 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "ve"
 
 using namespace llvm;
 
@@ -507,12 +510,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
 #endif
   }
-#if 1
   case VE::VE_SELECT: {
     // (VESelect $dst, $CC, $condVal, $trueVal, $dst)
-    //
-    // (CMOVrr $dst, condCode, $trueVal, $condVal)
+    //   -> (CMOVrr $dst, condCode, $trueVal, $condVal)
     // cmov.$df.$cf $dst, $trueval, $cond
+
+    assert(MI.getOperand(0).getReg() == MI.getOperand(4).getReg());
 
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc dl = MI.getDebugLoc();
@@ -523,49 +526,37 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       .addReg(MI.getOperand(2).getReg());
 
     MI.eraseFromParent();
-#if 0
-    // (select $dst, $condVal, $trueVal, $dst)
-    //
-    // (CMOVrr $dst, condCode, $trueVal, $condVal)
-    // cmov.$df.$cf $dst, $trueval, $cond
+    return true;
+  }
+  case VE::VFMSpv: {
+    // replace to pvfmslo and pvfmsup
 
+    // change VMP to VM
+    unsigned VMu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMl = VMu + 1;
+#if 0
+    DEBUG(dbgs() << "expandPostRAPseudo: VFMSpv:"
+          << " op0=" << MI.getOperand(0).getReg()
+          << " VMP0=" << VE::VMP0
+          << " VM0=" << VE::VM0
+          << " VMu" << VMu << " VMl=" << VMl
+          << "\n");
+#endif
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
-      .addReg(MI.getOperand(0).getReg())
-      .addImm(VECC::CC_G)
-      .addReg(MI.getOperand(2).getReg())
-      .addReg(MI.getOperand(1).getReg());
+    BuildMI(*MBB, MI, dl, get(VE::VFMSuv))
+      .addReg(VMu)
+      .addImm(MI.getOperand(1).getImm())
+      .addReg(MI.getOperand(2).getReg());
+    BuildMI(*MBB, MI, dl, get(VE::VFMSlv))
+      .addReg(VMl)
+      .addImm(MI.getOperand(1).getImm())
+      .addReg(MI.getOperand(2).getReg());
 
     MI.eraseFromParent();
-#endif
 
-#if 0
-      // select $dst, $cond, $trueVal, $falseVal
-      //
-      // cmov.$df.$cf, $dst, $trueVal, $cond
-      // cmov.$df.$cf, $dst, $falseVal, $cond  
-    MachineOperand& Dst = MI.getOperand(0);
-    MachineOperand& Cond = MI.getOperand(1);
-    MachineOperand& T = MI.getOperand(2);
-    MachineOperand& F = MI.getOperand(3);
-
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
-      .addReg(Dst.getReg())  // dst
-      .addImm(3)                            
-      .addReg(MI.getOperand(2).getReg())    // trueVal
-      .addReg(MI.getOperand(1).getReg());
-    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
-      .addReg(Dst.getReg())    // dst
-      .addImm(4)
-      .addReg(MI.getOperand(3).getReg())    //  falseVal
-      .addReg(MI.getOperand(1).getReg());   //
     return true;
-#endif
-                      }
-#endif
+    }
   }
   return false;
 }

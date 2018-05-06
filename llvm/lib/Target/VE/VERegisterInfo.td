@@ -47,8 +47,10 @@ class VR<bits<7> Enc, string n> : VEReg<Enc, n>;
 // VM - 256-bit wide mask registers
 class VM<bits<7> Enc, string n> : VEReg<Enc, n>;
 
-// Vector Lenght Register
-def VL : VEReg<0, "VL">;
+class VMp<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
+  let SubRegs = subregs;
+  let SubRegIndices = [sub_even, sub_odd];
+}
 
 // Miscellaneous Registers
 def UCC : VEMiscReg<0, "UCC">;       // User clock counter
@@ -75,6 +77,20 @@ foreach I = 0-63 in
 // Vector mask registers - 256 bits wide
 foreach I = 0-15 in
   def VM#I : VM<I, "VM"#I>, DwarfRegNum<[!add(128,I)]>;
+
+// Aliases of VMs to use as a pair of two VM for packed instructions
+def VMP0 : VMp<0, "VM0", [VM0, VM1]>;
+def VMP1 : VMp<2, "VM2", [VM2, VM3]>;
+def VMP2 : VMp<4, "VM4", [VM4, VM5]>;
+def VMP3 : VMp<6, "VM6", [VM6, VM7]>;
+def VMP4 : VMp<8, "VM8", [VM8, VM9]>;
+def VMP5 : VMp<10, "VM10", [VM10, VM11]>;
+def VMP6 : VMp<12, "VM12", [VM12, VM13]>;
+def VMP7 : VMp<14, "VM14", [VM14, VM15]>;
+
+// Vector Lenght Register
+def VL : VEReg<0, "VL">;
+
 
 // Aliases of the S* registers used to hold 128-bit for values (long doubles).
 // Following foreach represents something like:
@@ -117,3 +133,4 @@ def Misc : RegisterClass<"VE", [i64], 64,
 
 def V64 : RegisterClass<"VE", [v256f64], 64, (sequence "V%u", 0, 63)>;
 def VM : RegisterClass<"VE", [v4i64], 64, (sequence "VM%u", 1, 15)>; // vm0 is reserved for always true
+def VMP : RegisterClass<"VE", [v8i64], 64, (sequence "VMP%u", 1, 7)>;

@@ -866,7 +866,7 @@ def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
           (i32 (VE_SELECT (i32 (cond2cc $cond)), 
-                          (CMPlrr i32:$LHS, i32:$RHS), 
+                          (CMPlrr i32:$LHS, i32:$RHS),  // CMPl? CPSWZ?
                           (ORim1 1, 0), 
                           (ORim1 0, 0)))>;
 
