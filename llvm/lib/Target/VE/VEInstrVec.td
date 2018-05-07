@@ -45,7 +45,7 @@ class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let vw = 0;
 }
 
-multiclass RVm<string opcStr, bits<8> opc> {
+multiclass RV3m<string opcStr, bits<8> opc, RegisterClass MaskRC> {
   // (set V64:$vx, (op (simm7:$sy or I64:$sy or V64:$vz), V64:$vz))
   // V64:$vx = (simm7:$sy or I64:$sy or V64:$vz) opc V64:$vz
   def i : RV3<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz),
@@ -68,18 +68,18 @@ multiclass RVm<string opcStr, bits<8> opc> {
       let sy = 0;
       let m = 0;
     }
-  def im : RV3<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz, VM:$vm, V64:$vd),
+  def im : RV3<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cs = 1;
       let vy = 0;
     }
-  def rm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd),
+  def rm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, MaskRC:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cs = 1;
       let cy = 1;
       let vy = 0;
     }
-  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd),
+  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, MaskRC:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
       let sy = 0;
       let Constraints = "$vx = $vd";
@@ -137,40 +137,40 @@ multiclass RV4m<string opcStr, bits<8> opc> {
 
 // u64, u32
 multiclass RVLWm<string opcStr, bits<8> opc> {
-  let cx2 = 0 in defm l : RVm<opcStr # ".l", opc>; // u64
-  let cx2 = 1 in defm w : RVm<opcStr # ".w", opc>; // u32
+  let cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, VM>; // u64
+  let cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, VM>; // u32
 }
 
 // i32 (sz,zx)
 multiclass RVEXm<string opcStr, bits<8> opc> {
-  let cx2 = 0 in defm wsx : RVm<opcStr # ".w.sx", opc>; // i32 sx
-  let cx2 = 1 in defm wzx : RVm<opcStr # ".w.zx", opc>; // i32 zx
+  let cx2 = 0 in defm wsx : RV3m<opcStr # ".w.sx", opc, VM>; // i32 sx
+  let cx2 = 1 in defm wzx : RV3m<opcStr # ".w.zx", opc, VM>; // i32 zx
 }
 
 // u64, u32, packed u32
 multiclass RVUm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm l : RVm<opcStr # ".l", opc>; // u64
-  let cx = 0, cx2 = 1 in defm w : RVm<opcStr # ".w", opc>; // u32
-  let cx = 1, cx2 = 1 in defm p : RVm<"p" # opcStr, opc>; // packed u32
+  let cx = 0, cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, VM>; // u64
+  let cx = 0, cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, VM>; // u32
+  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VMP>; // packed u32
 }
 
 // i32 (sz,zx), packed i32
 multiclass RVWm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm wsx : RVm<opcStr # ".w.sx", opc>; // i32 sx
-  let cx = 0, cx2 = 1 in defm wzx : RVm<opcStr # ".w.zx", opc>; // i32 zx
-  let cx = 1, cx2 = 1 in defm p : RVm<"p" # opcStr, opc>;       // packed i32
+  let cx = 0, cx2 = 0 in defm wsx : RV3m<opcStr # ".w.sx", opc, VM>; // i32 sx
+  let cx = 0, cx2 = 1 in defm wzx : RV3m<opcStr # ".w.zx", opc, VM>; // i32 zx
+  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VMP>;       // packed i32
 }
 
 // i64
 multiclass RVLm<string opcStr, bits<8> opc> {
-  defm l : RVm<opcStr # ".l", opc>;
+  defm l : RV3m<opcStr # ".l", opc, VM>;
 }
 
 // f64, f32, packed f32
 multiclass RVDSPm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm d : RVm<opcStr # ".d", opc>; // double
-  let cx = 1, cx2 = 0 in defm s : RVm<opcStr # ".s", opc>; // float
-  let cx = 1, cx2 = 1 in defm p : RVm<"p" # opcStr, opc>; // packed
+  let cx = 0, cx2 = 0 in defm d : RV3m<opcStr # ".d", opc, VM>; // double
+  let cx = 1, cx2 = 0 in defm s : RV3m<opcStr # ".s", opc, VM>; // float
+  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VMP>; // packed
 }
 
 // f64, f32, packed f32 (4 operands)
@@ -394,7 +394,7 @@ defm VSBX : RVLm<"vsubs", 0x9B>;
 defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
 defm VMPS : RVEXm<"vmuls", 0xCB>; // mul signed 32b sx/zx
 defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
-defm VMPD : RVm<"vmuls.l.w", 0xD9>; // mul signed 32b -> 64b
+defm VMPD : RV3m<"vmuls.l.w", 0xD9, VM>; // mul signed 32b -> 64b
 // divs
 defm VCMP : RVUm<"vcmpu", 0xB9>;
 defm VCPS : RVWm<"vcmps", 0xFA>;
@@ -425,6 +425,7 @@ def VSFAi : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz),
   "vsfa $vx,$vz,$sy,$sz", []>;
 
 
+/*
 def VFADpvm2 : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz, VMP:$vm, V64:$vd),
   "pvfadd $vx,$vy,$vz,$vm", []> {
     let cx = 1;
@@ -436,11 +437,10 @@ def VFADpvm2 : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz, VMP:$vm, V64:$vd)
 
 def : Pat<(int_ve_pvfadd_vvvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd),
           (VFADpvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
+*/
 
 def VFMSpv : Pseudo<(outs VMP:$vm), (ins CCOp:$cf, V64:$vz), 
-                    "# pvfms.w.${cf} $vm,$vz", []>;
-
-def : Pat<(int_ve_pvfmks_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMSpv (i32 uimm6:$cc), v256f64:$vz)>;
+                    "# pvfmk.w.${cf} $vm,$vz", []>;
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
@@ -502,9 +502,17 @@ def VFMSlv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let vw = 0;
 }
 
+def VFMFdv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
+  "vfmk.d.${cf} $vm,$vz", []>
+{
+  let cx = 0;
+  let cx2 = 0;
+  let sy = 0;
+  let vw = 0;
+}
 
-def VFMFv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
-  "vfmf.l.${cf} $vm,$vz", []>
+def VFMFsv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
+  "vfmk.s.${cf} $vm,$vz", []>
 {
   let cx = 0;
   let cx2 = 0;

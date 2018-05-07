@@ -47,7 +47,8 @@ T_v256i32 = Type("v256f64", "V256d",  "int*",  T_i32)
 T_v256u64 = Type("v256f64", "V256d",  "unsigned long int*", T_u64)
 T_v256u32 = Type("v256f64", "V256d",  "unsigned int*",  T_u32)
 
-T_v4i64   = Type("v4i64",   "V4Li",   "unsigned long int*",  T_i64)
+T_v4u64   = Type("v4i64",   "V4ULi",   "unsigned long int*",  T_u64)
+T_v8u64   = Type("v8i64",   "V8ULi",   "unsigned int*",  T_u64)
 
 T_void    = Type(None,      None,     "void")
 T_v256v64 = Type("v256f64", "V256d",  "void*", T_void)
@@ -56,17 +57,17 @@ class Op(object):
     def __init__(self, kind, ty, name):
         self.kind = kind
         self.ty = ty
-        self.name = name
+        self.name_ = name
 
     def dagOp(self):
         if self.kind == 'I':
-            return "({} simm7:${})".format(self.ty.ValueType, self.name)
+            return "({} simm7:${})".format(self.ty.ValueType, self.name_)
         elif self.kind == 'N':
-            return "({} uimm6:${})".format(self.ty.ValueType, self.name)
+            return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
         elif self.kind == 'c':
-            return "({} uimm6:${})".format(self.ty.ValueType, self.name)
+            return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
         else:
-            return "{}:${}".format(self.ty.ValueType, self.name)
+            return "{}:${}".format(self.ty.ValueType, self.name_)
 
     def isImm(self):
         return self.kind == 'I' or self.kind == 'N'
@@ -77,18 +78,31 @@ class Op(object):
     def isVReg(self):
         return self.kind == 'v'
     def isMask(self):
-        return self.kind == 'm'
+        return self.kind == 'm' or self.kind == 'M'
+    def isMask512(self):
+        return self.kind == 'M'
     def isCC(self):
         return self.kind == 'c'
 
     def regName(self):
-        return self.name
+        return self.name_
 
     def formalName(self):
-        if self.kind == "v" or self.kind == 'm':
-            return "p" + self.name
+        if self.isVReg() or self.isMask():
+            return "p" + self.name_
         else:
-            return self.name
+            return self.name_
+
+    def VectorType(self):
+        if self.isVReg():
+            return "__vr"
+        elif self.isMask512():
+            return "__vm512"
+        elif self.isMask():
+            return "__vm"
+        raise Exception("not a vector type: {}".format(self.kind))
+
+
 
 class SX(Op):
     def __init__(self, ty):
@@ -129,8 +143,8 @@ def VW(ty):
 def VD(ty):
     return VOp(ty, "vd")
 
-VMx = Op("m", T_v4i64, "vmx")
-VM = Op("m", T_v4i64, "vm")
+VM = Op("m", T_v4u64, "vm")
+VM512 = Op("M", T_v8u64, "vm")
 CCOp = Op("c", T_u32, "cc")
 
 I = Op("I", T_u64, "I")
@@ -172,6 +186,9 @@ class Inst:
         s = re.sub(r'_[vm].*', '', s)
         s = re.sub(r'_svs', '', s) # LVS
         s = re.sub(r'_', '.', s)
+        # temp
+        if len(self.outs) > 0 and self.outs[0].isMask512():
+            s = ""
         return s
 
     def inst(self):
@@ -287,17 +304,23 @@ class Inst:
         if self.hasMask():
             self.ins.pop(-1)
 
+        # input
         args = []
         for op in self.ins:
             if op.isVReg():
                 stride = self.stride(op)
                 vld, vst = self.get_vld_vst_inst(op)
-                body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
-            if op.isMask():
+                body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
+            if op.isMask512():
                 stride = self.stride(op)
                 vld, vst = self.get_vld_vst_inst(op)
-                body += indent + "__vr {}0 = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
-                body += indent + "__vm {} = _ve_vfmkl_mcv({}, {}0);\n".format(op.name, cond, op.name)
+                body += indent + "__vr {}0 = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
+                body += indent + "__vm512 {} = _ve_pvfmkw_Mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
+            elif op.isMask():
+                stride = self.stride(op)
+                vld, vst = self.get_vld_vst_inst(op)
+                body += indent + "__vr {}0 = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
+                body += indent + "__vm {} = _ve_vfmkl_mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
             if op.isReg() or op.isMask():
                 args.append(op.regName())
             elif op.isImm():
@@ -309,10 +332,10 @@ class Inst:
             op = self.outs[0]
             vld, vst = self.get_vld_vst_inst(op)
             stride = self.stride(op)
-            body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.name, vld, op.name, stride)
-            body += indent + "{} = _ve_{}({});\n".format(out.name, self.intrinsicName(), ', '.join(args + [op.name]))
+            body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
+            body += indent + "{} = _ve_{}({});\n".format(out.regName(), self.intrinsicName(), ', '.join(args + [op.regName()]))
         else:
-            body += indent + "__vr {} = _ve_{}({});\n".format(out.name, self.intrinsicName(), ', '.join(args))
+            body += indent + "__vr {} = _ve_{}({});\n".format(out.regName(), self.intrinsicName(), ', '.join(args))
 
         if out.isVReg():
             stride = self.stride(out)
@@ -322,7 +345,7 @@ class Inst:
         tmp = []
         for op in (self.outs + self.ins):
             if op.isVReg() or op.isMask():
-                tmp.append(indent + "p{} += {};".format(op.name, "512" if self.packed else "256"))
+                tmp.append(indent + "p{} += {};".format(op.regName(), "512" if self.packed else "256"))
 
         body += "\n".join(tmp)
 
@@ -404,8 +427,10 @@ class ManualInstPrinter:
             if out.isVReg():
                 outType = "__vr"
                 v.append("{}[:]".format(out.regName()))
+            elif out.isMask512():
+                outType = "__vm512"
             elif out.isMask():
-                outType = "__vm"
+                outType = "__vm256"
             elif out.isSReg():
                 outType = "unsigned long int" # ok?
             else:
@@ -557,6 +582,7 @@ class InstTable:
                "vv"   : "v",
                "vvv"  : "v",
                "vvvmv": "vm",
+               "vvvMv": "vm",
                "vvs"  : "r",
                "vvss" : "r", # LSV
                "svs"  : "r", # LVS
@@ -569,6 +595,7 @@ class InstTable:
                "vIvv" : "i",
                "vvIv" : "i2",
                "mcv"  : "v",
+               "Mcv"  : "v",
                "vvIs" : "i", # VSFA
                }
 
@@ -607,23 +634,31 @@ class InstTable:
         O_f64 = [O_f64_vvv, O_f64_vsv, O_f64_vvvmv]
         O_f32 = [O_f32_vvv, O_f32_vsv, O_f32_vvvmv]
 
+        O_pf32_vvvmv = [VX(T_f32), VY(T_f32), VZ(T_f32), VM512, VD(T_f32)]
+
         self.InstX(opc, instName+"d", name+".d", O_f64, expr)
         self.InstX(opc, instName+"s", name+".s", O_f32, expr)
         if hasPacked:
             self.InstX(opc, instName+"p", "p"+name, [O_f32_vvv, O_pf32_vsv], expr) 
+            self.InstX(opc, instName+"p", "p"+name, [O_pf32_vvvmv], expr) 
 
     # 3 operands, unsigned [long] int
     def Inst3u(self, opc, name, instName, expr, hasPacked = True):
         O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
         O_u64_vsv = [VX(T_u64), SY(T_u64), VZ(T_u64)]
         O_u64_vIv = [VX(T_u64), I, VZ(T_u64)]
+        O_u64_vvvmv = [VX(T_u64), VY(T_u64), VZ(T_u64), VM, VD(T_u64)] 
 
         O_u32_vvv = [VX(T_u32), VY(T_u32), VZ(T_u32)]
         O_u32_vsv = [VX(T_u32), SY(T_u32), VZ(T_u32)]
         O_u32_vIv = [VX(T_u32), I, VZ(T_u32)]
+        O_u32_vvvmv = [VX(T_u32), VY(T_u32), VZ(T_u32), VM, VD(T_u32)]
 
-        self.InstX(opc, instName+"l", name+".l", [O_u64_vvv, O_u64_vsv, O_u64_vIv], expr)
-        self.InstX(opc, instName+"w", name+".w", [O_u32_vvv, O_u32_vsv, O_u32_vIv], expr)
+        O_u64 = [O_u64_vvv, O_u64_vsv, O_u64_vIv, O_u64_vvvmv]
+        O_u32 = [O_u32_vvv, O_u32_vsv, O_u32_vIv, O_u32_vvvmv]
+
+        self.InstX(opc, instName+"l", name+".l", O_u64, expr)
+        self.InstX(opc, instName+"w", name+".w", O_u32, expr)
         if hasPacked:
             self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vsv], expr)
 
@@ -807,11 +842,14 @@ T.NoImpl("VMGR")
 T.NoImpl("VSHF")
 T.NoImpl("VCP")
 T.NoImpl("VEX")
-T.InstX(0xB4, "VFMK", "vfmk.l", [[VMx, CCOp, VZ(T_i64)]]).noTest()
-T.InstX(0xB4, "VFMS", "vfmk.w", [[VMx, CCOp, VZ(T_i32)]]).noTest()
-T.InstX(0xB6, "VFMF", "vfmk.d", [[VMx, CCOp, VZ(T_f64)]]).noTest()
-T.InstX(0xB6, "VFMFu", "pvfmk.s.up", [[VMx, CCOp, VZ(T_f32)]]).noTest()
-T.InstX(0xB6, "VFMFl", "pvfmk.s.lo", [[VMx, CCOp, VZ(T_f32)]]).noTest()
+T.InstX(0xB4, "VFMK", "vfmk.l", [[VM, CCOp, VZ(T_i64)]]).noTest()
+T.InstX(0xB5, "VFMS", "vfmk.w", [[VM, CCOp, VZ(T_i32)]]).noTest()
+T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
+T.InstX(0xB6, "VFMFd", "vfmk.d", [[VM, CCOp, VZ(T_f64)]]).noTest()
+T.InstX(0xB6, "VFMFs", "vfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest()
+#T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest() # Pseudo
+#T.InstX(0xB6, "VFMFu", "pvfmk.s.up", [[VM, CCOp, VZ(T_f32)]]).noTest()
+#T.InstX(0xB6, "VFMFl", "pvfmk.s.lo", [[VM, CCOp, VZ(T_f32)]]).noTest()
 
 T.Section("5.3.2.13. Vector Recursive Relation Instructions")
 T.InstX(0xEA, "VSUMSsx", "vsumw_sx", [[VX(T_i32), VY(T_i32)]])
