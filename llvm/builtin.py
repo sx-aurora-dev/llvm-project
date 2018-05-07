@@ -701,7 +701,7 @@ class InstTable:
 
     def ShiftPacked(self, opc, name, instName, expr):
         O_u32_vvv = [VX(T_u32), VZ(T_u32), VY(T_u32)]
-        O_u32_vvs = [VX(T_u32), VZ(T_u64), SY(T_u64)]
+        O_u32_vvs = [VX(T_u32), VZ(T_u32), SY(T_u64)]
 
         self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vvs], expr)
 
