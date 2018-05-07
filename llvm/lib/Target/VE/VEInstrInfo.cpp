@@ -548,7 +548,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       .addReg(VMu)
       .addImm(MI.getOperand(1).getImm())
       .addReg(MI.getOperand(2).getReg());
-    BuildMI(*MBB, MI, dl, get(VE::VFMSlv))
+    BuildMI(*MBB, MI, dl, get(VE::VFMSv))
       .addReg(VMl)
       .addImm(MI.getOperand(1).getImm())
       .addReg(MI.getOperand(2).getReg());

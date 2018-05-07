@@ -72,12 +72,14 @@ multiclass RV3m<string opcStr, bits<8> opc, RegisterClass MaskRC> {
     !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cs = 1;
       let vy = 0;
+      let Constraints = "$vx = $vd";
     }
   def rm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, MaskRC:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cs = 1;
       let cy = 1;
       let vy = 0;
+      let Constraints = "$vx = $vd";
     }
   def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, MaskRC:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
@@ -468,10 +470,8 @@ defm VFNMSB : RV4DSPm<"vfnmsb", 0xF3>;
 // VSHF
 // VCP
 // VEX
-// VFMK
-// VFMS
-// VFMF
 
+// 64bit integer
 def VFMKv : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "vfmk.l.${cf} $vm,$vz", []>
 {
@@ -479,21 +479,26 @@ def VFMKv : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let vw = 0;
 }
 
+// 32bit integer (lower)
 def VFMSv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   "vfmk.w.${cf} $vm,$vz", []>
-{
-  let sy = 0;
-  let vw = 0;
-}
-
-def VFMSuv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
-  "pvfmk.w.up.${cf} $vm,$vz", []>
 {
   let cx = 0;
   let sy = 0;
   let vw = 0;
 }
 
+// 32bit integer (upper)
+def VFMSuv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
+  "pvfmk.w.up.${cf} $vm,$vz", []>
+{
+  let cx = 1;
+  let sy = 0;
+  let vw = 0;
+}
+
+/*
+// 32bit integer (lower) (same as VFMSv)
 def VFMSlv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   "pvfmk.w.lo.${cf} $vm,$vz", []>
 {
@@ -501,7 +506,9 @@ def VFMSlv : RV<0xB5, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let sy = 0;
   let vw = 0;
 }
+*/
 
+// 64bit float
 def VFMFdv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "vfmk.d.${cf} $vm,$vz", []>
 {
@@ -511,15 +518,18 @@ def VFMFdv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let vw = 0;
 }
 
+// 32bit float (upper)
 def VFMFsv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "vfmk.s.${cf} $vm,$vz", []>
 {
-  let cx = 0;
+  let cx = 1;
   let cx2 = 0;
   let sy = 0;
   let vw = 0;
 }
 
+/*
+// 32bit float (upper) (same as VFMFsv)
 def VFMFuv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "pvfmf.s.up.${cf} $vm,$vz", []>
 {
@@ -528,7 +538,9 @@ def VFMFuv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let sy = 0;
   let vw = 0;
 }
+*/
 
+// 32bit float (lower)
 def VFMFlv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "pvfmf.s.lo.${cf} $vm,$vz", []>
 {

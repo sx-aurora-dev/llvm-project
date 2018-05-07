@@ -445,15 +445,18 @@ class ManualInstPrinter:
             elif op.isSReg():
                 ins.append("{} {}".format(op.ty.ctype, op.regName()))
                 v.append("{}".format(op.regName()))
+            elif op.isMask512():
+                ins.append("__vm512 {}".format(op.regName()))
+                v.append("{}[:]".format(op.regName()))
             elif op.isMask():
-                ins.append("__vm {}".format(op.regName()))
+                ins.append("__vm256 {}".format(op.regName()))
                 v.append("{}[:]".format(op.regName()))
             elif op.isImm():
                 ins.append("{} {}".format(op.ty.ctype, op.regName()))
                 v.append("{}".format(op.regName()))
-            elif op.isMask():
-                ins.append("{} {}".format(op.ty.ctype, op.regName()))
-                v.append("{}".format(op.regName()))
+            #elif op.isMask():
+            #    ins.append("{} {}".format(op.ty.ctype, op.regName()))
+            #    v.append("{}".format(op.regName()))
             elif op.isCC():
                 ins.append("int cc".format(op.ty.ctype))
             else:
@@ -588,7 +591,10 @@ class InstTable:
                "svs"  : "r", # LVS
                "vvN"  : "i",
                "vsv"  : "r",
+               "vsvmv": "rm",
+               "vsvMv": "rm",
                "vIv"  : "i",
+               "vIvmv": "im",
                "vvvv" : "v",
                "vsvv" : "r",
                "vvsv" : "r2",
@@ -628,34 +634,49 @@ class InstTable:
         O_f32_vsv = [VX(T_f32), SY(T_f32), VZ(T_f32)]
         O_pf32_vsv = [VX(T_f32), SY(T_u64), VZ(T_f32)]
 
-        O_f64_vvvmv = [VX(T_f64), VY(T_f64), VZ(T_f64), VM, VD(T_f64)]
-        O_f32_vvvmv = [VX(T_f32), VY(T_f32), VZ(T_f32), VM, VD(T_f32)]
+        #O_f64_vvvmv = [VX(T_f64), VY(T_f64), VZ(T_f64), VM, VD(T_f64)]
+        #O_f32_vvvmv = [VX(T_f32), VY(T_f32), VZ(T_f32), VM, VD(T_f32)]
 
-        O_f64 = [O_f64_vvv, O_f64_vsv, O_f64_vvvmv]
-        O_f32 = [O_f32_vvv, O_f32_vsv, O_f32_vvvmv]
+        O_f64 = [O_f64_vvv, O_f64_vsv]
+        O_f32 = [O_f32_vvv, O_f32_vsv]
+        O_pf32 = [O_f32_vvv, O_pf32_vsv]
 
-        O_pf32_vvvmv = [VX(T_f32), VY(T_f32), VZ(T_f32), VM512, VD(T_f32)]
+        O_f64 = self.addMask(O_f64)
+        O_f32 = self.addMask(O_f32)
+        O_pf32 = self.addMask(O_pf32, VM512)
+
+        #O_pf32_vvvmv = [VX(T_f32), VY(T_f32), VZ(T_f32), VM512, VD(T_f32)]
 
         self.InstX(opc, instName+"d", name+".d", O_f64, expr)
         self.InstX(opc, instName+"s", name+".s", O_f32, expr)
         if hasPacked:
-            self.InstX(opc, instName+"p", "p"+name, [O_f32_vvv, O_pf32_vsv], expr) 
-            self.InstX(opc, instName+"p", "p"+name, [O_pf32_vvvmv], expr) 
+            self.InstX(opc, instName+"p", "p"+name, O_pf32, expr) 
+            #self.InstX(opc, instName+"p", "p"+name, [O_f32_vvv, O_pf32_vsv], expr) 
+            #self.InstX(opc, instName+"p", "p"+name, [O_pf32_vvvmv], expr) 
+
+    def addMask(self, ary, MaskOp = VM):
+        tmp = []
+        for a in ary:
+            tmp.append(a + [MaskOp, VD(a[0].ty.elemType)])
+        return ary + tmp
 
     # 3 operands, unsigned [long] int
     def Inst3u(self, opc, name, instName, expr, hasPacked = True):
         O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
         O_u64_vsv = [VX(T_u64), SY(T_u64), VZ(T_u64)]
         O_u64_vIv = [VX(T_u64), I, VZ(T_u64)]
-        O_u64_vvvmv = [VX(T_u64), VY(T_u64), VZ(T_u64), VM, VD(T_u64)] 
+        #O_u64_vvvmv = [VX(T_u64), VY(T_u64), VZ(T_u64), VM, VD(T_u64)] 
 
         O_u32_vvv = [VX(T_u32), VY(T_u32), VZ(T_u32)]
         O_u32_vsv = [VX(T_u32), SY(T_u32), VZ(T_u32)]
         O_u32_vIv = [VX(T_u32), I, VZ(T_u32)]
-        O_u32_vvvmv = [VX(T_u32), VY(T_u32), VZ(T_u32), VM, VD(T_u32)]
+        #O_u32_vvvmv = [VX(T_u32), VY(T_u32), VZ(T_u32), VM, VD(T_u32)]
 
-        O_u64 = [O_u64_vvv, O_u64_vsv, O_u64_vIv, O_u64_vvvmv]
-        O_u32 = [O_u32_vvv, O_u32_vsv, O_u32_vIv, O_u32_vvvmv]
+        O_u64 = [O_u64_vvv, O_u64_vsv, O_u64_vIv]
+        O_u32 = [O_u32_vvv, O_u32_vsv, O_u32_vIv]
+
+        O_u64 = self.addMask(O_u64)
+        O_u32 = self.addMask(O_u32)
 
         self.InstX(opc, instName+"l", name+".l", O_u64, expr)
         self.InstX(opc, instName+"w", name+".w", O_u32, expr)
