@@ -153,14 +153,14 @@ multiclass RVEXm<string opcStr, bits<8> opc> {
 multiclass RVUm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, VM>; // u64
   let cx = 0, cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, VM>; // u32
-  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VMP>; // packed u32
+  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VM512>; // packed u32
 }
 
 // i32 (sz,zx), packed i32
 multiclass RVWm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 0 in defm wsx : RV3m<opcStr # ".w.sx", opc, VM>; // i32 sx
   let cx = 0, cx2 = 1 in defm wzx : RV3m<opcStr # ".w.zx", opc, VM>; // i32 zx
-  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VMP>;       // packed i32
+  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VM512>;       // packed i32
 }
 
 // i64
@@ -172,7 +172,7 @@ multiclass RVLm<string opcStr, bits<8> opc> {
 multiclass RVDSPm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 0 in defm d : RV3m<opcStr # ".d", opc, VM>; // double
   let cx = 1, cx2 = 0 in defm s : RV3m<opcStr # ".s", opc, VM>; // float
-  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VMP>; // packed
+  let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, VM512>; // packed
 }
 
 // f64, f32, packed f32 (4 operands)
@@ -428,7 +428,7 @@ def VSFAi : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz),
 
 
 /*
-def VFADpvm2 : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz, VMP:$vm, V64:$vd),
+def VFADpvm2 : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd),
   "pvfadd $vx,$vy,$vz,$vm", []> {
     let cx = 1;
     let cx2 = 1;
@@ -441,7 +441,7 @@ def : Pat<(int_ve_pvfadd_vvvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)
           (VFADpvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
 */
 
-def VFMSpv : Pseudo<(outs VMP:$vm), (ins CCOp:$cf, V64:$vz), 
+def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
