@@ -321,6 +321,10 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (VE::I32RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
+  else if (VE::V64RegClass.contains(DestReg, SrcReg))
+    BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(KillSrc));
   else
     llvm_unreachable("Impossible reg-to-reg copy");
 #if 0

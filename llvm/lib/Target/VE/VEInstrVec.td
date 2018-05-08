@@ -198,6 +198,22 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cy = 1;
   }
 
+  def i0 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
+    !strconcat(opcStr, " $vx,(${sy})0,$vz"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 1;
+      let cy = 0;
+  }
+
+  def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
+    !strconcat(opcStr, " $vx,(${sy})1,$vz"), []> {
+      let cx = 0;
+      let cx2 = 0;
+      let cs = 1;
+      let cy = 0;
+  }
+
   def pv : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
     !strconcat("p", opcStr, " $vx,$vy,$vz"), []> {
       let cx = 1;
