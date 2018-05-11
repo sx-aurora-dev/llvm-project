@@ -126,6 +126,9 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
           FuncDeclWithoutBody.insert(FD->getNameAsString());
         }
       }
+      if (!D->hasBody() || (FD && !FD->doesThisDeclarationHaveABody())) {
+        TCD->NeedsSemicolon = true;
+      }
       return true;
     }
   }

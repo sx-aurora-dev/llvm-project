@@ -77,21 +77,5 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
 }
 
 clang::SourceRange TargetCodeDecl::getInnerRange() {
-  if (llvm::isa<clang::TypeDecl>(Node)) {
-    return getRealRange();
-  } // Types have .NeedsSemicolon set to true
-  auto *FD = Node->getAsFunction();
-  if (!Node->hasBody() || (FD && !FD->doesThisDeclarationHaveABody())) {
-    clang::SourceManager &SM = Context.getSourceManager();
-    auto possibleNextToken = clang::Lexer::findNextToken(
-      Node->getLocEnd().getLocWithOffset(1), SM, Context.getLangOpts());
-    clang::SourceLocation endLoc;
-    if (possibleNextToken.hasValue()) {
-      endLoc = possibleNextToken.getValue().getEndLoc();
-    } else {
-      endLoc = Node->getLocEnd();
-    }
-    return clang::SourceRange(Node->getLocStart(), endLoc);
-  }
   return getRealRange();
 }
