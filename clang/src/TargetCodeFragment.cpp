@@ -75,7 +75,3 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
     return getRealRange();
   }
 }
-
-clang::SourceRange TargetCodeDecl::getInnerRange() {
-  return getRealRange();
-}

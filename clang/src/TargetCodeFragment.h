@@ -113,5 +113,4 @@ public:
   TargetCodeDecl(clang::Decl *Node)
       : TargetCodeSourceFragment<clang::Decl *>(Node, Node->getASTContext(),
                                                 TCFK_TargetCodeDecl) {}
-  clang::SourceRange getInnerRange() override;
 };
