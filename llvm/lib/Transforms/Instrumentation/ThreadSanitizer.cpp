@@ -430,7 +430,9 @@ static bool shouldInstrumentReadWriteFromAddress(const Module *M, Value *Addr) {
   // with them.
   if (Addr) {
     Type *PtrTy = cast<PointerType>(Addr->getType()->getScalarType());
-    if (PtrTy->getPointerAddressSpace() != 0)
+    auto AS = PtrTy->getPointerAddressSpace();
+    // Allow for custom addresspaces
+    if (AS != 0 && AS < 10)
       return false;
   }
 
