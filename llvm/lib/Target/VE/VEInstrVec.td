@@ -204,6 +204,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cx2 = 0;
       let cs = 1;
       let cy = 0;
+      let sy{6} = 1;
   }
 
   def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
@@ -461,6 +462,30 @@ def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz),
                     "# pvfmk.w.${cf} $vm,$vz", []>;
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
+
+multiclass VRCPm<string opcStr, bits<8> opc> {
+  def dv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
+    !strconcat(opcStr, ".d $vx,$vy"), []> {
+      let cy = 1;
+      let sy = 0;
+  }
+
+  def sv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
+    !strconcat(opcStr, ".s $vx,$vy"), []> {
+      let cx = 1;
+      let cy = 1;
+      let sy = 0;
+  }
+
+  def pv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
+    !strconcat("p"#opcStr, " $vx,$vy"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cy = 1;
+      let sy = 0;
+  }
+}
+
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
 defm VFSB : RVDSPm<"vfsub", 0xDC>;
 defm VFMP : RVDSPm<"vfmul", 0xCD>;
@@ -472,7 +497,7 @@ defm VFMAD : RV4DSPm<"vfmad", 0xE2>;
 defm VFMSB : RV4DSPm<"vfmsb", 0xF2>;
 defm VFNMAD : RV4DSPm<"vfnmad", 0xE3>;
 defm VFNMSB : RV4DSPm<"vfnmsb", 0xF3>;
-// VRCP
+defm VRCP : VRCPm<"vrcp", 0xE1>;
 // VRSQRT
 // VFIX
 // VFIXX
@@ -619,16 +644,22 @@ defm VSCL : VSCm<"vscl", 0xB3>;
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, Defs = [VL] in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
-
 // Pattern Matchings for Vector Instructions
 
 def : Pat<(v256f64 (load ADDRri:$addr)), 
           (v256f64 (VLDi 8, (LEAasx ADDRri:$addr)))>;
 
-def : Pat<(store V64:$vx, ADDRri:$addr), 
+def : Pat<(v512f32 (load ADDRri:$addr)), 
+          (v512f32 (VLDi 8, (LEAasx ADDRri:$addr)))>;
+
+def : Pat<(store v256f64:$vx, ADDRri:$addr), 
           (VSTi v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
 
+def : Pat<(store v512f32:$vx, ADDRri:$addr), 
+          (VSTi v512f32:$vx, 8, (LEAasx ADDRri:$addr))>;
+
 def : Pat<(fadd v256f64:$vy, v256f64:$vz), (VFADdv v256f64:$vy, v256f64:$vz)>;
+def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
 
 // Pattern Matchings for Vector Intrinsics
 

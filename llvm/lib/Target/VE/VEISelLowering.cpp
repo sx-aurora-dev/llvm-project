@@ -1344,7 +1344,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::F64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
+  addRegisterClass(MVT::v256i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f32, &VE::V64RegClass);
   addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
   addRegisterClass(MVT::v4i64, &VE::VMRegClass);
   addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
 
@@ -2692,6 +2697,70 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getRegister(SP::G7, PtrVT);
 #endif
+  }
+  case Intrinsic::ve_vfdivsA_vsv: {
+/*
+600000000c68:       00 00 00 04     vrcp.s  %v4,%v0,%vm1
+600000000c70:       00 00 80 3f     lea.sl  %s1,0x3f800000(0,0)
+600000000c78:       04 00 00 02     vfnmsb.s        %v2,%s1,%v0,%v4,%vm1
+600000000c80:       02 04 04 02     vfmad.s %v2,%v4,%v4,%v2,%vm1
+600000000c88:       00 02 00 01     vfmul.s %v1,%s0,%v2,%vm1
+600000000c90:       00 01 00 03     vfnmsb.s        %v3,%s0,%v1,%v0,%vm1
+600000000c98:       03 04 01 01     vfmad.s %v1,%v1,%v4,%v3,%vm1
+600000000ca0:       00 01 00 03     vfnmsb.s        %v3,%s0,%v1,%v0,%vm1
+600000000ca8:       03 02 01 00     vfmad.s %v0,%v1,%v2,%v3,%vm1
+600000000cb0:       00 00 00 00     b.l.t   0x0(,%s10)
+ */
+    // Op0: function id, Op1: f32, Op1: V64
+    SDLoc dl(Op);
+
+    EVT VT = Op.getValueType();
+    SDValue S0, S1;
+    SDValue V0, V1, V2, V3, V4;
+
+    S0 = Op.getOperand(1);
+    V0 = Op.getOperand(2);
+
+    V4 = SDValue(DAG.getMachineNode(VE::VRCPsv, dl, VT, V0), 0);  // V4 = 1.0f / V0
+    S1 = SDValue(DAG.getMachineNode(VE::LEASLzzi, dl, MVT::f32,
+                                    DAG.getTargetConstant(0x3f800000, dl, MVT::i32)), 0); // S1 = 1.0f
+    V2 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S1, V0, V4), 0); // V2 = -(V0*V4-S1)
+    V2 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V4, V4, V2), 0); // V2 = V4*V2+V4
+    V1 = SDValue(DAG.getMachineNode(VE::VFMPsr,   dl, VT, S0, V2), 0);     // V1 = S0*V2
+    V3 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S0, V1, V0), 0); // V3 = -(V1*V0-S0)
+    V1 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V1, V4, V3), 0); // V1 = V4*V3+V1
+    V3 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S0, V1, V0), 0); // v3 = -(V1*V0-S0)
+    V0 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V1, V2, V3), 0); // V0 = V2*V3+V1
+    return V0;
+  }
+  case Intrinsic::ve_vec_call: {
+    // Op0: function id, Op1: input V64, Op2: address
+    SDLoc dl(Op);
+    SDValue Chain = DAG.getEntryNode();
+    SDValue InGlue;
+
+    // create copy from input to V0
+    Chain = DAG.getCopyToReg(Chain, dl, VE::V0, Op.getOperand(1), InGlue);
+    InGlue = Chain.getValue(1);
+
+    // create CALL node
+    SmallVector<SDValue, 8> Ops;
+    Ops.push_back(Chain);
+    Ops.push_back(Op.getOperand(2));
+
+    // preserved registers
+    static const uint32_t Mask_expf[] = {0xa1ffffff, 0x007fffff, 0xffffffee, 0x003fffff, 0xfffffc7e, 0x3fffffff, 0xffff87f0};
+    Ops.push_back(DAG.getRegisterMask(Mask_expf));
+
+    if (InGlue.getNode())
+        Ops.push_back(InGlue);
+    SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
+    Chain = DAG.getNode(VEISD::CALL, dl, NodeTys, Ops);
+    InGlue = Chain.getValue(1);
+
+    // create copy from V0 to output
+    SDValue RV = DAG.getCopyFromReg(Chain, dl, VE::V0, MVT::v256f64, InGlue);
+    return RV;
   }
   }
 }

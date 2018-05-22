@@ -190,6 +190,8 @@ class DummyInst:
         return self.func_
     def isDummy(self):
         return True
+    def hasInst(self):
+        return self.inst_ != None
 
 class Inst:
     def __init__(self, opc, ni, nf, outs, ins, packed = False, expr = None):
@@ -204,11 +206,17 @@ class Inst:
         self.nf = nf
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
+        self.hasBuiltin_ = True
+
+    def noBuiltin(self):
+        self.hasBuiltin_ = False
 
     def isDummy(self):
         return False
 
     def asm(self):
+        if not self.hasInst():
+            return ""
         s = self.nf
         s = re.sub(r'_[vm].*', '', s)
         s = re.sub(r'_svs', '', s) # LVS
@@ -242,6 +250,11 @@ class Inst:
     def prop(self):
         return self.prop_
 
+    def hasInst(self):
+        return self.instName != None
+
+    def hasBuiltin(self):
+        return self.hasBuiltin_
 
     # to be included from VEInstrInfo.td
     def intrinsicPattern(self):
@@ -268,7 +281,7 @@ class Inst:
         return "BUILTIN(__builtin_ve_{}, \"{}\", \"n\")".format(self.intrinsicName(), tmp)
 
     # to be included from veintrin.h
-    def header(self):
+    def veintrin(self):
         return "#define _ve_{} __builtin_ve_{}".format(self.intrinsicName(), self.intrinsicName())
 
     def funcHeader(self):
@@ -513,11 +526,12 @@ class HtmlManualPrinter(ManualInstPrinter):
                     expr = ""
                 else:
                     func, expr = self.make(I)
-                if I.inst() in rowspan:
-                    rowspan[I.inst()] += 1
+                inst = I.inst() if I.hasInst() else ""
+                if inst in rowspan:
+                    rowspan[inst] += 1
                 else:
-                    rowspan[I.inst()] = 1
-                tmp.append([I.inst(), func, I.asm(), expr])
+                    rowspan[inst] = 1
+                tmp.append([inst, func, I.asm(), expr])
 
             #sys.stderr.write("{}\n".format(s.name))
             #for k, v in rowspan.items():
@@ -545,6 +559,10 @@ class InstList:
     def noTest(self):
         for I in self.a:
             I.noTest()
+        return self
+    def noBuiltin(self):
+        for I in self.a:
+            I.noBuiltin()
         return self
     def readMem(self):
         for I in self.a:
@@ -644,14 +662,24 @@ class InstTable:
         IL = InstList()
         #print("InstX: ni={} nf={}".format(ni, nf))
         for args in ary:
-            ni0 = ni + self.args_to_inst_suffix(args)
-            nf0 = nf + self.args_to_func_suffix(args)
+            ni0 = nf0 = None
+            if ni:
+                ni0 = ni + self.args_to_inst_suffix(args)
+            if nf:
+                nf0 = nf + self.args_to_func_suffix(args)
             outs = [args[0]]
             ins = args[1:]
             i = Inst(opc, ni0, nf0, outs, ins, nf[0] == 'p', expr)
             self.add(i)
             IL.add(i)
         return IL
+
+    # RCP
+    def Inst2f(self, opc, name, instName, expr, hasPacked = True):
+        self.InstX(opc, instName+"d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
+        self.InstX(opc, instName+"s", name+".s", [[VX(T_f32), VY(T_f32)]], expr)
+        if hasPacked:
+            self.InstX(opc, instName+"p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr) 
 
     def Inst3f(self, opc, name, instName, expr, hasPacked = True):
         O_f64_vvv = [VX(T_f64), VY(T_f64), VZ(T_f64)]
@@ -874,10 +902,11 @@ T.NoImpl("VSRAX")
 T.InstX(0xD7, "VSFA", "vsfa", [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), I, SZ(T_u64)]], "{0} = ({1} << ({2} & 0x7)) + {3}")
 
 T.Section("5.3.2.11. Vector Floating-Point Operation Instructions")
-T.Inst3f(0xFF, "vfadd", "VFAD", "{0} = {1} + {2}")
-T.Inst3f(0xFF, "vfsub", "VFSB", "{0} = {1} - {2}")
-T.Inst3f(0xFF, "vfmul", "VFMP", "{0} = {1} * {2}")
-T.Inst3f(0xFF, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
+T.Inst3f(0xCC, "vfadd", "VFAD", "{0} = {1} + {2}")
+T.Inst3f(0xDC, "vfsub", "VFSB", "{0} = {1} - {2}")
+T.Inst3f(0xCD, "vfmul", "VFMP", "{0} = {1} * {2}")
+T.Inst3f(0xDD, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
+T.InstX(None, None, "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
 T.NoImpl("VFSQRT")
 T.NoImpl("VFCP")
 T.NoImpl("VFCM")
@@ -885,7 +914,7 @@ T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
 T.Inst4f(0xFF, "vfmsb", "VFMSB", "{0} = {2} * {3} - {1}")
 T.Inst4f(0xFF, "vfnmad", "VFNMAD", "{0} =  - ({2} * {3} + {1})")
 T.Inst4f(0xFF, "vfnmsb", "VFNMSB", "{0} =  - ({2} * {3} - {1})")
-T.NoImpl("VRCP")
+T.Inst2f(0xE1, "vrcp", "VRCP", "{0} = 1.0f / {1}")
 T.NoImpl("VRSQRT")
 T.NoImpl("VFIX")
 T.NoImpl("VFIXX")
@@ -949,13 +978,16 @@ T.NoImpl("LVIX")
 T.Section("Others")
 T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
 
+T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin()
+#T.Dummy("", "__vr _ve_vec_expf(__vr vy)", "{0} = expf({1})")
+#T.Dummy("", "__vr _ve_vfdivs_vsva(float sy, __vr vy)", "")
 import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', dest="opt_intrin", action="store_true")
 parser.add_argument('-p', dest="opt_pat", action="store_true")
 parser.add_argument('-b', dest="opt_builtin", action="store_true")
-parser.add_argument('--header', dest="opt_header", action="store_true")
+parser.add_argument('--veintrin', dest="opt_veintrin", action="store_true")
 parser.add_argument('--decl', dest="opt_decl", action="store_true")
 parser.add_argument('-t', dest="opt_test", action="store_true")
 parser.add_argument('-r', dest="opt_reference", action="store_true")
@@ -978,7 +1010,7 @@ if args.opt_all:
     args.opt_intrin = True
     args.opt_pat = True
     args.opt_builtin = True
-    args.opt_header = True
+    args.opt_veintrin = True
     args.opt_decl = True
     args.opt_reference = True
     args.opt_test = True
@@ -989,13 +1021,16 @@ if args.opt_intrin:
         print i.intrinsicDefine()
 if args.opt_pat:
     for i in insts:
-        print i.intrinsicPattern()
+        if i.hasInst():
+            print i.intrinsicPattern()
 if args.opt_builtin:
     for i in insts:
-        print i.builtin()
-if args.opt_header:
+        if i.hasBuiltin():
+            print i.builtin()
+if args.opt_veintrin:
     for i in insts:
-        print i.header()
+        if i.hasBuiltin():
+            print i.veintrin()
 if args.opt_decl:
     for i in insts:
         if i.hasTest():
@@ -1003,6 +1038,7 @@ if args.opt_decl:
 if args.opt_test:
     gen_test(insts, test_dir)
 if args.opt_reference:
+    print '#include <math.h>'
     print 'namespace ref {'
     for i in insts:
         if i.hasTest() and i.hasExpr():
