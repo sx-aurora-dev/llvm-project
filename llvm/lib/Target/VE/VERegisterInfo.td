@@ -132,5 +132,7 @@ def Misc : RegisterClass<"VE", [i64], 64,
                               (sequence "PMC%u", 0, 14))>;
 
 def V64 : RegisterClass<"VE", [v256i32, v256i64, v512i32, v256f32, v256f64, v512f32], 64, (sequence "V%u", 0, 63)>;
-def VM : RegisterClass<"VE", [v4i64], 64, (sequence "VM%u", 1, 15)>; // vm0 is reserved for always true
+// vm0 is reserved for always true
+def VM : RegisterClass<"VE", [v4i64], 64, (sequence "VM%u", 1, 15)>;
+
 def VM512 : RegisterClass<"VE", [v8i64], 64, (sequence "VMP%u", 1, 7)>;

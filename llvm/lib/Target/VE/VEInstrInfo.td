@@ -363,6 +363,7 @@ multiclass BCRm {
     let cz = 0;
     let sz = 0;
     let cf = 15;  /* AT */
+    let isBarrier = 1;
   }
 }
 
@@ -512,6 +513,27 @@ defm FAD : RRFm<"fadd", 0x4C, fadd>;
 defm FSB : RRFm<"fsub", 0x5C, fsub>;
 defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
+
+multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode, ValueType Ty0, ValueType Ty1>
+{
+  def r : RR<opc, (outs I64:$sx), (ins I64:$sy), !strconcat(opcStr, " $sx,$sy"),
+    [(set Ty0:$sx, (OpNode Ty1:$sy))]> {
+      let cx = 0;
+      let cy = 1;
+    }
+
+  def i : RR<opc, (outs I64:$sx), (ins I64:$sy), !strconcat(opcStr, " $sx,$sy"),
+    [(set Ty0:$sx, (OpNode Ty1:$sy))]> {
+      let cx = 0;
+      let cy = 0;
+    }
+}
+
+defm CVD : CVTm<"cvt.d.s", 0x0F, fpextend, f64, f32>;
+defm CVS : CVTm<"cvt.s.d", 0x1F, fpround, f32, f64>;
+
+//def CVD : RR<0xF, (outs I64:$sx), (ins I64:$sy), "cvt.d.s $sx,$sy",
+//  [(set f64:$sx, (fpextend f32:$sy))]>;
 
 
 // Load and Store instructions
@@ -864,6 +886,9 @@ def VE_SELECT : Pseudo<(outs I64:$dst),
 
 def : Pat<(i32 (VESelect (i32 timm:$cc), i32:$condVal, i32:$t, i32:$f)),
           (i32 (VE_SELECT $cc, i32:$condVal, i32:$t, i32:$f))>;
+
+def : Pat<(i64 (VESelect (i32 timm:$cc), i32:$condVal, i64:$t, i64:$f)),
+          (i64 (VE_SELECT $cc, i32:$condVal, i64:$t, i64:$f))>;
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
           (i32 (VE_SELECT (i32 (cond2cc $cond)), 
