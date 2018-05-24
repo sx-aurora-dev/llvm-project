@@ -28,6 +28,12 @@ BUILTIN(__builtin_ve_vst, "vv*V256dULi", "n")
 BUILTIN(__builtin_ve_vstu, "vv*V256dULi", "n")
 BUILTIN(__builtin_ve_vstl, "vv*V256dULi", "n")
 
+BUILTIN(__builtin_ve_pack_f32p, "ULifC*fC*", "n")
+
+BUILTIN(__builtin_ve_vec_call, "V256dV256dvC*", "n")
+
+BUILTIN(__builtin_ve_avfdivs_vsv, "V256dfV256d", "n")
+
 // BUILTIN(__builtin_bitrev, "UiUi", "nc")
 // BUILTIN(__builtin_getid, "Si", "nc")
 // BUILTIN(__builtin_getps, "UiUi", "n")
