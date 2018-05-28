@@ -29,6 +29,7 @@ BUILTIN(__builtin_ve_vstu, "vv*V256dULi", "n")
 BUILTIN(__builtin_ve_vstl, "vv*V256dULi", "n")
 
 BUILTIN(__builtin_ve_pack_f32p, "ULifC*fC*", "n")
+BUILTIN(__builtin_ve_pack_f32a, "ULifC*", "n")
 
 BUILTIN(__builtin_ve_vec_call, "V256dV256dvC*", "n")
 
