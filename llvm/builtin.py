@@ -977,6 +977,7 @@ T.NoImpl("LVIX")
 
 T.Section("Others")
 T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
+T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and pack")
 
 T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin()
 #T.Dummy("", "__vr _ve_vec_expf(__vr vy)", "{0} = expf({1})")

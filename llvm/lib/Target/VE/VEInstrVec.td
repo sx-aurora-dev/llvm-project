@@ -688,5 +688,21 @@ def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, (i64 simm7:$sy)),
 def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
           (ORrr (LDUri MEMri:$addr0), (LDLUri MEMri:$addr1))>;
 
+def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
+          (i64 (MPYrr
+            (LDLUri MEMri:$addr),
+            (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
+                      (HI32 (i64 0x0000000100000001)))))>;
+
+/*
+def : Pat<(i64 (int_ve_pack_f32 f32:$sy)),
+          (i64 (MPYrr 
+            (SRL $sy,32),
+            (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
+                      (HI32 (i64 0x0000000100000001)))))>;
+*/
+
+
+
 include "VEInstrIntrinsic.td"
 

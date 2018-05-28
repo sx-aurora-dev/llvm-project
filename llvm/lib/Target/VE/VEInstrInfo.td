@@ -518,22 +518,23 @@ multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode, ValueType Ty0, ValueT
 {
   def r : RR<opc, (outs I64:$sx), (ins I64:$sy), !strconcat(opcStr, " $sx,$sy"),
     [(set Ty0:$sx, (OpNode Ty1:$sy))]> {
-      let cx = 0;
       let cy = 1;
     }
 
   def i : RR<opc, (outs I64:$sx), (ins I64:$sy), !strconcat(opcStr, " $sx,$sy"),
     [(set Ty0:$sx, (OpNode Ty1:$sy))]> {
-      let cx = 0;
       let cy = 0;
     }
 }
 
+// FIX: f32 or f64 -> i32
+// FIXX: f64 -> i64
+let cx = 0 in defm FLTd : CVTm<"cvt.d.w", 0x5E, sint_to_fp, f64, i32>;
+let cx = 1 in defm FLTs : CVTm<"cvt.s.w", 0x5E, sint_to_fp, f32, i32>;
+defm FLTX : CVTm<"cvt.d.l", 0x5F, sint_to_fp, f64, i64>;
 defm CVD : CVTm<"cvt.d.s", 0x0F, fpextend, f64, f32>;
 defm CVS : CVTm<"cvt.s.d", 0x1F, fpround, f32, f64>;
-
-//def CVD : RR<0xF, (outs I64:$sx), (ins I64:$sy), "cvt.d.s $sx,$sy",
-//  [(set f64:$sx, (fpextend f32:$sy))]>;
+// CVQ: f32 or f64 -> f128
 
 
 // Load and Store instructions
