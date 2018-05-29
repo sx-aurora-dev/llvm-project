@@ -8,6 +8,7 @@
 #define _ve_vbrdl_vI __builtin_ve_vbrdl_vI
 #define _ve_pvbrd_vs __builtin_ve_pvbrd_vs
 #define _ve_vmv_vsv __builtin_ve_vmv_vsv
+#define _ve_vmv_vIv __builtin_ve_vmv_vIv
 #define _ve_vaddul_vvv __builtin_ve_vaddul_vvv
 #define _ve_vaddul_vsv __builtin_ve_vaddul_vsv
 #define _ve_vaddul_vIv __builtin_ve_vaddul_vIv
