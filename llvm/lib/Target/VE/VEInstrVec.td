@@ -329,6 +329,22 @@ multiclass VLDm<string opcStr, bits<8> opc> {
       let vc = 1;
       let cy = 1;
   }
+
+/*
+  def i2 : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, V64:$vd),
+    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+      let vc = 0;
+      let cy = 0;
+      let Constraints = "$vx = $vd";
+    }
+
+  def r2 : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd),
+    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+      let vc = 0;
+      let cy = 0;
+      let Constraints = "$vx = $vd";
+    }
+    */
 }
 
 multiclass VSTm<string opcStr, bits<8> opc> {
@@ -397,11 +413,11 @@ let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C>; // 32b lower (= i32/u3
 let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C>; // 32b uppper(= f32)
 let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C>; // 32b packed
 
-//def : Pat<(int_ve_vbrd v256f64:$vx, i64:$sy), (VBRD v256f64:$vx, i64:$sy)>;
-//def : Pat<(int_ve_vbrd v256f64:$vx, f64:$sy), (VBRD v256f64:$vx, f64:$sy)>;
-//def : Pat<(int_ve_vbrdl v256f64:$vx, i32:$sy), (VBRDl v256f64:$vx, i32:$sy)>;
-//def : Pat<(int_ve_vbrdu v256f64:$vx, f32:$sy), (VBRDu v256f64:$vx, i32:$sy)>;
-//def : Pat<(int_ve_pvbrd v256f64:$vx, f32:$sy), (VBRDp v256f64:$vx, i32:$sy)>;
+def VMVr : RV<0x9C, (outs V64:$vx), (ins I64:$sy, V64:$vz),
+  "vmv $vx,$sy,$vz", []> {
+    let cy = 1;
+    let vy = 0;
+  }
 
 // 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
 defm VADD : RVUm<"vaddu", 0xC8>;
@@ -426,6 +442,21 @@ defm VAND : RVLOGm<"vand", 0xC4>;
 defm VOR  : RVLOGm<"vor", 0xC5>;
 defm VXOR : RVLOGm<"vxor", 0xC6>;
 defm VEQV : RVLOGm<"veqv", 0xC7>;
+
+multiclass VSEQm<string opcStr> {
+  def v : RV<0x99, (outs V64:$vx), (ins), !strconcat(opcStr, " $vx"), []> {
+    let vy = 0;
+    let vz = 0;
+    let vw = 0;
+    let m = 0;
+    let sy = 0;
+  }
+}
+
+let cx = 0, cx2 = 0 in defm VSEQ : VSEQm<"vseq">;
+let cx = 0, cx2 = 1 in defm VSEQl : VSEQm<"pvseq.lo">;
+let cx = 1, cx2 = 0 in defm VSEQu : VSEQm<"pvseq.up">;
+let cx = 1, cx2 = 1 in defm VSEQp : VSEQm<"pvseq">;
 
 // 5.3.2.10. Vector Shift Instructions
 defm VSLL : RVShiftMulti<"vsll", 0xE5>;
@@ -693,6 +724,10 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
             (LDLUri MEMri:$addr),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
+
+/*
+def : Pat<(int_ve_vld2 i64:$sz, i64:$sy, v256f64:$vz), (VLDr2 i64:$sy, i64:$sz, v256f64:$vz)>;
+*/
 
 /*
 def : Pat<(i64 (int_ve_pack_f32 f32:$sy)),

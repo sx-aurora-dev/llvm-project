@@ -7,6 +7,7 @@ def : Pat<(int_ve_vbrdu_vs f32:$sy), (VBRDur f32:$sy)>;
 def : Pat<(int_ve_vbrdl_vs i32:$sy), (VBRDlr i32:$sy)>;
 def : Pat<(int_ve_vbrdl_vI (i64 simm7:$I)), (VBRDli (i64 simm7:$I))>;
 def : Pat<(int_ve_pvbrd_vs i64:$sy), (VBRDpr i64:$sy)>;
+def : Pat<(int_ve_vmv_vsv i32:$sy, v256f64:$vz), (VMVr i32:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vaddul_vvv v256f64:$vy, v256f64:$vz), (VADDlv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vaddul_vsv i64:$sy, v256f64:$vz), (VADDlr i64:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vaddul_vIv (i64 simm7:$I), v256f64:$vz), (VADDli (i64 simm7:$I), v256f64:$vz)>;
@@ -123,6 +124,10 @@ def : Pat<(int_ve_veqv_vvv v256f64:$vy, v256f64:$vz), (VEQVv v256f64:$vy, v256f6
 def : Pat<(int_ve_veqv_vsv i64:$sy, v256f64:$vz), (VEQVr i64:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_pveqv_vvv v256f64:$vy, v256f64:$vz), (VEQVpv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_pveqv_vsv i64:$sy, v256f64:$vz), (VEQVpr i64:$sy, v256f64:$vz)>;
+def : Pat<(int_ve_vseq_v ), (VSEQv )>;
+def : Pat<(int_ve_pvseqlo_v ), (VSEQlv )>;
+def : Pat<(int_ve_pvsequp_v ), (VSEQuv )>;
+def : Pat<(int_ve_pvseq_v ), (VSEQpv )>;
 def : Pat<(int_ve_vsll_vvv v256f64:$vz, v256f64:$vy), (VSLLv v256f64:$vz, v256f64:$vy)>;
 def : Pat<(int_ve_vsll_vvs v256f64:$vz, i64:$sy), (VSLLr v256f64:$vz, i64:$sy)>;
 def : Pat<(int_ve_vsll_vvN v256f64:$vz, (i64 uimm6:$sy)), (VSLLi v256f64:$vz, (i64 uimm6:$sy))>;

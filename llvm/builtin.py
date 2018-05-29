@@ -615,11 +615,13 @@ class InstTable:
 
         self.add(Inst(opc, "VBRDpr", "pvbrd_vs", [VX(T_u32)], [SY(T_u64)], True, "{0} = {1}"))
 
+
     def args_to_func_suffix(self, args):
         return "_" + "".join([op.kind for op in args])
 
     def args_to_inst_suffix(self, args):
         tbl = {
+               "v"    : "v",
                "vv"   : "v",
                "vvv"  : "v",
                "vvvmv": "vm",
@@ -852,7 +854,7 @@ T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
 T.NoImpl("LVM")
 T.NoImpl("SVM")
 T.VBRDm(0x8C, "vbrd", "VBRD")
-T.NoImpl("VMV")
+T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
 
 O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
           [VX(T_i64), SY(T_i32), VZ(T_i32)], 
@@ -886,7 +888,10 @@ T.Logical(0xC7, "veqv", "VEQV", "{0} = ~({1} ^ {2})")
 T.NoImpl("VLDZ")
 T.NoImpl("VPCNT")
 T.NoImpl("VBRV")
-T.NoImpl("VSEQ")
+T.InstX(0x99, "VSEQ", "vseq", [[VX(T_u64)]]).noTest()
+T.InstX(0x99, "VSEQl", "pvseq.lo", [[VX(T_u64)]]).noTest()
+T.InstX(0x99, "VSEQu", "pvseq.up", [[VX(T_u64)]]).noTest()
+T.InstX(0x99, "VSEQp", "pvseq", [[VX(T_u64)]]).noTest()
 
 T.Section("5.3.2.10. Vector Shift Instructions")
 T.Shift(0xE5, "vsll", "VSLL", "{0} = {1} << ({2} & 0x3f)")
