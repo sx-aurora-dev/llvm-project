@@ -7,6 +7,7 @@
 #define _ve_vbrdl_vs __builtin_ve_vbrdl_vs
 #define _ve_vbrdl_vI __builtin_ve_vbrdl_vI
 #define _ve_pvbrd_vs __builtin_ve_pvbrd_vs
+#define _ve_vmv_vsv __builtin_ve_vmv_vsv
 #define _ve_vaddul_vvv __builtin_ve_vaddul_vvv
 #define _ve_vaddul_vsv __builtin_ve_vaddul_vsv
 #define _ve_vaddul_vIv __builtin_ve_vaddul_vIv
@@ -123,6 +124,10 @@
 #define _ve_veqv_vsv __builtin_ve_veqv_vsv
 #define _ve_pveqv_vvv __builtin_ve_pveqv_vvv
 #define _ve_pveqv_vsv __builtin_ve_pveqv_vsv
+#define _ve_vseq_v __builtin_ve_vseq_v
+#define _ve_pvseqlo_v __builtin_ve_pvseqlo_v
+#define _ve_pvsequp_v __builtin_ve_pvsequp_v
+#define _ve_pvseq_v __builtin_ve_pvseq_v
 #define _ve_vsll_vvv __builtin_ve_vsll_vvv
 #define _ve_vsll_vvs __builtin_ve_vsll_vvs
 #define _ve_vsll_vvN __builtin_ve_vsll_vvN
