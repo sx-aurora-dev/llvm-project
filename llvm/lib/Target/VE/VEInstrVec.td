@@ -419,6 +419,12 @@ def VMVr : RV<0x9C, (outs V64:$vx), (ins I64:$sy, V64:$vz),
     let vy = 0;
   }
 
+def VMVi : RV<0x9C, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz),
+  "vmv $vx,$sy,$vz", []> {
+    let cy = 0;
+    let vy = 0;
+  }
+
 // 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
 defm VADD : RVUm<"vaddu", 0xC8>;
 defm VADS : RVWm<"vadds", 0xCA>;
