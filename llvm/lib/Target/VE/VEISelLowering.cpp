@@ -2747,6 +2747,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     SmallVector<SDValue, 8> Ops;
     Ops.push_back(Chain);
     Ops.push_back(Op.getOperand(2));
+    Ops.push_back(DAG.getRegister(VE::V0, MVT::v256f64));
 
     // preserved registers
     static const uint32_t Mask_expf[] = {0xa1ffffff, 0x007fffff, 0xffffffee, 0x003fffff, 0xfffffc7e, 0x3fffffff, 0xffff87f0};

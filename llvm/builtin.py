@@ -294,6 +294,59 @@ class Inst:
     def hasExpr(self):
         return self.expr != None
 
+class TestFunc:
+    def __init__(self, header, definition, ref):
+        self.header_ = header
+        self.definition_ = definition
+        self.ref_ = ref
+
+    def header(self):
+        return self.header_
+
+    def definition(self):
+        return self.definition_
+
+    def reference(self):
+        return self.ref_
+
+    def decl(self):
+        return "{};".format(self.header_)
+
+class TestGeneratorMask:
+    def test(self, I):
+        header = "void {}(unsigned long int* px, unsigned long int const* py, unsigned long int* pz, int n)".format(I.intrinsicName())
+
+        args = ", ".join([op.regName() for op in I.ins])
+
+        func = '''#include <veintrin.h>
+{}
+{{
+    __vm vmx, vmy, vmz;
+    for (int i = 0; i < 4; ++i) {{
+        vmy = _ve_lvm_mmss(vmy, i, py[i]);
+        vmz = _ve_lvm_mmss(vmz, i, pz[i]);
+    }}
+    vmx = _ve_{}({});
+    for (int i = 0; i < 4; ++i)
+        px[i] = _ve_svm_sms(vmx, i);
+}}
+'''.format(header, I.intrinsicName(), args)
+
+        if I.hasExpr():
+            args = ["px[i]", "py[i]", "pz[i]"]
+            #line = I.expr.format(*[op.regName() for op in I.outs + I.ins])
+            line = I.expr.format(*args)
+            ref = '''{}
+{{
+    for (int i = 0; i < 4; ++i)
+        {};
+}}
+'''.format(header, line)
+        else:
+            ref = None
+
+        return TestFunc(header, func, ref);
+
 class TestGenerator:
     def funcHeader(self, I):
         tmp = [i for i in (I.outs + I.ins) if not i.isImm()]
@@ -828,6 +881,13 @@ def cmpwrite(filename, data):
 def gen_test(insts, directory):
     g = TestGenerator()
     for i in insts:
+        if len(i.outs) > 0 and i.outs[0].isMask() and i.hasTest():
+            f = TestGeneratorMask().test(i)
+            #print f.definition()
+            filename = "{}/{}.c".format(directory, i.intrinsicName())
+            cmpwrite(filename, f.definition())
+            continue
+
         if i.hasTest():
             if directory:
                 filename = "{}/{}.c".format(directory, i.intrinsicName())
@@ -969,12 +1029,12 @@ T.add(Inst(0xB2, "VSCUv", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest()
 T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
 
 T.Section("5.3.2.15. Vector Mask Register Instructions")
-T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}").noTest()
-T.InstX(0x85, "ORM",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}").noTest()
-T.InstX(0x86, "XORM", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}").noTest()
-T.InstX(0x87, "EQVM", "eqvm", [[VMX, VMY, VMZ]], "{0} = {1} == {2}").noTest()
-T.InstX(0x94, "NNDM", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1} & {2}").noTest()
-T.InstX(0x95, "NEGM", "negm", [[VMX, VMY]], "{0} = ~{1}").noTest()
+T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
+T.InstX(0x85, "ORM",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
+T.InstX(0x86, "XORM", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}")
+T.InstX(0x87, "EQVM", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})")
+T.InstX(0x94, "NNDM", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
+T.InstX(0x95, "NEGM", "negm", [[VMX, VMY]], "{0} = ~{1}")
 T.NoImpl("PCVM")
 T.NoImpl("LZVM")
 T.NoImpl("TOVM")
@@ -1045,6 +1105,9 @@ if args.opt_veintrin:
 if args.opt_decl:
     for i in insts:
         if i.hasTest():
+            if len(i.outs) > 0 and i.outs[0].isMask():
+                print TestGeneratorMask().test(i).decl()
+                continue
             print TestGenerator().decl(i)
 if args.opt_test:
     gen_test(insts, test_dir)
@@ -1052,6 +1115,10 @@ if args.opt_reference:
     print '#include <math.h>'
     print 'namespace ref {'
     for i in insts:
+        if len(i.outs) > 0 and i.outs[0].isMask() and i.hasExpr():
+            f = TestGeneratorMask().test(i)
+            print f.reference()
+            continue
         if i.hasTest() and i.hasExpr():
             print TestGenerator().reference(i)
     print '}'
