@@ -54,7 +54,7 @@ enum CondCodes {
 extern void __vec_expf(void);
 #define _ve_vec_expf_vv(vr) _ve_vec_call(vr, __vec_expf)
 
-//#define _ve_vld2 __builtin_ve_vld2
+//#define _ve_lvs_svs_f32 __builtin_ve_lvs_svs_f32
 
 
 #include <veintrin2.h>

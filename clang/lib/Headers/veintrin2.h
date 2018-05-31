@@ -1,5 +1,9 @@
 #define _ve_lsv_vvss __builtin_ve_lsv_vvss
-#define _ve_lvs_svs __builtin_ve_lvs_svs
+#define _ve_lvs_svs_u64 __builtin_ve_lvs_svs_u64
+#define _ve_lvs_svs_f64 __builtin_ve_lvs_svs_f64
+#define _ve_lvs_svs_f32 __builtin_ve_lvs_svs_f32
+#define _ve_lvm_mmss __builtin_ve_lvm_mmss
+#define _ve_svm_sms __builtin_ve_svm_sms
 #define _ve_vbrd_vs_f64 __builtin_ve_vbrd_vs_f64
 #define _ve_vbrd_vs_i64 __builtin_ve_vbrd_vs_i64
 #define _ve_vbrd_vI __builtin_ve_vbrd_vI
@@ -242,3 +246,9 @@
 #define _ve_vsc_vv __builtin_ve_vsc_vv
 #define _ve_vscu_vv __builtin_ve_vscu_vv
 #define _ve_vscl_vv __builtin_ve_vscl_vv
+#define _ve_andm_mmm __builtin_ve_andm_mmm
+#define _ve_orm_mmm __builtin_ve_orm_mmm
+#define _ve_xorm_mmm __builtin_ve_xorm_mmm
+#define _ve_eqvm_mmm __builtin_ve_eqvm_mmm
+#define _ve_nndm_mmm __builtin_ve_nndm_mmm
+#define _ve_negm_mm __builtin_ve_negm_mm
