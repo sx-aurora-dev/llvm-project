@@ -22,19 +22,6 @@ class Type:
                 return 4
         raise Exception("not a vector type")
 
-#    def df(self):
-#        if self == T_f64: 
-#            return "d"
-#        elif self == T_f32: 
-#            return "s"
-#        elif self == T_i64 or self == T_u64:
-#            return "l"
-#        elif self == T_i32 or self == T_u32:
-#            return "w"
-#        else:
-#            raise Exception("df is unknown")
-
-
 T_f64     = Type("f64",     "d",      "double")
 T_f32     = Type("f32",     "f",      "float")
 T_i64     = Type("i64",     "Li",     "long int")
@@ -130,7 +117,6 @@ class Op(object):
         raise Exception("not a vector type: {}".format(self.kind))
 
 
-
 class SX(Op):
     def __init__(self, ty):
         super(SX, self).__init__("s", ty, "sx")
@@ -172,6 +158,10 @@ def VD(ty):
 
 VM = Op("m", T_v8u32, "vm")
 VM512 = Op("M", T_v16u32, "vm")
+VMX = Op("m", T_v8u32, "vmx")
+VMY = Op("m", T_v8u32, "vmy")
+VMZ = Op("m", T_v8u32, "vmz")
+VMD = Op("m", T_v8u32, "vmd")
 CCOp = Op("c", T_u32, "cc")
 
 I = Op("I", T_u64, "I")
@@ -194,6 +184,8 @@ class DummyInst:
         return self.inst_ != None
 
 class Inst:
+    # ni: instruction name
+    # nf: function name
     def __init__(self, opc, ni, nf, outs, ins, packed = False, expr = None):
         #self.opc = opc
         self.outs = outs
@@ -202,7 +194,6 @@ class Inst:
         self.expr = expr
 
         self.instName = ni
-        #self.intrinsicName = nf
         self.nf = nf
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
@@ -219,7 +210,7 @@ class Inst:
             return ""
         s = self.nf
         s = re.sub(r'_[vm].*', '', s)
-        s = re.sub(r'_svs', '', s) # LVS
+        s = re.sub(r'_svs.*', '', s) # LVS
         s = re.sub(r'_', '.', s)
         # temp
         if len(self.outs) > 0 and self.outs[0].isMask512():
@@ -234,6 +225,8 @@ class Inst:
         return s
 
     def hasMask(self):
+        if len(self.outs) > 0 and self.outs[0].isMask():
+            return False
         for op in self.ins:
             if op.isMask():
                 return True
@@ -284,12 +277,6 @@ class Inst:
     def veintrin(self):
         return "#define _ve_{} __builtin_ve_{}".format(self.intrinsicName(), self.intrinsicName())
 
-    def funcHeader(self):
-        tmp = [i for i in (self.outs + self.ins) if not i.isImm()]
-        args = ["{} {}".format(i.ty.ctype, i.formalName()) for i in tmp]
-
-        return "void {name}({args}, int n)".format(name=self.intrinsicName(), args=", ".join(args))
-
     def noTest(self):
         self.hasTest_ = False
         return self
@@ -304,10 +291,20 @@ class Inst:
         else:
             return op.ty.stride()
 
-    def get_vld_vst_inst(self, op):
+    def hasExpr(self):
+        return self.expr != None
+
+class TestGenerator:
+    def funcHeader(self, I):
+        tmp = [i for i in (I.outs + I.ins) if not i.isImm()]
+        args = ["{} {}".format(i.ty.ctype, i.formalName()) for i in tmp]
+
+        return "void {name}({args}, int n)".format(name=I.intrinsicName(), args=", ".join(args))
+
+    def get_vld_vst_inst(self, I, op):
         vld = "vld"
         vst = "vst"
-        if not self.packed:
+        if not I.packed:
             if op.ty.elemType == T_f32:
                 vld = "vldu"
                 vst = "vstu"
@@ -316,46 +313,46 @@ class Inst:
                 vst = "vstl"
         return [vld, vst]
 
-    def test(self):
-        head = self.funcHeader()
-
-        out = self.outs[0]
+    def test(self, I):
+        head = self.funcHeader(I)
+    
+        out = I.outs[0]
         body = ""
         indent = " " * 8
-
-        #print(self.instName)
-
-        if self.packed:
+    
+        #print(I.instName)
+    
+        if I.packed:
             #stride = 8
             step = 512
             body += indent + "int l = n - i < 512 ? (n - i) / 2UL : 256;\n"
         else:
-            #stride = self.outs[0].ty.stride()
+            #stride = I.outs[0].ty.stride()
             step = 256
             body += indent + "int l = n - i < 256 ? n - i : 256;\n"
-
+    
         body += indent + "_ve_lvl(l);\n"
-
+    
         cond = "CC_G"
-
-        if self.hasMask():
-            self.ins.pop(-1)
-
+    
+        if I.hasMask():
+            I.ins.pop(-1)
+    
         # input
         args = []
-        for op in self.ins:
+        for op in I.ins:
             if op.isVReg():
-                stride = self.stride(op)
-                vld, vst = self.get_vld_vst_inst(op)
+                stride = I.stride(op)
+                vld, vst = self.get_vld_vst_inst(I, op)
                 body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
             if op.isMask512():
-                stride = self.stride(op)
-                vld, vst = self.get_vld_vst_inst(op)
+                stride = I.stride(op)
+                vld, vst = self.get_vld_vst_inst(I, op)
                 body += indent + "__vr {}0 = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
                 body += indent + "__vm512 {} = _ve_pvfmkw_Mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
             elif op.isMask():
-                stride = self.stride(op)
-                vld, vst = self.get_vld_vst_inst(op)
+                stride = I.stride(op)
+                vld, vst = self.get_vld_vst_inst(I, op)
                 body += indent + "__vr {}0 = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
                 body += indent + "__vm {} = _ve_vfmkw_mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
             if op.isReg() or op.isMask():
@@ -364,28 +361,28 @@ class Inst:
                 args.append("3")
             elif op.isCC():
                 args.append(op.name)
-
-        if self.hasMask():
-            op = self.outs[0]
-            vld, vst = self.get_vld_vst_inst(op)
-            stride = self.stride(op)
+    
+        if I.hasMask():
+            op = I.outs[0]
+            vld, vst = self.get_vld_vst_inst(I, op)
+            stride = I.stride(op)
             body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
-            body += indent + "{} = _ve_{}({});\n".format(out.regName(), self.intrinsicName(), ', '.join(args + [op.regName()]))
+            body += indent + "{} = _ve_{}({});\n".format(out.regName(), I.intrinsicName(), ', '.join(args + [op.regName()]))
         else:
-            body += indent + "__vr {} = _ve_{}({});\n".format(out.regName(), self.intrinsicName(), ', '.join(args))
-
+            body += indent + "__vr {} = _ve_{}({});\n".format(out.regName(), I.intrinsicName(), ', '.join(args))
+    
         if out.isVReg():
-            stride = self.stride(out)
-            vld, vst = self.get_vld_vst_inst(out)
+            stride = I.stride(out)
+            vld, vst = self.get_vld_vst_inst(I, out)
             body += indent + "_ve_{}({}, {}, {});\n".format(vst, out.formalName(), out.regName(), stride)
-
+    
         tmp = []
-        for op in (self.outs + self.ins):
+        for op in (I.outs + I.ins):
             if op.isVReg() or op.isMask():
-                tmp.append(indent + "p{} += {};".format(op.regName(), "512" if self.packed else "256"))
-
+                tmp.append(indent + "p{} += {};".format(op.regName(), "512" if I.packed else "256"))
+    
         body += "\n".join(tmp)
-
+    
         func = '''#include "veintrin.h"
 {} {{
     for (int i = 0; i < n; i += {}) {{
@@ -393,21 +390,13 @@ class Inst:
     }}
 }}
 '''
-
         return func.format(head, step, body)
-
-    def decl(self):
-        head = self.funcHeader()
-        return "extern {};".format(head)
-
-    def hasExpr(self):
-        return self.expr != None
         
-    def reference(self):
-        head = self.funcHeader()
+    def reference(self, I):
+        head = self.funcHeader(I)
 
         tmp = []
-        for op in self.outs + self.ins:
+        for op in I.outs + I.ins:
             if op.isVReg():
                 tmp.append("p{}[i]".format(op.regName()))
             elif op.isReg():
@@ -415,17 +404,17 @@ class Inst:
             elif op.isImm():
                 tmp.append("3")
 
-        body = self.expr.format(*tmp) + ";"
+        body = I.expr.format(*tmp) + ";"
 
         preprocess = ''
-        for op in self.ins:
+        for op in I.ins:
             if op.isSReg():
-                if self.packed:
-                    ctype = self.outs[0].ty.elemType.ctype
+                if I.packed:
+                    ctype = I.outs[0].ty.elemType.ctype
                     preprocess = '{} sy0 = *({}*)&sy;'.format(ctype, ctype)
                     body = re.sub('sy', "sy0", body)
 
-        if self.hasMask():
+        if I.hasMask():
             body = "if (pvm[i] > 0) {{ {} }}".format(body)
 
         func = '''{}
@@ -438,6 +427,9 @@ class Inst:
 
         return func.format(head, preprocess, body);
 
+    def decl(self, I):
+        head = self.funcHeader(I)
+        return "extern {};".format(head)
 
 class ManualInstPrinter:
     def __init__(self):
@@ -460,6 +452,7 @@ class ManualInstPrinter:
                 outType = "__vm512"
             elif out.isMask():
                 outType = "__vm256"
+                v.append("{}[:]".format(out.regName()))
             elif out.isSReg():
                 outType = "unsigned long int" # ok?
             else:
@@ -615,6 +608,11 @@ class InstTable:
 
         self.add(Inst(opc, "VBRDpr", "pvbrd_vs", [VX(T_u32)], [SY(T_u64)], True, "{0} = {1}"))
 
+    def LVSm(self, opc):
+        self.add(Inst(opc, "LVSr", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSr", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSr", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
+
 
     def args_to_func_suffix(self, args):
         return "_" + "".join([op.kind for op in args])
@@ -645,6 +643,10 @@ class InstTable:
                "vvsvmv" : "r2",
                "vIvvmv" : "i",
                "vvIvmv" : "i2",
+               "mmm" : "",
+               "mm" : "",
+               "sms" : "",
+               "mmss" : "",
 
                "mcv"  : "v",
                "Mcv"  : "v",
@@ -824,11 +826,12 @@ def cmpwrite(filename, data):
 
 
 def gen_test(insts, directory):
+    g = TestGenerator()
     for i in insts:
         if i.hasTest():
             if directory:
                 filename = "{}/{}.c".format(directory, i.intrinsicName())
-                cmpwrite(filename, i.test())
+                cmpwrite(filename, g.test(i))
             else:
                 print i.test()
 
@@ -850,9 +853,10 @@ T.NoImpl("VSTU2D")
 T.NoImpl("VSTL2D")
 T.NoImpl("PFCHV")
 T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
-T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
-T.NoImpl("LVM")
-T.NoImpl("SVM")
+#T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
+T.LVSm(0x9E)
+T.InstX(0xB7, "LVM", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
+T.InstX(0xA7, "SVM", "svm", [[SX(T_u64), VMY, SZ(T_u64)]]).noTest()
 T.VBRDm(0x8C, "vbrd", "VBRD")
 T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
 T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), I, VZ(T_u64)]]).noTest()
@@ -965,12 +969,12 @@ T.add(Inst(0xB2, "VSCUv", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest()
 T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
 
 T.Section("5.3.2.15. Vector Mask Register Instructions")
-T.NoImpl("ANDM")
-T.NoImpl("ORM")
-T.NoImpl("XORM")
-T.NoImpl("EQVM")
-T.NoImpl("NNDM")
-T.NoImpl("NEGM")
+T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}").noTest()
+T.InstX(0x85, "ORM",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}").noTest()
+T.InstX(0x86, "XORM", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}").noTest()
+T.InstX(0x87, "EQVM", "eqvm", [[VMX, VMY, VMZ]], "{0} = {1} == {2}").noTest()
+T.InstX(0x94, "NNDM", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1} & {2}").noTest()
+T.InstX(0x95, "NEGM", "negm", [[VMX, VMY]], "{0} = ~{1}").noTest()
 T.NoImpl("PCVM")
 T.NoImpl("LZVM")
 T.NoImpl("TOVM")
@@ -1041,7 +1045,7 @@ if args.opt_veintrin:
 if args.opt_decl:
     for i in insts:
         if i.hasTest():
-            print i.decl()
+            print TestGenerator().decl(i)
 if args.opt_test:
     gen_test(insts, test_dir)
 if args.opt_reference:
@@ -1049,7 +1053,7 @@ if args.opt_reference:
     print 'namespace ref {'
     for i in insts:
         if i.hasTest() and i.hasExpr():
-            print i.reference()
+            print TestGenerator().reference(i)
     print '}'
 if args.opt_html:
     HtmlManualPrinter().printAll(T)

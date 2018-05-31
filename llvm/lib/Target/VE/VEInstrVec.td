@@ -329,22 +329,6 @@ multiclass VLDm<string opcStr, bits<8> opc> {
       let vc = 1;
       let cy = 1;
   }
-
-/*
-  def i2 : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, V64:$vd),
-    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-      let vc = 0;
-      let cy = 0;
-      let Constraints = "$vx = $vd";
-    }
-
-  def r2 : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd),
-    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-      let vc = 0;
-      let cy = 0;
-      let Constraints = "$vx = $vd";
-    }
-    */
 }
 
 multiclass VSTm<string opcStr, bits<8> opc> {
@@ -394,6 +378,16 @@ def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
 
 let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0 in
 def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy), "lvs ${sx},${vx}(${sy})", []>;
+
+def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)), 
+          (f32 (LVSr v256f64:$vx, i32:$sy))>;
+
+def LVM : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
+  "lvm $vmx,$sy,$sz", []> {
+  let Constraints = "$vmx = $vmd";
+}
+
+def SVM : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
 
 multiclass VBRDm<string opcStr, bits<8> opc> {
   def r : RV2<opc, (outs V64:$vx), (ins I64:$sy), 
@@ -480,23 +474,6 @@ let cy = 1, vy = 0 in
 def VSFAi : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz),
   "vsfa $vx,$vz,$sy,$sz", []>;
 
-
-/*
-def VFADpvm2 : RV<0xCC, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd),
-  "pvfadd $vx,$vy,$vz,$vm", []> {
-    let cx = 1;
-    let cx2 = 1;
-    let sy = 0;
-    let vw = 0;
-    let Constraints = "$vx = $vd";
-}
-
-def : Pat<(int_ve_pvfadd_vvvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd),
-          (VFADpvm2 v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
-*/
-
-def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
-                    "# pvfmk.w.${cf} $vm,$vz", []>;
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 
@@ -628,6 +605,9 @@ def VFMFlv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let vw = 0;
 }
 
+def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
+                    "# pvfmk.w.${cf} $vm,$vz", []>;
+
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions
@@ -672,8 +652,36 @@ defm VSCU : VSCm<"vscu", 0xB2>;
 defm VSCL : VSCm<"vscl", 0xB3>;
 
 // 5.3.2.15. Vector Mask Register Instructions
+
+class VMR3<bits<8> op, string asm> 
+  : RV<op, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz),
+        !strconcat(asm, " $vmx,$vmy,$vmz"), []> {
+  let sy = 0;
+  let vw = 0;
+  let m = 0;
+}
+
+class VMR2<bits<8> op, string asm> 
+  : RV<op, (outs VM:$vmx), (ins VM:$vmy),
+        !strconcat(asm, " $vmx,$vmy"), []> {
+  let sy = 0;
+  let vz = 0;
+  let vw = 0;
+  let m = 0;
+}
+
+
+def ANDM : VMR3<0x84, "andm">;
+def ORM :  VMR3<0x85, "orm">;
+def XORM : VMR3<0x86, "xorm">;
+def EQVM : VMR3<0x87, "eqvm">;
+def NNDM : VMR3<0x94, "nndm">;
+def NEGM : VMR2<0x95, "negm">;
+// PCVM
+// LZVM
+// TOVM
+
 // 5.3.2.16. Vector Control Instructions
-// LVL
 // SVL
 // SMVL
 // LVIX

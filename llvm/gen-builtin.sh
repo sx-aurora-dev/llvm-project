@@ -14,7 +14,6 @@ python builtin.py -t
 
 python builtin.py -r > tmp/ref.cc #> ../test/intrinsic/gen/ref.cc
 
-python builtin.py -m > tmp/m.txt
 python builtin.py --html > tmp/intrinsics.html
 
 #touch include/llvm/IR/Intrinsics.td
