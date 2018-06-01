@@ -189,7 +189,9 @@
 #define _ve_vfdivs_vsv __builtin_ve_vfdivs_vsv
 #define _ve_vfdivs_vvvmv __builtin_ve_vfdivs_vvvmv
 #define _ve_vfdivs_vsvmv __builtin_ve_vfdivs_vsvmv
+#define _ve_vfdivsA_vvv __builtin_ve_vfdivsA_vvv
 #define _ve_vfdivsA_vsv __builtin_ve_vfdivsA_vsv
+#define _ve_pvfdivA_vvv __builtin_ve_pvfdivA_vvv
 #define _ve_vfcmpd_vvv __builtin_ve_vfcmpd_vvv
 #define _ve_vfcmpd_vsv __builtin_ve_vfcmpd_vsv
 #define _ve_vfcmpd_vvvmv __builtin_ve_vfcmpd_vvvmv

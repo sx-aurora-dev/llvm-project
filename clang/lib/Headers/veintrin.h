@@ -8,22 +8,22 @@ typedef double __vm512 __attribute__((__vector_size__(64)));
 
 // FIXME: rename to VECC_*
 enum CondCodes {
-    CC_AF    =  0   ,  // Never
-    CC_G     =  1   ,  // Greater
-    CC_L     =  2   ,  // Less
-    CC_NE    =  3   ,  // Not Equal
-    CC_EQ    =  4   ,  // Equal
-    CC_GE    =  5   ,  // Greater or Equal
-    CC_LE    =  6   ,  // Less or Equal
-    CC_NUM   =  7   ,  // Number
-    CC_NAN   =  8   ,  // NaN
-    CC_GNAN  =  9   ,  // Greater or NaN
-    CC_LNAN  = 10   ,  // Less or NaN
-    CC_NENAN = 11   ,  // Not Equal or NaN
-    CC_EQNAN = 12   ,  // Equal or NaN
-    CC_GENAN = 13   ,  // Greater or Equal or NaN
-    CC_LENAN = 14   ,  // Less or Equal or NaN
-    CC_AT    = 15   ,  // Always
+    VECC_AF    =  0   ,  // Never
+    VECC_G     =  1   ,  // Greater
+    VECC_L     =  2   ,  // Less
+    VECC_NE    =  3   ,  // Not Equal
+    VECC_EQ    =  4   ,  // Equal
+    VECC_GE    =  5   ,  // Greater or Equal
+    VECC_LE    =  6   ,  // Less or Equal
+    VECC_NUM   =  7   ,  // Number
+    VECC_NAN   =  8   ,  // NaN
+    VECC_GNAN  =  9   ,  // Greater or NaN
+    VECC_LNAN  = 10   ,  // Less or NaN
+    VECC_NENAN = 11   ,  // Not Equal or NaN
+    VECC_EQNAN = 12   ,  // Equal or NaN
+    VECC_GENAN = 13   ,  // Greater or Equal or NaN
+    VECC_LENAN = 14   ,  // Less or Equal or NaN
+    VECC_AT    = 15   ,  // Always
 };
 
 /*
