@@ -513,6 +513,8 @@ defm FAD : RRFm<"fadd", 0x4C, fadd>;
 defm FSB : RRFm<"fsub", 0x5C, fsub>;
 defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
+// FCP
+// FCM
 
 multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode, ValueType Ty0, ValueType Ty1>
 {

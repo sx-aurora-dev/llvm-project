@@ -2698,6 +2698,66 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     return DAG.getRegister(SP::G7, PtrVT);
 #endif
   }
+  case Intrinsic::ve_vfdivsA_vvv: {
+/*
+    600000000b98:       00 00 01 05     vrcp.s          %v5,%v1,%vm1
+    600000000ba0:       00 00 80 3f     lea.sl          %s0,0x3f800000(0,0)
+    600000000ba8:       05 01 00 04     vfnmsb.s        %v4,%s0,%v1,%v5,%vm1
+    600000000bb0:       04 05 05 03     vfmad.s         %v3,%v5,%v5,%v4,%vm1
+    600000000bb8:       00 03 00 02     vfmul.s         %v2,%v0,%v3,%vm1
+    600000000bc0:       01 02 00 04     vfnmsb.s        %v4,%v0,%v2,%v1,%vm1
+    600000000bc8:       04 05 02 02     vfmad.s         %v2,%v2,%v5,%v4,%vm1
+    600000000bd0:       01 02 00 00     vfnmsb.s        %v0,%v0,%v2,%v1,%vm1
+    600000000bd8:       00 03 02 00     vfmad.s         %v0,%v2,%v3,%v0,%vm1
+    600000000be0:       00 00 00 00     b.l.t           0x0(,%s10)
+ */
+    // Op0: function id, Op1: V64, Op1: V64
+    SDLoc dl(Op);
+
+    EVT VT = Op.getValueType();
+    SDValue S0;
+    SDValue V0, V1, V2, V3, V4, V5;
+
+    V0 = Op.getOperand(1);
+    V1 = Op.getOperand(2);
+
+    V5 = SDValue(DAG.getMachineNode(VE::VRCPsv, dl, VT, V1), 0);  // V5 = 1.0f / V1
+    S0 = SDValue(DAG.getMachineNode(VE::LEASLzzi, dl, MVT::f32,
+                                    DAG.getTargetConstant(0x3f800000, dl, MVT::i32)), 0); // S0 = 1.0f
+    V4 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S0, V1, V5), 0); // V4 = -(V1*V5-S0)
+    V3 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V5, V5, V4), 0); // V3 = V5*V4+V5
+    V2 = SDValue(DAG.getMachineNode(VE::VFMPsv,   dl, VT, V0, V3), 0);     // V1 = V0*V3
+    V4 = SDValue(DAG.getMachineNode(VE::VFNMSBsv, dl, VT, V0, V2, V1), 0); // V4 = -(V2*V1-V0)
+    V2 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V2, V5, V4), 0); // V2 = V5*V4+V2
+    V0 = SDValue(DAG.getMachineNode(VE::VFNMSBsv, dl, VT, V0, V2, V1), 0); // v3 = -(V2*V1-S0)
+    V0 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V2, V3, V0), 0); // V0 = V3*V0+V2
+    return V0;
+  }
+#if 1
+  case Intrinsic::ve_pvfdivA_vvv: {
+    // Op0: function id, Op1: V64, Op1: V64
+    SDLoc dl(Op);
+
+    EVT VT = Op.getValueType();
+    SDValue S0;
+    SDValue V0, V1, V2, V3, V4, V5;
+
+    V0 = Op.getOperand(1);
+    V1 = Op.getOperand(2);
+
+    V5 = SDValue(DAG.getMachineNode(VE::VRCPpv, dl, VT, V1), 0);  // V5 = 1.0f / V1
+    S0 = SDValue(DAG.getMachineNode(VE::LEASLzzi, dl, MVT::f32,
+                                    DAG.getTargetConstant(0x3f8000003f800000, dl, MVT::i64)), 0); // S0 = 1.0f
+    V4 = SDValue(DAG.getMachineNode(VE::VFNMSBpr, dl, VT, S0, V1, V5), 0); // V4 = -(V1*V5-S0)
+    V3 = SDValue(DAG.getMachineNode(VE::VFMADpv,  dl, VT, V5, V5, V4), 0); // V3 = V5*V4+V5
+    V2 = SDValue(DAG.getMachineNode(VE::VFMPpv,   dl, VT, V0, V3), 0);     // V1 = V0*V3
+    V4 = SDValue(DAG.getMachineNode(VE::VFNMSBpv, dl, VT, V0, V2, V1), 0); // V4 = -(V2*V1-V0)
+    V2 = SDValue(DAG.getMachineNode(VE::VFMADpv,  dl, VT, V2, V5, V4), 0); // V2 = V5*V4+V2
+    V0 = SDValue(DAG.getMachineNode(VE::VFNMSBpv, dl, VT, V0, V2, V1), 0); // v3 = -(V2*V1-S0)
+    V0 = SDValue(DAG.getMachineNode(VE::VFMADpv,  dl, VT, V2, V3, V0), 0); // V0 = V3*V0+V2
+    return V0;
+  }
+#endif
   case Intrinsic::ve_vfdivsA_vsv: {
 /*
 600000000c68:       00 00 00 04     vrcp.s  %v4,%v0,%vm1
@@ -2711,7 +2771,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 600000000ca8:       03 02 01 00     vfmad.s %v0,%v1,%v2,%v3,%vm1
 600000000cb0:       00 00 00 00     b.l.t   0x0(,%s10)
  */
-    // Op0: function id, Op1: f32, Op1: V64
+    // Op0: function id, Op1: f32, Op1: V64  (f32/V64)
     SDLoc dl(Op);
 
     EVT VT = Op.getValueType();

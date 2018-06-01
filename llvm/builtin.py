@@ -386,7 +386,7 @@ class TestGenerator:
     
         body += indent + "_ve_lvl(l);\n"
     
-        cond = "CC_G"
+        cond = "VECC_G"
     
         if I.hasMask():
             I.ins.pop(-1)
@@ -979,7 +979,9 @@ T.Inst3f(0xCC, "vfadd", "VFAD", "{0} = {1} + {2}")
 T.Inst3f(0xDC, "vfsub", "VFSB", "{0} = {1} - {2}")
 T.Inst3f(0xCD, "vfmul", "VFMP", "{0} = {1} * {2}")
 T.Inst3f(0xDD, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
+T.InstX(None, None, "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
 T.InstX(None, None, "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
+T.InstX(None, None, "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
 T.NoImpl("VFSQRT")
 T.Inst3f(0xFC, "vfcmp", "VFCP", "{0} = compare({1}, {2})")
 T.Inst3f(0xBD, "vfmax", "VFCMa", "{0} = max({1}, {2})")
