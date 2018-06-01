@@ -863,6 +863,9 @@ class InstTable:
         self.InstX(opc, instName+"s", name+".s", O_f32, expr)
         self.InstX(opc, instName+"p", "p"+name, O_pf32, expr)
 
+    def FLm(self, opc, inst, asm, args):
+        self.InstX(opc, inst.format(fl="f"), asm.format(fl=".fst"), args)
+        self.InstX(opc, inst.format(fl="l"), asm.format(fl=".lst"), args)
 
 def cmpwrite(filename, data):
     need_write = True
@@ -893,7 +896,7 @@ def gen_test(insts, directory):
                 filename = "{}/{}.c".format(directory, i.intrinsicName())
                 cmpwrite(filename, g.test(i))
             else:
-                print i.test()
+                print g.test(i)
 
 
 T = InstTable()
@@ -978,20 +981,23 @@ T.Inst3f(0xCD, "vfmul", "VFMP", "{0} = {1} * {2}")
 T.Inst3f(0xDD, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
 T.InstX(None, None, "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
 T.NoImpl("VFSQRT")
-T.NoImpl("VFCP")
-T.NoImpl("VFCM")
-T.Inst4f(0xFF, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
-T.Inst4f(0xFF, "vfmsb", "VFMSB", "{0} = {2} * {3} - {1}")
-T.Inst4f(0xFF, "vfnmad", "VFNMAD", "{0} =  - ({2} * {3} + {1})")
-T.Inst4f(0xFF, "vfnmsb", "VFNMSB", "{0} =  - ({2} * {3} - {1})")
+T.Inst3f(0xFC, "vfcmp", "VFCP", "{0} = compare({1}, {2})")
+T.Inst3f(0xBD, "vfmax", "VFCMa", "{0} = max({1}, {2})")
+T.Inst3f(0xBD, "vfmin", "VFCMi", "{0} = min({1}, {2})")
+T.Inst4f(0xE2, "vfmad", "VFMAD", "{0} = {2} * {3} + {1}")
+T.Inst4f(0xF2, "vfmsb", "VFMSB", "{0} = {2} * {3} - {1}")
+T.Inst4f(0xE3, "vfnmad", "VFNMAD", "{0} =  - ({2} * {3} + {1})")
+T.Inst4f(0xF3, "vfnmsb", "VFNMSB", "{0} =  - ({2} * {3} - {1})")
 T.Inst2f(0xE1, "vrcp", "VRCP", "{0} = 1.0f / {1}")
 T.NoImpl("VRSQRT")
 T.NoImpl("VFIX")
 T.NoImpl("VFIXX")
-T.NoImpl("VFLT")
-T.NoImpl("VFLTX")
-T.NoImpl("VCVD")
-T.NoImpl("VCVS")
+T.InstX(0xF8, "VFLTd", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
+T.InstX(0xF8, "VFLTs", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
+T.InstX(0xF8, "VFLTp", "pvcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
+T.InstX(0xB8, "VFLTX", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}")
+T.InstX(0x8F, "VCVD", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
+T.InstX(0x9F, "VCVS", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
 
 T.Section("5.3.2.12. Vector Mask Arithmetic Instructions")
 T.NoImpl("VMGR")
@@ -1013,6 +1019,16 @@ T.InstX(0xEA, "VSUMSzx", "vsumw_zx", [[VX(T_i32), VY(T_i32)]])
 T.InstX(0xAA, "VSUMX", "vsuml", [[VX(T_i64), VY(T_i64)]])
 T.InstX(0xEC, "VFSUMd", "vfsumd", [[VX(T_f64), VY(T_f64)]])
 T.InstX(0xEC, "VFSUMs", "vfsums", [[VX(T_f32), VY(T_f32)]])
+T.FLm(0xBB, "VMAXSa{fl}sx", "vrmaxs.w{fl}.sx", [[VX(T_i32), VY(T_i32)]])
+T.FLm(0xBB, "VMAXSa{fl}zx", "vrmaxs.w{fl}.zx", [[VX(T_u32), VY(T_u32)]])
+T.FLm(0xBB, "VMAXSi{fl}sx", "vrmins.w{fl}.sx", [[VX(T_i32), VY(T_i32)]])
+T.FLm(0xBB, "VMAXSi{fl}zx", "vrmins.w{fl}.zx", [[VX(T_u32), VY(T_u32)]])
+T.FLm(0xAB, "VMAXXa{fl}", "vrmaxs.l{fl}", [[VX(T_i64), VY(T_i64)]])
+T.FLm(0xAB, "VMAXXi{fl}", "vrmins.l{fl}", [[VX(T_i64), VY(T_i64)]])
+T.FLm(0xAD, "VFMAXad{fl}", "vfrmax.d{fl}", [[VX(T_f64), VY(T_f64)]])
+T.FLm(0xAD, "VFMAXas{fl}", "vfrmax.s{fl}", [[VX(T_f32), VY(T_f32)]])
+T.FLm(0xAD, "VFMAXid{fl}", "vfrmin.d{fl}", [[VX(T_f64), VY(T_f64)]])
+T.FLm(0xAD, "VFMAXis{fl}", "vfrmin.s{fl}", [[VX(T_f32), VY(T_f32)]])
 T.NoImpl("...")
 
 O_u64_vv = [VX(T_u64), VY(T_u64)]
@@ -1050,8 +1066,7 @@ T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)",
 T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and pack")
 
 T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin()
-#T.Dummy("", "__vr _ve_vec_expf(__vr vy)", "{0} = expf({1})")
-#T.Dummy("", "__vr _ve_vfdivs_vsva(float sy, __vr vy)", "")
+T.InstX(None, None, "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin()
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -1113,6 +1128,9 @@ if args.opt_test:
     gen_test(insts, test_dir)
 if args.opt_reference:
     print '#include <math.h>'
+    print '#include <algorithm>'
+    print 'using namespace std;'
+    print '#include "../refutils.h"'
     print 'namespace ref {'
     for i in insts:
         if len(i.outs) > 0 and i.outs[0].isMask() and i.hasExpr():
