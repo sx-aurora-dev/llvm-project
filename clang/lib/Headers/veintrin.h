@@ -52,9 +52,9 @@ enum CondCodes {
 #define _ve_vec_call __builtin_ve_vec_call
 
 extern void __vec_expf(void);
+extern void __vec_exp(void);
 #define _ve_vec_expf_vv(vr) _ve_vec_call(vr, __vec_expf)
-
-//#define _ve_lvs_svs_f32 __builtin_ve_lvs_svs_f32
+#define _ve_vec_exp_vv(vr) _ve_vec_call(vr, __vec_exp)
 
 
 #include <veintrin2.h>
