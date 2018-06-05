@@ -71,6 +71,10 @@ def cond2cc : SDNodeXForm<cond, [{
   case ISD::SETULE: cc = VECC::CC_LENAN; break;
   case ISD::SETUGT: cc = VECC::CC_GNAN; break;
   case ISD::SETUGE: cc = VECC::CC_GENAN; break;
+  case ISD::SETOLT: cc = VECC::CC_L; break;
+  case ISD::SETOLE: cc = VECC::CC_LE; break;
+  case ISD::SETOGT: cc = VECC::CC_G; break;
+  case ISD::SETOGE: cc = VECC::CC_GE; break;
   }
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
@@ -935,20 +939,6 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
 
-
-/*
-def SDTVESelect : SDTypeProfile<1, 4, []>;
-def VESelect: SDNode<"VEISD::SELECT", SDTVESelect, [SDNPInGlue]>;
-*/
-
-//def VE_SELECT : Pseudo<(outs I64:$dst),
-//                       (ins I64:$cond, I64:$condVal, I64:$t, I64:$f),
-//                       "# VE_SELECT",
-//                       [(set i32:$dst, (VESelect i32:$cond, i32:$condVal, i32:$t, i32:$f))]>
-//                       {
-//                         let Constraints = "$dst = $f";
-//                       }
-
 // Pseudo CMOV
 def PCMOVlrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
   "cmov.l.${cf} $sx,$sz,$sy", []> {
@@ -970,37 +960,6 @@ def PCMOVsrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
   let Constraints = "$sx = $sd";
   }
 
-/*
-def : Pat<(i64 (VESelect cond:$cc, i64:$sy, i64:$sz, i64:$sd)),
-          (i64 (PCMOVlrr (cond2cc $cc), i64:$sy, i64:$sz, i64:$sd))>;
-
-def : Pat<(i32 (VESelect cond:$cc, i32:$sy, i32:$sz, i32:$sd)),
-          (i32 (PCMOVwrr (cond2cc $cc), i32:$sy, i32:$sz, i32:$sd))>;
-
-def : Pat<(f64 (VESelect cond:$cc, f64:$sy, f64:$sz, f64:$sd)),
-          (f64 (PCMOVdrr (cond2cc $cc), f64:$sy, f64:$sz, f64:$sd))>;
-
-def : Pat<(f32 (VESelect cond:$cc, f32:$sy, f32:$sz, f32:$sd)),
-          (f32 (PCMOVsrr (cond2cc $cc), f32:$sy, f32:$sz, f32:$sd))>;
-*/
-
-/*
-def VE_SELECT : Pseudo<(outs I64:$dst),
-                       (ins uimm6Op32:$cond, I64:$condVal, I64:$t, I64:$f),
-                       "# VE_SELECT", []> 
-                       {
-                         let Constraints = "$dst = $f";
-                       }
-                       */
-
-/*
-def : Pat<(i32 (VESelect (i32 timm:$cc), i32:$condVal, i32:$t, i32:$f)),
-          (i32 (VE_SELECT $cc, i32:$condVal, i32:$t, i32:$f))>;
-
-def : Pat<(i64 (VESelect (i32 timm:$cc), i32:$condVal, i64:$t, i64:$f)),
-          (i64 (VE_SELECT $cc, i32:$condVal, i64:$t, i64:$f))>;
-          */
-
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
           (i32 (PCMOVlrr (cond2cc $cond), 
                          (CMPLrr i64:$LHS, i64:$RHS), 
@@ -1013,18 +972,16 @@ def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
                          (ORim1 1, 0), 
                          (ORim1 0, 0)))>;
 
-/*
-def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
-          (i32 (VE_SELECT (i32 (cond2cc $cond)), 
-                          (CMPLrr i64:$LHS, i64:$RHS), 
-                          (ORim1 1, 0), 
-                          (ORim1 0, 0)))>;
+def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
+          (i32 (PCMOVsrr (cond2cc $cond), 
+                         (FCPsrr f64:$LHS, f64:$RHS), 
+                         (ORim1 1, 0), 
+                         (ORim1 0, 0)))>;
 
-def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
-          (i32 (VE_SELECT (i32 (cond2cc $cond)), 
-                          (CMPWrr i32:$LHS, i32:$RHS),  // CMPl? CPSWZ?
-                          (ORim1 1, 0), 
-                          (ORim1 0, 0)))>;
-*/
+def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
+          (i32 (PCMOVsrr (cond2cc $cond), 
+                         (FCPsrr f32:$LHS, f32:$RHS), 
+                         (ORim1 1, 0), 
+                         (ORim1 0, 0)))>;
 
 include "VEInstrVec.td"
