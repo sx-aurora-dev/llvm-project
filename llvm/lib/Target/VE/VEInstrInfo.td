@@ -431,7 +431,7 @@ defm ADDUW : RRm<"addu.w", 0x48, add, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 0 in
 defm ADS : RRm<"adds.w.sx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm ADSU : RRm<"adds.w.zx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
+defm ADSU : RRm<"adds.w.zx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
 
 //def ADSir : RR<0x4A, (outs I64:$sx), (ins simm7Op32:$sy, I64:$sz),
 //  "adds.w.sx $sx,$sy,$sz", []>;
@@ -587,27 +587,46 @@ def FCMas : RR<0x3E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
 let cw = 0 in defm FCMa : RRFm<"fmax", 0x3E, VEfmax>;
 let cw = 1 in defm FCMi : RRFm<"fmin", 0x3E, VEfmin>;
 
-multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode, ValueType Ty0, ValueType Ty1>
+multiclass CVTm<string opcStr, bits<8> opc>
 {
-  def r : RR<opc, (outs I64:$sx), (ins I64:$sy), !strconcat(opcStr, " $sx,$sy"),
-    [(set Ty0:$sx, (OpNode Ty1:$sy))]> {
+  def r : RR<opc, (outs I64:$sx), (ins I64:$sy), 
+    !strconcat(opcStr, " $sx,$sy"), []> {
       let cy = 1;
     }
 
-  def i : RR<opc, (outs I64:$sx), (ins I64:$sy), !strconcat(opcStr, " $sx,$sy"),
-    [(set Ty0:$sx, (OpNode Ty1:$sy))]> {
+  def i : RR<opc, (outs I64:$sx), (ins simm7Op32:$sy), 
+    !strconcat(opcStr, " $sx,$sy"), []> {
       let cy = 0;
     }
 }
 
-// FIX: f32 or f64 -> i32
-// FIXX: f64 -> i64
-let cx = 0 in defm FLTd : CVTm<"cvt.d.w", 0x5E, sint_to_fp, f64, i32>;
-let cx = 1 in defm FLTs : CVTm<"cvt.s.w", 0x5E, sint_to_fp, f32, i32>;
-defm FLTX : CVTm<"cvt.d.l", 0x5F, sint_to_fp, f64, i64>;
-defm CVD : CVTm<"cvt.d.s", 0x0F, fpextend, f64, f32>;
-defm CVS : CVTm<"cvt.s.d", 0x1F, fpround, f32, f64>;
+let cx = 1, cw = 0 in let CFw = 8 in defm FIXs : CVTm<"cvt.w.s.sx.rz", 0x5E>;
+let cx = 0, cw = 0 in let CFw = 8 in defm FIXd : CVTm<"cvt.w.d.sx.rz", 0x5E>;
+let CFw = 8 in defm FIXX : CVTm<"cvt.l.d.rz", 0x4F>;
+let cx = 1 in defm FLTs : CVTm<"cvt.s.w", 0x5E>;
+let cx = 0 in defm FLTd : CVTm<"cvt.d.w", 0x5E>;
+defm FLTX : CVTm<"cvt.d.l", 0x5F>;
+defm CVS : CVTm<"cvt.s.d", 0x1F>;
+defm CVD : CVTm<"cvt.d.s", 0x0F>;
 // CVQ: f32 or f64 -> f128
+
+
+def : Pat<(i32 (trunc i64:$sy)), (i32 (ADSrm1 i64:$sy, 0))>;
+def : Pat<(i32 (fp_to_sint f32:$sy)), (i32 (FIXsr f32:$sy))>;
+def : Pat<(i32 (fp_to_sint f64:$sy)), (i32 (FIXdr f64:$sy))>;
+
+def : Pat<(i64 (sext i32:$sy)), (i64 (ADSrm1 i32:$sy, 0))>;
+def : Pat<(i64 (zext i32:$sy)), (i64 (ADSUrm1 i32:$sy, 0))>;
+def : Pat<(i64 (fp_to_sint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
+def : Pat<(i64 (fp_to_sint f64:$sy)), (i64 (FIXXr f64:$sy))>;
+
+def : Pat<(f32 (sint_to_fp i32:$sy)), (f32 (FLTsr i32:$sy))>;
+def : Pat<(f32 (sint_to_fp i64:$sy)), (f32 (CVSr (FLTXr i64:$sy)))>;
+def : Pat<(f32 (fpround f64:$sy)), (f32 (CVSr f64:$sy))>;
+
+def : Pat<(f64 (sint_to_fp i32:$sy)), (f64 (FLTdr i32:$sy))>;
+def : Pat<(f64 (sint_to_fp i64:$sy)), (f64 (FLTXr i64:$sy))>;
+def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 
 
 // Load and Store instructions

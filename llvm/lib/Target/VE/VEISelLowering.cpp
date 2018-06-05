@@ -1402,10 +1402,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // Custom expand fp<->sint
+#if 0
   setOperationAction(ISD::FP_TO_SINT, MVT::i32, Custom);
   setOperationAction(ISD::SINT_TO_FP, MVT::i32, Custom);
   setOperationAction(ISD::FP_TO_SINT, MVT::i64, Custom);
   setOperationAction(ISD::SINT_TO_FP, MVT::i64, Custom);
+#endif
 
   // Custom Expand fp<->uint
   setOperationAction(ISD::FP_TO_UINT, MVT::i32, Custom);
@@ -2865,7 +2867,6 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
   assert(TrueVal.getValueType() == FalseVal.getValueType());
 
   EVT CMPVT = LHS.getValueType();
-  EVT CMOVVT = TrueVal.getValueType();
 
   unsigned CMPOpcode = 0;
   unsigned CMOVOpcode = 0;
@@ -2902,7 +2903,7 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
     Ops.push_back(TrueVal);
     Ops.push_back(FalseVal);
 
-    return SDValue(DAG.getMachineNode(CMOVOpcode, dl, CMOVVT, Ops), 0);
+    return SDValue(DAG.getMachineNode(CMOVOpcode, dl, Op.getValueType(), Ops), 0);
   }
 
   return SDValue();
