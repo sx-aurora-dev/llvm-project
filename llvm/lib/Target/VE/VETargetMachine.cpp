@@ -62,6 +62,18 @@ static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
   return CodeModel::Small;
 }
 
+class VEELFTargetObjectFile : public TargetLoweringObjectFileELF {
+  void Initialize(MCContext &Ctx, const TargetMachine &TM) override {
+    TargetLoweringObjectFileELF::Initialize(Ctx, TM);
+    InitializeELF(TM.Options.UseInitArray);
+  }
+};
+
+static std::unique_ptr<TargetLoweringObjectFile> createTLOF()
+{
+    return llvm::make_unique<VEELFTargetObjectFile>();
+}
+
 /// Create an Aurora VE architecture model
 VETargetMachine::VETargetMachine(
     const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
@@ -72,7 +84,8 @@ VETargetMachine::VETargetMachine(
           getEffectiveRelocModel(RM),
           getEffectiveCodeModel(CM, getEffectiveRelocModel(RM), JIT),
           OL),
-      TLOF(make_unique<TargetLoweringObjectFileELF>()),
+      //TLOF(make_unique<TargetLoweringObjectFileELF>()),
+      TLOF(createTLOF()),
       Subtarget(TT, CPU, FS, *this) {
   initAsmInfo();
 }

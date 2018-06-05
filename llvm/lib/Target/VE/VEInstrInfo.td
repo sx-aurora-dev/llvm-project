@@ -193,6 +193,11 @@ def call          : SDNode<"VEISD::CALL", SDT_SPCall,
 def retflag       : SDNode<"VEISD::RET_FLAG", SDTNone,
                            [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
+def VEmax : SDNode<"VEISD::MAX", SDTIntBinOp>;
+def VEmin : SDNode<"VEISD::MIN", SDTIntBinOp>;
+def VEfmax : SDNode<"VEISD::FMAX", SDTFPBinOp>;
+def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
+
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
 //===----------------------------------------------------------------------===//
@@ -372,7 +377,20 @@ multiclass BCRm {
 //===----------------------------------------------------------------------===//
 
 // SX = SZ if cf(sy)
-def CMOVrr : RR<0x3B, (outs I32:$sx), (ins CCOp:$cf, I32:$sy, I32:$sz),
+let cw = 0, cw2 = 0 in
+def CMOVlrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
+    "cmov.l.${cf} $sx,$sy,$sz", []>;
+
+let cw = 1, cw2 = 0 in
+def CMOVwrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
+    "cmov.w.${cf} $sx,$sy,$sz", []>;
+
+let cw = 0, cw2 = 1 in
+def CMOVdrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
+    "cmov.w.${cf} $sx,$sy,$sz", []>;
+
+let cw = 1, cw2 = 1 in
+def CMOVsrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
     "cmov.w.${cf} $sx,$sy,$sz", []>;
 
 // NOP instruction
@@ -397,7 +415,7 @@ let cx = 0, cy = 1, cz = 0, sz = 0 in {
       "lea $sx,$addr", []>;
 }
 
-// Fixed-Point Arithmetic Operation Instructions
+// 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
 // ADD instruction
 let cx = 0 in
@@ -442,19 +460,56 @@ defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
 
 // DIV
 
+// u64
 let cx = 0, cy = 1, cz = 1 in
-def CMPlrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+def CMPLrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
         "cmpu.l $sx,$sy,$sz", []>;
 
-let cx = 1, cy = 1, cz = 1 in {
-def CPSWZrr : RR<0x7A, (outs I32:$sx), (ins I32:$sy, I32:$sz),
-        "cmps.w.zx $sx,$sy,$sz", 
-        []>;
-        //[(set i32:$sx, (setcc i32:$sy, i32:$sz, cond))]>;
-}
+// u32
+let cx = 1, cy = 1, cz = 1 in
+def CMPWrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+        "cmpu.w $sx,$sy,$sz", []>;
 
-//def : Pat<(set i1:$sx, (setcc i32:$sy, i32:$sz, SETGT)),
-//          (set I32:$sx, (CPSWZrr I32:$sy, I32:$sz))>;
+// i32 cx: sx
+let cx = 1, cy = 1, cz = 1 in
+def CPSWZrr : RR<0x7A, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+        "cmps.w.zx $sx,$sy,$sz", []>;
+
+// i64
+let cy = 1, cz = 1 in
+def CPXrr : RR<0x7A, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+        "cmps.l $sx,$sy,$sz", []>;
+
+// cx: sx/zx, cw: max/min
+
+let cw = 0 in defm CMXa : 
+  RRm<"maxs.l", 0x68, VEmax, I64, i64, simm7Op64, uimm6Op64>;
+
+let cx = 0, cw = 0 in defm CMSa :
+  RRm<"maxs.w.zx", 0x78, VEmax, I64, i32, simm7Op32, uimm6Op32>;
+
+let cw = 1 in defm CMXi : 
+  RRm<"mins.l", 0x68, VEmin, I64, i64, simm7Op64, uimm6Op64>;
+
+let cx = 1, cw = 0 in defm CMSi :
+  RRm<"mins.w.zx", 0x78, VEmin, I64, i32, simm7Op32, uimm6Op32>;
+
+// cx: sx/zx, cw: max/min
+/*
+let cx = 0, cw = 0 in def CMSal : RR<0x78, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+  "maxs.l.zx $sx,$sy,$sz",
+  [(set i64:$sx, (VEmax i64:$sy, i64:$sz))]>;
+
+let cx = 0, cw = 0 in def CMSa : RR<0x78, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+  "maxs.w.zx $sx,$sy,$sz",
+  [(set i32:$sx, (VEmax i32:$sy, i32:$sz))]>;
+
+let cx = 0, cw = 1 in def CMSi : RR<0x78, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+  "mins.w.zx $sx,$sy,$sz",
+  [(set i32:$sx, (VEmin i32:$sy, i32:$sz))]>;
+  */
+
+// 5.3.2.3. Logical Arithmetic Operation Instructions
 
 // AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
@@ -513,8 +568,20 @@ defm FAD : RRFm<"fadd", 0x4C, fadd>;
 defm FSB : RRFm<"fsub", 0x5C, fsub>;
 defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
-// FCP
+
+let cx = 0 in def FCPdrr : RR<0x7E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+  "fcmp.d $sx,$sy,$sz", []>;
+let cx = 1 in def FCPsrr : RR<0x7E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+  "fcmp.s $sx,$sy,$sz", []>;
 // FCM
+
+/*
+def FCMas : RR<0x3E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
+  "fmax.s $sx,$sy,$sz", 
+  [(set f32:$sx, (VEfmax f32:$sy, f32:$sz))]>;
+*/
+let cw = 0 in defm FCMa : RRFm<"fmax", 0x3E, VEfmax>;
+let cw = 1 in defm FCMi : RRFm<"fmin", 0x3E, VEfmin>;
 
 multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode, ValueType Ty0, ValueType Ty1>
 {
@@ -869,8 +936,10 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 []>;
 
 
+/*
 def SDTVESelect : SDTypeProfile<1, 4, []>;
 def VESelect: SDNode<"VEISD::SELECT", SDTVESelect, [SDNPInGlue]>;
+*/
 
 //def VE_SELECT : Pseudo<(outs I64:$dst),
 //                       (ins I64:$cond, I64:$condVal, I64:$t, I64:$f),
@@ -880,29 +949,82 @@ def VESelect: SDNode<"VEISD::SELECT", SDTVESelect, [SDNPInGlue]>;
 //                         let Constraints = "$dst = $f";
 //                       }
 
+// Pseudo CMOV
+def PCMOVlrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
+  "cmov.l.${cf} $sx,$sz,$sy", []> {
+  let Constraints = "$sx = $sd";
+  }
+
+def PCMOVwrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
+  "cmov.w.${cf} $sx,$sz,$sy", []> {
+  let Constraints = "$sx = $sd";
+  }
+
+def PCMOVdrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
+  "cmov.d.${cf} $sx,$sz,$sy", []> {
+  let Constraints = "$sx = $sd";
+  }
+
+def PCMOVsrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
+  "cmov.s.${cf} $sx,$sz,$sy", []> {
+  let Constraints = "$sx = $sd";
+  }
+
+/*
+def : Pat<(i64 (VESelect cond:$cc, i64:$sy, i64:$sz, i64:$sd)),
+          (i64 (PCMOVlrr (cond2cc $cc), i64:$sy, i64:$sz, i64:$sd))>;
+
+def : Pat<(i32 (VESelect cond:$cc, i32:$sy, i32:$sz, i32:$sd)),
+          (i32 (PCMOVwrr (cond2cc $cc), i32:$sy, i32:$sz, i32:$sd))>;
+
+def : Pat<(f64 (VESelect cond:$cc, f64:$sy, f64:$sz, f64:$sd)),
+          (f64 (PCMOVdrr (cond2cc $cc), f64:$sy, f64:$sz, f64:$sd))>;
+
+def : Pat<(f32 (VESelect cond:$cc, f32:$sy, f32:$sz, f32:$sd)),
+          (f32 (PCMOVsrr (cond2cc $cc), f32:$sy, f32:$sz, f32:$sd))>;
+*/
+
+/*
 def VE_SELECT : Pseudo<(outs I64:$dst),
                        (ins uimm6Op32:$cond, I64:$condVal, I64:$t, I64:$f),
                        "# VE_SELECT", []> 
                        {
                          let Constraints = "$dst = $f";
                        }
+                       */
 
+/*
 def : Pat<(i32 (VESelect (i32 timm:$cc), i32:$condVal, i32:$t, i32:$f)),
           (i32 (VE_SELECT $cc, i32:$condVal, i32:$t, i32:$f))>;
 
 def : Pat<(i64 (VESelect (i32 timm:$cc), i32:$condVal, i64:$t, i64:$f)),
           (i64 (VE_SELECT $cc, i32:$condVal, i64:$t, i64:$f))>;
+          */
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
+          (i32 (PCMOVlrr (cond2cc $cond), 
+                         (CMPLrr i64:$LHS, i64:$RHS), 
+                         (ORim1 1, 0), 
+                         (ORim1 0, 0)))>;
+
+def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
+          (i32 (PCMOVwrr (cond2cc $cond), 
+                         (CMPWrr i32:$LHS, i32:$RHS),
+                         (ORim1 1, 0), 
+                         (ORim1 0, 0)))>;
+
+/*
+def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
           (i32 (VE_SELECT (i32 (cond2cc $cond)), 
-                          (CMPlrr i64:$LHS, i64:$RHS), 
+                          (CMPLrr i64:$LHS, i64:$RHS), 
                           (ORim1 1, 0), 
                           (ORim1 0, 0)))>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
           (i32 (VE_SELECT (i32 (cond2cc $cond)), 
-                          (CMPlrr i32:$LHS, i32:$RHS),  // CMPl? CPSWZ?
+                          (CMPWrr i32:$LHS, i32:$RHS),  // CMPl? CPSWZ?
                           (ORim1 1, 0), 
                           (ORim1 0, 0)))>;
+*/
 
 include "VEInstrVec.td"

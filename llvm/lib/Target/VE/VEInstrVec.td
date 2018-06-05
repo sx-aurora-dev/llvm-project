@@ -612,7 +612,7 @@ def VFMFuv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
 
 // 32bit float (lower)
 def VFMFlv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
-  "pvfmf.s.lo.${cf} $vm,$vz", []>
+  "pvfmk.s.lo.${cf} $vm,$vz", []>
 {
   let cx = 0;
   let cx2 = 1;
@@ -623,6 +623,8 @@ def VFMFlv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
 def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
 
+def VFMFpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
+                    "# pvfmk.w.${cf} $vm,$vz", []>;
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions

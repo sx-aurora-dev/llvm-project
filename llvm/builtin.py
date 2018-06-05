@@ -1011,9 +1011,7 @@ T.InstX(0xB5, "VFMS", "vfmk.w", [[VM, CCOp, VZ(T_i32)]]).noTest()
 T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
 T.InstX(0xB6, "VFMFd", "vfmk.d", [[VM, CCOp, VZ(T_f64)]]).noTest()
 T.InstX(0xB6, "VFMFs", "vfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest()
-#T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest() # Pseudo
-#T.InstX(0xB6, "VFMFu", "pvfmk.s.up", [[VM, CCOp, VZ(T_f32)]]).noTest()
-#T.InstX(0xB6, "VFMFl", "pvfmk.s.lo", [[VM, CCOp, VZ(T_f32)]]).noTest()
+T.InstX(0xB6, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
 
 T.Section("5.3.2.13. Vector Recursive Relation Instructions")
 T.InstX(0xEA, "VSUMSsx", "vsumw_sx", [[VX(T_i32), VY(T_i32)]])

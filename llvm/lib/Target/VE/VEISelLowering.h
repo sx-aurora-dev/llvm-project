@@ -44,6 +44,11 @@ namespace llvm {
       FTOX,        // FP to Int64 within a FP register.
       XTOF,        // Int64 to FP within a FP register.
 
+      MAX,
+      MIN,
+      FMAX,
+      FMIN,
+
       CALL,        // A call instruction.
       RET_FLAG,    // Return with a flag operand.
       GLOBAL_BASE_REG, // Global base reg for PIC.
@@ -75,6 +80,10 @@ namespace llvm {
                                 MachineBasicBlock *MBB) const override;
 
     const char *getTargetNodeName(unsigned Opcode) const override;
+
+#if 0
+    SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+#endif
 
     ConstraintType getConstraintType(StringRef Constraint) const override;
     ConstraintWeight

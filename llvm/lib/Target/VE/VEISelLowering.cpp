@@ -33,6 +33,7 @@
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;
 
+#define DEBUG_TYPE "ve-lower"
 
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation
@@ -1310,17 +1311,24 @@ static VECC::CondCodes IntCondCodeToICC(ISD::CondCode CC)
 {
   switch (CC) {
     default: llvm_unreachable("Unknown integer condition code!");
+    case ISD::SETOEQ: return VECC::CC_EQ;
+    case ISD::SETOGT: return VECC::CC_G;
+    case ISD::SETOGE: return VECC::CC_GE;
+    case ISD::SETOLT: return VECC::CC_L;
+    case ISD::SETOLE: return VECC::CC_LE;
+    case ISD::SETONE: return VECC::CC_NE;
+
     case ISD::SETEQ:  return VECC::CC_EQ;
     case ISD::SETNE:  return VECC::CC_NE;
     case ISD::SETLT:  return VECC::CC_L;
     case ISD::SETGT:  return VECC::CC_G;
     case ISD::SETLE:  return VECC::CC_LE;
     case ISD::SETGE:  return VECC::CC_GE;
-#if 0
-    case ISD::SETULT: return VECC::CC_CS;
-    case ISD::SETULE: return VECC::CC_LEU;
-    case ISD::SETUGT: return VECC::CC_GU;
-    case ISD::SETUGE: return VECC::CC_CC;
+#if 1
+    case ISD::SETULT: return VECC::CC_L;
+    case ISD::SETULE: return VECC::CC_LE;
+    case ISD::SETUGT: return VECC::CC_G;
+    case ISD::SETUGE: return VECC::CC_GE;
 #endif
   }
 }
@@ -1410,8 +1418,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     //setOperationAction(ISD::SETCC,  VT, Expand);
     //setOperationAction(ISD::SELECT, VT, Expand);
     //setOperationAction(ISD::SELECT_CC, VT, Custom);
-    setOperationAction(ISD::SELECT, VT, Custom);
-    setOperationAction(ISD::SELECT_CC, VT, Expand);
+    //setOperationAction(ISD::SELECT, VT, Custom);
+    //setOperationAction(ISD::SELECT_CC, VT, Expand);
+    setOperationAction(ISD::SELECT_CC, VT, Custom);
   }
   setOperationAction(ISD::SETCC,  MVT::i1, Promote);
   //setOperationAction(ISD::SELECT, MVT::i1, Promote);
@@ -1605,6 +1614,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
+  setTargetDAGCombine(ISD::SELECT);
+
   // Set function alignment to 16 bytes (4 bits)
   setMinFunctionAlignment(4);
 
@@ -1631,6 +1642,10 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::ITOF:            return "VEISD::ITOF";
   case VEISD::FTOX:            return "VEISD::FTOX";
   case VEISD::XTOF:            return "VEISD::XTOF";
+  case VEISD::MAX:             return "VEISD::MAX";
+  case VEISD::MIN:             return "VEISD::MIN";
+  case VEISD::FMAX:            return "VEISD::FMAX";
+  case VEISD::FMIN:            return "VEISD::FMIN";
   case VEISD::CALL:            return "VEISD::CALL";
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
@@ -2739,15 +2754,19 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     SDLoc dl(Op);
 
     EVT VT = Op.getValueType();
-    SDValue S0;
+    SDValue S0, S1;
     SDValue V0, V1, V2, V3, V4, V5;
 
     V0 = Op.getOperand(1);
     V1 = Op.getOperand(2);
 
     V5 = SDValue(DAG.getMachineNode(VE::VRCPpv, dl, VT, V1), 0);  // V5 = 1.0f / V1
-    S0 = SDValue(DAG.getMachineNode(VE::LEASLzzi, dl, MVT::f32,
-                                    DAG.getTargetConstant(0x3f8000003f800000, dl, MVT::i64)), 0); // S0 = 1.0f
+    // S0 = 1.0f|1.0f
+    S1 = SDValue(DAG.getMachineNode(VE::LEAzzi, dl, MVT::i32,
+                                    DAG.getTargetConstant(0x3f800000, dl, MVT::i32)), 0);
+    S0 = SDValue(DAG.getMachineNode(VE::LEASLrzi, dl, MVT::f32,
+                                    S1,
+                                    DAG.getTargetConstant(0x3f800000, dl, MVT::i32)), 0);
     V4 = SDValue(DAG.getMachineNode(VE::VFNMSBpr, dl, VT, S0, V1, V5), 0); // V4 = -(V1*V5-S0)
     V3 = SDValue(DAG.getMachineNode(VE::VFMADpv,  dl, VT, V5, V5, V4), 0); // V3 = V5*V4+V5
     V2 = SDValue(DAG.getMachineNode(VE::VFMPpv,   dl, VT, V0, V3), 0);     // V1 = V0*V3
@@ -2827,7 +2846,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
-#if 1
+#if 0
 static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
                            const VETargetLowering &TLI)
 {
@@ -2864,6 +2883,7 @@ static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
     SDValue CondVal = Op.getOperand(0);
     SDValue TrueVal = Op.getOperand(1);
     SDValue FalseVal = Op.getOperand(2);
+    SDValue CCOp = CondVal.getOperand(2);
     SDLoc dl(Op);
 
     assert(CondVal.getOpcode() == ISD::SETCC);
@@ -2875,16 +2895,32 @@ static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
     //
     // (i32 (VESD::SELECT (cond2cc $cc), (CMPWZrr $LHS, $RHS), $TrueVal, $FalseVal))
 
-#if 1
-    CondVal = SDValue(DAG.getMachineNode(VE::CPSWZrr, dl, 
-                                         MVT::i32, // ok?
+    unsigned Opcode = 0;
+
+    assert(TrueVal.getValueType() == FalseVal.getValueType());
+
+    EVT VT = TrueVal.getValueType();
+    if (VT == MVT::i32) {
+        if (isSignedIntSetCC(CC)) {
+            Opcode = VE::CPSWZrr;
+        } else if (isUnsignedIntSetCC(CC)) {
+            Opcode = VE::CMPWrr;
+        }
+    } else if (VT == MVT::i64) {
+        if (isSignedIntSetCC(CC)) {
+            Opcode = VE::CPXrr;
+        } else if (isUnsignedIntSetCC(CC)) {
+            Opcode = VE::CMPLrr;
+        }
+    }
+
+    CondVal = SDValue(DAG.getMachineNode(Opcode, dl, MVT::i32, // i32 ok?
                                          CondVal.getOperand(0),
-                                         CondVal.getOperand(1)),
-                      0);
-#endif
+                                         CondVal.getOperand(1)), 0);
 
     SmallVector<SDValue, 4> Ops;
-    Ops.push_back(DAG.getTargetConstant(VECC, dl, MVT::i32));
+    Ops.push_back(CCOp);
+    //Ops.push_back(DAG.getTargetConstant(VECC, dl, MVT::i32));
     Ops.push_back(CondVal);
     Ops.push_back(TrueVal);
     Ops.push_back(FalseVal);
@@ -2893,6 +2929,68 @@ static SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG,
 #endif
 }
 #endif
+
+static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
+                              const VETargetLowering &TLI)
+{
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  SDValue TrueVal = Op.getOperand(2);
+  SDValue FalseVal = Op.getOperand(3);
+  SDValue CCOp = Op.getOperand(4);
+  SDLoc dl(Op);
+
+  // from (selectcc LHS, RHS, TrueVal, FalseVal, CCOp)
+  // to   (PCMOV CCop, (CMP LHS, RHS), TrueVal, FalseVal)
+
+  ISD::CondCode CC = cast<CondCodeSDNode>(CCOp)->get();
+
+  assert(LHS.getValueType() == RHS.getValueType());
+  assert(TrueVal.getValueType() == FalseVal.getValueType());
+
+  EVT CMPVT = LHS.getValueType();
+  EVT CMOVVT = TrueVal.getValueType();
+
+  unsigned CMPOpcode = 0;
+  unsigned CMOVOpcode = 0;
+  if (CMPVT == MVT::i32) {
+    CMOVOpcode = VE::PCMOVwrr;
+    if (isSignedIntSetCC(CC)) {
+      CMPOpcode = VE::CPSWZrr;
+    } else if (isUnsignedIntSetCC(CC)) {
+      CMPOpcode = VE::CMPWrr;
+    }
+  } else if (CMPVT == MVT::i64) {
+    CMOVOpcode = VE::PCMOVlrr;
+    if (isSignedIntSetCC(CC)) {
+      CMPOpcode = VE::CPXrr;
+    } else if (isUnsignedIntSetCC(CC)) {
+      CMPOpcode = VE::CMPLrr;
+    }
+  } else if (CMPVT == MVT::f32) {
+    CMPOpcode = VE::FCPsrr;
+    CMOVOpcode = VE::PCMOVsrr;
+  } else if (CMPVT == MVT::f64) {
+    CMPOpcode = VE::FCPdrr;
+    CMOVOpcode = VE::PCMOVdrr;
+  }
+
+  if (CMPOpcode && CMOVOpcode) {
+    SDValue CondVal
+      = SDValue(DAG.getMachineNode(CMPOpcode, dl, CMPVT, LHS, RHS), 0);
+
+    SmallVector<SDValue, 4> Ops;
+    VECC::CondCodes VECC = IntCondCodeToICC(CC);
+    Ops.push_back(DAG.getTargetConstant(VECC, dl, MVT::i32));
+    Ops.push_back(CondVal);
+    Ops.push_back(TrueVal);
+    Ops.push_back(FalseVal);
+
+    return SDValue(DAG.getMachineNode(CMOVOpcode, dl, CMOVVT, Ops), 0);
+  }
+
+  return SDValue();
+}
 
 SDValue VETargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
@@ -2977,10 +3075,10 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
     //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
-#if 1
+#if 0
   case ISD::SELECT:           return LowerSELECT(Op, DAG, *this);
-  //case VEISD::SELECT:         return LowerVESELECT(Op, DAG, *this);
 #endif
+  case ISD::SELECT_CC:        return LowerSELECT_CC(Op, DAG, *this);
   }
 }
 
@@ -3405,6 +3503,83 @@ VETargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
   // The VE target isn't yet aware of offsets.
   return false;
 }
+
+#if 0
+static SDValue performSelectCombine(SDNode *N,
+                                    TargetLowering::DAGCombinerInfo &DCI) {
+  SelectionDAG &DAG = DCI.DAG;
+  SDLoc dl(N);
+  SDValue Cond = N->getOperand(0);
+  SDValue True = N->getOperand(1);
+  SDValue False = N->getOperand(2);
+
+  assert(Cond.getOpcode() == ISD::SETCC);
+
+  SDValue LHS = Cond.getOperand(0);
+  SDValue RHS = Cond.getOperand(1);
+  EVT VT = LHS.getValueType();
+
+  unsigned Opcode = 0;
+  ISD::CondCode CC = cast<CondCodeSDNode>(Cond.getOperand(2))->get();
+
+  unsigned OpcodeForG = 0;
+  unsigned OpcodeForL = 0;
+  if (DAG.isEqualTo(LHS, True) && DAG.isEqualTo(RHS, False)) {
+    if (VT == MVT::f32 || VT == MVT::f64) {
+        OpcodeForG = VEISD::FMAX;
+        OpcodeForL = VEISD::FMIN;
+    } else if (VT == MVT::i32 || VT == MVT::i64) {
+        OpcodeForG = VEISD::MAX;
+        OpcodeForL = VEISD::MIN;
+    }
+  } else if (DAG.isEqualTo(LHS, False) && DAG.isEqualTo(RHS, True)) {
+    if (VT == MVT::f32 || VT == MVT::f64) {
+        OpcodeForG = VEISD::FMIN;
+        OpcodeForL = VEISD::FMAX;
+    } else if (VT == MVT::i32 || VT == MVT::i64) {
+        OpcodeForG = VEISD::MIN;
+        OpcodeForL = VEISD::MAX;
+    }
+  }
+
+  if (!OpcodeForG)
+    return SDValue();
+
+  switch (CC) {
+    default: break;
+    case ISD::SETGT:
+    case ISD::SETGE:
+    case ISD::SETOGT:
+      Opcode = OpcodeForG;
+      break;
+    case ISD::SETLT:
+    case ISD::SETLE:
+    case ISD::SETOLT:
+      Opcode = OpcodeForL;
+      break;
+  }
+
+  if (Opcode) {
+    return DAG.getNode(Opcode, dl, N->getValueType(0), LHS, RHS);
+  }
+
+  return SDValue();
+}
+
+SDValue VETargetLowering::PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const {
+  //SelectionDAG &DAG = DCI.DAG;
+  switch (N->getOpcode()) {
+    default:
+      DEBUG(dbgs() << "Custom combining: skipping\n");
+      break;
+#if 1
+    case ISD::SELECT:
+      return performSelectCombine(N, DCI);
+#endif
+  }
+  return SDValue();
+}
+#endif
 
 void VETargetLowering::ReplaceNodeResults(SDNode *N,
                                              SmallVectorImpl<SDValue>& Results,

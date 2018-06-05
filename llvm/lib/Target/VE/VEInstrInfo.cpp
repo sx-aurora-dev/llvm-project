@@ -514,6 +514,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
 #endif
   }
+#if 0
   case VE::VE_SELECT: {
     // (VESelect $dst, $CC, $condVal, $trueVal, $dst)
     //   -> (CMOVrr $dst, condCode, $trueVal, $condVal)
@@ -523,7 +524,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::CMOVrr))
+    BuildMI(*MBB, MI, dl, get(VE::CMOVWrr))
       .addReg(MI.getOperand(0).getReg())
       .addImm(MI.getOperand(1).getImm())
       .addReg(MI.getOperand(3).getReg())
@@ -532,12 +533,25 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     MI.eraseFromParent();
     return true;
   }
-  case VE::VFMSpv: {
-    // replace to pvfmslo and pvfmsup
+#endif
+  case VE::VFMSpv:
+  case VE::VFMFpv: {
+    // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
+    // replace to pvfmk.s.up and pvfmk.s.lo (VFMFpv)
 
     // change VMP to VM
     unsigned VMu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
     unsigned VMl = VMu + 1;
+
+    unsigned OpcodeUpper;
+    unsigned OpcodeLower;
+    if (MI.getOpcode() == VE::VFMSpv) {
+      OpcodeUpper = VE::VFMSuv;
+      OpcodeLower = VE::VFMSv;
+    } else { // VE::VFMFpv
+      OpcodeUpper = VE::VFMFsv;
+      OpcodeLower = VE::VFMFlv;
+    }
 #if 0
     DEBUG(dbgs() << "expandPostRAPseudo: VFMSpv:"
           << " op0=" << MI.getOperand(0).getReg()
@@ -548,11 +562,11 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 #endif
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::VFMSuv))
+    BuildMI(*MBB, MI, dl, get(OpcodeUpper))
       .addReg(VMu)
       .addImm(MI.getOperand(1).getImm())
       .addReg(MI.getOperand(2).getReg());
-    BuildMI(*MBB, MI, dl, get(VE::VFMSv))
+    BuildMI(*MBB, MI, dl, get(OpcodeLower))
       .addReg(VMl)
       .addImm(MI.getOperand(1).getImm())
       .addReg(MI.getOperand(2).getReg());
