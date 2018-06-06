@@ -164,6 +164,7 @@ VMZ = Op("m", T_v8u32, "vmz")
 VMD = Op("m", T_v8u32, "vmd")
 CCOp = Op("c", T_u32, "cc")
 
+Imm7 = Op("I", T_i32, "I")
 I = Op("I", T_u64, "I")
 N = Op("N", T_u64, "sy")
 
@@ -507,7 +508,7 @@ class ManualInstPrinter:
                 outType = "__vm256"
                 v.append("{}[:]".format(out.regName()))
             elif out.isSReg():
-                outType = "unsigned long int" # ok?
+                outType = out.ty.ctype
             else:
                 raise Exception("unknown output operand type: {}".format(out.kind))
                 #v.append(out.regName())
@@ -650,16 +651,26 @@ class InstTable:
     def add(self, inst):
         self.currentSection.add(inst)
 
-    def VBRDm(self, opc, name, instName, packed = False):
-        self.add(Inst(opc, "VBRDr", "vbrd_vs_f64", [VX(T_f64)], [SY(T_f64)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDr", "vbrd_vs_i64", [VX(T_i64)], [SY(T_i64)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDi", "vbrd_vI", [VX(T_i64)], [I], False, "{0} = {1}"))
+    def VBRDm(self, opc, name, instName):
+        tmp = []
+        tmp.append(["VBRD", "vbrd", [VX(T_f64), SY(T_f64)], VM])
+        tmp.append(["VBRD", "vbrd", [VX(T_i64), SY(T_i64)], VM])
+        tmp.append(["VBRD", "vbrd", [VX(T_i64), Imm7], VM])
+        tmp.append(["VBRDu", "vbrdu", [VX(T_f32), SY(T_f32)], VM])
+        tmp.append(["VBRDl", "vbrdl", [VX(T_i32), SY(T_i32)], VM])
+        tmp.append(["VBRDl", "vbrdl", [VX(T_i32), Imm7], VM])
+        tmp.append(["VBRDp", "pvbrd", [VX(T_u32), SY(T_u64)], VM512])
 
-        self.add(Inst(opc, "VBRDur", "vbrdu_vs", [VX(T_f32)], [SY(T_f32)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDlr", "vbrdl_vs", [VX(T_i32)], [SY(T_i32)], False, "{0} = {1}"))
-        self.add(Inst(opc, "VBRDli", "vbrdl_vI", [VX(T_i32)], [I], False, "{0} = {1}"))
+        for ary in tmp:
+            args = ary[2]
+            tmp2 = self.addMask([args], ary[3])
 
-        self.add(Inst(opc, "VBRDpr", "pvbrd_vs", [VX(T_u32)], [SY(T_u64)], True, "{0} = {1}"))
+            for args0 in tmp2:
+                inst = ary[0] + self.args_to_inst_suffix(args0)
+                func = ary[1] + self.args_to_func_suffix(args0) + "_" + args0[1].ty.ValueType
+                packed = func[0] == 'p'
+                i = Inst(opc, inst, func, [args0[0]], args0[1:], packed, "{0} = {1}")
+                self.add(i)
 
     def LVSm(self, opc):
         self.add(Inst(opc, "LVSr", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
@@ -674,6 +685,12 @@ class InstTable:
         tbl = {
                "v"    : "v",
                "vv"   : "v",
+               "vs"   : "r",
+               "vI"   : "i",
+               "vsmv" : "rm",
+               "vsMv" : "rm",
+               "vImv" : "im",
+               "vIMv" : "im",
                "vvv"  : "v",
                "vvvmv": "vm",
                "vvvMv": "vm",
@@ -1002,7 +1019,7 @@ T.InstX(0x8F, "VCVD", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
 T.InstX(0x9F, "VCVS", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
 
 T.Section("5.3.2.12. Vector Mask Arithmetic Instructions")
-T.NoImpl("VMGR")
+T.NoImpl("VMRG")
 T.NoImpl("VSHF")
 T.NoImpl("VCP")
 T.NoImpl("VEX")
@@ -1100,6 +1117,7 @@ if args.opt_all:
     args.opt_decl = True
     args.opt_reference = True
     args.opt_test = True
+    args.opt_html = True
     test_dir = None
 
 if args.opt_intrin:
