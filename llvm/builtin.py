@@ -158,6 +158,10 @@ def VD(ty):
 
 VM = Op("m", T_v8u32, "vm")
 VM512 = Op("M", T_v16u32, "vm")
+VMX512 = Op("M", T_v16u32, "vmx")
+VMY512 = Op("M", T_v16u32, "vmy")
+VMZ512 = Op("M", T_v16u32, "vmz")
+VMD512 = Op("M", T_v16u32, "vmd")
 VMX = Op("m", T_v8u32, "vmx")
 VMY = Op("m", T_v8u32, "vmy")
 VMZ = Op("m", T_v8u32, "vmz")
@@ -319,30 +323,45 @@ class TestGeneratorMask:
 
         args = ", ".join([op.regName() for op in I.ins])
 
+        is512 = I.outs[0].isMask512()
+
+        if (is512):
+            vm = "__vm512"
+            m = "M"
+            l = 8
+        else:
+            vm = "__vm"
+            m = "m"
+            l = 4
+
+        lvm = ""
+        svm = ""
+        for i in range(l):
+            lvm += "    vmy = _ve_lvm_{m}{m}Is(vmy, {i}, py[{i}]);\n".format(m=m, i=i)
+            lvm += "    vmz = _ve_lvm_{m}{m}Is(vmz, {i}, pz[{i}]);\n".format(m=m, i=i)
+            svm += "    px[{i}] = _ve_svm_s{m}I(vmx, {i});\n".format(m=m, i=i)
+
         func = '''#include <veintrin.h>
-{}
+{header}
 {{
-    __vm vmx, vmy, vmz;
-    for (int i = 0; i < 4; ++i) {{
-        vmy = _ve_lvm_mmss(vmy, i, py[i]);
-        vmz = _ve_lvm_mmss(vmz, i, pz[i]);
-    }}
-    vmx = _ve_{}({});
-    for (int i = 0; i < 4; ++i)
-        px[i] = _ve_svm_sms(vmx, i);
+    {vm} vmx, vmy, vmz;
+{lvm}
+    vmx = _ve_{inst}({args});
+
+{svm}
 }}
-'''.format(header, I.intrinsicName(), args)
+'''.format(header=header, inst=I.intrinsicName(), args=args, vm=vm, lvm=lvm, svm=svm)
 
         if I.hasExpr():
             args = ["px[i]", "py[i]", "pz[i]"]
             #line = I.expr.format(*[op.regName() for op in I.outs + I.ins])
             line = I.expr.format(*args)
-            ref = '''{}
+            ref = '''{header}
 {{
-    for (int i = 0; i < 4; ++i)
-        {};
+    for (int i = 0; i < {l}; ++i)
+        {line};
 }}
-'''.format(header, line)
+'''.format(header=header, line=line, l=l)
         else:
             ref = None
 
@@ -504,6 +523,7 @@ class ManualInstPrinter:
                 v.append("{}[:]".format(out.regName()))
             elif out.isMask512():
                 outType = "__vm512"
+                v.append("{}[:]".format(out.regName()))
             elif out.isMask():
                 outType = "__vm256"
                 v.append("{}[:]".format(out.regName()))
@@ -651,7 +671,12 @@ class InstTable:
     def add(self, inst):
         self.currentSection.add(inst)
 
-    def VBRDm(self, opc, name, instName):
+    def LSVMm(self, opc, name, instName):
+        self.InstX(opc, name+"r", instName, [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
+        self.InstX(opc, name+"i", instName, [[VMX, VMD, I, SZ(T_u64)]]).noTest()
+        self.InstX(opc, name+"pi", instName, [[VMX512, VMD512, I, SZ(T_u64)]]).noTest()
+
+    def VBRDm(self, opc):
         tmp = []
         tmp.append(["VBRD", "vbrd", [VX(T_f64), SY(T_f64)], VM])
         tmp.append(["VBRD", "vbrd", [VX(T_i64), SY(T_i64)], VM])
@@ -714,9 +739,15 @@ class InstTable:
                "vIvvmv" : "i",
                "vvIvmv" : "i2",
                "mmm" : "",
+               "MMM" : "",
                "mm" : "",
+               "MM" : "",
                "sms" : "",
+               "smI" : "",
+               "sMI" : "",
                "mmss" : "",
+               "mmIs" : "",
+               "MMIs" : "",
 
                "mcv"  : "v",
                "Mcv"  : "v",
@@ -935,9 +966,13 @@ T.NoImpl("PFCHV")
 T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
 #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
 T.LVSm(0x9E)
-T.InstX(0xB7, "LVM", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
-T.InstX(0xA7, "SVM", "svm", [[SX(T_u64), VMY, SZ(T_u64)]]).noTest()
-T.VBRDm(0x8C, "vbrd", "VBRD")
+T.InstX(0xB7, "LVMr", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
+T.InstX(0xB7, "LVMi", "lvm", [[VMX, VMD, I, SZ(T_u64)]]).noTest()
+T.InstX(0xB7, "LVMpi","lvm", [[VMX512, VMD512, I, SZ(T_u64)]]).noTest()
+T.InstX(0xA7, "SVMr", "svm", [[SX(T_u64), VMZ, SY(T_u64)]]).noTest()
+T.InstX(0xA7, "SVMi", "svm", [[SX(T_u64), VMZ, I]]).noTest()
+T.InstX(0xA7, "SVMpi", "svm", [[SX(T_u64), VMZ512, I]]).noTest()
+T.VBRDm(0x8C)
 T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
 T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), I, VZ(T_u64)]]).noTest()
 
@@ -1063,14 +1098,21 @@ T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest()
 
 T.Section("5.3.2.15. Vector Mask Register Instructions")
 T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
+T.InstX(0x84, "ANDMp", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
 T.InstX(0x85, "ORM",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
+T.InstX(0x85, "ORMp",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}")
 T.InstX(0x86, "XORM", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}")
+T.InstX(0x86, "XORMp", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}")
 T.InstX(0x87, "EQVM", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})")
+T.InstX(0x87, "EQVMp", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})")
 T.InstX(0x94, "NNDM", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
+T.InstX(0x94, "NNDMp", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
 T.InstX(0x95, "NEGM", "negm", [[VMX, VMY]], "{0} = ~{1}")
+T.InstX(0x95, "NEGMp", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
 T.NoImpl("PCVM")
 T.NoImpl("LZVM")
 T.NoImpl("TOVM")
+
 
 T.Section("5.3.2.16. Vector Control Instructions")
 T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")

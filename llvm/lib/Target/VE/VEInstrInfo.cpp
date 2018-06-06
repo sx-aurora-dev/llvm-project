@@ -491,6 +491,27 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
   report_fatal_error("getGlobalBaseReg is not implemented yet");
 }
 
+static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
+  MachineBasicBlock* MBB = MI.getParent();
+  DebugLoc dl = MI.getDebugLoc();
+
+  unsigned VMXu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
+  unsigned VMXl = VMXu + 1;
+  unsigned VMYu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
+  unsigned VMYl = VMYu + 1;
+
+  if (MI.getNumOperands() > 2) {
+      unsigned VMZu = (MI.getOperand(2).getReg() - VE::VMP0) * 2 + VE::VM0; 
+      unsigned VMZl = VMZu + 1;
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
+  } else {
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
+  }
+  MI.eraseFromParent();
+}
+
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
   case VE::EXTEND_STACK: {
@@ -572,9 +593,55 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       .addReg(MI.getOperand(2).getReg());
 
     MI.eraseFromParent();
-
     return true;
     }
+  case VE::LVMpi: {
+    unsigned VMXu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMXl = VMXu + 1;
+    unsigned VMDu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMDl = VMDu + 1;
+    int64_t imm = MI.getOperand(2).getImm();
+    unsigned VMX = VMXl;
+    unsigned VMD = VMDl;
+    if (imm >= 4) {
+        VMX = VMXu;
+        VMD = VMDu;
+        imm -= 4;
+    }
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::LVMi))
+      .addDef(VMX)
+      .addReg(VMD)
+      .addImm(imm)
+      .addReg(MI.getOperand(3).getReg());
+    MI.eraseFromParent();
+    return true;
+  }
+  case VE::SVMpi: {
+    unsigned VMZu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMZl = VMZu + 1;
+    int64_t imm = MI.getOperand(2).getImm();
+    unsigned VMZ = VMZl;
+    if (imm >= 4) {
+        VMZ = VMZu;
+        imm -= 4;
+    }
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::SVMi))
+      .add(MI.getOperand(0))
+      .addReg(VMZ)
+      .addImm(imm);
+    MI.eraseFromParent();
+    return true;
+  }
+  case VE::ANDMp: buildVMRInst(MI, get(VE::ANDM)); return true;
+  case VE::ORMp:  buildVMRInst(MI, get(VE::ORM)); return true;
+  case VE::XORMp: buildVMRInst(MI, get(VE::XORM)); return true;
+  case VE::EQVMp: buildVMRInst(MI, get(VE::EQVM)); return true;
+  case VE::NNDMp: buildVMRInst(MI, get(VE::NNDM)); return true;
+  case VE::NEGMp: buildVMRInst(MI, get(VE::NEGM)); return true;
   }
   return false;
 }

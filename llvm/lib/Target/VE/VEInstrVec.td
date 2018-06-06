@@ -382,12 +382,30 @@ def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy), "lvs ${sx},${vx}(${s
 def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)), 
           (f32 (LVSr v256f64:$vx, i32:$sy))>;
 
-def LVM : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
+let cy = 1 in
+def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
   "lvm $vmx,$sy,$sz", []> {
   let Constraints = "$vmx = $vmd";
 }
 
-def SVM : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
+let cy = 0 in
+def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, simm7Op64:$sy, I64:$sz),
+  "lvm $vmx,$sy,$sz", []> {
+  let Constraints = "$vmx = $vmd";
+}
+
+def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, simm7Op64:$sy, I64:$sz),
+  "# lvm $vmx,$sy,$sz", []> {
+  let Constraints = "$vmx = $vmd";
+}
+
+let cy = 1 in
+def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
+
+let cy = 0 in 
+def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, simm7Op64:$sy), "svm $sx,$vmx,$sy", []>;
+
+def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, simm7Op64:$sy), "# svm+svm", []>;
 
 multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
   def r : RV2<opc, (outs V64:$vx), (ins I64:$sy), 
@@ -728,7 +746,6 @@ class VMR2<bits<8> op, string asm>
   let m = 0;
 }
 
-
 def ANDM : VMR3<0x84, "andm">;
 def ORM :  VMR3<0x85, "orm">;
 def XORM : VMR3<0x86, "xorm">;
@@ -738,6 +755,13 @@ def NEGM : VMR2<0x95, "negm">;
 // PCVM
 // LZVM
 // TOVM
+
+def ANDMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def ORMp  : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def XORMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def EQVMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def NNDMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def NEGMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 
 // 5.3.2.16. Vector Control Instructions
 // SVL
