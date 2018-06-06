@@ -628,6 +628,8 @@ def : Pat<(f64 (sint_to_fp i32:$sy)), (f64 (FLTdr i32:$sy))>;
 def : Pat<(f64 (sint_to_fp i64:$sy)), (f64 (FLTXr i64:$sy))>;
 def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 
+def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
+
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
