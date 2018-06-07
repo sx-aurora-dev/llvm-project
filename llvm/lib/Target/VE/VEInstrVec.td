@@ -389,12 +389,12 @@ def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
 }
 
 let cy = 0 in
-def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, simm7Op64:$sy, I64:$sz),
+def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, simm7Op32:$sy, I64:$sz),
   "lvm $vmx,$sy,$sz", []> {
   let Constraints = "$vmx = $vmd";
 }
 
-def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, simm7Op64:$sy, I64:$sz),
+def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, simm7Op32:$sy, I64:$sz),
   "# lvm $vmx,$sy,$sz", []> {
   let Constraints = "$vmx = $vmd";
 }
@@ -403,9 +403,9 @@ let cy = 1 in
 def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
 
 let cy = 0 in 
-def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, simm7Op64:$sy), "svm $sx,$vmx,$sy", []>;
+def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, simm7Op32:$sy), "svm $sx,$vmx,$sy", []>;
 
-def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, simm7Op64:$sy), "# svm+svm", []>;
+def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, simm7Op32:$sy), "# svm+svm", []>;
 
 multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
   def r : RV2<opc, (outs V64:$vx), (ins I64:$sy), 
@@ -570,6 +570,16 @@ defm VCVD : VCVT<0x8F, "vcvt.d.s">;
 defm VCVS : VCVT<0x9F, "vcvt.s.d">;
 
 // 5.3.2.12. Vector Mask Arithmetic Instructions
+
+let cx = 0, cs = 1 in
+def VMRGvm : RV<0xD6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm),
+  "vmrg $vx,$vy,$vz,$vm", []>;
+let cx = 1, cs = 1 in
+def VMRGpvm : RV<0xD6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm),
+  "vmrg.w $vx,$vy,$vz,$vm", []>;
+
+//let cx = 0 in defm VMRG : RV3m<"vmrg", 0xD6, VM>;
+//let cx = 1 in defm VMRGp : RV3m<"vmrg.w", 0xD6, VM512>;
 // VMRG
 // VSHF
 // VCP
