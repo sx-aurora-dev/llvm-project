@@ -573,6 +573,9 @@ defm FSB : RRFm<"fsub", 0x5C, fsub>;
 defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
 
+def : Pat<(fneg f64:$sx), (FSBd (ORim1 0, 0), $sx)>;
+def : Pat<(fneg f32:$sx), (FSBs (ORim1 0, 0), $sx)>;
+
 let cx = 0 in def FCPdrr : RR<0x7E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
   "fcmp.d $sx,$sy,$sz", []>;
 let cx = 1 in def FCPsrr : RR<0x7E, (outs I64:$sx), (ins I64:$sy, I64:$sz),

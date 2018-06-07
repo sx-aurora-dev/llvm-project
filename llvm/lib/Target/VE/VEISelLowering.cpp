@@ -2848,9 +2848,78 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
+static SDValue performSelectCombine(SDValue& Op, SelectionDAG& DAG) 
+{
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  SDValue True = Op.getOperand(2);
+  SDValue False = Op.getOperand(3);
+  SDValue CCOp = Op.getOperand(4);
+  SDLoc dl(Op);
+
+  assert(LHS.getValueType() == RHS.getValueType());
+
+  EVT VT = LHS.getValueType();
+
+  ISD::CondCode CC = cast<CondCodeSDNode>(CCOp)->get();
+
+
+  unsigned OpcodeMax = 0;
+  unsigned OpcodeMin = 0;
+  if (VT == MVT::f32 || VT == MVT::f64) {
+    OpcodeMax = VEISD::FMAX;
+    OpcodeMin = VEISD::FMIN;
+  } else if (VT == MVT::i32 || VT == MVT::i64) {
+    OpcodeMax = VEISD::MAX;
+    OpcodeMin = VEISD::MIN;
+  }
+
+  if (!OpcodeMax)
+    return SDValue();
+
+  unsigned OpcodeG = 0;
+  unsigned OpcodeL = 0;
+  if (DAG.isEqualTo(LHS, True) && DAG.isEqualTo(RHS, False)) {
+    OpcodeG = OpcodeMax;
+    OpcodeL = OpcodeMin;
+  } else if (DAG.isEqualTo(LHS, False) && DAG.isEqualTo(RHS, True)) {
+    OpcodeG = OpcodeMin;
+    OpcodeL = OpcodeMax;
+  }
+
+  if (!OpcodeG)
+    return SDValue();
+
+  unsigned Opcode = 0;
+  if (VT == MVT::i32 || VT == MVT::i64) {
+    // VE don't have max/min for unsigned integer
+    if (CC == ISD::SETGT || CC == ISD::SETGE)
+      Opcode = OpcodeG;
+    else if (CC == ISD::SETLT || CC == ISD::SETLE)
+      Opcode = OpcodeL;
+  } else if (VT == MVT::f32 || VT == MVT::f64) {
+    if (CC == ISD::SETGT || CC == ISD::SETGE
+        || CC == ISD::SETOGT || CC == ISD::SETOGE) {
+      Opcode = OpcodeG;
+    } else if (CC == ISD::SETLT || CC == ISD::SETLE
+               || CC == ISD::SETOLT || CC == ISD::SETOLE) {
+      Opcode = OpcodeL;
+    }
+  }
+
+  if (Opcode) {
+    return DAG.getNode(Opcode, dl, Op.getValueType(), LHS, RHS);
+  }
+
+  return SDValue();
+}
+
 static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
                               const VETargetLowering &TLI)
 {
+  if (SDValue Res = performSelectCombine(Op, DAG))
+    return Res;
+
   SDValue LHS = Op.getOperand(0);
   SDValue RHS = Op.getOperand(1);
   SDValue TrueVal = Op.getOperand(2);
@@ -3420,83 +3489,6 @@ VETargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
   // The VE target isn't yet aware of offsets.
   return false;
 }
-
-#if 0
-static SDValue performSelectCombine(SDNode *N,
-                                    TargetLowering::DAGCombinerInfo &DCI) {
-  SelectionDAG &DAG = DCI.DAG;
-  SDLoc dl(N);
-  SDValue Cond = N->getOperand(0);
-  SDValue True = N->getOperand(1);
-  SDValue False = N->getOperand(2);
-
-  assert(Cond.getOpcode() == ISD::SETCC);
-
-  SDValue LHS = Cond.getOperand(0);
-  SDValue RHS = Cond.getOperand(1);
-  EVT VT = LHS.getValueType();
-
-  unsigned Opcode = 0;
-  ISD::CondCode CC = cast<CondCodeSDNode>(Cond.getOperand(2))->get();
-
-  unsigned OpcodeForG = 0;
-  unsigned OpcodeForL = 0;
-  if (DAG.isEqualTo(LHS, True) && DAG.isEqualTo(RHS, False)) {
-    if (VT == MVT::f32 || VT == MVT::f64) {
-        OpcodeForG = VEISD::FMAX;
-        OpcodeForL = VEISD::FMIN;
-    } else if (VT == MVT::i32 || VT == MVT::i64) {
-        OpcodeForG = VEISD::MAX;
-        OpcodeForL = VEISD::MIN;
-    }
-  } else if (DAG.isEqualTo(LHS, False) && DAG.isEqualTo(RHS, True)) {
-    if (VT == MVT::f32 || VT == MVT::f64) {
-        OpcodeForG = VEISD::FMIN;
-        OpcodeForL = VEISD::FMAX;
-    } else if (VT == MVT::i32 || VT == MVT::i64) {
-        OpcodeForG = VEISD::MIN;
-        OpcodeForL = VEISD::MAX;
-    }
-  }
-
-  if (!OpcodeForG)
-    return SDValue();
-
-  switch (CC) {
-    default: break;
-    case ISD::SETGT:
-    case ISD::SETGE:
-    case ISD::SETOGT:
-      Opcode = OpcodeForG;
-      break;
-    case ISD::SETLT:
-    case ISD::SETLE:
-    case ISD::SETOLT:
-      Opcode = OpcodeForL;
-      break;
-  }
-
-  if (Opcode) {
-    return DAG.getNode(Opcode, dl, N->getValueType(0), LHS, RHS);
-  }
-
-  return SDValue();
-}
-
-SDValue VETargetLowering::PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const {
-  //SelectionDAG &DAG = DCI.DAG;
-  switch (N->getOpcode()) {
-    default:
-      DEBUG(dbgs() << "Custom combining: skipping\n");
-      break;
-#if 1
-    case ISD::SELECT:
-      return performSelectCombine(N, DCI);
-#endif
-  }
-  return SDValue();
-}
-#endif
 
 void VETargetLowering::ReplaceNodeResults(SDNode *N,
                                              SmallVectorImpl<SDValue>& Results,
