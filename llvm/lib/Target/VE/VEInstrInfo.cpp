@@ -209,7 +209,7 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     return true;
   }
 
-  // 4AOtherwise, can't handle this.
+  // Otherwise, can't handle this.
   return true;
 }
 

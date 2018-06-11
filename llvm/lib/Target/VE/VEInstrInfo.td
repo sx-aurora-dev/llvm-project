@@ -79,24 +79,6 @@ def cond2cc : SDNodeXForm<cond, [{
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
 
-// reverse
-/*
-def cond2rcc : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
-  switch (N->get()) {
-  default:          llvm_unreachable("Unknown integer condition code!");
-  case ISD::SETEQ:  cc = VECC::CC_NE; break;
-  case ISD::SETNE:  cc = VECC::CC_EQ; break;
-  case ISD::SETLT:  cc = VECC::CC_GE;  break;
-  case ISD::SETGT:  cc = VECC::CC_LE;  break;
-  case ISD::SETLE:  cc = VECC::CC_G; break;
-  case ISD::SETGE:  cc = VECC::CC_L; break;
-  }
-  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
-}]>;
-*/
-
-
 // Addressing modes.
 def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
 def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
@@ -497,21 +479,6 @@ let cw = 1 in defm CMXi :
 
 let cx = 1, cw = 0 in defm CMSi :
   RRm<"mins.w.zx", 0x78, VEmin, I64, i32, simm7Op32, uimm6Op32>;
-
-// cx: sx/zx, cw: max/min
-/*
-let cx = 0, cw = 0 in def CMSal : RR<0x78, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-  "maxs.l.zx $sx,$sy,$sz",
-  [(set i64:$sx, (VEmax i64:$sy, i64:$sz))]>;
-
-let cx = 0, cw = 0 in def CMSa : RR<0x78, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-  "maxs.w.zx $sx,$sy,$sz",
-  [(set i32:$sx, (VEmax i32:$sy, i32:$sz))]>;
-
-let cx = 0, cw = 1 in def CMSi : RR<0x78, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-  "mins.w.zx $sx,$sy,$sz",
-  [(set i32:$sx, (VEmin i32:$sy, i32:$sz))]>;
-  */
 
 // 5.3.2.3. Logical Arithmetic Operation Instructions
 
@@ -930,9 +897,6 @@ def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
 def : Pat<(brcc cond:$cond, simm7:$lhs, i32:$rhs, bb:$addr),
           (BCRir (cond2cc $cond), (i64 (sext_imm $lhs)), 
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
-//def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
-//          (BCRir (cond2rcc $cond), (i64 (sext_imm $rhs)), 
-//                 (COPY_TO_REGCLASS $lhs, I64), bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
           (BCRrr (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;

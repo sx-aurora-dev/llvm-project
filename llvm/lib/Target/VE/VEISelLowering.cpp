@@ -1616,8 +1616,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
-  setTargetDAGCombine(ISD::SELECT);
-
   // Set function alignment to 16 bytes (4 bits)
   setMinFunctionAlignment(4);
 

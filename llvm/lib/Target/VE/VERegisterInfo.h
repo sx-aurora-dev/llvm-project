@@ -43,14 +43,6 @@ struct VERegisterInfo : public VEGenRegisterInfo {
 
   bool canRealignStack(const MachineFunction &MF) const override;
 
-#if 0
-  bool requiresRegisterScavenging(const MachineFunction &MF) const override 
-  { return true; }
-
-  bool requiresFrameIndexScavenging(const MachineFunction &MF) const override
-  { return true; }
-#endif
-
 };
 
 } // end namespace llvm
