@@ -285,6 +285,8 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 1;
     let cz = 0;
     let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
   }
   def rm1 : RR<
     opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
@@ -292,6 +294,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     []> {
     let cy = 1;
     let cz = 0;
+    let hasSideEffects = 0;
   }
   def im0 : RR<
     opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
@@ -300,6 +303,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
     let sz{6} = 1;
+    let hasSideEffects = 0;
   }
   def im1 : RR<
     opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
@@ -307,6 +311,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     []> {
     let cy = 0;
     let cz = 0;
+    let hasSideEffects = 0;
   }
   /*
   def zi : RR<
