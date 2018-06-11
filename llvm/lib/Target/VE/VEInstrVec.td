@@ -464,7 +464,9 @@ defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
 defm VMPS : RVEXm<"vmuls", 0xCB>; // mul signed 32b sx/zx
 defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
 defm VMPD : RV3m<"vmuls.l.w", 0xD9, VM>; // mul signed 32b -> 64b
-// divs
+defm VDIV : RVLWm<"vdivu", 0xE9>;
+defm VDVS : RVEXm<"vdivs", 0xEB>;
+defm VDVX : RVLm<"vdivs", 0xFB>;
 defm VCMP : RVUm<"vcmpu", 0xB9>;
 defm VCPS : RVWm<"vcmps", 0xFA>;
 defm VCPX : RVLm<"vcmps", 0xBA>;
