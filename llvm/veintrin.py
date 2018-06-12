@@ -774,10 +774,13 @@ class InstTable:
                "vvv"  : "v",
                "vvvmv": "vm",
                "vvvMv": "vm",
-               "vvs"  : "r",
+               "vvs"  : "r2",
+               "vvsmv": "rm2",
+               "vvI"  : "i2",
+               "vvImv": "im2",
                "vvss" : "r", # LSV
                "svs"  : "r", # LVS
-               "vvN"  : "i",
+               "vvN"  : "i2",
                "vsv"  : "r",
                "vsvmv": "rm",
                "vsvMv": "rm",
@@ -920,6 +923,13 @@ class InstTable:
         if hasPacked:
             self.InstX(opc, instName+"p", "p"+name, O_pi32, expr)
 
+    def Inst3divbys(self, opc, name, instName, ty):
+        O_s = [VX(ty), VY(ty), SY(ty)]
+        O_i = [VX(ty), VY(ty), ImmI]
+        O = [O_s, O_i]
+        O = self.addMask(O)
+        self.InstX(opc, instName, name, O, "{0} = {1} / {2}")
+
     def Logical(self, opc, name, instName, expr):
         O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
         O_u64_vsv = [VX(T_u64), SY(T_u64), VZ(T_u64)]
@@ -970,7 +980,7 @@ class InstTable:
 
     def FLm(self, opc, inst, asm, args):
         self.InstX(opc, inst.format(fl="f"), asm.format(fl=".fst"), args)
-        self.InstX(opc, inst.format(fl="l"), asm.format(fl=".lst"), args)
+        self.InstX(opc, inst.format(fl="l"), asm.format(fl=".lst"), args).noTest()
 
 def cmpwrite(filename, data):
     need_write = True
@@ -1041,8 +1051,13 @@ T.Inst3w(0xCB, "vmuls", "VMPS", "{0} = {1} * {2}", False)
 T.Inst3l(0xDB, "vmuls", "VMPX", "{0} = {1} * {2}")
 T.InstX(0xD9, "VMPD", "vmuls.l.w", O_VMPD, "{0} = {1} * {2}")
 T.Inst3u(0xE9, "vdivu", "VDIV", "{0} = {1} / {2}", False)
+T.Inst3divbys(0xE9, "vdivu.l", "VDIVl", T_u64)
+T.Inst3divbys(0xE9, "vdivu.w", "VDIVw", T_u32)
 T.Inst3w(0xEB, "vdivs", "VDVS", "{0} = {1} / {2}", False)
+T.Inst3divbys(0xEB, "vdivs.w_sx", "VDVSwsx", T_i32)
+T.Inst3divbys(0xEB, "vdivs.w_zx", "VDVSwzx", T_i32)
 T.Inst3l(0xFB, "vdivs", "VDVX", "{0} = {1} / {2}")
+T.Inst3divbys(0xEB, "vdivs.l", "VDVXl", T_i64)
 T.NoImpl("VCMP")
 T.NoImpl("VCPS")
 T.NoImpl("VCPX")
