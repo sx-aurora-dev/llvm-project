@@ -330,6 +330,8 @@ def : Pat<(int_ve_vcvtds_vv v256f64:$vy), (VCVDv v256f64:$vy)>;
 def : Pat<(int_ve_vcvtsd_vv v256f64:$vy), (VCVSv v256f64:$vy)>;
 def : Pat<(int_ve_vmrg_vvvm v256f64:$vy, v256f64:$vz, v4i64:$vm), (VMRGvm v256f64:$vy, v256f64:$vz, v4i64:$vm)>;
 def : Pat<(int_ve_vmrgw_vvvM v256f64:$vy, v256f64:$vz, v8i64:$vm), (VMRGpvm v256f64:$vy, v256f64:$vz, v8i64:$vm)>;
+def : Pat<(int_ve_vshf_vvvs v256f64:$vy, v256f64:$vz, i64:$sy), (VSHFr v256f64:$vy, v256f64:$vz, i64:$sy)>;
+def : Pat<(int_ve_vshf_vvvI v256f64:$vy, v256f64:$vz, (i32 simm7:$N)), (VSHFi v256f64:$vy, v256f64:$vz, (i32 simm7:$N))>;
 def : Pat<(int_ve_vfmkl_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMKv (i32 uimm6:$cc), v256f64:$vz)>;
 def : Pat<(int_ve_vfmkw_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMSv (i32 uimm6:$cc), v256f64:$vz)>;
 def : Pat<(int_ve_pvfmkw_Mcv (i32 uimm6:$cc), v256f64:$vz), (VFMSpv (i32 uimm6:$cc), v256f64:$vz)>;

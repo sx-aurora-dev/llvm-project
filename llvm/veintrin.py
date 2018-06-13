@@ -639,6 +639,11 @@ class ManualInstPrinter:
 
 class HtmlManualPrinter(ManualInstPrinter):
     def printAll(self, T):
+        idx = 0
+        for s in T.sections:
+            print("<a href=\"#sec{}\">{}</a><br>".format(idx, s.name))
+            idx += 1
+        idx = 0
         for s in T.sections:
             rowspan = {}
             tmp = []
@@ -655,11 +660,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                     rowspan[inst] = 1
                 tmp.append([inst, func, I.asm(), expr])
 
-            #sys.stderr.write("{}\n".format(s.name))
-            #for k, v in rowspan.items():
-            #    sys.stderr.write("{} {}\n".format(k, v))
-
-            print("<h3>{}</h3>".format(s.name))
+            print("<h3><a name=\"sec{}\">{}</a></h3>".format(idx, s.name))
             print("<table border=1>")
             print("<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>")
             row = 0
@@ -672,6 +673,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                 row -= 1
                 print("<td>{}</td><td>{}</td><td>{}</td></tr>".format(*a))
             print("</table>")
+            idx += 1
 
 class InstList:
     def __init__(self):
@@ -808,6 +810,8 @@ class InstTable:
                "MMIs" : "",
                "vvvm" : "v",
                "vvvM" : "v",
+               "vvvs" : "r", # VSHF
+               "vvvI" : "i", # VSHF
 
                "mcv"  : "v",
                "Mcv"  : "v",
@@ -1120,7 +1124,7 @@ T.InstX(0x9F, "VCVS", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
 T.Section("5.3.2.12. Vector Mask Arithmetic Instructions")
 T.add(Inst(0xD6, "VMRGvm", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
 T.add(Inst(0xD6, "VMRGpvm", "vmrg.w_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], True))
-T.NoImpl("VSHF")
+T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN]])
 T.NoImpl("VCP")
 T.NoImpl("VEX")
 T.InstX(0xB4, "VFMK", "vfmk.l", [[VM, CCOp, VZ(T_i64)]]).noTest()
@@ -1187,7 +1191,7 @@ T.NoImpl("LVIX")
 
 T.Section("Others")
 T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
-T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and pack")
+T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
 
 T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin()
 T.InstX(None, None, "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin()

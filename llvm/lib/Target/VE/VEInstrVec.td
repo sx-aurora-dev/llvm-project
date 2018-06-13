@@ -626,9 +626,13 @@ let cx = 1, cs = 1 in
 def VMRGpvm : RV<0xD6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm),
   "vmrg.w $vx,$vy,$vz,$vm", []>;
 
-//let cx = 0 in defm VMRG : RV3m<"vmrg", 0xD6, VM>;
-//let cx = 1 in defm VMRGp : RV3m<"vmrg.w", 0xD6, VM512>;
-// VMRG
+let cy = 0 in
+def VSHFi : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, uimm6Op32:$sy),
+  "vshf $vx,$vy,$vz,$sy", []>;
+let cy = 1 in
+def VSHFr : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy),
+  "vshf $vx,$vy,$vz,$sy", []>;
+
 // VSHF
 // VCP
 // VEX
