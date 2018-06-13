@@ -333,6 +333,8 @@
 #define _ve_vcvtsd_vv __builtin_ve_vcvtsd_vv
 #define _ve_vmrg_vvvm __builtin_ve_vmrg_vvvm
 #define _ve_vmrgw_vvvM __builtin_ve_vmrgw_vvvM
+#define _ve_vshf_vvvs __builtin_ve_vshf_vvvs
+#define _ve_vshf_vvvI __builtin_ve_vshf_vvvI
 #define _ve_vfmkl_mcv __builtin_ve_vfmkl_mcv
 #define _ve_vfmkw_mcv __builtin_ve_vfmkw_mcv
 #define _ve_pvfmkw_Mcv __builtin_ve_pvfmkw_Mcv
