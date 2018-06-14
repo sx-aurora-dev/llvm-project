@@ -194,6 +194,12 @@ std::string EVT::getEVTString() const {
   case MVT::v2f64:   return "v2f64";
   case MVT::v4f64:   return "v4f64";
   case MVT::v8f64:   return "v8f64";
+  case MVT::v256i32: return "v256i32";
+  case MVT::v256i64: return "v256i64";
+  case MVT::v512i32: return "v512i32";
+  case MVT::v256f32: return "v256f32";
+  case MVT::v256f64: return "v256f64";
+  case MVT::v512f32: return "v512f32";
   case MVT::Metadata:return "Metadata";
   case MVT::Untyped: return "Untyped";
   }
@@ -274,6 +280,12 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::v2f64:   return VectorType::get(Type::getDoubleTy(Context), 2);
   case MVT::v4f64:   return VectorType::get(Type::getDoubleTy(Context), 4);
   case MVT::v8f64:   return VectorType::get(Type::getDoubleTy(Context), 8);
+  case MVT::v256i32: return VectorType::get(Type::getInt32Ty(Context), 256);
+  case MVT::v256i64: return VectorType::get(Type::getInt64Ty(Context), 256);
+  case MVT::v512i32: return VectorType::get(Type::getInt32Ty(Context), 512);
+  case MVT::v256f32: return VectorType::get(Type::getFloatTy(Context), 256);
+  case MVT::v256f64: return VectorType::get(Type::getDoubleTy(Context), 256);
+  case MVT::v512f32: return VectorType::get(Type::getFloatTy(Context), 512);
   case MVT::Metadata: return Type::getMetadataTy(Context);
  }
 }

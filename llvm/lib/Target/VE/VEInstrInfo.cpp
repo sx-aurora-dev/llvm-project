@@ -23,6 +23,9 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "ve"
 
 using namespace llvm;
 
@@ -109,7 +112,7 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
 static bool isUncondBranchOpcode(int Opc) { return Opc == VE::BCRa; }
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == VE::BCRrr || Opc == VE::BCRri;
+  return Opc == VE::BCRrr || Opc == VE::BCRir;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -217,35 +220,49 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
                                       int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
+#if 0
   assert((Cond.size() == 1 || Cond.size() == 0) &&
          "VE branch conditions should have one component!");
+#endif
   assert(!BytesAdded && "code size not handled");
-#if 0
   if (Cond.empty()) {
     assert(!FBB && "Unconditional branch with multiple successors!");
-    BuildMI(&MBB, DL, get(SP::BA)).addMBB(TBB);
+    BuildMI(&MBB, DL, get(VE::BCRa)).addMBB(TBB);
     return 1;
   }
 
   // Conditional branch
-  unsigned CC = Cond[0].getImm();
 
-  if (IsIntegerCC(CC))
-    BuildMI(&MBB, DL, get(SP::BCOND)).addMBB(TBB).addImm(CC);
-  else
-    BuildMI(&MBB, DL, get(SP::FBCOND)).addMBB(TBB).addImm(CC);
+  assert(Cond.size() == 3 && "Cond.size() == 3 is only implemented");
+
+  // (BCRir CC sy sz addr)
+
+  assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
+
+  if (Cond[1].isImm()) {
+      BuildMI(&MBB, DL, get(VE::BCRir))
+          .addImm(Cond[0].getImm()) // condition code
+          .addImm(Cond[1].getImm()) // lhs 
+          .addReg(Cond[2].getReg()) // rhs
+          .addMBB(TBB);
+  } else {
+      BuildMI(&MBB, DL, get(VE::BCRrr))
+          .addImm(Cond[0].getImm())
+          .addReg(Cond[1].getReg())
+          .addReg(Cond[2].getReg())
+          .addMBB(TBB);
+  }
+
   if (!FBB)
     return 1;
-
-  BuildMI(&MBB, DL, get(SP::BA)).addMBB(FBB);
+  BuildMI(&MBB, DL, get(VE::BCRa)).addMBB(FBB);
   return 2;
-#endif
-  report_fatal_error("insertBranch is not implemented yet");
+
+  //report_fatal_error("insertBranch is not implemented yet");
 }
 
 unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
                                       int *BytesRemoved) const {
-#if 0
   assert(!BytesRemoved && "code size not handled");
 
   MachineBasicBlock::iterator I = MBB.end();
@@ -256,9 +273,9 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
     if (I->isDebugValue())
       continue;
 
-    if (I->getOpcode() != SP::BA
-        && I->getOpcode() != SP::BCOND
-        && I->getOpcode() != SP::FBCOND)
+    if (I->getOpcode() != VE::BCRa
+        && I->getOpcode() != VE::BCRir
+        && I->getOpcode() != VE::BCRrr)
       break; // Not a branch
 
     I->eraseFromParent();
@@ -266,13 +283,15 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
     ++Count;
   }
   return Count;
-#endif
-  report_fatal_error("removeBranch is not implemented yet");
+
+  //report_fatal_error("removeBranch is not implemented yet");
 }
 
 bool VEInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
+#if 0
   assert(Cond.size() == 1);
+#endif
   VECC::CondCodes CC = static_cast<VECC::CondCodes>(Cond[0].getImm());
   Cond[0].setImm(GetOppositeBranchCondition(CC));
   return false;
@@ -302,6 +321,10 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (VE::I32RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
+  else if (VE::V64RegClass.contains(DestReg, SrcReg))
+    BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(KillSrc));
   else
     llvm_unreachable("Impossible reg-to-reg copy");
 #if 0
@@ -468,6 +491,27 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
   report_fatal_error("getGlobalBaseReg is not implemented yet");
 }
 
+static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
+  MachineBasicBlock* MBB = MI.getParent();
+  DebugLoc dl = MI.getDebugLoc();
+
+  unsigned VMXu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
+  unsigned VMXl = VMXu + 1;
+  unsigned VMYu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
+  unsigned VMYl = VMYu + 1;
+
+  if (MI.getNumOperands() > 2) {
+      unsigned VMZu = (MI.getOperand(2).getReg() - VE::VMP0) * 2 + VE::VM0; 
+      unsigned VMZl = VMZu + 1;
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
+  } else {
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
+  }
+  MI.eraseFromParent();
+}
+
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
   case VE::EXTEND_STACK: {
@@ -491,6 +535,122 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
 #endif
   }
+#if 0
+  case VE::VE_SELECT: {
+    // (VESelect $dst, $CC, $condVal, $trueVal, $dst)
+    //   -> (CMOVrr $dst, condCode, $trueVal, $condVal)
+    // cmov.$df.$cf $dst, $trueval, $cond
+
+    assert(MI.getOperand(0).getReg() == MI.getOperand(4).getReg());
+
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::CMOVWrr))
+      .addReg(MI.getOperand(0).getReg())
+      .addImm(MI.getOperand(1).getImm())
+      .addReg(MI.getOperand(3).getReg())
+      .addReg(MI.getOperand(2).getReg());
+
+    MI.eraseFromParent();
+    return true;
+  }
+#endif
+  case VE::VFMSpv:
+  case VE::VFMFpv:
+  case VE::VFMKpat:
+  case VE::VFMKpaf: {
+    // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
+    // replace to pvfmk.s.up and pvfmk.s.lo (VFMFpv)
+
+    unsigned Opcode = MI.getOpcode();
+
+    // change VMP to VM
+    unsigned VMu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMl = VMu + 1;
+
+    unsigned OpcodeUpper;
+    unsigned OpcodeLower;
+    if (Opcode == VE::VFMSpv) {
+      OpcodeUpper = VE::VFMSuv;
+      OpcodeLower = VE::VFMSv;
+    } else if (Opcode == VE::VFMFpv) {
+      OpcodeUpper = VE::VFMFsv;
+      OpcodeLower = VE::VFMFlv;
+    } else if (Opcode == VE::VFMKpat) {
+      OpcodeUpper = VE::VFMSuat;
+      OpcodeLower = VE::VFMSlat;
+    } else if (Opcode == VE::VFMKpaf) {
+      OpcodeUpper = VE::VFMSuaf;
+      OpcodeLower = VE::VFMSlaf;
+    }
+#if 0
+    DEBUG(dbgs() << "expandPostRAPseudo: VFMSpv:"
+          << " op0=" << MI.getOperand(0).getReg()
+          << " VMP0=" << VE::VMP0
+          << " VM0=" << VE::VM0
+          << " VMu" << VMu << " VMl=" << VMl
+          << "\n");
+#endif
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, get(OpcodeUpper)).addReg(VMu);
+    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, get(OpcodeLower)).addReg(VMl);
+
+    if (MI.getOpcode() == VE::VFMSpv || MI.getOpcode() == VE::VFMFpv) {
+      Bu.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+      Bl.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+    }
+
+    MI.eraseFromParent();
+    return true;
+    }
+  case VE::LVMpi: {
+    unsigned VMXu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMXl = VMXu + 1;
+    unsigned VMDu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMDl = VMDu + 1;
+    int64_t imm = MI.getOperand(2).getImm();
+    unsigned VMX = VMXl;
+    unsigned VMD = VMDl;
+    if (imm >= 4) {
+        VMX = VMXu;
+        VMD = VMDu;
+        imm -= 4;
+    }
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::LVMi))
+      .addDef(VMX)
+      .addReg(VMD)
+      .addImm(imm)
+      .addReg(MI.getOperand(3).getReg());
+    MI.eraseFromParent();
+    return true;
+  }
+  case VE::SVMpi: {
+    unsigned VMZu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
+    unsigned VMZl = VMZu + 1;
+    int64_t imm = MI.getOperand(2).getImm();
+    unsigned VMZ = VMZl;
+    if (imm >= 4) {
+        VMZ = VMZu;
+        imm -= 4;
+    }
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    BuildMI(*MBB, MI, dl, get(VE::SVMi))
+      .add(MI.getOperand(0))
+      .addReg(VMZ)
+      .addImm(imm);
+    MI.eraseFromParent();
+    return true;
+  }
+  case VE::ANDMp: buildVMRInst(MI, get(VE::ANDM)); return true;
+  case VE::ORMp:  buildVMRInst(MI, get(VE::ORM)); return true;
+  case VE::XORMp: buildVMRInst(MI, get(VE::XORM)); return true;
+  case VE::EQVMp: buildVMRInst(MI, get(VE::EQVM)); return true;
+  case VE::NNDMp: buildVMRInst(MI, get(VE::NNDM)); return true;
+  case VE::NEGMp: buildVMRInst(MI, get(VE::NEGM)); return true;
   }
   return false;
 }

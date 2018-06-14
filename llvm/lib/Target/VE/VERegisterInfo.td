@@ -47,6 +47,11 @@ class VR<bits<7> Enc, string n> : VEReg<Enc, n>;
 // VM - 256-bit wide mask registers
 class VM<bits<7> Enc, string n> : VEReg<Enc, n>;
 
+class VMp<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
+  let SubRegs = subregs;
+  let SubRegIndices = [sub_even, sub_odd];
+}
+
 // Miscellaneous Registers
 def UCC : VEMiscReg<0, "UCC">;       // User clock counter
 def PSW : VEMiscReg<1, "PSW">;       // Program status word
@@ -73,6 +78,20 @@ foreach I = 0-63 in
 foreach I = 0-15 in
   def VM#I : VM<I, "VM"#I>, DwarfRegNum<[!add(128,I)]>;
 
+// Aliases of VMs to use as a pair of two VM for packed instructions
+def VMP0 : VMp<0, "VM0", [VM0, VM1]>;
+def VMP1 : VMp<2, "VM2", [VM2, VM3]>;
+def VMP2 : VMp<4, "VM4", [VM4, VM5]>;
+def VMP3 : VMp<6, "VM6", [VM6, VM7]>;
+def VMP4 : VMp<8, "VM8", [VM8, VM9]>;
+def VMP5 : VMp<10, "VM10", [VM10, VM11]>;
+def VMP6 : VMp<12, "VM12", [VM12, VM13]>;
+def VMP7 : VMp<14, "VM14", [VM14, VM15]>;
+
+// Vector Lenght Register
+def VL : VEReg<0, "VL">;
+
+
 // Aliases of the S* registers used to hold 128-bit for values (long doubles).
 // Following foreach represents something like:
 //   def Q0 : Rq<0, "S0", [S0, S1]>;
@@ -93,10 +112,10 @@ def I8 : RegisterClass<"VE", [i8], 8,
 def I16 : RegisterClass<"VE", [i16], 16,
                         (add (sequence "S%u", 34, 63),
                              (sequence "S%u", 0, 33))>;
-def I32 : RegisterClass<"VE", [i32], 32,
+def I32 : RegisterClass<"VE", [i32, f32], 32,
                         (add (sequence "S%u", 34, 63),
                              (sequence "S%u", 0, 33))>;
-def I64 : RegisterClass<"VE", [i64], 64,
+def I64 : RegisterClass<"VE", [i32, f32, i64, f64], 64,
                         (add (sequence "S%u", 34, 63),
                              (sequence "S%u", 0, 33))>;
 def F32 : RegisterClass<"VE", [f32], 32,
@@ -112,3 +131,8 @@ def Misc : RegisterClass<"VE", [i64], 64,
                               (sequence "PMCR%u", 0, 3),
                               (sequence "PMC%u", 0, 14))>;
 
+def V64 : RegisterClass<"VE", [v256i32, v256i64, v512i32, v256f32, v256f64, v512f32], 64, (sequence "V%u", 0, 63)>;
+// vm0 is reserved for always true
+def VM : RegisterClass<"VE", [v4i64], 64, (sequence "VM%u", 1, 15)>;
+
+def VM512 : RegisterClass<"VE", [v8i64], 64, (sequence "VMP%u", 1, 7)>;

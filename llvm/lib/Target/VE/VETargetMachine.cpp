@@ -13,6 +13,7 @@
 #include "VETargetMachine.h"
 #include "VE.h"
 // #include "VETargetObjectFile.h"
+#include "VETargetTransformInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -41,6 +42,9 @@ static std::string computeDataLayout(const Triple &T) {
   // Stack alignment is 64 bits
   Ret += "-S64";
 
+  // Vector alignment is 64 bits
+  Ret += "-v16384:64:64";
+
   return Ret;
 }
 
@@ -58,6 +62,18 @@ static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
   return CodeModel::Small;
 }
 
+class VEELFTargetObjectFile : public TargetLoweringObjectFileELF {
+  void Initialize(MCContext &Ctx, const TargetMachine &TM) override {
+    TargetLoweringObjectFileELF::Initialize(Ctx, TM);
+    InitializeELF(TM.Options.UseInitArray);
+  }
+};
+
+static std::unique_ptr<TargetLoweringObjectFile> createTLOF()
+{
+    return llvm::make_unique<VEELFTargetObjectFile>();
+}
+
 /// Create an Aurora VE architecture model
 VETargetMachine::VETargetMachine(
     const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
@@ -68,12 +84,17 @@ VETargetMachine::VETargetMachine(
           getEffectiveRelocModel(RM),
           getEffectiveCodeModel(CM, getEffectiveRelocModel(RM), JIT),
           OL),
-      TLOF(make_unique<TargetLoweringObjectFileELF>()),
+      //TLOF(make_unique<TargetLoweringObjectFileELF>()),
+      TLOF(createTLOF()),
       Subtarget(TT, CPU, FS, *this) {
   initAsmInfo();
 }
 
 VETargetMachine::~VETargetMachine() {}
+
+TargetTransformInfo VETargetMachine::getTargetTransformInfo(const Function &F) {
+  return TargetTransformInfo(VETTIImpl(this, F));
+}
 
 namespace {
 /// VE Code Generator Pass Configuration Options.
@@ -112,3 +133,4 @@ void VEPassConfig::addPreEmitPass(){
   addPass(createVEDelaySlotFillerPass());
 #endif
 }
+

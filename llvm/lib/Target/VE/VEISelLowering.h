@@ -29,6 +29,7 @@ namespace llvm {
       BRICC,       // Branch to dest on icc condition
       BRXCC,       // Branch to dest on xcc condition (64-bit only).
       BRFCC,       // Branch to dest on fcc condition
+      SELECT,
       SELECT_ICC,  // Select between two values using the current ICC flags.
       SELECT_XCC,  // Select between two values using the current XCC flags.
       SELECT_FCC,  // Select between two values using the current FCC flags.
@@ -42,6 +43,11 @@ namespace llvm {
       ITOF,        // Int to FP within a FP register.
       FTOX,        // FP to Int64 within a FP register.
       XTOF,        // Int64 to FP within a FP register.
+
+      MAX,
+      MIN,
+      FMAX,
+      FMIN,
 
       CALL,        // A call instruction.
       RET_FLAG,    // Return with a flag operand.
@@ -74,6 +80,10 @@ namespace llvm {
                                 MachineBasicBlock *MBB) const override;
 
     const char *getTargetNodeName(unsigned Opcode) const override;
+
+#if 0
+    SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+#endif
 
     ConstraintType getConstraintType(StringRef Constraint) const override;
     ConstraintWeight
@@ -174,6 +184,7 @@ namespace llvm {
     SDValue LowerF128Compare(SDValue LHS, SDValue RHS, unsigned &SPCC,
                              const SDLoc &DL, SelectionDAG &DAG) const;
 
+    SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
 
     bool ShouldShrinkFPConstant(EVT VT) const override {
@@ -201,6 +212,8 @@ namespace llvm {
                                         MachineBasicBlock *MBB) const;
     MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
                                          MachineBasicBlock *MBB) const;
+
+    void finalizeLowering(MachineFunction &MF) const override;
   };
 } // end namespace llvm
 
