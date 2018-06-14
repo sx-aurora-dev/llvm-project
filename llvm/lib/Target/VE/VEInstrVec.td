@@ -637,12 +637,13 @@ def VSHFr : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy),
 // VCP
 // VEX
 
-// 64bit integer
+// 64bit signed integer
 def VFMKv : RV<0xB4, (outs VM:$vm), (ins CCOp:$cf, V64:$vz), 
   "vfmk.l.${cf} $vm,$vz", []>
 {
   let sy = 0;
   let vw = 0;
+  let m = 0;
 }
 
 // 32bit integer (lower)
@@ -716,11 +717,32 @@ def VFMFlv : RV<0xB6, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
   let vw = 0;
 }
 
+// at and af 64b
+let sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
+def VFMKat : RV<0xB4, (outs VM:$vm), (ins), "vfmk.l.at $vm", []>;
+
+let sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
+def VFMKaf : RV<0xB4, (outs VM:$vm), (ins), "vfmk.l.af $vm", []>;
+
+// at and af for 32b lower and upper
+let cx = 0, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
+def VFMSuat : RV<0xB5, (outs VM:$vm), (ins), "pvfmk.w.up.at $vm", []>;
+let cx = 1, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
+def VFMSlat : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.at $vm", []>;
+let cx = 0, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
+def VFMSuaf : RV<0xB5, (outs VM:$vm), (ins), "pvfmk.w.up.af $vm", []>;
+let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
+def VFMSlaf : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.af $vm", []>;
+
+// Pseudo for VM512
 def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
 
 def VFMFpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
+
+def VFMKpat : Pseudo<(outs VM512:$vm), (ins), "# pvfmk.at", []>;
+def VFMKpaf : Pseudo<(outs VM512:$vm), (ins), "# pvfmk.af", []>;
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions

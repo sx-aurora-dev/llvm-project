@@ -556,9 +556,13 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
 #endif
   case VE::VFMSpv:
-  case VE::VFMFpv: {
+  case VE::VFMFpv:
+  case VE::VFMKpat:
+  case VE::VFMKpaf: {
     // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
     // replace to pvfmk.s.up and pvfmk.s.lo (VFMFpv)
+
+    unsigned Opcode = MI.getOpcode();
 
     // change VMP to VM
     unsigned VMu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
@@ -566,12 +570,18 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 
     unsigned OpcodeUpper;
     unsigned OpcodeLower;
-    if (MI.getOpcode() == VE::VFMSpv) {
+    if (Opcode == VE::VFMSpv) {
       OpcodeUpper = VE::VFMSuv;
       OpcodeLower = VE::VFMSv;
-    } else { // VE::VFMFpv
+    } else if (Opcode == VE::VFMFpv) {
       OpcodeUpper = VE::VFMFsv;
       OpcodeLower = VE::VFMFlv;
+    } else if (Opcode == VE::VFMKpat) {
+      OpcodeUpper = VE::VFMSuat;
+      OpcodeLower = VE::VFMSlat;
+    } else if (Opcode == VE::VFMKpaf) {
+      OpcodeUpper = VE::VFMSuaf;
+      OpcodeLower = VE::VFMSlaf;
     }
 #if 0
     DEBUG(dbgs() << "expandPostRAPseudo: VFMSpv:"
@@ -583,14 +593,13 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 #endif
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(OpcodeUpper))
-      .addReg(VMu)
-      .addImm(MI.getOperand(1).getImm())
-      .addReg(MI.getOperand(2).getReg());
-    BuildMI(*MBB, MI, dl, get(OpcodeLower))
-      .addReg(VMl)
-      .addImm(MI.getOperand(1).getImm())
-      .addReg(MI.getOperand(2).getReg());
+    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, get(OpcodeUpper)).addReg(VMu);
+    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, get(OpcodeLower)).addReg(VMl);
+
+    if (MI.getOpcode() == VE::VFMSpv || MI.getOpcode() == VE::VFMFpv) {
+      Bu.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+      Bl.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+    }
 
     MI.eraseFromParent();
     return true;
