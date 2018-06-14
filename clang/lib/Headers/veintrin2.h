@@ -336,11 +336,15 @@
 #define _ve_vshf_vvvs __builtin_ve_vshf_vvvs
 #define _ve_vshf_vvvI __builtin_ve_vshf_vvvI
 #define _ve_vfmkl_mcv __builtin_ve_vfmkl_mcv
+#define _ve_vfmkat_m __builtin_ve_vfmkat_m
+#define _ve_vfmkaf_m __builtin_ve_vfmkaf_m
 #define _ve_vfmkw_mcv __builtin_ve_vfmkw_mcv
 #define _ve_pvfmkw_Mcv __builtin_ve_pvfmkw_Mcv
 #define _ve_vfmkd_mcv __builtin_ve_vfmkd_mcv
 #define _ve_vfmks_mcv __builtin_ve_vfmks_mcv
 #define _ve_pvfmks_Mcv __builtin_ve_pvfmks_Mcv
+#define _ve_pvfmkat_M __builtin_ve_pvfmkat_M
+#define _ve_pvfmkaf_M __builtin_ve_pvfmkaf_M
 #define _ve_vsumw_sx_vv __builtin_ve_vsumw_sx_vv
 #define _ve_vsumw_zx_vv __builtin_ve_vsumw_zx_vv
 #define _ve_vsuml_vv __builtin_ve_vsuml_vv
