@@ -106,6 +106,8 @@ set(files
   xsaveoptintrin.h
   xsavesintrin.h
   xtestintrin.h
+  veintrin.h
+  veintrin2.h
   )
 
 set(cuda_wrapper_files

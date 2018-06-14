@@ -2485,6 +2485,7 @@ void Generic_ELF::addClangTargetOptions(const ArgList &DriverArgs,
        !getTriple().hasEnvironment()) ||
       getTriple().getOS() == llvm::Triple::Solaris;
 
+
   if (DriverArgs.hasFlag(options::OPT_fuse_init_array,
                          options::OPT_fno_use_init_array, UseInitArrayDefault))
     CC1Args.push_back("-fuse-init-array");
