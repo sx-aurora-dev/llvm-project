@@ -89,7 +89,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, unsigned FramePtr) {
   if (1) {
-      DEBUG(dbgs() << "replaceFI: "; MI.dump());
+      LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
   }
   // Replace frame index with a frame pointer reference.
   if (1) { //Offset >= -4096 && Offset <= 4095) {
