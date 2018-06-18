@@ -160,7 +160,7 @@ class DummyInst:
 class Inst:
     # ni: instruction name
     # nf: function name
-    def __init__(self, opc, ni, nf, outs, ins, packed = False, expr = None):
+    def __init__(self, opc, ni, asm, intrinsicName, outs, ins, packed = False, expr = None):
         #self.opc = opc
         self.outs = outs
         self.ins = ins
@@ -168,7 +168,9 @@ class Inst:
         self.expr = expr
 
         self.instName = ni
-        self.nf = nf
+        self.asm_ = asm
+        self.intrinsicName_ = intrinsicName
+        #self.nf = nf
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
@@ -180,16 +182,9 @@ class Inst:
         return False
 
     def asm(self):
-        if not self.hasInst():
+        if not self.asm_:
             return ""
-        s = self.nf
-        s = re.sub(r'_[vm].*', '', s)
-        s = re.sub(r'_svs.*', '', s) # LVS
-        s = re.sub(r'_', '.', s)
-        # temp
-        if len(self.outs) > 0 and self.outs[0].isMask512():
-            s = ""
-        return s
+        return self.asm_
 
     def inst(self):
         if not self.instName:
@@ -197,8 +192,7 @@ class Inst:
         return re.sub(r'[a-z0-9]*', '', self.instName)
 
     def intrinsicName(self):
-        s = re.sub(r'\.', '', self.nf)
-        return s
+        return self.intrinsicName_
 
     def hasMask(self):
         if len(self.outs) > 0 and self.outs[0].isMask():
@@ -709,13 +703,13 @@ class InstTable:
                 inst = ary[0] + self.args_to_inst_suffix(args0)
                 func = ary[1] + self.args_to_func_suffix(args0) + "_" + args0[1].ty.ValueType
                 packed = func[0] == 'p'
-                i = Inst(opc, inst, func, [args0[0]], args0[1:], packed, "{0} = {1}")
+                i = Inst(opc, inst, ary[1], func, [args0[0]], args0[1:], packed, "{0} = {1}")
                 self.add(i)
 
     def LVSm(self, opc):
-        self.add(Inst(opc, "LVSr", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSr", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSr", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
 
 
     def args_to_func_suffix(self, args):
@@ -787,18 +781,20 @@ class InstTable:
     def NoImpl(self, inst):
         self.add(DummyInst(inst, "not yet implemented", ""))
 
-    def InstX(self, opc, ni, nf, ary, expr = None):
+    def InstX(self, opc, baseInstName, asm, ary, expr = None, pseudo = False):
+        isPacked = asm[0] == 'p'
+        baseIntrinName = re.sub(r'\.', '', asm)
+        if pseudo:
+            asm = ""
         IL = InstList()
-        #print("InstX: ni={} nf={}".format(ni, nf))
         for args in ary:
-            ni0 = nf0 = None
-            if ni:
-                ni0 = ni + self.args_to_inst_suffix(args)
-            if nf:
-                nf0 = nf + self.args_to_func_suffix(args)
+            instName = None
+            if baseInstName:
+                instName = baseInstName + self.args_to_inst_suffix(args)
+            intrinsicName = baseIntrinName + self.args_to_func_suffix(args)
             outs = [args[0]]
             ins = args[1:]
-            i = Inst(opc, ni0, nf0, outs, ins, nf[0] == 'p', expr)
+            i = Inst(opc, instName, asm, intrinsicName, outs, ins, isPacked, expr)
             self.add(i)
             IL.add(i)
         return IL
@@ -882,8 +878,8 @@ class InstTable:
         O_pi32 = [O_i32_vvv, O_pi32_vsv]
         O_pi32 = self.addMask(O_pi32, VM512)
 
-        self.InstX(opc, instName+"wsx", name+".w_sx", O_i32, expr)
-        self.InstX(opc, instName+"wzx", name+".w_zx", O_i32, expr)
+        self.InstX(opc, instName+"wsx", name+".w.sx", O_i32, expr)
+        self.InstX(opc, instName+"wzx", name+".w.zx", O_i32, expr)
         if hasPacked:
             self.InstX(opc, instName+"p", "p"+name, O_pi32, expr)
 
@@ -1018,8 +1014,8 @@ T.Inst3u(0xE9, "vdivu", "VDIV", "{0} = {1} / {2}", False)
 T.Inst3divbys(0xE9, "vdivu.l", "VDIVl", T_u64)
 T.Inst3divbys(0xE9, "vdivu.w", "VDIVw", T_u32)
 T.Inst3w(0xEB, "vdivs", "VDVS", "{0} = {1} / {2}", False)
-T.Inst3divbys(0xEB, "vdivs.w_sx", "VDVSwsx", T_i32)
-T.Inst3divbys(0xEB, "vdivs.w_zx", "VDVSwzx", T_i32)
+T.Inst3divbys(0xEB, "vdivs.w.sx", "VDVSwsx", T_i32)
+T.Inst3divbys(0xEB, "vdivs.w.zx", "VDVSwzx", T_i32)
 T.Inst3l(0xFB, "vdivs", "VDVX", "{0} = {1} / {2}")
 T.Inst3divbys(0xEB, "vdivs.l", "VDVXl", T_i64)
 T.NoImpl("VCMP")
@@ -1059,9 +1055,9 @@ T.Inst3f(0xCC, "vfadd", "VFAD", "{0} = {1} + {2}")
 T.Inst3f(0xDC, "vfsub", "VFSB", "{0} = {1} - {2}")
 T.Inst3f(0xCD, "vfmul", "VFMP", "{0} = {1} * {2}")
 T.Inst3f(0xDD, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
-T.InstX(None, None, "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
-T.InstX(None, None, "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
-T.InstX(None, None, "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], "{0} = {1} / {2}")
+T.add(Inst(None, None, None, "vfdivsA_vvv", [VX(T_f32)], [VY(T_f32), VZ(T_f32)], False, "{0} = {1} / {2}"))
+T.add(Inst(None, None, None, "vfdivsA_vsv", [VX(T_f32)], [SY(T_f32), VZ(T_f32)], False, "{0} = {1} / {2}"))
+T.add(Inst(None, None, None, "pvfdivA_vvv", [VX(T_f32)], [VY(T_f32), VZ(T_f32)], False, "{0} = {1} / {2}"))
 T.NoImpl("VFSQRT")
 T.Inst3f(0xFC, "vfcmp", "VFCP", "{0} = compare({1}, {2})")
 T.Inst3f(0xBD, "vfmax", "VFCMa", "{0} = max({1}, {2})")
@@ -1082,8 +1078,8 @@ T.InstX(0x8F, "VCVD", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
 T.InstX(0x9F, "VCVS", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
 
 T.Section("5.3.2.12. Vector Mask Arithmetic Instructions")
-T.add(Inst(0xD6, "VMRGvm", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
-T.add(Inst(0xD6, "VMRGpvm", "vmrg.w_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], True))
+T.add(Inst(0xD6, "VMRGvm", "vmrg", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
+T.add(Inst(0xD6, "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], True))
 T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN]])
 T.NoImpl("VCP")
 T.NoImpl("VEX")
@@ -1091,17 +1087,17 @@ T.InstX(0xB4, "VFMK", "vfmk.l", [[VM, CCOp, VZ(T_i64)]]).noTest()
 T.InstX(0xB4, "VFMKat", "vfmk.at", [[VM]]).noTest()
 T.InstX(0xB4, "VFMKaf", "vfmk.af", [[VM]]).noTest()
 T.InstX(0xB5, "VFMS", "vfmk.w", [[VM, CCOp, VZ(T_i32)]]).noTest()
-T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
+T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]], None, True).noTest() # Pseudo
 T.InstX(0xB6, "VFMFd", "vfmk.d", [[VM, CCOp, VZ(T_f64)]]).noTest()
 T.InstX(0xB6, "VFMFs", "vfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest()
-T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
+T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]], None, True).noTest() # Pseudo
 
-T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
-T.InstX(0x00, "VFMKpaf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
+T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]], None, True).noTest() # Pseudo
+T.InstX(0x00, "VFMKpaf", "pvfmk.af", [[VM512]], None, True).noTest() # Pseudo
 
 T.Section("5.3.2.13. Vector Recursive Relation Instructions")
-T.InstX(0xEA, "VSUMSsx", "vsumw_sx", [[VX(T_i32), VY(T_i32)]])
-T.InstX(0xEA, "VSUMSzx", "vsumw_zx", [[VX(T_i32), VY(T_i32)]])
+T.InstX(0xEA, "VSUMSsx", "vsumw.sx", [[VX(T_i32), VY(T_i32)]])
+T.InstX(0xEA, "VSUMSzx", "vsumw.zx", [[VX(T_i32), VY(T_i32)]])
 T.InstX(0xAA, "VSUMX", "vsuml", [[VX(T_i64), VY(T_i64)]])
 T.InstX(0xEC, "VFSUMd", "vfsumd", [[VX(T_f64), VY(T_f64)]])
 T.InstX(0xEC, "VFSUMs", "vfsums", [[VX(T_f32), VY(T_f32)]])
@@ -1124,11 +1120,11 @@ O_i32_vv = [VX(T_i32), VY(T_i32)]
 T.Section("5.3.2.14. Vector Gatering/Scattering Instructions")
 T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest().readMem()
 T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest().readMem()
-T.InstX(0xA3, "VGTLsx", "vgtl_sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
-T.InstX(0xA3, "VGTLzx", "vgtl_zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
-T.add(Inst(0xB1, "VSCv", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noTest().writeMem())
-T.add(Inst(0xB2, "VSCUv", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest().writeMem())
-T.add(Inst(0xB2, "VSCLv", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
+T.InstX(0xA3, "VGTLsx", "vgtl.sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
+T.InstX(0xA3, "VGTLzx", "vgtl.zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
+T.add(Inst(0xB1, "VSCv", "vsc", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noTest().writeMem())
+T.add(Inst(0xB2, "VSCUv", "vscu", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest().writeMem())
+T.add(Inst(0xB2, "VSCLv", "vscl", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
 
 T.Section("5.3.2.15. Vector Mask Register Instructions")
 T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
@@ -1158,8 +1154,8 @@ T.Section("Others")
 T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
 T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
 
-T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin()
-T.InstX(None, None, "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin()
+T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})", True).noBuiltin()
+T.InstX(None, None, "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})", True).noBuiltin()
 import argparse
 
 parser = argparse.ArgumentParser()
