@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief WebAssembly control-flow code-gen constructs.
+/// WebAssembly control-flow code-gen constructs.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -57,19 +57,21 @@ def BR_TABLE_I64 : I<(outs), (ins I64:$index, variable_ops),
 }
 } // isTerminator = 1, hasCtrlDep = 1, isBarrier = 1
 
-// Placemarkers to indicate the start or end of a block, loop, or try scope.
+// This is technically a control-flow instruction, since all it affects is the
+// IP.
+def NOP : I<(outs), (ins), [], "nop", 0x01>;
+
+// Placemarkers to indicate the start or end of a block or loop scope.
 // These use/clobber VALUE_STACK to prevent them from being moved into the
 // middle of an expression tree.
 let Uses = [VALUE_STACK], Defs = [VALUE_STACK] in {
 def BLOCK     : I<(outs), (ins Signature:$sig), [], "block   \t$sig", 0x02>;
 def LOOP      : I<(outs), (ins Signature:$sig), [], "loop    \t$sig", 0x03>;
-def TRY       : I<(outs), (ins Signature:$sig), [], "try     \t$sig", 0x06>;
 
-// END_BLOCK, END_LOOP, END_TRY, and END_FUNCTION are represented with the same
-// opcode in wasm.
+// END_BLOCK, END_LOOP, and END_FUNCTION are represented with the same opcode in
+// wasm.
 def END_BLOCK : I<(outs), (ins), [], "end_block", 0x0b>;
 def END_LOOP  : I<(outs), (ins), [], "end_loop", 0x0b>;
-def END_TRY   : I<(outs), (ins), [], "end_try", 0x0b>;
 let isTerminator = 1, isBarrier = 1 in
 def END_FUNCTION : I<(outs), (ins), [], "end_function", 0x0b>;
 } // Uses = [VALUE_STACK], Defs = [VALUE_STACK]
@@ -96,14 +98,15 @@ multiclass SIMD_RETURN<ValueType vt> {
 let isTerminator = 1, hasCtrlDep = 1, isBarrier = 1 in {
 
 let isReturn = 1 in {
-  defm : RETURN<I32>;
-  defm : RETURN<I64>;
-  defm : RETURN<F32>;
-  defm : RETURN<F64>;
-  defm : SIMD_RETURN<v16i8>;
-  defm : SIMD_RETURN<v8i16>;
-  defm : SIMD_RETURN<v4i32>;
-  defm : SIMD_RETURN<v4f32>;
+  defm "": RETURN<I32>;
+  defm "": RETURN<I64>;
+  defm "": RETURN<F32>;
+  defm "": RETURN<F64>;
+  defm "": RETURN<EXCEPT_REF>;
+  defm "": SIMD_RETURN<v16i8>;
+  defm "": SIMD_RETURN<v8i16>;
+  defm "": SIMD_RETURN<v4i32>;
+  defm "": SIMD_RETURN<v4f32>;
 
   def RETURN_VOID : I<(outs), (ins), [(WebAssemblyreturn)], "return", 0x0f>;
 
@@ -113,21 +116,49 @@ let isReturn = 1 in {
 } // isReturn = 1
 
 def UNREACHABLE : I<(outs), (ins), [(trap)], "unreachable", 0x00>;
+} // isTerminator = 1, hasCtrlDep = 1, isBarrier = 1
 
-def THROW_I32 : I<(outs), (ins i32imm:$tag, I32:$obj),
-                  [(int_wasm_throw imm:$tag, I32:$obj)], "throw   \t$tag, $obj",
+//===----------------------------------------------------------------------===//
+// Exception handling instructions
+//===----------------------------------------------------------------------===//
+
+// Throwing an exception: throw / rethrow
+let isTerminator = 1, hasCtrlDep = 1, isBarrier = 1 in {
+def THROW_I32 : I<(outs), (ins i32imm:$tag, I32:$val),
+                  [(int_wasm_throw imm:$tag, I32:$val)], "throw   \t$tag, $val",
                   0x08>;
-def THROW_I64 : I<(outs), (ins i32imm:$tag, I64:$obj),
-                  [(int_wasm_throw imm:$tag, I64:$obj)], "throw   \t$tag, $obj",
+def THROW_I64 : I<(outs), (ins i32imm:$tag, I64:$val),
+                  [(int_wasm_throw imm:$tag, I64:$val)], "throw   \t$tag, $val",
                   0x08>;
 def RETHROW : I<(outs), (ins i32imm:$rel_depth), [], "rethrow \t$rel_depth",
                 0x09>;
-
 } // isTerminator = 1, hasCtrlDep = 1, isBarrier = 1
 
-} // Defs = [ARGUMENTS]
+// Region within which an exception is caught: try / end_try
+let Uses = [VALUE_STACK], Defs = [VALUE_STACK] in {
+def TRY     : I<(outs), (ins Signature:$sig), [], "try     \t$sig", 0x06>;
+def END_TRY : I<(outs), (ins), [], "end_try", 0x0b>;
+} // Uses = [VALUE_STACK], Defs = [VALUE_STACK]
 
-// rethrow takes a relative depth as an argument, for which currently only 0 is
-// possible for C++. Once other languages need depths other than 0, depths will
-// be computed in CFGStackify.
-def : Pat<(int_wasm_rethrow), (RETHROW 0)>;
+// Catching an exception: catch / catch_all
+let hasCtrlDep = 1 in {
+def CATCH_I32 : I<(outs I32:$dst), (ins i32imm:$tag),
+                  [(set I32:$dst, (int_wasm_catch imm:$tag))],
+                  "i32.catch   \t$dst, $tag", 0x07>;
+def CATCH_I64 : I<(outs I64:$dst), (ins i32imm:$tag),
+                  [(set I64:$dst, (int_wasm_catch imm:$tag))],
+                  "i64.catch   \t$dst, $tag", 0x07>;
+def CATCH_ALL : I<(outs), (ins), [], "catch_all", 0x05>;
+}
+
+// Pseudo instructions: cleanupret / catchret
+// They are not return instructions in wasm, but setting 'isReturn' to true as
+// in X86 is necessary for computing EH scope membership.
+let isTerminator = 1, hasSideEffects = 1, isBarrier = 1, hasCtrlDep = 1,
+    isCodeGenOnly = 1, isReturn = 1 in {
+  def CLEANUPRET : I<(outs), (ins), [(cleanupret)], "", 0>;
+  def CATCHRET : I<(outs), (ins bb_op:$dst, bb_op:$from),
+                   [(catchret bb:$dst, bb:$from)], "", 0>;
+}
+
+} // Defs = [ARGUMENTS]

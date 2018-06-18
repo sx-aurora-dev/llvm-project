@@ -18,9 +18,18 @@
 namespace clang {
 namespace clangd {
 
-/// \brief Collect top-level symbols from an AST. These are symbols defined
-/// immediately inside a namespace or a translation unit scope. For example,
-/// symbols in classes or functions are not collected.
+/// \brief Collect declarations (symbols) from an AST.
+/// It collects most declarations except:
+/// - Implicit declarations
+/// - Anonymous declarations (anonymous enum/class/struct, etc)
+/// - Declarations in anonymous namespaces
+/// - Local declarations (in function bodies, blocks, etc)
+/// - Declarations in main files
+/// - Template specializations
+/// - Library-specific private declarations (e.g. private declaration generated
+/// by protobuf compiler)
+///
+/// See also shouldFilterDecl().
 ///
 /// Clients (e.g. clangd) can use SymbolCollector together with
 /// index::indexTopLevelDecls to retrieve all symbols when the source file is
@@ -28,9 +37,6 @@ namespace clangd {
 class SymbolCollector : public index::IndexDataConsumer {
 public:
   struct Options {
-    /// Whether to collect symbols in main files (e.g. the source file
-    /// corresponding to a TU).
-    bool IndexMainFiles = false;
     /// When symbol paths cannot be resolved to absolute paths (e.g. files in
     /// VFS that does not have absolute path), combine the fallback directory
     /// with symbols' paths to get absolute paths. This must be an absolute
@@ -44,6 +50,8 @@ public:
     /// If set, this is used to map symbol #include path to a potentially
     /// different #include path.
     const CanonicalIncludes *Includes = nullptr;
+    // Populate the Symbol.References field.
+    bool CountReferences = false;
   };
 
   SymbolCollector(Options Opts);
@@ -56,11 +64,13 @@ public:
 
   bool
   handleDeclOccurence(const Decl *D, index::SymbolRoleSet Roles,
-                      ArrayRef<index::SymbolRelation> Relations, FileID FID,
-                      unsigned Offset,
+                      ArrayRef<index::SymbolRelation> Relations,
+                      SourceLocation Loc,
                       index::IndexDataConsumer::ASTNodeInfo ASTNode) override;
 
   SymbolSlab takeSymbols() { return std::move(Symbols).build(); }
+
+  void finish() override;
 
 private:
   const Symbol *addDeclaration(const NamedDecl &, SymbolID);
@@ -73,6 +83,14 @@ private:
   std::shared_ptr<GlobalCodeCompletionAllocator> CompletionAllocator;
   std::unique_ptr<CodeCompletionTUInfo> CompletionTUInfo;
   Options Opts;
+  // Decls referenced from the current TU, flushed on finish().
+  llvm::DenseSet<const NamedDecl *> ReferencedDecls;
+  // Maps canonical declaration provided by clang to canonical declaration for
+  // an index symbol, if clangd prefers a different declaration than that
+  // provided by clang. For example, friend declaration might be considered
+  // canonical by clang but should not be considered canonical in the index
+  // unless it's a definition.
+  llvm::DenseMap<const Decl *, const Decl *> CanonicalDecls;
 };
 
 } // namespace clangd

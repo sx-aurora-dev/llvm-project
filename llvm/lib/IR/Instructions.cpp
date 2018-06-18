@@ -2081,7 +2081,7 @@ bool CastInst::isLosslessCast() const {
 /// # bitcast i32* %x to i8*
 /// # bitcast <2 x i32> %x to <4 x i16> 
 /// # ptrtoint i32* %x to i32     ; on 32-bit plaforms only
-/// @brief Determine if the described cast is a no-op.
+/// Determine if the described cast is a no-op.
 bool CastInst::isNoopCast(Instruction::CastOps Opcode,
                           Type *SrcTy,
                           Type *DestTy,
@@ -2173,7 +2173,7 @@ unsigned CastInst::isEliminableCastPair(
     { 99,99,99, 0, 0,99,99, 0, 0,99,99, 4, 0}, // UIToFP         +- firstOp
     { 99,99,99, 0, 0,99,99, 0, 0,99,99, 4, 0}, // SIToFP         |
     { 99,99,99, 0, 0,99,99, 0, 0,99,99, 4, 0}, // FPTrunc        |
-    { 99,99,99, 2, 2,99,99,10, 2,99,99, 4, 0}, // FPExt          |
+    { 99,99,99, 2, 2,99,99, 8, 2,99,99, 4, 0}, // FPExt          |
     {  1, 0, 0,99,99, 0, 0,99,99,99, 7, 3, 0}, // PtrToInt       |
     { 99,99,99,99,99,99,99,99,99,11,99,15, 0}, // IntToPtr       |
     {  5, 5, 5, 6, 6, 5, 5, 6, 6,16, 5, 1,14}, // BitCast        |
@@ -2267,12 +2267,6 @@ unsigned CastInst::isEliminableCastPair(
     case 9:
       // zext, sext -> zext, because sext can't sign extend after zext
       return Instruction::ZExt;
-    case 10:
-      // fpext followed by ftrunc is allowed if the bit size returned to is
-      // the same as the original, in which case its just a bitcast
-      if (SrcTy == DstTy)
-        return Instruction::BitCast;
-      return 0; // If the types are not the same we can't eliminate it.
     case 11: {
       // inttoptr, ptrtoint -> bitcast if SrcSize<=PtrSize and SrcSize==DstSize
       if (!MidIntPtrTy)
@@ -2455,7 +2449,7 @@ CastInst *CastInst::CreatePointerCast(Value *S, Type *Ty,
   return CreatePointerBitCastOrAddrSpaceCast(S, Ty, Name, InsertAtEnd);
 }
 
-/// @brief Create a BitCast or a PtrToInt cast instruction
+/// Create a BitCast or a PtrToInt cast instruction
 CastInst *CastInst::CreatePointerCast(Value *S, Type *Ty,
                                       const Twine &Name,
                                       Instruction *InsertBefore) {

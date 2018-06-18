@@ -6,6 +6,10 @@ set(LIBFUZZER_UNITTEST_CFLAGS
   -Werror
   -O2)
 
+if (APPLE)
+  set(FUZZER_SUPPORTED_OS osx)
+endif()
+
 add_custom_target(FuzzerUnitTests)
 set_target_properties(FuzzerUnitTests PROPERTIES FOLDER "Compiler-RT Tests")
 
@@ -22,7 +26,10 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND COMPILER_RT_LIBCXX_PATH)
   list(APPEND LIBFUZZER_UNITTEST_CFLAGS -nostdinc++ -D_LIBCPP_ABI_VERSION=Fuzzer)
 endif()
 
-foreach(arch ${FUZZER_SUPPORTED_ARCH})
+if(COMPILER_RT_DEFAULT_TARGET_ARCH IN_LIST FUZZER_SUPPORTED_ARCH)
+  # libFuzzer unit tests are only run on the host machine.
+  set(arch ${COMPILER_RT_DEFAULT_TARGET_ARCH})
+
   set(LIBFUZZER_TEST_RUNTIME RTFuzzerTest.${arch})
   if(APPLE)
     set(LIBFUZZER_TEST_RUNTIME_OBJECTS
@@ -40,7 +47,7 @@ foreach(arch ${FUZZER_SUPPORTED_ARCH})
   if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND COMPILER_RT_LIBCXX_PATH)
     set(LIBFUZZER_TEST_RUNTIME_DEPS libcxx_fuzzer_${arch}-build)
     set(LIBFUZZER_TEST_RUNTIME_CFLAGS -isystem ${COMPILER_RT_LIBCXX_PATH}/include)
-    set(LIBFUZZER_TEST_RUNTIME_LINK_FLAGS ${LIBCXX_${arch}_PREFIX}/src/libcxx_fuzzer_${arch}-build/lib/libc++.a)
+    set(LIBFUZZER_TEST_RUNTIME_LINK_FLAGS ${LIBCXX_${arch}_PREFIX}/lib/libc++.a)
   endif()
 
   set(FuzzerTestObjects)
@@ -53,4 +60,4 @@ foreach(arch ${FUZZER_SUPPORTED_ARCH})
     LINK_FLAGS ${LIBFUZZER_UNITTEST_LINK_FLAGS} ${LIBFUZZER_TEST_RUNTIME_LINK_FLAGS})
   set_target_properties(FuzzerUnitTests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-endforeach()
+endif()

@@ -559,7 +559,7 @@ bool ScopBuilder::buildAccessCallInst(MemAccInst Inst, ScopStmt *Stmt) {
   if (CI == nullptr)
     return false;
 
-  if (CI->doesNotAccessMemory() || isIgnoredIntrinsic(CI))
+  if (CI->doesNotAccessMemory() || isIgnoredIntrinsic(CI) || isDebugCall(CI))
     return true;
 
   bool ReadOnly = false;
@@ -1190,10 +1190,21 @@ void ScopBuilder::buildDomain(ScopStmt &Stmt) {
 
 void ScopBuilder::collectSurroundingLoops(ScopStmt &Stmt) {
   isl::set Domain = Stmt.getDomain();
-  for (unsigned u = 0, e = Domain.dim(isl::dim::set); u < e; u++) {
-    isl::id DimId = Domain.get_dim_id(isl::dim::set, u);
-    Stmt.NestLoops.push_back(static_cast<Loop *>(DimId.get_user()));
+  BasicBlock *BB = Stmt.getEntryBlock();
+
+  Loop *L = LI.getLoopFor(BB);
+
+  while (L && Stmt.isRegionStmt() && Stmt.getRegion()->contains(L))
+    L = L->getParentLoop();
+
+  SmallVector<llvm::Loop *, 8> Loops;
+
+  while (L && Stmt.getParent()->getRegion().contains(L)) {
+    Loops.push_back(L);
+    L = L->getParentLoop();
   }
+
+  Stmt.NestLoops.insert(Stmt.NestLoops.begin(), Loops.rbegin(), Loops.rend());
 }
 
 /// Return the reduction type for a given binary operator.
@@ -1500,7 +1511,8 @@ void ScopBuilder::buildScop(Region &R, AssumptionCache &AC,
   DenseMap<BasicBlock *, isl::set> InvalidDomainMap;
 
   if (!scop->buildDomains(&R, DT, LI, InvalidDomainMap)) {
-    DEBUG(dbgs() << "Bailing-out because buildDomains encountered problems\n");
+    LLVM_DEBUG(
+        dbgs() << "Bailing-out because buildDomains encountered problems\n");
     return;
   }
 
@@ -1519,14 +1531,15 @@ void ScopBuilder::buildScop(Region &R, AssumptionCache &AC,
   scop->removeStmtNotInDomainMap();
   scop->simplifySCoP(false);
   if (scop->isEmpty()) {
-    DEBUG(dbgs() << "Bailing-out because SCoP is empty\n");
+    LLVM_DEBUG(dbgs() << "Bailing-out because SCoP is empty\n");
     return;
   }
 
   // The ScopStmts now have enough information to initialize themselves.
   for (ScopStmt &Stmt : *scop) {
-    buildDomain(Stmt);
     collectSurroundingLoops(Stmt);
+
+    buildDomain(Stmt);
     buildAccessRelations(Stmt);
 
     if (DetectReductions)
@@ -1535,7 +1548,7 @@ void ScopBuilder::buildScop(Region &R, AssumptionCache &AC,
 
   // Check early for a feasible runtime context.
   if (!scop->hasFeasibleRuntimeContext()) {
-    DEBUG(dbgs() << "Bailing-out because of unfeasible context (early)\n");
+    LLVM_DEBUG(dbgs() << "Bailing-out because of unfeasible context (early)\n");
     return;
   }
 
@@ -1543,7 +1556,8 @@ void ScopBuilder::buildScop(Region &R, AssumptionCache &AC,
   // only the runtime context could become infeasible.
   if (!scop->isProfitable(UnprofitableScalarAccs)) {
     scop->invalidate(PROFITABLE, DebugLoc());
-    DEBUG(dbgs() << "Bailing-out because SCoP is not considered profitable\n");
+    LLVM_DEBUG(
+        dbgs() << "Bailing-out because SCoP is not considered profitable\n");
     return;
   }
 
@@ -1561,7 +1575,7 @@ void ScopBuilder::buildScop(Region &R, AssumptionCache &AC,
 
   scop->simplifyContexts();
   if (!scop->buildAliasChecks(AA)) {
-    DEBUG(dbgs() << "Bailing-out because could not build alias checks\n");
+    LLVM_DEBUG(dbgs() << "Bailing-out because could not build alias checks\n");
     return;
   }
 
@@ -1573,7 +1587,7 @@ void ScopBuilder::buildScop(Region &R, AssumptionCache &AC,
   // Check late for a feasible runtime context because profitability did not
   // change.
   if (!scop->hasFeasibleRuntimeContext()) {
-    DEBUG(dbgs() << "Bailing-out because of unfeasible context (late)\n");
+    LLVM_DEBUG(dbgs() << "Bailing-out because of unfeasible context (late)\n");
     return;
   }
 
@@ -1597,12 +1611,12 @@ ScopBuilder::ScopBuilder(Region *R, AssumptionCache &AC, AliasAnalysis &AA,
 
   buildScop(*R, AC, ORE);
 
-  DEBUG(dbgs() << *scop);
+  LLVM_DEBUG(dbgs() << *scop);
 
   if (!scop->hasFeasibleRuntimeContext()) {
     InfeasibleScops++;
     Msg = "SCoP ends here but was dismissed.";
-    DEBUG(dbgs() << "SCoP detected but dismissed\n");
+    LLVM_DEBUG(dbgs() << "SCoP detected but dismissed\n");
     scop.reset();
   } else {
     Msg = "SCoP ends here.";

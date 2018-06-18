@@ -8,7 +8,7 @@
 //==-----------------------------------------------------------------------===//
 //
 /// \file
-/// \brief AMDGPU specific subclass of TargetSubtarget.
+/// AMDGPU specific subclass of TargetSubtarget.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,7 +23,6 @@
 #include "SIFrameLowering.h"
 #include "SIISelLowering.h"
 #include "SIInstrInfo.h"
-#include "SIMachineFunctionInfo.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
@@ -72,7 +71,9 @@ public:
     ISAVersion8_0_3,
     ISAVersion8_1_0,
     ISAVersion9_0_0,
-    ISAVersion9_0_2
+    ISAVersion9_0_2,
+    ISAVersion9_0_4,
+    ISAVersion9_0_6,
   };
 
   enum TrapHandlerAbi {
@@ -133,6 +134,7 @@ protected:
   bool EnableLoadStoreOpt;
   bool EnableUnsafeDSOffsetFolding;
   bool EnableSIScheduler;
+  bool EnableDS128;
   bool DumpCode;
 
   // Subtarget statically properties set by tablegen
@@ -149,9 +151,11 @@ protected:
   bool HasIntClamp;
   bool HasVOP3PInsts;
   bool HasMadMixInsts;
+  bool HasFmaMixInsts;
   bool HasMovrel;
   bool HasVGPRIndexMode;
   bool HasScalarStores;
+  bool HasScalarAtomics;
   bool HasInv2PiInlineImm;
   bool HasSDWA;
   bool HasSDWAOmod;
@@ -160,6 +164,8 @@ protected:
   bool HasSDWAMac;
   bool HasSDWAOutModsVOPC;
   bool HasDPP;
+  bool HasDLInsts;
+  bool D16PreservesUnusedBits;
   bool FlatAddressSpace;
   bool FlatInstOffsets;
   bool FlatGlobalInsts;
@@ -210,11 +216,6 @@ public:
 
   bool isMesa3DOS() const {
     return TargetTriple.getOS() == Triple::Mesa3D;
-  }
-
-  bool isOpenCLEnv() const {
-    return TargetTriple.getEnvironment() == Triple::OpenCL ||
-           TargetTriple.getEnvironmentName() == "amdgizcl";
   }
 
   bool isAmdPalOS() const {
@@ -332,6 +333,10 @@ public:
     return HasMadMixInsts;
   }
 
+  bool hasFmaMixInsts() const {
+    return HasFmaMixInsts;
+  }
+
   bool hasCARRY() const {
     return (getGeneration() >= EVERGREEN);
   }
@@ -377,10 +382,7 @@ public:
   /// the given LDS memory size is the only constraint.
   unsigned getOccupancyWithLocalMemSize(uint32_t Bytes, const Function &) const;
 
-  unsigned getOccupancyWithLocalMemSize(const MachineFunction &MF) const {
-    const auto *MFI = MF.getInfo<SIMachineFunctionInfo>();
-    return getOccupancyWithLocalMemSize(MFI->getLDSSize(), MF.getFunction());
-  }
+  unsigned getOccupancyWithLocalMemSize(const MachineFunction &MF) const;
 
   bool hasFP16Denormals() const {
     return FP64FP16Denormals;
@@ -412,6 +414,12 @@ public:
 
   bool useFlatForGlobal() const {
     return FlatForGlobal;
+  }
+
+  /// \returns If target supports ds_read/write_b128 and user enables generation
+  /// of ds_read/write_b128.
+  bool useDS128() const {
+    return CIInsts && EnableDS128;
   }
 
   /// \returns If MUBUF instructions always perform range checking, even for
@@ -464,6 +472,10 @@ public:
     return FlatScratchInsts;
   }
 
+  bool hasFlatLgkmVMemCountInOrder() const {
+    return getGeneration() > GFX9;
+  }
+
   bool hasD16LoadStore() const {
     return getGeneration() >= GFX9;
   }
@@ -482,17 +494,17 @@ public:
     return HasUnpackedD16VMem;
   }
 
-  bool isMesaKernel(const MachineFunction &MF) const {
-    return isMesa3DOS() && !AMDGPU::isShader(MF.getFunction().getCallingConv());
+  bool isMesaKernel(const Function &F) const {
+    return isMesa3DOS() && !AMDGPU::isShader(F.getCallingConv());
   }
 
   // Covers VS/PS/CS graphics shaders
-  bool isMesaGfxShader(const MachineFunction &MF) const {
-    return isMesa3DOS() && AMDGPU::isShader(MF.getFunction().getCallingConv());
+  bool isMesaGfxShader(const Function &F) const {
+    return isMesa3DOS() && AMDGPU::isShader(F.getCallingConv());
   }
 
-  bool isAmdCodeObjectV2(const MachineFunction &MF) const {
-    return isAmdHsaOS() || isMesaKernel(MF);
+  bool isAmdCodeObjectV2(const Function &F) const {
+    return isAmdHsaOS() || isMesaKernel(F);
   }
 
   bool hasMad64_32() const {
@@ -527,29 +539,46 @@ public:
     return HasSDWAOutModsVOPC;
   }
 
-  /// \brief Returns the offset in bytes from the start of the input buffer
+  bool vmemWriteNeedsExpWaitcnt() const {
+    return getGeneration() < SEA_ISLANDS;
+  }
+
+  bool hasDLInsts() const {
+    return HasDLInsts;
+  }
+
+  bool d16PreservesUnusedBits() const {
+    return D16PreservesUnusedBits;
+  }
+
+  /// Returns the offset in bytes from the start of the input buffer
   ///        of the first explicit kernel argument.
-  unsigned getExplicitKernelArgOffset(const MachineFunction &MF) const {
-    return isAmdCodeObjectV2(MF) ? 0 : 36;
+  unsigned getExplicitKernelArgOffset(const Function &F) const {
+    return isAmdCodeObjectV2(F) ? 0 : 36;
   }
 
   unsigned getAlignmentForImplicitArgPtr() const {
     return isAmdHsaOS() ? 8 : 4;
   }
 
-  unsigned getImplicitArgNumBytes(const MachineFunction &MF) const {
-    if (isMesaKernel(MF))
+  /// \returns Number of bytes of arguments that are passed to a shader or
+  /// kernel in addition to the explicit ones declared for the function.
+  unsigned getImplicitArgNumBytes(const Function &F) const {
+    if (isMesaKernel(F))
       return 16;
-    if (isAmdHsaOS() && isOpenCLEnv())
-      return 32;
-    return 0;
+    return AMDGPU::getIntegerAttribute(F, "amdgpu-implicitarg-num-bytes", 0);
   }
 
   // Scratch is allocated in 256 dword per wave blocks for the entire
   // wavefront. When viewed from the perspecive of an arbitrary workitem, this
   // is 4-byte aligned.
+  //
+  // Only 4-byte alignment is really needed to access anything. Transformations
+  // on the pointer value itself may rely on the alignment / known low bits of
+  // the pointer. Set this to something above the minimum to avoid needing
+  // dynamic realignment in common cases.
   unsigned getStackAlignment() const {
-    return 4;
+    return 16;
   }
 
   bool enableMachineScheduler() const override {
@@ -705,7 +734,7 @@ private:
 
 public:
   SISubtarget(const Triple &TT, StringRef CPU, StringRef FS,
-              const TargetMachine &TM);
+              const GCNTargetMachine &TM);
 
   const SIInstrInfo *getInstrInfo() const override {
     return &InstrInfo;
@@ -777,6 +806,10 @@ public:
     return HasScalarStores;
   }
 
+  bool hasScalarAtomics() const {
+    return HasScalarAtomics;
+  }
+
   bool hasInv2PiInlineImm() const {
     return HasInv2PiInlineImm;
   }
@@ -830,7 +863,7 @@ public:
     return getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS;
   }
 
-  unsigned getKernArgSegmentSize(const MachineFunction &MF,
+  unsigned getKernArgSegmentSize(const Function &F,
                                  unsigned ExplictArgBytes) const;
 
   /// Return the maximum number of waves per SIMD for kernels using \p SGPRs SGPRs

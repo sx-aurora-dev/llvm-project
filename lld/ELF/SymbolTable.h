@@ -12,7 +12,7 @@
 
 #include "InputFiles.h"
 #include "LTO.h"
-#include "Strings.h"
+#include "lld/Common/Strings.h"
 #include "llvm/ADT/CachedHashString.h"
 #include "llvm/ADT/DenseMap.h"
 
@@ -77,8 +77,8 @@ public:
                                    uint8_t Visibility, bool CanOmitFromDynSym,
                                    InputFile *File);
 
-  template <class ELFT> void fetchIfLazy(StringRef Name);
-  template <class ELFT> void scanShlibUndefined();
+  template <class ELFT> void fetchLazy(Symbol *Sym);
+
   void scanVersionScript();
 
   Symbol *find(StringRef Name);

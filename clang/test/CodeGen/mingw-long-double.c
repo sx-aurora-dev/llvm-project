@@ -1,5 +1,7 @@
 // RUN: %clang_cc1 -triple i686-windows-gnu -emit-llvm -o - %s \
 // RUN:    | FileCheck %s --check-prefix=GNU32
+// RUN: %clang_cc1 -triple i686-windows-gnu -emit-llvm -o - %s -mms-bitfields \
+// RUN:    | FileCheck %s --check-prefix=GNU32
 // RUN: %clang_cc1 -triple x86_64-windows-gnu -emit-llvm -o - %s \
 // RUN:    | FileCheck %s --check-prefix=GNU64
 // RUN: %clang_cc1 -triple x86_64-windows-msvc -emit-llvm -o - %s \
@@ -39,3 +41,7 @@ long double _Complex TestLDC(long double _Complex x) {
 // GNU32: define dso_local void @TestLDC({ x86_fp80, x86_fp80 }* noalias sret %agg.result, { x86_fp80, x86_fp80 }* byval align 4 %x)
 // GNU64: define dso_local void @TestLDC({ x86_fp80, x86_fp80 }* noalias sret %agg.result, { x86_fp80, x86_fp80 }* %x)
 // MSC64: define dso_local void @TestLDC({ double, double }* noalias sret %agg.result, { double, double }* %x)
+
+// GNU32: declare dso_local void @__mulxc3
+// GNU64: declare dso_local void @__mulxc3
+// MSC64: declare dso_local void @__muldc3

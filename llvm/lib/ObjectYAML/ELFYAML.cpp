@@ -50,6 +50,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_PT>::enumeration(
   ECase(PT_SHLIB);
   ECase(PT_PHDR);
   ECase(PT_TLS);
+  ECase(PT_GNU_EH_FRAME);
 #undef ECase
   IO.enumFallback<Hex32>(Value);
 }
@@ -399,6 +400,8 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX810, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX900, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX902, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX904, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX906, EF_AMDGPU_MACH);
     BCase(EF_AMDGPU_XNACK);
     break;
   case ELF::EM_X86_64:
@@ -438,6 +441,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHT>::enumeration(
   ECase(SHT_ANDROID_RELA);
   ECase(SHT_LLVM_ODRTAB);
   ECase(SHT_LLVM_LINKER_OPTIONS);
+  ECase(SHT_LLVM_CALL_GRAPH_PROFILE);
   ECase(SHT_GNU_ATTRIBUTES);
   ECase(SHT_GNU_HASH);
   ECase(SHT_GNU_verdef);

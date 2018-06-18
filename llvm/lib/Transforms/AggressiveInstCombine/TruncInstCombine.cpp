@@ -380,7 +380,7 @@ void TruncInstCombine::ReduceExpressionDag(Type *SclTy) {
     // We still need to check that the instruction has no users before we erase
     // it, because {SExt, ZExt}Inst Instruction might have other users that was
     // not reduced, in such case, we need to keep that instruction.
-    if (!I->first->getNumUses())
+    if (I->first->use_empty())
       I->first->eraseFromParent();
   }
 }
@@ -405,9 +405,10 @@ bool TruncInstCombine::run(Function &F) {
     CurrentTruncInst = Worklist.pop_back_val();
 
     if (Type *NewDstSclTy = getBestTruncatedType()) {
-      DEBUG(dbgs() << "ICE: TruncInstCombine reducing type of expression dag "
-                      "dominated by: "
-                   << CurrentTruncInst << '\n');
+      LLVM_DEBUG(
+          dbgs() << "ICE: TruncInstCombine reducing type of expression dag "
+                    "dominated by: "
+                 << CurrentTruncInst << '\n');
       ReduceExpressionDag(NewDstSclTy);
       MadeIRChange = true;
     }

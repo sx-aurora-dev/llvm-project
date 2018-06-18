@@ -26,11 +26,11 @@
 #include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/Wasm.h"
 
+using llvm::object::WasmSection;
 using llvm::object::WasmSegment;
 using llvm::wasm::WasmFunction;
 using llvm::wasm::WasmRelocation;
 using llvm::wasm::WasmSignature;
-using llvm::object::WasmSection;
 
 namespace llvm {
 class raw_ostream;
@@ -44,20 +44,22 @@ class OutputSegment;
 
 class InputChunk {
 public:
-  enum Kind { DataSegment, Function };
+  enum Kind { DataSegment, Function, SyntheticFunction, Section };
 
   Kind kind() const { return SectionKind; }
 
-  uint32_t getSize() const { return data().size(); }
+  virtual uint32_t getSize() const { return data().size(); }
 
   void copyRelocations(const WasmSection &Section);
 
-  void writeTo(uint8_t *SectionStart) const;
+  virtual void writeTo(uint8_t *SectionStart) const;
 
   ArrayRef<WasmRelocation> getRelocations() const { return Relocations; }
 
-  virtual StringRef getComdat() const = 0;
   virtual StringRef getName() const = 0;
+  virtual StringRef getDebugName() const = 0;
+  virtual uint32_t getComdat() const = 0;
+  StringRef getComdatName() const;
 
   size_t NumRelocations() const { return Relocations.size(); }
   void writeRelocations(llvm::raw_ostream &OS) const;
@@ -76,6 +78,11 @@ protected:
   virtual ~InputChunk() = default;
   virtual ArrayRef<uint8_t> data() const = 0;
   virtual uint32_t getInputSectionOffset() const = 0;
+  virtual uint32_t getInputSize() const { return getSize(); };
+
+  // Verifies the existing data at relocation targets matches our expectations.
+  // This is performed only debug builds as an extra sanity check.
+  void verifyRelocTargets() const;
 
   std::vector<WasmRelocation> Relocations;
   Kind SectionKind;
@@ -96,21 +103,12 @@ public:
 
   static bool classof(const InputChunk *C) { return C->kind() == DataSegment; }
 
-  // Translate an offset in the input segment to an offset in the output
-  // segment.
-  uint32_t translateVA(uint32_t Offset) const;
-
-  const OutputSegment *getOutputSegment() const { return OutputSeg; }
-
-  void setOutputSegment(const OutputSegment *Segment, uint32_t Offset) {
-    OutputSeg = Segment;
-    OutputSegmentOffset = Offset;
-  }
-
   uint32_t getAlignment() const { return Segment.Data.Alignment; }
   StringRef getName() const override { return Segment.Data.Name; }
-  StringRef getComdat() const override { return Segment.Data.Comdat; }
+  StringRef getDebugName() const override { return StringRef(); }
+  uint32_t getComdat() const override { return Segment.Data.Comdat; }
 
+  const OutputSegment *OutputSeg = nullptr;
   int32_t OutputSegmentOffset = 0;
 
 protected:
@@ -120,59 +118,114 @@ protected:
   }
 
   const WasmSegment &Segment;
-  const OutputSegment *OutputSeg = nullptr;
 };
 
 // Represents a single wasm function within and input file.  These are
 // combined to create the final output CODE section.
 class InputFunction : public InputChunk {
 public:
-  InputFunction(const WasmSignature &S, const WasmFunction *Func,
-                ObjFile *F)
+  InputFunction(const WasmSignature &S, const WasmFunction *Func, ObjFile *F)
       : InputChunk(F, InputChunk::Function), Signature(S), Function(Func) {}
 
   static bool classof(const InputChunk *C) {
-    return C->kind() == InputChunk::Function;
+    return C->kind() == InputChunk::Function ||
+           C->kind() == InputChunk::SyntheticFunction;
   }
 
-  StringRef getName() const override { return Function->Name; }
-  StringRef getComdat() const override { return Function->Comdat; }
-  uint32_t getOutputIndex() const { return OutputIndex.getValue(); }
-  bool hasOutputIndex() const { return OutputIndex.hasValue(); }
-  void setOutputIndex(uint32_t Index);
+  void writeTo(uint8_t *SectionStart) const override;
+  StringRef getName() const override { return Function->SymbolName; }
+  StringRef getDebugName() const override { return Function->DebugName; }
+  uint32_t getComdat() const override { return Function->Comdat; }
+  uint32_t getFunctionInputOffset() const { return getInputSectionOffset(); }
+  uint32_t getFunctionCodeOffset() const { return Function->CodeOffset; }
+  uint32_t getSize() const override {
+    if (Config->CompressRelocTargets && File) {
+      assert(CompressedSize);
+      return CompressedSize;
+    }
+    return data().size();
+  }
+  uint32_t getFunctionIndex() const { return FunctionIndex.getValue(); }
+  bool hasFunctionIndex() const { return FunctionIndex.hasValue(); }
+  void setFunctionIndex(uint32_t Index);
   uint32_t getTableIndex() const { return TableIndex.getValue(); }
   bool hasTableIndex() const { return TableIndex.hasValue(); }
   void setTableIndex(uint32_t Index);
+
+  // The size of a given input function can depend on the values of the
+  // LEB relocations within it.  This finalizeContents method is called after
+  // all the symbol values have be calcualted but before getSize() is ever
+  // called.
+  void calculateSize();
 
   const WasmSignature &Signature;
 
 protected:
   ArrayRef<uint8_t> data() const override {
+    assert(!Config->CompressRelocTargets);
     return File->CodeSection->Content.slice(getInputSectionOffset(),
                                             Function->Size);
   }
+
+  uint32_t getInputSize() const override { return Function->Size; }
+
   uint32_t getInputSectionOffset() const override {
     return Function->CodeSectionOffset;
   }
 
   const WasmFunction *Function;
-  llvm::Optional<uint32_t> OutputIndex;
+  llvm::Optional<uint32_t> FunctionIndex;
   llvm::Optional<uint32_t> TableIndex;
+  uint32_t CompressedFuncSize = 0;
+  uint32_t CompressedSize = 0;
 };
 
 class SyntheticFunction : public InputFunction {
 public:
-  SyntheticFunction(const WasmSignature &S, ArrayRef<uint8_t> Body,
-                    StringRef Name)
-      : InputFunction(S, nullptr, nullptr), Name(Name), Body(Body) {}
+  SyntheticFunction(const WasmSignature &S, StringRef Name,
+                    StringRef DebugName = {})
+      : InputFunction(S, nullptr, nullptr), Name(Name), DebugName(DebugName) {
+    SectionKind = InputChunk::SyntheticFunction;
+  }
+
+  static bool classof(const InputChunk *C) {
+    return C->kind() == InputChunk::SyntheticFunction;
+  }
 
   StringRef getName() const override { return Name; }
+  StringRef getDebugName() const override { return DebugName; }
+  uint32_t getComdat() const override { return UINT32_MAX; }
+
+  void setBody(ArrayRef<uint8_t> Body_) { Body = Body_; }
 
 protected:
   ArrayRef<uint8_t> data() const override { return Body; }
 
   StringRef Name;
+  StringRef DebugName;
   ArrayRef<uint8_t> Body;
+};
+
+// Represents a single Wasm Section within an input file.
+class InputSection : public InputChunk {
+public:
+  InputSection(const WasmSection &S, ObjFile *F)
+      : InputChunk(F, InputChunk::Section), Section(S) {
+    assert(Section.Type == llvm::wasm::WASM_SEC_CUSTOM);
+  }
+
+  StringRef getName() const override { return Section.Name; }
+  StringRef getDebugName() const override { return StringRef(); }
+  uint32_t getComdat() const override { return UINT32_MAX; }
+
+protected:
+  ArrayRef<uint8_t> data() const override { return Section.Content; }
+
+  // Offset within the input section.  This is only zero since this chunk
+  // type represents an entire input section, not part of one.
+  uint32_t getInputSectionOffset() const override { return 0; }
+
+  const WasmSection &Section;
 };
 
 } // namespace wasm

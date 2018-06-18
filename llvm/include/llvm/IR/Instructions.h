@@ -1719,7 +1719,7 @@ public:
     return Attrs.getDereferenceableOrNullBytes(i);
   }
 
-  /// @brief Determine if the return value is marked with NoAlias attribute.
+  /// Determine if the return value is marked with NoAlias attribute.
   bool returnDoesNotAlias() const {
     return Attrs.hasAttribute(AttributeList::ReturnIndex, Attribute::NoAlias);
   }
@@ -1763,7 +1763,7 @@ public:
     addAttribute(AttributeList::FunctionIndex, Attribute::WriteOnly);
   }
 
-  /// @brief Determine if the call can access memmory only using pointers based
+  /// Determine if the call can access memmory only using pointers based
   /// on its arguments.
   bool onlyAccessesArgMemory() const {
     return hasFnAttr(Attribute::ArgMemOnly);
@@ -1772,7 +1772,7 @@ public:
     addAttribute(AttributeList::FunctionIndex, Attribute::ArgMemOnly);
   }
 
-  /// @brief Determine if the function may only access memory that is
+  /// Determine if the function may only access memory that is
   /// inaccessible from the IR.
   bool onlyAccessesInaccessibleMemory() const {
     return hasFnAttr(Attribute::InaccessibleMemOnly);
@@ -1781,7 +1781,7 @@ public:
     addAttribute(AttributeList::FunctionIndex, Attribute::InaccessibleMemOnly);
   }
 
-  /// @brief Determine if the function may only access memory that is
+  /// Determine if the function may only access memory that is
   /// either inaccessible from the IR or pointed to by its arguments.
   bool onlyAccessesInaccessibleMemOrArgMem() const {
     return hasFnAttr(Attribute::InaccessibleMemOrArgMemOnly);
@@ -1794,6 +1794,9 @@ public:
   void setDoesNotReturn() {
     addAttribute(AttributeList::FunctionIndex, Attribute::NoReturn);
   }
+
+  /// Determine if the call should not perform indirect branch tracking.
+  bool doesNoCfCheck() const { return hasFnAttr(Attribute::NoCfCheck); }
 
   /// Determine if the call cannot unwind.
   bool doesNotThrow() const { return hasFnAttr(Attribute::NoUnwind); }
@@ -3830,8 +3833,15 @@ public:
   static InvokeInst *Create(InvokeInst *II, ArrayRef<OperandBundleDef> Bundles,
                             Instruction *InsertPt = nullptr);
 
+  /// Determine if the call should not perform indirect branch tracking.
+  bool doesNoCfCheck() const { return hasFnAttr(Attribute::NoCfCheck); }
 
-
+  /// Determine if the call cannot unwind.
+  bool doesNotThrow() const { return hasFnAttr(Attribute::NoUnwind); }
+  void setDoesNotThrow() {
+    addAttribute(AttributeList::FunctionIndex, Attribute::NoUnwind);
+  }
+  
   /// Return the function called, or null if this is an
   /// indirect function invocation.
   ///
@@ -5042,6 +5052,26 @@ public:
     return getType()->getPointerAddressSpace();
   }
 };
+
+/// A helper function that returns the pointer operand of a load or store
+/// instruction. Returns nullptr if not load or store.
+inline Value *getLoadStorePointerOperand(Value *V) {
+  if (auto *Load = dyn_cast<LoadInst>(V))
+    return Load->getPointerOperand();
+  if (auto *Store = dyn_cast<StoreInst>(V))
+    return Store->getPointerOperand();
+  return nullptr;
+}
+
+/// A helper function that returns the pointer operand of a load, store
+/// or GEP instruction. Returns nullptr if not load, store, or GEP.
+inline Value *getPointerOperand(Value *V) {
+  if (auto *Ptr = getLoadStorePointerOperand(V))
+    return Ptr;
+  if (auto *Gep = dyn_cast<GetElementPtrInst>(V))
+    return Gep->getPointerOperand();
+  return nullptr;
+}
 
 } // end namespace llvm
 

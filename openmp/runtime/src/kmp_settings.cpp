@@ -665,9 +665,6 @@ static void __kmp_stg_print_blocktime(kmp_str_buf_t *buffer, char const *name,
   __kmp_stg_print_int(buffer, name, __kmp_dflt_blocktime);
 } // __kmp_stg_print_blocktime
 
-// Used for OMP_WAIT_POLICY
-static char const *blocktime_str = NULL;
-
 // -----------------------------------------------------------------------------
 // KMP_DUPLICATE_LIB_OK
 
@@ -701,6 +698,9 @@ static void __kmp_stg_print_inherit_fp_control(kmp_str_buf_t *buffer,
 } // __kmp_stg_print_inherit_fp_control
 
 #endif /* KMP_ARCH_X86 || KMP_ARCH_X86_64 */
+
+// Used for OMP_WAIT_POLICY
+static char const *blocktime_str = NULL;
 
 // -----------------------------------------------------------------------------
 // KMP_LIBRARY, OMP_WAIT_POLICY
@@ -1177,6 +1177,46 @@ static void __kmp_stg_print_default_device(kmp_str_buf_t *buffer,
                                            char const *name, void *data) {
   __kmp_stg_print_int(buffer, name, __kmp_default_device);
 } // __kmp_stg_print_default_device
+#endif
+
+#if OMP_50_ENABLED
+// -----------------------------------------------------------------------------
+// OpenMP 5.0: OMP_TARGET_OFFLOAD
+static void __kmp_stg_parse_target_offload(char const *name, char const *value,
+                                           void *data) {
+  const char *next = value;
+  const char *scan = next;
+
+  __kmp_target_offload = tgt_default;
+  SKIP_WS(next);
+  if (*next == '\0')
+    return;
+  scan = next;
+  if (__kmp_match_str("MANDATORY", scan, &next)) {
+    __kmp_target_offload = tgt_mandatory;
+  } else if (__kmp_match_str("DISABLED", scan, &next)) {
+    __kmp_target_offload = tgt_disabled;
+  } else if (__kmp_match_str("DEFAULT", scan, &next)) {
+    __kmp_target_offload = tgt_default;
+  } else {
+    KMP_WARNING(SyntaxErrorUsing, name, "DEFAULT");
+  }
+
+} // __kmp_stg_parse_target_offload
+
+static void __kmp_stg_print_target_offload(kmp_str_buf_t *buffer,
+                                           char const *name, void *data) {
+  const char *value = NULL;
+  if (__kmp_target_offload == tgt_default)
+    value = "DEFAULT";
+  else if (__kmp_target_offload == tgt_mandatory)
+    value = "MANDATORY";
+  else if (__kmp_target_offload == tgt_disabled)
+    value = "DISABLED";
+  if (value) {
+    __kmp_str_buf_print(buffer, "   %s=%s\n", name, value);
+  }
+} // __kmp_stg_print_target_offload
 #endif
 
 #if OMP_45_ENABLED
@@ -4443,6 +4483,10 @@ static kmp_setting_t __kmp_stg_table[] = {
     {"OMP_DEFAULT_DEVICE", __kmp_stg_parse_default_device,
      __kmp_stg_print_default_device, NULL, 0, 0},
 #endif
+#if OMP_50_ENABLED
+    {"OMP_TARGET_OFFLOAD", __kmp_stg_parse_target_offload,
+     __kmp_stg_print_target_offload, NULL, 0, 0},
+#endif
 #if OMP_45_ENABLED
     {"OMP_MAX_TASK_PRIORITY", __kmp_stg_parse_max_task_priority,
      __kmp_stg_print_max_task_priority, NULL, 0, 0},
@@ -5363,6 +5407,8 @@ void __kmp_env_initialize(char const *string) {
     KMP_DEBUG_ASSERT(__kmp_affinity_type != affinity_default);
 #if OMP_40_ENABLED
     KMP_DEBUG_ASSERT(__kmp_nested_proc_bind.bind_types[0] != proc_bind_default);
+    K_DIAG(1, ("__kmp_nested_proc_bind.bind_types[0] == %d\n",
+               __kmp_nested_proc_bind.bind_types[0]));
 #endif
   }
 

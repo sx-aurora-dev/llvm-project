@@ -16,6 +16,7 @@
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/Analysis/Analyses/LiveVariables.h"
+#include "clang/Analysis/ConstructionContext.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "llvm/ADT/SmallSet.h"
@@ -120,7 +121,7 @@ static std::pair<const Stmt*,
 
 /// Adjusts a return value when the called function's return type does not
 /// match the caller's expression type. This can happen when a dynamic call
-/// is devirtualized, and the overridding method has a covariant (more specific)
+/// is devirtualized, and the overriding method has a covariant (more specific)
 /// return type than the parent's method. For C++ objects, this means we need
 /// to add base casts.
 static SVal adjustReturnValue(SVal V, QualType ExpectedTy, QualType ActualTy,
@@ -192,23 +193,6 @@ static bool wasDifferentDeclUsedForInlining(CallEventRef<> Call,
   return RuntimeCallee->getCanonicalDecl() != StaticDecl->getCanonicalDecl();
 }
 
-/// Returns true if the CXXConstructExpr \p E was intended to construct a
-/// prvalue for the region in \p V.
-///
-/// Note that we can't just test for rvalue vs. glvalue because
-/// CXXConstructExprs embedded in DeclStmts and initializers are considered
-/// rvalues by the AST, and the analyzer would like to treat them as lvalues.
-static bool isTemporaryPRValue(const CXXConstructExpr *E, SVal V) {
-  if (E->isGLValue())
-    return false;
-
-  const MemRegion *MR = V.getAsRegion();
-  if (!MR)
-    return false;
-
-  return isa<CXXTempObjectRegion>(MR);
-}
-
 /// The call exit is simulated with a sequence of nodes, which occur between
 /// CallExitBegin and CallExitEnd. The following operations occur between the
 /// two program points:
@@ -268,11 +252,7 @@ void ExprEngine::processCallExit(ExplodedNode *CEBNode) {
       loc::MemRegionVal This =
         svalBuilder.getCXXThis(CCE->getConstructor()->getParent(), calleeCtx);
       SVal ThisV = state->getSVal(This);
-
-      // If the constructed object is a temporary prvalue, get its bindings.
-      if (isTemporaryPRValue(CCE, ThisV))
-        ThisV = state->getSVal(ThisV.castAs<Loc>());
-
+      ThisV = state->getSVal(ThisV.castAs<Loc>());
       state = state->BindExpr(CCE, callerCtx, ThisV);
     }
 
@@ -287,8 +267,8 @@ void ExprEngine::processCallExit(ExplodedNode *CEBNode) {
           AllocV, CNE->getType(),
           getContext().getPointerType(getContext().VoidTy));
 
-      state =
-          setCXXNewAllocatorValue(state, CNE, calleeCtx->getParent(), AllocV);
+      state = addObjectUnderConstruction(state, CNE, calleeCtx->getParent(),
+                                         AllocV);
     }
   }
 
@@ -353,8 +333,9 @@ void ExprEngine::processCallExit(ExplodedNode *CEBNode) {
                                                  /*WasInlined=*/true);
       for (auto I : DstPostPostCallCallback) {
         getCheckerManager().runCheckersForNewAllocator(
-            CNE, getCXXNewAllocatorValue(I->getState(), CNE,
-                                         calleeCtx->getParent()),
+            CNE,
+            *getObjectUnderConstruction(I->getState(), CNE,
+                                        calleeCtx->getParent()),
             DstPostCall, I, *this,
             /*WasInlined=*/true);
       }
@@ -572,31 +553,45 @@ ProgramStateRef ExprEngine::bindReturnValue(const CallEvent &Call,
     }
   } else if (const CXXConstructorCall *C = dyn_cast<CXXConstructorCall>(&Call)){
     SVal ThisV = C->getCXXThisVal();
-
-    // If the constructed object is a temporary prvalue, get its bindings.
-    if (isTemporaryPRValue(cast<CXXConstructExpr>(E), ThisV))
-      ThisV = State->getSVal(ThisV.castAs<Loc>());
-
+    ThisV = State->getSVal(ThisV.castAs<Loc>());
     return State->BindExpr(E, LCtx, ThisV);
   }
 
-  // Conjure a symbol if the return value is unknown.
+  SVal R;
   QualType ResultTy = Call.getResultType();
-  SValBuilder &SVB = getSValBuilder();
   unsigned Count = currBldrCtx->blockCount();
+  if (auto RTC = getCurrentCFGElement().getAs<CFGCXXRecordTypedCall>()) {
+    // Conjure a temporary if the function returns an object by value.
+    SVal Target;
+    assert(RTC->getStmt() == Call.getOriginExpr());
+    EvalCallOptions CallOpts; // FIXME: We won't really need those.
+    std::tie(State, Target) =
+        prepareForObjectConstruction(Call.getOriginExpr(), State, LCtx,
+                                     RTC->getConstructionContext(), CallOpts);
+    assert(Target.getAsRegion());
+    // Invalidate the region so that it didn't look uninitialized. Don't notify
+    // the checkers.
+    State = State->invalidateRegions(Target.getAsRegion(), E, Count, LCtx,
+                                     /* CausedByPointerEscape=*/false, nullptr,
+                                     &Call, nullptr);
 
-  // See if we need to conjure a heap pointer instead of
-  // a regular unknown pointer.
-  bool IsHeapPointer = false;
-  if (const auto *CNE = dyn_cast<CXXNewExpr>(E))
-    if (CNE->getOperatorNew()->isReplaceableGlobalAllocationFunction()) {
-      // FIXME: Delegate this to evalCall in MallocChecker?
-      IsHeapPointer = true;
-    }
+    R = State->getSVal(Target.castAs<Loc>(), E->getType());
+  } else {
+    // Conjure a symbol if the return value is unknown.
 
-  SVal R = IsHeapPointer
-               ? SVB.getConjuredHeapSymbolVal(E, LCtx, Count)
-               : SVB.conjureSymbolVal(nullptr, E, LCtx, ResultTy, Count);
+    // See if we need to conjure a heap pointer instead of
+    // a regular unknown pointer.
+    bool IsHeapPointer = false;
+    if (const auto *CNE = dyn_cast<CXXNewExpr>(E))
+      if (CNE->getOperatorNew()->isReplaceableGlobalAllocationFunction()) {
+        // FIXME: Delegate this to evalCall in MallocChecker?
+        IsHeapPointer = true;
+      }
+
+    R = IsHeapPointer ? svalBuilder.getConjuredHeapSymbolVal(E, LCtx, Count)
+                      : svalBuilder.conjureSymbolVal(nullptr, E, LCtx, ResultTy,
+                                                     Count);
+  }
   return State->BindExpr(E, LCtx, R);
 }
 
@@ -635,10 +630,11 @@ ExprEngine::mayInlineCallKind(const CallEvent &Call, const ExplodedNode *Pred,
 
     const CXXConstructExpr *CtorExpr = Ctor.getOriginExpr();
 
-    auto CC = getCurrentCFGElement().getAs<CFGConstructor>();
-    const Stmt *ParentExpr = CC ? CC->getTriggerStmt() : nullptr;
+    auto CCE = getCurrentCFGElement().getAs<CFGConstructor>();
+    const ConstructionContext *CC = CCE ? CCE->getConstructionContext()
+                                        : nullptr;
 
-    if (ParentExpr && isa<CXXNewExpr>(ParentExpr) &&
+    if (CC && isa<NewAllocatedObjectConstructionContext>(CC) &&
         !Opts.mayInlineCXXAllocator())
       return CIP_DisallowedOnce;
 
@@ -675,6 +671,11 @@ ExprEngine::mayInlineCallKind(const CallEvent &Call, const ExplodedNode *Pred,
       // to inline the constructor. Instead we will simply invalidate
       // the fake temporary target.
       if (CallOpts.IsCtorOrDtorWithImproperlyModeledTargetRegion)
+        return CIP_DisallowedOnce;
+
+      // If the temporary is lifetime-extended by binding it to a reference-type
+      // field within an aggregate, automatic destructors don't work properly.
+      if (CallOpts.IsTemporaryLifetimeExtendedViaAggregate)
         return CIP_DisallowedOnce;
     }
 
@@ -783,8 +784,9 @@ static bool isCXXSharedPtrDtor(const FunctionDecl *FD) {
 /// This checks static properties of the function, such as its signature and
 /// CFG, to determine whether the analyzer should ever consider inlining it,
 /// in any context.
-static bool mayInlineDecl(AnalysisDeclContext *CalleeADC,
-                          AnalyzerOptions &Opts) {
+static bool mayInlineDecl(AnalysisManager &AMgr,
+                          AnalysisDeclContext *CalleeADC) {
+  AnalyzerOptions &Opts = AMgr.getAnalyzerOptions();
   // FIXME: Do not inline variadic calls.
   if (CallEvent::isVariadic(CalleeADC->getDecl()))
     return false;
@@ -807,7 +809,7 @@ static bool mayInlineDecl(AnalysisDeclContext *CalleeADC,
       // Conditionally control the inlining of methods on objects that look
       // like C++ containers.
       if (!Opts.mayInlineCXXContainerMethods())
-        if (!Ctx.getSourceManager().isInMainFile(FD->getLocation()))
+        if (!AMgr.isInCodeFile(FD->getLocation()))
           if (isContainerMethod(Ctx, FD))
             return false;
 
@@ -868,7 +870,7 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
   } else {
     // We haven't actually checked the static properties of this function yet.
     // Do that now, and record our decision in the function summaries.
-    if (mayInlineDecl(CalleeADC, Opts)) {
+    if (mayInlineDecl(getAnalysisManager(), CalleeADC)) {
       Engine.FunctionSummaries->markMayInline(D);
     } else {
       Engine.FunctionSummaries->markShouldNotInline(D);
