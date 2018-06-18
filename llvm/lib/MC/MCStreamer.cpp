@@ -75,7 +75,8 @@ void MCTargetStreamer::emitValue(const MCExpr *Value) {
 void MCTargetStreamer::emitAssignment(MCSymbol *Symbol, const MCExpr *Value) {}
 
 MCStreamer::MCStreamer(MCContext &Ctx)
-    : Context(Ctx), CurrentWinFrameInfo(nullptr) {
+    : Context(Ctx), CurrentWinFrameInfo(nullptr),
+      UseAssemblerInfoForParsing(false) {
   SectionStack.push_back(std::pair<MCSectionSubPair, MCSectionSubPair>());
 }
 
@@ -197,6 +198,15 @@ MCStreamer::tryEmitDwarfFileDirective(unsigned FileNo, StringRef Directory,
                                       unsigned CUID) {
   return getContext().getDwarfFile(Directory, Filename, FileNo, Checksum,
                                    Source, CUID);
+}
+
+void MCStreamer::emitDwarfFile0Directive(StringRef Directory,
+                                         StringRef Filename,
+                                         MD5::MD5Result *Checksum,
+                                         Optional<StringRef> Source,
+                                         unsigned CUID) {
+  getContext().setMCLineTableRootFile(CUID, Directory, Filename, Checksum,
+                                      Source);
 }
 
 void MCStreamer::EmitDwarfLocDirective(unsigned FileNo, unsigned Line,
@@ -651,6 +661,10 @@ void MCStreamer::EmitWinEHHandlerData(SMLoc Loc) {
     getContext().reportError(Loc, "Chained unwind areas can't have handlers!");
 }
 
+void MCStreamer::emitCGProfileEntry(const MCSymbolRefExpr *From,
+                                    const MCSymbolRefExpr *To, uint64_t Count) {
+}
+
 static MCSection *getWinCFISection(MCContext &Context, unsigned *NextWinCFIID,
                                    MCSection *MainCFISec,
                                    const MCSection *TextSec) {
@@ -929,7 +943,7 @@ void MCStreamer::EmitCOFFSymbolType(int Type) {
   llvm_unreachable("this directive only supported on COFF targets");
 }
 void MCStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {}
-void MCStreamer::emitELFSymverDirective(MCSymbol *Alias,
+void MCStreamer::emitELFSymverDirective(StringRef AliasName,
                                         const MCSymbol *Aliasee) {}
 void MCStreamer::EmitLocalCommonSymbol(MCSymbol *Symbol, uint64_t Size,
                                        unsigned ByteAlignment) {}

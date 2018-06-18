@@ -24,8 +24,8 @@ add_clang_library(clangTidyReadabilityModule
   RedundantStringCStrCheck.cpp
   RedundantSmartptrGetCheck.cpp
   RedundantStringInitCheck.cpp
-  SIMDIntrinsicsCheck.cpp
   SimplifyBooleanExprCheck.cpp
+  SimplifySubscriptExprCheck.cpp
   StaticAccessedThroughInstanceCheck.cpp
   StaticDefinitionInAnonymousNamespaceCheck.cpp
   StringCompareCheck.cpp

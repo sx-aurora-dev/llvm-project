@@ -12,7 +12,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "CodeGenDAGPatterns.h"
 #include "CodeGenTarget.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/TableGenBackend.h"
@@ -169,18 +168,18 @@ void X86EVEX2VEXTablesEmitter::printTable(const std::vector<Entry> &Table,
       {"VRNDSCALEPDZ128rmi",  "VROUNDPDm",       true},
       {"VRNDSCALEPSZ128rri",  "VROUNDPSr",       true},
       {"VRNDSCALEPSZ128rmi",  "VROUNDPSm",       true},
-      {"VRNDSCALEPDZ256rri",  "VROUNDYPDr",      false},
-      {"VRNDSCALEPDZ256rmi",  "VROUNDYPDm",      false},
-      {"VRNDSCALEPSZ256rri",  "VROUNDYPSr",      false},
-      {"VRNDSCALEPSZ256rmi",  "VROUNDYPSm",      false},
-      {"VRNDSCALESDr",        "VROUNDSDr",       true},
-      {"VRNDSCALESDm",        "VROUNDSDm",       true},
-      {"VRNDSCALESSr",        "VROUNDSSr",       true},
-      {"VRNDSCALESSm",        "VROUNDSSm",       true},
-      {"VRNDSCALESDr_Int",    "VROUNDSDr_Int",   true},
-      {"VRNDSCALESDm_Int",    "VROUNDSDm_Int",   true},
-      {"VRNDSCALESSr_Int",    "VROUNDSSr_Int",   true},
-      {"VRNDSCALESSm_Int",    "VROUNDSSm_Int",   true},
+      {"VRNDSCALEPDZ256rri",  "VROUNDPDYr",      false},
+      {"VRNDSCALEPDZ256rmi",  "VROUNDPDYm",      false},
+      {"VRNDSCALEPSZ256rri",  "VROUNDPSYr",      false},
+      {"VRNDSCALEPSZ256rmi",  "VROUNDPSYm",      false},
+      {"VRNDSCALESDZr",       "VROUNDSDr",       true},
+      {"VRNDSCALESDZm",       "VROUNDSDm",       true},
+      {"VRNDSCALESSZr",       "VROUNDSSr",       true},
+      {"VRNDSCALESSZm",       "VROUNDSSm",       true},
+      {"VRNDSCALESDZr_Int",   "VROUNDSDr_Int",   true},
+      {"VRNDSCALESDZm_Int",   "VROUNDSDm_Int",   true},
+      {"VRNDSCALESSZr_Int",   "VROUNDSSr_Int",   true},
+      {"VRNDSCALESSZm_Int",   "VROUNDSSm_Int",   true},
   };
 
   // Print the manually added entries
@@ -261,7 +260,7 @@ public:
     // Also for instructions that their EVEX version was upgraded to work with
     // k-registers. For example VPCMPEQBrm (xmm output register) and
     // VPCMPEQBZ128rm (k register output register).
-    for (unsigned i = 0; i < Inst->Operands.size(); i++) {
+    for (unsigned i = 0, e = Inst->Operands.size(); i < e; i++) {
       Record *OpRec1 = Inst->Operands[i].Rec;
       Record *OpRec2 = Inst2->Operands[i].Rec;
 

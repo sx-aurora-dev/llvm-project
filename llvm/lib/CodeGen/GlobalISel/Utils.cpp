@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/GlobalISel/Utils.h"
+#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -57,6 +58,13 @@ unsigned llvm::constrainOperandRegClass(
   // register class constraints on some of their operands: If it's a use, we can
   // skip constraining as the instruction defining the register would constrain
   // it.
+
+  // We can't constrain unallocatable register classes, because we can't create
+  // virtual registers for these classes, so we need to let targets handled this
+  // case.
+  if (RegClass && !RegClass->isAllocatable())
+    RegClass = TRI.getConstrainedRegClassForOperand(RegMO, MRI);
+
   if (!RegClass) {
     assert((!isTargetSpecificOpcode(II.getOpcode()) || RegMO.isUse()) &&
            "Register class constraint is required unless either the "
@@ -93,7 +101,7 @@ bool llvm::constrainSelectedInstRegOperands(MachineInstr &I,
     if (!MO.isReg())
       continue;
 
-    DEBUG(dbgs() << "Converting operand: " << MO << '\n');
+    LLVM_DEBUG(dbgs() << "Converting operand: " << MO << '\n');
     assert(MO.isReg() && "Unsupported non-reg operand");
 
     unsigned Reg = MO.getReg();
@@ -168,7 +176,7 @@ void llvm::reportGISelFailure(MachineFunction &MF, const TargetPassConfig &TPC,
                                     MI.getDebugLoc(), MI.getParent());
   R << Msg;
   // Printing MI is expensive;  only do it if expensive remarks are enabled.
-  if (MORE.allowExtraAnalysis(PassName))
+  if (TPC.isGlobalISelAbortEnabled() || MORE.allowExtraAnalysis(PassName))
     R << ": " << ore::MNV("Inst", MI);
   reportGISelFailure(MF, TPC, MORE, R);
 }
@@ -211,4 +219,17 @@ llvm::MachineInstr *llvm::getOpcodeDef(unsigned Opcode, unsigned Reg,
     DefMI = MRI.getVRegDef(SrcReg);
   }
   return DefMI->getOpcode() == Opcode ? DefMI : nullptr;
+}
+
+APFloat llvm::getAPFloatFromSize(double Val, unsigned Size) {
+  if (Size == 32)
+    return APFloat(float(Val));
+  if (Size == 64)
+    return APFloat(Val);
+  if (Size != 16)
+    llvm_unreachable("Unsupported FPConstant size");
+  bool Ignored;
+  APFloat APF(Val);
+  APF.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven, &Ignored);
+  return APF;
 }

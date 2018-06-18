@@ -36,7 +36,7 @@ Sections:
         Body:            00
   - Type:            CUSTOM
     Name:            linking
-    DataSize:        10
+    Version:         1
     SymbolTable:
       - Index:           0
         Kind:            FUNCTION
@@ -63,7 +63,6 @@ Sections:
 # CHECK:         Index:           0
 # CHECK:   - Type:            CUSTOM
 # CHECK:     Name:            linking
-# CHECK:     DataSize:        10
 # CHECK:     SymbolTable:
 # CHECK:      - Index:           0
 # CHECK:        Kind:            FUNCTION

@@ -51,17 +51,17 @@ public:
   using ObjLayerT = orc::RTDyldObjectLinkingLayer;
   using CompileLayerT = orc::IRCompileLayer<ObjLayerT, orc::SimpleCompiler>;
   using TransformFtor =
-          std::function<std::shared_ptr<Module>(std::shared_ptr<Module>)>;
+      std::function<std::unique_ptr<Module>(std::unique_ptr<Module>)>;
   using IRDumpLayerT = orc::IRTransformLayer<CompileLayerT, TransformFtor>;
   using CODLayerT = orc::CompileOnDemandLayer<IRDumpLayerT, CompileCallbackMgr>;
   using IndirectStubsManagerBuilder = CODLayerT::IndirectStubsManagerBuilderT;
 
   OrcLazyJIT(std::unique_ptr<TargetMachine> TM,
-             std::unique_ptr<CompileCallbackMgr> CCMgr,
              IndirectStubsManagerBuilder IndirectStubsMgrBuilder,
              bool InlineStubs)
-      : ES(SSP), TM(std::move(TM)), DL(this->TM->createDataLayout()),
-        CCMgr(std::move(CCMgr)),
+      : TM(std::move(TM)), DL(this->TM->createDataLayout()),
+        CCMgr(orc::createLocalCompileCallbackManager(
+            this->TM->getTargetTriple(), ES, 0)),
         ObjectLayer(ES,
                     [this](orc::VModuleKey K) {
                       auto ResolverI = Resolvers.find(K);
@@ -106,7 +106,7 @@ public:
       }
   }
 
-  Error addModule(std::shared_ptr<Module> M) {
+  Error addModule(std::unique_ptr<Module> M) {
     if (M->getDataLayout().isDefault())
       M->setDataLayout(DL);
 
@@ -173,9 +173,10 @@ public:
             }
             return std::move(*NotFoundViaLegacyLookup);
           },
-          [LegacyLookup](std::shared_ptr<orc::AsynchronousSymbolQuery> Query,
+          [this,
+           LegacyLookup](std::shared_ptr<orc::AsynchronousSymbolQuery> Query,
                          orc::SymbolNameSet Symbols) {
-            return lookupWithLegacyFn(*Query, Symbols, LegacyLookup);
+            return lookupWithLegacyFn(ES, *Query, Symbols, LegacyLookup);
           });
 
       // Add the module to the JIT.

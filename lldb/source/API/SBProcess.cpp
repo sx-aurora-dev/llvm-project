@@ -20,13 +20,13 @@
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
-#include "lldb/Interpreter/Args.h"
 #include "lldb/Target/MemoryRegionInfo.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/SystemRuntime.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
+#include "lldb/Utility/Args.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Stream.h"
 
@@ -896,8 +896,7 @@ SBProcess SBProcess::GetProcessFromEvent(const SBEvent &event) {
   ProcessSP process_sp =
       Process::ProcessEventData::GetProcessFromEvent(event.get());
   if (!process_sp) {
-    // StructuredData events also know the process they come from.
-    // Try that.
+    // StructuredData events also know the process they come from. Try that.
     process_sp = EventDataStructuredData::GetProcessFromEvent(event.get());
   }
 

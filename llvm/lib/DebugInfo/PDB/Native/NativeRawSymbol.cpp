@@ -7,6 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/DebugInfo/PDB/IPDBLineNumber.h"
 #include "llvm/DebugInfo/PDB/Native/NativeRawSymbol.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolTypeBuiltin.h"
 
@@ -187,7 +188,7 @@ uint32_t NativeRawSymbol::getLiveRangeStartRelativeVirtualAddress() const {
 }
 
 codeview::RegisterId NativeRawSymbol::getLocalBasePointerRegisterId() const {
-  return codeview::RegisterId::EAX;
+  return codeview::RegisterId::CVRegEAX;
 }
 
 uint32_t NativeRawSymbol::getLowerBoundId() const {
@@ -247,7 +248,7 @@ uint32_t NativeRawSymbol::getRank() const {
 }
 
 codeview::RegisterId NativeRawSymbol::getRegisterId() const {
-  return codeview::RegisterId::EAX;
+  return codeview::RegisterId::CVRegEAX;
 }
 
 uint32_t NativeRawSymbol::getRegisterType() const {
@@ -276,6 +277,11 @@ uint32_t NativeRawSymbol::getSlot() const {
 
 std::string NativeRawSymbol::getSourceFileName() const {
   return {};
+}
+
+std::unique_ptr<IPDBLineNumber>
+NativeRawSymbol::getSrcLineOnTypeDefn() const {
+  return nullptr;
 }
 
 uint32_t NativeRawSymbol::getStride() const {

@@ -43,7 +43,7 @@ public:
   static_assert(!std::is_reference<Type>::value,
                 "Reference arguments to Key<> are not allowed");
 
-  Key() = default;
+  constexpr Key() = default;
 
   Key(Key const &) = delete;
   Key &operator=(Key const &) = delete;
@@ -146,7 +146,7 @@ public:
 
   template <class Type> Context derive(Type &&Value) && {
     static Key<typename std::decay<Type>::type> Private;
-    return std::move(this)->derive(Private, std::forward<Type>(Value));
+    return std::move(*this).derive(Private, std::forward<Type>(Value));
   }
 
   /// Clone this context object.

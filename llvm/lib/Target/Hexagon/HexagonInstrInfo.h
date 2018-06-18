@@ -18,9 +18,9 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/Support/MachineValueType.h"
 #include <cstdint>
 #include <vector>
 
@@ -215,7 +215,7 @@ public:
   /// anything was changed.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
-  /// \brief Get the base register and byte offset of a load/store instr.
+  /// Get the base register and byte offset of a load/store instr.
   bool getMemOpBaseRegImmOfs(MachineInstr &LdSt, unsigned &BaseReg,
                              int64_t &Offset,
                              const TargetRegisterInfo *TRI) const override;
@@ -346,7 +346,11 @@ public:
   /// HexagonInstrInfo specifics.
 
   unsigned createVR(MachineFunction *MF, MVT VT) const;
+  MachineInstr *findLoopInstr(MachineBasicBlock *BB, unsigned EndLoopOp,
+                              MachineBasicBlock *TargetBB,
+                              SmallPtrSet<MachineBasicBlock *, 8> &Visited) const;
 
+  bool isBaseImmOffset(const MachineInstr &MI) const;
   bool isAbsoluteSet(const MachineInstr &MI) const;
   bool isAccumulator(const MachineInstr &MI) const;
   bool isAddrModeWithOffset(const MachineInstr &MI) const;

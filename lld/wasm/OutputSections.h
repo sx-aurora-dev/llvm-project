@@ -35,7 +35,7 @@ public:
       : Type(Type), Name(Name) {}
   virtual ~OutputSection() = default;
 
-  std::string getSectionName() const;
+  StringRef getSectionName() const;
   void setOffset(size_t NewOffset) {
     log("setOffset: " + toString(*this) + ": " + Twine(NewOffset));
     Offset = NewOffset;
@@ -85,22 +85,6 @@ protected:
   raw_string_ostream BodyOutputStream;
 };
 
-// Some synthetic sections (e.g. "name" and "linking") have subsections.
-// Just like the synthetic sections themselves these need to be created before
-// they can be written out (since they are preceded by their length). This
-// class is used to create subsections and then write them into the stream
-// of the parent section.
-class SubSection : public SyntheticSection {
-public:
-  explicit SubSection(uint32_t Type) : SyntheticSection(Type) {}
-
-  std::string getSectionName() const;
-  void writeToStream(raw_ostream &OS) {
-    OS.write(Header.data(), Header.size());
-    OS.write(Body.data(), Body.size());
-  }
-};
-
 class CodeSection : public OutputSection {
 public:
   explicit CodeSection(ArrayRef<InputFunction *> Functions);
@@ -127,6 +111,29 @@ protected:
   ArrayRef<OutputSegment *> Segments;
   std::string DataSectionHeader;
   size_t BodySize = 0;
+};
+
+// Represents a custom section in the output file.  Wasm custom sections are 
+// used for storing user-defined metadata.  Unlike the core sections types
+// they are identified by their string name.
+// The linker combines custom sections that have the same name by simply
+// concatenating them.
+// Note that some custom sections such as "name" and "linking" are handled
+// separately and are instead synthesized by the linker.
+class CustomSection : public OutputSection {
+public:
+  CustomSection(std::string Name, ArrayRef<InputSection *> InputSections);
+  size_t getSize() const override {
+    return Header.size() + NameData.size() + PayloadSize;
+  }
+  void writeTo(uint8_t *Buf) override;
+  uint32_t numRelocations() const override;
+  void writeRelocations(raw_ostream &OS) const override;
+
+protected:
+  size_t PayloadSize;
+  ArrayRef<InputSection *> InputSections;
+  std::string NameData;
 };
 
 } // namespace wasm

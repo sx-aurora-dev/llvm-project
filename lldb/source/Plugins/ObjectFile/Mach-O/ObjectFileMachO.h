@@ -162,14 +162,14 @@ protected:
   // with an on-disk dyld_shared_cache file.  The process will record
   // the shared cache UUID so the on-disk cache can be matched or rejected
   // correctly.
-  lldb_private::UUID GetProcessSharedCacheUUID(lldb_private::Process *);
+  void GetProcessSharedCacheUUID(lldb_private::Process *, lldb::addr_t &base_addr, lldb_private::UUID &uuid);
 
   // Intended for same-host arm device debugging where lldb will read
   // shared cache libraries out of its own memory instead of the remote
   // process' memory as an optimization.  If lldb's shared cache UUID
   // does not match the process' shared cache UUID, this optimization
   // should not be used.
-  lldb_private::UUID GetLLDBSharedCacheUUID();
+  void GetLLDBSharedCacheUUID(lldb::addr_t &base_addir, lldb_private::UUID &uuid);
 
   lldb_private::Section *GetMachHeaderSection();
 
@@ -184,6 +184,18 @@ protected:
                      const uint32_t addr_byte_size);
 
   size_t ParseSymtab();
+
+  typedef lldb_private::RangeArray<uint32_t, uint32_t, 8> EncryptedFileRanges;
+  EncryptedFileRanges GetEncryptedFileRanges();
+
+  struct SegmentParsingContext;
+  void ProcessDysymtabCommand(const llvm::MachO::load_command &load_cmd,
+                              lldb::offset_t offset);
+  void ProcessSegmentCommand(const llvm::MachO::load_command &load_cmd,
+                             lldb::offset_t offset, uint32_t cmd_idx,
+                             SegmentParsingContext &context);
+  void SanitizeSegmentCommand(llvm::MachO::segment_command_64 &seg_cmd,
+                              uint32_t cmd_idx);
 
   llvm::MachO::mach_header m_header;
   static const lldb_private::ConstString &GetSegmentNameTEXT();

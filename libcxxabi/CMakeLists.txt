@@ -99,6 +99,7 @@ else()
   set(LIBCXXABI_LIBCXX_SRC_DIRS
     "${LLVM_MAIN_SRC_DIR}/projects/libcxx"
     "${LLVM_MAIN_SRC_DIR}/runtimes/libcxx"
+    "${LLVM_MAIN_SRC_DIR}/../libcxx"
     )
 endif()
 
@@ -386,6 +387,10 @@ endif()
 # Prevent libc++abi from having library dependencies on libc++
 add_definitions(-D_LIBCPP_DISABLE_EXTERN_TEMPLATE)
 
+# Bring back `std::unexpected`, which is removed in C++17, to support
+# pre-C++17.
+add_definitions(-D_LIBCPP_ENABLE_CXX17_REMOVED_UNEXPECTED_FUNCTIONS)
+
 if (MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
@@ -426,6 +431,7 @@ if (LIBCXXABI_USE_LLVM_UNWINDER OR LLVM_NATIVE_ARCH MATCHES ARM)
           ${CMAKE_BINARY_DIR}/${LIBCXXABI_LIBUNWIND_INCLUDES}
           ${LLVM_MAIN_SRC_DIR}/projects/libunwind/include
           ${LLVM_MAIN_SRC_DIR}/runtimes/libunwind/include
+          ${LLVM_MAIN_SRC_DIR}/../libunwind/include
     NO_DEFAULT_PATH
     NO_CMAKE_FIND_ROOT_PATH
   )
