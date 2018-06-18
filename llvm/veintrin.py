@@ -2,6 +2,7 @@
 
 import re
 import sys
+from functools import partial
 
 class Type:
     def __init__(self, ValueType, builtinCode, ctype, elemType = None):
@@ -42,9 +43,6 @@ T_v8u64   = Type("v8i64",   "V8ULi",   "unsigned long int*",  T_u64)
 T_v8u32   = Type("v8i32",   "V8ULi",   "unsigned int*",  T_u32)
 T_v16u32  = Type("v16i32",  "V16ULi",  "unsigned int*",  T_u32)
 
-T_void    = Type(None,      None,     "void")
-T_v256v64 = Type("v256f64", "V256d",  "void*", T_void)
-
 class Op(object):
     def __init__(self, kind, ty, name):
         self.kind = kind
@@ -81,22 +79,14 @@ class Op(object):
         else:
             return "{}:${}".format(self.ty.ValueType, self.name_)
 
-    def isImm(self):
-        return self.kind == 'I' or self.kind == 'N'
-    def isReg(self):
-        return self.kind == 'v' or self.kind == 's'
-    def isSReg(self):
-        return self.kind == 's'
-    def isVReg(self):
-        return self.kind == 'v'
-    def isMask(self):
-        return self.kind == 'm' or self.kind == 'M'
-    def isMask256(self):
-        return self.kind == 'm'
-    def isMask512(self):
-        return self.kind == 'M'
-    def isCC(self):
-        return self.kind == 'c'
+    def isImm(self): return self.kind == 'I' or self.kind == 'N'
+    def isReg(self): return self.kind == 'v' or self.kind == 's'
+    def isSReg(self): return self.kind == 's'
+    def isVReg(self): return self.kind == 'v'
+    def isMask(self): return self.kind == 'm' or self.kind == 'M'
+    def isMask256(self): return self.kind == 'm'
+    def isMask512(self): return self.kind == 'M'
+    def isCC(self): return self.kind == 'c'
 
     def regName(self):
         return self.name_
@@ -116,62 +106,40 @@ class Op(object):
             return "__vm"
         raise Exception("not a vector type: {}".format(self.kind))
 
-
-class SX(Op):
-    def __init__(self, ty):
-        super(SX, self).__init__("s", ty, "sx")
-class SY(Op):
-    def __init__(self, ty):
-        super(SY, self).__init__("s", ty, "sy")
-class SZ(Op):
-    def __init__(self, ty):
-        super(SZ, self).__init__("s", ty, "sz")
-
 def VOp(ty, name):
-    if ty == T_f64:
-        return Op("v", T_v256f64, name)
-    elif ty == T_f32:
-        return Op("v", T_v256f32, name)
-    elif ty == T_i64:
-        return Op("v", T_v256i64, name)
-    elif ty == T_i32:
-        return Op("v", T_v256i32, name)
-    elif ty == T_u64:
-        return Op("v", T_v256u64, name)
-    elif ty == T_u32:
-        return Op("v", T_v256u32, name)
-    elif ty == T_void:
-        return Op("v", T_v256v64, name)
-    else:
-        raise Exception("unknown type")
+    if ty == T_f64: return Op("v", T_v256f64, name)
+    elif ty == T_f32: return Op("v", T_v256f32, name)
+    elif ty == T_i64: return Op("v", T_v256i64, name)
+    elif ty == T_i32: return Op("v", T_v256i32, name)
+    elif ty == T_u64: return Op("v", T_v256u64, name)
+    elif ty == T_u32: return Op("v", T_v256u32, name)
+    else: raise Exception("unknown type")
 
-def VX(ty):
-    return VOp(ty, "vx")
-def VY(ty):
-    return VOp(ty, "vy")
-def VZ(ty):
-    return VOp(ty, "vz")
-def VW(ty):
-    return VOp(ty, "vw")
-def VD(ty):
-    return VOp(ty, "vd")
+def SX(ty): return Op("s", ty, "sx")
+def SY(ty): return Op("s", ty, "sy")
+def SZ(ty): return Op("s", ty, "sz")
+
+def VX(ty): return VOp(ty, "vx")
+def VY(ty): return VOp(ty, "vy")
+def VZ(ty): return VOp(ty, "vz")
+def VW(ty): return VOp(ty, "vw")
+def VD(ty): return VOp(ty, "vd")
 
 VM = Op("m", T_v8u32, "vm")
+VMX = Op("m", T_v8u32, "vmx")
+VMY = Op("m", T_v8u32, "vmy")
+VMZ = Op("m", T_v8u32, "vmz")
+VMD = Op("m", T_v8u32, "vmd")
 VM512 = Op("M", T_v16u32, "vm")
 VMX512 = Op("M", T_v16u32, "vmx")
 VMY512 = Op("M", T_v16u32, "vmy")
 VMZ512 = Op("M", T_v16u32, "vmz")
 VMD512 = Op("M", T_v16u32, "vmd")
-VMX = Op("m", T_v8u32, "vmx")
-VMY = Op("m", T_v8u32, "vmy")
-VMZ = Op("m", T_v8u32, "vmz")
-VMD = Op("m", T_v8u32, "vmd")
 CCOp = Op("c", T_u32, "cc")
 
 ImmI = Op("I", T_u64, "I") # FIXME: T_u64 is ok?. 7bit integer
-ImmN = Op("I", T_i32, "N") # FIXME: T_i32?
-#I = Op("I", T_u64, "I")
-N = Op("N", T_u64, "sy")
+ImmN = Op("I", T_i32, "N") # FIXME: T_i32?, IorN?
+N = Op("N", T_u64, "sy") # FIXME: remove me
 
 class DummyInst:
     def __init__(self, inst, func, asm):
@@ -680,22 +648,12 @@ class InstList:
         self.a = []
     def add(self, I):
         self.a.append(I)
-    def noTest(self):
-        for I in self.a:
-            I.noTest()
-        return self
-    def noBuiltin(self):
-        for I in self.a:
-            I.noBuiltin()
-        return self
-    def readMem(self):
-        for I in self.a:
-            I.readMem()
-        return self
-    def writeMem(self):
-        for I in self.a:
-            I.writeMem()
-        return self
+    def __getattr__(self, attrname):
+        def _method_missing(self, name, *args):
+            for i in self.a:
+                getattr(i, name)(*args)
+            return self
+        return partial(_method_missing, self, attrname)
 
 class Section:
     def __init__(self, name):
