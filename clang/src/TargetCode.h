@@ -41,7 +41,7 @@ public:
   void addHeader(const std::string &Header) { SystemHeaders.insert(Header); }
 
 private:
-  void generateFunctionPrologue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
-  void generateFunctionEpilogue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
+  void generateFunctionPrologue(TargetCodeRegion *TCR);
+  void generateFunctionEpilogue(TargetCodeRegion *TCR);
   std::string generateFunctionName(TargetCodeRegion *TCR);
 };

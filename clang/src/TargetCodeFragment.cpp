@@ -53,30 +53,96 @@ static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
   return S->getLocEnd();
 }
 
-clang::SourceRange TargetCodeRegion::getInnerRange() {
+clang::SourceLocation TargetCodeDecl::getStartLoc() {
+  llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getStartLoc()\n";
+}
+
+clang::SourceLocation TargetCodeDecl::getEndLoc() {
+  llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getEndLoc()\n";
+}
+
+
+//TODO: Implement recursiv for an arbitrary depth?
+clang::SourceLocation findPreviousToken(clang::SourceLocation Loc, clang::SourceManager &SM, const clang::LangOptions &LO) {
+  clang::Token token;
+
+  Loc = clang::Lexer::GetBeginningOfToken(Loc, SM, LO);
+
+  // Search until we find a valid token before Loc
+  // TODO: Error handling if no token can be found
+  do {
+    Loc = clang::Lexer::GetBeginningOfToken(Loc.getLocWithOffset(-1), SM, LO);
+  } while((clang::Lexer::getRawToken(Loc, token, SM, LO)));
+
+  return token.getLocation();
+}
+
+clang::SourceLocation TargetCodeRegion::getStartLoc() {
   clang::SourceManager &SM = Context.getSourceManager();
   const clang::LangOptions &LO = Context.getLangOpts();
+  auto TokenBegin =
+       clang::Lexer::GetBeginningOfToken(getNode()->getLocStart(), SM, LO);
   if (hasRegionCompoundStmt(getNode())) {
-    // Use the lexer to determine the positions of the first and last tokens
-    // despite its name, getLocdForEndOfToken points just behind the token
-    auto InnerLocStart =
-        clang::Lexer::getLocForEndOfToken(getNode()->getLocStart(), 0, SM, LO);
 
-    clang::SourceLocation InnerLocEnd =
-        clang::Lexer::GetBeginningOfToken(getNode()->getLocEnd(), SM, LO)
-            .getLocWithOffset(-1);
+    #if 0
+    // This piece of code could be used to check if we start with a new scope.
+    // However, the pretty printer destroys this again somehow...
+    // Since the extra scope does not realy hurt, i will leave it as it is for now.
+    clang::Token token;
+    if(!(clang::Lexer::getRawToken(TokenBegin, token, SM, LO))) {
+      if (token.is(clang::tok::l_brace)) {
+        auto possibleNextToken = clang::Lexer::findNextToken(
+                TokenBegin, SM, LO);
+        if (possibleNextToken.hasValue()) {
+          return possibleNextToken.getValue().getLocation();
+        } else {
+          llvm::outs()<< "OUCH\n";
+        }
+        return TokenBegin.getLocWithOffset(1);
+      }
+    }
+    else llvm::outs() << "NOTOK\n";
+    #endif
 
-    return clang::SourceRange(InnerLocStart, InnerLocEnd);
+    return TokenBegin;
   } else if (hasRegionOMPStmt(getNode())) {
-    return clang::SourceRange(getNode()->getLocStart().getLocWithOffset(
-                                  -8), // try to get #pragma into source range
-                              getOMPStmtSourceLocEnd(getNode()));
+    // We have to go backwards 2 tokens in case of an OMP statement 
+    // (the '#' and the 'pragma').
+    return findPreviousToken(findPreviousToken(TokenBegin, SM,LO), SM, LO);
   } else {
-    return getRealRange();
+    return getNode()->getLocStart();
   }
 }
 
+clang::SourceLocation TargetCodeRegion::getEndLoc() {
+  clang::SourceManager &SM = Context.getSourceManager();
+  const clang::LangOptions &LO = Context.getLangOpts();
+  auto N = getNode();
+  if (hasRegionCompoundStmt(N)) {
+    return clang::Lexer::GetBeginningOfToken(N->getLocEnd(), SM, LO)
+            .getLocWithOffset(-1);// TODO: If I set this to"1" it works too. I
+                                  // think it was here to remove addition scope
+                                  // which i get with "printPretty". Does this
+                                  // need some fixing?
+  } else if (hasRegionOMPStmt(N)) {
+    return getOMPStmtSourceLocEnd(N);
+  } else {
+    return N->getLocEnd();
+  }
+}
+
+
+clang::SourceRange TargetCodeRegion::getInnerRange() {
+  auto InnerLocStart = getStartLoc();
+  auto InnerLocEnd = getEndLoc();
+  return clang::SourceRange(InnerLocStart, InnerLocEnd);
+}
+
+// TODO:: Implement this as
+// "return clang::SourceRange(getStartLoc(), getEndLoc())"
 clang::SourceRange TargetCodeDecl::getInnerRange() {
+  clang::SourceManager &SM = Context.getSourceManager();
+
   if (llvm::isa<clang::TypeDecl>(Node)) {
     return getRealRange();
   } // Types have .NeedsSemicolon set to true
@@ -84,7 +150,7 @@ clang::SourceRange TargetCodeDecl::getInnerRange() {
   if (!Node->hasBody() || (FD && !FD->doesThisDeclarationHaveABody())) {
     clang::SourceManager &SM = Context.getSourceManager();
     auto possibleNextToken = clang::Lexer::findNextToken(
-      Node->getLocEnd().getLocWithOffset(1), SM, Context.getLangOpts());
+      Node->getLocEnd(), SM, Context.getLangOpts());
     clang::SourceLocation endLoc;
     if (possibleNextToken.hasValue()) {
       endLoc = possibleNextToken.getValue().getEndLoc();

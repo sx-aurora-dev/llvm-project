@@ -1,12 +1,14 @@
 #include <sstream>
 
 #include "clang/AST/Decl.h"
+#include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
+#include "clang/Lex/Lexer.h"
 
 #include "TargetCode.h"
 
@@ -52,25 +54,44 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     std::shared_ptr<TargetCodeFragment> Frag = *i;
     auto *TCR = llvm::dyn_cast<TargetCodeRegion>(Frag.get());
 
-    if (TCR) {
-      generateFunctionPrologue(TCR, Out);
+    std::string PrettyStr;
+    llvm::raw_string_ostream PrettyOS(PrettyStr);
+    clang::PrintingPolicy PP = clang::PrintingPolicy(TargetCodeRewriter.getLangOpts());
+    PP.Indentation= 1;
+
+    auto *CS= Frag->getNode();
+    if (CS != NULL) {
+      // Do pretty printing in order to resolve Macros.
+      // TODO: Is there a better approach (e.g., token or preprocessor based?)
+      // One issue here: Addition braces (i.e., scope) in some cases.
+      CS->printPretty(PrettyOS, NULL, PP);
+
+      TargetCodeRewriter.ReplaceText(Frag->getInnerRange(), PrettyOS.str());
     }
 
+    if (TCR) {
+      generateFunctionPrologue(TCR);
+    }
+
+
+    if (TCR) {
+      generateFunctionEpilogue(TCR);
+    }
+    Out << "\n";
     Out << TargetCodeRewriter.getRewrittenText(Frag->getInnerRange());
 
     if (Frag->NeedsSemicolon) {
-      Out << ";";
+      Out << ";\n";
     }
 
-    if (TCR) {
-      generateFunctionEpilogue(TCR, Out);
-    }
-    Out << "\n";
   }
 }
 
-void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
-                                          llvm::raw_ostream &Out) {
+void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
+
+  auto tmpSL = TCR->getStartLoc();
+
+  std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
   for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
@@ -99,10 +120,14 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     }
   }
   Out << "\n";
+  if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
+    llvm::errs() << "ERROR: Prologue was not written\n";
 }
 
-void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
-                                          llvm::raw_ostream &Out) {
+void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
+  std::stringstream Out;
+  auto tmpSL = TCR->getEndLoc();
+
   Out << "\n";
   // copy values from scalars from scoped vars back into pointers
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
@@ -114,6 +139,8 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
   }
 
   Out << "\n}\n";
+  if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
+    llvm::errs() << "ERROR: Epilogue was not written\n";
 }
 
 std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {

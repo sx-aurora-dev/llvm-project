@@ -13,6 +13,10 @@ class CapturedStmt;
 class ASTContext;
 }; // namespace clang
 
+//TODO: Put this somewhere else
+clang::SourceLocation findPreviousToken(clang::SourceLocation Loc, clang::SourceManager &SM, const clang::LangOptions &LO);
+
+
 // This class only really exists because we need a common base class, so we
 // can keep a list of pointers of all code fragments (which cannot be
 // templated)
@@ -30,20 +34,24 @@ protected:
   const TargetCodeFragmentKind Kind;
   // Actual class content
 public:
-  bool NeedsSemicolon;
+  bool NeedsSemicolon; //TODO: getter method
+  bool HasExtraBraces; //TODO: Determine if this can be used for removing the addition scope or remove it.
   TargetCodeFragmentKind getKind() const { return Kind; };
   static bool classof(const TargetCodeFragment *TCF) {
     return TCF->getKind() == TCFK_TargetCodeFragment;
   }
+  virtual clang::CapturedStmt *getNode() = 0;
 
 protected:
   clang::ASTContext &Context;
 
 public:
   TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
-      : Context(Context), Kind(Kind), NeedsSemicolon(false) {}
+      : Context(Context), Kind(Kind), NeedsSemicolon(false), HasExtraBraces(false) {}
   virtual clang::SourceRange getRealRange() = 0;
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }
+  virtual clang::SourceLocation getStartLoc() = 0;
+  virtual clang::SourceLocation getEndLoc() = 0;
 };
 
 // TargetCodeFragment which has an actual representation in source code
@@ -58,6 +66,12 @@ public:
   TargetCodeSourceFragment(T Node, clang::ASTContext &Context,
                            TargetCodeFragmentKind Kind)
       : TargetCodeFragment(Context, Kind), Node(Node) {}
+  // TODO: This is called by many declare_target* tests. 
+  // It really should have T as a return type. However,
+  // I belive this not working, because you cant overload
+  // by the return type.
+  // virtual T *getNode() {return NULL;}
+  virtual clang::CapturedStmt *getNode() {return NULL;}
   virtual clang::SourceRange getRealRange() { return Node->getSourceRange(); }
 };
 
@@ -87,7 +101,7 @@ public:
         TargetDirectiveLocation(TargetDirectiveLocation) {}
 
   void addCapturedVar(clang::VarDecl *Var);
-  clang::CapturedStmt *getNode() { return Node; }
+  virtual clang::CapturedStmt *getNode() { return Node; }
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsBegin() {
     return CapturedVars.begin();
   };
@@ -95,6 +109,8 @@ public:
     return CapturedVars.end();
   };
   clang::SourceRange getInnerRange() override;
+  clang::SourceLocation getStartLoc() override;
+  clang::SourceLocation getEndLoc() override;
   const std::string &getParentFuncName() { return ParentFuncName; }
   clang::SourceLocation getTargetDirectiveLocation() {
     return TargetDirectiveLocation;
@@ -114,4 +130,6 @@ public:
       : TargetCodeSourceFragment<clang::Decl *>(Node, Node->getASTContext(),
                                                 TCFK_TargetCodeDecl) {}
   clang::SourceRange getInnerRange() override;
+  clang::SourceLocation getStartLoc() override;
+  clang::SourceLocation getEndLoc() override;
 };
