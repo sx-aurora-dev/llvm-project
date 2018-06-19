@@ -141,6 +141,10 @@ ImmI = Op("I", T_u64, "I") # FIXME: T_u64 is ok?. 7bit integer
 ImmN = Op("I", T_i32, "N") # FIXME: T_i32?, IorN?
 N = Op("N", T_u64, "sy") # FIXME: remove me
 
+def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
+def Args_vsv(ty): return [VX(ty), SY(ty), VZ(ty)]
+def Args_vIv(ty): return [VX(ty), ImmI, VZ(ty)]
+
 class DummyInst:
     def __init__(self, inst, func, asm):
         self.inst_ = inst
@@ -680,11 +684,6 @@ class InstTable:
     def add(self, inst):
         self.currentSection.add(inst)
 
-    def LSVMm(self, opc, name, instName):
-        self.InstX(opc, name+"r", instName, [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
-        self.InstX(opc, name+"i", instName, [[VMX, VMD, I, SZ(T_u64)]]).noTest()
-        self.InstX(opc, name+"pi", instName, [[VMX512, VMD512, I, SZ(T_u64)]]).noTest()
-
     def VBRDm(self, opc):
         tmp = []
         tmp.append(["VBRD", "vbrd", [VX(T_f64), SY(T_f64)], VM])
@@ -781,6 +780,7 @@ class InstTable:
     def NoImpl(self, inst):
         self.add(DummyInst(inst, "not yet implemented", ""))
 
+    # intrinsic name is generated from asm and arguments
     def InstX(self, opc, baseInstName, asm, ary, expr = None, pseudo = False):
         isPacked = asm[0] == 'p'
         baseIntrinName = re.sub(r'\.', '', asm)
@@ -799,7 +799,13 @@ class InstTable:
             IL.add(i)
         return IL
 
-    # RCP
+    def addMask(self, ary, MaskOp = VM):
+        tmp = []
+        for a in ary:
+            tmp.append(a + [MaskOp, VD(a[0].ty.elemType)])
+        return ary + tmp
+
+
     def Inst2f(self, opc, name, instName, expr, hasPacked = True):
         self.InstX(opc, instName+"d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
         self.InstX(opc, instName+"s", name+".s", [[VX(T_f32), VY(T_f32)]], expr)
@@ -807,15 +813,9 @@ class InstTable:
             self.InstX(opc, instName+"p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr) 
 
     def Inst3f(self, opc, name, instName, expr, hasPacked = True):
-        O_f64_vvv = [VX(T_f64), VY(T_f64), VZ(T_f64)]
-        O_f64_vsv = [VX(T_f64), SY(T_f64), VZ(T_f64)]
-        O_f32_vvv = [VX(T_f32), VY(T_f32), VZ(T_f32)]
-        O_f32_vsv = [VX(T_f32), SY(T_f32), VZ(T_f32)]
-        O_pf32_vsv = [VX(T_f32), SY(T_u64), VZ(T_f32)]
-
-        O_f64 = [O_f64_vvv, O_f64_vsv]
-        O_f32 = [O_f32_vvv, O_f32_vsv]
-        O_pf32 = [O_f32_vvv, O_pf32_vsv]
+        O_f64 = [Args_vvv(T_f64), Args_vsv(T_f64)]
+        O_f32 = [Args_vvv(T_f32), Args_vsv(T_f32)]
+        O_pf32 = [Args_vvv(T_f32), [VX(T_f32), SY(T_u64), VZ(T_f32)]]
 
         O_f64 = self.addMask(O_f64)
         O_f32 = self.addMask(O_f32)
@@ -826,27 +826,11 @@ class InstTable:
         if hasPacked:
             self.InstX(opc, instName+"p", "p"+name, O_pf32, expr) 
 
-    def addMask(self, ary, MaskOp = VM):
-        tmp = []
-        for a in ary:
-            tmp.append(a + [MaskOp, VD(a[0].ty.elemType)])
-        return ary + tmp
-
     # 3 operands, u64/u32
     def Inst3u(self, opc, name, instName, expr, hasPacked = True):
-        O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
-        O_u64_vsv = [VX(T_u64), SY(T_u64), VZ(T_u64)]
-        O_u64_vIv = [VX(T_u64), ImmI, VZ(T_u64)]
-
-        O_u32_vvv = [VX(T_u32), VY(T_u32), VZ(T_u32)]
-        O_u32_vsv = [VX(T_u32), SY(T_u32), VZ(T_u32)]
-        O_u32_vIv = [VX(T_u32), ImmI, VZ(T_u32)]
-
-        O_pu32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
-
-        O_u64 = [O_u64_vvv, O_u64_vsv, O_u64_vIv]
-        O_u32 = [O_u32_vvv, O_u32_vsv, O_u32_vIv]
-        O_pu32 = [O_u32_vvv, O_pu32_vsv]
+        O_u64 = [Args_vvv(T_u64), Args_vsv(T_u64), Args_vIv(T_u64)]
+        O_u32 = [Args_vvv(T_u32), Args_vsv(T_u32), Args_vIv(T_u32)]
+        O_pu32 = [Args_vvv(T_u32), [VX(T_u32), SY(T_u64), VZ(T_u32)]]
 
         O_u64 = self.addMask(O_u64)
         O_u32 = self.addMask(O_u32)
@@ -859,23 +843,14 @@ class InstTable:
 
     # 3 operands, i64
     def Inst3l(self, opc, name, instName, expr):
-        O_i64_vvv = [VX(T_i64), VY(T_i64), VZ(T_i64)]
-        O_i64_vsv = [VX(T_i64), SY(T_i64), VZ(T_i64)]
-        O_i64_vIv = [VX(T_i64), ImmI, VZ(T_i64)]
-
-        self.InstX(opc, instName+"l", name+".l", [O_i64_vvv, O_i64_vsv, O_i64_vIv], expr)
+        self.InstX(opc, instName+"l", name+".l", [Args_vvv(T_i64), Args_vsv(T_i64), Args_vIv(T_i64)], expr)
 
     # 3 operands, i32
     def Inst3w(self, opc, name, instName, expr, hasPacked = True):
-        O_i32_vvv = [VX(T_i32), VY(T_i32), VZ(T_i32)]
-        O_i32_vsv = [VX(T_i32), SY(T_i32), VZ(T_i32)]
-        O_i32_vIv = [VX(T_i32), ImmI, VZ(T_i32)]
-        O_pi32_vsv = [VX(T_i32), SY(T_u64), VZ(T_i32)]
+        O_i32 = [Args_vvv(T_i32), Args_vsv(T_i32), Args_vIv(T_i32)]
+        O_pi32 = [Args_vvv(T_i32), [VX(T_i32), SY(T_u64), VZ(T_i32)]]
 
-        O_i32 = [O_i32_vvv, O_i32_vsv, O_i32_vIv]
         O_i32 = self.addMask(O_i32)
-
-        O_pi32 = [O_i32_vvv, O_pi32_vsv]
         O_pi32 = self.addMask(O_pi32, VM512)
 
         self.InstX(opc, instName+"wsx", name+".w.sx", O_i32, expr)
@@ -891,15 +866,10 @@ class InstTable:
         self.InstX(opc, instName, name, O, "{0} = {1} / {2}")
 
     def Logical(self, opc, name, instName, expr):
-        O_u64_vvv = [VX(T_u64), VY(T_u64), VZ(T_u64)]
-        O_u64_vsv = [VX(T_u64), SY(T_u64), VZ(T_u64)]
-        #O_u64_vMv = [VX(T_u64), M, VZ(T_u64)]
-
-        O_u32_vvv = [VX(T_u32), VY(T_u32), VZ(T_u32)]
         O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
 
-        self.InstX(opc, instName, name, [O_u64_vvv, O_u64_vsv], expr)
-        self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vsv], expr)
+        self.InstX(opc, instName, name, [Args_vvv(T_u64), Args_vsv(T_u64)], expr)
+        self.InstX(opc, instName+"p", "p"+name, [Args_vvv(T_u32), O_u32_vsv], expr)
 
     def Shift(self, opc, name, instName, expr):
         O_u64_vvv = [VX(T_u64), VZ(T_u64), VY(T_u64)]
@@ -1238,6 +1208,4 @@ if args.opt_html:
 
 if args.opt_manual:
     ManualInstPrinter().printAll(insts)
-
-#ManualInstPrinter().printAll(insts) if args.opt_manual else None
 
