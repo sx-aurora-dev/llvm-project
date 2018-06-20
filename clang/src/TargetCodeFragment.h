@@ -129,7 +129,6 @@ public:
   TargetCodeDecl(clang::Decl *Node)
       : TargetCodeSourceFragment<clang::Decl *>(Node, Node->getASTContext(),
                                                 TCFK_TargetCodeDecl) {}
-  clang::SourceRange getInnerRange() override;
   clang::SourceLocation getStartLoc() override;
   clang::SourceLocation getEndLoc() override;
 };
