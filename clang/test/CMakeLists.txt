@@ -29,7 +29,7 @@ if(NOT SOTOC_LLVM_LIT_EXECUTABLE)
 endif()
 
 
-set(SOTOC_LIT_ARGS -s -v --no-progress-bar)
+set(SOTOC_LIT_ARGS -v --no-progress-bar)
 
 
 add_custom_target(check-sotoc
