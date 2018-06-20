@@ -81,8 +81,9 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     Out << TargetCodeRewriter.getRewrittenText(Frag->getInnerRange());
 
     if (Frag->NeedsSemicolon) {
-      Out << ";\n";
+      Out << ";";
     }
+    Out << "\n";
 
   }
 }
