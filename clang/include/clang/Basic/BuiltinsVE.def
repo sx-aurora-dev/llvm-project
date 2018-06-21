@@ -30,6 +30,9 @@ BUILTIN(__builtin_ve_vst, "vv*V256dULi", "n")
 BUILTIN(__builtin_ve_vstu, "vv*V256dULi", "n")
 BUILTIN(__builtin_ve_vstl, "vv*V256dULi", "n")
 
+BUILTIN(__builtin_ve_lvm_MMss, "V8ULiV8ULiCLUiCLUiC", "n")
+BUILTIN(__builtin_ve_svm_sMs, "LUiV8ULiCLUiC", "n")
+
 BUILTIN(__builtin_ve_pack_f32p, "ULifC*fC*", "n")
 BUILTIN(__builtin_ve_pack_f32a, "ULifC*", "n")
 
