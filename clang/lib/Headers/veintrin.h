@@ -46,6 +46,9 @@ enum CondCodes {
 #define _ve_vstu(p, v, s) __builtin_ve_vstu(p, v, s)
 #define _ve_vstl(p, v, s) __builtin_ve_vstl(p, v, s)
 
+#define _ve_lvm_MMss __builtin_ve_lvm_MMss
+#define _ve_svm_sMs __builtin_ve_svm_sMs
+
 #define _ve_pack_f32p __builtin_ve_pack_f32p
 #define _ve_pack_f32a __builtin_ve_pack_f32a
 
