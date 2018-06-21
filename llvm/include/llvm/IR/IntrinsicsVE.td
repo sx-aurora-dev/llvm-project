@@ -15,6 +15,9 @@ let TargetPrefix = "ve" in {
   def int_ve_vstl : GCCBuiltin<"__builtin_ve_vstl">, 
         Intrinsic<[], [llvm_ptr_ty, LLVMType<v256f64>, llvm_i64_ty], [IntrWriteMem]>;
 
+  def int_ve_lvm_MMss : GCCBuiltin<"__builtin_ve_lvm_MMss">, Intrinsic<[LLVMType<v8i64>], [LLVMType<v8i64>, LLVMType<i64>, LLVMType<i64>], [IntrNoMem]>;
+  def int_ve_svm_sMs : GCCBuiltin<"__builtin_ve_svm_sMs">, Intrinsic<[LLVMType<i64>], [LLVMType<v8i64>, LLVMType<i64>], [IntrNoMem]>;
+
   def int_ve_pack_f32p : GCCBuiltin<"__builtin_ve_pack_f32p">,
         Intrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_ptr_ty], [IntrReadMem]>;
 
