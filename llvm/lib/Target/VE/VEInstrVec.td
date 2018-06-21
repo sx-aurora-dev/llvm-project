@@ -229,6 +229,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cx = 0;
       let cx2 = 0;
       let cs = 0;
+      let m = 0;
   }
 
   def r : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
@@ -237,6 +238,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cx2 = 0;
       let cs = 1;
       let cy = 1;
+      let m = 0;
   }
 
   def i0 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
@@ -246,6 +248,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cs = 1;
       let cy = 0;
       let sy{6} = 1;
+      let m = 0;
   }
 
   def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
@@ -254,6 +257,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cx2 = 0;
       let cs = 1;
       let cy = 0;
+      let m = 0;
   }
 
   def pv : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
@@ -261,6 +265,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cx = 1;
       let cx2 = 1;
       let cs = 0;
+      let m = 0;
   }
 
   def pr : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
@@ -269,6 +274,43 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let cx2 = 1;
       let cs = 1;
       let cy = 1;
+      let m = 0;
+  }
+
+  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd),
+    !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+    let cx = 0;
+    let cx2 = 0;
+    let cs = 0;
+    let Constraints = "$vx = $vd";
+  }
+
+  def rm : RV3<opc, (outs V64:$vx), (ins I64:$vy, V64:$vz, VM:$vm, V64:$vd),
+    !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+    let cx = 0;
+    let cx2 = 0;
+    let cs = 1;
+    let cy = 1;
+    let Constraints = "$vx = $vd";
+  }
+
+  // TODO: im0, im1
+
+  def pvm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd),
+    !strconcat("p", opcStr, " $vx,$vy,$vz,$vm"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cs = 0;
+      let Constraints = "$vx = $vd";
+  }
+
+  def prm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd),
+    !strconcat("p", opcStr, " $vx,$sy,$vz,$vm"), []> {
+      let cx = 1;
+      let cx2 = 1;
+      let cs = 1;
+      let cy = 1;
+      let Constraints = "$vx = $vd";
   }
 }
 
