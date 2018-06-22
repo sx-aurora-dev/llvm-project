@@ -1965,11 +1965,11 @@ define void @trunc_ssat_v8i64_v8i8_store(<8 x i64> %a0, <8 x i8> *%p1) {
 ; SSE41-NEXT:    movapd {{.*#+}} xmm0 = [255,0,0,0,0,0,0,0,255,0,0,0,0,0,0,0]
 ; SSE41-NEXT:    andpd %xmm0, %xmm1
 ; SSE41-NEXT:    andpd %xmm0, %xmm3
-; SSE41-NEXT:    packuswb %xmm1, %xmm3
+; SSE41-NEXT:    packusdw %xmm1, %xmm3
 ; SSE41-NEXT:    andpd %xmm0, %xmm7
 ; SSE41-NEXT:    andpd %xmm0, %xmm2
-; SSE41-NEXT:    packuswb %xmm7, %xmm2
-; SSE41-NEXT:    packuswb %xmm3, %xmm2
+; SSE41-NEXT:    packusdw %xmm7, %xmm2
+; SSE41-NEXT:    packusdw %xmm3, %xmm2
 ; SSE41-NEXT:    packuswb %xmm2, %xmm2
 ; SSE41-NEXT:    movq %xmm2, (%rdi)
 ; SSE41-NEXT:    retq
@@ -2004,12 +2004,12 @@ define void @trunc_ssat_v8i64_v8i8_store(<8 x i64> %a0, <8 x i8> *%p1) {
 ; AVX1-NEXT:    vmovapd {{.*#+}} xmm3 = [255,0,0,0,0,0,0,0,255,0,0,0,0,0,0,0]
 ; AVX1-NEXT:    vandpd %xmm3, %xmm2, %xmm2
 ; AVX1-NEXT:    vandpd %xmm3, %xmm1, %xmm1
-; AVX1-NEXT:    vpackuswb %xmm2, %xmm1, %xmm1
+; AVX1-NEXT:    vpackusdw %xmm2, %xmm1, %xmm1
 ; AVX1-NEXT:    vextractf128 $1, %ymm0, %xmm2
 ; AVX1-NEXT:    vandpd %xmm3, %xmm2, %xmm2
 ; AVX1-NEXT:    vandpd %xmm3, %xmm0, %xmm0
-; AVX1-NEXT:    vpackuswb %xmm2, %xmm0, %xmm0
-; AVX1-NEXT:    vpackuswb %xmm1, %xmm0, %xmm0
+; AVX1-NEXT:    vpackusdw %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vpackusdw %xmm1, %xmm0, %xmm0
 ; AVX1-NEXT:    vpackuswb %xmm0, %xmm0, %xmm0
 ; AVX1-NEXT:    vmovq %xmm0, (%rdi)
 ; AVX1-NEXT:    vzeroupper
@@ -2042,9 +2042,7 @@ define void @trunc_ssat_v8i64_v8i8_store(<8 x i64> %a0, <8 x i8> *%p1) {
 ;
 ; AVX512-LABEL: trunc_ssat_v8i64_v8i8_store:
 ; AVX512:       # %bb.0:
-; AVX512-NEXT:    vpminsq {{.*}}(%rip){1to8}, %zmm0, %zmm0
-; AVX512-NEXT:    vpmaxsq {{.*}}(%rip){1to8}, %zmm0, %zmm0
-; AVX512-NEXT:    vpmovqb %zmm0, (%rdi)
+; AVX512-NEXT:    vpmovsqb %zmm0, (%rdi)
 ; AVX512-NEXT:    vzeroupper
 ; AVX512-NEXT:    retq
   %1 = icmp slt <8 x i64> %a0, <i64 127, i64 127, i64 127, i64 127, i64 127, i64 127, i64 127, i64 127>
@@ -2998,9 +2996,7 @@ define void @trunc_ssat_v8i32_v8i8_store(<8 x i32> %a0, <8 x i8> *%p1) {
 ;
 ; AVX512VL-LABEL: trunc_ssat_v8i32_v8i8_store:
 ; AVX512VL:       # %bb.0:
-; AVX512VL-NEXT:    vpminsd {{.*}}(%rip){1to8}, %ymm0, %ymm0
-; AVX512VL-NEXT:    vpmaxsd {{.*}}(%rip){1to8}, %ymm0, %ymm0
-; AVX512VL-NEXT:    vpmovdb %ymm0, (%rdi)
+; AVX512VL-NEXT:    vpmovsdb %ymm0, (%rdi)
 ; AVX512VL-NEXT:    vzeroupper
 ; AVX512VL-NEXT:    retq
 ;
@@ -3018,9 +3014,7 @@ define void @trunc_ssat_v8i32_v8i8_store(<8 x i32> %a0, <8 x i8> *%p1) {
 ;
 ; AVX512BWVL-LABEL: trunc_ssat_v8i32_v8i8_store:
 ; AVX512BWVL:       # %bb.0:
-; AVX512BWVL-NEXT:    vpminsd {{.*}}(%rip){1to8}, %ymm0, %ymm0
-; AVX512BWVL-NEXT:    vpmaxsd {{.*}}(%rip){1to8}, %ymm0, %ymm0
-; AVX512BWVL-NEXT:    vpmovdb %ymm0, (%rdi)
+; AVX512BWVL-NEXT:    vpmovsdb %ymm0, (%rdi)
 ; AVX512BWVL-NEXT:    vzeroupper
 ; AVX512BWVL-NEXT:    retq
   %1 = icmp slt <8 x i32> %a0, <i32 127, i32 127, i32 127, i32 127, i32 127, i32 127, i32 127, i32 127>

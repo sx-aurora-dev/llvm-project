@@ -36,14 +36,14 @@ class Value;
 
 namespace orc {
 
-/// @brief This iterator provides a convenient way to iterate over the elements
+/// This iterator provides a convenient way to iterate over the elements
 ///        of an llvm.global_ctors/llvm.global_dtors instance.
 ///
 ///   The easiest way to get hold of instances of this class is to use the
 /// getConstructors/getDestructors functions.
 class CtorDtorIterator {
 public:
-  /// @brief Accessor for an element of the global_ctors/global_dtors array.
+  /// Accessor for an element of the global_ctors/global_dtors array.
   ///
   ///   This class provides a read-only view of the element with any casts on
   /// the function stripped away.
@@ -56,23 +56,23 @@ public:
     Value *Data;
   };
 
-  /// @brief Construct an iterator instance. If End is true then this iterator
+  /// Construct an iterator instance. If End is true then this iterator
   ///        acts as the end of the range, otherwise it is the beginning.
   CtorDtorIterator(const GlobalVariable *GV, bool End);
 
-  /// @brief Test iterators for equality.
+  /// Test iterators for equality.
   bool operator==(const CtorDtorIterator &Other) const;
 
-  /// @brief Test iterators for inequality.
+  /// Test iterators for inequality.
   bool operator!=(const CtorDtorIterator &Other) const;
 
-  /// @brief Pre-increment iterator.
+  /// Pre-increment iterator.
   CtorDtorIterator& operator++();
 
-  /// @brief Post-increment iterator.
+  /// Post-increment iterator.
   CtorDtorIterator operator++(int);
 
-  /// @brief Dereference iterator. The resulting value provides a read-only view
+  /// Dereference iterator. The resulting value provides a read-only view
   ///        of this element of the global_ctors/global_dtors list.
   Element operator*() const;
 
@@ -81,44 +81,38 @@ private:
   unsigned I;
 };
 
-/// @brief Create an iterator range over the entries of the llvm.global_ctors
+/// Create an iterator range over the entries of the llvm.global_ctors
 ///        array.
 iterator_range<CtorDtorIterator> getConstructors(const Module &M);
 
-/// @brief Create an iterator range over the entries of the llvm.global_ctors
+/// Create an iterator range over the entries of the llvm.global_ctors
 ///        array.
 iterator_range<CtorDtorIterator> getDestructors(const Module &M);
 
-/// @brief Convenience class for recording constructor/destructor names for
+/// Convenience class for recording constructor/destructor names for
 ///        later execution.
 template <typename JITLayerT>
 class CtorDtorRunner {
 public:
-  /// @brief Construct a CtorDtorRunner for the given range using the given
+  /// Construct a CtorDtorRunner for the given range using the given
   ///        name mangling function.
   CtorDtorRunner(std::vector<std::string> CtorDtorNames, VModuleKey K)
       : CtorDtorNames(std::move(CtorDtorNames)), K(K) {}
 
-  /// @brief Run the recorded constructors/destructors through the given JIT
+  /// Run the recorded constructors/destructors through the given JIT
   ///        layer.
   Error runViaLayer(JITLayerT &JITLayer) const {
     using CtorDtorTy = void (*)();
 
     for (const auto &CtorDtorName : CtorDtorNames) {
-      dbgs() << "Searching for ctor/dtor: " << CtorDtorName << "...";
       if (auto CtorDtorSym = JITLayer.findSymbolIn(K, CtorDtorName, false)) {
-        dbgs() << " found symbol...";
         if (auto AddrOrErr = CtorDtorSym.getAddress()) {
-          dbgs() << " at addr " << format("0x%016x", *AddrOrErr) << "\n";
           CtorDtorTy CtorDtor =
             reinterpret_cast<CtorDtorTy>(static_cast<uintptr_t>(*AddrOrErr));
           CtorDtor();
-        } else {
-          dbgs() << " failed materialization!\n";
+        } else
           return AddrOrErr.takeError();
-        }
       } else {
-        dbgs() << " failed to find symbol...";
         if (auto Err = CtorDtorSym.takeError())
           return Err;
         else
@@ -133,7 +127,7 @@ private:
   orc::VModuleKey K;
 };
 
-/// @brief Support class for static dtor execution. For hosted (in-process) JITs
+/// Support class for static dtor execution. For hosted (in-process) JITs
 ///        only!
 ///
 ///   If a __cxa_atexit function isn't found C++ programs that use static

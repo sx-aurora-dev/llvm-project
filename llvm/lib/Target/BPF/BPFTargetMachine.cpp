@@ -13,6 +13,7 @@
 
 #include "BPFTargetMachine.h"
 #include "BPF.h"
+#include "MCTargetDesc/BPFMCAsmInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -68,6 +69,9 @@ BPFTargetMachine::BPFTargetMachine(const Target &T, const Triple &TT,
       TLOF(make_unique<TargetLoweringObjectFileELF>()),
       Subtarget(TT, CPU, FS, *this) {
   initAsmInfo();
+
+  BPFMCAsmInfo *MAI = static_cast<BPFMCAsmInfo *>(const_cast<MCAsmInfo *>(AsmInfo));
+  MAI->setDwarfUsesRelocationsAcrossSections(!Subtarget.getUseDwarfRIS());
 }
 namespace {
 // BPF Code Generator Pass Configuration Options.
@@ -82,6 +86,7 @@ public:
 
   bool addInstSelector() override;
   void addMachineSSAOptimization() override;
+  void addPreEmitPass() override;
 };
 }
 
@@ -105,4 +110,12 @@ void BPFPassConfig::addMachineSSAOptimization() {
   const BPFSubtarget *Subtarget = getBPFTargetMachine().getSubtargetImpl();
   if (Subtarget->getHasAlu32() && !DisableMIPeephole)
     addPass(createBPFMIPeepholePass());
+}
+
+void BPFPassConfig::addPreEmitPass() {
+  const BPFSubtarget *Subtarget = getBPFTargetMachine().getSubtargetImpl();
+
+  if (getOptLevel() != CodeGenOpt::None)
+    if (Subtarget->getHasAlu32() && !DisableMIPeephole)
+      addPass(createBPFMIPreEmitPeepholePass());
 }

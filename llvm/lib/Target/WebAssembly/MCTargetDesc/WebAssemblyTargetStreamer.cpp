@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file defines WebAssembly-specific target streamer classes.
+/// This file defines WebAssembly-specific target streamer classes.
 /// These are for implementing support for target-specific assembly directives.
 ///
 //===----------------------------------------------------------------------===//
@@ -31,7 +31,7 @@ WebAssemblyTargetStreamer::WebAssemblyTargetStreamer(MCStreamer &S)
     : MCTargetStreamer(S) {}
 
 void WebAssemblyTargetStreamer::emitValueType(wasm::ValType Type) {
-  Streamer.EmitSLEB128IntValue(int32_t(Type));
+  Streamer.EmitIntValue(uint8_t(Type), 1);
 }
 
 WebAssemblyTargetAsmStreamer::WebAssemblyTargetAsmStreamer(

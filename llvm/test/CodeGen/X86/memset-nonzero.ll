@@ -148,6 +148,7 @@ define void @memset_256_nonzero_bytes(i8* %x) {
 ; SSE-NEXT:    movl $256, %edx # imm = 0x100
 ; SSE-NEXT:    callq memset
 ; SSE-NEXT:    popq %rax
+; SSE-NEXT:    .cfi_def_cfa_offset 8
 ; SSE-NEXT:    retq
 ;
 ; SSE2FAST-LABEL: memset_256_nonzero_bytes:
@@ -195,6 +196,7 @@ declare i8* @__memset_chk(i8*, i32, i64, i64)
 define void @memset_16_nonconst_bytes(i8* %x, i8 %c) {
 ; SSE-LABEL: memset_16_nonconst_bytes:
 ; SSE:       # %bb.0:
+; SSE-NEXT:    # kill: def $esi killed $esi def $rsi
 ; SSE-NEXT:    movzbl %sil, %eax
 ; SSE-NEXT:    movabsq $72340172838076673, %rcx # imm = 0x101010101010101
 ; SSE-NEXT:    imulq %rax, %rcx
@@ -232,6 +234,7 @@ define void @memset_16_nonconst_bytes(i8* %x, i8 %c) {
 define void @memset_32_nonconst_bytes(i8* %x, i8 %c) {
 ; SSE-LABEL: memset_32_nonconst_bytes:
 ; SSE:       # %bb.0:
+; SSE-NEXT:    # kill: def $esi killed $esi def $rsi
 ; SSE-NEXT:    movzbl %sil, %eax
 ; SSE-NEXT:    movabsq $72340172838076673, %rcx # imm = 0x101010101010101
 ; SSE-NEXT:    imulq %rax, %rcx
@@ -275,6 +278,7 @@ define void @memset_32_nonconst_bytes(i8* %x, i8 %c) {
 define void @memset_64_nonconst_bytes(i8* %x, i8 %c) {
 ; SSE-LABEL: memset_64_nonconst_bytes:
 ; SSE:       # %bb.0:
+; SSE-NEXT:    # kill: def $esi killed $esi def $rsi
 ; SSE-NEXT:    movzbl %sil, %eax
 ; SSE-NEXT:    movabsq $72340172838076673, %rcx # imm = 0x101010101010101
 ; SSE-NEXT:    imulq %rax, %rcx
@@ -326,6 +330,7 @@ define void @memset_64_nonconst_bytes(i8* %x, i8 %c) {
 define void @memset_128_nonconst_bytes(i8* %x, i8 %c) {
 ; SSE-LABEL: memset_128_nonconst_bytes:
 ; SSE:       # %bb.0:
+; SSE-NEXT:    # kill: def $esi killed $esi def $rsi
 ; SSE-NEXT:    movzbl %sil, %eax
 ; SSE-NEXT:    movabsq $72340172838076673, %rcx # imm = 0x101010101010101
 ; SSE-NEXT:    imulq %rax, %rcx
@@ -394,7 +399,7 @@ define void @memset_256_nonconst_bytes(i8* %x, i8 %c) {
 ; SSE-LABEL: memset_256_nonconst_bytes:
 ; SSE:       # %bb.0:
 ; SSE-NEXT:    movl $256, %edx # imm = 0x100
-; SSE-NEXT:    jmp memset@PLT # TAILCALL
+; SSE-NEXT:    jmp memset # TAILCALL
 ;
 ; SSE2FAST-LABEL: memset_256_nonconst_bytes:
 ; SSE2FAST:       # %bb.0:

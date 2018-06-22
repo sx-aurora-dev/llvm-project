@@ -323,7 +323,7 @@ class CXXNameMangler {
                        AdditionalAbiTags->end());
       }
 
-      std::sort(TagList.begin(), TagList.end());
+      llvm::sort(TagList.begin(), TagList.end());
       TagList.erase(std::unique(TagList.begin(), TagList.end()), TagList.end());
 
       writeSortedUniqueAbiTags(Out, TagList);
@@ -339,7 +339,7 @@ class CXXNameMangler {
     }
 
     const AbiTagList &getSortedUniqueUsedAbiTags() {
-      std::sort(UsedAbiTags.begin(), UsedAbiTags.end());
+      llvm::sort(UsedAbiTags.begin(), UsedAbiTags.end());
       UsedAbiTags.erase(std::unique(UsedAbiTags.begin(), UsedAbiTags.end()),
                         UsedAbiTags.end());
       return UsedAbiTags;
@@ -1324,8 +1324,7 @@ void CXXNameMangler::mangleUnqualifiedName(const NamedDecl *ND,
 
     if (const VarDecl *VD = dyn_cast<VarDecl>(ND)) {
       // We must have an anonymous union or struct declaration.
-      const RecordDecl *RD =
-        cast<RecordDecl>(VD->getType()->getAs<RecordType>()->getDecl());
+      const RecordDecl *RD = VD->getType()->getAs<RecordType>()->getDecl();
 
       // Itanium C++ ABI 5.1.2:
       //
@@ -2330,7 +2329,8 @@ void CXXNameMangler::mangleObjCMethodName(const ObjCMethodDecl *MD) {
   Context.mangleObjCMethodName(MD, Out);
 }
 
-static bool isTypeSubstitutable(Qualifiers Quals, const Type *Ty) {
+static bool isTypeSubstitutable(Qualifiers Quals, const Type *Ty,
+                                ASTContext &Ctx) {
   if (Quals)
     return true;
   if (Ty->isSpecificBuiltinType(BuiltinType::ObjCSel))
@@ -2339,7 +2339,11 @@ static bool isTypeSubstitutable(Qualifiers Quals, const Type *Ty) {
     return true;
   if (Ty->isBuiltinType())
     return false;
-
+  // Through to Clang 6.0, we accidentally treated undeduced auto types as
+  // substitution candidates.
+  if (Ctx.getLangOpts().getClangABICompat() > LangOptions::ClangABI::Ver6 &&
+      isa<AutoType>(Ty))
+    return false;
   return true;
 }
 
@@ -2400,7 +2404,8 @@ void CXXNameMangler::mangleType(QualType T) {
   Qualifiers quals = split.Quals;
   const Type *ty = split.Ty;
 
-  bool isSubstitutable = isTypeSubstitutable(quals, ty);
+  bool isSubstitutable =
+    isTypeSubstitutable(quals, ty, Context.getASTContext());
   if (isSubstitutable && mangleSubstitution(T))
     return;
 
@@ -2520,6 +2525,9 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
   case BuiltinType::WChar_U:
     Out << 'w';
     break;
+  case BuiltinType::Char8:
+    Out << "Du";
+    break;
   case BuiltinType::Char16:
     Out << "Ds";
     break;
@@ -2544,6 +2552,31 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
   case BuiltinType::Float16:
     Out << "DF16_";
     break;
+  case BuiltinType::ShortAccum:
+  case BuiltinType::Accum:
+  case BuiltinType::LongAccum:
+  case BuiltinType::UShortAccum:
+  case BuiltinType::UAccum:
+  case BuiltinType::ULongAccum:
+  case BuiltinType::ShortFract:
+  case BuiltinType::Fract:
+  case BuiltinType::LongFract:
+  case BuiltinType::UShortFract:
+  case BuiltinType::UFract:
+  case BuiltinType::ULongFract:
+  case BuiltinType::SatShortAccum:
+  case BuiltinType::SatAccum:
+  case BuiltinType::SatLongAccum:
+  case BuiltinType::SatUShortAccum:
+  case BuiltinType::SatUAccum:
+  case BuiltinType::SatULongAccum:
+  case BuiltinType::SatShortFract:
+  case BuiltinType::SatFract:
+  case BuiltinType::SatLongFract:
+  case BuiltinType::SatUShortFract:
+  case BuiltinType::SatUFract:
+  case BuiltinType::SatULongFract:
+    llvm_unreachable("Fixed point types are disabled for c++");
   case BuiltinType::Half:
     Out << "Dh";
     break;
@@ -2689,12 +2722,12 @@ void CXXNameMangler::mangleType(const FunctionProtoType *T) {
 
   // Mangle CV-qualifiers, if present.  These are 'this' qualifiers,
   // e.g. "const" in "int (A::*)() const".
-  mangleQualifiers(Qualifiers::fromCVRMask(T->getTypeQuals()));
+  mangleQualifiers(Qualifiers::fromCVRUMask(T->getTypeQuals()));
 
   // Mangle instantiation-dependent exception-specification, if present,
   // per cxx-abi-dev proposal on 2016-10-11.
   if (T->hasInstantiationDependentExceptionSpec()) {
-    if (T->getExceptionSpecType() == EST_ComputedNoexcept) {
+    if (isComputedNoexcept(T->getExceptionSpecType())) {
       Out << "DO";
       mangleExpression(T->getNoexceptExpr());
       Out << "E";
@@ -2705,7 +2738,7 @@ void CXXNameMangler::mangleType(const FunctionProtoType *T) {
         mangleType(ExceptTy);
       Out << "E";
     }
-  } else if (T->isNothrow(getASTContext())) {
+  } else if (T->isNothrow()) {
     Out << "Do";
   }
 
@@ -3251,14 +3284,13 @@ void CXXNameMangler::mangleType(const UnaryTransformType *T) {
 }
 
 void CXXNameMangler::mangleType(const AutoType *T) {
-  QualType D = T->getDeducedType();
-  // <builtin-type> ::= Da  # dependent auto
-  if (D.isNull()) {
-    assert(T->getKeyword() != AutoTypeKeyword::GNUAutoType &&
-           "shouldn't need to mangle __auto_type!");
-    Out << (T->isDecltypeAuto() ? "Dc" : "Da");
-  } else
-    mangleType(D);
+  assert(T->getDeducedType().isNull() &&
+         "Deduced AutoType shouldn't be handled here!");
+  assert(T->getKeyword() != AutoTypeKeyword::GNUAutoType &&
+         "shouldn't need to mangle __auto_type!");
+  // <builtin-type> ::= Da # auto
+  //                ::= Dc # decltype(auto)
+  Out << (T->isDecltypeAuto() ? "Dc" : "Da");
 }
 
 void CXXNameMangler::mangleType(const DeducedTemplateSpecializationType *T) {

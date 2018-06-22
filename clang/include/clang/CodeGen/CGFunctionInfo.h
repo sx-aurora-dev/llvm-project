@@ -384,7 +384,7 @@ public:
     AllocaFieldIndex = FieldIndex;
   }
 
-  /// \brief Return true if this field of an inalloca struct should be returned
+  /// Return true if this field of an inalloca struct should be returned
   /// to implement a struct return calling convention.
   bool getInAllocaSRet() const {
     assert(isInAlloca() && "Invalid kind!");
@@ -494,7 +494,7 @@ class CGFunctionInfo final
   unsigned EffectiveCallingConvention : 8;
 
   /// The clang::CallingConv that this was originally created with.
-  unsigned ASTCallingConvention : 7;
+  unsigned ASTCallingConvention : 6;
 
   /// Whether this is an instance method.
   unsigned InstanceMethod : 1;
@@ -514,6 +514,9 @@ class CGFunctionInfo final
   /// How many arguments to pass inreg.
   unsigned HasRegParm : 1;
   unsigned RegParm : 3;
+
+  /// Whether this function has nocf_check attribute.
+  unsigned NoCfCheck : 1;
 
   RequiredArgs Required;
 
@@ -599,6 +602,9 @@ public:
   /// Whether this function no longer saves caller registers.
   bool isNoCallerSavedRegs() const { return NoCallerSavedRegs; }
 
+  /// Whether this function has nocf_check attribute.
+  bool isNoCfCheck() const { return NoCfCheck; }
+
   /// getASTCallingConvention() - Return the AST-specified calling
   /// convention.
   CallingConv getASTCallingConvention() const {
@@ -624,7 +630,7 @@ public:
   FunctionType::ExtInfo getExtInfo() const {
     return FunctionType::ExtInfo(isNoReturn(), getHasRegParm(), getRegParm(),
                                  getASTCallingConvention(), isReturnsRetained(),
-                                 isNoCallerSavedRegs());
+                                 isNoCallerSavedRegs(), isNoCfCheck());
   }
 
   CanQualType getReturnType() const { return getArgsBuffer()[0].type; }
@@ -642,10 +648,10 @@ public:
     return getExtParameterInfos()[argIndex];
   }
 
-  /// \brief Return true if this function uses inalloca arguments.
+  /// Return true if this function uses inalloca arguments.
   bool usesInAlloca() const { return ArgStruct; }
 
-  /// \brief Get the struct type used to represent all the arguments in memory.
+  /// Get the struct type used to represent all the arguments in memory.
   llvm::StructType *getArgStruct() const { return ArgStruct; }
   CharUnits getArgStructAlignment() const {
     return CharUnits::fromQuantity(ArgStructAlign);
@@ -664,6 +670,7 @@ public:
     ID.AddBoolean(NoCallerSavedRegs);
     ID.AddBoolean(HasRegParm);
     ID.AddInteger(RegParm);
+    ID.AddBoolean(NoCfCheck);
     ID.AddInteger(Required.getOpaqueData());
     ID.AddBoolean(HasExtParameterInfos);
     if (HasExtParameterInfos) {
@@ -690,6 +697,7 @@ public:
     ID.AddBoolean(info.getNoCallerSavedRegs());
     ID.AddBoolean(info.getHasRegParm());
     ID.AddInteger(info.getRegParm());
+    ID.AddBoolean(info.getNoCfCheck());
     ID.AddInteger(required.getOpaqueData());
     ID.AddBoolean(!paramInfos.empty());
     if (!paramInfos.empty()) {

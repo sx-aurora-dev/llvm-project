@@ -8,14 +8,16 @@
 //===----------------------------------------------------------------------===//
 //
 /// \file
-/// \brief SI implementation of the TargetRegisterInfo class.
+/// SI implementation of the TargetRegisterInfo class.
 //
 //===----------------------------------------------------------------------===//
 
 #include "SIRegisterInfo.h"
+#include "AMDGPURegisterBankInfo.h"
 #include "AMDGPUSubtarget.h"
 #include "SIInstrInfo.h"
 #include "SIMachineFunctionInfo.h"
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
@@ -636,6 +638,7 @@ bool SIRegisterInfo::spillSGPR(MachineBasicBlock::iterator MI,
   MachineBasicBlock *MBB = MI->getParent();
   MachineFunction *MF = MBB->getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
+  DenseSet<unsigned> SGPRSpillVGPRDefinedSet;
 
   ArrayRef<SIMachineFunctionInfo::SpilledReg> VGPRSpills
     = MFI->getSGPRToVGPRSpills(Index);
@@ -656,6 +659,10 @@ bool SIRegisterInfo::spillSGPR(MachineBasicBlock::iterator MI,
   bool SpillToSMEM = spillSGPRToSMEM();
   if (SpillToSMEM && OnlyToVGPR)
     return false;
+
+  assert(SpillToVGPR || (SuperReg != MFI->getStackPtrOffsetReg() &&
+                         SuperReg != MFI->getFrameOffsetReg() &&
+                         SuperReg != MFI->getScratchWaveOffsetReg()));
 
   assert(SuperReg != AMDGPU::M0 && "m0 should never spill");
 
@@ -732,11 +739,21 @@ bool SIRegisterInfo::spillSGPR(MachineBasicBlock::iterator MI,
     if (SpillToVGPR) {
       SIMachineFunctionInfo::SpilledReg Spill = VGPRSpills[i];
 
+      // During SGPR spilling to VGPR, determine if the VGPR is defined. The
+      // only circumstance in which we say it is undefined is when it is the
+      // first spill to this VGPR in the first basic block.
+      bool VGPRDefined = true;
+      if (MBB == &MF->front())
+        VGPRDefined = !SGPRSpillVGPRDefinedSet.insert(Spill.VGPR).second;
+
+      // Mark the "old value of vgpr" input undef only if this is the first sgpr
+      // spill to this specific vgpr in the first basic block.
       BuildMI(*MBB, MI, DL,
               TII->getMCOpcodeFromPseudo(AMDGPU::V_WRITELANE_B32),
               Spill.VGPR)
         .addReg(SubReg, getKillRegState(IsKill))
-        .addImm(Spill.Lane);
+        .addImm(Spill.Lane)
+        .addReg(Spill.VGPR, VGPRDefined ? 0 : RegState::Undef);
 
       // FIXME: Since this spills to another register instead of an actual
       // frame index, we should delete the frame index when all references to
@@ -1215,6 +1232,10 @@ const TargetRegisterClass *SIRegisterInfo::getPhysRegClass(unsigned Reg) const {
     &AMDGPU::VReg_512RegClass,
     &AMDGPU::SReg_512RegClass,
     &AMDGPU::SCC_CLASSRegClass,
+    &AMDGPU::R600_Reg32RegClass,
+    &AMDGPU::R600_PredicateRegClass,
+    &AMDGPU::Pseudo_SReg_32RegClass,
+    &AMDGPU::Pseudo_SReg_128RegClass,
   };
 
   for (const TargetRegisterClass *BaseClass : BaseClasses) {
@@ -1351,7 +1372,7 @@ bool SIRegisterInfo::shouldRewriteCopySrc(
   return getCommonSubClass(DefRC, SrcRC) != nullptr;
 }
 
-/// \brief Returns a register that is not used at any point in the function.
+/// Returns a register that is not used at any point in the function.
 ///        If all registers are used, then this function will return
 //         AMDGPU::NoRegister.
 unsigned
@@ -1479,7 +1500,9 @@ SIRegisterInfo::getRegClassForReg(const MachineRegisterInfo &MRI,
 
 bool SIRegisterInfo::isVGPR(const MachineRegisterInfo &MRI,
                             unsigned Reg) const {
-  return hasVGPRs(getRegClassForReg(MRI, Reg));
+  const TargetRegisterClass * RC = getRegClassForReg(MRI, Reg);
+  assert(RC && "Register class for the reg not found");
+  return hasVGPRs(RC);
 }
 
 bool SIRegisterInfo::shouldCoalesce(MachineInstr *MI,
@@ -1540,4 +1563,35 @@ const int *SIRegisterInfo::getRegUnitPressureSets(unsigned RegUnit) const {
   if (hasRegUnit(AMDGPU::M0, RegUnit))
     return Empty;
   return AMDGPURegisterInfo::getRegUnitPressureSets(RegUnit);
+}
+
+unsigned SIRegisterInfo::getReturnAddressReg(const MachineFunction &MF) const {
+  // Not a callee saved register.
+  return AMDGPU::SGPR30_SGPR31;
+}
+
+const TargetRegisterClass *
+SIRegisterInfo::getConstrainedRegClassForOperand(const MachineOperand &MO,
+                                         const MachineRegisterInfo &MRI) const {
+  unsigned Size = getRegSizeInBits(MO.getReg(), MRI);
+  const RegisterBank *RB = MRI.getRegBankOrNull(MO.getReg());
+  if (!RB)
+    return nullptr;
+
+  switch (Size) {
+  case 32:
+    return RB->getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VGPR_32RegClass :
+                                                  &AMDGPU::SReg_32_XM0RegClass;
+  case 64:
+    return RB->getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_64RegClass :
+                                                   &AMDGPU::SReg_64_XEXECRegClass;
+  case 96:
+    return RB->getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_96RegClass :
+                                                  nullptr;
+  case 128:
+    return RB->getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_128RegClass :
+                                                  &AMDGPU::SReg_128RegClass;
+  default:
+    llvm_unreachable("not implemented");
+  }
 }

@@ -1,5 +1,4 @@
-// RUN: %clang_analyze_cc1 -analyze -analyzer-checker=core -mllvm -debug-only=MemRegion %s 2>&1 | FileCheck %s
-// REQUIRES: asserts
+// RUN: %clang_analyze_cc1 -analyze -analyzer-checker=core -verify %s
 
 int **h;
 int overflow_in_memregion(long j) {
@@ -9,4 +8,9 @@ int overflow_in_memregion(long j) {
   }
   return 0;
 }
-// CHECK: MemRegion::getAsArrayOffset: offset overflowing, returning unknown
+
+void rdar39593879(long long *d) {
+  long e, f;
+  e = f = d[1]; // no-crash
+  for (; d[e];) f-- > 0; // expected-warning{{relational comparison result unused}}; 
+}

@@ -226,9 +226,10 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
       const Instruction *PadInst = BB.getFirstNonPHI();
       // If this is a non-landingpad EH pad, mark this function as using
       // funclets.
-      // FIXME: SEH catchpads do not create funclets, so we could avoid setting
-      // this in such cases in order to improve frame layout.
+      // FIXME: SEH catchpads do not create EH scope/funclets, so we could avoid
+      // setting this in such cases in order to improve frame layout.
       if (!isa<LandingPadInst>(PadInst)) {
+        MF->setHasEHScopes(true);
         MF->setHasEHFunclets(true);
         MF->getFrameInfo().setHasOpaqueSPAdjustment(true);
       }
@@ -312,12 +313,14 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
 void FunctionLoweringInfo::clear() {
   MBBMap.clear();
   ValueMap.clear();
+  VirtReg2Value.clear();
   StaticAllocaMap.clear();
   LiveOutRegInfo.clear();
   VisitedBBs.clear();
   ArgDbgValues.clear();
   ByValArgFrameIndexMap.clear();
   RegFixups.clear();
+  RegsWithFixups.clear();
   StatepointStackSlots.clear();
   StatepointSpillMaps.clear();
   PreferredExtendType.clear();
@@ -483,7 +486,7 @@ int FunctionLoweringInfo::getArgumentFrameIndex(const Argument *A) {
   auto I = ByValArgFrameIndexMap.find(A);
   if (I != ByValArgFrameIndexMap.end())
     return I->second;
-  DEBUG(dbgs() << "Argument does not have assigned frame index!\n");
+  LLVM_DEBUG(dbgs() << "Argument does not have assigned frame index!\n");
   return INT_MAX;
 }
 
@@ -546,4 +549,14 @@ FunctionLoweringInfo::getOrCreateSwiftErrorVRegUseAt(const Instruction *I, const
     return std::make_pair(VReg, true);
   }
   return std::make_pair(It->second, false);
+}
+
+const Value *
+FunctionLoweringInfo::getValueFromVirtualReg(unsigned Vreg) {
+  if (VirtReg2Value.empty()) {
+    for (auto &P : ValueMap) {
+      VirtReg2Value[P.second] = P.first;
+    }
+  }
+  return VirtReg2Value[Vreg];
 }

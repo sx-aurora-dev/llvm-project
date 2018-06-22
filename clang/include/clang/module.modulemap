@@ -43,6 +43,7 @@ module Clang_Basic {
   textual header "Basic/BuiltinsXCore.def"
   textual header "Basic/BuiltinsVE.def"
   textual header "Basic/DiagnosticOptions.def"
+  textual header "Basic/Features.def"
   textual header "Basic/LangOptions.def"
   textual header "Basic/OpenCLExtensions.def"
   textual header "Basic/OpenCLImageTypes.def"
@@ -153,4 +154,9 @@ module Clang_Tooling {
 module Clang_ToolingCore {
   requires cplusplus
   umbrella "Tooling/Core" module * { export * }
+}
+
+module Clang_ToolingInclusions {
+  requires cplusplus
+  umbrella "Tooling/Inclusions" module * { export * }
 }

@@ -28,11 +28,12 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/DivergenceAnalysis.h"
 #include "llvm/CodeGen/DAGCombine.h"
+#include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
-#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/DebugLoc.h"
@@ -44,6 +45,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/RecyclingAllocator.h"
 #include <algorithm>
 #include <cassert>
@@ -71,6 +73,7 @@ class MachineConstantPoolValue;
 class MCSymbol;
 class OptimizationRemarkEmitter;
 class SDDbgValue;
+class SDDbgLabel;
 class SelectionDAG;
 class SelectionDAGTargetInfo;
 class TargetLibraryInfo;
@@ -146,6 +149,7 @@ class SDDbgInfo {
   BumpPtrAllocator Alloc;
   SmallVector<SDDbgValue*, 32> DbgValues;
   SmallVector<SDDbgValue*, 32> ByvalParmDbgValues;
+  SmallVector<SDDbgLabel*, 4> DbgLabels;
   using DbgValMapType = DenseMap<const SDNode *, SmallVector<SDDbgValue *, 2>>;
   DbgValMapType DbgValMap;
 
@@ -162,7 +166,11 @@ public:
       DbgValMap[Node].push_back(V);
   }
 
-  /// \brief Invalidate all DbgValues attached to the node and remove
+  void add(SDDbgLabel *L) {
+    DbgLabels.push_back(L);
+  }
+
+  /// Invalidate all DbgValues attached to the node and remove
   /// it from the Node-to-DbgValues map.
   void erase(const SDNode *Node);
 
@@ -170,13 +178,14 @@ public:
     DbgValMap.clear();
     DbgValues.clear();
     ByvalParmDbgValues.clear();
+    DbgLabels.clear();
     Alloc.Reset();
   }
 
   BumpPtrAllocator &getAlloc() { return Alloc; }
 
   bool empty() const {
-    return DbgValues.empty() && ByvalParmDbgValues.empty();
+    return DbgValues.empty() && ByvalParmDbgValues.empty() && DbgLabels.empty();
   }
 
   ArrayRef<SDDbgValue*> getSDDbgValues(const SDNode *Node) {
@@ -187,11 +196,14 @@ public:
   }
 
   using DbgIterator = SmallVectorImpl<SDDbgValue*>::iterator;
+  using DbgLabelIterator = SmallVectorImpl<SDDbgLabel*>::iterator;
 
   DbgIterator DbgBegin() { return DbgValues.begin(); }
   DbgIterator DbgEnd()   { return DbgValues.end(); }
   DbgIterator ByvalParmDbgBegin() { return ByvalParmDbgValues.begin(); }
   DbgIterator ByvalParmDbgEnd()   { return ByvalParmDbgValues.end(); }
+  DbgLabelIterator DbgLabelBegin() { return DbgLabels.begin(); }
+  DbgLabelIterator DbgLabelEnd()   { return DbgLabels.end(); }
 };
 
 void checkForCycles(const SelectionDAG *DAG, bool force = false);
@@ -216,6 +228,9 @@ class SelectionDAG {
   Pass *SDAGISelPass = nullptr;
   LLVMContext *Context;
   CodeGenOpt::Level OptLevel;
+
+  DivergenceAnalysis * DA = nullptr;
+  FunctionLoweringInfo * FLI = nullptr;
 
   /// The function-level optimization remark emitter.  Used to emit remarks
   /// whenever manipulating the DAG.
@@ -250,7 +265,7 @@ class SelectionDAG {
   /// Pool allocation for misc. objects that are created once per SelectionDAG.
   BumpPtrAllocator Allocator;
 
-  /// Tracks dbg_value information through SDISel.
+  /// Tracks dbg_value and dbg_label information through SDISel.
   SDDbgInfo *DbgInfo;
 
   uint16_t NextPersistentId = 0;
@@ -346,19 +361,7 @@ private:
          .getRawSubclassData();
   }
 
-  void createOperands(SDNode *Node, ArrayRef<SDValue> Vals) {
-    assert(!Node->OperandList && "Node already has operands");
-    SDUse *Ops = OperandRecycler.allocate(
-        ArrayRecycler<SDUse>::Capacity::get(Vals.size()), OperandAllocator);
-
-    for (unsigned I = 0; I != Vals.size(); ++I) {
-      Ops[I].setUser(Node);
-      Ops[I].setInitial(Vals[I]);
-    }
-    Node->NumOperands = Vals.size();
-    Node->OperandList = Ops;
-    checkForCycles(Node);
-  }
+  void createOperands(SDNode *Node, ArrayRef<SDValue> Vals);
 
   void removeOperands(SDNode *Node) {
     if (!Node->OperandList)
@@ -369,7 +372,7 @@ private:
     Node->NumOperands = 0;
     Node->OperandList = nullptr;
   }
-
+  void CreateTopologicalOrder(std::vector<SDNode*>& Order);
 public:
   explicit SelectionDAG(const TargetMachine &TM, CodeGenOpt::Level);
   SelectionDAG(const SelectionDAG &) = delete;
@@ -378,7 +381,12 @@ public:
 
   /// Prepare this SelectionDAG to process code in the given MachineFunction.
   void init(MachineFunction &NewMF, OptimizationRemarkEmitter &NewORE,
-            Pass *PassPtr, const TargetLibraryInfo *LibraryInfo);
+            Pass *PassPtr, const TargetLibraryInfo *LibraryInfo,
+            DivergenceAnalysis * DA);
+
+  void setFunctionLoweringInfo(FunctionLoweringInfo * FuncInfo) {
+    FLI = FuncInfo;
+  }
 
   /// Clear state and free memory necessary to make this
   /// SelectionDAG ready to process a new block.
@@ -463,6 +471,8 @@ public:
     return Root;
   }
 
+  void VerifyDAGDiverence();
+
   /// This iterates over the nodes in the SelectionDAG, folding
   /// certain types of nodes together, or eliminating superfluous nodes.  The
   /// Level argument controls whether Combine is allowed to produce nodes and
@@ -486,7 +496,7 @@ public:
   /// the graph.
   void Legalize();
 
-  /// \brief Transforms a SelectionDAG node and any operands to it into a node
+  /// Transforms a SelectionDAG node and any operands to it into a node
   /// that is compatible with the target instruction selector, as indicated by
   /// the TargetLowering object.
   ///
@@ -537,7 +547,7 @@ public:
   //===--------------------------------------------------------------------===//
   // Node creation methods.
 
-  /// \brief Create a ConstantSDNode wrapping a constant value.
+  /// Create a ConstantSDNode wrapping a constant value.
   /// If VT is a vector type, the constant is splatted into a BUILD_VECTOR.
   ///
   /// If only legal types can be produced, this does the necessary
@@ -571,12 +581,12 @@ public:
     return getConstant(Val, DL, VT, true, isOpaque);
   }
 
-  /// \brief Create a true or false constant of type \p VT using the target's
+  /// Create a true or false constant of type \p VT using the target's
   /// BooleanContent for type \p OpVT.
   SDValue getBoolConstant(bool V, const SDLoc &DL, EVT VT, EVT OpVT);
   /// @}
 
-  /// \brief Create a ConstantFPSDNode wrapping a constant value.
+  /// Create a ConstantFPSDNode wrapping a constant value.
   /// If VT is a vector type, the constant is splatted into a BUILD_VECTOR.
   ///
   /// If only legal types can be produced, this does the necessary
@@ -748,7 +758,7 @@ public:
     return getNode(ISD::BUILD_VECTOR, DL, VT, Ops);
   }
 
-  /// \brief Returns an ISD::VECTOR_SHUFFLE node semantically equivalent to
+  /// Returns an ISD::VECTOR_SHUFFLE node semantically equivalent to
   /// the shuffle node in input but with swapped operands.
   ///
   /// Example: shuffle A, B, <0,5,2,7> -> shuffle B, A, <4,1,6,3>
@@ -800,10 +810,10 @@ public:
   /// Create a bitwise NOT operation as (XOR Val, -1).
   SDValue getNOT(const SDLoc &DL, SDValue Val, EVT VT);
 
-  /// \brief Create a logical NOT operation as (XOR Val, BooleanOne).
+  /// Create a logical NOT operation as (XOR Val, BooleanOne).
   SDValue getLogicalNOT(const SDLoc &DL, SDValue Val, EVT VT);
 
-  /// \brief Create an add instruction with appropriate flags when used for
+  /// Create an add instruction with appropriate flags when used for
   /// addressing some offset of an object. i.e. if a load is split into multiple
   /// components, create an add nuw from the base pointer to the offset.
   SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Op, int64_t Offset) {
@@ -879,7 +889,8 @@ public:
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
                   SDValue N2, const SDNodeFlags Flags = SDNodeFlags());
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
-                  SDValue N2, SDValue N3);
+                  SDValue N2, SDValue N3,
+                  const SDNodeFlags Flags = SDNodeFlags());
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
                   SDValue N2, SDValue N3, SDValue N4);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
@@ -916,6 +927,23 @@ public:
   SDValue getMemset(SDValue Chain, const SDLoc &dl, SDValue Dst, SDValue Src,
                     SDValue Size, unsigned Align, bool isVol, bool isTailCall,
                     MachinePointerInfo DstPtrInfo);
+
+  SDValue getAtomicMemcpy(SDValue Chain, const SDLoc &dl, SDValue Dst,
+                          unsigned DstAlign, SDValue Src, unsigned SrcAlign,
+                          SDValue Size, Type *SizeTy, unsigned ElemSz,
+                          bool isTailCall, MachinePointerInfo DstPtrInfo,
+                          MachinePointerInfo SrcPtrInfo);
+
+  SDValue getAtomicMemmove(SDValue Chain, const SDLoc &dl, SDValue Dst,
+                           unsigned DstAlign, SDValue Src, unsigned SrcAlign,
+                           SDValue Size, Type *SizeTy, unsigned ElemSz,
+                           bool isTailCall, MachinePointerInfo DstPtrInfo,
+                           MachinePointerInfo SrcPtrInfo);
+
+  SDValue getAtomicMemset(SDValue Chain, const SDLoc &dl, SDValue Dst,
+                          unsigned DstAlign, SDValue Value, SDValue Size,
+                          Type *SizeTy, unsigned ElemSz, bool isTailCall,
+                          MachinePointerInfo DstPtrInfo);
 
   /// Helper function to make it easier to build SetCC's if you just
   /// have an ISD::CondCode instead of an SDValue.
@@ -1128,6 +1156,9 @@ public:
                                SDValue Op3, SDValue Op4, SDValue Op5);
   SDNode *UpdateNodeOperands(SDNode *N, ArrayRef<SDValue> Ops);
 
+  // Propagates the change in divergence to users
+  void updateDivergence(SDNode * N);
+
   /// These are used for target selectors to *mutate* the
   /// specified node to have the specified return type, Target opcode, and
   /// operands.  Note that target opcodes are stored as
@@ -1222,6 +1253,14 @@ public:
                                     unsigned FI, const DebugLoc &DL,
                                     unsigned O);
 
+  /// Creates a VReg SDDbgValue node.
+  SDDbgValue *getVRegDbgValue(DIVariable *Var, DIExpression *Expr,
+                              unsigned VReg, bool IsIndirect,
+                              const DebugLoc &DL, unsigned O);
+
+  /// Creates a SDDbgLabel node.
+  SDDbgLabel *getDbgLabel(DILabel *Label, const DebugLoc &DL, unsigned O);
+
   /// Transfer debug values from one node to another, while optionally
   /// generating fragment expressions for split-up values. If \p InvalidateDbg
   /// is set, debug values are invalidated after they are transferred.
@@ -1303,6 +1342,9 @@ public:
   /// value is produced by SD.
   void AddDbgValue(SDDbgValue *DB, SDNode *SD, bool isParameter);
 
+  /// Add a dbg_label SDNode.
+  void AddDbgLabel(SDDbgLabel *DB);
+
   /// Get the debug values which reference the given SDNode.
   ArrayRef<SDDbgValue*> GetDbgValues(const SDNode* SD) {
     return DbgInfo->getSDDbgValues(SD);
@@ -1322,6 +1364,13 @@ public:
 
   SDDbgInfo::DbgIterator ByvalParmDbgEnd()   {
     return DbgInfo->ByvalParmDbgEnd();
+  }
+
+  SDDbgInfo::DbgLabelIterator DbgLabelBegin() {
+    return DbgInfo->DbgLabelBegin();
+  }
+  SDDbgInfo::DbgLabelIterator DbgLabelEnd() {
+    return DbgInfo->DbgLabelEnd();
   }
 
   /// To be invoked on an SDNode that is slated to be erased. This

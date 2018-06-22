@@ -41,6 +41,7 @@
 #include "llvm/Support/Threading.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
 #include <cassert>
 #include <string>
@@ -80,6 +81,9 @@ static cl::opt<bool> DisablePostRAMachineLICM("disable-postra-machine-licm",
     cl::desc("Disable Machine LICM"));
 static cl::opt<bool> DisableMachineSink("disable-machine-sink", cl::Hidden,
     cl::desc("Disable Machine Sinking"));
+static cl::opt<bool> DisablePostRAMachineSink("disable-postra-machine-sink",
+    cl::Hidden,
+    cl::desc("Disable PostRA Machine Sinking"));
 static cl::opt<bool> DisableLSR("disable-lsr", cl::Hidden,
     cl::desc("Disable Loop Strength Reduction Pass"));
 static cl::opt<bool> DisableConstantHoisting("disable-constant-hoisting",
@@ -110,11 +114,6 @@ static cl::opt<bool> VerifyMachineCode("verify-machineinstrs", cl::Hidden,
 static cl::opt<bool> EnableMachineOutliner("enable-machine-outliner",
     cl::Hidden,
     cl::desc("Enable machine outliner"));
-static cl::opt<bool> EnableLinkOnceODROutlining(
-    "enable-linkonceodr-outlining",
-    cl::Hidden,
-    cl::desc("Enable the machine outliner on linkonceodr functions"),
-    cl::init(false));
 // Enable or disable FastISel. Both options are needed, because
 // FastISel is enabled by default with -fast, and we wish to be
 // able to enable or disable fast-isel independently from -O0.
@@ -251,6 +250,9 @@ static IdentifyingPassPtr overridePass(AnalysisID StandardID,
 
   if (StandardID == &MachineSinkingID)
     return applyDisable(TargetID, DisableMachineSink);
+
+  if (StandardID == &PostRAMachineSinkingID)
+    return applyDisable(TargetID, DisablePostRAMachineSink);
 
   if (StandardID == &MachineCopyPropagationID)
     return applyDisable(TargetID, DisableCopyProp);
@@ -654,7 +656,12 @@ void TargetPassConfig::addPassesToHandleExceptions() {
     addPass(createDwarfEHPass());
     break;
   case ExceptionHandling::Wasm:
-    // TODO to prevent warning
+    // Wasm EH uses Windows EH instructions, but it does not need to demote PHIs
+    // on catchpads and cleanuppads because it does not outline them into
+    // funclets. Catchswitch blocks are not lowered in SelectionDAG, so we
+    // should remove PHIs there.
+    addPass(createWinEHPass(/*DemoteCatchSwitchPHIOnly=*/false));
+    addPass(createWasmEHPass());
     break;
   case ExceptionHandling::None:
     addPass(createLowerInvokePass());
@@ -748,7 +755,7 @@ bool TargetPassConfig::addCoreISelPasses() {
 }
 
 bool TargetPassConfig::addISelPasses() {
-  if (TM->Options.EmulatedTLS)
+  if (TM->useEmulatedTLS())
     addPass(createLowerEmuTLSPass());
 
   addPass(createPreISelIntrinsicLoweringPass());
@@ -837,8 +844,10 @@ void TargetPassConfig::addMachinePasses() {
   addPostRegAlloc();
 
   // Insert prolog/epilog code.  Eliminate abstract frame index references...
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOpt::None) {
+    addPass(&PostRAMachineSinkingID);
     addPass(&ShrinkWrapID);
+  }
 
   // Prolog/Epilog inserter needs a TargetMachine to instantiate. But only
   // do so if it hasn't been disabled, substituted, or overridden.
@@ -898,7 +907,7 @@ void TargetPassConfig::addMachinePasses() {
   addPass(&PatchableFunctionID, false);
 
   if (EnableMachineOutliner)
-    PM->add(createMachineOutlinerPass(EnableLinkOnceODROutlining));
+    addPass(createMachineOutlinerPass());
 
   // Add passes that directly emit MI after all other MI passes.
   addPreEmitPass2();
@@ -1082,6 +1091,10 @@ void TargetPassConfig::addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
     // FIXME: Re-enable coloring with register when it's capable of adding
     // kill markers.
     addPass(&StackSlotColoringID);
+
+    // Copy propagate to forward register uses and try to eliminate COPYs that
+    // were not coalesced.
+    addPass(&MachineCopyPropagationID);
 
     // Run post-ra machine LICM to hoist reloads / remats.
     //

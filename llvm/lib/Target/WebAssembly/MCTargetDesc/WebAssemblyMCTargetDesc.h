@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file provides WebAssembly-specific target descriptions.
+/// This file provides WebAssembly-specific target descriptions.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +26,7 @@ class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectWriter;
+class MCObjectTargetWriter;
 class MCSubtargetInfo;
 class MVT;
 class Target;
@@ -40,13 +40,11 @@ MCCodeEmitter *createWebAssemblyMCCodeEmitter(const MCInstrInfo &MCII);
 
 MCAsmBackend *createWebAssemblyAsmBackend(const Triple &TT);
 
-std::unique_ptr<MCObjectWriter>
-createWebAssemblyELFObjectWriter(raw_pwrite_stream &OS,
-                                 bool Is64Bit, uint8_t OSABI);
+std::unique_ptr<MCObjectTargetWriter>
+createWebAssemblyELFObjectWriter(bool Is64Bit, uint8_t OSABI);
 
-std::unique_ptr<MCObjectWriter>
-createWebAssemblyWasmObjectWriter(raw_pwrite_stream &OS,
-                                  bool Is64Bit);
+std::unique_ptr<MCObjectTargetWriter>
+createWebAssemblyWasmObjectWriter(bool Is64Bit);
 
 namespace WebAssembly {
 enum OperandType {
@@ -158,19 +156,20 @@ static const unsigned LoadP2AlignOperandNo = 1;
 static const unsigned StoreP2AlignOperandNo = 0;
 
 /// This is used to indicate block signatures.
-enum class ExprType {
-  Void    = -0x40,
-  I32     = -0x01,
-  I64     = -0x02,
-  F32     = -0x03,
-  F64     = -0x04,
-  I8x16   = -0x05,
-  I16x8   = -0x06,
-  I32x4   = -0x07,
-  F32x4   = -0x08,
-  B8x16   = -0x09,
-  B16x8   = -0x0a,
-  B32x4   = -0x0b
+enum class ExprType : unsigned {
+  Void      = 0x40,
+  I32       = 0x7F,
+  I64       = 0x7E,
+  F32       = 0x7D,
+  F64       = 0x7C,
+  I8x16     = 0x7B,
+  I16x8     = 0x7A,
+  I32x4     = 0x79,
+  F32x4     = 0x78,
+  B8x16     = 0x77,
+  B16x8     = 0x76,
+  B32x4     = 0x75,
+  ExceptRef = 0x68
 };
 
 /// Instruction opcodes emitted via means other than CodeGen.

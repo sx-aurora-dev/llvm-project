@@ -22,6 +22,7 @@
 #include "clang/Analysis/CallGraph.h"
 #include "clang/Analysis/CodeInjector.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/CrossTU/CrossTranslationUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/LocalCheckers.h"
@@ -72,7 +73,7 @@ void ento::createPlistHTMLDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
                                              const Preprocessor &PP) {
   createHTMLDiagnosticConsumer(AnalyzerOpts, C,
                                llvm::sys::path::parent_path(prefix), PP);
-  createPlistDiagnosticConsumer(AnalyzerOpts, C, prefix, PP);
+  createPlistMultiFileDiagnosticConsumer(AnalyzerOpts, C, prefix, PP);
 }
 
 void ento::createTextPathDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
@@ -170,8 +171,9 @@ public:
   AnalyzerOptionsRef Opts;
   ArrayRef<std::string> Plugins;
   CodeInjector *Injector;
+  cross_tu::CrossTranslationUnitContext CTU;
 
-  /// \brief Stores the declarations from the local translation unit.
+  /// Stores the declarations from the local translation unit.
   /// Note, we pre-compute the local declarations at parse time as an
   /// optimization to make sure we do not deserialize everything from disk.
   /// The local declaration to all declarations ratio might be very small when
@@ -195,12 +197,12 @@ public:
   /// translation unit.
   FunctionSummariesTy FunctionSummaries;
 
-  AnalysisConsumer(const Preprocessor &pp, const std::string &outdir,
+  AnalysisConsumer(CompilerInstance &CI, const std::string &outdir,
                    AnalyzerOptionsRef opts, ArrayRef<std::string> plugins,
                    CodeInjector *injector)
-      : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr), PP(pp),
-        OutDir(outdir), Opts(std::move(opts)), Plugins(plugins),
-        Injector(injector) {
+      : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr),
+        PP(CI.getPreprocessor()), OutDir(outdir), Opts(std::move(opts)),
+        Plugins(plugins), Injector(injector), CTU(CI) {
     DigestAnalyzerOptions();
     if (Opts->PrintStats || Opts->shouldSerializeStats()) {
       AnalyzerTimers = llvm::make_unique<llvm::TimerGroup>(
@@ -299,24 +301,24 @@ public:
         CreateStoreMgr, CreateConstraintMgr, checkerMgr.get(), *Opts, Injector);
   }
 
-  /// \brief Store the top level decls in the set to be processed later on.
+  /// Store the top level decls in the set to be processed later on.
   /// (Doing this pre-processing avoids deserialization of data from PCH.)
   bool HandleTopLevelDecl(DeclGroupRef D) override;
   void HandleTopLevelDeclInObjCContainer(DeclGroupRef D) override;
 
   void HandleTranslationUnit(ASTContext &C) override;
 
-  /// \brief Determine which inlining mode should be used when this function is
+  /// Determine which inlining mode should be used when this function is
   /// analyzed. This allows to redefine the default inlining policies when
   /// analyzing a given function.
   ExprEngine::InliningModes
     getInliningModeForFunction(const Decl *D, const SetOfConstDecls &Visited);
 
-  /// \brief Build the call graph for all the top level decls of this TU and
+  /// Build the call graph for all the top level decls of this TU and
   /// use it to define the order in which the functions should be visited.
   void HandleDeclsCallGraph(const unsigned LocalTUDeclsSize);
 
-  /// \brief Run analyzes(syntax or path sensitive) on the given function.
+  /// Run analyzes(syntax or path sensitive) on the given function.
   /// \param Mode - determines if we are requesting syntax only or path
   /// sensitive only analysis.
   /// \param VisitedCallees - The output parameter, which is populated with the
@@ -387,7 +389,7 @@ private:
   void storeTopLevelDecls(DeclGroupRef DG);
   std::string getFunctionName(const Decl *D);
 
-  /// \brief Check if we should skip (not analyze) the given function.
+  /// Check if we should skip (not analyze) the given function.
   AnalysisMode getModeForDecl(Decl *D, AnalysisMode Mode);
   void runAnalysisOnTranslationUnit(ASTContext &C);
 
@@ -676,7 +678,7 @@ AnalysisConsumer::getModeForDecl(Decl *D, AnalysisMode Mode) {
   SourceLocation SL = Body ? Body->getLocStart() : D->getLocation();
   SL = SM.getExpansionLoc(SL);
 
-  if (!Opts->AnalyzeAll && !SM.isWrittenInMainFile(SL)) {
+  if (!Opts->AnalyzeAll && !Mgr->isInCodeFile(SL)) {
     if (SL.isInvalid() || SM.isInSystemHeader(SL))
       return AM_None;
     return Mode & ~AM_Path;
@@ -732,7 +734,8 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   if (!Mgr->getAnalysisDeclContext(D)->getAnalysis<RelaxedLiveVariables>())
     return;
 
-  ExprEngine Eng(*Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,IMode);
+  ExprEngine Eng(CTU, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
+                 IMode);
 
   // Set the graph auditor.
   std::unique_ptr<ExplodedNode::Auditor> Auditor;
@@ -790,7 +793,7 @@ ento::CreateAnalysisConsumer(CompilerInstance &CI) {
   bool hasModelPath = analyzerOpts->Config.count("model-path") > 0;
 
   return llvm::make_unique<AnalysisConsumer>(
-      CI.getPreprocessor(), CI.getFrontendOpts().OutputFile, analyzerOpts,
+      CI, CI.getFrontendOpts().OutputFile, analyzerOpts,
       CI.getFrontendOpts().Plugins,
       hasModelPath ? new ModelInjector(CI) : nullptr);
 }
@@ -880,9 +883,9 @@ UbigraphViz::~UbigraphViz() {
   std::string Ubiviz;
   if (auto Path = llvm::sys::findProgramByName("ubiviz"))
     Ubiviz = *Path;
-  const char *args[] = {Ubiviz.c_str(), Filename.c_str(), nullptr};
+  std::array<StringRef, 2> Args{{Ubiviz, Filename}};
 
-  if (llvm::sys::ExecuteAndWait(Ubiviz, &args[0], nullptr, {}, 0, 0, &ErrMsg)) {
+  if (llvm::sys::ExecuteAndWait(Ubiviz, Args, llvm::None, {}, 0, 0, &ErrMsg)) {
     llvm::errs() << "Error viewing graph: " << ErrMsg << "\n";
   }
 

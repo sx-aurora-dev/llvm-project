@@ -11,6 +11,7 @@
 #include "InputChunks.h"
 #include "InputFiles.h"
 #include "OutputSegment.h"
+#include "WriterUtils.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Threads.h"
 #include "llvm/ADT/Twine.h"
@@ -54,24 +55,20 @@ static StringRef sectionTypeToString(uint32_t SectionType) {
   }
 }
 
-std::string lld::toString(const OutputSection &Section) {
-  std::string rtn = Section.getSectionName();
-  if (!Section.Name.empty())
-    rtn += "(" + Section.Name + ")";
-  return rtn;
+// Returns a string, e.g. "FUNCTION(.text)".
+std::string lld::toString(const OutputSection &Sec) {
+  if (!Sec.Name.empty())
+    return (Sec.getSectionName() + "(" + Sec.Name + ")").str();
+  return Sec.getSectionName();
 }
 
-std::string OutputSection::getSectionName() const {
+StringRef OutputSection::getSectionName() const {
   return sectionTypeToString(Type);
-}
-
-std::string SubSection::getSectionName() const {
-  return std::string("subsection <type=") + std::to_string(Type) + ">";
 }
 
 void OutputSection::createHeader(size_t BodySize) {
   raw_string_ostream OS(Header);
-  debugWrite(OS.tell(), "section type [" + Twine(getSectionName()) + "]");
+  debugWrite(OS.tell(), "section type [" + getSectionName() + "]");
   encodeULEB128(Type, OS);
   writeUleb128(OS, BodySize, "section size");
   OS.flush();
@@ -88,8 +85,9 @@ CodeSection::CodeSection(ArrayRef<InputFunction *> Functions)
   OS.flush();
   BodySize = CodeSectionHeader.size();
 
-  for (InputChunk *Func : Functions) {
+  for (InputFunction *Func : Functions) {
     Func->OutputOffset = BodySize;
+    Func->calculateSize();
     BodySize += Func->getSize();
   }
 
@@ -107,16 +105,12 @@ void CodeSection::writeTo(uint8_t *Buf) {
   memcpy(Buf, Header.data(), Header.size());
   Buf += Header.size();
 
-  uint8_t *ContentsStart = Buf;
-
   // Write code section headers
   memcpy(Buf, CodeSectionHeader.data(), CodeSectionHeader.size());
-  Buf += CodeSectionHeader.size();
 
   // Write code section bodies
-  parallelForEach(Functions, [ContentsStart](const InputChunk *Chunk) {
-    Chunk->writeTo(ContentsStart);
-  });
+  parallelForEach(Functions,
+                  [&](const InputChunk *Chunk) { Chunk->writeTo(Buf); });
 }
 
 uint32_t CodeSection::numRelocations() const {
@@ -147,12 +141,13 @@ DataSection::DataSection(ArrayRef<OutputSegment *> Segments)
     writeUleb128(OS, WASM_OPCODE_END, "opcode:end");
     writeUleb128(OS, Segment->Size, "segment size");
     OS.flush();
-    Segment->setSectionOffset(BodySize);
+
+    Segment->SectionOffset = BodySize;
     BodySize += Segment->Header.size() + Segment->Size;
     log("Data segment: size=" + Twine(Segment->Size));
+
     for (InputSegment *InputSeg : Segment->InputSegments)
-      InputSeg->OutputOffset = Segment->getSectionOffset() +
-                               Segment->Header.size() +
+      InputSeg->OutputOffset = Segment->SectionOffset + Segment->Header.size() +
                                InputSeg->OutputSegmentOffset;
   }
 
@@ -168,19 +163,17 @@ void DataSection::writeTo(uint8_t *Buf) {
   memcpy(Buf, Header.data(), Header.size());
   Buf += Header.size();
 
-  uint8_t *ContentsStart = Buf;
-
   // Write data section headers
   memcpy(Buf, DataSectionHeader.data(), DataSectionHeader.size());
 
-  parallelForEach(Segments, [ContentsStart](const OutputSegment *Segment) {
+  parallelForEach(Segments, [&](const OutputSegment *Segment) {
     // Write data segment header
-    uint8_t *SegStart = ContentsStart + Segment->getSectionOffset();
+    uint8_t *SegStart = Buf + Segment->SectionOffset;
     memcpy(SegStart, Segment->Header.data(), Segment->Header.size());
 
     // Write segment data payload
     for (const InputChunk *Chunk : Segment->InputSegments)
-      Chunk->writeTo(ContentsStart);
+      Chunk->writeTo(Buf);
   });
 }
 
@@ -196,4 +189,51 @@ void DataSection::writeRelocations(raw_ostream &OS) const {
   for (const OutputSegment *Seg : Segments)
     for (const InputChunk *C : Seg->InputSegments)
       C->writeRelocations(OS);
+}
+
+CustomSection::CustomSection(std::string Name,
+                             ArrayRef<InputSection *> InputSections)
+    : OutputSection(WASM_SEC_CUSTOM, Name), PayloadSize(0),
+      InputSections(InputSections) {
+  raw_string_ostream OS(NameData);
+  encodeULEB128(Name.size(), OS);
+  OS << Name;
+  OS.flush();
+
+  for (InputSection *Section : InputSections) {
+    Section->OutputOffset = PayloadSize;
+    PayloadSize += Section->getSize();
+  }
+
+  createHeader(PayloadSize + NameData.size());
+}
+
+void CustomSection::writeTo(uint8_t *Buf) {
+  log("writing " + toString(*this) + " size=" + Twine(getSize()) +
+      " chunks=" + Twine(InputSections.size()));
+
+  assert(Offset);
+  Buf += Offset;
+
+  // Write section header
+  memcpy(Buf, Header.data(), Header.size());
+  Buf += Header.size();
+  memcpy(Buf, NameData.data(), NameData.size());
+  Buf += NameData.size();
+
+  // Write custom sections payload
+  parallelForEach(InputSections,
+                  [&](const InputSection *Section) { Section->writeTo(Buf); });
+}
+
+uint32_t CustomSection::numRelocations() const {
+  uint32_t Count = 0;
+  for (const InputSection *InputSect : InputSections)
+    Count += InputSect->NumRelocations();
+  return Count;
+}
+
+void CustomSection::writeRelocations(raw_ostream &OS) const {
+  for (const InputSection *S : InputSections)
+    S->writeRelocations(OS);
 }

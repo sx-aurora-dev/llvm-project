@@ -71,6 +71,10 @@ SinkInstsToAvoidSpills("sink-insts-to-avoid-spills",
                        cl::desc("MachineLICM should sink instructions into "
                                 "loops to avoid register spills"),
                        cl::init(false), cl::Hidden);
+static cl::opt<bool>
+HoistConstStores("hoist-const-stores",
+                 cl::desc("Hoist invariant stores"),
+                 cl::init(true), cl::Hidden);
 
 STATISTIC(NumHoisted,
           "Number of machine instructions hoisted out of loops");
@@ -82,6 +86,8 @@ STATISTIC(NumCSEed,
           "Number of hoisted machine instructions CSEed");
 STATISTIC(NumPostRAHoisted,
           "Number of machine instructions hoisted out of loops post regalloc");
+STATISTIC(NumStoreConst,
+          "Number of stores of const phys reg hoisted out of loops");
 
 namespace {
 
@@ -308,15 +314,15 @@ bool MachineLICMBase::runOnMachineFunction(MachineFunction &MF) {
   TRI = ST.getRegisterInfo();
   MFI = &MF.getFrameInfo();
   MRI = &MF.getRegInfo();
-  SchedModel.init(ST.getSchedModel(), &ST, TII);
+  SchedModel.init(&ST);
 
   PreRegAlloc = MRI->isSSA();
 
   if (PreRegAlloc)
-    DEBUG(dbgs() << "******** Pre-regalloc Machine LICM: ");
+    LLVM_DEBUG(dbgs() << "******** Pre-regalloc Machine LICM: ");
   else
-    DEBUG(dbgs() << "******** Post-regalloc Machine LICM: ");
-  DEBUG(dbgs() << MF.getName() << " ********\n");
+    LLVM_DEBUG(dbgs() << "******** Post-regalloc Machine LICM: ");
+  LLVM_DEBUG(dbgs() << MF.getName() << " ********\n");
 
   if (PreRegAlloc) {
     // Estimate register pressure during pre-regalloc pass.
@@ -368,6 +374,10 @@ bool MachineLICMBase::runOnMachineFunction(MachineFunction &MF) {
 
 /// Return true if instruction stores to the specified frame.
 static bool InstructionStoresToFI(const MachineInstr *MI, int FI) {
+  // Check mayStore before memory operands so that e.g. DBG_VALUEs will return
+  // true since they have no memory operands.
+  if (!MI->mayStore())
+     return false;
   // If we lost memory operands, conservatively assume that the instruction
   // writes to all slots.
   if (MI->memoperands_empty())
@@ -581,8 +591,9 @@ void MachineLICMBase::HoistPostRA(MachineInstr *MI, unsigned Def) {
 
   // Now move the instructions to the predecessor, inserting it before any
   // terminator instructions.
-  DEBUG(dbgs() << "Hoisting to " << printMBBReference(*Preheader) << " from "
-               << printMBBReference(*MI->getParent()) << ": " << *MI);
+  LLVM_DEBUG(dbgs() << "Hoisting to " << printMBBReference(*Preheader)
+                    << " from " << printMBBReference(*MI->getParent()) << ": "
+                    << *MI);
 
   // Splice the instruction to the preheader.
   MachineBasicBlock *MBB = MI->getParent();
@@ -619,14 +630,14 @@ bool MachineLICMBase::IsGuaranteedToExecute(MachineBasicBlock *BB) {
 }
 
 void MachineLICMBase::EnterScope(MachineBasicBlock *MBB) {
-  DEBUG(dbgs() << "Entering " << printMBBReference(*MBB) << '\n');
+  LLVM_DEBUG(dbgs() << "Entering " << printMBBReference(*MBB) << '\n');
 
   // Remember livein register pressure.
   BackTrace.push_back(RegPressure);
 }
 
 void MachineLICMBase::ExitScope(MachineBasicBlock *MBB) {
-  DEBUG(dbgs() << "Exiting " << printMBBReference(*MBB) << '\n');
+  LLVM_DEBUG(dbgs() << "Exiting " << printMBBReference(*MBB) << '\n');
   BackTrace.pop_back();
 }
 
@@ -726,6 +737,8 @@ void MachineLICMBase::HoistOutOfLoop(MachineDomTreeNode *HeaderN) {
       MachineInstr *MI = &*MII;
       if (!Hoist(MI, Preheader))
         UpdateRegPressure(MI);
+      // If we have hoisted an instruction that may store, it can only be a
+      // constant store.
       MII = NextMII;
     }
 
@@ -889,13 +902,86 @@ static bool mayLoadFromGOTOrConstantPool(MachineInstr &MI) {
   return false;
 }
 
+// This function iterates through all the operands of the input store MI and
+// checks that each register operand statisfies isCallerPreservedPhysReg.
+// This means, the value being stored and the address where it is being stored
+// is constant throughout the body of the function (not including prologue and
+// epilogue). When called with an MI that isn't a store, it returns false.
+// A future improvement can be to check if the store registers are constant
+// throughout the loop rather than throughout the funtion.
+static bool isInvariantStore(const MachineInstr &MI,
+                             const TargetRegisterInfo *TRI,
+                             const MachineRegisterInfo *MRI) {
+
+  bool FoundCallerPresReg = false;
+  if (!MI.mayStore() || MI.hasUnmodeledSideEffects() ||
+      (MI.getNumOperands() == 0))
+    return false;
+
+  // Check that all register operands are caller-preserved physical registers.
+  for (const MachineOperand &MO : MI.operands()) {
+    if (MO.isReg()) {
+      unsigned Reg = MO.getReg();
+      // If operand is a virtual register, check if it comes from a copy of a
+      // physical register.
+      if (TargetRegisterInfo::isVirtualRegister(Reg))
+        Reg = TRI->lookThruCopyLike(MO.getReg(), MRI);
+      if (TargetRegisterInfo::isVirtualRegister(Reg))
+        return false;
+      if (!TRI->isCallerPreservedPhysReg(Reg, *MI.getMF()))
+        return false;
+      else
+        FoundCallerPresReg = true;
+    } else if (!MO.isImm()) {
+        return false;
+    }
+  }
+  return FoundCallerPresReg;
+}
+
+// Return true if the input MI is a copy instruction that feeds an invariant
+// store instruction. This means that the src of the copy has to satisfy
+// isCallerPreservedPhysReg and atleast one of it's users should satisfy
+// isInvariantStore.
+static bool isCopyFeedingInvariantStore(const MachineInstr &MI,
+                                        const MachineRegisterInfo *MRI,
+                                        const TargetRegisterInfo *TRI) {
+
+  // FIXME: If targets would like to look through instructions that aren't
+  // pure copies, this can be updated to a query.
+  if (!MI.isCopy())
+    return false;
+
+  const MachineFunction *MF = MI.getMF();
+  // Check that we are copying a constant physical register.
+  unsigned CopySrcReg = MI.getOperand(1).getReg();
+  if (TargetRegisterInfo::isVirtualRegister(CopySrcReg))
+    return false;
+
+  if (!TRI->isCallerPreservedPhysReg(CopySrcReg, *MF))
+    return false;
+
+  unsigned CopyDstReg = MI.getOperand(0).getReg();
+  // Check if any of the uses of the copy are invariant stores.
+  assert (TargetRegisterInfo::isVirtualRegister(CopyDstReg) &&
+          "copy dst is not a virtual reg");
+
+  for (MachineInstr &UseMI : MRI->use_instructions(CopyDstReg)) {
+    if (UseMI.mayStore() && isInvariantStore(UseMI, TRI, MRI))
+      return true;
+  }
+  return false;
+}
+
 /// Returns true if the instruction may be a suitable candidate for LICM.
 /// e.g. If the instruction is a call, then it's obviously not safe to hoist it.
 bool MachineLICMBase::IsLICMCandidate(MachineInstr &I) {
   // Check if it's safe to move the instruction.
   bool DontMoveAcrossStore = true;
-  if (!I.isSafeToMove(AA, DontMoveAcrossStore))
+  if ((!I.isSafeToMove(AA, DontMoveAcrossStore)) &&
+      !(HoistConstStores && isInvariantStore(I, TRI, MRI))) {
     return false;
+  }
 
   // If it is load then check if it is guaranteed to execute by making sure that
   // it dominates all exiting blocks. If it doesn't, then there is a path out of
@@ -1115,12 +1201,15 @@ bool MachineLICMBase::IsProfitableToHoist(MachineInstr &MI) {
   // - When hoisting the last use of a value in the loop, that value no longer
   //   needs to be live in the loop. This lowers register pressure in the loop.
 
+  if (HoistConstStores &&  isCopyFeedingInvariantStore(MI, MRI, TRI))
+    return true;
+
   bool CheapInstr = IsCheapInstruction(MI);
   bool CreatesCopy = HasLoopPHIUse(&MI);
 
   // Don't hoist a cheap instruction if it would create a copy in the loop.
   if (CheapInstr && CreatesCopy) {
-    DEBUG(dbgs() << "Won't hoist cheap instr with loop PHI use: " << MI);
+    LLVM_DEBUG(dbgs() << "Won't hoist cheap instr with loop PHI use: " << MI);
     return false;
   }
 
@@ -1139,7 +1228,7 @@ bool MachineLICMBase::IsProfitableToHoist(MachineInstr &MI) {
     if (!TargetRegisterInfo::isVirtualRegister(Reg))
       continue;
     if (MO.isDef() && HasHighOperandLatency(MI, i, Reg)) {
-      DEBUG(dbgs() << "Hoist High Latency: " << MI);
+      LLVM_DEBUG(dbgs() << "Hoist High Latency: " << MI);
       ++NumHighLatency;
       return true;
     }
@@ -1157,14 +1246,14 @@ bool MachineLICMBase::IsProfitableToHoist(MachineInstr &MI) {
   // Visit BBs from header to current BB, if hoisting this doesn't cause
   // high register pressure, then it's safe to proceed.
   if (!CanCauseHighRegPressure(Cost, CheapInstr)) {
-    DEBUG(dbgs() << "Hoist non-reg-pressure: " << MI);
+    LLVM_DEBUG(dbgs() << "Hoist non-reg-pressure: " << MI);
     ++NumLowRP;
     return true;
   }
 
   // Don't risk increasing register pressure if it would create copies.
   if (CreatesCopy) {
-    DEBUG(dbgs() << "Won't hoist instr with loop PHI use: " << MI);
+    LLVM_DEBUG(dbgs() << "Won't hoist instr with loop PHI use: " << MI);
     return false;
   }
 
@@ -1173,7 +1262,7 @@ bool MachineLICMBase::IsProfitableToHoist(MachineInstr &MI) {
   // conservative.
   if (AvoidSpeculation &&
       (!IsGuaranteedToExecute(MI.getParent()) && !MayCSE(&MI))) {
-    DEBUG(dbgs() << "Won't speculate: " << MI);
+    LLVM_DEBUG(dbgs() << "Won't speculate: " << MI);
     return false;
   }
 
@@ -1181,7 +1270,7 @@ bool MachineLICMBase::IsProfitableToHoist(MachineInstr &MI) {
   // to be remat'ed.
   if (!TII->isTriviallyReMaterializable(MI, AA) &&
       !MI.isDereferenceableInvariantLoad(AA)) {
-    DEBUG(dbgs() << "Can't remat / high reg-pressure: " << MI);
+    LLVM_DEBUG(dbgs() << "Can't remat / high reg-pressure: " << MI);
     return false;
   }
 
@@ -1278,7 +1367,7 @@ bool MachineLICMBase::EliminateCSE(MachineInstr *MI,
     return false;
 
   if (const MachineInstr *Dup = LookForDuplicate(MI, CI->second)) {
-    DEBUG(dbgs() << "CSEing " << *MI << " with " << *Dup);
+    LLVM_DEBUG(dbgs() << "CSEing " << *MI << " with " << *Dup);
 
     // Replace virtual registers defined by MI by their counterparts defined
     // by Dup.
@@ -1351,16 +1440,21 @@ bool MachineLICMBase::Hoist(MachineInstr *MI, MachineBasicBlock *Preheader) {
     if (!MI) return false;
   }
 
+  // If we have hoisted an instruction that may store, it can only be a constant
+  // store.
+  if (MI->mayStore())
+    NumStoreConst++;
+
   // Now move the instructions to the predecessor, inserting it before any
   // terminator instructions.
-  DEBUG({
-      dbgs() << "Hoisting " << *MI;
-      if (MI->getParent()->getBasicBlock())
-        dbgs() << " from " << printMBBReference(*MI->getParent());
-      if (Preheader->getBasicBlock())
-        dbgs() << " to " << printMBBReference(*Preheader);
-      dbgs() << "\n";
-    });
+  LLVM_DEBUG({
+    dbgs() << "Hoisting " << *MI;
+    if (MI->getParent()->getBasicBlock())
+      dbgs() << " from " << printMBBReference(*MI->getParent());
+    if (Preheader->getBasicBlock())
+      dbgs() << " to " << printMBBReference(*Preheader);
+    dbgs() << "\n";
+  });
 
   // If this is the first instruction being hoisted to the preheader,
   // initialize the CSE map with potential common expressions.

@@ -12,13 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/PrettyDeclStackTrace.h"
 #include "clang/Basic/Attributes.h"
 #include "clang/Basic/PrettyStackTrace.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/LoopHint.h"
-#include "clang/Sema/PrettyDeclStackTrace.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/TypoCorrection.h"
 using namespace clang;
@@ -27,7 +27,7 @@ using namespace clang;
 // C99 6.8: Statements and Blocks.
 //===----------------------------------------------------------------------===//
 
-/// \brief Parse a standalone statement (for instance, as the body of an 'if',
+/// Parse a standalone statement (for instance, as the body of an 'if',
 /// 'while', or 'for').
 StmtResult Parser::ParseStatement(SourceLocation *TrailingElseLoc,
                                   bool AllowOpenMPStandalone) {
@@ -402,7 +402,7 @@ Retry:
   return Res;
 }
 
-/// \brief Parse an expression statement.
+/// Parse an expression statement.
 StmtResult Parser::ParseExprStatement() {
   // If a case keyword is missing, this is where it should be inserted.
   Token OldToken = Tok;
@@ -1957,7 +1957,7 @@ Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
   assert(Tok.is(tok::l_brace));
   SourceLocation LBraceLoc = Tok.getLocation();
 
-  PrettyDeclStackTraceEntry CrashInfo(Actions, Decl, LBraceLoc,
+  PrettyDeclStackTraceEntry CrashInfo(Actions.Context, Decl, LBraceLoc,
                                       "parsing function body");
 
   // Save and reset current vtordisp stack if we have entered a C++ method body.
@@ -1990,7 +1990,7 @@ Decl *Parser::ParseFunctionTryBlock(Decl *Decl, ParseScope &BodyScope) {
   assert(Tok.is(tok::kw_try) && "Expected 'try'");
   SourceLocation TryLoc = ConsumeToken();
 
-  PrettyDeclStackTraceEntry CrashInfo(Actions, Decl, TryLoc,
+  PrettyDeclStackTraceEntry CrashInfo(Actions.Context, Decl, TryLoc,
                                       "parsing function try block");
 
   // Constructor initializer list?

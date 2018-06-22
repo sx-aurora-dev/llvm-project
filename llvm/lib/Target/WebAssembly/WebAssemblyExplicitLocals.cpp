@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file converts any remaining registers into WebAssembly locals.
+/// This file converts any remaining registers into WebAssembly locals.
 ///
 /// After register stackification and register coloring, convert non-stackified
 /// registers into locals, inserting explicit get_local and set_local
@@ -60,6 +60,9 @@ public:
 } // end anonymous namespace
 
 char WebAssemblyExplicitLocals::ID = 0;
+INITIALIZE_PASS(WebAssemblyExplicitLocals, DEBUG_TYPE,
+                "Convert registers to WebAssembly locals", false, false)
+
 FunctionPass *llvm::createWebAssemblyExplicitLocals() {
   return new WebAssemblyExplicitLocals();
 }
@@ -86,6 +89,8 @@ static unsigned getDropOpcode(const TargetRegisterClass *RC) {
     return WebAssembly::DROP_F64;
   if (RC == &WebAssembly::V128RegClass)
     return WebAssembly::DROP_V128;
+  if (RC == &WebAssembly::EXCEPT_REFRegClass)
+    return WebAssembly::DROP_EXCEPT_REF;
   llvm_unreachable("Unexpected register class");
 }
 
@@ -101,6 +106,8 @@ static unsigned getGetLocalOpcode(const TargetRegisterClass *RC) {
     return WebAssembly::GET_LOCAL_F64;
   if (RC == &WebAssembly::V128RegClass)
     return WebAssembly::GET_LOCAL_V128;
+  if (RC == &WebAssembly::EXCEPT_REFRegClass)
+    return WebAssembly::GET_LOCAL_EXCEPT_REF;
   llvm_unreachable("Unexpected register class");
 }
 
@@ -116,6 +123,8 @@ static unsigned getSetLocalOpcode(const TargetRegisterClass *RC) {
     return WebAssembly::SET_LOCAL_F64;
   if (RC == &WebAssembly::V128RegClass)
     return WebAssembly::SET_LOCAL_V128;
+  if (RC == &WebAssembly::EXCEPT_REFRegClass)
+    return WebAssembly::SET_LOCAL_EXCEPT_REF;
   llvm_unreachable("Unexpected register class");
 }
 
@@ -131,6 +140,8 @@ static unsigned getTeeLocalOpcode(const TargetRegisterClass *RC) {
     return WebAssembly::TEE_LOCAL_F64;
   if (RC == &WebAssembly::V128RegClass)
     return WebAssembly::TEE_LOCAL_V128;
+  if (RC == &WebAssembly::EXCEPT_REFRegClass)
+    return WebAssembly::TEE_LOCAL_EXCEPT_REF;
   llvm_unreachable("Unexpected register class");
 }
 
@@ -144,6 +155,8 @@ static MVT typeForRegClass(const TargetRegisterClass *RC) {
     return MVT::f32;
   if (RC == &WebAssembly::F64RegClass)
     return MVT::f64;
+  if (RC == &WebAssembly::EXCEPT_REFRegClass)
+    return MVT::ExceptRef;
   llvm_unreachable("unrecognized register class");
 }
 
@@ -168,9 +181,9 @@ static MachineInstr *FindStartOfTree(MachineOperand &MO,
 }
 
 bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG(dbgs() << "********** Make Locals Explicit **********\n"
-                  "********** Function: "
-               << MF.getName() << '\n');
+  LLVM_DEBUG(dbgs() << "********** Make Locals Explicit **********\n"
+                       "********** Function: "
+                    << MF.getName() << '\n');
 
   // Disable this pass if directed to do so.
   if (DisableWebAssemblyExplicitLocals)
@@ -218,7 +231,7 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr &MI = *I++;
       assert(!WebAssembly::isArgument(MI));
 
-      if (MI.isDebugValue() || MI.isLabel())
+      if (MI.isDebugInstr() || MI.isLabel())
         continue;
 
       // Replace tee instructions with tee_local. The difference is that tee
@@ -362,7 +375,7 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
   // Assert that all registers have been stackified at this point.
   for (const MachineBasicBlock &MBB : MF) {
     for (const MachineInstr &MI : MBB) {
-      if (MI.isDebugValue() || MI.isLabel())
+      if (MI.isDebugInstr() || MI.isLabel())
         continue;
       for (const MachineOperand &MO : MI.explicit_operands()) {
         assert(

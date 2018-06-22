@@ -106,8 +106,8 @@ class X86FoldTablesEmitter {
 
     friend raw_ostream &operator<<(raw_ostream &OS,
                                    const X86FoldTableEntry &E) {
-      OS << "{ X86::" << E.RegInst->TheDef->getName().str()
-         << ", X86::" << E.MemInst->TheDef->getName().str() << ", ";
+      OS << "{ X86::" << E.RegInst->TheDef->getName()
+         << ", X86::" << E.MemInst->TheDef->getName() << ", ";
 
       if (E.IsLoad)
         OS << "TB_FOLDED_LOAD | ";
@@ -157,7 +157,7 @@ private:
 
   // Print the given table as a static const C++ array of type
   // X86MemoryFoldTableEntry.
-  void printTable(const FoldTable &Table, std::string TableName,
+  void printTable(const FoldTable &Table, StringRef TableName,
                   raw_ostream &OS) {
     OS << "static const X86MemoryFoldTableEntry MemoryFold" << TableName
        << "[] = {\n";
@@ -251,16 +251,6 @@ getMemOperandSize(const Record *MemRec, const bool IntrinsicSensitive = false) {
   llvm_unreachable("Memory operand's size not known!");
 }
 
-// Returns true if the record's list of defs includes the given def.
-static inline bool hasDefInList(const Record *Rec, const StringRef List,
-                                const StringRef Def) {
-  if (!Rec->isValueUnset(List)) {
-    return any_of(*(Rec->getValueAsListInit(List)),
-                  [Def](const Init *I) { return I->getAsString() == Def; });
-  }
-  return false;
-}
-
 // Return true if the instruction defined as a register flavor.
 static inline bool hasRegisterFormat(const Record *Inst) {
   const BitsInit *FormBits = Inst->getValueAsBitsInit("FormBits");
@@ -335,6 +325,7 @@ public:
             MemRec->getValueAsDef("OpPrefix") ||
         RegRec->getValueAsDef("OpMap") != MemRec->getValueAsDef("OpMap") ||
         RegRec->getValueAsDef("OpSize") != MemRec->getValueAsDef("OpSize") ||
+        RegRec->getValueAsDef("AdSize") != MemRec->getValueAsDef("AdSize") ||
         RegRec->getValueAsBit("hasVEX_4V") !=
             MemRec->getValueAsBit("hasVEX_4V") ||
         RegRec->getValueAsBit("hasEVEX_K") !=
@@ -350,6 +341,8 @@ public:
             MemRec->getValueAsBit("hasREX_WPrefix") ||
         RegRec->getValueAsBit("hasLockPrefix") !=
             MemRec->getValueAsBit("hasLockPrefix") ||
+        RegRec->getValueAsBit("hasNoTrackPrefix") !=
+            MemRec->getValueAsBit("hasNoTrackPrefix") ||
         !equalBitsInits(RegRec->getValueAsBitsInit("EVEX_LL"),
                         MemRec->getValueAsBitsInit("EVEX_LL")) ||
         !equalBitsInits(RegRec->getValueAsBitsInit("VEX_WPrefix"),
@@ -512,10 +505,8 @@ void X86FoldTablesEmitter::updateTables(const CodeGenInstruction *RegInstr,
   unsigned MemInSize = MemRec->getValueAsDag("InOperandList")->getNumArgs();
   unsigned RegInSize = RegRec->getValueAsDag("InOperandList")->getNumArgs();
 
-  // Instructions which have the WriteRMW value (Read-Modify-Write) should be
-  // added to Table2Addr.
-  if (hasDefInList(MemRec, "SchedRW", "WriteRMW") && MemOutSize != RegOutSize &&
-      MemInSize == RegInSize) {
+  // Instructions which Read-Modify-Write should be added to Table2Addr.
+  if (MemOutSize != RegOutSize && MemInSize == RegInSize) {
     addEntryWithFlags(Table2Addr, RegInstr, MemInstr, S, 0);
     return;
   }
@@ -549,7 +540,7 @@ void X86FoldTablesEmitter::updateTables(const CodeGenInstruction *RegInstr,
     }
   } else if (MemInSize == RegInSize + 1 && MemOutSize + 1 == RegOutSize) {
     // Store-Folding cases.
-    // If the memory form instruction performs performs a store, the *output*
+    // If the memory form instruction performs a store, the *output*
     // register of the register form instructions disappear and instead a
     // memory *input* operand appears in the memory form instruction.
     // For example:
@@ -557,7 +548,8 @@ void X86FoldTablesEmitter::updateTables(const CodeGenInstruction *RegInstr,
     //   MOVAPSmr => (outs), (ins f128mem:$dst, VR128:$src)
     Record *RegOpRec = RegInstr->Operands[RegOutSize - 1].Rec;
     Record *MemOpRec = MemInstr->Operands[RegOutSize - 1].Rec;
-    if (isRegisterOperand(RegOpRec) && isMemoryOperand(MemOpRec))
+    if (isRegisterOperand(RegOpRec) && isMemoryOperand(MemOpRec) &&
+        getRegOperandSize(RegOpRec) == getMemOperandSize(MemOpRec))
       addEntryWithFlags(Table0, RegInstr, MemInstr, S, 0);
   }
 

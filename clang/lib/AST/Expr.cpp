@@ -230,7 +230,7 @@ SourceLocation Expr::getExprLoc() const {
 // Primary Expressions.
 //===----------------------------------------------------------------------===//
 
-/// \brief Compute the type-, value-, and instantiation-dependence of a 
+/// Compute the type-, value-, and instantiation-dependence of a 
 /// declaration reference
 /// based on the declaration being referenced.
 static void computeDeclRefDependence(const ASTContext &Ctx, NamedDecl *D,
@@ -881,7 +881,8 @@ StringLiteral *StringLiteral::CreateEmpty(const ASTContext &C,
   void *Mem =
       C.Allocate(sizeof(StringLiteral) + sizeof(SourceLocation) * (NumStrs - 1),
                  alignof(StringLiteral));
-  StringLiteral *SL = new (Mem) StringLiteral(QualType());
+  StringLiteral *SL =
+      new (Mem) StringLiteral(C.adjustStringLiteralBaseType(QualType()));
   SL->CharByteWidth = 0;
   SL->Length = 0;
   SL->NumConcatenated = NumStrs;
@@ -1633,8 +1634,8 @@ bool CastExpr::CastConsistency() const {
   return true;
 }
 
-const char *CastExpr::getCastKindName() const {
-  switch (getCastKind()) {
+const char *CastExpr::getCastKindName(CastKind CK) {
+  switch (CK) {
 #define CAST_OPERATION(Name) case CK_##Name: return #Name;
 #include "clang/AST/OperationKinds.def"
   }
@@ -2048,6 +2049,10 @@ bool Expr::isUnusedResultAWarning(const Expr *&WarnE, SourceLocation &Loc,
       isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
   case GenericSelectionExprClass:
     return cast<GenericSelectionExpr>(this)->getResultExpr()->
+      isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
+  case CoawaitExprClass:
+  case CoyieldExprClass:
+    return cast<CoroutineSuspendExpr>(this)->getResumeExpr()->
       isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
   case ChooseExprClass:
     return cast<ChooseExpr>(this)->getChosenSubExpr()->
@@ -2628,7 +2633,7 @@ bool Expr::isDefaultArgument() const {
   return isa<CXXDefaultArgExpr>(E);
 }
 
-/// \brief Skip over any no-op casts and any temporary-binding
+/// Skip over any no-op casts and any temporary-binding
 /// expressions.
 static const Expr *skipTemporaryBindingsNoOpCastsAndParens(const Expr *E) {
   if (const MaterializeTemporaryExpr *M = dyn_cast<MaterializeTemporaryExpr>(E))
@@ -2930,7 +2935,7 @@ bool CallExpr::isBuiltinAssumeFalse(const ASTContext &Ctx) const {
 }
 
 namespace {
-  /// \brief Look for any side effects within a Stmt.
+  /// Look for any side effects within a Stmt.
   class SideEffectFinder : public ConstEvaluatedExprVisitor<SideEffectFinder> {
     typedef ConstEvaluatedExprVisitor<SideEffectFinder> Inherited;
     const bool IncludePossibleEffects;
@@ -3226,7 +3231,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
 }
 
 namespace {
-  /// \brief Look for a call to a non-trivial function within an expression.
+  /// Look for a call to a non-trivial function within an expression.
   class NonTrivialCallFinder : public ConstEvaluatedExprVisitor<NonTrivialCallFinder>
   {
     typedef ConstEvaluatedExprVisitor<NonTrivialCallFinder> Inherited;
@@ -3402,7 +3407,7 @@ Expr::isNullPointerConstant(ASTContext &Ctx,
   return NPCK_ZeroExpression;
 }
 
-/// \brief If this expression is an l-value for an Objective C
+/// If this expression is an l-value for an Objective C
 /// property, find the underlying property reference expression.
 const ObjCPropertyRefExpr *Expr::getObjCProperty() const {
   const Expr *E = this;
@@ -3458,10 +3463,11 @@ FieldDecl *Expr::getSourceBitField() {
       if (Field->isBitField())
         return Field;
 
-  if (ObjCIvarRefExpr *IvarRef = dyn_cast<ObjCIvarRefExpr>(E))
-    if (FieldDecl *Ivar = dyn_cast<FieldDecl>(IvarRef->getDecl()))
-      if (Ivar->isBitField())
-        return Ivar;
+  if (ObjCIvarRefExpr *IvarRef = dyn_cast<ObjCIvarRefExpr>(E)) {
+    FieldDecl *Ivar = IvarRef->getDecl();
+    if (Ivar->isBitField())
+      return Ivar;
+  }
 
   if (DeclRefExpr *DeclRef = dyn_cast<DeclRefExpr>(E)) {
     if (FieldDecl *Field = dyn_cast<FieldDecl>(DeclRef->getDecl()))
@@ -3825,7 +3831,7 @@ Expr *DesignatedInitExpr::getArrayRangeEnd(const Designator &D) const {
   return getSubExpr(D.ArrayOrRange.Index + 2);
 }
 
-/// \brief Replaces the designator at index @p Idx with the series
+/// Replaces the designator at index @p Idx with the series
 /// of designators in [First, Last).
 void DesignatedInitExpr::ExpandDesignator(const ASTContext &C, unsigned Idx,
                                           const Designator *First,
@@ -4046,6 +4052,8 @@ unsigned AtomicExpr::getNumSubExprs(AtomicOp Op) {
   case AO__atomic_or_fetch:
   case AO__atomic_xor_fetch:
   case AO__atomic_nand_fetch:
+  case AO__atomic_fetch_min:
+  case AO__atomic_fetch_max:
     return 3;
 
   case AO__opencl_atomic_store:

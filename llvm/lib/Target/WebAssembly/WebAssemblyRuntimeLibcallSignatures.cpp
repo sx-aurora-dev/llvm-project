@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file contains signature information for runtime libcalls.
+/// This file contains signature information for runtime libcalls.
 ///
 /// CodeGen uses external symbols, which it refers to by name. The WebAssembly
 /// target needs type information for all functions. This file contains a big
@@ -59,13 +59,16 @@ enum RuntimeLibcallSignature {
   i32_func_f32_f32,
   i32_func_f64_f64,
   i32_func_i32_i32,
+  i32_func_i32_i32_iPTR,
   i64_func_i64_i64,
+  i64_func_i64_i64_iPTR,
   i64_i64_func_f32,
   i64_i64_func_f64,
   i16_i16_func_i16_i16,
   i32_i32_func_i32_i32,
   i64_i64_func_i64_i64,
   i64_i64_func_i64_i64_i64_i64,
+  i64_i64_func_i64_i64_i64_i64_iPTR,
   i64_i64_i64_i64_func_i64_i64_i64_i64,
   i64_i64_func_i64_i64_i32,
   iPTR_func_iPTR_i32_iPTR,
@@ -109,9 +112,9 @@ struct RuntimeLibcallSignatureTable {
     Table[RTLIB::MUL_I32] = i32_func_i32_i32;
     Table[RTLIB::MUL_I64] = i64_func_i64_i64;
     Table[RTLIB::MUL_I128] = i64_i64_func_i64_i64_i64_i64;
-    Table[RTLIB::MULO_I32] = i32_func_i32_i32;
-    Table[RTLIB::MULO_I64] = i64_func_i64_i64;
-    Table[RTLIB::MULO_I128] = i64_i64_func_i64_i64_i64_i64;
+    Table[RTLIB::MULO_I32] = i32_func_i32_i32_iPTR;
+    Table[RTLIB::MULO_I64] = i64_func_i64_i64_iPTR;
+    Table[RTLIB::MULO_I128] = i64_i64_func_i64_i64_i64_i64_iPTR;
     Table[RTLIB::SDIV_I8] = i8_func_i8_i8;
     Table[RTLIB::SDIV_I16] = i16_func_i16_i16;
     Table[RTLIB::SDIV_I32] = i32_func_i32_i32;
@@ -491,9 +494,8 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
   assert(Rets.empty());
   assert(Params.empty());
 
-  WebAssembly::ExprType iPTR = Subtarget.hasAddr64() ?
-                               WebAssembly::ExprType::I64 :
-                               WebAssembly::ExprType::I32;
+  wasm::ValType iPTR =
+      Subtarget.hasAddr64() ? wasm::ValType::I64 : wasm::ValType::I32;
 
   auto& Table = RuntimeLibcallSignatures->Table;
   switch (Table[LC]) {
@@ -600,13 +602,13 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     break;
   case func_f32_iPTR_iPTR:
     Params.push_back(wasm::ValType::F32);
-    Params.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
+    Params.push_back(iPTR);
     break;
   case func_f64_iPTR_iPTR:
     Params.push_back(wasm::ValType::F64);
-    Params.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
+    Params.push_back(iPTR);
     break;
   case i16_func_i16_i16:
     Rets.push_back(wasm::ValType::I32);
@@ -628,17 +630,29 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Params.push_back(wasm::ValType::I32);
     Params.push_back(wasm::ValType::I32);
     break;
+  case i32_func_i32_i32_iPTR:
+    Rets.push_back(wasm::ValType::I32);
+    Params.push_back(wasm::ValType::I32);
+    Params.push_back(wasm::ValType::I32);
+    Params.push_back(iPTR);
+    break;
   case i64_func_i64_i64:
     Rets.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
+    break;
+  case i64_func_i64_i64_iPTR:
+    Rets.push_back(wasm::ValType::I64);
+    Params.push_back(wasm::ValType::I64);
+    Params.push_back(wasm::ValType::I64);
+    Params.push_back(iPTR);
     break;
   case i64_i64_func_f32:
 #if 0 // TODO: Enable this when wasm gets multiple-return-value support.
     Rets.push_back(wasm::ValType::I64);
     Rets.push_back(wasm::ValType::I64);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::F32);
     break;
@@ -647,7 +661,7 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I64);
     Rets.push_back(wasm::ValType::I64);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::F64);
     break;
@@ -656,7 +670,7 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I32);
     Rets.push_back(wasm::ValType::I32);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::I32);
     Params.push_back(wasm::ValType::I32);
@@ -666,7 +680,7 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I32);
     Rets.push_back(wasm::ValType::I32);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::I32);
     Params.push_back(wasm::ValType::I32);
@@ -676,7 +690,7 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I64);
     Rets.push_back(wasm::ValType::I64);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
@@ -686,12 +700,25 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I64);
     Rets.push_back(wasm::ValType::I64);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
+    break;
+  case i64_i64_func_i64_i64_i64_i64_iPTR:
+#if 0 // TODO: Enable this when wasm gets multiple-return-value support.
+    Rets.push_back(wasm::ValType::I64);
+    Rets.push_back(wasm::ValType::I64);
+#else
+    Params.push_back(iPTR);
+#endif
+    Params.push_back(wasm::ValType::I64);
+    Params.push_back(wasm::ValType::I64);
+    Params.push_back(wasm::ValType::I64);
+    Params.push_back(wasm::ValType::I64);
+    Params.push_back(iPTR);
     break;
   case i64_i64_i64_i64_func_i64_i64_i64_i64:
 #if 0 // TODO: Enable this when wasm gets multiple-return-value support.
@@ -700,7 +727,7 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I64);
     Rets.push_back(wasm::ValType::I64);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
@@ -714,23 +741,23 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
     Rets.push_back(wasm::ValType::I64);
     Rets.push_back(wasm::ValType::I64);
 #else
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
 #endif
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I32);
     break;
   case iPTR_func_iPTR_i32_iPTR:
-    Rets.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
+    Rets.push_back(iPTR);
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::I32);
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     break;
   case iPTR_func_iPTR_iPTR_iPTR:
-    Rets.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
+    Rets.push_back(iPTR);
+    Params.push_back(iPTR);
+    Params.push_back(iPTR);
+    Params.push_back(iPTR);
     break;
   case f32_func_f32_f32_f32:
     Rets.push_back(wasm::ValType::F32);
@@ -747,39 +774,39 @@ void llvm::GetSignature(const WebAssemblySubtarget &Subtarget,
   case func_i64_i64_iPTR_iPTR:
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
-    Params.push_back(wasm::ValType(iPTR));
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
+    Params.push_back(iPTR);
     break;
   case func_iPTR_f32:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::F32);
     break;
   case func_iPTR_f64:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::F64);
     break;
   case func_iPTR_i32:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::I32);
     break;
   case func_iPTR_i64:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::I64);
     break;
   case func_iPTR_i64_i64:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     break;
   case func_iPTR_i64_i64_i64_i64:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     break;
   case func_iPTR_i64_i64_i64_i64_i64_i64:
-    Params.push_back(wasm::ValType(iPTR));
+    Params.push_back(iPTR);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
     Params.push_back(wasm::ValType::I64);
