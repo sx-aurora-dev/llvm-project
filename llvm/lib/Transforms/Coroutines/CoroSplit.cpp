@@ -28,6 +28,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
@@ -59,7 +60,6 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <cassert>
 #include <cstddef>
@@ -250,7 +250,7 @@ static Function *createClone(Function &F, Twine Suffix, coro::Shape &Shape,
   auto *FnTy = cast<FunctionType>(FnPtrTy->getElementType());
 
   Function *NewF =
-      Function::Create(FnTy, GlobalValue::LinkageTypes::InternalLinkage,
+      Function::Create(FnTy, GlobalValue::LinkageTypes::ExternalLinkage,
                        F.getName() + Suffix, M);
   NewF->addParamAttr(0, Attribute::NonNull);
   NewF->addParamAttr(0, Attribute::NoAlias);
@@ -265,7 +265,7 @@ static Function *createClone(Function &F, Twine Suffix, coro::Shape &Shape,
   SmallVector<ReturnInst *, 4> Returns;
 
   CloneFunctionInto(NewF, &F, VMap, /*ModuleLevelChanges=*/true, Returns);
-  NewF->setDSOLocal(true);
+  NewF->setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
 
   // Remove old returns.
   for (ReturnInst *Return : Returns)
@@ -654,7 +654,7 @@ getNotRelocatableInstructions(CoroBeginInst *CoroBegin,
   // set.
   do {
     Instruction *Current = Work.pop_back_val();
-    DEBUG(dbgs() << "CoroSplit: Will not relocate: " << *Current << "\n");
+    LLVM_DEBUG(dbgs() << "CoroSplit: Will not relocate: " << *Current << "\n");
     DoNotRelocate.insert(Current);
     for (Value *U : Current->operands()) {
       auto *I = dyn_cast<Instruction>(U);
@@ -850,8 +850,8 @@ struct CoroSplit : public CallGraphSCCPass {
     for (Function *F : Coroutines) {
       Attribute Attr = F->getFnAttribute(CORO_PRESPLIT_ATTR);
       StringRef Value = Attr.getValueAsString();
-      DEBUG(dbgs() << "CoroSplit: Processing coroutine '" << F->getName()
-                   << "' state: " << Value << "\n");
+      LLVM_DEBUG(dbgs() << "CoroSplit: Processing coroutine '" << F->getName()
+                        << "' state: " << Value << "\n");
       if (Value == UNPREPARED_FOR_SPLIT) {
         prepareForSplit(*F, CG);
         continue;

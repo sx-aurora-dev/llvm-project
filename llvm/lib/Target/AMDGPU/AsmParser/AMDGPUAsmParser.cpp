@@ -26,7 +26,6 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
-#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -46,6 +45,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -443,7 +443,7 @@ public:
   }
 
   bool isVSrcB32() const {
-    return isVCSrcF32() || isLiteralImm(MVT::i32);
+    return isVCSrcF32() || isLiteralImm(MVT::i32) || isExpr();
   }
 
   bool isVSrcB64() const {
@@ -460,7 +460,7 @@ public:
   }
 
   bool isVSrcF32() const {
-    return isVCSrcF32() || isLiteralImm(MVT::f32);
+    return isVCSrcF32() || isLiteralImm(MVT::f32) || isExpr();
   }
 
   bool isVSrcF64() const {
@@ -864,7 +864,7 @@ private:
                            unsigned& RegNum, unsigned& RegWidth,
                            unsigned *DwordRegIndex);
   void cvtMubufImpl(MCInst &Inst, const OperandVector &Operands,
-                    bool IsAtomic, bool IsAtomicReturn);
+                    bool IsAtomic, bool IsAtomicReturn, bool IsLds = false);
   void cvtDSImpl(MCInst &Inst, const OperandVector &Operands,
                  bool IsGdsHardcoded);
 
@@ -1053,6 +1053,7 @@ private:
   bool validateEarlyClobberLimitations(const MCInst &Inst);
   bool validateIntClampSupported(const MCInst &Inst);
   bool validateMIMGAtomicDMask(const MCInst &Inst);
+  bool validateMIMGGatherDMask(const MCInst &Inst);
   bool validateMIMGDataSize(const MCInst &Inst);
   bool validateMIMGR128(const MCInst &Inst);
   bool validateMIMGD16(const MCInst &Inst);
@@ -1092,6 +1093,7 @@ public:
   void cvtMubuf(MCInst &Inst, const OperandVector &Operands) { cvtMubufImpl(Inst, Operands, false, false); }
   void cvtMubufAtomic(MCInst &Inst, const OperandVector &Operands) { cvtMubufImpl(Inst, Operands, true, false); }
   void cvtMubufAtomicReturn(MCInst &Inst, const OperandVector &Operands) { cvtMubufImpl(Inst, Operands, true, true); }
+  void cvtMubufLds(MCInst &Inst, const OperandVector &Operands) { cvtMubufImpl(Inst, Operands, false, false, true); }
   void cvtMtbuf(MCInst &Inst, const OperandVector &Operands);
 
   AMDGPUOperand::Ptr defaultGLC() const;
@@ -2299,7 +2301,7 @@ bool AMDGPUAsmParser::validateMIMGDataSize(const MCInst &Inst) {
   if ((Desc.TSFlags & SIInstrFlags::MIMG) == 0)
     return true;
 
-  // Gather4 instructions seem to have special rules not described in spec.
+  // Gather4 instructions do not need validation: dst size is hardcoded.
   if (Desc.TSFlags & SIInstrFlags::Gather4)
     return true;
 
@@ -2343,6 +2345,25 @@ bool AMDGPUAsmParser::validateMIMGAtomicDMask(const MCInst &Inst) {
   // may use 0x1 and 0x3. However these limitations are
   // verified when we check that dmask matches dst size.
   return DMask == 0x1 || DMask == 0x3 || DMask == 0xf;
+}
+
+bool AMDGPUAsmParser::validateMIMGGatherDMask(const MCInst &Inst) {
+
+  const unsigned Opc = Inst.getOpcode();
+  const MCInstrDesc &Desc = MII.get(Opc);
+
+  if ((Desc.TSFlags & SIInstrFlags::Gather4) == 0)
+    return true;
+
+  int DMaskIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::dmask);
+  unsigned DMask = Inst.getOperand(DMaskIdx).getImm() & 0xf;
+
+  // GATHER4 instructions use dmask in a different fashion compared to
+  // other MIMG instructions. The only useful DMASK values are
+  // 1=red, 2=green, 4=blue, 8=alpha. (e.g. 1 returns
+  // (red,red,red,red) etc.) The ISA document doesn't mention
+  // this.
+  return DMask == 0x1 || DMask == 0x2 || DMask == 0x4 || DMask == 0x8;
 }
 
 bool AMDGPUAsmParser::validateMIMGR128(const MCInst &Inst) {
@@ -2410,6 +2431,11 @@ bool AMDGPUAsmParser::validateInstruction(const MCInst &Inst,
   if (!validateMIMGAtomicDMask(Inst)) {
     Error(IDLoc,
       "invalid atomic image dmask");
+    return false;
+  }
+  if (!validateMIMGGatherDMask(Inst)) {
+    Error(IDLoc,
+      "invalid image_gather dmask: only one bit must be set");
     return false;
   }
 
@@ -2582,6 +2608,13 @@ bool AMDGPUAsmParser::ParseDirectiveHSACodeObjectISA() {
 
 bool AMDGPUAsmParser::ParseAMDKernelCodeTValue(StringRef ID,
                                                amd_kernel_code_t &Header) {
+  // max_scratch_backing_memory_byte_size is deprecated. Ignore it while parsing
+  // assembly for backwards compatibility.
+  if (ID == "max_scratch_backing_memory_byte_size") {
+    Parser.eatToEndOfStatement();
+    return false;
+  }
+
   SmallString<40> ErrStr;
   raw_svector_ostream Err(ErrStr);
   if (!parseAmdKernelCodeField(ID, getParser(), Header, Err)) {
@@ -4081,7 +4114,10 @@ AMDGPUOperand::Ptr AMDGPUAsmParser::defaultTFE() const {
 
 void AMDGPUAsmParser::cvtMubufImpl(MCInst &Inst,
                                const OperandVector &Operands,
-                               bool IsAtomic, bool IsAtomicReturn) {
+                               bool IsAtomic,
+                               bool IsAtomicReturn,
+                               bool IsLds) {
+  bool IsLdsOpcode = IsLds;
   bool HasLdsModifier = false;
   OptionalImmIndexMap OptionalIdx;
   assert(IsAtomicReturn ? IsAtomic : true);
@@ -4121,10 +4157,11 @@ void AMDGPUAsmParser::cvtMubufImpl(MCInst &Inst,
   // optional modifiers and llvm asm matcher regards this 'lds'
   // modifier as an optional one. As a result, an lds version
   // of opcode may be selected even if it has no 'lds' modifier.
-  if (!HasLdsModifier) {
+  if (IsLdsOpcode && !HasLdsModifier) {
     int NoLdsOpcode = AMDGPU::getMUBUFNoLdsInst(Inst.getOpcode());
     if (NoLdsOpcode != -1) { // Got lds version - correct it.
       Inst.setOpcode(NoLdsOpcode);
+      IsLdsOpcode = false;
     }
   }
 
@@ -4140,7 +4177,7 @@ void AMDGPUAsmParser::cvtMubufImpl(MCInst &Inst,
   }
   addOptionalImmOperand(Inst, Operands, OptionalIdx, AMDGPUOperand::ImmTySLC);
 
-  if (!HasLdsModifier) { // tfe is not legal with lds opcodes
+  if (!IsLdsOpcode) { // tfe is not legal with lds opcodes
     addOptionalImmOperand(Inst, Operands, OptionalIdx, AMDGPUOperand::ImmTyTFE);
   }
 }
@@ -4564,12 +4601,14 @@ void AMDGPUAsmParser::cvtVOP3(MCInst &Inst, const OperandVector &Operands,
     addOptionalImmOperand(Inst, Operands, OptionalIdx, AMDGPUOperand::ImmTyOModSI);
   }
 
-  // special case v_mac_{f16, f32}:
+  // Special case v_mac_{f16, f32} and v_fmac_f32 (gfx906):
   // it has src2 register operand that is tied to dst operand
   // we don't allow modifiers for this operand in assembler so src2_modifiers
-  // should be 0
-  if (Opc == AMDGPU::V_MAC_F32_e64_si || Opc == AMDGPU::V_MAC_F32_e64_vi ||
-      Opc == AMDGPU::V_MAC_F16_e64_vi) {
+  // should be 0.
+  if (Opc == AMDGPU::V_MAC_F32_e64_si ||
+      Opc == AMDGPU::V_MAC_F32_e64_vi ||
+      Opc == AMDGPU::V_MAC_F16_e64_vi ||
+      Opc == AMDGPU::V_FMAC_F32_e64_vi) {
     auto it = Inst.begin();
     std::advance(it, AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src2_modifiers));
     it = Inst.insert(it, MCOperand::createImm(0)); // no modifiers for src2
@@ -4671,21 +4710,23 @@ void AMDGPUAsmParser::cvtVOP3P(MCInst &Inst,
 //===----------------------------------------------------------------------===//
 
 bool AMDGPUOperand::isDPPCtrl() const {
+  using namespace AMDGPU::DPP;
+
   bool result = isImm() && getImmTy() == ImmTyDppCtrl && isUInt<9>(getImm());
   if (result) {
     int64_t Imm = getImm();
-    return ((Imm >= 0x000) && (Imm <= 0x0ff)) ||
-           ((Imm >= 0x101) && (Imm <= 0x10f)) ||
-           ((Imm >= 0x111) && (Imm <= 0x11f)) ||
-           ((Imm >= 0x121) && (Imm <= 0x12f)) ||
-           (Imm == 0x130) ||
-           (Imm == 0x134) ||
-           (Imm == 0x138) ||
-           (Imm == 0x13c) ||
-           (Imm == 0x140) ||
-           (Imm == 0x141) ||
-           (Imm == 0x142) ||
-           (Imm == 0x143);
+    return (Imm >= DppCtrl::QUAD_PERM_FIRST && Imm <= DppCtrl::QUAD_PERM_LAST) ||
+           (Imm >= DppCtrl::ROW_SHL_FIRST && Imm <= DppCtrl::ROW_SHL_LAST) ||
+           (Imm >= DppCtrl::ROW_SHR_FIRST && Imm <= DppCtrl::ROW_SHR_LAST) ||
+           (Imm >= DppCtrl::ROW_ROR_FIRST && Imm <= DppCtrl::ROW_ROR_LAST) ||
+           (Imm == DppCtrl::WAVE_SHL1) ||
+           (Imm == DppCtrl::WAVE_ROL1) ||
+           (Imm == DppCtrl::WAVE_SHR1) ||
+           (Imm == DppCtrl::WAVE_ROR1) ||
+           (Imm == DppCtrl::ROW_MIRROR) ||
+           (Imm == DppCtrl::ROW_HALF_MIRROR) ||
+           (Imm == DppCtrl::BCAST15) ||
+           (Imm == DppCtrl::BCAST31);
   }
   return false;
 }
@@ -4704,6 +4745,8 @@ bool AMDGPUOperand::isU16Imm() const {
 
 OperandMatchResultTy
 AMDGPUAsmParser::parseDPPCtrl(OperandVector &Operands) {
+  using namespace AMDGPU::DPP;
+
   SMLoc S = Parser.getTok().getLoc();
   StringRef Prefix;
   int64_t Int;
@@ -4715,10 +4758,10 @@ AMDGPUAsmParser::parseDPPCtrl(OperandVector &Operands) {
   }
 
   if (Prefix == "row_mirror") {
-    Int = 0x140;
+    Int = DppCtrl::ROW_MIRROR;
     Parser.Lex();
   } else if (Prefix == "row_half_mirror") {
-    Int = 0x141;
+    Int = DppCtrl::ROW_HALF_MIRROR;
     Parser.Lex();
   } else {
     // Check to prevent parseDPPCtrlOps from eating invalid tokens
@@ -4770,24 +4813,24 @@ AMDGPUAsmParser::parseDPPCtrl(OperandVector &Operands) {
         return MatchOperand_ParseFail;
 
       if (Prefix == "row_shl" && 1 <= Int && Int <= 15) {
-        Int |= 0x100;
+        Int |= DppCtrl::ROW_SHL0;
       } else if (Prefix == "row_shr" && 1 <= Int && Int <= 15) {
-        Int |= 0x110;
+        Int |= DppCtrl::ROW_SHR0;
       } else if (Prefix == "row_ror" && 1 <= Int && Int <= 15) {
-        Int |= 0x120;
+        Int |= DppCtrl::ROW_ROR0;
       } else if (Prefix == "wave_shl" && 1 == Int) {
-        Int = 0x130;
+        Int = DppCtrl::WAVE_SHL1;
       } else if (Prefix == "wave_rol" && 1 == Int) {
-        Int = 0x134;
+        Int = DppCtrl::WAVE_ROL1;
       } else if (Prefix == "wave_shr" && 1 == Int) {
-        Int = 0x138;
+        Int = DppCtrl::WAVE_SHR1;
       } else if (Prefix == "wave_ror" && 1 == Int) {
-        Int = 0x13C;
+        Int = DppCtrl::WAVE_ROR1;
       } else if (Prefix == "row_bcast") {
         if (Int == 15) {
-          Int = 0x142;
+          Int = DppCtrl::BCAST15;
         } else if (Int == 31) {
-          Int = 0x143;
+          Int = DppCtrl::BCAST31;
         } else {
           return MatchOperand_ParseFail;
         }

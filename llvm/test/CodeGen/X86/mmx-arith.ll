@@ -80,6 +80,7 @@ define void @test0(x86_mmx* %A, x86_mmx* %B) {
 ; X32-NEXT:    emms
 ; X32-NEXT:    movl %ebp, %esp
 ; X32-NEXT:    popl %ebp
+; X32-NEXT:    .cfi_def_cfa %esp, 4
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: test0:
@@ -415,6 +416,7 @@ define void @test2(x86_mmx* %A, x86_mmx* %B) {
 ; X32-NEXT:    emms
 ; X32-NEXT:    movl %ebp, %esp
 ; X32-NEXT:    popl %ebp
+; X32-NEXT:    .cfi_def_cfa %esp, 4
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: test2:
@@ -580,7 +582,7 @@ define <1 x i64> @test3(<1 x i64>* %a, <1 x i64>* %b, i32 %count) nounwind {
 ; X32-NEXT:    # =>This Inner Loop Header: Depth=1
 ; X32-NEXT:    movl 8(%ebp), %ecx
 ; X32-NEXT:    movl %ecx, %esi
-; X32-NEXT:    movl (%esi,%ebx,8), %ecx
+; X32-NEXT:    movl (%ecx,%ebx,8), %ecx
 ; X32-NEXT:    movl 4(%esi,%ebx,8), %esi
 ; X32-NEXT:    movl 12(%ebp), %edi
 ; X32-NEXT:    addl (%edi,%ebx,8), %ecx

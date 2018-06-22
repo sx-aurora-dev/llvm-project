@@ -39,7 +39,7 @@ class Value;
 
 namespace objcarc {
 
-/// \brief This is similar to BasicAliasAnalysis, and it uses many of the same
+/// This is similar to BasicAliasAnalysis, and it uses many of the same
 /// techniques, except it uses special ObjC-specific reasoning about pointer
 /// relationships.
 ///
@@ -55,6 +55,8 @@ class ProvenanceAnalysis {
   using CachedResultsTy = DenseMap<ValuePairTy, bool>;
 
   CachedResultsTy CachedResults;
+
+  DenseMap<const Value *, const Value *> UnderlyingObjCPtrCache;
 
   bool relatedCheck(const Value *A, const Value *B, const DataLayout &DL);
   bool relatedSelect(const SelectInst *A, const Value *B);
@@ -73,6 +75,7 @@ public:
 
   void clear() {
     CachedResults.clear();
+    UnderlyingObjCPtrCache.clear();
   }
 };
 

@@ -8,6 +8,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "CanonicalIncludes.h"
+#include "../Headers.h"
+#include "clang/Driver/Types.h"
 #include "llvm/Support/Regex.h"
 
 namespace clang {
@@ -27,8 +29,39 @@ void CanonicalIncludes::addRegexMapping(llvm::StringRef RE,
   this->RegexHeaderMappingTable.emplace_back(llvm::Regex(RE), CanonicalPath);
 }
 
-llvm::StringRef CanonicalIncludes::mapHeader(llvm::StringRef Header) const {
+void CanonicalIncludes::addSymbolMapping(llvm::StringRef QualifiedName,
+                                         llvm::StringRef CanonicalPath) {
+  this->SymbolMapping[QualifiedName] = CanonicalPath;
+}
+
+llvm::StringRef
+CanonicalIncludes::mapHeader(llvm::ArrayRef<std::string> Headers,
+                             llvm::StringRef QualifiedName) const {
+  assert(!Headers.empty());
+  auto SE = SymbolMapping.find(QualifiedName);
+  if (SE != SymbolMapping.end())
+    return SE->second;
   std::lock_guard<std::mutex> Lock(RegexMutex);
+  // Find the first header such that the extension is not '.inc', and isn't a
+  // recognized non-header file
+  auto I =
+      std::find_if(Headers.begin(), Headers.end(), [](llvm::StringRef Include) {
+        // Skip .inc file whose including header file should
+        // be #included instead.
+        return !Include.endswith(".inc");
+      });
+  if (I == Headers.end())
+    return Headers[0]; // Fallback to the declaring header.
+  StringRef Header = *I;
+  // If Header is not expected be included (e.g. .cc file), we fall back to
+  // the declaring header.
+  StringRef Ext = llvm::sys::path::extension(Header).trim('.');
+  // Include-able headers must have precompile type. Treat files with
+  // non-recognized extenstions (TY_INVALID) as headers.
+  auto ExtType = driver::types::lookupTypeForExtension(Ext);
+  if ((ExtType != driver::types::TY_INVALID) &&
+      !driver::types::onlyPrecompileType(ExtType))
+    return Headers[0];
   for (auto &Entry : RegexHeaderMappingTable) {
 #ifndef NDEBUG
     std::string Dummy;
@@ -55,8 +88,8 @@ collectIWYUHeaderMaps(CanonicalIncludes *Includes) {
       // FIXME(ioeric): resolve the header and store actual file path. For now,
       // we simply assume the written header is suitable to be #included.
       Includes->addMapping(PP.getSourceManager().getFilename(Range.getBegin()),
-                           Text.startswith("<") ? Text.str()
-                                                : ("\"" + Text + "\"").str());
+                           isLiteralInclude(Text) ? Text.str()
+                                                  : ("\"" + Text + "\"").str());
       return false;
     }
 
@@ -67,6 +100,57 @@ collectIWYUHeaderMaps(CanonicalIncludes *Includes) {
 }
 
 void addSystemHeadersMapping(CanonicalIncludes *Includes) {
+  static const std::vector<std::pair<const char *, const char *>> SymbolMap = {
+      {"std::addressof", "<memory>"},
+      // Map symbols in <iosfwd> to their preferred includes.
+      {"std::basic_filebuf", "<fstream>"},
+      {"std::basic_fstream", "<fstream>"},
+      {"std::basic_ifstream", "<fstream>"},
+      {"std::basic_ofstream", "<fstream>"},
+      {"std::filebuf", "<fstream>"},
+      {"std::fstream", "<fstream>"},
+      {"std::ifstream", "<fstream>"},
+      {"std::ofstream", "<fstream>"},
+      {"std::wfilebuf", "<fstream>"},
+      {"std::wfstream", "<fstream>"},
+      {"std::wifstream", "<fstream>"},
+      {"std::wofstream", "<fstream>"},
+      {"std::basic_ios", "<ios>"},
+      {"std::ios", "<ios>"},
+      {"std::wios", "<ios>"},
+      {"std::basic_iostream", "<iostream>"},
+      {"std::iostream", "<iostream>"},
+      {"std::wiostream", "<iostream>"},
+      {"std::basic_istream", "<istream>"},
+      {"std::istream", "<istream>"},
+      {"std::wistream", "<istream>"},
+      {"std::istreambuf_iterator", "<iterator>"},
+      {"std::ostreambuf_iterator", "<iterator>"},
+      {"std::basic_ostream", "<ostream>"},
+      {"std::ostream", "<ostream>"},
+      {"std::wostream", "<ostream>"},
+      {"std::basic_istringstream", "<sstream>"},
+      {"std::basic_ostringstream", "<sstream>"},
+      {"std::basic_stringbuf", "<sstream>"},
+      {"std::basic_stringstream", "<sstream>"},
+      {"std::istringstream", "<sstream>"},
+      {"std::ostringstream", "<sstream>"},
+      {"std::stringbuf", "<sstream>"},
+      {"std::stringstream", "<sstream>"},
+      {"std::wistringstream", "<sstream>"},
+      {"std::wostringstream", "<sstream>"},
+      {"std::wstringbuf", "<sstream>"},
+      {"std::wstringstream", "<sstream>"},
+      {"std::basic_streambuf", "<streambuf>"},
+      {"std::streambuf", "<streambuf>"},
+      {"std::wstreambuf", "<streambuf>"},
+      {"std::uint_least16_t", "<cstdint>"}, // <type_traits> redeclares these
+      {"std::uint_least32_t", "<cstdint>"},
+      {"std::declval", "<utility>"},
+  };
+  for (const auto &Pair : SymbolMap)
+    Includes->addSymbolMapping(Pair.first, Pair.second);
+
   static const std::vector<std::pair<const char *, const char *>>
       SystemHeaderMap = {
           {"include/__stddef_max_align_t.h$", "<cstddef>"},
@@ -134,15 +218,18 @@ void addSystemHeadersMapping(CanonicalIncludes *Includes) {
           {"include/_G_config.h$", "<cstdio>"},
           {"include/assert.h$", "<cassert>"},
           {"algorithm$", "<algorithm>"},
+          {"valarray$", "<valarray>"},
           {"array$", "<array>"},
           {"atomic$", "<atomic>"},
           {"backward/auto_ptr.h$", "<memory>"},
           {"backward/binders.h$", "<string>"},
           {"bits/algorithmfwd.h$", "<algorithm>"},
-          {"bits/alloc_traits.h$", "<unordered_set>"},
-          {"bits/allocator.h$", "<string>"},
+          {"bits/alloc_traits.h$", "<memory>"},
+          {"bits/allocated_ptr.h$", "<memory>"},
+          {"bits/allocator.h$", "<allocator>"},
           {"bits/atomic_base.h$", "<atomic>"},
           {"bits/atomic_lockfree_defines.h$", "<exception>"},
+          {"bits/atomic_futex.h$", "<atomic>"},
           {"bits/basic_ios.h$", "<ios>"},
           {"bits/basic_ios.tcc$", "<ios>"},
           {"bits/basic_string.h$", "<string>"},
@@ -153,24 +240,27 @@ void addSystemHeadersMapping(CanonicalIncludes *Includes) {
           {"bits/cpp_type_traits.h$", "<cmath>"},
           {"bits/cxxabi_forced.h$", "<cxxabi.h>"},
           {"bits/deque.tcc$", "<deque>"},
+          {"bits/exception.h$", "<exception>"},
           {"bits/exception_defines.h$", "<exception>"},
           {"bits/exception_ptr.h$", "<exception>"},
           {"bits/forward_list.h$", "<forward_list>"},
           {"bits/forward_list.tcc$", "<forward_list>"},
           {"bits/fstream.tcc$", "<fstream>"},
           {"bits/functexcept.h$", "<list>"},
-          {"bits/functional_hash.h$", "<string>"},
+          {"bits/functional_hash.h$", "<functional>"},
           {"bits/gslice.h$", "<valarray>"},
           {"bits/gslice_array.h$", "<valarray>"},
           {"bits/hash_bytes.h$", "<typeinfo>"},
           {"bits/hashtable.h$", "<unordered_set>"},
           {"bits/hashtable_policy.h$", "<unordered_set>"},
           {"bits/indirect_array.h$", "<valarray>"},
+          {"bits/invoke.h$", "<functional>"},
           {"bits/ios_base.h$", "<ios>"},
           {"bits/istream.tcc$", "<istream>"},
           {"bits/list.tcc$", "<list>"},
           {"bits/locale_classes.h$", "<locale>"},
           {"bits/locale_classes.tcc$", "<locale>"},
+          {"bits/locale_conv.h$", "<locale>"},
           {"bits/locale_facets.h$", "<locale>"},
           {"bits/locale_facets.tcc$", "<locale>"},
           {"bits/locale_facets_nonio.h$", "<locale>"},
@@ -182,33 +272,44 @@ void addSystemHeadersMapping(CanonicalIncludes *Includes) {
           {"bits/nested_exception.h$", "<exception>"},
           {"bits/ostream.tcc$", "<ostream>"},
           {"bits/ostream_insert.h$", "<ostream>"},
-          {"bits/postypes.h$", "<iosfwd>"},
+          {"bits/parse_numbers.h$", "<chrono>"},
+          {"bits/postypes.h$", "<ios>"},
+          {"bits/predefined_ops.h$", "<algorithm>"},
           {"bits/ptr_traits.h$", "<memory>"},
+          {"bits/quoted_string.h$", "<iomanip>"},
           {"bits/random.h$", "<random>"},
           {"bits/random.tcc$", "<random>"},
           {"bits/range_access.h$", "<iterator>"},
+          {"bits/refwrap.h$", "<functional>"},
           {"bits/regex.h$", "<regex>"},
+          {"bits/regex_automaton.h$", "<regex>"},
           {"bits/regex_compiler.h$", "<regex>"},
           {"bits/regex_constants.h$", "<regex>"},
           {"bits/regex_cursor.h$", "<regex>"},
           {"bits/regex_error.h$", "<regex>"},
+          {"bits/regex_executor.h$", "<regex>"},
           {"bits/regex_grep_matcher.h$", "<regex>"},
           {"bits/regex_grep_matcher.tcc$", "<regex>"},
           {"bits/regex_nfa.h$", "<regex>"},
+          {"bits/regex_scanner.h$", "<regex>"},
           {"bits/shared_ptr.h$", "<memory>"},
           {"bits/shared_ptr_base.h$", "<memory>"},
+          {"bits/shared_ptr_atomic.h$", "<atomic>"},
           {"bits/slice_array.h$", "<valarray>"},
           {"bits/sstream.tcc$", "<sstream>"},
+          {"bits/std_abs.h$", "<cmath>"},
+          {"bits/std_function.h$", "<functional>"},
+          {"bits/std_mutex.h$", "<mutex>"},
           {"bits/stl_algo.h$", "<algorithm>"},
-          {"bits/stl_algobase.h$", "<list>"},
+          {"bits/stl_algobase.h$", "<algorithm>"},
           {"bits/stl_bvector.h$", "<vector>"},
           {"bits/stl_construct.h$", "<deque>"},
           {"bits/stl_deque.h$", "<deque>"},
-          {"bits/stl_function.h$", "<string>"},
-          {"bits/stl_heap.h$", "<queue>"},
+          {"bits/stl_function.h$", "<functional>"},
+          {"bits/stl_heap.h$", "<heap>"},
           {"bits/stl_iterator.h$", "<iterator>"},
           {"bits/stl_iterator_base_funcs.h$", "<iterator>"},
-          {"bits/stl_iterator_base_types.h$", "<numeric>"},
+          {"bits/stl_iterator_base_types.h$", "<iterator>"},
           {"bits/stl_list.h$", "<list>"},
           {"bits/stl_map.h$", "<map>"},
           {"bits/stl_multimap.h$", "<map>"},
@@ -222,16 +323,17 @@ void addSystemHeadersMapping(CanonicalIncludes *Includes) {
           {"bits/stl_stack.h$", "<stack>"},
           {"bits/stl_tempbuf.h$", "<memory>"},
           {"bits/stl_tree.h$", "<map>"},
-          {"bits/stl_uninitialized.h$", "<deque>"},
+          {"bits/stl_uninitialized.h$", "<memory>"},
           {"bits/stl_vector.h$", "<vector>"},
           {"bits/stream_iterator.h$", "<iterator>"},
           {"bits/streambuf.tcc$", "<streambuf>"},
           {"bits/streambuf_iterator.h$", "<iterator>"},
           {"bits/stringfwd.h$", "<string>"},
+          {"bits/uniform_int_dist.h$", "<random>"},
           {"bits/unique_ptr.h$", "<memory>"},
           {"bits/unordered_map.h$", "<unordered_map>"},
           {"bits/unordered_set.h$", "<unordered_set>"},
-          {"bits/uses_allocator.h$", "<tuple>"},
+          {"bits/uses_allocator.h$", "<memory>"},
           {"bits/valarray_after.h$", "<valarray>"},
           {"bits/valarray_array.h$", "<valarray>"},
           {"bits/valarray_array.tcc$", "<valarray>"},
@@ -296,6 +398,7 @@ void addSystemHeadersMapping(CanonicalIncludes *Includes) {
           {"locale$", "<locale>"},
           {"map$", "<map>"},
           {"memory$", "<memory>"},
+          {"shared_mutex$", "<shared_mutex>"},
           {"mutex$", "<mutex>"},
           {"new$", "<new>"},
           {"numeric$", "<numeric>"},
@@ -374,7 +477,7 @@ void addSystemHeadersMapping(CanonicalIncludes *Includes) {
           {"bits/atomic_word.h$", "<memory>"},
           {"bits/basic_file.h$", "<fstream>"},
           {"bits/c\\+\\+allocator.h$", "<string>"},
-          {"bits/c\\+\\+config.h$", "<iosfwd>"},
+          {"bits/c\\+\\+config.h$", "<cstddef>"},
           {"bits/c\\+\\+io.h$", "<ios>"},
           {"bits/c\\+\\+locale.h$", "<locale>"},
           {"bits/cpu_defines.h$", "<iosfwd>"},

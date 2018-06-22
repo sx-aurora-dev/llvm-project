@@ -42,8 +42,6 @@ class OutputSection final : public BaseCommand, public SectionBase {
 public:
   OutputSection(StringRef Name, uint32_t Type, uint64_t Flags);
 
-  bool isAllSectionDescription() const;
-
   static bool classof(const SectionBase *S) {
     return S->kind() == SectionBase::Output;
   }
@@ -53,7 +51,7 @@ public:
   uint64_t getLMA() const { return PtLoad ? Addr + PtLoad->LMAOffset : Addr; }
   template <typename ELFT> void writeHeaderTo(typename ELFT::Shdr *SHdr);
 
-  unsigned SectionIndex;
+  uint32_t SectionIndex = UINT32_MAX;
   unsigned SortRank;
 
   uint32_t getPhdrFlags() const;
@@ -103,12 +101,13 @@ public:
   std::string LMARegionName;
   bool NonAlloc = false;
   bool Noload = false;
+  bool ExpressionsUseSymbols = false;
 
   template <class ELFT> void finalize();
   template <class ELFT> void writeTo(uint8_t *Buf);
   template <class ELFT> void maybeCompress();
 
-  void sort(std::function<int(InputSectionBase *S)> Order);
+  void sort(llvm::function_ref<int(InputSectionBase *S)> Order);
   void sortInitFini();
   void sortCtorsDtors();
 
@@ -129,8 +128,6 @@ std::vector<InputSection *> getInputSections(OutputSection* OS);
 // until Writer is initialized.
 struct Out {
   static uint8_t First;
-  static OutputSection *Opd;
-  static uint8_t *OpdBuf;
   static PhdrEntry *TlsPhdr;
   static OutputSection *DebugInfo;
   static OutputSection *ElfHeader;

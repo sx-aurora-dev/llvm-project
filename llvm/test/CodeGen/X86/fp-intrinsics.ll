@@ -33,12 +33,12 @@ entry:
 ; COMMON:  subsd
 define double @f2(double %a) {
 entry:
-  %div = call double @llvm.experimental.constrained.fsub.f64(
+  %sub = call double @llvm.experimental.constrained.fsub.f64(
                                                double %a,
                                                double 0.000000e+00,
                                                metadata !"round.dynamic",
                                                metadata !"fpexcept.strict")
-  ret double %div
+  ret double %sub
 }
 
 ; Verify that '-((-a)*b)' isn't simplified to 'a*b' when the rounding mode is
@@ -245,7 +245,7 @@ entry:
 ; Verify that fma(3.5) isn't simplified when the rounding mode is
 ; unknown.
 ; CHECK-LABEL: f17
-; FMACALL32: jmp fmaf@PLT  # TAILCALL
+; FMACALL32: jmp fmaf  # TAILCALL
 ; FMA32: vfmadd213ss
 define float @f17() {
 entry:
@@ -261,7 +261,7 @@ entry:
 ; Verify that fma(42.1) isn't simplified when the rounding mode is
 ; unknown.
 ; CHECK-LABEL: f18
-; FMACALL64: jmp fma@PLT  # TAILCALL
+; FMACALL64: jmp fma  # TAILCALL
 ; FMA64: vfmadd213sd
 define double @f18() {
 entry:

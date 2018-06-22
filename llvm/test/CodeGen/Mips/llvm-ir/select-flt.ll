@@ -25,7 +25,7 @@
 ; RUN:    -check-prefixes=CMOV64
 ; RUN: llc < %s -mtriple=mips64-unknown-linux-gnu -mcpu=mips64r6 -verify-machineinstrs | FileCheck %s \
 ; RUN:    -check-prefixes=64R6
-; RUN: llc < %s -mtriple=mips-unknown-linux-gnu -mcpu=mips32r3 -mattr=+micromips -verify-machineinstrs | FileCheck %s \
+; RUN: llc < %s -mtriple=mips-unknown-linux-gnu -mcpu=mips32r3 -mattr=+micromips -verify-machineinstrs -asm-show-inst | FileCheck %s \
 ; RUN:    -check-prefixes=MM32R3
 ; RUN: llc < %s -mtriple=mips-unknown-linux-gnu -mcpu=mips32r6 -mattr=+micromips -verify-machineinstrs | FileCheck %s \
 ; RUN:    -check-prefixes=MM32R6
@@ -93,11 +93,11 @@ define float @tst_select_i1_float(i1 signext %s, float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_i1_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mtc1 $6, $f0
-; MM32R3-NEXT:    andi16 $2, $4, 1
-; MM32R3-NEXT:    mtc1 $5, $f1
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movn.s $f0, $f1, $2
+; MM32R3:       mtc1 $6, $f0 # <MCInst #{{.*}} MTC1_MM
+; MM32R3:       andi16 $2, $4, 1 # <MCInst #{{.*}} ANDI16_MM
+; MM32R3:       mtc1 $5, $f1 # <MCInst #{{.*}} MTC1_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movn.s $f0, $f1, $2 # <MCInst #{{.*}} MOVN_I_S_MM
 ;
 ; MM32R6-LABEL: tst_select_i1_float:
 ; MM32R6:       # %bb.0: # %entry
@@ -169,10 +169,10 @@ define float @tst_select_i1_float_reordered(float %x, float %y,
 ;
 ; MM32R3-LABEL: tst_select_i1_float_reordered:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    andi16 $2, $6, 1
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movn.s $f0, $f12, $2
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       andi16 $2, $6, 1 # <MCInst #{{.*}} ANDI16_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movn.s $f0, $f12, $2 # <MCInst #{{.*}} MOVN_I_S_MM
 ;
 ; MM32R6-LABEL: tst_select_i1_float_reordered:
 ; MM32R6:       # %bb.0: # %entry
@@ -188,10 +188,9 @@ entry:
 define float @tst_select_fcmp_olt_float(float %x, float %y) {
 ; M2-LABEL: tst_select_fcmp_olt_float:
 ; M2:       # %bb.0: # %entry
-; M2-NEXT:    mov.s $f0, $f12
-; M2-NEXT:    c.olt.s $f0, $f14
+; M2-NEXT:    c.olt.s $f12, $f14
 ; M2-NEXT:    bc1t $BB2_2
-; M2-NEXT:    nop
+; M2-NEXT:    mov.s $f0, $f12
 ; M2-NEXT:  # %bb.1: # %entry
 ; M2-NEXT:    mov.s $f0, $f14
 ; M2-NEXT:  $BB2_2: # %entry
@@ -201,14 +200,14 @@ define float @tst_select_fcmp_olt_float(float %x, float %y) {
 ; CMOV32R1-LABEL: tst_select_fcmp_olt_float:
 ; CMOV32R1:       # %bb.0: # %entry
 ; CMOV32R1-NEXT:    mov.s $f0, $f14
-; CMOV32R1-NEXT:    c.olt.s $f12, $f0
+; CMOV32R1-NEXT:    c.olt.s $f12, $f14
 ; CMOV32R1-NEXT:    jr $ra
 ; CMOV32R1-NEXT:    movt.s $f0, $f12, $fcc0
 ;
 ; CMOV32R2-LABEL: tst_select_fcmp_olt_float:
 ; CMOV32R2:       # %bb.0: # %entry
 ; CMOV32R2-NEXT:    mov.s $f0, $f14
-; CMOV32R2-NEXT:    c.olt.s $f12, $f0
+; CMOV32R2-NEXT:    c.olt.s $f12, $f14
 ; CMOV32R2-NEXT:    jr $ra
 ; CMOV32R2-NEXT:    movt.s $f0, $f12, $fcc0
 ;
@@ -220,10 +219,9 @@ define float @tst_select_fcmp_olt_float(float %x, float %y) {
 ;
 ; M3-LABEL: tst_select_fcmp_olt_float:
 ; M3:       # %bb.0: # %entry
-; M3-NEXT:    mov.s $f0, $f12
-; M3-NEXT:    c.olt.s $f0, $f13
+; M3-NEXT:    c.olt.s $f12, $f13
 ; M3-NEXT:    bc1t .LBB2_2
-; M3-NEXT:    nop
+; M3-NEXT:    mov.s $f0, $f12
 ; M3-NEXT:  # %bb.1: # %entry
 ; M3-NEXT:    mov.s $f0, $f13
 ; M3-NEXT:  .LBB2_2: # %entry
@@ -233,7 +231,7 @@ define float @tst_select_fcmp_olt_float(float %x, float %y) {
 ; CMOV64-LABEL: tst_select_fcmp_olt_float:
 ; CMOV64:       # %bb.0: # %entry
 ; CMOV64-NEXT:    mov.s $f0, $f13
-; CMOV64-NEXT:    c.olt.s $f12, $f0
+; CMOV64-NEXT:    c.olt.s $f12, $f13
 ; CMOV64-NEXT:    jr $ra
 ; CMOV64-NEXT:    movt.s $f0, $f12, $fcc0
 ;
@@ -245,10 +243,10 @@ define float @tst_select_fcmp_olt_float(float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_fcmp_olt_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    c.olt.s $f12, $f0
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movt.s $f0, $f12, $fcc0
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       c.olt.s $f12, $f14 # <MCInst #{{.*}} FCMP_S32_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movt.s $f0, $f12, $fcc0 # <MCInst #{{.*}} MOVT_S_MM
 ;
 ; MM32R6-LABEL: tst_select_fcmp_olt_float:
 ; MM32R6:       # %bb.0: # %entry
@@ -264,10 +262,9 @@ entry:
 define float @tst_select_fcmp_ole_float(float %x, float %y) {
 ; M2-LABEL: tst_select_fcmp_ole_float:
 ; M2:       # %bb.0: # %entry
-; M2-NEXT:    mov.s $f0, $f12
-; M2-NEXT:    c.ole.s $f0, $f14
+; M2-NEXT:    c.ole.s $f12, $f14
 ; M2-NEXT:    bc1t $BB3_2
-; M2-NEXT:    nop
+; M2-NEXT:    mov.s $f0, $f12
 ; M2-NEXT:  # %bb.1: # %entry
 ; M2-NEXT:    mov.s $f0, $f14
 ; M2-NEXT:  $BB3_2: # %entry
@@ -277,14 +274,14 @@ define float @tst_select_fcmp_ole_float(float %x, float %y) {
 ; CMOV32R1-LABEL: tst_select_fcmp_ole_float:
 ; CMOV32R1:       # %bb.0: # %entry
 ; CMOV32R1-NEXT:    mov.s $f0, $f14
-; CMOV32R1-NEXT:    c.ole.s $f12, $f0
+; CMOV32R1-NEXT:    c.ole.s $f12, $f14
 ; CMOV32R1-NEXT:    jr $ra
 ; CMOV32R1-NEXT:    movt.s $f0, $f12, $fcc0
 ;
 ; CMOV32R2-LABEL: tst_select_fcmp_ole_float:
 ; CMOV32R2:       # %bb.0: # %entry
 ; CMOV32R2-NEXT:    mov.s $f0, $f14
-; CMOV32R2-NEXT:    c.ole.s $f12, $f0
+; CMOV32R2-NEXT:    c.ole.s $f12, $f14
 ; CMOV32R2-NEXT:    jr $ra
 ; CMOV32R2-NEXT:    movt.s $f0, $f12, $fcc0
 ;
@@ -296,10 +293,9 @@ define float @tst_select_fcmp_ole_float(float %x, float %y) {
 ;
 ; M3-LABEL: tst_select_fcmp_ole_float:
 ; M3:       # %bb.0: # %entry
-; M3-NEXT:    mov.s $f0, $f12
-; M3-NEXT:    c.ole.s $f0, $f13
+; M3-NEXT:    c.ole.s $f12, $f13
 ; M3-NEXT:    bc1t .LBB3_2
-; M3-NEXT:    nop
+; M3-NEXT:    mov.s $f0, $f12
 ; M3-NEXT:  # %bb.1: # %entry
 ; M3-NEXT:    mov.s $f0, $f13
 ; M3-NEXT:  .LBB3_2: # %entry
@@ -309,7 +305,7 @@ define float @tst_select_fcmp_ole_float(float %x, float %y) {
 ; CMOV64-LABEL: tst_select_fcmp_ole_float:
 ; CMOV64:       # %bb.0: # %entry
 ; CMOV64-NEXT:    mov.s $f0, $f13
-; CMOV64-NEXT:    c.ole.s $f12, $f0
+; CMOV64-NEXT:    c.ole.s $f12, $f13
 ; CMOV64-NEXT:    jr $ra
 ; CMOV64-NEXT:    movt.s $f0, $f12, $fcc0
 ;
@@ -321,10 +317,10 @@ define float @tst_select_fcmp_ole_float(float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_fcmp_ole_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    c.ole.s $f12, $f0
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movt.s $f0, $f12, $fcc0
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       c.ole.s $f12, $f14 # <MCInst #{{.*}} FCMP_S32_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movt.s $f0, $f12, $fcc0 # <MCInst #{{.*}} MOVT_S_MM
 ;
 ; MM32R6-LABEL: tst_select_fcmp_ole_float:
 ; MM32R6:       # %bb.0: # %entry
@@ -340,10 +336,9 @@ entry:
 define float @tst_select_fcmp_ogt_float(float %x, float %y) {
 ; M2-LABEL: tst_select_fcmp_ogt_float:
 ; M2:       # %bb.0: # %entry
-; M2-NEXT:    mov.s $f0, $f12
-; M2-NEXT:    c.ule.s $f0, $f14
+; M2-NEXT:    c.ule.s $f12, $f14
 ; M2-NEXT:    bc1f $BB4_2
-; M2-NEXT:    nop
+; M2-NEXT:    mov.s $f0, $f12
 ; M2-NEXT:  # %bb.1: # %entry
 ; M2-NEXT:    mov.s $f0, $f14
 ; M2-NEXT:  $BB4_2: # %entry
@@ -353,14 +348,14 @@ define float @tst_select_fcmp_ogt_float(float %x, float %y) {
 ; CMOV32R1-LABEL: tst_select_fcmp_ogt_float:
 ; CMOV32R1:       # %bb.0: # %entry
 ; CMOV32R1-NEXT:    mov.s $f0, $f14
-; CMOV32R1-NEXT:    c.ule.s $f12, $f0
+; CMOV32R1-NEXT:    c.ule.s $f12, $f14
 ; CMOV32R1-NEXT:    jr $ra
 ; CMOV32R1-NEXT:    movf.s $f0, $f12, $fcc0
 ;
 ; CMOV32R2-LABEL: tst_select_fcmp_ogt_float:
 ; CMOV32R2:       # %bb.0: # %entry
 ; CMOV32R2-NEXT:    mov.s $f0, $f14
-; CMOV32R2-NEXT:    c.ule.s $f12, $f0
+; CMOV32R2-NEXT:    c.ule.s $f12, $f14
 ; CMOV32R2-NEXT:    jr $ra
 ; CMOV32R2-NEXT:    movf.s $f0, $f12, $fcc0
 ;
@@ -372,10 +367,9 @@ define float @tst_select_fcmp_ogt_float(float %x, float %y) {
 ;
 ; M3-LABEL: tst_select_fcmp_ogt_float:
 ; M3:       # %bb.0: # %entry
-; M3-NEXT:    mov.s $f0, $f12
-; M3-NEXT:    c.ule.s $f0, $f13
+; M3-NEXT:    c.ule.s $f12, $f13
 ; M3-NEXT:    bc1f .LBB4_2
-; M3-NEXT:    nop
+; M3-NEXT:    mov.s $f0, $f12
 ; M3-NEXT:  # %bb.1: # %entry
 ; M3-NEXT:    mov.s $f0, $f13
 ; M3-NEXT:  .LBB4_2: # %entry
@@ -385,7 +379,7 @@ define float @tst_select_fcmp_ogt_float(float %x, float %y) {
 ; CMOV64-LABEL: tst_select_fcmp_ogt_float:
 ; CMOV64:       # %bb.0: # %entry
 ; CMOV64-NEXT:    mov.s $f0, $f13
-; CMOV64-NEXT:    c.ule.s $f12, $f0
+; CMOV64-NEXT:    c.ule.s $f12, $f13
 ; CMOV64-NEXT:    jr $ra
 ; CMOV64-NEXT:    movf.s $f0, $f12, $fcc0
 ;
@@ -397,10 +391,10 @@ define float @tst_select_fcmp_ogt_float(float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_fcmp_ogt_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    c.ule.s $f12, $f0
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movf.s $f0, $f12, $fcc0
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       c.ule.s $f12, $f14 # <MCInst #{{.*}} FCMP_S32_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movf.s $f0, $f12, $fcc0 # <MCInst #{{.*}} MOVF_S_MM
 ;
 ; MM32R6-LABEL: tst_select_fcmp_ogt_float:
 ; MM32R6:       # %bb.0: # %entry
@@ -416,10 +410,9 @@ entry:
 define float @tst_select_fcmp_oge_float(float %x, float %y) {
 ; M2-LABEL: tst_select_fcmp_oge_float:
 ; M2:       # %bb.0: # %entry
-; M2-NEXT:    mov.s $f0, $f12
-; M2-NEXT:    c.ult.s $f0, $f14
+; M2-NEXT:    c.ult.s $f12, $f14
 ; M2-NEXT:    bc1f $BB5_2
-; M2-NEXT:    nop
+; M2-NEXT:    mov.s $f0, $f12
 ; M2-NEXT:  # %bb.1: # %entry
 ; M2-NEXT:    mov.s $f0, $f14
 ; M2-NEXT:  $BB5_2: # %entry
@@ -429,14 +422,14 @@ define float @tst_select_fcmp_oge_float(float %x, float %y) {
 ; CMOV32R1-LABEL: tst_select_fcmp_oge_float:
 ; CMOV32R1:       # %bb.0: # %entry
 ; CMOV32R1-NEXT:    mov.s $f0, $f14
-; CMOV32R1-NEXT:    c.ult.s $f12, $f0
+; CMOV32R1-NEXT:    c.ult.s $f12, $f14
 ; CMOV32R1-NEXT:    jr $ra
 ; CMOV32R1-NEXT:    movf.s $f0, $f12, $fcc0
 ;
 ; CMOV32R2-LABEL: tst_select_fcmp_oge_float:
 ; CMOV32R2:       # %bb.0: # %entry
 ; CMOV32R2-NEXT:    mov.s $f0, $f14
-; CMOV32R2-NEXT:    c.ult.s $f12, $f0
+; CMOV32R2-NEXT:    c.ult.s $f12, $f14
 ; CMOV32R2-NEXT:    jr $ra
 ; CMOV32R2-NEXT:    movf.s $f0, $f12, $fcc0
 ;
@@ -448,10 +441,9 @@ define float @tst_select_fcmp_oge_float(float %x, float %y) {
 ;
 ; M3-LABEL: tst_select_fcmp_oge_float:
 ; M3:       # %bb.0: # %entry
-; M3-NEXT:    mov.s $f0, $f12
-; M3-NEXT:    c.ult.s $f0, $f13
+; M3-NEXT:    c.ult.s $f12, $f13
 ; M3-NEXT:    bc1f .LBB5_2
-; M3-NEXT:    nop
+; M3-NEXT:    mov.s $f0, $f12
 ; M3-NEXT:  # %bb.1: # %entry
 ; M3-NEXT:    mov.s $f0, $f13
 ; M3-NEXT:  .LBB5_2: # %entry
@@ -461,7 +453,7 @@ define float @tst_select_fcmp_oge_float(float %x, float %y) {
 ; CMOV64-LABEL: tst_select_fcmp_oge_float:
 ; CMOV64:       # %bb.0: # %entry
 ; CMOV64-NEXT:    mov.s $f0, $f13
-; CMOV64-NEXT:    c.ult.s $f12, $f0
+; CMOV64-NEXT:    c.ult.s $f12, $f13
 ; CMOV64-NEXT:    jr $ra
 ; CMOV64-NEXT:    movf.s $f0, $f12, $fcc0
 ;
@@ -473,10 +465,10 @@ define float @tst_select_fcmp_oge_float(float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_fcmp_oge_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    c.ult.s $f12, $f0
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movf.s $f0, $f12, $fcc0
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       c.ult.s $f12, $f14 # <MCInst #{{.*}} FCMP_S32_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movf.s $f0, $f12, $fcc0 # <MCInst #{{.*}} MOVF_S_MM
 ;
 ; MM32R6-LABEL: tst_select_fcmp_oge_float:
 ; MM32R6:       # %bb.0: # %entry
@@ -492,10 +484,9 @@ entry:
 define float @tst_select_fcmp_oeq_float(float %x, float %y) {
 ; M2-LABEL: tst_select_fcmp_oeq_float:
 ; M2:       # %bb.0: # %entry
-; M2-NEXT:    mov.s $f0, $f12
-; M2-NEXT:    c.eq.s $f0, $f14
+; M2-NEXT:    c.eq.s $f12, $f14
 ; M2-NEXT:    bc1t $BB6_2
-; M2-NEXT:    nop
+; M2-NEXT:    mov.s $f0, $f12
 ; M2-NEXT:  # %bb.1: # %entry
 ; M2-NEXT:    mov.s $f0, $f14
 ; M2-NEXT:  $BB6_2: # %entry
@@ -505,14 +496,14 @@ define float @tst_select_fcmp_oeq_float(float %x, float %y) {
 ; CMOV32R1-LABEL: tst_select_fcmp_oeq_float:
 ; CMOV32R1:       # %bb.0: # %entry
 ; CMOV32R1-NEXT:    mov.s $f0, $f14
-; CMOV32R1-NEXT:    c.eq.s $f12, $f0
+; CMOV32R1-NEXT:    c.eq.s $f12, $f14
 ; CMOV32R1-NEXT:    jr $ra
 ; CMOV32R1-NEXT:    movt.s $f0, $f12, $fcc0
 ;
 ; CMOV32R2-LABEL: tst_select_fcmp_oeq_float:
 ; CMOV32R2:       # %bb.0: # %entry
 ; CMOV32R2-NEXT:    mov.s $f0, $f14
-; CMOV32R2-NEXT:    c.eq.s $f12, $f0
+; CMOV32R2-NEXT:    c.eq.s $f12, $f14
 ; CMOV32R2-NEXT:    jr $ra
 ; CMOV32R2-NEXT:    movt.s $f0, $f12, $fcc0
 ;
@@ -524,10 +515,9 @@ define float @tst_select_fcmp_oeq_float(float %x, float %y) {
 ;
 ; M3-LABEL: tst_select_fcmp_oeq_float:
 ; M3:       # %bb.0: # %entry
-; M3-NEXT:    mov.s $f0, $f12
-; M3-NEXT:    c.eq.s $f0, $f13
+; M3-NEXT:    c.eq.s $f12, $f13
 ; M3-NEXT:    bc1t .LBB6_2
-; M3-NEXT:    nop
+; M3-NEXT:    mov.s $f0, $f12
 ; M3-NEXT:  # %bb.1: # %entry
 ; M3-NEXT:    mov.s $f0, $f13
 ; M3-NEXT:  .LBB6_2: # %entry
@@ -537,7 +527,7 @@ define float @tst_select_fcmp_oeq_float(float %x, float %y) {
 ; CMOV64-LABEL: tst_select_fcmp_oeq_float:
 ; CMOV64:       # %bb.0: # %entry
 ; CMOV64-NEXT:    mov.s $f0, $f13
-; CMOV64-NEXT:    c.eq.s $f12, $f0
+; CMOV64-NEXT:    c.eq.s $f12, $f13
 ; CMOV64-NEXT:    jr $ra
 ; CMOV64-NEXT:    movt.s $f0, $f12, $fcc0
 ;
@@ -549,10 +539,10 @@ define float @tst_select_fcmp_oeq_float(float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_fcmp_oeq_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    c.eq.s $f12, $f0
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movt.s $f0, $f12, $fcc0
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       c.eq.s $f12, $f14 # <MCInst #{{.*}} FCMP_S32_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movt.s $f0, $f12, $fcc0 # <MCInst #{{.*}} MOVT_S_MM
 ;
 ; MM32R6-LABEL: tst_select_fcmp_oeq_float:
 ; MM32R6:       # %bb.0: # %entry
@@ -568,10 +558,9 @@ entry:
 define float @tst_select_fcmp_one_float(float %x, float %y) {
 ; M2-LABEL: tst_select_fcmp_one_float:
 ; M2:       # %bb.0: # %entry
-; M2-NEXT:    mov.s $f0, $f12
-; M2-NEXT:    c.ueq.s $f0, $f14
+; M2-NEXT:    c.ueq.s $f12, $f14
 ; M2-NEXT:    bc1f $BB7_2
-; M2-NEXT:    nop
+; M2-NEXT:    mov.s $f0, $f12
 ; M2-NEXT:  # %bb.1: # %entry
 ; M2-NEXT:    mov.s $f0, $f14
 ; M2-NEXT:  $BB7_2: # %entry
@@ -581,14 +570,14 @@ define float @tst_select_fcmp_one_float(float %x, float %y) {
 ; CMOV32R1-LABEL: tst_select_fcmp_one_float:
 ; CMOV32R1:       # %bb.0: # %entry
 ; CMOV32R1-NEXT:    mov.s $f0, $f14
-; CMOV32R1-NEXT:    c.ueq.s $f12, $f0
+; CMOV32R1-NEXT:    c.ueq.s $f12, $f14
 ; CMOV32R1-NEXT:    jr $ra
 ; CMOV32R1-NEXT:    movf.s $f0, $f12, $fcc0
 ;
 ; CMOV32R2-LABEL: tst_select_fcmp_one_float:
 ; CMOV32R2:       # %bb.0: # %entry
 ; CMOV32R2-NEXT:    mov.s $f0, $f14
-; CMOV32R2-NEXT:    c.ueq.s $f12, $f0
+; CMOV32R2-NEXT:    c.ueq.s $f12, $f14
 ; CMOV32R2-NEXT:    jr $ra
 ; CMOV32R2-NEXT:    movf.s $f0, $f12, $fcc0
 ;
@@ -603,10 +592,9 @@ define float @tst_select_fcmp_one_float(float %x, float %y) {
 ;
 ; M3-LABEL: tst_select_fcmp_one_float:
 ; M3:       # %bb.0: # %entry
-; M3-NEXT:    mov.s $f0, $f12
-; M3-NEXT:    c.ueq.s $f0, $f13
+; M3-NEXT:    c.ueq.s $f12, $f13
 ; M3-NEXT:    bc1f .LBB7_2
-; M3-NEXT:    nop
+; M3-NEXT:    mov.s $f0, $f12
 ; M3-NEXT:  # %bb.1: # %entry
 ; M3-NEXT:    mov.s $f0, $f13
 ; M3-NEXT:  .LBB7_2: # %entry
@@ -616,7 +604,7 @@ define float @tst_select_fcmp_one_float(float %x, float %y) {
 ; CMOV64-LABEL: tst_select_fcmp_one_float:
 ; CMOV64:       # %bb.0: # %entry
 ; CMOV64-NEXT:    mov.s $f0, $f13
-; CMOV64-NEXT:    c.ueq.s $f12, $f0
+; CMOV64-NEXT:    c.ueq.s $f12, $f13
 ; CMOV64-NEXT:    jr $ra
 ; CMOV64-NEXT:    movf.s $f0, $f12, $fcc0
 ;
@@ -631,10 +619,10 @@ define float @tst_select_fcmp_one_float(float %x, float %y) {
 ;
 ; MM32R3-LABEL: tst_select_fcmp_one_float:
 ; MM32R3:       # %bb.0: # %entry
-; MM32R3-NEXT:    mov.s $f0, $f14
-; MM32R3-NEXT:    c.ueq.s $f12, $f0
-; MM32R3-NEXT:    jr $ra
-; MM32R3-NEXT:    movf.s $f0, $f12, $fcc0
+; MM32R3:       mov.s $f0, $f14 # <MCInst #{{.*}} FMOV_S
+; MM32R3:       c.ueq.s $f12, $f14 # <MCInst #{{.*}} FCMP_S32_MM
+; MM32R3:       jr $ra # <MCInst #{{.*}} JR_MM
+; MM32R3:       movf.s $f0, $f12, $fcc0 # <MCInst #{{.*}} MOVF_S_MM
 ;
 ; MM32R6-LABEL: tst_select_fcmp_one_float:
 ; MM32R6:       # %bb.0: # %entry

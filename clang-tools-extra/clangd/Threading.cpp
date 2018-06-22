@@ -1,4 +1,5 @@
 #include "Threading.h"
+#include "Trace.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Threading.h"
@@ -23,9 +24,14 @@ void Notification::wait() const {
 Semaphore::Semaphore(std::size_t MaxLocks) : FreeSlots(MaxLocks) {}
 
 void Semaphore::lock() {
-  std::unique_lock<std::mutex> Lock(Mutex);
-  SlotsChanged.wait(Lock, [&]() { return FreeSlots > 0; });
-  --FreeSlots;
+  trace::Span Span("WaitForFreeSemaphoreSlot");
+  // trace::Span can also acquire locks in ctor and dtor, we make sure it
+  // happens when Semaphore's own lock is not held.
+  {
+    std::unique_lock<std::mutex> Lock(Mutex);
+    SlotsChanged.wait(Lock, [&]() { return FreeSlots > 0; });
+    --FreeSlots;
+  }
 }
 
 void Semaphore::unlock() {
@@ -76,9 +82,18 @@ void AsyncTaskRunner::runAsync(llvm::Twine Name,
 Deadline timeoutSeconds(llvm::Optional<double> Seconds) {
   using namespace std::chrono;
   if (!Seconds)
-    return llvm::None;
+    return Deadline::infinity();
   return steady_clock::now() +
          duration_cast<steady_clock::duration>(duration<double>(*Seconds));
+}
+
+void wait(std::unique_lock<std::mutex> &Lock, std::condition_variable &CV,
+          Deadline D) {
+  if (D == Deadline::zero())
+    return;
+  if (D == Deadline::infinity())
+    return CV.wait(Lock);
+  CV.wait_until(Lock, D.time());
 }
 
 } // namespace clangd

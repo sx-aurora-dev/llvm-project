@@ -44,7 +44,7 @@ namespace Intrinsic {
 
 class GlobalValue : public Constant {
 public:
-  /// @brief An enumeration for the kinds of linkage for global values.
+  /// An enumeration for the kinds of linkage for global values.
   enum LinkageTypes {
     ExternalLinkage = 0,///< Externally visible function
     AvailableExternallyLinkage, ///< Available for inspection, not emission.
@@ -59,14 +59,14 @@ public:
     CommonLinkage       ///< Tentative definitions.
   };
 
-  /// @brief An enumeration for the kinds of visibility of global values.
+  /// An enumeration for the kinds of visibility of global values.
   enum VisibilityTypes {
     DefaultVisibility = 0,  ///< The GV is visible
     HiddenVisibility,       ///< The GV is hidden
     ProtectedVisibility     ///< The GV is protected
   };
 
-  /// @brief Storage classes of global values for PE targets.
+  /// Storage classes of global values for PE targets.
   enum DLLStorageClassTypes {
     DefaultStorageClass   = 0,
     DLLImportStorageClass = 1, ///< Function to be imported from DLL
@@ -150,7 +150,7 @@ private:
   }
 
 protected:
-  /// \brief The intrinsic ID for this subclass (which must be a Function).
+  /// The intrinsic ID for this subclass (which must be a Function).
   ///
   /// This member is defined by this class, but not used for anything.
   /// Subclasses can use it to store their intrinsic ID, if they have one.
@@ -572,6 +572,13 @@ public:
            V->getValueID() == Value::GlobalAliasVal ||
            V->getValueID() == Value::GlobalIFuncVal;
   }
+
+  /// True if GV can be left out of the object symbol table. This is the case
+  /// for linkonce_odr values whose address is not significant. While legal, it
+  /// is not normally profitable to omit them from the .o symbol table. Using
+  /// this analysis makes sense when the information can be passed down to the
+  /// linker or we are in LTO.
+  bool canBeOmittedFromSymbolTable() const;
 };
 
 } // end namespace llvm
