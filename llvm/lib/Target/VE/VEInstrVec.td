@@ -32,6 +32,12 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Uses = [VL]; // vector length register
 }
 
+class PseudoVec<dag outs, dag ins, string asmstr, list<dag> pattern> 
+  : Pseudo<outs, ins, asmstr, pattern> {
+    let Uses = [VL]; // vector length register
+  }
+
+
 class RV2<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
         InstrItinClass itin = NoItinerary> 
       : RV<opVal, outs, ins, asmstr, pattern, itin> {
@@ -322,6 +328,7 @@ multiclass RVShiftMulti<string opcStr, bits<8> opc> {
       let cs = 0;
   }
 
+  // why r2? not r?
   def r2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy),
     !strconcat(opcStr, " $vx,$vz,$sy"), []> {
       let cx = 0;
@@ -778,14 +785,14 @@ let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
 def VFMSlaf : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.af $vm", []>;
 
 // Pseudo for VM512
-def VFMSpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
+def VFMSpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
 
-def VFMFpv : Pseudo<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
+def VFMFpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
 
-def VFMKpat : Pseudo<(outs VM512:$vm), (ins), "# pvfmk.at", []>;
-def VFMKpaf : Pseudo<(outs VM512:$vm), (ins), "# pvfmk.af", []>;
+def VFMKpat : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.at", []>;
+def VFMKpaf : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.af", []>;
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions
@@ -883,12 +890,12 @@ def NEGM : VMR2<0x95, "negm">;
 // LZVM
 // TOVM
 
-def ANDMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def ORMp  : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def XORMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def EQVMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def NNDMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def NEGMp : Pseudo<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
+def ANDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def ORMp  : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def XORMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def EQVMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def NNDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
+def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 
 // 5.3.2.16. Vector Control Instructions
 // SVL

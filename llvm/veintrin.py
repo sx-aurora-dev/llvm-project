@@ -67,9 +67,7 @@ class Op(object):
 
     def dagOp(self):
         if self.kind == 'I':
-            return "({} simm7:${})".format(self.ty.ValueType, self.name_)
-        elif self.kind == 'N':
-            return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
+            return "({} {}:${})".format(self.ty.ValueType, self.immType, self.name_)
         elif self.kind == 'c':
             return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
         elif self.isMask512():
@@ -137,8 +135,13 @@ VMZ512 = Op("M", T_v16u32, "vmz")
 VMD512 = Op("M", T_v16u32, "vmd")
 CCOp = Op("c", T_u32, "cc")
 
-def ImmI(ty): return Op("I", ty, "I")
-def ImmN(ty): return Op("N", ty, "N")
+class ImmOp(Op):
+    def __init__(self, kind, ty, name, immType):
+        super(ImmOp, self).__init__(kind, ty, name)
+        self.immType = immType
+
+def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
+def ImmN(ty): return ImmOp("I", ty, "N", "uimm6")
 
 class OL(list):
     def __init__(self):
@@ -734,13 +737,13 @@ class InstTable:
                "vv"   : "v",
                "vs"   : "r",
                "vI"   : "i",
-               "vN"   : "i",
+               #"vN"   : "i",
                "vsmv" : "rm",
                "vsMv" : "rm",
                "vImv" : "im",
                "vIMv" : "im",
-               "vNmv" : "im",
-               "vNMv" : "im",
+               #"vNmv" : "im",
+               #"vNMv" : "im",
                "vvv"  : "v",
                "vvvmv": "vm",
                "vvvMv": "vm",
@@ -750,7 +753,7 @@ class InstTable:
                "vvImv": "im2",
                "vvss" : "r", # LSV
                "svs"  : "r", # LVS
-               "vvN"  : "i2",
+               #"vvN"  : "i2",
                "vsv"  : "r",
                "vsvmv": "rm",
                "vsvMv": "rm",
@@ -771,15 +774,15 @@ class InstTable:
                "mm" : "",
                "MM" : "",
                "sms" : "",
-               "smN" : "",
-               "sMN" : "",
+               "smI" : "",
+               "sMI" : "",
                "mmss" : "",
-               "mmNs" : "",
-               "MMNs" : "",
+               "mmIs" : "",
+               "MMIs" : "",
                "vvvm" : "v",
                "vvvM" : "v",
                "vvvs" : "r", # VSHF
-               "vvvN" : "i", # VSHF
+               "vvvI" : "i", # VSHF
 
                "m"    : "", # VFMK at, af
                "M"    : "", # VFMKp at, af
