@@ -67,9 +67,7 @@ class Op(object):
 
     def dagOp(self):
         if self.kind == 'I':
-            return "({} simm7:${})".format(self.ty.ValueType, self.name_)
-        elif self.kind == 'N':
-            return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
+            return "({} {}:${})".format(self.ty.ValueType, self.immType, self.name_)
         elif self.kind == 'c':
             return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
         elif self.isMask512():
@@ -137,11 +135,28 @@ VMZ512 = Op("M", T_v16u32, "vmz")
 VMD512 = Op("M", T_v16u32, "vmd")
 CCOp = Op("c", T_u32, "cc")
 
-def ImmI(ty): return Op("I", ty, "I")
-def ImmN(ty): return Op("N", ty, "N")
+class ImmOp(Op):
+    def __init__(self, kind, ty, name, immType):
+        super(ImmOp, self).__init__(kind, ty, name)
+        self.immType = immType
+
+def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
+def ImmN(ty): return ImmOp("I", ty, "N", "uimm6")
+
+class OL(list):
+    def __init__(self):
+        super(OL, self).__init__(self)
+
+    def __init__(self, l):
+        super(OL, self).__init__(self)
+        for i in l:
+            self.append(i)
 
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
-def Args_vsv(ty): return [VX(ty), SY(ty), VZ(ty)]
+def Args_vsv(tyV, tyS = None): 
+    if tyS == None:
+        tyS = tyV
+    return [VX(tyV), SY(tyS), VZ(tyV)]
 def Args_vIv(ty): return [VX(ty), ImmI(ty), VZ(ty)]
 
 class DummyInst:
@@ -161,7 +176,7 @@ class DummyInst:
         return self.inst_ != None
 
 class Inst:
-    # ni: instruction name
+    # ni: instruction name in LLVM, such as VMRGvm
     def __init__(self, opc, ni, asm, intrinsicName, outs, ins, packed = False, expr = None):
         #self.opc = opc
         self.outs = outs
@@ -172,7 +187,6 @@ class Inst:
         self.instName = ni
         self.asm_ = asm
         self.intrinsicName_ = intrinsicName
-        #self.nf = nf
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
@@ -723,13 +737,13 @@ class InstTable:
                "vv"   : "v",
                "vs"   : "r",
                "vI"   : "i",
-               "vN"   : "i",
+               #"vN"   : "i",
                "vsmv" : "rm",
                "vsMv" : "rm",
                "vImv" : "im",
                "vIMv" : "im",
-               "vNmv" : "im",
-               "vNMv" : "im",
+               #"vNmv" : "im",
+               #"vNMv" : "im",
                "vvv"  : "v",
                "vvvmv": "vm",
                "vvvMv": "vm",
@@ -739,7 +753,7 @@ class InstTable:
                "vvImv": "im2",
                "vvss" : "r", # LSV
                "svs"  : "r", # LVS
-               "vvN"  : "i2",
+               #"vvN"  : "i2",
                "vsv"  : "r",
                "vsvmv": "rm",
                "vsvMv": "rm",
@@ -760,15 +774,15 @@ class InstTable:
                "mm" : "",
                "MM" : "",
                "sms" : "",
-               "smN" : "",
-               "sMN" : "",
+               "smI" : "",
+               "sMI" : "",
                "mmss" : "",
-               "mmNs" : "",
-               "MMNs" : "",
+               "mmIs" : "",
+               "MMIs" : "",
                "vvvm" : "v",
                "vvvM" : "v",
                "vvvs" : "r", # VSHF
-               "vvvN" : "i", # VSHF
+               "vvvI" : "i", # VSHF
 
                "m"    : "", # VFMK at, af
                "M"    : "", # VFMKp at, af
@@ -874,8 +888,14 @@ class InstTable:
     def Logical(self, opc, name, instName, expr):
         O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
 
-        self.InstX(opc, instName, name, [Args_vvv(T_u64), Args_vsv(T_u64)], expr)
-        self.InstX(opc, instName+"p", "p"+name, [Args_vvv(T_u32), O_u32_vsv], expr)
+        Args = [Args_vvv(T_u64), Args_vsv(T_u64)]
+        Args = self.addMask(Args)
+
+        ArgsP = [Args_vvv(T_u32), O_u32_vsv]
+        ArgsP = self.addMask(ArgsP, VM512)
+
+        self.InstX(opc, instName, name, Args, expr)
+        self.InstX(opc, instName+"p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, expr):
         O_u64_vvv = [VX(T_u64), VZ(T_u64), VY(T_u64)]

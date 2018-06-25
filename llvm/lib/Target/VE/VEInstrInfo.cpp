@@ -500,7 +500,7 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   unsigned VMYu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
   unsigned VMYl = VMYu + 1;
 
-  if (MI.getNumOperands() > 2) {
+  if (MI.getNumOperands() > 3) { // includes VL
       unsigned VMZu = (MI.getOperand(2).getReg() - VE::VMP0) * 2 + VE::VM0; 
       unsigned VMZl = VMZu + 1;
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
