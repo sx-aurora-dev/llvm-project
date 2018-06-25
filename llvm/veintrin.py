@@ -77,7 +77,7 @@ class Op(object):
         else:
             return "{}:${}".format(self.ty.ValueType, self.name_)
 
-    def isImm(self): return self.kind == 'I' or self.kind == 'N'
+    def isImm(self): return self.kind == 'I' or self.kind == 'N' or self.kind == "Z"
     def isReg(self): return self.kind == 'v' or self.kind == 's'
     def isSReg(self): return self.kind == 's'
     def isVReg(self): return self.kind == 'v'
@@ -142,6 +142,7 @@ class ImmOp(Op):
 
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
 def ImmN(ty): return ImmOp("I", ty, "N", "uimm6")
+def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7") # FIXME: simm7?
 
 class OL(list):
     def __init__(self):
@@ -211,7 +212,7 @@ class Inst:
     def inst(self):
         if not self.instName:
             return None
-        return re.sub(r'[a-z0-9]*', '', self.instName)
+        return re.sub(r'[a-z]*[0-9]*$', '', self.instName)
 
     def intrinsicName(self):
         return self.intrinsicName_
@@ -700,6 +701,22 @@ class InstTable:
 
     def add(self, inst):
         self.currentSection.add(inst)
+        return inst
+
+    def Inst(self, *args):
+        return self.add(Inst(*args))
+
+    def VLD2Dm(self, opc, inst, asm):
+        self.Inst(opc, inst+"rr", asm, asm, [VX(T_u64)], [SY(T_u64), SZ(T_u64)]).noTest().readMem()
+        self.Inst(opc, inst+"ir", asm, asm, [VX(T_u64)], [ImmI(T_u64), SZ(T_u64)]).noTest().readMem()
+        self.Inst(opc, inst+"rz", asm, asm, [VX(T_u64)], [SY(T_u64), ImmZ(T_u64)]).noTest().readMem()
+        self.Inst(opc, inst+"iz", asm, asm, [VX(T_u64)], [ImmI(T_u64), ImmZ(T_u64)]).noTest().readMem()
+
+    def VST2Dm(self, opc, inst, asm):
+        self.Inst(opc, inst+"rr", asm, asm, [], [VX(T_u64), SY(T_u64), SZ(T_u64)]).noTest().writeMem()
+        self.Inst(opc, inst+"ir", asm, asm, [], [VX(T_u64), ImmI(T_u64), SZ(T_u64)]).noTest().writeMem()
+        self.Inst(opc, inst+"rz", asm, asm, [], [VX(T_u64), SY(T_u64), ImmZ(T_u64)]).noTest().writeMem()
+        self.Inst(opc, inst+"iz", asm, asm, [], [VX(T_u64), ImmI(T_u64), ImmZ(T_u64)]).noTest().writeMem()
 
     def VBRDm(self, opc):
         tmp = []
@@ -992,15 +1009,15 @@ T.Section("5.3.2.7. Vector Transfer Instructions")
 T.Dummy("VLD", "__vr _ve_vld(void* sz, int sy)", "vld")
 T.Dummy("VLDU", "__vr _ve_vldu(void* sz, int sy)", "vldu")
 T.Dummy("VLDL", "__vr _ve_vldl(void* sz, int sy)", "vldl")
-T.NoImpl("VLD2D")
-T.NoImpl("VLDU2D")
-T.NoImpl("VLDL2D")
+T.VLD2Dm(0xC1, "VLD2D", "vld2d")
+T.VLD2Dm(0xC2, "VLDU2D", "vldu2d")
+T.VLD2Dm(0xC3, "VLDL2D", "vldl2d")
 T.Dummy("VST", "void _ve_vst(void* sz, __vr vx, int sy)", "vst")
 T.Dummy("VSTU", "void _ve_vstu(void* sz, __vr vx, int sy)", "vstu")
 T.Dummy("VSTL", "void _ve_vstl(void* sz, __vr vx, int sy)", "vstl")
-T.NoImpl("VST2D")
-T.NoImpl("VSTU2D")
-T.NoImpl("VSTL2D")
+T.VST2Dm(0xD1, "VST2D", "vst2d")
+T.VST2Dm(0xD2, "VSTU2D", "vstu2d")
+T.VST2Dm(0xD3, "VSTL2D", "vstl2d")
 T.NoImpl("PFCHV")
 T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
 #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
