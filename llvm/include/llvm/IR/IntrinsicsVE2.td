@@ -1,3 +1,9 @@
+let TargetPrefix = "ve" in def int_ve_vld2d : GCCBuiltin<"__builtin_ve_vld2d">, Intrinsic<[LLVMType<v256f64>], [LLVMType<i64>, llvm_ptr_ty], [IntrReadMem]>;
+let TargetPrefix = "ve" in def int_ve_vldu2d : GCCBuiltin<"__builtin_ve_vldu2d">, Intrinsic<[LLVMType<v256f64>], [LLVMType<i64>, llvm_ptr_ty], [IntrReadMem]>;
+let TargetPrefix = "ve" in def int_ve_vldl2d : GCCBuiltin<"__builtin_ve_vldl2d">, Intrinsic<[LLVMType<v256f64>], [LLVMType<i64>, llvm_ptr_ty], [IntrReadMem]>;
+let TargetPrefix = "ve" in def int_ve_vst2d : GCCBuiltin<"__builtin_ve_vst2d">, Intrinsic<[], [LLVMType<v256f64>, LLVMType<i64>, llvm_ptr_ty], [IntrWriteMem]>;
+let TargetPrefix = "ve" in def int_ve_vstu2d : GCCBuiltin<"__builtin_ve_vstu2d">, Intrinsic<[], [LLVMType<v256f64>, LLVMType<i64>, llvm_ptr_ty], [IntrWriteMem]>;
+let TargetPrefix = "ve" in def int_ve_vstl2d : GCCBuiltin<"__builtin_ve_vstl2d">, Intrinsic<[], [LLVMType<v256f64>, LLVMType<i64>, llvm_ptr_ty], [IntrWriteMem]>;
 let TargetPrefix = "ve" in def int_ve_lsv_vvss : GCCBuiltin<"__builtin_ve_lsv_vvss">, Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, LLVMType<i32>, LLVMType<i64>], [IntrNoMem]>;
 let TargetPrefix = "ve" in def int_ve_lvs_svs_u64 : GCCBuiltin<"__builtin_ve_lvs_svs_u64">, Intrinsic<[LLVMType<i64>], [LLVMType<v256f64>, LLVMType<i32>], [IntrNoMem]>;
 let TargetPrefix = "ve" in def int_ve_lvs_svs_f64 : GCCBuiltin<"__builtin_ve_lvs_svs_f64">, Intrinsic<[LLVMType<f64>], [LLVMType<v256f64>, LLVMType<i32>], [IntrNoMem]>;

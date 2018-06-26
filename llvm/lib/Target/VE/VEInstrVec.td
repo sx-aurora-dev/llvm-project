@@ -421,6 +421,31 @@ multiclass VLDm<string opcStr, bits<8> opc> {
   }
 }
 
+multiclass VLD2Dm<string opcStr, bits<8> opc> {
+  def rr : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+      let vc = 0;
+      let cy = 1;
+  }
+  def ir : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+      let vc = 0;
+      let cy = 0;
+  }
+  def rz : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,0"), []> {
+      let vc = 0;
+      let cy = 1;
+      let cz = 0;
+  }
+  def iz : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,0"), []> {
+      let vc = 0;
+      let cy = 0;
+      let cz = 0;
+  }
+}
+
 multiclass VSTm<string opcStr, bits<8> opc> {
   def i : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
@@ -448,13 +473,46 @@ multiclass VSTm<string opcStr, bits<8> opc> {
   }
 }
 
+multiclass VST2Dm<string opcStr, bits<8> opc> {
+  def rr : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+      let vc = 0;
+      let cy = 1;
+  }
+  def ir : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+      let vc = 0;
+      let cy = 0;
+  }
+  def rz : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,0"), []> {
+      let vc = 0;
+      let cy = 1;
+      let cz = 0;
+  }
+  def iz : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
+    !strconcat(opcStr, " $vx,$sy,0"), []> {
+      let vc = 0;
+      let cy = 0;
+      let cz = 0;
+  }
+}
+
 defm VLD : VLDm<"vld", 0x81>;
 defm VLDU : VLDm<"vldu", 0x82>;
 defm VLDL : VLDm<"vldl", 0x83>;
 
+defm VLD2D  : VLD2Dm<"vld2d", 0xC1>;
+defm VLDU2D : VLD2Dm<"vldu2d", 0xC2>;
+defm VLDL2D : VLD2Dm<"vldl2d", 0xC3>;
+
 defm VST : VSTm<"vst", 0x91>;
 defm VSTU : VSTm<"vstu", 0x92>;
 defm VSTL : VSTm<"vstl", 0x93>;
+
+defm VST2D  : VST2Dm<"vst2d", 0xD1>;
+defm VSTU2D : VST2Dm<"vstu2d", 0xD2>;
+defm VSTL2D : VST2Dm<"vstl2d", 0xD3>;
 
 def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I64:$sy, I64:$sz), 
   "lsv ${vx}(${sy}),$sz", []> {
