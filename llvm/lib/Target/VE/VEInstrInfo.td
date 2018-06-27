@@ -967,7 +967,7 @@ def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
 
 def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
           (i32 (PCMOVsrr (cond2cc $cond), 
-                         (FCPsrr f64:$LHS, f64:$RHS), 
+                         (FCPdrr f64:$LHS, f64:$RHS), 
                          (ORim1 1, 0), 
                          (ORim1 0, 0)))>;
 
