@@ -2940,16 +2940,16 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
   if (CMPVT == MVT::i32) {
     CMOVOpcode = VE::PCMOVwrr;
     if (isSignedIntSetCC(CC)) {
-      CMPOpcode = VE::CPSWZrr;
+      CMPOpcode = VE::CPSrr;
     } else if (isUnsignedIntSetCC(CC)) {
-      CMPOpcode = VE::CMPWrr;
+      CMPOpcode = VE::CMPUWrr;
     }
   } else if (CMPVT == MVT::i64) {
     CMOVOpcode = VE::PCMOVlrr;
     if (isSignedIntSetCC(CC)) {
       CMPOpcode = VE::CPXrr;
     } else if (isUnsignedIntSetCC(CC)) {
-      CMPOpcode = VE::CMPLrr;
+      CMPOpcode = VE::CMPrr;
     }
   } else if (CMPVT == MVT::f32) {
     CMPOpcode = VE::FCPsrr;
