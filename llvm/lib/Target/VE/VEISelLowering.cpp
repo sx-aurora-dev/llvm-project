@@ -2952,10 +2952,10 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
       CMPOpcode = VE::CMPrr;
     }
   } else if (CMPVT == MVT::f32) {
-    CMPOpcode = VE::FCPsrr;
+    CMPOpcode = VE::FCPSrr;
     CMOVOpcode = VE::PCMOVsrr;
   } else if (CMPVT == MVT::f64) {
-    CMPOpcode = VE::FCPdrr;
+    CMPOpcode = VE::FCPrr;
     CMOVOpcode = VE::PCMOVdrr;
   }
 

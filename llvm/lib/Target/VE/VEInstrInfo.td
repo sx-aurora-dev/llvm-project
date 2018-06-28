@@ -437,7 +437,7 @@ multiclass RRNDm<string opcStr, bits<8>opc,
 //   Used by cmov instruction
 
 let Constraints = "$sx = $sd", DisableEncoding = "$sd" in
-multiclass RRCFm<string opcStr, bits<8>opc, SDNode OpNode,
+multiclass RRCFm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def rr : RR<
     opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, RC:$sz, RC:$sd),
@@ -534,16 +534,16 @@ multiclass BCRm {
 
 // CMOV instructions
 let cx = 0, cw = 0, cw2 = 0 in
-defm CMOVL : RRCFm<"cmov.l.${cf}", 0x3B, select, I64, i64, simm7Op64, uimm6Op64>;
+defm CMOVL : RRCFm<"cmov.l.${cf}", 0x3B, I64, i64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 0 in
-defm CMOVW : RRCFm<"cmov.w.${cf}", 0x3B, select, I32, i32, simm7Op32, uimm6Op32>;
+defm CMOVW : RRCFm<"cmov.w.${cf}", 0x3B, I32, i32, simm7Op32, uimm6Op32>;
 
 let cx = 0, cw = 0, cw2 = 1 in
-defm CMOVD : RRCFm<"cmov.d.${cf}", 0x3B, select, F64, f64, simm7Op64, uimm6Op64>;
+defm CMOVD : RRCFm<"cmov.d.${cf}", 0x3B, F64, f64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 1 in
-defm CMOVS : RRCFm<"cmov.s.${cf}", 0x3B, select, F32, f32, simm7Op32, uimm6Op32>;
+defm CMOVS : RRCFm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op32, uimm6Op32>;
 
 // NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
@@ -705,10 +705,12 @@ defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
 def : Pat<(fneg f64:$sx), (FSBd (ORim1 0, 0), $sx)>;
 def : Pat<(fneg f32:$sx), (FSBs (ORim1 0, 0), $sx)>;
 
-let cx = 0 in def FCPdrr : RR<0x7E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-  "fcmp.d $sx,$sy,$sz", []>;
-let cx = 1 in def FCPsrr : RR<0x7E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-  "fcmp.s $sx,$sy,$sz", []>;
+// FCP instruction
+let cx = 0 in
+defm FCP : RRNDm<"fcmp.d", 0x7E, F64, f64, simm7Op64, uimm6Op64>;
+let cx = 1 in
+defm FCPS : RRNDm<"fcmp.s", 0x7E, F32, f32, simm7Op32, uimm6Op32>;
+
 // FCM
 
 /*
@@ -1119,39 +1121,43 @@ def PCMOVsrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
 //           CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
-          (i32 (CMOVLrm0 (icond2cc $cond), 
-                         (CPXrr i64:$LHS, i64:$RHS), 
-                         63, 
-                         (ORim1 0, 0)))>;
+          (COPY_TO_REGCLASS
+              (CMOVLrm0 (icond2cc $cond), 
+                        (i64 (CPXrr i64:$LHS, i64:$RHS)), 
+                        63, 
+                        (ORim1 0, 0)), I32)>;
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCUIOp:$cond)),
-          (i32 (CMOVLrm0 (icond2cc $cond), 
-                         (CMPrr i64:$LHS, i64:$RHS), 
-                         63, 
-                         (ORim1 0, 0)))>;
+          (COPY_TO_REGCLASS
+              (CMOVLrm0 (icond2cc $cond), 
+                        (CMPrr i64:$LHS, i64:$RHS), 
+                        63, 
+                        (ORim1 0, 0)), I32)>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCSIOp:$cond)),
-          (i32 (CMOVWrm0 (icond2cc $cond), 
-                         (CPSrr i32:$LHS, i32:$RHS),
-                         63, 
-                         (ORim1 0, 0)))>;
+          (CMOVWrm0 (icond2cc $cond), 
+                    (CPSrr i32:$LHS, i32:$RHS),
+                    63, 
+                    (ORim1 0, 0))>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCUIOp:$cond)),
-          (i32 (CMOVWrm0 (icond2cc $cond), 
-                         (CMPUWrr i32:$LHS, i32:$RHS),
-                         63, 
-                         (ORim1 0, 0)))>;
+          (CMOVWrm0 (icond2cc $cond), 
+                    (CMPUWrr i32:$LHS, i32:$RHS),
+                    63, 
+                    (ORim1 0, 0))>;
 
 def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
-          (i32 (PCMOVsrr (fcond2cc $cond), 
-                         (FCPdrr f64:$LHS, f64:$RHS), 
-                         (ORim1 1, 0), 
-                         (ORim1 0, 0)))>;
+          (COPY_TO_REGCLASS
+              (CMOVDrm0 (fcond2cc $cond), 
+                        (FCPrr f64:$LHS, f64:$RHS), 
+                        63, 
+                        (COPY_TO_REGCLASS (ORim1 0, 0), F64)), I32)>;
 
 def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
-          (i32 (PCMOVsrr (fcond2cc $cond), 
-                         (FCPsrr f32:$LHS, f32:$RHS), 
-                         (ORim1 1, 0), 
-                         (ORim1 0, 0)))>;
+          (COPY_TO_REGCLASS
+              (CMOVSrm0 (fcond2cc $cond), 
+                        (FCPSrr f32:$LHS, f32:$RHS), 
+                        63, 
+                        (ORim1 0, 0)), I32)>;
 
 include "VEInstrVec.td"
