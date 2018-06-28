@@ -54,13 +54,12 @@ class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
    : RM<opVal, outs, ins, asmstr, pattern, itin> {
   bits<1> cw = 0;
   bits<1> cw2 = 0;
-  bits<4> CFw = 0;
+  bits<4> cfw = 0;
   let imm32{0-23} = 0;
   let imm32{24} = cw;
   let imm32{25} = cw2;
   let imm32{26-27} = 0;
-  let imm32{28-31} = CFw;
-  //let imm32 = 0;
+  let imm32{28-31} = cfw;
 }
 
 class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,

@@ -575,9 +575,9 @@ multiclass CVTm<string opcStr, bits<8> opc>
     }
 }
 
-let cx = 1, cw = 0 in let CFw = 8 in defm FIXs : CVTm<"cvt.w.s.sx.rz", 0x5E>;
-let cx = 0, cw = 0 in let CFw = 8 in defm FIXd : CVTm<"cvt.w.d.sx.rz", 0x5E>;
-let CFw = 8 in defm FIXX : CVTm<"cvt.l.d.rz", 0x4F>;
+let cx = 1, cw = 0 in let cfw = 8 in defm FIXs : CVTm<"cvt.w.s.sx.rz", 0x5E>;
+let cx = 0, cw = 0 in let cfw = 8 in defm FIXd : CVTm<"cvt.w.d.sx.rz", 0x5E>;
+let cfw = 8 in defm FIXX : CVTm<"cvt.l.d.rz", 0x4F>;
 let cx = 1 in defm FLTs : CVTm<"cvt.s.w", 0x5E>;
 let cx = 0 in defm FLTd : CVTm<"cvt.d.w", 0x5E>;
 defm FLTX : CVTm<"cvt.d.l", 0x5F>;
