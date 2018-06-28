@@ -3,10 +3,9 @@
 define zeroext i1 @setccf64(double, double) #0 {
 ; CHECK-LABEL: setccf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fcmp.d %s34,%s0,%s1
+; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s35, 1, (0)1
-; CHECK-NEXT:    cmov.s.gt %s0,%s35,%s34
+; CHECK-NEXT:    cmov.d.gt %s0, (63)0, %s34
   %3 = fcmp ogt double %0, %1
   ret i1 %3
 }
@@ -14,10 +13,9 @@ define zeroext i1 @setccf64(double, double) #0 {
 define zeroext i1 @setccf32(float, float) #0 {
 ; CHECK-LABEL: setccf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fcmp.s %s34,%s0,%s1
+; CHECK-NEXT:    fcmp.s %s34, %s0, %s1
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s35, 1, (0)1
-; CHECK-NEXT:    cmov.s.gt %s0,%s35,%s34
+; CHECK-NEXT:    cmov.s.gt %s0, (63)0, %s34
   %3 = fcmp ogt float %0, %1
   ret i1 %3
 }
