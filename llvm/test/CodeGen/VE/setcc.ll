@@ -25,10 +25,9 @@ define zeroext i1 @setccf32(float, float) #0 {
 define zeroext i1 @setcci64(i64, i64) #0 {
 ; CHECK-LABEL: setcci64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cmpu.l %s34,%s0,%s1
+; CHECK-NEXT:    cmps.l %s34, %s0, %s1
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s35, 1, (0)1
-; CHECK-NEXT:    cmov.l.gt %s0,%s35,%s34
+; CHECK-NEXT:    cmov.l.gt %s0, (63)0, %s34
   %3 = icmp sgt i64 %0, %1
   ret i1 %3
 }
@@ -36,10 +35,9 @@ define zeroext i1 @setcci64(i64, i64) #0 {
 define zeroext i1 @setcci32(i32, i32) #0 {
 ; CHECK-LABEL: setcci32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cmpu.w %s34,%s0,%s1
+; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s35, 1, (0)1
-; CHECK-NEXT:    cmov.w.gt %s0,%s35,%s34
+; CHECK-NEXT:    cmov.w.gt %s0, (63)0, %s34
   %3 = icmp sgt i32 %0, %1
   ret i1 %3
 }

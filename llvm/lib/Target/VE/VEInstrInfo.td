@@ -30,6 +30,26 @@ def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm6   : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 
+def CCSIOp : PatLeaf<(cond), [{
+  switch (N->get()) {
+  default:          return true;
+  case ISD::SETULT:
+  case ISD::SETULE:
+  case ISD::SETUGT:
+  case ISD::SETUGE: return false;
+  }
+}]>;
+
+def CCUIOp : PatLeaf<(cond), [{
+  switch (N->get()) {
+  default:         return true;
+  case ISD::SETLT:
+  case ISD::SETLE:
+  case ISD::SETGT:
+  case ISD::SETGE: return false;
+  }
+}]>;
+
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((unsigned)(N->getZExtValue() & 0xffffffff),
                                    SDLoc(N), MVT::i64);
@@ -57,7 +77,7 @@ def zext_imm : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i64);
 }]>;
 
-def cond2cc : SDNodeXForm<cond, [{
+def icond2cc : SDNodeXForm<cond, [{
   VECC::CondCodes cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown integer condition code!");
@@ -67,14 +87,34 @@ def cond2cc : SDNodeXForm<cond, [{
   case ISD::SETGT:  cc = VECC::CC_G;  break;
   case ISD::SETLE:  cc = VECC::CC_LE; break;
   case ISD::SETGE:  cc = VECC::CC_GE; break;
-  case ISD::SETULT: cc = VECC::CC_LNAN; break;
-  case ISD::SETULE: cc = VECC::CC_LENAN; break;
-  case ISD::SETUGT: cc = VECC::CC_GNAN; break;
-  case ISD::SETUGE: cc = VECC::CC_GENAN; break;
-  case ISD::SETOLT: cc = VECC::CC_L; break;
-  case ISD::SETOLE: cc = VECC::CC_LE; break;
-  case ISD::SETOGT: cc = VECC::CC_G; break;
-  case ISD::SETOGE: cc = VECC::CC_GE; break;
+  case ISD::SETULT: cc = VECC::CC_L;  break;
+  case ISD::SETULE: cc = VECC::CC_LE; break;
+  case ISD::SETUGT: cc = VECC::CC_G;  break;
+  case ISD::SETUGE: cc = VECC::CC_GE; break;
+  }
+  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2cc : SDNodeXForm<cond, [{
+  VECC::CondCodes cc;
+  switch (N->get()) {
+  default:          llvm_unreachable("Unknown float condition code!");
+  case ISD::SETFALSE: cc = VECC::CC_AF;    break;
+  case ISD::SETOEQ:   cc = VECC::CC_EQ;    break;
+  case ISD::SETONE:   cc = VECC::CC_NE;    break;
+  case ISD::SETOLT:   cc = VECC::CC_L;     break;
+  case ISD::SETOGT:   cc = VECC::CC_G;     break;
+  case ISD::SETOLE:   cc = VECC::CC_LE;    break;
+  case ISD::SETOGE:   cc = VECC::CC_GE;    break;
+  case ISD::SETO:     cc = VECC::CC_NUM;   break;
+  case ISD::SETUO:    cc = VECC::CC_NAN;   break;
+  case ISD::SETUEQ:   cc = VECC::CC_EQNAN; break;
+  case ISD::SETUNE:   cc = VECC::CC_NENAN; break;
+  case ISD::SETULT:   cc = VECC::CC_LNAN;  break;
+  case ISD::SETUGT:   cc = VECC::CC_GNAN;  break;
+  case ISD::SETULE:   cc = VECC::CC_LENAN; break;
+  case ISD::SETUGE:   cc = VECC::CC_GENAN; break;
+  case ISD::SETTRUE:  cc = VECC::CC_AT;    break;
   }
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
@@ -262,6 +302,9 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
   }
 }
 
+// Multiclass for RR type instructions
+//   Used by add, sub, and similar isntructions
+
 multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def rr : RR<
@@ -325,6 +368,128 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
   */
 }
 
+// Multiclass for RR type instructions without dag pattern
+//   Used by cmp instruction
+
+multiclass RRNDm<string opcStr, bits<8>opc,
+               RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
+  def rr : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
+    !strconcat(opcStr, " $sx, $sy, $sz"),
+    []> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def ri : RR<
+    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
+    !strconcat(opcStr, " $sx, $sy, $sz"),
+    []> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def rm0 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})0"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
+  }
+  def rm1 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})1"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def im0 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})0"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz{6} = 1;
+    let hasSideEffects = 0;
+  }
+  def im1 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, $sy, (${sz})1"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def zi : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy),
+    !strconcat(opcStr, " $sx, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz = 0;
+    let hasSideEffects = 0;
+  }
+}
+
+// Multiclass for RR type instructions
+//   Used by cmov instruction
+
+let Constraints = "$sx = $sd", DisableEncoding = "$sd" in
+multiclass RRCFm<string opcStr, bits<8>opc, SDNode OpNode,
+               RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
+  def rr : RR<
+    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, RC:$sz, RC:$sd),
+    !strconcat(opcStr, " $sx, $sz, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def ri : RR<
+    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sz, immOp:$sy, RC:$sd),
+    !strconcat(opcStr, " $sx, $sz, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def rm0 : RR<
+    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, RC:$sd),
+    !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
+  }
+  def rm1 : RR<
+    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, RC:$sd),
+    !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def im0 : RR<
+    opc, (outs RC:$sx), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, RC:$sd),
+    !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz{6} = 1;
+    let hasSideEffects = 0;
+  }
+  def im1 : RR<
+    opc, (outs RC:$sx), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, RC:$sd),
+    !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+}
+
 
 // Branch multiclass
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
@@ -367,22 +532,18 @@ multiclass BCRm {
 // Instructions
 //===----------------------------------------------------------------------===//
 
-// SX = SZ if cf(sy)
-let cw = 0, cw2 = 0 in
-def CMOVlrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
-    "cmov.l.${cf} $sx,$sy,$sz", []>;
+// CMOV instructions
+let cx = 0, cw = 0, cw2 = 0 in
+defm CMOVL : RRCFm<"cmov.l.${cf}", 0x3B, select, I64, i64, simm7Op64, uimm6Op64>;
 
-let cw = 1, cw2 = 0 in
-def CMOVwrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
-    "cmov.w.${cf} $sx,$sy,$sz", []>;
+let cx = 0, cw = 1, cw2 = 0 in
+defm CMOVW : RRCFm<"cmov.w.${cf}", 0x3B, select, I32, i32, simm7Op32, uimm6Op32>;
 
-let cw = 0, cw2 = 1 in
-def CMOVdrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
-    "cmov.w.${cf} $sx,$sy,$sz", []>;
+let cx = 0, cw = 0, cw2 = 1 in
+defm CMOVD : RRCFm<"cmov.d.${cf}", 0x3B, select, F64, f64, simm7Op64, uimm6Op64>;
 
-let cw = 1, cw2 = 1 in
-def CMOVsrr : RR<0x3B, (outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz),
-    "cmov.w.${cf} $sx,$sy,$sz", []>;
+let cx = 0, cw = 1, cw2 = 1 in
+defm CMOVS : RRCFm<"cmov.s.${cf}", 0x3B, select, F32, f32, simm7Op32, uimm6Op32>;
 
 // NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
@@ -451,25 +612,21 @@ defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
 
 // DIV
 
-// u64
-let cx = 0, cy = 1, cz = 1 in
-def CMPLrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-        "cmpu.l $sx,$sy,$sz", []>;
+// CMP instruction
+let cx = 0 in
+defm CMP : RRNDm<"cmpu.l", 0x55, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 1 in
+defm CMPUW : RRNDm<"cmpu.w", 0x55, I32, i32, simm7Op32, uimm6Op32>;
 
-// u32
-let cx = 1, cy = 1, cz = 1 in
-def CMPWrr : RR<0x55, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-        "cmpu.w $sx,$sy,$sz", []>;
+// CPS instruction
+let cx = 0 in
+defm CPS : RRNDm<"cmps.w.sx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 1 in
+defm CPSU : RRNDm<"cmps.w.zx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
 
-// i32 cx: sx
-let cx = 1, cy = 1, cz = 1 in
-def CPSWZrr : RR<0x7A, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-        "cmps.w.zx $sx,$sy,$sz", []>;
-
-// i64
-let cy = 1, cz = 1 in
-def CPXrr : RR<0x7A, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-        "cmps.l $sx,$sy,$sz", []>;
+// CPX instruction
+let cx = 0 in
+defm CPX : RRNDm<"cmps.l", 0x6A, I64, i64, simm7Op64, uimm6Op64>;
 
 // cx: sx/zx, cw: max/min
 
@@ -897,16 +1054,16 @@ def : Pat<(call i64:$dst),
 // Branches
 def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
 //def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
-//          (BCRri (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
+//          (BCRri (icond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
 //                 (i64 (sext_imm $rhs)), bb:$addr)>;
 def : Pat<(brcc cond:$cond, simm7:$lhs, i32:$rhs, bb:$addr),
-          (BCRir (cond2cc $cond), (i64 (sext_imm $lhs)), 
+          (BCRir (icond2cc $cond), (i64 (sext_imm $lhs)), 
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
-          (BCRrr (cond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
+          (BCRrr (icond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
                  (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
 def : Pat<(brcc cond:$cond, i64:$lhs, i64:$rhs, bb:$addr),
-          (BCRrr (cond2cc $cond), $lhs, $rhs, bb:$addr)>;
+          (BCRrr (icond2cc $cond), $lhs, $rhs, bb:$addr)>;
 
 def : Pat<(i32 (bitconvert f32:$op)), (i32 I64:$op)>;
 
@@ -953,26 +1110,46 @@ def PCMOVsrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
   let Constraints = "$sx = $sd";
   }
 
-def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, cond:$cond)),
-          (i32 (PCMOVlrr (cond2cc $cond), 
-                         (CMPLrr i64:$LHS, i64:$RHS), 
-                         (ORim1 1, 0), 
+// Pattern matching for setcc LLVM IR
+//
+// For example:
+//   input:  setcc lhs, rhs, cond
+//   output: CMP  %tmp, lhs, rhs     ; compare lhs and rhs
+//           or   %res, 0, (0)1      ; initialize by 0
+//           CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
+
+def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
+          (i32 (CMOVLrm0 (icond2cc $cond), 
+                         (CPXrr i64:$LHS, i64:$RHS), 
+                         63, 
                          (ORim1 0, 0)))>;
 
-def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, cond:$cond)),
-          (i32 (PCMOVwrr (cond2cc $cond), 
-                         (CMPWrr i32:$LHS, i32:$RHS),
-                         (ORim1 1, 0), 
+def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCUIOp:$cond)),
+          (i32 (CMOVLrm0 (icond2cc $cond), 
+                         (CMPrr i64:$LHS, i64:$RHS), 
+                         63, 
+                         (ORim1 0, 0)))>;
+
+def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCSIOp:$cond)),
+          (i32 (CMOVWrm0 (icond2cc $cond), 
+                         (CPSrr i32:$LHS, i32:$RHS),
+                         63, 
+                         (ORim1 0, 0)))>;
+
+def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCUIOp:$cond)),
+          (i32 (CMOVWrm0 (icond2cc $cond), 
+                         (CMPUWrr i32:$LHS, i32:$RHS),
+                         63, 
                          (ORim1 0, 0)))>;
 
 def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
-          (i32 (PCMOVsrr (cond2cc $cond), 
+          (i32 (PCMOVsrr (fcond2cc $cond), 
                          (FCPdrr f64:$LHS, f64:$RHS), 
                          (ORim1 1, 0), 
                          (ORim1 0, 0)))>;
 
 def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
-          (i32 (PCMOVsrr (cond2cc $cond), 
+          (i32 (PCMOVsrr (fcond2cc $cond), 
                          (FCPsrr f32:$LHS, f32:$RHS), 
                          (ORim1 1, 0), 
                          (ORim1 0, 0)))>;
