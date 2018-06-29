@@ -1013,6 +1013,12 @@ def gen_veintrin_h(insts):
         if (not I.hasImmOp()) and I.hasBuiltin():
             print I.veintrin()
 
+def gen_mktest(insts):
+    for I in insts:
+        if I.hasTest() and I.asm():
+            intrin = I.intrinsicName()
+            print("python mktest.py {name} gen/tests/{name}.ll gen/tests/{name}.s {asm} > tmp/gen-intrin-{name}.ll".format(name=intrin, asm=I.asm()))
+
 T = InstTable()
 
 T.Section("5.3.2.7. Vector Transfer Instructions", 18)
@@ -1145,11 +1151,11 @@ T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]], None, True).noTest() # Pseudo
 T.InstX(0x00, "VFMKpaf", "pvfmk.af", [[VM512]], None, True).noTest() # Pseudo
 
 T.Section("5.3.2.13. Vector Recursive Relation Instructions", 32)
-T.InstX(0xEA, "VSUMSsx", "vsumw.sx", [[VX(T_i32), VY(T_i32)]])
-T.InstX(0xEA, "VSUMSzx", "vsumw.zx", [[VX(T_i32), VY(T_i32)]])
-T.InstX(0xAA, "VSUMX", "vsuml", [[VX(T_i64), VY(T_i64)]])
-T.InstX(0xEC, "VFSUMd", "vfsumd", [[VX(T_f64), VY(T_f64)]])
-T.InstX(0xEC, "VFSUMs", "vfsums", [[VX(T_f32), VY(T_f32)]])
+T.InstX(0xEA, "VSUMSsx", "vsum.w.sx", [[VX(T_i32), VY(T_i32)]])
+T.InstX(0xEA, "VSUMSzx", "vsum.w.zx", [[VX(T_i32), VY(T_i32)]])
+T.InstX(0xAA, "VSUMX", "vsum.l", [[VX(T_i64), VY(T_i64)]])
+T.InstX(0xEC, "VFSUMd", "vfsum.d", [[VX(T_f64), VY(T_f64)]])
+T.InstX(0xEC, "VFSUMs", "vfsum.s", [[VX(T_f32), VY(T_f32)]])
 T.FLm(0xBB, "VMAXSa{fl}sx", "vrmaxs.w{fl}.sx", [[VX(T_i32), VY(T_i32)]])
 T.FLm(0xBB, "VMAXSa{fl}zx", "vrmaxs.w{fl}.zx", [[VX(T_u32), VY(T_u32)]])
 T.FLm(0xBB, "VMAXSi{fl}sx", "vrmins.w{fl}.sx", [[VX(T_i32), VY(T_i32)]])
@@ -1219,6 +1225,7 @@ parser.add_argument('-f', dest="opt_filter", action="store")
 parser.add_argument('-m', dest="opt_manual", action="store_true")
 parser.add_argument('-a', dest="opt_all", action="store_true")
 parser.add_argument('--html', dest="opt_html", action="store_true")
+parser.add_argument('--mktest', dest="opt_mktest", action="store_true")
 args, others = parser.parse_known_args()
 
 
@@ -1277,6 +1284,8 @@ if args.opt_reference:
     print '}'
 if args.opt_html:
     HtmlManualPrinter().printAll(T)
+if args.opt_mktest:
+    gen_mktest(insts)
 
 if args.opt_manual:
     ManualInstPrinter().printAll(insts)
