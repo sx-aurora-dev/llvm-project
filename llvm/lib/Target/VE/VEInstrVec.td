@@ -399,29 +399,6 @@ class RVM0<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 // 5.3.2.7. Vector Transfer Instructions
 
 multiclass VLDm<string opcStr, bits<8> opc> {
-  def i : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz),
-    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-      let vc = 0;
-      let cy = 0;
-  }
-  def r : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
-    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-      let vc = 0;
-      let cy = 1;
-  }
-  def inc : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz),
-    !strconcat(opcStr, ".nc $vx,$sy,$sz"), []> {
-      let vc = 1;
-      let cy = 0;
-  }
-  def rnc : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
-    !strconcat(opcStr, ".nc $vx,$sy,$sz"), []> {
-      let vc = 1;
-      let cy = 1;
-  }
-}
-
-multiclass VLD2Dm<string opcStr, bits<8> opc> {
   def rr : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
       let vc = 0;
@@ -447,33 +424,6 @@ multiclass VLD2Dm<string opcStr, bits<8> opc> {
 }
 
 multiclass VSTm<string opcStr, bits<8> opc> {
-  def i : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
-    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-      let vc = 0;
-      let cy = 0;
-      let cz = 1;
-  }
-  def r : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
-    !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-      let vc = 0;
-      let cy = 1;
-      let cz = 1;
-  }
-  def inc : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
-    !strconcat(opcStr, ".nc $vx,$sy,$sz"), []> {
-      let vc = 1;
-      let cy = 0;
-      let cz = 1;
-  }
-  def rnc : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
-    !strconcat(opcStr, ".nc $vx,$sy,$sz"), []> {
-      let vc = 1;
-      let cy = 1;
-      let cz = 1;
-  }
-}
-
-multiclass VST2Dm<string opcStr, bits<8> opc> {
   def rr : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
       let vc = 0;
@@ -500,19 +450,21 @@ multiclass VST2Dm<string opcStr, bits<8> opc> {
 
 defm VLD : VLDm<"vld", 0x81>;
 defm VLDU : VLDm<"vldu", 0x82>;
-defm VLDL : VLDm<"vldl", 0x83>;
+let vo = 0 in defm VLDLsx : VLDm<"vldl.sx", 0x83>;
+let vo = 1 in defm VLDLzx : VLDm<"vldl.zx", 0x83>;
 
-defm VLD2D  : VLD2Dm<"vld2d", 0xC1>;
-defm VLDU2D : VLD2Dm<"vldu2d", 0xC2>;
-defm VLDL2D : VLD2Dm<"vldl2d", 0xC3>;
+defm VLD2D  : VLDm<"vld2d", 0xC1>;
+defm VLDU2D : VLDm<"vldu2d", 0xC2>;
+let vo = 0 in defm VLDL2Dsx : VLDm<"vldl2d.sx", 0xC3>;
+let vo = 1 in defm VLDL2Dzx : VLDm<"vldl2d.zx", 0xC3>;
 
 defm VST : VSTm<"vst", 0x91>;
 defm VSTU : VSTm<"vstu", 0x92>;
 defm VSTL : VSTm<"vstl", 0x93>;
 
-defm VST2D  : VST2Dm<"vst2d", 0xD1>;
-defm VSTU2D : VST2Dm<"vstu2d", 0xD2>;
-defm VSTL2D : VST2Dm<"vstl2d", 0xD3>;
+defm VST2D  : VSTm<"vst2d", 0xD1>;
+defm VSTU2D : VSTm<"vstu2d", 0xD2>;
+defm VSTL2D : VSTm<"vstl2d", 0xD3>;
 
 def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I64:$sy, I64:$sz), 
   "lsv ${vx}(${sy}),$sz", []> {
@@ -525,7 +477,8 @@ def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
 }
 
 let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0 in
-def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy), "lvs ${sx},${vx}(${sy})", []>;
+def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy),
+  "lvs ${sx},${vx}(${sy})", []>;
 
 def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)), 
           (f32 (LVSr v256f64:$vx, i32:$sy))>;
@@ -966,16 +919,16 @@ def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 // Pattern Matchings for Vector Instructions
 
 def : Pat<(v256f64 (load ADDRri:$addr)), 
-          (v256f64 (VLDi 8, (LEAasx ADDRri:$addr)))>;
+          (v256f64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(v512f32 (load ADDRri:$addr)), 
-          (v512f32 (VLDi 8, (LEAasx ADDRri:$addr)))>;
+          (v512f32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(store v256f64:$vx, ADDRri:$addr), 
-          (VSTi v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(store v512f32:$vx, ADDRri:$addr), 
-          (VSTi v512f32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(fadd v256f64:$vy, v256f64:$vz), (VFADdv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
@@ -983,26 +936,6 @@ def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
 // Pattern Matchings for Vector Intrinsics
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
-
-def : Pat<(int_ve_vld i64:$sz, i64:$sy), (VLDr i64:$sy, i64:$sz)>;
-def : Pat<(int_ve_vld i64:$sz, (i64 simm7:$sy)), (VLDi (i64 simm7:$sy), i64:$sz)>;
-def : Pat<(int_ve_vldu i64:$sz, i64:$sy), (VLDUr i64:$sy, i64:$sz)>;
-def : Pat<(int_ve_vldu i64:$sz, (i64 simm7:$sy)), (VLDUi (i64 simm7:$sy), i64:$sz)>;
-def : Pat<(int_ve_vldl i64:$sz, i64:$sy), (VLDLr i64:$sy, i64:$sz)>;
-def : Pat<(int_ve_vldl i64:$sz, (i64 simm7:$sy)), (VLDLi (i64 simm7:$sy), i64:$sz)>;
-
-def : Pat<(int_ve_vst i64:$sz, v256f64:$vx, i64:$sy), 
-          (VSTr v256f64:$vx, i64:$sy, i64:$sz)>;
-def : Pat<(int_ve_vst i64:$sz, v256f64:$vx, (i64 simm7:$sy)), 
-          (VSTi v256f64:$vx, (i64 simm7:$sy), i64:$sz)>;
-def : Pat<(int_ve_vstu i64:$sz, v256f64:$vx, i64:$sy), 
-          (VSTUr v256f64:$vx, i64:$sy, i64:$sz)>;
-def : Pat<(int_ve_vstu i64:$sz, v256f64:$vx, (i64 simm7:$sy)), 
-          (VSTUi v256f64:$vx, (i64 simm7:$sy), i64:$sz)>;
-def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, i64:$sy), 
-          (VSTLr v256f64:$vx, i64:$sy, i64:$sz)>;
-def : Pat<(int_ve_vstl i64:$sz, v256f64:$vx, (i64 simm7:$sy)), 
-          (VSTLi v256f64:$vx, (i64 simm7:$sy), i64:$sz)>;
 
 def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
           (ORrr (LDUri MEMri:$addr0), (LDLUri MEMri:$addr1))>;
@@ -1012,19 +945,6 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
             (LDLUri MEMri:$addr),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
-
-/*
-def : Pat<(int_ve_vld2 i64:$sz, i64:$sy, v256f64:$vz), (VLDr2 i64:$sy, i64:$sz, v256f64:$vz)>;
-*/
-
-/*
-def : Pat<(i64 (int_ve_pack_f32 f32:$sy)),
-          (i64 (MPYrr 
-            (SRL $sy,32),
-            (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
-                      (HI32 (i64 0x0000000100000001)))))>;
-*/
-
 
 
 include "VEInstrIntrinsic.td"

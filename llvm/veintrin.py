@@ -62,7 +62,7 @@ class Op(object):
         return self.ty.builtinCode
 
     def dagOp(self):
-        if self.kind == 'I':
+        if self.kind == 'I' or self.kind == 'Z':
             return "({} {}:${})".format(self.ty.ValueType, self.immType, self.name_)
         elif self.kind == 'c':
             return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
@@ -236,8 +236,6 @@ class Inst:
 
     # to be included from IntrinsicsVE.td
     def intrinsicDefine(self):
-        #outs = ", ".join(["LLVMType<{}>".format(op.ValueType()) for op in self.outs])
-        #ins = ", ".join(["LLVMType<{}>".format(op.ValueType()) for op in self.ins])
         outs = ", ".join(["{}".format(op.intrinDefType()) for op in self.outs])
         ins = ", ".join(["{}".format(op.intrinDefType()) for op in self.ins])
 
@@ -263,7 +261,6 @@ class Inst:
 
     def hasTest(self):
         return self.hasTest_
-        #return not self.outs[0].isMask()
 
     def stride(self, op):
         if self.packed:
@@ -297,12 +294,12 @@ class TestGeneratorVMRG:
 
         p = {'type' : 'unsigned long int*',
              'stride' : 256, 'vm' : '__vm', 'vfmk' : '_ve_vfmkw_mcv',
-             'vld' : '_ve_vldl(pm, 4)' }
+             'vld' : '_ve_vldlzx_vss(4, pm)' }
         p['lvl'] = '_ve_lvl(n - i < 256 ? n - i : 256)'
         if I.ins[2].isMask512():
             p = {'type' : 'unsigned int*',
                  'stride': 512, 'vm' : '__vm512',
-                 'vfmk' : '_ve_pvfmkw_Mcv', 'vld' : '_ve_vld(pm, 8)'}
+                 'vfmk' : '_ve_pvfmkw_Mcv', 'vld' : '_ve_vld_vss(8, pm)'}
             p['lvl'] = '_ve_lvl(n - i < 512 ? (n - i) / 2UL : 256)'
 
         header = "void {f}({ty} px, {ty} py, {ty} pz, unsigned int* pm, int n)".format(f=I.intrinsicName(), ty=p['type'])
@@ -312,12 +309,12 @@ class TestGeneratorVMRG:
 {{
     for (int i = 0; i < n; i += {stride}) {{
         {lvl};
-        __vr vy = _ve_vld(py, 8);
-        __vr vz = _ve_vld(pz, 8);
+        __vr vy = _ve_vld_vss(8, py);
+        __vr vz = _ve_vld_vss(8, pz);
         __vr tmp = {vld};
         {vm} vm = {vfmk}(VECC_G, tmp);
         __vr vx = _ve_{intrin}(vy, vz, vm);
-        _ve_vst(px, vx, 8);
+        _ve_vst_vss(vx, 8, px);
         px += {stride};
         py += {stride};
         pz += {stride};
@@ -393,15 +390,15 @@ class TestGenerator:
         return "void {name}({args}, int n)".format(name=I.intrinsicName(), args=", ".join(args))
 
     def get_vld_vst_inst(self, I, op):
-        vld = "vld"
-        vst = "vst"
+        vld = "vld_vss"
+        vst = "vst_vss"
         if not I.packed:
             if op.ty.elemType == T_f32:
-                vld = "vldu"
-                vst = "vstu"
+                vld = "vldu_vss"
+                vst = "vstu_vss"
             elif op.ty.elemType == T_i32 or op.ty.elemType == T_u32:
-                vld = "vldl"
-                vst = "vstl"
+                vld = "vldlsx_vss"
+                vst = "vstl_vss"
         return [vld, vst]
 
     def test_(self, I):
@@ -436,16 +433,16 @@ class TestGenerator:
             if op.isVReg():
                 stride = I.stride(op)
                 vld, vst = self.get_vld_vst_inst(I, op)
-                body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
+                body += indent + "__vr {} = _ve_{}({}, p{});\n".format(op.regName(), vld, stride, op.regName())
             if op.isMask512():
                 stride = I.stride(op)
-                vld, vst = self.get_vld_vst_inst(I, op)
-                body += indent + "__vr {}0 = _ve_vld(p{}, {});\n".format(op.regName(), op.regName(), stride)
+                #vld, vst = self.get_vld_vst_inst(I, op)
+                body += indent + "__vr {}0 = _ve_vld_vss({}, p{});\n".format(op.regName(), stride, op.regName())
                 body += indent + "__vm512 {} = _ve_pvfmkw_Mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
             elif op.isMask():
                 stride = I.stride(op)
-                vld, vst = self.get_vld_vst_inst(I, op)
-                body += indent + "__vr {}0 = _ve_vldl(p{}, 4);\n".format(op.regName(), op.regName(), stride)
+                #vld, vst = self.get_vld_vst_inst(I, op)
+                body += indent + "__vr {}0 = _ve_vldlzx_vss(4, p{});\n".format(op.regName(), op.regName(), stride)
                 body += indent + "__vm {} = _ve_vfmkw_mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
             if op.isReg() or op.isMask():
                 args.append(op.regName())
@@ -460,7 +457,7 @@ class TestGenerator:
             op = I.outs[0]
             vld, vst = self.get_vld_vst_inst(I, op)
             stride = I.stride(op)
-            body += indent + "__vr {} = _ve_{}(p{}, {});\n".format(op.regName(), vld, op.regName(), stride)
+            body += indent + "__vr {} = _ve_{}({}, p{});\n".format(op.regName(), vld, stride, op.regName())
             body += indent + "{} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args + [op.regName()]))
         else:
             body += indent + "__vr {} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args))
@@ -468,7 +465,7 @@ class TestGenerator:
         if out.isVReg():
             stride = I.stride(out)
             vld, vst = self.get_vld_vst_inst(I, out)
-            body += indent + "_ve_{}({}, {}, {});\n".format(vst, out.formalName(), out.regName(), stride)
+            body += indent + "_ve_{}({}, {}, {});\n".format(vst, out.regName(), stride, out.formalName())
     
         tmp = []
         for op in (I.outs + ins):
@@ -633,7 +630,9 @@ class HtmlManualPrinter(ManualInstPrinter):
                     rowspan[inst] += 1
                 else:
                     rowspan[inst] = 1
-                tmp.append([inst, func, I.asm(), expr])
+                asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, I.asm())
+                #tmp.append([inst, func, I.asm(), expr])
+                tmp.append([inst, func, asm, expr])
 
             print("<h3><a name=\"sec{}\">{}</a></h3>".format(idx, s.name))
             print("<table border=1>")
@@ -668,8 +667,9 @@ class InstList:
         return partial(_method_missing, self, attrname)
 
 class Section:
-    def __init__(self, name):
+    def __init__(self, name, page):
         self.name = name
+        self.page = page
         self.a = []
     def add(self, i):
         self.a.append(i)
@@ -684,8 +684,8 @@ class InstTable:
         self.sections = []
         #self.a = []
 
-    def Section(self, name):
-        s = Section(name)
+    def Section(self, name, page):
+        s = Section(name, page)
         self.sections.append(s)
         self.currentSection = s
 
@@ -707,20 +707,21 @@ class InstTable:
     def Inst(self, *args):
         return self.add(Inst(*args))
 
-    def VLD2Dm(self, opc, inst, asm):
-        L = InstList()
-        L.Inst(opc, inst+"rr", asm, asm, [VX(T_u64)], [SY(T_u64), SZ(T_voidcp)])
-        L.Inst(opc, inst+"ir", asm, asm, [VX(T_u64)], [ImmI(T_u64), SZ(T_voidcp)])
-        L.Inst(opc, inst+"rz", asm, asm, [VX(T_u64)], [SY(T_u64), ImmZ(T_voidcp)])
-        L.Inst(opc, inst+"iz", asm, asm, [VX(T_u64)], [ImmI(T_u64), ImmZ(T_voidcp)])
-        self.addList(L).noTest().readMem()
+    def VLDm(self, opc, inst, asm):
+        O = []
+        O.append([VX(T_u64), SY(T_u64), SZ(T_voidcp)])
+        O.append([VX(T_u64), ImmI(T_u64), SZ(T_voidcp)])
+        #O.append([VX(T_u64), SY(T_u64), ImmZ(T_voidcp)])
+        #O.append([VX(T_u64), ImmI(T_u64), ImmZ(T_voidcp)])
 
-    def VST2Dm(self, opc, inst, asm):
+        self.InstX(opc, inst, asm, O).noTest().readMem()
+
+    def VSTm(self, opc, inst, asm):
         L = InstList()
-        L.Inst(opc, inst+"rr", asm, asm, [], [VX(T_u64), SY(T_u64), SZ(T_voidp)])
-        L.Inst(opc, inst+"ir", asm, asm, [], [VX(T_u64), ImmI(T_u64), SZ(T_voidp)])
-        L.Inst(opc, inst+"rz", asm, asm, [], [VX(T_u64), SY(T_u64), ImmZ(T_voidp)])
-        L.Inst(opc, inst+"iz", asm, asm, [], [VX(T_u64), ImmI(T_u64), ImmZ(T_voidp)])
+        L.Inst(opc, inst+"rr", asm, asm+"_vss", [], [VX(T_u64), SY(T_u64), SZ(T_voidp)])
+        L.Inst(opc, inst+"ir", asm, asm+"_vss", [], [VX(T_u64), ImmI(T_u64), SZ(T_voidp)])
+        #L.Inst(opc, inst+"rz", asm, asm, [], [VX(T_u64), SY(T_u64), ImmZ(T_voidp)])
+        #L.Inst(opc, inst+"iz", asm, asm, [], [VX(T_u64), ImmI(T_u64), ImmZ(T_voidp)])
         self.addList(L).noTest().writeMem()
 
     def VBRDm(self, opc):
@@ -739,7 +740,7 @@ class InstTable:
 
             for args0 in tmp2:
                 inst = ary[0] + self.args_to_inst_suffix(args0)
-                func = ary[1] + self.args_to_func_suffix(args0) + "_" + args0[0].ty.elemType.ValueType
+                func = ary[1] + self.args_to_func_suffix(args0) + "_" + args0[1].ty.ValueType
                 packed = func[0] == 'p'
                 i = Inst(opc, inst, ary[1], func, [args0[0]], args0[1:], packed, "{0} = {1}")
                 self.add(i)
@@ -770,6 +771,10 @@ class InstTable:
                "vvvmv": "vm",
                "vvvMv": "vm",
                "vvs"  : "r2",
+               "vss"  : "rr",  # VLD
+               "vIs"  : "ir",  # VLD
+               "vsZ"  : "rz",  # VLD
+               "vIZ"  : "iz",  # VLD
                "vvsmv": "rm2",
                "vvI"  : "i2",
                "vvImv": "im2",
@@ -993,7 +998,7 @@ def gen_pattern(insts):
     for I in insts:
         if I.hasInst():
             args = ", ".join([op.dagOp() for op in I.ins])
-            ni = re.sub(r'[IN]', 's', I.intrinsicName()) # replace Imm to s
+            ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
             l = "(int_ve_{} {})".format(ni, args)
             r = "({} {})".format(I.instName, args)
             print("def : Pat<{}, {}>;".format(l, r))
@@ -1010,19 +1015,21 @@ def gen_veintrin_h(insts):
 
 T = InstTable()
 
-T.Section("5.3.2.7. Vector Transfer Instructions")
-T.Dummy("VLD", "__vr _ve_vld(void* sz, int sy)", "vld")
-T.Dummy("VLDU", "__vr _ve_vldu(void* sz, int sy)", "vldu")
-T.Dummy("VLDL", "__vr _ve_vldl(void* sz, int sy)", "vldl")
-T.VLD2Dm(0xC1, "VLD2D", "vld2d")
-T.VLD2Dm(0xC2, "VLDU2D", "vldu2d")
-T.VLD2Dm(0xC3, "VLDL2D", "vldl2d")
-T.Dummy("VST", "void _ve_vst(void* sz, __vr vx, int sy)", "vst")
-T.Dummy("VSTU", "void _ve_vstu(void* sz, __vr vx, int sy)", "vstu")
-T.Dummy("VSTL", "void _ve_vstl(void* sz, __vr vx, int sy)", "vstl")
-T.VST2Dm(0xD1, "VST2D", "vst2d")
-T.VST2Dm(0xD2, "VSTU2D", "vstu2d")
-T.VST2Dm(0xD3, "VSTL2D", "vstl2d")
+T.Section("5.3.2.7. Vector Transfer Instructions", 18)
+T.VLDm(0x81, "VLD", "vld")
+T.VLDm(0x82, "VLDU", "vldu")
+T.VLDm(0x83, "VLDLsx", "vldl.sx")
+T.VLDm(0x83, "VLDLzx", "vldl.zx")
+T.VLDm(0xC1, "VLD2D", "vld2d")
+T.VLDm(0xC2, "VLDU2D", "vldu2d")
+T.VLDm(0xC3, "VLDL2Dsx", "vldl2d.sx")
+T.VLDm(0xC3, "VLDL2Dzx", "vldl2d.zx")
+T.VSTm(0x91, "VST", "vst")
+T.VSTm(0x92, "VSTU", "vstu")
+T.VSTm(0x93, "VSTL", "vstl")
+T.VSTm(0xD1, "VST2D", "vst2d")
+T.VSTm(0xD2, "VSTU2D", "vstu2d")
+T.VSTm(0xD3, "VSTL2D", "vstl2d")
 T.NoImpl("PFCHV")
 T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
 #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
@@ -1041,7 +1048,7 @@ O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)],
           [VX(T_i64), SY(T_i32), VZ(T_i32)], 
           [VX(T_i64), ImmI(T_i32), VZ(T_i32)]]
 
-T.Section("5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions")
+T.Section("5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions", 19)
 T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
 T.Inst3w(0xCA, "vadds", "VADS", "{0} = {1} + {2}") # i32
 T.Inst3l(0x8B, "vadds", "VADX", "{0} = {1} + {2}") # i64
@@ -1066,7 +1073,7 @@ T.NoImpl("VCPX")
 T.NoImpl("VCMS")
 T.NoImpl("VCMX")
 
-T.Section("5.3.2.9. Vector Logical Arithmetic Operation Instructions")
+T.Section("5.3.2.9. Vector Logical Arithmetic Operation Instructions", 23)
 T.Logical(0xC4, "vand", "VAND", "{0} = {1} & {2}")
 T.Logical(0xC5, "vor",  "VOR",  "{0} = {1} | {2}")
 T.Logical(0xC6, "vxor", "VXOR", "{0} = {1} ^ {2}")
@@ -1079,7 +1086,7 @@ T.InstX(0x99, "VSEQl", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
 T.InstX(0x99, "VSEQu", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
 T.InstX(0x99, "VSEQp", "pvseq", [[VX(T_u64)]], "{0} = i").noTest()
 
-T.Section("5.3.2.10. Vector Shift Instructions")
+T.Section("5.3.2.10. Vector Shift Instructions", 25)
 T.Shift(0xE5, "vsll", "VSLL", "{0} = {1} << ({2} & 0x3f)")
 T.ShiftPacked(0xE5, "vsll", "VSLL", "{0} = {1} << ({2} & 0x1f)")
 T.NoImpl("VSLD")
@@ -1092,7 +1099,7 @@ T.NoImpl("VSRA")
 T.NoImpl("VSRAX")
 T.InstX(0xD7, "VSFA", "vsfa", [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), ImmI(T_u64), SZ(T_u64)]], "{0} = ({1} << ({2} & 0x7)) + {3}")
 
-T.Section("5.3.2.11. Vector Floating-Point Operation Instructions")
+T.Section("5.3.2.11. Vector Floating-Point Operation Instructions", 26)
 T.Inst3f(0xCC, "vfadd", "VFAD", "{0} = {1} + {2}")
 T.Inst3f(0xDC, "vfsub", "VFSB", "{0} = {1} - {2}")
 T.Inst3f(0xCD, "vfmul", "VFMP", "{0} = {1} * {2}")
@@ -1119,7 +1126,7 @@ T.InstX(0xB8, "VFLTX", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}"
 T.InstX(0x8F, "VCVD", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
 T.InstX(0x9F, "VCVS", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
 
-T.Section("5.3.2.12. Vector Mask Arithmetic Instructions")
+T.Section("5.3.2.12. Vector Mask Arithmetic Instructions", 31)
 T.add(Inst(0xD6, "VMRGvm", "vmrg", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
 T.add(Inst(0xD6, "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], True))
 T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
@@ -1137,7 +1144,7 @@ T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]], None, True).noTest
 T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]], None, True).noTest() # Pseudo
 T.InstX(0x00, "VFMKpaf", "pvfmk.af", [[VM512]], None, True).noTest() # Pseudo
 
-T.Section("5.3.2.13. Vector Recursive Relation Instructions")
+T.Section("5.3.2.13. Vector Recursive Relation Instructions", 32)
 T.InstX(0xEA, "VSUMSsx", "vsumw.sx", [[VX(T_i32), VY(T_i32)]])
 T.InstX(0xEA, "VSUMSzx", "vsumw.zx", [[VX(T_i32), VY(T_i32)]])
 T.InstX(0xAA, "VSUMX", "vsuml", [[VX(T_i64), VY(T_i64)]])
@@ -1159,7 +1166,7 @@ O_u64_vv = [VX(T_u64), VY(T_u64)]
 O_f32_vv = [VX(T_f32), VY(T_f32)]
 O_i32_vv = [VX(T_i32), VY(T_i32)]
 
-T.Section("5.3.2.14. Vector Gatering/Scattering Instructions")
+T.Section("5.3.2.14. Vector Gatering/Scattering Instructions", 33)
 T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest().readMem()
 T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest().readMem()
 T.InstX(0xA3, "VGTLsx", "vgtl.sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
@@ -1168,7 +1175,7 @@ T.add(Inst(0xB1, "VSCv", "vsc", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noT
 T.add(Inst(0xB2, "VSCUv", "vscu", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest().writeMem())
 T.add(Inst(0xB2, "VSCLv", "vscl", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
 
-T.Section("5.3.2.15. Vector Mask Register Instructions")
+T.Section("5.3.2.15. Vector Mask Register Instructions", 34)
 T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
 T.InstX(0x84, "ANDMp", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
 T.InstX(0x85, "ORM",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
@@ -1186,13 +1193,13 @@ T.NoImpl("LZVM")
 T.NoImpl("TOVM")
 
 
-T.Section("5.3.2.16. Vector Control Instructions")
+T.Section("5.3.2.16. Vector Control Instructions", 34)
 T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")
 T.NoImpl("SVL")
-T.NoImpl("SVML")
+T.NoImpl("SMVL")
 T.NoImpl("LVIX")
 
-T.Section("Others")
+T.Section("Others", None)
 T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
 T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
 
