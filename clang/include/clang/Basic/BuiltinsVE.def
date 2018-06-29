@@ -18,17 +18,7 @@
 //BUILTIN(__builtin_dummy, "Si", "nc")
 
 BUILTIN(__builtin_ve_lvl, "vUi", "nr")
-BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "nr")
-
-BUILTIN(__builtin_ve_vld, "V256dvC*ULi", "n")
-BUILTIN(__builtin_ve_vldu, "V256dvC*ULi", "n")
-BUILTIN(__builtin_ve_vldl, "V256dvC*ULi", "n")
-
-//BUILTIN(__builtin_ve_vld2, "V256dvC*ULiV256d", "n")
-
-BUILTIN(__builtin_ve_vst, "vv*V256dULi", "n")
-BUILTIN(__builtin_ve_vstu, "vv*V256dULi", "n")
-BUILTIN(__builtin_ve_vstl, "vv*V256dULi", "n")
+//BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "nr")
 
 BUILTIN(__builtin_ve_lvm_MMss, "V8ULiV8ULiCLUiCLUiC", "n")
 BUILTIN(__builtin_ve_svm_sMs, "LUiV8ULiCLUiC", "n")
