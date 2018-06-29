@@ -1307,32 +1307,6 @@ TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(
   return AtomicExpansionKind::CmpXChg;
 }
 
-static VECC::CondCodes IntCondCodeToICC(ISD::CondCode CC) 
-{
-  switch (CC) {
-    default: llvm_unreachable("Unknown integer condition code!");
-    case ISD::SETOEQ: return VECC::CC_EQ;
-    case ISD::SETOGT: return VECC::CC_G;
-    case ISD::SETOGE: return VECC::CC_GE;
-    case ISD::SETOLT: return VECC::CC_L;
-    case ISD::SETOLE: return VECC::CC_LE;
-    case ISD::SETONE: return VECC::CC_NE;
-
-    case ISD::SETEQ:  return VECC::CC_EQ;
-    case ISD::SETNE:  return VECC::CC_NE;
-    case ISD::SETLT:  return VECC::CC_L;
-    case ISD::SETGT:  return VECC::CC_G;
-    case ISD::SETLE:  return VECC::CC_LE;
-    case ISD::SETGE:  return VECC::CC_GE;
-#if 1
-    case ISD::SETULT: return VECC::CC_L;
-    case ISD::SETULE: return VECC::CC_LE;
-    case ISD::SETUGT: return VECC::CC_G;
-    case ISD::SETUGE: return VECC::CC_GE;
-#endif
-  }
-}
-
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
@@ -1415,20 +1389,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
 
-  // VE has no select or setcc: expand to SELECT_CC.
-  for (MVT VT : MVT::all_valuetypes()) {
-    //setOperationAction(ISD::SETCC,  VT, Expand);
-    //setOperationAction(ISD::SELECT, VT, Expand);
-    //setOperationAction(ISD::SELECT_CC, VT, Custom);
-    //setOperationAction(ISD::SELECT, VT, Custom);
-    //setOperationAction(ISD::SELECT_CC, VT, Expand);
-    setOperationAction(ISD::SELECT_CC, VT, Custom);
-  }
-  setOperationAction(ISD::SETCC,  MVT::i1, Promote);
-  //setOperationAction(ISD::SELECT, MVT::i1, Promote);
-  //setOperationAction(ISD::SELECT, MVT::i32, Promote);
-  //setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
-
   // VE doesn't have BRCOND either, it has BR_CC.
   for (MVT VT : MVT::all_valuetypes()) {
     setOperationAction(ISD::BRCOND, VT, Expand);
@@ -1443,12 +1403,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BR_CC, MVT::f32, Custom);
   setOperationAction(ISD::BR_CC, MVT::f64, Custom);
   setOperationAction(ISD::BR_CC, MVT::f128, Custom);
-
-  setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
-  setOperationAction(ISD::SELECT_CC, MVT::i64, Custom);
-  setOperationAction(ISD::SELECT_CC, MVT::f32, Custom);
-  setOperationAction(ISD::SELECT_CC, MVT::f64, Custom);
-  setOperationAction(ISD::SELECT_CC, MVT::f128, Custom);
 
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
@@ -2846,136 +2800,6 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
-static SDValue performSelectCombine(SDValue& Op, SelectionDAG& DAG) 
-{
-  SDValue LHS = Op.getOperand(0);
-  SDValue RHS = Op.getOperand(1);
-  SDValue True = Op.getOperand(2);
-  SDValue False = Op.getOperand(3);
-  SDValue CCOp = Op.getOperand(4);
-  SDLoc dl(Op);
-
-  assert(LHS.getValueType() == RHS.getValueType());
-
-  EVT VT = LHS.getValueType();
-
-  ISD::CondCode CC = cast<CondCodeSDNode>(CCOp)->get();
-
-
-  unsigned OpcodeMax = 0;
-  unsigned OpcodeMin = 0;
-  if (VT == MVT::f32 || VT == MVT::f64) {
-    OpcodeMax = VEISD::FMAX;
-    OpcodeMin = VEISD::FMIN;
-  } else if (VT == MVT::i32 || VT == MVT::i64) {
-    OpcodeMax = VEISD::MAX;
-    OpcodeMin = VEISD::MIN;
-  }
-
-  if (!OpcodeMax)
-    return SDValue();
-
-  unsigned OpcodeG = 0;
-  unsigned OpcodeL = 0;
-  if (DAG.isEqualTo(LHS, True) && DAG.isEqualTo(RHS, False)) {
-    OpcodeG = OpcodeMax;
-    OpcodeL = OpcodeMin;
-  } else if (DAG.isEqualTo(LHS, False) && DAG.isEqualTo(RHS, True)) {
-    OpcodeG = OpcodeMin;
-    OpcodeL = OpcodeMax;
-  }
-
-  if (!OpcodeG)
-    return SDValue();
-
-  unsigned Opcode = 0;
-  if (VT == MVT::i32 || VT == MVT::i64) {
-    // VE don't have max/min for unsigned integer
-    if (CC == ISD::SETGT || CC == ISD::SETGE)
-      Opcode = OpcodeG;
-    else if (CC == ISD::SETLT || CC == ISD::SETLE)
-      Opcode = OpcodeL;
-  } else if (VT == MVT::f32 || VT == MVT::f64) {
-    if (CC == ISD::SETGT || CC == ISD::SETGE
-        || CC == ISD::SETOGT || CC == ISD::SETOGE) {
-      Opcode = OpcodeG;
-    } else if (CC == ISD::SETLT || CC == ISD::SETLE
-               || CC == ISD::SETOLT || CC == ISD::SETOLE) {
-      Opcode = OpcodeL;
-    }
-  }
-
-  if (Opcode) {
-    return DAG.getNode(Opcode, dl, Op.getValueType(), LHS, RHS);
-  }
-
-  return SDValue();
-}
-
-static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
-                              const VETargetLowering &TLI)
-{
-  if (SDValue Res = performSelectCombine(Op, DAG))
-    return Res;
-
-  SDValue LHS = Op.getOperand(0);
-  SDValue RHS = Op.getOperand(1);
-  SDValue TrueVal = Op.getOperand(2);
-  SDValue FalseVal = Op.getOperand(3);
-  SDValue CCOp = Op.getOperand(4);
-  SDLoc dl(Op);
-
-  // from (selectcc LHS, RHS, TrueVal, FalseVal, CCOp)
-  // to   (PCMOV CCop, (CMP LHS, RHS), TrueVal, FalseVal)
-
-  ISD::CondCode CC = cast<CondCodeSDNode>(CCOp)->get();
-
-  assert(LHS.getValueType() == RHS.getValueType());
-  assert(TrueVal.getValueType() == FalseVal.getValueType());
-
-  EVT CMPVT = LHS.getValueType();
-
-  unsigned CMPOpcode = 0;
-  unsigned CMOVOpcode = 0;
-  if (CMPVT == MVT::i32) {
-    CMOVOpcode = VE::PCMOVwrr;
-    if (isSignedIntSetCC(CC)) {
-      CMPOpcode = VE::CPSrr;
-    } else if (isUnsignedIntSetCC(CC)) {
-      CMPOpcode = VE::CMPUWrr;
-    }
-  } else if (CMPVT == MVT::i64) {
-    CMOVOpcode = VE::PCMOVlrr;
-    if (isSignedIntSetCC(CC)) {
-      CMPOpcode = VE::CPXrr;
-    } else if (isUnsignedIntSetCC(CC)) {
-      CMPOpcode = VE::CMPrr;
-    }
-  } else if (CMPVT == MVT::f32) {
-    CMPOpcode = VE::FCPSrr;
-    CMOVOpcode = VE::PCMOVsrr;
-  } else if (CMPVT == MVT::f64) {
-    CMPOpcode = VE::FCPrr;
-    CMOVOpcode = VE::PCMOVdrr;
-  }
-
-  if (CMPOpcode && CMOVOpcode) {
-    SDValue CondVal
-      = SDValue(DAG.getMachineNode(CMPOpcode, dl, CMPVT, LHS, RHS), 0);
-
-    SmallVector<SDValue, 4> Ops;
-    VECC::CondCodes VECC = IntCondCodeToICC(CC);
-    Ops.push_back(DAG.getTargetConstant(VECC, dl, MVT::i32));
-    Ops.push_back(CondVal);
-    Ops.push_back(TrueVal);
-    Ops.push_back(FalseVal);
-
-    return SDValue(DAG.getMachineNode(CMOVOpcode, dl, Op.getValueType(), Ops), 0);
-  }
-
-  return SDValue();
-}
-
 SDValue VETargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
@@ -3059,10 +2883,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
     //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
-#if 0
-  case ISD::SELECT:           return LowerSELECT(Op, DAG, *this);
-#endif
-  case ISD::SELECT_CC:        return LowerSELECT_CC(Op, DAG, *this);
   }
 }
 
@@ -3070,7 +2890,7 @@ MachineBasicBlock *
 VETargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                  MachineBasicBlock *BB) const {
   switch (MI.getOpcode()) {
-  default: llvm_unreachable("Unknown SELECT_CC!");
+  default: llvm_unreachable("Unknown Custom Instruction!");
 #if 0
   case SP::SELECT_CC_Int_ICC:
   case SP::SELECT_CC_FP_ICC:
