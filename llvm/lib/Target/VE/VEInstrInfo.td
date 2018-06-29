@@ -686,9 +686,10 @@ def : Pat<(srl i32:$sy, (i32 uimm6:$sz)),
 // 5.3.2.5. Floating-point Arithmetic Operation Instructions
 class RRF<string opcStr, bits<8>opc, SDNode OpNode, RegisterClass RC, ValueType Ty>
   : RR<opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
-      !strconcat(opcStr, " $sx,$sy,$sz"), [(set Ty:$sx, (OpNode Ty:$sy, Ty:$sz))]> {
-        let cy = 0;
-        let cz = 0;
+       !strconcat(opcStr, " $sx, $sy, $sz"),
+       [(set Ty:$sx, (OpNode Ty:$sy, Ty:$sz))]> {
+         let cy = 0;
+         let cz = 0;
 }
 
 multiclass RRFm<string opcStr, bits<8> opc, SDNode OpNode>
@@ -712,24 +713,18 @@ let cx = 1 in
 defm FCPS : RRNDm<"fcmp.s", 0x7E, F32, f32, simm7Op32, uimm6Op32>;
 
 // FCM
-
-/*
-def FCMas : RR<0x3E, (outs I64:$sx), (ins I64:$sy, I64:$sz),
-  "fmax.s $sx,$sy,$sz", 
-  [(set f32:$sx, (VEfmax f32:$sy, f32:$sz))]>;
-*/
 let cw = 0 in defm FCMa : RRFm<"fmax", 0x3E, VEfmax>;
 let cw = 1 in defm FCMi : RRFm<"fmin", 0x3E, VEfmin>;
 
 multiclass CVTm<string opcStr, bits<8> opc>
 {
   def r : RR<opc, (outs I64:$sx), (ins I64:$sy), 
-    !strconcat(opcStr, " $sx,$sy"), []> {
+    !strconcat(opcStr, " $sx, $sy"), []> {
       let cy = 1;
     }
 
   def i : RR<opc, (outs I64:$sx), (ins simm7Op32:$sy), 
-    !strconcat(opcStr, " $sx,$sy"), []> {
+    !strconcat(opcStr, " $sx, $sy"), []> {
       let cy = 0;
     }
 }
@@ -1091,39 +1086,16 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
 
-// Pseudo CMOV
-def PCMOVlrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
-  "cmov.l.${cf} $sx,$sz,$sy", []> {
-  let Constraints = "$sx = $sd";
-  }
-
-def PCMOVwrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
-  "cmov.w.${cf} $sx,$sz,$sy", []> {
-  let Constraints = "$sx = $sd";
-  }
-
-def PCMOVdrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
-  "cmov.d.${cf} $sx,$sz,$sy", []> {
-  let Constraints = "$sx = $sd";
-  }
-
-def PCMOVsrr : Pseudo<(outs I64:$sx), (ins CCOp:$cf, I64:$sy, I64:$sz, I64:$sd),
-  "cmov.s.${cf} $sx,$sz,$sy", []> {
-  let Constraints = "$sx = $sd";
-  }
-
-// Pattern matching for setcc LLVM IR
+// SETCC pattern matches
 //
-// For example:
-//   input:  setcc lhs, rhs, cond
-//   output: CMP  %tmp, lhs, rhs     ; compare lhs and rhs
-//           or   %res, 0, (0)1      ; initialize by 0
-//           CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
+//   CMP  %tmp, lhs, rhs     ; compare lhs and rhs
+//   or   %res, 0, (0)1      ; initialize by 0
+//   CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
           (COPY_TO_REGCLASS
               (CMOVLrm0 (icond2cc $cond), 
-                        (i64 (CPXrr i64:$LHS, i64:$RHS)), 
+                        (CPXrr i64:$LHS, i64:$RHS), 
                         63, 
                         (ORim1 0, 0)), I32)>;
 
@@ -1159,5 +1131,103 @@ def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
                         (FCPSrr f32:$LHS, f32:$RHS), 
                         63, 
                         (ORim1 0, 0)), I32)>;
+
+// Special SELECTCC pattern matches
+// Use min/max for better performance.
+//
+//   MAX/MIN  %res, %lhs, %rhs
+
+def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGT)),
+          (FCMad $LHS, $RHS)>;
+def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGT)),
+          (FCMas $LHS, $RHS)>;
+def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETGT)),
+          (CMXarr $LHS, $RHS)>;
+def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETGT)),
+          (CMSarr $LHS, $RHS)>;
+def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGE)),
+          (FCMad $LHS, $RHS)>;
+def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGE)),
+          (FCMas $LHS, $RHS)>;
+def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETGE)),
+          (CMXarr $LHS, $RHS)>;
+def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETGE)),
+          (CMSarr $LHS, $RHS)>;
+
+def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLT)),
+          (FCMid $LHS, $RHS)>;
+def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLT)),
+          (FCMis $LHS, $RHS)>;
+def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETLT)),
+          (CMXirr $LHS, $RHS)>;
+def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETLT)),
+          (CMSirr $LHS, $RHS)>;
+def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLE)),
+          (FCMid $LHS, $RHS)>;
+def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLE)),
+          (FCMis $LHS, $RHS)>;
+def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETLE)),
+          (CMXirr $LHS, $RHS)>;
+def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETLE)),
+          (CMSirr $LHS, $RHS)>;
+
+// Generic SELECTCC pattern matches
+//
+//   CMP  %tmp, lhs, rhs     ; compare lhs and rhs
+//   or   %res, %fval, (0)1  ; initialize by fval
+//   CMOV %res, %tval, %tmp  ; set tval if %tmp is true
+
+def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$tval, i64:$fval,
+                         CCSIOp:$cond)),
+          (CMOVLrr (icond2cc $cond), (CPXrr i64:$LHS, i64:$RHS), $tval, $fval)>;
+
+def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$tval, i64:$fval,
+                         CCUIOp:$cond)),
+          (CMOVLrr (icond2cc $cond), 
+                   (CMPrr i64:$LHS, i64:$RHS), 
+                   $tval, $fval)>;
+
+def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$tval, i32:$fval,
+                         CCSIOp:$cond)),
+          (CMOVWrr (icond2cc $cond), 
+                   (CPSrr i32:$LHS, i32:$RHS),
+                   $tval, $fval)>;
+
+def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$tval, i32:$fval,
+                         CCUIOp:$cond)),
+          (CMOVWrr (icond2cc $cond), 
+                   (CMPUWrr i32:$LHS, i32:$RHS),
+                   $tval, $fval)>;
+
+def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$tval, f64:$fval, cond:$cond)),
+          (CMOVDrr (fcond2cc $cond), 
+                   (FCPrr f64:$LHS, f64:$RHS), 
+                   $tval, $fval)>;
+
+def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$tval, f32:$fval, cond:$cond)),
+          (CMOVSrr (fcond2cc $cond), 
+                    (FCPSrr f32:$LHS, f32:$RHS), 
+                    $tval, 
+                    $fval)>;
+
+// Generic SELECT pattern matches
+// Use cmov.w for all cases since %pred holds i32.
+//
+//   CMOV.w.ne %res, %tval, %tmp  ; set tval if %tmp is true
+
+def : Pat<(i64 (select i32:$pred, i64:$t, i64:$f)),
+          (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
+            (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), I64)>;
+
+def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
+          (CMOVWrr CC_NE, $pred, $t, $f)>;
+
+def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
+          (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
+            (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), F64)>;
+
+def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
+          (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
+            (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), F32)>;
 
 include "VEInstrVec.td"
