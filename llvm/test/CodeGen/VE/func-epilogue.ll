@@ -3,7 +3,7 @@
 define i32 @sample_add(i32, i32) {
 ; CHECK-LABEL: sample_add:
 ; CHECK:       .LBB0_2:
-; CHECK-NEXT:    addu.w %s0, %s1, %s0
+; CHECK-NEXT:    adds.w.sx %s0, %s1, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 ; CHECK-NEXT:    ld %s16, 32(,%s11)
 ; CHECK-NEXT:    ld %s15, 24(,%s11)

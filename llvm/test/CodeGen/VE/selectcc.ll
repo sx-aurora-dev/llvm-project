@@ -50,7 +50,7 @@ define i32 @selectcci32_2(i32, i32, i32, i32) #0 {
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
 ; CHECK-NEXT:    or %s35, 0, %s3
 ; CHECK-NEXT:    cmov.w.gt %s35, %s2, %s34
-; CHECK-NEXT:    addu.w %s0, %s35, %s3
+; CHECK-NEXT:    adds.w.sx %s0, %s35, %s3
   %5 = icmp sgt i32 %0, %1
   %6 = select i1 %5, i32 %2, i32 %3
   %7 = add nsw i32 %6, %3

@@ -569,21 +569,15 @@ let cx = 0, cy = 1, cz = 0, sz = 0 in {
 
 // ADD instruction
 let cx = 0 in
-defm ADD : RRm<"addu.l", 0x48, add, I64, i64, simm7Op64, uimm6Op64>;
+defm ADD : RRNDm<"addu.l", 0x48, add, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm ADDUW : RRm<"addu.w", 0x48, add, I32, i32, simm7Op32, uimm6Op32>;
+defm ADDUW : RRNDm<"addu.w", 0x48, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // ADS instruction
 let cx = 0 in
-defm ADS : RRm<"adds.w.sx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
+defm ADS : RRm<"adds.w.sx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm ADSU : RRm<"adds.w.zx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
-
-//def ADSir : RR<0x4A, (outs I64:$sx), (ins simm7Op32:$sy, I64:$sz),
-//  "adds.w.sx $sx,$sy,$sz", []>;
-
-//def ADSri0 : RR<0x4A, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sy),
-//  "adds.w.sx $sx,$sy,($sz)0", []>;
+defm ADSU : RRNDm<"adds.w.zx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // ADX instruction
 let cx = 0 in
@@ -738,12 +732,12 @@ defm CVD : CVTm<"cvt.d.s", 0x0F>;
 // CVQ: f32 or f64 -> f128
 
 
-def : Pat<(i32 (trunc i64:$sy)), (i32 (ADSrm1 i64:$sy, 0))>;
+def : Pat<(i32 (trunc i64:$sy)), (ADSrm1 (COPY_TO_REGCLASS $sy, I32), 0)>;
 def : Pat<(i32 (fp_to_sint f32:$sy)), (i32 (FIXsr f32:$sy))>;
 def : Pat<(i32 (fp_to_sint f64:$sy)), (i32 (FIXdr f64:$sy))>;
 
-def : Pat<(i64 (sext i32:$sy)), (i64 (ADSrm1 i32:$sy, 0))>;
-def : Pat<(i64 (zext i32:$sy)), (i64 (ADSUrm1 i32:$sy, 0))>;
+def : Pat<(i64 (sext i32:$sy)), (COPY_TO_REGCLASS (ADSrm1 $sy, 0), I64)>;
+def : Pat<(i64 (zext i32:$sy)), (COPY_TO_REGCLASS (ADSUrm1 i32:$sy, 0), I64)>;
 def : Pat<(i64 (fp_to_sint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
 def : Pat<(i64 (fp_to_sint f64:$sy)), (i64 (FIXXr f64:$sy))>;
 
@@ -997,12 +991,12 @@ def : Pat<(i64 imm:$val),
 // def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
 // Or free trunc, but 1 instruction for anyext.
-def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri i32:$val, 0), I64)>;
+def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri $val, 0), I64)>;
 def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
 def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
-def : Pat<(i64 (sext_inreg i64:$val, i32)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
-//def : Pat<(i64 (sext_inreg i64:$val, i32)), (i64 (ADSri $val, 0))>;
+def : Pat<(i64 (sext_inreg i64:$val, i32)),
+          (COPY_TO_REGCLASS (ADSri (COPY_TO_REGCLASS $val, I32), 0), I64)>;
 
 // sextload and zextload stuff
 def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
