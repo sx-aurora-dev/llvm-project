@@ -356,7 +356,6 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cz = 0;
     let hasSideEffects = 0;
   }
-  /*
   def zi : RR<
     opc, (outs RC:$sx), (ins immOp:$sy),
     !strconcat(opcStr, " $sx, $sy"),
@@ -365,7 +364,6 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cz = 0;
     let sz = 0;
   }
-  */
 }
 
 // Multiclass for RR type instructions without dag pattern
