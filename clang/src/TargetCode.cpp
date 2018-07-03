@@ -54,20 +54,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     std::shared_ptr<TargetCodeFragment> Frag = *i;
     auto *TCR = llvm::dyn_cast<TargetCodeRegion>(Frag.get());
 
-    std::string PrettyStr;
-    llvm::raw_string_ostream PrettyOS(PrettyStr);
-    clang::PrintingPolicy PP = clang::PrintingPolicy(TargetCodeRewriter.getLangOpts());
-    PP.Indentation= 1;
-
-    auto *CS= Frag->getNode();
-    if (CS != NULL) {
-      // Do pretty printing in order to resolve Macros.
-      // TODO: Is there a better approach (e.g., token or preprocessor based?)
-      // One issue here: Addition braces (i.e., scope) in some cases.
-      CS->printPretty(PrettyOS, NULL, PP);
-
-      TargetCodeRewriter.ReplaceText(Frag->getInnerRange(), PrettyOS.str());
-    }
+    TargetCodeRewriter.ReplaceText(Frag->getInnerRange(), Frag->PrintPretty());
 
     if (TCR) {
       generateFunctionPrologue(TCR);

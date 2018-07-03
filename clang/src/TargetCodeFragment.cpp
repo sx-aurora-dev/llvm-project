@@ -1,4 +1,3 @@
-#include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
@@ -53,6 +52,7 @@ static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
   return S->getLocEnd();
 }
 
+//TODO: REMOVE this
 clang::SourceLocation TargetCodeDecl::getStartLoc() {
   llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getStartLoc()\n";
 }
@@ -138,3 +138,22 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
   return clang::SourceRange(InnerLocStart, InnerLocEnd);
 }
 
+std::string TargetCodeRegion::PrintPretty() {
+  // Do pretty printing in order to resolve Macros.
+  // TODO: Is there a better approach (e.g., token or preprocessor based?)
+  // One issue here: Addition braces (i.e., scope) in some cases.
+  std::string PrettyStr = "";
+  llvm::raw_string_ostream PrettyOS(PrettyStr);
+  if(Node != NULL)
+    Node->printPretty(PrettyOS, NULL, PP);
+  return PrettyOS.str();
+}
+
+std::string TargetCodeDecl::PrintPretty() {
+  std::string PrettyStr = "";
+  llvm::raw_string_ostream PrettyOS(PrettyStr);
+  if(Node != NULL)
+    //Node->getBody()->printPretty(PrettyOS, NULL, PP);
+    Node->print(PrettyOS, PP);
+  return PrettyOS.str();
+}

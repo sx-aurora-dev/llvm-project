@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+#include "clang/AST/ASTContext.h"
+#include "clang/AST/PrettyPrinter.h"
+
 // forward declaration of clang types
 namespace clang {
 class SourceLocation;
@@ -48,6 +51,7 @@ protected:
 public:
   TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
       : Context(Context), Kind(Kind), NeedsSemicolon(false), HasExtraBraces(false) {}
+  virtual std::string PrintPretty() = 0;
   virtual clang::SourceRange getRealRange() = 0;
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }
   virtual clang::SourceLocation getStartLoc() = 0;
@@ -61,17 +65,26 @@ template <class T> class TargetCodeSourceFragment : public TargetCodeFragment {
 
 protected:
   T Node;
-
+  clang::PrintingPolicy PP;
 public:
   TargetCodeSourceFragment(T Node, clang::ASTContext &Context,
                            TargetCodeFragmentKind Kind)
-      : TargetCodeFragment(Context, Kind), Node(Node) {}
+      : TargetCodeFragment(Context, Kind), Node(Node),
+        PP(Context.getLangOpts()) {
+          // Set some details for the pretty printer
+          PP.Indentation = 1;
+          PP.SuppressSpecifiers = 0;
+          PP.IncludeTagDefinition = 1;
+        }
   // TODO: This is called by many declare_target* tests. 
   // It really should have T as a return type. However,
   // I belive this not working, because you cant overload
   // by the return type.
   // virtual T *getNode() {return NULL;}
   virtual clang::CapturedStmt *getNode() {return NULL;}
+  //TODO: Implementing PrintPretty only here would be great. However, "printPretty"
+  //onl exist in Stmt, but not in Decl :-(.
+  virtual std::string PrintPretty() {return "";};
   virtual clang::SourceRange getRealRange() { return Node->getSourceRange(); }
 };
 
@@ -108,6 +121,7 @@ public:
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsEnd() {
     return CapturedVars.end();
   };
+  virtual std::string PrintPretty() override;
   clang::SourceRange getInnerRange() override;
   clang::SourceLocation getStartLoc() override;
   clang::SourceLocation getEndLoc() override;
@@ -129,6 +143,7 @@ public:
   TargetCodeDecl(clang::Decl *Node)
       : TargetCodeSourceFragment<clang::Decl *>(Node, Node->getASTContext(),
                                                 TCFK_TargetCodeDecl) {}
+  virtual std::string PrintPretty() override;
   clang::SourceLocation getStartLoc() override;
   clang::SourceLocation getEndLoc() override;
 };
