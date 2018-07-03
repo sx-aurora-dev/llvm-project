@@ -369,7 +369,7 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
 // Multiclass for RR type instructions without dag pattern
 //   Used by cmp instruction
 
-multiclass RRNDm<string opcStr, bits<8>opc,
+multiclass RRNDm<string opcStr, bits<8>opc, SDNode OpNode,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def rr : RR<
     opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
@@ -612,19 +612,19 @@ defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
 
 // CMP instruction
 let cx = 0 in
-defm CMP : RRNDm<"cmpu.l", 0x55, I64, i64, simm7Op64, uimm6Op64>;
+defm CMP : RRNDm<"cmpu.l", 0x55, setcc, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm CMPUW : RRNDm<"cmpu.w", 0x55, I32, i32, simm7Op32, uimm6Op32>;
+defm CMPUW : RRNDm<"cmpu.w", 0x55, setcc, I32, i32, simm7Op32, uimm6Op32>;
 
 // CPS instruction
 let cx = 0 in
-defm CPS : RRNDm<"cmps.w.sx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+defm CPS : RRNDm<"cmps.w.sx", 0x7A, setcc, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm CPSU : RRNDm<"cmps.w.zx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+defm CPSU : RRNDm<"cmps.w.zx", 0x7A, setcc, I32, i32, simm7Op32, uimm6Op32>;
 
 // CPX instruction
 let cx = 0 in
-defm CPX : RRNDm<"cmps.l", 0x6A, I64, i64, simm7Op64, uimm6Op64>;
+defm CPX : RRNDm<"cmps.l", 0x6A, setcc, I64, i64, simm7Op64, uimm6Op64>;
 
 // cx: sx/zx, cw: max/min
 
@@ -706,9 +706,9 @@ def : Pat<(fneg f32:$sx), (FSBs (ORim1 0, 0), $sx)>;
 
 // FCP instruction
 let cx = 0 in
-defm FCP : RRNDm<"fcmp.d", 0x7E, F64, f64, simm7Op64, uimm6Op64>;
+defm FCP : RRNDm<"fcmp.d", 0x7E, setcc, F64, f64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm FCPS : RRNDm<"fcmp.s", 0x7E, F32, f32, simm7Op32, uimm6Op32>;
+defm FCPS : RRNDm<"fcmp.s", 0x7E, setcc, F32, f32, simm7Op32, uimm6Op32>;
 
 // FCM
 let cw = 0 in defm FCMa : RRFm<"fmax", 0x3E, VEfmax>;
