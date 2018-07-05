@@ -356,7 +356,6 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cz = 0;
     let hasSideEffects = 0;
   }
-  /*
   def zi : RR<
     opc, (outs RC:$sx), (ins immOp:$sy),
     !strconcat(opcStr, " $sx, $sy"),
@@ -365,13 +364,12 @@ multiclass RRm<string opcStr, bits<8>opc, SDNode OpNode,
     let cz = 0;
     let sz = 0;
   }
-  */
 }
 
 // Multiclass for RR type instructions without dag pattern
 //   Used by cmp instruction
 
-multiclass RRNDm<string opcStr, bits<8>opc,
+multiclass RRNDm<string opcStr, bits<8>opc, SDNode OpNode,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def rr : RR<
     opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
@@ -571,21 +569,15 @@ let cx = 0, cy = 1, cz = 0, sz = 0 in {
 
 // ADD instruction
 let cx = 0 in
-defm ADD : RRm<"addu.l", 0x48, add, I64, i64, simm7Op64, uimm6Op64>;
+defm ADD : RRNDm<"addu.l", 0x48, add, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm ADDUW : RRm<"addu.w", 0x48, add, I32, i32, simm7Op32, uimm6Op32>;
+defm ADDUW : RRNDm<"addu.w", 0x48, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // ADS instruction
 let cx = 0 in
-defm ADS : RRm<"adds.w.sx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
+defm ADS : RRm<"adds.w.sx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm ADSU : RRm<"adds.w.zx", 0x4A, add, I64, i32, simm7Op32, uimm6Op32>;
-
-//def ADSir : RR<0x4A, (outs I64:$sx), (ins simm7Op32:$sy, I64:$sz),
-//  "adds.w.sx $sx,$sy,$sz", []>;
-
-//def ADSri0 : RR<0x4A, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sy),
-//  "adds.w.sx $sx,$sy,($sz)0", []>;
+defm ADSU : RRNDm<"adds.w.zx", 0x4A, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // ADX instruction
 let cx = 0 in
@@ -593,19 +585,19 @@ defm ADX : RRm<"adds.l", 0x59, add, I64, i64, simm7Op64, uimm6Op64>;
 
 // SUB instruction
 let cx = 0 in
-defm SUB : RRm<"subu.l", 0x58, sub, I64, i64, simm7Op64, uimm6Op64>;
+defm SUB : RRNDm<"subu.l", 0x58, sub, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm SUBUW : RRm<"subu.w", 0x58, sub, I32, i32, simm7Op32, uimm6Op32>;
+defm SUBUW : RRNDm<"subu.w", 0x58, sub, I32, i32, simm7Op32, uimm6Op32>;
 
 // SBS instruction
 let cx = 0 in
-defm SBS : RRm<"subs.w.sx", 0x5A, add, I32, i32, simm7Op32, uimm6Op32>;
+defm SBS : RRm<"subs.w.sx", 0x5A, sub, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm SBSU : RRm<"subs.w.zx", 0x5A, add, I32, i32, simm7Op32, uimm6Op32>;
+defm SBSU : RRNDm<"subs.w.zx", 0x5A, sub, I32, i32, simm7Op32, uimm6Op32>;
 
 // SBX instruction
 let cx = 0 in
-defm SBX : RRm<"subs.l", 0x5B, add, I64, i64, simm7Op64, uimm6Op64>;
+defm SBX : RRm<"subs.l", 0x5B, sub, I64, i64, simm7Op64, uimm6Op64>;
 
 // MPY instruction (mul u64)
 defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
@@ -614,19 +606,19 @@ defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
 
 // CMP instruction
 let cx = 0 in
-defm CMP : RRNDm<"cmpu.l", 0x55, I64, i64, simm7Op64, uimm6Op64>;
+defm CMP : RRNDm<"cmpu.l", 0x55, setcc, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm CMPUW : RRNDm<"cmpu.w", 0x55, I32, i32, simm7Op32, uimm6Op32>;
+defm CMPUW : RRNDm<"cmpu.w", 0x55, setcc, I32, i32, simm7Op32, uimm6Op32>;
 
 // CPS instruction
 let cx = 0 in
-defm CPS : RRNDm<"cmps.w.sx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+defm CPS : RRNDm<"cmps.w.sx", 0x7A, setcc, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm CPSU : RRNDm<"cmps.w.zx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+defm CPSU : RRNDm<"cmps.w.zx", 0x7A, setcc, I32, i32, simm7Op32, uimm6Op32>;
 
 // CPX instruction
 let cx = 0 in
-defm CPX : RRNDm<"cmps.l", 0x6A, I64, i64, simm7Op64, uimm6Op64>;
+defm CPX : RRNDm<"cmps.l", 0x6A, setcc, I64, i64, simm7Op64, uimm6Op64>;
 
 // cx: sx/zx, cw: max/min
 
@@ -708,9 +700,9 @@ def : Pat<(fneg f32:$sx), (FSBs (ORim1 0, 0), $sx)>;
 
 // FCP instruction
 let cx = 0 in
-defm FCP : RRNDm<"fcmp.d", 0x7E, F64, f64, simm7Op64, uimm6Op64>;
+defm FCP : RRNDm<"fcmp.d", 0x7E, setcc, F64, f64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm FCPS : RRNDm<"fcmp.s", 0x7E, F32, f32, simm7Op32, uimm6Op32>;
+defm FCPS : RRNDm<"fcmp.s", 0x7E, setcc, F32, f32, simm7Op32, uimm6Op32>;
 
 // FCM
 let cw = 0 in defm FCMa : RRFm<"fmax", 0x3E, VEfmax>;
@@ -740,12 +732,12 @@ defm CVD : CVTm<"cvt.d.s", 0x0F>;
 // CVQ: f32 or f64 -> f128
 
 
-def : Pat<(i32 (trunc i64:$sy)), (i32 (ADSrm1 i64:$sy, 0))>;
+def : Pat<(i32 (trunc i64:$sy)), (ADSrm1 (COPY_TO_REGCLASS $sy, I32), 0)>;
 def : Pat<(i32 (fp_to_sint f32:$sy)), (i32 (FIXsr f32:$sy))>;
 def : Pat<(i32 (fp_to_sint f64:$sy)), (i32 (FIXdr f64:$sy))>;
 
-def : Pat<(i64 (sext i32:$sy)), (i64 (ADSrm1 i32:$sy, 0))>;
-def : Pat<(i64 (zext i32:$sy)), (i64 (ADSUrm1 i32:$sy, 0))>;
+def : Pat<(i64 (sext i32:$sy)), (COPY_TO_REGCLASS (ADSrm1 $sy, 0), I64)>;
+def : Pat<(i64 (zext i32:$sy)), (COPY_TO_REGCLASS (ADSUrm1 i32:$sy, 0), I64)>;
 def : Pat<(i64 (fp_to_sint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
 def : Pat<(i64 (fp_to_sint f64:$sy)), (i64 (FIXXr f64:$sy))>;
 
@@ -999,12 +991,12 @@ def : Pat<(i64 imm:$val),
 // def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
 // Or free trunc, but 1 instruction for anyext.
-def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri i32:$val, 0), I64)>;
+def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri $val, 0), I64)>;
 def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
 def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
-def : Pat<(i64 (sext_inreg i64:$val, i32)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
-//def : Pat<(i64 (sext_inreg i64:$val, i32)), (i64 (ADSri $val, 0))>;
+def : Pat<(i64 (sext_inreg i64:$val, i32)),
+          (COPY_TO_REGCLASS (ADSri (COPY_TO_REGCLASS $val, I32), 0), I64)>;
 
 // sextload and zextload stuff
 def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
