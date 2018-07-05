@@ -585,19 +585,19 @@ defm ADX : RRm<"adds.l", 0x59, add, I64, i64, simm7Op64, uimm6Op64>;
 
 // SUB instruction
 let cx = 0 in
-defm SUB : RRm<"subu.l", 0x58, sub, I64, i64, simm7Op64, uimm6Op64>;
+defm SUB : RRNDm<"subu.l", 0x58, sub, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm SUBUW : RRm<"subu.w", 0x58, sub, I32, i32, simm7Op32, uimm6Op32>;
+defm SUBUW : RRNDm<"subu.w", 0x58, sub, I32, i32, simm7Op32, uimm6Op32>;
 
 // SBS instruction
 let cx = 0 in
-defm SBS : RRm<"subs.w.sx", 0x5A, add, I32, i32, simm7Op32, uimm6Op32>;
+defm SBS : RRm<"subs.w.sx", 0x5A, sub, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm SBSU : RRm<"subs.w.zx", 0x5A, add, I32, i32, simm7Op32, uimm6Op32>;
+defm SBSU : RRNDm<"subs.w.zx", 0x5A, sub, I32, i32, simm7Op32, uimm6Op32>;
 
 // SBX instruction
 let cx = 0 in
-defm SBX : RRm<"subs.l", 0x5B, add, I64, i64, simm7Op64, uimm6Op64>;
+defm SBX : RRm<"subs.l", 0x5B, sub, I64, i64, simm7Op64, uimm6Op64>;
 
 // MPY instruction (mul u64)
 defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
