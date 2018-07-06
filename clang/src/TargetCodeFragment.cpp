@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
@@ -11,6 +13,10 @@
 
 void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
   CapturedVars.push_back(Var);
+}
+
+void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause){
+  OMPClauses.push_back(Clause);
 }
 
 // TODO: this is a mess
@@ -136,6 +142,23 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
   auto InnerLocStart = getStartLoc();
   auto InnerLocEnd = getEndLoc();
   return clang::SourceRange(InnerLocStart, InnerLocEnd);
+}
+
+// TODO: Use StringRef?
+std::string TargetCodeRegion::PrintClauses(){
+  clang::SourceManager &SM = Context.getSourceManager();
+  const clang::LangOptions &LO = Context.getLangOpts();
+  std::stringstream Out;
+  for(auto C : OMPClauses) {
+    // getEndLoc should deliver the location of the right paren.
+    // However, there in July 2018 there is a bug in clang, such
+    // that a wrong location for 'map', 'num_threads', 'shared', 'private'
+    // is returned. We wait for the fix..
+    clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
+    clang::CharSourceRange CCRange = clang::CharSourceRange::getTokenRange(CRange);
+    Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
+  }
+  return Out.str();
 }
 
 std::string TargetCodeRegion::PrintPretty() {

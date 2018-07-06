@@ -10,7 +10,7 @@ class Stmt;
 class Decl;
 class Type;
 class CapturedStmt;
-class OMPTargetDirective;
+class OMPExecutableDirective;
 class SourceLocation;
 class FunctionDecl;
 class Attr;
@@ -62,7 +62,7 @@ public:
   bool VisitDecl(clang::Decl *D);
 
 private:
-  bool processTargetRegion(clang::OMPTargetDirective *TargetDirective);
+  bool processTargetRegion(clang::OMPExecutableDirective *TargetDirective);
   void addTargetRegionArgs(clang::CapturedStmt *S,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };

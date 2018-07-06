@@ -5,6 +5,8 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/PrettyPrinter.h"
+#include "clang/Basic/OpenMPKinds.h"
+#include "clang/AST/OpenMPClause.h"
 
 // forward declaration of clang types
 namespace clang {
@@ -38,6 +40,7 @@ protected:
   // Actual class content
 public:
   bool NeedsSemicolon; //TODO: getter method
+  clang::OpenMPDirectiveKind TargetCodeKind; //TODO: getter method
   bool HasExtraBraces; //TODO: Determine if this can be used for removing the addition scope or remove it.
   TargetCodeFragmentKind getKind() const { return Kind; };
   static bool classof(const TargetCodeFragment *TCF) {
@@ -50,7 +53,8 @@ protected:
 
 public:
   TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
-      : Context(Context), Kind(Kind), NeedsSemicolon(false), HasExtraBraces(false) {}
+      : Context(Context), Kind(Kind), NeedsSemicolon(false), 
+        TargetCodeKind(clang::OpenMPDirectiveKind::OMPD_unknown), HasExtraBraces(false) {}
   virtual std::string PrintPretty() = 0;
   virtual clang::SourceRange getRealRange() = 0;
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }
@@ -100,6 +104,7 @@ public:
   // actual class content
 private:
   std::vector<clang::VarDecl *> CapturedVars;
+  std::vector<clang::OMPClause *> OMPClauses;
   std::string ParentFuncName;
   clang::SourceLocation TargetDirectiveLocation;
 
@@ -114,6 +119,7 @@ public:
         TargetDirectiveLocation(TargetDirectiveLocation) {}
 
   void addCapturedVar(clang::VarDecl *Var);
+  void addOpenMPClause(clang::OMPClause *Clause);
   virtual clang::CapturedStmt *getNode() { return Node; }
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsBegin() {
     return CapturedVars.begin();
@@ -121,6 +127,7 @@ public:
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsEnd() {
     return CapturedVars.end();
   };
+  std::string PrintClauses();
   virtual std::string PrintPretty() override;
   clang::SourceRange getInnerRange() override;
   clang::SourceLocation getStartLoc() override;

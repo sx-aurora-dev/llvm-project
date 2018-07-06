@@ -9,6 +9,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Rewrite/Core/Rewriter.h"
+#include "clang/Basic/OpenMPKinds.h"
 
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
@@ -63,12 +64,18 @@ static bool isInSystemHeader(clang::Decl *D) {
 bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   if (auto *TD = llvm::dyn_cast<clang::OMPTargetDirective>(S)) {
     processTargetRegion(TD);
+  } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetTeamsDirective>(S)) {
+    processTargetRegion(TD);
+  } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetParallelDirective>(S)) {
+    processTargetRegion(TD);
   }
   return true;
 }
 
 bool FindTargetCodeVisitor::processTargetRegion(
-    clang::OMPTargetDirective *TargetDirective) {
+    clang::OMPExecutableDirective *TargetDirective) {
+  // TODO: Not sure why to iterate the children, because I think there
+  // is only one child. For me this looks wrong.
   for (auto i = TargetDirective->child_begin(),
             e = TargetDirective->child_end();
        i != e; ++i) {
@@ -84,6 +91,28 @@ bool FindTargetCodeVisitor::processTargetRegion(
         DiscoverTypeVisitor.TraverseStmt(CS);
         addTargetRegionArgs(CS, TCR);
         TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
+        TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
+
+        // For some combined OpenMP constructs we need some of the clauses.
+        // This parts figures out which clauses to add (regarding the
+        // specification).
+        // TODO: This is the case list for 'target parallel'. However,
+        // this depends on combined construct!
+        for (auto C : TargetDirective->clauses()) {
+          switch(C->getClauseKind()) {
+            case clang::OpenMPClauseKind::OMPC_if:
+            case clang::OpenMPClauseKind::OMPC_default:
+            case clang::OpenMPClauseKind::OMPC_private:
+            case clang::OpenMPClauseKind::OMPC_shared:
+            // 'copyin' is the only exception which is not allowed
+            // case clang::OpenMPClauseKind::OMPC_copyin:
+            case clang::OpenMPClauseKind::OMPC_proc_bind:
+            case clang::OpenMPClauseKind::OMPC_num_threads:
+            case clang::OpenMPClauseKind::OMPC_reduction:
+              TCR->addOpenMPClause(C);
+              break;
+          }
+        }
       }
     }
   }

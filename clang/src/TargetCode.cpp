@@ -108,6 +108,16 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     }
   }
   Out << "\n";
+
+  // Handle combined OpenMP constructs.
+  // Since the runtime can decide to only create one team,
+  // target team contructs are ignored right now.
+  // TODO: What to do with standalone team constructs?
+  if(TCR->TargetCodeKind ==
+     clang::OpenMPDirectiveKind::OMPD_target_parallel) {
+    Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
+  }
+
   if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
     llvm::errs() << "ERROR: Prologue was not written\n";
 }
@@ -115,6 +125,11 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   auto tmpSL = TCR->getEndLoc();
+
+  if(TCR->TargetCodeKind ==
+     clang::OpenMPDirectiveKind::OMPD_target_parallel) {
+    Out << "  }\n";
+  }
 
   Out << "\n";
   // copy values from scalars from scoped vars back into pointers
