@@ -27,6 +27,7 @@ include "VEInstrFormats.td"
 
 def simm7   : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
+def uimm32  : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def uimm6   : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 
@@ -658,18 +659,18 @@ let cx = 0 in {
 // should be uimm5? (0-31)
 let cy = 0, cz = 1 in
 def SRAX : RR<0x76, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
-  "sra.l $sx,$sy,$sz",
+  "sra.l $sx, $sy, $sz",
   [(set i32:$sx, (sra i32:$sy, (i32 uimm6:$sz)))]>;
 
 def SLL : RR<0x64, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
-  "sll $sx,$sy,$sz",
+  "sll $sx, $sy, $sz",
   [(set i64:$sx, (shl i64:$sy, (i32 uimm6:$sz)))]>;
 
 def : Pat<(i32 (shl i32:$sy, (i32 uimm6:$sz))),
           (SLL i32:$sy, (i32 uimm6:$sz))>;
 
 def SRL : RR<0x75, (outs I64:$sx), (ins I64:$sy, uimm6Op32:$sz),
-  "srl $sx,$sy,$sz",
+  "srl $sx, $sy, $sz",
   [(set i64:$sx, (srl i64:$sy, (i32 uimm6:$sz)))]>;
 
 def : Pat<(srl i32:$sy, (i32 uimm6:$sz)),
@@ -730,26 +731,6 @@ defm FLTX : CVTm<"cvt.d.l", 0x5F>;
 defm CVS : CVTm<"cvt.s.d", 0x1F>;
 defm CVD : CVTm<"cvt.d.s", 0x0F>;
 // CVQ: f32 or f64 -> f128
-
-
-def : Pat<(i32 (trunc i64:$sy)), (ADSrm1 (COPY_TO_REGCLASS $sy, I32), 0)>;
-def : Pat<(i32 (fp_to_sint f32:$sy)), (i32 (FIXsr f32:$sy))>;
-def : Pat<(i32 (fp_to_sint f64:$sy)), (i32 (FIXdr f64:$sy))>;
-
-def : Pat<(i64 (sext i32:$sy)), (COPY_TO_REGCLASS (ADSrm1 $sy, 0), I64)>;
-def : Pat<(i64 (zext i32:$sy)), (COPY_TO_REGCLASS (ADSUrm1 i32:$sy, 0), I64)>;
-def : Pat<(i64 (fp_to_sint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
-def : Pat<(i64 (fp_to_sint f64:$sy)), (i64 (FIXXr f64:$sy))>;
-
-def : Pat<(f32 (sint_to_fp i32:$sy)), (f32 (FLTsr i32:$sy))>;
-def : Pat<(f32 (sint_to_fp i64:$sy)), (f32 (CVSr (FLTXr i64:$sy)))>;
-def : Pat<(f32 (fpround f64:$sy)), (f32 (CVSr f64:$sy))>;
-
-def : Pat<(f64 (sint_to_fp i32:$sy)), (f64 (FLTdr i32:$sy))>;
-def : Pat<(f64 (sint_to_fp i64:$sy)), (f64 (FLTXr i64:$sy))>;
-def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
-
-def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
 
 // Load and Store instructions
@@ -978,6 +959,7 @@ def : Pat<(i64 simm7:$val), (ORim1 imm:$val, 0)>;
 // Medium immediates.
 def : Pat<(i32 simm32:$val), (LEA32zzi imm:$val)>;
 def : Pat<(i64 simm32:$val), (LEAzzi imm:$val)>;
+def : Pat<(i64 uimm32:$val), (ANDrm0 (LEAzzi imm:$val), 32)>;
 // Arbitrary immediates.
 def : Pat<(i64 imm:$val),
           (LEASLrzi (ANDrm0 (LEAzzi (LO32 imm:$val)), 32),
@@ -986,17 +968,79 @@ def : Pat<(i64 imm:$val),
 // The same integer registers are used for i32 and i64 values.
 // When registers hold i32 values, the high bits are don't care.
 
+// Cast to i1
+// Following patterns are not used by llvm, unfortunately.
+// Need to investigate them later.
+def : Pat<(sext_inreg I32:$src, i1), (AND32rm0 $src, 63)>;
+def : Pat<(sext_inreg i64:$src, i1), (ANDrm0 $src, 63)>;
+
+// Cast to i8
+def : Pat<(sext_inreg I32:$src, i8),
+          (COPY_TO_REGCLASS (SRAX (SLL $src, 56), 56), I32)>;
+def : Pat<(sext_inreg (trunc i64:$src), i8),
+          (SRAX (SLL $src, 56), 56)>;
+def : Pat<(and (trunc i64:$src), 0xff),
+          (AND32rm0 (COPY_TO_REGCLASS $src, I32), 56)>;
+
+// Cast to i16
+def : Pat<(sext_inreg I32:$src, i16),
+          (COPY_TO_REGCLASS (SRAX (SLL $src, 48), 48), I32)>;
+def : Pat<(sext_inreg (trunc i64:$src), i16),
+          (SRAX (SLL $src, 48), 48)>;
+def : Pat<(and (trunc i64:$src), 0xffff),
+          (AND32rm0 (COPY_TO_REGCLASS $src, I32), 48)>;
+
+// Cast to i32
+def : Pat<(i32 (trunc i64:$src)),
+          (ADSrm1 (COPY_TO_REGCLASS $src, I32), 0)>;
+def : Pat<(i32 (fp_to_sint f32:$sy)), (i32 (FIXsr f32:$sy))>;
+def : Pat<(i32 (fp_to_sint f64:$sy)), (i32 (FIXdr f64:$sy))>;
+def : Pat<(i32 (fp_to_uint f32:$sy)),
+          (COPY_TO_REGCLASS (ANDrm0 (FIXXr (CVDr $sy)), 32), I32)>;
+def : Pat<(i32 (fp_to_uint f64:$sy)),
+          (COPY_TO_REGCLASS (ANDrm0 (FIXXr f64:$sy), 32), I32)>;
+
+// Cast to i64
+def : Pat<(i64 (sext i32:$sy)), (COPY_TO_REGCLASS (ADSrm1 $sy, 0), I64)>;
+def : Pat<(i64 (zext i32:$sy)), (COPY_TO_REGCLASS (ADSUrm1 i32:$sy, 0), I64)>;
+def : Pat<(i64 (fp_to_sint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
+def : Pat<(i64 (fp_to_sint f64:$sy)), (i64 (FIXXr f64:$sy))>;
+def : Pat<(i64 (fp_to_uint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
+def : Pat<(i64 (fp_to_uint f64:$sy)), (i64 (FIXXr f64:$sy))>;
+
+// Cast to f32
+def : Pat<(f32 (sint_to_fp i32:$sy)), (f32 (FLTsr i32:$sy))>;
+def : Pat<(f32 (sint_to_fp i64:$sy)), (f32 (CVSr (FLTXr i64:$sy)))>;
+def : Pat<(f32 (uint_to_fp i32:$sy)),
+          (COPY_TO_REGCLASS (CVSr (FLTXr
+            (ANDrm0 (COPY_TO_REGCLASS $sy, I64), 32))), F32)>;
+def : Pat<(f32 (uint_to_fp i64:$sy)),
+          (COPY_TO_REGCLASS (CVSr (FLTXr $sy)), F32)>;
+def : Pat<(f32 (fpround f64:$sy)), (f32 (CVSr f64:$sy))>;
+
+// Cast to f64
+def : Pat<(f64 (sint_to_fp i32:$sy)), (f64 (FLTdr i32:$sy))>;
+def : Pat<(f64 (sint_to_fp i64:$sy)), (f64 (FLTXr i64:$sy))>;
+def : Pat<(f64 (uint_to_fp i32:$sy)),
+          (COPY_TO_REGCLASS (FLTXr
+            (ANDrm0 (COPY_TO_REGCLASS $sy, I64), 32)), F64)>;
+def : Pat<(f64 (uint_to_fp i64:$sy)),
+          (COPY_TO_REGCLASS (FLTXr $sy), F64)>;
+def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
+
+def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
+
 // This give us free trunc and anyext.
 // def : Pat<(i64 (anyext i32:$val)), (COPY_TO_REGCLASS $val, I64)>;
 // def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
 // Or free trunc, but 1 instruction for anyext.
-def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri $val, 0), I64)>;
-def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
-def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
+//def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri $val, 0), I64)>;
+//def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
+//def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
 
-def : Pat<(i64 (sext_inreg i64:$val, i32)),
-          (COPY_TO_REGCLASS (ADSri (COPY_TO_REGCLASS $val, I32), 0), I64)>;
+//def : Pat<(i64 (sext_inreg i64:$val, i32)),
+//          (COPY_TO_REGCLASS (ADSri (COPY_TO_REGCLASS $val, I32), 0), I64)>;
 
 // sextload and zextload stuff
 def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
@@ -1221,5 +1265,14 @@ def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
 def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
           (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
             (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), F32)>;
+
+// Several special pattern matches to optimize code
+
+def : Pat<(i32 (and i32:$lhs, 0xff)),
+          (AND32rm0 $lhs, 56)>;
+def : Pat<(i32 (and i32:$lhs, 0xffff)),
+          (AND32rm0 $lhs, 48)>;
+def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
+          (AND32rm0 $lhs, 32)>;
 
 include "VEInstrVec.td"
