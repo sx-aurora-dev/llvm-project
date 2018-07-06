@@ -128,6 +128,7 @@ public:
     return CapturedVars.end();
   };
   std::string PrintClauses();
+  std::string PrintLocalVarsFromClauses();
   virtual std::string PrintPretty() override;
   clang::SourceRange getInnerRange() override;
   clang::SourceLocation getStartLoc() override;

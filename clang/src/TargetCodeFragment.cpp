@@ -161,6 +161,25 @@ std::string TargetCodeRegion::PrintClauses(){
   return Out.str();
 }
 
+std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
+  std::stringstream Out;
+  for(auto C : OMPClauses) {
+    if (C->getClauseKind() == clang::OpenMPClauseKind::OMPC_private) {
+      auto PC = llvm::dyn_cast<clang::OMPPrivateClause>(C);
+      for (auto Var : PC->varlists()){
+        std::string PrettyStr = "";
+        llvm::raw_string_ostream PrettyOS(PrettyStr);
+        Var->printPretty(PrettyOS, NULL, PP);
+        Out << "  " << Var->getType().getAsString() << " "
+            << PrettyOS.str() << ";\n";
+      }
+    }
+  }
+  return Out.str();
+}
+
+
+
 std::string TargetCodeRegion::PrintPretty() {
   // Do pretty printing in order to resolve Macros.
   // TODO: Is there a better approach (e.g., token or preprocessor based?)

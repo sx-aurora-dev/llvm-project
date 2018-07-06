@@ -109,6 +109,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   }
   Out << "\n";
 
+  // Generate local declarations.
+  Out << TCR->PrintLocalVarsFromClauses();
+
   // Handle combined OpenMP constructs.
   // Since the runtime can decide to only create one team,
   // target team contructs are ignored right now.
