@@ -1356,11 +1356,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::ConstantPool, PtrVT, Custom);
   setOperationAction(ISD::BlockAddress, PtrVT, Custom);
 
-  // VE doesn't have sext_inreg, replace them with shl/sra
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8 , Expand);
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1 , Expand);
-
   // VE has no REM or DIVREM operations.
   setOperationAction(ISD::UREM, MVT::i32, Expand);
   setOperationAction(ISD::SREM, MVT::i32, Expand);
@@ -1384,10 +1379,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 #endif
 
   // Custom Expand fp<->uint
+#if 0
   setOperationAction(ISD::FP_TO_UINT, MVT::i32, Custom);
   setOperationAction(ISD::UINT_TO_FP, MVT::i32, Custom);
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
+#endif
 
   // VE doesn't have BRCOND either, it has BR_CC.
   for (MVT VT : MVT::all_valuetypes()) {
