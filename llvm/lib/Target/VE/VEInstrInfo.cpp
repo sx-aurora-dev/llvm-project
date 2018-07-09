@@ -321,20 +321,26 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (VE::I32RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
-  else if (VE::I32RegClass.contains(SrcReg) &&
-           VE::I64RegClass.contains(DestReg))
-    BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
-  else if (VE::I64RegClass.contains(SrcReg) &&
-           VE::I32RegClass.contains(DestReg))
+  // any scaler to any scaler
+  else if ((VE::I32RegClass.contains(SrcReg) ||
+            VE::F32RegClass.contains(SrcReg) ||
+            VE::I64RegClass.contains(SrcReg) ||
+            VE::F64RegClass.contains(SrcReg)) &&
+           (VE::I32RegClass.contains(DestReg) ||
+            VE::F32RegClass.contains(DestReg) ||
+            VE::I64RegClass.contains(DestReg) ||
+            VE::F64RegClass.contains(DestReg)))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
   else if (VE::V64RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
         .addImm(0)
         .addReg(SrcReg, getKillRegState(KillSrc));
-  else
+  else {
+    const TargetRegisterInfo *TRI = &getRegisterInfo();
+    dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
     llvm_unreachable("Impossible reg-to-reg copy");
+  }
 #if 0
   else if (SP::IntPairRegClass.contains(DestReg, SrcReg)) {
     subRegIdx  = DW_SubRegsIdx;
