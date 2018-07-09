@@ -985,58 +985,60 @@ def : Pat<(sext_inreg i64:$src, i1), (ANDrm0 $src, 63)>;
 
 // Cast to i8
 def : Pat<(sext_inreg I32:$src, i8),
-          (COPY_TO_REGCLASS (SRAX (SLL
-            (COPY_TO_REGCLASS $src, I64), 56), 56), I32)>;
+          (EXTRACT_SUBREG (SRAX (SLL (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32), 56), 56), sub_i32)>;
 def : Pat<(sext_inreg (i32 (trunc i64:$src)), i8),
-          (COPY_TO_REGCLASS (SRAX (SLL $src, 56), 56), I32)>;
+          (EXTRACT_SUBREG (SRAX (SLL $src, 56), 56), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xff),
           (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 56)>;
 
 // Cast to i16
 def : Pat<(sext_inreg I32:$src, i16),
-          (COPY_TO_REGCLASS (SRAX (SLL
-            (COPY_TO_REGCLASS $src, I64), 48), 48), I32)>;
+          (EXTRACT_SUBREG (SRAX (SLL (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32), 48), 48), sub_i32)>;
 def : Pat<(sext_inreg (trunc i64:$src), i16),
-          (COPY_TO_REGCLASS (SRAX (SLL $src, 48), 48), I32)>;
+          (EXTRACT_SUBREG (SRAX (SLL $src, 48), 48), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xffff),
-          (AND32rm0 (COPY_TO_REGCLASS $src, I32), 48)>;
+          (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 48)>;
 
 // Cast to i32
 def : Pat<(i32 (trunc i64:$src)),
-          (ADSrm1 (COPY_TO_REGCLASS $src, I32), 0)>;
-def : Pat<(i32 (fp_to_sint f32:$sy)), (i32 (FIXsr f32:$sy))>;
-def : Pat<(i32 (fp_to_sint f64:$sy)), (i32 (FIXdr f64:$sy))>;
+          (ADSrm1 (EXTRACT_SUBREG $src, sub_i32), 0)>;
+def : Pat<(i32 (fp_to_sint f32:$sy)), (FIXsr f32:$sy)>;
+def : Pat<(i32 (fp_to_sint f64:$sy)), (FIXdr f64:$sy)>;
 def : Pat<(i32 (fp_to_uint f32:$sy)),
-          (COPY_TO_REGCLASS (ANDrm0 (FIXXr (CVDr $sy)), 32), I32)>;
+          (EXTRACT_SUBREG (ANDrm0 (FIXXr (CVDr $sy)), 32), sub_i32)>;
 def : Pat<(i32 (fp_to_uint f64:$sy)),
-          (COPY_TO_REGCLASS (ANDrm0 (FIXXr f64:$sy), 32), I32)>;
+          (EXTRACT_SUBREG (ANDrm0 (FIXXr f64:$sy), 32), sub_i32)>;
 
 // Cast to i64
-def : Pat<(i64 (sext i32:$sy)), (COPY_TO_REGCLASS (ADSrm1 $sy, 0), I64)>;
-def : Pat<(i64 (zext i32:$sy)), (COPY_TO_REGCLASS (ADSUrm1 i32:$sy, 0), I64)>;
-def : Pat<(i64 (fp_to_sint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
-def : Pat<(i64 (fp_to_sint f64:$sy)), (i64 (FIXXr f64:$sy))>;
-def : Pat<(i64 (fp_to_uint f32:$sy)), (i64 (FIXXr (CVDr f32:$sy)))>;
-def : Pat<(i64 (fp_to_uint f64:$sy)), (i64 (FIXXr f64:$sy))>;
+def : Pat<(i64 (sext i32:$sy)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSrm1 $sy, 0), sub_i32)>;
+def : Pat<(i64 (zext i32:$sy)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSUrm1 i32:$sy, 0), sub_i32)>;
+def : Pat<(i64 (fp_to_sint f32:$sy)), (FIXXr (CVDr f32:$sy))>;
+def : Pat<(i64 (fp_to_sint f64:$sy)), (FIXXr f64:$sy)>;
+def : Pat<(i64 (fp_to_uint f32:$sy)), (FIXXr (CVDr f32:$sy))>;
+def : Pat<(i64 (fp_to_uint f64:$sy)), (FIXXr f64:$sy)>;
 
 // Cast to f32
-def : Pat<(f32 (sint_to_fp i32:$sy)), (f32 (FLTsr i32:$sy))>;
-def : Pat<(f32 (sint_to_fp i64:$sy)), (f32 (CVSr (FLTXr i64:$sy)))>;
+def : Pat<(f32 (sint_to_fp i32:$sy)), (FLTsr i32:$sy)>;
+def : Pat<(f32 (sint_to_fp i64:$sy)), (CVSr (FLTXr i64:$sy))>;
 def : Pat<(f32 (uint_to_fp i32:$sy)),
-          (COPY_TO_REGCLASS (CVSr (FLTXr
-            (ANDrm0 (COPY_TO_REGCLASS $sy, I64), 32))), F32)>;
+          (CVSr (FLTXr
+            (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)))>;
 def : Pat<(f32 (uint_to_fp i64:$sy)),
-          (COPY_TO_REGCLASS (CVSr (FLTXr $sy)), F32)>;
-def : Pat<(f32 (fpround f64:$sy)), (f32 (CVSr f64:$sy))>;
+          (CVSr (FLTXr $sy))>;
+def : Pat<(f32 (fpround f64:$sy)), (CVSr f64:$sy)>;
 
 // Cast to f64
-def : Pat<(f64 (sint_to_fp i32:$sy)), (f64 (FLTdr i32:$sy))>;
-def : Pat<(f64 (sint_to_fp i64:$sy)), (f64 (FLTXr i64:$sy))>;
+def : Pat<(f64 (sint_to_fp i32:$sy)), (FLTdr i32:$sy)>;
+def : Pat<(f64 (sint_to_fp i64:$sy)), (FLTXr i64:$sy)>;
 def : Pat<(f64 (uint_to_fp i32:$sy)),
-          (COPY_TO_REGCLASS (FLTXr
-            (ANDrm0 (COPY_TO_REGCLASS $sy, I64), 32)), F64)>;
+          (FLTXr (ANDrm0 (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32))>;
 def : Pat<(f64 (uint_to_fp i64:$sy)),
-          (COPY_TO_REGCLASS (FLTXr $sy), F64)>;
+          (FLTXr $sy)>;
 def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
