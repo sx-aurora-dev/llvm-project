@@ -22,10 +22,14 @@ def CC_VE : CallingConv<[
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
   // bool, char, int, enum, long --> generic integer 32 bit registers
-  CCIfType<[i32], CCAssignToReg<[SW0, SW1, SW2, SW3, SW4, SW5, SW6, SW7]>>,
+  CCIfType<[i32], CCAssignToRegWithShadow<
+    [SW0, SW1, SW2, SW3, SW4, SW5, SW6, SW7],
+    [SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
 
   // float --> generic floating point 32 bit registers
-  CCIfType<[f32], CCAssignToReg<[SF0, SF1, SF2, SF3, SF4, SF5, SF6, SF7]>>,
+  CCIfType<[f32], CCAssignToRegWithShadow<
+    [SF0, SF1, SF2, SF3, SF4, SF5, SF6, SF7],
+    [SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
 
   // long long/double --> generic 64 bit registers
   CCIfType<[i64, f64],
@@ -40,10 +44,14 @@ def RetCC_VE : CallingConv<[
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
   // bool, char, int, enum, long --> generic integer 32 bit registers
-  CCIfType<[i32], CCAssignToReg<[SW0, SW1, SW2, SW3, SW4, SW5, SW6, SW7]>>,
+  CCIfType<[i32], CCAssignToRegWithShadow<
+    [SW0, SW1, SW2, SW3, SW4, SW5, SW6, SW7],
+    [SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
 
   // float --> generic floating point 32 bit registers
-  CCIfType<[f32], CCAssignToReg<[SF0, SF1, SF2, SF3, SF4, SF5, SF6, SF7]>>,
+  CCIfType<[f32], CCAssignToRegWithShadow<
+    [SF0, SF1, SF2, SF3, SF4, SF5, SF6, SF7],
+    [SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
 
   // long long/double --> generic 64 bit registers
   CCIfType<[i64, f64],
