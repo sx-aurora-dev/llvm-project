@@ -436,24 +436,24 @@ multiclass RRNDm<string opcStr, bits<8>opc, SDNode OpNode,
 //   Used by cmov instruction
 
 let Constraints = "$sx = $sd", DisableEncoding = "$sd" in
-multiclass RRCFm<string opcStr, bits<8>opc,
+multiclass RRCMOVm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def rr : RR<
-    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, RC:$sz, RC:$sd),
+    opc, (outs I64:$sx), (ins CCOp:$cf, RC:$sy, I64:$sz, I64:$sd),
     !strconcat(opcStr, " $sx, $sz, $sy"),
     []> {
     let cy = 1;
     let cz = 1;
   }
   def ri : RR<
-    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sz, immOp:$sy, RC:$sd),
+    opc, (outs I64:$sx), (ins CCOp:$cf, I64:$sz, immOp:$sy, I64:$sd),
     !strconcat(opcStr, " $sx, $sz, $sy"),
     []> {
     let cy = 0;
     let cz = 1;
   }
   def rm0 : RR<
-    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, RC:$sd),
+    opc, (outs I64:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, I64:$sd),
     !strconcat(opcStr, " $sx, (${sz})0, $sy"),
     []> {
     let cy = 1;
@@ -463,7 +463,7 @@ multiclass RRCFm<string opcStr, bits<8>opc,
     let hasSideEffects = 0;
   }
   def rm1 : RR<
-    opc, (outs RC:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, RC:$sd),
+    opc, (outs I64:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, I64:$sd),
     !strconcat(opcStr, " $sx, (${sz})1, $sy"),
     []> {
     let cy = 1;
@@ -471,7 +471,7 @@ multiclass RRCFm<string opcStr, bits<8>opc,
     let hasSideEffects = 0;
   }
   def im0 : RR<
-    opc, (outs RC:$sx), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, RC:$sd),
+    opc, (outs I64:$sx), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, I64:$sd),
     !strconcat(opcStr, " $sx, (${sz})0, $sy"),
     []> {
     let cy = 0;
@@ -480,7 +480,7 @@ multiclass RRCFm<string opcStr, bits<8>opc,
     let hasSideEffects = 0;
   }
   def im1 : RR<
-    opc, (outs RC:$sx), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, RC:$sd),
+    opc, (outs I64:$sx), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, I64:$sd),
     !strconcat(opcStr, " $sx, (${sz})1, $sy"),
     []> {
     let cy = 0;
@@ -550,16 +550,16 @@ multiclass CVTm<string opcStr, bits<8> opc,
 
 // CMOV instructions
 let cx = 0, cw = 0, cw2 = 0 in
-defm CMOVL : RRCFm<"cmov.l.${cf}", 0x3B, I64, i64, simm7Op64, uimm6Op64>;
+defm CMOVL : RRCMOVm<"cmov.l.${cf}", 0x3B, I64, i64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 0 in
-defm CMOVW : RRCFm<"cmov.w.${cf}", 0x3B, I32, i32, simm7Op32, uimm6Op32>;
+defm CMOVW : RRCMOVm<"cmov.w.${cf}", 0x3B, I32, i32, simm7Op32, uimm6Op32>;
 
 let cx = 0, cw = 0, cw2 = 1 in
-defm CMOVD : RRCFm<"cmov.d.${cf}", 0x3B, F64, f64, simm7Op64, uimm6Op64>;
+defm CMOVD : RRCMOVm<"cmov.d.${cf}", 0x3B, F64, f64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 1 in
-defm CMOVS : RRCFm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op32, uimm6Op32>;
+defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op32, uimm6Op32>;
 
 // NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
@@ -1154,31 +1154,32 @@ def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCUIOp:$cond)),
                         (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCSIOp:$cond)),
-          (CMOVWrm0 (icond2cc $cond), 
-                    (CPSrr i32:$LHS, i32:$RHS),
-                    63, 
-                    (OR32im1 0, 0))>;
+          (EXTRACT_SUBREG
+              (CMOVWrm0 (icond2cc $cond), 
+                        (CPSrr i32:$LHS, i32:$RHS),
+                        63, 
+                        (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCUIOp:$cond)),
-          (CMOVWrm0 (icond2cc $cond), 
-                    (CMPUWrr i32:$LHS, i32:$RHS),
-                    63, 
-                    (OR32im1 0, 0))>;
+          (EXTRACT_SUBREG
+              (CMOVWrm0 (icond2cc $cond), 
+                        (CMPUWrr i32:$LHS, i32:$RHS),
+                        63, 
+                        (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
           (EXTRACT_SUBREG
               (CMOVDrm0 (fcond2cc $cond), 
                         (FCPrr f64:$LHS, f64:$RHS), 
                         63, 
-                        (COPY_TO_REGCLASS (ORim1 0, 0), F64)), sub_i32)>;
+                        (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
-          (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+          (EXTRACT_SUBREG
               (CMOVSrm0 (fcond2cc $cond), 
                         (FCPSrr f32:$LHS, f32:$RHS), 
                         63, 
-                        (f32 (EXTRACT_SUBREG (ORim1 0, 0), sub_f32))),
-              sub_f32), sub_i32)>;
+                        (ORim1 0, 0)), sub_i32)>;
 
 // Special SELECTCC pattern matches
 // Use min/max for better performance.
@@ -1237,26 +1238,36 @@ def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$tval, i64:$fval,
 
 def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$tval, i32:$fval,
                          CCSIOp:$cond)),
-          (CMOVWrr (icond2cc $cond), 
-                   (CPSrr i32:$LHS, i32:$RHS),
-                   $tval, $fval)>;
+          (EXTRACT_SUBREG
+              (CMOVWrr (icond2cc $cond), 
+                       (CPSrr i32:$LHS, i32:$RHS),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $tval, sub_i32),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $fval, sub_i32)),
+              sub_i32)>;
 
 def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$tval, i32:$fval,
                          CCUIOp:$cond)),
-          (CMOVWrr (icond2cc $cond), 
-                   (CMPUWrr i32:$LHS, i32:$RHS),
-                   $tval, $fval)>;
+          (EXTRACT_SUBREG
+              (CMOVWrr (icond2cc $cond), 
+                       (CMPUWrr i32:$LHS, i32:$RHS),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $tval, sub_i32),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $fval, sub_i32)),
+              sub_i32)>;
 
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$tval, f64:$fval, cond:$cond)),
-          (CMOVDrr (fcond2cc $cond), 
-                   (FCPrr f64:$LHS, f64:$RHS), 
-                   $tval, $fval)>;
+          (COPY_TO_REGCLASS
+              (CMOVDrr (fcond2cc $cond), 
+                       (FCPrr f64:$LHS, f64:$RHS), 
+                       (COPY_TO_REGCLASS $tval, I64),
+                       (COPY_TO_REGCLASS $fval, I64)), F64)>;
 
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$tval, f32:$fval, cond:$cond)),
-          (CMOVSrr (fcond2cc $cond), 
-                    (FCPSrr f32:$LHS, f32:$RHS), 
-                    $tval, 
-                    $fval)>;
+          (EXTRACT_SUBREG
+              (CMOVSrr (fcond2cc $cond), 
+                       (FCPSrr f32:$LHS, f32:$RHS), 
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $tval, sub_f32),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $fval, sub_f32)),
+              sub_f32)>;
 
 // Generic SELECT pattern matches
 // Use cmov.w for all cases since %pred holds i32.
@@ -1264,19 +1275,25 @@ def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$tval, f32:$fval, cond:$cond)),
 //   CMOV.w.ne %res, %tval, %tmp  ; set tval if %tmp is true
 
 def : Pat<(i64 (select i32:$pred, i64:$t, i64:$f)),
-          (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
-            (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), I64)>;
+          (CMOVWrr CC_NE, $pred, $t, $f)>;
 
 def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
-          (CMOVWrr CC_NE, $pred, $t, $f)>;
+          (EXTRACT_SUBREG
+              (CMOVWrr CC_NE, $pred,
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
+              sub_i32)>;
 
 def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
           (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
-            (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), F64)>;
+            (COPY_TO_REGCLASS $t, I64), (COPY_TO_REGCLASS $f, I64)), F64)>;
 
 def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
-          (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
-            (COPY_TO_REGCLASS $t, I32), (COPY_TO_REGCLASS $f, I32)), F32)>;
+          (EXTRACT_SUBREG
+            (CMOVWrr CC_NE, $pred,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_f32),
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
+            sub_f32)>;
 
 // Several special pattern matches to optimize code
 
