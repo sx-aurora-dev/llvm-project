@@ -321,6 +321,14 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (VE::I32RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
+  else if (VE::I32RegClass.contains(SrcReg) &&
+           VE::I64RegClass.contains(DestReg))
+    BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
+      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
+  else if (VE::I64RegClass.contains(SrcReg) &&
+           VE::I32RegClass.contains(DestReg))
+    BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
+      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
   else if (VE::V64RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
         .addImm(0)
@@ -697,8 +705,8 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   BB->addSuccessor(sinkMBB);
   BuildMI(BB, dl, TII.get(VE::BCRrr))
       .addImm(5)
-      .addReg(VE::S11)                          // %sp
-      .addReg(VE::S8)                           // %sl
+      .addReg(VE::SX11)                          // %sp
+      .addReg(VE::SX8)                           // %sl
       .addMBB(sinkMBB);
 
   BB = syscallMBB;
@@ -706,22 +714,22 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   // Update machine-CFG edges
   BB->addSuccessor(sinkMBB);
 
-  BuildMI(BB, dl, TII.get(VE::LDSri), VE::S61)
-    .addReg(VE::S14).addImm(0x18);
-  BuildMI(BB, dl, TII.get(VE::ORri), VE::S62)
-    .addReg(VE::S0).addImm(0);
-  BuildMI(BB, dl, TII.get(VE::LEAzzi), VE::S63)
+  BuildMI(BB, dl, TII.get(VE::LDSri), VE::SX61)
+    .addReg(VE::SX14).addImm(0x18);
+  BuildMI(BB, dl, TII.get(VE::ORri), VE::SX62)
+    .addReg(VE::SX0).addImm(0);
+  BuildMI(BB, dl, TII.get(VE::LEAzzi), VE::SX63)
     .addImm(0x13b);
   BuildMI(BB, dl, TII.get(VE::SHMri))
-    .addReg(VE::S61).addImm(0).addReg(VE::S63);
+    .addReg(VE::SX61).addImm(0).addReg(VE::SX63);
   BuildMI(BB, dl, TII.get(VE::SHMri))
-    .addReg(VE::S61).addImm(8).addReg(VE::S8);
+    .addReg(VE::SX61).addImm(8).addReg(VE::SX8);
   BuildMI(BB, dl, TII.get(VE::SHMri))
-    .addReg(VE::S61).addImm(16).addReg(VE::S11);
+    .addReg(VE::SX61).addImm(16).addReg(VE::SX11);
   BuildMI(BB, dl, TII.get(VE::MONC));
 
-  BuildMI(BB, dl, TII.get(VE::ORri), VE::S0)
-    .addReg(VE::S62).addImm(0);
+  BuildMI(BB, dl, TII.get(VE::ORri), VE::SX0)
+    .addReg(VE::SX62).addImm(0);
 
   MI.eraseFromParent(); // The pseudo instruction is gone now.
   return true;

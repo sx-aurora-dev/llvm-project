@@ -24,13 +24,19 @@ class VEMiscReg<bits<5> Enc, string n>: Register<n> {
 }
 
 let Namespace = "VE" in {
-def sub_even : SubRegIndex<64>;
-def sub_odd  : SubRegIndex<64, 64>;
+  def sub_i8    : SubRegIndex<8, 56>;           // High 8 bit
+  def sub_i16   : SubRegIndex<16, 48>;          // High 16 bit
+  def sub_i32   : SubRegIndex<32, 32>;          // High 32 bit
+  def sub_f32   : SubRegIndex<32>;              // Low 32 bit
+  def sub_even  : SubRegIndex<64>;
+  def sub_odd   : SubRegIndex<64, 64>;
 }
 
 // Registers are identified with 7-bit ID numbers.
 // R - 64-bit integer or floating-point registers
-class R<bits<7> Enc, string n> : VEReg<Enc, n>;
+class R<bits<7> Enc, string n, list<Register> subregs = []>: VEReg<Enc, n> {
+  let SubRegs = subregs;
+}
 
 // Rq - Slots in the register file for 128-bit floating-point values.
 class Rq<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
@@ -68,7 +74,35 @@ foreach I = 0-14 in
 
 // Generic registers - 64 bits wide
 foreach I = 0-63 in
-  def S#I : R<I, "S"#I>, DwarfRegNum<[I]>;
+  def SX#I : R<I, "S"#I>, DwarfRegNum<[I]>;
+
+// Generic integer registers - 32 bits wide
+let SubRegIndices = [sub_i32] in {
+foreach I = 0-63 in
+  def SW#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
+}
+
+// Generic floating point registers - 32 bits wide
+let SubRegIndices = [sub_f32] in {
+foreach I = 0-63 in
+  def SF#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
+}
+
+// Generic integer registers - 16 bits wide
+let SubRegIndices = [sub_i16] in {
+foreach I = 0-63 in
+  def SH#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
+}
+
+// Generic integer registers - 8 bits wide
+let SubRegIndices = [sub_i8] in {
+foreach I = 0-63 in
+  def SB#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
+}
+
+// Generic registers - 64 bits wide
+//foreach I = 0-63 in
+//  def S#I : R<I, "S"#I>, DwarfRegNum<[I]>;
 
 // Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
@@ -99,31 +133,31 @@ def VL : VEReg<0, "VL">;
 //   ...
 foreach I = 0-31 in
   def Q#I : Rq<!shl(I,1),  "S"#!shl(I,1),
-               [!cast<R>("S"#!shl(I,1)),
-                !cast<R>("S"#!add(!shl(I,1),1))]>;
+               [!cast<R>("SX"#!shl(I,1)),
+                !cast<R>("SX"#!add(!shl(I,1),1))]>;
 
 // Register classes.
 //
 // The register order is defined in terms of the preferred
 // allocation order.
-def I8 : RegisterClass<"VE", [i8], 8,
-                        (add (sequence "S%u", 34, 63),
-                             (sequence "S%u", 0, 33))>;
+def I8  : RegisterClass<"VE", [i8], 8,
+                        (add (sequence "SB%u", 34, 63),
+                             (sequence "SB%u", 0, 33))>;
 def I16 : RegisterClass<"VE", [i16], 16,
-                        (add (sequence "S%u", 34, 63),
-                             (sequence "S%u", 0, 33))>;
-def I32 : RegisterClass<"VE", [i32, f32], 32,
-                        (add (sequence "S%u", 34, 63),
-                             (sequence "S%u", 0, 33))>;
-def I64 : RegisterClass<"VE", [i32, f32, i64, f64], 64,
-                        (add (sequence "S%u", 34, 63),
-                             (sequence "S%u", 0, 33))>;
+                        (add (sequence "SH%u", 34, 63),
+                             (sequence "SH%u", 0, 33))>;
+def I32 : RegisterClass<"VE", [i32], 32,
+                        (add (sequence "SW%u", 34, 63),
+                             (sequence "SW%u", 0, 33))>;
+def I64 : RegisterClass<"VE", [i64], 64,
+                        (add (sequence "SX%u", 34, 63),
+                             (sequence "SX%u", 0, 33))>;
 def F32 : RegisterClass<"VE", [f32], 32,
-                        (add (sequence "S%u", 34, 63),
-                             (sequence "S%u", 0, 33))>;
+                        (add (sequence "SF%u", 34, 63),
+                             (sequence "SF%u", 0, 33))>;
 def F64 : RegisterClass<"VE", [f64], 64,
-                        (add (sequence "S%u", 34, 63),
-                             (sequence "S%u", 0, 33))>;
+                        (add (sequence "SX%u", 34, 63),
+                             (sequence "SX%u", 0, 33))>;
 def F128 : RegisterClass<"VE", [f128], 128, (sequence "Q%u", 0, 31)>;
 
 def Misc : RegisterClass<"VE", [i64], 64,

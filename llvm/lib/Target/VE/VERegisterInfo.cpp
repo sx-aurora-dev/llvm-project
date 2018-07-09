@@ -32,7 +32,7 @@ using namespace llvm;
 #include "VEGenRegisterInfo.inc"
 
 // VE uses %s10 == %lp to keep return address
-VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::S10) {}
+VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {}
 
 const MCPhysReg*
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -47,32 +47,57 @@ VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
 
 BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
-  Reserved.set(VE::S8);         // stack limit
-  Reserved.set(VE::S9);         // frame pointer
-  Reserved.set(VE::S10);        // link register (return address)
-  Reserved.set(VE::S11);        // stack pointer
+  Reserved.set(VE::SX8);        // stack limit
+  Reserved.set(VE::SX9);        // frame pointer
+  Reserved.set(VE::SX10);       // link register (return address)
+  Reserved.set(VE::SX11);       // stack pointer
 
   // FIXME: maybe not need to be reserved
-  Reserved.set(VE::S12);        // outer register
-  Reserved.set(VE::S13);        // id register for dynamic linker
+  Reserved.set(VE::SX12);       // outer register
+  Reserved.set(VE::SX13);       // id register for dynamic linker
 
-  Reserved.set(VE::S14);        // thread pointer
-  Reserved.set(VE::S15);        // global offset table register
-  Reserved.set(VE::S16);        // procedure linkage table register
-  Reserved.set(VE::S17);        // linkage-area register
+  Reserved.set(VE::SX14);       // thread pointer
+  Reserved.set(VE::SX15);       // global offset table register
+  Reserved.set(VE::SX16);       // procedure linkage table register
+  Reserved.set(VE::SX17);       // linkage-area register
 
   // Also reserve the register pair aliases covering the above
   // registers, with the same conditions.  This is required since
   // LiveIntervals treat a register as a non reserved register if any
   // of its aliases are not reserved.
-  Reserved.set(VE::Q4);         // S8_S9
-  Reserved.set(VE::Q5);         // S10_S11
-  Reserved.set(VE::Q6);         // S12_S13
-  Reserved.set(VE::Q7);         // S14_S15
-  Reserved.set(VE::Q8);         // S16_S17
+  Reserved.set(VE::Q4);         // SX8_SX9
+  Reserved.set(VE::Q5);         // SX10_SX11
+  Reserved.set(VE::Q6);         // SX12_SX13
+  Reserved.set(VE::Q7);         // SX14_SX15
+  Reserved.set(VE::Q8);         // SX16_SX17
 
-  // s18-s33 are callee-saved registers
-  // s34-s63 are temporary registers
+  // Also reserve the integer 32 bit registers convering the above registers.
+  Reserved.set(VE::SW8);
+  Reserved.set(VE::SW9);
+  Reserved.set(VE::SW10);
+  Reserved.set(VE::SW11);
+  Reserved.set(VE::SW12);
+  Reserved.set(VE::SW13);
+  Reserved.set(VE::SW14);
+  Reserved.set(VE::SW15);
+  Reserved.set(VE::SW16);
+  Reserved.set(VE::SW17);
+
+  // Also reserve the floating point 32 bit registers convering the above
+  // registers.
+  Reserved.set(VE::SF8);
+  Reserved.set(VE::SF9);
+  Reserved.set(VE::SF10);
+  Reserved.set(VE::SF11);
+  Reserved.set(VE::SF12);
+  Reserved.set(VE::SF13);
+  Reserved.set(VE::SF14);
+  Reserved.set(VE::SF15);
+  Reserved.set(VE::SF16);
+  Reserved.set(VE::SF17);
+
+  // sx18-sx33 are callee-saved registers
+  // sx34-sx63 are temporary registers
 
   return Reserved;
 }
@@ -208,7 +233,7 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 }
 
 unsigned VERegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  return VE::S9;
+  return VE::SX9;
 }
 
 // VE has no architectural need for stack realignment support,

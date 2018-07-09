@@ -54,15 +54,15 @@ void VEFrameLowering::emitPrologueInsns(
   //    or %fp, 0, %sp
 
   BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
-    .addReg(VE::S11).addImm(0).addReg(VE::S9);
+    .addReg(VE::SX11).addImm(0).addReg(VE::SX9);
   BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
-    .addReg(VE::S11).addImm(8).addReg(VE::S10);
+    .addReg(VE::SX11).addImm(8).addReg(VE::SX10);
   BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
-    .addReg(VE::S11).addImm(24).addReg(VE::S15);
+    .addReg(VE::SX11).addImm(24).addReg(VE::SX15);
   BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
-    .addReg(VE::S11).addImm(32).addReg(VE::S16);
+    .addReg(VE::SX11).addImm(32).addReg(VE::SX16);
   BuildMI(MBB, MBBI, dl, TII.get(VE::ORri))
-    .addReg(VE::S9).addReg(VE::S11).addImm(0);
+    .addReg(VE::SX9).addReg(VE::SX11).addImm(0);
 }
 
 void VEFrameLowering::emitEpilogueInsns(
@@ -82,15 +82,15 @@ void VEFrameLowering::emitEpilogueInsns(
   //    ld %fp, 0(,%sp)
 
   BuildMI(MBB, MBBI, dl, TII.get(VE::ORri))
-    .addReg(VE::S11).addReg(VE::S9).addImm(0);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S16)
-    .addReg(VE::S11).addImm(32);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S15)
-    .addReg(VE::S11).addImm(24);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S10)
-    .addReg(VE::S11).addImm(8);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::S9)
-    .addReg(VE::S11).addImm(0);
+    .addReg(VE::SX11).addReg(VE::SX9).addImm(0);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX16)
+    .addReg(VE::SX11).addImm(32);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX15)
+    .addReg(VE::SX11).addImm(24);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX10)
+    .addReg(VE::SX11).addImm(8);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX9)
+    .addReg(VE::SX11).addImm(0);
 }
 
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
@@ -102,22 +102,22 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
   if (NumBytes >= -64 && NumBytes < 63) {
-    BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::S11)
-      .addReg(VE::S11).addImm(NumBytes);
+    BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::SX11)
+      .addReg(VE::SX11).addImm(NumBytes);
     return;
   }
 
-  // Emit following codes.  This clobbers S13 which we always know is
+  // Emit following codes.  This clobbers SX13 which we always know is
   // available here.
   //   lea     %s13,%lo(NumBytes)
   //   and     %s13,%s13,(32)0
   //   lea.sl  %sp,%hi(NumBytes)(%sp, %s13)
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LEAzzi), VE::S13)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LEAzzi), VE::SX13)
     .addImm(LO32(NumBytes));
-  BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm0), VE::S13)
-    .addReg(VE::S13).addImm(32);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::S11)
-    .addReg(VE::S11).addReg(VE::S13).addImm(HI32(NumBytes));
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm0), VE::SX13)
+    .addReg(VE::SX13).addImm(32);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::SX11)
+    .addReg(VE::SX11).addReg(VE::SX13).addImm(HI32(NumBytes));
 }
 
 void VEFrameLowering::emitSPExtend(MachineFunction &MF,
@@ -236,7 +236,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // emit stack extend instructions
   emitSPExtend(MF, MBB, MBBI, -NumBytes);
 
-  unsigned regFP = RegInfo.getDwarfRegNum(VE::S9, true);
+  unsigned regFP = RegInfo.getDwarfRegNum(VE::SX9, true);
 
   // Emit ".cfi_def_cfa_register 30".
   unsigned CFIIndex =
@@ -262,7 +262,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   if (NeedsStackRealignment) {
 #if 0
     unsigned regUnbiased;
-    regUnbiased = VE::S11; // %sp
+    regUnbiased = VE::SX11; // %sp
 
     // andn %regUnbiased, MaxAlign-1, %regUnbiased
     int MaxAlign = MFI.getMaxAlignment();
@@ -271,7 +271,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
     if (Bias) {
       // add %g1, -BIAS, %o6
-      BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::S11)
+      BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::SX11)
         .addReg(regUnbiased).addImm(-Bias);
     }
 #endif
@@ -386,7 +386,7 @@ int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     FrameReg = RegInfo->getFrameRegister(MF);
     return FrameOffset;
   } else {
-    FrameReg = VE::S11; // %sp
+    FrameReg = VE::SX11; // %sp
     return FrameOffset + MF.getFrameInfo().getStackSize();
   }
 }
@@ -395,12 +395,12 @@ static bool LLVM_ATTRIBUTE_UNUSED verifyLeafProcRegUse(MachineRegisterInfo *MRI)
 {
 
   // If any of parameter registers are used, this is not leaf function.
-  for (unsigned reg = VE::S0; reg <= VE::S7; ++reg)
+  for (unsigned reg = VE::SX0; reg <= VE::SX7; ++reg)
     if (MRI->isPhysRegUsed(reg))
       return false;
 
   // If any of callee-saved registers are used, this is not leaf function.
-  for (unsigned reg = VE::S18; reg <= VE::S33; ++reg)
+  for (unsigned reg = VE::SX18; reg <= VE::SX33; ++reg)
     if (MRI->isPhysRegUsed(reg))
       return false;
 
@@ -414,9 +414,9 @@ bool VEFrameLowering::isLeafProc(MachineFunction &MF) const
   MachineFrameInfo    &MFI = MF.getFrameInfo();
 
   return !(MFI.hasCalls()                  // has calls
-           || MRI.isPhysRegUsed(VE::S18)   // Too many registers needed
+           || MRI.isPhysRegUsed(VE::SX18)  // Too many registers needed
                                            //   (s18 is first CSR)
-           || MRI.isPhysRegUsed(VE::S11)   // %sp is used
+           || MRI.isPhysRegUsed(VE::SX11)  // %sp is used
            || hasFP(MF));                  // need %fp
 }
 

@@ -481,7 +481,8 @@ def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy),
   "lvs ${sx},${vx}(${sy})", []>;
 
 def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)), 
-          (f32 (LVSr v256f64:$vx, i32:$sy))>;
+          (COPY_TO_REGCLASS (LVSr v256f64:$vx,
+            (COPY_TO_REGCLASS $sy, I64)), F32)>;
 
 let cy = 1 in
 def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
@@ -508,8 +509,8 @@ def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,
 
 def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
 
-multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, Operand immOp> {
-  def r : RV2<opc, (outs V64:$vx), (ins I64:$sy), 
+multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass RCi, Operand immOp> {
+  def r : RV2<opc, (outs V64:$vx), (ins RCi:$sy), 
     !strconcat(opcStr, " $vx,$sy"), []> {
       let cy = 1;
       let vy = 0;
@@ -522,7 +523,7 @@ multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, Operand immOp
       let m = 0;
   }
 
-  def rm : RV2<opc, (outs V64:$vx), (ins I64:$sy, MaskRC:$vm, V64:$vd), 
+  def rm : RV2<opc, (outs V64:$vx), (ins RCi:$sy, MaskRC:$vm, V64:$vd), 
     !strconcat(opcStr, " $vx,$sy,$vm"), []> {
       let cy = 1;
       let vy = 0;
@@ -537,10 +538,10 @@ multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, Operand immOp
   }
 }
 
-let cx = 0, cx2 = 0 in defm VBRD : VBRDm<"vbrd", 0x8C, VM, simm7Op64>;   // 64b
-let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C, VM, simm7Op32>; // 32b lower (= i32/u32)
-let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C, VM, simm7Op32>; // 32b uppper(= f32)
-let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C, VM512, simm7Op32>; // 32b packed
+let cx = 0, cx2 = 0 in defm VBRD : VBRDm<"vbrd", 0x8C, VM, I64, simm7Op64>;   // 64b
+let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C, VM, I32, simm7Op32>; // 32b lower (= i32/u32)
+let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C, VM, I32, simm7Op32>; // 32b uppper(= f32)
+let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C, VM512, I64, simm7Op32>; // 32b packed
 
 def VMVr : RV<0x9C, (outs V64:$vx), (ins I64:$sy, V64:$vz),
   "vmv $vx,$sy,$vz", []> {
@@ -938,11 +939,12 @@ def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
 def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
-          (ORrr (LDUri MEMri:$addr0), (LDLUri MEMri:$addr1))>;
+          (ORrr (COPY_TO_REGCLASS (LDUri MEMri:$addr0), I64),
+            (COPY_TO_REGCLASS (LDLUri MEMri:$addr1), I64))>;
 
 def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
           (i64 (MPYrr
-            (LDLUri MEMri:$addr),
+            (COPY_TO_REGCLASS (LDLUri MEMri:$addr), I64),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
 

@@ -16,19 +16,39 @@
 //===----------------------------------------------------------------------===//
 
 def CC_VE : CallingConv<[
-  // i32 f32 i64 f64 arguments get passed in generic registers
-  // if there is space.
-  CCIfType<[i32, f32, i64, f64],
-           CCAssignToReg<[S0, S1, S2, S3, S4, S5, S6, S7]>>,
+  // all arguments get passed in generic registers if there is space.
+
+  // Promote i1/i8/i16 arguments to i32.
+  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+
+  // bool, char, int, enum, long --> generic integer 32 bit registers
+  CCIfType<[i32], CCAssignToReg<[SW0, SW1, SW2, SW3, SW4, SW5, SW6, SW7]>>,
+
+  // float --> generic floating point 32 bit registers
+  CCIfType<[f32], CCAssignToReg<[SF0, SF1, SF2, SF3, SF4, SF5, SF6, SF7]>>,
+
+  // long long/double --> generic 64 bit registers
+  CCIfType<[i64, f64],
+           CCAssignToReg<[SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCAssignToStack<8, 8>
 ]>;
 
 def RetCC_VE : CallingConv<[
-  CCIfType<[i32, f32, i64, f64],
-           CCAssignToReg<[S0, S1, S2, S3, S4, S5, S6, S7]>>
+  // Promote i1/i8/i16 arguments to i32.
+  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+
+  // bool, char, int, enum, long --> generic integer 32 bit registers
+  CCIfType<[i32], CCAssignToReg<[SW0, SW1, SW2, SW3, SW4, SW5, SW6, SW7]>>,
+
+  // float --> generic floating point 32 bit registers
+  CCIfType<[f32], CCAssignToReg<[SF0, SF1, SF2, SF3, SF4, SF5, SF6, SF7]>>,
+
+  // long long/double --> generic 64 bit registers
+  CCIfType<[i64, f64],
+           CCAssignToReg<[SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>
 ]>;
 
 // Callee-saved registers
-def CSR : CalleeSavedRegs<(add (sequence "S%u", 18, 33))>;
+def CSR : CalleeSavedRegs<(add (sequence "SX%u", 18, 33))>;
