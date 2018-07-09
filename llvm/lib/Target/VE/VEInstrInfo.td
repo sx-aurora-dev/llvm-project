@@ -990,7 +990,7 @@ def : Pat<(sext_inreg I32:$src, i8),
 def : Pat<(sext_inreg (i32 (trunc i64:$src)), i8),
           (COPY_TO_REGCLASS (SRAX (SLL $src, 56), 56), I32)>;
 def : Pat<(and (trunc i64:$src), 0xff),
-          (AND32rm0 (COPY_TO_REGCLASS $src, I32), 56)>;
+          (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 56)>;
 
 // Cast to i16
 def : Pat<(sext_inreg I32:$src, i16),
@@ -1140,18 +1140,18 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
 //   CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
-          (COPY_TO_REGCLASS
+          (EXTRACT_SUBREG
               (CMOVLrm0 (icond2cc $cond), 
                         (CPXrr i64:$LHS, i64:$RHS), 
                         63, 
-                        (ORim1 0, 0)), I32)>;
+                        (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCUIOp:$cond)),
-          (COPY_TO_REGCLASS
+          (EXTRACT_SUBREG
               (CMOVLrm0 (icond2cc $cond), 
                         (CMPrr i64:$LHS, i64:$RHS), 
                         63, 
-                        (ORim1 0, 0)), I32)>;
+                        (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCSIOp:$cond)),
           (CMOVWrm0 (icond2cc $cond), 
@@ -1166,18 +1166,19 @@ def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCUIOp:$cond)),
                     (OR32im1 0, 0))>;
 
 def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
-          (COPY_TO_REGCLASS
+          (EXTRACT_SUBREG
               (CMOVDrm0 (fcond2cc $cond), 
                         (FCPrr f64:$LHS, f64:$RHS), 
                         63, 
-                        (COPY_TO_REGCLASS (ORim1 0, 0), F64)), I32)>;
+                        (COPY_TO_REGCLASS (ORim1 0, 0), F64)), sub_i32)>;
 
 def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
-          (COPY_TO_REGCLASS
+          (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
               (CMOVSrm0 (fcond2cc $cond), 
                         (FCPSrr f32:$LHS, f32:$RHS), 
                         63, 
-                        (COPY_TO_REGCLASS (ORim1 0, 0), F32)), I32)>;
+                        (f32 (EXTRACT_SUBREG (ORim1 0, 0), sub_f32))),
+              sub_f32), sub_i32)>;
 
 // Special SELECTCC pattern matches
 // Use min/max for better performance.

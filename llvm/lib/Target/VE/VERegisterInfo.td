@@ -72,32 +72,30 @@ foreach I = 0-3 in
 foreach I = 0-14 in
   def PMC#I : VEMiscReg<!add(16,I), "PMC"#I>;
 
-// Generic registers - 64 bits wide
-foreach I = 0-63 in
-  def SX#I : R<I, "S"#I>, DwarfRegNum<[I]>;
-
 // Generic integer registers - 32 bits wide
-let SubRegIndices = [sub_i32] in {
 foreach I = 0-63 in
-  def SW#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
-}
+  def SW#I : R<I, "S"#I>, DwarfRegNum<[I]>;
 
 // Generic floating point registers - 32 bits wide
-let SubRegIndices = [sub_f32] in {
 foreach I = 0-63 in
-  def SF#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
-}
+  def SF#I : R<I, "S"#I>, DwarfRegNum<[I]>;
 
 // Generic integer registers - 16 bits wide
-let SubRegIndices = [sub_i16] in {
 foreach I = 0-63 in
-  def SH#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
-}
+  def SH#I : R<I, "S"#I>, DwarfRegNum<[I]>;
 
 // Generic integer registers - 8 bits wide
-let SubRegIndices = [sub_i8] in {
 foreach I = 0-63 in
-  def SB#I : R<I, "S"#I, [!cast<R>("SX"#I)]>, DwarfRegNum<[I]>;
+  def SB#I : R<I, "S"#I>, DwarfRegNum<[I]>;
+
+// Generic registers - 64 bits wide
+let SubRegIndices = [sub_i32, sub_f32, sub_i16, sub_i8],
+    CoveredBySubRegs = 1 in {
+foreach I = 0-63 in
+  def SX#I : R<I, "S"#I,
+               [!cast<R>("SW"#I), !cast<R>("SF"#I),
+                !cast<R>("SH"#I), !cast<R>("SB"#I)]>,
+               DwarfRegNum<[I]>;
 }
 
 // Generic registers - 64 bits wide
