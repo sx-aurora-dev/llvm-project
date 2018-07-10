@@ -14,6 +14,7 @@
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/LTO/LTO.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -28,6 +29,12 @@ using llvm::wasm::WasmImport;
 using llvm::wasm::WasmRelocation;
 using llvm::wasm::WasmSignature;
 
+namespace llvm {
+namespace lto {
+class InputFile;
+}
+} // namespace llvm
+
 namespace lld {
 namespace wasm {
 
@@ -35,12 +42,14 @@ class InputChunk;
 class InputFunction;
 class InputSegment;
 class InputGlobal;
+class InputSection;
 
 class InputFile {
 public:
   enum Kind {
     ObjectKind,
     ArchiveKind,
+    BitcodeKind,
   };
 
   virtual ~InputFile() {}
@@ -56,9 +65,14 @@ public:
   // An archive file name if this file is created from an archive.
   StringRef ParentName;
 
+  ArrayRef<Symbol *> getSymbols() const { return Symbols; }
+
 protected:
   InputFile(Kind K, MemoryBufferRef M) : MB(M), FileKind(K) {}
   MemoryBufferRef MB;
+
+  // List of all symbols referenced or defined by this file.
+  std::vector<Symbol *> Symbols;
 
 private:
   const Kind FileKind;
@@ -94,21 +108,29 @@ public:
 
   uint32_t calcNewIndex(const WasmRelocation &Reloc) const;
   uint32_t calcNewValue(const WasmRelocation &Reloc) const;
+  uint32_t calcNewAddend(const WasmRelocation &Reloc) const;
+  uint32_t calcExpectedValue(const WasmRelocation &Reloc) const;
 
   const WasmSection *CodeSection = nullptr;
   const WasmSection *DataSection = nullptr;
 
+  // Maps input type indices to output type indices
   std::vector<uint32_t> TypeMap;
   std::vector<bool> TypeIsUsed;
+  // Maps function indices to table indices
+  std::vector<uint32_t> TableEntries;
+  std::vector<bool> UsedComdats;
   std::vector<InputSegment *> Segments;
   std::vector<InputFunction *> Functions;
   std::vector<InputGlobal *> Globals;
+  std::vector<InputSection *> CustomSections;
+  llvm::DenseMap<uint32_t, InputSection *> CustomSectionsByIndex;
 
-  ArrayRef<Symbol *> getSymbols() const { return Symbols; }
   Symbol *getSymbol(uint32_t Index) const { return Symbols[Index]; }
   FunctionSymbol *getFunctionSymbol(uint32_t Index) const;
   DataSymbol *getDataSymbol(uint32_t Index) const;
   GlobalSymbol *getGlobalSymbol(uint32_t Index) const;
+  SectionSymbol *getSectionSymbol(uint32_t Index) const;
 
 private:
   Symbol *createDefined(const WasmSymbol &Sym);
@@ -116,10 +138,16 @@ private:
 
   bool isExcludedByComdat(InputChunk *Chunk) const;
 
-  // List of all symbols referenced or defined by this file.
-  std::vector<Symbol *> Symbols;
-
   std::unique_ptr<WasmObjectFile> WasmObj;
+};
+
+class BitcodeFile : public InputFile {
+public:
+  explicit BitcodeFile(MemoryBufferRef M) : InputFile(BitcodeKind, M) {}
+  static bool classof(const InputFile *F) { return F->kind() == BitcodeKind; }
+
+  void parse() override;
+  std::unique_ptr<llvm::lto::InputFile> Obj;
 };
 
 // Opens a given file.

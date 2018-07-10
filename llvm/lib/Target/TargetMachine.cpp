@@ -13,8 +13,6 @@
 
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/CodeGen/TargetLoweringObjectFile.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/GlobalValue.h"
@@ -27,6 +25,7 @@
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/SectionKind.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
 using namespace llvm;
 
 //---------------------------------------------------------------------------
@@ -52,7 +51,7 @@ bool TargetMachine::isPositionIndependent() const {
   return getRelocationModel() == Reloc::PIC_;
 }
 
-/// \brief Reset the target options based on the function's attributes.
+/// Reset the target options based on the function's attributes.
 // FIXME: This function needs to go away for a number of reasons:
 // a) global state on the TargetMachine is terrible in general,
 // b) these target options should be passed only on the function

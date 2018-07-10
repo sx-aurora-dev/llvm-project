@@ -75,7 +75,8 @@ void MCTargetStreamer::emitValue(const MCExpr *Value) {
 void MCTargetStreamer::emitAssignment(MCSymbol *Symbol, const MCExpr *Value) {}
 
 MCStreamer::MCStreamer(MCContext &Ctx)
-    : Context(Ctx), CurrentWinFrameInfo(nullptr) {
+    : Context(Ctx), CurrentWinFrameInfo(nullptr),
+      UseAssemblerInfoForParsing(false) {
   SectionStack.push_back(std::pair<MCSectionSubPair, MCSectionSubPair>());
 }
 
@@ -197,6 +198,15 @@ MCStreamer::tryEmitDwarfFileDirective(unsigned FileNo, StringRef Directory,
                                       unsigned CUID) {
   return getContext().getDwarfFile(Directory, Filename, FileNo, Checksum,
                                    Source, CUID);
+}
+
+void MCStreamer::emitDwarfFile0Directive(StringRef Directory,
+                                         StringRef Filename,
+                                         MD5::MD5Result *Checksum,
+                                         Optional<StringRef> Source,
+                                         unsigned CUID) {
+  getContext().setMCLineTableRootFile(CUID, Directory, Filename, Checksum,
+                                      Source);
 }
 
 void MCStreamer::EmitDwarfLocDirective(unsigned FileNo, unsigned Line,
@@ -651,6 +661,10 @@ void MCStreamer::EmitWinEHHandlerData(SMLoc Loc) {
     getContext().reportError(Loc, "Chained unwind areas can't have handlers!");
 }
 
+void MCStreamer::emitCGProfileEntry(const MCSymbolRefExpr *From,
+                                    const MCSymbolRefExpr *To, uint64_t Count) {
+}
+
 static MCSection *getWinCFISection(MCContext &Context, unsigned *NextWinCFIID,
                                    MCSection *MainCFISec,
                                    const MCSection *TextSec) {
@@ -659,16 +673,31 @@ static MCSection *getWinCFISection(MCContext &Context, unsigned *NextWinCFIID,
     return MainCFISec;
 
   const auto *TextSecCOFF = cast<MCSectionCOFF>(TextSec);
+  auto *MainCFISecCOFF = cast<MCSectionCOFF>(MainCFISec);
   unsigned UniqueID = TextSecCOFF->getOrAssignWinCFISectionID(NextWinCFIID);
 
   // If this section is COMDAT, this unwind section should be COMDAT associative
   // with its group.
   const MCSymbol *KeySym = nullptr;
-  if (TextSecCOFF->getCharacteristics() & COFF::IMAGE_SCN_LNK_COMDAT)
+  if (TextSecCOFF->getCharacteristics() & COFF::IMAGE_SCN_LNK_COMDAT) {
     KeySym = TextSecCOFF->getCOMDATSymbol();
 
-  return Context.getAssociativeCOFFSection(cast<MCSectionCOFF>(MainCFISec),
-                                           KeySym, UniqueID);
+    // In a GNU environment, we can't use associative comdats. Instead, do what
+    // GCC does, which is to make plain comdat selectany section named like
+    // ".[px]data$_Z3foov".
+    if (!Context.getAsmInfo()->hasCOFFAssociativeComdats()) {
+      std::string SectionName =
+          (MainCFISecCOFF->getSectionName() + "$" +
+           TextSecCOFF->getSectionName().split('$').second)
+              .str();
+      return Context.getCOFFSection(
+          SectionName,
+          MainCFISecCOFF->getCharacteristics() | COFF::IMAGE_SCN_LNK_COMDAT,
+          MainCFISecCOFF->getKind(), "", COFF::IMAGE_COMDAT_SELECT_ANY);
+    }
+  }
+
+  return Context.getAssociativeCOFFSection(MainCFISecCOFF, KeySym, UniqueID);
 }
 
 MCSection *MCStreamer::getAssociatedPDataSection(const MCSection *TextSec) {

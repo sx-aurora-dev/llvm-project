@@ -1914,6 +1914,24 @@ isl_bool isl_space_is_equal(__isl_keep isl_space *space1,
 	return isl_space_has_equal_tuples(space1, space2);
 }
 
+/* Do the tuples of "space1" correspond to those of the domain of "space2"?
+ * That is, is "space1" eqaul to the domain of "space2", ignoring parameters.
+ *
+ * "space2" is allowed to be a set space, in which case "space1"
+ * should be a parameter space.
+ */
+isl_bool isl_space_has_domain_tuples(__isl_keep isl_space *space1,
+	__isl_keep isl_space *space2)
+{
+	isl_bool is_set;
+
+	is_set = isl_space_is_set(space1);
+	if (is_set < 0 || !is_set)
+		return is_set;
+	return isl_space_tuple_is_equal(space1, isl_dim_set,
+					space2, isl_dim_in);
+}
+
 /* Is space1 equal to the domain of space2?
  *
  * In the internal version we also allow space2 to be the space of a set,
@@ -1926,13 +1944,10 @@ isl_bool isl_space_is_domain_internal(__isl_keep isl_space *space1,
 
 	if (!space1 || !space2)
 		return isl_bool_error;
-	if (!isl_space_is_set(space1))
-		return isl_bool_false;
 	equal_params = isl_space_has_equal_params(space1, space2);
 	if (equal_params < 0 || !equal_params)
 		return equal_params;
-	return isl_space_tuple_is_equal(space1, isl_dim_set,
-					space2, isl_dim_in);
+	return isl_space_has_domain_tuples(space1, space2);
 }
 
 /* Is space1 equal to the domain of space2?
@@ -2286,7 +2301,14 @@ __isl_give isl_space *isl_space_flatten_range(__isl_take isl_space *space)
 __isl_give isl_space *isl_space_replace_params(__isl_take isl_space *dst,
 	__isl_keep isl_space *src)
 {
+	isl_bool equal_params;
 	enum isl_dim_type type = isl_dim_param;
+
+	equal_params = isl_space_has_equal_params(dst, src);
+	if (equal_params < 0)
+		return isl_space_free(dst);
+	if (equal_params)
+		return dst;
 
 	dst = isl_space_cow(dst);
 
@@ -2524,35 +2546,31 @@ isl_stat isl_space_check_named_params(__isl_keep isl_space *space)
 		return isl_stat_error;
 	if (!named)
 		isl_die(isl_space_get_ctx(space), isl_error_invalid,
-			"unaligned unnamed parameters", return isl_stat_error);
+			"unexpected unnamed parameters", return isl_stat_error);
 
 	return isl_stat_ok;
 }
 
-/* Align the initial parameters of dim1 to match the order in dim2.
+/* Align the initial parameters of space1 to match the order in space2.
  */
-__isl_give isl_space *isl_space_align_params(__isl_take isl_space *dim1,
-	__isl_take isl_space *dim2)
+__isl_give isl_space *isl_space_align_params(__isl_take isl_space *space1,
+	__isl_take isl_space *space2)
 {
 	isl_reordering *exp;
 
-	if (!isl_space_has_named_params(dim1) || !isl_space_has_named_params(dim2))
-		isl_die(isl_space_get_ctx(dim1), isl_error_invalid,
-			"parameter alignment requires named parameters",
-			goto error);
+	if (isl_space_check_named_params(space1) < 0 ||
+	    isl_space_check_named_params(space2) < 0)
+		goto error;
 
-	dim2 = isl_space_params(dim2);
-	exp = isl_parameter_alignment_reordering(dim1, dim2);
-	exp = isl_reordering_extend_space(exp, dim1);
-	isl_space_free(dim2);
-	if (!exp)
-		return NULL;
-	dim1 = isl_space_copy(exp->dim);
+	exp = isl_parameter_alignment_reordering(space1, space2);
+	exp = isl_reordering_extend_space(exp, space1);
+	isl_space_free(space2);
+	space1 = isl_reordering_get_space(exp);
 	isl_reordering_free(exp);
-	return dim1;
+	return space1;
 error:
-	isl_space_free(dim1);
-	isl_space_free(dim2);
+	isl_space_free(space1);
+	isl_space_free(space2);
 	return NULL;
 }
 

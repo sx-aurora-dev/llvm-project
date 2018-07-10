@@ -73,15 +73,27 @@ public:
         return WrapperFrontendAction::CreateASTConsumer(CI, InFile);
       }
 
+      bool BeginInvocation(CompilerInstance &CI) override {
+        // We want all comments, not just the doxygen ones.
+        CI.getLangOpts().CommentOpts.ParseAllComments = true;
+        return WrapperFrontendAction::BeginInvocation(CI);
+      }
+
       void EndSourceFileAction() override {
         WrapperFrontendAction::EndSourceFileAction();
 
+        const auto &CI = getCompilerInstance();
+        if (CI.hasDiagnostics() &&
+            CI.getDiagnostics().hasUncompilableErrorOccurred()) {
+          llvm::errs()
+              << "Found uncompilable errors in the translation unit. Igoring "
+                 "collected symbols...\n";
+          return;
+        }
+
         auto Symbols = Collector->takeSymbols();
         for (const auto &Sym : Symbols) {
-          std::string IDStr;
-          llvm::raw_string_ostream OS(IDStr);
-          OS << Sym.ID;
-          Ctx->reportResult(OS.str(), SymbolToYAML(Sym));
+          Ctx->reportResult(Sym.ID.str(), SymbolToYAML(Sym));
         }
       }
 
@@ -99,6 +111,8 @@ public:
     auto CollectorOpts = SymbolCollector::Options();
     CollectorOpts.FallbackDir = AssumedHeaderDir;
     CollectorOpts.CollectIncludePath = true;
+    CollectorOpts.CountReferences = true;
+    CollectorOpts.Origin = SymbolOrigin::Static;
     auto Includes = llvm::make_unique<CanonicalIncludes>();
     addSystemHeadersMapping(Includes.get());
     CollectorOpts.Includes = Includes.get();

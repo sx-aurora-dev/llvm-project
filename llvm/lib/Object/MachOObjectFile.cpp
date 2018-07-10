@@ -107,7 +107,8 @@ getSectionPtr(const MachOObjectFile &O, MachOObjectFile::LoadCommandInfo L,
 }
 
 static const char *getPtr(const MachOObjectFile &O, size_t Offset) {
-  return O.getData().substr(Offset, 1).data();
+  assert(Offset <= O.getData().size());
+  return O.getData().data() + Offset;
 }
 
 static MachO::nlist_base
@@ -1968,8 +1969,10 @@ unsigned MachOObjectFile::getSectionID(SectionRef Sec) const {
 }
 
 bool MachOObjectFile::isSectionVirtual(DataRefImpl Sec) const {
-  // FIXME: Unimplemented.
-  return false;
+  uint32_t Flags = getSectionFlags(*this, Sec);
+  unsigned SectionType = Flags & MachO::SECTION_TYPE;
+  return SectionType == MachO::S_ZEROFILL ||
+         SectionType == MachO::S_GB_ZEROFILL;
 }
 
 bool MachOObjectFile::isSectionBitcode(DataRefImpl Sec) const {

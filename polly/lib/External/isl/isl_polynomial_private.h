@@ -65,6 +65,16 @@ struct isl_pw_qpolynomial {
 	struct isl_pw_qpolynomial_piece p[1];
 };
 
+#undef PW
+#define PW isl_pw_qpolynomial
+
+#include <isl_pw_templ.h>
+
+#undef EL
+#define EL isl_pw_qpolynomial
+
+#include <isl_list_templ.h>
+
 /* dim represents the domain space.
  */
 struct isl_qpolynomial_fold {
@@ -95,6 +105,16 @@ struct isl_pw_qpolynomial_fold {
 	size_t size;
 	struct isl_pw_qpolynomial_fold_piece p[1];
 };
+
+#undef PW
+#define PW isl_pw_qpolynomial_fold
+
+#include <isl_pw_templ.h>
+
+#undef EL
+#define EL isl_pw_qpolynomial_fold
+
+#include <isl_list_templ.h>
 
 void isl_term_get_num(__isl_keep isl_term *term, isl_int *n);
 

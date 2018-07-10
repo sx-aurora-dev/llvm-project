@@ -1051,7 +1051,7 @@ Value *SCEVExpander::expandIVInc(PHINode *PN, Value *StepV, const Loop *L,
   return IncV;
 }
 
-/// \brief Hoist the addrec instruction chain rooted in the loop phi above the
+/// Hoist the addrec instruction chain rooted in the loop phi above the
 /// position. This routine assumes that this is possible (has been checked).
 void SCEVExpander::hoistBeforePos(DominatorTree *DT, Instruction *InstToHoist,
                                   Instruction *Pos, PHINode *LoopPhi) {
@@ -1067,7 +1067,7 @@ void SCEVExpander::hoistBeforePos(DominatorTree *DT, Instruction *InstToHoist,
   } while (InstToHoist != LoopPhi);
 }
 
-/// \brief Check whether we can cheaply express the requested SCEV in terms of
+/// Check whether we can cheaply express the requested SCEV in terms of
 /// the available PHI SCEV by truncation and/or inversion of the step.
 static bool canBeCheaplyTransformed(ScalarEvolution &SE,
                                     const SCEVAddRecExpr *Phi,
@@ -1169,8 +1169,11 @@ SCEVExpander::getAddRecExprPHILiterally(const SCEVAddRecExpr *Normalized,
       if (!IsMatchingSCEV && !TryNonMatchingSCEV)
           continue;
 
+      // TODO: this possibly can be reworked to avoid this cast at all.
       Instruction *TempIncV =
-          cast<Instruction>(PN.getIncomingValueForBlock(LatchBlock));
+          dyn_cast<Instruction>(PN.getIncomingValueForBlock(LatchBlock));
+      if (!TempIncV)
+        continue;
 
       // Check whether we can reuse this PHI node.
       if (LSRMode) {
@@ -1862,7 +1865,7 @@ SCEVExpander::replaceCongruentIVs(Loop *L, const DominatorTree *DT,
     Phis.push_back(&PN);
 
   if (TTI)
-    std::sort(Phis.begin(), Phis.end(), [](Value *LHS, Value *RHS) {
+    llvm::sort(Phis.begin(), Phis.end(), [](Value *LHS, Value *RHS) {
       // Put pointers at the back and make sure pointer < pointer = false.
       if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
         return RHS->getType()->isIntegerTy() && !LHS->getType()->isIntegerTy();

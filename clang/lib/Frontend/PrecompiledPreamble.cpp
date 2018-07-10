@@ -40,7 +40,7 @@ namespace {
 StringRef getInMemoryPreamblePath() {
 #if defined(LLVM_ON_UNIX)
   return "/__clang_tmp/___clang_inmemory_preamble___";
-#elif defined(LLVM_ON_WIN32)
+#elif defined(_WIN32)
   return "C:\\__clang_tmp\\___clang_inmemory_preamble___";
 #else
 #warning "Unknown platform. Defaulting to UNIX-style paths for in-memory PCHs"
@@ -62,6 +62,16 @@ createVFSOverlayForPreamblePCH(StringRef PCHFilename,
   Overlay->pushOverlay(PCHFS);
   return Overlay;
 }
+
+class PreambleDependencyCollector : public DependencyCollector {
+public:
+  // We want to collect all dependencies for correctness. Avoiding the real
+  // system dependencies (e.g. stl from /usr/lib) would probably be a good idea,
+  // but there is no way to distinguish between those and the ones that can be
+  // spuriously added by '-isystem' (e.g. to suppress warnings from those
+  // headers).
+  bool needSystemDependencies() override { return true; }
+};
 
 /// Keeps a track of files to be deleted in destructor.
 class TemporaryFiles {
@@ -303,8 +313,6 @@ llvm::ErrorOr<PrecompiledPreamble> PrecompiledPreamble::Build(
 
   VFS =
       createVFSFromCompilerInvocation(Clang->getInvocation(), Diagnostics, VFS);
-  if (!VFS)
-    return BuildPreambleError::CouldntCreateVFSOverlay;
 
   // Create a file manager object to provide access to and cache the filesystem.
   Clang->setFileManager(new FileManager(Clang->getFileSystemOpts(), VFS));
@@ -313,7 +321,7 @@ llvm::ErrorOr<PrecompiledPreamble> PrecompiledPreamble::Build(
   Clang->setSourceManager(
       new SourceManager(Diagnostics, Clang->getFileManager()));
 
-  auto PreambleDepCollector = std::make_shared<DependencyCollector>();
+  auto PreambleDepCollector = std::make_shared<PreambleDependencyCollector>();
   Clang->addDependencyCollector(PreambleDepCollector);
 
   // Remap the main source file to the preamble buffer.
@@ -756,8 +764,6 @@ std::string BuildPreambleErrorCategory::message(int condition) const {
     return "Could not create temporary file for PCH";
   case BuildPreambleError::CouldntCreateTargetInfo:
     return "CreateTargetInfo() return null";
-  case BuildPreambleError::CouldntCreateVFSOverlay:
-    return "Could not create VFS Overlay";
   case BuildPreambleError::BeginSourceFileFailed:
     return "BeginSourceFile() return an error";
   case BuildPreambleError::CouldntEmitPCH:

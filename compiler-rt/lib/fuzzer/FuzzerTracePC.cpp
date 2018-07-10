@@ -132,8 +132,8 @@ void TracePC::PrintModuleInfo() {
       _Exit(1);
     }
   }
-  if (size_t NumClangCounters = ClangCountersEnd() - ClangCountersBegin())
-    Printf("INFO: %zd Clang Coverage Counters\n", NumClangCounters);
+  if (size_t NumExtraCounters = ExtraCountersEnd() - ExtraCountersBegin())
+    Printf("INFO: %zd Extra Counters\n", NumExtraCounters);
 }
 
 ATTRIBUTE_NO_SANITIZE_ALL
@@ -147,8 +147,10 @@ void TracePC::HandleCallerCallee(uintptr_t Caller, uintptr_t Callee) {
 void TracePC::UpdateObservedPCs() {
   Vector<uintptr_t> CoveredFuncs;
   auto ObservePC = [&](uintptr_t PC) {
-    if (ObservedPCs.insert(PC).second && DoPrintNewPCs)
-      PrintPC("\tNEW_PC: %p %F %L\n", "\tNEW_PC: %p\n", PC + 1);
+    if (ObservedPCs.insert(PC).second && DoPrintNewPCs) {
+      PrintPC("\tNEW_PC: %p %F %L", "\tNEW_PC: %p", PC + 1);
+      Printf("\n");
+    }
   };
 
   auto Observe = [&](const PCTableEntry &TE) {
@@ -182,17 +184,11 @@ void TracePC::UpdateObservedPCs() {
       }
     }
   }
-  if (size_t NumClangCounters =
-      ClangCountersEnd() - ClangCountersBegin()) {
-    auto P = ClangCountersBegin();
-    for (size_t Idx = 0; Idx < NumClangCounters; Idx++)
-      if (P[Idx])
-        ObservePC((uintptr_t)Idx);
-  }
 
   for (size_t i = 0, N = Min(CoveredFuncs.size(), NumPrintNewFuncs); i < N; i++) {
-    Printf("\tNEW_FUNC[%zd/%zd]: ", i, CoveredFuncs.size());
-    PrintPC("%p %F %L\n", "%p\n", CoveredFuncs[i] + 1);
+    Printf("\tNEW_FUNC[%zd/%zd]: ", i + 1, CoveredFuncs.size());
+    PrintPC("%p %F %L", "%p", CoveredFuncs[i] + 1);
+    Printf("\n");
   }
 }
 
@@ -218,6 +214,57 @@ static std::string GetModuleName(uintptr_t PC) {
   return ModulePathRaw;
 }
 
+template<class CallBack>
+void TracePC::IterateCoveredFunctions(CallBack CB) {
+  for (size_t i = 0; i < NumPCTables; i++) {
+    auto &M = ModulePCTable[i];
+    assert(M.Start < M.Stop);
+    auto ModuleName = GetModuleName(M.Start->PC);
+    for (auto NextFE = M.Start; NextFE < M.Stop; ) {
+      auto FE = NextFE;
+      assert((FE->PCFlags & 1) && "Not a function entry point");
+      do {
+        NextFE++;
+      } while (NextFE < M.Stop && !(NextFE->PCFlags & 1));
+      if (ObservedFuncs.count(FE->PC))
+        CB(FE, NextFE);
+    }
+  }
+}
+
+void TracePC::SetFocusFunction(const std::string &FuncName) {
+  // This function should be called once.
+  assert(FocusFunction.first > NumModulesWithInline8bitCounters);
+  if (FuncName.empty())
+    return;
+  for (size_t M = 0; M < NumModulesWithInline8bitCounters; M++) {
+    auto &PCTE = ModulePCTable[M];
+    size_t N = PCTE.Stop - PCTE.Start;
+    for (size_t I = 0; I < N; I++) {
+      if (!(PCTE.Start[I].PCFlags & 1)) continue;  // not a function entry.
+      auto Name = DescribePC("%F", GetNextInstructionPc(PCTE.Start[I].PC));
+      if (Name[0] == 'i' && Name[1] == 'n' && Name[2] == ' ')
+        Name = Name.substr(3, std::string::npos);
+      if (FuncName != Name) continue;
+      Printf("INFO: Focus function is set to '%s'\n", Name.c_str());
+      FocusFunction = {M, I};
+      return;
+    }
+  }
+}
+
+bool TracePC::ObservedFocusFunction() {
+  size_t I = FocusFunction.first;
+  size_t J = FocusFunction.second;
+  if (I >= NumModulesWithInline8bitCounters)
+    return false;
+  auto &MC = ModuleCounters[I];
+  size_t Size = MC.Stop - MC.Start;
+  if (J >= Size)
+    return false;
+  return MC.Start[J] != 0;
+}
+
 void TracePC::PrintCoverage() {
   if (!EF->__sanitizer_symbolize_pc ||
       !EF->__sanitizer_get_module_and_offset_for_pc) {
@@ -227,53 +274,31 @@ void TracePC::PrintCoverage() {
     return;
   }
   Printf("COVERAGE:\n");
-  std::string LastFunctionName = "";
-  std::string LastFileStr = "";
-  Set<size_t> UncoveredLines;
-  Set<size_t> CoveredLines;
-
-  auto FunctionEndCallback = [&](const std::string &CurrentFunc,
-                                 const std::string &CurrentFile) {
-    if (LastFunctionName != CurrentFunc) {
-      if (CoveredLines.empty() && !UncoveredLines.empty()) {
-        Printf("UNCOVERED_FUNC: %s\n", LastFunctionName.c_str());
-      } else {
-        for (auto Line : UncoveredLines) {
-          if (!CoveredLines.count(Line))
-            Printf("UNCOVERED_LINE: %s %s:%zd\n", LastFunctionName.c_str(),
-                   LastFileStr.c_str(), Line);
-        }
-      }
-
-      UncoveredLines.clear();
-      CoveredLines.clear();
-      LastFunctionName = CurrentFunc;
-      LastFileStr = CurrentFile;
+  auto CoveredFunctionCallback = [&](const PCTableEntry *First, const PCTableEntry *Last) {
+    assert(First < Last);
+    auto VisualizePC = GetNextInstructionPc(First->PC);
+    std::string FileStr = DescribePC("%s", VisualizePC);
+    if (!IsInterestingCoverageFile(FileStr)) return;
+    std::string FunctionStr = DescribePC("%F", VisualizePC);
+    std::string LineStr = DescribePC("%l", VisualizePC);
+    size_t Line = std::stoul(LineStr);
+    Vector<uintptr_t> UncoveredPCs;
+    for (auto TE = First; TE < Last; TE++)
+      if (!ObservedPCs.count(TE->PC))
+        UncoveredPCs.push_back(TE->PC);
+    Printf("COVERED_FUNC: ");
+    UncoveredPCs.empty()
+        ? Printf("all")
+        : Printf("%zd/%zd", (Last - First) - UncoveredPCs.size(), Last - First);
+    Printf(" PCs covered %s %s:%zd\n", FunctionStr.c_str(), FileStr.c_str(),
+           Line);
+    for (auto PC: UncoveredPCs) {
+      Printf("  UNCOVERED_PC: %s\n",
+             DescribePC("%s:%l", GetNextInstructionPc(PC)).c_str());
     }
   };
 
-  for (size_t i = 0; i < NumPCTables; i++) {
-    auto &M = ModulePCTable[i];
-    assert(M.Start < M.Stop);
-    auto ModuleName = GetModuleName(M.Start->PC);
-    for (auto Ptr = M.Start; Ptr < M.Stop; Ptr++) {
-      auto PC = Ptr->PC;
-      auto VisualizePC = GetNextInstructionPc(PC);
-      bool IsObserved = ObservedPCs.count(PC);
-      std::string FileStr = DescribePC("%s", VisualizePC);
-      if (!IsInterestingCoverageFile(FileStr)) continue;
-      std::string FunctionStr = DescribePC("%F", VisualizePC);
-      FunctionEndCallback(FunctionStr, FileStr);
-      std::string LineStr = DescribePC("%l", VisualizePC);
-      size_t Line = std::stoul(LineStr);
-      if (IsObserved && CoveredLines.insert(Line).second)
-        Printf("COVERED: %s %s:%zd\n", FunctionStr.c_str(), FileStr.c_str(),
-               Line);
-      else
-        UncoveredLines.insert(Line);
-    }
-  }
-  FunctionEndCallback("", "");
+  IterateCoveredFunctions(CoveredFunctionCallback);
 }
 
 void TracePC::DumpCoverage() {
@@ -334,7 +359,14 @@ void TracePC::HandleCmp(uintptr_t PC, T Arg1, T Arg2) {
       TORC4.Insert(ArgXor, Arg1, Arg2);
   else if (sizeof(T) == 8)
       TORC8.Insert(ArgXor, Arg1, Arg2);
-  ValueProfileMap.AddValue(Idx);
+  // TODO: remove these flags and instead use all metrics at once.
+  if (UseValueProfileMask & 1)
+    ValueProfileMap.AddValue(Idx);
+  if (UseValueProfileMask & 2)
+    ValueProfileMap.AddValue(
+        PC * 64 + (Arg1 == Arg2 ? 0 : __builtin_clzll(Arg1 - Arg2) + 1));
+  if (UseValueProfileMask & 4)  // alternative way to use the hamming distance
+    ValueProfileMap.AddValue(PC * 64 + ArgDistance);
 }
 
 static size_t InternalStrnlen(const char *S, size_t MaxLen) {

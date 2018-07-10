@@ -28,13 +28,13 @@
 #include "llvm/Analysis/ObjCARCAnalysisUtils.h"
 #include "llvm/Analysis/ObjCARCInstKind.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/ObjCARC.h"
-#include "llvm/Transforms/Utils/Local.h"
 
 namespace llvm {
 class raw_ostream;
@@ -43,7 +43,7 @@ class raw_ostream;
 namespace llvm {
 namespace objcarc {
 
-/// \brief Erase the given instruction.
+/// Erase the given instruction.
 ///
 /// Many ObjC calls return their argument verbatim,
 /// so if it's such a call and the return value has users, replace them with the

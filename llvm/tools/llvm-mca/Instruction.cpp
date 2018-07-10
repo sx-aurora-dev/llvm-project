@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines abstractions used by the Backend to model register reads,
+// This file defines abstractions used by the Pipeline to model register reads,
 // register writes and instructions.
 //
 //===----------------------------------------------------------------------===//
@@ -32,16 +32,18 @@ void ReadState::writeStartEvent(unsigned Cycles) {
   --DependentWrites;
   TotalCycles = std::max(TotalCycles, Cycles);
 
-  if (!DependentWrites)
+  if (!DependentWrites) {
     CyclesLeft = TotalCycles;
+    IsReady = !CyclesLeft;
+  }
 }
 
 void WriteState::onInstructionIssued() {
   assert(CyclesLeft == UNKNOWN_CYCLES);
   // Update the number of cycles left based on the WriteDescriptor info.
-  CyclesLeft = WD.Latency;
+  CyclesLeft = getLatency();
 
-  // Now that the time left before write-back is know, notify
+  // Now that the time left before write-back is known, notify
   // all the users.
   for (const std::pair<ReadState *, int> &User : Users) {
     ReadState *RS = User.first;
@@ -73,62 +75,92 @@ void WriteState::cycleEvent() {
 }
 
 void ReadState::cycleEvent() {
-  // If CyclesLeft is unknown, then bail out immediately.
+  // Update the total number of cycles.
+  if (DependentWrites && TotalCycles) {
+    --TotalCycles;
+    return;
+  }
+
+  // Bail out immediately if we don't know how many cycles are left.
   if (CyclesLeft == UNKNOWN_CYCLES)
     return;
 
-  // If there are still dependent writes, or we reached cycle zero,
-  // then just exit.
-  if (DependentWrites || CyclesLeft == 0)
-    return;
-
-  CyclesLeft--;
+  if (CyclesLeft) {
+    --CyclesLeft;
+    IsReady = !CyclesLeft;
+  }
 }
 
 #ifndef NDEBUG
 void WriteState::dump() const {
-  dbgs() << "{ OpIdx=" << WD.OpIndex << ", Lat=" << WD.Latency << ", RegID "
-         << getRegisterID() << ", Cycles Left=" << getCyclesLeft() << " }\n";
+  dbgs() << "{ OpIdx=" << WD.OpIndex << ", Lat=" << getLatency() << ", RegID "
+         << getRegisterID() << ", Cycles Left=" << getCyclesLeft() << " }";
+}
+
+void WriteRef::dump() const {
+  dbgs() << "IID=" << getSourceIndex() << ' ';
+  if (isValid())
+    getWriteState()->dump();
+  else
+    dbgs() << "(null)";
 }
 #endif
 
-bool Instruction::isReady() {
-  if (Stage == IS_READY)
-    return true;
+void Instruction::dispatch(unsigned RCUToken) {
+  assert(Stage == IS_INVALID);
+  Stage = IS_AVAILABLE;
+  RCUTokenID = RCUToken;
 
-  assert(Stage == IS_AVAILABLE);
-  for (const UniqueUse &Use : Uses)
-    if (!Use.get()->isReady())
-      return false;
-
-  setReady();
-  return true;
+  // Check if input operands are already available.
+  update();
 }
 
 void Instruction::execute() {
   assert(Stage == IS_READY);
   Stage = IS_EXECUTING;
+
+  // Set the cycles left before the write-back stage.
+  CyclesLeft = Desc.MaxLatency;
+
   for (UniqueDef &Def : Defs)
     Def->onInstructionIssued();
-}
 
-bool Instruction::isZeroLatency() const {
-  return Desc.MaxLatency == 0 && Defs.size() == 0 && Uses.size() == 0;
-}
-
-void Instruction::cycleEvent() {
-  if (isDispatched()) {
-    for (UniqueUse &Use : Uses)
-      Use->cycleEvent();
-    return;
-  }
-  if (isExecuting()) {
-    for (UniqueDef &Def : Defs)
-      Def->cycleEvent();
-    CyclesLeft--;
-  }
+  // Transition to the "executed" stage if this is a zero-latency instruction.
   if (!CyclesLeft)
     Stage = IS_EXECUTED;
 }
+
+void Instruction::update() {
+  assert(isDispatched() && "Unexpected instruction stage found!");
+  if (llvm::all_of(Uses, [](const UniqueUse &Use) { return Use->isReady(); }))
+    Stage = IS_READY;
+}
+
+void Instruction::cycleEvent() {
+  if (isReady())
+    return;
+
+  if (isDispatched()) {
+    bool IsReady = true;
+    for (UniqueUse &Use : Uses) {
+      Use->cycleEvent();
+      IsReady &= Use->isReady();
+    }
+
+    if (IsReady)
+      Stage = IS_READY;
+    return;
+  }
+
+  assert(isExecuting() && "Instruction not in-flight?");
+  assert(CyclesLeft && "Instruction already executed?");
+  for (UniqueDef &Def : Defs)
+    Def->cycleEvent();
+  CyclesLeft--;
+  if (!CyclesLeft)
+    Stage = IS_EXECUTED;
+}
+
+const unsigned WriteRef::INVALID_IID = std::numeric_limits<unsigned>::max();
 
 } // namespace mca

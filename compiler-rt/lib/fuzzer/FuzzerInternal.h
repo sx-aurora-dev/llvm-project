@@ -12,6 +12,7 @@
 #ifndef LLVM_FUZZER_INTERNAL_H
 #define LLVM_FUZZER_INTERNAL_H
 
+#include "FuzzerDataFlowTrace.h"
 #include "FuzzerDefs.h"
 #include "FuzzerExtFunctions.h"
 #include "FuzzerInterface.h"
@@ -134,6 +135,7 @@ private:
   InputCorpus &Corpus;
   MutationDispatcher &MD;
   FuzzingOptions Options;
+  DataFlowTrace DFT;
 
   system_clock::time_point ProcessStartTime = system_clock::now();
   system_clock::time_point UnitStartTime, UnitStopTime;
@@ -148,6 +150,28 @@ private:
 
   // Need to know our own thread.
   static thread_local bool IsMyThread;
+};
+
+struct ScopedEnableMsanInterceptorChecks {
+  ScopedEnableMsanInterceptorChecks() {
+    if (EF->__msan_scoped_enable_interceptor_checks)
+      EF->__msan_scoped_enable_interceptor_checks();
+  }
+  ~ScopedEnableMsanInterceptorChecks() {
+    if (EF->__msan_scoped_disable_interceptor_checks)
+      EF->__msan_scoped_disable_interceptor_checks();
+  }
+};
+
+struct ScopedDisableMsanInterceptorChecks {
+  ScopedDisableMsanInterceptorChecks() {
+    if (EF->__msan_scoped_disable_interceptor_checks)
+      EF->__msan_scoped_disable_interceptor_checks();
+  }
+  ~ScopedDisableMsanInterceptorChecks() {
+    if (EF->__msan_scoped_enable_interceptor_checks)
+      EF->__msan_scoped_enable_interceptor_checks();
+  }
 };
 
 } // namespace fuzzer

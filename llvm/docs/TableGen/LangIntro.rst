@@ -152,8 +152,8 @@ supported include:
 ``foreach <var> = [ <list> ] in <def>``
     Replicate <body> or <def>, replacing instances of <var> with each value
     in <list>.  <var> is scoped at the level of the ``foreach`` loop and must
-    not conflict with any other object introduced in <body> or <def>.  Currently
-    only ``def``\s are expanded within <body>.
+    not conflict with any other object introduced in <body> or <def>.  Only
+    ``def``\s and ``defm``\s are expanded within <body>.
 
 ``foreach <var> = 0-15 in ...``
 
@@ -164,6 +164,24 @@ supported include:
     a dag value.  The first element is required to be a record definition, the
     remaining elements in the list may be arbitrary other values, including
     nested ```dag``' values.
+
+``!con(a, b, ...)``
+    Concatenate two or more DAG nodes. Their operations must equal.
+
+    Example: !con((op a1:$name1, a2:$name2), (op b1:$name3)) results in
+    the DAG node (op a1:$name1, a2:$name2, b1:$name3).
+
+``!dag(op, children, names)``
+    Generate a DAG node programmatically. 'children' and 'names' must be lists
+    of equal length or unset ('?'). 'names' must be a 'list<string>'.
+
+    Due to limitations of the type system, 'children' must be a list of items
+    of a common type. In practice, this means that they should either have the
+    same type or be records with a common superclass. Mixing dag and non-dag
+    items is not possible. However, '?' can be used.
+
+    Example: !dag(op, [a1, a2, ?], ["name1", "name2", "name3"]) results in
+    (op a1:$name1, a2:$name2, ?:$name3).
 
 ``!listconcat(a, b, ...)``
     A list value that is the result of concatenating the 'a' and 'b' lists.
@@ -197,10 +215,6 @@ supported include:
     references to template arguments of the outer multiclass).
 
     If the type of 'a' does not match *type*, TableGen aborts with an error.
-
-    For historical reasons, 'a' can also be the name of a variable or a
-    template argument in some cases, but this use is unreliable and is
-    discouraged.
 
     Otherwise, perform a normal type cast e.g. between an int and a bit, or
     between record types. This allows casting a record to a subclass, though if
@@ -249,8 +263,19 @@ supported include:
     on string, int and bit objects.  Use !cast<string> to compare other types of
     objects.
 
-``!shl(a,b)`` ``!srl(a,b)`` ``!sra(a,b)`` ``!add(a,b)`` ``!and(a,b)``
-    The usual binary and arithmetic operators.
+``!ne(a,b)``
+    The negation of ``!eq(a,b)``.
+
+``!le(a,b), !lt(a,b), !ge(a,b), !gt(a,b)``
+    (Signed) comparison of integer values that returns bit 1 or 0 depending on
+    the result of the comparison.
+
+``!shl(a,b)`` ``!srl(a,b)`` ``!sra(a,b)``
+    The usual shift operators. Operations are on 64-bit integers, the result
+    is undefined for shift counts outside [0, 63].
+
+``!add(a,b,...)`` ``!and(a,b,...)`` ``!or(a,b,...)``
+    The usual arithmetic and binary operators.
 
 Note that all of the values have rules specifying how they convert to values
 for different types.  These rules allow you to assign a value like "``7``"
@@ -322,6 +347,23 @@ the ``V`` field for all of its subclasses:
 In this case, the ``Z`` definition will have a zero value for its ``V`` value,
 despite the fact that it derives (indirectly) from the ``C`` class, because the
 ``D`` class overrode its value.
+
+References between variables in a record are substituted late, which gives
+``let`` expressions unusual power. Consider this admittedly silly example:
+
+.. code-block:: text
+
+  class A<int x> {
+    int Y = x;
+    int Yplus1 = !add(Y, 1);
+    int xplus1 = !add(x, 1);
+  }
+  def Z : A<5> {
+    let Y = 10;
+  }
+
+The value of ``Z.xplus1`` will be 6, but the value of ``Z.Yplus1`` is 11. Use
+this power wisely.
 
 .. _template arguments:
 

@@ -29,6 +29,12 @@ def SDT_PPCLxsizx : SDTypeProfile<1, 2, [
 def SDT_PPCstxsix : SDTypeProfile<0, 3, [
   SDTCisVT<0, f64>, SDTCisPtrTy<1>, SDTCisPtrTy<2>
 ]>;
+def SDT_PPCcv_fp_to_int  : SDTypeProfile<1, 1, [
+  SDTCisFP<0>, SDTCisFP<1>
+  ]>;
+def SDT_PPCstore_scal_int_from_vsr : SDTypeProfile<0, 3, [
+  SDTCisVT<0, f64>, SDTCisPtrTy<1>, SDTCisPtrTy<2>
+]>;
 def SDT_PPCVexts  : SDTypeProfile<1, 2, [
   SDTCisVT<0, f64>, SDTCisVT<1, f64>, SDTCisPtrTy<2>
 ]>;
@@ -123,6 +129,14 @@ def PPCfctidz : SDNode<"PPCISD::FCTIDZ", SDTFPUnaryOp, []>;
 def PPCfctiwz : SDNode<"PPCISD::FCTIWZ", SDTFPUnaryOp, []>;
 def PPCfctiduz: SDNode<"PPCISD::FCTIDUZ",SDTFPUnaryOp, []>;
 def PPCfctiwuz: SDNode<"PPCISD::FCTIWUZ",SDTFPUnaryOp, []>;
+
+def PPCcv_fp_to_uint_in_vsr:
+    SDNode<"PPCISD::FP_TO_UINT_IN_VSR", SDT_PPCcv_fp_to_int, []>;
+def PPCcv_fp_to_sint_in_vsr:
+    SDNode<"PPCISD::FP_TO_SINT_IN_VSR", SDT_PPCcv_fp_to_int, []>;
+def PPCstore_scal_int_from_vsr:
+   SDNode<"PPCISD::ST_VSR_SCAL_INT", SDT_PPCstore_scal_int_from_vsr,
+           [SDNPHasChain, SDNPMayStore]>;
 def PPCstfiwx : SDNode<"PPCISD::STFIWX", SDT_PPCstfiwx,
                        [SDNPHasChain, SDNPMayStore]>;
 def PPClfiwax : SDNode<"PPCISD::LFIWAX", SDT_PPClfiwx,
@@ -203,6 +217,13 @@ def PPCcmpb     : SDNode<"PPCISD::CMPB", SDTIntBinOp, []>;
 def PPCsrl        : SDNode<"PPCISD::SRL"       , SDTIntShiftOp>;
 def PPCsra        : SDNode<"PPCISD::SRA"       , SDTIntShiftOp>;
 def PPCshl        : SDNode<"PPCISD::SHL"       , SDTIntShiftOp>;
+
+// Move 2 i64 values into a VSX register
+def PPCbuild_fp128: SDNode<"PPCISD::BUILD_FP128",
+                           SDTypeProfile<1, 2,
+                             [SDTCisFP<0>, SDTCisSameSizeAs<1,2>,
+                              SDTCisSameAs<1,2>]>,
+                           []>;
 
 // These are target-independent nodes, but have target-specific formats.
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_PPCCallSeqStart,
@@ -1195,6 +1216,9 @@ let usesCustomInserter = 1,    // Expanded after instruction selection.
   def SELECT_CC_F8  : Pseudo<(outs f8rc:$dst), (ins crrc:$cond, f8rc:$T, f8rc:$F,
                               i32imm:$BROPC), "#SELECT_CC_F8",
                               []>;
+  def SELECT_CC_F16  : Pseudo<(outs vrrc:$dst), (ins crrc:$cond, vrrc:$T, vrrc:$F,
+                              i32imm:$BROPC), "#SELECT_CC_F16",
+                              []>;
   def SELECT_CC_VRRC: Pseudo<(outs vrrc:$dst), (ins crrc:$cond, vrrc:$T, vrrc:$F,
                               i32imm:$BROPC), "#SELECT_CC_VRRC",
                               []>;
@@ -1213,6 +1237,9 @@ let usesCustomInserter = 1,    // Expanded after instruction selection.
   def SELECT_F8  : Pseudo<(outs f8rc:$dst), (ins crbitrc:$cond,
                           f8rc:$T, f8rc:$F), "#SELECT_F8",
                           [(set f64:$dst, (select i1:$cond, f64:$T, f64:$F))]>;
+  def SELECT_F16  : Pseudo<(outs vrrc:$dst), (ins crbitrc:$cond,
+                          vrrc:$T, vrrc:$F), "#SELECT_F16",
+                          [(set f128:$dst, (select i1:$cond, f128:$T, f128:$F))]>;
   def SELECT_VRRC: Pseudo<(outs vrrc:$dst), (ins crbitrc:$cond,
                           vrrc:$T, vrrc:$F), "#SELECT_VRRC",
                           [(set v4i32:$dst,
@@ -1724,28 +1751,28 @@ def : Pat<(PPCatomicCmpSwap_16 xoaddr:$ptr, i32:$old, i32:$new),
 
 // Instructions to support atomic operations
 let mayLoad = 1, mayStore = 0, hasSideEffects = 0 in {
-def LBARX : XForm_1<31,  52, (outs gprc:$rD), (ins memrr:$src),
+def LBARX : XForm_1_memOp<31,  52, (outs gprc:$rD), (ins memrr:$src),
                     "lbarx $rD, $src", IIC_LdStLWARX, []>,
                     Requires<[HasPartwordAtomics]>;
 
-def LHARX : XForm_1<31,  116, (outs gprc:$rD), (ins memrr:$src),
+def LHARX : XForm_1_memOp<31,  116, (outs gprc:$rD), (ins memrr:$src),
                     "lharx $rD, $src", IIC_LdStLWARX, []>,
                     Requires<[HasPartwordAtomics]>;
 
-def LWARX : XForm_1<31,  20, (outs gprc:$rD), (ins memrr:$src),
+def LWARX : XForm_1_memOp<31,  20, (outs gprc:$rD), (ins memrr:$src),
                     "lwarx $rD, $src", IIC_LdStLWARX, []>;
 
 // Instructions to support lock versions of atomics
 // (EH=1 - see Power ISA 2.07 Book II 4.4.2)
-def LBARXL : XForm_1<31,  52, (outs gprc:$rD), (ins memrr:$src),
+def LBARXL : XForm_1_memOp<31,  52, (outs gprc:$rD), (ins memrr:$src),
                      "lbarx $rD, $src, 1", IIC_LdStLWARX, []>, isDOT,
                      Requires<[HasPartwordAtomics]>;
 
-def LHARXL : XForm_1<31,  116, (outs gprc:$rD), (ins memrr:$src),
+def LHARXL : XForm_1_memOp<31,  116, (outs gprc:$rD), (ins memrr:$src),
                      "lharx $rD, $src, 1", IIC_LdStLWARX, []>, isDOT,
                      Requires<[HasPartwordAtomics]>;
 
-def LWARXL : XForm_1<31,  20, (outs gprc:$rD), (ins memrr:$src),
+def LWARXL : XForm_1_memOp<31,  20, (outs gprc:$rD), (ins memrr:$src),
                      "lwarx $rD, $src, 1", IIC_LdStLWARX, []>, isDOT;
 
 // The atomic instructions use the destination register as well as the next one
@@ -1757,15 +1784,15 @@ def LWAT : X_RD5_RS5_IM5<31, 582, (outs gprc:$rD), (ins gprc:$rA, u5imm:$FC),
 }
 
 let Defs = [CR0], mayStore = 1, mayLoad = 0, hasSideEffects = 0 in {
-def STBCX : XForm_1<31, 694, (outs), (ins gprc:$rS, memrr:$dst),
+def STBCX : XForm_1_memOp<31, 694, (outs), (ins gprc:$rS, memrr:$dst),
                     "stbcx. $rS, $dst", IIC_LdStSTWCX, []>,
                     isDOT, Requires<[HasPartwordAtomics]>;
 
-def STHCX : XForm_1<31, 726, (outs), (ins gprc:$rS, memrr:$dst),
+def STHCX : XForm_1_memOp<31, 726, (outs), (ins gprc:$rS, memrr:$dst),
                     "sthcx. $rS, $dst", IIC_LdStSTWCX, []>,
                     isDOT, Requires<[HasPartwordAtomics]>;
 
-def STWCX : XForm_1<31, 150, (outs), (ins gprc:$rS, memrr:$dst),
+def STWCX : XForm_1_memOp<31, 150, (outs), (ins gprc:$rS, memrr:$dst),
                     "stwcx. $rS, $dst", IIC_LdStSTWCX, []>, isDOT;
 }
 
@@ -1848,37 +1875,37 @@ def LFDU : DForm_1<51, (outs f8rc:$rD, ptr_rc_nor0:$ea_result), (ins memri:$addr
 
 
 // Indexed (r+r) Loads with Update (preinc).
-def LBZUX : XForm_1<31, 119, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
+def LBZUX : XForm_1_memOp<31, 119, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
                    (ins memrr:$addr),
                    "lbzux $rD, $addr", IIC_LdStLoadUpdX,
                    []>, RegConstraint<"$addr.ptrreg = $ea_result">,
                    NoEncode<"$ea_result">;
 
-def LHAUX : XForm_1<31, 375, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
+def LHAUX : XForm_1_memOp<31, 375, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
                    (ins memrr:$addr),
                    "lhaux $rD, $addr", IIC_LdStLHAUX,
                    []>, RegConstraint<"$addr.ptrreg = $ea_result">,
                    NoEncode<"$ea_result">;
 
-def LHZUX : XForm_1<31, 311, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
+def LHZUX : XForm_1_memOp<31, 311, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
                    (ins memrr:$addr),
                    "lhzux $rD, $addr", IIC_LdStLoadUpdX,
                    []>, RegConstraint<"$addr.ptrreg = $ea_result">,
                    NoEncode<"$ea_result">;
 
-def LWZUX : XForm_1<31, 55, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
+def LWZUX : XForm_1_memOp<31, 55, (outs gprc:$rD, ptr_rc_nor0:$ea_result),
                    (ins memrr:$addr),
                    "lwzux $rD, $addr", IIC_LdStLoadUpdX,
                    []>, RegConstraint<"$addr.ptrreg = $ea_result">,
                    NoEncode<"$ea_result">;
 
-def LFSUX : XForm_1<31, 567, (outs f4rc:$rD, ptr_rc_nor0:$ea_result),
+def LFSUX : XForm_1_memOp<31, 567, (outs f4rc:$rD, ptr_rc_nor0:$ea_result),
                    (ins memrr:$addr),
                    "lfsux $rD, $addr", IIC_LdStLFDUX,
                    []>, RegConstraint<"$addr.ptrreg = $ea_result">,
                    NoEncode<"$ea_result">;
 
-def LFDUX : XForm_1<31, 631, (outs f8rc:$rD, ptr_rc_nor0:$ea_result),
+def LFDUX : XForm_1_memOp<31, 631, (outs f8rc:$rD, ptr_rc_nor0:$ea_result),
                    (ins memrr:$addr),
                    "lfdux $rD, $addr", IIC_LdStLFDUX,
                    []>, RegConstraint<"$addr.ptrreg = $ea_result">,
@@ -1889,37 +1916,37 @@ def LFDUX : XForm_1<31, 631, (outs f8rc:$rD, ptr_rc_nor0:$ea_result),
 // Indexed (r+r) Loads.
 //
 let PPC970_Unit = 2, mayLoad = 1, mayStore = 0 in {
-def LBZX : XForm_1<31,  87, (outs gprc:$rD), (ins memrr:$src),
+def LBZX : XForm_1_memOp<31,  87, (outs gprc:$rD), (ins memrr:$src),
                    "lbzx $rD, $src", IIC_LdStLoad,
                    [(set i32:$rD, (zextloadi8 xaddr:$src))]>;
-def LHAX : XForm_1<31, 343, (outs gprc:$rD), (ins memrr:$src),
+def LHAX : XForm_1_memOp<31, 343, (outs gprc:$rD), (ins memrr:$src),
                    "lhax $rD, $src", IIC_LdStLHA,
                    [(set i32:$rD, (sextloadi16 xaddr:$src))]>,
                    PPC970_DGroup_Cracked;
-def LHZX : XForm_1<31, 279, (outs gprc:$rD), (ins memrr:$src),
+def LHZX : XForm_1_memOp<31, 279, (outs gprc:$rD), (ins memrr:$src),
                    "lhzx $rD, $src", IIC_LdStLoad,
                    [(set i32:$rD, (zextloadi16 xaddr:$src))]>;
-def LWZX : XForm_1<31,  23, (outs gprc:$rD), (ins memrr:$src),
+def LWZX : XForm_1_memOp<31,  23, (outs gprc:$rD), (ins memrr:$src),
                    "lwzx $rD, $src", IIC_LdStLoad,
                    [(set i32:$rD, (load xaddr:$src))]>;
-def LHBRX : XForm_1<31, 790, (outs gprc:$rD), (ins memrr:$src),
+def LHBRX : XForm_1_memOp<31, 790, (outs gprc:$rD), (ins memrr:$src),
                    "lhbrx $rD, $src", IIC_LdStLoad,
                    [(set i32:$rD, (PPClbrx xoaddr:$src, i16))]>;
-def LWBRX : XForm_1<31,  534, (outs gprc:$rD), (ins memrr:$src),
+def LWBRX : XForm_1_memOp<31,  534, (outs gprc:$rD), (ins memrr:$src),
                    "lwbrx $rD, $src", IIC_LdStLoad,
                    [(set i32:$rD, (PPClbrx xoaddr:$src, i32))]>;
 
-def LFSX   : XForm_25<31, 535, (outs f4rc:$frD), (ins memrr:$src),
+def LFSX   : XForm_25_memOp<31, 535, (outs f4rc:$frD), (ins memrr:$src),
                       "lfsx $frD, $src", IIC_LdStLFD,
                       [(set f32:$frD, (load xaddr:$src))]>;
-def LFDX   : XForm_25<31, 599, (outs f8rc:$frD), (ins memrr:$src),
+def LFDX   : XForm_25_memOp<31, 599, (outs f8rc:$frD), (ins memrr:$src),
                       "lfdx $frD, $src", IIC_LdStLFD,
                       [(set f64:$frD, (load xaddr:$src))]>;
 
-def LFIWAX : XForm_25<31, 855, (outs f8rc:$frD), (ins memrr:$src),
+def LFIWAX : XForm_25_memOp<31, 855, (outs f8rc:$frD), (ins memrr:$src),
                       "lfiwax $frD, $src", IIC_LdStLFD,
                       [(set f64:$frD, (PPClfiwax xoaddr:$src))]>;
-def LFIWZX : XForm_25<31, 887, (outs f8rc:$frD), (ins memrr:$src),
+def LFIWZX : XForm_25_memOp<31, 887, (outs f8rc:$frD), (ins memrr:$src),
                       "lfiwzx $frD, $src", IIC_LdStLFD,
                       [(set f64:$frD, (PPClfiwzx xoaddr:$src))]>;
 }
@@ -1986,62 +2013,72 @@ def : Pat<(pre_store f64:$rS, iPTR:$ptrreg, iaddroff:$ptroff),
 
 // Indexed (r+r) Stores.
 let PPC970_Unit = 2 in {
-def STBX  : XForm_8<31, 215, (outs), (ins gprc:$rS, memrr:$dst),
+def STBX  : XForm_8_memOp<31, 215, (outs), (ins gprc:$rS, memrr:$dst),
                    "stbx $rS, $dst", IIC_LdStStore,
                    [(truncstorei8 i32:$rS, xaddr:$dst)]>,
                    PPC970_DGroup_Cracked;
-def STHX  : XForm_8<31, 407, (outs), (ins gprc:$rS, memrr:$dst),
+def STHX  : XForm_8_memOp<31, 407, (outs), (ins gprc:$rS, memrr:$dst),
                    "sthx $rS, $dst", IIC_LdStStore,
                    [(truncstorei16 i32:$rS, xaddr:$dst)]>,
                    PPC970_DGroup_Cracked;
-def STWX  : XForm_8<31, 151, (outs), (ins gprc:$rS, memrr:$dst),
+def STWX  : XForm_8_memOp<31, 151, (outs), (ins gprc:$rS, memrr:$dst),
                    "stwx $rS, $dst", IIC_LdStStore,
                    [(store i32:$rS, xaddr:$dst)]>,
                    PPC970_DGroup_Cracked;
- 
-def STHBRX: XForm_8<31, 918, (outs), (ins gprc:$rS, memrr:$dst),
+
+def STHBRX: XForm_8_memOp<31, 918, (outs), (ins gprc:$rS, memrr:$dst),
                    "sthbrx $rS, $dst", IIC_LdStStore,
                    [(PPCstbrx i32:$rS, xoaddr:$dst, i16)]>,
                    PPC970_DGroup_Cracked;
-def STWBRX: XForm_8<31, 662, (outs), (ins gprc:$rS, memrr:$dst),
+def STWBRX: XForm_8_memOp<31, 662, (outs), (ins gprc:$rS, memrr:$dst),
                    "stwbrx $rS, $dst", IIC_LdStStore,
                    [(PPCstbrx i32:$rS, xoaddr:$dst, i32)]>,
                    PPC970_DGroup_Cracked;
 
-def STFIWX: XForm_28<31, 983, (outs), (ins f8rc:$frS, memrr:$dst),
+def STFIWX: XForm_28_memOp<31, 983, (outs), (ins f8rc:$frS, memrr:$dst),
                      "stfiwx $frS, $dst", IIC_LdStSTFD,
                      [(PPCstfiwx f64:$frS, xoaddr:$dst)]>;
-                     
-def STFSX : XForm_28<31, 663, (outs), (ins f4rc:$frS, memrr:$dst),
+
+def STFSX : XForm_28_memOp<31, 663, (outs), (ins f4rc:$frS, memrr:$dst),
                      "stfsx $frS, $dst", IIC_LdStSTFD,
                      [(store f32:$frS, xaddr:$dst)]>;
-def STFDX : XForm_28<31, 727, (outs), (ins f8rc:$frS, memrr:$dst),
+def STFDX : XForm_28_memOp<31, 727, (outs), (ins f8rc:$frS, memrr:$dst),
                      "stfdx $frS, $dst", IIC_LdStSTFD,
                      [(store f64:$frS, xaddr:$dst)]>;
 }
 
 // Indexed (r+r) Stores with Update (preinc).
 let PPC970_Unit = 2, mayStore = 1, mayLoad = 0 in {
-def STBUX : XForm_8<31, 247, (outs ptr_rc_nor0:$ea_res), (ins gprc:$rS, memrr:$dst),
-                    "stbux $rS, $dst", IIC_LdStStoreUpd, []>,
-                    RegConstraint<"$dst.ptrreg = $ea_res">, NoEncode<"$ea_res">,
-                    PPC970_DGroup_Cracked;
-def STHUX : XForm_8<31, 439, (outs ptr_rc_nor0:$ea_res), (ins gprc:$rS, memrr:$dst),
-                    "sthux $rS, $dst", IIC_LdStStoreUpd, []>,
-                    RegConstraint<"$dst.ptrreg = $ea_res">, NoEncode<"$ea_res">,
-                    PPC970_DGroup_Cracked;
-def STWUX : XForm_8<31, 183, (outs ptr_rc_nor0:$ea_res), (ins gprc:$rS, memrr:$dst),
-                    "stwux $rS, $dst", IIC_LdStStoreUpd, []>,
-                    RegConstraint<"$dst.ptrreg = $ea_res">, NoEncode<"$ea_res">,
-                    PPC970_DGroup_Cracked;
-def STFSUX: XForm_8<31, 695, (outs ptr_rc_nor0:$ea_res), (ins f4rc:$rS, memrr:$dst),
-                    "stfsux $rS, $dst", IIC_LdStSTFDU, []>,
-                    RegConstraint<"$dst.ptrreg = $ea_res">, NoEncode<"$ea_res">,
-                    PPC970_DGroup_Cracked;
-def STFDUX: XForm_8<31, 759, (outs ptr_rc_nor0:$ea_res), (ins f8rc:$rS, memrr:$dst),
-                    "stfdux $rS, $dst", IIC_LdStSTFDU, []>,
-                    RegConstraint<"$dst.ptrreg = $ea_res">, NoEncode<"$ea_res">,
-                    PPC970_DGroup_Cracked;
+def STBUX : XForm_8_memOp<31, 247, (outs ptr_rc_nor0:$ea_res),
+                          (ins gprc:$rS, memrr:$dst),
+                          "stbux $rS, $dst", IIC_LdStStoreUpd, []>,
+                          RegConstraint<"$dst.ptrreg = $ea_res">,
+                          NoEncode<"$ea_res">,
+                          PPC970_DGroup_Cracked;
+def STHUX : XForm_8_memOp<31, 439, (outs ptr_rc_nor0:$ea_res),
+                          (ins gprc:$rS, memrr:$dst),
+                          "sthux $rS, $dst", IIC_LdStStoreUpd, []>,
+                          RegConstraint<"$dst.ptrreg = $ea_res">,
+                          NoEncode<"$ea_res">,
+                          PPC970_DGroup_Cracked;
+def STWUX : XForm_8_memOp<31, 183, (outs ptr_rc_nor0:$ea_res),
+                          (ins gprc:$rS, memrr:$dst),
+                          "stwux $rS, $dst", IIC_LdStStoreUpd, []>,
+                          RegConstraint<"$dst.ptrreg = $ea_res">,
+                          NoEncode<"$ea_res">,
+                          PPC970_DGroup_Cracked;
+def STFSUX: XForm_8_memOp<31, 695, (outs ptr_rc_nor0:$ea_res),
+                          (ins f4rc:$rS, memrr:$dst),
+                          "stfsux $rS, $dst", IIC_LdStSTFDU, []>,
+                          RegConstraint<"$dst.ptrreg = $ea_res">,
+                          NoEncode<"$ea_res">,
+                          PPC970_DGroup_Cracked;
+def STFDUX: XForm_8_memOp<31, 759, (outs ptr_rc_nor0:$ea_res),
+                          (ins f8rc:$rS, memrr:$dst),
+                          "stfdux $rS, $dst", IIC_LdStSTFDU, []>,
+                          RegConstraint<"$dst.ptrreg = $ea_res">,
+                          NoEncode<"$ea_res">,
+                          PPC970_DGroup_Cracked;
 }
 
 // Patterns to match the pre-inc stores.  We can't put the patterns on
@@ -3591,6 +3628,37 @@ defm : CRNotPat<(i1 (setcc f64:$s1, f64:$s2, SETNE)),
 defm : CRNotPat<(i1 (setcc f64:$s1, f64:$s2, SETO)),
                 (EXTRACT_SUBREG (FCMPUD $s1, $s2), sub_un)>;
 
+// SETCC for f128.
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETOLT)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_lt)>;
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETLT)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_lt)>;
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETOGT)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_gt)>;
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETGT)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_gt)>;
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETOEQ)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_eq)>;
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETEQ)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_eq)>;
+def : Pat<(i1 (setcc f128:$s1, f128:$s2, SETUO)),
+          (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_un)>;
+
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETUGE)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_lt)>;
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETGE)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_lt)>;
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETULE)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_gt)>;
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETLE)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_gt)>;
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETUNE)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_eq)>;
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETNE)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_eq)>;
+defm : CRNotPat<(i1 (setcc f128:$s1, f128:$s2, SETO)),
+                (EXTRACT_SUBREG (XSCMPUQP $s1, $s2), sub_un)>;
+
 // match select on i1 variables:
 def : Pat<(i1 (select i1:$cond, i1:$tval, i1:$fval)),
           (CROR (CRAND        $cond , $tval),
@@ -3715,6 +3783,27 @@ def : Pat<(f64 (selectcc i1:$lhs, i1:$rhs, f64:$tval, f64:$fval, SETUGT)),
 def : Pat<(f64 (selectcc i1:$lhs, i1:$rhs, f64:$tval, f64:$fval, SETNE)),
           (SELECT_F8 (CRXOR $lhs, $rhs), $tval, $fval)>;
 
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETLT)),
+          (SELECT_F16 (CRANDC $lhs, $rhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETULT)),
+          (SELECT_F16 (CRANDC $rhs, $lhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETLE)),
+          (SELECT_F16 (CRORC  $lhs, $rhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETULE)),
+          (SELECT_F16 (CRORC  $rhs, $lhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETEQ)),
+          (SELECT_F16 (CREQV $lhs, $rhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETGE)),
+         (SELECT_F16 (CRORC  $rhs, $lhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETUGE)),
+          (SELECT_F16 (CRORC  $lhs, $rhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETGT)),
+          (SELECT_F16 (CRANDC $rhs, $lhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETUGT)),
+          (SELECT_F16 (CRANDC $lhs, $rhs), $tval, $fval)>;
+def : Pat<(f128 (selectcc i1:$lhs, i1:$rhs, f128:$tval, f128:$fval, SETNE)),
+          (SELECT_F16 (CRXOR $lhs, $rhs), $tval, $fval)>;
+
 def : Pat<(v4i32 (selectcc i1:$lhs, i1:$rhs, v4i32:$tval, v4i32:$fval, SETLT)),
           (SELECT_VRRC (CRANDC $lhs, $rhs), $tval, $fval)>;
 def : Pat<(v4i32 (selectcc i1:$lhs, i1:$rhs, v4i32:$tval, v4i32:$fval, SETULT)),
@@ -3763,13 +3852,15 @@ def : Pat<(i1 (not (trunc i64:$in))),
 
 // FIXME: For B=0 or B > 8, the registers following RT are used.
 // WARNING: Do not add patterns for this instruction without fixing this.
-def LSWI  : XForm_base_r3xo<31, 597, (outs gprc:$RT), (ins gprc:$A, u5imm:$B),
-                            "lswi $RT, $A, $B", IIC_LdStLoad, []>;
+def LSWI  : XForm_base_r3xo_memOp<31, 597, (outs gprc:$RT),
+                                  (ins gprc:$A, u5imm:$B),
+                                  "lswi $RT, $A, $B", IIC_LdStLoad, []>;
 
 // FIXME: For B=0 or B > 8, the registers following RT are used.
 // WARNING: Do not add patterns for this instruction without fixing this.
-def STSWI : XForm_base_r3xo<31, 725, (outs), (ins gprc:$RT, gprc:$A, u5imm:$B),
-                            "stswi $RT, $A, $B", IIC_LdStLoad, []>;
+def STSWI : XForm_base_r3xo_memOp<31, 725, (outs),
+                                  (ins gprc:$RT, gprc:$A, u5imm:$B),
+                                  "stswi $RT, $A, $B", IIC_LdStLoad, []>;
 
 def ISYNC : XLForm_2_ext<19, 150, 0, 0, 0, (outs), (ins),
                          "isync", IIC_SprISYNC, []>;
@@ -3781,7 +3872,7 @@ def ICBI : XForm_1a<31, 982, (outs), (ins memrr:$src),
 def EnforceIEIO : XForm_24_eieio<31, 854, (outs), (ins),
                            "eieio", IIC_LdStLoad, []>;
 
-def WAIT : XForm_24_sync<31, 62, (outs), (ins i32imm:$L),
+def WAIT : XForm_24_sync<31, 30, (outs), (ins i32imm:$L),
                          "wait $L", IIC_LdStLoad, []>;
 
 def MBAR : XForm_mbar<31, 854, (outs), (ins u5imm:$MO),
@@ -3932,23 +4023,31 @@ def NAP   : XLForm_1_np<19, 434, (outs), (ins), "nap", IIC_BrB, []>;
 
 def ATTN : XForm_attn<0, 256, (outs), (ins), "attn", IIC_BrB>;
 
-def LBZCIX : XForm_base_r3xo<31, 853, (outs gprc:$RST), (ins gprc:$A, gprc:$B),
-                             "lbzcix $RST, $A, $B", IIC_LdStLoad, []>;
-def LHZCIX : XForm_base_r3xo<31, 821, (outs gprc:$RST), (ins gprc:$A, gprc:$B),
-                             "lhzcix $RST, $A, $B", IIC_LdStLoad, []>;
-def LWZCIX : XForm_base_r3xo<31, 789, (outs gprc:$RST), (ins gprc:$A, gprc:$B),
-                             "lwzcix $RST, $A, $B", IIC_LdStLoad, []>;
-def LDCIX :  XForm_base_r3xo<31, 885, (outs gprc:$RST), (ins gprc:$A, gprc:$B),
-                             "ldcix $RST, $A, $B", IIC_LdStLoad, []>;
+def LBZCIX : XForm_base_r3xo_memOp<31, 853, (outs gprc:$RST),
+                                  (ins gprc:$A, gprc:$B),
+                                  "lbzcix $RST, $A, $B", IIC_LdStLoad, []>;
+def LHZCIX : XForm_base_r3xo_memOp<31, 821, (outs gprc:$RST),
+                                  (ins gprc:$A, gprc:$B),
+                                  "lhzcix $RST, $A, $B", IIC_LdStLoad, []>;
+def LWZCIX : XForm_base_r3xo_memOp<31, 789, (outs gprc:$RST),
+                                  (ins gprc:$A, gprc:$B),
+                                  "lwzcix $RST, $A, $B", IIC_LdStLoad, []>;
+def LDCIX :  XForm_base_r3xo_memOp<31, 885, (outs gprc:$RST),
+                                  (ins gprc:$A, gprc:$B),
+                                  "ldcix $RST, $A, $B", IIC_LdStLoad, []>;
 
-def STBCIX : XForm_base_r3xo<31, 981, (outs), (ins gprc:$RST, gprc:$A, gprc:$B),
-                             "stbcix $RST, $A, $B", IIC_LdStLoad, []>;
-def STHCIX : XForm_base_r3xo<31, 949, (outs), (ins gprc:$RST, gprc:$A, gprc:$B),
-                             "sthcix $RST, $A, $B", IIC_LdStLoad, []>;
-def STWCIX : XForm_base_r3xo<31, 917, (outs), (ins gprc:$RST, gprc:$A, gprc:$B),
-                             "stwcix $RST, $A, $B", IIC_LdStLoad, []>;
-def STDCIX : XForm_base_r3xo<31, 1013, (outs), (ins gprc:$RST, gprc:$A, gprc:$B),
-                             "stdcix $RST, $A, $B", IIC_LdStLoad, []>;
+def STBCIX : XForm_base_r3xo_memOp<31, 981, (outs),
+                                  (ins gprc:$RST, gprc:$A, gprc:$B),
+                                  "stbcix $RST, $A, $B", IIC_LdStLoad, []>;
+def STHCIX : XForm_base_r3xo_memOp<31, 949, (outs),
+                                  (ins gprc:$RST, gprc:$A, gprc:$B),
+                                  "sthcix $RST, $A, $B", IIC_LdStLoad, []>;
+def STWCIX : XForm_base_r3xo_memOp<31, 917, (outs),
+                                  (ins gprc:$RST, gprc:$A, gprc:$B),
+                                  "stwcix $RST, $A, $B", IIC_LdStLoad, []>;
+def STDCIX : XForm_base_r3xo_memOp<31, 1013, (outs),
+                                  (ins gprc:$RST, gprc:$A, gprc:$B),
+                                  "stdcix $RST, $A, $B", IIC_LdStLoad, []>;
 
 // External PID Load Store Instructions
 
@@ -3972,7 +4071,7 @@ def STBEPX  : XForm_8<31, 223, (outs), (ins gprc:$rS, memrr:$dst),
                       "stbepx $rS, $dst", IIC_LdStStore, []>,
                       Requires<[IsE500]>;
 
-def STFDEPX : XForm_28<31, 735, (outs), (ins f8rc:$frS, memrr:$dst),
+def STFDEPX : XForm_28_memOp<31, 735, (outs), (ins f8rc:$frS, memrr:$dst),
                       "stfdepx $frS, $dst", IIC_LdStSTFD, []>,
                       Requires<[IsE500]>;
 
@@ -4695,10 +4794,10 @@ def DWMaskValues {
 def DWSwapInByte {
   dag Swap1 = (OR8 (AND8 (RLDICL $A, 63, 1), DWMaskValues.Lo1),
                    (AND8 (RLDICR $A, 1, 62), DWMaskValues.Hi1));
-  dag Swap2 = (OR8 (AND8 (RLDICL DWSwapInByte.Swap1, 62, 2), DWMaskValues.Lo2),
-                   (AND8 (RLDICR DWSwapInByte.Swap1, 2, 61), DWMaskValues.Hi2));
-  dag Swap4 = (OR8 (AND8 (RLDICL DWSwapInByte.Swap2, 60, 4), DWMaskValues.Lo4),
-                   (AND8 (RLDICR DWSwapInByte.Swap2, 4, 59), DWMaskValues.Hi4));
+  dag Swap2 = (OR8 (AND8 (RLDICL Swap1, 62, 2), DWMaskValues.Lo2),
+                   (AND8 (RLDICR Swap1, 2, 61), DWMaskValues.Hi2));
+  dag Swap4 = (OR8 (AND8 (RLDICL Swap2, 60, 4), DWMaskValues.Lo4),
+                   (AND8 (RLDICR Swap2, 4, 59), DWMaskValues.Hi4));
 }
 
 // Intra-byte swap is done, now start inter-byte swap.
@@ -4718,7 +4817,7 @@ def DWBytes7656 {
 def DWBytes7654 {
   dag Word = (RLWIMI DWBytes7656.Word, DWBytes4567.Word, 8, 24, 31);
   dag DWord =
-    (i64 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), DWBytes7654.Word, sub_32));
+    (i64 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), Word, sub_32));
 }
 
 def DWBytes0123 {
@@ -4737,7 +4836,7 @@ def DWBytes3212 {
 def DWBytes3210 {
   dag Word = (RLWIMI DWBytes3212.Word, DWBytes0123.Word, 8, 24, 31);
   dag DWord =
-    (i64 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), DWBytes3210.Word, sub_32));
+    (i64 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), Word, sub_32));
 }
 
 // Now both high word and low word are reversed, next

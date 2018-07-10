@@ -273,7 +273,7 @@ def AllocSizeDocs : Documentation {
   let Content = [{
 The ``alloc_size`` attribute can be placed on functions that return pointers in
 order to hint to the compiler how many bytes of memory will be available at the
-returned poiner. ``alloc_size`` takes one or two arguments.
+returned pointer. ``alloc_size`` takes one or two arguments.
 
 - ``alloc_size(N)`` implies that argument number N equals the number of
   available bytes at the returned pointer.
@@ -311,7 +311,7 @@ def AllocAlignDocs : Documentation {
   let Content = [{
 Use ``__attribute__((alloc_align(<alignment>))`` on a function
 declaration to specify that the return value of the function (which must be a
-pointer type) is at least as aligned as the value of the indicated parameter. The 
+pointer type) is at least as aligned as the value of the indicated parameter. The
 parameter is given by its index in the list of formal parameters; the first
 parameter has index 1 unless the function is a C++ non-static member function,
 in which case the first parameter has index 2 to account for the implicit ``this``
@@ -330,7 +330,7 @@ parameter.
   void *Foo::b(void *v, size_t align) __attribute__((alloc_align(3)));
 
 Note that this attribute merely informs the compiler that a function always
-returns a sufficiently aligned pointer. It does not cause the compiler to 
+returns a sufficiently aligned pointer. It does not cause the compiler to
 emit code to enforce that alignment.  The behavior is undefined if the returned
 poitner is not sufficiently aligned.
   }];
@@ -913,10 +913,10 @@ in the metadata name for that object. The `objc_runtime_name`
 attribute allows annotated interfaces or protocols to use the
 specified string argument in the object's metadata name instead of the
 default name.
-        
+
 **Usage**: ``__attribute__((objc_runtime_name("MyLocalName")))``.  This attribute
 can only be placed before an @protocol or @interface declaration:
-        
+
 .. code-block:: objc
 
   __attribute__((objc_runtime_name("MyLocalName")))
@@ -1496,6 +1496,30 @@ Additionally, a function may not become multiversioned after its first use.
 }];
 }
 
+def MinVectorWidthDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+Clang supports the ``__attribute__((min_vector_width(width)))`` attribute. This
+attribute may be attached to a function and informs the backend that this
+function desires vectors of at least this width to be generated. Target-specific
+maximum vector widths still apply. This means even if you ask for something
+larger than the target supports, you will only get what the target supports.
+This attribute is meant to be a hint to control target heuristics that may
+generate narrower vectors than what the target hardware supports.
+
+This is currently used by the X86 target to allow some CPUs that support 512-bit
+vectors to be limited to using 256-bit vectors to avoid frequency penalties.
+This is currently enabled with the ``-prefer-vector-width=256`` command line
+option. The ``min_vector_width`` attribute can be used to prevent the backend
+from trying to split vector operations to match the ``prefer-vector-width``. All
+X86 vector intrinsics from x86intrin.h already set this attribute. Additionally,
+use of any of the X86-specific vector builtins will implicitly set this
+attribute on the calling function. The intent is that explicitly writing vector
+code using the X86 intrinsics will prevent ``prefer-vector-width`` from
+affecting the code.
+}];
+}
+
 def DocCatAMDGPUAttributes : DocumentationCategory<"AMD GPU Attributes">;
 
 def AMDGPUFlatWorkGroupSizeDocs : Documentation {
@@ -1804,13 +1828,14 @@ This attribute accepts a single parameter that must be one of the following:
 def NoSanitizeDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
-Use the ``no_sanitize`` attribute on a function declaration to specify
-that a particular instrumentation or set of instrumentations should not be
-applied to that function. The attribute takes a list of string literals,
-which have the same meaning as values accepted by the ``-fno-sanitize=``
-flag. For example, ``__attribute__((no_sanitize("address", "thread")))``
-specifies that AddressSanitizer and ThreadSanitizer should not be applied
-to the function.
+Use the ``no_sanitize`` attribute on a function or a global variable
+declaration to specify that a particular instrumentation or set of
+instrumentations should not be applied. The attribute takes a list of
+string literals, which have the same meaning as values accepted by the
+``-fno-sanitize=`` flag. For example,
+``__attribute__((no_sanitize("address", "thread")))`` specifies that
+AddressSanitizer and ThreadSanitizer should not be applied to the
+function or variable.
 
 See :ref:`Controlling Code Generation <controlling-code-generation>` for a
 full list of supported sanitizer flags.
@@ -1825,9 +1850,9 @@ def NoSanitizeAddressDocs : Documentation {
   let Content = [{
 .. _langext-address_sanitizer:
 
-Use ``__attribute__((no_sanitize_address))`` on a function declaration to
-specify that address safety instrumentation (e.g. AddressSanitizer) should
-not be applied to that function.
+Use ``__attribute__((no_sanitize_address))`` on a function or a global
+variable declaration to specify that address safety instrumentation
+(e.g. AddressSanitizer) should not be applied.
   }];
 }
 
@@ -2626,7 +2651,7 @@ The ``_Nullable`` nullability qualifier indicates that a value of the ``_Nullabl
 
     int fetch_or_zero(int * _Nullable ptr);
 
-a caller of ``fetch_or_zero`` can provide null. 
+a caller of ``fetch_or_zero`` can provide null.
   }];
 }
 
@@ -2740,6 +2765,28 @@ The syntax of the declare target directive is as follows:
   }];
 }
 
+def NoStackProtectorDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+Clang supports the ``__attribute__((no_stack_protector))`` attribute which disables
+the stack protector on the specified function. This attribute is useful for
+selectively disabling the stack protector on some functions when building with
+``-fstack-protector`` compiler option.
+
+For example, it disables the stack protector for the function ``foo`` but function
+``bar`` will still be built with the stack protector with the ``-fstack-protector``
+option.
+
+.. code-block:: c
+
+    int __attribute__((no_stack_protector))
+    foo (int x); // stack protection will be disabled for foo.
+
+    int bar(int y); // bar can be built with the stack protector.
+
+    }];
+}
+
 def NotTailCalledDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
@@ -2798,7 +2845,7 @@ def NoThrowDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
 Clang supports the GNU style ``__attribute__((nothrow))`` and Microsoft style
-``__declspec(nothrow)`` attribute as an equivilent of `noexcept` on function
+``__declspec(nothrow)`` attribute as an equivalent of `noexcept` on function
 declarations. This attribute informs the compiler that the annotated function
 does not throw an exception. This prevents exception-unwinding. This attribute
 is particularly useful on functions in the C Standard Library that are
@@ -2861,7 +2908,7 @@ Use this attribute to indicate that the specified function has no
 caller-saved registers. That is, all registers are callee-saved except for
 registers used for passing parameters to the function or returning parameters
 from the function.
-The compiler saves and restores any modified registers that were not used for 
+The compiler saves and restores any modified registers that were not used for
 passing or returning arguments to the function.
 
 The user can call functions specified with the 'no_caller_saved_registers'
@@ -2911,6 +2958,23 @@ jumps from i386 arch code).
     }
 
   }];
+}
+
+def AnyX86NoCfCheckDocs : Documentation{
+  let Category = DocCatFunction;
+  let Content = [{
+Jump Oriented Programming attacks rely on tampering with addresses used by
+indirect call / jmp, e.g. redirect control-flow to non-programmer
+intended bytes in the binary.
+X86 Supports Indirect Branch Tracking (IBT) as part of Control-Flow
+Enforcement Technology (CET). IBT instruments ENDBR instructions used to
+specify valid targets of indirect call / jmp.
+The ``nocf_check`` attribute has two roles:
+1. Appertains to a function - do not add ENDBR instruction at the beginning of
+the function.
+2. Appertains to a function pointer - do not track the target function of this
+pointer (by adding nocf_check prefix to the indirect-call instruction).
+}];
 }
 
 def SwiftCallDocs : Documentation {
@@ -3092,7 +3156,7 @@ the ability to distinguish between different versions of the same entity but
 with different ABI versions supported. For example, a newer version of a class
 could have a different set of data members and thus have a different size. Using
 the ``abi_tag`` attribute, it is possible to have different mangled names for
-a global variable of the class type. Therefor, the old code could keep using
+a global variable of the class type. Therefore, the old code could keep using
 the old manged name and the new code will use the new mangled name with tags.
   }];
 }
@@ -3280,7 +3344,7 @@ def ArtificialDocs : Documentation {
   let Content = [{
 The ``artificial`` attribute can be applied to an inline function. If such a
 function is inlined, the attribute indicates that debuggers should associate
-the resulting instructions with the call site, rather than with the 
+the resulting instructions with the call site, rather than with the
 corresponding line within the inlined callee.
   }];
 }

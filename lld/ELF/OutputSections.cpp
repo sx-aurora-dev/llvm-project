@@ -25,15 +25,12 @@
 using namespace llvm;
 using namespace llvm::dwarf;
 using namespace llvm::object;
-using namespace llvm::support::endian;
 using namespace llvm::ELF;
 
 using namespace lld;
 using namespace lld::elf;
 
 uint8_t Out::First;
-OutputSection *Out::Opd;
-uint8_t *Out::OpdBuf;
 PhdrEntry *Out::TlsPhdr;
 OutputSection *Out::DebugInfo;
 OutputSection *Out::ElfHeader;
@@ -124,7 +121,6 @@ void OutputSection::addSection(InputSection *IS) {
   Flags = AndFlags | OrFlags;
 
   Alignment = std::max(Alignment, IS->Alignment);
-  IS->OutSecOff = Size++;
 
   // If this section contains a table of fixed-size entries, sh_entsize
   // holds the element size. If it contains elements of different size we
@@ -143,7 +139,7 @@ void OutputSection::addSection(InputSection *IS) {
 }
 
 static void sortByOrder(MutableArrayRef<InputSection *> In,
-                        std::function<int(InputSectionBase *S)> Order) {
+                        llvm::function_ref<int(InputSectionBase *S)> Order) {
   typedef std::pair<int, InputSection *> Pair;
   auto Comp = [](const Pair &A, const Pair &B) { return A.first < B.first; };
 
@@ -166,7 +162,7 @@ bool OutputSection::classof(const BaseCommand *C) {
   return C->Kind == OutputSectionKind;
 }
 
-void OutputSection::sort(std::function<int(InputSectionBase *S)> Order) {
+void OutputSection::sort(llvm::function_ref<int(InputSectionBase *S)> Order) {
   assert(Live);
   for (BaseCommand *B : SectionCommands)
     if (auto *ISD = dyn_cast<InputSectionDescription>(B))
@@ -213,11 +209,11 @@ static void writeInt(uint8_t *Buf, uint64_t Data, uint64_t Size) {
   if (Size == 1)
     *Buf = Data;
   else if (Size == 2)
-    write16(Buf, Data, Config->Endianness);
+    write16(Buf, Data);
   else if (Size == 4)
-    write32(Buf, Data, Config->Endianness);
+    write32(Buf, Data);
   else if (Size == 8)
-    write64(Buf, Data, Config->Endianness);
+    write64(Buf, Data);
   else
     llvm_unreachable("unsupported Size argument");
 }
@@ -366,8 +362,6 @@ static bool compCtors(const InputSection *A, const InputSection *B) {
   assert(Y.startswith(".ctors") || Y.startswith(".dtors"));
   X = X.substr(6);
   Y = Y.substr(6);
-  if (X.empty() && Y.empty())
-    return false;
   return X < Y;
 }
 

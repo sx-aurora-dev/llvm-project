@@ -283,12 +283,6 @@ TEST(TripleTest, ParsedIDs) {
   EXPECT_EQ(Triple::AMDHSA, T.getOS());
   EXPECT_EQ(Triple::UnknownEnvironment, T.getEnvironment());
 
-  T = Triple("amdgcn-amd-amdhsa-opencl");
-  EXPECT_EQ(Triple::amdgcn, T.getArch());
-  EXPECT_EQ(Triple::AMD, T.getVendor());
-  EXPECT_EQ(Triple::AMDHSA, T.getOS());
-  EXPECT_EQ(Triple::OpenCL, T.getEnvironment());
-
   T = Triple("amdgcn-amd-amdpal");
   EXPECT_EQ(Triple::amdgcn, T.getArch());
   EXPECT_EQ(Triple::AMD, T.getVendor());
@@ -366,6 +360,12 @@ TEST(TripleTest, ParsedIDs) {
   EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
   EXPECT_EQ(Triple::Linux, T.getOS());
   EXPECT_EQ(Triple::GNUABI64, T.getEnvironment());
+
+  T = Triple("arm-oe-linux-gnueabi");
+  EXPECT_EQ(Triple::arm, T.getArch());
+  EXPECT_EQ(Triple::OpenEmbedded, T.getVendor());
+  EXPECT_EQ(Triple::Linux, T.getOS());
+  EXPECT_EQ(Triple::GNUEABI, T.getEnvironment());
 
   T = Triple("huh");
   EXPECT_EQ(Triple::UnknownArch, T.getArch());

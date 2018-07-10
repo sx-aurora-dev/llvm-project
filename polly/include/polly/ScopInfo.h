@@ -25,6 +25,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
@@ -75,7 +76,6 @@ class Value;
 
 void initializeScopInfoRegionPassPass(PassRegistry &);
 void initializeScopInfoWrapperPassPass(PassRegistry &);
-
 } // end namespace llvm
 
 struct isl_map;
@@ -1559,7 +1559,14 @@ public:
   /// Remove @p MA from this statement.
   ///
   /// In contrast to removeMemoryAccess(), no other access will be eliminated.
-  void removeSingleMemoryAccess(MemoryAccess *MA);
+  ///
+  /// @param MA            The MemoryAccess to be removed.
+  /// @param AfterHoisting If true, also remove from data access lists.
+  ///                      These lists are filled during
+  ///                      ScopBuilder::buildAccessRelations. Therefore, if this
+  ///                      method is called before buildAccessRelations, false
+  ///                      must be passed.
+  void removeSingleMemoryAccess(MemoryAccess *MA, bool AfterHoisting = true);
 
   using iterator = MemoryAccessVec::iterator;
   using const_iterator = MemoryAccessVec::const_iterator;
@@ -1711,7 +1718,7 @@ private:
   Region &R;
 
   /// The name of the SCoP (identical to the regions name)
-  std::string name;
+  Optional<std::string> name;
 
   /// The ID to be assigned to the next Scop in a function
   static int NextScopID;
@@ -1880,6 +1887,10 @@ private:
   /// are also several other nodes. A full description of the different nodes
   /// in a schedule tree is given in the isl manual.
   isl::schedule Schedule = nullptr;
+
+  /// Whether the schedule has been modified after derived from the CFG by
+  /// ScopBuilder.
+  bool ScheduleModified = false;
 
   /// The set of minimal/maximal accesses for each alias group.
   ///
@@ -2270,9 +2281,15 @@ private:
 
   /// Remove statements from the list of scop statements.
   ///
-  /// @param ShouldDelete A function that returns true if the statement passed
-  ///                     to it should be deleted.
-  void removeStmts(std::function<bool(ScopStmt &)> ShouldDelete);
+  /// @param ShouldDelete  A function that returns true if the statement passed
+  ///                      to it should be deleted.
+  /// @param AfterHoisting If true, also remove from data access lists.
+  ///                      These lists are filled during
+  ///                      ScopBuilder::buildAccessRelations. Therefore, if this
+  ///                      method is called before buildAccessRelations, false
+  ///                      must be passed.
+  void removeStmts(std::function<bool(ScopStmt &)> ShouldDelete,
+                   bool AfterHoisting = true);
 
   /// Removes @p Stmt from the StmtMap.
   void removeFromStmtMap(ScopStmt &Stmt);
@@ -2443,7 +2460,11 @@ public:
   /// could be executed.
   bool isEmpty() const { return Stmts.empty(); }
 
-  const StringRef getName() const { return name; }
+  StringRef getName() {
+    if (!name)
+      name = R.getNameStr();
+    return *name;
+  }
 
   using array_iterator = ArrayInfoSetTy::iterator;
   using const_array_iterator = ArrayInfoSetTy::const_iterator;
@@ -2980,6 +3001,10 @@ public:
   /// NewSchedule The new schedule (given as schedule tree).
   void setScheduleTree(isl::schedule NewSchedule);
 
+  /// Whether the schedule is the original schedule as derived from the CFG by
+  /// ScopBuilder.
+  bool isOriginalSchedule() const { return !ScheduleModified; }
+
   /// Intersects the domains of all statements in the SCoP.
   ///
   /// @return true if a change was made
@@ -3203,7 +3228,6 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 };
-
 } // end namespace polly
 
 #endif // POLLY_SCOPINFO_H

@@ -18,12 +18,12 @@ SECTIONS {
 # CHECK:      Sections:
 # CHECK-NEXT: Idx Name          Size      Address          Type
 # CHECK-NEXT:   0               00000000 0000000000000000
-# CHECK-NEXT:   1 .text         00000008 0000000000000000 TEXT DATA
-# CHECK-NEXT:   2 .foo.text     00000008 0000000000000008 TEXT DATA
+# CHECK-NEXT:   1 .text         00000008 0000000000000000 TEXT
+# CHECK-NEXT:   2 .foo.text     00000008 0000000000000008 TEXT
 # CHECK-NEXT:   3 .data         00000008 0000000000000010 DATA
 # CHECK-NEXT:   4 .foo.data     00000008 0000000000000018 DATA
 
 # RUN: not ld.lld %t1.o -o %t1 --script %s 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=ERR
-# ERR-DAG: error: unable to INSERT AFTER .text: section not defined
-# ERR-DAG: error: unable to INSERT AFTER .data: section not defined
+# ERR-DAG: error: unable to INSERT AFTER/BEFORE .text: section not defined
+# ERR-DAG: error: unable to INSERT AFTER/BEFORE .data: section not defined

@@ -76,11 +76,6 @@ cl::opt<bool> llvm::UniversalHeaders("universal-headers",
                                               "(requires -macho)"));
 
 cl::opt<bool>
-    llvm::ArchiveHeaders("archive-headers",
-                         cl::desc("Print archive headers for Mach-O archives "
-                                  "(requires -macho)"));
-
-cl::opt<bool>
     ArchiveMemberOffsets("archive-member-offsets",
                          cl::desc("Print the offset to each archive member for "
                                   "Mach-O archives (requires -macho and "
@@ -1284,14 +1279,35 @@ static void DumpLiteralPointerSection(MachOObjectFile *O,
   }
 }
 
-static void DumpInitTermPointerSection(MachOObjectFile *O, const char *sect,
+static void DumpInitTermPointerSection(MachOObjectFile *O,
+                                       const SectionRef &Section,
+                                       const char *sect,
                                        uint32_t sect_size, uint64_t sect_addr,
                                        SymbolAddressMap *AddrMap,
                                        bool verbose) {
   uint32_t stride;
   stride = (O->is64Bit()) ? sizeof(uint64_t) : sizeof(uint32_t);
+
+  // Collect the external relocation symbols for the pointers.
+  std::vector<std::pair<uint64_t, SymbolRef>> Relocs;
+  for (const RelocationRef &Reloc : Section.relocations()) {
+    DataRefImpl Rel;
+    MachO::any_relocation_info RE;
+    bool isExtern = false;
+    Rel = Reloc.getRawDataRefImpl();
+    RE = O->getRelocation(Rel);
+    isExtern = O->getPlainRelocationExternal(RE);
+    if (isExtern) {
+      uint64_t RelocOffset = Reloc.getOffset();
+      symbol_iterator RelocSym = Reloc.getSymbol();
+      Relocs.push_back(std::make_pair(RelocOffset, *RelocSym));
+    }
+  }
+  array_pod_sort(Relocs.begin(), Relocs.end());
+
   for (uint32_t i = 0; i < sect_size; i += stride) {
     const char *SymbolName = nullptr;
+    uint64_t p;
     if (O->is64Bit()) {
       outs() << format("0x%016" PRIx64, sect_addr + i * stride) << " ";
       uint64_t pointer_value;
@@ -1299,8 +1315,7 @@ static void DumpInitTermPointerSection(MachOObjectFile *O, const char *sect,
       if (O->isLittleEndian() != sys::IsLittleEndianHost)
         sys::swapByteOrder(pointer_value);
       outs() << format("0x%016" PRIx64, pointer_value);
-      if (verbose)
-        SymbolName = GuessSymbolName(pointer_value, AddrMap);
+      p = pointer_value;
     } else {
       outs() << format("0x%08" PRIx64, sect_addr + i * stride) << " ";
       uint32_t pointer_value;
@@ -1308,11 +1323,25 @@ static void DumpInitTermPointerSection(MachOObjectFile *O, const char *sect,
       if (O->isLittleEndian() != sys::IsLittleEndianHost)
         sys::swapByteOrder(pointer_value);
       outs() << format("0x%08" PRIx32, pointer_value);
-      if (verbose)
-        SymbolName = GuessSymbolName(pointer_value, AddrMap);
+      p = pointer_value;
     }
-    if (SymbolName)
-      outs() << " " << SymbolName;
+    if (verbose) {
+      // First look for an external relocation entry for this pointer.
+      auto Reloc = find_if(Relocs, [&](const std::pair<uint64_t, SymbolRef> &P) {
+        return P.first == i;
+      });
+      if (Reloc != Relocs.end()) {
+        symbol_iterator RelocSym = Reloc->second;
+        Expected<StringRef> SymName = RelocSym->getName();
+        if (!SymName)
+          report_error(O->getFileName(), SymName.takeError());
+        outs() << " " << *SymName;
+      } else {
+        SymbolName = GuessSymbolName(p, AddrMap);
+        if (SymbolName)
+          outs() << " " << SymbolName;
+      }
+    }
     outs() << "\n";
   }
 }
@@ -1463,8 +1492,8 @@ static void DumpSectionContents(StringRef Filename, MachOObjectFile *O,
             break;
           case MachO::S_MOD_INIT_FUNC_POINTERS:
           case MachO::S_MOD_TERM_FUNC_POINTERS:
-            DumpInitTermPointerSection(O, sect, sect_size, sect_addr, &AddrMap,
-                                       verbose);
+            DumpInitTermPointerSection(O, Section, sect, sect_size, sect_addr,
+                                       &AddrMap, verbose);
             break;
           default:
             outs() << "Unknown section type ("
@@ -3200,6 +3229,8 @@ struct imageInfo_t {
 /* masks for objc_image_info.flags */
 #define OBJC_IMAGE_IS_REPLACEMENT (1 << 0)
 #define OBJC_IMAGE_SUPPORTS_GC (1 << 1)
+#define OBJC_IMAGE_IS_SIMULATED (1 << 5)
+#define OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES (1 << 6)
 
 struct message_ref64 {
   uint64_t imp; /* IMP (64-bit pointer) */
@@ -5561,6 +5592,10 @@ static void print_image_info64(SectionRef S, struct DisassembleInfo *info) {
     outs() << " OBJC_IMAGE_IS_REPLACEMENT";
   if (o.flags & OBJC_IMAGE_SUPPORTS_GC)
     outs() << " OBJC_IMAGE_SUPPORTS_GC";
+  if (o.flags & OBJC_IMAGE_IS_SIMULATED)
+    outs() << " OBJC_IMAGE_IS_SIMULATED";
+  if (o.flags & OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES)
+    outs() << " OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES";
   swift_version = (o.flags >> 8) & 0xff;
   if (swift_version != 0) {
     if (swift_version == 1)
@@ -6719,7 +6754,7 @@ static const char *SymbolizerSymbolLookUp(void *DisInfo,
   return SymbolName;
 }
 
-/// \brief Emits the comments that are stored in the CommentStream.
+/// Emits the comments that are stored in the CommentStream.
 /// Each comment in the CommentStream must end with a newline.
 static void emitComments(raw_svector_ostream &CommentStream,
                          SmallString<128> &CommentsToEmit,
@@ -6875,7 +6910,7 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
                         BaseSegmentAddress);
 
   // Sort the symbols by address, just in case they didn't come in that way.
-  std::sort(Symbols.begin(), Symbols.end(), SymbolSorter());
+  llvm::sort(Symbols.begin(), Symbols.end(), SymbolSorter());
 
   // Build a data in code table that is sorted on by the address of each entry.
   uint64_t BaseAddress = 0;
@@ -6911,10 +6946,12 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
         errs() << "llvm-objdump: " << Filename << ": " << EC.message() << '\n';
         return;
       }
-      DbgObj =
-          ObjectFile::createMachOObjectFile(BufOrErr.get()->getMemBufferRef())
-              .get()
-              .release();
+      Expected<std::unique_ptr<MachOObjectFile>> DbgObjCheck =
+          ObjectFile::createMachOObjectFile(BufOrErr.get()->getMemBufferRef());
+
+      if (DbgObjCheck.takeError())
+        report_error(MachOOF->getFileName(), DbgObjCheck.takeError());
+      DbgObj = DbgObjCheck.get().release();
     }
 
     // Setup the DIContext

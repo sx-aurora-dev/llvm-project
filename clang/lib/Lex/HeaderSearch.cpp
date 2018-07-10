@@ -124,7 +124,7 @@ const HeaderMap *HeaderSearch::CreateHeaderMap(const FileEntry *FE) {
   return nullptr;
 }
 
-/// \brief Get filenames for all registered header maps.
+/// Get filenames for all registered header maps.
 void HeaderSearch::getHeaderMapFileNames(
     SmallVectorImpl<std::string> &Names) const {
   for (auto &HM : HeaderMaps)
@@ -211,7 +211,7 @@ Module *HeaderSearch::lookupModule(StringRef ModuleName, bool AllowSearch) {
   // module.private.modulemap that are supposed to define private submodules --
   // may have different flavors of names: FooPrivate, Foo_Private and Foo.Private.
   //
-  // Foo.Private is now depracated in favor of Foo_Private. Users of FooPrivate
+  // Foo.Private is now deprecated in favor of Foo_Private. Users of FooPrivate
   // should also rename to Foo_Private. Representing private as submodules
   // could force building unwanted dependencies into the parent module and cause
   // dependency cycles.
@@ -404,7 +404,7 @@ const FileEntry *DirectoryLookup::LookupFile(
   return Result;
 }
 
-/// \brief Given a framework directory, find the top-most framework directory.
+/// Given a framework directory, find the top-most framework directory.
 ///
 /// \param FileMgr The file manager to use for directory lookups.
 /// \param DirName The name of the framework directory.
@@ -600,7 +600,7 @@ void HeaderSearch::setTarget(const TargetInfo &Target) {
 // Header File Location.
 //===----------------------------------------------------------------------===//
 
-/// \brief Return true with a diagnostic if the file that MSVC would have found
+/// Return true with a diagnostic if the file that MSVC would have found
 /// fails to match the one that Clang would have found with MSVC header search
 /// disabled.
 static bool checkMSVCHeaderSearch(DiagnosticsEngine &Diags,
@@ -619,6 +619,74 @@ static const char *copyString(StringRef Str, llvm::BumpPtrAllocator &Alloc) {
   std::copy(Str.begin(), Str.end(), CopyStr);
   CopyStr[Str.size()] = '\0';
   return CopyStr;
+}
+
+static bool isFrameworkStylePath(StringRef Path, bool &IsPrivateHeader,
+                                 SmallVectorImpl<char> &FrameworkName) {
+  using namespace llvm::sys;
+  path::const_iterator I = path::begin(Path);
+  path::const_iterator E = path::end(Path);
+  IsPrivateHeader = false;
+
+  // Detect different types of framework style paths:
+  //
+  //   ...Foo.framework/{Headers,PrivateHeaders}
+  //   ...Foo.framework/Versions/{A,Current}/{Headers,PrivateHeaders}
+  //   ...Foo.framework/Frameworks/Nested.framework/{Headers,PrivateHeaders}
+  //   ...<other variations with 'Versions' like in the above path>
+  //
+  // and some other variations among these lines.
+  int FoundComp = 0;
+  while (I != E) {
+    if (*I == "Headers")
+      ++FoundComp;
+    if (I->endswith(".framework")) {
+      FrameworkName.append(I->begin(), I->end());
+      ++FoundComp;
+    }
+    if (*I == "PrivateHeaders") {
+      ++FoundComp;
+      IsPrivateHeader = true;
+    }
+    ++I;
+  }
+
+  return FoundComp >= 2;
+}
+
+static void
+diagnoseFrameworkInclude(DiagnosticsEngine &Diags, SourceLocation IncludeLoc,
+                         StringRef Includer, StringRef IncludeFilename,
+                         const FileEntry *IncludeFE, bool isAngled = false,
+                         bool FoundByHeaderMap = false) {
+  bool IsIncluderPrivateHeader = false;
+  SmallString<128> FromFramework, ToFramework;
+  if (!isFrameworkStylePath(Includer, IsIncluderPrivateHeader, FromFramework))
+    return;
+  bool IsIncludeePrivateHeader = false;
+  bool IsIncludeeInFramework = isFrameworkStylePath(
+      IncludeFE->getName(), IsIncludeePrivateHeader, ToFramework);
+
+  if (!isAngled && !FoundByHeaderMap) {
+    SmallString<128> NewInclude("<");
+    if (IsIncludeeInFramework) {
+      NewInclude += StringRef(ToFramework).drop_back(10); // drop .framework
+      NewInclude += "/";
+    }
+    NewInclude += IncludeFilename;
+    NewInclude += ">";
+    Diags.Report(IncludeLoc, diag::warn_quoted_include_in_framework_header)
+        << IncludeFilename
+        << FixItHint::CreateReplacement(IncludeLoc, NewInclude);
+  }
+
+  // Headers in Foo.framework/Headers should not include headers
+  // from Foo.framework/PrivateHeaders, since this violates public/private
+  // API boundaries and can cause modular dependency cycles.
+  if (!IsIncluderPrivateHeader && IsIncludeeInFramework &&
+      IsIncludeePrivateHeader && FromFramework == ToFramework)
+    Diags.Report(IncludeLoc, diag::warn_framework_include_private_from_public)
+        << IncludeFilename;
 }
 
 /// LookupFile - Given a "foo" or \<foo> reference, look up the indicated file,
@@ -722,8 +790,12 @@ const FileEntry *HeaderSearch::LookupFile(
           RelativePath->clear();
           RelativePath->append(Filename.begin(), Filename.end());
         }
-        if (First)
+        if (First) {
+          diagnoseFrameworkInclude(Diags, IncludeLoc,
+                                   IncluderAndDir.second->getName(), Filename,
+                                   FE);
           return FE;
+        }
 
         // Otherwise, we found the path via MSVC header search rules.  If
         // -Wmsvc-include is enabled, we have to keep searching to see if we
@@ -833,6 +905,12 @@ const FileEntry *HeaderSearch::LookupFile(
         *SuggestedModule = MSSuggestedModule;
       return MSFE;
     }
+
+    bool FoundByHeaderMap = !IsMapped ? false : *IsMapped;
+    if (!Includers.empty())
+      diagnoseFrameworkInclude(Diags, IncludeLoc,
+                               Includers.front().second->getName(), Filename,
+                               FE, isAngled, FoundByHeaderMap);
 
     // Remember this location for the next lookup we do.
     CacheLookup.HitIdx = i;
@@ -996,7 +1074,7 @@ LookupSubframeworkHeader(StringRef Filename,
 // File Info Management.
 //===----------------------------------------------------------------------===//
 
-/// \brief Merge the header file info provided by \p OtherHFI into the current
+/// Merge the header file info provided by \p OtherHFI into the current
 /// header file info (\p HFI)
 static void mergeHeaderFileInfo(HeaderFileInfo &HFI, 
                                 const HeaderFileInfo &OtherHFI) {

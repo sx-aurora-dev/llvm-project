@@ -122,11 +122,11 @@ namespace X86Local {
   };
 
   enum {
-    OB = 0, TB = 1, T8 = 2, TA = 3, XOP8 = 4, XOP9 = 5, XOPA = 6
+    OB = 0, TB = 1, T8 = 2, TA = 3, XOP8 = 4, XOP9 = 5, XOPA = 6, ThreeDNow = 7
   };
 
   enum {
-    PS = 1, PD = 2, XS = 3, XD = 4
+    PD = 1, XS = 2, XD = 3, PS = 4
   };
 
   enum {
@@ -142,7 +142,7 @@ namespace X86Local {
   };
 
   enum {
-    VEX_W0 = 0, VEX_W1 = 1, VEX_WIG = 2
+    VEX_W0 = 0, VEX_W1 = 1, VEX_WIG = 2, VEX_W1X = 3
   };
 }
 
@@ -191,8 +191,6 @@ private:
   bool HasEVEX_KZ;
   /// The hasEVEX_B field from the record
   bool HasEVEX_B;
-  /// The has3DNow0F0FOpcode field from the record
-  bool Has3DNow0F0FOpcode;
   /// Indicates that the instruction uses the L and L' fields for RC.
   bool EncodeRC;
   /// The isCodeGenOnly field from the record
@@ -274,7 +272,7 @@ private:
   static OperandEncoding writemaskRegisterEncodingFromString(const std::string &s,
                                                              uint8_t OpSize);
 
-  /// \brief Adjust the encoding type for an operand based on the instruction.
+  /// Adjust the encoding type for an operand based on the instruction.
   void adjustOperandEncoding(OperandEncoding &encoding);
 
   /// handleOperand - Converts a single operand from the LLVM table format to

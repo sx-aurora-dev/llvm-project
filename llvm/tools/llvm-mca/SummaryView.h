@@ -14,82 +14,63 @@
 /// performance throughput. Below is an example of summary view:
 ///
 ///
-/// Iterations:     300
-/// Instructions:   900
-/// Total Cycles:   610
-/// Dispatch Width: 2
-/// IPC:            1.48
+/// Iterations:        300
+/// Instructions:      900
+/// Total Cycles:      610
+/// Dispatch Width:    2
+/// IPC:               1.48
+/// Block RThroughput: 2.0
 ///
-///
-/// Instruction Info:
-/// [1]: #uOps
-/// [2]: Latency
-/// [3]: RThroughput
-/// [4]: MayLoad
-/// [5]: MayStore
-/// [6]: HasSideEffects
-///
-/// [1]    [2]    [3]    [4]    [5]    [6]	Instructions:
-///  1      2     1.00                    	vmulps	%xmm0, %xmm1, %xmm2
-///  1      3     1.00                    	vhaddps	%xmm2, %xmm2, %xmm3
-///  1      3     1.00                    	vhaddps	%xmm3, %xmm3, %xmm4
-///
-/// The summary view is structured in two sections.
-///
-/// The first section collects a a few performance numbers. The two main
+/// The summary view collects a few performance numbers. The two main
 /// performance indicators are 'Total Cycles' and IPC (Instructions Per Cycle).
-///
-/// The second section shows the latency and reciprocal throughput of every
-/// instruction in the sequence. This section also reports extra informaton
-/// related to the number of micro opcodes, and opcode properties (i.e.
-/// 'MayLoad', 'MayStore', 'HasSideEffects)
 ///
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_TOOLS_LLVM_MCA_SUMMARYVIEW_H
 #define LLVM_TOOLS_LLVM_MCA_SUMMARYVIEW_H
 
-#include "Backend.h"
+#include "SourceMgr.h"
 #include "View.h"
-#include "llvm/MC/MCInstPrinter.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/MC/MCSchedule.h"
 #include "llvm/Support/raw_ostream.h"
-
-#define DEBUG_TYPE "llvm-mca"
 
 namespace mca {
 
-/// \brief A printer class that knows how to collects statistics on the
-/// code analyzed by the llvm-mca tool.
-///
-/// This class knows how to print out the analysis information collected
-/// during the execution of the code. Internally, it delegates to other
-/// classes the task of printing out timeline information as well as
-/// resource pressure.
+/// A view that collects and prints a few performance numbers.
 class SummaryView : public View {
-  const Backend &B;
-  llvm::MCInstPrinter &MCIP;
-  const unsigned Iterations;
-  const unsigned Instructions;
+  const llvm::MCSchedModel &SM;
+  const SourceMgr &Source;
   const unsigned DispatchWidth;
   unsigned TotalCycles;
+  // The total number of micro opcodes contributed by a block of instructions.
+  unsigned NumMicroOps;
+  // For each processor resource, this vector stores the cumulative number of
+  // resource cycles consumed by the analyzed code block.
+  llvm::SmallVector<unsigned, 8> ProcResourceUsage;
 
-  void printSummary(llvm::raw_ostream &OS) const;
-  void printInstructionInfo(llvm::raw_ostream &OS) const;
+  // Each processor resource is associated with a so-called processor resource
+  // mask. This vector allows to correlate processor resource IDs with processor
+  // resource masks. There is exactly one element per each processor resource
+  // declared by the scheduling model.
+  llvm::SmallVector<uint64_t, 8> ProcResourceMasks;
+
+  // Compute the reciprocal throughput for the analyzed code block.
+  // The reciprocal block throughput is computed as the MAX between:
+  //   - NumMicroOps / DispatchWidth
+  //   - Total Resource Cycles / #Units   (for every resource consumed).
+  double getBlockRThroughput() const;
 
 public:
-  SummaryView(const Backend &backend, llvm::MCInstPrinter &IP,
-              unsigned NumIterations, unsigned NumInstructions, unsigned Width)
-      : B(backend), MCIP(IP), Iterations(NumIterations),
-        Instructions(NumInstructions), DispatchWidth(Width), TotalCycles(0) {}
+  SummaryView(const llvm::MCSchedModel &Model, const SourceMgr &S,
+              unsigned Width);
 
-  void onCycleEnd(unsigned /* unused */) override { ++TotalCycles; }
+  void onCycleEnd() override { ++TotalCycles; }
 
-  void printView(llvm::raw_ostream &OS) const override {
-    printSummary(OS);
-    printInstructionInfo(OS);
-  }
+  void onInstructionEvent(const HWInstructionEvent &Event) override;
+
+  void printView(llvm::raw_ostream &OS) const override;
 };
-
 } // namespace mca
 
 #endif

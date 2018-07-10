@@ -67,7 +67,7 @@ class CGDebugInfo {
   llvm::DIType *ClassTy = nullptr;
   llvm::DICompositeType *ObjTy = nullptr;
   llvm::DIType *SelTy = nullptr;
-#define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
+#define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix)                   \
   llvm::DIType *SingletonId = nullptr;
 #include "clang/Basic/OpenCLImageTypes.def"
   llvm::DIType *OCLSamplerDITy = nullptr;
@@ -97,6 +97,10 @@ class CGDebugInfo {
 
   /// Cache of previously constructed interfaces which may change.
   llvm::SmallVector<ObjCInterfaceCacheEntry, 32> ObjCInterfaceCache;
+
+  /// Cache of forward declarations for methods belonging to the interface.
+  llvm::DenseMap<const ObjCInterfaceDecl *, std::vector<llvm::DISubprogram *>>
+      ObjCMethodCache;
 
   /// Cache of references to clang modules and precompiled headers.
   llvm::DenseMap<const Module *, llvm::TrackingMDRef> ModuleCache;
@@ -228,12 +232,12 @@ class CGDebugInfo {
 
   /// Helper function for CollectCXXBases.
   /// Adds debug info entries for types in Bases that are not in SeenTypes.
-  void CollectCXXBasesAux(const CXXRecordDecl *RD, llvm::DIFile *Unit,
-                          SmallVectorImpl<llvm::Metadata *> &EltTys,
-                          llvm::DIType *RecordTy,
-                          const CXXRecordDecl::base_class_const_range &Bases,
-                          llvm::DenseSet<CanonicalDeclPtr<const CXXRecordDecl>> &SeenTypes,
-                          llvm::DINode::DIFlags StartingFlags);
+  void CollectCXXBasesAux(
+      const CXXRecordDecl *RD, llvm::DIFile *Unit,
+      SmallVectorImpl<llvm::Metadata *> &EltTys, llvm::DIType *RecordTy,
+      const CXXRecordDecl::base_class_const_range &Bases,
+      llvm::DenseSet<CanonicalDeclPtr<const CXXRecordDecl>> &SeenTypes,
+      llvm::DINode::DIFlags StartingFlags);
 
   /// A helper function to collect template parameters.
   llvm::DINodeArray CollectTemplateParams(const TemplateParameterList *TPList,
@@ -252,8 +256,7 @@ class CGDebugInfo {
 
   llvm::DIType *createFieldType(StringRef name, QualType type,
                                 SourceLocation loc, AccessSpecifier AS,
-                                uint64_t offsetInBits,
-                                uint32_t AlignInBits,
+                                uint64_t offsetInBits, uint32_t AlignInBits,
                                 llvm::DIFile *tunit, llvm::DIScope *scope,
                                 const RecordDecl *RD = nullptr);
 
@@ -366,7 +369,8 @@ public:
   /// \param ScopeLoc  The location of the function body.
   void EmitFunctionStart(GlobalDecl GD, SourceLocation Loc,
                          SourceLocation ScopeLoc, QualType FnType,
-                         llvm::Function *Fn, CGBuilderTy &Builder);
+                         llvm::Function *Fn, bool CurFnIsThunk,
+                         CGBuilderTy &Builder);
 
   /// Start a new scope for an inlined function.
   void EmitInlineFunctionStart(CGBuilderTy &Builder, GlobalDecl GD);
@@ -397,11 +401,9 @@ public:
 
   /// Emit call to \c llvm.dbg.declare for an imported variable
   /// declaration in a block.
-  void EmitDeclareOfBlockDeclRefVariable(const VarDecl *variable,
-                                         llvm::Value *storage,
-                                         CGBuilderTy &Builder,
-                                         const CGBlockInfo &blockInfo,
-                                         llvm::Instruction *InsertPoint = nullptr);
+  void EmitDeclareOfBlockDeclRefVariable(
+      const VarDecl *variable, llvm::Value *storage, CGBuilderTy &Builder,
+      const CGBlockInfo &blockInfo, llvm::Instruction *InsertPoint = nullptr);
 
   /// Emit call to \c llvm.dbg.declare for an argument variable
   /// declaration.
@@ -657,7 +659,7 @@ public:
 
   ~ApplyDebugLocation();
 
-  /// \brief Apply TemporaryLocation if it is valid. Otherwise switch
+  /// Apply TemporaryLocation if it is valid. Otherwise switch
   /// to an artificial debug location that has a valid scope, but no
   /// line information.
   ///
@@ -671,7 +673,7 @@ public:
   static ApplyDebugLocation CreateArtificial(CodeGenFunction &CGF) {
     return ApplyDebugLocation(CGF, false, SourceLocation());
   }
-  /// \brief Apply TemporaryLocation if it is valid. Otherwise switch
+  /// Apply TemporaryLocation if it is valid. Otherwise switch
   /// to an artificial debug location that has a valid scope, but no
   /// line information.
   static ApplyDebugLocation
@@ -688,7 +690,6 @@ public:
   static ApplyDebugLocation CreateEmpty(CodeGenFunction &CGF) {
     return ApplyDebugLocation(CGF, true, SourceLocation());
   }
-
 };
 
 /// A scoped helper to set the current debug location to an inlined location.

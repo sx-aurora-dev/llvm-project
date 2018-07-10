@@ -56,6 +56,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
@@ -90,7 +91,6 @@
 #include "llvm/Support/SpecialCaseList.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -539,8 +539,7 @@ TransformedFunction DataFlowSanitizer::getCustomFunctionType(FunctionType *T) {
 bool DataFlowSanitizer::doInitialization(Module &M) {
   Triple TargetTriple(M.getTargetTriple());
   bool IsX86_64 = TargetTriple.getArch() == Triple::x86_64;
-  bool IsMIPS64 = TargetTriple.getArch() == Triple::mips64 ||
-                  TargetTriple.getArch() == Triple::mips64el;
+  bool IsMIPS64 = TargetTriple.isMIPS64();
   bool IsAArch64 = TargetTriple.getArch() == Triple::aarch64 ||
                    TargetTriple.getArch() == Triple::aarch64_be;
 
@@ -859,9 +858,17 @@ bool DataFlowSanitizer::runOnModule(Module &M) {
       FunctionType *NewFT = getInstrumentedABI() == IA_Args
                                 ? getArgsFunctionType(FT)
                                 : FT;
+
+      // If the function being wrapped has local linkage, then preserve the
+      // function's linkage in the wrapper function.
+      GlobalValue::LinkageTypes wrapperLinkage =
+          F.hasLocalLinkage()
+              ? F.getLinkage()
+              : GlobalValue::LinkOnceODRLinkage;
+
       Function *NewF = buildWrapperFunction(
           &F, std::string("dfsw$") + std::string(F.getName()),
-          GlobalValue::LinkOnceODRLinkage, NewFT);
+          wrapperLinkage, NewFT);
       if (getInstrumentedABI() == IA_TLS)
         NewF->removeAttributes(AttributeList::FunctionIndex, ReadOnlyNoneAttrs);
 

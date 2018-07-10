@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <inttypes.h>
+
 // cuda includes
 #include <cuda.h>
 #include <math.h>
@@ -62,6 +64,46 @@
 #define __ACTIVEMASK() __ballot(1)
 #endif
 
+// arguments needed for L0 parallelism only.
+class omptarget_nvptx_SharedArgs {
+public:
+  // All these methods must be called by the master thread only.
+  INLINE void Init() {
+    args  = buffer;
+    nArgs = MAX_SHARED_ARGS;
+  }
+  INLINE void DeInit() {
+    // Free any memory allocated for outlined parallel function with a large
+    // number of arguments.
+    if (nArgs > MAX_SHARED_ARGS) {
+      SafeFree(args, (char *)"new extended args");
+      Init();
+    }
+  }
+  INLINE void EnsureSize(size_t size) {
+    if (size > nArgs) {
+      if (nArgs > MAX_SHARED_ARGS) {
+        SafeFree(args, (char *)"new extended args");
+      }
+      args = (void **) SafeMalloc(size * sizeof(void *),
+                                  (char *)"new extended args");
+      nArgs = size;
+    }
+  }
+  // Called by all threads.
+  INLINE void **GetArgs() { return args; };
+private:
+  // buffer of pre-allocated arguments.
+  void *buffer[MAX_SHARED_ARGS];
+  // pointer to arguments buffer.
+  // starts off as a pointer to 'buffer' but can be dynamically allocated.
+  void **args;
+  // starts off as MAX_SHARED_ARGS but can increase in size.
+  uint32_t nArgs;
+};
+
+extern __device__ __shared__ omptarget_nvptx_SharedArgs omptarget_nvptx_globalArgs;
+
 // Data sharing related quantities, need to match what is used in the compiler.
 enum DATA_SHARING_SIZES {
   // The maximum number of workers in a kernel.
@@ -80,6 +122,7 @@ enum DATA_SHARING_SIZES {
 struct DataSharingStateTy {
   __kmpc_data_sharing_slot *SlotPtr[DS_Max_Warp_Number];
   void *StackPtr[DS_Max_Warp_Number];
+  __kmpc_data_sharing_slot *TailPtr[DS_Max_Warp_Number];
   void *FramePtr[DS_Max_Warp_Number];
   int32_t ActiveThreads[DS_Max_Warp_Number];
 };
@@ -87,6 +130,8 @@ struct DataSharingStateTy {
 // size of 4*32 bytes.
 struct __kmpc_data_sharing_worker_slot_static {
   __kmpc_data_sharing_slot *Next;
+  __kmpc_data_sharing_slot *Prev;
+  void *PrevSlotStackPtr;
   void *DataEnd;
   char Data[DS_Worker_Warp_Slot_Size];
 };
@@ -94,6 +139,8 @@ struct __kmpc_data_sharing_worker_slot_static {
 // size of 4 bytes.
 struct __kmpc_data_sharing_master_slot_static {
   __kmpc_data_sharing_slot *Next;
+  __kmpc_data_sharing_slot *Prev;
+  void *PrevSlotStackPtr;
   void *DataEnd;
   char Data[DS_Slot_Size];
 };
@@ -214,23 +261,34 @@ public:
   // init
   INLINE void InitTeamDescr();
 
-  INLINE __kmpc_data_sharing_slot *RootS(int wid) {
+  INLINE __kmpc_data_sharing_slot *RootS(int wid, bool IsMasterThread) {
     // If this is invoked by the master thread of the master warp then intialize
     // it with a smaller slot.
-    if (wid == WARPSIZE - 1) {
+    if (IsMasterThread) {
+      // Do not initalize this slot again if it has already been initalized.
+      if (master_rootS[0].DataEnd == &master_rootS[0].Data[0] + DS_Slot_Size)
+        return 0;
       // Initialize the pointer to the end of the slot given the size of the
       // data section. DataEnd is non-inclusive.
       master_rootS[0].DataEnd = &master_rootS[0].Data[0] + DS_Slot_Size;
       // We currently do not have a next slot.
       master_rootS[0].Next = 0;
+      master_rootS[0].Prev = 0;
+      master_rootS[0].PrevSlotStackPtr = 0;
       return (__kmpc_data_sharing_slot *)&master_rootS[0];
     }
+    // Do not initalize this slot again if it has already been initalized.
+    if (worker_rootS[wid].DataEnd ==
+        &worker_rootS[wid].Data[0] + DS_Worker_Warp_Slot_Size)
+      return 0;
     // Initialize the pointer to the end of the slot given the size of the data
     // section. DataEnd is non-inclusive.
     worker_rootS[wid].DataEnd =
         &worker_rootS[wid].Data[0] + DS_Worker_Warp_Slot_Size;
     // We currently do not have a next slot.
     worker_rootS[wid].Next = 0;
+    worker_rootS[wid].Prev = 0;
+    worker_rootS[wid].PrevSlotStackPtr = 0;
     return (__kmpc_data_sharing_slot *)&worker_rootS[wid];
   }
 
@@ -320,6 +378,19 @@ private:
   // Queue to which this object must be returned.
   uint64_t SourceQueue;
 };
+
+/// Device envrionment data
+struct omptarget_device_environmentTy {
+  int32_t debug_level;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// global device envrionment
+////////////////////////////////////////////////////////////////////////////////
+
+extern __device__ omptarget_device_environmentTy omptarget_device_environment;
+
+////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 // global data tables

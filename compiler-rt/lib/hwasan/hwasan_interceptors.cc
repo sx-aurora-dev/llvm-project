@@ -17,8 +17,10 @@
 
 #include "interception/interception.h"
 #include "hwasan.h"
+#include "hwasan_mapping.h"
 #include "hwasan_thread.h"
 #include "hwasan_poisoning.h"
+#include "hwasan_report.h"
 #include "sanitizer_common/sanitizer_platform_limits_posix.h"
 #include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_allocator_interface.h"
@@ -258,6 +260,8 @@ INTERCEPTOR(void *, realloc, void *ptr, SIZE_T size) {
 
 INTERCEPTOR(void *, malloc, SIZE_T size) {
   GET_MALLOC_STACK_TRACE;
+  if (UNLIKELY(!hwasan_init_is_running))
+    ENSURE_HWASAN_INITED();
   if (UNLIKELY(!hwasan_inited))
     // Hack: dlsym calls malloc before REAL(malloc) is retrieved from dlsym.
     return AllocateFromLocalPool(size);

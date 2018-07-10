@@ -33,7 +33,7 @@
 
 namespace llvm {
 
-/// \brief Enumerate the SCCs of a directed graph in reverse topological order
+/// Enumerate the SCCs of a directed graph in reverse topological order
 /// of the SCC DAG.
 ///
 /// This is implemented using Tarjan's DFS algorithm using an internal stack to
@@ -90,6 +90,7 @@ class scc_iterator : public iterator_facade_base<
   /// Compute the next SCC using the DFS traversal.
   void GetNextSCC();
 
+public:
   scc_iterator(NodeRef entryN) : visitNum(0) {
     DFSVisitOne(entryN);
     GetNextSCC();
@@ -98,13 +99,7 @@ class scc_iterator : public iterator_facade_base<
   /// End is when the DFS stack is empty.
   scc_iterator() = default;
 
-public:
-  static scc_iterator begin(const GraphT &G) {
-    return scc_iterator(GT::getEntryNode(G));
-  }
-  static scc_iterator end(const GraphT &) { return scc_iterator(); }
-
-  /// \brief Direct loop termination test which is more efficient than
+  /// Direct loop termination test which is more efficient than
   /// comparison with \c end().
   bool isAtEnd() const {
     assert(!CurrentSCC.empty() || VisitStack.empty());
@@ -125,7 +120,7 @@ public:
     return CurrentSCC;
   }
 
-  /// \brief Test if the current SCC has a loop.
+  /// Test if the current SCC has a loop.
   ///
   /// If the SCC has more than one node, this is trivially true.  If not, it may
   /// still contain a loop if the node has an edge back to itself.
@@ -222,15 +217,24 @@ bool scc_iterator<GraphT, GT>::hasLoop() const {
     return false;
   }
 
-/// \brief Construct the begin iterator for a deduced graph type T.
+/// Construct the begin iterator for a deduced graph type T, starting from its
+/// entry node.
 template <class T> scc_iterator<T> scc_begin(const T &G) {
-  return scc_iterator<T>::begin(G);
+  return scc_iterator<T>(GraphTraits<T>::getEntryNode(G));
 }
 
-/// \brief Construct the end iterator for a deduced graph type T.
-template <class T> scc_iterator<T> scc_end(const T &G) {
-  return scc_iterator<T>::end(G);
+/// Construct the begin iterator for a graph type T, starting from the specified
+/// node.
+template <class T, class U = GraphTraits<T>>
+scc_iterator<T, U> scc_begin(typename U::NodeRef N) {
+  return scc_iterator<T>(N);
 }
+
+  /// Construct the end iterator for a deduced graph type T.
+template <class T> scc_iterator<T> scc_end(const T &G) {
+  return scc_iterator<T>();
+}
+
 
 } // end namespace llvm
 

@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file converts any remaining registers into WebAssembly locals.
+/// This file converts any remaining registers into WebAssembly locals.
 ///
 /// After register stackification and register coloring, convert non-stackified
 /// registers into locals, inserting explicit get_local and set_local
@@ -60,6 +60,9 @@ public:
 } // end anonymous namespace
 
 char WebAssemblyExplicitLocals::ID = 0;
+INITIALIZE_PASS(WebAssemblyExplicitLocals, DEBUG_TYPE,
+                "Convert registers to WebAssembly locals", false, false)
+
 FunctionPass *llvm::createWebAssemblyExplicitLocals() {
   return new WebAssemblyExplicitLocals();
 }
@@ -178,9 +181,9 @@ static MachineInstr *FindStartOfTree(MachineOperand &MO,
 }
 
 bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG(dbgs() << "********** Make Locals Explicit **********\n"
-                  "********** Function: "
-               << MF.getName() << '\n');
+  LLVM_DEBUG(dbgs() << "********** Make Locals Explicit **********\n"
+                       "********** Function: "
+                    << MF.getName() << '\n');
 
   // Disable this pass if directed to do so.
   if (DisableWebAssemblyExplicitLocals)
@@ -228,7 +231,7 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr &MI = *I++;
       assert(!WebAssembly::isArgument(MI));
 
-      if (MI.isDebugValue() || MI.isLabel())
+      if (MI.isDebugInstr() || MI.isLabel())
         continue;
 
       // Replace tee instructions with tee_local. The difference is that tee
@@ -281,8 +284,11 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
           }
           if (UseEmpty[TargetRegisterInfo::virtReg2Index(OldReg)]) {
             unsigned Opc = getDropOpcode(RC);
-            BuildMI(MBB, InsertPt, MI.getDebugLoc(), TII->get(Opc))
-                .addReg(NewReg);
+            MachineInstr *Drop =
+                BuildMI(MBB, InsertPt, MI.getDebugLoc(), TII->get(Opc))
+                    .addReg(NewReg);
+            // After the drop instruction, this reg operand will not be used
+            Drop->getOperand(0).setIsKill();
           } else {
             unsigned LocalId = getLocalId(Reg2Local, CurLocal, OldReg);
             unsigned Opc = getSetLocalOpcode(RC);
@@ -291,6 +297,9 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
                 .addReg(NewReg);
           }
           MI.getOperand(0).setReg(NewReg);
+          // This register operand is now being used by the inserted drop
+          // instruction, so make it undead.
+          MI.getOperand(0).setIsDead(false);
           MFI.stackifyVReg(NewReg);
           Changed = true;
         }
@@ -372,7 +381,7 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
   // Assert that all registers have been stackified at this point.
   for (const MachineBasicBlock &MBB : MF) {
     for (const MachineInstr &MI : MBB) {
-      if (MI.isDebugValue() || MI.isLabel())
+      if (MI.isDebugInstr() || MI.isLabel())
         continue;
       for (const MachineOperand &MO : MI.explicit_operands()) {
         assert(

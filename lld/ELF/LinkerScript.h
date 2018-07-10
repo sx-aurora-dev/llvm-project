@@ -75,7 +75,6 @@ enum SectionsCommandKind {
   AssignmentKind, // . = expr or <sym> = expr
   OutputSectionKind,
   InputSectionKind,
-  AssertKind, // ASSERT(expr)
   ByteKind    // BYTE(expr), SHORT(expr), LONG(expr) or QUAD(expr)
 };
 
@@ -106,6 +105,16 @@ struct SymbolAssignment : BaseCommand {
 
   // Holds file name and line number for error reporting.
   std::string Location;
+
+  // A string representation of this command. We use this for -Map.
+  std::string CommandString;
+
+  // Address of this assignment command.
+  unsigned Addr;
+
+  // Size of this assignment command. This is usually 0, but if
+  // you move '.' this may be greater than 0.
+  unsigned Size;
 };
 
 // Linker scripts allow additional constraints to be put on ouput sections.
@@ -167,24 +176,23 @@ struct InputSectionDescription : BaseCommand {
   std::vector<std::pair<ThunkSection *, uint32_t>> ThunkSections;
 };
 
-// Represents an ASSERT().
-struct AssertCommand : BaseCommand {
-  AssertCommand(Expr E) : BaseCommand(AssertKind), Expression(E) {}
-
-  static bool classof(const BaseCommand *C) { return C->Kind == AssertKind; }
-
-  Expr Expression;
-};
-
 // Represents BYTE(), SHORT(), LONG(), or QUAD().
 struct ByteCommand : BaseCommand {
-  ByteCommand(Expr E, unsigned Size)
-      : BaseCommand(ByteKind), Expression(E), Size(Size) {}
+  ByteCommand(Expr E, unsigned Size, std::string CommandString)
+      : BaseCommand(ByteKind), CommandString(CommandString), Expression(E),
+        Size(Size) {}
 
   static bool classof(const BaseCommand *C) { return C->Kind == ByteKind; }
 
+  // Keeps string representing the command. Used for -Map" is perhaps better.
+  std::string CommandString;
+
   Expr Expression;
+
+  // This is just an offset of this assignment command in the output section.
   unsigned Offset;
+
+  // Size of this data command.
   unsigned Size;
 };
 
@@ -216,6 +224,7 @@ class LinkerScript final {
   void assignSymbol(SymbolAssignment *Cmd, bool InSec);
   void setDot(Expr E, const Twine &Loc, bool InSec);
   void expandOutputSection(uint64_t Size);
+  void expandMemoryRegions(uint64_t Size);
 
   std::vector<InputSection *>
   computeInputSections(const InputSectionDescription *);
@@ -289,9 +298,10 @@ public:
   // A list of symbols referenced by the script.
   std::vector<llvm::StringRef> ReferencedSymbols;
 
-  // Used to implement INSERT AFTER. Contains commands that need
+  // Used to implement INSERT [AFTER|BEFORE]. Contains commands that need
   // to be inserted into SECTIONS commands list.
   llvm::DenseMap<StringRef, std::vector<BaseCommand *>> InsertAfterCommands;
+  llvm::DenseMap<StringRef, std::vector<BaseCommand *>> InsertBeforeCommands;
 };
 
 extern LinkerScript *Script;

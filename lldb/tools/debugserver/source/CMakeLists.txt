@@ -77,7 +77,7 @@ set(lldbDebugserverCommonSources
   RNBSocket.cpp
   SysSignal.cpp
   TTYState.cpp
-  
+
   MacOSX/CFBundle.cpp
   MacOSX/CFString.cpp
   MacOSX/Genealogy.cpp
@@ -99,15 +99,22 @@ set(LLDB_CODESIGN_IDENTITY "lldb_codesign"
   CACHE STRING "Identity used for code signing. Set to empty string to skip the signing step.")
 
 if(NOT LLDB_CODESIGN_IDENTITY STREQUAL "")
-  set(DEBUGSERVER_PATH $<TARGET_FILE:debugserver> CACHE PATH "Path to debugserver.")
+  set(DEBUGSERVER_PATH ${LLVM_RUNTIME_OUTPUT_INTDIR}/debugserver${CMAKE_EXECUTABLE_SUFFIX} CACHE PATH "Path to debugserver.")
   set(SKIP_DEBUGSERVER OFF CACHE BOOL "Skip building the in-tree debug server")
 else()
   execute_process(
     COMMAND xcode-select -p
     OUTPUT_VARIABLE XCODE_DEV_DIR)
   string(STRIP ${XCODE_DEV_DIR} XCODE_DEV_DIR)
-  set(DEBUGSERVER_PATH
-    "${XCODE_DEV_DIR}/../SharedFrameworks/LLDB.framework/Resources/debugserver" CACHE PATH "Path to debugserver.")
+  if(EXISTS "${XCODE_DEV_DIR}/../SharedFrameworks/LLDB.framework/")
+    set(DEBUGSERVER_PATH
+      "${XCODE_DEV_DIR}/../SharedFrameworks/LLDB.framework/Resources/debugserver" CACHE PATH "Path to debugserver.")
+  elseif(EXISTS "${XCODE_DEV_DIR}/Library/PrivateFrameworks/LLDB.framework/")
+    set(DEBUGSERVER_PATH
+      "${XCODE_DEV_DIR}/Library/PrivateFrameworks/LLDB.framework/Resources/debugserver" CACHE PATH "Path to debugserver.")
+  else()
+    message(SEND_ERROR "Cannot find debugserver on system.")
+  endif()
   set(SKIP_DEBUGSERVER ON CACHE BOOL "Skip building the in-tree debug server")
 endif()
 message(STATUS "Path to the lldb debugserver: ${DEBUGSERVER_PATH}")
@@ -154,7 +161,7 @@ if(NOT SKIP_DEBUGSERVER)
                  COMPILE_DEFINITIONS HAVE_LIBCOMPRESSION)
   endif()
   set(LLVM_OPTIONAL_SOURCES ${lldbDebugserverCommonSources})
-  add_lldb_tool(debugserver INCLUDE_IN_FRAMEWORK
+  add_lldb_tool(debugserver INCLUDE_IN_SUITE
     debugserver.cpp
 
     LINK_LIBS
@@ -202,12 +209,11 @@ endif()
 set(entitlements_xml ${CMAKE_CURRENT_SOURCE_DIR}/debugserver-macosx-entitlements.plist)
 if(IOS)
   set(entitlements_xml ${CMAKE_CURRENT_SOURCE_DIR}/debugserver-entitlements.plist)
+else()
+  set(entitlements_xml ${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/debugserver-macosx-entitlements.plist)
 endif()
 
 set(LLDB_USE_ENTITLEMENTS_Default On)
-if("${LLDB_CODESIGN_IDENTITY}" STREQUAL "lldb_codesign")
-  set(LLDB_USE_ENTITLEMENTS_Default Off)
-endif()
 option(LLDB_USE_ENTITLEMENTS "Use entitlements when codesigning (Defaults Off when using lldb_codesign identity, otherwise On)" ${LLDB_USE_ENTITLEMENTS_Default})
 
 if (SKIP_DEBUGSERVER)

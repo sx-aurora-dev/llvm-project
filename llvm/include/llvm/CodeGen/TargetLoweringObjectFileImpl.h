@@ -15,9 +15,9 @@
 #ifndef LLVM_CODEGEN_TARGETLOWERINGOBJECTFILEIMPL_H
 #define LLVM_CODEGEN_TARGETLOWERINGOBJECTFILEIMPL_H
 
-#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCExpr.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
 
 namespace llvm {
 
@@ -42,8 +42,7 @@ public:
   ~TargetLoweringObjectFileELF() override = default;
 
   /// Emit Obj-C garbage collection and linker options.
-  void emitModuleMetadata(MCStreamer &Streamer, Module &M,
-                          const TargetMachine &TM) const override;
+  void emitModuleMetadata(MCStreamer &Streamer, Module &M) const override;
 
   void emitPersonalityValue(MCStreamer &Streamer, const DataLayout &TM,
                             const MCSymbol *Sym) const override;
@@ -98,8 +97,7 @@ public:
   void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 
   /// Emit the module flags that specify the garbage collection information.
-  void emitModuleMetadata(MCStreamer &Streamer, Module &M,
-                          const TargetMachine &TM) const override;
+  void emitModuleMetadata(MCStreamer &Streamer, Module &M) const override;
 
   MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
                                     const TargetMachine &TM) const override;
@@ -153,8 +151,7 @@ public:
                                     const TargetMachine &TM) const override;
 
   /// Emit Obj-C garbage collection and linker options.
-  void emitModuleMetadata(MCStreamer &Streamer, Module &M,
-                          const TargetMachine &TM) const override;
+  void emitModuleMetadata(MCStreamer &Streamer, Module &M) const override;
 
   MCSection *getStaticCtorSection(unsigned Priority,
                                   const MCSymbol *KeySym) const override;
@@ -166,6 +163,16 @@ public:
 
   void emitLinkerFlagsForUsed(raw_ostream &OS,
                               const GlobalValue *GV) const override;
+
+  const MCExpr *lowerRelativeReference(const GlobalValue *LHS,
+                                       const GlobalValue *RHS,
+                                       const TargetMachine &TM) const override;
+
+  /// Given a mergeable constant with the specified size and relocation
+  /// information, return a section that it should be placed in.
+  MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
+                                   const Constant *C,
+                                   unsigned &Align) const override;
 };
 
 class TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {

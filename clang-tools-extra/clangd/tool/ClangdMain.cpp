@@ -18,6 +18,7 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
+#include "clang/Basic/Version.h"
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -33,7 +34,7 @@ enum class PCHStorageFlag { Disk, Memory };
 // Build an in-memory static index for global symbols from a YAML-format file.
 // The size of global symbols should be relatively small, so that all symbols
 // can be managed in memory.
-std::unique_ptr<SymbolIndex> BuildStaticIndex(llvm::StringRef YamlSymbolFile) {
+std::unique_ptr<SymbolIndex> buildStaticIndex(llvm::StringRef YamlSymbolFile) {
   auto Buffer = llvm::MemoryBuffer::getFile(YamlSymbolFile);
   if (!Buffer) {
     llvm::errs() << "Can't open " << YamlSymbolFile << "\n";
@@ -58,6 +59,23 @@ static llvm::cl::opt<unsigned>
     WorkerThreadsCount("j",
                        llvm::cl::desc("Number of async workers used by clangd"),
                        llvm::cl::init(getDefaultAsyncThreadsCount()));
+
+// FIXME: also support "plain" style where signatures are always omitted.
+enum CompletionStyleFlag {
+  Detailed,
+  Bundled,
+};
+static llvm::cl::opt<CompletionStyleFlag> CompletionStyle(
+    "completion-style",
+    llvm::cl::desc("Granularity of code completion suggestions"),
+    llvm::cl::values(
+        clEnumValN(Detailed, "detailed",
+                   "One completion item for each semantically distinct "
+                   "completion, with full type information."),
+        clEnumValN(Bundled, "bundled",
+                   "Similar completion items (e.g. function overloads) are "
+                   "combined. Type information shown where possible.")),
+    llvm::cl::init(Detailed));
 
 // FIXME: Flags are the wrong mechanism for user preferences.
 // We should probably read a dotfile or similar.
@@ -96,9 +114,9 @@ static llvm::cl::opt<PCHStorageFlag> PCHStorage(
         clEnumValN(PCHStorageFlag::Memory, "memory", "store PCHs in memory")),
     llvm::cl::init(PCHStorageFlag::Disk));
 
-static llvm::cl::opt<int> LimitCompletionResult(
-    "completion-limit",
-    llvm::cl::desc("Limit the number of completion results returned by clangd. "
+static llvm::cl::opt<int> LimitResults(
+    "limit-results",
+    llvm::cl::desc("Limit the number of results returned by clangd. "
                    "0 means no limit."),
     llvm::cl::init(100));
 
@@ -118,12 +136,18 @@ static llvm::cl::opt<Path> InputMirrorFile(
         "Mirror all LSP input to the specified file. Useful for debugging."),
     llvm::cl::init(""), llvm::cl::Hidden);
 
-static llvm::cl::opt<bool> EnableIndexBasedCompletion(
-    "enable-index-based-completion",
-    llvm::cl::desc(
-        "Enable index-based global code completion. "
-        "Clang uses an index built from symbols in opened files"),
+static llvm::cl::opt<bool> EnableIndex(
+    "index",
+    llvm::cl::desc("Enable index-based features such as global code completion "
+                   "and searching for symbols."
+                   "Clang uses an index built from symbols in opened files"),
     llvm::cl::init(true));
+
+static llvm::cl::opt<bool>
+    ShowOrigins("debug-origin",
+                llvm::cl::desc("Show origins of completion items"),
+                llvm::cl::init(clangd::CodeCompleteOptions().ShowOrigins),
+                llvm::cl::Hidden);
 
 static llvm::cl::opt<Path> YamlSymbolFile(
     "yaml-symbol-file",
@@ -136,7 +160,16 @@ static llvm::cl::opt<Path> YamlSymbolFile(
 
 int main(int argc, char *argv[]) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
-  llvm::cl::ParseCommandLineOptions(argc, argv, "clangd");
+  llvm::cl::SetVersionPrinter([](llvm::raw_ostream &OS) {
+    OS << clang::getClangToolFullVersion("clangd") << "\n";
+  });
+  llvm::cl::ParseCommandLineOptions(
+      argc, argv,
+      "clangd is a language server that provides IDE-like features to editors. "
+      "\n\nIt should be used via an editor plugin rather than invoked directly."
+      "For more information, see:"
+      "\n\thttps://clang.llvm.org/extra/clangd.html"
+      "\n\thttps://microsoft.github.io/language-server-protocol/");
   if (Test) {
     RunSynchronously = true;
     InputStyle = JSONStreamStyle::Delimited;
@@ -159,7 +192,8 @@ int main(int argc, char *argv[]) {
   llvm::Optional<llvm::raw_fd_ostream> InputMirrorStream;
   if (!InputMirrorFile.empty()) {
     std::error_code EC;
-    InputMirrorStream.emplace(InputMirrorFile, /*ref*/ EC, llvm::sys::fs::F_RW);
+    InputMirrorStream.emplace(InputMirrorFile, /*ref*/ EC,
+                              llvm::sys::fs::FA_Read | llvm::sys::fs::FA_Write);
     if (EC) {
       InputMirrorStream.reset();
       llvm::errs() << "Error while opening an input mirror file: "
@@ -174,7 +208,8 @@ int main(int argc, char *argv[]) {
   std::unique_ptr<trace::EventTracer> Tracer;
   if (auto *TraceFile = getenv("CLANGD_TRACE")) {
     std::error_code EC;
-    TraceStream.emplace(TraceFile, /*ref*/ EC, llvm::sys::fs::F_RW);
+    TraceStream.emplace(TraceFile, /*ref*/ EC,
+                        llvm::sys::fs::FA_Read | llvm::sys::fs::FA_Write);
     if (EC) {
       TraceStream.reset();
       llvm::errs() << "Error while opening trace file " << TraceFile << ": "
@@ -220,17 +255,19 @@ int main(int argc, char *argv[]) {
   }
   if (!ResourceDir.empty())
     Opts.ResourceDir = ResourceDir;
-  Opts.BuildDynamicSymbolIndex = EnableIndexBasedCompletion;
+  Opts.BuildDynamicSymbolIndex = EnableIndex;
   std::unique_ptr<SymbolIndex> StaticIdx;
-  if (EnableIndexBasedCompletion && !YamlSymbolFile.empty()) {
-    StaticIdx = BuildStaticIndex(YamlSymbolFile);
+  if (EnableIndex && !YamlSymbolFile.empty()) {
+    StaticIdx = buildStaticIndex(YamlSymbolFile);
     Opts.StaticIndex = StaticIdx.get();
   }
   Opts.AsyncThreadsCount = WorkerThreadsCount;
 
   clangd::CodeCompleteOptions CCOpts;
   CCOpts.IncludeIneligibleResults = IncludeIneligibleResults;
-  CCOpts.Limit = LimitCompletionResult;
+  CCOpts.Limit = LimitResults;
+  CCOpts.BundleOverloads = CompletionStyle != Detailed;
+  CCOpts.ShowOrigins = ShowOrigins;
 
   // Initialize and run ClangdLSPServer.
   ClangdLSPServer LSPServer(Out, CCOpts, CompileCommandsDirPath, Opts);
@@ -238,5 +275,5 @@ int main(int argc, char *argv[]) {
   llvm::set_thread_name("clangd.main");
   // Change stdin to binary to not lose \r\n on windows.
   llvm::sys::ChangeStdinToBinary();
-  return LSPServer.run(std::cin, InputStyle) ? 0 : NoShutdownRequestErrorCode;
+  return LSPServer.run(stdin, InputStyle) ? 0 : NoShutdownRequestErrorCode;
 }

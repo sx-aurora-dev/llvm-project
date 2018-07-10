@@ -17,6 +17,7 @@
 
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/CallGraph.h"
@@ -62,6 +63,10 @@ public:
   /// Execute all of the passes scheduled for execution.  Keep track of
   /// whether any of the passes modifies the module, and if so, return true.
   bool runOnModule(Module &M) override;
+
+  /// Execute all of the passes scheduled for execution on a given SCC. Return
+  /// true if any passes modify the module.
+  bool runOnSCC(CallGraphSCC &SCC, CallGraph &CG);
 
   using ModulePass::doInitialization;
   using ModulePass::doFinalization;
@@ -120,6 +125,7 @@ bool CGPassManager::RunPassOnSCC(Pass *P, CallGraphSCC &CurSCC,
                                  bool &DevirtualizedCall) {
   bool Changed = false;
   PMDataManager *PM = P->getAsPMDataManager();
+  Module &M = CG.getModule();
 
   if (!PM) {
     CallGraphSCCPass *CGSP = (CallGraphSCCPass*)P;
@@ -130,7 +136,12 @@ bool CGPassManager::RunPassOnSCC(Pass *P, CallGraphSCC &CurSCC,
 
     {
       TimeRegion PassTimer(getPassTimer(CGSP));
+      unsigned InstrCount = initSizeRemarkInfo(M);
       Changed = CGSP->runOnSCC(CurSCC);
+
+      // If the pass modified the module, it may have modified the instruction
+      // count of the module. Try emitting a remark.
+      emitInstrCountChangedRemark(P, M, InstrCount);
     }
     
     // After the CGSCCPass is done, when assertions are enabled, use
@@ -162,8 +173,8 @@ bool CGPassManager::RunPassOnSCC(Pass *P, CallGraphSCC &CurSCC,
   // The function pass(es) modified the IR, they may have clobbered the
   // callgraph.
   if (Changed && CallGraphUpToDate) {
-    DEBUG(dbgs() << "CGSCCPASSMGR: Pass Dirtied SCC: "
-                 << P->getPassName() << '\n');
+    LLVM_DEBUG(dbgs() << "CGSCCPASSMGR: Pass Dirtied SCC: " << P->getPassName()
+                      << '\n');
     CallGraphUpToDate = false;
   }
   return Changed;
@@ -181,12 +192,11 @@ bool CGPassManager::RunPassOnSCC(Pass *P, CallGraphSCC &CurSCC,
 bool CGPassManager::RefreshCallGraph(const CallGraphSCC &CurSCC, CallGraph &CG,
                                      bool CheckingMode) {
   DenseMap<Value*, CallGraphNode*> CallSites;
-  
-  DEBUG(dbgs() << "CGSCCPASSMGR: Refreshing SCC with " << CurSCC.size()
-               << " nodes:\n";
-        for (CallGraphNode *CGN : CurSCC)
-          CGN->dump();
-        );
+
+  LLVM_DEBUG(dbgs() << "CGSCCPASSMGR: Refreshing SCC with " << CurSCC.size()
+                    << " nodes:\n";
+             for (CallGraphNode *CGN
+                  : CurSCC) CGN->dump(););
 
   bool MadeChange = false;
   bool DevirtualizedCall = false;
@@ -307,8 +317,8 @@ bool CGPassManager::RefreshCallGraph(const CallGraphSCC &CurSCC, CallGraph &CG,
             // one.
             if (!ExistingNode->getFunction()) {
               DevirtualizedCall = true;
-              DEBUG(dbgs() << "  CGSCCPASSMGR: Devirtualized call to '"
-                           << Callee->getName() << "'\n");
+              LLVM_DEBUG(dbgs() << "  CGSCCPASSMGR: Devirtualized call to '"
+                                << Callee->getName() << "'\n");
             }
           } else {
             CalleeNode = CG.getCallsExternalNode();
@@ -363,17 +373,15 @@ bool CGPassManager::RefreshCallGraph(const CallGraphSCC &CurSCC, CallGraph &CG,
       CallSites.clear();
   }
 
-  DEBUG(if (MadeChange) {
-          dbgs() << "CGSCCPASSMGR: Refreshed SCC is now:\n";
-          for (CallGraphNode *CGN : CurSCC)
-            CGN->dump();
-          if (DevirtualizedCall)
-            dbgs() << "CGSCCPASSMGR: Refresh devirtualized a call!\n";
-
-         } else {
-           dbgs() << "CGSCCPASSMGR: SCC Refresh didn't change call graph.\n";
-         }
-        );
+  LLVM_DEBUG(if (MadeChange) {
+    dbgs() << "CGSCCPASSMGR: Refreshed SCC is now:\n";
+    for (CallGraphNode *CGN : CurSCC)
+      CGN->dump();
+    if (DevirtualizedCall)
+      dbgs() << "CGSCCPASSMGR: Refresh devirtualized a call!\n";
+  } else {
+    dbgs() << "CGSCCPASSMGR: SCC Refresh didn't change call graph.\n";
+  });
   (void)MadeChange;
 
   return DevirtualizedCall;
@@ -445,47 +453,75 @@ bool CGPassManager::RunAllPassesOnSCC(CallGraphSCC &CurSCC, CallGraph &CG,
 bool CGPassManager::runOnModule(Module &M) {
   CallGraph &CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
   bool Changed = doInitialization(CG);
-  
-  // Walk the callgraph in bottom-up SCC order.
-  scc_iterator<CallGraph*> CGI = scc_begin(&CG);
 
-  CallGraphSCC CurSCC(CG, &CGI);
-  while (!CGI.isAtEnd()) {
-    // Copy the current SCC and increment past it so that the pass can hack
-    // on the SCC if it wants to without invalidating our iterator.
-    const std::vector<CallGraphNode *> &NodeVec = *CGI;
-    CurSCC.initialize(NodeVec);
-    ++CGI;
+  DenseSet<const Function *> Visited;
 
-    // At the top level, we run all the passes in this pass manager on the
-    // functions in this SCC.  However, we support iterative compilation in the
-    // case where a function pass devirtualizes a call to a function.  For
-    // example, it is very common for a function pass (often GVN or instcombine)
-    // to eliminate the addressing that feeds into a call.  With that improved
-    // information, we would like the call to be an inline candidate, infer
-    // mod-ref information etc.
-    //
-    // Because of this, we allow iteration up to a specified iteration count.
-    // This only happens in the case of a devirtualized call, so we only burn
-    // compile time in the case that we're making progress.  We also have a hard
-    // iteration count limit in case there is crazy code.
-    unsigned Iteration = 0;
-    bool DevirtualizedCall = false;
-    do {
-      DEBUG(if (Iteration)
-              dbgs() << "  SCCPASSMGR: Re-visiting SCC, iteration #"
-                     << Iteration << '\n');
-      DevirtualizedCall = false;
-      Changed |= RunAllPassesOnSCC(CurSCC, CG, DevirtualizedCall);
-    } while (Iteration++ < MaxIterations && DevirtualizedCall);
-    
-    if (DevirtualizedCall)
-      DEBUG(dbgs() << "  CGSCCPASSMGR: Stopped iteration after " << Iteration
-                   << " times, due to -max-cg-scc-iterations\n");
+  CallGraph::iterator INext;
+  for (auto I = CG.begin(), E = CG.end(); I != E;) {
+    // Walk the callgraph in bottom-up SCC order.
+    auto CGI = scc_begin<CallGraph *>(I->second.get());
 
-    MaxSCCIterations.updateMax(Iteration);
+    CallGraphSCC CurSCC(CG, &CGI);
+    while (!CGI.isAtEnd()) {
+      const std::vector<CallGraphNode *> &NodeVec = *CGI;
+
+      // Record that we've seen this set of functions so we don't run the pass
+      // twice.
+      for (auto *Elt : NodeVec)
+        Visited.insert(Elt->getFunction());
+
+      // Copy the current SCC and increment past it so that the pass can hack
+      // on the SCC if it wants to without invalidating our iterator.
+      CurSCC.initialize(NodeVec);
+      ++CGI;
+
+      // If we've got all functions reachable from our chosen initial node,
+      // calculate the next node we need to search from now before parts of the
+      // graph are invalidated.
+      if (CGI.isAtEnd()) {
+        do
+          ++I;
+        while (I != E && Visited.count(I->first));
+      }
+
+      Changed |= runOnSCC(CurSCC, CG);
+    }
   }
+
   Changed |= doFinalization(CG);
+  return Changed;
+}
+
+bool CGPassManager::runOnSCC(CallGraphSCC &CurSCC, CallGraph &CG) {
+  bool Changed = false;
+
+  // At the top level, we run all the passes in this pass manager on the
+  // functions in this SCC.  However, we support iterative compilation in the
+  // case where a function pass devirtualizes a call to a function.  For
+  // example, it is very common for a function pass (often GVN or instcombine)
+  // to eliminate the addressing that feeds into a call.  With that improved
+  // information, we would like the call to be an inline candidate, infer
+  // mod-ref information etc.
+  //
+  // Because of this, we allow iteration up to a specified iteration count.
+  // This only happens in the case of a devirtualized call, so we only burn
+  // compile time in the case that we're making progress.  We also have a hard
+  // iteration count limit in case there is crazy code.
+  unsigned Iteration = 0;
+  bool DevirtualizedCall = false;
+  do {
+    LLVM_DEBUG(if (Iteration) dbgs()
+               << "  SCCPASSMGR: Re-visiting SCC, iteration #" << Iteration
+               << '\n');
+    DevirtualizedCall = false;
+    Changed |= RunAllPassesOnSCC(CurSCC, CG, DevirtualizedCall);
+  } while (Iteration++ < MaxIterations && DevirtualizedCall);
+
+  if (DevirtualizedCall)
+    LLVM_DEBUG(dbgs() << "  CGSCCPASSMGR: Stopped iteration after " << Iteration
+                      << " times, due to -max-cg-scc-iterations\n");
+
+  MaxSCCIterations.updateMax(Iteration);
   return Changed;
 }
 
@@ -648,7 +684,7 @@ Pass *CallGraphSCCPass::createPrinterPass(raw_ostream &OS,
 bool CallGraphSCCPass::skipSCC(CallGraphSCC &SCC) const {
   return !SCC.getCallGraph().getModule()
               .getContext()
-              .getOptBisect()
+              .getOptPassGate()
               .shouldRunPass(this, SCC);
 }
 

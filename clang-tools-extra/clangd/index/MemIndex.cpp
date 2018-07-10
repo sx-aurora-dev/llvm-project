@@ -45,9 +45,11 @@ bool MemIndex::fuzzyFind(
       // Exact match against all possible scopes.
       if (!Req.Scopes.empty() && !llvm::is_contained(Req.Scopes, Sym->Scope))
         continue;
+      if (Req.RestrictForCodeCompletion && !Sym->IsIndexedForCodeCompletion)
+        continue;
 
       if (auto Score = Filter.match(Sym->Name)) {
-        Top.emplace(-*Score, Sym);
+        Top.emplace(-*Score * quality(*Sym), Sym);
         if (Top.size() > Req.MaxCandidateCount) {
           More = true;
           Top.pop();
@@ -58,6 +60,15 @@ bool MemIndex::fuzzyFind(
       Callback(*Top.top().second);
   }
   return More;
+}
+
+void MemIndex::lookup(const LookupRequest &Req,
+                      llvm::function_ref<void(const Symbol &)> Callback) const {
+  for (const auto &ID : Req.IDs) {
+    auto I = Index.find(ID);
+    if (I != Index.end())
+      Callback(*I->second);
+  }
 }
 
 std::unique_ptr<SymbolIndex> MemIndex::build(SymbolSlab Slab) {

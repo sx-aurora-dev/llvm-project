@@ -88,10 +88,6 @@ BPFTargetLowering::BPFTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MULHS, VT, Expand);
     setOperationAction(ISD::UMUL_LOHI, VT, Expand);
     setOperationAction(ISD::SMUL_LOHI, VT, Expand);
-    setOperationAction(ISD::ADDC, VT, Expand);
-    setOperationAction(ISD::ADDE, VT, Expand);
-    setOperationAction(ISD::SUBC, VT, Expand);
-    setOperationAction(ISD::SUBE, VT, Expand);
     setOperationAction(ISD::ROTR, VT, Expand);
     setOperationAction(ISD::ROTL, VT, Expand);
     setOperationAction(ISD::SHL_PARTS, VT, Expand);
@@ -105,7 +101,7 @@ BPFTargetLowering::BPFTargetLowering(const TargetMachine &TM,
   }
 
   if (STI.getHasAlu32()) {
-    setOperationAction(ISD::BSWAP, MVT::i32, Expand);
+    setOperationAction(ISD::BSWAP, MVT::i32, Promote);
     setOperationAction(ISD::BR_CC, MVT::i32, Promote);
   }
 
@@ -502,13 +498,7 @@ SDValue BPFTargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
     NegateCC(LHS, RHS, CC);
 
   SDValue TargetCC = DAG.getConstant(CC, DL, LHS.getValueType());
-
   SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Glue);
-
-  // The constant is expected at RHS in Select_Ri pattern.
-  if (isa<ConstantSDNode>(LHS.getNode()))
-    std::swap(LHS, RHS);
-
   SDValue Ops[] = {LHS, RHS, TargetCC, TrueV, FalseV};
 
   return DAG.getNode(BPFISD::SELECT_CC, DL, VTs, Ops);

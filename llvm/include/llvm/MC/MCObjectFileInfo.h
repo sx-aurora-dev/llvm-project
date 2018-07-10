@@ -14,7 +14,9 @@
 #ifndef LLVM_MC_MCOBJECTFILEINFO_H
 #define LLVM_MC_MCOBJECTFILEINFO_H
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/CodeGen.h"
 
 namespace llvm {
@@ -92,11 +94,11 @@ protected:
   // can be enabled by a compiler flag.
   MCSection *DwarfPubNamesSection;
 
-  /// DWARF5 Experimental Debug Info Sections
-  /// DwarfAccelNamesSection, DwarfAccelObjCSection,
-  /// DwarfAccelNamespaceSection, DwarfAccelTypesSection -
-  /// If we use the DWARF accelerated hash tables then we want to emit these
-  /// sections.
+  /// Accelerator table sections. DwarfDebugNamesSection is the DWARF v5
+  /// accelerator table, while DwarfAccelNamesSection, DwarfAccelObjCSection,
+  /// DwarfAccelNamespaceSection, DwarfAccelTypesSection are pre-DWARF v5
+  /// extensions.
+  MCSection *DwarfDebugNamesSection;
   MCSection *DwarfAccelNamesSection;
   MCSection *DwarfAccelObjCSection;
   MCSection *DwarfAccelNamespaceSection;
@@ -158,6 +160,7 @@ protected:
 
   /// Section containing metadata on function stack sizes.
   MCSection *StackSizesSection;
+  mutable DenseMap<const MCSymbol *, unsigned> StackSizesUniquing;
 
   // ELF specific sections.
   MCSection *DataRelROSection;
@@ -183,6 +186,7 @@ protected:
   MCSection *ConstTextCoalSection;
   MCSection *ConstDataSection;
   MCSection *DataCoalSection;
+  MCSection *ConstDataCoalSection;
   MCSection *DataCommonSection;
   MCSection *DataBSSSection;
   MCSection *FourByteConstantSection;
@@ -254,7 +258,9 @@ public:
   MCSection *getDwarfRangesSection() const { return DwarfRangesSection; }
   MCSection *getDwarfMacinfoSection() const { return DwarfMacinfoSection; }
 
-  // DWARF5 Experimental Debug Info Sections
+  MCSection *getDwarfDebugNamesSection() const {
+    return DwarfDebugNamesSection;
+  }
   MCSection *getDwarfAccelNamesSection() const {
     return DwarfAccelNamesSection;
   }
@@ -296,7 +302,7 @@ public:
   MCSection *getStackMapSection() const { return StackMapSection; }
   MCSection *getFaultMapSection() const { return FaultMapSection; }
 
-  MCSection *getStackSizesSection() const { return StackSizesSection; }
+  MCSection *getStackSizesSection(const MCSection &TextSec) const;
 
   // ELF specific sections.
   MCSection *getDataRelROSection() const { return DataRelROSection; }
@@ -326,6 +332,9 @@ public:
   }
   const MCSection *getConstDataSection() const { return ConstDataSection; }
   const MCSection *getDataCoalSection() const { return DataCoalSection; }
+  const MCSection *getConstDataCoalSection() const {
+    return ConstDataCoalSection;
+  }
   const MCSection *getDataCommonSection() const { return DataCommonSection; }
   MCSection *getDataBSSSection() const { return DataBSSSection; }
   const MCSection *getFourByteConstantSection() const {

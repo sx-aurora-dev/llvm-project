@@ -10,15 +10,13 @@
 #include "FileIndex.h"
 #include "SymbolCollector.h"
 #include "clang/Index/IndexingAction.h"
+#include "clang/Lex/Preprocessor.h"
 
 namespace clang {
 namespace clangd {
-namespace {
 
-/// Retrieves namespace and class level symbols in \p Decls.
-std::unique_ptr<SymbolSlab> indexAST(ASTContext &Ctx,
-                                     std::shared_ptr<Preprocessor> PP,
-                                     llvm::ArrayRef<const Decl *> Decls) {
+SymbolSlab indexAST(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
+                    llvm::ArrayRef<std::string> URISchemes) {
   SymbolCollector::Options CollectorOpts;
   // FIXME(ioeric): we might also want to collect include headers. We would need
   // to make sure all includes are canonicalized (with CanonicalIncludes), which
@@ -26,21 +24,29 @@ std::unique_ptr<SymbolSlab> indexAST(ASTContext &Ctx,
   // AST at this point, but we also need preprocessor callbacks (e.g.
   // CommentHandler for IWYU pragma) to canonicalize includes.
   CollectorOpts.CollectIncludePath = false;
+  CollectorOpts.CountReferences = false;
+  if (!URISchemes.empty())
+    CollectorOpts.URISchemes = URISchemes;
+  CollectorOpts.Origin = SymbolOrigin::Dynamic;
 
-  auto Collector = std::make_shared<SymbolCollector>(std::move(CollectorOpts));
-  Collector->setPreprocessor(std::move(PP));
+  SymbolCollector Collector(std::move(CollectorOpts));
+  Collector.setPreprocessor(PP);
   index::IndexingOptions IndexOpts;
+  // We only need declarations, because we don't count references.
   IndexOpts.SystemSymbolFilter =
-      index::IndexingOptions::SystemSymbolFilterKind::All;
+      index::IndexingOptions::SystemSymbolFilterKind::DeclarationsOnly;
   IndexOpts.IndexFunctionLocals = false;
 
-  index::indexTopLevelDecls(Ctx, Decls, Collector, IndexOpts);
-  auto Symbols = llvm::make_unique<SymbolSlab>();
-  *Symbols = Collector->takeSymbols();
-  return Symbols;
+  std::vector<const Decl *> TopLevelDecls(
+      AST.getTranslationUnitDecl()->decls().begin(),
+      AST.getTranslationUnitDecl()->decls().end());
+  index::indexTopLevelDecls(AST, TopLevelDecls, Collector, IndexOpts);
+
+  return Collector.takeSymbols();
 }
 
-} // namespace
+FileIndex::FileIndex(std::vector<std::string> URISchemes)
+    : URISchemes(std::move(URISchemes)) {}
 
 void FileSymbols::update(PathRef Path, std::unique_ptr<SymbolSlab> Slab) {
   std::lock_guard<std::mutex> Lock(Mutex);
@@ -73,12 +79,14 @@ std::shared_ptr<std::vector<const Symbol *>> FileSymbols::allSymbols() {
   return {std::move(Snap), Pointers};
 }
 
-void FileIndex::update(PathRef Path, ParsedAST *AST) {
+void FileIndex::update(PathRef Path, ASTContext *AST,
+                       std::shared_ptr<Preprocessor> PP) {
   if (!AST) {
     FSymbols.update(Path, nullptr);
   } else {
-    auto Slab = indexAST(AST->getASTContext(), AST->getPreprocessorPtr(),
-                         AST->getTopLevelDecls());
+    assert(PP);
+    auto Slab = llvm::make_unique<SymbolSlab>();
+    *Slab = indexAST(*AST, PP, URISchemes);
     FSymbols.update(Path, std::move(Slab));
   }
   auto Symbols = FSymbols.allSymbols();
@@ -89,6 +97,12 @@ bool FileIndex::fuzzyFind(
     const FuzzyFindRequest &Req,
     llvm::function_ref<void(const Symbol &)> Callback) const {
   return Index.fuzzyFind(Req, Callback);
+}
+
+void FileIndex::lookup(
+    const LookupRequest &Req,
+    llvm::function_ref<void(const Symbol &)> Callback) const {
+  Index.lookup(Req, Callback);
 }
 
 } // namespace clangd

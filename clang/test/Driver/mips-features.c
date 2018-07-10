@@ -11,7 +11,7 @@
 // CHECK-MNOABICALLS: "-target-feature" "+noabicalls"
 //
 // -mno-abicalls non-PIC N64
-// RUN: %clang -target mips64-linux-gnu -### -c -fno-PIC %s 2>&1 \
+// RUN: %clang -target mips64-linux-gnu -### -c -fno-PIC -mno-abicalls %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-MNOABICALLS-N64NPIC %s
 // CHECK-MNOABICALLS-N64NPIC: "-target-feature" "+noabicalls"
 //
@@ -86,13 +86,13 @@
 // CHECK-MEMBEDDEDDATADEF-NOT: "-mllvm" "-membedded-data"
 //
 // MIPS64 + N64: -fno-pic -> -mno-abicalls -mgpopt
-// RUN: %clang -target mips64-mti-elf -mabi=64 -### -c %s -fno-pic 2>&1 \
+// RUN: %clang -target mips64-mti-elf -mabi=64 -### -c %s -fno-pic -mno-abicalls 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-N64-GPOPT %s
 // CHECK-N64-GPOPT: "-target-feature" "+noabicalls"
 // CHECK-N64-GPOPT: "-mllvm" "-mgpopt"
 //
 // MIPS64 + N64: -fno-pic -mno-gpopt
-// RUN: %clang -target mips64-mti-elf -mabi=64 -### -c %s -fno-pic -mno-gpopt 2>&1 \
+// RUN: %clang -target mips64-mti-elf -mabi=64 -### -c %s -fno-pic -mno-abicalls -mno-gpopt 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-N64-MNO-GPOPT %s
 // CHECK-N64-MNO-GPOPT: "-target-feature" "+noabicalls"
 // CHECK-N64-MNO-GPOPT-NOT: "-mllvm" "-mgpopt"
@@ -408,3 +408,15 @@
 // RUN:        -mindirect-jump=hazard 2>&1 \
 // RUN:   | FileCheck --check-prefix=INDIRECT-BH %s
 // INDIRECT-BH: "-target-feature" "+use-indirect-jump-hazard"
+//
+// -mcrc
+// RUN: %clang -target mips-unknown-linux-gnu -### -c %s \
+// RUN:     -mno-crc -mcrc 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-CRC %s
+// CHECK-CRC: "-target-feature" "+crc"
+//
+// -mno-crc
+// RUN: %clang -target mips-unknown-linux-gnu -### -c %s \
+// RUN:     -mcrc -mno-crc 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-CRC %s
+// CHECK-NO-CRC: "-target-feature" "-crc"
