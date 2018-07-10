@@ -96,6 +96,30 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(VE::SF16);
   Reserved.set(VE::SF17);
 
+  // Also reserve the integer 16 bit registers convering the above registers.
+  Reserved.set(VE::SH8);
+  Reserved.set(VE::SH9);
+  Reserved.set(VE::SH10);
+  Reserved.set(VE::SH11);
+  Reserved.set(VE::SH12);
+  Reserved.set(VE::SH13);
+  Reserved.set(VE::SH14);
+  Reserved.set(VE::SH15);
+  Reserved.set(VE::SH16);
+  Reserved.set(VE::SH17);
+
+  // Also reserve the integer 8 bit registers convering the above registers.
+  Reserved.set(VE::SB8);
+  Reserved.set(VE::SB9);
+  Reserved.set(VE::SB10);
+  Reserved.set(VE::SB11);
+  Reserved.set(VE::SB12);
+  Reserved.set(VE::SB13);
+  Reserved.set(VE::SB14);
+  Reserved.set(VE::SB15);
+  Reserved.set(VE::SB16);
+  Reserved.set(VE::SB17);
+
   // sx18-sx33 are callee-saved registers
   // sx34-sx63 are temporary registers
 
