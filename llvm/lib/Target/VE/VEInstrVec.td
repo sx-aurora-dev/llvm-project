@@ -481,8 +481,8 @@ def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy),
   "lvs ${sx},${vx}(${sy})", []>;
 
 def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)), 
-          (COPY_TO_REGCLASS (LVSr v256f64:$vx,
-            (COPY_TO_REGCLASS $sy, I64)), F32)>;
+          (EXTRACT_SUBREG (LVSr v256f64:$vx,
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)), sub_f32)>;
 
 let cy = 1 in
 def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
@@ -939,12 +939,14 @@ def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
 def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
-          (ORrr (COPY_TO_REGCLASS (LDUri MEMri:$addr0), I64),
-            (COPY_TO_REGCLASS (LDLUri MEMri:$addr1), I64))>;
+          (ORrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+                               (LDUri MEMri:$addr0), sub_i32),
+                (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+                               (LDLUri MEMri:$addr1), sub_i32))>;
 
 def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
           (i64 (MPYrr
-            (COPY_TO_REGCLASS (LDLUri MEMri:$addr), I64),
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
 
