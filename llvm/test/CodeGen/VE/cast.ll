@@ -854,8 +854,6 @@ define zeroext i8 @uc2uc(i8 returned zeroext) #0 {
 define signext i16 @uc2s(i8 zeroext) #0 {
 ; CHECK-LABEL: uc2s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    sll %s34, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s34, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = zext i8 %0 to i16
   ret i16 %2
