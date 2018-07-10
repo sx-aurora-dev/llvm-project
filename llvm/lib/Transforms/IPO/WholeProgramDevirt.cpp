@@ -111,6 +111,12 @@ static cl::opt<std::string> ClWriteSummary(
     cl::desc("Write summary to given YAML file after running pass"),
     cl::Hidden);
 
+static cl::opt<unsigned>
+    ClThreshold("wholeprogramdevirt-branch-funnel-threshold", cl::Hidden,
+                cl::init(10), cl::ZeroOrMore,
+                cl::desc("Maximum number of call targets per "
+                         "call site to enable branch funnels"));
+
 // Find the minimum offset that we may store a value of size Size bits at. If
 // IsAfter is set, look for an offset before the object, otherwise look for an
 // offset after the object.
@@ -613,7 +619,7 @@ PreservedAnalyses WholeProgramDevirtPass::run(Module &M,
 bool DevirtModule::runForTesting(
     Module &M, function_ref<AAResults &(Function &)> AARGetter,
     function_ref<OptimizationRemarkEmitter &(Function *)> OREGetter) {
-  ModuleSummaryIndex Summary(/*IsPerformingAnalysis=*/false);
+  ModuleSummaryIndex Summary(/*HaveGVs=*/false);
 
   // Handle the command-line summary arguments. This code is for testing
   // purposes only, so we handle errors directly.
@@ -820,8 +826,7 @@ void DevirtModule::tryICallBranchFunnel(
   if (T.getArch() != Triple::x86_64)
     return;
 
-  const unsigned kBranchFunnelThreshold = 10;
-  if (TargetsForSlot.size() > kBranchFunnelThreshold)
+  if (TargetsForSlot.size() > ClThreshold)
     return;
 
   bool HasNonDevirt = !SlotInfo.CSInfo.AllCallSitesDevirted;
@@ -1061,7 +1066,7 @@ Constant *DevirtModule::importConstant(VTableSlot Slot, ArrayRef<uint64_t> Args,
 
   // We only need to set metadata if the global is newly created, in which
   // case it would not have hidden visibility.
-  if (GV->getMetadata(LLVMContext::MD_absolute_symbol))
+  if (GV->hasMetadata(LLVMContext::MD_absolute_symbol))
     return C;
 
   auto SetAbsRange = [&](uint64_t Min, uint64_t Max) {

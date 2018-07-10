@@ -7,6 +7,8 @@ async/wait_group_events.cl
 atomic/atomic_add.cl
 atomic/atomic_and.cl
 atomic/atomic_cmpxchg.cl
+atomic/atomic_dec.cl
+atomic/atomic_inc.cl
 atomic/atomic_max.cl
 atomic/atomic_min.cl
 atomic/atomic_or.cl
@@ -98,10 +100,14 @@ math/exp.cl
 math/exp_helper.cl
 math/expm1.cl
 math/exp2.cl
+math/clc_exp10.cl
 math/exp10.cl
 math/fdim.cl
+math/clc_fma.cl
+math/fma.cl
 math/fmax.cl
 math/fmin.cl
+math/clc_fmod.cl
 math/fmod.cl
 math/fract.cl
 math/frexp.cl
@@ -119,6 +125,7 @@ math/half_rsqrt.cl
 math/half_sin.cl
 math/half_sqrt.cl
 math/half_tan.cl
+math/clc_hypot.cl
 math/hypot.cl
 math/ilogb.cl
 math/clc_ldexp.cl
@@ -134,6 +141,7 @@ math/mad.cl
 math/maxmag.cl
 math/minmag.cl
 math/modf.cl
+math/nan.cl
 math/native_cos.cl
 math/native_divide.cl
 math/native_exp.cl
@@ -157,6 +165,10 @@ math/clc_pown.cl
 math/pown.cl
 math/clc_powr.cl
 math/powr.cl
+math/clc_remainder.cl
+math/remainder.cl
+math/clc_remquo.cl
+math/remquo.cl
 math/clc_rootn.cl
 math/rootn.cl
 math/sin.cl

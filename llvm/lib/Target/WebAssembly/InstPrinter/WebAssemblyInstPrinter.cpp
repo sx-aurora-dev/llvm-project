@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief Print MCInst instructions to wasm format.
+/// Print MCInst instructions to wasm format.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -46,7 +46,7 @@ void WebAssemblyInstPrinter::printRegName(raw_ostream &OS,
 
 void WebAssemblyInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
                                        StringRef Annot,
-                                       const MCSubtargetInfo & /*STI*/) {
+                                       const MCSubtargetInfo &STI) {
   // Print the instruction (this uses the AsmStrings from the .td files).
   printInstruction(MI, OS);
 
@@ -82,10 +82,12 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
       ControlFlowStack.push_back(std::make_pair(ControlFlowCounter++, false));
       break;
     case WebAssembly::END_LOOP:
-      ControlFlowStack.pop_back();
+      // Have to guard against an empty stack, in case of mismatched pairs
+      // in assembly parsing.
+      if (!ControlFlowStack.empty()) ControlFlowStack.pop_back();
       break;
     case WebAssembly::END_BLOCK:
-      printAnnotation(
+      if (!ControlFlowStack.empty()) printAnnotation(
           OS, "label" + utostr(ControlFlowStack.pop_back_val().first) + ':');
       break;
     }
@@ -192,20 +194,16 @@ void WebAssemblyInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
   }
 }
 
-void
-WebAssemblyInstPrinter::printWebAssemblyP2AlignOperand(const MCInst *MI,
-                                                       unsigned OpNo,
-                                                       raw_ostream &O) {
+void WebAssemblyInstPrinter::printWebAssemblyP2AlignOperand(
+    const MCInst *MI, unsigned OpNo, raw_ostream &O) {
   int64_t Imm = MI->getOperand(OpNo).getImm();
   if (Imm == WebAssembly::GetDefaultP2Align(MI->getOpcode()))
     return;
   O << ":p2align=" << Imm;
 }
 
-void
-WebAssemblyInstPrinter::printWebAssemblySignatureOperand(const MCInst *MI,
-                                                         unsigned OpNo,
-                                                         raw_ostream &O) {
+void WebAssemblyInstPrinter::printWebAssemblySignatureOperand(
+    const MCInst *MI, unsigned OpNo, raw_ostream &O) {
   int64_t Imm = MI->getOperand(OpNo).getImm();
   switch (WebAssembly::ExprType(Imm)) {
   case WebAssembly::ExprType::Void: break;

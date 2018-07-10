@@ -74,55 +74,55 @@ class Sema;
 
   /// ImplicitConversionKind - The kind of implicit conversion used to
   /// convert an argument to a parameter's type. The enumerator values
-  /// match with Table 9 of (C++ 13.3.3.1.1) and are listed such that
-  /// better conversion kinds have smaller values.
+  /// match with the table titled 'Conversions' in [over.ics.scs] and are listed
+  /// such that better conversion kinds have smaller values.
   enum ImplicitConversionKind {
     /// Identity conversion (no conversion)
     ICK_Identity = 0,
 
-    /// Lvalue-to-rvalue conversion (C++ 4.1)
+    /// Lvalue-to-rvalue conversion (C++ [conv.lval])
     ICK_Lvalue_To_Rvalue,
 
-    /// Array-to-pointer conversion (C++ 4.2)
+    /// Array-to-pointer conversion (C++ [conv.array])
     ICK_Array_To_Pointer,
 
-    /// Function-to-pointer (C++ 4.3)
+    /// Function-to-pointer (C++ [conv.array])
     ICK_Function_To_Pointer,
 
-    /// Function pointer conversion (C++17 4.13)
+    /// Function pointer conversion (C++17 [conv.fctptr])
     ICK_Function_Conversion,
 
-    /// Qualification conversions (C++ 4.4)
+    /// Qualification conversions (C++ [conv.qual])
     ICK_Qualification,
 
-    /// Integral promotions (C++ 4.5)
+    /// Integral promotions (C++ [conv.prom])
     ICK_Integral_Promotion,
 
-    /// Floating point promotions (C++ 4.6)
+    /// Floating point promotions (C++ [conv.fpprom])
     ICK_Floating_Promotion,
 
     /// Complex promotions (Clang extension)
     ICK_Complex_Promotion,
 
-    /// Integral conversions (C++ 4.7)
+    /// Integral conversions (C++ [conv.integral])
     ICK_Integral_Conversion,
 
-    /// Floating point conversions (C++ 4.8)
+    /// Floating point conversions (C++ [conv.double] 
     ICK_Floating_Conversion,
 
     /// Complex conversions (C99 6.3.1.6)
     ICK_Complex_Conversion,
 
-    /// Floating-integral conversions (C++ 4.9)
+    /// Floating-integral conversions (C++ [conv.fpint])
     ICK_Floating_Integral,
 
-    /// Pointer conversions (C++ 4.10)
+    /// Pointer conversions (C++ [conv.ptr])
     ICK_Pointer_Conversion,
 
-    /// Pointer-to-member conversions (C++ 4.11)
+    /// Pointer-to-member conversions (C++ [conv.mem])
     ICK_Pointer_Member,
 
-    /// Boolean conversions (C++ 4.12)
+    /// Boolean conversions (C++ [conv.bool])
     ICK_Boolean_Conversion,
 
     /// Conversions between compatible types in C99
@@ -244,12 +244,12 @@ class Sema;
     /// or a function conversion.
     ImplicitConversionKind Third : 8;
 
-    /// \brief Whether this is the deprecated conversion of a
+    /// Whether this is the deprecated conversion of a
     /// string literal to a pointer to non-const character data
     /// (C++ 4.2p2).
     unsigned DeprecatedStringLiteralToCharPtr : 1;
 
-    /// \brief Whether the qualification conversion involves a change in the
+    /// Whether the qualification conversion involves a change in the
     /// Objective-C lifetime (for automatic reference counting).
     unsigned QualificationIncludesObjCLifetime : 1;
     
@@ -265,21 +265,21 @@ class Sema;
     /// direct binding (C++ [dcl.init.ref]).
     unsigned DirectBinding : 1;
 
-    /// \brief Whether this is an lvalue reference binding (otherwise, it's
+    /// Whether this is an lvalue reference binding (otherwise, it's
     /// an rvalue reference binding).
     unsigned IsLvalueReference : 1;
     
-    /// \brief Whether we're binding to a function lvalue.
+    /// Whether we're binding to a function lvalue.
     unsigned BindsToFunctionLvalue : 1;
     
-    /// \brief Whether we're binding to an rvalue.
+    /// Whether we're binding to an rvalue.
     unsigned BindsToRvalue : 1;
     
-    /// \brief Whether this binds an implicit object argument to a 
+    /// Whether this binds an implicit object argument to a 
     /// non-static member function without a ref-qualifier.
     unsigned BindsImplicitObjectArgumentWithoutRefQualifier : 1;
     
-    /// \brief Whether this binds a reference to an object with a different
+    /// Whether this binds a reference to an object with a different
     /// Objective-C lifetime qualifier.
     unsigned ObjCLifetimeConversionBinding : 1;
     
@@ -330,9 +330,10 @@ class Sema;
     }
     
     ImplicitConversionRank getRank() const;
-    NarrowingKind getNarrowingKind(ASTContext &Context, const Expr *Converted,
-                                   APValue &ConstantValue,
-                                   QualType &ConstantType) const;
+    NarrowingKind
+    getNarrowingKind(ASTContext &Context, const Expr *Converted,
+                     APValue &ConstantValue, QualType &ConstantType,
+                     bool IgnoreFloatToIntegralConversion = false) const;
     bool isPointerConversionToBool() const;
     bool isPointerConversionToVoidPointer(ASTContext& Context) const;
     void dump() const;
@@ -341,7 +342,7 @@ class Sema;
   /// UserDefinedConversionSequence - Represents a user-defined
   /// conversion sequence (C++ 13.3.3.1.2).
   struct UserDefinedConversionSequence {
-    /// \brief Represents the standard conversion that occurs before
+    /// Represents the standard conversion that occurs before
     /// the actual user-defined conversion.
     ///
     /// C++11 13.3.3.1.2p1:
@@ -376,7 +377,7 @@ class Sema;
     /// aggregate initialization from an initializer list.
     FunctionDecl* ConversionFunction;
 
-    /// \brief The declaration that we found via name lookup, which might be
+    /// The declaration that we found via name lookup, which might be
     /// the same as \c ConversionFunction or it might be a using declaration
     /// that refers to \c ConversionFunction.
     DeclAccessPair FoundConversionFunction;
@@ -505,7 +506,7 @@ class Sema;
     /// ConversionKind - The kind of implicit conversion sequence.
     unsigned ConversionKind : 30;
 
-    /// \brief Whether the target is really a std::initializer_list, and the
+    /// Whether the target is really a std::initializer_list, and the
     /// sequence only represents the worst element conversion.
     unsigned StdInitializerListElement : 1;
 
@@ -571,7 +572,7 @@ class Sema;
       return Kind(ConversionKind);
     }
     
-    /// \brief Return a ranking of the implicit conversion sequence
+    /// Return a ranking of the implicit conversion sequence
     /// kind, where smaller ranks represent better conversion
     /// sequences.
     ///
@@ -640,7 +641,7 @@ class Sema;
       Standard.setAllToTypes(T);
     }
 
-    /// \brief Whether the target is really a std::initializer_list, and the
+    /// Whether the target is really a std::initializer_list, and the
     /// sequence only represents the worst element conversion.
     bool isStdInitializerListElement() const {
       return StdInitializerListElement;
@@ -774,7 +775,7 @@ class Sema;
     /// Actually an OverloadFailureKind.
     unsigned char FailureKind;
 
-    /// \brief The number of call arguments that were explicitly provided,
+    /// The number of call arguments that were explicitly provided,
     /// to be used while performing partial ordering of function templates.
     unsigned ExplicitCallArguments;
 
@@ -904,13 +905,13 @@ class Sema;
     SourceLocation getLocation() const { return Loc; }
     CandidateSetKind getKind() const { return Kind; }
 
-    /// \brief Determine when this overload candidate will be new to the
+    /// Determine when this overload candidate will be new to the
     /// overload set.
     bool isNewCandidate(Decl *F) {
       return Functions.insert(F->getCanonicalDecl()).second;
     }
 
-    /// \brief Clear out all of the candidates.
+    /// Clear out all of the candidates.
     void clear(CandidateSetKind CSK);
 
     using iterator = SmallVectorImpl<OverloadCandidate>::iterator;
@@ -921,7 +922,7 @@ class Sema;
     size_t size() const { return Candidates.size(); }
     bool empty() const { return Candidates.empty(); }
 
-    /// \brief Allocate storage for conversion sequences for NumConversions
+    /// Allocate storage for conversion sequences for NumConversions
     /// conversions.
     ConversionSequenceList
     allocateConversionSequences(unsigned NumConversions) {
@@ -935,7 +936,7 @@ class Sema;
       return ConversionSequenceList(Conversions, NumConversions);
     }
 
-    /// \brief Add a new candidate with NumConversions conversion sequence slots
+    /// Add a new candidate with NumConversions conversion sequence slots
     /// to the overload set.
     OverloadCandidate &addCandidate(unsigned NumConversions = 0,
                                     ConversionSequenceList Conversions = None) {

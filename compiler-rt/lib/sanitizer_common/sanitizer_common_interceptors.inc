@@ -1189,6 +1189,50 @@ INTERCEPTOR(SSIZE_T, pwritev64, int fd, __sanitizer_iovec *iov, int iovcnt,
 #define INIT_PWRITEV64
 #endif
 
+#if SANITIZER_INTERCEPT_FGETS
+INTERCEPTOR(char *, fgets, char *s, SIZE_T size, void *file) {
+  // libc file streams can call user-supplied functions, see fopencookie.
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, fgets, s, size, file);
+  // FIXME: under ASan the call below may write to freed memory and corrupt
+  // its metadata. See
+  // https://github.com/google/sanitizers/issues/321.
+  char *res = REAL(fgets)(s, size, file);
+  if (res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, s, REAL(strlen)(s) + 1);
+  return res;
+}
+#define INIT_FGETS COMMON_INTERCEPT_FUNCTION(fgets)
+#else
+#define INIT_FGETS
+#endif
+
+#if SANITIZER_INTERCEPT_FPUTS
+INTERCEPTOR_WITH_SUFFIX(int, fputs, char *s, void *file) {
+  // libc file streams can call user-supplied functions, see fopencookie.
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, fputs, s, file);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, s, REAL(strlen)(s) + 1);
+  return REAL(fputs)(s, file);
+}
+#define INIT_FPUTS COMMON_INTERCEPT_FUNCTION(fputs)
+#else
+#define INIT_FPUTS
+#endif
+
+#if SANITIZER_INTERCEPT_PUTS
+INTERCEPTOR(int, puts, char *s) {
+  // libc file streams can call user-supplied functions, see fopencookie.
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, puts, s);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, s, REAL(strlen)(s) + 1);
+  return REAL(puts)(s);
+}
+#define INIT_PUTS COMMON_INTERCEPT_FUNCTION(puts)
+#else
+#define INIT_PUTS
+#endif
+
 #if SANITIZER_INTERCEPT_PRCTL
 INTERCEPTOR(int, prctl, int option, unsigned long arg2,
             unsigned long arg3,                        // NOLINT
@@ -3597,7 +3641,8 @@ INTERCEPTOR(char *, strerror, int errnum) {
 //  * GNU version returns message pointer, which points to either buf or some
 //    static storage.
 #if ((_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && !_GNU_SOURCE) || \
-    SANITIZER_MAC || SANITIZER_ANDROID || SANITIZER_NETBSD || SANITIZER_FREEBSD
+    SANITIZER_MAC || SANITIZER_ANDROID || SANITIZER_NETBSD ||                 \
+    SANITIZER_FREEBSD || SANITIZER_OPENBSD
 // POSIX version. Spec is not clear on whether buf is NULL-terminated.
 // At least on OSX, buf contents are valid even when the call fails.
 INTERCEPTOR(int, strerror_r, int errnum, char *buf, SIZE_T buflen) {
@@ -4020,7 +4065,7 @@ INTERCEPTOR(void, _exit, int status) {
 #define INIT__EXIT
 #endif
 
-#if SANITIZER_INTERCEPT_PHTREAD_MUTEX
+#if SANITIZER_INTERCEPT_PTHREAD_MUTEX
 INTERCEPTOR(int, pthread_mutex_lock, void *m) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, pthread_mutex_lock, m);
@@ -4053,13 +4098,42 @@ INTERCEPTOR(int, pthread_mutex_unlock, void *m) {
 #define INIT_PTHREAD_MUTEX_UNLOCK
 #endif
 
-#if SANITIZER_NETBSD
-INTERCEPTOR(int, __libc_mutex_lock, void *m) \
-  ALIAS(WRAPPER_NAME(pthread_mutex_lock));
-INTERCEPTOR(int, __libc_mutex_unlock, void *m) \
-  ALIAS(WRAPPER_NAME(pthread_mutex_unlock));
-INTERCEPTOR(int, __libc_thr_setcancelstate, int state, int *oldstate) \
-  ALIAS(WRAPPER_NAME(pthread_setcancelstate));
+#if SANITIZER_INTERCEPT___PTHREAD_MUTEX
+INTERCEPTOR(int, __pthread_mutex_lock, void *m) {
+  return WRAP(pthread_mutex_lock)(m);
+}
+
+INTERCEPTOR(int, __pthread_mutex_unlock, void *m) {
+  return WRAP(pthread_mutex_unlock)(m);
+}
+
+#define INIT___PTHREAD_MUTEX_LOCK \
+  COMMON_INTERCEPT_FUNCTION(__pthread_mutex_lock)
+#define INIT___PTHREAD_MUTEX_UNLOCK \
+  COMMON_INTERCEPT_FUNCTION(__pthread_mutex_unlock)
+#else
+#define INIT___PTHREAD_MUTEX_LOCK
+#define INIT___PTHREAD_MUTEX_UNLOCK
+#endif
+
+#if SANITIZER_INTERCEPT___LIBC_MUTEX
+INTERCEPTOR(int, __libc_mutex_lock, void *m)
+ALIAS(WRAPPER_NAME(pthread_mutex_lock));
+
+INTERCEPTOR(int, __libc_mutex_unlock, void *m)
+ALIAS(WRAPPER_NAME(pthread_mutex_unlock));
+
+INTERCEPTOR(int, __libc_thr_setcancelstate, int state, int *oldstate)
+ALIAS(WRAPPER_NAME(pthread_setcancelstate));
+
+#define INIT___LIBC_MUTEX_LOCK COMMON_INTERCEPT_FUNCTION(__libc_mutex_lock)
+#define INIT___LIBC_MUTEX_UNLOCK COMMON_INTERCEPT_FUNCTION(__libc_mutex_unlock)
+#define INIT___LIBC_THR_SETCANCELSTATE \
+  COMMON_INTERCEPT_FUNCTION(__libc_thr_setcancelstate)
+#else
+#define INIT___LIBC_MUTEX_LOCK
+#define INIT___LIBC_MUTEX_UNLOCK
+#define INIT___LIBC_THR_SETCANCELSTATE
 #endif
 
 #if SANITIZER_INTERCEPT_GETMNTENT || SANITIZER_INTERCEPT_GETMNTENT_R
@@ -4414,8 +4488,6 @@ INTERCEPTOR(int, random_r, void *buf, u32 *result) {
 #if SANITIZER_INTERCEPT_PTHREAD_ATTR_GET
 INTERCEPTOR_PTHREAD_ATTR_GET(detachstate, sizeof(int))
 INTERCEPTOR_PTHREAD_ATTR_GET(guardsize, sizeof(SIZE_T))
-INTERCEPTOR_PTHREAD_ATTR_GET(schedparam, struct_sched_param_sz)
-INTERCEPTOR_PTHREAD_ATTR_GET(schedpolicy, sizeof(int))
 INTERCEPTOR_PTHREAD_ATTR_GET(scope, sizeof(int))
 INTERCEPTOR_PTHREAD_ATTR_GET(stacksize, sizeof(SIZE_T))
 INTERCEPTOR(int, pthread_attr_getstack, void *attr, void **addr, SIZE_T *size) {
@@ -4446,13 +4518,22 @@ int real_pthread_attr_getstack(void *attr, void **addr, SIZE_T *size) {
 #define INIT_PTHREAD_ATTR_GET                             \
   COMMON_INTERCEPT_FUNCTION(pthread_attr_getdetachstate); \
   COMMON_INTERCEPT_FUNCTION(pthread_attr_getguardsize);   \
-  COMMON_INTERCEPT_FUNCTION(pthread_attr_getschedparam);  \
-  COMMON_INTERCEPT_FUNCTION(pthread_attr_getschedpolicy); \
   COMMON_INTERCEPT_FUNCTION(pthread_attr_getscope);       \
   COMMON_INTERCEPT_FUNCTION(pthread_attr_getstacksize);   \
   COMMON_INTERCEPT_FUNCTION(pthread_attr_getstack);
 #else
 #define INIT_PTHREAD_ATTR_GET
+#endif
+
+#if SANITIZER_INTERCEPT_PTHREAD_ATTR_GET_SCHED
+INTERCEPTOR_PTHREAD_ATTR_GET(schedparam, struct_sched_param_sz)
+INTERCEPTOR_PTHREAD_ATTR_GET(schedpolicy, sizeof(int))
+
+#define INIT_PTHREAD_ATTR_GET_SCHED                      \
+  COMMON_INTERCEPT_FUNCTION(pthread_attr_getschedparam); \
+  COMMON_INTERCEPT_FUNCTION(pthread_attr_getschedpolicy);
+#else
+#define INIT_PTHREAD_ATTR_GET_SCHED
 #endif
 
 #if SANITIZER_INTERCEPT_PTHREAD_ATTR_GETINHERITSCHED
@@ -6529,6 +6610,7 @@ INTERCEPTOR(wchar_t *, wcsncat, wchar_t *dst, const wchar_t *src, SIZE_T n) {
 #define INIT_WCSCAT
 #endif
 
+#if SANITIZER_INTERCEPT_STRXFRM
 static SIZE_T RealStrLen(const char *str) { return REAL(strlen)(str); }
 
 static SIZE_T RealStrLen(const wchar_t *str) { return REAL(wcslen)(str); }
@@ -6545,7 +6627,6 @@ static SIZE_T RealStrLen(const wchar_t *str) { return REAL(wcslen)(str); }
     return res;                                                            \
   }
 
-#if SANITIZER_INTERCEPT_STRXFRM
 INTERCEPTOR(SIZE_T, strxfrm, char *dest, const char *src, SIZE_T len) {
   STRXFRM_INTERCEPTOR_IMPL(strxfrm, dest, src, len);
 }
@@ -6722,6 +6803,12 @@ INTERCEPTOR(int, getgrouplist, const char *name, u32 basegid, u32 *groups,
   return res;
 }
 
+#define INIT_GETGROUPLIST COMMON_INTERCEPT_FUNCTION(getgrouplist);
+#else
+#define INIT_GETGROUPLIST
+#endif
+
+#if SANITIZER_INTERCEPT_GETGROUPMEMBERSHIP
 INTERCEPTOR(int, getgroupmembership, const char *name, u32 basegid, u32 *groups,
             int maxgrp, int *ngroups) {
   void *ctx;
@@ -6738,11 +6825,9 @@ INTERCEPTOR(int, getgroupmembership, const char *name, u32 basegid, u32 *groups,
   return res;
 }
 
-#define INIT_GETGROUPLIST \
-  COMMON_INTERCEPT_FUNCTION(getgrouplist); \
-  COMMON_INTERCEPT_FUNCTION(getgroupmembership);
+#define INIT_GETGROUPMEMBERSHIP COMMON_INTERCEPT_FUNCTION(getgroupmembership);
 #else
-#define INIT_GETGROUPLIST
+#define INIT_GETGROUPMEMBERSHIP
 #endif
 
 #if SANITIZER_INTERCEPT_READLINK
@@ -6844,8 +6929,8 @@ INTERCEPTOR(SIZE_T, strlcpy, char *dst, char *src, SIZE_T size) {
   COMMON_INTERCEPTOR_ENTER(ctx, strlcpy, dst, src, size);
   if (src) {
     // Keep strnlen as macro argument, as macro may ignore it.
-    COMMON_INTERCEPTOR_READ_STRING(ctx, src,
-      Min(REAL(strnlen)(src, size), size - 1) + 1);
+    COMMON_INTERCEPTOR_READ_STRING(
+        ctx, src, Min(internal_strnlen(src, size), size - 1) + 1);
   }
   res = REAL(strlcpy)(dst, src, size);
   COMMON_INTERCEPTOR_COPY_STRING(ctx, dst, src, REAL(strlen)(dst) + 1);
@@ -6858,7 +6943,7 @@ INTERCEPTOR(SIZE_T, strlcat, char *dst, char *src, SIZE_T size) {
   COMMON_INTERCEPTOR_ENTER(ctx, strlcat, dst, src, size);
   // src is checked in the strlcpy() interceptor
   if (dst) {
-    len = REAL(strnlen)(dst, size);
+    len = internal_strnlen(dst, size);
     COMMON_INTERCEPTOR_READ_STRING(ctx, dst, Min(len, size - 1) + 1);
   }
   // Reuse the rest of the code in the strlcpy() interceptor
@@ -6875,20 +6960,37 @@ INTERCEPTOR(SIZE_T, strlcat, char *dst, char *src, SIZE_T size) {
 INTERCEPTOR(void *, mmap, void *addr, SIZE_T sz, int prot, int flags, int fd,
             OFF_T off) {
   void *ctx;
+  if (common_flags()->detect_write_exec)
+    ReportMmapWriteExec(prot);
   if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
     return (void *)internal_mmap(addr, sz, prot, flags, fd, off);
   COMMON_INTERCEPTOR_ENTER(ctx, mmap, addr, sz, prot, flags, fd, off);
   COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd, off);
 }
-#define INIT_MMAP COMMON_INTERCEPT_FUNCTION(mmap);
+
+INTERCEPTOR(int, mprotect, void *addr, SIZE_T sz, int prot) {
+  void *ctx;
+  if (common_flags()->detect_write_exec)
+    ReportMmapWriteExec(prot);
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return (int)internal_mprotect(addr, sz, prot);
+  COMMON_INTERCEPTOR_ENTER(ctx, mprotect, addr, sz, prot);
+  MprotectMallocZones(addr, prot);
+  return REAL(mprotect)(addr, sz, prot);
+}
+#define INIT_MMAP                                                              \
+  COMMON_INTERCEPT_FUNCTION(mmap);                                             \
+  COMMON_INTERCEPT_FUNCTION(mprotect);
 #else
 #define INIT_MMAP
 #endif
 
 #if SANITIZER_INTERCEPT_MMAP64
 INTERCEPTOR(void *, mmap64, void *addr, SIZE_T sz, int prot, int flags, int fd,
-            OFF_T off) {
+            OFF64_T off) {
   void *ctx;
+  if (common_flags()->detect_write_exec)
+    ReportMmapWriteExec(prot);
   if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
     return (void *)internal_mmap(addr, sz, prot, flags, fd, off);
   COMMON_INTERCEPTOR_ENTER(ctx, mmap64, addr, sz, prot, flags, fd, off);
@@ -7178,6 +7280,9 @@ static void InitializeCommonInterceptors() {
   INIT_WRITEV;
   INIT_PWRITEV;
   INIT_PWRITEV64;
+  INIT_FGETS;
+  INIT_FPUTS;
+  INIT_PUTS;
   INIT_PRCTL;
   INIT_LOCALTIME_AND_FRIENDS;
   INIT_STRPTIME;
@@ -7262,6 +7367,11 @@ static void InitializeCommonInterceptors() {
   INIT__EXIT;
   INIT_PTHREAD_MUTEX_LOCK;
   INIT_PTHREAD_MUTEX_UNLOCK;
+  INIT___PTHREAD_MUTEX_LOCK;
+  INIT___PTHREAD_MUTEX_UNLOCK;
+  INIT___LIBC_MUTEX_LOCK;
+  INIT___LIBC_MUTEX_UNLOCK;
+  INIT___LIBC_THR_SETCANCELSTATE;
   INIT_GETMNTENT;
   INIT_GETMNTENT_R;
   INIT_STATFS;
@@ -7275,6 +7385,7 @@ static void InitializeCommonInterceptors() {
   INIT_SHMCTL;
   INIT_RANDOM_R;
   INIT_PTHREAD_ATTR_GET;
+  INIT_PTHREAD_ATTR_GET_SCHED;
   INIT_PTHREAD_ATTR_GETINHERITSCHED;
   INIT_PTHREAD_ATTR_GETAFFINITY_NP;
   INIT_PTHREAD_MUTEXATTR_GETPSHARED;
@@ -7359,6 +7470,7 @@ static void InitializeCommonInterceptors() {
   INIT_ACCESS;
   INIT_FACCESSAT;
   INIT_GETGROUPLIST;
+  INIT_GETGROUPMEMBERSHIP;
   INIT_READLINK;
   INIT_READLINKAT;
   INIT_NAME_TO_HANDLE_AT;
@@ -7371,12 +7483,6 @@ static void InitializeCommonInterceptors() {
   INIT_TTYENT;
   INIT_PROTOENT;
   INIT_NETENT;
-
-#if SANITIZER_NETBSD
-  COMMON_INTERCEPT_FUNCTION(__libc_mutex_lock);
-  COMMON_INTERCEPT_FUNCTION(__libc_mutex_unlock);
-  COMMON_INTERCEPT_FUNCTION(__libc_thr_setcancelstate);
-#endif
 
   INIT___PRINTF_CHK;
 }

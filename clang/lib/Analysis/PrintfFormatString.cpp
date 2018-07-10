@@ -466,13 +466,14 @@ ArgType PrintfSpecifier::getArgType(ASTContext &Ctx,
       case LengthModifier::AsIntMax:
         return ArgType(Ctx.getIntMaxType(), "intmax_t");
       case LengthModifier::AsSizeT:
-        return ArgType(Ctx.getSignedSizeType(), "ssize_t");
+        return ArgType::makeSizeT(ArgType(Ctx.getSignedSizeType(), "ssize_t"));
       case LengthModifier::AsInt3264:
         return Ctx.getTargetInfo().getTriple().isArch64Bit()
                    ? ArgType(Ctx.LongLongTy, "__int64")
                    : ArgType(Ctx.IntTy, "__int32");
       case LengthModifier::AsPtrDiff:
-        return ArgType(Ctx.getPointerDiffType(), "ptrdiff_t");
+        return ArgType::makePtrdiffT(
+            ArgType(Ctx.getPointerDiffType(), "ptrdiff_t"));
       case LengthModifier::AsAllocate:
       case LengthModifier::AsMAllocate:
       case LengthModifier::AsWide:
@@ -499,13 +500,14 @@ ArgType PrintfSpecifier::getArgType(ASTContext &Ctx,
       case LengthModifier::AsIntMax:
         return ArgType(Ctx.getUIntMaxType(), "uintmax_t");
       case LengthModifier::AsSizeT:
-        return ArgType(Ctx.getSizeType(), "size_t");
+        return ArgType::makeSizeT(ArgType(Ctx.getSizeType(), "size_t"));
       case LengthModifier::AsInt3264:
         return Ctx.getTargetInfo().getTriple().isArch64Bit()
                    ? ArgType(Ctx.UnsignedLongLongTy, "unsigned __int64")
                    : ArgType(Ctx.UnsignedIntTy, "unsigned __int32");
       case LengthModifier::AsPtrDiff:
-        return ArgType(Ctx.getUnsignedPointerDiffType(), "unsigned ptrdiff_t");
+        return ArgType::makePtrdiffT(
+            ArgType(Ctx.getUnsignedPointerDiffType(), "unsigned ptrdiff_t"));
       case LengthModifier::AsAllocate:
       case LengthModifier::AsMAllocate:
       case LengthModifier::AsWide:
@@ -647,6 +649,7 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
   case BuiltinType::Bool:
   case BuiltinType::WChar_U:
   case BuiltinType::WChar_S:
+  case BuiltinType::Char8: // FIXME: Treat like 'char'?
   case BuiltinType::Char16:
   case BuiltinType::Char32:
   case BuiltinType::UInt128:
@@ -654,6 +657,30 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
   case BuiltinType::Half:
   case BuiltinType::Float16:
   case BuiltinType::Float128:
+  case BuiltinType::ShortAccum:
+  case BuiltinType::Accum:
+  case BuiltinType::LongAccum:
+  case BuiltinType::UShortAccum:
+  case BuiltinType::UAccum:
+  case BuiltinType::ULongAccum:
+  case BuiltinType::ShortFract:
+  case BuiltinType::Fract:
+  case BuiltinType::LongFract:
+  case BuiltinType::UShortFract:
+  case BuiltinType::UFract:
+  case BuiltinType::ULongFract:
+  case BuiltinType::SatShortAccum:
+  case BuiltinType::SatAccum:
+  case BuiltinType::SatLongAccum:
+  case BuiltinType::SatUShortAccum:
+  case BuiltinType::SatUAccum:
+  case BuiltinType::SatULongAccum:
+  case BuiltinType::SatShortFract:
+  case BuiltinType::SatFract:
+  case BuiltinType::SatLongFract:
+  case BuiltinType::SatUShortFract:
+  case BuiltinType::SatUFract:
+  case BuiltinType::SatULongFract:
     // Various types which are non-trivial to correct.
     return false;
 

@@ -130,7 +130,7 @@ defm AnyReg : SystemZRegClass<"AnyReg",
                               [i64, f64, v8i8, v4i16, v2i32, v2f32], 64,
                               (add (sequence "R%uD", 0, 15),
                                    (sequence "F%uD", 0, 15),
-                                   (sequence "V%u", 0, 15))>;
+                                   (sequence "V%u", 0, 15)), 0/*allocatable*/>;
 
 //===----------------------------------------------------------------------===//
 // Floating-point registers
@@ -296,8 +296,8 @@ def v128any : TypedReg<untyped, VR128>;
 // The 2-bit condition code field of the PSW.  Every register named in an
 // inline asm needs a class associated with it.
 def CC : SystemZReg<"cc">;
-let isAllocatable = 0 in
-  def CCRegs : RegisterClass<"SystemZ", [i32], 32, (add CC)>;
+let isAllocatable = 0, CopyCost = -1 in
+  def CCR : RegisterClass<"SystemZ", [i32], 32, (add CC)>;
 
 // Access registers.
 class ACR32<bits<16> num, string n> : SystemZReg<n> {

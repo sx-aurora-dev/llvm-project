@@ -168,7 +168,8 @@ EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime,
   if (RequiresDataSharing && threadId % WARPSIZE == 0) {
     // Warp master innitializes data sharing environment.
     unsigned WID = threadId / WARPSIZE;
-    __kmpc_data_sharing_slot *RootS = currTeamDescr.RootS(WID);
+    __kmpc_data_sharing_slot *RootS = currTeamDescr.RootS(
+        WID, WID == WARPSIZE - 1);
     DataSharingState.SlotPtr[WID] = RootS;
     DataSharingState.StackPtr[WID] = (void *)&RootS->Data[0];
   }
@@ -185,4 +186,9 @@ EXTERN void __kmpc_spmd_kernel_deinit() {
     omptarget_nvptx_device_State[slot].Enqueue(
         omptarget_nvptx_threadPrivateContext);
   }
+}
+
+// Return true if the current target region is executed in SPMD mode.
+EXTERN int8_t __kmpc_is_spmd_exec_mode() {
+  return isSPMDMode();
 }

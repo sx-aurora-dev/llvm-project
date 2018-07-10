@@ -179,6 +179,7 @@ if (POLLY_BUNDLED_ISL)
   set (ISL_FILES
     isl/basis_reduction_tab.c
     isl/isl_aff.c
+    isl/isl_aff_map.c
     isl/isl_affine_hull.c
     isl/isl_arg.c
     isl/isl_ast_build.c
@@ -189,6 +190,7 @@ if (POLLY_BUNDLED_ISL)
     isl/isl_bernstein.c
     isl/isl_blk.c
     isl/isl_bound.c
+    isl/isl_box.c
     isl/isl_coalesce.c
     isl/isl_constraint.c
     isl/isl_convex_hull.c
@@ -254,6 +256,10 @@ if (POLLY_BUNDLED_ISL)
     isl/isl_version.c
     isl/isl_vertices.c
     isl/print.c
+    isl/set_to_map.c
+    isl/set_from_map.c
+    isl/uset_to_umap.c
+    isl/uset_from_umap.c
     isl/imath/gmp_compat.c
     isl/imath/imath.c
     isl/imath/imrat.c
@@ -352,6 +358,7 @@ if (MSVC)
     -wd4200 # nonstandard extension used: zero-sized array in struct/union
     -wd4201 # nonstandard extension used: nameless struct/union
     -wd4334 # 'operator': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)
+    -wd4221 # nonstandard extension used : 'identifier' : cannot be initialized using address of automatic variable
   )
   if (POLLY_BUNDLED_ISL)
     target_compile_options(PollyISL PRIVATE ${DISABLE_WARNING_FLAGS})

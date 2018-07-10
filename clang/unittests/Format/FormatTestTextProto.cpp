@@ -21,13 +21,13 @@ class FormatTestTextProto : public ::testing::Test {
 protected:
   static std::string format(llvm::StringRef Code, unsigned Offset,
                             unsigned Length, const FormatStyle &Style) {
-    DEBUG(llvm::errs() << "---\n");
-    DEBUG(llvm::errs() << Code << "\n\n");
+    LLVM_DEBUG(llvm::errs() << "---\n");
+    LLVM_DEBUG(llvm::errs() << Code << "\n\n");
     std::vector<tooling::Range> Ranges(1, tooling::Range(Offset, Length));
     tooling::Replacements Replaces = reformat(Style, Code, Ranges);
     auto Result = applyAllReplacements(Code, Replaces);
     EXPECT_TRUE(static_cast<bool>(Result));
-    DEBUG(llvm::errs() << "\n" << *Result << "\n\n");
+    LLVM_DEBUG(llvm::errs() << "\n" << *Result << "\n\n");
     return *Result;
   }
 
@@ -36,6 +36,7 @@ protected:
   }
 
   static void verifyFormat(llvm::StringRef Code, const FormatStyle &Style) {
+    EXPECT_EQ(Code.str(), format(Code, Style)) << "Expected code is not stable";
     EXPECT_EQ(Code.str(), format(test::messUp(Code), Style));
   }
 
@@ -143,6 +144,23 @@ TEST_F(FormatTestTextProto, AddsNewlinesAfterTrailingComments) {
                "}");
 }
 
+TEST_F(FormatTestTextProto, ImplicitStringLiteralConcatenation) {
+  verifyFormat("field_a: 'aaaaa'\n"
+               "         'bbbbb'");
+  verifyFormat("field_a: \"aaaaa\"\n"
+               "         \"bbbbb\"");
+  FormatStyle Style = getGoogleStyle(FormatStyle::LK_TextProto);
+  Style.AlwaysBreakBeforeMultilineStrings = true;
+  verifyFormat("field_a:\n"
+               "    'aaaaa'\n"
+               "    'bbbbb'",
+               Style);
+  verifyFormat("field_a:\n"
+               "    \"aaaaa\"\n"
+               "    \"bbbbb\"",
+               Style);
+}
+
 TEST_F(FormatTestTextProto, SupportsAngleBracketMessageFields) {
   // Single-line tests
   verifyFormat("msg_field <>");
@@ -153,17 +171,48 @@ TEST_F(FormatTestTextProto, SupportsAngleBracketMessageFields) {
   verifyFormat("msg_field < field_a < field_b <> > >");
   verifyFormat("msg_field: < field_a < field_b: <> > >");
   verifyFormat("msg_field < field_a: OK, field_b: \"OK\" >");
-  verifyFormat("msg_field < field_a: OK field_b: <>, field_c: OK >");
-  verifyFormat("msg_field < field_a { field_b: 1 }, field_c: < f_d: 2 > >");
   verifyFormat("msg_field: < field_a: OK, field_b: \"OK\" >");
-  verifyFormat("msg_field: < field_a: OK field_b: <>, field_c: OK >");
-  verifyFormat("msg_field: < field_a { field_b: 1 }, field_c: < fd_d: 2 > >");
-  verifyFormat("field_a: \"OK\", msg_field: < field_b: 123 >, field_c: {}");
-  verifyFormat("field_a < field_b: 1 >, msg_fid: < fiel_b: 123 >, field_c <>");
-  verifyFormat("field_a < field_b: 1 > msg_fied: < field_b: 123 > field_c <>");
-  verifyFormat("field < field < field: <> >, field <> > field: < field: 1 >");
-
   // Multiple lines tests
+  verifyFormat("msg_field <\n"
+               "  field_a: OK\n"
+               "  field_b: <>,\n"
+               "  field_c: OK\n"
+               ">");
+
+  verifyFormat("msg_field <\n"
+               "  field_a { field_b: 1 },\n"
+               "  field_c: < f_d: 2 >\n"
+               ">");
+
+  verifyFormat("msg_field: <\n"
+               "  field_a: OK\n"
+               "  field_b: <>,\n"
+               "  field_c: OK\n"
+               ">");
+
+  verifyFormat("msg_field: <\n"
+               "  field_a { field_b: 1 },\n"
+               "  field_c: < fd_d: 2 >\n"
+               ">");
+
+  verifyFormat("field_a: \"OK\",\n"
+               "msg_field: < field_b: 123 >,\n"
+               "field_c: {}");
+
+  verifyFormat("field_a < field_b: 1 >,\n"
+               "msg_fid: < fiel_b: 123 >,\n" 
+               "field_c <>");
+
+  verifyFormat("field_a < field_b: 1 >\n"
+               "msg_fied: < field_b: 123 >\n"
+               "field_c <>");
+
+  verifyFormat("field <\n"
+               "  field < field: <> >,\n"
+               "  field <>\n"
+               ">\n"
+               "field: < field: 1 >");
+
   verifyFormat("msg_field <\n"
                "  field_a: OK\n"
                "  field_b: \"OK\"\n"
@@ -224,7 +273,10 @@ TEST_F(FormatTestTextProto, SupportsAngleBracketMessageFields) {
                "  field_d: ok\n"
                "}");
 
-  verifyFormat("field_a: < f1: 1, f2: <> >\n"
+  verifyFormat("field_a: <\n"
+               "  f1: 1,\n"
+               "  f2: <>\n"
+               ">\n"
                "field_b <\n"
                "  field_b1: <>\n"
                "  field_b2: ok,\n"
@@ -329,6 +381,28 @@ TEST_F(FormatTestTextProto, KeepsCommentsIndentedInList) {
                "cccccccccccccccccccccccc: 3849");
 }
 
+TEST_F(FormatTestTextProto, UnderstandsHashHashComments) {
+  FormatStyle Style = getGoogleStyle(FormatStyle::LK_TextProto);
+  Style.ColumnLimit = 60; // To make writing tests easier.
+  EXPECT_EQ("aaa: 100\n"
+            "##this is a double-hash comment.\n"
+            "bb: 100\n"
+            "## another double-hash comment.\n"
+            "### a triple-hash comment\n"
+            "cc: 200\n"
+            "#### a quadriple-hash comment\n"
+            "dd: 100\n",
+            format("aaa: 100\n"
+                   "##this is a double-hash comment.\n"
+                   "bb: 100\n"
+                   "## another double-hash comment.\n"
+                   "### a triple-hash comment\n"
+                   "cc: 200\n"
+                   "#### a quadriple-hash comment\n"
+                   "dd: 100\n",
+                   Style));
+}
+
 TEST_F(FormatTestTextProto, FormatsExtensions) {
   verifyFormat("[type] { key: value }");
   verifyFormat("[type] {\n"
@@ -375,10 +449,12 @@ TEST_F(FormatTestTextProto, FormatsExtensions) {
                "     .long/longg.longlong] { key: value }");
   verifyFormat("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/\n"
                " bbbbbbbbbbbbbb] { key: value }");
-  verifyFormat("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
-               "] { key: value }");
-  verifyFormat("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
-               "] {\n"
+  // These go over the column limit intentionally, since the alternative
+  // [aa..a\n] is worse.
+  verifyFormat("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] {\n"
+               "  key: value\n"
+               "}");
+  verifyFormat("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] {\n"
                "  [type.type] {\n"
                "    keyyyyyyyyyyyyyy: valuuuuuuuuuuuuuuuuuuuuuuuuue\n"
                "  }\n"
@@ -399,16 +475,25 @@ TEST_F(FormatTestTextProto, FormatsExtensions) {
       "}");
 }
 
-TEST_F(FormatTestTextProto, NoSpaceAfterPercent) {
+TEST_F(FormatTestTextProto, SpacesAroundPercents) {
   verifyFormat("key: %d");
+  verifyFormat("key: 0x%04x");
+  verifyFormat("key: \"%d %d\"");
 }
 
 TEST_F(FormatTestTextProto, FormatsRepeatedListInitializers) {
   verifyFormat("keys: []");
   verifyFormat("keys: [ 1 ]");
   verifyFormat("keys: [ 'ala', 'bala' ]");
-  verifyFormat("keys:\n"
-               "    [ 'ala', 'bala', 'porto', 'kala', 'too', 'long', 'ng' ]");
+  verifyFormat("keys: [\n"
+               "  'ala',\n"
+               "  'bala',\n"
+               "  'porto',\n"
+               "  'kala',\n"
+               "  'too',\n"
+               "  'long',\n"
+               "  'ng'\n"
+               "]");
   verifyFormat("key: item\n"
                "keys: [\n"
                "  'ala',\n"
@@ -447,6 +532,7 @@ TEST_F(FormatTestTextProto, AcceptsOperatorAsKey) {
                "    ccccccccccccccccccccccc: <\n"
                "      operator: 1\n"
                "      operator: 2\n"
+               "      operator: 3\n"
                "      operator { key: value }\n"
                "    >\n"
                "  >\n"
@@ -456,6 +542,197 @@ TEST_F(FormatTestTextProto, AcceptsOperatorAsKey) {
 TEST_F(FormatTestTextProto, BreaksConsecutiveStringLiterals) {
   verifyFormat("ala: \"str1\"\n"
                "     \"str2\"\n");
+}
+
+TEST_F(FormatTestTextProto, PutsMultipleEntriesInExtensionsOnNewlines) {
+  FormatStyle Style = getGoogleStyle(FormatStyle::LK_TextProto);
+  verifyFormat("pppppppppp: {\n"
+               "  ssssss: \"http://example.com/blahblahblah\"\n"
+               "  ppppppp: \"sssss/MMMMMMMMMMMM\"\n"
+               "  [ns.sssss.eeeeeeeee.eeeeeeeeeeeeeee] { begin: 24 end: 252 }\n"
+               "  [ns.sssss.eeeeeeeee.eeeeeeeeeeeeeee] {\n"
+               "    begin: 24\n"
+               "    end: 252\n"
+               "    key: value\n"
+               "    key: value\n"
+               "  }\n"
+               "}", Style);
+}
+
+TEST_F(FormatTestTextProto, BreaksAfterBraceFollowedByClosingBraceOnNextLine) {
+  FormatStyle Style = getGoogleStyle(FormatStyle::LK_TextProto);
+  Style.ColumnLimit = 60;
+  verifyFormat("keys: [\n"
+               "  data: { item: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }\n"
+               "]");
+  verifyFormat("keys: <\n"
+               "  data: { item: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }\n"
+               ">");
+}
+
+TEST_F(FormatTestTextProto, BreaksEntriesOfSubmessagesContainingSubmessages) {
+  FormatStyle Style = getGoogleStyle(FormatStyle::LK_TextProto);
+  Style.ColumnLimit = 60;
+  // The column limit allows for the keys submessage to be put on 1 line, but we
+  // break it since it contains a submessage an another entry.
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "  sub <>\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "  sub {}\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub {}\n"
+               "  sub: <>\n"
+               "  sub: []\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: 'aaaaaaaaaaa'\n"
+               "  sub { msg: 1 }\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: 'aaaaaaaaaaa'\n"
+               "  sub: { msg: 1 }\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: 'aaaaaaaaaaa'\n"
+               "  sub < msg: 1 >\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: 'aaaaaaaaaaa'\n"
+               "  sub: [ msg: 1 ]\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: <\n"
+               "  item: 'aaaaaaaaaaa'\n"
+               "  sub: [ 1, 2 ]\n"
+               ">");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub {}\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub: []\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub <>\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub { key: value }\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub: [ 1, 2 ]\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  sub < sub_2: {} >\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: data\n"
+               "  sub: [ 1, 2 ]\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("key: valueeeeeeee\n"
+               "keys: {\n"
+               "  item: data\n"
+               "  sub < sub_2: {} >\n"
+               "  item: 'aaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("sub: {\n"
+               "  key: valueeeeeeee\n"
+               "  keys: {\n"
+               "    sub: [ 1, 2 ]\n"
+               "    item: 'aaaaaaaaaaaaaaaa'\n"
+               "  }\n"
+               "}");
+  verifyFormat("sub: {\n"
+               "  key: 1\n"
+               "  sub: {}\n"
+               "}\n"
+               "# comment\n");
+  verifyFormat("sub: {\n"
+               "  key: 1\n"
+               "  # comment\n"
+               "  sub: {}\n"
+               "}");
+}
+
+TEST_F(FormatTestTextProto, PreventBreaksBetweenKeyAndSubmessages) {
+  verifyFormat("submessage: {\n"
+               "  key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("submessage {\n"
+               "  key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"
+               "}");
+  verifyFormat("submessage: <\n"
+               "  key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"
+               ">");
+  verifyFormat("submessage <\n"
+               "  key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"
+               ">");
+  verifyFormat("repeatedd: [\n"
+               "  'eyaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"
+               "]");
+  // "{" is going over the column limit.
+  verifyFormat(
+      "submessageeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee: {\n"
+      "  key: 'aaaaa'\n"
+      "}");
+}
+
+TEST_F(FormatTestTextProto, FormatsCommentsAtEndOfFile) {
+  verifyFormat("key: value\n"
+               "# endfile comment");
+  verifyFormat("key: value\n"
+               "// endfile comment");
+  verifyFormat("key: value\n"
+               "// endfile comment 1\n"
+               "// endfile comment 2");
+  verifyFormat("submessage { key: value }\n"
+               "# endfile comment");
+  verifyFormat("submessage <\n"
+               "  key: value\n"
+               "  item {}\n"
+               ">\n"
+               "# endfile comment");
+}
+
+TEST_F(FormatTestTextProto, KeepsAmpersandsNextToKeys) {
+  verifyFormat("@tmpl { field: 1 }");
+  verifyFormat("@placeholder: 1");
+  verifyFormat("@name <>");
+  verifyFormat("submessage: @base { key: value }");
+  verifyFormat("submessage: @base {\n"
+               "  key: value\n"
+               "  item: {}\n"
+               "}");
+  verifyFormat("submessage: {\n"
+               "  msg: @base {\n"
+               "    yolo: {}\n"
+               "    key: value\n"
+               "  }\n"
+               "  key: value\n"
+               "}");
 }
 
 } // end namespace tooling

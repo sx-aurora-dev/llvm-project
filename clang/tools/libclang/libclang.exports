@@ -46,6 +46,7 @@ clang_Cursor_isVariadic
 clang_Cursor_getModule
 clang_Cursor_getStorageClass
 clang_File_isEqual
+clang_File_tryGetRealPathName
 clang_Module_getASTFile
 clang_Module_getParent
 clang_Module_getName
@@ -170,6 +171,8 @@ clang_getCompletionBriefComment
 clang_getCompletionChunkCompletionString
 clang_getCompletionChunkKind
 clang_getCompletionChunkText
+clang_getCompletionNumFixIts
+clang_getCompletionFixIt
 clang_getCompletionNumAnnotations
 clang_getCompletionParent
 clang_getCompletionPriority
@@ -259,6 +262,7 @@ clang_getSpecializedCursorTemplate
 clang_getSpellingLocation
 clang_getTUResourceUsageName
 clang_getTemplateCursorKind
+clang_getToken
 clang_getTokenExtent
 clang_getTokenKind
 clang_getTokenLocation

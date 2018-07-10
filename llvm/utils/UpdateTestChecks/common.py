@@ -3,6 +3,7 @@ import re
 import string
 import subprocess
 import sys
+import copy
 
 if sys.version_info[0] > 2:
   class string:
@@ -53,6 +54,11 @@ OPT_FUNCTION_RE = re.compile(
     r'(\s+)?[^)]*[^{]*\{\n(?P<body>.*?)^\}$',
     flags=(re.M | re.S))
 
+ANALYZE_FUNCTION_RE = re.compile(
+    r'^\s*\'(?P<analysis>[\w\s-]+?)\'\s+for\s+function\s+\'(?P<func>[\w-]+?)\':'
+    r'\s*\n(?P<body>.*)$',
+    flags=(re.X | re.S))
+
 IR_FUNCTION_RE = re.compile('^\s*define\s+(?:internal\s+)?[^@]*@(\w+)\s*\(')
 TRIPLE_IR_RE = re.compile(r'^\s*target\s+triple\s*=\s*"([^"]+)"$')
 TRIPLE_ARG_RE = re.compile(r'-mtriple[= ]([^ ]+)')
@@ -75,13 +81,33 @@ def scrub_body(body):
   body = SCRUB_TRAILING_WHITESPACE_RE.sub(r'', body)
   return body
 
+def do_scrub(body, scrubber, scrubber_args, extra):
+  if scrubber_args:
+    local_args = copy.deepcopy(scrubber_args)
+    local_args[0].extra_scrub = extra
+    return scrubber(body, *local_args)
+  return scrubber(body, *scrubber_args)
+
 # Build up a dictionary of all the function bodies.
+class function_body(object):
+  def __init__(self, string, extra):
+    self.scrub = string
+    self.extrascrub = extra
+  def __str__(self):
+    return self.scrub
+
 def build_function_body_dictionary(function_re, scrubber, scrubber_args, raw_tool_output, prefixes, func_dict, verbose):
   for m in function_re.finditer(raw_tool_output):
     if not m:
       continue
     func = m.group('func')
-    scrubbed_body = scrubber(m.group('body'), *scrubber_args)
+    body = m.group('body')
+    scrubbed_body = do_scrub(body, scrubber, scrubber_args, extra = False)
+    scrubbed_extra = do_scrub(body, scrubber, scrubber_args, extra = True)
+    if m.groupdict().has_key('analysis'):
+      analysis = m.group('analysis')
+      if analysis.lower() != 'cost model analysis':
+        print('WARNING: Unsupported analysis mode: %r!' % (analysis,), file=sys.stderr)
     if func.startswith('stress'):
       # We only use the last line of the function body for stress tests.
       scrubbed_body = '\n'.join(scrubbed_body.splitlines()[-1:])
@@ -90,15 +116,19 @@ def build_function_body_dictionary(function_re, scrubber, scrubber_args, raw_too
       for l in scrubbed_body.splitlines():
         print('  ' + l, file=sys.stderr)
     for prefix in prefixes:
-      if func in func_dict[prefix] and func_dict[prefix][func] != scrubbed_body:
-        if prefix == prefixes[-1]:
-          print('WARNING: Found conflicting asm under the '
-                               'same prefix: %r!' % (prefix,), file=sys.stderr)
-        else:
-          func_dict[prefix][func] = None
+      if func in func_dict[prefix] and str(func_dict[prefix][func]) != scrubbed_body:
+        if func_dict[prefix][func] and func_dict[prefix][func].extrascrub == scrubbed_extra:
+          func_dict[prefix][func].scrub = scrubbed_extra
           continue
+        else:
+          if prefix == prefixes[-1]:
+            print('WARNING: Found conflicting asm under the '
+                                 'same prefix: %r!' % (prefix,), file=sys.stderr)
+          else:
+            func_dict[prefix][func] = None
+            continue
 
-      func_dict[prefix][func] = scrubbed_body
+      func_dict[prefix][func] = function_body(scrubbed_body, scrubbed_extra)
 
 ##### Generator of LLVM IR CHECK lines
 
@@ -106,13 +136,14 @@ SCRUB_IR_COMMENT_RE = re.compile(r'\s*;.*')
 
 # Match things that look at identifiers, but only if they are followed by
 # spaces, commas, paren, or end of the string
-IR_VALUE_RE = re.compile(r'(\s+)%([\w\.]+?)([,\s\(\)]|\Z)')
+IR_VALUE_RE = re.compile(r'(\s+)%([\w\.\-]+?)([,\s\(\)]|\Z)')
 
 # Create a FileCheck variable name based on an IR name.
 def get_value_name(var):
   if var.isdigit():
     var = 'TMP' + var
   var = var.replace('.', '_')
+  var = var.replace('-', '_')
   return var.upper()
 
 
@@ -126,7 +157,7 @@ def get_value_use(var):
   return '[[' + get_value_name(var) + ']]'
 
 # Replace IR value defs and uses with FileCheck variables.
-def genericize_check_lines(lines):
+def genericize_check_lines(lines, is_analyze):
   # This gets called for each match that occurs in
   # a line. We transform variables we haven't seen
   # into defs, and variables we have seen into uses.
@@ -151,32 +182,45 @@ def genericize_check_lines(lines):
     line = line.replace('%.', '%dot')
     # Ignore any comments, since the check lines will too.
     scrubbed_line = SCRUB_IR_COMMENT_RE.sub(r'', line)
-    lines[i] =  IR_VALUE_RE.sub(transform_line_vars, scrubbed_line)
+    if is_analyze == False:
+      lines[i] =  IR_VALUE_RE.sub(transform_line_vars, scrubbed_line)
+    else:
+      lines[i] =  scrubbed_line
   return lines
 
 
-def add_ir_checks(output_lines, prefix_list, func_dict, func_name, opt_basename):
-  # Label format is based on IR string.
-  check_label_format = "; %s-LABEL: @%s("
-
+def add_checks(output_lines, comment_marker, prefix_list, func_dict, func_name, check_label_format, is_asm, is_analyze):
   printed_prefixes = []
-  for checkprefixes, _ in prefix_list:
+  for p in prefix_list:
+    checkprefixes = p[0]
     for checkprefix in checkprefixes:
       if checkprefix in printed_prefixes:
         break
-      if not func_dict[checkprefix][func_name]:
+      # TODO func_dict[checkprefix] may be None, '' or not exist.
+      # Fix the call sites.
+      if func_name not in func_dict[checkprefix] or not func_dict[checkprefix][func_name]:
         continue
+
       # Add some space between different check prefixes, but not after the last
       # check line (before the test code).
-      #if len(printed_prefixes) != 0:
-      #  output_lines.append(';')
+      if is_asm == True:
+        if len(printed_prefixes) != 0:
+          output_lines.append(comment_marker)
+
       printed_prefixes.append(checkprefix)
       output_lines.append(check_label_format % (checkprefix, func_name))
-      func_body = func_dict[checkprefix][func_name].splitlines()
+      func_body = str(func_dict[checkprefix][func_name]).splitlines()
+
+      # For ASM output, just emit the check lines.
+      if is_asm == True:
+        output_lines.append('%s %s:       %s' % (comment_marker, checkprefix, func_body[0]))
+        for func_line in func_body[1:]:
+          output_lines.append('%s %s-NEXT:  %s' % (comment_marker, checkprefix, func_line))
+        break
 
       # For IR output, change all defs to FileCheck variables, so we're immune
       # to variable naming fashions.
-      func_body = genericize_check_lines(func_body)
+      func_body = genericize_check_lines(func_body, is_analyze)
 
       # This could be selectively enabled with an optional invocation argument.
       # Disabled for now: better to check everything. Be safe rather than sorry.
@@ -186,7 +230,7 @@ def add_ir_checks(output_lines, prefix_list, func_dict, func_name, opt_basename)
       #if func_body[0].startswith("#") or func_body[0].startswith("entry:"):
       #  is_blank_line = True
       #else:
-      #  output_lines.append('; %s:       %s' % (checkprefix, func_body[0]))
+      #  output_lines.append('%s %s:       %s' % (comment_marker, checkprefix, func_body[0]))
       #  is_blank_line = False
 
       is_blank_line = False
@@ -200,13 +244,23 @@ def add_ir_checks(output_lines, prefix_list, func_dict, func_name, opt_basename)
 
         # Skip blank lines instead of checking them.
         if is_blank_line == True:
-          output_lines.append('; %s:       %s' % (checkprefix, func_line))
+          output_lines.append('{} {}:       {}'.format(
+              comment_marker, checkprefix, func_line))
         else:
-          output_lines.append('; %s-NEXT:  %s' % (checkprefix, func_line))
+          output_lines.append('{} {}-NEXT:  {}'.format(
+              comment_marker, checkprefix, func_line))
         is_blank_line = False
 
       # Add space between different check prefixes and also before the first
       # line of code in the test function.
-      output_lines.append(';')
+      output_lines.append(comment_marker)
       break
-  return output_lines
+
+def add_ir_checks(output_lines, comment_marker, prefix_list, func_dict, func_name):
+  # Label format is based on IR string.
+  check_label_format = '{} %s-LABEL: @%s('.format(comment_marker)
+  add_checks(output_lines, comment_marker, prefix_list, func_dict, func_name, check_label_format, False, False)
+
+def add_analyze_checks(output_lines, comment_marker, prefix_list, func_dict, func_name):
+  check_label_format = '{} %s-LABEL: \'%s\''.format(comment_marker)
+  add_checks(output_lines, comment_marker, prefix_list, func_dict, func_name, check_label_format, False, True)

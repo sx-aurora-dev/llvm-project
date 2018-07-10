@@ -61,12 +61,7 @@ public:
     StringRef Exe = Saver.save(*ExeOrErr);
     Args.insert(Args.begin(), Exe);
 
-    std::vector<const char *> Vec;
-    for (StringRef S : Args)
-      Vec.push_back(S.data());
-    Vec.push_back(nullptr);
-
-    if (sys::ExecuteAndWait(Args[0], Vec.data()) != 0)
+    if (sys::ExecuteAndWait(Args[0], Args) != 0)
       fatal("ExecuteAndWait failed: " +
             llvm::join(Args.begin(), Args.end(), " "));
   }
@@ -139,7 +134,7 @@ void parseGuard(StringRef FullArg) {
     else if (Arg.equals_lower("cf") || Arg.equals_lower("longjmp"))
       Config->GuardCF = GuardCFLevel::Full;
     else
-      fatal("invalid argument to /GUARD: " + Arg);
+      fatal("invalid argument to /guard: " + Arg);
   }
 }
 
@@ -185,6 +180,10 @@ void parseMerge(StringRef S) {
   std::tie(From, To) = S.split('=');
   if (From.empty() || To.empty())
     fatal("/merge: invalid argument: " + S);
+  if (From == ".rsrc" || To == ".rsrc")
+    fatal("/merge: cannot merge '.rsrc' with any section");
+  if (From == ".reloc" || To == ".reloc")
+    fatal("/merge: cannot merge '.reloc' with any section");
   auto Pair = Config->Merge.insert(std::make_pair(From, To));
   bool Inserted = Pair.second;
   if (!Inserted) {
@@ -582,6 +581,26 @@ static StringRef undecorate(StringRef Sym) {
   return Sym.startswith("_") ? Sym.substr(1) : Sym;
 }
 
+// Convert stdcall/fastcall style symbols into unsuffixed symbols,
+// with or without a leading underscore. (MinGW specific.)
+static StringRef killAt(StringRef Sym, bool Prefix) {
+  if (Sym.empty())
+    return Sym;
+  // Strip any trailing stdcall suffix
+  Sym = Sym.substr(0, Sym.find('@', 1));
+  if (!Sym.startswith("@")) {
+    if (Prefix && !Sym.startswith("_"))
+      return Saver.save("_" + Sym);
+    return Sym;
+  }
+  // For fastcall, remove the leading @ and replace it with an
+  // underscore, if prefixes are used.
+  Sym = Sym.substr(1);
+  if (Prefix)
+    Sym = Saver.save("_" + Sym);
+  return Sym;
+}
+
 // Performs error checking on all /export arguments.
 // It also sets ordinals.
 void fixupExports() {
@@ -611,6 +630,15 @@ void fixupExports() {
       E.ExportName = undecorate(E.Name);
     } else {
       E.ExportName = undecorate(E.ExtName.empty() ? E.Name : E.ExtName);
+    }
+  }
+
+  if (Config->KillAt && Config->Machine == I386) {
+    for (Export &E : Config->Exports) {
+      E.Name = killAt(E.Name, true);
+      E.ExportName = killAt(E.ExportName, false);
+      E.ExtName = killAt(E.ExtName, true);
+      E.SymbolName = killAt(E.SymbolName, true);
     }
   }
 
@@ -723,6 +751,28 @@ static const llvm::opt::OptTable::Info InfoTable[] = {
 
 COFFOptTable::COFFOptTable() : OptTable(InfoTable, true) {}
 
+// Set color diagnostics according to --color-diagnostics={auto,always,never}
+// or --no-color-diagnostics flags.
+static void handleColorDiagnostics(opt::InputArgList &Args) {
+  auto *Arg = Args.getLastArg(OPT_color_diagnostics, OPT_color_diagnostics_eq,
+                              OPT_no_color_diagnostics);
+  if (!Arg)
+    return;
+  if (Arg->getOption().getID() == OPT_color_diagnostics) {
+    errorHandler().ColorDiagnostics = true;
+  } else if (Arg->getOption().getID() == OPT_no_color_diagnostics) {
+    errorHandler().ColorDiagnostics = false;
+  } else {
+    StringRef S = Arg->getValue();
+    if (S == "always")
+      errorHandler().ColorDiagnostics = true;
+    else if (S == "never")
+      errorHandler().ColorDiagnostics = false;
+    else if (S != "auto")
+      error("unknown option: --color-diagnostics=" + S);
+  }
+}
+
 static cl::TokenizerCallback getQuotingStyle(opt::InputArgList &Args) {
   if (auto *Arg = Args.getLastArg(OPT_rsp_quoting)) {
     StringRef S = Arg->getValue();
@@ -766,6 +816,9 @@ opt::InputArgList ArgParser::parse(ArrayRef<const char *> Argv) {
 
   if (MissingCount)
     fatal(Twine(Args.getArgString(MissingIndex)) + ": missing argument");
+
+  handleColorDiagnostics(Args);
+
   for (auto *Arg : Args.filtered(OPT_UNKNOWN))
     warn("ignoring unknown argument: " + Arg->getSpelling());
   return Args;

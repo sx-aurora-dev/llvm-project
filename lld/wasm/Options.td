@@ -11,12 +11,21 @@ multiclass Eq<string name> {
   def _eq: Joined<["--", "-"], name # "=">, Alias<!cast<Separate>(NAME)>;
 }
 
+multiclass B<string name, string help1, string help2> {
+  def NAME: Flag<["--", "-"], name>, HelpText<help1>;
+  def no_ # NAME: Flag<["--", "-"], "no-" # name>, HelpText<help2>;
+}
+
 // The follow flags are shared with the ELF linker
 def color_diagnostics: F<"color-diagnostics">,
   HelpText<"Use colors in diagnostics">;
 
 def color_diagnostics_eq: J<"color-diagnostics=">,
-  HelpText<"Use colors in diagnostics">;
+  HelpText<"Use colors in diagnostics; one of 'always', 'never', 'auto'">;
+
+defm demangle: B<"demangle",
+    "Demangle symbol names",
+    "Do not demangle symbol names">;
 
 def entry: S<"entry">, MetaVarName<"<entry>">,
   HelpText<"Name of entry point symbol">;
@@ -27,8 +36,13 @@ def error_limit: J<"error-limit=">,
 def fatal_warnings: F<"fatal-warnings">,
   HelpText<"Treat warnings as errors">;
 
-def gc_sections: F<"gc-sections">,
-  HelpText<"Enable garbage collection of unused sections">;
+defm gc_sections: B<"gc-sections",
+    "Enable garbage collection of unused sections",
+    "Disable garbage collection of unused sections">;
+
+defm merge_data_segments: B<"merge-data-segments",
+    "Enable merging data segments",
+    "Disable merging data segments">;
 
 def help: F<"help">, HelpText<"Print option help">;
 
@@ -48,17 +62,14 @@ def no_color_diagnostics: F<"no-color-diagnostics">,
 
 def no_fatal_warnings: F<"no-fatal-warnings">;
 
-def no_gc_sections: F<"no-gc-sections">,
-  HelpText<"Disable garbage collection of unused sections">;
-
-def no_print_gc_sections: F<"no-print-gc-sections">,
-  HelpText<"Do not list removed unused sections">;
-
 def o: JoinedOrSeparate<["-"], "o">, MetaVarName<"<path>">,
   HelpText<"Path to file to write output">;
 
-def print_gc_sections: F<"print-gc-sections">,
-  HelpText<"List removed unused sections">;
+def O: JoinedOrSeparate<["-"], "O">, HelpText<"Optimize output file size">;
+
+defm print_gc_sections: B<"print-gc-sections",
+    "List removed unused sections",
+    "Do not list removed unused sections">;
 
 def relocatable: F<"relocatable">, HelpText<"Create relocatable object file">;
 
@@ -91,11 +102,14 @@ def allow_undefined_file: J<"allow-undefined-file=">,
 def allow_undefined_file_s: Separate<["-"], "allow-undefined-file">,
   Alias<allow_undefined_file>;
 
-def check_signatures: F<"check-signatures">,
-  HelpText<"Check function signatures">;
-
 defm export: Eq<"export">,
   HelpText<"Force a symbol to be exported">;
+
+def export_all: F<"export-all">,
+  HelpText<"Export all symbols (normally combined with --no-gc-sections)">;
+
+def export_table: F<"export-table">,
+  HelpText<"Export function table to the environment">;
 
 def global_base: J<"global-base=">,
   HelpText<"Where to start to place global data">;
@@ -103,17 +117,20 @@ def global_base: J<"global-base=">,
 def import_memory: F<"import-memory">,
   HelpText<"Import memory from the environment">;
 
+def import_table: F<"import-table">,
+  HelpText<"Import function table from the environment">;
+
 def initial_memory: J<"initial-memory=">,
   HelpText<"Initial size of the linear memory">;
 
 def max_memory: J<"max-memory=">,
   HelpText<"Maximum size of the linear memory">;
 
-def no_check_signatures: F<"no-check-signatures">,
-  HelpText<"Don't check function signatures">;
-
 def no_entry: F<"no-entry">,
   HelpText<"Do not output any entry point">;
+
+def stack_first: F<"stack-first">,
+  HelpText<"Place stack at start of linear memory rather than after data">;
 
 // Aliases
 def alias_entry_e: JoinedOrSeparate<["-"], "e">, Alias<entry>;
@@ -122,3 +139,16 @@ def alias_initial_memory_i: Flag<["-"], "i">, Alias<initial_memory>;
 def alias_max_memory_m: Flag<["-"], "m">, Alias<max_memory>;
 def alias_relocatable_r: Flag<["-"], "r">, Alias<relocatable>;
 def alias_undefined_u: JoinedOrSeparate<["-"], "u">, Alias<undefined>;
+
+// LTO-related options.
+def lto_O: J<"lto-O">, MetaVarName<"<opt-level>">,
+  HelpText<"Optimization level for LTO">;
+def lto_partitions: J<"lto-partitions=">,
+  HelpText<"Number of LTO codegen partitions">;
+def disable_verify: F<"disable-verify">;
+def save_temps: F<"save-temps">;
+def thinlto_cache_dir: J<"thinlto-cache-dir=">,
+  HelpText<"Path to ThinLTO cached object file directory">;
+defm thinlto_cache_policy: Eq<"thinlto-cache-policy">,
+  HelpText<"Pruning policy for the ThinLTO cache">;
+def thinlto_jobs: J<"thinlto-jobs=">, HelpText<"Number of ThinLTO jobs">;

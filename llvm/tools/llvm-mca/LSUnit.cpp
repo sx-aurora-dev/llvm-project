@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "LSUnit.h"
+#include "Instruction.h"
+
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -35,8 +37,8 @@ void LSUnit::assignLQSlot(unsigned Index) {
   assert(!isLQFull());
   assert(LoadQueue.count(Index) == 0);
 
-  DEBUG(dbgs() << "[LSUnit] - AssignLQSlot <Idx=" << Index
-               << ",slot=" << LoadQueue.size() << ">\n");
+  LLVM_DEBUG(dbgs() << "[LSUnit] - AssignLQSlot <Idx=" << Index
+                    << ",slot=" << LoadQueue.size() << ">\n");
   LoadQueue.insert(Index);
 }
 
@@ -44,25 +46,49 @@ void LSUnit::assignSQSlot(unsigned Index) {
   assert(!isSQFull());
   assert(StoreQueue.count(Index) == 0);
 
-  DEBUG(dbgs() << "[LSUnit] - AssignSQSlot <Idx=" << Index
-               << ",slot=" << StoreQueue.size() << ">\n");
+  LLVM_DEBUG(dbgs() << "[LSUnit] - AssignSQSlot <Idx=" << Index
+                    << ",slot=" << StoreQueue.size() << ">\n");
   StoreQueue.insert(Index);
 }
 
-bool LSUnit::isReady(unsigned Index) const {
+bool LSUnit::reserve(const InstRef &IR) {
+  const InstrDesc Desc = IR.getInstruction()->getDesc();
+  unsigned MayLoad = Desc.MayLoad;
+  unsigned MayStore = Desc.MayStore;
+  unsigned IsMemBarrier = Desc.HasSideEffects;
+  if (!MayLoad && !MayStore)
+    return false;
+
+  const unsigned Index = IR.getSourceIndex();
+  if (MayLoad) {
+    if (IsMemBarrier)
+      LoadBarriers.insert(Index);
+    assignLQSlot(Index);
+  }
+  if (MayStore) {
+    if (IsMemBarrier)
+      StoreBarriers.insert(Index);
+    assignSQSlot(Index);
+  }
+  return true;
+}
+
+bool LSUnit::isReady(const InstRef &IR) const {
+  const unsigned Index = IR.getSourceIndex();
   bool IsALoad = LoadQueue.count(Index) != 0;
   bool IsAStore = StoreQueue.count(Index) != 0;
-  unsigned LoadBarrierIndex = LoadBarriers.empty() ? 0 : *LoadBarriers.begin();
-  unsigned StoreBarrierIndex = StoreBarriers.empty() ? 0 : *StoreBarriers.begin();
+  assert((IsALoad || IsAStore) && "Instruction is not in queue!");
 
-  if (IsALoad && LoadBarrierIndex) {
+  if (IsALoad && !LoadBarriers.empty()) {
+    unsigned LoadBarrierIndex = *LoadBarriers.begin();
     if (Index > LoadBarrierIndex)
       return false;
     if (Index == LoadBarrierIndex && Index != *LoadQueue.begin())
       return false;
   }
 
-  if (IsAStore && StoreBarrierIndex) {
+  if (IsAStore && !StoreBarriers.empty()) {
+    unsigned StoreBarrierIndex = *StoreBarriers.begin();
     if (Index > StoreBarrierIndex)
       return false;
     if (Index == StoreBarrierIndex && Index != *StoreQueue.begin())
@@ -92,24 +118,31 @@ bool LSUnit::isReady(unsigned Index) const {
   return !IsAStore;
 }
 
-void LSUnit::onInstructionExecuted(unsigned Index) {
+void LSUnit::onInstructionExecuted(const InstRef &IR) {
+  const unsigned Index = IR.getSourceIndex();
   std::set<unsigned>::iterator it = LoadQueue.find(Index);
   if (it != LoadQueue.end()) {
-    DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
-                 << " has been removed from the load queue.\n");
+    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
+                      << " has been removed from the load queue.\n");
     LoadQueue.erase(it);
   }
 
   it = StoreQueue.find(Index);
   if (it != StoreQueue.end()) {
-    DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
-                 << " has been removed from the store queue.\n");
+    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
+                      << " has been removed from the store queue.\n");
     StoreQueue.erase(it);
   }
 
-  if (!StoreBarriers.empty() && Index == *StoreBarriers.begin())
+  if (!StoreBarriers.empty() && Index == *StoreBarriers.begin()) {
+    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
+                      << " has been removed from the set of store barriers.\n");
     StoreBarriers.erase(StoreBarriers.begin());
-  if (!LoadBarriers.empty() && Index == *LoadBarriers.begin())
+  }
+  if (!LoadBarriers.empty() && Index == *LoadBarriers.begin()) {
+    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
+                      << " has been removed from the set of load barriers.\n");
     LoadBarriers.erase(LoadBarriers.begin());
+  }
 }
 } // namespace mca

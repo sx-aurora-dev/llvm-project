@@ -13,11 +13,11 @@
 
 #include "clang/Parse/Parser.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/PrettyDeclStackTrace.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
-#include "clang/Sema/PrettyDeclStackTrace.h"
 #include "clang/Sema/Scope.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
@@ -381,25 +381,23 @@ static void addContextSensitiveTypeNullability(Parser &P,
                                                SourceLocation nullabilityLoc,
                                                bool &addedToDeclSpec) {
   // Create the attribute.
-  auto getNullabilityAttr = [&]() -> AttributeList * {
-    return D.getAttributePool().create(
-             P.getNullabilityKeyword(nullability),
-             SourceRange(nullabilityLoc),
-             nullptr, SourceLocation(),
-             nullptr, 0,
-             AttributeList::AS_ContextSensitiveKeyword);
+  auto getNullabilityAttr = [&](AttributePool &Pool) -> AttributeList * {
+    return Pool.create(P.getNullabilityKeyword(nullability),
+                       SourceRange(nullabilityLoc), nullptr, SourceLocation(),
+                       nullptr, 0, AttributeList::AS_ContextSensitiveKeyword);
   };
 
   if (D.getNumTypeObjects() > 0) {
     // Add the attribute to the declarator chunk nearest the declarator.
-    auto nullabilityAttr = getNullabilityAttr();
+    auto nullabilityAttr = getNullabilityAttr(D.getAttributePool());
     DeclaratorChunk &chunk = D.getTypeObject(0);
     nullabilityAttr->setNext(chunk.getAttrListRef());
     chunk.getAttrListRef() = nullabilityAttr;
   } else if (!addedToDeclSpec) {
     // Otherwise, just put it on the declaration specifiers (if one
     // isn't there already).
-    D.getMutableDeclSpec().addAttributes(getNullabilityAttr());
+    D.getMutableDeclSpec().addAttributes(
+        getNullabilityAttr(D.getDeclSpec().getAttributePool()));
     addedToDeclSpec = true;
   }
 }
@@ -2272,7 +2270,7 @@ void Parser::ObjCImplParsingDataRAII::finish(SourceRange AtEnd) {
       P.ParseLexedObjCMethodDefs(*LateParsedObjCMethods[i], 
                                  false/*c-functions*/);
   
-  /// \brief Clear and free the cached objc methods.
+  /// Clear and free the cached objc methods.
   for (LateParsedObjCMethodContainer::iterator
          I = LateParsedObjCMethods.begin(),
          E = LateParsedObjCMethods.end(); I != E; ++I)
@@ -2585,13 +2583,26 @@ StmtResult Parser::ParseObjCTryStmt(SourceLocation atLoc) {
       ParseScope FinallyScope(this,
                               Scope::DeclScope | Scope::CompoundStmtScope);
 
+      bool ShouldCapture =
+          getTargetInfo().getTriple().isWindowsMSVCEnvironment();
+      if (ShouldCapture)
+        Actions.ActOnCapturedRegionStart(Tok.getLocation(), getCurScope(),
+                                         CR_ObjCAtFinally, 1);
+
       StmtResult FinallyBody(true);
       if (Tok.is(tok::l_brace))
         FinallyBody = ParseCompoundStatementBody();
       else
         Diag(Tok, diag::err_expected) << tok::l_brace;
-      if (FinallyBody.isInvalid())
+
+      if (FinallyBody.isInvalid()) {
         FinallyBody = Actions.ActOnNullStmt(Tok.getLocation());
+        if (ShouldCapture)
+          Actions.ActOnCapturedRegionError();
+      } else if (ShouldCapture) {
+        FinallyBody = Actions.ActOnCapturedRegionEnd(FinallyBody.get());
+      }
+
       FinallyStmt = Actions.ActOnObjCAtFinallyStmt(AtCatchFinallyLoc,
                                                    FinallyBody.get());
       catch_or_finally_seen = true;
@@ -2680,7 +2691,7 @@ void Parser::StashAwayMethodOrFunctionBodyTokens(Decl *MDecl) {
 Decl *Parser::ParseObjCMethodDefinition() {
   Decl *MDecl = ParseObjCMethodPrototype();
 
-  PrettyDeclStackTraceEntry CrashInfo(Actions, MDecl, Tok.getLocation(),
+  PrettyDeclStackTraceEntry CrashInfo(Actions.Context, MDecl, Tok.getLocation(),
                                       "parsing Objective-C method");
 
   // parse optional ';'
@@ -2864,7 +2875,7 @@ ExprResult Parser::ParseObjCAtExpression(SourceLocation AtLoc) {
   }
 }
 
-/// \brief Parse the receiver of an Objective-C++ message send.
+/// Parse the receiver of an Objective-C++ message send.
 ///
 /// This routine parses the receiver of a message send in
 /// Objective-C++ either as a type or as an expression. Note that this
@@ -2954,7 +2965,7 @@ bool Parser::ParseObjCXXMessageReceiver(bool &IsExpr, void *&TypeOrExpr) {
   return false;
 }
 
-/// \brief Determine whether the parser is currently referring to a an
+/// Determine whether the parser is currently referring to a an
 /// Objective-C message send, using a simplified heuristic to avoid overhead.
 ///
 /// This routine will only return true for a subset of valid message-send
@@ -3099,7 +3110,7 @@ ExprResult Parser::ParseObjCMessageExpression() {
                                         Res.get());
 }
 
-/// \brief Parse the remainder of an Objective-C message following the
+/// Parse the remainder of an Objective-C message following the
 /// '[' objc-receiver.
 ///
 /// This routine handles sends to super, class messages (sent to a

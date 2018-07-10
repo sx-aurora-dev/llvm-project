@@ -15,16 +15,19 @@
 #ifndef LLVM_TOOLS_LLVM_MCA_INSTRBUILDER_H
 #define LLVM_TOOLS_LLVM_MCA_INSTRBUILDER_H
 
-#include "Dispatch.h"
 #include "Instruction.h"
+#include "Support.h"
+#include "llvm/MC/MCInstPrinter.h"
+#include "llvm/MC/MCInstrAnalysis.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 
 namespace mca {
 
 class DispatchUnit;
 
-/// \brief A builder class that knows how to construct Instruction objects.
+/// A builder class that knows how to construct Instruction objects.
 ///
 /// Every llvm-mca Instruction is described by an object of class InstrDesc.
 /// An InstrDesc describes which registers are read/written by the instruction,
@@ -35,28 +38,48 @@ class DispatchUnit;
 /// Information from the machine scheduling model is used to identify processor
 /// resources that are consumed by an instruction.
 class InstrBuilder {
+  const llvm::MCSubtargetInfo &STI;
   const llvm::MCInstrInfo &MCII;
-  const llvm::ArrayRef<uint64_t> ProcResourceMasks;
+  const llvm::MCRegisterInfo &MRI;
+  const llvm::MCInstrAnalysis &MCIA;
+  llvm::MCInstPrinter &MCIP;
+  llvm::SmallVector<uint64_t, 8> ProcResourceMasks;
 
   llvm::DenseMap<unsigned short, std::unique_ptr<const InstrDesc>> Descriptors;
-  llvm::DenseMap<unsigned, std::unique_ptr<Instruction>> Instructions;
+  llvm::DenseMap<const llvm::MCInst *, std::unique_ptr<const InstrDesc>>
+      VariantDescriptors;
 
-  void createInstrDescImpl(const llvm::MCSubtargetInfo &STI,
-                           const llvm::MCInst &MCI);
+  const InstrDesc &createInstrDescImpl(const llvm::MCInst &MCI);
+  InstrBuilder(const InstrBuilder &) = delete;
+  InstrBuilder &operator=(const InstrBuilder &) = delete;
+
+  void populateWrites(InstrDesc &ID, const llvm::MCInst &MCI,
+                      unsigned SchedClassID);
+  void populateReads(InstrDesc &ID, const llvm::MCInst &MCI,
+                     unsigned SchedClassID);
 
 public:
-  InstrBuilder(const llvm::MCInstrInfo &mcii,
-               const llvm::ArrayRef<uint64_t> Masks)
-      : MCII(mcii), ProcResourceMasks(Masks) {}
+  InstrBuilder(const llvm::MCSubtargetInfo &sti, const llvm::MCInstrInfo &mcii,
+               const llvm::MCRegisterInfo &mri,
+               const llvm::MCInstrAnalysis &mcia, llvm::MCInstPrinter &mcip)
+      : STI(sti), MCII(mcii), MRI(mri), MCIA(mcia), MCIP(mcip),
+        ProcResourceMasks(STI.getSchedModel().getNumProcResourceKinds()) {
+    computeProcResourceMasks(STI.getSchedModel(), ProcResourceMasks);
+  }
 
-  const InstrDesc &getOrCreateInstrDesc(const llvm::MCSubtargetInfo &STI,
-                                        const llvm::MCInst &MCI);
+  const InstrDesc &getOrCreateInstrDesc(const llvm::MCInst &MCI);
+  // Returns an array of processor resource masks.
+  // Masks are computed by function mca::computeProcResourceMasks. see
+  // Support.h for a description of how masks are computed and how masks can be
+  // used to solve set membership problems.
+  llvm::ArrayRef<uint64_t> getProcResourceMasks() const {
+    return ProcResourceMasks;
+  }
 
-  Instruction *createInstruction(const llvm::MCSubtargetInfo &STI,
-                                 DispatchUnit &DU, unsigned Idx,
-                                 const llvm::MCInst &MCI);
+  void clear() { VariantDescriptors.shrink_and_clear(); }
+
+  std::unique_ptr<Instruction> createInstruction(const llvm::MCInst &MCI);
 };
-
 } // namespace mca
 
 #endif

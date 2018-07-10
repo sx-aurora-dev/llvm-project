@@ -17,7 +17,8 @@
 
 // Other libraries and framework includes
 // Project includes
-#include "lldb/Interpreter/Args.h"
+#include "lldb/Utility/Args.h"
+#include "lldb/Utility/Status.h"
 #include "lldb/lldb-defines.h"
 #include "lldb/lldb-private.h"
 
@@ -27,6 +28,22 @@ namespace lldb_private {
 
 struct Option;
 
+typedef std::vector<std::tuple<std::string, int, std::string>> OptionArgVector;
+typedef std::shared_ptr<OptionArgVector> OptionArgVectorSP;
+
+struct OptionArgElement {
+  enum { eUnrecognizedArg = -1, eBareDash = -2, eBareDoubleDash = -3 };
+
+  OptionArgElement(int defs_index, int pos, int arg_pos)
+      : opt_defs_index(defs_index), opt_pos(pos), opt_arg_pos(arg_pos) {}
+
+  int opt_defs_index;
+  int opt_pos;
+  int opt_arg_pos;
+};
+
+typedef std::vector<OptionArgElement> OptionElementVector;
+
 static inline bool isprint8(int ch) {
   if (ch & 0xffffff00u)
     return false;
@@ -35,15 +52,13 @@ static inline bool isprint8(int ch) {
 
 //----------------------------------------------------------------------
 /// @class Options Options.h "lldb/Interpreter/Options.h"
-/// @brief A command line option parsing protocol class.
+/// A command line option parsing protocol class.
 ///
-/// Options is designed to be subclassed to contain all needed
-/// options for a given command. The options can be parsed by calling the Parse
-/// function.
+/// Options is designed to be subclassed to contain all needed options for a
+/// given command. The options can be parsed by calling the Parse function.
 ///
-/// The options are specified using the format defined for the libc
-/// options parsing function getopt_long_only:
-/// \code
+/// The options are specified using the format defined for the libc options
+/// parsing function getopt_long_only: \code
 ///     #include <getopt.h>
 ///     int getopt_long_only(int argc, char * const *argv, const char
 ///     *optstring, const struct option *longopts, int *longindex);
@@ -75,9 +90,9 @@ public:
 
   bool VerifyOptions(CommandReturnObject &result);
 
-  // Verify that the options given are in the options table and can
-  // be used together, but there may be some required options that are
-  // missing (used to verify options that get folded into command aliases).
+  // Verify that the options given are in the options table and can be used
+  // together, but there may be some required options that are missing (used to
+  // verify options that get folded into command aliases).
   bool VerifyPartialOptions(CommandReturnObject &result);
 
   void OutputFormattedUsageText(Stream &strm,
@@ -89,26 +104,26 @@ public:
 
   bool SupportsLongOption(const char *long_option);
 
-  // The following two pure virtual functions must be defined by every
-  // class that inherits from this class.
+  // The following two pure virtual functions must be defined by every class
+  // that inherits from this class.
 
   virtual llvm::ArrayRef<OptionDefinition> GetDefinitions() {
     return llvm::ArrayRef<OptionDefinition>();
   }
 
-  // Call this prior to parsing any options. This call will call the
-  // subclass OptionParsingStarting() and will avoid the need for all
+  // Call this prior to parsing any options. This call will call the subclass
+  // OptionParsingStarting() and will avoid the need for all
   // OptionParsingStarting() function instances from having to call the
-  // Option::OptionParsingStarting() like they did before. This was error
-  // prone and subclasses shouldn't have to do it.
+  // Option::OptionParsingStarting() like they did before. This was error prone
+  // and subclasses shouldn't have to do it.
   void NotifyOptionParsingStarting(ExecutionContext *execution_context);
 
   //------------------------------------------------------------------
   /// Parse the provided arguments.
   ///
   /// The parsed options are set via calls to SetOptionValue. In case of a
-  /// successful parse, the function returns a copy of the input arguments with
-  /// the parsed options removed. Otherwise, it returns an error.
+  /// successful parse, the function returns a copy of the input arguments
+  /// with the parsed options removed. Otherwise, it returns an error.
   ///
   /// param[in] platform_sp
   ///   The platform used for option validation.  This is necessary
@@ -158,8 +173,8 @@ public:
                                 ExecutionContext *execution_context) = 0;
 
   //------------------------------------------------------------------
-  /// Handles the generic bits of figuring out whether we are in an
-  /// option, and if so completing it.
+  /// Handles the generic bits of figuring out whether we are in an option,
+  /// and if so completing it.
   ///
   /// @param[in] input
   ///    The command line parsed into words
@@ -186,8 +201,8 @@ public:
   ///     The array of matches returned.
   ///
   /// FIXME: This is the wrong return value, since we also need to
-  /// make a distinction between total number of matches, and the
-  /// window the user wants returned.
+  /// make a distinction between total number of matches, and the window the
+  /// user wants returned.
   ///
   /// @return
   ///     \btrue if we were in an option, \bfalse otherwise.
@@ -200,8 +215,8 @@ public:
                               lldb_private::StringList &matches);
 
   //------------------------------------------------------------------
-  /// Handles the generic bits of figuring out whether we are in an
-  /// option, and if so completing it.
+  /// Handles the generic bits of figuring out whether we are in an option,
+  /// and if so completing it.
   ///
   /// @param[in] interpreter
   ///    The command interpreter doing the completion.
@@ -238,8 +253,8 @@ public:
   ///     The array of matches returned.
   ///
   /// FIXME: This is the wrong return value, since we also need to
-  /// make a distinction between total number of matches, and the
-  /// window the user wants returned.
+  /// make a distinction between total number of matches, and the window the
+  /// user wants returned.
   ///
   /// @return
   ///     \btrue if we were in an option, \bfalse otherwise.
@@ -281,14 +296,14 @@ protected:
   void OptionsSetUnion(const OptionSet &set_a, const OptionSet &set_b,
                        OptionSet &union_set);
 
-  // Subclasses must reset their option values prior to starting a new
-  // option parse. Each subclass must override this function and revert
-  // all option settings to default values.
+  // Subclasses must reset their option values prior to starting a new option
+  // parse. Each subclass must override this function and revert all option
+  // settings to default values.
   virtual void OptionParsingStarting(ExecutionContext *execution_context) = 0;
 
   virtual Status OptionParsingFinished(ExecutionContext *execution_context) {
-    // If subclasses need to know when the options are done being parsed
-    // they can implement this function to do extra checking
+    // If subclasses need to know when the options are done being parsed they
+    // can implement this function to do extra checking
     Status error;
     return error;
   }
@@ -309,8 +324,8 @@ public:
   virtual void OptionParsingStarting(ExecutionContext *execution_context) = 0;
 
   virtual Status OptionParsingFinished(ExecutionContext *execution_context) {
-    // If subclasses need to know when the options are done being parsed
-    // they can implement this function to do extra checking
+    // If subclasses need to know when the options are done being parsed they
+    // can implement this function to do extra checking
     Status error;
     return error;
   }
@@ -326,8 +341,8 @@ public:
   //----------------------------------------------------------------------
   /// Append options from a OptionGroup class.
   ///
-  /// Append all options from \a group using the exact same option groups
-  /// that each option is defined with.
+  /// Append all options from \a group using the exact same option groups that
+  /// each option is defined with.
   ///
   /// @param[in] group
   ///     A group of options to take option values from and copy their
@@ -338,9 +353,9 @@ public:
   //----------------------------------------------------------------------
   /// Append options from a OptionGroup class.
   ///
-  /// Append options from \a group that have a usage mask that has any bits
-  /// in "src_mask" set. After the option definition is copied into the
-  /// options definitions in this class, set the usage_mask to "dst_mask".
+  /// Append options from \a group that have a usage mask that has any bits in
+  /// "src_mask" set. After the option definition is copied into the options
+  /// definitions in this class, set the usage_mask to "dst_mask".
   ///
   /// @param[in] group
   ///     A group of options to take option values from and copy their

@@ -19,6 +19,7 @@
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LazyValueInfo.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -28,11 +29,11 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Type.h"
@@ -43,7 +44,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include <cassert>
 #include <utility>
 
@@ -52,6 +52,7 @@ using namespace llvm;
 #define DEBUG_TYPE "correlated-value-propagation"
 
 STATISTIC(NumPhis,      "Number of phis propagated");
+STATISTIC(NumPhiCommon, "Number of phis deleted via common incoming value");
 STATISTIC(NumSelects,   "Number of selects propagated");
 STATISTIC(NumMemAccess, "Number of memory access targets propagated");
 STATISTIC(NumCmps,      "Number of comparisons propagated");
@@ -81,6 +82,7 @@ namespace {
       AU.addRequired<DominatorTreeWrapperPass>();
       AU.addRequired<LazyValueInfoWrapperPass>();
       AU.addPreserved<GlobalsAAWrapperPass>();
+      AU.addPreserved<DominatorTreeWrapperPass>();
     }
   };
 
@@ -104,14 +106,14 @@ static bool processSelect(SelectInst *S, LazyValueInfo *LVI) {
   if (S->getType()->isVectorTy()) return false;
   if (isa<Constant>(S->getOperand(0))) return false;
 
-  Constant *C = LVI->getConstant(S->getOperand(0), S->getParent(), S);
+  Constant *C = LVI->getConstant(S->getCondition(), S->getParent(), S);
   if (!C) return false;
 
   ConstantInt *CI = dyn_cast<ConstantInt>(C);
   if (!CI) return false;
 
-  Value *ReplaceWith = S->getOperand(1);
-  Value *Other = S->getOperand(2);
+  Value *ReplaceWith = S->getTrueValue();
+  Value *Other = S->getFalseValue();
   if (!CI->isOne()) std::swap(ReplaceWith, Other);
   if (ReplaceWith == S) ReplaceWith = UndefValue::get(S->getType());
 
@@ -123,7 +125,63 @@ static bool processSelect(SelectInst *S, LazyValueInfo *LVI) {
   return true;
 }
 
-static bool processPHI(PHINode *P, LazyValueInfo *LVI,
+/// Try to simplify a phi with constant incoming values that match the edge
+/// values of a non-constant value on all other edges:
+/// bb0:
+///   %isnull = icmp eq i8* %x, null
+///   br i1 %isnull, label %bb2, label %bb1
+/// bb1:
+///   br label %bb2
+/// bb2:
+///   %r = phi i8* [ %x, %bb1 ], [ null, %bb0 ]
+/// -->
+///   %r = %x
+static bool simplifyCommonValuePhi(PHINode *P, LazyValueInfo *LVI,
+                                   DominatorTree *DT) {
+  // Collect incoming constants and initialize possible common value.
+  SmallVector<std::pair<Constant *, unsigned>, 4> IncomingConstants;
+  Value *CommonValue = nullptr;
+  for (unsigned i = 0, e = P->getNumIncomingValues(); i != e; ++i) {
+    Value *Incoming = P->getIncomingValue(i);
+    if (auto *IncomingConstant = dyn_cast<Constant>(Incoming)) {
+      IncomingConstants.push_back(std::make_pair(IncomingConstant, i));
+    } else if (!CommonValue) {
+      // The potential common value is initialized to the first non-constant.
+      CommonValue = Incoming;
+    } else if (Incoming != CommonValue) {
+      // There can be only one non-constant common value.
+      return false;
+    }
+  }
+
+  if (!CommonValue || IncomingConstants.empty())
+    return false;
+
+  // The common value must be valid in all incoming blocks.
+  BasicBlock *ToBB = P->getParent();
+  if (auto *CommonInst = dyn_cast<Instruction>(CommonValue))
+    if (!DT->dominates(CommonInst, ToBB))
+      return false;
+
+  // We have a phi with exactly 1 variable incoming value and 1 or more constant
+  // incoming values. See if all constant incoming values can be mapped back to
+  // the same incoming variable value.
+  for (auto &IncomingConstant : IncomingConstants) {
+    Constant *C = IncomingConstant.first;
+    BasicBlock *IncomingBB = P->getIncomingBlock(IncomingConstant.second);
+    if (C != LVI->getConstantOnEdge(CommonValue, IncomingBB, ToBB, P))
+      return false;
+  }
+
+  // All constant incoming values map to the same variable along the incoming
+  // edges of the phi. The phi is unnecessary.
+  P->replaceAllUsesWith(CommonValue);
+  P->eraseFromParent();
+  ++NumPhiCommon;
+  return true;
+}
+
+static bool processPHI(PHINode *P, LazyValueInfo *LVI, DominatorTree *DT,
                        const SimplifyQuery &SQ) {
   bool Changed = false;
 
@@ -171,7 +229,7 @@ static bool processPHI(PHINode *P, LazyValueInfo *LVI,
         V = SI->getTrueValue();
       }
 
-      DEBUG(dbgs() << "CVP: Threading PHI over " << *SI << '\n');
+      LLVM_DEBUG(dbgs() << "CVP: Threading PHI over " << *SI << '\n');
     }
 
     P->setIncomingValue(i, V);
@@ -183,6 +241,9 @@ static bool processPHI(PHINode *P, LazyValueInfo *LVI,
     P->eraseFromParent();
     Changed = true;
   }
+
+  if (!Changed)
+    Changed = simplifyCommonValuePhi(P, LVI, DT);
 
   if (Changed)
     ++NumPhis;
@@ -246,7 +307,7 @@ static bool processCmp(CmpInst *C, LazyValueInfo *LVI) {
 /// that cannot fire no matter what the incoming edge can safely be removed. If
 /// a case fires on every incoming edge then the entire switch can be removed
 /// and replaced with a branch to the case destination.
-static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
+static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI, DominatorTree *DT) {
   Value *Cond = SI->getCondition();
   BasicBlock *BB = SI->getParent();
 
@@ -261,6 +322,10 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
 
   // Analyse each switch case in turn.
   bool Changed = false;
+  DenseMap<BasicBlock*, int> SuccessorsCount;
+  for (auto *Succ : successors(BB))
+    SuccessorsCount[Succ]++;
+
   for (auto CI = SI->case_begin(), CE = SI->case_end(); CI != CE;) {
     ConstantInt *Case = CI->getCaseValue();
 
@@ -295,7 +360,8 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
 
     if (State == LazyValueInfo::False) {
       // This case never fires - remove it.
-      CI->getCaseSuccessor()->removePredecessor(BB);
+      BasicBlock *Succ = CI->getCaseSuccessor();
+      Succ->removePredecessor(BB);
       CI = SI->removeCase(CI);
       CE = SI->case_end();
 
@@ -305,6 +371,8 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
 
       ++NumDeadCases;
       Changed = true;
+      if (--SuccessorsCount[Succ] == 0)
+        DT->deleteEdge(BB, Succ);
       continue;
     }
     if (State == LazyValueInfo::True) {
@@ -321,10 +389,14 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
     ++CI;
   }
 
-  if (Changed)
+  if (Changed) {
     // If the switch has been simplified to the point where it can be replaced
     // by a branch then do so now.
-    ConstantFoldTerminator(BB);
+    DeferredDominance DDT(*DT);
+    ConstantFoldTerminator(BB, /*DeleteDeadConditions = */ false,
+                           /*TLI = */ nullptr, &DDT);
+    DDT.flush();
+  }
 
   return Changed;
 }
@@ -609,7 +681,8 @@ static Constant *getConstantAt(Value *V, Instruction *At, LazyValueInfo *LVI) {
     ConstantInt::getFalse(C->getContext());
 }
 
-static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
+static bool runImpl(Function &F, LazyValueInfo *LVI, DominatorTree *DT,
+                    const SimplifyQuery &SQ) {
   bool FnChanged = false;
   // Visiting in a pre-order depth-first traversal causes us to simplify early
   // blocks before querying later blocks (which require us to analyze early
@@ -625,7 +698,7 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
         BBChanged |= processSelect(cast<SelectInst>(II), LVI);
         break;
       case Instruction::PHI:
-        BBChanged |= processPHI(cast<PHINode>(II), LVI, SQ);
+        BBChanged |= processPHI(cast<PHINode>(II), LVI, DT, SQ);
         break;
       case Instruction::ICmp:
       case Instruction::FCmp:
@@ -661,7 +734,7 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
     Instruction *Term = BB->getTerminator();
     switch (Term->getOpcode()) {
     case Instruction::Switch:
-      BBChanged |= processSwitch(cast<SwitchInst>(Term), LVI);
+      BBChanged |= processSwitch(cast<SwitchInst>(Term), LVI, DT);
       break;
     case Instruction::Ret: {
       auto *RI = cast<ReturnInst>(Term);
@@ -690,18 +763,22 @@ bool CorrelatedValuePropagation::runOnFunction(Function &F) {
     return false;
 
   LazyValueInfo *LVI = &getAnalysis<LazyValueInfoWrapperPass>().getLVI();
-  return runImpl(F, LVI, getBestSimplifyQuery(*this, F));
+  DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+
+  return runImpl(F, LVI, DT, getBestSimplifyQuery(*this, F));
 }
 
 PreservedAnalyses
 CorrelatedValuePropagationPass::run(Function &F, FunctionAnalysisManager &AM) {
-
   LazyValueInfo *LVI = &AM.getResult<LazyValueAnalysis>(F);
-  bool Changed = runImpl(F, LVI, getBestSimplifyQuery(AM, F));
+  DominatorTree *DT = &AM.getResult<DominatorTreeAnalysis>(F);
+
+  bool Changed = runImpl(F, LVI, DT, getBestSimplifyQuery(AM, F));
 
   if (!Changed)
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserve<GlobalsAA>();
+  PA.preserve<DominatorTreeAnalysis>();
   return PA;
 }

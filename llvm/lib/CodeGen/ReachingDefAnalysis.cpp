@@ -34,7 +34,7 @@ void ReachingDefAnalysis::enterBasicBlock(
   // Set up LiveRegs to represent registers entering MBB.
   // Default values are 'nothing happened a long time ago'.
   if (LiveRegs.empty())
-    LiveRegs.assign(NumRegUnits, ReachingDedDefaultVal);
+    LiveRegs.assign(NumRegUnits, ReachingDefDefaultVal);
 
   // This is the entry block.
   if (MBB->pred_empty()) {
@@ -47,7 +47,7 @@ void ReachingDefAnalysis::enterBasicBlock(
         MBBReachingDefs[MBBNumber][*Unit].push_back(LiveRegs[*Unit]);
       }
     }
-    DEBUG(dbgs() << printMBBReference(*MBB) << ": entry\n");
+    LLVM_DEBUG(dbgs() << printMBBReference(*MBB) << ": entry\n");
     return;
   }
 
@@ -64,14 +64,14 @@ void ReachingDefAnalysis::enterBasicBlock(
     for (unsigned Unit = 0; Unit != NumRegUnits; ++Unit) {
       // Use the most recent predecessor def for each register.
       LiveRegs[Unit] = std::max(LiveRegs[Unit], Incoming[Unit]);
-      if ((LiveRegs[Unit] != ReachingDedDefaultVal))
+      if ((LiveRegs[Unit] != ReachingDefDefaultVal))
         MBBReachingDefs[MBBNumber][Unit].push_back(LiveRegs[Unit]);
     }
   }
 
-  DEBUG(dbgs() << printMBBReference(*MBB)
-               << (!TraversedMBB.IsDone ? ": incomplete\n"
-                                        : ": all preds known\n"));
+  LLVM_DEBUG(dbgs() << printMBBReference(*MBB)
+                    << (!TraversedMBB.IsDone ? ": incomplete\n"
+                                             : ": all preds known\n"));
 }
 
 void ReachingDefAnalysis::leaveBasicBlock(
@@ -93,7 +93,7 @@ void ReachingDefAnalysis::leaveBasicBlock(
 }
 
 void ReachingDefAnalysis::processDefs(MachineInstr *MI) {
-  assert(!MI->isDebugValue() && "Won't process debug values");
+  assert(!MI->isDebugInstr() && "Won't process debug instructions");
 
   unsigned MBBNumber = MI->getParent()->getNumber();
   assert(MBBNumber < MBBReachingDefs.size() &&
@@ -109,8 +109,8 @@ void ReachingDefAnalysis::processDefs(MachineInstr *MI) {
       continue;
     for (MCRegUnitIterator Unit(MO.getReg(), TRI); Unit.isValid(); ++Unit) {
       // This instruction explicitly defines the current reg unit.
-      DEBUG(dbgs() << printReg(MO.getReg(), TRI) << ":\t" << CurInstr << '\t'
-                   << *MI);
+      LLVM_DEBUG(dbgs() << printReg(MO.getReg(), TRI) << ":\t" << CurInstr
+                        << '\t' << *MI);
 
       // How many instructions since this reg unit was last written?
       LiveRegs[*Unit] = CurInstr;
@@ -125,7 +125,7 @@ void ReachingDefAnalysis::processBasicBlock(
     const LoopTraversal::TraversedMBBInfo &TraversedMBB) {
   enterBasicBlock(TraversedMBB);
   for (MachineInstr &MI : *TraversedMBB.MBB) {
-    if (!MI.isDebugValue())
+    if (!MI.isDebugInstr())
       processDefs(&MI);
   }
   leaveBasicBlock(TraversedMBB);
@@ -142,7 +142,7 @@ bool ReachingDefAnalysis::runOnMachineFunction(MachineFunction &mf) {
 
   MBBReachingDefs.resize(mf.getNumBlockIDs());
 
-  DEBUG(dbgs() << "********** REACHING DEFINITION ANALYSIS **********\n");
+  LLVM_DEBUG(dbgs() << "********** REACHING DEFINITION ANALYSIS **********\n");
 
   // Initialize the MBBOutRegsInfos
   MBBOutRegsInfos.resize(mf.getNumBlockIDs());
@@ -157,7 +157,7 @@ bool ReachingDefAnalysis::runOnMachineFunction(MachineFunction &mf) {
   // Sorting all reaching defs found for a ceartin reg unit in a given BB.
   for (MBBDefsInfo &MBBDefs : MBBReachingDefs) {
     for (MBBRegUnitDefs &RegUnitDefs : MBBDefs)
-      std::sort(RegUnitDefs.begin(), RegUnitDefs.end());
+      llvm::sort(RegUnitDefs.begin(), RegUnitDefs.end());
   }
 
   return false;
@@ -173,11 +173,11 @@ void ReachingDefAnalysis::releaseMemory() {
 int ReachingDefAnalysis::getReachingDef(MachineInstr *MI, int PhysReg) {
   assert(InstIds.count(MI) && "Unexpected machine instuction.");
   int InstId = InstIds[MI];
-  int DefRes = ReachingDedDefaultVal;
+  int DefRes = ReachingDefDefaultVal;
   unsigned MBBNumber = MI->getParent()->getNumber();
   assert(MBBNumber < MBBReachingDefs.size() &&
          "Unexpected basic block number.");
-  int LatestDef = ReachingDedDefaultVal;
+  int LatestDef = ReachingDefDefaultVal;
   for (MCRegUnitIterator Unit(PhysReg, TRI); Unit.isValid(); ++Unit) {
     for (int Def : MBBReachingDefs[MBBNumber][*Unit]) {
       if (Def >= InstId)

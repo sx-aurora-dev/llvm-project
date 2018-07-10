@@ -104,6 +104,7 @@ static std::string ReadPCHRecord(StringRef type) {
     .Case("Expr *", "Record.readExpr()")
     .Case("IdentifierInfo *", "Record.getIdentifierInfo()")
     .Case("StringRef", "Record.readString()")
+    .Case("ParamIdx", "ParamIdx::deserialize(Record.readInt())")
     .Default("Record.readInt()");
 }
 
@@ -122,6 +123,7 @@ static std::string WritePCHRecord(StringRef type, StringRef name) {
     .Case("Expr *", "AddStmt(" + std::string(name) + ");\n")
     .Case("IdentifierInfo *", "AddIdentifierRef(" + std::string(name) + ");\n")
     .Case("StringRef", "AddString(" + std::string(name) + ");\n")
+    .Case("ParamIdx", "push_back(" + std::string(name) + ".serialize());\n")
     .Default("push_back(" + std::string(name) + ");\n");
 }
 
@@ -302,9 +304,8 @@ namespace {
     std::string getIsOmitted() const override {
       if (type == "IdentifierInfo *")
         return "!get" + getUpperName().str() + "()";
-      // FIXME: Do this declaratively in Attr.td.
-      if (getAttrName() == "AllocSize")
-        return "0 == get" + getUpperName().str() + "()";
+      if (type == "ParamIdx")
+        return "!get" + getUpperName().str() + "().isValid()";
       return "false";
     }
 
@@ -319,6 +320,8 @@ namespace {
            << "()->getName() : \"\") << \"";
       else if (type == "TypeSourceInfo *")
         OS << "\" << get" << getUpperName() << "().getAsString() << \"";
+      else if (type == "ParamIdx")
+        OS << "\" << get" << getUpperName() << "().getSourceIndex() << \"";
       else
         OS << "\" << get" << getUpperName() << "() << \"";
     }
@@ -341,6 +344,11 @@ namespace {
            << getUpperName() << "\";\n";
       } else if (type == "int" || type == "unsigned") {
         OS << "    OS << \" \" << SA->get" << getUpperName() << "();\n";
+      } else if (type == "ParamIdx") {
+        if (isOptional())
+          OS << "    if (SA->get" << getUpperName() << "().isValid())\n  ";
+        OS << "    OS << \" \" << SA->get" << getUpperName()
+           << "().getSourceIndex();\n";
       } else {
         llvm_unreachable("Unknown SimpleArgument type!");
       }
@@ -618,6 +626,10 @@ namespace {
     virtual void writeValueImpl(raw_ostream &OS) const {
       OS << "    OS << Val;\n";
     }
+    // Assumed to receive a parameter: raw_ostream OS.
+    virtual void writeDumpImpl(raw_ostream &OS) const {
+      OS << "      OS << \" \" << Val;\n";
+    }
 
   public:
     VariadicArgument(const Record &Arg, StringRef Attr, std::string T)
@@ -744,7 +756,22 @@ namespace {
 
     void writeDump(raw_ostream &OS) const override {
       OS << "    for (const auto &Val : SA->" << RangeName << "())\n";
-      OS << "      OS << \" \" << Val;\n";
+      writeDumpImpl(OS);
+    }
+  };
+
+  class VariadicParamIdxArgument : public VariadicArgument {
+  public:
+    VariadicParamIdxArgument(const Record &Arg, StringRef Attr)
+        : VariadicArgument(Arg, Attr, "ParamIdx") {}
+
+  public:
+    void writeValueImpl(raw_ostream &OS) const override {
+      OS << "    OS << Val.getSourceIndex();\n";
+    }
+
+    void writeDumpImpl(raw_ostream &OS) const override {
+      OS << "      OS << \" \" << Val.getSourceIndex();\n";
     }
   };
 
@@ -1247,6 +1274,10 @@ createArgument(const Record &Arg, StringRef Attr,
     Ptr = llvm::make_unique<VariadicEnumArgument>(Arg, Attr);
   else if (ArgName == "VariadicExprArgument")
     Ptr = llvm::make_unique<VariadicExprArgument>(Arg, Attr);
+  else if (ArgName == "VariadicParamIdxArgument")
+    Ptr = llvm::make_unique<VariadicParamIdxArgument>(Arg, Attr);
+  else if (ArgName == "ParamIdxArgument")
+    Ptr = llvm::make_unique<SimpleArgument>(Arg, Attr, "ParamIdx");
   else if (ArgName == "VersionArgument")
     Ptr = llvm::make_unique<VersionArgument>(Arg, Attr);
 
@@ -1476,7 +1507,7 @@ writePrettyPrintFunction(Record &R,
   OS << "}\n\n";
 }
 
-/// \brief Return the index of a spelling in a spelling list.
+/// Return the index of a spelling in a spelling list.
 static unsigned
 getSpellingListIndex(const std::vector<FlattenedSpelling> &SpellingList,
                      const FlattenedSpelling &Spelling) {
@@ -2025,7 +2056,7 @@ static void forEachUniqueSpelling(const Record &Attr, Fn &&F) {
   }
 }
 
-/// \brief Emits the first-argument-is-type property for attributes.
+/// Emits the first-argument-is-type property for attributes.
 static void emitClangAttrTypeArgList(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#if defined(CLANG_ATTR_TYPE_ARG_LIST)\n";
   std::vector<Record *> Attrs = Records.getAllDerivedDefinitions("Attr");
@@ -2047,7 +2078,7 @@ static void emitClangAttrTypeArgList(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#endif // CLANG_ATTR_TYPE_ARG_LIST\n\n";
 }
 
-/// \brief Emits the parse-arguments-in-unevaluated-context property for
+/// Emits the parse-arguments-in-unevaluated-context property for
 /// attributes.
 static void emitClangAttrArgContextList(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#if defined(CLANG_ATTR_ARG_CONTEXT_LIST)\n";
@@ -2128,7 +2159,8 @@ void EmitClangAttrClass(RecordKeeper &Records, raw_ostream &OS) {
     bool Inheritable = false;
     for (const auto &Super : llvm::reverse(Supers)) {
       const Record *R = Super.first;
-      if (R->getName() != "TargetSpecificAttr" && SuperName.empty())
+      if (R->getName() != "TargetSpecificAttr" &&
+          R->getName() != "DeclOrTypeAttr" && SuperName.empty())
         SuperName = R->getName();
       if (R->getName() == "InheritableAttr")
         Inheritable = true;
@@ -3497,7 +3529,9 @@ void EmitClangAttrParsedAttrImpl(RecordKeeper &Records, raw_ostream &OS) {
     emitArgInfo(*I->second, SS);
     SS << ", " << I->second->getValueAsBit("HasCustomParsing");
     SS << ", " << I->second->isSubClassOf("TargetSpecificAttr");
-    SS << ", " << I->second->isSubClassOf("TypeAttr");
+    SS << ", "
+       << (I->second->isSubClassOf("TypeAttr") ||
+           I->second->isSubClassOf("DeclOrTypeAttr"));
     SS << ", " << I->second->isSubClassOf("StmtAttr");
     SS << ", " << IsKnownToGCC(*I->second);
     SS << ", " << PragmaAttributeSupport.isAttributedSupported(*I->second);
@@ -3877,9 +3911,9 @@ void EmitClangAttrDocs(RecordKeeper &Records, raw_ostream &OS) {
   for (auto &I : SplitDocs) {
     WriteCategoryHeader(I.first, OS);
 
-    std::sort(I.second.begin(), I.second.end(),
-              [](const DocumentationData &D1, const DocumentationData &D2) {
-                return D1.Heading < D2.Heading;
+    llvm::sort(I.second.begin(), I.second.end(),
+               [](const DocumentationData &D1, const DocumentationData &D2) {
+                 return D1.Heading < D2.Heading;
               });
 
     // Walk over each of the attributes in the category and write out their

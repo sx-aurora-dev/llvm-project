@@ -3,7 +3,7 @@
 
 #include <isl/space.h>
 #include <isl/hash.h>
-#include <isl/id.h>
+#include <isl/id_type.h>
 
 struct isl_name;
 struct isl_space {
@@ -31,6 +31,8 @@ uint32_t isl_space_get_tuple_hash(__isl_keep isl_space *space);
 uint32_t isl_space_get_hash(__isl_keep isl_space *space);
 uint32_t isl_space_get_domain_hash(__isl_keep isl_space *space);
 
+isl_bool isl_space_has_domain_tuples(__isl_keep isl_space *space1,
+	__isl_keep isl_space *space2);
 isl_bool isl_space_is_domain_internal(__isl_keep isl_space *space1,
 	__isl_keep isl_space *space2);
 isl_bool isl_space_is_range_internal(__isl_keep isl_space *space1,

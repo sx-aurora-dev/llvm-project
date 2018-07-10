@@ -20,7 +20,6 @@
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -32,6 +31,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include <cctype>
 using namespace llvm;
@@ -96,7 +96,7 @@ bool TargetLowering::parametersInCSRMatch(const MachineRegisterInfo &MRI,
   return true;
 }
 
-/// \brief Set CallLoweringInfo attribute flags based on a call instruction
+/// Set CallLoweringInfo attribute flags based on a call instruction
 /// and called function attributes.
 void TargetLoweringBase::ArgListEntry::setAttributes(ImmutableCallSite *CS,
                                                      unsigned ArgIdx) {
@@ -1461,7 +1461,7 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     SDValue Sub = Op.getOperand(1);
     EVT SubVT = Sub.getValueType();
     unsigned NumSubElts = SubVT.getVectorNumElements();
-    APInt Idx = cast<ConstantSDNode>(Op.getOperand(2))->getAPIntValue();
+    const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(2))->getAPIntValue();
     if (Idx.uge(NumElts - NumSubElts))
       break;
     unsigned SubIdx = Idx.getZExtValue();
@@ -1477,6 +1477,25 @@ bool TargetLowering::SimplifyDemandedVectorElts(
       return true;
     KnownUndef.insertBits(SubUndef, SubIdx);
     KnownZero.insertBits(SubZero, SubIdx);
+    break;
+  }
+  case ISD::EXTRACT_SUBVECTOR: {
+    if (!isa<ConstantSDNode>(Op.getOperand(1)))
+      break;
+    SDValue Src = Op.getOperand(0);
+    unsigned NumSrcElts = Src.getValueType().getVectorNumElements();
+    const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(1))->getAPIntValue();
+    if (Idx.uge(NumSrcElts - NumElts))
+      break;
+    // Offset the demanded elts by the subvector index.
+    uint64_t SubIdx = Idx.getZExtValue();
+    APInt SrcElts = DemandedElts.zext(NumSrcElts).shl(SubIdx);
+    APInt SrcUndef, SrcZero;
+    if (SimplifyDemandedVectorElts(Src, SrcElts, SrcUndef, SrcZero, TLO,
+                                   Depth + 1))
+      return true;
+    KnownUndef = SrcUndef.extractBits(NumElts, SubIdx);
+    KnownZero = SrcZero.extractBits(NumElts, SubIdx);
     break;
   }
   case ISD::INSERT_VECTOR_ELT: {
@@ -3310,7 +3329,7 @@ void TargetLowering::ComputeConstraintToUse(AsmOperandInfo &OpInfo,
   }
 }
 
-/// \brief Given an exact SDIV by a constant, create a multiplication
+/// Given an exact SDIV by a constant, create a multiplication
 /// with the multiplicative inverse of the constant.
 static SDValue BuildExactSDIV(const TargetLowering &TLI, SDValue Op1, APInt d,
                               const SDLoc &dl, SelectionDAG &DAG,
@@ -3352,7 +3371,7 @@ SDValue TargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
   return SDValue();
 }
 
-/// \brief Given an ISD::SDIV node expressing a divide by constant,
+/// Given an ISD::SDIV node expressing a divide by constant,
 /// return a DAG expression to select that will generate the same value by
 /// multiplying by a magic number.
 /// Ref: "Hacker's Delight" or "The PowerPC Compiler Writer's Guide".
@@ -3416,7 +3435,7 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
   return DAG.getNode(ISD::ADD, dl, VT, Q, T);
 }
 
-/// \brief Given an ISD::UDIV node expressing a divide by constant,
+/// Given an ISD::UDIV node expressing a divide by constant,
 /// return a DAG expression to select that will generate the same value by
 /// multiplying by a magic number.
 /// Ref: "Hacker's Delight" or "The PowerPC Compiler Writer's Guide".

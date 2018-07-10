@@ -28,7 +28,6 @@
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
 #include "llvm/CodeGen/StackMaps.h"
 #include "llvm/CodeGen/TargetLowering.h"
@@ -50,6 +49,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Target/TargetMachine.h"
 #include <algorithm>
@@ -535,6 +535,7 @@ TargetLoweringBase::TargetLoweringBase(const TargetMachine &tm) : TM(tm) {
   // Perform these initializations only once.
   MaxStoresPerMemset = MaxStoresPerMemcpy = MaxStoresPerMemmove =
       MaxLoadsPerMemcmp = 8;
+  MaxGluedStoresPerMemcpy = 0;
   MaxStoresPerMemsetOptSize = MaxStoresPerMemcpyOptSize =
       MaxStoresPerMemmoveOptSize = MaxLoadsPerMemcmpOptSize = 4;
   UseUnderscoreSetJmp = false;
@@ -619,6 +620,12 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::ADDCARRY, VT, Expand);
     setOperationAction(ISD::SUBCARRY, VT, Expand);
     setOperationAction(ISD::SETCCCARRY, VT, Expand);
+
+    // ADDC/ADDE/SUBC/SUBE default to expand.
+    setOperationAction(ISD::ADDC, VT, Expand);
+    setOperationAction(ISD::ADDE, VT, Expand);
+    setOperationAction(ISD::SUBC, VT, Expand);
+    setOperationAction(ISD::SUBE, VT, Expand);
 
     // These default to Expand so they will be expanded to CTLZ/CTTZ by default.
     setOperationAction(ISD::CTLZ_ZERO_UNDEF, VT, Expand);
@@ -991,6 +998,21 @@ TargetLoweringBase::emitXRayCustomEvent(MachineInstr &MI,
                                         MachineBasicBlock *MBB) const {
   assert(MI.getOpcode() == TargetOpcode::PATCHABLE_EVENT_CALL &&
          "Called emitXRayCustomEvent on the wrong MI!");
+  auto &MF = *MI.getMF();
+  auto MIB = BuildMI(MF, MI.getDebugLoc(), MI.getDesc());
+  for (unsigned OpIdx = 0; OpIdx != MI.getNumOperands(); ++OpIdx)
+    MIB.add(MI.getOperand(OpIdx));
+
+  MBB->insert(MachineBasicBlock::iterator(MI), MIB);
+  MI.eraseFromParent();
+  return MBB;
+}
+
+MachineBasicBlock *
+TargetLoweringBase::emitXRayTypedEvent(MachineInstr &MI,
+                                       MachineBasicBlock *MBB) const {
+  assert(MI.getOpcode() == TargetOpcode::PATCHABLE_TYPED_EVENT_CALL &&
+         "Called emitXRayTypedEvent on the wrong MI!");
   auto &MF = *MI.getMF();
   auto MIB = BuildMI(MF, MI.getDebugLoc(), MI.getDesc());
   for (unsigned OpIdx = 0; OpIdx != MI.getNumOperands(); ++OpIdx)
@@ -1609,13 +1631,16 @@ Value *TargetLoweringBase::getIRStackGuard(IRBuilder<> &IRB) const {
 // Currently only support "standard" __stack_chk_guard.
 // TODO: add LOAD_STACK_GUARD support.
 void TargetLoweringBase::insertSSPDeclarations(Module &M) const {
-  M.getOrInsertGlobal("__stack_chk_guard", Type::getInt8PtrTy(M.getContext()));
+  if (!M.getNamedValue("__stack_chk_guard"))
+    new GlobalVariable(M, Type::getInt8PtrTy(M.getContext()), false,
+                       GlobalVariable::ExternalLinkage,
+                       nullptr, "__stack_chk_guard");
 }
 
 // Currently only support "standard" __stack_chk_guard.
 // TODO: add LOAD_STACK_GUARD support.
 Value *TargetLoweringBase::getSDagStackGuard(const Module &M) const {
-  return M.getGlobalVariable("__stack_chk_guard", true);
+  return M.getNamedValue("__stack_chk_guard");
 }
 
 Value *TargetLoweringBase::getSSPStackGuardCheck(const Module &M) const {
@@ -1705,7 +1730,7 @@ static int getOpEnabled(bool IsSqrt, EVT VT, StringRef Override) {
     return TargetLoweringBase::ReciprocalEstimate::Unspecified;
 
   SmallVector<StringRef, 4> OverrideVector;
-  SplitString(Override, OverrideVector, ",");
+  Override.split(OverrideVector, ',');
   unsigned NumArgs = OverrideVector.size();
 
   // Check if "all", "none", or "default" was specified.
@@ -1765,7 +1790,7 @@ static int getOpRefinementSteps(bool IsSqrt, EVT VT, StringRef Override) {
     return TargetLoweringBase::ReciprocalEstimate::Unspecified;
 
   SmallVector<StringRef, 4> OverrideVector;
-  SplitString(Override, OverrideVector, ",");
+  Override.split(OverrideVector, ',');
   unsigned NumArgs = OverrideVector.size();
 
   // Check if "all", "default", or "none" was specified.

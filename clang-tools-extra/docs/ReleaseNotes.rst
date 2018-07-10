@@ -57,34 +57,71 @@ The improvements are...
 Improvements to clang-tidy
 --------------------------
 
+- The checks profiling info can now be stored as JSON files for futher
+  post-processing and analysis.
+
+- New module `abseil` for checks related to the `Abseil <https://abseil.io>`_
+  library.
+
 - New module ``portability``.
 
-- New `bugprone-throw-keyword-missing
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-throw-keyword-missing.html>`_ check
+- New module ``zircon`` for checks related to Fuchsia's Zircon kernel.
+
+- New :doc:`android-comparison-in-temp-failure-retry
+  <clang-tidy/checks/android-comparison-in-temp-failure-retry>` check.
+
+  Diagnoses comparisons that appear to be incorrectly placed in the argument to
+  the ``TEMP_FAILURE_RETRY`` macro.
+
+- New :doc:`bugprone-parent-virtual-call
+  <clang-tidy/checks/bugprone-parent-virtual-call>` check.
+
+  Detects and fixes calls to grand-...parent virtual methods instead of calls
+  to overridden parent's virtual methods.
+
+- New :doc:`bugprone-terminating-continue
+  <clang-tidy/checks/bugprone-terminating-continue>` check
+
+  Checks if a ``continue`` statement terminates the loop.
+
+- New :doc:`bugprone-throw-keyword-missing
+  <clang-tidy/checks/bugprone-throw-keyword-missing>` check.
 
   Diagnoses when a temporary object that appears to be an exception is
   constructed but not thrown.
 
-- New `cppcoreguidelines-avoid-goto
-  <http://clang.llvm.org/extra/clang-tidy/checks/cppcoreguidelines-avoid-goto.html>`_ check
+- New :doc:`bugprone-unused-return-value
+  <clang-tidy/checks/bugprone-unused-return-value>` check.
+
+  Warns on unused function return values.
+
+- New :doc:`cppcoreguidelines-avoid-goto
+  <clang-tidy/checks/cppcoreguidelines-avoid-goto>` check.
 
   The usage of ``goto`` for control flow is error prone and should be replaced
   with looping constructs. Every backward jump is rejected. Forward jumps are
   only allowed in nested loops.
 
-- New `fuchsia-multiple-inheritance
-  <http://clang.llvm.org/extra/clang-tidy/checks/fuchsia-multiple-inheritance.html>`_ check
+- New :doc:`cppcoreguidelines-narrowing-conversions
+  <clang-tidy/checks/cppcoreguidelines-narrowing-conversions>` check
+
+  Checks for narrowing conversions, e. g. ``int i = 0; i += 0.1;``.
+
+- New :doc:`fuchsia-multiple-inheritance
+  <clang-tidy/checks/fuchsia-multiple-inheritance>` check.
 
   Warns if a class inherits from multiple classes that are not pure virtual.
 
-- New `abseil` module for checks related to the `Abseil <https://abseil.io>`_
-  library.
-
-- New `abseil-string-find-startswith
-  <http://clang.llvm.org/extra/clang-tidy/checks/abseil-string-find-startswith.html>`_ check
+- New :doc:`abseil-string-find-startswith
+  <clang-tidy/checks/abseil-string-find-startswith>` check.
 
   Checks whether a ``std::string::find()`` result is compared with 0, and
   suggests replacing with ``absl::StartsWith()``.
+
+- New `fuchsia-restrict-system-includes
+  <http://clang.llvm.org/extra/clang-tidy/checks/fuchsia-restrict-system-includes.html>`_ check
+
+  Checks for allowed system includes and suggests removal of any others.
 
 - New `fuchsia-statically-constructed-objects
   <http://clang.llvm.org/extra/clang-tidy/checks/fuchsia-statically-constructed-objects.html>`_ check
@@ -92,72 +129,140 @@ Improvements to clang-tidy
   Warns if global, non-trivial objects with static storage are constructed,
   unless the object is statically initialized with a ``constexpr`` constructor
   or has no explicit constructor.
-  
-- New `fuchsia-trailing-return
-  <http://clang.llvm.org/extra/clang-tidy/checks/fuchsia-trailing-return.html>`_ check
 
-  Functions that have trailing returns are disallowed, except for those 
-  using ``decltype`` specifiers and lambda with otherwise unutterable 
+- New :doc:`fuchsia-trailing-return
+  <clang-tidy/checks/fuchsia-trailing-return>` check.
+
+  Functions that have trailing returns are disallowed, except for those
+  using ``decltype`` specifiers and lambda with otherwise unutterable
   return types.
 
-- New `modernize-use-uncaught-exceptions
-  <http://clang.llvm.org/extra/clang-tidy/checks/modernize-use-uncaught-exceptions.html>`_ check
+- New :doc:`hicpp-multiway-paths-covered
+  <clang-tidy/checks/hicpp-multiway-paths-covered>` check.
+
+  Checks on ``switch`` and ``if`` - ``else if`` constructs that do not cover all possible code paths.
+
+- New :doc:`modernize-use-uncaught-exceptions
+  <clang-tidy/checks/modernize-use-uncaught-exceptions>` check.
 
   Finds and replaces deprecated uses of ``std::uncaught_exception`` to
   ``std::uncaught_exceptions``.
 
-- New `portability-simd-intrinsics
-  <http://clang.llvm.org/extra/clang-tidy/checks/portability-simd-intrinsics.html>`_ check
+- New :doc:`portability-simd-intrinsics
+  <clang-tidy/checks/portability-simd-intrinsics>` check.
 
   Warns or suggests alternatives if SIMD intrinsics are used which can be replaced by
   ``std::experimental::simd`` operations.
 
-- New alias `hicpp-avoid-goto
-  <http://clang.llvm.org/extra/clang-tidy/checks/hicpp-avoid-goto.html>`_ to
-  `cppcoreguidelines-avoid-goto <http://clang.llvm.org/extra/clang-tidy/checks/cppcoreguidelines-avoid-goto.html>`_
+- New :doc:`readability-simplify-subscript-expr
+  <clang-tidy/checks/readability-simplify-subscript-expr>` check.
+
+  Simplifies subscript expressions like ``s.data()[i]`` into ``s[i]``.
+
+- New :doc:`zircon-temporary-objects
+  <clang-tidy/checks/zircon-temporary-objects>` check.
+
+  Warns on construction of specific temporary objects in the Zircon kernel.
+
+- Added the missing bitwise assignment operations to
+  :doc:`hicpp-signed-bitwise <clang-tidy/checks/hicpp-signed-bitwise>`.
+
+- New option `MinTypeNameLength` for :doc:`modernize-use-auto
+  <clang-tidy/checks/modernize-use-auto>` check to limit the minimal length of
+  type names to be replaced with ``auto``. Use to skip replacing short type
+  names like ``int``/``bool`` with ``auto``. Default value is 5 which means
+  replace types with the name length >= 5 letters only (ex. ``double``,
+  ``unsigned``).
+
+- Add `VariableThreshold` option to :doc:`readability-function-size
+  <clang-tidy/checks/readability-function-size>` check.
+
+  Flags functions that have more than a specified number of variables declared
+  in the body.
+
+- The `AnalyzeTemporaryDtors` option was removed, since the corresponding
+  `cfg-temporary-dtors` option of the Static Analyzer now defaults to `true`.
+
+- New alias :doc:`fuchsia-header-anon-namespaces
+  <clang-tidy/checks/fuchsia-header-anon-namespaces>` to :doc:`google-build-namespaces
+  <clang-tidy/checks/google-build-namespaces>`
   added.
 
-- The 'misc-forwarding-reference-overload' check was renamed to `bugprone-forwarding-reference-overload
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-forwarding-reference-overload.html>`_
+- New alias :doc:`hicpp-avoid-goto
+  <clang-tidy/checks/hicpp-avoid-goto>` to :doc:`cppcoreguidelines-avoid-goto
+  <clang-tidy/checks/cppcoreguidelines-avoid-goto>`
+  added.
 
-- The 'misc-incorrect-roundings' check was renamed to `bugprone-incorrect-roundings
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-incorrect-roundings.html>`_
+- Removed the `google-readability-redundant-smartptr-get` alias of the
+  :doc:`readability-redundant-smartptr-get
+  <clang-tidy/checks/readability-redundant-smartptr-get>` check.
 
-- The 'misc-lambda-function-name' check was renamed to `bugprone-lambda-function-name
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-lambda-function-name.html>`_
+- The 'misc-forwarding-reference-overload' check was renamed to :doc:`bugprone-forwarding-reference-overload
+  <clang-tidy/checks/bugprone-forwarding-reference-overload>`
 
-- The 'misc-macro-repeated-side-effects' check was renamed to `bugprone-macro-repeated-side-effects
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-macro-repeated-side-effects.html>`_
+- The 'misc-incorrect-roundings' check was renamed to :doc:`bugprone-incorrect-roundings
+  <clang-tidy/checks/bugprone-incorrect-roundings>`
 
-- The 'misc-misplaced-widening-cast' check was renamed to `bugprone-misplaced-widening-cast
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-misplaced-widening-cast.html>`_
+- The 'misc-lambda-function-name' check was renamed to :doc:`bugprone-lambda-function-name
+  <clang-tidy/checks/bugprone-lambda-function-name>`
 
-- The 'misc-string-compare' check was renamed to `readability-string-compare
-  <http://clang.llvm.org/extra/clang-tidy/checks/readability-string-compare.html>`_
+- The 'misc-macro-parentheses' check was renamed to :doc:`bugprone-macro-parentheses
+  <clang-tidy/checks/bugprone-macro-parentheses>`
 
-- The 'misc-string-integer-assignment' check was renamed to `bugprone-string-integer-assignment
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-string-integer-assignment.html>`_
+- The 'misc-macro-repeated-side-effects' check was renamed to :doc:`bugprone-macro-repeated-side-effects
+  <clang-tidy/checks/bugprone-macro-repeated-side-effects>`
 
-- The 'misc-string-literal-with-embedded-nul' check was renamed to `bugprone-string-literal-with-embedded-nul
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-string-literal-with-embedded-nul.html>`_
+- The 'misc-misplaced-widening-cast' check was renamed to :doc:`bugprone-misplaced-widening-cast
+  <clang-tidy/checks/bugprone-misplaced-widening-cast>`
 
-- The 'misc-suspicious-enum-usage' check was renamed to `bugprone-suspicious-enum-usage
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-suspicious-enum-usage.html>`_
+- The 'misc-sizeof-container' check was renamed to :doc:`bugprone-sizeof-container
+  <clang-tidy/checks/bugprone-sizeof-container>`
 
-- The 'misc-suspicious-missing-comma' check was renamed to `bugprone-suspicious-missing-comma
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-suspicious-missing-comma.html>`_
+- The 'misc-sizeof-expression' check was renamed to :doc:`bugprone-sizeof-expression
+  <clang-tidy/checks/bugprone-sizeof-expression>`
 
-- The 'misc-suspicious-semicolon' check was renamed to `bugprone-suspicious-semicolon
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-suspicious-semicolon.html>`_
+- The 'misc-string-compare' check was renamed to :doc:`readability-string-compare
+  <clang-tidy/checks/readability-string-compare>`
 
-- The 'misc-suspicious-string-compare' check was renamed to `bugprone-suspicious-string-compare
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-suspicious-string-compare.html>`_
+- The 'misc-string-integer-assignment' check was renamed to :doc:`bugprone-string-integer-assignment
+  <clang-tidy/checks/bugprone-string-integer-assignment>`
 
-- The 'misc-swapped-arguments' check was renamed to `bugprone-swapped-arguments
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-swapped-arguments.html>`_
+- The 'misc-string-literal-with-embedded-nul' check was renamed to :doc:`bugprone-string-literal-with-embedded-nul
+  <clang-tidy/checks/bugprone-string-literal-with-embedded-nul>`
 
-- The 'misc-undelegated-constructor' check was renamed to `bugprone-undelegated-constructor
-  <http://clang.llvm.org/extra/clang-tidy/checks/bugprone-undelegated-constructor.html>`_
+- The 'misc-suspicious-enum-usage' check was renamed to :doc:`bugprone-suspicious-enum-usage
+  <clang-tidy/checks/bugprone-suspicious-enum-usage>`
+
+- The 'misc-suspicious-missing-comma' check was renamed to :doc:`bugprone-suspicious-missing-comma
+  <clang-tidy/checks/bugprone-suspicious-missing-comma>`
+
+- The 'misc-suspicious-semicolon' check was renamed to :doc:`bugprone-suspicious-semicolon
+  <clang-tidy/checks/bugprone-suspicious-semicolon>`
+
+- The 'misc-suspicious-string-compare' check was renamed to :doc:`bugprone-suspicious-string-compare
+  <clang-tidy/checks/bugprone-suspicious-string-compare>`
+
+- The 'misc-swapped-arguments' check was renamed to :doc:`bugprone-swapped-arguments
+  <clang-tidy/checks/bugprone-swapped-arguments>`
+
+- The 'misc-undelegated-constructor' check was renamed to :doc:`bugprone-undelegated-constructor
+  <clang-tidy/checks/bugprone-undelegated-constructor>`
+
+- The 'misc-unused-raii' check was renamed to :doc:`bugprone-unused-raii
+  <clang-tidy/checks/bugprone-unused-raii>`
+
+- The 'google-runtime-member-string-references' check was removed.
+
+- New `cert-msc51-cpp
+  <http://clang.llvm.org/extra/clang-tidy/checks/cert-properly-seeded-random-generator.html>`_ check
+
+  Detects inappropriate seeding of C++ random generators and C ``srand()`` function.
+  
+- New `cert-msc32-c
+  <http://clang.llvm.org/extra/clang-tidy/checks/cert-properly-seeded-random-generator.html>`_ check
+
+  Detects inappropriate seeding of ``srand()`` function.
+
 
 Improvements to include-fixer
 -----------------------------
