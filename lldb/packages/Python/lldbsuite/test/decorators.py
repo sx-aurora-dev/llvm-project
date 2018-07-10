@@ -344,6 +344,28 @@ def no_debug_info_test(func):
     wrapper.__no_debug_info_test__ = True
     return wrapper
 
+def apple_simulator_test(platform):
+    """
+    Decorate the test as a test requiring a simulator for a specific platform.
+
+    Consider that a simulator is available if you have the corresponding SDK installed.
+    The SDK identifiers for simulators are iphonesimulator, appletvsimulator, watchsimulator
+    """
+    def should_skip_simulator_test():
+        if lldbplatformutil.getHostPlatform() != 'darwin':
+            return "simulator tests are run only on darwin hosts"
+        try:
+            DEVNULL = open(os.devnull, 'w')
+            output = subprocess.check_output(["xcodebuild", "-showsdks"], stderr=DEVNULL)
+            if re.search('%ssimulator' % platform, output):
+                return None
+            else:
+                return "%s simulator is not supported on this system." % platform
+        except subprocess.CalledProcessError:
+            return "%s is not supported on this system (xcodebuild failed)." % feature
+
+    return skipTestIfFn(should_skip_simulator_test)
+
 
 def debugserver_test(func):
     """Decorate the item as a debugserver test."""
@@ -652,6 +674,18 @@ def skipIfTargetAndroid(api_levels=None, archs=None):
             api_levels,
             archs))
 
+def skipUnlessSupportedTypeAttribute(attr):
+    """Decorate the item to skip test unless Clang supports type __attribute__(attr)."""
+    def compiler_doesnt_support_struct_attribute(self):
+        compiler_path = self.getCompiler()
+        f = tempfile.NamedTemporaryFile()
+        cmd = [self.getCompiler(), "-x", "c++", "-c", "-o", f.name, "-"]
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        stdout, stderr = p.communicate('struct __attribute__((%s)) Test {};'%attr)
+        if attr in stderr:
+            return "Compiler does not support attribute %s"%(attr)
+        return None
+    return skipTestIfFn(compiler_doesnt_support_struct_attribute)
 
 def skipUnlessThreadSanitizer(func):
     """Decorate the item to skip test unless Clang -fsanitize=thread is supported."""
@@ -681,7 +715,7 @@ def skipUnlessUndefinedBehaviorSanitizer(func):
 
     def is_compiler_clang_with_ubsan(self):
         # Write out a temp file which exhibits UB.
-        inputf = tempfile.NamedTemporaryFile(suffix='.c')
+        inputf = tempfile.NamedTemporaryFile(suffix='.c', mode='w')
         inputf.write('int main() { int x = 0; return x / x; }\n')
         inputf.flush()
 
@@ -748,6 +782,17 @@ def skipIfXmlSupportMissing(func):
     fail_value = True # More likely to notice if something goes wrong
     have_xml = xml.GetValueForKey("value").GetBooleanValue(fail_value)
     return unittest2.skipIf(not have_xml, "requires xml support")(func)
+
+def skipIfLLVMTargetMissing(target):
+    config = lldb.SBDebugger.GetBuildConfiguration()
+    targets = config.GetValueForKey("targets").GetValueForKey("value")
+    found = False
+    for i in range(targets.GetSize()):
+        if targets.GetItemAtIndex(i).GetStringValue(99) == target:
+            found = True
+            break
+    
+    return unittest2.skipIf(not found, "requires " + target)
 
 # Call sysctl on darwin to see if a specified hardware feature is available on this machine.
 def skipUnlessFeature(feature):

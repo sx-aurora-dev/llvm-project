@@ -18,12 +18,12 @@
 #include "Hexagon.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
-#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/Support/MachineValueType.h"
 #include <cstdint>
 #include <utility>
 
@@ -36,6 +36,8 @@ namespace HexagonISD {
 
       CONST32 = OP_BEGIN,
       CONST32_GP,  // For marking data present in GP.
+      ADDC,        // Add with carry: (X, Y, Cin) -> (X+Y, Cout).
+      SUBC,        // Sub with carry: (X, Y, Cin) -> (X+~Y+Cin, Cout).
       ALLOCA,
 
       AT_GOT,      // Index in GOT.
@@ -51,7 +53,8 @@ namespace HexagonISD {
       CP,          // Constant pool.
 
       COMBINE,
-      VSPLAT,
+      VSPLAT,      // Generic splat, selection depends on argument/return
+                   // types.
       VASL,
       VASR,
       VLSR,
@@ -77,6 +80,7 @@ namespace HexagonISD {
       QTRUE,
       QFALSE,
       VZERO,
+      VSPLATW,     // HVX splat of a 32-bit word with an arbitrary result type.
       TYPECAST,    // No-op that's used to convert between different legal
                    // types in a register.
       VALIGN,      // Align two vectors (in Op0, Op1) to one that would have
@@ -121,6 +125,10 @@ namespace HexagonISD {
     bool isTruncateFree(Type *Ty1, Type *Ty2) const override;
     bool isTruncateFree(EVT VT1, EVT VT2) const override;
 
+    bool isCheapToSpeculateCttz() const override { return true; }
+    bool isCheapToSpeculateCtlz() const override { return true; }
+    bool isCtlzFast() const override { return true; }
+
     bool allowTruncateForTailCall(Type *Ty1, Type *Ty2) const override;
 
     /// Return true if an FMA operation is faster than a pair of mul and add
@@ -151,11 +159,13 @@ namespace HexagonISD {
     SDValue LowerINSERT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVECTOR_SHIFT(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerROTL(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBITCAST(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerANY_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerSIGN_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerZERO_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerUnalignedLoad(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerAddSubCarry(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINLINEASM(SDValue Op, SelectionDAG &DAG) const;
@@ -416,6 +426,7 @@ namespace HexagonISD {
     SDValue LowerHvxAnyExt(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxSignExt(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxZeroExt(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerHvxCttz(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxMul(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxMulh(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerHvxSetCC(SDValue Op, SelectionDAG &DAG) const;

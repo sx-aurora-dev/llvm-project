@@ -7,6 +7,7 @@ add_clang_library(clangTidy
   ClangTidyModule.cpp
   ClangTidyDiagnosticConsumer.cpp
   ClangTidyOptions.cpp
+  ClangTidyProfiling.cpp
 
   DEPENDS
   ClangSACheckers
@@ -46,3 +47,4 @@ add_subdirectory(portability)
 add_subdirectory(readability)
 add_subdirectory(tool)
 add_subdirectory(utils)
+add_subdirectory(zircon)

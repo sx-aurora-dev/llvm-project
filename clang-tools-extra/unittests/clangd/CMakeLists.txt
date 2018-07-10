@@ -15,15 +15,20 @@ add_extra_unittest(ClangdTests
   CodeCompleteTests.cpp
   CodeCompletionStringsTests.cpp
   ContextTests.cpp
+  DraftStoreTests.cpp
   FileIndexTests.cpp
+  FileDistanceTests.cpp
+  FindSymbolsTests.cpp
   FuzzyMatchTests.cpp
+  GlobalCompilationDatabaseTests.cpp
   HeadersTests.cpp
   IndexTests.cpp
-  JSONExprTests.cpp
+  QualityTests.cpp
   SourceCodeTests.cpp
   SymbolCollectorTests.cpp
   SyncAPI.cpp
   TestFS.cpp
+  TestTU.cpp
   ThreadingTests.cpp
   TraceTests.cpp
   TUSchedulerTests.cpp
@@ -33,6 +38,7 @@ add_extra_unittest(ClangdTests
 
 target_link_libraries(ClangdTests
   PRIVATE
+  clangAST
   clangBasic
   clangDaemon
   clangFormat
@@ -42,5 +48,7 @@ target_link_libraries(ClangdTests
   clangSema
   clangTooling
   clangToolingCore
+  clangToolingInclusions
   LLVMSupport
+  LLVMTestingSupport
   )

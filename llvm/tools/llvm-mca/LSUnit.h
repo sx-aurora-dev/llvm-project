@@ -16,15 +16,14 @@
 #ifndef LLVM_TOOLS_LLVM_MCA_LSUNIT_H
 #define LLVM_TOOLS_LLVM_MCA_LSUNIT_H
 
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 #include <set>
-
-#define DEBUG_TYPE "llvm-mca"
 
 namespace mca {
 
-/// \brief A Load/Store Unit implementing a load and store queues.
+class InstRef;
+struct InstrDesc;
+
+/// A Load/Store Unit implementing a load and store queues.
 ///
 /// This class implements a load queue and a store queue to emulate the
 /// out-of-order execution of memory operations.
@@ -129,20 +128,8 @@ public:
   bool isSQFull() const { return SQ_Size != 0 && StoreQueue.size() == SQ_Size; }
   bool isLQFull() const { return LQ_Size != 0 && LoadQueue.size() == LQ_Size; }
 
-  void reserve(unsigned Index, bool MayLoad, bool MayStore, bool IsMemBarrier) {
-    if (!MayLoad && !MayStore)
-      return;
-    if (MayLoad) {
-      if (IsMemBarrier)
-        LoadBarriers.insert(Index);
-      assignLQSlot(Index);
-    }
-    if (MayStore) {
-      if (IsMemBarrier)
-        StoreBarriers.insert(Index);
-      assignSQSlot(Index);
-    }
-  }
+  // Returns true if this instruction has been successfully enqueued.
+  bool reserve(const InstRef &IR);
 
   // The rules are:
   // 1. A store may not pass a previous store.
@@ -151,8 +138,8 @@ public:
   // 4. A store may not pass a previous load (regardless of flag 'NoAlias').
   // 5. A load has to wait until an older load barrier is fully executed.
   // 6. A store has to wait until an older store barrier is fully executed.
-  bool isReady(unsigned Index) const;
-  void onInstructionExecuted(unsigned Index);
+  bool isReady(const InstRef &IR) const;
+  void onInstructionExecuted(const InstRef &IR);
 };
 
 } // namespace mca

@@ -68,16 +68,16 @@ DILocation *DILocation::getImpl(LLVMContext &Context, unsigned Line,
                    Storage, Context.pImpl->DILocations);
 }
 
-const DILocation *
-DILocation::getMergedLocation(const DILocation *LocA, const DILocation *LocB,
-                              const Instruction *ForInst) {
+const DILocation *DILocation::getMergedLocation(const DILocation *LocA,
+                                                const DILocation *LocB,
+                                                bool GenerateLocation) {
   if (!LocA || !LocB)
     return nullptr;
 
   if (LocA == LocB || !LocA->canDiscriminate(*LocB))
     return LocA;
 
-  if (!dyn_cast_or_null<CallInst>(ForInst))
+  if (!GenerateLocation)
     return nullptr;
 
   SmallPtrSet<DILocation *, 5> InlinedLocationsA;
@@ -283,6 +283,19 @@ DIBasicType *DIBasicType::getImpl(LLVMContext &Context, unsigned Tag,
                        Ops);
 }
 
+Optional<DIBasicType::Signedness> DIBasicType::getSignedness() const {
+  switch (getEncoding()) {
+  case dwarf::DW_ATE_signed:
+  case dwarf::DW_ATE_signed_char:
+    return Signedness::Signed;
+  case dwarf::DW_ATE_unsigned:
+  case dwarf::DW_ATE_unsigned_char:
+    return Signedness::Unsigned;
+  default:
+    return None;
+  }
+}
+
 DIDerivedType *DIDerivedType::getImpl(
     LLVMContext &Context, unsigned Tag, MDString *Name, Metadata *File,
     unsigned Line, Metadata *Scope, Metadata *BaseType, uint64_t SizeInBits,
@@ -462,7 +475,7 @@ DICompileUnit::getEmissionKind(StringRef Str) {
       .Default(None);
 }
 
-const char *DICompileUnit::EmissionKindString(DebugEmissionKind EK) {
+const char *DICompileUnit::emissionKindString(DebugEmissionKind EK) {
   switch (EK) {
   case NoDebug:        return "NoDebug";
   case FullDebug:      return "FullDebug";
@@ -489,7 +502,7 @@ DISubprogram *DISubprogram::getImpl(
     bool IsLocalToUnit, bool IsDefinition, unsigned ScopeLine,
     Metadata *ContainingType, unsigned Virtuality, unsigned VirtualIndex,
     int ThisAdjustment, DIFlags Flags, bool IsOptimized, Metadata *Unit,
-    Metadata *TemplateParams, Metadata *Declaration, Metadata *Variables,
+    Metadata *TemplateParams, Metadata *Declaration, Metadata *RetainedNodes,
     Metadata *ThrownTypes, StorageType Storage, bool ShouldCreate) {
   assert(isCanonical(Name) && "Expected canonical MDString");
   assert(isCanonical(LinkageName) && "Expected canonical MDString");
@@ -497,10 +510,10 @@ DISubprogram *DISubprogram::getImpl(
       DISubprogram, (Scope, Name, LinkageName, File, Line, Type, IsLocalToUnit,
                      IsDefinition, ScopeLine, ContainingType, Virtuality,
                      VirtualIndex, ThisAdjustment, Flags, IsOptimized, Unit,
-                     TemplateParams, Declaration, Variables, ThrownTypes));
+                     TemplateParams, Declaration, RetainedNodes, ThrownTypes));
   SmallVector<Metadata *, 11> Ops = {
-      File,        Scope,     Name,           LinkageName,    Type,       Unit,
-      Declaration, Variables, ContainingType, TemplateParams, ThrownTypes};
+      File,        Scope,         Name,           LinkageName,    Type,       Unit,
+      Declaration, RetainedNodes, ContainingType, TemplateParams, ThrownTypes};
   if (!ThrownTypes) {
     Ops.pop_back();
     if (!TemplateParams) {
@@ -653,6 +666,18 @@ Optional<uint64_t> DIVariable::getSizeInBits() const {
   return None;
 }
 
+DILabel *DILabel::getImpl(LLVMContext &Context, Metadata *Scope,
+                          MDString *Name, Metadata *File, unsigned Line,
+                          StorageType Storage,
+                          bool ShouldCreate) {
+  assert(Scope && "Expected scope");
+  assert(isCanonical(Name) && "Expected canonical MDString");
+  DEFINE_GETIMPL_LOOKUP(DILabel,
+                        (Scope, Name, File, Line));
+  Metadata *Ops[] = {Scope, Name, File};
+  DEFINE_GETIMPL_STORE(DILabel, (Line), Ops);
+}
+
 DIExpression *DIExpression::getImpl(LLVMContext &Context,
                                     ArrayRef<uint64_t> Elements,
                                     StorageType Storage, bool ShouldCreate) {
@@ -721,6 +746,9 @@ bool DIExpression::isValid() const {
     case dwarf::DW_OP_shra:
     case dwarf::DW_OP_deref:
     case dwarf::DW_OP_xderef:
+    case dwarf::DW_OP_lit0:
+    case dwarf::DW_OP_not:
+    case dwarf::DW_OP_dup:
       break;
     }
   }
@@ -780,35 +808,73 @@ DIExpression *DIExpression::prepend(const DIExpression *Expr, bool DerefBefore,
   SmallVector<uint64_t, 8> Ops;
   if (DerefBefore)
     Ops.push_back(dwarf::DW_OP_deref);
-  
+
   appendOffset(Ops, Offset);
   if (DerefAfter)
     Ops.push_back(dwarf::DW_OP_deref);
 
-  return doPrepend(Expr, Ops, StackValue);
+  return prependOpcodes(Expr, Ops, StackValue);
 }
 
-DIExpression *DIExpression::doPrepend(const DIExpression *Expr,
-                                      SmallVectorImpl<uint64_t> &Ops,
-                                      bool StackValue) {
-  if (Expr)
-    for (auto Op : Expr->expr_ops()) {
-      // A DW_OP_stack_value comes at the end, but before a DW_OP_LLVM_fragment.
-      if (StackValue) {
-        if (Op.getOp() == dwarf::DW_OP_stack_value)
-          StackValue = false;
-        else if (Op.getOp() == dwarf::DW_OP_LLVM_fragment) {
-          Ops.push_back(dwarf::DW_OP_stack_value);
-          StackValue = false;
-        }
+DIExpression *DIExpression::prependOpcodes(const DIExpression *Expr,
+                                           SmallVectorImpl<uint64_t> &Ops,
+                                           bool StackValue) {
+  assert(Expr && "Can't prepend ops to this expression");
+
+  // If there are no ops to prepend, do not even add the DW_OP_stack_value.
+  if (Ops.empty())
+    StackValue = false;
+  for (auto Op : Expr->expr_ops()) {
+    // A DW_OP_stack_value comes at the end, but before a DW_OP_LLVM_fragment.
+    if (StackValue) {
+      if (Op.getOp() == dwarf::DW_OP_stack_value)
+        StackValue = false;
+      else if (Op.getOp() == dwarf::DW_OP_LLVM_fragment) {
+        Ops.push_back(dwarf::DW_OP_stack_value);
+        StackValue = false;
       }
-      Ops.push_back(Op.getOp());
-      for (unsigned I = 0; I < Op.getNumArgs(); ++I)
-        Ops.push_back(Op.getArg(I));
     }
+    Op.appendToVector(Ops);
+  }
   if (StackValue)
     Ops.push_back(dwarf::DW_OP_stack_value);
   return DIExpression::get(Expr->getContext(), Ops);
+}
+
+DIExpression *DIExpression::appendToStack(const DIExpression *Expr,
+                                          ArrayRef<uint64_t> Ops) {
+  assert(Expr && !Ops.empty() && "Can't append ops to this expression");
+
+  // Append a DW_OP_deref after Expr's current op list if it's non-empty and
+  // has no DW_OP_stack_value.
+  //
+  // Match .* DW_OP_stack_value (DW_OP_LLVM_fragment A B)?.
+  Optional<FragmentInfo> FI = Expr->getFragmentInfo();
+  unsigned DropUntilStackValue = FI.hasValue() ? 3 : 0;
+  bool NeedsDeref =
+      (Expr->getNumElements() > DropUntilStackValue) &&
+      (Expr->getElements().drop_back(DropUntilStackValue).back() !=
+       dwarf::DW_OP_stack_value);
+
+  // Copy Expr's current op list, add a DW_OP_deref if needed, and ensure that
+  // a DW_OP_stack_value is present.
+  SmallVector<uint64_t, 16> NewOps;
+  for (auto Op : Expr->expr_ops()) {
+    if (Op.getOp() == dwarf::DW_OP_stack_value ||
+        Op.getOp() == dwarf::DW_OP_LLVM_fragment)
+      break;
+    Op.appendToVector(NewOps);
+  }
+  if (NeedsDeref)
+    NewOps.push_back(dwarf::DW_OP_deref);
+  NewOps.append(Ops.begin(), Ops.end());
+  NewOps.push_back(dwarf::DW_OP_stack_value);
+
+  // If Expr is a fragment, make the new expression a fragment as well.
+  if (FI)
+    NewOps.append(
+        {dwarf::DW_OP_LLVM_fragment, FI->OffsetInBits, FI->SizeInBits});
+  return DIExpression::get(Expr->getContext(), NewOps);
 }
 
 Optional<DIExpression *> DIExpression::createFragmentExpression(
@@ -830,17 +896,15 @@ Optional<DIExpression *> DIExpression::createFragmentExpression(
       case dwarf::DW_OP_LLVM_fragment: {
         // Make the new offset point into the existing fragment.
         uint64_t FragmentOffsetInBits = Op.getArg(0);
-        // Op.getArg(0) is FragmentOffsetInBits.
-        // Op.getArg(1) is FragmentSizeInBits.
-        assert((OffsetInBits + SizeInBits <= Op.getArg(0) + Op.getArg(1)) &&
+        uint64_t FragmentSizeInBits = Op.getArg(1);
+        (void)FragmentSizeInBits;
+        assert((OffsetInBits + SizeInBits <= FragmentSizeInBits) &&
                "new fragment outside of original fragment");
         OffsetInBits += FragmentOffsetInBits;
         continue;
       }
       }
-      Ops.push_back(Op.getOp());
-      for (unsigned I = 0; I < Op.getNumArgs(); ++I)
-        Ops.push_back(Op.getArg(I));
+      Op.appendToVector(Ops);
     }
   }
   Ops.push_back(dwarf::DW_OP_LLVM_fragment);

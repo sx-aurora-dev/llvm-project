@@ -24,6 +24,7 @@ namespace lld {
 namespace elf {
 
 class InputFile;
+class InputSectionBase;
 
 enum ELFKind {
   ELFNoneKind,
@@ -85,6 +86,8 @@ struct Configuration {
   llvm::StringRef Init;
   llvm::StringRef LTOAAPipeline;
   llvm::StringRef LTONewPmPasses;
+  llvm::StringRef LTOObjPath;
+  llvm::StringRef LTOSampleProfile;
   llvm::StringRef MapFile;
   llvm::StringRef OutputFile;
   llvm::StringRef OptRemarksFilename;
@@ -92,6 +95,9 @@ struct Configuration {
   llvm::StringRef SoName;
   llvm::StringRef Sysroot;
   llvm::StringRef ThinLTOCacheDir;
+  llvm::StringRef ThinLTOIndexOnlyArg;
+  std::pair<llvm::StringRef, llvm::StringRef> ThinLTOObjectSuffixReplace;
+  std::pair<llvm::StringRef, llvm::StringRef> ThinLTOPrefixReplace;
   std::string Rpath;
   std::vector<VersionDefinition> VersionDefinitions;
   std::vector<llvm::StringRef> AuxiliaryList;
@@ -103,8 +109,11 @@ struct Configuration {
   std::vector<SymbolVersion> VersionScriptGlobals;
   std::vector<SymbolVersion> VersionScriptLocals;
   std::vector<uint8_t> BuildIdVector;
+  llvm::MapVector<std::pair<const InputSectionBase *, const InputSectionBase *>,
+                  uint64_t>
+      CallGraphProfile;
   bool AllowMultipleDefinition;
-  bool AndroidPackDynRelocs = false;
+  bool AndroidPackDynRelocs;
   bool ARMHasBlx = false;
   bool ARMHasMovtMovw = false;
   bool ARMJ1J2BranchEncoding = false;
@@ -113,6 +122,7 @@ struct Configuration {
   bool BsymbolicFunctions;
   bool CheckSections;
   bool CompressDebugSections;
+  bool Cref;
   bool DefineCommon;
   bool Demangle = true;
   bool DisableVerify;
@@ -130,6 +140,8 @@ struct Configuration {
   bool ICF;
   bool IgnoreDataAddressEquality;
   bool IgnoreFunctionAddressEquality;
+  bool LTODebugPassManager;
+  bool LTONewPassManager;
   bool MergeArmExidx;
   bool MipsN32Abi = false;
   bool NoinhibitExec;
@@ -141,6 +153,7 @@ struct Configuration {
   bool PrintGcSections;
   bool PrintIcfSections;
   bool Relocatable;
+  bool RelrPackDynRelocs;
   bool SaveTemps;
   bool SingleRoRx;
   bool Shared;
@@ -148,15 +161,21 @@ struct Configuration {
   bool SysvHash = false;
   bool Target1Rel;
   bool Trace;
+  bool ThinLTOEmitImportsFiles;
+  bool ThinLTOIndexOnly;
   bool UndefinedVersion;
+  bool UseAndroidRelrTags = false;
+  bool WarnBackrefs;
   bool WarnCommon;
   bool WarnMissingEntry;
   bool WarnSymbolOrdering;
   bool WriteAddends;
   bool ZCombreloc;
+  bool ZCopyreloc;
   bool ZExecstack;
   bool ZHazardplt;
-  bool ZNocopyreloc;
+  bool ZInitfirst;
+  bool ZKeepTextSectionPrefix;
   bool ZNodelete;
   bool ZNodlopen;
   bool ZNow;
@@ -178,6 +197,7 @@ struct Configuration {
   uint16_t EMachine = llvm::ELF::EM_NONE;
   llvm::Optional<uint64_t> ImageBase;
   uint64_t MaxPageSize;
+  uint64_t MipsGotSize;
   uint64_t ZStackSize;
   unsigned LTOPartitions;
   unsigned LTOO;

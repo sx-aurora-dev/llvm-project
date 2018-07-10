@@ -7,15 +7,39 @@ set(SCUDO_CFLAGS ${SANITIZER_COMMON_CFLAGS})
 list(APPEND SCUDO_CFLAGS -fbuiltin)
 append_rtti_flag(OFF SCUDO_CFLAGS)
 
-set(SCUDO_DYNAMIC_LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS})
+set(SCUDO_MINIMAL_DYNAMIC_LIBS ${SANITIZER_COMMON_LINK_LIBS})
+append_list_if(COMPILER_RT_HAS_LIBDL dl SCUDO_MINIMAL_DYNAMIC_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBRT rt SCUDO_MINIMAL_DYNAMIC_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread SCUDO_MINIMAL_DYNAMIC_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBLOG log SCUDO_MINIMAL_DYNAMIC_LIBS)
 
+set(SCUDO_DYNAMIC_LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS})
 # Use gc-sections by default to avoid unused code being pulled in.
-list(APPEND SCUDO_CFLAGS -ffunction-sections -fdata-sections)
 list(APPEND SCUDO_DYNAMIC_LINK_FLAGS -Wl,--gc-sections)
+
+# The minimal Scudo runtime does not inlude the UBSan runtime.
+set(SCUDO_MINIMAL_OBJECT_LIBS
+  RTSanitizerCommonNoTermination
+  RTSanitizerCommonLibc
+  RTInterception)
+set(SCUDO_OBJECT_LIBS ${SCUDO_MINIMAL_OBJECT_LIBS})
+set(SCUDO_DYNAMIC_LIBS ${SCUDO_MINIMAL_DYNAMIC_LIBS})
+
+if (FUCHSIA)
+  list(APPEND SCUDO_CFLAGS -nostdinc++)
+  list(APPEND SCUDO_DYNAMIC_LINK_FLAGS -nostdlib++)
+else()
+  list(APPEND SCUDO_DYNAMIC_LIBS ${SANITIZER_CXX_ABI_LIBRARY})
+  list(APPEND SCUDO_OBJECT_LIBS
+    RTSanitizerCommonCoverage
+    RTSanitizerCommonSymbolizer
+    RTUbsan)
+endif()
 
 set(SCUDO_SOURCES
   scudo_allocator.cpp
   scudo_crc32.cpp
+  scudo_errors.cpp
   scudo_flags.cpp
   scudo_malloc.cpp
   scudo_termination.cpp
@@ -38,24 +62,27 @@ if (COMPILER_RT_HAS_MCRC_FLAG)
 endif()
 
 if(COMPILER_RT_HAS_SCUDO)
-  set(SCUDO_DYNAMIC_LIBS ${SANITIZER_CXX_ABI_LIBRARY}
-                         ${SANITIZER_COMMON_LINK_LIBS})
-  append_list_if(COMPILER_RT_HAS_LIBDL dl SCUDO_DYNAMIC_LIBS)
-  append_list_if(COMPILER_RT_HAS_LIBRT rt SCUDO_DYNAMIC_LIBS)
-  append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread SCUDO_DYNAMIC_LIBS)
-  append_list_if(COMPILER_RT_HAS_LIBLOG log SCUDO_DYNAMIC_LIBS)
+  add_compiler_rt_runtime(clang_rt.scudo_minimal
+    STATIC
+    ARCHS ${SCUDO_SUPPORTED_ARCH}
+    SOURCES ${SCUDO_SOURCES}
+    OBJECT_LIBS ${SCUDO_MINIMAL_OBJECT_LIBS}
+    CFLAGS ${SCUDO_CFLAGS}
+    PARENT_TARGET scudo)
+  add_compiler_rt_runtime(clang_rt.scudo_cxx_minimal
+    STATIC
+    ARCHS ${SCUDO_SUPPORTED_ARCH}
+    SOURCES ${SCUDO_CXX_SOURCES}
+    CFLAGS ${SCUDO_CFLAGS}
+    PARENT_TARGET scudo)
 
   add_compiler_rt_runtime(clang_rt.scudo
     STATIC
     ARCHS ${SCUDO_SUPPORTED_ARCH}
     SOURCES ${SCUDO_SOURCES}
-    OBJECT_LIBS RTSanitizerCommonNoTermination
-                RTSanitizerCommonLibc
-                RTInterception
-                RTUbsan
+    OBJECT_LIBS ${SCUDO_OBJECT_LIBS}
     CFLAGS ${SCUDO_CFLAGS}
     PARENT_TARGET scudo)
-
   add_compiler_rt_runtime(clang_rt.scudo_cxx
     STATIC
     ARCHS ${SCUDO_SUPPORTED_ARCH}
@@ -64,15 +91,21 @@ if(COMPILER_RT_HAS_SCUDO)
     CFLAGS ${SCUDO_CFLAGS}
     PARENT_TARGET scudo)
 
+  add_compiler_rt_runtime(clang_rt.scudo_minimal
+    SHARED
+    ARCHS ${SCUDO_SUPPORTED_ARCH}
+    SOURCES ${SCUDO_SOURCES} ${SCUDO_CXX_SOURCES}
+    OBJECT_LIBS ${SCUDO_MINIMAL_OBJECT_LIBS}
+    CFLAGS ${SCUDO_CFLAGS}
+    LINK_FLAGS ${SCUDO_DYNAMIC_LINK_FLAGS}
+    LINK_LIBS ${SCUDO_MINIMAL_DYNAMIC_LIBS}
+    PARENT_TARGET scudo)
+
   add_compiler_rt_runtime(clang_rt.scudo
     SHARED
     ARCHS ${SCUDO_SUPPORTED_ARCH}
     SOURCES ${SCUDO_SOURCES} ${SCUDO_CXX_SOURCES}
-    OBJECT_LIBS RTSanitizerCommonNoTermination
-                RTSanitizerCommonLibc
-                RTInterception
-                RTUbsan
-                RTUbsan_cxx
+    OBJECT_LIBS ${SCUDO_OBJECT_LIBS}
     CFLAGS ${SCUDO_CFLAGS}
     LINK_FLAGS ${SCUDO_DYNAMIC_LINK_FLAGS}
     LINK_LIBS ${SCUDO_DYNAMIC_LIBS}

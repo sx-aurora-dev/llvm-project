@@ -41,6 +41,7 @@
 #include "llvm/Support/Threading.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
 #include <cassert>
 #include <string>
@@ -80,6 +81,9 @@ static cl::opt<bool> DisablePostRAMachineLICM("disable-postra-machine-licm",
     cl::desc("Disable Machine LICM"));
 static cl::opt<bool> DisableMachineSink("disable-machine-sink", cl::Hidden,
     cl::desc("Disable Machine Sinking"));
+static cl::opt<bool> DisablePostRAMachineSink("disable-postra-machine-sink",
+    cl::Hidden,
+    cl::desc("Disable PostRA Machine Sinking"));
 static cl::opt<bool> DisableLSR("disable-lsr", cl::Hidden,
     cl::desc("Disable Loop Strength Reduction Pass"));
 static cl::opt<bool> DisableConstantHoisting("disable-constant-hoisting",
@@ -94,10 +98,9 @@ static cl::opt<bool> EnableImplicitNullChecks(
     "enable-implicit-null-checks",
     cl::desc("Fold null checks into faulting memory operations"),
     cl::init(false), cl::Hidden);
-static cl::opt<bool>
-    EnableMergeICmps("enable-mergeicmps",
-                     cl::desc("Merge ICmp chains into a single memcmp"),
-                     cl::init(false), cl::Hidden);
+static cl::opt<bool> DisableMergeICmps("disable-mergeicmps",
+    cl::desc("Disable MergeICmps Pass"),
+    cl::init(false), cl::Hidden);
 static cl::opt<bool> PrintLSR("print-lsr-output", cl::Hidden,
     cl::desc("Print LLVM IR produced by the loop-reduce pass"));
 static cl::opt<bool> PrintISelInput("print-isel-input", cl::Hidden,
@@ -108,14 +111,16 @@ static cl::opt<bool> VerifyMachineCode("verify-machineinstrs", cl::Hidden,
     cl::desc("Verify generated machine code"),
     cl::init(false),
     cl::ZeroOrMore);
-static cl::opt<bool> EnableMachineOutliner("enable-machine-outliner",
-    cl::Hidden,
-    cl::desc("Enable machine outliner"));
-static cl::opt<bool> EnableLinkOnceODROutlining(
-    "enable-linkonceodr-outlining",
-    cl::Hidden,
-    cl::desc("Enable the machine outliner on linkonceodr functions"),
-    cl::init(false));
+enum RunOutliner { AlwaysOutline, NeverOutline, TargetDefault };
+// Enable or disable the MachineOutliner.
+static cl::opt<RunOutliner> EnableMachineOutliner(
+    "enable-machine-outliner", cl::desc("Enable the machine outliner"),
+    cl::Hidden, cl::ValueOptional, cl::init(TargetDefault),
+    cl::values(clEnumValN(AlwaysOutline, "always",
+                          "Run on all functions guaranteed to be beneficial"),
+               clEnumValN(NeverOutline, "never", "Disable all outlining"),
+               // Sentinel value for unspecified option.
+               clEnumValN(AlwaysOutline, "", "")));
 // Enable or disable FastISel. Both options are needed, because
 // FastISel is enabled by default with -fast, and we wish to be
 // able to enable or disable fast-isel independently from -O0.
@@ -252,6 +257,9 @@ static IdentifyingPassPtr overridePass(AnalysisID StandardID,
 
   if (StandardID == &MachineSinkingID)
     return applyDisable(TargetID, DisableMachineSink);
+
+  if (StandardID == &PostRAMachineSinkingID)
+    return applyDisable(TargetID, DisablePostRAMachineSink);
 
   if (StandardID == &MachineCopyPropagationID)
     return applyDisable(TargetID, DisableCopyProp);
@@ -596,7 +604,7 @@ void TargetPassConfig::addIRPasses() {
     // loads and compares. ExpandMemCmpPass then tries to expand those calls
     // into optimally-sized loads and compares. The transforms are enabled by a
     // target lowering hook.
-    if (EnableMergeICmps)
+    if (!DisableMergeICmps)
       addPass(createMergeICmpsPass());
     addPass(createExpandMemCmpPass());
   }
@@ -655,7 +663,12 @@ void TargetPassConfig::addPassesToHandleExceptions() {
     addPass(createDwarfEHPass());
     break;
   case ExceptionHandling::Wasm:
-    // TODO to prevent warning
+    // Wasm EH uses Windows EH instructions, but it does not need to demote PHIs
+    // on catchpads and cleanuppads because it does not outline them into
+    // funclets. Catchswitch blocks are not lowered in SelectionDAG, so we
+    // should remove PHIs there.
+    addPass(createWinEHPass(/*DemoteCatchSwitchPHIOnly=*/false));
+    addPass(createWasmEHPass());
     break;
   case ExceptionHandling::None:
     addPass(createLowerInvokePass());
@@ -838,8 +851,10 @@ void TargetPassConfig::addMachinePasses() {
   addPostRegAlloc();
 
   // Insert prolog/epilog code.  Eliminate abstract frame index references...
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOpt::None) {
+    addPass(&PostRAMachineSinkingID);
     addPass(&ShrinkWrapID);
+  }
 
   // Prolog/Epilog inserter needs a TargetMachine to instantiate. But only
   // do so if it hasn't been disabled, substituted, or overridden.
@@ -898,8 +913,14 @@ void TargetPassConfig::addMachinePasses() {
   addPass(&XRayInstrumentationID, false);
   addPass(&PatchableFunctionID, false);
 
-  if (EnableMachineOutliner)
-    PM->add(createMachineOutlinerPass(EnableLinkOnceODROutlining));
+  if (TM->Options.EnableMachineOutliner && getOptLevel() != CodeGenOpt::None &&
+      EnableMachineOutliner != NeverOutline) {
+    bool RunOnAllFunctions = (EnableMachineOutliner == AlwaysOutline);
+    bool AddOutliner = RunOnAllFunctions ||
+                       TM->Options.SupportsDefaultOutlining;
+    if (AddOutliner)
+      addPass(createMachineOutlinerPass(RunOnAllFunctions));
+  }
 
   // Add passes that directly emit MI after all other MI passes.
   addPreEmitPass2();

@@ -263,7 +263,7 @@ bool AnalyzerOptions::mayInlineCXXSharedPtrDtor() {
 bool AnalyzerOptions::mayInlineCXXTemporaryDtors() {
   return getBooleanOption(InlineCXXTemporaryDtors,
                           "c++-temp-dtor-inlining",
-                          /*Default=*/false);
+                          /*Default=*/true);
 }
 
 bool AnalyzerOptions::mayInlineObjCMethod() {
@@ -296,6 +296,12 @@ bool AnalyzerOptions::shouldSuppressFromCXXStandardLibrary() {
                           /* Default = */ true);
 }
 
+bool AnalyzerOptions::shouldCrosscheckWithZ3() {
+  return getBooleanOption(CrosscheckWithZ3,
+                          "crosscheck-with-z3",
+                          /* Default = */ false);
+}
+
 bool AnalyzerOptions::shouldReportIssuesInMainSourceFile() {
   return getBooleanOption(ReportIssuesInMainSourceFile,
                           "report-in-main-source-file",
@@ -313,6 +319,12 @@ bool AnalyzerOptions::shouldSerializeStats() {
   return getBooleanOption(SerializeStats,
                           "serialize-stats",
                           /* Default = */ false);
+}
+
+bool AnalyzerOptions::shouldElideConstructors() {
+  return getBooleanOption(ElideConstructors,
+                          "elide-constructors",
+                          /* Default = */ true);
 }
 
 int AnalyzerOptions::getOptionAsInteger(StringRef Name, int DefaultVal,
@@ -443,6 +455,14 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
     DisplayNotesAsEvents =
         getBooleanOption("notes-as-events", /*Default=*/false);
   return DisplayNotesAsEvents.getValue();
+}
+
+bool AnalyzerOptions::shouldAggressivelySimplifyRelationalComparison() {
+  if (!AggressiveRelationalComparisonSimplification.hasValue())
+    AggressiveRelationalComparisonSimplification =
+      getBooleanOption("aggressive-relational-comparison-simplification",
+                       /*Default=*/false);
+  return AggressiveRelationalComparisonSimplification.getValue();
 }
 
 StringRef AnalyzerOptions::getCTUDir() {

@@ -20,6 +20,7 @@
 #include <isl_space_private.h>
 #include <isl_aff_private.h>
 #include <isl/hash.h>
+#include <isl/id.h>
 #include <isl/constraint.h>
 #include <isl/schedule.h>
 #include <isl_schedule_constraints.h>
@@ -561,7 +562,7 @@ static isl_bool graph_has_edge(struct isl_sched_graph *graph,
 
 	edge = graph_find_edge(graph, type, src, dst);
 	if (!edge)
-		return 0;
+		return isl_bool_false;
 
 	empty = isl_map_plain_is_empty(edge->map);
 	if (empty < 0)

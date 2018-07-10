@@ -17,6 +17,7 @@
 
 #include "clang/AST/ExprCXX.h"
 #include "clang/Analysis/Support/BumpVector.h"
+#include "clang/Analysis/ConstructionContext.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -38,7 +39,6 @@ namespace clang {
 class ASTContext;
 class BinaryOperator;
 class CFG;
-class ConstructionContext;
 class CXXBaseSpecifier;
 class CXXBindTemporaryExpr;
 class CXXCtorInitializer;
@@ -65,8 +65,9 @@ public:
     // stmt kind
     Statement,
     Constructor,
+    CXXRecordTypedCall,
     STMT_BEGIN = Statement,
-    STMT_END = Constructor,
+    STMT_END = CXXRecordTypedCall,
     // dtor kind
     AutomaticObjectDtor,
     DeleteDtor,
@@ -91,7 +92,7 @@ protected:
   CFGElement() = default;
 
 public:
-  /// \brief Convert to the specified CFGElement type, asserting that this
+  /// Convert to the specified CFGElement type, asserting that this
   /// CFGElement is of the desired type.
   template<typename T>
   T castAs() const {
@@ -102,7 +103,7 @@ public:
     return t;
   }
 
-  /// \brief Convert to the specified CFGElement type, returning None if this
+  /// Convert to the specified CFGElement type, returning None if this
   /// CFGElement is not of the desired type.
   template<typename T>
   Optional<T> getAs() const {
@@ -158,10 +159,6 @@ public:
     return static_cast<ConstructionContext *>(Data2.getPointer());
   }
 
-  QualType getType() const {
-    return cast<CXXConstructExpr>(getStmt())->getType();
-  }
-
 private:
   friend class CFGElement;
 
@@ -169,6 +166,47 @@ private:
 
   static bool isKind(const CFGElement &E) {
     return E.getKind() == Constructor;
+  }
+};
+
+/// CFGCXXRecordTypedCall - Represents a function call that returns a C++ object
+/// by value. This, like constructor, requires a construction context in order
+/// to understand the storage of the returned object . In C such tracking is not
+/// necessary because no additional effort is required for destroying the object
+/// or modeling copy elision. Like CFGConstructor, this element is for now only
+/// used by the analyzer's CFG.
+class CFGCXXRecordTypedCall : public CFGStmt {
+public:
+  /// Returns true when call expression \p CE needs to be represented
+  /// by CFGCXXRecordTypedCall, as opposed to a regular CFGStmt.
+  static bool isCXXRecordTypedCall(CallExpr *CE, const ASTContext &ACtx) {
+    return CE->getCallReturnType(ACtx).getCanonicalType()->getAsCXXRecordDecl();
+  }
+
+  explicit CFGCXXRecordTypedCall(CallExpr *CE, const ConstructionContext *C)
+      : CFGStmt(CE, CXXRecordTypedCall) {
+    // FIXME: This is not protected against squeezing a non-record-typed-call
+    // into the constructor. An assertion would require passing an ASTContext
+    // which would mean paying for something we don't use.
+    assert(C && (isa<TemporaryObjectConstructionContext>(C) ||
+                 // These are possible in C++17 due to mandatory copy elision.
+                 isa<ReturnedValueConstructionContext>(C) ||
+                 isa<VariableConstructionContext>(C) ||
+                 isa<ConstructorInitializerConstructionContext>(C)));
+    Data2.setPointer(const_cast<ConstructionContext *>(C));
+  }
+
+  const ConstructionContext *getConstructionContext() const {
+    return static_cast<ConstructionContext *>(Data2.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGCXXRecordTypedCall() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == CXXRecordTypedCall;
   }
 };
 
@@ -840,6 +878,12 @@ public:
     Elements.push_back(CFGConstructor(CE, CC), C);
   }
 
+  void appendCXXRecordTypedCall(CallExpr *CE,
+                                const ConstructionContext *CC,
+                                BumpVectorContext &C) {
+    Elements.push_back(CFGCXXRecordTypedCall(CE, CC), C);
+  }
+
   void appendInitializer(CXXCtorInitializer *initializer,
                         BumpVectorContext &C) {
     Elements.push_back(CFGInitializer(initializer), C);
@@ -936,7 +980,7 @@ public:
 
 };
 
-/// \brief CFGCallback defines methods that should be called when a logical
+/// CFGCallback defines methods that should be called when a logical
 /// operator error is found when building the CFG.
 class CFGCallback {
 public:
@@ -981,6 +1025,7 @@ public:
     bool AddCXXNewAllocator = false;
     bool AddCXXDefaultInitExprInCtors = false;
     bool AddRichCXXConstructors = false;
+    bool MarkElidedCXXConstructors = false;
 
     BuildOptions() = default;
 

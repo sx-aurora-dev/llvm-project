@@ -36,6 +36,7 @@ class GetElementPtrInst;
 
 namespace polly {
 class Scop;
+class ScopStmt;
 
 /// Type to remap values.
 using ValueMapT = llvm::DenseMap<llvm::AssertingVH<llvm::Value>,
@@ -390,10 +391,12 @@ llvm::Value *getConditionFromTerminator(llvm::TerminatorInst *TI);
 /// @param LI    The loop info.
 /// @param SE    The scalar evolution analysis.
 /// @param DT    The dominator tree of the function.
+/// @param KnownInvariantLoads The invariant load set.
 ///
 /// @return True if @p LInst can be hoisted in @p R.
 bool isHoistableLoad(llvm::LoadInst *LInst, llvm::Region &R, llvm::LoopInfo &LI,
-                     llvm::ScalarEvolution &SE, const llvm::DominatorTree &DT);
+                     llvm::ScalarEvolution &SE, const llvm::DominatorTree &DT,
+                     const InvariantLoadsSetTy &KnownInvariantLoads);
 
 /// Return true iff @p V is an intrinsic that we ignore during code
 ///        generation.
@@ -458,5 +461,24 @@ llvm::Loop *getFirstNonBoxedLoopFor(llvm::Loop *L, llvm::LoopInfo &LI,
 // @param BoxedLoops    Set of Boxed Loops we get from the SCoP.
 llvm::Loop *getFirstNonBoxedLoopFor(llvm::BasicBlock *BB, llvm::LoopInfo &LI,
                                     const BoxedLoopsSetTy &BoxedLoops);
+
+/// Is the given instruction a call to a debug function?
+///
+/// A debug function can be used to insert output in Polly-optimized code which
+/// normally does not allow function calls with side-effects. For instance, a
+/// printf can be inserted to check whether a value still has the expected value
+/// after Polly generated code:
+///
+///     int sum = 0;
+///     for (int i = 0; i < 16; i+=1) {
+///       sum += i;
+///       printf("The value of sum at i=%d is %d\n", sum, i);
+///     }
+bool isDebugCall(llvm::Instruction *Inst);
+
+/// Does the statement contain a call to a debug function?
+///
+/// Such a statement must not be removed, even if has no side-effects.
+bool hasDebugCall(ScopStmt *Stmt);
 } // namespace polly
 #endif

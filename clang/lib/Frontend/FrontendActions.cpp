@@ -74,7 +74,8 @@ ASTPrintAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
 std::unique_ptr<ASTConsumer>
 ASTDumpAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
-  return CreateASTDumper(CI.getFrontendOpts().ASTDumpFilter,
+  return CreateASTDumper(nullptr /*Dump to stdout.*/,
+                         CI.getFrontendOpts().ASTDumpFilter,
                          CI.getFrontendOpts().ASTDumpDecls,
                          CI.getFrontendOpts().ASTDumpAll,
                          CI.getFrontendOpts().ASTDumpLookups);
@@ -111,14 +112,14 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   if (!CI.getFrontendOpts().RelocatablePCH)
     Sysroot.clear();
 
+  const auto &FrontendOpts = CI.getFrontendOpts();
   auto Buffer = std::make_shared<PCHBuffer>();
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
   Consumers.push_back(llvm::make_unique<PCHGenerator>(
                         CI.getPreprocessor(), OutputFile, Sysroot,
-                        Buffer, CI.getFrontendOpts().ModuleFileExtensions,
-      /*AllowASTWithErrors*/CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
-                        /*IncludeTimestamps*/
-                          +CI.getFrontendOpts().IncludeTimestamps));
+                        Buffer, FrontendOpts.ModuleFileExtensions,
+                        CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
+                        FrontendOpts.IncludeTimestamps));
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
       CI, InFile, OutputFile, std::move(OS), Buffer));
 
@@ -415,7 +416,7 @@ void TemplightDumpAction::ExecuteAction() {
 }
 
 namespace {
-  /// \brief AST reader listener that dumps module information for a module
+  /// AST reader listener that dumps module information for a module
   /// file.
   class DumpModuleInfoListener : public ASTReaderListener {
     llvm::raw_ostream &Out;
@@ -732,6 +733,7 @@ void PrintPreambleAction::ExecuteAction() {
   case InputKind::ObjCXX:
   case InputKind::OpenCL:
   case InputKind::CUDA:
+  case InputKind::HIP:
     break;
       
   case InputKind::Unknown:
@@ -753,4 +755,52 @@ void PrintPreambleAction::ExecuteAction() {
         Lexer::ComputePreamble((*Buffer)->getBuffer(), CI.getLangOpts()).Size;
     llvm::outs().write((*Buffer)->getBufferStart(), Preamble);
   }
+}
+
+void DumpCompilerOptionsAction::ExecuteAction() {
+  CompilerInstance &CI = getCompilerInstance();
+  std::unique_ptr<raw_ostream> OSP =
+      CI.createDefaultOutputFile(false, getCurrentFile());
+  if (!OSP)
+    return;
+
+  raw_ostream &OS = *OSP;
+  const Preprocessor &PP = CI.getPreprocessor();
+  const LangOptions &LangOpts = PP.getLangOpts();
+
+  // FIXME: Rather than manually format the JSON (which is awkward due to
+  // needing to remove trailing commas), this should make use of a JSON library.
+  // FIXME: Instead of printing enums as an integral value and specifying the
+  // type as a separate field, use introspection to print the enumerator.
+
+  OS << "{\n";
+  OS << "\n\"features\" : [\n";
+  {
+    llvm::SmallString<128> Str;
+#define FEATURE(Name, Predicate)                                               \
+  ("\t{\"" #Name "\" : " + llvm::Twine(Predicate ? "true" : "false") + "},\n") \
+      .toVector(Str);
+#include "clang/Basic/Features.def"
+#undef FEATURE
+    // Remove the newline and comma from the last entry to ensure this remains
+    // valid JSON.
+    OS << Str.substr(0, Str.size() - 2);
+  }
+  OS << "\n],\n";
+
+  OS << "\n\"extensions\" : [\n";
+  {
+    llvm::SmallString<128> Str;
+#define EXTENSION(Name, Predicate)                                             \
+  ("\t{\"" #Name "\" : " + llvm::Twine(Predicate ? "true" : "false") + "},\n") \
+      .toVector(Str);
+#include "clang/Basic/Features.def"
+#undef EXTENSION
+    // Remove the newline and comma from the last entry to ensure this remains
+    // valid JSON.
+    OS << Str.substr(0, Str.size() - 2);
+  }
+  OS << "\n]\n";
+
+  OS << "}";
 }

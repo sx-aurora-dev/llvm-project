@@ -207,7 +207,7 @@ private:
   template <typename... Ts> void WriteTs() {}
 
 public:
-  /// \brief A check failed, so printout out the condition and the message.
+  /// A check failed, so printout out the condition and the message.
   ///
   /// This provides a nice place to put a breakpoint if you want to see why
   /// something is not correct.
@@ -217,7 +217,7 @@ public:
     Broken = true;
   }
 
-  /// \brief A check failed (with values to print).
+  /// A check failed (with values to print).
   ///
   /// This calls the Message-only version so that the above is easier to set a
   /// breakpoint on.
@@ -255,14 +255,14 @@ class Verifier : public InstVisitor<Verifier>, VerifierSupport {
 
   DominatorTree DT;
 
-  /// \brief When verifying a basic block, keep track of all of the
+  /// When verifying a basic block, keep track of all of the
   /// instructions we have seen so far.
   ///
   /// This allows us to do efficient dominance checks for the case when an
   /// instruction has an operand that is an instruction in the same block.
   SmallPtrSet<Instruction *, 16> InstsInThisBlock;
 
-  /// \brief Keep track of the metadata nodes that have been checked already.
+  /// Keep track of the metadata nodes that have been checked already.
   SmallPtrSet<const Metadata *, 32> MDNodes;
 
   /// Keep track which DISubprogram is attached to which function.
@@ -271,10 +271,10 @@ class Verifier : public InstVisitor<Verifier>, VerifierSupport {
   /// Track all DICompileUnits visited.
   SmallPtrSet<const Metadata *, 2> CUVisited;
 
-  /// \brief The result type for a landingpad.
+  /// The result type for a landingpad.
   Type *LandingPadResultTy;
 
-  /// \brief Whether we've seen a call to @llvm.localescape in this function
+  /// Whether we've seen a call to @llvm.localescape in this function
   /// already.
   bool SawFrameEscape;
 
@@ -467,6 +467,7 @@ private:
   void visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS);
   void visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI);
   void visitDbgIntrinsic(StringRef Kind, DbgInfoIntrinsic &DII);
+  void visitDbgLabelIntrinsic(StringRef Kind, DbgLabelInst &DLI);
   void visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI);
   void visitAtomicRMWInst(AtomicRMWInst &RMWI);
   void visitFenceInst(FenceInst &FI);
@@ -1085,12 +1086,13 @@ void Verifier::visitDISubprogram(const DISubprogram &N) {
   if (auto *S = N.getRawDeclaration())
     AssertDI(isa<DISubprogram>(S) && !cast<DISubprogram>(S)->isDefinition(),
              "invalid subprogram declaration", &N, S);
-  if (auto *RawVars = N.getRawVariables()) {
-    auto *Vars = dyn_cast<MDTuple>(RawVars);
-    AssertDI(Vars, "invalid variable list", &N, RawVars);
-    for (Metadata *Op : Vars->operands()) {
-      AssertDI(Op && isa<DILocalVariable>(Op), "invalid local variable", &N,
-               Vars, Op);
+  if (auto *RawNode = N.getRawRetainedNodes()) {
+    auto *Node = dyn_cast<MDTuple>(RawNode);
+    AssertDI(Node, "invalid retained nodes list", &N, RawNode);
+    for (Metadata *Op : Node->operands()) {
+      AssertDI(Op && (isa<DILocalVariable>(Op) || isa<DILabel>(Op)),
+               "invalid retained nodes, expected DILocalVariable or DILabel",
+               &N, Node, Op);
     }
   }
   AssertDI(!hasConflictingReferenceFlags(N.getFlags()),
@@ -1220,6 +1222,17 @@ void Verifier::visitDILocalVariable(const DILocalVariable &N) {
   AssertDI(N.getTag() == dwarf::DW_TAG_variable, "invalid tag", &N);
   AssertDI(N.getRawScope() && isa<DILocalScope>(N.getRawScope()),
            "local variable requires a valid scope", &N, N.getRawScope());
+}
+
+void Verifier::visitDILabel(const DILabel &N) {
+  if (auto *S = N.getRawScope())
+    AssertDI(isa<DIScope>(S), "invalid scope", &N, S);
+  if (auto *F = N.getRawFile())
+    AssertDI(isa<DIFile>(F), "invalid file", &N, F);
+
+  AssertDI(N.getTag() == dwarf::DW_TAG_label, "invalid tag", &N);
+  AssertDI(N.getRawScope() && isa<DILocalScope>(N.getRawScope()),
+           "label requires a valid scope", &N, N.getRawScope());
 }
 
 void Verifier::visitDIExpression(const DIExpression &N) {
@@ -1404,6 +1417,7 @@ Verifier::visitModuleFlag(const MDNode *Op,
 static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   switch (Kind) {
   case Attribute::NoReturn:
+  case Attribute::NoCfCheck:
   case Attribute::NoUnwind:
   case Attribute::NoInline:
   case Attribute::AlwaysInline:
@@ -1412,6 +1426,7 @@ static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   case Attribute::StackProtectReq:
   case Attribute::StackProtectStrong:
   case Attribute::SafeStack:
+  case Attribute::ShadowCallStack:
   case Attribute::NoRedZone:
   case Attribute::NoImplicitFloat:
   case Attribute::Naked:
@@ -1429,6 +1444,7 @@ static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   case Attribute::Builtin:
   case Attribute::NoBuiltin:
   case Attribute::Cold:
+  case Attribute::OptForFuzzing:
   case Attribute::OptimizeNone:
   case Attribute::JumpTable:
   case Attribute::Convergent:
@@ -2254,7 +2270,7 @@ void Verifier::visitBasicBlock(BasicBlock &BB) {
   if (isa<PHINode>(BB.front())) {
     SmallVector<BasicBlock*, 8> Preds(pred_begin(&BB), pred_end(&BB));
     SmallVector<std::pair<BasicBlock*, Value*>, 8> Values;
-    std::sort(Preds.begin(), Preds.end());
+    llvm::sort(Preds.begin(), Preds.end());
     for (const PHINode &PN : BB.phis()) {
       // Ensure that PHI nodes have at least one entry!
       Assert(PN.getNumIncomingValues() != 0,
@@ -2272,7 +2288,7 @@ void Verifier::visitBasicBlock(BasicBlock &BB) {
       for (unsigned i = 0, e = PN.getNumIncomingValues(); i != e; ++i)
         Values.push_back(
             std::make_pair(PN.getIncomingBlock(i), PN.getIncomingValue(i)));
-      std::sort(Values.begin(), Values.end());
+      llvm::sort(Values.begin(), Values.end());
 
       for (unsigned i = 0, e = Values.size(); i != e; ++i) {
         // Check to make sure that if there is more than one entry for a
@@ -2913,7 +2929,7 @@ void Verifier::verifyMustTailCall(CallInst &CI) {
 
   // Check the return.
   ReturnInst *Ret = dyn_cast_or_null<ReturnInst>(Next);
-  Assert(Ret, "musttail call must be precede a ret with an optional bitcast",
+  Assert(Ret, "musttail call must precede a ret with an optional bitcast",
          &CI);
   Assert(!Ret->getReturnValue() || Ret->getReturnValue() == RetVal,
          "musttail call result must be returned", Ret);
@@ -3167,8 +3183,7 @@ void Verifier::visitLoadInst(LoadInst &LI) {
            "Load cannot have Release ordering", &LI);
     Assert(LI.getAlignment() != 0,
            "Atomic load must specify explicit alignment", &LI);
-    Assert(ElTy->isIntegerTy() || ElTy->isPointerTy() ||
-               ElTy->isFloatingPointTy(),
+    Assert(ElTy->isIntOrPtrTy() || ElTy->isFloatingPointTy(),
            "atomic load operand must have integer, pointer, or floating point "
            "type!",
            ElTy, &LI);
@@ -3196,8 +3211,7 @@ void Verifier::visitStoreInst(StoreInst &SI) {
            "Store cannot have Acquire ordering", &SI);
     Assert(SI.getAlignment() != 0,
            "Atomic store must specify explicit alignment", &SI);
-    Assert(ElTy->isIntegerTy() || ElTy->isPointerTy() ||
-               ElTy->isFloatingPointTy(),
+    Assert(ElTy->isIntOrPtrTy() || ElTy->isFloatingPointTy(),
            "atomic store operand must have integer, pointer, or floating point "
            "type!",
            ElTy, &SI);
@@ -3288,9 +3302,8 @@ void Verifier::visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI) {
   PointerType *PTy = dyn_cast<PointerType>(CXI.getOperand(0)->getType());
   Assert(PTy, "First cmpxchg operand must be a pointer.", &CXI);
   Type *ElTy = PTy->getElementType();
-  Assert(ElTy->isIntegerTy() || ElTy->isPointerTy(),
-        "cmpxchg operand must have integer or pointer type",
-         ElTy, &CXI);
+  Assert(ElTy->isIntOrPtrTy(),
+         "cmpxchg operand must have integer or pointer type", ElTy, &CXI);
   checkAtomicMemAccessSize(ElTy, &CXI);
   Assert(ElTy == CXI.getOperand(1)->getType(),
          "Expected value type does not match pointer operand type!", &CXI,
@@ -4062,6 +4075,9 @@ void Verifier::visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS) {
   case Intrinsic::dbg_value: // llvm.dbg.value
     visitDbgIntrinsic("value", cast<DbgInfoIntrinsic>(*CS.getInstruction()));
     break;
+  case Intrinsic::dbg_label: // llvm.dbg.label
+    visitDbgLabelIntrinsic("label", cast<DbgLabelInst>(*CS.getInstruction()));
+    break;
   case Intrinsic::memcpy:
   case Intrinsic::memmove:
   case Intrinsic::memset: {
@@ -4082,81 +4098,13 @@ void Verifier::visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS) {
            CS);
     break;
   }
-  case Intrinsic::memcpy_element_unordered_atomic: {
-    const AtomicMemCpyInst *MI = cast<AtomicMemCpyInst>(CS.getInstruction());
-
-    ConstantInt *ElementSizeCI =
-        dyn_cast<ConstantInt>(MI->getRawElementSizeInBytes());
-    Assert(ElementSizeCI,
-           "element size of the element-wise unordered atomic memory "
-           "intrinsic must be a constant int",
-           CS);
-    const APInt &ElementSizeVal = ElementSizeCI->getValue();
-    Assert(ElementSizeVal.isPowerOf2(),
-           "element size of the element-wise atomic memory intrinsic "
-           "must be a power of 2",
-           CS);
-
-    if (auto *LengthCI = dyn_cast<ConstantInt>(MI->getLength())) {
-      uint64_t Length = LengthCI->getZExtValue();
-      uint64_t ElementSize = MI->getElementSizeInBytes();
-      Assert((Length % ElementSize) == 0,
-             "constant length must be a multiple of the element size in the "
-             "element-wise atomic memory intrinsic",
-             CS);
-    }
-
-    auto IsValidAlignment = [&](uint64_t Alignment) {
-      return isPowerOf2_64(Alignment) && ElementSizeVal.ule(Alignment);
-    };
-    uint64_t DstAlignment = CS.getParamAlignment(0),
-             SrcAlignment = CS.getParamAlignment(1);
-    Assert(IsValidAlignment(DstAlignment),
-           "incorrect alignment of the destination argument", CS);
-    Assert(IsValidAlignment(SrcAlignment),
-           "incorrect alignment of the source argument", CS);
-    break;
-  }
-  case Intrinsic::memmove_element_unordered_atomic: {
-    auto *MI = cast<AtomicMemMoveInst>(CS.getInstruction());
-
-    ConstantInt *ElementSizeCI =
-        dyn_cast<ConstantInt>(MI->getRawElementSizeInBytes());
-    Assert(ElementSizeCI,
-           "element size of the element-wise unordered atomic memory "
-           "intrinsic must be a constant int",
-           CS);
-    const APInt &ElementSizeVal = ElementSizeCI->getValue();
-    Assert(ElementSizeVal.isPowerOf2(),
-           "element size of the element-wise atomic memory intrinsic "
-           "must be a power of 2",
-           CS);
-
-    if (auto *LengthCI = dyn_cast<ConstantInt>(MI->getLength())) {
-      uint64_t Length = LengthCI->getZExtValue();
-      uint64_t ElementSize = MI->getElementSizeInBytes();
-      Assert((Length % ElementSize) == 0,
-             "constant length must be a multiple of the element size in the "
-             "element-wise atomic memory intrinsic",
-             CS);
-    }
-
-    auto IsValidAlignment = [&](uint64_t Alignment) {
-      return isPowerOf2_64(Alignment) && ElementSizeVal.ule(Alignment);
-    };
-    uint64_t DstAlignment = CS.getParamAlignment(0),
-             SrcAlignment = CS.getParamAlignment(1);
-    Assert(IsValidAlignment(DstAlignment),
-           "incorrect alignment of the destination argument", CS);
-    Assert(IsValidAlignment(SrcAlignment),
-           "incorrect alignment of the source argument", CS);
-    break;
-  }
+  case Intrinsic::memcpy_element_unordered_atomic:
+  case Intrinsic::memmove_element_unordered_atomic:
   case Intrinsic::memset_element_unordered_atomic: {
-    auto *MI = cast<AtomicMemSetInst>(CS.getInstruction());
+    const auto *AMI = cast<AtomicMemIntrinsic>(CS.getInstruction());
 
     ConstantInt *ElementSizeCI =
-        dyn_cast<ConstantInt>(MI->getRawElementSizeInBytes());
+        dyn_cast<ConstantInt>(AMI->getRawElementSizeInBytes());
     Assert(ElementSizeCI,
            "element size of the element-wise unordered atomic memory "
            "intrinsic must be a constant int",
@@ -4167,9 +4115,9 @@ void Verifier::visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS) {
            "must be a power of 2",
            CS);
 
-    if (auto *LengthCI = dyn_cast<ConstantInt>(MI->getLength())) {
+    if (auto *LengthCI = dyn_cast<ConstantInt>(AMI->getLength())) {
       uint64_t Length = LengthCI->getZExtValue();
-      uint64_t ElementSize = MI->getElementSizeInBytes();
+      uint64_t ElementSize = AMI->getElementSizeInBytes();
       Assert((Length % ElementSize) == 0,
              "constant length must be a multiple of the element size in the "
              "element-wise atomic memory intrinsic",
@@ -4179,9 +4127,14 @@ void Verifier::visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS) {
     auto IsValidAlignment = [&](uint64_t Alignment) {
       return isPowerOf2_64(Alignment) && ElementSizeVal.ule(Alignment);
     };
-    uint64_t DstAlignment = CS.getParamAlignment(0);
+    uint64_t DstAlignment = AMI->getDestAlignment();
     Assert(IsValidAlignment(DstAlignment),
            "incorrect alignment of the destination argument", CS);
+    if (const auto *AMT = dyn_cast<AtomicMemTransferInst>(AMI)) {
+      uint64_t SrcAlignment = AMT->getSourceAlignment();
+      Assert(IsValidAlignment(SrcAlignment),
+             "incorrect alignment of the source argument", CS);
+    }
     break;
   }
   case Intrinsic::gcroot:
@@ -4481,7 +4434,7 @@ void Verifier::visitIntrinsicCallSite(Intrinsic::ID ID, CallSite CS) {
   };
 }
 
-/// \brief Carefully grab the subprogram from a local scope.
+/// Carefully grab the subprogram from a local scope.
 ///
 /// This carefully grabs the subprogram from a local scope, avoiding the
 /// built-in assertions that would typically fire.
@@ -4554,7 +4507,40 @@ void Verifier::visitDbgIntrinsic(StringRef Kind, DbgInfoIntrinsic &DII) {
   verifyFnArgs(DII);
 }
 
+void Verifier::visitDbgLabelIntrinsic(StringRef Kind, DbgLabelInst &DLI) {
+  AssertDI(isa<DILabel>(DLI.getRawVariable()),
+         "invalid llvm.dbg." + Kind + " intrinsic variable", &DLI,
+         DLI.getRawVariable());
+
+  // Ignore broken !dbg attachments; they're checked elsewhere.
+  if (MDNode *N = DLI.getDebugLoc().getAsMDNode())
+    if (!isa<DILocation>(N))
+      return;
+
+  BasicBlock *BB = DLI.getParent();
+  Function *F = BB ? BB->getParent() : nullptr;
+
+  // The scopes for variables and !dbg attachments must agree.
+  DILabel *Label = DLI.getLabel();
+  DILocation *Loc = DLI.getDebugLoc();
+  Assert(Loc, "llvm.dbg." + Kind + " intrinsic requires a !dbg attachment",
+         &DLI, BB, F);
+
+  DISubprogram *LabelSP = getSubprogram(Label->getRawScope());
+  DISubprogram *LocSP = getSubprogram(Loc->getRawScope());
+  if (!LabelSP || !LocSP)
+    return;
+
+  AssertDI(LabelSP == LocSP, "mismatched subprogram between llvm.dbg." + Kind +
+                             " label and !dbg attachment",
+           &DLI, BB, F, Label, Label->getScope()->getSubprogram(), Loc,
+           Loc->getScope()->getSubprogram());
+}
+
 void Verifier::verifyFragmentExpression(const DbgInfoIntrinsic &I) {
+  if (dyn_cast<DbgLabelInst>(&I))
+    return;
+
   DILocalVariable *V = dyn_cast_or_null<DILocalVariable>(I.getRawVariable());
   DIExpression *E = dyn_cast_or_null<DIExpression>(I.getRawExpression());
 

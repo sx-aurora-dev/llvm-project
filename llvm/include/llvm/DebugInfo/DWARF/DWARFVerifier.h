@@ -11,6 +11,7 @@
 #define LLVM_DEBUGINFO_DWARF_DWARFVERIFIER_H
 
 #include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h"
 #include "llvm/DebugInfo/DWARF/DWARFAddressRange.h"
 #include "llvm/DebugInfo/DWARF/DWARFDie.h"
 
@@ -24,9 +25,9 @@ struct DWARFAttribute;
 class DWARFContext;
 class DWARFDie;
 class DWARFUnit;
+class DWARFCompileUnit;
 class DWARFDataExtractor;
 class DWARFDebugAbbrev;
-class DWARFDebugNames;
 class DataExtractor;
 struct DWARFSection;
 
@@ -151,7 +152,7 @@ private:
   ///                  type of the unit DIE.
   ///
   /// \returns true if the content is verified successfully, false otherwise.
-  bool verifyUnitContents(DWARFUnit Unit, uint8_t UnitType = 0);
+  bool verifyUnitContents(DWARFUnit &Unit, uint8_t UnitType = 0);
 
   /// Verify that all Die ranges are valid.
   ///
@@ -234,14 +235,29 @@ private:
                                  const char *SectionName);
 
   unsigned verifyDebugNamesCULists(const DWARFDebugNames &AccelTable);
+  unsigned verifyNameIndexBuckets(const DWARFDebugNames::NameIndex &NI,
+                                  const DataExtractor &StrData);
+  unsigned verifyNameIndexAbbrevs(const DWARFDebugNames::NameIndex &NI);
+  unsigned verifyNameIndexAttribute(const DWARFDebugNames::NameIndex &NI,
+                                    const DWARFDebugNames::Abbrev &Abbr,
+                                    DWARFDebugNames::AttributeEncoding AttrEnc);
+  unsigned verifyNameIndexEntries(const DWARFDebugNames::NameIndex &NI,
+                                  const DWARFDebugNames::NameTableEntry &NTE);
+  unsigned verifyNameIndexCompleteness(const DWARFDie &Die,
+                                       const DWARFDebugNames::NameIndex &NI);
 
   /// Verify that the DWARF v5 accelerator table is valid.
   ///
   /// This function currently checks that:
-  /// - Headers and abbreviation tables of individual Name Indices fit into the
-  ///   section and can be parsed.
+  /// - Headers individual Name Indices fit into the section and can be parsed.
+  /// - Abbreviation tables can be parsed and contain valid index attributes
+  ///   with correct form encodings.
   /// - The CU lists reference existing compile units.
   /// - The buckets have a valid index, or they are empty.
+  /// - All names are reachable via the hash table (they have the correct hash,
+  ///   and the hash is in the correct bucket).
+  /// - Information in the index entries is complete (all required entries are
+  ///   present) and consistent with the debug_info section DIEs.
   ///
   /// \param AccelSection section containing the acceleration table
   /// \param StrData string section

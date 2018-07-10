@@ -39,54 +39,90 @@
 ; SSE2 (cvtts[ds]2si) and vanilla X87 (fnstcw+fist, 32-bit only).
 
 define i64 @f_to_u64(float %a) nounwind {
-; AVX512_32_WIN-LABEL: f_to_u64:
-; AVX512_32_WIN:       # %bb.0:
-; AVX512_32_WIN-NEXT:    pushl %ebp
-; AVX512_32_WIN-NEXT:    movl %esp, %ebp
-; AVX512_32_WIN-NEXT:    andl $-8, %esp
-; AVX512_32_WIN-NEXT:    subl $16, %esp
-; AVX512_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
-; AVX512_32_WIN-NEXT:    vmovss {{.*#+}} xmm1 = mem[0],zero,zero,zero
-; AVX512_32_WIN-NEXT:    vcmpltss %xmm1, %xmm0, %k1
-; AVX512_32_WIN-NEXT:    vsubss %xmm1, %xmm0, %xmm2
-; AVX512_32_WIN-NEXT:    vmovss %xmm0, %xmm0, %xmm2 {%k1}
-; AVX512_32_WIN-NEXT:    vmovss %xmm2, {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    flds {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    fisttpll (%esp)
-; AVX512_32_WIN-NEXT:    xorl %edx, %edx
-; AVX512_32_WIN-NEXT:    vucomiss %xmm0, %xmm1
-; AVX512_32_WIN-NEXT:    setbe %dl
-; AVX512_32_WIN-NEXT:    shll $31, %edx
-; AVX512_32_WIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
-; AVX512_32_WIN-NEXT:    movl (%esp), %eax
-; AVX512_32_WIN-NEXT:    movl %ebp, %esp
-; AVX512_32_WIN-NEXT:    popl %ebp
-; AVX512_32_WIN-NEXT:    retl
+; AVX512DQVL_32_WIN-LABEL: f_to_u64:
+; AVX512DQVL_32_WIN:       # %bb.0:
+; AVX512DQVL_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQVL_32_WIN-NEXT:    vcvttps2uqq %xmm0, %ymm0
+; AVX512DQVL_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_WIN-NEXT:    vzeroupper
+; AVX512DQVL_32_WIN-NEXT:    retl
 ;
-; AVX512_32_LIN-LABEL: f_to_u64:
-; AVX512_32_LIN:       # %bb.0:
-; AVX512_32_LIN-NEXT:    subl $20, %esp
-; AVX512_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
-; AVX512_32_LIN-NEXT:    vmovss {{.*#+}} xmm1 = mem[0],zero,zero,zero
-; AVX512_32_LIN-NEXT:    vcmpltss %xmm1, %xmm0, %k1
-; AVX512_32_LIN-NEXT:    vsubss %xmm1, %xmm0, %xmm2
-; AVX512_32_LIN-NEXT:    vmovss %xmm0, %xmm0, %xmm2 {%k1}
-; AVX512_32_LIN-NEXT:    vmovss %xmm2, {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    flds {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    fisttpll (%esp)
-; AVX512_32_LIN-NEXT:    xorl %edx, %edx
-; AVX512_32_LIN-NEXT:    vucomiss %xmm0, %xmm1
-; AVX512_32_LIN-NEXT:    setbe %dl
-; AVX512_32_LIN-NEXT:    shll $31, %edx
-; AVX512_32_LIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
-; AVX512_32_LIN-NEXT:    movl (%esp), %eax
-; AVX512_32_LIN-NEXT:    addl $20, %esp
-; AVX512_32_LIN-NEXT:    retl
+; AVX512DQVL_32_LIN-LABEL: f_to_u64:
+; AVX512DQVL_32_LIN:       # %bb.0:
+; AVX512DQVL_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQVL_32_LIN-NEXT:    vcvttps2uqq %xmm0, %ymm0
+; AVX512DQVL_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_LIN-NEXT:    vzeroupper
+; AVX512DQVL_32_LIN-NEXT:    retl
 ;
 ; AVX512_64-LABEL: f_to_u64:
 ; AVX512_64:       # %bb.0:
 ; AVX512_64-NEXT:    vcvttss2usi %xmm0, %rax
 ; AVX512_64-NEXT:    retq
+;
+; AVX512DQ_32_WIN-LABEL: f_to_u64:
+; AVX512DQ_32_WIN:       # %bb.0:
+; AVX512DQ_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQ_32_WIN-NEXT:    vcvttps2uqq %ymm0, %zmm0
+; AVX512DQ_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_WIN-NEXT:    vzeroupper
+; AVX512DQ_32_WIN-NEXT:    retl
+;
+; AVX512DQ_32_LIN-LABEL: f_to_u64:
+; AVX512DQ_32_LIN:       # %bb.0:
+; AVX512DQ_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQ_32_LIN-NEXT:    vcvttps2uqq %ymm0, %zmm0
+; AVX512DQ_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_LIN-NEXT:    vzeroupper
+; AVX512DQ_32_LIN-NEXT:    retl
+;
+; AVX512F_32_WIN-LABEL: f_to_u64:
+; AVX512F_32_WIN:       # %bb.0:
+; AVX512F_32_WIN-NEXT:    pushl %ebp
+; AVX512F_32_WIN-NEXT:    movl %esp, %ebp
+; AVX512F_32_WIN-NEXT:    andl $-8, %esp
+; AVX512F_32_WIN-NEXT:    subl $16, %esp
+; AVX512F_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512F_32_WIN-NEXT:    vmovss {{.*#+}} xmm1 = mem[0],zero,zero,zero
+; AVX512F_32_WIN-NEXT:    vcmpltss %xmm1, %xmm0, %k1
+; AVX512F_32_WIN-NEXT:    vsubss %xmm1, %xmm0, %xmm2
+; AVX512F_32_WIN-NEXT:    vmovss %xmm0, %xmm0, %xmm2 {%k1}
+; AVX512F_32_WIN-NEXT:    vmovss %xmm2, {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    flds {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_WIN-NEXT:    xorl %edx, %edx
+; AVX512F_32_WIN-NEXT:    vucomiss %xmm0, %xmm1
+; AVX512F_32_WIN-NEXT:    setbe %dl
+; AVX512F_32_WIN-NEXT:    shll $31, %edx
+; AVX512F_32_WIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_WIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_WIN-NEXT:    movl %ebp, %esp
+; AVX512F_32_WIN-NEXT:    popl %ebp
+; AVX512F_32_WIN-NEXT:    retl
+;
+; AVX512F_32_LIN-LABEL: f_to_u64:
+; AVX512F_32_LIN:       # %bb.0:
+; AVX512F_32_LIN-NEXT:    subl $20, %esp
+; AVX512F_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512F_32_LIN-NEXT:    vmovss {{.*#+}} xmm1 = mem[0],zero,zero,zero
+; AVX512F_32_LIN-NEXT:    vcmpltss %xmm1, %xmm0, %k1
+; AVX512F_32_LIN-NEXT:    vsubss %xmm1, %xmm0, %xmm2
+; AVX512F_32_LIN-NEXT:    vmovss %xmm0, %xmm0, %xmm2 {%k1}
+; AVX512F_32_LIN-NEXT:    vmovss %xmm2, {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    flds {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_LIN-NEXT:    xorl %edx, %edx
+; AVX512F_32_LIN-NEXT:    vucomiss %xmm0, %xmm1
+; AVX512F_32_LIN-NEXT:    setbe %dl
+; AVX512F_32_LIN-NEXT:    shll $31, %edx
+; AVX512F_32_LIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_LIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_LIN-NEXT:    addl $20, %esp
+; AVX512F_32_LIN-NEXT:    retl
 ;
 ; SSE3_32_WIN-LABEL: f_to_u64:
 ; SSE3_32_WIN:       # %bb.0:
@@ -304,38 +340,74 @@ define i64 @f_to_u64(float %a) nounwind {
 }
 
 define i64 @f_to_s64(float %a) nounwind {
-; AVX512_32_WIN-LABEL: f_to_s64:
-; AVX512_32_WIN:       # %bb.0:
-; AVX512_32_WIN-NEXT:    pushl %ebp
-; AVX512_32_WIN-NEXT:    movl %esp, %ebp
-; AVX512_32_WIN-NEXT:    andl $-8, %esp
-; AVX512_32_WIN-NEXT:    subl $16, %esp
-; AVX512_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
-; AVX512_32_WIN-NEXT:    vmovss %xmm0, {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    flds {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    fisttpll (%esp)
-; AVX512_32_WIN-NEXT:    movl (%esp), %eax
-; AVX512_32_WIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
-; AVX512_32_WIN-NEXT:    movl %ebp, %esp
-; AVX512_32_WIN-NEXT:    popl %ebp
-; AVX512_32_WIN-NEXT:    retl
+; AVX512DQVL_32_WIN-LABEL: f_to_s64:
+; AVX512DQVL_32_WIN:       # %bb.0:
+; AVX512DQVL_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQVL_32_WIN-NEXT:    vcvttps2qq %xmm0, %ymm0
+; AVX512DQVL_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_WIN-NEXT:    vzeroupper
+; AVX512DQVL_32_WIN-NEXT:    retl
 ;
-; AVX512_32_LIN-LABEL: f_to_s64:
-; AVX512_32_LIN:       # %bb.0:
-; AVX512_32_LIN-NEXT:    subl $20, %esp
-; AVX512_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
-; AVX512_32_LIN-NEXT:    vmovss %xmm0, {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    flds {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    fisttpll (%esp)
-; AVX512_32_LIN-NEXT:    movl (%esp), %eax
-; AVX512_32_LIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
-; AVX512_32_LIN-NEXT:    addl $20, %esp
-; AVX512_32_LIN-NEXT:    retl
+; AVX512DQVL_32_LIN-LABEL: f_to_s64:
+; AVX512DQVL_32_LIN:       # %bb.0:
+; AVX512DQVL_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQVL_32_LIN-NEXT:    vcvttps2qq %xmm0, %ymm0
+; AVX512DQVL_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_LIN-NEXT:    vzeroupper
+; AVX512DQVL_32_LIN-NEXT:    retl
 ;
 ; AVX512_64-LABEL: f_to_s64:
 ; AVX512_64:       # %bb.0:
 ; AVX512_64-NEXT:    vcvttss2si %xmm0, %rax
 ; AVX512_64-NEXT:    retq
+;
+; AVX512DQ_32_WIN-LABEL: f_to_s64:
+; AVX512DQ_32_WIN:       # %bb.0:
+; AVX512DQ_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQ_32_WIN-NEXT:    vcvttps2qq %ymm0, %zmm0
+; AVX512DQ_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_WIN-NEXT:    vzeroupper
+; AVX512DQ_32_WIN-NEXT:    retl
+;
+; AVX512DQ_32_LIN-LABEL: f_to_s64:
+; AVX512DQ_32_LIN:       # %bb.0:
+; AVX512DQ_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512DQ_32_LIN-NEXT:    vcvttps2qq %ymm0, %zmm0
+; AVX512DQ_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_LIN-NEXT:    vzeroupper
+; AVX512DQ_32_LIN-NEXT:    retl
+;
+; AVX512F_32_WIN-LABEL: f_to_s64:
+; AVX512F_32_WIN:       # %bb.0:
+; AVX512F_32_WIN-NEXT:    pushl %ebp
+; AVX512F_32_WIN-NEXT:    movl %esp, %ebp
+; AVX512F_32_WIN-NEXT:    andl $-8, %esp
+; AVX512F_32_WIN-NEXT:    subl $16, %esp
+; AVX512F_32_WIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512F_32_WIN-NEXT:    vmovss %xmm0, {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    flds {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_WIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_WIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_WIN-NEXT:    movl %ebp, %esp
+; AVX512F_32_WIN-NEXT:    popl %ebp
+; AVX512F_32_WIN-NEXT:    retl
+;
+; AVX512F_32_LIN-LABEL: f_to_s64:
+; AVX512F_32_LIN:       # %bb.0:
+; AVX512F_32_LIN-NEXT:    subl $20, %esp
+; AVX512F_32_LIN-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; AVX512F_32_LIN-NEXT:    vmovss %xmm0, {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    flds {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_LIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_LIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_LIN-NEXT:    addl $20, %esp
+; AVX512F_32_LIN-NEXT:    retl
 ;
 ; SSE3_32_WIN-LABEL: f_to_s64:
 ; SSE3_32_WIN:       # %bb.0:
@@ -455,54 +527,90 @@ define i64 @f_to_s64(float %a) nounwind {
 }
 
 define i64 @d_to_u64(double %a) nounwind {
-; AVX512_32_WIN-LABEL: d_to_u64:
-; AVX512_32_WIN:       # %bb.0:
-; AVX512_32_WIN-NEXT:    pushl %ebp
-; AVX512_32_WIN-NEXT:    movl %esp, %ebp
-; AVX512_32_WIN-NEXT:    andl $-8, %esp
-; AVX512_32_WIN-NEXT:    subl $16, %esp
-; AVX512_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
-; AVX512_32_WIN-NEXT:    vmovsd {{.*#+}} xmm1 = mem[0],zero
-; AVX512_32_WIN-NEXT:    vcmpltsd %xmm1, %xmm0, %k1
-; AVX512_32_WIN-NEXT:    vsubsd %xmm1, %xmm0, %xmm2
-; AVX512_32_WIN-NEXT:    vmovsd %xmm0, %xmm0, %xmm2 {%k1}
-; AVX512_32_WIN-NEXT:    vmovsd %xmm2, {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    fldl {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    fisttpll (%esp)
-; AVX512_32_WIN-NEXT:    xorl %edx, %edx
-; AVX512_32_WIN-NEXT:    vucomisd %xmm0, %xmm1
-; AVX512_32_WIN-NEXT:    setbe %dl
-; AVX512_32_WIN-NEXT:    shll $31, %edx
-; AVX512_32_WIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
-; AVX512_32_WIN-NEXT:    movl (%esp), %eax
-; AVX512_32_WIN-NEXT:    movl %ebp, %esp
-; AVX512_32_WIN-NEXT:    popl %ebp
-; AVX512_32_WIN-NEXT:    retl
+; AVX512DQVL_32_WIN-LABEL: d_to_u64:
+; AVX512DQVL_32_WIN:       # %bb.0:
+; AVX512DQVL_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQVL_32_WIN-NEXT:    vcvttpd2uqq %ymm0, %ymm0
+; AVX512DQVL_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_WIN-NEXT:    vzeroupper
+; AVX512DQVL_32_WIN-NEXT:    retl
 ;
-; AVX512_32_LIN-LABEL: d_to_u64:
-; AVX512_32_LIN:       # %bb.0:
-; AVX512_32_LIN-NEXT:    subl $20, %esp
-; AVX512_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
-; AVX512_32_LIN-NEXT:    vmovsd {{.*#+}} xmm1 = mem[0],zero
-; AVX512_32_LIN-NEXT:    vcmpltsd %xmm1, %xmm0, %k1
-; AVX512_32_LIN-NEXT:    vsubsd %xmm1, %xmm0, %xmm2
-; AVX512_32_LIN-NEXT:    vmovsd %xmm0, %xmm0, %xmm2 {%k1}
-; AVX512_32_LIN-NEXT:    vmovsd %xmm2, {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    fldl {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    fisttpll (%esp)
-; AVX512_32_LIN-NEXT:    xorl %edx, %edx
-; AVX512_32_LIN-NEXT:    vucomisd %xmm0, %xmm1
-; AVX512_32_LIN-NEXT:    setbe %dl
-; AVX512_32_LIN-NEXT:    shll $31, %edx
-; AVX512_32_LIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
-; AVX512_32_LIN-NEXT:    movl (%esp), %eax
-; AVX512_32_LIN-NEXT:    addl $20, %esp
-; AVX512_32_LIN-NEXT:    retl
+; AVX512DQVL_32_LIN-LABEL: d_to_u64:
+; AVX512DQVL_32_LIN:       # %bb.0:
+; AVX512DQVL_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQVL_32_LIN-NEXT:    vcvttpd2uqq %ymm0, %ymm0
+; AVX512DQVL_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_LIN-NEXT:    vzeroupper
+; AVX512DQVL_32_LIN-NEXT:    retl
 ;
 ; AVX512_64-LABEL: d_to_u64:
 ; AVX512_64:       # %bb.0:
 ; AVX512_64-NEXT:    vcvttsd2usi %xmm0, %rax
 ; AVX512_64-NEXT:    retq
+;
+; AVX512DQ_32_WIN-LABEL: d_to_u64:
+; AVX512DQ_32_WIN:       # %bb.0:
+; AVX512DQ_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQ_32_WIN-NEXT:    vcvttpd2uqq %zmm0, %zmm0
+; AVX512DQ_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_WIN-NEXT:    vzeroupper
+; AVX512DQ_32_WIN-NEXT:    retl
+;
+; AVX512DQ_32_LIN-LABEL: d_to_u64:
+; AVX512DQ_32_LIN:       # %bb.0:
+; AVX512DQ_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQ_32_LIN-NEXT:    vcvttpd2uqq %zmm0, %zmm0
+; AVX512DQ_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_LIN-NEXT:    vzeroupper
+; AVX512DQ_32_LIN-NEXT:    retl
+;
+; AVX512F_32_WIN-LABEL: d_to_u64:
+; AVX512F_32_WIN:       # %bb.0:
+; AVX512F_32_WIN-NEXT:    pushl %ebp
+; AVX512F_32_WIN-NEXT:    movl %esp, %ebp
+; AVX512F_32_WIN-NEXT:    andl $-8, %esp
+; AVX512F_32_WIN-NEXT:    subl $16, %esp
+; AVX512F_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512F_32_WIN-NEXT:    vmovsd {{.*#+}} xmm1 = mem[0],zero
+; AVX512F_32_WIN-NEXT:    vcmpltsd %xmm1, %xmm0, %k1
+; AVX512F_32_WIN-NEXT:    vsubsd %xmm1, %xmm0, %xmm2
+; AVX512F_32_WIN-NEXT:    vmovsd %xmm0, %xmm0, %xmm2 {%k1}
+; AVX512F_32_WIN-NEXT:    vmovsd %xmm2, {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    fldl {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_WIN-NEXT:    xorl %edx, %edx
+; AVX512F_32_WIN-NEXT:    vucomisd %xmm0, %xmm1
+; AVX512F_32_WIN-NEXT:    setbe %dl
+; AVX512F_32_WIN-NEXT:    shll $31, %edx
+; AVX512F_32_WIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_WIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_WIN-NEXT:    movl %ebp, %esp
+; AVX512F_32_WIN-NEXT:    popl %ebp
+; AVX512F_32_WIN-NEXT:    retl
+;
+; AVX512F_32_LIN-LABEL: d_to_u64:
+; AVX512F_32_LIN:       # %bb.0:
+; AVX512F_32_LIN-NEXT:    subl $20, %esp
+; AVX512F_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512F_32_LIN-NEXT:    vmovsd {{.*#+}} xmm1 = mem[0],zero
+; AVX512F_32_LIN-NEXT:    vcmpltsd %xmm1, %xmm0, %k1
+; AVX512F_32_LIN-NEXT:    vsubsd %xmm1, %xmm0, %xmm2
+; AVX512F_32_LIN-NEXT:    vmovsd %xmm0, %xmm0, %xmm2 {%k1}
+; AVX512F_32_LIN-NEXT:    vmovsd %xmm2, {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    fldl {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_LIN-NEXT:    xorl %edx, %edx
+; AVX512F_32_LIN-NEXT:    vucomisd %xmm0, %xmm1
+; AVX512F_32_LIN-NEXT:    setbe %dl
+; AVX512F_32_LIN-NEXT:    shll $31, %edx
+; AVX512F_32_LIN-NEXT:    xorl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_LIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_LIN-NEXT:    addl $20, %esp
+; AVX512F_32_LIN-NEXT:    retl
 ;
 ; SSE3_32_WIN-LABEL: d_to_u64:
 ; SSE3_32_WIN:       # %bb.0:
@@ -720,38 +828,74 @@ define i64 @d_to_u64(double %a) nounwind {
 }
 
 define i64 @d_to_s64(double %a) nounwind {
-; AVX512_32_WIN-LABEL: d_to_s64:
-; AVX512_32_WIN:       # %bb.0:
-; AVX512_32_WIN-NEXT:    pushl %ebp
-; AVX512_32_WIN-NEXT:    movl %esp, %ebp
-; AVX512_32_WIN-NEXT:    andl $-8, %esp
-; AVX512_32_WIN-NEXT:    subl $16, %esp
-; AVX512_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
-; AVX512_32_WIN-NEXT:    vmovsd %xmm0, {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    fldl {{[0-9]+}}(%esp)
-; AVX512_32_WIN-NEXT:    fisttpll (%esp)
-; AVX512_32_WIN-NEXT:    movl (%esp), %eax
-; AVX512_32_WIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
-; AVX512_32_WIN-NEXT:    movl %ebp, %esp
-; AVX512_32_WIN-NEXT:    popl %ebp
-; AVX512_32_WIN-NEXT:    retl
+; AVX512DQVL_32_WIN-LABEL: d_to_s64:
+; AVX512DQVL_32_WIN:       # %bb.0:
+; AVX512DQVL_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQVL_32_WIN-NEXT:    vcvttpd2qq %ymm0, %ymm0
+; AVX512DQVL_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_WIN-NEXT:    vzeroupper
+; AVX512DQVL_32_WIN-NEXT:    retl
 ;
-; AVX512_32_LIN-LABEL: d_to_s64:
-; AVX512_32_LIN:       # %bb.0:
-; AVX512_32_LIN-NEXT:    subl $20, %esp
-; AVX512_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
-; AVX512_32_LIN-NEXT:    vmovsd %xmm0, {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    fldl {{[0-9]+}}(%esp)
-; AVX512_32_LIN-NEXT:    fisttpll (%esp)
-; AVX512_32_LIN-NEXT:    movl (%esp), %eax
-; AVX512_32_LIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
-; AVX512_32_LIN-NEXT:    addl $20, %esp
-; AVX512_32_LIN-NEXT:    retl
+; AVX512DQVL_32_LIN-LABEL: d_to_s64:
+; AVX512DQVL_32_LIN:       # %bb.0:
+; AVX512DQVL_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQVL_32_LIN-NEXT:    vcvttpd2qq %ymm0, %ymm0
+; AVX512DQVL_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQVL_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQVL_32_LIN-NEXT:    vzeroupper
+; AVX512DQVL_32_LIN-NEXT:    retl
 ;
 ; AVX512_64-LABEL: d_to_s64:
 ; AVX512_64:       # %bb.0:
 ; AVX512_64-NEXT:    vcvttsd2si %xmm0, %rax
 ; AVX512_64-NEXT:    retq
+;
+; AVX512DQ_32_WIN-LABEL: d_to_s64:
+; AVX512DQ_32_WIN:       # %bb.0:
+; AVX512DQ_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQ_32_WIN-NEXT:    vcvttpd2qq %zmm0, %zmm0
+; AVX512DQ_32_WIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_WIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_WIN-NEXT:    vzeroupper
+; AVX512DQ_32_WIN-NEXT:    retl
+;
+; AVX512DQ_32_LIN-LABEL: d_to_s64:
+; AVX512DQ_32_LIN:       # %bb.0:
+; AVX512DQ_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512DQ_32_LIN-NEXT:    vcvttpd2qq %zmm0, %zmm0
+; AVX512DQ_32_LIN-NEXT:    vmovd %xmm0, %eax
+; AVX512DQ_32_LIN-NEXT:    vpextrd $1, %xmm0, %edx
+; AVX512DQ_32_LIN-NEXT:    vzeroupper
+; AVX512DQ_32_LIN-NEXT:    retl
+;
+; AVX512F_32_WIN-LABEL: d_to_s64:
+; AVX512F_32_WIN:       # %bb.0:
+; AVX512F_32_WIN-NEXT:    pushl %ebp
+; AVX512F_32_WIN-NEXT:    movl %esp, %ebp
+; AVX512F_32_WIN-NEXT:    andl $-8, %esp
+; AVX512F_32_WIN-NEXT:    subl $16, %esp
+; AVX512F_32_WIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512F_32_WIN-NEXT:    vmovsd %xmm0, {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    fldl {{[0-9]+}}(%esp)
+; AVX512F_32_WIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_WIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_WIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_WIN-NEXT:    movl %ebp, %esp
+; AVX512F_32_WIN-NEXT:    popl %ebp
+; AVX512F_32_WIN-NEXT:    retl
+;
+; AVX512F_32_LIN-LABEL: d_to_s64:
+; AVX512F_32_LIN:       # %bb.0:
+; AVX512F_32_LIN-NEXT:    subl $20, %esp
+; AVX512F_32_LIN-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
+; AVX512F_32_LIN-NEXT:    vmovsd %xmm0, {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    fldl {{[0-9]+}}(%esp)
+; AVX512F_32_LIN-NEXT:    fisttpll (%esp)
+; AVX512F_32_LIN-NEXT:    movl (%esp), %eax
+; AVX512F_32_LIN-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; AVX512F_32_LIN-NEXT:    addl $20, %esp
+; AVX512F_32_LIN-NEXT:    retl
 ;
 ; SSE3_32_WIN-LABEL: d_to_s64:
 ; SSE3_32_WIN:       # %bb.0:
@@ -918,7 +1062,7 @@ define i64 @x_to_u64(x86_fp80 %a) nounwind {
 ; AVX512_64_WIN-LABEL: x_to_u64:
 ; AVX512_64_WIN:       # %bb.0:
 ; AVX512_64_WIN-NEXT:    pushq %rax
-; AVX512_64_WIN-NEXT:    fldt {{[0-9]+}}(%rsp)
+; AVX512_64_WIN-NEXT:    fldt (%rcx)
 ; AVX512_64_WIN-NEXT:    flds __real@{{.*}}(%rip)
 ; AVX512_64_WIN-NEXT:    fld %st(1)
 ; AVX512_64_WIN-NEXT:    fsub %st(1)
@@ -1003,25 +1147,25 @@ define i64 @x_to_u64(x86_fp80 %a) nounwind {
 ;
 ; SSE3_64_WIN-LABEL: x_to_u64:
 ; SSE3_64_WIN:       # %bb.0:
-; SSE3_64_WIN-NEXT:    subq $24, %rsp
-; SSE3_64_WIN-NEXT:    fldt {{[0-9]+}}(%rsp)
+; SSE3_64_WIN-NEXT:    subq $16, %rsp
+; SSE3_64_WIN-NEXT:    fldt (%rcx)
 ; SSE3_64_WIN-NEXT:    flds __real@{{.*}}(%rip)
 ; SSE3_64_WIN-NEXT:    fld %st(1)
 ; SSE3_64_WIN-NEXT:    fsub %st(1)
 ; SSE3_64_WIN-NEXT:    fisttpll {{[0-9]+}}(%rsp)
 ; SSE3_64_WIN-NEXT:    fld %st(1)
-; SSE3_64_WIN-NEXT:    fisttpll {{[0-9]+}}(%rsp)
+; SSE3_64_WIN-NEXT:    fisttpll (%rsp)
 ; SSE3_64_WIN-NEXT:    fucompi %st(1)
 ; SSE3_64_WIN-NEXT:    fstp %st(0)
 ; SSE3_64_WIN-NEXT:    jbe .LBB4_1
 ; SSE3_64_WIN-NEXT:  # %bb.2:
-; SSE3_64_WIN-NEXT:    movq {{[0-9]+}}(%rsp), %rax
-; SSE3_64_WIN-NEXT:    addq $24, %rsp
+; SSE3_64_WIN-NEXT:    movq (%rsp), %rax
+; SSE3_64_WIN-NEXT:    addq $16, %rsp
 ; SSE3_64_WIN-NEXT:    retq
 ; SSE3_64_WIN-NEXT:  .LBB4_1:
 ; SSE3_64_WIN-NEXT:    movabsq $-9223372036854775808, %rax # imm = 0x8000000000000000
 ; SSE3_64_WIN-NEXT:    xorq {{[0-9]+}}(%rsp), %rax
-; SSE3_64_WIN-NEXT:    addq $24, %rsp
+; SSE3_64_WIN-NEXT:    addq $16, %rsp
 ; SSE3_64_WIN-NEXT:    retq
 ;
 ; SSE3_64_LIN-LABEL: x_to_u64:
@@ -1103,7 +1247,7 @@ define i64 @x_to_u64(x86_fp80 %a) nounwind {
 ; SSE2_64_WIN-LABEL: x_to_u64:
 ; SSE2_64_WIN:       # %bb.0:
 ; SSE2_64_WIN-NEXT:    subq $24, %rsp
-; SSE2_64_WIN-NEXT:    fldt {{[0-9]+}}(%rsp)
+; SSE2_64_WIN-NEXT:    fldt (%rcx)
 ; SSE2_64_WIN-NEXT:    flds __real@{{.*}}(%rip)
 ; SSE2_64_WIN-NEXT:    fld %st(1)
 ; SSE2_64_WIN-NEXT:    fsub %st(1)
@@ -1268,7 +1412,7 @@ define i64 @x_to_s64(x86_fp80 %a) nounwind {
 ; AVX512_64_WIN-LABEL: x_to_s64:
 ; AVX512_64_WIN:       # %bb.0:
 ; AVX512_64_WIN-NEXT:    pushq %rax
-; AVX512_64_WIN-NEXT:    fldt {{[0-9]+}}(%rsp)
+; AVX512_64_WIN-NEXT:    fldt (%rcx)
 ; AVX512_64_WIN-NEXT:    fisttpll (%rsp)
 ; AVX512_64_WIN-NEXT:    movq (%rsp), %rax
 ; AVX512_64_WIN-NEXT:    popq %rcx
@@ -1308,7 +1452,7 @@ define i64 @x_to_s64(x86_fp80 %a) nounwind {
 ; SSE3_64_WIN-LABEL: x_to_s64:
 ; SSE3_64_WIN:       # %bb.0:
 ; SSE3_64_WIN-NEXT:    pushq %rax
-; SSE3_64_WIN-NEXT:    fldt {{[0-9]+}}(%rsp)
+; SSE3_64_WIN-NEXT:    fldt (%rcx)
 ; SSE3_64_WIN-NEXT:    fisttpll (%rsp)
 ; SSE3_64_WIN-NEXT:    movq (%rsp), %rax
 ; SSE3_64_WIN-NEXT:    popq %rcx
@@ -1359,8 +1503,8 @@ define i64 @x_to_s64(x86_fp80 %a) nounwind {
 ;
 ; SSE2_64_WIN-LABEL: x_to_s64:
 ; SSE2_64_WIN:       # %bb.0:
-; SSE2_64_WIN-NEXT:    subq $24, %rsp
-; SSE2_64_WIN-NEXT:    fldt {{[0-9]+}}(%rsp)
+; SSE2_64_WIN-NEXT:    subq $16, %rsp
+; SSE2_64_WIN-NEXT:    fldt (%rcx)
 ; SSE2_64_WIN-NEXT:    fnstcw {{[0-9]+}}(%rsp)
 ; SSE2_64_WIN-NEXT:    movzwl {{[0-9]+}}(%rsp), %eax
 ; SSE2_64_WIN-NEXT:    movw $3199, {{[0-9]+}}(%rsp) # imm = 0xC7F
@@ -1369,7 +1513,7 @@ define i64 @x_to_s64(x86_fp80 %a) nounwind {
 ; SSE2_64_WIN-NEXT:    fistpll {{[0-9]+}}(%rsp)
 ; SSE2_64_WIN-NEXT:    fldcw {{[0-9]+}}(%rsp)
 ; SSE2_64_WIN-NEXT:    movq {{[0-9]+}}(%rsp), %rax
-; SSE2_64_WIN-NEXT:    addq $24, %rsp
+; SSE2_64_WIN-NEXT:    addq $16, %rsp
 ; SSE2_64_WIN-NEXT:    retq
 ;
 ; SSE2_64_LIN-LABEL: x_to_s64:

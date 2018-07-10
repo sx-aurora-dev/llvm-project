@@ -105,6 +105,7 @@ void MCContext::reset() {
   MachOUniquingMap.clear();
   ELFUniquingMap.clear();
   COFFUniquingMap.clear();
+  WasmUniquingMap.clear();
 
   NextID.clear();
   AllowTemporaryLabels = true;
@@ -515,13 +516,18 @@ MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind Kind,
 
   StringRef CachedName = Entry.first.SectionName;
 
-  MCSymbol *Begin = nullptr;
-  if (BeginSymName)
-    Begin = createTempSymbol(BeginSymName, false);
+  MCSymbol *Begin = createSymbol(CachedName, false, false);
+  cast<MCSymbolWasm>(Begin)->setType(wasm::WASM_SYMBOL_TYPE_SECTION);
 
   MCSectionWasm *Result = new (WasmAllocator.Allocate())
       MCSectionWasm(CachedName, Kind, GroupSym, UniqueID, Begin);
   Entry.second = Result;
+
+  auto *F = new MCDataFragment();
+  Result->getFragmentList().insert(Result->begin(), F);
+  F->setParent(Result);
+  Begin->setFragment(F);
+
   return Result;
 }
 
@@ -550,11 +556,13 @@ Expected<unsigned> MCContext::getDwarfFile(StringRef Directory,
 /// isValidDwarfFileNumber - takes a dwarf file number and returns true if it
 /// currently is assigned and false otherwise.
 bool MCContext::isValidDwarfFileNumber(unsigned FileNumber, unsigned CUID) {
-  const SmallVectorImpl<MCDwarfFile> &MCDwarfFiles = getMCDwarfFiles(CUID);
-  if (FileNumber == 0 || FileNumber >= MCDwarfFiles.size())
+  const MCDwarfLineTable &LineTable = getMCDwarfLineTable(CUID);
+  if (FileNumber == 0)
+    return getDwarfVersion() >= 5 && LineTable.hasRootFile();
+  if (FileNumber >= LineTable.getMCDwarfFiles().size())
     return false;
 
-  return !MCDwarfFiles[FileNumber].Name.empty();
+  return !LineTable.getMCDwarfFiles()[FileNumber].Name.empty();
 }
 
 /// Remove empty sections from SectionStartEndSyms, to avoid generating
@@ -568,6 +576,11 @@ CodeViewContext &MCContext::getCVContext() {
   if (!CVContext.get())
     CVContext.reset(new CodeViewContext);
   return *CVContext.get();
+}
+
+void MCContext::clearCVLocSeen() {
+  if (CVContext)
+    CVContext->clearCVLocSeen();
 }
 
 //===----------------------------------------------------------------------===//

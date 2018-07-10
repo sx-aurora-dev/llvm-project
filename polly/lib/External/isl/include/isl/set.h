@@ -10,14 +10,16 @@
 #ifndef ISL_SET_H
 #define ISL_SET_H
 
+#include <isl/id_type.h>
 #include <isl/map_type.h>
 #include <isl/aff_type.h>
 #include <isl/list.h>
 #include <isl/mat.h>
 #include <isl/point.h>
 #include <isl/local_space.h>
-#include <isl/val.h>
+#include <isl/val_type.h>
 #include <isl/stdint.h>
+#include <isl/stride_info.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -427,12 +429,6 @@ __isl_give isl_set *isl_set_gist_params(__isl_take isl_set *set,
 isl_stat isl_set_dim_residue_class_val(__isl_keep isl_set *set,
 	int pos, __isl_give isl_val **modulo, __isl_give isl_val **residue);
 
-struct isl_stride_info;
-typedef struct isl_stride_info isl_stride_info;
-__isl_give isl_val *isl_stride_info_get_stride(__isl_keep isl_stride_info *si);
-__isl_give isl_aff *isl_stride_info_get_offset(__isl_keep isl_stride_info *si);
-__isl_null isl_stride_info *isl_stride_info_free(
-	__isl_take isl_stride_info *si);
 __isl_give isl_stride_info *isl_set_get_stride_info(__isl_keep isl_set *set,
 	int pos);
 __isl_export
@@ -487,6 +483,9 @@ __isl_give isl_basic_set *isl_basic_set_align_params(
 	__isl_take isl_basic_set *bset, __isl_take isl_space *model);
 __isl_give isl_set *isl_set_align_params(__isl_take isl_set *set,
 	__isl_take isl_space *model);
+__isl_give isl_basic_set *isl_basic_set_drop_unused_params(
+	__isl_take isl_basic_set *bset);
+__isl_give isl_set *isl_set_drop_unused_params(__isl_take isl_set *set);
 
 __isl_give isl_mat *isl_basic_set_equalities_matrix(
 	__isl_keep isl_basic_set *bset, enum isl_dim_type c1,
@@ -498,6 +497,11 @@ __isl_give isl_basic_set *isl_basic_set_from_constraint_matrices(
 	__isl_take isl_space *dim,
 	__isl_take isl_mat *eq, __isl_take isl_mat *ineq, enum isl_dim_type c1,
 	enum isl_dim_type c2, enum isl_dim_type c3, enum isl_dim_type c4);
+
+__isl_give isl_basic_set *isl_basic_set_from_multi_aff(
+	__isl_take isl_multi_aff *ma);
+
+__isl_give isl_set *isl_set_from_multi_aff(__isl_take isl_multi_aff *ma);
 
 __isl_give isl_mat *isl_basic_set_reduced_basis(__isl_keep isl_basic_set *bset);
 

@@ -7,7 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 #include "TestFS.h"
+#include "URI.h"
+#include "clang/AST/DeclCXX.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Errc.h"
+#include "llvm/Support/Path.h"
 #include "gtest/gtest.h"
 
 namespace clang {
@@ -20,20 +24,10 @@ buildTestFS(StringMap<std::string> const &Files) {
       new vfs::InMemoryFileSystem);
   for (auto &FileAndContents : Files) {
     MemFS->addFile(FileAndContents.first(), time_t(),
-                   MemoryBuffer::getMemBuffer(FileAndContents.second,
-                                              FileAndContents.first()));
+                   MemoryBuffer::getMemBufferCopy(FileAndContents.second,
+                                                  FileAndContents.first()));
   }
   return MemFS;
-}
-
-Tagged<IntrusiveRefCntPtr<vfs::FileSystem>>
-MockFSProvider::getTaggedFileSystem(PathRef File) {
-  if (ExpectedFile) {
-    EXPECT_EQ(*ExpectedFile, File);
-  }
-
-  auto FS = buildTestFS(Files);
-  return make_tagged(FS, Tag);
 }
 
 MockCompilationDatabase::MockCompilationDatabase(bool UseRelPaths)
@@ -55,7 +49,7 @@ MockCompilationDatabase::getCompileCommand(PathRef File) const {
 }
 
 const char *testRoot() {
-#ifdef LLVM_ON_WIN32
+#ifdef _WIN32
   return "C:\\clangd-test";
 #else
   return "/clangd-test";
@@ -65,10 +59,51 @@ const char *testRoot() {
 std::string testPath(PathRef File) {
   assert(sys::path::is_relative(File) && "FileName should be relative");
 
+  SmallString<32> NativeFile = File;
+  sys::path::native(NativeFile);
   SmallString<32> Path;
-  sys::path::append(Path, testRoot(), File);
+  sys::path::append(Path, testRoot(), NativeFile);
   return Path.str();
 }
+
+/// unittest: is a scheme that refers to files relative to testRoot().
+/// URI body is a path relative to testRoot() e.g. unittest:///x.h for
+/// /clangd-test/x.h.
+class TestScheme : public URIScheme {
+public:
+  static const char *Scheme;
+
+  llvm::Expected<std::string>
+  getAbsolutePath(llvm::StringRef /*Authority*/, llvm::StringRef Body,
+                  llvm::StringRef HintPath) const override {
+    assert(HintPath.startswith(testRoot()));
+    if (!Body.consume_front("/"))
+      return llvm::make_error<llvm::StringError>(
+          "Body of an unittest: URI must start with '/'",
+          llvm::inconvertibleErrorCode());
+    llvm::SmallString<16> Path(Body.begin(), Body.end());
+    llvm::sys::path::native(Path);
+    return testPath(Path);
+  }
+
+  llvm::Expected<URI>
+  uriFromAbsolutePath(llvm::StringRef AbsolutePath) const override {
+    llvm::StringRef Body = AbsolutePath;
+    if (!Body.consume_front(testRoot()))
+      return llvm::make_error<llvm::StringError>(
+          AbsolutePath + "does not start with " + testRoot(),
+          llvm::inconvertibleErrorCode());
+
+    return URI(Scheme, /*Authority=*/"",
+               llvm::sys::path::convert_to_slash(Body));
+  }
+};
+
+const char *TestScheme::Scheme = "unittest";
+
+static URISchemeRegistry::Add<TestScheme> X(TestScheme::Scheme, "Test schema");
+
+volatile int UnittestSchemeAnchorSource = 0;
 
 } // namespace clangd
 } // namespace clang

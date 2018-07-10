@@ -24,7 +24,7 @@ namespace __xray {
 void printToStdErr(const char *Buffer);
 
 // EINTR-safe write routine, provided a file descriptor and a character range.
-void retryingWriteAll(int Fd, char *Begin, char *End);
+void retryingWriteAll(int Fd, const char *Begin, const char *End);
 
 // Reads a long long value from a provided file.
 bool readValueFromFile(const char *Filename, long long *Value);
@@ -35,6 +35,24 @@ std::pair<ssize_t, bool> retryingReadSome(int Fd, char *Begin, char *End);
 // EINTR-safe open routine, uses flag-provided values for initialising a log
 // file.
 int getLogFD();
+
+constexpr size_t gcd(size_t a, size_t b) {
+  return (b == 0) ? a : gcd(b, a % b);
+}
+
+constexpr size_t lcm(size_t a, size_t b) { return a * b / gcd(a, b); }
+
+template <class T> constexpr T nearest_boundary(T number, T multiple) {
+  return multiple * ((number / multiple) + (number % multiple ? 1 : 0));
+}
+
+constexpr size_t next_pow2_helper(size_t num, size_t acc) {
+  return (1u << acc) >= num ? (1u << acc) : next_pow2_helper(num, acc + 1);
+}
+
+constexpr size_t next_pow2(size_t number) {
+  return next_pow2_helper(number, 1);
+}
 
 } // namespace __xray
 

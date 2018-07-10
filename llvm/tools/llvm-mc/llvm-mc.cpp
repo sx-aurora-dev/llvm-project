@@ -20,34 +20,38 @@
 #include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCParser/AsmLexer.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.def"
+#include "llvm/MC/MCTargetOptionsCommandFlags.inc"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
-#include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/WithColor.h"
 
 using namespace llvm;
 
 static cl::opt<std::string>
 InputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
 
-static cl::opt<std::string>
-OutputFilename("o", cl::desc("Output filename"),
-               cl::value_desc("filename"));
+static cl::opt<std::string> OutputFilename("o", cl::desc("Output filename"),
+                                           cl::value_desc("filename"),
+                                           cl::init("-"));
+
+static cl::opt<std::string> SplitDwarfFile("split-dwarf-file",
+                                           cl::desc("DWO output filename"),
+                                           cl::value_desc("filename"));
 
 static cl::opt<bool>
 ShowEncoding("show-encoding", cl::desc("Show instruction encodings"));
@@ -188,7 +192,7 @@ static const Target *GetTarget(const char *ProgName) {
   const Target *TheTarget = TargetRegistry::lookupTarget(ArchName, TheTriple,
                                                          Error);
   if (!TheTarget) {
-    errs() << ProgName << ": " << Error;
+    WithColor::error(errs(), ProgName) << Error;
     return nullptr;
   }
 
@@ -197,15 +201,11 @@ static const Target *GetTarget(const char *ProgName) {
   return TheTarget;
 }
 
-static std::unique_ptr<ToolOutputFile> GetOutputStream() {
-  if (OutputFilename == "")
-    OutputFilename = "-";
-
+static std::unique_ptr<ToolOutputFile> GetOutputStream(StringRef Path) {
   std::error_code EC;
-  auto Out =
-      llvm::make_unique<ToolOutputFile>(OutputFilename, EC, sys::fs::F_None);
+  auto Out = llvm::make_unique<ToolOutputFile>(Path, EC, sys::fs::F_None);
   if (EC) {
-    errs() << EC.message() << '\n';
+    WithColor::error() << EC.message() << '\n';
     return nullptr;
   }
 
@@ -254,12 +254,13 @@ static int fillCommandLineSymbols(MCAsmParser &Parser) {
     auto Val = Pair.second;
 
     if (Sym.empty() || Val.empty()) {
-      errs() << "error: defsym must be of the form: sym=value: " << I << "\n";
+      WithColor::error() << "defsym must be of the form: sym=value: " << I
+                         << "\n";
       return 1;
     }
     int64_t Value;
     if (Val.getAsInteger(0, Value)) {
-      errs() << "error: Value is not an integer: " << Val << "\n";
+      WithColor::error() << "value is not an integer: " << Val << "\n";
       return 1;
     }
     Parser.getContext().setSymbolValue(Parser.getStreamer(), Sym, Value);
@@ -277,8 +278,8 @@ static int AssembleInput(const char *ProgName, const Target *TheTarget,
       TheTarget->createMCAsmParser(STI, *Parser, MCII, MCOptions));
 
   if (!TAP) {
-    errs() << ProgName
-           << ": error: this target does not support assembly parsing.\n";
+    WithColor::error(errs(), ProgName)
+        << "this target does not support assembly parsing.\n";
     return 1;
   }
 
@@ -294,10 +295,7 @@ static int AssembleInput(const char *ProgName, const Target *TheTarget,
 }
 
 int main(int argc, char **argv) {
-  // Print a stack trace if we signal out.
-  sys::PrintStackTraceOnErrorSignal(argv[0]);
-  PrettyStackTraceProgram X(argc, argv);
-  llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
+  InitLLVM X(argc, argv);
 
   // Initialize targets and assembly printers/parsers.
   llvm::InitializeAllTargetInfos();
@@ -326,7 +324,8 @@ int main(int argc, char **argv) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> BufferPtr =
       MemoryBuffer::getFileOrSTDIN(InputFilename);
   if (std::error_code EC = BufferPtr.getError()) {
-    errs() << InputFilename << ": " << EC.message() << '\n';
+    WithColor::error(errs(), ProgName)
+        << InputFilename << ": " << EC.message() << '\n';
     return 1;
   }
   MemoryBuffer *Buffer = BufferPtr->get();
@@ -350,8 +349,8 @@ int main(int argc, char **argv) {
 
   if (CompressDebugSections != DebugCompressionType::None) {
     if (!zlib::isAvailable()) {
-      errs() << ProgName
-             << ": build tools with zlib to enable -compress-debug-sections";
+      WithColor::error(errs(), ProgName)
+          << "build tools with zlib to enable -compress-debug-sections";
       return 1;
     }
     MAI->setCompressDebugSections(CompressDebugSections);
@@ -390,6 +389,18 @@ int main(int argc, char **argv) {
   }
   if (!MainFileName.empty())
     Ctx.setMainFileName(MainFileName);
+  if (GenDwarfForAssembly && DwarfVersion >= 5) {
+    // DWARF v5 needs the root file as well as the compilation directory.
+    // If we find a '.file 0' directive that will supersede these values.
+    MD5 Hash;
+    MD5::MD5Result *Cksum =
+        (MD5::MD5Result *)Ctx.allocate(sizeof(MD5::MD5Result), 1);
+    Hash.update(Buffer->getBuffer());
+    Hash.final(*Cksum);
+    Ctx.setMCLineTableRootFile(
+        /*CUID=*/0, Ctx.getCompilationDir(),
+        !MainFileName.empty() ? MainFileName : InputFilename, Cksum, None);
+  }
 
   // Package up features to be passed to target/subtarget
   std::string FeaturesStr;
@@ -400,9 +411,20 @@ int main(int argc, char **argv) {
     FeaturesStr = Features.getString();
   }
 
-  std::unique_ptr<ToolOutputFile> Out = GetOutputStream();
+  std::unique_ptr<ToolOutputFile> Out = GetOutputStream(OutputFilename);
   if (!Out)
     return 1;
+
+  std::unique_ptr<ToolOutputFile> DwoOut;
+  if (!SplitDwarfFile.empty()) {
+    if (FileType != OFT_ObjectFile) {
+      WithColor::error() << "dwo output only supported with object files\n";
+      return 1;
+    }
+    DwoOut = GetOutputStream(SplitDwarfFile);
+    if (!DwoOut)
+      return 1;
+  }
 
   std::unique_ptr<buffer_ostream> BOS;
   raw_pwrite_stream *OS = &Out->os();
@@ -418,8 +440,8 @@ int main(int argc, char **argv) {
                                         *MAI, *MCII, *MRI);
 
     if (!IP) {
-      errs()
-          << "error: unable to create instruction printer for target triple '"
+      WithColor::error()
+          << "unable to create instruction printer for target triple '"
           << TheTriple.normalize() << "' with assembly variant "
           << OutputAsmVariant << ".\n";
       return 1;
@@ -429,16 +451,17 @@ int main(int argc, char **argv) {
     IP->setPrintImmHex(PrintImmHex);
 
     // Set up the AsmStreamer.
-    MCCodeEmitter *CE = nullptr;
-    MCAsmBackend *MAB = nullptr;
-    if (ShowEncoding) {
-      CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
-      MAB = TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions);
-    }
+    std::unique_ptr<MCCodeEmitter> CE;
+    if (ShowEncoding)
+      CE.reset(TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx));
+
+    std::unique_ptr<MCAsmBackend> MAB(
+        TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions));
     auto FOut = llvm::make_unique<formatted_raw_ostream>(*OS);
-    Str.reset(TheTarget->createAsmStreamer(
-        Ctx, std::move(FOut), /*asmverbose*/ true,
-        /*useDwarfDirectory*/ true, IP, CE, MAB, ShowInst));
+    Str.reset(
+        TheTarget->createAsmStreamer(Ctx, std::move(FOut), /*asmverbose*/ true,
+                                     /*useDwarfDirectory*/ true, IP,
+                                     std::move(CE), std::move(MAB), ShowInst));
 
   } else if (FileType == OFT_Null) {
     Str.reset(TheTarget->createNullStreamer(Ctx));
@@ -456,13 +479,18 @@ int main(int argc, char **argv) {
     MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
     MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions);
     Str.reset(TheTarget->createMCObjectStreamer(
-        TheTriple, Ctx, std::unique_ptr<MCAsmBackend>(MAB), *OS,
+        TheTriple, Ctx, std::unique_ptr<MCAsmBackend>(MAB),
+        DwoOut ? MAB->createDwoObjectWriter(*OS, DwoOut->os())
+               : MAB->createObjectWriter(*OS),
         std::unique_ptr<MCCodeEmitter>(CE), *STI, MCOptions.MCRelaxAll,
         MCOptions.MCIncrementalLinkerCompatible,
         /*DWARFMustBeAtTheEnd*/ false));
     if (NoExecStack)
       Str->InitSections(true);
   }
+
+  // Use Assembler information for parsing.
+  Str->setUseAssemblerInfoForParsing(true);
 
   int Res = 1;
   bool disassemble = false;
@@ -488,6 +516,10 @@ int main(int argc, char **argv) {
                                     *Buffer, SrcMgr, Out->os());
 
   // Keep output if no errors.
-  if (Res == 0) Out->keep();
+  if (Res == 0) {
+    Out->keep();
+    if (DwoOut)
+      DwoOut->keep();
+  }
   return Res;
 }

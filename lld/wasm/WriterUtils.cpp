@@ -37,7 +37,7 @@ static const char *valueTypeToString(uint8_t Type) {
 namespace lld {
 
 void wasm::debugWrite(uint64_t Offset, const Twine &Msg) {
-  DEBUG(dbgs() << format("  | %08lld: ", Offset) << Msg << "\n");
+  LLVM_DEBUG(dbgs() << format("  | %08lld: ", Offset) << Msg << "\n");
 }
 
 void wasm::writeUleb128(raw_ostream &OS, uint32_t Number, const Twine &Msg) {
@@ -70,7 +70,7 @@ void wasm::writeU8(raw_ostream &OS, uint8_t Byte, const Twine &Msg) {
 
 void wasm::writeU32(raw_ostream &OS, uint32_t Number, const Twine &Msg) {
   debugWrite(OS.tell(), Msg + "[0x" + utohexstr(Number) + "]");
-  support::endian::Writer<support::little>(OS).write(Number);
+  support::endian::write(OS, Number, support::little);
 }
 
 void wasm::writeValueType(raw_ostream &OS, uint8_t Type, const Twine &Msg) {
@@ -126,6 +126,11 @@ void wasm::writeGlobal(raw_ostream &OS, const WasmGlobal &Global) {
   writeInitExpr(OS, Global.InitExpr);
 }
 
+void wasm::writeTableType(raw_ostream &OS, const llvm::wasm::WasmTable &Type) {
+  writeU8(OS, WASM_TYPE_ANYFUNC, "table type");
+  writeLimits(OS, Type.Limits);
+}
+
 void wasm::writeImport(raw_ostream &OS, const WasmImport &Import) {
   writeStr(OS, Import.Module, "import module name");
   writeStr(OS, Import.Field, "import field name");
@@ -139,6 +144,9 @@ void wasm::writeImport(raw_ostream &OS, const WasmImport &Import) {
     break;
   case WASM_EXTERNAL_MEMORY:
     writeLimits(OS, Import.Memory);
+    break;
+  case WASM_EXTERNAL_TABLE:
+    writeTableType(OS, Import.Table);
     break;
   default:
     fatal("unsupported import type: " + Twine(Import.Kind));
@@ -157,6 +165,9 @@ void wasm::writeExport(raw_ostream &OS, const WasmExport &Export) {
     break;
   case WASM_EXTERNAL_MEMORY:
     writeUleb128(OS, Export.Index, "memory index");
+    break;
+  case WASM_EXTERNAL_TABLE:
+    writeUleb128(OS, Export.Index, "table index");
     break;
   default:
     fatal("unsupported export type: " + Twine(Export.Kind));

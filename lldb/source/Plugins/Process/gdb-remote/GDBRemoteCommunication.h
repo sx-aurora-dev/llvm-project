@@ -24,10 +24,10 @@
 #include "lldb/Core/Listener.h"
 #include "lldb/Host/HostThread.h"
 #include "lldb/Host/Predicate.h"
-#include "lldb/Interpreter/Args.h"
+#include "lldb/Utility/Args.h"
 #include "lldb/lldb-public.h"
 
-#include "Utility/StringExtractorGDBRemote.h"
+#include "lldb/Utility/StringExtractorGDBRemote.h"
 
 namespace lldb_private {
 namespace process_gdb_remote {

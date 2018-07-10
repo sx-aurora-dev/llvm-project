@@ -153,7 +153,8 @@
 //
 // CHECK-ASAN-ANDROID-STATICLIBASAN: "{{(.*[^.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
 // CHECK-ASAN-ANDROID-STATICLIBASAN: libclang_rt.asan-arm-android.a"
-// CHECK-ASAN-ANDROID-STATICLIBASAN: "-lpthread"
+// CHECK-ASAN-ANDROID-STATICLIBASAN-NOT: "-lpthread"
+// CHECK-ASAN-ANDROID-STATICLIBASAN-NOT: "-lrt"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
 // RUN:     -target arm-linux-androideabi -fuse-ld=ld -fsanitize=undefined \
@@ -175,7 +176,8 @@
 //
 // CHECK-UBSAN-ANDROID-STATICLIBASAN: "{{(.*[^.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
 // CHECK-UBSAN-ANDROID-STATICLIBASAN: libclang_rt.ubsan_standalone-arm-android.a"
-// CHECK-UBSAN-ANDROID-STATICLIBASAN: "-lpthread"
+// CHECK-UBSAN-ANDROID-STATICLIBASAN-NOT: "-lpthread"
+// CHECK-UBSAN-ANDROID-STATICLIBASAN-NOT: "-lrt"
 
 //
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
@@ -514,7 +516,7 @@
 // RUN:     --sysroot=%S/Inputs/basic_android_tree \
 // RUN:   | FileCheck --check-prefix=CHECK-CFI-CROSS-DSO-ANDROID %s
 // CHECK-CFI-CROSS-DSO-ANDROID: "{{.*}}ld{{(.exe)?}}"
-// CHECK-CFI-CROSS-DSO-ANDROID-NOT: libclang_rt.
+// CHECK-CFI-CROSS-DSO-ANDROID-NOT: libclang_rt.cfi
 
 // Cross-DSO CFI with diagnostics on Android links just the UBSAN runtime.
 // RUN: %clang -fsanitize=cfi -fsanitize-cfi-cross-dso %s -### -o %t.o 2>&1 \
@@ -556,6 +558,34 @@
 // CHECK-SAFESTACK-LINUX: "-u" "__safestack_init"
 // CHECK-SAFESTACK-LINUX: "-lpthread"
 // CHECK-SAFESTACK-LINUX: "-ldl"
+
+// RUN: %clang -fsanitize=shadow-call-stack %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux -fuse-ld=ld \
+// RUN:   | FileCheck --check-prefix=CHECK-SHADOWCALLSTACK-LINUX-X86-64 %s
+// CHECK-SHADOWCALLSTACK-LINUX-X86-64-NOT: error:
+
+// RUN: %clang -fsanitize=shadow-call-stack %s -### -o %t.o 2>&1 \
+// RUN:     -target aarch64-unknown-linux -fuse-ld=ld \
+// RUN:   | FileCheck --check-prefix=CHECK-SHADOWCALLSTACK-LINUX-AARCH64 %s
+// CHECK-SHADOWCALLSTACK-LINUX-AARCH64: '-fsanitize=shadow-call-stack' only allowed with '-ffixed-x18'
+
+// RUN: %clang -fsanitize=shadow-call-stack %s -### -o %t.o 2>&1 \
+// RUN:     -target aarch64-unknown-linux -fuse-ld=ld -ffixed-x18 \
+// RUN:   | FileCheck --check-prefix=CHECK-SHADOWCALLSTACK-LINUX-AARCH64-X18 %s
+// RUN: %clang -fsanitize=shadow-call-stack %s -### -o %t.o 2>&1 \
+// RUN:     -target arm64-unknown-ios -fuse-ld=ld \
+// RUN:   | FileCheck --check-prefix=CHECK-SHADOWCALLSTACK-LINUX-AARCH64-X18 %s
+// CHECK-SHADOWCALLSTACK-LINUX-AARCH64-X18-NOT: error:
+
+// RUN: %clang -fsanitize=shadow-call-stack %s -### -o %t.o 2>&1 \
+// RUN:     -target x86-unknown-linux -fuse-ld=ld \
+// RUN:   | FileCheck --check-prefix=CHECK-SHADOWCALLSTACK-LINUX-X86 %s
+// CHECK-SHADOWCALLSTACK-LINUX-X86: error: unsupported option '-fsanitize=shadow-call-stack' for target 'x86-unknown-linux'
+
+// RUN: %clang -fsanitize=shadow-call-stack %s -### -o %t.o 2>&1 \
+// RUN:     -fsanitize=safe-stack -target x86_64-unknown-linux -fuse-ld=ld \
+// RUN:   | FileCheck --check-prefix=CHECK-SHADOWCALLSTACK-SAFESTACK %s
+// CHECK-SHADOWCALLSTACK-SAFESTACK: error: invalid argument '-fsanitize=shadow-call-stack' not allowed with '-fsanitize=safe-stack'
 
 // RUN: %clang -fsanitize=cfi -fsanitize-stats %s -### -o %t.o 2>&1 \
 // RUN:     -target x86_64-unknown-linux -fuse-ld=ld \
@@ -618,6 +648,7 @@
 // RUN:     -target x86_64-scei-ps4 -fuse-ld=ld \
 // RUN:     -shared \
 // RUN:   | FileCheck --check-prefix=CHECK-UBSAN-PS4 %s
+// CHECK-UBSAN-PS4: --dependent-lib=libSceDbgUBSanitizer_stub_weak.a
 // CHECK-UBSAN-PS4: "{{.*}}ld{{(.gold)?(.exe)?}}"
 // CHECK-UBSAN-PS4: -lSceDbgUBSanitizer_stub_weak
 
@@ -625,6 +656,7 @@
 // RUN:     -target x86_64-scei-ps4 -fuse-ld=ld \
 // RUN:     -shared \
 // RUN:   | FileCheck --check-prefix=CHECK-ASAN-PS4 %s
+// CHECK-ASAN-PS4: --dependent-lib=libSceDbgAddressSanitizer_stub_weak.a
 // CHECK-ASAN-PS4: "{{.*}}ld{{(.gold)?(.exe)?}}"
 // CHECK-ASAN-PS4: -lSceDbgAddressSanitizer_stub_weak
 
@@ -632,6 +664,9 @@
 // RUN:     -target x86_64-scei-ps4 -fuse-ld=ld \
 // RUN:     -shared \
 // RUN:   | FileCheck --check-prefix=CHECK-AUBSAN-PS4 %s
+// CHECK-AUBSAN-PS4-NOT: --dependent-lib=libSceDbgUBSanitizer_stub_weak.a
+// CHECK-AUBSAN-PS4: --dependent-lib=libSceDbgAddressSanitizer_stub_weak.a
+// CHECK-AUBSAN-PS4-NOT: --dependent-lib=libSceDbgUBSanitizer_stub_weak.a
 // CHECK-AUBSAN-PS4: "{{.*}}ld{{(.gold)?(.exe)?}}"
 // CHECK-AUBSAN-PS4: -lSceDbgAddressSanitizer_stub_weak
 
@@ -655,6 +690,15 @@
 // CHECK-SCUDO-LINUX-NOT: "-lstdc++"
 // CHECK-SCUDO-LINUX: "-lpthread"
 // CHECK-SCUDO-LINUX: "-ldl"
+
+// RUN: %clang -fsanitize=scudo -fsanitize-minimal-runtime %s -### -o %t.o 2>&1 \
+// RUN:     -target i386-unknown-linux -fuse-ld=ld \
+// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
+// RUN:   | FileCheck --check-prefix=CHECK-SCUDO-MINIMAL-LINUX %s
+// CHECK-SCUDO-MINIMAL-LINUX: "{{.*}}ld{{(.exe)?}}"
+// CHECK-SCUDO-MINIMAL-LINUX: "-pie"
+// CHECK-SCUDO-MINIMAL-LINUX: "--whole-archive" "{{.*}}libclang_rt.scudo_minimal-i386.a" "--no-whole-archive"
+// CHECK-SCUDO-MINIMAL-LINUX: "-lpthread"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.so -shared 2>&1 \
 // RUN:     -target i386-unknown-linux -fuse-ld=ld -fsanitize=scudo -shared-libsan \
@@ -693,57 +737,104 @@
 // CHECK-SCUDO-ANDROID-STATIC: "-pie"
 // CHECK-SCUDO-ANDROID-STATIC: "--whole-archive" "{{.*}}libclang_rt.scudo-arm-android.a" "--no-whole-archive"
 // CHECK-SCUDO-ANDROID-STATIC-NOT: "-lstdc++"
-// CHECK-SCUDO-ANDROID-STATIC: "-lpthread"
+// CHECK-SCUDO-ANDROID-STATIC-NOT: "-lpthread"
+// CHECK-SCUDO-ANDROID-STATIC-NOT: "-lrt"
+
+// RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \
+// RUN:     -resource-dir=%S/Inputs/resource_dir \
+// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
+// RUN:   | FileCheck --check-prefix=CHECK-HWASAN-X86-64-LINUX %s
+//
+// CHECK-HWASAN-X86-64-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
+// CHECK-HWASAN-X86-64-LINUX: "-pie"
+// CHECK-HWASAN-X86-64-LINUX-NOT: "-lc"
+// CHECK-HWASAN-X86-64-LINUX: libclang_rt.hwasan-x86_64.a"
+// CHECK-HWASAN-X86-64-LINUX-NOT: "--export-dynamic"
+// CHECK-HWASAN-X86-64-LINUX: "--dynamic-list={{.*}}libclang_rt.hwasan-x86_64.a.syms"
+// CHECK-HWASAN-X86-64-LINUX-NOT: "--export-dynamic"
+// CHECK-HWASAN-X86-64-LINUX: "-lpthread"
+// CHECK-HWASAN-X86-64-LINUX: "-lrt"
+// CHECK-HWASAN-X86-64-LINUX: "-ldl"
+
+// RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \
+// RUN:     -shared-libsan -resource-dir=%S/Inputs/resource_dir \
+// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
+// RUN:   | FileCheck --check-prefix=CHECK-SHARED-HWASAN-X86-64-LINUX %s
+//
+// CHECK-SHARED-HWASAN-X86-64-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
+// CHECK-SHARED-HWASAN-X86-64-LINUX: "-pie"
+// CHECK-SHARED-HWASAN-X86-64-LINUX-NOT: "-lc"
+// CHECK-SHARED-HWASAN-X86-64-LINUX: libclang_rt.hwasan-x86_64.so"
+// CHECK-SHARED-HWASAN-X86-64-LINUX-NOT: "-lpthread"
+// CHECK-SHARED-HWASAN-X86-64-LINUX-NOT: "-lrt"
+// CHECK-SHARED-HWASAN-X86-64-LINUX-NOT: "-ldl"
+// CHECK-SHARED-HWASAN-X86-64-LINUX-NOT: "--export-dynamic"
+// CHECK-SHARED-HWASAN-X86-64-LINUX-NOT: "--dynamic-list"
+
+// RUN: %clang -no-canonical-prefixes %s -### -o %t.so -shared 2>&1 \
+// RUN:     -target x86_64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \
+// RUN:     -shared-libsan -resource-dir=%S/Inputs/resource_dir \
+// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
+// RUN:   | FileCheck --check-prefix=CHECK-DSO-SHARED-HWASAN-X86-64-LINUX %s
+//
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
+// CHECK-DSO_SHARED-HWASAN-X86-64-LINUX: "-pie"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX-NOT: "-lc"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX: libclang_rt.hwasan-x86_64.so"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX-NOT: "-lpthread"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX-NOT: "-lrt"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX-NOT: "-ldl"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX-NOT: "--export-dynamic"
+// CHECK-DSO-SHARED-HWASAN-X86-64-LINUX-NOT: "--dynamic-list"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
 // RUN:     -target aarch64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \
 // RUN:     -resource-dir=%S/Inputs/resource_dir \
 // RUN:     --sysroot=%S/Inputs/basic_linux_tree \
-// RUN:   | FileCheck --check-prefix=CHECK-HWASAN-LINUX %s
+// RUN:   | FileCheck --check-prefix=CHECK-HWASAN-AARCH64-LINUX %s
 //
-// CHECK-HWASAN-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
-// CHECK-HWASAN-LINUX-NOT: "-lc"
-// CHECK-HWASAN-LINUX: libclang_rt.hwasan-aarch64.a"
-// CHECK-HWASAN-LINUX-NOT: "--export-dynamic"
-// CHECK-HWASAN-LINUX: "--dynamic-list={{.*}}libclang_rt.hwasan-aarch64.a.syms"
-// CHECK-HWASAN-LINUX-NOT: "--export-dynamic"
-// CHECK-HWASAN-LINUX: "-lpthread"
-// CHECK-HWASAN-LINUX: "-lrt"
-// CHECK-HWASAN-LINUX: "-ldl"
-
-// RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
-// RUN:     -target aarch64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress -shared-libsan \
-// RUN:     -resource-dir=%S/Inputs/resource_dir \
-// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
-// RUN:   | FileCheck --check-prefix=CHECK-SHARED-HWASAN-LINUX %s
+// CHECK-HWASAN-AARCH64-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
+// CHECK-HWASAN-AARCH64-LINUX: "-pie"
+// CHECK-HWASAN-AARCH64-LINUX-NOT: "-lc"
+// CHECK-HWASAN-AARCH64-LINUX: libclang_rt.hwasan-aarch64.a"
+// CHECK-HWASAN-AARCH64-LINUX-NOT: "--export-dynamic"
+// CHECK-HWASAN-AARCH64-LINUX: "--dynamic-list={{.*}}libclang_rt.hwasan-aarch64.a.syms"
+// CHECK-HWASAN-AARCH64-LINUX-NOT: "--export-dynamic"
+// CHECK-HWASAN-AARCH64-LINUX: "-lpthread"
+// CHECK-HWASAN-AARCH64-LINUX: "-lrt"
+// CHECK-HWASAN-AARCH64-LINUX: "-ldl"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
 // RUN:     -target aarch64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \
 // RUN:     -shared-libsan \
 // RUN:     -resource-dir=%S/Inputs/resource_dir \
 // RUN:     --sysroot=%S/Inputs/basic_linux_tree \
-// RUN:   | FileCheck --check-prefix=CHECK-SHARED-HWASAN-LINUX %s
+// RUN:   | FileCheck --check-prefix=CHECK-SHARED-HWASAN-AARCH64-LINUX %s
 //
-// CHECK-SHARED-HWASAN-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
-// CHECK-SHARED-HWASAN-LINUX-NOT: "-lc"
-// CHECK-SHARED-HWASAN-LINUX: libclang_rt.hwasan-aarch64.so"
-// CHECK-SHARED-HWASAN-LINUX-NOT: "-lpthread"
-// CHECK-SHARED-HWASAN-LINUX-NOT: "-lrt"
-// CHECK-SHARED-HWASAN-LINUX-NOT: "-ldl"
-// CHECK-SHARED-HWASAN-LINUX-NOT: "--export-dynamic"
-// CHECK-SHARED-HWASAN-LINUX-NOT: "--dynamic-list"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX: "-pie"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX-NOT: "-lc"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX: libclang_rt.hwasan-aarch64.so"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX-NOT: "-lpthread"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX-NOT: "-lrt"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX-NOT: "-ldl"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX-NOT: "--export-dynamic"
+// CHECK-SHARED-HWASAN-AARCH64-LINUX-NOT: "--dynamic-list"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.so -shared 2>&1 \
-// RUN:     -target aarch64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress -shared-libsan \
-// RUN:     -resource-dir=%S/Inputs/resource_dir \
+// RUN:     -target aarch64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \
+// RUN:     -shared-libsan -resource-dir=%S/Inputs/resource_dir \
 // RUN:     --sysroot=%S/Inputs/basic_linux_tree \
-// RUN:   | FileCheck --check-prefix=CHECK-DSO-SHARED-HWASAN-LINUX %s
+// RUN:   | FileCheck --check-prefix=CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX %s
 //
-// CHECK-DSO-SHARED-HWASAN-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
-// CHECK-DSO-SHARED-HWASAN-LINUX-NOT: "-lc"
-// CHECK-DSO-SHARED-HWASAN-LINUX: libclang_rt.hwasan-aarch64.so"
-// CHECK-DSO-SHARED-HWASAN-LINUX-NOT: "-lpthread"
-// CHECK-DSO-SHARED-HWASAN-LINUX-NOT: "-lrt"
-// CHECK-DSO-SHARED-HWASAN-LINUX-NOT: "-ldl"
-// CHECK-DSO-SHARED-HWASAN-LINUX-NOT: "--export-dynamic"
-// CHECK-DSO-SHARED-HWASAN-LINUX-NOT: "--dynamic-list"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX: "{{(.*[^-.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
+// CHECK-DSO_SHARED-HWASAN-AARCH64-LINUX: "-pie"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX-NOT: "-lc"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX: libclang_rt.hwasan-aarch64.so"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX-NOT: "-lpthread"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX-NOT: "-lrt"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX-NOT: "-ldl"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX-NOT: "--export-dynamic"
+// CHECK-DSO-SHARED-HWASAN-AARCH64-LINUX-NOT: "--dynamic-list"

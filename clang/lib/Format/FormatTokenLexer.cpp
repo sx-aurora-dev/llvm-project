@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements FormatTokenLexer, which tokenizes a source file
+/// This file implements FormatTokenLexer, which tokenizes a source file
 /// into a FormatToken stream suitable for ClangFormat.
 ///
 //===----------------------------------------------------------------------===//
@@ -38,7 +38,7 @@ FormatTokenLexer::FormatTokenLexer(const SourceManager &SourceMgr, FileID ID,
 
   for (const std::string &ForEachMacro : Style.ForEachMacros)
     ForEachMacros.push_back(&IdentTable.get(ForEachMacro));
-  std::sort(ForEachMacros.begin(), ForEachMacros.end());
+  llvm::sort(ForEachMacros.begin(), ForEachMacros.end());
 }
 
 ArrayRef<FormatToken *> FormatTokenLexer::lex() {
@@ -334,7 +334,7 @@ void FormatTokenLexer::handleTemplateStrings() {
 
 void FormatTokenLexer::tryParsePythonComment() {
   FormatToken *HashToken = Tokens.back();
-  if (HashToken->isNot(tok::hash))
+  if (!HashToken->isOneOf(tok::hash, tok::hashhash))
     return;
   // Turn the remainder of this line into a comment.
   const char *CommentBegin =

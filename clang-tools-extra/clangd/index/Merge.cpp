@@ -52,6 +52,28 @@ class MergedIndex : public SymbolIndex {
      return More;
   }
 
+  void
+  lookup(const LookupRequest &Req,
+         llvm::function_ref<void(const Symbol &)> Callback) const override {
+    SymbolSlab::Builder B;
+
+    Dynamic->lookup(Req, [&](const Symbol &S) { B.insert(S); });
+
+    auto RemainingIDs = Req.IDs;
+    Symbol::Details Scratch;
+    Static->lookup(Req, [&](const Symbol &S) {
+      const Symbol *Sym = B.find(S.ID);
+      RemainingIDs.erase(S.ID);
+      if (!Sym)
+        Callback(S);
+      else
+        Callback(mergeSymbol(*Sym, S, &Scratch));
+    });
+    for (const auto &ID : RemainingIDs)
+      if (const Symbol *Sym = B.find(ID))
+        Callback(*Sym);
+  }
+
 private:
   const SymbolIndex *Dynamic, *Static;
 };
@@ -73,14 +95,11 @@ mergeSymbol(const Symbol &L, const Symbol &R, Symbol::Details *Scratch) {
     S.Definition = O.Definition;
   if (!S.CanonicalDeclaration)
     S.CanonicalDeclaration = O.CanonicalDeclaration;
-  if (S.CompletionLabel == "")
-    S.CompletionLabel = O.CompletionLabel;
-  if (S.CompletionFilterText == "")
-    S.CompletionFilterText = O.CompletionFilterText;
-  if (S.CompletionPlainInsertText == "")
-    S.CompletionPlainInsertText = O.CompletionPlainInsertText;
-  if (S.CompletionSnippetInsertText == "")
-    S.CompletionSnippetInsertText = O.CompletionSnippetInsertText;
+  S.References += O.References;
+  if (S.Signature == "")
+    S.Signature = O.Signature;
+  if (S.CompletionSnippetSuffix == "")
+    S.CompletionSnippetSuffix = O.CompletionSnippetSuffix;
 
   if (O.Detail) {
     if (S.Detail) {
@@ -88,14 +107,16 @@ mergeSymbol(const Symbol &L, const Symbol &R, Symbol::Details *Scratch) {
       *Scratch = *S.Detail;
       if (Scratch->Documentation == "")
         Scratch->Documentation = O.Detail->Documentation;
-      if (Scratch->CompletionDetail == "")
-        Scratch->CompletionDetail = O.Detail->CompletionDetail;
+      if (Scratch->ReturnType == "")
+        Scratch->ReturnType = O.Detail->ReturnType;
       if (Scratch->IncludeHeader == "")
         Scratch->IncludeHeader = O.Detail->IncludeHeader;
       S.Detail = Scratch;
     } else
       S.Detail = O.Detail;
   }
+
+  S.Origin |= O.Origin | SymbolOrigin::Merge;
   return S;
 }
 

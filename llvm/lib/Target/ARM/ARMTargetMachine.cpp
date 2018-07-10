@@ -34,7 +34,6 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/DataLayout.h"
@@ -45,6 +44,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetParser.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/Scalar.h"
 #include <cassert>
@@ -89,6 +89,7 @@ extern "C" void LLVMInitializeARMTarget() {
   initializeGlobalISel(Registry);
   initializeARMLoadStoreOptPass(Registry);
   initializeARMPreAllocLoadStoreOptPass(Registry);
+  initializeARMParallelDSPPass(Registry);
   initializeARMConstantIslandsPass(Registry);
   initializeARMExecutionDomainFixPass(Registry);
   initializeARMExpandPseudoPass(Registry);
@@ -236,6 +237,11 @@ ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, const Triple &TT,
       this->Options.EABIVersion = EABI::GNU;
     else
       this->Options.EABIVersion = EABI::EABI5;
+  }
+
+  if (TT.isOSBinFormatMachO()) {
+    this->Options.TrapUnreachable = true;
+    this->Options.NoTrapAfterNoreturn = true;
   }
 
   initAsmInfo();
@@ -401,6 +407,9 @@ void ARMPassConfig::addIRPasses() {
 }
 
 bool ARMPassConfig::addPreISel() {
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createARMParallelDSPPass());
+
   if ((TM->getOptLevel() != CodeGenOpt::None &&
        EnableGlobalMerge == cl::BOU_UNSET) ||
       EnableGlobalMerge == cl::BOU_TRUE) {

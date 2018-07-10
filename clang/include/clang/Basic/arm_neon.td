@@ -199,6 +199,13 @@ def OP_SCALAR_HALF_SET_LNQ : Op<(bitcast "float16x8_t",
                                           (bitcast "int16_t", $p0),
                                           (bitcast "int16x8_t", $p1), $p2))>;
 
+def OP_DOT_LN
+    : Op<(call "vdot", $p0, $p1,
+          (bitcast $p1, (splat(bitcast "uint32x2_t", $p2), $p3)))>;
+def OP_DOT_LNQ
+    : Op<(call "vdot", $p0, $p1,
+          (bitcast $p1, (splat(bitcast "uint32x4_t", $p2), $p3)))>;
+
 //===----------------------------------------------------------------------===//
 // Instructions
 //===----------------------------------------------------------------------===//
@@ -331,12 +338,24 @@ def VSLI_N : WInst<"vsli_n", "dddi",
 // E.3.14 Loads and stores of a single vector
 def VLD1      : WInst<"vld1", "dc",
                       "QUcQUsQUiQUlQcQsQiQlQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
+def VLD1_X2   : WInst<"vld1_x2", "2c",
+                      "cfhilsUcUiUlUsQcQfQhQiQlQsQUcQUiQUlQUsPcPsQPcQPs">;
+def VLD1_X3   : WInst<"vld1_x3", "3c",
+                      "cfhilsUcUiUlUsQcQfQhQiQlQsQUcQUiQUlQUsPcPsQPcQPs">;
+def VLD1_X4   : WInst<"vld1_x4", "4c",
+                      "cfhilsUcUiUlUsQcQfQhQiQlQsQUcQUiQUlQUsPcPsQPcQPs">;
 def VLD1_LANE : WInst<"vld1_lane", "dcdi",
                       "QUcQUsQUiQUlQcQsQiQlQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
 def VLD1_DUP  : WInst<"vld1_dup", "dc",
                       "QUcQUsQUiQUlQcQsQiQlQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
 def VST1      : WInst<"vst1", "vpd",
                       "QUcQUsQUiQUlQcQsQiQlQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
+def VST1_X2   : WInst<"vst1_x2", "vp2",
+                      "cfhilsUcUiUlUsQcQfQhQiQlQsQUcQUiQUlQUsPcPsQPcQPs">;
+def VST1_X3   : WInst<"vst1_x3", "vp3",
+                      "cfhilsUcUiUlUsQcQfQhQiQlQsQUcQUiQUlQUsPcPsQPcQPs">;
+def VST1_X4   : WInst<"vst1_x4", "vp4",
+                      "cfhilsUcUiUlUsQcQfQhQiQlQsQUcQUiQUlQUsPcPsQPcQPs">;
 def VST1_LANE : WInst<"vst1_lane", "vpdi",
                       "QUcQUsQUiQUlQcQsQiQlQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
 
@@ -345,9 +364,12 @@ def VST1_LANE : WInst<"vst1_lane", "vpdi",
 def VLD2 : WInst<"vld2", "2c", "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
 def VLD3 : WInst<"vld3", "3c", "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
 def VLD4 : WInst<"vld4", "4c", "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPs">;
-def VLD2_DUP  : WInst<"vld2_dup", "2c", "UcUsUiUlcsilhfPcPs">;
-def VLD3_DUP  : WInst<"vld3_dup", "3c", "UcUsUiUlcsilhfPcPs">;
-def VLD4_DUP  : WInst<"vld4_dup", "4c", "UcUsUiUlcsilhfPcPs">;
+def VLD2_DUP  : WInst<"vld2_dup", "2c",
+                      "UcUsUiUlcsilhfPcPsQcQfQhQiQlQsQPcQPsQUcQUiQUlQUs">;
+def VLD3_DUP  : WInst<"vld3_dup", "3c",
+                      "UcUsUiUlcsilhfPcPsQcQfQhQiQlQsQPcQPsQUcQUiQUlQUs">;
+def VLD4_DUP  : WInst<"vld4_dup", "4c",
+                      "UcUsUiUlcsilhfPcPsQcQfQhQiQlQsQPcQPsQUcQUiQUlQUs">;
 def VLD2_LANE : WInst<"vld2_lane", "2c2i", "QUsQUiQsQiQhQfQPsUcUsUicsihfPcPs">;
 def VLD3_LANE : WInst<"vld3_lane", "3c3i", "QUsQUiQsQiQhQfQPsUcUsUicsihfPcPs">;
 def VLD4_LANE : WInst<"vld4_lane", "4c4i", "QUsQUiQsQiQhQfQPsUcUsUicsihfPcPs">;
@@ -397,6 +419,10 @@ def VCOMBINE : NoTestOpInst<"vcombine", "kdd", "csilhfUcUsUiUlPcPs", OP_CONC>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // E.3.21 Splitting vectors
+// Note that the ARM NEON Reference 2.0 mistakenly document the vget_high_f16()
+// and vget_low_f16() intrinsics as AArch64-only. We (and GCC) support all
+// versions of these intrinsics in both AArch32 and AArch64 architectures. See
+// D45668 for more details.
 let InstName = "vmov" in {
 def VGET_HIGH : NoTestOpInst<"vget_high", "dk", "csilhfUcUsUiUlPcPs", OP_HI>;
 def VGET_LOW  : NoTestOpInst<"vget_low", "dk", "csilhfUcUsUiUlPcPs", OP_LO>;
@@ -531,6 +557,7 @@ def VREINTERPRET
 let ArchGuard = "defined(__ARM_FEATURE_FMA)" in {
   def VFMA : SInst<"vfma", "dddd", "fQf">;
   def VFMS : SOpInst<"vfms", "dddd", "fQf", OP_FMLS>;
+  def FMLA_N_F32 : SOpInst<"vfma_n", "ddds", "fQf", OP_FMLA_N>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -557,18 +584,15 @@ def ST3 : WInst<"vst3", "vp3", "QUlQldQdPlQPl">;
 def ST4 : WInst<"vst4", "vp4", "QUlQldQdPlQPl">;
 
 def LD1_X2 : WInst<"vld1_x2", "2c",
-                   "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPsQUlQldQdPlQPl">;
-def LD3_x3 : WInst<"vld1_x3", "3c",
-                   "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPsQUlQldQdPlQPl">;
-def LD4_x4 : WInst<"vld1_x4", "4c",
-                   "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPsQUlQldQdPlQPl">;
+                   "dQdPlQPl">;
+def LD1_X3 : WInst<"vld1_x3", "3c",
+                   "dQdPlQPl">;
+def LD1_X4 : WInst<"vld1_x4", "4c",
+                   "dQdPlQPl">;
 
-def ST1_X2 : WInst<"vst1_x2", "vp2",
-                   "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPsQUlQldQdPlQPl">;
-def ST1_X3 : WInst<"vst1_x3", "vp3",
-                   "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPsQUlQldQdPlQPl">;
-def ST1_X4 : WInst<"vst1_x4", "vp4",
-                   "QUcQUsQUiQcQsQiQhQfQPcQPsUcUsUiUlcsilhfPcPsQUlQldQdPlQPl">;
+def ST1_X2 : WInst<"vst1_x2", "vp2", "dQdPlQPl">;
+def ST1_X3 : WInst<"vst1_x3", "vp3", "dQdPlQPl">;
+def ST1_X4 : WInst<"vst1_x4", "vp4", "dQdPlQPl">;
 
 def LD1_LANE : WInst<"vld1_lane", "dcdi", "dQdPlQPl">;
 def LD2_LANE : WInst<"vld2_lane", "2c2i", "lUlQcQUcQPcQlQUldQdPlQPl">;
@@ -580,12 +604,9 @@ def ST3_LANE : WInst<"vst3_lane", "vp3i", "lUlQcQUcQPcQlQUldQdPlQPl">;
 def ST4_LANE : WInst<"vst4_lane", "vp4i", "lUlQcQUcQPcQlQUldQdPlQPl">;
 
 def LD1_DUP  : WInst<"vld1_dup", "dc", "dQdPlQPl">;
-def LD2_DUP  : WInst<"vld2_dup", "2c",
-                     "QUcQUsQUiQUlQcQsQiQlQhQfQdQPcQPsQPldPl">;
-def LD3_DUP  : WInst<"vld3_dup", "3c",
-                     "QUcQUsQUiQUlQcQsQiQlQhQfQdQPcQPsQPldPl">;
-def LD4_DUP  : WInst<"vld4_dup", "4c",
-                     "QUcQUsQUiQUlQcQsQiQlQhQfQdQPcQPsQPldPl">;
+def LD2_DUP  : WInst<"vld2_dup", "2c", "dQdPlQPl">;
+def LD3_DUP  : WInst<"vld3_dup", "3c", "dQdPlQPl">;
+def LD4_DUP  : WInst<"vld4_dup", "4c", "dQdPlQPl">;
 
 def VLDRQ : WInst<"vldrq", "sc", "Pk">;
 def VSTRQ : WInst<"vstrq", "vps", "Pk">;
@@ -621,8 +642,8 @@ def FMLS : SOpInst<"vfms", "dddd", "dQd", OP_FMLS>;
 // MUL, MLA, MLS, FMA, FMS definitions with scalar argument
 def VMUL_N_A64 : IOpInst<"vmul_n", "dds", "Qd", OP_MUL_N>;
 
-def FMLA_N : SOpInst<"vfma_n", "ddds", "fQfQd", OP_FMLA_N>;
-def FMLS_N : SOpInst<"vfms_n", "ddds", "fQfQd", OP_FMLS_N>;
+def FMLA_N : SOpInst<"vfma_n", "ddds", "dQd", OP_FMLA_N>;
+def FMLS_N : SOpInst<"vfms_n", "ddds", "fdQfQd", OP_FMLS_N>;
 
 def MLA_N : SOpInst<"vmla_n", "ddds", "Qd", OP_MLA_N>;
 def MLS_N : SOpInst<"vmls_n", "ddds", "Qd", OP_MLS_N>;
@@ -913,7 +934,7 @@ def VEXT_A64 : WInst<"vext", "dddi", "dQdPlQPl">;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Crypto
-let ArchGuard = "__ARM_FEATURE_CRYPTO" in {
+let ArchGuard = "__ARM_ARCH >= 8 && defined(__ARM_FEATURE_CRYPTO)" in {
 def AESE : SInst<"vaese", "ddd", "QUc">;
 def AESD : SInst<"vaesd", "ddd", "QUc">;
 def AESMC : SInst<"vaesmc", "dd", "QUc">;
@@ -1113,6 +1134,12 @@ def SCALAR_FCVTZS_N_S32 : SInst<"vcvt_n_s32", "$si", "Sf">;
 def SCALAR_FCVTZU_N_U32 : SInst<"vcvt_n_u32", "bsi", "Sf">;
 def SCALAR_FCVTZS_N_S64 : SInst<"vcvt_n_s64", "$si", "Sd">;
 def SCALAR_FCVTZU_N_U64 : SInst<"vcvt_n_u64", "bsi", "Sd">;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Scalar Floating-point Round to Integral
+let ArchGuard = "__ARM_ARCH >= 8 && defined(__ARM_FEATURE_DIRECTED_ROUNDING)" in {
+def SCALAR_FRINTN_S32 : SInst<"vrndn", "ss", "Sf">;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1547,11 +1574,9 @@ let ArchGuard = "defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && defined(__aarc
   def VMULX_LANEH   : IOpInst<"vmulx_lane", "ddgi", "hQh", OP_MULX_LN>;
   def VMULX_LANEQH  : IOpInst<"vmulx_laneq", "ddji", "hQh", OP_MULX_LN>;
   def VMULX_NH      : IOpInst<"vmulx_n", "dds", "hQh", OP_MULX_N>;
-  // TODO: Scalar floating point multiply extended (scalar, by element)
-  // Below ones are commented out because they need vmulx_f16(float16_t, float16_t)
-  // which will be implemented later with fp16 scalar intrinsic (arm_fp16.h)
-  //def SCALAR_FMULX_LANEH : IOpInst<"vmulx_lane", "ssdi", "Sh", OP_SCALAR_MUL_LN>;
-  //def SCALAR_FMULX_LANEQH : IOpInst<"vmulx_laneq", "ssji", "Sh", OP_SCALAR_MUL_LN>;
+  // Scalar floating point  mulx (scalar, by element)
+  def SCALAR_FMULX_LANEH : IInst<"vmulx_lane", "ssdi", "Sh">;
+  def SCALAR_FMULX_LANEQH : IInst<"vmulx_laneq", "ssji", "Sh">;
 
   // ARMv8.2-A FP16 reduction vector intrinsics.
   def VMAXVH   : SInst<"vmaxv", "sd", "hQh">;
@@ -1569,4 +1594,14 @@ let ArchGuard = "defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && defined(__aarc
 
   def SCALAR_VDUP_LANEH  : IInst<"vdup_lane", "sdi", "Sh">;
   def SCALAR_VDUP_LANEQH : IInst<"vdup_laneq", "sji", "Sh">;
+}
+
+// v8.2-A dot product instructions.
+let ArchGuard = "defined(__ARM_FEATURE_DOTPROD)" in {
+  def DOT : SInst<"vdot", "dd88", "iQiUiQUi">;
+  def DOT_LANE : SOpInst<"vdot_lane", "dd87i", "iUiQiQUi", OP_DOT_LN>;
+}
+let ArchGuard = "defined(__ARM_FEATURE_DOTPROD) && defined(__aarch64__)" in {
+  // Variants indexing into a 128-bit vector are A64 only.
+  def UDOT_LANEQ : SOpInst<"vdot_laneq", "dd89i", "iUiQiQUi", OP_DOT_LNQ>;
 }

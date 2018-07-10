@@ -894,6 +894,10 @@ TEST(isConstexpr, MatchesConstexprDeclarations) {
                       varDecl(hasName("foo"), isConstexpr())));
   EXPECT_TRUE(matches("constexpr int bar();",
                       functionDecl(hasName("bar"), isConstexpr())));
+  EXPECT_TRUE(matchesConditionally("void baz() { if constexpr(1 > 0) {} }",
+                                   ifStmt(isConstexpr()), true, "-std=c++17"));
+  EXPECT_TRUE(matchesConditionally("void baz() { if (1 > 0) {} }",
+                                   ifStmt(isConstexpr()), false, "-std=c++17"));
 }
 
 TEST(TemplateArgumentCountIs, Matches) {
@@ -2137,6 +2141,21 @@ TEST(HasTrailingReturn, MatchesLambdaTrailingReturn) {
   EXPECT_TRUE(notMatches(
           "auto lambda2 = [](double x, double y) {return x + y;};",
           functionDecl(hasTrailingReturn())));
+}
+
+TEST(IsAssignmentOperator, Basic) {
+  StatementMatcher BinAsgmtOperator = binaryOperator(isAssignmentOperator());
+  StatementMatcher CXXAsgmtOperator =
+      cxxOperatorCallExpr(isAssignmentOperator());
+
+  EXPECT_TRUE(matches("void x() { int a; a += 1; }", BinAsgmtOperator));
+  EXPECT_TRUE(matches("void x() { int a; a = 2; }", BinAsgmtOperator));
+  EXPECT_TRUE(matches("void x() { int a; a &= 3; }", BinAsgmtOperator));
+  EXPECT_TRUE(matches("struct S { S& operator=(const S&); };"
+                      "void x() { S s1, s2; s1 = s2; }",
+                      CXXAsgmtOperator));
+  EXPECT_TRUE(
+      notMatches("void x() { int a; if(a == 0) return; }", BinAsgmtOperator));
 }
 
 } // namespace ast_matchers

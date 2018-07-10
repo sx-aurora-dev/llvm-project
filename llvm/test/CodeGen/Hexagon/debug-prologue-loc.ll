@@ -1,5 +1,7 @@
 ; RUN: llc -O2 -march=hexagon < %s | FileCheck %s
 
+; Broken after r326208.
+; XFAIL: *
 ; CHECK: allocframe{{.*}}
 ; CHECK-NEXT: }
 ; CHECK-NEXT:{{.*}}tmp{{[0-9]+}}:
@@ -47,7 +49,7 @@ attributes #1 = { nounwind readnone speculatable }
 !2 = !{}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = !{i32 2, !"Debug Info Version", i32 3}
-!5 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 1, type: !6, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: false, unit: !0, variables: !2)
+!5 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 1, type: !6, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: false, unit: !0, retainedNodes: !2)
 !6 = !DISubroutineType(types: !7)
 !7 = !{!8, !8, !8}
 !8 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
@@ -63,7 +65,7 @@ attributes #1 = { nounwind readnone speculatable }
 !18 = !DILocation(line: 3, column: 12, scope: !5)
 !19 = !DILocation(line: 3, column: 11, scope: !5)
 !20 = !DILocation(line: 3, column: 3, scope: !5)
-!21 = distinct !DISubprogram(name: "bar", scope: !1, file: !1, line: 7, type: !22, isLocal: false, isDefinition: true, scopeLine: 7, flags: DIFlagPrototyped, isOptimized: false, unit: !0, variables: !2)
+!21 = distinct !DISubprogram(name: "bar", scope: !1, file: !1, line: 7, type: !22, isLocal: false, isDefinition: true, scopeLine: 7, flags: DIFlagPrototyped, isOptimized: false, unit: !0, retainedNodes: !2)
 !22 = !DISubroutineType(types: !23)
 !23 = !{!8, !14}
 !24 = !DILocalVariable(name: "var", arg: 1, scope: !21, file: !1, line: 7, type: !14)

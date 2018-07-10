@@ -43,11 +43,18 @@ struct NormalizedSymbolID {
   std::string HexString;
 };
 
+template <> struct MappingTraits<SymbolLocation::Position> {
+  static void mapping(IO &IO, SymbolLocation::Position &Value) {
+    IO.mapRequired("Line", Value.Line);
+    IO.mapRequired("Column", Value.Column);
+  }
+};
+
 template <> struct MappingTraits<SymbolLocation> {
   static void mapping(IO &IO, SymbolLocation &Value) {
-    IO.mapRequired("StartOffset", Value.StartOffset);
-    IO.mapRequired("EndOffset", Value.EndOffset);
     IO.mapRequired("FileURI", Value.FileURI);
+    IO.mapRequired("Start", Value.Start);
+    IO.mapRequired("End", Value.End);
   }
 };
 
@@ -62,7 +69,7 @@ template <> struct MappingTraits<SymbolInfo> {
 template <> struct MappingTraits<Symbol::Details> {
   static void mapping(IO &io, Symbol::Details &Detail) {
     io.mapOptional("Documentation", Detail.Documentation);
-    io.mapOptional("CompletionDetail", Detail.CompletionDetail);
+    io.mapOptional("ReturnType", Detail.ReturnType);
     io.mapOptional("IncludeHeader", Detail.IncludeHeader);
   }
 };
@@ -100,12 +107,11 @@ template <> struct MappingTraits<Symbol> {
     IO.mapOptional("CanonicalDeclaration", Sym.CanonicalDeclaration,
                    SymbolLocation());
     IO.mapOptional("Definition", Sym.Definition, SymbolLocation());
-    IO.mapRequired("CompletionLabel", Sym.CompletionLabel);
-    IO.mapRequired("CompletionFilterText", Sym.CompletionFilterText);
-    IO.mapRequired("CompletionPlainInsertText", Sym.CompletionPlainInsertText);
-
-    IO.mapOptional("CompletionSnippetInsertText",
-                   Sym.CompletionSnippetInsertText);
+    IO.mapOptional("References", Sym.References, 0u);
+    IO.mapOptional("IsIndexedForCodeCompletion", Sym.IsIndexedForCodeCompletion,
+                   false);
+    IO.mapOptional("Signature", Sym.Signature);
+    IO.mapOptional("CompletionSnippetSuffix", Sym.CompletionSnippetSuffix);
     IO.mapOptional("Detail", NDetail->Opt);
   }
 };

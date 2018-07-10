@@ -17,7 +17,6 @@
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
@@ -216,7 +215,7 @@ struct VerifyEndCallback : public SourceFileCallbacks {
   bool Matched;
 };
 
-#if !defined(LLVM_ON_WIN32)
+#if !defined(_WIN32)
 TEST(newFrontendActionFactory, InjectsSourceFileCallbacks) {
   VerifyEndCallback EndCallback;
 
@@ -319,8 +318,8 @@ TEST(runToolOnCode, TestSkipFunctionBody) {
 
 TEST(runToolOnCodeWithArgs, TestNoDepFile) {
   llvm::SmallString<32> DepFilePath;
-  ASSERT_FALSE(
-      llvm::sys::fs::createTemporaryFile("depfile", "d", DepFilePath));
+  ASSERT_FALSE(llvm::sys::fs::getPotentiallyUniqueTempFileName("depfile", "d",
+                                                               DepFilePath));
   std::vector<std::string> Args;
   Args.push_back("-MMD");
   Args.push_back("-MT");
@@ -531,7 +530,7 @@ TEST(addTargetAndModeForProgramName, IgnoresExistingMode) {
             ArgsAlt);
 }
 
-#ifndef LLVM_ON_WIN32
+#ifndef _WIN32
 TEST(ClangToolTest, BuildASTs) {
   FixedCompilationDatabase Compilations("/", std::vector<std::string>());
 
