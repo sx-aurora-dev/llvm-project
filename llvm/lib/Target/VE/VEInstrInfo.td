@@ -433,6 +433,134 @@ multiclass RRNDm<string opcStr, bits<8>opc, SDNode OpNode,
 }
 
 // Multiclass for RR type instructions
+//   Used by sra, sla, sll, etc.
+
+multiclass RRIm<string opcStr, bits<8>opc, SDNode OpNode,
+               RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
+  def rr : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
+    !strconcat(opcStr, " $sx, $sz, $sy"),
+    [(set Ty:$sx, (OpNode Ty:$sz, Ty:$sy))]> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def ri : RR<
+    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
+    !strconcat(opcStr, " $sx, $sz, $sy"),
+    [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm7:$sy)))]> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def rm0 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
+  }
+  def rm1 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def im0 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz{6} = 1;
+    let hasSideEffects = 0;
+  }
+  def im1 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def zi : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy),
+    !strconcat(opcStr, " $sx, $sy"),
+    [(set Ty:$sx, (OpNode 0, (Ty simm7:$sy)))]> {
+    let cy = 0;
+    let cz = 0;
+    let sz = 0;
+  }
+}
+
+// Multiclass for RR type instructions without dag pattern
+//   Used by sra.w.zx, sla.w.zx, and others
+
+multiclass RRINDm<string opcStr, bits<8>opc, SDNode OpNode,
+               RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
+  def rr : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
+    !strconcat(opcStr, " $sx, $sz, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def ri : RR<
+    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
+    !strconcat(opcStr, " $sx, $sz, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def rm0 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
+  }
+  def rm1 : RR<
+    opc, (outs RC:$sx), (ins RC:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def im0 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz{6} = 1;
+    let hasSideEffects = 0;
+  }
+  def im1 : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def zi : RR<
+    opc, (outs RC:$sx), (ins immOp:$sy),
+    !strconcat(opcStr, " $sx, $sy"),
+    []> {
+    let cy = 0;
+    let cz = 0;
+    let sz = 0;
+  }
+}
+
+// Multiclass for RR type instructions
 //   Used by cmov instruction
 
 let Constraints = "$sx = $sd", DisableEncoding = "$sd" in
@@ -673,25 +801,26 @@ let cx = 0 in {
 
 // 5.3.2.4 Shift Instructions
 
-// should be uimm5? (0-31)
-let cy = 0, cz = 1 in
-def SRAX : RR<0x76, (outs I64:$sx), (ins I64:$sy, uimm6Op64:$sz),
-  "sra.l $sx, $sy, $sz",
-  [(set i64:$sx, (sra i64:$sy, (i64 uimm6:$sz)))]>;
+let cx = 0 in
+defm SRAX : RRIm<"sra.l", 0x77, sra, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 0 in
+defm SRA : RRIm<"sra.w.sx", 0x76, sra, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 1 in
+defm SRAU : RRINDm<"sra.w.zx", 0x76, sra, I32, i32, simm7Op32, uimm6Op32>;
 
-def SLL : RR<0x64, (outs I64:$sx), (ins I64:$sy, uimm6Op64:$sz),
-  "sll $sx, $sy, $sz",
-  [(set i64:$sx, (shl i64:$sy, (i64 uimm6:$sz)))]>;
+let cx = 0 in
+defm SLL : RRIm<"sll", 0x65, shl, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 0 in
+defm SLA : RRIm<"sla.w.sx", 0x66, srl, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 1 in
+defm SLAU : RRINDm<"sla.w.zx", 0x66, srl, I32, i32, simm7Op32, uimm6Op32>;
 
-def : Pat<(i32 (shl i32:$sy, (i32 uimm6:$sz))),
-          (COPY_TO_REGCLASS (SLL (COPY_TO_REGCLASS $sy, I64), (COPY_TO_REGCLASS $sz, I64)), I32)>;
-
-def SRL : RR<0x75, (outs I64:$sx), (ins I64:$sy, uimm6Op64:$sz),
-  "srl $sx, $sy, $sz",
-  [(set i64:$sx, (srl i64:$sy, (i64 uimm6:$sz)))]>;
-
+let cx = 0 in
+defm SRL : RRIm<"srl", 0x75, srl, I64, i64, simm7Op64, uimm6Op64>;
 def : Pat<(srl i32:$sy, (i32 uimm6:$sz)),
-          (COPY_TO_REGCLASS (SRL (COPY_TO_REGCLASS $sy, I64), (COPY_TO_REGCLASS $sz, I64)), I32)>;
+          (EXTRACT_SUBREG (SRLri
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+            (COPY_TO_REGCLASS $sz, I64)), sub_i32)>;
 
 // 5.3.2.5. Floating-point Arithmetic Operation Instructions
 class RRF<string opcStr, bits<8>opc, SDNode OpNode, RegisterClass RC, ValueType Ty>
@@ -985,19 +1114,17 @@ def : Pat<(sext_inreg i64:$src, i1), (ANDrm0 $src, 63)>;
 
 // Cast to i8
 def : Pat<(sext_inreg I32:$src, i8),
-          (EXTRACT_SUBREG (SRAX (SLL (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32), 56), 56), sub_i32)>;
+          (SRAri (SLAri $src, 24), 24)>;
 def : Pat<(sext_inreg (i32 (trunc i64:$src)), i8),
-          (EXTRACT_SUBREG (SRAX (SLL $src, 56), 56), sub_i32)>;
+          (EXTRACT_SUBREG (SRAXri (SLLri $src, 56), 56), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xff),
           (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 56)>;
 
 // Cast to i16
 def : Pat<(sext_inreg I32:$src, i16),
-          (EXTRACT_SUBREG (SRAX (SLL (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32), 48), 48), sub_i32)>;
+          (SRAri (SLAri $src, 16), 16)>;
 def : Pat<(sext_inreg (trunc i64:$src), i16),
-          (EXTRACT_SUBREG (SRAX (SLL $src, 48), 48), sub_i32)>;
+          (EXTRACT_SUBREG (SRAXri (SLLri $src, 48), 48), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xffff),
           (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 48)>;
 

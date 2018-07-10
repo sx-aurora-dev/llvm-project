@@ -408,10 +408,8 @@ define double @ull2d(i64) #0 {
 define signext i8 @i2c(i32) #0 {
 ; CHECK-LABEL: i2c:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s34, 56
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 24
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i32 %0 to i8
   ret i8 %2
@@ -429,10 +427,8 @@ define zeroext i8 @i2uc(i32) #0 {
 define signext i16 @i2s(i32) #0 {
 ; CHECK-LABEL: i2s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s34, 48
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 16
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i32 %0 to i16
   ret i16 %2
@@ -500,10 +496,8 @@ define double @i2d(i32) #0 {
 define signext i8 @ui2c(i32) #0 {
 ; CHECK-LABEL: ui2c:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s34, 56
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 24
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i32 %0 to i8
   ret i8 %2
@@ -521,10 +515,8 @@ define zeroext i8 @ui2uc(i32) #0 {
 define signext i16 @ui2s(i32) #0 {
 ; CHECK-LABEL: ui2s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s34, 48
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 16
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i32 %0 to i16
   ret i16 %2
@@ -597,10 +589,8 @@ define double @ui2d(i32) #0 {
 define signext i8 @s2c(i16 signext) #0 {
 ; CHECK-LABEL: s2c:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s34, 56
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 24
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i16 %0 to i8
   ret i8 %2
@@ -686,10 +676,8 @@ define double @s2d(i16 signext) #0 {
 define signext i8 @us2c(i16 zeroext) #0 {
 ; CHECK-LABEL: us2c:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s34, 56
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 24
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i16 %0 to i8
   ret i8 %2
@@ -707,10 +695,8 @@ define zeroext i8 @us2uc(i16 zeroext) #0 {
 define signext i16 @us2s(i16 returned zeroext) #0 {
 ; CHECK-LABEL: us2s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s34, 48
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 16
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 16
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i16 %0
 }
@@ -866,10 +852,8 @@ define double @c2d(i8 signext) #0 {
 define signext i8 @uc2c(i8 returned zeroext) #0 {
 ; CHECK-LABEL: uc2c:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s34, 56
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    sla.w.sx %s34, %s0, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 24
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i8 %0
 }
