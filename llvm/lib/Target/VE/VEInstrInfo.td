@@ -811,9 +811,9 @@ defm SRAU : RRINDm<"sra.w.zx", 0x76, sra, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 0 in
 defm SLL : RRIm<"sll", 0x65, shl, I64, i64, simm7Op32, uimm6Op64>;
 let cx = 0 in
-defm SLA : RRIm<"sla.w.sx", 0x66, srl, I32, i32, simm7Op32, uimm6Op32>;
+defm SLA : RRIm<"sla.w.sx", 0x66, shl, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm SLAU : RRINDm<"sla.w.zx", 0x66, srl, I32, i32, simm7Op32, uimm6Op32>;
+defm SLAU : RRINDm<"sla.w.zx", 0x66, shl, I32, i32, simm7Op32, uimm6Op32>;
 
 let cx = 0 in
 defm SRL : RRIm<"srl", 0x75, srl, I64, i64, simm7Op32, uimm6Op64>;
@@ -1113,6 +1113,8 @@ def : Pat<(sext_inreg i64:$src, i1), (ANDrm0 $src, 63)>;
 // Cast to i8
 def : Pat<(sext_inreg I32:$src, i8),
           (SRAri (SLAri $src, 24), 24)>;
+def : Pat<(sext_inreg I64:$src, i8),
+          (SRAXri (SLLri $src, 56), 56)>;
 def : Pat<(sext_inreg (i32 (trunc i64:$src)), i8),
           (EXTRACT_SUBREG (SRAXri (SLLri $src, 56), 56), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xff),
@@ -1121,6 +1123,8 @@ def : Pat<(and (trunc i64:$src), 0xff),
 // Cast to i16
 def : Pat<(sext_inreg I32:$src, i16),
           (SRAri (SLAri $src, 16), 16)>;
+def : Pat<(sext_inreg I64:$src, i16),
+          (SRAXri (SLLri $src, 48), 48)>;
 def : Pat<(sext_inreg (trunc i64:$src), i16),
           (EXTRACT_SUBREG (SRAXri (SLLri $src, 48), 48), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xffff),
