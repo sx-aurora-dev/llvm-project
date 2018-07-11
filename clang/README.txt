@@ -1,4 +1,21 @@
 //===----------------------------------------------------------------------===//
+// C Language Family Front-end for NEC SX-Aurora VE
+//===----------------------------------------------------------------------===//
+
+This repository is a clone of public Clang repository (http://clang.llvm.org),
+plus an experimental modifications which provides support for the NEC SX-Aurora
+Tsubasa Vector Engine (VE).
+
+Please file issues if you have problems.
+
+//===----------------------------------------------------------------------===//
+// C Language Family Front-end for NEC SX-Aurora VE
+//===----------------------------------------------------------------------===//
+
+Please see https://github.com/SXAuroraTSUBASAResearch/llvm/README.txt for
+details.
+
+//===----------------------------------------------------------------------===//
 // C Language Family Front-end
 //===----------------------------------------------------------------------===//
 
