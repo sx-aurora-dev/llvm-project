@@ -85,8 +85,8 @@ static llvm::cl::extrahelp
 
 int main(int argc, const char **argv) {
   clang::tooling::CommonOptionsParser option(argc, argv, SotocCategory);
-  auto files = option.getSourcePathList();
-  clang::tooling::ClangTool tool(option.getCompilations(), files);
+  clang::tooling::ClangTool tool(option.getCompilations(),
+                                 option.getSourcePathList());
 
   return tool.run(
       clang::tooling::newFrontendActionFactory<SourceTransformAction>().get());
