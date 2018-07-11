@@ -57,7 +57,8 @@ add_definitions(
 # Add actual binary
 ################################################################################
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-unused-parameter -fno-strict-aliasing -fno-exceptions -fno-rtti")
+#TODO: Use "-stdlib=libc++" if set in llvm build after integration
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=c++11 -Wno-unused-parameter -fno-strict-aliasing -fno-exceptions -fno-rtti")
 
 add_executable(${SOTOC_PROJECT_NAME} ${SOTOC_SOURCES})
 
