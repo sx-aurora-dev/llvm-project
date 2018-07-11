@@ -119,14 +119,22 @@ public:
 } // end anonymous namespace
 
   static const MCPhysReg IntRegs[64] = {
-    VE::S0, VE::S1, VE::S2, VE::S3, VE::S4, VE::S5, VE::S6, VE::S7,
-    VE::S8, VE::S9, VE::S10, VE::S11, VE::S12, VE::S13, VE::S14, VE::S15,
-    VE::S16, VE::S17, VE::S18, VE::S19, VE::S20, VE::S21, VE::S22, VE::S23,
-    VE::S24, VE::S25, VE::S26, VE::S27, VE::S28, VE::S29, VE::S30, VE::S31,
-    VE::S32, VE::S33, VE::S34, VE::S35, VE::S36, VE::S37, VE::S38, VE::S39,
-    VE::S40, VE::S41, VE::S42, VE::S43, VE::S44, VE::S45, VE::S46, VE::S47,
-    VE::S48, VE::S49, VE::S50, VE::S51, VE::S52, VE::S53, VE::S54, VE::S55,
-    VE::S56, VE::S57, VE::S58, VE::S59, VE::S60, VE::S61, VE::S62, VE::S63 };
+    VE::SX0,  VE::SX1,  VE::SX2,  VE::SX3,
+    VE::SX4,  VE::SX5,  VE::SX6,  VE::SX7,
+    VE::SX8,  VE::SX9,  VE::SX10, VE::SX11,
+    VE::SX12, VE::SX13, VE::SX14, VE::SX15,
+    VE::SX16, VE::SX17, VE::SX18, VE::SX19,
+    VE::SX20, VE::SX21, VE::SX22, VE::SX23,
+    VE::SX24, VE::SX25, VE::SX26, VE::SX27,
+    VE::SX28, VE::SX29, VE::SX30, VE::SX31,
+    VE::SX32, VE::SX33, VE::SX34, VE::SX35,
+    VE::SX36, VE::SX37, VE::SX38, VE::SX39,
+    VE::SX40, VE::SX41, VE::SX42, VE::SX43,
+    VE::SX44, VE::SX45, VE::SX46, VE::SX47,
+    VE::SX48, VE::SX49, VE::SX50, VE::SX51,
+    VE::SX52, VE::SX53, VE::SX54, VE::SX55,
+    VE::SX56, VE::SX57, VE::SX58, VE::SX59,
+    VE::SX60, VE::SX61, VE::SX62, VE::SX63 };
 
 #if 0
   static const MCPhysReg FloatRegs[32] = {
@@ -976,13 +984,13 @@ bool VEAsmParser::matchRegisterName(const AsmToken &Tok, unsigned &RegNo,
 
     // %fp
     if (name.equals("fp")) {
-      RegNo = VE::S9;
+      RegNo = VE::SX9;
       RegKind = VEOperand::rk_IntReg;
       return true;
     }
     // %sp
     if (name.equals("sp")) {
-      RegNo = VE::S11;
+      RegNo = VE::SX11;
       RegKind = VEOperand::rk_IntReg;
       return true;
     }

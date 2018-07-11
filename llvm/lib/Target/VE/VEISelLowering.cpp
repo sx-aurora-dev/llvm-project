@@ -362,7 +362,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
   // Store remaining ArgRegs to the stack if this is a varargs function.
   if (isVarArg) {
     static const MCPhysReg ArgRegs[] = {
-      VE::S0, VE::S1, VE::S2, VE::S3, VE::S4, VE::S5, VE::S6, VE::S7,
+      VE::SX0, VE::SX1, VE::SX2, VE::SX3, VE::SX4, VE::SX5, VE::SX6, VE::SX7,
     };
     unsigned NumAllocated = CCInfo.getFirstUnallocated(ArgRegs);
     const MCPhysReg *CurArgReg = ArgRegs+NumAllocated, *ArgRegEnd = ArgRegs+6;
@@ -500,7 +500,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
   // of how many arguments were actually passed.
   SmallVector<SDValue, 8> OutChains;
   for (; ArgOffset < 8*8; ArgOffset += 8) {
-    unsigned VReg = MF.addLiveIn(VE::S0 + ArgOffset/8, &VE::I64RegClass);
+    unsigned VReg = MF.addLiveIn(VE::SX0 + ArgOffset/8, &VE::I64RegClass);
     SDValue VArg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i64);
     int FI = MF.getFrameInfo().CreateFixedObject(8, ArgOffset + ArgsBaseOffset, true);
     auto PtrVT = getPointerTy(MF.getDataLayout());
@@ -629,7 +629,7 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
     if (Flags.isSRet()) {
       assert(VA.needsCustom());
       // store SRet argument in %sp+64
-      SDValue StackPtr = DAG.getRegister(VE::S11, MVT::i32);
+      SDValue StackPtr = DAG.getRegister(VE::SX11, MVT::i32);
       SDValue PtrOff = DAG.getIntPtrConstant(64, dl);
       PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
       MemOpChains.push_back(
@@ -645,7 +645,7 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
         unsigned Offset = VA.getLocMemOffset() + StackOffset;
         // if it is double-word aligned, just store.
         if (Offset % 8 == 0) {
-          SDValue StackPtr = DAG.getRegister(VE::S11, MVT::i32);
+          SDValue StackPtr = DAG.getRegister(VE::SX11, MVT::i32);
           SDValue PtrOff = DAG.getIntPtrConstant(Offset, dl);
           PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
           MemOpChains.push_back(
@@ -681,7 +681,7 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
         } else {
           // Store the second part in stack.
           unsigned Offset = NextVA.getLocMemOffset() + StackOffset;
-          SDValue StackPtr = DAG.getRegister(VE::S11, MVT::i32);
+          SDValue StackPtr = DAG.getRegister(VE::SX11, MVT::i32);
           SDValue PtrOff = DAG.getIntPtrConstant(Offset, dl);
           PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
           MemOpChains.push_back(
@@ -690,7 +690,7 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
       } else {
         unsigned Offset = VA.getLocMemOffset() + StackOffset;
         // Store the first part.
-        SDValue StackPtr = DAG.getRegister(VE::S11, MVT::i32);
+        SDValue StackPtr = DAG.getRegister(VE::SX11, MVT::i32);
         SDValue PtrOff = DAG.getIntPtrConstant(Offset, dl);
         PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
         MemOpChains.push_back(
@@ -719,7 +719,7 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
     assert(VA.isMemLoc());
 
     // Create a store off the stack pointer for this argument.
-    SDValue StackPtr = DAG.getRegister(VE::S11, MVT::i32);
+    SDValue StackPtr = DAG.getRegister(VE::SX11, MVT::i32);
     SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset() + StackOffset,
                                            dl);
     PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
@@ -824,15 +824,15 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
 unsigned VETargetLowering::getRegisterByName(const char* RegName, EVT VT,
                                                SelectionDAG &DAG) const {
   unsigned Reg = StringSwitch<unsigned>(RegName)
-    .Case("sp", VE::S11)        // Stack pointer
-    .Case("fp", VE::S9)         // Frame pointer
-    .Case("sl", VE::S8)         // Stack limit
-    .Case("lr", VE::S10)        // Link regsiter
-    .Case("tp", VE::S14)        // Thread pointer
-    .Case("outer", VE::S12)     // Outer regiser
-    .Case("info", VE::S17)      // Info area register
-    .Case("got", VE::S15)       // Global offset table register
-    .Case("plt", VE::S16)       // Procedure linkage table register
+    .Case("sp", VE::SX11)        // Stack pointer
+    .Case("fp", VE::SX9)         // Frame pointer
+    .Case("sl", VE::SX8)         // Stack limit
+    .Case("lr", VE::SX10)        // Link regsiter
+    .Case("tp", VE::SX14)        // Thread pointer
+    .Case("outer", VE::SX12)     // Outer regiser
+    .Case("info", VE::SX17)      // Info area register
+    .Case("got", VE::SX15)       // Global offset table register
+    .Case("plt", VE::SX16)       // Procedure linkage table register
     .Case("usrcc", VE::UCC)     // User clock counter
     .Default(0);
 
@@ -913,14 +913,14 @@ static void fixupVariableFloatArgs(SmallVectorImpl<CCValAssign> &ArgLocs,
     CCValAssign NewVA;
 
     // Determine the offset into the argument array.
-    unsigned firstReg = (ValTy == MVT::f64) ? VE::S0 : VE::Q0;
+    unsigned firstReg = (ValTy == MVT::f64) ? VE::SX0 : VE::Q0;
     unsigned argSize  = (ValTy == MVT::f64) ? 8 : 16;
     unsigned Offset = argSize * (VA.getLocReg() - firstReg);
     assert(Offset < 16*8 && "Offset out of range, bad register enum?");
 
     if (Offset < 8*8) {
       // This argument should go in %s0-%s7.
-      unsigned IReg = VE::S0 + Offset/8;
+      unsigned IReg = VE::SX0 + Offset/8;
       if (ValTy == MVT::f64)
         // Full register, just bitconvert into i64.
         NewVA = CCValAssign::getReg(VA.getValNo(), VA.getValVT(),
@@ -953,7 +953,8 @@ static bool CC_VE2(unsigned ValNo, MVT ValVT,
         LocVT == MVT::i64 ||
         LocVT == MVT::f64) {
         static const MCPhysReg RegList1[] = {
-            VE::S0, VE::S1, VE::S2, VE::S3, VE::S4, VE::S5, VE::S6, VE::S7
+            VE::SX0, VE::SX1, VE::SX2, VE::SX3,
+            VE::SX4, VE::SX5, VE::SX6, VE::SX7
         };
         if (unsigned Reg = State.AllocateReg(RegList1)) {
             State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
@@ -1035,7 +1036,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
 
 #if 1
   // VE needs to get address of callee function in a register
-  // So, prepare to copy it to S12 here.
+  // So, prepare to copy it to SX12 here.
 
   // If the callee is a GlobalAddress node (quite common, every direct call is)
   // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
@@ -1064,7 +1065,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     }
   }
 
-  RegsToPass.push_back(std::make_pair(VE::S12, Callee));
+  RegsToPass.push_back(std::make_pair(VE::SX12, Callee));
 #endif
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
@@ -1107,9 +1108,9 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
           && VA.getLocVT() == MVT::i128) {
 #if 0 // ishizaka
         // Store and reload into the integer register reg and reg+1.
-        unsigned Offset = 8 * (VA.getLocReg() - VE::S0);
+        unsigned Offset = 8 * (VA.getLocReg() - VE::SX0);
         unsigned StackOffset = Offset + ArgsBaseOffset;
-        SDValue StackPtr = DAG.getRegister(VE::S11, PtrVT);
+        SDValue StackPtr = DAG.getRegister(VE::SX11, PtrVT);
         SDValue HiPtrOff = DAG.getIntPtrConstant(StackOffset, DL);
         HiPtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, HiPtrOff);
         SDValue LoPtrOff = DAG.getIntPtrConstant(StackOffset + 8, DL);
@@ -1161,7 +1162,7 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     assert(VA.isMemLoc());
 
     // Create a store off the stack pointer for this argument.
-    SDValue StackPtr = DAG.getRegister(VE::S11, PtrVT);
+    SDValue StackPtr = DAG.getRegister(VE::SX11, PtrVT);
     // The argument area starts at %fp+176 in the callee frame,
     // %sp+176 in ours.
     SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset() +
@@ -1535,7 +1536,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STACKRESTORE      , MVT::Other, Expand);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32  , Custom);
 
-  setStackPointerRegisterToSaveRestore(VE::S11);
+  setStackPointerRegisterToSaveRestore(VE::SX11);
 
   setOperationAction(ISD::CTPOP, MVT::i32, Legal);
 
@@ -2210,7 +2211,7 @@ static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
   // memory location argument.
   SDLoc DL(Op);
   SDValue Offset =
-      DAG.getNode(ISD::ADD, DL, PtrVT, DAG.getRegister(VE::S9, PtrVT),
+      DAG.getNode(ISD::ADD, DL, PtrVT, DAG.getRegister(VE::SX9, PtrVT),
                   DAG.getIntPtrConstant(FuncInfo->getVarArgsFrameOffset(), DL));
   const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
   return DAG.getStore(Op.getOperand(0), DL, Offset, Op.getOperand(1),
@@ -2262,7 +2263,7 @@ static SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG,
   // at the bottom of the stack.  The format is described in VESubtarget.cpp.
   unsigned regSpillArea = 176;
 
-  unsigned SPReg = VE::S11;
+  unsigned SPReg = VE::SX11;
   SDValue SP = DAG.getCopyFromReg(Chain, dl, SPReg, VT);
   SDValue NewSP = DAG.getNode(ISD::SUB, dl, VT, SP, Size); // Value
   Chain = DAG.getCopyToReg(SP.getValue(1), dl, SPReg, NewSP);    // Output chain
@@ -2313,7 +2314,7 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
   SDValue RetAddr;
   if (depth == 0) {
     auto PtrVT = TLI.getPointerTy(DAG.getDataLayout());
-    unsigned RetReg = MF.addLiveIn(VE::S10, TLI.getRegClassFor(PtrVT));
+    unsigned RetReg = MF.addLiveIn(VE::SX10, TLI.getRegClassFor(PtrVT));
     RetAddr = DAG.getCopyFromReg(DAG.getEntryNode(), dl, RetReg, VT);
     return RetAddr;
   }
@@ -3002,7 +3003,7 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
             .addImm(RegSize);
 
   // Instruction to restore SP
-  const unsigned SP  = VE::S11;
+  const unsigned SP  = VE::SX11;
   MIB = BuildMI(*MBB, MI, DL, TII->get(SP::LDri))
             .addReg(SP)
             .addReg(Buf)
@@ -3109,7 +3110,7 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
             .addReg(LabelReg2, RegState::Kill);
 
   // Instruction to store SP
-  const unsigned SP  = VE::S11;
+  const unsigned SP  = VE::SX11;
   MIB = BuildMI(thisMBB, DL, TII->get(SP::STri))
             .addReg(BufReg)
             .addImm(2 * RegSize)
