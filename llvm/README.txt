@@ -1,3 +1,44 @@
+LLVM for NEC SX-Aurora VE
+=========================
+
+This repository is a clone of public LLVM repository (http://llvm.org), plus an
+experimental modifications which provides support for the NEC SX-Aurora Tsubasa
+Vector Engine (VE).
+
+Modifications are under the development.  For example, we implmented below.
+
+ - integer, long long, float, double, and vector
+ - function call passing arguments through registers
+ - intrinsic functions to use vector instructions
+
+However, following items are not implemented yet.
+
+ - function call passing arguments through stack
+ - division, reminder calculations
+
+Please file issues if you have problems.
+
+How to compile LLVM for NEC SX-Aurora VE
+========================================
+
+First, check out llvm and clang like below.
+
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/llvm.git \
+      llvm -b develop
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/clang.git \
+      llvm/tools/clang -b develop
+
+Then, compile it with ninja.
+
+    $ mkdir build
+    $ cd build
+    $ cmake3 -G Ninja -DCMAKE_BUILD_TYPE="Release" \
+      -DLLVM_TARGETS_TO_BUILD="VE" ../llvm
+    $ ninja-build
+
+Please see the documentation provided in docs/ for further
+assistance with LLVM.
+
 The LLVM Compiler Infrastructure
 ================================
 
