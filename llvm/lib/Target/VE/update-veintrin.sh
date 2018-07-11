@@ -9,7 +9,7 @@ cp -vf tmp/veintrin2.h          ./tools/clang/lib/Headers/veintrin2.h
 cp -vf tmp/ref.cc               ../test/intrinsic/gen/ref.cc
 cp -vf tmp/decl.h               ../test/intrinsic/decl.h
 
-python veintrin.py -t
+#python veintrin.py -t
 
 touch include/llvm/IR/Intrinsics.td
 touch tools/clang/include/clang/Basic/Builtins.def
