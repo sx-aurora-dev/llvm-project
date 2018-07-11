@@ -55,6 +55,9 @@ public:
   TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
       : Context(Context), Kind(Kind), NeedsSemicolon(false), 
         TargetCodeKind(clang::OpenMPDirectiveKind::OMPD_unknown), HasExtraBraces(false) {}
+
+  /// Returns a pretty printed string of the code fragment and an empty string ""
+  /// if no pretty printing is available.
   virtual std::string PrintPretty() = 0;
   virtual clang::SourceRange getRealRange() = 0;
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }

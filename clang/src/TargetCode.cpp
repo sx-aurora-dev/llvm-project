@@ -54,7 +54,11 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     std::shared_ptr<TargetCodeFragment> Frag = *i;
     auto *TCR = llvm::dyn_cast<TargetCodeRegion>(Frag.get());
 
-    TargetCodeRewriter.ReplaceText(Frag->getInnerRange(), Frag->PrintPretty());
+    auto PrettyCode = Frag->PrintPretty();
+
+    // This is a workaround, since "Decl::print" includes "pragma omp declare".
+    if (PrettyCode != "")
+      TargetCodeRewriter.ReplaceText(Frag->getInnerRange(), PrettyCode);
 
     if (TCR) {
       generateFunctionPrologue(TCR);

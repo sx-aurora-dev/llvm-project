@@ -141,6 +141,13 @@ clang::SourceLocation TargetCodeRegion::getEndLoc() {
 clang::SourceRange TargetCodeRegion::getInnerRange() {
   auto InnerLocStart = getStartLoc();
   auto InnerLocEnd = getEndLoc();
+#if 0
+  clang::SourceManager &SM = Context.getSourceManager();
+  // TODO: Remove this code at some point. It is
+  // only useful for printf debugging.
+  llvm::outs() << "InnerRange: " << InnerLocStart.printToString(SM)
+    << " <--> " << InnerLocEnd.printToString(SM) << "\n";
+#endif
   return clang::SourceRange(InnerLocStart, InnerLocEnd);
 }
 
@@ -150,10 +157,6 @@ std::string TargetCodeRegion::PrintClauses(){
   const clang::LangOptions &LO = Context.getLangOpts();
   std::stringstream Out;
   for(auto C : OMPClauses) {
-    // getEndLoc should deliver the location of the right paren.
-    // However, there in July 2018 there is a bug in clang, such
-    // that a wrong location for 'map', 'num_threads', 'shared', 'private'
-    // is returned. We wait for the fix..
     clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
     clang::CharSourceRange CCRange = clang::CharSourceRange::getTokenRange(CRange);
     Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
@@ -194,8 +197,23 @@ std::string TargetCodeRegion::PrintPretty() {
 std::string TargetCodeDecl::PrintPretty() {
   std::string PrettyStr = "";
   llvm::raw_string_ostream PrettyOS(PrettyStr);
-  if(Node != NULL)
+  if(Node != NULL) {
+#if 0
+    clang::SourceManager &SM = Context.getSourceManager();
+    // TODO: Remove this code at some point. It is
+    // only useful for printf debugging.
+    llvm::outs() << "DeclPrintRange: " << Node->getSourceRange().getBegin().printToString(SM)
+      << " <--> " << Node->getSourceRange().getEnd().printToString(SM) << "\n";
+#endif
+    // I would prefer a pretty printing function as for the Stmts. However, this does
+    // not exist at all.
     //Node->getBody()->printPretty(PrettyOS, NULL, PP);
-    Node->print(PrettyOS, PP);
+
+    // This was ok before I merged the llvm-mirror at 10th of July, 2018.
+    // After that the pragma omp declare target" is printed as well, which is wrong
+    // and does not fit to the SourceRange we get. As a workaournd we return an empty string,
+    // which implies that we do not have to rewrite the code at all
+    //Node->print(PrettyOS, PP);
+  }
   return PrettyOS.str();
 }
