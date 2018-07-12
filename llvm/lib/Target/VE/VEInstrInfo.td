@@ -681,13 +681,13 @@ let cx = 0, cw = 0, cw2 = 0 in
 defm CMOVL : RRCMOVm<"cmov.l.${cf}", 0x3B, I64, i64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 0 in
-defm CMOVW : RRCMOVm<"cmov.w.${cf}", 0x3B, I32, i32, simm7Op32, uimm6Op32>;
+defm CMOVW : RRCMOVm<"cmov.w.${cf}", 0x3B, I32, i32, simm7Op64, uimm6Op32>;
 
 let cx = 0, cw = 0, cw2 = 1 in
 defm CMOVD : RRCMOVm<"cmov.d.${cf}", 0x3B, F64, f64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 1 in
-defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op32, uimm6Op32>;
+defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op64, uimm6Op32>;
 
 // NOP instruction
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
@@ -841,7 +841,7 @@ defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
 
 def : Pat<(fneg f64:$sx), (FSBd (COPY_TO_REGCLASS (ORim1 0, 0), F64), $sx)>;
-def : Pat<(fneg f32:$sx), (FSBs (COPY_TO_REGCLASS (ORim1 0, 0), F32), $sx)>;
+def : Pat<(fneg f32:$sx), (FSBs (EXTRACT_SUBREG (ORim1 0, 0), sub_f32), $sx)>;
 
 // FCP instruction
 let cx = 0 in
@@ -943,10 +943,10 @@ def ST1Bri : RM<
 
 def : Pat<(f64 (load ADDRri:$addr)), (COPY_TO_REGCLASS (LDSri ADDRri:$addr), F64)>;
 def : Pat<(i64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
-def : Pat<(f32 (load ADDRri:$addr)), (COPY_TO_REGCLASS (LDUri ADDRri:$addr), F32)>;
+def : Pat<(f32 (load ADDRri:$addr)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDUri ADDRri:$addr), sub_i32), sub_f32)>;
 def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, (COPY_TO_REGCLASS f64:$sx, I64))>;
 def : Pat<(store i64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, i64:$sx)>;
-def : Pat<(store f32:$sx, ADDRri:$addr), (STUri ADDRri:$addr, (COPY_TO_REGCLASS f32:$sx, I32))>;
+def : Pat<(store f32:$sx, ADDRri:$addr), (STUri ADDRri:$addr, (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:$sx, sub_f32), sub_i32))>;
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
@@ -1172,26 +1172,14 @@ def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
-// This give us free trunc and anyext.
-// def : Pat<(i64 (anyext i32:$val)), (COPY_TO_REGCLASS $val, I64)>;
-// def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
-
-// Or free trunc, but 1 instruction for anyext.
-//def : Pat<(i64 (zext i32:$val)), (COPY_TO_REGCLASS (ADSUri $val, 0), I64)>;
-//def : Pat<(i64 (sext i32:$val)), (COPY_TO_REGCLASS (ADSri $val, 0), I64)>;
-//def : Pat<(i32 (trunc i64:$val)), (COPY_TO_REGCLASS $val, I32)>;
-
-//def : Pat<(i64 (sext_inreg i64:$val, i32)),
-//          (COPY_TO_REGCLASS (ADSri (COPY_TO_REGCLASS $val, I32), 0), I64)>;
-
 // sextload and zextload stuff
 def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
-          (COPY_TO_REGCLASS (LDLri MEMri:$addr), I64)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
-          (COPY_TO_REGCLASS (LDLUri MEMri:$addr), I64)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32)>;
 
 def : Pat<(i64 (extloadi32 ADDRri:$addr)),
-          (COPY_TO_REGCLASS (LDLri MEMri:$addr), I64)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 
 // truncstore
 def : Pat<(truncstorei32 i64:$src, ADDRri:$addr),
@@ -1229,18 +1217,23 @@ def : Pat<(call i64:$dst),
 // Branches
 def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
 //def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
-//          (BCRri (icond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
+//          (BCRri (icond2cc $cond),
+//                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $lhs, sub_i32),
 //                 (i64 (sext_imm $rhs)), bb:$addr)>;
 def : Pat<(brcc cond:$cond, simm7:$lhs, i32:$rhs, bb:$addr),
           (BCRir (icond2cc $cond), (i64 (sext_imm $lhs)), 
-                 (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $rhs, sub_i32),
+                 bb:$addr)>;
 def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
-          (BCRrr (icond2cc $cond), (COPY_TO_REGCLASS $lhs, I64),
-                 (COPY_TO_REGCLASS $rhs, I64), bb:$addr)>;
+          (BCRrr (icond2cc $cond),
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $lhs, sub_i32),
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $rhs, sub_i32),
+                 bb:$addr)>;
 def : Pat<(brcc cond:$cond, i64:$lhs, i64:$rhs, bb:$addr),
           (BCRrr (icond2cc $cond), $lhs, $rhs, bb:$addr)>;
 
-def : Pat<(i32 (bitconvert f32:$op)), (COPY_TO_REGCLASS $op, I32)>;
+def : Pat<(i32 (bitconvert f32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_f32), sub_i32)>;
+def : Pat<(f32 (bitconvert i32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_i32), sub_f32)>;
 
 
 //===----------------------------------------------------------------------===//
