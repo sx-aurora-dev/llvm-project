@@ -69,6 +69,19 @@ class Op(object):
         else:
             return "{}:${}".format(self.ty.ValueType, self.name_)
 
+    def dagOpR(self):
+        if self.kind == 's':
+            if self.ty.ValueType == 'i32':
+                return "(INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:${}, sub_i32)".format(self.name_)
+            elif self.ty.ValueType == 'f32':
+                return "(EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:${}, sub_f32), sub_i32)".format(self.name_)
+            elif self.ty.ValueType == 'f64':
+                return "(COPY_TO_REGCLASS f64:${}, I64)".format(self.name_)
+            else:
+                return self.dagOp()
+        else:
+            return self.dagOp()
+
     def isImm(self): return self.kind == 'I' or self.kind == 'N' or self.kind == "Z"
     def isReg(self): return self.kind == 'v' or self.kind == 's'
     def isSReg(self): return self.kind == 's'
@@ -626,6 +639,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                 else:
                     func, expr = self.make(I)
                 inst = I.inst() if I.hasInst() else ""
+                inst = re.sub(r'i64|i32|f64|f32', '', inst)
                 if inst in rowspan:
                     rowspan[inst] += 1
                 else:
@@ -726,12 +740,12 @@ class InstTable:
 
     def VBRDm(self, opc):
         tmp = []
-        tmp.append(["VBRD", "vbrd", [VX(T_f64), SY(T_f64)], VM])
+        tmp.append(["VBRDf64", "vbrd", [VX(T_f64), SY(T_f64)], VM])
         tmp.append(["VBRD", "vbrd", [VX(T_i64), SY(T_i64)], VM])
         tmp.append(["VBRD", "vbrd", [VX(T_i64), ImmI(T_i64)], VM])
-        tmp.append(["VBRDu", "vbrdu", [VX(T_f32), SY(T_f32)], VM])
-        tmp.append(["VBRDl", "vbrdl", [VX(T_i32), SY(T_i32)], VM])
-        tmp.append(["VBRDl", "vbrdl", [VX(T_i32), ImmI(T_i32)], VM])
+        tmp.append(["VBRDf32", "vbrdu", [VX(T_f32), SY(T_f32)], VM])
+        tmp.append(["VBRDi32", "vbrdl", [VX(T_i32), SY(T_i32)], VM])
+        tmp.append(["VBRDi32", "vbrdl", [VX(T_i32), ImmI(T_i32)], VM])
         tmp.append(["VBRDp", "pvbrd", [VX(T_u32), SY(T_u64)], VM512])
 
         for ary in tmp:
@@ -746,9 +760,9 @@ class InstTable:
                 self.add(i)
 
     def LVSm(self, opc):
-        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSi64r", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSf64r", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSf32r", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
 
 
     def args_to_func_suffix(self, args):
@@ -997,10 +1011,11 @@ def gen_intrinsic_def(insts):
 def gen_pattern(insts):
     for I in insts:
         if I.hasInst():
-            args = ", ".join([op.dagOp() for op in I.ins])
+            argsL = ", ".join([op.dagOp() for op in I.ins])
+            argsR = ", ".join([op.dagOp() for op in I.ins])
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
-            l = "(int_ve_{} {})".format(ni, args)
-            r = "({} {})".format(I.instName, args)
+            l = "(int_ve_{} {})".format(ni, argsL)
+            r = "({} {})".format(I.instName, argsR)
             print("def : Pat<{}, {}>;".format(l, r))
 
 def gen_bulitin(insts):
@@ -1166,7 +1181,16 @@ T.FLm(0xAD, "VFMAXad{fl}", "vfrmax.d{fl}", [[VX(T_f64), VY(T_f64)]])
 T.FLm(0xAD, "VFMAXas{fl}", "vfrmax.s{fl}", [[VX(T_f32), VY(T_f32)]])
 T.FLm(0xAD, "VFMAXid{fl}", "vfrmin.d{fl}", [[VX(T_f64), VY(T_f64)]])
 T.FLm(0xAD, "VFMAXis{fl}", "vfrmin.s{fl}", [[VX(T_f32), VY(T_f32)]])
-T.NoImpl("...")
+T.NoImpl("VRAND")
+T.NoImpl("VROR")
+T.NoImpl("VRXOR")
+T.NoImpl("VFIA")
+T.NoImpl("VFIS")
+T.NoImpl("VFIM")
+T.NoImpl("VFIAM")
+T.NoImpl("VFISM")
+T.NoImpl("VFIMA")
+T.NoImpl("VFIMS")
 
 O_u64_vv = [VX(T_u64), VY(T_u64)]
 O_f32_vv = [VX(T_f32), VY(T_f32)]
