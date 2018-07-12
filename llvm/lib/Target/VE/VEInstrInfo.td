@@ -1195,7 +1195,7 @@ def : Pat<(i64 (extloadi32 ADDRri:$addr)),
 
 // truncstore
 def : Pat<(truncstorei32 i64:$src, ADDRri:$addr),
-          (STLri MEMri:$addr, (COPY_TO_REGCLASS $src, I32))>;
+          (STLri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 
 // Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzzi tglobaladdr:$in)>;
