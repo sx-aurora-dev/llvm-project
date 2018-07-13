@@ -217,14 +217,14 @@ multiclass RVLm<string opcStr, bits<8> opc> {
 // f64, f32, packed f32
 multiclass RVDSPm<string opcStr, bits<8> opc> {
   // last argument should not be used...
-  let cx = 0, cx2 = 0 in defm d : RV3m<opcStr # ".d", opc, F64, VM, simm7Op64>; // double
+  let cx = 0, cx2 = 0 in defm d : RV3m<opcStr # ".d", opc, I64, VM, simm7Op64>; // double
   let cx = 1, cx2 = 0 in defm s : RV3m<opcStr # ".s", opc, F32, VM, simm7Op64>; // float
   let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, I64, VM512, simm7Op64>; // packed
 }
 
 // f64, f32, packed f32 (4 operands)
 multiclass RV4DSPm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm d : RV4m<opcStr # ".d", opc, F64>; // double
+  let cx = 0, cx2 = 0 in defm d : RV4m<opcStr # ".d", opc, I64>; // double
   let cx = 1, cx2 = 0 in defm s : RV4m<opcStr # ".s", opc, F32>; // float
   let cx = 1, cx2 = 1 in defm p : RV4m<"p" # opcStr, opc, I64>; // packed
 }
@@ -533,7 +533,7 @@ def LVSi64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
   "lvs ${sx},${vx}(${sy})", []>;
 
 let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1 in
-def LVSf64r : RR<0x9E, (outs F64:$sx), (ins V64:$vx, I32:$sy),
+def LVSf64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
   "lvs ${sx},${vx}(${sy})", []>;
 
 let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1 in
@@ -603,7 +603,7 @@ let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C, VM, I64, simm7Op64>; //
 let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C, VM, I64, simm7Op64>; // 32b uppper(= f32)
 let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C, VM512, I64, simm7Op64>; // 32b packed
 
-let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf64 : VBRDm<"vbrd", 0x8C, VM, F64, simm7Op64>;
+let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf64 : VBRDm<"vbrd", 0x8C, VM, I64, simm7Op64>;
 let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf32 : VBRDm<"vbrdu", 0x8C, VM, F32, simm7Op64>;
 let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDi32 : VBRDm<"vbrdl", 0x8C, VM, I32, simm7Op32>;
 
