@@ -1325,7 +1325,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::i32, &VE::I32RegClass);
   addRegisterClass(MVT::i64, &VE::I64RegClass);
   addRegisterClass(MVT::f32, &VE::F32RegClass);
-  addRegisterClass(MVT::f64, &VE::F64RegClass);
+  addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
   addRegisterClass(MVT::v256i32, &VE::V64RegClass);
   addRegisterClass(MVT::v256i64, &VE::V64RegClass);
@@ -3267,14 +3267,14 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
       return std::make_pair(0U, &VE::I64RegClass);
     case 'f':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::F64RegClass);
+        return std::make_pair(0U, &VE::I64RegClass);
       else if (VT == MVT::f128)
         return std::make_pair(0U, &VE::F128RegClass);
       llvm_unreachable("Unknown ValueType for f-register-type!");
       break;
     case 'e':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::F64RegClass);
+        return std::make_pair(0U, &VE::I64RegClass);
       else if (VT == MVT::f128)
         return std::make_pair(0U, &VE::F128RegClass);
       llvm_unreachable("Unknown ValueType for e-register-type!");

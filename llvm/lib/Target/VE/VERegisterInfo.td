@@ -145,15 +145,12 @@ def I16 : RegisterClass<"VE", [i16], 16,
 def I32 : RegisterClass<"VE", [i32], 32,
                         (add (sequence "SW%u", 34, 63),
                              (sequence "SW%u", 0, 33))>;
-def I64 : RegisterClass<"VE", [i64], 64,
+def I64 : RegisterClass<"VE", [i64, f64], 64,
                         (add (sequence "SX%u", 34, 63),
                              (sequence "SX%u", 0, 33))>;
 def F32 : RegisterClass<"VE", [f32], 32,
                         (add (sequence "SF%u", 34, 63),
                              (sequence "SF%u", 0, 33))>;
-def F64 : RegisterClass<"VE", [f64], 64,
-                        (add (sequence "SX%u", 34, 63),
-                             (sequence "SX%u", 0, 33))>;
 def F128 : RegisterClass<"VE", [f128], 128, (sequence "Q%u", 0, 31)>;
 
 def Misc : RegisterClass<"VE", [i64], 64,

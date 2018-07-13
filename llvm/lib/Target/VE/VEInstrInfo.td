@@ -684,7 +684,7 @@ let cx = 0, cw = 1, cw2 = 0 in
 defm CMOVW : RRCMOVm<"cmov.w.${cf}", 0x3B, I32, i32, simm7Op64, uimm6Op32>;
 
 let cx = 0, cw = 0, cw2 = 1 in
-defm CMOVD : RRCMOVm<"cmov.d.${cf}", 0x3B, F64, f64, simm7Op64, uimm6Op64>;
+defm CMOVD : RRCMOVm<"cmov.d.${cf}", 0x3B, I64, f64, simm7Op64, uimm6Op64>;
 
 let cx = 0, cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op64, uimm6Op32>;
@@ -831,7 +831,7 @@ class RRF<string opcStr, bits<8>opc, SDNode OpNode, RegisterClass RC, ValueType 
 
 multiclass RRFm<string opcStr, bits<8> opc, SDNode OpNode>
 {
-  def d : RRF<opcStr#".d", opc, OpNode, F64, f64> { let cx = 0; }
+  def d : RRF<opcStr#".d", opc, OpNode, I64, f64> { let cx = 0; }
   def s : RRF<opcStr#".s", opc, OpNode, F32, f32> { let cx = 1; }
 }
 
@@ -840,12 +840,12 @@ defm FSB : RRFm<"fsub", 0x5C, fsub>;
 defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
 
-def : Pat<(fneg f64:$sx), (FSBd (COPY_TO_REGCLASS (ORim1 0, 0), F64), $sx)>;
+def : Pat<(fneg f64:$sx), (FSBd (ORim1 0, 0), $sx)>;
 def : Pat<(fneg f32:$sx), (FSBs (EXTRACT_SUBREG (ORim1 0, 0), sub_f32), $sx)>;
 
 // FCP instruction
 let cx = 0 in
-defm FCP : RRNDm<"fcmp.d", 0x7E, setcc, F64, f64, simm7Op64, uimm6Op64>;
+defm FCP : RRNDm<"fcmp.d", 0x7E, setcc, I64, f64, simm7Op64, uimm6Op64>;
 let cx = 1 in
 defm FCPS : RRNDm<"fcmp.s", 0x7E, setcc, F32, f32, simm7Op32, uimm6Op32>;
 
@@ -856,16 +856,16 @@ let cw = 1 in defm FCMi : RRFm<"fmin", 0x3E, VEfmin>;
 let cx = 1, cw = 0 in let cfw = 8 in
 defm FIXs : CVTm<"cvt.w.s.sx.rz", 0x5E, I32, i32, F32, f32, simm7Op32>;
 let cx = 0, cw = 0 in let cfw = 8 in
-defm FIXd : CVTm<"cvt.w.d.sx.rz", 0x5E, I32, i32, F64, f64, simm7Op32>;
+defm FIXd : CVTm<"cvt.w.d.sx.rz", 0x5E, I32, i32, I64, f64, simm7Op32>;
 let cfw = 8 in
-defm FIXX : CVTm<"cvt.l.d.rz", 0x4F, I64, i64, F64, f64, simm7Op64>;
+defm FIXX : CVTm<"cvt.l.d.rz", 0x4F, I64, i64, I64, f64, simm7Op64>;
 let cx = 1 in
 defm FLTs : CVTm<"cvt.s.w", 0x5E, F32, f32, I32, i32, simm7Op32>;
 let cx = 0 in
-defm FLTd : CVTm<"cvt.d.w", 0x5E, F64, f64, I32, i32, simm7Op32>;
-defm FLTX : CVTm<"cvt.d.l", 0x5F, F64, f64, I64, i64, simm7Op64>;
-defm CVS : CVTm<"cvt.s.d", 0x1F, F32, f32, F64, f64, simm7Op64>;
-defm CVD : CVTm<"cvt.d.s", 0x0F, F64, f64, F32, f32, simm7Op32>;
+defm FLTd : CVTm<"cvt.d.w", 0x5E, I64, f64, I32, i32, simm7Op32>;
+defm FLTX : CVTm<"cvt.d.l", 0x5F, I64, f64, I64, i64, simm7Op64>;
+defm CVS : CVTm<"cvt.s.d", 0x1F, F32, f32, I64, f64, simm7Op64>;
+defm CVD : CVTm<"cvt.d.s", 0x0F, I64, f64, F32, f32, simm7Op32>;
 // CVQ: f32 or f64 -> f128
 
 
@@ -941,10 +941,10 @@ def ST1Bri : RM<
     [(store i8:$sx, ADDRri:$addr)]>;
 }
 
-def : Pat<(f64 (load ADDRri:$addr)), (COPY_TO_REGCLASS (LDSri ADDRri:$addr), F64)>;
+def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
 def : Pat<(i64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
 def : Pat<(f32 (load ADDRri:$addr)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDUri ADDRri:$addr), sub_i32), sub_f32)>;
-def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, (COPY_TO_REGCLASS f64:$sx, I64))>;
+def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, f64:$sx)>;
 def : Pat<(store i64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, i64:$sx)>;
 def : Pat<(store f32:$sx, ADDRri:$addr), (STUri ADDRri:$addr, (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:$sx, sub_f32), sub_i32))>;
 
@@ -1379,11 +1379,8 @@ def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$tval, i32:$fval,
               sub_i32)>;
 
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$tval, f64:$fval, cond:$cond)),
-          (COPY_TO_REGCLASS
-              (CMOVDrr (fcond2cc $cond), 
-                       (FCPrr f64:$LHS, f64:$RHS), 
-                       (COPY_TO_REGCLASS $tval, I64),
-                       (COPY_TO_REGCLASS $fval, I64)), F64)>;
+          (CMOVDrr (fcond2cc $cond), 
+                   (FCPrr f64:$LHS, f64:$RHS), $tval, $fval)>;
 
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$tval, f32:$fval, cond:$cond)),
           (EXTRACT_SUBREG
@@ -1409,8 +1406,7 @@ def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
               sub_i32)>;
 
 def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
-          (COPY_TO_REGCLASS (CMOVWrr CC_NE, $pred,
-            (COPY_TO_REGCLASS $t, I64), (COPY_TO_REGCLASS $f, I64)), F64)>;
+          (CMOVWrr CC_NE, $pred, $t, $f)>;
 
 def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
           (EXTRACT_SUBREG
