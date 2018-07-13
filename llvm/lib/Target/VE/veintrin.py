@@ -69,6 +69,19 @@ class Op(object):
         else:
             return "{}:${}".format(self.ty.ValueType, self.name_)
 
+    def dagOpR(self):
+        if self.kind == 's':
+            if self.ty.ValueType == 'i32':
+                return "(INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:${}, sub_i32)".format(self.name_)
+            elif self.ty.ValueType == 'f32':
+                return "(EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:${}, sub_f32), sub_i32)".format(self.name_)
+            elif self.ty.ValueType == 'f64':
+                return "(COPY_TO_REGCLASS f64:${}, I64)".format(self.name_)
+            else:
+                return self.dagOp()
+        else:
+            return self.dagOp()
+
     def isImm(self): return self.kind == 'I' or self.kind == 'N' or self.kind == "Z"
     def isReg(self): return self.kind == 'v' or self.kind == 's'
     def isSReg(self): return self.kind == 's'
@@ -626,6 +639,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                 else:
                     func, expr = self.make(I)
                 inst = I.inst() if I.hasInst() else ""
+                inst = re.sub(r'i64|i32|f64|f32', '', inst)
                 if inst in rowspan:
                     rowspan[inst] += 1
                 else:
@@ -726,12 +740,12 @@ class InstTable:
 
     def VBRDm(self, opc):
         tmp = []
-        tmp.append(["VBRD", "vbrd", [VX(T_f64), SY(T_f64)], VM])
+        tmp.append(["VBRDf64", "vbrd", [VX(T_f64), SY(T_f64)], VM])
         tmp.append(["VBRD", "vbrd", [VX(T_i64), SY(T_i64)], VM])
         tmp.append(["VBRD", "vbrd", [VX(T_i64), ImmI(T_i64)], VM])
-        tmp.append(["VBRDu", "vbrdu", [VX(T_f32), SY(T_f32)], VM])
-        tmp.append(["VBRDl", "vbrdl", [VX(T_i32), SY(T_i32)], VM])
-        tmp.append(["VBRDl", "vbrdl", [VX(T_i32), ImmI(T_i32)], VM])
+        tmp.append(["VBRDf32", "vbrdu", [VX(T_f32), SY(T_f32)], VM])
+        tmp.append(["VBRDi32", "vbrdl", [VX(T_i32), SY(T_i32)], VM])
+        tmp.append(["VBRDi32", "vbrdl", [VX(T_i32), ImmI(T_i32)], VM])
         tmp.append(["VBRDp", "pvbrd", [VX(T_u32), SY(T_u64)], VM512])
 
         for ary in tmp:
@@ -746,9 +760,9 @@ class InstTable:
                 self.add(i)
 
     def LVSm(self, opc):
-        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSr", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSi64r", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSf64r", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSf32r", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
 
 
     def args_to_func_suffix(self, args):
@@ -770,6 +784,7 @@ class InstTable:
                "vvv"  : "v",
                "vvvmv": "vm",
                "vvvMv": "vm",
+               "vvsMv": "rm2",
                "vvs"  : "r2",
                "vss"  : "rr",  # VLD
                "vIs"  : "ir",  # VLD
@@ -814,8 +829,12 @@ class InstTable:
                "m"    : "", # VFMK at, af
                "M"    : "", # VFMKp at, af
                "mcv"  : "v",
+               "mcvm" : "vm",
                "Mcv"  : "v",
                "vvIs" : "i", # VSFA
+               "sm"   : "", # PCMV, etc
+               "sM"   : "", # PCMV, etc
+               "vvmv" : "", # VCP, VEX
                }
 
         tmp = "".join([op.kind for op in args])
@@ -929,13 +948,19 @@ class InstTable:
         O_u64_vvs = [VX(T_u64), VZ(T_u64), SY(T_u64)]
         O_u64_vvN = [VX(T_u64), VZ(T_u64), ImmN(T_u64)]
 
-        self.InstX(opc, instName, name, [O_u64_vvv, O_u64_vvs, O_u64_vvN], expr)
+        OL = [O_u64_vvv, O_u64_vvs, O_u64_vvN]
+        OL = self.addMask(OL);
+
+        self.InstX(opc, instName, name, OL, expr)
 
     def ShiftPacked(self, opc, name, instName, expr):
         O_u32_vvv = [VX(T_u32), VZ(T_u32), VY(T_u32)]
         O_u32_vvs = [VX(T_u32), VZ(T_u32), SY(T_u64)]
 
-        self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vvs], expr)
+        OL = [O_u32_vvv, O_u32_vvs]
+        OL = self.addMask(OL, VM512)
+
+        self.InstX(opc, instName+"p", "p"+name, OL, expr)
 
     def Inst4f(self, opc, name, instName, expr):
         O_f64_vvvv = [VX(T_f64), VY(T_f64), VZ(T_f64), VW(T_f64)]
@@ -964,6 +989,11 @@ class InstTable:
     def FLm(self, opc, inst, asm, args):
         self.InstX(opc, inst.format(fl="f"), asm.format(fl=".fst"), args)
         self.InstX(opc, inst.format(fl="l"), asm.format(fl=".lst"), args).noTest()
+
+    def VFMKm(self, opc, inst, asm):
+        T.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
+        T.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64), VM]]).noTest()
+
 
 def cmpwrite(filename, data):
     need_write = True
@@ -997,10 +1027,11 @@ def gen_intrinsic_def(insts):
 def gen_pattern(insts):
     for I in insts:
         if I.hasInst():
-            args = ", ".join([op.dagOp() for op in I.ins])
+            argsL = ", ".join([op.dagOp() for op in I.ins])
+            argsR = ", ".join([op.dagOp() for op in I.ins])
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
-            l = "(int_ve_{} {})".format(ni, args)
-            r = "({} {})".format(I.instName, args)
+            l = "(int_ve_{} {})".format(ni, argsL)
+            r = "({} {})".format(I.instName, argsR)
             print("def : Pat<{}, {}>;".format(l, r))
 
 def gen_bulitin(insts):
@@ -1136,15 +1167,15 @@ T.Section("5.3.2.12. Vector Mask Arithmetic Instructions", 31)
 T.add(Inst(0xD6, "VMRGvm", "vmrg", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
 T.add(Inst(0xD6, "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], True))
 T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
-T.NoImpl("VCP")
-T.NoImpl("VEX")
-T.InstX(0xB4, "VFMK", "vfmk.l", [[VM, CCOp, VZ(T_i64)]]).noTest()
+T.InstX(0x8D, "VCP", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
+T.InstX(0x9D, "VEX", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
+T.VFMKm(0xB4, "VFMK", "vfmk.l")
+T.VFMKm(0xB4, "VFMS", "vfmk.w")
+T.VFMKm(0xB4, "VFMFd", "vfmk.d")
+T.VFMKm(0xB4, "VFMFs", "vfmk.s")
 T.InstX(0xB4, "VFMKat", "vfmk.at", [[VM]]).noTest()
 T.InstX(0xB4, "VFMKaf", "vfmk.af", [[VM]]).noTest()
-T.InstX(0xB5, "VFMS", "vfmk.w", [[VM, CCOp, VZ(T_i32)]]).noTest()
 T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]], None, True).noTest() # Pseudo
-T.InstX(0xB6, "VFMFd", "vfmk.d", [[VM, CCOp, VZ(T_f64)]]).noTest()
-T.InstX(0xB6, "VFMFs", "vfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest()
 T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]], None, True).noTest() # Pseudo
 
 T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]], None, True).noTest() # Pseudo
@@ -1166,7 +1197,16 @@ T.FLm(0xAD, "VFMAXad{fl}", "vfrmax.d{fl}", [[VX(T_f64), VY(T_f64)]])
 T.FLm(0xAD, "VFMAXas{fl}", "vfrmax.s{fl}", [[VX(T_f32), VY(T_f32)]])
 T.FLm(0xAD, "VFMAXid{fl}", "vfrmin.d{fl}", [[VX(T_f64), VY(T_f64)]])
 T.FLm(0xAD, "VFMAXis{fl}", "vfrmin.s{fl}", [[VX(T_f32), VY(T_f32)]])
-T.NoImpl("...")
+T.NoImpl("VRAND")
+T.NoImpl("VROR")
+T.NoImpl("VRXOR")
+T.NoImpl("VFIA")
+T.NoImpl("VFIS")
+T.NoImpl("VFIM")
+T.NoImpl("VFIAM")
+T.NoImpl("VFISM")
+T.NoImpl("VFIMA")
+T.NoImpl("VFIMS")
 
 O_u64_vv = [VX(T_u64), VY(T_u64)]
 O_f32_vv = [VX(T_f32), VY(T_f32)]
@@ -1194,9 +1234,9 @@ T.InstX(0x94, "NNDM", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
 T.InstX(0x94, "NNDMp", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
 T.InstX(0x95, "NEGM", "negm", [[VMX, VMY]], "{0} = ~{1}")
 T.InstX(0x95, "NEGMp", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
-T.NoImpl("PCVM")
-T.NoImpl("LZVM")
-T.NoImpl("TOVM")
+T.InstX(0xA4, "PCVM", "pcvm", [[SX(T_u64), VMY]]).noTest();
+T.InstX(0xA5, "LZVM", "lzvm", [[SX(T_u64), VMY]]).noTest();
+T.InstX(0xA6, "TOVM", "tovm", [[SX(T_u64), VMY]]).noTest();
 
 
 T.Section("5.3.2.16. Vector Control Instructions", 34)
