@@ -315,7 +315,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                           SP::sub_odd64_then_sub_odd };
 #endif
 
-  // For the case of VE, I32, I64, F32, and F64 uses the identical
+  // For the case of VE, I32, I64, and F32 uses the identical
   // registers %s0-%s63, so no need to check other register classes
   // here
   if (VE::I32RegClass.contains(DestReg, SrcReg))
@@ -324,12 +324,10 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   // any scaler to any scaler
   else if ((VE::I32RegClass.contains(SrcReg) ||
             VE::F32RegClass.contains(SrcReg) ||
-            VE::I64RegClass.contains(SrcReg) ||
-            VE::F64RegClass.contains(SrcReg)) &&
+            VE::I64RegClass.contains(SrcReg)) &&
            (VE::I32RegClass.contains(DestReg) ||
             VE::F32RegClass.contains(DestReg) ||
-            VE::I64RegClass.contains(DestReg) ||
-            VE::F64RegClass.contains(DestReg)))
+            VE::I64RegClass.contains(DestReg)))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
   else if (VE::V64RegClass.contains(DestReg, SrcReg))
@@ -425,7 +423,7 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
   // On the order of operands here: think "[FrameIdx + 0] = SrcReg".
-  if (RC == &VE::I64RegClass || RC == &VE::F64RegClass)
+  if (RC == &VE::I64RegClass)
     BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else if (RC == &VE::I32RegClass)
@@ -459,7 +457,7 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
-  if (RC == &VE::I64RegClass || RC == &VE::F64RegClass)
+  if (RC == &VE::I64RegClass)
     BuildMI(MBB, I, DL, get(VE::LDSri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
   else if (RC == &VE::I32RegClass)
