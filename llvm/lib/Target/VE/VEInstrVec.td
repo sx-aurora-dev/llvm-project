@@ -759,9 +759,15 @@ let cy = 1 in
 def VSHFr : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy),
   "vshf $vx,$vy,$vz,$sy", []>;
 
-// VSHF
-// VCP
-// VEX
+class VCPEX<bits<8> opc, string opcStr> 
+  : RV<opc, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd),
+  !strconcat(opcStr, " $vx,$vz,$vm"), []> {
+    let vy = 0;
+    let Constraints = "$vx = $vd";
+}
+
+def VCP : VCPEX<0x8D, "vcp">;
+def VEX : VCPEX<0x9D, "vex">;
 
 multiclass VFMKm<string opcStr, bits<8> opc> {
   def v : RV<opc, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),

@@ -834,6 +834,7 @@ class InstTable:
                "vvIs" : "i", # VSFA
                "sm"   : "", # PCMV, etc
                "sM"   : "", # PCMV, etc
+               "vvmv" : "", # VCP, VEX
                }
 
         tmp = "".join([op.kind for op in args])
@@ -1166,8 +1167,8 @@ T.Section("5.3.2.12. Vector Mask Arithmetic Instructions", 31)
 T.add(Inst(0xD6, "VMRGvm", "vmrg", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
 T.add(Inst(0xD6, "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], True))
 T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
-T.NoImpl("VCP")
-T.NoImpl("VEX")
+T.InstX(0x8D, "VCP", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
+T.InstX(0x9D, "VEX", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
 T.VFMKm(0xB4, "VFMK", "vfmk.l")
 T.VFMKm(0xB4, "VFMS", "vfmk.w")
 T.VFMKm(0xB4, "VFMFd", "vfmk.d")
