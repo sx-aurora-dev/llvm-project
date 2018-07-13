@@ -784,6 +784,7 @@ class InstTable:
                "vvv"  : "v",
                "vvvmv": "vm",
                "vvvMv": "vm",
+               "vvsMv": "rm2",
                "vvs"  : "r2",
                "vss"  : "rr",  # VLD
                "vIs"  : "ir",  # VLD
@@ -828,8 +829,11 @@ class InstTable:
                "m"    : "", # VFMK at, af
                "M"    : "", # VFMKp at, af
                "mcv"  : "v",
+               "mcvm" : "vm",
                "Mcv"  : "v",
                "vvIs" : "i", # VSFA
+               "sm"   : "", # PCMV, etc
+               "sM"   : "", # PCMV, etc
                }
 
         tmp = "".join([op.kind for op in args])
@@ -943,13 +947,19 @@ class InstTable:
         O_u64_vvs = [VX(T_u64), VZ(T_u64), SY(T_u64)]
         O_u64_vvN = [VX(T_u64), VZ(T_u64), ImmN(T_u64)]
 
-        self.InstX(opc, instName, name, [O_u64_vvv, O_u64_vvs, O_u64_vvN], expr)
+        OL = [O_u64_vvv, O_u64_vvs, O_u64_vvN]
+        OL = self.addMask(OL);
+
+        self.InstX(opc, instName, name, OL, expr)
 
     def ShiftPacked(self, opc, name, instName, expr):
         O_u32_vvv = [VX(T_u32), VZ(T_u32), VY(T_u32)]
         O_u32_vvs = [VX(T_u32), VZ(T_u32), SY(T_u64)]
 
-        self.InstX(opc, instName+"p", "p"+name, [O_u32_vvv, O_u32_vvs], expr)
+        OL = [O_u32_vvv, O_u32_vvs]
+        OL = self.addMask(OL, VM512)
+
+        self.InstX(opc, instName+"p", "p"+name, OL, expr)
 
     def Inst4f(self, opc, name, instName, expr):
         O_f64_vvvv = [VX(T_f64), VY(T_f64), VZ(T_f64), VW(T_f64)]
@@ -978,6 +988,11 @@ class InstTable:
     def FLm(self, opc, inst, asm, args):
         self.InstX(opc, inst.format(fl="f"), asm.format(fl=".fst"), args)
         self.InstX(opc, inst.format(fl="l"), asm.format(fl=".lst"), args).noTest()
+
+    def VFMKm(self, opc, inst, asm):
+        T.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
+        T.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64), VM]]).noTest()
+
 
 def cmpwrite(filename, data):
     need_write = True
@@ -1153,13 +1168,13 @@ T.add(Inst(0xD6, "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(
 T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
 T.NoImpl("VCP")
 T.NoImpl("VEX")
-T.InstX(0xB4, "VFMK", "vfmk.l", [[VM, CCOp, VZ(T_i64)]]).noTest()
+T.VFMKm(0xB4, "VFMK", "vfmk.l")
+T.VFMKm(0xB4, "VFMS", "vfmk.w")
+T.VFMKm(0xB4, "VFMFd", "vfmk.d")
+T.VFMKm(0xB4, "VFMFs", "vfmk.s")
 T.InstX(0xB4, "VFMKat", "vfmk.at", [[VM]]).noTest()
 T.InstX(0xB4, "VFMKaf", "vfmk.af", [[VM]]).noTest()
-T.InstX(0xB5, "VFMS", "vfmk.w", [[VM, CCOp, VZ(T_i32)]]).noTest()
 T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]], None, True).noTest() # Pseudo
-T.InstX(0xB6, "VFMFd", "vfmk.d", [[VM, CCOp, VZ(T_f64)]]).noTest()
-T.InstX(0xB6, "VFMFs", "vfmk.s", [[VM, CCOp, VZ(T_f32)]]).noTest()
 T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]], None, True).noTest() # Pseudo
 
 T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]], None, True).noTest() # Pseudo
@@ -1218,9 +1233,9 @@ T.InstX(0x94, "NNDM", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
 T.InstX(0x94, "NNDMp", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
 T.InstX(0x95, "NEGM", "negm", [[VMX, VMY]], "{0} = ~{1}")
 T.InstX(0x95, "NEGMp", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
-T.NoImpl("PCVM")
-T.NoImpl("LZVM")
-T.NoImpl("TOVM")
+T.InstX(0xA4, "PCVM", "pcvm", [[SX(T_u64), VMY]]).noTest();
+T.InstX(0xA5, "LZVM", "lzvm", [[SX(T_u64), VMY]]).noTest();
+T.InstX(0xA6, "TOVM", "tovm", [[SX(T_u64), VMY]]).noTest();
 
 
 T.Section("5.3.2.16. Vector Control Instructions", 34)
