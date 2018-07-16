@@ -1173,6 +1173,19 @@ def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
 // sextload and zextload stuff
+def : Pat<(i32 (sextloadi8 ADDRri:$addr)),
+          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD1Bri MEMri:$addr), sub_i8)>;
+def : Pat<(i32 (zextloadi8 ADDRri:$addr)),
+          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD1BUri MEMri:$addr), sub_i8)>;
+def : Pat<(i32 (sextloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD2Bri MEMri:$addr), sub_i16)>;
+def : Pat<(i32 (zextloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i16)>;
+
+def : Pat<(i64 (sextloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2Bri MEMri:$addr), sub_i16)>;
+def : Pat<(i64 (zextloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i16)>;
 def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
