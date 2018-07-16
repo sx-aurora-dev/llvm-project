@@ -42,6 +42,9 @@ VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 const uint32_t *
 VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                         CallingConv::ID CC) const {
+  if (CC == CallingConv::VE_VEC_EXPF) {
+    return CSR_vec_expf_RegMask;
+  }
   return CSR_RegMask;
 }
 

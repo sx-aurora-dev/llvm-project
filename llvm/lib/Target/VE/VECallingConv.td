@@ -60,3 +60,11 @@ def RetCC_VE : CallingConv<[
 
 // Callee-saved registers
 def CSR : CalleeSavedRegs<(add (sequence "SX%u", 18, 33))>;
+
+// vec_expf destroys s0, s1, s5, s6, s11, s61, s62, s63, v0-6, and vm6
+def CSR_vec_expf : CalleeSavedRegs<(add (sequence "SX%u", 2, 4),
+                                        (sequence "SX%u", 7, 10),
+                                        (sequence "SX%u", 12, 60),
+                                        (sequence "V%u", 7, 63),
+                                        (sequence "VM%u", 1, 5),
+                                        (sequence "VM%u", 7, 15))>;

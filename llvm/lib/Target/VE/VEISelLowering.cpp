@@ -2787,9 +2787,11 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     Ops.push_back(DAG.getRegister(VE::V0, MVT::v256f64));
 
     // preserved registers
-    //static const uint32_t Mask_expf[] = {0xa1ffffff, 0x007fffff, 0xffffffee, 0x003fffff, 0xfffffc7e, 0x3fffffff, 0xffff87f0};
-    static const uint32_t Mask_expf[] = {0xa5ffffff, 0x387fffff, 0xffffffef, 0x003fffff, 0xffffffff, 0x7fffffff, 0xffffefff};
-    Ops.push_back(DAG.getRegisterMask(Mask_expf));
+    const VERegisterInfo *TRI = Subtarget->getRegisterInfo();
+    const uint32_t *Mask = TRI->getCallPreservedMask(DAG.getMachineFunction(),
+        CallingConv::VE_VEC_EXPF);
+    assert(Mask && "Missing call preserved mask for calling convention");
+    Ops.push_back(DAG.getRegisterMask(Mask));
 
     if (InGlue.getNode())
         Ops.push_back(InGlue);
