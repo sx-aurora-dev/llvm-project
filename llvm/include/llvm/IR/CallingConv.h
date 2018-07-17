@@ -220,6 +220,10 @@ namespace CallingConv {
     /// shader if tessellation is in use, or otherwise the vertex shader.
     AMDGPU_ES = 96,
 
+    /// Calling convention used for NEC SX-Aurora VE vec_expf intrinsic
+    /// function.
+    VE_VEC_EXPF = 150,
+
     /// The highest possible calling convention ID. Must be some 2^k - 1.
     MaxID = 1023
   };
