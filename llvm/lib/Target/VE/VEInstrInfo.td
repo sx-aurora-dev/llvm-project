@@ -876,14 +876,12 @@ let cx = 0 in
 def LDSri : RM<
     0x01, (outs I64:$sx), (ins MEMri:$addr),
     "ld $sx, $addr",
-    []>;
-//    [(set i64:$sx, (load ADDRri:$addr))]>;
+    [(set i64:$sx, (load ADDRri:$addr))]>;
 let cx = 0 in
 def LDUri : RM<
-    0x02, (outs I32:$sx), (ins MEMri:$addr),
+    0x02, (outs F32:$sx), (ins MEMri:$addr),
     "ldu $sx, $addr",
-    [/* FIXME: load into only upper part of $sx here
-     (set i32:$sx, (load ADDRri:$addr)) */]>;
+    [(set f32:$sx, (load ADDRri:$addr))]>;
 let cx = 0 in
 def LDLri : RM<
     0x03, (outs I32:$sx), (ins MEMri:$addr),
@@ -896,57 +894,51 @@ def LDLUri : RM<
     [(set i32:$sx, (load ADDRri:$addr))]>;
 let cx = 0 in
 def LD2Bri : RM<
-    0x04, (outs I16:$sx), (ins MEMri:$addr),
+    0x04, (outs I32:$sx), (ins MEMri:$addr),
     "ld2b.sx $sx, $addr",
-    [(set i16:$sx, (load ADDRri:$addr))]>;
+    [(set i32:$sx, (sextloadi16 ADDRri:$addr))]>;
 let cx = 1 in
 def LD2BUri : RM<
-    0x04, (outs I16:$sx), (ins MEMri:$addr),
+    0x04, (outs I32:$sx), (ins MEMri:$addr),
     "ld2b.zx $sx, $addr",
-    [(set i16:$sx, (load ADDRri:$addr))]>;
+    [(set i32:$sx, (zextloadi16 ADDRri:$addr))]>;
 let cx = 0 in
 def LD1Bri : RM<
-    0x05, (outs I8:$sx), (ins MEMri:$addr),
+    0x05, (outs I32:$sx), (ins MEMri:$addr),
     "ld1b.sx $sx, $addr",
-    [(set i8:$sx, (load ADDRri:$addr))]>;
+    [(set i32:$sx, (sextloadi8 ADDRri:$addr))]>;
 let cx = 1 in
 def LD1BUri : RM<
-    0x05, (outs I8:$sx), (ins MEMri:$addr),
+    0x05, (outs I32:$sx), (ins MEMri:$addr),
     "ld1b.zx $sx, $addr",
-    [(set i8:$sx, (load ADDRri:$addr))]>;
+    [(set i32:$sx, (zextloadi8 ADDRri:$addr))]>;
 }
 
 let cx = 0, cy = 0, sy = 0, cz = 1, mayStore = 1 in {
 def STSri : RM<
     0x11, (outs), (ins MEMri:$addr, I64:$sx),
     "st $sx, $addr",
-    []>;
-    //[(store f64:$sx, ADDRri:$addr), (store i64:$sx, ADDRri:$addr)]>; // why don't work?
+    [(store i64:$sx, ADDRri:$addr)]>;
 def STUri : RM<
-    0x12, (outs), (ins MEMri:$addr, I32:$sx),
+    0x12, (outs), (ins MEMri:$addr, F32:$sx),
     "stu $sx, $addr",
-    [/* FIXME: store only upper part of $sx here
-     (store i32:$sx, ADDRri:$addr) */]>;
+    [(store f32:$sx, ADDRri:$addr)]>;
 def STLri : RM<
     0x13, (outs), (ins MEMri:$addr, I32:$sx),
     "stl $sx, $addr",
     [(store i32:$sx, ADDRri:$addr)]>;
 def ST2Bri : RM<
-    0x14, (outs), (ins MEMri:$addr, I16:$sx),
+    0x14, (outs), (ins MEMri:$addr, I32:$sx),
     "st2b $sx, $addr",
-    [(store i16:$sx, ADDRri:$addr)]>;
+    [(truncstorei16 i32:$sx, ADDRri:$addr)]>;
 def ST1Bri : RM<
-    0x15, (outs), (ins MEMri:$addr, I8:$sx),
+    0x15, (outs), (ins MEMri:$addr, I32:$sx),
     "st1b $sx, $addr",
-    [(store i8:$sx, ADDRri:$addr)]>;
+    [(truncstorei8 i32:$sx, ADDRri:$addr)]>;
 }
 
 def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
-def : Pat<(i64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
-def : Pat<(f32 (load ADDRri:$addr)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDUri ADDRri:$addr), sub_i32), sub_f32)>;
-def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, f64:$sx)>;
-def : Pat<(store i64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, i64:$sx)>;
-def : Pat<(store f32:$sx, ADDRri:$addr), (STUri ADDRri:$addr, (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:$sx, sub_f32), sub_i32))>;
+def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, $sx)>;
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
@@ -1173,15 +1165,6 @@ def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
 // sextload and zextload stuff
-def : Pat<(i32 (sextloadi8 ADDRri:$addr)),
-          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD1Bri MEMri:$addr), sub_i8)>;
-def : Pat<(i32 (zextloadi8 ADDRri:$addr)),
-          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD1BUri MEMri:$addr), sub_i8)>;
-def : Pat<(i32 (sextloadi16 ADDRri:$addr)),
-          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD2Bri MEMri:$addr), sub_i16)>;
-def : Pat<(i32 (zextloadi16 ADDRri:$addr)),
-          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i16)>;
-
 def : Pat<(i64 (sextloadi16 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2Bri MEMri:$addr), sub_i16)>;
 def : Pat<(i64 (zextloadi16 ADDRri:$addr)),
@@ -1190,11 +1173,14 @@ def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32)>;
-
 def : Pat<(i64 (extloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 
 // truncstore
+def : Pat<(truncstorei8 i64:$src, ADDRri:$addr),
+          (ST1Bri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei16 i64:$src, ADDRri:$addr),
+          (ST2Bri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 def : Pat<(truncstorei32 i64:$src, ADDRri:$addr),
           (STLri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 
