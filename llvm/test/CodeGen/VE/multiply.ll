@@ -4,8 +4,8 @@ define dso_local signext i8 @func1(i8 signext, i8 signext) local_unnamed_addr #0
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, %s1, %s0
-; CHECK-NEXT:    sll %s34, %s34, 56
-; CHECK-NEXT:    sra.l %s0, %s34, 56
+; CHECK-NEXT:    sla.w.sx %s34, %s34, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 24
   %3 = mul i8 %1, %0
   ret i8 %3
 }
@@ -14,8 +14,8 @@ define dso_local signext i16 @func2(i16 signext, i16 signext) local_unnamed_addr
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, %s1, %s0
-; CHECK-NEXT:    sll %s34, %s34, 48
-; CHECK-NEXT:    sra.l %s0, %s34, 48
+; CHECK-NEXT:    sla.w.sx %s34, %s34, 16
+; CHECK-NEXT:    sra.w.sx %s0, %s34, 16
   %3 = mul i16 %1, %0
   ret i16 %3
 }
