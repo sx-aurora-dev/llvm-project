@@ -708,7 +708,7 @@ defm LEASL32 : RMm<"lea.sl", 0x06, add, I32, i32, simm7Op32, simm32Op32>;
 let cx = 0, cy = 1, cz = 0, sz = 0 in {
   def LEAasx : RM<
       0x06, (outs I64:$sx), (ins MEMri:$addr),
-      "lea $sx,$addr", []>;
+      "lea $sx,$addr", [(set iPTR:$sx, ADDRri:$addr)]>;
 }
 
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
