@@ -15,6 +15,7 @@ However, following items are not implemented yet.
 
  - function call passing arguments through stack
  - division, reminder calculations
+ - automatic vectorization is no supported yet.
 
 Please file issues if you have problems.
 
@@ -35,6 +36,18 @@ Then, compile it with ninja.
     $ cmake3 -G Ninja -DCMAKE_BUILD_TYPE="Release" \
       -DLLVM_TARGETS_TO_BUILD="VE" ../llvm
     $ ninja-build
+
+Use it from clang like:
+
+    $ clang -target ve -O3 -fno-vectorize -fno-slp-vectorize \
+      -fno-crash-diagnostics -c ...
+
+ - Clang without -O3 may cause internal compiler errors.  Adding -O3 option
+   will solve this problem.
+ - Clang with -O3 may cause vectorization related errors.  Adding
+   "-fno-vectorize -fno-slp-vectorize" options will solve this problem.
+ - -fno-crash-diagnostics avoid generating diagnostics which contain
+   compiling source codes.
 
 Please see the documentation provided in docs/ for further
 assistance with LLVM.
