@@ -1491,7 +1491,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // Expands to [SU]MUL_LOHI.
   setOperationAction(ISD::MULHU,     MVT::i32, Expand);
   setOperationAction(ISD::MULHS,     MVT::i32, Expand);
-  setOperationAction(ISD::MUL,       MVT::i32, Expand);
+  //setOperationAction(ISD::MUL,       MVT::i32, Expand);
 
 #if 0
   if (Subtarget->useSoftMulDiv()) {
