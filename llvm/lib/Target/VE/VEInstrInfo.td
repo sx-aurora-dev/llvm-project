@@ -745,8 +745,21 @@ defm SBSU : RRNDm<"subs.w.zx", 0x5A, sub, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 0 in
 defm SBX : RRm<"subs.l", 0x5B, sub, I64, i64, simm7Op64, uimm6Op64>;
 
-// MPY instruction (mul u64)
-defm MPY : RRm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
+// MPY instruction
+let cx = 0 in
+defm MPY : RRNDm<"mulu.l", 0x49, mul, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 1 in
+defm MPYUW : RRNDm<"mulu.w", 0x49, mul, I32, i32, simm7Op32, uimm6Op32>;
+
+// MPS instruction
+let cx = 0 in
+defm MPS : RRm<"muls.w.sx", 0x4B, mul, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 1 in
+defm MPSU : RRNDm<"muls.w.zx", 0x4B, mul, I32, i32, simm7Op32, uimm6Op32>;
+
+// MPX instruction
+let cx = 0 in
+defm MPX : RRm<"muls.l", 0x6E, mul, I64, i64, simm7Op64, uimm6Op64>;
 
 // DIV
 
