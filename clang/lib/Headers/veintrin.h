@@ -40,14 +40,6 @@ enum CondCodes {
 
 #define _ve_lvl(l) __builtin_ve_lvl(l)
 
-// deprecated
-#define _ve_vld(p, s) __builtin_ve_vld_vss(s, p)
-#define _ve_vldu(p, s) __builtin_ve_vldu_vss(s, p)
-#define _ve_vldl(p, s) __builtin_ve_vldlsx_vss(p, s)
-#define _ve_vst(p, v, s) __builtin_ve_vst_vss(v, s, p)
-#define _ve_vstu(p, v, s) __builtin_ve_vstu_vss(v, s, p)
-#define _ve_vstl(p, v, s) __builtin_ve_vstl_vss(v, s, p)
-
 #define _ve_lvm_MMss __builtin_ve_lvm_MMss
 #define _ve_svm_sMs __builtin_ve_svm_sMs
 
