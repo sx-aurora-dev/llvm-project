@@ -1343,8 +1343,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // VE doesn't have i1 sign extending load
-  for (MVT VT : MVT::integer_valuetypes())
+  for (MVT VT : MVT::integer_valuetypes()) {
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
+    setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
+    setLoadExtAction(ISD::EXTLOAD,  VT, MVT::i1, Promote);
+    setTruncStoreAction(MVT::i64, MVT::i1, Expand);
+  }
 
   // Turn FP truncstore into trunc + store.
   setTruncStoreAction(MVT::f64, MVT::f32, Expand);

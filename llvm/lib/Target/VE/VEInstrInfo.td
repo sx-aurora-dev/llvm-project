@@ -1189,6 +1189,10 @@ def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
 def : Pat<(i64 (extloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 
+// anyextload
+def : Pat<(extloadi8  ADDRri:$addr), (LD1BUri MEMri:$addr)>;
+def : Pat<(extloadi16 ADDRri:$addr), (LD2BUri MEMri:$addr)>;
+
 // truncstore
 def : Pat<(truncstorei8 i64:$src, ADDRri:$addr),
           (ST1Bri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
