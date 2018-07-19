@@ -144,7 +144,7 @@ def nxv8f64  : ValueType<512, 114>; // n x  8 x f64 vector value
 def v256i32 : ValueType<8192, 55>; // 256 x i32 vector value
 def v256i64 : ValueType<16384, 56>; // 256 x i64 vector value
 def v512i32 : ValueType<16384, 57>; // 512 x i32 vector value
-def v256f32 : ValueType<8192, 108>; // 256 x f32 vector value
+def v256f32 : ValueType<8192,  100>; // 256 x f32 vector value
 def v256f64 : ValueType<16384, 101>; // 256 x f64 vector value
 def v512f32 : ValueType<16384, 102>; // 512 x f32 vector value
 
