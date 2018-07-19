@@ -29,6 +29,6 @@ has_asmprinter = 1
 type = Library
 name = VECodeGen
 parent = VE
-required_libraries = AsmPrinter CodeGen Core MC SelectionDAG VEAsmPrinter
+required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG VEAsmPrinter
                      VEDesc VEInfo Support Target
 add_to_library_groups = VE
