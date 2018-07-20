@@ -1146,6 +1146,9 @@ def : Pat<(i32 (fp_to_uint f64:$sy)),
           (EXTRACT_SUBREG (ANDrm0 (FIXXr f64:$sy), 32), sub_i32)>;
 
 // Cast to i64
+def : Pat<(sext_inreg I64:$src, i32),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+            (ADSrm1 (EXTRACT_SUBREG $src, sub_i32), 0), sub_i32)>;
 def : Pat<(i64 (sext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSrm1 $sy, 0), sub_i32)>;
 def : Pat<(i64 (zext i32:$sy)),
