@@ -31,6 +31,9 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   ZeroDirective = nullptr;
   Data32bitsDirective = "\t.word\t";
 
+  // Uses '.section' before '.bss' directive
+  UsesELFSectionDirectiveForBSS = true;
+
   // ExceptionsType = ExceptionHandling::DwarfCFI;
   // SupportsDebugInformation = true;
   // SunStyleELFSectionSwitchSyntax = true;
