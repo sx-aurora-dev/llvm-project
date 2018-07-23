@@ -3339,15 +3339,3 @@ void VETargetLowering::insertSSPDeclarations(Module &M) const {
   if (!Subtarget->isTargetLinux())
     return TargetLowering::insertSSPDeclarations(M);
 }
-
-void VETargetLowering::finalizeLowering(MachineFunction &MF) const {
-#if 0
-  for (auto &MBB : MF) {
-      LivePhysRegs LiveRegs;
-      computeAndAddLiveIns(LiveRegs, MBB);
-  }
-#endif
-  for (auto &MBB : MF)
-      MBB.addLiveIn(VE::VL);
-  TargetLoweringBase::finalizeLowering(MF);
-}
