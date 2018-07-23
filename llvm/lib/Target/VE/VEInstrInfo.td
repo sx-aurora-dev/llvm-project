@@ -761,7 +761,21 @@ defm MPSU : RRNDm<"muls.w.zx", 0x4B, mul, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 0 in
 defm MPX : RRm<"muls.l", 0x6E, mul, I64, i64, simm7Op64, uimm6Op64>;
 
-// DIV
+// DIV instruction
+let cx = 0 in
+defm DIV : RRm<"divu.l", 0x6F, udiv, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 1 in
+defm DIVUW : RRm<"divu.w", 0x6F, udiv, I32, i32, simm7Op32, uimm6Op32>;
+
+// DVS instruction
+let cx = 0 in
+defm DVS : RRm<"divs.w.sx", 0x7B, sdiv, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 1 in
+defm DVSU : RRNDm<"divs.w.zx", 0x7B, sdiv, I32, i32, simm7Op32, uimm6Op32>;
+
+// DVX instruction
+let cx = 0 in
+defm DVX : RRm<"divs.l", 0x7F, sdiv, I64, i64, simm7Op64, uimm6Op64>;
 
 // CMP instruction
 let cx = 0 in
