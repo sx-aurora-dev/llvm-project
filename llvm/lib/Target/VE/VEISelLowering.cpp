@@ -1362,17 +1362,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BlockAddress, PtrVT, Custom);
 
   // VE has no REM or DIVREM operations.
-  setOperationAction(ISD::UREM, MVT::i32, Expand);
-  setOperationAction(ISD::SREM, MVT::i32, Expand);
-  setOperationAction(ISD::SDIVREM, MVT::i32, Expand);
-  setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
-
-  // ... nor does VE
-  if (1) {
-    setOperationAction(ISD::UREM, MVT::i64, Expand);
-    setOperationAction(ISD::SREM, MVT::i64, Expand);
-    setOperationAction(ISD::SDIVREM, MVT::i64, Expand);
-    setOperationAction(ISD::UDIVREM, MVT::i64, Expand);
+  for (MVT VT : MVT::integer_valuetypes()) {
+    setOperationAction(ISD::UREM, VT, Expand);
+    setOperationAction(ISD::SREM, VT, Expand);
+    setOperationAction(ISD::SDIVREM, VT, Expand);
+    setOperationAction(ISD::UDIVREM, VT, Expand);
   }
 
   // Custom expand fp<->sint
