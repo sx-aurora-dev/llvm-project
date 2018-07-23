@@ -737,7 +737,7 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   BB->addSuccessor(syscallMBB);
   BB->addSuccessor(sinkMBB);
   BuildMI(BB, dl, TII.get(VE::BCRLrr))
-      .addImm(5)
+      .addImm(VECC::CC_IGE)
       .addReg(VE::SX11)                          // %sp
       .addReg(VE::SX8)                           // %sl
       .addMBB(sinkMBB);
