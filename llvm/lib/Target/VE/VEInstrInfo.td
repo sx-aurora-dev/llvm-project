@@ -82,16 +82,16 @@ def icond2cc : SDNodeXForm<cond, [{
   VECC::CondCodes cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown integer condition code!");
-  case ISD::SETEQ:  cc = VECC::CC_EQ; break;
-  case ISD::SETNE:  cc = VECC::CC_NE; break;
-  case ISD::SETLT:  cc = VECC::CC_L;  break;
-  case ISD::SETGT:  cc = VECC::CC_G;  break;
-  case ISD::SETLE:  cc = VECC::CC_LE; break;
-  case ISD::SETGE:  cc = VECC::CC_GE; break;
-  case ISD::SETULT: cc = VECC::CC_L;  break;
-  case ISD::SETULE: cc = VECC::CC_LE; break;
-  case ISD::SETUGT: cc = VECC::CC_G;  break;
-  case ISD::SETUGE: cc = VECC::CC_GE; break;
+  case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
+  case ISD::SETNE:  cc = VECC::CC_INE; break;
+  case ISD::SETLT:  cc = VECC::CC_IL;  break;
+  case ISD::SETGT:  cc = VECC::CC_IG;  break;
+  case ISD::SETLE:  cc = VECC::CC_ILE; break;
+  case ISD::SETGE:  cc = VECC::CC_IGE; break;
+  case ISD::SETULT: cc = VECC::CC_IL;  break;
+  case ISD::SETULE: cc = VECC::CC_ILE; break;
+  case ISD::SETUGT: cc = VECC::CC_IG;  break;
+  case ISD::SETUGE: cc = VECC::CC_IGE; break;
   }
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
@@ -232,22 +232,28 @@ def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
 // Note that these values must be kept in sync with the CCOp::CondCode enum
 // values.
 class CC_VAL<int N> : PatLeaf<(i32 N)>;
-def CC_AF    : CC_VAL< 0>;  // Always false
-def CC_G     : CC_VAL< 1>;  // Greater
-def CC_L     : CC_VAL< 2>;  // Less
-def CC_NE    : CC_VAL< 3>;  // Not Equal
-def CC_EQ    : CC_VAL< 4>;  // Equal
-def CC_GE    : CC_VAL< 5>;  // Greater or Equal
-def CC_LE    : CC_VAL< 6>;  // Less or Equal
-def CC_NUM   : CC_VAL< 7>;  // Number
-def CC_NAN   : CC_VAL< 8>;  // NaN
-def CC_GNAN  : CC_VAL< 9>;  // Greater or NaN
-def CC_LNAN  : CC_VAL<10>;  // Less or NaN
-def CC_NENAN : CC_VAL<11>;  // Not Equal or NaN
-def CC_EQNAN : CC_VAL<12>;  // Equal or NaN
-def CC_GENAN : CC_VAL<13>;  // Greater or Equal or NaN
-def CC_LENAN : CC_VAL<14>;  // Less or Equal or NaN
-def CC_AT    : CC_VAL<15>;  // Always true
+def CC_IG    : CC_VAL< 0>;  // Greater
+def CC_IL    : CC_VAL< 1>;  // Less
+def CC_INE   : CC_VAL< 2>;  // Not Equal
+def CC_IEQ   : CC_VAL< 3>;  // Equal
+def CC_IGE   : CC_VAL< 4>;  // Greater or Equal
+def CC_ILE   : CC_VAL< 5>;  // Less or Equal
+def CC_AF    : CC_VAL< 6>;  // Always false
+def CC_G     : CC_VAL< 7>;  // Greater
+def CC_L     : CC_VAL< 8>;  // Less
+def CC_NE    : CC_VAL< 9>;  // Not Equal
+def CC_EQ    : CC_VAL<10>;  // Equal
+def CC_GE    : CC_VAL<11>;  // Greater or Equal
+def CC_LE    : CC_VAL<12>;  // Less or Equal
+def CC_NUM   : CC_VAL<13>;  // Number
+def CC_NAN   : CC_VAL<14>;  // NaN
+def CC_GNAN  : CC_VAL<15>;  // Greater or NaN
+def CC_LNAN  : CC_VAL<16>;  // Less or NaN
+def CC_NENAN : CC_VAL<17>;  // Not Equal or NaN
+def CC_EQNAN : CC_VAL<18>;  // Equal or NaN
+def CC_GENAN : CC_VAL<19>;  // Greater or Equal or NaN
+def CC_LENAN : CC_VAL<20>;  // Less or Equal or NaN
+def CC_AT    : CC_VAL<21>;  // Always true
 
 //===----------------------------------------------------------------------===//
 // VE Multiclasses for common instruction formats
@@ -619,33 +625,57 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
 
 
 // Branch multiclass
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
-  isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
-multiclass BCRm {
+let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
+                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def rr : CF<
-    0x18, (outs),
-    (ins CCOp:$cf, I64:$sy, I64:$sz, brtarget32:$imm32),
-    "br${cf}.l $sy, $sz, $imm32", []> {
+    opc, (outs),
+    (ins CCOp:$cf, RC:$sy, RC:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, $sz, $imm32"), []> {
     let cy = 1;
     let cz = 1;
   }
-//  def ri : CF<
-//    0x18, (outs),
-//    (ins CCOp:$cf, I64:$sz, i64imm:$sy, brtarget32:$imm32),
-//    "br${cf}.l $sy, $sz, $imm32", []> {
-//    let cy = 0;
-//    let cz = 1;
-//  }
   def ir : CF<
-    0x18, (outs),
-    (ins CCOp:$cf, i64imm:$sy, I64:$sz, brtarget32:$imm32),
-    "br${cf}.l $sy, $sz, $imm32", []> {
+    opc, (outs),
+    (ins CCOp:$cf, immOp:$sy, RC:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, $sz, $imm32"), []> {
     let cy = 0;
     let cz = 1;
   }
+  def rm0 : CF<
+    opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, (${sz})0, $imm32"), []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
+  }
+  def rm1 : CF<
+    opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, (${sz})1, $imm32"), []> {
+    let cy = 1;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+  def im0 : CF<
+    opc, (outs), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, (${sz})0, $imm32"), []> {
+    let cy = 0;
+    let cz = 0;
+    let sz{6} = 1;
+    let hasSideEffects = 0;
+  }
+  def im1 : CF<
+    opc, (outs), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, (${sz})1, $imm32"), []> {
+    let cy = 0;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
   def a : CF<
-    0x18, (outs), (ins brtarget32:$imm32),
-    "br.l $imm32", []> {
+    opc, (outs), (ins brtarget32:$imm32),
+    !strconcat(opcStrAt, " $imm32"), []> {
     let cy = 0;
     let sy = 0;
     let cz = 0;
@@ -1005,7 +1035,14 @@ def RET : CF<
     [(retflag)]>;
 
 // Branch instruction
-defm BCR : BCRm;
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */ in
+defm BCRL : BCRm<"br.${cf}.l", "br.l", 0x18, I64, i64, simm7Op64, uimm6Op64>;
+let cx = 1, cx2 = 0, bpf = 0 /* NONE */ in
+defm BCRW : BCRm<"br.${cf}.w", "br.w", 0x18, I32, i32, simm7Op32, uimm6Op32>;
+let cx = 0, cx2 = 1, bpf = 0 /* NONE */ in
+defm BCRD : BCRm<"br.${cf}.d", "br.d", 0x18, I64, f64, simm7Op64, uimm6Op64>;
+let cx = 1, cx2 = 1, bpf = 0 /* NONE */ in
+defm BCRS : BCRm<"br.${cf}.s", "br.s", 0x18, F32, f32, simm7Op32, uimm6Op32>;
 
 // Load and Store host memory instructions
 let cx = 0, cy = 0, cz = 1 in {
@@ -1252,22 +1289,22 @@ def : Pat<(call i64:$dst),
           (CALLr i64:$dst)>;
 
 // Branches
-def : Pat<(br bb:$addr), (BCRa bb:$addr)>;
-//def : Pat<(brcc cond:$cond, i32:$lhs, simm7:$rhs, bb:$addr),
-//          (BCRri (icond2cc $cond),
-//                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $lhs, sub_i32),
-//                 (i64 (sext_imm $rhs)), bb:$addr)>;
-def : Pat<(brcc cond:$cond, simm7:$lhs, i32:$rhs, bb:$addr),
-          (BCRir (icond2cc $cond), (i64 (sext_imm $lhs)), 
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $rhs, sub_i32),
-                 bb:$addr)>;
-def : Pat<(brcc cond:$cond, i32:$lhs, i32:$rhs, bb:$addr),
-          (BCRrr (icond2cc $cond),
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $lhs, sub_i32),
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $rhs, sub_i32),
-                 bb:$addr)>;
-def : Pat<(brcc cond:$cond, i64:$lhs, i64:$rhs, bb:$addr),
-          (BCRrr (icond2cc $cond), $lhs, $rhs, bb:$addr)>;
+def : Pat<(br bb:$addr), (BCRLa bb:$addr)>;
+
+// selectcc for i64 result
+def : Pat<(brcc CCSIOp:$cond, i32:$l, i32:$r, bb:$addr),
+          (BCRWrr (icond2cc $cond), $l, $r, bb:$addr)>;
+def : Pat<(brcc CCUIOp:$cond, i32:$l, i32:$r, bb:$addr),
+          (BCRWir (icond2cc $cond), 0, (CMPUWrr $r, $l), bb:$addr)>;
+def : Pat<(brcc CCSIOp:$cond, i64:$l, i64:$r, bb:$addr),
+          (BCRLrr (icond2cc $cond), $l, $r, bb:$addr)>;
+def : Pat<(brcc CCUIOp:$cond, i64:$l, i64:$r, bb:$addr),
+          (BCRLir (icond2cc $cond), 0, (CMPrr $r, $l), bb:$addr)>;
+def : Pat<(brcc cond:$cond, f32:$l, f32:$r, bb:$addr),
+          (BCRSrr (fcond2cc $cond), $l, $r, bb:$addr)>;
+def : Pat<(brcc cond:$cond, f64:$l, f64:$r, bb:$addr),
+          (BCRDrr (fcond2cc $cond), $l, $r, bb:$addr)>;
+
 
 def : Pat<(i32 (bitconvert f32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_f32), sub_i32)>;
 def : Pat<(f32 (bitconvert i32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_i32), sub_f32)>;
@@ -1509,21 +1546,21 @@ def : Pat<(f32 (selectcc f64:$l, f64:$r, f32:$t, f32:$f, cond:$cond)),
 //   CMOV.w.ne %res, %tval, %tmp  ; set tval if %tmp is true
 
 def : Pat<(i64 (select i32:$pred, i64:$t, i64:$f)),
-          (CMOVWrr CC_NE, $pred, $t, $f)>;
+          (CMOVWrr CC_INE, $pred, $t, $f)>;
 
 def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
           (EXTRACT_SUBREG
-              (CMOVWrr CC_NE, $pred,
+              (CMOVWrr CC_INE, $pred,
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
               sub_i32)>;
 
 def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
-          (CMOVWrr CC_NE, $pred, $t, $f)>;
+          (CMOVWrr CC_INE, $pred, $t, $f)>;
 
 def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
           (EXTRACT_SUBREG
-            (CMOVWrr CC_NE, $pred,
+            (CMOVWrr CC_INE, $pred,
                      (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_f32),
                      (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
             sub_f32)>;
