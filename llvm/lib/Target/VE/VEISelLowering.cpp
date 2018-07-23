@@ -1386,11 +1386,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 #endif
 
   // VE doesn't have BRCOND either, it has BR_CC.
-  for (MVT VT : MVT::all_valuetypes()) {
-    setOperationAction(ISD::BRCOND, VT, Expand);
-    setOperationAction(ISD::BRIND,  VT, Expand);
-    setOperationAction(ISD::BR_JT,  VT, Expand);
-  }
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+
+  // BRIND/BR_JT are not implemented yet.
+  setOperationAction(ISD::BRIND,  MVT::Other, Expand);
+  setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
 
 #if 0
   // Should we use EmitInstrWithCustomInserter()?  Not sure atm.

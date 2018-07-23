@@ -238,22 +238,18 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
                                       int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
-#if 0
-  assert((Cond.size() == 1 || Cond.size() == 0) &&
-         "VE branch conditions should have one component!");
-#endif
+  assert((Cond.size() == 3 || Cond.size() == 0) &&
+         "VE branch conditions should have three component!");
   assert(!BytesAdded && "code size not handled");
   if (Cond.empty()) {
+    // Uncondition branch
     assert(!FBB && "Unconditional branch with multiple successors!");
     BuildMI(&MBB, DL, get(VE::BCRLa)).addMBB(TBB);
     return 1;
   }
 
   // Conditional branch
-
-  assert(Cond.size() == 3 && "Cond.size() == 3 is only implemented");
-
-  // (BCRir CC sy sz addr)
+  //   (BCRir CC sy sz addr)
 
   assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
 
@@ -293,8 +289,6 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
     return 1;
   BuildMI(&MBB, DL, get(VE::BCRLa)).addMBB(FBB);
   return 2;
-
-  //report_fatal_error("insertBranch is not implemented yet");
 }
 
 unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
