@@ -1566,6 +1566,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
+  // TRAP to expand (which turns it into abort).
+  setOperationAction(ISD::TRAP, MVT::Other, Expand);
+
+  // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
+  // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
+  setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
+
   // Set function alignment to 16 bytes (4 bits)
   setMinFunctionAlignment(4);
 
