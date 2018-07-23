@@ -1036,13 +1036,13 @@ def RET : CF<
 
 // Branch instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRL : BCRm<"br.${cf}.l", "br.l", 0x18, I64, i64, simm7Op64, uimm6Op64>;
+defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRW : BCRm<"br.${cf}.w", "br.w", 0x18, I32, i32, simm7Op32, uimm6Op32>;
+defm BCRW : BCRm<"br${cf}.w", "br.w", 0x18, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 0, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRD : BCRm<"br.${cf}.d", "br.d", 0x18, I64, f64, simm7Op64, uimm6Op64>;
+defm BCRD : BCRm<"br${cf}.d", "br.d", 0x18, I64, f64, simm7Op64, uimm6Op64>;
 let cx = 1, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRS : BCRm<"br.${cf}.s", "br.s", 0x18, F32, f32, simm7Op32, uimm6Op32>;
+defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32, uimm6Op32>;
 
 // Load and Store host memory instructions
 let cx = 0, cy = 0, cz = 1 in {
