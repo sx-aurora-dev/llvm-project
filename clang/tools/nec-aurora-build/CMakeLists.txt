@@ -3,8 +3,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   project("NEC Aurora Offloading Build Wrapper Tools" CXX)
 endif()
 
-
-
 option(NECAURORA_USE_TOOLCHAIN_WRAPPERS
        "build and install executable wrapper around ncc/gcc for easy switching"
        OFF)
@@ -19,6 +17,7 @@ if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK AND
   message(SEND_ERROR "Options: INSTALL_TOOLCHAIN_SYMLINK and USE_TOOLCHAIN_WRAPPERS are mutually exclusive" )
 endif()
 
+# TODO: Make this more dynamically
 set(NECAURORA_TARGET_COMPILER "/opt/nec/ve/bin/ncc" CACHE FILEPATH "")
 
 if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK)
@@ -40,19 +39,20 @@ endif()
 install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
 
 if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
-    install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
-    install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
-                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
-
-    install_symlink(${CMAKE_INSTALL_PREFIX}/bin/necaurora-ofld-tool-wrapper
-                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
+  install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
+  add_clang_symlink(necaurora-linker-wrapper necaurora-ofld-tool-wrapper)
+  add_clang_symlink(necaurora-asm-wrapper necaurora-ofld-tool-wrapper)
 endif()
 
 
-if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK)#
+if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK)
     install_symlink(${NECAURORA_TOOLCHAIN_SYMLINK_PATH}
                     ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
 
     install_symlink(${NECAURORA_TOOLCHAIN_SYMLINK_PATH}
                     ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
+#  TODO: This clang method to create symlinks does not work, 
+#        because the ncc compiler is not a target
+#  add_clang_symlink(necaurora-linker-wrapper ${NECAURORA_TOOLCHAIN_SYMLINK_PATH})
+#  add_clang_symlink(necaurora-asm-wrapper ${NECAURORA_TOOLCHAIN_SYMLINK_PATH})
 endif()
