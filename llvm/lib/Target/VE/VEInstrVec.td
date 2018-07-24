@@ -642,8 +642,10 @@ defm VDVXl : RV3DIVBYSm<"vdivs.l", 0xFB, I64, VM, simm7Op64>;
 defm VCMP : RVUm<"vcmpu", 0xB9>;
 defm VCPS : RVWm<"vcmps", 0xFA>;
 defm VCPX : RVLm<"vcmps", 0xBA>;
-// CMS
-// CMX
+let cs2 = 0 in defm VCMSa : RVWm<"vmaxs", 0x8A>;
+let cs2 = 1 in defm VCMSi : RVWm<"vmaxs", 0x8A>;
+let cs2 = 0 in defm VCMXa : RVLm<"vmaxs", 0x9A>;
+let cs2 = 1 in defm VCMXi : RVLm<"vmins", 0x9A>;
 
 // 5.3.2.9. Vector Logical Arithmetic Operation Instructions
 defm VAND : RVLOGm<"vand", 0xC4>;
