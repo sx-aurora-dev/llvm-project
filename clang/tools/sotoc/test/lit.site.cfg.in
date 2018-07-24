@@ -1,0 +1,9 @@
+@AUTO_GEN_COMMENT@
+
+config.test_compiler = '@SOTOC_TEST_COMPILER@'
+config.test_sotoc = '@SOTOC_EXECUTABLE@'
+config.sotoc_obj_root = '@SOTOC_OBJ_ROOT@'
+
+# Let the main config do the real work.
+lit_config.load_config(config, '@SOTOC_TEST_DIR@/lit.cfg')
+
