@@ -1449,27 +1449,34 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setLibcallName(RTLIB::SRA_I128, nullptr);
   }
 
-  if (!1) {
-    // VEV8 does not have FNEGD and FABSD.
-    setOperationAction(ISD::FNEG, MVT::f64, Custom);
-    setOperationAction(ISD::FABS, MVT::f64, Custom);
+  for (MVT VT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FMA, VT, Legal);
+    setOperationAction(ISD::FREM, VT, Expand);
+    setOperationAction(ISD::FNEG, VT, Expand);
+    setOperationAction(ISD::FABS, VT, Expand);
+    setOperationAction(ISD::FSQRT, VT, Expand);
+    setOperationAction(ISD::FSIN, VT, Expand);
+    setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FPOWI, VT, Expand);
+    setOperationAction(ISD::FPOW, VT, Expand);
+    setOperationAction(ISD::FLOG, VT, Expand);
+    setOperationAction(ISD::FLOG2, VT, Expand);
+    setOperationAction(ISD::FLOG10, VT, Expand);
+    setOperationAction(ISD::FEXP, VT, Expand);
+    setOperationAction(ISD::FEXP2, VT, Expand);
+    setOperationAction(ISD::FCEIL, VT, Expand);
+    setOperationAction(ISD::FTRUNC, VT, Expand);
+    setOperationAction(ISD::FRINT, VT, Expand);
+    setOperationAction(ISD::FNEARBYINT, VT, Expand);
+    setOperationAction(ISD::FROUND, VT, Expand);
+    setOperationAction(ISD::FFLOOR, VT, Expand);
+    setOperationAction(ISD::FMINNUM, VT, Expand);
+    setOperationAction(ISD::FMAXNUM, VT, Expand);
+    setOperationAction(ISD::FMINNAN, VT, Expand);
+    setOperationAction(ISD::FMAXNAN, VT, Expand);
+    setOperationAction(ISD::FSINCOS, VT, Expand);
   }
 
-  setOperationAction(ISD::FSIN , MVT::f128, Expand);
-  setOperationAction(ISD::FCOS , MVT::f128, Expand);
-  setOperationAction(ISD::FSINCOS, MVT::f128, Expand);
-  setOperationAction(ISD::FREM , MVT::f128, Expand);
-  setOperationAction(ISD::FMA  , MVT::f128, Expand);
-  setOperationAction(ISD::FSIN , MVT::f64, Expand);
-  setOperationAction(ISD::FCOS , MVT::f64, Expand);
-  setOperationAction(ISD::FSINCOS, MVT::f64, Expand);
-  setOperationAction(ISD::FREM , MVT::f64, Expand);
-  setOperationAction(ISD::FMA  , MVT::f64, Expand);
-  setOperationAction(ISD::FSIN , MVT::f32, Expand);
-  setOperationAction(ISD::FCOS , MVT::f32, Expand);
-  setOperationAction(ISD::FSINCOS, MVT::f32, Expand);
-  setOperationAction(ISD::FREM , MVT::f32, Expand);
-  setOperationAction(ISD::FMA  , MVT::f32, Expand);
   setOperationAction(ISD::CTTZ , MVT::i32, Expand);
   setOperationAction(ISD::CTLZ , MVT::i32, Expand);
   setOperationAction(ISD::ROTL , MVT::i32, Expand);
@@ -1478,9 +1485,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FCOPYSIGN, MVT::f128, Expand);
   setOperationAction(ISD::FCOPYSIGN, MVT::f64, Expand);
   setOperationAction(ISD::FCOPYSIGN, MVT::f32, Expand);
-  setOperationAction(ISD::FPOW , MVT::f128, Expand);
-  setOperationAction(ISD::FPOW , MVT::f64, Expand);
-  setOperationAction(ISD::FPOW , MVT::f32, Expand);
 
   setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
@@ -1548,8 +1552,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FSQRT, MVT::f128, Legal);
   setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
   setOperationAction(ISD::FP_ROUND,  MVT::f64, Legal);
-  setOperationAction(ISD::FNEG, MVT::f128, Legal);
-  setOperationAction(ISD::FABS, MVT::f128, Legal);
 
 #if 0
   if (Subtarget->fixAllFDIVSQRT()) {
@@ -2358,39 +2360,6 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
 }
 
 #if 0
-static SDValue LowerF64Op(SDValue SrcReg64, const SDLoc &dl, SelectionDAG &DAG,
-                          unsigned opcode) {
-  assert(SrcReg64.getValueType() == MVT::f64 && "LowerF64Op called on non-double!");
-  assert(opcode == ISD::FNEG || opcode == ISD::FABS);
-
-  // Lower fneg/fabs on f64 to fneg/fabs on f32.
-  // fneg f64 => fneg f32:sub_even, fmov f32:sub_odd.
-  // fabs f64 => fabs f32:sub_even, fmov f32:sub_odd.
-
-  // Note: in little-endian, the floating-point value is stored in the
-  // registers are in the opposite order, so the subreg with the sign
-  // bit is the highest-numbered (odd), rather than the
-  // lowest-numbered (even).
-
-  SDValue Hi32 = DAG.getTargetExtractSubreg(VE::sub_even, dl, MVT::f32,
-                                            SrcReg64);
-  SDValue Lo32 = DAG.getTargetExtractSubreg(VE::sub_odd, dl, MVT::f32,
-                                            SrcReg64);
-
-  if (DAG.getDataLayout().isLittleEndian())
-    Lo32 = DAG.getNode(opcode, dl, MVT::f32, Lo32);
-  else
-    Hi32 = DAG.getNode(opcode, dl, MVT::f32, Hi32);
-
-  SDValue DstReg64 = SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
-                                                dl, MVT::f64), 0);
-  DstReg64 = DAG.getTargetInsertSubreg(VE::sub_even, dl, MVT::f64,
-                                       DstReg64, Hi32);
-  DstReg64 = DAG.getTargetInsertSubreg(VE::sub_odd, dl, MVT::f64,
-                                       DstReg64, Lo32);
-  return DstReg64;
-}
-
 // Lower a f128 load into two f64 loads.
 static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
 {
@@ -2507,49 +2476,6 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
 #endif
 
 #if 0
-static SDValue LowerFNEGorFABS(SDValue Op, SelectionDAG &DAG, bool isV9) {
-  assert((Op.getOpcode() == ISD::FNEG || Op.getOpcode() == ISD::FABS)
-         && "invalid opcode");
-
-  SDLoc dl(Op);
-
-  if (Op.getValueType() == MVT::f64)
-    return LowerF64Op(Op.getOperand(0), dl, DAG, Op.getOpcode());
-  if (Op.getValueType() != MVT::f128)
-    return Op;
-
-  // Lower fabs/fneg on f128 to fabs/fneg on f64
-  // fabs/fneg f128 => fabs/fneg f64:sub_even64, fmov f64:sub_odd64
-  // (As with LowerF64Op, on little-endian, we need to negate the odd
-  // subreg)
-
-  SDValue SrcReg128 = Op.getOperand(0);
-  SDValue Hi64 = DAG.getTargetExtractSubreg(SP::sub_even64, dl, MVT::f64,
-                                            SrcReg128);
-  SDValue Lo64 = DAG.getTargetExtractSubreg(SP::sub_odd64, dl, MVT::f64,
-                                            SrcReg128);
-
-  if (DAG.getDataLayout().isLittleEndian()) {
-    if (isV9)
-      Lo64 = DAG.getNode(Op.getOpcode(), dl, MVT::f64, Lo64);
-    else
-      Lo64 = LowerF64Op(Lo64, dl, DAG, Op.getOpcode());
-  } else {
-    if (isV9)
-      Hi64 = DAG.getNode(Op.getOpcode(), dl, MVT::f64, Hi64);
-    else
-      Hi64 = LowerF64Op(Hi64, dl, DAG, Op.getOpcode());
-  }
-
-  SDValue DstReg128 = SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
-                                                 dl, MVT::f128), 0);
-  DstReg128 = DAG.getTargetInsertSubreg(SP::sub_even64, dl, MVT::f128,
-                                        DstReg128, Hi64);
-  DstReg128 = DAG.getTargetInsertSubreg(SP::sub_odd64, dl, MVT::f128,
-                                        DstReg128, Lo64);
-  return DstReg128;
-}
-
 static SDValue LowerADDC_ADDE_SUBC_SUBE(SDValue Op, SelectionDAG &DAG) {
 
   if (Op.getValueType() != MVT::i64)
@@ -2874,9 +2800,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
                                 //        getLibcallName(RTLIB::SQRT_F128),1);
     report_fatal_error("FSQRT expansion is not implemented yet");
-  case ISD::FABS:
-  case ISD::FNEG:               // return LowerFNEGorFABS(Op, DAG, isV9);
-    report_fatal_error("FABS or FNEG expansion is not implemented yet");
   case ISD::FP_EXTEND:          // return LowerF128_FPEXTEND(Op, DAG, *this);
     report_fatal_error("FP_EXTEND expansion is not implemented yet");
   case ISD::FP_ROUND:           // return LowerF128_FPROUND(Op, DAG, *this);

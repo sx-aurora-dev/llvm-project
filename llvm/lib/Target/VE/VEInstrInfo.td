@@ -897,9 +897,6 @@ defm FSB : RRFm<"fsub", 0x5C, fsub>;
 defm FMP : RRFm<"fmul", 0x4D, fmul>;
 defm FDV : RRFm<"fdiv", 0x5D, fdiv>;
 
-def : Pat<(fneg f64:$sx), (FSBd (ORim1 0, 0), $sx)>;
-def : Pat<(fneg f32:$sx), (FSBs (EXTRACT_SUBREG (ORim1 0, 0), sub_f32), $sx)>;
-
 // FCP instruction
 let cx = 0 in
 defm FCP : RRNDm<"fcmp.d", 0x7E, setcc, I64, f64, simm7Op64, uimm6Op64>;
