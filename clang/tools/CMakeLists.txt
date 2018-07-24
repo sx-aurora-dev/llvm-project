@@ -8,6 +8,7 @@ add_clang_subdirectory(clang-format-vs)
 add_clang_subdirectory(clang-fuzzer)
 add_clang_subdirectory(clang-import-test)
 add_clang_subdirectory(clang-offload-bundler)
+add_clang_subdirectory(sotoc)
 
 add_clang_subdirectory(c-index-test)
 
