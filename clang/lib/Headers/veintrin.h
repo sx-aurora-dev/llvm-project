@@ -32,6 +32,26 @@ enum CondCodes {
     VECC_AT    = 15+6 ,  // Always
 };
 
+enum VShuffleCodes {
+    VE_VSHUFFLE_YUYU =  0,
+    VE_VSHUFFLE_YUYL =  1,
+    VE_VSHUFFLE_YUZU =  2,
+    VE_VSHUFFLE_YUZL =  3,
+    VE_VSHUFFLE_YLYU =  4,
+    VE_VSHUFFLE_YLYL =  5,
+    VE_VSHUFFLE_YLZU =  6,
+    VE_VSHUFFLE_YLZL =  7,
+    VE_VSHUFFLE_ZUYU =  8,
+    VE_VSHUFFLE_ZUYL =  9,
+    VE_VSHUFFLE_ZUZU = 10,
+    VE_VSHUFFLE_ZUZL = 11,
+    VE_VSHUFFLE_ZLYU = 12,
+    VE_VSHUFFLE_ZLYL = 13,
+    VE_VSHUFFLE_ZLZU = 14,
+    VE_VSHUFFLE_ZLZL = 15,
+} ;
+
+
 /*
  * suffix
  *
