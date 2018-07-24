@@ -1565,6 +1565,10 @@ def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
                      (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
             sub_f32)>;
 
+// bitconvert
+def : Pat<(f64 (bitconvert i64:$src)), (COPY_TO_REGCLASS $src, I64)>;
+def : Pat<(i64 (bitconvert f64:$src)), (COPY_TO_REGCLASS $src, I64)>;
+
 // Several special pattern matches to optimize code
 
 def : Pat<(i32 (and i32:$lhs, 0xff)),
