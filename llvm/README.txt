@@ -13,9 +13,9 @@ Modifications are under the development.  For example, we implmented below.
 
 However, following items are not implemented yet.
 
- - function call passing arguments through stack
- - division, reminder calculations
- - automatic vectorization is no supported yet.
+ - function call passing arguments through stack may fail
+ - varargs
+ - automatic vectorization is not supported yet
 
 Please file issues if you have problems.
 
