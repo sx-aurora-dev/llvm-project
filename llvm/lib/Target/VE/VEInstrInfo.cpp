@@ -78,16 +78,20 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
   return 0;
 }
 
-#if 0
 static bool IsIntegerCC(unsigned CC)
 {
-  return  (CC <= SPCC::ICC_VC);
+  return  (CC < VECC::CC_AF);
 }
-#endif
 
 static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
 {
   switch(CC) {
+  case VECC::CC_IG:     return VECC::CC_ILE;
+  case VECC::CC_IL:     return VECC::CC_IGE;
+  case VECC::CC_INE:    return VECC::CC_IEQ;
+  case VECC::CC_IEQ:    return VECC::CC_INE;
+  case VECC::CC_IGE:    return VECC::CC_IL;
+  case VECC::CC_ILE:    return VECC::CC_IG;
   case VECC::CC_AF:     return VECC::CC_AT;
   case VECC::CC_G:      return VECC::CC_LE;
   case VECC::CC_L:      return VECC::CC_GE;
@@ -109,10 +113,24 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
 }
 
 // Treat br.l [BCR AT] as unconditional branch
-static bool isUncondBranchOpcode(int Opc) { return Opc == VE::BCRa; }
+static bool isUncondBranchOpcode(int Opc) {
+  return Opc == VE::BCRLa || Opc == VE::BCRWa ||
+         Opc == VE::BCRDa || Opc == VE::BCRSa;
+}
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == VE::BCRrr || Opc == VE::BCRir;
+  return Opc == VE::BCRLrr  || Opc == VE::BCRLir  ||
+         Opc == VE::BCRLrm0 || Opc == VE::BCRLrm1 ||
+         Opc == VE::BCRLim0 || Opc == VE::BCRLim1 ||
+         Opc == VE::BCRWrr  || Opc == VE::BCRWir  ||
+         Opc == VE::BCRWrm0 || Opc == VE::BCRWrm1 ||
+         Opc == VE::BCRWim0 || Opc == VE::BCRWim1 ||
+         Opc == VE::BCRDrr  || Opc == VE::BCRDir  ||
+         Opc == VE::BCRDrm0 || Opc == VE::BCRDrm1 ||
+         Opc == VE::BCRDim0 || Opc == VE::BCRDim1 ||
+         Opc == VE::BCRSrr  || Opc == VE::BCRSir  ||
+         Opc == VE::BCRSrm0 || Opc == VE::BCRSrm1 ||
+         Opc == VE::BCRSim0 || Opc == VE::BCRSim1;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -220,45 +238,57 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
                                       int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
-#if 0
-  assert((Cond.size() == 1 || Cond.size() == 0) &&
-         "VE branch conditions should have one component!");
-#endif
+  assert((Cond.size() == 3 || Cond.size() == 0) &&
+         "VE branch conditions should have three component!");
   assert(!BytesAdded && "code size not handled");
   if (Cond.empty()) {
+    // Uncondition branch
     assert(!FBB && "Unconditional branch with multiple successors!");
-    BuildMI(&MBB, DL, get(VE::BCRa)).addMBB(TBB);
+    BuildMI(&MBB, DL, get(VE::BCRLa)).addMBB(TBB);
     return 1;
   }
 
   // Conditional branch
-
-  assert(Cond.size() == 3 && "Cond.size() == 3 is only implemented");
-
-  // (BCRir CC sy sz addr)
+  //   (BCRir CC sy sz addr)
 
   assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
 
+  unsigned opc[2];
+  if (IsIntegerCC(Cond[0].getImm())) {
+    if (VE::I32RegClass.contains(Cond[2].getReg())) {
+      opc[0] = VE::BCRWir;
+      opc[1] = VE::BCRWrr;
+    } else {
+      opc[0] = VE::BCRLir;
+      opc[1] = VE::BCRLrr;
+    }
+  } else {
+    if (VE::F32RegClass.contains(Cond[2].getReg())) {
+      opc[0] = VE::BCRSir;
+      opc[1] = VE::BCRSrr;
+    } else {
+      opc[0] = VE::BCRDir;
+      opc[1] = VE::BCRDrr;
+    }
+  }
   if (Cond[1].isImm()) {
-      BuildMI(&MBB, DL, get(VE::BCRir))
-          .addImm(Cond[0].getImm()) // condition code
-          .addImm(Cond[1].getImm()) // lhs 
-          .addReg(Cond[2].getReg()) // rhs
+      BuildMI(&MBB, DL, get(opc[0]))
+          .add(Cond[0]) // condition code
+          .add(Cond[1]) // lhs 
+          .add(Cond[2]) // rhs
           .addMBB(TBB);
   } else {
-      BuildMI(&MBB, DL, get(VE::BCRrr))
-          .addImm(Cond[0].getImm())
-          .addReg(Cond[1].getReg())
-          .addReg(Cond[2].getReg())
+      BuildMI(&MBB, DL, get(opc[1]))
+          .add(Cond[0])
+          .add(Cond[1])
+          .add(Cond[2])
           .addMBB(TBB);
   }
 
   if (!FBB)
     return 1;
-  BuildMI(&MBB, DL, get(VE::BCRa)).addMBB(FBB);
+  BuildMI(&MBB, DL, get(VE::BCRLa)).addMBB(FBB);
   return 2;
-
-  //report_fatal_error("insertBranch is not implemented yet");
 }
 
 unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
@@ -273,9 +303,8 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
     if (I->isDebugValue())
       continue;
 
-    if (I->getOpcode() != VE::BCRa
-        && I->getOpcode() != VE::BCRir
-        && I->getOpcode() != VE::BCRrr)
+    if (!isUncondBranchOpcode(I->getOpcode()) &&
+        !isCondBranchOpcode(I->getOpcode()))
       break; // Not a branch
 
     I->eraseFromParent();
@@ -707,8 +736,8 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   // Next, add the true and fallthrough blocks as its successors.
   BB->addSuccessor(syscallMBB);
   BB->addSuccessor(sinkMBB);
-  BuildMI(BB, dl, TII.get(VE::BCRrr))
-      .addImm(5)
+  BuildMI(BB, dl, TII.get(VE::BCRLrr))
+      .addImm(VECC::CC_IGE)
       .addReg(VE::SX11)                          // %sp
       .addReg(VE::SX8)                           // %sl
       .addMBB(sinkMBB);

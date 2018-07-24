@@ -40,27 +40,42 @@ namespace llvm {
   // values must be kept in sync with the ones in the .td file.
   namespace VECC {
     enum CondCodes {
-      CC_AF    =  0   ,  // Never
-      CC_G     =  1   ,  // Greater
-      CC_L     =  2   ,  // Less
-      CC_NE    =  3   ,  // Not Equal
-      CC_EQ    =  4   ,  // Equal
-      CC_GE    =  5   ,  // Greater or Equal
-      CC_LE    =  6   ,  // Less or Equal
-      CC_NUM   =  7   ,  // Number
-      CC_NAN   =  8   ,  // NaN
-      CC_GNAN  =  9   ,  // Greater or NaN
-      CC_LNAN  = 10   ,  // Less or NaN
-      CC_NENAN = 11   ,  // Not Equal or NaN
-      CC_EQNAN = 12   ,  // Equal or NaN
-      CC_GENAN = 13   ,  // Greater or Equal or NaN
-      CC_LENAN = 14   ,  // Less or Equal or NaN
-      CC_AT    = 15   ,  // Always
+      // Integer comparison
+      CC_IG     =  0   ,  // Greater
+      CC_IL     =  1   ,  // Less
+      CC_INE    =  2   ,  // Not Equal
+      CC_IEQ    =  3   ,  // Equal
+      CC_IGE    =  4   ,  // Greater or Equal
+      CC_ILE    =  5   ,  // Less or Equal
+
+      // Floating point comparison
+      CC_AF    =  0+6 ,  // Never
+      CC_G     =  1+6 ,  // Greater
+      CC_L     =  2+6 ,  // Less
+      CC_NE    =  3+6 ,  // Not Equal
+      CC_EQ    =  4+6 ,  // Equal
+      CC_GE    =  5+6 ,  // Greater or Equal
+      CC_LE    =  6+6 ,  // Less or Equal
+      CC_NUM   =  7+6 ,  // Number
+      CC_NAN   =  8+6 ,  // NaN
+      CC_GNAN  =  9+6 ,  // Greater or NaN
+      CC_LNAN  = 10+6 ,  // Less or NaN
+      CC_NENAN = 11+6 ,  // Not Equal or NaN
+      CC_EQNAN = 12+6 ,  // Equal or NaN
+      CC_GENAN = 13+6 ,  // Greater or Equal or NaN
+      CC_LENAN = 14+6 ,  // Less or Equal or NaN
+      CC_AT    = 15+6 ,  // Always
     };
   }
 
   inline static const char *VECondCodeToString(VECC::CondCodes CC) {
     switch (CC) {
+    case VECC::CC_IG:    return "gt";
+    case VECC::CC_IL:    return "lt";
+    case VECC::CC_INE:   return "ne";
+    case VECC::CC_IEQ:   return "eq";
+    case VECC::CC_IGE:   return "ge";
+    case VECC::CC_ILE:   return "le";
     case VECC::CC_AF:    return "af";
     case VECC::CC_G:     return "gt";
     case VECC::CC_L:     return "lt";
