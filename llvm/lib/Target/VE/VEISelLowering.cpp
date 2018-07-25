@@ -198,13 +198,11 @@ SDValue VETargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
     const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &DL,
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
-  if (1)
-    return LowerFormalArguments_64(Chain, CallConv, IsVarArg, Ins,
-                                   DL, DAG, InVals);
-  return LowerFormalArguments_32(Chain, CallConv, IsVarArg, Ins,
+  return LowerFormalArguments_64(Chain, CallConv, IsVarArg, Ins,
                                  DL, DAG, InVals);
 }
 
+#if 0
 /// LowerFormalArguments32 - V8 uses a very simple ABI, where all values are
 /// passed in either one or two GPRs, including FP values.  TODO: we should
 /// pass FP values in FP registers for fastcc functions.
@@ -401,6 +399,7 @@ SDValue VETargetLowering::LowerFormalArguments_32(
 
   return Chain;
 }
+#endif
 
 // Lower formal arguments for the 64 bit ABI.
 SDValue VETargetLowering::LowerFormalArguments_64(
@@ -409,10 +408,10 @@ SDValue VETargetLowering::LowerFormalArguments_64(
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
 
-  // Get the base offset of the outgoing arguments stack space.
+  // Get the base offset of the incoming arguments stack space.
   unsigned ArgsBaseOffset = 176;
   // Get the size of the preserved arguments area
-  unsigned ArgsPreserved = 8*8u;
+  unsigned ArgsPreserved = 64;
 
   // Analyze arguments according to CC_VE.
   SmallVector<CCValAssign, 16> ArgLocs;
@@ -489,12 +488,15 @@ SDValue VETargetLowering::LowerFormalArguments_64(
   //
   // The va_start intrinsic needs to know the offset to the first variable
   // argument.
-  // unsigned ArgOffset = CCInfo.getNextStackOffset();
-  unsigned ArgOffset = 0;
+  // TODO: need to calculate offset correctly once we support f128.
+  unsigned ArgOffset = ArgLocs.size() * 8;
   VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
   // Skip the 176 bytes of register save area.
   FuncInfo->setVarArgsFrameOffset(ArgOffset + ArgsBaseOffset);
 
+#if 0
+// VE ABI requires to store values in stack by caller side.
+// So no need to store varargs here.
   // Save the variable arguments that were passed in registers.
   // The caller is required to reserve stack space for 8 arguments regardless
   // of how many arguments were actually passed.
@@ -511,6 +513,7 @@ SDValue VETargetLowering::LowerFormalArguments_64(
 
   if (!OutChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
+#endif
 
   return Chain;
 }
@@ -1526,10 +1529,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // VASTART needs to be custom lowered to use the VarArgsFrameIndex.
   setOperationAction(ISD::VASTART           , MVT::Other, Custom);
-  // VAARG needs to be lowered to not do unaligned accesses for doubles.
+  // VAARG needs to be lowered to access with 8 bytes alignment.
   setOperationAction(ISD::VAARG             , MVT::Other, Custom);
-
-  setOperationAction(ISD::TRAP              , MVT::Other, Legal);
 
   // Use the default implementation.
   setOperationAction(ISD::VACOPY            , MVT::Other, Expand);
@@ -1577,6 +1578,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // Set function alignment to 16 bytes (4 bits)
   setMinFunctionAlignment(4);
+
+  // VE stores all argument by 8 bytes alignment
+  setMinStackArgumentAlignment(8);
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 }
@@ -2204,6 +2208,7 @@ SDValue VETargetLowering::LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
   return DAG.getNode(VEISD::EH_SJLJ_LONGJMP, DL, MVT::Other, Op.getOperand(0), Op.getOperand(1));
 }
+#endif
 
 static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
                             const VETargetLowering &TLI) {
@@ -2235,9 +2240,9 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
   SDLoc DL(Node);
   SDValue VAList =
       DAG.getLoad(PtrVT, DL, InChain, VAListPtr, MachinePointerInfo(SV));
-  // Increment the pointer, VAList, to the next vaarg.
+  // Increment the pointer, VAList, by 8 to the next vaarg.
   SDValue NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
-                                DAG.getIntPtrConstant(VT.getSizeInBits()/8,
+                                DAG.getIntPtrConstant(8,
                                                       DL));
   // Store the incremented VAList to the legalized pointer.
   InChain = DAG.getStore(VAList.getValue(1), DL, NextPtr, VAListPtr,
@@ -2248,6 +2253,7 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
                      std::min(PtrVT.getSizeInBits(), VT.getSizeInBits()) / 8);
 }
 
+#if 0
 static SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG,
                                        const VESubtarget *Subtarget) {
   SDValue Chain = Op.getOperand(0);  // Legalize the chain.
@@ -2773,10 +2779,8 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     report_fatal_error("EH_SJLJ_SETJMP expansion is not implemented yet");
   case ISD::EH_SJLJ_LONGJMP:    // return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
     report_fatal_error("EH_SJLJ_LONGJMP expansion is not implemented yet");
-  case ISD::VASTART:            // return LowerVASTART(Op, DAG, *this);
-    report_fatal_error("VASTART expansion is not implemented yet");
-  case ISD::VAARG:              // return LowerVAARG(Op, DAG);
-    report_fatal_error("VAARG expansion is not implemented yet");
+  case ISD::VASTART:            return LowerVASTART(Op, DAG, *this);
+  case ISD::VAARG:              return LowerVAARG(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC: // return LowerDYNAMIC_STACKALLOC(Op, DAG,
                                 //                                Subtarget);
     report_fatal_error("DYNAMIC_STACKALLOC expansion is not implemented yet");
