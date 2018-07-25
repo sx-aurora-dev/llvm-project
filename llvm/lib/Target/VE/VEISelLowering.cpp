@@ -1529,8 +1529,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // VAARG needs to be lowered to not do unaligned accesses for doubles.
   setOperationAction(ISD::VAARG             , MVT::Other, Custom);
 
-  setOperationAction(ISD::TRAP              , MVT::Other, Legal);
-
   // Use the default implementation.
   setOperationAction(ISD::VACOPY            , MVT::Other, Expand);
   setOperationAction(ISD::VAEND             , MVT::Other, Expand);
