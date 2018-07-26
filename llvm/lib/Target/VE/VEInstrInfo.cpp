@@ -363,7 +363,28 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
         .addImm(0)
         .addReg(SrcReg, getKillRegState(KillSrc));
-  else {
+  else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
+    // Use two FMOVD instructions.
+    const unsigned subRegIdx[] = { VE::sub_even, VE::sub_odd };
+    unsigned int numSubRegs = 2;
+
+    const TargetRegisterInfo *TRI = &getRegisterInfo();
+    MachineInstr *MovMI = nullptr;
+
+    for (unsigned i = 0; i != numSubRegs; ++i) {
+      unsigned Dst = TRI->getSubReg(DestReg, subRegIdx[i]);
+      unsigned Src = TRI->getSubReg(SrcReg,  subRegIdx[i]);
+      assert(Dst && Src && "Bad sub-register");
+  
+      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::ORri), Dst).
+        addReg(Src).addImm(0);
+      MovMI = MIB.getInstr();
+    }
+    // Add implicit super-register defs and kills to the last MovMI.
+    MovMI->addRegisterDefined(DestReg, TRI);
+    if (KillSrc)
+      MovMI->addRegisterKilled(SrcReg, TRI);
+  } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
     dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
     llvm_unreachable("Impossible reg-to-reg copy");
@@ -382,23 +403,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       // Use two FMOVS instructions.
       subRegIdx  = DFP_FP_SubRegsIdx;
       numSubRegs = 2;
-      movOpc     = SP::FMOVS;
-    }
-  } else if (SP::QFPRegsRegClass.contains(DestReg, SrcReg)) {
-    if (Subtarget.isV9()) {
-      if (Subtarget.hasHardQuad()) {
-        BuildMI(MBB, I, DL, get(SP::FMOVQ), DestReg)
-          .addReg(SrcReg, getKillRegState(KillSrc));
-      } else {
-        // Use two FMOVD instructions.
-        subRegIdx  = QFP_DFP_SubRegsIdx;
-        numSubRegs = 2;
-        movOpc     = SP::FMOVD;
-      }
-    } else {
-      // Use four FMOVS instructions.
-      subRegIdx  = QFP_FP_SubRegsIdx;
-      numSubRegs = 4;
       movOpc     = SP::FMOVS;
     }
   } else if (SP::ASRRegsRegClass.contains(DestReg) &&
