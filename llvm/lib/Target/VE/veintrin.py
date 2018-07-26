@@ -795,6 +795,7 @@ class InstTable:
                "vvI"  : "i2",
                "vvImv": "im2",
                "vvss" : "r", # LSV
+               "vvssmv" : "rm", # VSFA
                "svs"  : "r", # LVS
                #"vvN"  : "i2",
                "vsv"  : "r",
@@ -833,6 +834,7 @@ class InstTable:
                "mcvm" : "vm",
                "Mcv"  : "v",
                "vvIs" : "i", # VSFA
+               "vvIsmv" : "im", # VSFA
                "sm"   : "", # PCMV, etc
                "sM"   : "", # PCMV, etc
                "vvmv" : "vm", # VCP, VEX
@@ -947,21 +949,21 @@ class InstTable:
         self.InstX(opc, instName, name, Args, expr)
         self.InstX(opc, instName+"p", "p"+name, ArgsP, expr)
 
-    def Shift(self, opc, name, instName, expr):
-        O_u64_vvv = [VX(T_u64), VZ(T_u64), VY(T_u64)]
-        O_u64_vvs = [VX(T_u64), VZ(T_u64), SY(T_u64)]
-        O_u64_vvN = [VX(T_u64), VZ(T_u64), ImmN(T_u64)]
+    def Shift(self, opc, name, instName, ty, expr):
+        O_vvv = [VX(ty), VZ(ty), VY(T_u64)]
+        O_vvs = [VX(ty), VZ(ty), SY(T_u64)]
+        O_vvN = [VX(ty), VZ(ty), ImmN(T_u64)]
 
-        OL = [O_u64_vvv, O_u64_vvs, O_u64_vvN]
+        OL = [O_vvv, O_vvs, O_vvN]
         OL = self.addMask(OL);
 
         self.InstX(opc, instName, name, OL, expr)
 
-    def ShiftPacked(self, opc, name, instName, expr):
-        O_u32_vvv = [VX(T_u32), VZ(T_u32), VY(T_u32)]
-        O_u32_vvs = [VX(T_u32), VZ(T_u32), SY(T_u64)]
+    def ShiftPacked(self, opc, name, instName, ty, expr):
+        O_vvv = [VX(ty), VZ(ty), VY(T_u32)]
+        O_vvs = [VX(ty), VZ(ty), SY(T_u64)]
 
-        OL = [O_u32_vvv, O_u32_vvs]
+        OL = [O_vvv, O_vvs]
         OL = self.addMask(OL, VM512)
 
         self.InstX(opc, instName+"p", "p"+name, OL, expr)
@@ -1147,17 +1149,25 @@ T.InstX(0x99, "VSEQu", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
 T.InstX(0x99, "VSEQp", "pvseq", [[VX(T_u64)]], "{0} = i").noTest()
 
 T.Section("5.3.2.10. Vector Shift Instructions", 25)
-T.Shift(0xE5, "vsll", "VSLL", "{0} = {1} << ({2} & 0x3f)")
-T.ShiftPacked(0xE5, "vsll", "VSLL", "{0} = {1} << ({2} & 0x1f)")
+T.Shift(0xE5, "vsll", "VSLL", T_u64, "{0} = {1} << ({2} & 0x3f)")
+T.ShiftPacked(0xE5, "vsll", "VSLL", T_u32, "{0} = {1} << ({2} & 0x1f)")
 T.NoImpl("VSLD")
-T.Shift(0xF5, "vsrl", "VSRL", "{0} = {1} >> ({2} & 0x3f)")
-T.ShiftPacked(0xF5, "vsrl", "VSRL", "{0} = {1} >> ({2} & 0x1f)")
+T.Shift(0xF5, "vsrl", "VSRL", T_u64, "{0} = {1} >> ({2} & 0x3f)")
+T.ShiftPacked(0xF5, "vsrl", "VSRL", T_u32, "{0} = {1} >> ({2} & 0x1f)")
 T.NoImpl("VSRD")
-T.NoImpl("VSLA")
-T.NoImpl("VSLAX")
-T.NoImpl("VSRA")
-T.NoImpl("VSRAX")
-T.InstX(0xD7, "VSFA", "vsfa", [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), ImmI(T_u64), SZ(T_u64)]], "{0} = ({1} << ({2} & 0x7)) + {3}")
+#T.NoImpl("VSLA")
+
+T.Shift(0xE6, "vsla.w", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
+T.ShiftPacked(0xE6, "vsla", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
+T.Shift(0xD4, "vsla.l", "VSLAX", T_i64, "{0} = {1} << ({2} & 0x3f)")
+
+T.Shift(0xF6, "vsra.w", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
+T.ShiftPacked(0xF6, "vsra", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
+T.Shift(0xD5, "vsra.l", "VSRAX", T_i64, "{0} = {1} >> ({2} & 0x3f)")
+
+O_vsfa = [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), ImmI(T_u64), SZ(T_u64)]]
+O_vsfa = T.addMask(O_vsfa)
+T.InstX(0xD7, "VSFA", "vsfa", O_vsfa, "{0} = ({1} << ({2} & 0x7)) + {3}")
 
 T.Section("5.3.2.11. Vector Floating-Point Operation Instructions", 26)
 T.Inst3f(0xCC, "vfadd", "VFAD", "{0} = {1} + {2}")
@@ -1230,10 +1240,6 @@ T.NoImpl("VFIAM")
 T.NoImpl("VFISM")
 T.NoImpl("VFIMA")
 T.NoImpl("VFIMS")
-
-O_u64_vv = [VX(T_u64), VY(T_u64)]
-O_f32_vv = [VX(T_f32), VY(T_f32)]
-O_i32_vv = [VX(T_i32), VY(T_i32)]
 
 T.Section("5.3.2.14. Vector Gatering/Scattering Instructions", 33)
 T.VGTm(0xA1, "VGT", "vgt")
