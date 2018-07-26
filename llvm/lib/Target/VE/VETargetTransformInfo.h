@@ -58,7 +58,7 @@ public:
       return 64;
   }
 
-  //unsigned getMinVectorRegisterBitWidth() { }
+  unsigned getMinVectorRegisterBitWidth() const { return 256*64; }
 
 };
 
