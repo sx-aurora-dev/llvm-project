@@ -55,6 +55,8 @@
 #define _ve_pvadds_vsvMv __builtin_ve_pvadds_vsvMv
 #define _ve_vaddsl_vvv __builtin_ve_vaddsl_vvv
 #define _ve_vaddsl_vsv __builtin_ve_vaddsl_vsv
+#define _ve_vaddsl_vvvmv __builtin_ve_vaddsl_vvvmv
+#define _ve_vaddsl_vsvmv __builtin_ve_vaddsl_vsvmv
 #define _ve_vsubul_vvv __builtin_ve_vsubul_vvv
 #define _ve_vsubul_vsv __builtin_ve_vsubul_vsv
 #define _ve_vsubul_vvvmv __builtin_ve_vsubul_vvvmv
@@ -81,6 +83,8 @@
 #define _ve_pvsubs_vsvMv __builtin_ve_pvsubs_vsvMv
 #define _ve_vsubsl_vvv __builtin_ve_vsubsl_vvv
 #define _ve_vsubsl_vsv __builtin_ve_vsubsl_vsv
+#define _ve_vsubsl_vvvmv __builtin_ve_vsubsl_vvvmv
+#define _ve_vsubsl_vsvmv __builtin_ve_vsubsl_vsvmv
 #define _ve_vmulul_vvv __builtin_ve_vmulul_vvv
 #define _ve_vmulul_vsv __builtin_ve_vmulul_vsv
 #define _ve_vmulul_vvvmv __builtin_ve_vmulul_vvvmv
@@ -99,6 +103,8 @@
 #define _ve_vmulswzx_vsvmv __builtin_ve_vmulswzx_vsvmv
 #define _ve_vmulsl_vvv __builtin_ve_vmulsl_vvv
 #define _ve_vmulsl_vsv __builtin_ve_vmulsl_vsv
+#define _ve_vmulsl_vvvmv __builtin_ve_vmulsl_vvvmv
+#define _ve_vmulsl_vsvmv __builtin_ve_vmulsl_vsvmv
 #define _ve_vmulslw_vvv __builtin_ve_vmulslw_vvv
 #define _ve_vmulslw_vsv __builtin_ve_vmulslw_vsv
 #define _ve_vdivul_vvv __builtin_ve_vdivul_vvv
@@ -127,6 +133,8 @@
 #define _ve_vdivswzx_vvsmv __builtin_ve_vdivswzx_vvsmv
 #define _ve_vdivsl_vvv __builtin_ve_vdivsl_vvv
 #define _ve_vdivsl_vsv __builtin_ve_vdivsl_vsv
+#define _ve_vdivsl_vvvmv __builtin_ve_vdivsl_vvvmv
+#define _ve_vdivsl_vsvmv __builtin_ve_vdivsl_vsvmv
 #define _ve_vdivsl_vvs __builtin_ve_vdivsl_vvs
 #define _ve_vdivsl_vvsmv __builtin_ve_vdivsl_vvsmv
 #define _ve_vcmpul_vvv __builtin_ve_vcmpul_vvv
@@ -155,6 +163,8 @@
 #define _ve_pvcmps_vsvMv __builtin_ve_pvcmps_vsvMv
 #define _ve_vcmpsl_vvv __builtin_ve_vcmpsl_vvv
 #define _ve_vcmpsl_vsv __builtin_ve_vcmpsl_vsv
+#define _ve_vcmpsl_vvvmv __builtin_ve_vcmpsl_vvvmv
+#define _ve_vcmpsl_vsvmv __builtin_ve_vcmpsl_vsvmv
 #define _ve_vmaxswsx_vvv __builtin_ve_vmaxswsx_vvv
 #define _ve_vmaxswsx_vsv __builtin_ve_vmaxswsx_vsv
 #define _ve_vmaxswsx_vvvmv __builtin_ve_vmaxswsx_vvvmv
@@ -181,8 +191,12 @@
 #define _ve_pvmins_vsvMv __builtin_ve_pvmins_vsvMv
 #define _ve_vmaxsl_vvv __builtin_ve_vmaxsl_vvv
 #define _ve_vmaxsl_vsv __builtin_ve_vmaxsl_vsv
+#define _ve_vmaxsl_vvvmv __builtin_ve_vmaxsl_vvvmv
+#define _ve_vmaxsl_vsvmv __builtin_ve_vmaxsl_vsvmv
 #define _ve_vminsl_vvv __builtin_ve_vminsl_vvv
 #define _ve_vminsl_vsv __builtin_ve_vminsl_vsv
+#define _ve_vminsl_vvvmv __builtin_ve_vminsl_vvvmv
+#define _ve_vminsl_vsvmv __builtin_ve_vminsl_vsvmv
 #define _ve_vand_vvv __builtin_ve_vand_vvv
 #define _ve_vand_vsv __builtin_ve_vand_vsv
 #define _ve_vand_vvvmv __builtin_ve_vand_vvvmv
@@ -409,12 +423,19 @@
 #define _ve_vfrminsfst_vv __builtin_ve_vfrminsfst_vv
 #define _ve_vfrminslst_vv __builtin_ve_vfrminslst_vv
 #define _ve_vgt_vv __builtin_ve_vgt_vv
+#define _ve_vgt_vvm __builtin_ve_vgt_vvm
 #define _ve_vgtu_vv __builtin_ve_vgtu_vv
+#define _ve_vgtu_vvm __builtin_ve_vgtu_vvm
 #define _ve_vgtlsx_vv __builtin_ve_vgtlsx_vv
+#define _ve_vgtlsx_vvm __builtin_ve_vgtlsx_vvm
 #define _ve_vgtlzx_vv __builtin_ve_vgtlzx_vv
+#define _ve_vgtlzx_vvm __builtin_ve_vgtlzx_vvm
 #define _ve_vsc_vv __builtin_ve_vsc_vv
+#define _ve_vsc_vvm __builtin_ve_vsc_vvm
 #define _ve_vscu_vv __builtin_ve_vscu_vv
+#define _ve_vscu_vvm __builtin_ve_vscu_vvm
 #define _ve_vscl_vv __builtin_ve_vscl_vv
+#define _ve_vscl_vvm __builtin_ve_vscl_vvm
 #define _ve_andm_mmm __builtin_ve_andm_mmm
 #define _ve_andm_MMM __builtin_ve_andm_MMM
 #define _ve_orm_mmm __builtin_ve_orm_mmm
