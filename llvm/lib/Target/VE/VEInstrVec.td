@@ -423,9 +423,11 @@ class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     bits<7> sy;
     bits<7> sz;
     bits<7> sw;
+    bits<4> m;
     let op = opVal;
     let Inst{8} = vo;
     let Inst{9} = vc;
+    let Inst{15-12} = m;
     let Inst{16} = cy;
     let Inst{23-17} = sy;
     let Inst{24} = cz;
@@ -768,8 +770,8 @@ class VCPEX<bits<8> opc, string opcStr>
     let Constraints = "$vx = $vd";
 }
 
-def VCP : VCPEX<0x8D, "vcp">;
-def VEX : VCPEX<0x9D, "vex">;
+def VCPvm : VCPEX<0x8D, "vcp">;
+def VEXvm : VCPEX<0x9D, "vex">;
 
 multiclass VFMKm<string opcStr, bits<8> opc> {
   def v : RV<opc, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
@@ -867,6 +869,29 @@ multiclass VGTm<string opcStr, bits<8> opc> {
       let sy = 0;
       let sz = 0;
       let sw = 0;
+      let m = 0;
+  }
+
+  def r : RVM<opc, (outs V64:$vx), (ins I64:$sw),
+    !strconcat(opcStr, " $vx,$sw,0,0"), []> {
+      let sy = 0;
+      let sz = 0;
+      let vy = 0;
+      let m = 0;
+  }
+
+  def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
+    !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
+      let sy = 0;
+      let sz = 0;
+      let sw = 0;
+  }
+
+  def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm),
+    !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
+      let sy = 0;
+      let sz = 0;
+      let vy = 0;
   }
 }
 
@@ -876,6 +901,29 @@ multiclass VSCm<string opcStr, bits<8> opc> {
       let sy = 0;
       let sz = 0;
       let sw = 0;
+      let m = 0;
+  }
+
+  def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw),
+    !strconcat(opcStr, " $vx,$sw,0,0"), []> {
+      let sy = 0;
+      let sz = 0;
+      let vy = 0;
+      let m = 0;
+  }
+
+  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm),
+    !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
+      let sy = 0;
+      let sz = 0;
+      let sw = 0;
+  }
+
+  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm),
+    !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
+      let sy = 0;
+      let sz = 0;
+      let vy = 0;
   }
 }
 
