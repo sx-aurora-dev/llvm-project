@@ -121,6 +121,7 @@ def VOp(ty, name):
 def SX(ty): return Op("s", ty, "sx")
 def SY(ty): return Op("s", ty, "sy")
 def SZ(ty): return Op("s", ty, "sz")
+def SW(ty): return Op("s", ty, "sw")
 
 def VX(ty): return VOp(ty, "vx")
 def VY(ty): return VOp(ty, "vy")
@@ -834,7 +835,8 @@ class InstTable:
                "vvIs" : "i", # VSFA
                "sm"   : "", # PCMV, etc
                "sM"   : "", # PCMV, etc
-               "vvmv" : "", # VCP, VEX
+               "vvmv" : "vm", # VCP, VEX
+               "vvm"  : "vm", # VGT, VSC
                }
 
         tmp = "".join([op.kind for op in args])
@@ -909,7 +911,9 @@ class InstTable:
 
     # 3 operands, i64
     def Inst3l(self, opc, name, instName, expr):
-        self.InstX(opc, instName+"l", name+".l", [Args_vvv(T_i64), Args_vsv(T_i64), Args_vIv(T_i64)], expr)
+        O = [Args_vvv(T_i64), Args_vsv(T_i64), Args_vIv(T_i64)]
+        O = self.addMask(O)
+        self.InstX(opc, instName+"l", name+".l", O, expr)
 
     # 3 operands, i32
     def Inst3w(self, opc, name, instName, expr, hasPacked = True):
@@ -991,9 +995,26 @@ class InstTable:
         self.InstX(opc, inst.format(fl="l"), asm.format(fl=".lst"), args).noTest()
 
     def VFMKm(self, opc, inst, asm):
-        T.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
-        T.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64), VM]]).noTest()
+        self.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
+        self.InstX(opc, inst, asm, [[VM, CCOp, VZ(T_i64), VM]]).noTest()
 
+    def VGTm(self, opc, inst, asm):
+        O_v = [VX(T_u64), VY(T_u64)]
+        O_vm = [VX(T_u64), VY(T_u64), VM]
+        O = [O_v, O_vm]
+
+        self.InstX(opc, inst, asm, O, "{0} = *{1}").noTest().readMem()
+
+    def VSCm(self, opc, inst, asm):
+        O_v = [VX(T_u64), VY(T_u64)]
+        O_vm = [VX(T_u64), VY(T_u64), VM]
+        #O_s = [VX(T_u64), SW(T_u64)]
+        O = [O_v, O_vm]
+
+        for op in O:
+            si = self.args_to_inst_suffix(op)
+            sf = self.args_to_func_suffix(op)
+            self.add(Inst(opc, inst+si, asm, asm+sf, [], op, False, "*{1} = {0}").noTest().writeMem())
 
 def cmpwrite(filename, data):
     need_write = True
@@ -1215,13 +1236,13 @@ O_f32_vv = [VX(T_f32), VY(T_f32)]
 O_i32_vv = [VX(T_i32), VY(T_i32)]
 
 T.Section("5.3.2.14. Vector Gatering/Scattering Instructions", 33)
-T.InstX(0xA1, "VGT", "vgt", [[VX(T_u64), VY(T_u64)]], "{0} = *{1}").noTest().readMem()
-T.InstX(0xA2, "VGTU", "vgtu", [[VX(T_f32), VY(T_f32)]], "{0} = *{1}").noTest().readMem()
-T.InstX(0xA3, "VGTLsx", "vgtl.sx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
-T.InstX(0xA3, "VGTLzx", "vgtl.zx", [[VX(T_i32), VY(T_i32)]], "{0} = *{1}").noTest().readMem()
-T.add(Inst(0xB1, "VSCv", "vsc", "vsc_vv", [], O_u64_vv, False, "*{1} = {0}").noTest().writeMem())
-T.add(Inst(0xB2, "VSCUv", "vscu", "vscu_vv", [], O_f32_vv, False, "*{1} = {0}").noTest().writeMem())
-T.add(Inst(0xB2, "VSCLv", "vscl", "vscl_vv", [], O_i32_vv, False, "*{1} = {0}").noTest().writeMem())
+T.VGTm(0xA1, "VGT", "vgt")
+T.VGTm(0xA2, "VGTU", "vgtu")
+T.VGTm(0xA3, "VGTLsx", "vgtl.sx")
+T.VGTm(0xA3, "VGTLzx", "vgtl.zx")
+T.VSCm(0xB1, "VSC", "vsc")
+T.VSCm(0xB2, "VSCU", "vscu")
+T.VSCm(0xB3, "VSCL", "vscl")
 
 T.Section("5.3.2.15. Vector Mask Register Instructions", 34)
 T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
