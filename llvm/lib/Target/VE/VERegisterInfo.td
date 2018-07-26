@@ -24,12 +24,14 @@ class VEMiscReg<bits<5> Enc, string n>: Register<n> {
 }
 
 let Namespace = "VE" in {
-  def sub_i8    : SubRegIndex<8, 56>;           // Low 8 bit (56..63)
-  def sub_i16   : SubRegIndex<16, 48>;          // Low 16 bit (48..63)
-  def sub_i32   : SubRegIndex<32, 32>;          // Low 32 bit (32..63)
-  def sub_f32   : SubRegIndex<32>;              // High 32 bit (0..31)
-  def sub_even  : SubRegIndex<64>;
-  def sub_odd   : SubRegIndex<64, 64>;
+  def sub_i8      : SubRegIndex<8, 56>;         // Low 8 bit (56..63)
+  def sub_i16     : SubRegIndex<16, 48>;        // Low 16 bit (48..63)
+  def sub_i32     : SubRegIndex<32, 32>;        // Low 32 bit (32..63)
+  def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
+  def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
+  def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
+  def sub_vm_even : SubRegIndex<256>;           // High 256 bit (0..255)
+  def sub_vm_odd  : SubRegIndex<256, 256>;      // Low 256 bit (256..511)
 }
 
 // Registers are identified with 7-bit ID numbers.
@@ -57,7 +59,7 @@ class VM<bits<7> Enc, string n> : VEReg<Enc, n>;
 
 class VMp<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
   let SubRegs = subregs;
-  let SubRegIndices = [sub_even, sub_odd];
+  let SubRegIndices = [sub_vm_even, sub_vm_odd];
 }
 
 // Miscellaneous Registers
@@ -151,7 +153,9 @@ def I64 : RegisterClass<"VE", [i64, f64], 64,
 def F32 : RegisterClass<"VE", [f32], 32,
                         (add (sequence "SF%u", 34, 63),
                              (sequence "SF%u", 0, 33))>;
-def F128 : RegisterClass<"VE", [f128], 128, (sequence "Q%u", 0, 31)>;
+def F128 : RegisterClass<"VE", [f128], 128,
+                        (add (sequence "Q%u", 17, 31),
+                             (sequence "Q%u", 0, 16))>;
 
 def Misc : RegisterClass<"VE", [i64], 64,
                          (add UCC, PSW, SAR, PMMR,

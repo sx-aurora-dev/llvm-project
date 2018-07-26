@@ -1543,14 +1543,22 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::CTPOP, MVT::i32, Legal);
 
+  // VE has no load/store for f128, but llvm doesn't expand them
+  // automatically, so we need to use Custom here.
   setOperationAction(ISD::LOAD, MVT::f128, Custom);
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::LOAD,  VT, Expand);
+    setOperationAction(ISD::STORE, VT, Expand);
+  }
+
+  // VE has FAQ, FSQ, FMQ, and FCQ
   setOperationAction(ISD::FADD,  MVT::f128, Legal);
   setOperationAction(ISD::FSUB,  MVT::f128, Legal);
   setOperationAction(ISD::FMUL,  MVT::f128, Legal);
-  setOperationAction(ISD::FDIV,  MVT::f128, Legal);
-  setOperationAction(ISD::FSQRT, MVT::f128, Legal);
+  setOperationAction(ISD::FDIV,  MVT::f128, Expand);
+  setOperationAction(ISD::FSQRT, MVT::f128, Expand);
   setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
   setOperationAction(ISD::FP_ROUND,  MVT::f64, Legal);
 
@@ -2365,7 +2373,6 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
                      MachinePointerInfo());
 }
 
-#if 0
 // Lower a f128 load into two f64 loads.
 static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
 {
@@ -2380,13 +2387,18 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
 
   SDValue Hi64 =
       DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LdNode->getBasePtr(),
-                  LdNode->getPointerInfo(), alignment);
+                  LdNode->getPointerInfo(), alignment,
+                  LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                         MachineMemOperand::MONone);
   EVT addrVT = LdNode->getBasePtr().getValueType();
   SDValue LoPtr = DAG.getNode(ISD::ADD, dl, addrVT,
                               LdNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
-  SDValue Lo64 = DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LoPtr,
-                             LdNode->getPointerInfo(), alignment);
+  SDValue Lo64 =
+      DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LoPtr,
+                  LdNode->getPointerInfo(), alignment,
+                  LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                         MachineMemOperand::MONone);
 
   SDValue SubRegEven = DAG.getTargetConstant(VE::sub_even, dl, MVT::i32);
   SDValue SubRegOdd  = DAG.getTargetConstant(VE::sub_odd, dl, MVT::i32);
@@ -2448,13 +2460,18 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   SDValue OutChains[2];
   OutChains[0] =
       DAG.getStore(StNode->getChain(), dl, SDValue(Hi64, 0),
-                   StNode->getBasePtr(), MachinePointerInfo(), alignment);
+                   StNode->getBasePtr(), MachinePointerInfo(), alignment,
+                   StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                          MachineMemOperand::MONone);
   EVT addrVT = StNode->getBasePtr().getValueType();
   SDValue LoPtr = DAG.getNode(ISD::ADD, dl, addrVT,
                               StNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
-  OutChains[1] = DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0), LoPtr,
-                              MachinePointerInfo(), alignment);
+  OutChains[1] =
+      DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0), LoPtr,
+                   MachinePointerInfo(), alignment,
+                   StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                          MachineMemOperand::MONone);
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
@@ -2467,6 +2484,7 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
 
+#if 0
   if (MemVT == MVT::i64) {
     // Custom handling for i64 stores: turn it into a bitcast and a
     // v2i32 store.
@@ -2476,10 +2494,10 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
         St->getAlignment(), St->getMemOperand()->getFlags(), St->getAAInfo());
     return Chain;
   }
+#endif
 
   return SDValue();
 }
-#endif
 
 #if 0
 static SDValue LowerADDC_ADDE_SUBC_SUBE(SDValue Op, SelectionDAG &DAG) {
@@ -2785,10 +2803,8 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                                 //                                Subtarget);
     report_fatal_error("DYNAMIC_STACKALLOC expansion is not implemented yet");
 
-  case ISD::LOAD:               // return LowerLOAD(Op, DAG);
-    report_fatal_error("LOAD expansion is not implemented yet");
-  case ISD::STORE:              // return LowerSTORE(Op, DAG);
-    report_fatal_error("STORE expansion is not implemented yet");
+  case ISD::LOAD:               return LowerLOAD(Op, DAG);
+  case ISD::STORE:              return LowerSTORE(Op, DAG);
   case ISD::FADD:               // return LowerF128Op(Op, DAG,
                                 //        getLibcallName(RTLIB::ADD_F128), 2);
     report_fatal_error("FADD expansion is not implemented yet");

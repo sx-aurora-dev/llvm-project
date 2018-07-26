@@ -35,6 +35,15 @@ def CC_VE : CallingConv<[
   CCIfType<[i64, f64],
            CCAssignToReg<[SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
 
+  // long double --> pair of generic 64 bit registers
+  //
+  // NOTE: If Q1 is allocated, SX1 should not be used for following arguments,
+  //       so masking them like below.
+  CCIfType<[f128],
+           CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
+                                   [SX0, SX1, SX3, SX5]>>,
+  CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
+
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCAssignToStack<8, 8>
 ]>;
@@ -55,7 +64,11 @@ def RetCC_VE : CallingConv<[
 
   // long long/double --> generic 64 bit registers
   CCIfType<[i64, f64],
-           CCAssignToReg<[SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>
+           CCAssignToReg<[SX0, SX1, SX2, SX3, SX4, SX5, SX6, SX7]>>,
+
+  // long double --> pair of generic 64 bit registers
+  CCIfType<[f128],
+           CCAssignToReg<[Q0, Q1, Q2, Q3]>>
 ]>;
 
 // Callee-saved registers
