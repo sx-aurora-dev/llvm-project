@@ -88,6 +88,7 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
                          const ArgList &Args)
     : ToolChain(D, Triple, Args) {
+  getProgramPaths().push_back("/opt/nec/ve/bin");
   // ProgramPaths are found via 'PATH' environment variable.
 }
 
