@@ -2387,13 +2387,18 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
 
   SDValue Hi64 =
       DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LdNode->getBasePtr(),
-                  LdNode->getPointerInfo(), alignment);
+                  LdNode->getPointerInfo(), alignment,
+                  LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                         MachineMemOperand::MONone);
   EVT addrVT = LdNode->getBasePtr().getValueType();
   SDValue LoPtr = DAG.getNode(ISD::ADD, dl, addrVT,
                               LdNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
-  SDValue Lo64 = DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LoPtr,
-                             LdNode->getPointerInfo(), alignment);
+  SDValue Lo64 =
+      DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LoPtr,
+                  LdNode->getPointerInfo(), alignment,
+                  LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                         MachineMemOperand::MONone);
 
   SDValue SubRegEven = DAG.getTargetConstant(VE::sub_even, dl, MVT::i32);
   SDValue SubRegOdd  = DAG.getTargetConstant(VE::sub_odd, dl, MVT::i32);
@@ -2455,13 +2460,18 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   SDValue OutChains[2];
   OutChains[0] =
       DAG.getStore(StNode->getChain(), dl, SDValue(Hi64, 0),
-                   StNode->getBasePtr(), MachinePointerInfo(), alignment);
+                   StNode->getBasePtr(), MachinePointerInfo(), alignment,
+                   StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                          MachineMemOperand::MONone);
   EVT addrVT = StNode->getBasePtr().getValueType();
   SDValue LoPtr = DAG.getNode(ISD::ADD, dl, addrVT,
                               StNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
-  OutChains[1] = DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0), LoPtr,
-                              MachinePointerInfo(), alignment);
+  OutChains[1] =
+      DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0), LoPtr,
+                   MachinePointerInfo(), alignment,
+                   StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                          MachineMemOperand::MONone);
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
