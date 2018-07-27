@@ -123,6 +123,9 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(VE::SB16);
   Reserved.set(VE::SB17);
 
+  // VL register is reserved
+  Reserved.set(VE::VL);
+
   // sx18-sx33 are callee-saved registers
   // sx34-sx63 are temporary registers
 

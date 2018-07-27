@@ -212,8 +212,6 @@ namespace llvm {
                                         MachineBasicBlock *MBB) const;
     MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
                                          MachineBasicBlock *MBB) const;
-
-    void finalizeLowering(MachineFunction &MF) const override;
   };
 } // end namespace llvm
 
