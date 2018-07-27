@@ -218,7 +218,7 @@ class Inst:
     def inst(self):
         if not self.instName:
             return None
-        return re.sub(r'[a-z]*[0-9]*$', '', self.instName)
+        return re.sub(r'[a-z]*[0-9]*m*$', '', self.instName)
 
     def intrinsicName(self):
         return self.intrinsicName_
@@ -641,6 +641,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                     func, expr = self.make(I)
                 inst = I.inst() if I.hasInst() else ""
                 inst = re.sub(r'i64|i32|f64|f32', '', inst)
+                #print("inst={}".format(inst))
                 if inst in rowspan:
                     rowspan[inst] += 1
                 else:
