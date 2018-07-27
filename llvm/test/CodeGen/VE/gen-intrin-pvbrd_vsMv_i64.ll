@@ -27,7 +27,7 @@ for.body:                                         ; preds = %entry, %for.body
   tail call void @llvm.ve.lvl(i32 %conv3)
   %1 = bitcast i32* %pvm.addr.021 to i8*
   %2 = tail call <256 x double> @llvm.ve.vld.vss(i64 8, i8* %1)
-  %3 = tail call <8 x i64> @llvm.ve.pvfmkw.Mcv(i32 1, <256 x double> %2)
+  %3 = tail call <8 x i64> @llvm.ve.pvfmkw.Mcv(i32 7, <256 x double> %2)
   %4 = bitcast i32* %pvx.addr.022 to i8*
   %5 = tail call <256 x double> @llvm.ve.vld.vss(i64 8, i8* %4)
   %6 = tail call <256 x double> @llvm.ve.pvbrd.vsMv.i64(i64 %sy, <8 x i64> %3, <256 x double> %5)
@@ -64,4 +64,4 @@ attributes #4 = { nounwind writeonly }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 75fd1a3a6a07de8889d08fb9dd1eb1c0940e62a5) (llvm/llvm.git 882a992d251d96ec3ff0729ba24e71b2e10b6eda)"}
+!1 = !{!"clang version 7.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git d326119e3a71593369edd97e642577b570bf7c32) (llvm/llvm.git 453ce7931582b8cea4ec8bb639e18532858e5f51)"}
