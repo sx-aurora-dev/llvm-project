@@ -178,6 +178,10 @@ def simm7Op64 : Operand<i64> {
   let DecoderMethod = "DecodeSIMM7";
 }
 
+def simm7Op128 : Operand<i128> {
+  let DecoderMethod = "DecodeSIMM7";
+}
+
 def simm32Op32 : Operand<i32> {
   let DecoderMethod = "DecodeSIMM32";
 }
@@ -687,16 +691,17 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
 
 // Multiclass for floating point conversion instructions.
 //   Used by CVS/CVD/FLT and others
-multiclass CVTm<string opcStr, bits<8> opc,
+multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode,
                 RegisterClass RCo, ValueType Tyo,
                 RegisterClass RCi, ValueType Tyi, Operand immOp> {
   def r : RR<opc, (outs RCo:$sx), (ins RCi:$sy), 
-    !strconcat(opcStr, " $sx, $sy"), []> {
+    !strconcat(opcStr, " $sx, $sy"),
+    [(set Tyo:$sx, (OpNode Tyi:$sy))]> {
       let cy = 1;
     }
-
   def i : RR<opc, (outs RCo:$sx), (ins immOp:$sy), 
-    !strconcat(opcStr, " $sx, $sy"), []> {
+    !strconcat(opcStr, " $sx, $sy"),
+    [/* (set Tyo:$sx, (OpNode (Tyi simm7:$sy))) */]> {
       let cy = 0;
     }
 }
@@ -907,21 +912,32 @@ defm FCPS : RRNDm<"fcmp.s", 0x7E, setcc, F32, f32, simm7Op32, uimm6Op32>;
 let cw = 0 in defm FCMa : RRFm<"fmax", 0x3E, VEfmax>;
 let cw = 1 in defm FCMi : RRFm<"fmin", 0x3E, VEfmin>;
 
-let cx = 1, cw = 0 in let cfw = 8 in
-defm FIXs : CVTm<"cvt.w.s.sx.rz", 0x5E, I32, i32, F32, f32, simm7Op32>;
-let cx = 0, cw = 0 in let cfw = 8 in
-defm FIXd : CVTm<"cvt.w.d.sx.rz", 0x5E, I32, i32, I64, f64, simm7Op32>;
-let cfw = 8 in
-defm FIXX : CVTm<"cvt.l.d.rz", 0x4F, I64, i64, I64, f64, simm7Op64>;
-let cx = 1 in
-defm FLTs : CVTm<"cvt.s.w", 0x5E, F32, f32, I32, i32, simm7Op32>;
-let cx = 0 in
-defm FLTd : CVTm<"cvt.d.w", 0x5E, I64, f64, I32, i32, simm7Op32>;
-defm FLTX : CVTm<"cvt.d.l", 0x5F, I64, f64, I64, i64, simm7Op64>;
-defm CVS : CVTm<"cvt.s.d", 0x1F, F32, f32, I64, f64, simm7Op64>;
-defm CVD : CVTm<"cvt.d.s", 0x0F, I64, f64, F32, f32, simm7Op32>;
-// CVQ: f32 or f64 -> f128
-
+let cx = 0, cw = 0 /* sign extend */, cz = 1, sz = 0 /* round toward zero */ in
+defm FIX : CVTm<"cvt.w.d.sx.rz", 0x4E, fp_to_sint, I32, i32, I64, f64, simm7Op32>;
+let cx = 1, cw = 0 /* sign extend */, cz = 1, sz = 0 /* round toward zero */ in
+defm FIXS : CVTm<"cvt.w.s.sx.rz", 0x4E, fp_to_sint, I32, i32, F32, f32, simm7Op32>;
+let cx = 0, cz = 1, sz = 0 /* round toward zero */ in
+defm FIXX : CVTm<"cvt.l.d.rz", 0x4F, fp_to_sint, I64, i64, I64, f64, simm7Op64>;
+let cz = 0, sz = 0 in {
+  let cx = 0 in
+  defm FLT : CVTm<"cvt.d.w", 0x5E, sint_to_fp, I64, f64, I32, i32, simm7Op32>;
+  let cx = 1 in
+  defm FLTS : CVTm<"cvt.s.w", 0x5E, sint_to_fp, F32, f32, I32, i32, simm7Op32>;
+  let cx = 0 in
+  defm FLTX : CVTm<"cvt.d.l", 0x5F, sint_to_fp, I64, f64, I64, i64, simm7Op64>;
+  let cx = 0 in
+  defm CVS : CVTm<"cvt.s.d", 0x1F, fpround, F32, f32, I64, f64, simm7Op64>;
+  let cx = 1 in
+  defm CVSQ : CVTm<"cvt.s.q", 0x1F, fpround, F32, f32, F128, f128, simm7Op128>;
+  let cx = 0 in
+  defm CVD : CVTm<"cvt.d.s", 0x0F, fpextend, I64, f64, F32, f32, simm7Op32>;
+  let cx = 1 in
+  defm CVDQ : CVTm<"cvt.d.q", 0x0F, fpround, I64, f64, F128, f128, simm7Op128>;
+  let cx = 0 in
+  defm CVQ : CVTm<"cvt.q.d", 0x2D, fpextend, F128, f128, I64, f64, simm7Op64>;
+  let cx = 1 in
+  defm CVQS : CVTm<"cvt.q.s", 0x2D, fpextend, F128, f128, F32, f32, simm7Op32>;
+}
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
@@ -1186,8 +1202,6 @@ def : Pat<(and (trunc i64:$src), 0xffff),
 // Cast to i32
 def : Pat<(i32 (trunc i64:$src)),
           (ADSrm1 (EXTRACT_SUBREG $src, sub_i32), 0)>;
-def : Pat<(i32 (fp_to_sint f32:$sy)), (FIXsr f32:$sy)>;
-def : Pat<(i32 (fp_to_sint f64:$sy)), (FIXdr f64:$sy)>;
 def : Pat<(i32 (fp_to_uint f32:$sy)),
           (EXTRACT_SUBREG (ANDrm0 (FIXXr (CVDr $sy)), 32), sub_i32)>;
 def : Pat<(i32 (fp_to_uint f64:$sy)),
@@ -1202,29 +1216,23 @@ def : Pat<(i64 (sext i32:$sy)),
 def : Pat<(i64 (zext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSUrm1 i32:$sy, 0), sub_i32)>;
 def : Pat<(i64 (fp_to_sint f32:$sy)), (FIXXr (CVDr f32:$sy))>;
-def : Pat<(i64 (fp_to_sint f64:$sy)), (FIXXr f64:$sy)>;
 def : Pat<(i64 (fp_to_uint f32:$sy)), (FIXXr (CVDr f32:$sy))>;
 def : Pat<(i64 (fp_to_uint f64:$sy)), (FIXXr f64:$sy)>;
 
 // Cast to f32
-def : Pat<(f32 (sint_to_fp i32:$sy)), (FLTsr i32:$sy)>;
 def : Pat<(f32 (sint_to_fp i64:$sy)), (CVSr (FLTXr i64:$sy))>;
 def : Pat<(f32 (uint_to_fp i32:$sy)),
           (CVSr (FLTXr
             (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)))>;
 def : Pat<(f32 (uint_to_fp i64:$sy)),
           (CVSr (FLTXr $sy))>;
-def : Pat<(f32 (fpround f64:$sy)), (CVSr f64:$sy)>;
 
 // Cast to f64
-def : Pat<(f64 (sint_to_fp i32:$sy)), (FLTdr i32:$sy)>;
-def : Pat<(f64 (sint_to_fp i64:$sy)), (FLTXr i64:$sy)>;
 def : Pat<(f64 (uint_to_fp i32:$sy)),
           (FLTXr (ANDrm0 (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32))>;
 def : Pat<(f64 (uint_to_fp i64:$sy)),
           (FLTXr $sy)>;
-def : Pat<(f64 (fpextend f32:$sy)), (f64 (CVDr f32:$sy))>;
 
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
