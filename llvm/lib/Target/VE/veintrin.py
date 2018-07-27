@@ -808,11 +808,11 @@ class InstTable:
                "vvsv" : "r2",
                "vIvv" : "i",
                "vvIv" : "i2",
-               "vvvvmv" : "v",
-               "vsvvmv" : "r",
-               "vvsvmv" : "r2",
-               "vIvvmv" : "i",
-               "vvIvmv" : "i2",
+               "vvvvmv" : "vm",
+               "vsvvmv" : "rm",
+               "vvsvmv" : "r2m",
+               "vIvvmv" : "im",
+               "vvIvmv" : "i2m",
                "mmm" : "",
                "MMM" : "",
                "mm" : "",
@@ -839,6 +839,10 @@ class InstTable:
                "sM"   : "", # PCMV, etc
                "vvmv" : "vm", # VCP, VEX
                "vvm"  : "vm", # VGT, VSC
+
+               "vvvvMv" : "vm", # VFMAD, etc
+               "vsvvMv" : "rm", # VFMAD, etc
+               "vvsvMv" : "r2m", # VFMAD, etc
                }
 
         tmp = "".join([op.kind for op in args])
@@ -984,9 +988,9 @@ class InstTable:
         O_f32 = [O_f32_vvvv, O_f32_vsvv, O_f32_vvsv]
         O_pf32 = [O_f32_vvvv, O_pf32_vsvv, O_pf32_vvsv]
 
-        #O_f64 = self.addMask(O_f64)
-        #O_f32 = self.addMask(O_f32)
-        #O_pf32 = self.addMask(O_pf32)
+        O_f64 = self.addMask(O_f64)
+        O_f32 = self.addMask(O_f32)
+        O_pf32 = self.addMask(O_pf32, VM512)
 
         self.InstX(opc, instName+"d", name+".d", O_f64, expr)
         self.InstX(opc, instName+"s", name+".s", O_f32, expr)
@@ -1155,12 +1159,9 @@ T.NoImpl("VSLD")
 T.Shift(0xF5, "vsrl", "VSRL", T_u64, "{0} = {1} >> ({2} & 0x3f)")
 T.ShiftPacked(0xF5, "vsrl", "VSRL", T_u32, "{0} = {1} >> ({2} & 0x1f)")
 T.NoImpl("VSRD")
-#T.NoImpl("VSLA")
-
 T.Shift(0xE6, "vsla.w", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
 T.ShiftPacked(0xE6, "vsla", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
 T.Shift(0xD4, "vsla.l", "VSLAX", T_i64, "{0} = {1} << ({2} & 0x3f)")
-
 T.Shift(0xF6, "vsra.w", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
 T.ShiftPacked(0xF6, "vsra", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
 T.Shift(0xD5, "vsra.l", "VSRAX", T_i64, "{0} = {1} >> ({2} & 0x3f)")
