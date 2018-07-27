@@ -28,10 +28,13 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   CodePointerSize = CalleeSaveStackSlotSize = 8;
   MaxInstLength = MinInstAlignment = 8;
 
-  ZeroDirective = nullptr;
+  // VE has ".zero" directive although it is not listed in assembler manual.
+  // ZeroDirective = nullptr;
+
   Data32bitsDirective = "\t.word\t";
 
-  // Uses '.section' before '.bss' directive
+  // Uses '.section' before '.bss' directive.  VE requires this although
+  // assembler manual says sinple '.bss' is supported.
   UsesELFSectionDirectiveForBSS = true;
 
   // ExceptionsType = ExceptionHandling::DwarfCFI;
