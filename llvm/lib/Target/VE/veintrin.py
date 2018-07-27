@@ -1136,7 +1136,7 @@ T.Inst3u(0xB9, "vcmpu", "VCMP", "{0} = compare({1}, {2})")
 T.Inst3w(0xFA, "vcmps", "VCPS", "{0} = compare({1}, {2})")
 T.Inst3l(0xBA, "vcmps", "VCPX", "{0} = compare({1}, {2})")
 T.Inst3w(0x8A, "vmaxs", "VCMSa", "{0} = max({1}, {2})")
-T.Inst3w(0x8A, "vmins", "VCMSi", "{0} = max({1}, {2})")
+T.Inst3w(0x8A, "vmins", "VCMSi", "{0} = min({1}, {2})")
 T.Inst3l(0x9A, "vmaxs", "VCMXa", "{0} = max({1}, {2})")
 T.Inst3l(0x9A, "vmins", "VCMXi", "{0} = min({1}, {2})")
 

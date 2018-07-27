@@ -590,7 +590,7 @@ defm VCMP : RVUm<"vcmpu", 0xB9>;
 defm VCPS : RVWm<"vcmps", 0xFA>;
 defm VCPX : RVLm<"vcmps", 0xBA>;
 let cs2 = 0 in defm VCMSa : RVWm<"vmaxs", 0x8A>;
-let cs2 = 1 in defm VCMSi : RVWm<"vmaxs", 0x8A>;
+let cs2 = 1 in defm VCMSi : RVWm<"vmins", 0x8A>;
 let cs2 = 0 in defm VCMXa : RVLm<"vmaxs", 0x9A>;
 let cs2 = 1 in defm VCMXi : RVLm<"vmins", 0x9A>;
 
