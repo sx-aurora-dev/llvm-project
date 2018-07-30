@@ -4,8 +4,8 @@
 define dso_local fp128 @loadq(fp128* nocapture readonly) local_unnamed_addr #0 {
 ; CHECK-LABEL: loadq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s34, (,%s0)
-; CHECK-NEXT:    ld %s35, 8(,%s0)
+; CHECK-NEXT:    ld %s34, 8(,%s0)
+; CHECK-NEXT:    ld %s35, (,%s0)
 ; CHECK-NEXT:    or %s0, 0, %s34
 ; CHECK-NEXT:    or %s1, 0, %s35
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -17,8 +17,8 @@ define dso_local fp128 @loadq(fp128* nocapture readonly) local_unnamed_addr #0 {
 define dso_local void @storeq(fp128* nocapture, fp128) local_unnamed_addr #1 {
 ; CHECK-LABEL: storeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s3, 8(,%s0)
-; CHECK-NEXT:    st %s2, (,%s0)
+; CHECK-NEXT:    st %s2, 8(,%s0)
+; CHECK-NEXT:    st %s3, (,%s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   store fp128 %1, fp128* %0, align 16, !tbaa !2
   ret void
@@ -28,26 +28,26 @@ define dso_local void @storeq(fp128* nocapture, fp128) local_unnamed_addr #1 {
 define dso_local void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) local_unnamed_addr #1 {
 ; CHECK-LABEL: ld_l_arg:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s34, 272(,%s9)
-; CHECK-NEXT:    lea %s36,272(,%s9)
+; CHECK-NEXT:    lea %s34,272(,%s9)
+; CHECK-NEXT:    or %s34, 8, %s34
+; CHECK-NEXT:    ld %s34, (,%s34)
+; CHECK-NEXT:    ld %s35, 272(,%s9)
+; CHECK-NEXT:    lea %s36,240(,%s9)
 ; CHECK-NEXT:    or %s36, 8, %s36
-; CHECK-NEXT:    ld %s35, (,%s36)
-; CHECK-NEXT:    ld %s36, 240(,%s9)
-; CHECK-NEXT:    lea %s38,240(,%s9)
-; CHECK-NEXT:    or %s38, 8, %s38
-; CHECK-NEXT:    ld %s37, (,%s38)
+; CHECK-NEXT:    ld %s36, (,%s36)
+; CHECK-NEXT:    ld %s37, 240(,%s9)
 ; CHECK-NEXT:    ld %s38, 288(,%s9)
 ; CHECK-NEXT:    ld %s39, 256(,%s9)
-; CHECK-NEXT:    st %s3, 8(,%s0)
-; CHECK-NEXT:    st %s2, (,%s0)
+; CHECK-NEXT:    st %s2, 8(,%s0)
+; CHECK-NEXT:    st %s3, (,%s0)
 ; CHECK-NEXT:    st %s4, (,%s0)
 ; CHECK-NEXT:    st %s5, (,%s0)
 ; CHECK-NEXT:    st %s6, (,%s0)
-; CHECK-NEXT:    st %s37, 8(,%s0)
-; CHECK-NEXT:    st %s36, (,%s0)
+; CHECK-NEXT:    st %s36, 8(,%s0)
+; CHECK-NEXT:    st %s37, (,%s0)
 ; CHECK-NEXT:    st %s39, (,%s0)
-; CHECK-NEXT:    st %s35, 8(,%s0)
-; CHECK-NEXT:    st %s34, (,%s0)
+; CHECK-NEXT:    st %s34, 8(,%s0)
+; CHECK-NEXT:    st %s35, (,%s0)
 ; CHECK-NEXT:    st %s38, (,%s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %10 = bitcast i8* %0 to fp128*
