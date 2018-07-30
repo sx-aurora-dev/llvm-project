@@ -1202,10 +1202,14 @@ def : Pat<(and (trunc i64:$src), 0xffff),
 // Cast to i32
 def : Pat<(i32 (trunc i64:$src)),
           (ADSrm1 (EXTRACT_SUBREG $src, sub_i32), 0)>;
+def : Pat<(i32 (fp_to_sint f128:$sy)), (FIXr (CVDQr $sy))>;
 def : Pat<(i32 (fp_to_uint f32:$sy)),
           (EXTRACT_SUBREG (ANDrm0 (FIXXr (CVDr $sy)), 32), sub_i32)>;
+// FIXME: need special treatment for fp_to_uint for f64 and f128
 def : Pat<(i32 (fp_to_uint f64:$sy)),
-          (EXTRACT_SUBREG (ANDrm0 (FIXXr f64:$sy), 32), sub_i32)>;
+          (EXTRACT_SUBREG (ANDrm0 (FIXXr $sy), 32), sub_i32)>;
+def : Pat<(i32 (fp_to_sint f128:$sy)),
+          (EXTRACT_SUBREG (ANDrm0 (FIXXr (CVDQr $sy)), 32), sub_i32)>;
 
 // Cast to i64
 def : Pat<(sext_inreg I64:$src, i32),
@@ -1214,16 +1218,20 @@ def : Pat<(sext_inreg I64:$src, i32),
 def : Pat<(i64 (sext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSrm1 $sy, 0), sub_i32)>;
 def : Pat<(i64 (zext i32:$sy)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSUrm1 i32:$sy, 0), sub_i32)>;
-def : Pat<(i64 (fp_to_sint f32:$sy)), (FIXXr (CVDr f32:$sy))>;
-def : Pat<(i64 (fp_to_uint f32:$sy)), (FIXXr (CVDr f32:$sy))>;
-def : Pat<(i64 (fp_to_uint f64:$sy)), (FIXXr f64:$sy)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSUrm1 $sy, 0), sub_i32)>;
+def : Pat<(i64 (fp_to_sint f32:$sy)), (FIXXr (CVDr $sy))>;
+def : Pat<(i64 (fp_to_sint f128:$sy)), (FIXXr (CVDQr $sy))>;
+def : Pat<(i64 (fp_to_uint f32:$sy)), (FIXXr (CVDr $sy))>;
+// FIXME: need special treatment for fp_to_uint for f64 and f128
+def : Pat<(i64 (fp_to_uint f64:$sy)), (FIXXr $sy)>;
+def : Pat<(i64 (fp_to_uint f128:$sy)), (FIXXr (CVDQr $sy))>;
 
 // Cast to f32
 def : Pat<(f32 (sint_to_fp i64:$sy)), (CVSr (FLTXr i64:$sy))>;
 def : Pat<(f32 (uint_to_fp i32:$sy)),
           (CVSr (FLTXr
             (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)))>;
+// FIXME: need special treatment for uint_to_fp for i64
 def : Pat<(f32 (uint_to_fp i64:$sy)),
           (CVSr (FLTXr $sy))>;
 
@@ -1231,8 +1239,18 @@ def : Pat<(f32 (uint_to_fp i64:$sy)),
 def : Pat<(f64 (uint_to_fp i32:$sy)),
           (FLTXr (ANDrm0 (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32))>;
+// FIXME: need special treatment for uint_to_fp for i64
 def : Pat<(f64 (uint_to_fp i64:$sy)),
           (FLTXr $sy)>;
+
+// Cast to f128
+def : Pat<(f128 (sint_to_fp i32:$sy)), (CVQr (FLTr $sy))>;
+def : Pat<(f128 (sint_to_fp i64:$sy)), (CVQr (FLTXr $sy))>;
+def : Pat<(f128 (uint_to_fp i32:$sy)),
+          (CVQr (FLTXr
+            (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)))>;
+// FIXME: need special treatment for uint_to_fp for i64
+def : Pat<(f128 (uint_to_fp i64:$sy)), (CVQr (FLTXr $sy))>;
 
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
