@@ -47,11 +47,10 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                               const SmallVectorImpl<ISD::OutputArg> &Outs,
                               const SmallVectorImpl<SDValue> &OutVals,
                               const SDLoc &DL, SelectionDAG &DAG) const {
-  if (1)
-    return LowerReturn_64(Chain, CallConv, IsVarArg, Outs, OutVals, DL, DAG);
-  return LowerReturn_32(Chain, CallConv, IsVarArg, Outs, OutVals, DL, DAG);
+  return LowerReturn_64(Chain, CallConv, IsVarArg, Outs, OutVals, DL, DAG);
 }
 
+#if 0
 SDValue
 VETargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
                                     bool IsVarArg,
@@ -118,6 +117,7 @@ VETargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
 
   return DAG.getNode(VEISD::RET_FLAG, DL, MVT::Other, RetOps);
 }
+#endif
 
 // Lower return values for the 64-bit ABI.
 // Return values are passed the exactly the same way as function arguments.
@@ -521,11 +521,10 @@ SDValue VETargetLowering::LowerFormalArguments_64(
 SDValue
 VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                SmallVectorImpl<SDValue> &InVals) const {
-  if (1)
-    return LowerCall_64(CLI, InVals);
-  return LowerCall_32(CLI, InVals);
+  return LowerCall_64(CLI, InVals);
 }
 
+#if 0
 // Lower a call for the 32-bit ABI.
 SDValue
 VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
@@ -821,6 +820,7 @@ VETargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
 
   return Chain;
 }
+#endif
 
 // FIXME? Maybe this could be a TableGen attribute on some registers and
 // this table could be generated automatically from RegInfo.
@@ -889,93 +889,10 @@ VETargetLowering::getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const
   return DAG.getDataLayout().getTypeAllocSize(ElementTy);
 }
 
-
-#if 0 // ishizaka
-// Fixup floating point arguments in the ... part of a varargs call.
-//
-// The SPARC v9 ABI requires that floating point arguments are treated the same
-// as integers when calling a varargs function. This does not apply to the
-// fixed arguments that are part of the function's prototype.
-//
-// This function post-processes a CCValAssign array created by
-// AnalyzeCallOperands().
-static void fixupVariableFloatArgs(SmallVectorImpl<CCValAssign> &ArgLocs,
-                                   ArrayRef<ISD::OutputArg> Outs) {
-  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    const CCValAssign &VA = ArgLocs[i];
-    MVT ValTy = VA.getLocVT();
-    // FIXME: What about f32 arguments? C promotes them to f64 when calling
-    // varargs functions.
-    if (!VA.isRegLoc() || (ValTy != MVT::f64 && ValTy != MVT::f128))
-      continue;
-    // The fixed arguments to a varargs function still go in FP registers.
-    if (Outs[VA.getValNo()].IsFixed)
-      continue;
-
-    // This floating point argument should be reassigned.
-    CCValAssign NewVA;
-
-    // Determine the offset into the argument array.
-    unsigned firstReg = (ValTy == MVT::f64) ? VE::SX0 : VE::Q0;
-    unsigned argSize  = (ValTy == MVT::f64) ? 8 : 16;
-    unsigned Offset = argSize * (VA.getLocReg() - firstReg);
-    assert(Offset < 16*8 && "Offset out of range, bad register enum?");
-
-    if (Offset < 8*8) {
-      // This argument should go in %s0-%s7.
-      unsigned IReg = VE::SX0 + Offset/8;
-      if (ValTy == MVT::f64)
-        // Full register, just bitconvert into i64.
-        NewVA = CCValAssign::getReg(VA.getValNo(), VA.getValVT(),
-                                    IReg, MVT::i64, CCValAssign::BCvt);
-      else {
-        assert(ValTy == MVT::f128 && "Unexpected type!");
-        // Full register, just bitconvert into i128 -- We will lower this into
-        // two i64s in LowerCall_64.
-        NewVA = CCValAssign::getCustomReg(VA.getValNo(), VA.getValVT(),
-                                          IReg, MVT::i128, CCValAssign::BCvt);
-      }
-    } else {
-      // This needs to go to memory, we're out of integer registers.
-      NewVA = CCValAssign::getMem(VA.getValNo(), VA.getValVT(),
-                                  Offset, VA.getLocVT(), VA.getLocInfo());
-    }
-    ArgLocs[i] = NewVA;
-  }
-}
-#endif
-
-// allocate a parameter to both a register and a stack 
-// for variable number of arguments.
-static bool CC_VE2(unsigned ValNo, MVT ValVT,
-                  MVT LocVT, CCValAssign::LocInfo LocInfo,
-                  ISD::ArgFlagsTy ArgFlags, CCState &State) {
-
-    if (LocVT == MVT::i32 ||
-        LocVT == MVT::f32 ||
-        LocVT == MVT::i64 ||
-        LocVT == MVT::f64) {
-        static const MCPhysReg RegList1[] = {
-            VE::SX0, VE::SX1, VE::SX2, VE::SX3,
-            VE::SX4, VE::SX5, VE::SX6, VE::SX7
-        };
-        if (unsigned Reg = State.AllocateReg(RegList1)) {
-            State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
-        }
-    }
-
-    unsigned Offset2 = State.AllocateStack(8, 8);
-    State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset2, LocVT, LocInfo));
-    return false;
-
-    return true;  // CC didn't match.
-}
-
-
 // Lower a call for the 64-bit ABI.
 SDValue
 VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
-                                  SmallVectorImpl<SDValue> &InVals) const {
+                               SmallVectorImpl<SDValue> &InVals) const {
   SelectionDAG &DAG = CLI.DAG;
   SDLoc DL = CLI.DL;
   SDValue Chain = CLI.Chain;
@@ -993,34 +910,28 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CLI.CallConv, CLI.IsVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
-#if 0 // ishizaka
   // Allocate the preserved area first.
   CCInfo.AllocateStack(ArgsPreserved, 8);
   // We already allocated the preserved area, so the stack offset computed
   // by CC_VE would be correct now.
   CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
-#else
 
-  if (CLI.IsVarArg) {
-      CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE2);
-  } else {
-      CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
-  }
-  // Allocate parameters first.
-  CCInfo.AllocateStack(ArgsPreserved, 8);
-#endif
+  // VE requires to use both register and stack for varargs or no-prototyped
+  // functions.  FIXME: How to check prototype here?
+  bool UseBoth = CLI.IsVarArg /* || CLI.NoProtoType */;
+
+  // Analyze operands again if it is required to store BOTH.
+  SmallVector<CCValAssign, 16> ArgLocs2;
+  CCState CCInfo2(CLI.CallConv, CLI.IsVarArg, DAG.getMachineFunction(),
+                  ArgLocs2, *DAG.getContext());
+  if (UseBoth)
+    CCInfo2.AnalyzeCallOperands(CLI.Outs, CC_VE2);
 
   // Get the size of the outgoing arguments stack space requirement.
   unsigned ArgsSize = CCInfo.getNextStackOffset();
 
   // Keep stack frames 16-byte aligned.
   ArgsSize = alignTo(ArgsSize, 16);
-
-#if 0 // ishizaka
-  // Varargs calls require special treatment.
-  if (CLI.IsVarArg)
-    fixupVariableFloatArgs(ArgLocs, CLI.Outs);
-#endif
 
   // Adjust the stack pointer to make room for the arguments.
   // FIXME: Use hasReservedCallFrame to avoid %sp adjustments around all calls
@@ -1037,7 +948,6 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // call instruction itself.
   SmallVector<SDValue, 8> MemOpChains;
 
-#if 1
   // VE needs to get address of callee function in a register
   // So, prepare to copy it to SX12 here.
 
@@ -1069,16 +979,10 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   }
 
   RegsToPass.push_back(std::make_pair(VE::SX12, Callee));
-#endif
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    const CCValAssign &VA = ArgLocs[i];
-#if 0 // ishizaka
+    CCValAssign &VA = ArgLocs[i];
     SDValue Arg = CLI.OutVals[i];
-#else
-    // Varargs call uses a register and a stack for a parameters
-    SDValue Arg = CLI.IsVarArg ? CLI.OutVals[i/2] : CLI.OutVals[i];
-#endif
 
     // Promote the value if needed.
     switch (VA.getLocInfo()) {
@@ -1086,7 +990,6 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
       llvm_unreachable("Unknown location info!");
     case CCValAssign::Full:
       break;
-#if 0 // ishizaka
     case CCValAssign::SExt:
       Arg = DAG.getNode(ISD::SIGN_EXTEND, DL, VA.getLocVT(), Arg);
       break;
@@ -1096,47 +999,9 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     case CCValAssign::AExt:
       Arg = DAG.getNode(ISD::ANY_EXTEND, DL, VA.getLocVT(), Arg);
       break;
-    case CCValAssign::BCvt:
-      // fixupVariableFloatArgs() may create bitcasts from f128 to i128. But
-      // SPARC does not support i128 natively. Lower it into two i64, see below.
-      if (!VA.needsCustom() || VA.getValVT() != MVT::f128
-          || VA.getLocVT() != MVT::i128)
-        Arg = DAG.getNode(ISD::BITCAST, DL, VA.getLocVT(), Arg);
-      break;
-#endif
     }
 
     if (VA.isRegLoc()) {
-      if (VA.needsCustom() && VA.getValVT() == MVT::f128
-          && VA.getLocVT() == MVT::i128) {
-#if 0 // ishizaka
-        // Store and reload into the integer register reg and reg+1.
-        unsigned Offset = 8 * (VA.getLocReg() - VE::SX0);
-        unsigned StackOffset = Offset + ArgsBaseOffset;
-        SDValue StackPtr = DAG.getRegister(VE::SX11, PtrVT);
-        SDValue HiPtrOff = DAG.getIntPtrConstant(StackOffset, DL);
-        HiPtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, HiPtrOff);
-        SDValue LoPtrOff = DAG.getIntPtrConstant(StackOffset + 8, DL);
-        LoPtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, LoPtrOff);
-
-        // Store to %sp+176+Offset
-        SDValue Store =
-            DAG.getStore(Chain, DL, Arg, HiPtrOff, MachinePointerInfo());
-        // Load into Reg and Reg+1
-        SDValue Hi64 =
-            DAG.getLoad(MVT::i64, DL, Store, HiPtrOff, MachinePointerInfo());
-        SDValue Lo64 =
-            DAG.getLoad(MVT::i64, DL, Store, LoPtrOff, MachinePointerInfo());
-        RegsToPass.push_back(std::make_pair(VA.getLocReg(),
-                                            Hi64));
-        RegsToPass.push_back(std::make_pair(VA.getLocReg()+1,
-                                            Lo64));
-        continue;
-#else
-      llvm_unreachable("f128 and i128 are not supported\n");
-#endif
-      }
-
       // The custom bit on an i32 return value indicates that it should be
       // passed in the high bits of the register.
       if (VA.getValVT() == MVT::i32 && VA.needsCustom()) {
@@ -1159,7 +1024,9 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
 #endif
       }
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
-      continue;
+      if (!UseBoth)
+        continue;
+      VA = ArgLocs2[i];
     }
 
     assert(VA.isMemLoc());
@@ -1190,24 +1057,9 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
     InGlue = Chain.getValue(1);
   }
 
-#if 0
-  // If the callee is a GlobalAddress node (quite common, every direct call is)
-  // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
-  // Likewise ExternalSymbol -> TargetExternalSymbol.
-  SDValue Callee = CLI.Callee;
-  unsigned TF = isPositionIndependent() ? VEMCExpr::VK_VE_WPLT30 : 0;
-  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee))
-    Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, TF);
-  else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
-    Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
-#endif
-
   // Build the operands for the call instruction itself.
   SmallVector<SDValue, 8> Ops;
   Ops.push_back(Chain);
-#if 0
-  Ops.push_back(Callee);
-#endif
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i)
     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
                                   RegsToPass[i].second.getValueType()));
@@ -2403,17 +2255,18 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
   SDValue SubRegEven = DAG.getTargetConstant(VE::sub_even, dl, MVT::i32);
   SDValue SubRegOdd  = DAG.getTargetConstant(VE::sub_odd, dl, MVT::i32);
 
+  // VE stores LowReg to 8(addr) and HiReg to 0(addr)
   SDNode *InFP128 = DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
                                        dl, MVT::f128);
   InFP128 = DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, dl,
                                MVT::f128,
                                SDValue(InFP128, 0),
-                               Hi64,
+                               Lo64,
                                SubRegEven);
   InFP128 = DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, dl,
                                MVT::f128,
                                SDValue(InFP128, 0),
-                               Lo64,
+                               Hi64,
                                SubRegOdd);
   SDValue OutChains[2] = { SDValue(Hi64.getNode(), 1),
                            SDValue(Lo64.getNode(), 1) };
@@ -2457,9 +2310,10 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   if (alignment > 8)
     alignment = 8;
 
+  // VE stores LowReg to 8(addr) and HiReg to 0(addr)
   SDValue OutChains[2];
   OutChains[0] =
-      DAG.getStore(StNode->getChain(), dl, SDValue(Hi64, 0),
+      DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0),
                    StNode->getBasePtr(), MachinePointerInfo(), alignment,
                    StNode->isVolatile() ? MachineMemOperand::MOVolatile :
                                           MachineMemOperand::MONone);
@@ -2468,7 +2322,7 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
                               StNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
   OutChains[1] =
-      DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0), LoPtr,
+      DAG.getStore(StNode->getChain(), dl, SDValue(Hi64, 0), LoPtr,
                    MachinePointerInfo(), alignment,
                    StNode->isVolatile() ? MachineMemOperand::MOVolatile :
                                           MachineMemOperand::MONone);
