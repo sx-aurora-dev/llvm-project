@@ -36,6 +36,7 @@ define dso_local zeroext i16 @func4() local_unnamed_addr #0 {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.sx %s34, 191(,%s11)
+; CHECK-NEXT:    and %s0, %s34, (48)0 
   %1 = alloca i8, align 1
   %2 = load i8, i8* %1, align 1, !tbaa !2
   %3 = sext i8 %2 to i16
