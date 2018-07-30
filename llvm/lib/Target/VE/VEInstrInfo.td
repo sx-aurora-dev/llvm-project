@@ -627,6 +627,45 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
   }
 }
 
+// Multiclass for RR type instructions with only 2 operands
+//   Used by pcnt, brv
+
+multiclass RRI2m<string opcStr, bits<8>opc, SDNode OpNode,
+                 RegisterClass RC, ValueType Ty, Operand immOp2> {
+  def r : RR<
+    opc, (outs RC:$sx), (ins RC:$sz),
+    !strconcat(opcStr, " $sx, $sz"),
+    [(set Ty:$sx, (OpNode Ty:$sz))]> {
+    let cy = 1;
+    let cz = 1;
+  }
+  def i : RR<
+    opc, (outs RC:$sx), (ins RC:$sz),
+    !strconcat(opcStr, " $sx, $sz"),
+    [(set Ty:$sx, (OpNode Ty:$sz))]> {
+    let cy = 0;
+    let cz = 1;
+  }
+  def m0 : RR<
+    opc, (outs RC:$sx), (ins immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})0"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let sz{6} = 1;
+    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
+    let hasSideEffects = 0;
+  }
+  def m1 : RR<
+    opc, (outs RC:$sx), (ins immOp2:$sz),
+    !strconcat(opcStr, " $sx, (${sz})1"),
+    []> {
+    let cy = 1;
+    let cz = 0;
+    let hasSideEffects = 0;
+  }
+}
+
 
 // Branch multiclass
 let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
@@ -860,6 +899,16 @@ let cx = 0 in {
      defm MRG : RRm<"mrg", 0x56, mrg, I64, i64, simm7Op64, uimm6Op64>;
    */
 }
+
+// Bits operations
+
+let cx = 0 in {
+defm PCNT : RRI2m<"pcnt", 0x38, ctpop, I64, i64, uimm6Op64>;
+defm BRV : RRI2m<"brv", 0x39, bitreverse, I64, i64, uimm6Op64>;
+defm LDZ : RRI2m<"ldz", 0x67, ctlz, I64, i64, uimm6Op64>;
+defm BSWP : RRINDm<"bswp", 0x2B, bswap, I64, i64, simm7Op64, uimm6Op64>;
+}
+
 
 // 5.3.2.4 Shift Instructions
 
@@ -1591,6 +1640,22 @@ def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
 // bitconvert
 def : Pat<(f64 (bitconvert i64:$src)), (COPY_TO_REGCLASS $src, I64)>;
 def : Pat<(i64 (bitconvert f64:$src)), (COPY_TO_REGCLASS $src, I64)>;
+
+// Bits operations pattern matchings.
+def : Pat<(i32 (ctpop i32:$src)),
+          (EXTRACT_SUBREG (PCNTr (ANDrm0 (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;
+def : Pat<(i32 (bitreverse i32:$src)),
+          (EXTRACT_SUBREG (SRLri (BRVr (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32)), 32), sub_i32)>;
+def : Pat<(i32 (ctlz i32:$src)),
+          (EXTRACT_SUBREG (LDZr (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32)), sub_i32)>;
+def : Pat<(i64 (bswap i64:$src)),
+          (BSWPri $src, 0)>;
+def : Pat<(i32 (bswap i32:$src)),
+          (EXTRACT_SUBREG (BSWPri (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32), 1), sub_i32)>;
 
 // Several special pattern matches to optimize code
 
