@@ -1253,24 +1253,21 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BR_CC, MVT::i64, Custom);
   setOperationAction(ISD::BR_CC, MVT::f32, Custom);
   setOperationAction(ISD::BR_CC, MVT::f64, Custom);
+  // FIXME: VE's BR_CC for f128 is not inmplemented yet
   setOperationAction(ISD::BR_CC, MVT::f128, Custom);
 
+  // FIXME: VE's SETJMP is not investigated yet.
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
 #endif
 
+  // FIXME: VE's ADDC stuff is not investigated yet.
   if (1) {
     setOperationAction(ISD::ADDC, MVT::i64, Custom);
     setOperationAction(ISD::ADDE, MVT::i64, Custom);
     setOperationAction(ISD::SUBC, MVT::i64, Custom);
     setOperationAction(ISD::SUBE, MVT::i64, Custom);
 
-    setOperationAction(ISD::CTPOP, MVT::i64, Legal);
-    setOperationAction(ISD::CTTZ , MVT::i64, Expand);
-    setOperationAction(ISD::CTLZ , MVT::i64, Expand);
-    setOperationAction(ISD::BSWAP, MVT::i64, Expand);
-    setOperationAction(ISD::ROTL , MVT::i64, Expand);
-    setOperationAction(ISD::ROTR , MVT::i64, Expand);
     setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
   }
 
@@ -1282,6 +1279,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setMinCmpXchgSizeInBits(32);
 
+  // FIXME: VE's atomic instructions are not investivated yet.
   setOperationAction(ISD::ATOMIC_SWAP, MVT::i32, Legal);
 
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Legal);
@@ -1297,6 +1295,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::ATOMIC_STORE, MVT::i64, Custom);
   }
 
+  // FIXME: VE's I128 stuff is not investivated yet
   if (!1) {
     // These libcalls are not available in 32-bit.
     setLibcallName(RTLIB::SHL_I128, nullptr);
@@ -1332,24 +1331,27 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FSINCOS, VT, Expand);
   }
 
-  setOperationAction(ISD::CTTZ , MVT::i32, Expand);
-  setOperationAction(ISD::CTLZ , MVT::i32, Expand);
-  setOperationAction(ISD::ROTL , MVT::i32, Expand);
-  setOperationAction(ISD::ROTR , MVT::i32, Expand);
-  setOperationAction(ISD::BSWAP, MVT::i32, Expand);
+  // FIXME: VE's FCOPYSIGN is not investivated yet
   setOperationAction(ISD::FCOPYSIGN, MVT::f128, Expand);
   setOperationAction(ISD::FCOPYSIGN, MVT::f64, Expand);
   setOperationAction(ISD::FCOPYSIGN, MVT::f32, Expand);
 
+  // FIXME: VE's SHL_PARTS and others are not investigated yet.
   setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
+  if (1) {
+    setOperationAction(ISD::SHL_PARTS, MVT::i64, Expand);
+    setOperationAction(ISD::SRA_PARTS, MVT::i64, Expand);
+    setOperationAction(ISD::SRL_PARTS, MVT::i64, Expand);
+  }
 
   // Expands to [SU]MUL_LOHI.
   setOperationAction(ISD::MULHU,     MVT::i32, Expand);
   setOperationAction(ISD::MULHS,     MVT::i32, Expand);
   //setOperationAction(ISD::MUL,       MVT::i32, Expand);
 
+  // FIXME: VE's i64 MUL stuff is not investigated yet.
 #if 0
   if (Subtarget->useSoftMulDiv()) {
     // .umul works for both signed and unsigned
@@ -1373,11 +1375,24 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
     setOperationAction(ISD::UMULO,     MVT::i64, Custom);
     setOperationAction(ISD::SMULO,     MVT::i64, Custom);
-
-    setOperationAction(ISD::SHL_PARTS, MVT::i64, Expand);
-    setOperationAction(ISD::SRA_PARTS, MVT::i64, Expand);
-    setOperationAction(ISD::SRL_PARTS, MVT::i64, Expand);
   }
+
+  // Bits operations
+  setOperationAction(ISD::BITREVERSE, MVT::i32, Legal);
+  setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
+  setOperationAction(ISD::BSWAP, MVT::i32, Legal);
+  setOperationAction(ISD::BSWAP, MVT::i64, Legal);
+  setOperationAction(ISD::CTPOP, MVT::i32, Legal);
+  setOperationAction(ISD::CTPOP, MVT::i64, Legal);
+  // FIXME: VE has CTLZ, but not sure how to use it correctly atm.
+  setOperationAction(ISD::CTLZ , MVT::i32, Legal);
+  setOperationAction(ISD::CTLZ , MVT::i64, Legal);
+  setOperationAction(ISD::CTTZ , MVT::i32, Expand);
+  setOperationAction(ISD::CTTZ , MVT::i64, Expand);
+  setOperationAction(ISD::ROTL , MVT::i32, Expand);
+  setOperationAction(ISD::ROTL , MVT::i64, Expand);
+  setOperationAction(ISD::ROTR , MVT::i32, Expand);
+  setOperationAction(ISD::ROTR , MVT::i64, Expand);
 
   // VASTART needs to be custom lowered to use the VarArgsFrameIndex.
   setOperationAction(ISD::VASTART           , MVT::Other, Custom);
@@ -1390,10 +1405,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STACKSAVE         , MVT::Other, Expand);
   setOperationAction(ISD::STACKRESTORE      , MVT::Other, Expand);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32  , Custom);
-
-  setStackPointerRegisterToSaveRestore(VE::SX11);
-
-  setOperationAction(ISD::CTPOP, MVT::i32, Legal);
 
   // VE has no load/store for f128, but llvm doesn't expand them
   // automatically, so we need to use Custom here.
@@ -1435,6 +1446,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
   // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
   setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
+
+  setStackPointerRegisterToSaveRestore(VE::SX11);
 
   // Set function alignment to 16 bytes (4 bits)
   setMinFunctionAlignment(4);
