@@ -16,7 +16,7 @@
 //===----------------------------------------------------------------------===//
 
 def CC_VE : CallingConv<[
-  // all arguments get passed in generic registers if there is space.
+  // All arguments get passed in generic registers if there is space.
 
   // Promote i1/i8/i16 arguments to i32.
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
@@ -37,22 +37,21 @@ def CC_VE : CallingConv<[
 
   // long double --> pair of generic 64 bit registers
   //
-  // NOTE: If Q1 is allocated, SX1 should not be used for following arguments,
-  //       so masking them like below.
+  // NOTE: If Q1 is allocated while SX1 is free, llvm tries to allocate SX1 for
+  //       following operands, this masks SX1 to avoid such behavior.
   CCIfType<[f128],
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
-  CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
+  CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
   CCAssignToStack<8, 8>
 ]>;
 
 def CC_VE2 : CallingConv<[
-  // all arguments get passed in stack
+  // All arguments get passed in stack for varargs function or non-prototyped
+  // function.
   CCIfType<[f128], CCAssignToStack<16, 16>>,
-
-  // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCAssignToStack<8, 8>
 ]>;
 
