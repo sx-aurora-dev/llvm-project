@@ -1246,16 +1246,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
 #endif
 
-  // FIXME: VE's ADDC stuff is not investigated yet.
-  if (1) {
-    setOperationAction(ISD::ADDC, MVT::i64, Custom);
-    setOperationAction(ISD::ADDE, MVT::i64, Custom);
-    setOperationAction(ISD::SUBC, MVT::i64, Custom);
-    setOperationAction(ISD::SUBE, MVT::i64, Custom);
-
-    setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
-  }
-
   // ATOMICs.
   // Atomics are supported on VE. 32-bit atomics are also
   // supported by some Leon VE variants. Otherwise, atomics
@@ -1390,7 +1380,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::VAEND             , MVT::Other, Expand);
   setOperationAction(ISD::STACKSAVE         , MVT::Other, Expand);
   setOperationAction(ISD::STACKRESTORE      , MVT::Other, Expand);
-  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32  , Custom);
+
+  // Expand DYNAMIC_STACKALLOC
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Expand);
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Expand);
 
   // VE has no load/store for f128, but llvm doesn't expand them
   // automatically, so we need to use Custom here.
@@ -1821,200 +1814,6 @@ VETargetLowering::LowerF128Op(SDValue Op, SelectionDAG &DAG,
 #endif
 
 #if 0
-SDValue VETargetLowering::LowerF128Compare(SDValue LHS, SDValue RHS,
-                                           unsigned &VECC, const SDLoc &DL,
-                                           SelectionDAG &DAG) const {
-
-  const char *LibCall = nullptr;
-  bool is64Bit = 1;
-  switch(VECC) {
-  default: llvm_unreachable("Unhandled conditional code!");
-  case SPCC::FCC_E  : LibCall = is64Bit? "_Qp_feq" : "_Q_feq"; break;
-  case SPCC::FCC_NE : LibCall = is64Bit? "_Qp_fne" : "_Q_fne"; break;
-  case SPCC::FCC_L  : LibCall = is64Bit? "_Qp_flt" : "_Q_flt"; break;
-  case SPCC::FCC_G  : LibCall = is64Bit? "_Qp_fgt" : "_Q_fgt"; break;
-  case SPCC::FCC_LE : LibCall = is64Bit? "_Qp_fle" : "_Q_fle"; break;
-  case SPCC::FCC_GE : LibCall = is64Bit? "_Qp_fge" : "_Q_fge"; break;
-  case SPCC::FCC_UL :
-  case SPCC::FCC_ULE:
-  case SPCC::FCC_UG :
-  case SPCC::FCC_UGE:
-  case SPCC::FCC_U  :
-  case SPCC::FCC_O  :
-  case SPCC::FCC_LG :
-  case SPCC::FCC_UE : LibCall = is64Bit? "_Qp_cmp" : "_Q_cmp"; break;
-  }
-
-  auto PtrVT = getPointerTy(DAG.getDataLayout());
-  SDValue Callee = DAG.getExternalSymbol(LibCall, PtrVT);
-  Type *RetTy = Type::getInt32Ty(*DAG.getContext());
-  ArgListTy Args;
-  SDValue Chain = DAG.getEntryNode();
-  Chain = LowerF128_LibCallArg(Chain, Args, LHS, DL, DAG);
-  Chain = LowerF128_LibCallArg(Chain, Args, RHS, DL, DAG);
-
-  TargetLowering::CallLoweringInfo CLI(DAG);
-  CLI.setDebugLoc(DL).setChain(Chain)
-    .setCallee(CallingConv::C, RetTy, Callee, std::move(Args));
-
-  std::pair<SDValue, SDValue> CallInfo = LowerCallTo(CLI);
-
-  // result is in first, and chain is in second result.
-  SDValue Result =  CallInfo.first;
-
-  switch(SPCC) {
-  default: {
-    SDValue RHS = DAG.getTargetConstant(0, DL, Result.getValueType());
-    SPCC = SPCC::ICC_NE;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_UL : {
-    SDValue Mask   = DAG.getTargetConstant(1, DL, Result.getValueType());
-    Result = DAG.getNode(ISD::AND, DL, Result.getValueType(), Result, Mask);
-    SDValue RHS    = DAG.getTargetConstant(0, DL, Result.getValueType());
-    SPCC = SPCC::ICC_NE;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_ULE: {
-    SDValue RHS = DAG.getTargetConstant(2, DL, Result.getValueType());
-    SPCC = SPCC::ICC_NE;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_UG :  {
-    SDValue RHS = DAG.getTargetConstant(1, DL, Result.getValueType());
-    SPCC = SPCC::ICC_G;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_UGE: {
-    SDValue RHS = DAG.getTargetConstant(1, DL, Result.getValueType());
-    SPCC = SPCC::ICC_NE;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-
-  case SPCC::FCC_U  :  {
-    SDValue RHS = DAG.getTargetConstant(3, DL, Result.getValueType());
-    SPCC = SPCC::ICC_E;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_O  :  {
-    SDValue RHS = DAG.getTargetConstant(3, DL, Result.getValueType());
-    SPCC = SPCC::ICC_NE;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_LG :  {
-    SDValue Mask   = DAG.getTargetConstant(3, DL, Result.getValueType());
-    Result = DAG.getNode(ISD::AND, DL, Result.getValueType(), Result, Mask);
-    SDValue RHS    = DAG.getTargetConstant(0, DL, Result.getValueType());
-    SPCC = SPCC::ICC_NE;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  case SPCC::FCC_UE : {
-    SDValue Mask   = DAG.getTargetConstant(3, DL, Result.getValueType());
-    Result = DAG.getNode(ISD::AND, DL, Result.getValueType(), Result, Mask);
-    SDValue RHS    = DAG.getTargetConstant(0, DL, Result.getValueType());
-    SPCC = SPCC::ICC_E;
-    return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
-  }
-  }
-}
-
-static SDValue LowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG,
-                               const VETargetLowering &TLI,
-                               bool hasHardQuad) {
-  SDLoc dl(Op);
-  EVT VT = Op.getValueType();
-  assert(VT == MVT::i32 || VT == MVT::i64);
-
-  // Expand f128 operations to fp128 abi calls.
-  if (Op.getOperand(0).getValueType() == MVT::f128
-      && (!hasHardQuad || !TLI.isTypeLegal(VT))) {
-    const char *libName = TLI.getLibcallName(VT == MVT::i32
-                                             ? RTLIB::FPTOSINT_F128_I32
-                                             : RTLIB::FPTOSINT_F128_I64);
-    return TLI.LowerF128Op(Op, DAG, libName, 1);
-  }
-
-  // Expand if the resulting type is illegal.
-  if (!TLI.isTypeLegal(VT))
-    return SDValue();
-
-  // Otherwise, Convert the fp value to integer in an FP register.
-  if (VT == MVT::i32)
-    Op = DAG.getNode(VEISD::FTOI, dl, MVT::f32, Op.getOperand(0));
-  else
-    Op = DAG.getNode(VEISD::FTOX, dl, MVT::f64, Op.getOperand(0));
-
-  return DAG.getNode(ISD::BITCAST, dl, VT, Op);
-}
-
-static SDValue LowerSINT_TO_FP(SDValue Op, SelectionDAG &DAG,
-                               const VETargetLowering &TLI,
-                               bool hasHardQuad) {
-  SDLoc dl(Op);
-  EVT OpVT = Op.getOperand(0).getValueType();
-  assert(OpVT == MVT::i32 || (OpVT == MVT::i64));
-
-  EVT floatVT = (OpVT == MVT::i32) ? MVT::f32 : MVT::f64;
-
-  // Expand f128 operations to fp128 ABI calls.
-  if (Op.getValueType() == MVT::f128
-      && (!hasHardQuad || !TLI.isTypeLegal(OpVT))) {
-    const char *libName = TLI.getLibcallName(OpVT == MVT::i32
-                                             ? RTLIB::SINTTOFP_I32_F128
-                                             : RTLIB::SINTTOFP_I64_F128);
-    return TLI.LowerF128Op(Op, DAG, libName, 1);
-  }
-
-  // Expand if the operand type is illegal.
-  if (!TLI.isTypeLegal(OpVT))
-    return SDValue();
-
-  // Otherwise, Convert the int value to FP in an FP register.
-  SDValue Tmp = DAG.getNode(ISD::BITCAST, dl, floatVT, Op.getOperand(0));
-  unsigned opcode = (OpVT == MVT::i32)? VEISD::ITOF : VEISD::XTOF;
-  return DAG.getNode(opcode, dl, Op.getValueType(), Tmp);
-}
-
-static SDValue LowerFP_TO_UINT(SDValue Op, SelectionDAG &DAG,
-                               const VETargetLowering &TLI,
-                               bool hasHardQuad) {
-  SDLoc dl(Op);
-  EVT VT = Op.getValueType();
-
-  // Expand if it does not involve f128 or the target has support for
-  // quad floating point instructions and the resulting type is legal.
-  if (Op.getOperand(0).getValueType() != MVT::f128 ||
-      (hasHardQuad && TLI.isTypeLegal(VT)))
-    return SDValue();
-
-  assert(VT == MVT::i32 || VT == MVT::i64);
-
-  return TLI.LowerF128Op(Op, DAG,
-                         TLI.getLibcallName(VT == MVT::i32
-                                            ? RTLIB::FPTOUINT_F128_I32
-                                            : RTLIB::FPTOUINT_F128_I64),
-                         1);
-}
-
-static SDValue LowerUINT_TO_FP(SDValue Op, SelectionDAG &DAG,
-                               const VETargetLowering &TLI,
-                               bool hasHardQuad) {
-  SDLoc dl(Op);
-  EVT OpVT = Op.getOperand(0).getValueType();
-  assert(OpVT == MVT::i32 || OpVT == MVT::i64);
-
-  // Expand if it does not involve f128 or the target has support for
-  // quad floating point instructions and the operand type is legal.
-  if (Op.getValueType() != MVT::f128 || (hasHardQuad && TLI.isTypeLegal(OpVT)))
-    return SDValue();
-
-  return TLI.LowerF128Op(Op, DAG,
-                         TLI.getLibcallName(OpVT == MVT::i32
-                                            ? RTLIB::UINTTOFP_I32_F128
-                                            : RTLIB::UINTTOFP_I64_F128),
-                         1);
-}
-
 SDValue VETargetLowering::LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG,
     const VETargetLowering &TLI) const {
   SDLoc DL(Op);
@@ -2314,55 +2113,6 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
 }
 
 #if 0
-static SDValue LowerADDC_ADDE_SUBC_SUBE(SDValue Op, SelectionDAG &DAG) {
-
-  if (Op.getValueType() != MVT::i64)
-    return Op;
-
-  SDLoc dl(Op);
-  SDValue Src1 = Op.getOperand(0);
-  SDValue Src1Lo = DAG.getNode(ISD::TRUNCATE, dl, MVT::i32, Src1);
-  SDValue Src1Hi = DAG.getNode(ISD::SRL, dl, MVT::i64, Src1,
-                               DAG.getConstant(32, dl, MVT::i64));
-  Src1Hi = DAG.getNode(ISD::TRUNCATE, dl, MVT::i32, Src1Hi);
-
-  SDValue Src2 = Op.getOperand(1);
-  SDValue Src2Lo = DAG.getNode(ISD::TRUNCATE, dl, MVT::i32, Src2);
-  SDValue Src2Hi = DAG.getNode(ISD::SRL, dl, MVT::i64, Src2,
-                               DAG.getConstant(32, dl, MVT::i64));
-  Src2Hi = DAG.getNode(ISD::TRUNCATE, dl, MVT::i32, Src2Hi);
-
-
-  bool hasChain = false;
-  unsigned hiOpc = Op.getOpcode();
-  switch (Op.getOpcode()) {
-  default: llvm_unreachable("Invalid opcode");
-  case ISD::ADDC: hiOpc = ISD::ADDE; break;
-  case ISD::ADDE: hasChain = true; break;
-  case ISD::SUBC: hiOpc = ISD::SUBE; break;
-  case ISD::SUBE: hasChain = true; break;
-  }
-  SDValue Lo;
-  SDVTList VTs = DAG.getVTList(MVT::i32, MVT::Glue);
-  if (hasChain) {
-    Lo = DAG.getNode(Op.getOpcode(), dl, VTs, Src1Lo, Src2Lo,
-                     Op.getOperand(2));
-  } else {
-    Lo = DAG.getNode(Op.getOpcode(), dl, VTs, Src1Lo, Src2Lo);
-  }
-  SDValue Hi = DAG.getNode(hiOpc, dl, VTs, Src1Hi, Src2Hi, Lo.getValue(1));
-  SDValue Carry = Hi.getValue(1);
-
-  Lo = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i64, Lo);
-  Hi = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i64, Hi);
-  Hi = DAG.getNode(ISD::SHL, dl, MVT::i64, Hi,
-                   DAG.getConstant(32, dl, MVT::i64));
-
-  SDValue Dst = DAG.getNode(ISD::OR, dl, MVT::i64, Hi, Lo);
-  SDValue Ops[2] = { Dst, Carry };
-  return DAG.getMergeValues(Ops, dl);
-}
-
 // Custom lower UMULO/SMULO for SPARC. This code is similar to ExpandNode()
 // in LegalizeDAG.cpp except the order of arguments to the library function.
 static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
@@ -2595,18 +2345,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-  case ISD::FP_TO_SINT:         // return LowerFP_TO_SINT(Op, DAG, *this,
-                                //                        hasHardQuad);
-    report_fatal_error("FP_TO_SINT expansion is not implemented yet");
-  case ISD::SINT_TO_FP:         // return LowerSINT_TO_FP(Op, DAG, *this,
-                                //                        hasHardQuad);
-    report_fatal_error("SINT_TO_FP expansion is not implemented yet");
-  case ISD::FP_TO_UINT:         // return LowerFP_TO_UINT(Op, DAG, *this,
-                                //                        hasHardQuad);
-    report_fatal_error("FP_TO_UINT expansion is not implemented yet");
-  case ISD::UINT_TO_FP:         // return LowerUINT_TO_FP(Op, DAG, *this,
-                                //                        hasHardQuad);
-    report_fatal_error("UINT_TO_FP expansion is not implemented yet");
   case ISD::EH_SJLJ_SETJMP:     // return LowerEH_SJLJ_SETJMP(Op, DAG, *this);
     report_fatal_error("EH_SJLJ_SETJMP expansion is not implemented yet");
   case ISD::EH_SJLJ_LONGJMP:    // return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
@@ -2625,11 +2363,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
                                 //        getLibcallName(RTLIB::SQRT_F128),1);
     report_fatal_error("FSQRT expansion is not implemented yet");
-  case ISD::ADDC:
-  case ISD::ADDE:
-  case ISD::SUBC:
-  case ISD::SUBE:               // return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
-    report_fatal_error("ADDC, ADDE, SUBC, or SUBE expansion is not implemented yet");
   case ISD::UMULO:
   case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
     report_fatal_error("UMULO or SMULO expansion is not implemented yet");
@@ -3078,38 +2811,6 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
     llvm_unreachable("Do not know how to custom type legalize this operation!");
 
 #if 0
-  case ISD::FP_TO_SINT:
-  case ISD::FP_TO_UINT:
-    // Custom lower only if it involves f128 or i64.
-    if (N->getOperand(0).getValueType() != MVT::f128
-        || N->getValueType(0) != MVT::i64)
-      return;
-    libCall = ((N->getOpcode() == ISD::FP_TO_SINT)
-               ? RTLIB::FPTOSINT_F128_I64
-               : RTLIB::FPTOUINT_F128_I64);
-
-    Results.push_back(LowerF128Op(SDValue(N, 0),
-                                  DAG,
-                                  getLibcallName(libCall),
-                                  1));
-    return;
-
-  case ISD::SINT_TO_FP:
-  case ISD::UINT_TO_FP:
-    // Custom lower only if it involves f128 or i64.
-    if (N->getValueType(0) != MVT::f128
-        || N->getOperand(0).getValueType() != MVT::i64)
-      return;
-
-    libCall = ((N->getOpcode() == ISD::SINT_TO_FP)
-               ? RTLIB::SINTTOFP_I64_F128
-               : RTLIB::UINTTOFP_I64_F128);
-
-    Results.push_back(LowerF128Op(SDValue(N, 0),
-                                  DAG,
-                                  getLibcallName(libCall),
-                                  1));
-    return;
   case ISD::LOAD: {
     LoadSDNode *Ld = cast<LoadSDNode>(N);
     // Custom handling only for i64: turn i64 load into a v2i32 load,
