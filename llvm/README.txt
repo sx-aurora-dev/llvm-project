@@ -7,15 +7,15 @@ Vector Engine (VE).
 
 Modifications are under the development.  For example, we implmented below.
 
- - integer, long long, float, double, and vector
+ - integer, long long, float, double, long double, and vector
  - function call passing arguments through registers
- - intrinsic functions to use vector instructions
+ - function call using stack also including varargs
+ - intrinsic functions of vector instructions
 
 However, following items are not implemented yet.
 
- - function call passing arguments through stack may fail
- - varargs
  - automatic vectorization is not supported yet
+ - PIC is not supported yet
 
 Please file issues if you have problems.
 
@@ -47,7 +47,7 @@ Use it from clang like:
  - Clang with -O3 may cause vectorization related errors.  Adding
    "-fno-vectorize -fno-slp-vectorize" options will solve this problem.
  - -fno-crash-diagnostics avoid generating diagnostics which contain
-   compiling source codes.
+   compiling source codes under /tmp.
 
 Please see the documentation provided in docs/ for further
 assistance with LLVM.
