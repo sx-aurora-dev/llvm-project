@@ -1224,21 +1224,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UDIVREM, VT, Expand);
   }
 
-  // Custom expand fp<->sint
-#if 0
-  setOperationAction(ISD::FP_TO_SINT, MVT::i32, Custom);
-  setOperationAction(ISD::SINT_TO_FP, MVT::i32, Custom);
-  setOperationAction(ISD::FP_TO_SINT, MVT::i64, Custom);
-  setOperationAction(ISD::SINT_TO_FP, MVT::i64, Custom);
-#endif
+  // VE has instructions for fp<->sint, so use them.
 
-  // Custom Expand fp<->uint
-#if 0
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Custom);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Custom);
-  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
-#endif
+  // VE doesn't have instructions for fp<->uint, so expand them by llvm
+  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote); // use i64
+  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote); // use i64
+  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
+  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
 
   // VE doesn't have BRCOND
   setOperationAction(ISD::BRCOND, MVT::Other, Expand);
@@ -1924,40 +1916,6 @@ SDValue VETargetLowering::LowerF128Compare(SDValue LHS, SDValue RHS,
     return DAG.getNode(VEISD::CMPICC, DL, MVT::Glue, Result, RHS);
   }
   }
-}
-
-static SDValue
-LowerF128_FPEXTEND(SDValue Op, SelectionDAG &DAG,
-                   const VETargetLowering &TLI) {
-
-  if (Op.getOperand(0).getValueType() == MVT::f64)
-    return TLI.LowerF128Op(Op, DAG,
-                           TLI.getLibcallName(RTLIB::FPEXT_F64_F128), 1);
-
-  if (Op.getOperand(0).getValueType() == MVT::f32)
-    return TLI.LowerF128Op(Op, DAG,
-                           TLI.getLibcallName(RTLIB::FPEXT_F32_F128), 1);
-
-  llvm_unreachable("fpextend with non-float operand!");
-  return SDValue();
-}
-
-static SDValue
-LowerF128_FPROUND(SDValue Op, SelectionDAG &DAG,
-                  const VETargetLowering &TLI) {
-  // FP_ROUND on f64 and f32 are legal.
-  if (Op.getOperand(0).getValueType() != MVT::f128)
-    return Op;
-
-  if (Op.getValueType() == MVT::f64)
-    return TLI.LowerF128Op(Op, DAG,
-                           TLI.getLibcallName(RTLIB::FPROUND_F128_F64), 1);
-  if (Op.getValueType() == MVT::f32)
-    return TLI.LowerF128Op(Op, DAG,
-                           TLI.getLibcallName(RTLIB::FPROUND_F128_F32), 1);
-
-  llvm_unreachable("fpround to non-float!");
-  return SDValue();
 }
 
 static SDValue LowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG,
@@ -2661,25 +2619,12 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   case ISD::LOAD:               return LowerLOAD(Op, DAG);
   case ISD::STORE:              return LowerSTORE(Op, DAG);
-  case ISD::FADD:               // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::ADD_F128), 2);
-    report_fatal_error("FADD expansion is not implemented yet");
-  case ISD::FSUB:               // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::SUB_F128), 2);
-    report_fatal_error("FSUB expansion is not implemented yet");
-  case ISD::FMUL:               // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::MUL_F128), 2);
-    report_fatal_error("FMUL expansion is not implemented yet");
   case ISD::FDIV:               // return LowerF128Op(Op, DAG,
                                 //        getLibcallName(RTLIB::DIV_F128), 2);
     report_fatal_error("FDIV expansion is not implemented yet");
   case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
                                 //        getLibcallName(RTLIB::SQRT_F128),1);
     report_fatal_error("FSQRT expansion is not implemented yet");
-  case ISD::FP_EXTEND:          // return LowerF128_FPEXTEND(Op, DAG, *this);
-    report_fatal_error("FP_EXTEND expansion is not implemented yet");
-  case ISD::FP_ROUND:           // return LowerF128_FPROUND(Op, DAG, *this);
-    report_fatal_error("FP_ROUND expansion is not implemented yet");
   case ISD::ADDC:
   case ISD::ADDE:
   case ISD::SUBC:
