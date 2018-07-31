@@ -1126,11 +1126,16 @@ def BC : CF<
 // to make finding unconditional jump easy.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
-def BA : CF<
-    0x19, (outs), (ins brtarget32:$imm32),
-    "b.l $imm32",
-    []>;
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isCodeGenOnly = 1 in {
+def BArr : CF<
+    0x19, (outs), (ins MEMrr:$addr),
+    "b.l $addr",
+    [(brind ADDRrr:$addr)]>;
+def BAri : CF<
+    0x19, (outs), (ins MEMri:$addr),
+    "b.l $addr",
+    [(brind ADDRri:$addr)]>;
+}
 
 // Jump never instruction is also a special case of jump.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
