@@ -1761,6 +1761,7 @@ SDValue VETargetLowering::LowerGlobalTLSAddress(SDValue Op,
 }
 #endif
 
+#if 0
 SDValue VETargetLowering::LowerF128_LibCallArg(SDValue Chain,
                                                   ArgListTy &Args, SDValue Arg,
                                                   const SDLoc &DL,
@@ -1839,6 +1840,7 @@ VETargetLowering::LowerF128Op(SDValue Op, SelectionDAG &DAG,
   return DAG.getLoad(Op.getValueType(), SDLoc(Op), Chain, RetPtr,
                      MachinePointerInfo(), /* Alignment = */ 8);
 }
+#endif
 
 #if 0
 SDValue VETargetLowering::LowerF128Compare(SDValue LHS, SDValue RHS,
@@ -3136,12 +3138,15 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
 
   SDLoc dl(N);
 
+#if 0
   RTLIB::Libcall libCall = RTLIB::UNKNOWN_LIBCALL;
+#endif
 
   switch (N->getOpcode()) {
   default:
     llvm_unreachable("Do not know how to custom type legalize this operation!");
 
+#if 0
   case ISD::FP_TO_SINT:
   case ISD::FP_TO_UINT:
     // Custom lower only if it involves f128 or i64.
@@ -3192,6 +3197,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
     Results.push_back(LoadRes.getValue(1));
     return;
   }
+#endif
   }
 }
 
