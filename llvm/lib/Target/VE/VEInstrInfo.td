@@ -1418,7 +1418,7 @@ def : Pat<(call i64:$dst),
 // Branches
 def : Pat<(br bb:$addr), (BCRLa bb:$addr)>;
 
-// selectcc for i64 result
+// brcc
 def : Pat<(brcc CCSIOp:$cond, i32:$l, i32:$r, bb:$addr),
           (BCRWrr (icond2cc $cond), $l, $r, bb:$addr)>;
 def : Pat<(brcc CCUIOp:$cond, i32:$l, i32:$r, bb:$addr),
@@ -1431,7 +1431,8 @@ def : Pat<(brcc cond:$cond, f32:$l, f32:$r, bb:$addr),
           (BCRSrr (fcond2cc $cond), $l, $r, bb:$addr)>;
 def : Pat<(brcc cond:$cond, f64:$l, f64:$r, bb:$addr),
           (BCRDrr (fcond2cc $cond), $l, $r, bb:$addr)>;
-
+def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
+          (BCRDrr (fcond2cc $cond), 0, (FCQrr $r, $l), bb:$addr)>;
 
 def : Pat<(i32 (bitconvert f32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_f32), sub_i32)>;
 def : Pat<(f32 (bitconvert i32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_i32), sub_f32)>;
