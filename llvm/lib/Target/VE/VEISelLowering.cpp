@@ -1248,14 +1248,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
 
 #if 0
-  // Should we use EmitInstrWithCustomInserter()?  Not sure atm.
-  setOperationAction(ISD::BR_CC, MVT::i32, Custom);
-  setOperationAction(ISD::BR_CC, MVT::i64, Custom);
-  setOperationAction(ISD::BR_CC, MVT::f32, Custom);
-  setOperationAction(ISD::BR_CC, MVT::f64, Custom);
-  // FIXME: VE's BR_CC for f128 is not inmplemented yet
-  setOperationAction(ISD::BR_CC, MVT::f128, Custom);
-
   // FIXME: VE's SETJMP is not investigated yet.
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
@@ -1424,7 +1416,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FDIV,  MVT::f128, Expand);
   setOperationAction(ISD::FSQRT, MVT::f128, Expand);
   setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
-  setOperationAction(ISD::FP_ROUND,  MVT::f64, Legal);
+  setOperationAction(ISD::FP_ROUND,  MVT::f128, Legal);
+
+  // Other configurations related to f128.
+  setOperationAction(ISD::SELECT,    MVT::f128, Expand);
+  setOperationAction(ISD::SELECT_CC, MVT::f128, Expand);
+  setOperationAction(ISD::SETCC,     MVT::f128, Legal);
+  setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
 
 #if 0
   if (Subtarget->fixAllFDIVSQRT()) {
