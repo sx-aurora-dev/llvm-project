@@ -1074,7 +1074,7 @@ def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
 
 def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
           (ORrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
-                               (LDUri MEMri:$addr0), sub_i32),
+                               (LDUri MEMri:$addr0), sub_f32),
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
                                (LDLUri MEMri:$addr1), sub_i32))>;
 
