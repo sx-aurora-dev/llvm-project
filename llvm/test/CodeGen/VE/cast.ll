@@ -45,9 +45,7 @@ define signext i8 @d2c(double) #0 {
 define zeroext i8 @d2uc(double) #0 {
 ; CHECK-LABEL: d2uc:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cvt.l.d.rz %s34, %s0
-; CHECK-NEXT:    and %s0, %s34, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    cvt.w.d.sx.rz %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui double %0 to i8
   ret i8 %2
@@ -65,9 +63,7 @@ define signext i16 @d2s(double) #0 {
 define zeroext i16 @d2us(double) #0 {
 ; CHECK-LABEL: d2us:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cvt.l.d.rz %s34, %s0
-; CHECK-NEXT:    and %s0, %s34, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    cvt.w.d.sx.rz %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui double %0 to i16
   ret i16 %2
@@ -86,8 +82,7 @@ define i32 @d2ui(double) #0 {
 ; CHECK-LABEL: d2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.l.d.rz %s34, %s0
-; CHECK-NEXT:    and %s0, %s34, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    adds.w.sx %s0, %s34, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui double %0 to i32
   ret i32 %2
@@ -137,10 +132,7 @@ define signext i8 @f2c(float) #0 {
 define zeroext i8 @f2uc(float) #0 {
 ; CHECK-LABEL: f2uc:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cvt.d.s %s34, %s0
-; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:    and %s0, %s34, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    cvt.w.s.sx.rz %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui float %0 to i8
   ret i8 %2
@@ -158,10 +150,7 @@ define signext i16 @f2s(float) #0 {
 define zeroext i16 @f2us(float) #0 {
 ; CHECK-LABEL: f2us:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cvt.d.s %s34, %s0
-; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:    and %s0, %s34, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    cvt.w.s.sx.rz %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui float %0 to i16
   ret i16 %2
@@ -181,8 +170,7 @@ define i32 @f2ui(float) #0 {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.d.s %s34, %s0
 ; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:    and %s0, %s34, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    adds.w.sx %s0, %s34, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui float %0 to i32
   ret i32 %2
@@ -389,8 +377,18 @@ define i64 @ull2ull(i64 returned) #0 {
 define float @ull2f(i64) #0 {
 ; CHECK-LABEL: ull2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s34, 0, (0)1
+; CHECK-NEXT:    cmps.l %s35, %s0, %s34
 ; CHECK-NEXT:    cvt.d.l %s34, %s0
-; CHECK-NEXT:    cvt.s.d %s0, %s34
+; CHECK-NEXT:    cvt.s.d %s34, %s34
+; CHECK-NEXT:    srl %s36, %s0, 1
+; CHECK-NEXT:    and %s37, 1, %s0
+; CHECK-NEXT:    or %s36, %s37, %s36
+; CHECK-NEXT:    cvt.d.l %s36, %s36
+; CHECK-NEXT:    cvt.s.d %s36, %s36
+; CHECK-NEXT:    fadd.s %s36, %s36, %s36
+; CHECK-NEXT:    cmov.l.lt %s34, %s36, %s35
+; CHECK-NEXT:    or %s0, 0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i64 %0 to float
   ret float %2
@@ -399,7 +397,20 @@ define float @ull2f(i64) #0 {
 define double @ull2d(i64) #0 {
 ; CHECK-LABEL: ull2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cvt.d.l %s0, %s0
+; CHECK-NEXT:    srl %s34, %s0, 32
+; CHECK-NEXT:    lea %s35, 0
+; CHECK-NEXT:    lea.sl %s36, %hi(.LCPI43_0)
+; CHECK-NEXT:    ld %s36, %lo(.LCPI43_0)(,%s36)
+; CHECK-NEXT:    and %s35, %s35, (32)0
+; CHECK-NEXT:    lea.sl %s37, 1160773632(%s35)
+; CHECK-NEXT:    or %s34, %s34, %s37
+; CHECK-NEXT:    fsub.d %s34, %s34, %s36
+; CHECK-NEXT:    lea %s36, -1
+; CHECK-NEXT:    and %s36, %s36, (32)0
+; CHECK-NEXT:    and %s36, %s0, %s36
+; CHECK-NEXT:    lea.sl %s35, 1127219200(%s35)
+; CHECK-NEXT:    or %s35, %s36, %s35
+; CHECK-NEXT:    fadd.d %s0, %s35, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i64 %0 to double
   ret double %2
@@ -566,8 +577,7 @@ define i64 @ui2ull(i32) #0 {
 define float @ui2f(i32) #0 {
 ; CHECK-LABEL: ui2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    adds.w.zx %s34, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.l %s34, %s34
 ; CHECK-NEXT:    cvt.s.d %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -578,8 +588,7 @@ define float @ui2f(i32) #0 {
 define double @ui2d(i32) #0 {
 ; CHECK-LABEL: ui2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    adds.w.zx %s34, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.l %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i32 %0 to double
@@ -745,10 +754,7 @@ define i64 @us2ull(i16 zeroext) #0 {
 define float @us2f(i16 zeroext) #0 {
 ; CHECK-LABEL: us2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s34, %s0, (32)0
-; CHECK-NEXT:    cvt.d.l %s34, %s34
-; CHECK-NEXT:    cvt.s.d %s0, %s34
+; CHECK-NEXT:    cvt.s.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i16 %0 to float
   ret float %2
@@ -757,9 +763,7 @@ define float @us2f(i16 zeroext) #0 {
 define double @us2d(i16 zeroext) #0 {
 ; CHECK-LABEL: us2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s34, %s0, (32)0
-; CHECK-NEXT:    cvt.d.l %s0, %s34
+; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i16 %0 to double
   ret double %2
@@ -918,10 +922,7 @@ define i64 @uc2ull(i8 zeroext) #0 {
 define float @uc2f(i8 zeroext) #0 {
 ; CHECK-LABEL: uc2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s34, %s0, (32)0
-; CHECK-NEXT:    cvt.d.l %s34, %s34
-; CHECK-NEXT:    cvt.s.d %s0, %s34
+; CHECK-NEXT:    cvt.s.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i8 %0 to float
   ret float %2
@@ -930,9 +931,7 @@ define float @uc2f(i8 zeroext) #0 {
 define double @uc2d(i8 zeroext) #0 {
 ; CHECK-LABEL: uc2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s34, %s0, (32)0
-; CHECK-NEXT:    cvt.d.l %s0, %s34
+; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i8 %0 to double
   ret double %2

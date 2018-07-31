@@ -1224,21 +1224,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UDIVREM, VT, Expand);
   }
 
-  // Custom expand fp<->sint
-#if 0
-  setOperationAction(ISD::FP_TO_SINT, MVT::i32, Custom);
-  setOperationAction(ISD::SINT_TO_FP, MVT::i32, Custom);
-  setOperationAction(ISD::FP_TO_SINT, MVT::i64, Custom);
-  setOperationAction(ISD::SINT_TO_FP, MVT::i64, Custom);
-#endif
+  // VE has instructions for fp<->sint, so use them.
 
-  // Custom Expand fp<->uint
-#if 0
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Custom);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Custom);
-  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
-#endif
+  // VE doesn't have instructions for fp<->uint, so expand them by llvm
+  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote); // use i64
+  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote); // use i64
+  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
+  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
 
   // VE doesn't have BRCOND
   setOperationAction(ISD::BRCOND, MVT::Other, Expand);
