@@ -1240,10 +1240,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Custom);
 #endif
 
-  // VE doesn't have BRCOND either, it has BR_CC.
+  // VE doesn't have BRCOND
   setOperationAction(ISD::BRCOND, MVT::Other, Expand);
 
   // BRIND/BR_JT are not implemented yet.
+  //   FIXME: BRIND instruction is implemented, but JumpTable is not yet.
   setOperationAction(ISD::BRIND,  MVT::Other, Expand);
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
 
@@ -1423,19 +1424,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SELECT_CC, MVT::f128, Expand);
   setOperationAction(ISD::SETCC,     MVT::f128, Legal);
   setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
-
-#if 0
-  if (Subtarget->fixAllFDIVSQRT()) {
-    // Promote FDIVS and FSQRTS to FDIVD and FSQRTD instructions instead as
-    // the former instructions generate errata on LEON processors.
-    setOperationAction(ISD::FDIV, MVT::f32, Promote);
-    setOperationAction(ISD::FSQRT, MVT::f32, Promote);
-  }
-
-  if (Subtarget->hasNoFMULS()) {
-    setOperationAction(ISD::FMUL, MVT::f32, Promote);
-  }
-#endif
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
