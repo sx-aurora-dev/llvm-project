@@ -1,25 +1,26 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
-
-; ModuleID = 'src/ticket162.c'
-source_filename = "src/ticket162.c"
+; ModuleID = 'test.c'
+source_filename = "test.c"
 target datalayout = "e-m:e-i64:64-n32:64-S64-v16384:64:64"
 target triple = "ve"
 
 ; Function Attrs: nounwind readonly
-define dso_local i64 @test(float* readonly, i64) local_unnamed_addr #0 {
-; CHECK-LABEL: test:
-; CHECK:       .LBB0_2:
-; CHECK-NEXT:    sll %s34, %s1, 2
-; CHECK-NEXT:    adds.l %s34, %s0, %s34
-; CHECK-NEXT:    ldu %s35, (,%s0)
-; CHECK-NEXT:    ldl.zx %s34, (,%s34)
-; CHECK-NEXT:    or %s0, %s35, %s34
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = bitcast float* %0 to i8*
-  %4 = getelementptr inbounds float, float* %0, i64 %1
-  %5 = bitcast float* %4 to i8*
-  %6 = tail call i64 @llvm.ve.pack.f32p(i8* %3, i8* %5)
-  ret i64 %6
+define dso_local i64 @test(float* readonly %pValue, i64 %distance) local_unnamed_addr #0 {
+; CHECK-LABEL: test
+; CHECK: .LBB0_2:
+; CHECK-NEXT: sll %s34, %s1, 2
+; CHECK-NEXT: adds.l %s34, %s0, %s34
+; CHECK-NEXT: ldu %s35, (,%s0)
+; CHECK-NEXT: ldl.zx %s34, (,%s34)
+; CHECK-NEXT: or %s0, %s35, %s34
+; CHECK-NEXT: or %s11, 0, %s9
+
+entry:
+  %0 = bitcast float* %pValue to i8*
+  %add.ptr = getelementptr inbounds float, float* %pValue, i64 %distance
+  %1 = bitcast float* %add.ptr to i8*
+  %2 = tail call i64 @llvm.ve.pack.f32p(i8* %0, i8* %1)
+  ret i64 %2
 }
 
 ; Function Attrs: nounwind readonly
@@ -32,4 +33,4 @@ attributes #1 = { nounwind readonly }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (https://github.com/llvm-mirror/clang.git d326119e3a71593369edd97e642577b570bf7c32) (https://github.com/llvm-mirror/llvm.git 829abd1ed2f74dd10970ac11b6832b8f2e0689c2)"}
+!1 = !{!"clang version 7.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git d326119e3a71593369edd97e642577b570bf7c32) (llvm/llvm.git ae4a0b83cb85df4a10710782ad4640e34361e368)"}
