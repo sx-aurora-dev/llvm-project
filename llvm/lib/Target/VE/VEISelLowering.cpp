@@ -2380,16 +2380,6 @@ VETargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   switch (MI.getOpcode()) {
   default: llvm_unreachable("Unknown Custom Instruction!");
 #if 0
-  case SP::SELECT_CC_Int_ICC:
-  case SP::SELECT_CC_FP_ICC:
-  case SP::SELECT_CC_DFP_ICC:
-  case SP::SELECT_CC_QFP_ICC:
-    return expandSelectCC(MI, BB, SP::BCOND);
-  case SP::SELECT_CC_Int_FCC:
-  case SP::SELECT_CC_FP_FCC:
-  case SP::SELECT_CC_DFP_FCC:
-  case SP::SELECT_CC_QFP_FCC:
-    return expandSelectCC(MI, BB, SP::FBCOND);
   case SP::EH_SJLJ_SETJMP32ri:
   case SP::EH_SJLJ_SETJMP32rr:
     return emitEHSjLjSetJmp(MI, BB);
@@ -2399,64 +2389,6 @@ VETargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
 #endif
   }
 }
-
-#if 0
-MachineBasicBlock *
-VETargetLowering::expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
-                                    unsigned BROpcode) const {
-  const TargetInstrInfo &TII = *Subtarget->getInstrInfo();
-  DebugLoc dl = MI.getDebugLoc();
-  unsigned CC = (SPCC::CondCodes)MI.getOperand(3).getImm();
-
-  // To "insert" a SELECT_CC instruction, we actually have to insert the
-  // triangle control-flow pattern. The incoming instruction knows the
-  // destination vreg to set, the condition code register to branch on, the
-  // true/false values to select between, and the condition code for the branch.
-  //
-  // We produce the following control flow:
-  //     ThisMBB
-  //     |  \
-  //     |  IfFalseMBB
-  //     | /
-  //    SinkMBB
-  const BasicBlock *LLVM_BB = BB->getBasicBlock();
-  MachineFunction::iterator It = ++BB->getIterator();
-
-  MachineBasicBlock *ThisMBB = BB;
-  MachineFunction *F = BB->getParent();
-  MachineBasicBlock *IfFalseMBB = F->CreateMachineBasicBlock(LLVM_BB);
-  MachineBasicBlock *SinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
-  F->insert(It, IfFalseMBB);
-  F->insert(It, SinkMBB);
-
-  // Transfer the remainder of ThisMBB and its successor edges to SinkMBB.
-  SinkMBB->splice(SinkMBB->begin(), ThisMBB,
-                  std::next(MachineBasicBlock::iterator(MI)), ThisMBB->end());
-  SinkMBB->transferSuccessorsAndUpdatePHIs(ThisMBB);
-
-  // Set the new successors for ThisMBB.
-  ThisMBB->addSuccessor(IfFalseMBB);
-  ThisMBB->addSuccessor(SinkMBB);
-
-  BuildMI(ThisMBB, dl, TII.get(BROpcode))
-    .addMBB(SinkMBB)
-    .addImm(CC);
-
-  // IfFalseMBB just falls through to SinkMBB.
-  IfFalseMBB->addSuccessor(SinkMBB);
-
-  // %Result = phi [ %TrueValue, ThisMBB ], [ %FalseValue, IfFalseMBB ]
-  BuildMI(*SinkMBB, SinkMBB->begin(), dl, TII.get(SP::PHI),
-          MI.getOperand(0).getReg())
-      .addReg(MI.getOperand(1).getReg())
-      .addMBB(ThisMBB)
-      .addReg(MI.getOperand(2).getReg())
-      .addMBB(IfFalseMBB);
-
-  MI.eraseFromParent(); // The pseudo instruction is gone now.
-  return SinkMBB;
-}
-#endif
 
 #if 0
 MachineBasicBlock *
