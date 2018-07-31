@@ -110,7 +110,8 @@ define dso_local zeroext i8 @remu8(i8 zeroext, i8 zeroext) local_unnamed_addr #0
 define dso_local i64 @remi64ri(i64, i64) local_unnamed_addr #0 {
 ; CHECK-LABEL: remi64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    divs.l %s34, 3, %s0
+; CHECK-NEXT:    or %s34, 3, (0)1
+; CHECK-NEXT:    divs.l %s34, %s0, %s34
 ; CHECK-NEXT:    muls.l %s34, 3, %s34
 ; CHECK-NEXT:    subs.l %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -141,7 +142,8 @@ define dso_local i32 @remi32ri(i32, i32) local_unnamed_addr #0 {
 define dso_local i64 @remu64ri(i64, i64) local_unnamed_addr #0 {
 ; CHECK-LABEL: remu64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    divu.l %s34, 3, %s0
+; CHECK-NEXT:    or %s34, 3, (0)1
+; CHECK-NEXT:    divu.l %s34, %s0, %s34
 ; CHECK-NEXT:    muls.l %s34, 3, %s34
 ; CHECK-NEXT:    subs.l %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -170,10 +172,9 @@ define dso_local i32 @remu32ri(i32, i32) local_unnamed_addr #0 {
 define dso_local i64 @remi64li(i64, i64) local_unnamed_addr #0 {
 ; CHECK-LABEL: remi64li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, 3, (0)1
-; CHECK-NEXT:    divs.l %s35, %s34, %s1
-; CHECK-NEXT:    muls.l %s35, %s35, %s1
-; CHECK-NEXT:    subs.l %s0, %s34, %s35
+; CHECK-NEXT:    divs.l %s34, 3, %s1
+; CHECK-NEXT:    muls.l %s34, %s34, %s1
+; CHECK-NEXT:    subs.l %s0, 3, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = srem i64 3, %1
   ret i64 %3
@@ -183,10 +184,9 @@ define dso_local i64 @remi64li(i64, i64) local_unnamed_addr #0 {
 define dso_local i32 @remi32li(i32, i32) local_unnamed_addr #0 {
 ; CHECK-LABEL: remi32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, 3, (0)1
-; CHECK-NEXT:    divs.w.sx %s35, %s34, %s1
-; CHECK-NEXT:    muls.w.sx %s35, %s35, %s1
-; CHECK-NEXT:    subs.w.sx %s0, %s34, %s35
+; CHECK-NEXT:    divs.w.sx %s34, 3, %s1
+; CHECK-NEXT:    muls.w.sx %s34, %s34, %s1
+; CHECK-NEXT:    subs.w.sx %s0, 3, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = srem i32 3, %1
   ret i32 %3
@@ -196,10 +196,9 @@ define dso_local i32 @remi32li(i32, i32) local_unnamed_addr #0 {
 define dso_local i64 @remu64li(i64, i64) local_unnamed_addr #0 {
 ; CHECK-LABEL: remu64li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, 3, (0)1
-; CHECK-NEXT:    divu.l %s35, %s34, %s1
-; CHECK-NEXT:    muls.l %s35, %s35, %s1
-; CHECK-NEXT:    subs.l %s0, %s34, %s35
+; CHECK-NEXT:    divu.l %s34, 3, %s1
+; CHECK-NEXT:    muls.l %s34, %s34, %s1
+; CHECK-NEXT:    subs.l %s0, 3, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = urem i64 3, %1
   ret i64 %3
@@ -209,10 +208,9 @@ define dso_local i64 @remu64li(i64, i64) local_unnamed_addr #0 {
 define dso_local i32 @remu32li(i32, i32) local_unnamed_addr #0 {
 ; CHECK-LABEL: remu32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, 3, (0)1
-; CHECK-NEXT:    divu.w %s35, %s34, %s1
-; CHECK-NEXT:    muls.w.sx %s35, %s35, %s1
-; CHECK-NEXT:    subs.w.sx %s0, %s34, %s35
+; CHECK-NEXT:    divu.w %s34, 3, %s1
+; CHECK-NEXT:    muls.w.sx %s34, %s34, %s1
+; CHECK-NEXT:    subs.w.sx %s0, 3, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = urem i32 3, %1
   ret i32 %3

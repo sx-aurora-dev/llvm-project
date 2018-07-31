@@ -1304,7 +1304,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   for (MVT VT : MVT::fp_valuetypes()) {
-    setOperationAction(ISD::FMA, VT, Legal);
+    // VE has no sclar FMA instruction
+    setOperationAction(ISD::FMA, VT, Expand);
     setOperationAction(ISD::FREM, VT, Expand);
     setOperationAction(ISD::FNEG, VT, Expand);
     setOperationAction(ISD::FABS, VT, Expand);
