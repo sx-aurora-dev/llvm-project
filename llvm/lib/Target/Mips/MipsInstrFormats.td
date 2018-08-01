@@ -120,7 +120,7 @@ class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 class InstSE<dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin, Format f, string opstr = ""> :
   MipsInst<outs, ins, asmstr, pattern, itin, f> {
-  let EncodingPredicates = [HasStdEnc];
+  let EncodingPredicates = [NotInMips16Mode];
   string BaseOpcode = opstr;
   string Arch;
 }
@@ -137,7 +137,7 @@ class MipsPseudo<dag outs, dag ins, list<dag> pattern,
 class PseudoSE<dag outs, dag ins, list<dag> pattern,
                InstrItinClass itin = IIPseudo> :
   MipsPseudo<outs, ins, pattern, itin> {
-  let EncodingPredicates = [HasStdEnc];
+  let EncodingPredicates = [NotInMips16Mode];
 }
 
 // Pseudo-instructions for alternate assembly syntax (never used by codegen).
@@ -508,6 +508,7 @@ class EXT_FM<bits<6> funct> : StdArch {
 class RDHWR_FM : StdArch {
   bits<5> rt;
   bits<5> rd;
+  bits<3> sel;
 
   bits<32> Inst;
 
@@ -515,7 +516,8 @@ class RDHWR_FM : StdArch {
   let Inst{25-21} = 0;
   let Inst{20-16} = rt;
   let Inst{15-11} = rd;
-  let Inst{10-6}  = 0;
+  let Inst{10-9}  = 0b00;
+  let Inst{8-6}   = sel;
   let Inst{5-0}   = 0x3b;
 }
 

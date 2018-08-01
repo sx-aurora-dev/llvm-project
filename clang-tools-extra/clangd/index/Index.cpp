@@ -44,6 +44,16 @@ void operator>>(StringRef Str, SymbolID &ID) {
   std::copy(HexString.begin(), HexString.end(), ID.HashValue.begin());
 }
 
+raw_ostream &operator<<(raw_ostream &OS, SymbolOrigin O) {
+  if (O == SymbolOrigin::Unknown)
+    return OS << "unknown";
+  constexpr static char Sigils[] = "ADSM4567";
+  for (unsigned I = 0; I < sizeof(Sigils); ++I)
+    if (static_cast<uint8_t>(O) & 1u << I)
+      OS << Sigils[I];
+  return OS;
+}
+
 raw_ostream &operator<<(raw_ostream &OS, const Symbol &S) {
   return OS << S.Scope << S.Name;
 }
@@ -84,10 +94,8 @@ static void own(Symbol &S, DenseSet<StringRef> &Strings,
   Intern(S.CanonicalDeclaration.FileURI);
   Intern(S.Definition.FileURI);
 
-  Intern(S.CompletionLabel);
-  Intern(S.CompletionFilterText);
-  Intern(S.CompletionPlainInsertText);
-  Intern(S.CompletionSnippetInsertText);
+  Intern(S.Signature);
+  Intern(S.CompletionSnippetSuffix);
 
   if (S.Detail) {
     // Copy values of StringRefs into arena.
@@ -95,7 +103,7 @@ static void own(Symbol &S, DenseSet<StringRef> &Strings,
     *Detail = *S.Detail;
     // Intern the actual strings.
     Intern(Detail->Documentation);
-    Intern(Detail->CompletionDetail);
+    Intern(Detail->ReturnType);
     Intern(Detail->IncludeHeader);
     // Replace the detail pointer with our copy.
     S.Detail = Detail;

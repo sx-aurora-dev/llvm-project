@@ -131,9 +131,9 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
       IsBuildingRecoveryCallExpr(false), Cleanup{}, LateTemplateParser(nullptr),
       LateTemplateParserCleanup(nullptr), OpaqueParser(nullptr), IdResolver(pp),
       StdExperimentalNamespaceCache(nullptr), StdInitializerList(nullptr),
-      CXXTypeInfoDecl(nullptr), MSVCGuidDecl(nullptr), NSNumberDecl(nullptr),
-      NSValueDecl(nullptr), NSStringDecl(nullptr),
-      StringWithUTF8StringMethod(nullptr),
+      StdCoroutineTraitsCache(nullptr), CXXTypeInfoDecl(nullptr),
+      MSVCGuidDecl(nullptr), NSNumberDecl(nullptr), NSValueDecl(nullptr),
+      NSStringDecl(nullptr), StringWithUTF8StringMethod(nullptr),
       ValueWithBytesObjCTypeMethod(nullptr), NSArrayDecl(nullptr),
       ArrayWithObjectsMethod(nullptr), NSDictionaryDecl(nullptr),
       DictionaryWithObjectsMethod(nullptr), GlobalNewDeleteDeclared(false),
@@ -163,7 +163,7 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
 
   ExprEvalContexts.emplace_back(
       ExpressionEvaluationContext::PotentiallyEvaluated, 0, CleanupInfo{},
-      nullptr, false);
+      nullptr, ExpressionEvaluationContextRecord::EK_Other);
 
   PreallocatedFunctionScope.reset(new FunctionScopeInfo(Diags));
 
@@ -481,6 +481,7 @@ ExprResult Sema::ImpCastExprToType(Expr *E, QualType Ty,
     case CK_ArrayToPointerDecay:
     case CK_FunctionToPointerDecay:
     case CK_ToVoid:
+    case CK_NonAtomicToAtomic:
       break;
     }
   }
@@ -644,6 +645,8 @@ void Sema::getUndefinedButUsed(
       if (FD->isExternallyVisible() &&
           !isExternalWithNoLinkageType(FD) &&
           !FD->getMostRecentDecl()->isInlined())
+        continue;
+      if (FD->getBuiltinID())
         continue;
     } else {
       auto *VD = cast<VarDecl>(ND);
@@ -1008,11 +1011,6 @@ void Sema::ActOnEndOfTranslationUnit() {
     // Warnings emitted in ActOnEndOfTranslationUnit() should be emitted for
     // modules when they are built, not every time they are used.
     emitAndClearUnusedLocalTypedefWarnings();
-
-    // Modules don't need any of the checking below.
-    if (!PP.isIncrementalProcessingEnabled())
-      TUScope = nullptr;
-    return;
   }
 
   // C99 6.9.2p2:
@@ -1030,8 +1028,7 @@ void Sema::ActOnEndOfTranslationUnit() {
   for (TentativeDefinitionsType::iterator
             T = TentativeDefinitions.begin(ExternalSource),
          TEnd = TentativeDefinitions.end();
-       T != TEnd; ++T)
-  {
+       T != TEnd; ++T) {
     VarDecl *VD = (*T)->getActingDefinition();
 
     // If the tentative definition was completed, getActingDefinition() returns
@@ -1058,12 +1055,13 @@ void Sema::ActOnEndOfTranslationUnit() {
     // Notify the consumer that we've completed a tentative definition.
     if (!VD->isInvalidDecl())
       Consumer.CompleteTentativeDefinition(VD);
-
   }
 
   // If there were errors, disable 'unused' warnings since they will mostly be
-  // noise.
-  if (!Diags.hasErrorOccurred()) {
+  // noise. Don't warn for a use from a module: either we should warn on all
+  // file-scope declarations in modules or not at all, but whether the
+  // declaration is used is immaterial.
+  if (!Diags.hasErrorOccurred() && TUKind != TU_Module) {
     // Output warning for unused file scoped decls.
     for (UnusedFileScopedDeclsType::iterator
            I = UnusedFileScopedDecls.begin(ExternalSource),
@@ -1131,6 +1129,8 @@ void Sema::ActOnEndOfTranslationUnit() {
   }
 
   if (!Diags.isIgnored(diag::warn_unused_private_field, SourceLocation())) {
+    // FIXME: Load additional unused private field candidates from the external
+    // source.
     RecordCompleteMap RecordsComplete;
     RecordCompleteMap MNCComplete;
     for (NamedDeclSetType::iterator I = UnusedPrivateFields.begin(),
@@ -1500,7 +1500,7 @@ LambdaScopeInfo *Sema::getCurLambda(bool IgnoreNonLambdaCapturingScope) {
 
   return CurLSI;
 }
-// We have a generic lambda if we parsed auto parameters, or we have 
+// We have a generic lambda if we parsed auto parameters, or we have
 // an associated template parameter list.
 LambdaScopeInfo *Sema::getCurGenericLambda() {
   if (LambdaScopeInfo *LSI =  getCurLambda()) {
@@ -1585,6 +1585,7 @@ bool Sema::tryExprAsCall(Expr &E, QualType &ZeroArgCallReturnTy,
   }
 
   bool Ambiguous = false;
+  bool IsMV = false;
 
   if (Overloads) {
     for (OverloadExpr::decls_iterator it = Overloads->decls_begin(),
@@ -1598,11 +1599,16 @@ bool Sema::tryExprAsCall(Expr &E, QualType &ZeroArgCallReturnTy,
       if (const FunctionDecl *OverloadDecl
             = dyn_cast<FunctionDecl>((*it)->getUnderlyingDecl())) {
         if (OverloadDecl->getMinRequiredArguments() == 0) {
-          if (!ZeroArgCallReturnTy.isNull() && !Ambiguous) {
+          if (!ZeroArgCallReturnTy.isNull() && !Ambiguous &&
+              (!IsMV || !(OverloadDecl->isCPUDispatchMultiVersion() ||
+                          OverloadDecl->isCPUSpecificMultiVersion()))) {
             ZeroArgCallReturnTy = QualType();
             Ambiguous = true;
-          } else
+          } else {
             ZeroArgCallReturnTy = OverloadDecl->getReturnType();
+            IsMV = OverloadDecl->isCPUDispatchMultiVersion() ||
+                   OverloadDecl->isCPUSpecificMultiVersion();
+          }
         }
       }
     }
@@ -1683,7 +1689,7 @@ static void noteOverloads(Sema &S, const UnresolvedSetImpl &Overloads,
     NamedDecl *Fn = (*It)->getUnderlyingDecl();
     // Don't print overloads for non-default multiversioned functions.
     if (const auto *FD = Fn->getAsFunction()) {
-      if (FD->isMultiVersion() &&
+      if (FD->isMultiVersion() && FD->hasAttr<TargetAttr>() &&
           !FD->getAttr<TargetAttr>()->isDefaultVersion())
         continue;
     }
@@ -1725,6 +1731,21 @@ static bool IsCallableWithAppend(Expr *E) {
           !isa<CXXOperatorCallExpr>(E));
 }
 
+static bool IsCPUDispatchCPUSpecificMultiVersion(const Expr *E) {
+  if (const auto *UO = dyn_cast<UnaryOperator>(E))
+    E = UO->getSubExpr();
+
+  if (const auto *ULE = dyn_cast<UnresolvedLookupExpr>(E)) {
+    if (ULE->getNumDecls() == 0)
+      return false;
+
+    const NamedDecl *ND = *ULE->decls_begin();
+    if (const auto *FD = dyn_cast<FunctionDecl>(ND))
+      return FD->isCPUDispatchMultiVersion() || FD->isCPUSpecificMultiVersion();
+  }
+  return false;
+}
+
 bool Sema::tryToRecoverWithCall(ExprResult &E, const PartialDiagnostic &PD,
                                 bool ForceComplain,
                                 bool (*IsPlausibleResult)(QualType)) {
@@ -1741,12 +1762,13 @@ bool Sema::tryToRecoverWithCall(ExprResult &E, const PartialDiagnostic &PD,
     // so we can emit a fixit and carry on pretending that E was
     // actually a CallExpr.
     SourceLocation ParenInsertionLoc = getLocForEndOfToken(Range.getEnd());
-    Diag(Loc, PD)
-      << /*zero-arg*/ 1 << Range
-      << (IsCallableWithAppend(E.get())
-          ? FixItHint::CreateInsertion(ParenInsertionLoc, "()")
-          : FixItHint());
-    notePlausibleOverloads(*this, Loc, Overloads, IsPlausibleResult);
+    bool IsMV = IsCPUDispatchCPUSpecificMultiVersion(E.get());
+    Diag(Loc, PD) << /*zero-arg*/ 1 << IsMV << Range
+                  << (IsCallableWithAppend(E.get())
+                          ? FixItHint::CreateInsertion(ParenInsertionLoc, "()")
+                          : FixItHint());
+    if (!IsMV)
+      notePlausibleOverloads(*this, Loc, Overloads, IsPlausibleResult);
 
     // FIXME: Try this before emitting the fixit, and suppress diagnostics
     // while doing so.
@@ -1757,8 +1779,10 @@ bool Sema::tryToRecoverWithCall(ExprResult &E, const PartialDiagnostic &PD,
 
   if (!ForceComplain) return false;
 
-  Diag(Loc, PD) << /*not zero-arg*/ 0 << Range;
-  notePlausibleOverloads(*this, Loc, Overloads, IsPlausibleResult);
+  bool IsMV = IsCPUDispatchCPUSpecificMultiVersion(E.get());
+  Diag(Loc, PD) << /*not zero-arg*/ 0 << IsMV << Range;
+  if (!IsMV)
+    notePlausibleOverloads(*this, Loc, Overloads, IsPlausibleResult);
   E = ExprError();
   return true;
 }

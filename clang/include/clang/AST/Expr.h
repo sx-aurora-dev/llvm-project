@@ -884,7 +884,7 @@ public:
     : Expr(OpaqueValueExprClass, T, VK, OK,
            T->isDependentType() ||
            (SourceExpr && SourceExpr->isTypeDependent()),
-           T->isDependentType() || 
+           T->isDependentType() ||
            (SourceExpr && SourceExpr->isValueDependent()),
            T->isInstantiationDependentType() ||
            (SourceExpr && SourceExpr->isInstantiationDependent()),
@@ -1206,9 +1206,10 @@ public:
   enum IdentType {
     Func,
     Function,
-    LFunction,  // Same as Function, but as wide string.
+    LFunction, // Same as Function, but as wide string.
     FuncDName,
     FuncSig,
+    LFuncSig, // Same as FuncSig, but as as wide string
     PrettyFunction,
     /// The same as PrettyFunction, except that the
     /// 'virtual' keyword is omitted for virtual member functions.
@@ -1341,6 +1342,47 @@ public:
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == IntegerLiteralClass;
   }
+
+  // Iterators
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+  const_child_range children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+};
+
+class FixedPointLiteral : public Expr, public APIntStorage {
+  SourceLocation Loc;
+  unsigned Scale;
+
+  /// \brief Construct an empty integer literal.
+  explicit FixedPointLiteral(EmptyShell Empty)
+      : Expr(FixedPointLiteralClass, Empty) {}
+
+ public:
+  FixedPointLiteral(const ASTContext &C, const llvm::APInt &V, QualType type,
+                    SourceLocation l, unsigned Scale);
+
+  // Store the int as is without any bit shifting.
+  static FixedPointLiteral *CreateFromRawInt(const ASTContext &C,
+                                             const llvm::APInt &V,
+                                             QualType type, SourceLocation l,
+                                             unsigned Scale);
+
+  SourceLocation getLocStart() const LLVM_READONLY { return Loc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return Loc; }
+
+  /// \brief Retrieve the location of the literal.
+  SourceLocation getLocation() const { return Loc; }
+
+  void setLocation(SourceLocation Location) { Loc = Location; }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == FixedPointLiteralClass;
+  }
+
+  std::string getValueAsString(unsigned Radix) const;
 
   // Iterators
   child_range children() {
@@ -2780,6 +2822,7 @@ protected:
               (op && op->containsUnexpandedParameterPack()))),
         Op(op) {
     CastExprBits.Kind = kind;
+    CastExprBits.PartOfExplicitCast = false;
     setBasePathSize(BasePathSize);
     assert(CastConsistency());
   }
@@ -2787,6 +2830,7 @@ protected:
   /// Construct an empty cast.
   CastExpr(StmtClass SC, EmptyShell Empty, unsigned BasePathSize)
     : Expr(SC, Empty) {
+    CastExprBits.PartOfExplicitCast = false;
     setBasePathSize(BasePathSize);
   }
 
@@ -2808,6 +2852,10 @@ public:
   const Expr *getSubExprAsWritten() const {
     return const_cast<CastExpr *>(this)->getSubExprAsWritten();
   }
+
+  /// If this cast applies a user-defined conversion, retrieve the conversion
+  /// function that it invokes.
+  NamedDecl *getConversionFunction() const;
 
   typedef CXXBaseSpecifier **path_iterator;
   typedef const CXXBaseSpecifier * const *path_const_iterator;
@@ -2876,6 +2924,11 @@ public:
   ImplicitCastExpr(OnStack_t _, QualType ty, CastKind kind, Expr *op,
                    ExprValueKind VK)
     : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, 0) {
+  }
+
+  bool isPartOfExplicitCast() const { return CastExprBits.PartOfExplicitCast; }
+  void setIsPartOfExplicitCast(bool PartOfExplicitCast) {
+    CastExprBits.PartOfExplicitCast = PartOfExplicitCast;
   }
 
   static ImplicitCastExpr *Create(const ASTContext &Context, QualType T,
@@ -5288,7 +5341,7 @@ public:
 
   SourceLocation getLocStart() const LLVM_READONLY { return SourceLocation(); }
   SourceLocation getLocEnd() const LLVM_READONLY { return SourceLocation(); }
-  
+
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == TypoExprClass;
   }

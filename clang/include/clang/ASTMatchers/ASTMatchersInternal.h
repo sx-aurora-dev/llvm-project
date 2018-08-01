@@ -38,9 +38,12 @@
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprCXX.h"
+#include "clang/AST/ExprObjC.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/TemplateName.h"
@@ -120,9 +123,13 @@ inline QualType getUnderlyingType(const Expr &Node) { return Node.getType(); }
 inline QualType getUnderlyingType(const ValueDecl &Node) {
   return Node.getType();
 }
-
 inline QualType getUnderlyingType(const TypedefNameDecl &Node) {
   return Node.getUnderlyingType();
+}
+inline QualType getUnderlyingType(const FriendDecl &Node) {
+  if (const TypeSourceInfo *TSI = Node.getFriendType())
+    return TSI->getType();
+  return QualType();
 }
 
 /// Unifies obtaining the FunctionProtoType pointer from both
@@ -860,6 +867,12 @@ private:
     return matchesDecl(Node.getConstructor(), Finder, Builder);
   }
 
+  bool matchesSpecialized(const ObjCIvarRefExpr &Node,
+                          ASTMatchFinder *Finder,
+                          BoundNodesTreeBuilder *Builder) const {
+    return matchesDecl(Node.getDecl(), Finder, Builder);
+  }
+
   /// Extracts the operator new of the new call and returns whether the
   /// inner matcher matches on it.
   bool matchesSpecialized(const CXXNewExpr &Node,
@@ -1105,7 +1118,7 @@ using HasDeclarationSupportedTypes =
              ElaboratedType, InjectedClassNameType, LabelStmt, AddrLabelExpr,
              MemberExpr, QualType, RecordType, TagType,
              TemplateSpecializationType, TemplateTypeParmType, TypedefType,
-             UnresolvedUsingType>;
+             UnresolvedUsingType, ObjCIvarRefExpr>;
 
 /// Converts a \c Matcher<T> to a matcher of desired type \c To by
 /// "adapting" a \c To into a \c T.

@@ -24,31 +24,6 @@ bool isInformativeQualifierChunk(CodeCompletionString::Chunk const &Chunk) {
          StringRef(Chunk.Text).endswith("::");
 }
 
-void processPlainTextChunks(const CodeCompletionString &CCS,
-                            std::string *LabelOut, std::string *InsertTextOut) {
-  std::string &Label = *LabelOut;
-  std::string &InsertText = *InsertTextOut;
-  for (const auto &Chunk : CCS) {
-    // Informative qualifier chunks only clutter completion results, skip
-    // them.
-    if (isInformativeQualifierChunk(Chunk))
-      continue;
-
-    switch (Chunk.Kind) {
-    case CodeCompletionString::CK_ResultType:
-    case CodeCompletionString::CK_Optional:
-      break;
-    case CodeCompletionString::CK_TypedText:
-      InsertText += Chunk.Text;
-      Label += Chunk.Text;
-      break;
-    default:
-      Label += Chunk.Text;
-      break;
-    }
-  }
-}
-
 void appendEscapeSnippet(const llvm::StringRef Text, std::string *Out) {
   for (const auto Character : Text) {
     if (Character == '$' || Character == '}' || Character == '\\')
@@ -57,11 +32,67 @@ void appendEscapeSnippet(const llvm::StringRef Text, std::string *Out) {
   }
 }
 
-void processSnippetChunks(const CodeCompletionString &CCS,
-                          std::string *LabelOut, std::string *InsertTextOut) {
-  std::string &Label = *LabelOut;
-  std::string &InsertText = *InsertTextOut;
+bool looksLikeDocComment(llvm::StringRef CommentText) {
+  // We don't report comments that only contain "special" chars.
+  // This avoids reporting various delimiters, like:
+  //   =================
+  //   -----------------
+  //   *****************
+  return CommentText.find_first_not_of("/*-= \t\r\n") != llvm::StringRef::npos;
+}
 
+} // namespace
+
+std::string getDocComment(const ASTContext &Ctx,
+                          const CodeCompletionResult &Result,
+                          bool CommentsFromHeaders) {
+  // FIXME: clang's completion also returns documentation for RK_Pattern if they
+  // contain a pattern for ObjC properties. Unfortunately, there is no API to
+  // get this declaration, so we don't show documentation in that case.
+  if (Result.Kind != CodeCompletionResult::RK_Declaration)
+    return "";
+  auto *Decl = Result.getDeclaration();
+  if (!Decl || llvm::isa<NamespaceDecl>(Decl)) {
+    // Namespaces often have too many redecls for any particular redecl comment
+    // to be useful. Moreover, we often confuse file headers or generated
+    // comments with namespace comments. Therefore we choose to just ignore
+    // the comments for namespaces.
+    return "";
+  }
+  const RawComment *RC = getCompletionComment(Ctx, Decl);
+  if (!RC)
+    return "";
+
+  // Sanity check that the comment does not come from the PCH. We choose to not
+  // write them into PCH, because they are racy and slow to load.
+  assert(!Ctx.getSourceManager().isLoadedSourceLocation(RC->getLocStart()));
+  std::string Doc = RC->getFormattedText(Ctx.getSourceManager(), Ctx.getDiagnostics());
+  if (!looksLikeDocComment(Doc))
+    return "";
+  return Doc;
+}
+
+std::string
+getParameterDocComment(const ASTContext &Ctx,
+                       const CodeCompleteConsumer::OverloadCandidate &Result,
+                       unsigned ArgIndex, bool CommentsFromHeaders) {
+  auto *Func = Result.getFunction();
+  if (!Func)
+    return "";
+  const RawComment *RC = getParameterComment(Ctx, Result, ArgIndex);
+  if (!RC)
+    return "";
+  // Sanity check that the comment does not come from the PCH. We choose to not
+  // write them into PCH, because they are racy and slow to load.
+  assert(!Ctx.getSourceManager().isLoadedSourceLocation(RC->getLocStart()));
+  std::string Doc = RC->getFormattedText(Ctx.getSourceManager(), Ctx.getDiagnostics());
+  if (!looksLikeDocComment(Doc))
+    return "";
+  return Doc;
+}
+
+void getSignature(const CodeCompletionString &CCS, std::string *Signature,
+                  std::string *Snippet, std::string *RequiredQualifiers) {
   unsigned ArgCount = 0;
   for (const auto &Chunk : CCS) {
     // Informative qualifier chunks only clutter completion results, skip
@@ -71,28 +102,36 @@ void processSnippetChunks(const CodeCompletionString &CCS,
 
     switch (Chunk.Kind) {
     case CodeCompletionString::CK_TypedText:
+      // The typed-text chunk is the actual name. We don't record this chunk.
+      // In general our string looks like <qualifiers><name><signature>.
+      // So once we see the name, any text we recorded so far should be
+      // reclassified as qualifiers.
+      if (RequiredQualifiers)
+        *RequiredQualifiers = std::move(*Signature);
+      Signature->clear();
+      Snippet->clear();
+      break;
     case CodeCompletionString::CK_Text:
-      Label += Chunk.Text;
-      InsertText += Chunk.Text;
+      *Signature += Chunk.Text;
+      *Snippet += Chunk.Text;
       break;
     case CodeCompletionString::CK_Optional:
-      // FIXME: Maybe add an option to allow presenting the optional chunks?
       break;
     case CodeCompletionString::CK_Placeholder:
+      *Signature += Chunk.Text;
       ++ArgCount;
-      InsertText += "${" + std::to_string(ArgCount) + ':';
-      appendEscapeSnippet(Chunk.Text, &InsertText);
-      InsertText += '}';
-      Label += Chunk.Text;
+      *Snippet += "${" + std::to_string(ArgCount) + ':';
+      appendEscapeSnippet(Chunk.Text, Snippet);
+      *Snippet += '}';
       break;
     case CodeCompletionString::CK_Informative:
       // For example, the word "const" for a const method, or the name of
       // the base class for methods that are part of the base class.
-      Label += Chunk.Text;
-      // Don't put the informative chunks in the insertText.
+      *Signature += Chunk.Text;
+      // Don't put the informative chunks in the snippet.
       break;
     case CodeCompletionString::CK_ResultType:
-      // This is retrieved as detail.
+      // This is not part of the signature.
       break;
     case CodeCompletionString::CK_CurrentParameter:
       // This should never be present while collecting completion items,
@@ -113,96 +152,15 @@ void processSnippetChunks(const CodeCompletionString &CCS,
     case CodeCompletionString::CK_SemiColon:
     case CodeCompletionString::CK_Equal:
     case CodeCompletionString::CK_HorizontalSpace:
-      InsertText += Chunk.Text;
-      Label += Chunk.Text;
+      *Signature += Chunk.Text;
+      *Snippet += Chunk.Text;
       break;
     case CodeCompletionString::CK_VerticalSpace:
-      InsertText += Chunk.Text;
-      // Don't even add a space to the label.
+      *Snippet += Chunk.Text;
+      // Don't even add a space to the signature.
       break;
     }
   }
-}
-
-bool canRequestComment(const ASTContext &Ctx, const NamedDecl &D,
-                       bool CommentsFromHeaders) {
-  if (CommentsFromHeaders)
-    return true;
-  auto &SourceMgr = Ctx.getSourceManager();
-  // Accessing comments for decls from  invalid preamble can lead to crashes.
-  // So we only return comments from the main file when doing code completion.
-  // For indexing, we still read all the comments.
-  // FIXME: find a better fix, e.g. store file contents in the preamble or get
-  // doc comments from the index.
-  auto canRequestForDecl = [&](const NamedDecl &D) -> bool {
-    for (auto *Redecl : D.redecls()) {
-      auto Loc = SourceMgr.getSpellingLoc(Redecl->getLocation());
-      if (!SourceMgr.isWrittenInMainFile(Loc))
-        return false;
-    }
-    return true;
-  };
-  // First, check the decl itself.
-  if (!canRequestForDecl(D))
-    return false;
-  // Completion also returns comments for properties, corresponding to ObjC
-  // methods.
-  const ObjCMethodDecl *M = dyn_cast<ObjCMethodDecl>(&D);
-  const ObjCPropertyDecl *PDecl = M ? M->findPropertyDecl() : nullptr;
-  return !PDecl || canRequestForDecl(*PDecl);
-}
-
-bool LooksLikeDocComment(llvm::StringRef CommentText) {
-  // We don't report comments that only contain "special" chars.
-  // This avoids reporting various delimiters, like:
-  //   =================
-  //   -----------------
-  //   *****************
-  return CommentText.find_first_not_of("/*-= \t\r\n") != llvm::StringRef::npos;
-}
-
-} // namespace
-
-std::string getDocComment(const ASTContext &Ctx,
-                          const CodeCompletionResult &Result,
-                          bool CommentsFromHeaders) {
-  // FIXME: clang's completion also returns documentation for RK_Pattern if they
-  // contain a pattern for ObjC properties. Unfortunately, there is no API to
-  // get this declaration, so we don't show documentation in that case.
-  if (Result.Kind != CodeCompletionResult::RK_Declaration)
-    return "";
-  auto *Decl = Result.getDeclaration();
-  if (!Decl || !canRequestComment(Ctx, *Decl, CommentsFromHeaders))
-    return "";
-  const RawComment *RC = getCompletionComment(Ctx, Decl);
-  if (!RC)
-    return "";
-  std::string Doc = RC->getFormattedText(Ctx.getSourceManager(), Ctx.getDiagnostics());
-  if (!LooksLikeDocComment(Doc))
-    return "";
-  return Doc;
-}
-
-std::string
-getParameterDocComment(const ASTContext &Ctx,
-                       const CodeCompleteConsumer::OverloadCandidate &Result,
-                       unsigned ArgIndex, bool CommentsFromHeaders) {
-  auto *Func = Result.getFunction();
-  if (!Func || !canRequestComment(Ctx, *Func, CommentsFromHeaders))
-    return "";
-  const RawComment *RC = getParameterComment(Ctx, Result, ArgIndex);
-  if (!RC)
-    return "";
-  std::string Doc = RC->getFormattedText(Ctx.getSourceManager(), Ctx.getDiagnostics());
-  if (!LooksLikeDocComment(Doc))
-    return "";
-  return Doc;
-}
-
-void getLabelAndInsertText(const CodeCompletionString &CCS, std::string *Label,
-                           std::string *InsertText, bool EnableSnippets) {
-  return EnableSnippets ? processSnippetChunks(CCS, Label, InsertText)
-                        : processPlainTextChunks(CCS, Label, InsertText);
 }
 
 std::string formatDocumentation(const CodeCompletionString &CCS,
@@ -235,30 +193,10 @@ std::string formatDocumentation(const CodeCompletionString &CCS,
   return Result;
 }
 
-std::string getDetail(const CodeCompletionString &CCS) {
-  for (const auto &Chunk : CCS) {
-    // Informative qualifier chunks only clutter completion results, skip
-    // them.
-    switch (Chunk.Kind) {
-    case CodeCompletionString::CK_ResultType:
+std::string getReturnType(const CodeCompletionString &CCS) {
+  for (const auto &Chunk : CCS)
+    if (Chunk.Kind == CodeCompletionString::CK_ResultType)
       return Chunk.Text;
-    default:
-      break;
-    }
-  }
-  return "";
-}
-
-std::string getFilterText(const CodeCompletionString &CCS) {
-  for (const auto &Chunk : CCS) {
-    switch (Chunk.Kind) {
-    case CodeCompletionString::CK_TypedText:
-      // There's always exactly one CK_TypedText chunk.
-      return Chunk.Text;
-    default:
-      break;
-    }
-  }
   return "";
 }
 

@@ -789,7 +789,9 @@ FLAGS_ENUM(TypeOptions){eTypeOptionNone = (0u),
                         eTypeOptionShowOneLiner = (1u << 5),
                         eTypeOptionHideNames = (1u << 6),
                         eTypeOptionNonCacheable = (1u << 7),
-                        eTypeOptionHideEmptyAggregates = (1u << 8)};
+                        eTypeOptionHideEmptyAggregates = (1u << 8),
+                        eTypeOptionFrontEndWantsDereference = (1u << 9)
+};
 
 //----------------------------------------------------------------------
 // This is the return value for frame comparisons.  If you are comparing frame
@@ -811,26 +813,6 @@ enum FrameComparison {
   eFrameCompareSameParent,
   eFrameCompareYounger,
   eFrameCompareOlder
-};
-
-//----------------------------------------------------------------------
-// Address Class
-//
-// A way of classifying an address used for disassembling and setting
-// breakpoints. Many object files can track exactly what parts of their object
-// files are code, data and other information. This is of course above and
-// beyond just looking at the section types. For example, code might contain PC
-// relative data and the object file might be able to tell us that an address
-// in code is data.
-//----------------------------------------------------------------------
-enum AddressClass {
-  eAddressClassInvalid,
-  eAddressClassUnknown,
-  eAddressClassCode,
-  eAddressClassCodeAlternateISA,
-  eAddressClassData,
-  eAddressClassDebug,
-  eAddressClassRuntime
 };
 
 //----------------------------------------------------------------------

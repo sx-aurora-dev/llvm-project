@@ -366,13 +366,13 @@ void StmtPrinter::VisitMSDependentExistsStmt(MSDependentExistsStmt *Node) {
     OS << "__if_exists (";
   else
     OS << "__if_not_exists (";
-  
+
   if (NestedNameSpecifier *Qualifier
         = Node->getQualifierLoc().getNestedNameSpecifier())
     Qualifier->print(OS, Policy);
-  
+
   OS << Node->getNameInfo() << ") ";
-  
+
   PrintRawCompoundStmt(Node->getSubStmt());
 }
 
@@ -990,7 +990,7 @@ void OMPClausePrinter::VisitOMPMapClause(OMPMapClause *Node) {
     OS << "map(";
     if (Node->getMapType() != OMPC_MAP_unknown) {
       if (Node->getMapTypeModifier() != OMPC_MAP_unknown) {
-        OS << getOpenMPSimpleClauseTypeName(OMPC_map, 
+        OS << getOpenMPSimpleClauseTypeName(OMPC_map,
                                             Node->getMapTypeModifier());
         OS << ',';
       }
@@ -1529,6 +1529,28 @@ void StmtPrinter::VisitIntegerLiteral(IntegerLiteral *Node) {
   }
 }
 
+void StmtPrinter::VisitFixedPointLiteral(FixedPointLiteral *Node) {
+  if (Policy.ConstantsAsWritten && printExprAsWritten(OS, Node, Context))
+    return;
+  OS << Node->getValueAsString(/*Radix=*/10);
+
+  switch (Node->getType()->getAs<BuiltinType>()->getKind()) {
+    default: llvm_unreachable("Unexpected type for fixed point literal!");
+    case BuiltinType::ShortFract:   OS << "hr"; break;
+    case BuiltinType::ShortAccum:   OS << "hk"; break;
+    case BuiltinType::UShortFract:  OS << "uhr"; break;
+    case BuiltinType::UShortAccum:  OS << "uhk"; break;
+    case BuiltinType::Fract:        OS << "r"; break;
+    case BuiltinType::Accum:        OS << "k"; break;
+    case BuiltinType::UFract:       OS << "ur"; break;
+    case BuiltinType::UAccum:       OS << "uk"; break;
+    case BuiltinType::LongFract:    OS << "lr"; break;
+    case BuiltinType::LongAccum:    OS << "lk"; break;
+    case BuiltinType::ULongFract:   OS << "ulr"; break;
+    case BuiltinType::ULongAccum:   OS << "ulk"; break;
+  }
+}
+
 static void PrintFloatingLiteral(raw_ostream &OS, FloatingLiteral *Node,
                                  bool PrintSuffix) {
   SmallString<16> Str;
@@ -1623,12 +1645,12 @@ void StmtPrinter::VisitOffsetOfExpr(OffsetOfExpr *Node) {
     IdentifierInfo *Id = ON.getFieldName();
     if (!Id)
       continue;
-    
+
     if (PrintedSomething)
       OS << ".";
     else
       PrintedSomething = true;
-    OS << Id->getName();    
+    OS << Id->getName();
   }
   OS << ")";
 }
@@ -2650,7 +2672,7 @@ void StmtPrinter::VisitObjCDictionaryLiteral(ObjCDictionaryLiteral *E) {
   for (unsigned I = 0, N = E->getNumElements(); I != N; ++I) {
     if (I > 0)
       OS << ", ";
-    
+
     ObjCDictionaryElement Element = E->getKeyValueElement(I);
     Visit(Element.Key);
     OS << " : ";
@@ -2759,7 +2781,7 @@ void StmtPrinter::VisitBlockExpr(BlockExpr *Node) {
   OS << "{ }";
 }
 
-void StmtPrinter::VisitOpaqueValueExpr(OpaqueValueExpr *Node) { 
+void StmtPrinter::VisitOpaqueValueExpr(OpaqueValueExpr *Node) {
   PrintExpr(Node->getSourceExpr());
 }
 

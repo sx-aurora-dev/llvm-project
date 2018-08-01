@@ -515,11 +515,23 @@ private:
         }
         Left->MatchingParen = CurrentToken;
         CurrentToken->MatchingParen = Left;
+        // FirstObjCSelectorName is set when a colon is found. This does
+        // not work, however, when the method has no parameters.
+        // Here, we set FirstObjCSelectorName when the end of the method call is
+        // reached, in case it was not set already.
+        if (!Contexts.back().FirstObjCSelectorName) {
+            FormatToken* Previous = CurrentToken->getPreviousNonComment();
+            if (Previous && Previous->is(TT_SelectorName)) {
+              Previous->ObjCSelectorNameParts = 1;
+              Contexts.back().FirstObjCSelectorName = Previous;
+            }
+        } else {
+          Left->ParameterCount =
+              Contexts.back().FirstObjCSelectorName->ObjCSelectorNameParts;
+        }
         if (Contexts.back().FirstObjCSelectorName) {
           Contexts.back().FirstObjCSelectorName->LongestObjCSelectorName =
               Contexts.back().LongestObjCSelectorName;
-          Contexts.back().FirstObjCSelectorName->ObjCSelectorNameParts =
-              Left->ParameterCount;
           if (Left->BlockParameterCount > 1)
             Contexts.back().FirstObjCSelectorName->LongestObjCSelectorName = 0;
         }
@@ -539,11 +551,6 @@ private:
                                  TT_DesignatedInitializerLSquare)) {
           Left->Type = TT_ObjCMethodExpr;
           StartsObjCMethodExpr = true;
-          // ParameterCount might have been set to 1 before expression was
-          // recognized as ObjCMethodExpr (as '1 + number of commas' formula is
-          // used for other expression types). Parameter counter has to be,
-          // therefore, reset to 0.
-          Left->ParameterCount = 0;
           Contexts.back().ColonIsObjCMethodExpr = true;
           if (Parent && Parent->is(tok::r_paren))
             // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
@@ -617,12 +624,12 @@ private:
   }
 
   void updateParameterCount(FormatToken *Left, FormatToken *Current) {
+    // For ObjC methods, the number of parameters is calculated differently as
+    // method declarations have a different structure (the parameters are not
+    // inside a bracket scope).
     if (Current->is(tok::l_brace) && Current->BlockKind == BK_Block)
       ++Left->BlockParameterCount;
-    if (Left->Type == TT_ObjCMethodExpr) {
-      if (Current->is(tok::colon))
-        ++Left->ParameterCount;
-    } else if (Current->is(tok::comma)) {
+    if (Current->is(tok::comma)) {
       ++Left->ParameterCount;
       if (!Left->Role)
         Left->Role.reset(new CommaSeparatedList(Style));
@@ -698,13 +705,19 @@ private:
                  Line.startsWith(TT_ObjCMethodSpecifier)) {
         Tok->Type = TT_ObjCMethodExpr;
         const FormatToken *BeforePrevious = Tok->Previous->Previous;
+        // Ensure we tag all identifiers in method declarations as
+        // TT_SelectorName.
+        bool UnknownIdentifierInMethodDeclaration =
+            Line.startsWith(TT_ObjCMethodSpecifier) &&
+            Tok->Previous->is(tok::identifier) && Tok->Previous->is(TT_Unknown);
         if (!BeforePrevious ||
             // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
             !(BeforePrevious->is(TT_CastRParen) ||
               (BeforePrevious->is(TT_ObjCMethodExpr) &&
                BeforePrevious->is(tok::colon))) ||
             BeforePrevious->is(tok::r_square) ||
-            Contexts.back().LongestObjCSelectorName == 0) {
+            Contexts.back().LongestObjCSelectorName == 0 ||
+            UnknownIdentifierInMethodDeclaration) {
           Tok->Previous->Type = TT_SelectorName;
           if (!Contexts.back().FirstObjCSelectorName)
             Contexts.back().FirstObjCSelectorName = Tok->Previous;
@@ -712,6 +725,9 @@ private:
                    Contexts.back().LongestObjCSelectorName)
             Contexts.back().LongestObjCSelectorName =
                 Tok->Previous->ColumnWidth;
+          Tok->Previous->ParameterIndex =
+              Contexts.back().FirstObjCSelectorName->ObjCSelectorNameParts;
+          ++Contexts.back().FirstObjCSelectorName->ObjCSelectorNameParts;
         }
       } else if (Contexts.back().ColonIsForRangeExpr) {
         Tok->Type = TT_RangeBasedForLoopColon;
@@ -2128,8 +2144,20 @@ void TokenAnnotator::calculateFormattingInformation(AnnotatedLine &Line) {
     // FIXME: Only calculate this if CanBreakBefore is true once static
     // initializers etc. are sorted out.
     // FIXME: Move magic numbers to a better place.
-    Current->SplitPenalty = 20 * Current->BindingStrength +
-                            splitPenalty(Line, *Current, InFunctionDecl);
+
+    // Reduce penalty for aligning ObjC method arguments using the colon
+    // alignment as this is the canonical way (still prefer fitting everything
+    // into one line if possible). Trying to fit a whole expression into one
+    // line should not force other line breaks (e.g. when ObjC method
+    // expression is a part of other expression).
+    Current->SplitPenalty = splitPenalty(Line, *Current, InFunctionDecl);
+    if (Style.Language == FormatStyle::LK_ObjC &&
+        Current->is(TT_SelectorName) && Current->ParameterIndex > 0) {
+      if (Current->ParameterIndex == 1)
+        Current->SplitPenalty += 5 * Current->BindingStrength;
+    } else {
+      Current->SplitPenalty += 20 * Current->BindingStrength;
+    }
 
     Current = Current->Next;
   }
@@ -2949,15 +2977,32 @@ bool TokenAnnotator::mustBreakBefore(const AnnotatedLine &Line,
   //
   // Be careful to exclude the case  [proto.ext] { ... } since the `]` is
   // the TT_SelectorName there, but we don't want to break inside the brackets.
+  //
+  // Another edge case is @submessage { key: value }, which is a common
+  // substitution placeholder. In this case we want to keep `@` and `submessage`
+  // together.
+  //
   // We ensure elsewhere that extensions are always on their own line.
   if ((Style.Language == FormatStyle::LK_Proto ||
        Style.Language == FormatStyle::LK_TextProto) &&
       Right.is(TT_SelectorName) && !Right.is(tok::r_square) && Right.Next) {
+    // Keep `@submessage` together in:
+    // @submessage { key: value }
+    if (Right.Previous && Right.Previous->is(tok::at))
+      return false;
     // Look for the scope opener after selector in cases like:
     // selector { ...
     // selector: { ...
-    FormatToken *LBrace =
-        Right.Next->is(tok::colon) ? Right.Next->Next : Right.Next;
+    // selector: @base { ...
+    FormatToken *LBrace = Right.Next;
+    if (LBrace && LBrace->is(tok::colon)) {
+      LBrace = LBrace->Next;
+      if (LBrace && LBrace->is(tok::at)) {
+        LBrace = LBrace->Next;
+        if (LBrace)
+          LBrace = LBrace->Next;
+      }
+    }
     if (LBrace &&
         // The scope opener is one of {, [, <:
         // selector { ... }

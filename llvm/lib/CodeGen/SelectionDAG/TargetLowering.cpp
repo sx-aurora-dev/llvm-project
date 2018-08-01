@@ -1187,6 +1187,7 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
       bool OpVTLegal = isOperationLegalOrCustom(ISD::FGETSIGN, VT);
       bool i32Legal  = isOperationLegalOrCustom(ISD::FGETSIGN, MVT::i32);
       if ((OpVTLegal || i32Legal) && VT.isSimple() &&
+           Op.getOperand(0).getValueType() != MVT::f16 &&
            Op.getOperand(0).getValueType() != MVT::f128) {
         // Cannot eliminate/lower SHL for f128 yet.
         EVT Ty = OpVTLegal ? VT : MVT::i32;
@@ -1461,7 +1462,7 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     SDValue Sub = Op.getOperand(1);
     EVT SubVT = Sub.getValueType();
     unsigned NumSubElts = SubVT.getVectorNumElements();
-    APInt Idx = cast<ConstantSDNode>(Op.getOperand(2))->getAPIntValue();
+    const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(2))->getAPIntValue();
     if (Idx.uge(NumElts - NumSubElts))
       break;
     unsigned SubIdx = Idx.getZExtValue();
@@ -1477,6 +1478,25 @@ bool TargetLowering::SimplifyDemandedVectorElts(
       return true;
     KnownUndef.insertBits(SubUndef, SubIdx);
     KnownZero.insertBits(SubZero, SubIdx);
+    break;
+  }
+  case ISD::EXTRACT_SUBVECTOR: {
+    if (!isa<ConstantSDNode>(Op.getOperand(1)))
+      break;
+    SDValue Src = Op.getOperand(0);
+    unsigned NumSrcElts = Src.getValueType().getVectorNumElements();
+    const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(1))->getAPIntValue();
+    if (Idx.uge(NumSrcElts - NumElts))
+      break;
+    // Offset the demanded elts by the subvector index.
+    uint64_t SubIdx = Idx.getZExtValue();
+    APInt SrcElts = DemandedElts.zext(NumSrcElts).shl(SubIdx);
+    APInt SrcUndef, SrcZero;
+    if (SimplifyDemandedVectorElts(Src, SrcElts, SrcUndef, SrcZero, TLO,
+                                   Depth + 1))
+      return true;
+    KnownUndef = SrcUndef.extractBits(NumElts, SubIdx);
+    KnownZero = SrcZero.extractBits(NumElts, SubIdx);
     break;
   }
   case ISD::INSERT_VECTOR_ELT: {
@@ -1829,6 +1849,89 @@ SDValue TargetLowering::simplifySetCCWithAnd(EVT VT, SDValue N0, SDValue N1,
   }
 
   return SDValue();
+}
+
+/// There are multiple IR patterns that could be checking whether certain
+/// truncation of a signed number would be lossy or not. The pattern which is
+/// best at IR level, may not lower optimally. Thus, we want to unfold it.
+/// We are looking for the following pattern: (KeptBits is a constant)
+///   (add %x, (1 << (KeptBits-1))) srccond (1 << KeptBits)
+/// KeptBits won't be bitwidth(x), that will be constant-folded to true/false.
+/// KeptBits also can't be 1, that would have been folded to  %x dstcond 0
+/// We will unfold it into the natural trunc+sext pattern:
+///   ((%x << C) a>> C) dstcond %x
+/// Where  C = bitwidth(x) - KeptBits  and  C u< bitwidth(x)
+SDValue TargetLowering::optimizeSetCCOfSignedTruncationCheck(
+    EVT SCCVT, SDValue N0, SDValue N1, ISD::CondCode Cond, DAGCombinerInfo &DCI,
+    const SDLoc &DL) const {
+  // We must be comparing with a constant.
+  ConstantSDNode *C1;
+  if (!(C1 = dyn_cast<ConstantSDNode>(N1)))
+    return SDValue();
+
+  // N0 should be:  add %x, (1 << (KeptBits-1))
+  if (N0->getOpcode() != ISD::ADD)
+    return SDValue();
+
+  // And we must be 'add'ing a constant.
+  ConstantSDNode *C01;
+  if (!(C01 = dyn_cast<ConstantSDNode>(N0->getOperand(1))))
+    return SDValue();
+
+  SDValue X = N0->getOperand(0);
+  EVT XVT = X.getValueType();
+
+  // Validate constants ...
+
+  APInt I1 = C1->getAPIntValue();
+
+  ISD::CondCode NewCond;
+  if (Cond == ISD::CondCode::SETULT) {
+    NewCond = ISD::CondCode::SETEQ;
+  } else if (Cond == ISD::CondCode::SETULE) {
+    NewCond = ISD::CondCode::SETEQ;
+    // But need to 'canonicalize' the constant.
+    I1 += 1;
+  } else if (Cond == ISD::CondCode::SETUGT) {
+    NewCond = ISD::CondCode::SETNE;
+    // But need to 'canonicalize' the constant.
+    I1 += 1;
+  } else if (Cond == ISD::CondCode::SETUGE) {
+    NewCond = ISD::CondCode::SETNE;
+  } else
+    return SDValue();
+
+  const APInt &I01 = C01->getAPIntValue();
+  // Both of them must be power-of-two, and the constant from setcc is bigger.
+  if (!(I1.ugt(I01) && I1.isPowerOf2() && I01.isPowerOf2()))
+    return SDValue();
+
+  // They are power-of-two, so which bit is set?
+  const unsigned KeptBits = I1.logBase2();
+  const unsigned KeptBitsMinusOne = I01.logBase2();
+
+  // Magic!
+  if (KeptBits != (KeptBitsMinusOne + 1))
+    return SDValue();
+  assert(KeptBits > 0 && KeptBits < XVT.getSizeInBits() && "unreachable");
+
+  // We don't want to do this in every single case.
+  SelectionDAG &DAG = DCI.DAG;
+  if (!DAG.getTargetLoweringInfo().shouldTransformSignedTruncationCheck(
+          XVT, KeptBits))
+    return SDValue();
+
+  const unsigned MaskedBits = XVT.getSizeInBits() - KeptBits;
+  assert(MaskedBits > 0 && MaskedBits < XVT.getSizeInBits() && "unreachable");
+
+  // Unfold into:  ((%x << C) a>> C) cond %x
+  // Where 'cond' will be either 'eq' or 'ne'.
+  SDValue ShiftAmt = DAG.getConstant(MaskedBits, DL, XVT);
+  SDValue T0 = DAG.getNode(ISD::SHL, DL, XVT, X, ShiftAmt);
+  SDValue T1 = DAG.getNode(ISD::SRA, DL, XVT, T0, ShiftAmt);
+  SDValue T2 = DAG.getSetCC(DL, SCCVT, T1, X, NewCond);
+
+  return T2;
 }
 
 /// Try to simplify a setcc built with the specified operands and cc. If it is
@@ -2227,6 +2330,10 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
                               Cond == ISD::SETEQ ? ISD::SETNE : ISD::SETEQ);
       }
     }
+
+    if (SDValue V =
+            optimizeSetCCOfSignedTruncationCheck(VT, N0, N1, Cond, DCI, dl))
+      return V;
   }
 
   // These simplifications apply to splat vectors as well.
@@ -3314,7 +3421,7 @@ void TargetLowering::ComputeConstraintToUse(AsmOperandInfo &OpInfo,
 /// with the multiplicative inverse of the constant.
 static SDValue BuildExactSDIV(const TargetLowering &TLI, SDValue Op1, APInt d,
                               const SDLoc &dl, SelectionDAG &DAG,
-                              std::vector<SDNode *> &Created) {
+                              SmallVectorImpl<SDNode *> &Created) {
   assert(d != 0 && "Division by zero!");
 
   // Shift the value upfront if it is even, so the LSB is one.
@@ -3343,8 +3450,8 @@ static SDValue BuildExactSDIV(const TargetLowering &TLI, SDValue Op1, APInt d,
 }
 
 SDValue TargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
-                                      SelectionDAG &DAG,
-                                      std::vector<SDNode *> *Created) const {
+                                     SelectionDAG &DAG,
+                                     SmallVectorImpl<SDNode *> &Created) const {
   AttributeList Attr = DAG.getMachineFunction().getFunction().getAttributes();
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   if (TLI.isIntDivCheap(N->getValueType(0), Attr))
@@ -3358,9 +3465,7 @@ SDValue TargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
 /// Ref: "Hacker's Delight" or "The PowerPC Compiler Writer's Guide".
 SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
                                   SelectionDAG &DAG, bool IsAfterLegalization,
-                                  std::vector<SDNode *> *Created) const {
-  assert(Created && "No vector to hold sdiv ops.");
-
+                                  SmallVectorImpl<SDNode *> &Created) const {
   EVT VT = N->getValueType(0);
   SDLoc dl(N);
 
@@ -3371,7 +3476,7 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
 
   // If the sdiv has an 'exact' bit we can use a simpler lowering.
   if (N->getFlags().hasExact())
-    return BuildExactSDIV(*this, N->getOperand(0), Divisor, dl, DAG, *Created);
+    return BuildExactSDIV(*this, N->getOperand(0), Divisor, dl, DAG, Created);
 
   APInt::ms magics = Divisor.magic();
 
@@ -3389,15 +3494,18 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
                               DAG.getConstant(magics.m, dl, VT)).getNode(), 1);
   else
     return SDValue();       // No mulhs or equvialent
+
+  Created.push_back(Q.getNode());
+
   // If d > 0 and m < 0, add the numerator
   if (Divisor.isStrictlyPositive() && magics.m.isNegative()) {
     Q = DAG.getNode(ISD::ADD, dl, VT, Q, N->getOperand(0));
-    Created->push_back(Q.getNode());
+    Created.push_back(Q.getNode());
   }
   // If d < 0 and m > 0, subtract the numerator.
   if (Divisor.isNegative() && magics.m.isStrictlyPositive()) {
     Q = DAG.getNode(ISD::SUB, dl, VT, Q, N->getOperand(0));
-    Created->push_back(Q.getNode());
+    Created.push_back(Q.getNode());
   }
   auto &DL = DAG.getDataLayout();
   // Shift right algebraic if shift value is nonzero
@@ -3405,14 +3513,14 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
     Q = DAG.getNode(
         ISD::SRA, dl, VT, Q,
         DAG.getConstant(magics.s, dl, getShiftAmountTy(Q.getValueType(), DL)));
-    Created->push_back(Q.getNode());
+    Created.push_back(Q.getNode());
   }
   // Extract the sign bit and add it to the quotient
   SDValue T =
       DAG.getNode(ISD::SRL, dl, VT, Q,
                   DAG.getConstant(VT.getScalarSizeInBits() - 1, dl,
                                   getShiftAmountTy(Q.getValueType(), DL)));
-  Created->push_back(T.getNode());
+  Created.push_back(T.getNode());
   return DAG.getNode(ISD::ADD, dl, VT, Q, T);
 }
 
@@ -3422,9 +3530,7 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
 /// Ref: "Hacker's Delight" or "The PowerPC Compiler Writer's Guide".
 SDValue TargetLowering::BuildUDIV(SDNode *N, const APInt &Divisor,
                                   SelectionDAG &DAG, bool IsAfterLegalization,
-                                  std::vector<SDNode *> *Created) const {
-  assert(Created && "No vector to hold udiv ops.");
-
+                                  SmallVectorImpl<SDNode *> &Created) const {
   EVT VT = N->getValueType(0);
   SDLoc dl(N);
   auto &DL = DAG.getDataLayout();
@@ -3447,7 +3553,7 @@ SDValue TargetLowering::BuildUDIV(SDNode *N, const APInt &Divisor,
     Q = DAG.getNode(
         ISD::SRL, dl, VT, Q,
         DAG.getConstant(Shift, dl, getShiftAmountTy(Q.getValueType(), DL)));
-    Created->push_back(Q.getNode());
+    Created.push_back(Q.getNode());
 
     // Get magic number for the shifted divisor.
     magics = Divisor.lshr(Shift).magicu(Shift);
@@ -3466,7 +3572,7 @@ SDValue TargetLowering::BuildUDIV(SDNode *N, const APInt &Divisor,
   else
     return SDValue();       // No mulhu or equivalent
 
-  Created->push_back(Q.getNode());
+  Created.push_back(Q.getNode());
 
   if (magics.a == 0) {
     assert(magics.s < Divisor.getBitWidth() &&
@@ -3476,13 +3582,13 @@ SDValue TargetLowering::BuildUDIV(SDNode *N, const APInt &Divisor,
         DAG.getConstant(magics.s, dl, getShiftAmountTy(Q.getValueType(), DL)));
   } else {
     SDValue NPQ = DAG.getNode(ISD::SUB, dl, VT, N->getOperand(0), Q);
-    Created->push_back(NPQ.getNode());
+    Created.push_back(NPQ.getNode());
     NPQ = DAG.getNode(
         ISD::SRL, dl, VT, NPQ,
         DAG.getConstant(1, dl, getShiftAmountTy(NPQ.getValueType(), DL)));
-    Created->push_back(NPQ.getNode());
+    Created.push_back(NPQ.getNode());
     NPQ = DAG.getNode(ISD::ADD, dl, VT, NPQ, Q);
-    Created->push_back(NPQ.getNode());
+    Created.push_back(NPQ.getNode());
     return DAG.getNode(
         ISD::SRL, dl, VT, NPQ,
         DAG.getConstant(magics.s - 1, dl,
@@ -3886,6 +3992,8 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
       if (!isOperationLegalOrCustom(ISD::LOAD, intVT)) {
         // Scalarize the load and let the individual components be handled.
         SDValue Scalarized = scalarizeVectorLoad(LD, DAG);
+        if (Scalarized->getOpcode() == ISD::MERGE_VALUES)
+          return std::make_pair(Scalarized.getOperand(0), Scalarized.getOperand(1));
         return std::make_pair(Scalarized.getValue(0), Scalarized.getValue(1));
       }
 
