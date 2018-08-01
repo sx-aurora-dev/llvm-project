@@ -50,3 +50,40 @@ orn z7.d, z8.d, #254
 // CHECK: [[@LINE-1]]:{{[0-9]+}}: error: operand must match destination register
 // CHECK-NEXT: orn z7.d, z8.d, #254
 // CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+
+// --------------------------------------------------------------------------//
+// Predicate register must have .b suffix
+
+orn p0.h, p0/z, p0.h, p1.h
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid predicate register.
+// CHECK-NEXT: orn p0.h, p0/z, p0.h, p1.h
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+orn p0.s, p0/z, p0.s, p1.s
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid predicate register.
+// CHECK-NEXT: orn p0.s, p0/z, p0.s, p1.s
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+orn p0.d, p0/z, p0.d, p1.d
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid predicate register.
+// CHECK-NEXT: orn p0.d, p0/z, p0.d, p1.d
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+// --------------------------------------------------------------------------//
+// Operation only has zeroing predicate behaviour (p0/z).
+
+orn p0.b, p0/m, p1.b, p2.b
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid operand
+// CHECK-NEXT: orn p0.b, p0/m, p1.b, p2.b
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+
+// --------------------------------------------------------------------------//
+// Negative tests for instructions that are incompatible with movprfx
+
+movprfx z0.d, p0/z, z7.d
+orn     z0.d, z0.d, #0x6
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: instruction is unpredictable when following a predicated movprfx, suggest using unpredicated movprfx
+// CHECK-NEXT: orn     z0.d, z0.d, #0x6
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:

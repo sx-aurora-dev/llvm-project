@@ -48,6 +48,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <string>
 #include <utility>
@@ -470,8 +471,13 @@ void DWARFContext::dump(
                                   isLittleEndian(), savedAddressByteSize);
     uint32_t offset = 0;
     DWARFDebugRangeList rangeList;
-    while (rangeList.extract(rangesData, &offset))
+    while (rangesData.isValidOffset(offset)) {
+      if (Error E = rangeList.extract(rangesData, &offset)) {
+        WithColor::error() << toString(std::move(E)) << '\n';
+        break;
+      }
       rangeList.dump(OS);
+    }
   }
 
   if (shouldDump(Explicit, ".debug_rnglists", DIDT_ID_DebugRnglists,
@@ -1243,7 +1249,9 @@ class DWARFObjInMemory final : public DWARFObject {
   StringRef TUIndexSection;
   StringRef LineStringSection;
 
-  SmallVector<SmallString<32>, 4> UncompressedSections;
+  // A deque holding section data whose iterators are not invalidated when
+  // new decompressed sections are inserted at the end.
+  std::deque<SmallString<0>> UncompressedSections;
 
   StringRef *mapSectionToMember(StringRef Name) {
     if (DWARFSection *Sec = mapNameToDWARFSection(Name))
@@ -1281,11 +1289,11 @@ class DWARFObjInMemory final : public DWARFObject {
     if (!Decompressor)
       return Decompressor.takeError();
 
-    SmallString<32> Out;
+    SmallString<0> Out;
     if (auto Err = Decompressor->resizeAndDecompress(Out))
       return Err;
 
-    UncompressedSections.emplace_back(std::move(Out));
+    UncompressedSections.push_back(std::move(Out));
     Data = UncompressedSections.back();
 
     return Error::success();

@@ -1735,25 +1735,25 @@ void APInt::udivrem(const APInt &LHS, const APInt &RHS,
 
   // Check the degenerate cases
   if (lhsWords == 0) {
-    Quotient = 0;                // 0 / Y ===> 0
-    Remainder = 0;               // 0 % Y ===> 0
+    Quotient = APInt(BitWidth, 0);    // 0 / Y ===> 0
+    Remainder = APInt(BitWidth, 0);   // 0 % Y ===> 0
     return;
   }
 
   if (rhsBits == 1) {
-    Quotient = LHS;             // X / 1 ===> X
-    Remainder = 0;              // X % 1 ===> 0
+    Quotient = LHS;                   // X / 1 ===> X
+    Remainder = APInt(BitWidth, 0);   // X % 1 ===> 0
   }
 
   if (lhsWords < rhsWords || LHS.ult(RHS)) {
-    Remainder = LHS;            // X % Y ===> X, iff X < Y
-    Quotient = 0;               // X / Y ===> 0, iff X < Y
+    Remainder = LHS;                  // X % Y ===> X, iff X < Y
+    Quotient = APInt(BitWidth, 0);    // X / Y ===> 0, iff X < Y
     return;
   }
 
   if (LHS == RHS) {
-    Quotient  = 1;              // X / X ===> 1
-    Remainder = 0;              // X % X ===> 0;
+    Quotient  = APInt(BitWidth, 1);   // X / X ===> 1
+    Remainder = APInt(BitWidth, 0);   // X % X ===> 0;
     return;
   }
 
@@ -1801,25 +1801,26 @@ void APInt::udivrem(const APInt &LHS, uint64_t RHS, APInt &Quotient,
 
   // Check the degenerate cases
   if (lhsWords == 0) {
-    Quotient = 0;                // 0 / Y ===> 0
-    Remainder = 0;               // 0 % Y ===> 0
+    Quotient = APInt(BitWidth, 0);    // 0 / Y ===> 0
+    Remainder = 0;                    // 0 % Y ===> 0
     return;
   }
 
   if (RHS == 1) {
-    Quotient = LHS;             // X / 1 ===> X
-    Remainder = 0;              // X % 1 ===> 0
+    Quotient = LHS;                   // X / 1 ===> X
+    Remainder = 0;                    // X % 1 ===> 0
+    return;
   }
 
   if (LHS.ult(RHS)) {
-    Remainder = LHS.getZExtValue(); // X % Y ===> X, iff X < Y
-    Quotient = 0;                   // X / Y ===> 0, iff X < Y
+    Remainder = LHS.getZExtValue();   // X % Y ===> X, iff X < Y
+    Quotient = APInt(BitWidth, 0);    // X / Y ===> 0, iff X < Y
     return;
   }
 
   if (LHS == RHS) {
-    Quotient  = 1;              // X / X ===> 1
-    Remainder = 0;              // X % X ===> 0;
+    Quotient  = APInt(BitWidth, 1);   // X / X ===> 1
+    Remainder = 0;                    // X % X ===> 0;
     return;
   }
 
@@ -2657,4 +2658,52 @@ void APInt::tcSetLeastSignificantBits(WordType *dst, unsigned parts,
 
   while (i < parts)
     dst[i++] = 0;
+}
+
+APInt llvm::APIntOps::RoundingUDiv(const APInt &A, const APInt &B,
+                                   APInt::Rounding RM) {
+  // Currently udivrem always rounds down.
+  switch (RM) {
+  case APInt::Rounding::DOWN:
+  case APInt::Rounding::TOWARD_ZERO:
+    return A.udiv(B);
+  case APInt::Rounding::UP: {
+    APInt Quo, Rem;
+    APInt::udivrem(A, B, Quo, Rem);
+    if (Rem == 0)
+      return Quo;
+    return Quo + 1;
+  }
+  }
+  llvm_unreachable("Unknown APInt::Rounding enum");
+}
+
+APInt llvm::APIntOps::RoundingSDiv(const APInt &A, const APInt &B,
+                                   APInt::Rounding RM) {
+  switch (RM) {
+  case APInt::Rounding::DOWN:
+  case APInt::Rounding::UP: {
+    APInt Quo, Rem;
+    APInt::sdivrem(A, B, Quo, Rem);
+    if (Rem == 0)
+      return Quo;
+    // This algorithm deals with arbitrary rounding mode used by sdivrem.
+    // We want to check whether the non-integer part of the mathematical value
+    // is negative or not. If the non-integer part is negative, we need to round
+    // down from Quo; otherwise, if it's positive or 0, we return Quo, as it's
+    // already rounded down.
+    if (RM == APInt::Rounding::DOWN) {
+      if (Rem.isNegative() != B.isNegative())
+        return Quo - 1;
+      return Quo;
+    }
+    if (Rem.isNegative() != B.isNegative())
+      return Quo;
+    return Quo + 1;
+  }
+  // Currently sdiv rounds twards zero.
+  case APInt::Rounding::TOWARD_ZERO:
+    return A.sdiv(B);
+  }
+  llvm_unreachable("Unknown APInt::Rounding enum");
 }

@@ -29,7 +29,7 @@ namespace clangd {
 /// - Library-specific private declarations (e.g. private declaration generated
 /// by protobuf compiler)
 ///
-/// See also shouldFilterDecl().
+/// See also shouldCollectSymbol(...).
 ///
 /// Clients (e.g. clangd) can use SymbolCollector together with
 /// index::indexTopLevelDecls to retrieve all symbols when the source file is
@@ -52,9 +52,21 @@ public:
     const CanonicalIncludes *Includes = nullptr;
     // Populate the Symbol.References field.
     bool CountReferences = false;
+    // Every symbol collected will be stamped with this origin.
+    SymbolOrigin Origin = SymbolOrigin::Unknown;
+    /// Collect macros.
+    /// Note that SymbolCollector must be run with preprocessor in order to
+    /// collect macros. For example, `indexTopLevelDecls` will not index any
+    /// macro even if this is true.
+    bool CollectMacro = false;
   };
 
   SymbolCollector(Options Opts);
+
+  /// Returns true is \p ND should be collected.
+  /// AST matchers require non-const ASTContext.
+  static bool shouldCollectSymbol(const NamedDecl &ND, ASTContext &ASTCtx,
+                                  const Options &Opts);
 
   void initialize(ASTContext &Ctx) override;
 
@@ -67,6 +79,10 @@ public:
                       ArrayRef<index::SymbolRelation> Relations,
                       SourceLocation Loc,
                       index::IndexDataConsumer::ASTNodeInfo ASTNode) override;
+
+  bool handleMacroOccurence(const IdentifierInfo *Name, const MacroInfo *MI,
+                            index::SymbolRoleSet Roles,
+                            SourceLocation Loc) override;
 
   SymbolSlab takeSymbols() { return std::move(Symbols).build(); }
 
@@ -83,8 +99,9 @@ private:
   std::shared_ptr<GlobalCodeCompletionAllocator> CompletionAllocator;
   std::unique_ptr<CodeCompletionTUInfo> CompletionTUInfo;
   Options Opts;
-  // Decls referenced from the current TU, flushed on finish().
+  // Symbols referenced from the current TU, flushed on finish().
   llvm::DenseSet<const NamedDecl *> ReferencedDecls;
+  llvm::DenseSet<const IdentifierInfo *> ReferencedMacros;
   // Maps canonical declaration provided by clang to canonical declaration for
   // an index symbol, if clangd prefers a different declaration than that
   // provided by clang. For example, friend declaration might be considered

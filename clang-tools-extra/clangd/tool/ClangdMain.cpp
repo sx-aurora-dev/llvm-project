@@ -12,6 +12,7 @@
 #include "Path.h"
 #include "Trace.h"
 #include "index/SymbolYAML.h"
+#include "clang/Basic/Version.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -39,7 +40,7 @@ std::unique_ptr<SymbolIndex> buildStaticIndex(llvm::StringRef YamlSymbolFile) {
     llvm::errs() << "Can't open " << YamlSymbolFile << "\n";
     return nullptr;
   }
-  auto Slab = SymbolsFromYAML(Buffer.get()->getBuffer());
+  auto Slab = symbolsFromYAML(Buffer.get()->getBuffer());
   SymbolSlab::Builder SymsBuilder;
   for (auto Sym : Slab)
     SymsBuilder.insert(Sym);
@@ -97,6 +98,14 @@ static llvm::cl::opt<bool>
     PrettyPrint("pretty", llvm::cl::desc("Pretty-print JSON output"),
                 llvm::cl::init(false));
 
+static llvm::cl::opt<Logger::Level> LogLevel(
+    "log", llvm::cl::desc("Verbosity of log messages written to stderr"),
+    llvm::cl::values(clEnumValN(Logger::Error, "error", "Error messages only"),
+                     clEnumValN(Logger::Info, "info",
+                                "High level execution tracing"),
+                     clEnumValN(Logger::Debug, "verbose", "Low level details")),
+    llvm::cl::init(Logger::Info));
+
 static llvm::cl::opt<bool> Test(
     "lit-test",
     llvm::cl::desc(
@@ -142,6 +151,19 @@ static llvm::cl::opt<bool> EnableIndex(
                    "Clang uses an index built from symbols in opened files"),
     llvm::cl::init(true));
 
+static llvm::cl::opt<bool>
+    ShowOrigins("debug-origin",
+                llvm::cl::desc("Show origins of completion items"),
+                llvm::cl::init(clangd::CodeCompleteOptions().ShowOrigins),
+                llvm::cl::Hidden);
+
+static llvm::cl::opt<bool> HeaderInsertionDecorators(
+    "header-insertion-decorators",
+    llvm::cl::desc("Prepend a circular dot or space before the completion "
+                   "label, depending on wether "
+                   "an include line will be inserted or not."),
+    llvm::cl::init(true));
+
 static llvm::cl::opt<Path> YamlSymbolFile(
     "yaml-symbol-file",
     llvm::cl::desc(
@@ -153,7 +175,16 @@ static llvm::cl::opt<Path> YamlSymbolFile(
 
 int main(int argc, char *argv[]) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
-  llvm::cl::ParseCommandLineOptions(argc, argv, "clangd");
+  llvm::cl::SetVersionPrinter([](llvm::raw_ostream &OS) {
+    OS << clang::getClangToolFullVersion("clangd") << "\n";
+  });
+  llvm::cl::ParseCommandLineOptions(
+      argc, argv,
+      "clangd is a language server that provides IDE-like features to editors. "
+      "\n\nIt should be used via an editor plugin rather than invoked directly."
+      "For more information, see:"
+      "\n\thttps://clang.llvm.org/extra/clangd.html"
+      "\n\thttps://microsoft.github.io/language-server-protocol/");
   if (Test) {
     RunSynchronously = true;
     InputStyle = JSONStreamStyle::Delimited;
@@ -207,7 +238,7 @@ int main(int argc, char *argv[]) {
   if (Tracer)
     TracingSession.emplace(*Tracer);
 
-  JSONOutput Out(llvm::outs(), llvm::errs(),
+  JSONOutput Out(llvm::outs(), llvm::errs(), LogLevel,
                  InputMirrorStream ? InputMirrorStream.getPointer() : nullptr,
                  PrettyPrint);
 
@@ -251,6 +282,11 @@ int main(int argc, char *argv[]) {
   CCOpts.IncludeIneligibleResults = IncludeIneligibleResults;
   CCOpts.Limit = LimitResults;
   CCOpts.BundleOverloads = CompletionStyle != Detailed;
+  CCOpts.ShowOrigins = ShowOrigins;
+  if (!HeaderInsertionDecorators) {
+    CCOpts.IncludeIndicator.Insert.clear();
+    CCOpts.IncludeIndicator.NoInsert.clear();
+  }
 
   // Initialize and run ClangdLSPServer.
   ClangdLSPServer LSPServer(Out, CCOpts, CompileCommandsDirPath, Opts);

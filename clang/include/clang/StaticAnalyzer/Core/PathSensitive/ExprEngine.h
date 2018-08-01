@@ -69,7 +69,7 @@ namespace cross_tu {
 class CrossTranslationUnitContext;
 
 } // namespace cross_tu
-  
+
 namespace ento {
 
 class BasicValueFactory;
@@ -117,7 +117,7 @@ private:
   cross_tu::CrossTranslationUnitContext &CTU;
 
   AnalysisManager &AMgr;
-  
+
   AnalysisDeclContextManager &AnalysisDeclContexts;
 
   CoreEngine Engine;
@@ -136,11 +136,11 @@ private:
 
   unsigned int currStmtIdx = 0;
   const NodeBuilderContext *currBldrCtx = nullptr;
-  
+
   /// Helper object to determine if an Objective-C message expression
   /// implicitly never returns.
   ObjCNoReturn ObjCNoRet;
-  
+
   /// Whether or not GC is enabled in this analysis.
   bool ObjCGCEnabled;
 
@@ -173,7 +173,7 @@ public:
   /// state of the function call. Returns true if there is still simulation
   /// state on the worklist.
   bool ExecuteWorkListWithInitialState(const LocationContext *L, unsigned Steps,
-                                       ProgramStateRef InitState, 
+                                       ProgramStateRef InitState,
                                        ExplodedNodeSet &Dst) {
     return Engine.ExecuteWorkListWithInitialState(L, Steps, InitState, Dst);
   }
@@ -276,17 +276,17 @@ public:
                        ExplodedNode *Pred, ExplodedNodeSet &Dst);
   void ProcessMemberDtor(const CFGMemberDtor D,
                          ExplodedNode *Pred, ExplodedNodeSet &Dst);
-  void ProcessTemporaryDtor(const CFGTemporaryDtor D, 
+  void ProcessTemporaryDtor(const CFGTemporaryDtor D,
                             ExplodedNode *Pred, ExplodedNodeSet &Dst);
 
   /// Called by CoreEngine when processing the entrance of a CFGBlock.
   void processCFGBlockEntrance(const BlockEdge &L,
                                NodeBuilderWithSinks &nodeBuilder,
                                ExplodedNode *Pred) override;
- 
+
   /// ProcessBranch - Called by CoreEngine.  Used to generate successor
   ///  nodes by processing the 'effects' of a branch condition.
-  void processBranch(const Stmt *Condition, const Stmt *Term, 
+  void processBranch(const Stmt *Condition, const Stmt *Term,
                      NodeBuilderContext& BuilderCtx,
                      ExplodedNode *Pred,
                      ExplodedNodeSet &Dst,
@@ -354,7 +354,7 @@ public:
 
   /// processRegionChanges - Called by ProgramStateManager whenever a change is made
   ///  to the store. Used to update checkers that track region values.
-  ProgramStateRef 
+  ProgramStateRef
   processRegionChanges(ProgramStateRef state,
                        const InvalidatedSymbols *invalidated,
                        ArrayRef<const MemRegion *> ExplicitRegions,
@@ -410,15 +410,15 @@ public:
                       ExplodedNodeSet &Dst);
 
   /// VisitBlockExpr - Transfer function logic for BlockExprs.
-  void VisitBlockExpr(const BlockExpr *BE, ExplodedNode *Pred, 
+  void VisitBlockExpr(const BlockExpr *BE, ExplodedNode *Pred,
                       ExplodedNodeSet &Dst);
 
   /// VisitLambdaExpr - Transfer function logic for LambdaExprs.
-  void VisitLambdaExpr(const LambdaExpr *LE, ExplodedNode *Pred, 
+  void VisitLambdaExpr(const LambdaExpr *LE, ExplodedNode *Pred,
                        ExplodedNodeSet &Dst);
 
   /// VisitBinaryOperator - Transfer function logic for binary operators.
-  void VisitBinaryOperator(const BinaryOperator* B, ExplodedNode *Pred, 
+  void VisitBinaryOperator(const BinaryOperator* B, ExplodedNode *Pred,
                            ExplodedNodeSet &Dst);
 
 
@@ -431,21 +431,21 @@ public:
                  ExplodedNodeSet &Dst);
 
   /// VisitCompoundLiteralExpr - Transfer function logic for compound literals.
-  void VisitCompoundLiteralExpr(const CompoundLiteralExpr *CL, 
+  void VisitCompoundLiteralExpr(const CompoundLiteralExpr *CL,
                                 ExplodedNode *Pred, ExplodedNodeSet &Dst);
 
   /// Transfer function logic for DeclRefExprs and BlockDeclRefExprs.
   void VisitCommonDeclRefExpr(const Expr *DR, const NamedDecl *D,
                               ExplodedNode *Pred, ExplodedNodeSet &Dst);
-  
+
   /// VisitDeclStmt - Transfer function logic for DeclStmts.
-  void VisitDeclStmt(const DeclStmt *DS, ExplodedNode *Pred, 
+  void VisitDeclStmt(const DeclStmt *DS, ExplodedNode *Pred,
                      ExplodedNodeSet &Dst);
 
   /// VisitGuardedExpr - Transfer function logic for ?, __builtin_choose
-  void VisitGuardedExpr(const Expr *Ex, const Expr *L, const Expr *R, 
+  void VisitGuardedExpr(const Expr *Ex, const Expr *L, const Expr *R,
                         ExplodedNode *Pred, ExplodedNodeSet &Dst);
-  
+
   void VisitInitListExpr(const InitListExpr *E, ExplodedNode *Pred,
                          ExplodedNodeSet &Dst);
 
@@ -454,7 +454,7 @@ public:
                         ExplodedNodeSet &Dst);
 
   /// VisitMemberExpr - Transfer function for member expressions.
-  void VisitMemberExpr(const MemberExpr *M, ExplodedNode *Pred, 
+  void VisitMemberExpr(const MemberExpr *M, ExplodedNode *Pred,
                        ExplodedNodeSet &Dst);
 
   /// VisitAtomicExpr - Transfer function for builtin atomic expressions
@@ -471,16 +471,16 @@ public:
 
   /// VisitObjCForCollectionStmt - Transfer function logic for
   ///  ObjCForCollectionStmt.
-  void VisitObjCForCollectionStmt(const ObjCForCollectionStmt *S, 
+  void VisitObjCForCollectionStmt(const ObjCForCollectionStmt *S,
                                   ExplodedNode *Pred, ExplodedNodeSet &Dst);
 
   void VisitObjCMessage(const ObjCMessageExpr *ME, ExplodedNode *Pred,
                         ExplodedNodeSet &Dst);
 
   /// VisitReturnStmt - Transfer function logic for return statements.
-  void VisitReturnStmt(const ReturnStmt *R, ExplodedNode *Pred, 
+  void VisitReturnStmt(const ReturnStmt *R, ExplodedNode *Pred,
                        ExplodedNodeSet &Dst);
-  
+
   /// VisitOffsetOfExpr - Transfer function for offsetof.
   void VisitOffsetOfExpr(const OffsetOfExpr *Ex, ExplodedNode *Pred,
                          ExplodedNodeSet &Dst);
@@ -490,7 +490,7 @@ public:
                                      ExplodedNode *Pred, ExplodedNodeSet &Dst);
 
   /// VisitUnaryOperator - Transfer function logic for unary operators.
-  void VisitUnaryOperator(const UnaryOperator* B, ExplodedNode *Pred, 
+  void VisitUnaryOperator(const UnaryOperator* B, ExplodedNode *Pred,
                           ExplodedNodeSet &Dst);
 
   /// Handle ++ and -- (both pre- and post-increment).
@@ -505,7 +505,7 @@ public:
   void VisitCXXCatchStmt(const CXXCatchStmt *CS, ExplodedNode *Pred,
                          ExplodedNodeSet &Dst);
 
-  void VisitCXXThisExpr(const CXXThisExpr *TE, ExplodedNode *Pred, 
+  void VisitCXXThisExpr(const CXXThisExpr *TE, ExplodedNode *Pred,
                         ExplodedNodeSet & Dst);
 
   void VisitCXXConstructExpr(const CXXConstructExpr *E, ExplodedNode *Pred,
@@ -528,16 +528,16 @@ public:
 
   /// Create a C++ temporary object for an rvalue.
   void CreateCXXTemporaryObject(const MaterializeTemporaryExpr *ME,
-                                ExplodedNode *Pred, 
+                                ExplodedNode *Pred,
                                 ExplodedNodeSet &Dst);
-  
+
   /// evalEagerlyAssumeBinOpBifurcation - Given the nodes in 'Src', eagerly assume symbolic
   ///  expressions of the form 'x != 0' and generate new nodes (stored in Dst)
   ///  with those assumptions.
-  void evalEagerlyAssumeBinOpBifurcation(ExplodedNodeSet &Dst, ExplodedNodeSet &Src, 
+  void evalEagerlyAssumeBinOpBifurcation(ExplodedNodeSet &Dst, ExplodedNodeSet &Src,
                          const Expr *Ex);
-  
-  std::pair<const ProgramPointTag *, const ProgramPointTag *>
+
+  static std::pair<const ProgramPointTag *, const ProgramPointTag *>
     geteagerlyAssumeBinOpBifurcationTags();
 
   SVal evalMinus(SVal X) {
@@ -580,7 +580,7 @@ public:
                  SVal LHS, SVal RHS, QualType T) {
     return svalBuilder.evalBinOp(ST, Op, LHS, RHS, T);
   }
-  
+
 protected:
   /// evalBind - Handle the semantics of binding a value to a specific location.
   ///  This method is used by evalStore, VisitDeclStmt, and others.
@@ -780,9 +780,30 @@ private:
       llvm::PointerUnion<const Stmt *, const CXXCtorInitializer *> P,
       const LocationContext *LC);
 
+  /// If the given expression corresponds to a temporary that was used for
+  /// passing into an elidable copy/move constructor and that constructor
+  /// was actually elided, track that we also need to elide the destructor.
+  static ProgramStateRef elideDestructor(ProgramStateRef State,
+                                         const CXXBindTemporaryExpr *BTE,
+                                         const LocationContext *LC);
+
+  /// Stop tracking the destructor that corresponds to an elided constructor.
+  static ProgramStateRef
+  cleanupElidedDestructor(ProgramStateRef State,
+                          const CXXBindTemporaryExpr *BTE,
+                          const LocationContext *LC);
+
+  /// Returns true if the given expression corresponds to a temporary that
+  /// was constructed for passing into an elidable copy/move constructor
+  /// and that constructor was actually elided.
+  static bool isDestructorElided(ProgramStateRef State,
+                                 const CXXBindTemporaryExpr *BTE,
+                                 const LocationContext *LC);
+
   /// Check if all objects under construction have been fully constructed
   /// for the given context range (including FromLC, not including ToLC).
-  /// This is useful for assertions.
+  /// This is useful for assertions. Also checks if elided destructors
+  /// were cleaned up.
   static bool areAllObjectsFullyConstructed(ProgramStateRef State,
                                             const LocationContext *FromLC,
                                             const LocationContext *ToLC);

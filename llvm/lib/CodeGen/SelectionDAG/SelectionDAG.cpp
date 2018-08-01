@@ -538,6 +538,34 @@ static void AddNodeIDCustom(FoldingSetNodeID &ID, const SDNode *N) {
     ID.AddInteger(ST->getPointerInfo().getAddrSpace());
     break;
   }
+  case ISD::MLOAD: {
+    const MaskedLoadSDNode *MLD = cast<MaskedLoadSDNode>(N);
+    ID.AddInteger(MLD->getMemoryVT().getRawBits());
+    ID.AddInteger(MLD->getRawSubclassData());
+    ID.AddInteger(MLD->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::MSTORE: {
+    const MaskedStoreSDNode *MST = cast<MaskedStoreSDNode>(N);
+    ID.AddInteger(MST->getMemoryVT().getRawBits());
+    ID.AddInteger(MST->getRawSubclassData());
+    ID.AddInteger(MST->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::MGATHER: {
+    const MaskedGatherSDNode *MG = cast<MaskedGatherSDNode>(N);
+    ID.AddInteger(MG->getMemoryVT().getRawBits());
+    ID.AddInteger(MG->getRawSubclassData());
+    ID.AddInteger(MG->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::MSCATTER: {
+    const MaskedScatterSDNode *MS = cast<MaskedScatterSDNode>(N);
+    ID.AddInteger(MS->getMemoryVT().getRawBits());
+    ID.AddInteger(MS->getRawSubclassData());
+    ID.AddInteger(MS->getPointerInfo().getAddrSpace());
+    break;
+  }
   case ISD::ATOMIC_CMP_SWAP:
   case ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS:
   case ISD::ATOMIC_SWAP:
@@ -1243,7 +1271,7 @@ SDValue SelectionDAG::getConstant(const ConstantInt &Val, const SDLoc &DL,
       return SDValue(N, 0);
 
   if (!N) {
-    N = newSDNode<ConstantSDNode>(isT, isO, Elt, DL.getDebugLoc(), EltVT);
+    N = newSDNode<ConstantSDNode>(isT, isO, Elt, EltVT);
     CSEMap.InsertNode(N, IP);
     InsertNode(N);
     NewSDValueDbgMsg(SDValue(N, 0), "Creating constant: ", this);
@@ -1286,7 +1314,7 @@ SDValue SelectionDAG::getConstantFP(const ConstantFP &V, const SDLoc &DL,
       return SDValue(N, 0);
 
   if (!N) {
-    N = newSDNode<ConstantFPSDNode>(isTarget, &V, DL.getDebugLoc(), EltVT);
+    N = newSDNode<ConstantFPSDNode>(isTarget, &V, EltVT);
     CSEMap.InsertNode(N, IP);
     InsertNode(N);
   }
@@ -3611,17 +3639,33 @@ bool SelectionDAG::isKnownNeverNaN(SDValue Op) const {
   return false;
 }
 
-bool SelectionDAG::isKnownNeverZero(SDValue Op) const {
+bool SelectionDAG::isKnownNeverZeroFloat(SDValue Op) const {
+  assert(Op.getValueType().isFloatingPoint() &&
+         "Floating point type expected");
+
   // If the value is a constant, we can obviously see if it is a zero or not.
+  // TODO: Add BuildVector support.
   if (const ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(Op))
     return !C->isZero();
+  return false;
+}
+
+bool SelectionDAG::isKnownNeverZero(SDValue Op) const {
+  assert(!Op.getValueType().isFloatingPoint() &&
+         "Floating point types unsupported - use isKnownNeverZeroFloat");
+
+  // If the value is a constant, we can obviously see if it is a zero or not.
+  if (ISD::matchUnaryPredicate(
+          Op, [](ConstantSDNode *C) { return !C->isNullValue(); }))
+    return true;
 
   // TODO: Recognize more cases here.
   switch (Op.getOpcode()) {
   default: break;
   case ISD::OR:
-    if (const ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op.getOperand(1)))
-      return !C->isNullValue();
+    if (isKnownNeverZero(Op.getOperand(1)) ||
+        isKnownNeverZero(Op.getOperand(0)))
+      return true;
     break;
   }
 
@@ -4442,24 +4486,6 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
   case ISD::FMUL:
   case ISD::FDIV:
   case ISD::FREM:
-    if (getTarget().Options.UnsafeFPMath) {
-      if (Opcode == ISD::FADD) {
-        // x+0 --> x
-        if (N2CFP && N2CFP->getValueAPF().isZero())
-          return N1;
-      } else if (Opcode == ISD::FSUB) {
-        // x-0 --> x
-        if (N2CFP && N2CFP->getValueAPF().isZero())
-          return N1;
-      } else if (Opcode == ISD::FMUL) {
-        // x*0 --> 0
-        if (N2CFP && N2CFP->isZero())
-          return N2;
-        // x*1 --> x
-        if (N2CFP && N2CFP->isExactlyValue(1.0))
-          return N1;
-      }
-    }
     assert(VT.isFloatingPoint() && "This operator only applies to FP types!");
     assert(N1.getValueType() == N2.getValueType() &&
            N1.getValueType() == VT && "Binary operator types must match!");
@@ -4864,6 +4890,9 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
   // Perform various simplifications.
   switch (Opcode) {
   case ISD::FMA: {
+    assert(VT.isFloatingPoint() && "This operator only applies to FP types!");
+    assert(N1.getValueType() == VT && N2.getValueType() == VT &&
+           N3.getValueType() == VT && "FMA types must match!");
     ConstantFPSDNode *N1CFP = dyn_cast<ConstantFPSDNode>(N1);
     ConstantFPSDNode *N2CFP = dyn_cast<ConstantFPSDNode>(N2);
     ConstantFPSDNode *N3CFP = dyn_cast<ConstantFPSDNode>(N3);
@@ -7390,11 +7419,13 @@ SDDbgValue *SelectionDAG::getConstantDbgValue(DIVariable *Var,
 /// FrameIndex
 SDDbgValue *SelectionDAG::getFrameIndexDbgValue(DIVariable *Var,
                                                 DIExpression *Expr, unsigned FI,
+                                                bool IsIndirect,
                                                 const DebugLoc &DL,
                                                 unsigned O) {
   assert(cast<DILocalVariable>(Var)->isValidLocationForIntrinsic(DL) &&
          "Expected inlined-at fields to agree");
-  return new (DbgInfo->getAlloc()) SDDbgValue(Var, Expr, FI, DL, O);
+  return new (DbgInfo->getAlloc())
+      SDDbgValue(Var, Expr, FI, IsIndirect, DL, O, SDDbgValue::FRAMEIX);
 }
 
 /// VReg
@@ -7404,8 +7435,8 @@ SDDbgValue *SelectionDAG::getVRegDbgValue(DIVariable *Var,
                                           const DebugLoc &DL, unsigned O) {
   assert(cast<DILocalVariable>(Var)->isValidLocationForIntrinsic(DL) &&
          "Expected inlined-at fields to agree");
-  return new (DbgInfo->getAlloc()) SDDbgValue(Var, Expr, VReg, IsIndirect, DL,
-                                              O);
+  return new (DbgInfo->getAlloc())
+      SDDbgValue(Var, Expr, VReg, IsIndirect, DL, O, SDDbgValue::VREG);
 }
 
 void SelectionDAG::transferDbgValues(SDValue From, SDValue To,

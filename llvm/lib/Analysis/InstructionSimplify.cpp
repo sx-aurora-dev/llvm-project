@@ -65,6 +65,48 @@ static Value *SimplifyCastInst(unsigned, Value *, Type *,
 static Value *SimplifyGEPInst(Type *, ArrayRef<Value *>, const SimplifyQuery &,
                               unsigned);
 
+static Value *foldSelectWithBinaryOp(Value *Cond, Value *TrueVal,
+                                     Value *FalseVal) {
+  BinaryOperator::BinaryOps BinOpCode;
+  if (auto *BO = dyn_cast<BinaryOperator>(Cond))
+    BinOpCode = BO->getOpcode();
+  else
+    return nullptr;
+
+  CmpInst::Predicate ExpectedPred, Pred1, Pred2;
+  if (BinOpCode == BinaryOperator::Or) {
+    ExpectedPred = ICmpInst::ICMP_NE;
+  } else if (BinOpCode == BinaryOperator::And) {
+    ExpectedPred = ICmpInst::ICMP_EQ;
+  } else
+    return nullptr;
+
+  // %A = icmp eq %TV, %FV
+  // %B = icmp eq %X, %Y (and one of these is a select operand)
+  // %C = and %A, %B
+  // %D = select %C, %TV, %FV
+  // -->
+  // %FV
+
+  // %A = icmp ne %TV, %FV
+  // %B = icmp ne %X, %Y (and one of these is a select operand)
+  // %C = or %A, %B
+  // %D = select %C, %TV, %FV
+  // -->
+  // %TV
+  Value *X, *Y;
+  if (!match(Cond, m_c_BinOp(m_c_ICmp(Pred1, m_Specific(TrueVal),
+                                      m_Specific(FalseVal)),
+                             m_ICmp(Pred2, m_Value(X), m_Value(Y)))) ||
+      Pred1 != Pred2 || Pred1 != ExpectedPred)
+    return nullptr;
+
+  if (X == TrueVal || X == FalseVal || Y == TrueVal || Y == FalseVal)
+    return BinOpCode == BinaryOperator::Or ? TrueVal : FalseVal;
+
+  return nullptr;
+}
+
 /// For a boolean type or a vector of boolean type, return false or a vector
 /// with every element false.
 static Constant *getFalse(Type *Ty) {
@@ -540,6 +582,10 @@ static Value *SimplifyAddInst(Value *Op0, Value *Op1, bool IsNSW, bool IsNUW,
   if (match(Op1, m_Zero()))
     return Op0;
 
+  // If two operands are negative, return 0.
+  if (isKnownNegation(Op0, Op1))
+    return Constant::getNullValue(Op0->getType());
+
   // X + (Y - X) -> Y
   // (Y - X) + X -> Y
   // Eg: X + -X -> 0
@@ -902,7 +948,10 @@ static Value *simplifyDivRem(Value *Op0, Value *Op1, bool IsDiv) {
   // X % 1 -> 0
   // If this is a boolean op (single-bit element type), we can't have
   // division-by-zero or remainder-by-zero, so assume the divisor is 1.
-  if (match(Op1, m_One()) || Ty->isIntOrIntVectorTy(1))
+  // Similarly, if we're zero-extending a boolean divisor, then assume it's a 1.
+  Value *X;
+  if (match(Op1, m_One()) || Ty->isIntOrIntVectorTy(1) ||
+      (match(Op1, m_ZExt(m_Value(X))) && X->getType()->isIntOrIntVectorTy(1)))
     return IsDiv ? Op0 : Constant::getNullValue(Ty);
 
   return nullptr;
@@ -1074,6 +1123,10 @@ static Value *simplifyRem(Instruction::BinaryOps Opcode, Value *Op0, Value *Op1,
 /// If not, this returns null.
 static Value *SimplifySDivInst(Value *Op0, Value *Op1, const SimplifyQuery &Q,
                                unsigned MaxRecurse) {
+  // If two operands are negated and no signed overflow, return -1.
+  if (isKnownNegation(Op0, Op1, /*NeedNSW=*/true))
+    return Constant::getAllOnesValue(Op0->getType());
+
   return simplifyDiv(Instruction::SDiv, Op0, Op1, Q, MaxRecurse);
 }
 
@@ -1096,6 +1149,16 @@ Value *llvm::SimplifyUDivInst(Value *Op0, Value *Op1, const SimplifyQuery &Q) {
 /// If not, this returns null.
 static Value *SimplifySRemInst(Value *Op0, Value *Op1, const SimplifyQuery &Q,
                                unsigned MaxRecurse) {
+  // If the divisor is 0, the result is undefined, so assume the divisor is -1.
+  // srem Op0, (sext i1 X) --> srem Op0, -1 --> 0
+  Value *X;
+  if (match(Op1, m_SExt(m_Value(X))) && X->getType()->isIntOrIntVectorTy(1))
+    return ConstantInt::getNullValue(Op0->getType());
+
+  // If the two operands are negated, return 0.
+  if (isKnownNegation(Op0, Op1))
+    return ConstantInt::getNullValue(Op0->getType());
+
   return simplifyRem(Instruction::SRem, Op0, Op1, Q, MaxRecurse);
 }
 
@@ -1153,7 +1216,11 @@ static Value *SimplifyShift(Instruction::BinaryOps Opcode, Value *Op0,
     return Constant::getNullValue(Op0->getType());
 
   // X shift by 0 -> X
-  if (match(Op1, m_Zero()))
+  // Shift-by-sign-extended bool must be shift-by-0 because shift-by-all-ones
+  // would be poison.
+  Value *X;
+  if (match(Op1, m_Zero()) ||
+      (match(Op1, m_SExt(m_Value(X))) && X->getType()->isIntOrIntVectorTy(1)))
     return Op0;
 
   // Fold undefined shifts.
@@ -1313,7 +1380,7 @@ static Value *simplifyUnsignedRangeCheck(ICmpInst *ZeroICmp,
       ICmpInst::isUnsigned(UnsignedPred))
     ;
   else if (match(UnsignedICmp,
-                 m_ICmp(UnsignedPred, m_Value(Y), m_Specific(X))) &&
+                 m_ICmp(UnsignedPred, m_Specific(Y), m_Value(X))) &&
            ICmpInst::isUnsigned(UnsignedPred))
     UnsignedPred = ICmpInst::getSwappedPredicate(UnsignedPred);
   else
@@ -2107,9 +2174,12 @@ computePointerICmp(const DataLayout &DL, const TargetLibraryInfo *TLI,
       ConstantInt *LHSOffsetCI = dyn_cast<ConstantInt>(LHSOffset);
       ConstantInt *RHSOffsetCI = dyn_cast<ConstantInt>(RHSOffset);
       uint64_t LHSSize, RHSSize;
+      ObjectSizeOpts Opts;
+      Opts.NullIsUnknownSize =
+          NullPointerIsDefined(cast<AllocaInst>(LHS)->getFunction());
       if (LHSOffsetCI && RHSOffsetCI &&
-          getObjectSize(LHS, LHSSize, DL, TLI) &&
-          getObjectSize(RHS, RHSSize, DL, TLI)) {
+          getObjectSize(LHS, LHSSize, DL, TLI, Opts) &&
+          getObjectSize(RHS, RHSSize, DL, TLI, Opts)) {
         const APInt &LHSOffsetValue = LHSOffsetCI->getValue();
         const APInt &RHSOffsetValue = RHSOffsetCI->getValue();
         if (!LHSOffsetValue.isNegative() &&
@@ -3724,6 +3794,9 @@ static Value *SimplifySelectInst(Value *Cond, Value *TrueVal, Value *FalseVal,
           simplifySelectWithICmpCond(Cond, TrueVal, FalseVal, Q, MaxRecurse))
     return V;
 
+  if (Value *V = foldSelectWithBinaryOp(Cond, TrueVal, FalseVal))
+    return V;
+
   return nullptr;
 }
 
@@ -4576,141 +4649,131 @@ static bool maskIsAllZeroOrUndef(Value *Mask) {
   return true;
 }
 
-template <typename IterTy>
-static Value *SimplifyIntrinsic(Function *F, IterTy ArgBegin, IterTy ArgEnd,
-                                const SimplifyQuery &Q, unsigned MaxRecurse) {
+static Value *simplifyUnaryIntrinsic(Function *F, Value *Op0,
+                                     const SimplifyQuery &Q) {
+  // Idempotent functions return the same result when called repeatedly.
   Intrinsic::ID IID = F->getIntrinsicID();
-  unsigned NumOperands = std::distance(ArgBegin, ArgEnd);
+  if (IsIdempotent(IID))
+    if (auto *II = dyn_cast<IntrinsicInst>(Op0))
+      if (II->getIntrinsicID() == IID)
+        return II;
 
-  // Unary Ops
-  if (NumOperands == 1) {
-    // Perform idempotent optimizations
-    if (IsIdempotent(IID)) {
-      if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(*ArgBegin)) {
-        if (II->getIntrinsicID() == IID)
-          return II;
-      }
-    }
-
-    Value *IIOperand = *ArgBegin;
-    Value *X;
-    switch (IID) {
-    case Intrinsic::fabs: {
-      if (SignBitMustBeZero(IIOperand, Q.TLI))
-        return IIOperand;
-      return nullptr;
-    }
-    case Intrinsic::bswap: {
-      // bswap(bswap(x)) -> x
-      if (match(IIOperand, m_BSwap(m_Value(X))))
-        return X;
-      return nullptr;
-    }
-    case Intrinsic::bitreverse: {
-      // bitreverse(bitreverse(x)) -> x
-      if (match(IIOperand, m_BitReverse(m_Value(X))))
-        return X;
-      return nullptr;
-    }
-    case Intrinsic::exp: {
-      // exp(log(x)) -> x
-      if (Q.CxtI->hasAllowReassoc() &&
-          match(IIOperand, m_Intrinsic<Intrinsic::log>(m_Value(X))))
-        return X;
-      return nullptr;
-    }
-    case Intrinsic::exp2: {
-      // exp2(log2(x)) -> x
-      if (Q.CxtI->hasAllowReassoc() &&
-          match(IIOperand, m_Intrinsic<Intrinsic::log2>(m_Value(X))))
-        return X;
-      return nullptr;
-    }
-    case Intrinsic::log: {
-      // log(exp(x)) -> x
-      if (Q.CxtI->hasAllowReassoc() &&
-          match(IIOperand, m_Intrinsic<Intrinsic::exp>(m_Value(X))))
-        return X;
-      return nullptr;
-    }
-    case Intrinsic::log2: {
-      // log2(exp2(x)) -> x
-      if (Q.CxtI->hasAllowReassoc() &&
-          match(IIOperand, m_Intrinsic<Intrinsic::exp2>(m_Value(X)))) {
-        return X;
-      }
-      return nullptr;
-    }
-    default:
-      return nullptr;
-    }
+  Value *X;
+  switch (IID) {
+  case Intrinsic::fabs:
+    if (SignBitMustBeZero(Op0, Q.TLI)) return Op0;
+    break;
+  case Intrinsic::bswap:
+    // bswap(bswap(x)) -> x
+    if (match(Op0, m_BSwap(m_Value(X)))) return X;
+    break;
+  case Intrinsic::bitreverse:
+    // bitreverse(bitreverse(x)) -> x
+    if (match(Op0, m_BitReverse(m_Value(X)))) return X;
+    break;
+  case Intrinsic::exp:
+    // exp(log(x)) -> x
+    if (Q.CxtI->hasAllowReassoc() &&
+        match(Op0, m_Intrinsic<Intrinsic::log>(m_Value(X)))) return X;
+    break;
+  case Intrinsic::exp2:
+    // exp2(log2(x)) -> x
+    if (Q.CxtI->hasAllowReassoc() &&
+        match(Op0, m_Intrinsic<Intrinsic::log2>(m_Value(X)))) return X;
+    break;
+  case Intrinsic::log:
+    // log(exp(x)) -> x
+    if (Q.CxtI->hasAllowReassoc() &&
+        match(Op0, m_Intrinsic<Intrinsic::exp>(m_Value(X)))) return X;
+    break;
+  case Intrinsic::log2:
+    // log2(exp2(x)) -> x
+    if (Q.CxtI->hasAllowReassoc() &&
+        match(Op0, m_Intrinsic<Intrinsic::exp2>(m_Value(X)))) return X;
+    break;
+  default:
+    break;
   }
 
-  // Binary Ops
-  if (NumOperands == 2) {
-    Value *LHS = *ArgBegin;
-    Value *RHS = *(ArgBegin + 1);
-    Type *ReturnType = F->getReturnType();
+  return nullptr;
+}
 
-    switch (IID) {
-    case Intrinsic::usub_with_overflow:
-    case Intrinsic::ssub_with_overflow: {
-      // X - X -> { 0, false }
-      if (LHS == RHS)
-        return Constant::getNullValue(ReturnType);
-
-      // X - undef -> undef
-      // undef - X -> undef
-      if (isa<UndefValue>(LHS) || isa<UndefValue>(RHS))
-        return UndefValue::get(ReturnType);
-
-      return nullptr;
-    }
-    case Intrinsic::uadd_with_overflow:
-    case Intrinsic::sadd_with_overflow: {
-      // X + undef -> undef
-      if (isa<UndefValue>(LHS) || isa<UndefValue>(RHS))
-        return UndefValue::get(ReturnType);
-
-      return nullptr;
-    }
-    case Intrinsic::umul_with_overflow:
-    case Intrinsic::smul_with_overflow: {
-      // 0 * X -> { 0, false }
-      // X * 0 -> { 0, false }
-      if (match(LHS, m_Zero()) || match(RHS, m_Zero()))
-        return Constant::getNullValue(ReturnType);
-
-      // undef * X -> { 0, false }
-      // X * undef -> { 0, false }
-      if (match(LHS, m_Undef()) || match(RHS, m_Undef()))
-        return Constant::getNullValue(ReturnType);
-
-      return nullptr;
-    }
-    case Intrinsic::load_relative: {
-      Constant *C0 = dyn_cast<Constant>(LHS);
-      Constant *C1 = dyn_cast<Constant>(RHS);
-      if (C0 && C1)
+static Value *simplifyBinaryIntrinsic(Function *F, Value *Op0, Value *Op1,
+                                      const SimplifyQuery &Q) {
+  Intrinsic::ID IID = F->getIntrinsicID();
+  Type *ReturnType = F->getReturnType();
+  switch (IID) {
+  case Intrinsic::usub_with_overflow:
+  case Intrinsic::ssub_with_overflow:
+    // X - X -> { 0, false }
+    if (Op0 == Op1)
+      return Constant::getNullValue(ReturnType);
+    // X - undef -> undef
+    // undef - X -> undef
+    if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+      return UndefValue::get(ReturnType);
+    break;
+  case Intrinsic::uadd_with_overflow:
+  case Intrinsic::sadd_with_overflow:
+    // X + undef -> undef
+    if (isa<UndefValue>(Op0) || isa<UndefValue>(Op1))
+      return UndefValue::get(ReturnType);
+    break;
+  case Intrinsic::umul_with_overflow:
+  case Intrinsic::smul_with_overflow:
+    // 0 * X -> { 0, false }
+    // X * 0 -> { 0, false }
+    if (match(Op0, m_Zero()) || match(Op1, m_Zero()))
+      return Constant::getNullValue(ReturnType);
+    // undef * X -> { 0, false }
+    // X * undef -> { 0, false }
+    if (match(Op0, m_Undef()) || match(Op1, m_Undef()))
+      return Constant::getNullValue(ReturnType);
+    break;
+  case Intrinsic::load_relative:
+    if (auto *C0 = dyn_cast<Constant>(Op0))
+      if (auto *C1 = dyn_cast<Constant>(Op1))
         return SimplifyRelativeLoad(C0, C1, Q.DL);
-      return nullptr;
+    break;
+  case Intrinsic::powi:
+    if (auto *Power = dyn_cast<ConstantInt>(Op1)) {
+      // powi(x, 0) -> 1.0
+      if (Power->isZero())
+        return ConstantFP::get(Op0->getType(), 1.0);
+      // powi(x, 1) -> x
+      if (Power->isOne())
+        return Op0;
     }
-    case Intrinsic::powi:
-      if (ConstantInt *Power = dyn_cast<ConstantInt>(RHS)) {
-        // powi(x, 0) -> 1.0
-        if (Power->isZero())
-          return ConstantFP::get(LHS->getType(), 1.0);
-        // powi(x, 1) -> x
-        if (Power->isOne())
-          return LHS;
-      }
-      return nullptr;
-    default:
-      return nullptr;
-    }
+    break;
+  case Intrinsic::maxnum:
+  case Intrinsic::minnum:
+    // If one argument is NaN, return the other argument.
+    if (match(Op0, m_NaN())) return Op1;
+    if (match(Op1, m_NaN())) return Op0;
+    break;
+  default:
+    break;
   }
 
-  // Simplify calls to llvm.masked.load.*
+  return nullptr;
+}
+
+template <typename IterTy>
+static Value *simplifyIntrinsic(Function *F, IterTy ArgBegin, IterTy ArgEnd,
+                                const SimplifyQuery &Q) {
+  // Intrinsics with no operands have some kind of side effect. Don't simplify.
+  unsigned NumOperands = std::distance(ArgBegin, ArgEnd);
+  if (NumOperands == 0)
+    return nullptr;
+
+  Intrinsic::ID IID = F->getIntrinsicID();
+  if (NumOperands == 1)
+    return simplifyUnaryIntrinsic(F, ArgBegin[0], Q);
+
+  if (NumOperands == 2)
+    return simplifyBinaryIntrinsic(F, ArgBegin[0], ArgBegin[1], Q);
+
+  // Handle intrinsics with 3 or more arguments.
   switch (IID) {
   case Intrinsic::masked_load: {
     Value *MaskArg = ArgBegin[2];
@@ -4718,6 +4781,19 @@ static Value *SimplifyIntrinsic(Function *F, IterTy ArgBegin, IterTy ArgEnd,
     // If the mask is all zeros or undef, the "passthru" argument is the result.
     if (maskIsAllZeroOrUndef(MaskArg))
       return PassthruArg;
+    return nullptr;
+  }
+  case Intrinsic::fshl:
+  case Intrinsic::fshr: {
+    Value *ShAmtArg = ArgBegin[2];
+    const APInt *ShAmtC;
+    if (match(ShAmtArg, m_APInt(ShAmtC))) {
+      // If there's effectively no shift, return the 1st arg or 2nd arg.
+      // TODO: For vectors, we could check each element of a non-splat constant.
+      APInt BitWidth = APInt(ShAmtC->getBitWidth(), ShAmtC->getBitWidth());
+      if (ShAmtC->urem(BitWidth).isNullValue())
+        return ArgBegin[IID == Intrinsic::fshl ? 0 : 1];
+    }
     return nullptr;
   }
   default:
@@ -4744,7 +4820,7 @@ static Value *SimplifyCall(ImmutableCallSite CS, Value *V, IterTy ArgBegin,
     return nullptr;
 
   if (F->isIntrinsic())
-    if (Value *Ret = SimplifyIntrinsic(F, ArgBegin, ArgEnd, Q, MaxRecurse))
+    if (Value *Ret = simplifyIntrinsic(F, ArgBegin, ArgEnd, Q))
       return Ret;
 
   if (!canConstantFoldCallTo(CS, F))

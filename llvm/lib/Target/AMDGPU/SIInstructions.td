@@ -11,10 +11,9 @@
 // that are not yet supported remain commented out.
 //===----------------------------------------------------------------------===//
 
-class GCNPat<dag pattern, dag result> : AMDGPUPat<pattern, result> {
+class GCNPat<dag pattern, dag result> : Pat<pattern, result>, GCNPredicateControl {
   let SubtargetPredicate = isGCN;
 }
-
 
 include "VOPInstructions.td"
 include "SOPInstructions.td"
@@ -292,14 +291,21 @@ def SI_ELSE_BREAK : CFPseudoInstSI <
   let isReMaterializable = 1;
 }
 
-let Uses = [EXEC], Defs = [EXEC,VCC] in {
+let Uses = [EXEC] in {
 
 multiclass PseudoInstKill <dag ins> {
+  // Even though this pseudo can usually be expanded without an SCC def, we
+  // conservatively assume that it has an SCC def, both because it is sometimes
+  // required in degenerate cases (when V_CMPX cannot be used due to constant
+  // bus limitations) and because it allows us to avoid having to track SCC
+  // liveness across basic blocks.
+  let Defs = [EXEC,VCC,SCC] in
   def _PSEUDO : PseudoInstSI <(outs), ins> {
     let isConvergent = 1;
     let usesCustomInserter = 1;
   }
 
+  let Defs = [EXEC,VCC,SCC] in
   def _TERMINATOR : SPseudoInstSI <(outs), ins> {
     let isTerminator = 1;
   }
@@ -308,6 +314,7 @@ multiclass PseudoInstKill <dag ins> {
 defm SI_KILL_I1 : PseudoInstKill <(ins SSrc_b64:$src, i1imm:$killvalue)>;
 defm SI_KILL_F32_COND_IMM : PseudoInstKill <(ins VSrc_b32:$src0, i32imm:$src1, i32imm:$cond)>;
 
+let Defs = [EXEC,VCC] in
 def SI_ILLEGAL_COPY : SPseudoInstSI <
   (outs unknown:$dst), (ins unknown:$src),
   [], " ; illegal copy $src to $dst">;
@@ -367,6 +374,7 @@ def SI_RETURN_TO_EPILOG : SPseudoInstSI <
   let isReturn = 1;
   let hasNoSchedulingInfo = 1;
   let DisableWQM = 1;
+  let FixedSize = 1;
 }
 
 // Return for returning function calls.
@@ -445,7 +453,7 @@ def ADJCALLSTACKDOWN : SPseudoInstSI<
   let usesCustomInserter = 1;
 }
 
-let Defs = [M0, EXEC],
+let Defs = [M0, EXEC, SCC],
   UseNamedOperandTable = 1 in {
 
 class SI_INDIRECT_SRC<RegisterClass rc> : VPseudoInstSI <
@@ -696,15 +704,19 @@ multiclass FMADPat <ValueType vt, Instruction inst> {
 defm : FMADPat <f16, V_MAC_F16_e64>;
 defm : FMADPat <f32, V_MAC_F32_e64>;
 
-class FMADModsPat<Instruction inst, SDPatternOperator mad_opr> : GCNPat<
-  (f32 (mad_opr (VOP3Mods f32:$src0, i32:$src0_mod),
-  (VOP3Mods f32:$src1, i32:$src1_mod),
-  (VOP3Mods f32:$src2, i32:$src2_mod))),
+class FMADModsPat<Instruction inst, SDPatternOperator mad_opr, ValueType Ty>
+  : GCNPat<
+  (Ty (mad_opr (VOP3Mods Ty:$src0, i32:$src0_mod),
+  (VOP3Mods Ty:$src1, i32:$src1_mod),
+  (VOP3Mods Ty:$src2, i32:$src2_mod))),
   (inst $src0_mod, $src0, $src1_mod, $src1,
   $src2_mod, $src2, DSTCLAMP.NONE, DSTOMOD.NONE)
 >;
 
-def : FMADModsPat<V_MAD_F32, AMDGPUfmad_ftz>;
+def : FMADModsPat<V_MAD_F32, AMDGPUfmad_ftz, f32>;
+def : FMADModsPat<V_MAD_F16, AMDGPUfmad_ftz, f16> {
+  let SubtargetPredicate = Has16BitInsts;
+}
 
 multiclass SelectPat <ValueType vt, Instruction inst> {
   def : GCNPat <
@@ -1375,6 +1387,11 @@ def : GCNPat<
 >;
 
 def : GCNPat<
+  (fcanonicalize (f16 (fneg (VOP3Mods f16:$src, i32:$src_mods)))),
+  (V_MUL_F16_e64 0, (i32 CONST.FP16_NEG_ONE), $src_mods, $src, 0, 0)
+>;
+
+def : GCNPat<
   (fcanonicalize (v2f16 (VOP3PMods v2f16:$src, i32:$src_mods))),
   (V_PK_MUL_F16 0, (i32 CONST.V2FP16_ONE), $src_mods, $src, DSTCLAMP.NONE)
 >;
@@ -1398,6 +1415,11 @@ let OtherPredicates = [NoFP32Denormals] in {
 def : GCNPat<
   (fcanonicalize (f32 (VOP3Mods f32:$src, i32:$src_mods))),
   (V_MUL_F32_e64 0, (i32 CONST.FP32_ONE), $src_mods, $src, 0, 0)
+>;
+
+def : GCNPat<
+  (fcanonicalize (f32 (fneg (VOP3Mods f32:$src, i32:$src_mods)))),
+  (V_MUL_F32_e64 0, (i32 CONST.FP32_NEG_ONE), $src_mods, $src, 0, 0)
 >;
 }
 
@@ -1488,6 +1510,16 @@ def : GCNPat <
 //   (v2i16 (scalar_to_vector i16:$src0)),
 //   (COPY $src0)
 // >;
+
+def : GCNPat <
+  (v4i16 (scalar_to_vector i16:$src0)),
+  (INSERT_SUBREG (IMPLICIT_DEF), $src0, sub0)
+>;
+
+def : GCNPat <
+  (v4f16 (scalar_to_vector f16:$src0)),
+  (INSERT_SUBREG (IMPLICIT_DEF), $src0, sub0)
+>;
 
 //===----------------------------------------------------------------------===//
 // Fract Patterns

@@ -533,6 +533,12 @@ void ASTStmtReader::VisitIntegerLiteral(IntegerLiteral *E) {
   E->setValue(Record.getContext(), Record.readAPInt());
 }
 
+void ASTStmtReader::VisitFixedPointLiteral(FixedPointLiteral *E) {
+  VisitExpr(E);
+  E->setLocation(ReadSourceLocation());
+  E->setValue(Record.getContext(), Record.readAPInt());
+}
+
 void ASTStmtReader::VisitFloatingLiteral(FloatingLiteral *E) {
   VisitExpr(E);
   E->setRawSemantics(static_cast<Stmt::APFloatSemantics>(Record.readInt()));
@@ -763,6 +769,7 @@ ASTStmtReader::VisitBinaryConditionalOperator(BinaryConditionalOperator *E) {
 
 void ASTStmtReader::VisitImplicitCastExpr(ImplicitCastExpr *E) {
   VisitCastExpr(E);
+  E->setIsPartOfExplicitCast(Record.readInt());
 }
 
 void ASTStmtReader::VisitExplicitCastExpr(ExplicitCastExpr *E) {

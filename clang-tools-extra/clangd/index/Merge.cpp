@@ -77,7 +77,7 @@ class MergedIndex : public SymbolIndex {
 private:
   const SymbolIndex *Dynamic, *Static;
 };
-}
+} // namespace
 
 Symbol
 mergeSymbol(const Symbol &L, const Symbol &R, Symbol::Details *Scratch) {
@@ -96,14 +96,10 @@ mergeSymbol(const Symbol &L, const Symbol &R, Symbol::Details *Scratch) {
   if (!S.CanonicalDeclaration)
     S.CanonicalDeclaration = O.CanonicalDeclaration;
   S.References += O.References;
-  if (S.CompletionLabel == "")
-    S.CompletionLabel = O.CompletionLabel;
-  if (S.CompletionFilterText == "")
-    S.CompletionFilterText = O.CompletionFilterText;
-  if (S.CompletionPlainInsertText == "")
-    S.CompletionPlainInsertText = O.CompletionPlainInsertText;
-  if (S.CompletionSnippetInsertText == "")
-    S.CompletionSnippetInsertText = O.CompletionSnippetInsertText;
+  if (S.Signature == "")
+    S.Signature = O.Signature;
+  if (S.CompletionSnippetSuffix == "")
+    S.CompletionSnippetSuffix = O.CompletionSnippetSuffix;
 
   if (O.Detail) {
     if (S.Detail) {
@@ -111,14 +107,16 @@ mergeSymbol(const Symbol &L, const Symbol &R, Symbol::Details *Scratch) {
       *Scratch = *S.Detail;
       if (Scratch->Documentation == "")
         Scratch->Documentation = O.Detail->Documentation;
-      if (Scratch->CompletionDetail == "")
-        Scratch->CompletionDetail = O.Detail->CompletionDetail;
+      if (Scratch->ReturnType == "")
+        Scratch->ReturnType = O.Detail->ReturnType;
       if (Scratch->IncludeHeader == "")
         Scratch->IncludeHeader = O.Detail->IncludeHeader;
       S.Detail = Scratch;
     } else
       S.Detail = O.Detail;
   }
+
+  S.Origin |= O.Origin | SymbolOrigin::Merge;
   return S;
 }
 

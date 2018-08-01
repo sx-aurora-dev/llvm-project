@@ -82,6 +82,7 @@ namespace {
       AU.addRequired<DominatorTreeWrapperPass>();
       AU.addRequired<LazyValueInfoWrapperPass>();
       AU.addPreserved<GlobalsAAWrapperPass>();
+      AU.addPreserved<DominatorTreeWrapperPass>();
     }
   };
 
@@ -306,7 +307,7 @@ static bool processCmp(CmpInst *C, LazyValueInfo *LVI) {
 /// that cannot fire no matter what the incoming edge can safely be removed. If
 /// a case fires on every incoming edge then the entire switch can be removed
 /// and replaced with a branch to the case destination.
-static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
+static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI, DominatorTree *DT) {
   Value *Cond = SI->getCondition();
   BasicBlock *BB = SI->getParent();
 
@@ -321,6 +322,10 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
 
   // Analyse each switch case in turn.
   bool Changed = false;
+  DenseMap<BasicBlock*, int> SuccessorsCount;
+  for (auto *Succ : successors(BB))
+    SuccessorsCount[Succ]++;
+
   for (auto CI = SI->case_begin(), CE = SI->case_end(); CI != CE;) {
     ConstantInt *Case = CI->getCaseValue();
 
@@ -355,7 +360,8 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
 
     if (State == LazyValueInfo::False) {
       // This case never fires - remove it.
-      CI->getCaseSuccessor()->removePredecessor(BB);
+      BasicBlock *Succ = CI->getCaseSuccessor();
+      Succ->removePredecessor(BB);
       CI = SI->removeCase(CI);
       CE = SI->case_end();
 
@@ -365,6 +371,8 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
 
       ++NumDeadCases;
       Changed = true;
+      if (--SuccessorsCount[Succ] == 0)
+        DT->deleteEdge(BB, Succ);
       continue;
     }
     if (State == LazyValueInfo::True) {
@@ -381,10 +389,14 @@ static bool processSwitch(SwitchInst *SI, LazyValueInfo *LVI) {
     ++CI;
   }
 
-  if (Changed)
+  if (Changed) {
     // If the switch has been simplified to the point where it can be replaced
     // by a branch then do so now.
-    ConstantFoldTerminator(BB);
+    DeferredDominance DDT(*DT);
+    ConstantFoldTerminator(BB, /*DeleteDeadConditions = */ false,
+                           /*TLI = */ nullptr, &DDT);
+    DDT.flush();
+  }
 
   return Changed;
 }
@@ -461,7 +473,7 @@ static bool processCallSite(CallSite CS, LazyValueInfo *LVI) {
     // relatively expensive analysis for constants which are obviously either
     // null or non-null to start with.
     if (Type && !CS.paramHasAttr(ArgNo, Attribute::NonNull) &&
-        !isa<Constant>(V) && 
+        !isa<Constant>(V) &&
         LVI->getPredicateAt(ICmpInst::ICMP_EQ, V,
                             ConstantPointerNull::get(Type),
                             CS.getInstruction()) == LazyValueInfo::False)
@@ -658,12 +670,12 @@ static Constant *getConstantAt(Value *V, Instruction *At, LazyValueInfo *LVI) {
   Value *Op0 = C->getOperand(0);
   Constant *Op1 = dyn_cast<Constant>(C->getOperand(1));
   if (!Op1) return nullptr;
-  
+
   LazyValueInfo::Tristate Result =
     LVI->getPredicateAt(C->getPredicate(), Op0, Op1, At);
   if (Result == LazyValueInfo::Unknown)
     return nullptr;
-  
+
   return (Result == LazyValueInfo::True) ?
     ConstantInt::getTrue(C->getContext()) :
     ConstantInt::getFalse(C->getContext());
@@ -722,7 +734,7 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, DominatorTree *DT,
     Instruction *Term = BB->getTerminator();
     switch (Term->getOpcode()) {
     case Instruction::Switch:
-      BBChanged |= processSwitch(cast<SwitchInst>(Term), LVI);
+      BBChanged |= processSwitch(cast<SwitchInst>(Term), LVI, DT);
       break;
     case Instruction::Ret: {
       auto *RI = cast<ReturnInst>(Term);
@@ -735,7 +747,7 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, DominatorTree *DT,
       if (auto *C = getConstantAt(RetVal, RI, LVI)) {
         ++NumReturns;
         RI->replaceUsesOfWith(RetVal, C);
-        BBChanged = true;        
+        BBChanged = true;
       }
     }
     }
@@ -767,5 +779,6 @@ CorrelatedValuePropagationPass::run(Function &F, FunctionAnalysisManager &AM) {
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserve<GlobalsAA>();
+  PA.preserve<DominatorTreeAnalysis>();
   return PA;
 }

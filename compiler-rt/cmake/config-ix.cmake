@@ -13,7 +13,7 @@ function(check_linker_flag flag out_var)
 endfunction()
 
 check_library_exists(c fopen "" COMPILER_RT_HAS_LIBC)
-if (COMPILER_RT_RUNTIME_LIBRARY STREQUAL "builtins")
+if (COMPILER_RT_USE_BUILTINS_LIBRARY)
   include(HandleCompilerRT)
   find_compiler_rt_library(builtins COMPILER_RT_BUILTINS_LIBRARY)
 else()
@@ -30,7 +30,7 @@ if (COMPILER_RT_HAS_NODEFAULTLIBS_FLAG)
   if (COMPILER_RT_HAS_LIBC)
     list(APPEND CMAKE_REQUIRED_LIBRARIES c)
   endif ()
-  if (COMPILER_RT_RUNTIME_LIBRARY STREQUAL "builtins")
+  if (COMPILER_RT_USE_BUILTINS_LIBRARY)
     list(APPEND CMAKE_REQUIRED_LIBRARIES "${COMPILER_RT_BUILTINS_LIBRARY}")
   elseif (COMPILER_RT_HAS_GCC_S_LIB)
     list(APPEND CMAKE_REQUIRED_LIBRARIES gcc_s)
@@ -123,6 +123,13 @@ endif()
 # List of all architectures we can target.
 set(COMPILER_RT_SUPPORTED_ARCH)
 
+# Try to compile a very simple source file to ensure we can target the given
+# platform. We use the results of these tests to build only the various target
+# runtime libraries supported by our current compilers cross-compiling
+# abilities.
+set(SIMPLE_SOURCE ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/simple.cc)
+file(WRITE ${SIMPLE_SOURCE} "#include <stdlib.h>\n#include <stdio.h>\nint main() { printf(\"hello, world\"); }\n")
+
 # Detect whether the current target platform is 32-bit or 64-bit, and setup
 # the correct commandline flags needed to attempt to target 32-bit and 64-bit.
 if (NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND
@@ -209,7 +216,7 @@ set(ALL_UBSAN_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64}
 set(ALL_SAFESTACK_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM64} ${MIPS32} ${MIPS64})
 set(ALL_CFI_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS64})
 set(ALL_ESAN_SUPPORTED_ARCH ${X86_64} ${MIPS64})
-set(ALL_SCUDO_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64})
+set(ALL_SCUDO_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} ${PPC64})
 if(APPLE)
 set(ALL_XRAY_SUPPORTED_ARCH ${X86_64})
 else()
@@ -364,7 +371,11 @@ if(APPLE)
         if(DARWIN_${platform}_ARCHS)
           list(APPEND SANITIZER_COMMON_SUPPORTED_OS ${platform})
           list(APPEND PROFILE_SUPPORTED_OS ${platform})
-          list(APPEND TSAN_SUPPORTED_OS ${platform})
+
+          list_intersect(DARWIN_${platform}_TSAN_ARCHS DARWIN_${platform}_ARCHS ALL_TSAN_SUPPORTED_ARCH)
+          if(DARWIN_${platform}_TSAN_ARCHS)
+            list(APPEND TSAN_SUPPORTED_OS ${platform})
+          endif()
         endif()
         foreach(arch ${DARWIN_${platform}_ARCHS})
           list(APPEND COMPILER_RT_SUPPORTED_ARCH ${arch})
@@ -376,7 +387,6 @@ if(APPLE)
 
   # for list_intersect
   include(CompilerRTUtils)
-
 
   list_intersect(SANITIZER_COMMON_SUPPORTED_ARCH
     ALL_SANITIZER_COMMON_SUPPORTED_ARCH
@@ -547,7 +557,7 @@ else()
 endif()
 
 if (PROFILE_SUPPORTED_ARCH AND NOT LLVM_USE_SANITIZER AND
-    OS_NAME MATCHES "Darwin|Linux|FreeBSD|Windows|Android|SunOS")
+    OS_NAME MATCHES "Darwin|Linux|FreeBSD|Windows|Android|Fuchsia|SunOS")
   set(COMPILER_RT_HAS_PROFILE TRUE)
 else()
   set(COMPILER_RT_HAS_PROFILE FALSE)

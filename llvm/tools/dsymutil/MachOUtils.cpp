@@ -1,4 +1,4 @@
-//===-- MachOUtils.h - Mach-o specific helpers for dsymutil  --------------===//
+//===-- MachOUtils.cpp - Mach-o specific helpers for dsymutil  ------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -10,8 +10,8 @@
 #include "MachOUtils.h"
 #include "BinaryHolder.h"
 #include "DebugMap.h"
+#include "LinkUtils.h"
 #include "NonRelocatableStringpool.h"
-#include "dsymutil.h"
 #include "llvm/MC/MCAsmLayout.h"
 #include "llvm/MC/MCMachObjectWriter.h"
 #include "llvm/MC/MCObjectStreamer.h"
@@ -26,6 +26,27 @@
 namespace llvm {
 namespace dsymutil {
 namespace MachOUtils {
+
+llvm::Error ArchAndFile::createTempFile() {
+  llvm::SmallString<128> TmpModel;
+  llvm::sys::path::system_temp_directory(true, TmpModel);
+  llvm::sys::path::append(TmpModel, "dsym.tmp%%%%%.dwarf");
+  Expected<sys::fs::TempFile> T = sys::fs::TempFile::create(TmpModel);
+
+  if (!T)
+    return T.takeError();
+
+  File = llvm::Optional<sys::fs::TempFile>(std::move(*T));
+  return Error::success();
+}
+
+llvm::StringRef ArchAndFile::path() const { return File->TmpName; }
+
+ArchAndFile::~ArchAndFile() {
+  if (File)
+    if (auto E = File->discard())
+      llvm::consumeError(std::move(E));
+}
 
 std::string getArchName(StringRef Arch) {
   if (Arch.startswith("thumb"))
@@ -53,21 +74,16 @@ static bool runLipo(StringRef SDKPath, SmallVectorImpl<StringRef> &Args) {
   return true;
 }
 
-bool generateUniversalBinary(SmallVectorImpl<ArchAndFilename> &ArchFiles,
+bool generateUniversalBinary(SmallVectorImpl<ArchAndFile> &ArchFiles,
                              StringRef OutputFileName,
                              const LinkOptions &Options, StringRef SDKPath) {
-  // No need to merge one file into a universal fat binary. First, try
-  // to move it (rename) to the final location. If that fails because
-  // of cross-device link issues then copy and delete.
+  // No need to merge one file into a universal fat binary.
   if (ArchFiles.size() == 1) {
-    StringRef From(ArchFiles.front().Path);
-    if (sys::fs::rename(From, OutputFileName)) {
-      if (std::error_code EC = sys::fs::copy_file(From, OutputFileName)) {
-        WithColor::error() << "while copying " << From << " to "
-                           << OutputFileName << ": " << EC.message() << "\n";
-        return false;
-      }
-      sys::fs::remove(From);
+    if (auto E = ArchFiles.front().File->keep(OutputFileName)) {
+      WithColor::error() << "while keeping " << ArchFiles.front().path()
+                         << " as " << OutputFileName << ": "
+                         << toString(std::move(E)) << "\n";
+      return false;
     }
     return true;
   }
@@ -77,7 +93,7 @@ bool generateUniversalBinary(SmallVectorImpl<ArchAndFilename> &ArchFiles,
   Args.push_back("-create");
 
   for (auto &Thin : ArchFiles)
-    Args.push_back(Thin.Path);
+    Args.push_back(Thin.path());
 
   // Align segments to match dsymutil-classic alignment
   for (auto &Thin : ArchFiles) {
@@ -322,24 +338,32 @@ bool generateDsymCompanion(const DebugMap &DM, MCStreamer &MS,
   auto &ObjectStreamer = static_cast<MCObjectStreamer &>(MS);
   MCAssembler &MCAsm = ObjectStreamer.getAssembler();
   auto &Writer = static_cast<MachObjectWriter &>(MCAsm.getWriter());
-  MCAsmLayout Layout(MCAsm);
 
+  // Layout but don't emit.
+  ObjectStreamer.flushPendingLabels();
+  MCAsmLayout Layout(MCAsm);
   MCAsm.layout(Layout);
 
   BinaryHolder InputBinaryHolder(false);
-  auto ErrOrObjs = InputBinaryHolder.GetObjectFiles(DM.getBinaryPath());
-  if (auto Error = ErrOrObjs.getError())
-    return error(Twine("opening ") + DM.getBinaryPath() + ": " +
-                     Error.message(),
-                 "output file streaming");
 
-  auto ErrOrInputBinary =
-      InputBinaryHolder.GetAs<object::MachOObjectFile>(DM.getTriple());
-  if (auto Error = ErrOrInputBinary.getError())
+  auto ObjectEntry = InputBinaryHolder.getObjectEntry(DM.getBinaryPath());
+  if (!ObjectEntry) {
+    auto Err = ObjectEntry.takeError();
     return error(Twine("opening ") + DM.getBinaryPath() + ": " +
-                     Error.message(),
+                     toString(std::move(Err)),
                  "output file streaming");
-  auto &InputBinary = *ErrOrInputBinary;
+  }
+
+  auto Object =
+      ObjectEntry->getObjectAs<object::MachOObjectFile>(DM.getTriple());
+  if (!Object) {
+    auto Err = Object.takeError();
+    return error(Twine("opening ") + DM.getBinaryPath() + ": " +
+                     toString(std::move(Err)),
+                 "output file streaming");
+  }
+
+  auto &InputBinary = *Object;
 
   bool Is64Bit = Writer.is64Bit();
   MachO::symtab_command SymtabCmd = InputBinary.getSymtabLoadCommand();

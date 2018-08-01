@@ -152,6 +152,12 @@ namespace opts {
   cl::alias StringDumpShort("p", cl::desc("Alias for --string-dump"),
                             cl::aliasopt(StringDump));
 
+  // -hex-dump
+  cl::list<std::string> HexDump("hex-dump", cl::desc("<number|name>"),
+                                cl::ZeroOrMore);
+  cl::alias HexDumpShort("x", cl::desc("Alias for --hex-dump"),
+                         cl::aliasopt(HexDump));
+
   // -hash-table
   cl::opt<bool> HashTable("hash-table",
     cl::desc("Display ELF hash table"));
@@ -163,6 +169,10 @@ namespace opts {
   // -expand-relocs
   cl::opt<bool> ExpandRelocs("expand-relocs",
     cl::desc("Expand each shown relocation to multiple lines"));
+
+  // -raw-relr
+  cl::opt<bool> RawRelr("raw-relr",
+    cl::desc("Do not decode relocations in SHT_RELR section, display raw contents"));
 
   // -codeview
   cl::opt<bool> CodeView("codeview",
@@ -291,6 +301,9 @@ namespace opts {
                                cl::aliasopt(HashHistogram));
 
   cl::opt<bool> CGProfile("elf-cg-profile", cl::desc("Display callgraph profile section"));
+
+  cl::opt<bool> Addrsig("elf-addrsig",
+                        cl::desc("Display address-significance table"));
 
   cl::opt<OutputStyleTy>
       Output("elf-output-style", cl::desc("Specify ELF dump style"),
@@ -424,8 +437,12 @@ static void dumpObject(const ObjectFile *Obj, ScopedPrinter &Writer) {
   if (opts::ProgramHeaders)
     Dumper->printProgramHeaders();
   if (!opts::StringDump.empty())
-    llvm::for_each(opts::StringDump, [&Dumper](StringRef SectionName) {
-      Dumper->printSectionAsString(SectionName);
+    llvm::for_each(opts::StringDump, [&Dumper, Obj](StringRef SectionName) {
+      Dumper->printSectionAsString(Obj, SectionName);
+    });
+  if (!opts::HexDump.empty())
+    llvm::for_each(opts::HexDump, [&Dumper, Obj](StringRef SectionName) {
+      Dumper->printSectionAsHex(Obj, SectionName);
     });
   if (opts::HashTable)
     Dumper->printHashTable();
@@ -455,6 +472,8 @@ static void dumpObject(const ObjectFile *Obj, ScopedPrinter &Writer) {
       Dumper->printHashHistogram();
     if (opts::CGProfile)
       Dumper->printCGProfile();
+    if (opts::Addrsig)
+      Dumper->printAddrsig();
     if (opts::Notes)
       Dumper->printNotes();
   }

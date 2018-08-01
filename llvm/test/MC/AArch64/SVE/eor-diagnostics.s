@@ -65,3 +65,52 @@ eor z0.d, p8/z, z0.d, z1.d
 // CHECK: [[@LINE-1]]:{{[0-9]+}}: error: restricted predicate has range [0, 7].
 // CHECK-NEXT: eor z0.d, p8/z, z0.d, z1.d
 // CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+
+// --------------------------------------------------------------------------//
+// Predicate register must have .b suffix
+
+eor p0.h, p0/z, p0.h, p1.h
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid predicate register.
+// CHECK-NEXT: eor p0.h, p0/z, p0.h, p1.h
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+eor p0.s, p0/z, p0.s, p1.s
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid predicate register.
+// CHECK-NEXT: eor p0.s, p0/z, p0.s, p1.s
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+eor p0.d, p0/z, p0.d, p1.d
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid predicate register.
+// CHECK-NEXT: eor p0.d, p0/z, p0.d, p1.d
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+// --------------------------------------------------------------------------//
+// Operation only has zeroing predicate behaviour (p0/z).
+
+eor p0.b, p0/m, p1.b, p2.b
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: invalid operand
+// CHECK-NEXT: eor p0.b, p0/m, p1.b, p2.b
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+
+// --------------------------------------------------------------------------//
+// Negative tests for instructions that are incompatible with movprfx
+
+movprfx z0.d, p0/z, z7.d
+eor     z0.d, z0.d, #0x6
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: instruction is unpredictable when following a predicated movprfx, suggest using unpredicated movprfx
+// CHECK-NEXT: eor     z0.d, z0.d, #0x6
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+movprfx z0.d, p0/z, z7.d
+eor     z0.d, z0.d, z0.d
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: instruction is unpredictable when following a movprfx, suggest replacing movprfx with mov
+// CHECK-NEXT: eor     z0.d, z0.d, z0.d
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
+
+movprfx z0, z7
+eor     z0.d, z0.d, z0.d
+// CHECK: [[@LINE-1]]:{{[0-9]+}}: error: instruction is unpredictable when following a movprfx, suggest replacing movprfx with mov
+// CHECK-NEXT: eor     z0.d, z0.d, z0.d
+// CHECK-NOT: [[@LINE-1]]:{{[0-9]+}}:
