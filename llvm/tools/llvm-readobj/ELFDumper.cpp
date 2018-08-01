@@ -44,6 +44,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MipsABIFlags.h"
 #include "llvm/Support/ScopedPrinter.h"
@@ -85,8 +86,10 @@ using namespace ELF;
   using Elf_Dyn_Range = typename ELFT::DynRange;                               \
   using Elf_Rel = typename ELFT::Rel;                                          \
   using Elf_Rela = typename ELFT::Rela;                                        \
+  using Elf_Relr = typename ELFT::Relr;                                        \
   using Elf_Rel_Range = typename ELFT::RelRange;                               \
   using Elf_Rela_Range = typename ELFT::RelaRange;                             \
+  using Elf_Relr_Range = typename ELFT::RelrRange;                             \
   using Elf_Phdr = typename ELFT::Phdr;                                        \
   using Elf_Half = typename ELFT::Half;                                        \
   using Elf_Ehdr = typename ELFT::Ehdr;                                        \
@@ -149,7 +152,6 @@ public:
   void printDynamicTable() override;
   void printNeededLibraries() override;
   void printProgramHeaders() override;
-  void printSectionAsString(StringRef StringName) override;
   void printHashTable() override;
   void printGnuHashTable() override;
   void printLoadName() override;
@@ -167,6 +169,7 @@ public:
   void printHashHistogram() override;
 
   void printCGProfile() override;
+  void printAddrsig() override;
 
   void printNotes() override;
 
@@ -206,6 +209,7 @@ private:
   const ELFO *Obj;
   DynRegionInfo DynRelRegion;
   DynRegionInfo DynRelaRegion;
+  DynRegionInfo DynRelrRegion;
   DynRegionInfo DynPLTRelRegion;
   DynRegionInfo DynSymRegion;
   DynRegionInfo DynamicTable;
@@ -215,6 +219,7 @@ private:
   const Elf_GnuHash *GnuHashTable = nullptr;
   const Elf_Shdr *DotSymtabSec = nullptr;
   const Elf_Shdr *DotCGProfileSec = nullptr;
+  const Elf_Shdr *DotAddrsigSec = nullptr;
   StringRef DynSymtabName;
   ArrayRef<Elf_Word> ShndxTable;
 
@@ -257,6 +262,7 @@ public:
 
   Elf_Rel_Range dyn_rels() const;
   Elf_Rela_Range dyn_relas() const;
+  Elf_Relr_Range dyn_relrs() const;
   std::string getFullSymbolName(const Elf_Sym *Symbol, StringRef StrTable,
                                 bool IsDynamic) const;
   void getSectionNameIndex(const Elf_Sym *Symbol, const Elf_Sym *FirstSym,
@@ -267,10 +273,12 @@ public:
   void printSymbolsHelper(bool IsDynamic) const;
   const Elf_Shdr *getDotSymtabSec() const { return DotSymtabSec; }
   const Elf_Shdr *getDotCGProfileSec() const { return DotCGProfileSec; }
+  const Elf_Shdr *getDotAddrsigSec() const { return DotAddrsigSec; }
   ArrayRef<Elf_Word> getShndxTable() const { return ShndxTable; }
   StringRef getDynamicStringTable() const { return DynamicStringTable; }
   const DynRegionInfo &getDynRelRegion() const { return DynRelRegion; }
   const DynRegionInfo &getDynRelaRegion() const { return DynRelaRegion; }
+  const DynRegionInfo &getDynRelrRegion() const { return DynRelrRegion; }
   const DynRegionInfo &getDynPLTRelRegion() const { return DynPLTRelRegion; }
   const Elf_Hash *getHashTable() const { return HashTable; }
   const Elf_GnuHash *getGnuHashTable() const { return GnuHashTable; }
@@ -325,10 +333,9 @@ public:
                            const Elf_Sym *FirstSym, StringRef StrTable,
                            bool IsDynamic) = 0;
   virtual void printProgramHeaders(const ELFFile<ELFT> *Obj) = 0;
-  virtual void printSectionAsString(const ELFFile<ELFT> *Obj,
-                                   StringRef SectionName) = 0;
   virtual void printHashHistogram(const ELFFile<ELFT> *Obj) = 0;
   virtual void printCGProfile(const ELFFile<ELFT> *Obj) = 0;
+  virtual void printAddrsig(const ELFFile<ELFT> *Obj) = 0;
   virtual void printNotes(const ELFFile<ELFT> *Obj) = 0;
   virtual void printELFLinkerOptions(const ELFFile<ELFT> *Obj) = 0;
   virtual void printMipsGOT(const MipsGOTParser<ELFT> &Parser) = 0;
@@ -358,9 +365,9 @@ public:
   void printSymtabMessage(const ELFO *Obj, StringRef Name,
                           size_t Offset) override;
   void printProgramHeaders(const ELFO *Obj) override;
-  void printSectionAsString(const ELFO *Obj, StringRef SectionName) override;
   void printHashHistogram(const ELFFile<ELFT> *Obj) override;
   void printCGProfile(const ELFFile<ELFT> *Obj) override;
+  void printAddrsig(const ELFFile<ELFT> *Obj) override;
   void printNotes(const ELFFile<ELFT> *Obj) override;
   void printELFLinkerOptions(const ELFFile<ELFT> *Obj) override;
   void printMipsGOT(const MipsGOTParser<ELFT> &Parser) override;
@@ -392,6 +399,7 @@ private:
   }
   void printHashedSymbol(const ELFO *Obj, const Elf_Sym *FirstSym, uint32_t Sym,
                          StringRef StrTable, uint32_t Bucket);
+  void printRelocHeader(unsigned SType);
   void printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
                        const Elf_Rela &R, bool IsRela);
   void printSymbol(const ELFO *Obj, const Elf_Sym *Symbol, const Elf_Sym *First,
@@ -421,9 +429,9 @@ public:
   void printDynamicSymbols(const ELFO *Obj) override;
   void printDynamicRelocations(const ELFO *Obj) override;
   void printProgramHeaders(const ELFO *Obj) override;
-  void printSectionAsString(const ELFO *Obj, StringRef SectionName) override;
   void printHashHistogram(const ELFFile<ELFT> *Obj) override;
   void printCGProfile(const ELFFile<ELFT> *Obj) override;
+  void printAddrsig(const ELFFile<ELFT> *Obj) override;
   void printNotes(const ELFFile<ELFT> *Obj) override;
   void printELFLinkerOptions(const ELFFile<ELFT> *Obj) override;
   void printMipsGOT(const MipsGOTParser<ELFT> &Parser) override;
@@ -1038,7 +1046,6 @@ static const EnumEntry<unsigned> ElfMachineType[] = {
   ENUM_ENT(EM_56800EX,       "EM_56800EX"),
   ENUM_ENT(EM_AMDGPU,        "EM_AMDGPU"),
   ENUM_ENT(EM_RISCV,         "RISC-V"),
-  ENUM_ENT(EM_WEBASSEMBLY,   "EM_WEBASSEMBLY"),
   ENUM_ENT(EM_LANAI,         "EM_LANAI"),
   ENUM_ENT(EM_BPF,           "EM_BPF"),
 };
@@ -1418,6 +1425,12 @@ ELFDumper<ELFT>::ELFDumper(const ELFFile<ELFT> *Obj, ScopedPrinter &Writer)
       if (DotCGProfileSec != nullptr)
         reportError("Multiple .note.llvm.cgprofile");
       DotCGProfileSec = &Sec;
+      break;
+    case ELF::SHT_LLVM_ADDRSIG:
+      if (DotAddrsigSec != nullptr)
+        reportError("Multiple .llvm_addrsig");
+      DotAddrsigSec = &Sec;
+      break;
     }
   }
 
@@ -1492,6 +1505,18 @@ void ELFDumper<ELFT>::parseDynamicTable(
     case ELF::DT_RELENT:
       DynRelRegion.EntSize = Dyn.getVal();
       break;
+    case ELF::DT_RELR:
+    case ELF::DT_ANDROID_RELR:
+      DynRelrRegion.Addr = toMappedAddr(Dyn.getPtr());
+      break;
+    case ELF::DT_RELRSZ:
+    case ELF::DT_ANDROID_RELRSZ:
+      DynRelrRegion.Size = Dyn.getVal();
+      break;
+    case ELF::DT_RELRENT:
+    case ELF::DT_ANDROID_RELRENT:
+      DynRelrRegion.EntSize = Dyn.getVal();
+      break;
     case ELF::DT_PLTREL:
       if (Dyn.getVal() == DT_REL)
         DynPLTRelRegion.EntSize = sizeof(Elf_Rel);
@@ -1525,6 +1550,11 @@ typename ELFDumper<ELFT>::Elf_Rela_Range ELFDumper<ELFT>::dyn_relas() const {
   return DynRelaRegion.getAsArrayRef<Elf_Rela>();
 }
 
+template <typename ELFT>
+typename ELFDumper<ELFT>::Elf_Relr_Range ELFDumper<ELFT>::dyn_relrs() const {
+  return DynRelrRegion.getAsArrayRef<Elf_Relr>();
+}
+
 template<class ELFT>
 void ELFDumper<ELFT>::printFileHeaders() {
   ELFDumperStyle->printFileHeaders(Obj);
@@ -1542,11 +1572,6 @@ void ELFDumper<ELFT>::printRelocations() {
 
 template <class ELFT> void ELFDumper<ELFT>::printProgramHeaders() {
   ELFDumperStyle->printProgramHeaders(Obj);
-}
-
-template <class ELFT>
-void ELFDumper<ELFT>::printSectionAsString(StringRef SectionName) {
-  ELFDumperStyle->printSectionAsString(Obj, SectionName);
 }
 
 template <class ELFT> void ELFDumper<ELFT>::printDynamicRelocations() {
@@ -2420,6 +2445,10 @@ template <class ELFT> void ELFDumper<ELFT>::printGroupSections() {
   ELFDumperStyle->printGroupSections(Obj);
 }
 
+template <class ELFT> void ELFDumper<ELFT>::printAddrsig() {
+  ELFDumperStyle->printAddrsig(Obj);
+}
+
 static inline void printFields(formatted_raw_ostream &OS, StringRef Str1,
                                StringRef Str2) {
   OS.PadToColumn(2u);
@@ -2427,6 +2456,30 @@ static inline void printFields(formatted_raw_ostream &OS, StringRef Str1,
   OS.PadToColumn(37u);
   OS << Str2 << "\n";
   OS.flush();
+}
+
+template <class ELFT>
+static std::string getSectionHeadersNumString(const ELFFile<ELFT> *Obj) {
+  const typename ELFT::Ehdr *ElfHeader = Obj->getHeader();
+  if (ElfHeader->e_shnum != 0)
+    return to_string(ElfHeader->e_shnum);
+
+  ArrayRef<typename ELFT::Shdr> Arr = unwrapOrError(Obj->sections());
+  if (Arr.empty())
+    return "0";
+  return "0 (" + to_string(Arr[0].sh_size) + ")";
+}
+
+template <class ELFT>
+static std::string getSectionHeaderTableIndexString(const ELFFile<ELFT> *Obj) {
+  const typename ELFT::Ehdr *ElfHeader = Obj->getHeader();
+  if (ElfHeader->e_shstrndx != SHN_XINDEX)
+    return to_string(ElfHeader->e_shstrndx);
+
+  ArrayRef<typename ELFT::Shdr> Arr = unwrapOrError(Obj->sections());
+  if (Arr.empty())
+    return "65535 (corrupt: out of range)";
+  return to_string(ElfHeader->e_shstrndx) + " (" + to_string(Arr[0].sh_link) + ")";
 }
 
 template <class ELFT> void GNUStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
@@ -2474,9 +2527,9 @@ template <class ELFT> void GNUStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
   printFields(OS, "Number of program headers:", Str);
   Str = to_string(e->e_shentsize) + " (bytes)";
   printFields(OS, "Size of section headers:", Str);
-  Str = to_string(e->e_shnum);
+  Str = getSectionHeadersNumString(Obj);
   printFields(OS, "Number of section headers:", Str);
-  Str = to_string(e->e_shstrndx);
+  Str = getSectionHeaderTableIndexString(Obj);
   printFields(OS, "Section header string table index:", Str);
 }
 
@@ -2582,7 +2635,6 @@ void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
                                      const Elf_Rela &R, bool IsRela) {
   std::string Offset, Info, Addend, Value;
   SmallString<32> RelocName;
-  StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*SymTab));
   StringRef TargetName;
   const Elf_Sym *Sym = nullptr;
   unsigned Width = ELFT::Is64Bits ? 16 : 8;
@@ -2598,6 +2650,7 @@ void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
         Obj->getSection(Sym, SymTab, this->dumper()->getShndxTable()));
     TargetName = unwrapOrError(Obj->getSectionName(Sec));
   } else if (Sym) {
+    StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*SymTab));
     TargetName = unwrapOrError(Sym->getName(StrTable));
   }
 
@@ -2629,24 +2682,36 @@ void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
   OS << "\n";
 }
 
-static inline void printRelocHeader(raw_ostream &OS, bool Is64, bool IsRela) {
-  if (Is64)
-    OS << "    Offset             Info             Type"
+template <class ELFT> void GNUStyle<ELFT>::printRelocHeader(unsigned SType) {
+  bool IsRela = SType == ELF::SHT_RELA || SType == ELF::SHT_ANDROID_RELA;
+  bool IsRelr = SType == ELF::SHT_RELR || SType == ELF::SHT_ANDROID_RELR;
+  if (ELFT::Is64Bits)
+    OS << "    ";
+  else
+    OS << " ";
+  if (IsRelr && opts::RawRelr)
+    OS << "Data  ";
+  else
+    OS << "Offset";
+  if (ELFT::Is64Bits)
+    OS << "             Info             Type"
        << "               Symbol's Value  Symbol's Name";
   else
-    OS << " Offset     Info    Type                Sym. Value  "
-       << "Symbol's Name";
+    OS << "     Info    Type                Sym. Value  Symbol's Name";
   if (IsRela)
-    OS << (IsRela ? " + Addend" : "");
+    OS << " + Addend";
   OS << "\n";
 }
 
 template <class ELFT> void GNUStyle<ELFT>::printRelocations(const ELFO *Obj) {
   bool HasRelocSections = false;
   for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
-    if (Sec.sh_type != ELF::SHT_REL && Sec.sh_type != ELF::SHT_RELA &&
+    if (Sec.sh_type != ELF::SHT_REL &&
+        Sec.sh_type != ELF::SHT_RELA &&
+        Sec.sh_type != ELF::SHT_RELR &&
         Sec.sh_type != ELF::SHT_ANDROID_REL &&
-        Sec.sh_type != ELF::SHT_ANDROID_RELA)
+        Sec.sh_type != ELF::SHT_ANDROID_RELA &&
+        Sec.sh_type != ELF::SHT_ANDROID_RELR)
       continue;
     HasRelocSections = true;
     StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
@@ -2659,13 +2724,20 @@ template <class ELFT> void GNUStyle<ELFT>::printRelocations(const ELFO *Obj) {
       AndroidRelas = unwrapOrError(Obj->android_relas(&Sec));
       Entries = AndroidRelas.size();
     }
+    std::vector<Elf_Rela> RelrRelas;
+    if (!opts::RawRelr && (Sec.sh_type == ELF::SHT_RELR ||
+                           Sec.sh_type == ELF::SHT_ANDROID_RELR)) {
+      // .relr.dyn relative relocation section needs to be unpacked first
+      // to get the actual number of entries.
+      Elf_Relr_Range Relrs = unwrapOrError(Obj->relrs(&Sec));
+      RelrRelas = unwrapOrError(Obj->decode_relrs(Relrs));
+      Entries = RelrRelas.size();
+    }
     uintX_t Offset = Sec.sh_offset;
     OS << "\nRelocation section '" << Name << "' at offset 0x"
        << to_hexString(Offset, false) << " contains " << Entries
        << " entries:\n";
-    printRelocHeader(OS, ELFT::Is64Bits,
-                     Sec.sh_type == ELF::SHT_RELA ||
-                         Sec.sh_type == ELF::SHT_ANDROID_RELA);
+    printRelocHeader(Sec.sh_type);
     const Elf_Shdr *SymTab = unwrapOrError(Obj->getSection(Sec.sh_link));
     switch (Sec.sh_type) {
     case ELF::SHT_REL:
@@ -2680,6 +2752,16 @@ template <class ELFT> void GNUStyle<ELFT>::printRelocations(const ELFO *Obj) {
     case ELF::SHT_RELA:
       for (const auto &R : unwrapOrError(Obj->relas(&Sec)))
         printRelocation(Obj, SymTab, R, true);
+      break;
+    case ELF::SHT_RELR:
+    case ELF::SHT_ANDROID_RELR:
+      if (opts::RawRelr)
+        for (const auto &R : unwrapOrError(Obj->relrs(&Sec)))
+          OS << to_string(format_hex_no_prefix(R, ELFT::Is64Bits ? 16 : 8))
+             << "\n";
+      else
+        for (const auto &R : RelrRelas)
+          printRelocation(Obj, SymTab, R, false);
       break;
     case ELF::SHT_ANDROID_REL:
     case ELF::SHT_ANDROID_RELA:
@@ -2762,12 +2844,17 @@ std::string getSectionTypeString(unsigned Arch, unsigned Type) {
     return "GROUP";
   case SHT_SYMTAB_SHNDX:
     return "SYMTAB SECTION INDICES";
+  case SHT_RELR:
+  case SHT_ANDROID_RELR:
+    return "RELR";
   case SHT_LLVM_ODRTAB:
     return "LLVM_ODRTAB";
   case SHT_LLVM_LINKER_OPTIONS:
     return "LLVM_LINKER_OPTIONS";
   case SHT_LLVM_CALL_GRAPH_PROFILE:
     return "LLVM_CALL_GRAPH_PROFILE";
+  case SHT_LLVM_ADDRSIG:
+    return "LLVM_ADDRSIG";
   // FIXME: Parse processor specific GNU attributes
   case SHT_GNU_ATTRIBUTES:
     return "ATTRIBUTES";
@@ -2799,7 +2886,9 @@ template <class ELFT> void GNUStyle<ELFT>::printSections(const ELFO *Obj) {
     Bias = 8;
     Width = 8;
   }
-  OS << "There are " << to_string(Obj->getHeader()->e_shnum)
+
+  ArrayRef<Elf_Shdr> Sections = unwrapOrError(Obj->sections());
+  OS << "There are " << to_string(Sections.size())
      << " section headers, starting at offset "
      << "0x" << to_hexString(Obj->getHeader()->e_shoff, false) << ":\n\n";
   OS << "Section Headers:\n";
@@ -2818,7 +2907,7 @@ template <class ELFT> void GNUStyle<ELFT>::printSections(const ELFO *Obj) {
     printField(f);
   OS << "\n";
 
-  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
+  for (const Elf_Shdr &Sec : Sections) {
     Number = to_string(SectionIndex);
     Fields[0].Str = Number;
     Fields[1].Str = unwrapOrError(Obj->getSectionName(&Sec));
@@ -3221,36 +3310,6 @@ void GNUStyle<ELFT>::printProgramHeaders(const ELFO *Obj) {
 }
 
 template <class ELFT>
-void GNUStyle<ELFT>::printSectionAsString(const ELFO *Obj,
-                                         StringRef SectionName) {
-  char *StrPtr;
-  long SectionIndex = strtol(SectionName.data(), &StrPtr, 10);
-  const Elf_Shdr *Sec;
-  if (*StrPtr)
-    Sec = unwrapOrError(Obj->getSection(SectionName));
-  else
-    Sec = unwrapOrError(Obj->getSection((unsigned int)SectionIndex));
-
-  StringRef SecName = unwrapOrError(Obj->getSectionName(Sec));
-  OS << "String dump of section '" << SecName << "':\n";
-  const char *SecContent =
-      reinterpret_cast<const char *>(Obj->base() + Sec->sh_offset);
-  const char *CurrentWord = SecContent;
-  const char *SecEnd = SecContent + Sec->sh_size;
-  while (CurrentWord <= SecEnd) {
-    size_t WordSize = strnlen(CurrentWord, SecEnd - CurrentWord);
-    if (!WordSize) {
-      CurrentWord++;
-      continue;
-    }
-    OS << format("[%6tx]", CurrentWord - SecContent);
-    OS << format(" %.*s\n", WordSize, CurrentWord);
-    CurrentWord += WordSize + 1;
-  }
-  OS.flush();
-}
-
-template <class ELFT>
 void GNUStyle<ELFT>::printDynamicRelocation(const ELFO *Obj, Elf_Rela R,
                                             bool IsRela) {
   SmallString<32> RelocName;
@@ -3300,13 +3359,14 @@ template <class ELFT>
 void GNUStyle<ELFT>::printDynamicRelocations(const ELFO *Obj) {
   const DynRegionInfo &DynRelRegion = this->dumper()->getDynRelRegion();
   const DynRegionInfo &DynRelaRegion = this->dumper()->getDynRelaRegion();
+  const DynRegionInfo &DynRelrRegion = this->dumper()->getDynRelrRegion();
   const DynRegionInfo &DynPLTRelRegion = this->dumper()->getDynPLTRelRegion();
   if (DynRelaRegion.Size > 0) {
     OS << "\n'RELA' relocation section at offset "
        << format_hex(reinterpret_cast<const uint8_t *>(DynRelaRegion.Addr) -
                          Obj->base(),
                      1) << " contains " << DynRelaRegion.Size << " bytes:\n";
-    printRelocHeader(OS, ELFT::Is64Bits, true);
+    printRelocHeader(ELF::SHT_RELA);
     for (const Elf_Rela &Rela : this->dumper()->dyn_relas())
       printDynamicRelocation(Obj, Rela, true);
   }
@@ -3315,12 +3375,24 @@ void GNUStyle<ELFT>::printDynamicRelocations(const ELFO *Obj) {
        << format_hex(reinterpret_cast<const uint8_t *>(DynRelRegion.Addr) -
                          Obj->base(),
                      1) << " contains " << DynRelRegion.Size << " bytes:\n";
-    printRelocHeader(OS, ELFT::Is64Bits, false);
+    printRelocHeader(ELF::SHT_REL);
     for (const Elf_Rel &Rel : this->dumper()->dyn_rels()) {
       Elf_Rela Rela;
       Rela.r_offset = Rel.r_offset;
       Rela.r_info = Rel.r_info;
       Rela.r_addend = 0;
+      printDynamicRelocation(Obj, Rela, false);
+    }
+  }
+  if (DynRelrRegion.Size > 0) {
+    OS << "\n'RELR' relocation section at offset "
+       << format_hex(reinterpret_cast<const uint8_t *>(DynRelrRegion.Addr) -
+                         Obj->base(),
+                     1) << " contains " << DynRelrRegion.Size << " bytes:\n";
+    printRelocHeader(ELF::SHT_REL);
+    Elf_Relr_Range Relrs = this->dumper()->dyn_relrs();
+    std::vector<Elf_Rela> RelrRelas = unwrapOrError(Obj->decode_relrs(Relrs));
+    for (const Elf_Rela &Rela : RelrRelas) {
       printDynamicRelocation(Obj, Rela, false);
     }
   }
@@ -3331,11 +3403,11 @@ void GNUStyle<ELFT>::printDynamicRelocations(const ELFO *Obj) {
                      1) << " contains " << DynPLTRelRegion.Size << " bytes:\n";
   }
   if (DynPLTRelRegion.EntSize == sizeof(Elf_Rela)) {
-    printRelocHeader(OS, ELFT::Is64Bits, true);
+    printRelocHeader(ELF::SHT_RELA);
     for (const Elf_Rela &Rela : DynPLTRelRegion.getAsArrayRef<Elf_Rela>())
       printDynamicRelocation(Obj, Rela, true);
   } else {
-    printRelocHeader(OS, ELFT::Is64Bits, false);
+    printRelocHeader(ELF::SHT_REL);
     for (const Elf_Rel &Rel : DynPLTRelRegion.getAsArrayRef<Elf_Rel>()) {
       Elf_Rela Rela;
       Rela.r_offset = Rel.r_offset;
@@ -3454,6 +3526,11 @@ void GNUStyle<ELFT>::printHashHistogram(const ELFFile<ELFT> *Obj) {
 template <class ELFT>
 void GNUStyle<ELFT>::printCGProfile(const ELFFile<ELFT> *Obj) {
   OS << "GNUStyle::printCGProfile not implemented\n";
+}
+
+template <class ELFT>
+void GNUStyle<ELFT>::printAddrsig(const ELFFile<ELFT> *Obj) {
+    OS << "GNUStyle::printAddrsig not implemented\n";
 }
 
 static std::string getGNUNoteTypeName(const uint32_t NT) {
@@ -3910,8 +3987,8 @@ template <class ELFT> void LLVMStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
     W.printNumber("ProgramHeaderEntrySize", e->e_phentsize);
     W.printNumber("ProgramHeaderCount", e->e_phnum);
     W.printNumber("SectionHeaderEntrySize", e->e_shentsize);
-    W.printNumber("SectionHeaderCount", e->e_shnum);
-    W.printNumber("StringTableSectionIndex", e->e_shstrndx);
+    W.printString("SectionHeaderCount", getSectionHeadersNumString(Obj));
+    W.printString("StringTableSectionIndex", getSectionHeaderTableIndexString(Obj));
   }
 }
 
@@ -3956,9 +4033,12 @@ template <class ELFT> void LLVMStyle<ELFT>::printRelocations(const ELFO *Obj) {
   for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
     ++SectionNumber;
 
-    if (Sec.sh_type != ELF::SHT_REL && Sec.sh_type != ELF::SHT_RELA &&
+    if (Sec.sh_type != ELF::SHT_REL &&
+        Sec.sh_type != ELF::SHT_RELA &&
+        Sec.sh_type != ELF::SHT_RELR &&
         Sec.sh_type != ELF::SHT_ANDROID_REL &&
-        Sec.sh_type != ELF::SHT_ANDROID_RELA)
+        Sec.sh_type != ELF::SHT_ANDROID_RELA &&
+        Sec.sh_type != ELF::SHT_ANDROID_RELR)
       continue;
 
     StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
@@ -3991,6 +4071,19 @@ void LLVMStyle<ELFT>::printRelocations(const Elf_Shdr *Sec, const ELFO *Obj) {
     for (const Elf_Rela &R : unwrapOrError(Obj->relas(Sec)))
       printRelocation(Obj, R, SymTab);
     break;
+  case ELF::SHT_RELR:
+  case ELF::SHT_ANDROID_RELR: {
+    Elf_Relr_Range Relrs = unwrapOrError(Obj->relrs(Sec));
+    if (opts::RawRelr) {
+      for (const Elf_Relr &R : Relrs)
+        W.startLine() << W.hex(R) << "\n";
+    } else {
+      std::vector<Elf_Rela> RelrRelas = unwrapOrError(Obj->decode_relrs(Relrs));
+      for (const Elf_Rela &R : RelrRelas)
+        printRelocation(Obj, R, SymTab);
+    }
+    break;
+  }
   case ELF::SHT_ANDROID_REL:
   case ELF::SHT_ANDROID_RELA:
     for (const Elf_Rela &R : unwrapOrError(Obj->android_relas(Sec)))
@@ -4171,6 +4264,7 @@ template <class ELFT>
 void LLVMStyle<ELFT>::printDynamicRelocations(const ELFO *Obj) {
   const DynRegionInfo &DynRelRegion = this->dumper()->getDynRelRegion();
   const DynRegionInfo &DynRelaRegion = this->dumper()->getDynRelaRegion();
+  const DynRegionInfo &DynRelrRegion = this->dumper()->getDynRelrRegion();
   const DynRegionInfo &DynPLTRelRegion = this->dumper()->getDynPLTRelRegion();
   if (DynRelRegion.Size && DynRelaRegion.Size)
     report_fatal_error("There are both REL and RELA dynamic relocations");
@@ -4187,6 +4281,12 @@ void LLVMStyle<ELFT>::printDynamicRelocations(const ELFO *Obj) {
       Rela.r_addend = 0;
       printDynamicRelocation(Obj, Rela);
     }
+  if (DynRelrRegion.Size > 0) {
+    Elf_Relr_Range Relrs = this->dumper()->dyn_relrs();
+    std::vector<Elf_Rela> RelrRelas = unwrapOrError(Obj->decode_relrs(Relrs));
+    for (const Elf_Rela &Rela : RelrRelas)
+      printDynamicRelocation(Obj, Rela);
+  }
   if (DynPLTRelRegion.EntSize == sizeof(Elf_Rela))
     for (const Elf_Rela &Rela : DynPLTRelRegion.getAsArrayRef<Elf_Rela>())
       printDynamicRelocation(Obj, Rela);
@@ -4245,38 +4345,6 @@ void LLVMStyle<ELFT>::printProgramHeaders(const ELFO *Obj) {
 }
 
 template <class ELFT>
-void LLVMStyle<ELFT>::printSectionAsString(const ELFO *Obj,
-                                          StringRef SectionName) {
-  char *StrPtr;
-  long SectionIndex = strtol(SectionName.data(), &StrPtr, 10);
-  const Elf_Shdr *Sec;
-  if (*StrPtr)
-    Sec = unwrapOrError(Obj->getSection(SectionName));
-  else
-    Sec = unwrapOrError(Obj->getSection((unsigned int)SectionIndex));
-
-  StringRef SecName = unwrapOrError(Obj->getSectionName(Sec));
-  W.startLine() << "String dump of section '" << SecName << "':\n";
-  const char *SecContent =
-      reinterpret_cast<const char *>(Obj->base() + Sec->sh_offset);
-  const char *CurrentWord = SecContent;
-  const char *SecEnd = SecContent + Sec->sh_size;
-  while (CurrentWord <= SecEnd) {
-    size_t WordSize = strnlen(CurrentWord, SecEnd - CurrentWord);
-    if (!WordSize) {
-      CurrentWord++;
-      continue;
-    }
-    W.startLine() << "["
-                  << to_string(
-                         format_hex_no_prefix((CurrentWord - SecContent), 6))
-                  << "]";
-    W.startLine() << format(" %.*s\n", WordSize, CurrentWord);
-    CurrentWord += WordSize + 1;
-  }
-}
-
-template <class ELFT>
 void LLVMStyle<ELFT>::printHashHistogram(const ELFFile<ELFT> *Obj) {
   W.startLine() << "Hash Histogram not implemented!\n";
 }
@@ -4296,6 +4364,27 @@ void LLVMStyle<ELFT>::printCGProfile(const ELFFile<ELFT> *Obj) {
     W.printNumber("To", this->dumper()->getStaticSymbolName(CGPE.cgp_to),
                   CGPE.cgp_to);
     W.printNumber("Weight", CGPE.cgp_weight);
+  }
+}
+
+template <class ELFT>
+void LLVMStyle<ELFT>::printAddrsig(const ELFFile<ELFT> *Obj) {
+  ListScope L(W, "Addrsig");
+  if (!this->dumper()->getDotAddrsigSec())
+    return;
+  ArrayRef<uint8_t> Contents = unwrapOrError(
+      Obj->getSectionContents(this->dumper()->getDotAddrsigSec()));
+  const uint8_t *Cur = Contents.begin();
+  const uint8_t *End = Contents.end();
+  while (Cur != End) {
+    unsigned Size;
+    const char *Err;
+    uint64_t SymIndex = decodeULEB128(Cur, &Size, Contents.end(), &Err);
+    if (Err)
+      reportError(Err);
+    W.printNumber("Sym", this->dumper()->getStaticSymbolName(SymIndex),
+                  SymIndex);
+    Cur += Size;
   }
 }
 

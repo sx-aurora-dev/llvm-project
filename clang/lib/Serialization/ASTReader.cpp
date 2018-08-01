@@ -704,6 +704,17 @@ static bool checkPreprocessorOptions(const PreprocessorOptions &PPOpts,
   // Compute the #include and #include_macros lines we need.
   for (unsigned I = 0, N = ExistingPPOpts.Includes.size(); I != N; ++I) {
     StringRef File = ExistingPPOpts.Includes[I];
+
+    if (!ExistingPPOpts.ImplicitPCHInclude.empty() &&
+        !ExistingPPOpts.PCHThroughHeader.empty()) {
+      // In case the through header is an include, we must add all the includes
+      // to the predefines so the start point can be determined.
+      SuggestedPredefines += "#include \"";
+      SuggestedPredefines += File;
+      SuggestedPredefines += "\"\n";
+      continue;
+    }
+
     if (File == ExistingPPOpts.ImplicitPCHInclude)
       continue;
 
@@ -2482,7 +2493,7 @@ ASTReader::ReadControlBlock(ModuleFile &F,
         return VersionMismatch;
       }
 
-      bool hasErrors = Record[6];
+      bool hasErrors = Record[7];
       if (hasErrors && !DisableValidation && !AllowASTWithCompilerErrors) {
         Diag(diag::err_pch_with_compiler_errors);
         return HadErrors;
@@ -2499,6 +2510,8 @@ ASTReader::ReadControlBlock(ModuleFile &F,
         F.BaseDirectory = isysroot.empty() ? "/" : isysroot;
 
       F.HasTimestamps = Record[5];
+
+      F.PCHHasObjectFile = Record[6];
 
       const std::string &CurBranch = getClangFullRepositoryVersion();
       StringRef ASTBranch = Blob;
@@ -2613,7 +2626,9 @@ ASTReader::ReadControlBlock(ModuleFile &F,
              "MODULE_DIRECTORY found before MODULE_NAME");
       // If we've already loaded a module map file covering this module, we may
       // have a better path for it (relative to the current build).
-      Module *M = PP.getHeaderSearchInfo().lookupModule(F.ModuleName);
+      Module *M = PP.getHeaderSearchInfo().lookupModule(
+          F.ModuleName, /*AllowSearch*/ true,
+          /*AllowExtraModuleMapSearch*/ true);
       if (M && M->Directory) {
         // If we're implicitly loading a module, the base directory can't
         // change between the build and use.
@@ -6017,7 +6032,7 @@ QualType ASTReader::readTypeRecord(unsigned Index) {
     }
     QualType ResultType = readType(*Loc.F, Record, Idx);
     FunctionType::ExtInfo Info(Record[1], Record[2], Record[3],
-                               (CallingConv)Record[4], Record[5], Record[6], 
+                               (CallingConv)Record[4], Record[5], Record[6],
                                Record[7]);
     return Context.getFunctionNoProtoType(ResultType, Info);
   }
@@ -6356,6 +6371,17 @@ QualType ASTReader::readTypeRecord(unsigned Index) {
     return Context.getPipeType(ElementType, ReadOnly);
   }
 
+  case TYPE_DEPENDENT_SIZED_VECTOR: {
+    unsigned Idx = 0;
+    QualType ElementType = readType(*Loc.F, Record, Idx);
+    Expr *SizeExpr = ReadExpr(*Loc.F);
+    SourceLocation AttrLoc = ReadSourceLocation(*Loc.F, Record, Idx);
+    unsigned VecKind = Record[Idx];
+
+    return Context.getDependentVectorType(ElementType, SizeExpr, AttrLoc,
+                                               (VectorType::VectorKind)VecKind);
+  }
+
   case TYPE_DEPENDENT_SIZED_EXT_VECTOR: {
     unsigned Idx = 0;
 
@@ -6533,6 +6559,11 @@ void TypeLocReader::VisitDependentSizedExtVectorTypeLoc(
 }
 
 void TypeLocReader::VisitVectorTypeLoc(VectorTypeLoc TL) {
+  TL.setNameLoc(ReadSourceLocation());
+}
+
+void TypeLocReader::VisitDependentVectorTypeLoc(
+    DependentVectorTypeLoc TL) {
   TL.setNameLoc(ReadSourceLocation());
 }
 
@@ -6731,6 +6762,13 @@ void TypeLocReader::VisitPipeTypeLoc(PipeTypeLoc TL) {
   TL.setKWLoc(ReadSourceLocation());
 }
 
+void ASTReader::ReadTypeLoc(ModuleFile &F, const ASTReader::RecordData &Record,
+                            unsigned &Idx, TypeLoc TL) {
+  TypeLocReader TLR(F, *this, Record, Idx);
+  for (; !TL.isNull(); TL = TL.getNextTypeLoc())
+    TLR.Visit(TL);
+}
+
 TypeSourceInfo *
 ASTReader::GetTypeSourceInfo(ModuleFile &F, const ASTReader::RecordData &Record,
                              unsigned &Idx) {
@@ -6739,9 +6777,7 @@ ASTReader::GetTypeSourceInfo(ModuleFile &F, const ASTReader::RecordData &Record,
     return nullptr;
 
   TypeSourceInfo *TInfo = getContext().CreateTypeSourceInfo(InfoTy);
-  TypeLocReader TLR(F, *this, Record, Idx);
-  for (TypeLoc TL = TInfo->getTypeLoc(); !TL.isNull(); TL = TL.getNextTypeLoc())
-    TLR.Visit(TL);
+  ReadTypeLoc(F, Record, Idx, TInfo->getTypeLoc());
   return TInfo;
 }
 
@@ -8448,6 +8484,11 @@ Module *ASTReader::getModule(unsigned ID) {
   return getSubmodule(ID);
 }
 
+bool ASTReader::DeclIsFromPCHWithObjectFile(const Decl *D) {
+  ModuleFile *MF = getOwningModuleFile(D);
+  return MF && MF->PCHHasObjectFile;
+}
+
 ModuleFile *ASTReader::getLocalModuleFile(ModuleFile &F, unsigned ID) {
   if (ID & 1) {
     // It's a module, look it up by submodule ID.
@@ -9349,6 +9390,19 @@ void ASTReader::finishPendingActions() {
                                PBEnd = PendingBodies.end();
        PB != PBEnd; ++PB) {
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(PB->first)) {
+      // For a function defined inline within a class template, force the
+      // canonical definition to be the one inside the canonical definition of
+      // the template. This ensures that we instantiate from a correct view
+      // of the template.
+      //
+      // Sadly we can't do this more generally: we can't be sure that all
+      // copies of an arbitrary class definition will have the same members
+      // defined (eg, some member functions may not be instantiated, and some
+      // special members may or may not have been implicitly defined).
+      if (auto *RD = dyn_cast<CXXRecordDecl>(FD->getLexicalParent()))
+        if (RD->isDependentContext() && !RD->isThisDeclarationADefinition())
+          continue;
+
       // FIXME: Check for =delete/=default?
       // FIXME: Complain about ODR violations here?
       const FunctionDecl *Defn = nullptr;
@@ -9361,7 +9415,15 @@ void ASTReader::finishPendingActions() {
         if (!FD->isLateTemplateParsed() &&
             !NonConstDefn->isLateTemplateParsed() &&
             FD->getODRHash() != NonConstDefn->getODRHash()) {
-          PendingFunctionOdrMergeFailures[FD].push_back(NonConstDefn);
+          if (!isa<CXXMethodDecl>(FD)) {
+            PendingFunctionOdrMergeFailures[FD].push_back(NonConstDefn);
+          } else if (FD->getLexicalParent()->isFileContext() &&
+                     NonConstDefn->getLexicalParent()->isFileContext()) {
+            // Only diagnose out-of-line method definitions.  If they are
+            // in class definitions, then an error will be generated when
+            // processing the class bodies.
+            PendingFunctionOdrMergeFailures[FD].push_back(NonConstDefn);
+          }
         }
       }
       continue;
@@ -9381,7 +9443,8 @@ void ASTReader::finishPendingActions() {
 
 void ASTReader::diagnoseOdrViolations() {
   if (PendingOdrMergeFailures.empty() && PendingOdrMergeChecks.empty() &&
-      PendingFunctionOdrMergeFailures.empty())
+      PendingFunctionOdrMergeFailures.empty() &&
+      PendingEnumOdrMergeFailures.empty())
     return;
 
   // Trigger the import of the full definition of each class that had any
@@ -9414,6 +9477,16 @@ void ASTReader::diagnoseOdrViolations() {
       FD->buildLookup();
       FD->decls_begin();
       FD->getBody();
+    }
+  }
+
+  // Trigger the import of enums.
+  auto EnumOdrMergeFailures = std::move(PendingEnumOdrMergeFailures);
+  PendingEnumOdrMergeFailures.clear();
+  for (auto &Merge : EnumOdrMergeFailures) {
+    Merge.first->decls_begin();
+    for (auto &Enum : Merge.second) {
+      Enum->decls_begin();
     }
   }
 
@@ -9499,7 +9572,8 @@ void ASTReader::diagnoseOdrViolations() {
     }
   }
 
-  if (OdrMergeFailures.empty() && FunctionOdrMergeFailures.empty())
+  if (OdrMergeFailures.empty() && FunctionOdrMergeFailures.empty() &&
+      EnumOdrMergeFailures.empty())
     return;
 
   // Ensure we don't accidentally recursively enter deserialization while
@@ -10033,6 +10107,7 @@ void ASTReader::diagnoseOdrViolations() {
         FieldDifferentInitializers,
         MethodName,
         MethodDeleted,
+        MethodDefaulted,
         MethodVirtual,
         MethodStatic,
         MethodVolatile,
@@ -10046,6 +10121,8 @@ void ASTReader::diagnoseOdrViolations() {
         MethodNoTemplateArguments,
         MethodDifferentNumberTemplateArguments,
         MethodDifferentTemplateArgument,
+        MethodSingleBody,
+        MethodDifferentBody,
         TypedefName,
         TypedefType,
         VarName,
@@ -10279,8 +10356,8 @@ void ASTReader::diagnoseOdrViolations() {
           break;
         }
 
-        const bool FirstDeleted = FirstMethod->isDeleted();
-        const bool SecondDeleted = SecondMethod->isDeleted();
+        const bool FirstDeleted = FirstMethod->isDeletedAsWritten();
+        const bool SecondDeleted = SecondMethod->isDeletedAsWritten();
         if (FirstDeleted != SecondDeleted) {
           ODRDiagError(FirstMethod->getLocation(),
                        FirstMethod->getSourceRange(), MethodDeleted)
@@ -10289,6 +10366,20 @@ void ASTReader::diagnoseOdrViolations() {
           ODRDiagNote(SecondMethod->getLocation(),
                       SecondMethod->getSourceRange(), MethodDeleted)
               << SecondMethodType << SecondName << SecondDeleted;
+          Diagnosed = true;
+          break;
+        }
+
+        const bool FirstDefaulted = FirstMethod->isExplicitlyDefaulted();
+        const bool SecondDefaulted = SecondMethod->isExplicitlyDefaulted();
+        if (FirstDefaulted != SecondDefaulted) {
+          ODRDiagError(FirstMethod->getLocation(),
+                       FirstMethod->getSourceRange(), MethodDefaulted)
+              << FirstMethodType << FirstName << FirstDefaulted;
+
+          ODRDiagNote(SecondMethod->getLocation(),
+                      SecondMethod->getSourceRange(), MethodDefaulted)
+              << SecondMethodType << SecondName << SecondDefaulted;
           Diagnosed = true;
           break;
         }
@@ -10558,6 +10649,44 @@ void ASTReader::diagnoseOdrViolations() {
             break;
           }
         }
+
+        // Compute the hash of the method as if it has no body.
+        auto ComputeCXXMethodODRHash = [&Hash](const CXXMethodDecl *D) {
+          Hash.clear();
+          Hash.AddFunctionDecl(D, true /*SkipBody*/);
+          return Hash.CalculateHash();
+        };
+
+        // Compare the hash generated to the hash stored.  A difference means
+        // that a body was present in the original source.  Due to merging,
+        // the stardard way of detecting a body will not work.
+        const bool HasFirstBody =
+            ComputeCXXMethodODRHash(FirstMethod) != FirstMethod->getODRHash();
+        const bool HasSecondBody =
+            ComputeCXXMethodODRHash(SecondMethod) != SecondMethod->getODRHash();
+
+        if (HasFirstBody != HasSecondBody) {
+          ODRDiagError(FirstMethod->getLocation(),
+                       FirstMethod->getSourceRange(), MethodSingleBody)
+              << FirstMethodType << FirstName << HasFirstBody;
+          ODRDiagNote(SecondMethod->getLocation(),
+                      SecondMethod->getSourceRange(), MethodSingleBody)
+              << SecondMethodType << SecondName << HasSecondBody;
+          Diagnosed = true;
+          break;
+        }
+
+        if (HasFirstBody && HasSecondBody) {
+          ODRDiagError(FirstMethod->getLocation(),
+                       FirstMethod->getSourceRange(), MethodDifferentBody)
+              << FirstMethodType << FirstName;
+          ODRDiagNote(SecondMethod->getLocation(),
+                      SecondMethod->getSourceRange(), MethodDifferentBody)
+              << SecondMethodType << SecondName;
+          Diagnosed = true;
+          break;
+        }
+
         break;
       }
       case TypeAlias:
@@ -11188,6 +11317,194 @@ void ASTReader::diagnoseOdrViolations() {
       Diagnosed = true;
       break;
     }
+    (void)Diagnosed;
+    assert(Diagnosed && "Unable to emit ODR diagnostic.");
+  }
+
+  // Issue ODR failures diagnostics for enums.
+  for (auto &Merge : EnumOdrMergeFailures) {
+    enum ODREnumDifference {
+      SingleScopedEnum,
+      EnumTagKeywordMismatch,
+      SingleSpecifiedType,
+      DifferentSpecifiedTypes,
+      DifferentNumberEnumConstants,
+      EnumConstantName,
+      EnumConstantSingleInitilizer,
+      EnumConstantDifferentInitilizer,
+    };
+
+    // If we've already pointed out a specific problem with this enum, don't
+    // bother issuing a general "something's different" diagnostic.
+    if (!DiagnosedOdrMergeFailures.insert(Merge.first).second)
+      continue;
+
+    EnumDecl *FirstEnum = Merge.first;
+    std::string FirstModule = getOwningModuleNameForDiagnostic(FirstEnum);
+
+    using DeclHashes =
+        llvm::SmallVector<std::pair<EnumConstantDecl *, unsigned>, 4>;
+    auto PopulateHashes = [&ComputeSubDeclODRHash, FirstEnum](
+                              DeclHashes &Hashes, EnumDecl *Enum) {
+      for (auto *D : Enum->decls()) {
+        // Due to decl merging, the first EnumDecl is the parent of
+        // Decls in both records.
+        if (!ODRHash::isWhitelistedDecl(D, FirstEnum))
+          continue;
+        assert(isa<EnumConstantDecl>(D) && "Unexpected Decl kind");
+        Hashes.emplace_back(cast<EnumConstantDecl>(D),
+                            ComputeSubDeclODRHash(D));
+      }
+    };
+    DeclHashes FirstHashes;
+    PopulateHashes(FirstHashes, FirstEnum);
+    bool Diagnosed = false;
+    for (auto &SecondEnum : Merge.second) {
+
+      if (FirstEnum == SecondEnum)
+        continue;
+
+      std::string SecondModule =
+          getOwningModuleNameForDiagnostic(SecondEnum);
+
+      auto ODRDiagError = [FirstEnum, &FirstModule,
+                           this](SourceLocation Loc, SourceRange Range,
+                                 ODREnumDifference DiffType) {
+        return Diag(Loc, diag::err_module_odr_violation_enum)
+               << FirstEnum << FirstModule.empty() << FirstModule << Range
+               << DiffType;
+      };
+      auto ODRDiagNote = [&SecondModule, this](SourceLocation Loc,
+                                               SourceRange Range,
+                                               ODREnumDifference DiffType) {
+        return Diag(Loc, diag::note_module_odr_violation_enum)
+               << SecondModule << Range << DiffType;
+      };
+
+      if (FirstEnum->isScoped() != SecondEnum->isScoped()) {
+        ODRDiagError(FirstEnum->getLocation(), FirstEnum->getSourceRange(),
+                     SingleScopedEnum)
+            << FirstEnum->isScoped();
+        ODRDiagNote(SecondEnum->getLocation(), SecondEnum->getSourceRange(),
+                    SingleScopedEnum)
+            << SecondEnum->isScoped();
+        Diagnosed = true;
+        continue;
+      }
+
+      if (FirstEnum->isScoped() && SecondEnum->isScoped()) {
+        if (FirstEnum->isScopedUsingClassTag() !=
+            SecondEnum->isScopedUsingClassTag()) {
+          ODRDiagError(FirstEnum->getLocation(), FirstEnum->getSourceRange(),
+                       EnumTagKeywordMismatch)
+              << FirstEnum->isScopedUsingClassTag();
+          ODRDiagNote(SecondEnum->getLocation(), SecondEnum->getSourceRange(),
+                      EnumTagKeywordMismatch)
+              << SecondEnum->isScopedUsingClassTag();
+          Diagnosed = true;
+          continue;
+        }
+      }
+
+      QualType FirstUnderlyingType =
+          FirstEnum->getIntegerTypeSourceInfo()
+              ? FirstEnum->getIntegerTypeSourceInfo()->getType()
+              : QualType();
+      QualType SecondUnderlyingType =
+          SecondEnum->getIntegerTypeSourceInfo()
+              ? SecondEnum->getIntegerTypeSourceInfo()->getType()
+              : QualType();
+      if (FirstUnderlyingType.isNull() != SecondUnderlyingType.isNull()) {
+          ODRDiagError(FirstEnum->getLocation(), FirstEnum->getSourceRange(),
+                       SingleSpecifiedType)
+              << !FirstUnderlyingType.isNull();
+          ODRDiagNote(SecondEnum->getLocation(), SecondEnum->getSourceRange(),
+                      SingleSpecifiedType)
+              << !SecondUnderlyingType.isNull();
+          Diagnosed = true;
+          continue;
+      }
+
+      if (!FirstUnderlyingType.isNull() && !SecondUnderlyingType.isNull()) {
+        if (ComputeQualTypeODRHash(FirstUnderlyingType) !=
+            ComputeQualTypeODRHash(SecondUnderlyingType)) {
+          ODRDiagError(FirstEnum->getLocation(), FirstEnum->getSourceRange(),
+                       DifferentSpecifiedTypes)
+              << FirstUnderlyingType;
+          ODRDiagNote(SecondEnum->getLocation(), SecondEnum->getSourceRange(),
+                      DifferentSpecifiedTypes)
+              << SecondUnderlyingType;
+          Diagnosed = true;
+          continue;
+        }
+      }
+
+      DeclHashes SecondHashes;
+      PopulateHashes(SecondHashes, SecondEnum);
+
+      if (FirstHashes.size() != SecondHashes.size()) {
+        ODRDiagError(FirstEnum->getLocation(), FirstEnum->getSourceRange(),
+                     DifferentNumberEnumConstants)
+            << (int)FirstHashes.size();
+        ODRDiagNote(SecondEnum->getLocation(), SecondEnum->getSourceRange(),
+                    DifferentNumberEnumConstants)
+            << (int)SecondHashes.size();
+        Diagnosed = true;
+        continue;
+      }
+
+      for (unsigned I = 0; I < FirstHashes.size(); ++I) {
+        if (FirstHashes[I].second == SecondHashes[I].second)
+          continue;
+        const EnumConstantDecl *FirstEnumConstant = FirstHashes[I].first;
+        const EnumConstantDecl *SecondEnumConstant = SecondHashes[I].first;
+
+        if (FirstEnumConstant->getDeclName() !=
+            SecondEnumConstant->getDeclName()) {
+
+          ODRDiagError(FirstEnumConstant->getLocation(),
+                       FirstEnumConstant->getSourceRange(), EnumConstantName)
+              << I + 1 << FirstEnumConstant;
+          ODRDiagNote(SecondEnumConstant->getLocation(),
+                      SecondEnumConstant->getSourceRange(), EnumConstantName)
+              << I + 1 << SecondEnumConstant;
+          Diagnosed = true;
+          break;
+        }
+
+        const Expr *FirstInit = FirstEnumConstant->getInitExpr();
+        const Expr *SecondInit = SecondEnumConstant->getInitExpr();
+        if (!FirstInit && !SecondInit)
+          continue;
+
+        if (!FirstInit || !SecondInit) {
+          ODRDiagError(FirstEnumConstant->getLocation(),
+                       FirstEnumConstant->getSourceRange(),
+                       EnumConstantSingleInitilizer)
+              << I + 1 << FirstEnumConstant << (FirstInit != nullptr);
+          ODRDiagNote(SecondEnumConstant->getLocation(),
+                      SecondEnumConstant->getSourceRange(),
+                      EnumConstantSingleInitilizer)
+              << I + 1 << SecondEnumConstant << (SecondInit != nullptr);
+          Diagnosed = true;
+          break;
+        }
+
+        if (ComputeODRHash(FirstInit) != ComputeODRHash(SecondInit)) {
+          ODRDiagError(FirstEnumConstant->getLocation(),
+                       FirstEnumConstant->getSourceRange(),
+                       EnumConstantDifferentInitilizer)
+              << I + 1 << FirstEnumConstant;
+          ODRDiagNote(SecondEnumConstant->getLocation(),
+                      SecondEnumConstant->getSourceRange(),
+                      EnumConstantDifferentInitilizer)
+              << I + 1 << SecondEnumConstant;
+          Diagnosed = true;
+          break;
+        }
+      }
+    }
+
     (void)Diagnosed;
     assert(Diagnosed && "Unable to emit ODR diagnostic.");
   }

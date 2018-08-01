@@ -213,7 +213,7 @@ struct MCDwarfLineTableHeader {
   SmallVector<std::string, 3> MCDwarfDirs;
   SmallVector<MCDwarfFile, 3> MCDwarfFiles;
   StringMap<unsigned> SourceIdMap;
-  StringRef CompilationDir;
+  std::string CompilationDir;
   MCDwarfFile RootFile;
   bool HasSource = false;
 private:
@@ -314,9 +314,12 @@ public:
 
   void resetRootFile() {
     assert(Header.MCDwarfFiles.empty());
+    Header.RootFile.Name.clear();
     Header.resetMD5Usage();
     Header.HasSource = false;
   }
+
+  bool hasRootFile() const { return !Header.RootFile.Name.empty(); }
 
   // Report whether MD5 usage has been consistent (all-or-none).
   bool isMD5UsageConsistent() const { return Header.isMD5UsageConsistent(); }
@@ -358,6 +361,13 @@ public:
   /// Utility function to encode a Dwarf pair of LineDelta and AddrDeltas.
   static void Encode(MCContext &Context, MCDwarfLineTableParams Params,
                      int64_t LineDelta, uint64_t AddrDelta, raw_ostream &OS);
+
+  /// Utility function to encode a Dwarf pair of LineDelta and AddrDeltas using
+  /// fixed length operands.
+  static bool FixedEncode(MCContext &Context,
+                          MCDwarfLineTableParams Params,
+                          int64_t LineDelta, uint64_t AddrDelta,
+                          raw_ostream &OS, uint32_t *Offset, uint32_t *Size);
 
   /// Utility function to emit the encoding to a streamer.
   static void Emit(MCStreamer *MCOS, MCDwarfLineTableParams Params,

@@ -646,19 +646,18 @@ LoadPluginCallback(void *baton, llvm::sys::fs::file_type ft,
 }
 
 void Debugger::InstanceInitialize() {
-  FileSpec dir_spec;
   const bool find_directories = true;
   const bool find_files = true;
   const bool find_other = true;
   char dir_path[PATH_MAX];
-  if (HostInfo::GetLLDBPath(ePathTypeLLDBSystemPlugins, dir_spec)) {
+  if (FileSpec dir_spec = HostInfo::GetSystemPluginDir()) {
     if (dir_spec.Exists() && dir_spec.GetPath(dir_path, sizeof(dir_path))) {
       FileSpec::EnumerateDirectory(dir_path, find_directories, find_files,
                                    find_other, LoadPluginCallback, this);
     }
   }
 
-  if (HostInfo::GetLLDBPath(ePathTypeLLDBUserPlugins, dir_spec)) {
+  if (FileSpec dir_spec = HostInfo::GetUserPluginDir()) {
     if (dir_spec.Exists() && dir_spec.GetPath(dir_path, sizeof(dir_path))) {
       FileSpec::EnumerateDirectory(dir_path, find_directories, find_files,
                                    find_other, LoadPluginCallback, this);
@@ -1587,15 +1586,18 @@ bool Debugger::StartEventHandlerThread() {
     // is up and running and listening to events before we return from this
     // function. We do this by listening to events for the
     // eBroadcastBitEventThreadIsListening from the m_sync_broadcaster
-    ListenerSP listener_sp(
-        Listener::MakeListener("lldb.debugger.event-handler"));
+    ConstString full_name("lldb.debugger.event-handler");
+    ListenerSP listener_sp(Listener::MakeListener(full_name.AsCString()));
     listener_sp->StartListeningForEvents(&m_sync_broadcaster,
                                          eBroadcastBitEventThreadIsListening);
 
+    auto thread_name =
+        full_name.GetLength() < llvm::get_max_thread_name_length() ?
+        full_name.AsCString() : "dbg.evt-handler";
+
     // Use larger 8MB stack for this thread
-    m_event_handler_thread = ThreadLauncher::LaunchThread(
-        "lldb.debugger.event-handler", EventHandlerThread, this, nullptr,
-        g_debugger_event_thread_stack_bytes);
+    m_event_handler_thread = ThreadLauncher::LaunchThread(thread_name,
+        EventHandlerThread, this, nullptr, g_debugger_event_thread_stack_bytes);
 
     // Make sure DefaultEventHandler() is running and listening to events
     // before we return from this function. We are only listening for events of

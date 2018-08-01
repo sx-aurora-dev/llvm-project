@@ -68,10 +68,6 @@ public:
 
 } // namespace
 
-IntrusiveRefCntPtr<vfs::FileSystem> RealFileSystemProvider::getFileSystem() {
-  return vfs::getRealFileSystem();
-}
-
 ClangdServer::Options ClangdServer::optsForTest() {
   ClangdServer::Options Opts;
   Opts.UpdateDebounce = std::chrono::steady_clock::duration::zero(); // Faster!
@@ -115,10 +111,15 @@ ClangdServer::ClangdServer(GlobalCompilationDatabase &CDB,
 }
 
 void ClangdServer::setRootPath(PathRef RootPath) {
-  std::string NewRootPath = llvm::sys::path::convert_to_slash(
-      RootPath, llvm::sys::path::Style::posix);
-  if (llvm::sys::fs::is_directory(NewRootPath))
-    this->RootPath = NewRootPath;
+  auto FS = FSProvider.getFileSystem();
+  auto Status = FS->status(RootPath);
+  if (!Status)
+    elog("Failed to get status for RootPath {0}: {1}", RootPath,
+         Status.getError().message());
+  else if (Status->isDirectory())
+    this->RootPath = RootPath;
+  else
+    elog("The provided RootPath {0} is not a directory.", RootPath);
 }
 
 void ClangdServer::addDocument(PathRef File, StringRef Contents,
@@ -141,7 +142,7 @@ void ClangdServer::removeDocument(PathRef File) {
 
 void ClangdServer::codeComplete(PathRef File, Position Pos,
                                 const clangd::CodeCompleteOptions &Opts,
-                                Callback<CompletionList> CB) {
+                                Callback<CodeCompleteResult> CB) {
   // Copy completion options for passing them to async task handler.
   auto CodeCompleteOpts = Opts;
   if (!CodeCompleteOpts.Index) // Respect overridden index.
@@ -151,7 +152,7 @@ void ClangdServer::codeComplete(PathRef File, Position Pos,
   std::shared_ptr<PCHContainerOperations> PCHs = this->PCHs;
   auto FS = FSProvider.getFileSystem();
   auto Task = [PCHs, Pos, FS,
-               CodeCompleteOpts](Path File, Callback<CompletionList> CB,
+               CodeCompleteOpts](Path File, Callback<CodeCompleteResult> CB,
                                  llvm::Expected<InputsAndPreamble> IP) {
     if (!IP)
       return CB(IP.takeError());
@@ -160,9 +161,9 @@ void ClangdServer::codeComplete(PathRef File, Position Pos,
 
     // FIXME(ibiryukov): even if Preamble is non-null, we may want to check
     // both the old and the new version in case only one of them matches.
-    CompletionList Result = clangd::codeComplete(
+    CodeCompleteResult Result = clangd::codeComplete(
         File, IP->Command, PreambleData ? &PreambleData->Preamble : nullptr,
-        PreambleData ? PreambleData->Inclusions : std::vector<Inclusion>(),
+        PreambleData ? PreambleData->Includes : IncludeStructure(),
         IP->Contents, Pos, FS, PCHs, CodeCompleteOpts);
     CB(std::move(Result));
   };
@@ -275,7 +276,7 @@ void ClangdServer::rename(PathRef File, Position Pos, llvm::StringRef NewName,
 }
 
 void ClangdServer::dumpAST(PathRef File,
-                           UniqueFunction<void(std::string)> Callback) {
+                           llvm::unique_function<void(std::string)> Callback) {
   auto Action = [](decltype(Callback) Callback,
                    llvm::Expected<InputsAndAST> InpAST) {
     if (!InpAST) {
@@ -370,7 +371,8 @@ ClangdServer::formatCode(llvm::StringRef Code, PathRef File,
                          ArrayRef<tooling::Range> Ranges) {
   // Call clang-format.
   auto FS = FSProvider.getFileSystem();
-  auto Style = format::getStyle("file", File, "LLVM", Code, FS.get());
+  auto Style = format::getStyle(format::DefaultFormatStyle, File,
+                                format::DefaultFallbackStyle, Code, FS.get());
   if (!Style)
     return Style.takeError();
 
@@ -446,7 +448,20 @@ void ClangdServer::onFileEvent(const DidChangeWatchedFilesParams &Params) {
 
 void ClangdServer::workspaceSymbols(
     StringRef Query, int Limit, Callback<std::vector<SymbolInformation>> CB) {
-  CB(clangd::getWorkspaceSymbols(Query, Limit, Index));
+  CB(clangd::getWorkspaceSymbols(Query, Limit, Index,
+                                 RootPath ? *RootPath : ""));
+}
+
+void ClangdServer::documentSymbols(
+    StringRef File, Callback<std::vector<SymbolInformation>> CB) {
+  auto Action = [](Callback<std::vector<SymbolInformation>> CB,
+                   llvm::Expected<InputsAndAST> InpAST) {
+    if (!InpAST)
+      return CB(InpAST.takeError());
+    CB(clangd::getDocumentSymbols(InpAST->AST));
+  };
+  WorkScheduler.runWithAST("documentSymbols", File,
+                           Bind(Action, std::move(CB)));
 }
 
 std::vector<std::pair<Path, std::size_t>>

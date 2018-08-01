@@ -563,6 +563,47 @@ public:
     return getIncomingValue(Idx);
   }
 
+  // After deleting incoming position I, the order of incoming may be changed.
+  void unorderedDeleteIncoming(unsigned I) {
+    unsigned E = getNumOperands();
+    assert(I < E && "Cannot remove out of bounds Phi entry.");
+    // MemoryPhi must have at least two incoming values, otherwise the MemoryPhi
+    // itself should be deleted.
+    assert(E >= 2 && "Cannot only remove incoming values in MemoryPhis with "
+                     "at least 2 values.");
+    setIncomingValue(I, getIncomingValue(E - 1));
+    setIncomingBlock(I, block_begin()[E - 1]);
+    setOperand(E - 1, nullptr);
+    block_begin()[E - 1] = nullptr;
+    setNumHungOffUseOperands(getNumOperands() - 1);
+  }
+
+  // After deleting entries that satisfy Pred, remaining entries may have
+  // changed order.
+  template <typename Fn> void unorderedDeleteIncomingIf(Fn &&Pred) {
+    for (unsigned I = 0, E = getNumOperands(); I != E; ++I)
+      if (Pred(getIncomingValue(I), getIncomingBlock(I))) {
+        unorderedDeleteIncoming(I);
+        E = getNumOperands();
+        --I;
+      }
+    assert(getNumOperands() >= 1 &&
+           "Cannot remove all incoming blocks in a MemoryPhi.");
+  }
+
+  // After deleting incoming block BB, the incoming blocks order may be changed.
+  void unorderedDeleteIncomingBlock(const BasicBlock *BB) {
+    unorderedDeleteIncomingIf(
+        [&](const MemoryAccess *, const BasicBlock *B) { return BB == B; });
+  }
+
+  // After deleting incoming memory access MA, the incoming accesses order may
+  // be changed.
+  void unorderedDeleteIncomingValue(const MemoryAccess *MA) {
+    unorderedDeleteIncomingIf(
+        [&](const MemoryAccess *M, const BasicBlock *) { return MA == M; });
+  }
+
   static bool classof(const Value *V) {
     return V->getValueID() == MemoryPhiVal;
   }
@@ -722,6 +763,7 @@ protected:
   void verifyDefUses(Function &F) const;
   void verifyDomination(Function &F) const;
   void verifyOrdering(Function &F) const;
+  void verifyDominationNumbers(const Function &F) const;
 
   // This is used by the use optimizer and updater.
   AccessList *getWritableBlockAccesses(const BasicBlock *BB) const {
@@ -740,7 +782,7 @@ protected:
   // relies on the updater to fixup what it breaks, so it is not public.
 
   void moveTo(MemoryUseOrDef *What, BasicBlock *BB, AccessList::iterator Where);
-  void moveTo(MemoryUseOrDef *What, BasicBlock *BB, InsertionPlace Point);
+  void moveTo(MemoryAccess *What, BasicBlock *BB, InsertionPlace Point);
 
   // Rename the dominator tree branch rooted at BB.
   void renamePass(BasicBlock *BB, MemoryAccess *IncomingVal,

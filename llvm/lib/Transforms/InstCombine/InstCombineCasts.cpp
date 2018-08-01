@@ -266,19 +266,11 @@ Instruction *InstCombiner::commonCastTransforms(CastInst &CI) {
     if (Instruction::CastOps NewOpc = isEliminableCastPair(CSrc, &CI)) {
       // The first cast (CSrc) is eliminable so we need to fix up or replace
       // the second cast (CI). CSrc will then have a good chance of being dead.
-      auto *Res = CastInst::Create(NewOpc, CSrc->getOperand(0), CI.getType());
-
-      // If the eliminable cast has debug users, insert a debug value after the
-      // cast pointing to the new Value.
-      SmallVector<DbgInfoIntrinsic *, 1> CSrcDbgInsts;
-      findDbgUsers(CSrcDbgInsts, CSrc);
-      if (CSrcDbgInsts.size()) {
-        DIBuilder DIB(*CI.getModule());
-        for (auto *DII : CSrcDbgInsts)
-          DIB.insertDbgValueIntrinsic(
-              Res, DII->getVariable(), DII->getExpression(),
-              DII->getDebugLoc().get(), &*std::next(CI.getIterator()));
-      }
+      auto *Ty = CI.getType();
+      auto *Res = CastInst::Create(NewOpc, CSrc->getOperand(0), Ty);
+      // Point debug users of the dying cast to the new one.
+      if (CSrc->hasOneUse())
+        replaceAllDbgUsesWith(*CSrc, *Res, CI, DT);
       return Res;
     }
   }
@@ -290,8 +282,10 @@ Instruction *InstCombiner::commonCastTransforms(CastInst &CI) {
     // condition may inhibit other folds and lead to worse codegen.
     auto *Cmp = dyn_cast<CmpInst>(Sel->getCondition());
     if (!Cmp || Cmp->getOperand(0)->getType() != Sel->getType())
-      if (Instruction *NV = FoldOpIntoSelect(CI, Sel))
+      if (Instruction *NV = FoldOpIntoSelect(CI, Sel)) {
+        replaceAllDbgUsesWith(*Sel, *NV, CI, DT);
         return NV;
+      }
   }
 
   // If we are casting a PHI, then fold the cast into the PHI.
@@ -677,20 +671,6 @@ Instruction *InstCombiner::visitTrunc(TruncInst &CI) {
   if (Instruction *Result = commonCastTransforms(CI))
     return Result;
 
-  // Test if the trunc is the user of a select which is part of a
-  // minimum or maximum operation. If so, don't do any more simplification.
-  // Even simplifying demanded bits can break the canonical form of a
-  // min/max.
-  Value *LHS, *RHS;
-  if (SelectInst *SI = dyn_cast<SelectInst>(CI.getOperand(0)))
-    if (matchSelectPattern(SI, LHS, RHS).Flavor != SPF_UNKNOWN)
-      return nullptr;
-
-  // See if we can simplify any instructions used by the input whose sole
-  // purpose is to compute bits we don't care about.
-  if (SimplifyDemandedInstructionBits(CI))
-    return &CI;
-
   Value *Src = CI.getOperand(0);
   Type *DestTy = CI.getType(), *SrcTy = Src->getType();
 
@@ -711,6 +691,20 @@ Instruction *InstCombiner::visitTrunc(TruncInst &CI) {
     assert(Res->getType() == DestTy);
     return replaceInstUsesWith(CI, Res);
   }
+
+  // Test if the trunc is the user of a select which is part of a
+  // minimum or maximum operation. If so, don't do any more simplification.
+  // Even simplifying demanded bits can break the canonical form of a
+  // min/max.
+  Value *LHS, *RHS;
+  if (SelectInst *SI = dyn_cast<SelectInst>(CI.getOperand(0)))
+    if (matchSelectPattern(SI, LHS, RHS).Flavor != SPF_UNKNOWN)
+      return nullptr;
+
+  // See if we can simplify any instructions used by the input whose sole
+  // purpose is to compute bits we don't care about.
+  if (SimplifyDemandedInstructionBits(CI))
+    return &CI;
 
   // Canonicalize trunc x to i1 -> (icmp ne (and x, 1), 0), likewise for vector.
   if (DestTy->getScalarSizeInBits() == 1) {
@@ -1085,6 +1079,11 @@ Instruction *InstCombiner::visitZExt(ZExtInst &CI) {
     Value *Res = EvaluateInDifferentType(Src, DestTy, false);
     assert(Res->getType() == DestTy);
 
+    // Preserve debug values referring to Src if the zext is its last use.
+    if (auto *SrcOp = dyn_cast<Instruction>(Src))
+      if (SrcOp->hasOneUse())
+        replaceAllDbgUsesWith(*SrcOp, *Res, CI, DT);
+
     uint32_t SrcBitsKept = SrcTy->getScalarSizeInBits()-BitsToClear;
     uint32_t DestBitSize = DestTy->getScalarSizeInBits();
 
@@ -1196,22 +1195,19 @@ Instruction *InstCombiner::transformSExtICmp(ICmpInst *ICI, Instruction &CI) {
   if (!Op1->getType()->isIntOrIntVectorTy())
     return nullptr;
 
-  if (Constant *Op1C = dyn_cast<Constant>(Op1)) {
+  if ((Pred == ICmpInst::ICMP_SLT && match(Op1, m_ZeroInt())) ||
+      (Pred == ICmpInst::ICMP_SGT && match(Op1, m_AllOnes()))) {
     // (x <s  0) ? -1 : 0 -> ashr x, 31        -> all ones if negative
     // (x >s -1) ? -1 : 0 -> not (ashr x, 31)  -> all ones if positive
-    if ((Pred == ICmpInst::ICMP_SLT && Op1C->isNullValue()) ||
-        (Pred == ICmpInst::ICMP_SGT && Op1C->isAllOnesValue())) {
+    Value *Sh = ConstantInt::get(Op0->getType(),
+                                 Op0->getType()->getScalarSizeInBits() - 1);
+    Value *In = Builder.CreateAShr(Op0, Sh, Op0->getName() + ".lobit");
+    if (In->getType() != CI.getType())
+      In = Builder.CreateIntCast(In, CI.getType(), true /*SExt*/);
 
-      Value *Sh = ConstantInt::get(Op0->getType(),
-                                   Op0->getType()->getScalarSizeInBits()-1);
-      Value *In = Builder.CreateAShr(Op0, Sh, Op0->getName() + ".lobit");
-      if (In->getType() != CI.getType())
-        In = Builder.CreateIntCast(In, CI.getType(), true /*SExt*/);
-
-      if (Pred == ICmpInst::ICMP_SGT)
-        In = Builder.CreateNot(In, In->getName() + ".not");
-      return replaceInstUsesWith(CI, In);
-    }
+    if (Pred == ICmpInst::ICMP_SGT)
+      In = Builder.CreateNot(In, In->getName() + ".not");
+    return replaceInstUsesWith(CI, In);
   }
 
   if (ConstantInt *Op1C = dyn_cast<ConstantInt>(Op1)) {
@@ -2246,6 +2242,12 @@ Instruction *InstCombiner::visitBitCast(BitCastInst &CI) {
     PointerType *SrcPTy = cast<PointerType>(SrcTy);
     Type *DstElTy = DstPTy->getElementType();
     Type *SrcElTy = SrcPTy->getElementType();
+
+    // Casting pointers between the same type, but with different address spaces
+    // is an addrspace cast rather than a bitcast.
+    if ((DstElTy == SrcElTy) &&
+        (DstPTy->getAddressSpace() != SrcPTy->getAddressSpace()))
+      return new AddrSpaceCastInst(Src, DestTy);
 
     // If we are casting a alloca to a pointer to a type of the same
     // size, rewrite the allocation instruction to allocate the "right" type.

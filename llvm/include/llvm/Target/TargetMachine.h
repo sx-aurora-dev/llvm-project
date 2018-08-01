@@ -202,6 +202,12 @@ public:
   bool getO0WantsFastISel() { return O0WantsFastISel; }
   void setO0WantsFastISel(bool Enable) { O0WantsFastISel = Enable; }
   void setGlobalISel(bool Enable) { Options.EnableGlobalISel = Enable; }
+  void setMachineOutliner(bool Enable) {
+    Options.EnableMachineOutliner = Enable;
+  }
+  void setSupportsDefaultOutlining(bool Enable) {
+    Options.SupportsDefaultOutlining = Enable;
+  }
 
   bool shouldPrintMachineCode() const { return Options.PrintMachineCode; }
 
@@ -299,7 +305,7 @@ public:
 class LLVMTargetMachine : public TargetMachine {
 protected: // Can only create subclasses.
   LLVMTargetMachine(const Target &T, StringRef DataLayoutString,
-                    const Triple &TargetTriple, StringRef CPU, StringRef FS,
+                    const Triple &TT, StringRef CPU, StringRef FS,
                     const TargetOptions &Options, Reloc::Model RM,
                     CodeModel::Model CM, CodeGenOpt::Level OL);
 
@@ -330,7 +336,7 @@ public:
   /// fills the MCContext Ctx pointer which can be used to build custom
   /// MCStreamer.
   bool addPassesToEmitMC(PassManagerBase &PM, MCContext *&Ctx,
-                         raw_pwrite_stream &OS,
+                         raw_pwrite_stream &Out,
                          bool DisableVerify = true) override;
 
   /// Returns true if the target is expected to pass all machine verifier
