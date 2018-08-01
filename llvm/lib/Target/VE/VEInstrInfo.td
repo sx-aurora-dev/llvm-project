@@ -964,8 +964,13 @@ defm SLAU : RRINDm<"sla.w.zx", 0x66, shl, I32, i32, simm7Op32, uimm6Op32>;
 
 let cx = 0 in
 defm SRL : RRIm<"srl", 0x75, srl, I64, i64, simm7Op32, uimm6Op64>;
-let cx = 0, isCodeGenOnly = 1 in
-defm SRLW : RRIm<"srl", 0x75, srl, I32, i32, simm7Op32, uimm6Op32>;
+
+def : Pat<(i32 (srl i32:$src, (i32 simm7:$val))),
+          (EXTRACT_SUBREG (SRLri (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+            $src, sub_i32), 32), imm:$val), sub_i32)>;
+def : Pat<(i32 (srl i32:$src, i32:$val)),
+          (EXTRACT_SUBREG (SRLrr (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+            $src, sub_i32), 32), $val), sub_i32)>;
 
 // 5.3.2.5. Floating-point Arithmetic Operation Instructions
 let cx = 0 in
@@ -1707,8 +1712,8 @@ def : Pat<(i32 (bitreverse i32:$src)),
           (EXTRACT_SUBREG (SRLri (BRVr (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $src, sub_i32)), 32), sub_i32)>;
 def : Pat<(i32 (ctlz i32:$src)),
-          (EXTRACT_SUBREG (LDZr (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32)), sub_i32)>;
+          (EXTRACT_SUBREG (LDZr (SLLri (INSERT_SUBREG
+            (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;
 def : Pat<(i64 (bswap i64:$src)),
           (BSWPri $src, 0)>;
 def : Pat<(i32 (bswap i32:$src)),
