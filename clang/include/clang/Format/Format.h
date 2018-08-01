@@ -1296,7 +1296,7 @@ struct FormatStyle {
   /// If ``Never``, lays out Objective-C protocol conformance list items
   /// onto individual lines whenever they go over ``ColumnLimit``.
   ///
-  /// \code
+  /// \code{.objc}
   ///    Always (or Auto, if BinPackParameters=true):
   ///    @interface ccccccccccccc () <
   ///        ccccccccccccc, ccccccccccccc,
@@ -1962,6 +1962,15 @@ LangOptions getFormattingLangOpts(const FormatStyle &Style = getLLVMStyle());
 /// specifying format style. The description is closely related to the operation
 /// of ``getStyle()``.
 extern const char *StyleOptionHelpDescription;
+
+/// The suggested format style to use by default. This allows tools using
+/// `getStyle` to have a consistent default style.
+/// Different builds can modify the value to the preferred styles.
+extern const char *DefaultFormatStyle;
+
+/// The suggested predefined style to use as the fallback style in `getStyle`.
+/// Different builds can modify the value to the preferred styles.
+extern const char *DefaultFallbackStyle;
 
 /// Construct a FormatStyle based on ``StyleName``.
 ///

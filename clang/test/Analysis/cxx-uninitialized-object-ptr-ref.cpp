@@ -235,10 +235,10 @@ void fVoidPointerTest2() {
 }
 
 class VoidPointerRRefTest1 {
-  void *&&vptrrref;
+  void *&&vptrrref; // expected-note {{here}}
 
 public:
-  VoidPointerRRefTest1(void *vptr, char) : vptrrref(static_cast<void *&&>(vptr)) {
+  VoidPointerRRefTest1(void *vptr, char) : vptrrref(static_cast<void *&&>(vptr)) { // expected-warning {{binding reference member 'vptrrref' to stack allocated parameter 'vptr'}}
     // All good!
   }
 };
@@ -249,10 +249,10 @@ void fVoidPointerRRefTest1() {
 }
 
 class VoidPointerRRefTest2 {
-  void **&&vpptrrref;
+  void **&&vpptrrref; // expected-note {{here}}
 
 public:
-  VoidPointerRRefTest2(void **vptr, char) : vpptrrref(static_cast<void **&&>(vptr)) {
+  VoidPointerRRefTest2(void **vptr, char) : vpptrrref(static_cast<void **&&>(vptr)) { // expected-warning {{binding reference member 'vpptrrref' to stack allocated parameter 'vptr'}}
     // All good!
   }
 };
@@ -263,10 +263,10 @@ void fVoidPointerRRefTest2() {
 }
 
 class VoidPointerLRefTest {
-  void *&vptrrref;
+  void *&vptrrref; // expected-note {{here}}
 
 public:
-  VoidPointerLRefTest(void *vptr, char) : vptrrref(static_cast<void *&>(vptr)) {
+  VoidPointerLRefTest(void *vptr, char) : vptrrref(static_cast<void *&>(vptr)) { // expected-warning {{binding reference member 'vptrrref' to stack allocated parameter 'vptr'}}
     // All good!
   }
 };
@@ -416,14 +416,12 @@ struct UsefulFunctions {
 
 #ifdef PEDANTIC
 struct PointerToMemberFunctionTest1 {
-  // TODO: we'd expect the note {{uninitialized field 'this->f'}}
-  void (UsefulFunctions::*f)(void); // no-note
+  void (UsefulFunctions::*f)(void); // expected-note{{uninitialized field 'this->f'}}
   PointerToMemberFunctionTest1() {}
 };
 
 void fPointerToMemberFunctionTest1() {
-  // TODO: we'd expect the warning {{1 uninitialized field}}
-  PointerToMemberFunctionTest1(); // no-warning
+  PointerToMemberFunctionTest1(); // expected-warning{{1 uninitialized field}}
 }
 
 struct PointerToMemberFunctionTest2 {
@@ -460,14 +458,12 @@ void fMultiPointerToMemberFunctionTest2() {
 }
 
 struct PointerToMemberDataTest1 {
-  // TODO: we'd expect the note {{uninitialized field 'this->f'}}
-  int UsefulFunctions::*d; // no-note
+  int UsefulFunctions::*d; // expected-note{{uninitialized field 'this->d'}}
   PointerToMemberDataTest1() {}
 };
 
 void fPointerToMemberDataTest1() {
-  // TODO: we'd expect the warning {{1 uninitialized field}}
-  PointerToMemberDataTest1(); // no-warning
+  PointerToMemberDataTest1(); // expected-warning{{1 uninitialized field}}
 }
 
 struct PointerToMemberDataTest2 {

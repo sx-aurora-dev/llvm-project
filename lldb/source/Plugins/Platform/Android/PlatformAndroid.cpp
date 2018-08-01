@@ -83,9 +83,9 @@ PlatformSP PlatformAndroid::CreateInstance(bool force, const ArchSpec *arch) {
       break;
 
 #if defined(__ANDROID__)
-    // Only accept "unknown" for the vendor if the host is android and it
+    // Only accept "unknown" for the vendor if the host is android and if
     // "unknown" wasn't specified (it was just returned because it was NOT
-    // specified_
+    // specified).
     case llvm::Triple::VendorType::UnknownVendor:
       create = !arch->TripleVendorWasSpecified();
       break;
@@ -95,7 +95,7 @@ PlatformSP PlatformAndroid::CreateInstance(bool force, const ArchSpec *arch) {
     }
 
     if (create) {
-      switch (triple.getOS()) {
+      switch (triple.getEnvironment()) {
       case llvm::Triple::Android:
         break;
 
@@ -103,8 +103,8 @@ PlatformSP PlatformAndroid::CreateInstance(bool force, const ArchSpec *arch) {
       // Only accept "unknown" for the OS if the host is android and it
       // "unknown" wasn't specified (it was just returned because it was NOT
       // specified)
-      case llvm::Triple::OSType::UnknownOS:
-        create = !arch->TripleOSWasSpecified();
+      case llvm::Triple::EnvironmentType::UnknownEnvironment:
+        create = !arch->TripleEnvironmentWasSpecified();
         break;
 #endif
       default:
@@ -360,10 +360,8 @@ Status PlatformAndroid::DownloadSymbolFile(const lldb::ModuleSP &module_sp,
 }
 
 bool PlatformAndroid::GetRemoteOSVersion() {
-  m_major_os_version = GetSdkVersion();
-  m_minor_os_version = 0;
-  m_update_os_version = 0;
-  return m_major_os_version != 0;
+  m_os_version = llvm::VersionTuple(GetSdkVersion());
+  return !m_os_version.empty();
 }
 
 llvm::StringRef

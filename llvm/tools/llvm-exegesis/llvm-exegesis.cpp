@@ -16,11 +16,9 @@
 #include "lib/BenchmarkResult.h"
 #include "lib/BenchmarkRunner.h"
 #include "lib/Clustering.h"
-#include "lib/Latency.h"
 #include "lib/LlvmState.h"
 #include "lib/PerfHelper.h"
-#include "lib/Uops.h"
-#include "lib/X86.h"
+#include "lib/Target.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCInstBuilder.h"
@@ -47,13 +45,16 @@ static llvm::cl::opt<std::string>
 static llvm::cl::opt<std::string>
     BenchmarkFile("benchmarks-file", llvm::cl::desc(""), llvm::cl::init(""));
 
-enum class BenchmarkModeE { Latency, Uops, Analysis };
-static llvm::cl::opt<BenchmarkModeE> BenchmarkMode(
+static llvm::cl::opt<exegesis::InstructionBenchmark::ModeE> BenchmarkMode(
     "mode", llvm::cl::desc("the mode to run"),
-    llvm::cl::values(
-        clEnumValN(BenchmarkModeE::Latency, "latency", "Instruction Latency"),
-        clEnumValN(BenchmarkModeE::Uops, "uops", "Uop Decomposition"),
-        clEnumValN(BenchmarkModeE::Analysis, "analysis", "Analysis")));
+    llvm::cl::values(clEnumValN(exegesis::InstructionBenchmark::Latency,
+                                "latency", "Instruction Latency"),
+                     clEnumValN(exegesis::InstructionBenchmark::Uops, "uops",
+                                "Uop Decomposition"),
+                     // When not asking for a specific benchmark mode, we'll
+                     // analyse the results.
+                     clEnumValN(exegesis::InstructionBenchmark::Unknown,
+                                "analysis", "Analysis")));
 
 static llvm::cl::opt<unsigned>
     NumRepetitions("num-repetitions",
@@ -85,6 +86,10 @@ static llvm::cl::opt<std::string>
 namespace exegesis {
 
 static llvm::ExitOnError ExitOnErr;
+
+#ifdef LLVM_EXEGESIS_INITIALIZE_NATIVE_TARGET
+void LLVM_EXEGESIS_INITIALIZE_NATIVE_TARGET();
+#endif
 
 static unsigned GetOpcodeOrDie(const llvm::MCInstrInfo &MCInstrInfo) {
   if (OpcodeName.empty() && (OpcodeIndex == 0))
@@ -120,9 +125,9 @@ void benchmarkMain() {
 
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
-
-  // FIXME: Target-specific filter.
-  X86Filter Filter;
+#ifdef LLVM_EXEGESIS_INITIALIZE_NATIVE_TARGET
+  LLVM_EXEGESIS_INITIALIZE_NATIVE_TARGET();
+#endif
 
   const LLVMState State;
   const auto Opcode = GetOpcodeOrDie(State.getInstrInfo());
@@ -135,20 +140,10 @@ void benchmarkMain() {
     return;
   }
 
-  // FIXME: Do not require SchedModel for latency.
-  if (!State.getSubtargetInfo().getSchedModel().hasExtraProcessorInfo())
-    llvm::report_fatal_error("sched model is missing extra processor info!");
-
-  std::unique_ptr<BenchmarkRunner> Runner;
-  switch (BenchmarkMode) {
-  case BenchmarkModeE::Latency:
-    Runner = llvm::make_unique<LatencyBenchmarkRunner>(State);
-    break;
-  case BenchmarkModeE::Uops:
-    Runner = llvm::make_unique<UopsBenchmarkRunner>(State);
-    break;
-  case BenchmarkModeE::Analysis:
-    llvm_unreachable("not a benchmark");
+  const std::unique_ptr<BenchmarkRunner> Runner =
+      State.getExegesisTarget().createBenchmarkRunner(BenchmarkMode, State);
+  if (!Runner) {
+    llvm::report_fatal_error("cannot create benchmark runner");
   }
 
   if (NumRepetitions == 0)
@@ -160,7 +155,7 @@ void benchmarkMain() {
 
   const BenchmarkResultContext Context = getBenchmarkResultContext(State);
   std::vector<InstructionBenchmark> Results =
-      ExitOnErr(Runner->run(Opcode, Filter, NumRepetitions));
+      ExitOnErr(Runner->run(Opcode, NumRepetitions));
   for (InstructionBenchmark &Result : Results)
     ExitOnErr(Result.writeYaml(Context, BenchmarkFile));
 
@@ -238,7 +233,7 @@ int main(int Argc, char **Argv) {
     return EXIT_FAILURE;
   });
 
-  if (BenchmarkMode == BenchmarkModeE::Analysis) {
+  if (BenchmarkMode == exegesis::InstructionBenchmark::Unknown) {
     exegesis::analysisMain();
   } else {
     exegesis::benchmarkMain();

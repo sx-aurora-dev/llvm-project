@@ -21,6 +21,7 @@
 #include "Protocol.h"
 #include "index/Index.h"
 #include "clang/Frontend/PrecompiledPreamble.h"
+#include "clang/Sema/CodeCompleteConsumer.h"
 #include "clang/Sema/CodeCompleteOptions.h"
 #include "clang/Tooling/CompilationDatabase.h"
 
@@ -67,6 +68,9 @@ struct CodeCompleteOptions {
     std::string NoInsert = " ";
   } IncludeIndicator;
 
+  /// Expose origins of completion items in the label (for debugging).
+  bool ShowOrigins = false;
+
   // Populated internally by clangd, do not set.
   /// If `Index` is set, it is used to augment the code completion
   /// results.
@@ -75,15 +79,85 @@ struct CodeCompleteOptions {
   const SymbolIndex *Index = nullptr;
 };
 
+// Semi-structured representation of a code-complete suggestion for our C++ API.
+// We don't use the LSP structures here (unlike most features) as we want
+// to expose more data to allow for more precise testing and evaluation.
+struct CodeCompletion {
+  // The unqualified name of the symbol or other completion item.
+  std::string Name;
+  // The scope qualifier for the symbol name. e.g. "ns1::ns2::"
+  // Empty for non-symbol completions. Not inserted, but may be displayed.
+  std::string Scope;
+  // Text that must be inserted before the name, and displayed (e.g. base::).
+  std::string RequiredQualifier;
+  // Details to be displayed following the name. Not inserted.
+  std::string Signature;
+  // Text to be inserted following the name, in snippet format.
+  std::string SnippetSuffix;
+  // Type to be displayed for this completion.
+  std::string ReturnType;
+  std::string Documentation;
+  CompletionItemKind Kind = CompletionItemKind::Missing;
+  // This completion item may represent several symbols that can be inserted in
+  // the same way, such as function overloads. In this case BundleSize > 1, and
+  // the following fields are summaries:
+  //  - Signature is e.g. "(...)" for functions.
+  //  - SnippetSuffix is similarly e.g. "(${0})".
+  //  - ReturnType may be empty
+  //  - Documentation may be from one symbol, or a combination of several
+  // Other fields should apply equally to all bundled completions.
+  unsigned BundleSize = 1;
+  SymbolOrigin Origin = SymbolOrigin::Unknown;
+  // The header through which this symbol could be included.
+  // Quoted string as expected by an #include directive, e.g. "<memory>".
+  // Empty for non-symbol completions, or when not known.
+  std::string Header;
+  // Present if Header is set and should be inserted to use this item.
+  llvm::Optional<TextEdit> HeaderInsertion;
+
+  // Scores are used to rank completion items.
+  struct Scores {
+    // The score that items are ranked by.
+    float Total = 0.f;
+
+    // The finalScore with the fuzzy name match score excluded.
+    // When filtering client-side, editors should calculate the new fuzzy score,
+    // whose scale is 0-1 (with 1 = prefix match, special case 2 = exact match),
+    // and recompute finalScore = fuzzyScore * symbolScore.
+    float ExcludingName = 0.f;
+
+    // Component scores that contributed to the final score:
+
+    // Quality describes how important we think this candidate is,
+    // independent of the query.
+    // e.g. symbols with lots of incoming references have higher quality.
+    float Quality = 0.f;
+    // Relevance describes how well this candidate matched the query.
+    // e.g. symbols from nearby files have higher relevance.
+    float Relevance = 0.f;
+  };
+  Scores Score;
+
+  // Serialize this to an LSP completion item. This is a lossy operation.
+  CompletionItem render(const CodeCompleteOptions &) const;
+};
+raw_ostream &operator<<(raw_ostream &, const CodeCompletion &);
+struct CodeCompleteResult {
+  std::vector<CodeCompletion> Completions;
+  bool HasMore = false;
+  CodeCompletionContext::Kind Context = CodeCompletionContext::CCC_Other;
+};
+raw_ostream &operator<<(raw_ostream &, const CodeCompleteResult &);
+
 /// Get code completions at a specified \p Pos in \p FileName.
-CompletionList codeComplete(PathRef FileName,
-                            const tooling::CompileCommand &Command,
-                            PrecompiledPreamble const *Preamble,
-                            const std::vector<Inclusion> &PreambleInclusions,
-                            StringRef Contents, Position Pos,
-                            IntrusiveRefCntPtr<vfs::FileSystem> VFS,
-                            std::shared_ptr<PCHContainerOperations> PCHs,
-                            CodeCompleteOptions Opts);
+CodeCompleteResult codeComplete(PathRef FileName,
+                                const tooling::CompileCommand &Command,
+                                PrecompiledPreamble const *Preamble,
+                                const IncludeStructure &PreambleInclusions,
+                                StringRef Contents, Position Pos,
+                                IntrusiveRefCntPtr<vfs::FileSystem> VFS,
+                                std::shared_ptr<PCHContainerOperations> PCHs,
+                                CodeCompleteOptions Opts);
 
 /// Get signature help at a specified \p Pos in \p FileName.
 SignatureHelp signatureHelp(PathRef FileName,

@@ -90,21 +90,23 @@ public:
   void setOutputSymbolIndex(uint32_t Index);
 
   WasmSymbolType getWasmType() const;
+  bool isExported() const;
 
   // True if this symbol was referenced by a regular (non-bitcode) object.
   unsigned IsUsedInRegularObj : 1;
+  unsigned ForceExport : 1;
 
 protected:
   Symbol(StringRef Name, Kind K, uint32_t Flags, InputFile *F)
-      : IsUsedInRegularObj(false), Name(Name), SymbolKind(K), Flags(Flags),
-        File(F), Referenced(!Config->GcSections) {}
+      : IsUsedInRegularObj(false), ForceExport(false), Name(Name),
+        SymbolKind(K), Flags(Flags), File(F), Referenced(!Config->GcSections) {}
 
   StringRef Name;
   Kind SymbolKind;
   uint32_t Flags;
   InputFile *File;
   uint32_t OutputSymbolIndex = INVALID_INDEX;
-  bool Referenced = false;
+  bool Referenced;
 };
 
 class FunctionSymbol : public Symbol {
@@ -113,8 +115,6 @@ public:
     return S->kind() == DefinedFunctionKind ||
            S->kind() == UndefinedFunctionKind;
   }
-
-  const WasmSignature *getFunctionType() const { return FunctionType; }
 
   // Get/set the table index
   void setTableIndex(uint32_t Index);
@@ -126,6 +126,8 @@ public:
   void setFunctionIndex(uint32_t Index);
   bool hasFunctionIndex() const;
 
+  const WasmSignature *FunctionType;
+
 protected:
   FunctionSymbol(StringRef Name, Kind K, uint32_t Flags, InputFile *F,
                  const WasmSignature *Type)
@@ -133,8 +135,6 @@ protected:
 
   uint32_t TableIndex = INVALID_INDEX;
   uint32_t FunctionIndex = INVALID_INDEX;
-
-  const WasmSignature *FunctionType;
 };
 
 class DefinedFunction : public FunctionSymbol {
@@ -340,6 +340,7 @@ T *replaceSymbol(Symbol *S, ArgT &&... Arg) {
 
   T *S2 = new (S) T(std::forward<ArgT>(Arg)...);
   S2->IsUsedInRegularObj = SymCopy.IsUsedInRegularObj;
+  S2->ForceExport = SymCopy.ForceExport;
   return S2;
 }
 

@@ -45,9 +45,12 @@ static std::unique_ptr<lto::LTO> createLTO() {
   lto::Config C;
   C.Options = InitTargetOptionsFromCodeGenFlags();
 
-  // Always emit a section per function/datum with LTO.
+  // Always emit a section per function/data with LTO.
   C.Options.FunctionSections = true;
   C.Options.DataSections = true;
+
+  // Wasm currently only supports ThreadModel::Single
+  C.Options.ThreadModel = ThreadModel::Single;
 
   C.DisableVerify = Config->DisableVerify;
   C.DiagHandler = diagnosticHandler;
@@ -95,7 +98,8 @@ void BitcodeCompiler::add(BitcodeFile &F) {
     // Once IRObjectFile is fixed to report only one symbol this hack can
     // be removed.
     R.Prevailing = !ObjSym.isUndefined() && Sym->getFile() == &F;
-    R.VisibleToRegularObj = Config->Relocatable || Sym->IsUsedInRegularObj;
+    R.VisibleToRegularObj = Config->Relocatable || Sym->IsUsedInRegularObj ||
+                            (R.Prevailing && Sym->isExported());
     if (R.Prevailing)
       undefine(Sym);
   }

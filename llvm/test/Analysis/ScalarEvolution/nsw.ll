@@ -25,7 +25,7 @@ bb:		; preds = %bb1, %bb.nph
 	%tmp6 = sext i32 %i.01 to i64		; <i64> [#uses=1]
 	%tmp7 = getelementptr double, double* %p, i64 %tmp6		; <double*> [#uses=1]
 ; CHECK: %tmp7
-; CHECK-NEXT:   -->  {%p,+,8}<nw><%bb>
+; CHECK-NEXT:   -->  {%p,+,8}<%bb>
 	store double %tmp5, double* %tmp7, align 8
 	%tmp8 = add nsw i32 %i.01, 1		; <i32> [#uses=2]
 ; CHECK: %tmp8

@@ -153,7 +153,8 @@
 //
 // CHECK-ASAN-ANDROID-STATICLIBASAN: "{{(.*[^.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
 // CHECK-ASAN-ANDROID-STATICLIBASAN: libclang_rt.asan-arm-android.a"
-// CHECK-ASAN-ANDROID-STATICLIBASAN: "-lpthread"
+// CHECK-ASAN-ANDROID-STATICLIBASAN-NOT: "-lpthread"
+// CHECK-ASAN-ANDROID-STATICLIBASAN-NOT: "-lrt"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
 // RUN:     -target arm-linux-androideabi -fuse-ld=ld -fsanitize=undefined \
@@ -175,7 +176,8 @@
 //
 // CHECK-UBSAN-ANDROID-STATICLIBASAN: "{{(.*[^.0-9A-Z_a-z])?}}ld{{(.exe)?}}"
 // CHECK-UBSAN-ANDROID-STATICLIBASAN: libclang_rt.ubsan_standalone-arm-android.a"
-// CHECK-UBSAN-ANDROID-STATICLIBASAN: "-lpthread"
+// CHECK-UBSAN-ANDROID-STATICLIBASAN-NOT: "-lpthread"
+// CHECK-UBSAN-ANDROID-STATICLIBASAN-NOT: "-lrt"
 
 //
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
@@ -689,6 +691,15 @@
 // CHECK-SCUDO-LINUX: "-lpthread"
 // CHECK-SCUDO-LINUX: "-ldl"
 
+// RUN: %clang -fsanitize=scudo -fsanitize-minimal-runtime %s -### -o %t.o 2>&1 \
+// RUN:     -target i386-unknown-linux -fuse-ld=ld \
+// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
+// RUN:   | FileCheck --check-prefix=CHECK-SCUDO-MINIMAL-LINUX %s
+// CHECK-SCUDO-MINIMAL-LINUX: "{{.*}}ld{{(.exe)?}}"
+// CHECK-SCUDO-MINIMAL-LINUX: "-pie"
+// CHECK-SCUDO-MINIMAL-LINUX: "--whole-archive" "{{.*}}libclang_rt.scudo_minimal-i386.a" "--no-whole-archive"
+// CHECK-SCUDO-MINIMAL-LINUX: "-lpthread"
+
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.so -shared 2>&1 \
 // RUN:     -target i386-unknown-linux -fuse-ld=ld -fsanitize=scudo -shared-libsan \
 // RUN:     -resource-dir=%S/Inputs/resource_dir \
@@ -726,7 +737,8 @@
 // CHECK-SCUDO-ANDROID-STATIC: "-pie"
 // CHECK-SCUDO-ANDROID-STATIC: "--whole-archive" "{{.*}}libclang_rt.scudo-arm-android.a" "--no-whole-archive"
 // CHECK-SCUDO-ANDROID-STATIC-NOT: "-lstdc++"
-// CHECK-SCUDO-ANDROID-STATIC: "-lpthread"
+// CHECK-SCUDO-ANDROID-STATIC-NOT: "-lpthread"
+// CHECK-SCUDO-ANDROID-STATIC-NOT: "-lrt"
 
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
 // RUN:     -target x86_64-unknown-linux -fuse-ld=ld -fsanitize=hwaddress \

@@ -19,13 +19,15 @@ namespace clangd {
 using namespace llvm;
 
 IntrusiveRefCntPtr<vfs::FileSystem>
-buildTestFS(StringMap<std::string> const &Files) {
+buildTestFS(llvm::StringMap<std::string> const &Files,
+            llvm::StringMap<time_t> const &Timestamps) {
   IntrusiveRefCntPtr<vfs::InMemoryFileSystem> MemFS(
       new vfs::InMemoryFileSystem);
   for (auto &FileAndContents : Files) {
-    MemFS->addFile(FileAndContents.first(), time_t(),
-                   MemoryBuffer::getMemBufferCopy(FileAndContents.second,
-                                                  FileAndContents.first()));
+    StringRef File = FileAndContents.first();
+    MemFS->addFile(
+        File, Timestamps.lookup(File),
+        MemoryBuffer::getMemBufferCopy(FileAndContents.second, File));
   }
   return MemFS;
 }
@@ -66,7 +68,9 @@ std::string testPath(PathRef File) {
   return Path.str();
 }
 
-/// unittest: is a scheme that refers to files relative to testRoot()
+/// unittest: is a scheme that refers to files relative to testRoot().
+/// URI body is a path relative to testRoot() e.g. unittest:///x.h for
+/// /clangd-test/x.h.
 class TestScheme : public URIScheme {
 public:
   static const char *Scheme;
@@ -75,6 +79,10 @@ public:
   getAbsolutePath(llvm::StringRef /*Authority*/, llvm::StringRef Body,
                   llvm::StringRef HintPath) const override {
     assert(HintPath.startswith(testRoot()));
+    if (!Body.consume_front("/"))
+      return llvm::make_error<llvm::StringError>(
+          "Body of an unittest: URI must start with '/'",
+          llvm::inconvertibleErrorCode());
     llvm::SmallString<16> Path(Body.begin(), Body.end());
     llvm::sys::path::native(Path);
     return testPath(Path);

@@ -27,13 +27,13 @@
 #define LLVM_TOOLS_LLVM_MCA_RETIRECONTROLUNITSTATISTICS_H
 
 #include "View.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include <map>
 
 namespace mca {
 
 class RetireControlUnitStatistics : public View {
-  using Histogram = llvm::DenseMap<unsigned, unsigned>;
+  using Histogram = std::map<unsigned, unsigned>;
   Histogram RetiredPerCycle;
 
   unsigned NumRetired;
@@ -47,7 +47,7 @@ class RetireControlUnitStatistics : public View {
 public:
   RetireControlUnitStatistics() : NumRetired(0), NumCycles(0) {}
 
-  void onInstructionEvent(const HWInstructionEvent &Event) override;
+  void onEvent(const HWInstructionEvent &Event) override;
 
   void onCycleBegin() override { NumCycles++; }
 

@@ -75,12 +75,18 @@ const char *AMDGCN::Linker::constructLLVMLinkCommand(
     std::string ISAVerBC =
         "oclc_isa_version_" + SubArchName.drop_front(3).str() + ".amdgcn.bc";
 
-    BCLibs.append({"hip.amdgcn.bc", "hc.amdgcn.bc", "opencl.amdgcn.bc",
-                   "ockl.amdgcn.bc", "irif.amdgcn.bc", "ocml.amdgcn.bc",
+    llvm::StringRef FlushDenormalControlBC;
+    if (Args.hasArg(options::OPT_fcuda_flush_denormals_to_zero))
+      FlushDenormalControlBC = "oclc_daz_opt_on.amdgcn.bc";
+    else
+      FlushDenormalControlBC = "oclc_daz_opt_off.amdgcn.bc";
+
+    BCLibs.append({"opencl.amdgcn.bc",
+                   "ocml.amdgcn.bc", "ockl.amdgcn.bc", "irif.amdgcn.bc",
                    "oclc_finite_only_off.amdgcn.bc",
-                   "oclc_daz_opt_off.amdgcn.bc",
+                   FlushDenormalControlBC,
                    "oclc_correctly_rounded_sqrt_on.amdgcn.bc",
-                   "oclc_unsafe_math_off.amdgcn.bc", "hc.amdgcn.bc", ISAVerBC});
+                   "oclc_unsafe_math_off.amdgcn.bc", ISAVerBC});
   }
   for (auto Lib : BCLibs)
     addBCLib(C, Args, CmdArgs, LibraryPaths, Lib);
@@ -226,6 +232,8 @@ void HIPToolChain::addClangTargetOptions(
   assert(DeviceOffloadingKind == Action::OFK_HIP &&
          "Only HIP offloading kinds are supported for GPUs.");
 
+  CC1Args.push_back("-target-cpu");
+  CC1Args.push_back(DriverArgs.MakeArgStringRef(GpuArch));
   CC1Args.push_back("-fcuda-is-device");
 
   if (DriverArgs.hasFlag(options::OPT_fcuda_flush_denormals_to_zero,
@@ -254,7 +262,7 @@ HIPToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
 
   for (Arg *A : Args) {
     if (A->getOption().matches(options::OPT_Xarch__)) {
-      // Skip this argument unless the architecture matches BoundArch
+      // Skip this argument unless the architecture matches BoundArch.
       if (BoundArch.empty() || A->getValue(0) != BoundArch)
         continue;
 
