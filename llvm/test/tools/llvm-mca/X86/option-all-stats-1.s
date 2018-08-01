@@ -19,7 +19,7 @@ add %eax, %eax
 # ALL-NEXT:        [3]: RThroughput
 # ALL-NEXT:        [4]: MayLoad
 # ALL-NEXT:        [5]: MayStore
-# ALL-NEXT:        [6]: HasSideEffects
+# ALL-NEXT:        [6]: HasSideEffects (U)
 
 # ALL:             [1]    [2]    [3]    [4]    [5]    [6]    Instructions:
 # ALL-NEXT:         1      1     0.50                        addl	%eax, %eax
@@ -35,8 +35,8 @@ add %eax, %eax
 # FULLREPORT:      Dispatch Logic - number of cycles where we saw N instructions dispatched:
 # FULLREPORT-NEXT: [# dispatched], [# cycles]
 # FULLREPORT-NEXT:  0,              22  (21.4%)
-# FULLREPORT-NEXT:  2,              19  (18.4%)
 # FULLREPORT-NEXT:  1,              62  (60.2%)
+# FULLREPORT-NEXT:  2,              19  (18.4%)
 
 # FULLREPORT:      Schedulers - number of cycles where we saw N instructions issued:
 # FULLREPORT-NEXT: [# issued], [# cycles]

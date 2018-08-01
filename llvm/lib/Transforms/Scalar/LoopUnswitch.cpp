@@ -708,7 +708,7 @@ bool LoopUnswitch::processCurrentLoop() {
       // Unswitch only those branches that are reachable.
       if (isUnreachableDueToPreviousUnswitching(*I))
         continue;
- 
+
       // If this isn't branching on an invariant condition, we can't unswitch
       // it.
       if (BI->isConditional()) {
@@ -754,7 +754,7 @@ bool LoopUnswitch::processCurrentLoop() {
           // We are unswitching ~0 out.
           UnswitchVal = AllOne;
         } else {
-          assert(OpChain == OC_OpChainNone && 
+          assert(OpChain == OC_OpChainNone &&
                  "Expect to unswitch on trivial chain");
           // Do not process same value again and again.
           // At this point we have some cases already unswitched and
@@ -910,6 +910,7 @@ void LoopUnswitch::EmitPreheaderBranchOnCondition(Value *LIC, Constant *Val,
                                                   BranchInst *OldBranch,
                                                   TerminatorInst *TI) {
   assert(OldBranch->isUnconditional() && "Preheader is not split correctly");
+  assert(TrueDest != FalseDest && "Branch targets should be different");
   // Insert a conditional branch on LIC to the two preheaders.  The original
   // code is the true version and the new code is the false version.
   Value *BranchVal = LIC;
@@ -942,9 +943,9 @@ void LoopUnswitch::EmitPreheaderBranchOnCondition(Value *LIC, Constant *Val,
   if (DT) {
     // First, add both successors.
     SmallVector<DominatorTree::UpdateType, 3> Updates;
-    if (TrueDest != OldBranchParent)
+    if (TrueDest != OldBranchSucc)
       Updates.push_back({DominatorTree::Insert, OldBranchParent, TrueDest});
-    if (FalseDest != OldBranchParent)
+    if (FalseDest != OldBranchSucc)
       Updates.push_back({DominatorTree::Insert, OldBranchParent, FalseDest});
     // If both of the new successors are different from the old one, inform the
     // DT that the edge was deleted.
@@ -1439,11 +1440,11 @@ void LoopUnswitch::RewriteLoopBodyWithConditionConstant(Loop *L, Value *LIC,
         // This in-loop instruction has been simplified w.r.t. its context,
         // i.e. LIC != Val, make sure we propagate its replacement value to
         // all its users.
-        //  
+        //
         // We can not yet delete UI, the LIC user, yet, because that would invalidate
         // the LIC->users() iterator !. However, we can make this instruction
         // dead by replacing all its users and push it onto the worklist so that
-        // it can be properly deleted and its operands simplified. 
+        // it can be properly deleted and its operands simplified.
         UI->replaceAllUsesWith(Replacement);
       }
     }
@@ -1608,7 +1609,7 @@ Value *LoopUnswitch::SimplifyInstructionWithNotEqual(Instruction *Inst,
       LLVMContext &Ctx = Inst->getContext();
       if (CI->getPredicate() == CmpInst::ICMP_EQ)
         return ConstantInt::getFalse(Ctx);
-      else 
+      else
         return ConstantInt::getTrue(Ctx);
      }
   }

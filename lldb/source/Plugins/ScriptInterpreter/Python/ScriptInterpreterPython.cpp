@@ -347,6 +347,71 @@ const char *ScriptInterpreterPython::GetPluginDescriptionStatic() {
   return "Embedded Python interpreter";
 }
 
+void ScriptInterpreterPython::ComputePythonDirForApple(
+    llvm::SmallVectorImpl<char> &path) {
+  auto style = llvm::sys::path::Style::posix;
+
+  llvm::StringRef path_ref(path.begin(), path.size());
+  auto rbegin = llvm::sys::path::rbegin(path_ref, style);
+  auto rend = llvm::sys::path::rend(path_ref);
+  auto framework = std::find(rbegin, rend, "LLDB.framework");
+  if (framework == rend) {
+    ComputePythonDirForPosix(path);
+    return;
+  }
+  path.resize(framework - rend);
+  llvm::sys::path::append(path, style, "LLDB.framework", "Resources", "Python");
+}
+
+void ScriptInterpreterPython::ComputePythonDirForPosix(
+    llvm::SmallVectorImpl<char> &path) {
+  auto style = llvm::sys::path::Style::posix;
+#if defined(LLDB_PYTHON_RELATIVE_LIBDIR)
+  // Build the path by backing out of the lib dir, then building with whatever
+  // the real python interpreter uses.  (e.g. lib for most, lib64 on RHEL
+  // x86_64).
+  llvm::sys::path::remove_filename(path, style);
+  llvm::sys::path::append(path, style, LLDB_PYTHON_RELATIVE_LIBDIR);
+#else
+  llvm::sys::path::append(path, style,
+                          "python" + llvm::Twine(PY_MAJOR_VERSION) + "." +
+                              llvm::Twine(PY_MINOR_VERSION),
+                          "site-packages");
+#endif
+}
+
+void ScriptInterpreterPython::ComputePythonDirForWindows(
+    llvm::SmallVectorImpl<char> &path) {
+  auto style = llvm::sys::path::Style::windows;
+  llvm::sys::path::remove_filename(path, style);
+  llvm::sys::path::append(path, style, "lib", "site-packages");
+
+  // This will be injected directly through FileSpec.GetDirectory().SetString(),
+  // so we need to normalize manually.
+  std::replace(path.begin(), path.end(), '\\', '/');
+}
+
+FileSpec ScriptInterpreterPython::GetPythonDir() {
+  static FileSpec g_spec = []() {
+    FileSpec spec = HostInfo::GetShlibDir();
+    if (!spec)
+      return FileSpec();
+    llvm::SmallString<64> path;
+    spec.GetPath(path);
+
+#if defined(__APPLE__)
+    ComputePythonDirForApple(path);
+#elif defined(_WIN32)
+    ComputePythonDirForWindows(path);
+#else
+    ComputePythonDirForPosix(path);
+#endif
+    spec.GetDirectory().SetString(path);
+    return spec;
+  }();
+  return g_spec;
+}
+
 lldb_private::ConstString ScriptInterpreterPython::GetPluginName() {
   return GetPluginNameStatic();
 }
@@ -686,12 +751,14 @@ static void ReadThreadBytesReceived(void *baton, const void *src,
 }
 
 bool ScriptInterpreterPython::ExecuteOneLine(
-    const char *command, CommandReturnObject *result,
+    llvm::StringRef command, CommandReturnObject *result,
     const ExecuteScriptOptions &options) {
+  std::string command_str = command.str();
+
   if (!m_valid_session)
     return false;
 
-  if (command && command[0]) {
+  if (!command.empty()) {
     // We want to call run_one_line, passing in the dictionary and the command
     // string.  We cannot do this through PyRun_SimpleString here because the
     // command string may contain escaped characters, and putting it inside
@@ -790,7 +857,7 @@ bool ScriptInterpreterPython::ExecuteOneLine(
           if (PyCallable_Check(m_run_one_line_function.get())) {
             PythonObject pargs(
                 PyRefType::Owned,
-                Py_BuildValue("(Os)", session_dict.get(), command));
+                Py_BuildValue("(Os)", session_dict.get(), command_str.c_str()));
             if (pargs.IsValid()) {
               PythonObject return_value(
                   PyRefType::Owned,
@@ -829,9 +896,10 @@ bool ScriptInterpreterPython::ExecuteOneLine(
       return true;
 
     // The one-liner failed.  Append the error message.
-    if (result)
+    if (result) {
       result->AppendErrorWithFormat(
-          "python failed attempting to evaluate '%s'\n", command);
+          "python failed attempting to evaluate '%s'\n", command_str.c_str());
+    }
     return false;
   }
 
@@ -956,7 +1024,7 @@ bool ScriptInterpreterPython::Interrupt() {
   return false;
 }
 bool ScriptInterpreterPython::ExecuteOneLineWithReturn(
-    const char *in_string, ScriptInterpreter::ScriptReturnType return_type,
+    llvm::StringRef in_string, ScriptInterpreter::ScriptReturnType return_type,
     void *ret_value, const ExecuteScriptOptions &options) {
 
   Locker locker(this, ScriptInterpreterPython::Locker::AcquireLock |
@@ -991,116 +1059,111 @@ bool ScriptInterpreterPython::ExecuteOneLineWithReturn(
   if (py_error.IsValid())
     PyErr_Clear();
 
-  if (in_string != nullptr) {
-    { // scope for PythonInputReaderManager
-      // PythonInputReaderManager py_input(options.GetEnableIO() ? this : NULL);
-      py_return.Reset(
-          PyRefType::Owned,
-          PyRun_String(in_string, Py_eval_input, globals.get(), locals.get()));
-      if (!py_return.IsValid()) {
-        py_error.Reset(PyRefType::Borrowed, PyErr_Occurred());
-        if (py_error.IsValid())
-          PyErr_Clear();
+  std::string as_string = in_string.str();
+  { // scope for PythonInputReaderManager
+    // PythonInputReaderManager py_input(options.GetEnableIO() ? this : NULL);
+    py_return.Reset(PyRefType::Owned,
+                    PyRun_String(as_string.c_str(), Py_eval_input,
+                                 globals.get(), locals.get()));
+    if (!py_return.IsValid()) {
+      py_error.Reset(PyRefType::Borrowed, PyErr_Occurred());
+      if (py_error.IsValid())
+        PyErr_Clear();
 
-        py_return.Reset(PyRefType::Owned,
-                        PyRun_String(in_string, Py_single_input, globals.get(),
-                                     locals.get()));
-      }
+      py_return.Reset(PyRefType::Owned,
+                      PyRun_String(as_string.c_str(), Py_single_input,
+                                   globals.get(), locals.get()));
+    }
+  }
+
+  if (py_return.IsValid()) {
+    switch (return_type) {
+    case eScriptReturnTypeCharPtr: // "char *"
+    {
+      const char format[3] = "s#";
+      success = PyArg_Parse(py_return.get(), format, (char **)ret_value);
+      break;
+    }
+    case eScriptReturnTypeCharStrOrNone: // char* or NULL if py_return ==
+                                         // Py_None
+    {
+      const char format[3] = "z";
+      success = PyArg_Parse(py_return.get(), format, (char **)ret_value);
+      break;
+    }
+    case eScriptReturnTypeBool: {
+      const char format[2] = "b";
+      success = PyArg_Parse(py_return.get(), format, (bool *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeShortInt: {
+      const char format[2] = "h";
+      success = PyArg_Parse(py_return.get(), format, (short *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeShortIntUnsigned: {
+      const char format[2] = "H";
+      success =
+          PyArg_Parse(py_return.get(), format, (unsigned short *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeInt: {
+      const char format[2] = "i";
+      success = PyArg_Parse(py_return.get(), format, (int *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeIntUnsigned: {
+      const char format[2] = "I";
+      success = PyArg_Parse(py_return.get(), format, (unsigned int *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeLongInt: {
+      const char format[2] = "l";
+      success = PyArg_Parse(py_return.get(), format, (long *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeLongIntUnsigned: {
+      const char format[2] = "k";
+      success =
+          PyArg_Parse(py_return.get(), format, (unsigned long *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeLongLong: {
+      const char format[2] = "L";
+      success = PyArg_Parse(py_return.get(), format, (long long *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeLongLongUnsigned: {
+      const char format[2] = "K";
+      success =
+          PyArg_Parse(py_return.get(), format, (unsigned long long *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeFloat: {
+      const char format[2] = "f";
+      success = PyArg_Parse(py_return.get(), format, (float *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeDouble: {
+      const char format[2] = "d";
+      success = PyArg_Parse(py_return.get(), format, (double *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeChar: {
+      const char format[2] = "c";
+      success = PyArg_Parse(py_return.get(), format, (char *)ret_value);
+      break;
+    }
+    case eScriptReturnTypeOpaqueObject: {
+      success = true;
+      PyObject *saved_value = py_return.get();
+      Py_XINCREF(saved_value);
+      *((PyObject **)ret_value) = saved_value;
+      break;
+    }
     }
 
-    if (py_return.IsValid()) {
-      switch (return_type) {
-      case eScriptReturnTypeCharPtr: // "char *"
-      {
-        const char format[3] = "s#";
-        success = PyArg_Parse(py_return.get(), format, (char **)ret_value);
-        break;
-      }
-      case eScriptReturnTypeCharStrOrNone: // char* or NULL if py_return ==
-                                           // Py_None
-        {
-          const char format[3] = "z";
-          success = PyArg_Parse(py_return.get(), format, (char **)ret_value);
-          break;
-        }
-      case eScriptReturnTypeBool: {
-        const char format[2] = "b";
-        success = PyArg_Parse(py_return.get(), format, (bool *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeShortInt: {
-        const char format[2] = "h";
-        success = PyArg_Parse(py_return.get(), format, (short *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeShortIntUnsigned: {
-        const char format[2] = "H";
-        success =
-            PyArg_Parse(py_return.get(), format, (unsigned short *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeInt: {
-        const char format[2] = "i";
-        success = PyArg_Parse(py_return.get(), format, (int *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeIntUnsigned: {
-        const char format[2] = "I";
-        success =
-            PyArg_Parse(py_return.get(), format, (unsigned int *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeLongInt: {
-        const char format[2] = "l";
-        success = PyArg_Parse(py_return.get(), format, (long *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeLongIntUnsigned: {
-        const char format[2] = "k";
-        success =
-            PyArg_Parse(py_return.get(), format, (unsigned long *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeLongLong: {
-        const char format[2] = "L";
-        success = PyArg_Parse(py_return.get(), format, (long long *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeLongLongUnsigned: {
-        const char format[2] = "K";
-        success = PyArg_Parse(py_return.get(), format,
-                              (unsigned long long *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeFloat: {
-        const char format[2] = "f";
-        success = PyArg_Parse(py_return.get(), format, (float *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeDouble: {
-        const char format[2] = "d";
-        success = PyArg_Parse(py_return.get(), format, (double *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeChar: {
-        const char format[2] = "c";
-        success = PyArg_Parse(py_return.get(), format, (char *)ret_value);
-        break;
-      }
-      case eScriptReturnTypeOpaqueObject: {
-        success = true;
-        PyObject *saved_value = py_return.get();
-        Py_XINCREF(saved_value);
-        *((PyObject **)ret_value) = saved_value;
-        break;
-      }
-      }
-
-      if (success)
-        ret_success = true;
-      else
-        ret_success = false;
-    }
+    ret_success = success;
   }
 
   py_error.Reset(PyRefType::Borrowed, PyErr_Occurred());
@@ -2714,7 +2777,7 @@ ScriptInterpreterPython::SynchronicityHandler::~SynchronicityHandler() {
 }
 
 bool ScriptInterpreterPython::RunScriptBasedCommand(
-    const char *impl_function, const char *args,
+    const char *impl_function, llvm::StringRef args,
     ScriptedCommandSynchronicity synchronicity,
     lldb_private::CommandReturnObject &cmd_retobj, Status &error,
     const lldb_private::ExecutionContext &exe_ctx) {
@@ -2748,9 +2811,10 @@ bool ScriptInterpreterPython::RunScriptBasedCommand(
 
     SynchronicityHandler synch_handler(debugger_sp, synchronicity);
 
-    ret_val =
-        g_swig_call_command(impl_function, m_dictionary_name.c_str(),
-                            debugger_sp, args, cmd_retobj, exe_ctx_ref_sp);
+    std::string args_str = args.str();
+    ret_val = g_swig_call_command(impl_function, m_dictionary_name.c_str(),
+                                  debugger_sp, args_str.c_str(), cmd_retobj,
+                                  exe_ctx_ref_sp);
   }
 
   if (!ret_val)
@@ -2762,7 +2826,7 @@ bool ScriptInterpreterPython::RunScriptBasedCommand(
 }
 
 bool ScriptInterpreterPython::RunScriptBasedCommand(
-    StructuredData::GenericSP impl_obj_sp, const char *args,
+    StructuredData::GenericSP impl_obj_sp, llvm::StringRef args,
     ScriptedCommandSynchronicity synchronicity,
     lldb_private::CommandReturnObject &cmd_retobj, Status &error,
     const lldb_private::ExecutionContext &exe_ctx) {
@@ -2796,8 +2860,10 @@ bool ScriptInterpreterPython::RunScriptBasedCommand(
 
     SynchronicityHandler synch_handler(debugger_sp, synchronicity);
 
+    std::string args_str = args.str();
     ret_val = g_swig_call_command_object(impl_obj_sp->GetValue(), debugger_sp,
-                                         args, cmd_retobj, exe_ctx_ref_sp);
+                                         args_str.c_str(), cmd_retobj,
+                                         exe_ctx_ref_sp);
   }
 
   if (!ret_val)
@@ -3094,14 +3160,13 @@ void ScriptInterpreterPython::InitializePrivate() {
   PyRun_SimpleString("import sys");
   AddToSysPath(AddLocation::End, ".");
 
-  FileSpec file_spec;
   // Don't denormalize paths when calling file_spec.GetPath().  On platforms
   // that use a backslash as the path separator, this will result in executing
   // python code containing paths with unescaped backslashes.  But Python also
   // accepts forward slashes, so to make life easier we just use that.
-  if (HostInfo::GetLLDBPath(ePathTypePythonDir, file_spec))
+  if (FileSpec file_spec = GetPythonDir())
     AddToSysPath(AddLocation::Beginning, file_spec.GetPath(false));
-  if (HostInfo::GetLLDBPath(ePathTypeLLDBShlibDir, file_spec))
+  if (FileSpec file_spec = HostInfo::GetShlibDir())
     AddToSysPath(AddLocation::Beginning, file_spec.GetPath(false));
 
   PyRun_SimpleString("sys.dont_write_bytecode = 1; import "
@@ -3127,30 +3192,20 @@ void ScriptInterpreterPython::AddToSysPath(AddLocation location,
   PyRun_SimpleString(statement.c_str());
 }
 
-// void
-// ScriptInterpreterPython::Terminate ()
-//{
-//    // We are intentionally NOT calling Py_Finalize here (this would be the
-//    logical place to call it).  Calling
-//    // Py_Finalize here causes test suite runs to seg fault:  The test suite
-//    runs in Python.  It registers
-//    // SBDebugger::Terminate to be called 'at_exit'.  When the test suite
-//    Python harness finishes up, it calls
-//    // Py_Finalize, which calls all the 'at_exit' registered functions.
-//    SBDebugger::Terminate calls Debugger::Terminate,
-//    // which calls lldb::Terminate, which calls ScriptInterpreter::Terminate,
-//    which calls
-//    // ScriptInterpreterPython::Terminate.  So if we call Py_Finalize here, we
-//    end up with Py_Finalize being called from
-//    // within Py_Finalize, which results in a seg fault.
-//    //
-//    // Since this function only gets called when lldb is shutting down and
-//    going away anyway, the fact that we don't
-//    // actually call Py_Finalize should not cause any problems (everything
-//    should shut down/go away anyway when the
-//    // process exits).
-//    //
-////    Py_Finalize ();
-//}
+// We are intentionally NOT calling Py_Finalize here (this would be the logical
+// place to call it).  Calling Py_Finalize here causes test suite runs to seg
+// fault:  The test suite runs in Python.  It registers SBDebugger::Terminate to
+// be called 'at_exit'.  When the test suite Python harness finishes up, it
+// calls Py_Finalize, which calls all the 'at_exit' registered functions.
+// SBDebugger::Terminate calls Debugger::Terminate, which calls lldb::Terminate,
+// which calls ScriptInterpreter::Terminate, which calls
+// ScriptInterpreterPython::Terminate.  So if we call Py_Finalize here, we end
+// up with Py_Finalize being called from within Py_Finalize, which results in a
+// seg fault. Since this function only gets called when lldb is shutting down
+// and going away anyway, the fact that we don't actually call Py_Finalize
+// should not cause any problems (everything should shut down/go away anyway
+// when the process exits).
+//
+// void ScriptInterpreterPython::Terminate() { Py_Finalize (); }
 
-#endif // #ifdef LLDB_DISABLE_PYTHON
+#endif // LLDB_DISABLE_PYTHON

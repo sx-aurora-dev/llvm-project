@@ -280,14 +280,14 @@ private:
   llvm::LLVMContext &VMContext;
 
   std::unique_ptr<CodeGenTBAA> TBAA;
-  
+
   mutable std::unique_ptr<TargetCodeGenInfo> TheTargetCodeGenInfo;
-  
+
   // This should not be moved earlier, since its initialization depends on some
   // of the previous reference members being already initialized and also checks
   // if TheTargetCodeGenInfo is NULL
   CodeGenTypes Types;
- 
+
   /// Holds information about C++ vtables.
   CodeGenVTables VTables;
 
@@ -366,6 +366,13 @@ private:
   llvm::MapVector<GlobalDecl, StringRef> MangledDeclNames;
   llvm::StringMap<GlobalDecl, llvm::BumpPtrAllocator> Manglings;
 
+  // An ordered map of canonical GlobalDecls paired with the cpu-index for
+  // cpu-specific name manglings.
+  llvm::MapVector<std::pair<GlobalDecl, unsigned>, StringRef>
+      CPUSpecificMangledDeclNames;
+  llvm::StringMap<std::pair<GlobalDecl, unsigned>, llvm::BumpPtrAllocator>
+      CPUSpecificManglings;
+
   /// Global annotations.
   std::vector<llvm::Constant*> Annotations;
 
@@ -408,7 +415,7 @@ private:
   /// order. Once the decl is emitted, the index is replaced with ~0U to ensure
   /// that we don't re-emit the initializer.
   llvm::DenseMap<const Decl*, unsigned> DelayedCXXInitPosition;
-  
+
   typedef std::pair<OrderGlobalInits, llvm::Function*> GlobalInitData;
 
   struct GlobalInitPriorityCmp {
@@ -445,7 +452,7 @@ private:
   /// The type used to describe the state of a fast enumeration in
   /// Objective-C's for..in loop.
   QualType ObjCFastEnumerationStateType;
-  
+
   /// @}
 
   /// Lazily create the Objective-C runtime
@@ -503,6 +510,7 @@ private:
   /// MDNodes.
   typedef llvm::DenseMap<QualType, llvm::Metadata *> MetadataTypeMap;
   MetadataTypeMap MetadataIdMap;
+  MetadataTypeMap VirtualMetadataIdMap;
   MetadataTypeMap GeneralizedMetadataIdMap;
 
 public:
@@ -568,7 +576,7 @@ public:
   llvm::Constant *getStaticLocalDeclAddress(const VarDecl *D) {
     return StaticLocalDeclMap[D];
   }
-  void setStaticLocalDeclAddress(const VarDecl *D, 
+  void setStaticLocalDeclAddress(const VarDecl *D,
                                  llvm::Constant *C) {
     StaticLocalDeclMap[D] = C;
   }
@@ -580,7 +588,7 @@ public:
   llvm::GlobalVariable *getStaticLocalDeclGuardAddress(const VarDecl *D) {
     return StaticLocalDeclGuardMap[D];
   }
-  void setStaticLocalDeclGuardAddress(const VarDecl *D, 
+  void setStaticLocalDeclGuardAddress(const VarDecl *D,
                                       llvm::GlobalVariable *C) {
     StaticLocalDeclGuardMap[D] = C;
   }
@@ -641,10 +649,10 @@ public:
 
   bool shouldUseTBAA() const { return TBAA != nullptr; }
 
-  const TargetCodeGenInfo &getTargetCodeGenInfo(); 
-  
+  const TargetCodeGenInfo &getTargetCodeGenInfo();
+
   CodeGenTypes &getTypes() { return Types; }
- 
+
   CodeGenVTables &getVTables() { return VTables; }
 
   ItaniumVTableContext &getItaniumVTableContext() {
@@ -844,7 +852,7 @@ public:
 
   /// Fetches the global unique block count.
   int getUniqueBlockCount() { return ++Block.GlobalUniqueCount; }
-  
+
   /// Fetches the type of a generic block descriptor.
   llvm::Type *getBlockDescriptorType();
 
@@ -863,7 +871,7 @@ public:
   /// Notes that BE's global block is available via Addr. Asserts that BE
   /// isn't already emitted.
   void setAddrOfGlobalBlock(const BlockExpr *BE, llvm::Constant *Addr);
-  
+
   /// Return a pointer to a constant CFString object for the given string.
   ConstantAddress GetAddrOfConstantCFString(const StringLiteral *Literal);
 
@@ -1131,7 +1139,7 @@ public:
 
   /// Return the store size, in character units, of the given LLVM type.
   CharUnits GetTargetTypeStoreSize(llvm::Type *Ty) const;
-  
+
   /// Returns LLVM linkage for a declarator.
   llvm::GlobalValue::LinkageTypes
   getLLVMLinkageForDeclarator(const DeclaratorDecl *D, GVALinkage Linkage,
@@ -1193,7 +1201,6 @@ public:
   /// are emitted lazily.
   void EmitGlobal(GlobalDecl D);
 
-  bool TryEmitDefinitionAsAlias(GlobalDecl Alias, GlobalDecl Target);
   bool TryEmitBaseDestructorAsAlias(const CXXDestructorDecl *D);
 
   llvm::GlobalValue *GetGlobalValue(StringRef Ref);
@@ -1233,13 +1240,18 @@ public:
   /// internal identifiers).
   llvm::Metadata *CreateMetadataIdentifierForType(QualType T);
 
+  /// Create a metadata identifier that is intended to be used to check virtual
+  /// calls via a member function pointer.
+  llvm::Metadata *CreateMetadataIdentifierForVirtualMemPtrType(QualType T);
+
   /// Create a metadata identifier for the generalization of the given type.
   /// This may either be an MDString (for external identifiers) or a distinct
   /// unnamed MDNode (for internal identifiers).
   llvm::Metadata *CreateMetadataIdentifierGeneralized(QualType T);
 
   /// Create and attach type metadata to the given function.
-  void CreateFunctionTypeMetadata(const FunctionDecl *FD, llvm::Function *F);
+  void CreateFunctionTypeMetadataForIcall(const FunctionDecl *FD,
+                                          llvm::Function *F);
 
   /// Returns whether this module needs the "all-vtables" type identifier.
   bool NeedAllVtablesTypeId() const;
@@ -1247,6 +1259,14 @@ public:
   /// Create and attach type metadata for the given vtable.
   void AddVTableTypeMetadata(llvm::GlobalVariable *VTable, CharUnits Offset,
                              const CXXRecordDecl *RD);
+
+  /// Return a vector of most-base classes for RD. This is used to implement
+  /// control flow integrity checks for member function pointers.
+  ///
+  /// A most-base class of a class C is defined as a recursive base class of C,
+  /// including C itself, that does not have any bases.
+  std::vector<const CXXRecordDecl *>
+  getMostBaseClasses(const CXXRecordDecl *RD);
 
   /// Get the declaration of std::terminate for the platform.
   llvm::Constant *getTerminateFn();
@@ -1270,7 +1290,6 @@ private:
 
   llvm::Constant *GetOrCreateMultiVersionIFunc(GlobalDecl GD,
                                                llvm::Type *DeclTy,
-                                               StringRef MangledName,
                                                const FunctionDecl *FD);
   void UpdateMultiVersionNames(GlobalDecl GD, const FunctionDecl *FD);
 
@@ -1294,9 +1313,10 @@ private:
   void EmitGlobalVarDefinition(const VarDecl *D, bool IsTentative = false);
   void EmitAliasDefinition(GlobalDecl GD);
   void emitIFuncDefinition(GlobalDecl GD);
+  void emitCPUDispatchDefinition(GlobalDecl GD);
   void EmitObjCPropertyImplementations(const ObjCImplementationDecl *D);
   void EmitObjCIvarInitializations(ObjCImplementationDecl *D);
-  
+
   // C++ related functions.
 
   void EmitDeclContext(const DeclContext *DC);
@@ -1409,6 +1429,9 @@ private:
   void ConstructDefaultFnAttrList(StringRef Name, bool HasOptnone,
                                   bool AttrOnCallSite,
                                   llvm::AttrBuilder &FuncAttrs);
+
+  llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
+                                               StringRef Suffix);
 };
 
 }  // end namespace CodeGen

@@ -90,3 +90,61 @@ eor     z31.b, p7/m, z31.b, z31.b
 // CHECK-ENCODING: [0xff,0x1f,0x19,0x04]
 // CHECK-ERROR: instruction requires: sve
 // CHECK-UNKNOWN: ff 1f 19 04 <unknown>
+
+eor     p0.b, p0/z, p0.b, p1.b
+// CHECK-INST: eor     p0.b, p0/z, p0.b, p1.b
+// CHECK-ENCODING: [0x00,0x42,0x01,0x25]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: 00 42 01 25 <unknown>
+
+eor     p0.b, p0/z, p0.b, p0.b
+// CHECK-INST: not     p0.b, p0/z, p0.b
+// CHECK-ENCODING: [0x00,0x42,0x00,0x25]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: 00 42 00 25 <unknown>
+
+eor     p15.b, p15/z, p15.b, p15.b
+// CHECK-INST: not     p15.b, p15/z, p15.b
+// CHECK-ENCODING: [0xef,0x7f,0x0f,0x25]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: ef 7f 0f 25 <unknown>
+
+
+// --------------------------------------------------------------------------//
+// Test compatibility with MOVPRFX instruction.
+
+movprfx z4.b, p7/z, z6.b
+// CHECK-INST: movprfx	z4.b, p7/z, z6.b
+// CHECK-ENCODING: [0xc4,0x3c,0x10,0x04]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: c4 3c 10 04 <unknown>
+
+eor     z4.b, p7/m, z4.b, z31.b
+// CHECK-INST: eor	z4.b, p7/m, z4.b, z31.b
+// CHECK-ENCODING: [0xe4,0x1f,0x19,0x04]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: e4 1f 19 04 <unknown>
+
+movprfx z4, z6
+// CHECK-INST: movprfx	z4, z6
+// CHECK-ENCODING: [0xc4,0xbc,0x20,0x04]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: c4 bc 20 04 <unknown>
+
+eor     z4.b, p7/m, z4.b, z31.b
+// CHECK-INST: eor	z4.b, p7/m, z4.b, z31.b
+// CHECK-ENCODING: [0xe4,0x1f,0x19,0x04]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: e4 1f 19 04 <unknown>
+
+movprfx z0, z7
+// CHECK-INST: movprfx	z0, z7
+// CHECK-ENCODING: [0xe0,0xbc,0x20,0x04]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: e0 bc 20 04 <unknown>
+
+eor     z0.d, z0.d, #0x6
+// CHECK-INST: eor	z0.d, z0.d, #0x6
+// CHECK-ENCODING: [0x20,0xf8,0x43,0x05]
+// CHECK-ERROR: instruction requires: sve
+// CHECK-UNKNOWN: 20 f8 43 05 <unknown>

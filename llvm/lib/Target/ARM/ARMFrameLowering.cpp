@@ -372,7 +372,7 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
   // Debug location must be unknown since the first debug location is used
   // to determine the end of the prologue.
   DebugLoc dl;
-  
+
   unsigned FramePtr = RegInfo->getFrameRegister(MF);
 
   // Determine the sizes of each callee-save spill areas and record which frame
@@ -2148,8 +2148,10 @@ void ARMFrameLowering::adjustForSegmentedStacks(
 
   uint64_t StackSize = MFI.getStackSize();
 
-  // Do not generate a prologue for functions with a stack of size zero
-  if (StackSize == 0)
+  // Do not generate a prologue for leaf functions with a stack of size zero.
+  // For non-leaf functions we have to allow for the possibility that the
+  // call is to a non-split function, as in PR37807.
+  if (StackSize == 0 && !MFI.hasTailCall())
     return;
 
   // Use R4 and R5 as scratch registers.

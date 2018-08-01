@@ -55,7 +55,6 @@ def ZnFPU2 : ProcResource<1>;
 def ZnFPU3 : ProcResource<1>;
 
 // FPU grouping
-def ZnFPU     : ProcResGroup<[ZnFPU0, ZnFPU1, ZnFPU2, ZnFPU3]>;
 def ZnFPU013  : ProcResGroup<[ZnFPU0, ZnFPU1, ZnFPU3]>;
 def ZnFPU01   : ProcResGroup<[ZnFPU0, ZnFPU1]>;
 def ZnFPU12   : ProcResGroup<[ZnFPU1, ZnFPU2]>;
@@ -90,6 +89,32 @@ def ZnDivider : ProcResource<1>;
 
 // 4 Cycles load-to use Latency is captured
 def : ReadAdvance<ReadAfterLd, 4>;
+
+// The Integer PRF for Zen is 168 entries, and it holds the architectural and
+// speculative version of the 64-bit integer registers.
+// Reference: "Software Optimization Guide for AMD Family 17h Processors"
+def ZnIntegerPRF : RegisterFile<168, [GR64, CCR]>;
+
+// 36 Entry (9x4 entries) floating-point Scheduler
+def ZnFPU     : ProcResGroup<[ZnFPU0, ZnFPU1, ZnFPU2, ZnFPU3]> {
+let BufferSize=36;
+}
+
+// The Zen FP Retire Queue renames SIMD and FP uOps onto a pool of 160 128-bit
+// registers. Operations on 256-bit data types are cracked into two COPs.
+// Reference: "Software Optimization Guide for AMD Family 17h Processors"
+def ZnFpuPRF: RegisterFile<160, [VR64, VR128, VR256], [1, 1, 2]>;
+
+// The unit can track up to 192 macro ops in-flight.
+// The retire unit handles in-order commit of up to 8 macro ops per cycle.
+// Reference: "Software Optimization Guide for AMD Family 17h Processors"
+// To be noted, the retire unit is shared between integer and FP ops.
+// In SMT mode it is 96 entry per thread. But, we do not use the conservative
+// value here because there is currently no way to fully mode the SMT mode,
+// so there is no point in trying.
+def ZnRCU : RetireControlUnit<192, 8>;
+
+// FIXME: there are 72 read buffers and 44 write buffers.
 
 // (a folded load is an instruction that loads and does some operation)
 // Ex: ADDPD xmm,[mem]-> This instruction has two micro-ops
@@ -154,7 +179,17 @@ defm : ZnWriteResPair<WriteALU,   [ZnALU], 1>;
 defm : ZnWriteResPair<WriteADC,   [ZnALU], 1>;
 defm : ZnWriteResPair<WriteIMul,   [ZnALU1, ZnMultiplier], 4>;
 defm : ZnWriteResPair<WriteIMul64, [ZnALU1, ZnMultiplier], 4, [1,1], 2>;
+
+defm : X86WriteRes<WriteBSWAP32, [ZnALU], 1, [4], 1>;
+defm : X86WriteRes<WriteBSWAP64, [ZnALU], 1, [4], 1>;
+
 defm : ZnWriteResPair<WriteShift, [ZnALU], 1>;
+
+defm : X86WriteRes<WriteSHDrri, [ZnALU], 1, [1], 1>;
+defm : X86WriteResUnsupported<WriteSHDrrcl>;
+defm : X86WriteResUnsupported<WriteSHDmri>;
+defm : X86WriteResUnsupported<WriteSHDmrcl>;
+
 defm : ZnWriteResPair<WriteJump,  [ZnALU], 1>;
 defm : ZnWriteResFpuPair<WriteCRC32, [ZnFPU0], 3>;
 
@@ -162,12 +197,14 @@ defm : ZnWriteResPair<WriteCMOV,   [ZnALU], 1>;
 defm : ZnWriteResPair<WriteCMOV2,  [ZnALU], 1>;
 def  : WriteRes<WriteSETCC,  [ZnALU]>;
 def  : WriteRes<WriteSETCCStore,  [ZnALU, ZnAGU]>;
+defm : X86WriteRes<WriteLAHFSAHF, [ZnALU], 2, [1], 2>;
 
 // Bit counts.
-defm : ZnWriteResPair<WriteBitScan, [ZnALU], 3>;
-defm : ZnWriteResPair<WriteLZCNT,   [ZnALU], 2>;
-defm : ZnWriteResPair<WriteTZCNT,   [ZnALU], 2>;
-defm : ZnWriteResPair<WritePOPCNT,  [ZnALU], 1>;
+defm : ZnWriteResPair<WriteBSF, [ZnALU], 3>;
+defm : ZnWriteResPair<WriteBSR, [ZnALU], 3>;
+defm : ZnWriteResPair<WriteLZCNT,          [ZnALU], 2>;
+defm : ZnWriteResPair<WriteTZCNT,          [ZnALU], 2>;
+defm : ZnWriteResPair<WritePOPCNT,         [ZnALU], 1>;
 
 // Treat misc copies as a move.
 def : InstRW<[WriteMove], (instrs COPY)>;
@@ -508,19 +545,6 @@ def : InstRW<[ZnWritePushA], (instregex "PUSHA(16|32)")>;
 
 //LAHF
 def : InstRW<[WriteMicrocoded], (instrs LAHF)>;
-
-// SAHF.
-def ZnWriteSAHF : SchedWriteRes<[ZnALU]> {
-  let Latency = 2;
-  let NumMicroOps = 2;
-}
-def : InstRW<[ZnWriteSAHF], (instrs SAHF)>;
-
-// BSWAP.
-def ZnWriteBSwap : SchedWriteRes<[ZnALU]> {
-  let ResourceCycles = [4];
-}
-def : InstRW<[ZnWriteBSwap], (instregex "BSWAP")>;
 
 // MOVBE.
 // r,m.

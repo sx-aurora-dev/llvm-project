@@ -661,5 +661,7 @@ TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
   if (!Target->validateTarget(Diags))
     return nullptr;
 
+  Target->CheckFixedPointBits();
+
   return Target.release();
 }

@@ -351,7 +351,7 @@ protected:
   /// block.  This is the same as using operator[] on this class.  The result
   /// may (but is not required to) be null for a forward (backwards)
   /// statically unreachable block.
-  DomTreeNodeBase<NodeT> *getNode(NodeT *BB) const {
+  DomTreeNodeBase<NodeT> *getNode(const NodeT *BB) const {
     auto I = DomTreeNodes.find(BB);
     if (I != DomTreeNodes.end())
       return I->second.get();
@@ -359,7 +359,9 @@ protected:
   }
 
   /// See getNode.
-  DomTreeNodeBase<NodeT> *operator[](NodeT *BB) const { return getNode(BB); }
+  DomTreeNodeBase<NodeT> *operator[](const NodeT *BB) const {
+    return getNode(BB);
+  }
 
   /// getRootNode - This returns the entry node for the CFG of the function.  If
   /// this tree represents the post-dominance relations for a function, however,
@@ -528,11 +530,10 @@ protected:
   /// CFG about its children and inverse children. This implies that deletions
   /// of CFG edges must not delete the CFG nodes before calling this function.
   ///
-  /// Batch updates should be generally faster when performing longer sequences
-  /// of updates than calling insertEdge/deleteEdge manually multiple times, as
-  /// it can reorder the updates and remove redundant ones internally.
-  /// The batch updater is also able to detect sequences of zero and exactly one
-  /// update -- it's optimized to do less work in these cases.
+  /// The applyUpdates function can reorder the updates and remove redundant
+  /// ones internally. The batch updater is also able to detect sequences of
+  /// zero and exactly one update -- it's optimized to do less work in these
+  /// cases.
   ///
   /// Note that for postdominators it automatically takes care of applying
   /// updates on reverse edges internally (so there's no need to swap the
@@ -852,10 +853,15 @@ protected:
     assert(isReachableFromEntry(B));
     assert(isReachableFromEntry(A));
 
+    const unsigned ALevel = A->getLevel();
     const DomTreeNodeBase<NodeT> *IDom;
-    while ((IDom = B->getIDom()) != nullptr && IDom != A && IDom != B)
+
+    // Don't walk nodes above A's subtree. When we reach A's level, we must
+    // either find A or be in some other subtree not dominated by A.
+    while ((IDom = B->getIDom()) != nullptr && IDom->getLevel() >= ALevel)
       B = IDom;  // Walk up the tree
-    return IDom != nullptr;
+
+    return B == A;
   }
 
   /// Wipe this tree's state without releasing any resources.

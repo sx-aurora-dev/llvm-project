@@ -432,7 +432,7 @@ HexagonTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
   }
 
-  if (NeedsArgAlign && Subtarget.hasV60TOps()) {
+  if (NeedsArgAlign && Subtarget.hasV60Ops()) {
     LLVM_DEBUG(dbgs() << "Function needs byte stack align due to call args\n");
     unsigned VecAlign = HRI.getSpillAlignment(Hexagon::HvxVRRegClass);
     LargestAlignSeen = std::max(LargestAlignSeen, VecAlign);
@@ -836,7 +836,7 @@ SDValue HexagonTargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
         SDValue Op = N.getOperand(0);
         if (Op.getOpcode() != ISD::AssertSext)
           return false;
-        MVT OrigTy = cast<VTSDNode>(Op.getOperand(1))->getVT().getSimpleVT();
+        EVT OrigTy = cast<VTSDNode>(Op.getOperand(1))->getVT();
         unsigned ThisBW = ty(N).getSizeInBits();
         unsigned OrigBW = OrigTy.getSizeInBits();
         // The type that was sign-extended to get the AssertSext must be
@@ -1225,7 +1225,7 @@ HexagonTargetLowering::HexagonTargetLowering(const TargetMachine &TM,
                                              const HexagonSubtarget &ST)
     : TargetLowering(TM), HTM(static_cast<const HexagonTargetMachine&>(TM)),
       Subtarget(ST) {
-  bool IsV4 = !Subtarget.hasV5TOps();
+  bool IsV4 = !Subtarget.hasV5Ops();
   auto &HRI = *Subtarget.getRegisterInfo();
 
   setPrefLoopAlignment(4);
@@ -1267,7 +1267,7 @@ HexagonTargetLowering::HexagonTargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v4i16, &Hexagon::DoubleRegsRegClass);
   addRegisterClass(MVT::v2i32, &Hexagon::DoubleRegsRegClass);
 
-  if (Subtarget.hasV5TOps()) {
+  if (Subtarget.hasV5Ops()) {
     addRegisterClass(MVT::f32, &Hexagon::IntRegsRegClass);
     addRegisterClass(MVT::f64, &Hexagon::DoubleRegsRegClass);
   }
@@ -1510,11 +1510,11 @@ HexagonTargetLowering::HexagonTargetLowering(const TargetMachine &TM,
 
   // Subtarget-specific operation actions.
   //
-  if (Subtarget.hasV60TOps()) {
+  if (Subtarget.hasV60Ops()) {
     setOperationAction(ISD::ROTL, MVT::i32, Custom);
     setOperationAction(ISD::ROTL, MVT::i64, Custom);
   }
-  if (Subtarget.hasV5TOps()) {
+  if (Subtarget.hasV5Ops()) {
     setOperationAction(ISD::FMA,  MVT::f64, Expand);
     setOperationAction(ISD::FADD, MVT::f64, Expand);
     setOperationAction(ISD::FSUB, MVT::f64, Expand);
@@ -1645,7 +1645,7 @@ HexagonTargetLowering::HexagonTargetLowering(const TargetMachine &TM,
     setLibcallName(RTLIB::DIV_F32, "__hexagon_divsf3");
   }
 
-  if (Subtarget.hasV5TOps()) {
+  if (Subtarget.hasV5Ops()) {
     if (FastMath)
       setLibcallName(RTLIB::SQRT_F32, "__hexagon_fast2_sqrtf");
     else
@@ -2327,7 +2327,9 @@ HexagonTargetLowering::extractVector(SDValue VecV, SDValue IdxV,
     // If the value extracted is a single bit, use tstbit.
     if (ValWidth == 1) {
       SDValue A0 = getInstr(Hexagon::C2_tfrpr, dl, MVT::i32, {VecV}, DAG);
-      return DAG.getNode(HexagonISD::TSTBIT, dl, MVT::i1, A0, IdxV);
+      SDValue M0 = DAG.getConstant(8 / VecWidth, dl, MVT::i32);
+      SDValue I0 = DAG.getNode(ISD::MUL, dl, MVT::i32, IdxV, M0);
+      return DAG.getNode(HexagonISD::TSTBIT, dl, MVT::i1, A0, I0);
     }
 
     // Each bool vector (v2i1, v4i1, v8i1) always occupies 8 bits in
@@ -2925,7 +2927,7 @@ HexagonTargetLowering::getRegForInlineAsmConstraint(
       case 512:
         return {0u, &Hexagon::HvxVRRegClass};
       case 1024:
-        if (Subtarget.hasV60TOps() && Subtarget.useHVX128BOps())
+        if (Subtarget.hasV60Ops() && Subtarget.useHVX128BOps())
           return {0u, &Hexagon::HvxVRRegClass};
         return {0u, &Hexagon::HvxWRRegClass};
       case 2048:
@@ -2944,7 +2946,7 @@ HexagonTargetLowering::getRegForInlineAsmConstraint(
 /// specified FP immediate natively. If false, the legalizer will
 /// materialize the FP immediate as a load from a constant pool.
 bool HexagonTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT) const {
-  return Subtarget.hasV5TOps();
+  return Subtarget.hasV5Ops();
 }
 
 /// isLegalAddressingMode - Return true if the addressing mode represented by

@@ -514,7 +514,7 @@ void MCStreamer::EmitCFIEscape(StringRef Values) {
 
 void MCStreamer::EmitCFIGnuArgsSize(int64_t Size) {
   MCSymbol *Label = EmitCFILabel();
-  MCCFIInstruction Instruction = 
+  MCCFIInstruction Instruction =
     MCCFIInstruction::createGnuArgsSize(Label, Size);
   MCDwarfFrameInfo *CurFrame = getCurrentDwarfFrameInfo();
   if (!CurFrame)
@@ -673,16 +673,31 @@ static MCSection *getWinCFISection(MCContext &Context, unsigned *NextWinCFIID,
     return MainCFISec;
 
   const auto *TextSecCOFF = cast<MCSectionCOFF>(TextSec);
+  auto *MainCFISecCOFF = cast<MCSectionCOFF>(MainCFISec);
   unsigned UniqueID = TextSecCOFF->getOrAssignWinCFISectionID(NextWinCFIID);
 
   // If this section is COMDAT, this unwind section should be COMDAT associative
   // with its group.
   const MCSymbol *KeySym = nullptr;
-  if (TextSecCOFF->getCharacteristics() & COFF::IMAGE_SCN_LNK_COMDAT)
+  if (TextSecCOFF->getCharacteristics() & COFF::IMAGE_SCN_LNK_COMDAT) {
     KeySym = TextSecCOFF->getCOMDATSymbol();
 
-  return Context.getAssociativeCOFFSection(cast<MCSectionCOFF>(MainCFISec),
-                                           KeySym, UniqueID);
+    // In a GNU environment, we can't use associative comdats. Instead, do what
+    // GCC does, which is to make plain comdat selectany section named like
+    // ".[px]data$_Z3foov".
+    if (!Context.getAsmInfo()->hasCOFFAssociativeComdats()) {
+      std::string SectionName =
+          (MainCFISecCOFF->getSectionName() + "$" +
+           TextSecCOFF->getSectionName().split('$').second)
+              .str();
+      return Context.getCOFFSection(
+          SectionName,
+          MainCFISecCOFF->getCharacteristics() | COFF::IMAGE_SCN_LNK_COMDAT,
+          MainCFISecCOFF->getKind(), "", COFF::IMAGE_COMDAT_SELECT_ANY);
+    }
+  }
+
+  return Context.getAssociativeCOFFSection(MainCFISecCOFF, KeySym, UniqueID);
 }
 
 MCSection *MCStreamer::getAssociatedPDataSection(const MCSection *TextSec) {
@@ -814,6 +829,8 @@ void MCStreamer::EmitCOFFSectionIndex(MCSymbol const *Symbol) {
 }
 
 void MCStreamer::EmitCOFFSecRel32(MCSymbol const *Symbol, uint64_t Offset) {}
+
+void MCStreamer::EmitCOFFImgRel32(MCSymbol const *Symbol, int64_t Offset) {}
 
 /// EmitRawText - If this file is backed by an assembly streamer, this dumps
 /// the specified string in the output .s file.  This capability is

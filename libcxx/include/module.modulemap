@@ -264,6 +264,10 @@ module std [system] {
     header "exception"
     export *
   }
+  module filesystem {
+    header "filesystem"
+    export *
+  }
   module forward_list {
     header "forward_list"
     export initializer_list
@@ -482,6 +486,7 @@ module std [system] {
   // FIXME: These should be private.
   module __bit_reference { header "__bit_reference" export * }
   module __debug { header "__debug" export * }
+  module __errc { header "__errc" export * }
   module __functional_base { header "__functional_base" export * }
   module __hash_table { header "__hash_table" export * }
   module __locale { header "__locale" export * }
@@ -556,6 +561,10 @@ module std [system] {
     }
     module set {
       header "experimental/set"
+      export *
+    }
+    module span {
+      header "span"
       export *
     }
     module string {

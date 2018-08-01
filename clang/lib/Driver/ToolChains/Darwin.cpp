@@ -479,6 +479,18 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
+  // Propagate the -moutline flag to the linker in LTO.
+  if (Args.hasFlag(options::OPT_moutline, options::OPT_mno_outline, false)) {
+    if (getMachOToolChain().getMachOArchName(Args) == "arm64") {
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back("-enable-machine-outliner");
+
+      // Outline from linkonceodr functions by default in LTO.
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back("-enable-linkonceodr-outlining");
+    }
+  }
+
   // It seems that the 'e' option is completely ignored for dynamic executables
   // (the default), and with static executables, the last one wins, as expected.
   Args.AddAllArgs(CmdArgs, {options::OPT_d_Flag, options::OPT_s, options::OPT_t,
@@ -904,13 +916,26 @@ unsigned DarwinClang::GetDefaultDwarfVersion() const {
   return 4;
 }
 
+SmallString<128> MachO::runtimeLibDir(bool IsEmbedded) const {
+  SmallString<128> Dir(getDriver().ResourceDir);
+  llvm::sys::path::append(
+      Dir, "lib", IsEmbedded ? "macho_embedded" : "darwin");
+  return Dir;
+}
+
+std::string Darwin::getFileNameForSanitizerLib(StringRef SanitizerName,
+                                              bool Shared) const {
+  return (Twine("libclang_rt.") + SanitizerName + "_" +
+                      getOSLibraryNameSuffix() +
+                      (Shared ? "_dynamic.dylib" : ".a")).str();
+
+}
+
 void MachO::AddLinkRuntimeLib(const ArgList &Args, ArgStringList &CmdArgs,
                               StringRef DarwinLibName,
                               RuntimeLinkOptions Opts) const {
-  SmallString<128> Dir(getDriver().ResourceDir);
-  llvm::sys::path::append(
-      Dir, "lib", (Opts & RLO_IsEmbedded) ? "macho_embedded" : "darwin");
 
+  SmallString<128> Dir = runtimeLibDir(Opts & RLO_IsEmbedded);
   SmallString<128> P(Dir);
   llvm::sys::path::append(P, DarwinLibName);
 
@@ -1019,7 +1044,6 @@ void Darwin::addProfileRTLibs(const ArgList &Args,
   // runtime, automatically export symbols necessary to implement some of the
   // runtime's functionality.
   if (hasExportSymbolDirective(Args)) {
-    addExportedSymbol(CmdArgs, "_VPMergeHook");
     addExportedSymbol(CmdArgs, "___llvm_profile_filename");
     addExportedSymbol(CmdArgs, "___llvm_profile_raw_version");
     addExportedSymbol(CmdArgs, "_lprofCurFilename");
@@ -1031,12 +1055,9 @@ void DarwinClang::AddLinkSanitizerLibArgs(const ArgList &Args,
                                           StringRef Sanitizer,
                                           bool Shared) const {
   auto RLO = RuntimeLinkOptions(RLO_AlwaysLink | (Shared ? RLO_AddRPath : 0U));
-  AddLinkRuntimeLib(Args, CmdArgs,
-                    (Twine("libclang_rt.") + Sanitizer + "_" +
-                     getOSLibraryNameSuffix() +
-                     (Shared ? "_dynamic.dylib" : ".a"))
-                        .str(),
-                    RLO);
+  std::string SanitizerRelFilename =
+      getFileNameForSanitizerLib(Sanitizer, Shared);
+  AddLinkRuntimeLib(Args, CmdArgs, SanitizerRelFilename, RLO);
 }
 
 ToolChain::RuntimeLibType DarwinClang::GetRuntimeLibType(
@@ -1473,10 +1494,16 @@ Optional<DarwinPlatform> inferDeploymentTargetFromSDK(DerivedArgList &Args) {
 std::string getOSVersion(llvm::Triple::OSType OS, const llvm::Triple &Triple,
                          const Driver &TheDriver) {
   unsigned Major, Minor, Micro;
+  llvm::Triple SystemTriple(llvm::sys::getProcessTriple());
   switch (OS) {
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX:
-    if (!Triple.getMacOSXVersion(Major, Minor, Micro))
+    // If there is no version specified on triple, and both host and target are
+    // macos, use the host triple to infer OS version.
+    if (Triple.isMacOSX() && SystemTriple.isMacOSX() &&
+        !Triple.getOSMajorVersion())
+      SystemTriple.getMacOSXVersion(Major, Minor, Micro);
+    else if (!Triple.getMacOSXVersion(Major, Minor, Micro))
       TheDriver.Diag(diag::err_drv_invalid_darwin_version)
           << Triple.getOSName();
     break;
@@ -2268,24 +2295,43 @@ void Darwin::CheckObjCARC() const {
 SanitizerMask Darwin::getSupportedSanitizers() const {
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
-  Res |= SanitizerKind::Address;
-  Res |= SanitizerKind::Leak;
-  Res |= SanitizerKind::Fuzzer;
-  Res |= SanitizerKind::FuzzerNoLink;
-  Res |= SanitizerKind::Function;
-  if (isTargetMacOS()) {
-    if (!isMacosxVersionLT(10, 9))
-      Res |= SanitizerKind::Vptr;
-    Res |= SanitizerKind::SafeStack;
-    if (IsX86_64)
-      Res |= SanitizerKind::Thread;
-  } else if (isTargetIOSSimulator() || isTargetTvOSSimulator()) {
-    if (IsX86_64)
-      Res |= SanitizerKind::Thread;
+
+  {
+    using namespace SanitizerKind;
+    assert(!(Res & (Address | Leak | Fuzzer | FuzzerNoLink | Thread)) &&
+           "Sanitizer is already registered as supported");
   }
+
+  if (sanitizerRuntimeExists("asan"))
+    Res |= SanitizerKind::Address;
+  if (sanitizerRuntimeExists("lsan"))
+    Res |= SanitizerKind::Leak;
+  if (sanitizerRuntimeExists("fuzzer", /*Shared=*/false)) {
+    Res |= SanitizerKind::Fuzzer;
+    Res |= SanitizerKind::FuzzerNoLink;
+  }
+  Res |= SanitizerKind::Function;
+  if (isTargetMacOS() && !isMacosxVersionLT(10, 9))
+    Res |= SanitizerKind::Vptr;
+  if (isTargetMacOS())
+    Res |= SanitizerKind::SafeStack;
+
+  if (sanitizerRuntimeExists("tsan") && IsX86_64 &&
+      (isTargetMacOS() || isTargetIOSSimulator() || isTargetTvOSSimulator()))
+    Res |= SanitizerKind::Thread;
+
   return Res;
 }
 
 void Darwin::printVerboseInfo(raw_ostream &OS) const {
   CudaInstallation.print(OS);
+}
+
+bool Darwin::sanitizerRuntimeExists(StringRef SanitizerName,
+                                    bool Shared) const {
+    std::string RelName = getFileNameForSanitizerLib(SanitizerName, Shared);
+    SmallString<128> Dir = runtimeLibDir();
+    SmallString<128> AbsName(Dir);
+    llvm::sys::path::append(AbsName, RelName);
+    return getVFS().exists(AbsName);
 }
