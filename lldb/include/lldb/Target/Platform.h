@@ -30,6 +30,7 @@
 #include "lldb/Utility/Timeout.h"
 #include "lldb/lldb-private-forward.h"
 #include "lldb/lldb-public.h"
+#include "llvm/Support/VersionTuple.h"
 
 namespace lldb_private {
 
@@ -225,10 +226,9 @@ public:
   /// simulator might be simulating a different OS. The \a process parameter
   /// might be specified to help to determine the OS version.
   //------------------------------------------------------------------
-  virtual bool GetOSVersion(uint32_t &major, uint32_t &minor, uint32_t &update,
-                            Process *process = nullptr);
+  virtual llvm::VersionTuple GetOSVersion(Process *process = nullptr);
 
-  bool SetOSVersion(uint32_t major, uint32_t minor, uint32_t update);
+  bool SetOSVersion(llvm::VersionTuple os_version);
 
   bool GetOSBuildString(std::string &s);
 
@@ -832,9 +832,49 @@ public:
                      const lldb_private::FileSpec &remote_file,
                      lldb_private::Status &error);
 
+  //------------------------------------------------------------------
+  /// Load a shared library specified by base name into this process,
+  /// looking by hand along a set of paths.
+  ///
+  /// @param[in] process
+  ///     The process to load the image.
+  ///
+  /// @param[in] library_name
+  ///     The name of the library to look for.  If library_name is an
+  ///     absolute path, the basename will be extracted and searched for
+  ///     along the paths.  This emulates the behavior of the loader when
+  ///     given an install name and a set (e.g. DYLD_LIBRARY_PATH provided) of
+  ///     alternate paths.
+  ///
+  /// @param[in] path_list
+  ///     The list of paths to use to search for the library.  First
+  ///     match wins.
+  ///
+  /// @param[out] error
+  ///     An error object that gets filled in with any errors that
+  ///     might occur when trying to load the shared library.
+  ///
+  /// @param[out] loaded_path
+  ///      If non-null, the path to the dylib that was successfully loaded
+  ///      is stored in this path.
+  /// 
+  /// @return
+  ///     A token that represents the shared library which can be
+  ///     passed to UnloadImage. A value of
+  ///     LLDB_INVALID_IMAGE_TOKEN will be returned if the shared
+  ///     library can't be opened.
+  //------------------------------------------------------------------
+  uint32_t LoadImageUsingPaths(lldb_private::Process *process,
+                               const lldb_private::FileSpec &library_name,
+                               const std::vector<std::string> &paths,
+                               lldb_private::Status &error,
+                               lldb_private::FileSpec *loaded_path);
+
   virtual uint32_t DoLoadImage(lldb_private::Process *process,
                                const lldb_private::FileSpec &remote_file,
-                               lldb_private::Status &error);
+                               const std::vector<std::string> *paths,
+                               lldb_private::Status &error,
+                               lldb_private::FileSpec *loaded_path = nullptr);
 
   virtual Status UnloadImage(lldb_private::Process *process,
                              uint32_t image_token);
@@ -874,9 +914,7 @@ protected:
                           // modules that have no install path set
   std::string m_remote_url;
   std::string m_name;
-  uint32_t m_major_os_version;
-  uint32_t m_minor_os_version;
-  uint32_t m_update_os_version;
+  llvm::VersionTuple m_os_version;
   ArchSpec
       m_system_arch; // The architecture of the kernel or the remote platform
   typedef std::map<uint32_t, ConstString> IDToNameMap;

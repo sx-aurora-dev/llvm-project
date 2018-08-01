@@ -37,6 +37,7 @@
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/CodeGen/WasmEHFuncInfo.h"
 #include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Attributes.h"
@@ -173,6 +174,11 @@ void MachineFunction::init() {
   if (isFuncletEHPersonality(classifyEHPersonality(
           F.hasPersonalityFn() ? F.getPersonalityFn() : nullptr))) {
     WinEHInfo = new (Allocator) WinEHFuncInfo();
+  }
+
+  if (isScopedEHPersonality(classifyEHPersonality(
+          F.hasPersonalityFn() ? F.getPersonalityFn() : nullptr))) {
+    WasmEHInfo = new (Allocator) WasmEHFuncInfo();
   }
 
   assert(Target.isCompatibleDataLayout(getDataLayout()) &&
@@ -478,6 +484,14 @@ const char *MachineFunction::createExternalSymbolName(StringRef Name) {
   std::copy(Name.begin(), Name.end(), Dest);
   Dest[Name.size()] = 0;
   return Dest;
+}
+
+uint32_t *MachineFunction::allocateRegMask() {
+  unsigned NumRegs = getSubtarget().getRegisterInfo()->getNumRegs();
+  unsigned Size = MachineOperand::getRegMaskSize(NumRegs);
+  uint32_t *Mask = Allocator.Allocate<uint32_t>(Size);
+  memset(Mask, 0, Size * sizeof(Mask[0]));
+  return Mask;
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

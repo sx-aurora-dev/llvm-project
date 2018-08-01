@@ -51,6 +51,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compression.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TarWriter.h"
 #include "llvm/Support/TargetSelect.h"
@@ -73,7 +74,7 @@ static void setConfigs(opt::InputArgList &Args);
 
 bool elf::link(ArrayRef<const char *> Args, bool CanExitEarly,
                raw_ostream &Error) {
-  errorHandler().LogName = Args[0];
+  errorHandler().LogName = sys::path::filename(Args[0]);
   errorHandler().ErrorLimitExceededMsg =
       "too many errors emitted, stopping now (use "
       "-error-limit=0 to see all errors)";
@@ -294,10 +295,20 @@ static void checkOptions(opt::InputArgList &Args) {
       error("-r and -shared may not be used together");
     if (Config->GcSections)
       error("-r and --gc-sections may not be used together");
-    if (Config->ICF)
+    if (Config->GdbIndex)
+      error("-r and --gdb-index may not be used together");
+    if (Config->ICF != ICFLevel::None)
       error("-r and --icf may not be used together");
     if (Config->Pie)
       error("-r and -pie may not be used together");
+  }
+
+  if (Config->ExecuteOnly) {
+    if (Config->EMachine != EM_AARCH64)
+      error("-execute-only is only supported on AArch64 targets");
+
+    if (Config->SingleRoRx && !Script->HasSectionsCommand)
+      error("-execute-only and -no-rosegment cannot be used together");
   }
 }
 
@@ -323,6 +334,25 @@ static bool getZFlag(opt::InputArgList &Args, StringRef K1, StringRef K2,
       return false;
   }
   return Default;
+}
+
+static bool isKnown(StringRef S) {
+  return S == "combreloc" || S == "copyreloc" || S == "defs" ||
+         S == "execstack" || S == "hazardplt" || S == "initfirst" ||
+         S == "keep-text-section-prefix" || S == "lazy" || S == "muldefs" ||
+         S == "nocombreloc" || S == "nocopyreloc" || S == "nodelete" ||
+         S == "nodlopen" || S == "noexecstack" ||
+         S == "nokeep-text-section-prefix" || S == "norelro" || S == "notext" ||
+         S == "now" || S == "origin" || S == "relro" || S == "retpolineplt" ||
+         S == "rodynamic" || S == "text" || S == "wxneeded" ||
+         S.startswith("max-page-size=") || S.startswith("stack-size=");
+}
+
+// Report an error for an unknown -z option.
+static void checkZOptions(opt::InputArgList &Args) {
+  for (auto *Arg : Args.filtered(OPT_z))
+    if (!isKnown(Arg->getValue()))
+      error("unknown -z value: " + StringRef(Arg->getValue()));
 }
 
 void LinkerDriver::main(ArrayRef<const char *> ArgsArr) {
@@ -380,6 +410,7 @@ void LinkerDriver::main(ArrayRef<const char *> ArgsArr) {
   }
 
   readConfigs(Args);
+  checkZOptions(Args);
   initLLVM();
   createFiles(Args);
   if (errorCount())
@@ -470,6 +501,8 @@ static bool isOutputFormatBinary(opt::InputArgList &Args) {
     StringRef S = Arg->getValue();
     if (S == "binary")
       return true;
+    if (S.startswith("elf"))
+      return false;
     error("unknown --oformat value: " + S);
   }
   return false;
@@ -495,6 +528,15 @@ static StringRef getDynamicLinker(opt::InputArgList &Args) {
   if (!Arg || Arg->getOption().getID() == OPT_no_dynamic_linker)
     return "";
   return Arg->getValue();
+}
+
+static ICFLevel getICF(opt::InputArgList &Args) {
+  auto *Arg = Args.getLastArg(OPT_icf_none, OPT_icf_safe, OPT_icf_all);
+  if (!Arg || Arg->getOption().getID() == OPT_icf_none)
+    return ICFLevel::None;
+  if (Arg->getOption().getID() == OPT_icf_safe)
+    return ICFLevel::Safe;
+  return ICFLevel::All;
 }
 
 static StripPolicy getStrip(opt::InputArgList &Args) {
@@ -587,6 +629,20 @@ getBuildId(opt::InputArgList &Args) {
   return {BuildIdKind::None, {}};
 }
 
+static std::pair<bool, bool> getPackDynRelocs(opt::InputArgList &Args) {
+  StringRef S = Args.getLastArgValue(OPT_pack_dyn_relocs, "none");
+  if (S == "android")
+    return {true, false};
+  if (S == "relr")
+    return {false, true};
+  if (S == "android+relr")
+    return {true, true};
+
+  if (S != "none")
+    error("unknown -pack-dyn-relocs format: " + S);
+  return {false, false};
+}
+
 static void readCallGraph(MemoryBufferRef MB) {
   // Build a map from symbol name to section
   DenseMap<StringRef, const Symbol *> SymbolNameToSymbol;
@@ -597,18 +653,16 @@ static void readCallGraph(MemoryBufferRef MB) {
   for (StringRef L : args::getLines(MB)) {
     SmallVector<StringRef, 3> Fields;
     L.split(Fields, ' ');
-    if (Fields.size() != 3)
-      fatal("parse error");
     uint64_t Count;
-    if (!to_integer(Fields[2], Count))
-      fatal("parse error");
+    if (Fields.size() != 3 || !to_integer(Fields[2], Count))
+      fatal(MB.getBufferIdentifier() + ": parse error");
     const Symbol *FromSym = SymbolNameToSymbol.lookup(Fields[0]);
     const Symbol *ToSym = SymbolNameToSymbol.lookup(Fields[1]);
     if (Config->WarnSymbolOrdering) {
       if (!FromSym)
-        warn("call graph file: no such symbol: " + Fields[0]);
+        warn(MB.getBufferIdentifier() + ": no such symbol: " + Fields[0]);
       if (!ToSym)
-        warn("call graph file: no such symbol: " + Fields[1]);
+        warn(MB.getBufferIdentifier() + ": no such symbol: " + Fields[1]);
     }
     if (!FromSym || !ToSym || Count == 0)
       continue;
@@ -695,6 +749,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->Demangle = Args.hasFlag(OPT_demangle, OPT_no_demangle, true);
   Config->DisableVerify = Args.hasArg(OPT_disable_verify);
   Config->Discard = getDiscard(Args);
+  Config->DwoDir = Args.getLastArgValue(OPT_plugin_opt_dwo_dir_eq);
   Config->DynamicLinker = getDynamicLinker(Args);
   Config->EhFrameHdr =
       Args.hasFlag(OPT_eh_frame_hdr, OPT_no_eh_frame_hdr, false);
@@ -702,6 +757,8 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->EnableNewDtags =
       Args.hasFlag(OPT_enable_new_dtags, OPT_disable_new_dtags, true);
   Config->Entry = Args.getLastArgValue(OPT_entry);
+  Config->ExecuteOnly =
+      Args.hasFlag(OPT_execute_only, OPT_no_execute_only, false);
   Config->ExportDynamic =
       Args.hasFlag(OPT_export_dynamic, OPT_no_export_dynamic, false);
   Config->FilterList = args::getStrings(Args, OPT_filter);
@@ -710,7 +767,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->GcSections = Args.hasFlag(OPT_gc_sections, OPT_no_gc_sections, false);
   Config->GnuUnique = Args.hasFlag(OPT_gnu_unique, OPT_no_gnu_unique, true);
   Config->GdbIndex = Args.hasFlag(OPT_gdb_index, OPT_no_gdb_index, false);
-  Config->ICF = Args.hasFlag(OPT_icf_all, OPT_icf_none, false);
+  Config->ICF = getICF(Args);
   Config->IgnoreDataAddressEquality =
       Args.hasArg(OPT_ignore_data_address_equality);
   Config->IgnoreFunctionAddressEquality =
@@ -774,6 +831,8 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->Undefined = args::getStrings(Args, OPT_undefined);
   Config->UndefinedVersion =
       Args.hasFlag(OPT_undefined_version, OPT_no_undefined_version, true);
+  Config->UseAndroidRelrTags = Args.hasFlag(
+      OPT_use_android_relr_tags, OPT_no_use_android_relr_tags, false);
   Config->UnresolvedSymbols = getUnresolvedSymbolPolicy(Args);
   Config->WarnBackrefs =
       Args.hasFlag(OPT_warn_backrefs, OPT_no_warn_backrefs, false);
@@ -784,6 +843,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->ZCopyreloc = getZFlag(Args, "copyreloc", "nocopyreloc", true);
   Config->ZExecstack = getZFlag(Args, "execstack", "noexecstack", false);
   Config->ZHazardplt = hasZOption(Args, "hazardplt");
+  Config->ZInitfirst = hasZOption(Args, "initfirst");
   Config->ZKeepTextSectionPrefix = getZFlag(
       Args, "keep-text-section-prefix", "nokeep-text-section-prefix", false);
   Config->ZNodelete = hasZOption(Args, "nodelete");
@@ -850,13 +910,8 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
 
   std::tie(Config->BuildId, Config->BuildIdVector) = getBuildId(Args);
 
-  if (auto *Arg = Args.getLastArg(OPT_pack_dyn_relocs)) {
-    StringRef S = Arg->getValue();
-    if (S == "android")
-      Config->AndroidPackDynRelocs = true;
-    else if (S != "none")
-      error("unknown -pack-dyn-relocs format: " + S);
-  }
+  std::tie(Config->AndroidPackDynRelocs, Config->RelrPackDynRelocs) =
+      getPackDynRelocs(Args);
 
   if (auto *Arg = Args.getLastArg(OPT_symbol_ordering_file))
     if (Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue()))
@@ -896,8 +951,12 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
     Config->Undefined.push_back(Arg->getValue());
 
   for (auto *Arg : Args.filtered(OPT_version_script))
-    if (Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue()))
-      readVersionScript(*Buffer);
+    if (Optional<std::string> Path = searchScript(Arg->getValue())) {
+      if (Optional<MemoryBufferRef> Buffer = readFile(*Path))
+        readVersionScript(*Buffer);
+    } else {
+      error(Twine("cannot find version script ") + Arg->getValue());
+    }
 }
 
 // Some Config members do not directly correspond to any particular
@@ -979,7 +1038,7 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
       break;
     }
     case OPT_script:
-      if (Optional<std::string> Path = searchLinkerScript(Arg->getValue())) {
+      if (Optional<std::string> Path = searchScript(Arg->getValue())) {
         if (Optional<MemoryBufferRef> MB = readFile(*Path))
           readLinkerScript(*MB);
         break;
@@ -1132,12 +1191,19 @@ static void excludeLibs(opt::InputArgList &Args) {
   DenseSet<StringRef> Libs = getExcludeLibs(Args);
   bool All = Libs.count("ALL");
 
-  for (InputFile *File : ObjectFiles)
+  auto Visit = [&](InputFile *File) {
     if (!File->ArchiveName.empty())
       if (All || Libs.count(path::filename(File->ArchiveName)))
         for (Symbol *Sym : File->getSymbols())
           if (!Sym->isLocal() && Sym->File == File)
             Sym->VersionId = VER_NDX_LOCAL;
+  };
+
+  for (InputFile *File : ObjectFiles)
+    Visit(File);
+
+  for (BitcodeFile *File : BitcodeFiles)
+    Visit(File);
 }
 
 // Force Sym to be entered in the output. Used for -u or equivalent.
@@ -1185,17 +1251,75 @@ template <class ELFT> static void demoteSymbols() {
   }
 }
 
+// The section referred to by S is considered address-significant. Set the
+// KeepUnique flag on the section if appropriate.
+static void markAddrsig(Symbol *S) {
+  if (auto *D = dyn_cast_or_null<Defined>(S))
+    if (D->Section)
+      // We don't need to keep text sections unique under --icf=all even if they
+      // are address-significant.
+      if (Config->ICF == ICFLevel::Safe || !(D->Section->Flags & SHF_EXECINSTR))
+        D->Section->KeepUnique = true;
+}
+
 // Record sections that define symbols mentioned in --keep-unique <symbol>
-// these sections are inelligible for ICF.
+// and symbols referred to by address-significance tables. These sections are
+// ineligible for ICF.
+template <class ELFT>
 static void findKeepUniqueSections(opt::InputArgList &Args) {
   for (auto *Arg : Args.filtered(OPT_keep_unique)) {
     StringRef Name = Arg->getValue();
-    if (auto *Sym = dyn_cast_or_null<Defined>(Symtab->find(Name)))
-      Sym->Section->KeepUnique = true;
-    else
+    auto *D = dyn_cast_or_null<Defined>(Symtab->find(Name));
+    if (!D || !D->Section) {
       warn("could not find symbol " + Name + " to keep unique");
+      continue;
+    }
+    D->Section->KeepUnique = true;
+  }
+
+  // --icf=all --ignore-data-address-equality means that we can ignore
+  // the dynsym and address-significance tables entirely.
+  if (Config->ICF == ICFLevel::All && Config->IgnoreDataAddressEquality)
+    return;
+
+  // Symbols in the dynsym could be address-significant in other executables
+  // or DSOs, so we conservatively mark them as address-significant.
+  for (Symbol *S : Symtab->getSymbols())
+    if (S->includeInDynsym())
+      markAddrsig(S);
+
+  // Visit the address-significance table in each object file and mark each
+  // referenced symbol as address-significant.
+  for (InputFile *F : ObjectFiles) {
+    auto *Obj = cast<ObjFile<ELFT>>(F);
+    ArrayRef<Symbol *> Syms = Obj->getSymbols();
+    if (Obj->AddrsigSec) {
+      ArrayRef<uint8_t> Contents =
+          check(Obj->getObj().getSectionContents(Obj->AddrsigSec));
+      const uint8_t *Cur = Contents.begin();
+      while (Cur != Contents.end()) {
+        unsigned Size;
+        const char *Err;
+        uint64_t SymIndex = decodeULEB128(Cur, &Size, Contents.end(), &Err);
+        if (Err)
+          fatal(toString(F) + ": could not decode addrsig section: " + Err);
+        markAddrsig(Syms[SymIndex]);
+        Cur += Size;
+      }
+    } else {
+      // If an object file does not have an address-significance table,
+      // conservatively mark all of its symbols as address-significant.
+      for (Symbol *S : Syms)
+        markAddrsig(S);
+    }
   }
 }
+
+static const char *LibcallRoutineNames[] = {
+#define HANDLE_LIBCALL(code, name) name,
+#include "llvm/IR/RuntimeLibcalls.def"
+#undef HANDLE_LIBCALL
+};
 
 // Do actual linking. Note that when this function is called,
 // all linker scripts have already been parsed.
@@ -1263,10 +1387,20 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   for (StringRef S : Config->Undefined)
     handleUndefined<ELFT>(S);
 
-  // If an entry symbol is in a static archive, pull out that file now
-  // to complete the symbol table. After this, no new names except a
-  // few linker-synthesized ones will be added to the symbol table.
+  // If an entry symbol is in a static archive, pull out that file now.
   handleUndefined<ELFT>(Config->Entry);
+
+  // If any of our inputs are bitcode files, the LTO code generator may create
+  // references to certain library functions that might not be explicit in the
+  // bitcode file's symbol table. If any of those library functions are defined
+  // in a bitcode file in an archive member, we need to arrange to use LTO to
+  // compile those archive members by adding them to the link beforehand.
+  //
+  // With this the symbol table should be complete. After this, no new names
+  // except a few linker-synthesized ones will be added to the symbol table.
+  if (!BitcodeFiles.empty())
+    for (const char *S : LibcallRoutineNames)
+      handleUndefined<ELFT>(S);
 
   // Return if there were name resolution errors.
   if (errorCount())
@@ -1369,8 +1503,8 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   markLive<ELFT>();
   demoteSymbols<ELFT>();
   mergeSections();
-  if (Config->ICF) {
-    findKeepUniqueSections(Args);
+  if (Config->ICF != ICFLevel::None) {
+    findKeepUniqueSections<ELFT>(Args);
     doIcf<ELFT>();
   }
 

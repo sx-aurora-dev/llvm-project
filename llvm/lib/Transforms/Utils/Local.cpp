@@ -1242,6 +1242,14 @@ static bool valueCoversEntireFragment(Type *ValTy, DbgInfoIntrinsic *DII) {
   uint64_t ValueSize = DL.getTypeAllocSizeInBits(ValTy);
   if (auto FragmentSize = DII->getFragmentSizeInBits())
     return ValueSize >= *FragmentSize;
+  // We can't always calculate the size of the DI variable (e.g. if it is a
+  // VLA). Try to use the size of the alloca that the dbg intrinsic describes
+  // intead.
+  if (DII->isAddressOfVariable())
+    if (auto *AI = dyn_cast_or_null<AllocaInst>(DII->getVariableLocation()))
+      if (auto FragmentSize = AI->getAllocationSizeInBits(DL))
+        return ValueSize >= *FragmentSize;
+  // Could not determine size of variable. Conservatively return false.
   return false;
 }
 
@@ -1313,8 +1321,14 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgInfoIntrinsic *DII,
   if (LdStHasDebugValue(DIVar, DIExpr, LI))
     return;
 
-  assert(valueCoversEntireFragment(LI->getType(), DII) &&
-         "Load is not loading the full variable fragment.");
+  if (!valueCoversEntireFragment(LI->getType(), DII)) {
+    // FIXME: If only referring to a part of the variable described by the
+    // dbg.declare, then we want to insert a dbg.value for the corresponding
+    // fragment.
+    LLVM_DEBUG(dbgs() << "Failed to convert dbg.declare to dbg.value: "
+                      << *DII << '\n');
+    return;
+  }
 
   // We are now tracking the loaded value instead of the address. In the
   // future if multi-location support is added to the IR, it might be
@@ -1336,8 +1350,14 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgInfoIntrinsic *DII,
   if (PhiHasDebugValue(DIVar, DIExpr, APN))
     return;
 
-  assert(valueCoversEntireFragment(APN->getType(), DII) &&
-         "PHI node is not describing the full variable.");
+  if (!valueCoversEntireFragment(APN->getType(), DII)) {
+    // FIXME: If only referring to a part of the variable described by the
+    // dbg.declare, then we want to insert a dbg.value for the corresponding
+    // fragment.
+    LLVM_DEBUG(dbgs() << "Failed to convert dbg.declare to dbg.value: "
+                      << *DII << '\n');
+    return;
+  }
 
   BasicBlock *BB = APN->getParent();
   auto InsertionPt = BB->getFirstInsertionPt();
@@ -1399,12 +1419,13 @@ bool llvm::LowerDbgDeclare(Function &F) {
       } else if (LoadInst *LI = dyn_cast<LoadInst>(U)) {
         ConvertDebugDeclareToDebugValue(DDI, LI, DIB);
       } else if (CallInst *CI = dyn_cast<CallInst>(U)) {
-        // This is a call by-value or some other instruction that
-        // takes a pointer to the variable. Insert a *value*
-        // intrinsic that describes the alloca.
-        DIB.insertDbgValueIntrinsic(AI, DDI->getVariable(),
-                                    DDI->getExpression(), DDI->getDebugLoc(),
-                                    CI);
+        // This is a call by-value or some other instruction that takes a
+        // pointer to the variable. Insert a *value* intrinsic that describes
+        // the variable by dereferencing the alloca.
+        auto *DerefExpr =
+            DIExpression::append(DDI->getExpression(), dwarf::DW_OP_deref);
+        DIB.insertDbgValueIntrinsic(AI, DDI->getVariable(), DerefExpr,
+                                    DDI->getDebugLoc(), CI);
       }
     }
     DDI->eraseFromParent();
@@ -1458,6 +1479,10 @@ void llvm::insertDebugValuesForPHIs(BasicBlock *BB,
 /// 'V' points to. This may include a mix of dbg.declare and
 /// dbg.addr intrinsics.
 TinyPtrVector<DbgInfoIntrinsic *> llvm::FindDbgAddrUses(Value *V) {
+  // This function is hot. Check whether the value has any metadata to avoid a
+  // DenseMap lookup.
+  if (!V->isUsedByMetadata())
+    return {};
   auto *L = LocalAsMetadata::getIfExists(V);
   if (!L)
     return {};
@@ -1476,6 +1501,10 @@ TinyPtrVector<DbgInfoIntrinsic *> llvm::FindDbgAddrUses(Value *V) {
 }
 
 void llvm::findDbgValues(SmallVectorImpl<DbgValueInst *> &DbgValues, Value *V) {
+  // This function is hot. Check whether the value has any metadata to avoid a
+  // DenseMap lookup.
+  if (!V->isUsedByMetadata())
+    return;
   if (auto *L = LocalAsMetadata::getIfExists(V))
     if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L))
       for (User *U : MDV->users())
@@ -1485,6 +1514,10 @@ void llvm::findDbgValues(SmallVectorImpl<DbgValueInst *> &DbgValues, Value *V) {
 
 void llvm::findDbgUsers(SmallVectorImpl<DbgInfoIntrinsic *> &DbgUsers,
                         Value *V) {
+  // This function is hot. Check whether the value has any metadata to avoid a
+  // DenseMap lookup.
+  if (!V->isUsedByMetadata())
+    return;
   if (auto *L = LocalAsMetadata::getIfExists(V))
     if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L))
       for (User *U : MDV->users())
@@ -1502,11 +1535,11 @@ bool llvm::replaceDbgDeclare(Value *Address, Value *NewAddress,
     auto *DIExpr = DII->getExpression();
     assert(DIVar && "Missing variable");
     DIExpr = DIExpression::prepend(DIExpr, DerefBefore, Offset, DerefAfter);
-    // Insert llvm.dbg.declare immediately after InsertBefore, and remove old
+    // Insert llvm.dbg.declare immediately before InsertBefore, and remove old
     // llvm.dbg.declare.
     Builder.insertDeclare(NewAddress, DIVar, DIExpr, Loc, InsertBefore);
     if (DII == InsertBefore)
-      InsertBefore = &*std::next(InsertBefore->getIterator());
+      InsertBefore = InsertBefore->getNextNode();
     DII->eraseFromParent();
   }
   return !DbgAddrs.empty();
@@ -1558,30 +1591,33 @@ void llvm::replaceDbgValueForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
       }
 }
 
-void llvm::salvageDebugInfo(Instruction &I) {
-  // This function is hot. An early check to determine whether the instruction
-  // has any metadata to save allows it to return earlier on average.
-  if (!I.isUsedByMetadata())
-    return;
+/// Wrap \p V in a ValueAsMetadata instance.
+static MetadataAsValue *wrapValueInMetadata(LLVMContext &C, Value *V) {
+  return MetadataAsValue::get(C, ValueAsMetadata::get(V));
+}
 
+bool llvm::salvageDebugInfo(Instruction &I) {
   SmallVector<DbgInfoIntrinsic *, 1> DbgUsers;
   findDbgUsers(DbgUsers, &I);
   if (DbgUsers.empty())
-    return;
+    return false;
 
   auto &M = *I.getModule();
   auto &DL = M.getDataLayout();
-
-  auto wrapMD = [&](Value *V) {
-    return MetadataAsValue::get(I.getContext(), ValueAsMetadata::get(V));
-  };
+  auto &Ctx = I.getContext();
+  auto wrapMD = [&](Value *V) { return wrapValueInMetadata(Ctx, V); };
 
   auto doSalvage = [&](DbgInfoIntrinsic *DII, SmallVectorImpl<uint64_t> &Ops) {
     auto *DIExpr = DII->getExpression();
-    DIExpr =
-        DIExpression::prependOpcodes(DIExpr, Ops, DIExpression::WithStackValue);
+    if (!Ops.empty()) {
+      // Do not add DW_OP_stack_value for DbgDeclare and DbgAddr, because they
+      // are implicitly pointing out the value as a DWARF memory location
+      // description.
+      bool WithStackValue = isa<DbgValueInst>(DII);
+      DIExpr = DIExpression::prependOpcodes(DIExpr, Ops, WithStackValue);
+    }
     DII->setOperand(0, wrapMD(I.getOperand(0)));
-    DII->setOperand(2, MetadataAsValue::get(I.getContext(), DIExpr));
+    DII->setOperand(2, MetadataAsValue::get(Ctx, DIExpr));
     LLVM_DEBUG(dbgs() << "SALVAGE: " << *DII << '\n');
   };
 
@@ -1599,7 +1635,7 @@ void llvm::salvageDebugInfo(Instruction &I) {
 
   if (auto *CI = dyn_cast<CastInst>(&I)) {
     if (!CI->isNoopCast(DL))
-      return;
+      return false;
 
     // No-op casts are irrelevant for debug info.
     MetadataAsValue *CastSrc = wrapMD(I.getOperand(0));
@@ -1607,6 +1643,7 @@ void llvm::salvageDebugInfo(Instruction &I) {
       DII->setOperand(0, CastSrc);
       LLVM_DEBUG(dbgs() << "SALVAGE: " << *DII << '\n');
     }
+    return true;
   } else if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
     unsigned BitWidth =
         M.getDataLayout().getIndexSizeInBits(GEP->getPointerAddressSpace());
@@ -1617,11 +1654,12 @@ void llvm::salvageDebugInfo(Instruction &I) {
     if (GEP->accumulateConstantOffset(M.getDataLayout(), Offset))
       for (auto *DII : DbgUsers)
         applyOffset(DII, Offset.getSExtValue());
+    return true;
   } else if (auto *BI = dyn_cast<BinaryOperator>(&I)) {
     // Rewrite binary operations with constant integer operands.
     auto *ConstInt = dyn_cast<ConstantInt>(I.getOperand(1));
     if (!ConstInt || ConstInt->getBitWidth() > 64)
-      return;
+      return false;
 
     uint64_t Val = ConstInt->getSExtValue();
     for (auto *DII : DbgUsers) {
@@ -1661,9 +1699,10 @@ void llvm::salvageDebugInfo(Instruction &I) {
         break;
       default:
         // TODO: Salvage constants from each kind of binop we know about.
-        continue;
+        return false;
       }
     }
+    return true;
   } else if (isa<LoadInst>(&I)) {
     MetadataAsValue *AddrMD = wrapMD(I.getOperand(0));
     for (auto *DII : DbgUsers) {
@@ -1671,10 +1710,174 @@ void llvm::salvageDebugInfo(Instruction &I) {
       auto *DIExpr = DII->getExpression();
       DIExpr = DIExpression::prepend(DIExpr, DIExpression::WithDeref);
       DII->setOperand(0, AddrMD);
-      DII->setOperand(2, MetadataAsValue::get(I.getContext(), DIExpr));
+      DII->setOperand(2, MetadataAsValue::get(Ctx, DIExpr));
       LLVM_DEBUG(dbgs() << "SALVAGE:  " << *DII << '\n');
     }
+    return true;
   }
+  return false;
+}
+
+/// A replacement for a dbg.value expression.
+using DbgValReplacement = Optional<DIExpression *>;
+
+/// Point debug users of \p From to \p To using exprs given by \p RewriteExpr,
+/// possibly moving/deleting users to prevent use-before-def. Returns true if
+/// changes are made.
+static bool rewriteDebugUsers(
+    Instruction &From, Value &To, Instruction &DomPoint, DominatorTree &DT,
+    function_ref<DbgValReplacement(DbgInfoIntrinsic &DII)> RewriteExpr) {
+  // Find debug users of From.
+  SmallVector<DbgInfoIntrinsic *, 1> Users;
+  findDbgUsers(Users, &From);
+  if (Users.empty())
+    return false;
+
+  // Prevent use-before-def of To.
+  bool Changed = false;
+  SmallPtrSet<DbgInfoIntrinsic *, 1> DeleteOrSalvage;
+  if (isa<Instruction>(&To)) {
+    bool DomPointAfterFrom = From.getNextNonDebugInstruction() == &DomPoint;
+
+    for (auto *DII : Users) {
+      // It's common to see a debug user between From and DomPoint. Move it
+      // after DomPoint to preserve the variable update without any reordering.
+      if (DomPointAfterFrom && DII->getNextNonDebugInstruction() == &DomPoint) {
+        LLVM_DEBUG(dbgs() << "MOVE:  " << *DII << '\n');
+        DII->moveAfter(&DomPoint);
+        Changed = true;
+
+      // Users which otherwise aren't dominated by the replacement value must
+      // be salvaged or deleted.
+      } else if (!DT.dominates(&DomPoint, DII)) {
+        DeleteOrSalvage.insert(DII);
+      }
+    }
+  }
+
+  // Update debug users without use-before-def risk.
+  for (auto *DII : Users) {
+    if (DeleteOrSalvage.count(DII))
+      continue;
+
+    LLVMContext &Ctx = DII->getContext();
+    DbgValReplacement DVR = RewriteExpr(*DII);
+    if (!DVR)
+      continue;
+
+    DII->setOperand(0, wrapValueInMetadata(Ctx, &To));
+    DII->setOperand(2, MetadataAsValue::get(Ctx, *DVR));
+    LLVM_DEBUG(dbgs() << "REWRITE:  " << *DII << '\n');
+    Changed = true;
+  }
+
+  if (!DeleteOrSalvage.empty()) {
+    // Try to salvage the remaining debug users.
+    Changed |= salvageDebugInfo(From);
+
+    // Delete the debug users which weren't salvaged.
+    for (auto *DII : DeleteOrSalvage) {
+      if (DII->getVariableLocation() == &From) {
+        LLVM_DEBUG(dbgs() << "Erased UseBeforeDef:  " << *DII << '\n');
+        DII->eraseFromParent();
+        Changed = true;
+      }
+    }
+  }
+
+  return Changed;
+}
+
+/// Check if a bitcast between a value of type \p FromTy to type \p ToTy would
+/// losslessly preserve the bits and semantics of the value. This predicate is
+/// symmetric, i.e swapping \p FromTy and \p ToTy should give the same result.
+///
+/// Note that Type::canLosslesslyBitCastTo is not suitable here because it
+/// allows semantically unequivalent bitcasts, such as <2 x i64> -> <4 x i32>,
+/// and also does not allow lossless pointer <-> integer conversions.
+static bool isBitCastSemanticsPreserving(const DataLayout &DL, Type *FromTy,
+                                         Type *ToTy) {
+  // Trivially compatible types.
+  if (FromTy == ToTy)
+    return true;
+
+  // Handle compatible pointer <-> integer conversions.
+  if (FromTy->isIntOrPtrTy() && ToTy->isIntOrPtrTy()) {
+    bool SameSize = DL.getTypeSizeInBits(FromTy) == DL.getTypeSizeInBits(ToTy);
+    bool LosslessConversion = !DL.isNonIntegralPointerType(FromTy) &&
+                              !DL.isNonIntegralPointerType(ToTy);
+    return SameSize && LosslessConversion;
+  }
+
+  // TODO: This is not exhaustive.
+  return false;
+}
+
+bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
+                                 Instruction &DomPoint, DominatorTree &DT) {
+  // Exit early if From has no debug users.
+  if (!From.isUsedByMetadata())
+    return false;
+
+  assert(&From != &To && "Can't replace something with itself");
+
+  Type *FromTy = From.getType();
+  Type *ToTy = To.getType();
+
+  auto Identity = [&](DbgInfoIntrinsic &DII) -> DbgValReplacement {
+    return DII.getExpression();
+  };
+
+  // Handle no-op conversions.
+  Module &M = *From.getModule();
+  const DataLayout &DL = M.getDataLayout();
+  if (isBitCastSemanticsPreserving(DL, FromTy, ToTy))
+    return rewriteDebugUsers(From, To, DomPoint, DT, Identity);
+
+  // Handle integer-to-integer widening and narrowing.
+  // FIXME: Use DW_OP_convert when it's available everywhere.
+  if (FromTy->isIntegerTy() && ToTy->isIntegerTy()) {
+    uint64_t FromBits = FromTy->getPrimitiveSizeInBits();
+    uint64_t ToBits = ToTy->getPrimitiveSizeInBits();
+    assert(FromBits != ToBits && "Unexpected no-op conversion");
+
+    // When the width of the result grows, assume that a debugger will only
+    // access the low `FromBits` bits when inspecting the source variable.
+    if (FromBits < ToBits)
+      return rewriteDebugUsers(From, To, DomPoint, DT, Identity);
+
+    // The width of the result has shrunk. Use sign/zero extension to describe
+    // the source variable's high bits.
+    auto SignOrZeroExt = [&](DbgInfoIntrinsic &DII) -> DbgValReplacement {
+      DILocalVariable *Var = DII.getVariable();
+
+      // Without knowing signedness, sign/zero extension isn't possible.
+      auto Signedness = Var->getSignedness();
+      if (!Signedness)
+        return None;
+
+      bool Signed = *Signedness == DIBasicType::Signedness::Signed;
+
+      if (!Signed) {
+        // In the unsigned case, assume that a debugger will initialize the
+        // high bits to 0 and do a no-op conversion.
+        return Identity(DII);
+      } else {
+        // In the signed case, the high bits are given by sign extension, i.e:
+        //   (To >> (ToBits - 1)) * ((2 ^ FromBits) - 1)
+        // Calculate the high bits and OR them together with the low bits.
+        SmallVector<uint64_t, 8> Ops({dwarf::DW_OP_dup, dwarf::DW_OP_constu,
+                                      (ToBits - 1), dwarf::DW_OP_shr,
+                                      dwarf::DW_OP_lit0, dwarf::DW_OP_not,
+                                      dwarf::DW_OP_mul, dwarf::DW_OP_or});
+        return DIExpression::appendToStack(DII.getExpression(), Ops);
+      }
+    };
+    return rewriteDebugUsers(From, To, DomPoint, DT, SignOrZeroExt);
+  }
+
+  // TODO: Floating-point conversions, vectors.
+  return false;
 }
 
 unsigned llvm::removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB) {
@@ -1814,41 +2017,43 @@ static bool markAliveBlocks(Function &F,
     // instructions into LLVM unreachable insts.  The instruction combining pass
     // canonicalizes unreachable insts into stores to null or undef.
     for (Instruction &I : *BB) {
-      // Assumptions that are known to be false are equivalent to unreachable.
-      // Also, if the condition is undefined, then we make the choice most
-      // beneficial to the optimizer, and choose that to also be unreachable.
-      if (auto *II = dyn_cast<IntrinsicInst>(&I)) {
-        if (II->getIntrinsicID() == Intrinsic::assume) {
-          if (match(II->getArgOperand(0), m_CombineOr(m_Zero(), m_Undef()))) {
-            // Don't insert a call to llvm.trap right before the unreachable.
-            changeToUnreachable(II, false, false, DDT);
-            Changed = true;
-            break;
-          }
-        }
-
-        if (II->getIntrinsicID() == Intrinsic::experimental_guard) {
-          // A call to the guard intrinsic bails out of the current compilation
-          // unit if the predicate passed to it is false.  If the predicate is a
-          // constant false, then we know the guard will bail out of the current
-          // compile unconditionally, so all code following it is dead.
-          //
-          // Note: unlike in llvm.assume, it is not "obviously profitable" for
-          // guards to treat `undef` as `false` since a guard on `undef` can
-          // still be useful for widening.
-          if (match(II->getArgOperand(0), m_Zero()))
-            if (!isa<UnreachableInst>(II->getNextNode())) {
-              changeToUnreachable(II->getNextNode(), /*UseLLVMTrap=*/false,
-                                  false, DDT);
+      if (auto *CI = dyn_cast<CallInst>(&I)) {
+        Value *Callee = CI->getCalledValue();
+        // Handle intrinsic calls.
+        if (Function *F = dyn_cast<Function>(Callee)) {
+          auto IntrinsicID = F->getIntrinsicID();
+          // Assumptions that are known to be false are equivalent to
+          // unreachable. Also, if the condition is undefined, then we make the
+          // choice most beneficial to the optimizer, and choose that to also be
+          // unreachable.
+          if (IntrinsicID == Intrinsic::assume) {
+            if (match(CI->getArgOperand(0), m_CombineOr(m_Zero(), m_Undef()))) {
+              // Don't insert a call to llvm.trap right before the unreachable.
+              changeToUnreachable(CI, false, false, DDT);
               Changed = true;
               break;
             }
-        }
-      }
-
-      if (auto *CI = dyn_cast<CallInst>(&I)) {
-        Value *Callee = CI->getCalledValue();
-        if (isa<ConstantPointerNull>(Callee) || isa<UndefValue>(Callee)) {
+          } else if (IntrinsicID == Intrinsic::experimental_guard) {
+            // A call to the guard intrinsic bails out of the current
+            // compilation unit if the predicate passed to it is false. If the
+            // predicate is a constant false, then we know the guard will bail
+            // out of the current compile unconditionally, so all code following
+            // it is dead.
+            //
+            // Note: unlike in llvm.assume, it is not "obviously profitable" for
+            // guards to treat `undef` as `false` since a guard on `undef` can
+            // still be useful for widening.
+            if (match(CI->getArgOperand(0), m_Zero()))
+              if (!isa<UnreachableInst>(CI->getNextNode())) {
+                changeToUnreachable(CI->getNextNode(), /*UseLLVMTrap=*/false,
+                                    false, DDT);
+                Changed = true;
+                break;
+              }
+          }
+        } else if ((isa<ConstantPointerNull>(Callee) &&
+                    !NullPointerIsDefined(CI->getFunction())) ||
+                   isa<UndefValue>(Callee)) {
           changeToUnreachable(CI, /*UseLLVMTrap=*/false, false, DDT);
           Changed = true;
           break;
@@ -1864,12 +2069,11 @@ static bool markAliveBlocks(Function &F,
           }
           break;
         }
-      }
+      } else if (auto *SI = dyn_cast<StoreInst>(&I)) {
+        // Store to undef and store to null are undefined and used to signal
+        // that they should be changed to unreachable by passes that can't
+        // modify the CFG.
 
-      // Store to undef and store to null are undefined and used to signal that
-      // they should be changed to unreachable by passes that can't modify the
-      // CFG.
-      if (auto *SI = dyn_cast<StoreInst>(&I)) {
         // Don't touch volatile stores.
         if (SI->isVolatile()) continue;
 
@@ -1877,7 +2081,8 @@ static bool markAliveBlocks(Function &F,
 
         if (isa<UndefValue>(Ptr) ||
             (isa<ConstantPointerNull>(Ptr) &&
-             SI->getPointerAddressSpace() == 0)) {
+             !NullPointerIsDefined(SI->getFunction(),
+                                   SI->getPointerAddressSpace()))) {
           changeToUnreachable(SI, true, false, DDT);
           Changed = true;
           break;
@@ -1889,7 +2094,9 @@ static bool markAliveBlocks(Function &F,
     if (auto *II = dyn_cast<InvokeInst>(Terminator)) {
       // Turn invokes that call 'nounwind' functions into ordinary calls.
       Value *Callee = II->getCalledValue();
-      if (isa<ConstantPointerNull>(Callee) || isa<UndefValue>(Callee)) {
+      if ((isa<ConstantPointerNull>(Callee) &&
+           !NullPointerIsDefined(BB->getParent())) ||
+          isa<UndefValue>(Callee)) {
         changeToUnreachable(II, true, false, DDT);
         Changed = true;
       } else if (II->doesNotThrow() && canSimplifyInvokeNoUnwind(&F)) {

@@ -36,6 +36,12 @@ def CallSeqEnd   : SDNode<"ISD::CALLSEQ_END", SDT_RISCVCallSeqEnd,
                           [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 def RetFlag      : SDNode<"RISCVISD::RET_FLAG", SDTNone,
                           [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+def URetFlag     : SDNode<"RISCVISD::URET_FLAG", SDTNone,
+                          [SDNPHasChain, SDNPOptInGlue]>;
+def SRetFlag     : SDNode<"RISCVISD::SRET_FLAG", SDTNone,
+                          [SDNPHasChain, SDNPOptInGlue]>;
+def MRetFlag     : SDNode<"RISCVISD::MRET_FLAG", SDTNone,
+                          [SDNPHasChain, SDNPOptInGlue]>;
 def SelectCC     : SDNode<"RISCVISD::SELECT_CC", SDT_RISCVSelectCC,
                           [SDNPInGlue]>;
 def Tail         : SDNode<"RISCVISD::TAIL", SDT_RISCVCall,
@@ -478,6 +484,11 @@ def : InstAlias<"snez $rd, $rs", (SLTU  GPR:$rd,      X0, GPR:$rs)>;
 def : InstAlias<"sltz $rd, $rs", (SLT   GPR:$rd, GPR:$rs,      X0)>;
 def : InstAlias<"sgtz $rd, $rs", (SLT   GPR:$rd,      X0, GPR:$rs)>;
 
+// sgt/sgtu are recognised by the GNU assembler but the canonical slt/sltu
+// form will always be printed. Therefore, set a zero weight.
+def : InstAlias<"sgt $rd, $rs, $rt", (SLT GPR:$rd, GPR:$rt, GPR:$rs), 0>;
+def : InstAlias<"sgtu $rd, $rs, $rt", (SLTU GPR:$rd, GPR:$rt, GPR:$rs), 0>;
+
 def : InstAlias<"beqz $rs, $offset",
                 (BEQ GPR:$rs,      X0, simm13_lsb0:$offset)>;
 def : InstAlias<"bnez $rs, $offset",
@@ -678,6 +689,10 @@ def PseudoCALL : Pseudo<(outs), (ins bare_symbol:$func),
 }
 
 def : Pat<(Call texternalsym:$func), (PseudoCALL texternalsym:$func)>;
+
+def : Pat<(URetFlag), (URET X0, X0)>;
+def : Pat<(SRetFlag), (SRET X0, X0)>;
+def : Pat<(MRetFlag), (MRET X0, X0)>;
 
 let isCall = 1, Defs = [X1] in
 def PseudoCALLIndirect : Pseudo<(outs), (ins GPR:$rs1), [(Call GPR:$rs1)]>,

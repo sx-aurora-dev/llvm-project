@@ -3616,10 +3616,63 @@ SDValue PPCDAGToDAGISel::SelectCC(SDValue LHS, SDValue RHS, ISD::CondCode CC,
       Opc = PPC::CMPD;
     }
   } else if (LHS.getValueType() == MVT::f32) {
-    Opc = PPC::FCMPUS;
+    if (PPCSubTarget->hasSPE()) {
+      switch (CC) {
+        default:
+        case ISD::SETEQ:
+        case ISD::SETNE:
+          Opc = PPC::EFSCMPEQ;
+          break;
+        case ISD::SETLT:
+        case ISD::SETGE:
+        case ISD::SETOLT:
+        case ISD::SETOGE:
+        case ISD::SETULT:
+        case ISD::SETUGE:
+          Opc = PPC::EFSCMPLT;
+          break;
+        case ISD::SETGT:
+        case ISD::SETLE:
+        case ISD::SETOGT:
+        case ISD::SETOLE:
+        case ISD::SETUGT:
+        case ISD::SETULE:
+          Opc = PPC::EFSCMPGT;
+          break;
+      }
+    } else
+      Opc = PPC::FCMPUS;
+  } else if (LHS.getValueType() == MVT::f64) {
+    if (PPCSubTarget->hasSPE()) {
+      switch (CC) {
+        default:
+        case ISD::SETEQ:
+        case ISD::SETNE:
+          Opc = PPC::EFDCMPEQ;
+          break;
+        case ISD::SETLT:
+        case ISD::SETGE:
+        case ISD::SETOLT:
+        case ISD::SETOGE:
+        case ISD::SETULT:
+        case ISD::SETUGE:
+          Opc = PPC::EFDCMPLT;
+          break;
+        case ISD::SETGT:
+        case ISD::SETLE:
+        case ISD::SETOGT:
+        case ISD::SETOLE:
+        case ISD::SETUGT:
+        case ISD::SETULE:
+          Opc = PPC::EFDCMPGT;
+          break;
+      }
+    } else
+      Opc = PPCSubTarget->hasVSX() ? PPC::XSCMPUDP : PPC::FCMPUD;
   } else {
-    assert(LHS.getValueType() == MVT::f64 && "Unknown vt!");
-    Opc = PPCSubTarget->hasVSX() ? PPC::XSCMPUDP : PPC::FCMPUD;
+    assert(LHS.getValueType() == MVT::f128 && "Unknown vt!");
+    assert(PPCSubTarget->hasVSX() && "__float128 requires VSX");
+    Opc = PPC::XSCMPUQP;
   }
   return SDValue(CurDAG->getMachineNode(Opc, dl, MVT::i32, LHS, RHS), 0);
 }
@@ -3893,7 +3946,7 @@ bool PPCDAGToDAGISel::trySETCC(SDNode *N) {
   // Altivec Vector compare instructions do not set any CR register by default and
   // vector compare operations return the same type as the operands.
   if (LHS.getValueType().isVector()) {
-    if (PPCSubTarget->hasQPX())
+    if (PPCSubTarget->hasQPX() || PPCSubTarget->hasSPE())
       return false;
 
     EVT VecVT = LHS.getValueType();
@@ -3922,6 +3975,12 @@ bool PPCDAGToDAGISel::trySETCC(SDNode *N) {
   unsigned Idx = getCRIdxForSetCC(CC, Inv);
   SDValue CCReg = SelectCC(LHS, RHS, CC, dl);
   SDValue IntCR;
+
+  // SPE e*cmp* instructions only set the 'gt' bit, so hard-code that
+  // The correct compare instruction is already set by SelectCC()
+  if (PPCSubTarget->hasSPE() && LHS.getValueType().isFloatingPoint()) {
+    Idx = 1;
+  }
 
   // Force the ccreg into CR7.
   SDValue CR7Reg = CurDAG->getRegister(PPC::CR7, MVT::i32);
@@ -4554,16 +4613,24 @@ void PPCDAGToDAGISel::Select(SDNode *N) {
       SelectCCOp = PPC::SELECT_CC_I4;
     else if (N->getValueType(0) == MVT::i64)
       SelectCCOp = PPC::SELECT_CC_I8;
-    else if (N->getValueType(0) == MVT::f32)
+    else if (N->getValueType(0) == MVT::f32) {
       if (PPCSubTarget->hasP8Vector())
         SelectCCOp = PPC::SELECT_CC_VSSRC;
+      else if (PPCSubTarget->hasSPE())
+        SelectCCOp = PPC::SELECT_CC_SPE4;
       else
         SelectCCOp = PPC::SELECT_CC_F4;
-    else if (N->getValueType(0) == MVT::f64)
+    } else if (N->getValueType(0) == MVT::f64) {
       if (PPCSubTarget->hasVSX())
         SelectCCOp = PPC::SELECT_CC_VSFRC;
+      else if (PPCSubTarget->hasSPE())
+        SelectCCOp = PPC::SELECT_CC_SPE;
       else
         SelectCCOp = PPC::SELECT_CC_F8;
+    } else if (N->getValueType(0) == MVT::f128)
+      SelectCCOp = PPC::SELECT_CC_F16;
+    else if (PPCSubTarget->hasSPE())
+      SelectCCOp = PPC::SELECT_CC_SPE;
     else if (PPCSubTarget->hasQPX() && N->getValueType(0) == MVT::v4f64)
       SelectCCOp = PPC::SELECT_CC_QFRC;
     else if (PPCSubTarget->hasQPX() && N->getValueType(0) == MVT::v4f32)
@@ -5347,6 +5414,8 @@ void PPCDAGToDAGISel::PeepholeCROps() {
       case PPC::SELECT_QFRC:
       case PPC::SELECT_QSRC:
       case PPC::SELECT_QBRC:
+      case PPC::SELECT_SPE:
+      case PPC::SELECT_SPE4:
       case PPC::SELECT_VRRC:
       case PPC::SELECT_VSFRC:
       case PPC::SELECT_VSSRC:
@@ -5666,6 +5735,8 @@ void PPCDAGToDAGISel::PeepholeCROps() {
       case PPC::SELECT_QFRC:
       case PPC::SELECT_QSRC:
       case PPC::SELECT_QBRC:
+      case PPC::SELECT_SPE:
+      case PPC::SELECT_SPE4:
       case PPC::SELECT_VRRC:
       case PPC::SELECT_VSFRC:
       case PPC::SELECT_VSSRC:
@@ -6044,28 +6115,37 @@ void PPCDAGToDAGISel::PeepholePPC64() {
 
     unsigned FirstOp;
     unsigned StorageOpcode = N->getMachineOpcode();
+    bool RequiresMod4Offset = false;
 
     switch (StorageOpcode) {
     default: continue;
 
+    case PPC::LWA:
+    case PPC::LD:
+    case PPC::DFLOADf64:
+    case PPC::DFLOADf32:
+      RequiresMod4Offset = true;
+      LLVM_FALLTHROUGH;
     case PPC::LBZ:
     case PPC::LBZ8:
-    case PPC::LD:
     case PPC::LFD:
     case PPC::LFS:
     case PPC::LHA:
     case PPC::LHA8:
     case PPC::LHZ:
     case PPC::LHZ8:
-    case PPC::LWA:
     case PPC::LWZ:
     case PPC::LWZ8:
       FirstOp = 0;
       break;
 
+    case PPC::STD:
+    case PPC::DFSTOREf64:
+    case PPC::DFSTOREf32:
+      RequiresMod4Offset = true;
+      LLVM_FALLTHROUGH;
     case PPC::STB:
     case PPC::STB8:
-    case PPC::STD:
     case PPC::STFD:
     case PPC::STFS:
     case PPC::STH:
@@ -6112,9 +6192,7 @@ void PPCDAGToDAGISel::PeepholePPC64() {
       // For these cases, the immediate may not be divisible by 4, in
       // which case the fold is illegal for DS-form instructions.  (The
       // other cases provide aligned addresses and are always safe.)
-      if ((StorageOpcode == PPC::LWA ||
-           StorageOpcode == PPC::LD  ||
-           StorageOpcode == PPC::STD) &&
+      if (RequiresMod4Offset &&
           (!isa<ConstantSDNode>(Base.getOperand(1)) ||
            Base.getConstantOperandVal(1) % 4 != 0))
         continue;
@@ -6176,8 +6254,7 @@ void PPCDAGToDAGISel::PeepholePPC64() {
       if (auto *C = dyn_cast<ConstantSDNode>(ImmOpnd)) {
         Offset += C->getSExtValue();
 
-        if ((StorageOpcode == PPC::LWA || StorageOpcode == PPC::LD ||
-             StorageOpcode == PPC::STD) && (Offset % 4) != 0)
+        if (RequiresMod4Offset && (Offset % 4) != 0)
           continue;
 
         if (!isInt<16>(Offset))
@@ -6209,8 +6286,7 @@ void PPCDAGToDAGISel::PeepholePPC64() {
         // We can't perform this optimization for data whose alignment
         // is insufficient for the instruction encoding.
         if (GV->getAlignment() < 4 &&
-            (StorageOpcode == PPC::LD || StorageOpcode == PPC::STD ||
-             StorageOpcode == PPC::LWA || (Offset % 4) != 0)) {
+            (RequiresMod4Offset || (Offset % 4) != 0)) {
           LLVM_DEBUG(dbgs() << "Rejected this candidate for alignment.\n\n");
           continue;
         }

@@ -74,12 +74,33 @@ protected:
   unsigned char LargeArrayMinWidth, LargeArrayAlign;
   unsigned char LongWidth, LongAlign;
   unsigned char LongLongWidth, LongLongAlign;
+
+  // Fixed point bit widths
   unsigned char ShortAccumWidth, ShortAccumAlign;
   unsigned char AccumWidth, AccumAlign;
   unsigned char LongAccumWidth, LongAccumAlign;
   unsigned char ShortFractWidth, ShortFractAlign;
   unsigned char FractWidth, FractAlign;
   unsigned char LongFractWidth, LongFractAlign;
+
+  // If true, unsigned fixed point types have the same number of fractional bits
+  // as their signed counterparts, forcing the unsigned types to have one extra
+  // bit of padding. Otherwise, unsigned fixed point types have
+  // one more fractional bit than its corresponding signed type. This is false
+  // by default.
+  bool PaddingOnUnsignedFixedPoint;
+
+  // Fixed point integral and fractional bit sizes
+  // Saturated types share the same integral/fractional bits as their
+  // corresponding unsaturated types.
+  // For simplicity, the fractional bits in a _Fract type will be one less the
+  // width of that _Fract type. This leaves all signed _Fract types having no
+  // padding and unsigned _Fract types will only have 1 bit of padding after the
+  // sign if PaddingOnUnsignedFixedPoint is set.
+  unsigned char ShortAccumScale;
+  unsigned char AccumScale;
+  unsigned char LongAccumScale;
+
   unsigned char SuitableAlign;
   unsigned char DefaultAlignForAttributeAligned;
   unsigned char MinGlobalAlign;
@@ -393,6 +414,89 @@ public:
   /// 'unsigned long _Fract' for this target, in bits.
   unsigned getLongFractWidth() const { return LongFractWidth; }
   unsigned getLongFractAlign() const { return LongFractAlign; }
+
+  /// getShortAccumScale/IBits - Return the number of fractional/integral bits
+  /// in a 'signed short _Accum' type.
+  unsigned getShortAccumScale() const { return ShortAccumScale; }
+  unsigned getShortAccumIBits() const {
+    return ShortAccumWidth - ShortAccumScale - 1;
+  }
+
+  /// getAccumScale/IBits - Return the number of fractional/integral bits
+  /// in a 'signed _Accum' type.
+  unsigned getAccumScale() const { return AccumScale; }
+  unsigned getAccumIBits() const { return AccumWidth - AccumScale - 1; }
+
+  /// getLongAccumScale/IBits - Return the number of fractional/integral bits
+  /// in a 'signed long _Accum' type.
+  unsigned getLongAccumScale() const { return LongAccumScale; }
+  unsigned getLongAccumIBits() const {
+    return LongAccumWidth - LongAccumScale - 1;
+  }
+
+  /// getUnsignedShortAccumScale/IBits - Return the number of
+  /// fractional/integral bits in a 'unsigned short _Accum' type.
+  unsigned getUnsignedShortAccumScale() const {
+    return PaddingOnUnsignedFixedPoint ? ShortAccumScale : ShortAccumScale + 1;
+  }
+  unsigned getUnsignedShortAccumIBits() const {
+    return PaddingOnUnsignedFixedPoint
+               ? getShortAccumIBits()
+               : ShortAccumWidth - getUnsignedShortAccumScale();
+  }
+
+  /// getUnsignedAccumScale/IBits - Return the number of fractional/integral
+  /// bits in a 'unsigned _Accum' type.
+  unsigned getUnsignedAccumScale() const {
+    return PaddingOnUnsignedFixedPoint ? AccumScale : AccumScale + 1;
+  }
+  unsigned getUnsignedAccumIBits() const {
+    return PaddingOnUnsignedFixedPoint ? getAccumIBits()
+                                       : AccumWidth - getUnsignedAccumScale();
+  }
+
+  /// getUnsignedLongAccumScale/IBits - Return the number of fractional/integral
+  /// bits in a 'unsigned long _Accum' type.
+  unsigned getUnsignedLongAccumScale() const {
+    return PaddingOnUnsignedFixedPoint ? LongAccumScale : LongAccumScale + 1;
+  }
+  unsigned getUnsignedLongAccumIBits() const {
+    return PaddingOnUnsignedFixedPoint
+               ? getLongAccumIBits()
+               : LongAccumWidth - getUnsignedLongAccumScale();
+  }
+
+  /// getShortFractScale - Return the number of fractional bits
+  /// in a 'signed short _Fract' type.
+  unsigned getShortFractScale() const { return ShortFractWidth - 1; }
+
+  /// getFractScale - Return the number of fractional bits
+  /// in a 'signed _Fract' type.
+  unsigned getFractScale() const { return FractWidth - 1; }
+
+  /// getLongFractScale - Return the number of fractional bits
+  /// in a 'signed long _Fract' type.
+  unsigned getLongFractScale() const { return LongFractWidth - 1; }
+
+  /// getUnsignedShortFractScale - Return the number of fractional bits
+  /// in a 'unsigned short _Fract' type.
+  unsigned getUnsignedShortFractScale() const {
+    return PaddingOnUnsignedFixedPoint ? getShortFractScale()
+                                       : getShortFractScale() + 1;
+  }
+
+  /// getUnsignedFractScale - Return the number of fractional bits
+  /// in a 'unsigned _Fract' type.
+  unsigned getUnsignedFractScale() const {
+    return PaddingOnUnsignedFixedPoint ? getFractScale() : getFractScale() + 1;
+  }
+
+  /// getUnsignedLongFractScale - Return the number of fractional bits
+  /// in a 'unsigned long _Fract' type.
+  unsigned getUnsignedLongFractScale() const {
+    return PaddingOnUnsignedFixedPoint ? getLongFractScale()
+                                       : getLongFractScale() + 1;
+  }
 
   /// Determine whether the __int128 type is supported on this target.
   virtual bool hasInt128Type() const {
@@ -988,6 +1092,27 @@ public:
   // argument.
   virtual bool validateCpuIs(StringRef Name) const { return false; }
 
+  // Validate a cpu_dispatch/cpu_specific CPU option, which is a different list
+  // from cpu_is, since it checks via features rather than CPUs directly.
+  virtual bool validateCPUSpecificCPUDispatch(StringRef Name) const {
+    return false;
+  }
+
+  // Get the character to be added for mangling purposes for cpu_specific.
+  virtual char CPUSpecificManglingCharacter(StringRef Name) const {
+    llvm_unreachable(
+        "cpu_specific Multiversioning not implemented on this target");
+  }
+
+  // Get a list of the features that make up the CPU option for
+  // cpu_specific/cpu_dispatch so that it can be passed to llvm as optimization
+  // options.
+  virtual void getCPUSpecificCPUDispatchFeatures(
+      StringRef Name, llvm::SmallVectorImpl<StringRef> &Features) const {
+    llvm_unreachable(
+        "cpu_specific Multiversioning not implemented on this target");
+  }
+
   // Returns maximal number of args passed in registers.
   unsigned getRegParmMax() const {
     assert(RegParmMax < 7 && "RegParmMax value is larger than AST can handle");
@@ -1014,7 +1139,8 @@ public:
   bool isSEHTrySupported() const {
     return getTriple().isOSWindows() &&
            (getTriple().getArch() == llvm::Triple::x86 ||
-            getTriple().getArch() == llvm::Triple::x86_64);
+            getTriple().getArch() == llvm::Triple::x86_64 ||
+            getTriple().getArch() == llvm::Triple::aarch64);
   }
 
   /// Return true if {|} are normal characters in the asm string.
@@ -1098,7 +1224,7 @@ public:
   enum CallingConvKind {
     CCK_Default,
     CCK_ClangABI4OrPS4,
-    CCK_MicrosoftX86_64
+    CCK_MicrosoftWin64
   };
 
   virtual CallingConvKind getCallingConvKind(bool ClangABICompat4) const;
@@ -1189,6 +1315,11 @@ protected:
   virtual ArrayRef<AddlRegName> getGCCAddlRegNames() const {
     return None;
   }
+
+ private:
+  // Assert the values for the fractional and integral bits for each fixed point
+  // type follow the restrictions given in clause 6.2.6.3 of N1169.
+  void CheckFixedPointBits() const;
 };
 
 }  // end namespace clang

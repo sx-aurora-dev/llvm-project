@@ -276,6 +276,10 @@ def ReturnUndefChecker : Checker<"UndefReturn">,
 
 let ParentPackage = Cplusplus in {
 
+def InnerPointerChecker : Checker<"InnerPointer">,
+  HelpText<"Check for inner pointers of C++ containers used after re/deallocation">,
+  DescFile<"InnerPointerChecker.cpp">;
+
 def NewDeleteChecker : Checker<"NewDelete">,
   HelpText<"Check for double-free and use-after-free problems. Traces memory managed by new/delete.">,
   DescFile<"MallocChecker.cpp">;
@@ -300,11 +304,6 @@ def VirtualCallChecker : Checker<"VirtualCall">,
 
 let ParentPackage = CplusplusAlpha in {
 
-def DanglingInternalBufferChecker : Checker<"DanglingInternalBuffer">,
-  HelpText<"Check for internal raw pointers of C++ standard library containers "
-           "used after deallocation">,
-  DescFile<"DanglingInternalBufferChecker.cpp">;
-
 def DeleteWithNonVirtualDtorChecker : Checker<"DeleteWithNonVirtualDtor">,
   HelpText<"Reports destructions of polymorphic objects with a non-virtual "
            "destructor in their base class">,
@@ -318,6 +317,10 @@ def MisusedMovedObjectChecker: Checker<"MisusedMovedObject">,
      HelpText<"Method calls on a moved-from object and copying a moved-from "
               "object will be reported">,
      DescFile<"MisusedMovedObjectChecker.cpp">;
+
+def UninitializedObjectChecker: Checker<"UninitializedObject">,
+     HelpText<"Reports uninitialized fields after object construction">,
+     DescFile<"UninitializedObjectChecker.cpp">;
 
 } // end: "alpha.cplusplus"
 
@@ -437,7 +440,7 @@ def MallocOverflowSecurityChecker : Checker<"MallocOverflow">,
   DescFile<"MallocOverflowSecurityChecker.cpp">;
 
 // Operating systems specific PROT_READ/PROT_WRITE values is not implemented,
-// the defaults are correct for several common operating systems though, 
+// the defaults are correct for several common operating systems though,
 // but may need to be overridden via the related analyzer-config flags.
 def MmapWriteExecChecker : Checker<"MmapWriteExec">,
   HelpText<"Warn on mmap() calls that are both writable and executable">,
@@ -564,6 +567,10 @@ def ObjCPropertyChecker : Checker<"ObjCProperty">,
 } // end "osx"
 
 let ParentPackage = Cocoa in {
+
+def RunLoopAutoreleaseLeakChecker : Checker<"RunLoopAutoreleaseLeak">,
+  HelpText<"Check for leaked memory in autorelease pools that will never be drained">,
+  DescFile<"RunLoopAutoreleaseLeakChecker.cpp">;
 
 def ObjCAtSyncChecker : Checker<"AtSync">,
   HelpText<"Check for nil pointers used as mutexes for @synchronized">,

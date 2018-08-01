@@ -122,6 +122,7 @@ struct LegalityQuery {
 
   struct MemDesc {
     uint64_t Size;
+    AtomicOrdering Ordering;
   };
 
   /// Operations which require memory can use this to place requirements on the
@@ -175,7 +176,19 @@ struct TypePairAndMemSize {
 };
 
 /// True iff P0 and P1 are true.
-LegalityPredicate all(LegalityPredicate P0, LegalityPredicate P1);
+template<typename Predicate>
+Predicate all(Predicate P0, Predicate P1) {
+  return [=](const LegalityQuery &Query) {
+    return P0(Query) && P1(Query);
+  };
+}
+/// True iff all given predicates are true.
+template<typename Predicate, typename... Args>
+Predicate all(Predicate P0, Predicate P1, Args... args) {
+  return all(all(P0, P1), args...);
+}
+/// True iff the given type index is the specified types.
+LegalityPredicate typeIs(unsigned TypeIdx, LLT TypesInit);
 /// True iff the given type index is one of the specified types.
 LegalityPredicate typeInSet(unsigned TypeIdx,
                             std::initializer_list<LLT> TypesInit);
@@ -205,6 +218,10 @@ LegalityPredicate memSizeInBytesNotPow2(unsigned MMOIdx);
 /// True iff the specified type index is a vector whose element count is not a
 /// power of 2.
 LegalityPredicate numElementsNotPow2(unsigned TypeIdx);
+/// True iff the specified MMO index has at an atomic ordering of at Ordering or
+/// stronger.
+LegalityPredicate atomicOrderingAtLeastOrStrongerThan(unsigned MMOIdx,
+                                                      AtomicOrdering Ordering);
 } // end namespace LegalityPredicates
 
 namespace LegalizeMutations {
@@ -769,7 +786,7 @@ public:
   /// setAction ({G_ADD, 0, LLT::scalar(32)}, Legal);
   /// setLegalizeScalarToDifferentSizeStrategy(
   ///   G_ADD, 0, widenToLargerTypesAndNarrowToLargest);
-  /// will end up defining getAction({G_ADD, 0, T}) to return the following 
+  /// will end up defining getAction({G_ADD, 0, T}) to return the following
   /// actions for different scalar types T:
   ///  LLT::scalar(1)..LLT::scalar(31): {WidenScalar, 0, LLT::scalar(32)}
   ///  LLT::scalar(32):                 {Legal, 0, LLT::scalar(32)}
@@ -797,7 +814,7 @@ public:
     VectorElementSizeChangeStrategies[OpcodeIdx][TypeIdx] = S;
   }
 
-  /// A SizeChangeStrategy for the common case where legalization for a 
+  /// A SizeChangeStrategy for the common case where legalization for a
   /// particular operation consists of only supporting a specific set of type
   /// sizes. E.g.
   ///   setAction ({G_DIV, 0, LLT::scalar(32)}, Legal);

@@ -1472,7 +1472,7 @@ lldb::SBModule SBTarget::AddModule(const char *path, const char *triple,
       module_spec.GetFileSpec().SetFile(path, false, FileSpec::Style::native);
 
     if (uuid_cstr)
-      module_spec.GetUUID().SetFromCString(uuid_cstr);
+      module_spec.GetUUID().SetFromStringRef(uuid_cstr);
 
     if (triple)
       module_spec.GetArchitecture() = Platform::GetAugmentedArchSpec(
@@ -1542,6 +1542,18 @@ SBModule SBTarget::FindModule(const SBFileSpec &sb_file_spec) {
     sb_module.SetSP(target_sp->GetImages().FindFirstModule(module_spec));
   }
   return sb_module;
+}
+
+SBSymbolContextList
+SBTarget::FindCompileUnits(const SBFileSpec &sb_file_spec) {
+  SBSymbolContextList sb_sc_list;
+  const TargetSP target_sp(GetSP());
+  if (target_sp && sb_file_spec.IsValid()) {
+    const bool append = true;
+    target_sp->GetImages().FindCompileUnits(*sb_file_spec,
+                                            append, *sb_sc_list);
+  }
+  return sb_sc_list;
 }
 
 lldb::ByteOrder SBTarget::GetByteOrder() {

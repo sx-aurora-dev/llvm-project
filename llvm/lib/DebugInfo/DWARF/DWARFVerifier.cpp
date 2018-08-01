@@ -171,7 +171,7 @@ bool DWARFVerifier::verifyUnitHeader(const DWARFDataExtractor DebugInfoData,
   return Success;
 }
 
-bool DWARFVerifier::verifyUnitContents(DWARFUnit Unit, uint8_t UnitType) {
+bool DWARFVerifier::verifyUnitContents(DWARFUnit &Unit, uint8_t UnitType) {
   uint32_t NumUnitErrors = 0;
   unsigned NumDies = Unit.getNumDIEs();
   for (unsigned I = 0; I < NumDies; ++I) {
@@ -324,8 +324,15 @@ unsigned DWARFVerifier::verifyDieRanges(const DWARFDie &Die,
   if (!Die.isValid())
     return NumErrors;
 
-  DWARFAddressRangesVector Ranges = Die.getAddressRanges();
+  auto RangesOrError = Die.getAddressRanges();
+  if (!RangesOrError) {
+    // FIXME: Report the error.
+    ++NumErrors;
+    llvm::consumeError(RangesOrError.takeError());
+    return NumErrors;
+  }
 
+  DWARFAddressRangesVector Ranges = RangesOrError.get();
   // Build RI for this DIE and check that ranges within this DIE do not
   // overlap.
   DieRangeInfo RI(Die);

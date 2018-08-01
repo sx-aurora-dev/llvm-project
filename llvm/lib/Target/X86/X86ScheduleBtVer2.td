@@ -41,7 +41,14 @@ def JFPU1 : ProcResource<1>; // Vector/FPU Pipe1: VALU1/STC/FPM
 // The Integer PRF for Jaguar is 64 entries, and it holds the architectural and
 // speculative version of the 64-bit integer registers.
 // Reference: www.realworldtech.com/jaguar/4/
-def JIntegerPRF : RegisterFile<64, [GR8, GR16, GR32, GR64, CCR]>;
+//
+// The processor always keeps the different parts of an integer register
+// together. An instruction that writes to a part of a register will therefore
+// have a false dependence on any previous write to the same register or any
+// part of it.
+// Reference: Section 21.10 "AMD Bobcat and Jaguar pipeline: Partial register
+// access" - Agner Fog's "microarchitecture.pdf".
+def JIntegerPRF : RegisterFile<64, [GR64, CCR]>;
 
 // The Jaguar FP Retire Queue renames SIMD and FP uOps onto a pool of 72 SSE
 // registers. Operations on 256-bit data types are cracked into two COPs.
@@ -161,6 +168,9 @@ defm : JWriteResIntPair<WriteIMul,   [JALU1, JMul], 3, [1, 1], 2>; // i8/i16/i32
 defm : JWriteResIntPair<WriteIMul64, [JALU1, JMul], 6, [1, 4], 2>; // i64 multiplication
 defm : X86WriteRes<WriteIMulH,       [JALU1], 6, [4], 1>;
 
+defm : X86WriteRes<WriteBSWAP32, [JALU01], 1, [1], 1>;
+defm : X86WriteRes<WriteBSWAP64, [JALU01], 1, [1], 1>;
+
 defm : JWriteResIntPair<WriteDiv8,   [JALU1, JDiv], 12, [1, 12], 1>;
 defm : JWriteResIntPair<WriteDiv16,  [JALU1, JDiv], 17, [1, 17], 2>;
 defm : JWriteResIntPair<WriteDiv32,  [JALU1, JDiv], 25, [1, 25], 2>;
@@ -177,16 +187,17 @@ defm : JWriteResIntPair<WriteCMOV2, [JALU01], 1>; // Conditional (CF + ZF flag) 
 defm : X86WriteRes<WriteFCMOV, [JFPU0, JFPA], 3, [1,1], 1>; // x87 conditional move.
 def  : WriteRes<WriteSETCC, [JALU01]>; // Setcc.
 def  : WriteRes<WriteSETCCStore, [JALU01,JSAGU]>;
+def  : WriteRes<WriteLAHFSAHF, [JALU01]>;
 
 // This is for simple LEAs with one or two input operands.
-// FIXME: SAGU 3-operand LEA
 def : WriteRes<WriteLEA, [JALU01]>;
 
 // Bit counts.
-defm : JWriteResIntPair<WriteBitScan, [JALU01], 5, [4], 8>;
-defm : JWriteResIntPair<WritePOPCNT,  [JALU01], 1>;
-defm : JWriteResIntPair<WriteLZCNT,   [JALU01], 1>;
-defm : JWriteResIntPair<WriteTZCNT,   [JALU01], 2, [2]>;
+defm : JWriteResIntPair<WriteBSF, [JALU01], 5, [4], 8>;
+defm : JWriteResIntPair<WriteBSR, [JALU01], 5, [4], 8>;
+defm : JWriteResIntPair<WritePOPCNT,         [JALU01], 1>;
+defm : JWriteResIntPair<WriteLZCNT,          [JALU01], 1>;
+defm : JWriteResIntPair<WriteTZCNT,          [JALU01], 2, [2]>;
 
 // BMI1 BEXTR, BMI2 BZHI
 defm : JWriteResIntPair<WriteBEXTR, [JALU01], 1>;
@@ -198,31 +209,11 @@ defm : X86WriteResPairUnsupported<WriteBZHI>;
 
 defm : JWriteResIntPair<WriteShift, [JALU01], 1>;
 
-def JWriteSHLDrri : SchedWriteRes<[JALU01]> {
-  let Latency = 3;
-  let ResourceCycles = [6];
-  let NumMicroOps = 6;
-}
-def: InstRW<[JWriteSHLDrri], (instrs SHLD16rri8, SHLD32rri8, SHLD64rri8,
-                                     SHRD16rri8, SHRD32rri8, SHRD64rri8)>;
-
-def JWriteSHLDrrCL : SchedWriteRes<[JALU01]> {
-  let Latency = 4;
-  let ResourceCycles = [8];
-  let NumMicroOps = 7;
-}
-def: InstRW<[JWriteSHLDrrCL], (instrs SHLD16rrCL, SHLD32rrCL, SHLD64rrCL,
-                                      SHRD16rrCL, SHRD32rrCL, SHRD64rrCL)>;
-
-def JWriteSHLDm : SchedWriteRes<[JLAGU, JALU01]> {
-  let Latency = 9;
-  let ResourceCycles = [1, 22];
-  let NumMicroOps = 8;
-}
-def: InstRW<[JWriteSHLDm],(instrs SHLD16mri8, SHLD32mri8, SHLD64mri8,
-                                  SHLD16mrCL, SHLD32mrCL, SHLD64mrCL,
-                                  SHRD16mri8, SHRD32mri8, SHRD64mri8,
-                                  SHRD16mrCL, SHRD32mrCL, SHRD64mrCL)>;
+// SHLD/SHRD.
+defm : X86WriteRes<WriteSHDrri, [JALU01], 3, [6], 6>;
+defm : X86WriteRes<WriteSHDrrcl,[JALU01], 4, [8], 7>;
+defm : X86WriteRes<WriteSHDmri, [JLAGU, JALU01], 9, [1, 22], 8>;
+defm : X86WriteRes<WriteSHDmrcl,[JLAGU, JALU01], 9, [1, 22], 8>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Loads, stores, and moves, not folded with other operations.
@@ -450,44 +441,47 @@ defm : X86WriteRes<WriteVecMoveFromGpr,   [JFPU01, JFPX], 8, [1, 1], 2>;
 
 defm : JWriteResFpuPair<WriteVecALU,      [JFPU01, JVALU], 1>;
 defm : JWriteResFpuPair<WriteVecALUX,     [JFPU01, JVALU], 1>;
-defm : JWriteResFpuPair<WriteVecALUY,     [JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WriteVecALUY>;
 defm : X86WriteResPairUnsupported<WriteVecALUZ>;
 defm : JWriteResFpuPair<WriteVecShift,    [JFPU01, JVALU], 1>;
 defm : JWriteResFpuPair<WriteVecShiftX,   [JFPU01, JVALU], 1>;
-defm : JWriteResFpuPair<WriteVecShiftY,   [JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WriteVecShiftY>;
 defm : X86WriteResPairUnsupported<WriteVecShiftZ>;
 defm : JWriteResFpuPair<WriteVecShiftImm, [JFPU01, JVALU], 1>;
 defm : JWriteResFpuPair<WriteVecShiftImmX,[JFPU01, JVALU], 1>;
-defm : JWriteResFpuPair<WriteVecShiftImmY,[JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WriteVecShiftImmY>;
 defm : X86WriteResPairUnsupported<WriteVecShiftImmZ>;
+defm : X86WriteResPairUnsupported<WriteVarVecShift>;
+defm : X86WriteResPairUnsupported<WriteVarVecShiftY>;
+defm : X86WriteResPairUnsupported<WriteVarVecShiftZ>;
 defm : JWriteResFpuPair<WriteVecIMul,     [JFPU0, JVIMUL], 2>;
 defm : JWriteResFpuPair<WriteVecIMulX,    [JFPU0, JVIMUL], 2>;
-defm : JWriteResFpuPair<WriteVecIMulY,    [JFPU0, JVIMUL], 2>;
+defm : X86WriteResPairUnsupported<WriteVecIMulY>;
 defm : X86WriteResPairUnsupported<WriteVecIMulZ>;
 defm : JWriteResFpuPair<WritePMULLD,      [JFPU0, JFPU01, JVIMUL, JVALU], 4, [2, 1, 2, 1], 3>;
-defm : JWriteResFpuPair<WritePMULLDY,     [JFPU0, JFPU01, JVIMUL, JVALU], 4, [2, 1, 2, 1], 3>;
+defm : X86WriteResPairUnsupported<WritePMULLDY>;
 defm : X86WriteResPairUnsupported<WritePMULLDZ>;
 defm : JWriteResFpuPair<WriteMPSAD,       [JFPU0, JVIMUL], 3, [1, 2]>;
-defm : JWriteResFpuPair<WriteMPSADY,      [JFPU0, JVIMUL], 3, [1, 2]>;
+defm : X86WriteResPairUnsupported<WriteMPSADY>;
 defm : X86WriteResPairUnsupported<WriteMPSADZ>;
 defm : JWriteResFpuPair<WritePSADBW,      [JFPU01, JVALU], 2>;
 defm : JWriteResFpuPair<WritePSADBWX,     [JFPU01, JVALU], 2>;
-defm : JWriteResFpuPair<WritePSADBWY,     [JFPU01, JVALU], 2>;
+defm : X86WriteResPairUnsupported<WritePSADBWY>;
 defm : X86WriteResPairUnsupported<WritePSADBWZ>;
 defm : JWriteResFpuPair<WritePHMINPOS,    [JFPU0,  JVALU], 2>;
 defm : JWriteResFpuPair<WriteShuffle,     [JFPU01, JVALU], 1>;
 defm : JWriteResFpuPair<WriteShuffleX,    [JFPU01, JVALU], 1>;
-defm : JWriteResFpuPair<WriteShuffleY,    [JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WriteShuffleY>;
 defm : X86WriteResPairUnsupported<WriteShuffleZ>;
 defm : JWriteResFpuPair<WriteVarShuffle,  [JFPU01, JVALU], 2, [1, 4], 3>;
 defm : JWriteResFpuPair<WriteVarShuffleX, [JFPU01, JVALU], 2, [1, 4], 3>;
-defm : JWriteResFpuPair<WriteVarShuffleY, [JFPU01, JVALU], 2, [1, 4], 3>;
+defm : X86WriteResPairUnsupported<WriteVarShuffleY>;
 defm : X86WriteResPairUnsupported<WriteVarShuffleZ>;
 defm : JWriteResFpuPair<WriteBlend,       [JFPU01, JVALU], 1>;
-defm : JWriteResFpuPair<WriteBlendY,      [JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WriteBlendY>;
 defm : X86WriteResPairUnsupported<WriteBlendZ>;
 defm : JWriteResFpuPair<WriteVarBlend,    [JFPU01, JVALU], 2, [1, 4], 3>;
-defm : JWriteResFpuPair<WriteVarBlendY,   [JFPU01, JVALU], 2, [1, 4], 3>;
+defm : X86WriteResPairUnsupported<WriteVarBlendY>;
 defm : X86WriteResPairUnsupported<WriteVarBlendZ>;
 defm : JWriteResFpuPair<WriteVecLogic,    [JFPU01, JVALU], 1>;
 defm : JWriteResFpuPair<WriteVecLogicX,   [JFPU01, JVALU], 1>;
@@ -496,11 +490,8 @@ defm : X86WriteResPairUnsupported<WriteVecLogicZ>;
 defm : JWriteResFpuPair<WriteVecTest,     [JFPU0, JFPA, JALU0], 3>;
 defm : JWriteResYMMPair<WriteVecTestY,    [JFPU01, JFPX, JFPA, JALU0], 4, [2, 2, 2, 1], 3>;
 defm : X86WriteResPairUnsupported<WriteVecTestZ>;
-defm : JWriteResFpuPair<WriteShuffle256,  [JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WriteShuffle256>;
 defm : X86WriteResPairUnsupported<WriteVarShuffle256>;
-defm : X86WriteResPairUnsupported<WriteVarVecShift>;
-defm : X86WriteResPairUnsupported<WriteVarVecShiftY>;
-defm : X86WriteResPairUnsupported<WriteVarVecShiftZ>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Vector insert/extract operations.
@@ -524,10 +515,10 @@ defm : JWriteResFpuPair<WritePCmpEStrM, [JFPU1, JSAGU, JLAGU, JVALU, JVALU1, JFP
 // MOVMSK Instructions.
 ////////////////////////////////////////////////////////////////////////////////
 
-def : WriteRes<WriteFMOVMSK,    [JFPU0, JFPA, JALU0]> { let Latency = 3; }
-def : WriteRes<WriteVecMOVMSK,  [JFPU0, JFPA, JALU0]> { let Latency = 3; }
-def : WriteRes<WriteVecMOVMSKY, [JFPU0, JFPA, JALU0]> { let Latency = 3; }
-def : WriteRes<WriteMMXMOVMSK,  [JFPU0, JFPA, JALU0]> { let Latency = 3; }
+def  : WriteRes<WriteFMOVMSK,    [JFPU0, JFPA, JALU0]> { let Latency = 3; }
+def  : WriteRes<WriteVecMOVMSK,  [JFPU0, JFPA, JALU0]> { let Latency = 3; }
+defm : X86WriteResUnsupported<WriteVecMOVMSKY>;
+def  : WriteRes<WriteMMXMOVMSK,  [JFPU0, JFPA, JALU0]> { let Latency = 3; }
 
 ////////////////////////////////////////////////////////////////////////////////
 // AES Instructions.
@@ -545,7 +536,7 @@ defm : JWriteResFpuPair<WriteFHAdd,         [JFPU0, JFPA], 3>;
 defm : JWriteResYMMPair<WriteFHAddY,        [JFPU0, JFPA], 3, [2,2], 2>;
 defm : JWriteResFpuPair<WritePHAdd,       [JFPU01, JVALU], 1>;
 defm : JWriteResFpuPair<WritePHAddX,      [JFPU01, JVALU], 1>;
-defm : JWriteResFpuPair<WritePHAddY,      [JFPU01, JVALU], 1>;
+defm : X86WriteResPairUnsupported<WritePHAddY>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Carry-less multiplication instructions.
@@ -653,4 +644,38 @@ def : InstRW<[JWriteVZeroIdiomALUX], (instrs PSUBBrr, VPSUBBrr,
                                              PCMPGTDrr, VPCMPGTDrr,
                                              PCMPGTQrr, VPCMPGTQrr,
                                              PCMPGTWrr, VPCMPGTWrr)>;
+
+// This write is used for slow LEA instructions.
+def JWrite3OpsLEA : SchedWriteRes<[JALU1, JSAGU]> {
+  let Latency = 2;
+}
+
+// On Jaguar, a slow LEA is either a 3Ops LEA (base, index, offset), or an LEA
+// with a `Scale` value different than 1.
+def JSlowLEAPredicate : MCSchedPredicate<
+  CheckAny<[
+    // A 3-operand LEA (base, index, offset).
+    IsThreeOperandsLEAFn,
+    // An LEA with a "Scale" different than 1.
+    CheckAll<[
+      CheckIsImmOperand<2>,
+      CheckNot<CheckImmOperand<2, 1>>
+    ]>
+  ]>
+>;
+
+def JWriteLEA : SchedWriteVariant<[
+    SchedVar<JSlowLEAPredicate,          [JWrite3OpsLEA]>,
+    SchedVar<MCSchedPredicate<TruePred>, [WriteLEA]>
+]>;
+
+def : InstRW<[JWriteLEA], (instrs LEA32r, LEA64r, LEA64_32r)>;
+
+def JSlowLEA16r : SchedWriteRes<[JALU01]> {
+  let Latency = 3;
+  let ResourceCycles = [4];
+}
+
+def : InstRW<[JSlowLEA16r], (instrs LEA16r)>;
+
 } // SchedModel

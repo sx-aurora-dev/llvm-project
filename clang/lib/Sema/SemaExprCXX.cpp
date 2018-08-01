@@ -80,6 +80,50 @@ ParsedType Sema::getInheritingConstructorName(CXXScopeSpec &SS,
                           Context.getTrivialTypeSourceInfo(Type, NameLoc));
 }
 
+ParsedType Sema::getConstructorName(IdentifierInfo &II,
+                                    SourceLocation NameLoc,
+                                    Scope *S, CXXScopeSpec &SS,
+                                    bool EnteringContext) {
+  CXXRecordDecl *CurClass = getCurrentClass(S, &SS);
+  assert(CurClass && &II == CurClass->getIdentifier() &&
+         "not a constructor name");
+
+  // When naming a constructor as a member of a dependent context (eg, in a
+  // friend declaration or an inherited constructor declaration), form an
+  // unresolved "typename" type.
+  if (CurClass->isDependentContext() && !EnteringContext) {
+    QualType T = Context.getDependentNameType(ETK_None, SS.getScopeRep(), &II);
+    return ParsedType::make(T);
+  }
+
+  if (SS.isNotEmpty() && RequireCompleteDeclContext(SS, CurClass))
+    return ParsedType();
+
+  // Find the injected-class-name declaration. Note that we make no attempt to
+  // diagnose cases where the injected-class-name is shadowed: the only
+  // declaration that can validly shadow the injected-class-name is a
+  // non-static data member, and if the class contains both a non-static data
+  // member and a constructor then it is ill-formed (we check that in
+  // CheckCompletedCXXClass).
+  CXXRecordDecl *InjectedClassName = nullptr;
+  for (NamedDecl *ND : CurClass->lookup(&II)) {
+    auto *RD = dyn_cast<CXXRecordDecl>(ND);
+    if (RD && RD->isInjectedClassName()) {
+      InjectedClassName = RD;
+      break;
+    }
+  }
+  if (!InjectedClassName && CurClass->isInvalidDecl())
+    return ParsedType();
+  assert(InjectedClassName && "couldn't find injected class name");
+
+  QualType T = Context.getTypeDeclType(InjectedClassName);
+  DiagnoseUseOfDecl(InjectedClassName, NameLoc);
+  MarkAnyDeclReferenced(NameLoc, InjectedClassName, /*OdrUse=*/false);
+
+  return ParsedType::make(T);
+}
+
 ParsedType Sema::getDestructorName(SourceLocation TildeLoc,
                                    IdentifierInfo &II,
                                    SourceLocation NameLoc,
@@ -1616,9 +1660,9 @@ Sema::ActOnCXXNew(SourceLocation StartLoc, bool UseGlobal,
       if (Expr *NumElts = (Expr *)Array.NumElts) {
         if (!NumElts->isTypeDependent() && !NumElts->isValueDependent()) {
           if (getLangOpts().CPlusPlus14) {
-	    // C++1y [expr.new]p6: Every constant-expression in a noptr-new-declarator
-	    //   shall be a converted constant expression (5.19) of type std::size_t
-	    //   and shall evaluate to a strictly positive value.
+            // C++1y [expr.new]p6: Every constant-expression in a noptr-new-declarator
+            //   shall be a converted constant expression (5.19) of type std::size_t
+            //   and shall evaluate to a strictly positive value.
             unsigned IntWidth = Context.getTargetInfo().getIntWidth();
             assert(IntWidth && "Builtin type of size 0?");
             llvm::APSInt Value(IntWidth);
@@ -1820,13 +1864,6 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
   if (CheckAllocatedType(AllocType, TypeRange.getBegin(), TypeRange))
     return ExprError();
 
-  if (initStyle == CXXNewExpr::ListInit &&
-      isStdInitializerList(AllocType, nullptr)) {
-    Diag(AllocTypeInfo->getTypeLoc().getBeginLoc(),
-         diag::warn_dangling_std_initializer_list)
-        << /*at end of FE*/0 << Inits[0]->getSourceRange();
-  }
-
   // In ARC, infer 'retaining' for the allocated
   if (getLangOpts().ObjCAutoRefCount &&
       AllocType.getObjCLifetime() == Qualifiers::OCL_None &&
@@ -1856,7 +1893,7 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
       assert(Context.getTargetInfo().getIntWidth() && "Builtin type of size 0?");
 
       ConvertedSize = PerformImplicitConversion(ArraySize, Context.getSizeType(),
-						AA_Converting);
+                                                AA_Converting);
 
       if (!ConvertedSize.isInvalid() &&
           ArraySize->getType()->getAs<RecordType>())
@@ -3725,6 +3762,10 @@ Sema::PerformImplicitConversion(Expr *From, QualType ToType,
                                 const ImplicitConversionSequence &ICS,
                                 AssignmentAction Action,
                                 CheckedConversionKind CCK) {
+  // C++ [over.match.oper]p7: [...] operands of class type are converted [...]
+  if (CCK == CCK_ForBuiltinOverloadedOp && !From->getType()->isRecordType())
+    return From;
+
   switch (ICS.getKind()) {
   case ImplicitConversionSequence::StandardConversion: {
     ExprResult Res = PerformImplicitConversion(From, ToType, ICS.Standard,
@@ -3783,6 +3824,12 @@ Sema::PerformImplicitConversion(Expr *From, QualType ToType,
         return ExprError();
 
       From = CastArg.get();
+
+      // C++ [over.match.oper]p7:
+      //   [...] the second standard conversion sequence of a user-defined
+      //   conversion sequence is not applied.
+      if (CCK == CCK_ForBuiltinOverloadedOp)
+        return From;
 
       return PerformImplicitConversion(From, ToType, ICS.UserDefined.After,
                                        AA_Converting, CCK);
@@ -4247,7 +4294,7 @@ Sema::PerformImplicitConversion(Expr *From, QualType ToType,
 
   // If this conversion sequence succeeded and involved implicitly converting a
   // _Nullable type to a _Nonnull one, complain.
-  if (CCK == CCK_ImplicitConversion)
+  if (!isCast(CCK))
     diagnoseNullableToNonnullConversion(ToType, InitialFromType,
                                         From->getLocStart());
 
@@ -5418,8 +5465,9 @@ QualType Sema::CheckPointerToMemberOperands(ExprResult &LHS, ExprResult &RHS,
 
     case RQ_LValue:
       if (!isIndirect && !LHS.get()->Classify(Context).isLValue()) {
-        // C++2a allows functions with ref-qualifier & if they are also 'const'.
-        if (Proto->isConst())
+        // C++2a allows functions with ref-qualifier & if their cv-qualifier-seq
+        // is (exactly) 'const'.
+        if (Proto->isConst() && !Proto->isVolatile())
           Diag(Loc, getLangOpts().CPlusPlus2a
                         ? diag::warn_cxx17_compat_pointer_to_const_ref_member_on_rvalue
                         : diag::ext_pointer_to_const_ref_member_on_rvalue);
@@ -6380,7 +6428,8 @@ ExprResult Sema::MaybeBindToTemporary(Expr *E) {
   if (RD->isInvalidDecl() || RD->isDependentContext())
     return E;
 
-  bool IsDecltype = ExprEvalContexts.back().IsDecltype;
+  bool IsDecltype = ExprEvalContexts.back().ExprContext ==
+                    ExpressionEvaluationContextRecord::EK_Decltype;
   CXXDestructorDecl *Destructor = IsDecltype ? nullptr : LookupDestructor(RD);
 
   if (Destructor) {
@@ -6462,7 +6511,9 @@ Stmt *Sema::MaybeCreateStmtWithCleanups(Stmt *SubStmt) {
 /// are omitted for the 'topmost' call in the decltype expression. If the
 /// topmost call bound a temporary, strip that temporary off the expression.
 ExprResult Sema::ActOnDecltypeExpression(Expr *E) {
-  assert(ExprEvalContexts.back().IsDecltype && "not in a decltype expression");
+  assert(ExprEvalContexts.back().ExprContext ==
+             ExpressionEvaluationContextRecord::EK_Decltype &&
+         "not in a decltype expression");
 
   // C++11 [expr.call]p11:
   //   If a function call is a prvalue of object type,
@@ -6504,7 +6555,8 @@ ExprResult Sema::ActOnDecltypeExpression(Expr *E) {
     TopBind = nullptr;
 
   // Disable the special decltype handling now.
-  ExprEvalContexts.back().IsDecltype = false;
+  ExprEvalContexts.back().ExprContext =
+      ExpressionEvaluationContextRecord::EK_Other;
 
   // In MS mode, don't perform any extra checking of call return types within a
   // decltype expression.
@@ -7062,10 +7114,17 @@ ExprResult Sema::ActOnPseudoDestructorExpr(Scope *S, Expr *Base,
 ExprResult Sema::BuildCXXMemberCallExpr(Expr *E, NamedDecl *FoundDecl,
                                         CXXConversionDecl *Method,
                                         bool HadMultipleCandidates) {
+  // Convert the expression to match the conversion function's implicit object
+  // parameter.
+  ExprResult Exp = PerformObjectArgumentInitialization(E, /*Qualifier=*/nullptr,
+                                          FoundDecl, Method);
+  if (Exp.isInvalid())
+    return true;
+
   if (Method->getParent()->isLambda() &&
       Method->getConversionType()->isBlockPointerType()) {
     // This is a lambda coversion to block pointer; check if the argument
-    // is a LambdaExpr.
+    // was a LambdaExpr.
     Expr *SubE = E;
     CastExpr *CE = dyn_cast<CastExpr>(SubE);
     if (CE && CE->getCastKind() == CK_NoOp)
@@ -7082,21 +7141,15 @@ ExprResult Sema::BuildCXXMemberCallExpr(Expr *E, NamedDecl *FoundDecl,
       DiagnosticErrorTrap Trap(Diags);
       PushExpressionEvaluationContext(
           ExpressionEvaluationContext::PotentiallyEvaluated);
-      ExprResult Exp = BuildBlockForLambdaConversion(E->getExprLoc(),
-                                                     E->getExprLoc(),
-                                                     Method, E);
+      ExprResult BlockExp = BuildBlockForLambdaConversion(
+          Exp.get()->getExprLoc(), Exp.get()->getExprLoc(), Method, Exp.get());
       PopExpressionEvaluationContext();
 
-      if (Exp.isInvalid())
-        Diag(E->getExprLoc(), diag::note_lambda_to_block_conv);
-      return Exp;
+      if (BlockExp.isInvalid())
+        Diag(Exp.get()->getExprLoc(), diag::note_lambda_to_block_conv);
+      return BlockExp;
     }
   }
-
-  ExprResult Exp = PerformObjectArgumentInitialization(E, /*Qualifier=*/nullptr,
-                                          FoundDecl, Method);
-  if (Exp.isInvalid())
-    return true;
 
   MemberExpr *ME = new (Context) MemberExpr(
       Exp.get(), /*IsArrow=*/false, SourceLocation(), Method, SourceLocation(),
@@ -7685,12 +7738,8 @@ Sema::CorrectDelayedTyposInExpr(Expr *E, VarDecl *InitDecl,
   if (E && !ExprEvalContexts.empty() && ExprEvalContexts.back().NumTypos &&
       (E->isTypeDependent() || E->isValueDependent() ||
        E->isInstantiationDependent())) {
-    auto TyposInContext = ExprEvalContexts.back().NumTypos;
-    assert(TyposInContext < ~0U && "Recursive call of CorrectDelayedTyposInExpr");
-    ExprEvalContexts.back().NumTypos = ~0U;
     auto TyposResolved = DelayedTypos.size();
     auto Result = TransformTypos(*this, InitDecl, Filter).Transform(E);
-    ExprEvalContexts.back().NumTypos = TyposInContext;
     TyposResolved -= DelayedTypos.size();
     if (Result.isInvalid() || Result.get() != E) {
       ExprEvalContexts.back().NumTypos -= TyposResolved;

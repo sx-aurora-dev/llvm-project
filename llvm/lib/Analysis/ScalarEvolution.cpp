@@ -421,24 +421,21 @@ SCEVCastExpr::SCEVCastExpr(const FoldingSetNodeIDRef ID,
 SCEVTruncateExpr::SCEVTruncateExpr(const FoldingSetNodeIDRef ID,
                                    const SCEV *op, Type *ty)
   : SCEVCastExpr(ID, scTruncate, op, ty) {
-  assert((Op->getType()->isIntegerTy() || Op->getType()->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(Op->getType()->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot truncate non-integer value!");
 }
 
 SCEVZeroExtendExpr::SCEVZeroExtendExpr(const FoldingSetNodeIDRef ID,
                                        const SCEV *op, Type *ty)
   : SCEVCastExpr(ID, scZeroExtend, op, ty) {
-  assert((Op->getType()->isIntegerTy() || Op->getType()->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(Op->getType()->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot zero extend non-integer value!");
 }
 
 SCEVSignExtendExpr::SCEVSignExtendExpr(const FoldingSetNodeIDRef ID,
                                        const SCEV *op, Type *ty)
   : SCEVCastExpr(ID, scSignExtend, op, ty) {
-  assert((Op->getType()->isIntegerTy() || Op->getType()->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(Op->getType()->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot sign extend non-integer value!");
 }
 
@@ -1562,6 +1559,43 @@ bool ScalarEvolution::proveNoWrapByVaryingStart(const SCEV *Start,
   return false;
 }
 
+// Finds an integer D for an expression (C + x + y + ...) such that the top
+// level addition in (D + (C - D + x + y + ...)) would not wrap (signed or
+// unsigned) and the number of trailing zeros of (C - D + x + y + ...) is
+// maximized, where C is the \p ConstantTerm, x, y, ... are arbitrary SCEVs, and
+// the (C + x + y + ...) expression is \p WholeAddExpr.
+static APInt extractConstantWithoutWrapping(ScalarEvolution &SE,
+                                            const SCEVConstant *ConstantTerm,
+                                            const SCEVAddExpr *WholeAddExpr) {
+  const APInt C = ConstantTerm->getAPInt();
+  const unsigned BitWidth = C.getBitWidth();
+  // Find number of trailing zeros of (x + y + ...) w/o the C first:
+  uint32_t TZ = BitWidth;
+  for (unsigned I = 1, E = WholeAddExpr->getNumOperands(); I < E && TZ; ++I)
+    TZ = std::min(TZ, SE.GetMinTrailingZeros(WholeAddExpr->getOperand(I)));
+  if (TZ) {
+    // Set D to be as many least significant bits of C as possible while still
+    // guaranteeing that adding D to (C - D + x + y + ...) won't cause a wrap:
+    return TZ < BitWidth ? C.trunc(TZ).zext(BitWidth) : C;
+  }
+  return APInt(BitWidth, 0);
+}
+
+// Finds an integer D for an affine AddRec expression {C,+,x} such that the top
+// level addition in (D + {C-D,+,x}) would not wrap (signed or unsigned) and the
+// number of trailing zeros of (C - D + x * n) is maximized, where C is the \p
+// ConstantStart, x is an arbitrary \p Step, and n is the loop trip count.
+static APInt extractConstantWithoutWrapping(ScalarEvolution &SE,
+                                            const APInt &ConstantStart,
+                                            const SCEV *Step) {
+  const unsigned BitWidth = ConstantStart.getBitWidth();
+  const uint32_t TZ = SE.GetMinTrailingZeros(Step);
+  if (TZ)
+    return TZ < BitWidth ? ConstantStart.trunc(TZ).zext(BitWidth)
+                         : ConstantStart;
+  return APInt(BitWidth, 0);
+}
+
 const SCEV *
 ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
   assert(getTypeSizeInBits(Op->getType()) < getTypeSizeInBits(Ty) &&
@@ -1748,6 +1782,23 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
         }
       }
 
+      // zext({C,+,Step}) --> (zext(D) + zext({C-D,+,Step}))<nuw><nsw>
+      // if D + (C - D + Step * n) could be proven to not unsigned wrap
+      // where D maximizes the number of trailing zeros of (C - D + Step * n)
+      if (const auto *SC = dyn_cast<SCEVConstant>(Start)) {
+        const APInt &C = SC->getAPInt();
+        const APInt &D = extractConstantWithoutWrapping(*this, C, Step);
+        if (D != 0) {
+          const SCEV *SZExtD = getZeroExtendExpr(getConstant(D), Ty, Depth);
+          const SCEV *SResidual =
+              getAddRecExpr(getConstant(C - D), Step, L, AR->getNoWrapFlags());
+          const SCEV *SZExtR = getZeroExtendExpr(SResidual, Ty, Depth + 1);
+          return getAddExpr(SZExtD, SZExtR,
+                            (SCEV::NoWrapFlags)(SCEV::FlagNSW | SCEV::FlagNUW),
+                            Depth + 1);
+        }
+      }
+
       if (proveNoWrapByVaryingStart<SCEVZeroExtendExpr>(Start, Step, L)) {
         const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNUW);
         return getAddRecExpr(
@@ -1755,6 +1806,20 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
             getZeroExtendExpr(Step, Ty, Depth + 1), L, AR->getNoWrapFlags());
       }
     }
+
+  // zext(A % B) --> zext(A) % zext(B)
+  {
+    const SCEV *LHS;
+    const SCEV *RHS;
+    if (matchURem(Op, LHS, RHS))
+      return getURemExpr(getZeroExtendExpr(LHS, Ty, Depth + 1),
+                         getZeroExtendExpr(RHS, Ty, Depth + 1));
+  }
+
+  // zext(A / B) --> zext(A) / zext(B).
+  if (auto *Div = dyn_cast<SCEVUDivExpr>(Op))
+    return getUDivExpr(getZeroExtendExpr(Div->getLHS(), Ty, Depth + 1),
+                       getZeroExtendExpr(Div->getRHS(), Ty, Depth + 1));
 
   if (auto *SA = dyn_cast<SCEVAddExpr>(Op)) {
     // zext((A + B + ...)<nuw>) --> (zext(A) + zext(B) + ...)<nuw>
@@ -1765,6 +1830,27 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       for (const auto *Op : SA->operands())
         Ops.push_back(getZeroExtendExpr(Op, Ty, Depth + 1));
       return getAddExpr(Ops, SCEV::FlagNUW, Depth + 1);
+    }
+
+    // zext(C + x + y + ...) --> (zext(D) + zext((C - D) + x + y + ...))
+    // if D + (C - D + x + y + ...) could be proven to not unsigned wrap
+    // where D maximizes the number of trailing zeros of (C - D + x + y + ...)
+    //
+    // Often address arithmetics contain expressions like
+    // (zext (add (shl X, C1), C2)), for instance, (zext (5 + (4 * X))).
+    // This transformation is useful while proving that such expressions are
+    // equal or differ by a small constant amount, see LoadStoreVectorizer pass.
+    if (const auto *SC = dyn_cast<SCEVConstant>(SA->getOperand(0))) {
+      const APInt &D = extractConstantWithoutWrapping(*this, SC, SA);
+      if (D != 0) {
+        const SCEV *SZExtD = getZeroExtendExpr(getConstant(D), Ty, Depth);
+        const SCEV *SResidual =
+            getAddExpr(getConstant(-D), SA, SCEV::FlagAnyWrap, Depth);
+        const SCEV *SZExtR = getZeroExtendExpr(SResidual, Ty, Depth + 1);
+        return getAddExpr(SZExtD, SZExtR,
+                          (SCEV::NoWrapFlags)(SCEV::FlagNSW | SCEV::FlagNUW),
+                          Depth + 1);
+      }
     }
   }
 
@@ -1867,24 +1953,7 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       return getTruncateOrSignExtend(X, Ty);
   }
 
-  // sext(C1 + (C2 * x)) --> C1 + sext(C2 * x) if C1 < C2
   if (auto *SA = dyn_cast<SCEVAddExpr>(Op)) {
-    if (SA->getNumOperands() == 2) {
-      auto *SC1 = dyn_cast<SCEVConstant>(SA->getOperand(0));
-      auto *SMul = dyn_cast<SCEVMulExpr>(SA->getOperand(1));
-      if (SMul && SC1) {
-        if (auto *SC2 = dyn_cast<SCEVConstant>(SMul->getOperand(0))) {
-          const APInt &C1 = SC1->getAPInt();
-          const APInt &C2 = SC2->getAPInt();
-          if (C1.isStrictlyPositive() && C2.isStrictlyPositive() &&
-              C2.ugt(C1) && C2.isPowerOf2())
-            return getAddExpr(getSignExtendExpr(SC1, Ty, Depth + 1),
-                              getSignExtendExpr(SMul, Ty, Depth + 1),
-                              SCEV::FlagAnyWrap, Depth + 1);
-        }
-      }
-    }
-
     // sext((A + B + ...)<nsw>) --> (sext(A) + sext(B) + ...)<nsw>
     if (SA->hasNoSignedWrap()) {
       // If the addition does not sign overflow then we can, by definition,
@@ -1893,6 +1962,28 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       for (const auto *Op : SA->operands())
         Ops.push_back(getSignExtendExpr(Op, Ty, Depth + 1));
       return getAddExpr(Ops, SCEV::FlagNSW, Depth + 1);
+    }
+
+    // sext(C + x + y + ...) --> (sext(D) + sext((C - D) + x + y + ...))
+    // if D + (C - D + x + y + ...) could be proven to not signed wrap
+    // where D maximizes the number of trailing zeros of (C - D + x + y + ...)
+    //
+    // For instance, this will bring two seemingly different expressions:
+    //     1 + sext(5 + 20 * %x + 24 * %y)  and
+    //         sext(6 + 20 * %x + 24 * %y)
+    // to the same form:
+    //     2 + sext(4 + 20 * %x + 24 * %y)
+    if (const auto *SC = dyn_cast<SCEVConstant>(SA->getOperand(0))) {
+      const APInt &D = extractConstantWithoutWrapping(*this, SC, SA);
+      if (D != 0) {
+        const SCEV *SSExtD = getSignExtendExpr(getConstant(D), Ty, Depth);
+        const SCEV *SResidual =
+            getAddExpr(getConstant(-D), SA, SCEV::FlagAnyWrap, Depth);
+        const SCEV *SSExtR = getSignExtendExpr(SResidual, Ty, Depth + 1);
+        return getAddExpr(SSExtD, SSExtR,
+                          (SCEV::NoWrapFlags)(SCEV::FlagNSW | SCEV::FlagNUW),
+                          Depth + 1);
+      }
     }
   }
   // If the input value is a chrec scev, and we can prove that the value
@@ -2023,21 +2114,20 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
         }
       }
 
-      // If Start and Step are constants, check if we can apply this
-      // transformation:
-      // sext{C1,+,C2} --> C1 + sext{0,+,C2} if C1 < C2
-      auto *SC1 = dyn_cast<SCEVConstant>(Start);
-      auto *SC2 = dyn_cast<SCEVConstant>(Step);
-      if (SC1 && SC2) {
-        const APInt &C1 = SC1->getAPInt();
-        const APInt &C2 = SC2->getAPInt();
-        if (C1.isStrictlyPositive() && C2.isStrictlyPositive() && C2.ugt(C1) &&
-            C2.isPowerOf2()) {
-          Start = getSignExtendExpr(Start, Ty, Depth + 1);
-          const SCEV *NewAR = getAddRecExpr(getZero(AR->getType()), Step, L,
-                                            AR->getNoWrapFlags());
-          return getAddExpr(Start, getSignExtendExpr(NewAR, Ty, Depth + 1),
-                            SCEV::FlagAnyWrap, Depth + 1);
+      // sext({C,+,Step}) --> (sext(D) + sext({C-D,+,Step}))<nuw><nsw>
+      // if D + (C - D + Step * n) could be proven to not signed wrap
+      // where D maximizes the number of trailing zeros of (C - D + Step * n)
+      if (const auto *SC = dyn_cast<SCEVConstant>(Start)) {
+        const APInt &C = SC->getAPInt();
+        const APInt &D = extractConstantWithoutWrapping(*this, C, Step);
+        if (D != 0) {
+          const SCEV *SSExtD = getSignExtendExpr(getConstant(D), Ty, Depth);
+          const SCEV *SResidual =
+              getAddRecExpr(getConstant(C - D), Step, L, AR->getNoWrapFlags());
+          const SCEV *SSExtR = getSignExtendExpr(SResidual, Ty, Depth + 1);
+          return getAddExpr(SSExtD, SSExtR,
+                            (SCEV::NoWrapFlags)(SCEV::FlagNSW | SCEV::FlagNUW),
+                            Depth + 1);
         }
       }
 
@@ -2261,7 +2351,7 @@ StrengthenNoWrapFlags(ScalarEvolution *SE, SCEVTypes Type,
     // (A <opcode> C) --> (A <opcode> C)<nuw> if the op doesn't unsign overflow.
     if (!(SignOrUnsignWrap & SCEV::FlagNUW)) {
       auto NUWRegion = ConstantRange::makeGuaranteedNoWrapRegion(
-          Instruction::Add, C, OBO::NoUnsignedWrap);
+          Opcode, C, OBO::NoUnsignedWrap);
       if (NUWRegion.contains(SE->getUnsignedRange(Ops[1])))
         Flags = ScalarEvolution::setFlags(Flags, SCEV::FlagNUW);
     }
@@ -2402,7 +2492,7 @@ const SCEV *ScalarEvolution::getAddExpr(SmallVectorImpl<const SCEV *> &Ops,
     }
     if (Ok) {
       // Evaluate the expression in the larger type.
-      const SCEV *Fold = getAddExpr(LargeOps, Flags, Depth + 1);
+      const SCEV *Fold = getAddExpr(LargeOps, SCEV::FlagAnyWrap, Depth + 1);
       // If it folds to something simple, use it. Otherwise, don't.
       if (isa<SCEVConstant>(Fold) || isa<SCEVUnknown>(Fold))
         return getTruncateExpr(Fold, Ty);
@@ -3685,7 +3775,7 @@ const SCEV *ScalarEvolution::getUnknown(Value *V) {
 /// target-specific information.
 bool ScalarEvolution::isSCEVable(Type *Ty) const {
   // Integers and pointers are always SCEVable.
-  return Ty->isIntegerTy() || Ty->isPointerTy();
+  return Ty->isIntOrPtrTy();
 }
 
 /// Return the size in bits of the specified type, for which isSCEVable must
@@ -3930,8 +4020,7 @@ const SCEV *ScalarEvolution::getMinusSCEV(const SCEV *LHS, const SCEV *RHS,
 const SCEV *
 ScalarEvolution::getTruncateOrZeroExtend(const SCEV *V, Type *Ty) {
   Type *SrcTy = V->getType();
-  assert((SrcTy->isIntegerTy() || SrcTy->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(SrcTy->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot truncate or zero extend with non-integer arguments!");
   if (getTypeSizeInBits(SrcTy) == getTypeSizeInBits(Ty))
     return V;  // No conversion
@@ -3944,8 +4033,7 @@ const SCEV *
 ScalarEvolution::getTruncateOrSignExtend(const SCEV *V,
                                          Type *Ty) {
   Type *SrcTy = V->getType();
-  assert((SrcTy->isIntegerTy() || SrcTy->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(SrcTy->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot truncate or zero extend with non-integer arguments!");
   if (getTypeSizeInBits(SrcTy) == getTypeSizeInBits(Ty))
     return V;  // No conversion
@@ -3957,8 +4045,7 @@ ScalarEvolution::getTruncateOrSignExtend(const SCEV *V,
 const SCEV *
 ScalarEvolution::getNoopOrZeroExtend(const SCEV *V, Type *Ty) {
   Type *SrcTy = V->getType();
-  assert((SrcTy->isIntegerTy() || SrcTy->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(SrcTy->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot noop or zero extend with non-integer arguments!");
   assert(getTypeSizeInBits(SrcTy) <= getTypeSizeInBits(Ty) &&
          "getNoopOrZeroExtend cannot truncate!");
@@ -3970,8 +4057,7 @@ ScalarEvolution::getNoopOrZeroExtend(const SCEV *V, Type *Ty) {
 const SCEV *
 ScalarEvolution::getNoopOrSignExtend(const SCEV *V, Type *Ty) {
   Type *SrcTy = V->getType();
-  assert((SrcTy->isIntegerTy() || SrcTy->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(SrcTy->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot noop or sign extend with non-integer arguments!");
   assert(getTypeSizeInBits(SrcTy) <= getTypeSizeInBits(Ty) &&
          "getNoopOrSignExtend cannot truncate!");
@@ -3983,8 +4069,7 @@ ScalarEvolution::getNoopOrSignExtend(const SCEV *V, Type *Ty) {
 const SCEV *
 ScalarEvolution::getNoopOrAnyExtend(const SCEV *V, Type *Ty) {
   Type *SrcTy = V->getType();
-  assert((SrcTy->isIntegerTy() || SrcTy->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(SrcTy->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot noop or any extend with non-integer arguments!");
   assert(getTypeSizeInBits(SrcTy) <= getTypeSizeInBits(Ty) &&
          "getNoopOrAnyExtend cannot truncate!");
@@ -3996,8 +4081,7 @@ ScalarEvolution::getNoopOrAnyExtend(const SCEV *V, Type *Ty) {
 const SCEV *
 ScalarEvolution::getTruncateOrNoop(const SCEV *V, Type *Ty) {
   Type *SrcTy = V->getType();
-  assert((SrcTy->isIntegerTy() || SrcTy->isPointerTy()) &&
-         (Ty->isIntegerTy() || Ty->isPointerTy()) &&
+  assert(SrcTy->isIntOrPtrTy() && Ty->isIntOrPtrTy() &&
          "Cannot truncate or noop with non-integer arguments!");
   assert(getTypeSizeInBits(SrcTy) >= getTypeSizeInBits(Ty) &&
          "getTruncateOrNoop cannot extend!");
@@ -4755,7 +4839,7 @@ ScalarEvolution::createAddRecFromPHIWithCastsImpl(const SCEVUnknown *SymbolicPHI
 
   // Construct the extended SCEV: (Ext ix (Trunc iy (Expr) to ix) to iy)
   // for each of StartVal and Accum
-  auto getExtendedExpr = [&](const SCEV *Expr, 
+  auto getExtendedExpr = [&](const SCEV *Expr,
                              bool CreateSignExtend) -> const SCEV * {
     assert(isLoopInvariant(Expr, L) && "Expr is expected to be invariant");
     const SCEV *TruncatedExpr = getTruncateExpr(Expr, TruncTy);
@@ -4851,11 +4935,11 @@ ScalarEvolution::createAddRecFromPHIWithCasts(const SCEVUnknown *SymbolicPHI) {
   return Rewrite;
 }
 
-// FIXME: This utility is currently required because the Rewriter currently 
-// does not rewrite this expression: 
-// {0, +, (sext ix (trunc iy to ix) to iy)} 
+// FIXME: This utility is currently required because the Rewriter currently
+// does not rewrite this expression:
+// {0, +, (sext ix (trunc iy to ix) to iy)}
 // into {0, +, %step},
-// even when the following Equal predicate exists: 
+// even when the following Equal predicate exists:
 // "%step == (sext ix (trunc iy to ix) to iy)".
 bool PredicatedScalarEvolution::areAddRecsEqualWithPreds(
     const SCEVAddRecExpr *AR1, const SCEVAddRecExpr *AR2) const {
@@ -9711,8 +9795,9 @@ bool ScalarEvolution::isImpliedViaMerge(ICmpInst::Predicate Pred,
     // AddRec. It means that there is a loop which has both AddRec and Unknown
     // PHIs, for it we can compare incoming values of AddRec from above the loop
     // and latch with their respective incoming values of LPhi.
-    assert(LPhi->getNumIncomingValues() == 2 &&
-           "Phi node standing in loop header does not have exactly 2 inputs?");
+    // TODO: Generalize to handle loops with many inputs in a header.
+    if (LPhi->getNumIncomingValues() != 2) return false;
+
     auto *RLoop = RAR->getLoop();
     auto *Predecessor = RLoop->getLoopPredecessor();
     assert(Predecessor && "Loop with AddRec with no predecessor?");
@@ -12165,4 +12250,44 @@ void PredicatedScalarEvolution::print(raw_ostream &OS, unsigned Depth) const {
       OS.indent(Depth + 2) << *Expr << "\n";
       OS.indent(Depth + 2) << "--> " << *II->second.second << "\n";
     }
+}
+
+// Match the mathematical pattern A - (A / B) * B, where A and B can be
+// arbitrary expressions.
+// It's not always easy, as A and B can be folded (imagine A is X / 2, and B is
+// 4, A / B becomes X / 8).
+bool ScalarEvolution::matchURem(const SCEV *Expr, const SCEV *&LHS,
+                                const SCEV *&RHS) {
+  const auto *Add = dyn_cast<SCEVAddExpr>(Expr);
+  if (Add == nullptr || Add->getNumOperands() != 2)
+    return false;
+
+  const SCEV *A = Add->getOperand(1);
+  const auto *Mul = dyn_cast<SCEVMulExpr>(Add->getOperand(0));
+
+  if (Mul == nullptr)
+    return false;
+
+  const auto MatchURemWithDivisor = [&](const SCEV *B) {
+    // (SomeExpr + (-(SomeExpr / B) * B)).
+    if (Expr == getURemExpr(A, B)) {
+      LHS = A;
+      RHS = B;
+      return true;
+    }
+    return false;
+  };
+
+  // (SomeExpr + (-1 * (SomeExpr / B) * B)).
+  if (Mul->getNumOperands() == 3 && isa<SCEVConstant>(Mul->getOperand(0)))
+    return MatchURemWithDivisor(Mul->getOperand(1)) ||
+           MatchURemWithDivisor(Mul->getOperand(2));
+
+  // (SomeExpr + ((-SomeExpr / B) * B)) or (SomeExpr + ((SomeExpr / B) * -B)).
+  if (Mul->getNumOperands() == 2)
+    return MatchURemWithDivisor(Mul->getOperand(1)) ||
+           MatchURemWithDivisor(Mul->getOperand(0)) ||
+           MatchURemWithDivisor(getNegativeSCEV(Mul->getOperand(1))) ||
+           MatchURemWithDivisor(getNegativeSCEV(Mul->getOperand(0)));
+  return false;
 }

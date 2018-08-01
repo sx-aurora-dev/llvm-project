@@ -181,8 +181,8 @@ parseRngListTableHeader(DWARFDataExtractor &DA, uint32_t Offset) {
   return Table;
 }
 
-bool DWARFUnit::extractRangeList(uint32_t RangeListOffset,
-                                 DWARFDebugRangeList &RangeList) const {
+Error DWARFUnit::extractRangeList(uint32_t RangeListOffset,
+                                  DWARFDebugRangeList &RangeList) const {
   // Require that compile unit is extracted.
   assert(!DieArray.empty());
   DWARFDataExtractor RangesData(Context.getDWARFObj(), *RangeSection,
@@ -314,22 +314,24 @@ size_t DWARFUnit::extractDIEsIfNeeded(bool CUDieOnly) {
       else
         setRangesSection(&Context.getDWARFObj().getRnglistsSection(),
                          toSectionOffset(UnitDie.find(DW_AT_rnglists_base), 0));
-      // Parse the range list table header. Individual range lists are
-      // extracted lazily.
-      DWARFDataExtractor RangesDA(Context.getDWARFObj(), *RangeSection,
-                                  isLittleEndian, 0);
-      if (auto TableOrError =
-              parseRngListTableHeader(RangesDA, RangeSectionBase))
-        RngListTable = TableOrError.get();
-      else
-        WithColor::error() << "parsing a range list table: "
-                           << toString(TableOrError.takeError())
-                           << '\n';
+      if (RangeSection->Data.size()) {
+        // Parse the range list table header. Individual range lists are
+        // extracted lazily.
+        DWARFDataExtractor RangesDA(Context.getDWARFObj(), *RangeSection,
+                                    isLittleEndian, 0);
+        if (auto TableOrError =
+                parseRngListTableHeader(RangesDA, RangeSectionBase))
+          RngListTable = TableOrError.get();
+        else
+          WithColor::error() << "parsing a range list table: "
+                             << toString(TableOrError.takeError())
+                             << '\n';
 
-      // In a split dwarf unit, there is no DW_AT_rnglists_base attribute.
-      // Adjust RangeSectionBase to point past the table header.
-      if (isDWO && RngListTable)
-        RangeSectionBase = RngListTable->getHeaderSize();
+        // In a split dwarf unit, there is no DW_AT_rnglists_base attribute.
+        // Adjust RangeSectionBase to point past the table header.
+        if (isDWO && RngListTable)
+          RangeSectionBase = RngListTable->getHeaderSize();
+      }
     }
 
     // Don't fall back to DW_AT_GNU_ranges_base: it should be ignored for
@@ -397,26 +399,39 @@ void DWARFUnit::clearDIEs(bool KeepCUDie) {
   }
 }
 
-DWARFAddressRangesVector DWARFUnit::findRnglistFromOffset(uint32_t Offset) {
+Expected<DWARFAddressRangesVector>
+DWARFUnit::findRnglistFromOffset(uint32_t Offset) {
   if (getVersion() <= 4) {
     DWARFDebugRangeList RangeList;
-    if (extractRangeList(Offset, RangeList))
-      return RangeList.getAbsoluteRanges(getBaseAddress());
-    return DWARFAddressRangesVector();
+    if (Error E = extractRangeList(Offset, RangeList))
+      return std::move(E);
+    return RangeList.getAbsoluteRanges(getBaseAddress());
   }
   if (RngListTable) {
     DWARFDataExtractor RangesData(Context.getDWARFObj(), *RangeSection,
                                   isLittleEndian, RngListTable->getAddrSize());
-    if (auto RangeList = RngListTable->findRangeList(RangesData, Offset))
-      return RangeList->getAbsoluteRanges(getBaseAddress());
+    auto RangeListOrError = RngListTable->findList(RangesData, Offset);
+    if (RangeListOrError)
+      return RangeListOrError.get().getAbsoluteRanges(getBaseAddress());
+    return RangeListOrError.takeError();
   }
-  return DWARFAddressRangesVector();
+
+  return make_error<StringError>("missing or invalid range list table",
+                                 inconvertibleErrorCode());
 }
 
-DWARFAddressRangesVector DWARFUnit::findRnglistFromIndex(uint32_t Index) {
+Expected<DWARFAddressRangesVector>
+DWARFUnit::findRnglistFromIndex(uint32_t Index) {
   if (auto Offset = getRnglistOffset(Index))
     return findRnglistFromOffset(*Offset + RangeSectionBase);
-  return DWARFAddressRangesVector();
+
+  std::string Buffer;
+  raw_string_ostream Stream(Buffer);
+  if (RngListTable)
+    Stream << format("invalid range list table index %d", Index);
+  else
+    Stream << "missing or invalid range list table";
+  return make_error<StringError>(Stream.str(), inconvertibleErrorCode());
 }
 
 void DWARFUnit::collectAddressRanges(DWARFAddressRangesVector &CURanges) {
@@ -424,11 +439,16 @@ void DWARFUnit::collectAddressRanges(DWARFAddressRangesVector &CURanges) {
   if (!UnitDie)
     return;
   // First, check if unit DIE describes address ranges for the whole unit.
-  const auto &CUDIERanges = UnitDie.getAddressRanges();
-  if (!CUDIERanges.empty()) {
-    CURanges.insert(CURanges.end(), CUDIERanges.begin(), CUDIERanges.end());
-    return;
-  }
+  auto CUDIERangesOrError = UnitDie.getAddressRanges();
+  if (CUDIERangesOrError) {
+    if (!CUDIERangesOrError.get().empty()) {
+      CURanges.insert(CURanges.end(), CUDIERangesOrError.get().begin(),
+                      CUDIERangesOrError.get().end());
+      return;
+    }
+  } else
+    WithColor::error() << "decoding address ranges: "
+                       << toString(CUDIERangesOrError.takeError()) << '\n';
 
   // This function is usually called if there in no .debug_aranges section
   // in order to produce a compile unit level set of address ranges that
@@ -454,21 +474,25 @@ void DWARFUnit::collectAddressRanges(DWARFAddressRangesVector &CURanges) {
 
 void DWARFUnit::updateAddressDieMap(DWARFDie Die) {
   if (Die.isSubroutineDIE()) {
-    for (const auto &R : Die.getAddressRanges()) {
-      // Ignore 0-sized ranges.
-      if (R.LowPC == R.HighPC)
-        continue;
-      auto B = AddrDieMap.upper_bound(R.LowPC);
-      if (B != AddrDieMap.begin() && R.LowPC < (--B)->second.first) {
-        // The range is a sub-range of existing ranges, we need to split the
-        // existing range.
-        if (R.HighPC < B->second.first)
-          AddrDieMap[R.HighPC] = B->second;
-        if (R.LowPC > B->first)
-          AddrDieMap[B->first].first = R.LowPC;
+    auto DIERangesOrError = Die.getAddressRanges();
+    if (DIERangesOrError) {
+      for (const auto &R : DIERangesOrError.get()) {
+        // Ignore 0-sized ranges.
+        if (R.LowPC == R.HighPC)
+          continue;
+        auto B = AddrDieMap.upper_bound(R.LowPC);
+        if (B != AddrDieMap.begin() && R.LowPC < (--B)->second.first) {
+          // The range is a sub-range of existing ranges, we need to split the
+          // existing range.
+          if (R.HighPC < B->second.first)
+            AddrDieMap[R.HighPC] = B->second;
+          if (R.LowPC > B->first)
+            AddrDieMap[B->first].first = R.LowPC;
+        }
+        AddrDieMap[R.LowPC] = std::make_pair(R.HighPC, Die);
       }
-      AddrDieMap[R.LowPC] = std::make_pair(R.HighPC, Die);
-    }
+    } else
+      llvm::consumeError(DIERangesOrError.takeError());
   }
   // Parent DIEs are added to the AddrDieMap prior to the Children DIEs to
   // simplify the logic to update AddrDieMap. The child's range will always
@@ -562,6 +586,25 @@ DWARFDie DWARFUnit::getSibling(const DWARFDebugInfoEntry *Die) {
   return DWARFDie();
 }
 
+DWARFDie DWARFUnit::getPreviousSibling(const DWARFDebugInfoEntry *Die) {
+  if (!Die)
+    return DWARFDie();
+  uint32_t Depth = Die->getDepth();
+  // Unit DIEs always have a depth of zero and never have siblings.
+  if (Depth == 0)
+    return DWARFDie();
+
+  // Find the previous DIE whose depth is the same as the Die's depth.
+  for (size_t I = getDIEIndex(Die); I > 0;) {
+    --I;
+    if (DieArray[I].getDepth() == Depth - 1)
+      return DWARFDie();
+    if (DieArray[I].getDepth() == Depth)
+      return DWARFDie(this, &DieArray[I]);
+  }
+  return DWARFDie();
+}
+
 DWARFDie DWARFUnit::getFirstChild(const DWARFDebugInfoEntry *Die) {
   if (!Die->hasChildren())
     return DWARFDie();
@@ -571,6 +614,21 @@ DWARFDie DWARFUnit::getFirstChild(const DWARFDebugInfoEntry *Die) {
   if (I >= DieArray.size())
     return DWARFDie();
   return DWARFDie(this, &DieArray[I]);
+}
+
+DWARFDie DWARFUnit::getLastChild(const DWARFDebugInfoEntry *Die) {
+  if (!Die->hasChildren())
+    return DWARFDie();
+
+  uint32_t Depth = Die->getDepth();
+  for (size_t I = getDIEIndex(Die) + 1, EndIdx = DieArray.size(); I < EndIdx;
+       ++I) {
+    if (DieArray[I].getDepth() == Depth + 1 &&
+        DieArray[I].getTag() == dwarf::DW_TAG_null)
+      return DWARFDie(this, &DieArray[I]);
+    assert(DieArray[I].getDepth() > Depth && "Not processing children?");
+  }
+  return DWARFDie();
 }
 
 const DWARFAbbreviationDeclarationSet *DWARFUnit::getAbbreviations() const {
