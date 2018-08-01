@@ -42,7 +42,9 @@ define dso_local i64 @func4(i64, i64) local_unnamed_addr #0 {
 define dso_local zeroext i8 @func5(i8 zeroext, i8 zeroext) local_unnamed_addr #0 {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s34, %s0, %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    srl %s34, %s34, %s1
 ; CHECK-NEXT:    and %s0, %s34, (56)0
   %3 = zext i8 %0 to i32
   %4 = zext i8 %1 to i32
@@ -54,7 +56,9 @@ define dso_local zeroext i8 @func5(i8 zeroext, i8 zeroext) local_unnamed_addr #0
 define dso_local zeroext i16 @func6(i16 zeroext, i16 zeroext) local_unnamed_addr #0 {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s34, %s0, %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    srl %s34, %s34, %s1
 ; CHECK-NEXT:    and %s0, %s34, (48)0
   %3 = zext i16 %0 to i32
   %4 = zext i16 %1 to i32
@@ -66,7 +70,10 @@ define dso_local zeroext i16 @func6(i16 zeroext, i16 zeroext) local_unnamed_addr
 define dso_local i32 @func7(i32, i32) local_unnamed_addr #0 {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s0, %s0, %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s34, %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
   %3 = lshr i32 %0, %1
   ret i32 %3
 }
@@ -115,7 +122,10 @@ define dso_local i64 @func12(i64) local_unnamed_addr #0 {
 define dso_local zeroext i8 @func13(i8 zeroext) local_unnamed_addr #0 {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s0, %s0, 5
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s34, 5
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
   %2 = lshr i8 %0, 5
   ret i8 %2
 }
@@ -123,7 +133,10 @@ define dso_local zeroext i8 @func13(i8 zeroext) local_unnamed_addr #0 {
 define dso_local zeroext i16 @func14(i16 zeroext) local_unnamed_addr #0 {
 ; CHECK-LABEL: func14:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s0, %s0, 5
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s34, 5
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
   %2 = lshr i16 %0, 5
   ret i16 %2
 }
@@ -131,7 +144,10 @@ define dso_local zeroext i16 @func14(i16 zeroext) local_unnamed_addr #0 {
 define dso_local i32 @func15(i32) local_unnamed_addr #0 {
 ; CHECK-LABEL: func15:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s0, %s0, 5
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    and %s34, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s34, 5
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
   %2 = lshr i32 %0, 5
   ret i32 %2
 }
