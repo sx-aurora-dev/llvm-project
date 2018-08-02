@@ -2097,18 +2097,6 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
 
-#if 0
-  if (MemVT == MVT::i64) {
-    // Custom handling for i64 stores: turn it into a bitcast and a
-    // v2i32 store.
-    SDValue Val = DAG.getNode(ISD::BITCAST, dl, MVT::v2i32, St->getValue());
-    SDValue Chain = DAG.getStore(
-        St->getChain(), dl, Val, St->getBasePtr(), St->getPointerInfo(),
-        St->getAlignment(), St->getMemOperand()->getFlags(), St->getAAInfo());
-    return Chain;
-  }
-#endif
-
   return SDValue();
 }
 
@@ -2734,34 +2722,9 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
 
   SDLoc dl(N);
 
-#if 0
-  RTLIB::Libcall libCall = RTLIB::UNKNOWN_LIBCALL;
-#endif
-
   switch (N->getOpcode()) {
   default:
     llvm_unreachable("Do not know how to custom type legalize this operation!");
-
-#if 0
-  case ISD::LOAD: {
-    LoadSDNode *Ld = cast<LoadSDNode>(N);
-    // Custom handling only for i64: turn i64 load into a v2i32 load,
-    // and a bitcast.
-    if (Ld->getValueType(0) != MVT::i64 || Ld->getMemoryVT() != MVT::i64)
-      return;
-
-    SDLoc dl(N);
-    SDValue LoadRes = DAG.getExtLoad(
-        Ld->getExtensionType(), dl, MVT::v2i32, Ld->getChain(),
-        Ld->getBasePtr(), Ld->getPointerInfo(), MVT::v2i32, Ld->getAlignment(),
-        Ld->getMemOperand()->getFlags(), Ld->getAAInfo());
-
-    SDValue Res = DAG.getNode(ISD::BITCAST, dl, MVT::i64, LoadRes);
-    Results.push_back(Res);
-    Results.push_back(LoadRes.getValue(1));
-    return;
-  }
-#endif
   }
 }
 

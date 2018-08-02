@@ -1416,8 +1416,12 @@ def : Pat<(brcc cond:$cond, f64:$l, f64:$r, bb:$addr),
 def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
           (BCRDrr (fcond2cc $cond), 0, (FCQrr $r, $l), bb:$addr)>;
 
-def : Pat<(i32 (bitconvert f32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_f32), sub_i32)>;
-def : Pat<(f32 (bitconvert i32:$op)), (EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $op, sub_i32), sub_f32)>;
+def : Pat<(i32 (bitconvert f32:$op)),
+          (EXTRACT_SUBREG (SRAXri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+            $op, sub_f32), 32), sub_i32)>;
+def : Pat<(f32 (bitconvert i32:$op)),
+          (EXTRACT_SUBREG (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+            $op, sub_i32), 32), sub_f32)>;
 
 
 //===----------------------------------------------------------------------===//
