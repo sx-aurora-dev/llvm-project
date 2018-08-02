@@ -512,28 +512,22 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
 
 unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
 {
-#if 0
   VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
   unsigned GlobalBaseReg = VEFI->getGlobalBaseReg();
   if (GlobalBaseReg != 0)
     return GlobalBaseReg;
 
-  // Insert the set of GlobalBaseReg into the first MBB of the function
+  // We use %s15 (%got) as a global base register
+  GlobalBaseReg = VE::SX15;
+
+  // Insert a pseudo instruction to set the GlobalBaseReg into the first
+  // MBB of the function
   MachineBasicBlock &FirstMBB = MF->front();
   MachineBasicBlock::iterator MBBI = FirstMBB.begin();
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
-
-  const TargetRegisterClass *PtrRC =
-    Subtarget.is64Bit() ? &SP::I64RegsRegClass : &SP::IntRegsRegClass;
-  GlobalBaseReg = RegInfo.createVirtualRegister(PtrRC);
-
   DebugLoc dl;
-
-  BuildMI(FirstMBB, MBBI, dl, get(SP::GETPCX), GlobalBaseReg);
+  BuildMI(FirstMBB, MBBI, dl, get(VE::GETGOT), GlobalBaseReg);
   VEFI->setGlobalBaseReg(GlobalBaseReg);
   return GlobalBaseReg;
-#endif
-  report_fatal_error("getGlobalBaseReg is not implemented yet");
 }
 
 static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {

@@ -53,11 +53,11 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind)
   case VK_VE_HH:       OS << "%hh(";  break;
   case VK_VE_HM:       OS << "%hm(";  break;
     // FIXME: use %pc22/%pc10, if system assembler supports them.
-  case VK_VE_PC22:     OS << "%hi("; break;
-  case VK_VE_PC10:     OS << "%lo("; break;
+  case VK_VE_PC22:     OS << "%pc_hi("; break;
+  case VK_VE_PC10:     OS << "%pc_lo("; break;
     // FIXME: use %got22/%got10, if system assembler supports them.
-  case VK_VE_GOT22:    OS << "%hi("; break;
-  case VK_VE_GOT10:    OS << "%lo("; break;
+  case VK_VE_GOT22:    OS << "%got_hi("; break;
+  case VK_VE_GOT10:    OS << "%got_lo("; break;
   case VK_VE_WPLT30:   closeParen = false; break;
   case VK_VE_R_DISP32: OS << "%r_disp32("; break;
   case VK_VE_TLS_GD_HI22:   OS << "%tgd_hi22(";   break;

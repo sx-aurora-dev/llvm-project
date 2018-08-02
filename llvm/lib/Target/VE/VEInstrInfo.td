@@ -228,6 +228,10 @@ def call          : SDNode<"VEISD::CALL", SDT_SPCall,
 def retflag       : SDNode<"VEISD::RET_FLAG", SDTNone,
                            [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
+def getGOT        : Operand<iPTR> {
+  let PrintMethod = "printGetGOT";
+}
+
 def VEmax : SDNode<"VEISD::MAX", SDTIntBinOp>;
 def VEmin : SDNode<"VEISD::MIN", SDTIntBinOp>;
 def VEfmax : SDNode<"VEISD::FMAX", SDTFPBinOp>;
@@ -276,15 +280,15 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 1;
     let cz = 1;
   }
-  /*
   def rii : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
-    [(set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm7:$sy)), (Ty simm32:$imm32)))]> {
+    [/* Not define DAG pattern here to avoid llvm uses LEArii for add
+        instructions.
+        (set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm7:$sy)), (Ty simm32:$imm32)))*/]> {
     let cy = 0;
     let cz = 1;
   }
-  */
   def rzi : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}(${sz})"),
@@ -293,22 +297,21 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let sy = 0;
     let cz = 1;
   }
-  /*
   def zii : RM<
     opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}(${sy})"),
-    [(set Ty:$sx, (OpNode (Ty simm7:$sy), (Ty simm32:$imm32)))]> {
+    [/* Not define DAG pattern here to avoid llvm uses LEAzii for all add
+        instructions.
+        (set Ty:$sx, (OpNode (Ty simm7:$sy), (Ty simm32:$imm32))) */]> {
     let cy = 0;
     let cz = 0;
     let sz = 0;
   }
-  */
   def zzi : RM<
     opc, (outs RC:$sx), (ins immOp2:$imm32),
     !strconcat(opcStr, " $sx, $imm32"),
-    [/* Not define set here to avoid llvm uses LEAzzi for all set instructions.
-        We uses pattern matching to select instructions depend on the size of
-        immediate later.
+    [/* Not define DAG pattern here to avoid llvm uses LEAzzi for all set
+        instructions.
         (set Ty:$sx, (Ty simm32:$imm32)) */]> {
     let cy = 0;
     let sy = 0;
@@ -1230,6 +1233,10 @@ def MONCT : RR<
     "monc.hdb",
     []>;
 
+// Save Instruction Counter
+
+let cx = 0, cy = 0, sy = 0, cz = 0, sz = 0 /* , Uses = [IC] */ in
+def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx", []>;
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
@@ -1423,10 +1430,14 @@ def : Pat<(f32 (bitconvert i32:$op)),
           (EXTRACT_SUBREG (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
             $op, sub_i32), 32), sub_f32)>;
 
-
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
 //===----------------------------------------------------------------------===//
+
+// GETGOT for PIC
+let Defs = [SX15 /* %got */, SX16 /* %plt */] in {
+  def GETGOT : Pseudo<(outs getGOT:$getpcseq), (ins), "$getpcseq", [] >;
+}
 
 let Defs = [SX11], Uses = [SX11] in {
 def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i64imm:$amt, i64imm:$amt2),
