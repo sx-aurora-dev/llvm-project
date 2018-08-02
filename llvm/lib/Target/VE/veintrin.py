@@ -1010,7 +1010,7 @@ class InstTable:
         O_vm = [VX(T_u64), VY(T_u64), VM]
         O = [O_v, O_vm]
 
-        self.InstX(opc, inst, asm, O, "{0} = *{1}").noTest().readMem()
+        self.InstX(opc, inst, asm, O).noTest().readMem()
 
     def VSCm(self, opc, inst, asm):
         O_v = [VX(T_u64), VY(T_u64)]
@@ -1021,7 +1021,7 @@ class InstTable:
         for op in O:
             si = self.args_to_inst_suffix(op)
             sf = self.args_to_func_suffix(op)
-            self.add(Inst(opc, inst+si, asm, asm+sf, [], op, False, "*{1} = {0}").noTest().writeMem())
+            self.add(Inst(opc, inst+si, asm, asm+sf, [], op, False).noTest().writeMem())
 
 def cmpwrite(filename, data):
     need_write = True
