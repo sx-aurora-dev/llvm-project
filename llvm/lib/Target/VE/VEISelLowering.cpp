@@ -955,26 +955,26 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
   // Likewise ExternalSymbol -> TargetExternalSymbol.
   SDValue Callee = CLI.Callee;
-  unsigned TF = isPositionIndependent() ? VEMCExpr::VK_VE_WPLT30 : 0;
 
-  bool IsPICCall = 1; /* isPositionIndependent(); */
-        // true if calls are translated to bsic %lr, (,%s12)
+  bool IsPICCall = isPositionIndependent();
 
   // Turn GlobalAddress/ExternalSymbol node into a value node
   // contining the address of them here.
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     if (IsPICCall) {
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_PLTHI,
+                             VEMCExpr::VK_VE_PLTLO, DAG);
+    } else {
       Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
                              VEMCExpr::VK_VE_LO, DAG);
-    } else {
-      Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, TF);
     }
   } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     if (IsPICCall) {
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_PLTHI,
+                             VEMCExpr::VK_VE_PLTLO, DAG);
+    } else {
       Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
                              VEMCExpr::VK_VE_LO, DAG);
-    } else {
-      Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
     }
   }
 
@@ -1569,17 +1569,25 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
 
   // Handle PIC mode first. SPARC needs a got load for every variable!
   if (isPositionIndependent()) {
-    // This is the pic32 code model, the GOT is known to be smaller than 4GB.
-    SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOT22,
-                                VEMCExpr::VK_VE_GOT10, DAG);
-    SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
-    SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
     // GLOBAL_BASE_REG codegen'ed with call. Inform MFI that this
     // function has calls.
     MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
     MFI.setHasCalls(true);
-    return DAG.getLoad(VT, DL, DAG.getEntryNode(), AbsAddr,
-                       MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+
+    if (dyn_cast<GlobalAddressSDNode>(Op) != nullptr &&
+        dyn_cast<GlobalAddressSDNode>(Op)->getGlobal()->hasLocalLinkage()) {
+      SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFFHI,
+                                  VEMCExpr::VK_VE_GOTOFFLO, DAG);
+      SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
+      return DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
+    } else {
+      SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTHI,
+                                  VEMCExpr::VK_VE_GOTLO, DAG);
+      SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
+      SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
+      return DAG.getLoad(VT, DL, DAG.getEntryNode(), AbsAddr,
+                         MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+    }
   }
 
   // This is one of the absolute code models.

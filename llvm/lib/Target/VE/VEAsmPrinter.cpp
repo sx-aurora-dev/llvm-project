@@ -206,9 +206,6 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
     OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
 
   const MachineOperand &MO = MI->getOperand(0);
-  assert(MO.getReg() != VE::SX15 &&
-         "%s15 is assigned as destination for getpcx!");
-
   MCOperand MCRegOP = MCOperand::createReg(MO.getReg());
 
 
@@ -260,14 +257,14 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   // sic %plt
   // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%got, %plt)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC10,
+  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PCLO,
                                        GOTLabel,
                                        OutContext);
   EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
   EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
   EmitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC22,
+  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PCHI,
                                        GOTLabel,
                                        OutContext);
   EmitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
