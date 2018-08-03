@@ -962,16 +962,16 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   // contining the address of them here.
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     if (IsPICCall) {
-      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_PLTHI,
-                             VEMCExpr::VK_VE_PLTLO, DAG);
+      Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, 0);
+      Callee = DAG.getNode(VEISD::GETFUNPLT, DL, PtrVT, Callee);
     } else {
       Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
                              VEMCExpr::VK_VE_LO, DAG);
     }
   } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     if (IsPICCall) {
-      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_PLTHI,
-                             VEMCExpr::VK_VE_PLTLO, DAG);
+      Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, 0);
+      Callee = DAG.getNode(VEISD::GETFUNPLT, DL, PtrVT, Callee);
     } else {
       Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
                              VEMCExpr::VK_VE_LO, DAG);
@@ -1454,6 +1454,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::MIN:             return "VEISD::MIN";
   case VEISD::FMAX:            return "VEISD::FMAX";
   case VEISD::FMIN:            return "VEISD::FMIN";
+  case VEISD::GETFUNPLT:       return "VEISD::GETFUNPLT";
   case VEISD::CALL:            return "VEISD::CALL";
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";

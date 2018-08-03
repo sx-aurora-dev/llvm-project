@@ -70,6 +70,8 @@ namespace {
 
     void LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                    const MCSubtargetInfo &STI);
+    void LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+                                      const MCSubtargetInfo &STI);
 
   };
 } // end of anonymous namespace
@@ -200,7 +202,7 @@ static void EmitHiLo(MCStreamer &OutStreamer,  MCSymbol *GOTSym,
 }
 
 void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
-                                                const MCSubtargetInfo &STI)
+                                             const MCSubtargetInfo &STI)
 {
   MCSymbol *GOTLabel   =
     OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
@@ -270,6 +272,39 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   EmitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
 }
 
+void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+                                                const MCSubtargetInfo &STI)
+{
+  const MachineOperand &MO = MI->getOperand(0);
+  MCOperand MCRegOP = MCOperand::createReg(MO.getReg());
+  const MachineOperand &Addr = MI->getOperand(1);
+  MCSymbol* AddrSym = getSymbol(Addr.getGlobal());
+
+  if (!isPositionIndependent()) {
+    llvm_unreachable("Unsupported uses of %plt in not PIC code");
+    return;
+  }
+
+  MCOperand RegPLT   = MCOperand::createReg(VE::SX16);  // PLT
+
+  // lea %dst, %plt_lo(func)(-24)
+  // and %dst, %dst, (32)0
+  // sic %plt                            ; FIXME: is it safe to use %plt here?
+  // lea.sl %dst, %plt_hi(func)(%dst, %plt)
+  MCOperand cim24 = MCOperand::createImm(-24);
+  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLTLO,
+                                       AddrSym,
+                                       OutContext);
+  EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
+  MCOperand ci32 = MCOperand::createImm(32);
+  EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
+  EmitSIC(*OutStreamer, RegPLT, STI);
+  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLTHI,
+                                       AddrSym,
+                                       OutContext);
+  EmitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
+}
+
 void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
 {
 
@@ -280,6 +315,9 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
     return;
   case VE::GETGOT:
     LowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
+    return;
+  case VE::GETFUNPLT:
+    LowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   }
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();

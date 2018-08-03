@@ -231,11 +231,17 @@ def retflag       : SDNode<"VEISD::RET_FLAG", SDTNone,
 def getGOT        : Operand<iPTR> {
   let PrintMethod = "printGetGOT";
 }
+def getFunPLT     : Operand<iPTR> {
+  let PrintMethod = "printGetFunPLT";
+}
 
 def VEmax : SDNode<"VEISD::MAX", SDTIntBinOp>;
 def VEmin : SDNode<"VEISD::MIN", SDTIntBinOp>;
 def VEfmax : SDNode<"VEISD::FMAX", SDTFPBinOp>;
 def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
+
+// GETFUNPLT for PIC
+def GetFunPLT : SDNode<"VEISD::GETFUNPLT", SDTIntUnaryOp>;
 
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
@@ -1438,6 +1444,16 @@ def : Pat<(f32 (bitconvert i32:$op)),
 let Defs = [SX15 /* %got */, SX16 /* %plt */] in {
   def GETGOT : Pseudo<(outs getGOT:$getpcseq), (ins), "$getpcseq", [] >;
 }
+
+// GETFUNPLT for PIC
+def GETFUNPLT : Pseudo<(outs I64:$dst), (ins i64imm:$addr),
+                       "$dst, $addr",
+                       [(set iPTR:$dst, (GetFunPLT tglobaladdr:$addr))] >;
+
+def : Pat<(GetFunPLT tglobaladdr:$dst),
+          (GETFUNPLT tglobaladdr:$dst)>;
+def : Pat<(GetFunPLT texternalsym:$dst),
+          (GETFUNPLT texternalsym:$dst)>;
 
 let Defs = [SX11], Uses = [SX11] in {
 def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i64imm:$amt, i64imm:$amt2),
