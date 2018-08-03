@@ -30,12 +30,12 @@ namespace llvm {
       fixup_ve_br16_2,
       fixup_ve_br16_14,
 
-      /// fixup_ve_hi22  - 22-bit fixup corresponding to %hi(foo)
+      /// fixup_ve_hi   - 32-bit fixup corresponding to %hi(foo)
       /// for sethi
-      fixup_ve_hi22,
+      fixup_ve_hi,
 
-      /// fixup_ve_lo10  - 10-bit fixup corresponding to %lo(foo)
-      fixup_ve_lo10,
+      /// fixup_ve_lo   - 32-bit fixup corresponding to %lo(foo)
+      fixup_ve_lo,
 
       /// fixup_ve_h44  - 22-bit fixup corresponding to %h44(foo)
       fixup_ve_h44,
@@ -52,20 +52,27 @@ namespace llvm {
       /// fixup_ve_hm  -  10-bit fixup corresponding to %hm(foo)
       fixup_ve_hm,
 
-      /// fixup_ve_pc22 - 22-bit fixup corresponding to %pc22(foo)
-      fixup_ve_pc22,
+      /// fixup_ve_pchi - 32-bit fixup corresponding to %pc_hi(foo)
+      fixup_ve_pchi,
 
-      /// fixup_ve_pc10 - 10-bit fixup corresponding to %pc10(foo)
-      fixup_ve_pc10,
+      /// fixup_ve_pclo - 32-bit fixup corresponding to %pc_lo(foo)
+      fixup_ve_pclo,
 
-      /// fixup_ve_got22 - 22-bit fixup corresponding to %got22(foo)
-      fixup_ve_got22,
+      /// fixup_ve_gothi - 32-bit fixup corresponding to %got_hi(foo)
+      fixup_ve_gothi,
 
-      /// fixup_ve_got10 - 10-bit fixup corresponding to %got10(foo)
-      fixup_ve_got10,
+      /// fixup_ve_gotlo - 32-bit fixup corresponding to %got_lo(foo)
+      fixup_ve_gotlo,
 
-      /// fixup_ve_wplt30
-      fixup_ve_wplt30,
+      /// fixup_ve_gotoffhi - 32-bit fixup corresponding to %gotoff_hi(foo)
+      fixup_ve_gotoffhi,
+
+      /// fixup_ve_gotofflo - 32-bit fixup corresponding to %gotoff_lo(foo)
+      fixup_ve_gotofflo,
+
+      /// fixup_ve_plthi/lo
+      fixup_ve_plthi,
+      fixup_ve_pltlo,
 
       /// fixups for Thread Local Storage
       fixup_ve_tls_gd_hi22,

@@ -49,6 +49,8 @@ namespace llvm {
       FMAX,
       FMIN,
 
+      GETFUNPLT,   // load function address through %plt insturction
+
       CALL,        // A call instruction.
       RET_FLAG,    // Return with a flag operand.
       GLOBAL_BASE_REG, // Global base reg for PIC.

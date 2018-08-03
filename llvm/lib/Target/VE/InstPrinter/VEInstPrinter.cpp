@@ -214,9 +214,9 @@ void VEInstPrinter::printCCOperand(const MCInst *MI, int opNum,
   O << VECondCodeToString((VECC::CondCodes)CC);
 }
 
-bool VEInstPrinter::printGetPCX(const MCInst *MI, unsigned opNum,
+bool VEInstPrinter::printGetGOT(const MCInst *MI, unsigned opNum,
                                    const MCSubtargetInfo &STI,
                                    raw_ostream &O) {
-  llvm_unreachable("FIXME: Implement VEInstPrinter::printGetPCX.");
+  llvm_unreachable("FIXME: Implement VEInstPrinter::printGetGOT.");
   return true;
 }

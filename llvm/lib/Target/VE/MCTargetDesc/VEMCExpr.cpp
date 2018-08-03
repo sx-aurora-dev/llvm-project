@@ -52,13 +52,14 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind)
   case VK_VE_L44:      OS << "%l44("; break;
   case VK_VE_HH:       OS << "%hh(";  break;
   case VK_VE_HM:       OS << "%hm(";  break;
-    // FIXME: use %pc22/%pc10, if system assembler supports them.
-  case VK_VE_PC22:     OS << "%hi("; break;
-  case VK_VE_PC10:     OS << "%lo("; break;
-    // FIXME: use %got22/%got10, if system assembler supports them.
-  case VK_VE_GOT22:    OS << "%hi("; break;
-  case VK_VE_GOT10:    OS << "%lo("; break;
-  case VK_VE_WPLT30:   closeParen = false; break;
+  case VK_VE_PCHI:     OS << "%pc_hi("; break;
+  case VK_VE_PCLO:     OS << "%pc_lo("; break;
+  case VK_VE_GOTHI:    OS << "%got_hi("; break;
+  case VK_VE_GOTLO:    OS << "%got_lo("; break;
+  case VK_VE_GOTOFFHI: OS << "%gotoff_hi("; break;
+  case VK_VE_GOTOFFLO: OS << "%gotoff_lo("; break;
+  case VK_VE_PLTHI:    OS << "%plt_hi("; break;
+  case VK_VE_PLTLO:    OS << "%plt_lo("; break;
   case VK_VE_R_DISP32: OS << "%r_disp32("; break;
   case VK_VE_TLS_GD_HI22:   OS << "%tgd_hi22(";   break;
   case VK_VE_TLS_GD_LO10:   OS << "%tgd_lo10(";   break;
@@ -92,10 +93,14 @@ VEMCExpr::VariantKind VEMCExpr::parseVariantKind(StringRef name)
     .Case("l44", VK_VE_L44)
     .Case("hh",  VK_VE_HH)
     .Case("hm",  VK_VE_HM)
-    .Case("pc22",  VK_VE_PC22)
-    .Case("pc10",  VK_VE_PC10)
-    .Case("got22", VK_VE_GOT22)
-    .Case("got10", VK_VE_GOT10)
+    .Case("pc_hi",  VK_VE_PCHI)
+    .Case("pc_lo",  VK_VE_PCLO)
+    .Case("got_hi", VK_VE_GOTHI)
+    .Case("got_lo", VK_VE_GOTLO)
+    .Case("gotoff_hi", VK_VE_GOTOFFHI)
+    .Case("gotoff_lo", VK_VE_GOTOFFLO)
+    .Case("plthi",  VK_VE_PLTHI)
+    .Case("pltlo",  VK_VE_PLTLO)
     .Case("r_disp32",   VK_VE_R_DISP32)
     .Case("tgd_hi22",   VK_VE_TLS_GD_HI22)
     .Case("tgd_lo10",   VK_VE_TLS_GD_LO10)
@@ -121,18 +126,21 @@ VEMCExpr::VariantKind VEMCExpr::parseVariantKind(StringRef name)
 VE::Fixups VEMCExpr::getFixupKind(VEMCExpr::VariantKind Kind) {
   switch (Kind) {
   default: llvm_unreachable("Unhandled VEMCExpr::VariantKind");
-  case VK_VE_LO:       return VE::fixup_ve_lo10;
-  case VK_VE_HI:       return VE::fixup_ve_hi22;
+  case VK_VE_LO:       return VE::fixup_ve_lo;
+  case VK_VE_HI:       return VE::fixup_ve_hi;
   case VK_VE_H44:      return VE::fixup_ve_h44;
   case VK_VE_M44:      return VE::fixup_ve_m44;
   case VK_VE_L44:      return VE::fixup_ve_l44;
   case VK_VE_HH:       return VE::fixup_ve_hh;
   case VK_VE_HM:       return VE::fixup_ve_hm;
-  case VK_VE_PC22:     return VE::fixup_ve_pc22;
-  case VK_VE_PC10:     return VE::fixup_ve_pc10;
-  case VK_VE_GOT22:    return VE::fixup_ve_got22;
-  case VK_VE_GOT10:    return VE::fixup_ve_got10;
-  case VK_VE_WPLT30:   return VE::fixup_ve_wplt30;
+  case VK_VE_PCHI:     return VE::fixup_ve_pchi;
+  case VK_VE_PCLO:     return VE::fixup_ve_pclo;
+  case VK_VE_GOTHI:    return VE::fixup_ve_gothi;
+  case VK_VE_GOTLO:    return VE::fixup_ve_gotlo;
+  case VK_VE_GOTOFFHI: return VE::fixup_ve_gotoffhi;
+  case VK_VE_GOTOFFLO: return VE::fixup_ve_gotofflo;
+  case VK_VE_PLTHI:    return VE::fixup_ve_plthi;
+  case VK_VE_PLTLO:    return VE::fixup_ve_pltlo;
   case VK_VE_TLS_GD_HI22:   return VE::fixup_ve_tls_gd_hi22;
   case VK_VE_TLS_GD_LO10:   return VE::fixup_ve_tls_gd_lo10;
   case VK_VE_TLS_GD_ADD:    return VE::fixup_ve_tls_gd_add;
