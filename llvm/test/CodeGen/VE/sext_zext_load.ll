@@ -265,7 +265,8 @@ define dso_local i64 @func24() local_unnamed_addr #0 {
 define dso_local signext i8 @func25() local_unnamed_addr #0 {
 ; CHECK-LABEL: func25:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.sx %s0, 191(,%s11)
+; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
+; CHECK-NEXT:    and %s0, %s34, (63)0
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i8
@@ -275,7 +276,8 @@ define dso_local signext i8 @func25() local_unnamed_addr #0 {
 define dso_local signext i16 @func26() local_unnamed_addr #0 {
 ; CHECK-LABEL: func26:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.sx %s0, 191(,%s11)
+; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
+; CHECK-NEXT:    and %s0, %s34, (63)0
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i16
@@ -285,7 +287,7 @@ define dso_local signext i16 @func26() local_unnamed_addr #0 {
 define dso_local signext i32 @func27() local_unnamed_addr #0 {
 ; CHECK-LABEL: func27:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.sx %s0, 191(,%s11)
+; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i32
@@ -295,7 +297,8 @@ define dso_local signext i32 @func27() local_unnamed_addr #0 {
 define dso_local signext i64 @func28() local_unnamed_addr #0 {
 ; CHECK-LABEL: func28:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.sx %s0, 191(,%s11)
+; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
+; CHECK-NEXT:    and %s0, %s34, (63)0
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i64
