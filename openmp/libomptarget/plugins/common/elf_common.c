@@ -71,3 +71,51 @@ static inline int32_t elf_check_machine(__tgt_device_image *image,
   elf_end(e);
   return MachineID == target_id;
 }
+
+static inline int32_t elf_is_dynamic(__tgt_device_image *image) {
+
+  // Is the library version incompatible with the header file?
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    DP("Incompatible ELF library!\n");
+    return 0;
+  }
+
+  char *img_begin = (char *)image->ImageStart;
+  char *img_end = (char *)image->ImageEnd;
+  size_t img_size = img_end - img_begin;
+
+  // Obtain elf handler
+  Elf *e = elf_memory(img_begin, img_size);
+  if (!e) {
+    DP("Unable to get ELF handle: %s!\n", elf_errmsg(-1));
+    return 0;
+  }
+
+  // Check if ELF is the right kind.
+  if (elf_kind(e) != ELF_K_ELF) {
+    DP("Unexpected ELF type!\n");
+    return 0;
+  }
+  Elf64_Ehdr *eh64 = elf64_getehdr(e);
+  Elf32_Ehdr *eh32 = elf32_getehdr(e);
+
+  if (!eh64 && !eh32) {
+    DP("Unable to get machine ID from ELF file!\n");
+    elf_end(e);
+    return 0;
+  }
+
+  uint16_t Type;
+  if (eh64 && !eh32)
+    Type = eh64->e_type;
+  else if (eh32 && !eh64)
+    Type = eh32->e_type;
+  else {
+    DP("Ambiguous ELF header!\n");
+    elf_end(e);
+    return 0;
+  }
+
+  elf_end(e);
+  return Type == ET_DYN;
+}

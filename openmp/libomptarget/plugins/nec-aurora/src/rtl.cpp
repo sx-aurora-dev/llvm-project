@@ -6,7 +6,7 @@
 #include <string>
 #include <cstring>
 #include <cerrno>
-
+#include <stdlib.h>
 #include <ve_offload.h>
 
 #ifndef TARGET_ELF_ID
@@ -139,7 +139,7 @@ static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
 
 
 static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
-                                    const struct veo_args *args, uint64_t *RetVal) {
+                                    struct veo_args *args, uint64_t *RetVal) {
   DP("Running function with entry point %p\n", reinterpret_cast<void *>(FuncAddr));
   uint64_t RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
   if (RequestHandle == VEO_REQUEST_ID_INVALID) {
@@ -191,10 +191,19 @@ int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *Image) {
 int32_t __tgt_rtl_init_device(int32_t ID) {
   // we will try to use 1 context per device
 
+  // TODO: At the moment we do not initilize the device here, but in
+  // "__tgt_rtl_load_binary". The reason is that we need to set an the
+  // ENV VEORUN_BIN to the static bin. As long as we dont have any possibilty
+  // to to pass the location of the binary to veo_proc_create it is much more
+  // convinient to set the ENV here (sentenv()). However, we do not know where
+  // the tgt_binary (ELF) for that which we dont have at this point. :-(.
+  // Thus, we do nothing here for now.
+  #if 0
   struct veo_proc_handle *proc_handle = veo_proc_create(ID);
   if (!proc_handle) {
     //TODO: errno does not seem to be set by VEO
-    DP("veo_proc_create() failed: %s\n", std::strerror(errno));
+    //DP("veo_proc_create() failed: %s\n", std::strerror(errno));
+    DP("veo_proc_create() failed for device %d\n",ID);
     return 1;
   }
 
@@ -210,7 +219,7 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
 
   DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
      proc_handle, ctx);
-
+#endif
   return 0;
 }
 
@@ -221,7 +230,6 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
 // offload region is not supported on the target device.
 __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
                                           __tgt_device_image *Image) {
-
   DP("Dev %d: load binary from " DPxMOD " image\n", ID,
     DPxPTR(Image->ImageStart));
 
@@ -259,16 +267,54 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   }
 
   fwrite(Image->ImageStart, ImageSize, 1, ftmp);
+  DP("Wrote target image to %s. ImageSize=%d\n", tmp_name, ImageSize);
   fclose(ftmp);
 
-  uint64_t LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
-
-  if (!LibHandle) {
-    DP("veo_load_library() failed: LibHandle=%" PRIu64 "\n", LibHandle);
-    //TODO: handle and report error
-    return  NULL;
+  // See comment in "__tgt_rtl_init_device"
+#if 1
+  char* VeorunBin = std::getenv("VEORUN_BIN");
+  if(!VeorunBin) {
+    VeorunBin = "veorun";
+    setenv("VEORUN_BIN", VeorunBin, 1);
   }
 
+  struct veo_proc_handle *proc_handle = veo_proc_create(ID);
+  if (!proc_handle) {
+    //TODO: errno does not seem to be set by VEO
+    //DP("veo_proc_create() failed: %s\n", std::strerror(errno));
+    DP("veo_proc_create() failed for device %d\n",ID);
+    return NULL;
+  }
+
+  struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
+  if (!ctx) {
+    //TODO: errno does not seem to be set by VEO
+    DP("veo_context_open() failed: %s\n", std::strerror(errno));
+    return NULL;
+  }
+
+  DeviceInfo.ProcHandles[ID] = proc_handle;
+  DeviceInfo.Contexts[ID] = ctx;
+
+  DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
+     proc_handle, ctx);
+#endif
+
+  uint64_t LibHandle = 0UL;
+  if(elf_is_dynamic(Image)) {
+    LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
+
+    if (!LibHandle) {
+      DP("veo_load_library() failed: LibHandle=%" PRIu64 \
+         " Name=%s. Set env VEORUN_BIN for static linked target code.\n",
+         LibHandle, tmp_name);
+     return  NULL;
+    }
+
+    DP("Successfully loaded library dynamically\n");
+  } else {
+    DP("Symbol table is expected to be in VEORUN_BIN=%s\n", VeorunBin);
+  }
   DynLibTy Lib = {tmp_name, LibHandle};
   DeviceInfo.DynLibs.push_back(Lib);
   DeviceInfo.LibraryHandles[ID] = LibHandle;
