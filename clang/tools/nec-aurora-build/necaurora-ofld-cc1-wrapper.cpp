@@ -10,21 +10,12 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "necaurora-utils.h"
 
-static bool Verbose = false;
 
 int runSourceTransformation(const std::string &InputPath,
                             std::string &OutputPath) {
   std::stringstream CmdLine;
-  std::string TmpPath;
-
-  const char *TmpEnv = std::getenv("TMP");
-
-  if (TmpEnv) {
-    TmpPath = TmpEnv;
-  } else {
-    TmpPath = "/tmp";
-  }
 
   // find last '/' in string so we can get just the filename
   size_t PosLastSlashInPath = InputPath.rfind("/");
@@ -54,32 +45,12 @@ int runSourceTransformation(const std::string &InputPath,
               << std::endl;
     return -1;
   }
-  // because mkstemp wants the last n chars to be 'X', we have to add the
-  // extension laster
 
-  std::stringstream TmpFilePathTemplate;
-  TmpFilePathTemplate << TmpPath << "/" << InputFileNameWE << "-XXXXXX"
-                      << InputFileExt;
-
-  std::string TmpFilePathTemplateStr = TmpFilePathTemplate.str();
-
-  std::vector<char> TmpFilePath(TmpFilePathTemplateStr.begin(),
-                                TmpFilePathTemplateStr.end());
-  TmpFilePath.push_back('\0');
-
-  // generate tmp name
-  int fd = mkstemps(&TmpFilePath[0], InputFileExt.length());
-
-  if (fd < 0) {
-    std::cerr << "necaurora-ofld-cc1-wrapper: mkstemp(" << &TmpFilePath[0]
-              << ") failed with message: \"" << strerror(errno) << "\""
-              << std::endl;
+  // We create an empty temp file
+  std::string Content = "";
+  std::string TmpFile = writeTmpFile(Content, InputFileNameWE, InputFileExt);
+  if (TmpFile == "")
     return -1;
-  }
-  close(fd); // we get a warning for mktemp so we use mkstemp
-
-  // We have our Tempfile
-  std::string TmpFile(TmpFilePath.data());
 
   CmdLine << "sotoc " << InputPath << " -- -fopenmp "
           << ">" << TmpFile;
@@ -92,24 +63,6 @@ int runSourceTransformation(const std::string &InputPath,
   return system(CmdLine.str().c_str());
 }
 
-int runTargetCompiler(const std::string &Compiler, const std::string &InputPath,
-                      const std::string &Args) {
-
-  std::stringstream CmdLine;
-
-  CmdLine << Compiler << " " << InputPath << " " << Args;
-
-  if (Verbose) {
-    std::cout << "  \"" << CmdLine.str() << std::endl;
-  }
-
-  int ret = system(CmdLine.str().c_str());
-
-  std::remove(InputPath.c_str());
-
-  return ret;
-}
-
 int main(int argc, char **argv) {
 
   int rc;
@@ -118,10 +71,6 @@ int main(int argc, char **argv) {
     std::cerr << "Needs at least one argument\n";
     return EXIT_FAILURE;
   }
-
-  const char *CompilerEnv = std::getenv("NECAURORA_OFLD_COMPILER");
-
-  std::string Compiler(CompilerEnv ? CompilerEnv : DEFAULT_TARGET_COMPILER);
 
   std::string InputPath(argv[1]);
   std::string SotocOutputPath;
@@ -144,7 +93,8 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  rc = runTargetCompiler(Compiler, SotocOutputPath, ArgsStream.str());
+  rc = runTargetCompiler(SotocOutputPath, ArgsStream.str());
+  std::remove(SotocOutputPath.c_str());
 
   if (rc != 0) {
     std::cerr << "necaurora-ofld-cc1-wrapper: "
