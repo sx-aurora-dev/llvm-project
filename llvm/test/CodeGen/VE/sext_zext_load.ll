@@ -288,6 +288,7 @@ define dso_local signext i32 @func27() local_unnamed_addr #0 {
 ; CHECK-LABEL: func27:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
+; CHECK-NEXT:    and %s0, %s34, (63)0
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i32
