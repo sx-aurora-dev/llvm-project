@@ -1353,7 +1353,7 @@ def : Pat<(f128 (sint_to_fp i64:$sy)), (CVQr (FLTXr $sy))>;
 
 def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
 
-// sextload and zextload stuff
+// extload, sextload and zextload stuff
 def : Pat<(i64 (sextloadi8 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1Bri MEMri:$addr), sub_i32)>;
 def : Pat<(i64 (zextloadi8 ADDRri:$addr)),
@@ -1366,6 +1366,10 @@ def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (extloadi8 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BUri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (extloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i32)>;
 def : Pat<(i64 (extloadi32 ADDRri:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
 
