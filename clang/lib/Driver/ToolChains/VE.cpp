@@ -78,6 +78,8 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                    false))
     CmdArgs.push_back("-fexceptions");
 
+  Args.AddAllArgs(CmdArgs, options::OPT_L);
+  getToolChain().AddFilePathLibArgs(Args, CmdArgs);
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
 
   const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("ncc"));
