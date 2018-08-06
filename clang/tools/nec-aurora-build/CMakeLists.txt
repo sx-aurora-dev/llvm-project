@@ -42,12 +42,12 @@ if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
     add_executable(necaurora-ofld-tool-wrapper
                    necaurora-ofld-tool-wrapper.cpp
                    necaurora-utils.cpp)
+    target_link_libraries(necaurora-ofld-tool-wrapper
+                          ${NECAURORA_LIBELF_LIBRARIES})
 endif()
 
 install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
 
-target_link_libraries(necaurora-ofld-tool-wrapper
-                      ${NECAURORA_LIBELF_LIBRARIES})
 
 if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
   install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
