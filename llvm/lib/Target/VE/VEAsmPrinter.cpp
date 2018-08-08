@@ -278,7 +278,25 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   const MachineOperand &MO = MI->getOperand(0);
   MCOperand MCRegOP = MCOperand::createReg(MO.getReg());
   const MachineOperand &Addr = MI->getOperand(1);
-  MCSymbol* AddrSym = getSymbol(Addr.getGlobal());
+  MCSymbol* AddrSym = nullptr;
+
+  switch (Addr.getType()) {
+  default:
+    llvm_unreachable ("<unknown operand type>");
+    return;
+  case MachineOperand::MO_MachineBasicBlock:
+    report_fatal_error("MBB is not supporeted yet");
+    return;
+  case MachineOperand::MO_ConstantPoolIndex:
+    report_fatal_error("ConstantPool is not supporeted yet");
+    return;
+  case MachineOperand::MO_ExternalSymbol:
+    AddrSym = GetExternalSymbolSymbol(Addr.getSymbolName());
+    break;
+  case MachineOperand::MO_GlobalAddress:
+    AddrSym = getSymbol(Addr.getGlobal());
+    break;
+  }
 
   if (!isPositionIndependent()) {
     llvm_unreachable("Unsupported uses of %plt in not PIC code");
