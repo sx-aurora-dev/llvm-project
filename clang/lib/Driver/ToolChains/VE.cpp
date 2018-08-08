@@ -129,6 +129,8 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/opt/nec/ve/musl/include");
   }
+  // FIXME: Remedy for /opt/nec/ve/musl/include/bits/alltypes.h
+  CC1Args.push_back("-D__NEED_off_t");
 }
 
 void VEToolChain::addClangTargetOptions(const ArgList &DriverArgs,
