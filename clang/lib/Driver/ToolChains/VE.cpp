@@ -117,24 +117,18 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc) ||
       DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
-#if 0
   if (const char *cl_include_dir = getenv("NCC_C_INCLUDE_PATH")) {
     SmallVector<StringRef, 4> Dirs;
     const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
     StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
+  } else {
+    addSystemInclude(DriverArgs, CC1Args,
+                     getDriver().SysRoot + "/opt/nec/ve/ncc/1.3.3/include");
+    addSystemInclude(DriverArgs, CC1Args,
+                     getDriver().SysRoot + "/opt/nec/ve/musl/include");
   }
-#else
-  const char *cl_include_dir = "/opt/nec/ve/musl/include";
-  if (const char* tmp = getenv("NCC_C_INCLUDE_PATH"))
-      cl_include_dir = tmp;
-  SmallVector<StringRef, 4> Dirs;
-  const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
-  StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
-  ArrayRef<StringRef> DirVec(Dirs);
-  addSystemIncludes(DriverArgs, CC1Args, DirVec);
-#endif
 }
 
 void VEToolChain::addClangTargetOptions(const ArgList &DriverArgs,
@@ -156,7 +150,16 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(
     StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
+  } else {
+    // Use default include paths
+    addSystemInclude(DriverArgs, CC1Args,
+                     getDriver().SysRoot + "/opt/nec/ve/ncc/1.3.3/include/C++");
   }
+  // Several remedies are required to use VE system header files.
+  // FIXME: Remedy for /opt/nec/ve/ncc/1.3.3/include/necvals.h problem.
+  CC1Args.push_back("-D_CHAR16T");
+  // FIXME: Remedy for /opt/nec/ve/ncc/1.3.3/include/C++/limits
+  CC1Args.push_back("-D__INFINITY__=INFINITY");
 }
 
 void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
