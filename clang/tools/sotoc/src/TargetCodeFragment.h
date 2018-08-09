@@ -4,9 +4,9 @@
 #include <vector>
 
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/OpenMPClause.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/Basic/OpenMPKinds.h"
-#include "clang/AST/OpenMPClause.h"
 
 // forward declaration of clang types
 namespace clang {
@@ -18,9 +18,10 @@ class CapturedStmt;
 class ASTContext;
 }; // namespace clang
 
-//TODO: Put this somewhere else
-clang::SourceLocation findPreviousToken(clang::SourceLocation Loc, clang::SourceManager &SM, const clang::LangOptions &LO);
-
+// TODO: Put this somewhere else
+clang::SourceLocation findPreviousToken(clang::SourceLocation Loc,
+                                        clang::SourceManager &SM,
+                                        const clang::LangOptions &LO);
 
 // This class only really exists because we need a common base class, so we
 // can keep a list of pointers of all code fragments (which cannot be
@@ -39,9 +40,10 @@ protected:
   const TargetCodeFragmentKind Kind;
   // Actual class content
 public:
-  bool NeedsSemicolon; //TODO: getter method
-  clang::OpenMPDirectiveKind TargetCodeKind; //TODO: getter method
-  bool HasExtraBraces; //TODO: Determine if this can be used for removing the addition scope or remove it.
+  bool NeedsSemicolon;                       // TODO: getter method
+  clang::OpenMPDirectiveKind TargetCodeKind; // TODO: getter method
+  bool HasExtraBraces; // TODO: Determine if this can be used for removing the
+                       // addition scope or remove it.
   TargetCodeFragmentKind getKind() const { return Kind; };
   static bool classof(const TargetCodeFragment *TCF) {
     return TCF->getKind() == TCFK_TargetCodeFragment;
@@ -53,11 +55,12 @@ protected:
 
 public:
   TargetCodeFragment(clang::ASTContext &Context, TargetCodeFragmentKind Kind)
-      : Context(Context), Kind(Kind), NeedsSemicolon(false), 
-        TargetCodeKind(clang::OpenMPDirectiveKind::OMPD_unknown), HasExtraBraces(false) {}
+      : Context(Context), Kind(Kind), NeedsSemicolon(false),
+        TargetCodeKind(clang::OpenMPDirectiveKind::OMPD_unknown),
+        HasExtraBraces(false) {}
 
-  /// Returns a pretty printed string of the code fragment and an empty string ""
-  /// if no pretty printing is available.
+  /// Returns a pretty printed string of the code fragment and an empty string
+  /// "" if no pretty printing is available.
   virtual std::string PrintPretty() = 0;
   virtual clang::SourceRange getRealRange() = 0;
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }
@@ -73,25 +76,26 @@ template <class T> class TargetCodeSourceFragment : public TargetCodeFragment {
 protected:
   T Node;
   clang::PrintingPolicy PP;
+
 public:
   TargetCodeSourceFragment(T Node, clang::ASTContext &Context,
                            TargetCodeFragmentKind Kind)
       : TargetCodeFragment(Context, Kind), Node(Node),
         PP(Context.getLangOpts()) {
-          // Set some details for the pretty printer
-          PP.Indentation = 1;
-          PP.SuppressSpecifiers = 0;
-          PP.IncludeTagDefinition = 1;
-        }
-  // TODO: This is called by many declare_target* tests. 
+    // Set some details for the pretty printer
+    PP.Indentation = 1;
+    PP.SuppressSpecifiers = 0;
+    PP.IncludeTagDefinition = 1;
+  }
+  // TODO: This is called by many declare_target* tests.
   // It really should have T as a return type. However,
   // I belive this not working, because you cant overload
   // by the return type.
   // virtual T *getNode() {return NULL;}
-  virtual clang::CapturedStmt *getNode() {return NULL;}
-  //TODO: Implementing PrintPretty only here would be great. However, "printPretty"
-  //onl exist in Stmt, but not in Decl :-(.
-  virtual std::string PrintPretty() {return "";};
+  virtual clang::CapturedStmt *getNode() { return NULL; }
+  // TODO: Implementing PrintPretty only here would be great. However,
+  // "printPretty" onl exist in Stmt, but not in Decl :-(.
+  virtual std::string PrintPretty() { return ""; };
   virtual clang::SourceRange getRealRange() { return Node->getSourceRange(); }
 };
 

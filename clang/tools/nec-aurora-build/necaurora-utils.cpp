@@ -12,21 +12,21 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <sstream>
-#include <iostream>
-#include <vector>
 #include <errno.h>
+#include <iostream>
+#include <sstream>
 #include <string.h>
 #include <unistd.h>
+#include <vector>
 
 #include "config.h"
 #include "necaurora-utils.h"
 
-std::string writeTmpFile(const std::string& Content, const std::string& Prefix, 
-                         const std::string& Extension){
+std::string writeTmpFile(const std::string &Content, const std::string &Prefix,
+                         const std::string &Extension) {
   std::string TmpPath;
   const char *TmpEnv = std::getenv("TMP");
-  
+
   if (TmpEnv) {
     TmpPath = TmpEnv;
   } else {
@@ -36,8 +36,7 @@ std::string writeTmpFile(const std::string& Content, const std::string& Prefix,
   // because mkstemp wants the last n chars to be 'X', we have to add the
   // extension laster
   std::stringstream TmpFilePathTemplate;
-  TmpFilePathTemplate << TmpPath << "/" << Prefix << "-XXXXXX"
-                      << Extension;
+  TmpFilePathTemplate << TmpPath << "/" << Prefix << "-XXXXXX" << Extension;
 
   std::string TmpFilePathTemplateStr = TmpFilePathTemplate.str();
 
@@ -56,12 +55,11 @@ std::string writeTmpFile(const std::string& Content, const std::string& Prefix,
   }
   write(fd, Content.c_str(), Content.length());
   close(fd); // we get a warning for mktemp so we use mkstemp
-  
+
   return TmpFilePath.data();
 }
 
-int runTargetCompiler(const std::string &InputPath,
-                      const std::string &Args) {
+int runTargetCompiler(const std::string &InputPath, const std::string &Args) {
 
   std::stringstream CmdLine;
   const char *CompilerEnv = std::getenv("NECAURORA_OFLD_COMPILER");
@@ -76,8 +74,5 @@ int runTargetCompiler(const std::string &InputPath,
 
   int ret = system(CmdLine.str().c_str());
 
-
   return ret;
 }
-
-

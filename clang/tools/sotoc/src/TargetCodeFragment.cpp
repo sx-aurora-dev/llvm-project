@@ -15,7 +15,7 @@ void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
   CapturedVars.push_back(Var);
 }
 
-void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause){
+void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause) {
   OMPClauses.push_back(Clause);
 }
 
@@ -58,7 +58,7 @@ static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
   return S->getLocEnd();
 }
 
-//TODO: REMOVE this
+// TODO: REMOVE this
 clang::SourceLocation TargetCodeDecl::getStartLoc() {
   llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getStartLoc()\n";
 }
@@ -67,9 +67,10 @@ clang::SourceLocation TargetCodeDecl::getEndLoc() {
   llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getEndLoc()\n";
 }
 
-
-//TODO: Implement recursiv for an arbitrary depth?
-clang::SourceLocation findPreviousToken(clang::SourceLocation Loc, clang::SourceManager &SM, const clang::LangOptions &LO) {
+// TODO: Implement recursiv for an arbitrary depth?
+clang::SourceLocation findPreviousToken(clang::SourceLocation Loc,
+                                        clang::SourceManager &SM,
+                                        const clang::LangOptions &LO) {
   clang::Token token;
 
   Loc = clang::Lexer::GetBeginningOfToken(Loc, SM, LO);
@@ -78,7 +79,7 @@ clang::SourceLocation findPreviousToken(clang::SourceLocation Loc, clang::Source
   // TODO: Error handling if no token can be found
   do {
     Loc = clang::Lexer::GetBeginningOfToken(Loc.getLocWithOffset(-1), SM, LO);
-  } while((clang::Lexer::getRawToken(Loc, token, SM, LO)));
+  } while ((clang::Lexer::getRawToken(Loc, token, SM, LO)));
 
   return token.getLocation();
 }
@@ -87,10 +88,10 @@ clang::SourceLocation TargetCodeRegion::getStartLoc() {
   clang::SourceManager &SM = Context.getSourceManager();
   const clang::LangOptions &LO = Context.getLangOpts();
   auto TokenBegin =
-       clang::Lexer::GetBeginningOfToken(getNode()->getLocStart(), SM, LO);
+      clang::Lexer::GetBeginningOfToken(getNode()->getLocStart(), SM, LO);
   if (hasRegionCompoundStmt(getNode())) {
 
-    #if 0
+#if 0
     // This piece of code could be used to check if we start with a new scope.
     // However, the pretty printer destroys this again somehow...
     // Since the extra scope does not realy hurt, i will leave it as it is for now.
@@ -108,13 +109,13 @@ clang::SourceLocation TargetCodeRegion::getStartLoc() {
       }
     }
     else llvm::outs() << "NOTOK\n";
-    #endif
+#endif
 
     return TokenBegin;
   } else if (hasRegionOMPStmt(getNode())) {
-    // We have to go backwards 2 tokens in case of an OMP statement 
+    // We have to go backwards 2 tokens in case of an OMP statement
     // (the '#' and the 'pragma').
-    return findPreviousToken(findPreviousToken(TokenBegin, SM,LO), SM, LO);
+    return findPreviousToken(findPreviousToken(TokenBegin, SM, LO), SM, LO);
   } else {
     return getNode()->getLocStart();
   }
@@ -126,17 +127,16 @@ clang::SourceLocation TargetCodeRegion::getEndLoc() {
   auto N = getNode();
   if (hasRegionCompoundStmt(N)) {
     return clang::Lexer::GetBeginningOfToken(N->getLocEnd(), SM, LO)
-            .getLocWithOffset(-1);// TODO: If I set this to"1" it works too. I
-                                  // think it was here to remove addition scope
-                                  // which i get with "printPretty". Does this
-                                  // need some fixing?
+        .getLocWithOffset(-1); // TODO: If I set this to"1" it works too. I
+                               // think it was here to remove addition scope
+                               // which i get with "printPretty". Does this
+                               // need some fixing?
   } else if (hasRegionOMPStmt(N)) {
     return getOMPStmtSourceLocEnd(N);
   } else {
     return N->getLocEnd();
   }
 }
-
 
 clang::SourceRange TargetCodeRegion::getInnerRange() {
   auto InnerLocStart = getStartLoc();
@@ -152,13 +152,14 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
 }
 
 // TODO: Use StringRef?
-std::string TargetCodeRegion::PrintClauses(){
+std::string TargetCodeRegion::PrintClauses() {
   clang::SourceManager &SM = Context.getSourceManager();
   const clang::LangOptions &LO = Context.getLangOpts();
   std::stringstream Out;
-  for(auto C : OMPClauses) {
+  for (auto C : OMPClauses) {
     clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
-    clang::CharSourceRange CCRange = clang::CharSourceRange::getTokenRange(CRange);
+    clang::CharSourceRange CCRange =
+        clang::CharSourceRange::getTokenRange(CRange);
     Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
   }
   return Out.str();
@@ -166,22 +167,20 @@ std::string TargetCodeRegion::PrintClauses(){
 
 std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
   std::stringstream Out;
-  for(auto C : OMPClauses) {
+  for (auto C : OMPClauses) {
     if (C->getClauseKind() == clang::OpenMPClauseKind::OMPC_private) {
       auto PC = llvm::dyn_cast<clang::OMPPrivateClause>(C);
-      for (auto Var : PC->varlists()){
+      for (auto Var : PC->varlists()) {
         std::string PrettyStr = "";
         llvm::raw_string_ostream PrettyOS(PrettyStr);
         Var->printPretty(PrettyOS, NULL, PP);
-        Out << "  " << Var->getType().getAsString() << " "
-            << PrettyOS.str() << ";\n";
+        Out << "  " << Var->getType().getAsString() << " " << PrettyOS.str()
+            << ";\n";
       }
     }
   }
   return Out.str();
 }
-
-
 
 std::string TargetCodeRegion::PrintPretty() {
   // Do pretty printing in order to resolve Macros.
@@ -189,7 +188,7 @@ std::string TargetCodeRegion::PrintPretty() {
   // One issue here: Addition braces (i.e., scope) in some cases.
   std::string PrettyStr = "";
   llvm::raw_string_ostream PrettyOS(PrettyStr);
-  if(Node != NULL)
+  if (Node != NULL)
     Node->printPretty(PrettyOS, NULL, PP);
   return PrettyOS.str();
 }
@@ -197,7 +196,7 @@ std::string TargetCodeRegion::PrintPretty() {
 std::string TargetCodeDecl::PrintPretty() {
   std::string PrettyStr = "";
   llvm::raw_string_ostream PrettyOS(PrettyStr);
-  if(Node != NULL) {
+  if (Node != NULL) {
 #if 0
     clang::SourceManager &SM = Context.getSourceManager();
     // TODO: Remove this code at some point. It is
@@ -205,15 +204,16 @@ std::string TargetCodeDecl::PrintPretty() {
     llvm::outs() << "DeclPrintRange: " << Node->getSourceRange().getBegin().printToString(SM)
       << " <--> " << Node->getSourceRange().getEnd().printToString(SM) << "\n";
 #endif
-    // I would prefer a pretty printing function as for the Stmts. However, this does
-    // not exist at all.
-    //Node->getBody()->printPretty(PrettyOS, NULL, PP);
+    // I would prefer a pretty printing function as for the Stmts. However, this
+    // does not exist at all.
+    // Node->getBody()->printPretty(PrettyOS, NULL, PP);
 
     // This was ok before I merged the llvm-mirror at 10th of July, 2018.
-    // After that the pragma omp declare target" is printed as well, which is wrong
-    // and does not fit to the SourceRange we get. As a workaournd we return an empty string,
-    // which implies that we do not have to rewrite the code at all
-    //Node->print(PrettyOS, PP);
+    // After that the pragma omp declare target" is printed as well, which is
+    // wrong and does not fit to the SourceRange we get. As a workaournd we
+    // return an empty string, which implies that we do not have to rewrite the
+    // code at all
+    // Node->print(PrettyOS, PP);
   }
   return PrettyOS.str();
 }

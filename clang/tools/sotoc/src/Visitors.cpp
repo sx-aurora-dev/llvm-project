@@ -6,10 +6,10 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Rewrite/Core/Rewriter.h"
-#include "clang/Basic/OpenMPKinds.h"
 
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
@@ -99,18 +99,18 @@ bool FindTargetCodeVisitor::processTargetRegion(
         // TODO: This is the case list for 'target parallel'. However,
         // this depends on combined construct!
         for (auto C : TargetDirective->clauses()) {
-          switch(C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_if:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            // 'copyin' is the only exception which is not allowed
-            // case clang::OpenMPClauseKind::OMPC_copyin:
-            case clang::OpenMPClauseKind::OMPC_proc_bind:
-            case clang::OpenMPClauseKind::OMPC_num_threads:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-              TCR->addOpenMPClause(C);
-              break;
+          switch (C->getClauseKind()) {
+          case clang::OpenMPClauseKind::OMPC_if:
+          case clang::OpenMPClauseKind::OMPC_default:
+          case clang::OpenMPClauseKind::OMPC_private:
+          case clang::OpenMPClauseKind::OMPC_shared:
+          // 'copyin' is the only exception which is not allowed
+          // case clang::OpenMPClauseKind::OMPC_copyin:
+          case clang::OpenMPClauseKind::OMPC_proc_bind:
+          case clang::OpenMPClauseKind::OMPC_num_threads:
+          case clang::OpenMPClauseKind::OMPC_reduction:
+            TCR->addOpenMPClause(C);
+            break;
           }
         }
       }

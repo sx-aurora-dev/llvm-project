@@ -6,9 +6,9 @@
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Lex/Lexer.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include "clang/Lex/Lexer.h"
 
 #include "TargetCode.h"
 
@@ -64,7 +64,6 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
       generateFunctionPrologue(TCR);
     }
 
-
     if (TCR) {
       generateFunctionEpilogue(TCR);
     }
@@ -75,7 +74,6 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
       Out << ";";
     }
     Out << "\n";
-
   }
 }
 
@@ -120,8 +118,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // Since the runtime can decide to only create one team,
   // target team contructs are ignored right now.
   // TODO: What to do with standalone team constructs?
-  if(TCR->TargetCodeKind ==
-     clang::OpenMPDirectiveKind::OMPD_target_parallel) {
+  if (TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel) {
     Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
   }
 
@@ -133,8 +130,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   auto tmpSL = TCR->getEndLoc();
 
-  if(TCR->TargetCodeKind ==
-     clang::OpenMPDirectiveKind::OMPD_target_parallel) {
+  if (TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel) {
     Out << "  }\n";
   }
 

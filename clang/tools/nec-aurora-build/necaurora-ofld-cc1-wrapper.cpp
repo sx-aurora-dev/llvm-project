@@ -9,7 +9,7 @@
 ///
 /// \file
 /// This file implements a build wrapper for offloading to NEC Aurora TSUABASA.
-/// It calls the sotoc to outline the OpenMP target regions and calls the 
+/// It calls the sotoc to outline the OpenMP target regions and calls the
 /// offloading compiler (e.g., ncc).
 ///
 //===----------------------------------------------------------------------===//
@@ -27,7 +27,6 @@
 
 #include "config.h"
 #include "necaurora-utils.h"
-
 
 int runSourceTransformation(const std::string &InputPath,
                             std::string &OutputPath) {

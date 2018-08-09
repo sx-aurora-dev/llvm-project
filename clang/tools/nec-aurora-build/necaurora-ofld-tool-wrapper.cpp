@@ -9,27 +9,26 @@
 ///
 /// \file
 /// This file implements a build wrapper for offloading to NEC Aurora TSUABASA.
-/// It calls the linker of the used tool chain. In case of static linking the 
+/// It calls the linker of the used tool chain. In case of static linking the
 /// outlined target code it generates a function for initialization of the
 /// symbol table which is called by VEO.
 ///
 //===----------------------------------------------------------------------===//
 
-
-#include <err.h>
 #include <cstdlib>
-#include <iostream>
-#include <sstream>
 #include <cstring>
-#include <string>
-#include <vector>
-#include <getopt.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <err.h>
 #include <fcntl.h>
-#include <libelf.h>
 #include <gelf.h>
+#include <getopt.h>
+#include <iostream>
+#include <libelf.h>
+#include <sstream>
+#include <stdlib.h>
+#include <string.h>
+#include <string>
+#include <unistd.h>
+#include <vector>
 
 #include "config.h"
 #include "necaurora-utils.h"
@@ -40,7 +39,7 @@
 
 /// This function returns the symbols in the given ELF object "elfObject"
 /// and returns the symbol names in "symbols".
-void getSymsFromELFObj(char* elfObject, std::vector<std::string>* symbols) {
+void getSymsFromELFObj(char *elfObject, std::vector<std::string> *symbols) {
   int fd;
   Elf *e;
   Elf_Scn *scn = NULL;
@@ -50,32 +49,32 @@ void getSymsFromELFObj(char* elfObject, std::vector<std::string>* symbols) {
   Elf_Data *data;
 
   if ((fd = open(elfObject, O_RDONLY, 0)) < 0) {
-    err(EXIT_FAILURE , "Open %s failed", elfObject);
+    err(EXIT_FAILURE, "Open %s failed", elfObject);
   }
 
   if ((e = elf_begin(fd, ELF_C_READ, NULL)) == NULL)
     errx(EXIT_FAILURE, "elf_begin() failed: %s.", elf_errmsg(-1));
 
-  if (elf_kind (e) != ELF_K_ELF)
-    errx(EXIT_FAILURE , "%s is  not an  ELF  object .", elfObject);
+  if (elf_kind(e) != ELF_K_ELF)
+    errx(EXIT_FAILURE, "%s is  not an  ELF  object .", elfObject);
 
   // Retrive section index of the ELF section containing the string table
   // of section names.
   if (elf_getshdrstrndx(e, &shstrndx) != 0)
-    errx ( EXIT_FAILURE , "elf_getshdrstrndx ()  failed : %s.", elf_errmsg ( -1));
+    errx(EXIT_FAILURE, "elf_getshdrstrndx ()  failed : %s.", elf_errmsg(-1));
 
   // Iterate all sections
-  while ((scn = elf_nextscn(e, scn)) != NULL ) {
+  while ((scn = elf_nextscn(e, scn)) != NULL) {
     if (gelf_getshdr(scn, &shdr) != &shdr)
-      errx (EXIT_FAILURE, "getshdr() failed : %s.", elf_errmsg ( -1));
+      errx(EXIT_FAILURE, "getshdr() failed : %s.", elf_errmsg(-1));
 
-    if ((name = elf_strptr(e, shstrndx , shdr.sh_name)) == NULL)
-      errx (EXIT_FAILURE, "elf_strptr() failed: %s.", elf_errmsg ( -1));
+    if ((name = elf_strptr(e, shstrndx, shdr.sh_name)) == NULL)
+      errx(EXIT_FAILURE, "elf_strptr() failed: %s.", elf_errmsg(-1));
 
     // We only care about symbols in ".symtab"
     if (shdr.sh_type == SHT_SYMTAB) {
       data = elf_getdata(scn, NULL);
-      int symCount =  shdr.sh_size / shdr.sh_entsize;
+      int symCount = shdr.sh_size / shdr.sh_entsize;
       for (int i = 0; i < symCount; i++) {
         GElf_Sym sym;
         gelf_getsym(data, i, &sym);
@@ -83,12 +82,13 @@ void getSymsFromELFObj(char* elfObject, std::vector<std::string>* symbols) {
         // We need all global function entris in the link table
         if (GELF_ST_BIND(sym.st_info) == STB_GLOBAL &&
             GELF_ST_TYPE(sym.st_info) == STT_FUNC) {
-          char* symName;
+          char *symName;
 
-          // if the sh_type equals SHT_SYMTAB, then sh_link holds the information for the section
-          // header index of the associated string table.
+          // if the sh_type equals SHT_SYMTAB, then sh_link holds the
+          // information for the section header index of the associated string
+          // table.
           if ((symName = elf_strptr(e, shdr.sh_link, sym.st_name)) == NULL)
-            errx (EXIT_FAILURE, "elf_strptr() failed: %s.", elf_errmsg ( -1));
+            errx(EXIT_FAILURE, "elf_strptr() failed: %s.", elf_errmsg(-1));
           symbols->push_back(symName);
         }
       }
@@ -101,13 +101,13 @@ void getSymsFromELFObj(char* elfObject, std::vector<std::string>* symbols) {
 
 // Generates the code which initializes the symbol table for static linking
 // and returns the path to the written C file.
-std::string generateSymTabCode(const std::vector<std::string>* symbols) {
+std::string generateSymTabCode(const std::vector<std::string> *symbols) {
   std::stringstream out;
   out << "#include <stdlib.h>\n";
   out << "#include <string.h>\n";
   out << "typedef unsigned long ulong;\n\n";
 
-  for(auto s : (*symbols)){
+  for (auto s : (*symbols)) {
     out << "extern ulong " << s << ";" << std::endl;
   }
 
@@ -117,12 +117,12 @@ std::string generateSymTabCode(const std::vector<std::string>* symbols) {
   out << std::endl;
   out << "void _init_static_symtable(void) {\n";
   out << "  int i = 0;\n";
-  out << "  _veo_static_symtable = (SYM *)malloc(("
-      << symbols->size() << "+1) * sizeof(SYM));\n";
+  out << "  _veo_static_symtable = (SYM *)malloc((" << symbols->size()
+      << "+1) * sizeof(SYM));\n";
   out << "  SYM *s = _veo_static_symtable;\n";
   out << std::endl;
 
-  for(auto s : (*symbols)){
+  for (auto s : (*symbols)) {
     out << "  s[i].n = strdup(\"" << s << "\");";
     out << " s[i++].v = (ulong)&" << s << ";" << std::endl;
   }
@@ -161,27 +161,27 @@ int main(int argc, char **argv) {
   opterr = 0; // we just ignore unknown options
   optind = 0;
   while ((option = getopt(argc, argv, "o:f:v:")) != -1) {
-    switch(option) {
-      case 'o':
-        output = optarg;
-        break;
-      case 'f':
-        // TODO: We use the "-Xlinker" option of clang with
-        // the value "-fopenmp-static". Question is if we should
-        // manipulate the Args in 
-        // "llvm/tools/clang/lib/Driver/ToolChains/NEC*" before we
-        // pass it to the linker wrapper.
+    switch (option) {
+    case 'o':
+      output = optarg;
+      break;
+    case 'f':
+      // TODO: We use the "-Xlinker" option of clang with
+      // the value "-fopenmp-static". Question is if we should
+      // manipulate the Args in
+      // "llvm/tools/clang/lib/Driver/ToolChains/NEC*" before we
+      // pass it to the linker wrapper.
 
-        // we ignore all other -f prefixes than "fopenmp-static"
-        if(!strcmp(optarg,"openmp-static")) {
-          statictgt = true;
-        }
-        break;
-      case 'v':
-        Verbose = true;
-        break;
-      default:
-        break;
+      // we ignore all other -f prefixes than "fopenmp-static"
+      if (!strcmp(optarg, "openmp-static")) {
+        statictgt = true;
+      }
+      break;
+    case 'v':
+      Verbose = true;
+      break;
+    default:
+      break;
     }
   }
 
@@ -198,18 +198,19 @@ int main(int argc, char **argv) {
     }
   } else {
     if (elf_version(EV_CURRENT) == EV_NONE)
-      errx (EXIT_FAILURE, "ELF library initialization failed : %s", 
-            elf_errmsg (-1));
+      errx(EXIT_FAILURE, "ELF library initialization failed : %s",
+           elf_errmsg(-1));
 
-    //for (std::vector<std::string>::iterator it=objects.begin(); it!=objects.end(); it++){
+    // for (std::vector<std::string>::iterator it=objects.begin();
+    // it!=objects.end(); it++){
     for (auto o : objects) {
-      char* objName = new char[o.length()+1];
+      char *objName = new char[o.length() + 1];
       std::strcpy(objName, o.c_str());
       getSymsFromELFObj(objName, &symNames);
       cmdLine << objName << " ";
       delete objName;
     }
-    SymTabPath = generateSymTabCode(&symNames); 
+    SymTabPath = generateSymTabCode(&symNames);
     cmdLine << SymTabPath << " ";
     cmdLine << "/opt/nec/ve/lib/libveorun.a ";
     // We just assume that we require OpenMP (otherwise we would be in a
@@ -219,9 +220,8 @@ int main(int argc, char **argv) {
   }
 
   if (Verbose)
-    std::cout << " \"" << cmdLine.str() << "\"" <<std::endl;
-  //ret = runTargetCompiler(SymTabPath, ArgsStream.str());
-
+    std::cout << " \"" << cmdLine.str() << "\"" << std::endl;
+  // ret = runTargetCompiler(SymTabPath, ArgsStream.str());
 
   ret = std::system(cmdLine.str().c_str());
 
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  if (statictgt){
+  if (statictgt) {
     std::cout << "Static Startup " << output << std::endl;
     // We have to keep the output in the static case.
     // TODO: This should be in the fat binary somehow...
@@ -243,6 +243,4 @@ int main(int argc, char **argv) {
 
   std::remove(SymTabPath.c_str());
   return ret;
-
 }
-
