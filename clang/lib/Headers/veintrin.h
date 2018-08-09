@@ -72,6 +72,11 @@ enum VShuffleCodes {
 #define _ve_pack_f32p __builtin_ve_pack_f32p
 #define _ve_pack_f32a __builtin_ve_pack_f32a
 
+static inline unsigned long int _ve_pack_i32(int a, int b)
+{
+    return (((unsigned long int)a) << 32) | (unsigned int)b;
+}
+
 #define _ve_vec_call __builtin_ve_vec_call
 
 extern void __vec_expf(void);
