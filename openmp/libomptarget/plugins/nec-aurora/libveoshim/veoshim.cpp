@@ -13,11 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "veoshim.h"
+#include <cstring>
 #include <dlfcn.h>
 #include <ffi.h>
 #include <list>
 #include <vector>
-#include <cstring>
 
 class ShimInfoTy {
   std::list<struct veo_proc_handle> proc_handles;
@@ -47,7 +47,8 @@ struct veo_proc_handle *veo_proc_create(int ve_node) {
 }
 
 struct veo_thr_ctxt *veo_context_open(struct veo_proc_handle *proc_handle) {
-  struct veo_thr_ctxt *ctx = (struct veo_thr_ctxt*)malloc(sizeof(struct veo_thr_ctxt));
+  struct veo_thr_ctxt *ctx =
+      (struct veo_thr_ctxt *)malloc(sizeof(struct veo_thr_ctxt));
   ctx->veoshim_dlhandle = NULL;
   return ctx;
 }
@@ -61,7 +62,8 @@ int veo_context_close(struct veo_thr_ctxt *thread_ctxt) {
   return ret;
 }
 
-uint64_t veo_load_library(struct veo_proc_handle *request, const char *filename) {
+uint64_t veo_load_library(struct veo_proc_handle *request,
+                          const char *filename) {
   void *dlhandle = dlopen(filename, RTLD_NOW);
   request->reserved = (uint64_t)dlhandle;
   return (uint64_t)dlhandle;
@@ -69,11 +71,11 @@ uint64_t veo_load_library(struct veo_proc_handle *request, const char *filename)
 
 uint64_t veo_get_sym(struct veo_proc_handle *request, uint64_t lib_handle,
                      const char *symbol_name) {
-  return (uint64_t)dlsym((void*)lib_handle, symbol_name);
+  return (uint64_t)dlsym((void *)lib_handle, symbol_name);
 }
 
 uint64_t veo_call_async(struct veo_thr_ctxt *request, uint64_t entry_point,
-                        const struct veo_args *args){
+                        const struct veo_args *args) {
   ffi_cif cif;
 
   std::vector<ffi_type *> args_types(8, &ffi_type_uint64);
@@ -82,8 +84,7 @@ uint64_t veo_call_async(struct veo_thr_ctxt *request, uint64_t entry_point,
 
   std::vector<void *> ptrs(args->arg.size());
 
-
-  for(int i = 0; i < args->arg.size(); ++i) {
+  for (int i = 0; i < args->arg.size(); ++i) {
     ptrs[i] = static_cast<void *>(&arg_values[i]);
   }
 
@@ -95,7 +96,7 @@ uint64_t veo_call_async(struct veo_thr_ctxt *request, uint64_t entry_point,
   }
 
   void (*entry)(void);
-  *((void**) &entry) = (void*)entry_point;
+  *((void **)&entry) = (void *)entry_point;
 
   ffi_arg result_value;
 
@@ -113,30 +114,30 @@ int veo_call_wait_result(struct veo_thr_ctxt *request,
   return 0;
 }
 
-int veo_alloc_mem(struct veo_proc_handle *request,
-                  uint64_t *ptr, const size_t size) {
+int veo_alloc_mem(struct veo_proc_handle *request, uint64_t *ptr,
+                  const size_t size) {
   *ptr = (uint64_t)malloc(size);
-   return ptr != NULL ? 0 : errno;
+  return ptr != NULL ? 0 : errno;
 }
 
 int veo_free_mem(struct veo_proc_handle *request, uint64_t ptr) {
   free((void *)ptr);
   return 0;
 }
-int veo_read_mem(struct veo_proc_handle *request, void *dest_ptr, uint64_t source,
-                 size_t bytes) {
-  memcpy(dest_ptr, (void*)source, bytes);
+int veo_read_mem(struct veo_proc_handle *request, void *dest_ptr,
+                 uint64_t source, size_t bytes) {
+  memcpy(dest_ptr, (void *)source, bytes);
   return 0;
 }
 
-int veo_write_mem(struct veo_proc_handle *request, uint64_t dest, void *source_ptr,
-                  size_t bytes) {
-  memcpy((void*)dest, source_ptr, bytes);
+int veo_write_mem(struct veo_proc_handle *request, uint64_t dest,
+                  void *source_ptr, size_t bytes) {
+  memcpy((void *)dest, source_ptr, bytes);
   return 0;
 }
 
 struct veo_args *veo_args_alloc() {
-    return new struct veo_args;
+  return new struct veo_args;
 }
 
 int veo_args_set_u64(struct veo_args *arg, int argnum, uint64_t u64) {
@@ -147,9 +148,7 @@ int veo_args_set_u64(struct veo_args *arg, int argnum, uint64_t u64) {
   return 0;
 }
 
-void veo_args_free(struct veo_args *arg) {
-  delete arg;
-}
+void veo_args_free(struct veo_args *arg) { delete arg; }
 
 #ifdef __cplusplus
 }

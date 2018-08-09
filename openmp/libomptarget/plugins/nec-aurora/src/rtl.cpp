@@ -13,14 +13,14 @@
 
 #include "omptargetplugin.h"
 
-#include <vector>
-#include <list>
 #include <cassert>
-#include <string>
-#include <cstring>
 #include <cerrno>
+#include <cstring>
+#include <list>
 #include <stdlib.h>
+#include <string>
 #include <ve_offload.h>
+#include <vector>
 
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
@@ -31,28 +31,25 @@ static int DebugLevel = 0;
 
 #define GETNAME2(name) #name
 #define GETNAME(name) GETNAME2(name)
-#define DP(...) \
-  do { \
-    if (DebugLevel > 0) { \
-      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__); \
-    } \
+#define DP(...)                                                                \
+  do {                                                                         \
+    if (DebugLevel > 0) {                                                      \
+      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__);              \
+    }                                                                          \
   } while (false)
 #else // OMPTARGET_DEBUG
-#define DP(...) {}
+#define DP(...)                                                                \
+  {}
 #endif // OMPTARGET_DEBUG
-
 
 #include "../../common/elf_common.c"
 
-
-#define NUMBER_OF_DEVICES 1 //TODO: find out how many nodes we can have
-
+#define NUMBER_OF_DEVICES 1 // TODO: find out how many nodes we can have
 
 struct DynLibTy {
   char *FileName;
   uint64_t VeoLibHandle;
 };
-
 
 /// Keep entries table per device.
 struct FuncOrGblEntryTy {
@@ -77,21 +74,21 @@ public:
 
     for (__tgt_offload_entry *i = HostBegin; i != HostEnd; ++i) {
       char *SymbolName = i->name;
-      // we have not enough access to the target memory to conveniently parse the
-      // offload table there so we need to lookup every symbol with the host table
+      // we have not enough access to the target memory to conveniently parse
+      // the offload table there so we need to lookup every symbol with the host
+      // table
       DP("Looking up symbol: %s\n", SymbolName);
-      uint64_t SymbolTargetAddr = veo_get_sym(ProcHandles[device_id],
-                                               VeoLibHandle,
-                                               SymbolName);
+      uint64_t SymbolTargetAddr =
+          veo_get_sym(ProcHandles[device_id], VeoLibHandle, SymbolName);
       __tgt_offload_entry Entry;
 
       if (!SymbolTargetAddr) {
         DP("Symbol %s not found in target image\n", SymbolName);
-        Entry = { NULL, NULL, 0, 0, 0 };
+        Entry = {NULL, NULL, 0, 0, 0};
       } else {
         DP("Found symbol %s successfully in target image (addr: %p)\n",
-           SymbolName, (void*)SymbolTargetAddr);
-        Entry = { (void*)SymbolTargetAddr, i->name, i->size, i->flags, 0 };
+           SymbolName, (void *)SymbolTargetAddr);
+        Entry = {(void *)SymbolTargetAddr, i->name, i->size, i->flags, 0};
       }
 
       T.push_back(Entry);
@@ -102,8 +99,8 @@ public:
     // the element after the last entry in the table.
     // If we didnt own the memory then we would have undefined behaviour
     if (!(T.capacity() > T.size())) {
-        __tgt_offload_entry DummyEntry =  { NULL, NULL, 0, 0, 0};
-        T.push_back(DummyEntry);
+      __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
+      T.push_back(DummyEntry);
     }
 
     FuncOrGblEntry[device_id].Table.EntriesBegin = &T.front();
@@ -115,10 +112,9 @@ public:
   }
 
   RTLDeviceInfoTy(int32_t num_devices)
-      : ProcHandles(num_devices, NULL),
-        Contexts(num_devices, NULL), FuncOrGblEntry(num_devices),
-        LibraryHandles(num_devices) {
-    //TODO: some debug code here
+      : ProcHandles(num_devices, NULL), Contexts(num_devices, NULL),
+        FuncOrGblEntry(num_devices), LibraryHandles(num_devices) {
+    // TODO: some debug code here
 #ifdef OMPTARGET_DEBUG
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
       DebugLevel = std::stoi(envStr);
@@ -128,7 +124,7 @@ public:
 
   ~RTLDeviceInfoTy() {
     for (auto &hdl : ProcHandles) {
-        // TODO: Do we need to destroch the proc handles?
+      // TODO: Do we need to destroch the proc handles?
     }
 
     for (auto &ctx : Contexts) {
@@ -147,16 +143,17 @@ public:
   }
 };
 
-
 static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
-
 
 static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
                                     struct veo_args *args, uint64_t *RetVal) {
-  DP("Running function with entry point %p\n", reinterpret_cast<void *>(FuncAddr));
-  uint64_t RequestHandle = veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
+  DP("Running function with entry point %p\n",
+     reinterpret_cast<void *>(FuncAddr));
+  uint64_t RequestHandle =
+      veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
   if (RequestHandle == VEO_REQUEST_ID_INVALID) {
-    DP("Execution of entry point %p failed\n", reinterpret_cast<void *>(FuncAddr));
+    DP("Execution of entry point %p failed\n",
+       reinterpret_cast<void *>(FuncAddr));
     return -1;
   } else {
     DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
@@ -165,16 +162,14 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
 
   int ret = veo_call_wait_result(DeviceInfo.Contexts[DeviceID], RequestHandle,
                                  RetVal);
-  if(ret != 0) {
+  if (ret != 0) {
     DP("Waiting for entry point %p failed (Error code %d)\n",
        reinterpret_cast<void *>(FuncAddr), ret);
-    //TODO: Do something with return value?
+    // TODO: Do something with return value?
     return -1;
   }
   return 0;
 }
-
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -182,9 +177,7 @@ extern "C" {
 
 // Return the number of available devices of the type supported by the
 // target RTL.
-int32_t __tgt_rtl_number_of_devices(void) {
-  return NUMBER_OF_DEVICES;
-}
+int32_t __tgt_rtl_number_of_devices(void) { return NUMBER_OF_DEVICES; }
 
 // Return an integer different from zero if the provided device image can be
 // supported by the runtime. The functionality is similar to comparing the
@@ -202,16 +195,16 @@ int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *Image) {
 // Initialize the specified device. In case of success return 0; otherwise
 // return an error code.
 int32_t __tgt_rtl_init_device(int32_t ID) {
-  // we will try to use 1 context per device
+// we will try to use 1 context per device
 
-  // TODO: At the moment we do not initilize the device here, but in
-  // "__tgt_rtl_load_binary". The reason is that we need to set an the
-  // ENV VEORUN_BIN to the static bin. As long as we dont have any possibilty
-  // to to pass the location of the binary to veo_proc_create it is much more
-  // convinient to set the ENV here (sentenv()). However, we do not know where
-  // the tgt_binary (ELF) for that which we dont have at this point. :-(.
-  // Thus, we do nothing here for now.
-  #if 0
+// TODO: At the moment we do not initilize the device here, but in
+// "__tgt_rtl_load_binary". The reason is that we need to set an the
+// ENV VEORUN_BIN to the static bin. As long as we dont have any possibilty
+// to to pass the location of the binary to veo_proc_create it is much more
+// convinient to set the ENV here (sentenv()). However, we do not know where
+// the tgt_binary (ELF) for that which we dont have at this point. :-(.
+// Thus, we do nothing here for now.
+#if 0
   struct veo_proc_handle *proc_handle = veo_proc_create(ID);
   if (!proc_handle) {
     //TODO: errno does not seem to be set by VEO
@@ -244,7 +237,7 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
 __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
                                           __tgt_device_image *Image) {
   DP("Dev %d: load binary from " DPxMOD " image\n", ID,
-    DPxPTR(Image->ImageStart));
+     DPxPTR(Image->ImageStart));
 
   assert(ID >= 0 && ID < NUMBER_OF_DEVICES && "bad dev id");
 
@@ -285,23 +278,23 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
   // See comment in "__tgt_rtl_init_device"
 #if 1
-  char* VeorunBin = std::getenv("VEORUN_BIN");
-  if(!VeorunBin) {
+  char *VeorunBin = std::getenv("VEORUN_BIN");
+  if (!VeorunBin) {
     VeorunBin = "veorun";
     setenv("VEORUN_BIN", VeorunBin, 1);
   }
 
   struct veo_proc_handle *proc_handle = veo_proc_create(ID);
   if (!proc_handle) {
-    //TODO: errno does not seem to be set by VEO
-    //DP("veo_proc_create() failed: %s\n", std::strerror(errno));
-    DP("veo_proc_create() failed for device %d\n",ID);
+    // TODO: errno does not seem to be set by VEO
+    // DP("veo_proc_create() failed: %s\n", std::strerror(errno));
+    DP("veo_proc_create() failed for device %d\n", ID);
     return NULL;
   }
 
   struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
   if (!ctx) {
-    //TODO: errno does not seem to be set by VEO
+    // TODO: errno does not seem to be set by VEO
     DP("veo_context_open() failed: %s\n", std::strerror(errno));
     return NULL;
   }
@@ -314,14 +307,14 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 #endif
 
   uint64_t LibHandle = 0UL;
-  if(elf_is_dynamic(Image)) {
+  if (elf_is_dynamic(Image)) {
     LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
 
     if (!LibHandle) {
-      DP("veo_load_library() failed: LibHandle=%" PRIu64 \
+      DP("veo_load_library() failed: LibHandle=%" PRIu64
          " Name=%s. Set env VEORUN_BIN for static linked target code.\n",
          LibHandle, tmp_name);
-     return  NULL;
+      return NULL;
     }
 
     DP("Successfully loaded library dynamically\n");
@@ -353,14 +346,15 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   uint64_t addr;
 
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
-      ID, (void*)addr, Size);
+     ID, (void *)addr, Size);
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
-  if(ret != 0) {
+  if (ret != 0) {
     DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %" PRIu64
-       "\n", ID, (void*)addr, Size, ret);
+       "\n",
+       ID, (void *)addr, Size, ret);
     return NULL;
   }
-  return (void*)addr;
+  return (void *)addr;
 }
 
 // Pass the data content to the target device using the target address.
@@ -369,7 +363,7 @@ int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
                               int64_t Size) {
   int ret = veo_write_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr,
                           HostPtr, (size_t)Size);
-  if(ret != 0) {
+  if (ret != 0) {
     DP("veo_write_mem() failed with error code %d\n", ret);
   }
   return ret;
@@ -381,7 +375,7 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
                                 int64_t Size) {
   int ret = veo_read_mem(DeviceInfo.ProcHandles[ID], HostPtr,
                          (uint64_t)TargetPtr, Size);
-  if(ret != 0) {
+  if (ret != 0) {
     DP("veo_read_mem() failed with error code %d\n", ret);
   }
   return ret;
@@ -402,16 +396,16 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
                                          int32_t NumTeams, int32_t ThreadLimit,
                                          uint64_t loop_tripcount) {
   // ignore team num and thread limit.
-  std::vector<void*> ptrs(NumArgs);
+  std::vector<void *> ptrs(NumArgs);
 
-  //TODO: Do we still need this?
+  // TODO: Do we still need this?
   assert(NumArgs <= 8); // the api can only handle 8 args at a time.
 
-  struct veo_args* TargetArgs;
+  struct veo_args *TargetArgs;
   TargetArgs = veo_args_alloc();
 
   for (int32_t i = 0; i < NumArgs; ++i) {
-    //TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
+    // TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
     veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
   }
 
@@ -432,8 +426,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
 // Otherwise, return an error code.
 int32_t __tgt_rtl_run_target_region(int32_t ID, void *Entry, void **Args,
                                     ptrdiff_t *Offsets, int32_t NumArgs) {
-  return __tgt_rtl_run_target_team_region(ID, Entry, Args, Offsets, NumArgs,
-                                          1, 1, 0);
+  return __tgt_rtl_run_target_team_region(ID, Entry, Args, Offsets, NumArgs, 1,
+                                          1, 0);
 }
 
 #ifdef __cplusplus
