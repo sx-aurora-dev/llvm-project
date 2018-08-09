@@ -345,7 +345,7 @@ define dso_local i32 @func21(float, float) local_unnamed_addr #0 {
 define dso_local i32 @func22(float, float) local_unnamed_addr #0 {
 ; CHECK-LABEL: func22:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    breq.d %s0, %s1, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    breq.s %s0, %s1, .LBB{{[0-9]+}}_2
   %3 = fcmp ueq float %0, %1
   br i1 %3, label %4, label %6
 
@@ -377,7 +377,7 @@ define dso_local i32 @func23(float, float) local_unnamed_addr #0 {
 define dso_local i32 @func24(float, float) local_unnamed_addr #0 {
 ; CHECK-LABEL: func24:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brnan.d %s0, %s1, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    brnan.s %s0, %s1, .LBB{{[0-9]+}}_2
   %3 = fcmp uno float %0, %1
   br i1 %3, label %4, label %6
 
