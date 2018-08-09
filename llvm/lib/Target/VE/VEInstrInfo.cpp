@@ -530,18 +530,28 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
   return GlobalBaseReg;
 }
 
+static int getVM512Upper(int no)
+{
+    return (no - VE::VMP0) * 2 + VE::VM0;
+}
+
+static int getVM512Lower(int no)
+{
+    return getVM512Upper(no) + 1;
+}
+
 static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   MachineBasicBlock* MBB = MI.getParent();
   DebugLoc dl = MI.getDebugLoc();
 
-  unsigned VMXu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
-  unsigned VMXl = VMXu + 1;
-  unsigned VMYu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
-  unsigned VMYl = VMYu + 1;
+  unsigned VMXu = getVM512Upper(MI.getOperand(0).getReg());
+  unsigned VMXl = getVM512Lower(MI.getOperand(0).getReg());
+  unsigned VMYu = getVM512Upper(MI.getOperand(1).getReg());
+  unsigned VMYl = getVM512Lower(MI.getOperand(1).getReg());
 
   if (MI.getNumOperands() > 3) { // includes VL
-      unsigned VMZu = (MI.getOperand(2).getReg() - VE::VMP0) * 2 + VE::VM0; 
-      unsigned VMZl = VMZu + 1;
+      unsigned VMZu = getVM512Upper(MI.getOperand(2).getReg());
+      unsigned VMZl = getVM512Lower(MI.getOperand(2).getReg());
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
   } else {
@@ -549,6 +559,64 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
   }
   MI.eraseFromParent();
+}
+
+static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
+{
+    // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
+    // replace to pvfmk.s.up and pvfmk.s.lo (VFMFpv)
+
+    unsigned Opcode = MI.getOpcode();
+
+    // change VMP to VM
+    unsigned VMu = getVM512Upper(MI.getOperand(0).getReg());
+    unsigned VMl = getVM512Lower(MI.getOperand(0).getReg());
+
+    unsigned OpcodeUpper;
+    unsigned OpcodeLower;
+    bool hasCond = true;
+    bool hasMask = false;
+    if (Opcode == VE::VFMSpv) {
+        OpcodeUpper = VE::VFMSuv;
+        OpcodeLower = VE::VFMSv;
+    } else if (Opcode == VE::VFMFpv) {
+        OpcodeUpper = VE::VFMFsv;
+        OpcodeLower = VE::VFMFlv;
+    } else if (Opcode == VE::VFMKpat) {
+        OpcodeUpper = VE::VFMSuat;
+        OpcodeLower = VE::VFMSlat;
+        hasCond = false;
+    } else if (Opcode == VE::VFMKpaf) {
+        OpcodeUpper = VE::VFMSuaf;
+        OpcodeLower = VE::VFMSlaf;
+        hasCond = false;
+    } else if (Opcode == VE::VFMSpvm) {
+        OpcodeUpper = VE::VFMSuvm;
+        OpcodeLower = VE::VFMSvm;
+        hasMask = true;
+    } else if (Opcode == VE::VFMFpvm) {
+        OpcodeUpper = VE::VFMFsvm;
+        OpcodeLower = VE::VFMFlvm;
+        hasMask = true;
+    }
+
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper)).addReg(VMu);
+    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower)).addReg(VMl);
+
+    if (hasCond) {
+        Bu = Bu.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+        Bl = Bl.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+    }
+    if (hasMask) {
+        unsigned VMu3 = getVM512Upper(MI.getOperand(3).getReg());
+        unsigned VMl3 = getVM512Lower(MI.getOperand(3).getReg());
+        Bu.addReg(VMu3);
+        Bl.addReg(VMl3);
+    }
+
+    MI.eraseFromParent();
 }
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
@@ -596,51 +664,11 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 #endif
   case VE::VFMSpv:
   case VE::VFMFpv:
+  case VE::VFMSpvm:
+  case VE::VFMFpvm:
   case VE::VFMKpat:
   case VE::VFMKpaf: {
-    // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
-    // replace to pvfmk.s.up and pvfmk.s.lo (VFMFpv)
-
-    unsigned Opcode = MI.getOpcode();
-
-    // change VMP to VM
-    unsigned VMu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
-    unsigned VMl = VMu + 1;
-
-    unsigned OpcodeUpper;
-    unsigned OpcodeLower;
-    if (Opcode == VE::VFMSpv) {
-      OpcodeUpper = VE::VFMSuv;
-      OpcodeLower = VE::VFMSv;
-    } else if (Opcode == VE::VFMFpv) {
-      OpcodeUpper = VE::VFMFsv;
-      OpcodeLower = VE::VFMFlv;
-    } else if (Opcode == VE::VFMKpat) {
-      OpcodeUpper = VE::VFMSuat;
-      OpcodeLower = VE::VFMSlat;
-    } else if (Opcode == VE::VFMKpaf) {
-      OpcodeUpper = VE::VFMSuaf;
-      OpcodeLower = VE::VFMSlaf;
-    }
-#if 0
-    DEBUG(dbgs() << "expandPostRAPseudo: VFMSpv:"
-          << " op0=" << MI.getOperand(0).getReg()
-          << " VMP0=" << VE::VMP0
-          << " VM0=" << VE::VM0
-          << " VMu" << VMu << " VMl=" << VMl
-          << "\n");
-#endif
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, get(OpcodeUpper)).addReg(VMu);
-    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, get(OpcodeLower)).addReg(VMl);
-
-    if (MI.getOpcode() == VE::VFMSpv || MI.getOpcode() == VE::VFMFpv) {
-      Bu.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
-      Bl.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
-    }
-
-    MI.eraseFromParent();
+    expandPseudoVFMK(*this, MI);
     return true;
     }
   case VE::LVMpi: {

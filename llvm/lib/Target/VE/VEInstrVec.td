@@ -876,11 +876,16 @@ let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
 def VFMSlaf : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.af $vm", []>;
 
 // Pseudo for VM512
-def VFMSpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
-                    "# pvfmk.w.${cf} $vm,$vz", []>;
+def VFMSpv : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz), 
+                    "# pvfmk.w.${cf} $vmx,$vz", []>;
+def VFMSpvm : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm), 
+                    "# pvfmk.w.${cf} $vmx,$vz,$vm", []> {
+                    }
 
 def VFMFpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
+def VFMFpvm : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm), 
+                    "# pvfmk.w.${cf} $vmx,$vz,$vm", []>;
 
 def VFMKpat : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.at", []>;
 def VFMKpaf : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.af", []>;
@@ -1084,6 +1089,11 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
 
+/*
+def : Pat<(i64 (int_ve_pack_i32 i32:$sy, i32:$sz)),
+          (i64 (ORrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, i32),
+                     (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32::$sz), 32))))>;
+*/
 
 include "VEInstrIntrinsic.td"
 

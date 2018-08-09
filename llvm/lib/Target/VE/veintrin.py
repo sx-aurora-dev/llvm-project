@@ -834,6 +834,7 @@ class InstTable:
                "mcv"  : "v",
                "mcvm" : "vm",
                "Mcv"  : "v",
+               "McvM" : "vm",
                "vvIs" : "i", # VSFA
                "vvIsmv" : "im", # VSFA
                "sm"   : "", # PCMV, etc
@@ -1211,9 +1212,11 @@ T.InstX(0x00, "VFMKpat", "pvfmk.at", [[VM512]], None, True).noTest() # Pseudo
 T.InstX(0x00, "VFMKpaf", "pvfmk.af", [[VM512]], None, True).noTest() # Pseudo
 T.VFMKm(0xB4, "VFMS", "vfmk.w")
 T.InstX(0x00, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]], None, True).noTest() # Pseudo
+T.InstX(0x00, "VFMSp", "pvfmk.w", [[VMX512, CCOp, VZ(T_i32), VM512]], None, True).noTest() # Pseudo
 T.VFMKm(0xB4, "VFMFd", "vfmk.d")
 T.VFMKm(0xB4, "VFMFs", "vfmk.s")
 T.InstX(0x00, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]], None, True).noTest() # Pseudo
+T.InstX(0x00, "VFMFp", "pvfmk.s", [[VMX512, CCOp, VZ(T_f32), VM512]], None, True).noTest() # Pseudo
 
 
 T.Section("5.3.2.13. Vector Recursive Relation Instructions", 32)
