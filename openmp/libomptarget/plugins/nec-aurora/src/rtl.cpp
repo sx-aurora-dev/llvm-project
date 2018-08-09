@@ -1,3 +1,16 @@
+//===-RTLs/nec-aurora/src/rtl.cpp - Target RTLs Implementation - C++ -*-======//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.txt for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// RTL for NEC Aurora TSUBASE machines
+//
+//===----------------------------------------------------------------------===//
+
 #include "omptargetplugin.h"
 
 #include <vector>

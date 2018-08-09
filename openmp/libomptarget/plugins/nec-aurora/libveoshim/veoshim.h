@@ -1,3 +1,19 @@
+//===-RTLs/nec-aurora/voeshim/veoshim.h -----------------------------------===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file provides the interface for the VE Offloading Framework (VEO) from
+/// NEC. This allows compiling the RTL nec-aurora module without installing the
+/// software stack from NEC on the local machine.
+///
+//===----------------------------------------------------------------------===//
+
 #ifndef VEOSHIM_H
 #define VEOSHIM_H
 

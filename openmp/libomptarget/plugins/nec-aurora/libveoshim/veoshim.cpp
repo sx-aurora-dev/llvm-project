@@ -1,3 +1,17 @@
+//===-RTLs/nec-aurora/voeshim/veoshim.cpp ---------------------------------===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file implements VE Offloading Framework (VEO) from NEC as dummy lib.
+///
+//===----------------------------------------------------------------------===//
+
 #include "veoshim.h"
 #include <dlfcn.h>
 #include <ffi.h>
