@@ -1,3 +1,18 @@
+//===-- sotoc/src/main.cpp ------------------------------------------------===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file implements sotoc, a clang to to enable outlining of OpenMP target
+/// region, which can be used by different compiler.
+///
+//===----------------------------------------------------------------------===//
+
 #include <memory>
 #include <sstream>
 #include <string>
