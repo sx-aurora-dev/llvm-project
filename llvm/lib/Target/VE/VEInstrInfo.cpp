@@ -254,8 +254,12 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
 
   unsigned opc[2];
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  MachineFunction *MF = MBB.getParent();
+  const MachineRegisterInfo &MRI = MF->getRegInfo();
+  unsigned Reg = Cond[2].getReg();
   if (IsIntegerCC(Cond[0].getImm())) {
-    if (VE::I32RegClass.contains(Cond[2].getReg())) {
+    if (TRI->getRegSizeInBits(Reg, MRI) == 32) {
       opc[0] = VE::BCRWir;
       opc[1] = VE::BCRWrr;
     } else {
@@ -263,7 +267,7 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
       opc[1] = VE::BCRLrr;
     }
   } else {
-    if (VE::F32RegClass.contains(Cond[2].getReg())) {
+    if (TRI->getRegSizeInBits(Reg, MRI) == 32) {
       opc[0] = VE::BCRSir;
       opc[1] = VE::BCRSrr;
     } else {
