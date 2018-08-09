@@ -1089,11 +1089,5 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
 
-/*
-def : Pat<(i64 (int_ve_pack_i32 i32:$sy, i32:$sz)),
-          (i64 (ORrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, i32),
-                     (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32::$sz), 32))))>;
-*/
-
 include "VEInstrIntrinsic.td"
 
