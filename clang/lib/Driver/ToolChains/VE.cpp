@@ -124,13 +124,17 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
   } else {
+#if 0
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/opt/nec/ve/ncc/1.3.3/include");
+#endif
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/opt/nec/ve/musl/include");
   }
+#if 0
   // FIXME: Remedy for /opt/nec/ve/musl/include/bits/alltypes.h
   CC1Args.push_back("-D__NEED_off_t");
+#endif
 }
 
 void VEToolChain::addClangTargetOptions(const ArgList &DriverArgs,
@@ -153,15 +157,19 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
   } else {
+#if 0
     // Use default include paths
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/opt/nec/ve/ncc/1.3.3/include/C++");
+#endif
   }
+#if 0
   // Several remedies are required to use VE system header files.
   // FIXME: Remedy for /opt/nec/ve/ncc/1.3.3/include/necvals.h problem.
   CC1Args.push_back("-D_CHAR16T");
   // FIXME: Remedy for /opt/nec/ve/ncc/1.3.3/include/C++/limits
   CC1Args.push_back("-D__INFINITY__=INFINITY");
+#endif
 }
 
 void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
