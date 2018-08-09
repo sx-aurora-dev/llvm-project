@@ -1,3 +1,19 @@
+//===-- nec-aurora-build/necaurora-ofld-cc1-wrapper.cpp -------------------===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file implements a build wrapper for offloading to NEC Aurora TSUABASA.
+/// It calls the sotoc to outline the OpenMP target regions and calls the 
+/// offloading compiler (e.g., ncc).
+///
+//===----------------------------------------------------------------------===//
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

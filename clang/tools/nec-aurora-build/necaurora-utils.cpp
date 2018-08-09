@@ -1,3 +1,17 @@
+//===-- nec-aurora-build/necaurora-utils.cpp--------- ---------------------===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file implements helper functions for the necaurora wrapper tools.
+///
+//===----------------------------------------------------------------------===//
+
 #include <sstream>
 #include <iostream>
 #include <vector>
