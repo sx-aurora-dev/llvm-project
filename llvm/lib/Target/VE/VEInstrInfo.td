@@ -1351,7 +1351,8 @@ def : Pat<(f32 (sint_to_fp i64:$sy)), (CVSr (FLTXr i64:$sy))>;
 def : Pat<(f128 (sint_to_fp i32:$sy)), (CVQr (FLTr $sy))>;
 def : Pat<(f128 (sint_to_fp i64:$sy)), (CVQr (FLTXr $sy))>;
 
-def : Pat<(i64 (anyext i32:$sy)), (COPY $sy)>;
+def : Pat<(i64 (anyext i32:$sy)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)>;
 
 // extload, sextload and zextload stuff
 def : Pat<(i64 (sextloadi8 ADDRri:$addr)),
