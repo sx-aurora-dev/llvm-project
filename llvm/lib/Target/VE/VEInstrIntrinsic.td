@@ -26,6 +26,8 @@ def : Pat<(int_ve_vstu2d_vss v256f64:$vx, i64:$sy, i64:$sz), (VSTU2Drr v256f64:$
 def : Pat<(int_ve_vstu2d_vss v256f64:$vx, (i64 simm7:$I), i64:$sz), (VSTU2Dir v256f64:$vx, (i64 simm7:$I), i64:$sz)>;
 def : Pat<(int_ve_vstl2d_vss v256f64:$vx, i64:$sy, i64:$sz), (VSTL2Drr v256f64:$vx, i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vstl2d_vss v256f64:$vx, (i64 simm7:$I), i64:$sz), (VSTL2Dir v256f64:$vx, (i64 simm7:$I), i64:$sz)>;
+def : Pat<(int_ve_pfchv i64:$sy, i64:$sz), (PFCHVr i64:$sy, i64:$sz)>;
+def : Pat<(int_ve_pfchv (i64 simm7:$I), i64:$sz), (PFCHVi (i64 simm7:$I), i64:$sz)>;
 def : Pat<(int_ve_lsv_vvss v256f64:$vx, i32:$sy, i64:$sz), (LSVr v256f64:$vx, i32:$sy, i64:$sz)>;
 def : Pat<(int_ve_lvs_svs_u64 v256f64:$vx, i32:$sy), (LVSi64r v256f64:$vx, i32:$sy)>;
 def : Pat<(int_ve_lvs_svs_f64 v256f64:$vx, i32:$sy), (LVSf64r v256f64:$vx, i32:$sy)>;

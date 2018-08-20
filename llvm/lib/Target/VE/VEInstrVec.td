@@ -566,6 +566,23 @@ def VMVi : RV<0x9C, (outs V64:$vx), (ins simm7Op32:$sy, V64:$vz),
     let vy = 0;
   }
 
+def PFCHVr : RVM0<0x80, (outs), (ins I64:$sy, I64:$sz),
+  "pfchv $sy,$sz", []> {
+    let vc = 0;
+    let cy = 1;
+    let vx = 0;
+    let hasSideEffects = 1;
+  }
+
+def PFCHVi : RVM0<0x80, (outs), (ins simm7Op64:$sy, I64:$sz),
+  "pfchv $sy,$sz", []> {
+    let vc = 0;
+    let cy = 0;
+    let vx = 0;
+    let hasSideEffects = 1;
+  }
+
+
 // 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
 defm VADD : RVUm<"vaddu", 0xC8>;
 defm VADS : RVWm<"vadds", 0xCA>;
