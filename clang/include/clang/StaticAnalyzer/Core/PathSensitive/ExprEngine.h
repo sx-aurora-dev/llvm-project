@@ -581,6 +581,14 @@ public:
     return svalBuilder.evalBinOp(ST, Op, LHS, RHS, T);
   }
 
+  /// By looking at a certain item that may be potentially part of an object's
+  /// ConstructionContext, retrieve such object's location. A particular
+  /// statement can be transparently passed as \p Item in most cases.
+  static Optional<SVal>
+  getObjectUnderConstruction(ProgramStateRef State,
+                             const ConstructionContextItem &Item,
+                             const LocationContext *LC);
+
 protected:
   /// evalBind - Handle the semantics of binding a value to a specific location.
   ///  This method is used by evalStore, VisitDeclStmt, and others.
@@ -654,6 +662,11 @@ public:
                        const EvalCallOptions &CallOpts = {});
 
 private:
+  ProgramStateRef finishArgumentConstruction(ProgramStateRef State,
+                                             const CallEvent &Call);
+  void finishArgumentConstruction(ExplodedNodeSet &Dst, ExplodedNode *Pred,
+                                  const CallEvent &Call);
+
   void evalLoadCommon(ExplodedNodeSet &Dst,
                       const Expr *NodeEx,  /* Eventually will be a CFGStmt */
                       const Expr *BoundEx,
@@ -772,13 +785,6 @@ private:
   finishObjectConstruction(ProgramStateRef State,
                            const ConstructionContextItem &Item,
                            const LocationContext *LC);
-
-  /// If the given statement corresponds to an object under construction,
-  /// being part of its construciton context, retrieve that object's location.
-  static Optional<SVal>
-  getObjectUnderConstruction(ProgramStateRef State,
-                             const ConstructionContextItem &Item,
-                             const LocationContext *LC);
 
   /// If the given expression corresponds to a temporary that was used for
   /// passing into an elidable copy/move constructor and that constructor

@@ -550,6 +550,19 @@ static bool tryConstantFoldOp(MachineRegisterInfo &MRI,
   if (!Src0->isImm() && !Src1->isImm())
     return false;
 
+  if (MI->getOpcode() == AMDGPU::V_LSHL_OR_B32) {
+    if (Src0->isImm() && Src0->getImm() == 0) {
+      // v_lshl_or_b32 0, X, Y -> copy Y
+      // v_lshl_or_b32 0, X, K -> v_mov_b32 K
+      bool UseCopy = TII->getNamedOperand(*MI, AMDGPU::OpName::src2)->isReg();
+      MI->RemoveOperand(Src1Idx);
+      MI->RemoveOperand(Src0Idx);
+
+      MI->setDesc(TII->get(UseCopy ? AMDGPU::COPY : AMDGPU::V_MOV_B32_e32));
+      return true;
+    }
+  }
+
   // and k0, k1 -> v_mov_b32 (k0 & k1)
   // or k0, k1 -> v_mov_b32 (k0 | k1)
   // xor k0, k1 -> v_mov_b32 (k0 ^ k1)
@@ -981,9 +994,8 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
   // omod is ignored by hardware if IEEE bit is enabled. omod also does not
   // correctly handle signed zeros.
   //
-  // TODO: Check nsz on instructions when fast math flags are preserved to MI
-  // level.
-  bool IsIEEEMode = ST->enableIEEEBit(MF) || !MFI->hasNoSignedZerosFPMath();
+  bool IsIEEEMode = ST->enableIEEEBit(MF);
+  bool HasNSZ = MFI->hasNoSignedZerosFPMath();
 
   for (MachineBasicBlock *MBB : depth_first(&MF)) {
     MachineBasicBlock::iterator I, Next;
@@ -994,7 +1006,10 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
       tryFoldInst(TII, &MI);
 
       if (!TII->isFoldableCopy(MI)) {
-        if (IsIEEEMode || !tryFoldOMod(MI))
+        // TODO: Omod might be OK if there is NSZ only on the source
+        // instruction, and not the omod multiply.
+        if (IsIEEEMode || (!HasNSZ && !MI.getFlag(MachineInstr::FmNsz)) ||
+            !tryFoldOMod(MI))
           tryFoldClamp(MI);
         continue;
       }

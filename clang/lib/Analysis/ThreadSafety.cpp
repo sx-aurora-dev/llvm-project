@@ -86,8 +86,8 @@ static void warnInvalidLock(ThreadSafetyHandler &Handler,
 
 namespace {
 
-/// A set of CapabilityInfo objects, which are compiled from the
-/// requires attributes on a function.
+/// A set of CapabilityExpr objects, which are compiled from thread safety
+/// attributes on a function.
 class CapExprSet : public SmallVector<CapabilityExpr, 4> {
 public:
   /// Push M onto list, but discard duplicates.
@@ -142,6 +142,9 @@ public:
   handleRemovalFromIntersection(const FactSet &FSet, FactManager &FactMan,
                                 SourceLocation JoinLoc, LockErrorKind LEK,
                                 ThreadSafetyHandler &Handler) const = 0;
+  virtual void handleLock(FactSet &FSet, FactManager &FactMan,
+                          const FactEntry &entry, ThreadSafetyHandler &Handler,
+                          StringRef DiagKind) const = 0;
   virtual void handleUnlock(FactSet &FSet, FactManager &FactMan,
                             const CapabilityExpr &Cp, SourceLocation UnlockLoc,
                             bool FullyRemove, ThreadSafetyHandler &Handler,
@@ -819,13 +822,13 @@ static void findBlockLocations(CFG *CFGraph,
     // Find the source location of the last statement in the block, if the
     // block is not empty.
     if (const Stmt *S = CurrBlock->getTerminator()) {
-      CurrBlockInfo->EntryLoc = CurrBlockInfo->ExitLoc = S->getLocStart();
+      CurrBlockInfo->EntryLoc = CurrBlockInfo->ExitLoc = S->getBeginLoc();
     } else {
       for (CFGBlock::const_reverse_iterator BI = CurrBlock->rbegin(),
            BE = CurrBlock->rend(); BI != BE; ++BI) {
         // FIXME: Handle other CFGElement kinds.
         if (Optional<CFGStmt> CS = BI->getAs<CFGStmt>()) {
-          CurrBlockInfo->ExitLoc = CS->getStmt()->getLocStart();
+          CurrBlockInfo->ExitLoc = CS->getStmt()->getBeginLoc();
           break;
         }
       }
@@ -837,7 +840,7 @@ static void findBlockLocations(CFG *CFGraph,
       for (const auto &BI : *CurrBlock) {
         // FIXME: Handle other CFGElement kinds.
         if (Optional<CFGStmt> CS = BI.getAs<CFGStmt>()) {
-          CurrBlockInfo->EntryLoc = CS->getStmt()->getLocStart();
+          CurrBlockInfo->EntryLoc = CS->getStmt()->getBeginLoc();
           break;
         }
       }
@@ -871,6 +874,12 @@ public:
       Handler.handleMutexHeldEndOfScope("mutex", toString(), loc(), JoinLoc,
                                         LEK);
     }
+  }
+
+  void handleLock(FactSet &FSet, FactManager &FactMan, const FactEntry &entry,
+                  ThreadSafetyHandler &Handler,
+                  StringRef DiagKind) const override {
+    Handler.handleDoubleLock(DiagKind, entry.toString(), entry.loc());
   }
 
   void handleUnlock(FactSet &FSet, FactManager &FactMan,
@@ -909,6 +918,23 @@ public:
         // mutex is still held, then warn about the underlying mutex.
         Handler.handleMutexHeldEndOfScope(
             "mutex", sx::toString(UnderlyingMutex), loc(), JoinLoc, LEK);
+      }
+    }
+  }
+
+  void handleLock(FactSet &FSet, FactManager &FactMan, const FactEntry &entry,
+                  ThreadSafetyHandler &Handler,
+                  StringRef DiagKind) const override {
+    for (const auto *UnderlyingMutex : UnderlyingMutexes) {
+      CapabilityExpr UnderCp(UnderlyingMutex, false);
+
+      // We're relocking the underlying mutexes. Warn on double locking.
+      if (FSet.findLock(FactMan, UnderCp))
+        Handler.handleDoubleLock(DiagKind, UnderCp.toString(), entry.loc());
+      else {
+        FSet.removeLock(FactMan, !UnderCp);
+        FSet.addLock(FactMan, llvm::make_unique<LockableFactEntry>(
+                                  UnderCp, entry.kind(), entry.loc()));
       }
     }
   }
@@ -1251,9 +1277,9 @@ void ThreadSafetyAnalyzer::addLock(FactSet &FSet,
   }
 
   // FIXME: Don't always warn when we have support for reentrant locks.
-  if (FSet.findLock(FactMan, *Entry)) {
+  if (FactEntry *Cp = FSet.findLock(FactMan, *Entry)) {
     if (!Entry->asserted())
-      Handler.handleDoubleLock(DiagKind, Entry->toString(), Entry->loc());
+      Cp->handleLock(FSet, FactMan, *Entry, Handler, DiagKind);
   } else {
     FSet.addLock(FactMan, std::move(Entry));
   }
@@ -2080,7 +2106,7 @@ void BuildLockset::VisitDeclStmt(DeclStmt *S) {
         CXXConstructorDecl *CtorD = findConstructorForByValueReturn(RD);
         if (!CtorD || !CtorD->hasAttrs())
           continue;
-        handleCall(buildFakeCtorCall(CtorD, {E}, E->getLocStart()), CtorD, VD);
+        handleCall(buildFakeCtorCall(CtorD, {E}, E->getBeginLoc()), CtorD, VD);
       }
     }
   }
@@ -2242,8 +2268,8 @@ void ThreadSafetyAnalyzer::runAnalysis(AnalysisDeclContext &AC) {
         // We must ignore such methods.
         if (A->args_size() == 0)
           return;
-        // FIXME -- deal with exclusive vs. shared unlock functions?
-        getMutexIDs(ExclusiveLocksToAdd, A, nullptr, D);
+        getMutexIDs(A->isShared() ? SharedLocksToAdd : ExclusiveLocksToAdd, A,
+                    nullptr, D);
         getMutexIDs(LocksReleased, A, nullptr, D);
         CapDiagKind = ClassifyDiagnostic(A);
       } else if (const auto *A = dyn_cast<AcquireCapabilityAttr>(Attr)) {
@@ -2396,7 +2422,7 @@ void ThreadSafetyAnalyzer::runAnalysis(AnalysisDeclContext &AC) {
           // Create a dummy expression,
           auto *VD = const_cast<VarDecl *>(AD.getVarDecl());
           DeclRefExpr DRE(VD, false, VD->getType().getNonReferenceType(),
-                          VK_LValue, AD.getTriggerStmt()->getLocEnd());
+                          VK_LValue, AD.getTriggerStmt()->getEndLoc());
           LocksetBuilder.handleCall(&DRE, DD);
           break;
         }

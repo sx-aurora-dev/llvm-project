@@ -57,6 +57,7 @@ public:
       case ArgumentKind:            return "construct into argument";
       case InitializerKind:         return "construct into member variable";
     };
+    llvm_unreachable("Unknown ItemKind");
   }
 
 private:
@@ -111,6 +112,13 @@ public:
 
   ConstructionContextItem(const ObjCMessageExpr *ME, unsigned Index)
       : Data(ME), Kind(ArgumentKind), Index(Index) {}
+
+  // A polymorphic version of the previous calls with dynamic type check.
+  ConstructionContextItem(const Expr *E, unsigned Index)
+      : Data(E), Kind(ArgumentKind), Index(Index) {
+    assert(isa<CallExpr>(E) || isa<CXXConstructExpr>(E) ||
+           isa<ObjCMessageExpr>(E));
+  }
 
   ConstructionContextItem(const CXXCtorInitializer *Init)
       : Data(Init), Kind(InitializerKind), Index(0) {}
@@ -615,9 +623,16 @@ public:
 };
 
 class ArgumentConstructionContext : public ConstructionContext {
-  const Expr *CE; // The call of which the context is an argument.
-  unsigned Index; // Which argument we're constructing.
-  const CXXBindTemporaryExpr *BTE; // Whether the object needs to be destroyed.
+  // The call of which the context is an argument.
+  const Expr *CE;
+
+  // Which argument we're constructing. Note that when numbering between
+  // arguments and parameters is inconsistent (eg., operator calls),
+  // this is the index of the argument, not of the parameter.
+  unsigned Index;
+
+  // Whether the object needs to be destroyed.
+  const CXXBindTemporaryExpr *BTE;
 
   friend class ConstructionContext; // Allows to create<>() itself.
 
