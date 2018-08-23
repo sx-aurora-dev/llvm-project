@@ -58,8 +58,6 @@ namespace {
 using name = SmallString<COFF::NameSize>;
 
 enum AuxiliaryType {
-  ATFunctionDefinition,
-  ATbfAndefSymbol,
   ATWeakExternal,
   ATFile,
   ATSectionDefinition
@@ -515,24 +513,6 @@ void WinCOFFObjectWriter::WriteAuxiliarySymbols(
     const COFFSymbol::AuxiliarySymbols &S) {
   for (const AuxSymbol &i : S) {
     switch (i.AuxType) {
-    case ATFunctionDefinition:
-      W.write<uint32_t>(i.Aux.FunctionDefinition.TagIndex);
-      W.write<uint32_t>(i.Aux.FunctionDefinition.TotalSize);
-      W.write<uint32_t>(i.Aux.FunctionDefinition.PointerToLinenumber);
-      W.write<uint32_t>(i.Aux.FunctionDefinition.PointerToNextFunction);
-      W.OS.write_zeros(sizeof(i.Aux.FunctionDefinition.unused));
-      if (UseBigObj)
-        W.OS.write_zeros(COFF::Symbol32Size - COFF::Symbol16Size);
-      break;
-    case ATbfAndefSymbol:
-      W.OS.write_zeros(sizeof(i.Aux.bfAndefSymbol.unused1));
-      W.write<uint16_t>(i.Aux.bfAndefSymbol.Linenumber);
-      W.OS.write_zeros(sizeof(i.Aux.bfAndefSymbol.unused2));
-      W.write<uint32_t>(i.Aux.bfAndefSymbol.PointerToNextFunction);
-      W.OS.write_zeros(sizeof(i.Aux.bfAndefSymbol.unused3));
-      if (UseBigObj)
-        W.OS.write_zeros(COFF::Symbol32Size - COFF::Symbol16Size);
-      break;
     case ATWeakExternal:
       W.write<uint32_t>(i.Aux.WeakExternal.TagIndex);
       W.write<uint32_t>(i.Aux.WeakExternal.Characteristics);
@@ -1020,22 +1000,28 @@ uint64_t WinCOFFObjectWriter::writeObject(MCAssembler &Asm,
       continue;
 
     const MCSectionCOFF &MCSec = *Section->MCSection;
+    const MCSymbol *AssocMCSym = MCSec.getCOMDATSymbol();
+    assert(AssocMCSym);
 
-    const MCSymbol *COMDAT = MCSec.getCOMDATSymbol();
-    assert(COMDAT);
-    COFFSymbol *COMDATSymbol = GetOrCreateCOFFSymbol(COMDAT);
-    assert(COMDATSymbol);
-    COFFSection *Assoc = COMDATSymbol->Section;
-    if (!Assoc)
-      report_fatal_error(
-          Twine("Missing associated COMDAT section for section ") +
-          MCSec.getSectionName());
+    // It's an error to try to associate with an undefined symbol or a symbol
+    // without a section.
+    if (!AssocMCSym->isInSection()) {
+      Asm.getContext().reportError(
+          SMLoc(), Twine("cannot make section ") + MCSec.getSectionName() +
+                       Twine(" associative with sectionless symbol ") +
+                       AssocMCSym->getName());
+      continue;
+    }
+
+    const auto *AssocMCSec = cast<MCSectionCOFF>(&AssocMCSym->getSection());
+    assert(SectionMap.count(AssocMCSec));
+    COFFSection *AssocSec = SectionMap[AssocMCSec];
 
     // Skip this section if the associated section is unused.
-    if (Assoc->Number == -1)
+    if (AssocSec->Number == -1)
       continue;
 
-    Section->Symbol->Aux[0].Aux.SectionDefinition.Number = Assoc->Number;
+    Section->Symbol->Aux[0].Aux.SectionDefinition.Number = AssocSec->Number;
   }
 
   assignFileOffsets(Asm, Layout);

@@ -171,6 +171,10 @@ struct TextEdit {
   /// The string to be inserted. For delete operations use an
   /// empty string.
   std::string newText;
+
+  bool operator==(const TextEdit &rhs) const {
+    return newText == rhs.newText && range == rhs.range;
+  }
 };
 bool fromJSON(const llvm::json::Value &, TextEdit &);
 llvm::json::Value toJSON(const TextEdit &);
@@ -243,6 +247,18 @@ struct CompletionClientCapabilities {
 };
 bool fromJSON(const llvm::json::Value &, CompletionClientCapabilities &);
 
+struct PublishDiagnosticsClientCapabilities {
+  // Whether the client accepts diagnostics with related information.
+  // NOTE: not used by clangd at the moment.
+  // bool relatedInformation;
+
+  /// Whether the client accepts diagnostics with fixes attached using the
+  /// "clangd_fixes" extension.
+  bool clangdFixSupport = false;
+};
+bool fromJSON(const llvm::json::Value &,
+              PublishDiagnosticsClientCapabilities &);
+
 /// A symbol kind.
 enum class SymbolKind {
   File = 1,
@@ -309,6 +325,9 @@ bool fromJSON(const llvm::json::Value &, WorkspaceClientCapabilities &);
 struct TextDocumentClientCapabilities {
   /// Capabilities specific to the `textDocument/completion`
   CompletionClientCapabilities completion;
+
+  /// Capabilities specific to the 'textDocument/publishDiagnostics'
+  PublishDiagnosticsClientCapabilities publishDiagnostics;
 };
 bool fromJSON(const llvm::json::Value &, TextDocumentClientCapabilities &);
 
@@ -321,6 +340,30 @@ struct ClientCapabilities {
 };
 
 bool fromJSON(const llvm::json::Value &, ClientCapabilities &);
+
+/// Clangd extension that's used in the 'compilationDatabaseChanges' in
+/// workspace/didChangeConfiguration to record updates to the in-memory
+/// compilation database.
+struct ClangdCompileCommand {
+  std::string workingDirectory;
+  std::vector<std::string> compilationCommand;
+};
+bool fromJSON(const llvm::json::Value &, ClangdCompileCommand &);
+
+/// Clangd extension to set clangd-specific "initializationOptions" in the
+/// "initialize" request and for the "workspace/didChangeConfiguration"
+/// notification since the data received is described as 'any' type in LSP.
+struct ClangdConfigurationParamsChange {
+  llvm::Optional<std::string> compilationDatabasePath;
+
+  // The changes that happened to the compilation database.
+  // The key of the map is a file name.
+  llvm::Optional<std::map<std::string, ClangdCompileCommand>>
+      compilationDatabaseChanges;
+};
+bool fromJSON(const llvm::json::Value &, ClangdConfigurationParamsChange &);
+
+struct ClangdInitializationOptions : public ClangdConfigurationParamsChange {};
 
 struct InitializeParams {
   /// The process Id of the parent process that started
@@ -348,6 +391,10 @@ struct InitializeParams {
 
   /// The initial trace setting. If omitted trace is disabled ('off').
   llvm::Optional<TraceLevel> trace;
+
+  // We use this predefined struct because it is easier to use
+  // than the protocol specified type of 'any'.
+  llvm::Optional<ClangdInitializationOptions> initializationOptions;
 };
 bool fromJSON(const llvm::json::Value &, InitializeParams &);
 
@@ -418,13 +465,6 @@ struct DidChangeWatchedFilesParams {
   std::vector<FileEvent> changes;
 };
 bool fromJSON(const llvm::json::Value &, DidChangeWatchedFilesParams &);
-
-/// Clangd extension to manage a workspace/didChangeConfiguration notification
-/// since the data received is described as 'any' type in LSP.
-struct ClangdConfigurationParamsChange {
-  llvm::Optional<std::string> compilationDatabasePath;
-};
-bool fromJSON(const llvm::json::Value &, ClangdConfigurationParamsChange &);
 
 struct DidChangeConfigurationParams {
   // We use this predefined struct because it is easier to use
@@ -504,6 +544,12 @@ struct Diagnostic {
 
   /// The diagnostic's message.
   std::string message;
+
+  /// The diagnostic's category. Can be omitted.
+  /// An LSP extension that's used to send the name of the category over to the
+  /// client. The category typically describes the compilation stage during
+  /// which the issue was produced, e.g. "Semantic Issue" or "Parse Issue".
+  std::string category;
 };
 
 /// A LSP-specific comparator used to find diagnostic in a container like

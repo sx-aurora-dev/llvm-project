@@ -103,14 +103,16 @@ multiclass RETURN<WebAssemblyRegClass vt> {
 }
 
 multiclass SIMD_RETURN<ValueType vt> {
-  defm RETURN_#vt : SIMD_I<(outs), (ins V128:$val), (outs), (ins),
-                           [(WebAssemblyreturn (vt V128:$val))],
-                           "return  \t$val", "return", 0x0f>;
+  defm RETURN_#vt : I<(outs), (ins V128:$val), (outs), (ins),
+                      [(WebAssemblyreturn (vt V128:$val))],
+                      "return  \t$val", "return", 0x0f>,
+                    Requires<[HasSIMD128]>;
   // Equivalent to RETURN_#vt, for use at the end of a function when wasm
   // semantics return by falling off the end of the block.
   let isCodeGenOnly = 1 in
-  defm FALLTHROUGH_RETURN_#vt : SIMD_I<(outs), (ins V128:$val), (outs), (ins),
-                                       []>;
+  defm FALLTHROUGH_RETURN_#vt : I<(outs), (ins V128:$val), (outs), (ins),
+                                  []>,
+                                Requires<[HasSIMD128]>;
 }
 
 let isTerminator = 1, hasCtrlDep = 1, isBarrier = 1 in {
@@ -124,7 +126,9 @@ let isReturn = 1 in {
   defm "": SIMD_RETURN<v16i8>;
   defm "": SIMD_RETURN<v8i16>;
   defm "": SIMD_RETURN<v4i32>;
+  defm "": SIMD_RETURN<v2i64>;
   defm "": SIMD_RETURN<v4f32>;
+  defm "": SIMD_RETURN<v2f64>;
 
   defm RETURN_VOID : NRI<(outs), (ins), [(WebAssemblyreturn)], "return", 0x0f>;
 
@@ -181,10 +185,8 @@ defm CATCH_ALL : NRI<(outs), (ins), [], "catch_all", 0x05>;
 }
 
 // Pseudo instructions: cleanupret / catchret
-// They are not return instructions in wasm, but setting 'isReturn' to true as
-// in X86 is necessary for computing EH scope membership.
 let isTerminator = 1, hasSideEffects = 1, isBarrier = 1, hasCtrlDep = 1,
-    isCodeGenOnly = 1, isReturn = 1 in {
+    isCodeGenOnly = 1, isEHScopeReturn = 1 in {
   defm CLEANUPRET : NRI<(outs), (ins), [(cleanupret)], "", 0>;
   defm CATCHRET : NRI<(outs), (ins bb_op:$dst, bb_op:$from),
                    [(catchret bb:$dst, bb:$from)], "", 0>;
