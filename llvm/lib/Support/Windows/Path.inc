@@ -450,7 +450,7 @@ static std::error_code rename_handle(HANDLE FromHandle, const Twine &To) {
       if (std::error_code EC2 = realPathFromHandle(FromHandle, WideFrom))
         return EC2;
       if (::MoveFileExW(WideFrom.begin(), WideTo.begin(),
-                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
+                        MOVEFILE_REPLACE_EXISTING))
         return std::error_code();
       return mapWindowsError(GetLastError());
     }
@@ -766,10 +766,12 @@ std::error_code setPermissions(const Twine &Path, perms Permissions) {
   return std::error_code();
 }
 
-std::error_code setLastModificationAndAccessTime(int FD, TimePoint<> Time) {
-  FILETIME FT = toFILETIME(Time);
+std::error_code setLastAccessAndModificationTime(int FD, TimePoint<> AccessTime,
+                                                 TimePoint<> ModificationTime) {
+  FILETIME AccessFT = toFILETIME(AccessTime);
+  FILETIME ModifyFT = toFILETIME(ModificationTime);
   HANDLE FileHandle = reinterpret_cast<HANDLE>(_get_osfhandle(FD));
-  if (!SetFileTime(FileHandle, NULL, &FT, &FT))
+  if (!SetFileTime(FileHandle, NULL, &AccessFT, &ModifyFT))
     return mapWindowsError(::GetLastError());
   return std::error_code();
 }

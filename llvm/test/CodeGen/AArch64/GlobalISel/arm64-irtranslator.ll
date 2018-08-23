@@ -138,9 +138,9 @@ false:
 ; CHECK: %0:_(s32) = COPY $w0
 ; CHECK: %[[reg100:[0-9]+]]:_(s32) = G_CONSTANT i32 100
 ; CHECK: %[[reg200:[0-9]+]]:_(s32) = G_CONSTANT i32 200
-; CHECK: %[[reg0:[0-9]+]]:_(s32) = G_CONSTANT i32 0
-; CHECK: %[[reg1:[0-9]+]]:_(s32) = G_CONSTANT i32 1
 ; CHECK: %[[reg2:[0-9]+]]:_(s32) = G_CONSTANT i32 2
+; CHECK: %[[reg1:[0-9]+]]:_(s32) = G_CONSTANT i32 1
+; CHECK: %[[reg0:[0-9]+]]:_(s32) = G_CONSTANT i32 0
 ; CHECK: %[[regicmp100:[0-9]+]]:_(s1) = G_ICMP intpred(eq), %[[reg100]](s32), %0
 ; CHECK: G_BRCOND %[[regicmp100]](s1), %[[BB_CASE100]]
 ; CHECK: G_BR %[[BB_NOTCASE100_CHECKNEXT]]
@@ -413,9 +413,9 @@ define i64* @trivial_bitcast(i8* %a) {
 ; CHECK:     G_BR %[[CAST:bb\.[0-9]+]]
 
 ; CHECK: [[END:bb\.[0-9]+]].{{[a-zA-Z0-9.]+}}:
+; CHECK:     $x0 = COPY [[A]]
 
 ; CHECK: [[CAST]].{{[a-zA-Z0-9.]+}}:
-; CHECK:     {{%[0-9]+}}:_(p0) = COPY [[A]]
 ; CHECK:     G_BR %[[END]]
 define i64* @trivial_bitcast_with_copy(i8* %a) {
   br label %cast
@@ -1406,6 +1406,56 @@ define float @test_fabs_intrin(float %a) {
 ; CHECK: $s0 = COPY [[RES]]
   %res = call float @llvm.fabs.f32(float %a)
   ret float %res
+}
+
+declare float @llvm.trunc.f32(float)
+define float @test_intrinsic_trunc(float %a) {
+; CHECK-LABEL: name: test_intrinsic_trunc
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $s0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_INTRINSIC_TRUNC [[A]]
+; CHECK: $s0 = COPY [[RES]]
+  %res = call float @llvm.trunc.f32(float %a)
+  ret float %res
+}
+
+declare float @llvm.round.f32(float)
+define float @test_intrinsic_round(float %a) {
+; CHECK-LABEL: name: test_intrinsic_round
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $s0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_INTRINSIC_ROUND [[A]]
+; CHECK: $s0 = COPY [[RES]]
+  %res = call float @llvm.round.f32(float %a)
+  ret float %res
+}
+
+declare i32 @llvm.ctlz.i32(i32, i1)
+define i32 @test_ctlz_intrinsic_zero_not_undef(i32 %a) {
+; CHECK-LABEL: name: test_ctlz_intrinsic_zero_not_undef
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $w0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_CTLZ [[A]]
+; CHECK: $w0 = COPY [[RES]]
+  %res = call i32 @llvm.ctlz.i32(i32 %a, i1 0)
+  ret i32 %res
+}
+
+declare i32 @llvm.cttz.i32(i32, i1)
+define i32 @test_cttz_intrinsic_zero_undef(i32 %a) {
+; CHECK-LABEL: name: test_cttz_intrinsic_zero_undef
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $w0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_CTTZ_ZERO_UNDEF [[A]]
+; CHECK: $w0 = COPY [[RES]]
+  %res = call i32 @llvm.cttz.i32(i32 %a, i1 1)
+  ret i32 %res
+}
+
+declare i32 @llvm.ctpop.i32(i32)
+define i32 @test_ctpop_intrinsic(i32 %a) {
+; CHECK-LABEL: name: test_ctpop
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $w0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_CTPOP [[A]]
+; CHECK: $w0 = COPY [[RES]]
+  %res = call i32 @llvm.ctpop.i32(i32 %a)
+  ret i32 %res
 }
 
 declare void @llvm.lifetime.start.p0i8(i64, i8*)

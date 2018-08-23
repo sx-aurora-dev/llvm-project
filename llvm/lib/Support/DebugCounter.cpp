@@ -82,8 +82,11 @@ void DebugCounter::push_back(const std::string &Val) {
              << " is not a registered counter\n";
       return;
     }
-    Counters[CounterID].Skip = CounterVal;
-    Counters[CounterID].IsSet = true;
+    enableAllCounters();
+
+    CounterInfo &Counter = Counters[CounterID];
+    Counter.Skip = CounterVal;
+    Counter.IsSet = true;
   } else if (CounterPair.first.endswith("-count")) {
     auto CounterName = CounterPair.first.drop_back(6);
     unsigned CounterID = getCounterId(CounterName);
@@ -92,8 +95,11 @@ void DebugCounter::push_back(const std::string &Val) {
              << " is not a registered counter\n";
       return;
     }
-    Counters[CounterID].StopAfter = CounterVal;
-    Counters[CounterID].IsSet = true;
+    enableAllCounters();
+
+    CounterInfo &Counter = Counters[CounterID];
+    Counter.StopAfter = CounterVal;
+    Counter.IsSet = true;
   } else {
     errs() << "DebugCounter Error: " << CounterPair.first
            << " does not end with -skip or -count\n";

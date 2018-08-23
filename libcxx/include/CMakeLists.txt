@@ -25,6 +25,7 @@ set(files
   any
   array
   atomic
+  bit
   bitset
   cassert
   ccomplex
@@ -32,6 +33,7 @@ set(files
   cerrno
   cfenv
   cfloat
+  charconv
   chrono
   cinttypes
   ciso646
