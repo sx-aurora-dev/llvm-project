@@ -323,14 +323,16 @@ bool IRTranslator::translateRet(const User &U, MachineIRBuilder &MIRBuilder) {
   const Value *Ret = RI.getReturnValue();
   if (Ret && DL->getTypeStoreSize(Ret->getType()) == 0)
     Ret = nullptr;
+
+  ArrayRef<unsigned> VRegs;
+  if (Ret)
+    VRegs = getOrCreateVRegs(*Ret);
+
   // The target may mess up with the insertion point, but
   // this is not important as a return is the last instruction
   // of the block anyway.
 
-  // FIXME: this interface should simplify when CallLowering gets adapted to
-  // multiple VRegs per Value.
-  unsigned VReg = Ret ? packRegs(*Ret, MIRBuilder) : 0;
-  return CLI->lowerReturn(MIRBuilder, Ret, VReg);
+  return CLI->lowerReturn(MIRBuilder, Ret, VRegs);
 }
 
 bool IRTranslator::translateBr(const User &U, MachineIRBuilder &MIRBuilder) {
@@ -704,13 +706,12 @@ void IRTranslator::getStackGuard(unsigned DstReg,
     return;
 
   MachinePointerInfo MPInfo(Global);
-  MachineInstr::mmo_iterator MemRefs = MF->allocateMemRefsArray(1);
   auto Flags = MachineMemOperand::MOLoad | MachineMemOperand::MOInvariant |
                MachineMemOperand::MODereferenceable;
-  *MemRefs =
+  MachineMemOperand *MemRef =
       MF->getMachineMemOperand(MPInfo, Flags, DL->getPointerSizeInBits() / 8,
                                DL->getPointerABIAlignment(0));
-  MIB.setMemRefs(MemRefs, MemRefs + 1);
+  MIB.setMemRefs({MemRef});
 }
 
 bool IRTranslator::translateOverflowIntrinsic(const CallInst &CI, unsigned Op,
@@ -766,6 +767,17 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
     } else
       MIRBuilder.buildDirectDbgValue(getOrCreateVReg(*Address),
                                      DI.getVariable(), DI.getExpression());
+    return true;
+  }
+  case Intrinsic::dbg_label: {
+    const DbgLabelInst &DI = cast<DbgLabelInst>(CI);
+    assert(DI.getLabel() && "Missing label");
+
+    assert(DI.getLabel()->isValidLocationForIntrinsic(
+               MIRBuilder.getDebugLoc()) &&
+           "Expected inlined-at fields to agree");
+
+    MIRBuilder.buildDbgLabel(DI.getLabel());
     return true;
   }
   case Intrinsic::vaend:
@@ -849,6 +861,16 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
         .addDef(getOrCreateVReg(CI))
         .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
     return true;
+  case Intrinsic::trunc:
+    MIRBuilder.buildInstr(TargetOpcode::G_INTRINSIC_TRUNC)
+        .addDef(getOrCreateVReg(CI))
+        .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
+    return true;
+  case Intrinsic::round:
+    MIRBuilder.buildInstr(TargetOpcode::G_INTRINSIC_ROUND)
+        .addDef(getOrCreateVReg(CI))
+        .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
+    return true;
   case Intrinsic::fma:
     MIRBuilder.buildInstr(TargetOpcode::G_FMA)
         .addDef(getOrCreateVReg(CI))
@@ -909,6 +931,26 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
                                               getOrCreateFrameIndex(*Slot)),
             MachineMemOperand::MOStore | MachineMemOperand::MOVolatile,
             PtrTy.getSizeInBits() / 8, 8));
+    return true;
+  }
+  case Intrinsic::cttz:
+  case Intrinsic::ctlz: {
+    ConstantInt *Cst = cast<ConstantInt>(CI.getArgOperand(1));
+    bool isTrailing = ID == Intrinsic::cttz;
+    unsigned Opcode = isTrailing
+                          ? Cst->isZero() ? TargetOpcode::G_CTTZ
+                                          : TargetOpcode::G_CTTZ_ZERO_UNDEF
+                          : Cst->isZero() ? TargetOpcode::G_CTLZ
+                                          : TargetOpcode::G_CTLZ_ZERO_UNDEF;
+    MIRBuilder.buildInstr(Opcode)
+        .addDef(getOrCreateVReg(CI))
+        .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
+    return true;
+  }
+  case Intrinsic::ctpop: {
+    MIRBuilder.buildInstr(TargetOpcode::G_CTPOP)
+        .addDef(getOrCreateVReg(CI))
+        .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
     return true;
   }
   }
@@ -1435,6 +1477,8 @@ void IRTranslator::finishPendingPhis() {
 bool IRTranslator::valueIsSplit(const Value &V,
                                 SmallVectorImpl<uint64_t> *Offsets) {
   SmallVector<LLT, 4> SplitTys;
+  if (Offsets && !Offsets->empty())
+    Offsets->clear();
   computeValueLLTs(*DL, *V.getType(), SplitTys, Offsets);
   return SplitTys.size() > 1;
 }

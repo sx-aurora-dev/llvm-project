@@ -48,6 +48,7 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CommentOptions.h"
 #include "clang/Basic/ExceptionSpecificationType.h"
+#include "clang/Basic/FixedPoint.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/LangOptions.h"
@@ -192,7 +193,7 @@ RawComment *ASTContext::getRawCommentForDeclNoCache(const Decl *D) const {
       isa<ObjCPropertyDecl>(D) ||
       isa<RedeclarableTemplateDecl>(D) ||
       isa<ClassTemplateSpecializationDecl>(D))
-    DeclLoc = D->getLocStart();
+    DeclLoc = D->getBeginLoc();
   else {
     DeclLoc = D->getLocation();
     if (DeclLoc.isMacroID()) {
@@ -200,7 +201,7 @@ RawComment *ASTContext::getRawCommentForDeclNoCache(const Decl *D) const {
         // If location of the typedef name is in a macro, it is because being
         // declared via a macro. Try using declaration's starting location as
         // the "declaration location".
-        DeclLoc = D->getLocStart();
+        DeclLoc = D->getBeginLoc();
       } else if (const auto *TD = dyn_cast<TagDecl>(D)) {
         // If location of the tag decl is inside a macro, but the spelling of
         // the tag name comes from a macro argument, it looks like a special
@@ -885,7 +886,9 @@ void ASTContext::PrintStats() const {
 #define TYPE(Name, Parent)                                              \
   if (counts[Idx])                                                      \
     llvm::errs() << "    " << counts[Idx] << " " << #Name               \
-                 << " types\n";                                         \
+                 << " types, " << sizeof(Name##Type) << " each "        \
+                 << "(" << counts[Idx] * sizeof(Name##Type)             \
+                 << " bytes)\n";                                        \
   TotalBytes += counts[Idx] * sizeof(Name##Type);                       \
   ++Idx;
 #define ABSTRACT_TYPE(Name, Parent)
@@ -2500,21 +2503,24 @@ const ObjCInterfaceDecl *ASTContext::getObjContainingInterface(
 
 /// Get the copy initialization expression of VarDecl, or nullptr if
 /// none exists.
-Expr *ASTContext::getBlockVarCopyInits(const VarDecl*VD) {
+ASTContext::BlockVarCopyInit
+ASTContext::getBlockVarCopyInit(const VarDecl*VD) const {
   assert(VD && "Passed null params");
   assert(VD->hasAttr<BlocksAttr>() &&
          "getBlockVarCopyInits - not __block var");
-  llvm::DenseMap<const VarDecl*, Expr*>::iterator
-    I = BlockVarCopyInits.find(VD);
-  return (I != BlockVarCopyInits.end()) ? I->second : nullptr;
+  auto I = BlockVarCopyInits.find(VD);
+  if (I != BlockVarCopyInits.end())
+    return I->second;
+  return {nullptr, false};
 }
 
 /// Set the copy inialization expression of a block var decl.
-void ASTContext::setBlockVarCopyInits(VarDecl*VD, Expr* Init) {
-  assert(VD && Init && "Passed null params");
+void ASTContext::setBlockVarCopyInit(const VarDecl*VD, Expr *CopyExpr,
+                                     bool CanThrow) {
+  assert(VD && CopyExpr && "Passed null params");
   assert(VD->hasAttr<BlocksAttr>() &&
          "setBlockVarCopyInits - not __block var");
-  BlockVarCopyInits[VD] = Init;
+  BlockVarCopyInits[VD].setExprAndFlag(CopyExpr, CanThrow);
 }
 
 TypeSourceInfo *ASTContext::CreateTypeSourceInfo(QualType T,
@@ -3870,7 +3876,7 @@ QualType ASTContext::getEnumType(const EnumDecl *Decl) const {
   return QualType(newType, 0);
 }
 
-QualType ASTContext::getAttributedType(AttributedType::Kind attrKind,
+QualType ASTContext::getAttributedType(attr::Kind attrKind,
                                        QualType modifiedType,
                                        QualType equivalentType) {
   llvm::FoldingSetNodeID id;
@@ -4130,8 +4136,10 @@ QualType ASTContext::getElaboratedType(ElaboratedTypeKeyword Keyword,
     (void)CheckT;
   }
 
-  T = new (*this, TypeAlignment)
-      ElaboratedType(Keyword, NNS, NamedType, Canon, OwnedTagDecl);
+  void *Mem = Allocate(ElaboratedType::totalSizeToAlloc<TagDecl *>(!!OwnedTagDecl),
+                       TypeAlignment);
+  T = new (Mem) ElaboratedType(Keyword, NNS, NamedType, Canon, OwnedTagDecl);
+
   Types.push_back(T);
   ElaboratedTypes.InsertNode(T, InsertPos);
   return QualType(T, 0);
@@ -5959,7 +5967,7 @@ LangAS ASTContext::getOpenCLTypeAddrSpace(const Type *T) const {
 bool ASTContext::BlockRequiresCopying(QualType Ty,
                                       const VarDecl *D) {
   if (const CXXRecordDecl *record = Ty->getAsCXXRecordDecl()) {
-    const Expr *copyExpr = getBlockVarCopyInits(D);
+    const Expr *copyExpr = getBlockVarCopyInit(D).getCopyExpr();
     if (!copyExpr && record->hasTrivialDestructor()) return false;
 
     return true;
@@ -9384,9 +9392,11 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
       // qualified with an address space.
       char *End;
       unsigned AddrSpace = strtoul(Str, &End, 10);
-      if (End != Str && AddrSpace != 0) {
-        Type = Context.getAddrSpaceQualType(Type,
-                                            getLangASFromTargetAS(AddrSpace));
+      if (End != Str) {
+        // Note AddrSpace == 0 is not the same as an unspecified address space.
+        Type = Context.getAddrSpaceQualType(
+          Type,
+          Context.getLangASForBuiltinAddressSpace(AddrSpace));
         Str = End;
       }
       if (c == '*')
@@ -9766,6 +9776,12 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
   const auto *VD = cast<VarDecl>(D);
   assert(VD->isFileVarDecl() && "Expected file scoped var");
 
+  // If the decl is marked as `declare target to`, it should be emitted for the
+  // host and for the device.
+  if (LangOpts.OpenMP &&
+      OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(VD))
+    return true;
+
   if (VD->isThisDeclarationADefinition() == VarDecl::DeclarationOnly &&
       !isMSStaticDataMemberInlineDefinition(VD))
     return false;
@@ -9797,21 +9813,12 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
         if (DeclMustBeEmitted(BindingVD))
           return true;
 
-  // If the decl is marked as `declare target`, it should be emitted.
-  for (const auto *Decl : D->redecls()) {
-    if (!Decl->hasAttrs())
-      continue;
-    if (const auto *Attr = Decl->getAttr<OMPDeclareTargetDeclAttr>())
-      if (Attr->getMapType() != OMPDeclareTargetDeclAttr::MT_Link)
-        return true;
-  }
-
   return false;
 }
 
 void ASTContext::forEachMultiversionedFunctionVersion(
     const FunctionDecl *FD,
-    llvm::function_ref<void(const FunctionDecl *)> Pred) const {
+    llvm::function_ref<void(FunctionDecl *)> Pred) const {
   assert(FD->isMultiVersion() && "Only valid for multiversioned functions");
   llvm::SmallDenseSet<const FunctionDecl*, 4> SeenDecls;
   FD = FD->getCanonicalDecl();
@@ -10322,6 +10329,16 @@ QualType ASTContext::getCorrespondingSaturatedType(QualType Ty) const {
   }
 }
 
+LangAS ASTContext::getLangASForBuiltinAddressSpace(unsigned AS) const {
+  if (LangOpts.OpenCL)
+    return getTargetInfo().getOpenCLBuiltinAddressSpace(AS);
+
+  if (LangOpts.CUDA)
+    return getTargetInfo().getCUDABuiltinAddressSpace(AS);
+
+  return getLangASFromTargetAS(AS);
+}
+
 // Explicitly instantiate this in case a Redeclarable<T> is used from a TU that
 // doesn't include ASTContext.h
 template
@@ -10418,4 +10435,23 @@ unsigned char ASTContext::getFixedPointIBits(QualType Ty) const {
     case BuiltinType::SatULongFract:
       return 0;
   }
+}
+
+FixedPointSemantics ASTContext::getFixedPointSemantics(QualType Ty) const {
+  assert(Ty->isFixedPointType());
+  bool isSigned = Ty->isSignedFixedPointType();
+  return FixedPointSemantics(
+      static_cast<unsigned>(getTypeSize(Ty)), getFixedPointScale(Ty), isSigned,
+      Ty->isSaturatedFixedPointType(),
+      !isSigned && getTargetInfo().doUnsignedFixedPointTypesHavePadding());
+}
+
+APFixedPoint ASTContext::getFixedPointMax(QualType Ty) const {
+  assert(Ty->isFixedPointType());
+  return APFixedPoint::getMax(getFixedPointSemantics(Ty));
+}
+
+APFixedPoint ASTContext::getFixedPointMin(QualType Ty) const {
+  assert(Ty->isFixedPointType());
+  return APFixedPoint::getMin(getFixedPointSemantics(Ty));
 }

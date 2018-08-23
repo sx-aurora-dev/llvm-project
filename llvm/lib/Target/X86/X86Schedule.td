@@ -120,6 +120,7 @@ def  WriteLEA    : SchedWrite;        // LEA instructions can't fold loads.
 
 def  WriteBSWAP32 : SchedWrite; // Byte Order (Endianness) 32-bit Swap.
 def  WriteBSWAP64 : SchedWrite; // Byte Order (Endianness) 64-bit Swap.
+def  WriteXCHG   : SchedWrite;        // Compare+Exchange - TODO RMW support.
 
 // Integer division.
 defm WriteDiv8   : X86SchedWritePair;
@@ -142,6 +143,7 @@ def  WriteFCMOV : SchedWrite; // X87 conditional move.
 def  WriteSETCC : SchedWrite; // Set register based on condition code.
 def  WriteSETCCStore : SchedWrite;
 def  WriteLAHFSAHF : SchedWrite; // Load/Store flags in AH.
+def  WriteBitTest  : SchedWrite; // Bit Test - TODO add memory folding support
 
 // Integer shifts and rotates.
 defm WriteShift : X86SchedWritePair;
