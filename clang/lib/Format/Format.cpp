@@ -777,9 +777,11 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
           {
               "EqualsProto",
               "EquivToProto",
+              "PARSE_PARTIAL_TEXT_PROTO",
               "PARSE_TEST_PROTO",
               "PARSE_TEXT_PROTO",
               "ParseTextOrDie",
+              "ParseTextProtoOrDie",
           },
           /*CanonicalDelimiter=*/"",
           /*BasedOnStyle=*/"google",
@@ -817,7 +819,7 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
     GoogleStyle.JavaScriptQuotes = FormatStyle::JSQS_Single;
     GoogleStyle.JavaScriptWrapImports = false;
   } else if (Language == FormatStyle::LK_Proto) {
-    GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
+    GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Empty;
     GoogleStyle.AlwaysBreakBeforeMultilineStrings = false;
     GoogleStyle.SpacesInContainerLiterals = false;
     GoogleStyle.Cpp11BracedListStyle = false;

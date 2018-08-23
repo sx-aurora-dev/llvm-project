@@ -1,17 +1,18 @@
-//===--- CodeComplete.h -----------------------------------------*- C++-*-===//
+//===--- CodeComplete.h ------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Code completion provides suggestions for what the user might type next.
 // After "std::string S; S." we might suggest members of std::string.
 // Signature help describes the parameters of a function as you type them.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_CODECOMPLETE_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CODECOMPLETE_H
 
@@ -77,6 +78,14 @@ struct CodeCompleteOptions {
   /// FIXME(ioeric): we might want a better way to pass the index around inside
   /// clangd.
   const SymbolIndex *Index = nullptr;
+
+  /// Include completions that require small corrections, e.g. change '.' to
+  /// '->' on member access etc.
+  bool IncludeFixIts = false;
+
+  /// Whether to generate snippets for function arguments on code-completion.
+  /// Needs snippets to be enabled as well.
+  bool EnableFunctionArgSnippets = true;
 };
 
 // Semi-structured representation of a code-complete suggestion for our C++ API.
@@ -114,6 +123,13 @@ struct CodeCompletion {
   std::string Header;
   // Present if Header is set and should be inserted to use this item.
   llvm::Optional<TextEdit> HeaderInsertion;
+
+  /// Holds information about small corrections that needs to be done. Like
+  /// converting '->' to '.' on member access.
+  std::vector<TextEdit> FixIts;
+
+  /// Holds the range of the token we are going to replace with this completion.
+  Range CompletionTokenRange;
 
   // Scores are used to rank completion items.
   struct Scores {
@@ -160,12 +176,11 @@ CodeCompleteResult codeComplete(PathRef FileName,
                                 CodeCompleteOptions Opts);
 
 /// Get signature help at a specified \p Pos in \p FileName.
-SignatureHelp signatureHelp(PathRef FileName,
-                            const tooling::CompileCommand &Command,
-                            PrecompiledPreamble const *Preamble,
-                            StringRef Contents, Position Pos,
-                            IntrusiveRefCntPtr<vfs::FileSystem> VFS,
-                            std::shared_ptr<PCHContainerOperations> PCHs);
+SignatureHelp
+signatureHelp(PathRef FileName, const tooling::CompileCommand &Command,
+              PrecompiledPreamble const *Preamble, StringRef Contents,
+              Position Pos, IntrusiveRefCntPtr<vfs::FileSystem> VFS,
+              std::shared_ptr<PCHContainerOperations> PCHs, SymbolIndex *Index);
 
 // For index-based completion, we only consider:
 //   * symbols in namespaces or translation unit scopes (e.g. no class
@@ -181,4 +196,4 @@ bool isIndexedForCodeCompletion(const NamedDecl &ND, ASTContext &ASTCtx);
 } // namespace clangd
 } // namespace clang
 
-#endif
+#endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_CODECOMPLETE_H

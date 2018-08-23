@@ -178,8 +178,7 @@ void Parser::CheckNestedObjCContexts(SourceLocation AtLoc)
   Diag(AtLoc, diag::err_objc_missing_end)
       << FixItHint::CreateInsertion(AtLoc, "@end\n");
   if (Decl)
-    Diag(Decl->getLocStart(), diag::note_objc_container_start)
-        << (int) ock;
+    Diag(Decl->getBeginLoc(), diag::note_objc_container_start) << (int)ock;
 }
 
 ///
@@ -384,12 +383,12 @@ static void addContextSensitiveTypeNullability(Parser &P,
 
   if (D.getNumTypeObjects() > 0) {
     // Add the attribute to the declarator chunk nearest the declarator.
-    D.getTypeObject(0).getAttrs().addAtStart(
+    D.getTypeObject(0).getAttrs().addAtEnd(
         getNullabilityAttr(D.getAttributePool()));
   } else if (!addedToDeclSpec) {
     // Otherwise, just put it on the declaration specifiers (if one
     // isn't there already).
-    D.getMutableDeclSpec().getAttributes().addAtStart(
+    D.getMutableDeclSpec().getAttributes().addAtEnd(
         getNullabilityAttr(D.getMutableDeclSpec().getAttributes().getPool()));
     addedToDeclSpec = true;
   }
@@ -690,8 +689,8 @@ void Parser::ParseObjCInterfaceDeclList(tok::ObjCKeywordKind contextKey,
     case tok::objc_interface:
       Diag(AtLoc, diag::err_objc_missing_end)
           << FixItHint::CreateInsertion(AtLoc, "@end\n");
-      Diag(CDecl->getLocStart(), diag::note_objc_container_start)
-          << (int) Actions.getObjCContainerKind();
+      Diag(CDecl->getBeginLoc(), diag::note_objc_container_start)
+          << (int)Actions.getObjCContainerKind();
       ConsumeToken();
       break;
 
@@ -776,8 +775,8 @@ void Parser::ParseObjCInterfaceDeclList(tok::ObjCKeywordKind contextKey,
   } else {
     Diag(Tok, diag::err_objc_missing_end)
         << FixItHint::CreateInsertion(Tok.getLocation(), "\n@end\n");
-    Diag(CDecl->getLocStart(), diag::note_objc_container_start)
-        << (int) Actions.getObjCContainerKind();
+    Diag(CDecl->getBeginLoc(), diag::note_objc_container_start)
+        << (int)Actions.getObjCContainerKind();
     AtEnd.setBegin(Tok.getLocation());
     AtEnd.setEnd(Tok.getLocation());
   }
@@ -1198,7 +1197,7 @@ static void takeDeclAttributes(ParsedAttributesView &attrs,
   for (auto &AL : llvm::reverse(from)) {
     if (!AL.isUsedAsTypeAttr()) {
       from.remove(&AL);
-      attrs.addAtStart(&AL);
+      attrs.addAtEnd(&AL);
     }
   }
 }
@@ -2223,7 +2222,7 @@ Parser::ObjCImplParsingDataRAII::~ObjCImplParsingDataRAII() {
     if (P.isEofOrEom()) {
       P.Diag(P.Tok, diag::err_objc_missing_end)
           << FixItHint::CreateInsertion(P.Tok.getLocation(), "\n@end\n");
-      P.Diag(Dcl->getLocStart(), diag::note_objc_container_start)
+      P.Diag(Dcl->getBeginLoc(), diag::note_objc_container_start)
           << Sema::OCK_Implementation;
     }
   }

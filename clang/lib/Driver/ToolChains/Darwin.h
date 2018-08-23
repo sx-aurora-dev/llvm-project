@@ -130,9 +130,6 @@ protected:
   Tool *buildLinker() const override;
   Tool *getTool(Action::ActionClass AC) const override;
 
-  /// \return Directory to find the runtime library in.
-  SmallString<128> runtimeLibDir(bool IsEmbedded=false) const;
-
 private:
   mutable std::unique_ptr<tools::darwin::Lipo> Lipo;
   mutable std::unique_ptr<tools::darwin::Dsymutil> Dsymutil;
@@ -192,9 +189,9 @@ public:
 
   /// Add a runtime library to the list of items to link.
   void AddLinkRuntimeLib(const llvm::opt::ArgList &Args,
-                         llvm::opt::ArgStringList &CmdArgs,
-                         StringRef DarwinLibName,
-                         RuntimeLinkOptions Opts = RuntimeLinkOptions()) const;
+                         llvm::opt::ArgStringList &CmdArgs, StringRef Component,
+                         RuntimeLinkOptions Opts = RuntimeLinkOptions(),
+                         bool IsShared = false) const;
 
   /// Add any profiling runtime libraries that are needed. This is essentially a
   /// MachO specific version of addProfileRT in Tools.cpp.
@@ -254,6 +251,11 @@ public:
   GetExceptionModel(const llvm::opt::ArgList &Args) const override {
     return llvm::ExceptionHandling::None;
   }
+
+  virtual StringRef getOSLibraryNameSuffix(bool IgnoreSim = false) const {
+    return "";
+  }
+
   /// }
 };
 
@@ -420,12 +422,7 @@ protected:
                              Action::OffloadKind DeviceOffloadKind) const override;
 
   StringRef getPlatformFamily() const;
-  StringRef getOSLibraryNameSuffix() const;
-
-  /// \return Relative path to the filename for the library
-  /// containing the sanitizer {@code SanitizerName}.
-  std::string getFileNameForSanitizerLib(StringRef SanitizerName,
-                                         bool Shared = true) const;
+  StringRef getOSLibraryNameSuffix(bool IgnoreSim = false) const override;
 
 public:
   static StringRef getSDKName(StringRef isysroot);
@@ -480,12 +477,6 @@ public:
   SanitizerMask getSupportedSanitizers() const override;
 
   void printVerboseInfo(raw_ostream &OS) const override;
-
-private:
-  /// \return Whether the runtime corresponding to the given
-  /// sanitizer exists in the toolchain.
-  bool sanitizerRuntimeExists(StringRef SanitizerName,
-                              bool Shared = true) const;
 };
 
 /// DarwinClang - The Darwin toolchain used by Clang.
