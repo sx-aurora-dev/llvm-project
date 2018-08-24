@@ -38,7 +38,7 @@ class Scheduler;
 // the following conditions are met:
 //  1) There are enough entries in the reorder buffer (see class
 //     RetireControlUnit) to write the opcodes associated with the instruction.
-//  2) There are enough temporaries to rename output register operands.
+//  2) There are enough physical registers to rename output register operands.
 //  3) There are enough entries available in the used buffered resource(s).
 //
 // The number of micro opcodes that can be dispatched in one cycle is limited by
@@ -94,7 +94,7 @@ public:
   // RetireStage::hasWorkToComplete will check for that case.
   virtual bool hasWorkToComplete() const override final { return false; }
   virtual void cycleStart() override final;
-  virtual bool execute(InstRef &IR) override final;
+  virtual Status execute(InstRef &IR) override final;
   void notifyDispatchStall(const InstRef &IR, unsigned EventType);
 
 #ifndef NDEBUG

@@ -6,7 +6,8 @@
 # CHECK-NEXT:  "params": {
 # CHECK-NEXT:    "diagnostics": [
 # CHECK-NEXT:      {
-# CHECK-NEXT:        "message": "variable 'i' is uninitialized when used here",
+# CHECK-NEXT:        "category": "Semantic Issue",
+# CHECK-NEXT:        "message": "Variable 'i' is uninitialized when used here",
 # CHECK-NEXT:        "range": {
 # CHECK-NEXT:          "end": {
 # CHECK-NEXT:            "character": 28,
@@ -28,7 +29,8 @@
 # CHECK-NEXT:  "params": {
 # CHECK-NEXT:    "diagnostics": [
 # CHECK-NEXT:      {
-# CHECK-NEXT:        "message": "variable 'i' is uninitialized when used here",
+# CHECK-NEXT:        "category": "Semantic Issue",
+# CHECK-NEXT:        "message": "Variable 'i' is uninitialized when used here",
 # CHECK-NEXT:        "range": {
 # CHECK-NEXT:          "end": {
 # CHECK-NEXT:            "character": 28,

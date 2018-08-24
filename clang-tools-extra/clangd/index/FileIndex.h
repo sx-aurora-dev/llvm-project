@@ -11,7 +11,7 @@
 // maintained at source-file granuality (e.g. with ASTs), and files can be
 // updated dynamically.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_FILEINDEX_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_FILEINDEX_H
@@ -73,6 +73,10 @@ public:
   void lookup(const LookupRequest &Req,
               llvm::function_ref<void(const Symbol &)> Callback) const override;
 
+
+  void findOccurrences(const OccurrencesRequest &Req,
+                       llvm::function_ref<void(const SymbolOccurrence &)>
+                           Callback) const override;
 private:
   FileSymbols FSymbols;
   MemIndex Index;

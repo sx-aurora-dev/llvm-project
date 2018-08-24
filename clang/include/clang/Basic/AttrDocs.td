@@ -2362,6 +2362,22 @@ It is only supported when using the Microsoft C++ ABI.
   }];
 }
 
+def LifetimeBoundDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``lifetimebound`` attribute indicates that a resource owned by
+a function parameter or implicit object parameter
+is retained by the return value of the annotated function
+(or, for a parameter of a constructor, in the value of the constructed object).
+It is only supported in C++.
+
+This attribute provides an experimental implementation of the facility
+described in the C++ committee paper [http://wg21.link/p0936r0](P0936R0),
+and is subject to change as the design of the corresponding functionality
+changes.
+  }];
+}
+
 def TrivialABIDocs : Documentation {
   let Category = DocCatVariable;
   let Content = [{
@@ -3440,5 +3456,33 @@ The ``artificial`` attribute can be applied to an inline function. If such a
 function is inlined, the attribute indicates that debuggers should associate
 the resulting instructions with the call site, rather than with the
 corresponding line within the inlined callee.
+  }];
+}
+
+def ReinitializesDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``reinitializes`` attribute can be applied to a non-static, non-const C++
+member function to indicate that this member function reinitializes the entire
+object to a known state, independent of the previous state of the object.
+
+This attribute can be interpreted by static analyzers that warn about uses of an
+object that has been left in an indeterminate state by a move operation. If a
+member function marked with the ``reinitializes`` attribute is called on a
+moved-from object, the analyzer can conclude that the object is no longer in an
+indeterminate state.
+
+A typical example where this attribute would be used is on functions that clear
+a container class:
+
+.. code-block:: c++
+
+  template <class T>
+  class Container {
+  public:
+    ...
+    [[clang::reinitializes]] void Clear();
+    ...
+  };
   }];
 }

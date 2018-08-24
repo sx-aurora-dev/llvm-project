@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/GlobalISel/IRTranslator.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallSet.h"
@@ -33,6 +34,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
@@ -321,14 +323,16 @@ bool IRTranslator::translateRet(const User &U, MachineIRBuilder &MIRBuilder) {
   const Value *Ret = RI.getReturnValue();
   if (Ret && DL->getTypeStoreSize(Ret->getType()) == 0)
     Ret = nullptr;
+
+  ArrayRef<unsigned> VRegs;
+  if (Ret)
+    VRegs = getOrCreateVRegs(*Ret);
+
   // The target may mess up with the insertion point, but
   // this is not important as a return is the last instruction
   // of the block anyway.
 
-  // FIXME: this interface should simplify when CallLowering gets adapted to
-  // multiple VRegs per Value.
-  unsigned VReg = Ret ? packRegs(*Ret, MIRBuilder) : 0;
-  return CLI->lowerReturn(MIRBuilder, Ret, VReg);
+  return CLI->lowerReturn(MIRBuilder, Ret, VRegs);
 }
 
 bool IRTranslator::translateBr(const User &U, MachineIRBuilder &MIRBuilder) {
@@ -909,6 +913,26 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
             PtrTy.getSizeInBits() / 8, 8));
     return true;
   }
+  case Intrinsic::cttz:
+  case Intrinsic::ctlz: {
+    ConstantInt *Cst = cast<ConstantInt>(CI.getArgOperand(1));
+    bool isTrailing = ID == Intrinsic::cttz;
+    unsigned Opcode = isTrailing
+                          ? Cst->isZero() ? TargetOpcode::G_CTTZ
+                                          : TargetOpcode::G_CTTZ_ZERO_UNDEF
+                          : Cst->isZero() ? TargetOpcode::G_CTLZ
+                                          : TargetOpcode::G_CTLZ_ZERO_UNDEF;
+    MIRBuilder.buildInstr(Opcode)
+        .addDef(getOrCreateVReg(CI))
+        .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
+    return true;
+  }
+  case Intrinsic::ctpop: {
+    MIRBuilder.buildInstr(TargetOpcode::G_CTPOP)
+        .addDef(getOrCreateVReg(CI))
+        .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
+    return true;
+  }
   }
   return false;
 }
@@ -1433,6 +1457,8 @@ void IRTranslator::finishPendingPhis() {
 bool IRTranslator::valueIsSplit(const Value &V,
                                 SmallVectorImpl<uint64_t> *Offsets) {
   SmallVector<LLT, 4> SplitTys;
+  if (Offsets && !Offsets->empty())
+    Offsets->clear();
   computeValueLLTs(*DL, *V.getType(), SplitTys, Offsets);
   return SplitTys.size() > 1;
 }
@@ -1503,6 +1529,8 @@ bool IRTranslator::translate(const Constant &C, unsigned Reg) {
       Ops.push_back(getOrCreateVReg(*CV->getOperand(i)));
     }
     EntryBuilder.buildMerge(Reg, Ops);
+  } else if (auto *BA = dyn_cast<BlockAddress>(&C)) {
+    EntryBuilder.buildBlockAddress(Reg, BA);
   } else
     return false;
 
@@ -1611,19 +1639,20 @@ bool IRTranslator::runOnMachineFunction(MachineFunction &CurMF) {
     ArgIt++;
   }
 
-  // And translate the function!
-  for (const BasicBlock &BB : F) {
-    MachineBasicBlock &MBB = getMBB(BB);
+  // Need to visit defs before uses when translating instructions.
+  ReversePostOrderTraversal<const Function *> RPOT(&F);
+  for (const BasicBlock *BB : RPOT) {
+    MachineBasicBlock &MBB = getMBB(*BB);
     // Set the insertion point of all the following translations to
     // the end of this basic block.
     CurBuilder.setMBB(MBB);
 
-    for (const Instruction &Inst : BB) {
+    for (const Instruction &Inst : *BB) {
       if (translate(Inst))
         continue;
 
       OptimizationRemarkMissed R("gisel-irtranslator", "GISelFailure",
-                                 Inst.getDebugLoc(), &BB);
+                                 Inst.getDebugLoc(), BB);
       R << "unable to translate instruction: " << ore::NV("Opcode", &Inst);
 
       if (ORE->allowExtraAnalysis("gisel-irtranslator")) {

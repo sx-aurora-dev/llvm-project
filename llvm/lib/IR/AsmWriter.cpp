@@ -1787,6 +1787,7 @@ static void writeDIBasicType(raw_ostream &Out, const DIBasicType *N,
   Printer.printInt("align", N->getAlignInBits());
   Printer.printDwarfEnum("encoding", N->getEncoding(),
                          dwarf::AttributeEncodingString);
+  Printer.printDIFlags("flags", N->getFlags());
   Out << ")";
 }
 
@@ -2955,11 +2956,13 @@ void AssemblyWriter::printConstVCalls(
   FieldSeparator FS;
   for (auto &ConstVCall : VCallList) {
     Out << FS;
+    Out << "(";
     printVFuncId(ConstVCall.VFunc);
     if (!ConstVCall.Args.empty()) {
       Out << ", ";
       printArgs(ConstVCall.Args);
     }
+    Out << ")";
   }
   Out << ")";
 }

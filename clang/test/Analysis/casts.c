@@ -175,3 +175,16 @@ void testCastVoidPtrToIntPtrThroughUIntTypedAssignment() {
 void testLocNonLocSymbolAssume(int a, int *b) {
   if ((int)b < a) {} // no-crash
 }
+
+void testLocNonLocSymbolRemainder(int a, int *b) {
+  int c = ((int)b) % a;
+  if (a == 1) {
+    c += 1;
+  }
+}
+
+void testSwitchWithSizeofs() {
+  switch (sizeof(char) == 1) { // expected-warning{{switch condition has boolean value}}
+  case sizeof(char):; // no-crash
+  }
+}

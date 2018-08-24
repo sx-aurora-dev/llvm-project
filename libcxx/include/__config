@@ -33,7 +33,7 @@
 #  define _GNUC_VER_NEW 0
 #endif
 
-#define _LIBCPP_VERSION 7000
+#define _LIBCPP_VERSION 8000
 
 #ifndef _LIBCPP_ABI_VERSION
 #  ifdef __Fuchsia__
@@ -328,6 +328,28 @@
 #  define _LIBCPP_NO_CFI
 #endif
 
+#if __ISO_C_VISIBLE >= 2011 || __cplusplus >= 201103L
+#  if defined(__FreeBSD__)
+#    define _LIBCPP_HAS_QUICK_EXIT
+#    define _LIBCPP_HAS_C11_FEATURES
+#  elif defined(__Fuchsia__)
+#    define _LIBCPP_HAS_QUICK_EXIT
+#    define _LIBCPP_HAS_C11_FEATURES
+#  elif defined(__linux__)
+#    if !defined(_LIBCPP_HAS_MUSL_LIBC)
+#      if _LIBCPP_GLIBC_PREREQ(2, 15) || defined(__BIONIC__)
+#        define _LIBCPP_HAS_QUICK_EXIT
+#      endif
+#      if _LIBCPP_GLIBC_PREREQ(2, 17)
+#        define _LIBCPP_HAS_C11_FEATURES
+#      endif
+#    else // defined(_LIBCPP_HAS_MUSL_LIBC)
+#      define _LIBCPP_HAS_QUICK_EXIT
+#      define _LIBCPP_HAS_C11_FEATURES
+#    endif
+#  endif // __linux__
+#endif
+
 #if defined(_LIBCPP_COMPILER_CLANG)
 
 // _LIBCPP_ALTERNATE_STRING_LAYOUT is an old name for
@@ -430,28 +452,6 @@ typedef __char32_t char32_t;
 #define _LIBCPP_HAS_NO_VARIABLE_TEMPLATES
 #endif
 
-#if __ISO_C_VISIBLE >= 2011 || __cplusplus >= 201103L
-#  if defined(__FreeBSD__)
-#    define _LIBCPP_HAS_QUICK_EXIT
-#    define _LIBCPP_HAS_C11_FEATURES
-#  elif defined(__Fuchsia__)
-#    define _LIBCPP_HAS_QUICK_EXIT
-#    define _LIBCPP_HAS_C11_FEATURES
-#  elif defined(__linux__)
-#    if !defined(_LIBCPP_HAS_MUSL_LIBC)
-#      if _LIBCPP_GLIBC_PREREQ(2, 15) || defined(__BIONIC__)
-#        define _LIBCPP_HAS_QUICK_EXIT
-#      endif
-#      if _LIBCPP_GLIBC_PREREQ(2, 17)
-#        define _LIBCPP_HAS_C11_FEATURES
-#      endif
-#    else // defined(_LIBCPP_HAS_MUSL_LIBC)
-#      define _LIBCPP_HAS_QUICK_EXIT
-#      define _LIBCPP_HAS_C11_FEATURES
-#    endif
-#  endif // __linux__
-#endif
-
 #if !(__has_feature(cxx_noexcept))
 #define _LIBCPP_HAS_NO_NOEXCEPT
 #endif
@@ -510,7 +510,7 @@ namespace std {
 #define _LIBCPP_HAS_IS_BASE_OF
 #endif
 
-#if !__EXCEPTIONS
+#if !__EXCEPTIONS && !defined(_LIBCPP_NO_EXCEPTIONS)
 #define _LIBCPP_NO_EXCEPTIONS
 #endif
 
@@ -706,12 +706,6 @@ namespace std {
 #define _LIBCPP_TEMPLATE_VIS
 #define _LIBCPP_ENUM_VIS
 
-#if defined(_LIBCPP_COMPILER_MSVC)
-#  define _LIBCPP_EXTERN_TEMPLATE_INLINE_VISIBILITY __forceinline
-#else
-#  define _LIBCPP_EXTERN_TEMPLATE_INLINE_VISIBILITY __attribute__ ((__always_inline__))
-#endif
-
 #endif // defined(_LIBCPP_OBJECT_FORMAT_COFF)
 
 #ifndef _LIBCPP_HIDDEN
@@ -805,16 +799,19 @@ namespace std {
 #  define _LIBCPP_HIDE_FROM_ABI _LIBCPP_HIDDEN _LIBCPP_INTERNAL_LINKAGE
 #endif
 
-// Just so we can migrate to _LIBCPP_HIDE_FROM_ABI gradually.
-#define _LIBCPP_INLINE_VISIBILITY _LIBCPP_HIDE_FROM_ABI
-
-#ifndef _LIBCPP_EXTERN_TEMPLATE_INLINE_VISIBILITY
-#  if !defined(_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS)
-#    define _LIBCPP_EXTERN_TEMPLATE_INLINE_VISIBILITY __attribute__((__visibility__("default"), __always_inline__))
+#ifdef _LIBCPP_BUILDING_LIBRARY
+#  if _LIBCPP_ABI_VERSION > 1
+#    define _LIBCPP_HIDE_FROM_ABI_AFTER_V1 _LIBCPP_HIDE_FROM_ABI
 #  else
-#    define _LIBCPP_EXTERN_TEMPLATE_INLINE_VISIBILITY __attribute__((__always_inline__))
+#    define _LIBCPP_HIDE_FROM_ABI_AFTER_V1
 #  endif
+#else
+#  define _LIBCPP_HIDE_FROM_ABI_AFTER_V1 _LIBCPP_HIDE_FROM_ABI
 #endif
+
+// Just so we can migrate to the new macros gradually.
+#define _LIBCPP_INLINE_VISIBILITY _LIBCPP_HIDE_FROM_ABI
+#define _LIBCPP_EXTERN_TEMPLATE_INLINE_VISIBILITY _LIBCPP_HIDE_FROM_ABI_AFTER_V1
 
 #ifndef _LIBCPP_PREFERRED_OVERLOAD
 #  if __has_attribute(__enable_if__)
@@ -991,6 +988,11 @@ template <unsigned> struct __static_assert_check {};
 #  endif
 #endif // defined(__APPLE__)
 
+#if !defined(_LIBCPP_HAS_NO_ALIGNED_ALLOCATION) && \
+    !defined(_LIBCPP_BUILDING_LIBRARY) && \
+    (!defined(__cpp_aligned_new) || __cpp_aligned_new < 201606)
+#  define _LIBCPP_HAS_NO_ALIGNED_ALLOCATION
+#endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #define _LIBCPP_HAS_DEFAULTRUNELOCALE

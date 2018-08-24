@@ -138,9 +138,9 @@ false:
 ; CHECK: %0:_(s32) = COPY $w0
 ; CHECK: %[[reg100:[0-9]+]]:_(s32) = G_CONSTANT i32 100
 ; CHECK: %[[reg200:[0-9]+]]:_(s32) = G_CONSTANT i32 200
-; CHECK: %[[reg0:[0-9]+]]:_(s32) = G_CONSTANT i32 0
-; CHECK: %[[reg1:[0-9]+]]:_(s32) = G_CONSTANT i32 1
 ; CHECK: %[[reg2:[0-9]+]]:_(s32) = G_CONSTANT i32 2
+; CHECK: %[[reg1:[0-9]+]]:_(s32) = G_CONSTANT i32 1
+; CHECK: %[[reg0:[0-9]+]]:_(s32) = G_CONSTANT i32 0
 ; CHECK: %[[regicmp100:[0-9]+]]:_(s1) = G_ICMP intpred(eq), %[[reg100]](s32), %0
 ; CHECK: G_BRCOND %[[regicmp100]](s1), %[[BB_CASE100]]
 ; CHECK: G_BR %[[BB_NOTCASE100_CHECKNEXT]]
@@ -413,9 +413,9 @@ define i64* @trivial_bitcast(i8* %a) {
 ; CHECK:     G_BR %[[CAST:bb\.[0-9]+]]
 
 ; CHECK: [[END:bb\.[0-9]+]].{{[a-zA-Z0-9.]+}}:
+; CHECK:     $x0 = COPY [[A]]
 
 ; CHECK: [[CAST]].{{[a-zA-Z0-9.]+}}:
-; CHECK:     {{%[0-9]+}}:_(p0) = COPY [[A]]
 ; CHECK:     G_BR %[[END]]
 define i64* @trivial_bitcast_with_copy(i8* %a) {
   br label %cast
@@ -1408,6 +1408,36 @@ define float @test_fabs_intrin(float %a) {
   ret float %res
 }
 
+declare i32 @llvm.ctlz.i32(i32, i1)
+define i32 @test_ctlz_intrinsic_zero_not_undef(i32 %a) {
+; CHECK-LABEL: name: test_ctlz_intrinsic_zero_not_undef
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $w0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_CTLZ [[A]]
+; CHECK: $w0 = COPY [[RES]]
+  %res = call i32 @llvm.ctlz.i32(i32 %a, i1 0)
+  ret i32 %res
+}
+
+declare i32 @llvm.cttz.i32(i32, i1)
+define i32 @test_cttz_intrinsic_zero_undef(i32 %a) {
+; CHECK-LABEL: name: test_cttz_intrinsic_zero_undef
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $w0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_CTTZ_ZERO_UNDEF [[A]]
+; CHECK: $w0 = COPY [[RES]]
+  %res = call i32 @llvm.cttz.i32(i32 %a, i1 1)
+  ret i32 %res
+}
+
+declare i32 @llvm.ctpop.i32(i32)
+define i32 @test_ctpop_intrinsic(i32 %a) {
+; CHECK-LABEL: name: test_ctpop
+; CHECK: [[A:%[0-9]+]]:_(s32) = COPY $w0
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_CTPOP [[A]]
+; CHECK: $w0 = COPY [[RES]]
+  %res = call i32 @llvm.ctpop.i32(i32 %a)
+  ret i32 %res
+}
+
 declare void @llvm.lifetime.start.p0i8(i64, i8*)
 declare void @llvm.lifetime.end.p0i8(i64, i8*)
 define void @test_lifetime_intrin() {
@@ -2146,4 +2176,16 @@ define i32 @test_atomicrmw_umax(i256* %addr) {
   ;        test so work around it by truncating to i32 for now.
   %oldval.trunc = trunc i256 %oldval to i32
   ret i32 %oldval.trunc
+}
+
+@addr = global i8* null
+
+define void @test_blockaddress() {
+; CHECK-LABEL: name: test_blockaddress
+; CHECK: [[BADDR:%[0-9]+]]:_(p0) = G_BLOCK_ADDR blockaddress(@test_blockaddress, %ir-block.block)
+; CHECK: G_STORE [[BADDR]](p0)
+  store i8* blockaddress(@test_blockaddress, %block), i8** @addr
+  indirectbr i8* blockaddress(@test_blockaddress, %block), [label %block]
+block:
+  ret void
 }

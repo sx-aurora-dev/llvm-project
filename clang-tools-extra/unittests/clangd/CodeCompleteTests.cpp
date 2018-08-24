@@ -79,6 +79,23 @@ std::unique_ptr<SymbolIndex> memIndex(std::vector<Symbol> Symbols) {
   return MemIndex::build(std::move(Slab).build());
 }
 
+CodeCompleteResult completions(ClangdServer &Server, StringRef TestCode,
+                               Position point,
+                               std::vector<Symbol> IndexSymbols = {},
+                               clangd::CodeCompleteOptions Opts = {}) {
+  std::unique_ptr<SymbolIndex> OverrideIndex;
+  if (!IndexSymbols.empty()) {
+    assert(!Opts.Index && "both Index and IndexSymbols given!");
+    OverrideIndex = memIndex(std::move(IndexSymbols));
+    Opts.Index = OverrideIndex.get();
+  }
+
+  auto File = testPath("foo.cpp");
+  runAddDocument(Server, File, TestCode);
+  auto CompletionList = cantFail(runCodeComplete(Server, File, point, Opts));
+  return CompletionList;
+}
+
 CodeCompleteResult completions(ClangdServer &Server, StringRef Text,
                                std::vector<Symbol> IndexSymbols = {},
                                clangd::CodeCompleteOptions Opts = {}) {
@@ -893,6 +910,10 @@ public:
   void lookup(const LookupRequest &,
               llvm::function_ref<void(const Symbol &)>) const override {}
 
+  void findOccurrences(const OccurrencesRequest &Req,
+                       llvm::function_ref<void(const SymbolOccurrence &)>
+                           Callback) const override {}
+
   const std::vector<FuzzyFindRequest> allRequests() const { return Requests; }
 
 private:
@@ -1336,6 +1357,237 @@ TEST(CompletionTest, CodeCompletionContext) {
       )cpp");
 
   EXPECT_THAT(Results.Context, CodeCompletionContext::CCC_DotMemberAccess);
+}
+
+TEST(CompletionTest, FixItForArrowToDot) {
+  MockFSProvider FS;
+  MockCompilationDatabase CDB;
+  IgnoreDiagnostics DiagConsumer;
+  ClangdServer Server(CDB, FS, DiagConsumer, ClangdServer::optsForTest());
+
+  CodeCompleteOptions Opts;
+  Opts.IncludeFixIts = true;
+  Annotations TestCode(
+      R"cpp(
+        class Auxilary {
+         public:
+          void AuxFunction();
+        };
+        class ClassWithPtr {
+         public:
+          void MemberFunction();
+          Auxilary* operator->() const;
+          Auxilary* Aux;
+        };
+        void f() {
+          ClassWithPtr x;
+          x[[->]]^;
+        }
+      )cpp");
+  auto Results =
+      completions(Server, TestCode.code(), TestCode.point(), {}, Opts);
+  EXPECT_EQ(Results.Completions.size(), 3u);
+
+  TextEdit ReplacementEdit;
+  ReplacementEdit.range = TestCode.range();
+  ReplacementEdit.newText = ".";
+  for (const auto &C : Results.Completions) {
+    EXPECT_TRUE(C.FixIts.size() == 1u || C.Name == "AuxFunction");
+    if (!C.FixIts.empty()) {
+      EXPECT_THAT(C.FixIts, ElementsAre(ReplacementEdit));
+    }
+  }
+}
+
+TEST(CompletionTest, FixItForDotToArrow) {
+  MockFSProvider FS;
+  MockCompilationDatabase CDB;
+  IgnoreDiagnostics DiagConsumer;
+  ClangdServer Server(CDB, FS, DiagConsumer, ClangdServer::optsForTest());
+
+  CodeCompleteOptions Opts;
+  Opts.IncludeFixIts = true;
+  Annotations TestCode(
+      R"cpp(
+        class Auxilary {
+         public:
+          void AuxFunction();
+        };
+        class ClassWithPtr {
+         public:
+          void MemberFunction();
+          Auxilary* operator->() const;
+          Auxilary* Aux;
+        };
+        void f() {
+          ClassWithPtr x;
+          x[[.]]^;
+        }
+      )cpp");
+  auto Results =
+      completions(Server, TestCode.code(), TestCode.point(), {}, Opts);
+  EXPECT_EQ(Results.Completions.size(), 3u);
+
+  TextEdit ReplacementEdit;
+  ReplacementEdit.range = TestCode.range();
+  ReplacementEdit.newText = "->";
+  for (const auto &C : Results.Completions) {
+    EXPECT_TRUE(C.FixIts.empty() || C.Name == "AuxFunction");
+    if (!C.FixIts.empty()) {
+      EXPECT_THAT(C.FixIts, ElementsAre(ReplacementEdit));
+    }
+  }
+}
+
+TEST(CompletionTest, RenderWithFixItMerged) {
+  TextEdit FixIt;
+  FixIt.range.end.character = 5;
+  FixIt.newText = "->";
+
+  CodeCompletion C;
+  C.Name = "x";
+  C.RequiredQualifier = "Foo::";
+  C.FixIts = {FixIt};
+  C.CompletionTokenRange.start.character = 5;
+
+  CodeCompleteOptions Opts;
+  Opts.IncludeFixIts = true;
+
+  auto R = C.render(Opts);
+  EXPECT_TRUE(R.textEdit);
+  EXPECT_EQ(R.textEdit->newText, "->Foo::x");
+  EXPECT_TRUE(R.additionalTextEdits.empty());
+}
+
+TEST(CompletionTest, RenderWithFixItNonMerged) {
+  TextEdit FixIt;
+  FixIt.range.end.character = 4;
+  FixIt.newText = "->";
+
+  CodeCompletion C;
+  C.Name = "x";
+  C.RequiredQualifier = "Foo::";
+  C.FixIts = {FixIt};
+  C.CompletionTokenRange.start.character = 5;
+
+  CodeCompleteOptions Opts;
+  Opts.IncludeFixIts = true;
+
+  auto R = C.render(Opts);
+  EXPECT_TRUE(R.textEdit);
+  EXPECT_EQ(R.textEdit->newText, "Foo::x");
+  EXPECT_THAT(R.additionalTextEdits, UnorderedElementsAre(FixIt));
+}
+
+TEST(CompletionTest, CompletionTokenRange) {
+  MockFSProvider FS;
+  MockCompilationDatabase CDB;
+  IgnoreDiagnostics DiagConsumer;
+  ClangdServer Server(CDB, FS, DiagConsumer, ClangdServer::optsForTest());
+
+  constexpr const char *TestCodes[] = {
+      R"cpp(
+        class Auxilary {
+         public:
+          void AuxFunction();
+        };
+        void f() {
+          Auxilary x;
+          x.[[Aux]]^;
+        }
+      )cpp",
+      R"cpp(
+        class Auxilary {
+         public:
+          void AuxFunction();
+        };
+        void f() {
+          Auxilary x;
+          x.[[]]^;
+        }
+      )cpp"};
+  for (const auto &Text : TestCodes) {
+    Annotations TestCode(Text);
+    auto Results = completions(Server, TestCode.code(), TestCode.point());
+
+    EXPECT_EQ(Results.Completions.size(), 1u);
+    EXPECT_THAT(Results.Completions.front().CompletionTokenRange, TestCode.range());
+  }
+}
+
+TEST(SignatureHelpTest, OverloadsOrdering) {
+  const auto Results = signatures(R"cpp(
+    void foo(int x);
+    void foo(int x, float y);
+    void foo(float x, int y);
+    void foo(float x, float y);
+    void foo(int x, int y = 0);
+    int main() { foo(^); }
+  )cpp");
+  EXPECT_THAT(
+      Results.signatures,
+      ElementsAre(
+          Sig("foo(int x) -> void", {"int x"}),
+          Sig("foo(int x, int y = 0) -> void", {"int x", "int y = 0"}),
+          Sig("foo(float x, int y) -> void", {"float x", "int y"}),
+          Sig("foo(int x, float y) -> void", {"int x", "float y"}),
+          Sig("foo(float x, float y) -> void", {"float x", "float y"})));
+  // We always prefer the first signature.
+  EXPECT_EQ(0, Results.activeSignature);
+  EXPECT_EQ(0, Results.activeParameter);
+}
+
+TEST(SignatureHelpTest, InstantiatedSignatures) {
+  EXPECT_THAT(signatures(R"cpp(
+    template <class T>
+    void foo(T, T, T);
+
+    int main() {
+      foo<int>(^);
+    }
+  )cpp")
+                  .signatures,
+              ElementsAre(Sig("foo(T, T, T) -> void", {"T", "T", "T"})));
+
+  EXPECT_THAT(signatures(R"cpp(
+    template <class T>
+    void foo(T, T, T);
+
+    int main() {
+      foo(10, ^);
+    })cpp")
+                  .signatures,
+              ElementsAre(Sig("foo(T, T, T) -> void", {"T", "T", "T"})));
+
+  EXPECT_THAT(signatures(R"cpp(
+    template <class ...T>
+    void foo(T...);
+
+    int main() {
+      foo<int>(^);
+    }
+  )cpp")
+                  .signatures,
+              ElementsAre(Sig("foo(T...) -> void", {"T..."})));
+
+  // It is debatable whether we should substitute the outer template parameter
+  // ('T') in that case. Currently we don't substitute it in signature help, but
+  // do substitute in code complete.
+  // FIXME: make code complete and signature help consistent, figure out which
+  // way is better.
+  EXPECT_THAT(signatures(R"cpp(
+    template <class T>
+    struct X {
+      template <class U>
+      void foo(T, U);
+    };
+
+    int main() {
+      X<int>().foo<double>(^)
+    }
+  )cpp")
+                  .signatures,
+              ElementsAre(Sig("foo(T, U) -> void", {"T", "U"})));
 }
 
 } // namespace

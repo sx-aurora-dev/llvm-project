@@ -22,6 +22,7 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/CaptureTracking.h"
+#include "llvm/Analysis/Loads.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -147,6 +148,29 @@ static bool isLocallyOpenedFile(Value *File, CallInst *CI, IRBuilder<> &B,
   if (PointerMayBeCaptured(File, true, true))
     return false;
 
+  return true;
+}
+
+static bool isOnlyUsedInComparisonWithZero(Value *V) {
+  for (User *U : V->users()) {
+    if (ICmpInst *IC = dyn_cast<ICmpInst>(U))
+      if (Constant *C = dyn_cast<Constant>(IC->getOperand(1)))
+        if (C->isNullValue())
+          continue;
+    // Unknown instruction.
+    return false;
+  }
+  return true;
+}
+
+static bool canTransformToMemCmp(CallInst *CI, Value *Str, uint64_t Len,
+                                 const DataLayout &DL) {
+  if (!isOnlyUsedInComparisonWithZero(CI))
+    return false;
+
+  if (!isDereferenceableAndAlignedPointer(Str, 1, APInt(64, Len), DL))
+    return false;
+    
   return true;
 }
 
@@ -322,6 +346,21 @@ Value *LibCallSimplifier::optimizeStrCmp(CallInst *CI, IRBuilder<> &B) {
                       B, DL, TLI);
   }
 
+  // strcmp to memcmp
+  if (!HasStr1 && HasStr2) {
+    if (canTransformToMemCmp(CI, Str1P, Len2, DL))
+      return emitMemCmp(
+          Str1P, Str2P,
+          ConstantInt::get(DL.getIntPtrType(CI->getContext()), Len2), B, DL,
+          TLI);
+  } else if (HasStr1 && !HasStr2) {
+    if (canTransformToMemCmp(CI, Str2P, Len1, DL))
+      return emitMemCmp(
+          Str1P, Str2P,
+          ConstantInt::get(DL.getIntPtrType(CI->getContext()), Len1), B, DL,
+          TLI);
+  }
+
   return nullptr;
 }
 
@@ -360,6 +399,26 @@ Value *LibCallSimplifier::optimizeStrNCmp(CallInst *CI, IRBuilder<> &B) {
 
   if (HasStr2 && Str2.empty()) // strncmp(x, "", n) -> *x
     return B.CreateZExt(B.CreateLoad(Str1P, "strcmpload"), CI->getType());
+
+  uint64_t Len1 = GetStringLength(Str1P);
+  uint64_t Len2 = GetStringLength(Str2P);
+
+  // strncmp to memcmp
+  if (!HasStr1 && HasStr2) {
+    Len2 = std::min(Len2, Length);
+    if (canTransformToMemCmp(CI, Str1P, Len2, DL))
+      return emitMemCmp(
+          Str1P, Str2P,
+          ConstantInt::get(DL.getIntPtrType(CI->getContext()), Len2), B, DL,
+          TLI);
+  } else if (HasStr1 && !HasStr2) {
+    Len1 = std::min(Len1, Length);
+    if (canTransformToMemCmp(CI, Str2P, Len1, DL))
+      return emitMemCmp(
+          Str1P, Str2P,
+          ConstantInt::get(DL.getIntPtrType(CI->getContext()), Len1), B, DL,
+          TLI);
+  }
 
   return nullptr;
 }
@@ -927,6 +986,20 @@ Value *LibCallSimplifier::optimizeRealloc(CallInst *CI, IRBuilder<> &B) {
 // Math Library Optimizations
 //===----------------------------------------------------------------------===//
 
+// Replace a libcall \p CI with a call to intrinsic \p IID
+static Value *replaceUnaryCall(CallInst *CI, IRBuilder<> &B, Intrinsic::ID IID) {
+  // Propagate fast-math flags from the existing call to the new call.
+  IRBuilder<>::FastMathFlagGuard Guard(B);
+  B.setFastMathFlags(CI->getFastMathFlags());
+
+  Module *M = CI->getModule();
+  Value *V = CI->getArgOperand(0);
+  Function *F = Intrinsic::getDeclaration(M, IID, CI->getType());
+  CallInst *NewCall = B.CreateCall(F, V);
+  NewCall->takeName(CI);
+  return NewCall;
+}
+
 /// Return a variant of Val with float type.
 /// Currently this works in two cases: If Val is an FPExtension of a float
 /// value to something bigger, simply return the operand.
@@ -949,104 +1022,75 @@ static Value *valueHasFloatPrecision(Value *Val) {
   return nullptr;
 }
 
-/// Shrink double -> float for unary functions like 'floor'.
-static Value *optimizeUnaryDoubleFP(CallInst *CI, IRBuilder<> &B,
-                                    bool CheckRetType) {
-  Function *Callee = CI->getCalledFunction();
-  // We know this libcall has a valid prototype, but we don't know which.
+/// Shrink double -> float functions.
+static Value *optimizeDoubleFP(CallInst *CI, IRBuilder<> &B,
+                               bool isBinary, bool isPrecise = false) {
   if (!CI->getType()->isDoubleTy())
     return nullptr;
 
-  if (CheckRetType) {
-    // Check if all the uses for function like 'sin' are converted to float.
+  // If not all the uses of the function are converted to float, then bail out.
+  // This matters if the precision of the result is more important than the
+  // precision of the arguments.
+  if (isPrecise)
     for (User *U : CI->users()) {
       FPTruncInst *Cast = dyn_cast<FPTruncInst>(U);
       if (!Cast || !Cast->getType()->isFloatTy())
         return nullptr;
     }
-  }
 
-  // If this is something like 'floor((double)floatval)', convert to floorf.
-  Value *V = valueHasFloatPrecision(CI->getArgOperand(0));
-  if (V == nullptr)
+  // If this is something like 'g((double) float)', convert to 'gf(float)'.
+  Value *V[2];
+  V[0] = valueHasFloatPrecision(CI->getArgOperand(0));
+  V[1] = isBinary ? valueHasFloatPrecision(CI->getArgOperand(1)) : nullptr;
+  if (!V[0] || (isBinary && !V[1]))
     return nullptr;
 
   // If call isn't an intrinsic, check that it isn't within a function with the
-  // same name as the float version of this call.
+  // same name as the float version of this call, otherwise the result is an
+  // infinite loop.  For example, from MinGW-w64:
   //
-  // e.g. inline float expf(float val) { return (float) exp((double) val); }
-  //
-  // A similar such definition exists in the MinGW-w64 math.h header file which
-  // when compiled with -O2 -ffast-math causes the generation of infinite loops
-  // where expf is called.
-  if (!Callee->isIntrinsic()) {
-    const Function *F = CI->getFunction();
-    StringRef FName = F->getName();
-    StringRef CalleeName = Callee->getName();
-    if ((FName.size() == (CalleeName.size() + 1)) &&
-        (FName.back() == 'f') &&
-        FName.startswith(CalleeName))
+  // float expf(float val) { return (float) exp((double) val); }
+  Function *CalleeFn = CI->getCalledFunction();
+  StringRef CalleeNm = CalleeFn->getName();
+  AttributeList CalleeAt = CalleeFn->getAttributes();
+  if (CalleeFn && !CalleeFn->isIntrinsic()) {
+    const Function *Fn = CI->getFunction();
+    StringRef FnName = Fn->getName();
+    if (FnName.back() == 'f' &&
+        FnName.size() == (CalleeNm.size() + 1) &&
+        FnName.startswith(CalleeNm))
       return nullptr;
   }
 
-  // Propagate fast-math flags from the existing call to the new call.
+  // Propagate the math semantics from the current function to the new function.
   IRBuilder<>::FastMathFlagGuard Guard(B);
   B.setFastMathFlags(CI->getFastMathFlags());
 
-  // floor((double)floatval) -> (double)floorf(floatval)
-  if (Callee->isIntrinsic()) {
+  // g((double) float) -> (double) gf(float)
+  Value *R;
+  if (CalleeFn->isIntrinsic()) {
     Module *M = CI->getModule();
-    Intrinsic::ID IID = Callee->getIntrinsicID();
-    Function *F = Intrinsic::getDeclaration(M, IID, B.getFloatTy());
-    V = B.CreateCall(F, V);
-  } else {
-    // The call is a library call rather than an intrinsic.
-    V = emitUnaryFloatFnCall(V, Callee->getName(), B, Callee->getAttributes());
+    Intrinsic::ID IID = CalleeFn->getIntrinsicID();
+    Function *Fn = Intrinsic::getDeclaration(M, IID, B.getFloatTy());
+    R = isBinary ? B.CreateCall(Fn, V) : B.CreateCall(Fn, V[0]);
   }
+  else
+    R = isBinary ? emitBinaryFloatFnCall(V[0], V[1], CalleeNm, B, CalleeAt)
+                 : emitUnaryFloatFnCall(V[0], CalleeNm, B, CalleeAt);
 
-  return B.CreateFPExt(V, B.getDoubleTy());
+  return B.CreateFPExt(R, B.getDoubleTy());
 }
 
-// Replace a libcall \p CI with a call to intrinsic \p IID
-static Value *replaceUnaryCall(CallInst *CI, IRBuilder<> &B, Intrinsic::ID IID) {
-  // Propagate fast-math flags from the existing call to the new call.
-  IRBuilder<>::FastMathFlagGuard Guard(B);
-  B.setFastMathFlags(CI->getFastMathFlags());
-
-  Module *M = CI->getModule();
-  Value *V = CI->getArgOperand(0);
-  Function *F = Intrinsic::getDeclaration(M, IID, CI->getType());
-  CallInst *NewCall = B.CreateCall(F, V);
-  NewCall->takeName(CI);
-  return NewCall;
+/// Shrink double -> float for unary functions.
+static Value *optimizeUnaryDoubleFP(CallInst *CI, IRBuilder<> &B,
+                                    bool isPrecise = false) {
+  return optimizeDoubleFP(CI, B, false, isPrecise);
 }
 
-/// Shrink double -> float for binary functions like 'fmin/fmax'.
-static Value *optimizeBinaryDoubleFP(CallInst *CI, IRBuilder<> &B) {
-  Function *Callee = CI->getCalledFunction();
-  // We know this libcall has a valid prototype, but we don't know which.
-  if (!CI->getType()->isDoubleTy())
-    return nullptr;
-
-  // If this is something like 'fmin((double)floatval1, (double)floatval2)',
-  // or fmin(1.0, (double)floatval), then we convert it to fminf.
-  Value *V1 = valueHasFloatPrecision(CI->getArgOperand(0));
-  if (V1 == nullptr)
-    return nullptr;
-  Value *V2 = valueHasFloatPrecision(CI->getArgOperand(1));
-  if (V2 == nullptr)
-    return nullptr;
-
-  // Propagate fast-math flags from the existing call to the new call.
-  IRBuilder<>::FastMathFlagGuard Guard(B);
-  B.setFastMathFlags(CI->getFastMathFlags());
-
-  // fmin((double)floatval1, (double)floatval2)
-  //                      -> (double)fminf(floatval1, floatval2)
-  // TODO: Handle intrinsics in the same way as in optimizeUnaryDoubleFP().
-  Value *V = emitBinaryFloatFnCall(V1, V2, Callee->getName(), B,
-                                   Callee->getAttributes());
-  return B.CreateFPExt(V, B.getDoubleTy());
+/// Shrink double -> float for binary functions.
+static Value *optimizeBinaryDoubleFP(CallInst *CI, IRBuilder<> &B,
+                                     bool isPrecise = false) {
+  return optimizeDoubleFP(CI, B, true, isPrecise);
 }
 
 // cabs(z) -> sqrt((creal(z)*creal(z)) + (cimag(z)*cimag(z)))
@@ -1078,20 +1122,36 @@ Value *LibCallSimplifier::optimizeCAbs(CallInst *CI, IRBuilder<> &B) {
   return B.CreateCall(FSqrt, B.CreateFAdd(RealReal, ImagImag), "cabs");
 }
 
-Value *LibCallSimplifier::optimizeCos(CallInst *CI, IRBuilder<> &B) {
-  Function *Callee = CI->getCalledFunction();
-  Value *Ret = nullptr;
-  StringRef Name = Callee->getName();
-  if (UnsafeFPShrink && Name == "cos" && hasFloatVersion(Name))
-    Ret = optimizeUnaryDoubleFP(CI, B, true);
-
-  // cos(-x) -> cos(x)
-  Value *Op1 = CI->getArgOperand(0);
-  if (BinaryOperator::isFNeg(Op1)) {
-    BinaryOperator *BinExpr = cast<BinaryOperator>(Op1);
-    return B.CreateCall(Callee, BinExpr->getOperand(1), "cos");
+static Value *optimizeTrigReflections(CallInst *Call, LibFunc Func,
+                                      IRBuilder<> &B) {
+  if (!isa<FPMathOperator>(Call))
+    return nullptr;
+  
+  IRBuilder<>::FastMathFlagGuard Guard(B);
+  B.setFastMathFlags(Call->getFastMathFlags());
+  
+  // TODO: Add tan() and other calls.
+  // TODO: Can this be shared to also handle LLVM intrinsics?
+  Value *X;
+  switch (Func) {
+  case LibFunc_sin:
+  case LibFunc_sinf:
+  case LibFunc_sinl:
+    // sin(-X) --> -sin(X)
+    if (match(Call->getArgOperand(0), m_OneUse(m_FNeg(m_Value(X)))))
+      return B.CreateFNeg(B.CreateCall(Call->getCalledFunction(), X, "sin"));
+    break;
+  case LibFunc_cos:
+  case LibFunc_cosf:
+  case LibFunc_cosl:
+    // cos(-X) --> cos(X)
+    if (match(Call->getArgOperand(0), m_FNeg(m_Value(X))))
+      return B.CreateCall(Call->getCalledFunction(), X, "cos");
+    break;
+  default:
+    break;
   }
-  return Ret;
+  return nullptr;
 }
 
 static Value *getPow(Value *InnerChain[33], unsigned Exp, IRBuilder<> &B) {
@@ -1136,23 +1196,21 @@ Value *LibCallSimplifier::replacePowWithSqrt(CallInst *Pow, IRBuilder<> &B) {
 
   // If errno is never set, then use the intrinsic for sqrt().
   if (Pow->hasFnAttr(Attribute::ReadNone)) {
-
     Function *SqrtFn = Intrinsic::getDeclaration(Pow->getModule(),
                                                  Intrinsic::sqrt, Ty);
     Sqrt = B.CreateCall(SqrtFn, Base);
   }
   // Otherwise, use the libcall for sqrt().
-  else if (hasUnaryFloatFn(TLI, Ty,
-                             LibFunc_sqrt, LibFunc_sqrtf, LibFunc_sqrtl)) {
+  else if (hasUnaryFloatFn(TLI, Ty, LibFunc_sqrt, LibFunc_sqrtf, LibFunc_sqrtl))
     // TODO: We also should check that the target can in fact lower the sqrt()
     // libcall. We currently have no way to ask this question, so we ask if
     // the target has a sqrt() libcall, which is not exactly the same.
     Sqrt = emitUnaryFloatFnCall(Base, TLI->getName(LibFunc_sqrt), B,
                                 Pow->getCalledFunction()->getAttributes());
-  } else
+  else
     return nullptr;
 
-  // If this is pow(x, -0.5), then get the reciprocal.
+  // If the exponent is negative, then get the reciprocal.
   if (ExpoF->isNegative())
     Sqrt = B.CreateFDiv(ConstantFP::get(Ty, 1.0), Sqrt, "reciprocal");
 
@@ -1169,18 +1227,24 @@ Value *LibCallSimplifier::optimizePow(CallInst *Pow, IRBuilder<> &B) {
   Value *Shrunk = nullptr;
   bool Ignored;
 
-  if (UnsafeFPShrink &&
-      Name == TLI->getName(LibFunc_pow) && hasFloatVersion(Name))
-    Shrunk = optimizeUnaryDoubleFP(Pow, B, true);
+  // Bail out if simplifying libcalls to pow() is disabled.
+  if (!hasUnaryFloatFn(TLI, Ty, LibFunc_pow, LibFunc_powf, LibFunc_powl))
+    return nullptr;
 
-  // Propagate math semantics flags from the call to any created instructions.
+  // Propagate the math semantics from the call to any created instructions.
   IRBuilder<>::FastMathFlagGuard Guard(B);
   B.setFastMathFlags(Pow->getFastMathFlags());
+
+  // Shrink pow() to powf() if the arguments are single precision,
+  // unless the result is expected to be double precision.
+  if (UnsafeFPShrink &&
+      Name == TLI->getName(LibFunc_pow) && hasFloatVersion(Name))
+    Shrunk = optimizeBinaryDoubleFP(Pow, B, true);
 
   // Evaluate special cases related to the base.
 
   // pow(1.0, x) -> 1.0
-  if (match(Base, m_SpecificFP(1.0)))
+  if (match(Base, m_FPOne()))
     return Base;
 
   // pow(2.0, x) -> exp2(x)
@@ -1189,13 +1253,12 @@ Value *LibCallSimplifier::optimizePow(CallInst *Pow, IRBuilder<> &B) {
     return B.CreateCall(Exp2, Expo, "exp2");
   }
 
-  // There's no exp10 intrinsic yet, but, maybe, some day there shall be one.
-  if (ConstantFP *BaseC = dyn_cast<ConstantFP>(Base)) {
-    // pow(10.0, x) -> exp10(x)
+  // pow(10.0, x) -> exp10(x)
+  if (ConstantFP *BaseC = dyn_cast<ConstantFP>(Base))
+    // There's no exp10 intrinsic yet, but, maybe, some day there shall be one.
     if (BaseC->isExactlyValue(10.0) &&
         hasUnaryFloatFn(TLI, Ty, LibFunc_exp10, LibFunc_exp10f, LibFunc_exp10l))
       return emitUnaryFloatFnCall(Expo, TLI->getName(LibFunc_exp10), B, Attrs);
-  }
 
   // pow(exp(x), y) -> exp(x * y)
   // pow(exp2(x), y) -> exp2(x * y)
@@ -1209,9 +1272,6 @@ Value *LibCallSimplifier::optimizePow(CallInst *Pow, IRBuilder<> &B) {
     Function *CalleeFn = BaseFn->getCalledFunction();
     if (CalleeFn && TLI->getLibFunc(CalleeFn->getName(), LibFn) &&
         (LibFn == LibFunc_exp || LibFn == LibFunc_exp2) && TLI->has(LibFn)) {
-      IRBuilder<>::FastMathFlagGuard Guard(B);
-      B.setFastMathFlags(Pow->getFastMathFlags());
-
       Value *FMul = B.CreateFMul(BaseFn->getArgOperand(0), Expo, "mul");
       return emitUnaryFloatFnCall(FMul, CalleeFn->getName(), B,
                                   CalleeFn->getAttributes());
@@ -1220,35 +1280,32 @@ Value *LibCallSimplifier::optimizePow(CallInst *Pow, IRBuilder<> &B) {
 
   // Evaluate special cases related to the exponent.
 
-  if (Value *Sqrt = replacePowWithSqrt(Pow, B))
-    return Sqrt;
-
-  ConstantFP *ExpoC = dyn_cast<ConstantFP>(Expo);
-  if (!ExpoC)
-    return Shrunk;
-
   // pow(x, -1.0) -> 1.0 / x
-  if (ExpoC->isExactlyValue(-1.0))
+  if (match(Expo, m_SpecificFP(-1.0)))
     return B.CreateFDiv(ConstantFP::get(Ty, 1.0), Base, "reciprocal");
 
   // pow(x, 0.0) -> 1.0
-  if (ExpoC->getValueAPF().isZero())
-    return ConstantFP::get(Ty, 1.0);
+  if (match(Expo, m_SpecificFP(0.0)))
+      return ConstantFP::get(Ty, 1.0);
 
   // pow(x, 1.0) -> x
-  if (ExpoC->isExactlyValue(1.0))
+  if (match(Expo, m_FPOne()))
     return Base;
 
   // pow(x, 2.0) -> x * x
-  if (ExpoC->isExactlyValue(2.0))
+  if (match(Expo, m_SpecificFP(2.0)))
     return B.CreateFMul(Base, Base, "square");
 
+  if (Value *Sqrt = replacePowWithSqrt(Pow, B))
+    return Sqrt;
+
   // FIXME: Correct the transforms and pull this into replacePowWithSqrt().
-  if (ExpoC->isExactlyValue(0.5) &&
+  ConstantFP *ExpoC = dyn_cast<ConstantFP>(Expo);
+  if (ExpoC && ExpoC->isExactlyValue(0.5) &&
       hasUnaryFloatFn(TLI, Ty, LibFunc_sqrt, LibFunc_sqrtf, LibFunc_sqrtl)) {
     // Expand pow(x, 0.5) to (x == -infinity ? +infinity : fabs(sqrt(x))).
-    // This is faster than calling pow, and still handles negative zero
-    // and negative infinity correctly.
+    // This is faster than calling pow(), and still handles -0.0 and
+    // negative infinity correctly.
     // TODO: In finite-only mode, this could be just fabs(sqrt(x)).
     Value *PosInf = ConstantFP::getInfinity(Ty);
     Value *NegInf = ConstantFP::getInfinity(Ty, true);
@@ -1257,41 +1314,39 @@ Value *LibCallSimplifier::optimizePow(CallInst *Pow, IRBuilder<> &B) {
     // an intrinsic, to match errno semantics.
     Value *Sqrt = emitUnaryFloatFnCall(Base, TLI->getName(LibFunc_sqrt),
                                        B, Attrs);
-    Function *FabsFn = Intrinsic::getDeclaration(Module, Intrinsic::fabs, Ty);
-    Value *FAbs = B.CreateCall(FabsFn, Sqrt, "abs");
-
+    Function *FAbsFn = Intrinsic::getDeclaration(Module, Intrinsic::fabs, Ty);
+    Value *FAbs = B.CreateCall(FAbsFn, Sqrt, "abs");
     Value *FCmp = B.CreateFCmpOEQ(Base, NegInf, "isinf");
-    Value *Sel = B.CreateSelect(FCmp, PosInf, FAbs);
-    return Sel;
+    Sqrt = B.CreateSelect(FCmp, PosInf, FAbs);
+    return Sqrt;
   }
 
-  // pow(x, n) -> x * x * x * ....
-  if (Pow->isFast()) {
-    APFloat ExpoA = abs(ExpoC->getValueAPF());
-    // We limit to a max of 7 fmul(s). Thus the maximum exponent is 32.
-    // This transformation applies to integer exponents only.
-    if (!ExpoA.isInteger() ||
-        ExpoA.compare
-            (APFloat(ExpoA.getSemantics(), 32.0)) == APFloat::cmpGreaterThan)
-      return nullptr;
+  // pow(x, n) -> x * x * x * ...
+  const APFloat *ExpoF;
+  if (Pow->isFast() && match(Expo, m_APFloat(ExpoF))) {
+    // We limit to a max of 7 multiplications, thus the maximum exponent is 32.
+    APFloat LimF(ExpoF->getSemantics(), 33.0),
+            ExpoA(abs(*ExpoF));
+    if (ExpoA.isInteger() && ExpoA.compare(LimF) == APFloat::cmpLessThan) {
+      // We will memoize intermediate products of the Addition Chain.
+      Value *InnerChain[33] = {nullptr};
+      InnerChain[1] = Base;
+      InnerChain[2] = B.CreateFMul(Base, Base, "square");
 
-    // We will memoize intermediate products of the Addition Chain.
-    Value *InnerChain[33] = {nullptr};
-    InnerChain[1] = Base;
-    InnerChain[2] = B.CreateFMul(Base, Base, "square");
+      // We cannot readily convert a non-double type (like float) to a double.
+      // So we first convert it to something which could be converted to double.
+      ExpoA.convert(APFloat::IEEEdouble(), APFloat::rmTowardZero, &Ignored);
+      Value *FMul = getPow(InnerChain, ExpoA.convertToDouble(), B);
 
-    // We cannot readily convert a non-double type (like float) to a double.
-    // So we first convert ExpoA to something which could be converted to double.
-    ExpoA.convert(APFloat::IEEEdouble(), APFloat::rmTowardZero, &Ignored);
+      // If the exponent is negative, then get the reciprocal.
+      if (ExpoF->isNegative())
+        FMul = B.CreateFDiv(ConstantFP::get(Ty, 1.0), FMul, "reciprocal");
 
-    Value *FMul = getPow(InnerChain, ExpoA.convertToDouble(), B);
-    // For negative exponents simply compute the reciprocal.
-    if (ExpoC->isNegative())
-      FMul = B.CreateFDiv(ConstantFP::get(Ty, 1.0), FMul, "reciprocal");
-    return FMul;
+      return FMul;
+    }
   }
 
-  return nullptr;
+  return Shrunk;
 }
 
 Value *LibCallSimplifier::optimizeExp2(CallInst *CI, IRBuilder<> &B) {
@@ -2289,11 +2344,10 @@ Value *LibCallSimplifier::optimizeFloatingPointLibCall(CallInst *CI,
   if (CI->isStrictFP())
     return nullptr;
 
+  if (Value *V = optimizeTrigReflections(CI, Func, Builder))
+    return V;
+
   switch (Func) {
-  case LibFunc_cosf:
-  case LibFunc_cos:
-  case LibFunc_cosl:
-    return optimizeCos(CI, Builder);
   case LibFunc_sinpif:
   case LibFunc_sinpi:
   case LibFunc_cospif:
@@ -2348,6 +2402,7 @@ Value *LibCallSimplifier::optimizeFloatingPointLibCall(CallInst *CI,
   case LibFunc_exp:
   case LibFunc_exp10:
   case LibFunc_expm1:
+  case LibFunc_cos:
   case LibFunc_sin:
   case LibFunc_sinh:
   case LibFunc_tanh:

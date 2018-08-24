@@ -100,48 +100,33 @@ namespace llvm {
 
 namespace clang {
 
-class ArrayType;
 class ASTContext;
-class AttributedType;
-class AutoType;
-class BuiltinType;
 template <typename> class CanQual;
-class ComplexType;
 class CXXRecordDecl;
 class DeclContext;
-class DeducedType;
 class EnumDecl;
 class Expr;
 class ExtQualsTypeCommonBase;
 class FunctionDecl;
-class FunctionNoProtoType;
-class FunctionProtoType;
 class IdentifierInfo;
-class InjectedClassNameType;
 class NamedDecl;
 class ObjCInterfaceDecl;
-class ObjCObjectPointerType;
-class ObjCObjectType;
 class ObjCProtocolDecl;
 class ObjCTypeParamDecl;
-class ParenType;
 struct PrintingPolicy;
 class RecordDecl;
-class RecordType;
 class Stmt;
 class TagDecl;
 class TemplateArgument;
 class TemplateArgumentListInfo;
 class TemplateArgumentLoc;
-class TemplateSpecializationType;
 class TemplateTypeParmDecl;
 class TypedefNameDecl;
-class TypedefType;
 class UnresolvedUsingTypenameDecl;
 
 using CanQualType = CanQual<Type>;
 
-  // Provide forward declarations for all of the *Type classes
+// Provide forward declarations for all of the *Type classes.
 #define TYPE(Class, Base) class Class##Type;
 #include "clang/AST/TypeNodes.def"
 
@@ -1554,8 +1539,6 @@ protected:
     unsigned IsKindOf : 1;
   };
 
-  static_assert(NumTypeBits + 7 + 6 + 1 <= 32, "Does not fit in an unsigned");
-
   class ReferenceTypeBitfields {
     friend class ReferenceType;
 
@@ -1634,6 +1617,27 @@ protected:
     ReferenceTypeBitfields ReferenceTypeBits;
     TypeWithKeywordBitfields TypeWithKeywordBits;
     VectorTypeBitfields VectorTypeBits;
+
+    static_assert(sizeof(TypeBitfields) <= 8,
+                  "TypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(ArrayTypeBitfields) <= 8,
+                  "ArrayTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(AttributedTypeBitfields) <= 8,
+                  "AttributedTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(AutoTypeBitfields) <= 8,
+                  "AutoTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(BuiltinTypeBitfields) <= 8,
+                  "BuiltinTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(FunctionTypeBitfields) <= 8,
+                  "FunctionTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(ObjCObjectTypeBitfields) <= 8,
+                  "ObjCObjectTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(ReferenceTypeBitfields) <= 8,
+                  "ReferenceTypeBitfields is larger than 8 bytes!");
+    static_assert(sizeof(TypeWithKeywordBitfields) <= 8,
+                  "TypeWithKeywordBitfields is larger than 8 bytes!");
+    static_assert(sizeof(VectorTypeBitfields) <= 8,
+                  "VectorTypeBitfields is larger than 8 bytes!");
   };
 
 private:
@@ -4237,6 +4241,7 @@ public:
     attr_null_unspecified,
     attr_objc_kindof,
     attr_objc_inert_unsafe_unretained,
+    attr_lifetimebound,
   };
 
 private:
@@ -6618,9 +6623,8 @@ QualType DecayedType::getPointeeType() const {
 
 // Get the decimal string representation of a fixed point type, represented
 // as a scaled integer.
-void FixedPointValueToString(SmallVectorImpl<char> &Str,
-                             const llvm::APSInt &Val,
-                             unsigned Scale, unsigned Radix);
+void FixedPointValueToString(SmallVectorImpl<char> &Str, llvm::APSInt Val,
+                             unsigned Scale);
 
 } // namespace clang
 

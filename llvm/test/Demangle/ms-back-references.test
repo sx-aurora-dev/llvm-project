@@ -23,8 +23,6 @@
 ?f7@@YAXHPAHH0_N1PA_N@Z
 ; CHECK: void __cdecl f7(int, int *, int, int *, bool, bool, bool *)
 
-; FIXME: tests for more than 10 types?
-
 ?g1@@YAXUS@@@Z
 ; CHECK: void __cdecl g1(struct S)
 
@@ -51,3 +49,6 @@
 
 ?foo@0@YAXXZ
 ; CHECK: void __cdecl foo::foo(void)
+
+??$?HH@S@@QEAAAEAU0@H@Z
+struct S & __cdecl S::operator+<int>(int)

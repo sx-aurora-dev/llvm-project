@@ -881,6 +881,14 @@ void X86DAGToDAGISel::PostprocessISelDAG() {
         In.getMachineOpcode() <= TargetOpcode::GENERIC_OP_END)
       continue;
 
+    // Make sure the instruction has a VEX, XOP, or EVEX prefix. This covers
+    // the SHA instructions which use a legacy encoding.
+    uint64_t TSFlags = getInstrInfo()->get(In.getMachineOpcode()).TSFlags;
+    if ((TSFlags & X86II::EncodingMask) != X86II::VEX &&
+        (TSFlags & X86II::EncodingMask) != X86II::EVEX &&
+        (TSFlags & X86II::EncodingMask) != X86II::XOP)
+      continue;
+
     // Producing instruction is another vector instruction. We can drop the
     // move.
     CurDAG->UpdateNodeOperands(N, N->getOperand(0), In, N->getOperand(2));
@@ -2541,10 +2549,9 @@ bool X86DAGToDAGISel::foldLoadStoreIntoMemOperand(SDNode *Node) {
     llvm_unreachable("Invalid opcode!");
   }
 
-  MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(2);
-  MemOp[0] = StoreNode->getMemOperand();
-  MemOp[1] = LoadNode->getMemOperand();
-  Result->setMemRefs(MemOp, MemOp + 2);
+  MachineMemOperand *MemOps[] = {StoreNode->getMemOperand(),
+                                 LoadNode->getMemOperand()};
+  CurDAG->setNodeMemRefs(Result, MemOps);
 
   // Update Load Chain uses as well.
   ReplaceUses(SDValue(LoadNode, 1), SDValue(Result, 1));
@@ -2634,9 +2641,7 @@ MachineSDNode *X86DAGToDAGISel::emitPCMPISTR(unsigned ROpc, unsigned MOpc,
     // Update the chain.
     ReplaceUses(Load.getValue(1), SDValue(CNode, 2));
     // Record the mem-refs
-    MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
-    MemOp[0] = cast<LoadSDNode>(Load)->getMemOperand();
-    CNode->setMemRefs(MemOp, MemOp + 1);
+    CurDAG->setNodeMemRefs(CNode, {cast<LoadSDNode>(Load)->getMemOperand()});
     return CNode;
   }
 
@@ -2674,9 +2679,7 @@ MachineSDNode *X86DAGToDAGISel::emitPCMPESTR(unsigned ROpc, unsigned MOpc,
     // Update the chain.
     ReplaceUses(Load.getValue(1), SDValue(CNode, 2));
     // Record the mem-refs
-    MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
-    MemOp[0] = cast<LoadSDNode>(Load)->getMemOperand();
-    CNode->setMemRefs(MemOp, MemOp + 1);
+    CurDAG->setNodeMemRefs(CNode, {cast<LoadSDNode>(Load)->getMemOperand()});
     return CNode;
   }
 
@@ -2794,6 +2797,16 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
   case X86ISD::GlobalBaseReg:
     ReplaceNode(Node, getGlobalBaseReg());
     return;
+
+  case ISD::BITCAST:
+    // Just drop all 128/256/512-bit bitcasts.
+    if (NVT.is512BitVector() || NVT.is256BitVector() || NVT.is128BitVector() ||
+        NVT == MVT::f128) {
+      ReplaceUses(SDValue(Node, 0), Node->getOperand(0));
+      CurDAG->RemoveDeadNode(Node);
+      return;
+    }
+    break;
 
   case X86ISD::SELECT:
   case X86ISD::SHRUNKBLEND: {
@@ -3018,9 +3031,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       // Update the chain.
       ReplaceUses(N1.getValue(1), Chain);
       // Record the mem-refs
-      MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
-      MemOp[0] = cast<LoadSDNode>(N1)->getMemOperand();
-      CNode->setMemRefs(MemOp, MemOp + 1);
+      CurDAG->setNodeMemRefs(CNode, {cast<LoadSDNode>(N1)->getMemOperand()});
     } else {
       SDValue Ops[] = { N1, InFlag };
       if (Opc == X86::MULX32rr || Opc == X86::MULX64rr) {
@@ -3188,9 +3199,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       // Update the chain.
       ReplaceUses(N1.getValue(1), SDValue(CNode, 0));
       // Record the mem-refs
-      MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
-      MemOp[0] = cast<LoadSDNode>(N1)->getMemOperand();
-      CNode->setMemRefs(MemOp, MemOp + 1);
+      CurDAG->setNodeMemRefs(CNode, {cast<LoadSDNode>(N1)->getMemOperand()});
     } else {
       InFlag =
         SDValue(CurDAG->getMachineNode(Opc, dl, MVT::Glue, N1, InFlag), 0);

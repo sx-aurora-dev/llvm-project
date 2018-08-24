@@ -147,7 +147,7 @@ static llvm::cl::opt<Path> InputMirrorFile(
 static llvm::cl::opt<bool> EnableIndex(
     "index",
     llvm::cl::desc("Enable index-based features such as global code completion "
-                   "and searching for symbols."
+                   "and searching for symbols. "
                    "Clang uses an index built from symbols in opened files"),
     llvm::cl::init(true));
 
@@ -160,7 +160,7 @@ static llvm::cl::opt<bool>
 static llvm::cl::opt<bool> HeaderInsertionDecorators(
     "header-insertion-decorators",
     llvm::cl::desc("Prepend a circular dot or space before the completion "
-                   "label, depending on wether "
+                   "label, depending on whether "
                    "an include line will be inserted or not."),
     llvm::cl::init(true));
 
@@ -172,6 +172,18 @@ static llvm::cl::opt<Path> YamlSymbolFile(
         "WARNING: This option is experimental only, and will be removed "
         "eventually. Don't rely on it."),
     llvm::cl::init(""), llvm::cl::Hidden);
+
+enum CompileArgsFrom { LSPCompileArgs, FilesystemCompileArgs };
+
+static llvm::cl::opt<CompileArgsFrom> CompileArgsFrom(
+    "compile_args_from", llvm::cl::desc("The source of compile commands"),
+    llvm::cl::values(clEnumValN(LSPCompileArgs, "lsp",
+                                "All compile commands come from LSP and "
+                                "'compile_commands.json' files are ignored"),
+                     clEnumValN(FilesystemCompileArgs, "filesystem",
+                                "All compile commands come from the "
+                                "'compile_commands.json' files")),
+    llvm::cl::init(FilesystemCompileArgs), llvm::cl::Hidden);
 
 int main(int argc, char *argv[]) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
@@ -289,7 +301,9 @@ int main(int argc, char *argv[]) {
   }
 
   // Initialize and run ClangdLSPServer.
-  ClangdLSPServer LSPServer(Out, CCOpts, CompileCommandsDirPath, Opts);
+  ClangdLSPServer LSPServer(
+      Out, CCOpts, CompileCommandsDirPath,
+      /*ShouldUseInMemoryCDB=*/CompileArgsFrom == LSPCompileArgs, Opts);
   constexpr int NoShutdownRequestErrorCode = 1;
   llvm::set_thread_name("clangd.main");
   // Change stdin to binary to not lose \r\n on windows.

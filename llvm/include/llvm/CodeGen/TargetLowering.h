@@ -2868,6 +2868,13 @@ public:
       SDValue Op, const APInt &DemandedElts, APInt &KnownUndef,
       APInt &KnownZero, TargetLoweringOpt &TLO, unsigned Depth = 0) const;
 
+  /// If \p SNaN is false, \returns true if \p Op is known to never be any
+  /// NaN. If \p sNaN is true, returns if \p Op is known to never be a signaling
+  /// NaN.
+  virtual bool isKnownNeverNaNForTargetNode(SDValue Op,
+                                            const SelectionDAG &DAG,
+                                            bool SNaN = false,
+                                            unsigned Depth = 0) const;
   struct DAGCombinerInfo {
     void *DC;  // The DAG Combiner object.
     CombineLevel Level;
@@ -2935,12 +2942,16 @@ public:
   ///
   virtual SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
-  /// Return true if it is profitable to move a following shift through this
-  //  node, adjusting any immediate operands as necessary to preserve semantics.
-  //  This transformation may not be desirable if it disrupts a particularly
-  //  auspicious target-specific tree (e.g. bitfield extraction in AArch64).
-  //  By default, it returns true.
-  virtual bool isDesirableToCommuteWithShift(const SDNode *N) const {
+  /// Return true if it is profitable to move this shift by a constant amount
+  /// though its operand, adjusting any immediate operands as necessary to
+  /// preserve semantics. This transformation may not be desirable if it
+  /// disrupts a particularly auspicious target-specific tree (e.g. bitfield
+  /// extraction in AArch64). By default, it returns true.
+  ///
+  /// @param N the shift node
+  /// @param Level the current DAGCombine legalization level.
+  virtual bool isDesirableToCommuteWithShift(const SDNode *N,
+                                             CombineLevel Level) const {
     return true;
   }
 
@@ -3488,12 +3499,10 @@ public:
   //===--------------------------------------------------------------------===//
   // Div utility functions
   //
-  SDValue BuildSDIV(SDNode *N, const APInt &Divisor, SelectionDAG &DAG,
-                    bool IsAfterLegalization,
-                    std::vector<SDNode *> &Created) const;
-  SDValue BuildUDIV(SDNode *N, const APInt &Divisor, SelectionDAG &DAG,
-                    bool IsAfterLegalization,
-                    std::vector<SDNode *> &Created) const;
+  SDValue BuildSDIV(SDNode *N, SelectionDAG &DAG, bool IsAfterLegalization,
+                    SmallVectorImpl<SDNode *> &Created) const;
+  SDValue BuildUDIV(SDNode *N, SelectionDAG &DAG, bool IsAfterLegalization,
+                    SmallVectorImpl<SDNode *> &Created) const;
 
   /// Targets may override this function to provide custom SDIV lowering for
   /// power-of-2 denominators.  If the target returns an empty SDValue, LLVM
@@ -3501,7 +3510,7 @@ public:
   /// operations.
   virtual SDValue BuildSDIVPow2(SDNode *N, const APInt &Divisor,
                                 SelectionDAG &DAG,
-                                std::vector<SDNode *> &Created) const;
+                                SmallVectorImpl<SDNode *> &Created) const;
 
   /// Indicate whether this target prefers to combine FDIVs with the same
   /// divisor. If the transform should never be done, return zero. If the

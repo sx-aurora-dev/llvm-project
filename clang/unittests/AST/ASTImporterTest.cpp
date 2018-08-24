@@ -553,6 +553,14 @@ TEST_P(ImportExpr, ImportFloatinglLiteralExpr) {
           floatLiteral(equals(1.0e-5f), hasType(asString("float"))))));
 }
 
+TEST_P(ImportExpr, ImportImaginaryLiteralExpr) {
+  MatchVerifier<Decl> Verifier;
+  testImport(
+      "void declToImport() { (void)1.0i; }",
+      Lang_CXX14, "", Lang_CXX14, Verifier,
+      functionDecl(hasDescendant(imaginaryLiteral())));
+}
+
 TEST_P(ImportExpr, ImportCompoundLiteralExpr) {
   MatchVerifier<Decl> Verifier;
   testImport(
@@ -645,7 +653,6 @@ TEST_P(ImportExpr, ImportSwitch) {
 
 TEST_P(ImportExpr, ImportStmtExpr) {
   MatchVerifier<Decl> Verifier;
-  // NOTE: has() ignores implicit casts, using hasDescendant() to match it
   testImport(
     "void declToImport() { int b; int a = b ?: 1; int C = ({int X=4; X;}); }",
     Lang_C, "", Lang_C, Verifier,
@@ -805,9 +812,6 @@ TEST_P(ImportDecl, ImportFunctionTemplateDecl) {
       Lang_CXX, "", Lang_CXX, Verifier,
       functionTemplateDecl());
 }
-
-const internal::VariadicDynCastAllOfMatcher<Expr, CXXDependentScopeMemberExpr>
-    cxxDependentScopeMemberExpr;
 
 TEST_P(ImportExpr, ImportCXXDependentScopeMemberExpr) {
   MatchVerifier<Decl> Verifier;
@@ -989,7 +993,7 @@ TEST_P(ASTImporterTestBase, ImportRecordTypeInFunc) {
                            "  return 0;"
                            "}",
                            Lang_C, "input.c");
-  auto FromVar =
+  auto *FromVar =
       FirstDeclMatcher<VarDecl>().match(FromTU, varDecl(hasName("d")));
   ASSERT_TRUE(FromVar);
   auto ToType =
@@ -999,12 +1003,41 @@ TEST_P(ASTImporterTestBase, ImportRecordTypeInFunc) {
 
 TEST_P(ASTImporterTestBase, ImportRecordDeclInFuncParams) {
   // This construct is not supported by ASTImporter.
-  Decl *FromTU =
-      getTuDecl("int declToImport(struct data_t{int a;int b;} *d){ return 0; }",
-                Lang_C, "input.c");
-  auto From = FirstDeclMatcher<FunctionDecl>().match(FromTU, functionDecl());
+  Decl *FromTU = getTuDecl(
+      "int declToImport(struct data_t{int a;int b;} ***d){ return 0; }",
+      Lang_C, "input.c");
+  auto *From = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("declToImport")));
   ASSERT_TRUE(From);
-  auto To = Import(From, Lang_C);
+  auto *To = Import(From, Lang_C);
+  EXPECT_EQ(To, nullptr);
+}
+
+TEST_P(ASTImporterTestBase, ImportRecordDeclInFuncFromMacro) {
+  Decl *FromTU = getTuDecl(
+      "#define NONAME_SIZEOF(type) sizeof(struct{type *dummy;}) \n"
+      "int declToImport(){ return NONAME_SIZEOF(int); }",
+      Lang_C, "input.c");
+  auto *From = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("declToImport")));
+  ASSERT_TRUE(From);
+  auto *To = Import(From, Lang_C);
+  ASSERT_TRUE(To);
+  EXPECT_TRUE(MatchVerifier<FunctionDecl>().match(
+      To, functionDecl(hasName("declToImport"),
+                       hasDescendant(unaryExprOrTypeTraitExpr()))));
+}
+
+TEST_P(ASTImporterTestBase, ImportRecordDeclInFuncParamsFromMacro) {
+  // This construct is not supported by ASTImporter.
+  Decl *FromTU = getTuDecl(
+      "#define PAIR_STRUCT(type) struct data_t{type a;type b;} \n"
+      "int declToImport(PAIR_STRUCT(int) ***d){ return 0; }",
+      Lang_C, "input.c");
+  auto *From = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("declToImport")));
+  ASSERT_TRUE(From);
+  auto *To = Import(From, Lang_C);
   EXPECT_EQ(To, nullptr);
 }
 
@@ -2327,9 +2360,6 @@ TEST_P(ImportExpr, DependentNameType) {
                  cxxRecordDecl(has(typedefDecl(has(dependentNameType())))))));
 }
 
-const internal::VariadicDynCastAllOfMatcher<Expr, UnresolvedMemberExpr>
-    unresolvedMemberExpr;
-
 TEST_P(ImportExpr, UnresolvedMemberExpr) {
   MatchVerifier<Decl> Verifier;
   testImport("struct S { template <typename T> void mem(); };"
@@ -2610,6 +2640,127 @@ TEST_P(ASTImporterTestBase, ImportUnnamedStructsWithRecursingField) {
       R0, recordDecl(has(fieldDecl(hasName("next"))))));
   EXPECT_TRUE(MatchVerifier<RecordDecl>().match(
       R1, recordDecl(has(fieldDecl(hasName("next"))))));
+}
+
+TEST_P(ASTImporterTestBase, ImportUnnamedFieldsInCorrectOrder) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      void f(int X, int Y, bool Z) {
+        (void)[X, Y, Z] { (void)Z; };
+      }
+      )",
+      Lang_CXX11, "input0.cc");
+  auto *FromF = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("f")));
+  auto *ToF = cast_or_null<FunctionDecl>(Import(FromF, Lang_CXX11));
+  EXPECT_TRUE(ToF);
+
+  CXXRecordDecl *FromLambda =
+      cast<LambdaExpr>(cast<CStyleCastExpr>(cast<CompoundStmt>(
+          FromF->getBody())->body_front())->getSubExpr())->getLambdaClass();
+
+  auto *ToLambda = cast_or_null<CXXRecordDecl>(Import(FromLambda, Lang_CXX11));
+  EXPECT_TRUE(ToLambda);
+
+  // Check if the fields of the lambda class are imported in correct order.
+  unsigned FromIndex = 0u;
+  for (auto *FromField : FromLambda->fields()) {
+    ASSERT_FALSE(FromField->getDeclName());
+    auto *ToField = cast_or_null<FieldDecl>(Import(FromField, Lang_CXX11));
+    EXPECT_TRUE(ToField);
+    unsigned ToIndex = ASTImporter::getFieldIndex(ToField);
+    EXPECT_EQ(ToIndex, FromIndex + 1);
+    ++FromIndex;
+  }
+
+  EXPECT_EQ(FromIndex, 3u);
+}
+
+TEST_P(
+    ASTImporterTestBase,
+    ImportOfFriendRecordDoesNotMergeDefinition) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      class A {
+        template <int I> class F {};
+        class X {
+          template <int I> friend class F;
+        };
+      };
+      )",
+      Lang_CXX, "input0.cc");
+
+  auto *FromClass = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("F"), isDefinition()));
+  auto *FromFriendClass = LastDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("F")));
+
+  ASSERT_TRUE(FromClass);
+  ASSERT_TRUE(FromFriendClass);
+  ASSERT_NE(FromClass, FromFriendClass);
+  ASSERT_EQ(FromFriendClass->getDefinition(), FromClass);
+  ASSERT_EQ(FromFriendClass->getPreviousDecl(), FromClass);
+  ASSERT_EQ(
+      FromFriendClass->getDescribedClassTemplate()->getPreviousDecl(),
+      FromClass->getDescribedClassTemplate());
+
+  auto *ToClass = cast<CXXRecordDecl>(Import(FromClass, Lang_CXX));
+  auto *ToFriendClass = cast<CXXRecordDecl>(Import(FromFriendClass, Lang_CXX));
+
+  EXPECT_TRUE(ToClass);
+  EXPECT_TRUE(ToFriendClass);
+  EXPECT_NE(ToClass, ToFriendClass);
+  EXPECT_EQ(ToFriendClass->getDefinition(), ToClass);
+  EXPECT_EQ(ToFriendClass->getPreviousDecl(), ToClass);
+  EXPECT_EQ(
+      ToFriendClass->getDescribedClassTemplate()->getPreviousDecl(),
+      ToClass->getDescribedClassTemplate());
+}
+
+TEST_P(
+    ASTImporterTestBase,
+    ImportOfRecursiveFriendClass) {
+  Decl *FromTu = getTuDecl(
+      R"(
+      class declToImport {
+        friend class declToImport;
+      };
+      )",
+      Lang_CXX, "input.cc");
+
+  auto *FromD = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTu, cxxRecordDecl(hasName("declToImport")));
+  auto *ToD = Import(FromD, Lang_CXX);
+  auto Pattern = cxxRecordDecl(hasName("declToImport"), has(friendDecl()));
+  ASSERT_TRUE(MatchVerifier<Decl>{}.match(FromD, Pattern));
+  EXPECT_TRUE(MatchVerifier<Decl>{}.match(ToD, Pattern));
+}
+
+TEST_P(
+    ASTImporterTestBase,
+    ImportOfRecursiveFriendClassTemplate) {
+  Decl *FromTu = getTuDecl(
+      R"(
+      template <class A> class declToImport {
+        template <class A1> friend class declToImport;
+      };
+      )",
+      Lang_CXX, "input.cc");
+
+  auto *FromD = FirstDeclMatcher<ClassTemplateDecl>().match(
+      FromTu, classTemplateDecl(hasName("declToImport")));
+  auto *ToD = Import(FromD, Lang_CXX);
+  
+  auto Pattern = classTemplateDecl(
+      has(cxxRecordDecl(has(friendDecl(has(classTemplateDecl()))))));
+  ASSERT_TRUE(MatchVerifier<Decl>{}.match(FromD, Pattern));
+  EXPECT_TRUE(MatchVerifier<Decl>{}.match(ToD, Pattern));
+  
+  auto *Class =
+      FirstDeclMatcher<ClassTemplateDecl>().match(ToD, classTemplateDecl());
+  auto *Friend = FirstDeclMatcher<FriendDecl>().match(ToD, friendDecl());
+  EXPECT_NE(Friend->getFriendDecl(), Class);
+  EXPECT_EQ(Friend->getFriendDecl()->getPreviousDecl(), Class);
 }
 
 struct DeclContextTest : ASTImporterTestBase {};

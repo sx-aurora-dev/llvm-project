@@ -509,15 +509,6 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles))
     getMachOToolChain().addStartObjectFileArgs(Args, CmdArgs);
 
-  // SafeStack requires its own runtime libraries
-  // These libraries should be linked first, to make sure the
-  // __safestack_init constructor executes before everything else
-  if (getToolChain().getSanitizerArgs().needsSafeStackRt()) {
-    getMachOToolChain().AddLinkRuntimeLib(Args, CmdArgs,
-                                          "libclang_rt.safestack_osx.a",
-                                          toolchains::Darwin::RLO_AlwaysLink);
-  }
-
   Args.AddAllArgs(CmdArgs, options::OPT_L);
 
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
@@ -916,26 +907,13 @@ unsigned DarwinClang::GetDefaultDwarfVersion() const {
   return 4;
 }
 
-SmallString<128> MachO::runtimeLibDir(bool IsEmbedded) const {
-  SmallString<128> Dir(getDriver().ResourceDir);
-  llvm::sys::path::append(
-      Dir, "lib", IsEmbedded ? "macho_embedded" : "darwin");
-  return Dir;
-}
-
-std::string Darwin::getFileNameForSanitizerLib(StringRef SanitizerName,
-                                              bool Shared) const {
-  return (Twine("libclang_rt.") + SanitizerName + "_" +
-                      getOSLibraryNameSuffix() +
-                      (Shared ? "_dynamic.dylib" : ".a")).str();
-
-}
-
 void MachO::AddLinkRuntimeLib(const ArgList &Args, ArgStringList &CmdArgs,
                               StringRef DarwinLibName,
                               RuntimeLinkOptions Opts) const {
+  SmallString<128> Dir(getDriver().ResourceDir);
+  llvm::sys::path::append(
+      Dir, "lib", (Opts & RLO_IsEmbedded) ? "macho_embedded" : "darwin");
 
-  SmallString<128> Dir = runtimeLibDir(Opts & RLO_IsEmbedded);
   SmallString<128> P(Dir);
   llvm::sys::path::append(P, DarwinLibName);
 
@@ -1055,9 +1033,12 @@ void DarwinClang::AddLinkSanitizerLibArgs(const ArgList &Args,
                                           StringRef Sanitizer,
                                           bool Shared) const {
   auto RLO = RuntimeLinkOptions(RLO_AlwaysLink | (Shared ? RLO_AddRPath : 0U));
-  std::string SanitizerRelFilename =
-      getFileNameForSanitizerLib(Sanitizer, Shared);
-  AddLinkRuntimeLib(Args, CmdArgs, SanitizerRelFilename, RLO);
+  AddLinkRuntimeLib(Args, CmdArgs,
+                    (Twine("libclang_rt.") + Sanitizer + "_" +
+                     getOSLibraryNameSuffix() +
+                     (Shared ? "_dynamic.dylib" : ".a"))
+                        .str(),
+                    RLO);
 }
 
 ToolChain::RuntimeLibType DarwinClang::GetRuntimeLibType(
@@ -2045,7 +2026,11 @@ bool Darwin::isAlignedAllocationUnavailable() const {
 void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                                    llvm::opt::ArgStringList &CC1Args,
                                    Action::OffloadKind DeviceOffloadKind) const {
-  if (isAlignedAllocationUnavailable())
+  // Pass "-faligned-alloc-unavailable" only when the user hasn't manually
+  // enabled or disabled aligned allocations.
+  if (!DriverArgs.hasArgNoClaim(options::OPT_faligned_allocation,
+                                options::OPT_fno_aligned_allocation) &&
+      isAlignedAllocationUnavailable())
     CC1Args.push_back("-faligned-alloc-unavailable");
 }
 
@@ -2295,43 +2280,23 @@ void Darwin::CheckObjCARC() const {
 SanitizerMask Darwin::getSupportedSanitizers() const {
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
-
-  {
-    using namespace SanitizerKind;
-    assert(!(Res & (Address | Leak | Fuzzer | FuzzerNoLink | Thread)) &&
-           "Sanitizer is already registered as supported");
-  }
-
-  if (sanitizerRuntimeExists("asan"))
-    Res |= SanitizerKind::Address;
-  if (sanitizerRuntimeExists("lsan"))
-    Res |= SanitizerKind::Leak;
-  if (sanitizerRuntimeExists("fuzzer", /*Shared=*/false)) {
-    Res |= SanitizerKind::Fuzzer;
-    Res |= SanitizerKind::FuzzerNoLink;
-  }
+  Res |= SanitizerKind::Address;
+  Res |= SanitizerKind::Leak;
+  Res |= SanitizerKind::Fuzzer;
+  Res |= SanitizerKind::FuzzerNoLink;
   Res |= SanitizerKind::Function;
-  if (isTargetMacOS() && !isMacosxVersionLT(10, 9))
-    Res |= SanitizerKind::Vptr;
-  if (isTargetMacOS())
-    Res |= SanitizerKind::SafeStack;
-
-  if (sanitizerRuntimeExists("tsan") && IsX86_64 &&
-      (isTargetMacOS() || isTargetIOSSimulator() || isTargetTvOSSimulator()))
-    Res |= SanitizerKind::Thread;
-
+  if (isTargetMacOS()) {
+    if (!isMacosxVersionLT(10, 9))
+      Res |= SanitizerKind::Vptr;
+    if (IsX86_64)
+      Res |= SanitizerKind::Thread;
+  } else if (isTargetIOSSimulator() || isTargetTvOSSimulator()) {
+    if (IsX86_64)
+      Res |= SanitizerKind::Thread;
+  }
   return Res;
 }
 
 void Darwin::printVerboseInfo(raw_ostream &OS) const {
   CudaInstallation.print(OS);
-}
-
-bool Darwin::sanitizerRuntimeExists(StringRef SanitizerName,
-                                    bool Shared) const {
-    std::string RelName = getFileNameForSanitizerLib(SanitizerName, Shared);
-    SmallString<128> Dir = runtimeLibDir();
-    SmallString<128> AbsName(Dir);
-    llvm::sys::path::append(AbsName, RelName);
-    return getVFS().exists(AbsName);
 }

@@ -37,7 +37,7 @@ void ExecuteStage::reclaimSchedulerResources() {
 // Update the scheduler's instruction queues.
 void ExecuteStage::updateSchedulerQueues() {
   SmallVector<InstRef, 4> InstructionIDs;
-  HWS.updateIssuedQueue(InstructionIDs);
+  HWS.updateIssuedSet(InstructionIDs);
   for (const InstRef &IR : InstructionIDs)
     notifyInstructionExecuted(IR);
   InstructionIDs.clear();
@@ -65,9 +65,9 @@ void ExecuteStage::issueReadyInstructions() {
     // Instructions that have been issued during this cycle might have unblocked
     // other dependent instructions. Dependent instructions may be issued during
     // this same cycle if operands have ReadAdvance entries.  Promote those
-    // instructions to the ReadyQueue and tell to the caller that we need
+    // instructions to the ReadySet and tell to the caller that we need
     // another round of 'issue()'.
-    HWS.promoteToReadyQueue(InstructionIDs);
+    HWS.promoteToReadySet(InstructionIDs);
     for (const InstRef &I : InstructionIDs)
       notifyInstructionReady(I);
     InstructionIDs.clear();
@@ -96,7 +96,7 @@ void ExecuteStage::cycleStart() {
 }
 
 // Schedule the instruction for execution on the hardware.
-bool ExecuteStage::execute(InstRef &IR) {
+Stage::Status ExecuteStage::execute(InstRef &IR) {
 #ifndef NDEBUG
   // Ensure that the HWS has not stored this instruction in its queues.
   HWS.sanityCheck(IR);
@@ -112,7 +112,7 @@ bool ExecuteStage::execute(InstRef &IR) {
   // Obtain a slot in the LSU.  If we cannot reserve resources, return true, so
   // that succeeding stages can make progress.
   if (!HWS.reserveResources(IR))
-    return true;
+    return Stage::Continue;
 
   // If we did not return early, then the scheduler is ready for execution.
   notifyInstructionReady(IR);
@@ -133,7 +133,7 @@ bool ExecuteStage::execute(InstRef &IR) {
   // If we cannot issue immediately, the HWS will add IR to its ready queue for
   // execution later, so we must return early here.
   if (!HWS.issueImmediately(IR))
-    return true;
+    return Stage::Continue;
 
   LLVM_DEBUG(dbgs() << "[SCHEDULER] Instruction #" << IR
                     << " issued immediately\n");
@@ -148,7 +148,7 @@ bool ExecuteStage::execute(InstRef &IR) {
   if (IR.getInstruction()->isExecuted())
     notifyInstructionExecuted(IR);
 
-  return true;
+  return Stage::Continue;
 }
 
 void ExecuteStage::notifyInstructionExecuted(const InstRef &IR) {

@@ -93,7 +93,7 @@ static bool inSubLoop(BasicBlock *BB, Loop *CurLoop, LoopInfo *LI);
 static bool isNotUsedOrFreeInLoop(const Instruction &I, const Loop *CurLoop,
                                   const LoopSafetyInfo *SafetyInfo,
                                   TargetTransformInfo *TTI, bool &FreeInLoop);
-static bool hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
+static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
                   const LoopSafetyInfo *SafetyInfo,
                   OptimizationRemarkEmitter *ORE);
 static bool sink(Instruction &I, LoopInfo *LI, DominatorTree *DT,
@@ -261,7 +261,7 @@ bool LoopInvariantCodeMotion::runOnLoop(
 
   // Compute loop safety information.
   LoopSafetyInfo SafetyInfo;
-  computeLoopSafetyInfo(&SafetyInfo, L);
+  SafetyInfo.computeLoopSafetyInfo(L);
 
   // We want to visit all of the instructions in this loop... that are not parts
   // of our subloops (they have already had their invariants hoisted out of
@@ -412,7 +412,7 @@ bool llvm::sinkRegion(DomTreeNode *N, AliasAnalysis *AA, LoopInfo *LI,
       //
       bool FreeInLoop = false;
       if (isNotUsedOrFreeInLoop(I, CurLoop, SafetyInfo, TTI, FreeInLoop) &&
-          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, SafetyInfo, ORE)) {
+          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, true, ORE)) {
         if (sink(I, LI, DT, CurLoop, SafetyInfo, ORE, FreeInLoop)) {
           if (!FreeInLoop) {
             ++II;
@@ -482,12 +482,13 @@ bool llvm::hoistRegion(DomTreeNode *N, AliasAnalysis *AA, LoopInfo *LI,
       // if it is safe to hoist the instruction.
       //
       if (CurLoop->hasLoopInvariantOperands(&I) &&
-          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, SafetyInfo, ORE) &&
+          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, true, ORE) &&
           (IsMustExecute ||
            isSafeToExecuteUnconditionally(
                I, DT, CurLoop, SafetyInfo, ORE,
                CurLoop->getLoopPreheader()->getTerminator()))) {
-        Changed |= hoist(I, DT, CurLoop, SafetyInfo, ORE);
+        hoist(I, DT, CurLoop, SafetyInfo, ORE);
+        Changed = true;
         continue;
       }
 
@@ -575,13 +576,40 @@ static bool isLoadInvariantInLoop(LoadInst *LI, DominatorTree *DT,
   return false;
 }
 
+namespace {
+/// Return true if-and-only-if we know how to (mechanically) both hoist and
+/// sink a given instruction out of a loop.  Does not address legality
+/// concerns such as aliasing or speculation safety.  
+bool isHoistableAndSinkableInst(Instruction &I) {
+  // Only these instructions are hoistable/sinkable.
+  return (isa<LoadInst>(I) || isa<CallInst>(I) ||
+          isa<FenceInst>(I) ||
+          isa<BinaryOperator>(I) || isa<CastInst>(I) ||
+          isa<SelectInst>(I) || isa<GetElementPtrInst>(I) ||
+          isa<CmpInst>(I) || isa<InsertElementInst>(I) ||
+          isa<ExtractElementInst>(I) || isa<ShuffleVectorInst>(I) ||
+          isa<ExtractValueInst>(I) || isa<InsertValueInst>(I));
+}
+/// Return true if all of the alias sets within this AST are known not to
+/// contain a Mod.
+bool isReadOnly(AliasSetTracker *CurAST) {
+  for (AliasSet &AS : *CurAST) {
+    if (!AS.isForwardingAliasSet() && AS.isMod()) {
+      return false;
+    }
+  }
+  return true;
+}
+}
+
 bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
                               Loop *CurLoop, AliasSetTracker *CurAST,
-                              LoopSafetyInfo *SafetyInfo,
+                              bool TargetExecutesOncePerLoop,
                               OptimizationRemarkEmitter *ORE) {
-  // SafetyInfo is nullptr if we are checking for sinking from preheader to
-  // loop body.
-  const bool SinkingToLoopBody = !SafetyInfo;
+  // If we don't understand the instruction, bail early.
+  if (!isHoistableAndSinkableInst(I))
+    return false;
+  
   // Loads have extra constraints we have to verify before we can hoist them.
   if (LoadInst *LI = dyn_cast<LoadInst>(&I)) {
     if (!LI->isUnordered())
@@ -594,8 +622,8 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
     if (LI->getMetadata(LLVMContext::MD_invariant_load))
       return true;
 
-    if (LI->isAtomic() && SinkingToLoopBody)
-      return false; // Don't sink unordered atomic loads to loop body.
+    if (LI->isAtomic() && !TargetExecutesOncePerLoop)
+      return false; // Don't risk duplicating unordered loads
 
     // This checks for an invariant.start dominating the load.
     if (isLoadInvariantInLoop(LI, DT, CurLoop))
@@ -631,6 +659,15 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
     if (CI->mayThrow())
       return false;
 
+    if (Function *F = CI->getCalledFunction())
+        switch (F->getIntrinsicID()) {
+        default: break;
+        // TODO: support invariant.start, and experimental.guard here
+        case Intrinsic::assume:
+          // Assumes don't actually alias anything or throw
+          return true;
+        };
+    
     // Handle simple cases by querying alias analysis.
     FunctionModRefBehavior Behavior = AA->getModRefBehavior(CI);
     if (Behavior == FMRB_DoesNotAccessMemory)
@@ -647,16 +684,10 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
             return false;
         return true;
       }
+
       // If this call only reads from memory and there are no writes to memory
       // in the loop, we can hoist or sink the call as appropriate.
-      bool FoundMod = false;
-      for (AliasSet &AS : *CurAST) {
-        if (!AS.isForwardingAliasSet() && AS.isMod()) {
-          FoundMod = true;
-          break;
-        }
-      }
-      if (!FoundMod)
+      if (isReadOnly(CurAST))
         return true;
     }
 
@@ -664,25 +695,28 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
     // sink the call.
 
     return false;
+  } else if (auto *FI = dyn_cast<FenceInst>(&I)) {
+    // Fences alias (most) everything to provide ordering.  For the moment,
+    // just give up if there are any other memory operations in the loop.
+    auto Begin = CurAST->begin();
+    assert(Begin != CurAST->end() && "must contain FI");
+    if (std::next(Begin) != CurAST->end())
+      // constant memory for instance, TODO: handle better
+      return false;
+    auto *UniqueI = Begin->getUniqueInstruction();
+    if (!UniqueI)
+      // other memory op, give up
+      return false;
+    (void)FI; //suppress unused variable warning
+    assert(UniqueI == FI && "AS must contain FI");
+    return true;
   }
 
-  // Only these instructions are hoistable/sinkable.
-  if (!isa<BinaryOperator>(I) && !isa<CastInst>(I) && !isa<SelectInst>(I) &&
-      !isa<GetElementPtrInst>(I) && !isa<CmpInst>(I) &&
-      !isa<InsertElementInst>(I) && !isa<ExtractElementInst>(I) &&
-      !isa<ShuffleVectorInst>(I) && !isa<ExtractValueInst>(I) &&
-      !isa<InsertValueInst>(I))
-    return false;
+  assert(!I.mayReadOrWriteMemory() && "unhandled aliasing");
 
-  // If we are checking for sinking from preheader to loop body it will be
-  // always safe as there is no speculative execution.
-  if (SinkingToLoopBody)
-    return true;
-
-  // TODO: Plumb the context instruction through to make hoisting and sinking
-  // more powerful. Hoisting of loads already works due to the special casing
-  // above.
-  return isSafeToExecuteUnconditionally(I, DT, CurLoop, SafetyInfo, nullptr);
+  // We've established mechanical ability and aliasing, it's up to the caller
+  // to check fault safety
+  return true;
 }
 
 /// Returns true if a PHINode is a trivially replaceable with an
@@ -1030,7 +1064,7 @@ static bool sink(Instruction &I, LoopInfo *LI, DominatorTree *DT,
 /// When an instruction is found to only use loop invariant operands that
 /// is safe to hoist, this instruction is called to do the dirty work.
 ///
-static bool hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
+static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
                   const LoopSafetyInfo *SafetyInfo,
                   OptimizationRemarkEmitter *ORE) {
   auto *Preheader = CurLoop->getLoopPreheader();
@@ -1068,7 +1102,6 @@ static bool hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
   else if (isa<CallInst>(I))
     ++NumMovedCalls;
   ++NumHoisted;
-  return true;
 }
 
 /// Only sink or hoist an instruction if it is not a trapping instruction,
@@ -1277,7 +1310,7 @@ bool llvm::promoteLoopAccessesToScalars(
   const DataLayout &MDL = Preheader->getModule()->getDataLayout();
 
   bool IsKnownThreadLocalObject = false;
-  if (SafetyInfo->MayThrow) {
+  if (SafetyInfo->anyBlockMayThrow()) {
     // If a loop can throw, we have to insert a store along each unwind edge.
     // That said, we can't actually make the unwind edge explicit. Therefore,
     // we have to prove that the store is dead along the unwind edge.  We do

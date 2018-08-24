@@ -197,20 +197,22 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
           S.update(File, Inputs, WantDiagnostics::Auto,
-                   [Nonce, &Mut,
+                   [File, Nonce, &Mut,
                     &TotalUpdates](llvm::Optional<std::vector<Diag>> Diags) {
                      EXPECT_THAT(Context::current().get(NonceKey),
                                  Pointee(Nonce));
 
                      std::lock_guard<std::mutex> Lock(Mut);
                      ++TotalUpdates;
+                     EXPECT_EQ(File,
+                               *TUScheduler::getFileBeingProcessedInContext());
                    });
         }
 
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
           S.runWithAST("CheckAST", File,
-                       [Inputs, Nonce, &Mut,
+                       [File, Inputs, Nonce, &Mut,
                         &TotalASTReads](llvm::Expected<InputsAndAST> AST) {
                          EXPECT_THAT(Context::current().get(NonceKey),
                                      Pointee(Nonce));
@@ -221,23 +223,27 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
 
                          std::lock_guard<std::mutex> Lock(Mut);
                          ++TotalASTReads;
+                         EXPECT_EQ(
+                             File,
+                             *TUScheduler::getFileBeingProcessedInContext());
                        });
         }
 
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
-          S.runWithPreamble("CheckPreamble", File,
-                            [Inputs, Nonce, &Mut, &TotalPreambleReads](
-                                llvm::Expected<InputsAndPreamble> Preamble) {
-                              EXPECT_THAT(Context::current().get(NonceKey),
-                                          Pointee(Nonce));
+          S.runWithPreamble(
+              "CheckPreamble", File,
+              [File, Inputs, Nonce, &Mut, &TotalPreambleReads](
+                  llvm::Expected<InputsAndPreamble> Preamble) {
+                EXPECT_THAT(Context::current().get(NonceKey), Pointee(Nonce));
 
-                              ASSERT_TRUE((bool)Preamble);
-                              EXPECT_EQ(Preamble->Contents, Inputs.Contents);
+                ASSERT_TRUE((bool)Preamble);
+                EXPECT_EQ(Preamble->Contents, Inputs.Contents);
 
-                              std::lock_guard<std::mutex> Lock(Mut);
-                              ++TotalPreambleReads;
-                            });
+                std::lock_guard<std::mutex> Lock(Mut);
+                ++TotalPreambleReads;
+                EXPECT_EQ(File, *TUScheduler::getFileBeingProcessedInContext());
+              });
         }
       }
     }
@@ -388,6 +394,40 @@ TEST_F(TUSchedulerTests, NoopOnEmptyChanges) {
   CDB.ExtraClangFlags.push_back("-DSOMETHING");
   ASSERT_TRUE(DoUpdate(getInputs(Source, OtherSourceContents)));
   ASSERT_FALSE(DoUpdate(getInputs(Source, OtherSourceContents)));
+}
+
+TEST_F(TUSchedulerTests, NoChangeDiags) {
+  TUScheduler S(
+      /*AsyncThreadsCount=*/getDefaultAsyncThreadsCount(),
+      /*StorePreambleInMemory=*/true, PreambleParsedCallback(),
+      /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
+      ASTRetentionPolicy());
+
+  auto FooCpp = testPath("foo.cpp");
+  auto Contents = "int a; int b;";
+
+  S.update(FooCpp, getInputs(FooCpp, Contents), WantDiagnostics::No,
+           [](std::vector<Diag>) { ADD_FAILURE() << "Should not be called."; });
+  S.runWithAST("touchAST", FooCpp, [](llvm::Expected<InputsAndAST> IA) {
+    // Make sure the AST was actually built.
+    cantFail(std::move(IA));
+  });
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
+
+  // Even though the inputs didn't change and AST can be reused, we need to
+  // report the diagnostics, as they were not reported previously.
+  std::atomic<bool> SeenDiags(false);
+  S.update(FooCpp, getInputs(FooCpp, Contents), WantDiagnostics::Auto,
+           [&](std::vector<Diag>) { SeenDiags = true; });
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
+  ASSERT_TRUE(SeenDiags);
+
+  // Subsequent request does not get any diagnostics callback because the same
+  // diags have previously been reported and the inputs didn't change.
+  S.update(
+      FooCpp, getInputs(FooCpp, Contents), WantDiagnostics::Auto,
+      [&](std::vector<Diag>) { ADD_FAILURE() << "Should not be called."; });
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
 }
 
 } // namespace clangd

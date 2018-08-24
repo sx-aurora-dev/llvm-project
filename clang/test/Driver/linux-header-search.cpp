@@ -496,8 +496,9 @@
 
 // Check header search on OpenEmbedded ARM.
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
-// RUN:     -target arm-oe-linux-gnueabi \
+// RUN:     -target arm-oe-linux-gnueabi -stdlib=libstdc++ \
 // RUN:     --sysroot=%S/Inputs/openembedded_arm_linux_tree \
+// RUN:     --gcc-toolchain="" \
 // RUN:   | FileCheck --check-prefix=CHECK-OE-ARM %s
 
 // CHECK-OE-ARM: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
@@ -507,8 +508,9 @@
 
 // Check header search on OpenEmbedded AArch64.
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
-// RUN:     -target aarch64-oe-linux \
+// RUN:     -target aarch64-oe-linux -stdlib=libstdc++ \
 // RUN:     --sysroot=%S/Inputs/openembedded_aarch64_linux_tree \
+// RUN:     --gcc-toolchain="" \
 // RUN:   | FileCheck --check-prefix=CHECK-OE-AARCH64 %s
 
 // CHECK-OE-AARCH64: "{{[^"]*}}clang{{[^"]*}}" "-cc1"

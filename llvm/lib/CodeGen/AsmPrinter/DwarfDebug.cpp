@@ -364,7 +364,9 @@ DwarfDebug::DwarfDebug(AsmPrinter *A, Module *M)
   else
     UseSectionsAsReferences = DwarfSectionsAsReferences == Enable;
 
-  GenerateTypeUnits = GenerateDwarfTypeUnits;
+  // Don't generate type units for unsupported object file formats.
+  GenerateTypeUnits =
+      A->TM.getTargetTriple().isOSBinFormatELF() && GenerateDwarfTypeUnits;
 
   TheAccelTableKind = computeAccelTableKind(
       DwarfVersion, GenerateTypeUnits, DebuggerTuning, A->TM.getTargetTriple());
@@ -542,7 +544,7 @@ DwarfDebug::getOrCreateDwarfCompileUnit(const DICompileUnit *DIUnit) {
 
   StringRef Producer = DIUnit->getProducer();
   StringRef Flags = DIUnit->getFlags();
-  if (!Flags.empty()) {
+  if (!Flags.empty() && !useAppleExtensionAttributes()) {
     std::string ProducerWithFlags = Producer.str() + " " + Flags.str();
     NewCU.addString(Die, dwarf::DW_AT_producer, ProducerWithFlags);
   } else
@@ -766,6 +768,8 @@ void DwarfDebug::finalizeModuleInfo() {
   // all other generation.
   for (const auto &P : CUMap) {
     auto &TheCU = *P.second;
+    if (TheCU.getCUNode()->isDebugDirectivesOnly())
+      continue;
     // Emit DW_AT_containing_type attribute to connect types with their
     // vtable holding type.
     TheCU.constructContainingTypeDIEs();
@@ -886,8 +890,7 @@ void DwarfDebug::endModule() {
     emitDebugInfoDWO();
     emitDebugAbbrevDWO();
     emitDebugLineDWO();
-    // Emit DWO addresses.
-    AddrPool.emit(*Asm, Asm->getObjFileLowering().getDwarfAddrSection());
+    emitDebugAddr();
   }
 
   // Emit info into the dwarf accelerator table sections.
@@ -1415,6 +1418,11 @@ void DwarfDebug::endFunctionImpl(const MachineFunction *MF) {
   LexicalScope *FnScope = LScopes.getCurrentFunctionScope();
   assert(!FnScope || SP == FnScope->getScopeNode());
   DwarfCompileUnit &TheCU = *CUMap.lookup(SP->getUnit());
+  if (TheCU.getCUNode()->isDebugDirectivesOnly()) {
+    PrevLabel = nullptr;
+    CurFn = nullptr;
+    return;
+  }
 
   DenseSet<InlinedVariable> ProcessedVars;
   collectVariableInfo(TheCU, SP, ProcessedVars);
@@ -2131,12 +2139,19 @@ void DwarfDebug::emitDebugRanges() {
         });
   };
 
+  if (llvm::all_of(CUMap, [](const decltype(CUMap)::value_type &Pair) {
+        return Pair.second->getCUNode()->isDebugDirectivesOnly();
+      })) {
+    assert(NoRangesPresent() && "No debug ranges expected.");
+    return;
+  }
+
   if (!useRangesSection()) {
     assert(NoRangesPresent() && "No debug ranges expected.");
     return;
   }
 
-  if (getDwarfVersion() >= 5 && NoRangesPresent())
+  if (NoRangesPresent())
     return;
 
   // Start the dwarf ranges section.
@@ -2153,6 +2168,8 @@ void DwarfDebug::emitDebugRanges() {
   // Grab the specific ranges for the compile units in the module.
   for (const auto &I : CUMap) {
     DwarfCompileUnit *TheCU = I.second;
+    if (TheCU->getCUNode()->isDebugDirectivesOnly())
+      continue;
 
     if (auto *Skel = TheCU->getSkeleton())
       TheCU = Skel;
@@ -2205,12 +2222,19 @@ void DwarfDebug::emitDebugMacinfo() {
   if (CUMap.empty())
     return;
 
+  if (llvm::all_of(CUMap, [](const decltype(CUMap)::value_type &Pair) {
+        return Pair.second->getCUNode()->isDebugDirectivesOnly();
+      }))
+    return;
+
   // Start the dwarf macinfo section.
   Asm->OutStreamer->SwitchSection(
       Asm->getObjFileLowering().getDwarfMacinfoSection());
 
   for (const auto &P : CUMap) {
     auto &TheCU = *P.second;
+    if (TheCU.getCUNode()->isDebugDirectivesOnly())
+      continue;
     auto *SkCU = TheCU.getSkeleton();
     DwarfCompileUnit &U = SkCU ? *SkCU : TheCU;
     auto *CUNode = cast<DICompileUnit>(P.first);
@@ -2295,6 +2319,12 @@ void DwarfDebug::emitDebugStrDWO() {
   MCSection *OffSec = Asm->getObjFileLowering().getDwarfStrOffDWOSection();
   InfoHolder.emitStrings(Asm->getObjFileLowering().getDwarfStrDWOSection(),
                          OffSec, /* UseRelativeOffsets = */ false);
+}
+
+// Emit DWO addresses.
+void DwarfDebug::emitDebugAddr() {
+  assert(useSplitDwarf() && "No split dwarf?");
+  AddrPool.emit(*Asm, Asm->getObjFileLowering().getDwarfAddrSection());
 }
 
 MCDwarfDwoLineTable *DwarfDebug::getDwoLineTable(const DwarfCompileUnit &CU) {
@@ -2407,8 +2437,7 @@ void DwarfDebug::addAccelNameImpl(AccelTable<DataT> &AppleAccel, StringRef Name,
     return;
 
   DwarfFile &Holder = useSplitDwarf() ? SkeletonHolder : InfoHolder;
-  DwarfStringPoolEntryRef Ref =
-      Holder.getStringPool().getEntry(*Asm, Name);
+  DwarfStringPoolEntryRef Ref = Holder.getStringPool().getEntry(*Asm, Name);
 
   switch (getAccelTableKind()) {
   case AccelTableKind::Apple:
