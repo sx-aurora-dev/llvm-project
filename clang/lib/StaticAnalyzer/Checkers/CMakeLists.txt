@@ -76,7 +76,9 @@ add_clang_library(clangStaticAnalyzerCheckers
   PointerArithChecker.cpp
   PointerSubChecker.cpp
   PthreadLockChecker.cpp
-  RetainCountChecker.cpp
+  RetainCountChecker/RetainCountChecker.cpp
+  RetainCountChecker/RetainCountSummaries.cpp
+  RetainCountChecker/RetainCountDiagnostics.cpp
   ReturnPointerRangeChecker.cpp
   ReturnUndefChecker.cpp
   RunLoopAutoreleaseLeakChecker.cpp
@@ -93,7 +95,8 @@ add_clang_library(clangStaticAnalyzerCheckers
   UndefResultChecker.cpp
   UndefinedArraySubscriptChecker.cpp
   UndefinedAssignmentChecker.cpp
-  UninitializedObjectChecker.cpp
+  UninitializedObject/UninitializedObjectChecker.cpp
+  UninitializedObject/UninitializedPointee.cpp
   UnixAPIChecker.cpp
   UnreachableCodeChecker.cpp
   VforkChecker.cpp

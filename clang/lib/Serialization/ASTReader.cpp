@@ -2632,7 +2632,9 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       if (M && M->Directory) {
         // If we're implicitly loading a module, the base directory can't
         // change between the build and use.
-        if (F.Kind != MK_ExplicitModule && F.Kind != MK_PrebuiltModule) {
+        // Don't emit module relocation error if we have -fno-validate-pch
+        if (!PP.getPreprocessorOpts().DisablePCHValidation &&
+            F.Kind != MK_ExplicitModule && F.Kind != MK_PrebuiltModule) {
           const DirectoryEntry *BuildDir =
               PP.getFileManager().getDirectory(Blob);
           if (!BuildDir || BuildDir != M->Directory) {
@@ -3602,7 +3604,8 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
     Module *M = PP.getHeaderSearchInfo().lookupModule(F.ModuleName);
     auto &Map = PP.getHeaderSearchInfo().getModuleMap();
     const FileEntry *ModMap = M ? Map.getModuleMapFileForUniquing(M) : nullptr;
-    if (!ModMap) {
+    // Don't emit module relocation error if we have -fno-validate-pch
+    if (!PP.getPreprocessorOpts().DisablePCHValidation && !ModMap) {
       assert(ImportedBy && "top-level import should be verified");
       if ((ClientLoadCapabilities & ARR_OutOfDate) == 0) {
         if (auto *ASTFE = M ? M->getASTFile() : nullptr) {
@@ -5039,7 +5042,9 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
 
       if (!ParentModule) {
         if (const FileEntry *CurFile = CurrentModule->getASTFile()) {
-          if (CurFile != F.File) {
+          // Don't emit module relocation error if we have -fno-validate-pch
+          if (!PP.getPreprocessorOpts().DisablePCHValidation &&
+              CurFile != F.File) {
             if (!Diags.isDiagnosticInFlight()) {
               Diag(diag::err_module_file_conflict)
                 << CurrentModule->getTopLevelModuleName()
@@ -9249,7 +9254,7 @@ std::string ASTReader::getOwningModuleNameForDiagnostic(const Decl *D) {
 }
 
 void ASTReader::finishPendingActions() {
-  while (!PendingIdentifierInfos.empty() ||
+  while (!PendingIdentifierInfos.empty() || !PendingFunctionTypes.empty() ||
          !PendingIncompleteDeclChains.empty() || !PendingDeclChains.empty() ||
          !PendingMacroIDs.empty() || !PendingDeclContextInfos.empty() ||
          !PendingUpdateRecords.empty()) {
@@ -9268,6 +9273,21 @@ void ASTReader::finishPendingActions() {
       SetGloballyVisibleDecls(II, DeclIDs, &TopLevelDecls[II]);
     }
 
+    // Load each function type that we deferred loading because it was a
+    // deduced type that might refer to a local type declared within itself.
+    for (unsigned I = 0; I != PendingFunctionTypes.size(); ++I) {
+      auto *FD = PendingFunctionTypes[I].first;
+      FD->setType(GetType(PendingFunctionTypes[I].second));
+
+      // If we gave a function a deduced return type, remember that we need to
+      // propagate that along the redeclaration chain.
+      auto *DT = FD->getReturnType()->getContainedDeducedType();
+      if (DT && DT->isDeduced())
+        PendingDeducedTypeUpdates.insert(
+            {FD->getCanonicalDecl(), FD->getReturnType()});
+    }
+    PendingFunctionTypes.clear();
+
     // For each decl chain that we wanted to complete while deserializing, mark
     // it as "still needs to be completed".
     for (unsigned I = 0; I != PendingIncompleteDeclChains.size(); ++I) {
@@ -9277,7 +9297,8 @@ void ASTReader::finishPendingActions() {
 
     // Load pending declaration chains.
     for (unsigned I = 0; I != PendingDeclChains.size(); ++I)
-      loadPendingDeclChain(PendingDeclChains[I].first, PendingDeclChains[I].second);
+      loadPendingDeclChain(PendingDeclChains[I].first,
+                           PendingDeclChains[I].second);
     PendingDeclChains.clear();
 
     // Make the most recent of the top-level declarations visible.
@@ -9672,8 +9693,8 @@ void ASTReader::diagnoseOdrViolations() {
           unsigned NumBases = DD->NumBases;
           if (NumBases == 0) return SourceRange();
           auto bases = DD->bases();
-          return SourceRange(bases[0].getLocStart(),
-                             bases[NumBases - 1].getLocEnd());
+          return SourceRange(bases[0].getBeginLoc(),
+                             bases[NumBases - 1].getEndLoc());
         };
 
         if (FirstNumBases != SecondNumBases) {
@@ -10174,10 +10195,10 @@ void ASTReader::diagnoseOdrViolations() {
         unsigned FirstODRHash = ComputeODRHash(FirstExpr);
         unsigned SecondODRHash = ComputeODRHash(SecondExpr);
         if (FirstODRHash != SecondODRHash) {
-          ODRDiagError(FirstExpr->getLocStart(), FirstExpr->getSourceRange(),
+          ODRDiagError(FirstExpr->getBeginLoc(), FirstExpr->getSourceRange(),
                        StaticAssertCondition);
-          ODRDiagNote(SecondExpr->getLocStart(),
-                      SecondExpr->getSourceRange(), StaticAssertCondition);
+          ODRDiagNote(SecondExpr->getBeginLoc(), SecondExpr->getSourceRange(),
+                      StaticAssertCondition);
           Diagnosed = true;
           break;
         }
@@ -10189,17 +10210,17 @@ void ASTReader::diagnoseOdrViolations() {
           SourceLocation FirstLoc, SecondLoc;
           SourceRange FirstRange, SecondRange;
           if (FirstStr) {
-            FirstLoc = FirstStr->getLocStart();
+            FirstLoc = FirstStr->getBeginLoc();
             FirstRange = FirstStr->getSourceRange();
           } else {
-            FirstLoc = FirstSA->getLocStart();
+            FirstLoc = FirstSA->getBeginLoc();
             FirstRange = FirstSA->getSourceRange();
           }
           if (SecondStr) {
-            SecondLoc = SecondStr->getLocStart();
+            SecondLoc = SecondStr->getBeginLoc();
             SecondRange = SecondStr->getSourceRange();
           } else {
-            SecondLoc = SecondSA->getLocStart();
+            SecondLoc = SecondSA->getBeginLoc();
             SecondRange = SecondSA->getSourceRange();
           }
           ODRDiagError(FirstLoc, FirstRange, StaticAssertOnlyMessage)
@@ -10212,9 +10233,9 @@ void ASTReader::diagnoseOdrViolations() {
 
         if (FirstStr && SecondStr &&
             FirstStr->getString() != SecondStr->getString()) {
-          ODRDiagError(FirstStr->getLocStart(), FirstStr->getSourceRange(),
+          ODRDiagError(FirstStr->getBeginLoc(), FirstStr->getSourceRange(),
                        StaticAssertMessage);
-          ODRDiagNote(SecondStr->getLocStart(), SecondStr->getSourceRange(),
+          ODRDiagNote(SecondStr->getBeginLoc(), SecondStr->getSourceRange(),
                       StaticAssertMessage);
           Diagnosed = true;
           break;
@@ -11526,11 +11547,16 @@ void ASTReader::FinishedDeserializing() {
   --NumCurrentElementsDeserializing;
 
   if (NumCurrentElementsDeserializing == 0) {
-    // Propagate exception specification updates along redeclaration chains.
-    while (!PendingExceptionSpecUpdates.empty()) {
-      auto Updates = std::move(PendingExceptionSpecUpdates);
+    // Propagate exception specification and deduced type updates along
+    // redeclaration chains.
+    //
+    // We do this now rather than in finishPendingActions because we want to
+    // be able to walk the complete redeclaration chains of the updated decls.
+    while (!PendingExceptionSpecUpdates.empty() ||
+           !PendingDeducedTypeUpdates.empty()) {
+      auto ESUpdates = std::move(PendingExceptionSpecUpdates);
       PendingExceptionSpecUpdates.clear();
-      for (auto Update : Updates) {
+      for (auto Update : ESUpdates) {
         ProcessingUpdatesRAIIObj ProcessingUpdates(*this);
         auto *FPT = Update.second->getType()->castAs<FunctionProtoType>();
         auto ESI = FPT->getExtProtoInfo().ExceptionSpec;
@@ -11538,6 +11564,15 @@ void ASTReader::FinishedDeserializing() {
           Listener->ResolvedExceptionSpec(cast<FunctionDecl>(Update.second));
         for (auto *Redecl : Update.second->redecls())
           getContext().adjustExceptionSpec(cast<FunctionDecl>(Redecl), ESI);
+      }
+
+      auto DTUpdates = std::move(PendingDeducedTypeUpdates);
+      PendingDeducedTypeUpdates.clear();
+      for (auto Update : DTUpdates) {
+        ProcessingUpdatesRAIIObj ProcessingUpdates(*this);
+        // FIXME: If the return type is already deduced, check that it matches.
+        getContext().adjustDeducedFunctionResultType(Update.first,
+                                                     Update.second);
       }
     }
 

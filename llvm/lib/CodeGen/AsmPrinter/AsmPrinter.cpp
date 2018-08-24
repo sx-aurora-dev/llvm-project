@@ -363,7 +363,7 @@ bool AsmPrinter::doInitialization(Module &M) {
                                    DWARFGroupName, DWARFGroupDescription));
 
   if (mdconst::extract_or_null<ConstantInt>(
-          MMI->getModule()->getModuleFlag("cfguard")))
+          MMI->getModule()->getModuleFlag("cfguardtable")))
     Handlers.push_back(HandlerInfo(new WinCFGuard(this), CFGuardName,
                                    CFGuardDescription, DWARFGroupName,
                                    DWARFGroupDescription));
@@ -1066,6 +1066,10 @@ void AsmPrinter::EmitFunctionBody() {
         ++NumInstsInFunction;
       }
 
+      // If there is a pre-instruction symbol, emit a label for it here.
+      if (MCSymbol *S = MI.getPreInstrSymbol())
+        OutStreamer->EmitLabel(S);
+
       if (ShouldPrintDebugScopes) {
         for (const HandlerInfo &HI : Handlers) {
           NamedRegionTimer T(HI.TimerName, HI.TimerDescription,
@@ -1116,6 +1120,10 @@ void AsmPrinter::EmitFunctionBody() {
         EmitInstruction(&MI);
         break;
       }
+
+      // If there is a post-instruction symbol, emit a label for it here.
+      if (MCSymbol *S = MI.getPostInstrSymbol())
+        OutStreamer->EmitLabel(S);
 
       if (ShouldPrintDebugScopes) {
         for (const HandlerInfo &HI : Handlers) {

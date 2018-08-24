@@ -36,28 +36,30 @@ Context::createDefaultPipeline(const PipelineOptions &Opts, InstrBuilder &IB,
   // Create the hardware units defining the backend.
   auto RCU = llvm::make_unique<RetireControlUnit>(SM);
   auto PRF = llvm::make_unique<RegisterFile>(SM, MRI, Opts.RegisterFileSize);
-  auto HWS = llvm::make_unique<Scheduler>(
-      SM, Opts.LoadQueueSize, Opts.StoreQueueSize, Opts.AssumeNoAlias);
+  auto LSU = llvm::make_unique<LSUnit>(Opts.LoadQueueSize, Opts.StoreQueueSize,
+                                       Opts.AssumeNoAlias);
+  auto HWS = llvm::make_unique<Scheduler>(SM, LSU.get());
 
   // Create the pipeline and its stages.
-  auto P = llvm::make_unique<Pipeline>();
-  auto F = llvm::make_unique<FetchStage>(IB, SrcMgr);
-  auto D = llvm::make_unique<DispatchStage>(
-      STI, MRI, Opts.RegisterFileSize, Opts.DispatchWidth, *RCU, *PRF, *HWS);
-  auto R = llvm::make_unique<RetireStage>(*RCU, *PRF);
-  auto E = llvm::make_unique<ExecuteStage>(*RCU, *HWS);
+  auto StagePipeline = llvm::make_unique<Pipeline>();
+  auto Fetch = llvm::make_unique<FetchStage>(IB, SrcMgr);
+  auto Dispatch = llvm::make_unique<DispatchStage>(
+      STI, MRI, Opts.RegisterFileSize, Opts.DispatchWidth, *RCU, *PRF);
+  auto Execute = llvm::make_unique<ExecuteStage>(*HWS);
+  auto Retire = llvm::make_unique<RetireStage>(*RCU, *PRF);
 
-  // Add the hardware to the context.
+  // Pass the ownership of all the hardware units to this Context.
   addHardwareUnit(std::move(RCU));
   addHardwareUnit(std::move(PRF));
+  addHardwareUnit(std::move(LSU));
   addHardwareUnit(std::move(HWS));
 
   // Build the pipeline.
-  P->appendStage(std::move(F));
-  P->appendStage(std::move(D));
-  P->appendStage(std::move(R));
-  P->appendStage(std::move(E));
-  return P;
+  StagePipeline->appendStage(std::move(Fetch));
+  StagePipeline->appendStage(std::move(Dispatch));
+  StagePipeline->appendStage(std::move(Execute));
+  StagePipeline->appendStage(std::move(Retire));
+  return StagePipeline;
 }
 
 } // namespace mca

@@ -197,20 +197,22 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
           S.update(File, Inputs, WantDiagnostics::Auto,
-                   [Nonce, &Mut,
+                   [File, Nonce, &Mut,
                     &TotalUpdates](llvm::Optional<std::vector<Diag>> Diags) {
                      EXPECT_THAT(Context::current().get(NonceKey),
                                  Pointee(Nonce));
 
                      std::lock_guard<std::mutex> Lock(Mut);
                      ++TotalUpdates;
+                     EXPECT_EQ(File,
+                               *TUScheduler::getFileBeingProcessedInContext());
                    });
         }
 
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
           S.runWithAST("CheckAST", File,
-                       [Inputs, Nonce, &Mut,
+                       [File, Inputs, Nonce, &Mut,
                         &TotalASTReads](llvm::Expected<InputsAndAST> AST) {
                          EXPECT_THAT(Context::current().get(NonceKey),
                                      Pointee(Nonce));
@@ -221,23 +223,27 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
 
                          std::lock_guard<std::mutex> Lock(Mut);
                          ++TotalASTReads;
+                         EXPECT_EQ(
+                             File,
+                             *TUScheduler::getFileBeingProcessedInContext());
                        });
         }
 
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
-          S.runWithPreamble("CheckPreamble", File,
-                            [Inputs, Nonce, &Mut, &TotalPreambleReads](
-                                llvm::Expected<InputsAndPreamble> Preamble) {
-                              EXPECT_THAT(Context::current().get(NonceKey),
-                                          Pointee(Nonce));
+          S.runWithPreamble(
+              "CheckPreamble", File,
+              [File, Inputs, Nonce, &Mut, &TotalPreambleReads](
+                  llvm::Expected<InputsAndPreamble> Preamble) {
+                EXPECT_THAT(Context::current().get(NonceKey), Pointee(Nonce));
 
-                              ASSERT_TRUE((bool)Preamble);
-                              EXPECT_EQ(Preamble->Contents, Inputs.Contents);
+                ASSERT_TRUE((bool)Preamble);
+                EXPECT_EQ(Preamble->Contents, Inputs.Contents);
 
-                              std::lock_guard<std::mutex> Lock(Mut);
-                              ++TotalPreambleReads;
-                            });
+                std::lock_guard<std::mutex> Lock(Mut);
+                ++TotalPreambleReads;
+                EXPECT_EQ(File, *TUScheduler::getFileBeingProcessedInContext());
+              });
         }
       }
     }
@@ -300,6 +306,51 @@ TEST_F(TUSchedulerTests, EvictedAST) {
   // evicted.
   EXPECT_THAT(S.getFilesWithCachedAST(),
               UnorderedElementsAre(Foo, AnyOf(Bar, Baz)));
+}
+
+TEST_F(TUSchedulerTests, EmptyPreamble) {
+  TUScheduler S(
+      /*AsyncThreadsCount=*/4, /*StorePreambleInMemory=*/true,
+      PreambleParsedCallback(),
+      /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
+      ASTRetentionPolicy());
+
+  auto Foo = testPath("foo.cpp");
+  auto Header = testPath("foo.h");
+
+  Files[Header] = "void foo()";
+  Timestamps[Header] = time_t(0);
+  auto WithPreamble = R"cpp(
+    #include "foo.h"
+    int main() {}
+  )cpp";
+  auto WithEmptyPreamble = R"cpp(int main() {})cpp";
+  S.update(Foo, getInputs(Foo, WithPreamble), WantDiagnostics::Auto,
+           [](std::vector<Diag>) {});
+  S.runWithPreamble("getNonEmptyPreamble", Foo,
+                    [&](llvm::Expected<InputsAndPreamble> Preamble) {
+                      // We expect to get a non-empty preamble.
+                      EXPECT_GT(cantFail(std::move(Preamble))
+                                    .Preamble->Preamble.getBounds()
+                                    .Size,
+                                0u);
+                    });
+  // Wait for the preamble is being built.
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
+
+  // Update the file which results in an empty preamble.
+  S.update(Foo, getInputs(Foo, WithEmptyPreamble), WantDiagnostics::Auto,
+           [](std::vector<Diag>) {});
+  // Wait for the preamble is being built.
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
+  S.runWithPreamble("getEmptyPreamble", Foo,
+                    [&](llvm::Expected<InputsAndPreamble> Preamble) {
+                      // We expect to get an empty preamble.
+                      EXPECT_EQ(cantFail(std::move(Preamble))
+                                    .Preamble->Preamble.getBounds()
+                                    .Size,
+                                0u);
+                    });
 }
 
 TEST_F(TUSchedulerTests, RunWaitsForPreamble) {

@@ -565,7 +565,7 @@ bool CursorVisitor::VisitChildren(CXCursor Cursor) {
     if (const ObjCObjectType *ObjT = A->getInterface()->getAs<ObjCObjectType>())
       return Visit(cxcursor::MakeCursorObjCClassRef(
           ObjT->getInterface(),
-          A->getInterfaceLoc()->getTypeLoc().getLocStart(), TU));
+          A->getInterfaceLoc()->getTypeLoc().getBeginLoc(), TU));
   }
 
   // If pointing inside a macro definition, check if the token is an identifier
@@ -993,7 +993,7 @@ static void addRangedDeclsInContainer(DeclIt *DI_current, DeclIt DE_current,
     Decl *D_next = *next;
     if (!D_next)
       break;
-    SourceLocation L = D_next->getLocStart();
+    SourceLocation L = D_next->getBeginLoc();
     if (!L.isValid())
       break;
     if (SM.isBeforeInTranslationUnit(L, EndLoc)) {
@@ -1038,7 +1038,7 @@ bool CursorVisitor::VisitObjCContainerDecl(ObjCContainerDecl *D) {
   // additional ones we've collected.  Then visit them.
   for (auto *SubDecl : D->decls()) {
     if (!SubDecl || SubDecl->getLexicalDeclContext() != D ||
-        SubDecl->getLocStart().isInvalid())
+        SubDecl->getBeginLoc().isInvalid())
       continue;
     DeclsInContainer.push_back(SubDecl);
   }
@@ -1046,12 +1046,12 @@ bool CursorVisitor::VisitObjCContainerDecl(ObjCContainerDecl *D) {
   // Now sort the Decls so that they appear in lexical order.
   llvm::sort(DeclsInContainer.begin(), DeclsInContainer.end(),
              [&SM](Decl *A, Decl *B) {
-    SourceLocation L_A = A->getLocStart();
-    SourceLocation L_B = B->getLocStart();
-    return L_A != L_B ?
-           SM.isBeforeInTranslationUnit(L_A, L_B) :
-           SM.isBeforeInTranslationUnit(A->getLocEnd(), B->getLocEnd());
-  });
+               SourceLocation L_A = A->getBeginLoc();
+               SourceLocation L_B = B->getBeginLoc();
+               return L_A != L_B ? SM.isBeforeInTranslationUnit(L_A, L_B)
+                                 : SM.isBeforeInTranslationUnit(A->getEndLoc(),
+                                                                B->getEndLoc());
+             });
 
   // Now visit the decls.
   for (SmallVectorImpl<Decl*>::iterator I = DeclsInContainer.begin(),
@@ -1578,7 +1578,7 @@ bool CursorVisitor::VisitObjCInterfaceTypeLoc(ObjCInterfaceTypeLoc TL) {
 }
 
 bool CursorVisitor::VisitObjCTypeParamTypeLoc(ObjCTypeParamTypeLoc TL) {
-  if (Visit(MakeCursorTypeRef(TL.getDecl(), TL.getLocStart(), TU)))
+  if (Visit(MakeCursorTypeRef(TL.getDecl(), TL.getBeginLoc(), TU)))
     return true;
   for (unsigned I = 0, N = TL.getNumProtocols(); I != N; ++I) {
     if (Visit(MakeCursorObjCProtocolRef(TL.getProtocol(I), TL.getProtocolLoc(I),
@@ -1802,7 +1802,9 @@ bool CursorVisitor::VisitCXXRecordDecl(CXXRecordDecl *D) {
 
 bool CursorVisitor::VisitAttributes(Decl *D) {
   for (const auto *I : D->attrs())
-    if (!I->isImplicit() && Visit(MakeCXCursor(I, D, TU)))
+    if ((TU->ParsingOptions & CXTranslationUnit_VisitImplicitAttributes ||
+         !I->isImplicit()) &&
+        Visit(MakeCXCursor(I, D, TU)))
         return true;
 
   return false;
@@ -4340,8 +4342,8 @@ static SourceLocation getLocationFromExpr(const Expr *E) {
     return SizeOfPack->getPackLoc();
   if (const ObjCPropertyRefExpr *PropRef = dyn_cast<ObjCPropertyRefExpr>(E))
     return PropRef->getLocation();
-  
-  return E->getLocStart();
+
+  return E->getBeginLoc();
 }
 
 extern "C" {
@@ -5277,6 +5279,42 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("attribute(dllexport)");
   case CXCursor_DLLImport:
     return cxstring::createRef("attribute(dllimport)");
+  case CXCursor_NSReturnsRetained:
+    return cxstring::createRef("attribute(ns_returns_retained)");
+  case CXCursor_NSReturnsNotRetained:
+    return cxstring::createRef("attribute(ns_returns_not_retained)");
+  case CXCursor_NSReturnsAutoreleased:
+    return cxstring::createRef("attribute(ns_returns_autoreleased)");
+  case CXCursor_NSConsumesSelf:
+    return cxstring::createRef("attribute(ns_consumes_self)");
+  case CXCursor_NSConsumed:
+    return cxstring::createRef("attribute(ns_consumed)");
+  case CXCursor_ObjCException:
+    return cxstring::createRef("attribute(objc_exception)");
+  case CXCursor_ObjCNSObject:
+    return cxstring::createRef("attribute(NSObject)");
+  case CXCursor_ObjCIndependentClass:
+    return cxstring::createRef("attribute(objc_independent_class)");
+  case CXCursor_ObjCPreciseLifetime:
+    return cxstring::createRef("attribute(objc_precise_lifetime)");
+  case CXCursor_ObjCReturnsInnerPointer:
+    return cxstring::createRef("attribute(objc_returns_inner_pointer)");
+  case CXCursor_ObjCRequiresSuper:
+    return cxstring::createRef("attribute(objc_requires_super)");
+  case CXCursor_ObjCRootClass:
+    return cxstring::createRef("attribute(objc_root_class)");
+  case CXCursor_ObjCSubclassingRestricted:
+    return cxstring::createRef("attribute(objc_subclassing_restricted)");
+  case CXCursor_ObjCExplicitProtocolImpl:
+    return cxstring::createRef("attribute(objc_protocol_requires_explicit_implementation)");
+  case CXCursor_ObjCDesignatedInitializer:
+    return cxstring::createRef("attribute(objc_designated_initializer)");
+  case CXCursor_ObjCRuntimeVisible:
+    return cxstring::createRef("attribute(objc_runtime_visible)");
+  case CXCursor_ObjCBoxable:
+    return cxstring::createRef("attribute(objc_boxable)");
+  case CXCursor_FlagEnum:
+    return cxstring::createRef("attribute(flag_enum)");
   case CXCursor_PreprocessingDirective:
     return cxstring::createRef("preprocessing directive");
   case CXCursor_MacroDefinition:
@@ -5752,9 +5790,9 @@ CXSourceLocation clang_getCursorLocation(CXCursor C) {
       if (TypeSourceInfo *TSInfo = BaseSpec->getTypeSourceInfo())
         return cxloc::translateSourceLocation(getCursorContext(C),
                                             TSInfo->getTypeLoc().getBeginLoc());
-      
+
       return cxloc::translateSourceLocation(getCursorContext(C),
-                                        BaseSpec->getLocStart());
+                                            BaseSpec->getBeginLoc());
     }
 
     case CXCursor_LabelRef: {
@@ -5778,7 +5816,7 @@ CXSourceLocation clang_getCursorLocation(CXCursor C) {
 
   if (clang_isStatement(C.kind))
     return cxloc::translateSourceLocation(getCursorContext(C),
-                                          getCursorStmt(C)->getLocStart());
+                                          getCursorStmt(C)->getBeginLoc());
 
   if (C.kind == CXCursor_PreprocessingDirective) {
     SourceLocation L = cxcursor::getCursorPreprocessingDirective(C).getBegin();
@@ -5978,10 +6016,10 @@ static SourceRange getFullCursorExtent(CXCursor C, SourceManager &SrcMgr) {
     SourceLocation StartLoc;
     if (const DeclaratorDecl *DD = dyn_cast<DeclaratorDecl>(D)) {
       if (TypeSourceInfo *TI = DD->getTypeSourceInfo())
-        StartLoc = TI->getTypeLoc().getLocStart();
+        StartLoc = TI->getTypeLoc().getBeginLoc();
     } else if (const TypedefDecl *Typedef = dyn_cast<TypedefDecl>(D)) {
       if (TypeSourceInfo *TI = Typedef->getTypeSourceInfo())
-        StartLoc = TI->getTypeLoc().getLocStart();
+        StartLoc = TI->getTypeLoc().getBeginLoc();
     }
 
     if (StartLoc.isValid() && R.getBegin().isValid() &&
@@ -7031,9 +7069,9 @@ AnnotateTokensWorker::Visit(CXCursor cursor, CXCursor parent) {
     const Expr *E = getCursorExpr(cursor);
     if (const Decl *D = getCursorParentDecl(cursor)) {
       const unsigned I = NextToken();
-      if (E->getLocStart().isValid() && D->getLocation().isValid() &&
-          E->getLocStart() == D->getLocation() &&
-          E->getLocStart() == GetTokenLoc(I)) {
+      if (E->getBeginLoc().isValid() && D->getLocation().isValid() &&
+          E->getBeginLoc() == D->getLocation() &&
+          E->getBeginLoc() == GetTokenLoc(I)) {
         updateCursorAnnotation(Cursors[I], updateC);
         AdvanceToken();
       }
@@ -7875,6 +7913,30 @@ unsigned clang_Cursor_getObjCPropertyAttributes(CXCursor C, unsigned reserved) {
 #undef SET_CXOBJCPROP_ATTR
 
   return Result;
+}
+
+CXString clang_Cursor_getObjCPropertyGetterName(CXCursor C) {
+  if (C.kind != CXCursor_ObjCPropertyDecl)
+    return cxstring::createNull();
+
+  const ObjCPropertyDecl *PD = dyn_cast<ObjCPropertyDecl>(getCursorDecl(C));
+  Selector sel = PD->getGetterName();
+  if (sel.isNull())
+    return cxstring::createNull();
+
+  return cxstring::createDup(sel.getAsString());
+}
+
+CXString clang_Cursor_getObjCPropertySetterName(CXCursor C) {
+  if (C.kind != CXCursor_ObjCPropertyDecl)
+    return cxstring::createNull();
+
+  const ObjCPropertyDecl *PD = dyn_cast<ObjCPropertyDecl>(getCursorDecl(C));
+  Selector sel = PD->getSetterName();
+  if (sel.isNull())
+    return cxstring::createNull();
+
+  return cxstring::createDup(sel.getAsString());
 }
 
 unsigned clang_Cursor_getObjCDeclQualifiers(CXCursor C) {

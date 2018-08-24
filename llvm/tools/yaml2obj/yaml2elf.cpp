@@ -245,7 +245,7 @@ bool ELFState<ELFT>::initSectionHeaders(std::vector<Elf_Shdr> &SHeaders,
 
     if (!Sec->Link.empty()) {
       unsigned Index;
-      if (SN2I.lookup(Sec->Link, Index)) {
+      if (SN2I.lookup(Sec->Link, Index) && !to_integer(Sec->Link, Index)) {
         WithColor::error() << "Unknown section referenced: '" << Sec->Link
                            << "' at YAML section '" << Sec->Name << "'.\n";
         return false;
@@ -261,12 +261,10 @@ bool ELFState<ELFT>::initSectionHeaders(std::vector<Elf_Shdr> &SHeaders,
         SHeader.sh_link = getDotSymTabSecNo();
 
       unsigned Index;
-      if (SN2I.lookup(S->Info, Index)) {
-        if (S->Info.getAsInteger(0, Index)) {
-          WithColor::error() << "Unknown section referenced: '" << S->Info
-                             << "' at YAML section '" << S->Name << "'.\n";
-          return false;
-        }
+      if (SN2I.lookup(S->Info, Index) && !to_integer(S->Info, Index)) {
+        WithColor::error() << "Unknown section referenced: '" << S->Info
+                           << "' at YAML section '" << S->Name << "'.\n";
+        return false;
       }
       SHeader.sh_info = Index;
 
@@ -274,7 +272,7 @@ bool ELFState<ELFT>::initSectionHeaders(std::vector<Elf_Shdr> &SHeaders,
         return false;
     } else if (auto S = dyn_cast<ELFYAML::Group>(Sec.get())) {
       unsigned SymIdx;
-      if (SymN2I.lookup(S->Info, SymIdx)) {
+      if (SymN2I.lookup(S->Info, SymIdx) && !to_integer(S->Info, SymIdx)) {
         WithColor::error() << "Unknown symbol referenced: '" << S->Info
                            << "' at YAML section '" << S->Name << "'.\n";
         return false;
@@ -461,7 +459,9 @@ ELFState<ELFT>::writeSectionContent(Elf_Shdr &SHeader,
   Section.Content.writeAsBinary(OS);
   for (auto i = Section.Content.binary_size(); i < Section.Size; ++i)
     OS.write(0);
-  if (Section.Type == llvm::ELF::SHT_RELR)
+  if (Section.EntSize)
+    SHeader.sh_entsize = *Section.EntSize;
+  else if (Section.Type == llvm::ELF::SHT_RELR)
     SHeader.sh_entsize = sizeof(Elf_Relr);
   else if (Section.Type == llvm::ELF::SHT_DYNAMIC)
     SHeader.sh_entsize = sizeof(Elf_Dyn);
@@ -535,7 +535,8 @@ bool ELFState<ELFT>::writeSectionContent(Elf_Shdr &SHeader,
     unsigned int sectionIndex = 0;
     if (member.sectionNameOrType == "GRP_COMDAT")
       sectionIndex = llvm::ELF::GRP_COMDAT;
-    else if (SN2I.lookup(member.sectionNameOrType, sectionIndex)) {
+    else if (SN2I.lookup(member.sectionNameOrType, sectionIndex) &&
+             !to_integer(member.sectionNameOrType, sectionIndex)) {
       WithColor::error() << "Unknown section referenced: '"
                          << member.sectionNameOrType << "' at YAML section' "
                          << Section.Name << "\n";

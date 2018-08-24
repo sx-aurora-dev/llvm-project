@@ -46,18 +46,27 @@ public:
     return *Index;
   }
 
+private:
   llvm::raw_ostream &dump(llvm::raw_ostream &OS) const override {
     OS << '[';
     auto Separator = "";
-    for (const auto &ID : Documents) {
-      OS << Separator << ID;
+    for (auto It = std::begin(Documents); It != std::end(Documents); ++It) {
+      OS << Separator;
+      if (It == Index)
+        OS << '{' << *It << '}';
+      else
+        OS << *It;
       Separator = ", ";
     }
+    OS << Separator;
+    if (Index == std::end(Documents))
+      OS << "{END}";
+    else
+      OS << "END";
     OS << ']';
     return OS;
   }
 
-private:
   PostingListRef Documents;
   PostingListRef::const_iterator Index;
 };
@@ -94,6 +103,7 @@ public:
 
   DocID peek() const override { return Children.front()->peek(); }
 
+private:
   llvm::raw_ostream &dump(llvm::raw_ostream &OS) const override {
     OS << "(& ";
     auto Separator = "";
@@ -105,7 +115,6 @@ public:
     return OS;
   }
 
-private:
   /// Restores class invariants: each child will point to the same element after
   /// sync.
   void sync() {
@@ -171,7 +180,7 @@ public:
   /// Moves each child pointing to the smallest DocID to the next item.
   void advance() override {
     assert(!reachedEnd() &&
-           "OrIterator must have at least one child to advance().");
+           "OrIterator can't call advance() after it reached the end.");
     const auto SmallestID = peek();
     for (const auto &Child : Children)
       if (!Child->reachedEnd() && Child->peek() == SmallestID)
@@ -190,7 +199,7 @@ public:
   /// value.
   DocID peek() const override {
     assert(!reachedEnd() &&
-           "OrIterator must have at least one child to peek().");
+           "OrIterator can't peek() after it reached the end.");
     DocID Result = std::numeric_limits<DocID>::max();
 
     for (const auto &Child : Children)
@@ -200,6 +209,7 @@ public:
     return Result;
   }
 
+private:
   llvm::raw_ostream &dump(llvm::raw_ostream &OS) const override {
     OS << "(| ";
     auto Separator = "";
@@ -211,16 +221,51 @@ public:
     return OS;
   }
 
-private:
   // FIXME(kbobyrev): Would storing Children in min-heap be faster?
   std::vector<std::unique_ptr<Iterator>> Children;
 };
 
+/// TrueIterator handles PostingLists which contain all items of the index. It
+/// stores size of the virtual posting list, and all operations are performed
+/// in O(1).
+class TrueIterator : public Iterator {
+public:
+  TrueIterator(DocID Size) : Size(Size) {}
+
+  bool reachedEnd() const override { return Index >= Size; }
+
+  void advance() override {
+    assert(!reachedEnd() && "Can't advance iterator after it reached the end.");
+    ++Index;
+  }
+
+  void advanceTo(DocID ID) override {
+    assert(!reachedEnd() && "Can't advance iterator after it reached the end.");
+    Index = std::min(ID, Size);
+  }
+
+  DocID peek() const override {
+    assert(!reachedEnd() && "TrueIterator can't call peek() at the end.");
+    return Index;
+  }
+
+private:
+  llvm::raw_ostream &dump(llvm::raw_ostream &OS) const override {
+    OS << "(TRUE {" << Index << "} out of " << Size << ")";
+    return OS;
+  }
+
+  DocID Index = 0;
+  /// Size of the underlying virtual PostingList.
+  DocID Size;
+};
+
 } // end namespace
 
-std::vector<DocID> consume(Iterator &It) {
+std::vector<DocID> consume(Iterator &It, size_t Limit) {
   std::vector<DocID> Result;
-  for (; !It.reachedEnd(); It.advance())
+  for (size_t Retrieved = 0; !It.reachedEnd() && Retrieved < Limit;
+       It.advance(), ++Retrieved)
     Result.push_back(It.peek());
   return Result;
 }
@@ -237,6 +282,10 @@ createAnd(std::vector<std::unique_ptr<Iterator>> Children) {
 std::unique_ptr<Iterator>
 createOr(std::vector<std::unique_ptr<Iterator>> Children) {
   return llvm::make_unique<OrIterator>(move(Children));
+}
+
+std::unique_ptr<Iterator> createTrue(DocID Size) {
+  return llvm::make_unique<TrueIterator>(Size);
 }
 
 } // namespace dex
