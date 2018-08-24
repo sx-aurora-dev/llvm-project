@@ -101,7 +101,7 @@ define dso_local i64 @f2ul(float %a) local_unnamed_addr #0 {
 ; CHECK-NEXT:  xor %s34, %s34, %s36
 ; CHECK-NEXT:  cvt.d.s %s36, %s0
 ; CHECK-NEXT:  cvt.l.d.rz %s36, %s36
-; CHECK-NEXT:  cmov.s.le %s34, %s36, %s35
+; CHECK-NEXT:  cmov.s.lt %s34, %s36, %s35
 ; CHECK-NEXT:  or %s0, 0, %s34
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -201,7 +201,7 @@ define dso_local i64 @d2ul(double %a) local_unnamed_addr #0 {
 ; CHECK-NEXT:  lea.sl %s36, -2147483648(%s36)
 ; CHECK-NEXT:  xor %s34, %s34, %s36
 ; CHECK-NEXT:  cvt.l.d.rz %s36, %s0
-; CHECK-NEXT:  cmov.d.le %s34, %s36, %s35
+; CHECK-NEXT:  cmov.d.lt %s34, %s36, %s35
 ; CHECK-NEXT:  or %s0, 0, %s34
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -314,7 +314,7 @@ define dso_local i64 @q2ul(fp128 %a) local_unnamed_addr #0 {
 ; CHECK-NEXT:  xor %s34, %s34, %s35
 ; CHECK-NEXT:  cvt.d.q %s35, %s0
 ; CHECK-NEXT:  cvt.l.d.rz %s35, %s35
-; CHECK-NEXT:  cmov.d.le %s34, %s35, %s36
+; CHECK-NEXT:  cmov.d.lt %s34, %s35, %s36
 ; CHECK-NEXT:  or %s0, 0, %s34
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
