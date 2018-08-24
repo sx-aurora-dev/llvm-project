@@ -8,6 +8,15 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11
+
+// XFAIL: with_system_cxx_lib=macosx10.13
+// XFAIL: with_system_cxx_lib=macosx10.12
+// XFAIL: with_system_cxx_lib=macosx10.11
+// XFAIL: with_system_cxx_lib=macosx10.10
+// XFAIL: with_system_cxx_lib=macosx10.9
+// XFAIL: with_system_cxx_lib=macosx10.8
+// XFAIL: with_system_cxx_lib=macosx10.7
+
 // <charconv>
 
 // from_chars_result from_chars(const char* first, const char* last,
@@ -37,6 +46,7 @@ struct test_basics : roundtrip_test_base<T>
             using xl = std::numeric_limits<T>;
 
             test(1, b);
+            test(-1, b);
             test(xl::lowest(), b);
             test((xl::max)(), b);
             test((xl::max)() / 2, b);

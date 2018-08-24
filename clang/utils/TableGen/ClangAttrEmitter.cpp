@@ -2470,8 +2470,10 @@ namespace {
 
 static const AttrClassDescriptor AttrClassDescriptors[] = {
   { "ATTR", "Attr" },
+  { "TYPE_ATTR", "TypeAttr" },
   { "STMT_ATTR", "StmtAttr" },
   { "INHERITABLE_ATTR", "InheritableAttr" },
+  { "DECL_OR_TYPE_ATTR", "DeclOrTypeAttr" },
   { "INHERITABLE_PARAM_ATTR", "InheritableParamAttr" },
   { "PARAMETER_ABI_ATTR", "ParameterABIAttr" }
 };
@@ -3335,7 +3337,7 @@ static std::string GenerateAppertainsTo(const Record &Attr, raw_ostream &OS) {
   SS << (Warn ? "warn_attribute_wrong_decl_type_str" :
                "err_attribute_wrong_decl_type_str");
   SS << ")\n";
-  SS << "      << Attr.getName() << ";
+  SS << "      << Attr << ";
   SS << CalculateDiagnostic(*SubjectObj) << ";\n";
   SS << "    return false;\n";
   SS << "  }\n";

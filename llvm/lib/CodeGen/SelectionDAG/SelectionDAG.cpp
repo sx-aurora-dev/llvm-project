@@ -2374,7 +2374,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, KnownBits &Known,
     if (SubIdx && SubIdx->getAPIntValue().ule(NumSrcElts - NumElts)) {
       // Offset the demanded elts by the subvector index.
       uint64_t Idx = SubIdx->getZExtValue();
-      APInt DemandedSrc = DemandedElts.zext(NumSrcElts).shl(Idx);
+      APInt DemandedSrc = DemandedElts.zextOrSelf(NumSrcElts).shl(Idx);
       computeKnownBits(Src, Known, DemandedSrc, Depth + 1);
     } else {
       computeKnownBits(Src, Known, Depth + 1);
@@ -3240,14 +3240,35 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, const APInt &DemandedElts,
     if (VTBits == SrcBits)
       return ComputeNumSignBits(N0, DemandedElts, Depth + 1);
 
+    bool IsLE = getDataLayout().isLittleEndian();
+
     // Bitcast 'large element' scalar/vector to 'small element' vector.
-    // TODO: Handle cases other than 'sign splat' when we have a use case.
-    // Requires handling of DemandedElts and Endianness.
     if ((SrcBits % VTBits) == 0) {
-      assert(Op.getValueType().isVector() && "Expected bitcast to vector");
-      Tmp = ComputeNumSignBits(N0, Depth + 1);
+      assert(VT.isVector() && "Expected bitcast to vector");
+
+      unsigned Scale = SrcBits / VTBits;
+      APInt SrcDemandedElts(NumElts / Scale, 0);
+      for (unsigned i = 0; i != NumElts; ++i)
+        if (DemandedElts[i])
+          SrcDemandedElts.setBit(i / Scale);
+
+      // Fast case - sign splat can be simply split across the small elements.
+      Tmp = ComputeNumSignBits(N0, SrcDemandedElts, Depth + 1);
       if (Tmp == SrcBits)
         return VTBits;
+
+      // Slow case - determine how far the sign extends into each sub-element.
+      Tmp2 = VTBits;
+      for (unsigned i = 0; i != NumElts; ++i)
+        if (DemandedElts[i]) {
+          unsigned SubOffset = i % Scale;
+          SubOffset = (IsLE ? ((Scale - 1) - SubOffset) : SubOffset);
+          SubOffset = SubOffset * VTBits;
+          if (Tmp <= SubOffset)
+            return 1;
+          Tmp2 = std::min(Tmp2, Tmp - SubOffset);
+        }
+      return Tmp2;
     }
     break;
   }
@@ -3361,7 +3382,7 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, const APInt &DemandedElts,
     // If setcc returns 0/-1, all bits are sign bits.
     // We know that we have an integer-based boolean since these operations
     // are only available for integer.
-    if (TLI->getBooleanContents(Op.getValueType().isVector(), false) ==
+    if (TLI->getBooleanContents(VT.isVector(), false) ==
         TargetLowering::ZeroOrNegativeOneBooleanContent)
       return VTBits;
     break;
@@ -3533,7 +3554,7 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, const APInt &DemandedElts,
     if (SubIdx && SubIdx->getAPIntValue().ule(NumSrcElts - NumElts)) {
       // Offset the demanded elts by the subvector index.
       uint64_t Idx = SubIdx->getZExtValue();
-      APInt DemandedSrc = DemandedElts.zext(NumSrcElts).shl(Idx);
+      APInt DemandedSrc = DemandedElts.zextOrSelf(NumSrcElts).shl(Idx);
       return ComputeNumSignBits(Src, DemandedSrc, Depth + 1);
     }
     return ComputeNumSignBits(Src, Depth + 1);
@@ -3622,21 +3643,97 @@ bool SelectionDAG::isBaseWithConstantOffset(SDValue Op) const {
   return true;
 }
 
-bool SelectionDAG::isKnownNeverNaN(SDValue Op) const {
+bool SelectionDAG::isKnownNeverNaN(SDValue Op, bool SNaN, unsigned Depth) const {
   // If we're told that NaNs won't happen, assume they won't.
-  if (getTarget().Options.NoNaNsFPMath)
+  if (getTarget().Options.NoNaNsFPMath || Op->getFlags().hasNoNaNs())
     return true;
 
-  if (Op->getFlags().hasNoNaNs())
-    return true;
+  if (Depth == 6)
+    return false; // Limit search depth.
 
+  // TODO: Handle vectors.
   // If the value is a constant, we can obviously see if it is a NaN or not.
-  if (const ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(Op))
-    return !C->getValueAPF().isNaN();
+  if (const ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(Op)) {
+    return !C->getValueAPF().isNaN() ||
+           (SNaN && !C->getValueAPF().isSignaling());
+  }
 
-  // TODO: Recognize more cases here.
+  unsigned Opcode = Op.getOpcode();
+  switch (Opcode) {
+  case ISD::FADD:
+  case ISD::FSUB:
+  case ISD::FMUL:
+  case ISD::FDIV:
+  case ISD::FREM:
+  case ISD::FSIN:
+  case ISD::FCOS: {
+    if (SNaN)
+      return true;
+    // TODO: Need isKnownNeverInfinity
+    return false;
+  }
+  case ISD::FCANONICALIZE:
+  case ISD::FEXP:
+  case ISD::FEXP2:
+  case ISD::FTRUNC:
+  case ISD::FFLOOR:
+  case ISD::FCEIL:
+  case ISD::FROUND:
+  case ISD::FRINT:
+  case ISD::FNEARBYINT: {
+    if (SNaN)
+      return true;
+    return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1);
+  }
+  case ISD::FABS:
+  case ISD::FNEG:
+  case ISD::FCOPYSIGN: {
+    return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1);
+  }
+  case ISD::SELECT:
+    return isKnownNeverNaN(Op.getOperand(1), SNaN, Depth + 1) &&
+           isKnownNeverNaN(Op.getOperand(2), SNaN, Depth + 1);
+  case ISD::FP_EXTEND:
+  case ISD::FP_ROUND: {
+    if (SNaN)
+      return true;
+    return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1);
+  }
+  case ISD::SINT_TO_FP:
+  case ISD::UINT_TO_FP:
+    return true;
+  case ISD::FMA:
+  case ISD::FMAD: {
+    if (SNaN)
+      return true;
+    return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1) &&
+           isKnownNeverNaN(Op.getOperand(1), SNaN, Depth + 1) &&
+           isKnownNeverNaN(Op.getOperand(2), SNaN, Depth + 1);
+  }
+  case ISD::FSQRT: // Need is known positive
+  case ISD::FLOG:
+  case ISD::FLOG2:
+  case ISD::FLOG10:
+  case ISD::FPOWI:
+  case ISD::FPOW: {
+    if (SNaN)
+      return true;
+    // TODO: Refine on operand
+    return false;
+  }
 
-  return false;
+  // TODO: Handle FMINNUM/FMAXNUM/FMINNAN/FMAXNAN when there is an agreement on
+  // what they should do.
+  default:
+    if (Opcode >= ISD::BUILTIN_OP_END ||
+        Opcode == ISD::INTRINSIC_WO_CHAIN ||
+        Opcode == ISD::INTRINSIC_W_CHAIN ||
+        Opcode == ISD::INTRINSIC_VOID) {
+      return TLI->isKnownNeverNaNForTargetNode(Op, *this, SNaN, Depth);
+    }
+
+    return false;
+  }
 }
 
 bool SelectionDAG::isKnownNeverZeroFloat(SDValue Op) const {
@@ -6574,7 +6671,7 @@ SDValue SelectionDAG::getMaskedGather(SDVTList VTs, EVT VT, const SDLoc &dl,
                                           VTs, VT, MMO);
   createOperands(N, Ops);
 
-  assert(N->getValue().getValueType() == N->getValueType(0) &&
+  assert(N->getPassThru().getValueType() == N->getValueType(0) &&
          "Incompatible type of the PassThru value in MaskedGatherSDNode");
   assert(N->getMask().getValueType().getVectorNumElements() ==
              N->getValueType(0).getVectorNumElements() &&
@@ -6659,7 +6756,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
   case 0: return getNode(Opcode, DL, VT);
   case 1: return getNode(Opcode, DL, VT, Ops[0], Flags);
   case 2: return getNode(Opcode, DL, VT, Ops[0], Ops[1], Flags);
-  case 3: return getNode(Opcode, DL, VT, Ops[0], Ops[1], Ops[2]);
+  case 3: return getNode(Opcode, DL, VT, Ops[0], Ops[1], Ops[2], Flags);
   default: break;
   }
 
@@ -7010,6 +7107,27 @@ void SDNode::DropOperands() {
   }
 }
 
+void SelectionDAG::setNodeMemRefs(MachineSDNode *N,
+                                  ArrayRef<MachineMemOperand *> NewMemRefs) {
+  if (NewMemRefs.empty()) {
+    N->clearMemRefs();
+    return;
+  }
+
+  // Check if we can avoid allocating by storing a single reference directly.
+  if (NewMemRefs.size() == 1) {
+    N->MemRefs = NewMemRefs[0];
+    N->NumMemRefs = 1;
+    return;
+  }
+
+  MachineMemOperand **MemRefsBuffer =
+      Allocator.template Allocate<MachineMemOperand *>(NewMemRefs.size());
+  std::copy(NewMemRefs.begin(), NewMemRefs.end(), MemRefsBuffer);
+  N->MemRefs = MemRefsBuffer;
+  N->NumMemRefs = static_cast<int>(NewMemRefs.size());
+}
+
 /// SelectNodeTo - These are wrappers around MorphNodeTo that accept a
 /// machine opcode.
 ///
@@ -7152,7 +7270,7 @@ SDNode *SelectionDAG::MorphNodeTo(SDNode *N, unsigned Opc,
 
   // For MachineNode, initialize the memory references information.
   if (MachineSDNode *MN = dyn_cast<MachineSDNode>(N))
-    MN->setMemRefs(nullptr, nullptr);
+    MN->clearMemRefs();
 
   // Swap for an appropriately sized array from the recycler.
   removeOperands(N);
@@ -8316,6 +8434,64 @@ bool SDNode::hasPredecessor(const SDNode *N) const {
 
 void SDNode::intersectFlagsWith(const SDNodeFlags Flags) {
   this->Flags.intersectWith(Flags);
+}
+
+SDValue
+SelectionDAG::matchBinOpReduction(SDNode *Extract, ISD::NodeType &BinOp,
+                                  ArrayRef<ISD::NodeType> CandidateBinOps) {
+  // The pattern must end in an extract from index 0.
+  if (Extract->getOpcode() != ISD::EXTRACT_VECTOR_ELT ||
+      !isNullConstant(Extract->getOperand(1)))
+    return SDValue();
+
+  SDValue Op = Extract->getOperand(0);
+  unsigned Stages = Log2_32(Op.getValueType().getVectorNumElements());
+
+  // Match against one of the candidate binary ops.
+  if (llvm::none_of(CandidateBinOps, [Op](ISD::NodeType BinOp) {
+        return Op.getOpcode() == unsigned(BinOp);
+      }))
+    return SDValue();
+
+  // At each stage, we're looking for something that looks like:
+  // %s = shufflevector <8 x i32> %op, <8 x i32> undef,
+  //                    <8 x i32> <i32 2, i32 3, i32 undef, i32 undef,
+  //                               i32 undef, i32 undef, i32 undef, i32 undef>
+  // %a = binop <8 x i32> %op, %s
+  // Where the mask changes according to the stage. E.g. for a 3-stage pyramid,
+  // we expect something like:
+  // <4,5,6,7,u,u,u,u>
+  // <2,3,u,u,u,u,u,u>
+  // <1,u,u,u,u,u,u,u>
+  unsigned CandidateBinOp = Op.getOpcode();
+  for (unsigned i = 0; i < Stages; ++i) {
+    if (Op.getOpcode() != CandidateBinOp)
+      return SDValue();
+
+    SDValue Op0 = Op.getOperand(0);
+    SDValue Op1 = Op.getOperand(1);
+
+    ShuffleVectorSDNode *Shuffle = dyn_cast<ShuffleVectorSDNode>(Op0);
+    if (Shuffle) {
+      Op = Op1;
+    } else {
+      Shuffle = dyn_cast<ShuffleVectorSDNode>(Op1);
+      Op = Op0;
+    }
+
+    // The first operand of the shuffle should be the same as the other operand
+    // of the binop.
+    if (!Shuffle || Shuffle->getOperand(0) != Op)
+      return SDValue();
+
+    // Verify the shuffle has the expected (at this stage of the pyramid) mask.
+    for (int Index = 0, MaskEnd = 1 << i; Index < MaskEnd; ++Index)
+      if (Shuffle->getMaskElt(Index) != MaskEnd + Index)
+        return SDValue();
+  }
+
+  BinOp = (ISD::NodeType)CandidateBinOp;
+  return Op;
 }
 
 SDValue SelectionDAG::UnrollVectorOp(SDNode *N, unsigned ResNE) {

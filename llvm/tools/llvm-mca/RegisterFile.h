@@ -21,6 +21,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSchedule.h"
+#include "llvm/Support/Error.h"
 
 namespace mca {
 
@@ -158,8 +159,6 @@ public:
   unsigned isAvailable(llvm::ArrayRef<unsigned> Regs) const;
   void collectWrites(llvm::SmallVectorImpl<WriteRef> &Writes,
                      unsigned RegID) const;
-  void updateOnRead(ReadState &RS, unsigned RegID);
-
   unsigned getNumRegisterFiles() const { return RegisterFiles.size(); }
 
 #ifndef NDEBUG

@@ -1,11 +1,11 @@
-//===--- Index.h ------------------------------------------------*- C++-*-===//
+//===--- Index.h -------------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_INDEX_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_INDEX_H
@@ -17,6 +17,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/StringSaver.h"
 #include <array>
 #include <string>
 
@@ -30,6 +31,9 @@ struct SymbolLocation {
     uint32_t Line = 0; // 0-based
     // Using UTF-16 code units.
     uint32_t Column = 0; // 0-based
+    bool operator==(const Position& P) const {
+      return Line == P.Line && Column == P.Column;
+    }
   };
 
   // The URI of the source file where a symbol occurs.
@@ -39,7 +43,11 @@ struct SymbolLocation {
   Position Start;
   Position End;
 
-  operator bool() const { return !FileURI.empty(); }
+  explicit operator bool() const { return !FileURI.empty(); }
+  bool operator==(const SymbolLocation& Loc) const {
+    return std::tie(FileURI, Start, End) ==
+           std::tie(Loc.FileURI, Loc.Start, Loc.End);
+  }
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const SymbolLocation &);
 
@@ -250,6 +258,8 @@ public:
   // The frozen SymbolSlab will use less memory.
   class Builder {
   public:
+    Builder() : UniqueStrings(Arena) {}
+
     // Adds a symbol, overwriting any existing one with the same ID.
     // This is a deep copy: underlying strings will be owned by the slab.
     void insert(const Symbol &S);
@@ -266,7 +276,7 @@ public:
   private:
     llvm::BumpPtrAllocator Arena;
     // Intern table for strings. Contents are on the arena.
-    llvm::DenseSet<llvm::StringRef> Strings;
+    llvm::UniqueStringSaver UniqueStrings;
     std::vector<Symbol> Symbols;
     // Values are indices into Symbols vector.
     llvm::DenseMap<SymbolID, size_t> SymbolIndex;
@@ -278,6 +288,40 @@ private:
 
   llvm::BumpPtrAllocator Arena; // Owns Symbol data that the Symbols do not.
   std::vector<Symbol> Symbols;  // Sorted by SymbolID to allow lookup.
+};
+
+// Describes the kind of a symbol occurrence.
+//
+// This is a bitfield which can be combined from different kinds.
+enum class SymbolOccurrenceKind : uint8_t {
+  Unknown = 0,
+  Declaration = static_cast<uint8_t>(index::SymbolRole::Declaration),
+  Definition = static_cast<uint8_t>(index::SymbolRole::Definition),
+  Reference = static_cast<uint8_t>(index::SymbolRole::Reference),
+};
+inline SymbolOccurrenceKind operator|(SymbolOccurrenceKind L,
+                                      SymbolOccurrenceKind R) {
+  return static_cast<SymbolOccurrenceKind>(static_cast<uint8_t>(L) |
+                                           static_cast<uint8_t>(R));
+}
+inline SymbolOccurrenceKind &operator|=(SymbolOccurrenceKind &L,
+                                        SymbolOccurrenceKind R) {
+  return L = L | R;
+}
+inline SymbolOccurrenceKind operator&(SymbolOccurrenceKind A,
+                                      SymbolOccurrenceKind B) {
+  return static_cast<SymbolOccurrenceKind>(static_cast<uint8_t>(A) &
+                                           static_cast<uint8_t>(B));
+}
+
+// Represents a symbol occurrence in the source file. It could be a
+// declaration/definition/reference occurrence.
+//
+// WARNING: Location does not own the underlying data - Copies are shallow.
+struct SymbolOccurrence {
+  // The location of the occurrence.
+  SymbolLocation Location;
+  SymbolOccurrenceKind Kind = SymbolOccurrenceKind::Unknown;
 };
 
 struct FuzzyFindRequest {
@@ -305,6 +349,11 @@ struct LookupRequest {
   llvm::DenseSet<SymbolID> IDs;
 };
 
+struct OccurrencesRequest {
+  llvm::DenseSet<SymbolID> IDs;
+  SymbolOccurrenceKind Filter;
+};
+
 /// \brief Interface for symbol indexes that can be used for searching or
 /// matching symbols among a set of symbols based on names or unique IDs.
 class SymbolIndex {
@@ -327,10 +376,18 @@ public:
   lookup(const LookupRequest &Req,
          llvm::function_ref<void(const Symbol &)> Callback) const = 0;
 
-  // FIXME: add interfaces for more index use cases:
-  //  - getAllOccurrences(SymbolID);
+  /// CrossReference finds all symbol occurrences (e.g. references,
+  /// declarations, definitions) and applies \p Callback on each result.
+  ///
+  /// Resutls are returned in arbitrary order.
+  ///
+  /// The returned result must be deep-copied if it's used outside Callback.
+  virtual void findOccurrences(
+      const OccurrencesRequest &Req,
+      llvm::function_ref<void(const SymbolOccurrence &)> Callback) const = 0;
 };
 
 } // namespace clangd
 } // namespace clang
+
 #endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_INDEX_H

@@ -17,10 +17,11 @@
 
 namespace clang {
 namespace clangd {
+namespace {
 
 using ::testing::_;
-using ::testing::Each;
 using ::testing::AnyOf;
+using ::testing::Each;
 using ::testing::Pair;
 using ::testing::Pointee;
 using ::testing::UnorderedElementsAre;
@@ -44,8 +45,7 @@ protected:
 
 TEST_F(TUSchedulerTests, MissingFiles) {
   TUScheduler S(getDefaultAsyncThreadsCount(),
-                /*StorePreamblesInMemory=*/true,
-                /*PreambleParsedCallback=*/nullptr,
+                /*StorePreamblesInMemory=*/true, noopParsingCallbacks(),
                 /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
                 ASTRetentionPolicy());
 
@@ -101,8 +101,7 @@ TEST_F(TUSchedulerTests, WantDiagnostics) {
     Notification Ready;
     TUScheduler S(
         getDefaultAsyncThreadsCount(),
-        /*StorePreamblesInMemory=*/true,
-        /*PreambleParsedCallback=*/nullptr,
+        /*StorePreamblesInMemory=*/true, noopParsingCallbacks(),
         /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
         ASTRetentionPolicy());
     auto Path = testPath("foo.cpp");
@@ -130,8 +129,7 @@ TEST_F(TUSchedulerTests, Debounce) {
   std::atomic<int> CallbackCount(0);
   {
     TUScheduler S(getDefaultAsyncThreadsCount(),
-                  /*StorePreamblesInMemory=*/true,
-                  /*PreambleParsedCallback=*/nullptr,
+                  /*StorePreamblesInMemory=*/true, noopParsingCallbacks(),
                   /*UpdateDebounce=*/std::chrono::seconds(1),
                   ASTRetentionPolicy());
     // FIXME: we could probably use timeouts lower than 1 second here.
@@ -162,8 +160,7 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
   // Run TUScheduler and collect some stats.
   {
     TUScheduler S(getDefaultAsyncThreadsCount(),
-                  /*StorePreamblesInMemory=*/true,
-                  /*PreambleParsedCallback=*/nullptr,
+                  /*StorePreamblesInMemory=*/true, noopParsingCallbacks(),
                   /*UpdateDebounce=*/std::chrono::milliseconds(50),
                   ASTRetentionPolicy());
 
@@ -197,20 +194,22 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
           S.update(File, Inputs, WantDiagnostics::Auto,
-                   [Nonce, &Mut,
+                   [File, Nonce, &Mut,
                     &TotalUpdates](llvm::Optional<std::vector<Diag>> Diags) {
                      EXPECT_THAT(Context::current().get(NonceKey),
                                  Pointee(Nonce));
 
                      std::lock_guard<std::mutex> Lock(Mut);
                      ++TotalUpdates;
+                     EXPECT_EQ(File,
+                               *TUScheduler::getFileBeingProcessedInContext());
                    });
         }
 
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
           S.runWithAST("CheckAST", File,
-                       [Inputs, Nonce, &Mut,
+                       [File, Inputs, Nonce, &Mut,
                         &TotalASTReads](llvm::Expected<InputsAndAST> AST) {
                          EXPECT_THAT(Context::current().get(NonceKey),
                                      Pointee(Nonce));
@@ -221,23 +220,27 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
 
                          std::lock_guard<std::mutex> Lock(Mut);
                          ++TotalASTReads;
+                         EXPECT_EQ(
+                             File,
+                             *TUScheduler::getFileBeingProcessedInContext());
                        });
         }
 
         {
           WithContextValue WithNonce(NonceKey, ++Nonce);
-          S.runWithPreamble("CheckPreamble", File,
-                            [Inputs, Nonce, &Mut, &TotalPreambleReads](
-                                llvm::Expected<InputsAndPreamble> Preamble) {
-                              EXPECT_THAT(Context::current().get(NonceKey),
-                                          Pointee(Nonce));
+          S.runWithPreamble(
+              "CheckPreamble", File,
+              [File, Inputs, Nonce, &Mut, &TotalPreambleReads](
+                  llvm::Expected<InputsAndPreamble> Preamble) {
+                EXPECT_THAT(Context::current().get(NonceKey), Pointee(Nonce));
 
-                              ASSERT_TRUE((bool)Preamble);
-                              EXPECT_EQ(Preamble->Contents, Inputs.Contents);
+                ASSERT_TRUE((bool)Preamble);
+                EXPECT_EQ(Preamble->Contents, Inputs.Contents);
 
-                              std::lock_guard<std::mutex> Lock(Mut);
-                              ++TotalPreambleReads;
-                            });
+                std::lock_guard<std::mutex> Lock(Mut);
+                ++TotalPreambleReads;
+                EXPECT_EQ(File, *TUScheduler::getFileBeingProcessedInContext());
+              });
         }
       }
     }
@@ -255,7 +258,7 @@ TEST_F(TUSchedulerTests, EvictedAST) {
   Policy.MaxRetainedASTs = 2;
   TUScheduler S(
       /*AsyncThreadsCount=*/1, /*StorePreambleInMemory=*/true,
-      PreambleParsedCallback(),
+      noopParsingCallbacks(),
       /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(), Policy);
 
   llvm::StringLiteral SourceContents = R"cpp(
@@ -302,12 +305,57 @@ TEST_F(TUSchedulerTests, EvictedAST) {
               UnorderedElementsAre(Foo, AnyOf(Bar, Baz)));
 }
 
+TEST_F(TUSchedulerTests, EmptyPreamble) {
+  TUScheduler S(
+      /*AsyncThreadsCount=*/4, /*StorePreambleInMemory=*/true,
+      noopParsingCallbacks(),
+      /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
+      ASTRetentionPolicy());
+
+  auto Foo = testPath("foo.cpp");
+  auto Header = testPath("foo.h");
+
+  Files[Header] = "void foo()";
+  Timestamps[Header] = time_t(0);
+  auto WithPreamble = R"cpp(
+    #include "foo.h"
+    int main() {}
+  )cpp";
+  auto WithEmptyPreamble = R"cpp(int main() {})cpp";
+  S.update(Foo, getInputs(Foo, WithPreamble), WantDiagnostics::Auto,
+           [](std::vector<Diag>) {});
+  S.runWithPreamble("getNonEmptyPreamble", Foo,
+                    [&](llvm::Expected<InputsAndPreamble> Preamble) {
+                      // We expect to get a non-empty preamble.
+                      EXPECT_GT(cantFail(std::move(Preamble))
+                                    .Preamble->Preamble.getBounds()
+                                    .Size,
+                                0u);
+                    });
+  // Wait for the preamble is being built.
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
+
+  // Update the file which results in an empty preamble.
+  S.update(Foo, getInputs(Foo, WithEmptyPreamble), WantDiagnostics::Auto,
+           [](std::vector<Diag>) {});
+  // Wait for the preamble is being built.
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
+  S.runWithPreamble("getEmptyPreamble", Foo,
+                    [&](llvm::Expected<InputsAndPreamble> Preamble) {
+                      // We expect to get an empty preamble.
+                      EXPECT_EQ(cantFail(std::move(Preamble))
+                                    .Preamble->Preamble.getBounds()
+                                    .Size,
+                                0u);
+                    });
+}
+
 TEST_F(TUSchedulerTests, RunWaitsForPreamble) {
   // Testing strategy: we update the file and schedule a few preamble reads at
   // the same time. All reads should get the same non-null preamble.
   TUScheduler S(
       /*AsyncThreadsCount=*/4, /*StorePreambleInMemory=*/true,
-      PreambleParsedCallback(),
+      noopParsingCallbacks(),
       /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
       ASTRetentionPolicy());
   auto Foo = testPath("foo.cpp");
@@ -340,7 +388,7 @@ TEST_F(TUSchedulerTests, RunWaitsForPreamble) {
 TEST_F(TUSchedulerTests, NoopOnEmptyChanges) {
   TUScheduler S(
       /*AsyncThreadsCount=*/getDefaultAsyncThreadsCount(),
-      /*StorePreambleInMemory=*/true, PreambleParsedCallback(),
+      /*StorePreambleInMemory=*/true, noopParsingCallbacks(),
       /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
       ASTRetentionPolicy());
 
@@ -393,7 +441,7 @@ TEST_F(TUSchedulerTests, NoopOnEmptyChanges) {
 TEST_F(TUSchedulerTests, NoChangeDiags) {
   TUScheduler S(
       /*AsyncThreadsCount=*/getDefaultAsyncThreadsCount(),
-      /*StorePreambleInMemory=*/true, PreambleParsedCallback(),
+      /*StorePreambleInMemory=*/true, noopParsingCallbacks(),
       /*UpdateDebounce=*/std::chrono::steady_clock::duration::zero(),
       ASTRetentionPolicy());
 
@@ -424,5 +472,6 @@ TEST_F(TUSchedulerTests, NoChangeDiags) {
   ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(1)));
 }
 
+} // namespace
 } // namespace clangd
 } // namespace clang

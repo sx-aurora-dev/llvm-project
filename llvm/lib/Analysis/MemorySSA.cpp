@@ -77,9 +77,15 @@ static cl::opt<unsigned> MaxCheckLimit(
     cl::desc("The maximum number of stores/phis MemorySSA"
              "will consider trying to walk past (default = 100)"));
 
-static cl::opt<bool>
-    VerifyMemorySSA("verify-memoryssa", cl::init(false), cl::Hidden,
-                    cl::desc("Verify MemorySSA in legacy printer pass."));
+// Always verify MemorySSA if expensive checking is enabled.
+#ifdef EXPENSIVE_CHECKS
+bool llvm::VerifyMemorySSA = true;
+#else
+bool llvm::VerifyMemorySSA = false;
+#endif
+static cl::opt<bool, true>
+    VerifyMemorySSAX("verify-memoryssa", cl::location(VerifyMemorySSA),
+                     cl::Hidden, cl::desc("Enable verification of MemorySSA."));
 
 namespace llvm {
 
@@ -258,13 +264,18 @@ static ClobberAlias instructionClobbersQuery(MemoryDef *MD,
 
   if (const IntrinsicInst *II = dyn_cast<IntrinsicInst>(DefInst)) {
     // These intrinsics will show up as affecting memory, but they are just
-    // markers.
+    // markers, mostly.
+    //
+    // FIXME: We probably don't actually want MemorySSA to model these at all
+    // (including creating MemoryAccesses for them): we just end up inventing
+    // clobbers where they don't really exist at all. Please see D43269 for
+    // context.
     switch (II->getIntrinsicID()) {
     case Intrinsic::lifetime_start:
       if (UseCS)
         return {false, NoAlias};
       AR = AA.alias(MemoryLocation(II->getArgOperand(1)), UseLoc);
-      return {AR == MustAlias, AR};
+      return {AR != NoAlias, AR};
     case Intrinsic::lifetime_end:
     case Intrinsic::invariant_start:
     case Intrinsic::invariant_end:
@@ -1461,15 +1472,25 @@ void MemorySSA::insertIntoListsBefore(MemoryAccess *What, const BasicBlock *BB,
   BlockNumberingValid.erase(BB);
 }
 
+void MemorySSA::prepareForMoveTo(MemoryAccess *What, BasicBlock *BB) {
+  // Keep it in the lookup tables, remove from the lists
+  removeFromLists(What, false);
+
+  // Note that moving should implicitly invalidate the optimized state of a
+  // MemoryUse (and Phis can't be optimized). However, it doesn't do so for a
+  // MemoryDef.
+  if (auto *MD = dyn_cast<MemoryDef>(What))
+    MD->resetOptimized();
+  What->setBlock(BB);
+}
+
 // Move What before Where in the IR.  The end result is that What will belong to
 // the right lists and have the right Block set, but will not otherwise be
 // correct. It will not have the right defining access, and if it is a def,
 // things below it will not properly be updated.
 void MemorySSA::moveTo(MemoryUseOrDef *What, BasicBlock *BB,
                        AccessList::iterator Where) {
-  // Keep it in the lookup tables, remove from the lists
-  removeFromLists(What, false);
-  What->setBlock(BB);
+  prepareForMoveTo(What, BB);
   insertIntoListsBefore(What, BB, Where);
 }
 
@@ -1485,8 +1506,7 @@ void MemorySSA::moveTo(MemoryAccess *What, BasicBlock *BB,
     assert(Inserted && "Cannot move a Phi to a block that already has one");
   }
 
-  removeFromLists(What, false);
-  What->setBlock(BB);
+  prepareForMoveTo(What, BB);
   insertIntoListsForBlock(What, BB, Point);
 }
 
@@ -1811,14 +1831,6 @@ void MemorySSA::verifyDefUses(Function &F) const {
       }
     }
   }
-}
-
-MemoryUseOrDef *MemorySSA::getMemoryAccess(const Instruction *I) const {
-  return cast_or_null<MemoryUseOrDef>(ValueToMemoryAccess.lookup(I));
-}
-
-MemoryPhi *MemorySSA::getMemoryAccess(const BasicBlock *BB) const {
-  return cast_or_null<MemoryPhi>(ValueToMemoryAccess.lookup(cast<Value>(BB)));
 }
 
 /// Perform a local numbering on blocks so that instruction ordering can be

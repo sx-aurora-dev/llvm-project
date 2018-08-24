@@ -128,7 +128,7 @@ CXXRecordDecl *CXXRecordDecl::Create(const ASTContext &C, TagKind TK,
                                      bool DelayTypeCreation) {
   auto *R = new (C, DC) CXXRecordDecl(CXXRecord, TK, C, DC, StartLoc, IdLoc, Id,
                                       PrevDecl);
-  R->MayHaveOutOfDateDef = C.getLangOpts().Modules;
+  R->setMayHaveOutOfDateDef(C.getLangOpts().Modules);
 
   // FIXME: DelayTypeCreation seems like such a hack
   if (!DelayTypeCreation)
@@ -143,11 +143,11 @@ CXXRecordDecl::CreateLambda(const ASTContext &C, DeclContext *DC,
                             LambdaCaptureDefault CaptureDefault) {
   auto *R = new (C, DC) CXXRecordDecl(CXXRecord, TTK_Class, C, DC, Loc, Loc,
                                       nullptr, nullptr);
-  R->IsBeingDefined = true;
+  R->setBeingDefined(true);
   R->DefinitionData =
       new (C) struct LambdaDefinitionData(R, Info, Dependent, IsGeneric,
                                           CaptureDefault);
-  R->MayHaveOutOfDateDef = false;
+  R->setMayHaveOutOfDateDef(false);
   R->setImplicit(true);
   C.getTypeDeclType(R, /*PrevDecl=*/nullptr);
   return R;
@@ -158,7 +158,7 @@ CXXRecordDecl::CreateDeserialized(const ASTContext &C, unsigned ID) {
   auto *R = new (C, ID) CXXRecordDecl(
       CXXRecord, TTK_Struct, C, nullptr, SourceLocation(), SourceLocation(),
       nullptr, nullptr);
-  R->MayHaveOutOfDateDef = false;
+  R->setMayHaveOutOfDateDef(false);
   return R;
 }
 
@@ -1327,6 +1327,15 @@ bool CXXRecordDecl::isGenericLambda() const {
   return getLambdaData().IsGenericLambda;
 }
 
+#ifndef NDEBUG
+static bool allLookupResultsAreTheSame(const DeclContext::lookup_result &R) {
+  for (auto *D : R)
+    if (!declaresSameEntity(D, R.front()))
+      return false;
+  return true;
+}
+#endif
+
 CXXMethodDecl* CXXRecordDecl::getLambdaCallOperator() const {
   if (!isLambda()) return nullptr;
   DeclarationName Name =
@@ -1334,7 +1343,8 @@ CXXMethodDecl* CXXRecordDecl::getLambdaCallOperator() const {
   DeclContext::lookup_result Calls = lookup(Name);
 
   assert(!Calls.empty() && "Missing lambda call operator!");
-  assert(Calls.size() == 1 && "More than one lambda call operator!");
+  assert(allLookupResultsAreTheSame(Calls) &&
+         "More than one lambda call operator!");
 
   NamedDecl *CallOp = Calls.front();
   if (const auto *CallOpTmpl = dyn_cast<FunctionTemplateDecl>(CallOp))
@@ -1349,7 +1359,8 @@ CXXMethodDecl* CXXRecordDecl::getLambdaStaticInvoker() const {
     &getASTContext().Idents.get(getLambdaStaticInvokerName());
   DeclContext::lookup_result Invoker = lookup(Name);
   if (Invoker.empty()) return nullptr;
-  assert(Invoker.size() == 1 && "More than one static invoker operator!");
+  assert(allLookupResultsAreTheSame(Invoker) &&
+         "More than one static invoker operator!");
   NamedDecl *InvokerFun = Invoker.front();
   if (const auto *InvokerTemplate = dyn_cast<FunctionTemplateDecl>(InvokerFun))
     return cast<CXXMethodDecl>(InvokerTemplate->getTemplatedDecl());
@@ -2246,6 +2257,21 @@ SourceRange CXXCtorInitializer::getSourceRange() const {
   return SourceRange(getSourceLocation(), getRParenLoc());
 }
 
+CXXConstructorDecl::CXXConstructorDecl(
+    ASTContext &C, CXXRecordDecl *RD, SourceLocation StartLoc,
+    const DeclarationNameInfo &NameInfo, QualType T, TypeSourceInfo *TInfo,
+    bool isExplicitSpecified, bool isInline, bool isImplicitlyDeclared,
+    bool isConstexpr, InheritedConstructor Inherited)
+    : CXXMethodDecl(CXXConstructor, C, RD, StartLoc, NameInfo, T, TInfo,
+                    SC_None, isInline, isConstexpr, SourceLocation()) {
+  setNumCtorInitializers(0);
+  setInheritingConstructor(static_cast<bool>(Inherited));
+  setImplicit(isImplicitlyDeclared);
+  if (Inherited)
+    *getTrailingObjects<InheritedConstructor>() = Inherited;
+  setExplicitSpecified(isExplicitSpecified);
+}
+
 void CXXConstructorDecl::anchor() {}
 
 CXXConstructorDecl *CXXConstructorDecl::CreateDeserialized(ASTContext &C,
@@ -2255,7 +2281,7 @@ CXXConstructorDecl *CXXConstructorDecl::CreateDeserialized(ASTContext &C,
   auto *Result = new (C, ID, Extra) CXXConstructorDecl(
       C, nullptr, SourceLocation(), DeclarationNameInfo(), QualType(), nullptr,
       false, false, false, false, InheritedConstructor());
-  Result->IsInheritingConstructor = Inherited;
+  Result->setInheritingConstructor(Inherited);
   return Result;
 }
 
@@ -2449,6 +2475,15 @@ CXXConversionDecl::Create(ASTContext &C, CXXRecordDecl *RD,
 bool CXXConversionDecl::isLambdaToBlockPointerConversion() const {
   return isImplicit() && getParent()->isLambda() &&
          getConversionType()->isBlockPointerType();
+}
+
+LinkageSpecDecl::LinkageSpecDecl(DeclContext *DC, SourceLocation ExternLoc,
+                                 SourceLocation LangLoc, LanguageIDs lang,
+                                 bool HasBraces)
+    : Decl(LinkageSpec, DC, LangLoc), DeclContext(LinkageSpec),
+      ExternLoc(ExternLoc), RBraceLoc(SourceLocation()) {
+  setLanguage(lang);
+  LinkageSpecDeclBits.HasBraces = HasBraces;
 }
 
 void LinkageSpecDecl::anchor() {}

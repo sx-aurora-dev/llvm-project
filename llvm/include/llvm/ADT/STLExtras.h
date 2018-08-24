@@ -21,6 +21,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/Config/abi-breaking.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <cassert>
@@ -418,6 +419,89 @@ make_filter_range(RangeT &&Range, PredicateT Pred) {
                       std::end(std::forward<RangeT>(Range)), Pred));
 }
 
+/// A pseudo-iterator adaptor that is designed to implement "early increment"
+/// style loops.
+///
+/// This is *not a normal iterator* and should almost never be used directly. It
+/// is intended primarily to be used with range based for loops and some range
+/// algorithms.
+///
+/// The iterator isn't quite an `OutputIterator` or an `InputIterator` but
+/// somewhere between them. The constraints of these iterators are:
+///
+/// - On construction or after being incremented, it is comparable and
+///   dereferencable. It is *not* incrementable.
+/// - After being dereferenced, it is neither comparable nor dereferencable, it
+///   is only incrementable.
+///
+/// This means you can only dereference the iterator once, and you can only
+/// increment it once between dereferences.
+template <typename WrappedIteratorT>
+class early_inc_iterator_impl
+    : public iterator_adaptor_base<early_inc_iterator_impl<WrappedIteratorT>,
+                                   WrappedIteratorT, std::input_iterator_tag> {
+  using BaseT =
+      iterator_adaptor_base<early_inc_iterator_impl<WrappedIteratorT>,
+                            WrappedIteratorT, std::input_iterator_tag>;
+
+  using PointerT = typename std::iterator_traits<WrappedIteratorT>::pointer;
+
+protected:
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+  bool IsEarlyIncremented = false;
+#endif
+
+public:
+  early_inc_iterator_impl(WrappedIteratorT I) : BaseT(I) {}
+
+  using BaseT::operator*;
+  typename BaseT::reference operator*() {
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+    assert(!IsEarlyIncremented && "Cannot dereference twice!");
+    IsEarlyIncremented = true;
+#endif
+    return *(this->I)++;
+  }
+
+  using BaseT::operator++;
+  early_inc_iterator_impl &operator++() {
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+    assert(IsEarlyIncremented && "Cannot increment before dereferencing!");
+    IsEarlyIncremented = false;
+#endif
+    return *this;
+  }
+
+  using BaseT::operator==;
+  bool operator==(const early_inc_iterator_impl &RHS) const {
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+    assert(!IsEarlyIncremented && "Cannot compare after dereferencing!");
+#endif
+    return BaseT::operator==(RHS);
+  }
+};
+
+/// Make a range that does early increment to allow mutation of the underlying
+/// range without disrupting iteration.
+///
+/// The underlying iterator will be incremented immediately after it is
+/// dereferenced, allowing deletion of the current node or insertion of nodes to
+/// not disrupt iteration provided they do not invalidate the *next* iterator --
+/// the current iterator can be invalidated.
+///
+/// This requires a very exact pattern of use that is only really suitable to
+/// range based for loops and other range algorithms that explicitly guarantee
+/// to dereference exactly once each element, and to increment exactly once each
+/// element.
+template <typename RangeT>
+iterator_range<early_inc_iterator_impl<detail::IterOfRange<RangeT>>>
+make_early_inc_range(RangeT &&Range) {
+  using EarlyIncIteratorT =
+      early_inc_iterator_impl<detail::IterOfRange<RangeT>>;
+  return make_range(EarlyIncIteratorT(std::begin(std::forward<RangeT>(Range))),
+                    EarlyIncIteratorT(std::end(std::forward<RangeT>(Range))));
+}
+
 // forward declarations required by zip_shortest/zip_first
 template <typename R, typename UnaryPredicate>
 bool all_of(R &&range, UnaryPredicate P);
@@ -740,6 +824,19 @@ struct less_second {
   }
 };
 
+/// \brief Function object to apply a binary function to the first component of
+/// a std::pair.
+template<typename FuncTy>
+struct on_first {
+  FuncTy func;
+
+  template <typename T>
+  auto operator()(const T &lhs, const T &rhs) const
+      -> decltype(func(lhs.first, rhs.first)) {
+    return func(lhs.first, rhs.first);
+  }
+};
+
 // A subset of N3658. More stuff can be added as-needed.
 
 /// Represents a compile-time sequence of integers.
@@ -908,6 +1005,18 @@ void DeleteContainerSeconds(Container &C) {
   C.clear();
 }
 
+/// Get the size of a range. This is a wrapper function around std::distance
+/// which is only enabled when the operation is O(1).
+template <typename R>
+auto size(R &&Range, typename std::enable_if<
+                         std::is_same<typename std::iterator_traits<decltype(
+                                          Range.begin())>::iterator_category,
+                                      std::random_access_iterator_tag>::value,
+                         void>::type * = nullptr)
+    -> decltype(std::distance(Range.begin(), Range.end())) {
+  return std::distance(Range.begin(), Range.end());
+}
+
 /// Provide wrappers to std::for_each which take ranges instead of having to
 /// pass begin/end explicitly.
 template <typename R, typename UnaryPredicate>
@@ -1018,6 +1127,15 @@ auto lower_bound(R &&Range, ForwardIt I) -> decltype(adl_begin(Range)) {
   return std::lower_bound(adl_begin(Range), adl_end(Range), I);
 }
 
+/// Wrapper function around std::equal to detect if all elements
+/// in a container are same.
+template <typename R> 
+bool is_splat(R &&Range) {
+  size_t range_size = size(Range);
+  return range_size != 0 && (range_size == 1 ||
+         std::equal(adl_begin(Range) + 1, adl_end(Range), adl_begin(Range)));
+}
+
 /// Given a range of type R, iterate the entire range and return a
 /// SmallVector with elements of the vector.  This is useful, for example,
 /// when you want to iterate a range and then sort the results.
@@ -1037,18 +1155,6 @@ to_vector(R &&Range) {
 template <typename Container, typename UnaryPredicate>
 void erase_if(Container &C, UnaryPredicate P) {
   C.erase(remove_if(C, P), C.end());
-}
-
-/// Get the size of a range. This is a wrapper function around std::distance
-/// which is only enabled when the operation is O(1).
-template <typename R>
-auto size(R &&Range, typename std::enable_if<
-                         std::is_same<typename std::iterator_traits<decltype(
-                                          Range.begin())>::iterator_category,
-                                      std::random_access_iterator_tag>::value,
-                         void>::type * = nullptr)
-    -> decltype(std::distance(Range.begin(), Range.end())) {
-  return std::distance(Range.begin(), Range.end());
 }
 
 //===----------------------------------------------------------------------===//
