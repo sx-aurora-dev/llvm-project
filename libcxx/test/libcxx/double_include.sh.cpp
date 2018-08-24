@@ -27,6 +27,7 @@
 #ifndef _LIBCPP_HAS_NO_THREADS
 #include <atomic>
 #endif
+#include <bit>
 #include <bitset>
 #include <cassert>
 #include <ccomplex>
@@ -34,6 +35,7 @@
 #include <cerrno>
 #include <cfenv>
 #include <cfloat>
+#include <charconv>
 #include <chrono>
 #include <cinttypes>
 #include <ciso646>

@@ -1,11 +1,11 @@
-//===--- Quality.cpp --------------------------------------------*- C++-*-===//
+//===--- Quality.cpp ---------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 #include "Quality.h"
 #include "FileDistance.h"
 #include "URI.h"
@@ -292,6 +292,8 @@ void SymbolRelevanceSignals::merge(const CodeCompletionResult &SemaCCResult) {
   // Declarations are scoped, others (like macros) are assumed global.
   if (SemaCCResult.Declaration)
     Scope = std::min(Scope, computeScope(SemaCCResult.Declaration));
+
+  NeedsFixIts = !SemaCCResult.FixIts.empty();
 }
 
 static std::pair<float, unsigned> proximityScore(llvm::StringRef SymbolURI,
@@ -343,6 +345,10 @@ float SymbolRelevanceSignals::evaluate() const {
     Score *= 0.5;
   }
 
+  // Penalize for FixIts.
+  if (NeedsFixIts)
+    Score *= 0.5;
+
   return Score;
 }
 
@@ -350,6 +356,7 @@ raw_ostream &operator<<(raw_ostream &OS, const SymbolRelevanceSignals &S) {
   OS << formatv("=== Symbol relevance: {0}\n", S.evaluate());
   OS << formatv("\tName match: {0}\n", S.NameMatch);
   OS << formatv("\tForbidden: {0}\n", S.Forbidden);
+  OS << formatv("\tNeedsFixIts: {0}\n", S.NeedsFixIts);
   OS << formatv("\tIsInstanceMember: {0}\n", S.IsInstanceMember);
   OS << formatv("\tContext: {0}\n", getCompletionKindString(S.Context));
   OS << formatv("\tSymbol URI: {0}\n", S.SymbolURI);
@@ -392,6 +399,18 @@ std::string sortText(float Score, llvm::StringRef Name) {
   OS << Name;
   OS.flush();
   return S;
+}
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &OS,
+                              const SignatureQualitySignals &S) {
+  OS << formatv("=== Signature Quality:\n");
+  OS << formatv("\tNumber of parameters: {0}\n", S.NumberOfParameters);
+  OS << formatv("\tNumber of optional parameters: {0}\n",
+                S.NumberOfOptionalParameters);
+  OS << formatv("\tContains active parameter: {0}\n",
+                S.ContainsActiveParameter);
+  OS << formatv("\tKind: {0}\n", S.Kind);
+  return OS;
 }
 
 } // namespace clangd

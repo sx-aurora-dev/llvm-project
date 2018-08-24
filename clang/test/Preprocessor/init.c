@@ -3442,7 +3442,7 @@
 // MIPS32BE:#define __mips 32
 // MIPS32BE:#define __mips__ 1
 // MIPS32BE:#define __mips_abicalls 1
-// MIPS32BE:#define __mips_fpr 32
+// MIPS32BE:#define __mips_fpr 0
 // MIPS32BE:#define __mips_hard_float 1
 // MIPS32BE:#define __mips_o32 1
 // MIPS32BE:#define _mips 1
@@ -3649,7 +3649,7 @@
 // MIPS32EL:#define __mips 32
 // MIPS32EL:#define __mips__ 1
 // MIPS32EL:#define __mips_abicalls 1
-// MIPS32EL:#define __mips_fpr 32
+// MIPS32EL:#define __mips_fpr 0
 // MIPS32EL:#define __mips_hard_float 1
 // MIPS32EL:#define __mips_o32 1
 // MIPS32EL:#define _mips 1
@@ -4900,6 +4900,41 @@
 // RUN:   | FileCheck -match-full-lines -check-prefix NOMIPS-ABS2008 %s
 // NOMIPS-ABS2008-NOT:#define __mips_abs2008 1
 //
+// RUN: %clang_cc1  \
+// RUN:   -E -dM -triple=mips-none-none < /dev/null \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS32-NOFP %s
+// MIPS32-NOFP:#define __mips_fpr 0
+//
+// RUN: %clang_cc1 -target-feature +fpxx \
+// RUN:   -E -dM -triple=mips-none-none < /dev/null \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS32-MFPXX %s
+// MIPS32-MFPXX:#define __mips_fpr 0
+//
+// RUN: %clang_cc1 -target-cpu mips32r6 -target-feature +fpxx \
+// RUN:   -E -dM -triple=mips-none-none < /dev/null \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS32R6-MFPXX %s
+// MIPS32R6-MFPXX:#define __mips_fpr 0
+//
+// RUN: %clang_cc1  \
+// RUN:   -E -dM -triple=mips64-none-none < /dev/null \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS64-NOFP %s
+// MIPS64-NOFP:#define __mips_fpr 64
+//
+// RUN: not %clang_cc1 -target-feature -fp64 \
+// RUN:   -E -dM -triple=mips64-none-none < /dev/null 2>&1 \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS64-MFP32 %s
+// MIPS64-MFP32:error: option '-mfpxx' cannot be specified with 'mips64r2'
+//
+// RUN: not %clang_cc1 -target-feature +fpxx \
+// RUN:   -E -dM -triple=mips64-none-none < /dev/null 2>&1 \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS64-MFPXX %s
+// MIPS64-MFPXX:error: '-mfpxx' can only be used with the 'o32' ABI
+//
+// RUN: not %clang_cc1 -target-cpu mips64r6 -target-feature +fpxx \
+// RUN:   -E -dM -triple=mips64-none-none < /dev/null 2>&1 \
+// RUN:   | FileCheck -match-full-lines -check-prefix MIPS64R6-MFPXX %s
+// MIPS64R6-MFPXX:error: '-mfpxx' can only be used with the 'o32' ABI
+//
 // RUN: %clang_cc1 -target-feature -fp64 \
 // RUN:   -E -dM -triple=mips-none-none < /dev/null \
 // RUN:   | FileCheck -match-full-lines -check-prefix MIPS32-MFP32 %s
@@ -4916,7 +4951,7 @@
 // RUN:   -E -dM -triple=mips-none-none < /dev/null \
 // RUN:   | FileCheck -match-full-lines -check-prefix MIPS32-MFP32SF %s
 // MIPS32-MFP32SF:#define _MIPS_FPSET 32
-// MIPS32-MFP32SF:#define __mips_fpr 32
+// MIPS32-MFP32SF:#define __mips_fpr 0
 //
 // RUN: %clang_cc1 -target-feature +fp64 \
 // RUN:   -E -dM -triple=mips64-none-none < /dev/null \
@@ -9019,7 +9054,7 @@
 // ANDROID:#define __ANDROID__ 1
 //
 // RUN: %clang_cc1 -x c++ -triple i686-linux-android -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix I386-ANDROID-CXX %s
-// I386-ANDROID-CXX:#define __STDCPP_DEFAULT_NEW_ALIGNMENT__ 4U
+// I386-ANDROID-CXX:#define __STDCPP_DEFAULT_NEW_ALIGNMENT__ 8U
 //
 // RUN: %clang_cc1 -x c++ -triple x86_64-linux-android -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix X86_64-ANDROID-CXX %s
 // X86_64-ANDROID-CXX:#define __STDCPP_DEFAULT_NEW_ALIGNMENT__ 16UL
