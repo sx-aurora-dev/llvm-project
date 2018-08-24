@@ -867,8 +867,8 @@ def err_protocol_has_circular_dependency : Error<
   "protocol has circular dependency">;
 def err_undeclared_protocol : Error<"cannot find protocol declaration for %0">;
 def warn_undef_protocolref : Warning<"cannot find protocol definition for %0">;
-def warn_atprotocol_protocol : Warning<
-  "@protocol is using a forward protocol declaration of %0">, InGroup<AtProtocol>;
+def err_atprotocol_protocol : Error<
+  "@protocol is using a forward protocol declaration of %0">;
 def warn_readonly_property : Warning<
   "attribute 'readonly' of property %0 restricts attribute "
   "'readwrite' of property inherited from %1">,
@@ -1808,6 +1808,10 @@ def err_destructor_expr_type_mismatch : Error<
   "type %1 of the object being destroyed">;
 def note_destructor_type_here : Note<
   "type %0 is declared here">;
+
+def err_destroy_attr_on_non_static_var : Error<
+  "%select{no_destroy|always_destroy}0 attribute can only be applied to a"
+  " variable with static or thread storage duration">;
 
 def err_destructor_template : Error<
   "destructor cannot be declared as a template">;
@@ -6465,12 +6469,12 @@ def warn_overaligned_type : Warning<
   "type %0 requires %1 bytes of alignment and the default allocator only "
   "guarantees %2 bytes">,
   InGroup<OveralignedType>, DefaultIgnore;
-def warn_aligned_allocation_unavailable :Warning<
+def err_aligned_allocation_unavailable : Error<
   "aligned %select{allocation|deallocation}0 function of type '%1' is only "
-  "available on %2 %3 or newer">, InGroup<AlignedAllocationUnavailable>, DefaultError;
-def note_silence_unligned_allocation_unavailable : Note<
+  "available on %2 %3 or newer">;
+def note_silence_aligned_allocation_unavailable : Note<
   "if you supply your own aligned allocation functions, use "
-  "-Wno-aligned-allocation-unavailable to silence this diagnostic">;
+  "-faligned-allocation to silence this diagnostic">;
 
 def err_conditional_void_nonvoid : Error<
   "%select{left|right}1 operand to ? is void, but %select{right|left}1 operand "
@@ -7854,6 +7858,13 @@ def warn_null_ret : Warning<
   "null returned from %select{function|method}0 that requires a non-null return value">,
   InGroup<NonNull>;
 
+def err_lifetimebound_no_object_param : Error<
+  "'lifetimebound' attribute cannot be applied; %select{static |non-}0member "
+  "function has no implicit object parameter">;
+def err_lifetimebound_ctor_dtor : Error<
+  "'lifetimebound' attribute cannot be applied to a "
+  "%select{constructor|destructor}0">;
+
 // CHECK: returning address/reference of stack memory
 def warn_ret_stack_addr_ref : Warning<
   "%select{address of|reference to}0 stack memory associated with "
@@ -7868,7 +7879,8 @@ def warn_ret_addr_label : Warning<
 def err_ret_local_block : Error<
   "returning block that lives on the local stack">;
 def note_local_var_initializer : Note<
-  "%select{via initialization of|binding reference}0 variable %1 here">;
+  "%select{via initialization of|binding reference}0 variable "
+  "%select{%2 |}1here">;
 def note_init_with_default_member_initalizer : Note<
   "initializing field %0 with default member initializer">;
 
@@ -7900,13 +7912,14 @@ def note_lifetime_extending_member_declared_here : Note<
   "member with %select{reference|'std::initializer_list'}0 subobject}1 "
   "declared here">;
 def warn_dangling_variable : Warning<
-  "%select{temporary %select{whose address is used as value of|bound to}3 "
-  "%select{%select{|reference }3member of local variable|"
-  "local %select{variable|reference}3}1|"
+  "%select{temporary %select{whose address is used as value of|"
+  "%select{|implicitly }2bound to}4 "
+  "%select{%select{|reference }4member of local variable|"
+  "local %select{variable|reference}4}1|"
   "array backing "
   "%select{initializer list subobject of local variable|"
   "local initializer list}1}0 "
-  "%2 will be destroyed at the end of the full-expression">,
+  "%select{%3 |}2will be destroyed at the end of the full-expression">,
   InGroup<Dangling>;
 def warn_new_dangling_reference : Warning<
   "temporary bound to reference member of allocated object "

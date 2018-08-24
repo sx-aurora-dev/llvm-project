@@ -1,11 +1,11 @@
-//===--- CodeComplete.cpp ---------------------------------------*- C++-*-===//
+//===--- CodeComplete.cpp ----------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Code completion has several moving parts:
 //  - AST-based completions are provided using the completion hooks in Sema.
@@ -16,12 +16,13 @@
 // Signature help works in a similar way as code completion, but it is simpler:
 // it's purely AST-based, and there are few candidates.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #include "CodeComplete.h"
 #include "AST.h"
 #include "CodeCompletionStrings.h"
 #include "Compiler.h"
+#include "Diagnostics.h"
 #include "FileDistance.h"
 #include "FuzzyMatch.h"
 #include "Headers.h"
@@ -33,6 +34,7 @@
 #include "index/Index.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Basic/LangOptions.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Format/Format.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -127,16 +129,16 @@ toCompletionItemKind(CodeCompletionResult::ResultKind ResKind,
 /// Get the optional chunk as a string. This function is possibly recursive.
 ///
 /// The parameter info for each parameter is appended to the Parameters.
-std::string
-getOptionalParameters(const CodeCompletionString &CCS,
-                      std::vector<ParameterInformation> &Parameters) {
+std::string getOptionalParameters(const CodeCompletionString &CCS,
+                                  std::vector<ParameterInformation> &Parameters,
+                                  SignatureQualitySignals &Signal) {
   std::string Result;
   for (const auto &Chunk : CCS) {
     switch (Chunk.Kind) {
     case CodeCompletionString::CK_Optional:
       assert(Chunk.Optional &&
              "Expected the optional code completion string to be non-null.");
-      Result += getOptionalParameters(*Chunk.Optional, Parameters);
+      Result += getOptionalParameters(*Chunk.Optional, Parameters, Signal);
       break;
     case CodeCompletionString::CK_VerticalSpace:
       break;
@@ -152,6 +154,8 @@ getOptionalParameters(const CodeCompletionString &CCS,
       ParameterInformation Info;
       Info.label = Chunk.Text;
       Parameters.push_back(std::move(Info));
+      Signal.ContainsActiveParameter = true;
+      Signal.NumberOfOptionalParameters++;
       break;
     }
     default:
@@ -234,7 +238,7 @@ struct CompletionCandidate {
       // file e.g. the symbol is forward declared.
       auto &SM = SemaResult->Declaration->getASTContext().getSourceManager();
       for (const Decl *RD : SemaResult->Declaration->redecls())
-        if (SM.isInMainFile(SM.getExpansionLoc(RD->getLocStart())))
+        if (SM.isInMainFile(SM.getExpansionLoc(RD->getBeginLoc())))
           return llvm::None;
     }
     return IndexResult->Detail->IncludeHeader;
@@ -280,6 +284,15 @@ struct CodeCompletionBuilder {
       }
       Completion.Kind =
           toCompletionItemKind(C.SemaResult->Kind, C.SemaResult->Declaration);
+      for (const auto &FixIt : C.SemaResult->FixIts) {
+        Completion.FixIts.push_back(
+            toTextEdit(FixIt, ASTCtx.getSourceManager(), ASTCtx.getLangOpts()));
+      }
+      std::sort(Completion.FixIts.begin(), Completion.FixIts.end(),
+                [](const TextEdit &X, const TextEdit &Y) {
+                  return std::tie(X.range.start.line, X.range.start.character) <
+                         std::tie(Y.range.start.line, Y.range.start.character);
+                });
     }
     if (C.IndexResult) {
       Completion.Origin |= C.IndexResult->Origin;
@@ -396,10 +409,7 @@ llvm::Optional<SymbolID> getSymbolID(const CodeCompletionResult &R) {
   switch (R.Kind) {
   case CodeCompletionResult::RK_Declaration:
   case CodeCompletionResult::RK_Pattern: {
-    llvm::SmallString<128> USR;
-    if (/*Ignore=*/clang::index::generateUSRForDecl(R.Declaration, USR))
-      return None;
-    return SymbolID(USR);
+    return clang::clangd::getSymbolID(R.Declaration);
   }
   case CodeCompletionResult::RK_Macro:
     // FIXME: Macros do have USRs, but the CCR doesn't contain enough info.
@@ -677,20 +687,30 @@ private:
   llvm::unique_function<void()> ResultsCallback;
 };
 
-class SignatureHelpCollector final : public CodeCompleteConsumer {
+struct ScoredSignature {
+  // When set, requires documentation to be requested from the index with this
+  // ID.
+  llvm::Optional<SymbolID> IDForDoc;
+  SignatureInformation Signature;
+  SignatureQualitySignals Quality;
+};
 
+class SignatureHelpCollector final : public CodeCompleteConsumer {
 public:
   SignatureHelpCollector(const clang::CodeCompleteOptions &CodeCompleteOpts,
-                         SignatureHelp &SigHelp)
-      : CodeCompleteConsumer(CodeCompleteOpts, /*OutputIsBinary=*/false),
+                         SymbolIndex *Index, SignatureHelp &SigHelp)
+      : CodeCompleteConsumer(CodeCompleteOpts,
+                             /*OutputIsBinary=*/false),
         SigHelp(SigHelp),
         Allocator(std::make_shared<clang::GlobalCodeCompletionAllocator>()),
-        CCTUInfo(Allocator) {}
+        CCTUInfo(Allocator), Index(Index) {}
 
   void ProcessOverloadCandidates(Sema &S, unsigned CurrentArg,
                                  OverloadCandidate *Candidates,
                                  unsigned NumCandidates) override {
+    std::vector<ScoredSignature> ScoredSignatures;
     SigHelp.signatures.reserve(NumCandidates);
+    ScoredSignatures.reserve(NumCandidates);
     // FIXME(rwols): How can we determine the "active overload candidate"?
     // Right now the overloaded candidates seem to be provided in a "best fit"
     // order, so I'm not too worried about this.
@@ -699,15 +719,85 @@ public:
            "too many arguments");
     SigHelp.activeParameter = static_cast<int>(CurrentArg);
     for (unsigned I = 0; I < NumCandidates; ++I) {
-      const auto &Candidate = Candidates[I];
+      OverloadCandidate Candidate = Candidates[I];
+      // We want to avoid showing instantiated signatures, because they may be
+      // long in some cases (e.g. when 'T' is substituted with 'std::string', we
+      // would get 'std::basic_string<char>').
+      if (auto *Func = Candidate.getFunction()) {
+        if (auto *Pattern = Func->getTemplateInstantiationPattern())
+          Candidate = OverloadCandidate(Pattern);
+      }
+
       const auto *CCS = Candidate.CreateSignatureString(
           CurrentArg, S, *Allocator, CCTUInfo, true);
       assert(CCS && "Expected the CodeCompletionString to be non-null");
-      // FIXME: for headers, we need to get a comment from the index.
-      SigHelp.signatures.push_back(processOverloadCandidate(
+      ScoredSignatures.push_back(processOverloadCandidate(
           Candidate, *CCS,
-          getParameterDocComment(S.getASTContext(), Candidate, CurrentArg,
-                                 /*CommentsFromHeaders=*/false)));
+          Candidate.getFunction()
+              ? getDeclComment(S.getASTContext(), *Candidate.getFunction())
+              : ""));
+    }
+
+    // Sema does not load the docs from the preamble, so we need to fetch extra
+    // docs from the index instead.
+    llvm::DenseMap<SymbolID, std::string> FetchedDocs;
+    if (Index) {
+      LookupRequest IndexRequest;
+      for (const auto &S : ScoredSignatures) {
+        if (!S.IDForDoc)
+          continue;
+        IndexRequest.IDs.insert(*S.IDForDoc);
+      }
+      Index->lookup(IndexRequest, [&](const Symbol &S) {
+        if (!S.Detail || S.Detail->Documentation.empty())
+          return;
+        FetchedDocs[S.ID] = S.Detail->Documentation;
+      });
+      log("SigHelp: requested docs for {0} symbols from the index, got {1} "
+          "symbols with non-empty docs in the response",
+          IndexRequest.IDs.size(), FetchedDocs.size());
+    }
+
+    std::sort(
+        ScoredSignatures.begin(), ScoredSignatures.end(),
+        [](const ScoredSignature &L, const ScoredSignature &R) {
+          // Ordering follows:
+          // - Less number of parameters is better.
+          // - Function is better than FunctionType which is better than
+          // Function Template.
+          // - High score is better.
+          // - Shorter signature is better.
+          // - Alphebatically smaller is better.
+          if (L.Quality.NumberOfParameters != R.Quality.NumberOfParameters)
+            return L.Quality.NumberOfParameters < R.Quality.NumberOfParameters;
+          if (L.Quality.NumberOfOptionalParameters !=
+              R.Quality.NumberOfOptionalParameters)
+            return L.Quality.NumberOfOptionalParameters <
+                   R.Quality.NumberOfOptionalParameters;
+          if (L.Quality.Kind != R.Quality.Kind) {
+            using OC = CodeCompleteConsumer::OverloadCandidate;
+            switch (L.Quality.Kind) {
+            case OC::CK_Function:
+              return true;
+            case OC::CK_FunctionType:
+              return R.Quality.Kind != OC::CK_Function;
+            case OC::CK_FunctionTemplate:
+              return false;
+            }
+            llvm_unreachable("Unknown overload candidate type.");
+          }
+          if (L.Signature.label.size() != R.Signature.label.size())
+            return L.Signature.label.size() < R.Signature.label.size();
+          return L.Signature.label < R.Signature.label;
+        });
+
+    for (auto &SS : ScoredSignatures) {
+      auto IndexDocIt =
+          SS.IDForDoc ? FetchedDocs.find(*SS.IDForDoc) : FetchedDocs.end();
+      if (IndexDocIt != FetchedDocs.end())
+        SS.Signature.documentation = IndexDocIt->second;
+
+      SigHelp.signatures.push_back(std::move(SS.Signature));
     }
   }
 
@@ -718,14 +808,15 @@ public:
 private:
   // FIXME(ioeric): consider moving CodeCompletionString logic here to
   // CompletionString.h.
-  SignatureInformation
-  processOverloadCandidate(const OverloadCandidate &Candidate,
-                           const CodeCompletionString &CCS,
-                           llvm::StringRef DocComment) const {
-    SignatureInformation Result;
+  ScoredSignature processOverloadCandidate(const OverloadCandidate &Candidate,
+                                           const CodeCompletionString &CCS,
+                                           llvm::StringRef DocComment) const {
+    SignatureInformation Signature;
+    SignatureQualitySignals Signal;
     const char *ReturnType = nullptr;
 
-    Result.documentation = formatDocumentation(CCS, DocComment);
+    Signature.documentation = formatDocumentation(CCS, DocComment);
+    Signal.Kind = Candidate.getKind();
 
     for (const auto &Chunk : CCS) {
       switch (Chunk.Kind) {
@@ -743,38 +834,48 @@ private:
         // A piece of text that describes the parameter that corresponds to
         // the code-completion location within a function call, message send,
         // macro invocation, etc.
-        Result.label += Chunk.Text;
+        Signature.label += Chunk.Text;
         ParameterInformation Info;
         Info.label = Chunk.Text;
-        Result.parameters.push_back(std::move(Info));
+        Signature.parameters.push_back(std::move(Info));
+        Signal.NumberOfParameters++;
+        Signal.ContainsActiveParameter = true;
         break;
       }
       case CodeCompletionString::CK_Optional: {
         // The rest of the parameters are defaulted/optional.
         assert(Chunk.Optional &&
                "Expected the optional code completion string to be non-null.");
-        Result.label +=
-            getOptionalParameters(*Chunk.Optional, Result.parameters);
+        Signature.label += getOptionalParameters(*Chunk.Optional,
+                                                 Signature.parameters, Signal);
         break;
       }
       case CodeCompletionString::CK_VerticalSpace:
         break;
       default:
-        Result.label += Chunk.Text;
+        Signature.label += Chunk.Text;
         break;
       }
     }
     if (ReturnType) {
-      Result.label += " -> ";
-      Result.label += ReturnType;
+      Signature.label += " -> ";
+      Signature.label += ReturnType;
     }
+    dlog("Signal for {0}: {1}", Signature, Signal);
+    ScoredSignature Result;
+    Result.Signature = std::move(Signature);
+    Result.Quality = Signal;
+    Result.IDForDoc =
+        Result.Signature.documentation.empty() && Candidate.getFunction()
+            ? clangd::getSymbolID(Candidate.getFunction())
+            : llvm::None;
     return Result;
   }
 
   SignatureHelp &SigHelp;
   std::shared_ptr<clang::GlobalCodeCompletionAllocator> Allocator;
   CodeCompletionTUInfo CCTUInfo;
-
+  const SymbolIndex *Index;
 }; // SignatureHelpCollector
 
 struct SemaCompleteInput {
@@ -909,6 +1010,7 @@ clang::CodeCompleteOptions CodeCompleteOptions::getClangCompleteOpts() const {
   // the index can provide results from the preamble.
   // Tell Sema not to deserialize the preamble to look for results.
   Result.LoadExternal = !Index;
+  Result.IncludeFixIts = IncludeFixIts;
 
   return Result;
 }
@@ -1041,6 +1143,23 @@ private:
   // This is called by run() once Sema code completion is done, but before the
   // Sema data structures are torn down. It does all the real work.
   CodeCompleteResult runWithSema() {
+    const auto &CodeCompletionRange = CharSourceRange::getCharRange(
+        Recorder->CCSema->getPreprocessor().getCodeCompletionTokenRange());
+    Range TextEditRange;
+    // When we are getting completions with an empty identifier, for example
+    //    std::vector<int> asdf;
+    //    asdf.^;
+    // Then the range will be invalid and we will be doing insertion, use
+    // current cursor position in such cases as range.
+    if (CodeCompletionRange.isValid()) {
+      TextEditRange = halfOpenToRange(Recorder->CCSema->getSourceManager(),
+                                      CodeCompletionRange);
+    } else {
+      const auto &Pos = sourceLocToPosition(
+          Recorder->CCSema->getSourceManager(),
+          Recorder->CCSema->getPreprocessor().getCodeCompletionLoc());
+      TextEditRange.start = TextEditRange.end = Pos;
+    }
     Filter = FuzzyMatcher(
         Recorder->CCSema->getPreprocessor().getCodeCompletionFilter());
     QueryScopes = getQueryScopes(Recorder->CCContext,
@@ -1060,6 +1179,7 @@ private:
     for (auto &C : Top) {
       Output.Completions.push_back(toCodeCompletion(C.first));
       Output.Completions.back().Score = C.second;
+      Output.Completions.back().CompletionTokenRange = TextEditRange;
     }
     Output.HasMore = Incomplete;
     Output.Context = Recorder->CCContext.getKind();
@@ -1093,8 +1213,8 @@ private:
   // Groups overloads if desired, to form CompletionCandidate::Bundles.
   // The bundles are scored and top results are returned, best to worst.
   std::vector<ScoredBundle>
-  mergeResults(const std::vector<CodeCompletionResult> &SemaResults,
-               const SymbolSlab &IndexResults) {
+      mergeResults(const std::vector<CodeCompletionResult> &SemaResults,
+                   const SymbolSlab &IndexResults) {
     trace::Span Tracer("Merge and score results");
     std::vector<CompletionCandidate::Bundle> Bundles;
     llvm::DenseMap<size_t, size_t> BundleLookup;
@@ -1234,7 +1354,8 @@ SignatureHelp signatureHelp(PathRef FileName,
                             PrecompiledPreamble const *Preamble,
                             StringRef Contents, Position Pos,
                             IntrusiveRefCntPtr<vfs::FileSystem> VFS,
-                            std::shared_ptr<PCHContainerOperations> PCHs) {
+                            std::shared_ptr<PCHContainerOperations> PCHs,
+                            SymbolIndex *Index) {
   SignatureHelp Result;
   clang::CodeCompleteOptions Options;
   Options.IncludeGlobals = false;
@@ -1242,10 +1363,11 @@ SignatureHelp signatureHelp(PathRef FileName,
   Options.IncludeCodePatterns = false;
   Options.IncludeBriefComments = false;
   IncludeStructure PreambleInclusions; // Unused for signatureHelp
-  semaCodeComplete(llvm::make_unique<SignatureHelpCollector>(Options, Result),
-                   Options,
-                   {FileName, Command, Preamble, Contents, Pos, std::move(VFS),
-                    std::move(PCHs)});
+  semaCodeComplete(
+      llvm::make_unique<SignatureHelpCollector>(Options, Index, Result),
+      Options,
+      {FileName, Command, Preamble, Contents, Pos, std::move(VFS),
+       std::move(PCHs)});
   return Result;
 }
 
@@ -1275,13 +1397,40 @@ CompletionItem CodeCompletion::render(const CodeCompleteOptions &Opts) const {
   LSP.documentation = Documentation;
   LSP.sortText = sortText(Score.Total, Name);
   LSP.filterText = Name;
-  LSP.insertText = RequiredQualifier + Name;
-  if (Opts.EnableSnippets)
-    LSP.insertText += SnippetSuffix;
+  LSP.textEdit = {CompletionTokenRange, RequiredQualifier + Name};
+  // Merge continious additionalTextEdits into main edit. The main motivation
+  // behind this is to help LSP clients, it seems most of them are confused when
+  // they are provided with additionalTextEdits that are consecutive to main
+  // edit.
+  // Note that we store additional text edits from back to front in a line. That
+  // is mainly to help LSP clients again, so that changes do not effect each
+  // other.
+  for (const auto &FixIt : FixIts) {
+    if (IsRangeConsecutive(FixIt.range, LSP.textEdit->range)) {
+      LSP.textEdit->newText = FixIt.newText + LSP.textEdit->newText;
+      LSP.textEdit->range.start = FixIt.range.start;
+    } else {
+      LSP.additionalTextEdits.push_back(FixIt);
+    }
+  }
+  if (Opts.EnableSnippets && !SnippetSuffix.empty()) {
+    if (!Opts.EnableFunctionArgSnippets &&
+        ((Kind == CompletionItemKind::Function) ||
+         (Kind == CompletionItemKind::Method)) &&
+        (SnippetSuffix.front() == '(') && (SnippetSuffix.back() == ')'))
+      // Check whether function has any parameters or not.
+      LSP.textEdit->newText += SnippetSuffix.size() > 2 ? "(${0})" : "()";
+    else
+      LSP.textEdit->newText += SnippetSuffix;
+  }
+
+  // FIXME(kadircet): Do not even fill insertText after making sure textEdit is
+  // compatible with most of the editors.
+  LSP.insertText = LSP.textEdit->newText;
   LSP.insertTextFormat = Opts.EnableSnippets ? InsertTextFormat::Snippet
                                              : InsertTextFormat::PlainText;
   if (HeaderInsertion)
-    LSP.additionalTextEdits = {*HeaderInsertion};
+    LSP.additionalTextEdits.push_back(*HeaderInsertion);
   return LSP;
 }
 

@@ -315,6 +315,19 @@ Parser::ParseRHSOfBinaryExpression(ExprResult LHS, prec::Level MinPrec) {
       return LHS;
     }
 
+    // In Objective-C++, alternative operator tokens can be used as keyword args
+    // in message expressions. Unconsume the token so that it can reinterpreted
+    // as an identifier in ParseObjCMessageExpressionBody. i.e., we support:
+    //   [foo meth:0 and:0];
+    //   [foo not_eq];
+    if (getLangOpts().ObjC1 && getLangOpts().CPlusPlus &&
+        Tok.isOneOf(tok::colon, tok::r_square) &&
+        OpToken.getIdentifierInfo() != nullptr) {
+      PP.EnterToken(Tok);
+      Tok = OpToken;
+      return LHS;
+    }
+
     // Special case handling for the ternary operator.
     ExprResult TernaryMiddle(true);
     if (NextTokPrec == prec::Conditional) {
@@ -1742,7 +1755,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         // Code completion for a member access expression.
         Actions.CodeCompleteMemberReferenceExpr(
             getCurScope(), Base, CorrectedBase, OpLoc, OpKind == tok::arrow,
-            Base && ExprStatementTokLoc == Base->getLocStart());
+            Base && ExprStatementTokLoc == Base->getBeginLoc());
 
         cutOffParsing();
         return ExprError();

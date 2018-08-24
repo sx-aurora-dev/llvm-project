@@ -140,6 +140,12 @@ def FeatureCIInsts : SubtargetFeature<"ci-insts",
   "Additional instructions for CI+"
 >;
 
+def FeatureVIInsts : SubtargetFeature<"vi-insts",
+  "VIInsts",
+  "true",
+  "Additional instructions for VI+"
+>;
+
 def FeatureGFX9Insts : SubtargetFeature<"gfx9-insts",
   "GFX9Insts",
   "true",
@@ -266,15 +272,6 @@ def FeatureD16PreservesUnusedBits : SubtargetFeature<
 //===------------------------------------------------------------===//
 // Subtarget Features (options and debugging)
 //===------------------------------------------------------------===//
-
-// Some instructions do not support denormals despite this flag. Using
-// fp32 denormals also causes instructions to run at the double
-// precision rate for the device.
-def FeatureFP32Denormals : SubtargetFeature<"fp32-denormals",
-  "FP32Denormals",
-  "true",
-  "Enable single precision denormal handling"
->;
 
 // Denormal handling for fp64 and fp16 is controlled by the same
 // config register when fp16 supported.
@@ -430,7 +427,7 @@ def FeatureSeaIslands : GCNSubtargetFeatureGeneration<"SEA_ISLANDS",
 def FeatureVolcanicIslands : GCNSubtargetFeatureGeneration<"VOLCANIC_ISLANDS",
   [FeatureFP64, FeatureLocalMemorySize65536, FeatureMIMG_R128,
    FeatureWavefrontSize64, FeatureFlatAddressSpace, FeatureGCN,
-   FeatureGCN3Encoding, FeatureCIInsts, Feature16BitInsts,
+   FeatureGCN3Encoding, FeatureCIInsts, FeatureVIInsts, Feature16BitInsts,
    FeatureSMemRealTime, FeatureVGPRIndexMode, FeatureMovrel,
    FeatureScalarStores, FeatureInv2PiInlineImm,
    FeatureSDWA, FeatureSDWAOutModsVOPC, FeatureSDWAMac, FeatureDPP,
@@ -441,7 +438,7 @@ def FeatureVolcanicIslands : GCNSubtargetFeatureGeneration<"VOLCANIC_ISLANDS",
 def FeatureGFX9 : GCNSubtargetFeatureGeneration<"GFX9",
   [FeatureFP64, FeatureLocalMemorySize65536,
    FeatureWavefrontSize64, FeatureFlatAddressSpace, FeatureGCN,
-   FeatureGCN3Encoding, FeatureCIInsts, Feature16BitInsts,
+   FeatureGCN3Encoding, FeatureCIInsts, FeatureVIInsts, Feature16BitInsts,
    FeatureSMemRealTime, FeatureScalarStores, FeatureInv2PiInlineImm,
    FeatureApertureRegs, FeatureGFX9Insts, FeatureVOP3P, FeatureVGPRIndexMode,
    FeatureFastFMAF32, FeatureDPP, FeatureIntClamp,

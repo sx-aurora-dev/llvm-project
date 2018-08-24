@@ -1455,6 +1455,11 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
     else
       CmdArgs.push_back("-aarch64-enable-global-merge=true");
   }
+
+  if (Arg *A = Args.getLastArg(options::OPT_msign_return_address)) {
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine("-msign-return-address=") + A->getValue()));
+  }
 }
 
 void Clang::AddMIPSTargetArgs(const ArgList &Args,
@@ -3055,11 +3060,18 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
       CmdArgs.push_back("-debug-info-macro");
 
   // -ggnu-pubnames turns on gnu style pubnames in the backend.
-  if (Args.hasFlag(options::OPT_ggnu_pubnames, options::OPT_gno_gnu_pubnames,
-                   false))
-    if (checkDebugInfoOption(Args.getLastArg(options::OPT_ggnu_pubnames), Args,
-                             D, TC))
-      CmdArgs.push_back("-ggnu-pubnames");
+  const auto *PubnamesArg =
+      Args.getLastArg(options::OPT_ggnu_pubnames, options::OPT_gno_gnu_pubnames,
+                      options::OPT_gpubnames, options::OPT_gno_pubnames);
+  if (SplitDWARFArg ||
+      (PubnamesArg && checkDebugInfoOption(PubnamesArg, Args, D, TC)))
+    if (!PubnamesArg ||
+        (!PubnamesArg->getOption().matches(options::OPT_gno_gnu_pubnames) &&
+         !PubnamesArg->getOption().matches(options::OPT_gno_pubnames)))
+      CmdArgs.push_back(PubnamesArg && PubnamesArg->getOption().matches(
+                                           options::OPT_gpubnames)
+                            ? "-gpubnames"
+                            : "-ggnu-pubnames");
 
   // -gdwarf-aranges turns on the emission of the aranges section in the
   // backend.
@@ -3345,6 +3357,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // defines).
   if (Args.hasArg(options::OPT_static))
     CmdArgs.push_back("-static-define");
+
+  if (Args.hasArg(options::OPT_municode))
+    CmdArgs.push_back("-DUNICODE");
 
   if (isa<AnalyzeJobAction>(JA))
     RenderAnalyzerOptions(Args, CmdArgs, Triple, Input);
@@ -3993,6 +4008,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_fno_operator_names);
   Args.AddLastArg(CmdArgs, options::OPT_femulated_tls,
                   options::OPT_fno_emulated_tls);
+  Args.AddLastArg(CmdArgs, options::OPT_fkeep_static_consts);
 
   // AltiVec-like language extensions aren't relevant for assembling.
   if (!isa<PreprocessJobAction>(JA) || Output.getType() != types::TY_PP_Asm)
@@ -4222,7 +4238,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
           options::OPT_fuse_cxa_atexit, options::OPT_fno_use_cxa_atexit,
           !RawTriple.isOSWindows() &&
               RawTriple.getOS() != llvm::Triple::Solaris &&
-              getToolChain().getArch() != llvm::Triple::hexagon &&
               getToolChain().getArch() != llvm::Triple::xcore &&
               ((RawTriple.getVendor() != llvm::Triple::MipsTechnologies) ||
                RawTriple.hasEnvironment())) ||
@@ -4818,6 +4833,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    options::OPT_fno_complete_member_pointers, false))
     CmdArgs.push_back("-fcomplete-member-pointers");
 
+  if (!Args.hasFlag(options::OPT_fcxx_static_destructors,
+                    options::OPT_fno_cxx_static_destructors, true))
+    CmdArgs.push_back("-fno-c++-static-destructors");
+
   if (Arg *A = Args.getLastArg(options::OPT_moutline,
                                options::OPT_mno_outline)) {
     if (A->getOption().matches(options::OPT_moutline)) {
@@ -4912,7 +4931,8 @@ ObjCRuntime Clang::AddObjCRuntimeArgs(const ArgList &args,
     }
     if ((runtime.getKind() == ObjCRuntime::GNUstep) &&
         (runtime.getVersion() >= VersionTuple(2, 0)))
-      if (!getToolChain().getTriple().isOSBinFormatELF()) {
+      if (!getToolChain().getTriple().isOSBinFormatELF() &&
+          !getToolChain().getTriple().isOSBinFormatCOFF()) {
         getToolChain().getDriver().Diag(
             diag::err_drv_gnustep_objc_runtime_incompatible_binary)
           << runtime.getVersion().getMajor();
@@ -5270,9 +5290,28 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
       CmdArgs.push_back("msvc");
   }
 
-  if (Args.hasArg(options::OPT__SLASH_Guard) &&
-      Args.getLastArgValue(options::OPT__SLASH_Guard).equals_lower("cf"))
-    CmdArgs.push_back("-cfguard");
+  if (Arg *A = Args.getLastArg(options::OPT__SLASH_guard)) {
+    SmallVector<StringRef, 1> SplitArgs;
+    StringRef(A->getValue()).split(SplitArgs, ",");
+    bool Instrument = false;
+    bool NoChecks = false;
+    for (StringRef Arg : SplitArgs) {
+      if (Arg.equals_lower("cf"))
+        Instrument = true;
+      else if (Arg.equals_lower("cf-"))
+        Instrument = false;
+      else if (Arg.equals_lower("nochecks"))
+        NoChecks = true;
+      else if (Arg.equals_lower("nochecks-"))
+        NoChecks = false;
+      else
+        D.Diag(diag::err_drv_invalid_value) << A->getSpelling() << Arg;
+    }
+    // Currently there's no support emitting CFG instrumentation; the flag only
+    // emits the table of address-taken functions.
+    if (Instrument || NoChecks)
+      CmdArgs.push_back("-cfguard");
+  }
 }
 
 visualstudio::Compiler *Clang::getCLFallback() const {
