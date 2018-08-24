@@ -101,11 +101,17 @@ def fcond2cc : SDNodeXForm<cond, [{
   switch (N->get()) {
   default:          llvm_unreachable("Unknown float condition code!");
   case ISD::SETFALSE: cc = VECC::CC_AF;    break;
+  case ISD::SETEQ:
   case ISD::SETOEQ:   cc = VECC::CC_EQ;    break;
+  case ISD::SETNE:
   case ISD::SETONE:   cc = VECC::CC_NE;    break;
+  case ISD::SETLT:
   case ISD::SETOLT:   cc = VECC::CC_L;     break;
+  case ISD::SETGT:
   case ISD::SETOGT:   cc = VECC::CC_G;     break;
+  case ISD::SETLE:
   case ISD::SETOLE:   cc = VECC::CC_LE;    break;
+  case ISD::SETGE:
   case ISD::SETOGE:   cc = VECC::CC_GE;    break;
   case ISD::SETO:     cc = VECC::CC_NUM;   break;
   case ISD::SETUO:    cc = VECC::CC_NAN;   break;
