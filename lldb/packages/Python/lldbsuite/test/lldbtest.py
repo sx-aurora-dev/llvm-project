@@ -740,6 +740,11 @@ class Base(unittest2.TestCase):
         else:
             self.lldbMiExec = None
 
+        if "LLDBVSCODE_EXEC" in os.environ:
+            self.lldbVSCodeExec = os.environ["LLDBVSCODE_EXEC"]
+        else:
+            self.lldbVSCodeExec = None
+
         # If we spawn an lldb process for test (via pexpect), do not load the
         # init file unless told otherwise.
         if "NO_LLDBINIT" in os.environ and "NO" == os.environ["NO_LLDBINIT"]:
@@ -1875,18 +1880,15 @@ class TestBase(Base):
         # decorators.
         Base.setUp(self)
 
-        if self.child:
-            # Set the clang modules cache path.
-            assert(self.getDebugInfo() == 'default')
-            mod_cache = os.path.join(self.getBuildDir(), "module-cache")
-            self.runCmd('settings set symbols.clang-modules-cache-path "%s"'
-                        % mod_cache)
+        # Set the clang modules cache path.
+        mod_cache = os.path.join(self.getBuildDir(), "module-cache-lldb")
+        self.runCmd('settings set symbols.clang-modules-cache-path "%s"'
+                    % mod_cache)
 
-            # Disable Spotlight lookup. The testsuite creates
-            # different binaries with the same UUID, because they only
-            # differ in the debug info, which is not being hashed.
-            self.runCmd('settings set symbols.enable-external-lookup false')
-
+        # Disable Spotlight lookup. The testsuite creates
+        # different binaries with the same UUID, because they only
+        # differ in the debug info, which is not being hashed.
+        self.runCmd('settings set symbols.enable-external-lookup false')
 
         if "LLDB_MAX_LAUNCH_COUNT" in os.environ:
             self.maxLaunchCount = int(os.environ["LLDB_MAX_LAUNCH_COUNT"])
@@ -2074,8 +2076,17 @@ class TestBase(Base):
                     print("Command '" + cmd + "' failed!", file=sbuf)
 
         if check:
+            output = ""
+            if self.res.GetOutput():
+              output += "\nCommand output:\n" + self.res.GetOutput()
+            if self.res.GetError():
+              output += "\nError output:\n" + self.res.GetError()
+            if msg:
+              msg += output
+            if cmd:
+              cmd += output
             self.assertTrue(self.res.Succeeded(),
-                            msg if msg else CMD_MSG(cmd))
+                            msg if (msg) else CMD_MSG(cmd))
 
     def match(
             self,

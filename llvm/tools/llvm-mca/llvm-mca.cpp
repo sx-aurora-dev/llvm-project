@@ -42,6 +42,7 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
@@ -180,7 +181,6 @@ static cl::opt<bool>
 namespace {
 
 const Target *getTarget(const char *ProgName) {
-  TripleName = Triple::normalize(TripleName);
   if (TripleName.empty())
     TripleName = Triple::normalize(sys::getDefaultTargetTriple());
   Triple TheTriple(TripleName);
@@ -236,9 +236,9 @@ public:
   }
 };
 
-int AssembleInput(const char *ProgName, MCAsmParser &Parser,
-                  const Target *TheTarget, MCSubtargetInfo &STI,
-                  MCInstrInfo &MCII, MCTargetOptions &MCOptions) {
+int AssembleInput(MCAsmParser &Parser, const Target *TheTarget,
+                  MCSubtargetInfo &STI, MCInstrInfo &MCII,
+                  MCTargetOptions &MCOptions) {
   std::unique_ptr<MCTargetAsmParser> TAP(
       TheTarget->createMCAsmParser(STI, Parser, MCII, MCOptions));
 
@@ -424,7 +424,7 @@ int main(int argc, char **argv) {
   MCACommentConsumer CC(Regions);
   Lexer.setCommentConsumer(&CC);
 
-  if (AssembleInput(ProgName, *P, TheTarget, *STI, *MCII, MCOptions))
+  if (AssembleInput(*P, TheTarget, *STI, *MCII, MCOptions))
     return 1;
 
   if (Regions.empty()) {
@@ -503,7 +503,9 @@ int main(int argc, char **argv) {
       }
       Printer.addView(
           llvm::make_unique<mca::ResourcePressureView>(*STI, *IP, S));
-      P->run();
+      auto Err = P->run();
+      if (Err)
+        report_fatal_error(toString(std::move(Err)));
       Printer.printReport(TOF->os());
       continue;
     }
@@ -540,7 +542,9 @@ int main(int argc, char **argv) {
           *STI, *IP, S, TimelineMaxIterations, TimelineMaxCycles));
     }
 
-    P->run();
+    auto Err = P->run();
+    if (Err)
+      report_fatal_error(toString(std::move(Err)));
     Printer.printReport(TOF->os());
 
     // Clear the InstrBuilder internal state in preparation for another round.

@@ -3458,3 +3458,50 @@ the resulting instructions with the call site, rather than with the
 corresponding line within the inlined callee.
   }];
 }
+
+def ReinitializesDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``reinitializes`` attribute can be applied to a non-static, non-const C++
+member function to indicate that this member function reinitializes the entire
+object to a known state, independent of the previous state of the object.
+
+This attribute can be interpreted by static analyzers that warn about uses of an
+object that has been left in an indeterminate state by a move operation. If a
+member function marked with the ``reinitializes`` attribute is called on a
+moved-from object, the analyzer can conclude that the object is no longer in an
+indeterminate state.
+
+A typical example where this attribute would be used is on functions that clear
+a container class:
+
+.. code-block:: c++
+
+  template <class T>
+  class Container {
+  public:
+    ...
+    [[clang::reinitializes]] void Clear();
+    ...
+  };
+  }];
+}
+
+def AlwaysDestroyDocs : Documentation {
+  let Category = DocCatVariable;
+  let Content = [{
+The ``always_destroy`` attribute specifies that a variable with static or thread
+storage duration should have its exit-time destructor run. This attribute is the
+default unless clang was invoked with -fno-c++-static-destructors.
+  }];
+}
+
+def NoDestroyDocs : Documentation {
+  let Category = DocCatVariable;
+  let Content = [{
+The ``no_destroy`` attribute specifies that a variable with static or thread
+storage duration shouldn't have its exit-time destructor run. Annotating every
+static and thread duration variable with this attribute is equivalent to
+invoking clang with -fno-c++-static-destructors.
+  }];
+}
