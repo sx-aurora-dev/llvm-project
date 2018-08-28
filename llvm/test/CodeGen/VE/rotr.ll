@@ -1,3 +1,5 @@
+; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+
 define dso_local i64 @func1(i64, i32) local_unnamed_addr #0 {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
