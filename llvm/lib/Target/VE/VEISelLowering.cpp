@@ -1575,13 +1575,27 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
     MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
     MFI.setHasCalls(true);
 
-    if (dyn_cast<GlobalAddressSDNode>(Op) != nullptr &&
-        dyn_cast<GlobalAddressSDNode>(Op)->getGlobal()->hasLocalLinkage()) {
+    if (dyn_cast<ConstantPoolSDNode>(Op) != nullptr ||
+        (dyn_cast<GlobalAddressSDNode>(Op) != nullptr &&
+         dyn_cast<GlobalAddressSDNode>(Op)->getGlobal()->hasLocalLinkage())) {
+      // Create following instructions for local linkage PIC code.
+      //     lea %s35, %gotoff_lo(.LCPI0_0)
+      //     and %s35, %s35, (32)0
+      //     lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35)
+      //     adds.l %s35, %s15, %s35                  ; %s15がGOT
+      // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
       SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFFHI,
                                   VEMCExpr::VK_VE_GOTOFFLO, DAG);
       SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
       return DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
     } else {
+      // Create following instructions for not local linkage PIC code.
+      //     lea %s35, %got_lo(.LCPI0_0)
+      //     and %s35, %s35, (32)0
+      //     lea.sl %s35, %got_hi(.LCPI0_0)(%s35)
+      //     adds.l %s35, %s15, %s35                  ; %s15がGOT
+      //     ld     %s35, (,%s35)
+      // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
       SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTHI,
                                   VEMCExpr::VK_VE_GOTLO, DAG);
       SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
