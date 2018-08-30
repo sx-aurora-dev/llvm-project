@@ -249,6 +249,9 @@ def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
 // GETFUNPLT for PIC
 def GetFunPLT : SDNode<"VEISD::GETFUNPLT", SDTIntUnaryOp>;
 
+// GETSTACKTOP
+def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone, [SDNPHasChain]>;
+
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
 //===----------------------------------------------------------------------===//
@@ -1482,6 +1485,15 @@ def EXTEND_STACK : Pseudo<(outs), (ins),
 def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
+
+// Dynamic stack allocation yields a __grow_stack for VE targets.
+// These calls are needed to probe the stack when allocating more over
+// %s8 (%sl - stack limit).
+
+let Uses = [SX11] in
+def GETSTACKTOP : Pseudo<(outs I64:$dst), (ins),
+                         "# GET STACK TOP",
+                         [(set iPTR:$dst, (GetStackTop))]>;
 
 // SETCC pattern matches
 //

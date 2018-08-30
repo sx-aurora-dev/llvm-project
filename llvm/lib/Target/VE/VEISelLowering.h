@@ -50,6 +50,8 @@ namespace llvm {
       FMIN,
 
       GETFUNPLT,   // load function address through %plt insturction
+      GETSTACKTOP, // retrieve address of stack top (first address of
+                   // locals and temporaries)
 
       CALL,        // A call instruction.
       RET_FLAG,    // Return with a flag operand.
@@ -128,11 +130,6 @@ namespace llvm {
                          const SmallVectorImpl<ISD::InputArg> &Ins,
                          const SDLoc &dl, SelectionDAG &DAG,
                          SmallVectorImpl<SDValue> &InVals) const override;
-    SDValue LowerFormalArguments_32(SDValue Chain, CallingConv::ID CallConv,
-                                    bool isVarArg,
-                                    const SmallVectorImpl<ISD::InputArg> &Ins,
-                                    const SDLoc &dl, SelectionDAG &DAG,
-                                    SmallVectorImpl<SDValue> &InVals) const;
     SDValue LowerFormalArguments_64(SDValue Chain, CallingConv::ID CallConv,
                                     bool isVarArg,
                                     const SmallVectorImpl<ISD::InputArg> &Ins,
@@ -142,8 +139,6 @@ namespace llvm {
     SDValue
       LowerCall(TargetLowering::CallLoweringInfo &CLI,
                 SmallVectorImpl<SDValue> &InVals) const override;
-    SDValue LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
-                         SmallVectorImpl<SDValue> &InVals) const;
     SDValue LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
                          SmallVectorImpl<SDValue> &InVals) const;
 
@@ -151,11 +146,6 @@ namespace llvm {
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
                         const SmallVectorImpl<SDValue> &OutVals,
                         const SDLoc &dl, SelectionDAG &DAG) const override;
-    SDValue LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
-                           bool IsVarArg,
-                           const SmallVectorImpl<ISD::OutputArg> &Outs,
-                           const SmallVectorImpl<SDValue> &OutVals,
-                           const SDLoc &DL, SelectionDAG &DAG) const;
     SDValue LowerReturn_64(SDValue Chain, CallingConv::ID CallConv,
                            bool IsVarArg,
                            const SmallVectorImpl<ISD::OutputArg> &Outs,
@@ -188,6 +178,8 @@ namespace llvm {
 
     SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
 
     bool ShouldShrinkFPConstant(EVT VT) const override {
       // Do not shrink FP constpool if VT == MVT::f128.
