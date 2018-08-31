@@ -1405,8 +1405,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FP_ROUND,  MVT::f128, Legal);
 
   // Other configurations related to f128.
-  setOperationAction(ISD::SELECT,    MVT::f128, Expand);
-  setOperationAction(ISD::SELECT_CC, MVT::f128, Expand);
+  setOperationAction(ISD::SELECT,    MVT::f128, Legal);
+  setOperationAction(ISD::SELECT_CC, MVT::f128, Legal);
   setOperationAction(ISD::SETCC,     MVT::f128, Legal);
   setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
 
