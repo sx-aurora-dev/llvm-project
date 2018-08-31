@@ -1,5 +1,17 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
+define fp128 @selectf128(i1 zeroext, fp128, fp128) #0 {
+; CHECK-LABEL: selectf128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
+; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
+; CHECK-NEXT:    or %s0, 0, %s4
+; CHECK-NEXT:    or %s1, 0, %s5
+; CHECK-NEXT:    or %s11, 0, %s9
+  %4 = select i1 %0, fp128 %1, fp128 %2
+  ret fp128 %4
+}
+
 define double @selectf64(i1 zeroext, double, double) #0 {
 ; CHECK-LABEL: selectf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:

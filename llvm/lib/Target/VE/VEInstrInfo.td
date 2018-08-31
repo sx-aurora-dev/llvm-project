@@ -1667,65 +1667,65 @@ def : Pat<(f128 (selectcc i32:$l, i32:$r, f128:$t, f128:$f, CCSIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVWrr (icond2cc $cond), (CPSrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVWrr (icond2cc $cond), (CPSrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc i32:$l, i32:$r, f128:$t, f128:$f, CCUIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVWrr (icond2cc $cond), (CMPUWrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVWrr (icond2cc $cond), (CMPUWrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc i64:$l, i64:$r, f128:$t, f128:$f, CCSIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVLrr (icond2cc $cond), (CPXrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVLrr (icond2cc $cond), (CPXrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc i64:$l, i64:$r, f128:$t, f128:$f, CCUIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVLrr (icond2cc $cond), (CMPrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVLrr (icond2cc $cond), (CMPrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc f32:$l, f32:$r, f128:$t, f128:$f, cond:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVSrr (fcond2cc $cond), (FCPSrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVSrr (fcond2cc $cond), (FCPSrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc f64:$l, f64:$r, f128:$t, f128:$f, cond:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVDrr (fcond2cc $cond), (FCPrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVDrr (fcond2cc $cond), (FCPrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc f128:$l, f128:$r, f128:$t, f128:$f, cond:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVDrr (fcond2cc $cond), (FCQrr $l, $r),
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVDrr (fcond2cc $cond), (FCQrr $l, $r),
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 
 // selectcc for f64 result
 def : Pat<(f64 (selectcc i32:$l, i32:$r, f64:$t, f64:$f, CCSIOp:$cond)),
@@ -1813,11 +1813,11 @@ def : Pat<(f128 (select i32:$pred, f128:$t, f128:$f)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
               (CMOVWrr CC_INE, $pred,
-                (EXTRACT_SUBREG $t, sub_even),
-                (EXTRACT_SUBREG $f, sub_even)), sub_even),
+                (EXTRACT_SUBREG $t, sub_odd),
+                (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
             (CMOVWrr CC_INE, $pred,
-              (EXTRACT_SUBREG $t, sub_odd),
-              (EXTRACT_SUBREG $f, sub_odd)), sub_odd)>;
+              (EXTRACT_SUBREG $t, sub_even),
+              (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 
 def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
           (CMOVWrr CC_INE, $pred, $t, $f)>;
