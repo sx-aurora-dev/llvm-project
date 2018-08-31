@@ -250,7 +250,7 @@ def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
 def GetFunPLT : SDNode<"VEISD::GETFUNPLT", SDTIntUnaryOp>;
 
 // GETSTACKTOP
-def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone, [SDNPHasChain]>;
+def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone>;
 
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
