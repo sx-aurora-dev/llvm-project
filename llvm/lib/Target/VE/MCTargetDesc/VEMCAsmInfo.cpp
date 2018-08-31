@@ -42,7 +42,7 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   UsesELFSectionDirectiveForBSS = true;
 
   // ExceptionsType = ExceptionHandling::DwarfCFI;
-  // SupportsDebugInformation = true;
+  SupportsDebugInformation = true;
   // SunStyleELFSectionSwitchSyntax = true;
   // UseIntegratedAssembler = true;
 }
