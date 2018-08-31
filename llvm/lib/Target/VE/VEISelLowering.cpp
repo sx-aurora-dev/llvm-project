@@ -1924,7 +1924,9 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(
       .setDiscardResult(true);
   std::pair<SDValue, SDValue> pair = LowerCallTo(CLI);
   SDValue Chain = pair.second;
-  return DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
+  SDValue Value =  DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
+  SDValue Ops[2] = {Value, Chain};
+  return DAG.getMergeValues(Ops, dl);
 }
 
 static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
