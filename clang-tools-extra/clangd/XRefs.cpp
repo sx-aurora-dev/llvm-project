@@ -1,11 +1,11 @@
-//===--- XRefs.cpp ----------------------------------------------*- C++-*-===//
+//===--- XRefs.cpp -----------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 #include "XRefs.h"
 #include "AST.h"
 #include "Logger.h"
@@ -25,7 +25,7 @@ namespace {
 // Get the definition from a given declaration `D`.
 // Return nullptr if no definition is found, or the declaration type of `D` is
 // not supported.
-const Decl *GetDefinition(const Decl *D) {
+const Decl *getDefinition(const Decl *D) {
   assert(D);
   if (const auto *TD = dyn_cast<TagDecl>(D))
     return TD->getDefinition();
@@ -40,18 +40,18 @@ const Decl *GetDefinition(const Decl *D) {
 // HintPath is used to resolve the path of URI.
 // FIXME: figure out a good home for it, and share the implementation with
 // FindSymbols.
-llvm::Optional<Location> ToLSPLocation(const SymbolLocation &Loc,
+llvm::Optional<Location> toLSPLocation(const SymbolLocation &Loc,
                                        llvm::StringRef HintPath) {
   if (!Loc)
     return llvm::None;
   auto Uri = URI::parse(Loc.FileURI);
   if (!Uri) {
-    log("Could not parse URI: " + Loc.FileURI);
+    log("Could not parse URI: {0}", Loc.FileURI);
     return llvm::None;
   }
   auto Path = URI::resolve(*Uri, HintPath);
   if (!Path) {
-    log("Could not resolve URI: " + Loc.FileURI);
+    log("Could not resolve URI: {0}", Loc.FileURI);
     return llvm::None;
   }
   Location LSPLoc;
@@ -77,8 +77,7 @@ class DeclarationAndMacrosFinder : public index::IndexDataConsumer {
   Preprocessor &PP;
 
 public:
-  DeclarationAndMacrosFinder(raw_ostream &OS,
-                             const SourceLocation &SearchedLocation,
+  DeclarationAndMacrosFinder(const SourceLocation &SearchedLocation,
                              ASTContext &AST, Preprocessor &PP)
       : SearchedLocation(SearchedLocation), AST(AST), PP(PP) {}
 
@@ -116,7 +115,7 @@ public:
       // We don't use parameter `D`, as Parameter `D` is the canonical
       // declaration, which is the first declaration of a redeclarable
       // declaration, and it could be a forward declaration.
-      if (const auto *Def = GetDefinition(D)) {
+      if (const auto *Def = getDefinition(D)) {
         Decls.push_back(Def);
       } else {
         // Couldn't find a definition, fall back to use `D`.
@@ -163,8 +162,8 @@ struct IdentifiedSymbol {
 };
 
 IdentifiedSymbol getSymbolAtPosition(ParsedAST &AST, SourceLocation Pos) {
-  auto DeclMacrosFinder = DeclarationAndMacrosFinder(
-      llvm::errs(), Pos, AST.getASTContext(), AST.getPreprocessor());
+  auto DeclMacrosFinder = DeclarationAndMacrosFinder(Pos, AST.getASTContext(),
+                                                     AST.getPreprocessor());
   index::IndexingOptions IndexOpts;
   IndexOpts.SystemSymbolFilter =
       index::IndexingOptions::SystemSymbolFilterKind::All;
@@ -192,7 +191,7 @@ makeLocation(ParsedAST &AST, const SourceRange &ValSourceRange) {
   Range R = {Begin, End};
   Location L;
 
-  auto FilePath = getAbsoluteFilePath(F, SourceMgr);
+  auto FilePath = getRealPath(F, SourceMgr);
   if (!FilePath) {
     log("failed to get path!");
     return llvm::None;
@@ -200,15 +199,6 @@ makeLocation(ParsedAST &AST, const SourceRange &ValSourceRange) {
   L.uri = URIForFile(*FilePath);
   L.range = R;
   return L;
-}
-
-// Get the symbol ID for a declaration, if possible.
-llvm::Optional<SymbolID> getSymbolID(const Decl *D) {
-  llvm::SmallString<128> USR;
-  if (index::generateUSRForDecl(D, USR)) {
-    return None;
-  }
-  return SymbolID(USR);
 }
 
 } // namespace
@@ -220,7 +210,7 @@ std::vector<Location> findDefinitions(ParsedAST &AST, Position Pos,
   std::vector<Location> Result;
   // Handle goto definition for #include.
   for (auto &Inc : AST.getIncludeStructure().MainFileIncludes) {
-    if (!Inc.Resolved.empty() && Inc.R.contains(Pos))
+    if (!Inc.Resolved.empty() && Inc.R.start.line == Pos.line)
       Result.push_back(Location{URIForFile{Inc.Resolved}, {}});
   }
   if (!Result.empty())
@@ -279,7 +269,7 @@ std::vector<Location> findDefinitions(ParsedAST &AST, Position Pos,
     auto L = makeLocation(AST, SourceRange(Loc, Loc));
     // The declaration in the identified symbols is a definition if possible
     // otherwise it is declaration.
-    bool IsDef = GetDefinition(D) == D;
+    bool IsDef = getDefinition(D) == D;
     // Populate one of the slots with location for the AST.
     if (!IsDef)
       Candidate.Decl = L;
@@ -295,7 +285,7 @@ std::vector<Location> findDefinitions(ParsedAST &AST, Position Pos,
     std::string HintPath;
     const FileEntry *FE =
         SourceMgr.getFileEntryForID(SourceMgr.getMainFileID());
-    if (auto Path = getAbsoluteFilePath(FE, SourceMgr))
+    if (auto Path = getRealPath(FE, SourceMgr))
       HintPath = *Path;
     // Query the index and populate the empty slot.
     Index->lookup(
@@ -305,9 +295,9 @@ std::vector<Location> findDefinitions(ParsedAST &AST, Position Pos,
           auto &Value = It->second;
 
           if (!Value.Def)
-            Value.Def = ToLSPLocation(Sym.Definition, HintPath);
+            Value.Def = toLSPLocation(Sym.Definition, HintPath);
           if (!Value.Decl)
-            Value.Decl = ToLSPLocation(Sym.CanonicalDeclaration, HintPath);
+            Value.Decl = toLSPLocation(Sym.CanonicalDeclaration, HintPath);
         });
   }
 
@@ -333,7 +323,7 @@ class DocumentHighlightsFinder : public index::IndexDataConsumer {
   const ASTContext &AST;
 
 public:
-  DocumentHighlightsFinder(raw_ostream &OS, ASTContext &AST, Preprocessor &PP,
+  DocumentHighlightsFinder(ASTContext &AST, Preprocessor &PP,
                            std::vector<const Decl *> &Decls)
       : Decls(Decls), AST(AST) {}
   std::vector<DocumentHighlight> takeHighlights() {
@@ -398,7 +388,7 @@ std::vector<DocumentHighlight> findDocumentHighlights(ParsedAST &AST,
   std::vector<const Decl *> SelectedDecls = Symbols.Decls;
 
   DocumentHighlightsFinder DocHighlightsFinder(
-      llvm::errs(), AST.getASTContext(), AST.getPreprocessor(), SelectedDecls);
+      AST.getASTContext(), AST.getPreprocessor(), SelectedDecls);
 
   index::IndexingOptions IndexOpts;
   IndexOpts.SystemSymbolFilter =
@@ -410,7 +400,7 @@ std::vector<DocumentHighlight> findDocumentHighlights(ParsedAST &AST,
   return DocHighlightsFinder.takeHighlights();
 }
 
-static PrintingPolicy PrintingPolicyForDecls(PrintingPolicy Base) {
+static PrintingPolicy printingPolicyForDecls(PrintingPolicy Base) {
   PrintingPolicy Policy(Base);
 
   Policy.AnonymousTagLocations = false;
@@ -424,11 +414,11 @@ static PrintingPolicy PrintingPolicyForDecls(PrintingPolicy Base) {
 
 /// Return a string representation (e.g. "class MyNamespace::MyClass") of
 /// the type declaration \p TD.
-static std::string TypeDeclToString(const TypeDecl *TD) {
+static std::string typeDeclToString(const TypeDecl *TD) {
   QualType Type = TD->getASTContext().getTypeDeclType(TD);
 
   PrintingPolicy Policy =
-      PrintingPolicyForDecls(TD->getASTContext().getPrintingPolicy());
+      printingPolicyForDecls(TD->getASTContext().getPrintingPolicy());
 
   std::string Name;
   llvm::raw_string_ostream Stream(Name);
@@ -439,10 +429,10 @@ static std::string TypeDeclToString(const TypeDecl *TD) {
 
 /// Return a string representation (e.g. "namespace ns1::ns2") of
 /// the named declaration \p ND.
-static std::string NamedDeclQualifiedName(const NamedDecl *ND,
+static std::string namedDeclQualifiedName(const NamedDecl *ND,
                                           StringRef Prefix) {
   PrintingPolicy Policy =
-      PrintingPolicyForDecls(ND->getASTContext().getPrintingPolicy());
+      printingPolicyForDecls(ND->getASTContext().getPrintingPolicy());
 
   std::string Name;
   llvm::raw_string_ostream Stream(Name);
@@ -461,11 +451,11 @@ static llvm::Optional<std::string> getScopeName(const Decl *D) {
   if (isa<TranslationUnitDecl>(DC))
     return std::string("global namespace");
   if (const TypeDecl *TD = dyn_cast<TypeDecl>(DC))
-    return TypeDeclToString(TD);
+    return typeDeclToString(TD);
   else if (const NamespaceDecl *ND = dyn_cast<NamespaceDecl>(DC))
-    return NamedDeclQualifiedName(ND, "namespace");
+    return namedDeclQualifiedName(ND, "namespace");
   else if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(DC))
-    return NamedDeclQualifiedName(FD, "function");
+    return namedDeclQualifiedName(FD, "function");
 
   return llvm::None;
 }
@@ -492,7 +482,7 @@ static Hover getHoverContents(const Decl *D) {
   llvm::raw_string_ostream OS(DeclText);
 
   PrintingPolicy Policy =
-      PrintingPolicyForDecls(D->getASTContext().getPrintingPolicy());
+      printingPolicyForDecls(D->getASTContext().getPrintingPolicy());
 
   D->print(OS, Policy);
 
@@ -507,7 +497,7 @@ static Hover getHoverContents(QualType T, ASTContext &ASTCtx) {
   Hover H;
   std::string TypeText;
   llvm::raw_string_ostream OS(TypeText);
-  PrintingPolicy Policy = PrintingPolicyForDecls(ASTCtx.getPrintingPolicy());
+  PrintingPolicy Policy = printingPolicyForDecls(ASTCtx.getPrintingPolicy());
   T.print(OS, Policy);
   OS.flush();
   H.contents.value += TypeText;
@@ -549,7 +539,7 @@ public:
   //- auto& i = 1;
   bool VisitDeclaratorDecl(DeclaratorDecl *D) {
     if (!D->getTypeSourceInfo() ||
-        D->getTypeSourceInfo()->getTypeLoc().getLocStart() != SearchedLocation)
+        D->getTypeSourceInfo()->getTypeLoc().getBeginLoc() != SearchedLocation)
       return true;
 
     auto DeclT = D->getType();

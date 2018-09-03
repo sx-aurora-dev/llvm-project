@@ -37,6 +37,7 @@ public:
   StandaloneToolExecutor(
       const CompilationDatabase &Compilations,
       llvm::ArrayRef<std::string> SourcePaths,
+      IntrusiveRefCntPtr<vfs::FileSystem> BaseFS = vfs::getRealFileSystem(),
       std::shared_ptr<PCHContainerOperations> PCHContainerOps =
           std::make_shared<PCHContainerOperations>());
 
@@ -50,6 +51,8 @@ public:
           std::make_shared<PCHContainerOperations>());
 
   StringRef getExecutorName() const override { return ExecutorName; }
+
+  bool isSingleProcess() const override { return true; }
 
   using ToolExecutor::execute;
 

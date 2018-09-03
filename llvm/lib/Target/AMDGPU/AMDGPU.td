@@ -140,6 +140,12 @@ def FeatureCIInsts : SubtargetFeature<"ci-insts",
   "Additional instructions for CI+"
 >;
 
+def FeatureVIInsts : SubtargetFeature<"vi-insts",
+  "VIInsts",
+  "true",
+  "Additional instructions for VI+"
+>;
+
 def FeatureGFX9Insts : SubtargetFeature<"gfx9-insts",
   "GFX9Insts",
   "true",
@@ -236,6 +242,12 @@ def FeatureDPP : SubtargetFeature<"dpp",
   "Support DPP (Data Parallel Primitives) extension"
 >;
 
+def FeatureR128A16 : SubtargetFeature<"r128-a16",
+  "HasR128A16",
+  "true",
+  "Support 16 bit coordindates/gradients/lod/clamp/mip types on gfx9"
+>;
+
 def FeatureIntClamp : SubtargetFeature<"int-clamp-insts",
   "HasIntClamp",
   "true",
@@ -266,15 +278,6 @@ def FeatureD16PreservesUnusedBits : SubtargetFeature<
 //===------------------------------------------------------------===//
 // Subtarget Features (options and debugging)
 //===------------------------------------------------------------===//
-
-// Some instructions do not support denormals despite this flag. Using
-// fp32 denormals also causes instructions to run at the double
-// precision rate for the device.
-def FeatureFP32Denormals : SubtargetFeature<"fp32-denormals",
-  "FP32Denormals",
-  "true",
-  "Enable single precision denormal handling"
->;
 
 // Denormal handling for fp64 and fp16 is controlled by the same
 // config register when fp16 supported.
@@ -411,26 +414,26 @@ def FeatureGCN : SubtargetFeature<"gcn",
   "GCN or newer GPU"
 >;
 
-class AMDGPUSubtargetFeatureGeneration <string Value,
+class GCNSubtargetFeatureGeneration <string Value,
                                   list<SubtargetFeature> Implies> :
-        SubtargetFeatureGeneration <Value, "AMDGPUSubtarget", Implies>;
+        SubtargetFeatureGeneration <Value, "GCNSubtarget", Implies>;
 
-def FeatureSouthernIslands : AMDGPUSubtargetFeatureGeneration<"SOUTHERN_ISLANDS",
+def FeatureSouthernIslands : GCNSubtargetFeatureGeneration<"SOUTHERN_ISLANDS",
   [FeatureFP64, FeatureLocalMemorySize32768, FeatureMIMG_R128,
   FeatureWavefrontSize64, FeatureGCN,
   FeatureLDSBankCount32, FeatureMovrel]
 >;
 
-def FeatureSeaIslands : AMDGPUSubtargetFeatureGeneration<"SEA_ISLANDS",
+def FeatureSeaIslands : GCNSubtargetFeatureGeneration<"SEA_ISLANDS",
   [FeatureFP64, FeatureLocalMemorySize65536, FeatureMIMG_R128,
   FeatureWavefrontSize64, FeatureGCN, FeatureFlatAddressSpace,
   FeatureCIInsts, FeatureMovrel]
 >;
 
-def FeatureVolcanicIslands : AMDGPUSubtargetFeatureGeneration<"VOLCANIC_ISLANDS",
+def FeatureVolcanicIslands : GCNSubtargetFeatureGeneration<"VOLCANIC_ISLANDS",
   [FeatureFP64, FeatureLocalMemorySize65536, FeatureMIMG_R128,
    FeatureWavefrontSize64, FeatureFlatAddressSpace, FeatureGCN,
-   FeatureGCN3Encoding, FeatureCIInsts, Feature16BitInsts,
+   FeatureGCN3Encoding, FeatureCIInsts, FeatureVIInsts, Feature16BitInsts,
    FeatureSMemRealTime, FeatureVGPRIndexMode, FeatureMovrel,
    FeatureScalarStores, FeatureInv2PiInlineImm,
    FeatureSDWA, FeatureSDWAOutModsVOPC, FeatureSDWAMac, FeatureDPP,
@@ -438,16 +441,16 @@ def FeatureVolcanicIslands : AMDGPUSubtargetFeatureGeneration<"VOLCANIC_ISLANDS"
   ]
 >;
 
-def FeatureGFX9 : AMDGPUSubtargetFeatureGeneration<"GFX9",
+def FeatureGFX9 : GCNSubtargetFeatureGeneration<"GFX9",
   [FeatureFP64, FeatureLocalMemorySize65536,
    FeatureWavefrontSize64, FeatureFlatAddressSpace, FeatureGCN,
-   FeatureGCN3Encoding, FeatureCIInsts, Feature16BitInsts,
+   FeatureGCN3Encoding, FeatureCIInsts, FeatureVIInsts, Feature16BitInsts,
    FeatureSMemRealTime, FeatureScalarStores, FeatureInv2PiInlineImm,
    FeatureApertureRegs, FeatureGFX9Insts, FeatureVOP3P, FeatureVGPRIndexMode,
    FeatureFastFMAF32, FeatureDPP, FeatureIntClamp,
    FeatureSDWA, FeatureSDWAOmod, FeatureSDWAScalar, FeatureSDWASdst,
    FeatureFlatInstOffsets, FeatureFlatGlobalInsts, FeatureFlatScratchInsts,
-   FeatureAddNoCarryInsts, FeatureScalarAtomics
+   FeatureAddNoCarryInsts, FeatureScalarAtomics, FeatureR128A16
   ]
 >;
 
@@ -705,6 +708,9 @@ def HasSDWA9 : Predicate<"Subtarget->hasSDWA()">,
 
 def HasDPP : Predicate<"Subtarget->hasDPP()">,
   AssemblerPredicate<"FeatureDPP">;
+
+def HasR128A16 : Predicate<"Subtarget->hasR128A16()">,
+  AssemblerPredicate<"FeatureR128A16">;
 
 def HasIntClamp : Predicate<"Subtarget->hasIntClamp()">,
   AssemblerPredicate<"FeatureIntClamp">;

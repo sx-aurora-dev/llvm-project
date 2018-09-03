@@ -1320,7 +1320,7 @@ MachineInstr *R600InstrInfo::buildSlotOfVectorInstruction(
     const {
   assert (MI->getOpcode() == R600::DOT_4 && "Not Implemented");
   unsigned Opcode;
-  if (ST.getGeneration() <= R600Subtarget::R700)
+  if (ST.getGeneration() <= AMDGPUSubtarget::R700)
     Opcode = R600::DOT4_r600;
   else
     Opcode = R600::DOT4_eg;
@@ -1500,19 +1500,19 @@ void R600InstrInfo::clearFlag(MachineInstr &MI, unsigned Operand,
 }
 
 unsigned R600InstrInfo::getAddressSpaceForPseudoSourceKind(
-    PseudoSourceValue::PSVKind Kind) const {
+    unsigned Kind) const {
   switch (Kind) {
   case PseudoSourceValue::Stack:
   case PseudoSourceValue::FixedStack:
-    return ST.getAMDGPUAS().PRIVATE_ADDRESS;
+    return AMDGPUAS::PRIVATE_ADDRESS;
   case PseudoSourceValue::ConstantPool:
   case PseudoSourceValue::GOT:
   case PseudoSourceValue::JumpTable:
   case PseudoSourceValue::GlobalValueCallEntry:
   case PseudoSourceValue::ExternalSymbolCallEntry:
   case PseudoSourceValue::TargetCustom:
-    return ST.getAMDGPUAS().CONSTANT_ADDRESS;
+    return AMDGPUAS::CONSTANT_ADDRESS;
   }
+
   llvm_unreachable("Invalid pseudo source kind");
-  return ST.getAMDGPUAS().PRIVATE_ADDRESS;
 }

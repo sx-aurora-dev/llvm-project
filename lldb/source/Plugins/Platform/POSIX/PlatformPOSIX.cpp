@@ -1155,6 +1155,10 @@ uint32_t PlatformPOSIX::DoLoadImage(lldb_private::Process *process,
     size_t buffer_size = 0;
     std::string path_array;
     for (auto path : *paths) {
+      // Don't insert empty paths, they will make us abort the path
+      // search prematurely.
+      if (path.empty())
+        continue;
       size_t path_size = path.size();
       path_array.append(path);
       path_array.push_back('\0');
@@ -1240,7 +1244,8 @@ uint32_t PlatformPOSIX::DoLoadImage(lldb_private::Process *process,
   options.SetTrapExceptions(false); // dlopen can't throw exceptions, so
                                     // don't do the work to trap them.
   options.SetTimeout(std::chrono::seconds(2));
-  
+  options.SetIsForUtilityExpr(true);
+
   Value return_value;
   // Fetch the clang types we will need:
   ClangASTContext *ast = process->GetTarget().GetScratchClangASTContext();

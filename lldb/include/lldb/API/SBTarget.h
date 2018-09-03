@@ -272,6 +272,10 @@ public:
 
   lldb::SBFileSpec GetExecutable();
 
+  // Append the path mapping (from -> to) to the target's paths mapping list.
+  void AppendImageSearchPath(const char *from, const char *to,
+                             lldb::SBError &error);
+
   bool AddModule(lldb::SBModule &module);
 
   lldb::SBModule AddModule(const char *path, const char *triple,
@@ -575,6 +579,11 @@ public:
   lldb::SBBreakpoint
   BreakpointCreateByLocation(const lldb::SBFileSpec &file_spec, uint32_t line,
                              lldb::addr_t offset, SBFileSpecList &module_list);
+
+  lldb::SBBreakpoint
+  BreakpointCreateByLocation(const lldb::SBFileSpec &file_spec, uint32_t line,
+                             uint32_t column, lldb::addr_t offset,
+                             SBFileSpecList &module_list);
 
   lldb::SBBreakpoint BreakpointCreateByName(const char *symbol_name,
                                             const char *module_name = nullptr);

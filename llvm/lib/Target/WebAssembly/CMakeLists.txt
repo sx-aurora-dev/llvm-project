@@ -9,16 +9,19 @@ tablegen(LLVM WebAssemblyGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM WebAssemblyGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM WebAssemblyGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM WebAssemblyGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM WebAssemblyGenStackifier.inc -gen-wasm-stackifier)
 
 add_public_tablegen_target(WebAssemblyCommonTableGen)
 
 add_llvm_target(WebAssemblyCodeGen
+  WebAssemblyAddMissingPrototypes.cpp
   WebAssemblyArgumentMove.cpp
   WebAssemblyAsmPrinter.cpp
   WebAssemblyCallIndirectFixup.cpp
   WebAssemblyCFGStackify.cpp
   WebAssemblyCFGSort.cpp
   WebAssemblyLateEHPrepare.cpp
+  WebAssemblyEHRestoreStackPointer.cpp
   WebAssemblyExceptionInfo.cpp
   WebAssemblyExplicitLocals.cpp
   WebAssemblyFastISel.cpp

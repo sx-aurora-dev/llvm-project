@@ -52,6 +52,7 @@ using namespace llvm::support;
 using namespace lld;
 using namespace lld::elf;
 
+using llvm::support::endian::read32le;
 using llvm::support::endian::write32le;
 using llvm::support::endian::write64le;
 
@@ -327,8 +328,6 @@ void BuildIdSection::computeHash(
 BssSection::BssSection(StringRef Name, uint64_t Size, uint32_t Alignment)
     : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_NOBITS, Alignment, Name) {
   this->Bss = true;
-  if (OutputSection *Sec = getParent())
-    Sec->Alignment = std::max(Sec->Alignment, Alignment);
   this->Size = Size;
 }
 
@@ -336,7 +335,7 @@ void BuildIdSection::writeBuildId(ArrayRef<uint8_t> Buf) {
   switch (Config->BuildId) {
   case BuildIdKind::Fast:
     computeHash(Buf, [](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
-      write64le(Dest, xxHash64(toStringRef(Arr)));
+      write64le(Dest, xxHash64(Arr));
     });
     break;
   case BuildIdKind::Md5:
@@ -369,15 +368,11 @@ EhFrameSection::EhFrameSection()
 // and where their relocations point to.
 template <class ELFT, class RelTy>
 CieRecord *EhFrameSection::addCie(EhSectionPiece &Cie, ArrayRef<RelTy> Rels) {
-  auto *Sec = cast<EhInputSection>(Cie.Sec);
-  if (read32(Cie.data().data() + 4) != 0)
-    fatal(toString(Sec) + ": CIE expected at beginning of .eh_frame");
-
   Symbol *Personality = nullptr;
   unsigned FirstRelI = Cie.FirstRelocation;
   if (FirstRelI != (unsigned)-1)
     Personality =
-        &Sec->template getFile<ELFT>()->getRelocTargetSym(Rels[FirstRelI]);
+        &Cie.Sec->template getFile<ELFT>()->getRelocTargetSym(Rels[FirstRelI]);
 
   // Search for an existing CIE by CIE contents/relocation target pair.
   CieRecord *&Rec = CieMap[{Cie.data(), Personality}];
@@ -479,9 +474,7 @@ static void writeCieFde(uint8_t *Buf, ArrayRef<uint8_t> D) {
 }
 
 void EhFrameSection::finalizeContents() {
-  if (this->Size)
-    return; // Already finalized.
-
+  assert(!this->Size); // Not finalized.
   size_t Off = 0;
   for (CieRecord *Rec : CieRecords) {
     Rec->Cie->OutputOff = Off;
@@ -509,14 +502,31 @@ std::vector<EhFrameSection::FdeData> EhFrameSection::getFdeData() const {
   uint8_t *Buf = getParent()->Loc + OutSecOff;
   std::vector<FdeData> Ret;
 
+  uint64_t VA = InX::EhFrameHdr->getVA();
   for (CieRecord *Rec : CieRecords) {
     uint8_t Enc = getFdeEncoding(Rec->Cie);
     for (EhSectionPiece *Fde : Rec->Fdes) {
-      uint32_t Pc = getFdePc(Buf, Fde->OutputOff, Enc);
-      uint32_t FdeVA = getParent()->Addr + Fde->OutputOff;
-      Ret.push_back({Pc, FdeVA});
+      uint64_t Pc = getFdePc(Buf, Fde->OutputOff, Enc);
+      uint64_t FdeVA = getParent()->Addr + Fde->OutputOff;
+      if (!isInt<32>(Pc - VA))
+        fatal(toString(Fde->Sec) + ": PC offset is too large: 0x" +
+              Twine::utohexstr(Pc - VA));
+      Ret.push_back({uint32_t(Pc - VA), uint32_t(FdeVA - VA)});
     }
   }
+
+  // Sort the FDE list by their PC and uniqueify. Usually there is only
+  // one FDE for a PC (i.e. function), but if ICF merges two functions
+  // into one, there can be more than one FDEs pointing to the address.
+  auto Less = [](const FdeData &A, const FdeData &B) {
+    return A.PcRel < B.PcRel;
+  };
+  std::stable_sort(Ret.begin(), Ret.end(), Less);
+  auto Eq = [](const FdeData &A, const FdeData &B) {
+    return A.PcRel == B.PcRel;
+  };
+  Ret.erase(std::unique(Ret.begin(), Ret.end(), Eq), Ret.end());
+
   return Ret;
 }
 
@@ -524,9 +534,14 @@ static uint64_t readFdeAddr(uint8_t *Buf, int Size) {
   switch (Size) {
   case DW_EH_PE_udata2:
     return read16(Buf);
+  case DW_EH_PE_sdata2:
+    return (int16_t)read16(Buf);
   case DW_EH_PE_udata4:
     return read32(Buf);
+  case DW_EH_PE_sdata4:
+    return (int32_t)read32(Buf);
   case DW_EH_PE_udata8:
+  case DW_EH_PE_sdata8:
     return read64(Buf);
   case DW_EH_PE_absptr:
     return readUint(Buf);
@@ -541,7 +556,7 @@ uint64_t EhFrameSection::getFdePc(uint8_t *Buf, size_t FdeOff,
   // The starting address to which this FDE applies is
   // stored at FDE + 8 byte.
   size_t Off = FdeOff + 8;
-  uint64_t Addr = readFdeAddr(Buf + Off, Enc & 0x7);
+  uint64_t Addr = readFdeAddr(Buf + Off, Enc & 0xf);
   if ((Enc & 0x70) == DW_EH_PE_absptr)
     return Addr;
   if ((Enc & 0x70) == DW_EH_PE_pcrel)
@@ -857,7 +872,13 @@ template <class ELFT> void MipsGotSection::build() {
     if (tryMergeGots(MergedGots.front(), SrcGot, true)) {
       File->MipsGotIndex = 0;
     } else {
-      if (!tryMergeGots(MergedGots.back(), SrcGot, false)) {
+      // If this is the first time we failed to merge with the primary GOT,
+      // MergedGots.back() will also be the primary GOT. We must make sure not
+      // to try to merge again with IsPrimary=false, as otherwise, if the
+      // inputs are just right, we could allow the primary GOT to become 1 or 2
+      // words too big due to ignoring the header size.
+      if (MergedGots.size() == 1 ||
+          !tryMergeGots(MergedGots.back(), SrcGot, false)) {
         MergedGots.emplace_back();
         std::swap(MergedGots.back(), SrcGot);
       }
@@ -1243,6 +1264,8 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   uint32_t DtFlags1 = 0;
   if (Config->Bsymbolic)
     DtFlags |= DF_SYMBOLIC;
+  if (Config->ZGlobal)
+    DtFlags1 |= DF_1_GLOBAL;
   if (Config->ZInitfirst)
     DtFlags1 |= DF_1_INITFIRST;
   if (Config->ZNodelete)
@@ -1824,8 +1847,10 @@ static bool sortMipsSymbols(const SymbolTableEntry &L,
 void SymbolTableBaseSection::finalizeContents() {
   getParent()->Link = StrTabSec.getParent()->SectionIndex;
 
-  if (this->Type != SHT_DYNSYM)
+  if (this->Type != SHT_DYNSYM) {
+    sortSymTabSymbols();
     return;
+  }
 
   // If it is a .dynsym, there should be no local symbols, but we need
   // to do a few things for the dynamic linker.
@@ -1853,10 +1878,7 @@ void SymbolTableBaseSection::finalizeContents() {
 // Aside from above, we put local symbols in groups starting with the STT_FILE
 // symbol. That is convenient for purpose of identifying where are local symbols
 // coming from.
-void SymbolTableBaseSection::postThunkContents() {
-  if (this->Type == SHT_DYNSYM)
-    return;
-
+void SymbolTableBaseSection::sortSymTabSymbols() {
   // Move all local symbols before global symbols.
   auto E = std::stable_partition(
       Symbols.begin(), Symbols.end(), [](const SymbolTableEntry &S) {
@@ -1915,6 +1937,24 @@ SymbolTableSection<ELFT>::SymbolTableSection(StringTableSection &StrTabSec)
   this->Entsize = sizeof(Elf_Sym);
 }
 
+static BssSection *getCommonSec(Symbol *Sym) {
+  if (!Config->DefineCommon)
+    if (auto *D = dyn_cast<Defined>(Sym))
+      return dyn_cast_or_null<BssSection>(D->Section);
+  return nullptr;
+}
+
+static uint32_t getSymSectionIndex(Symbol *Sym) {
+  if (getCommonSec(Sym))
+    return SHN_COMMON;
+  if (!isa<Defined>(Sym) || Sym->NeedsPltAddr)
+    return SHN_UNDEF;
+  if (const OutputSection *OS = Sym->getOutputSection())
+    return OS->SectionIndex >= SHN_LORESERVE ? (uint32_t)SHN_XINDEX
+                                             : OS->SectionIndex;
+  return SHN_ABS;
+}
+
 // Write the internal symbol table contents to the output symbol table.
 template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *Buf) {
   // The first entry is a null entry as per the ELF spec.
@@ -1936,22 +1976,7 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *Buf) {
     }
 
     ESym->st_name = Ent.StrTabOffset;
-
-    // Set a section index.
-    BssSection *CommonSec = nullptr;
-    if (!Config->DefineCommon)
-      if (auto *D = dyn_cast<Defined>(Sym))
-        CommonSec = dyn_cast_or_null<BssSection>(D->Section);
-    if (CommonSec)
-      ESym->st_shndx = SHN_COMMON;
-    else if (Sym->NeedsPltAddr)
-      ESym->st_shndx = SHN_UNDEF;
-    else if (const OutputSection *OutSec = Sym->getOutputSection())
-      ESym->st_shndx = OutSec->SectionIndex;
-    else if (isa<Defined>(Sym))
-      ESym->st_shndx = SHN_ABS;
-    else
-      ESym->st_shndx = SHN_UNDEF;
+    ESym->st_shndx = getSymSectionIndex(Ent.Sym);
 
     // Copy symbol size if it is a defined symbol. st_size is not significant
     // for undefined symbols, so whether copying it or not is up to us if that's
@@ -1966,7 +1991,7 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *Buf) {
     // st_value is usually an address of a symbol, but that has a
     // special meaining for uninstantiated common symbols (this can
     // occur if -r is given).
-    if (CommonSec)
+    if (BssSection *CommonSec = getCommonSec(Ent.Sym))
       ESym->st_value = CommonSec->Alignment;
     else
       ESym->st_value = Sym->getVA();
@@ -2004,6 +2029,44 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *Buf) {
       ++ESym;
     }
   }
+}
+
+SymtabShndxSection::SymtabShndxSection()
+    : SyntheticSection(0, SHT_SYMTAB_SHNDX, 4, ".symtab_shndxr") {
+  this->Entsize = 4;
+}
+
+void SymtabShndxSection::writeTo(uint8_t *Buf) {
+  // We write an array of 32 bit values, where each value has 1:1 association
+  // with an entry in .symtab. If the corresponding entry contains SHN_XINDEX,
+  // we need to write actual index, otherwise, we must write SHN_UNDEF(0).
+  Buf += 4; // Ignore .symtab[0] entry.
+  for (const SymbolTableEntry &Entry : InX::SymTab->getSymbols()) {
+    if (getSymSectionIndex(Entry.Sym) == SHN_XINDEX)
+      write32(Buf, Entry.Sym->getOutputSection()->SectionIndex);
+    Buf += 4;
+  }
+}
+
+bool SymtabShndxSection::empty() const {
+  // SHT_SYMTAB can hold symbols with section indices values up to
+  // SHN_LORESERVE. If we need more, we want to use extension SHT_SYMTAB_SHNDX
+  // section. Problem is that we reveal the final section indices a bit too
+  // late, and we do not know them here. For simplicity, we just always create
+  // a .symtab_shndxr section when the amount of output sections is huge.
+  size_t Size = 0;
+  for (BaseCommand *Base : Script->SectionCommands)
+    if (isa<OutputSection>(Base))
+      ++Size;
+  return Size < SHN_LORESERVE;
+}
+
+void SymtabShndxSection::finalizeContents() {
+  getParent()->Link = InX::SymTab->getParent()->SectionIndex;
+}
+
+size_t SymtabShndxSection::getSize() const {
+  return InX::SymTab->getNumSymbols() * 4;
 }
 
 // .hash and .gnu.hash sections contain on-disk hash tables that map
@@ -2277,19 +2340,51 @@ static uint32_t computeGdbHash(StringRef S) {
   return H;
 }
 
-static std::vector<GdbIndexChunk::CuEntry> readCuList(DWARFContext &Dwarf) {
-  std::vector<GdbIndexChunk::CuEntry> Ret;
-  for (std::unique_ptr<DWARFCompileUnit> &Cu : Dwarf.compile_units())
+GdbIndexSection::GdbIndexSection()
+    : SyntheticSection(0, SHT_PROGBITS, 1, ".gdb_index") {}
+
+// Returns the desired size of an on-disk hash table for a .gdb_index section.
+// There's a tradeoff between size and collision rate. We aim 75% utilization.
+size_t GdbIndexSection::computeSymtabSize() const {
+  return std::max<size_t>(NextPowerOf2(Symbols.size() * 4 / 3), 1024);
+}
+
+// Compute the output section size.
+void GdbIndexSection::initOutputSize() {
+  Size = sizeof(GdbIndexHeader) + computeSymtabSize() * 8;
+
+  for (GdbChunk &Chunk : Chunks)
+    Size += Chunk.CompilationUnits.size() * 16 + Chunk.AddressAreas.size() * 20;
+
+  // Add the constant pool size if exists.
+  if (!Symbols.empty()) {
+    GdbSymbol &Sym = Symbols.back();
+    Size += Sym.NameOff + Sym.Name.size() + 1;
+  }
+}
+
+static std::vector<InputSection *> getDebugInfoSections() {
+  std::vector<InputSection *> Ret;
+  for (InputSectionBase *S : InputSections)
+    if (InputSection *IS = dyn_cast<InputSection>(S))
+      if (IS->Name == ".debug_info")
+        Ret.push_back(IS);
+  return Ret;
+}
+
+static std::vector<GdbIndexSection::CuEntry> readCuList(DWARFContext &Dwarf) {
+  std::vector<GdbIndexSection::CuEntry> Ret;
+  for (std::unique_ptr<DWARFUnit> &Cu : Dwarf.compile_units())
     Ret.push_back({Cu->getOffset(), Cu->getLength() + 4});
   return Ret;
 }
 
-static std::vector<GdbIndexChunk::AddressEntry>
+static std::vector<GdbIndexSection::AddressEntry>
 readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
-  std::vector<GdbIndexChunk::AddressEntry> Ret;
+  std::vector<GdbIndexSection::AddressEntry> Ret;
 
   uint32_t CuIdx = 0;
-  for (std::unique_ptr<DWARFCompileUnit> &Cu : Dwarf.compile_units()) {
+  for (std::unique_ptr<DWARFUnit> &Cu : Dwarf.compile_units()) {
     DWARFAddressRangesVector Ranges;
     Cu->collectAddressRanges(Ranges);
 
@@ -2310,212 +2405,185 @@ readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
   return Ret;
 }
 
-static std::vector<GdbIndexChunk::NameTypeEntry>
-readPubNamesAndTypes(DWARFContext &Dwarf) {
+static std::vector<GdbIndexSection::NameTypeEntry>
+readPubNamesAndTypes(DWARFContext &Dwarf, uint32_t Idx) {
   StringRef Sec1 = Dwarf.getDWARFObj().getGnuPubNamesSection();
   StringRef Sec2 = Dwarf.getDWARFObj().getGnuPubTypesSection();
 
-  std::vector<GdbIndexChunk::NameTypeEntry> Ret;
+  std::vector<GdbIndexSection::NameTypeEntry> Ret;
   for (StringRef Sec : {Sec1, Sec2}) {
     DWARFDebugPubTable Table(Sec, Config->IsLE, true);
-    for (const DWARFDebugPubTable::Set &Set : Table.getData()) {
-      for (const DWARFDebugPubTable::Entry &Ent : Set.Entries) {
-        CachedHashStringRef S(Ent.Name, computeGdbHash(Ent.Name));
-        Ret.push_back({S, Ent.Descriptor.toBits()});
+    for (const DWARFDebugPubTable::Set &Set : Table.getData())
+      for (const DWARFDebugPubTable::Entry &Ent : Set.Entries)
+        Ret.push_back({{Ent.Name, computeGdbHash(Ent.Name)},
+                       (Ent.Descriptor.toBits() << 24) | Idx});
+  }
+  return Ret;
+}
+
+// Create a list of symbols from a given list of symbol names and types
+// by uniquifying them by name.
+static std::vector<GdbIndexSection::GdbSymbol>
+createSymbols(ArrayRef<std::vector<GdbIndexSection::NameTypeEntry>> NameTypes) {
+  typedef GdbIndexSection::GdbSymbol GdbSymbol;
+  typedef GdbIndexSection::NameTypeEntry NameTypeEntry;
+
+  // The number of symbols we will handle in this function is of the order
+  // of millions for very large executables, so we use multi-threading to
+  // speed it up.
+  size_t NumShards = 32;
+  size_t Concurrency = 1;
+  if (ThreadsEnabled)
+    Concurrency =
+        std::min<size_t>(PowerOf2Floor(hardware_concurrency()), NumShards);
+
+  // A sharded map to uniquify symbols by name.
+  std::vector<DenseMap<CachedHashStringRef, size_t>> Map(NumShards);
+  size_t Shift = 32 - countTrailingZeros(NumShards);
+
+  // Instantiate GdbSymbols while uniqufying them by name.
+  std::vector<std::vector<GdbSymbol>> Symbols(NumShards);
+  parallelForEachN(0, Concurrency, [&](size_t ThreadId) {
+    for (ArrayRef<NameTypeEntry> Entries : NameTypes) {
+      for (const NameTypeEntry &Ent : Entries) {
+        size_t ShardId = Ent.Name.hash() >> Shift;
+        if ((ShardId & (Concurrency - 1)) != ThreadId)
+          continue;
+
+        size_t &Idx = Map[ShardId][Ent.Name];
+        if (Idx) {
+          Symbols[ShardId][Idx - 1].CuVector.push_back(Ent.Type);
+          continue;
+        }
+
+        Idx = Symbols[ShardId].size() + 1;
+        Symbols[ShardId].push_back({Ent.Name, {Ent.Type}, 0, 0});
       }
     }
-  }
-  return Ret;
-}
-
-static std::vector<InputSection *> getDebugInfoSections() {
-  std::vector<InputSection *> Ret;
-  for (InputSectionBase *S : InputSections)
-    if (InputSection *IS = dyn_cast<InputSection>(S))
-      if (IS->Name == ".debug_info")
-        Ret.push_back(IS);
-  return Ret;
-}
-
-void GdbIndexSection::fixCuIndex() {
-  uint32_t Idx = 0;
-  for (GdbIndexChunk &Chunk : Chunks) {
-    for (GdbIndexChunk::AddressEntry &Ent : Chunk.AddressAreas)
-      Ent.CuIndex += Idx;
-    Idx += Chunk.CompilationUnits.size();
-  }
-}
-
-std::vector<std::vector<uint32_t>> GdbIndexSection::createCuVectors() {
-  std::vector<std::vector<uint32_t>> Ret;
-  uint32_t Idx = 0;
-  uint32_t Off = 0;
-
-  for (GdbIndexChunk &Chunk : Chunks) {
-    for (GdbIndexChunk::NameTypeEntry &Ent : Chunk.NamesAndTypes) {
-      GdbSymbol *&Sym = Symbols[Ent.Name];
-      if (!Sym) {
-        Sym = make<GdbSymbol>(GdbSymbol{Ent.Name.hash(), Off, Ret.size()});
-        Off += Ent.Name.size() + 1;
-        Ret.push_back({});
-      }
-
-      // gcc 5.4.1 produces a buggy .debug_gnu_pubnames that contains
-      // duplicate entries, so we want to dedup them.
-      std::vector<uint32_t> &Vec = Ret[Sym->CuVectorIndex];
-      uint32_t Val = (Ent.Type << 24) | Idx;
-      if (Vec.empty() || Vec.back() != Val)
-        Vec.push_back(Val);
-    }
-    Idx += Chunk.CompilationUnits.size();
-  }
-
-  StringPoolSize = Off;
-  return Ret;
-}
-
-template <class ELFT> GdbIndexSection *elf::createGdbIndex() {
-  // Gather debug info to create a .gdb_index section.
-  std::vector<InputSection *> Sections = getDebugInfoSections();
-  std::vector<GdbIndexChunk> Chunks(Sections.size());
-
-  parallelForEachN(0, Chunks.size(), [&](size_t I) {
-    ObjFile<ELFT> *File = Sections[I]->getFile<ELFT>();
-    DWARFContext Dwarf(make_unique<LLDDwarfObj<ELFT>>(File));
-
-    Chunks[I].DebugInfoSec = Sections[I];
-    Chunks[I].CompilationUnits = readCuList(Dwarf);
-    Chunks[I].AddressAreas = readAddressAreas(Dwarf, Sections[I]);
-    Chunks[I].NamesAndTypes = readPubNamesAndTypes(Dwarf);
   });
+
+  size_t NumSymbols = 0;
+  for (ArrayRef<GdbSymbol> V : Symbols)
+    NumSymbols += V.size();
+
+  // The return type is a flattened vector, so we'll copy each vector
+  // contents to Ret.
+  std::vector<GdbSymbol> Ret;
+  Ret.reserve(NumSymbols);
+  for (std::vector<GdbSymbol> &Vec : Symbols)
+    for (GdbSymbol &Sym : Vec)
+      Ret.push_back(std::move(Sym));
+
+  // CU vectors and symbol names are adjacent in the output file.
+  // We can compute their offsets in the output file now.
+  size_t Off = 0;
+  for (GdbSymbol &Sym : Ret) {
+    Sym.CuVectorOff = Off;
+    Off += (Sym.CuVector.size() + 1) * 4;
+  }
+  for (GdbSymbol &Sym : Ret) {
+    Sym.NameOff = Off;
+    Off += Sym.Name.size() + 1;
+  }
+
+  return Ret;
+}
+
+// Returns a newly-created .gdb_index section.
+template <class ELFT> GdbIndexSection *GdbIndexSection::create() {
+  std::vector<InputSection *> Sections = getDebugInfoSections();
 
   // .debug_gnu_pub{names,types} are useless in executables.
   // They are present in input object files solely for creating
-  // a .gdb_index. So we can remove it from the output.
+  // a .gdb_index. So we can remove them from the output.
   for (InputSectionBase *S : InputSections)
     if (S->Name == ".debug_gnu_pubnames" || S->Name == ".debug_gnu_pubtypes")
       S->Live = false;
 
-  // Create a .gdb_index and returns it.
-  return make<GdbIndexSection>(std::move(Chunks));
-}
+  std::vector<GdbChunk> Chunks(Sections.size());
+  std::vector<std::vector<NameTypeEntry>> NameTypes(Sections.size());
 
-static size_t getCuSize(ArrayRef<GdbIndexChunk> Arr) {
-  size_t Ret = 0;
-  for (const GdbIndexChunk &D : Arr)
-    Ret += D.CompilationUnits.size();
+  parallelForEachN(0, Sections.size(), [&](size_t I) {
+    ObjFile<ELFT> *File = Sections[I]->getFile<ELFT>();
+    DWARFContext Dwarf(make_unique<LLDDwarfObj<ELFT>>(File));
+
+    Chunks[I].Sec = Sections[I];
+    Chunks[I].CompilationUnits = readCuList(Dwarf);
+    Chunks[I].AddressAreas = readAddressAreas(Dwarf, Sections[I]);
+    NameTypes[I] = readPubNamesAndTypes(Dwarf, I);
+  });
+
+  auto *Ret = make<GdbIndexSection>();
+  Ret->Chunks = std::move(Chunks);
+  Ret->Symbols = createSymbols(NameTypes);
+  Ret->initOutputSize();
   return Ret;
-}
-
-static size_t getAddressAreaSize(ArrayRef<GdbIndexChunk> Arr) {
-  size_t Ret = 0;
-  for (const GdbIndexChunk &D : Arr)
-    Ret += D.AddressAreas.size();
-  return Ret;
-}
-
-std::vector<GdbSymbol *> GdbIndexSection::createGdbSymtab() {
-  uint32_t Size = NextPowerOf2(Symbols.size() * 4 / 3);
-  if (Size < 1024)
-    Size = 1024;
-
-  uint32_t Mask = Size - 1;
-  std::vector<GdbSymbol *> Ret(Size);
-
-  for (auto &KV : Symbols) {
-    GdbSymbol *Sym = KV.second;
-    uint32_t I = Sym->NameHash & Mask;
-    uint32_t Step = ((Sym->NameHash * 17) & Mask) | 1;
-
-    while (Ret[I])
-      I = (I + Step) & Mask;
-    Ret[I] = Sym;
-  }
-  return Ret;
-}
-
-GdbIndexSection::GdbIndexSection(std::vector<GdbIndexChunk> &&C)
-    : SyntheticSection(0, SHT_PROGBITS, 1, ".gdb_index"), Chunks(std::move(C)) {
-  fixCuIndex();
-  CuVectors = createCuVectors();
-  GdbSymtab = createGdbSymtab();
-
-  // Compute offsets early to know the section size.
-  // Each chunk size needs to be in sync with what we write in writeTo.
-  CuTypesOffset = CuListOffset + getCuSize(Chunks) * 16;
-  SymtabOffset = CuTypesOffset + getAddressAreaSize(Chunks) * 20;
-  ConstantPoolOffset = SymtabOffset + GdbSymtab.size() * 8;
-
-  for (ArrayRef<uint32_t> Vec : CuVectors) {
-    CuVectorOffsets.push_back(CuVectorsPoolSize);
-    CuVectorsPoolSize += (Vec.size() + 1) * 4;
-  }
-
-  uint64_t PoolSize = CuVectorsPoolSize + StringPoolSize;
-  TotalSize = ConstantPoolOffset + PoolSize;
-
-  // Length fields in the .gdb_index section are only 4 byte long,
-  // so the section cannot contain very large contents.
-  if (ConstantPoolOffset > UINT32_MAX || PoolSize > UINT32_MAX)
-    error(".gdb_index section too large");
 }
 
 void GdbIndexSection::writeTo(uint8_t *Buf) {
-  // Write the section header.
-  write32le(Buf, 7);
-  write32le(Buf + 4, CuListOffset);
-  write32le(Buf + 8, CuTypesOffset);
-  write32le(Buf + 12, CuTypesOffset);
-  write32le(Buf + 16, SymtabOffset);
-  write32le(Buf + 20, ConstantPoolOffset);
-  Buf += 24;
+  // Write the header.
+  auto *Hdr = reinterpret_cast<GdbIndexHeader *>(Buf);
+  uint8_t *Start = Buf;
+  Hdr->Version = 7;
+  Buf += sizeof(*Hdr);
 
   // Write the CU list.
-  for (GdbIndexChunk &D : Chunks) {
-    for (GdbIndexChunk::CuEntry &Cu : D.CompilationUnits) {
-      write64le(Buf, D.DebugInfoSec->OutSecOff + Cu.CuOffset);
+  Hdr->CuListOff = Buf - Start;
+  for (GdbChunk &Chunk : Chunks) {
+    for (CuEntry &Cu : Chunk.CompilationUnits) {
+      write64le(Buf, Chunk.Sec->OutSecOff + Cu.CuOffset);
       write64le(Buf + 8, Cu.CuLength);
       Buf += 16;
     }
   }
 
   // Write the address area.
-  for (GdbIndexChunk &D : Chunks) {
-    for (GdbIndexChunk::AddressEntry &E : D.AddressAreas) {
+  Hdr->CuTypesOff = Buf - Start;
+  Hdr->AddressAreaOff = Buf - Start;
+  uint32_t CuOff = 0;
+  for (GdbChunk &Chunk : Chunks) {
+    for (AddressEntry &E : Chunk.AddressAreas) {
       uint64_t BaseAddr = E.Section->getVA(0);
       write64le(Buf, BaseAddr + E.LowAddress);
       write64le(Buf + 8, BaseAddr + E.HighAddress);
-      write32le(Buf + 16, E.CuIndex);
+      write32le(Buf + 16, E.CuIndex + CuOff);
       Buf += 20;
     }
+    CuOff += Chunk.CompilationUnits.size();
   }
 
-  // Write the symbol table.
-  for (GdbSymbol *Sym : GdbSymtab) {
-    if (Sym) {
-      write32le(Buf, CuVectorsPoolSize + Sym->NameOffset);
-      write32le(Buf + 4, CuVectorOffsets[Sym->CuVectorIndex]);
-    }
-    Buf += 8;
+  // Write the on-disk open-addressing hash table containing symbols.
+  Hdr->SymtabOff = Buf - Start;
+  size_t SymtabSize = computeSymtabSize();
+  uint32_t Mask = SymtabSize - 1;
+
+  for (GdbSymbol &Sym : Symbols) {
+    uint32_t H = Sym.Name.hash();
+    uint32_t I = H & Mask;
+    uint32_t Step = ((H * 17) & Mask) | 1;
+
+    while (read32le(Buf + I * 8))
+      I = (I + Step) & Mask;
+
+    write32le(Buf + I * 8, Sym.NameOff);
+    write32le(Buf + I * 8 + 4, Sym.CuVectorOff);
   }
+
+  Buf += SymtabSize * 8;
+
+  // Write the string pool.
+  Hdr->ConstantPoolOff = Buf - Start;
+  for (GdbSymbol &Sym : Symbols)
+    memcpy(Buf + Sym.NameOff, Sym.Name.data(), Sym.Name.size());
 
   // Write the CU vectors.
-  for (ArrayRef<uint32_t> Vec : CuVectors) {
-    write32le(Buf, Vec.size());
+  for (GdbSymbol &Sym : Symbols) {
+    write32le(Buf, Sym.CuVector.size());
     Buf += 4;
-    for (uint32_t Val : Vec) {
+    for (uint32_t Val : Sym.CuVector) {
       write32le(Buf, Val);
       Buf += 4;
     }
-  }
-
-  // Write the string pool.
-  for (auto &KV : Symbols) {
-    CachedHashStringRef S = KV.first;
-    GdbSymbol *Sym = KV.second;
-    size_t Off = Sym->NameOffset;
-    memcpy(Buf + Off, S.val().data(), S.size());
-    Buf[Off + S.size()] = '\0';
   }
 }
 
@@ -2533,14 +2601,6 @@ void EhFrameHeader::writeTo(uint8_t *Buf) {
 
   std::vector<FdeData> Fdes = InX::EhFrame->getFdeData();
 
-  // Sort the FDE list by their PC and uniqueify. Usually there is only
-  // one FDE for a PC (i.e. function), but if ICF merges two functions
-  // into one, there can be more than one FDEs pointing to the address.
-  auto Less = [](const FdeData &A, const FdeData &B) { return A.Pc < B.Pc; };
-  std::stable_sort(Fdes.begin(), Fdes.end(), Less);
-  auto Eq = [](const FdeData &A, const FdeData &B) { return A.Pc == B.Pc; };
-  Fdes.erase(std::unique(Fdes.begin(), Fdes.end(), Eq), Fdes.end());
-
   Buf[0] = 1;
   Buf[1] = DW_EH_PE_pcrel | DW_EH_PE_sdata4;
   Buf[2] = DW_EH_PE_udata4;
@@ -2549,10 +2609,9 @@ void EhFrameHeader::writeTo(uint8_t *Buf) {
   write32(Buf + 8, Fdes.size());
   Buf += 12;
 
-  uint64_t VA = this->getVA();
   for (FdeData &Fde : Fdes) {
-    write32(Buf, Fde.Pc - VA);
-    write32(Buf + 4, Fde.FdeVA - VA);
+    write32(Buf, Fde.PcRel);
+    write32(Buf + 4, Fde.FdeVARel);
     Buf += 8;
   }
 }
@@ -2873,8 +2932,10 @@ void elf::mergeSections() {
 
     // We do not want to handle sections that are not alive, so just remove
     // them instead of trying to merge.
-    if (!MS->Live)
+    if (!MS->Live) {
+      S = nullptr;
       continue;
+    }
 
     StringRef OutsecName = getOutputSectionName(MS);
     uint32_t Alignment = std::max<uint32_t>(MS->Alignment, MS->Entsize);
@@ -2938,6 +2999,10 @@ bool ARMExidxSentinelSection::empty() const {
     if (!isa<ARMExidxSentinelSection>(IS))
       return false;
   return true;
+}
+
+bool ARMExidxSentinelSection::classof(const SectionBase *D) {
+  return D->kind() == InputSectionBase::Synthetic && D->Type == SHT_ARM_EXIDX;
 }
 
 ThunkSection::ThunkSection(OutputSection *OS, uint64_t Off)
@@ -3005,11 +3070,12 @@ RelocationBaseSection *InX::RelaIplt;
 StringTableSection *InX::ShStrTab;
 StringTableSection *InX::StrTab;
 SymbolTableBaseSection *InX::SymTab;
+SymtabShndxSection *InX::SymTabShndx;
 
-template GdbIndexSection *elf::createGdbIndex<ELF32LE>();
-template GdbIndexSection *elf::createGdbIndex<ELF32BE>();
-template GdbIndexSection *elf::createGdbIndex<ELF64LE>();
-template GdbIndexSection *elf::createGdbIndex<ELF64BE>();
+template GdbIndexSection *GdbIndexSection::create<ELF32LE>();
+template GdbIndexSection *GdbIndexSection::create<ELF32BE>();
+template GdbIndexSection *GdbIndexSection::create<ELF64LE>();
+template GdbIndexSection *GdbIndexSection::create<ELF64BE>();
 
 template void elf::splitSections<ELF32LE>();
 template void elf::splitSections<ELF32BE>();

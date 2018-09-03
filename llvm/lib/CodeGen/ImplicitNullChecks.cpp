@@ -115,7 +115,7 @@ class ImplicitNullChecks : public MachineFunctionPass {
   /// \c canHandle should return true for all instructions in \p
   /// Insts.
   DependenceResult computeDependence(const MachineInstr *MI,
-                                     ArrayRef<MachineInstr *> Insts);
+                                     ArrayRef<MachineInstr *> Block);
 
   /// Represents one null check that can be made implicit.
   class NullCheck {
@@ -651,7 +651,7 @@ MachineInstr *ImplicitNullChecks::insertFaultingInstr(
     }
   }
 
-  MIB.setMemRefs(MI->memoperands_begin(), MI->memoperands_end());
+  MIB.setMemRefs(MI->memoperands());
 
   return MIB;
 }

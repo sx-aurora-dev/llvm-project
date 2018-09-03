@@ -320,8 +320,8 @@ bool LoopIdiomRecognize::runOnCountableLoop() {
   // The following transforms hoist stores/memsets into the loop pre-header.
   // Give up if the loop has instructions may throw.
   LoopSafetyInfo SafetyInfo;
-  computeLoopSafetyInfo(&SafetyInfo, CurLoop);
-  if (SafetyInfo.MayThrow)
+  SafetyInfo.computeLoopSafetyInfo(CurLoop);
+  if (SafetyInfo.anyBlockMayThrow())
     return MadeChange;
 
   // Scan all the blocks in the loop that are not in subloops.
@@ -1405,16 +1405,21 @@ bool LoopIdiomRecognize::recognizeAndInsertCTLZ() {
   if (DefX->getOpcode() == Instruction::AShr && !isKnownNonNegative(InitX, *DL))
     return false;
 
-  // If we check X != 0 before entering the loop we don't need a zero
-  // check in CTLZ intrinsic, but only if Cnt Phi is not used outside of the
-  // loop (if it is used we count CTLZ(X >> 1)).
-  if (!IsCntPhiUsedOutsideLoop)
-    if (BasicBlock *PreCondBB = PH->getSinglePredecessor())
-      if (BranchInst *PreCondBr =
-          dyn_cast<BranchInst>(PreCondBB->getTerminator())) {
-        if (matchCondition(PreCondBr, PH) == InitX)
-          ZeroCheck = true;
-      }
+  // If we are using the count instruction outside the loop, make sure we
+  // have a zero check as a precondition. Without the check the loop would run
+  // one iteration for before any check of the input value. This means 0 and 1
+  // would have identical behavior in the original loop and thus
+  if (!IsCntPhiUsedOutsideLoop) {
+    auto *PreCondBB = PH->getSinglePredecessor();
+    if (!PreCondBB)
+      return false;
+    auto *PreCondBI = dyn_cast<BranchInst>(PreCondBB->getTerminator());
+    if (!PreCondBI)
+      return false;
+    if (matchCondition(PreCondBI, PH) != InitX)
+      return false;
+    ZeroCheck = true;
+  }
 
   // Check if CTLZ intrinsic is profitable. Assume it is always profitable
   // if we delete the loop (the loop has only 6 instructions):
@@ -1568,7 +1573,7 @@ void LoopIdiomRecognize::transformLoopToCountable(
       InitXNext =
           Builder.CreateLShr(InitX, ConstantInt::get(InitX->getType(), 1));
     else
-      llvm_unreachable("Unexpected opcode!");      
+      llvm_unreachable("Unexpected opcode!");
   } else
     InitXNext = InitX;
   CTLZ = createCTLZIntrinsic(Builder, InitXNext, DL, ZeroCheck);

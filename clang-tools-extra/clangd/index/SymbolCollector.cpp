@@ -52,7 +52,7 @@ llvm::Optional<std::string> toURI(const SourceManager &SM, StringRef Path,
   if (std::error_code EC =
           SM.getFileManager().getVirtualFileSystem()->makeAbsolute(
               AbsolutePath))
-    log("Warning: could not make absolute file: " + EC.message());
+    log("Warning: could not make absolute file: {0}", EC.message());
   if (llvm::sys::path::is_absolute(AbsolutePath)) {
     // Handle the symbolic link path case where the current working directory
     // (getCurrentWorkingDirectory) is a symlink./ We always want to the real
@@ -86,8 +86,7 @@ llvm::Optional<std::string> toURI(const SourceManager &SM, StringRef Path,
       return U->toString();
     ErrMsg += llvm::toString(U.takeError()) + "\n";
   }
-  log(llvm::Twine("Failed to create an URI for file ") + AbsolutePath + ": " +
-      ErrMsg);
+  log("Failed to create an URI for file {0}: {1}", AbsolutePath, ErrMsg);
   return llvm::None;
 }
 
@@ -183,7 +182,24 @@ getIncludeHeader(llvm::StringRef QName, const SourceManager &SM,
   return toURI(SM, Header, Opts);
 }
 
-// Return the symbol location of the token at \p Loc.
+// Return the symbol range of the token at \p TokLoc.
+std::pair<SymbolLocation::Position, SymbolLocation::Position>
+getTokenRange(SourceLocation TokLoc, const SourceManager &SM,
+              const LangOptions &LangOpts) {
+  auto CreatePosition = [&SM](SourceLocation Loc) {
+    auto LSPLoc = sourceLocToPosition(SM, Loc);
+    SymbolLocation::Position Pos;
+    Pos.Line = LSPLoc.line;
+    Pos.Column = LSPLoc.character;
+    return Pos;
+  };
+
+  auto TokenLength = clang::Lexer::MeasureTokenLength(TokLoc, SM, LangOpts);
+  return {CreatePosition(TokLoc),
+          CreatePosition(TokLoc.getLocWithOffset(TokenLength))};
+}
+
+// Return the symbol location of the token at \p TokLoc.
 llvm::Optional<SymbolLocation>
 getTokenLocation(SourceLocation TokLoc, const SourceManager &SM,
                  const SymbolCollector::Options &Opts,
@@ -195,19 +211,9 @@ getTokenLocation(SourceLocation TokLoc, const SourceManager &SM,
   FileURIStorage = std::move(*U);
   SymbolLocation Result;
   Result.FileURI = FileURIStorage;
-  auto TokenLength = clang::Lexer::MeasureTokenLength(TokLoc, SM, LangOpts);
-
-  auto CreatePosition = [&SM](SourceLocation Loc) {
-    auto LSPLoc = sourceLocToPosition(SM, Loc);
-    SymbolLocation::Position Pos;
-    Pos.Line = LSPLoc.line;
-    Pos.Column = LSPLoc.character;
-    return Pos;
-  };
-
-  Result.Start = CreatePosition(TokLoc);
-  auto EndLoc = TokLoc.getLocWithOffset(TokenLength);
-  Result.End = CreatePosition(EndLoc);
+  auto Range = getTokenRange(TokLoc, SM, LangOpts);
+  Result.Start = Range.first;
+  Result.End = Range.second;
 
   return std::move(Result);
 }
@@ -223,6 +229,11 @@ bool isPreferredDeclaration(const NamedDecl &ND, index::SymbolRoleSet Roles) {
   return (Roles & static_cast<unsigned>(index::SymbolRole::Definition)) &&
          llvm::isa<TagDecl>(&ND) &&
          match(decl(isExpansionInMainFile()), ND, ND.getASTContext()).empty();
+}
+
+SymbolOccurrenceKind toOccurrenceKind(index::SymbolRoleSet Roles) {
+  return static_cast<SymbolOccurrenceKind>(
+      static_cast<unsigned>(AllOccurrenceKinds) & Roles);
 }
 
 } // namespace
@@ -309,10 +320,15 @@ bool SymbolCollector::handleDeclOccurence(
   // Mark D as referenced if this is a reference coming from the main file.
   // D may not be an interesting symbol, but it's cheaper to check at the end.
   auto &SM = ASTCtx->getSourceManager();
+  auto SpellingLoc = SM.getSpellingLoc(Loc);
   if (Opts.CountReferences &&
       (Roles & static_cast<unsigned>(index::SymbolRole::Reference)) &&
-      SM.getFileID(SM.getSpellingLoc(Loc)) == SM.getMainFileID())
+      SM.getFileID(SpellingLoc) == SM.getMainFileID())
     ReferencedDecls.insert(ND);
+
+  if ((static_cast<unsigned>(Opts.OccurrenceFilter) & Roles) &&
+      SM.getFileID(SpellingLoc) == SM.getMainFileID())
+    DeclOccurrences[ND].emplace_back(SpellingLoc, Roles);
 
   // Don't continue indexing if this is a mere reference.
   if (!(Roles & static_cast<unsigned>(index::SymbolRole::Declaration) ||
@@ -321,21 +337,20 @@ bool SymbolCollector::handleDeclOccurence(
   if (!shouldCollectSymbol(*ND, *ASTCtx, Opts))
     return true;
 
-  llvm::SmallString<128> USR;
-  if (index::generateUSRForDecl(ND, USR))
+  auto ID = getSymbolID(ND);
+  if (!ID)
     return true;
-  SymbolID ID(USR);
 
   const NamedDecl &OriginalDecl = *cast<NamedDecl>(ASTNode.OrigD);
-  const Symbol *BasicSymbol = Symbols.find(ID);
+  const Symbol *BasicSymbol = Symbols.find(*ID);
   if (!BasicSymbol) // Regardless of role, ND is the canonical declaration.
-    BasicSymbol = addDeclaration(*ND, std::move(ID));
+    BasicSymbol = addDeclaration(*ND, std::move(*ID));
   else if (isPreferredDeclaration(OriginalDecl, Roles))
     // If OriginalDecl is preferred, replace the existing canonical
     // declaration (e.g. a class forward declaration). There should be at most
     // one duplicate as we expect to see only one preferred declaration per
     // TU, because in practice they are definitions.
-    BasicSymbol = addDeclaration(OriginalDecl, std::move(ID));
+    BasicSymbol = addDeclaration(OriginalDecl, std::move(*ID));
 
   if (Roles & static_cast<unsigned>(index::SymbolRole::Definition))
     addDefinition(OriginalDecl, *BasicSymbol);
@@ -407,9 +422,7 @@ bool SymbolCollector::handleMacroOccurence(const IdentifierInfo *Name,
   }
   S.Signature = Signature;
   S.CompletionSnippetSuffix = SnippetSuffix;
-  Symbol::Details Detail;
-  Detail.IncludeHeader = Include;
-  S.Detail = &Detail;
+  S.IncludeHeader = Include;
   Symbols.insert(S);
   return true;
 }
@@ -424,9 +437,9 @@ void SymbolCollector::finish() {
     }
   };
   for (const NamedDecl *ND : ReferencedDecls) {
-    llvm::SmallString<128> USR;
-    if (!index::generateUSRForDecl(ND, USR))
-      IncRef(SymbolID(USR));
+    if (auto ID = getSymbolID(ND)) {
+      IncRef(*ID);
+    }
   }
   if (Opts.CollectMacro) {
     assert(PP);
@@ -438,8 +451,35 @@ void SymbolCollector::finish() {
           IncRef(SymbolID(USR));
     }
   }
+
+  const auto &SM = ASTCtx->getSourceManager();
+  auto* MainFileEntry = SM.getFileEntryForID(SM.getMainFileID());
+
+  if (auto MainFileURI = toURI(SM, MainFileEntry->getName(), Opts)) {
+    std::string MainURI = *MainFileURI;
+    for (const auto &It : DeclOccurrences) {
+      if (auto ID = getSymbolID(It.first)) {
+        if (Symbols.find(*ID)) {
+          for (const auto &LocAndRole : It.second) {
+            SymbolOccurrence Occurrence;
+            auto Range =
+                getTokenRange(LocAndRole.first, SM, ASTCtx->getLangOpts());
+            Occurrence.Location.Start = Range.first;
+            Occurrence.Location.End = Range.second;
+            Occurrence.Location.FileURI = MainURI;
+            Occurrence.Kind = toOccurrenceKind(LocAndRole.second);
+            SymbolOccurrences.insert(*ID, Occurrence);
+          }
+        }
+      }
+    }
+  } else {
+    log("Failed to create URI for main file: {0}", MainFileEntry->getName());
+  }
+
   ReferencedDecls.clear();
   ReferencedMacros.clear();
+  DeclOccurrences.clear();
 }
 
 const Symbol *SymbolCollector::addDeclaration(const NamedDecl &ND,
@@ -488,11 +528,9 @@ const Symbol *SymbolCollector::addDeclaration(const NamedDecl &ND,
   }
   S.Signature = Signature;
   S.CompletionSnippetSuffix = SnippetSuffix;
-  Symbol::Details Detail;
-  Detail.Documentation = Documentation;
-  Detail.ReturnType = ReturnType;
-  Detail.IncludeHeader = Include;
-  S.Detail = &Detail;
+  S.Documentation = Documentation;
+  S.ReturnType = ReturnType;
+  S.IncludeHeader = Include;
 
   S.Origin = Opts.Origin;
   Symbols.insert(S);

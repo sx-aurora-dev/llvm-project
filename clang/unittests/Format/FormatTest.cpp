@@ -999,6 +999,24 @@ TEST_F(FormatTest, FormatsSwitchStatement) {
                    "  }\n"
                    "});",
                    getLLVMStyle()));
+  EXPECT_EQ("switch (n) {\n"
+            "case 0: {\n"
+            "  return false;\n"
+            "}\n"
+            "default: {\n"
+            "  return true;\n"
+            "}\n"
+            "}",
+            format("switch (n)\n"
+                   "{\n"
+                   "case 0: {\n"
+                   "  return false;\n"
+                   "}\n"
+                   "default: {\n"
+                   "  return true;\n"
+                   "}\n"
+                   "}",
+                   getLLVMStyle()));
   verifyFormat("switch (a) {\n"
                "case (b):\n"
                "  return;\n"
@@ -1145,6 +1163,22 @@ TEST_F(FormatTest, ShortCaseLabels) {
                "  break;\n"
                "}",
                Style);
+  Style.ColumnLimit = 80;
+  Style.AllowShortCaseLabelsOnASingleLine = false;
+  Style.IndentCaseLabels = true;
+  EXPECT_EQ("switch (n) {\n"
+            "  default /*comments*/:\n"
+            "    return true;\n"
+            "  case 0:\n"
+            "    return false;\n"
+            "}",
+            format("switch (n) {\n"
+                   "default/*comments*/:\n"
+                   "  return true;\n"
+                   "case 0:\n"
+                   "  return false;\n"
+                   "}",
+                   Style));
 }
 
 TEST_F(FormatTest, FormatsLabels) {
@@ -3375,6 +3409,18 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
                "    = bbbbbbbbbbbbbbbbb\n"
                "      >> aaaaaaaaaaaaaaaa(aaaaaaaaaaaaaaaaaaaaaaaaaa);",
                Style);
+
+  Style.ColumnLimit = 80;
+  Style.IndentWidth = 4;
+  Style.TabWidth = 4;
+  Style.UseTab = FormatStyle::UT_Always;
+  Style.AlignAfterOpenBracket = FormatStyle::BAS_DontAlign;
+  Style.AlignOperands = false;
+  EXPECT_EQ("return someVeryVeryLongConditionThatBarelyFitsOnALine\n"
+            "\t&& (someOtherLongishConditionPart1\n"
+            "\t\t|| someOtherEvenLongerNestedConditionPart2);",
+            format("return someVeryVeryLongConditionThatBarelyFitsOnALine && (someOtherLongishConditionPart1 || someOtherEvenLongerNestedConditionPart2);",
+                   Style));
 }
 
 TEST_F(FormatTest, EnforcedOperatorWraps) {
@@ -9804,6 +9850,14 @@ TEST_F(FormatTest, AlignConsecutiveDeclarations) {
       "});\n",
       Alignment);
   Alignment.PointerAlignment = FormatStyle::PAS_Right;
+
+  // See llvm.org/PR35641
+  Alignment.AlignConsecutiveDeclarations = true;
+  verifyFormat("int func() { //\n"
+               "  int      b;\n"
+               "  unsigned c;\n"
+               "}",
+               Alignment);
 }
 
 TEST_F(FormatTest, LinuxBraceBreaking) {

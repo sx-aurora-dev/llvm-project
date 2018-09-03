@@ -276,6 +276,7 @@ struct coff_symbol_generic {
 };
 
 struct coff_aux_section_definition;
+struct coff_aux_weak_external;
 
 class COFFSymbolRef {
 public:
@@ -358,6 +359,13 @@ public:
         getStorageClass() != COFF::IMAGE_SYM_CLASS_STATIC)
       return nullptr;
     return getAux<coff_aux_section_definition>();
+  }
+
+  const coff_aux_weak_external *getWeakExternal() const {
+    if (!getNumberOfAuxSymbols() ||
+        getStorageClass() != COFF::IMAGE_SYM_CLASS_WEAK_EXTERNAL)
+      return nullptr;
+    return getAux<coff_aux_weak_external>();
   }
 
   bool isAbsolute() const {
@@ -875,6 +883,7 @@ public:
     assert(is64());
     return reinterpret_cast<const coff_load_configuration64 *>(LoadConfig);
   }
+  StringRef getRelocationTypeName(uint16_t Type) const;
 
 protected:
   void moveSymbolNext(DataRefImpl &Symb) const override;
@@ -965,6 +974,8 @@ public:
   std::error_code getDataDirectory(uint32_t index,
                                    const data_directory *&Res) const;
   std::error_code getSection(int32_t index, const coff_section *&Res) const;
+  std::error_code getSection(StringRef SectionName,
+                             const coff_section *&Res) const;
 
   template <typename coff_symbol_type>
   std::error_code getSymbol(uint32_t Index,

@@ -14,7 +14,7 @@
 #ifndef LLVM_LIB_CODEGEN_ASMPRINTER_CODEVIEWDEBUG_H
 #define LLVM_LIB_CODEGEN_ASMPRINTER_CODEVIEWDEBUG_H
 
-#include "DbgValueHistoryCalculator.h"
+#include "DbgEntityHistoryCalculator.h"
 #include "DebugHandlerBase.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -225,7 +225,7 @@ class LLVM_LIBRARY_VISIBILITY CodeViewDebug : public DebugHandlerBase {
   using FileToFilepathMapTy = std::map<const DIFile *, std::string>;
   FileToFilepathMapTy FileToFilepathMap;
 
-  StringRef getFullFilepath(const DIFile *S);
+  StringRef getFullFilepath(const DIFile *File);
 
   unsigned maybeRecordFile(const DIFile *F);
 
@@ -386,7 +386,7 @@ protected:
   void endFunctionImpl(const MachineFunction *) override;
 
 public:
-  CodeViewDebug(AsmPrinter *Asm);
+  CodeViewDebug(AsmPrinter *AP);
 
   void setSymbolSize(const MCSymbol *, uint64_t) override {}
 

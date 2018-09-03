@@ -365,6 +365,17 @@ void visualstudio::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(std::string("-implib:") + ImplibName));
   }
 
+  if (TC.getSanitizerArgs().needsFuzzer()) {
+    if (!Args.hasArg(options::OPT_shared))
+      CmdArgs.push_back(
+          Args.MakeArgString(std::string("-wholearchive:") +
+                             TC.getCompilerRTArgString(Args, "fuzzer", false)));
+    CmdArgs.push_back(Args.MakeArgString("-debug"));
+    // Prevent the linker from padding sections we use for instrumentation
+    // arrays.
+    CmdArgs.push_back(Args.MakeArgString("-incremental:no"));
+  }
+
   if (TC.getSanitizerArgs().needsAsanRt()) {
     CmdArgs.push_back(Args.MakeArgString("-debug"));
     CmdArgs.push_back(Args.MakeArgString("-incremental:no"));
@@ -468,6 +479,9 @@ void visualstudio::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     // from the program PATH, because other environments like GnuWin32 install
     // their own link.exe which may come first.
     linkPath = FindVisualStudioExecutable(TC, "link.exe");
+
+    if (!TC.FoundMSVCInstall() && !llvm::sys::fs::can_execute(linkPath))
+      C.getDriver().Diag(clang::diag::warn_drv_msvc_not_found);
 
 #ifdef _WIN32
     // When cross-compiling with VS2017 or newer, link.exe expects to have
@@ -684,8 +698,6 @@ MSVCToolChain::MSVCToolChain(const Driver &D, const llvm::Triple &Triple,
 }
 
 Tool *MSVCToolChain::buildLinker() const {
-  if (VCToolChainPath.empty())
-    getDriver().Diag(clang::diag::warn_drv_msvc_not_found);
   return new tools::visualstudio::Linker(*this);
 }
 
@@ -1297,6 +1309,8 @@ MSVCToolChain::ComputeEffectiveClangTriple(const ArgList &Args,
 SanitizerMask MSVCToolChain::getSupportedSanitizers() const {
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
+  Res |= SanitizerKind::Fuzzer;
+  Res |= SanitizerKind::FuzzerNoLink;
   Res &= ~SanitizerKind::CFIMFCall;
   return Res;
 }

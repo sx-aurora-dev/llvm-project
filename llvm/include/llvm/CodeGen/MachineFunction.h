@@ -81,8 +81,8 @@ template <> struct ilist_alloc_traits<MachineBasicBlock> {
 };
 
 template <> struct ilist_callback_traits<MachineBasicBlock> {
-  void addNodeToList(MachineBasicBlock* MBB);
-  void removeNodeFromList(MachineBasicBlock* MBB);
+  void addNodeToList(MachineBasicBlock* N);
+  void removeNodeFromList(MachineBasicBlock* N);
 
   template <class Iterator>
   void transferNodesFromList(ilist_callback_traits &OldList, Iterator, Iterator) {
@@ -294,7 +294,7 @@ class MachineFunction {
   bool HasInlineAsm = false;
 
   /// True if any WinCFI instruction have been emitted in this function.
-  Optional<bool> HasWinCFI;
+  bool HasWinCFI = false;
 
   /// Current high-level properties of the IR of the function (e.g. is in SSA
   /// form or whether registers have been allocated)
@@ -366,7 +366,7 @@ public:
   using VariableDbgInfoMapTy = SmallVector<VariableDbgInfo, 4>;
   VariableDbgInfoMapTy VariableDbgInfos;
 
-  MachineFunction(const Function &F, const TargetMachine &TM,
+  MachineFunction(const Function &F, const TargetMachine &Target,
                   const TargetSubtargetInfo &STI, unsigned FunctionNum,
                   MachineModuleInfo &MMI);
   MachineFunction(const MachineFunction &) = delete;
@@ -484,8 +484,7 @@ public:
   }
 
   bool hasWinCFI() const {
-    assert(HasWinCFI.hasValue() && "HasWinCFI not set yet!");
-    return *HasWinCFI;
+    return HasWinCFI;
   }
   void setHasWinCFI(bool v) { HasWinCFI = v; }
 
@@ -709,31 +708,16 @@ public:
   }
 
   /// Allocate and initialize a register mask with @p NumRegister bits.
-  uint32_t *allocateRegisterMask(unsigned NumRegister) {
-    unsigned Size = (NumRegister + 31) / 32;
-    uint32_t *Mask = Allocator.Allocate<uint32_t>(Size);
-    for (unsigned i = 0; i != Size; ++i)
-      Mask[i] = 0;
-    return Mask;
-  }
+  uint32_t *allocateRegMask();
 
-  /// allocateMemRefsArray - Allocate an array to hold MachineMemOperand
-  /// pointers.  This array is owned by the MachineFunction.
-  MachineInstr::mmo_iterator allocateMemRefsArray(unsigned long Num);
-
-  /// extractLoadMemRefs - Allocate an array and populate it with just the
-  /// load information from the given MachineMemOperand sequence.
-  std::pair<MachineInstr::mmo_iterator,
-            MachineInstr::mmo_iterator>
-    extractLoadMemRefs(MachineInstr::mmo_iterator Begin,
-                       MachineInstr::mmo_iterator End);
-
-  /// extractStoreMemRefs - Allocate an array and populate it with just the
-  /// store information from the given MachineMemOperand sequence.
-  std::pair<MachineInstr::mmo_iterator,
-            MachineInstr::mmo_iterator>
-    extractStoreMemRefs(MachineInstr::mmo_iterator Begin,
-                        MachineInstr::mmo_iterator End);
+  /// Allocate and construct an extra info structure for a `MachineInstr`.
+  ///
+  /// This is allocated on the function's allocator and so lives the life of
+  /// the function.
+  MachineInstr::ExtraInfo *
+  createMIExtraInfo(ArrayRef<MachineMemOperand *> MMOs,
+                    MCSymbol *PreInstrSymbol = nullptr,
+                    MCSymbol *PostInstrSymbol = nullptr);
 
   /// Allocate a string and populate it with the given external symbol name.
   const char *createExternalSymbolName(StringRef Name);
@@ -809,7 +793,7 @@ public:
   void addCleanup(MachineBasicBlock *LandingPad);
 
   void addSEHCatchHandler(MachineBasicBlock *LandingPad, const Function *Filter,
-                          const BlockAddress *RecoverLabel);
+                          const BlockAddress *RecoverBA);
 
   void addSEHCleanupHandler(MachineBasicBlock *LandingPad,
                             const Function *Cleanup);

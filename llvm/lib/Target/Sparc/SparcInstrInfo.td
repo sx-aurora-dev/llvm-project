@@ -89,9 +89,21 @@ def HI22 : SDNodeXForm<imm, [{
                                    MVT::i32);
 }]>;
 
+// Return the complement of a HI22 immediate value.
+def HI22_not : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(~(unsigned)N->getZExtValue() >> 10, SDLoc(N),
+                                   MVT::i32);
+}]>;
+
 def SETHIimm : PatLeaf<(imm), [{
   return isShiftedUInt<22, 10>(N->getZExtValue());
 }], HI22>;
+
+// The N->hasOneUse() prevents the immediate from being instantiated in both
+// normal and complement form.
+def SETHIimm_not : PatLeaf<(i32 imm), [{
+  return N->hasOneUse() && isShiftedUInt<22, 10>(~(unsigned)N->getZExtValue());
+}], HI22_not>;
 
 // Addressing modes.
 def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
@@ -421,7 +433,7 @@ let hasSideEffects = 1, mayStore = 1 in {
     def FLUSHW : F3_1<0b10, 0b101011, (outs), (ins),
                       "flushw",
                       [(flushw)]>, Requires<[HasV9]>;
-  let rd = 0, rs1 = 1, simm13 = 3 in
+  let rd = 8, rs1 = 0, simm13 = 3 in
     def TA3 : F3_2<0b10, 0b111010, (outs), (ins),
                    "ta 3",
                    [(flushw)]>;
@@ -679,6 +691,12 @@ def XNORrr  : F3_1<2, 0b000111,
 def XNORri  : F3_2<2, 0b000111,
                    (outs IntRegs:$rd), (ins IntRegs:$rs1, simm13Op:$simm13),
                    "xnor $rs1, $simm13, $rd", []>;
+
+def : Pat<(and IntRegs:$rs1, SETHIimm_not:$rs2),
+          (ANDNrr i32:$rs1, (SETHIi SETHIimm_not:$rs2))>;
+
+def : Pat<(or IntRegs:$rs1, SETHIimm_not:$rs2),
+          (ORNrr i32:$rs1,  (SETHIi SETHIimm_not:$rs2))>;
 
 let Defs = [ICC] in {
   defm ANDCC  : F3_12np<"andcc",  0b010001>;
@@ -1008,6 +1026,9 @@ let DecoderNamespace = "SparcV9", DecoderMethod = "DecodeTRAP", Predicates = [Ha
 
 let isBarrier = 1, isTerminator = 1, rd = 0b01000, rs1 = 0, simm13 = 5 in
   def TA5 : F3_2<0b10, 0b111010, (outs), (ins), "ta 5", [(trap)]>;
+
+let hasSideEffects = 1, rd = 0b01000, rs1 = 0, simm13 = 1 in
+  def TA1 : F3_2<0b10, 0b111010, (outs), (ins), "ta 1", [(debugtrap)]>;
 
 // Section B.28 - Read State Register Instructions
 let rs2 = 0 in

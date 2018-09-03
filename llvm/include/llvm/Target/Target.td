@@ -439,6 +439,7 @@ class Instruction {
   // instruction.
   bit isReturn     = 0;     // Is this instruction a return instruction?
   bit isBranch     = 0;     // Is this instruction a branch instruction?
+  bit isEHScopeReturn = 0;  // Does this instruction end an EH scope?
   bit isIndirectBranch = 0; // Is this instruction an indirect branch?
   bit isCompare    = 0;     // Is this instruction a comparison instruction?
   bit isMoveImm    = 0;     // Is this instruction a move immediate instruction?
@@ -448,6 +449,7 @@ class Instruction {
   bit isBarrier    = 0;     // Can control flow fall through this instruction?
   bit isCall       = 0;     // Is this instruction a call instruction?
   bit isAdd        = 0;     // Is this instruction an add instruction?
+  bit isTrap       = 0;     // Is this instruction a trap instruction?
   bit canFoldAsLoad = 0;    // Can this be folded as a simple memory operand?
   bit mayLoad      = ?;     // Is it possible for this inst to read memory?
   bit mayStore     = ?;     // Is it possible for this inst to write memory?
@@ -1117,7 +1119,7 @@ def PATCHABLE_FUNCTION_ENTER : StandardPseudoInstruction {
   let hasSideEffects = 0;
 }
 def PATCHABLE_RET : StandardPseudoInstruction {
-  let OutOperandList = (outs unknown:$dst);
+  let OutOperandList = (outs);
   let InOperandList = (ins variable_ops);
   let AsmString = "# XRay Function Patchable RET.";
   let usesCustomInserter = 1;
@@ -1134,7 +1136,7 @@ def PATCHABLE_FUNCTION_EXIT : StandardPseudoInstruction {
   let isReturn = 0; // Original return instruction will follow
 }
 def PATCHABLE_TAIL_CALL : StandardPseudoInstruction {
-  let OutOperandList = (outs unknown:$dst);
+  let OutOperandList = (outs);
   let InOperandList = (ins variable_ops);
   let AsmString = "# XRay Tail Call Exit.";
   let usesCustomInserter = 1;

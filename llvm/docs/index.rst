@@ -79,6 +79,7 @@ representation.
    yaml2obj
    HowToSubmitABug
    SphinxQuickstartTemplate
+   MarkdownQuickstartTemplate
    Phabricator
    TestingGuide
    tutorial/index
@@ -143,6 +144,9 @@ representation.
 
 :doc:`LLVM Testing Infrastructure Guide <TestingGuide>`
    A reference manual for using the LLVM testing infrastructure.
+
+:doc:`TestSuiteGuide`
+  Describes how to compile and run the test-suite benchmarks.
 
 `How to build the C, C++, ObjC, and ObjC++ front end`__
    Instructions for building the clang front-end from source.
@@ -292,6 +296,7 @@ For API clients and LLVM developers.
    XRayFDRFormat
    PDB/index
    CFIVerify
+   SpeculativeLoadHardening
 
 :doc:`WritingAnLLVMPass`
    Information on how to write LLVM transformations and analyses.
@@ -424,6 +429,9 @@ For API clients and LLVM developers.
 
 :doc:`CFIVerify`
   A description of the verification tool for Control Flow Integrity.
+
+:doc:`SpeculativeLoadHardening`
+  A description of the Speculative Load Hardening mitigation for Spectre v1.
 
 Development Process Documentation
 =================================

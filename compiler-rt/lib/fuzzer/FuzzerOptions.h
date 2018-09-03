@@ -54,6 +54,8 @@ struct FuzzingOptions {
   bool PrintFinalStats = false;
   bool PrintCorpusStats = false;
   bool PrintCoverage = false;
+  bool PrintUnstableStats = false;
+  int HandleUnstable = 0;
   bool DumpCoverage = false;
   bool DetectLeaks = true;
   int PurgeAllocatorIntervalSec = 1;

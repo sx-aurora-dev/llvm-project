@@ -34,16 +34,17 @@ bool fromJSON(const json::Value &E, URIForFile &R) {
   if (auto S = E.getAsString()) {
     auto U = URI::parse(*S);
     if (!U) {
-      log("Failed to parse URI " + *S + ": " + llvm::toString(U.takeError()));
+      elog("Failed to parse URI {0}: {1}", *S, U.takeError());
       return false;
     }
     if (U->scheme() != "file" && U->scheme() != "test") {
-      log("Clangd only supports 'file' URI scheme for workspace files: " + *S);
+      elog("Clangd only supports 'file' URI scheme for workspace files: {0}",
+           *S);
       return false;
     }
     auto Path = URI::resolve(*U);
     if (!Path) {
-      log(llvm::toString(Path.takeError()));
+      log("{0}", Path.takeError());
       return false;
     }
     R = URIForFile(*Path);
@@ -177,6 +178,16 @@ bool fromJSON(const json::Value &Params, CompletionClientCapabilities &R) {
   return true;
 }
 
+bool fromJSON(const llvm::json::Value &Params,
+              PublishDiagnosticsClientCapabilities &R) {
+  json::ObjectMapper O(Params);
+  if (!O)
+    return false;
+  O.map("clangdFixSupport", R.clangdFixSupport);
+  O.map("categorySupport", R.categorySupport);
+  return true;
+}
+
 bool fromJSON(const json::Value &E, SymbolKind &Out) {
   if (auto T = E.getAsInteger()) {
     if (*T < static_cast<int>(SymbolKind::File) ||
@@ -207,10 +218,10 @@ bool fromJSON(const json::Value &Params, SymbolKindCapabilities &R) {
 }
 
 SymbolKind adjustKindToCapability(SymbolKind Kind,
-                                  SymbolKindBitset &supportedSymbolKinds) {
+                                  SymbolKindBitset &SupportedSymbolKinds) {
   auto KindVal = static_cast<size_t>(Kind);
-  if (KindVal >= SymbolKindMin && KindVal <= supportedSymbolKinds.size() &&
-      supportedSymbolKinds[KindVal])
+  if (KindVal >= SymbolKindMin && KindVal <= SupportedSymbolKinds.size() &&
+      SupportedSymbolKinds[KindVal])
     return Kind;
 
   switch (Kind) {
@@ -239,6 +250,7 @@ bool fromJSON(const json::Value &Params, TextDocumentClientCapabilities &R) {
   if (!O)
     return false;
   O.map("completion", R.completion);
+  O.map("publishDiagnostics", R.publishDiagnostics);
   return true;
 }
 
@@ -262,7 +274,7 @@ bool fromJSON(const json::Value &Params, InitializeParams &R) {
   O.map("rootPath", R.rootPath);
   O.map("capabilities", R.capabilities);
   O.map("trace", R.trace);
-  // initializationOptions, capabilities unused
+  O.map("initializationOptions", R.initializationOptions);
   return true;
 }
 
@@ -590,10 +602,51 @@ bool fromJSON(const json::Value &Params, DidChangeConfigurationParams &CCP) {
   return O && O.map("settings", CCP.settings);
 }
 
+bool fromJSON(const llvm::json::Value &Params,
+              ClangdCompileCommand &CDbUpdate) {
+  json::ObjectMapper O(Params);
+  return O && O.map("workingDirectory", CDbUpdate.workingDirectory) &&
+         O.map("compilationCommand", CDbUpdate.compilationCommand);
+}
+
 bool fromJSON(const json::Value &Params,
               ClangdConfigurationParamsChange &CCPC) {
   json::ObjectMapper O(Params);
-  return O && O.map("compilationDatabasePath", CCPC.compilationDatabasePath);
+  return O && O.map("compilationDatabasePath", CCPC.compilationDatabasePath) &&
+         O.map("compilationDatabaseChanges", CCPC.compilationDatabaseChanges);
+}
+
+json::Value toJSON(const CancelParams &CP) {
+  return json::Object{{"id", CP.ID}};
+}
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &O, const CancelParams &CP) {
+  O << toJSON(CP);
+  return O;
+}
+
+llvm::Optional<std::string> parseNumberOrString(const json::Value *Params) {
+  if (!Params)
+    return llvm::None;
+  // ID is either a number or a string, check for both.
+  if(const auto AsString = Params->getAsString())
+    return AsString->str();
+
+  if(const auto AsNumber = Params->getAsInteger())
+    return itostr(AsNumber.getValue());
+
+  return llvm::None;
+}
+
+bool fromJSON(const json::Value &Params, CancelParams &CP) {
+  const auto ParamsAsObject = Params.getAsObject();
+  if (!ParamsAsObject)
+    return false;
+  if (auto Parsed = parseNumberOrString(ParamsAsObject->get("id"))) {
+    CP.ID = std::move(*Parsed);
+    return true;
+  }
+  return false;
 }
 
 } // namespace clangd

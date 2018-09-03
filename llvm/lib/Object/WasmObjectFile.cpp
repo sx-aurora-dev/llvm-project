@@ -82,6 +82,8 @@ static uint32_t readUint32(WasmObjectFile::ReadContext &Ctx) {
 }
 
 static int32_t readFloat32(WasmObjectFile::ReadContext &Ctx) {
+  if (Ctx.Ptr + 4 > Ctx.End)
+    report_fatal_error("EOF while reading float64");
   int32_t Result = 0;
   memcpy(&Result, Ctx.Ptr, sizeof(Result));
   Ctx.Ptr += sizeof(Result);
@@ -89,6 +91,8 @@ static int32_t readFloat32(WasmObjectFile::ReadContext &Ctx) {
 }
 
 static int64_t readFloat64(WasmObjectFile::ReadContext &Ctx) {
+  if (Ctx.Ptr + 8 > Ctx.End)
+    report_fatal_error("EOF while reading float64");
   int64_t Result = 0;
   memcpy(&Result, Ctx.Ptr, sizeof(Result));
   Ctx.Ptr += sizeof(Result);
@@ -216,9 +220,16 @@ static Error readSection(WasmSection &Section,
     return make_error<StringError>("Section too large",
                                    object_error::parse_failed);
   if (Section.Type == wasm::WASM_SEC_CUSTOM) {
-    const uint8_t *NameStart = Ctx.Ptr;
-    Section.Name = readString(Ctx);
-    Size -= Ctx.Ptr - NameStart;
+    WasmObjectFile::ReadContext SectionCtx;
+    SectionCtx.Start = Ctx.Ptr;
+    SectionCtx.Ptr = Ctx.Ptr;
+    SectionCtx.End = Ctx.Ptr + Size;
+
+    Section.Name = readString(SectionCtx);
+
+    uint32_t SectionNameSize = SectionCtx.Ptr - SectionCtx.Start;
+    Ctx.Ptr += SectionNameSize;
+    Size -= SectionNameSize;
   }
   Section.Content = ArrayRef<uint8_t>(Ctx.Ptr, Size);
   Ctx.Ptr += Size;
@@ -595,10 +606,15 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
   WasmSection& Section = Sections[SectionIndex];
   uint32_t RelocCount = readVaruint32(Ctx);
   uint32_t EndOffset = Section.Content.size();
+  uint32_t PreviousOffset = 0;
   while (RelocCount--) {
     wasm::WasmRelocation Reloc = {};
     Reloc.Type = readVaruint32(Ctx);
     Reloc.Offset = readVaruint32(Ctx);
+    if (Reloc.Offset < PreviousOffset)
+      return make_error<GenericBinaryError>("Relocations not in offset order",
+                                            object_error::parse_failed);
+    PreviousOffset = Reloc.Offset;
     Reloc.Index = readVaruint32(Ctx);
     switch (Reloc.Type) {
     case wasm::R_WEBASSEMBLY_FUNCTION_INDEX_LEB:

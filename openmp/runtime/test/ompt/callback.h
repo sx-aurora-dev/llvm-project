@@ -183,11 +183,14 @@ ompt_label_##id:
 // to include or discard the new number of nibbles!
 #define FUZZY_ADDRESS_DISCARD_NIBBLES 2
 #define FUZZY_ADDRESS_DISCARD_BYTES (1 << ((FUZZY_ADDRESS_DISCARD_NIBBLES) * 4))
-#define print_fuzzy_address_blocks(addr) \
-  printf("%" PRIu64 ": fuzzy_address=0x%" PRIx64 " or 0x%" PRIx64 " (%p)\n", \
-  ompt_get_thread_data()->value, \
-  ((uint64_t)addr) / FUZZY_ADDRESS_DISCARD_BYTES - 1, \
-  ((uint64_t)addr) / FUZZY_ADDRESS_DISCARD_BYTES, addr)
+#define print_fuzzy_address_blocks(addr)                                       \
+  printf("%" PRIu64 ": fuzzy_address=0x%" PRIx64 " or 0x%" PRIx64              \
+         " or 0x%" PRIx64 " or 0x%" PRIx64 " (%p)\n",                          \
+         ompt_get_thread_data()->value,                                        \
+         ((uint64_t)addr) / FUZZY_ADDRESS_DISCARD_BYTES - 1,                   \
+         ((uint64_t)addr) / FUZZY_ADDRESS_DISCARD_BYTES,                       \
+         ((uint64_t)addr) / FUZZY_ADDRESS_DISCARD_BYTES + 1,                   \
+         ((uint64_t)addr) / FUZZY_ADDRESS_DISCARD_BYTES + 2, addr)
 
 static void
 on_ompt_callback_mutex_acquire(
@@ -408,21 +411,6 @@ on_ompt_callback_cancel(
     second_flag_value = ompt_cancel_flag_t_values[6];
 
   printf("%" PRIu64 ": ompt_event_cancel: task_data=%" PRIu64 ", flags=%s|%s=%" PRIu32 ", codeptr_ra=%p\n", ompt_get_thread_data()->value, task_data->value, first_flag_value, second_flag_value, flags,  codeptr_ra);
-}
-
-static void
-on_ompt_callback_idle(
-  ompt_scope_endpoint_t endpoint)
-{
-  switch(endpoint)
-  {
-    case ompt_scope_begin:
-      printf("%" PRIu64 ": ompt_event_idle_begin:\n", ompt_get_thread_data()->value);
-      break;
-    case ompt_scope_end:
-      printf("%" PRIu64 ": ompt_event_idle_end:\n", ompt_get_thread_data()->value);
-      break;
-  }
 }
 
 static void
@@ -729,7 +717,6 @@ int ompt_initialize(
   register_callback(ompt_callback_control_tool);
   register_callback(ompt_callback_flush);
   register_callback(ompt_callback_cancel);
-  register_callback(ompt_callback_idle);
   register_callback(ompt_callback_implicit_task);
   register_callback_t(ompt_callback_lock_init, ompt_callback_mutex_acquire_t);
   register_callback_t(ompt_callback_lock_destroy, ompt_callback_mutex_t);

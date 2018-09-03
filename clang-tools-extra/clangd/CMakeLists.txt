@@ -9,6 +9,7 @@ endif()
 
 add_clang_library(clangDaemon
   AST.cpp
+  Cancellation.cpp
   ClangdLSPServer.cpp
   ClangdServer.cpp
   ClangdUnit.cpp
@@ -34,6 +35,7 @@ add_clang_library(clangDaemon
   TUScheduler.cpp
   URI.cpp
   XRefs.cpp
+
   index/CanonicalIncludes.cpp
   index/FileIndex.cpp
   index/Index.cpp
@@ -41,6 +43,10 @@ add_clang_library(clangDaemon
   index/Merge.cpp
   index/SymbolCollector.cpp
   index/SymbolYAML.cpp
+
+  index/dex/DexIndex.cpp
+  index/dex/Iterator.cpp
+  index/dex/Trigram.cpp
 
   LINK_LIBS
   clangAST
