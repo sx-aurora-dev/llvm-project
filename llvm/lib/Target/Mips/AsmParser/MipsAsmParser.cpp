@@ -195,7 +195,6 @@ class MipsAsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseImm(OperandVector &Operands);
   OperandMatchResultTy parseJumpTarget(OperandVector &Operands);
   OperandMatchResultTy parseInvNum(OperandVector &Operands);
-  OperandMatchResultTy parseRegisterPair(OperandVector &Operands);
   OperandMatchResultTy parseMovePRegPair(OperandVector &Operands);
   OperandMatchResultTy parseRegisterList(OperandVector &Operands);
 
@@ -356,7 +355,6 @@ class MipsAsmParser : public MCTargetAsmParser {
 
   bool parseSetAssignment();
 
-  bool parseDataDirective(unsigned Size, SMLoc L);
   bool parseDirectiveGpWord();
   bool parseDirectiveGpDWord();
   bool parseDirectiveDtpRelWord();
@@ -488,6 +486,9 @@ public:
     MCAsmParserExtension::Initialize(parser);
 
     parser.addAliasForDirective(".asciiz", ".asciz");
+    parser.addAliasForDirective(".hword", ".2byte");
+    parser.addAliasForDirective(".word", ".4byte");
+    parser.addAliasForDirective(".dword", ".8byte");
 
     // Initialize the set of available features.
     setAvailableFeatures(ComputeAvailableFeatures(getSTI().getFeatureBits()));
@@ -1436,10 +1437,6 @@ public:
   StringRef getToken() const {
     assert(Kind == k_Token && "Invalid access!");
     return StringRef(Tok.Data, Tok.Length);
-  }
-
-  bool isRegPair() const {
-    return Kind == k_RegPair && RegIdx.Index <= 30;
   }
 
   unsigned getReg() const override {
@@ -6282,22 +6279,6 @@ MipsAsmParser::parseRegisterList(OperandVector &Operands) {
 }
 
 OperandMatchResultTy
-MipsAsmParser::parseRegisterPair(OperandVector &Operands) {
-  MCAsmParser &Parser = getParser();
-
-  SMLoc S = Parser.getTok().getLoc();
-  if (parseAnyRegister(Operands) != MatchOperand_Success)
-    return MatchOperand_ParseFail;
-
-  SMLoc E = Parser.getTok().getLoc();
-  MipsOperand Op = static_cast<MipsOperand &>(*Operands.back());
-
-  Operands.pop_back();
-  Operands.push_back(MipsOperand::CreateRegPair(Op, S, E, *this));
-  return MatchOperand_Success;
-}
-
-OperandMatchResultTy
 MipsAsmParser::parseMovePRegPair(OperandVector &Operands) {
   MCAsmParser &Parser = getParser();
   SmallVector<std::unique_ptr<MCParsedAsmOperand>, 8> TmpOperands;
@@ -7378,31 +7359,6 @@ bool MipsAsmParser::parseDirectiveSet() {
   return parseSetAssignment();
 }
 
-/// parseDataDirective
-///  ::= .word [ expression (, expression)* ]
-bool MipsAsmParser::parseDataDirective(unsigned Size, SMLoc L) {
-  MCAsmParser &Parser = getParser();
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    while (true) {
-      const MCExpr *Value;
-      if (getParser().parseExpression(Value))
-        return true;
-
-      getParser().getStreamer().EmitValue(Value, Size);
-
-      if (getLexer().is(AsmToken::EndOfStatement))
-        break;
-
-      if (getLexer().isNot(AsmToken::Comma))
-        return Error(L, "unexpected token, expected comma");
-      Parser.Lex();
-    }
-  }
-
-  Parser.Lex();
-  return false;
-}
-
 /// parseDirectiveGpWord
 ///  ::= .gpword local_sym
 bool MipsAsmParser::parseDirectiveGpWord() {
@@ -7415,7 +7371,7 @@ bool MipsAsmParser::parseDirectiveGpWord() {
   getParser().getStreamer().EmitGPRel32Value(Value);
 
   if (getLexer().isNot(AsmToken::EndOfStatement))
-    return Error(getLexer().getLoc(), 
+    return Error(getLexer().getLoc(),
                 "unexpected token, expected end of statement");
   Parser.Lex(); // Eat EndOfStatement token.
   return false;
@@ -7550,7 +7506,7 @@ bool MipsAsmParser::parseDirectiveOption() {
   }
 
   // Unknown option.
-  Warning(Parser.getTok().getLoc(), 
+  Warning(Parser.getTok().getLoc(),
           "unknown option, expected 'pic0' or 'pic2'");
   Parser.eatToEndOfStatement();
   return false;
@@ -7982,10 +7938,6 @@ bool MipsAsmParser::ParseDirective(AsmToken DirectiveID) {
     parseDirectiveCpRestore(DirectiveID.getLoc());
     return false;
   }
-  if (IDVal == ".dword") {
-    parseDataDirective(8, DirectiveID.getLoc());
-    return false;
-  }
   if (IDVal == ".ent") {
     StringRef SymbolName;
 
@@ -8233,16 +8185,6 @@ bool MipsAsmParser::ParseDirective(AsmToken DirectiveID) {
     return false;
   }
 
-  if (IDVal == ".word") {
-    parseDataDirective(4, DirectiveID.getLoc());
-    return false;
-  }
-
-  if (IDVal == ".hword") {
-    parseDataDirective(2, DirectiveID.getLoc());
-    return false;
-  }
-
   if (IDVal == ".option") {
     parseDirectiveOption();
     return false;
@@ -8251,7 +8193,7 @@ bool MipsAsmParser::ParseDirective(AsmToken DirectiveID) {
   if (IDVal == ".abicalls") {
     getTargetStreamer().emitDirectiveAbiCalls();
     if (Parser.getTok().isNot(AsmToken::EndOfStatement)) {
-      Error(Parser.getTok().getLoc(), 
+      Error(Parser.getTok().getLoc(),
             "unexpected token, expected end of statement");
     }
     return false;

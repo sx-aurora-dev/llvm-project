@@ -53,16 +53,6 @@ static void bectl(kmp_info_t *th, bget_compact_t compact,
                   bget_acquire_t acquire, bget_release_t release,
                   bufsize pool_incr);
 
-#ifdef KMP_DEBUG
-static void bstats(kmp_info_t *th, bufsize *curalloc, bufsize *totfree,
-                   bufsize *maxfree, long *nget, long *nrel);
-static void bstatse(kmp_info_t *th, bufsize *pool_incr, long *npool,
-                    long *npget, long *nprel, long *ndget, long *ndrel);
-static void bufdump(kmp_info_t *th, void *buf);
-static void bpoold(kmp_info_t *th, void *pool, int dumpalloc, int dumpfree);
-static int bpoolv(kmp_info_t *th, void *pool);
-#endif
-
 /* BGET CONFIGURATION */
 /* Buffer allocation size quantum: all buffers allocated are a
    multiple of this size.  This MUST be a power of two. */
@@ -270,23 +260,6 @@ static thr_data_t *get_thr_data(kmp_info_t *th) {
 
   return data;
 }
-
-#ifdef KMP_DEBUG
-
-static void __kmp_bget_validate_queue(kmp_info_t *th) {
-  /* NOTE: assume that the global_lock is held */
-
-  void *p = (void *)th->th.th_local.bget_list;
-
-  while (p != 0) {
-    bfhead_t *b = BFH(((char *)p) - sizeof(bhead_t));
-
-    KMP_DEBUG_ASSERT(b->bh.bb.bsize != 0);
-    p = (void *)b->ql.flink;
-  }
-}
-
-#endif
 
 /* Walk the free list and release the enqueued buffers */
 static void __kmp_bget_dequeue(kmp_info_t *th) {
@@ -1017,197 +990,6 @@ static void bfreed(kmp_info_t *th) {
     __kmp_printf_no_lock("__kmp_printpool: T#%d No free blocks\n", gtid);
 }
 
-#ifdef KMP_DEBUG
-
-#if BufStats
-
-/*  BSTATS  --  Return buffer allocation free space statistics.  */
-static void bstats(kmp_info_t *th, bufsize *curalloc, bufsize *totfree,
-                   bufsize *maxfree, long *nget, long *nrel) {
-  int bin = 0;
-  thr_data_t *thr = get_thr_data(th);
-
-  *nget = thr->numget;
-  *nrel = thr->numrel;
-  *curalloc = (bufsize)thr->totalloc;
-  *totfree = 0;
-  *maxfree = -1;
-
-  for (bin = 0; bin < MAX_BGET_BINS; ++bin) {
-    bfhead_t *b = thr->freelist[bin].ql.flink;
-
-    while (b != &thr->freelist[bin]) {
-      KMP_DEBUG_ASSERT(b->bh.bb.bsize > 0);
-      *totfree += b->bh.bb.bsize;
-      if (b->bh.bb.bsize > *maxfree) {
-        *maxfree = b->bh.bb.bsize;
-      }
-      b = b->ql.flink; /* Link to next buffer */
-    }
-  }
-}
-
-/*  BSTATSE  --  Return extended statistics  */
-static void bstatse(kmp_info_t *th, bufsize *pool_incr, long *npool,
-                    long *npget, long *nprel, long *ndget, long *ndrel) {
-  thr_data_t *thr = get_thr_data(th);
-
-  *pool_incr = (thr->pool_len < 0) ? -thr->exp_incr : thr->exp_incr;
-  *npool = thr->numpblk;
-  *npget = thr->numpget;
-  *nprel = thr->numprel;
-  *ndget = thr->numdget;
-  *ndrel = thr->numdrel;
-}
-
-#endif /* BufStats */
-
-/*  BUFDUMP  --  Dump the data in a buffer.  This is called with the  user
-                 data pointer, and backs up to the buffer header.  It will
-                 dump either a free block or an allocated one.  */
-static void bufdump(kmp_info_t *th, void *buf) {
-  bfhead_t *b;
-  unsigned char *bdump;
-  bufsize bdlen;
-
-  b = BFH(((char *)buf) - sizeof(bhead_t));
-  KMP_DEBUG_ASSERT(b->bh.bb.bsize != 0);
-  if (b->bh.bb.bsize < 0) {
-    bdump = (unsigned char *)buf;
-    bdlen = (-b->bh.bb.bsize) - (bufsize)sizeof(bhead_t);
-  } else {
-    bdump = (unsigned char *)(((char *)b) + sizeof(bfhead_t));
-    bdlen = b->bh.bb.bsize - (bufsize)sizeof(bfhead_t);
-  }
-
-  while (bdlen > 0) {
-    int i, dupes = 0;
-    bufsize l = bdlen;
-    char bhex[50], bascii[20];
-
-    if (l > 16) {
-      l = 16;
-    }
-
-    for (i = 0; i < l; i++) {
-      (void)KMP_SNPRINTF(bhex + i * 3, sizeof(bhex) - i * 3, "%02X ", bdump[i]);
-      if (bdump[i] > 0x20 && bdump[i] < 0x7F)
-        bascii[i] = bdump[i];
-      else
-        bascii[i] = ' ';
-    }
-    bascii[i] = 0;
-    (void)__kmp_printf_no_lock("%-48s   %s\n", bhex, bascii);
-    bdump += l;
-    bdlen -= l;
-    while ((bdlen > 16) &&
-           (memcmp((char *)(bdump - 16), (char *)bdump, 16) == 0)) {
-      dupes++;
-      bdump += 16;
-      bdlen -= 16;
-    }
-    if (dupes > 1) {
-      (void)__kmp_printf_no_lock(
-          "     (%d lines [%d bytes] identical to above line skipped)\n", dupes,
-          dupes * 16);
-    } else if (dupes == 1) {
-      bdump -= 16;
-      bdlen += 16;
-    }
-  }
-}
-
-/*  BPOOLD  --  Dump a buffer pool.  The buffer headers are always listed.
-                If DUMPALLOC is nonzero, the contents of allocated buffers
-                are  dumped.   If  DUMPFREE  is  nonzero,  free blocks are
-                dumped as well.  If FreeWipe  checking  is  enabled,  free
-                blocks  which  have  been clobbered will always be dumped. */
-static void bpoold(kmp_info_t *th, void *buf, int dumpalloc, int dumpfree) {
-  bfhead_t *b = BFH((char *)buf - sizeof(bhead_t));
-
-  while (b->bh.bb.bsize != ESent) {
-    bufsize bs = b->bh.bb.bsize;
-
-    if (bs < 0) {
-      bs = -bs;
-      (void)__kmp_printf_no_lock("Allocated buffer: size %6ld bytes.\n",
-                                 (long)bs);
-      if (dumpalloc) {
-        bufdump(th, (void *)(((char *)b) + sizeof(bhead_t)));
-      }
-    } else {
-      const char *lerr = "";
-
-      KMP_DEBUG_ASSERT(bs > 0);
-      if ((b->ql.blink->ql.flink != b) || (b->ql.flink->ql.blink != b)) {
-        lerr = "  (Bad free list links)";
-      }
-      (void)__kmp_printf_no_lock("Free block:       size %6ld bytes.%s\n",
-                                 (long)bs, lerr);
-#ifdef FreeWipe
-      lerr = ((char *)b) + sizeof(bfhead_t);
-      if ((bs > sizeof(bfhead_t)) &&
-          ((*lerr != 0x55) ||
-           (memcmp(lerr, lerr + 1, (size_t)(bs - (sizeof(bfhead_t) + 1))) !=
-            0))) {
-        (void)__kmp_printf_no_lock(
-            "(Contents of above free block have been overstored.)\n");
-        bufdump(th, (void *)(((char *)b) + sizeof(bhead_t)));
-      } else
-#endif
-          if (dumpfree) {
-        bufdump(th, (void *)(((char *)b) + sizeof(bhead_t)));
-      }
-    }
-    b = BFH(((char *)b) + bs);
-  }
-}
-
-/*  BPOOLV  --  Validate a buffer pool. */
-static int bpoolv(kmp_info_t *th, void *buf) {
-  bfhead_t *b = BFH(buf);
-
-  while (b->bh.bb.bsize != ESent) {
-    bufsize bs = b->bh.bb.bsize;
-
-    if (bs < 0) {
-      bs = -bs;
-    } else {
-#ifdef FreeWipe
-      char *lerr = "";
-#endif
-
-      KMP_DEBUG_ASSERT(bs > 0);
-      if (bs <= 0) {
-        return 0;
-      }
-      if ((b->ql.blink->ql.flink != b) || (b->ql.flink->ql.blink != b)) {
-        (void)__kmp_printf_no_lock(
-            "Free block: size %6ld bytes.  (Bad free list links)\n", (long)bs);
-        KMP_DEBUG_ASSERT(0);
-        return 0;
-      }
-#ifdef FreeWipe
-      lerr = ((char *)b) + sizeof(bfhead_t);
-      if ((bs > sizeof(bfhead_t)) &&
-          ((*lerr != 0x55) ||
-           (memcmp(lerr, lerr + 1, (size_t)(bs - (sizeof(bfhead_t) + 1))) !=
-            0))) {
-        (void)__kmp_printf_no_lock(
-            "(Contents of above free block have been overstored.)\n");
-        bufdump(th, (void *)(((char *)b) + sizeof(bhead_t)));
-        KMP_DEBUG_ASSERT(0);
-        return 0;
-      }
-#endif /* FreeWipe */
-    }
-    b = BFH(((char *)b) + bs);
-  }
-  return 1;
-}
-
-#endif /* KMP_DEBUG */
-
 void __kmp_initialize_bget(kmp_info_t *th) {
   KMP_DEBUG_ASSERT(SizeQuant >= sizeof(void *) && (th != 0));
 
@@ -1547,33 +1329,6 @@ void *___kmp_allocate(size_t size KMP_SRC_LOC_DECL) {
   KE_TRACE(25, ("<- __kmp_allocate() returns %p\n", ptr));
   return ptr;
 } // func ___kmp_allocate
-
-#if (BUILD_MEMORY == FIRST_TOUCH)
-void *__kmp_ft_page_allocate(size_t size) {
-  void *adr, *aadr;
-
-  const int page_size = KMP_GET_PAGE_SIZE();
-
-  adr = (void *)__kmp_thread_malloc(__kmp_get_thread(),
-                                    size + page_size + KMP_PTR_SKIP);
-  if (adr == 0)
-    KMP_FATAL(OutOfHeapMemory);
-
-  /* check to see if adr is on a page boundary. */
-  if (((kmp_uintptr_t)adr & (page_size - 1)) == 0)
-    /* nothing to do if adr is already on a page boundary. */
-    aadr = adr;
-  else
-    /* else set aadr to the first page boundary in the allocated memory. */
-    aadr = (void *)(((kmp_uintptr_t)adr + page_size) & ~(page_size - 1));
-
-  /* the first touch by the owner thread. */
-  *((void **)aadr) = adr;
-
-  /* skip the memory space used for storing adr above. */
-  return (void *)((char *)aadr + KMP_PTR_SKIP);
-}
-#endif
 
 /* Allocate memory on page boundary, fill allocated memory with 0x00.
    Does not call this func directly! Use __kmp_page_allocate macro instead.

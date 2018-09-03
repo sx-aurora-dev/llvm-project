@@ -1662,7 +1662,7 @@ bool MipsFastISel::selectRet(const Instruction *I) {
       return false;
 
     SmallVector<ISD::OutputArg, 4> Outs;
-    GetReturnInfo(F.getReturnType(), F.getAttributes(), Outs, TLI, DL);
+    GetReturnInfo(CC, F.getReturnType(), F.getAttributes(), Outs, TLI, DL);
 
     // Analyze operands of the call, assigning locations to each operand.
     SmallVector<CCValAssign, 16> ValLocs;
@@ -2062,6 +2062,10 @@ unsigned MipsFastISel::getRegEnsuringSimpleIntegerWidening(const Value *V,
   if (VReg == 0)
     return 0;
   MVT VMVT = TLI.getValueType(DL, V->getType(), true).getSimpleVT();
+
+  if (VMVT == MVT::i1)
+    return 0;
+
   if ((VMVT == MVT::i8) || (VMVT == MVT::i16)) {
     unsigned TempReg = createResultReg(&Mips::GPR32RegClass);
     if (!emitIntExt(VMVT, VReg, MVT::i32, TempReg, IsUnsigned))

@@ -26,6 +26,7 @@ set(SANITIZER_UNITTESTS
   sanitizer_posix_test.cc
   sanitizer_printf_test.cc
   sanitizer_procmaps_test.cc
+  sanitizer_ring_buffer_test.cc
   sanitizer_quarantine_test.cc
   sanitizer_stackdepot_test.cc
   sanitizer_stacktrace_printer_test.cc
@@ -41,7 +42,7 @@ set(SANITIZER_TEST_HEADERS
   sanitizer_pthread_wrappers.h
   sanitizer_test_config.h
   sanitizer_test_utils.h)
-foreach(header ${SANITIZER_HEADERS})
+foreach(header ${SANITIZER_IMPL_HEADERS})
   list(APPEND SANITIZER_TEST_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../${header})
 endforeach()
 

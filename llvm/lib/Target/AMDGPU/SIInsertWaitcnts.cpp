@@ -136,7 +136,7 @@ enum RegisterMapping {
 // "s_waitcnt 0" before use.
 class BlockWaitcntBrackets {
 public:
-  BlockWaitcntBrackets(const SISubtarget *SubTarget) : ST(SubTarget) {
+  BlockWaitcntBrackets(const GCNSubtarget *SubTarget) : ST(SubTarget) {
     for (enum InstCounterType T = VM_CNT; T < NUM_INST_CNTS;
          T = (enum InstCounterType)(T + 1)) {
       memset(VgprScores[T], 0, sizeof(VgprScores[T]));
@@ -314,7 +314,7 @@ public:
   void dump() { print(dbgs()); }
 
 private:
-  const SISubtarget *ST = nullptr;
+  const GCNSubtarget *ST = nullptr;
   bool WaitAtBeginning = false;
   bool RevisitLoop = false;
   bool MixedExpTypes = false;
@@ -364,13 +364,12 @@ private:
 
 class SIInsertWaitcnts : public MachineFunctionPass {
 private:
-  const SISubtarget *ST = nullptr;
+  const GCNSubtarget *ST = nullptr;
   const SIInstrInfo *TII = nullptr;
   const SIRegisterInfo *TRI = nullptr;
   const MachineRegisterInfo *MRI = nullptr;
   const MachineLoopInfo *MLI = nullptr;
   AMDGPU::IsaInfo::IsaVersion IV;
-  AMDGPUAS AMDGPUASI;
 
   DenseSet<MachineBasicBlock *> BlockVisitedSet;
   DenseSet<MachineInstr *> TrackedWaitcntSet;
@@ -1051,7 +1050,7 @@ void SIInsertWaitcnts::generateWaitcntInstBefore(
     // instruction.
     for (const MachineMemOperand *Memop : MI.memoperands()) {
       unsigned AS = Memop->getAddrSpace();
-      if (AS != AMDGPUASI.LOCAL_ADDRESS)
+      if (AS != AMDGPUAS::LOCAL_ADDRESS)
         continue;
       unsigned RegNo = SQ_MAX_PGM_VGPRS + EXTRA_VGPR_LDS;
       // VM_CNT is only relevant to vgpr or LDS.
@@ -1086,7 +1085,7 @@ void SIInsertWaitcnts::generateWaitcntInstBefore(
       // FIXME: Should not be relying on memoperands.
       for (const MachineMemOperand *Memop : MI.memoperands()) {
         unsigned AS = Memop->getAddrSpace();
-        if (AS != AMDGPUASI.LOCAL_ADDRESS)
+        if (AS != AMDGPUAS::LOCAL_ADDRESS)
           continue;
         unsigned RegNo = SQ_MAX_PGM_VGPRS + EXTRA_VGPR_LDS;
         EmitWaitcnt |= ScoreBrackets->updateByWait(
@@ -1305,7 +1304,7 @@ bool SIInsertWaitcnts::mayAccessLDSThroughFlat(const MachineInstr &MI) const {
 
   for (const MachineMemOperand *Memop : MI.memoperands()) {
     unsigned AS = Memop->getAddrSpace();
-    if (AS == AMDGPUASI.LOCAL_ADDRESS || AS == AMDGPUASI.FLAT_ADDRESS)
+    if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::FLAT_ADDRESS)
       return true;
   }
 
@@ -1837,14 +1836,13 @@ void SIInsertWaitcnts::insertWaitcntInBlock(MachineFunction &MF,
 }
 
 bool SIInsertWaitcnts::runOnMachineFunction(MachineFunction &MF) {
-  ST = &MF.getSubtarget<SISubtarget>();
+  ST = &MF.getSubtarget<GCNSubtarget>();
   TII = ST->getInstrInfo();
   TRI = &TII->getRegisterInfo();
   MRI = &MF.getRegInfo();
   MLI = &getAnalysis<MachineLoopInfo>();
   IV = AMDGPU::IsaInfo::getIsaVersion(ST->getFeatureBits());
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
-  AMDGPUASI = ST->getAMDGPUAS();
 
   ForceEmitZeroWaitcnts = ForceEmitZeroFlag;
   for (enum InstCounterType T = VM_CNT; T < NUM_INST_CNTS;

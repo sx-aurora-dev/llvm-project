@@ -95,7 +95,7 @@ protected:
     return MIB->getOperand(0).getReg();
   }
 
-  void validateBinaryOp(unsigned Dst, unsigned Src0, unsigned Src1);
+  void validateBinaryOp(unsigned Res, unsigned Op0, unsigned Op1);
 
 public:
   /// Some constructors for easy use.
@@ -207,6 +207,10 @@ public:
   MachineInstrBuilder buildConstDbgValue(const Constant &C,
                                          const MDNode *Variable,
                                          const MDNode *Expr);
+
+  /// Build and insert a DBG_LABEL instructions specifying that \p Label is
+  /// given. Convert "llvm.dbg.label Label" to "DBG_LABEL Label".
+  MachineInstrBuilder buildDbgLabel(const MDNode *Label);
 
   /// Build and insert \p Res = G_FRAME_INDEX \p Idx
   ///
@@ -424,7 +428,7 @@ public:
   /// \pre setBasicBlock or setMI must have been called.
   ///
   /// \return a MachineInstrBuilder for the newly created instruction.
-  MachineInstrBuilder buildBr(MachineBasicBlock &BB);
+  MachineInstrBuilder buildBr(MachineBasicBlock &Dest);
 
   /// Build and insert G_BRCOND \p Tst, \p Dest
   ///
@@ -438,7 +442,7 @@ public:
   ///      depend on bit 0 (for now).
   ///
   /// \return The newly created instruction.
-  MachineInstrBuilder buildBrCond(unsigned Tst, MachineBasicBlock &BB);
+  MachineInstrBuilder buildBrCond(unsigned Tst, MachineBasicBlock &Dest);
 
   /// Build and insert G_BRINDIRECT \p Tgt
   ///
@@ -558,7 +562,7 @@ public:
   template <typename DstType> MachineInstrBuilder buildUndef(DstType &&Res) {
     return buildUndef(getDestFromArg(Res));
   }
-  MachineInstrBuilder buildUndef(unsigned Dst);
+  MachineInstrBuilder buildUndef(unsigned Res);
 
   /// Build and insert instructions to put \p Ops together at the specified p
   /// Indices to form a larger register.
@@ -664,6 +668,11 @@ public:
   /// \return a MachineInstrBuilder for the newly created instruction.
   MachineInstrBuilder buildICmp(CmpInst::Predicate Pred,
                                 unsigned Res, unsigned Op0, unsigned Op1);
+  template <typename DstTy, typename... UseArgsTy>
+  MachineInstrBuilder buildICmp(CmpInst::Predicate Pred, DstTy &&Dst,
+                                UseArgsTy &&... UseArgs) {
+    return buildICmp(Pred, getDestFromArg(Dst), getRegFromArg(UseArgs)...);
+  }
 
   /// Build and insert a \p Res = G_FCMP \p Pred\p Op0, \p Op1
   ///
@@ -692,6 +701,10 @@ public:
   /// \return a MachineInstrBuilder for the newly created instruction.
   MachineInstrBuilder buildSelect(unsigned Res, unsigned Tst,
                                   unsigned Op0, unsigned Op1);
+  template <typename DstTy, typename... UseArgsTy>
+  MachineInstrBuilder buildSelect(DstTy &&Dst, UseArgsTy &&... UseArgs) {
+    return buildSelect(getDestFromArg(Dst), getRegFromArg(UseArgs)...);
+  }
 
   /// Build and insert \p Res = G_INSERT_VECTOR_ELT \p Val,
   /// \p Elt, \p Idx
@@ -942,6 +955,16 @@ public:
   /// \return a MachineInstrBuilder for the newly created instruction.
   MachineInstrBuilder buildAtomicRMWUmin(unsigned OldValRes, unsigned Addr,
                                          unsigned Val, MachineMemOperand &MMO);
+
+  /// Build and insert \p Res = G_BLOCK_ADDR \p BA
+  ///
+  /// G_BLOCK_ADDR computes the address of a basic block.
+  ///
+  /// \pre setBasicBlock or setMI must have been called.
+  /// \pre \p Res must be a generic virtual register of a pointer type.
+  ///
+  /// \return The newly created instruction.
+  MachineInstrBuilder buildBlockAddress(unsigned Res, const BlockAddress *BA);
 };
 
 /// A CRTP class that contains methods for building instructions that can

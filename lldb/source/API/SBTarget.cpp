@@ -693,6 +693,13 @@ SBBreakpoint
 SBTarget::BreakpointCreateByLocation(const SBFileSpec &sb_file_spec,
                                      uint32_t line, lldb::addr_t offset,
                                      SBFileSpecList &sb_module_list) {
+  return BreakpointCreateByLocation(sb_file_spec, line, 0, offset,
+                                    sb_module_list);
+}
+
+SBBreakpoint SBTarget::BreakpointCreateByLocation(
+    const SBFileSpec &sb_file_spec, uint32_t line, uint32_t column,
+    lldb::addr_t offset, SBFileSpecList &sb_module_list) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_API));
 
   SBBreakpoint sb_bp;
@@ -710,8 +717,8 @@ SBTarget::BreakpointCreateByLocation(const SBFileSpec &sb_file_spec,
       module_list = sb_module_list.get();
     }
     sb_bp = target_sp->CreateBreakpoint(
-        module_list, *sb_file_spec, line, offset, check_inlines, skip_prologue,
-        internal, hardware, move_to_nearest_code);
+        module_list, *sb_file_spec, line, column, offset, check_inlines,
+        skip_prologue, internal, hardware, move_to_nearest_code);
   }
 
   if (log) {
@@ -1455,6 +1462,26 @@ bool SBTarget::DeleteAllWatchpoints() {
     return true;
   }
   return false;
+}
+
+void SBTarget::AppendImageSearchPath(const char *from, const char *to,
+                                     lldb::SBError &error) {
+  TargetSP target_sp(GetSP());
+  if (!target_sp)
+    return error.SetErrorString("invalid target");
+
+  const ConstString csFrom(from), csTo(to);
+  if (!csFrom)
+    return error.SetErrorString("<from> path can't be empty");
+  if (!csTo)
+    return error.SetErrorString("<to> path can't be empty");
+
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_API));
+  if (log)
+    log->Printf("SBTarget(%p)::%s: '%s' -> '%s'",
+                static_cast<void *>(target_sp.get()),  __FUNCTION__,
+                from, to);
+  target_sp->GetImageSearchPathList().Append(csFrom, csTo, true);
 }
 
 lldb::SBModule SBTarget::AddModule(const char *path, const char *triple,

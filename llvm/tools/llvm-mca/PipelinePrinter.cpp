@@ -13,8 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PipelinePrinter.h"
-#include "View.h"
-#include "llvm/CodeGen/TargetSchedule.h"
+#include "Views/View.h"
 
 namespace mca {
 

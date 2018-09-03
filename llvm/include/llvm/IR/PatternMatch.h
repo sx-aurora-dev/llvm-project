@@ -407,6 +407,15 @@ inline cst_pred_ty<is_sign_mask> m_SignMask() {
   return cst_pred_ty<is_sign_mask>();
 }
 
+struct is_lowbit_mask {
+  bool isValue(const APInt &C) { return C.isMask(); }
+};
+/// Match an integer or vector with only the low bit(s) set.
+/// For vectors, this includes constants with undefined elements.
+inline cst_pred_ty<is_lowbit_mask> m_LowBitMask() {
+  return cst_pred_ty<is_lowbit_mask>();
+}
+
 struct is_nan {
   bool isValue(const APFloat &C) { return C.isNaN(); }
 };
@@ -1591,6 +1600,16 @@ inline typename m_Intrinsic_Ty<Opnd0>::Ty m_BitReverse(const Opnd0 &Op0) {
 template <typename Opnd0>
 inline typename m_Intrinsic_Ty<Opnd0>::Ty m_BSwap(const Opnd0 &Op0) {
   return m_Intrinsic<Intrinsic::bswap>(Op0);
+}
+
+template <typename Opnd0>
+inline typename m_Intrinsic_Ty<Opnd0>::Ty m_FAbs(const Opnd0 &Op0) {
+  return m_Intrinsic<Intrinsic::fabs>(Op0);
+}
+
+template <typename Opnd0>
+inline typename m_Intrinsic_Ty<Opnd0>::Ty m_FCanonicalize(const Opnd0 &Op0) {
+  return m_Intrinsic<Intrinsic::canonicalize>(Op0);
 }
 
 template <typename Opnd0, typename Opnd1>

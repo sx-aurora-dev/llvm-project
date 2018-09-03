@@ -859,12 +859,12 @@ void ResultBuilder::MaybeAddResult(Result R, DeclContext *CurContext) {
   }
 
   // Look through using declarations.
-  if (const UsingShadowDecl *Using =
-          dyn_cast<UsingShadowDecl>(R.Declaration)) {
-    MaybeAddResult(Result(Using->getTargetDecl(),
-                          getBasePriority(Using->getTargetDecl()),
-                          R.Qualifier),
-                   CurContext);
+  if (const UsingShadowDecl *Using = dyn_cast<UsingShadowDecl>(R.Declaration)) {
+    CodeCompletionResult Result(Using->getTargetDecl(),
+                                getBasePriority(Using->getTargetDecl()),
+                                R.Qualifier);
+    Result.ShadowDecl = Using;
+    MaybeAddResult(Result, CurContext);
     return;
   }
 
@@ -977,10 +977,11 @@ void ResultBuilder::AddResult(Result R, DeclContext *CurContext,
 
   // Look through using declarations.
   if (const UsingShadowDecl *Using = dyn_cast<UsingShadowDecl>(R.Declaration)) {
-    AddResult(Result(Using->getTargetDecl(),
-                     getBasePriority(Using->getTargetDecl()),
-                     R.Qualifier),
-              CurContext, Hiding);
+    CodeCompletionResult Result(Using->getTargetDecl(),
+                                getBasePriority(Using->getTargetDecl()),
+                                R.Qualifier);
+    Result.ShadowDecl = Using;
+    AddResult(Result, CurContext, Hiding);
     return;
   }
 
@@ -1004,10 +1005,10 @@ void ResultBuilder::AddResult(Result R, DeclContext *CurContext,
   if (AsNestedNameSpecifier) {
     R.StartsNestedNameSpecifier = true;
     R.Priority = CCP_NestedNameSpecifier;
-  }
-  else if (Filter == &ResultBuilder::IsMember && !R.Qualifier && InBaseClass &&
-           isa<CXXRecordDecl>(R.Declaration->getDeclContext()
-                                                  ->getRedeclContext()))
+  } else if (Filter == &ResultBuilder::IsMember && !R.Qualifier &&
+             InBaseClass &&
+             isa<CXXRecordDecl>(
+                 R.Declaration->getDeclContext()->getRedeclContext()))
     R.QualifierIsInformative = true;
 
   // If this result is supposed to have an informative qualifier, add one.
@@ -1304,7 +1305,6 @@ namespace {
       bool Accessible = true;
       if (Ctx)
         Accessible = Results.getSema().IsSimplyAccessible(ND, Ctx);
-
       ResultBuilder::Result Result(ND, Results.getBasePriority(ND), nullptr,
                                    false, Accessible, FixIts);
       Results.AddResult(Result, CurContext, Hiding, InBaseClass);
@@ -4290,7 +4290,7 @@ void Sema::CodeCompleteCase(Scope *S) {
   if (getCurFunction()->SwitchStack.empty() || !CodeCompleter)
     return;
 
-  SwitchStmt *Switch = getCurFunction()->SwitchStack.back();
+  SwitchStmt *Switch = getCurFunction()->SwitchStack.back().getPointer();
   QualType type = Switch->getCond()->IgnoreImplicit()->getType();
   if (!type->isEnumeralType()) {
     CodeCompleteExpressionData Data(type);
@@ -4435,10 +4435,11 @@ static QualType getParamType(Sema &SemaRef,
   return ParamType;
 }
 
-static void CodeCompleteOverloadResults(Sema &SemaRef, Scope *S,
-                                    MutableArrayRef<ResultCandidate> Candidates,
-                                        unsigned CurrentArg,
-                                 bool CompleteExpressionWithCurrentArg = true) {
+static void
+CodeCompleteOverloadResults(Sema &SemaRef, Scope *S,
+                            MutableArrayRef<ResultCandidate> Candidates,
+                            unsigned CurrentArg, SourceLocation OpenParLoc,
+                            bool CompleteExpressionWithCurrentArg = true) {
   QualType ParamType;
   if (CompleteExpressionWithCurrentArg)
     ParamType = getParamType(SemaRef, Candidates, CurrentArg);
@@ -4449,12 +4450,12 @@ static void CodeCompleteOverloadResults(Sema &SemaRef, Scope *S,
     SemaRef.CodeCompleteExpression(S, ParamType);
 
   if (!Candidates.empty())
-    SemaRef.CodeCompleter->ProcessOverloadCandidates(SemaRef, CurrentArg,
-                                                     Candidates.data(),
-                                                     Candidates.size());
+    SemaRef.CodeCompleter->ProcessOverloadCandidates(
+        SemaRef, CurrentArg, Candidates.data(), Candidates.size(), OpenParLoc);
 }
 
-void Sema::CodeCompleteCall(Scope *S, Expr *Fn, ArrayRef<Expr *> Args) {
+void Sema::CodeCompleteCall(Scope *S, Expr *Fn, ArrayRef<Expr *> Args,
+                            SourceLocation OpenParLoc) {
   if (!CodeCompleter)
     return;
 
@@ -4552,12 +4553,13 @@ void Sema::CodeCompleteCall(Scope *S, Expr *Fn, ArrayRef<Expr *> Args) {
   }
 
   mergeCandidatesWithResults(*this, Results, CandidateSet, Loc);
-  CodeCompleteOverloadResults(*this, S, Results, Args.size(),
+  CodeCompleteOverloadResults(*this, S, Results, Args.size(), OpenParLoc,
                               !CandidateSet.empty());
 }
 
 void Sema::CodeCompleteConstructor(Scope *S, QualType Type, SourceLocation Loc,
-                                   ArrayRef<Expr *> Args) {
+                                   ArrayRef<Expr *> Args,
+                                   SourceLocation OpenParLoc) {
   if (!CodeCompleter)
     return;
 
@@ -4592,7 +4594,7 @@ void Sema::CodeCompleteConstructor(Scope *S, QualType Type, SourceLocation Loc,
 
   SmallVector<ResultCandidate, 8> Results;
   mergeCandidatesWithResults(*this, Results, CandidateSet, Loc);
-  CodeCompleteOverloadResults(*this, S, Results, Args.size());
+  CodeCompleteOverloadResults(*this, S, Results, Args.size(), OpenParLoc);
 }
 
 void Sema::CodeCompleteInitializer(Scope *S, Decl *D) {

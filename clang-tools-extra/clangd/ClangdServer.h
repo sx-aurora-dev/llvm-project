@@ -10,13 +10,16 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDSERVER_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDSERVER_H
 
+#include "Cancellation.h"
 #include "ClangdUnit.h"
 #include "CodeComplete.h"
+#include "FSProvider.h"
 #include "Function.h"
 #include "GlobalCompilationDatabase.h"
 #include "Protocol.h"
 #include "TUScheduler.h"
 #include "index/FileIndex.h"
+#include "index/Index.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/Core/Replacement.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -40,22 +43,6 @@ public:
   /// Called by ClangdServer when \p Diagnostics for \p File are ready.
   virtual void onDiagnosticsReady(PathRef File,
                                   std::vector<Diag> Diagnostics) = 0;
-};
-
-class FileSystemProvider {
-public:
-  virtual ~FileSystemProvider() = default;
-  /// Called by ClangdServer to obtain a vfs::FileSystem to be used for parsing.
-  /// Context::current() will be the context passed to the clang entrypoint,
-  /// such as addDocument(), and will also be propagated to result callbacks.
-  /// Embedders may use this to isolate filesystem accesses.
-  virtual IntrusiveRefCntPtr<vfs::FileSystem> getFileSystem() = 0;
-};
-
-class RealFileSystemProvider : public FileSystemProvider {
-public:
-  /// Returns getRealFileSystem().
-  IntrusiveRefCntPtr<vfs::FileSystem> getFileSystem() override;
 };
 
 /// Provides API to manage ASTs for a collection of C++ files and request
@@ -114,6 +101,7 @@ public:
   /// synchronize access to shared state.
   ClangdServer(GlobalCompilationDatabase &CDB, FileSystemProvider &FSProvider,
                DiagnosticsConsumer &DiagConsumer, const Options &Opts);
+  ~ClangdServer();
 
   /// Set the root path of the workspace.
   void setRootPath(PathRef RootPath);
@@ -122,8 +110,6 @@ public:
   /// \p File is already tracked. Also schedules parsing of the AST for it on a
   /// separate thread. When the parsing is complete, DiagConsumer passed in
   /// constructor will receive onDiagnosticsReady callback.
-  /// When \p SkipCache is true, compile commands will always be requested from
-  /// compilation database even if they were cached in previous invocations.
   void addDocument(PathRef File, StringRef Contents,
                    WantDiagnostics WD = WantDiagnostics::Auto);
 
@@ -139,9 +125,9 @@ public:
   /// while returned future is not yet ready.
   /// A version of `codeComplete` that runs \p Callback on the processing thread
   /// when codeComplete results become available.
-  void codeComplete(PathRef File, Position Pos,
-                    const clangd::CodeCompleteOptions &Opts,
-                    Callback<CodeCompleteResult> CB);
+  TaskHandle codeComplete(PathRef File, Position Pos,
+                          const clangd::CodeCompleteOptions &Opts,
+                          Callback<CodeCompleteResult> CB);
 
   /// Provide signature help for \p File at \p Pos.  This method should only be
   /// called for tracked files.
@@ -217,6 +203,7 @@ private:
   formatCode(llvm::StringRef Code, PathRef File,
              ArrayRef<tooling::Range> Ranges);
 
+  class DynamicIndex;
   typedef uint64_t DocVersion;
 
   void consumeDiagnostics(PathRef File, DocVersion Version,
@@ -234,14 +221,21 @@ private:
   Path ResourceDir;
   // The index used to look up symbols. This could be:
   //   - null (all index functionality is optional)
-  //   - the dynamic index owned by ClangdServer (FileIdx)
+  //   - the dynamic index owned by ClangdServer (DynamicIdx)
   //   - the static index passed to the constructor
   //   - a merged view of a static and dynamic index (MergedIndex)
   SymbolIndex *Index;
-  // If present, an up-to-date of symbols in open files. Read via Index.
-  std::unique_ptr<FileIndex> FileIdx;
-  // If present, a merged view of FileIdx and an external index. Read via Index.
+  /// If present, an up-to-date of symbols in open files. Read via Index.
+  std::unique_ptr<DynamicIndex> DynamicIdx;
+  // If present, a merged view of DynamicIdx and an external index. Read via
+  // Index.
   std::unique_ptr<SymbolIndex> MergedIndex;
+
+  // GUARDED_BY(CachedCompletionFuzzyFindRequestMutex)
+  llvm::StringMap<llvm::Optional<FuzzyFindRequest>>
+      CachedCompletionFuzzyFindRequestByFile;
+  mutable std::mutex CachedCompletionFuzzyFindRequestMutex;
+
   // If set, this represents the workspace path.
   llvm::Optional<std::string> RootPath;
   std::shared_ptr<PCHContainerOperations> PCHs;

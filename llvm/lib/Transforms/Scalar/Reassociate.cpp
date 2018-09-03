@@ -63,6 +63,7 @@
 
 using namespace llvm;
 using namespace reassociate;
+using namespace PatternMatch;
 
 #define DEBUG_TYPE "reassociate"
 
@@ -788,7 +789,7 @@ void ReassociatePass::RewriteExprTree(BinaryOperator *I,
       // Discard any debug info related to the expressions that has changed (we
       // can leave debug infor related to the root, since the result of the
       // expression tree should be the same even after reassociation).
-      SmallVector<DbgInfoIntrinsic *, 1> DbgUsers;
+      SmallVector<DbgVariableIntrinsic *, 1> DbgUsers;
       findDbgUsers(DbgUsers, ExpressionChanged);
       for (auto *DII : DbgUsers) {
         Value *Undef = UndefValue::get(ExpressionChanged->getType());
@@ -1179,7 +1180,7 @@ static Value *createAndInstr(Instruction *InsertBefore, Value *Opnd,
 // and both "Res" and "ConstOpnd" remain unchanged.
 bool ReassociatePass::CombineXorOpnd(Instruction *I, XorOpnd *Opnd1,
                                      APInt &ConstOpnd, Value *&Res) {
-  // Xor-Rule 1: (x | c1) ^ c2 = (x | c1) ^ (c1 ^ c1) ^ c2 
+  // Xor-Rule 1: (x | c1) ^ c2 = (x | c1) ^ (c1 ^ c1) ^ c2
   //                       = ((x | c1) ^ c1) ^ (c1 ^ c2)
   //                       = (x & ~c1) ^ (c1 ^ c2)
   // It is useful only when c1 == c2.
@@ -1202,12 +1203,12 @@ bool ReassociatePass::CombineXorOpnd(Instruction *I, XorOpnd *Opnd1,
     RedoInsts.insert(T);
   return true;
 }
-                           
+
 // Helper function of OptimizeXor(). It tries to simplify
 // "Opnd1 ^ Opnd2 ^ ConstOpnd" into "R ^ C", where C would be 0, and R is a
-// symbolic value. 
-// 
-// If it was successful, true is returned, and the "R" and "C" is returned 
+// symbolic value.
+//
+// If it was successful, true is returned, and the "R" and "C" is returned
 // via "Res" and "ConstOpnd", respectively (If the entire expression is
 // evaluated to a constant, the Res is set to NULL); otherwise, false is
 // returned, and both "Res" and "ConstOpnd" remain unchanged.
@@ -1254,7 +1255,7 @@ bool ReassociatePass::CombineXorOpnd(Instruction *I, XorOpnd *Opnd1,
     const APInt &C1 = Opnd1->getConstPart();
     const APInt &C2 = Opnd2->getConstPart();
     APInt C3 = C1 ^ C2;
-    
+
     // Do not increase code size
     if (!C3.isNullValue() && !C3.isAllOnesValue()) {
       int NewInstNum = ConstOpnd.getBoolValue() ? 1 : 2;
@@ -1290,7 +1291,7 @@ Value *ReassociatePass::OptimizeXor(Instruction *I,
                                     SmallVectorImpl<ValueEntry> &Ops) {
   if (Value *V = OptimizeAndOrXor(Instruction::Xor, Ops))
     return V;
-      
+
   if (Ops.size() == 1)
     return nullptr;
 
@@ -1365,7 +1366,7 @@ Value *ReassociatePass::OptimizeXor(Instruction *I,
     }
 
     // step 3.2: When previous and current operands share the same symbolic
-    //  value, try to simplify "PrevOpnd ^ CurrOpnd ^ ConstOpnd" 
+    //  value, try to simplify "PrevOpnd ^ CurrOpnd ^ ConstOpnd"
     if (CombineXorOpnd(I, CurrOpnd, PrevOpnd, ConstOpnd, CV)) {
       // Remove previous operand
       PrevOpnd->Invalidate();
@@ -2131,6 +2132,66 @@ void ReassociatePass::OptimizeInst(Instruction *I) {
   ReassociateExpression(BO);
 }
 
+/// If we have an associative pair of binops with the same opcode and 2 of the 3
+/// operands to that pair of binops are some other matching binop, rearrange the
+/// operands of the associative binops so the matching ops are paired together.
+/// This transform creates factoring opportunities by pairing opcodes.
+/// TODO: Should those factoring optimizations be handled here or InstCombine?
+/// Example:
+///   ((X << S) & Y) & (Z << S) --> ((X << S) & (Z << S)) & Y (reassociation)
+///     --> ((X & Z) << S) & Y (factorize shift from 'and' ops optimization)
+void ReassociatePass::swapOperandsToMatchBinops(BinaryOperator &B) {
+  BinaryOperator *B0, *B1;
+  if (!B.isAssociative() || !B.isCommutative() ||
+      !match(&B, m_BinOp(m_BinOp(B0), m_BinOp(B1))))
+    return;
+
+  // We have (B0 op B1) where both operands are also binops.
+  // Canonicalize a binop with the same opcode as the parent binop (B) to B0 and
+  // a binop with a different opcode to B1.
+  Instruction::BinaryOps TopOpc = B.getOpcode();
+  if (B0->getOpcode() != TopOpc)
+    std::swap(B0, B1);
+
+  // If (1) we don't have a pair of binops with the same opcode or (2) B0 and B1
+  // already have the same opcode, there is nothing to do. If the binop with the
+  // same opcode (B0) has more than one use, reassociation would result in more
+  // instructions, so bail out.
+  Instruction::BinaryOps OtherOpc = B1->getOpcode();
+  if (B0->getOpcode() != TopOpc || !B0->hasOneUse() || OtherOpc == TopOpc)
+    return;
+
+  // Canonicalize a binop that matches B1 to V00 (operand 0 of B0) and a value
+  // that does not match B1 to V01.
+  Value *V00 = B0->getOperand(0), *V01 = B0->getOperand(1);
+  if (!match(V00, m_BinOp()) ||
+      cast<BinaryOperator>(V00)->getOpcode() != OtherOpc)
+    std::swap(V00, V01);
+
+  // We need a binop with the same opcode in V00, and a value with a different
+  // opcode in V01.
+  BinaryOperator *B00, *B01;
+  if (!match(V00, m_BinOp(B00)) || B00->getOpcode() != OtherOpc ||
+      (match(V01, m_BinOp(B01)) && B01->getOpcode() == OtherOpc))
+    return;
+
+  // B00 and B1 are displaced matching binops, so pull them together:
+  // (B00 & V01) & B1  --> (B00 & B1) & V01
+  IRBuilder<> Builder(&B);
+  Builder.SetInstDebugLocation(&B);
+  Value *NewBO1 = Builder.CreateBinOp(TopOpc, B00, B1);
+  Value *NewBO2 = Builder.CreateBinOp(TopOpc, NewBO1, V01);
+
+  // Fast-math-flags propagate from B; wrapping flags are cleared.
+  if (auto *I1 = dyn_cast<Instruction>(NewBO1))
+    I1->copyIRFlags(&B, false);
+  if (auto *I2 = dyn_cast<Instruction>(NewBO2))
+    I2->copyIRFlags(&B, false);
+
+  B.replaceAllUsesWith(NewBO2);
+  return;
+}
+
 void ReassociatePass::ReassociateExpression(BinaryOperator *I) {
   // First, walk the expression tree, linearizing the tree, collecting the
   // operand information.
@@ -2250,6 +2311,9 @@ void ReassociatePass::ReassociateExpression(BinaryOperator *I) {
   // Now that we ordered and optimized the expressions, splat them back into
   // the expression tree, removing any unneeded nodes.
   RewriteExprTree(I, Ops);
+
+  // Try a final reassociation of the root of the tree.
+  swapOperandsToMatchBinops(*I);
 }
 
 void

@@ -3,45 +3,17 @@ include_directories(..)
 add_custom_target(XRayUnitTests)
 set_target_properties(XRayUnitTests PROPERTIES FOLDER "XRay unittests")
 
-# Create an XRAY_IMPL_FILES variable which must include all the implementation
-# files that are in the lib directory. We *must* keep this list up-to-date.
-set(XRAY_IMPL_FILES
-  ../../xray_AArch64.cc
-  ../../xray_allocator.h
-  ../../xray_arm.cc
-  ../../xray_basic_flags.cc
-  ../../xray_basic_flags.h
-  ../../xray_basic_logging.cc
-  ../../xray_basic_logging.h
-  ../../xray_buffer_queue.cc
-  ../../xray_buffer_queue.h
-  ../../xray_defs.h
-  ../../xray_fdr_flags.cc
-  ../../xray_fdr_flags.h
-  ../../xray_fdr_logging.cc
-  ../../xray_fdr_logging.h
-  ../../xray_fdr_log_records.h
-  ../../xray_flags.cc
-  ../../xray_flags.h
-  ../../xray_function_call_trie.h
-  ../../xray_init.cc
-  ../../xray_interface.cc
-  ../../xray_interface_internal.h
-  ../../xray_log_interface.cc
-  ../../xray_mips64.cc
-  ../../xray_mips.cc
-  ../../xray_powerpc64.cc
-  ../../xray_profile_collector.cc
-  ../../xray_profile_collector.h
-  ../../xray_profiling_flags.cc
-  ../../xray_profiling_flags.h
-  ../../xray_recursion_guard.h
-  ../../xray_segmented_array.h
-  ../../xray_trampoline_powerpc64.cc
-  ../../xray_tsc.h
-  ../../xray_utils.cc
-  ../../xray_utils.h
-  ../../xray_x86_64.cc)
+# Sanity check XRAY_ALL_SOURCE_FILES_ABS_PATHS
+list(LENGTH XRAY_ALL_SOURCE_FILES_ABS_PATHS XASFAP_LENGTH)
+if (${XASFAP_LENGTH} EQUAL 0)
+  message(FATAL_ERROR "XRAY_ALL_SOURCE_FILES_ABS_PATHS cannot be empty")
+endif()
+unset(XASFAP_LENGTH)
+foreach (src_file ${XRAY_ALL_SOURCE_FILES_ABS_PATHS})
+  if (NOT EXISTS "${src_file}")
+    message(FATAL_ERROR "Source file \"${src_file}\" does not exist")
+  endif()
+endforeach()
 
 set(XRAY_UNITTEST_CFLAGS
   ${XRAY_CFLAGS}
@@ -70,8 +42,8 @@ endfunction()
 set(XRAY_TEST_ARCH ${XRAY_SUPPORTED_ARCH})
 set(XRAY_UNITTEST_LINK_FLAGS
   ${CMAKE_THREAD_LIBS_INIT}
+	-l${SANITIZER_CXX_ABI_LIBRARY}
   -fxray-instrument
-  -lstdc++  # TODO: Detect the correct standard library used!
   )
 if (NOT APPLE)
   append_list_if(COMPILER_RT_HAS_LIBM -lm XRAY_UNITTEST_LINK_FLAGS)
@@ -94,9 +66,9 @@ macro(add_xray_unittest testname)
         # tests to be re-built. This is by design, but may be cumbersome during
         # the build/test cycle.
         COMPILE_DEPS ${TEST_SOURCES} ${COMPILER_RT_GTEST_SOURCE}
-        ${XRAY_HEADERS} ${XRAY_IMPL_FILES}
+        ${XRAY_HEADERS} ${XRAY_ALL_SOURCE_FILES_ABS_PATHS}
         RUNTIME "${XRAY_RUNTIME_LIBS}"
-        DEPS gtest xray
+        DEPS gtest xray llvm-xray
         CFLAGS ${XRAY_UNITTEST_CFLAGS}
         LINK_FLAGS ${TARGET_LINK_FLAGS} ${XRAY_UNITTEST_LINK_FLAGS})
       set_target_properties(XRayUnitTests

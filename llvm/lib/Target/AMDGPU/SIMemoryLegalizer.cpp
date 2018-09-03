@@ -202,8 +202,6 @@ public:
 
 class SIMemOpAccess final {
 private:
-
-  AMDGPUAS SIAddrSpaceInfo;
   AMDGPUMachineModuleInfo *MMI = nullptr;
 
   /// Reports unsupported message \p Msg for \p MI to LLVM context.
@@ -257,12 +255,12 @@ protected:
 
   IsaInfo::IsaVersion IV;
 
-  SICacheControl(const SISubtarget &ST);
+  SICacheControl(const GCNSubtarget &ST);
 
 public:
 
   /// Create a cache control for the subtarget \p ST.
-  static std::unique_ptr<SICacheControl> create(const SISubtarget &ST);
+  static std::unique_ptr<SICacheControl> create(const GCNSubtarget &ST);
 
   /// Update \p MI memory load instruction to bypass any caches up to
   /// the \p Scope memory scope for address spaces \p
@@ -322,7 +320,7 @@ protected:
 
 public:
 
-  SIGfx6CacheControl(const SISubtarget &ST) : SICacheControl(ST) {};
+  SIGfx6CacheControl(const GCNSubtarget &ST) : SICacheControl(ST) {};
 
   bool enableLoadCacheBypass(const MachineBasicBlock::iterator &MI,
                              SIAtomicScope Scope,
@@ -346,7 +344,7 @@ public:
 class SIGfx7CacheControl : public SIGfx6CacheControl {
 public:
 
-  SIGfx7CacheControl(const SISubtarget &ST) : SIGfx6CacheControl(ST) {};
+  SIGfx7CacheControl(const GCNSubtarget &ST) : SIGfx6CacheControl(ST) {};
 
   bool insertCacheInvalidate(MachineBasicBlock::iterator &MI,
                              SIAtomicScope Scope,
@@ -453,22 +451,21 @@ SIMemOpAccess::toSIAtomicScope(SyncScope::ID SSID,
 }
 
 SIAtomicAddrSpace SIMemOpAccess::toSIAtomicAddrSpace(unsigned AS) const {
-  if (AS == SIAddrSpaceInfo.FLAT_ADDRESS)
+  if (AS == AMDGPUAS::FLAT_ADDRESS)
     return SIAtomicAddrSpace::FLAT;
-  if (AS == SIAddrSpaceInfo.GLOBAL_ADDRESS)
+  if (AS == AMDGPUAS::GLOBAL_ADDRESS)
     return SIAtomicAddrSpace::GLOBAL;
-  if (AS == SIAddrSpaceInfo.LOCAL_ADDRESS)
+  if (AS == AMDGPUAS::LOCAL_ADDRESS)
     return SIAtomicAddrSpace::LDS;
-  if (AS == SIAddrSpaceInfo.PRIVATE_ADDRESS)
+  if (AS == AMDGPUAS::PRIVATE_ADDRESS)
     return SIAtomicAddrSpace::SCRATCH;
-  if (AS == SIAddrSpaceInfo.REGION_ADDRESS)
+  if (AS == AMDGPUAS::REGION_ADDRESS)
     return SIAtomicAddrSpace::GDS;
 
   return SIAtomicAddrSpace::OTHER;
 }
 
 SIMemOpAccess::SIMemOpAccess(MachineFunction &MF) {
-  SIAddrSpaceInfo = getAMDGPUAS(MF.getTarget());
   MMI = &MF.getMMI().getObjFileInfo<AMDGPUMachineModuleInfo>();
 }
 
@@ -606,14 +603,14 @@ Optional<SIMemOpInfo> SIMemOpAccess::getAtomicCmpxchgOrRmwInfo(
   return constructFromMIWithMMO(MI);
 }
 
-SICacheControl::SICacheControl(const SISubtarget &ST) {
+SICacheControl::SICacheControl(const GCNSubtarget &ST) {
   TII = ST.getInstrInfo();
   IV = IsaInfo::getIsaVersion(ST.getFeatureBits());
 }
 
 /* static */
-std::unique_ptr<SICacheControl> SICacheControl::create(const SISubtarget &ST) {
-  AMDGPUSubtarget::Generation Generation = ST.getGeneration();
+std::unique_ptr<SICacheControl> SICacheControl::create(const GCNSubtarget &ST) {
+  GCNSubtarget::Generation Generation = ST.getGeneration();
   if (Generation <= AMDGPUSubtarget::SOUTHERN_ISLANDS)
     return make_unique<SIGfx6CacheControl>(ST);
   return make_unique<SIGfx7CacheControl>(ST);
@@ -737,7 +734,7 @@ bool SIGfx6CacheControl::insertWait(MachineBasicBlock::iterator &MI,
     case SIAtomicScope::WAVEFRONT:
     case SIAtomicScope::SINGLETHREAD:
       // The L1 cache keeps all memory operations in order for
-      // wavesfronts in the same work-group.
+      // wavefronts in the same work-group.
       break;
     default:
       llvm_unreachable("Unsupported synchronization scope");
@@ -1012,7 +1009,7 @@ bool SIMemoryLegalizer::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
 
   SIMemOpAccess MOA(MF);
-  CC = SICacheControl::create(MF.getSubtarget<SISubtarget>());
+  CC = SICacheControl::create(MF.getSubtarget<GCNSubtarget>());
 
   for (auto &MBB : MF) {
     for (auto MI = MBB.begin(); MI != MBB.end(); ++MI) {

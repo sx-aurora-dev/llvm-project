@@ -282,8 +282,10 @@ Instruction *InstCombiner::commonCastTransforms(CastInst &CI) {
     // condition may inhibit other folds and lead to worse codegen.
     auto *Cmp = dyn_cast<CmpInst>(Sel->getCondition());
     if (!Cmp || Cmp->getOperand(0)->getType() != Sel->getType())
-      if (Instruction *NV = FoldOpIntoSelect(CI, Sel))
+      if (Instruction *NV = FoldOpIntoSelect(CI, Sel)) {
+        replaceAllDbgUsesWith(*Sel, *NV, CI, DT);
         return NV;
+      }
   }
 
   // If we are casting a PHI, then fold the cast into the PHI.
@@ -2240,6 +2242,12 @@ Instruction *InstCombiner::visitBitCast(BitCastInst &CI) {
     PointerType *SrcPTy = cast<PointerType>(SrcTy);
     Type *DstElTy = DstPTy->getElementType();
     Type *SrcElTy = SrcPTy->getElementType();
+
+    // Casting pointers between the same type, but with different address spaces
+    // is an addrspace cast rather than a bitcast.
+    if ((DstElTy == SrcElTy) &&
+        (DstPTy->getAddressSpace() != SrcPTy->getAddressSpace()))
+      return new AddrSpaceCastInst(Src, DestTy);
 
     // If we are casting a alloca to a pointer to a type of the same
     // size, rewrite the allocation instruction to allocate the "right" type.

@@ -1,11 +1,11 @@
-//===--- ClangdUnit.cpp -----------------------------------------*- C++-*-===//
+//===--- ClangdUnit.cpp ------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #include "ClangdUnit.h"
 #include "Compiler.h"
@@ -121,7 +121,7 @@ void clangd::dumpAST(ParsedAST &AST, llvm::raw_ostream &OS) {
 }
 
 llvm::Optional<ParsedAST>
-ParsedAST::Build(std::unique_ptr<clang::CompilerInvocation> CI,
+ParsedAST::build(std::unique_ptr<clang::CompilerInvocation> CI,
                  std::shared_ptr<const PreambleData> Preamble,
                  std::unique_ptr<llvm::MemoryBuffer> Buffer,
                  std::shared_ptr<PCHContainerOperations> PCHs,
@@ -147,7 +147,7 @@ ParsedAST::Build(std::unique_ptr<clang::CompilerInvocation> CI,
   auto Action = llvm::make_unique<ClangdFrontendAction>();
   const FrontendInputFile &MainInput = Clang->getFrontendOpts().Inputs[0];
   if (!Action->BeginSourceFile(*Clang, MainInput)) {
-    log("BeginSourceFile() failed when building AST for " +
+    log("BeginSourceFile() failed when building AST for {0}",
         MainInput.getFile());
     return llvm::None;
   }
@@ -159,7 +159,7 @@ ParsedAST::Build(std::unique_ptr<clang::CompilerInvocation> CI,
       collectIncludeStructureCallback(Clang->getSourceManager(), &Includes));
 
   if (!Action->Execute())
-    log("Execute() failed when building AST for " + MainInput.getFile());
+    log("Execute() failed when building AST for {0}", MainInput.getFile());
 
   // UnitDiagsConsumer is local, we can not store it in CompilerInstance that
   // has a longer lifetime.
@@ -307,11 +307,11 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
       compileCommandsAreEqual(Inputs.CompileCommand, OldCompileCommand) &&
       OldPreamble->Preamble.CanReuse(CI, ContentsBuffer.get(), Bounds,
                                      Inputs.FS.get())) {
-    log("Reusing preamble for file " + Twine(FileName));
+    vlog("Reusing preamble for file {0}", Twine(FileName));
     return OldPreamble;
   }
-  log("Preamble for file " + Twine(FileName) +
-      " cannot be reused. Attempting to rebuild it.");
+  vlog("Preamble for file {0} cannot be reused. Attempting to rebuild it.",
+       FileName);
 
   trace::Span Tracer("BuildPreamble");
   SPAN_ATTACH(Tracer, "File", FileName);
@@ -343,13 +343,13 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
   CI.getFrontendOpts().SkipFunctionBodies = false;
 
   if (BuiltPreamble) {
-    log("Built preamble of size " + Twine(BuiltPreamble->getSize()) +
-        " for file " + Twine(FileName));
+    vlog("Built preamble of size {0} for file {1}", BuiltPreamble->getSize(),
+         FileName);
     return std::make_shared<PreambleData>(
         std::move(*BuiltPreamble), PreambleDiagnostics.take(),
         SerializedDeclsCollector.takeIncludes());
   } else {
-    log("Could not build a preamble for file " + Twine(FileName));
+    elog("Could not build a preamble for file {0}", FileName);
     return nullptr;
   }
 }
@@ -367,7 +367,7 @@ llvm::Optional<ParsedAST> clangd::buildAST(
     // dirs.
   }
 
-  return ParsedAST::Build(
+  return ParsedAST::build(
       llvm::make_unique<CompilerInvocation>(*Invocation), Preamble,
       llvm::MemoryBuffer::getMemBufferCopy(Inputs.Contents), PCHs, Inputs.FS);
 }
@@ -379,7 +379,7 @@ SourceLocation clangd::getBeginningOfIdentifier(ParsedAST &Unit,
   const SourceManager &SourceMgr = AST.getSourceManager();
   auto Offset = positionToOffset(SourceMgr.getBufferData(FID), Pos);
   if (!Offset) {
-    log("getBeginningOfIdentifier: " + toString(Offset.takeError()));
+    log("getBeginningOfIdentifier: {0}", Offset.takeError());
     return SourceLocation();
   }
   SourceLocation InputLoc = SourceMgr.getComposedLoc(FID, *Offset);

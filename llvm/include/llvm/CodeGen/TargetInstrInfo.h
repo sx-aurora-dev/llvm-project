@@ -79,9 +79,16 @@ public:
     return Opc <= TargetOpcode::GENERIC_OP_END;
   }
 
+  // Simple struct describing access to a FrameIndex.
+  struct FrameAccess {
+    const MachineMemOperand *MMO;
+    int FI;
+    FrameAccess(const MachineMemOperand *MMO, int FI) : MMO(MMO), FI(FI) {}
+  };
+
   /// Given a machine instruction descriptor, returns the register
   /// class constraint for OpNum, or NULL.
-  const TargetRegisterClass *getRegClass(const MCInstrDesc &TID, unsigned OpNum,
+  const TargetRegisterClass *getRegClass(const MCInstrDesc &MCID, unsigned OpNum,
                                          const TargetRegisterInfo *TRI,
                                          const MachineFunction &MF) const;
 
@@ -246,14 +253,13 @@ public:
   }
 
   /// If the specified machine instruction has a load from a stack slot,
-  /// return true along with the FrameIndex of the loaded stack slot and the
-  /// machine mem operand containing the reference.
+  /// return true along with the FrameIndices of the loaded stack slot and the
+  /// machine mem operands containing the reference.
   /// If not, return false.  Unlike isLoadFromStackSlot, this returns true for
   /// any instructions that loads from the stack.  This is just a hint, as some
   /// cases may be missed.
   virtual bool hasLoadFromStackSlot(const MachineInstr &MI,
-                                    const MachineMemOperand *&MMO,
-                                    int &FrameIndex) const;
+                                    SmallVectorImpl<FrameAccess> &Accesses) const;
 
   /// If the specified machine instruction is a direct
   /// store to a stack slot, return the virtual or physical register number of
@@ -284,14 +290,13 @@ public:
   }
 
   /// If the specified machine instruction has a store to a stack slot,
-  /// return true along with the FrameIndex of the loaded stack slot and the
-  /// machine mem operand containing the reference.
+  /// return true along with the FrameIndices of the loaded stack slot and the
+  /// machine mem operands containing the reference.
   /// If not, return false.  Unlike isStoreToStackSlot,
   /// this returns true for any instructions that stores to the
   /// stack.  This is just a hint, as some cases may be missed.
   virtual bool hasStoreToStackSlot(const MachineInstr &MI,
-                                   const MachineMemOperand *&MMO,
-                                   int &FrameIndex) const;
+                                    SmallVectorImpl<FrameAccess> &Accesses) const;
 
   /// Return true if the specified machine instruction
   /// is a copy of one stack slot to another and has no other effect.
@@ -846,13 +851,31 @@ public:
     llvm_unreachable("Target didn't implement TargetInstrInfo::copyPhysReg!");
   }
 
+protected:
+  /// Target-dependent implemenation for IsCopyInstr.
   /// If the specific machine instruction is a instruction that moves/copies
   /// value from one register to another register return true along with
   /// @Source machine operand and @Destination machine operand.
-  virtual bool isCopyInstr(const MachineInstr &MI,
-                           const MachineOperand *&SourceOpNum,
-                           const MachineOperand *&Destination) const {
+  virtual bool isCopyInstrImpl(const MachineInstr &MI,
+                               const MachineOperand *&Source,
+                               const MachineOperand *&Destination) const {
     return false;
+  }
+
+public:
+  /// If the specific machine instruction is a instruction that moves/copies
+  /// value from one register to another register return true along with
+  /// @Source machine operand and @Destination machine operand.
+  /// For COPY-instruction the method naturally returns true, for all other
+  /// instructions the method calls target-dependent implementation.
+  bool isCopyInstr(const MachineInstr &MI, const MachineOperand *&Source,
+                   const MachineOperand *&Destination) const {
+    if (MI.isCopy()) {
+      Destination = &MI.getOperand(0);
+      Source = &MI.getOperand(1);
+      return true;
+    }
+    return isCopyInstrImpl(MI, Source, Destination);
   }
 
   /// Store the specified register of the given register class to the specified
@@ -909,7 +932,7 @@ public:
   /// The new instruction is inserted before MI, and the client is responsible
   /// for removing the old instruction.
   MachineInstr *foldMemoryOperand(MachineInstr &MI, ArrayRef<unsigned> Ops,
-                                  int FrameIndex,
+                                  int FI,
                                   LiveIntervals *LIS = nullptr) const;
 
   /// Same as the previous version except it allows folding of any load and
@@ -961,13 +984,13 @@ public:
   /// \param InsInstrs - Vector of new instructions that implement P
   /// \param DelInstrs - Old instructions, including Root, that could be
   /// replaced by InsInstr
-  /// \param InstrIdxForVirtReg - map of virtual register to instruction in
+  /// \param InstIdxForVirtReg - map of virtual register to instruction in
   /// InsInstr that defines it
   virtual void genAlternativeCodeSequence(
       MachineInstr &Root, MachineCombinerPattern Pattern,
       SmallVectorImpl<MachineInstr *> &InsInstrs,
       SmallVectorImpl<MachineInstr *> &DelInstrs,
-      DenseMap<unsigned, unsigned> &InstrIdxForVirtReg) const;
+      DenseMap<unsigned, unsigned> &InstIdxForVirtReg) const;
 
   /// Attempt to reassociate \P Root and \P Prev according to \P Pattern to
   /// reduce critical path length.
@@ -1063,7 +1086,7 @@ public:
   /// getAddressSpaceForPseudoSourceKind - Given the kind of memory
   /// (e.g. stack) the target returns the corresponding address space.
   virtual unsigned
-  getAddressSpaceForPseudoSourceKind(PseudoSourceValue::PSVKind Kind) const {
+  getAddressSpaceForPseudoSourceKind(unsigned Kind) const {
     return 0;
   }
 
@@ -1602,9 +1625,9 @@ public:
     return false;
   }
 
-  /// Returns a \p outliner::TargetCostInfo struct containing target-specific
+  /// Returns a \p outliner::OutlinedFunction struct containing target-specific
   /// information for a set of outlining candidates.
-  virtual outliner::TargetCostInfo getOutliningCandidateInfo(
+  virtual outliner::OutlinedFunction getOutliningCandidateInfo(
       std::vector<outliner::Candidate> &RepeatedSequenceLocs) const {
     llvm_unreachable(
         "Target didn't implement TargetInstrInfo::getOutliningCandidateInfo!");
@@ -1624,9 +1647,8 @@ public:
   }
 
   /// Insert a custom frame for outlined functions.
-  virtual void buildOutlinedFrame(MachineBasicBlock &MBB,
-                                      MachineFunction &MF,
-                                    const outliner::TargetCostInfo &TCI) const {
+  virtual void buildOutlinedFrame(MachineBasicBlock &MBB, MachineFunction &MF,
+                                  const outliner::OutlinedFunction &OF) const {
     llvm_unreachable(
         "Target didn't implement TargetInstrInfo::buildOutlinedFrame!");
   }
@@ -1637,7 +1659,7 @@ public:
   virtual MachineBasicBlock::iterator
   insertOutlinedCall(Module &M, MachineBasicBlock &MBB,
                      MachineBasicBlock::iterator &It, MachineFunction &MF,
-                     const outliner::TargetCostInfo &TCI) const {
+                     const outliner::Candidate &C) const {
     llvm_unreachable(
         "Target didn't implement TargetInstrInfo::insertOutlinedCall!");
   }

@@ -26,9 +26,9 @@
 // CHECK-NEXT: ]
 
 // DISASM:      _start:
-// DISASM-NEXT: jmp	41
-// DISASM-NEXT: jmp	36
-// DISASM-NEXT: jmp	47
+// DISASM-NEXT: jmp    41
+// DISASM-NEXT: jmp    36
+// DISASM-NEXT: jmp    47
 
 .global foo
 foo:
