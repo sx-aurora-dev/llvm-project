@@ -58,7 +58,8 @@ TEST(DomTreeUpdater, EagerUpdateBasicOperations) {
 
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_TRUE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Eager);
+  ASSERT_TRUE(DTU.isEager());
+  ASSERT_FALSE(DTU.isLazy());
   ASSERT_TRUE(DTU.getDomTree().verify());
   ASSERT_TRUE(DTU.getPostDomTree().verify());
   ASSERT_FALSE(DTU.hasPendingUpdates());
@@ -71,8 +72,8 @@ TEST(DomTreeUpdater, EagerUpdateBasicOperations) {
   SwitchInst *SI = dyn_cast<SwitchInst>(BB0->getTerminator());
   ASSERT_NE(SI, nullptr) << "Couldn't get SwitchInst.";
 
-  ASSERT_FALSE(DTU.insertEdgeRelaxed(BB0, BB0));
-  ASSERT_TRUE(DTU.deleteEdgeRelaxed(BB0, BB0));
+  DTU.insertEdgeRelaxed(BB0, BB0);
+  DTU.deleteEdgeRelaxed(BB0, BB0);
 
   // Delete edge bb0 -> bb3 and push the update twice to verify duplicate
   // entries are discarded.
@@ -105,9 +106,9 @@ TEST(DomTreeUpdater, EagerUpdateBasicOperations) {
   ASSERT_FALSE(DTU.hasPendingUpdates());
 
   // Invalid Insert: no edge bb1 -> bb2 after change to bb0.
-  ASSERT_FALSE(DTU.insertEdgeRelaxed(BB1, BB2));
+  DTU.insertEdgeRelaxed(BB1, BB2);
   // Invalid Delete: edge exists bb0 -> bb1 after change to bb0.
-  ASSERT_FALSE(DTU.deleteEdgeRelaxed(BB0, BB1));
+  DTU.deleteEdgeRelaxed(BB0, BB1);
 
   // DTU working with Eager UpdateStrategy does not need to flush.
   ASSERT_TRUE(DT.verify());
@@ -166,7 +167,8 @@ TEST(DomTreeUpdater, EagerUpdateReplaceEntryBB) {
   DomTreeUpdater DTU(DT, PDT, DomTreeUpdater::UpdateStrategy::Eager);
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_TRUE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Eager);
+  ASSERT_TRUE(DTU.isEager());
+  ASSERT_FALSE(DTU.isLazy());
   ASSERT_TRUE(DT.verify());
   ASSERT_TRUE(PDT.verify());
 
@@ -181,7 +183,7 @@ TEST(DomTreeUpdater, EagerUpdateReplaceEntryBB) {
   EXPECT_EQ(F->begin()->getName(), NewEntry->getName());
   EXPECT_TRUE(&F->getEntryBlock() == NewEntry);
 
-  ASSERT_TRUE(DTU.insertEdgeRelaxed(NewEntry, BB0));
+  DTU.insertEdgeRelaxed(NewEntry, BB0);
 
   // Changing the Entry BB requires a full recalculation of DomTree.
   DTU.recalculate(*F);
@@ -239,7 +241,8 @@ TEST(DomTreeUpdater, LazyUpdateDTBasicOperations) {
   DomTreeUpdater DTU(&DT, PDT, DomTreeUpdater::UpdateStrategy::Lazy);
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_FALSE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Lazy);
+  ASSERT_FALSE(DTU.isEager());
+  ASSERT_TRUE(DTU.isLazy());
   ASSERT_TRUE(DTU.getDomTree().verify());
 
   Function::iterator FI = F->begin();
@@ -327,7 +330,8 @@ TEST(DomTreeUpdater, LazyUpdateDTInheritedPreds) {
   DomTreeUpdater DTU(&DT, PDT, DomTreeUpdater::UpdateStrategy::Lazy);
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_FALSE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Lazy);
+  ASSERT_FALSE(DTU.isEager());
+  ASSERT_TRUE(DTU.isLazy());
   ASSERT_TRUE(DTU.getDomTree().verify());
 
   Function::iterator FI = F->begin();
@@ -453,7 +457,8 @@ TEST(DomTreeUpdater, LazyUpdateBasicOperations) {
   DomTreeUpdater DTU(&DT, &PDT, DomTreeUpdater::UpdateStrategy::Lazy);
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_TRUE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Lazy);
+  ASSERT_FALSE(DTU.isEager());
+  ASSERT_TRUE(DTU.isLazy());
   ASSERT_TRUE(DTU.getDomTree().verify());
   ASSERT_TRUE(DTU.getPostDomTree().verify());
 
@@ -535,7 +540,8 @@ TEST(DomTreeUpdater, LazyUpdateReplaceEntryBB) {
   DomTreeUpdater DTU(DT, PDT, DomTreeUpdater::UpdateStrategy::Lazy);
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_TRUE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Lazy);
+  ASSERT_FALSE(DTU.isEager());
+  ASSERT_TRUE(DTU.isLazy());
   ASSERT_TRUE(DTU.getDomTree().verify());
   ASSERT_TRUE(DTU.getPostDomTree().verify());
 
@@ -624,7 +630,8 @@ TEST(DomTreeUpdater, LazyUpdateStepTest) {
 
   ASSERT_TRUE(DTU.hasDomTree());
   ASSERT_TRUE(DTU.hasPostDomTree());
-  ASSERT_EQ(DTU.getUpdateStrategy(), DomTreeUpdater::UpdateStrategy::Lazy);
+  ASSERT_FALSE(DTU.isEager());
+  ASSERT_TRUE(DTU.isLazy());
   ASSERT_TRUE(DTU.getDomTree().verify());
   ASSERT_TRUE(DTU.getPostDomTree().verify());
   ASSERT_FALSE(DTU.hasPendingUpdates());
@@ -691,4 +698,30 @@ TEST(DomTreeUpdater, LazyUpdateStepTest) {
   // flush both trees
   DTU.flush();
   ASSERT_TRUE(DT.verify());
+}
+
+TEST(DomTreeUpdater, NoTreeTest) {
+  StringRef FuncName = "f";
+  StringRef ModuleString = R"(
+                           define i32 @f() {
+                           bb0:
+                              ret i32 0
+                           }
+                           )";
+  // Make the module.
+  LLVMContext Context;
+  std::unique_ptr<Module> M = makeLLVMModule(Context, ModuleString);
+  Function *F = M->getFunction(FuncName);
+
+  // Make the DTU.
+  DomTreeUpdater DTU(nullptr, nullptr, DomTreeUpdater::UpdateStrategy::Lazy);
+  ASSERT_FALSE(DTU.hasDomTree());
+  ASSERT_FALSE(DTU.hasPostDomTree());
+  Function::iterator FI = F->begin();
+  BasicBlock *BB0 = &*FI++;
+  // Test whether PendingDeletedBB is flushed after the recalculation.
+  DTU.deleteBB(BB0);
+  ASSERT_TRUE(DTU.hasPendingDeletedBB());
+  DTU.recalculate(*F);
+  ASSERT_FALSE(DTU.hasPendingDeletedBB());
 }

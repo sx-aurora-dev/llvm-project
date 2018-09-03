@@ -34,7 +34,6 @@
 #include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/MC/MCSymbolELF.h"
 #include "llvm/MC/MCSymbolWasm.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -51,7 +50,7 @@ MVT WebAssemblyAsmPrinter::getRegType(unsigned RegNo) const {
   const TargetRegisterInfo *TRI = Subtarget->getRegisterInfo();
   const TargetRegisterClass *TRC = MRI->getRegClass(RegNo);
   for (MVT T : {MVT::i32, MVT::i64, MVT::f32, MVT::f64, MVT::v16i8, MVT::v8i16,
-                MVT::v4i32, MVT::v4f32})
+                MVT::v4i32, MVT::v2i64, MVT::v4f32, MVT::v2f64})
     if (TRI->isTypeLegalForClass(*TRC, T))
       return T;
   LLVM_DEBUG(errs() << "Unknown type for register number: " << RegNo);
@@ -101,8 +100,6 @@ void WebAssemblyAsmPrinter::EmitEndOfAsmFile(Module &M) {
     if (!G.hasInitializer() && G.hasExternalLinkage()) {
       if (G.getValueType()->isSized()) {
         uint16_t Size = M.getDataLayout().getTypeAllocSize(G.getValueType());
-        if (TM.getTargetTriple().isOSBinFormatELF())
-          getTargetStreamer()->emitGlobalImport(G.getGlobalIdentifier());
         OutStreamer->emitELFSize(getSymbol(&G),
                                  MCConstantExpr::create(Size, OutContext));
       }
@@ -162,32 +159,9 @@ void WebAssemblyAsmPrinter::EmitFunctionBodyStart() {
   else
     getTargetStreamer()->emitResult(CurrentFnSym, ArrayRef<MVT>());
 
-  if (TM.getTargetTriple().isOSBinFormatELF()) {
-    assert(MFI->getLocals().empty());
-    for (unsigned Idx = 0, IdxE = MRI->getNumVirtRegs(); Idx != IdxE; ++Idx) {
-      unsigned VReg = TargetRegisterInfo::index2VirtReg(Idx);
-      unsigned WAReg = MFI->getWAReg(VReg);
-      // Don't declare unused registers.
-      if (WAReg == WebAssemblyFunctionInfo::UnusedReg)
-        continue;
-      // Don't redeclare parameters.
-      if (WAReg < MFI->getParams().size())
-        continue;
-      // Don't declare stackified registers.
-      if (int(WAReg) < 0)
-        continue;
-      MFI->addLocal(getRegType(VReg));
-    }
-  }
-
   getTargetStreamer()->emitLocal(MFI->getLocals());
 
   AsmPrinter::EmitFunctionBodyStart();
-}
-
-void WebAssemblyAsmPrinter::EmitFunctionBodyEnd() {
-  if (TM.getTargetTriple().isOSBinFormatELF())
-    getTargetStreamer()->emitEndFunc();
 }
 
 void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
@@ -195,41 +169,62 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
   switch (MI->getOpcode()) {
   case WebAssembly::ARGUMENT_I32:
+  case WebAssembly::ARGUMENT_I32_S:
   case WebAssembly::ARGUMENT_I64:
+  case WebAssembly::ARGUMENT_I64_S:
   case WebAssembly::ARGUMENT_F32:
+  case WebAssembly::ARGUMENT_F32_S:
   case WebAssembly::ARGUMENT_F64:
+  case WebAssembly::ARGUMENT_F64_S:
   case WebAssembly::ARGUMENT_v16i8:
+  case WebAssembly::ARGUMENT_v16i8_S:
   case WebAssembly::ARGUMENT_v8i16:
+  case WebAssembly::ARGUMENT_v8i16_S:
   case WebAssembly::ARGUMENT_v4i32:
+  case WebAssembly::ARGUMENT_v4i32_S:
+  case WebAssembly::ARGUMENT_v2i64:
+  case WebAssembly::ARGUMENT_v2i64_S:
   case WebAssembly::ARGUMENT_v4f32:
+  case WebAssembly::ARGUMENT_v4f32_S:
+  case WebAssembly::ARGUMENT_v2f64:
+  case WebAssembly::ARGUMENT_v2f64_S:
     // These represent values which are live into the function entry, so there's
     // no instruction to emit.
     break;
   case WebAssembly::FALLTHROUGH_RETURN_I32:
+  case WebAssembly::FALLTHROUGH_RETURN_I32_S:
   case WebAssembly::FALLTHROUGH_RETURN_I64:
+  case WebAssembly::FALLTHROUGH_RETURN_I64_S:
   case WebAssembly::FALLTHROUGH_RETURN_F32:
+  case WebAssembly::FALLTHROUGH_RETURN_F32_S:
   case WebAssembly::FALLTHROUGH_RETURN_F64:
+  case WebAssembly::FALLTHROUGH_RETURN_F64_S:
   case WebAssembly::FALLTHROUGH_RETURN_v16i8:
+  case WebAssembly::FALLTHROUGH_RETURN_v16i8_S:
   case WebAssembly::FALLTHROUGH_RETURN_v8i16:
+  case WebAssembly::FALLTHROUGH_RETURN_v8i16_S:
   case WebAssembly::FALLTHROUGH_RETURN_v4i32:
-  case WebAssembly::FALLTHROUGH_RETURN_v4f32: {
+  case WebAssembly::FALLTHROUGH_RETURN_v4i32_S:
+  case WebAssembly::FALLTHROUGH_RETURN_v2i64:
+  case WebAssembly::FALLTHROUGH_RETURN_v2i64_S:
+  case WebAssembly::FALLTHROUGH_RETURN_v4f32:
+  case WebAssembly::FALLTHROUGH_RETURN_v4f32_S:
+  case WebAssembly::FALLTHROUGH_RETURN_v2f64:
+  case WebAssembly::FALLTHROUGH_RETURN_v2f64_S: {
     // These instructions represent the implicit return at the end of a
-    // function body. The operand is always a pop.
-    assert(MFI->isVRegStackified(MI->getOperand(0).getReg()));
-
+    // function body. Always pops one value off the stack.
     if (isVerbose()) {
-      OutStreamer->AddComment("fallthrough-return: $pop" +
-                              Twine(MFI->getWARegStackId(
-                                  MFI->getWAReg(MI->getOperand(0).getReg()))));
+      OutStreamer->AddComment("fallthrough-return-value");
       OutStreamer->AddBlankLine();
     }
     break;
   }
   case WebAssembly::FALLTHROUGH_RETURN_VOID:
+  case WebAssembly::FALLTHROUGH_RETURN_VOID_S:
     // This instruction represents the implicit return at the end of a
     // function body with no return value.
     if (isVerbose()) {
-      OutStreamer->AddComment("fallthrough-return");
+      OutStreamer->AddComment("fallthrough-return-void");
       OutStreamer->AddBlankLine();
     }
     break;
@@ -270,6 +265,9 @@ bool WebAssemblyAsmPrinter::PrintAsmOperand(const MachineInstr *MI,
       OS << MO.getImm();
       return false;
     case MachineOperand::MO_Register:
+      // FIXME: only opcode that still contains registers, as required by
+      // MachineInstr::getDebugVariable().
+      assert(MI->getOpcode() == WebAssembly::INLINEASM);
       OS << regToString(MO);
       return false;
     case MachineOperand::MO_GlobalAddress:

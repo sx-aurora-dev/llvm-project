@@ -23,8 +23,21 @@ namespace llvm {
 
 class SITargetLowering final : public AMDGPUTargetLowering {
 private:
-  const SISubtarget *Subtarget;
+  const GCNSubtarget *Subtarget;
 
+public:
+  MVT getRegisterTypeForCallingConv(LLVMContext &Context,
+                                    CallingConv::ID CC,
+                                    EVT VT) const override;
+  unsigned getNumRegistersForCallingConv(LLVMContext &Context,
+                                         CallingConv::ID CC,
+                                         EVT VT) const override;
+
+  unsigned getVectorTypeBreakdownForCallingConv(
+    LLVMContext &Context, CallingConv::ID CC, EVT VT, EVT &IntermediateVT,
+    unsigned &NumIntermediates, MVT &RegisterVT) const override;
+
+private:
   SDValue lowerKernArgParameterPtr(SelectionDAG &DAG, const SDLoc &SL,
                                    SDValue Chain, uint64_t Offset) const;
   SDValue getImplicitArgPtr(SelectionDAG &DAG, const SDLoc &SL) const;
@@ -52,6 +65,15 @@ private:
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
 
+  // The raw.tbuffer and struct.tbuffer intrinsics have two offset args: offset
+  // (the offset that is included in bounds checking and swizzling, to be split
+  // between the instruction's voffset and immoffset fields) and soffset (the
+  // offset that is excluded from bounds checking and swizzling, to go in the
+  // instruction's soffset field).  This function takes the first kind of
+  // offset and figures out how to split it between voffset and immoffset.
+  std::pair<SDValue, SDValue> splitBufferOffsets(SDValue Offset,
+                                                 SelectionDAG &DAG) const;
+
   SDValue widenLoad(LoadSDNode *Ld, DAGCombinerInfo &DCI) const;
   SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG) const;
@@ -68,7 +90,7 @@ private:
   SDValue LowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue adjustLoadValueType(unsigned Opcode, MemSDNode *M,
-                              SelectionDAG &DAG,
+                              SelectionDAG &DAG, ArrayRef<SDValue> Ops,
                               bool IsIntrinsic = false) const;
 
   SDValue handleD16VData(SDValue VData, SelectionDAG &DAG) const;
@@ -117,6 +139,8 @@ private:
   SDValue performXorCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performZeroExtendCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performClassCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue getCanonicalConstantFP(SelectionDAG &DAG, const SDLoc &SL, EVT VT,
+                                 const APFloat &C) const;
   SDValue performFCanonicalizeCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   SDValue performFPMed3ImmCombine(SelectionDAG &DAG, const SDLoc &SL,
@@ -136,6 +160,7 @@ private:
   SDValue performSubCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performFAddCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performFSubCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue performFMACombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performSetCCCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performCvtF32UByteNCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performClampCombine(SDNode *N, DAGCombinerInfo &DCI) const;
@@ -161,10 +186,16 @@ private:
   /// global value \p GV, false otherwise.
   bool shouldEmitPCReloc(const GlobalValue *GV) const;
 
-public:
-  SITargetLowering(const TargetMachine &tm, const SISubtarget &STI);
+  // Analyze a combined offset from an amdgcn_buffer_ intrinsic and store the
+  // three offsets (voffset, soffset and instoffset) into the SDValue[3] array
+  // pointed to by Offsets.
+  void setBufferOffsets(SDValue CombinedOffset, SelectionDAG &DAG,
+                        SDValue *Offsets) const;
 
-  const SISubtarget *getSubtarget() const;
+public:
+  SITargetLowering(const TargetMachine &tm, const GCNSubtarget &STI);
+
+  const GCNSubtarget *getSubtarget() const;
 
   bool isFPExtFoldable(unsigned Opcode, EVT DestVT, EVT SrcVT) const override;
 
@@ -234,11 +265,11 @@ public:
 
   void passSpecialInputs(
     CallLoweringInfo &CLI,
+    CCState &CCInfo,
     const SIMachineFunctionInfo &Info,
     SmallVectorImpl<std::pair<unsigned, SDValue>> &RegsToPass,
     SmallVectorImpl<SDValue> &MemOpChains,
-    SDValue Chain,
-    SDValue StackPtr) const;
+    SDValue Chain) const;
 
   SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
                           CallingConv::ID CallConv, bool isVarArg,
@@ -309,6 +340,10 @@ public:
 
   bool isSDNodeSourceOfDivergence(const SDNode *N,
     FunctionLoweringInfo *FLI, DivergenceAnalysis *DA) const override;
+
+  bool isCanonicalized(SelectionDAG &DAG, SDValue Op,
+                       unsigned MaxDepth = 5) const;
+  bool denormalsEnabledForType(EVT VT) const;
 };
 
 } // End namespace llvm

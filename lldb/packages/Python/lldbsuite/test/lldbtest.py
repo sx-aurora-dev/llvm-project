@@ -184,9 +184,10 @@ def CMD_MSG(str):
     return "Command '%s' returns successfully" % str
 
 
-def COMPLETION_MSG(str_before, str_after):
+def COMPLETION_MSG(str_before, str_after, completions):
     '''A generic message generator for the completion mechanism.'''
-    return "'%s' successfully completes to '%s'" % (str_before, str_after)
+    return ("'%s' successfully completes to '%s', but completions were:\n%s"
+           % (str_before, str_after, "\n".join(completions)))
 
 
 def EXP_MSG(str, actual, exe):
@@ -702,8 +703,8 @@ class Base(unittest2.TestCase):
         """Return the full path to the current test."""
         return os.path.join(os.environ["LLDB_BUILD"], self.mydir,
                             self.getBuildDirBasename())
-    
-     
+
+
     def makeBuildDir(self):
         """Create the test-specific working directory, deleting any previous
         contents."""
@@ -712,11 +713,11 @@ class Base(unittest2.TestCase):
         if os.path.isdir(bdir):
             shutil.rmtree(bdir)
         lldbutil.mkdir_p(bdir)
- 
+
     def getBuildArtifact(self, name="a.out"):
         """Return absolute path to an artifact in the test's build directory."""
         return os.path.join(self.getBuildDir(), name)
- 
+
     def getSourcePath(self, name):
         """Return absolute path to a file in the test's source directory."""
         return os.path.join(self.getSourceDir(), name)
@@ -738,6 +739,11 @@ class Base(unittest2.TestCase):
             self.lldbMiExec = os.environ["LLDBMI_EXEC"]
         else:
             self.lldbMiExec = None
+
+        if "LLDBVSCODE_EXEC" in os.environ:
+            self.lldbVSCodeExec = os.environ["LLDBVSCODE_EXEC"]
+        else:
+            self.lldbVSCodeExec = None
 
         # If we spawn an lldb process for test (via pexpect), do not load the
         # init file unless told otherwise.
@@ -1844,7 +1850,7 @@ class TestBase(Base):
         temp = os.path.join(self.getSourceDir(), template)
         with open(temp, 'r') as f:
             content = f.read()
-            
+
         public_api_dir = os.path.join(
             os.environ["LLDB_SRC"], "include", "lldb", "API")
 
@@ -1874,18 +1880,15 @@ class TestBase(Base):
         # decorators.
         Base.setUp(self)
 
-        if self.child:
-            # Set the clang modules cache path.
-            assert(self.getDebugInfo() == 'default')
-            mod_cache = os.path.join(self.getBuildDir(), "module-cache")
-            self.runCmd('settings set symbols.clang-modules-cache-path "%s"'
-                        % mod_cache)
+        # Set the clang modules cache path.
+        mod_cache = os.path.join(self.getBuildDir(), "module-cache-lldb")
+        self.runCmd('settings set symbols.clang-modules-cache-path "%s"'
+                    % mod_cache)
 
-            # Disable Spotlight lookup. The testsuite creates
-            # different binaries with the same UUID, because they only
-            # differ in the debug info, which is not being hashed.
-            self.runCmd('settings set symbols.enable-external-lookup false')
-
+        # Disable Spotlight lookup. The testsuite creates
+        # different binaries with the same UUID, because they only
+        # differ in the debug info, which is not being hashed.
+        self.runCmd('settings set symbols.enable-external-lookup false')
 
         if "LLDB_MAX_LAUNCH_COUNT" in os.environ:
             self.maxLaunchCount = int(os.environ["LLDB_MAX_LAUNCH_COUNT"])
@@ -2073,8 +2076,17 @@ class TestBase(Base):
                     print("Command '" + cmd + "' failed!", file=sbuf)
 
         if check:
+            output = ""
+            if self.res.GetOutput():
+              output += "\nCommand output:\n" + self.res.GetOutput()
+            if self.res.GetError():
+              output += "\nError output:\n" + self.res.GetError()
+            if msg:
+              msg += output
+            if cmd:
+              cmd += output
             self.assertTrue(self.res.Succeeded(),
-                            msg if msg else CMD_MSG(cmd))
+                            msg if (msg) else CMD_MSG(cmd))
 
     def match(
             self,

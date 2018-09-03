@@ -47,9 +47,8 @@ void RTLsTy::LoadRTLs() {
 #endif // OMPTARGET_DEBUG
 
   // Parse environment variable OMP_TARGET_OFFLOAD (if set)
-  char *envStr = getenv("OMP_TARGET_OFFLOAD");
-  if (envStr && !strcmp(envStr, "DISABLED")) {
-    DP("Target offloading disabled by environment\n");
+  TargetOffloadPolicy = (kmp_target_offload_kind_t) __kmpc_get_target_offload();
+  if (TargetOffloadPolicy == tgt_disabled) {
     return;
   }
 
@@ -217,7 +216,6 @@ void RTLsTy::RegisterLib(__tgt_bin_desc *desc) {
       if (!R.isUsed) {
         // Initialize the device information for the RTL we are about to use.
         DeviceTy device(&R);
-
         size_t start = Devices.size();
         Devices.resize(start + R.NumberOfDevices, device);
         for (int32_t device_id = 0; device_id < R.NumberOfDevices;

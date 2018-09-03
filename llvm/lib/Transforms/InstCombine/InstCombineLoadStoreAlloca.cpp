@@ -197,30 +197,32 @@ static Instruction *simplifyAllocaArraySize(InstCombiner &IC, AllocaInst &AI) {
 
   // Convert: alloca Ty, C - where C is a constant != 1 into: alloca [C x Ty], 1
   if (const ConstantInt *C = dyn_cast<ConstantInt>(AI.getArraySize())) {
-    Type *NewTy = ArrayType::get(AI.getAllocatedType(), C->getZExtValue());
-    AllocaInst *New = IC.Builder.CreateAlloca(NewTy, nullptr, AI.getName());
-    New->setAlignment(AI.getAlignment());
+    if (C->getValue().getActiveBits() <= 64) {
+      Type *NewTy = ArrayType::get(AI.getAllocatedType(), C->getZExtValue());
+      AllocaInst *New = IC.Builder.CreateAlloca(NewTy, nullptr, AI.getName());
+      New->setAlignment(AI.getAlignment());
 
-    // Scan to the end of the allocation instructions, to skip over a block of
-    // allocas if possible...also skip interleaved debug info
-    //
-    BasicBlock::iterator It(New);
-    while (isa<AllocaInst>(*It) || isa<DbgInfoIntrinsic>(*It))
-      ++It;
+      // Scan to the end of the allocation instructions, to skip over a block of
+      // allocas if possible...also skip interleaved debug info
+      //
+      BasicBlock::iterator It(New);
+      while (isa<AllocaInst>(*It) || isa<DbgInfoIntrinsic>(*It))
+        ++It;
 
-    // Now that I is pointing to the first non-allocation-inst in the block,
-    // insert our getelementptr instruction...
-    //
-    Type *IdxTy = IC.getDataLayout().getIntPtrType(AI.getType());
-    Value *NullIdx = Constant::getNullValue(IdxTy);
-    Value *Idx[2] = {NullIdx, NullIdx};
-    Instruction *GEP =
-        GetElementPtrInst::CreateInBounds(New, Idx, New->getName() + ".sub");
-    IC.InsertNewInstBefore(GEP, *It);
+      // Now that I is pointing to the first non-allocation-inst in the block,
+      // insert our getelementptr instruction...
+      //
+      Type *IdxTy = IC.getDataLayout().getIntPtrType(AI.getType());
+      Value *NullIdx = Constant::getNullValue(IdxTy);
+      Value *Idx[2] = {NullIdx, NullIdx};
+      Instruction *GEP =
+          GetElementPtrInst::CreateInBounds(New, Idx, New->getName() + ".sub");
+      IC.InsertNewInstBefore(GEP, *It);
 
-    // Now make everything use the getelementptr instead of the original
-    // allocation.
-    return IC.replaceInstUsesWith(AI, GEP);
+      // Now make everything use the getelementptr instead of the original
+      // allocation.
+      return IC.replaceInstUsesWith(AI, GEP);
+    }
   }
 
   if (isa<UndefValue>(AI.getArraySize()))
@@ -518,7 +520,7 @@ static LoadInst *combineLoadToNewType(InstCombiner &IC, LoadInst &LI, Type *NewT
 static StoreInst *combineStoreToNewValue(InstCombiner &IC, StoreInst &SI, Value *V) {
   assert((!SI.isAtomic() || isSupportedAtomicType(V->getType())) &&
          "can't fold an atomic store of requested type");
-  
+
   Value *Ptr = SI.getPointerOperand();
   unsigned AS = SI.getPointerAddressSpace();
   SmallVector<std::pair<unsigned, MDNode *>, 8> MD;
@@ -964,23 +966,26 @@ static Instruction *replaceGEPIdxWithZero(InstCombiner &IC, Value *Ptr,
 }
 
 static bool canSimplifyNullStoreOrGEP(StoreInst &SI) {
-  if (SI.getPointerAddressSpace() != 0)
+  if (NullPointerIsDefined(SI.getFunction(), SI.getPointerAddressSpace()))
     return false;
 
   auto *Ptr = SI.getPointerOperand();
   if (GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(Ptr))
     Ptr = GEPI->getOperand(0);
-  return isa<ConstantPointerNull>(Ptr);
+  return (isa<ConstantPointerNull>(Ptr) &&
+          !NullPointerIsDefined(SI.getFunction(), SI.getPointerAddressSpace()));
 }
 
 static bool canSimplifyNullLoadOrGEP(LoadInst &LI, Value *Op) {
   if (GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(Op)) {
     const Value *GEPI0 = GEPI->getOperand(0);
-    if (isa<ConstantPointerNull>(GEPI0) && GEPI->getPointerAddressSpace() == 0)
+    if (isa<ConstantPointerNull>(GEPI0) &&
+        !NullPointerIsDefined(LI.getFunction(), GEPI->getPointerAddressSpace()))
       return true;
   }
   if (isa<UndefValue>(Op) ||
-      (isa<ConstantPointerNull>(Op) && LI.getPointerAddressSpace() == 0))
+      (isa<ConstantPointerNull>(Op) &&
+       !NullPointerIsDefined(LI.getFunction(), LI.getPointerAddressSpace())))
     return true;
   return false;
 }
@@ -1021,7 +1026,7 @@ Instruction *InstCombiner::visitLoadInst(LoadInst &LI) {
   if (Value *AvailableVal = FindAvailableLoadedValue(
           &LI, LI.getParent(), BBI, DefMaxInstsToScan, AA, &IsLoadCSE)) {
     if (IsLoadCSE)
-      combineMetadataForCSE(cast<LoadInst>(AvailableVal), &LI);
+      combineMetadataForCSE(cast<LoadInst>(AvailableVal), &LI, false);
 
     return replaceInstUsesWith(
         LI, Builder.CreateBitOrPointerCast(AvailableVal, LI.getType(),
@@ -1076,14 +1081,16 @@ Instruction *InstCombiner::visitLoadInst(LoadInst &LI) {
 
       // load (select (cond, null, P)) -> load P
       if (isa<ConstantPointerNull>(SI->getOperand(1)) &&
-          LI.getPointerAddressSpace() == 0) {
+          !NullPointerIsDefined(SI->getFunction(),
+                                LI.getPointerAddressSpace())) {
         LI.setOperand(0, SI->getOperand(2));
         return &LI;
       }
 
       // load (select (cond, P, null)) -> load P
       if (isa<ConstantPointerNull>(SI->getOperand(2)) &&
-          LI.getPointerAddressSpace() == 0) {
+          !NullPointerIsDefined(SI->getFunction(),
+                                LI.getPointerAddressSpace())) {
         LI.setOperand(0, SI->getOperand(1));
         return &LI;
       }

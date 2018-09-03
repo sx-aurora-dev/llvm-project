@@ -24,7 +24,7 @@
 using namespace llvm;
 using namespace LegalizeActions;
 
-AMDGPULegalizerInfo::AMDGPULegalizerInfo(const SISubtarget &ST,
+AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST,
                                          const GCNTargetMachine &TM) {
   using namespace TargetOpcode;
 
@@ -172,10 +172,7 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const SISubtarget &ST,
   }
 
   // FIXME: Doesn't handle extract of illegal sizes.
-  getActionDefinitionsBuilder(G_EXTRACT)
-    .unsupportedIf([=](const LegalityQuery &Query) {
-        return Query.Types[0].getSizeInBits() >= Query.Types[1].getSizeInBits();
-      })
+  getActionDefinitionsBuilder({G_EXTRACT, G_INSERT})
     .legalIf([=](const LegalityQuery &Query) {
         const LLT &Ty0 = Query.Types[0];
         const LLT &Ty1 = Query.Types[1];

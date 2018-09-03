@@ -15,8 +15,7 @@ from lldbsuite.test import lldbutil
 class StdTupleDataFormatterTestCase(TestBase):
     mydir = TestBase.compute_mydir(__file__)
 
-    @skipIfDarwin  # doesn't compile on Darwin
-    @skipUnlessLibstdcxxAvailable
+    @add_test_categories(["libstdcxx"])
     def test_with_run_command(self):
         self.build()
         self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
@@ -41,7 +40,7 @@ class StdTupleDataFormatterTestCase(TestBase):
 
         self.assertEqual('"foobar"', frame.GetValueForVariablePath("ts[0]").GetSummary())
         self.assertFalse(frame.GetValueForVariablePath("ts[1]").IsValid())
-        
+
         self.assertEqual(1, frame.GetValueForVariablePath("tt[0]").GetValueAsUnsigned())
         self.assertEqual('"baz"', frame.GetValueForVariablePath("tt[1]").GetSummary())
         self.assertEqual(2, frame.GetValueForVariablePath("tt[2]").GetValueAsUnsigned())

@@ -28,6 +28,7 @@
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Analysis/PhiValues.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/CallSite.h"
@@ -85,15 +86,16 @@ const unsigned MaxNumPhiBBsValueReachabilityCheck = 20;
 // depth otherwise the algorithm in aliasGEP will assert.
 static const unsigned MaxLookupSearchDepth = 6;
 
-bool BasicAAResult::invalidate(Function &F, const PreservedAnalyses &PA,
+bool BasicAAResult::invalidate(Function &Fn, const PreservedAnalyses &PA,
                                FunctionAnalysisManager::Invalidator &Inv) {
   // We don't care if this analysis itself is preserved, it has no state. But
   // we need to check that the analyses it depends on have been. Note that we
   // may be created without handles to some analyses and in that case don't
   // depend on them.
-  if (Inv.invalidate<AssumptionAnalysis>(F, PA) ||
-      (DT && Inv.invalidate<DominatorTreeAnalysis>(F, PA)) ||
-      (LI && Inv.invalidate<LoopAnalysis>(F, PA)))
+  if (Inv.invalidate<AssumptionAnalysis>(Fn, PA) ||
+      (DT && Inv.invalidate<DominatorTreeAnalysis>(Fn, PA)) ||
+      (LI && Inv.invalidate<LoopAnalysis>(Fn, PA)) ||
+      (PV && Inv.invalidate<PhiValuesAnalysis>(Fn, PA)))
     return true;
 
   // Otherwise this analysis result remains valid.
@@ -150,10 +152,12 @@ static bool isEscapeSource(const Value *V) {
 /// Returns the size of the object specified by V or UnknownSize if unknown.
 static uint64_t getObjectSize(const Value *V, const DataLayout &DL,
                               const TargetLibraryInfo &TLI,
+                              bool NullIsValidLoc,
                               bool RoundToAlign = false) {
   uint64_t Size;
   ObjectSizeOpts Opts;
   Opts.RoundToAlign = RoundToAlign;
+  Opts.NullIsUnknownSize = NullIsValidLoc;
   if (getObjectSize(V, Size, DL, &TLI, Opts))
     return Size;
   return MemoryLocation::UnknownSize;
@@ -163,7 +167,8 @@ static uint64_t getObjectSize(const Value *V, const DataLayout &DL,
 /// Size.
 static bool isObjectSmallerThan(const Value *V, uint64_t Size,
                                 const DataLayout &DL,
-                                const TargetLibraryInfo &TLI) {
+                                const TargetLibraryInfo &TLI,
+                                bool NullIsValidLoc) {
   // Note that the meanings of the "object" are slightly different in the
   // following contexts:
   //    c1: llvm::getObjectSize()
@@ -195,15 +200,16 @@ static bool isObjectSmallerThan(const Value *V, uint64_t Size,
 
   // This function needs to use the aligned object size because we allow
   // reads a bit past the end given sufficient alignment.
-  uint64_t ObjectSize = getObjectSize(V, DL, TLI, /*RoundToAlign*/ true);
+  uint64_t ObjectSize = getObjectSize(V, DL, TLI, NullIsValidLoc,
+                                      /*RoundToAlign*/ true);
 
   return ObjectSize != MemoryLocation::UnknownSize && ObjectSize < Size;
 }
 
 /// Returns true if we can prove that the object specified by V has size Size.
 static bool isObjectSize(const Value *V, uint64_t Size, const DataLayout &DL,
-                         const TargetLibraryInfo &TLI) {
-  uint64_t ObjectSize = getObjectSize(V, DL, TLI);
+                         const TargetLibraryInfo &TLI, bool NullIsValidLoc) {
+  uint64_t ObjectSize = getObjectSize(V, DL, TLI, NullIsValidLoc);
   return ObjectSize != MemoryLocation::UnknownSize && ObjectSize == Size;
 }
 
@@ -795,14 +801,15 @@ ModRefInfo BasicAAResult::getModRefInfo(ImmutableCallSite CS,
 
   const Value *Object = GetUnderlyingObject(Loc.Ptr, DL);
 
-  // If this is a tail call and Loc.Ptr points to a stack location, we know that
-  // the tail call cannot access or modify the local stack.
-  // We cannot exclude byval arguments here; these belong to the caller of
-  // the current function not to the current function, and a tail callee
-  // may reference them.
+  // Calls marked 'tail' cannot read or write allocas from the current frame
+  // because the current frame might be destroyed by the time they run. However,
+  // a tail call may use an alloca with byval. Calling with byval copies the
+  // contents of the alloca into argument registers or stack slots, so there is
+  // no lifetime issue.
   if (isa<AllocaInst>(Object))
     if (const CallInst *CI = dyn_cast<CallInst>(CS.getInstruction()))
-      if (CI->isTailCall())
+      if (CI->isTailCall() &&
+          !CI->getAttributes().hasAttrSomewhere(Attribute::ByVal))
         return ModRefInfo::NoModRef;
 
   // If the pointer is to a locally allocated object that does not escape,
@@ -1523,33 +1530,69 @@ AliasResult BasicAAResult::aliasPHI(const PHINode *PN, LocationSize PNSize,
       return Alias;
     }
 
-  SmallPtrSet<Value *, 4> UniqueSrc;
   SmallVector<Value *, 4> V1Srcs;
   bool isRecursive = false;
-  for (Value *PV1 : PN->incoming_values()) {
-    if (isa<PHINode>(PV1))
-      // If any of the source itself is a PHI, return MayAlias conservatively
-      // to avoid compile time explosion. The worst possible case is if both
-      // sides are PHI nodes. In which case, this is O(m x n) time where 'm'
-      // and 'n' are the number of PHI sources.
+  if (PV)  {
+    // If we have PhiValues then use it to get the underlying phi values.
+    const PhiValues::ValueSet &PhiValueSet = PV->getValuesForPhi(PN);
+    // If we have more phi values than the search depth then return MayAlias
+    // conservatively to avoid compile time explosion. The worst possible case
+    // is if both sides are PHI nodes. In which case, this is O(m x n) time
+    // where 'm' and 'n' are the number of PHI sources.
+    if (PhiValueSet.size() > MaxLookupSearchDepth)
       return MayAlias;
-
-    if (EnableRecPhiAnalysis)
-      if (GEPOperator *PV1GEP = dyn_cast<GEPOperator>(PV1)) {
-        // Check whether the incoming value is a GEP that advances the pointer
-        // result of this PHI node (e.g. in a loop). If this is the case, we
-        // would recurse and always get a MayAlias. Handle this case specially
-        // below.
-        if (PV1GEP->getPointerOperand() == PN && PV1GEP->getNumIndices() == 1 &&
-            isa<ConstantInt>(PV1GEP->idx_begin())) {
-          isRecursive = true;
-          continue;
+    // Add the values to V1Srcs
+    for (Value *PV1 : PhiValueSet) {
+      if (EnableRecPhiAnalysis) {
+        if (GEPOperator *PV1GEP = dyn_cast<GEPOperator>(PV1)) {
+          // Check whether the incoming value is a GEP that advances the pointer
+          // result of this PHI node (e.g. in a loop). If this is the case, we
+          // would recurse and always get a MayAlias. Handle this case specially
+          // below.
+          if (PV1GEP->getPointerOperand() == PN && PV1GEP->getNumIndices() == 1 &&
+              isa<ConstantInt>(PV1GEP->idx_begin())) {
+            isRecursive = true;
+            continue;
+          }
         }
       }
-
-    if (UniqueSrc.insert(PV1).second)
       V1Srcs.push_back(PV1);
+    }
+  } else {
+    // If we don't have PhiInfo then just look at the operands of the phi itself
+    // FIXME: Remove this once we can guarantee that we have PhiInfo always
+    SmallPtrSet<Value *, 4> UniqueSrc;
+    for (Value *PV1 : PN->incoming_values()) {
+      if (isa<PHINode>(PV1))
+        // If any of the source itself is a PHI, return MayAlias conservatively
+        // to avoid compile time explosion. The worst possible case is if both
+        // sides are PHI nodes. In which case, this is O(m x n) time where 'm'
+        // and 'n' are the number of PHI sources.
+        return MayAlias;
+
+      if (EnableRecPhiAnalysis)
+        if (GEPOperator *PV1GEP = dyn_cast<GEPOperator>(PV1)) {
+          // Check whether the incoming value is a GEP that advances the pointer
+          // result of this PHI node (e.g. in a loop). If this is the case, we
+          // would recurse and always get a MayAlias. Handle this case specially
+          // below.
+          if (PV1GEP->getPointerOperand() == PN && PV1GEP->getNumIndices() == 1 &&
+              isa<ConstantInt>(PV1GEP->idx_begin())) {
+            isRecursive = true;
+            continue;
+          }
+        }
+
+      if (UniqueSrc.insert(PV1).second)
+        V1Srcs.push_back(PV1);
+    }
   }
+
+  // If V1Srcs is empty then that means that the phi has no underlying non-phi
+  // value. This should only be possible in blocks unreachable from the entry
+  // block, but return MayAlias just in case.
+  if (V1Srcs.empty())
+    return MayAlias;
 
   // If this PHI node is recursive, set the size of the accessed memory to
   // unknown to represent all the possible values the GEP could advance the
@@ -1623,10 +1666,10 @@ AliasResult BasicAAResult::aliasCheck(const Value *V1, LocationSize V1Size,
   // Null values in the default address space don't point to any object, so they
   // don't alias any other pointer.
   if (const ConstantPointerNull *CPN = dyn_cast<ConstantPointerNull>(O1))
-    if (CPN->getType()->getAddressSpace() == 0)
+    if (!NullPointerIsDefined(&F, CPN->getType()->getAddressSpace()))
       return NoAlias;
   if (const ConstantPointerNull *CPN = dyn_cast<ConstantPointerNull>(O2))
-    if (CPN->getType()->getAddressSpace() == 0)
+    if (!NullPointerIsDefined(&F, CPN->getType()->getAddressSpace()))
       return NoAlias;
 
   if (O1 != O2) {
@@ -1662,10 +1705,11 @@ AliasResult BasicAAResult::aliasCheck(const Value *V1, LocationSize V1Size,
 
   // If the size of one access is larger than the entire object on the other
   // side, then we know such behavior is undefined and can assume no alias.
+  bool NullIsValidLocation = NullPointerIsDefined(&F);
   if ((V1Size != MemoryLocation::UnknownSize &&
-       isObjectSmallerThan(O2, V1Size, DL, TLI)) ||
+       isObjectSmallerThan(O2, V1Size, DL, TLI, NullIsValidLocation)) ||
       (V2Size != MemoryLocation::UnknownSize &&
-       isObjectSmallerThan(O1, V2Size, DL, TLI)))
+       isObjectSmallerThan(O1, V2Size, DL, TLI, NullIsValidLocation)))
     return NoAlias;
 
   // Check the cache before climbing up use-def chains. This also terminates
@@ -1725,8 +1769,8 @@ AliasResult BasicAAResult::aliasCheck(const Value *V1, LocationSize V1Size,
   if (O1 == O2)
     if (V1Size != MemoryLocation::UnknownSize &&
         V2Size != MemoryLocation::UnknownSize &&
-        (isObjectSize(O1, V1Size, DL, TLI) ||
-         isObjectSize(O2, V2Size, DL, TLI)))
+        (isObjectSize(O1, V1Size, DL, TLI, NullIsValidLocation) ||
+         isObjectSize(O2, V2Size, DL, TLI, NullIsValidLocation)))
       return AliasCache[Locs] = PartialAlias;
 
   // Recurse back into the best AA results we have, potentially with refined
@@ -1870,10 +1914,12 @@ AnalysisKey BasicAA::Key;
 
 BasicAAResult BasicAA::run(Function &F, FunctionAnalysisManager &AM) {
   return BasicAAResult(F.getParent()->getDataLayout(),
+                       F,
                        AM.getResult<TargetLibraryAnalysis>(F),
                        AM.getResult<AssumptionAnalysis>(F),
                        &AM.getResult<DominatorTreeAnalysis>(F),
-                       AM.getCachedResult<LoopAnalysis>(F));
+                       AM.getCachedResult<LoopAnalysis>(F),
+                       AM.getCachedResult<PhiValuesAnalysis>(F));
 }
 
 BasicAAWrapperPass::BasicAAWrapperPass() : FunctionPass(ID) {
@@ -1885,12 +1931,12 @@ char BasicAAWrapperPass::ID = 0;
 void BasicAAWrapperPass::anchor() {}
 
 INITIALIZE_PASS_BEGIN(BasicAAWrapperPass, "basicaa",
-                      "Basic Alias Analysis (stateless AA impl)", true, true)
+                      "Basic Alias Analysis (stateless AA impl)", false, true)
 INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_END(BasicAAWrapperPass, "basicaa",
-                    "Basic Alias Analysis (stateless AA impl)", true, true)
+                    "Basic Alias Analysis (stateless AA impl)", false, true)
 
 FunctionPass *llvm::createBasicAAWrapperPass() {
   return new BasicAAWrapperPass();
@@ -1901,10 +1947,12 @@ bool BasicAAWrapperPass::runOnFunction(Function &F) {
   auto &TLIWP = getAnalysis<TargetLibraryInfoWrapperPass>();
   auto &DTWP = getAnalysis<DominatorTreeWrapperPass>();
   auto *LIWP = getAnalysisIfAvailable<LoopInfoWrapperPass>();
+  auto *PVWP = getAnalysisIfAvailable<PhiValuesWrapperPass>();
 
-  Result.reset(new BasicAAResult(F.getParent()->getDataLayout(), TLIWP.getTLI(),
+  Result.reset(new BasicAAResult(F.getParent()->getDataLayout(), F, TLIWP.getTLI(),
                                  ACT.getAssumptionCache(F), &DTWP.getDomTree(),
-                                 LIWP ? &LIWP->getLoopInfo() : nullptr));
+                                 LIWP ? &LIWP->getLoopInfo() : nullptr,
+                                 PVWP ? &PVWP->getResult() : nullptr));
 
   return false;
 }
@@ -1914,11 +1962,13 @@ void BasicAAWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<AssumptionCacheTracker>();
   AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<TargetLibraryInfoWrapperPass>();
+  AU.addUsedIfAvailable<PhiValuesWrapperPass>();
 }
 
 BasicAAResult llvm::createLegacyPMBasicAAResult(Pass &P, Function &F) {
   return BasicAAResult(
       F.getParent()->getDataLayout(),
+      F,
       P.getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(),
       P.getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F));
 }

@@ -64,7 +64,7 @@ bool Sema::isLibstdcxxEagerExceptionSpecHack(const Declarator &D) {
   }
 
   // Only apply this hack within a system header.
-  if (!Context.getSourceManager().isInSystemHeader(D.getLocStart()))
+  if (!Context.getSourceManager().isInSystemHeader(D.getBeginLoc()))
     return false;
 
   return llvm::StringSwitch<bool>(RD->getIdentifier()->getName())
@@ -385,7 +385,7 @@ bool Sema::CheckEquivalentExceptionSpec(FunctionDecl *Old, FunctionDecl *New) {
         OnFirstException = false;
       else
         OS << ", ";
-      
+
       OS << E.getAsString(getPrintingPolicy());
     }
     OS << ")";
@@ -530,10 +530,16 @@ static bool CheckEquivalentExceptionSpecImpl(
     }
   }
 
-  // FIXME: We treat dependent noexcept specifications as compatible even if
-  // their expressions are not equivalent.
-  if (OldEST == EST_DependentNoexcept && NewEST == EST_DependentNoexcept)
-    return false;
+  // C++14 [except.spec]p3:
+  //   Two exception-specifications are compatible if [...] both have the form
+  //   noexcept(constant-expression) and the constant-expressions are equivalent
+  if (OldEST == EST_DependentNoexcept && NewEST == EST_DependentNoexcept) {
+    llvm::FoldingSetNodeID OldFSN, NewFSN;
+    Old->getNoexceptExpr()->Profile(OldFSN, S.Context, true);
+    New->getNoexceptExpr()->Profile(NewFSN, S.Context, true);
+    if (OldFSN == NewFSN)
+      return false;
+  }
 
   // Dynamic exception specifications with the same set of adjusted types
   // are compatible.
@@ -986,7 +992,7 @@ static CanThrowResult canCalleeThrow(Sema &S, const Expr *E, const Decl *D) {
   if (!FT)
     return CT_Can;
 
-  FT = S.ResolveExceptionSpec(E->getLocStart(), FT);
+  FT = S.ResolveExceptionSpec(E->getBeginLoc(), FT);
   if (!FT)
     return CT_Can;
 

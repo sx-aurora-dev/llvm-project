@@ -6,12 +6,15 @@
 
 add %eax, %eax
 
-# FULLREPORT:      Iterations:        100
-# FULLREPORT-NEXT: Instructions:      100
-# FULLREPORT-NEXT: Total Cycles:      103
-# FULLREPORT-NEXT: Dispatch Width:    2
-# FULLREPORT-NEXT: IPC:               0.97
-# FULLREPORT-NEXT: Block RThroughput: 0.5
+# ALL:             Iterations:        100
+# ALL-NEXT:        Instructions:      100
+# ALL-NEXT:        Total Cycles:      103
+# ALL-NEXT:        Total uOps:        100
+
+# ALL:             Dispatch Width:    2
+# ALL-NEXT:        uOps Per Cycle:    0.97
+# ALL-NEXT:        IPC:               0.97
+# ALL-NEXT:        Block RThroughput: 0.5
 
 # ALL:             Instruction Info:
 # ALL-NEXT:        [1]: #uOps
@@ -19,7 +22,7 @@ add %eax, %eax
 # ALL-NEXT:        [3]: RThroughput
 # ALL-NEXT:        [4]: MayLoad
 # ALL-NEXT:        [5]: MayStore
-# ALL-NEXT:        [6]: HasSideEffects
+# ALL-NEXT:        [6]: HasSideEffects (U)
 
 # ALL:             [1]    [2]    [3]    [4]    [5]    [6]    Instructions:
 # ALL-NEXT:         1      1     0.50                        addl	%eax, %eax
@@ -44,9 +47,15 @@ add %eax, %eax
 # FULLREPORT-NEXT:  1,          100  (97.1%)
 
 # FULLREPORT:      Scheduler's queue usage:
-# FULLREPORT-NEXT: JALU01,  20/20
-# FULLREPORT-NEXT: JFPU01,  0/18
-# FULLREPORT-NEXT: JLSAGU,  0/12
+# FULLREPORT-NEXT: [1] Resource name.
+# FULLREPORT-NEXT: [2] Average number of used buffer entries.
+# FULLREPORT-NEXT: [3] Maximum number of used buffer entries.
+# FULLREPORT-NEXT: [4] Total number of buffer entries.
+
+# FULLREPORT:       [1]            [2]        [3]        [4]
+# FULLREPORT-NEXT: JALU01           15         20         20
+# FULLREPORT-NEXT: JFPU01           0          0          18
+# FULLREPORT-NEXT: JLSAGU           0          0          12
 
 # FULLREPORT:      Retire Control Unit - number of cycles where we saw N instructions retired:
 # FULLREPORT-NEXT: [# retired], [# cycles]

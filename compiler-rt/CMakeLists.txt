@@ -59,6 +59,9 @@ if (NOT COMPILER_RT_ASAN_SHADOW_SCALE STREQUAL "")
       -D${COMPILER_RT_ASAN_SHADOW_SCALE_DEFINITION})
 endif()
 
+set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS ON CACHE BOOLEAN
+    "Enable libc interceptors in HWASan (testing mode)")
+
 set(COMPILER_RT_BAREMETAL_BUILD OFF CACHE BOOLEAN
   "Build for a bare-metal target.")
 
@@ -89,12 +92,12 @@ if (COMPILER_RT_STANDALONE_BUILD)
 endif()
 
 construct_compiler_rt_default_triple()
-if ("${COMPILER_RT_DEFAULT_TARGET_ABI}" MATCHES "hf$")
+if ("${COMPILER_RT_DEFAULT_TARGET_TRIPLE}" MATCHES ".*hf$")
   if (${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "^arm")
     set(COMPILER_RT_DEFAULT_TARGET_ARCH "armhf")
   endif()
 endif()
-if ("${COMPILER_RT_DEFAULT_TARGET_ABI}" MATCHES "^android")
+if ("${COMPILER_RT_DEFAULT_TARGET_TRIPLE}" MATCHES ".*android.*")
   set(ANDROID 1)
 endif()
 pythonize_bool(ANDROID)
@@ -142,10 +145,7 @@ set(CXXABIS none default libstdc++ libc++)
 set_property(CACHE SANITIZER_CXX_ABI PROPERTY STRINGS ;${CXXABIS})
 
 if (SANITIZER_CXX_ABI STREQUAL "default")
-  if (CLANG_DEFAULT_CXX_STDLIB STREQUAL "libc++" AND (TARGET cxx OR HAVE_LIBCXX))
-    set(SANITIZER_CXX_ABI_LIBNAME "libc++")
-    set(SANITIZER_CXX_ABI_INTREE 1)
-  elseif (APPLE)
+  if (APPLE)
     set(SANITIZER_CXX_ABI_LIBNAME "libc++")
     set(SANITIZER_CXX_ABI_SYSTEM 1)
   elseif (FUCHSIA)
@@ -160,18 +160,13 @@ else()
   set(SANITIZER_CXX_ABI_SYSTEM 1)
 endif()
 
-set(COMPILER_RT_RUNTIME "default" CACHE STRING
-    "Compiler runtime to use.")
-
-if (COMPILER_RT_RUNTIME STREQUAL "default")
-  if (CLANG_DEFAULT_RTLIB STREQUAL "compiler-rt")
-    set(COMPILER_RT_RUNTIME_LIBRARY "builtins")
-  elseif (FUCHSIA)
-    set(COMPILER_RT_RUNTIME_LIBRARY "builtins")
-  endif()
-else()
-  set(COMPILER_RT_RUNTIME_LIBRARY "${COMPILER_RT_RUNTIME}")
+set(DEFAULT_COMPILER_RT_USE_BUILTINS_LIBRARY OFF)
+if (FUCHSIA)
+  set(DEFAULT_COMPILER_RT_USE_BUILTINS_LIBRARY ON)
 endif()
+
+option(COMPILER_RT_USE_BUILTINS_LIBRARY
+  "Use compiler-rt builtins instead of libgcc" ${DEFAULT_COMPILER_RT_USE_BUILTINS_LIBRARY})
 
 include(config-ix)
 
@@ -321,7 +316,7 @@ append_list_if(COMPILER_RT_HAS_WD4800_FLAG /wd4800 SANITIZER_COMMON_CFLAGS)
 # Set common link flags.
 append_list_if(COMPILER_RT_HAS_NODEFAULTLIBS_FLAG -nodefaultlibs SANITIZER_COMMON_LINK_FLAGS)
 
-if (COMPILER_RT_RUNTIME_LIBRARY STREQUAL "builtins")
+if (COMPILER_RT_USE_BUILTINS_LIBRARY)
   list(APPEND SANITIZER_COMMON_LINK_LIBS ${COMPILER_RT_BUILTINS_LIBRARY})
 else()
   if (ANDROID)
@@ -332,6 +327,14 @@ else()
 endif()
 
 append_list_if(COMPILER_RT_HAS_LIBC c SANITIZER_COMMON_LINK_LIBS)
+
+if(ANDROID)
+# Put the Sanitizer shared libraries in the global group. For more details, see
+# android-changes-for-ndk-developers.md#changes-to-library-search-order
+  if (COMPILER_RT_HAS_Z_GLOBAL)
+    list(APPEND SANITIZER_COMMON_LINK_FLAGS -Wl,-z,global)
+  endif()
+endif()
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Fuchsia")
   list(APPEND SANITIZER_COMMON_LINK_FLAGS -Wl,-z,defs,-z,now,-z,relro)
@@ -353,6 +356,8 @@ if (SANITIZER_CXX_ABI_LIBNAME STREQUAL "libc++")
   else()
     append_list_if(COMPILER_RT_HAS_LIBCXX c++ SANITIZER_CXX_ABI_LIBRARY)
   endif()
+elseif (SANITIZER_CXX_ABI_LIBNAME STREQUAL "libcxxabi")
+  list(APPEND SANITIZER_CXX_ABI_LIBRARY "c++abi")
 elseif (SANITIZER_CXX_ABI_LIBNAME STREQUAL "libstdc++")
   append_list_if(COMPILER_RT_HAS_LIBSTDCXX stdc++ SANITIZER_CXX_ABI_LIBRARY)
 endif()

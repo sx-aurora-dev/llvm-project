@@ -39,13 +39,13 @@ namespace llvm {
 class APInt;
 class MachineRegisterInfo;
 class RegScavenger;
-class SISubtarget;
+class GCNSubtarget;
 class TargetRegisterClass;
 
 class SIInstrInfo final : public AMDGPUGenInstrInfo {
 private:
   const SIRegisterInfo RI;
-  const SISubtarget &ST;
+  const GCNSubtarget &ST;
 
   // The inverse predicate should have the negative value.
   enum BranchPredicate {
@@ -101,6 +101,8 @@ private:
                             MachineInstr &Inst) const;
   void splitScalar64BitBFE(SetVectorType &Worklist,
                            MachineInstr &Inst) const;
+  void splitScalarBuffer(SetVectorType &Worklist,
+                         MachineInstr &Inst) const;
   void movePackToVALU(SetVectorType &Worklist,
                       MachineRegisterInfo &MRI,
                       MachineInstr &Inst) const;
@@ -147,7 +149,7 @@ public:
     MO_REL32_HI = 5
   };
 
-  explicit SIInstrInfo(const SISubtarget &ST);
+  explicit SIInstrInfo(const GCNSubtarget &ST);
 
   const SIRegisterInfo &getRegisterInfo() const {
     return RI;
@@ -276,7 +278,7 @@ public:
                           unsigned TrueReg, unsigned FalseReg) const;
 
   unsigned getAddressSpaceForPseudoSourceKind(
-             PseudoSourceValue::PSVKind Kind) const override;
+             unsigned Kind) const override;
 
   bool
   areMemAccessesTriviallyDisjoint(MachineInstr &MIa, MachineInstr &MIb,
@@ -597,6 +599,9 @@ public:
     return !RI.isSGPRReg(MRI, Dest);
   }
 
+  /// Whether we must prevent this instruction from executing with EXEC = 0.
+  bool hasUnwantedEffectsWhenEXECEmpty(const MachineInstr &MI) const;
+
   bool isInlineConstant(const APInt &Imm) const;
 
   bool isInlineConstant(const MachineOperand &MO, uint8_t OperandType) const;
@@ -685,6 +690,12 @@ public:
   bool hasModifiersSet(const MachineInstr &MI,
                        unsigned OpName) const;
   bool hasAnyModifiersSet(const MachineInstr &MI) const;
+
+  bool canShrink(const MachineInstr &MI,
+                 const MachineRegisterInfo &MRI) const;
+
+  MachineInstr *buildShrunkInst(MachineInstr &MI,
+                                unsigned NewOpcode) const;
 
   bool verifyInstruction(const MachineInstr &MI,
                          StringRef &ErrInfo) const override;

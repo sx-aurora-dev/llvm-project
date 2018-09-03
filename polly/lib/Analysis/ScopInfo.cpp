@@ -1314,12 +1314,9 @@ void ScopStmt::realignParams() {
 /// Add @p BSet to set @p BoundedParts if @p BSet is bounded.
 static isl::set collectBoundedParts(isl::set S) {
   isl::set BoundedParts = isl::set::empty(S.get_space());
-  S.foreach_basic_set([&BoundedParts](isl::basic_set BSet) -> isl::stat {
-    if (BSet.is_bounded()) {
+  for (isl::basic_set BSet : S.get_basic_set_list())
+    if (BSet.is_bounded())
       BoundedParts = BoundedParts.unite(isl::set(BSet));
-    }
-    return isl::stat::ok;
-  });
   return BoundedParts;
 }
 
@@ -2286,8 +2283,11 @@ void Scop::simplifyContexts() {
 }
 
 /// Add the minimal/maximal access in @p Set to @p User.
-static isl::stat
-buildMinMaxAccess(isl::set Set, Scop::MinMaxVectorTy &MinMaxAccesses, Scop &S) {
+///
+/// @return True if more accesses should be added, false if we reached the
+///         maximal number of run-time checks to be generated.
+static bool buildMinMaxAccess(isl::set Set,
+                              Scop::MinMaxVectorTy &MinMaxAccesses, Scop &S) {
   isl::pw_multi_aff MinPMA, MaxPMA;
   isl::pw_aff LastDimAff;
   isl::aff OneAff;
@@ -2320,7 +2320,7 @@ buildMinMaxAccess(isl::set Set, Scop::MinMaxVectorTy &MinMaxAccesses, Scop &S) {
         InvolvedParams++;
 
     if (InvolvedParams > RunTimeChecksMaxParameters)
-      return isl::stat::error;
+      return false;
   }
 
   MinPMA = Set.lexmin_pw_multi_aff();
@@ -2344,11 +2344,11 @@ buildMinMaxAccess(isl::set Set, Scop::MinMaxVectorTy &MinMaxAccesses, Scop &S) {
   MaxPMA = MaxPMA.set_pw_aff(Pos, LastDimAff);
 
   if (!MinPMA || !MaxPMA)
-    return isl::stat::error;
+    return false;
 
   MinMaxAccesses.push_back(std::make_pair(MinPMA, MaxPMA));
 
-  return isl::stat::ok;
+  return true;
 }
 
 static isl::set getAccessDomain(MemoryAccess *MA) {
@@ -2371,10 +2371,14 @@ static bool calculateMinMaxAccess(Scop::AliasGroupTy AliasGroup, Scop &S,
   Accesses = Accesses.intersect_domain(Domains);
   isl::union_set Locations = Accesses.range();
 
-  auto Lambda = [&MinMaxAccesses, &S](isl::set Set) -> isl::stat {
-    return buildMinMaxAccess(Set, MinMaxAccesses, S);
-  };
-  return Locations.foreach_set(Lambda) == isl::stat::ok;
+  bool LimitReached = false;
+  for (isl::set Set : Locations.get_set_list()) {
+    LimitReached |= !buildMinMaxAccess(Set, MinMaxAccesses, S);
+    if (LimitReached)
+      break;
+  }
+
+  return !LimitReached;
 }
 
 /// Helper to treat non-affine regions and basic blocks the same.
@@ -2611,7 +2615,7 @@ bool Scop::propagateInvalidStmtDomains(
       isl::set DomPar = Domain.params();
       recordAssumption(ERRORBLOCK, DomPar, BB->getTerminator()->getDebugLoc(),
                        AS_RESTRICTION);
-      Domain = nullptr;
+      Domain = isl::set::empty(Domain.get_space());
     }
 
     if (InvalidDomain.is_empty()) {
@@ -3519,7 +3523,10 @@ void Scop::removeStmts(std::function<bool(ScopStmt &)> ShouldDelete,
 
 void Scop::removeStmtNotInDomainMap() {
   auto ShouldDelete = [this](ScopStmt &Stmt) -> bool {
-    return !this->DomainMap.lookup(Stmt.getEntryBlock());
+    isl::set Domain = DomainMap.lookup(Stmt.getEntryBlock());
+    if (!Domain)
+      return true;
+    return Domain.is_empty();
   };
   removeStmts(ShouldDelete, false);
 }
@@ -3750,13 +3757,10 @@ void Scop::addInvariantLoads(ScopStmt &Stmt, InvariantAccessesTy &InvMAs) {
 static bool isAccessRangeTooComplex(isl::set AccessRange) {
   unsigned NumTotalDims = 0;
 
-  auto CountDimensions = [&NumTotalDims](isl::basic_set BSet) -> isl::stat {
+  for (isl::basic_set BSet : AccessRange.get_basic_set_list()) {
     NumTotalDims += BSet.dim(isl::dim::div);
     NumTotalDims += BSet.dim(isl::dim::set);
-    return isl::stat::ok;
-  };
-
-  AccessRange.foreach_basic_set(CountDimensions);
+  }
 
   if (NumTotalDims > MaxDimensionsInAccessRange)
     return true;
@@ -4539,7 +4543,7 @@ static isl::multi_union_pw_aff mapToDimension(isl::union_set USet, int N) {
 
   auto Result = isl::union_pw_multi_aff::empty(USet.get_space());
 
-  auto Lambda = [&Result, N](isl::set S) -> isl::stat {
+  for (isl::set S : USet.get_set_list()) {
     int Dim = S.dim(isl::dim::set);
     auto PMA = isl::pw_multi_aff::project_out_map(S.get_space(), isl::dim::set,
                                                   N, Dim - N);
@@ -4547,13 +4551,7 @@ static isl::multi_union_pw_aff mapToDimension(isl::union_set USet, int N) {
       PMA = PMA.drop_dims(isl::dim::out, 0, N - 1);
 
     Result = Result.add_pw_multi_aff(PMA);
-    return isl::stat::ok;
-  };
-
-  isl::stat Res = USet.foreach_set(Lambda);
-  (void)Res;
-
-  assert(Res == isl::stat::ok);
+  }
 
   return isl::multi_union_pw_aff(isl::union_pw_multi_aff(Result));
 }

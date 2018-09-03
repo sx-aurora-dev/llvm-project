@@ -56,6 +56,8 @@ bool DomTreeUpdater::isSelfDominance(
 
 bool DomTreeUpdater::applyLazyUpdate(DominatorTree::UpdateKind Kind,
                                      BasicBlock *From, BasicBlock *To) {
+  assert((DT || PDT) &&
+         "Call applyLazyUpdate() when both DT and PDT are nullptrs.");
   assert(Strategy == DomTreeUpdater::UpdateStrategy::Lazy &&
          "Call applyLazyUpdate() with Eager strategy error");
   // Analyze pending updates to determine if the update is unnecessary.
@@ -134,6 +136,13 @@ bool DomTreeUpdater::forceFlushDeletedBB() {
     return false;
 
   for (auto *BB : DeletedBBs) {
+    // After calling deleteBB or callbackDeleteBB under Lazy UpdateStrategy,
+    // validateDeleteBB() removes all instructions of DelBB and adds an
+    // UnreachableInst as its terminator. So we check whether the BasicBlock to
+    // delete only has an UnreachableInst inside.
+    assert(BB->getInstList().size() == 1 &&
+           isa<UnreachableInst>(BB->getTerminator()) &&
+           "DelBB has been modified while awaiting deletion.");
     BB->removeFromParent();
     eraseDelBBNode(BB);
     delete BB;
@@ -143,39 +152,34 @@ bool DomTreeUpdater::forceFlushDeletedBB() {
   return true;
 }
 
-bool DomTreeUpdater::recalculate(Function &F) {
-  if (!DT && !PDT)
-    return false;
+void DomTreeUpdater::recalculate(Function &F) {
 
   if (Strategy == UpdateStrategy::Eager) {
     if (DT)
       DT->recalculate(F);
     if (PDT)
       PDT->recalculate(F);
-    return true;
+    return;
   }
+
+  // There is little performance gain if we pend the recalculation under
+  // Lazy UpdateStrategy so we recalculate available trees immediately.
 
   // Prevent forceFlushDeletedBB() from erasing DomTree or PostDomTree nodes.
   IsRecalculatingDomTree = IsRecalculatingPostDomTree = true;
 
   // Because all trees are going to be up-to-date after recalculation,
   // flush awaiting deleted BasicBlocks.
-  if (forceFlushDeletedBB() || hasPendingUpdates()) {
-    if (DT)
-      DT->recalculate(F);
-    if (PDT)
-      PDT->recalculate(F);
-
-    // Resume forceFlushDeletedBB() to erase DomTree or PostDomTree nodes.
-    IsRecalculatingDomTree = IsRecalculatingPostDomTree = false;
-    PendDTUpdateIndex = PendPDTUpdateIndex = PendUpdates.size();
-    dropOutOfDateUpdates();
-    return true;
-  }
+  forceFlushDeletedBB();
+  if (DT)
+    DT->recalculate(F);
+  if (PDT)
+    PDT->recalculate(F);
 
   // Resume forceFlushDeletedBB() to erase DomTree or PostDomTree nodes.
   IsRecalculatingDomTree = IsRecalculatingPostDomTree = false;
-  return false;
+  PendDTUpdateIndex = PendPDTUpdateIndex = PendUpdates.size();
+  dropOutOfDateUpdates();
 }
 
 bool DomTreeUpdater::hasPendingUpdates() const {
@@ -260,6 +264,9 @@ void DomTreeUpdater::validateDeleteBB(BasicBlock *DelBB) {
 
 void DomTreeUpdater::applyUpdates(ArrayRef<DominatorTree::UpdateType> Updates,
                                   bool ForceRemoveDuplicates) {
+  if (!DT && !PDT)
+    return;
+
   if (Strategy == UpdateStrategy::Lazy || ForceRemoveDuplicates) {
     SmallVector<DominatorTree::UpdateType, 8> Seen;
     for (const auto U : Updates)
@@ -310,6 +317,9 @@ void DomTreeUpdater::insertEdge(BasicBlock *From, BasicBlock *To) {
          "Inserted edge does not appear in the CFG");
 #endif
 
+  if (!DT && !PDT)
+    return;
+
   // Won't affect DomTree and PostDomTree; discard update.
   if (From == To)
     return;
@@ -325,23 +335,25 @@ void DomTreeUpdater::insertEdge(BasicBlock *From, BasicBlock *To) {
   applyLazyUpdate(DominatorTree::Insert, From, To);
 }
 
-bool DomTreeUpdater::insertEdgeRelaxed(BasicBlock *From, BasicBlock *To) {
-  if (!isUpdateValid({DominatorTree::Insert, From, To}))
-    return false;
-
+void DomTreeUpdater::insertEdgeRelaxed(BasicBlock *From, BasicBlock *To) {
   if (From == To)
-    return true;
+    return;
+
+  if (!DT && !PDT)
+    return;
+
+  if (!isUpdateValid({DominatorTree::Insert, From, To}))
+    return;
 
   if (Strategy == UpdateStrategy::Eager) {
     if (DT)
       DT->insertEdge(From, To);
     if (PDT)
       PDT->insertEdge(From, To);
-    return true;
+    return;
   }
 
   applyLazyUpdate(DominatorTree::Insert, From, To);
-  return true;
 }
 
 void DomTreeUpdater::deleteEdge(BasicBlock *From, BasicBlock *To) {
@@ -351,6 +363,9 @@ void DomTreeUpdater::deleteEdge(BasicBlock *From, BasicBlock *To) {
          "Deleted edge still exists in the CFG!");
 #endif
 
+  if (!DT && !PDT)
+    return;
+
   // Won't affect DomTree and PostDomTree; discard update.
   if (From == To)
     return;
@@ -366,23 +381,25 @@ void DomTreeUpdater::deleteEdge(BasicBlock *From, BasicBlock *To) {
   applyLazyUpdate(DominatorTree::Delete, From, To);
 }
 
-bool DomTreeUpdater::deleteEdgeRelaxed(BasicBlock *From, BasicBlock *To) {
-  if (!isUpdateValid({DominatorTree::Delete, From, To}))
-    return false;
-
+void DomTreeUpdater::deleteEdgeRelaxed(BasicBlock *From, BasicBlock *To) {
   if (From == To)
-    return true;
+    return;
+
+  if (!DT && !PDT)
+    return;
+
+  if (!isUpdateValid({DominatorTree::Delete, From, To}))
+    return;
 
   if (Strategy == UpdateStrategy::Eager) {
     if (DT)
       DT->deleteEdge(From, To);
     if (PDT)
       PDT->deleteEdge(From, To);
-    return true;
+    return;
   }
 
   applyLazyUpdate(DominatorTree::Delete, From, To);
-  return true;
 }
 
 void DomTreeUpdater::dropOutOfDateUpdates() {

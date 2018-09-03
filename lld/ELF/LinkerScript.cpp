@@ -116,7 +116,8 @@ void LinkerScript::expandMemoryRegions(uint64_t Size) {
   if (Ctx->MemRegion)
     expandMemoryRegion(Ctx->MemRegion, Size, Ctx->MemRegion->Name,
                        Ctx->OutSec->Name);
-  if (Ctx->LMARegion)
+  // Only expand the LMARegion if it is different from MemRegion.
+  if (Ctx->LMARegion && Ctx->MemRegion != Ctx->LMARegion)
     expandMemoryRegion(Ctx->LMARegion, Size, Ctx->LMARegion->Name,
                        Ctx->OutSec->Name);
 }
@@ -414,7 +415,8 @@ LinkerScript::computeInputSections(const InputSectionDescription *Cmd) {
 void LinkerScript::discard(ArrayRef<InputSection *> V) {
   for (InputSection *S : V) {
     if (S == InX::ShStrTab || S == InX::Dynamic || S == InX::DynSymTab ||
-        S == InX::DynStrTab || S == InX::RelaPlt || S == InX::RelaDyn)
+        S == InX::DynStrTab || S == InX::RelaPlt || S == InX::RelaDyn ||
+        S == InX::RelrDyn)
       error("discarding " + S->Name + " section is not allowed");
 
     // You can discard .hash and .gnu.hash sections by linker scripts. Since
@@ -699,6 +701,7 @@ uint64_t LinkerScript::advance(uint64_t Size, unsigned Alignment) {
 }
 
 void LinkerScript::output(InputSection *S) {
+  assert(Ctx->OutSec == S->getParent());
   uint64_t Before = advance(0, 1);
   uint64_t Pos = advance(S->getSize(), S->Alignment);
   S->OutSecOff = Pos - S->getSize() - Ctx->OutSec->Addr;
@@ -749,6 +752,13 @@ MemoryRegion *LinkerScript::findMemoryRegion(OutputSection *Sec) {
   return nullptr;
 }
 
+static OutputSection *findFirstSection(PhdrEntry *Load) {
+  for (OutputSection *Sec : OutputSections)
+    if (Sec->PtLoad == Load)
+      return Sec;
+  return nullptr;
+}
+
 // This function assigns offsets to input sections and an output section
 // for a single sections command (e.g. ".text { *(.text); }").
 void LinkerScript::assignOffsets(OutputSection *Sec) {
@@ -774,8 +784,11 @@ void LinkerScript::assignOffsets(OutputSection *Sec) {
   // will set the LMA such that the difference between VMA and LMA for the
   // section is the same as the preceding output section in the same region
   // https://sourceware.org/binutils/docs-2.20/ld/Output-Section-LMA.html
+  // This, however, should only be done by the first "non-header" section
+  // in the segment.
   if (PhdrEntry *L = Ctx->OutSec->PtLoad)
-    L->LMAOffset = Ctx->LMAOffset;
+    if (Sec == findFirstSection(L))
+      L->LMAOffset = Ctx->LMAOffset;
 
   // We can call this method multiple times during the creation of
   // thunks and want to start over calculation each time.
@@ -804,21 +817,8 @@ void LinkerScript::assignOffsets(OutputSection *Sec) {
     // Handle a single input section description command.
     // It calculates and assigns the offsets for each section and also
     // updates the output section size.
-    auto *Cmd = cast<InputSectionDescription>(Base);
-    for (InputSection *Sec : Cmd->Sections) {
-      // We tentatively added all synthetic sections at the beginning and
-      // removed empty ones afterwards (because there is no way to know
-      // whether they were going be empty or not other than actually running
-      // linker scripts.) We need to ignore remains of empty sections.
-      if (auto *S = dyn_cast<SyntheticSection>(Sec))
-        if (S->empty())
-          continue;
-
-      if (!Sec->Live)
-        continue;
-      assert(Ctx->OutSec == Sec->getParent());
+    for (InputSection *Sec : cast<InputSectionDescription>(Base)->Sections)
       output(Sec);
-    }
   }
 }
 
@@ -950,13 +950,6 @@ void LinkerScript::adjustSectionsAfterSorting() {
       DefPhdrs = Sec->Phdrs;
     }
   }
-}
-
-static OutputSection *findFirstSection(PhdrEntry *Load) {
-  for (OutputSection *Sec : OutputSections)
-    if (Sec->PtLoad == Load)
-      return Sec;
-  return nullptr;
 }
 
 static uint64_t computeBase(uint64_t Min, bool AllocateHeaders) {

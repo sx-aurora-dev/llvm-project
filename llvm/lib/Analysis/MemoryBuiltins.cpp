@@ -150,7 +150,7 @@ getAllocationDataForFunction(const Function *Callee, AllocType AllocTy,
     return None;
 
   const AllocFnsTy *FnData = &Iter->second;
-  if ((FnData->AllocTy & AllocTy) != FnData->AllocTy)
+  if ((FnData->AllocTy & AllocTy) == 0)
     return None;
 
   // Check function prototype.
@@ -642,7 +642,14 @@ SizeOffsetType ObjectSizeOffsetVisitor::visitCallSite(CallSite CS) {
 
 SizeOffsetType
 ObjectSizeOffsetVisitor::visitConstantPointerNull(ConstantPointerNull& CPN) {
-  if (Options.NullIsUnknownSize && CPN.getType()->getAddressSpace() == 0)
+  // If null is unknown, there's nothing we can do. Additionally, non-zero
+  // address spaces can make use of null, so we don't presume to know anything
+  // about that.
+  //
+  // TODO: How should this work with address space casts? We currently just drop
+  // them on the floor, but it's unclear what we should do when a NULL from
+  // addrspace(1) gets casted to addrspace(0) (or vice-versa).
+  if (Options.NullIsUnknownSize || CPN.getType()->getAddressSpace())
     return unknown();
   return std::make_pair(Zero, Zero);
 }

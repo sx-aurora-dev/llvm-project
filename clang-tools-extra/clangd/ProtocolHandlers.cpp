@@ -33,7 +33,7 @@ struct HandlerRegisterer {
       if (fromJSON(RawParams, P)) {
         (Callbacks->*Handler)(P);
       } else {
-        log("Failed to decode " + Method + " request.");
+        elog("Failed to decode {0} request.", Method);
       }
     });
   }
@@ -75,4 +75,5 @@ void clangd::registerCallbackHandlers(JSONRPCDispatcher &Dispatcher,
   Register("workspace/didChangeConfiguration",
            &ProtocolCallbacks::onChangeConfiguration);
   Register("workspace/symbol", &ProtocolCallbacks::onWorkspaceSymbol);
+  Register("$/cancelRequest", &ProtocolCallbacks::onCancelRequest);
 }

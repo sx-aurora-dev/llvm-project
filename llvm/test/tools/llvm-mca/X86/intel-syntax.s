@@ -12,7 +12,10 @@
 # ALL:        Iterations:        100
 # ALL-NEXT:   Instructions:      400
 # ALL-NEXT:   Total Cycles:      305
-# ALL-NEXT:   Dispatch Width:    2
+# ALL-NEXT:   Total uOps:        500
+
+# ALL:        Dispatch Width:    2
+# ALL-NEXT:   uOps Per Cycle:    1.64
 # ALL-NEXT:   IPC:               1.31
 # ALL-NEXT:   Block RThroughput: 2.5
 
@@ -22,7 +25,7 @@
 # ALL-NEXT:   [3]: RThroughput
 # ALL-NEXT:   [4]: MayLoad
 # ALL-NEXT:   [5]: MayStore
-# ALL-NEXT:   [6]: HasSideEffects
+# ALL-NEXT:   [6]: HasSideEffects (U)
 
 # ALL:        [1]    [2]    [3]    [4]    [5]    [6]    Instructions:
 

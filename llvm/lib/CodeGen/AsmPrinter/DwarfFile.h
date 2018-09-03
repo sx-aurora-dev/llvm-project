@@ -24,7 +24,9 @@
 namespace llvm {
 
 class AsmPrinter;
+class DbgEntity;
 class DbgVariable;
+class DbgLabel;
 class DwarfCompileUnit;
 class DwarfUnit;
 class LexicalScope;
@@ -48,6 +50,10 @@ class DwarfFile {
   /// the string offsets table. The contribution is shared by all units.
   MCSymbol *StringOffsetsStartSym = nullptr;
 
+  /// DWARF v5: The symbol that designates the base of the range list table.
+  /// The table is shared by all units.
+  MCSymbol *RnglistsTableBaseSym = nullptr;
+
   /// The variables of a lexical scope.
   struct ScopeVars {
     /// We need to sort Args by ArgNo and check for duplicates. This could also
@@ -58,9 +64,13 @@ class DwarfFile {
   /// Collection of DbgVariables of each lexical scope.
   DenseMap<LexicalScope *, ScopeVars> ScopeVariables;
 
+  /// Collection of DbgLabels of each lexical scope.
+  using LabelList = SmallVector<DbgLabel *, 4>;
+  DenseMap<LexicalScope *, LabelList> ScopeLabels;
+
   // Collection of abstract subprogram DIEs.
   DenseMap<const MDNode *, DIE *> AbstractSPDies;
-  DenseMap<const MDNode *, std::unique_ptr<DbgVariable>> AbstractVariables;
+  DenseMap<const DINode *, std::unique_ptr<DbgEntity>> AbstractEntities;
 
   /// Maps MDNodes for type system with the corresponding DIEs. These DIEs can
   /// be shared across CUs, that is why we keep the map here instead
@@ -87,9 +97,6 @@ public:
   /// Add a unit to the list of CUs.
   void addUnit(std::unique_ptr<DwarfCompileUnit> U);
 
-  /// Emit the string table offsets header.
-  void emitStringOffsetsTableHeader(MCSection *Section);
-
   /// Emit all of the units to the section listed with the given
   /// abbreviation section.
   void emitUnits(bool UseOffsets);
@@ -114,19 +121,29 @@ public:
 
   void setStringOffsetsStartSym(MCSymbol *Sym) { StringOffsetsStartSym = Sym; }
 
+  MCSymbol *getRnglistsTableBaseSym() const { return RnglistsTableBaseSym; }
+
+  void setRnglistsTableBaseSym(MCSymbol *Sym) { RnglistsTableBaseSym = Sym; }
+
   /// \returns false if the variable was merged with a previous one.
   bool addScopeVariable(LexicalScope *LS, DbgVariable *Var);
 
+  void addScopeLabel(LexicalScope *LS, DbgLabel *Label);
+
   DenseMap<LexicalScope *, ScopeVars> &getScopeVariables() {
     return ScopeVariables;
+  }
+
+  DenseMap<LexicalScope *, LabelList> &getScopeLabels() {
+    return ScopeLabels;
   }
 
   DenseMap<const MDNode *, DIE *> &getAbstractSPDies() {
     return AbstractSPDies;
   }
 
-  DenseMap<const MDNode *, std::unique_ptr<DbgVariable>> &getAbstractVariables() {
-    return AbstractVariables;
+  DenseMap<const DINode *, std::unique_ptr<DbgEntity>> &getAbstractEntities() {
+    return AbstractEntities;
   }
 
   void insertDIE(const MDNode *TypeMD, DIE *Die) {

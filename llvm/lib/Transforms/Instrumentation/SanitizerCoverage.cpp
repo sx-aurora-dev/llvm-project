@@ -591,11 +591,16 @@ void SanitizerCoverageModule::CreateFunctionLocalArrays(
     FunctionGuardArray = CreateFunctionLocalArrayInSection(
         AllBlocks.size(), F, Int32Ty, SanCovGuardsSectionName);
     GlobalsToAppendToUsed.push_back(FunctionGuardArray);
+    GlobalsToAppendToCompilerUsed.push_back(FunctionGuardArray);
+    MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
+    FunctionGuardArray->addMetadata(LLVMContext::MD_associated, *MD);
   }
   if (Options.Inline8bitCounters) {
     Function8bitCounterArray = CreateFunctionLocalArrayInSection(
         AllBlocks.size(), F, Int8Ty, SanCovCountersSectionName);
-    GlobalsToAppendToUsed.push_back(Function8bitCounterArray);
+    GlobalsToAppendToCompilerUsed.push_back(Function8bitCounterArray);
+    MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
+    Function8bitCounterArray->addMetadata(LLVMContext::MD_associated, *MD);
   }
   if (Options.PCTable) {
     FunctionPCsArray = CreatePCArray(F, AllBlocks);

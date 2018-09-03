@@ -56,7 +56,7 @@ static cl::opt<bool> EnableSpillSGPRToVGPR(
   cl::ReallyHidden,
   cl::init(true));
 
-SIRegisterInfo::SIRegisterInfo(const SISubtarget &ST) :
+SIRegisterInfo::SIRegisterInfo(const GCNSubtarget &ST) :
   AMDGPURegisterInfo(),
   SGPRPressureSets(getNumRegPressureSets()),
   VGPRPressureSets(getNumRegPressureSets()),
@@ -106,7 +106,7 @@ SIRegisterInfo::SIRegisterInfo(const SISubtarget &ST) :
 unsigned SIRegisterInfo::reservedPrivateSegmentBufferReg(
   const MachineFunction &MF) const {
 
-  const SISubtarget &ST = MF.getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   unsigned BaseIdx = alignDown(ST.getMaxNumSGPRs(MF), 4) - 4;
   unsigned BaseReg(AMDGPU::SGPR_32RegClass.getRegister(BaseIdx));
   return getMatchingSuperReg(BaseReg, AMDGPU::sub0, &AMDGPU::SReg_128RegClass);
@@ -131,7 +131,7 @@ static unsigned findPrivateSegmentWaveByteOffsetRegIndex(unsigned RegCount) {
 
 unsigned SIRegisterInfo::reservedPrivateSegmentWaveByteOffsetReg(
   const MachineFunction &MF) const {
-  const SISubtarget &ST = MF.getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   unsigned Reg = findPrivateSegmentWaveByteOffsetRegIndex(ST.getMaxNumSGPRs(MF));
   return AMDGPU::SGPR_32RegClass.getRegister(Reg);
 }
@@ -173,7 +173,7 @@ BitVector SIRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   reserveRegisterTuples(Reserved, AMDGPU::TTMP12_TTMP13);
   reserveRegisterTuples(Reserved, AMDGPU::TTMP14_TTMP15);
 
-  const SISubtarget &ST = MF.getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
 
   unsigned MaxNumSGPRs = ST.getMaxNumSGPRs(MF);
   unsigned TotalNumSGPRs = AMDGPU::SGPR_32RegClass.getNumRegs();
@@ -253,7 +253,7 @@ bool SIRegisterInfo::requiresFrameIndexReplacementScavenging(
   // create a virtual register for it during frame index elimination, so the
   // scavenger is directly needed.
   return MF.getFrameInfo().hasStackObjects() &&
-         MF.getSubtarget<SISubtarget>().hasScalarStores() &&
+         MF.getSubtarget<GCNSubtarget>().hasScalarStores() &&
          MF.getInfo<SIMachineFunctionInfo>()->hasSpilledSGPRs();
 }
 
@@ -308,7 +308,7 @@ void SIRegisterInfo::materializeFrameBaseRegister(MachineBasicBlock *MBB,
     DL = Ins->getDebugLoc();
 
   MachineFunction *MF = MBB->getParent();
-  const SISubtarget &Subtarget = MF->getSubtarget<SISubtarget>();
+  const GCNSubtarget &Subtarget = MF->getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = Subtarget.getInstrInfo();
 
   if (Offset == 0) {
@@ -337,7 +337,7 @@ void SIRegisterInfo::resolveFrameIndex(MachineInstr &MI, unsigned BaseReg,
 
   MachineBasicBlock *MBB = MI.getParent();
   MachineFunction *MF = MBB->getParent();
-  const SISubtarget &Subtarget = MF->getSubtarget<SISubtarget>();
+  const GCNSubtarget &Subtarget = MF->getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = Subtarget.getInstrInfo();
 
 #ifndef NDEBUG
@@ -495,15 +495,16 @@ static bool buildMUBUFOffsetLoadStore(const SIInstrInfo *TII,
     return false;
 
   const MachineOperand *Reg = TII->getNamedOperand(*MI, AMDGPU::OpName::vdata);
-  MachineInstrBuilder NewMI = BuildMI(*MBB, MI, DL, TII->get(LoadStoreOp))
-    .add(*Reg)
-    .add(*TII->getNamedOperand(*MI, AMDGPU::OpName::srsrc))
-    .add(*TII->getNamedOperand(*MI, AMDGPU::OpName::soffset))
-    .addImm(Offset)
-    .addImm(0) // glc
-    .addImm(0) // slc
-    .addImm(0) // tfe
-    .setMemRefs(MI->memoperands_begin(), MI->memoperands_end());
+  MachineInstrBuilder NewMI =
+      BuildMI(*MBB, MI, DL, TII->get(LoadStoreOp))
+          .add(*Reg)
+          .add(*TII->getNamedOperand(*MI, AMDGPU::OpName::srsrc))
+          .add(*TII->getNamedOperand(*MI, AMDGPU::OpName::soffset))
+          .addImm(Offset)
+          .addImm(0) // glc
+          .addImm(0) // slc
+          .addImm(0) // tfe
+          .cloneMemRefs(*MI);
 
   const MachineOperand *VDataIn = TII->getNamedOperand(*MI,
                                                        AMDGPU::OpName::vdata_in);
@@ -524,7 +525,7 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
                                          RegScavenger *RS) const {
   MachineBasicBlock *MBB = MI->getParent();
   MachineFunction *MF = MI->getParent()->getParent();
-  const SISubtarget &ST =  MF->getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST =  MF->getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
   const MachineFrameInfo &MFI = MF->getFrameInfo();
 
@@ -532,21 +533,28 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
   const DebugLoc &DL = MI->getDebugLoc();
   bool IsStore = Desc.mayStore();
 
-  bool RanOutOfSGPRs = false;
   bool Scavenged = false;
   unsigned SOffset = ScratchOffsetReg;
 
+  const unsigned EltSize = 4;
   const TargetRegisterClass *RC = getRegClassForReg(MF->getRegInfo(), ValueReg);
-  unsigned NumSubRegs = AMDGPU::getRegBitWidth(RC->getID()) / 32;
-  unsigned Size = NumSubRegs * 4;
+  unsigned NumSubRegs = AMDGPU::getRegBitWidth(RC->getID()) / (EltSize * CHAR_BIT);
+  unsigned Size = NumSubRegs * EltSize;
   int64_t Offset = InstOffset + MFI.getObjectOffset(Index);
-  const int64_t OriginalImmOffset = Offset;
+  int64_t ScratchOffsetRegDelta = 0;
 
   unsigned Align = MFI.getObjectAlignment(Index);
   const MachinePointerInfo &BasePtrInfo = MMO->getPointerInfo();
 
-  if (!isUInt<12>(Offset + Size)) {
+  assert((Offset % EltSize) == 0 && "unexpected VGPR spill offset");
+
+  if (!isUInt<12>(Offset + Size - EltSize)) {
     SOffset = AMDGPU::NoRegister;
+
+    // We currently only support spilling VGPRs to EltSize boundaries, meaning
+    // we can simplify the adjustment of Offset here to just scale with
+    // WavefrontSize.
+    Offset *= ST.getWavefrontSize();
 
     // We don't have access to the register scavenger if this function is called
     // during  PEI::scavengeFrameVirtualRegs().
@@ -561,8 +569,8 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
       // add the offset directly to the ScratchOffset register, and then
       // subtract the offset after the spill to return ScratchOffset to it's
       // original value.
-      RanOutOfSGPRs = true;
       SOffset = ScratchOffsetReg;
+      ScratchOffsetRegDelta = Offset;
     } else {
       Scavenged = true;
     }
@@ -573,8 +581,6 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
 
     Offset = 0;
   }
-
-  const unsigned EltSize = 4;
 
   for (unsigned i = 0, e = NumSubRegs; i != e; ++i, Offset += EltSize) {
     unsigned SubReg = NumSubRegs == 1 ?
@@ -607,11 +613,11 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
       MIB.addReg(ValueReg, RegState::Implicit | SrcDstRegState);
   }
 
-  if (RanOutOfSGPRs) {
+  if (ScratchOffsetRegDelta != 0) {
     // Subtract the offset we added to the ScratchOffset register.
     BuildMI(*MBB, MI, DL, TII->get(AMDGPU::S_SUB_U32), ScratchOffsetReg)
-      .addReg(ScratchOffsetReg)
-      .addImm(OriginalImmOffset);
+        .addReg(ScratchOffsetReg)
+        .addImm(ScratchOffsetRegDelta);
   }
 }
 
@@ -647,7 +653,7 @@ bool SIRegisterInfo::spillSGPR(MachineBasicBlock::iterator MI,
     return false;
 
   MachineRegisterInfo &MRI = MF->getRegInfo();
-  const SISubtarget &ST =  MF->getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST =  MF->getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
 
   unsigned SuperReg = MI->getOperand(0).getReg();
@@ -825,7 +831,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI,
     return false;
 
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
-  const SISubtarget &ST =  MF->getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST =  MF->getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
   const DebugLoc &DL = MI->getDebugLoc();
 
@@ -985,7 +991,7 @@ void SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
   MachineBasicBlock *MBB = MI->getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
-  const SISubtarget &ST =  MF->getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST =  MF->getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
   DebugLoc DL = MI->getDebugLoc();
 
@@ -1527,7 +1533,7 @@ bool SIRegisterInfo::shouldCoalesce(MachineInstr *MI,
 unsigned SIRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
                                              MachineFunction &MF) const {
 
-  const SISubtarget &ST = MF.getSubtarget<SISubtarget>();
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
 
   unsigned Occupancy = ST.getOccupancyWithLocalMemSize(MFI->getLDSSize(),

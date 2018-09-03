@@ -116,6 +116,8 @@ typedef enum kmp_sched_t {
   kmp_sched_runtime = 37,
   kmp_sched_auto = 38,
 
+  kmp_sched_static_balanced_chunk = 45,
+
   kmp_sched_static_ordered = 65,
   kmp_sched_static_nochunk_ordered = 66,
   kmp_sched_dynamic_ordered = 67,
@@ -485,6 +487,7 @@ EXTERN void __kmpc_kernel_end_convergent_simd(void *buffer);
 
 
 EXTERN void __kmpc_data_sharing_init_stack();
+EXTERN void __kmpc_data_sharing_init_stack_spmd();
 EXTERN void *__kmpc_data_sharing_push_stack(size_t size, int16_t UseSharedMemory);
 EXTERN void __kmpc_data_sharing_pop_stack(void *a);
 EXTERN void __kmpc_begin_sharing_variables(void ***GlobalArgs, size_t nArgs);

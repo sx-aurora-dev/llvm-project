@@ -8,7 +8,10 @@ vpaddd %xmm0, %xmm0, %xmm3
 # CHECK:      Iterations:        500
 # CHECK-NEXT: Instructions:      1500
 # CHECK-NEXT: Total Cycles:      1504
-# CHECK-NEXT: Dispatch Width:    2
+# CHECK-NEXT: Total uOps:        1500
+
+# CHECK:      Dispatch Width:    2
+# CHECK-NEXT: uOps Per Cycle:    1.00
 # CHECK-NEXT: IPC:               1.00
 # CHECK-NEXT: Block RThroughput: 1.5
 
@@ -18,7 +21,7 @@ vpaddd %xmm0, %xmm0, %xmm3
 # CHECK-NEXT: [3]: RThroughput
 # CHECK-NEXT: [4]: MayLoad
 # CHECK-NEXT: [5]: MayStore
-# CHECK-NEXT: [6]: HasSideEffects
+# CHECK-NEXT: [6]: HasSideEffects (U)
 
 # CHECK:      [1]    [2]    [3]    [4]    [5]    [6]    Instructions:
 # CHECK-NEXT:  1      2     1.00                        vpmuldq	%xmm0, %xmm0, %xmm1

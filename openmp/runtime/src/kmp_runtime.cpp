@@ -1644,12 +1644,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
       KA_TRACE(20, ("__kmp_fork_call: T#%d(%d:0) invoke microtask = %p\n", gtid,
                     parent_team->t.t_id, parent_team->t.t_pkfn));
 
-      {
-        KMP_TIME_PARTITIONED_BLOCK(OMP_parallel);
-        KMP_SET_THREAD_STATE_BLOCK(IMPLICIT_TASK);
-        if (!parent_team->t.t_invoke(gtid)) {
-          KMP_ASSERT2(0, "cannot invoke microtask for MASTER thread");
-        }
+      if (!parent_team->t.t_invoke(gtid)) {
+        KMP_ASSERT2(0, "cannot invoke microtask for MASTER thread");
       }
       KA_TRACE(20, ("__kmp_fork_call: T#%d(%d:0) done microtask = %p\n", gtid,
                     parent_team->t.t_id, parent_team->t.t_pkfn));
@@ -1839,11 +1835,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
           //     because initial code in teams should have level=0
           team->t.t_level--;
           // AC: call special invoker for outer "parallel" of teams construct
-          {
-            KMP_TIME_PARTITIONED_BLOCK(OMP_parallel);
-            KMP_SET_THREAD_STATE_BLOCK(IMPLICIT_TASK);
-            invoker(gtid);
-          }
+          invoker(gtid);
         } else {
 #endif /* OMP_40_ENABLED */
           argv = args;
@@ -2123,7 +2115,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
             master_th->th.th_task_state;
         master_th->th.th_task_state_top++;
 #if KMP_NESTED_HOT_TEAMS
-        if (team == master_th->th.th_hot_teams[active_level].hot_team) {
+        if (master_th->th.th_hot_teams &&
+            team == master_th->th.th_hot_teams[active_level].hot_team) {
           // Restore master's nested state if nested hot team
           master_th->th.th_task_state =
               master_th->th
@@ -2256,12 +2249,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
                   team->t.t_id, team->t.t_pkfn));
   } // END of timer KMP_fork_call block
 
-  {
-    KMP_TIME_PARTITIONED_BLOCK(OMP_parallel);
-    KMP_SET_THREAD_STATE_BLOCK(IMPLICIT_TASK);
-    if (!team->t.t_invoke(gtid)) {
-      KMP_ASSERT2(0, "cannot invoke microtask for MASTER thread");
-    }
+  if (!team->t.t_invoke(gtid)) {
+    KMP_ASSERT2(0, "cannot invoke microtask for MASTER thread");
   }
   KA_TRACE(20, ("__kmp_fork_call: T#%d(%d:0) done microtask = %p\n", gtid,
                 team->t.t_id, team->t.t_pkfn));
@@ -3700,7 +3689,7 @@ int __kmp_register_root(int initial_thread) {
 #if KMP_STATS_ENABLED
   // Initialize stats as soon as possible (right after gtid assignment).
   __kmp_stats_thread_ptr = __kmp_stats_list->push_back(gtid);
-  KMP_START_EXPLICIT_TIMER(OMP_worker_thread_life);
+  __kmp_stats_thread_ptr->startLife();
   KMP_SET_THREAD_STATE(SERIAL_REGION);
   KMP_INIT_PARTITIONED_TIMERS(OMP_serial);
 #endif
@@ -4019,10 +4008,11 @@ void __kmp_task_info() {
   kmp_team_t *steam = this_thr->th.th_serial_team;
   kmp_team_t *team = this_thr->th.th_team;
 
-  __kmp_printf("__kmp_task_info: gtid=%d tid=%d t_thread=%p team=%p curtask=%p "
-               "ptask=%p\n",
-               gtid, tid, this_thr, team, this_thr->th.th_current_task,
-               team->t.t_implicit_task_taskdata[tid].td_parent);
+  __kmp_printf(
+      "__kmp_task_info: gtid=%d tid=%d t_thread=%p team=%p steam=%p curtask=%p "
+      "ptask=%p\n",
+      gtid, tid, this_thr, team, steam, this_thr->th.th_current_task,
+      team->t.t_implicit_task_taskdata[tid].td_parent);
 }
 #endif // KMP_DEBUG
 
@@ -4334,6 +4324,9 @@ kmp_info_t *__kmp_allocate_thread(kmp_root_t *root, kmp_team_t *team,
 
   new_thr->th.th_spin_here = FALSE;
   new_thr->th.th_next_waiting = 0;
+#if KMP_OS_UNIX
+  new_thr->th.th_blocking = false;
+#endif
 
 #if OMP_40_ENABLED && KMP_AFFINITY_SUPPORTED
   new_thr->th.th_current_place = KMP_PLACE_UNDEFINED;
@@ -5636,11 +5629,7 @@ void *__kmp_launch_thread(kmp_info_t *this_thr) {
         }
 #endif
 
-        {
-          KMP_TIME_PARTITIONED_BLOCK(OMP_parallel);
-          KMP_SET_THREAD_STATE_BLOCK(IMPLICIT_TASK);
-          rc = (*pteam)->t.t_invoke(gtid);
-        }
+        rc = (*pteam)->t.t_invoke(gtid);
         KMP_ASSERT(rc);
 
         KMP_MB();
@@ -5960,6 +5949,18 @@ static void __kmp_internal_end(void) {
     }
 
     __kmp_reap_task_teams();
+
+#if KMP_OS_UNIX
+    // Threads that are not reaped should not access any resources since they
+    // are going to be deallocated soon, so the shutdown sequence should wait
+    // until all threads either exit the final spin-waiting loop or begin
+    // sleeping after the given blocktime.
+    for (i = 0; i < __kmp_threads_capacity; i++) {
+      kmp_info_t *thr = __kmp_threads[i];
+      while (thr && KMP_ATOMIC_LD_ACQ(&thr->th.th_blocking))
+        KMP_CPU_PAUSE();
+    }
+#endif
 
     for (i = 0; i < __kmp_threads_capacity; ++i) {
       // TBD: Add some checking...
@@ -6294,7 +6295,7 @@ void __kmp_register_library_startup(void) {
       if (tail != NULL) {
         long *flag_addr = 0;
         long flag_val = 0;
-        KMP_SSCANF(flag_addr_str, "%p", &flag_addr);
+        KMP_SSCANF(flag_addr_str, "%p", RCAST(void**, &flag_addr));
         KMP_SSCANF(flag_val_str, "%lx", &flag_val);
         if (flag_addr != 0 && flag_val != 0 && strcmp(file_name, "") != 0) {
           // First, check whether environment-encoded address is mapped into
@@ -7639,7 +7640,6 @@ __kmp_determine_reduction_method(
   } else {
 
     int atomic_available = FAST_REDUCTION_ATOMIC_METHOD_GENERATED;
-    int tree_available = FAST_REDUCTION_TREE_METHOD_GENERATED;
 
 #if KMP_ARCH_X86_64 || KMP_ARCH_PPC64 || KMP_ARCH_AARCH64 || KMP_ARCH_MIPS64
 
@@ -7653,6 +7653,7 @@ __kmp_determine_reduction_method(
       teamsize_cutoff = 8;
     }
 #endif
+    int tree_available = FAST_REDUCTION_TREE_METHOD_GENERATED;
     if (tree_available) {
       if (team_size <= teamsize_cutoff) {
         if (atomic_available) {
@@ -7683,6 +7684,7 @@ __kmp_determine_reduction_method(
 
 #elif KMP_OS_DARWIN
 
+    int tree_available = FAST_REDUCTION_TREE_METHOD_GENERATED;
     if (atomic_available && (num_vars <= 3)) {
       retval = atomic_reduce_block;
     } else if (tree_available) {

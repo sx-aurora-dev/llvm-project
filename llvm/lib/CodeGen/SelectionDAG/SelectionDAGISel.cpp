@@ -328,7 +328,6 @@ void SelectionDAGISel::getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<AAResultsWrapperPass>();
   AU.addRequired<GCModuleInfo>();
   AU.addRequired<StackProtector>();
-  AU.addPreserved<StackProtector>();
   AU.addPreserved<GCModuleInfo>();
   AU.addRequired<TargetLibraryInfoWrapperPass>();
   AU.addRequired<TargetTransformInfoWrapperPass>();
@@ -724,7 +723,7 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
 #ifndef NDEBUG
   MatchFilterBB = (FilterDAGBasicBlockName.empty() ||
                    FilterDAGBasicBlockName ==
-                       FuncInfo->MBB->getBasicBlock()->getName().str());
+                       FuncInfo->MBB->getBasicBlock()->getName());
 #endif
 #ifdef NDEBUG
   if (ViewDAGCombine1 || ViewLegalizeTypesDAGs || ViewLegalizeDAGs ||
@@ -1172,7 +1171,7 @@ bool SelectionDAGISel::PrepareEHLandingPad() {
 static bool isFoldedOrDeadInstruction(const Instruction *I,
                                       FunctionLoweringInfo *FuncInfo) {
   return !I->mayWriteToMemory() && // Side-effecting instructions aren't folded.
-         !isa<TerminatorInst>(I) &&    // Terminators aren't folded.
+         !I->isTerminator() &&     // Terminators aren't folded.
          !isa<DbgInfoIntrinsic>(I) &&  // Debug instructions aren't folded.
          !I->isEHPad() &&              // EH pad instructions aren't folded.
          !FuncInfo->isExportedInst(I); // Exported instrs must be computed.
@@ -1544,6 +1543,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
   processDbgDeclares(FuncInfo);
 
   // Iterate over all basic blocks in the function.
+  StackProtector &SP = getAnalysis<StackProtector>();
   for (const BasicBlock *LLVMBB : RPOT) {
     if (OptLevel != CodeGenOpt::None) {
       bool AllPredsVisited = true;
@@ -1688,7 +1688,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
                                    Inst->getDebugLoc(), LLVMBB);
 
         bool ShouldAbort = EnableFastISelAbort;
-        if (isa<TerminatorInst>(Inst)) {
+        if (Inst->isTerminator()) {
           // Use a different message for terminator misses.
           R << "FastISel missed terminator";
           // Don't abort for terminator unless the level is really high
@@ -1713,7 +1713,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
       FastIS->recomputeInsertPt();
     }
 
-    if (getAnalysis<StackProtector>().shouldEmitSDCheck(*LLVMBB)) {
+    if (SP.shouldEmitSDCheck(*LLVMBB)) {
       bool FunctionBasedInstrumentation =
           TLI->getSSPStackGuardCheck(*Fn.getParent());
       SDB->SPDescriptor.initialize(LLVMBB, FuncInfo->MBBMap[LLVMBB],
@@ -1745,6 +1745,8 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
     FuncInfo->PHINodesToUpdate.clear();
     ElidedArgCopyInstrs.clear();
   }
+
+  SP.copyToMachineFrameInfo(MF->getFrameInfo());
 
   propagateSwiftErrorVRegs(FuncInfo);
 
@@ -3596,38 +3598,22 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
         bool mayLoad = MCID.mayLoad();
         bool mayStore = MCID.mayStore();
 
-        unsigned NumMemRefs = 0;
-        for (SmallVectorImpl<MachineMemOperand *>::const_iterator I =
-               MatchedMemRefs.begin(), E = MatchedMemRefs.end(); I != E; ++I) {
-          if ((*I)->isLoad()) {
+        // We expect to have relatively few of these so just filter them into a
+        // temporary buffer so that we can easily add them to the instruction.
+        SmallVector<MachineMemOperand *, 4> FilteredMemRefs;
+        for (MachineMemOperand *MMO : MatchedMemRefs) {
+          if (MMO->isLoad()) {
             if (mayLoad)
-              ++NumMemRefs;
-          } else if ((*I)->isStore()) {
+              FilteredMemRefs.push_back(MMO);
+          } else if (MMO->isStore()) {
             if (mayStore)
-              ++NumMemRefs;
+              FilteredMemRefs.push_back(MMO);
           } else {
-            ++NumMemRefs;
+            FilteredMemRefs.push_back(MMO);
           }
         }
 
-        MachineSDNode::mmo_iterator MemRefs =
-          MF->allocateMemRefsArray(NumMemRefs);
-
-        MachineSDNode::mmo_iterator MemRefsPos = MemRefs;
-        for (SmallVectorImpl<MachineMemOperand *>::const_iterator I =
-               MatchedMemRefs.begin(), E = MatchedMemRefs.end(); I != E; ++I) {
-          if ((*I)->isLoad()) {
-            if (mayLoad)
-              *MemRefsPos++ = *I;
-          } else if ((*I)->isStore()) {
-            if (mayStore)
-              *MemRefsPos++ = *I;
-          } else {
-            *MemRefsPos++ = *I;
-          }
-        }
-
-        Res->setMemRefs(MemRefs, MemRefs + NumMemRefs);
+        CurDAG->setNodeMemRefs(Res, FilteredMemRefs);
       }
 
       LLVM_DEBUG(if (!MatchedMemRefs.empty() && Res->memoperands_empty()) dbgs()

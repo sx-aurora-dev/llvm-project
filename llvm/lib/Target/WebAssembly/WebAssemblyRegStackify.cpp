@@ -235,20 +235,8 @@ static void Query(const MachineInstr &MI, AliasAnalysis &AA, bool &Read,
 
   // Analyze calls.
   if (MI.isCall()) {
-    switch (MI.getOpcode()) {
-    case WebAssembly::CALL_VOID:
-    case WebAssembly::CALL_INDIRECT_VOID:
-      QueryCallee(MI, 0, Read, Write, Effects, StackPointer);
-      break;
-    case WebAssembly::CALL_I32: case WebAssembly::CALL_I64:
-    case WebAssembly::CALL_F32: case WebAssembly::CALL_F64:
-    case WebAssembly::CALL_INDIRECT_I32: case WebAssembly::CALL_INDIRECT_I64:
-    case WebAssembly::CALL_INDIRECT_F32: case WebAssembly::CALL_INDIRECT_F64:
-      QueryCallee(MI, 1, Read, Write, Effects, StackPointer);
-      break;
-    default:
-      llvm_unreachable("unexpected call opcode");
-    }
+    unsigned CalleeOpNo = WebAssembly::getCalleeOpNo(MI);
+    QueryCallee(MI, CalleeOpNo, Read, Write, Effects, StackPointer);
   }
 }
 
@@ -749,14 +737,6 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
   MachineDominatorTree &MDT = getAnalysis<MachineDominatorTree>();
   LiveIntervals &LIS = getAnalysis<LiveIntervals>();
 
-  // Disable the TEE optimization if we aren't doing direct wasm object
-  // emission, because lowering TEE to TEE_LOCAL is done in the ExplicitLocals
-  // pass, which is also disabled.
-  bool UseTee = true;
-  if (MF.getSubtarget<WebAssemblySubtarget>()
-        .getTargetTriple().isOSBinFormatELF())
-    UseTee = false;
-
   // Walk the instructions from the bottom up. Currently we don't look past
   // block boundaries, and the blocks aren't ordered so the block visitation
   // order isn't significant, but we may want to change this in the future.
@@ -822,7 +802,7 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
           Insert =
               RematerializeCheapDef(Reg, Op, *Def, MBB, Insert->getIterator(),
                                     LIS, MFI, MRI, TII, TRI);
-        } else if (UseTee && CanMove &&
+        } else if (CanMove &&
                    OneUseDominatesOtherUses(Reg, Op, MBB, MRI, MDT, LIS, MFI)) {
           Insert = MoveAndTeeForMultiUse(Reg, Op, Def, MBB, Insert, LIS, MFI,
                                          MRI, TII);

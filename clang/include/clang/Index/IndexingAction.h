@@ -1,4 +1,4 @@
-//===--- IndexingAction.h - Frontend index action -------------------------===//
+//===--- IndexingAction.h - Frontend index action ---------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -39,6 +39,7 @@ struct IndexingOptions {
   SystemSymbolFilterKind SystemSymbolFilter
     = SystemSymbolFilterKind::DeclarationsOnly;
   bool IndexFunctionLocals = false;
+  bool IndexImplicitInstantiation = false;
 };
 
 /// Creates a frontend action that indexes all symbols (macros and AST decls).

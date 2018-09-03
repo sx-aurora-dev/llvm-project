@@ -5,7 +5,8 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+
 #include "TestTU.h"
 #include "TestFS.h"
 #include "index/FileIndex.h"
@@ -30,7 +31,7 @@ ParsedAST TestTU::build() const {
     Cmd.push_back(FullHeaderName.c_str());
   }
   Cmd.insert(Cmd.end(), ExtraArgs.begin(), ExtraArgs.end());
-  auto AST = ParsedAST::Build(
+  auto AST = ParsedAST::build(
       createInvocationFromCommandLine(Cmd), nullptr,
       MemoryBuffer::getMemBufferCopy(Code),
       std::make_shared<PCHContainerOperations>(),

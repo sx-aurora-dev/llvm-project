@@ -79,6 +79,8 @@ TargetInfo *elf::getTarget() {
     return getPPCTargetInfo();
   case EM_PPC64:
     return getPPC64TargetInfo();
+  case EM_RISCV:
+    return getRISCVTargetInfo();
   case EM_SPARCV9:
     return getSPARCV9TargetInfo();
   case EM_X86_64:
@@ -129,6 +131,12 @@ bool TargetInfo::needsThunk(RelExpr Expr, RelType Type, const InputFile *File,
                             uint64_t BranchAddr, const Symbol &S) const {
   return false;
 }
+
+bool TargetInfo::adjustPrologueForCrossSplitStack(uint8_t *Loc,
+                                                  uint8_t *End) const {
+  llvm_unreachable("Target doesn't support split stacks.");
+}
+
 
 bool TargetInfo::inBranchRange(RelType Type, uint64_t Src, uint64_t Dst) const {
   return true;

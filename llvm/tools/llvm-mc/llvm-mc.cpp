@@ -152,6 +152,11 @@ static cl::opt<std::string>
 DebugCompilationDir("fdebug-compilation-dir",
                     cl::desc("Specifies the debug info's compilation dir"));
 
+static cl::list<std::string>
+DebugPrefixMap("fdebug-prefix-map",
+               cl::desc("Map file source paths in debug info"),
+               cl::value_desc("= separated key-value pairs"));
+
 static cl::opt<std::string>
 MainFileName("main-file-name",
              cl::desc("Specifies the name we should consider the input file"));
@@ -308,7 +313,6 @@ int main(int argc, char **argv) {
 
   cl::ParseCommandLineOptions(argc, argv, "llvm machine code playground\n");
   MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
-  TripleName = Triple::normalize(TripleName);
   setDwarfDebugFlags(argc, argv);
 
   setDwarfDebugProducer();
@@ -386,6 +390,10 @@ int main(int argc, char **argv) {
     SmallString<128> CWD;
     if (!sys::fs::current_path(CWD))
       Ctx.setCompilationDir(CWD);
+  }
+  for (const auto &Arg : DebugPrefixMap) {
+    const auto &KV = StringRef(Arg).split('=');
+    Ctx.addDebugPrefixMapEntry(KV.first, KV.second);
   }
   if (!MainFileName.empty())
     Ctx.setMainFileName(MainFileName);

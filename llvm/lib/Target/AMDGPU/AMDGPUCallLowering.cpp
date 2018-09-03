@@ -32,7 +32,8 @@ AMDGPUCallLowering::AMDGPUCallLowering(const AMDGPUTargetLowering &TLI)
 }
 
 bool AMDGPUCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
-                                     const Value *Val, unsigned VReg) const {
+                                     const Value *Val,
+                                     ArrayRef<unsigned> VRegs) const {
   // FIXME: Add support for non-void returns.
   if (Val)
     return false;
@@ -95,10 +96,10 @@ bool AMDGPUCallLowering::lowerFormalArguments(MachineIRBuilder &MIRBuilder,
     return false;
 
   MachineFunction &MF = MIRBuilder.getMF();
-  const SISubtarget *Subtarget = &MF.getSubtarget<SISubtarget>();
+  const GCNSubtarget *Subtarget = &MF.getSubtarget<GCNSubtarget>();
   MachineRegisterInfo &MRI = MF.getRegInfo();
   SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
-  const SIRegisterInfo *TRI = MF.getSubtarget<SISubtarget>().getRegisterInfo();
+  const SIRegisterInfo *TRI = MF.getSubtarget<GCNSubtarget>().getRegisterInfo();
   const DataLayout &DL = F.getParent()->getDataLayout();
 
   SmallVector<CCValAssign, 16> ArgLocs;
