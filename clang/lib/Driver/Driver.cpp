@@ -4333,6 +4333,8 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       if (Target.getArch() == llvm::Triple::hexagon)
         TC = llvm::make_unique<toolchains::HexagonToolChain>(*this, Target,
                                                              Args);
+      else if (Target.getArch() == llvm::Triple::ve)
+        TC = llvm::make_unique<toolchains::VEToolChain>(*this, Target, Args);
       else if ((Target.getVendor() == llvm::Triple::MipsTechnologies) &&
                !Target.hasEnvironment())
         TC = llvm::make_unique<toolchains::MipsLLVMToolChain>(*this, Target,

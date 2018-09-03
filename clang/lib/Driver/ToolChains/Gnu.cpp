@@ -277,6 +277,8 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
     if (T.getEnvironment() == llvm::Triple::GNUX32)
       return "elf32_x86_64";
     return "elf_x86_64";
+  case llvm::Triple::ve:
+    return "elf64ve";
   default:
     return nullptr;
   }
