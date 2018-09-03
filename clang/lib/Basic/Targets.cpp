@@ -587,12 +587,7 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
     return new LinuxTargetInfo<RenderScript64TargetInfo>(Triple, Opts);
 
   case llvm::Triple::ve:
-    switch (os) {
-    case llvm::Triple::Linux:
-      return new LinuxTargetInfo<VETargetInfo>(Triple, Opts);
-    default:
-      return new VETargetInfo(Triple, Opts);
-    }
+    return new LinuxTargetInfo<VETargetInfo>(Triple, Opts);
   }
 }
 } // namespace targets

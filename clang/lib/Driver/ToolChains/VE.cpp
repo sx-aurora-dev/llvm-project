@@ -82,6 +82,12 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   getToolChain().AddFilePathLibArgs(Args, CmdArgs);
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
 
+  if (!Args.hasArg(options::OPT_nostdlib)) {
+    if (!Args.hasArg(options::OPT_nodefaultlibs)) {
+      AddRunTimeLibs(getToolChain(), getToolChain().getDriver(), CmdArgs, Args);
+    }
+  }
+
   const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("ncc"));
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
