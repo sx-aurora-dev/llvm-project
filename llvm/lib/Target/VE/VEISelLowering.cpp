@@ -1156,9 +1156,8 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
 //===----------------------------------------------------------------------===//
 
 TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
-  if (AI->getOperation() == AtomicRMWInst::Xchg &&
-      AI->getType()->getPrimitiveSizeInBits() == 32)
-    return AtomicExpansionKind::None; // Uses xchg instruction
+  if (AI->getOperation() == AtomicRMWInst::Xchg)
+    return AtomicExpansionKind::None; // Uses ts1am instruction
 
   return AtomicExpansionKind::CmpXChg;
 }
@@ -1249,7 +1248,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // ATOMICs.
   // Atomics are supported on VE.
   setMaxAtomicSizeInBitsSupported(64);
-  setMinCmpXchgSizeInBits(64);
+  setMinCmpXchgSizeInBits(32);
 
   // Use custom inserter, LowerATOMIC_FENCE, for ATOMIC_FENCE.
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
@@ -1264,11 +1263,15 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::ATOMIC_SWAP, VT, Legal);
 
     setOperationAction(ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS, VT, Expand);
+
+    // FIXME: not supported "atmam" isntructions yet
     setOperationAction(ISD::ATOMIC_LOAD_ADD, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_SUB, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_AND, VT, Expand);
-    setOperationAction(ISD::ATOMIC_LOAD_CLR, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_OR, VT, Expand);
+
+    // VE doesn't have follwing instructions
+    setOperationAction(ISD::ATOMIC_LOAD_CLR, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_XOR, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_NAND, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_MIN, VT, Expand);

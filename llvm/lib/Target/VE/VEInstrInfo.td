@@ -1360,7 +1360,7 @@ def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
           (TS1AMWasi MEMASri:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
-          (TS1AMLasi MEMASri:$src, -64, $new)>;
+          (TS1AMLasi MEMASri:$src, 127, $new)>;
 
 // Compare and Swap
 
@@ -1370,10 +1370,6 @@ let cx = 1 in
 defm CASW : RRCASm<"cas.w", 0x62, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // Atomic cmp and swap
-def : Pat<(i32 (atomic_cmp_swap_8  ADDRri:$src, i32:$cmp, i32:$new)),
-          (CASWasr MEMASri:$src, $cmp, $new)>;
-def : Pat<(i32 (atomic_cmp_swap_16 ADDRri:$src, i32:$cmp, i32:$new)),
-          (CASWasr MEMASri:$src, $cmp, $new)>;
 def : Pat<(i32 (atomic_cmp_swap_32 ADDRri:$src, i32:$cmp, i32:$new)),
           (CASWasr MEMASri:$src, $cmp, $new)>;
 def : Pat<(i64 (atomic_cmp_swap_64 ADDRri:$src, i64:$cmp, i64:$new)),
