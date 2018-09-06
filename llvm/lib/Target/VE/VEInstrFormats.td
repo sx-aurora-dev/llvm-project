@@ -62,6 +62,28 @@ class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
   let imm32{28-31} = cfw;
 }
 
+class RRFENCE<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+              InstrItinClass itin = NoItinerary>
+   : InstVE<outs, ins, asmstr, pattern, itin> {
+  bits<1> avo = 0;
+  bits<1> lf = 0;
+  bits<1> sf = 0;
+  bits<1> c2 = 0;
+  bits<1> c1 = 0;
+  bits<1> c0 = 0;
+  let op = opVal;
+  let Inst{15} = avo;
+  let Inst{14-10} = 0;
+  let Inst{9} = lf;
+  let Inst{8} = sf;
+  let Inst{23-19} = 0;
+  let Inst{18} = c2;
+  let Inst{17} = c1;
+  let Inst{16} = c0;
+  let Inst{31-24} = 0;
+  let Inst{63-32} = 0;
+}
+
 class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
          InstrItinClass itin = NoItinerary>
    : RM<opVal, outs, ins, asmstr, pattern, itin> {

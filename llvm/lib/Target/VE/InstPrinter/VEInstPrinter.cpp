@@ -70,10 +70,10 @@ bool VEInstPrinter::printVEAliasInstr(const MCInst *MI,
         case SP::O7: O << "\tretl"; return true;
         }
       }
-      O << "\tjmp "; printMemOperand(MI, 1, STI, O);
+      O << "\tjmp "; printMemASXOperand(MI, 1, STI, O);
       return true;
     case SP::O7: // call $addr
-      O << "\tcall "; printMemOperand(MI, 1, STI, O);
+      O << "\tcall "; printMemASXOperand(MI, 1, STI, O);
       return true;
     }
   }
@@ -139,7 +139,7 @@ void VEInstPrinter::printOperand(const MCInst *MI, int opNum,
   MO.getExpr()->print(O, &MAI);
 }
 
-void VEInstPrinter::printMemOperand(const MCInst *MI, int opNum,
+void VEInstPrinter::printMemASXOperand(const MCInst *MI, int opNum,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O, const char *Modifier) {
   // If this is an ADD operand, emit it like normal operands.
@@ -161,9 +161,9 @@ void VEInstPrinter::printMemOperand(const MCInst *MI, int opNum,
   O << ")";
 }
 
-void VEInstPrinter::printMemHmOperand(const MCInst *MI, int opNum,
-                                       const MCSubtargetInfo &STI,
-                                       raw_ostream &O, const char *Modifier) {
+void VEInstPrinter::printMemASOperand(const MCInst *MI, int opNum,
+                                      const MCSubtargetInfo &STI,
+                                      raw_ostream &O, const char *Modifier) {
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, STI, O);

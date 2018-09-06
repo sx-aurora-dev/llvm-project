@@ -1247,27 +1247,34 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 #endif
 
   // ATOMICs.
-  // Atomics are supported on VE. 32-bit atomics are also
-  // supported by some Leon VE variants. Otherwise, atomics
-  // are unsupported.
+  // Atomics are supported on VE.
   setMaxAtomicSizeInBitsSupported(64);
+  setMinCmpXchgSizeInBits(64);
 
-  setMinCmpXchgSizeInBits(32);
+  // Use custom inserter, LowerATOMIC_FENCE, for ATOMIC_FENCE.
+  setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
 
-  // FIXME: VE's atomic instructions are not investivated yet.
-  setOperationAction(ISD::ATOMIC_SWAP, MVT::i32, Legal);
+  for (MVT VT : MVT::integer_valuetypes()) {
+    // Several atomic operations are converted to VE instructions well.
+    // Additional memory fences are generated in emitLeadingfence and
+    // emitTrailingFence functions.
+    setOperationAction(ISD::ATOMIC_LOAD, VT, Legal);
+    setOperationAction(ISD::ATOMIC_STORE, VT, Legal);
+    setOperationAction(ISD::ATOMIC_CMP_SWAP, VT, Legal);
+    setOperationAction(ISD::ATOMIC_SWAP, VT, Legal);
 
-  setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Legal);
-
-  // Custom Lower Atomic LOAD/STORE
-  setOperationAction(ISD::ATOMIC_LOAD, MVT::i32, Custom);
-  setOperationAction(ISD::ATOMIC_STORE, MVT::i32, Custom);
-
-  if (1) {
-    setOperationAction(ISD::ATOMIC_CMP_SWAP, MVT::i64, Legal);
-    setOperationAction(ISD::ATOMIC_SWAP, MVT::i64, Legal);
-    setOperationAction(ISD::ATOMIC_LOAD, MVT::i64, Custom);
-    setOperationAction(ISD::ATOMIC_STORE, MVT::i64, Custom);
+    setOperationAction(ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_ADD, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_SUB, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_AND, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_CLR, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_OR, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_XOR, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_NAND, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_MIN, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_MAX, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_UMIN, VT, Expand);
+    setOperationAction(ISD::ATOMIC_LOAD_UMAX, VT, Expand);
   }
 
   // FIXME: VE's I128 stuff is not investivated yet
@@ -1360,7 +1367,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BSWAP, MVT::i64, Legal);
   setOperationAction(ISD::CTPOP, MVT::i32, Legal);
   setOperationAction(ISD::CTPOP, MVT::i64, Legal);
-  // FIXME: VE has CTLZ, but not sure how to use it correctly atm.
   setOperationAction(ISD::CTLZ , MVT::i32, Legal);
   setOperationAction(ISD::CTLZ , MVT::i64, Legal);
   setOperationAction(ISD::CTTZ , MVT::i32, Expand);
@@ -1456,6 +1462,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::FMIN:            return "VEISD::FMIN";
   case VEISD::GETFUNPLT:       return "VEISD::GETFUNPLT";
   case VEISD::GETSTACKTOP:     return "VEISD::GETSTACKTOP";
+  case VEISD::MEMBARRIER:      return "VEISD::MEMBARRIER";
   case VEISD::CALL:            return "VEISD::CALL";
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
@@ -2170,16 +2177,92 @@ static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
   SDValue Ops[2] = { BottomHalf, TopHalf } ;
   return DAG.getMergeValues(Ops, dl);
 }
-
-static SDValue LowerATOMIC_LOAD_STORE(SDValue Op, SelectionDAG &DAG) {
-  if (isStrongerThanMonotonic(cast<AtomicSDNode>(Op)->getOrdering()))
-  // Expand with a fence.
-  return SDValue();
-
-  // Monotonic load/stores are legal.
-  return Op;
-}
 #endif
+
+SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
+                                            SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  AtomicOrdering FenceOrdering = static_cast<AtomicOrdering>(
+    cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue());
+  SyncScope::ID FenceSSID = static_cast<SyncScope::ID>(
+    cast<ConstantSDNode>(Op.getOperand(2))->getZExtValue());
+
+  // VE uses Release consistency, so need a fence instruction if it is a
+  // cross-thread fence.
+  if (FenceSSID == SyncScope::System) {
+    switch (FenceOrdering) {
+    case AtomicOrdering::NotAtomic:
+    case AtomicOrdering::Unordered:
+    case AtomicOrdering::Monotonic:
+      // No need to generate fencem instruction here.
+      break;
+    case AtomicOrdering::Acquire:
+      // Generate "fencem 2" as acquire fence.
+      return SDValue(DAG.getMachineNode(VE::FENCEload, DL, MVT::Other,
+                                        Op.getOperand(0)), 0);
+    case AtomicOrdering::Release:
+      // Generate "fencem 1" as release fence.
+      return SDValue(DAG.getMachineNode(VE::FENCEstore, DL, MVT::Other,
+                                        Op.getOperand(0)), 0);
+    case AtomicOrdering::AcquireRelease:
+    case AtomicOrdering::SequentiallyConsistent:
+      // Generate "fencem 3" as acq_rel and seq_cst fence.
+      // FIXME: "fencem 3" doesn't wait for for PCIe deveices accesses,
+      //        so  seq_cst may require more instruction for them.
+      return SDValue(DAG.getMachineNode(VE::FENCEloadstore, DL, MVT::Other,
+                                        Op.getOperand(0)), 0);
+    }
+  }
+
+  // MEMBARRIER is a compiler barrier; it codegens to a no-op.
+  return DAG.getNode(VEISD::MEMBARRIER, DL, MVT::Other, Op.getOperand(0));
+}
+
+static Instruction* callIntrinsic(IRBuilder<> &Builder, Intrinsic::ID Id) {
+  Module *M = Builder.GetInsertBlock()->getParent()->getParent();
+  Function *Func = Intrinsic::getDeclaration(M, Id);
+  return Builder.CreateCall(Func, {});
+}
+
+Instruction *VETargetLowering::emitLeadingFence(IRBuilder<> &Builder,
+                                                Instruction *Inst,
+                                                AtomicOrdering Ord) const {
+  switch (Ord) {
+  case AtomicOrdering::NotAtomic:
+  case AtomicOrdering::Unordered:
+    llvm_unreachable("Invalid fence: unordered/non-atomic");
+  case AtomicOrdering::Monotonic:
+  case AtomicOrdering::Acquire:
+    return nullptr; // Nothing to do
+  case AtomicOrdering::Release:
+  case AtomicOrdering::AcquireRelease:
+    return callIntrinsic(Builder, Intrinsic::ve_fencem1);
+  case AtomicOrdering::SequentiallyConsistent:
+    if (!Inst->hasAtomicStore())
+      return nullptr; // Nothing to do
+    return callIntrinsic(Builder, Intrinsic::ve_fencem3);
+  }
+  llvm_unreachable("Unknown fence ordering in emitLeadingFence");
+}
+
+Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
+                                                 Instruction *Inst,
+                                                 AtomicOrdering Ord) const {
+  switch (Ord) {
+  case AtomicOrdering::NotAtomic:
+  case AtomicOrdering::Unordered:
+    llvm_unreachable("Invalid fence: unordered/not-atomic");
+  case AtomicOrdering::Monotonic:
+  case AtomicOrdering::Release:
+    return nullptr; // Nothing to do
+  case AtomicOrdering::Acquire:
+  case AtomicOrdering::AcquireRelease:
+    return callIntrinsic(Builder, Intrinsic::ve_fencem2);
+  case AtomicOrdering::SequentiallyConsistent:
+    return callIntrinsic(Builder, Intrinsic::ve_fencem3);
+  }
+  llvm_unreachable("Unknown fence ordering in emitTrailingFence");
+}
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                      SelectionDAG &DAG) const {
@@ -2374,9 +2457,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::UMULO:
   case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
     report_fatal_error("UMULO or SMULO expansion is not implemented yet");
-  case ISD::ATOMIC_LOAD:
-  case ISD::ATOMIC_STORE:       // return LowerATOMIC_LOAD_STORE(Op, DAG);
-    report_fatal_error("ATOMIC_LOAD or ATOMIC_STORE expansion is not implemented yet");
+  case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
     //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
   }

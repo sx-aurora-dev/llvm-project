@@ -53,6 +53,8 @@ namespace llvm {
       GETSTACKTOP, // retrieve address of stack top (first address of
                    // locals and temporaries)
 
+      MEMBARRIER,  // Compiler barrier only; generate a no-op.
+
       CALL,        // A call instruction.
       RET_FLAG,    // Return with a flag operand.
       GLOBAL_BASE_REG, // Global base reg for PIC.
@@ -181,6 +183,10 @@ namespace llvm {
 
     SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
 
+    SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
+
     bool ShouldShrinkFPConstant(EVT VT) const override {
       // Do not shrink FP constpool if VT == MVT::f128.
       // (ldd, call _Q_fdtoq) is more expensive than two ldds.
@@ -188,11 +194,13 @@ namespace llvm {
     }
 
     bool shouldInsertFencesForAtomic(const Instruction *I) const override {
-      // FIXME: We insert fences for each atomics and generate
-      // sub-optimal code for PSO/TSO. (Approximately nobody uses any
-      // mode but TSO, which makes this even more silly)
+      // VE uses Release consistency, so need fence for each atomics.
       return true;
     }
+    Instruction *emitLeadingFence(IRBuilder<> &Builder, Instruction *Inst,
+                                  AtomicOrdering Ord) const override;
+    Instruction *emitTrailingFence(IRBuilder<> &Builder, Instruction *Inst,
+                                   AtomicOrdering Ord) const override;
 
     AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 
