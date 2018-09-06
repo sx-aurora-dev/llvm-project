@@ -3,9 +3,9 @@
 define dso_local double @func1() local_unnamed_addr #0 {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(func_fl)
+; CHECK-NEXT:    lea %s34, func_fl@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(func_fl)(%s34)
+; CHECK-NEXT:    lea.sl %s12, func_fl@hi(%s34)
 ; CHECK-NEXT:    lea %s0,-4(,%s9)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    ldu %s34, -4(,%s9)
@@ -27,9 +27,9 @@ declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture) #1
 define dso_local fp128 @func2() local_unnamed_addr #0 {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(func_fl)
+; CHECK-NEXT:    lea %s34, func_fl@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(func_fl)(%s34)
+; CHECK-NEXT:    lea.sl %s12, func_fl@hi(%s34)
 ; CHECK-NEXT:    lea %s0,-4(,%s9)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    ldu %s34, -4(,%s9)
@@ -47,9 +47,9 @@ define dso_local fp128 @func2() local_unnamed_addr #0 {
 define dso_local fp128 @func3() local_unnamed_addr #0 {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(func_db)
+; CHECK-NEXT:    lea %s34, func_db@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(func_db)(%s34)
+; CHECK-NEXT:    lea.sl %s12, func_db@hi(%s34)
 ; CHECK-NEXT:    lea %s0,-8(,%s9)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    ld %s34, -8(,%s9)

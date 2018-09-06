@@ -153,8 +153,8 @@ define dso_local i32 @func9(double, double) local_unnamed_addr #0 {
 define dso_local i32 @func10(double, double) local_unnamed_addr #0 {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI{{[0-9]+}}_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI{{[0-9]+}}_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:    brlenan.d %s0, %s34, .LBB{{[0-9]+}}_1
   %3 = fcmp ogt double %0, 5.000000e+00
   br i1 %3, label %4, label %6

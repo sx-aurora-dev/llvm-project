@@ -21,9 +21,9 @@ define dso_local double @func2(double, double) local_unnamed_addr #0 {
 define dso_local fp128 @func3(fp128, fp128) local_unnamed_addr #0 {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(__divtf3)
+; CHECK-NEXT:    lea %s34, __divtf3@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(__divtf3)(%s34)
+; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv fp128 %0, %1
@@ -33,8 +33,8 @@ define dso_local fp128 @func3(fp128, fp128) local_unnamed_addr #0 {
 define dso_local float @func4(float) local_unnamed_addr #0 {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI3_0)
-; CHECK-NEXT:    ldu %s34, %lo(.LCPI3_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI3_0@hi
+; CHECK-NEXT:    ldu %s34, .LCPI3_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fdiv float %0, 5.000000e+00
@@ -44,8 +44,8 @@ define dso_local float @func4(float) local_unnamed_addr #0 {
 define dso_local double @func5(double) local_unnamed_addr #0 {
 ; CHECK-LABEL: func5
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI4_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI4_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI4_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI4_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fdiv double %0, 5.000000e+00
@@ -55,15 +55,15 @@ define dso_local double @func5(double) local_unnamed_addr #0 {
 define dso_local fp128 @func6(fp128) local_unnamed_addr #0 {
 ; CHECK-LABEL: func6
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(.LCPI5_0)
+; CHECK-NEXT:    lea %s34, .LCPI5_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI5_0)(%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI5_0@hi(%s34)
 ; CHECK-NEXT:    ld %s2, 8(,%s34)
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI5_0)
-; CHECK-NEXT:    ld %s3, %lo(.LCPI5_0)(,%s34)
-; CHECK-NEXT:    lea %s34, %lo(__divtf3)
+; CHECK-NEXT:    lea.sl %s34, .LCPI5_0@hi
+; CHECK-NEXT:    ld %s3, .LCPI5_0@lo(,%s34)
+; CHECK-NEXT:    lea %s34, __divtf3@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(__divtf3)(%s34)
+; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fdiv fp128 %0, 0xL00000000000000004001400000000000
@@ -73,8 +73,8 @@ define dso_local fp128 @func6(fp128) local_unnamed_addr #0 {
 define dso_local float @func7(float) local_unnamed_addr #0 {
 ; CHECK-LABEL: func7
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI6_0)
-; CHECK-NEXT:    ldu %s34, %lo(.LCPI6_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI6_0@hi
+; CHECK-NEXT:    ldu %s34, .LCPI6_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fdiv float %0, 0x47EFFFFFE0000000
@@ -84,8 +84,8 @@ define dso_local float @func7(float) local_unnamed_addr #0 {
 define dso_local double @func8(double) local_unnamed_addr #0 {
 ; CHECK-LABEL: func8
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI7_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI7_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI7_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI7_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fdiv double %0, 0x7FEFFFFFFFFFFFFF
@@ -96,15 +96,15 @@ define dso_local double @func8(double) local_unnamed_addr #0 {
 define dso_local fp128 @func9(fp128) local_unnamed_addr #0 {
 ; CHECK-LABEL: func9
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(.LCPI8_0)
+; CHECK-NEXT:    lea %s34, .LCPI8_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI8_0)(%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI8_0@hi(%s34)
 ; CHECK-NEXT:    ld %s2, 8(,%s34)
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI8_0)
-; CHECK-NEXT:    ld %s3, %lo(.LCPI8_0)(,%s34)
-; CHECK-NEXT:    lea %s34, %lo(__divtf3)
+; CHECK-NEXT:    lea.sl %s34, .LCPI8_0@hi
+; CHECK-NEXT:    ld %s3, .LCPI8_0@lo(,%s34)
+; CHECK-NEXT:    lea %s34, __divtf3@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(__divtf3)(%s34)
+; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fdiv fp128 %0, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF

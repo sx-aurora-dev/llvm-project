@@ -114,8 +114,8 @@ define dso_local zeroext i8 @divu8(i8 zeroext, i8 zeroext) local_unnamed_addr #0
 define dso_local double @divf64ri(double, double) local_unnamed_addr #0 {
 ; CHECK-LABEL: divf64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI{{[0-9]+}}_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI{{[0-9]+}}_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv double %0, 1.200000e+00
@@ -126,8 +126,8 @@ define dso_local double @divf64ri(double, double) local_unnamed_addr #0 {
 define dso_local float @divf32ri(float, float) local_unnamed_addr #0 {
 ; CHECK-LABEL: divf32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI{{[0-9]+}}_0)
-; CHECK-NEXT:    ldu %s34, %lo(.LCPI{{[0-9]+}}_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:    ldu %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv float %0, 0x3FF3333340000000
@@ -192,8 +192,8 @@ define dso_local i32 @divu32ri(i32, i32) local_unnamed_addr #0 {
 define dso_local double @divf64li(double, double) local_unnamed_addr #0 {
 ; CHECK-LABEL: divf64li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI{{[0-9]+}}_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI{{[0-9]+}}_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.d %s0, %s34, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv double 1.200000e+00, %1
@@ -204,8 +204,8 @@ define dso_local double @divf64li(double, double) local_unnamed_addr #0 {
 define dso_local float @divf32li(float, float) local_unnamed_addr #0 {
 ; CHECK-LABEL: divf32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI{{[0-9]+}}_0)
-; CHECK-NEXT:    ldu %s34, %lo(.LCPI{{[0-9]+}}_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:    ldu %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:    fdiv.s %s0, %s34, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv float 0x3FF3333340000000, %1

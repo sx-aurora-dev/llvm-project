@@ -11,20 +11,20 @@ define dso_local void @test(i32) local_unnamed_addr #0 {
 ; CHECK-NEXT:    lea %s34, 15(%s18)
 ; CHECK-NEXT:    and %s0, -16, %s34
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
-; CHECK-NEXT:    lea %s34, %lo(__grow_stack)
+; CHECK-NEXT:    lea %s34, __grow_stack@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(__grow_stack)(%s34)
+; CHECK-NEXT:    lea.sl %s12, __grow_stack@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    lea %s13, 64
 ; CHECK-NEXT:    and %s13, %s13, (32)0
 ; CHECK-NEXT:    lea.sl %s11, 0(%s11, %s13)
-; CHECK-NEXT:    lea.sl %s34, %hi(buf)
-; CHECK-NEXT:    ld %s0, %lo(buf)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, buf@hi
+; CHECK-NEXT:    ld %s0, buf@lo(,%s34)
 ; CHECK-NEXT:    lea %s1, 176(%s11)
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
-; CHECK-NEXT:    lea %s34, %lo(memcpy)
+; CHECK-NEXT:    lea %s34, memcpy@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(memcpy)(%s34)
+; CHECK-NEXT:    lea.sl %s12, memcpy@hi(%s34)
 ; CHECK-NEXT:    or %s2, 0, %s18
 ; CHECK-NEXT:    bsic %lr, (,%s12)
   %2 = sext i32 %0 to i64
