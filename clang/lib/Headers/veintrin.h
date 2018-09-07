@@ -84,6 +84,10 @@ extern void __vec_exp(void);
 #define _ve_vec_expf_vv(vr) _ve_vec_call(vr, __vec_expf)
 #define _ve_vec_exp_vv(vr) _ve_vec_call(vr, __vec_exp)
 
+#define _ve_extract_vm512u(vm) __builtin_ve_extract_vm512u(vm)
+#define _ve_extract_vm512l(vm) __builtin_ve_extract_vm512l(vm)
+#define _ve_insert_vm512u(vm512, vm) __builtin_ve_insert_vm512u(vm512, vm)
+#define _ve_insert_vm512l(vm512, vm) __builtin_ve_insert_vm512l(vm512, vm)
 
 #include <veintrin2.h>
 

@@ -28,6 +28,11 @@ BUILTIN(__builtin_ve_pack_f32a, "ULifC*", "n")
 
 BUILTIN(__builtin_ve_vec_call, "V256dV256dvC*", "n")
 
+BUILTIN(__builtin_ve_extract_vm512u, "V4ULiV8ULi", "n")
+BUILTIN(__builtin_ve_extract_vm512l, "V4ULiV8ULi", "n")
+BUILTIN(__builtin_ve_insert_vm512u, "V8ULiV8ULiV4ULi", "n")
+BUILTIN(__builtin_ve_insert_vm512l, "V8ULiV8ULiV4ULi", "n")
+
 // BUILTIN(__builtin_bitrev, "UiUi", "nc")
 // BUILTIN(__builtin_getid, "Si", "nc")
 // BUILTIN(__builtin_getps, "UiUi", "n")
