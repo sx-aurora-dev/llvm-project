@@ -17,6 +17,18 @@ let TargetPrefix = "ve" in {
   def int_ve_fencem1 : Intrinsic<[], [], []>;
   def int_ve_fencem2 : Intrinsic<[], [], []>;
   def int_ve_fencem3 : Intrinsic<[], [], []>;
+
+  def int_ve_extract_vm512u : GCCBuiltin<"__builtin_ve_extract_vm512u">,
+        Intrinsic<[LLVMType<v4i64>], [LLVMType<v8i64>], [IntrNoMem]>;
+
+  def int_ve_extract_vm512l : GCCBuiltin<"__builtin_ve_extract_vm512l">,
+        Intrinsic<[LLVMType<v4i64>], [LLVMType<v8i64>], [IntrNoMem]>;
+
+  def int_ve_insert_vm512u : GCCBuiltin<"__builtin_ve_insert_vm512u">,
+        Intrinsic<[LLVMType<v8i64>], [LLVMType<v8i64>, LLVMType<v4i64>], [IntrNoMem]>;
+
+  def int_ve_insert_vm512l : GCCBuiltin<"__builtin_ve_insert_vm512l">,
+        Intrinsic<[LLVMType<v8i64>], [LLVMType<v8i64>, LLVMType<v4i64>], [IntrNoMem]>;
 }
 
 

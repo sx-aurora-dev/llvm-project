@@ -1106,5 +1106,17 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
 
+def : Pat<(v4i64 (int_ve_extract_vm512u VM512:$vm)),
+          (v4i64 (EXTRACT_SUBREG VM512:$vm, sub_vm_odd))>;
+
+def : Pat<(v4i64 (int_ve_extract_vm512l VM512:$vm)),
+          (v4i64 (EXTRACT_SUBREG VM512:$vm, sub_vm_even))>;
+
+def : Pat<(v8i64 (int_ve_insert_vm512u VM512:$vmx, VM:$vmy)),
+          (v8i64 (INSERT_SUBREG VM512:$vmx, VM:$vmy, sub_vm_odd))>;
+
+def : Pat<(v8i64 (int_ve_insert_vm512l VM512:$vmx, VM:$vmy)),
+          (v8i64 (INSERT_SUBREG VM512:$vmx, VM:$vmy, sub_vm_even))>;
+
 include "VEInstrIntrinsic.td"
 
