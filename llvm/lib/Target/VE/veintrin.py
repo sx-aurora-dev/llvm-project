@@ -1290,6 +1290,11 @@ T.Dummy("", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
 
 T.InstX(None, None, "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})", True).noBuiltin()
 T.InstX(None, None, "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})", True).noBuiltin()
+T.Dummy("", "__vm _ve_extract_vm512u(__vm vm)", "")
+T.Dummy("", "__vm _ve_extract_vm512l(__vm vm)", "")
+T.Dummy("", "__vm512 _ve_insert_vm512u(__vm512 vmx, __vm vmy)", "")
+T.Dummy("", "__vm512 _ve_insert_vm512l(__vm512 vmx, __vm vmy)", "")
+
 import argparse
 
 parser = argparse.ArgumentParser()
