@@ -41,6 +41,7 @@ public:
     IntMaxType = SignedLong;
     Int64Type = SignedLong;
     RegParmMax = 8;
+    MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 64;
 
     WCharType = UnsignedInt;
     WIntType = UnsignedInt;
