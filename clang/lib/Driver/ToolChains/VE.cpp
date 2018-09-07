@@ -134,29 +134,32 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc))
     return;
 
+  if (DriverArgs.hasArg(options::OPT_nobuiltininc) &&
+      DriverArgs.hasArg(options::OPT_nostdlibinc))
+    return;
+
+  if (!DriverArgs.hasArg(options::OPT_nostdlibinc)) {
+    if (const char *cl_include_dir = getenv("NCC_C_INCLUDE_PATH")) {
+      SmallVector<StringRef, 4> Dirs;
+      const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
+      StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
+      ArrayRef<StringRef> DirVec(Dirs);
+      addSystemIncludes(DriverArgs, CC1Args, DirVec);
+    } else {
+      addSystemInclude(DriverArgs, CC1Args,
+                       getDriver().SysRoot + "/opt/nec/ve/musl/include");
+    }
+#if 0
+    // FIXME: Remedy for /opt/nec/ve/musl/include/bits/alltypes.h
+    CC1Args.push_back("-D__NEED_off_t");
+#endif
+  }
+
   if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
     SmallString<128> P(getDriver().ResourceDir);
     llvm::sys::path::append(P, "include");
     addSystemInclude(DriverArgs, CC1Args, P);
   }
-
-  if (DriverArgs.hasArg(options::OPT_nostdlibinc))
-    return;
-
-  if (const char *cl_include_dir = getenv("NCC_C_INCLUDE_PATH")) {
-    SmallVector<StringRef, 4> Dirs;
-    const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
-    StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
-    ArrayRef<StringRef> DirVec(Dirs);
-    addSystemIncludes(DriverArgs, CC1Args, DirVec);
-  } else {
-    addSystemInclude(DriverArgs, CC1Args,
-                     getDriver().SysRoot + "/opt/nec/ve/musl/include");
-  }
-#if 0
-  // FIXME: Remedy for /opt/nec/ve/musl/include/bits/alltypes.h
-  CC1Args.push_back("-D__NEED_off_t");
-#endif
 }
 
 void VEToolChain::addClangTargetOptions(const ArgList &DriverArgs,
