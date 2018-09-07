@@ -65,6 +65,15 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                      const char *LinkingOutput) const {
   ArgStringList CmdArgs;
 
+  bool IsStatic = Args.hasArg(options::OPT_static);
+  bool IsShared = Args.hasArg(options::OPT_shared);
+
+  if (IsShared)
+    CmdArgs.push_back("-shared");
+
+  if (IsStatic)
+    CmdArgs.push_back("-static");
+
   if (Output.isFilename()) {
     CmdArgs.push_back("-o");
     CmdArgs.push_back(Output.getFilename());
