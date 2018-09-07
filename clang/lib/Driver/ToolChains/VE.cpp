@@ -13,6 +13,8 @@
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Option/ArgList.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include <cstdlib> // ::getenv
 
 using namespace clang::driver;
@@ -120,9 +122,18 @@ bool VEToolChain::hasBlocksRuntime() const { return false; }
 
 void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                                ArgStringList &CC1Args) const {
-  if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc) ||
-      DriverArgs.hasArg(options::OPT_nostdlibinc))
+  if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc))
     return;
+
+  if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
+    SmallString<128> P(getDriver().ResourceDir);
+    llvm::sys::path::append(P, "include");
+    addSystemInclude(DriverArgs, CC1Args, P);
+  }
+
+  if (DriverArgs.hasArg(options::OPT_nostdlibinc))
+    return;
+
   if (const char *cl_include_dir = getenv("NCC_C_INCLUDE_PATH")) {
     SmallVector<StringRef, 4> Dirs;
     const char EnvPathSeparatorStr[] = {llvm::sys::EnvPathSeparator, '\0'};
@@ -130,10 +141,6 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
   } else {
-#if 0
-    addSystemInclude(DriverArgs, CC1Args,
-                     getDriver().SysRoot + "/opt/nec/ve/ncc/1.3.3/include");
-#endif
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/opt/nec/ve/musl/include");
   }
