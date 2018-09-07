@@ -191,8 +191,8 @@ define dso_local double @ul2d(i64 %a) local_unnamed_addr #0 {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 32
 ; CHECK-NEXT:  lea %s35, 0
-; CHECK-NEXT:  lea.sl %s36, %hi(.LCPI15_0)
-; CHECK-NEXT:  ld %s36, %lo(.LCPI15_0)(,%s36)
+; CHECK-NEXT:  lea.sl %s36, .LCPI15_0@hi
+; CHECK-NEXT:  ld %s36, .LCPI15_0@lo(,%s36)
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s37, 1160773632(%s35)
 ; CHECK-NEXT:  or %s34, %s34, %s37
@@ -300,9 +300,9 @@ define dso_local fp128 @ul2q(i64 %a) local_unnamed_addr #0 {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 61
 ; CHECK-NEXT:  and %s34, 4, %s34
-; CHECK-NEXT:  lea %s35, %lo(.LCPI23_0)
+; CHECK-NEXT:  lea %s35, .LCPI23_0@lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s35, %hi(.LCPI23_0)(%s35)
+; CHECK-NEXT:  lea.sl %s35, .LCPI23_0@hi(%s35)
 ; CHECK-NEXT:  adds.l %s34, %s35, %s34
 ; CHECK-NEXT:  ldu %s34, (,%s34)
 ; CHECK-NEXT:  cvt.q.s %s34, %s34

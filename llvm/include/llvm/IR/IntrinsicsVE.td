@@ -12,6 +12,11 @@ let TargetPrefix = "ve" in {
 
   def int_ve_vec_call: GCCBuiltin<"__builtin_ve_vec_call">,
         Intrinsic<[LLVMType<v256f64>], [LLVMType<v256f64>, llvm_ptr_ty], [IntrNoMem]>;
+
+  // fencem instructions
+  def int_ve_fencem1 : Intrinsic<[], [], []>;
+  def int_ve_fencem2 : Intrinsic<[], [], []>;
+  def int_ve_fencem3 : Intrinsic<[], [], []>;
 }
 
 

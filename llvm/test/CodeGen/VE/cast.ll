@@ -100,8 +100,8 @@ define i64 @d2ll(double) #0 {
 define i64 @d2ull(double) #0 {
 ; CHECK-LABEL: d2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI11_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI11_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI11_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI11_0@lo(,%s34)
 ; CHECK-NEXT:    fcmp.d %s35, %s0, %s34
 ; CHECK-NEXT:    fsub.d %s34, %s0, %s34
 ; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
@@ -216,12 +216,12 @@ define i64 @q2ll(fp128) #0 {
 define i64 @q2ull(fp128) #0 {
 ; CHECK-LABEL: q2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(.LCPI22_0)
+; CHECK-NEXT:    lea %s34, .LCPI22_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI22_0)(%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI22_0@hi(%s34)
 ; CHECK-NEXT:    ld %s34, 8(,%s34)
-; CHECK-NEXT:    lea.sl %s36, %hi(.LCPI22_0)
-; CHECK-NEXT:    ld %s35, %lo(.LCPI22_0)(,%s36)
+; CHECK-NEXT:    lea.sl %s36, .LCPI22_0@hi
+; CHECK-NEXT:    ld %s35, .LCPI22_0@lo(,%s36)
 ; CHECK-NEXT:    fcmp.q %s36, %s0, %s34
 ; CHECK-NEXT:    fsub.q %s34, %s0, %s34
 ; CHECK-NEXT:    cvt.d.q %s34, %s34
@@ -333,8 +333,8 @@ define i64 @f2ll(float) #0 {
 define i64 @f2ull(float) #0 {
 ; CHECK-LABEL: f2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI33_0)
-; CHECK-NEXT:    ldu %s34, %lo(.LCPI33_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI33_0@hi
+; CHECK-NEXT:    ldu %s34, .LCPI33_0@lo(,%s34)
 ; CHECK-NEXT:    fcmp.s %s35, %s0, %s34
 ; CHECK-NEXT:    fsub.s %s34, %s0, %s34
 ; CHECK-NEXT:    cvt.d.s %s34, %s34
@@ -577,8 +577,8 @@ define double @ull2d(i64) #0 {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    srl %s34, %s0, 32
 ; CHECK-NEXT:    lea %s35, 0
-; CHECK-NEXT:    lea.sl %s36, %hi(.LCPI57_0)
-; CHECK-NEXT:    ld %s36, %lo(.LCPI57_0)(,%s36)
+; CHECK-NEXT:    lea.sl %s36, .LCPI57_0@hi
+; CHECK-NEXT:    ld %s36, .LCPI57_0@lo(,%s36)
 ; CHECK-NEXT:    and %s35, %s35, (32)0
 ; CHECK-NEXT:    lea.sl %s37, 1160773632(%s35)
 ; CHECK-NEXT:    or %s34, %s34, %s37
@@ -599,9 +599,9 @@ define fp128 @ull2q(i64) #0 {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    srl %s34, %s0, 61
 ; CHECK-NEXT:    and %s34, 4, %s34
-; CHECK-NEXT:    lea %s35, %lo(.LCPI58_0)
+; CHECK-NEXT:    lea %s35, .LCPI58_0@lo
 ; CHECK-NEXT:    and %s35, %s35, (32)0
-; CHECK-NEXT:    lea.sl %s35, %hi(.LCPI58_0)(%s35)
+; CHECK-NEXT:    lea.sl %s35, .LCPI58_0@hi(%s35)
 ; CHECK-NEXT:    adds.l %s34, %s35, %s34
 ; CHECK-NEXT:    ldu %s34, (,%s34)
 ; CHECK-NEXT:    cvt.q.s %s34, %s34

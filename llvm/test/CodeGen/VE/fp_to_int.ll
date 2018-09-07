@@ -89,8 +89,8 @@ entry:
 define dso_local i64 @f2ul(float %a) local_unnamed_addr #0 {
 ; CHECK-LABEL: f2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea.sl %s34, %hi(.LCPI7_0)
-; CHECK-NEXT:  ldu %s34, %lo(.LCPI7_0)(,%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI7_0@hi
+; CHECK-NEXT:  ldu %s34, .LCPI7_0@lo(,%s34)
 ; CHECK-NEXT:  fcmp.s %s35, %s0, %s34
 ; CHECK-NEXT:  fsub.s %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.d.s %s34, %s34
@@ -191,8 +191,8 @@ entry:
 define dso_local i64 @d2ul(double %a) local_unnamed_addr #0 {
 ; CHECK-LABEL: d2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea.sl %s34, %hi(.LCPI15_0)
-; CHECK-NEXT:  ld %s34, %lo(.LCPI15_0)(,%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI15_0@hi
+; CHECK-NEXT:  ld %s34, .LCPI15_0@lo(,%s34)
 ; CHECK-NEXT:  fcmp.d %s35, %s0, %s34
 ; CHECK-NEXT:  fsub.d %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.l.d.rz %s34, %s34
@@ -298,12 +298,12 @@ entry:
 define dso_local i64 @q2ul(fp128 %a) local_unnamed_addr #0 {
 ; CHECK-LABEL: q2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea %s34, %lo(.LCPI23_0)
+; CHECK-NEXT:  lea %s34, .LCPI23_0@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, %hi(.LCPI23_0)(%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI23_0@hi(%s34)
 ; CHECK-NEXT:  ld %s34, 8(,%s34)
-; CHECK-NEXT:  lea.sl %s36, %hi(.LCPI23_0)
-; CHECK-NEXT:  ld %s35, %lo(.LCPI23_0)(,%s36)
+; CHECK-NEXT:  lea.sl %s36, .LCPI23_0@hi
+; CHECK-NEXT:  ld %s35, .LCPI23_0@lo(,%s36)
 ; CHECK-NEXT:  fcmp.q %s36, %s0, %s34
 ; CHECK-NEXT:  fsub.q %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.d.q %s34, %s34

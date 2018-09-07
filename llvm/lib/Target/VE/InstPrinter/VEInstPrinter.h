@@ -42,9 +42,9 @@ public:
 
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &OS);
-  void printMemOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+  void printMemASXOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                        raw_ostream &OS, const char *Modifier = nullptr);
-  void printMemHmOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+  void printMemASOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                          raw_ostream &OS, const char *Modifier = nullptr);
   void printCCOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);

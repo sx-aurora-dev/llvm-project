@@ -38,6 +38,7 @@ void VEMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
 
   if (closeParen)
     OS << ')';
+  printVariantKindSuffix(OS, Kind);
 }
 
 bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind)
@@ -45,8 +46,8 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind)
   bool closeParen = true;
   switch (Kind) {
   case VK_VE_None:     closeParen = false; break;
-  case VK_VE_LO:       OS << "%lo(";  break;
-  case VK_VE_HI:       OS << "%hi(";  break;
+  case VK_VE_LO:       return false; // OS << "%lo(";  break;
+  case VK_VE_HI:       return false; // OS << "%hi(";  break;
   case VK_VE_H44:      OS << "%h44("; break;
   case VK_VE_M44:      OS << "%m44("; break;
   case VK_VE_L44:      OS << "%l44("; break;
@@ -54,12 +55,12 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind)
   case VK_VE_HM:       OS << "%hm(";  break;
   case VK_VE_PCHI:     OS << "%pc_hi("; break;
   case VK_VE_PCLO:     OS << "%pc_lo("; break;
-  case VK_VE_GOTHI:    OS << "%got_hi("; break;
-  case VK_VE_GOTLO:    OS << "%got_lo("; break;
-  case VK_VE_GOTOFFHI: OS << "%gotoff_hi("; break;
-  case VK_VE_GOTOFFLO: OS << "%gotoff_lo("; break;
-  case VK_VE_PLTHI:    OS << "%plt_hi("; break;
-  case VK_VE_PLTLO:    OS << "%plt_lo("; break;
+  case VK_VE_GOTHI:    return false; // OS << "%got_hi("; break;
+  case VK_VE_GOTLO:    return false; // OS << "%got_lo("; break;
+  case VK_VE_GOTOFFHI: return false; // OS << "%gotoff_hi("; break;
+  case VK_VE_GOTOFFLO: return false; // OS << "%gotoff_lo("; break;
+  case VK_VE_PLTHI:    return false; // OS << "%plt_hi("; break;
+  case VK_VE_PLTLO:    return false; // OS << "%plt_lo("; break;
   case VK_VE_R_DISP32: OS << "%r_disp32("; break;
   case VK_VE_TLS_GD_HI22:   OS << "%tgd_hi22(";   break;
   case VK_VE_TLS_GD_LO10:   OS << "%tgd_lo10(";   break;
@@ -81,6 +82,47 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind)
   case VK_VE_TLS_LE_LOX10:  OS << "%tle_lox10(";  break;
   }
   return closeParen;
+}
+
+void VEMCExpr::printVariantKindSuffix(raw_ostream &OS, VariantKind Kind)
+{
+  switch (Kind) {
+  case VK_VE_None:     break;
+  case VK_VE_LO:       OS << "@lo";  break;
+  case VK_VE_HI:       OS << "@hi";  break;
+  case VK_VE_H44:      break;
+  case VK_VE_M44:      break;
+  case VK_VE_L44:      break;
+  case VK_VE_HH:       break;
+  case VK_VE_HM:       break;
+  case VK_VE_PCHI:     break;
+  case VK_VE_PCLO:     break;
+  case VK_VE_GOTHI:    OS << "@got_hi"; break;
+  case VK_VE_GOTLO:    OS << "@got_lo"; break;
+  case VK_VE_GOTOFFHI: OS << "@gotoff_hi"; break;
+  case VK_VE_GOTOFFLO: OS << "@gotoff_lo"; break;
+  case VK_VE_PLTHI:    OS << "@plt_hi"; break;
+  case VK_VE_PLTLO:    OS << "@plt_lo"; break;
+  case VK_VE_R_DISP32: break;
+  case VK_VE_TLS_GD_HI22:   break;
+  case VK_VE_TLS_GD_LO10:   break;
+  case VK_VE_TLS_GD_ADD:    break;
+  case VK_VE_TLS_GD_CALL:   break;
+  case VK_VE_TLS_LDM_HI22:  break;
+  case VK_VE_TLS_LDM_LO10:  break;
+  case VK_VE_TLS_LDM_ADD:   break;
+  case VK_VE_TLS_LDM_CALL:  break;
+  case VK_VE_TLS_LDO_HIX22: break;
+  case VK_VE_TLS_LDO_LOX10: break;
+  case VK_VE_TLS_LDO_ADD:   break;
+  case VK_VE_TLS_IE_HI22:   break;
+  case VK_VE_TLS_IE_LO10:   break;
+  case VK_VE_TLS_IE_LD:     break;
+  case VK_VE_TLS_IE_LDX:    break;
+  case VK_VE_TLS_IE_ADD:    break;
+  case VK_VE_TLS_LE_HIX22:  break;
+  case VK_VE_TLS_LE_LOX10:  break;
+  }
 }
 
 VEMCExpr::VariantKind VEMCExpr::parseVariantKind(StringRef name)

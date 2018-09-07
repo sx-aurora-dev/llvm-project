@@ -107,6 +107,7 @@ public:
 
   static VariantKind parseVariantKind(StringRef name);
   static bool printVariantKind(raw_ostream &OS, VariantKind Kind);
+  static void printVariantKindSuffix(raw_ostream &OS, VariantKind Kind);
   static VE::Fixups getFixupKind(VariantKind Kind);
 };
 

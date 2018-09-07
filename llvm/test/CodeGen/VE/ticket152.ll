@@ -57,9 +57,10 @@ define dso_local i32 @caller2() local_unnamed_addr #1 {
 ; CHECK-NEXT:  or %s34, 10, (0)1
 ; CHECK-NEXT:  stl %s34, 248(,%s11)
 ; CHECK-NEXT:  or %s34, 9, (0)1
-; CHECK-NEXT:  lea %s35, %lo(callee2)
-; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s12, %hi(callee2)(%s35)
+; CHECK-NEXT:  stl %s34, 240(,%s11)
+; CHECK-NEXT:  lea %s34, callee2@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s12, callee2@hi(%s34)
 ; CHECK-NEXT:  or %s0, 1, (0)1
 ; CHECK-NEXT:  or %s1, 2, (0)1
 ; CHECK-NEXT:  or %s2, 3, (0)1
@@ -68,7 +69,6 @@ define dso_local i32 @caller2() local_unnamed_addr #1 {
 ; CHECK-NEXT:  or %s5, 6, (0)1
 ; CHECK-NEXT:  or %s6, 7, (0)1
 ; CHECK-NEXT:  or %s7, 8, (0)1
-; CHECK-NEXT:  stl %s34, 240(,%s11)
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 @callee2(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10) #3
@@ -99,15 +99,15 @@ define dso_local i32 @caller3() local_unnamed_addr #1 {
 ; CHECK-NEXT:  stl %s1, 184(,%s11)
 ; CHECK-NEXT:  or %s0, 1, (0)1
 ; CHECK-NEXT:  stl %s0, 176(,%s11)
-; CHECK-NEXT:  lea %s34, %lo(callee3)
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, %hi(callee3)(%s34)
-; CHECK-NEXT:  lea.sl %s34, %hi(.LCPI2_0)
-; CHECK-NEXT:  ld %s3, %lo(.LCPI2_0)(,%s34)
 ; CHECK-NEXT:  lea %s34, 0
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, 1074790400(%s34)
 ; CHECK-NEXT:  st %s34, 200(,%s11)
+; CHECK-NEXT:  lea.sl %s34, .LCPI2_0@hi
+; CHECK-NEXT:  ld %s3, .LCPI2_0@lo(,%s34)
+; CHECK-NEXT:  lea %s34, callee3@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s12, callee3@hi(%s34)
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 (i32, ...) @callee3(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10) #3
@@ -123,11 +123,12 @@ define dso_local i32 @caller4() local_unnamed_addr #1 {
 ; CHECK-NEXT:  or %s34, 10, (0)1
 ; CHECK-NEXT:  stl %s34, 248(,%s11)
 ; CHECK-NEXT:  or %s34, 9, (0)1
-; CHECK-NEXT:  lea %s35, %lo(callee4)
-; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s12, %hi(callee4)(%s35)
-; CHECK-NEXT:  lea.sl %s35, %hi(.LCPI3_0)
-; CHECK-NEXT:  ld %s3, %lo(.LCPI3_0)(,%s35)
+; CHECK-NEXT:  stl %s34, 240(,%s11)
+; CHECK-NEXT:  lea %s34, callee4@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s12, callee4@hi(%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI3_0@hi
+; CHECK-NEXT:  ld %s3, .LCPI3_0@lo(,%s34)
 ; CHECK-NEXT:  or %s0, 1, (0)1
 ; CHECK-NEXT:  or %s1, 2, (0)1
 ; CHECK-NEXT:  or %s2, 3, (0)1
@@ -135,7 +136,6 @@ define dso_local i32 @caller4() local_unnamed_addr #1 {
 ; CHECK-NEXT:  or %s5, 6, (0)1
 ; CHECK-NEXT:  or %s6, 7, (0)1
 ; CHECK-NEXT:  or %s7, 8, (0)1
-; CHECK-NEXT:  stl %s34, 240(,%s11)
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 bitcast (i32 (...)* @callee4 to i32 (i32, i32, i32, double, i32, i32, i32, i32, i32, i32)*)(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10) #3

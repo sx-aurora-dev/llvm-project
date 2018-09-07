@@ -16,22 +16,22 @@ define dso_local void @test(i32) local_unnamed_addr #0 {
 ; CHECK-NEXT:    lea.sl %s35, 15(%s35)
 ; CHECK-NEXT:    and %s0, %s34, %s35
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
-; CHECK-NEXT:    lea %s34, %lo(__grow_stack)
+; CHECK-NEXT:    lea %s34, __grow_stack@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(__grow_stack)(%s34)
+; CHECK-NEXT:    lea.sl %s12, __grow_stack@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    lea %s13, 64
 ; CHECK-NEXT:    and %s13, %s13, (32)0
 ; CHECK-NEXT:    lea.sl %s11, 0(%s11, %s13)
-; CHECK-NEXT:    lea.sl %s34, %hi(p)
-; CHECK-NEXT:    ld %s0, %lo(p)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, p@hi
+; CHECK-NEXT:    ld %s0, p@lo(,%s34)
 ; CHECK-NEXT:    lea %s1, 176(%s11)
 ; CHECK-NEXT:    adds.w.sx %s34, %s18, (0)1
 ; CHECK-NEXT:    sll %s2, %s34, 3
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
-; CHECK-NEXT:    lea %s34, %lo(memcpy)
+; CHECK-NEXT:    lea %s34, memcpy@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(memcpy)(%s34)
+; CHECK-NEXT:    lea.sl %s12, memcpy@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
   %2 = zext i32 %0 to i64
   %3 = alloca double, i64 %2, align 8

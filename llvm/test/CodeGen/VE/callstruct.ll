@@ -27,19 +27,19 @@ define dso_local void @fun(%struct.a* noalias nocapture sret, i32, i32) local_un
 define dso_local void @caller() local_unnamed_addr #1 {
 ; CHECK-LABEL: caller:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, %lo(callee)
+; CHECK-NEXT:    lea %s34, callee@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, %hi(callee)(%s34)
+; CHECK-NEXT:    lea.sl %s12, callee@hi(%s34)
 ; CHECK-NEXT:    lea %s0,-8(,%s9)
 ; CHECK-NEXT:    or %s1, 3, (0)1
 ; CHECK-NEXT:    or %s2, 4, (0)1
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    ld %s34, -8(,%s9)
-; CHECK-NEXT:    lea.sl %s35, %hi(A)
-; CHECK-NEXT:    stl %s34, %lo(A)(,%s35)
-; CHECK-NEXT:    lea %s35, %lo(A)
+; CHECK-NEXT:    lea.sl %s35, A@hi
+; CHECK-NEXT:    stl %s34, A@lo(,%s35)
+; CHECK-NEXT:    lea %s35, A@lo
 ; CHECK-NEXT:    and %s35, %s35, (32)0
-; CHECK-NEXT:    lea.sl %s35, %hi(A)(%s35)
+; CHECK-NEXT:    lea.sl %s35, A@hi(%s35)
 ; CHECK-NEXT:    srl %s34, %s34, 32
 ; CHECK-NEXT:    stl %s34, 4(,%s35)
 ; CHECK-NEXT:    or %s11, 0, %s9

@@ -49,9 +49,9 @@ namespace {
     StringRef getPassName() const override { return "VE Assembly Printer"; }
 
     void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
-    void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
+    void printMemASXOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
-    void printMemHmOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
+    void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                            const char *Modifier = nullptr);
 
     void EmitFunctionBodyStart() override;
@@ -337,6 +337,10 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
   case VE::GETFUNPLT:
     LowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
+  // Emit nothing here but a comment if we can.
+  case VE::MEMBARRIER:
+    OutStreamer->emitRawComment("MEMBARRIER");
+    return;
   }
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();
   MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
@@ -455,9 +459,10 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
     llvm_unreachable("<unknown operand type>");
   }
   if (CloseParen) O << ")";
+  VEMCExpr::printVariantKindSuffix(O, TF);
 }
 
-void VEAsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
+void VEAsmPrinter::printMemASXOperand(const MachineInstr *MI, int opNum,
                                       raw_ostream &O, const char *Modifier) {
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
@@ -478,7 +483,7 @@ void VEAsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
   O << ")";
 }
 
-void VEAsmPrinter::printMemHmOperand(const MachineInstr *MI, int opNum,
+void VEAsmPrinter::printMemASOperand(const MachineInstr *MI, int opNum,
                                       raw_ostream &O, const char *Modifier) {
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
@@ -531,7 +536,7 @@ bool VEAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
     return true;  // Unknown modifier
 
   O << '[';
-  printMemOperand(MI, OpNo, O);
+  printMemASXOperand(MI, OpNo, O);
   O << ']';
 
   return false;

@@ -159,8 +159,8 @@ define dso_local i64 @func18(i64) local_unnamed_addr #0 {
 define dso_local float @func19(float) local_unnamed_addr #0 {
 ; CHECK-LABEL: func19:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI18_0)
-; CHECK-NEXT:    ldu %s34, %lo(.LCPI18_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI18_0@hi
+; CHECK-NEXT:    ldu %s34, .LCPI18_0@lo(,%s34)
 ; CHECK-NEXT:    fmul.s %s0, %s0, %s34
   %2 = fmul float %0, 5.000000e+00
   ret float %2
@@ -169,8 +169,8 @@ define dso_local float @func19(float) local_unnamed_addr #0 {
 define dso_local double @func20(double) local_unnamed_addr #0 {
 ; CHECK-LABEL: func20:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s34, %hi(.LCPI19_0)
-; CHECK-NEXT:    ld %s34, %lo(.LCPI19_0)(,%s34)
+; CHECK-NEXT:    lea.sl %s34, .LCPI19_0@hi
+; CHECK-NEXT:    ld %s34, .LCPI19_0@lo(,%s34)
 ; CHECK-NEXT:    fmul.d %s0, %s0, %s34
   %2 = fmul double %0, 5.000000e+00
   ret double %2
