@@ -676,6 +676,11 @@ public:
     return isMIPS32() || isMIPS64();
   }
 
+  /// Tests whether the target is VE
+  bool isVE() const {
+    return getArch() == Triple::ve;
+  }
+
   /// Tests whether the target supports comdat
   bool supportsCOMDAT() const {
     return !isOSBinFormatMachO();
