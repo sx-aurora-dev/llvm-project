@@ -9,8 +9,8 @@
 
 #include "VE.h"
 #include "CommonArgs.h"
-#include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
+#include "clang/Driver/Compilation.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/FileSystem.h"
@@ -106,9 +106,12 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 /// VE tool chain
 VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
                          const ArgList &Args)
-    : ToolChain(D, Triple, Args) {
+    : Linux(D, Triple, Args) {
   getProgramPaths().push_back("/opt/nec/ve/bin");
   // ProgramPaths are found via 'PATH' environment variable.
+
+  getFilePaths().clear();
+  getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/musl/lib");
 }
 
 Tool *VEToolChain::buildAssembler() const {
@@ -116,7 +119,8 @@ Tool *VEToolChain::buildAssembler() const {
 }
 
 Tool *VEToolChain::buildLinker() const {
-  return new tools::VE::Linker(*this);
+  return new tools::gnutools::Linker(*this);
+//  return new tools::VE::Linker(*this);
 }
 
 bool VEToolChain::isPICDefault() const { return false; }

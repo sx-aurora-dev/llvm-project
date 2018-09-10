@@ -10,7 +10,7 @@
 #ifndef LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_VE_H
 #define LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_VE_H
 
-#include "clang/Driver/Tool.h"
+#include "Linux.h"
 #include "clang/Driver/ToolChain.h"
 
 namespace clang {
@@ -48,10 +48,10 @@ public:
 
 namespace toolchains {
 
-class LLVM_LIBRARY_VISIBILITY VEToolChain : public ToolChain {
+class LLVM_LIBRARY_VISIBILITY VEToolChain : public Linux {
 public:
   VEToolChain(const Driver &D, const llvm::Triple &Triple,
-                 const llvm::opt::ArgList &Args);
+              const llvm::opt::ArgList &Args);
 
 protected:
   Tool *buildAssembler() const override;
@@ -78,6 +78,8 @@ public:
   RuntimeLibType GetDefaultRuntimeLibType() const override {
     return ToolChain::RLT_CompilerRT;
   }
+
+  const char *getDefaultLinker() const override { return "nld"; }
 
 };
 
