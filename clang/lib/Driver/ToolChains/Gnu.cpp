@@ -310,10 +310,12 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const llvm::Triple::ArchType Arch = ToolChain.getArch();
   const bool isAndroid = ToolChain.getTriple().isAndroid();
   const bool IsIAMCU = ToolChain.getTriple().isOSIAMCU();
+  const bool IsVE = ToolChain.getTriple().isVE();
   const bool IsPIE = getPIE(Args, ToolChain);
   const bool HasCRTBeginEndFiles =
-      ToolChain.getTriple().hasEnvironment() ||
-      (ToolChain.getTriple().getVendor() != llvm::Triple::MipsTechnologies);
+      (ToolChain.getTriple().hasEnvironment() ||
+       (ToolChain.getTriple().getVendor() != llvm::Triple::MipsTechnologies)) &&
+      !IsVE;
 
   ArgStringList CmdArgs;
 
@@ -411,6 +413,11 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crti.o")));
     }
 
+    if (IsVE) {
+      CmdArgs.push_back("-z");
+      CmdArgs.push_back("max-page-size=0x4000000");
+    }
+
     if (IsIAMCU)
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt0.o")));
     else {
@@ -493,7 +500,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
-      if (WantPthread && !isAndroid)
+      if (WantPthread && !isAndroid && !IsVE)
         CmdArgs.push_back("-lpthread");
 
       if (Args.hasArg(options::OPT_fsplit_stack))
