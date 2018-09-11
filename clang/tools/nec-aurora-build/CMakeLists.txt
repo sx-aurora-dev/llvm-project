@@ -7,8 +7,17 @@ option(NECAURORA_USE_TOOLCHAIN_WRAPPERS
        "Build and install executable wrapper around ncc/gcc for easy switching."
        ON)
 
-# TODO: Make this more dynamically
-set(NECAURORA_TARGET_COMPILER "/opt/nec/ve/bin/ncc" CACHE FILEPATH "")
+# Find NEC target compiler.
+find_program(NECAURORA_TARGET_COMPILER ncc
+  DOC "NEC target compiler."
+  PATHS
+    "/opt/nec/ve/bin/")
+if(NOT NECAURORA_TARGET_COMPILER)
+  message(STATUS "NEC target compiler could not be found, defaulting to GCC.")
+  # Use a separate variable to print this message every time.
+  find_program(NECAURORA_TARGET_COMPILER_GCC gcc)
+  set(NECAURORA_TARGET_COMPILER "${NECAURORA_TARGET_COMPILER_GCC}")
+endif()
 
 if(NOT NECAURORA_USE_TOOLCHAIN_WRAPPERS)
   set(NECAURORA_TOOLCHAIN_SYMLINK_PATH "${NECAURORA_TARGET_COMPILER}" CACHE
