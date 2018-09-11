@@ -1650,7 +1650,7 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
 
-// Dynamic stack allocation yields a __grow_stack for VE targets.
+// Dynamic stack allocation yields a __llvm_grow_stack for VE targets.
 // These calls are needed to probe the stack when allocating more over
 // %s8 (%sl - stack limit).
 
