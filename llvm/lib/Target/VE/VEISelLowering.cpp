@@ -965,16 +965,16 @@ VETargetLowering::LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
       Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, 0);
       Callee = DAG.getNode(VEISD::GETFUNPLT, DL, PtrVT, Callee);
     } else {
-      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
-                             VEMCExpr::VK_VE_LO, DAG);
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI32,
+                             VEMCExpr::VK_VE_LO32, DAG);
     }
   } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     if (IsPICCall) {
       Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, 0);
       Callee = DAG.getNode(VEISD::GETFUNPLT, DL, PtrVT, Callee);
     } else {
-      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI,
-                             VEMCExpr::VK_VE_LO, DAG);
+      Callee =  makeHiLoPair(Callee, VEMCExpr::VK_VE_HI32,
+                             VEMCExpr::VK_VE_LO32, DAG);
     }
   }
 
@@ -1465,14 +1465,12 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::FMIN:            return "VEISD::FMIN";
   case VEISD::GETFUNPLT:       return "VEISD::GETFUNPLT";
   case VEISD::GETSTACKTOP:     return "VEISD::GETSTACKTOP";
+  case VEISD::GETTLSADDR:      return "VEISD::GETTLSADDR";
   case VEISD::MEMBARRIER:      return "VEISD::MEMBARRIER";
   case VEISD::CALL:            return "VEISD::CALL";
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
-  case VEISD::TLS_ADD:         return "VEISD::TLS_ADD";
-  case VEISD::TLS_LD:          return "VEISD::TLS_LD";
-  case VEISD::TLS_CALL:        return "VEISD::TLS_CALL";
   }
   return nullptr;
 }
@@ -1595,8 +1593,8 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
       //     lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35)
       //     adds.l %s35, %s15, %s35                  ; %s15がGOT
       // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
-      SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFFHI,
-                                  VEMCExpr::VK_VE_GOTOFFLO, DAG);
+      SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFF_HI32,
+                                  VEMCExpr::VK_VE_GOTOFF_LO32, DAG);
       SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
       return DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
     } else {
@@ -1607,8 +1605,8 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
       //     adds.l %s35, %s15, %s35                  ; %s15がGOT
       //     ld     %s35, (,%s35)
       // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
-      SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTHI,
-                                  VEMCExpr::VK_VE_GOTLO, DAG);
+      SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOT_HI32,
+                                  VEMCExpr::VK_VE_GOT_LO32, DAG);
       SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
       SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
       return DAG.getLoad(VT, DL, DAG.getEntryNode(), AbsAddr,
@@ -1621,27 +1619,11 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Unsupported absolute code model");
   case CodeModel::Small:
-    // abs32.
-    return makeHiLoPair(Op, VEMCExpr::VK_VE_HI,
-                        VEMCExpr::VK_VE_LO, DAG);
-  case CodeModel::Medium: {
-    // abs44.
-    SDValue H44 = makeHiLoPair(Op, VEMCExpr::VK_VE_H44,
-                               VEMCExpr::VK_VE_M44, DAG);
-    H44 = DAG.getNode(ISD::SHL, DL, VT, H44, DAG.getConstant(12, DL, MVT::i32));
-    SDValue L44 = withTargetFlags(Op, VEMCExpr::VK_VE_L44, DAG);
-    L44 = DAG.getNode(VEISD::Lo, DL, VT, L44);
-    return DAG.getNode(ISD::ADD, DL, VT, H44, L44);
-  }
-  case CodeModel::Large: {
+  case CodeModel::Medium:
+  case CodeModel::Large:
     // abs64.
-    SDValue Hi = makeHiLoPair(Op, VEMCExpr::VK_VE_HH,
-                              VEMCExpr::VK_VE_HM, DAG);
-    Hi = DAG.getNode(ISD::SHL, DL, VT, Hi, DAG.getConstant(32, DL, MVT::i32));
-    SDValue Lo = makeHiLoPair(Op, VEMCExpr::VK_VE_HI,
-                              VEMCExpr::VK_VE_LO, DAG);
-    return DAG.getNode(ISD::ADD, DL, VT, Hi, Lo);
-  }
+    return makeHiLoPair(Op, VEMCExpr::VK_VE_HI32,
+                        VEMCExpr::VK_VE_LO32, DAG);
   }
 }
 
@@ -1660,111 +1642,81 @@ SDValue VETargetLowering::LowerBlockAddress(SDValue Op,
   return makeAddress(Op, DAG);
 }
 
-#if 0
-SDValue VETargetLowering::LowerGlobalTLSAddress(SDValue Op,
-                                                   SelectionDAG &DAG) const {
-  GlobalAddressSDNode *GA = cast<GlobalAddressSDNode>(Op);
-  if (DAG.getTarget().Options.EmulatedTLS)
-    return LowerToTLSEmulatedModel(GA, DAG);
+SDValue VETargetLowering::LowerToTLSGeneralDynamicModel(
+  SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
 
-  SDLoc DL(GA);
-  const GlobalValue *GV = GA->getGlobal();
+  // Generate following code:
+  //   t1: ch,glue = callseq_start t0, 0, 0
+  //   t2: i64,ch,glue = VEISD::GETTLSADDR t1, label, t1:1
+  //   t3: ch,glue = callseq_end t2, 0, 0, t2:2
+  //   t4: i64,ch,glue = CopyFromReg t3, Register:i64 $sx0, t3:1
+  SDValue Label = withTargetFlags(Op, 0, DAG);
   EVT PtrVT = getPointerTy(DAG.getDataLayout());
 
+  // Lowering the machine isd will make sure everything is in the right
+  // location.
+  SDValue Chain = DAG.getEntryNode();
+  SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
+  const uint32_t *Mask = Subtarget->getRegisterInfo()->getCallPreservedMask(
+      DAG.getMachineFunction(), CallingConv::C);
+  Chain = DAG.getCALLSEQ_START(Chain, 64, 0, dl);
+  SDValue Args[] = { Chain, Label, DAG.getRegisterMask(Mask), Chain.getValue(1) };
+  Chain = DAG.getNode(VEISD::GETTLSADDR, dl, NodeTys, Args);
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(64, dl, true),
+                             DAG.getIntPtrConstant(0, dl, true),
+                             Chain.getValue(1), dl);
+  Chain = DAG.getCopyFromReg(Chain, dl, VE::SX0, PtrVT, Chain.getValue(1));
+
+  // GETTLSADDR will be codegen'ed as call. Inform MFI that function has calls.
+  MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
+  MFI.setHasCalls(true);
+
+  return Chain;
+}
+
+SDValue VETargetLowering::LowerToTLSLocalExecModel(SDValue Op,
+                                                   SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  EVT PtrVT = getPointerTy(DAG.getDataLayout());
+
+  // Generate following code:
+  //   lea %s0, Op@tpoff_lo
+  //   and %s0, %s0, (32)0
+  //   lea.sl %s0, Op@tpoff_hi(%s0)
+  //   add %s0, %s0, %tp
+  // FIXME: use lea.sl %s0, Op@tpoff_hi(%tp, %s0) for better performance
+  SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_TPOFF_HI32,
+                              VEMCExpr::VK_VE_TPOFF_LO32, DAG);
+  return DAG.getNode(ISD::ADD, dl, PtrVT,
+                     DAG.getRegister(VE::SX14, PtrVT), HiLo);
+}
+
+SDValue VETargetLowering::LowerGlobalTLSAddress(SDValue Op,
+                                                SelectionDAG &DAG) const {
+#if 1
+  // Current implementation of nld doesn't allow local exec model code
+  // described in VE-tls_v1.1.pdf (*1) as its input.  The nld accept
+  // only general dynamic model and optimize it whenever.  So, here
+  // we need to generate only general dynamic model code sequence.
+  //
+  // *1: https://www.nec.com/en/global/prod/hpc/aurora/document/VE-tls_v1.1.pdf
+  return LowerToTLSGeneralDynamicModel(Op, DAG);
+#else
+  // FIXME: Use either general dynamic model or local exec model when
+  //        the nld accepts them.
+  GlobalAddressSDNode *GA = cast<GlobalAddressSDNode>(Op);
+  const GlobalValue *GV = GA->getGlobal();
   TLSModel::Model model = getTargetMachine().getTLSModel(GV);
 
   if (model == TLSModel::GeneralDynamic || model == TLSModel::LocalDynamic) {
-    unsigned HiTF = ((model == TLSModel::GeneralDynamic)
-                     ? VEMCExpr::VK_VE_TLS_GD_HI22
-                     : VEMCExpr::VK_VE_TLS_LDM_HI22);
-    unsigned LoTF = ((model == TLSModel::GeneralDynamic)
-                     ? VEMCExpr::VK_VE_TLS_GD_LO10
-                     : VEMCExpr::VK_VE_TLS_LDM_LO10);
-    unsigned addTF = ((model == TLSModel::GeneralDynamic)
-                      ? VEMCExpr::VK_VE_TLS_GD_ADD
-                      : VEMCExpr::VK_VE_TLS_LDM_ADD);
-    unsigned callTF = ((model == TLSModel::GeneralDynamic)
-                       ? VEMCExpr::VK_VE_TLS_GD_CALL
-                       : VEMCExpr::VK_VE_TLS_LDM_CALL);
-
-    SDValue HiLo = makeHiLoPair(Op, HiTF, LoTF, DAG);
-    SDValue Base = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrVT);
-    SDValue Argument = DAG.getNode(VEISD::TLS_ADD, DL, PtrVT, Base, HiLo,
-                               withTargetFlags(Op, addTF, DAG));
-
-    SDValue Chain = DAG.getEntryNode();
-    SDValue InFlag;
-
-    Chain = DAG.getCALLSEQ_START(Chain, 1, 0, DL);
-    Chain = DAG.getCopyToReg(Chain, DL, SP::O0, Argument, InFlag);
-    InFlag = Chain.getValue(1);
-    SDValue Callee = DAG.getTargetExternalSymbol("__tls_get_addr", PtrVT);
-    SDValue Symbol = withTargetFlags(Op, callTF, DAG);
-
-    SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
-    const uint32_t *Mask = Subtarget->getRegisterInfo()->getCallPreservedMask(
-        DAG.getMachineFunction(), CallingConv::C);
-    assert(Mask && "Missing call preserved mask for calling convention");
-    SDValue Ops[] = {Chain,
-                     Callee,
-                     Symbol,
-                     DAG.getRegister(SP::O0, PtrVT),
-                     DAG.getRegisterMask(Mask),
-                     InFlag};
-    Chain = DAG.getNode(VEISD::TLS_CALL, DL, NodeTys, Ops);
-    InFlag = Chain.getValue(1);
-    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(1, DL, true),
-                               DAG.getIntPtrConstant(0, DL, true), InFlag, DL);
-    InFlag = Chain.getValue(1);
-    SDValue Ret = DAG.getCopyFromReg(Chain, DL, SP::O0, PtrVT, InFlag);
-
-    if (model != TLSModel::LocalDynamic)
-      return Ret;
-
-    SDValue Hi = DAG.getNode(VEISD::Hi, DL, PtrVT,
-                 withTargetFlags(Op, VEMCExpr::VK_VE_TLS_LDO_HIX22, DAG));
-    SDValue Lo = DAG.getNode(VEISD::Lo, DL, PtrVT,
-                 withTargetFlags(Op, VEMCExpr::VK_VE_TLS_LDO_LOX10, DAG));
-    HiLo =  DAG.getNode(ISD::XOR, DL, PtrVT, Hi, Lo);
-    return DAG.getNode(VEISD::TLS_ADD, DL, PtrVT, Ret, HiLo,
-                   withTargetFlags(Op, VEMCExpr::VK_VE_TLS_LDO_ADD, DAG));
+    return LowerToTLSGeneralDynamicModel(Op, DAG);
+  } else if (model == TLSModel::InitialExec || model == TLSModel::LocalExec) {
+    return LowerToTLSLocalExecModel(Op, DAG);
   }
-
-  if (model == TLSModel::InitialExec) {
-    unsigned ldTF     = ((PtrVT == MVT::i64)? VEMCExpr::VK_VE_TLS_IE_LDX
-                         : VEMCExpr::VK_VE_TLS_IE_LD);
-
-    SDValue Base = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrVT);
-
-    // GLOBAL_BASE_REG codegen'ed with call. Inform MFI that this
-    // function has calls.
-    MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
-    MFI.setHasCalls(true);
-
-    SDValue TGA = makeHiLoPair(Op,
-                               VEMCExpr::VK_VE_TLS_IE_HI22,
-                               VEMCExpr::VK_VE_TLS_IE_LO10, DAG);
-    SDValue Ptr = DAG.getNode(ISD::ADD, DL, PtrVT, Base, TGA);
-    SDValue Offset = DAG.getNode(VEISD::TLS_LD,
-                                 DL, PtrVT, Ptr,
-                                 withTargetFlags(Op, ldTF, DAG));
-    return DAG.getNode(VEISD::TLS_ADD, DL, PtrVT,
-                       DAG.getRegister(SP::G7, PtrVT), Offset,
-                       withTargetFlags(Op,
-                                       VEMCExpr::VK_VE_TLS_IE_ADD, DAG));
-  }
-
-  assert(model == TLSModel::LocalExec);
-  SDValue Hi = DAG.getNode(VEISD::Hi, DL, PtrVT,
-                  withTargetFlags(Op, VEMCExpr::VK_VE_TLS_LE_HIX22, DAG));
-  SDValue Lo = DAG.getNode(VEISD::Lo, DL, PtrVT,
-                  withTargetFlags(Op, VEMCExpr::VK_VE_TLS_LE_LOX10, DAG));
-  SDValue Offset =  DAG.getNode(ISD::XOR, DL, PtrVT, Hi, Lo);
-
-  return DAG.getNode(ISD::ADD, DL, PtrVT,
-                     DAG.getRegister(SP::G7, PtrVT), Offset);
-}
+  llvm_unreachable("bogus TLS model");
 #endif
+}
 
 #if 0
 SDValue VETargetLowering::LowerF128_LibCallArg(SDValue Chain,
@@ -2453,8 +2405,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                                                        Subtarget);
   case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG, *this,
                                                       Subtarget);
-  case ISD::GlobalTLSAddress:   // return LowerGlobalTLSAddress(Op, DAG);
-    report_fatal_error("GlobalTLSAddress expansion is not implemented yet");
+  case ISD::GlobalTLSAddress:   return LowerGlobalTLSAddress(Op, DAG);
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
@@ -2628,12 +2579,12 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
   // Instructions to store jmp location
   MIB = BuildMI(thisMBB, DL, TII->get(SP::SETHIi))
             .addReg(LabelReg, RegState::Define)
-            .addMBB(restoreMBB, VEMCExpr::VK_VE_HI);
+            .addMBB(restoreMBB, VEMCExpr::VK_VE_HI32);
 
   MIB = BuildMI(thisMBB, DL, TII->get(SP::ORri))
             .addReg(LabelReg2, RegState::Define)
             .addReg(LabelReg, RegState::Kill)
-            .addMBB(restoreMBB, VEMCExpr::VK_VE_LO);
+            .addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
 
   MIB = BuildMI(thisMBB, DL, TII->get(SP::STri))
             .addReg(BufReg)

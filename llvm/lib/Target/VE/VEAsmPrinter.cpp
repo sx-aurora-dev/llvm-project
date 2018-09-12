@@ -72,6 +72,8 @@ namespace {
                                    const MCSubtargetInfo &STI);
     void LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
                                       const MCSubtargetInfo &STI);
+    void LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+                                       const MCSubtargetInfo &STI);
 
   };
 } // end of anonymous namespace
@@ -100,6 +102,15 @@ static void EmitSIC(MCStreamer &OutStreamer,
   SICInst.setOpcode(VE::SIC);
   SICInst.addOperand(RD);
   OutStreamer.EmitInstruction(SICInst, STI);
+}
+
+static void EmitBSIC(MCStreamer &OutStreamer,
+                    MCOperand &R1, MCOperand &R2, const MCSubtargetInfo &STI) {
+  MCInst BSICInst;
+  BSICInst.setOpcode(VE::BSIC);
+  BSICInst.addOperand(R1);
+  BSICInst.addOperand(R2);
+  OutStreamer.EmitInstruction(BSICInst, STI);
 }
 
 static void EmitLEAzzi(MCStreamer &OutStreamer,
@@ -168,6 +179,7 @@ static void EmitANDrm0(MCStreamer &OutStreamer,
   EmitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
 }
 
+#if 0
 static void EmitOR(MCStreamer &OutStreamer,
                    MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
                    const MCSubtargetInfo &STI) {
@@ -185,6 +197,7 @@ static void EmitSHL(MCStreamer &OutStreamer,
                     const MCSubtargetInfo &STI) {
   EmitBinary(OutStreamer, VE::SLLri, RS1, Imm, RD, STI);
 }
+#endif
 
 static void EmitHiLo(MCStreamer &OutStreamer,  MCSymbol *GOTSym,
                      VEMCExpr::VariantKind HiKind,
@@ -217,36 +230,12 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
     default:
       llvm_unreachable("Unsupported absolute code model");
     case CodeModel::Small:
+    case CodeModel::Medium:
+    case CodeModel::Large:
       EmitHiLo(*OutStreamer, GOTLabel,
-               VEMCExpr::VK_VE_HI, VEMCExpr::VK_VE_LO,
+               VEMCExpr::VK_VE_HI32, VEMCExpr::VK_VE_LO32,
                MCRegOP, OutContext, STI);
       break;
-    case CodeModel::Medium: {
-      EmitHiLo(*OutStreamer, GOTLabel,
-               VEMCExpr::VK_VE_H44, VEMCExpr::VK_VE_M44,
-               MCRegOP, OutContext, STI);
-      MCOperand imm = MCOperand::createExpr(MCConstantExpr::create(12,
-                                                                   OutContext));
-      EmitSHL(*OutStreamer, MCRegOP, imm, MCRegOP, STI);
-      MCOperand lo = createVEMCOperand(VEMCExpr::VK_VE_L44,
-                                          GOTLabel, OutContext);
-      EmitOR(*OutStreamer, MCRegOP, lo, MCRegOP, STI);
-      break;
-    }
-    case CodeModel::Large: {
-      EmitHiLo(*OutStreamer, GOTLabel,
-               VEMCExpr::VK_VE_HH, VEMCExpr::VK_VE_HM,
-               MCRegOP, OutContext, STI);
-      MCOperand imm = MCOperand::createExpr(MCConstantExpr::create(32,
-                                                                   OutContext));
-      EmitSHL(*OutStreamer, MCRegOP, imm, MCRegOP, STI);
-      // Use register %s15 to load the lower 32 bits.
-      MCOperand RegGOT = MCOperand::createReg(VE::SX15);
-      EmitHiLo(*OutStreamer, GOTLabel,
-               VEMCExpr::VK_VE_HI, VEMCExpr::VK_VE_LO,
-               RegGOT, OutContext, STI);
-      EmitADD(*OutStreamer, MCRegOP, RegGOT, MCRegOP, STI);
-    }
     }
     return;
   }
@@ -259,14 +248,14 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   // sic %plt
   // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%got, %plt)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PCLO,
+  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC_LO32,
                                        GOTLabel,
                                        OutContext);
   EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
   EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
   EmitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PCHI,
+  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC_HI32,
                                        GOTLabel,
                                        OutContext);
   EmitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
@@ -310,17 +299,85 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   // sic %plt                            ; FIXME: is it safe to use %plt here?
   // lea.sl %dst, %plt_hi(func)(%dst, %plt)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLTLO,
+  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
                                        AddrSym,
                                        OutContext);
   EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
   EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
   EmitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLTHI,
+  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
                                        AddrSym,
                                        OutContext);
   EmitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
+}
+
+void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+                                                 const MCSubtargetInfo &STI)
+{
+  const MachineOperand &Addr = MI->getOperand(0);
+  MCSymbol* AddrSym = nullptr;
+
+  switch (Addr.getType()) {
+  default:
+    llvm_unreachable ("<unknown operand type>");
+    return;
+  case MachineOperand::MO_MachineBasicBlock:
+    report_fatal_error("MBB is not supporeted yet");
+    return;
+  case MachineOperand::MO_ConstantPoolIndex:
+    report_fatal_error("ConstantPool is not supporeted yet");
+    return;
+  case MachineOperand::MO_ExternalSymbol:
+    AddrSym = GetExternalSymbolSymbol(Addr.getSymbolName());
+    break;
+  case MachineOperand::MO_GlobalAddress:
+    AddrSym = getSymbol(Addr.getGlobal());
+    break;
+  }
+
+  if (!isPositionIndependent()) {
+    llvm_unreachable("Unsupported uses of %plt in not PIC code");
+    return;
+  }
+
+  MCOperand RegLR   = MCOperand::createReg(VE::SX10);   // LR
+  MCOperand RegS0   = MCOperand::createReg(VE::SX0);    // S0
+  MCOperand RegS12  = MCOperand::createReg(VE::SX12);   // S12
+  MCSymbol *GetTLSLabel   =
+    OutContext.getOrCreateSymbol(Twine("__tls_get_addr"));
+
+  // lea %s0, sym@tls_gd_lo(-24)
+  // and %s0, %s0, (32)0
+  // sic %lr
+  // lea.sl %s0, sym@tls_gd_hi(%s0, %lr)
+  // lea %s12, __tls_get_addr@plt_lo(8)
+  // and %s12, %s12, (32)0
+  // lea.sl %s12, __tls_get_addr@plt_hi(%s12, %lr)
+  // bsic %lr, (, %s12)
+  MCOperand cim24 = MCOperand::createImm(-24);
+  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_LO32,
+                                       AddrSym,
+                                       OutContext);
+  EmitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
+  MCOperand ci32 = MCOperand::createImm(32);
+  EmitANDrm0(*OutStreamer, RegS0, ci32, RegS0, STI);
+  EmitSIC(*OutStreamer, RegLR, STI);
+  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_HI32,
+                                       AddrSym,
+                                       OutContext);
+  EmitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
+  MCOperand ci8 = MCOperand::createImm(8);
+  MCOperand loImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
+                                        GetTLSLabel,
+                                        OutContext);
+  EmitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
+  EmitANDrm0(*OutStreamer, RegS12, ci32, RegS12, STI);
+  MCOperand hiImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
+                                        GetTLSLabel,
+                                        OutContext);
+  EmitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
+  EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
 void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
@@ -336,6 +393,9 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
     return;
   case VE::GETFUNPLT:
     LowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
+    return;
+  case VE::GETTLSADDR:
+    LowerGETTLSAddrAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   // Emit nothing here but a comment if we can.
   case VE::MEMBARRIER:

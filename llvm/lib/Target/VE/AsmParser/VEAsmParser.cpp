@@ -1073,13 +1073,13 @@ VEAsmParser::adjustPICRelocation(VEMCExpr::VariantKind VK,
   if (getContext().getObjectFileInfo()->isPositionIndependent()) {
     switch(VK) {
     default: break;
-    case VEMCExpr::VK_VE_LO:
-      VK = (hasGOTReference(subExpr) ? VEMCExpr::VK_VE_PCLO
-                                     : VEMCExpr::VK_VE_GOTLO);
+    case VEMCExpr::VK_VE_LO32:
+      VK = (hasGOTReference(subExpr) ? VEMCExpr::VK_VE_PC_LO32
+                                     : VEMCExpr::VK_VE_GOT_LO32);
       break;
-    case VEMCExpr::VK_VE_HI:
-      VK = (hasGOTReference(subExpr) ? VEMCExpr::VK_VE_PCHI
-                                     : VEMCExpr::VK_VE_GOTHI);
+    case VEMCExpr::VK_VE_HI32:
+      VK = (hasGOTReference(subExpr) ? VEMCExpr::VK_VE_PC_HI32
+                                     : VEMCExpr::VK_VE_GOT_HI32);
       break;
     }
   }
