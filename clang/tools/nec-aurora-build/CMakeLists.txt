@@ -19,11 +19,6 @@ if(NOT NECAURORA_TARGET_COMPILER)
   set(NECAURORA_TARGET_COMPILER "${NECAURORA_TARGET_COMPILER_GCC}")
 endif()
 
-if(NOT NECAURORA_USE_TOOLCHAIN_WRAPPERS)
-  set(NECAURORA_TOOLCHAIN_SYMLINK_PATH "${NECAURORA_TARGET_COMPILER}" CACHE
-      FILEPATH "")
-endif()
-
 find_package(NECAURORA_LIBELF)
 if(NOT NECAURORA_LIBELF_FOUND)
   # TODO: Really fatal error? Can we just exclude static linking?
@@ -53,13 +48,9 @@ if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
   add_clang_symlink(necaurora-linker-wrapper necaurora-ofld-tool-wrapper)
   add_clang_symlink(necaurora-asm-wrapper necaurora-ofld-tool-wrapper)
 else()
-    install_symlink(${NECAURORA_TOOLCHAIN_SYMLINK_PATH}
-                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
+  install_symlink(${NECAURORA_TARGET_COMPILER}
+                  ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
 
-    install_symlink(${NECAURORA_TOOLCHAIN_SYMLINK_PATH}
-                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
-#  TODO: This clang method to create symlinks does not work, 
-#        because the ncc compiler is not a target
-#  add_clang_symlink(necaurora-linker-wrapper ${NECAURORA_TOOLCHAIN_SYMLINK_PATH})
-#  add_clang_symlink(necaurora-asm-wrapper ${NECAURORA_TOOLCHAIN_SYMLINK_PATH})
+  install_symlink(${NECAURORA_TARGET_COMPILER}
+                  ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
 endif()
