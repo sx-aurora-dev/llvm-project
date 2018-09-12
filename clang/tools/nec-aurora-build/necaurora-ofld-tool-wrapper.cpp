@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
     // TODO: This should be in the fat binary somehow...
     cmdCp << "cp " << output << " ./" << VEORUN_BIN;
     if (Verbose)
-      std::cout << cmdCp << std::endl;
+      std::cout << cmdCp.str() << std::endl;
     ret = std::system(cmdCp.str().c_str());
   }
 
