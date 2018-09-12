@@ -1893,13 +1893,29 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
   SDLoc DL(Node);
   SDValue VAList =
       DAG.getLoad(PtrVT, DL, InChain, VAListPtr, MachinePointerInfo(SV));
-  // Increment the pointer, VAList, by 8 to the next vaarg.
-  SDValue NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
-                                DAG.getIntPtrConstant(8,
-                                                      DL));
+  SDValue Chain = VAList.getValue(1);
+  SDValue NextPtr;
+
+  if(VT == MVT::f128) {
+    // Alignment
+    int Align = 16;
+    VAList = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
+                         DAG.getConstant(Align - 1, DL, PtrVT));
+    VAList = DAG.getNode(ISD::AND, DL, PtrVT, VAList,
+                         DAG.getConstant(-Align, DL, PtrVT));
+    // Increment the pointer, VAList, by 16 to the next vaarg.
+    NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
+                          DAG.getIntPtrConstant(16, DL));
+  } else {
+    // Increment the pointer, VAList, by 8 to the next vaarg.
+    NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
+                          DAG.getIntPtrConstant(8, DL));
+  }
+
   // Store the incremented VAList to the legalized pointer.
-  InChain = DAG.getStore(VAList.getValue(1), DL, NextPtr, VAListPtr,
+  InChain = DAG.getStore(Chain, DL, NextPtr, VAListPtr,
                          MachinePointerInfo(SV));
+
   // Load the actual argument out of the pointer VAList.
   // We can't count on greater alignment than the word size.
   return DAG.getLoad(VT, DL, InChain, VAList, MachinePointerInfo(),
