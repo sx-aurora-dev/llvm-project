@@ -1925,7 +1925,7 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
 SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(
     SDValue Op, SelectionDAG &DAG) const {
   // Generate following code.
-  //   (void)__grow_stack(size);
+  //   (void)__llvm_grow_stack(size);
   //   ret = GETSTACKTOP;        // pseudo instruction
   SDLoc dl(Op);
 
@@ -1941,12 +1941,13 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(
   Type* RetTy = Type::getVoidTy(*DAG.getContext());
 
   EVT PtrVT = getPointerTy(DAG.getDataLayout());
-  SDValue Callee = DAG.getTargetExternalSymbol("__grow_stack", PtrVT, 0);
+  SDValue Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
 
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
       .setChain(DAG.getEntryNode())
-      .setCallee(CallingConv::C, RetTy, Callee, std::move(Args))
+      .setCallee(CallingConv::VE_LLVM_GROW_STACK, RetTy,
+                 Callee, std::move(Args))
       .setDiscardResult(true);
   std::pair<SDValue, SDValue> pair = LowerCallTo(CLI);
   SDValue Chain = pair.second;

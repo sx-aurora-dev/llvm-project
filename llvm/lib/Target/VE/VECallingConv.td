@@ -88,3 +88,8 @@ def CSR_vec_expf : CalleeSavedRegs<(add (sequence "SX%u", 2, 4),
                                         (sequence "V%u", 7, 63),
                                         (sequence "VM%u", 1, 5),
                                         (sequence "VM%u", 7, 15))>;
+
+// llvm_grow_stack destroys s62 and s63
+def CSR_llvm_grow_stack : CalleeSavedRegs<(add (sequence "SX%u", 0, 61),
+                                               (sequence "V%u", 0, 63),
+                                               (sequence "VM%u", 1, 15))>;

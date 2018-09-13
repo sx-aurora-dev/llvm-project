@@ -44,6 +44,8 @@ VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                         CallingConv::ID CC) const {
   if (CC == CallingConv::VE_VEC_EXPF) {
     return CSR_vec_expf_RegMask;
+  } else if (CC == CallingConv::VE_LLVM_GROW_STACK) {
+    return CSR_llvm_grow_stack_RegMask;
   }
   return CSR_RegMask;
 }
