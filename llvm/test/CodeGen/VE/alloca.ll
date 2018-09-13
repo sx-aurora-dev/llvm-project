@@ -6,14 +6,13 @@
 define dso_local void @test(i32) local_unnamed_addr #0 {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB0_2:
-; CHECK-NEXT:    st %s18, 48(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:    adds.w.sx %s18, %s0, (0)1
-; CHECK-NEXT:    lea %s34, 15(%s18)
+; CHECK-NEXT:    adds.w.sx %s2, %s0, (0)1
+; CHECK-NEXT:    lea %s34, 15(%s2)
 ; CHECK-NEXT:    and %s0, -16, %s34
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
-; CHECK-NEXT:    lea %s34, __grow_stack@lo
+; CHECK-NEXT:    lea %s34, __llvm_grow_stack@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, __grow_stack@hi(%s34)
+; CHECK-NEXT:    lea.sl %s12, __llvm_grow_stack@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    lea %s13, 64
 ; CHECK-NEXT:    and %s13, %s13, (32)0
@@ -25,8 +24,11 @@ define dso_local void @test(i32) local_unnamed_addr #0 {
 ; CHECK-NEXT:    lea %s34, memcpy@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s12, memcpy@hi(%s34)
-; CHECK-NEXT:    or %s2, 0, %s18
 ; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea %s13, 64
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s11, 0(%s11, %s13)
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = sext i32 %0 to i64
   %3 = alloca i8, i64 %2, align 8
   %4 = load i8*, i8** @buf, align 8, !tbaa !2
