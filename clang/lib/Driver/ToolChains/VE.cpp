@@ -63,6 +63,10 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                      const InputInfoList &Inputs,
                                      const ArgList &Args,
                                      const char *LinkingOutput) const {
+  // Using gnutools::Linker::ConstructJob now.
+  // See VEToolChain::buildLinker() function.
+  assert(0 && "VE::Linker::ConstructJob is deprecated");
+#if 0
   ArgStringList CmdArgs;
 
   bool IsStatic = Args.hasArg(options::OPT_static);
@@ -101,6 +105,7 @@ void tools::VE::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("ncc"));
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
+#endif
 }
 
 /// VE tool chain
@@ -110,7 +115,18 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   getProgramPaths().push_back("/opt/nec/ve/bin");
   // ProgramPaths are found via 'PATH' environment variable.
 
+  // default file paths are:
+  //   ${RESOURCEDIR}/lib/linux/ve (== getArchSpecificLibPath)
+  //   /lib/../lib64
+  //   /usr/lib/../lib64
+  //   ${BINPATH}/../lib
+  //   /lib
+  //   /usr/lib
+  //
+  // These are OK for host, but no go for VE.  So, defines them all
+  // from scratch here.
   getFilePaths().clear();
+  getFilePaths().push_back(getArchSpecificLibPath());
   getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/musl/lib");
 }
 
@@ -191,6 +207,9 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/opt/nec/ve/ncc/1.3.3/include/C++");
 #endif
+    SmallString<128> P(getDriver().ResourceDir);
+    llvm::sys::path::append(P, "include/c++/v1");
+    addSystemInclude(DriverArgs, CC1Args, P);
   }
 #if 0
   // Several remedies are required to use VE system header files.
@@ -202,6 +221,25 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(
 }
 
 void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
-                                         ArgStringList &CmdArgs) const {
-  // We don't output any lib args. This is handled by ncc.
+                                      ArgStringList &CmdArgs) const {
+  assert((GetCXXStdlibType(Args) == ToolChain::CST_Libcxx) &&
+         "Only -lc++ (aka libxx) is supported in this toolchain.");
+
+  auto P = getArchSpecificLibPath() + "/lib";
+  CmdArgs.push_back(Args.MakeArgString("-L" + P));
+  CmdArgs.push_back(Args.MakeArgString("-rpath=" + P));
+  auto P2 = getArchSpecificLibPath();
+  CmdArgs.push_back(Args.MakeArgString("-L" + P2));
+  CmdArgs.push_back(Args.MakeArgString("-rpath=" + P2));
+
+  CmdArgs.push_back("-lc++");
+  CmdArgs.push_back("-lc++abi");
+  CmdArgs.push_back("-lunwind");
 }
+
+llvm::ExceptionHandling VEToolChain::GetExceptionModel(
+        const ArgList &Args) const {
+  // VE uses SjLj exceptions.
+  return llvm::ExceptionHandling::SjLj;
+}
+
