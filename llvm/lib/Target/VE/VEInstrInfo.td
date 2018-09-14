@@ -253,6 +253,11 @@ def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
 // GETFUNPLT for PIC
 def GetFunPLT : SDNode<"VEISD::GETFUNPLT", SDTIntUnaryOp>;
 
+// GETTLSADDR for TLS
+def GetTLSAddr : SDNode<"VEISD::GETTLSADDR", SDT_SPCall,
+                        [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
+                         SDNPVariadic]>;
+
 // GETSTACKTOP
 def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone>;
 
@@ -1271,6 +1276,11 @@ def RET : CF<
     "b.l (,%lr)",
     [(retflag)]>;
 
+// Branch and Save IC
+
+let cx = 0, cy = 0, cy = 0, cz = 1 /* , Uses = [IC] */ in
+def BSIC : RM<0x08, (outs), (ins I64:$sx, I64:$sz), "bsic $sx, (, ${sz})", []>;
+
 // Branch instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */ in
 defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64, uimm6Op64>;
@@ -1566,6 +1576,13 @@ def : Pat<(add (VEhi tglobaladdr:$in1), (VElo tglobaladdr:$in2)),
           (LEASLrzi (ANDrm0 (LEAzzi tglobaladdr:$in2), 32),
                     (tglobaladdr:$in1))>;
 
+// GlobalTLS address calculation and its optimization
+def : Pat<(VEhi tglobaltlsaddr:$in), (LEASLzzi tglobaltlsaddr:$in)>;
+def : Pat<(VElo tglobaltlsaddr:$in), (ANDrm0 (LEAzzi tglobaltlsaddr:$in), 32)>;
+def : Pat<(add (VEhi tglobaltlsaddr:$in1), (VElo tglobaltlsaddr:$in2)),
+          (LEASLrzi (ANDrm0 (LEAzzi tglobaltlsaddr:$in2), 32),
+                    (tglobaltlsaddr:$in1))>;
+
 // Address calculation and its optimization
 def : Pat<(VEhi tconstpool:$in), (LEASLzzi tconstpool:$in)>;
 def : Pat<(VElo tconstpool:$in), (ANDrm0 (LEAzzi tconstpool:$in), 32)>;
@@ -1632,6 +1649,15 @@ def : Pat<(GetFunPLT tglobaladdr:$dst),
           (GETFUNPLT tglobaladdr:$dst)>;
 def : Pat<(GetFunPLT texternalsym:$dst),
           (GETFUNPLT texternalsym:$dst)>;
+
+// GETTLSADDR for TLS
+let Defs = [SX0, SX10, SX12] in
+def GETTLSADDR : Pseudo<(outs), (ins i64imm:$addr),
+                        "# GETTLSADDR $addr",
+                        [(GetTLSAddr tglobaltlsaddr:$addr)] >;
+
+def : Pat<(GetTLSAddr tglobaltlsaddr:$dst),
+          (GETTLSADDR tglobaltlsaddr:$dst)>;
 
 let Defs = [SX11], Uses = [SX11] in {
 def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i64imm:$amt, i64imm:$amt2),

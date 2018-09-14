@@ -52,6 +52,7 @@ namespace llvm {
       GETFUNPLT,   // load function address through %plt insturction
       GETSTACKTOP, // retrieve address of stack top (first address of
                    // locals and temporaries)
+      GETTLSADDR,  // load address for TLS access
 
       MEMBARRIER,  // Compiler barrier only; generate a no-op.
 
@@ -59,10 +60,6 @@ namespace llvm {
       RET_FLAG,    // Return with a flag operand.
       GLOBAL_BASE_REG, // Global base reg for PIC.
       FLUSHW,      // FLUSH register windows to stack.
-
-      TLS_ADD,     // For Thread Local Storage (TLS).
-      TLS_LD,
-      TLS_CALL
     };
   }
 
@@ -156,6 +153,8 @@ namespace llvm {
 
     SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
 
