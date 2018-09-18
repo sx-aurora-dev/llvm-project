@@ -219,6 +219,11 @@ private:
                    MDNode::get(*C, None));
   }
 
+  std::string UniqueSuffix() {
+    static size_t Count = 0;
+    return "_sancov" + std::to_string(Count++);
+  }
+
   std::string getSectionName(const std::string &Section) const;
   std::string getSectionStart(const std::string &Section) const;
   std::string getSectionEnd(const std::string &Section) const;
@@ -273,9 +278,20 @@ Function *SanitizerCoverageModule::CreateInitCallsForSections(
   auto SecStart = SecStartEnd.first;
   auto SecEnd = SecStartEnd.second;
   Function *CtorFunc;
+  Value *SecStartPtr = nullptr;
+  // Account for the fact that on windows-msvc __start_* symbols actually
+  // point to a uint64_t before the start of the array.
+  if (TargetTriple.getObjectFormat() == Triple::COFF) {
+    auto SecStartI8Ptr = IRB.CreatePointerCast(SecStart, Int8PtrTy);
+    auto GEP = IRB.CreateGEP(SecStartI8Ptr,
+                             ConstantInt::get(IntptrTy, sizeof(uint64_t)));
+    SecStartPtr = IRB.CreatePointerCast(GEP, Ty);
+  } else {
+    SecStartPtr = IRB.CreatePointerCast(SecStart, Ty);
+  }
   std::tie(CtorFunc, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, SanCovModuleCtorName, InitFunctionName, {Ty, Ty},
-      {IRB.CreatePointerCast(SecStart, Ty), IRB.CreatePointerCast(SecEnd, Ty)});
+      {SecStartPtr, IRB.CreatePointerCast(SecEnd, Ty)});
 
   if (TargetTriple.supportsCOMDAT()) {
     // Use comdat to dedup CtorFunc.
@@ -397,9 +413,20 @@ bool SanitizerCoverageModule::runOnModule(Module &M) {
     Function *InitFunction = declareSanitizerInitFunction(
         M, SanCovPCsInitName, {IntptrPtrTy, IntptrPtrTy});
     IRBuilder<> IRBCtor(Ctor->getEntryBlock().getTerminator());
-    IRBCtor.CreateCall(InitFunction,
-                       {IRB.CreatePointerCast(SecStartEnd.first, IntptrPtrTy),
-                        IRB.CreatePointerCast(SecStartEnd.second, IntptrPtrTy)});
+    Value *SecStartPtr = nullptr;
+    // Account for the fact that on windows-msvc __start_pc_table actually
+    // points to a uint64_t before the start of the PC table.
+    if (TargetTriple.getObjectFormat() == Triple::COFF) {
+      auto SecStartI8Ptr = IRB.CreatePointerCast(SecStartEnd.first, Int8PtrTy);
+      auto GEP = IRB.CreateGEP(SecStartI8Ptr,
+                               ConstantInt::get(IntptrTy, sizeof(uint64_t)));
+      SecStartPtr = IRB.CreatePointerCast(GEP, IntptrPtrTy);
+    } else {
+      SecStartPtr = IRB.CreatePointerCast(SecStartEnd.first, IntptrPtrTy);
+    }
+    IRBCtor.CreateCall(
+        InitFunction,
+        {SecStartPtr, IRB.CreatePointerCast(SecStartEnd.second, IntptrPtrTy)});
   }
   // We don't reference these arrays directly in any of our runtime functions,
   // so we need to prevent them from being dead stripped.
@@ -549,11 +576,34 @@ GlobalVariable *SanitizerCoverageModule::CreateFunctionLocalArrayInSection(
   auto Array = new GlobalVariable(
       *CurModule, ArrayTy, false, GlobalVariable::PrivateLinkage,
       Constant::getNullValue(ArrayTy), "__sancov_gen_");
-  if (auto Comdat = F.getComdat())
+  if (auto Comdat = F.getComdat()) {
     Array->setComdat(Comdat);
+  } else {
+    // TODO: Refactor into a helper function and use it in ASan.
+    assert(F.hasName());
+    std::string Name = F.getName();
+    if (F.hasLocalLinkage()) {
+      std::string ModuleId = getUniqueModuleId(CurModule);
+      Name += ModuleId.empty() ? UniqueSuffix() : ModuleId;
+    }
+    Comdat = CurModule->getOrInsertComdat(Name);
+    // Make this IMAGE_COMDAT_SELECT_NODUPLICATES on COFF. Also upgrade private
+    // linkage to internal linkage so that a symbol table entry is emitted. This
+    // is necessary in order to create the comdat group.
+    if (TargetTriple.isOSBinFormatCOFF()) {
+      Comdat->setSelectionKind(Comdat::NoDuplicates);
+      if (F.hasPrivateLinkage())
+        F.setLinkage(GlobalValue::InternalLinkage);
+    }
+    F.setComdat(Comdat);
+    Array->setComdat(Comdat);
+  }
   Array->setSection(getSectionName(Section));
   Array->setAlignment(Ty->isPointerTy() ? DL->getPointerSize()
                                         : Ty->getPrimitiveSizeInBits() / 8);
+  GlobalsToAppendToCompilerUsed.push_back(Array);
+  MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
+  Array->addMetadata(LLVMContext::MD_associated, *MD);
   return Array;
 }
 
@@ -591,23 +641,12 @@ void SanitizerCoverageModule::CreateFunctionLocalArrays(
     FunctionGuardArray = CreateFunctionLocalArrayInSection(
         AllBlocks.size(), F, Int32Ty, SanCovGuardsSectionName);
     GlobalsToAppendToUsed.push_back(FunctionGuardArray);
-    GlobalsToAppendToCompilerUsed.push_back(FunctionGuardArray);
-    MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
-    FunctionGuardArray->addMetadata(LLVMContext::MD_associated, *MD);
   }
-  if (Options.Inline8bitCounters) {
+  if (Options.Inline8bitCounters)
     Function8bitCounterArray = CreateFunctionLocalArrayInSection(
         AllBlocks.size(), F, Int8Ty, SanCovCountersSectionName);
-    GlobalsToAppendToCompilerUsed.push_back(Function8bitCounterArray);
-    MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
-    Function8bitCounterArray->addMetadata(LLVMContext::MD_associated, *MD);
-  }
-  if (Options.PCTable) {
+  if (Options.PCTable)
     FunctionPCsArray = CreatePCArray(F, AllBlocks);
-    GlobalsToAppendToCompilerUsed.push_back(FunctionPCsArray);
-    MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
-    FunctionPCsArray->addMetadata(LLVMContext::MD_associated, *MD);
-  }
 }
 
 bool SanitizerCoverageModule::InjectCoverage(Function &F,
@@ -809,8 +848,13 @@ void SanitizerCoverageModule::InjectCoverageAtBlock(Function &F, BasicBlock &BB,
 
 std::string
 SanitizerCoverageModule::getSectionName(const std::string &Section) const {
-  if (TargetTriple.getObjectFormat() == Triple::COFF)
-    return ".SCOV$M";
+  if (TargetTriple.getObjectFormat() == Triple::COFF) {
+    if (Section == SanCovCountersSectionName)
+      return ".SCOV$CM";
+    if (Section == SanCovPCsSectionName)
+      return ".SCOVP$M";
+    return ".SCOV$GM"; // For SanCovGuardsSectionName.
+  }
   if (TargetTriple.isOSBinFormatMachO())
     return "__DATA,__" + Section;
   return "__" + Section;

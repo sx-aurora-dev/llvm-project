@@ -10,6 +10,7 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDSERVER_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDSERVER_H
 
+#include "Cancellation.h"
 #include "ClangdUnit.h"
 #include "CodeComplete.h"
 #include "FSProvider.h"
@@ -18,6 +19,7 @@
 #include "Protocol.h"
 #include "TUScheduler.h"
 #include "index/FileIndex.h"
+#include "index/Index.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/Core/Replacement.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -99,6 +101,7 @@ public:
   /// synchronize access to shared state.
   ClangdServer(GlobalCompilationDatabase &CDB, FileSystemProvider &FSProvider,
                DiagnosticsConsumer &DiagConsumer, const Options &Opts);
+  ~ClangdServer();
 
   /// Set the root path of the workspace.
   void setRootPath(PathRef RootPath);
@@ -122,9 +125,9 @@ public:
   /// while returned future is not yet ready.
   /// A version of `codeComplete` that runs \p Callback on the processing thread
   /// when codeComplete results become available.
-  void codeComplete(PathRef File, Position Pos,
-                    const clangd::CodeCompleteOptions &Opts,
-                    Callback<CodeCompleteResult> CB);
+  TaskHandle codeComplete(PathRef File, Position Pos,
+                          const clangd::CodeCompleteOptions &Opts,
+                          Callback<CodeCompleteResult> CB);
 
   /// Provide signature help for \p File at \p Pos.  This method should only be
   /// called for tracked files.
@@ -153,6 +156,10 @@ public:
   /// Retrieve the symbols within the specified file.
   void documentSymbols(StringRef File,
                        Callback<std::vector<SymbolInformation>> CB);
+
+  /// Retrieve locations for symbol references.
+  void findReferences(PathRef File, Position Pos,
+                      Callback<std::vector<Location>> CB);
 
   /// Run formatting for \p Rng inside \p File with content \p Code.
   llvm::Expected<tooling::Replacements> formatRange(StringRef Code,
@@ -188,6 +195,10 @@ public:
   /// FIXME: those metrics might be useful too, we should add them.
   std::vector<std::pair<Path, std::size_t>> getUsedBytesPerFile() const;
 
+  /// Returns the active dynamic index if one was built.
+  /// This can be useful for testing, debugging, or observing memory usage.
+  const SymbolIndex *dynamicIndex() const;
+
   // Blocks the main thread until the server is idle. Only for use in tests.
   // Returns false if the timeout expires.
   LLVM_NODISCARD bool
@@ -200,6 +211,7 @@ private:
   formatCode(llvm::StringRef Code, PathRef File,
              ArrayRef<tooling::Range> Ranges);
 
+  class DynamicIndex;
   typedef uint64_t DocVersion;
 
   void consumeDiagnostics(PathRef File, DocVersion Version,
@@ -217,14 +229,20 @@ private:
   Path ResourceDir;
   // The index used to look up symbols. This could be:
   //   - null (all index functionality is optional)
-  //   - the dynamic index owned by ClangdServer (FileIdx)
+  //   - the dynamic index owned by ClangdServer (DynamicIdx)
   //   - the static index passed to the constructor
   //   - a merged view of a static and dynamic index (MergedIndex)
-  SymbolIndex *Index;
-  // If present, an up-to-date of symbols in open files. Read via Index.
-  std::unique_ptr<FileIndex> FileIdx;
-  // If present, a merged view of FileIdx and an external index. Read via Index.
+  const SymbolIndex *Index;
+  // If present, an index of symbols in open files. Read via *Index.
+  std::unique_ptr<DynamicIndex> DynamicIdx;
+  // If present, storage for the merged static/dynamic index. Read via *Index.
   std::unique_ptr<SymbolIndex> MergedIndex;
+
+  // GUARDED_BY(CachedCompletionFuzzyFindRequestMutex)
+  llvm::StringMap<llvm::Optional<FuzzyFindRequest>>
+      CachedCompletionFuzzyFindRequestByFile;
+  mutable std::mutex CachedCompletionFuzzyFindRequestMutex;
+
   // If set, this represents the workspace path.
   llvm::Optional<std::string> RootPath;
   std::shared_ptr<PCHContainerOperations> PCHs;

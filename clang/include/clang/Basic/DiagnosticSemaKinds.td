@@ -694,7 +694,8 @@ def warn_assume_side_effects : Warning<
   InGroup<DiagGroup<"assume">>;
 
 def warn_memcpy_chk_overflow : Warning<
-  "%0 will always overflow destination buffer">,
+  "'%0' will always overflow; destination buffer has size %1,"
+  " but size argument is %2">,
   InGroup<DiagGroup<"builtin-memcpy-chk-size">>;
 
 /// main()
@@ -867,8 +868,8 @@ def err_protocol_has_circular_dependency : Error<
   "protocol has circular dependency">;
 def err_undeclared_protocol : Error<"cannot find protocol declaration for %0">;
 def warn_undef_protocolref : Warning<"cannot find protocol definition for %0">;
-def warn_atprotocol_protocol : Warning<
-  "@protocol is using a forward protocol declaration of %0">, InGroup<AtProtocol>;
+def err_atprotocol_protocol : Error<
+  "@protocol is using a forward protocol declaration of %0">;
 def warn_readonly_property : Warning<
   "attribute 'readonly' of property %0 restricts attribute "
   "'readwrite' of property inherited from %1">,
@@ -1046,6 +1047,9 @@ def err_objc_property_attr_mutually_exclusive : Error<
   "property attributes '%0' and '%1' are mutually exclusive">;
 def err_objc_property_requires_object : Error<
   "property with '%0' attribute must be of object type">;
+def warn_objc_property_assign_on_object : Warning<
+  "'assign' property of object type may become a dangling reference; consider using 'unsafe_unretained'">,
+  InGroup<ObjCPropertyAssignOnObjectType>, DefaultIgnore;
 def warn_objc_property_no_assignment_attribute : Warning<
   "no 'assign', 'retain', or 'copy' attribute is specified - "
   "'assign' is assumed">,
@@ -1464,6 +1468,10 @@ def err_noexcept_needs_constant_expression : Error<
   "argument to noexcept specifier must be a constant expression">;
 def err_exception_spec_not_parsed : Error<
   "exception specification is not available until end of class definition">;
+def err_exception_spec_cycle : Error<
+  "exception specification of %0 uses itself">;
+def err_exception_spec_incomplete_type : Error<
+  "exception specification needed for member of incomplete class %0">;
 
 // C++ access checking
 def err_class_redeclared_with_different_access : Error<
@@ -1809,6 +1817,10 @@ def err_destructor_expr_type_mismatch : Error<
 def note_destructor_type_here : Note<
   "type %0 is declared here">;
 
+def err_destroy_attr_on_non_static_var : Error<
+  "%select{no_destroy|always_destroy}0 attribute can only be applied to a"
+  " variable with static or thread storage duration">;
+
 def err_destructor_template : Error<
   "destructor cannot be declared as a template">;
 
@@ -2139,8 +2151,12 @@ def note_deduction_guide_template_access : Note<
   "member template declared %0 here">;
 def note_deduction_guide_access : Note<
   "deduction guide declared %0 by intervening access specifier">;
+def warn_cxx14_compat_class_template_argument_deduction : Warning<
+  "class template argument deduction is incompatible with C++ standards "
+  "before C++17%select{|; for compatibility, use explicit type name %1}0">,
+  InGroup<CXXPre17Compat>, DefaultIgnore;
 
-// C++1y deduced return types
+// C++14 deduced return types
 def err_auto_fn_deduction_failure : Error<
   "cannot deduce return type %0 from returned value of type %1">;
 def err_auto_fn_different_deductions : Error<
@@ -2156,6 +2172,9 @@ def err_auto_fn_return_init_list : Error<
   "cannot deduce return type from initializer list">;
 def err_auto_fn_virtual : Error<
   "function with deduced return type cannot be virtual">;
+def warn_cxx11_compat_deduced_return_type : Warning<
+  "return type deduction is incompatible with C++ standards before C++14">,
+  InGroup<CXXPre14Compat>, DefaultIgnore;
 
 // C++11 override control
 def override_keyword_only_allowed_on_virtual_member_functions : Error<
@@ -2512,6 +2531,8 @@ def err_attribute_argument_type : Error<
   "constant|a string|an identifier}1">;
 def err_attribute_argument_outof_range : Error<
   "%0 attribute requires integer constant between %1 and %2 inclusive">;
+def err_attribute_argument_negative : Error<
+  "negative argument is not allowed for %0 attribute">;
 def err_init_priority_object_attr : Error<
   "can only use 'init_priority' attribute on file-scope definitions "
   "of objects of class type">;
@@ -2599,6 +2620,8 @@ def err_arg_with_address_space : Error<
   "parameter may not be qualified with an address space">;
 def err_field_with_address_space : Error<
   "field may not be qualified with an address space">;
+def err_compound_literal_with_address_space : Error<
+  "compound literal in function scope may not be qualified with an address space">;
 def err_attr_objc_ownership_redundant : Error<
   "the type %0 is already explicitly ownership-qualified">;
 def err_invalid_nsnumber_type : Error<
@@ -4255,6 +4278,8 @@ def note_forward_template_decl : Note<
 def note_inst_declaration_hint : Note<"add an explicit instantiation "
   "declaration to suppress this warning if %q0 is explicitly instantiated in "
   "another translation unit">;
+def note_evaluating_exception_spec_here : Note<
+  "in evaluation of exception specification for %q0 needed here">;
 
 def note_default_arg_instantiation_here : Note<
   "in instantiation of default argument for '%0' required here">;
@@ -6468,7 +6493,7 @@ def warn_overaligned_type : Warning<
 def err_aligned_allocation_unavailable : Error<
   "aligned %select{allocation|deallocation}0 function of type '%1' is only "
   "available on %2 %3 or newer">;
-def note_silence_unligned_allocation_unavailable : Note<
+def note_silence_aligned_allocation_unavailable : Note<
   "if you supply your own aligned allocation functions, use "
   "-faligned-allocation to silence this diagnostic">;
 
@@ -6571,6 +6596,11 @@ let CategoryName = "Lambda Issue" in {
     "cannot deduce type for lambda capture %0 from initializer of type %2">;
   def err_init_capture_deduction_failure_from_init_list : Error<
     "cannot deduce type for lambda capture %0 from initializer list">;
+
+  // C++14 generic lambdas.
+  def warn_cxx11_compat_generic_lambda : Warning<
+    "generic lambdas are incompatible with C++11">,
+    InGroup<CXXPre14Compat>, DefaultIgnore;
 
   // C++17 '*this' captures.
   def warn_cxx14_compat_star_this_lambda_capture : Warning<
@@ -7064,8 +7094,11 @@ def warn_atomic_op_has_invalid_memory_order : Warning<
 def err_atomic_op_has_invalid_synch_scope : Error<
   "synchronization scope argument to atomic operation is invalid">;
 def warn_atomic_op_misaligned : Warning<
-  "misaligned or large atomic operation may incur significant performance penalty">,
-  InGroup<DiagGroup<"atomic-alignment">>;
+  "%select{large|misaligned}0 atomic operation may incur "
+  "significant performance penalty">, InGroup<DiagGroup<"atomic-alignment">>;
+def warn_atomic_implicit_seq_cst : Warning<
+  "implicit use of sequentially-consistent atomic may incur stronger memory barriers than necessary">,
+  InGroup<DiagGroup<"atomic-implicit-seq-cst">>, DefaultIgnore;
 
 def err_overflow_builtin_must_be_int : Error<
   "operand argument to overflow builtin must be an integer (%0 invalid)">;
@@ -7451,8 +7484,6 @@ def note_in_class_initializer_not_yet_parsed : Note<
   "default member initializer declared here">;
 def err_in_class_initializer_cycle
     : Error<"default member initializer for %0 uses itself">;
-def err_exception_spec_cycle
-    : Error<"exception specification of %0 uses itself">;
 
 def ext_in_class_initializer_non_constant : Extension<
   "in-class initializer for static data member is not a constant expression; "
@@ -8756,8 +8787,6 @@ def warn_omp_linear_step_zero : Warning<
 def warn_omp_alignment_not_power_of_two : Warning<
   "aligned clause will be ignored because the requested alignment is not a power of 2">,
   InGroup<OpenMPClauses>;
-def err_omp_enclosed_declare_target : Error<
-  "declare target region may not be enclosed within another declare target region">;
 def err_omp_invalid_target_decl : Error<
   "%0 used in declare target directive is not a variable or a function name">;
 def err_omp_declare_target_multiple : Error<

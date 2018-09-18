@@ -255,6 +255,10 @@ struct PublishDiagnosticsClientCapabilities {
   /// Whether the client accepts diagnostics with fixes attached using the
   /// "clangd_fixes" extension.
   bool clangdFixSupport = false;
+
+  /// Whether the client accepts diagnostics with category attached to it
+  /// using the "category" extension.
+  bool categorySupport = false;
 };
 bool fromJSON(const llvm::json::Value &,
               PublishDiagnosticsClientCapabilities &);
@@ -764,6 +768,9 @@ struct CompletionItem {
   /// themselves.
   std::vector<TextEdit> additionalTextEdits;
 
+  /// Indicates if this item is deprecated.
+  bool deprecated = false;
+
   // TODO(krasimir): The following optional fields defined by the language
   // server protocol are unsupported:
   //
@@ -824,6 +831,13 @@ struct SignatureHelp {
 
   /// The active parameter of the active signature.
   int activeParameter = 0;
+
+  /// Position of the start of the argument list, including opening paren. e.g.
+  /// foo("first arg",   "second arg",
+  ///    ^-argListStart   ^-cursor
+  /// This is a clangd-specific extension, it is only available via C++ API and
+  /// not currently serialized for the LSP.
+  Position argListStart;
 };
 llvm::json::Value toJSON(const SignatureHelp &);
 
@@ -866,6 +880,25 @@ struct DocumentHighlight {
 };
 llvm::json::Value toJSON(const DocumentHighlight &DH);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const DocumentHighlight &);
+
+struct ReferenceParams : public TextDocumentPositionParams {
+  // For now, no options like context.includeDeclaration are supported.
+};
+bool fromJSON(const llvm::json::Value &, ReferenceParams &);
+
+struct CancelParams {
+  /// The request id to cancel.
+  /// This can be either a number or string, if it is a number simply print it
+  /// out and always use a string.
+  std::string ID;
+};
+llvm::json::Value toJSON(const CancelParams &);
+llvm::raw_ostream &operator<<(llvm::raw_ostream &, const CancelParams &);
+bool fromJSON(const llvm::json::Value &, CancelParams &);
+
+/// Param can be either of type string or number. Returns the result as a
+/// string.
+llvm::Optional<std::string> parseNumberOrString(const llvm::json::Value *Param);
 
 } // namespace clangd
 } // namespace clang

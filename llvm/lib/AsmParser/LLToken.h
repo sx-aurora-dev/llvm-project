@@ -219,6 +219,7 @@ enum Kind {
   kw_sret,
   kw_sanitize_thread,
   kw_sanitize_memory,
+  kw_speculative_load_hardening,
   kw_strictfp,
   kw_swifterror,
   kw_swiftself,
@@ -434,6 +435,7 @@ enum Kind {
   DwarfLang,        // DW_LANG_foo
   DwarfCC,          // DW_CC_foo
   EmissionKind,     // lineTablesOnly
+  NameTableKind,    // GNU
   DwarfOp,          // DW_OP_foo
   DIFlag,           // DIFlagFoo
   DwarfMacinfo,     // DW_MACINFO_foo

@@ -578,6 +578,7 @@
 // RUN:     --driver-mode=cl \
 // RUN:     -fblocks \
 // RUN:     -fcrash-diagnostics-dir=/foo \
+// RUN:     -fno-crash-diagnostics \
 // RUN:     -fno-blocks \
 // RUN:     -fbuiltin \
 // RUN:     -fno-builtin \
@@ -609,6 +610,7 @@
 // RUN:     -flto \
 // RUN:     -fmerge-all-constants \
 // RUN:     -no-canonical-prefixes \
+// RUN:     -march=skylake \
 // RUN:     --version \
 // RUN:     -Werror /Zs -- %s 2>&1
 

@@ -17,10 +17,20 @@ namespace pdb {
 NativeCompilandSymbol::NativeCompilandSymbol(NativeSession &Session,
                                              SymIndexId SymbolId,
                                              DbiModuleDescriptor MI)
-    : NativeRawSymbol(Session, SymbolId), Module(MI) {}
+    : NativeRawSymbol(Session, PDB_SymType::Compiland, SymbolId), Module(MI) {}
 
 PDB_SymType NativeCompilandSymbol::getSymTag() const {
   return PDB_SymType::Compiland;
+}
+
+void NativeCompilandSymbol::dump(raw_ostream &OS, int Indent) const {
+  NativeRawSymbol::dump(OS, Indent);
+
+  dumpSymbolField(OS, "lexicalParentId", 0, Indent);
+  dumpSymbolField(OS, "libraryName", getLibraryName(), Indent);
+  dumpSymbolField(OS, "name", getName(), Indent);
+  dumpSymbolField(OS, "editAndContinueEnabled", isEditAndContinueEnabled(),
+                  Indent);
 }
 
 std::unique_ptr<NativeRawSymbol> NativeCompilandSymbol::clone() const {
@@ -31,7 +41,7 @@ bool NativeCompilandSymbol::isEditAndContinueEnabled() const {
   return Module.hasECInfo();
 }
 
-uint32_t NativeCompilandSymbol::getLexicalParentId() const { return 0; }
+SymIndexId NativeCompilandSymbol::getLexicalParentId() const { return 0; }
 
 // The usage of getObjFileName for getLibraryName and getModuleName for getName
 // may seem backwards, but it is consistent with DIA, which is what this API

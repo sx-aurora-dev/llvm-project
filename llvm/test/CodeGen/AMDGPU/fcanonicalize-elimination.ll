@@ -121,7 +121,8 @@ define amdgpu_kernel void @test_fold_canonicalize_floor_value_f32(float addrspac
 }
 
 ; GCN-LABEL: test_fold_canonicalize_fma_value_f32:
-; GCN: v_fma_f32 [[V:v[0-9]+]], v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_mov_b32 [[SREG:s[0-9]+]], 0x41700000
+; GCN: v_fma_f32 [[V:v[0-9]+]], v{{[0-9]+}}, [[SREG]], [[SREG]]
 ; GCN-NOT: v_mul
 ; GCN-NOT: v_max
 ; GCN: {{flat|global}}_store_dword v[{{[0-9:]+}}], [[V]]
@@ -136,7 +137,8 @@ define amdgpu_kernel void @test_fold_canonicalize_fma_value_f32(float addrspace(
 }
 
 ; GCN-LABEL: test_fold_canonicalize_fmad_ftz_value_f32:
-; GCN: v_mad_f32 [[V:v[0-9]+]], v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_mov_b32 [[SGPR:s[0-9]+]], 0x41700000
+; GCN: v_mad_f32 [[V:v[0-9]+]], v{{[0-9]+}}, [[SGPR]], [[SGPR]]
 ; GCN-NOT: v_mul
 ; GCN-NOT: v_max
 ; GCN: {{flat|global}}_store_dword v[{{[0-9:]+}}], [[V]]
@@ -152,10 +154,12 @@ define amdgpu_kernel void @test_fold_canonicalize_fmad_ftz_value_f32(float addrs
 
 ; GCN-LABEL: test_fold_canonicalize_fmuladd_value_f32:
 ; GCN-FLUSH: v_mac_f32_e32 [[V:v[0-9]+]], v{{[0-9]+}}, v{{[0-9]+}}
-; GFX9-DENORM: v_fma_f32 [[V:v[0-9]+]], v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN-DENORM: s_mov_b32 [[SREG:s[0-9]+]], 0x41700000
+; GCN-DENORM: v_fma_f32 [[V:v[0-9]+]], v{{[0-9]+}}, [[SREG]], [[SREG]]
 ; GCN-NOT: v_mul
 ; GCN-NOT: v_max
-; GCN: {{flat|global}}_store_dword v[{{[0-9:]+}}],
+; GCN: {{flat|global}}_store_dword v[{{[0-9:]+}}], [[V]]
+; GCN-NOT: 1.0
 define amdgpu_kernel void @test_fold_canonicalize_fmuladd_value_f32(float addrspace(1)* %arg) {
   %id = tail call i32 @llvm.amdgcn.workitem.id.x()
   %gep = getelementptr inbounds float, float addrspace(1)* %arg, i32 %id
@@ -783,7 +787,7 @@ define <2 x half> @v_test_canonicalize_build_vector_noncanon0_v2f16(<2 x half> %
 
 ; GCN-LABEL: {{^}}v_test_canonicalize_extract_element_v2f16:
 ; GFX9: s_waitcnt
-; GFX9-NEXT: v_pk_mul_f16 v0, v0, 4.0 op_sel_hi:[1,0]
+; GFX9-NEXT: v_mul_f16_e32 v0, 4.0, v0
 ; GFX9-NEXT: s_setpc_b64
 define half @v_test_canonicalize_extract_element_v2f16(<2 x half> %vec) {
   %vec.op = fmul <2 x half> %vec, <half 4.0, half 4.0>

@@ -1055,6 +1055,7 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   setStackPointerRegisterToSaveRestore(isPPC64 ? PPC::X1 : PPC::R1);
 
   // We have target-specific dag combine patterns for the following nodes:
+  setTargetDAGCombine(ISD::ADD);
   setTargetDAGCombine(ISD::SHL);
   setTargetDAGCombine(ISD::SRA);
   setTargetDAGCombine(ISD::SRL);
@@ -1355,6 +1356,7 @@ const char *PPCTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case PPCISD::QBFLT:           return "PPCISD::QBFLT";
   case PPCISD::QVLFSb:          return "PPCISD::QVLFSb";
   case PPCISD::BUILD_FP128:     return "PPCISD::BUILD_FP128";
+  case PPCISD::EXTSWSLI:        return "PPCISD::EXTSWSLI";
   }
   return nullptr;
 }
@@ -2405,6 +2407,28 @@ bool PPCTargetLowering::SelectAddressRegRegOnly(SDValue N, SDValue &Base,
   return true;
 }
 
+/// Returns true if we should use a direct load into vector instruction
+/// (such as lxsd or lfd), instead of a load into gpr + direct move sequence.
+static bool usePartialVectorLoads(SDNode *N) {
+  if (!N->hasOneUse())
+    return false;
+
+  // If there are any other uses other than scalar to vector, then we should
+  // keep it as a scalar load -> direct move pattern to prevent multiple
+  // loads.  Currently, only check for i64 since we have lxsd/lfd to do this
+  // efficiently, but no update equivalent.
+  if (LoadSDNode *LD = dyn_cast<LoadSDNode>(N)) {
+    EVT MemVT = LD->getMemoryVT();
+    if (MemVT.isSimple() && MemVT.getSimpleVT().SimpleTy == MVT::i64) {
+      SDNode *User = *(LD->use_begin());
+      if (User->getOpcode() == ISD::SCALAR_TO_VECTOR)
+        return true;
+    }
+  }
+
+  return false;
+}
+
 /// getPreIndexedAddressParts - returns true by value, base pointer and
 /// offset pointer and addressing mode by reference if the node's address
 /// can be legally represented as pre-indexed load / store address.
@@ -2429,6 +2453,13 @@ bool PPCTargetLowering::getPreIndexedAddressParts(SDNode *N, SDValue &Base,
     isLoad = false;
   } else
     return false;
+
+  // Do not generate pre-inc forms for specific loads that feed scalar_to_vector
+  // instructions because we can fold these into a more efficient instruction
+  // instead, (such as LXSD).
+  if (isLoad && usePartialVectorLoads(N)) {
+    return false;
+  }
 
   // PowerPC doesn't have preinc load/store instructions for vectors (except
   // for QPX, which does have preinc r+r forms).
@@ -9968,10 +9999,6 @@ PPCTargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
   const BasicBlock *BB = MBB->getBasicBlock();
   MachineFunction::iterator I = ++MBB->getIterator();
 
-  // Memory Reference
-  MachineInstr::mmo_iterator MMOBegin = MI.memoperands_begin();
-  MachineInstr::mmo_iterator MMOEnd = MI.memoperands_end();
-
   unsigned DstReg = MI.getOperand(0).getReg();
   const TargetRegisterClass *RC = MRI.getRegClass(DstReg);
   assert(TRI->isTypeLegalForClass(*RC, MVT::i32) && "Invalid destination!");
@@ -10034,10 +10061,10 @@ PPCTargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
   if (Subtarget.isPPC64() && Subtarget.isSVR4ABI()) {
     setUsesTOCBasePtr(*MBB->getParent());
     MIB = BuildMI(*thisMBB, MI, DL, TII->get(PPC::STD))
-            .addReg(PPC::X2)
-            .addImm(TOCOffset)
-            .addReg(BufReg);
-    MIB.setMemRefs(MMOBegin, MMOEnd);
+              .addReg(PPC::X2)
+              .addImm(TOCOffset)
+              .addReg(BufReg)
+              .cloneMemRefs(MI);
   }
 
   // Naked functions never have a base pointer, and so we use r1. For all
@@ -10052,8 +10079,8 @@ PPCTargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
                 TII->get(Subtarget.isPPC64() ? PPC::STD : PPC::STW))
             .addReg(BaseReg)
             .addImm(BPOffset)
-            .addReg(BufReg);
-  MIB.setMemRefs(MMOBegin, MMOEnd);
+            .addReg(BufReg)
+            .cloneMemRefs(MI);
 
   // Setup
   MIB = BuildMI(*thisMBB, MI, DL, TII->get(PPC::BCLalways)).addMBB(mainMBB);
@@ -10086,8 +10113,7 @@ PPCTargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
             .addImm(LabelOffset)
             .addReg(BufReg);
   }
-
-  MIB.setMemRefs(MMOBegin, MMOEnd);
+  MIB.cloneMemRefs(MI);
 
   BuildMI(mainMBB, DL, TII->get(PPC::LI), mainDstReg).addImm(0);
   mainMBB->addSuccessor(sinkMBB);
@@ -10110,10 +10136,6 @@ PPCTargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
 
   MachineFunction *MF = MBB->getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
-
-  // Memory Reference
-  MachineInstr::mmo_iterator MMOBegin = MI.memoperands_begin();
-  MachineInstr::mmo_iterator MMOEnd = MI.memoperands_end();
 
   MVT PVT = getPointerTy(MF->getDataLayout());
   assert((PVT == MVT::i64 || PVT == MVT::i32) &&
@@ -10152,7 +10174,7 @@ PPCTargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
             .addImm(0)
             .addReg(BufReg);
   }
-  MIB.setMemRefs(MMOBegin, MMOEnd);
+  MIB.cloneMemRefs(MI);
 
   // Reload IP
   if (PVT == MVT::i64) {
@@ -10164,7 +10186,7 @@ PPCTargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
             .addImm(LabelOffset)
             .addReg(BufReg);
   }
-  MIB.setMemRefs(MMOBegin, MMOEnd);
+  MIB.cloneMemRefs(MI);
 
   // Reload SP
   if (PVT == MVT::i64) {
@@ -10176,7 +10198,7 @@ PPCTargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
             .addImm(SPOffset)
             .addReg(BufReg);
   }
-  MIB.setMemRefs(MMOBegin, MMOEnd);
+  MIB.cloneMemRefs(MI);
 
   // Reload BP
   if (PVT == MVT::i64) {
@@ -10188,16 +10210,15 @@ PPCTargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
             .addImm(BPOffset)
             .addReg(BufReg);
   }
-  MIB.setMemRefs(MMOBegin, MMOEnd);
+  MIB.cloneMemRefs(MI);
 
   // Reload TOC
   if (PVT == MVT::i64 && Subtarget.isSVR4ABI()) {
     setUsesTOCBasePtr(*MBB->getParent());
     MIB = BuildMI(*MBB, MI, DL, TII->get(PPC::LD), PPC::X2)
-            .addImm(TOCOffset)
-            .addReg(BufReg);
-
-    MIB.setMemRefs(MMOBegin, MMOEnd);
+              .addImm(TOCOffset)
+              .addReg(BufReg)
+              .cloneMemRefs(MI);
   }
 
   // Jump
@@ -12450,6 +12471,8 @@ SDValue PPCTargetLowering::PerformDAGCombine(SDNode *N,
   SDLoc dl(N);
   switch (N->getOpcode()) {
   default: break;
+  case ISD::ADD:
+    return combineADD(N, DCI);
   case ISD::SHL:
     return combineSHL(N, DCI);
   case ISD::SRA:
@@ -14116,7 +14139,30 @@ SDValue PPCTargetLowering::combineSHL(SDNode *N, DAGCombinerInfo &DCI) const {
   if (auto Value = stripModuloOnShift(*this, N, DCI.DAG))
     return Value;
 
-  return SDValue();
+  SDValue N0 = N->getOperand(0);
+  ConstantSDNode *CN1 = dyn_cast<ConstantSDNode>(N->getOperand(1));
+  if (!Subtarget.isISA3_0() ||
+      N0.getOpcode() != ISD::SIGN_EXTEND ||
+      N0.getOperand(0).getValueType() != MVT::i32 ||
+      CN1 == nullptr || N->getValueType(0) != MVT::i64)
+    return SDValue();
+
+  // We can't save an operation here if the value is already extended, and
+  // the existing shift is easier to combine.
+  SDValue ExtsSrc = N0.getOperand(0);
+  if (ExtsSrc.getOpcode() == ISD::TRUNCATE &&
+      ExtsSrc.getOperand(0).getOpcode() == ISD::AssertSext)
+    return SDValue();
+
+  SDLoc DL(N0);
+  SDValue ShiftBy = SDValue(CN1, 0);
+  // We want the shift amount to be i32 on the extswli, but the shift could
+  // have an i64.
+  if (ShiftBy.getValueType() == MVT::i64)
+    ShiftBy = DCI.DAG.getConstant(CN1->getZExtValue(), DL, MVT::i32);
+
+  return DCI.DAG.getNode(PPCISD::EXTSWSLI, DL, MVT::i64, N0->getOperand(0),
+                         ShiftBy);
 }
 
 SDValue PPCTargetLowering::combineSRA(SDNode *N, DAGCombinerInfo &DCI) const {
@@ -14128,6 +14174,100 @@ SDValue PPCTargetLowering::combineSRA(SDNode *N, DAGCombinerInfo &DCI) const {
 
 SDValue PPCTargetLowering::combineSRL(SDNode *N, DAGCombinerInfo &DCI) const {
   if (auto Value = stripModuloOnShift(*this, N, DCI.DAG))
+    return Value;
+
+  return SDValue();
+}
+
+// Transform (add X, (zext(setne Z, C))) -> (addze X, (addic (addi Z, -C), -1))
+// Transform (add X, (zext(sete  Z, C))) -> (addze X, (subfic (addi Z, -C), 0))
+// When C is zero, the equation (addi Z, -C) can be simplified to Z
+// Requirement: -C in [-32768, 32767], X and Z are MVT::i64 types
+static SDValue combineADDToADDZE(SDNode *N, SelectionDAG &DAG,
+                                 const PPCSubtarget &Subtarget) {
+  if (!Subtarget.isPPC64())
+    return SDValue();
+
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+
+  auto isZextOfCompareWithConstant = [](SDValue Op) {
+    if (Op.getOpcode() != ISD::ZERO_EXTEND || !Op.hasOneUse() ||
+        Op.getValueType() != MVT::i64)
+      return false;
+
+    SDValue Cmp = Op.getOperand(0);
+    if (Cmp.getOpcode() != ISD::SETCC || !Cmp.hasOneUse() ||
+        Cmp.getOperand(0).getValueType() != MVT::i64)
+      return false;
+
+    if (auto *Constant = dyn_cast<ConstantSDNode>(Cmp.getOperand(1))) {
+      int64_t NegConstant = 0 - Constant->getSExtValue();
+      // Due to the limitations of the addi instruction,
+      // -C is required to be [-32768, 32767].
+      return isInt<16>(NegConstant);
+    }
+
+    return false;
+  };
+
+  bool LHSHasPattern = isZextOfCompareWithConstant(LHS);
+  bool RHSHasPattern = isZextOfCompareWithConstant(RHS);
+
+  // If there is a pattern, canonicalize a zext operand to the RHS.
+  if (LHSHasPattern && !RHSHasPattern)
+    std::swap(LHS, RHS);
+  else if (!LHSHasPattern && !RHSHasPattern)
+    return SDValue();
+
+  SDLoc DL(N);
+  SDVTList VTs = DAG.getVTList(MVT::i64, MVT::i64);
+  SDValue Cmp = RHS.getOperand(0);
+  SDValue Z = Cmp.getOperand(0);
+  auto *Constant = dyn_cast<ConstantSDNode>(Cmp.getOperand(1));
+
+  assert(Constant && "Constant Should not be a null pointer.");
+  int64_t NegConstant = 0 - Constant->getSExtValue();
+
+  switch(cast<CondCodeSDNode>(Cmp.getOperand(2))->get()) {
+  default: break;
+  case ISD::SETNE: {
+    //                                 when C == 0
+    //                             --> addze X, (addic Z, -1).carry
+    //                            /
+    // add X, (zext(setne Z, C))--
+    //                            \    when -32768 <= -C <= 32767 && C != 0
+    //                             --> addze X, (addic (addi Z, -C), -1).carry
+    SDValue Add = DAG.getNode(ISD::ADD, DL, MVT::i64, Z,
+                              DAG.getConstant(NegConstant, DL, MVT::i64));
+    SDValue AddOrZ = NegConstant != 0 ? Add : Z;
+    SDValue Addc = DAG.getNode(ISD::ADDC, DL, DAG.getVTList(MVT::i64, MVT::Glue),
+                               AddOrZ, DAG.getConstant(-1ULL, DL, MVT::i64));
+    return DAG.getNode(ISD::ADDE, DL, VTs, LHS, DAG.getConstant(0, DL, MVT::i64),
+                       SDValue(Addc.getNode(), 1));
+    }
+  case ISD::SETEQ: {
+    //                                 when C == 0
+    //                             --> addze X, (subfic Z, 0).carry
+    //                            /
+    // add X, (zext(sete  Z, C))--
+    //                            \    when -32768 <= -C <= 32767 && C != 0
+    //                             --> addze X, (subfic (addi Z, -C), 0).carry
+    SDValue Add = DAG.getNode(ISD::ADD, DL, MVT::i64, Z,
+                              DAG.getConstant(NegConstant, DL, MVT::i64));
+    SDValue AddOrZ = NegConstant != 0 ? Add : Z;
+    SDValue Subc = DAG.getNode(ISD::SUBC, DL, DAG.getVTList(MVT::i64, MVT::Glue),
+                               DAG.getConstant(0, DL, MVT::i64), AddOrZ);
+    return DAG.getNode(ISD::ADDE, DL, VTs, LHS, DAG.getConstant(0, DL, MVT::i64),
+                       SDValue(Subc.getNode(), 1));
+    }
+  }
+
+  return SDValue();
+}
+
+SDValue PPCTargetLowering::combineADD(SDNode *N, DAGCombinerInfo &DCI) const {
+  if (auto Value = combineADDToADDZE(N, DCI.DAG, Subtarget))
     return Value;
 
   return SDValue();

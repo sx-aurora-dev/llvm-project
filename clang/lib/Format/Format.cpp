@@ -819,7 +819,7 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
     GoogleStyle.JavaScriptQuotes = FormatStyle::JSQS_Single;
     GoogleStyle.JavaScriptWrapImports = false;
   } else if (Language == FormatStyle::LK_Proto) {
-    GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
+    GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Empty;
     GoogleStyle.AlwaysBreakBeforeMultilineStrings = false;
     GoogleStyle.SpacesInContainerLiterals = false;
     GoogleStyle.Cpp11BracedListStyle = false;
@@ -1309,8 +1309,7 @@ private:
     std::set<unsigned> DeletedLines;
     for (unsigned i = 0, e = AnnotatedLines.size(); i != e; ++i) {
       auto &Line = *AnnotatedLines[i];
-      if (Line.startsWith(tok::kw_namespace) ||
-          Line.startsWith(tok::kw_inline, tok::kw_namespace)) {
+      if (Line.startsWithNamespace()) {
         checkEmptyNamespace(AnnotatedLines, i, i, DeletedLines);
       }
     }
@@ -1347,9 +1346,7 @@ private:
       if (AnnotatedLines[CurrentLine]->startsWith(tok::r_brace))
         break;
 
-      if (AnnotatedLines[CurrentLine]->startsWith(tok::kw_namespace) ||
-          AnnotatedLines[CurrentLine]->startsWith(tok::kw_inline,
-                                                  tok::kw_namespace)) {
+      if (AnnotatedLines[CurrentLine]->startsWithNamespace()) {
         if (!checkEmptyNamespace(AnnotatedLines, CurrentLine, NewLine,
                                  DeletedLines))
           return false;

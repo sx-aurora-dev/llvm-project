@@ -341,6 +341,8 @@ private:
       return "PriorTemplateArgumentSubstitution";
     case CodeSynthesisContext::DefaultTemplateArgumentChecking:
       return "DefaultTemplateArgumentChecking";
+    case CodeSynthesisContext::ExceptionSpecEvaluation:
+      return "ExceptionSpecEvaluation";
     case CodeSynthesisContext::ExceptionSpecInstantiation:
       return "ExceptionSpecInstantiation";
     case CodeSynthesisContext::DeclaringSpecialMember:
@@ -598,6 +600,17 @@ namespace {
       Out << "\n";
 
       return true;
+    }
+
+    /// Returns true if this \c ASTReaderListener wants to receive the
+    /// imports of the AST file via \c visitImport, false otherwise.
+    bool needsImportVisitation() const override { return true; }
+
+    /// If needsImportVisitation returns \c true, this is called for each
+    /// AST file imported by this AST file.
+    void visitImport(StringRef ModuleName, StringRef Filename) override {
+      Out.indent(2) << "Imports module '" << ModuleName
+                    << "': " << Filename.str() << "\n";
     }
 #undef DUMP_BOOLEAN
   };

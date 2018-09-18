@@ -17,6 +17,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ArchiveWriter.h"
 #include "llvm/Object/Binary.h"
@@ -29,12 +30,15 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Compression.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Memory.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -126,41 +130,62 @@ struct SectionRename {
   Optional<uint64_t> NewFlags;
 };
 
+// Configuration for copying/stripping a single file.
 struct CopyConfig {
-  StringRef OutputFilename;
+  // Main input/output options
   StringRef InputFilename;
-  StringRef OutputFormat;
   StringRef InputFormat;
-  StringRef BinaryArch;
+  StringRef OutputFilename;
+  StringRef OutputFormat;
 
-  StringRef SplitDWO;
+  // Only applicable for --input-format=Binary
+  MachineInfo BinaryArch;
+
+  // Advanced options
   StringRef AddGnuDebugLink;
+  StringRef SplitDWO;
   StringRef SymbolsPrefix;
-  std::vector<StringRef> ToRemove;
-  std::vector<StringRef> Keep;
-  std::vector<StringRef> OnlyKeep;
+
+  // Repeated options
   std::vector<StringRef> AddSection;
   std::vector<StringRef> DumpSection;
-  std::vector<StringRef> SymbolsToLocalize;
+  std::vector<StringRef> Keep;
+  std::vector<StringRef> OnlyKeep;
   std::vector<StringRef> SymbolsToGlobalize;
-  std::vector<StringRef> SymbolsToWeaken;
-  std::vector<StringRef> SymbolsToRemove;
   std::vector<StringRef> SymbolsToKeep;
+  std::vector<StringRef> SymbolsToLocalize;
+  std::vector<StringRef> SymbolsToRemove;
+  std::vector<StringRef> SymbolsToWeaken;
+  std::vector<StringRef> ToRemove;
+  std::vector<std::string> SymbolsToKeepGlobal;
+
+  // Map options
   StringMap<SectionRename> SectionsToRename;
   StringMap<StringRef> SymbolsToRename;
+
+  // Boolean options
+  bool DiscardAll = false;
+  bool ExtractDWO = false;
+  bool KeepFileSymbols = false;
+  bool LocalizeHidden = false;
+  bool OnlyKeepDebug = false;
+  bool PreserveDates = false;
   bool StripAll = false;
   bool StripAllGNU = false;
-  bool StripDebug = false;
-  bool StripSections = false;
-  bool StripNonAlloc = false;
   bool StripDWO = false;
+  bool StripDebug = false;
+  bool StripNonAlloc = false;
+  bool StripSections = false;
   bool StripUnneeded = false;
-  bool ExtractDWO = false;
-  bool LocalizeHidden = false;
   bool Weaken = false;
-  bool DiscardAll = false;
-  bool OnlyKeepDebug = false;
-  bool KeepFileSymbols = false;
+  DebugCompressionType CompressionType = DebugCompressionType::None;
+};
+
+// Configuration for the overall invocation of this tool. When invoked as
+// objcopy, will always contain exactly one CopyConfig. When invoked as strip,
+// will contain one or more CopyConfigs.
+struct DriverConfig {
+  SmallVector<CopyConfig, 1> CopyConfigs;
 };
 
 using SectionPred = std::function<bool(const SectionBase &Sec)>;
@@ -276,12 +301,12 @@ static SectionRename parseRenameSectionValue(StringRef FlagValue) {
 }
 
 static bool isDebugSection(const SectionBase &Sec) {
-  return Sec.Name.startswith(".debug") || Sec.Name.startswith(".zdebug") ||
-         Sec.Name == ".gdb_index";
+  return StringRef(Sec.Name).startswith(".debug") ||
+         StringRef(Sec.Name).startswith(".zdebug") || Sec.Name == ".gdb_index";
 }
 
 static bool isDWOSection(const SectionBase &Sec) {
-  return Sec.Name.endswith(".dwo");
+  return StringRef(Sec.Name).endswith(".dwo");
 }
 
 static bool onlyKeepDWOPred(const Object &Obj, const SectionBase &Sec) {
@@ -291,6 +316,45 @@ static bool onlyKeepDWOPred(const Object &Obj, const SectionBase &Sec) {
   // Short of keeping the string table we want to keep everything that is a DWO
   // section and remove everything else.
   return !isDWOSection(Sec);
+}
+
+static const StringMap<MachineInfo> ArchMap{
+    // Name, {EMachine, 64bit, LittleEndian}
+    {"aarch64", {EM_AARCH64, true, true}},
+    {"arm", {EM_ARM, false, true}},
+    {"i386", {EM_386, false, true}},
+    {"i386:x86-64", {EM_X86_64, true, true}},
+    {"powerpc:common64", {EM_PPC64, true, true}},
+    {"sparc", {EM_SPARC, false, true}},
+    {"x86-64", {EM_X86_64, true, true}},
+};
+
+static const MachineInfo &getMachineInfo(StringRef Arch) {
+  auto Iter = ArchMap.find(Arch);
+  if (Iter == std::end(ArchMap))
+    error("Invalid architecture: '" + Arch + "'");
+  return Iter->getValue();
+}
+
+static ElfType getOutputElfType(const Binary &Bin) {
+  // Infer output ELF type from the input ELF object
+  if (isa<ELFObjectFile<ELF32LE>>(Bin))
+    return ELFT_ELF32LE;
+  if (isa<ELFObjectFile<ELF64LE>>(Bin))
+    return ELFT_ELF64LE;
+  if (isa<ELFObjectFile<ELF32BE>>(Bin))
+    return ELFT_ELF32BE;
+  if (isa<ELFObjectFile<ELF64BE>>(Bin))
+    return ELFT_ELF64BE;
+  llvm_unreachable("Invalid ELFType");
+}
+
+static ElfType getOutputElfType(const MachineInfo &MI) {
+  // Infer output ELF type from the binary arch specified
+  if (MI.Is64Bit)
+    return MI.IsLittleEndian ? ELFT_ELF64LE : ELFT_ELF64BE;
+  else
+    return MI.IsLittleEndian ? ELFT_ELF32LE : ELFT_ELF32BE;
 }
 
 static std::unique_ptr<Writer> createWriter(const CopyConfig &Config,
@@ -352,6 +416,50 @@ static Error dumpSectionToFile(StringRef SecName, StringRef Filename,
                                  object_error::parse_failed);
 }
 
+static bool isCompressed(const SectionBase &Section) {
+  const char *Magic = "ZLIB";
+  return StringRef(Section.Name).startswith(".zdebug") ||
+         (Section.OriginalData.size() > strlen(Magic) &&
+          !strncmp(reinterpret_cast<const char *>(Section.OriginalData.data()),
+                   Magic, strlen(Magic))) ||
+         (Section.Flags & ELF::SHF_COMPRESSED);
+}
+
+static bool isCompressable(const SectionBase &Section) {
+  return !isCompressed(Section) && isDebugSection(Section) &&
+         Section.Name != ".gdb_index";
+}
+
+static void compressSections(const CopyConfig &Config, Object &Obj,
+                             SectionPred &RemovePred) {
+  SmallVector<SectionBase *, 13> ToCompress;
+  SmallVector<RelocationSection *, 13> RelocationSections;
+  for (auto &Sec : Obj.sections()) {
+    if (RelocationSection *R = dyn_cast<RelocationSection>(&Sec)) {
+      if (isCompressable(*R->getSection()))
+        RelocationSections.push_back(R);
+      continue;
+    }
+
+    if (isCompressable(Sec))
+      ToCompress.push_back(&Sec);
+  }
+
+  for (SectionBase *S : ToCompress) {
+    CompressedSection &CS =
+        Obj.addSection<CompressedSection>(*S, Config.CompressionType);
+
+    for (RelocationSection *RS : RelocationSections) {
+      if (RS->getSection() == S)
+        RS->setSection(&CS);
+    }
+  }
+
+  RemovePred = [RemovePred](const SectionBase &Sec) {
+    return isCompressable(Sec) || RemovePred(Sec);
+  };
+}
+
 // This function handles the high level operations of GNU objcopy including
 // handling command line options. It's important to outline certain properties
 // we expect to hold of the command line operations. Any operation that "keeps"
@@ -374,6 +482,20 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
            (Sym.Visibility == STV_HIDDEN || Sym.Visibility == STV_INTERNAL)) ||
           (!Config.SymbolsToLocalize.empty() &&
            is_contained(Config.SymbolsToLocalize, Sym.Name)))
+        Sym.Binding = STB_LOCAL;
+
+      // Note: these two globalize flags have very similar names but different
+      // meanings:
+      //
+      // --globalize-symbol: promote a symbol to global
+      // --keep-global-symbol: all symbols except for these should be made local
+      //
+      // If --globalize-symbol is specified for a given symbol, it will be
+      // global in the output file even if it is not included via
+      // --keep-global-symbol. Because of that, make sure to check
+      // --globalize-symbol second.
+      if (!Config.SymbolsToKeepGlobal.empty() &&
+          !is_contained(Config.SymbolsToKeepGlobal, Sym.Name))
         Sym.Binding = STB_LOCAL;
 
       if (!Config.SymbolsToGlobalize.empty() &&
@@ -438,7 +560,7 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
   // Removes:
   if (!Config.ToRemove.empty()) {
     RemovePred = [&Config](const SectionBase &Sec) {
-      return find(Config.ToRemove, Sec.Name) != Config.ToRemove.end();
+      return is_contained(Config.ToRemove, Sec.Name);
     };
   }
 
@@ -497,7 +619,7 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
         return true;
       if (&Sec == Obj.SectionNames)
         return false;
-      if (Sec.Name.startswith(".gnu.warning"))
+      if (StringRef(Sec.Name).startswith(".gnu.warning"))
         return false;
       return (Sec.Flags & SHF_ALLOC) == 0;
     };
@@ -506,7 +628,7 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
   if (!Config.OnlyKeep.empty()) {
     RemovePred = [&Config, RemovePred, &Obj](const SectionBase &Sec) {
       // Explicitly keep these sections regardless of previous removes.
-      if (find(Config.OnlyKeep, Sec.Name) != Config.OnlyKeep.end())
+      if (is_contained(Config.OnlyKeep, Sec.Name))
         return false;
 
       // Allow all implicit removes.
@@ -528,7 +650,7 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
   if (!Config.Keep.empty()) {
     RemovePred = [Config, RemovePred](const SectionBase &Sec) {
       // Explicitly keep these sections regardless of previous removes.
-      if (find(Config.Keep, Sec.Name) != Config.Keep.end())
+      if (is_contained(Config.Keep, Sec.Name))
         return false;
       // Otherwise defer to RemovePred.
       return RemovePred(Sec);
@@ -548,6 +670,9 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
       return RemovePred(Sec);
     };
   }
+
+  if (Config.CompressionType != DebugCompressionType::None)
+    compressSections(Config, Obj, RemovePred);
 
   Obj.removeSections(RemovePred);
 
@@ -601,15 +726,14 @@ static void handleArgs(const CopyConfig &Config, Object &Obj,
     Obj.addSection<GnuDebugLinkSection>(Config.AddGnuDebugLink);
 }
 
-static void executeElfObjcopyOnBinary(const CopyConfig &Config, Binary &Binary,
-                                      Buffer &Out) {
-  ELFReader Reader(&Binary);
+static void executeElfObjcopyOnBinary(const CopyConfig &Config, Reader &Reader,
+                                      Buffer &Out, ElfType OutputElfType) {
   std::unique_ptr<Object> Obj = Reader.create();
 
-  handleArgs(Config, *Obj, Reader, Reader.getElfType());
+  handleArgs(Config, *Obj, Reader, OutputElfType);
 
   std::unique_ptr<Writer> Writer =
-      createWriter(Config, *Obj, Out, Reader.getElfType());
+      createWriter(Config, *Obj, Out, OutputElfType);
   Writer->finalize();
   Writer->write();
 }
@@ -651,12 +775,15 @@ static void executeElfObjcopyOnArchive(const CopyConfig &Config,
     Expected<std::unique_ptr<Binary>> ChildOrErr = Child.getAsBinary();
     if (!ChildOrErr)
       reportError(Ar.getFileName(), ChildOrErr.takeError());
+    Binary *Bin = ChildOrErr->get();
+
     Expected<StringRef> ChildNameOrErr = Child.getName();
     if (!ChildNameOrErr)
       reportError(Ar.getFileName(), ChildNameOrErr.takeError());
 
     MemBuffer MB(ChildNameOrErr.get());
-    executeElfObjcopyOnBinary(Config, **ChildOrErr, MB);
+    ELFReader Reader(Bin);
+    executeElfObjcopyOnBinary(Config, Reader, MB, getOutputElfType(*Bin));
 
     Expected<NewArchiveMember> Member =
         NewArchiveMember::getOldMember(Child, true);
@@ -675,23 +802,81 @@ static void executeElfObjcopyOnArchive(const CopyConfig &Config,
     reportError(Config.OutputFilename, std::move(E));
 }
 
+static void restoreDateOnFile(StringRef Filename,
+                              const sys::fs::file_status &Stat) {
+  int FD;
+
+  if (auto EC =
+          sys::fs::openFileForWrite(Filename, FD, sys::fs::CD_OpenExisting))
+    reportError(Filename, EC);
+
+  if (auto EC = sys::fs::setLastAccessAndModificationTime(
+          FD, Stat.getLastAccessedTime(), Stat.getLastModificationTime()))
+    reportError(Filename, EC);
+
+  if (auto EC = sys::Process::SafelyCloseFileDescriptor(FD))
+    reportError(Filename, EC);
+}
+
 static void executeElfObjcopy(const CopyConfig &Config) {
-  Expected<OwningBinary<llvm::object::Binary>> BinaryOrErr =
-      createBinary(Config.InputFilename);
-  if (!BinaryOrErr)
-    reportError(Config.InputFilename, BinaryOrErr.takeError());
+  sys::fs::file_status Stat;
+  if (Config.PreserveDates)
+    if (auto EC = sys::fs::status(Config.InputFilename, Stat))
+      reportError(Config.InputFilename, EC);
 
-  if (Archive *Ar = dyn_cast<Archive>(BinaryOrErr.get().getBinary()))
-    return executeElfObjcopyOnArchive(Config, *Ar);
+  if (Config.InputFormat == "binary") {
+    auto BufOrErr = MemoryBuffer::getFile(Config.InputFilename);
+    if (!BufOrErr)
+      reportError(Config.InputFilename, BufOrErr.getError());
 
-  FileBuffer FB(Config.OutputFilename);
-  executeElfObjcopyOnBinary(Config, *BinaryOrErr.get().getBinary(), FB);
+    FileBuffer FB(Config.OutputFilename);
+    BinaryReader Reader(Config.BinaryArch, BufOrErr->get());
+    executeElfObjcopyOnBinary(Config, Reader, FB,
+                              getOutputElfType(Config.BinaryArch));
+  } else {
+    Expected<OwningBinary<llvm::object::Binary>> BinaryOrErr =
+        createBinary(Config.InputFilename);
+    if (!BinaryOrErr)
+      reportError(Config.InputFilename, BinaryOrErr.takeError());
+
+    if (Archive *Ar = dyn_cast<Archive>(BinaryOrErr.get().getBinary())) {
+      executeElfObjcopyOnArchive(Config, *Ar);
+    } else {
+      FileBuffer FB(Config.OutputFilename);
+      Binary *Bin = BinaryOrErr.get().getBinary();
+      ELFReader Reader(Bin);
+      executeElfObjcopyOnBinary(Config, Reader, FB, getOutputElfType(*Bin));
+    }
+  }
+
+  if (Config.PreserveDates) {
+    restoreDateOnFile(Config.OutputFilename, Stat);
+    if (!Config.SplitDWO.empty())
+      restoreDateOnFile(Config.SplitDWO, Stat);
+  }
+}
+
+static void addGlobalSymbolsFromFile(std::vector<std::string> &Symbols,
+                                     StringRef Filename) {
+  SmallVector<StringRef, 16> Lines;
+  auto BufOrErr = MemoryBuffer::getFile(Filename);
+  if (!BufOrErr)
+    reportError(Filename, BufOrErr.getError());
+
+  BufOrErr.get()->getBuffer().split(Lines, '\n');
+  for (StringRef Line : Lines) {
+    // Ignore everything after '#', trim whitespace, and only add the symbol if
+    // it's not empty.
+    auto TrimmedLine = Line.split('#').first.trim();
+    if (!TrimmedLine.empty())
+      Symbols.push_back(TrimmedLine.str());
+  }
 }
 
 // ParseObjcopyOptions returns the config and sets the input arguments. If a
 // help flag is set then ParseObjcopyOptions will print the help messege and
 // exit.
-static CopyConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
+static DriverConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
   ObjcopyOptTable T;
   unsigned MissingArgumentIndex, MissingArgumentCount;
   llvm::opt::InputArgList InputArgs =
@@ -726,7 +911,31 @@ static CopyConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
   Config.OutputFilename = Positional[Positional.size() == 1 ? 0 : 1];
   Config.InputFormat = InputArgs.getLastArgValue(OBJCOPY_input_target);
   Config.OutputFormat = InputArgs.getLastArgValue(OBJCOPY_output_target);
-  Config.BinaryArch = InputArgs.getLastArgValue(OBJCOPY_binary_architecture);
+  if (Config.InputFormat == "binary") {
+    auto BinaryArch = InputArgs.getLastArgValue(OBJCOPY_binary_architecture);
+    if (BinaryArch.empty())
+      error("Specified binary input without specifiying an architecture");
+    Config.BinaryArch = getMachineInfo(BinaryArch);
+  }
+
+  if (auto Arg = InputArgs.getLastArg(OBJCOPY_compress_debug_sections,
+                                      OBJCOPY_compress_debug_sections_eq)) {
+    Config.CompressionType = DebugCompressionType::Z;
+
+    if (Arg->getOption().getID() == OBJCOPY_compress_debug_sections_eq) {
+      Config.CompressionType =
+          StringSwitch<DebugCompressionType>(
+              InputArgs.getLastArgValue(OBJCOPY_compress_debug_sections_eq))
+              .Case("zlib-gnu", DebugCompressionType::GNU)
+              .Case("zlib", DebugCompressionType::Z)
+              .Default(DebugCompressionType::None);
+      if (Config.CompressionType == DebugCompressionType::None)
+        error("Invalid or unsupported --compress-debug-sections format: " +
+              InputArgs.getLastArgValue(OBJCOPY_compress_debug_sections_eq));
+      if (!zlib::isAvailable())
+        error("LLVM was not compiled with LLVM_ENABLE_ZLIB: can not compress.");
+    }
+  }
 
   Config.SplitDWO = InputArgs.getLastArgValue(OBJCOPY_split_dwo);
   Config.AddGnuDebugLink = InputArgs.getLastArgValue(OBJCOPY_add_gnu_debuglink);
@@ -771,6 +980,10 @@ static CopyConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
   Config.KeepFileSymbols = InputArgs.hasArg(OBJCOPY_keep_file_symbols);
   for (auto Arg : InputArgs.filtered(OBJCOPY_localize_symbol))
     Config.SymbolsToLocalize.push_back(Arg->getValue());
+  for (auto Arg : InputArgs.filtered(OBJCOPY_keep_global_symbol))
+    Config.SymbolsToKeepGlobal.push_back(Arg->getValue());
+  for (auto Arg : InputArgs.filtered(OBJCOPY_keep_global_symbols))
+    addGlobalSymbolsFromFile(Config.SymbolsToKeepGlobal, Arg->getValue());
   for (auto Arg : InputArgs.filtered(OBJCOPY_globalize_symbol))
     Config.SymbolsToGlobalize.push_back(Arg->getValue());
   for (auto Arg : InputArgs.filtered(OBJCOPY_weaken_symbol))
@@ -780,25 +993,29 @@ static CopyConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
   for (auto Arg : InputArgs.filtered(OBJCOPY_keep_symbol))
     Config.SymbolsToKeep.push_back(Arg->getValue());
 
-  return Config;
+  Config.PreserveDates = InputArgs.hasArg(OBJCOPY_preserve_dates);
+
+  DriverConfig DC;
+  DC.CopyConfigs.push_back(std::move(Config));
+  return DC;
 }
 
 // ParseStripOptions returns the config and sets the input arguments. If a
 // help flag is set then ParseStripOptions will print the help messege and
 // exit.
-static CopyConfig parseStripOptions(ArrayRef<const char *> ArgsArr) {
+static DriverConfig parseStripOptions(ArrayRef<const char *> ArgsArr) {
   StripOptTable T;
   unsigned MissingArgumentIndex, MissingArgumentCount;
   llvm::opt::InputArgList InputArgs =
       T.ParseArgs(ArgsArr, MissingArgumentIndex, MissingArgumentCount);
 
   if (InputArgs.size() == 0) {
-    T.PrintHelp(errs(), "llvm-strip <input> [ <output> ]", "strip tool");
+    T.PrintHelp(errs(), "llvm-strip", "strip tool");
     exit(1);
   }
 
   if (InputArgs.hasArg(STRIP_help)) {
-    T.PrintHelp(outs(), "llvm-strip <input> [ <output> ]", "strip tool");
+    T.PrintHelp(outs(), "llvm-strip", "strip tool");
     exit(0);
   }
 
@@ -811,14 +1028,10 @@ static CopyConfig parseStripOptions(ArrayRef<const char *> ArgsArr) {
   if (Positional.empty())
     error("No input file specified");
 
-  if (Positional.size() > 2)
-    error("Support for multiple input files is not implemented yet");
+  if (Positional.size() > 1 && InputArgs.hasArg(STRIP_output))
+    error("Multiple input files cannot be used in combination with -o");
 
   CopyConfig Config;
-  Config.InputFilename = Positional[0];
-  Config.OutputFilename =
-      InputArgs.getLastArgValue(STRIP_output, Positional[0]);
-
   Config.StripDebug = InputArgs.hasArg(STRIP_strip_debug);
 
   Config.DiscardAll = InputArgs.hasArg(STRIP_discard_all);
@@ -834,16 +1047,33 @@ static CopyConfig parseStripOptions(ArrayRef<const char *> ArgsArr) {
   for (auto Arg : InputArgs.filtered(STRIP_keep_symbol))
     Config.SymbolsToKeep.push_back(Arg->getValue());
 
-  return Config;
+  Config.PreserveDates = InputArgs.hasArg(STRIP_preserve_dates);
+
+  DriverConfig DC;
+  if (Positional.size() == 1) {
+    Config.InputFilename = Positional[0];
+    Config.OutputFilename =
+        InputArgs.getLastArgValue(STRIP_output, Positional[0]);
+    DC.CopyConfigs.push_back(std::move(Config));
+  } else {
+    for (const char *Filename : Positional) {
+      Config.InputFilename = Filename;
+      Config.OutputFilename = Filename;
+      DC.CopyConfigs.push_back(Config);
+    }
+  }
+
+  return DC;
 }
 
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
   ToolName = argv[0];
-  CopyConfig Config;
+  DriverConfig DriverConfig;
   if (sys::path::stem(ToolName).endswith_lower("strip"))
-    Config = parseStripOptions(makeArrayRef(argv + 1, argc));
+    DriverConfig = parseStripOptions(makeArrayRef(argv + 1, argc));
   else
-    Config = parseObjcopyOptions(makeArrayRef(argv + 1, argc));
-  executeElfObjcopy(Config);
+    DriverConfig = parseObjcopyOptions(makeArrayRef(argv + 1, argc));
+  for (const CopyConfig &CopyConfig : DriverConfig.CopyConfigs)
+    executeElfObjcopy(CopyConfig);
 }

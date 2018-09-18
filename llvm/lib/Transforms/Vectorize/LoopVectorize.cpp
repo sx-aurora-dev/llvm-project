@@ -584,6 +584,16 @@ protected:
   /// Emit bypass checks to check any memory assumptions we may have made.
   void emitMemRuntimeChecks(Loop *L, BasicBlock *Bypass);
 
+  /// Compute the transformed value of Index at offset StartValue using step
+  /// StepValue.
+  /// For integer induction, returns StartValue + Index * StepValue.
+  /// For pointer induction, returns StartValue[Index * StepValue].
+  /// FIXME: The newly created binary instructions should contain nsw/nuw
+  /// flags, which can be found from the original scalar operations.
+  Value *emitTransformedIndex(IRBuilder<> &B, Value *Index, ScalarEvolution *SE,
+                              const DataLayout &DL,
+                              const InductionDescriptor &ID) const;
+
   /// Add additional metadata to \p To that was not present on \p Orig.
   ///
   /// Currently this is used to add the noalias annotations based on the
@@ -856,7 +866,7 @@ public:
     int Key = Index + SmallestKey;
 
     // Skip if there is already a member with the same index.
-    if (Members.count(Key))
+    if (Members.find(Key) != Members.end())
       return false;
 
     if (Key > LargestKey) {
@@ -884,10 +894,11 @@ public:
   /// \returns nullptr if contains no such member.
   Instruction *getMember(unsigned Index) const {
     int Key = SmallestKey + Index;
-    if (!Members.count(Key))
+    auto Member = Members.find(Key);
+    if (Member == Members.end())
       return nullptr;
 
-    return Members.find(Key)->second;
+    return Member->second;
   }
 
   /// Get the index for the given member. Unlike the key in the member
@@ -971,16 +982,17 @@ public:
 
   /// Check if \p Instr belongs to any interleave group.
   bool isInterleaved(Instruction *Instr) const {
-    return InterleaveGroupMap.count(Instr);
+    return InterleaveGroupMap.find(Instr) != InterleaveGroupMap.end();
   }
 
   /// Get the interleave group that \p Instr belongs to.
   ///
   /// \returns nullptr if doesn't have such group.
   InterleaveGroup *getInterleaveGroup(Instruction *Instr) const {
-    if (InterleaveGroupMap.count(Instr))
-      return InterleaveGroupMap.find(Instr)->second;
-    return nullptr;
+    auto Group = InterleaveGroupMap.find(Instr);
+    if (Group == InterleaveGroupMap.end())
+      return nullptr;
+    return Group->second;
   }
 
   /// Returns true if an interleaved group that may access memory
@@ -1040,8 +1052,7 @@ private:
   /// \returns the newly created interleave group.
   InterleaveGroup *createInterleaveGroup(Instruction *Instr, int Stride,
                                          unsigned Align) {
-    assert(!InterleaveGroupMap.count(Instr) &&
-           "Already in an interleaved access group");
+    assert(!isInterleaved(Instr) && "Already in an interleaved access group");
     InterleaveGroupMap[Instr] = new InterleaveGroup(Instr, Stride, Align);
     return InterleaveGroupMap[Instr];
   }
@@ -1121,7 +1132,8 @@ private:
 
     // If we know there is a dependence from source to sink, assume the
     // instructions can't be reordered. Otherwise, reordering is legal.
-    return !Dependences.count(Src) || !Dependences.lookup(Src).count(Sink);
+    return Dependences.find(Src) == Dependences.end() ||
+           !Dependences.lookup(Src).count(Sink);
   }
 
   /// Collect the dependences from LoopAccessInfo.
@@ -1250,31 +1262,34 @@ public:
     auto Scalars = InstsToScalarize.find(VF);
     assert(Scalars != InstsToScalarize.end() &&
            "VF not yet analyzed for scalarization profitability");
-    return Scalars->second.count(I);
+    return Scalars->second.find(I) != Scalars->second.end();
   }
 
   /// Returns true if \p I is known to be uniform after vectorization.
   bool isUniformAfterVectorization(Instruction *I, unsigned VF) const {
     if (VF == 1)
       return true;
-    assert(Uniforms.count(VF) && "VF not yet analyzed for uniformity");
     auto UniformsPerVF = Uniforms.find(VF);
-    return UniformsPerVF->second.count(I);
+    assert(UniformsPerVF != Uniforms.end() &&
+           "VF not yet analyzed for uniformity");
+    return UniformsPerVF->second.find(I) != UniformsPerVF->second.end();
   }
 
   /// Returns true if \p I is known to be scalar after vectorization.
   bool isScalarAfterVectorization(Instruction *I, unsigned VF) const {
     if (VF == 1)
       return true;
-    assert(Scalars.count(VF) && "Scalar values are not calculated for VF");
     auto ScalarsPerVF = Scalars.find(VF);
-    return ScalarsPerVF->second.count(I);
+    assert(ScalarsPerVF != Scalars.end() &&
+           "Scalar values are not calculated for VF");
+    return ScalarsPerVF->second.find(I) != ScalarsPerVF->second.end();
   }
 
   /// \returns True if instruction \p I can be truncated to a smaller bitwidth
   /// for vectorization factor \p VF.
   bool canTruncateToMinimalBitwidth(Instruction *I, unsigned VF) const {
-    return VF > 1 && MinBWs.count(I) && !isProfitableToScalarize(I, VF) &&
+    return VF > 1 && MinBWs.find(I) != MinBWs.end() &&
+           !isProfitableToScalarize(I, VF) &&
            !isScalarAfterVectorization(I, VF);
   }
 
@@ -1330,7 +1345,8 @@ public:
   unsigned getWideningCost(Instruction *I, unsigned VF) {
     assert(VF >= 2 && "Expected VF >=2");
     std::pair<Instruction *, unsigned> InstOnVF = std::make_pair(I, VF);
-    assert(WideningDecisions.count(InstOnVF) && "The cost is not calculated");
+    assert(WideningDecisions.find(InstOnVF) != WideningDecisions.end() &&
+           "The cost is not calculated");
     return WideningDecisions[InstOnVF].second;
   }
 
@@ -1369,7 +1385,7 @@ public:
   /// that may be vectorized as interleave, gather-scatter or scalarized.
   void collectUniformsAndScalars(unsigned VF) {
     // Do the analysis once.
-    if (VF == 1 || Uniforms.count(VF))
+    if (VF == 1 || Uniforms.find(VF) != Uniforms.end())
       return;
     setCostBasedWideningDecision(VF);
     collectLoopUniforms(VF);
@@ -1414,7 +1430,22 @@ public:
   /// Returns true if \p I is an instruction that will be scalarized with
   /// predication. Such instructions include conditional stores and
   /// instructions that may divide by zero.
-  bool isScalarWithPredication(Instruction *I);
+  /// If a non-zero VF has been calculated, we check if I will be scalarized
+  /// predication for that VF.
+  bool isScalarWithPredication(Instruction *I, unsigned VF = 1);
+
+  // Returns true if \p I is an instruction that will be predicated either
+  // through scalar predication or masked load/store or masked gather/scatter.
+  // Superset of instructions that return true for isScalarWithPredication.
+  bool isPredicatedInst(Instruction *I) {
+    if (!Legal->blockNeedsPredication(I->getParent()))
+      return false;
+    // Loads and stores that need some form of masked operation are predicated
+    // instructions.
+    if (isa<LoadInst>(I) || isa<StoreInst>(I))
+      return Legal->isMaskRequired(I);
+    return isScalarWithPredication(I);
+  }
 
   /// Returns true if \p I is a memory instruction with consecutive memory
   /// access that can be widened.
@@ -1950,7 +1981,7 @@ void InnerLoopVectorizer::widenIntOrFpInduction(PHINode *IV, TruncInst *Trunc) {
                      ? Builder.CreateSExtOrTrunc(Induction, IV->getType())
                      : Builder.CreateCast(Instruction::SIToFP, Induction,
                                           IV->getType());
-      ScalarIV = ID.transform(Builder, ScalarIV, PSE.getSE(), DL);
+      ScalarIV = emitTransformedIndex(Builder, ScalarIV, PSE.getSE(), DL, ID);
       ScalarIV->setName("offset.idx");
     }
     if (Trunc) {
@@ -2789,6 +2820,75 @@ void InnerLoopVectorizer::emitMemRuntimeChecks(Loop *L, BasicBlock *Bypass) {
   LVer->prepareNoAliasMetadata();
 }
 
+Value *InnerLoopVectorizer::emitTransformedIndex(
+    IRBuilder<> &B, Value *Index, ScalarEvolution *SE, const DataLayout &DL,
+    const InductionDescriptor &ID) const {
+
+  SCEVExpander Exp(*SE, DL, "induction");
+  auto Step = ID.getStep();
+  auto StartValue = ID.getStartValue();
+  assert(Index->getType() == Step->getType() &&
+         "Index type does not match StepValue type");
+  switch (ID.getKind()) {
+  case InductionDescriptor::IK_IntInduction: {
+    assert(Index->getType() == StartValue->getType() &&
+           "Index type does not match StartValue type");
+
+    // FIXME: Theoretically, we can call getAddExpr() of ScalarEvolution
+    // and calculate (Start + Index * Step) for all cases, without
+    // special handling for "isOne" and "isMinusOne".
+    // But in the real life the result code getting worse. We mix SCEV
+    // expressions and ADD/SUB operations and receive redundant
+    // intermediate values being calculated in different ways and
+    // Instcombine is unable to reduce them all.
+
+    if (ID.getConstIntStepValue() && ID.getConstIntStepValue()->isMinusOne())
+      return B.CreateSub(StartValue, Index);
+    if (ID.getConstIntStepValue() && ID.getConstIntStepValue()->isOne())
+      return B.CreateAdd(StartValue, Index);
+    const SCEV *S = SE->getAddExpr(SE->getSCEV(StartValue),
+                                   SE->getMulExpr(Step, SE->getSCEV(Index)));
+    return Exp.expandCodeFor(S, StartValue->getType(), &*B.GetInsertPoint());
+  }
+  case InductionDescriptor::IK_PtrInduction: {
+    assert(isa<SCEVConstant>(Step) &&
+           "Expected constant step for pointer induction");
+    const SCEV *S = SE->getMulExpr(SE->getSCEV(Index), Step);
+    Index = Exp.expandCodeFor(S, Index->getType(), &*B.GetInsertPoint());
+    return B.CreateGEP(nullptr, StartValue, Index);
+  }
+  case InductionDescriptor::IK_FpInduction: {
+    assert(Step->getType()->isFloatingPointTy() && "Expected FP Step value");
+    auto InductionBinOp = ID.getInductionBinOp();
+    assert(InductionBinOp &&
+           (InductionBinOp->getOpcode() == Instruction::FAdd ||
+            InductionBinOp->getOpcode() == Instruction::FSub) &&
+           "Original bin op should be defined for FP induction");
+
+    Value *StepValue = cast<SCEVUnknown>(Step)->getValue();
+
+    // Floating point operations had to be 'fast' to enable the induction.
+    FastMathFlags Flags;
+    Flags.setFast();
+
+    Value *MulExp = B.CreateFMul(StepValue, Index);
+    if (isa<Instruction>(MulExp))
+      // We have to check, the MulExp may be a constant.
+      cast<Instruction>(MulExp)->setFastMathFlags(Flags);
+
+    Value *BOp = B.CreateBinOp(InductionBinOp->getOpcode(), StartValue, MulExp,
+                               "induction");
+    if (isa<Instruction>(BOp))
+      cast<Instruction>(BOp)->setFastMathFlags(Flags);
+
+    return BOp;
+  }
+  case InductionDescriptor::IK_NoInduction:
+    return nullptr;
+  }
+  llvm_unreachable("invalid enum");
+}
+
 BasicBlock *InnerLoopVectorizer::createVectorizedLoopSkeleton() {
   /*
    In this function we generate a new loop. The new loop will contain
@@ -2927,7 +3027,7 @@ BasicBlock *InnerLoopVectorizer::createVectorizedLoopSkeleton() {
         CastInst::getCastOpcode(CountRoundDown, true, StepType, true);
       Value *CRD = B.CreateCast(CastOp, CountRoundDown, StepType, "cast.crd");
       const DataLayout &DL = OrigLoop->getHeader()->getModule()->getDataLayout();
-      EndValue = II.transform(B, CRD, PSE.getSE(), DL);
+      EndValue = emitTransformedIndex(B, CRD, PSE.getSE(), DL, II);
       EndValue->setName("ind.end");
     }
 
@@ -3023,7 +3123,7 @@ void InnerLoopVectorizer::fixupIVUsers(PHINode *OrigPhi,
                              II.getStep()->getType())
               : B.CreateSExtOrTrunc(CountMinusOne, II.getStep()->getType());
       CMO->setName("cast.cmo");
-      Value *Escape = II.transform(B, CMO, PSE.getSE(), DL);
+      Value *Escape = emitTransformedIndex(B, CMO, PSE.getSE(), DL, II);
       Escape->setName("ind.escape");
       MissingVals[UI] = Escape;
     }
@@ -3212,7 +3312,8 @@ void InnerLoopVectorizer::truncateToMinimalBitwidths() {
       continue;
     for (unsigned Part = 0; Part < UF; ++Part) {
       Value *I = getOrCreateVectorValue(KV.first, Part);
-      if (Erased.count(I) || I->use_empty() || !isa<Instruction>(I))
+      if (Erased.find(I) != Erased.end() || I->use_empty() ||
+          !isa<Instruction>(I))
         continue;
       Type *OriginalTy = I->getType();
       Type *ScalarTruncatedTy =
@@ -3666,8 +3767,8 @@ void InnerLoopVectorizer::fixReduction(PHINode *Phi) {
           Builder.CreateBinOp((Instruction::BinaryOps)Op, RdxPart,
                               ReducedPartRdx, "bin.rdx"));
     else
-      ReducedPartRdx = RecurrenceDescriptor::createMinMaxOp(
-          Builder, MinMaxKind, ReducedPartRdx, RdxPart);
+      ReducedPartRdx = createMinMaxOp(Builder, MinMaxKind, ReducedPartRdx,
+                                      RdxPart);
   }
 
   if (VF > 1) {
@@ -3721,11 +3822,18 @@ void InnerLoopVectorizer::fixLCSSAPHIs() {
   for (PHINode &LCSSAPhi : LoopExitBlock->phis()) {
     if (LCSSAPhi.getNumIncomingValues() == 1) {
       auto *IncomingValue = LCSSAPhi.getIncomingValue(0);
+      // Non-instruction incoming values will have only one value.
+      unsigned LastLane = 0;
+      if (isa<Instruction>(IncomingValue)) 
+          LastLane = Cost->isUniformAfterVectorization(
+                         cast<Instruction>(IncomingValue), VF)
+                         ? 0
+                         : VF - 1;
       // Can be a loop invariant incoming value or the last scalar value to be
       // extracted from the vectorized loop.
       Builder.SetInsertPoint(LoopMiddleBlock->getTerminator());
       Value *lastIncomingValue =
-          getOrCreateScalarValue(IncomingValue, {UF - 1, VF - 1});
+          getOrCreateScalarValue(IncomingValue, { UF - 1, LastLane });
       LCSSAPhi.addIncoming(lastIncomingValue, LoopMiddleBlock);
     }
   }
@@ -3850,7 +3958,8 @@ void InnerLoopVectorizer::widenPHIInstruction(Instruction *PN, unsigned UF,
       for (unsigned Lane = 0; Lane < Lanes; ++Lane) {
         Constant *Idx = ConstantInt::get(PtrInd->getType(), Lane + Part * VF);
         Value *GlobalIdx = Builder.CreateAdd(PtrInd, Idx);
-        Value *SclrGep = II.transform(Builder, GlobalIdx, PSE.getSE(), DL);
+        Value *SclrGep =
+            emitTransformedIndex(Builder, GlobalIdx, PSE.getSE(), DL, II);
         SclrGep->setName("next.gep");
         VectorLoopValueMap.setScalarValue(P, {Part, Lane}, SclrGep);
       }
@@ -4171,7 +4280,7 @@ void LoopVectorizationCostModel::collectLoopScalars(unsigned VF) {
   // We should not collect Scalars more than once per VF. Right now, this
   // function is called from collectUniformsAndScalars(), which already does
   // this check. Collecting Scalars for VF=1 does not make any sense.
-  assert(VF >= 2 && !Scalars.count(VF) &&
+  assert(VF >= 2 && Scalars.find(VF) == Scalars.end() &&
          "This function should not be visited twice for the same VF");
 
   SmallSetVector<Instruction *, 8> Worklist;
@@ -4257,7 +4366,7 @@ void LoopVectorizationCostModel::collectLoopScalars(unsigned VF) {
       }
     }
   for (auto *I : ScalarPtrs)
-    if (!PossibleNonScalarPtrs.count(I)) {
+    if (PossibleNonScalarPtrs.find(I) == PossibleNonScalarPtrs.end()) {
       LLVM_DEBUG(dbgs() << "LV: Found scalar instruction: " << *I << "\n");
       Worklist.insert(I);
     }
@@ -4283,8 +4392,9 @@ void LoopVectorizationCostModel::collectLoopScalars(unsigned VF) {
   // Insert the forced scalars.
   // FIXME: Currently widenPHIInstruction() often creates a dead vector
   // induction variable when the PHI user is scalarized.
-  if (ForcedScalars.count(VF))
-    for (auto *I : ForcedScalars.find(VF)->second)
+  auto ForcedScalar = ForcedScalars.find(VF);
+  if (ForcedScalar != ForcedScalars.end())
+    for (auto *I : ForcedScalar->second)
       Worklist.insert(I);
 
   // Expand the worklist by looking through any bitcasts and getelementptr
@@ -4352,7 +4462,7 @@ void LoopVectorizationCostModel::collectLoopScalars(unsigned VF) {
   Scalars[VF].insert(Worklist.begin(), Worklist.end());
 }
 
-bool LoopVectorizationCostModel::isScalarWithPredication(Instruction *I) {
+bool LoopVectorizationCostModel::isScalarWithPredication(Instruction *I, unsigned VF) {
   if (!Legal->blockNeedsPredication(I->getParent()))
     return false;
   switch(I->getOpcode()) {
@@ -4364,6 +4474,14 @@ bool LoopVectorizationCostModel::isScalarWithPredication(Instruction *I) {
       return false;
     auto *Ptr = getLoadStorePointerOperand(I);
     auto *Ty = getMemInstValueType(I);
+    // We have already decided how to vectorize this instruction, get that
+    // result.
+    if (VF > 1) {
+      InstWidening WideningDecision = getWideningDecision(I, VF);
+      assert(WideningDecision != CM_Unknown &&
+             "Widening decision should be ready at this moment");
+      return WideningDecision == CM_Scalarize;
+    }
     return isa<LoadInst>(I) ?
         !(isLegalMaskedLoad(Ty, Ptr)  || isLegalMaskedGather(Ty))
       : !(isLegalMaskedStore(Ty, Ptr) || isLegalMaskedScatter(Ty));
@@ -4411,7 +4529,7 @@ void LoopVectorizationCostModel::collectLoopUniforms(unsigned VF) {
   // already does this check. Collecting Uniforms for VF=1 does not make any
   // sense.
 
-  assert(VF >= 2 && !Uniforms.count(VF) &&
+  assert(VF >= 2 && Uniforms.find(VF) == Uniforms.end() &&
          "This function should not be visited twice for the same VF");
 
   // Visit the list of Uniforms. If we'll not find any uniform value, we'll
@@ -4498,26 +4616,33 @@ void LoopVectorizationCostModel::collectLoopUniforms(unsigned VF) {
   // Add to the Worklist all consecutive and consecutive-like pointers that
   // aren't also identified as possibly non-uniform.
   for (auto *V : ConsecutiveLikePtrs)
-    if (!PossibleNonUniformPtrs.count(V)) {
+    if (PossibleNonUniformPtrs.find(V) == PossibleNonUniformPtrs.end()) {
       LLVM_DEBUG(dbgs() << "LV: Found uniform instruction: " << *V << "\n");
       Worklist.insert(V);
     }
 
   // Expand Worklist in topological order: whenever a new instruction
-  // is added , its users should be either already inside Worklist, or
-  // out of scope. It ensures a uniform instruction will only be used
-  // by uniform instructions or out of scope instructions.
+  // is added , its users should be already inside Worklist.  It ensures
+  // a uniform instruction will only be used by uniform instructions.
   unsigned idx = 0;
   while (idx != Worklist.size()) {
     Instruction *I = Worklist[idx++];
 
     for (auto OV : I->operand_values()) {
+      // isOutOfScope operands cannot be uniform instructions.
       if (isOutOfScope(OV))
         continue;
+      // First order recurrence Phi's should typically be considered
+      // non-uniform.
+      auto *OP = dyn_cast<PHINode>(OV);
+      if (OP && Legal->isFirstOrderRecurrence(OP))
+        continue;
+      // If all the users of the operand are uniform, then add the
+      // operand into the uniform worklist.
       auto *OI = cast<Instruction>(OV);
       if (llvm::all_of(OI->users(), [&](User *U) -> bool {
             auto *J = cast<Instruction>(U);
-            return !TheLoop->contains(J) || Worklist.count(J) ||
+            return Worklist.count(J) ||
                    (OI == getLoadStorePointerOperand(J) &&
                     isUniformDecision(J, VF));
           })) {
@@ -5088,7 +5213,7 @@ LoopVectorizationCostModel::getSmallestAndWidestTypes() {
       Type *T = I.getType();
 
       // Skip ignored values.
-      if (ValuesToIgnore.count(&I))
+      if (ValuesToIgnore.find(&I) != ValuesToIgnore.end())
         continue;
 
       // Only examine Loads, Stores and PHINodes.
@@ -5386,11 +5511,11 @@ LoopVectorizationCostModel::calculateRegisterUsage(ArrayRef<unsigned> VFs) {
       OpenIntervals.erase(ToRemove);
 
     // Ignore instructions that are never used within the loop.
-    if (!Ends.count(I))
+    if (Ends.find(I) == Ends.end())
       continue;
 
     // Skip ignored values.
-    if (ValuesToIgnore.count(I))
+    if (ValuesToIgnore.find(I) != ValuesToIgnore.end())
       continue;
 
     // For each VF find the maximum usage of registers.
@@ -5404,7 +5529,7 @@ LoopVectorizationCostModel::calculateRegisterUsage(ArrayRef<unsigned> VFs) {
       unsigned RegUsage = 0;
       for (auto Inst : OpenIntervals) {
         // Skip ignored values for VF > 1.
-        if (VecValuesToIgnore.count(Inst) ||
+        if (VecValuesToIgnore.find(Inst) != VecValuesToIgnore.end() ||
             isScalarAfterVectorization(Inst, VFs[j]))
           continue;
         RegUsage += GetRegUsage(Inst->getType(), VFs[j]);
@@ -5450,8 +5575,7 @@ bool LoopVectorizationCostModel::useEmulatedMaskMemRefHack(Instruction *I){
   // from moving "masked load/store" check from legality to cost model.
   // Masked Load/Gather emulation was previously never allowed.
   // Limited number of Masked Store/Scatter emulation was allowed.
-  assert(isScalarWithPredication(I) &&
-         "Expecting a scalar emulated instruction");
+  assert(isPredicatedInst(I) && "Expecting a scalar emulated instruction");
   return isa<LoadInst>(I) ||
          (isa<StoreInst>(I) &&
           NumPredStores > NumberOfStoresToPredicate);
@@ -5462,7 +5586,7 @@ void LoopVectorizationCostModel::collectInstsToScalarize(unsigned VF) {
   // instructions to scalarize, there's nothing to do. Collection may already
   // have occurred if we have a user-selected VF and are now computing the
   // expected cost for interleaving.
-  if (VF < 2 || InstsToScalarize.count(VF))
+  if (VF < 2 || InstsToScalarize.find(VF) != InstsToScalarize.end())
     return;
 
   // Initialize a mapping for VF in InstsToScalalarize. If we find that it's
@@ -5557,7 +5681,7 @@ int LoopVectorizationCostModel::computePredInstDiscount(
     Instruction *I = Worklist.pop_back_val();
 
     // If we've already analyzed the instruction, there's nothing to do.
-    if (ScalarCosts.count(I))
+    if (ScalarCosts.find(I) != ScalarCosts.end())
       continue;
 
     // Compute the cost of the vector instruction. Note that this cost already
@@ -5616,8 +5740,8 @@ LoopVectorizationCostModel::expectedCost(unsigned VF) {
     // For each instruction in the old loop.
     for (Instruction &I : BB->instructionsWithoutDebug()) {
       // Skip ignored values.
-      if (ValuesToIgnore.count(&I) ||
-          (VF > 1 && VecValuesToIgnore.count(&I)))
+      if (ValuesToIgnore.find(&I) != ValuesToIgnore.end() ||
+          (VF > 1 && VecValuesToIgnore.find(&I) != VecValuesToIgnore.end()))
         continue;
 
       VectorizationCostTy C = getInstructionCost(&I, VF);
@@ -5712,7 +5836,7 @@ unsigned LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
   // If we have a predicated store, it may not be executed for each vector
   // lane. Scale the cost by the probability of executing the predicated
   // block.
-  if (isScalarWithPredication(I)) {
+  if (isPredicatedInst(I)) {
     Cost /= getReciprocalPredBlockProb();
 
     if (useEmulatedMaskMemRefHack(I))
@@ -5830,9 +5954,12 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, unsigned VF) {
     return VectorizationCostTy(InstsToScalarize[VF][I], false);
 
   // Forced scalars do not have any scalarization overhead.
-  if (VF > 1 && ForcedScalars.count(VF) &&
-      ForcedScalars.find(VF)->second.count(I))
-    return VectorizationCostTy((getInstructionCost(I, 1).first * VF), false);
+  auto ForcedScalar = ForcedScalars.find(VF);
+  if (VF > 1 && ForcedScalar != ForcedScalars.end()) {
+    auto InstSet = ForcedScalar->second;
+    if (InstSet.find(I) != InstSet.end())
+      return VectorizationCostTy((getInstructionCost(I, 1).first * VF), false);
+  }
 
   Type *VectorTy;
   unsigned C = getInstructionCost(I, VF, VectorTy);
@@ -5855,7 +5982,12 @@ void LoopVectorizationCostModel::setCostBasedWideningDecision(unsigned VF) {
 
       if (isa<StoreInst>(&I) && isScalarWithPredication(&I))
         NumPredStores++;
-      if (isa<LoadInst>(&I) && Legal->isUniform(Ptr)) {
+
+      if (isa<LoadInst>(&I) && Legal->isUniform(Ptr) &&
+          // Conditional loads should be scalarized and predicated.
+          // isScalarWithPredication cannot be used here since masked
+          // gather/scatters are not considered scalar with predication.
+          !Legal->blockNeedsPredication(I.getParent())) {
         // Scalar load + broadcast
         unsigned Cost = getUniformMemOpCost(&I, VF);
         setWideningDecision(&I, VF, CM_Scalarize, Cost);
@@ -6005,8 +6137,10 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     bool ScalarPredicatedBB = false;
     BranchInst *BI = cast<BranchInst>(I);
     if (VF > 1 && BI->isConditional() &&
-        (PredicatedBBsAfterVectorization.count(BI->getSuccessor(0)) ||
-         PredicatedBBsAfterVectorization.count(BI->getSuccessor(1))))
+        (PredicatedBBsAfterVectorization.find(BI->getSuccessor(0)) !=
+             PredicatedBBsAfterVectorization.end() ||
+         PredicatedBBsAfterVectorization.find(BI->getSuccessor(1)) !=
+             PredicatedBBsAfterVectorization.end()))
       ScalarPredicatedBB = true;
 
     if (ScalarPredicatedBB) {
@@ -6412,7 +6546,8 @@ void LoopVectorizationPlanner::collectTriviallyDeadInstructions(
     PHINode *Ind = Induction.first;
     auto *IndUpdate = cast<Instruction>(Ind->getIncomingValueForBlock(Latch));
     if (llvm::all_of(IndUpdate->users(), [&](User *U) -> bool {
-          return U == Ind || DeadInstructions.count(cast<Instruction>(U));
+          return U == Ind || DeadInstructions.find(cast<Instruction>(U)) !=
+                                 DeadInstructions.end();
         }))
       DeadInstructions.insert(IndUpdate);
 
@@ -6692,7 +6827,11 @@ VPBlendRecipe *VPRecipeBuilder::tryToBlend(Instruction *I, VPlanPtr &Plan) {
 
 bool VPRecipeBuilder::tryToWiden(Instruction *I, VPBasicBlock *VPBB,
                                  VFRange &Range) {
-  if (CM.isScalarWithPredication(I))
+
+  bool IsPredicated = LoopVectorizationPlanner::getDecisionAndClampRange(
+      [&](unsigned VF) { return CM.isScalarWithPredication(I, VF); }, Range);
+
+  if (IsPredicated)
     return false;
 
   auto IsVectorizableOpcode = [](unsigned Opcode) {
@@ -6799,7 +6938,9 @@ VPBasicBlock *VPRecipeBuilder::handleReplication(
       [&](unsigned VF) { return CM.isUniformAfterVectorization(I, VF); },
       Range);
 
-  bool IsPredicated = CM.isScalarWithPredication(I);
+  bool IsPredicated = LoopVectorizationPlanner::getDecisionAndClampRange(
+      [&](unsigned VF) { return CM.isScalarWithPredication(I, VF); }, Range);
+
   auto *Recipe = new VPReplicateRecipe(I, IsUniform, IsPredicated);
 
   // Find if I uses a predicated instruction. If so, it will use its scalar
@@ -6973,7 +7114,8 @@ LoopVectorizationPlanner::buildVPlanWithVPRecipes(
 
       // First filter out irrelevant instructions, to ensure no recipes are
       // built for them.
-      if (isa<BranchInst>(Instr) || DeadInstructions.count(Instr))
+      if (isa<BranchInst>(Instr) ||
+          DeadInstructions.find(Instr) != DeadInstructions.end())
         continue;
 
       // I is a member of an InterleaveGroup for Range.Start. If it's an adjunct
@@ -6983,8 +7125,9 @@ LoopVectorizationPlanner::buildVPlanWithVPRecipes(
           Range.Start >= 2 && // Query is illegal for VF == 1
           CM.getWideningDecision(Instr, Range.Start) ==
               LoopVectorizationCostModel::CM_Interleave) {
-        if (SinkAfterInverse.count(Instr))
-          Ingredients.push_back(SinkAfterInverse.find(Instr)->second);
+        auto SinkCandidate = SinkAfterInverse.find(Instr);
+        if (SinkCandidate != SinkAfterInverse.end())
+          Ingredients.push_back(SinkCandidate->second);
         continue;
       }
 
