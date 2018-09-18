@@ -12,6 +12,7 @@
 // C Includes
 // C++ Includes
 // Other libraries and framework includes
+#include "llvm/ADT/ScopeExit.h"
 // Project includes
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/FormatEntity.h"
@@ -22,7 +23,9 @@
 #include "lldb/DataFormatters/TypeSummary.h"
 #include "lldb/DataFormatters/VectorIterator.h"
 #include "lldb/Symbol/ClangASTContext.h"
+#include "lldb/Target/CPPLanguageRuntime.h"
 #include "lldb/Target/ProcessStructReader.h"
+#include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Endian.h"
@@ -51,6 +54,54 @@ bool lldb_private::formatters::LibcxxOptionalSummaryProvider(
       engaged_sp->GetValueAsUnsigned(0) == 1 ? "true" : "false");
 
   stream.Printf(" Has Value=%s ", engaged_as_cstring.data());
+
+  return true;
+}
+
+bool lldb_private::formatters::LibcxxFunctionSummaryProvider(
+    ValueObject &valobj, Stream &stream, const TypeSummaryOptions &options) {
+
+  ValueObjectSP valobj_sp(valobj.GetNonSyntheticValue());
+
+  if (!valobj_sp)
+    return false;
+
+  ExecutionContext exe_ctx(valobj_sp->GetExecutionContextRef());
+  Process *process = exe_ctx.GetProcessPtr();
+
+  if (process == nullptr)
+    return false;
+
+  CPPLanguageRuntime *cpp_runtime = process->GetCPPLanguageRuntime();
+
+  if (!cpp_runtime)
+    return false;
+
+  CPPLanguageRuntime::LibCppStdFunctionCallableInfo callable_info =
+      cpp_runtime->FindLibCppStdFunctionCallableInfo(valobj_sp);
+
+  switch (callable_info.callable_case) {
+  case CPPLanguageRuntime::LibCppStdFunctionCallableCase::Invalid:
+    stream.Printf(" __f_ = %" PRIu64, callable_info.member__f_pointer_value);
+    return false;
+    break;
+  case CPPLanguageRuntime::LibCppStdFunctionCallableCase::Lambda:
+    stream.Printf(
+        " Lambda in File %s at Line %u",
+        callable_info.callable_line_entry.file.GetFilename().GetCString(),
+        callable_info.callable_line_entry.line);
+    break;
+  case CPPLanguageRuntime::LibCppStdFunctionCallableCase::CallableObject:
+    stream.Printf(
+        " Function in File %s at Line %u",
+        callable_info.callable_line_entry.file.GetFilename().GetCString(),
+        callable_info.callable_line_entry.line);
+    break;
+  case CPPLanguageRuntime::LibCppStdFunctionCallableCase::FreeOrMemberFunction:
+    stream.Printf(" Function = %s ",
+                  callable_info.callable_symbol.GetName().GetCString());
+    break;
+  }
 
   return true;
 }
@@ -587,23 +638,4 @@ bool lldb_private::formatters::LibcxxStringSummaryProvider(
       StringPrinter::StringElementType::ASCII>(options);
 
   return true;
-}
-
-class LibcxxFunctionFrontEnd : public SyntheticValueProviderFrontEnd {
-public:
-  LibcxxFunctionFrontEnd(ValueObject &backend)
-      : SyntheticValueProviderFrontEnd(backend) {}
-
-  lldb::ValueObjectSP GetSyntheticValue() override {
-    static ConstString g___f_("__f_");
-    return m_backend.GetChildMemberWithName(g___f_, true);
-  }
-};
-
-SyntheticChildrenFrontEnd *
-lldb_private::formatters::LibcxxFunctionFrontEndCreator(
-    CXXSyntheticChildren *, lldb::ValueObjectSP valobj_sp) {
-  if (valobj_sp)
-    return new LibcxxFunctionFrontEnd(*valobj_sp);
-  return nullptr;
 }

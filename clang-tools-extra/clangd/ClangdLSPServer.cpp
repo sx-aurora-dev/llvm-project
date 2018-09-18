@@ -12,6 +12,7 @@
 #include "JSONRPCDispatcher.h"
 #include "SourceCode.h"
 #include "URI.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Path.h"
@@ -122,6 +123,7 @@ void ClangdLSPServer::onInitialize(InitializeParams &Params) {
             {"renameProvider", true},
             {"documentSymbolProvider", true},
             {"workspaceSymbolProvider", true},
+            {"referencesProvider", true},
             {"executeCommandProvider",
              json::Object{
                  {"commands", {ExecuteCommandParams::CLANGD_APPLY_FIX_COMMAND}},
@@ -342,13 +344,12 @@ void ClangdLSPServer::onCompletion(TextDocumentPositionParams &Params) {
   Server.codeComplete(Params.textDocument.uri.file(), Params.position, CCOpts,
                       [this](llvm::Expected<CodeCompleteResult> List) {
                         if (!List)
-                          return replyError(ErrorCode::InvalidParams,
-                                            llvm::toString(List.takeError()));
+                          return replyError(List.takeError());
                         CompletionList LSPList;
                         LSPList.isIncomplete = List->HasMore;
                         for (const auto &R : List->Completions)
                           LSPList.items.push_back(R.render(CCOpts));
-                        reply(std::move(LSPList));
+                        return reply(std::move(LSPList));
                       });
 }
 
@@ -364,14 +365,14 @@ void ClangdLSPServer::onSignatureHelp(TextDocumentPositionParams &Params) {
 }
 
 void ClangdLSPServer::onGoToDefinition(TextDocumentPositionParams &Params) {
-  Server.findDefinitions(
-      Params.textDocument.uri.file(), Params.position,
-      [](llvm::Expected<std::vector<Location>> Items) {
-        if (!Items)
-          return replyError(ErrorCode::InvalidParams,
-                            llvm::toString(Items.takeError()));
-        reply(json::Array(*Items));
-      });
+  Server.findDefinitions(Params.textDocument.uri.file(), Params.position,
+                         [](llvm::Expected<std::vector<Location>> Items) {
+                           if (!Items)
+                             return replyError(
+                                 ErrorCode::InvalidParams,
+                                 llvm::toString(Items.takeError()));
+                           reply(json::Array(*Items));
+                         });
 }
 
 void ClangdLSPServer::onSwitchSourceHeader(TextDocumentIdentifier &Params) {
@@ -436,6 +437,17 @@ void ClangdLSPServer::applyConfiguration(
 void ClangdLSPServer::onChangeConfiguration(
     DidChangeConfigurationParams &Params) {
   applyConfiguration(Params.settings);
+}
+
+void ClangdLSPServer::onReference(ReferenceParams &Params) {
+  Server.findReferences(Params.textDocument.uri.file(), Params.position,
+                        [](llvm::Expected<std::vector<Location>> Locations) {
+                          if (!Locations)
+                            return replyError(
+                                ErrorCode::InternalError,
+                                llvm::toString(Locations.takeError()));
+                          reply(llvm::json::Array(*Locations));
+                        });
 }
 
 ClangdLSPServer::ClangdLSPServer(JSONOutput &Out,

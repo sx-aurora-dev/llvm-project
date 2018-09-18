@@ -730,6 +730,14 @@ static bool shouldAssumeDSOLocal(const CodeGenModule &CGM,
     return false;
 
   const llvm::Triple &TT = CGM.getTriple();
+  if (TT.isWindowsGNUEnvironment()) {
+    // In MinGW, variables without DLLImport can still be automatically
+    // imported from a DLL by the linker; don't mark variables that
+    // potentially could come from another DLL as DSO local.
+    if (GV->isDeclarationForLinker() && isa<llvm::GlobalVariable>(GV) &&
+        !GV->isThreadLocal())
+      return false;
+  }
   // Every other GV is local on COFF.
   // Make an exception for windows OS in the triple: Some firmware builds use
   // *-win32-macho triples. This (accidentally?) produced windows relocations
@@ -1959,9 +1967,6 @@ bool CodeGenModule::isInSanitizerBlacklist(llvm::GlobalVariable *GV,
 
 bool CodeGenModule::imbueXRayAttrs(llvm::Function *Fn, SourceLocation Loc,
                                    StringRef Category) const {
-  if (!LangOpts.XRayInstrument)
-    return false;
-
   const auto &XRayFilter = getContext().getXRayFilter();
   using ImbueAttr = XRayFunctionFilter::ImbueAttribute;
   auto Attr = ImbueAttr::NONE;
@@ -2433,9 +2438,22 @@ void CodeGenModule::EmitGlobalDefinition(GlobalDecl GD, llvm::GlobalValue *GV) {
 static void ReplaceUsesOfNonProtoTypeWithRealFunction(llvm::GlobalValue *Old,
                                                       llvm::Function *NewFn);
 
+static unsigned
+TargetMVPriority(const TargetInfo &TI,
+                 const CodeGenFunction::MultiVersionResolverOption &RO) {
+  unsigned Priority = 0;
+  for (StringRef Feat : RO.Conditions.Features)
+    Priority = std::max(Priority, TI.multiVersionSortPriority(Feat));
+
+  if (!RO.Conditions.Architecture.empty())
+    Priority = std::max(
+        Priority, TI.multiVersionSortPriority(RO.Conditions.Architecture));
+  return Priority;
+}
+
 void CodeGenModule::emitMultiVersionFunctions() {
   for (GlobalDecl GD : MultiVersionFuncs) {
-    SmallVector<CodeGenFunction::TargetMultiVersionResolverOption, 10> Options;
+    SmallVector<CodeGenFunction::MultiVersionResolverOption, 10> Options;
     const FunctionDecl *FD = cast<FunctionDecl>(GD.getDecl());
     getContext().forEachMultiversionedFunctionVersion(
         FD, [this, &GD, &Options](const FunctionDecl *CurFD) {
@@ -2456,8 +2474,13 @@ void CodeGenModule::emitMultiVersionFunctions() {
             }
             assert(Func && "This should have just been created");
           }
-          Options.emplace_back(getTarget(), cast<llvm::Function>(Func),
-                               CurFD->getAttr<TargetAttr>()->parse());
+
+          const auto *TA = CurFD->getAttr<TargetAttr>();
+          llvm::SmallVector<StringRef, 8> Feats;
+          TA->getAddedFeatures(Feats);
+
+          Options.emplace_back(cast<llvm::Function>(Func),
+                               TA->getArchitecture(), Feats);
         });
 
     llvm::Function *ResolverFunc = cast<llvm::Function>(
@@ -2465,11 +2488,16 @@ void CodeGenModule::emitMultiVersionFunctions() {
     if (supportsCOMDAT())
       ResolverFunc->setComdat(
           getModule().getOrInsertComdat(ResolverFunc->getName()));
+
+    const TargetInfo &TI = getTarget();
     std::stable_sort(
         Options.begin(), Options.end(),
-        std::greater<CodeGenFunction::TargetMultiVersionResolverOption>());
+        [&TI](const CodeGenFunction::MultiVersionResolverOption &LHS,
+              const CodeGenFunction::MultiVersionResolverOption &RHS) {
+          return TargetMVPriority(TI, LHS) > TargetMVPriority(TI, RHS);
+        });
     CodeGenFunction CGF(*this);
-    CGF.EmitTargetMultiVersionResolver(ResolverFunc, Options);
+    CGF.EmitMultiVersionResolver(ResolverFunc, Options);
   }
 }
 
@@ -2489,8 +2517,7 @@ void CodeGenModule::emitCPUDispatchDefinition(GlobalDecl GD) {
       GetOrCreateLLVMFunction(ResolverName, ResolverType, GlobalDecl{},
                               /*ForVTable=*/false));
 
-  SmallVector<CodeGenFunction::CPUDispatchMultiVersionResolverOption, 10>
-      Options;
+  SmallVector<CodeGenFunction::MultiVersionResolverOption, 10> Options;
   const TargetInfo &Target = getTarget();
   for (const IdentifierInfo *II : DD->cpus()) {
     // Get the name of the target function so we can look it up/create it.
@@ -2507,15 +2534,18 @@ void CodeGenModule::emitCPUDispatchDefinition(GlobalDecl GD) {
         Features.begin(), Features.end(), [&Target](StringRef Feat) {
           return !Target.validateCpuSupports(Feat);
         }), Features.end());
-    Options.emplace_back(cast<llvm::Function>(Func),
-                         CodeGenFunction::GetX86CpuSupportsMask(Features));
+    Options.emplace_back(cast<llvm::Function>(Func), StringRef{}, Features);
   }
 
   llvm::sort(
       Options.begin(), Options.end(),
-      std::greater<CodeGenFunction::CPUDispatchMultiVersionResolverOption>());
+      [](const CodeGenFunction::MultiVersionResolverOption &LHS,
+         const CodeGenFunction::MultiVersionResolverOption &RHS) {
+        return CodeGenFunction::GetX86CpuSupportsMask(LHS.Conditions.Features) >
+               CodeGenFunction::GetX86CpuSupportsMask(RHS.Conditions.Features);
+      });
   CodeGenFunction CGF(*this);
-  CGF.EmitCPUDispatchMultiVersionResolver(ResolverFunc, Options);
+  CGF.EmitMultiVersionResolver(ResolverFunc, Options);
 }
 
 /// If an ifunc for the specified mangled name is not in the module, create and
@@ -2571,17 +2601,16 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     if (getLangOpts().OpenMPIsDevice && OpenMPRuntime &&
         !OpenMPRuntime->markAsGlobalTarget(GD) && FD->isDefined() &&
         !DontDefer && !IsForDefinition) {
-      if (const FunctionDecl *FDDef = FD->getDefinition())
-        if (getContext().DeclMustBeEmitted(FDDef)) {
-          GlobalDecl GDDef;
-          if (const auto *CD = dyn_cast<CXXConstructorDecl>(FDDef))
-            GDDef = GlobalDecl(CD, GD.getCtorType());
-          else if (const auto *DD = dyn_cast<CXXDestructorDecl>(FDDef))
-            GDDef = GlobalDecl(DD, GD.getDtorType());
-          else
-            GDDef = GlobalDecl(FDDef);
-          addDeferredDeclToEmit(GDDef);
-        }
+      if (const FunctionDecl *FDDef = FD->getDefinition()) {
+        GlobalDecl GDDef;
+        if (const auto *CD = dyn_cast<CXXConstructorDecl>(FDDef))
+          GDDef = GlobalDecl(CD, GD.getCtorType());
+        else if (const auto *DD = dyn_cast<CXXDestructorDecl>(FDDef))
+          GDDef = GlobalDecl(DD, GD.getDtorType());
+        else
+          GDDef = GlobalDecl(FDDef);
+        EmitGlobal(GDDef);
+      }
     }
 
     if (FD->isMultiVersion()) {
@@ -3092,10 +3121,9 @@ CodeGenModule::GetAddrOfGlobal(GlobalDecl GD,
                               IsForDefinition);
 }
 
-llvm::GlobalVariable *
-CodeGenModule::CreateOrReplaceCXXRuntimeVariable(StringRef Name,
-                                      llvm::Type *Ty,
-                                      llvm::GlobalValue::LinkageTypes Linkage) {
+llvm::GlobalVariable *CodeGenModule::CreateOrReplaceCXXRuntimeVariable(
+    StringRef Name, llvm::Type *Ty, llvm::GlobalValue::LinkageTypes Linkage,
+    unsigned Alignment) {
   llvm::GlobalVariable *GV = getModule().getNamedGlobal(Name);
   llvm::GlobalVariable *OldGV = nullptr;
 
@@ -3130,6 +3158,8 @@ CodeGenModule::CreateOrReplaceCXXRuntimeVariable(StringRef Name,
   if (supportsCOMDAT() && GV->isWeakForLinker() &&
       !GV->hasAvailableExternallyLinkage())
     GV->setComdat(TheModule.getOrInsertComdat(GV->getName()));
+
+  GV->setAlignment(Alignment);
 
   return GV;
 }
@@ -4298,15 +4328,13 @@ CodeGenModule::GetAddrOfConstantStringFromLiteral(const StringLiteral *S,
   StringRef GlobalVariableName;
   llvm::GlobalValue::LinkageTypes LT;
 
-  // Mangle the string literal if the ABI allows for it.  However, we cannot
-  // do this if  we are compiling with ASan or -fwritable-strings because they
-  // rely on strings having normal linkage.
-  if (!LangOpts.WritableStrings &&
-      !LangOpts.Sanitize.has(SanitizerKind::Address) &&
-      getCXXABI().getMangleContext().shouldMangleStringLiteral(S)) {
+  // Mangle the string literal if that's how the ABI merges duplicate strings.
+  // Don't do it if they are writable, since we don't want writes in one TU to
+  // affect strings in another.
+  if (getCXXABI().getMangleContext().shouldMangleStringLiteral(S) &&
+      !LangOpts.WritableStrings) {
     llvm::raw_svector_ostream Out(MangledNameBuffer);
     getCXXABI().getMangleContext().mangleStringLiteral(S, Out);
-
     LT = llvm::GlobalValue::LinkOnceODRLinkage;
     GlobalVariableName = MangledNameBuffer;
   } else {

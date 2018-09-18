@@ -212,6 +212,7 @@ StringRef Triple::getOSTypeName(OSType Kind) {
   case Mesa3D: return "mesa3d";
   case Contiki: return "contiki";
   case AMDPAL: return "amdpal";
+  case HermitCore: return "hermit";
   }
 
   llvm_unreachable("Invalid OSType");
@@ -404,8 +405,8 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("msp430", Triple::msp430)
     .Cases("mips", "mipseb", "mipsallegrex", Triple::mips)
     .Cases("mipsel", "mipsallegrexel", Triple::mipsel)
-    .Cases("mips64", "mips64eb", Triple::mips64)
-    .Case("mips64el", Triple::mips64el)
+    .Cases("mips64", "mips64eb", "mipsn32", Triple::mips64)
+    .Cases("mips64el", "mipsn32el", Triple::mips64el)
     .Case("nios2", Triple::nios2)
     .Case("r600", Triple::r600)
     .Case("amdgcn", Triple::amdgcn)
@@ -507,6 +508,7 @@ static Triple::OSType parseOS(StringRef OSName) {
     .StartsWith("mesa3d", Triple::Mesa3D)
     .StartsWith("contiki", Triple::Contiki)
     .StartsWith("amdpal", Triple::AMDPAL)
+    .StartsWith("hermit", Triple::HermitCore)
     .Default(Triple::UnknownOS);
 }
 
@@ -715,6 +717,14 @@ Triple::Triple(const Twine &Str)
           ObjectFormat = parseFormat(Components[3]);
         }
       }
+    } else {
+      Environment = StringSwitch<Triple::EnvironmentType>(Components[0])
+                        .StartsWith("mipsn32", Triple::GNUABIN32)
+                        .StartsWith("mips64", Triple::GNUABI64)
+                        .StartsWith("mipsisa64", Triple::GNUABI64)
+                        .StartsWith("mipsisa32", Triple::GNU)
+                        .Cases("mips", "mipsel",  Triple::GNU)
+                        .Default(UnknownEnvironment);
     }
   }
   if (ObjectFormat == UnknownObjectFormat)

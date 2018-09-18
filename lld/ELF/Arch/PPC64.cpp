@@ -98,6 +98,37 @@ static uint16_t highera(uint64_t V) { return (V + 0x8000) >> 32; }
 static uint16_t highest(uint64_t V) { return V >> 48; }
 static uint16_t highesta(uint64_t V) { return (V + 0x8000) >> 48; }
 
+// Extracts the 'PO' field of an instruction encoding.
+static uint8_t getPrimaryOpCode(uint32_t Encoding) { return (Encoding >> 26); }
+
+static bool isDQFormInstruction(uint32_t Encoding) {
+  switch (getPrimaryOpCode(Encoding)) {
+  default:
+    return false;
+  case 56:
+    // The only instruction with a primary opcode of 56 is `lq`.
+    return true;
+  case 61:
+    // There are both DS and DQ instruction forms with this primary opcode.
+    // Namely `lxv` and `stxv` are the DQ-forms that use it.
+    // The DS 'XO' bits being set to 01 is restricted to DQ form.
+    return (Encoding & 3) == 0x1;
+  }
+}
+
+// There are a number of places when we either want to read or write an
+// instruction when handling a half16 relocation type. On big-endian the buffer
+// pointer is pointing into the middle of the word we want to extract, and on
+// little-endian it is pointing to the start of the word. These 2 helpers are to
+// simplify reading and writing in that context.
+static void writeInstrFromHalf16(uint8_t *Loc, uint32_t Instr) {
+  write32(Loc - (Config->EKind == ELF64BEKind ? 2 : 0), Instr);
+}
+
+static uint32_t readInstrFromHalf16(const uint8_t *Loc) {
+  return read32(Loc - (Config->EKind == ELF64BEKind ? 2 : 0));
+}
+
 PPC64::PPC64() {
   GotRel = R_PPC64_GLOB_DAT;
   PltRel = R_PPC64_JMP_SLOT;
@@ -173,26 +204,28 @@ void PPC64::relaxTlsGdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const {
   // bl __tls_get_addr(x@tlsgd)      into      nop
   // nop                             into      addi r3, r3, x@tprel@l
 
-  uint32_t EndianOffset = Config->EKind == ELF64BEKind ? 2U : 0U;
-
   switch (Type) {
   case R_PPC64_GOT_TLSGD16_HA:
-    write32(Loc - EndianOffset, 0x60000000); // nop
+    writeInstrFromHalf16(Loc, 0x60000000); // nop
     break;
+  case R_PPC64_GOT_TLSGD16:
   case R_PPC64_GOT_TLSGD16_LO:
-    write32(Loc - EndianOffset, 0x3c6d0000); // addis r3, r13
+    writeInstrFromHalf16(Loc, 0x3c6d0000); // addis r3, r13
     relocateOne(Loc, R_PPC64_TPREL16_HA, Val);
     break;
   case R_PPC64_TLSGD:
     write32(Loc, 0x60000000);     // nop
     write32(Loc + 4, 0x38630000); // addi r3, r3
-    relocateOne(Loc + 4 + EndianOffset, R_PPC64_TPREL16_LO, Val);
+    // Since we are relocating a half16 type relocation and Loc + 4 points to
+    // the start of an instruction we need to advance the buffer by an extra
+    // 2 bytes on BE.
+    relocateOne(Loc + 4 + (Config->EKind == ELF64BEKind ? 2 : 0),
+                R_PPC64_TPREL16_LO, Val);
     break;
   default:
     llvm_unreachable("unsupported relocation for TLS GD to LE relaxation");
   }
 }
-
 
 void PPC64::relaxTlsLdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const {
   // Reference: 3.7.4.3 of the 64-bit ELF V2 abi supplement.
@@ -210,13 +243,12 @@ void PPC64::relaxTlsLdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const {
   // bl __tls_get_addr(x@tlsgd)     into      nop
   // nop                            into      addi r3, r3, 4096
 
-  uint32_t EndianOffset = Config->EKind == ELF64BEKind ? 2U : 0U;
   switch (Type) {
   case R_PPC64_GOT_TLSLD16_HA:
-    write32(Loc - EndianOffset, 0x60000000); // nop
+    writeInstrFromHalf16(Loc, 0x60000000); // nop
     break;
   case R_PPC64_GOT_TLSLD16_LO:
-    write32(Loc - EndianOffset, 0x3c6d0000); // addis r3, r13, 0
+    writeInstrFromHalf16(Loc, 0x3c6d0000); // addis r3, r13, 0
     break;
   case R_PPC64_TLSLD:
     write32(Loc, 0x60000000);     // nop
@@ -298,7 +330,7 @@ void PPC64::relaxTlsIeToLe(uint8_t *Loc, RelType Type, uint64_t Val) const {
     break;
   }
   case R_PPC64_TLS: {
-    uint32_t PrimaryOp = (read32(Loc) & 0xFC000000) >> 26; // bits 0-5
+    uint32_t PrimaryOp = getPrimaryOpCode(read32(Loc));
     if (PrimaryOp != 31)
       error("unrecognized instruction for IE to LE R_PPC64_TLS");
     uint32_t SecondaryOp = (read32(Loc) & 0x000007FE) >> 1; // bits 21-30
@@ -506,10 +538,14 @@ void PPC64::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
     write16(Loc, Val);
     break;
   case R_PPC64_ADDR16_DS:
-  case R_PPC64_TPREL16_DS:
+  case R_PPC64_TPREL16_DS: {
     checkInt(Loc, Val, 16, Type);
-    write16(Loc, (read16(Loc) & 3) | (Val & ~3));
-    break;
+    // DQ-form instructions use bits 28-31 as part of the instruction encoding
+    // DS-form instructions only use bits 30-31.
+    uint16_t Mask = isDQFormInstruction(readInstrFromHalf16(Loc)) ? 0xF : 0x3;
+    checkAlignment(Loc, lo(Val), Mask + 1, Type);
+    write16(Loc, (read16(Loc) & Mask) | lo(Val));
+  } break;
   case R_PPC64_ADDR16_HA:
   case R_PPC64_REL16_HA:
   case R_PPC64_TPREL16_HA:
@@ -542,9 +578,13 @@ void PPC64::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
     write16(Loc, lo(Val));
     break;
   case R_PPC64_ADDR16_LO_DS:
-  case R_PPC64_TPREL16_LO_DS:
-    write16(Loc, (read16(Loc) & 3) | (lo(Val) & ~3));
-    break;
+  case R_PPC64_TPREL16_LO_DS: {
+    // DQ-form instructions use bits 28-31 as part of the instruction encoding
+    // DS-form instructions only use bits 30-31.
+    uint16_t Mask = isDQFormInstruction(readInstrFromHalf16(Loc)) ? 0xF : 0x3;
+    checkAlignment(Loc, lo(Val), Mask + 1, Type);
+    write16(Loc, (read16(Loc) & Mask) | lo(Val));
+  } break;
   case R_PPC64_ADDR32:
   case R_PPC64_REL32:
     checkInt(Loc, Val, 32, Type);
@@ -612,9 +652,8 @@ void PPC64::relaxTlsGdToIe(uint8_t *Loc, RelType Type, uint64_t Val) const {
   case R_PPC64_GOT_TLSGD16_LO: {
     // Relax from addi  r3, rA, sym@got@tlsgd@l to
     //            ld r3, sym@got@tprel@l(rA)
-    uint32_t EndianOffset = Config->EKind == ELF64BEKind ? 2U : 0U;
-    uint32_t InputRegister = (read32(Loc - EndianOffset) & (0x1f << 16));
-    write32(Loc - EndianOffset, 0xE8600000 | InputRegister);
+    uint32_t InputRegister = (readInstrFromHalf16(Loc) & (0x1f << 16));
+    writeInstrFromHalf16(Loc, 0xE8600000 | InputRegister);
     relocateOne(Loc, R_PPC64_GOT_TPREL16_LO_DS, Val);
     return;
   }

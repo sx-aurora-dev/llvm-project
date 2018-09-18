@@ -29,7 +29,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Analysis/DivergenceAnalysis.h"
+#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
@@ -542,6 +542,12 @@ public:
   /// \p Cost[out] gives the cost of that transformation when this is true.
   virtual bool canCombineStoreAndExtract(Type *VectorTy, Value *Idx,
                                          unsigned &Cost) const {
+    return false;
+  }
+
+  /// Return true if inserting a scalar into a variable element of an undef
+  /// vector is more efficiently handled by splatting the scalar instead.
+  virtual bool shouldSplatInsEltVarIndex(EVT) const {
     return false;
   }
 
@@ -1427,6 +1433,12 @@ public:
   /// Return the preferred loop alignment.
   virtual unsigned getPrefLoopAlignment(MachineLoop *ML = nullptr) const {
     return PrefLoopAlignment;
+  }
+
+  /// Should loops be aligned even when the function is marked OptSize (but not
+  /// MinSize).
+  virtual bool alignLoopsWithOptSize() const {
+    return false;
   }
 
   /// If the target has a standard location for the stack protector guard,
@@ -2649,7 +2661,7 @@ public:
 
   virtual bool isSDNodeSourceOfDivergence(const SDNode *N,
                                           FunctionLoweringInfo *FLI,
-                                          DivergenceAnalysis *DA) const {
+                                          LegacyDivergenceAnalysis *DA) const {
     return false;
   }
 

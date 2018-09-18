@@ -21,8 +21,8 @@
 #ifndef LLD_ELF_SYNTHETIC_SECTION_H
 #define LLD_ELF_SYNTHETIC_SECTION_H
 
+#include "DWARF.h"
 #include "EhFrame.h"
-#include "GdbIndex.h"
 #include "InputSection.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/MC/StringTableBuilder.h"
@@ -133,6 +133,15 @@ protected:
   size_t NumEntries = 0;
   uint32_t TlsIndexOff = -1;
   uint64_t Size = 0;
+};
+
+// .note.GNU-stack section.
+class GnuStackSection : public SyntheticSection {
+public:
+  GnuStackSection()
+      : SyntheticSection(0, llvm::ELF::SHT_PROGBITS, 1, ".note.GNU-stack") {}
+  void writeTo(uint8_t *Buf) override {}
+  size_t getSize() const override { return 0; }
 };
 
 // .note.gnu.build-id section.
@@ -527,6 +536,7 @@ struct RelativeReloc {
 class RelrBaseSection : public SyntheticSection {
 public:
   RelrBaseSection();
+  bool empty() const override { return Relocs.empty(); }
   std::vector<RelativeReloc> Relocs;
 };
 

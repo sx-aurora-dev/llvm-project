@@ -355,7 +355,7 @@ bool IRTranslator::translateBr(const User &U, MachineIRBuilder &MIRBuilder) {
     MIRBuilder.buildBr(TgtBB);
 
   // Link successors.
-  for (const BasicBlock *Succ : BrInst.successors())
+  for (const BasicBlock *Succ : successors(&BrInst))
     CurBB.addSuccessor(&getMBB(*Succ));
   return true;
 }
@@ -415,7 +415,7 @@ bool IRTranslator::translateIndirectBr(const User &U,
 
   // Link successors.
   MachineBasicBlock &CurBB = MIRBuilder.getMBB();
-  for (const BasicBlock *Succ : BrInst.successors())
+  for (const BasicBlock *Succ : successors(&BrInst))
     CurBB.addSuccessor(&getMBB(*Succ));
 
   return true;
@@ -717,17 +717,11 @@ void IRTranslator::getStackGuard(unsigned DstReg,
 bool IRTranslator::translateOverflowIntrinsic(const CallInst &CI, unsigned Op,
                                               MachineIRBuilder &MIRBuilder) {
   ArrayRef<unsigned> ResRegs = getOrCreateVRegs(CI);
-  auto MIB = MIRBuilder.buildInstr(Op)
-                 .addDef(ResRegs[0])
-                 .addDef(ResRegs[1])
-                 .addUse(getOrCreateVReg(*CI.getOperand(0)))
-                 .addUse(getOrCreateVReg(*CI.getOperand(1)));
-
-  if (Op == TargetOpcode::G_UADDE || Op == TargetOpcode::G_USUBE) {
-    unsigned Zero = getOrCreateVReg(
-        *Constant::getNullValue(Type::getInt1Ty(CI.getContext())));
-    MIB.addUse(Zero);
-  }
+  MIRBuilder.buildInstr(Op)
+      .addDef(ResRegs[0])
+      .addDef(ResRegs[1])
+      .addUse(getOrCreateVReg(*CI.getOperand(0)))
+      .addUse(getOrCreateVReg(*CI.getOperand(1)));
 
   return true;
 }
@@ -764,9 +758,12 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
       // instructions (in fact, they get ignored if they *do* exist).
       MF->setVariableDbgInfo(DI.getVariable(), DI.getExpression(),
                              getOrCreateFrameIndex(*AI), DI.getDebugLoc());
-    } else
-      MIRBuilder.buildDirectDbgValue(getOrCreateVReg(*Address),
-                                     DI.getVariable(), DI.getExpression());
+    } else {
+      // A dbg.declare describes the address of a source variable, so lower it
+      // into an indirect DBG_VALUE.
+      MIRBuilder.buildIndirectDbgValue(getOrCreateVReg(*Address),
+                                       DI.getVariable(), DI.getExpression());
+    }
     return true;
   }
   case Intrinsic::dbg_label: {
@@ -819,11 +816,11 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
     return true;
   }
   case Intrinsic::uadd_with_overflow:
-    return translateOverflowIntrinsic(CI, TargetOpcode::G_UADDE, MIRBuilder);
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_UADDO, MIRBuilder);
   case Intrinsic::sadd_with_overflow:
     return translateOverflowIntrinsic(CI, TargetOpcode::G_SADDO, MIRBuilder);
   case Intrinsic::usub_with_overflow:
-    return translateOverflowIntrinsic(CI, TargetOpcode::G_USUBE, MIRBuilder);
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_USUBO, MIRBuilder);
   case Intrinsic::ssub_with_overflow:
     return translateOverflowIntrinsic(CI, TargetOpcode::G_SSUBO, MIRBuilder);
   case Intrinsic::umul_with_overflow:
