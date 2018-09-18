@@ -44,20 +44,6 @@ namespace dex {
 /// Symbol position in the list of all index symbols sorted by a pre-computed
 /// symbol quality.
 using DocID = uint32_t;
-/// Contains sorted sequence of DocIDs all of which belong to symbols matching
-/// certain criteria, i.e. containing a Search Token. PostingLists are values
-/// for the inverted index.
-// FIXME(kbobyrev): Posting lists for incomplete trigrams (one/two symbols) are
-// likely to be very dense and hence require special attention so that the index
-// doesn't use too much memory. Possible solution would be to construct
-// compressed posting lists which consist of ranges of DocIDs instead of
-// distinct DocIDs. A special case would be the empty query: for that case
-// TrueIterator should be implemented - an iterator which doesn't actually store
-// any PostingList within itself, but "contains" all DocIDs in range
-// [0, IndexSize).
-using PostingList = std::vector<DocID>;
-/// Immutable reference to PostingList object.
-using PostingListRef = llvm::ArrayRef<DocID>;
 
 /// Iterator is the interface for Query Tree node. The simplest type of Iterator
 /// is DocumentIterator which is simply a wrapper around PostingList iterator
@@ -87,13 +73,16 @@ public:
   ///
   /// Note: reachedEnd() must be false.
   virtual DocID peek() const = 0;
-  /// Retrieves boosting score. Query tree root should pass Root->peek() to this
-  /// function, the parameter is needed to propagate through the tree. Given ID
-  /// should be compared against BOOST iterator peek()s: some of the iterators
-  /// would not point to the item which was propagated to the top of the query
-  /// tree (e.g. if these iterators are branches of OR iterator) and hence
-  /// shouldn't apply any boosting to the consumed item.
-  virtual float consume(DocID ID) = 0;
+  /// Informs the iterator that the current document was consumed, and returns
+  /// its boost.
+  ///
+  /// Note: If this iterator has any child iterators that contain the document,
+  /// consume() should be called on those and their boosts incorporated.
+  /// consume() must *not* be called on children that don't contain the current
+  /// doc.
+  virtual float consume() = 0;
+  /// Returns an estimate of advance() calls before the iterator is exhausted.
+  virtual size_t estimateSize() const = 0;
 
   virtual ~Iterator() {}
 
@@ -118,22 +107,15 @@ private:
   virtual llvm::raw_ostream &dump(llvm::raw_ostream &OS) const = 0;
 };
 
-/// Advances the iterator until it is either exhausted or the number of
-/// requested items is reached. Returns pairs of document IDs with the
-/// corresponding boosting score.
+/// Advances the iterator until it is exhausted. Returns pairs of document IDs
+/// with the corresponding boosting score.
 ///
 /// Boosting can be seen as a compromise between retrieving too many items and
 /// calculating finals score for each of them (which might be very expensive)
 /// and not retrieving enough items so that items with very high final score
 /// would not be processed. Boosting score is a computationally efficient way
 /// to acquire preliminary scores of requested items.
-std::vector<std::pair<DocID, float>>
-consume(Iterator &It, size_t Limit = std::numeric_limits<size_t>::max());
-
-/// Returns a document iterator over given PostingList.
-///
-/// DocumentIterator returns DEFAULT_BOOST_SCORE for each processed item.
-std::unique_ptr<Iterator> create(PostingListRef Documents);
+std::vector<std::pair<DocID, float>> consume(Iterator &It);
 
 /// Returns AND Iterator which performs the intersection of the PostingLists of
 /// its children.
@@ -164,6 +146,13 @@ std::unique_ptr<Iterator> createTrue(DocID Size);
 /// trim Top K using retrieval score.
 std::unique_ptr<Iterator> createBoost(std::unique_ptr<Iterator> Child,
                                       float Factor);
+
+/// Returns LIMIT iterator, which yields up to N elements of its child iterator.
+/// Elements only count towards the limit if they are part of the final result
+/// set. Therefore the following iterator (AND (2) (LIMIT (1 2) 1)) yields (2),
+/// not ().
+std::unique_ptr<Iterator> createLimit(std::unique_ptr<Iterator> Child,
+                                      size_t Limit);
 
 /// This allows createAnd(create(...), create(...)) syntax.
 template <typename... Args> std::unique_ptr<Iterator> createAnd(Args... args) {

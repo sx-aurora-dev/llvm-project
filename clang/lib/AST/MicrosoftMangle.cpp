@@ -1384,9 +1384,16 @@ void MicrosoftCXXNameMangler::mangleTemplateArgs(
   assert(TPL->size() == TemplateArgs.size() &&
          "size mismatch between args and parms!");
 
-  unsigned Idx = 0;
-  for (const TemplateArgument &TA : TemplateArgs.asArray())
-    mangleTemplateArg(TD, TA, TPL->getParam(Idx++));
+  for (size_t i = 0; i < TemplateArgs.size(); ++i) {
+    const TemplateArgument &TA = TemplateArgs[i];
+
+    // Separate consecutive packs by $$Z.
+    if (i > 0 && TA.getKind() == TemplateArgument::Pack &&
+        TemplateArgs[i - 1].getKind() == TemplateArgument::Pack)
+      Out << "$$Z";
+
+    mangleTemplateArg(TD, TA, TPL->getParam(i));
+  }
 }
 
 void MicrosoftCXXNameMangler::mangleTemplateArg(const TemplateDecl *TD,
@@ -3217,10 +3224,13 @@ void MicrosoftMangleContextImpl::mangleInitFiniStub(const VarDecl *D,
   msvc_hashing_ostream MHO(Out);
   MicrosoftCXXNameMangler Mangler(*this, MHO);
   Mangler.getStream() << "??__" << CharCode;
-  Mangler.mangleName(D);
   if (D->isStaticDataMember()) {
+    Mangler.getStream() << '?';
+    Mangler.mangleName(D);
     Mangler.mangleVariableEncoding(D);
-    Mangler.getStream() << '@';
+    Mangler.getStream() << "@@";
+  } else {
+    Mangler.mangleName(D);
   }
   // This is the function class mangling.  These stubs are global, non-variadic,
   // cdecl functions that return void and take no args.

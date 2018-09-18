@@ -586,8 +586,6 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
       AddPromotedToType (ISD::LOAD  , VT, MVT::v4i32);
       setOperationAction(ISD::SELECT, VT, Promote);
       AddPromotedToType (ISD::SELECT, VT, MVT::v4i32);
-      setOperationAction(ISD::VSELECT, VT, Promote);
-      AddPromotedToType (ISD::VSELECT, VT, MVT::v4i32);
       setOperationAction(ISD::SELECT_CC, VT, Promote);
       AddPromotedToType (ISD::SELECT_CC, VT, MVT::v4i32);
       setOperationAction(ISD::STORE, VT, Promote);
@@ -628,6 +626,7 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
       setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Expand);
       setOperationAction(ISD::FPOW, VT, Expand);
       setOperationAction(ISD::BSWAP, VT, Expand);
+      setOperationAction(ISD::VSELECT, VT, Expand);
       setOperationAction(ISD::SIGN_EXTEND_INREG, VT, Expand);
       setOperationAction(ISD::ROTL, VT, Expand);
       setOperationAction(ISD::ROTR, VT, Expand);
@@ -650,7 +649,6 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
     setOperationAction(ISD::LOAD  , MVT::v4i32, Legal);
     setOperationAction(ISD::SELECT, MVT::v4i32,
                        Subtarget.useCRBits() ? Legal : Expand);
-    setOperationAction(ISD::VSELECT, MVT::v4i32, Legal);
     setOperationAction(ISD::STORE , MVT::v4i32, Legal);
     setOperationAction(ISD::FP_TO_SINT, MVT::v4i32, Legal);
     setOperationAction(ISD::FP_TO_UINT, MVT::v4i32, Legal);
@@ -728,6 +726,12 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
 
       setOperationAction(ISD::FDIV, MVT::v2f64, Legal);
       setOperationAction(ISD::FSQRT, MVT::v2f64, Legal);
+
+      setOperationAction(ISD::VSELECT, MVT::v16i8, Legal);
+      setOperationAction(ISD::VSELECT, MVT::v8i16, Legal);
+      setOperationAction(ISD::VSELECT, MVT::v4i32, Legal);
+      setOperationAction(ISD::VSELECT, MVT::v4f32, Legal);
+      setOperationAction(ISD::VSELECT, MVT::v2f64, Legal);
 
       // Share the Altivec comparison restrictions.
       setCondCodeAction(ISD::SETUO, MVT::v2f64, Expand);
@@ -1051,6 +1055,7 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   setStackPointerRegisterToSaveRestore(isPPC64 ? PPC::X1 : PPC::R1);
 
   // We have target-specific dag combine patterns for the following nodes:
+  setTargetDAGCombine(ISD::ADD);
   setTargetDAGCombine(ISD::SHL);
   setTargetDAGCombine(ISD::SRA);
   setTargetDAGCombine(ISD::SRL);
@@ -1351,6 +1356,7 @@ const char *PPCTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case PPCISD::QBFLT:           return "PPCISD::QBFLT";
   case PPCISD::QVLFSb:          return "PPCISD::QVLFSb";
   case PPCISD::BUILD_FP128:     return "PPCISD::BUILD_FP128";
+  case PPCISD::EXTSWSLI:        return "PPCISD::EXTSWSLI";
   }
   return nullptr;
 }
@@ -2699,7 +2705,8 @@ SDValue PPCTargetLowering::LowerBlockAddress(SDValue Op,
 
   // 64-bit SVR4 ABI code is always position-independent.
   // The actual BlockAddress is stored in the TOC.
-  if (Subtarget.isSVR4ABI() && isPositionIndependent()) {
+  if (Subtarget.isSVR4ABI() &&
+      (Subtarget.isPPC64() || isPositionIndependent())) {
     if (Subtarget.isPPC64())
       setUsesTOCBasePtr(DAG);
     SDValue GA = DAG.getTargetBlockAddress(BA, PtrVT, BASDN->getOffset());
@@ -3505,9 +3512,14 @@ SDValue PPCTargetLowering::LowerFormalArguments_32SVR4(
       // Argument stored in memory.
       assert(VA.isMemLoc());
 
+      // Get the extended size of the argument type in stack
       unsigned ArgSize = VA.getLocVT().getStoreSize();
-      int FI = MFI.CreateFixedObject(ArgSize, VA.getLocMemOffset(),
-                                     isImmutable);
+      // Get the actual size of the argument type
+      unsigned ObjSize = VA.getValVT().getStoreSize();
+      unsigned ArgOffset = VA.getLocMemOffset();
+      // Stack objects in PPC32 are right justified.
+      ArgOffset += ArgSize - ObjSize;
+      int FI = MFI.CreateFixedObject(ArgSize, ArgOffset, isImmutable);
 
       // Create load nodes to retrieve arguments from the stack.
       SDValue FIN = DAG.getFrameIndex(FI, PtrVT);
@@ -5462,10 +5474,15 @@ SDValue PPCTargetLowering::LowerCall_32SVR4(
       Arg = PtrOff;
     }
 
-    if (VA.isRegLoc()) {
-      if (Arg.getValueType() == MVT::i1)
-        Arg = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, Arg);
+    // When useCRBits() is true, there can be i1 arguments.
+    // It is because getRegisterType(MVT::i1) => MVT::i1,
+    // and for other integer types getRegisterType() => MVT::i32.
+    // Extend i1 and ensure callee will get i32.
+    if (Arg.getValueType() == MVT::i1)
+      Arg = DAG.getNode(Flags.isSExt() ? ISD::SIGN_EXTEND : ISD::ZERO_EXTEND,
+                        dl, MVT::i32, Arg);
 
+    if (VA.isRegLoc()) {
       seenFloatArg |= VA.getLocVT().isFloatingPoint();
       // Put argument in a physical register.
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
@@ -12465,6 +12482,8 @@ SDValue PPCTargetLowering::PerformDAGCombine(SDNode *N,
   SDLoc dl(N);
   switch (N->getOpcode()) {
   default: break;
+  case ISD::ADD:
+    return combineADD(N, DCI);
   case ISD::SHL:
     return combineSHL(N, DCI);
   case ISD::SRA:
@@ -14131,7 +14150,30 @@ SDValue PPCTargetLowering::combineSHL(SDNode *N, DAGCombinerInfo &DCI) const {
   if (auto Value = stripModuloOnShift(*this, N, DCI.DAG))
     return Value;
 
-  return SDValue();
+  SDValue N0 = N->getOperand(0);
+  ConstantSDNode *CN1 = dyn_cast<ConstantSDNode>(N->getOperand(1));
+  if (!Subtarget.isISA3_0() ||
+      N0.getOpcode() != ISD::SIGN_EXTEND ||
+      N0.getOperand(0).getValueType() != MVT::i32 ||
+      CN1 == nullptr || N->getValueType(0) != MVT::i64)
+    return SDValue();
+
+  // We can't save an operation here if the value is already extended, and
+  // the existing shift is easier to combine.
+  SDValue ExtsSrc = N0.getOperand(0);
+  if (ExtsSrc.getOpcode() == ISD::TRUNCATE &&
+      ExtsSrc.getOperand(0).getOpcode() == ISD::AssertSext)
+    return SDValue();
+
+  SDLoc DL(N0);
+  SDValue ShiftBy = SDValue(CN1, 0);
+  // We want the shift amount to be i32 on the extswli, but the shift could
+  // have an i64.
+  if (ShiftBy.getValueType() == MVT::i64)
+    ShiftBy = DCI.DAG.getConstant(CN1->getZExtValue(), DL, MVT::i32);
+
+  return DCI.DAG.getNode(PPCISD::EXTSWSLI, DL, MVT::i64, N0->getOperand(0),
+                         ShiftBy);
 }
 
 SDValue PPCTargetLowering::combineSRA(SDNode *N, DAGCombinerInfo &DCI) const {
@@ -14143,6 +14185,100 @@ SDValue PPCTargetLowering::combineSRA(SDNode *N, DAGCombinerInfo &DCI) const {
 
 SDValue PPCTargetLowering::combineSRL(SDNode *N, DAGCombinerInfo &DCI) const {
   if (auto Value = stripModuloOnShift(*this, N, DCI.DAG))
+    return Value;
+
+  return SDValue();
+}
+
+// Transform (add X, (zext(setne Z, C))) -> (addze X, (addic (addi Z, -C), -1))
+// Transform (add X, (zext(sete  Z, C))) -> (addze X, (subfic (addi Z, -C), 0))
+// When C is zero, the equation (addi Z, -C) can be simplified to Z
+// Requirement: -C in [-32768, 32767], X and Z are MVT::i64 types
+static SDValue combineADDToADDZE(SDNode *N, SelectionDAG &DAG,
+                                 const PPCSubtarget &Subtarget) {
+  if (!Subtarget.isPPC64())
+    return SDValue();
+
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+
+  auto isZextOfCompareWithConstant = [](SDValue Op) {
+    if (Op.getOpcode() != ISD::ZERO_EXTEND || !Op.hasOneUse() ||
+        Op.getValueType() != MVT::i64)
+      return false;
+
+    SDValue Cmp = Op.getOperand(0);
+    if (Cmp.getOpcode() != ISD::SETCC || !Cmp.hasOneUse() ||
+        Cmp.getOperand(0).getValueType() != MVT::i64)
+      return false;
+
+    if (auto *Constant = dyn_cast<ConstantSDNode>(Cmp.getOperand(1))) {
+      int64_t NegConstant = 0 - Constant->getSExtValue();
+      // Due to the limitations of the addi instruction,
+      // -C is required to be [-32768, 32767].
+      return isInt<16>(NegConstant);
+    }
+
+    return false;
+  };
+
+  bool LHSHasPattern = isZextOfCompareWithConstant(LHS);
+  bool RHSHasPattern = isZextOfCompareWithConstant(RHS);
+
+  // If there is a pattern, canonicalize a zext operand to the RHS.
+  if (LHSHasPattern && !RHSHasPattern)
+    std::swap(LHS, RHS);
+  else if (!LHSHasPattern && !RHSHasPattern)
+    return SDValue();
+
+  SDLoc DL(N);
+  SDVTList VTs = DAG.getVTList(MVT::i64, MVT::i64);
+  SDValue Cmp = RHS.getOperand(0);
+  SDValue Z = Cmp.getOperand(0);
+  auto *Constant = dyn_cast<ConstantSDNode>(Cmp.getOperand(1));
+
+  assert(Constant && "Constant Should not be a null pointer.");
+  int64_t NegConstant = 0 - Constant->getSExtValue();
+
+  switch(cast<CondCodeSDNode>(Cmp.getOperand(2))->get()) {
+  default: break;
+  case ISD::SETNE: {
+    //                                 when C == 0
+    //                             --> addze X, (addic Z, -1).carry
+    //                            /
+    // add X, (zext(setne Z, C))--
+    //                            \    when -32768 <= -C <= 32767 && C != 0
+    //                             --> addze X, (addic (addi Z, -C), -1).carry
+    SDValue Add = DAG.getNode(ISD::ADD, DL, MVT::i64, Z,
+                              DAG.getConstant(NegConstant, DL, MVT::i64));
+    SDValue AddOrZ = NegConstant != 0 ? Add : Z;
+    SDValue Addc = DAG.getNode(ISD::ADDC, DL, DAG.getVTList(MVT::i64, MVT::Glue),
+                               AddOrZ, DAG.getConstant(-1ULL, DL, MVT::i64));
+    return DAG.getNode(ISD::ADDE, DL, VTs, LHS, DAG.getConstant(0, DL, MVT::i64),
+                       SDValue(Addc.getNode(), 1));
+    }
+  case ISD::SETEQ: {
+    //                                 when C == 0
+    //                             --> addze X, (subfic Z, 0).carry
+    //                            /
+    // add X, (zext(sete  Z, C))--
+    //                            \    when -32768 <= -C <= 32767 && C != 0
+    //                             --> addze X, (subfic (addi Z, -C), 0).carry
+    SDValue Add = DAG.getNode(ISD::ADD, DL, MVT::i64, Z,
+                              DAG.getConstant(NegConstant, DL, MVT::i64));
+    SDValue AddOrZ = NegConstant != 0 ? Add : Z;
+    SDValue Subc = DAG.getNode(ISD::SUBC, DL, DAG.getVTList(MVT::i64, MVT::Glue),
+                               DAG.getConstant(0, DL, MVT::i64), AddOrZ);
+    return DAG.getNode(ISD::ADDE, DL, VTs, LHS, DAG.getConstant(0, DL, MVT::i64),
+                       SDValue(Subc.getNode(), 1));
+    }
+  }
+
+  return SDValue();
+}
+
+SDValue PPCTargetLowering::combineADD(SDNode *N, DAGCombinerInfo &DCI) const {
+  if (auto Value = combineADDToADDZE(N, DCI.DAG, Subtarget))
     return Value;
 
   return SDValue();

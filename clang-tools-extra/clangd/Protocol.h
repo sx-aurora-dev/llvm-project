@@ -768,6 +768,9 @@ struct CompletionItem {
   /// themselves.
   std::vector<TextEdit> additionalTextEdits;
 
+  /// Indicates if this item is deprecated.
+  bool deprecated = false;
+
   // TODO(krasimir): The following optional fields defined by the language
   // server protocol are unsupported:
   //
@@ -828,6 +831,13 @@ struct SignatureHelp {
 
   /// The active parameter of the active signature.
   int activeParameter = 0;
+
+  /// Position of the start of the argument list, including opening paren. e.g.
+  /// foo("first arg",   "second arg",
+  ///    ^-argListStart   ^-cursor
+  /// This is a clangd-specific extension, it is only available via C++ API and
+  /// not currently serialized for the LSP.
+  Position argListStart;
 };
 llvm::json::Value toJSON(const SignatureHelp &);
 
@@ -870,6 +880,11 @@ struct DocumentHighlight {
 };
 llvm::json::Value toJSON(const DocumentHighlight &DH);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const DocumentHighlight &);
+
+struct ReferenceParams : public TextDocumentPositionParams {
+  // For now, no options like context.includeDeclaration are supported.
+};
+bool fromJSON(const llvm::json::Value &, ReferenceParams &);
 
 } // namespace clangd
 } // namespace clang

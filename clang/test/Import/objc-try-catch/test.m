@@ -1,5 +1,8 @@
 // RUN: clang-import-test -x objective-c++ -Xcc -fobjc-exceptions -dump-ast -import %S/Inputs/F.m -expression %s | FileCheck %s
 
+// FIXME: Seems that Objective-C try/catch crash codegen on Windows. Reenable once this is fixed.
+// UNSUPPORTED: system-windows
+
 // CHECK: ObjCAtTryStmt
 // CHECK-NEXT: CompoundStmt
 // CHECK-NEXT: DeclStmt
