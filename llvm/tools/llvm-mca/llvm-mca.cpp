@@ -22,19 +22,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "CodeRegion.h"
-#include "Context.h"
-#include "DispatchStatistics.h"
-#include "FetchStage.h"
-#include "InstructionInfoView.h"
-#include "InstructionTables.h"
-#include "Pipeline.h"
 #include "PipelinePrinter.h"
-#include "RegisterFileStatistics.h"
-#include "ResourcePressureView.h"
-#include "RetireControlUnitStatistics.h"
-#include "SchedulerStatistics.h"
-#include "SummaryView.h"
-#include "TimelineView.h"
+#include "Stages/FetchStage.h"
+#include "Stages/InstructionTables.h"
+#include "Views/DispatchStatistics.h"
+#include "Views/InstructionInfoView.h"
+#include "Views/RegisterFileStatistics.h"
+#include "Views/ResourcePressureView.h"
+#include "Views/RetireControlUnitStatistics.h"
+#include "Views/SchedulerStatistics.h"
+#include "Views/SummaryView.h"
+#include "Views/TimelineView.h"
+#include "include/Context.h"
+#include "include/Pipeline.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCObjectFileInfo.h"
@@ -318,7 +318,6 @@ static void processViewOptions() {
       EnableAllViews.getPosition() < EnableAllStats.getPosition()
           ? EnableAllStats
           : EnableAllViews;
-  processOptionImpl(PrintSummaryView, Default);
   processOptionImpl(PrintRegisterFileStats, Default);
   processOptionImpl(PrintDispatchStats, Default);
   processOptionImpl(PrintSchedulerStats, Default);

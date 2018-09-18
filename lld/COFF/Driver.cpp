@@ -32,6 +32,7 @@
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/TarWriter.h"
@@ -56,7 +57,7 @@ Configuration *Config;
 LinkerDriver *Driver;
 
 bool link(ArrayRef<const char *> Args, bool CanExitEarly, raw_ostream &Diag) {
-  errorHandler().LogName = sys::path::filename(Args[0]);
+  errorHandler().LogName = args::getFilenameWithoutExe(Args[0]);
   errorHandler().ErrorOS = &Diag;
   errorHandler().ColorDiagnostics = Diag.has_colors();
   errorHandler().ErrorLimitExceededMsg =
@@ -741,6 +742,46 @@ static void parseOrderFile(StringRef Arg) {
   }
 }
 
+static void markAddrsig(Symbol *S) {
+  if (auto *D = dyn_cast_or_null<Defined>(S))
+    if (Chunk *C = D->getChunk())
+      C->KeepUnique = true;
+}
+
+static void findKeepUniqueSections() {
+  // Exported symbols could be address-significant in other executables or DSOs,
+  // so we conservatively mark them as address-significant.
+  for (Export &R : Config->Exports)
+    markAddrsig(R.Sym);
+
+  // Visit the address-significance table in each object file and mark each
+  // referenced symbol as address-significant.
+  for (ObjFile *Obj : ObjFile::Instances) {
+    ArrayRef<Symbol *> Syms = Obj->getSymbols();
+    if (Obj->AddrsigSec) {
+      ArrayRef<uint8_t> Contents;
+      Obj->getCOFFObj()->getSectionContents(Obj->AddrsigSec, Contents);
+      const uint8_t *Cur = Contents.begin();
+      while (Cur != Contents.end()) {
+        unsigned Size;
+        const char *Err;
+        uint64_t SymIndex = decodeULEB128(Cur, &Size, Contents.end(), &Err);
+        if (Err)
+          fatal(toString(Obj) + ": could not decode addrsig section: " + Err);
+        if (SymIndex >= Syms.size())
+          fatal(toString(Obj) + ": invalid symbol index in addrsig section");
+        markAddrsig(Syms[SymIndex]);
+        Cur += Size;
+      }
+    } else {
+      // If an object file does not have an address-significance table,
+      // conservatively mark all of its symbols as address-significant.
+      for (Symbol *S : Syms)
+        markAddrsig(S);
+    }
+  }
+}
+
 void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // If the first command line argument is "/lib", link.exe acts like lib.exe.
   // We call our own implementation of lib.exe that understands bitcode files.
@@ -847,7 +888,11 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   // Handle /force or /force:unresolved
   if (Args.hasArg(OPT_force, OPT_force_unresolved))
-    Config->Force = true;
+    Config->ForceUnresolved = true;
+
+  // Handle /force or /force:multiple
+  if (Args.hasArg(OPT_force, OPT_force_multiple))
+    Config->ForceMultiple = true;
 
   // Handle /debug
   if (Args.hasArg(OPT_debug, OPT_debug_dwarf, OPT_debug_ghash)) {
@@ -1066,6 +1111,12 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   parseMerge(".xdata=.rdata");
   parseMerge(".bss=.data");
 
+  if (Config->MinGW) {
+    parseMerge(".ctors=.rdata");
+    parseMerge(".dtors=.rdata");
+    parseMerge(".CRT=.rdata");
+  }
+
   // Handle /section
   for (auto *Arg : Args.filtered(OPT_section))
     parseSection(Arg->getValue());
@@ -1151,10 +1202,14 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     return;
 
   std::set<sys::fs::UniqueID> WholeArchives;
-  for (auto *Arg : Args.filtered(OPT_wholearchive_file))
-    if (Optional<StringRef> Path = doFindFile(Arg->getValue()))
+  AutoExporter Exporter;
+  for (auto *Arg : Args.filtered(OPT_wholearchive_file)) {
+    if (Optional<StringRef> Path = doFindFile(Arg->getValue())) {
       if (Optional<sys::fs::UniqueID> ID = getUniqueID(*Path))
         WholeArchives.insert(*ID);
+      Exporter.addWholeArchive(*Path);
+    }
+  }
 
   // A predicate returning true if a given path is an argument for
   // /wholearchive:, or /wholearchive is enabled globally.
@@ -1184,6 +1239,9 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   // Read all input files given via the command line.
   run();
+
+  if (errorCount())
+    return;
 
   // We should have inferred a machine type by now from the input files, but if
   // not we assume x64.
@@ -1326,6 +1384,13 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Needed for MSVC 2017 15.5 CRT.
   Symtab->addAbsolute(mangle("__enclave_config"), 0);
 
+  if (Config->MinGW) {
+    Symtab->addAbsolute(mangle("__RUNTIME_PSEUDO_RELOC_LIST__"), 0);
+    Symtab->addAbsolute(mangle("__RUNTIME_PSEUDO_RELOC_LIST_END__"), 0);
+    Symtab->addAbsolute(mangle("__CTOR_LIST__"), 0);
+    Symtab->addAbsolute(mangle("__DTOR_LIST__"), 0);
+  }
+
   // This code may add new undefined symbols to the link, which may enqueue more
   // symbol resolution tasks, so we need to continue executing tasks until we
   // converge.
@@ -1370,6 +1435,24 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Symtab->addCombinedLTOObjects();
   run();
 
+  if (Config->MinGW) {
+    // Load any further object files that might be needed for doing automatic
+    // imports.
+    //
+    // For cases with no automatically imported symbols, this iterates once
+    // over the symbol table and doesn't do anything.
+    //
+    // For the normal case with a few automatically imported symbols, this
+    // should only need to be run once, since each new object file imported
+    // is an import library and wouldn't add any new undefined references,
+    // but there's nothing stopping the __imp_ symbols from coming from a
+    // normal object file as well (although that won't be used for the
+    // actual autoimport later on). If this pass adds new undefined references,
+    // we won't iterate further to resolve them.
+    Symtab->loadMinGWAutomaticImports();
+    run();
+  }
+
   // Make sure we have resolved all symbols.
   Symtab->reportRemainingUndefines();
   if (errorCount())
@@ -1388,7 +1471,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // are chosen to be exported.
   if (Config->DLL && ((Config->MinGW && Config->Exports.empty()) ||
                       Args.hasArg(OPT_export_all_symbols))) {
-    AutoExporter Exporter;
+    Exporter.initSymbolExcludes();
 
     Symtab->forEachSymbol([=](Symbol *S) {
       auto *Def = dyn_cast<Defined>(S);
@@ -1452,8 +1535,10 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     markLive(Symtab->getChunks());
 
   // Identify identical COMDAT sections to merge them.
-  if (Config->DoICF)
+  if (Config->DoICF) {
+    findKeepUniqueSections();
     doICF(Symtab->getChunks());
+  }
 
   // Write the result.
   writeResult();

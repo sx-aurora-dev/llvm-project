@@ -1350,12 +1350,44 @@ static Instruction *foldSelectShuffle(ShuffleVectorInst &Shuf,
   return NewBO;
 }
 
+/// Match a shuffle-select-shuffle pattern where the shuffles are widening and
+/// narrowing (concatenating with undef and extracting back to the original
+/// length). This allows replacing the wide select with a narrow select.
+Instruction *narrowVectorSelect(ShuffleVectorInst &Shuf,
+                                InstCombiner::BuilderTy &Builder) {
+  // This must be a narrowing identity shuffle. It extracts the 1st N elements
+  // of the 1st vector operand of a shuffle.
+  if (!match(Shuf.getOperand(1), m_Undef()) || !Shuf.isIdentityWithExtract())
+    return nullptr;
+
+  // The vector being shuffled must be a vector select that we can eliminate.
+  // TODO: The one-use requirement could be eased if X and/or Y are constants.
+  Value *Cond, *X, *Y;
+  if (!match(Shuf.getOperand(0),
+             m_OneUse(m_Select(m_Value(Cond), m_Value(X), m_Value(Y)))))
+    return nullptr;
+
+  // We need a narrow condition value. It must be extended with undef elements
+  // and have the same number of elements as this shuffle.
+  unsigned NarrowNumElts = Shuf.getType()->getVectorNumElements();
+  Value *NarrowCond;
+  if (!match(Cond, m_OneUse(m_ShuffleVector(m_Value(NarrowCond), m_Undef(),
+                                            m_Constant()))) ||
+      NarrowCond->getType()->getVectorNumElements() != NarrowNumElts ||
+      !cast<ShuffleVectorInst>(Cond)->isIdentityWithPadding())
+    return nullptr;
+
+  // shuf (sel (shuf NarrowCond, undef, WideMask), X, Y), undef, NarrowMask) -->
+  // sel NarrowCond, (shuf X, undef, NarrowMask), (shuf Y, undef, NarrowMask)
+  Value *Undef = UndefValue::get(X->getType());
+  Value *NarrowX = Builder.CreateShuffleVector(X, Undef, Shuf.getMask());
+  Value *NarrowY = Builder.CreateShuffleVector(Y, Undef, Shuf.getMask());
+  return SelectInst::Create(NarrowCond, NarrowX, NarrowY);
+}
+
 Instruction *InstCombiner::visitShuffleVectorInst(ShuffleVectorInst &SVI) {
   Value *LHS = SVI.getOperand(0);
   Value *RHS = SVI.getOperand(1);
-  SmallVector<int, 16> Mask = SVI.getShuffleMask();
-  Type *Int32Ty = Type::getInt32Ty(SVI.getContext());
-
   if (auto *V = SimplifyShuffleVectorInst(
           LHS, RHS, SVI.getMask(), SVI.getType(), SQ.getWithInstruction(&SVI)))
     return replaceInstUsesWith(SVI, V);
@@ -1363,9 +1395,10 @@ Instruction *InstCombiner::visitShuffleVectorInst(ShuffleVectorInst &SVI) {
   if (Instruction *I = foldSelectShuffle(SVI, Builder, DL))
     return I;
 
-  bool MadeChange = false;
-  unsigned VWidth = SVI.getType()->getVectorNumElements();
+  if (Instruction *I = narrowVectorSelect(SVI, Builder))
+    return I;
 
+  unsigned VWidth = SVI.getType()->getVectorNumElements();
   APInt UndefElts(VWidth, 0);
   APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
   if (Value *V = SimplifyDemandedVectorElts(&SVI, AllOnesEltMask, UndefElts)) {
@@ -1374,18 +1407,14 @@ Instruction *InstCombiner::visitShuffleVectorInst(ShuffleVectorInst &SVI) {
     return &SVI;
   }
 
+  SmallVector<int, 16> Mask = SVI.getShuffleMask();
+  Type *Int32Ty = Type::getInt32Ty(SVI.getContext());
   unsigned LHSWidth = LHS->getType()->getVectorNumElements();
+  bool MadeChange = false;
 
   // Canonicalize shuffle(x    ,x,mask) -> shuffle(x, undef,mask')
   // Canonicalize shuffle(undef,x,mask) -> shuffle(x, undef,mask').
   if (LHS == RHS || isa<UndefValue>(LHS)) {
-    if (isa<UndefValue>(LHS) && LHS == RHS) {
-      // shuffle(undef,undef,mask) -> undef.
-      Value *Result = (VWidth == LHSWidth)
-                      ? LHS : UndefValue::get(SVI.getType());
-      return replaceInstUsesWith(SVI, Result);
-    }
-
     // Remap any references to RHS to use LHS.
     SmallVector<Constant*, 16> Elts;
     for (unsigned i = 0, e = LHSWidth; i != VWidth; ++i) {

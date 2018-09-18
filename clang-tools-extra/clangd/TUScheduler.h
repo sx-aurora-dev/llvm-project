@@ -14,6 +14,7 @@
 #include "Function.h"
 #include "Threading.h"
 #include "llvm/ADT/StringMap.h"
+#include <future>
 
 namespace clang {
 namespace clangd {
@@ -73,8 +74,6 @@ public:
   virtual void onMainAST(PathRef Path, ParsedAST &AST) {}
 };
 
-ParsingCallbacks &noopParsingCallbacks();
-
 /// Handles running tasks for ClangdServer and managing the resources (e.g.,
 /// preambles and ASTs) for opened files.
 /// TUScheduler is not thread-safe, only one thread should be providing updates
@@ -85,7 +84,7 @@ ParsingCallbacks &noopParsingCallbacks();
 class TUScheduler {
 public:
   TUScheduler(unsigned AsyncThreadsCount, bool StorePreamblesInMemory,
-              ParsingCallbacks &ASTCallbacks,
+              std::unique_ptr<ParsingCallbacks> ASTCallbacks,
               std::chrono::steady_clock::duration UpdateDebounce,
               ASTRetentionPolicy RetentionPolicy);
   ~TUScheduler();
@@ -118,19 +117,28 @@ public:
   void runWithAST(llvm::StringRef Name, PathRef File,
                   Callback<InputsAndAST> Action);
 
-  /// Schedule an async read of the Preamble.
-  /// The preamble may be stale, generated from an older version of the file.
-  /// Reading from locations in the preamble may cause the files to be re-read.
-  /// This gives callers two options:
-  /// - validate that the preamble is still valid, and only use it in this case
-  /// - accept that preamble contents may be outdated, and try to avoid reading
-  ///   source code from headers.
+  /// Controls whether preamble reads wait for the preamble to be up-to-date.
+  enum PreambleConsistency {
+    /// The preamble is generated from the current version of the file.
+    /// If the content was recently updated, we will wait until we have a
+    /// preamble that reflects that update.
+    /// This is the slowest option, and may be delayed by other tasks.
+    Consistent,
+    /// The preamble may be generated from an older version of the file.
+    /// Reading from locations in the preamble may cause files to be re-read.
+    /// This gives callers two options:
+    /// - validate that the preamble is still valid, and only use it if so
+    /// - accept that the preamble contents may be outdated, and try to avoid
+    ///   reading source code from headers.
+    /// This is the fastest option, usually a preamble is available immediately.
+    Stale,
+  };
+  /// Schedule an async read of the preamble.
   /// If there's no preamble yet (because the file was just opened), we'll wait
-  /// for it to build. The preamble may still be null if it fails to build or is
-  /// empty.
-  /// If an error occurs during processing, it is forwarded to the \p Action
-  /// callback.
+  /// for it to build. The result may be null if it fails to build or is empty.
+  /// If an error occurs, it is forwarded to the \p Action callback.
   void runWithPreamble(llvm::StringRef Name, PathRef File,
+                       PreambleConsistency Consistency,
                        Callback<InputsAndPreamble> Action);
 
   /// Wait until there are no scheduled or running tasks.
@@ -156,7 +164,7 @@ public:
 private:
   const bool StorePreamblesInMemory;
   const std::shared_ptr<PCHContainerOperations> PCHOps;
-  ParsingCallbacks &Callbacks;
+  std::unique_ptr<ParsingCallbacks> Callbacks; // not nullptr
   Semaphore Barrier;
   llvm::StringMap<std::unique_ptr<FileData>> Files;
   std::unique_ptr<ASTCache> IdleASTs;
@@ -166,6 +174,18 @@ private:
   llvm::Optional<AsyncTaskRunner> WorkerThreads;
   std::chrono::steady_clock::duration UpdateDebounce;
 };
+
+/// Runs \p Action asynchronously with a new std::thread. The context will be
+/// propagated.
+template <typename T>
+std::future<T> runAsync(llvm::unique_function<T()> Action) {
+  return std::async(std::launch::async,
+                    [](llvm::unique_function<T()> &&Action, Context Ctx) {
+                      WithContext WithCtx(std::move(Ctx));
+                      return Action();
+                    },
+                    std::move(Action), Context::current().clone());
+}
 
 } // namespace clangd
 } // namespace clang

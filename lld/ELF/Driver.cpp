@@ -74,7 +74,7 @@ static void setConfigs(opt::InputArgList &Args);
 
 bool elf::link(ArrayRef<const char *> Args, bool CanExitEarly,
                raw_ostream &Error) {
-  errorHandler().LogName = sys::path::filename(Args[0]);
+  errorHandler().LogName = args::getFilenameWithoutExe(Args[0]);
   errorHandler().ErrorLimitExceededMsg =
       "too many errors emitted, stopping now (use "
       "-error-limit=0 to see all errors)";
@@ -340,7 +340,8 @@ static bool getZFlag(opt::InputArgList &Args, StringRef K1, StringRef K2,
 
 static bool isKnown(StringRef S) {
   return S == "combreloc" || S == "copyreloc" || S == "defs" ||
-         S == "execstack" || S == "hazardplt" || S == "initfirst" ||
+         S == "execstack" || S == "global" || S == "hazardplt" ||
+         S == "initfirst" || S == "interpose" ||
          S == "keep-text-section-prefix" || S == "lazy" || S == "muldefs" ||
          S == "nocombreloc" || S == "nocopyreloc" || S == "nodelete" ||
          S == "nodlopen" || S == "noexecstack" ||
@@ -833,8 +834,10 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->ZCombreloc = getZFlag(Args, "combreloc", "nocombreloc", true);
   Config->ZCopyreloc = getZFlag(Args, "copyreloc", "nocopyreloc", true);
   Config->ZExecstack = getZFlag(Args, "execstack", "noexecstack", false);
+  Config->ZGlobal = hasZOption(Args, "global");
   Config->ZHazardplt = hasZOption(Args, "hazardplt");
   Config->ZInitfirst = hasZOption(Args, "initfirst");
+  Config->ZInterpose = hasZOption(Args, "interpose");
   Config->ZKeepTextSectionPrefix = getZFlag(
       Args, "keep-text-section-prefix", "nokeep-text-section-prefix", false);
   Config->ZNodelete = hasZOption(Args, "nodelete");
@@ -1230,33 +1233,19 @@ template <class ELFT> static void handleLibcall(StringRef Name) {
     Symtab->fetchLazy<ELFT>(Sym);
 }
 
-template <class ELFT> static bool shouldDemote(Symbol &Sym) {
-  // If all references to a DSO happen to be weak, the DSO is not added to
-  // DT_NEEDED. If that happens, we need to eliminate shared symbols created
-  // from the DSO. Otherwise, they become dangling references that point to a
-  // non-existent DSO.
-  if (auto *S = dyn_cast<SharedSymbol>(&Sym))
-    return !S->getFile<ELFT>().IsNeeded;
-
-  // We are done processing archives, so lazy symbols that were used but not
-  // found can be converted to undefined. We could also just delete the other
-  // lazy symbols, but that seems to be more work than it is worth.
-  return Sym.isLazy() && Sym.IsUsedInRegularObj;
-}
-
-// Some files, such as .so or files between -{start,end}-lib may be removed
-// after their symbols are added to the symbol table. If that happens, we
-// need to remove symbols that refer files that no longer exist, so that
-// they won't appear in the symbol table of the output file.
-//
-// We remove symbols by demoting them to undefined symbol.
-template <class ELFT> static void demoteSymbols() {
+// If all references to a DSO happen to be weak, the DSO is not added
+// to DT_NEEDED. If that happens, we need to eliminate shared symbols
+// created from the DSO. Otherwise, they become dangling references
+// that point to a non-existent DSO.
+template <class ELFT> static void demoteSharedSymbols() {
   for (Symbol *Sym : Symtab->getSymbols()) {
-    if (shouldDemote<ELFT>(*Sym)) {
-      bool Used = Sym->Used;
-      replaceSymbol<Undefined>(Sym, nullptr, Sym->getName(), Sym->Binding,
-                               Sym->StOther, Sym->Type);
-      Sym->Used = Used;
+    if (auto *S = dyn_cast<SharedSymbol>(Sym)) {
+      if (!S->getFile<ELFT>().IsNeeded) {
+        bool Used = S->Used;
+        replaceSymbol<Undefined>(S, nullptr, S->getName(), STB_WEAK, S->StOther,
+                                 S->Type);
+        S->Used = Used;
+      }
     }
   }
 }
@@ -1591,7 +1580,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   decompressSections();
   splitSections<ELFT>();
   markLive<ELFT>();
-  demoteSymbols<ELFT>();
+  demoteSharedSymbols<ELFT>();
   mergeSections();
   if (Config->ICF != ICFLevel::None) {
     findKeepUniqueSections<ELFT>(Args);

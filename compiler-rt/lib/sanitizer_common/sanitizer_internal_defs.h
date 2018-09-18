@@ -105,8 +105,8 @@
 //
 // FIXME: do we have anything like this on Mac?
 #ifndef SANITIZER_CAN_USE_PREINIT_ARRAY
-#if ((SANITIZER_LINUX && !SANITIZER_ANDROID) || SANITIZER_OPENBSD) && \
-    !defined(PIC)
+#if ((SANITIZER_LINUX && !SANITIZER_ANDROID) || SANITIZER_OPENBSD || \
+     SANITIZER_FUCHSIA) && !defined(PIC)
 #define SANITIZER_CAN_USE_PREINIT_ARRAY 1
 // Before Solaris 11.4, .preinit_array is fully supported only with GNU ld.
 // FIXME: Check for those conditions.
@@ -431,6 +431,7 @@ namespace __scudo { using namespace __sanitizer; }  // NOLINT
 namespace __ubsan { using namespace __sanitizer; }  // NOLINT
 namespace __xray  { using namespace __sanitizer; }  // NOLINT
 namespace __interception  { using namespace __sanitizer; }  // NOLINT
+namespace __hwasan  { using namespace __sanitizer; }  // NOLINT
 
 
 #endif  // SANITIZER_DEFS_H

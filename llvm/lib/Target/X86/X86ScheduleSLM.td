@@ -100,7 +100,9 @@ defm : SLMWriteResPair<WriteIMul64, [SLM_IEC_RSV1],  3>;
 
 defm : X86WriteRes<WriteBSWAP32, [SLM_IEC_RSV01], 1, [1], 1>;
 defm : X86WriteRes<WriteBSWAP64, [SLM_IEC_RSV01], 1, [1], 1>;
-defm : X86WriteRes<WriteXCHG,       [SLM_IEC_RSV01], 1, [1], 1>;
+defm : X86WriteRes<WriteCMPXCHG, [SLM_IEC_RSV01], 1, [1], 1>;
+defm : X86WriteRes<WriteCMPXCHGRMW, [SLM_IEC_RSV01, SLM_MEC_RSV], 4, [1, 2], 2>;
+defm : X86WriteRes<WriteXCHG,      [SLM_IEC_RSV01], 1, [1], 1>;
 
 defm : SLMWriteResPair<WriteShift,  [SLM_IEC_RSV0],  1>;
 
@@ -135,8 +137,9 @@ defm : SLMWriteResPair<WriteLZCNT,          [SLM_IEC_RSV0], 3>;
 defm : SLMWriteResPair<WriteTZCNT,          [SLM_IEC_RSV0], 3>;
 defm : SLMWriteResPair<WritePOPCNT,         [SLM_IEC_RSV0], 3>;
 
-// BMI1 BEXTR, BMI2 BZHI
+// BMI1 BEXTR/BLS, BMI2 BZHI
 defm : X86WriteResPairUnsupported<WriteBEXTR>;
+defm : X86WriteResPairUnsupported<WriteBLS>;
 defm : X86WriteResPairUnsupported<WriteBZHI>;
 
 defm : SLMWriteResPair<WriteDiv8,   [SLM_IEC_RSV01, SLMDivider], 25, [1,25], 1, 4>;
