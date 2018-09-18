@@ -406,18 +406,10 @@ public:
     return SourceRange(getLocation(), getLocation());
   }
 
-  LLVM_ATTRIBUTE_DEPRECATED(SourceLocation getLocStart() const LLVM_READONLY,
-                            "Use getBeginLoc instead") {
-    return getBeginLoc();
-  }
   SourceLocation getBeginLoc() const LLVM_READONLY {
     return getSourceRange().getBegin();
   }
 
-  LLVM_ATTRIBUTE_DEPRECATED(SourceLocation getLocEnd() const LLVM_READONLY,
-                            "Use getEndLoc instead") {
-    return getEndLoc();
-  }
   SourceLocation getEndLoc() const LLVM_READONLY {
     return getSourceRange().getEnd();
   }
@@ -1148,6 +1140,9 @@ public:
   void dumpColor() const;
 
   void dump(raw_ostream &Out, bool Deserialize = false) const;
+
+  /// \return Unique reproducible object identifier
+  int64_t getID() const;
 
   /// Looks through the Decl's underlying type to extract a FunctionType
   /// when possible. Will return null if the type underlying the Decl does not

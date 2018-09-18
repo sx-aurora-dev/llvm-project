@@ -114,18 +114,16 @@ StringRef elf::getOutputSectionName(const InputSectionBase *S) {
   // for instance.
   if (Config->ZKeepTextSectionPrefix)
     for (StringRef V :
-         {".text.hot.", ".text.unlikely.", ".text.startup.", ".text.exit."}) {
+         {".text.hot.", ".text.unlikely.", ".text.startup.", ".text.exit."})
       if (isSectionPrefix(V, S->Name))
         return V.drop_back();
-    }
 
   for (StringRef V :
        {".text.", ".rodata.", ".data.rel.ro.", ".data.", ".bss.rel.ro.",
         ".bss.", ".init_array.", ".fini_array.", ".ctors.", ".dtors.", ".tbss.",
-        ".gcc_except_table.", ".tdata.", ".ARM.exidx.", ".ARM.extab."}) {
+        ".gcc_except_table.", ".tdata.", ".ARM.exidx.", ".ARM.extab."})
     if (isSectionPrefix(V, S->Name))
       return V.drop_back();
-  }
 
   // CommonSection is identified as "COMMON" in linker scripts.
   // By default, it should go to .bss section.
@@ -398,6 +396,14 @@ template <class ELFT> static void createSyntheticSections() {
   Add(InX::Plt);
   InX::Iplt = make<PltSection>(true);
   Add(InX::Iplt);
+
+  // .note.GNU-stack is always added when we are creating a re-linkable
+  // object file. Other linkers are using the presence of this marker
+  // section to control the executable-ness of the stack area, but that
+  // is irrelevant these days. Stack area should always be non-executable
+  // by default. So we emit this section unconditionally.
+  if (Config->Relocatable)
+    Add(make<GnuStackSection>());
 
   if (!Config->Relocatable) {
     if (Config->EhFrameHdr) {

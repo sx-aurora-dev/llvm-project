@@ -67,13 +67,15 @@ void WebAssemblyMCCodeEmitter::encodeInstruction(
     OS << uint8_t(Binary);
   } else {
     assert(Binary <= UINT16_MAX && "Several-byte opcodes not supported yet");
-    OS << uint8_t(Binary >> 8)
-       << uint8_t(Binary);
+    OS << uint8_t(Binary >> 8) << uint8_t(Binary);
   }
 
   // For br_table instructions, encode the size of the table. In the MCInst,
-  // there's an index operand, one operand for each table entry, and the
-  // default operand.
+  // there's an index operand (if not a stack instruction), one operand for
+  // each table entry, and the default operand.
+  if (MI.getOpcode() == WebAssembly::BR_TABLE_I32_S ||
+      MI.getOpcode() == WebAssembly::BR_TABLE_I64_S)
+    encodeULEB128(MI.getNumOperands() - 1, OS);
   if (MI.getOpcode() == WebAssembly::BR_TABLE_I32 ||
       MI.getOpcode() == WebAssembly::BR_TABLE_I64)
     encodeULEB128(MI.getNumOperands() - 2, OS);
@@ -159,9 +161,8 @@ void WebAssemblyMCCodeEmitter::encodeInstruction(
       } else {
         llvm_unreachable("unexpected symbolic operand kind");
       }
-      Fixups.push_back(MCFixup::create(
-          OS.tell() - Start, MO.getExpr(),
-          FixupKind, MI.getLoc()));
+      Fixups.push_back(MCFixup::create(OS.tell() - Start, MO.getExpr(),
+                                       FixupKind, MI.getLoc()));
       ++MCNumFixups;
       encodeULEB128(0, OS, PaddedSize);
     } else {
