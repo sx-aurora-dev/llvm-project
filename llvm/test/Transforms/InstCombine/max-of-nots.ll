@@ -239,8 +239,8 @@ define i32 @compute_min_pessimization(i32 %x, i32 %y) {
 ; CHECK-NEXT:    [[NOT_VALUE:%.*]] = sub i32 3, [[X:%.*]]
 ; CHECK-NEXT:    call void @fake_use(i32 [[NOT_VALUE]])
 ; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[X]], -4
-; CHECK-NEXT:    [[TMP2:%.*]] = icmp sgt i32 [[TMP1]], [[Y:%.*]]
-; CHECK-NEXT:    [[MIN:%.*]] = select i1 [[TMP2]], i32 [[Y]], i32 [[TMP1]]
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp slt i32 [[TMP1]], [[Y:%.*]]
+; CHECK-NEXT:    [[MIN:%.*]] = select i1 [[TMP2]], i32 [[TMP1]], i32 [[Y]]
 ; CHECK-NEXT:    ret i32 [[MIN]]
 ;
   %not_value = sub i32 3, %x

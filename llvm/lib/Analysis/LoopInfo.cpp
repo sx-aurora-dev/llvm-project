@@ -213,33 +213,21 @@ bool Loop::isSafeToClone() const {
 
 MDNode *Loop::getLoopID() const {
   MDNode *LoopID = nullptr;
-  if (BasicBlock *Latch = getLoopLatch()) {
-    LoopID = Latch->getTerminator()->getMetadata(LLVMContext::MD_loop);
-  } else {
-    assert(!getLoopLatch() &&
-           "The loop should have no single latch at this point");
-    // Go through each predecessor of the loop header and check the
-    // terminator for the metadata.
-    BasicBlock *H = getHeader();
-    for (BasicBlock *BB : this->blocks()) {
-      TerminatorInst *TI = BB->getTerminator();
-      MDNode *MD = nullptr;
 
-      // Check if this terminator branches to the loop header.
-      for (BasicBlock *Successor : TI->successors()) {
-        if (Successor == H) {
-          MD = TI->getMetadata(LLVMContext::MD_loop);
-          break;
-        }
-      }
-      if (!MD)
-        return nullptr;
+  // Go through the latch blocks and check the terminator for the metadata.
+  SmallVector<BasicBlock *, 4> LatchesBlocks;
+  getLoopLatches(LatchesBlocks);
+  for (BasicBlock *BB : LatchesBlocks) {
+    TerminatorInst *TI = BB->getTerminator();
+    MDNode *MD = TI->getMetadata(LLVMContext::MD_loop);
 
-      if (!LoopID)
-        LoopID = MD;
-      else if (MD != LoopID)
-        return nullptr;
-    }
+    if (!MD)
+      return nullptr;
+
+    if (!LoopID)
+      LoopID = MD;
+    else if (MD != LoopID)
+      return nullptr;
   }
   if (!LoopID || LoopID->getNumOperands() == 0 ||
       LoopID->getOperand(0) != LoopID)
@@ -262,7 +250,7 @@ void Loop::setLoopID(MDNode *LoopID) const {
   BasicBlock *H = getHeader();
   for (BasicBlock *BB : this->blocks()) {
     TerminatorInst *TI = BB->getTerminator();
-    for (BasicBlock *Successor : TI->successors()) {
+    for (BasicBlock *Successor : successors(TI)) {
       if (Successor == H)
         TI->setMetadata(LLVMContext::MD_loop, LoopID);
     }

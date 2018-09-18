@@ -955,8 +955,8 @@ def HasFastLZCNT : Predicate<"Subtarget->hasFastLZCNT()">;
 def HasFastSHLDRotate : Predicate<"Subtarget->hasFastSHLDRotate()">;
 def HasERMSB : Predicate<"Subtarget->hasERMSB()">;
 def HasMFence    : Predicate<"Subtarget->hasMFence()">;
-def UseRetpoline : Predicate<"Subtarget->useRetpoline()">;
-def NotUseRetpoline : Predicate<"!Subtarget->useRetpoline()">;
+def UseRetpolineIndirectCalls : Predicate<"Subtarget->useRetpolineIndirectCalls()">;
+def NotUseRetpolineIndirectCalls : Predicate<"!Subtarget->useRetpolineIndirectCalls()">;
 
 //===----------------------------------------------------------------------===//
 // X86 Instruction Format Definitions.
@@ -2061,7 +2061,7 @@ def XADD64rm  : RI<0xC1, MRMSrcMem, (outs GR64:$dst),
 
 }
 
-let SchedRW = [WriteALU], hasSideEffects = 0 in {
+let SchedRW = [WriteCMPXCHG], hasSideEffects = 0 in {
 let Defs = [AL, EFLAGS], Uses = [AL] in
 def CMPXCHG8rr : I<0xB0, MRMDestReg, (outs GR8:$dst), (ins GR8:$src),
                    "cmpxchg{b}\t{$src, $dst|$dst, $src}", []>, TB,
@@ -2080,7 +2080,7 @@ def CMPXCHG64rr  : RI<0xB1, MRMDestReg, (outs GR64:$dst), (ins GR64:$src),
                       NotMemoryFoldable;
 } // SchedRW, hasSideEffects
 
-let SchedRW = [WriteALULd, WriteRMW], mayLoad = 1, mayStore = 1,
+let SchedRW = [WriteCMPXCHGRMW], mayLoad = 1, mayStore = 1,
     hasSideEffects = 0 in {
 let Defs = [AL, EFLAGS], Uses = [AL] in
 def CMPXCHG8rm   : I<0xB0, MRMDestMem, (outs), (ins i8mem:$dst, GR8:$src),
@@ -2368,11 +2368,11 @@ multiclass bmi_bls<string mnemonic, Format RegMRM, Format MemMRM,
 let hasSideEffects = 0 in {
   def rr : I<0xF3, RegMRM, (outs RC:$dst), (ins RC:$src),
              !strconcat(mnemonic, "\t{$src, $dst|$dst, $src}"), []>,
-             T8PS, VEX_4V, Sched<[WriteALU]>;
+             T8PS, VEX_4V, Sched<[WriteBLS]>;
   let mayLoad = 1 in
   def rm : I<0xF3, MemMRM, (outs RC:$dst), (ins x86memop:$src),
              !strconcat(mnemonic, "\t{$src, $dst|$dst, $src}"), []>,
-             T8PS, VEX_4V, Sched<[WriteALULd]>;
+             T8PS, VEX_4V, Sched<[WriteBLS.Folded]>;
 }
 }
 
