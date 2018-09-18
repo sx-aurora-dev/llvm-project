@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "JSONRPCDispatcher.h"
+#include "Cancellation.h"
 #include "ProtocolHandlers.h"
 #include "Trace.h"
 #include "llvm/ADT/SmallString.h"
@@ -27,7 +28,7 @@ namespace {
 static Key<json::Value> RequestID;
 static Key<JSONOutput *> RequestOut;
 
-// When tracing, we trace a request and attach the repsonse in reply().
+// When tracing, we trace a request and attach the response in reply().
 // Because the Span isn't available, we find the current request using Context.
 class RequestSpan {
   RequestSpan(llvm::json::Object *Args) : Args(Args) {}
@@ -93,7 +94,7 @@ void JSONOutput::mirrorInput(const Twine &Message) {
 }
 
 void clangd::reply(json::Value &&Result) {
-  auto ID = Context::current().get(RequestID);
+  auto ID = getRequestId();
   if (!ID) {
     elog("Attempted to reply to a notification!");
     return;
@@ -116,7 +117,7 @@ void clangd::replyError(ErrorCode Code, const llvm::StringRef &Message) {
                                  {"message", Message.str()}};
   });
 
-  if (auto ID = Context::current().get(RequestID)) {
+  if (auto ID = getRequestId()) {
     log("--> reply({0}) error: {1}", *ID, Message);
     Context::current()
         .getExisting(RequestOut)
@@ -127,6 +128,16 @@ void clangd::replyError(ErrorCode Code, const llvm::StringRef &Message) {
                                    {"message", Message}}},
         });
   }
+}
+
+void clangd::replyError(Error E) {
+  handleAllErrors(std::move(E),
+                  [](const CancelledError &TCE) {
+                    replyError(ErrorCode::RequestCancelled, TCE.message());
+                  },
+                  [](const ErrorInfoBase &EIB) {
+                    replyError(ErrorCode::InvalidParams, EIB.message());
+                  });
 }
 
 void clangd::call(StringRef Method, json::Value &&Params) {
@@ -365,4 +376,8 @@ void clangd::runLanguageServerLoop(std::FILE *In, JSONOutput &Out,
       }
     }
   }
+}
+
+const json::Value *clangd::getRequestId() {
+  return Context::current().get(RequestID);
 }

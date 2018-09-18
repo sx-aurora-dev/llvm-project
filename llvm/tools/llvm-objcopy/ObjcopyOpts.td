@@ -17,11 +17,23 @@ def I : JoinedOrSeparate<[ "-" ], "I">, Alias<input_target>;
 defm output_target : Eq<"output-target">,
                      HelpText<"Format of the output file">,
                      Values<"binary">;
+def compress_debug_sections : Flag<["--", "-"], "compress-debug-sections">;
+def compress_debug_sections_eq : Joined<["--", "-"], "compress-debug-sections=">,
+                                 MetaVarName<"[ zlib | zlib-gnu ]">,
+                                 HelpText<"Compress DWARF debug sections using "
+                                          "specified style. Supported styles: "
+                                          "'zlib-gnu' and 'zlib'">;
 def O : JoinedOrSeparate<["-"], "O">,
         Alias<output_target>;
 defm split_dwo : Eq<"split-dwo">,
                  MetaVarName<"dwo-file">,
                  HelpText<"Equivalent to extract-dwo on the input file to <dwo-file>, then strip-dwo on the input file">;
+
+def preserve_dates : Flag<[ "-", "--" ], "preserve-dates">,
+                     HelpText<"Preserve access and modification timestamps">;
+
+def p : Flag<[ "-" ], "p">, Alias<preserve_dates>;
+
 defm add_gnu_debuglink : Eq<"add-gnu-debuglink">,
                          MetaVarName<"debug-file">,
                          HelpText<"Add a .gnu_debuglink for <debug-file>">;
@@ -75,6 +87,24 @@ def L : JoinedOrSeparate<["-"], "L">,
 defm globalize_symbol : Eq<"globalize-symbol">,
                        MetaVarName<"symbol">,
                        HelpText<"Mark <symbol> as global">;
+
+defm keep_global_symbol
+    : Eq<"keep-global-symbol">,
+      MetaVarName<"symbol">,
+      HelpText<"Convert all symbols except <symbol> to local. May be repeated "
+               "to convert all except a set of symbols to local.">;
+def G : JoinedOrSeparate<[ "-" ], "G">, Alias<keep_global_symbol>;
+
+defm keep_global_symbols
+    : Eq<"keep-global-symbols">,
+      MetaVarName<"filename">,
+      HelpText<
+          "Reads a list of symbols from <filename> and runs as if "
+	  "--keep-global-symbol=<symbol> is set for each one. <filename> "
+	  "contains one symbol per line and may contain comments beginning "
+	  "with '#'. Leading and trailing whitespace is stripped from each "
+	  "line. May be repeated to read symbols from many files.">;
+
 defm weaken_symbol : Eq<"weaken-symbol">,
                        MetaVarName<"symbol">,
                        HelpText<"Mark <symbol> as weak">;

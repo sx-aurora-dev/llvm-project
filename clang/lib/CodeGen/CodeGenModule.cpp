@@ -730,6 +730,14 @@ static bool shouldAssumeDSOLocal(const CodeGenModule &CGM,
     return false;
 
   const llvm::Triple &TT = CGM.getTriple();
+  if (TT.isWindowsGNUEnvironment()) {
+    // In MinGW, variables without DLLImport can still be automatically
+    // imported from a DLL by the linker; don't mark variables that
+    // potentially could come from another DLL as DSO local.
+    if (GV->isDeclarationForLinker() && isa<llvm::GlobalVariable>(GV) &&
+        !GV->isThreadLocal())
+      return false;
+  }
   // Every other GV is local on COFF.
   // Make an exception for windows OS in the triple: Some firmware builds use
   // *-win32-macho triples. This (accidentally?) produced windows relocations
@@ -1350,6 +1358,12 @@ void CodeGenModule::SetCommonAttributes(GlobalDecl GD, llvm::GlobalValue *GV) {
 
   if (D && D->hasAttr<UsedAttr>())
     addUsedGlobal(GV);
+
+  if (CodeGenOpts.KeepStaticConsts && D && isa<VarDecl>(D)) {
+    const auto *VD = cast<VarDecl>(D);
+    if (VD->getType().isConstQualified() && VD->getStorageClass() == SC_Static)
+      addUsedGlobal(GV);
+  }
 }
 
 bool CodeGenModule::GetCPUAndFeaturesAttributes(const Decl *D,
@@ -1985,6 +1999,13 @@ bool CodeGenModule::MustBeEmitted(const ValueDecl *Global) {
   if (LangOpts.EmitAllDecls)
     return true;
 
+  if (CodeGenOpts.KeepStaticConsts) {
+    const auto *VD = dyn_cast<VarDecl>(Global);
+    if (VD && VD->getType().isConstQualified() &&
+        VD->getStorageClass() == SC_Static)
+      return true;
+  }
+
   return getContext().DeclMustBeEmitted(Global);
 }
 
@@ -2004,7 +2025,8 @@ bool CodeGenModule::MayBeEmittedEagerly(const ValueDecl *Global) {
   // codegen for global variables, because they may be marked as threadprivate.
   if (LangOpts.OpenMP && LangOpts.OpenMPUseTLS &&
       getContext().getTargetInfo().isTLSSupported() && isa<VarDecl>(Global) &&
-      !isTypeConstant(Global->getType(), false))
+      !isTypeConstant(Global->getType(), false) &&
+      !OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(Global))
     return false;
 
   return true;
@@ -2155,6 +2177,20 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
     if (!MustEmitForCuda &&
         VD->isThisDeclarationADefinition() != VarDecl::Definition &&
         !Context.isMSStaticDataMemberInlineDefinition(VD)) {
+      if (LangOpts.OpenMP) {
+        // Emit declaration of the must-be-emitted declare target variable.
+        if (llvm::Optional<OMPDeclareTargetDeclAttr::MapTypeTy> Res =
+                OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(VD)) {
+          if (*Res == OMPDeclareTargetDeclAttr::MT_To) {
+            (void)GetAddrOfGlobalVar(VD);
+          } else {
+            assert(*Res == OMPDeclareTargetDeclAttr::MT_Link &&
+                   "link claue expected.");
+            (void)getOpenMPRuntime().getAddrOfDeclareTargetLink(VD);
+          }
+          return;
+        }
+      }
       // If this declaration may have caused an inline variable definition to
       // change linkage, make sure that it's emitted.
       if (Context.getInlineVariableDefinitionKind(VD) ==
@@ -2543,15 +2579,16 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     if (getLangOpts().OpenMPIsDevice && OpenMPRuntime &&
         !OpenMPRuntime->markAsGlobalTarget(GD) && FD->isDefined() &&
         !DontDefer && !IsForDefinition) {
-      const FunctionDecl *FDDef = FD->getDefinition();
-      GlobalDecl GDDef;
-      if (const auto *CD = dyn_cast<CXXConstructorDecl>(FDDef))
-        GDDef = GlobalDecl(CD, GD.getCtorType());
-      else if (const auto *DD = dyn_cast<CXXDestructorDecl>(FDDef))
-        GDDef = GlobalDecl(DD, GD.getDtorType());
-      else
-        GDDef = GlobalDecl(FDDef);
-      addDeferredDeclToEmit(GDDef);
+      if (const FunctionDecl *FDDef = FD->getDefinition()) {
+        GlobalDecl GDDef;
+        if (const auto *CD = dyn_cast<CXXConstructorDecl>(FDDef))
+          GDDef = GlobalDecl(CD, GD.getCtorType());
+        else if (const auto *DD = dyn_cast<CXXDestructorDecl>(FDDef))
+          GDDef = GlobalDecl(DD, GD.getDtorType());
+        else
+          GDDef = GlobalDecl(FDDef);
+        EmitGlobal(GDDef);
+      }
     }
 
     if (FD->isMultiVersion()) {
@@ -4268,15 +4305,13 @@ CodeGenModule::GetAddrOfConstantStringFromLiteral(const StringLiteral *S,
   StringRef GlobalVariableName;
   llvm::GlobalValue::LinkageTypes LT;
 
-  // Mangle the string literal if the ABI allows for it.  However, we cannot
-  // do this if  we are compiling with ASan or -fwritable-strings because they
-  // rely on strings having normal linkage.
-  if (!LangOpts.WritableStrings &&
-      !LangOpts.Sanitize.has(SanitizerKind::Address) &&
-      getCXXABI().getMangleContext().shouldMangleStringLiteral(S)) {
+  // Mangle the string literal if that's how the ABI merges duplicate strings.
+  // Don't do it if they are writable, since we don't want writes in one TU to
+  // affect strings in another.
+  if (getCXXABI().getMangleContext().shouldMangleStringLiteral(S) &&
+      !LangOpts.WritableStrings) {
     llvm::raw_svector_ostream Out(MangledNameBuffer);
     getCXXABI().getMangleContext().mangleStringLiteral(S, Out);
-
     LT = llvm::GlobalValue::LinkOnceODRLinkage;
     GlobalVariableName = MangledNameBuffer;
   } else {

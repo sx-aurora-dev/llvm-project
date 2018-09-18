@@ -1260,32 +1260,38 @@ Value *InstCombiner::SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
     break;
   }
   case Instruction::Select: {
-    APInt LeftDemanded(DemandedElts), RightDemanded(DemandedElts);
-    if (ConstantVector* CV = dyn_cast<ConstantVector>(I->getOperand(0))) {
+    SelectInst *Sel = cast<SelectInst>(I);
+    Value *Cond = Sel->getCondition();
+
+    APInt DemandedLHS(DemandedElts), DemandedRHS(DemandedElts);
+    if (auto *CV = dyn_cast<ConstantVector>(Cond)) {
       for (unsigned i = 0; i < VWidth; i++) {
+        // isNullValue() always returns false when called on a ConstantExpr.
+        // Skip constant expressions to avoid propagating incorrect information.
         Constant *CElt = CV->getAggregateElement(i);
-        // Method isNullValue always returns false when called on a
-        // ConstantExpr. If CElt is a ConstantExpr then skip it in order to
-        // to avoid propagating incorrect information.
         if (isa<ConstantExpr>(CElt))
           continue;
         if (CElt->isNullValue())
-          LeftDemanded.clearBit(i);
+          DemandedLHS.clearBit(i);
         else
-          RightDemanded.clearBit(i);
+          DemandedRHS.clearBit(i);
       }
     }
 
-    TmpV = SimplifyDemandedVectorElts(I->getOperand(1), LeftDemanded, UndefElts,
-                                      Depth + 1);
-    if (TmpV) { I->setOperand(1, TmpV); MadeChange = true; }
+    if (Value *V = SimplifyDemandedVectorElts(Sel->getTrueValue(), DemandedLHS,
+                                              UndefElts2, Depth + 1)) {
+      Sel->setTrueValue(V);
+      MadeChange = true;
+    }
 
-    TmpV = SimplifyDemandedVectorElts(I->getOperand(2), RightDemanded,
-                                      UndefElts2, Depth + 1);
-    if (TmpV) { I->setOperand(2, TmpV); MadeChange = true; }
+    if (Value *V = SimplifyDemandedVectorElts(Sel->getFalseValue(), DemandedRHS,
+                                              UndefElts3, Depth + 1)) {
+      Sel->setFalseValue(V);
+      MadeChange = true;
+    }
 
-    // Output elements are undefined if both are undefined.
-    UndefElts &= UndefElts2;
+    // Output elements are undefined if the element from each arm is undefined.
+    UndefElts = UndefElts2 & UndefElts3;
     break;
   }
   case Instruction::BitCast: {

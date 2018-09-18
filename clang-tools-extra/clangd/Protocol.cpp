@@ -184,6 +184,7 @@ bool fromJSON(const llvm::json::Value &Params,
   if (!O)
     return false;
   O.map("clangdFixSupport", R.clangdFixSupport);
+  O.map("categorySupport", R.categorySupport);
   return true;
 }
 
@@ -516,6 +517,8 @@ json::Value toJSON(const CompletionItem &CI) {
     Result["textEdit"] = *CI.textEdit;
   if (!CI.additionalTextEdits.empty())
     Result["additionalTextEdits"] = json::Array(CI.additionalTextEdits);
+  if (CI.deprecated)
+    Result["deprecated"] = CI.deprecated;
   return std::move(Result);
 }
 
@@ -613,6 +616,44 @@ bool fromJSON(const json::Value &Params,
   json::ObjectMapper O(Params);
   return O && O.map("compilationDatabasePath", CCPC.compilationDatabasePath) &&
          O.map("compilationDatabaseChanges", CCPC.compilationDatabaseChanges);
+}
+
+bool fromJSON(const json::Value &Params, ReferenceParams &R) {
+  TextDocumentPositionParams &Base = R;
+  return fromJSON(Params, Base);
+}
+
+json::Value toJSON(const CancelParams &CP) {
+  return json::Object{{"id", CP.ID}};
+}
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &O, const CancelParams &CP) {
+  O << toJSON(CP);
+  return O;
+}
+
+llvm::Optional<std::string> parseNumberOrString(const json::Value *Params) {
+  if (!Params)
+    return llvm::None;
+  // ID is either a number or a string, check for both.
+  if(const auto AsString = Params->getAsString())
+    return AsString->str();
+
+  if(const auto AsNumber = Params->getAsInteger())
+    return itostr(AsNumber.getValue());
+
+  return llvm::None;
+}
+
+bool fromJSON(const json::Value &Params, CancelParams &CP) {
+  const auto ParamsAsObject = Params.getAsObject();
+  if (!ParamsAsObject)
+    return false;
+  if (auto Parsed = parseNumberOrString(ParamsAsObject->get("id"))) {
+    CP.ID = std::move(*Parsed);
+    return true;
+  }
+  return false;
 }
 
 } // namespace clangd

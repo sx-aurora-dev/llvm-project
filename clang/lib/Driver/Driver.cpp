@@ -1661,17 +1661,28 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
   }
 
   if (C.getArgs().hasArg(options::OPT_print_multi_directory)) {
-    for (const Multilib &Multilib : TC.getMultilibs()) {
-      if (Multilib.gccSuffix().empty())
-        llvm::outs() << ".\n";
-      else {
-        StringRef Suffix(Multilib.gccSuffix());
-        assert(Suffix.front() == '/');
-        llvm::outs() << Suffix.substr(1) << "\n";
-      }
+    const Multilib &Multilib = TC.getMultilib();
+    if (Multilib.gccSuffix().empty())
+      llvm::outs() << ".\n";
+    else {
+      StringRef Suffix(Multilib.gccSuffix());
+      assert(Suffix.front() == '/');
+      llvm::outs() << Suffix.substr(1) << "\n";
     }
     return false;
   }
+
+  if (C.getArgs().hasArg(options::OPT_print_target_triple)) {
+    llvm::outs() << TC.getTripleString() << "\n";
+    return false;
+  }
+
+  if (C.getArgs().hasArg(options::OPT_print_effective_triple)) {
+    const llvm::Triple Triple(TC.ComputeEffectiveClangTriple(C.getArgs()));
+    llvm::outs() << Triple.getTriple() << "\n";
+    return false;
+  }
+
   return true;
 }
 
@@ -2971,22 +2982,9 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
     }
   }
 
-  // Diagnose unsupported forms of /Yc /Yu. Ignore /Yc/Yu for now if:
-  // * no filename after it
-  // * both /Yc and /Yu passed but with different filenames
-  // * corresponding file not also passed as /FI
+  // Ignore /Yc/Yu if both /Yc and /Yu passed but with different filenames.
   Arg *YcArg = Args.getLastArg(options::OPT__SLASH_Yc);
   Arg *YuArg = Args.getLastArg(options::OPT__SLASH_Yu);
-  if (YcArg && YcArg->getValue()[0] == '\0') {
-    Diag(clang::diag::warn_drv_ycyu_no_arg_clang_cl) << YcArg->getSpelling();
-    Args.eraseArg(options::OPT__SLASH_Yc);
-    YcArg = nullptr;
-  }
-  if (YuArg && YuArg->getValue()[0] == '\0') {
-    Diag(clang::diag::warn_drv_ycyu_no_arg_clang_cl) << YuArg->getSpelling();
-    Args.eraseArg(options::OPT__SLASH_Yu);
-    YuArg = nullptr;
-  }
   if (YcArg && YuArg && strcmp(YcArg->getValue(), YuArg->getValue()) != 0) {
     Diag(clang::diag::warn_drv_ycyu_different_arg_clang_cl);
     Args.eraseArg(options::OPT__SLASH_Yc);
@@ -2998,9 +2996,10 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
     Args.eraseArg(options::OPT__SLASH_Yc);
     YcArg = nullptr;
   }
-  if (Args.hasArg(options::OPT__SLASH_Y_)) {
-    // /Y- disables all pch handling.  Rather than check for it everywhere,
-    // just remove clang-cl pch-related flags here.
+  if (FinalPhase == phases::Preprocess || Args.hasArg(options::OPT__SLASH_Y_)) {
+    // If only preprocessing or /Y- is used, all pch handling is disabled.
+    // Rather than check for it everywhere, just remove clang-cl pch-related
+    // flags here.
     Args.eraseArg(options::OPT__SLASH_Fp);
     Args.eraseArg(options::OPT__SLASH_Yc);
     Args.eraseArg(options::OPT__SLASH_Yu);
@@ -4267,11 +4266,11 @@ std::string Driver::GetClPchPath(Compilation &C, StringRef BaseName) const {
     // extension of .pch is assumed. "
     if (!llvm::sys::path::has_extension(Output))
       Output += ".pch";
-  } else if (Arg *YcArg = C.getArgs().getLastArg(options::OPT__SLASH_Yc)) {
-    Output = YcArg->getValue();
-    llvm::sys::path::replace_extension(Output, ".pch");
   } else {
-    Output = BaseName;
+    if (Arg *YcArg = C.getArgs().getLastArg(options::OPT__SLASH_Yc))
+      Output = YcArg->getValue();
+    if (Output.empty())
+      Output = BaseName;
     llvm::sys::path::replace_extension(Output, ".pch");
   }
   return Output.str();

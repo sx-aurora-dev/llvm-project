@@ -2,7 +2,8 @@
 
 set(LIBUNWIND_CXX_SOURCES
     libunwind.cpp
-    Unwind-EHABI.cpp)
+    Unwind-EHABI.cpp
+    Unwind-seh.cpp)
 append_if(LIBUNWIND_CXX_SOURCES APPLE Unwind_AppleExtras.cpp)
 
 set(LIBUNWIND_C_SOURCES
@@ -50,8 +51,9 @@ set(LIBUNWIND_SOURCES
     ${LIBUNWIND_ASM_SOURCES})
 
 # Generate library list.
-set(libraries ${LIBUNWINDCXX_ABI_LIBRARIES})
+set(libraries)
 append_if(libraries LIBUNWIND_HAS_C_LIB c)
+append_if(libraries LIBUNWIND_HAS_GCC_S_LIB gcc_s)
 append_if(libraries LIBUNWIND_HAS_DL_LIB dl)
 if (LIBUNWIND_ENABLE_THREADS)
   append_if(libraries LIBUNWIND_HAS_PTHREAD_LIB pthread)

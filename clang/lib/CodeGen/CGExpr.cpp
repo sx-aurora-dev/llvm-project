@@ -2270,18 +2270,14 @@ static LValue EmitThreadPrivateVarDeclLValue(
 
 static Address emitDeclTargetLinkVarDeclLValue(CodeGenFunction &CGF,
                                                const VarDecl *VD, QualType T) {
-  for (const auto *D : VD->redecls()) {
-    if (!VD->hasAttrs())
-      continue;
-    if (const auto *Attr = D->getAttr<OMPDeclareTargetDeclAttr>())
-      if (Attr->getMapType() == OMPDeclareTargetDeclAttr::MT_Link) {
-        QualType PtrTy = CGF.getContext().getPointerType(VD->getType());
-        Address Addr =
-            CGF.CGM.getOpenMPRuntime().getAddrOfDeclareTargetLink(VD);
-        return CGF.EmitLoadOfPointer(Addr, PtrTy->castAs<PointerType>());
-      }
-  }
-  return Address::invalid();
+  llvm::Optional<OMPDeclareTargetDeclAttr::MapTypeTy> Res =
+      OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(VD);
+  if (!Res || *Res == OMPDeclareTargetDeclAttr::MT_To)
+    return Address::invalid();
+  assert(*Res == OMPDeclareTargetDeclAttr::MT_Link && "Expected link clause");
+  QualType PtrTy = CGF.getContext().getPointerType(VD->getType());
+  Address Addr = CGF.CGM.getOpenMPRuntime().getAddrOfDeclareTargetLink(VD);
+  return CGF.EmitLoadOfPointer(Addr, PtrTy->castAs<PointerType>());
 }
 
 Address
@@ -2441,6 +2437,7 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
     // A DeclRefExpr for a reference initialized by a constant expression can
     // appear without being odr-used. Directly emit the constant initializer.
     const Expr *Init = VD->getAnyInitializer(VD);
+    const auto *BD = dyn_cast_or_null<BlockDecl>(CurCodeDecl);
     if (Init && !isa<ParmVarDecl>(VD) && VD->getType()->isReferenceType() &&
         VD->isUsableInConstantExpressions(getContext()) &&
         VD->checkInitIsICE() &&
@@ -2450,7 +2447,7 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
             (LocalDeclMap.count(VD->getCanonicalDecl()) ||
              CapturedStmtInfo->lookup(VD->getCanonicalDecl()))) ||
            LambdaCaptureFields.lookup(VD->getCanonicalDecl()) ||
-           isa<BlockDecl>(CurCodeDecl)))) {
+           (BD && BD->capturesVariable(VD))))) {
       llvm::Constant *Val =
         ConstantEmitter(*this).emitAbstract(E->getLocation(),
                                             *VD->evaluateValue(),

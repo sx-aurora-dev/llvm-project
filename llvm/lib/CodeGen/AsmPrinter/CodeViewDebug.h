@@ -14,7 +14,7 @@
 #ifndef LLVM_LIB_CODEGEN_ASMPRINTER_CODEVIEWDEBUG_H
 #define LLVM_LIB_CODEGEN_ASMPRINTER_CODEVIEWDEBUG_H
 
-#include "DbgValueHistoryCalculator.h"
+#include "DbgEntityHistoryCalculator.h"
 #include "DebugHandlerBase.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -277,11 +277,11 @@ class LLVM_LIBRARY_VISIBILITY CodeViewDebug : public DebugHandlerBase {
   void emitInlinedCallSite(const FunctionInfo &FI, const DILocation *InlinedAt,
                            const InlineSite &Site);
 
-  using InlinedVariable = DbgValueHistoryMap::InlinedVariable;
+  using InlinedEntity = DbgValueHistoryMap::InlinedEntity;
 
   void collectVariableInfo(const DISubprogram *SP);
 
-  void collectVariableInfoFromMFTable(DenseSet<InlinedVariable> &Processed);
+  void collectVariableInfoFromMFTable(DenseSet<InlinedEntity> &Processed);
 
   // Construct the lexical block tree for a routine, pruning emptpy lexical
   // scopes, and populate it with local variables.

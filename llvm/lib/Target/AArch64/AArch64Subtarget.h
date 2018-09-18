@@ -78,6 +78,7 @@ protected:
   bool HasRDM = false;
   bool HasPerfMon = false;
   bool HasFullFP16 = false;
+  bool HasFP16FML = false;
   bool HasSPE = false;
 
   // ARMv8.4 Crypto extensions
@@ -137,11 +138,8 @@ protected:
   unsigned MaxJumpTableSize = 0;
   unsigned WideningBaseCost = 0;
 
-  // ReserveX18 - X18 is not available as a general purpose register.
-  bool ReserveX18;
-
-  // ReserveX20 - X20 is not available as a general purpose register.
-  bool ReserveX20 = false;
+  // ReserveXRegister[i] - X#i is not available as a general purpose register.
+  BitVector ReserveXRegister;
 
   bool IsLittle;
 
@@ -228,8 +226,8 @@ public:
     return MinVectorRegisterBitWidth;
   }
 
-  bool isX18Reserved() const { return ReserveX18; }
-  bool isX20Reserved() const { return ReserveX20; }
+  bool isXRegisterReserved(size_t i) const { return ReserveXRegister[i]; }
+  unsigned getNumXRegisterReserved() const { return ReserveXRegister.count(); }
   bool hasFPARMv8() const { return HasFPARMv8; }
   bool hasNEON() const { return HasNEON; }
   bool hasCrypto() const { return HasCrypto; }
@@ -291,6 +289,7 @@ public:
 
   bool hasPerfMon() const { return HasPerfMon; }
   bool hasFullFP16() const { return HasFullFP16; }
+  bool hasFP16FML() const { return HasFP16FML; }
   bool hasSPE() const { return HasSPE; }
   bool hasLSLFast() const { return HasLSLFast; }
   bool hasSVE() const { return HasSVE; }

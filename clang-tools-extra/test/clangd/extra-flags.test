@@ -6,7 +6,6 @@
 # CHECK-NEXT:  "params": {
 # CHECK-NEXT:    "diagnostics": [
 # CHECK-NEXT:      {
-# CHECK-NEXT:        "category": "Semantic Issue",
 # CHECK-NEXT:        "message": "Variable 'i' is uninitialized when used here",
 # CHECK-NEXT:        "range": {
 # CHECK-NEXT:          "end": {
@@ -29,7 +28,6 @@
 # CHECK-NEXT:  "params": {
 # CHECK-NEXT:    "diagnostics": [
 # CHECK-NEXT:      {
-# CHECK-NEXT:        "category": "Semantic Issue",
 # CHECK-NEXT:        "message": "Variable 'i' is uninitialized when used here",
 # CHECK-NEXT:        "range": {
 # CHECK-NEXT:          "end": {
@@ -49,6 +47,6 @@
 ---
 {"jsonrpc":"2.0","id":5,"method":"shutdown"}
 ---
-{"jsonrpc":"2.0":"method":"exit"}
+{"jsonrpc":"2.0","method":"exit"}
 
 

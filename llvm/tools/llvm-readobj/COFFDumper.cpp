@@ -50,6 +50,7 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/Win64EH.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -98,6 +99,7 @@ public:
   mergeCodeViewTypes(llvm::codeview::MergingTypeTableBuilder &CVIDs,
                      llvm::codeview::MergingTypeTableBuilder &CVTypes) override;
   void printStackMap() const override;
+  void printAddrsig() override;
 private:
   void printSymbol(const SymbolRef &Sym);
   void printRelocation(const SectionRef &Section, const RelocationRef &Reloc,
@@ -749,7 +751,7 @@ void COFFDumper::printCOFFDebugDirectory() {
         W.printNumber("PDBAge", DebugInfo->PDB70.Age);
         W.printString("PDBFileName", PDBFileName);
       }
-    } else {
+    } else if (D.SizeOfData != 0) {
       // FIXME: Type values of 12 and 13 are commonly observed but are not in
       // the documented type enum.  Figure out what they mean.
       ArrayRef<uint8_t> RawData;
@@ -1060,10 +1062,28 @@ void COFFDumper::printCodeViewSymbolSection(StringRef SectionName,
         W.printHex("LocalSize", FD.LocalSize);
         W.printHex("ParamsSize", FD.ParamsSize);
         W.printHex("MaxStackSize", FD.MaxStackSize);
-        W.printString("FrameFunc", FrameFunc);
         W.printHex("PrologSize", FD.PrologSize);
         W.printHex("SavedRegsSize", FD.SavedRegsSize);
         W.printFlags("Flags", FD.Flags, makeArrayRef(FrameDataFlags));
+
+        // The FrameFunc string is a small RPN program. It can be broken up into
+        // statements that end in the '=' operator, which assigns the value on
+        // the top of the stack to the previously pushed variable. Variables can
+        // be temporary values ($T0) or physical registers ($esp). Print each
+        // assignment on its own line to make these programs easier to read.
+        {
+          ListScope FFS(W, "FrameFunc");
+          while (!FrameFunc.empty()) {
+            size_t EqOrEnd = FrameFunc.find('=');
+            if (EqOrEnd == StringRef::npos)
+              EqOrEnd = FrameFunc.size();
+            else
+              ++EqOrEnd;
+            StringRef Stmt = FrameFunc.substr(0, EqOrEnd);
+            W.printString(Stmt);
+            FrameFunc = FrameFunc.drop_front(EqOrEnd).trim();
+          }
+        }
       }
       break;
     }
@@ -1828,6 +1848,49 @@ void COFFDumper::printStackMap() const {
   else
     prettyPrintStackMap(W,
                         StackMapV2Parser<support::big>(StackMapContentsArray));
+}
+
+void COFFDumper::printAddrsig() {
+  object::SectionRef AddrsigSection;
+  for (auto Sec : Obj->sections()) {
+    StringRef Name;
+    Sec.getName(Name);
+    if (Name == ".llvm_addrsig") {
+      AddrsigSection = Sec;
+      break;
+    }
+  }
+
+  if (AddrsigSection == object::SectionRef())
+    return;
+
+  StringRef AddrsigContents;
+  AddrsigSection.getContents(AddrsigContents);
+  ArrayRef<uint8_t> AddrsigContentsArray(
+      reinterpret_cast<const uint8_t*>(AddrsigContents.data()),
+      AddrsigContents.size());
+
+  ListScope L(W, "Addrsig");
+  auto *Cur = reinterpret_cast<const uint8_t *>(AddrsigContents.begin());
+  auto *End = reinterpret_cast<const uint8_t *>(AddrsigContents.end());
+  while (Cur != End) {
+    unsigned Size;
+    const char *Err;
+    uint64_t SymIndex = decodeULEB128(Cur, &Size, End, &Err);
+    if (Err)
+      reportError(Err);
+
+    Expected<COFFSymbolRef> Sym = Obj->getSymbol(SymIndex);
+    StringRef SymName;
+    std::error_code EC = errorToErrorCode(Sym.takeError());
+    if (EC || (EC = Obj->getSymbolName(*Sym, SymName))) {
+      SymName = "";
+      error(EC);
+    }
+
+    W.printNumber("Sym", SymName, SymIndex);
+    Cur += Size;
+  }
 }
 
 void llvm::dumpCodeViewMergedTypes(
