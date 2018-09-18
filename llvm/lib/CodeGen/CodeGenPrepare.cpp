@@ -278,7 +278,7 @@ class TypePromotionTransaction;
     /// Keep track of GEPs accessing the same data structures such as structs or
     /// arrays that are candidates to be split later because of their large
     /// size.
-    DenseMap<
+    MapVector<
         AssertingVH<Value>,
         SmallVector<std::pair<AssertingVH<GetElementPtrInst>, int64_t>, 32>>
         LargeOffsetGEPMap;
@@ -1405,6 +1405,7 @@ SinkShiftAndTruncate(BinaryOperator *ShiftI, Instruction *User, ConstantInt *CI,
       else
         InsertedShift = BinaryOperator::CreateLShr(ShiftI->getOperand(0), CI,
                                                    "", &*InsertPt);
+      InsertedShift->setDebugLoc(ShiftI->getDebugLoc());
 
       // Sink the trunc
       BasicBlock::iterator TruncInsertPt = TruncUserBB->getFirstInsertionPt();
@@ -1413,6 +1414,7 @@ SinkShiftAndTruncate(BinaryOperator *ShiftI, Instruction *User, ConstantInt *CI,
 
       InsertedTrunc = CastInst::Create(TruncI->getOpcode(), InsertedShift,
                                        TruncI->getType(), "", &*TruncInsertPt);
+      InsertedTrunc->setDebugLoc(TruncI->getDebugLoc());
 
       MadeChange = true;
 
@@ -1504,6 +1506,7 @@ static bool OptimizeExtractBits(BinaryOperator *ShiftI, ConstantInt *CI,
       else
         InsertedShift = BinaryOperator::CreateLShr(ShiftI->getOperand(0), CI,
                                                    "", &*InsertPt);
+      InsertedShift->setDebugLoc(ShiftI->getDebugLoc());
 
       MadeChange = true;
     }
@@ -1513,8 +1516,10 @@ static bool OptimizeExtractBits(BinaryOperator *ShiftI, ConstantInt *CI,
   }
 
   // If we removed all uses, nuke the shift.
-  if (ShiftI->use_empty())
+  if (ShiftI->use_empty()) {
+    salvageDebugInfo(*ShiftI);
     ShiftI->eraseFromParent();
+  }
 
   return MadeChange;
 }
@@ -5602,10 +5607,9 @@ bool CodeGenPrepare::optimizeSelectInst(SelectInst *SI) {
   // Find all consecutive select instructions that share the same condition.
   SmallVector<SelectInst *, 2> ASI;
   ASI.push_back(SI);
-  for (Instruction *NextInst = SI->getNextNonDebugInstruction();
-       NextInst != SI->getParent()->getTerminator();
-       NextInst = NextInst->getNextNonDebugInstruction()) {
-    SelectInst *I = dyn_cast<SelectInst>(NextInst);
+  for (BasicBlock::iterator It = ++BasicBlock::iterator(SI);
+       It != SI->getParent()->end(); ++It) {
+    SelectInst *I = dyn_cast<SelectInst>(&*It);
     if (I && SI->getCondition() == I->getCondition()) {
       ASI.push_back(I);
     } else {

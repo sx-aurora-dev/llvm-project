@@ -497,6 +497,8 @@ static codegenoptions::DebugInfoKind DebugLevelToInfoKind(const Arg &A) {
   if (A.getOption().matches(options::OPT_gline_tables_only) ||
       A.getOption().matches(options::OPT_ggdb1))
     return codegenoptions::DebugLineTablesOnly;
+  if (A.getOption().matches(options::OPT_gline_directives_only))
+    return codegenoptions::DebugDirectivesOnly;
   return codegenoptions::LimitedDebugInfo;
 }
 
@@ -893,6 +895,9 @@ static void RenderDebugEnablingArgs(const ArgList &Args, ArgStringList &CmdArgs,
                                     unsigned DwarfVersion,
                                     llvm::DebuggerKind DebuggerTuning) {
   switch (DebugInfoKind) {
+  case codegenoptions::DebugDirectivesOnly:
+    CmdArgs.push_back("-debug-info-kind=line-directives-only");
+    break;
   case codegenoptions::DebugLineTablesOnly:
     CmdArgs.push_back("-debug-info-kind=line-tables-only");
     break;
@@ -1104,10 +1109,19 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
       StringRef ThroughHeader = YcArg ? YcArg->getValue() : YuArg->getValue();
       if (!isa<PrecompileJobAction>(JA)) {
         CmdArgs.push_back("-include-pch");
-        CmdArgs.push_back(Args.MakeArgString(D.GetClPchPath(C, ThroughHeader)));
+        CmdArgs.push_back(Args.MakeArgString(D.GetClPchPath(
+            C, !ThroughHeader.empty()
+                   ? ThroughHeader
+                   : llvm::sys::path::filename(Inputs[0].getBaseInput()))));
       }
-      CmdArgs.push_back(
-          Args.MakeArgString(Twine("-pch-through-header=") + ThroughHeader));
+
+      if (ThroughHeader.empty()) {
+        CmdArgs.push_back(Args.MakeArgString(
+            Twine("-pch-through-hdrstop-") + (YcArg ? "create" : "use")));
+      } else {
+        CmdArgs.push_back(
+            Args.MakeArgString(Twine("-pch-through-header=") + ThroughHeader));
+      }
     }
   }
 
@@ -2259,8 +2273,6 @@ static void RenderAnalyzerOptions(const ArgList &Args, ArgStringList &CmdArgs,
   // Treat blocks as analysis entry points.
   CmdArgs.push_back("-analyzer-opt-analyze-nested-blocks");
 
-  CmdArgs.push_back("-analyzer-eagerly-assume");
-
   // Add default argument set.
   if (!Args.hasArg(options::OPT__analyzer_no_default_checks)) {
     CmdArgs.push_back("-analyzer-checker=core");
@@ -2956,6 +2968,7 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
         if (SplitDWARFArg) {
           if (A->getIndex() > SplitDWARFArg->getIndex()) {
             if (DebugInfoKind == codegenoptions::NoDebugInfo ||
+                DebugInfoKind == codegenoptions::DebugDirectivesOnly ||
                 (DebugInfoKind == codegenoptions::DebugLineTablesOnly &&
                  SplitDWARFInlining))
               SplitDWARFArg = nullptr;
@@ -3007,6 +3020,10 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
       DebugInfoKind != codegenoptions::NoDebugInfo)
     DWARFVersion = TC.GetDefaultDwarfVersion();
 
+  // -gline-directives-only supported only for the DWARF debug info.
+  if (DWARFVersion == 0 && DebugInfoKind == codegenoptions::DebugDirectivesOnly)
+    DebugInfoKind = codegenoptions::NoDebugInfo;
+
   // We ignore flag -gstrict-dwarf for now.
   // And we handle flag -grecord-gcc-switches later with DWARFDebugFlags.
   Args.ClaimAllArgs(options::OPT_g_flags_Group);
@@ -3024,10 +3041,11 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
     CmdArgs.push_back("-dwarf-column-info");
 
   // FIXME: Move backend command line options to the module.
-  // If -gline-tables-only is the last option it wins.
+  // If -gline-tables-only or -gline-directives-only is the last option it wins.
   if (const Arg *A = Args.getLastArg(options::OPT_gmodules))
     if (checkDebugInfoOption(A, Args, D, TC)) {
-      if (DebugInfoKind != codegenoptions::DebugLineTablesOnly) {
+      if (DebugInfoKind != codegenoptions::DebugLineTablesOnly &&
+          DebugInfoKind != codegenoptions::DebugDirectivesOnly) {
         DebugInfoKind = codegenoptions::LimitedDebugInfo;
         CmdArgs.push_back("-dwarf-ext-refs");
         CmdArgs.push_back("-fmodule-format=obj");
@@ -3089,7 +3107,7 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
   const auto *PubnamesArg =
       Args.getLastArg(options::OPT_ggnu_pubnames, options::OPT_gno_gnu_pubnames,
                       options::OPT_gpubnames, options::OPT_gno_pubnames);
-  if (SplitDWARFArg ||
+  if (SplitDWARFArg || DebuggerTuning == llvm::DebuggerKind::LLDB ||
       (PubnamesArg && checkDebugInfoOption(PubnamesArg, Args, D, TC)))
     if (!PubnamesArg ||
         (!PubnamesArg->getOption().matches(options::OPT_gno_gnu_pubnames) &&
@@ -3152,17 +3170,54 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Check number of inputs for sanity. We need at least one input.
   assert(Inputs.size() >= 1 && "Must have at least one input.");
-  const InputInfo &Input = Inputs[0];
   // CUDA/HIP compilation may have multiple inputs (source file + results of
   // device-side compilations). OpenMP device jobs also take the host IR as a
-  // second input. All other jobs are expected to have exactly one
-  // input.
+  // second input. Module precompilation accepts a list of header files to
+  // include as part of the module. All other jobs are expected to have exactly
+  // one input.
   bool IsCuda = JA.isOffloading(Action::OFK_Cuda);
   bool IsHIP = JA.isOffloading(Action::OFK_HIP);
   bool IsOpenMPDevice = JA.isDeviceOffloading(Action::OFK_OpenMP);
-  assert((IsCuda || IsHIP || (IsOpenMPDevice && Inputs.size() == 2) ||
-          Inputs.size() == 1) &&
-         "Unable to handle multiple inputs.");
+  bool IsModulePrecompile =
+      isa<PrecompileJobAction>(JA) && JA.getType() == types::TY_ModuleFile;
+  bool IsHeaderModulePrecompile = isa<HeaderModulePrecompileJobAction>(JA);
+
+  // A header module compilation doesn't have a main input file, so invent a
+  // fake one as a placeholder.
+  // FIXME: Pick the language based on the header file language.
+  const char *ModuleName = [&]{
+    auto *ModuleNameArg = Args.getLastArg(options::OPT_fmodule_name_EQ);
+    return ModuleNameArg ? ModuleNameArg->getValue() : "";
+  }();
+  InputInfo HeaderModuleInput(types::TY_CXXModule, ModuleName, ModuleName);
+
+  const InputInfo &Input =
+      IsHeaderModulePrecompile ? HeaderModuleInput : Inputs[0];
+
+  InputInfoList ModuleHeaderInputs;
+  const InputInfo *CudaDeviceInput = nullptr;
+  const InputInfo *OpenMPDeviceInput = nullptr;
+  for (const InputInfo &I : Inputs) {
+    if (&I == &Input) {
+      // This is the primary input.
+    } else if (IsModulePrecompile &&
+               types::getPrecompiledType(I.getType()) == types::TY_PCH) {
+      types::ID Expected =
+          types::lookupHeaderTypeForSourceType(Inputs[0].getType());
+      if (I.getType() != Expected) {
+        D.Diag(diag::err_drv_module_header_wrong_kind)
+            << I.getFilename() << types::getTypeName(I.getType())
+            << types::getTypeName(Expected);
+      }
+      ModuleHeaderInputs.push_back(I);
+    } else if ((IsCuda || IsHIP) && !CudaDeviceInput) {
+      CudaDeviceInput = &I;
+    } else if (IsOpenMPDevice && !OpenMPDeviceInput) {
+      OpenMPDeviceInput = &I;
+    } else {
+      llvm_unreachable("unexpectedly given multiple inputs");
+    }
+  }
 
   const llvm::Triple *AuxTriple =
       IsCuda ? getToolChain().getAuxTriple() : nullptr;
@@ -3275,7 +3330,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     if (JA.getType() == types::TY_Nothing)
       CmdArgs.push_back("-fsyntax-only");
     else if (JA.getType() == types::TY_ModuleFile)
-      CmdArgs.push_back("-emit-module-interface");
+      CmdArgs.push_back(IsHeaderModulePrecompile
+                            ? "-emit-header-module"
+                            : "-emit-module-interface");
     else if (UsePCH)
       CmdArgs.push_back("-emit-pch");
     else
@@ -4067,8 +4124,16 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
-      Args.AddLastArg(CmdArgs, options::OPT_fopenmp_cuda_mode,
-                      options::OPT_fno_openmp_cuda_mode);
+      if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
+                       options::OPT_fno_openmp_cuda_mode, /*Default=*/false))
+        CmdArgs.push_back("-fopenmp-cuda-mode");
+
+      // When in OpenMP offloading mode with NVPTX target, check if full runtime
+      // is required.
+      if (Args.hasFlag(options::OPT_fopenmp_cuda_force_full_runtime,
+                       options::OPT_fno_openmp_cuda_force_full_runtime,
+                       /*Default=*/false))
+        CmdArgs.push_back("-fopenmp-cuda-force-full-runtime");
       break;
     default:
       // By default, if Clang doesn't know how to generate useful OpenMP code
@@ -4140,6 +4205,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                   options::OPT_fno_unroll_loops);
 
   Args.AddLastArg(CmdArgs, options::OPT_pthread);
+
+  Args.AddLastArg(CmdArgs, options::OPT_mspeculative_load_hardening,
+                  options::OPT_mno_speculative_load_hardening);
 
   RenderSSPOptions(getToolChain(), Args, CmdArgs, KernelOrKext);
 
@@ -4726,10 +4794,18 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   addDashXForInput(Args, Input, CmdArgs);
 
-  if (Input.isFilename())
-    CmdArgs.push_back(Input.getFilename());
-  else
-    Input.getInputArg().renderAsInput(Args, CmdArgs);
+  ArrayRef<InputInfo> FrontendInputs = Input;
+  if (IsHeaderModulePrecompile)
+    FrontendInputs = ModuleHeaderInputs;
+  else if (Input.isNothing())
+    FrontendInputs = {};
+
+  for (const InputInfo &Input : FrontendInputs) {
+    if (Input.isFilename())
+      CmdArgs.push_back(Input.getFilename());
+    else
+      Input.getInputArg().renderAsInput(Args, CmdArgs);
+  }
 
   Args.AddAllArgs(CmdArgs, options::OPT_undef);
 
@@ -4762,10 +4838,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (IsCuda) {
     // Host-side cuda compilation receives all device-side outputs in a single
     // fatbin as Inputs[1]. Include the binary with -fcuda-include-gpubinary.
-    if (Inputs.size() > 1) {
-      assert(Inputs.size() == 2 && "More than one GPU binary!");
+    if (CudaDeviceInput) {
       CmdArgs.push_back("-fcuda-include-gpubinary");
-      CmdArgs.push_back(Inputs[1].getFilename());
+      CmdArgs.push_back(CudaDeviceInput->getFilename());
     }
 
     if (Args.hasFlag(options::OPT_fcuda_rdc, options::OPT_fno_cuda_rdc, false))
@@ -4782,9 +4857,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // only the relevant declarations are emitted.
   if (IsOpenMPDevice) {
     CmdArgs.push_back("-fopenmp-is-device");
-    if (Inputs.size() == 2) {
+    if (OpenMPDeviceInput) {
       CmdArgs.push_back("-fopenmp-host-ir-file-path");
-      CmdArgs.push_back(Args.MakeArgString(Inputs.back().getFilename()));
+      CmdArgs.push_back(Args.MakeArgString(OpenMPDeviceInput->getFilename()));
     }
   }
 
@@ -4883,7 +4958,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (Args.hasFlag(options::OPT_faddrsig, options::OPT_fno_addrsig,
-                   getToolChain().getTriple().isOSBinFormatELF() &&
+                   (getToolChain().getTriple().isOSBinFormatELF() ||
+                    getToolChain().getTriple().isOSBinFormatCOFF()) &&
                        getToolChain().useIntegratedAs()))
     CmdArgs.push_back("-faddrsig");
 
@@ -4906,7 +4982,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (Arg *A = Args.getLastArg(options::OPT_pg))
-    if (Args.hasArg(options::OPT_fomit_frame_pointer))
+    if (Args.hasFlag(options::OPT_fomit_frame_pointer,
+                     options::OPT_fno_omit_frame_pointer, /*default=*/false))
       D.Diag(diag::err_drv_argument_not_allowed_with) << "-fomit-frame-pointer"
                                                       << A->getAsString(Args);
 

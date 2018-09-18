@@ -2124,16 +2124,25 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   }
   case Intrinsic::cos:
   case Intrinsic::amdgcn_cos: {
-    Value *SrcSrc;
+    Value *X;
     Value *Src = II->getArgOperand(0);
-    if (match(Src, m_FNeg(m_Value(SrcSrc))) ||
-        match(Src, m_FAbs(m_Value(SrcSrc)))) {
+    if (match(Src, m_FNeg(m_Value(X))) || match(Src, m_FAbs(m_Value(X)))) {
       // cos(-x) -> cos(x)
       // cos(fabs(x)) -> cos(x)
-      II->setArgOperand(0, SrcSrc);
+      II->setArgOperand(0, X);
       return II;
     }
-
+    break;
+  }
+  case Intrinsic::sin: {
+    Value *X;
+    if (match(II->getArgOperand(0), m_OneUse(m_FNeg(m_Value(X))))) {
+      // sin(-x) --> -sin(x)
+      Value *NewSin = Builder.CreateIntrinsic(Intrinsic::sin, { X }, II);
+      Instruction *FNeg = BinaryOperator::CreateFNeg(NewSin);
+      FNeg->copyFastMathFlags(II);
+      return FNeg;
+    }
     break;
   }
   case Intrinsic::ppc_altivec_lvx:
@@ -2920,16 +2929,10 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   case Intrinsic::x86_avx_blendv_ps_256:
   case Intrinsic::x86_avx_blendv_pd_256:
   case Intrinsic::x86_avx2_pblendvb: {
-    // Convert blendv* to vector selects if the mask is constant.
-    // This optimization is convoluted because the intrinsic is defined as
-    // getting a vector of floats or doubles for the ps and pd versions.
-    // FIXME: That should be changed.
-
+    // fold (blend A, A, Mask) -> A
     Value *Op0 = II->getArgOperand(0);
     Value *Op1 = II->getArgOperand(1);
     Value *Mask = II->getArgOperand(2);
-
-    // fold (blend A, A, Mask) -> A
     if (Op0 == Op1)
       return replaceInstUsesWith(CI, Op0);
 
@@ -2942,6 +2945,20 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       Constant *NewSelector = getNegativeIsTrueBoolVec(ConstantMask);
       return SelectInst::Create(NewSelector, Op1, Op0, "blendv");
     }
+
+    // Convert to a vector select if we can bypass casts and find a boolean
+    // vector condition value.
+    Value *BoolVec;
+    if (match(peekThroughBitcast(Mask), m_SExt(m_Value(BoolVec)))) {
+      auto *VTy = dyn_cast<VectorType>(BoolVec->getType());
+      if (VTy && VTy->getScalarSizeInBits() == 1 &&
+          VTy->getVectorNumElements() == II->getType()->getVectorNumElements())
+        return SelectInst::Create(BoolVec, Op1, Op0);
+      // TODO: If we can find a boolean vector condition with less elements,
+      //       then we can form a vector select by bitcasting Op0/Op1 to a
+      //       vector type with wider elements and bitcasting the result.
+    }
+
     break;
   }
 
@@ -3280,6 +3297,13 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
 
       FCmp->takeName(II);
       return replaceInstUsesWith(*II, FCmp);
+    }
+
+    // fp_class (nnan x), qnan|snan|other -> fp_class (nnan x), other
+    if (((Mask & S_NAN) || (Mask & Q_NAN)) && isKnownNeverNaN(Src0, &TLI)) {
+      II->setArgOperand(1, ConstantInt::get(Src1->getType(),
+                                            Mask & ~(S_NAN | Q_NAN)));
+      return II;
     }
 
     const ConstantFP *CVal = dyn_cast<ConstantFP>(Src0);

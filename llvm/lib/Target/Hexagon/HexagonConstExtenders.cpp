@@ -730,21 +730,8 @@ bool HCE::ExtRoot::operator< (const HCE::ExtRoot &ER) const {
     }
     case MachineOperand::MO_ExternalSymbol:
       return StringRef(V.SymbolName) < StringRef(ER.V.SymbolName);
-    case MachineOperand::MO_GlobalAddress: {
-      // Global values may not have names, so compare their positions
-      // in the parent module.
-      const Module &M = *V.GV->getParent();
-      auto FindPos = [&M] (const GlobalValue &V) {
-        unsigned P = 0;
-        for (const GlobalValue &T : M.global_values()) {
-          if (&T == &V)
-            return P;
-          P++;
-        }
-        llvm_unreachable("Global value not found in module");
-      };
-      return FindPos(*V.GV) < FindPos(*ER.V.GV);
-    }
+    case MachineOperand::MO_GlobalAddress:
+      return V.GV->getGUID() < ER.V.GV->getGUID();
     case MachineOperand::MO_BlockAddress: {
       const BasicBlock *ThisB = V.BA->getBasicBlock();
       const BasicBlock *OtherB = ER.V.BA->getBasicBlock();
@@ -1221,6 +1208,12 @@ void HCE::recordExtender(MachineInstr &MI, unsigned OpNum) {
   }
 
   ED.UseMI = &MI;
+
+  // Ignore unnamed globals.
+  ExtRoot ER(ED.getOp());
+  if (ER.Kind == MachineOperand::MO_GlobalAddress)
+    if (ER.V.GV->getName().empty())
+      return;
   Extenders.push_back(ED);
 }
 
@@ -1715,6 +1708,15 @@ bool HCE::replaceInstrExpr(const ExtDesc &ED, const ExtenderInit &ExtI,
 
     // Clamp Diff to the 16 bit range.
     int32_t D = isInt<16>(Diff) ? Diff : (Diff > 0 ? 32767 : -32768);
+    if (Diff > 32767) {
+      // Split Diff into two values: one that is close to min/max int16,
+      // and the other being the rest, and such that both have the same
+      // "alignment" as Diff.
+      uint32_t UD = Diff;
+      OffsetRange R = getOffsetRange(MI.getOperand(0));
+      uint32_t A = std::min<uint32_t>(R.Align, 1u << countTrailingZeros(UD));
+      D &= ~(A-1);
+    }
     BuildMI(MBB, At, dl, HII->get(IdxOpc))
       .add(MI.getOperand(0))
       .add(MachineOperand(ExtR))

@@ -1199,6 +1199,8 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
   // Prefer likely predicted branches to selects on out-of-order cores.
   PredictableSelectIsExpensive = Subtarget->getSchedModel().isOutOfOrder();
 
+  setPrefLoopAlignment(Subtarget->getPrefLoopAlignment());
+
   setMinFunctionAlignment(Subtarget->isThumb() ? 1 : 2);
 }
 
@@ -3317,9 +3319,13 @@ SDValue ARMTargetLowering::LowerGlobalAddressWindows(SDValue Op,
   assert(!Subtarget->isROPI() && !Subtarget->isRWPI() &&
          "ROPI/RWPI not currently supported for Windows");
 
+  const TargetMachine &TM = getTargetMachine();
   const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
-  const ARMII::TOF TargetFlags =
-    (GV->hasDLLImportStorageClass() ? ARMII::MO_DLLIMPORT : ARMII::MO_NO_FLAG);
+  ARMII::TOF TargetFlags = ARMII::MO_NO_FLAG;
+  if (GV->hasDLLImportStorageClass())
+    TargetFlags = ARMII::MO_DLLIMPORT;
+  else if (!TM.shouldAssumeDSOLocal(*GV->getParent(), GV))
+    TargetFlags = ARMII::MO_COFFSTUB;
   EVT PtrVT = getPointerTy(DAG.getDataLayout());
   SDValue Result;
   SDLoc DL(Op);
@@ -3331,7 +3337,7 @@ SDValue ARMTargetLowering::LowerGlobalAddressWindows(SDValue Op,
   Result = DAG.getNode(ARMISD::Wrapper, DL, PtrVT,
                        DAG.getTargetGlobalAddress(GV, DL, PtrVT, /*Offset=*/0,
                                                   TargetFlags));
-  if (GV->hasDLLImportStorageClass())
+  if (TargetFlags & (ARMII::MO_DLLIMPORT | ARMII::MO_COFFSTUB))
     Result = DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), Result,
                          MachinePointerInfo::getGOT(DAG.getMachineFunction()));
   return Result;
@@ -14689,6 +14695,11 @@ Value *ARMTargetLowering::emitStoreConditional(IRBuilder<> &Builder, Value *Val,
       Strex, {Builder.CreateZExtOrBitCast(
                   Val, Strex->getFunctionType()->getParamType(0)),
               Addr});
+}
+
+
+bool ARMTargetLowering::alignLoopsWithOptSize() const {
+  return Subtarget->isMClass();
 }
 
 /// A helper function for determining the number of interleaved accesses we

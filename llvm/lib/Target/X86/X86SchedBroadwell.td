@@ -119,6 +119,8 @@ defm : BWWriteResPair<WriteIDiv16, [BWPort0, BWDivider], 25, [1, 10]>;
 defm : BWWriteResPair<WriteIDiv32, [BWPort0, BWDivider], 25, [1, 10]>;
 defm : BWWriteResPair<WriteIDiv64, [BWPort0, BWDivider], 25, [1, 10]>;
 
+defm : X86WriteRes<WriteCMPXCHG,[BWPort06, BWPort0156], 5, [2, 3], 5>;
+defm : X86WriteRes<WriteCMPXCHGRMW,[BWPort23, BWPort06, BWPort0156, BWPort237, BWPort4], 8, [1, 2, 1, 1, 1], 6>;
 defm : X86WriteRes<WriteBSWAP32,   [BWPort15], 1, [1], 1>;
 defm : X86WriteRes<WriteBSWAP64,   [BWPort06, BWPort15], 2, [1, 1], 2>;
 defm : X86WriteRes<WriteXCHG,      [BWPort0156], 2, [3], 3>;
@@ -156,9 +158,10 @@ defm : X86WriteRes<WriteSHDrrcl,[BWPort1,BWPort06,BWPort0156], 6, [1, 1, 2], 4>;
 defm : X86WriteRes<WriteSHDmri, [BWPort1,BWPort23,BWPort237,BWPort0156], 9, [1, 1, 1, 1], 4>;
 defm : X86WriteRes<WriteSHDmrcl,[BWPort1,BWPort23,BWPort237,BWPort06,BWPort0156], 11, [1, 1, 1, 1, 2], 6>;
 
-// BMI1 BEXTR, BMI2 BZHI
+// BMI1 BEXTR/BLS, BMI2 BZHI
 defm : BWWriteResPair<WriteBEXTR, [BWPort06,BWPort15], 2, [1,1], 2>;
-defm : BWWriteResPair<WriteBZHI, [BWPort15], 1>;
+defm : BWWriteResPair<WriteBLS,   [BWPort15], 1>;
+defm : BWWriteResPair<WriteBZHI,  [BWPort15], 1>;
 
 // Loads, stores, and moves, not folded with other operations.
 defm : X86WriteRes<WriteLoad,    [BWPort23], 5, [1], 1>;
@@ -611,10 +614,7 @@ def BWWriteResGroup7 : SchedWriteRes<[BWPort15]> {
   let NumMicroOps = 1;
   let ResourceCycles = [1];
 }
-def: InstRW<[BWWriteResGroup7], (instregex "ANDN(32|64)rr",
-                                           "BLSI(32|64)rr",
-                                           "BLSMSK(32|64)rr",
-                                           "BLSR(32|64)rr")>;
+def: InstRW<[BWWriteResGroup7], (instregex "ANDN(32|64)rr")>;
 
 def BWWriteResGroup8 : SchedWriteRes<[BWPort015]> {
   let Latency = 1;
@@ -939,13 +939,6 @@ def BWWriteResGroup55 : SchedWriteRes<[BWPort06,BWPort0156]> {
 }
 def: InstRW<[BWWriteResGroup55], (instrs XSETBV)>;
 
-def BWWriteResGroup56 : SchedWriteRes<[BWPort06,BWPort0156]> {
-  let Latency = 5;
-  let NumMicroOps = 5;
-  let ResourceCycles = [2,3];
-}
-def: InstRW<[BWWriteResGroup56], (instregex "CMPXCHG(8|16|32|64)rr")>;
-
 def BWWriteResGroup57 : SchedWriteRes<[BWPort4,BWPort237,BWPort0156]> {
   let Latency = 5;
   let NumMicroOps = 6;
@@ -1010,9 +1003,6 @@ def BWWriteResGroup64 : SchedWriteRes<[BWPort23,BWPort15]> {
   let ResourceCycles = [1,1];
 }
 def: InstRW<[BWWriteResGroup64], (instregex "ANDN(32|64)rm",
-                                            "BLSI(32|64)rm",
-                                            "BLSMSK(32|64)rm",
-                                            "BLSR(32|64)rm",
                                             "MOVBE(16|32|64)rm")>;
 
 def BWWriteResGroup65 : SchedWriteRes<[BWPort23,BWPort015]> {
@@ -1214,8 +1204,7 @@ def BWWriteResGroup100 : SchedWriteRes<[BWPort4,BWPort23,BWPort237,BWPort06,BWPo
   let ResourceCycles = [1,1,1,2,1];
 }
 def : SchedAlias<WriteADCRMW, BWWriteResGroup100>;
-def: InstRW<[BWWriteResGroup100], (instregex "CMPXCHG(8|16|32|64)rm",
-                                             "ROL(8|16|32|64)mCL",
+def: InstRW<[BWWriteResGroup100], (instregex "ROL(8|16|32|64)mCL",
                                              "SAR(8|16|32|64)mCL",
                                              "SHL(8|16|32|64)mCL",
                                              "SHR(8|16|32|64)mCL")>;

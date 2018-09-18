@@ -1,4 +1,4 @@
-//===-- hwasan_thread.h -------------------------------------------*- C++ -*-===//
+//===-- hwasan_thread.h -----------------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -19,19 +19,17 @@
 
 namespace __hwasan {
 
-class HwasanThread {
+class Thread {
  public:
-  static HwasanThread *Create(thread_callback_t start_routine, void *arg);
+  static void Create();  // Must be called from the thread itself.
   void Destroy();
-
-  void Init();
-  thread_return_t ThreadStart();
 
   uptr stack_top() { return stack_top_; }
   uptr stack_bottom() { return stack_bottom_; }
+  uptr stack_size() { return stack_top() - stack_bottom(); }
   uptr tls_begin() { return tls_begin_; }
   uptr tls_end() { return tls_end_; }
-  bool IsMainThread() { return start_routine_ == nullptr; }
+  bool IsMainThread() { return unique_id_ == 0; }
 
   bool AddrIsInStack(uptr addr) {
     return addr >= stack_bottom_ && addr < stack_top_;
@@ -49,19 +47,53 @@ class HwasanThread {
   void EnterInterceptorScope() { in_interceptor_scope_++; }
   void LeaveInterceptorScope() { in_interceptor_scope_--; }
 
-  HwasanThreadLocalMallocStorage &malloc_storage() { return malloc_storage_; }
+  AllocatorCache *allocator_cache() { return &allocator_cache_; }
+  HeapAllocationsRingBuffer *heap_allocations() {
+    return heap_allocations_;
+  }
 
   tag_t GenerateRandomTag();
 
   int destructor_iterations_;
+  void DisableTagging() { tagging_disabled_++; }
+  void EnableTagging() { tagging_disabled_--; }
+  bool TaggingIsDisabled() const { return tagging_disabled_; }
+
+  template <class CB>
+  static void VisitAllLiveThreads(CB cb) {
+    SpinMutexLock l(&thread_list_mutex);
+    Thread *t = thread_list_head;
+    while (t) {
+      cb(t);
+      t = t->next_;
+    }
+  }
+
+  u64 unique_id() const { return unique_id_; }
+  void Announce() {
+    if (announced_) return;
+    announced_ = true;
+    Print("Thread: ");
+  }
+
+  struct ThreadStats {
+    uptr n_live_threads;
+    uptr total_stack_size;
+  };
+
+  static ThreadStats GetThreadStats() {
+    SpinMutexLock l(&thread_list_mutex);
+    return thread_stats;
+  }
+
+  static uptr MemoryUsedPerThread();
 
  private:
-  // NOTE: There is no HwasanThread constructor. It is allocated
+  // NOTE: There is no Thread constructor. It is allocated
   // via mmap() and *must* be valid in zero-initialized state.
-  void SetThreadStackAndTls();
+  void Init();
   void ClearShadowForThreadStackAndTLS();
-  thread_callback_t start_routine_;
-  void *arg_;
+  void Print(const char *prefix);
   uptr stack_top_;
   uptr stack_bottom_;
   uptr tls_begin_;
@@ -74,11 +106,30 @@ class HwasanThread {
   u32 random_state_;
   u32 random_buffer_;
 
-  HwasanThreadLocalMallocStorage malloc_storage_;
+  AllocatorCache allocator_cache_;
+  HeapAllocationsRingBuffer *heap_allocations_;
+
+  static void InsertIntoThreadList(Thread *t);
+  static void RemoveFromThreadList(Thread *t);
+  Thread *next_;  // All live threads form a linked list.
+  static SpinMutex thread_list_mutex;
+  static Thread *thread_list_head;
+  static ThreadStats thread_stats;
+
+  u64 unique_id_;  // counting from zero.
+
+  u32 tagging_disabled_;  // if non-zero, malloc uses zero tag in this thread.
+
+  bool announced_;
 };
 
-HwasanThread *GetCurrentThread();
-void SetCurrentThread(HwasanThread *t);
+Thread *GetCurrentThread();
+void SetCurrentThread(Thread *t);
+
+struct ScopedTaggingDisabler {
+  ScopedTaggingDisabler() { GetCurrentThread()->DisableTagging(); }
+  ~ScopedTaggingDisabler() { GetCurrentThread()->EnableTagging(); }
+};
 
 } // namespace __hwasan
 

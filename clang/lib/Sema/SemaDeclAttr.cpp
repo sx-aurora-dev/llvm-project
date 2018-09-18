@@ -227,9 +227,13 @@ static SourceLocation getAttrLoc(const ParsedAttr &AL) { return AL.getLoc(); }
 
 /// If Expr is a valid integer constant, get the value of the integer
 /// expression and return success or failure. May output an error.
+///
+/// Negative argument is implicitly converted to unsigned, unless
+/// \p StrictlyUnsigned is true.
 template <typename AttrInfo>
 static bool checkUInt32Argument(Sema &S, const AttrInfo &AI, const Expr *Expr,
-                                uint32_t &Val, unsigned Idx = UINT_MAX) {
+                                uint32_t &Val, unsigned Idx = UINT_MAX,
+                                bool StrictlyUnsigned = false) {
   llvm::APSInt I(32);
   if (Expr->isTypeDependent() || Expr->isValueDependent() ||
       !Expr->isIntegerConstantExpr(I, S.Context)) {
@@ -246,6 +250,12 @@ static bool checkUInt32Argument(Sema &S, const AttrInfo &AI, const Expr *Expr,
   if (!I.isIntN(32)) {
     S.Diag(Expr->getExprLoc(), diag::err_ice_too_large)
         << I.toString(10, false) << 32 << /* Unsigned */ 1;
+    return false;
+  }
+
+  if (StrictlyUnsigned && I.isSigned() && I.isNegative()) {
+    S.Diag(getAttrLoc(AI), diag::err_attribute_requires_positive_integer)
+        << AI << /*non-negative*/ 1;
     return false;
   }
 
@@ -1833,6 +1843,14 @@ static void handleRestrictAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
 
 static void handleCPUSpecificAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   FunctionDecl *FD = cast<FunctionDecl>(D);
+
+  if (const auto *MD = dyn_cast<CXXMethodDecl>(D)) {
+    if (MD->getParent()->isLambda()) {
+      S.Diag(AL.getLoc(), diag::err_attribute_dll_lambda) << AL;
+      return;
+    }
+  }
+
   if (!checkAttributeAtLeastNumArgs(S, AL, 1))
     return;
 
@@ -2766,7 +2784,8 @@ static void handleWorkGroupSize(Sema &S, Decl *D, const ParsedAttr &AL) {
   uint32_t WGSize[3];
   for (unsigned i = 0; i < 3; ++i) {
     const Expr *E = AL.getArgAsExpr(i);
-    if (!checkUInt32Argument(S, AL, E, WGSize[i], i))
+    if (!checkUInt32Argument(S, AL, E, WGSize[i], i,
+                             /*StrictlyUnsigned=*/true))
       return;
     if (WGSize[i] == 0) {
       S.Diag(AL.getLoc(), diag::err_attribute_argument_is_zero)
@@ -5890,10 +5909,16 @@ static void handleOpenCLAccessAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
 
   // Check if there is only one access qualifier.
   if (D->hasAttr<OpenCLAccessAttr>()) {
-    S.Diag(AL.getLoc(), diag::err_opencl_multiple_access_qualifiers)
-        << D->getSourceRange();
-    D->setInvalidDecl(true);
-    return;
+    if (D->getAttr<OpenCLAccessAttr>()->getSemanticSpelling() ==
+        AL.getSemanticSpelling()) {
+      S.Diag(AL.getLoc(), diag::warn_duplicate_declspec)
+          << AL.getName()->getName() << AL.getRange();
+    } else {
+      S.Diag(AL.getLoc(), diag::err_opencl_multiple_access_qualifiers)
+          << D->getSourceRange();
+      D->setInvalidDecl(true);
+      return;
+    }
   }
 
   // OpenCL v2.0 s6.6 - read_write can be used for image types to specify that an
@@ -6943,8 +6968,12 @@ static const AvailabilityAttr *getAttrForPlatform(ASTContext &Context,
 /// \param D The declaration to check.
 /// \param Message If non-null, this will be populated with the message from
 /// the availability attribute that is selected.
+/// \param ClassReceiver If we're checking the the method of a class message
+/// send, the class. Otherwise nullptr.
 static std::pair<AvailabilityResult, const NamedDecl *>
-ShouldDiagnoseAvailabilityOfDecl(const NamedDecl *D, std::string *Message) {
+ShouldDiagnoseAvailabilityOfDecl(Sema &S, const NamedDecl *D,
+                                 std::string *Message,
+                                 ObjCInterfaceDecl *ClassReceiver) {
   AvailabilityResult Result = D->getAvailability(Message);
 
   // For typedefs, if the typedef declaration appears available look
@@ -6976,6 +7005,20 @@ ShouldDiagnoseAvailabilityOfDecl(const NamedDecl *D, std::string *Message) {
         D = TheEnumDecl;
       }
     }
+
+  // For +new, infer availability from -init.
+  if (const auto *MD = dyn_cast<ObjCMethodDecl>(D)) {
+    if (S.NSAPIObj && ClassReceiver) {
+      ObjCMethodDecl *Init = ClassReceiver->lookupInstanceMethod(
+          S.NSAPIObj->getInitSelector());
+      if (Init && Result == AR_Available && MD->isClassMethod() &&
+          MD->getSelector() == S.NSAPIObj->getNewSelector() &&
+          MD->definedInNSObject(S.getASTContext())) {
+        Result = Init->getAvailability(Message);
+        D = Init;
+      }
+    }
+  }
 
   return {Result, D};
 }
@@ -7565,7 +7608,8 @@ class DiagnoseUnguardedAvailability
   SmallVector<VersionTuple, 8> AvailabilityStack;
   SmallVector<const Stmt *, 16> StmtStack;
 
-  void DiagnoseDeclAvailability(NamedDecl *D, SourceRange Range);
+  void DiagnoseDeclAvailability(NamedDecl *D, SourceRange Range,
+                                ObjCInterfaceDecl *ClassReceiver = nullptr);
 
 public:
   DiagnoseUnguardedAvailability(Sema &SemaRef, Decl *Ctx)
@@ -7607,9 +7651,15 @@ public:
   }
 
   bool VisitObjCMessageExpr(ObjCMessageExpr *Msg) {
-    if (ObjCMethodDecl *D = Msg->getMethodDecl())
+    if (ObjCMethodDecl *D = Msg->getMethodDecl()) {
+      ObjCInterfaceDecl *ID = nullptr;
+      QualType ReceiverTy = Msg->getClassReceiver();
+      if (!ReceiverTy.isNull() && ReceiverTy->getAsObjCInterfaceType())
+        ID = ReceiverTy->getAsObjCInterfaceType()->getInterface();
+
       DiagnoseDeclAvailability(
-          D, SourceRange(Msg->getSelectorStartLoc(), Msg->getEndLoc()));
+          D, SourceRange(Msg->getSelectorStartLoc(), Msg->getEndLoc()), ID);
+    }
     return true;
   }
 
@@ -7635,11 +7685,11 @@ public:
 };
 
 void DiagnoseUnguardedAvailability::DiagnoseDeclAvailability(
-    NamedDecl *D, SourceRange Range) {
+    NamedDecl *D, SourceRange Range, ObjCInterfaceDecl *ReceiverClass) {
   AvailabilityResult Result;
   const NamedDecl *OffendingDecl;
   std::tie(Result, OffendingDecl) =
-    ShouldDiagnoseAvailabilityOfDecl(D, nullptr);
+      ShouldDiagnoseAvailabilityOfDecl(SemaRef, D, nullptr, ReceiverClass);
   if (Result != AR_Available) {
     // All other diagnostic kinds have already been handled in
     // DiagnoseAvailabilityOfDecl.
@@ -7821,12 +7871,14 @@ void Sema::DiagnoseAvailabilityOfDecl(NamedDecl *D,
                                       ArrayRef<SourceLocation> Locs,
                                       const ObjCInterfaceDecl *UnknownObjCClass,
                                       bool ObjCPropertyAccess,
-                                      bool AvoidPartialAvailabilityChecks) {
+                                      bool AvoidPartialAvailabilityChecks,
+                                      ObjCInterfaceDecl *ClassReceiver) {
   std::string Message;
   AvailabilityResult Result;
   const NamedDecl* OffendingDecl;
   // See if this declaration is unavailable, deprecated, or partial.
-  std::tie(Result, OffendingDecl) = ShouldDiagnoseAvailabilityOfDecl(D, &Message);
+  std::tie(Result, OffendingDecl) =
+      ShouldDiagnoseAvailabilityOfDecl(*this, D, &Message, ClassReceiver);
   if (Result == AR_Available)
     return;
 

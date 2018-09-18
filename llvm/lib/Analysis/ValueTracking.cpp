@@ -26,6 +26,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/Loads.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -1902,8 +1903,7 @@ static bool isKnownNonNullFromDominatingCondition(const Value *V,
           BasicBlockEdge Edge(BI->getParent(), NonNullSuccessor);
           if (Edge.isSingleEdge() && DT->dominates(Edge, CtxI->getParent()))
             return true;
-        } else if (Pred == ICmpInst::ICMP_NE &&
-                   match(Curr, m_Intrinsic<Intrinsic::experimental_guard>()) &&
+        } else if (Pred == ICmpInst::ICMP_NE && isGuard(Curr) &&
                    DT->dominates(cast<Instruction>(Curr), CtxI)) {
           return true;
         }
@@ -2213,7 +2213,9 @@ bool MaskedValueIsZero(const Value *V, const APInt &Mask, unsigned Depth,
 // Returns the input and lower/upper bounds.
 static bool isSignedMinMaxClamp(const Value *Select, const Value *&In,
                                 const APInt *&CLow, const APInt *&CHigh) {
-  assert(isa<SelectInst>(Select) && "Input should be a SelectInst!");
+  assert(isa<Operator>(Select) &&
+         cast<Operator>(Select)->getOpcode() == Instruction::Select &&
+         "Input should be a Select!");
 
   const Value *LHS, *RHS, *LHS2, *RHS2;
   SelectPatternFlavor SPF = matchSelectPattern(Select, LHS, RHS).Flavor;
