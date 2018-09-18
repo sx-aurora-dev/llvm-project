@@ -231,7 +231,9 @@ public:
   /// Get a DIE given an exact offset.
   DWARFDie getDIEForOffset(uint32_t Offset);
 
-  unsigned getMaxVersion() const { return MaxVersion; }
+  unsigned getMaxVersion(uint16_t DefaultVersion = 0) const {
+    return MaxVersion ? MaxVersion : DefaultVersion;
+  }
 
   void setMaxVersionIfGreater(unsigned Version) {
     if (Version > MaxVersion)
@@ -346,6 +348,9 @@ public:
   /// Get address size from CUs.
   /// TODO: refactor compile_units() to make this const.
   uint8_t getCUAddrSize();
+
+  /// Dump Error as warning message to stderr.
+  static void dumpWarning(Error Warning);
 
 private:
   /// Return the compile unit which contains instruction with provided

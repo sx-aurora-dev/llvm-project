@@ -83,29 +83,31 @@ namespace {
 
 class DebugDirectoryChunk : public Chunk {
 public:
-  DebugDirectoryChunk(const std::vector<Chunk *> &R) : Records(R) {}
+  DebugDirectoryChunk(const std::vector<Chunk *> &R, bool WriteRepro)
+      : Records(R), WriteRepro(WriteRepro) {}
 
   size_t getSize() const override {
-    return Records.size() * sizeof(debug_directory);
+    return (Records.size() + int(WriteRepro)) * sizeof(debug_directory);
   }
 
   void writeTo(uint8_t *B) const override {
     auto *D = reinterpret_cast<debug_directory *>(B + OutputSectionOff);
 
     for (const Chunk *Record : Records) {
-      D->Characteristics = 0;
-      D->TimeDateStamp = 0;
-      D->MajorVersion = 0;
-      D->MinorVersion = 0;
-      D->Type = COFF::IMAGE_DEBUG_TYPE_CODEVIEW;
-      D->SizeOfData = Record->getSize();
-      D->AddressOfRawData = Record->getRVA();
       OutputSection *OS = Record->getOutputSection();
       uint64_t Offs = OS->getFileOff() + (Record->getRVA() - OS->getRVA());
-      D->PointerToRawData = Offs;
-
-      TimeDateStamps.push_back(&D->TimeDateStamp);
+      fillEntry(D, COFF::IMAGE_DEBUG_TYPE_CODEVIEW, Record->getSize(),
+                Record->getRVA(), Offs);
       ++D;
+    }
+
+    if (WriteRepro) {
+      // FIXME: The COFF spec allows either a 0-sized entry to just say
+      // "the timestamp field is really a hash", or a 4-byte size field
+      // followed by that many bytes containing a longer hash (with the
+      // lowest 4 bytes usually being the timestamp in little-endian order).
+      // Consider storing the full 8 bytes computed by xxHash64 here.
+      fillEntry(D, COFF::IMAGE_DEBUG_TYPE_REPRO, 0, 0, 0);
     }
   }
 
@@ -115,8 +117,23 @@ public:
   }
 
 private:
+  void fillEntry(debug_directory *D, COFF::DebugType DebugType, size_t Size,
+                 uint64_t RVA, uint64_t Offs) const {
+    D->Characteristics = 0;
+    D->TimeDateStamp = 0;
+    D->MajorVersion = 0;
+    D->MinorVersion = 0;
+    D->Type = DebugType;
+    D->SizeOfData = Size;
+    D->AddressOfRawData = RVA;
+    D->PointerToRawData = Offs;
+
+    TimeDateStamps.push_back(&D->TimeDateStamp);
+  }
+
   mutable std::vector<support::ulittle32_t *> TimeDateStamps;
   const std::vector<Chunk *> &Records;
+  bool WriteRepro;
 };
 
 class CVDebugRecordChunk : public Chunk {
@@ -158,6 +175,8 @@ private:
   void openFile(StringRef OutputPath);
   template <typename PEHeaderTy> void writeHeader();
   void createSEHTable();
+  void createRuntimePseudoRelocs();
+  void insertCtorDtorSymbols();
   void createGuardCFTables();
   void markSymbolsForRVATable(ObjFile *File,
                               ArrayRef<SectionChunk *> SymIdxChunks,
@@ -209,6 +228,8 @@ private:
   OutputSection *DidatSec;
   OutputSection *RsrcSec;
   OutputSection *RelocSec;
+  OutputSection *CtorsSec;
+  OutputSection *DtorsSec;
 
   // The first and last .pdata sections in the output file.
   //
@@ -234,6 +255,11 @@ void writeResult() { Writer().run(); }
 
 void OutputSection::addChunk(Chunk *C) {
   Chunks.push_back(C);
+  C->setOutputSection(this);
+}
+
+void OutputSection::insertChunkAtStart(Chunk *C) {
+  Chunks.insert(Chunks.begin(), C);
   C->setOutputSection(this);
 }
 
@@ -429,12 +455,14 @@ void Writer::createSections() {
   DidatSec = CreateSection(".didat", DATA | R);
   RsrcSec = CreateSection(".rsrc", DATA | R);
   RelocSec = CreateSection(".reloc", DATA | DISCARDABLE | R);
+  CtorsSec = CreateSection(".ctors", DATA | R | W);
+  DtorsSec = CreateSection(".dtors", DATA | R | W);
 
   // Then bin chunks by name and output characteristics.
   std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> Map;
   for (Chunk *C : Symtab->getChunks()) {
     auto *SC = dyn_cast<SectionChunk>(C);
-    if (SC && !SC->isLive()) {
+    if (SC && !SC->Live) {
       if (Config->Verbose)
         SC->printDiscardedMessage();
       continue;
@@ -451,7 +479,7 @@ void Writer::createSections() {
   // '$' and all following characters in input section names are
   // discarded when determining output section. So, .text$foo
   // contributes to .text, for example. See PE/COFF spec 3.2.
-  for (auto Pair : Map) {
+  for (auto &Pair : Map) {
     StringRef Name = getOutputSectionName(Pair.first.first);
     uint32_t OutChars = Pair.first.second;
 
@@ -499,20 +527,20 @@ void Writer::createMiscChunks() {
   }
 
   // Create Debug Information Chunks
+  OutputSection *DebugInfoSec = Config->MinGW ? BuildidSec : RdataSec;
+  if (Config->Debug || Config->Repro) {
+    DebugDirectory = make<DebugDirectoryChunk>(DebugRecords, Config->Repro);
+    DebugInfoSec->addChunk(DebugDirectory);
+  }
+
   if (Config->Debug) {
-    DebugDirectory = make<DebugDirectoryChunk>(DebugRecords);
-
-    OutputSection *DebugInfoSec = Config->MinGW ? BuildidSec : RdataSec;
-
     // Make a CVDebugRecordChunk even when /DEBUG:CV is not specified.  We
     // output a PDB no matter what, and this chunk provides the only means of
     // allowing a debugger to match a PDB and an executable.  So we need it even
     // if we're ultimately not going to write CodeView data to the PDB.
-    auto *CVChunk = make<CVDebugRecordChunk>();
-    BuildId = CVChunk;
-    DebugRecords.push_back(CVChunk);
+    BuildId = make<CVDebugRecordChunk>();
+    DebugRecords.push_back(BuildId);
 
-    DebugInfoSec->addChunk(DebugDirectory);
     for (Chunk *C : DebugRecords)
       DebugInfoSec->addChunk(C);
   }
@@ -524,6 +552,12 @@ void Writer::createMiscChunks() {
   // Create /guard:cf tables if requested.
   if (Config->GuardCF != GuardCFLevel::Off)
     createGuardCFTables();
+
+  if (Config->MinGW) {
+    createRuntimePseudoRelocs();
+
+    insertCtorDtorSymbols();
+  }
 }
 
 // Create .idata section for the DLL-imported symbol table.
@@ -907,7 +941,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
                                 : sizeof(object::coff_tls_directory32);
     }
   }
-  if (Config->Debug) {
+  if (DebugDirectory) {
     Dir[DEBUG_DIRECTORY].RelativeVirtualAddress = DebugDirectory->getRVA();
     Dir[DEBUG_DIRECTORY].Size = DebugDirectory->getSize();
   }
@@ -1010,7 +1044,7 @@ static void markSymbolsWithRelocations(ObjFile *File,
     // We only care about live section chunks. Common chunks and other chunks
     // don't generally contain relocations.
     SectionChunk *SC = dyn_cast<SectionChunk>(C);
-    if (!SC || !SC->isLive())
+    if (!SC || !SC->Live)
       continue;
 
     for (const coff_relocation &Reloc : SC->Relocs) {
@@ -1093,7 +1127,7 @@ void Writer::markSymbolsForRVATable(ObjFile *File,
     // is associated with something like a vtable and the vtable is discarded.
     // In this case, the associated gfids section is discarded, and we don't
     // mark the virtual member functions as address-taken by the vtable.
-    if (!C->isLive())
+    if (!C->Live)
       continue;
 
     // Validate that the contents look like symbol table indices.
@@ -1138,6 +1172,56 @@ void Writer::maybeAddRVATable(SymbolRVASet TableSymbols, StringRef TableSym,
   Symbol *C = Symtab->findUnderscore(CountSym);
   replaceSymbol<DefinedSynthetic>(T, T->getName(), TableChunk);
   cast<DefinedAbsolute>(C)->setVA(TableChunk->getSize() / 4);
+}
+
+// MinGW specific. Gather all relocations that are imported from a DLL even
+// though the code didn't expect it to, produce the table that the runtime
+// uses for fixing them up, and provide the synthetic symbols that the
+// runtime uses for finding the table.
+void Writer::createRuntimePseudoRelocs() {
+  std::vector<RuntimePseudoReloc> Rels;
+
+  for (Chunk *C : Symtab->getChunks()) {
+    auto *SC = dyn_cast<SectionChunk>(C);
+    if (!SC || !SC->Live)
+      continue;
+    SC->getRuntimePseudoRelocs(Rels);
+  }
+
+  if (!Rels.empty())
+    log("Writing " + Twine(Rels.size()) + " runtime pseudo relocations");
+  PseudoRelocTableChunk *Table = make<PseudoRelocTableChunk>(Rels);
+  RdataSec->addChunk(Table);
+  EmptyChunk *EndOfList = make<EmptyChunk>();
+  RdataSec->addChunk(EndOfList);
+
+  Symbol *HeadSym = Symtab->findUnderscore("__RUNTIME_PSEUDO_RELOC_LIST__");
+  Symbol *EndSym = Symtab->findUnderscore("__RUNTIME_PSEUDO_RELOC_LIST_END__");
+  replaceSymbol<DefinedSynthetic>(HeadSym, HeadSym->getName(), Table);
+  replaceSymbol<DefinedSynthetic>(EndSym, EndSym->getName(), EndOfList);
+}
+
+// MinGW specific.
+// The MinGW .ctors and .dtors lists have sentinels at each end;
+// a (uintptr_t)-1 at the start and a (uintptr_t)0 at the end.
+// There's a symbol pointing to the start sentinel pointer, __CTOR_LIST__
+// and __DTOR_LIST__ respectively.
+void Writer::insertCtorDtorSymbols() {
+  AbsolutePointerChunk *CtorListHead = make<AbsolutePointerChunk>(-1);
+  AbsolutePointerChunk *CtorListEnd = make<AbsolutePointerChunk>(0);
+  AbsolutePointerChunk *DtorListHead = make<AbsolutePointerChunk>(-1);
+  AbsolutePointerChunk *DtorListEnd = make<AbsolutePointerChunk>(0);
+  CtorsSec->insertChunkAtStart(CtorListHead);
+  CtorsSec->addChunk(CtorListEnd);
+  DtorsSec->insertChunkAtStart(DtorListHead);
+  DtorsSec->addChunk(DtorListEnd);
+
+  Symbol *CtorListSym = Symtab->findUnderscore("__CTOR_LIST__");
+  Symbol *DtorListSym = Symtab->findUnderscore("__DTOR_LIST__");
+  replaceSymbol<DefinedSynthetic>(CtorListSym, CtorListSym->getName(),
+                                  CtorListHead);
+  replaceSymbol<DefinedSynthetic>(DtorListSym, DtorListSym->getName(),
+                                  DtorListHead);
 }
 
 // Handles /section options to allow users to overwrite

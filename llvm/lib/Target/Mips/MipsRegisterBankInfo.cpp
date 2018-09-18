@@ -84,6 +84,12 @@ MipsRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case G_LOAD:
   case G_STORE:
   case G_GEP:
+  case G_AND:
+  case G_OR:
+  case G_XOR:
+  case G_SHL:
+  case G_ASHR:
+  case G_LSHR:
     OperandsMapping = &Mips::ValueMappings[Mips::GPRIdx];
     break;
   case G_CONSTANT:
@@ -91,6 +97,12 @@ MipsRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case G_GLOBAL_VALUE:
     OperandsMapping =
         getOperandsMapping({&Mips::ValueMappings[Mips::GPRIdx], nullptr});
+    break;
+  case G_ICMP:
+    OperandsMapping =
+        getOperandsMapping({&Mips::ValueMappings[Mips::GPRIdx], nullptr,
+                            &Mips::ValueMappings[Mips::GPRIdx],
+                            &Mips::ValueMappings[Mips::GPRIdx]});
     break;
   default:
     return getInvalidInstructionMapping();

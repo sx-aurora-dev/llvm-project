@@ -575,6 +575,8 @@ class VectorType;
     bool isLegalInterleavedAccessType(VectorType *VecTy,
                                       const DataLayout &DL) const;
 
+    bool alignLoopsWithOptSize() const override;
+
     /// Returns the number of interleaved accesses that will be generated when
     /// lowering accesses of the given type.
     unsigned getNumInterleavedAccesses(VectorType *VecTy,
@@ -769,6 +771,8 @@ class VectorType;
     bool isUsedByReturnOnly(SDNode *N, SDValue &Chain) const override;
 
     bool mayBeEmittedAsTailCall(const CallInst *CI) const override;
+
+    bool shouldConsiderGEPOffsetSplit() const override { return true; }
 
     SDValue getCMOV(const SDLoc &dl, EVT VT, SDValue FalseVal, SDValue TrueVal,
                     SDValue ARMcc, SDValue CCR, SDValue Cmp,

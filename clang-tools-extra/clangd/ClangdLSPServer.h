@@ -26,8 +26,11 @@ namespace clangd {
 class JSONOutput;
 class SymbolIndex;
 
-/// This class provides implementation of an LSP server, glueing the JSON
-/// dispatch and ClangdServer together.
+/// This class exposes ClangdServer's capabilities via Language Server Protocol.
+///
+/// JSONRPCDispatcher binds the implemented ProtocolCallbacks methods
+/// (e.g. onInitialize) to corresponding JSON-RPC methods ("initialize").
+/// The server also supports $/cancelRequest (JSONRPCDispatcher provides this).
 class ClangdLSPServer : private DiagnosticsConsumer, private ProtocolCallbacks {
 public:
   /// If \p CompileCommandsDir has a value, compile_commands.json will be
@@ -67,6 +70,7 @@ private:
   void onCompletion(TextDocumentPositionParams &Params) override;
   void onSignatureHelp(TextDocumentPositionParams &Params) override;
   void onGoToDefinition(TextDocumentPositionParams &Params) override;
+  void onReference(ReferenceParams &Params) override;
   void onSwitchSourceHeader(TextDocumentIdentifier &Params) override;
   void onDocumentHighlight(TextDocumentPositionParams &Params) override;
   void onFileEvent(DidChangeWatchedFilesParams &Params) override;
@@ -168,7 +172,6 @@ private:
   // destructed instance of ClangdLSPServer.
   ClangdServer Server;
 };
-
 } // namespace clangd
 } // namespace clang
 

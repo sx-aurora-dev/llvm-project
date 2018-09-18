@@ -74,7 +74,7 @@ static void setConfigs(opt::InputArgList &Args);
 
 bool elf::link(ArrayRef<const char *> Args, bool CanExitEarly,
                raw_ostream &Error) {
-  errorHandler().LogName = sys::path::filename(Args[0]);
+  errorHandler().LogName = args::getFilenameWithoutExe(Args[0]);
   errorHandler().ErrorLimitExceededMsg =
       "too many errors emitted, stopping now (use "
       "-error-limit=0 to see all errors)";
@@ -340,7 +340,8 @@ static bool getZFlag(opt::InputArgList &Args, StringRef K1, StringRef K2,
 
 static bool isKnown(StringRef S) {
   return S == "combreloc" || S == "copyreloc" || S == "defs" ||
-         S == "execstack" || S == "hazardplt" || S == "initfirst" ||
+         S == "execstack" || S == "global" || S == "hazardplt" ||
+         S == "initfirst" || S == "interpose" ||
          S == "keep-text-section-prefix" || S == "lazy" || S == "muldefs" ||
          S == "nocombreloc" || S == "nocopyreloc" || S == "nodelete" ||
          S == "nodlopen" || S == "noexecstack" ||
@@ -833,8 +834,10 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->ZCombreloc = getZFlag(Args, "combreloc", "nocombreloc", true);
   Config->ZCopyreloc = getZFlag(Args, "copyreloc", "nocopyreloc", true);
   Config->ZExecstack = getZFlag(Args, "execstack", "noexecstack", false);
+  Config->ZGlobal = hasZOption(Args, "global");
   Config->ZHazardplt = hasZOption(Args, "hazardplt");
   Config->ZInitfirst = hasZOption(Args, "initfirst");
+  Config->ZInterpose = hasZOption(Args, "interpose");
   Config->ZKeepTextSectionPrefix = getZFlag(
       Args, "keep-text-section-prefix", "nokeep-text-section-prefix", false);
   Config->ZNodelete = hasZOption(Args, "nodelete");
@@ -1230,33 +1233,19 @@ template <class ELFT> static void handleLibcall(StringRef Name) {
     Symtab->fetchLazy<ELFT>(Sym);
 }
 
-template <class ELFT> static bool shouldDemote(Symbol &Sym) {
-  // If all references to a DSO happen to be weak, the DSO is not added to
-  // DT_NEEDED. If that happens, we need to eliminate shared symbols created
-  // from the DSO. Otherwise, they become dangling references that point to a
-  // non-existent DSO.
-  if (auto *S = dyn_cast<SharedSymbol>(&Sym))
-    return !S->getFile<ELFT>().IsNeeded;
-
-  // We are done processing archives, so lazy symbols that were used but not
-  // found can be converted to undefined. We could also just delete the other
-  // lazy symbols, but that seems to be more work than it is worth.
-  return Sym.isLazy() && Sym.IsUsedInRegularObj;
-}
-
-// Some files, such as .so or files between -{start,end}-lib may be removed
-// after their symbols are added to the symbol table. If that happens, we
-// need to remove symbols that refer files that no longer exist, so that
-// they won't appear in the symbol table of the output file.
-//
-// We remove symbols by demoting them to undefined symbol.
-template <class ELFT> static void demoteSymbols() {
+// If all references to a DSO happen to be weak, the DSO is not added
+// to DT_NEEDED. If that happens, we need to eliminate shared symbols
+// created from the DSO. Otherwise, they become dangling references
+// that point to a non-existent DSO.
+template <class ELFT> static void demoteSharedSymbols() {
   for (Symbol *Sym : Symtab->getSymbols()) {
-    if (shouldDemote<ELFT>(*Sym)) {
-      bool Used = Sym->Used;
-      replaceSymbol<Undefined>(Sym, nullptr, Sym->getName(), Sym->Binding,
-                               Sym->StOther, Sym->Type);
-      Sym->Used = Used;
+    if (auto *S = dyn_cast<SharedSymbol>(Sym)) {
+      if (!S->getFile<ELFT>().IsNeeded) {
+        bool Used = S->Used;
+        replaceSymbol<Undefined>(S, nullptr, S->getName(), STB_WEAK, S->StOther,
+                                 S->Type);
+        S->Used = Used;
+      }
     }
   }
 }
@@ -1323,6 +1312,80 @@ static void findKeepUniqueSections(opt::InputArgList &Args) {
         markAddrsig(S);
     }
   }
+}
+
+// The --wrap option is a feature to rename symbols so that you can write
+// wrappers for existing functions. If you pass `-wrap=foo`, all
+// occurrences of symbol `foo` are resolved to `wrap_foo` (so, you are
+// expected to write `wrap_foo` function as a wrapper). The original
+// symbol becomes accessible as `real_foo`, so you can call that from your
+// wrapper.
+//
+// This data structure is instantiated for each -wrap option.
+struct WrappedSymbol {
+  Symbol *Sym;
+  Symbol *Real;
+  Symbol *Wrap;
+};
+
+// Handles -wrap option.
+//
+// This function instantiates wrapper symbols. At this point, they seem
+// like they are not being used at all, so we explicitly set some flags so
+// that LTO won't eliminate them.
+template <class ELFT>
+static std::vector<WrappedSymbol> addWrappedSymbols(opt::InputArgList &Args) {
+  std::vector<WrappedSymbol> V;
+  DenseSet<StringRef> Seen;
+
+  for (auto *Arg : Args.filtered(OPT_wrap)) {
+    StringRef Name = Arg->getValue();
+    if (!Seen.insert(Name).second)
+      continue;
+
+    Symbol *Sym = Symtab->find(Name);
+    if (!Sym)
+      continue;
+
+    Symbol *Real = Symtab->addUndefined<ELFT>(Saver.save("__real_" + Name));
+    Symbol *Wrap = Symtab->addUndefined<ELFT>(Saver.save("__wrap_" + Name));
+    V.push_back({Sym, Real, Wrap});
+
+    // We want to tell LTO not to inline symbols to be overwritten
+    // because LTO doesn't know the final symbol contents after renaming.
+    Real->CanInline = false;
+    Sym->CanInline = false;
+
+    // Tell LTO not to eliminate these symbols.
+    Sym->IsUsedInRegularObj = true;
+    Wrap->IsUsedInRegularObj = true;
+  }
+  return V;
+}
+
+// Do renaming for -wrap by updating pointers to symbols.
+//
+// When this function is executed, only InputFiles and symbol table
+// contain pointers to symbol objects. We visit them to replace pointers,
+// so that wrapped symbols are swapped as instructed by the command line.
+template <class ELFT> static void wrapSymbols(ArrayRef<WrappedSymbol> Wrapped) {
+  DenseMap<Symbol *, Symbol *> Map;
+  for (const WrappedSymbol &W : Wrapped) {
+    Map[W.Sym] = W.Wrap;
+    Map[W.Real] = W.Sym;
+  }
+
+  // Update pointers in input files.
+  parallelForEach(ObjectFiles, [&](InputFile *File) {
+    std::vector<Symbol *> &Syms = File->getMutableSymbols();
+    for (size_t I = 0, E = Syms.size(); I != E; ++I)
+      if (Symbol *S = Map.lookup(Syms[I]))
+        Syms[I] = S;
+  });
+
+  // Update pointers in the symbol table.
+  for (const WrappedSymbol &W : Wrapped)
+    Symtab->wrap(W.Sym, W.Real, W.Wrap);
 }
 
 static const char *LibcallRoutineNames[] = {
@@ -1456,8 +1519,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
     Symtab->scanVersionScript();
 
   // Create wrapped symbols for -wrap option.
-  for (auto *Arg : Args.filtered(OPT_wrap))
-    Symtab->addSymbolWrap<ELFT>(Arg->getValue());
+  std::vector<WrappedSymbol> Wrapped = addWrappedSymbols<ELFT>(Args);
 
   // Do link-time optimization if given files are LLVM bitcode files.
   // This compiles bitcode files into real object files.
@@ -1475,7 +1537,8 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
     return;
 
   // Apply symbol renames for -wrap.
-  Symtab->applySymbolWrap();
+  if (!Wrapped.empty())
+    wrapSymbols<ELFT>(Wrapped);
 
   // Now that we have a complete list of input files.
   // Beyond this point, no new files are added.
@@ -1517,7 +1580,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   decompressSections();
   splitSections<ELFT>();
   markLive<ELFT>();
-  demoteSymbols<ELFT>();
+  demoteSharedSymbols<ELFT>();
   mergeSections();
   if (Config->ICF != ICFLevel::None) {
     findKeepUniqueSections<ELFT>(Args);

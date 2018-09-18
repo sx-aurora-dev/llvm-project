@@ -820,19 +820,6 @@ let Constraints = "$src1 = $dst" in {
                       Sched<[SchedWriteFShuffle.XMM]>, NotMemoryFoldable;
 }
 
-// TODO: This is largely to trick fastisel into ignoring the pattern.
-def UnpckhUnary : PatFrag<(ops node:$src1, node:$src2),
-                          (X86Unpckh node:$src1, node:$src2), [{
-  return N->getOperand(0) == N->getOperand(1);
-}]>;
-
-let Predicates = [UseSSE2] in {
-  // TODO: This is a hack pattern to allow lowering to emit unpckh instead of
-  // movhlps for sse2 without changing a bunch of tests.
-  def : Pat<(v2f64 (UnpckhUnary VR128:$src, VR128:$src)),
-            (MOVHLPSrr VR128:$src, VR128:$src)>;
-}
-
 //===----------------------------------------------------------------------===//
 // SSE 1 & 2 - Conversion Instructions
 //===----------------------------------------------------------------------===//
@@ -2712,7 +2699,7 @@ multiclass sse_fp_unop_s<bits<8> opc, string OpcodeStr, RegisterClass RC,
   def m : I<opc, MRMSrcMem, (outs RC:$dst), (ins x86memop:$src1),
             !strconcat(OpcodeStr, "\t{$src1, $dst|$dst, $src1}"),
             [(set RC:$dst, (OpNode (load addr:$src1)))], d>,
-            Sched<[sched.Folded, ReadAfterLd]>,
+            Sched<[sched.Folded]>,
             Requires<[target, OptForSize]>;
 
   let isCodeGenOnly = 1, Constraints = "$src1 = $dst", ExeDomain = d in {
@@ -7940,7 +7927,7 @@ defm VPMASKMOVQ : avx2_pmovmask<"vpmaskmovq",
 multiclass maskmov_lowering<string InstrStr, RegisterClass RC, ValueType VT,
                           ValueType MaskVT, string BlendStr, ValueType ZeroVT> {
     // masked store
-    def: Pat<(X86mstore addr:$ptr, (MaskVT RC:$mask), (VT RC:$src)),
+    def: Pat<(X86mstore (VT RC:$src), addr:$ptr, (MaskVT RC:$mask)),
              (!cast<Instruction>(InstrStr#"mr") addr:$ptr, RC:$mask, RC:$src)>;
     // masked load
     def: Pat<(VT (X86mload addr:$ptr, (MaskVT RC:$mask), undef)),
