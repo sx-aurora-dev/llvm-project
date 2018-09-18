@@ -120,7 +120,9 @@ def  WriteLEA    : SchedWrite;        // LEA instructions can't fold loads.
 
 def  WriteBSWAP32 : SchedWrite; // Byte Order (Endianness) 32-bit Swap.
 def  WriteBSWAP64 : SchedWrite; // Byte Order (Endianness) 64-bit Swap.
-def  WriteXCHG   : SchedWrite;        // Compare+Exchange - TODO RMW support.
+defm WriteCMPXCHG : X86SchedWritePair; // Compare and set, compare and swap.
+def  WriteCMPXCHGRMW : SchedWrite;     // Compare and set, compare and swap.
+def  WriteXCHG    : SchedWrite;        // Compare+Exchange - TODO RMW support.
 
 // Integer division.
 defm WriteDiv8   : X86SchedWritePair;
@@ -147,14 +149,16 @@ def  WriteBitTest  : SchedWrite; // Bit Test - TODO add memory folding support
 
 // Integer shifts and rotates.
 defm WriteShift : X86SchedWritePair;
+
 // Double shift instructions.
 def  WriteSHDrri  : SchedWrite;
 def  WriteSHDrrcl : SchedWrite;
 def  WriteSHDmri  : SchedWrite;
 def  WriteSHDmrcl : SchedWrite;
 
-// BMI1 BEXTR, BMI2 BZHI
+// BMI1 BEXTR/BLS, BMI2 BZHI
 defm WriteBEXTR : X86SchedWritePair;
+defm WriteBLS   : X86SchedWritePair;
 defm WriteBZHI  : X86SchedWritePair;
 
 // Idioms that clear a register, like xorps %xmm0, %xmm0.

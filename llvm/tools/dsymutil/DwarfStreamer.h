@@ -7,6 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef LLVM_TOOLS_DSYMUTIL_DWARFSTREAMER_H
+#define LLVM_TOOLS_DSYMUTIL_DWARFSTREAMER_H
+
 #include "CompileUnit.h"
 #include "DebugMap.h"
 #include "LinkUtils.h"
@@ -14,7 +17,7 @@
 #include "llvm/CodeGen/AccelTable.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
-#include "llvm/DebugInfo/DWARF/DWARFDebugRangeList.h"
+#include "llvm/DebugInfo/DWARF/DWARFDebugRnglists.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -31,9 +34,6 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
-
-#ifndef LLVM_TOOLS_DSYMUTIL_DWARFSTREAMER_H
-#define LLVM_TOOLS_DSYMUTIL_DWARFSTREAMER_H
 
 namespace llvm {
 namespace dsymutil {
@@ -83,7 +83,7 @@ public:
   void emitRangesEntries(
       int64_t UnitPcOffset, uint64_t OrigLowPc,
       const FunctionIntervals::const_iterator &FuncRange,
-      const std::vector<DWARFDebugRangeList::RangeListEntry> &Entries,
+      const DWARFDebugRnglist &RangeList,
       unsigned AddressSize);
 
   /// Emit debug_aranges entries for \p Unit and if \p DoRangesSection is true,

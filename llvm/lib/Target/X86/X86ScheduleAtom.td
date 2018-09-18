@@ -84,6 +84,8 @@ defm : AtomWriteResPair<WriteIMul64, [AtomPort01], [AtomPort01], 12, 12, [12], [
 defm : X86WriteRes<WriteXCHG,        [AtomPort01], 2, [2], 1>;
 defm : X86WriteRes<WriteBSWAP32,     [AtomPort0], 1, [1], 1>;
 defm : X86WriteRes<WriteBSWAP64,     [AtomPort0], 1, [1], 1>;
+defm : AtomWriteResPair<WriteCMPXCHG, [AtomPort01], [AtomPort01], 15, 15, [15]>;
+defm : X86WriteRes<WriteCMPXCHGRMW,   [AtomPort01, AtomPort0], 1, [1, 1], 1>;
 
 defm : AtomWriteResPair<WriteDiv8,   [AtomPort01], [AtomPort01], 50, 68, [50], [68]>;
 defm : AtomWriteResPair<WriteDiv16,  [AtomPort01], [AtomPort01], 50, 50, [50], [50]>;
@@ -142,8 +144,9 @@ defm : X86WriteResPairUnsupported<WritePOPCNT>;
 defm : X86WriteResPairUnsupported<WriteLZCNT>;
 defm : X86WriteResPairUnsupported<WriteTZCNT>;
 
-// BMI1 BEXTR, BMI2 BZHI
+// BMI1 BEXTR/BLS, BMI2 BZHI
 defm : X86WriteResPairUnsupported<WriteBEXTR>;
+defm : X86WriteResPairUnsupported<WriteBLS>;
 defm : X86WriteResPairUnsupported<WriteBZHI>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -675,12 +678,6 @@ def AtomWrite01_14 : SchedWriteRes<[AtomPort01]> {
   let ResourceCycles = [14];
 }
 def : InstRW<[AtomWrite01_14], (instrs CMPXCHG16rm, CMPXCHG32rm, CMPXCHG64rm)>;
-
-def AtomWrite01_15 : SchedWriteRes<[AtomPort01]> {
-  let Latency = 15;
-  let ResourceCycles = [15];
-}
-def : InstRW<[AtomWrite01_15], (instrs CMPXCHG16rr, CMPXCHG32rr, CMPXCHG64rr)>;
 
 def AtomWrite01_17 : SchedWriteRes<[AtomPort01]> {
   let Latency = 17;

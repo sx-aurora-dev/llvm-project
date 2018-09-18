@@ -997,7 +997,7 @@ void ASTDumper::dumpTemplateArgument(const TemplateArgument &A, SourceRange R) {
       A.getAsTemplate().dump(OS);
       break;
     case TemplateArgument::TemplateExpansion:
-      OS << " template expansion";
+      OS << " template expansion ";
       A.getAsTemplateOrTemplatePattern().dump(OS);
       break;
     case TemplateArgument::Expression:
@@ -1641,6 +1641,9 @@ void ASTDumper::VisitTemplateTypeParmDecl(const TemplateTypeParmDecl *D) {
   dumpName(D);
   if (D->hasDefaultArgument())
     dumpTemplateArgument(D->getDefaultArgument());
+  if (auto *From = D->getDefaultArgStorage().getInheritedFrom())
+    dumpDeclRef(From, D->defaultArgumentWasInherited() ? "inherited from"
+                                                       : "previous");
 }
 
 void ASTDumper::VisitNonTypeTemplateParmDecl(const NonTypeTemplateParmDecl *D) {
@@ -1651,6 +1654,9 @@ void ASTDumper::VisitNonTypeTemplateParmDecl(const NonTypeTemplateParmDecl *D) {
   dumpName(D);
   if (D->hasDefaultArgument())
     dumpTemplateArgument(D->getDefaultArgument());
+  if (auto *From = D->getDefaultArgStorage().getInheritedFrom())
+    dumpDeclRef(From, D->defaultArgumentWasInherited() ? "inherited from"
+                                                       : "previous");
 }
 
 void ASTDumper::VisitTemplateTemplateParmDecl(
@@ -1662,6 +1668,9 @@ void ASTDumper::VisitTemplateTemplateParmDecl(
   dumpTemplateParameters(D->getTemplateParameters());
   if (D->hasDefaultArgument())
     dumpTemplateArgumentLoc(D->getDefaultArgument());
+  if (auto *From = D->getDefaultArgStorage().getInheritedFrom())
+    dumpDeclRef(From, D->defaultArgumentWasInherited() ? "inherited from"
+                                                       : "previous");
 }
 
 void ASTDumper::VisitUsingDecl(const UsingDecl *D) {

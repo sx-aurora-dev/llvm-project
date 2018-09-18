@@ -818,14 +818,6 @@ void ThinLTOCodeGenerator::optimize(Module &TheModule) {
   optimizeModule(TheModule, *TMBuilder.create(), OptLevel, Freestanding);
 }
 
-/**
- * Perform ThinLTO CodeGen.
- */
-std::unique_ptr<MemoryBuffer> ThinLTOCodeGenerator::codegen(Module &TheModule) {
-  initTMBuilder(TMBuilder, Triple(TheModule.getTargetTriple()));
-  return codegenModule(TheModule, *TMBuilder.create());
-}
-
 /// Write out the generated object file, either from CacheEntryPath or from
 /// OutputBuffer, preferring hard-link when possible.
 /// Returns the path to the generated file in SavedObjectsDirectoryPath.
@@ -893,7 +885,7 @@ void ThinLTOCodeGenerator::run() {
                                  /*IsImporting*/ false);
 
         // CodeGen
-        auto OutputBuffer = codegen(*TheModule);
+        auto OutputBuffer = codegenModule(*TheModule, *TMBuilder.create());
         if (SavedObjectsDirectoryPath.empty())
           ProducedBinaries[count] = std::move(OutputBuffer);
         else
@@ -958,11 +950,15 @@ void ThinLTOCodeGenerator::run() {
   // Changes are made in the index, consumed in the ThinLTO backends.
   internalizeAndPromoteInIndex(ExportLists, GUIDPreservedSymbols, *Index);
 
-  // Make sure that every module has an entry in the ExportLists and
-  // ResolvedODR maps to enable threaded access to these maps below.
-  for (auto &DefinedGVSummaries : ModuleToDefinedGVSummaries) {
-    ExportLists[DefinedGVSummaries.first()];
-    ResolvedODR[DefinedGVSummaries.first()];
+  // Make sure that every module has an entry in the ExportLists, ImportList,
+  // GVSummary and ResolvedODR maps to enable threaded access to these maps
+  // below.
+  for (auto &Module : Modules) {
+    auto ModuleIdentifier = Module.getBufferIdentifier();
+    ExportLists[ModuleIdentifier];
+    ImportLists[ModuleIdentifier];
+    ResolvedODR[ModuleIdentifier];
+    ModuleToDefinedGVSummaries[ModuleIdentifier];
   }
 
   // Compute the ordering we will process the inputs: the rough heuristic here
