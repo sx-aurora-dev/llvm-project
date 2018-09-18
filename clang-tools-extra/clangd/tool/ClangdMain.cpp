@@ -10,9 +10,9 @@
 #include "ClangdLSPServer.h"
 #include "JSONRPCDispatcher.h"
 #include "Path.h"
+#include "RIFF.h"
 #include "Trace.h"
 #include "index/SymbolYAML.h"
-#include "index/dex/DexIndex.h"
 #include "clang/Basic/Version.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -29,34 +29,11 @@
 using namespace clang;
 using namespace clang::clangd;
 
+// FIXME: remove this option when Dex is stable enough.
 static llvm::cl::opt<bool>
     UseDex("use-dex-index",
            llvm::cl::desc("Use experimental Dex static index."),
-           llvm::cl::init(false), llvm::cl::Hidden);
-
-namespace {
-
-enum class PCHStorageFlag { Disk, Memory };
-
-// Build an in-memory static index for global symbols from a YAML-format file.
-// The size of global symbols should be relatively small, so that all symbols
-// can be managed in memory.
-std::unique_ptr<SymbolIndex> buildStaticIndex(llvm::StringRef YamlSymbolFile) {
-  auto Buffer = llvm::MemoryBuffer::getFile(YamlSymbolFile);
-  if (!Buffer) {
-    llvm::errs() << "Can't open " << YamlSymbolFile << "\n";
-    return nullptr;
-  }
-  auto Slab = symbolsFromYAML(Buffer.get()->getBuffer());
-  SymbolSlab::Builder SymsBuilder;
-  for (auto Sym : Slab)
-    SymsBuilder.insert(Sym);
-
-  return UseDex ? dex::DexIndex::build(std::move(SymsBuilder).build())
-                : MemIndex::build(std::move(SymsBuilder).build());
-}
-
-} // namespace
+           llvm::cl::init(true), llvm::cl::Hidden);
 
 static llvm::cl::opt<Path> CompileCommandsDir(
     "compile-commands-dir",
@@ -70,10 +47,7 @@ static llvm::cl::opt<unsigned>
                        llvm::cl::init(getDefaultAsyncThreadsCount()));
 
 // FIXME: also support "plain" style where signatures are always omitted.
-enum CompletionStyleFlag {
-  Detailed,
-  Bundled,
-};
+enum CompletionStyleFlag { Detailed, Bundled };
 static llvm::cl::opt<CompletionStyleFlag> CompletionStyle(
     "completion-style",
     llvm::cl::desc("Granularity of code completion suggestions"),
@@ -122,6 +96,7 @@ static llvm::cl::opt<bool> Test(
         "Intended to simplify lit tests."),
     llvm::cl::init(false), llvm::cl::Hidden);
 
+enum PCHStorageFlag { Disk, Memory };
 static llvm::cl::opt<PCHStorageFlag> PCHStorage(
     "pch-storage",
     llvm::cl::desc("Storing PCHs in memory increases memory usages, but may "
@@ -155,10 +130,11 @@ static llvm::cl::opt<Path> InputMirrorFile(
 
 static llvm::cl::opt<bool> EnableIndex(
     "index",
-    llvm::cl::desc("Enable index-based features such as global code completion "
-                   "and searching for symbols. "
-                   "Clang uses an index built from symbols in opened files"),
-    llvm::cl::init(true));
+    llvm::cl::desc(
+        "Enable index-based features. By default, clangd maintains an index "
+        "built from symbols in opened files. Global index support needs to "
+        "enabled separatedly."),
+    llvm::cl::init(true), llvm::cl::Hidden);
 
 static llvm::cl::opt<bool>
     ShowOrigins("debug-origin",
@@ -183,7 +159,6 @@ static llvm::cl::opt<Path> YamlSymbolFile(
     llvm::cl::init(""), llvm::cl::Hidden);
 
 enum CompileArgsFrom { LSPCompileArgs, FilesystemCompileArgs };
-
 static llvm::cl::opt<CompileArgsFrom> CompileArgsFrom(
     "compile_args_from", llvm::cl::desc("The source of compile commands"),
     llvm::cl::values(clEnumValN(LSPCompileArgs, "lsp",
@@ -259,6 +234,9 @@ int main(int argc, char *argv[]) {
   if (Tracer)
     TracingSession.emplace(*Tracer);
 
+  // Use buffered stream to stderr (we still flush each log message). Unbuffered
+  // stream can cause significant (non-deterministic) latency for the logger.
+  llvm::errs().SetBuffered();
   JSONOutput Out(llvm::outs(), llvm::errs(), LogLevel,
                  InputMirrorStream ? InputMirrorStream.getPointer() : nullptr,
                  PrettyPrint);
@@ -293,10 +271,19 @@ int main(int argc, char *argv[]) {
     Opts.ResourceDir = ResourceDir;
   Opts.BuildDynamicSymbolIndex = EnableIndex;
   std::unique_ptr<SymbolIndex> StaticIdx;
+  std::future<void> AsyncIndexLoad; // Block exit while loading the index.
   if (EnableIndex && !YamlSymbolFile.empty()) {
-    StaticIdx = buildStaticIndex(YamlSymbolFile);
-    Opts.StaticIndex = StaticIdx.get();
+    // Load the index asynchronously. Meanwhile SwapIndex returns no results.
+    SwapIndex *Placeholder;
+    StaticIdx.reset(Placeholder = new SwapIndex(llvm::make_unique<MemIndex>()));
+    AsyncIndexLoad = runAsync<void>([Placeholder, &Opts] {
+      if (auto Idx = loadIndex(YamlSymbolFile, Opts.URISchemes, UseDex))
+        Placeholder->reset(std::move(Idx));
+    });
+    if (RunSynchronously)
+      AsyncIndexLoad.wait();
   }
+  Opts.StaticIndex = StaticIdx.get();
   Opts.AsyncThreadsCount = WorkerThreadsCount;
 
   clangd::CodeCompleteOptions CCOpts;
@@ -308,6 +295,7 @@ int main(int argc, char *argv[]) {
     CCOpts.IncludeIndicator.Insert.clear();
     CCOpts.IncludeIndicator.NoInsert.clear();
   }
+  CCOpts.SpeculativeIndexRequest = Opts.StaticIndex;
 
   // Initialize and run ClangdLSPServer.
   ClangdLSPServer LSPServer(

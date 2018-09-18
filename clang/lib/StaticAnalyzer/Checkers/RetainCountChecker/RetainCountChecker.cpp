@@ -31,6 +31,7 @@ const RefVal *getRefBinding(ProgramStateRef State, SymbolRef Sym) {
 
 ProgramStateRef setRefBinding(ProgramStateRef State, SymbolRef Sym,
                                      RefVal Val) {
+  assert(Sym != nullptr);
   return State->set<RefBindings>(Sym, Val);
 }
 
@@ -419,9 +420,16 @@ void RetainCountChecker::processSummaryOfInlined(const RetainSummary &Summ,
 
   // Consult the summary for the return value.
   RetEffect RE = Summ.getRetEffect();
-  if (RE.getKind() == RetEffect::NoRetHard) {
-    SymbolRef Sym = CallOrMsg.getReturnValue().getAsSymbol();
-    if (Sym)
+
+  if (SymbolRef Sym = CallOrMsg.getReturnValue().getAsSymbol()) {
+    if (const auto *MCall = dyn_cast<CXXMemberCall>(&CallOrMsg)) {
+      if (Optional<RefVal> updatedRefVal =
+              refValFromRetEffect(RE, MCall->getResultType())) {
+        state = setRefBinding(state, Sym, *updatedRefVal);
+      }
+    }
+
+    if (RE.getKind() == RetEffect::NoRetHard)
       state = removeRefBinding(state, Sym);
   }
 
@@ -490,11 +498,10 @@ void RetainCountChecker::checkSummary(const RetainSummary &Summ,
     }
   }
 
-  // Evaluate the effect on the message receiver.
+  // Evaluate the effect on the message receiver / `this` argument.
   bool ReceiverIsTracked = false;
   if (!hasErr) {
-    const ObjCMethodCall *MsgInvocation = dyn_cast<ObjCMethodCall>(&CallOrMsg);
-    if (MsgInvocation) {
+    if (const auto *MsgInvocation = dyn_cast<ObjCMethodCall>(&CallOrMsg)) {
       if (SymbolRef Sym = MsgInvocation->getReceiverSVal().getAsLocSymbol()) {
         if (const RefVal *T = getRefBinding(state, Sym)) {
           ReceiverIsTracked = true;
@@ -502,6 +509,17 @@ void RetainCountChecker::checkSummary(const RetainSummary &Summ,
                                  hasErr, C);
           if (hasErr) {
             ErrorRange = MsgInvocation->getOriginExpr()->getReceiverRange();
+            ErrorSym = Sym;
+          }
+        }
+      }
+    } else if (const auto *MCall = dyn_cast<CXXMemberCall>(&CallOrMsg)) {
+      if (SymbolRef Sym = MCall->getCXXThisVal().getAsLocSymbol()) {
+        if (const RefVal *T = getRefBinding(state, Sym)) {
+          state = updateSymbol(state, Sym, *T, Summ.getThisEffect(),
+                               hasErr, C);
+          if (hasErr) {
+            ErrorRange = MCall->getOriginExpr()->getSourceRange();
             ErrorSym = Sym;
           }
         }

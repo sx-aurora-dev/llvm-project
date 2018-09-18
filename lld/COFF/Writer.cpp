@@ -83,29 +83,31 @@ namespace {
 
 class DebugDirectoryChunk : public Chunk {
 public:
-  DebugDirectoryChunk(const std::vector<Chunk *> &R) : Records(R) {}
+  DebugDirectoryChunk(const std::vector<Chunk *> &R, bool WriteRepro)
+      : Records(R), WriteRepro(WriteRepro) {}
 
   size_t getSize() const override {
-    return Records.size() * sizeof(debug_directory);
+    return (Records.size() + int(WriteRepro)) * sizeof(debug_directory);
   }
 
   void writeTo(uint8_t *B) const override {
     auto *D = reinterpret_cast<debug_directory *>(B + OutputSectionOff);
 
     for (const Chunk *Record : Records) {
-      D->Characteristics = 0;
-      D->TimeDateStamp = 0;
-      D->MajorVersion = 0;
-      D->MinorVersion = 0;
-      D->Type = COFF::IMAGE_DEBUG_TYPE_CODEVIEW;
-      D->SizeOfData = Record->getSize();
-      D->AddressOfRawData = Record->getRVA();
       OutputSection *OS = Record->getOutputSection();
       uint64_t Offs = OS->getFileOff() + (Record->getRVA() - OS->getRVA());
-      D->PointerToRawData = Offs;
-
-      TimeDateStamps.push_back(&D->TimeDateStamp);
+      fillEntry(D, COFF::IMAGE_DEBUG_TYPE_CODEVIEW, Record->getSize(),
+                Record->getRVA(), Offs);
       ++D;
+    }
+
+    if (WriteRepro) {
+      // FIXME: The COFF spec allows either a 0-sized entry to just say
+      // "the timestamp field is really a hash", or a 4-byte size field
+      // followed by that many bytes containing a longer hash (with the
+      // lowest 4 bytes usually being the timestamp in little-endian order).
+      // Consider storing the full 8 bytes computed by xxHash64 here.
+      fillEntry(D, COFF::IMAGE_DEBUG_TYPE_REPRO, 0, 0, 0);
     }
   }
 
@@ -115,8 +117,23 @@ public:
   }
 
 private:
+  void fillEntry(debug_directory *D, COFF::DebugType DebugType, size_t Size,
+                 uint64_t RVA, uint64_t Offs) const {
+    D->Characteristics = 0;
+    D->TimeDateStamp = 0;
+    D->MajorVersion = 0;
+    D->MinorVersion = 0;
+    D->Type = DebugType;
+    D->SizeOfData = Size;
+    D->AddressOfRawData = RVA;
+    D->PointerToRawData = Offs;
+
+    TimeDateStamps.push_back(&D->TimeDateStamp);
+  }
+
   mutable std::vector<support::ulittle32_t *> TimeDateStamps;
   const std::vector<Chunk *> &Records;
+  bool WriteRepro;
 };
 
 class CVDebugRecordChunk : public Chunk {
@@ -158,6 +175,8 @@ private:
   void openFile(StringRef OutputPath);
   template <typename PEHeaderTy> void writeHeader();
   void createSEHTable();
+  void createRuntimePseudoRelocs();
+  void insertCtorDtorSymbols();
   void createGuardCFTables();
   void markSymbolsForRVATable(ObjFile *File,
                               ArrayRef<SectionChunk *> SymIdxChunks,
@@ -191,7 +210,6 @@ private:
   DebugDirectoryChunk *DebugDirectory = nullptr;
   std::vector<Chunk *> DebugRecords;
   CVDebugRecordChunk *BuildId = nullptr;
-  Optional<codeview::DebugInfo> PreviousBuildId;
   ArrayRef<uint8_t> SectionTable;
 
   uint64_t FileSize;
@@ -209,6 +227,8 @@ private:
   OutputSection *DidatSec;
   OutputSection *RsrcSec;
   OutputSection *RelocSec;
+  OutputSection *CtorsSec;
+  OutputSection *DtorsSec;
 
   // The first and last .pdata sections in the output file.
   //
@@ -234,6 +254,11 @@ void writeResult() { Writer().run(); }
 
 void OutputSection::addChunk(Chunk *C) {
   Chunks.push_back(C);
+  C->setOutputSection(this);
+}
+
+void OutputSection::insertChunkAtStart(Chunk *C) {
+  Chunks.insert(Chunks.begin(), C);
   C->setOutputSection(this);
 }
 
@@ -267,67 +292,6 @@ void OutputSection::writeHeaderTo(uint8_t *Buf) {
 } // namespace coff
 } // namespace lld
 
-// PDBs are matched against executables using a build id which consists of three
-// components:
-//   1. A 16-bit GUID
-//   2. An age
-//   3. A time stamp.
-//
-// Debuggers and symbol servers match executables against debug info by checking
-// each of these components of the EXE/DLL against the corresponding value in
-// the PDB and failing a match if any of the components differ.  In the case of
-// symbol servers, symbols are cached in a folder that is a function of the
-// GUID.  As a result, in order to avoid symbol cache pollution where every
-// incremental build copies a new PDB to the symbol cache, we must try to re-use
-// the existing GUID if one exists, but bump the age.  This way the match will
-// fail, so the symbol cache knows to use the new PDB, but the GUID matches, so
-// it overwrites the existing item in the symbol cache rather than making a new
-// one.
-static Optional<codeview::DebugInfo> loadExistingBuildId(StringRef Path) {
-  // We don't need to incrementally update a previous build id if we're not
-  // writing codeview debug info.
-  if (!Config->Debug)
-    return None;
-
-  auto ExpectedBinary = llvm::object::createBinary(Path);
-  if (!ExpectedBinary) {
-    consumeError(ExpectedBinary.takeError());
-    return None;
-  }
-
-  auto Binary = std::move(*ExpectedBinary);
-  if (!Binary.getBinary()->isCOFF())
-    return None;
-
-  std::error_code EC;
-  COFFObjectFile File(Binary.getBinary()->getMemoryBufferRef(), EC);
-  if (EC)
-    return None;
-
-  // If the machine of the binary we're outputting doesn't match the machine
-  // of the existing binary, don't try to re-use the build id.
-  if (File.is64() != Config->is64() || File.getMachine() != Config->Machine)
-    return None;
-
-  for (const auto &DebugDir : File.debug_directories()) {
-    if (DebugDir.Type != IMAGE_DEBUG_TYPE_CODEVIEW)
-      continue;
-
-    const codeview::DebugInfo *ExistingDI = nullptr;
-    StringRef PDBFileName;
-    if (auto EC = File.getDebugPDBInfo(ExistingDI, PDBFileName)) {
-      (void)EC;
-      return None;
-    }
-    // We only support writing PDBs in v70 format.  So if this is not a build
-    // id that we recognize / support, ignore it.
-    if (ExistingDI->Signature.CVSignature != OMF::Signature::PDB70)
-      return None;
-    return *ExistingDI;
-  }
-  return None;
-}
-
 // The main function of the writer.
 void Writer::run() {
   ScopedTimer T1(CodeLayoutTimer);
@@ -346,9 +310,6 @@ void Writer::run() {
     fatal("image size (" + Twine(FileSize) + ") " +
         "exceeds maximum allowable size (" + Twine(UINT32_MAX) + ")");
 
-  // We must do this before opening the output file, as it depends on being able
-  // to read the contents of the existing output file.
-  PreviousBuildId = loadExistingBuildId(Config->OutputFile);
   openFile(Config->OutputFile);
   if (Config->is64()) {
     writeHeader<pe32plus_header>();
@@ -357,14 +318,14 @@ void Writer::run() {
   }
   writeSections();
   sortExceptionTable();
-  writeBuildId();
 
   T1.stop();
 
   if (!Config->PDBPath.empty() && Config->Debug) {
     assert(BuildId);
-    createPDB(Symtab, OutputSections, SectionTable, *BuildId->BuildId);
+    createPDB(Symtab, OutputSections, SectionTable, BuildId->BuildId);
   }
+  writeBuildId();
 
   writeMapFile(OutputSections);
 
@@ -429,12 +390,14 @@ void Writer::createSections() {
   DidatSec = CreateSection(".didat", DATA | R);
   RsrcSec = CreateSection(".rsrc", DATA | R);
   RelocSec = CreateSection(".reloc", DATA | DISCARDABLE | R);
+  CtorsSec = CreateSection(".ctors", DATA | R | W);
+  DtorsSec = CreateSection(".dtors", DATA | R | W);
 
   // Then bin chunks by name and output characteristics.
   std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> Map;
   for (Chunk *C : Symtab->getChunks()) {
     auto *SC = dyn_cast<SectionChunk>(C);
-    if (SC && !SC->isLive()) {
+    if (SC && !SC->Live) {
       if (Config->Verbose)
         SC->printDiscardedMessage();
       continue;
@@ -451,7 +414,7 @@ void Writer::createSections() {
   // '$' and all following characters in input section names are
   // discarded when determining output section. So, .text$foo
   // contributes to .text, for example. See PE/COFF spec 3.2.
-  for (auto Pair : Map) {
+  for (auto &Pair : Map) {
     StringRef Name = getOutputSectionName(Pair.first.first);
     uint32_t OutChars = Pair.first.second;
 
@@ -499,20 +462,20 @@ void Writer::createMiscChunks() {
   }
 
   // Create Debug Information Chunks
+  OutputSection *DebugInfoSec = Config->MinGW ? BuildidSec : RdataSec;
+  if (Config->Debug || Config->Repro) {
+    DebugDirectory = make<DebugDirectoryChunk>(DebugRecords, Config->Repro);
+    DebugInfoSec->addChunk(DebugDirectory);
+  }
+
   if (Config->Debug) {
-    DebugDirectory = make<DebugDirectoryChunk>(DebugRecords);
-
-    OutputSection *DebugInfoSec = Config->MinGW ? BuildidSec : RdataSec;
-
     // Make a CVDebugRecordChunk even when /DEBUG:CV is not specified.  We
     // output a PDB no matter what, and this chunk provides the only means of
     // allowing a debugger to match a PDB and an executable.  So we need it even
     // if we're ultimately not going to write CodeView data to the PDB.
-    auto *CVChunk = make<CVDebugRecordChunk>();
-    BuildId = CVChunk;
-    DebugRecords.push_back(CVChunk);
+    BuildId = make<CVDebugRecordChunk>();
+    DebugRecords.push_back(BuildId);
 
-    DebugInfoSec->addChunk(DebugDirectory);
     for (Chunk *C : DebugRecords)
       DebugInfoSec->addChunk(C);
   }
@@ -524,6 +487,12 @@ void Writer::createMiscChunks() {
   // Create /guard:cf tables if requested.
   if (Config->GuardCF != GuardCFLevel::Off)
     createGuardCFTables();
+
+  if (Config->MinGW) {
+    createRuntimePseudoRelocs();
+
+    insertCtorDtorSymbols();
+  }
 }
 
 // Create .idata section for the DLL-imported symbol table.
@@ -907,7 +876,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
                                 : sizeof(object::coff_tls_directory32);
     }
   }
-  if (Config->Debug) {
+  if (DebugDirectory) {
     Dir[DEBUG_DIRECTORY].RelativeVirtualAddress = DebugDirectory->getRVA();
     Dir[DEBUG_DIRECTORY].Size = DebugDirectory->getSize();
   }
@@ -1010,7 +979,7 @@ static void markSymbolsWithRelocations(ObjFile *File,
     // We only care about live section chunks. Common chunks and other chunks
     // don't generally contain relocations.
     SectionChunk *SC = dyn_cast<SectionChunk>(C);
-    if (!SC || !SC->isLive())
+    if (!SC || !SC->Live)
       continue;
 
     for (const coff_relocation &Reloc : SC->Relocs) {
@@ -1093,7 +1062,7 @@ void Writer::markSymbolsForRVATable(ObjFile *File,
     // is associated with something like a vtable and the vtable is discarded.
     // In this case, the associated gfids section is discarded, and we don't
     // mark the virtual member functions as address-taken by the vtable.
-    if (!C->isLive())
+    if (!C->Live)
       continue;
 
     // Validate that the contents look like symbol table indices.
@@ -1140,6 +1109,56 @@ void Writer::maybeAddRVATable(SymbolRVASet TableSymbols, StringRef TableSym,
   cast<DefinedAbsolute>(C)->setVA(TableChunk->getSize() / 4);
 }
 
+// MinGW specific. Gather all relocations that are imported from a DLL even
+// though the code didn't expect it to, produce the table that the runtime
+// uses for fixing them up, and provide the synthetic symbols that the
+// runtime uses for finding the table.
+void Writer::createRuntimePseudoRelocs() {
+  std::vector<RuntimePseudoReloc> Rels;
+
+  for (Chunk *C : Symtab->getChunks()) {
+    auto *SC = dyn_cast<SectionChunk>(C);
+    if (!SC || !SC->Live)
+      continue;
+    SC->getRuntimePseudoRelocs(Rels);
+  }
+
+  if (!Rels.empty())
+    log("Writing " + Twine(Rels.size()) + " runtime pseudo relocations");
+  PseudoRelocTableChunk *Table = make<PseudoRelocTableChunk>(Rels);
+  RdataSec->addChunk(Table);
+  EmptyChunk *EndOfList = make<EmptyChunk>();
+  RdataSec->addChunk(EndOfList);
+
+  Symbol *HeadSym = Symtab->findUnderscore("__RUNTIME_PSEUDO_RELOC_LIST__");
+  Symbol *EndSym = Symtab->findUnderscore("__RUNTIME_PSEUDO_RELOC_LIST_END__");
+  replaceSymbol<DefinedSynthetic>(HeadSym, HeadSym->getName(), Table);
+  replaceSymbol<DefinedSynthetic>(EndSym, EndSym->getName(), EndOfList);
+}
+
+// MinGW specific.
+// The MinGW .ctors and .dtors lists have sentinels at each end;
+// a (uintptr_t)-1 at the start and a (uintptr_t)0 at the end.
+// There's a symbol pointing to the start sentinel pointer, __CTOR_LIST__
+// and __DTOR_LIST__ respectively.
+void Writer::insertCtorDtorSymbols() {
+  AbsolutePointerChunk *CtorListHead = make<AbsolutePointerChunk>(-1);
+  AbsolutePointerChunk *CtorListEnd = make<AbsolutePointerChunk>(0);
+  AbsolutePointerChunk *DtorListHead = make<AbsolutePointerChunk>(-1);
+  AbsolutePointerChunk *DtorListEnd = make<AbsolutePointerChunk>(0);
+  CtorsSec->insertChunkAtStart(CtorListHead);
+  CtorsSec->addChunk(CtorListEnd);
+  DtorsSec->insertChunkAtStart(DtorListHead);
+  DtorsSec->addChunk(DtorListEnd);
+
+  Symbol *CtorListSym = Symtab->findUnderscore("__CTOR_LIST__");
+  Symbol *DtorListSym = Symtab->findUnderscore("__DTOR_LIST__");
+  replaceSymbol<DefinedSynthetic>(CtorListSym, CtorListSym->getName(),
+                                  CtorListHead);
+  replaceSymbol<DefinedSynthetic>(DtorListSym, DtorListSym->getName(),
+                                  DtorListHead);
+}
+
 // Handles /section options to allow users to overwrite
 // section attributes.
 void Writer::setSectionPermissions() {
@@ -1177,25 +1196,10 @@ void Writer::writeBuildId() {
   //    timestamp as well as a Guid and Age of the PDB.
   // 2) In all cases, the PE COFF file header also contains a timestamp.
   // For reproducibility, instead of a timestamp we want to use a hash of the
-  // binary, however when building with debug info the hash needs to take into
-  // account the debug info, since it's possible to add blank lines to a file
-  // which causes the debug info to change but not the generated code.
-  //
-  // To handle this, we first set the Guid and Age in the debug directory (but
-  // only if we're doing a debug build).  Then, we hash the binary (thus causing
-  // the hash to change if only the debug info changes, since the Age will be
-  // different).  Finally, we write that hash into the debug directory (if
-  // present) as well as the COFF file header (always).
+  // PE contents.
   if (Config->Debug) {
     assert(BuildId && "BuildId is not set!");
-    if (PreviousBuildId.hasValue()) {
-      *BuildId->BuildId = *PreviousBuildId;
-      BuildId->BuildId->PDB70.Age = BuildId->BuildId->PDB70.Age + 1;
-    } else {
-      BuildId->BuildId->Signature.CVSignature = OMF::Signature::PDB70;
-      BuildId->BuildId->PDB70.Age = 1;
-      llvm::getRandomBytes(BuildId->BuildId->PDB70.Signature, 16);
-    }
+    // BuildId->BuildId was filled in when the PDB was written.
   }
 
   // At this point the only fields in the COFF file which remain unset are the

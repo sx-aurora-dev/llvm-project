@@ -43,8 +43,7 @@ using namespace llvm;
 /// require stricter alignment than the stack pointer itself.  Because we need
 /// to shift the stack pointer by some unknown amount to force the alignment,
 /// we need to record the value of the stack pointer on entry to the function.
-bool WebAssemblyFrameLowering::hasBP(
-    const MachineFunction &MF) const {
+bool WebAssemblyFrameLowering::hasBP(const MachineFunction &MF) const {
   const auto *RegInfo =
       MF.getSubtarget<WebAssemblySubtarget>().getRegisterInfo();
   return RegInfo->needsStackRealignment(MF);
@@ -79,6 +78,14 @@ bool WebAssemblyFrameLowering::hasReservedCallFrame(
   return !MF.getFrameInfo().hasVarSizedObjects();
 }
 
+// Returns true if this function needs a local user-space stack pointer for its
+// local frame (not for exception handling).
+bool WebAssemblyFrameLowering::needsSPForLocalFrame(
+    const MachineFunction &MF) const {
+  auto &MFI = MF.getFrameInfo();
+  return MFI.getStackSize() || MFI.adjustsStack() || hasFP(MF);
+}
+
 // In function with EH pads, we need to make a copy of the value of
 // __stack_pointer global in SP32 register, in order to use it when restoring
 // __stack_pointer after an exception is caught.
@@ -92,10 +99,8 @@ bool WebAssemblyFrameLowering::needsPrologForEH(
 /// Returns true if this function needs a local user-space stack pointer.
 /// Unlike a machine stack pointer, the wasm user stack pointer is a global
 /// variable, so it is loaded into a register in the prolog.
-bool WebAssemblyFrameLowering::needsSP(const MachineFunction &MF,
-                                       const MachineFrameInfo &MFI) const {
-  return MFI.getStackSize() || MFI.adjustsStack() || hasFP(MF) ||
-         needsPrologForEH(MF);
+bool WebAssemblyFrameLowering::needsSP(const MachineFunction &MF) const {
+  return needsSPForLocalFrame(MF) || needsPrologForEH(MF);
 }
 
 /// Returns true if the local user-space stack pointer needs to be written back
@@ -103,10 +108,19 @@ bool WebAssemblyFrameLowering::needsSP(const MachineFunction &MF,
 /// needsSP is false). If false, the stack red zone can be used and only a local
 /// SP is needed.
 bool WebAssemblyFrameLowering::needsSPWriteback(
-    const MachineFunction &MF, const MachineFrameInfo &MFI) const {
-  assert(needsSP(MF, MFI));
-  return MFI.getStackSize() > RedZoneSize || MFI.hasCalls() ||
-         MF.getFunction().hasFnAttribute(Attribute::NoRedZone);
+    const MachineFunction &MF) const {
+  auto &MFI = MF.getFrameInfo();
+  assert(needsSP(MF));
+  // When we don't need a local stack pointer for its local frame but only to
+  // support EH, we don't need to write SP back in the epilog, because we don't
+  // bump down the stack pointer in the prolog. We need to write SP back in the
+  // epilog only if
+  // 1. We need SP not only for EH support but also because we actually use
+  // stack or we have a frame address taken.
+  // 2. We cannot use the red zone.
+  bool CanUseRedZone = MFI.getStackSize() <= RedZoneSize && !MFI.hasCalls() &&
+                       !MF.getFunction().hasFnAttribute(Attribute::NoRedZone);
+  return needsSPForLocalFrame(MF) && !CanUseRedZone;
 }
 
 void WebAssemblyFrameLowering::writeSPToGlobal(
@@ -129,7 +143,7 @@ WebAssemblyFrameLowering::eliminateCallFramePseudoInstr(
          "Call frame pseudos should only be used for dynamic stack adjustment");
   const auto *TII = MF.getSubtarget<WebAssemblySubtarget>().getInstrInfo();
   if (I->getOpcode() == TII->getCallFrameDestroyOpcode() &&
-      needsSPWriteback(MF, MF.getFrameInfo())) {
+      needsSPWriteback(MF)) {
     DebugLoc DL = I->getDebugLoc();
     writeSPToGlobal(WebAssembly::SP32, MF, MBB, I, DL);
   }
@@ -143,7 +157,8 @@ void WebAssemblyFrameLowering::emitPrologue(MachineFunction &MF,
   assert(MFI.getCalleeSavedInfo().empty() &&
          "WebAssembly should not have callee-saved registers");
 
-  if (!needsSP(MF, MFI)) return;
+  if (!needsSP(MF))
+    return;
   uint64_t StackSize = MFI.getStackSize();
 
   const auto *TII = MF.getSubtarget<WebAssemblySubtarget>().getInstrInfo();
@@ -187,7 +202,7 @@ void WebAssemblyFrameLowering::emitPrologue(MachineFunction &MF,
     unsigned BitmaskReg = MRI.createVirtualRegister(PtrRC);
     unsigned Alignment = MFI.getMaxAlignment();
     assert((1u << countTrailingZeros(Alignment)) == Alignment &&
-      "Alignment must be a power of 2");
+           "Alignment must be a power of 2");
     BuildMI(MBB, InsertPt, DL, TII->get(WebAssembly::CONST_I32), BitmaskReg)
         .addImm((int)~(Alignment - 1));
     BuildMI(MBB, InsertPt, DL, TII->get(WebAssembly::AND_I32),
@@ -199,20 +214,19 @@ void WebAssemblyFrameLowering::emitPrologue(MachineFunction &MF,
     // Unlike most conventional targets (where FP points to the saved FP),
     // FP points to the bottom of the fixed-size locals, so we can use positive
     // offsets in load/store instructions.
-    BuildMI(MBB, InsertPt, DL, TII->get(WebAssembly::COPY),
-            WebAssembly::FP32)
+    BuildMI(MBB, InsertPt, DL, TII->get(WebAssembly::COPY), WebAssembly::FP32)
         .addReg(WebAssembly::SP32);
   }
-  if (StackSize && needsSPWriteback(MF, MFI)) {
+  if (StackSize && needsSPWriteback(MF)) {
     writeSPToGlobal(WebAssembly::SP32, MF, MBB, InsertPt, DL);
   }
 }
 
 void WebAssemblyFrameLowering::emitEpilogue(MachineFunction &MF,
                                             MachineBasicBlock &MBB) const {
-  auto &MFI = MF.getFrameInfo();
-  uint64_t StackSize = MFI.getStackSize();
-  if (!needsSP(MF, MFI) || !needsSPWriteback(MF, MFI)) return;
+  uint64_t StackSize = MF.getFrameInfo().getStackSize();
+  if (!needsSP(MF) || !needsSPWriteback(MF))
+    return;
   const auto *TII = MF.getSubtarget<WebAssemblySubtarget>().getInstrInfo();
   auto &MRI = MF.getRegInfo();
   auto InsertPt = MBB.getFirstTerminator();

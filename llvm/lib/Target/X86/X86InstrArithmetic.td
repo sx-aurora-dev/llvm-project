@@ -1176,6 +1176,30 @@ let isCompare = 1 in {
 defm CMP : ArithBinOp_F<0x38, 0x3A, 0x3C, "cmp", MRM7r, MRM7m, X86cmp, 0, 0>;
 }
 
+// Patterns to recognize loads on the LHS of an ADC. We can't make X86adc_flag
+// commutable since it has EFLAGs as an input.
+def : Pat<(X86adc_flag (loadi8 addr:$src2), GR8:$src1, EFLAGS),
+          (ADC8rm GR8:$src1, addr:$src2)>;
+def : Pat<(X86adc_flag (loadi16 addr:$src2), GR16:$src1, EFLAGS),
+          (ADC16rm GR16:$src1, addr:$src2)>;
+def : Pat<(X86adc_flag (loadi32 addr:$src2), GR32:$src1, EFLAGS),
+          (ADC32rm GR32:$src1, addr:$src2)>;
+def : Pat<(X86adc_flag (loadi64 addr:$src2), GR64:$src1, EFLAGS),
+          (ADC64rm GR64:$src1, addr:$src2)>;
+
+// Patterns to recognize RMW ADC with loads in operand 1.
+def : Pat<(store (X86adc_flag GR8:$src, (loadi8 addr:$dst), EFLAGS),
+                 addr:$dst),
+          (ADC8mr addr:$dst, GR8:$src)>;
+def : Pat<(store (X86adc_flag GR16:$src, (loadi16 addr:$dst), EFLAGS),
+                 addr:$dst),
+          (ADC16mr addr:$dst, GR16:$src)>;
+def : Pat<(store (X86adc_flag GR32:$src, (loadi32 addr:$dst), EFLAGS),
+                 addr:$dst),
+          (ADC32mr addr:$dst, GR32:$src)>;
+def : Pat<(store (X86adc_flag GR64:$src, (loadi64 addr:$dst), EFLAGS),
+                 addr:$dst),
+          (ADC64mr addr:$dst, GR64:$src)>;
 
 //===----------------------------------------------------------------------===//
 // Semantically, test instructions are similar like AND, except they don't
@@ -1283,22 +1307,18 @@ let Predicates = [HasBMI2] in {
 //===----------------------------------------------------------------------===//
 // ADCX and ADOX Instructions
 //
+// We don't have patterns for these as there is no advantage over ADC for
+// most code.
 let Predicates = [HasADX], Defs = [EFLAGS], Uses = [EFLAGS],
-    Constraints = "$src1 = $dst", AddedComplexity = 10 in {
-  let SchedRW = [WriteADC] in {
+    Constraints = "$src1 = $dst", hasSideEffects = 0 in {
+  let SchedRW = [WriteADC], isCommutable = 1 in {
   def ADCX32rr : I<0xF6, MRMSrcReg, (outs GR32:$dst),
                    (ins GR32:$src1, GR32:$src2),
-                   "adcx{l}\t{$src2, $dst|$dst, $src2}",
-                   [(set GR32:$dst, EFLAGS,
-                     (X86adc_flag GR32:$src1, GR32:$src2, EFLAGS))]>, T8PD;
+                   "adcx{l}\t{$src2, $dst|$dst, $src2}", []>, T8PD;
   def ADCX64rr : RI<0xF6, MRMSrcReg, (outs GR64:$dst),
                     (ins GR64:$src1, GR64:$src2),
-                    "adcx{q}\t{$src2, $dst|$dst, $src2}",
-                    [(set GR64:$dst, EFLAGS,
-                      (X86adc_flag GR64:$src1, GR64:$src2, EFLAGS))]>, T8PD;
+                    "adcx{q}\t{$src2, $dst|$dst, $src2}", []>, T8PD;
 
-  // We don't have patterns for ADOX yet.
-  let hasSideEffects = 0 in {
   def ADOX32rr : I<0xF6, MRMSrcReg, (outs GR32:$dst),
                    (ins GR32:$src1, GR32:$src2),
                    "adox{l}\t{$src2, $dst|$dst, $src2}", []>, T8XS;
@@ -1306,26 +1326,17 @@ let Predicates = [HasADX], Defs = [EFLAGS], Uses = [EFLAGS],
   def ADOX64rr : RI<0xF6, MRMSrcReg, (outs GR64:$dst),
                     (ins GR64:$src1, GR64:$src2),
                     "adox{q}\t{$src2, $dst|$dst, $src2}", []>, T8XS;
-  } // hasSideEffects = 0
   } // SchedRW
 
   let mayLoad = 1, SchedRW = [WriteADCLd, ReadAfterLd] in {
   def ADCX32rm : I<0xF6, MRMSrcMem, (outs GR32:$dst),
                    (ins GR32:$src1, i32mem:$src2),
-                   "adcx{l}\t{$src2, $dst|$dst, $src2}",
-                   [(set GR32:$dst, EFLAGS,
-                     (X86adc_flag GR32:$src1, (loadi32 addr:$src2), EFLAGS))]>,
-                   T8PD;
+                   "adcx{l}\t{$src2, $dst|$dst, $src2}", []>, T8PD;
 
   def ADCX64rm : RI<0xF6, MRMSrcMem, (outs GR64:$dst),
                     (ins GR64:$src1, i64mem:$src2),
-                    "adcx{q}\t{$src2, $dst|$dst, $src2}",
-                    [(set GR64:$dst, EFLAGS,
-                      (X86adc_flag GR64:$src1, (loadi64 addr:$src2), EFLAGS))]>,
-                    T8PD;
+                    "adcx{q}\t{$src2, $dst|$dst, $src2}", []>, T8PD;
 
-  // We don't have patterns for ADOX yet.
-  let hasSideEffects = 0 in {
   def ADOX32rm : I<0xF6, MRMSrcMem, (outs GR32:$dst),
                    (ins GR32:$src1, i32mem:$src2),
                    "adox{l}\t{$src2, $dst|$dst, $src2}", []>, T8XS;
@@ -1333,6 +1344,5 @@ let Predicates = [HasADX], Defs = [EFLAGS], Uses = [EFLAGS],
   def ADOX64rm : RI<0xF6, MRMSrcMem, (outs GR64:$dst),
                     (ins GR64:$src1, i64mem:$src2),
                     "adox{q}\t{$src2, $dst|$dst, $src2}", []>, T8XS;
-  } // hasSideEffects = 0
   } // mayLoad = 1, SchedRW = [WriteADCLd]
 }

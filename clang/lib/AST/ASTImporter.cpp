@@ -6088,38 +6088,6 @@ Expr *ASTNodeImporter::VisitExplicitCastExpr(ExplicitCastExpr *E) {
             TInfo, SubExpr);
   }
   default:
-    break; // just fall through
-  }
-
-  auto *Named = cast<CXXNamedCastExpr>(E);
-  SourceLocation ExprLoc = Importer.Import(Named->getOperatorLoc()),
-      RParenLoc = Importer.Import(Named->getRParenLoc());
-  SourceRange Brackets = Importer.Import(Named->getAngleBrackets());
-
-  switch (E->getStmtClass()) {
-  case Stmt::CXXStaticCastExprClass:
-    return CXXStaticCastExpr::Create(Importer.getToContext(), T,
-                                     E->getValueKind(), E->getCastKind(),
-                                     SubExpr, &BasePath, TInfo,
-                                     ExprLoc, RParenLoc, Brackets);
-
-  case Stmt::CXXDynamicCastExprClass:
-    return CXXDynamicCastExpr::Create(Importer.getToContext(), T,
-                                      E->getValueKind(), E->getCastKind(),
-                                      SubExpr, &BasePath, TInfo,
-                                      ExprLoc, RParenLoc, Brackets);
-
-  case Stmt::CXXReinterpretCastExprClass:
-    return CXXReinterpretCastExpr::Create(Importer.getToContext(), T,
-                                          E->getValueKind(), E->getCastKind(),
-                                          SubExpr, &BasePath, TInfo,
-                                          ExprLoc, RParenLoc, Brackets);
-
-  case Stmt::CXXConstCastExprClass:
-    return CXXConstCastExpr::Create(Importer.getToContext(), T,
-                                    E->getValueKind(), SubExpr, TInfo, ExprLoc,
-                                    RParenLoc, Brackets);
-  default:
     llvm_unreachable("Cast expression of unsupported type!");
     return nullptr;
   }
@@ -6849,9 +6817,9 @@ Expr *ASTNodeImporter::VisitInitListExpr(InitListExpr *ILE) {
     To->setSyntacticForm(ToSyntForm);
   }
 
+  // Copy InitListExprBitfields, which are not handled in the ctor of
+  // InitListExpr.
   To->sawArrayRangeDesignator(ILE->hadArrayRangeDesignator());
-  To->setValueDependent(ILE->isValueDependent());
-  To->setInstantiationDependent(ILE->isInstantiationDependent());
 
   return To;
 }
@@ -7195,6 +7163,19 @@ Stmt *ASTImporter::Import(Stmt *FromS) {
   Stmt *ToS = Importer.Visit(FromS);
   if (!ToS)
     return nullptr;
+
+  if (auto *ToE = dyn_cast<Expr>(ToS)) {
+    auto *FromE = cast<Expr>(FromS);
+    // Copy ExprBitfields, which may not be handled in Expr subclasses
+    // constructors.
+    ToE->setValueKind(FromE->getValueKind());
+    ToE->setObjectKind(FromE->getObjectKind());
+    ToE->setTypeDependent(FromE->isTypeDependent());
+    ToE->setValueDependent(FromE->isValueDependent());
+    ToE->setInstantiationDependent(FromE->isInstantiationDependent());
+    ToE->setContainsUnexpandedParameterPack(
+        FromE->containsUnexpandedParameterPack());
+  }
 
   // Record the imported declaration.
   ImportedStmts[FromS] = ToS;

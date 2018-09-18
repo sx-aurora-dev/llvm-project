@@ -25,7 +25,6 @@
 #include "llvm/DebugInfo/DWARF/DWARFDebugLoc.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugMacro.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugPubTable.h"
-#include "llvm/DebugInfo/DWARF/DWARFDebugRangeList.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugRnglists.h"
 #include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
@@ -248,19 +247,12 @@ static void dumpStringOffsetsSection(raw_ostream &OS, StringRef SectionName,
 static void dumpAddrSection(raw_ostream &OS, DWARFDataExtractor &AddrData,
                             DIDumpOptions DumpOpts, uint16_t Version,
                             uint8_t AddrSize) {
-  // TODO: Make this more general: add callback types to Error.h, create
-  // implementation and make all DWARF classes use them.
-  static auto WarnCallback = [](Error Warn) {
-    handleAllErrors(std::move(Warn), [](ErrorInfoBase &Info) {
-      WithColor::warning() << Info.message() << '\n';
-    });
-  };
   uint32_t Offset = 0;
   while (AddrData.isValidOffset(Offset)) {
     DWARFDebugAddrTable AddrTable;
     uint32_t TableOffset = Offset;
-    if (Error Err = AddrTable.extract(AddrData, &Offset, Version,
-                                      AddrSize, WarnCallback)) {
+    if (Error Err = AddrTable.extract(AddrData, &Offset, Version, AddrSize,
+                                      DWARFContext::dumpWarning)) {
       WithColor::error() << toString(std::move(Err)) << '\n';
       // Keep going after an error, if we can, assuming that the length field
       // could be read. If it couldn't, stop reading the section.
@@ -274,24 +266,29 @@ static void dumpAddrSection(raw_ostream &OS, DWARFDataExtractor &AddrData,
   }
 }
 
-// Dump the .debug_rnglists or .debug_rnglists.dwo section (DWARF v5).
-static void dumpRnglistsSection(raw_ostream &OS,
-                                DWARFDataExtractor &rnglistData,
-                                DIDumpOptions DumpOpts) {
+// Dump a section that contains a sequence of tables of lists, such as range
+// or location list tables. In DWARF v5 we expect to find properly formatted
+// tables with headers. In DWARF v4 and earlier we simply expect a sequence of
+// lists, which we treat, mutatis mutandis, like DWARF v5 tables.
+template <typename ListTable>
+static void dumpListSection(raw_ostream &OS, DWARFContext *C,
+                            StringRef SectionName, uint16_t MaxVersion,
+                            DWARFDataExtractor &ListData,
+                            DIDumpOptions DumpOpts, bool isDWO = false) {
   uint32_t Offset = 0;
-  while (rnglistData.isValidOffset(Offset)) {
-    llvm::DWARFDebugRnglistTable Rnglists;
-    uint32_t TableOffset = Offset;
-    if (Error Err = Rnglists.extract(rnglistData, &Offset)) {
+  while (ListData.isValidOffset(Offset)) {
+    ListTable Table(C, SectionName, isDWO);
+    if (Error Err = Table.extract(ListData, MaxVersion, &Offset)) {
       WithColor::error() << toString(std::move(Err)) << '\n';
-      uint64_t Length = Rnglists.length();
-      // Keep going after an error, if we can, assuming that the length field
-      // could be read. If it couldn't, stop reading the section.
-      if (Length == 0)
+      // If table extraction set Offset to 0, it indicates that we cannot
+      // continue to read the section.
+      if (Offset == 0)
         break;
-      Offset = TableOffset + Length;
+      // In DWARF v4 and earlier, dump as much of the lists as we can.
+      if (MaxVersion < 5)
+        Table.dump(OS, DumpOpts);
     } else {
-      Rnglists.dump(OS, DumpOpts);
+      Table.dump(OS, DumpOpts);
     }
   }
 }
@@ -404,14 +401,15 @@ void DWARFContext::dump(
                              DIDumpOptions DumpOpts) {
     while (!Parser.done()) {
       if (DumpOffset && Parser.getOffset() != *DumpOffset) {
-        Parser.skip();
+        Parser.skip(dumpWarning);
         continue;
       }
       OS << "debug_line[" << format("0x%8.8x", Parser.getOffset()) << "]\n";
       if (DumpOpts.Verbose) {
-        Parser.parseNext(DWARFDebugLine::warn, DWARFDebugLine::warn, &OS);
+        Parser.parseNext(dumpWarning, dumpWarning, &OS);
       } else {
-        DWARFDebugLine::LineTable LineTable = Parser.parseNext();
+        DWARFDebugLine::LineTable LineTable =
+            Parser.parseNext(dumpWarning, dumpWarning);
         LineTable.dump(OS, DumpOpts);
       }
     }
@@ -490,29 +488,25 @@ void DWARFContext::dump(
     uint8_t savedAddressByteSize = getCUAddrSize();
     DWARFDataExtractor rangesData(*DObj, DObj->getRangeSection(),
                                   isLittleEndian(), savedAddressByteSize);
-    uint32_t offset = 0;
-    DWARFDebugRangeList rangeList;
-    while (rangesData.isValidOffset(offset)) {
-      if (Error E = rangeList.extract(rangesData, &offset)) {
-        WithColor::error() << toString(std::move(E)) << '\n';
-        break;
-      }
-      rangeList.dump(OS);
-    }
+    dumpListSection<DWARFDebugRnglistTable>(
+        OS, this, ".debug_ranges", /* MaxVersion = */ 4, rangesData, DumpOpts);
   }
 
   if (shouldDump(Explicit, ".debug_rnglists", DIDT_ID_DebugRnglists,
                  DObj->getRnglistsSection().Data)) {
     DWARFDataExtractor RnglistData(*DObj, DObj->getRnglistsSection(),
-                                   isLittleEndian(), 0);
-    dumpRnglistsSection(OS, RnglistData, DumpOpts);
+                                   isLittleEndian(), getCUAddrSize());
+    dumpListSection<DWARFDebugRnglistTable>(
+        OS, this, ".debug_rnglists", getMaxVersion(5), RnglistData, DumpOpts);
   }
 
   if (shouldDump(ExplicitDWO, ".debug_rnglists.dwo", DIDT_ID_DebugRnglists,
                  DObj->getRnglistsDWOSection().Data)) {
     DWARFDataExtractor RnglistData(*DObj, DObj->getRnglistsDWOSection(),
-                                   isLittleEndian(), 0);
-    dumpRnglistsSection(OS, RnglistData, DumpOpts);
+                                   isLittleEndian(), getCUAddrSize());
+    dumpListSection<DWARFDebugRnglistTable>(OS, this, ".debug_rnglists.dwo",
+                                            getMaxVersion(5), RnglistData,
+                                            DumpOpts);
   }
 
   if (shouldDump(Explicit, ".debug_pubnames", DIDT_ID_DebugPubnames,
@@ -799,9 +793,9 @@ const AppleAcceleratorTable &DWARFContext::getAppleObjC() {
 const DWARFDebugLine::LineTable *
 DWARFContext::getLineTableForUnit(DWARFUnit *U) {
   Expected<const DWARFDebugLine::LineTable *> ExpectedLineTable =
-      getLineTableForUnit(U, DWARFDebugLine::warn);
+      getLineTableForUnit(U, dumpWarning);
   if (!ExpectedLineTable) {
-    DWARFDebugLine::warn(ExpectedLineTable.takeError());
+    dumpWarning(ExpectedLineTable.takeError());
     return nullptr;
   }
   return *ExpectedLineTable;
@@ -1616,4 +1610,10 @@ uint8_t DWARFContext::getCUAddrSize() {
     break;
   }
   return Addr;
+}
+
+void DWARFContext::dumpWarning(Error Warning) {
+  handleAllErrors(std::move(Warning), [](ErrorInfoBase &Info) {
+      WithColor::warning() << Info.message() << '\n';
+  });
 }

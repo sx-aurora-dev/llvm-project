@@ -3959,7 +3959,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     return false;
   }
 
-  LLVM_DEBUG(dbgs() << "Succesfully expanded node\n");
+  LLVM_DEBUG(dbgs() << "Successfully expanded node\n");
   ReplaceNode(Node, Results.data());
   return true;
 }
@@ -4046,6 +4046,11 @@ void SelectionDAGLegalize::ConvertNodeToLibcall(SDNode *Node) {
     Results.push_back(ExpandFPLibCall(Node, RTLIB::SQRT_F32, RTLIB::SQRT_F64,
                                       RTLIB::SQRT_F80, RTLIB::SQRT_F128,
                                       RTLIB::SQRT_PPCF128));
+    break;
+  case ISD::FCBRT:
+    Results.push_back(ExpandFPLibCall(Node, RTLIB::CBRT_F32, RTLIB::CBRT_F64,
+                                      RTLIB::CBRT_F80, RTLIB::CBRT_F128,
+                                      RTLIB::CBRT_PPCF128));
     break;
   case ISD::FSIN:
   case ISD::STRICT_FSIN:
@@ -4261,6 +4266,21 @@ void SelectionDAGLegalize::ConvertNodeToLibcall(SDNode *Node) {
                                        RTLIB::MUL_I8,
                                        RTLIB::MUL_I16, RTLIB::MUL_I32,
                                        RTLIB::MUL_I64, RTLIB::MUL_I128));
+    break;
+  case ISD::CTLZ_ZERO_UNDEF:
+    switch (Node->getSimpleValueType(0).SimpleTy) {
+    default:
+      llvm_unreachable("LibCall explicitly requested, but not available");
+    case MVT::i32:
+      Results.push_back(ExpandLibCall(RTLIB::CTLZ_I32, Node, false));
+      break;
+    case MVT::i64:
+      Results.push_back(ExpandLibCall(RTLIB::CTLZ_I64, Node, false));
+      break;
+    case MVT::i128:
+      Results.push_back(ExpandLibCall(RTLIB::CTLZ_I128, Node, false));
+      break;
+    }
     break;
   }
 

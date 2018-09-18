@@ -31,8 +31,7 @@ class LLJIT {
 public:
   /// Create an LLJIT instance.
   static Expected<std::unique_ptr<LLJIT>>
-  Create(std::unique_ptr<ExecutionSession> ES,
-         std::unique_ptr<TargetMachine> TM, DataLayout DL);
+  Create(std::unique_ptr<TargetMachine> TM, DataLayout DL);
 
   /// Returns a reference to the ExecutionSession for this JIT instance.
   ExecutionSession &getExecutionSession() { return *ES; }
@@ -49,6 +48,14 @@ public:
   /// Adds an IR module to the Main JITDylib.
   Error addIRModule(std::unique_ptr<Module> M) {
     return addIRModule(Main, std::move(M));
+  }
+
+  /// Adds an object file to the given JITDylib.
+  Error addObjectFile(JITDylib &JD, std::unique_ptr<MemoryBuffer> Obj);
+
+  /// Adds an object file to the given JITDylib.
+  Error addObjectFile(std::unique_ptr<MemoryBuffer> Obj) {
+    return addObjectFile(Main, std::move(Obj));
   }
 
   /// Look up a symbol in JITDylib JD by the symbol's linker-mangled name (to
@@ -83,7 +90,7 @@ protected:
   LLJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<TargetMachine> TM,
         DataLayout DL);
 
-  std::shared_ptr<RuntimeDyld::MemoryManager> getMemoryManager(VModuleKey K);
+  std::unique_ptr<RuntimeDyld::MemoryManager> getMemoryManager(VModuleKey K);
 
   std::string mangle(StringRef UnmangledName);
 
@@ -109,8 +116,7 @@ class LLLazyJIT : public LLJIT {
 public:
   /// Create an LLLazyJIT instance.
   static Expected<std::unique_ptr<LLLazyJIT>>
-  Create(std::unique_ptr<ExecutionSession> ES,
-         std::unique_ptr<TargetMachine> TM, DataLayout DL, LLVMContext &Ctx);
+  Create(std::unique_ptr<TargetMachine> TM, DataLayout DL, LLVMContext &Ctx);
 
   /// Set an IR transform (e.g. pass manager pipeline) to run on each function
   /// when it is compiled.
