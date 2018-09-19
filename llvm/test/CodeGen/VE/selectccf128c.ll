@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define fp128 @selectccsgti8(i8, i8, fp128, fp128) #0 {
+define fp128 @selectccsgti8(i8, i8, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s34, %s1, 24
@@ -18,7 +18,7 @@ define fp128 @selectccsgti8(i8, i8, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccsgti16(i16, i16, fp128, fp128) #0 {
+define fp128 @selectccsgti16(i16, i16, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s34, %s1, 16
@@ -36,7 +36,7 @@ define fp128 @selectccsgti16(i16, i16, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccsgti32(i32, i32, fp128, fp128) #0 {
+define fp128 @selectccsgti32(i32, i32, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -50,7 +50,7 @@ define fp128 @selectccsgti32(i32, i32, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccsgti64(i64, i64, fp128, fp128) #0 {
+define fp128 @selectccsgti64(i64, i64, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -64,7 +64,7 @@ define fp128 @selectccsgti64(i64, i64, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccogtf32(float, float, fp128, fp128) #0 {
+define fp128 @selectccogtf32(float, float, fp128, fp128) {
 ; CHECK-LABEL: selectccogtf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s1
@@ -78,7 +78,7 @@ define fp128 @selectccogtf32(float, float, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccogtf64(double, double, fp128, fp128) #0 {
+define fp128 @selectccogtf64(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccogtf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -92,7 +92,7 @@ define fp128 @selectccogtf64(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccogtf128(fp128, fp128, fp128, fp128) #0 {
+define fp128 @selectccogtf128(fp128, fp128, fp128, fp128) {
 ; CHECK-LABEL: selectccogtf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.q %s34, %s0, %s2

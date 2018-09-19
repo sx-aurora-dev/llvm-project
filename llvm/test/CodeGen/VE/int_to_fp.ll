@@ -1,12 +1,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-; ModuleID = 'src/int_to_fp.c'
-source_filename = "src/int_to_fp.c"
-target datalayout = "e-m:e-i64:64-n32:64-S64-v16384:64:64"
-target triple = "ve"
-
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @c2f(i8 signext %a) local_unnamed_addr #0 {
+define float @c2f(i8 signext %a) {
 ; CHECK-LABEL: c2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.s.w %s0, %s0
@@ -17,7 +12,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @s2f(i16 signext %a) local_unnamed_addr #0 {
+define float @s2f(i16 signext %a) {
 ; CHECK-LABEL: s2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.s.w %s0, %s0
@@ -28,7 +23,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @i2f(i32 %a) local_unnamed_addr #0 {
+define float @i2f(i32 %a) {
 ; CHECK-LABEL: i2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.s.w %s0, %s0
@@ -39,7 +34,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @l2f(i64 %a) local_unnamed_addr #0 {
+define float @l2f(i64 %a) {
 ; CHECK-LABEL: l2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.l %s34, %s0
@@ -51,7 +46,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @uc2f(i8 zeroext %a) local_unnamed_addr #0 {
+define float @uc2f(i8 zeroext %a) {
 ; CHECK-LABEL: uc2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.s.w %s0, %s0
@@ -62,7 +57,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @us2f(i16 zeroext %a) local_unnamed_addr #0 {
+define float @us2f(i16 zeroext %a) {
 ; CHECK-LABEL: us2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.s.w %s0, %s0
@@ -73,7 +68,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @ui2f(i32 %a) local_unnamed_addr #0 {
+define float @ui2f(i32 %a) {
 ; CHECK-LABEL: ui2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  adds.w.zx %s34, %s0, (0)1
@@ -86,7 +81,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local float @ul2f(i64 %a) local_unnamed_addr #0 {
+define float @ul2f(i64 %a) {
 ; CHECK-LABEL: ul2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  or %s34, 0, (0)1
@@ -108,7 +103,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @c2d(i8 signext %a) local_unnamed_addr #0 {
+define double @c2d(i8 signext %a) {
 ; CHECK-LABEL: c2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s0, %s0
@@ -119,7 +114,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @s2d(i16 signext %a) local_unnamed_addr #0 {
+define double @s2d(i16 signext %a) {
 ; CHECK-LABEL: s2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s0, %s0
@@ -130,7 +125,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @i2d(i32 %a) local_unnamed_addr #0 {
+define double @i2d(i32 %a) {
 ; CHECK-LABEL: i2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s0, %s0
@@ -141,7 +136,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @l2d(i64 %a) local_unnamed_addr #0 {
+define double @l2d(i64 %a) {
 ; CHECK-LABEL: l2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.l %s0, %s0
@@ -152,7 +147,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @uc2d(i8 zeroext %a) local_unnamed_addr #0 {
+define double @uc2d(i8 zeroext %a) {
 ; CHECK-LABEL: uc2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s0, %s0
@@ -163,7 +158,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @us2d(i16 zeroext %a) local_unnamed_addr #0 {
+define double @us2d(i16 zeroext %a) {
 ; CHECK-LABEL: us2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s0, %s0
@@ -174,7 +169,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @ui2d(i32 %a) local_unnamed_addr #0 {
+define double @ui2d(i32 %a) {
 ; CHECK-LABEL: ui2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  adds.w.zx %s34, %s0, (0)1
@@ -186,7 +181,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local double @ul2d(i64 %a) local_unnamed_addr #0 {
+define double @ul2d(i64 %a) {
 ; CHECK-LABEL: ul2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 32
@@ -210,7 +205,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @c2q(i8 signext %a) local_unnamed_addr #0 {
+define fp128 @c2q(i8 signext %a) {
 ; CHECK-LABEL: c2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s34, %s0
@@ -222,7 +217,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @s2q(i16 signext %a) local_unnamed_addr #0 {
+define fp128 @s2q(i16 signext %a) {
 ; CHECK-LABEL: s2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s34, %s0
@@ -234,7 +229,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @i2q(i32 %a) local_unnamed_addr #0 {
+define fp128 @i2q(i32 %a) {
 ; CHECK-LABEL: i2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s34, %s0
@@ -246,7 +241,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @l2q(i64 %a) local_unnamed_addr #0 {
+define fp128 @l2q(i64 %a) {
 ; CHECK-LABEL: l2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.l %s34, %s0
@@ -258,7 +253,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @uc2q(i8 zeroext %a) local_unnamed_addr #0 {
+define fp128 @uc2q(i8 zeroext %a) {
 ; CHECK-LABEL: uc2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s34, %s0
@@ -270,7 +265,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @us2q(i16 zeroext %a) local_unnamed_addr #0 {
+define fp128 @us2q(i16 zeroext %a) {
 ; CHECK-LABEL: us2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  cvt.d.w %s34, %s0
@@ -282,7 +277,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @ui2q(i32 %a) local_unnamed_addr #0 {
+define fp128 @ui2q(i32 %a) {
 ; CHECK-LABEL: ui2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  adds.w.zx %s34, %s0, (0)1
@@ -295,7 +290,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local fp128 @ul2q(i64 %a) local_unnamed_addr #0 {
+define fp128 @ul2q(i64 %a) {
 ; CHECK-LABEL: ul2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 61
@@ -315,10 +310,3 @@ entry:
   ret fp128 %conv
 }
 
-attributes #0 = { norecurse nounwind readnone "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (https://github.com/llvm-mirror/clang.git d326119e3a71593369edd97e642577b570bf7c32) (https://github.com/llvm-mirror/llvm.git 76da0cf6ceaa4105ea016d070327f8167f05d1eb)"}

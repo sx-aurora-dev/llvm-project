@@ -11,7 +11,7 @@
 @.str.8 = private unnamed_addr constant [7 x i8] c"i=%ld\0A\00", align 1
 @.str.9 = private unnamed_addr constant [7 x i8] c"j=%lf\0A\00", align 1
 
-define dso_local i32 @func(i32, ...) local_unnamed_addr #0 {
+define i32 @func(i32, ...) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  st %s18, 48(,%s9)
@@ -65,9 +65,9 @@ define dso_local i32 @func(i32, ...) local_unnamed_addr #0 {
   %2 = alloca i8*, align 8
   %3 = alloca i8*, align 8
   %4 = bitcast i8** %2 to i8*
-  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %4) #2
+  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %4)
   %5 = bitcast i8** %3 to i8*
-  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %5) #2
+  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %5)
   call void @llvm.va_start(i8* nonnull %4)
   call void @llvm.va_copy(i8* nonnull %5, i8* nonnull %4)
   %6 = va_arg i8** %2, i32
@@ -122,14 +122,14 @@ define dso_local i32 @func(i32, ...) local_unnamed_addr #0 {
   %54 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([7 x i8], [7 x i8]* @.str.8, i64 0, i64 0), i64 %39)
   %55 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([7 x i8], [7 x i8]* @.str.9, i64 0, i64 0), double %40)
   call void @llvm.va_end(i8* nonnull %5)
-  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %5) #2
-  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %4) #2
+  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %5)
+  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %4)
   ret i32 0
 }
 
-declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture) #1
-declare void @llvm.va_start(i8*) #2
-declare void @llvm.va_copy(i8*, i8*) #2
-declare dso_local i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #3
-declare void @llvm.va_end(i8*) #2
-declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture) #1
+declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture)
+declare void @llvm.va_start(i8*)
+declare void @llvm.va_copy(i8*, i8*)
+declare i32 @printf(i8* nocapture readonly, ...)
+declare void @llvm.va_end(i8*)
+declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture)

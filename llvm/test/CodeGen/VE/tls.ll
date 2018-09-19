@@ -6,7 +6,7 @@
 @y = internal thread_local global i32 0, align 4
 
 ; Function Attrs: norecurse nounwind readnone
-define nonnull i32* @get_global() local_unnamed_addr #0 {
+define nonnull i32* @get_global() {
 ; PIC-LABEL:   get_global:
 ; PIC:         .LBB{{[0-9]+}}_2:
 ; PIC-NEXT:    lea %s0, x@tls_gd_lo(-24)
@@ -30,7 +30,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define nonnull i32* @get_local() local_unnamed_addr #0 {
+define nonnull i32* @get_local() {
 ; PIC-LABEL:   get_local:
 ; PIC:         .LBB{{[0-9]+}}_2:
 ; PIC-NEXT:    lea %s0, y@tls_gd_lo(-24)
@@ -54,7 +54,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define void @set_global(i32 %v) local_unnamed_addr #1 {
+define void @set_global(i32 %v) {
 ; PIC-LABEL:   set_global:
 ; PIC:         .LBB{{[0-9]+}}_2:
 ; PIC-NEXT:    st %s18, 48(,%s9)
@@ -84,7 +84,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define void @set_local(i32 %v) local_unnamed_addr #1 {
+define void @set_local(i32 %v) {
 ; PIC-LABEL:   set_local:
 ; PIC:         .LBB{{[0-9]+}}_2:
 ; PIC-NEXT:    st %s18, 48(,%s9)
@@ -113,8 +113,6 @@ entry:
   ret void
 }
 
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
 !2 = !{!"clang version 8.0.0 (https://github.com/llvm-mirror/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (https://github.com/llvm-mirror/llvm.git 404e99265b881e4259763b7780aaf824581ff160)"}
 !3 = !{!4, !4, i64 0}
 !4 = !{!"int", !5, i64 0}

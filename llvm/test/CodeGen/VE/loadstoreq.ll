@@ -1,7 +1,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readonly
-define dso_local fp128 @loadq(fp128* nocapture readonly) local_unnamed_addr #0 {
+define fp128 @loadq(fp128* nocapture readonly) {
 ; CHECK-LABEL: loadq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld %s34, 8(,%s0)
@@ -14,7 +14,7 @@ define dso_local fp128 @loadq(fp128* nocapture readonly) local_unnamed_addr #0 {
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @storeq(fp128* nocapture, fp128) local_unnamed_addr #1 {
+define void @storeq(fp128* nocapture, fp128) {
 ; CHECK-LABEL: storeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    st %s2, 8(,%s0)
@@ -25,19 +25,19 @@ define dso_local void @storeq(fp128* nocapture, fp128) local_unnamed_addr #1 {
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) local_unnamed_addr #1 {
+define void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) {
 ; CHECK-LABEL: ld_l_arg:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34,272(,%s9)
+; CHECK-NEXT:    lea %s34,448(,%s11)
 ; CHECK-NEXT:    or %s34, 8, %s34
 ; CHECK-NEXT:    ld %s34, (,%s34)
-; CHECK-NEXT:    ld %s35, 272(,%s9)
-; CHECK-NEXT:    lea %s36,240(,%s9)
+; CHECK-NEXT:    ld %s35, 448(,%s11)
+; CHECK-NEXT:    lea %s36,416(,%s11)
 ; CHECK-NEXT:    or %s36, 8, %s36
 ; CHECK-NEXT:    ld %s36, (,%s36)
-; CHECK-NEXT:    ld %s37, 240(,%s9)
-; CHECK-NEXT:    ld %s38, 288(,%s9)
-; CHECK-NEXT:    ld %s39, 256(,%s9)
+; CHECK-NEXT:    ld %s37, 416(,%s11)
+; CHECK-NEXT:    ld %s38, 464(,%s11)
+; CHECK-NEXT:    ld %s39, 432(,%s11)
 ; CHECK-NEXT:    st %s2, 8(,%s0)
 ; CHECK-NEXT:    st %s3, (,%s0)
 ; CHECK-NEXT:    st %s4, (,%s0)
@@ -63,14 +63,6 @@ define dso_local void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i6
   ret void
 }
 
-attributes #0 = { norecurse nounwind readonly "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (https://github.com/llvm-mirror/clang.git 85f4d20fbaa66ed83f9fe688403dc8767b9d004a) (https://github.com/llvm-mirror/llvm.git 80af48ed03ca687a7cf3ebe95594fb1f166aaff2)"}
 !2 = !{!3, !3, i64 0}
 !3 = !{!"long double", !4, i64 0}
 !4 = !{!"omnipotent char", !5, i64 0}

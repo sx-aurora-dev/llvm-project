@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define fp128 @selectccaf(double, double, fp128, fp128) #0 {
+define fp128 @selectccaf(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccaf:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -11,7 +11,7 @@ define fp128 @selectccaf(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccat(double, double, fp128, fp128) #0 {
+define fp128 @selectccat(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccat:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, %s2
@@ -22,7 +22,7 @@ define fp128 @selectccat(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccoeq(double, double, fp128, fp128) #0 {
+define fp128 @selectccoeq(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccoeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -36,7 +36,7 @@ define fp128 @selectccoeq(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccone(double, double, fp128, fp128) #0 {
+define fp128 @selectccone(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccone:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -50,7 +50,7 @@ define fp128 @selectccone(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccogt(double, double, fp128, fp128) #0 {
+define fp128 @selectccogt(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccogt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -64,7 +64,7 @@ define fp128 @selectccogt(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccoge(double, double, fp128, fp128) #0 {
+define fp128 @selectccoge(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccoge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -78,7 +78,7 @@ define fp128 @selectccoge(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccolt(double, double, fp128, fp128) #0 {
+define fp128 @selectccolt(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccolt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -92,7 +92,7 @@ define fp128 @selectccolt(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccole(double, double, fp128, fp128) #0 {
+define fp128 @selectccole(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccole:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -106,7 +106,7 @@ define fp128 @selectccole(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccord(double, double, fp128, fp128) #0 {
+define fp128 @selectccord(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccord:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -120,7 +120,7 @@ define fp128 @selectccord(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccuno(double, double, fp128, fp128) #0 {
+define fp128 @selectccuno(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccuno:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -134,7 +134,7 @@ define fp128 @selectccuno(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccueq(double, double, fp128, fp128) #0 {
+define fp128 @selectccueq(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccueq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -148,7 +148,7 @@ define fp128 @selectccueq(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccune(double, double, fp128, fp128) #0 {
+define fp128 @selectccune(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccune:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -162,7 +162,7 @@ define fp128 @selectccune(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccugt(double, double, fp128, fp128) #0 {
+define fp128 @selectccugt(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -176,7 +176,7 @@ define fp128 @selectccugt(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccuge(double, double, fp128, fp128) #0 {
+define fp128 @selectccuge(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -190,7 +190,7 @@ define fp128 @selectccuge(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccult(double, double, fp128, fp128) #0 {
+define fp128 @selectccult(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -204,7 +204,7 @@ define fp128 @selectccult(double, double, fp128, fp128) #0 {
   ret fp128 %6
 }
 
-define fp128 @selectccule(double, double, fp128, fp128) #0 {
+define fp128 @selectccule(double, double, fp128, fp128) {
 ; CHECK-LABEL: selectccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1

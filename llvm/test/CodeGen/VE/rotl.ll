@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define dso_local i64 @func1(i64, i32) local_unnamed_addr #0 {
+define i64 @func1(i64, i32) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sll %s34, %s0, %s1
@@ -18,7 +18,7 @@ define dso_local i64 @func1(i64, i32) local_unnamed_addr #0 {
   ret i64 %8
 }
 
-define dso_local i32 @func2(i32, i32) local_unnamed_addr #0 {
+define i32 @func2(i32, i32) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0

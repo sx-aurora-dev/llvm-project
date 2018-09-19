@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define dso_local i32 @func(i32, i32, i32) local_unnamed_addr #0 {
+define i32 @func(i32, i32, i32) {
 ; CHECK-LABEL: func:
 ; CHECK:       st %s9, (,%s11)
 ; CHECK-NEXT:  st %s10, 8(,%s11)

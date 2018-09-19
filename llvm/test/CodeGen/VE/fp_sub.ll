@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define dso_local float @func1(float, float) local_unnamed_addr #0 {
+define float @func1(float, float) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fsub.s %s0, %s0, %s1
@@ -9,7 +9,7 @@ define dso_local float @func1(float, float) local_unnamed_addr #0 {
   ret float %3
 }
 
-define dso_local double @func2(double, double) local_unnamed_addr #0 {
+define double @func2(double, double) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fsub.d %s0, %s0, %s1
@@ -18,7 +18,7 @@ define dso_local double @func2(double, double) local_unnamed_addr #0 {
   ret double %3
 }
 
-define dso_local fp128 @func3(fp128, fp128) local_unnamed_addr #0 {
+define fp128 @func3(fp128, fp128) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fsub.q %s0, %s0, %s2
@@ -27,7 +27,7 @@ define dso_local fp128 @func3(fp128, fp128) local_unnamed_addr #0 {
   ret fp128 %3
 }
 
-define dso_local float @func4(float) local_unnamed_addr #0 {
+define float @func4(float) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s34, .LCPI3_0@hi
@@ -38,7 +38,7 @@ define dso_local float @func4(float) local_unnamed_addr #0 {
   ret float %2
 }
 
-define dso_local double @func5(double) local_unnamed_addr #0 {
+define double @func5(double) {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s34, .LCPI4_0@hi
@@ -49,7 +49,7 @@ define dso_local double @func5(double) local_unnamed_addr #0 {
   ret double %2
 }
 
-define dso_local fp128 @func6(fp128) local_unnamed_addr #0 {
+define fp128 @func6(fp128) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s34, .LCPI5_0@lo
@@ -64,7 +64,7 @@ define dso_local fp128 @func6(fp128) local_unnamed_addr #0 {
   ret fp128 %2
 }
 
-define dso_local float @func7(float) local_unnamed_addr #0 {
+define float @func7(float) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s34, .LCPI6_0@hi
@@ -75,7 +75,7 @@ define dso_local float @func7(float) local_unnamed_addr #0 {
   ret float %2
 }
 
-define dso_local double @func8(double) local_unnamed_addr #0 {
+define double @func8(double) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s34, .LCPI7_0@hi
@@ -86,7 +86,7 @@ define dso_local double @func8(double) local_unnamed_addr #0 {
   ret double %2
 }
 
-define dso_local fp128 @func9(fp128) local_unnamed_addr #0 {
+define fp128 @func9(fp128) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s34, .LCPI8_0@lo

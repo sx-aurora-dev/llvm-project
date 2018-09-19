@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i32 @selectcceq(i32, i32, i32, i32) #0 {
+define i32 @selectcceq(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectcceq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -14,7 +14,7 @@ define i32 @selectcceq(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccne(i32, i32, i32, i32) #0 {
+define i32 @selectccne(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccne:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -28,7 +28,7 @@ define i32 @selectccne(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccsgt(i32, i32, i32, i32) #0 {
+define i32 @selectccsgt(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccsgt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -42,7 +42,7 @@ define i32 @selectccsgt(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccsge(i32, i32, i32, i32) #0 {
+define i32 @selectccsge(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccsge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -56,7 +56,7 @@ define i32 @selectccsge(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccslt(i32, i32, i32, i32) #0 {
+define i32 @selectccslt(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccslt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -70,7 +70,7 @@ define i32 @selectccslt(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccsle(i32, i32, i32, i32) #0 {
+define i32 @selectccsle(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccsle:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -84,7 +84,7 @@ define i32 @selectccsle(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccugt(i32, i32, i32, i32) #0 {
+define i32 @selectccugt(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -98,7 +98,7 @@ define i32 @selectccugt(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccuge(i32, i32, i32, i32) #0 {
+define i32 @selectccuge(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -112,7 +112,7 @@ define i32 @selectccuge(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccult(i32, i32, i32, i32) #0 {
+define i32 @selectccult(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -126,7 +126,7 @@ define i32 @selectccult(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccule(i32, i32, i32, i32) #0 {
+define i32 @selectccule(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -140,7 +140,7 @@ define i32 @selectccule(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccugt2(i32, i32, i32, i32) #0 {
+define i32 @selectccugt2(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccugt2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -154,7 +154,7 @@ define i32 @selectccugt2(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccuge2(i32, i32, i32, i32) #0 {
+define i32 @selectccuge2(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccuge2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -168,7 +168,7 @@ define i32 @selectccuge2(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccult2(i32, i32, i32, i32) #0 {
+define i32 @selectccult2(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccult2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -182,7 +182,7 @@ define i32 @selectccult2(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccule2(i32, i32, i32, i32) #0 {
+define i32 @selectccule2(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccule2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3

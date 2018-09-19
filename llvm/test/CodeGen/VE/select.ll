@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define fp128 @selectf128(i1 zeroext, fp128, fp128) #0 {
+define fp128 @selectf128(i1 zeroext, fp128, fp128) {
 ; CHECK-LABEL: selectf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
@@ -12,7 +12,7 @@ define fp128 @selectf128(i1 zeroext, fp128, fp128) #0 {
   ret fp128 %4
 }
 
-define double @selectf64(i1 zeroext, double, double) #0 {
+define double @selectf64(i1 zeroext, double, double) {
 ; CHECK-LABEL: selectf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s0
@@ -22,7 +22,7 @@ define double @selectf64(i1 zeroext, double, double) #0 {
   ret double %4
 }
 
-define float @selectf32(i1 zeroext, float, float) #0 {
+define float @selectf32(i1 zeroext, float, float) {
 ; CHECK-LABEL: selectf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
@@ -34,7 +34,7 @@ define float @selectf32(i1 zeroext, float, float) #0 {
   ret float %4
 }
 
-define i64 @selecti64(i1 zeroext, i64, i64) #0 {
+define i64 @selecti64(i1 zeroext, i64, i64) {
 ; CHECK-LABEL: selecti64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s0
@@ -44,7 +44,7 @@ define i64 @selecti64(i1 zeroext, i64, i64) #0 {
   ret i64 %4
 }
 
-define i32 @selecti32(i1 zeroext, i32, i32) #0 {
+define i32 @selecti32(i1 zeroext, i32, i32) {
 ; CHECK-LABEL: selecti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 def $sx2
@@ -56,7 +56,7 @@ define i32 @selecti32(i1 zeroext, i32, i32) #0 {
   ret i32 %4
 }
 
-define zeroext i1 @selecti1(i1 zeroext, i1 zeroext, i1 zeroext) #0 {
+define zeroext i1 @selecti1(i1 zeroext, i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: selecti1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 def $sx2

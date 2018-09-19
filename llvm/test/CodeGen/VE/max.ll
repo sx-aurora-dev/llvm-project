@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define double @maxf64(double, double) #0 {
+define double @maxf64(double, double) {
 ; CHECK-LABEL: maxf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmax.d %s0, %s0, %s1
@@ -10,7 +10,7 @@ define double @maxf64(double, double) #0 {
   ret double %4
 }
 
-define double @max2f64(double, double) #0 {
+define double @max2f64(double, double) {
 ; CHECK-LABEL: max2f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmax.d %s0, %s0, %s1
@@ -21,7 +21,7 @@ define double @max2f64(double, double) #0 {
 }
 
 ; VE has no max for unordered comparison
-define double @maxuf64(double, double) #0 {
+define double @maxuf64(double, double) {
 ; CHECK-LABEL: maxuf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -34,7 +34,7 @@ define double @maxuf64(double, double) #0 {
 }
 
 ; VE has no max for unordered comparison
-define double @max2uf64(double, double) #0 {
+define double @max2uf64(double, double) {
 ; CHECK-LABEL: max2uf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -46,7 +46,7 @@ define double @max2uf64(double, double) #0 {
   ret double %4
 }
 
-define float @maxf32(float, float) #0 {
+define float @maxf32(float, float) {
 ; CHECK-LABEL: maxf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmax.s %s0, %s0, %s1
@@ -56,7 +56,7 @@ define float @maxf32(float, float) #0 {
   ret float %4
 }
 
-define float @max2f32(float, float) #0 {
+define float @max2f32(float, float) {
 ; CHECK-LABEL: max2f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmax.s %s0, %s0, %s1
@@ -66,7 +66,7 @@ define float @max2f32(float, float) #0 {
   ret float %4
 }
 
-define float @maxuf32(float, float) #0 {
+define float @maxuf32(float, float) {
 ; CHECK-LABEL: maxuf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
@@ -80,7 +80,7 @@ define float @maxuf32(float, float) #0 {
   ret float %4
 }
 
-define float @max2uf32(float, float) #0 {
+define float @max2uf32(float, float) {
 ; CHECK-LABEL: max2uf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
@@ -94,7 +94,7 @@ define float @max2uf32(float, float) #0 {
   ret float %4
 }
 
-define i64 @maxi64(i64, i64) #0 {
+define i64 @maxi64(i64, i64) {
 ; CHECK-LABEL: maxi64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    maxs.l %s0, %s0, %s1
@@ -104,7 +104,7 @@ define i64 @maxi64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i64 @max2i64(i64, i64) #0 {
+define i64 @max2i64(i64, i64) {
 ; CHECK-LABEL: max2i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    maxs.l %s0, %s0, %s1
@@ -114,7 +114,7 @@ define i64 @max2i64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i64 @maxu64(i64, i64) #0 {
+define i64 @maxu64(i64, i64) {
 ; CHECK-LABEL: maxu64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -126,7 +126,7 @@ define i64 @maxu64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i64 @max2u64(i64, i64) #0 {
+define i64 @max2u64(i64, i64) {
 ; CHECK-LABEL: max2u64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -138,7 +138,7 @@ define i64 @max2u64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i32 @maxi32(i32, i32) #0 {
+define i32 @maxi32(i32, i32) {
 ; CHECK-LABEL: maxi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    maxs.w.zx %s0, %s0, %s1
@@ -148,7 +148,7 @@ define i32 @maxi32(i32, i32) #0 {
   ret i32 %4
 }
 
-define i32 @max2i32(i32, i32) #0 {
+define i32 @max2i32(i32, i32) {
 ; CHECK-LABEL: max2i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    maxs.w.zx %s0, %s0, %s1
@@ -158,7 +158,7 @@ define i32 @max2i32(i32, i32) #0 {
   ret i32 %4
 }
 
-define i32 @maxu32(i32, i32) #0 {
+define i32 @maxu32(i32, i32) {
 ; CHECK-LABEL: maxu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
@@ -172,7 +172,7 @@ define i32 @maxu32(i32, i32) #0 {
   ret i32 %4
 }
 
-define i32 @max2u32(i32, i32) #0 {
+define i32 @max2u32(i32, i32) {
 ; CHECK-LABEL: max2u32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
@@ -186,7 +186,7 @@ define i32 @max2u32(i32, i32) #0 {
   ret i32 %4
 }
 
-define zeroext i1 @maxi1(i1 zeroext, i1 zeroext) #0 {
+define zeroext i1 @maxi1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: maxi1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s34, %s0, %s1

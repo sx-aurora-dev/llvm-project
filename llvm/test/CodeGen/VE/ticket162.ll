@@ -1,11 +1,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
-; ModuleID = 'test.c'
-source_filename = "test.c"
-target datalayout = "e-m:e-i64:64-n32:64-S64-v16384:64:64"
-target triple = "ve"
 
 ; Function Attrs: nounwind readonly
-define dso_local i64 @test(float* readonly %pValue, i64 %distance) local_unnamed_addr #0 {
+define i64 @test(float* readonly %pValue, i64 %distance) {
 ; CHECK-LABEL: test
 ; CHECK: .LBB0_2:
 ; CHECK-NEXT: sll %s34, %s1, 2
@@ -24,13 +20,5 @@ entry:
 }
 
 ; Function Attrs: nounwind readonly
-declare i64 @llvm.ve.pack.f32p(i8*, i8*) #1
+declare i64 @llvm.ve.pack.f32p(i8*, i8*)
 
-attributes #0 = { nounwind readonly "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { nounwind readonly }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git d326119e3a71593369edd97e642577b570bf7c32) (llvm/llvm.git ae4a0b83cb85df4a10710782ad4640e34361e368)"}

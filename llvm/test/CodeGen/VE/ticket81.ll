@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define void @vfdivsA_vvv(float* %pvx, float* %pvy, float* %pvz, i32 %n) #0 {
+define void @vfdivsA_vvv(float* %pvx, float* %pvy, float* %pvz, i32 %n) {
 ; CHECK-LABEL: vfdivsA_vvv:
 ; CHECK:       mins.w.zx %s38, %s37, %s35
 ; CHECK-NEXT:  lvl %s38
@@ -41,13 +41,13 @@ for.body:                                         ; preds = %entry, %for.body
 }
 
 ; Function Attrs: nounwind
-declare void @llvm.ve.lvl(i32) #1
+declare void @llvm.ve.lvl(i32)
 
 ; Function Attrs: nounwind readonly
-declare <256 x double> @llvm.ve.vldu.vss(i64, i8*) #2
+declare <256 x double> @llvm.ve.vldu.vss(i64, i8*)
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vfdivsA.vvv(<256 x double>, <256 x double>) #3
+declare <256 x double> @llvm.ve.vfdivsA.vvv(<256 x double>, <256 x double>)
 
 ; Function Attrs: nounwind writeonly
-declare void @llvm.ve.vstu.vss(<256 x double>, i64, i8*) #4
+declare void @llvm.ve.vstu.vss(<256 x double>, i64, i8*)

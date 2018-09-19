@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i64 @selectcceq(i64, i64, i64, i64) #0 {
+define i64 @selectcceq(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectcceq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -11,7 +11,7 @@ define i64 @selectcceq(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccne(i64, i64, i64, i64) #0 {
+define i64 @selectccne(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccne:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -22,7 +22,7 @@ define i64 @selectccne(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccsgt(i64, i64, i64, i64) #0 {
+define i64 @selectccsgt(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccsgt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -33,7 +33,7 @@ define i64 @selectccsgt(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccsge(i64, i64, i64, i64) #0 {
+define i64 @selectccsge(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccsge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -44,7 +44,7 @@ define i64 @selectccsge(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccslt(i64, i64, i64, i64) #0 {
+define i64 @selectccslt(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccslt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -55,7 +55,7 @@ define i64 @selectccslt(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccsle(i64, i64, i64, i64) #0 {
+define i64 @selectccsle(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccsle:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -66,7 +66,7 @@ define i64 @selectccsle(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccugt(i64, i64, i64, i64) #0 {
+define i64 @selectccugt(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -77,7 +77,7 @@ define i64 @selectccugt(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccuge(i64, i64, i64, i64) #0 {
+define i64 @selectccuge(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -88,7 +88,7 @@ define i64 @selectccuge(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccult(i64, i64, i64, i64) #0 {
+define i64 @selectccult(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -99,7 +99,7 @@ define i64 @selectccult(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccule(i64, i64, i64, i64) #0 {
+define i64 @selectccule(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -110,7 +110,7 @@ define i64 @selectccule(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccugt2(i64, i64, i64, i64) #0 {
+define i64 @selectccugt2(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccugt2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -121,7 +121,7 @@ define i64 @selectccugt2(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccuge2(i64, i64, i64, i64) #0 {
+define i64 @selectccuge2(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccuge2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -132,7 +132,7 @@ define i64 @selectccuge2(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccult2(i64, i64, i64, i64) #0 {
+define i64 @selectccult2(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccult2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -143,7 +143,7 @@ define i64 @selectccult2(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccule2(i64, i64, i64, i64) #0 {
+define i64 @selectccule2(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccule2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1

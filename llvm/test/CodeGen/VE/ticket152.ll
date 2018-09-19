@@ -1,22 +1,17 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-; ModuleID = 'src/ticket152.c'
-source_filename = "src/ticket152.c"
-target datalayout = "e-m:e-i64:64-n32:64-S64-v16384:64:64"
-target triple = "ve"
-
 ; Function Attrs: norecurse nounwind readnone
-define dso_local i32 @callee(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i8 signext, i16 signext, fp128) local_unnamed_addr #0 {
+define i32 @callee(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i8 signext, i16 signext, fp128) {
 ; CHECK-LABEL: callee:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea %s34,272(,%s9)
+; CHECK-NEXT:  lea %s34,448(,%s11)
 ; CHECK-NEXT:  or %s34, 8, %s34
 ; CHECK-NEXT:  ld %s34, (,%s34)
-; CHECK-NEXT:  ld %s35, 272(,%s9)
-; CHECK-NEXT:  ldl.sx %s36, 264(,%s9)
-; CHECK-NEXT:  ldl.sx %s37, 256(,%s9)
-; CHECK-NEXT:  ldl.sx %s38, 248(,%s9)
-; CHECK-NEXT:  ldl.sx %s39, 240(,%s9)
+; CHECK-NEXT:  ld %s35, 448(,%s11)
+; CHECK-NEXT:  ldl.sx %s36, 440(,%s11)
+; CHECK-NEXT:  ldl.sx %s37, 432(,%s11)
+; CHECK-NEXT:  ldl.sx %s38, 424(,%s11)
+; CHECK-NEXT:  ldl.sx %s39, 416(,%s11)
 ; CHECK-NEXT:  adds.w.sx %s40, %s1, %s0
 ; CHECK-NEXT:  adds.w.sx %s40, %s40, %s2
 ; CHECK-NEXT:  adds.w.sx %s40, %s40, %s3
@@ -51,7 +46,7 @@ define dso_local i32 @callee(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i
 }
 
 ; Function Attrs: nounwind
-define dso_local i32 @caller2() local_unnamed_addr #1 {
+define i32 @caller2() {
 ; CHECK-LABEL: caller2:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  or %s34, 10, (0)1
@@ -71,14 +66,14 @@ define dso_local i32 @caller2() local_unnamed_addr #1 {
 ; CHECK-NEXT:  or %s7, 8, (0)1
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
-  %1 = tail call i32 @callee2(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10) #3
+  %1 = tail call i32 @callee2(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
   ret i32 %1
 }
 
-declare dso_local i32 @callee2(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) local_unnamed_addr #2
+declare i32 @callee2(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)
 
 ; Function Attrs: nounwind
-define dso_local i32 @caller3() local_unnamed_addr #1 {
+define i32 @caller3() {
 ; CHECK-LABEL: caller3:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  or %s34, 10, (0)1
@@ -110,14 +105,14 @@ define dso_local i32 @caller3() local_unnamed_addr #1 {
 ; CHECK-NEXT:  lea.sl %s12, callee3@hi(%s34)
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
-  %1 = tail call i32 (i32, ...) @callee3(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10) #3
+  %1 = tail call i32 (i32, ...) @callee3(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
   ret i32 %1
 }
 
-declare dso_local i32 @callee3(i32, ...) local_unnamed_addr #2
+declare i32 @callee3(i32, ...)
 
 ; Function Attrs: nounwind
-define dso_local i32 @caller4() local_unnamed_addr #1 {
+define i32 @caller4() {
 ; CHECK-LABEL: caller4:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  or %s34, 10, (0)1
@@ -138,19 +133,9 @@ define dso_local i32 @caller4() local_unnamed_addr #1 {
 ; CHECK-NEXT:  or %s7, 8, (0)1
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
-  %1 = tail call i32 bitcast (i32 (...)* @callee4 to i32 (i32, i32, i32, double, i32, i32, i32, i32, i32, i32)*)(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10) #3
+  %1 = tail call i32 bitcast (i32 (...)* @callee4 to i32 (i32, i32, i32, double, i32, i32, i32, i32, i32, i32)*)(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
   ret i32 %1
 }
 
-declare dso_local i32 @callee4(...) local_unnamed_addr #2
+declare i32 @callee4(...)
 
-attributes #0 = { norecurse nounwind readnone "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #2 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #3 = { nounwind }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (https://github.com/llvm-mirror/clang.git d326119e3a71593369edd97e642577b570bf7c32) (https://github.com/llvm-mirror/llvm.git 322c96fd93ac73a432d19f3b95b71f6439b0bd14)"}

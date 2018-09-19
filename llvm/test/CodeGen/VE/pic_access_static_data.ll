@@ -4,7 +4,7 @@
 @src = internal unnamed_addr global i1 false, align 4
 @.str = private unnamed_addr constant [3 x i8] c"%d\00", align 1
 
-define void @func() local_unnamed_addr #0 {
+define void @func() {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB0_2:
 ; CHECK-NEXT:  lea %s15, _GLOBAL_OFFSET_TABLE_@pc_lo(-24)
@@ -32,7 +32,7 @@ define void @func() local_unnamed_addr #0 {
 }
 
 ; Function Attrs: nounwind
-define i32 @main() local_unnamed_addr #1 {
+define i32 @main() {
   store i1 true, i1* @src, align 4
   tail call void @func()
   %1 = load i32, i32* @dst, align 4, !tbaa !3
@@ -40,10 +40,8 @@ define i32 @main() local_unnamed_addr #1 {
   ret i32 0
 }
 
-declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #2
+declare i32 @printf(i8* nocapture readonly, ...)
 
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
 !2 = !{!"clang version 8.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (llvm/llvm.git 6fe73ad9979f8f32a171413308a96c1d7c3b6a18)"}
 !3 = !{!4, !4, i64 0}
 !4 = !{!"int", !5, i64 0}
