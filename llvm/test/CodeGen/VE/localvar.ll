@@ -1,9 +1,9 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-@p = external dso_local local_unnamed_addr global double*, align 8
+@p = external global double*, align 8
 
 ; Function Attrs: nounwind
-define dso_local void @test(i32) local_unnamed_addr #0 {
+define void @test(i32) {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB0_2:
 ; CHECK-NEXT:    or %s34, 0, %s0
@@ -47,16 +47,8 @@ define dso_local void @test(i32) local_unnamed_addr #0 {
 }
 
 ; Function Attrs: argmemonly nounwind
-declare void @llvm.memcpy.p0i8.p0i8.i64(i8* nocapture writeonly, i8* nocapture readonly, i64, i1) #1
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* nocapture writeonly, i8* nocapture readonly, i64, i1)
 
-attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { argmemonly nounwind }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 8.0.0 (https://github.com/llvm-mirror/clang.git 8ac29e6baf2b9a5aa59f1a1d9b75d2bf8c566d8f) (https://github.com/llvm-mirror/llvm.git f4ef29896b171e346c1c9fbee7184bbce7d9bb44)"}
 !2 = !{!3, !3, i64 0}
 !3 = !{!"any pointer", !4, i64 0}
 !4 = !{!"omnipotent char", !5, i64 0}

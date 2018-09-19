@@ -1,10 +1,10 @@
 ; RUN: llc -relocation-model=pic < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
 @dst = external global i32, align 4
-@ptr = external local_unnamed_addr global i32*, align 8
-@src = external local_unnamed_addr global i32, align 4
+@ptr = external global i32*, align 8
+@src = external global i32, align 4
 
-define i32 @func() local_unnamed_addr #0 {
+define i32 @func() {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s15, _GLOBAL_OFFSET_TABLE_@pc_lo(-24)
@@ -35,8 +35,6 @@ define i32 @func() local_unnamed_addr #0 {
   ret i32 1
 }
 
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
 !2 = !{!"clang version 8.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (llvm/llvm.git 6fe73ad9979f8f32a171413308a96c1d7c3b6a18)"}
 !3 = !{!4, !4, i64 0}
 !4 = !{!"any pointer", !5, i64 0}

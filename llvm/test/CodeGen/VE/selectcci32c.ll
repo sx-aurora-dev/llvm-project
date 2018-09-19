@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i32 @selectccsgti8(i8, i8, i32, i32) #0 {
+define i32 @selectccsgti8(i8, i8, i32, i32) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -18,7 +18,7 @@ define i32 @selectccsgti8(i8, i8, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccsgti16(i16, i16, i32, i32) #0 {
+define i32 @selectccsgti16(i16, i16, i32, i32) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -36,7 +36,7 @@ define i32 @selectccsgti16(i16, i16, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccsgti32(i32, i32, i32, i32) #0 {
+define i32 @selectccsgti32(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -50,7 +50,7 @@ define i32 @selectccsgti32(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccsgti64(i64, i64, i32, i32) #0 {
+define i32 @selectccsgti64(i64, i64, i32, i32) {
 ; CHECK-LABEL: selectccsgti64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -64,7 +64,7 @@ define i32 @selectccsgti64(i64, i64, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccogtf32(float, float, i32, i32) #0 {
+define i32 @selectccogtf32(float, float, i32, i32) {
 ; CHECK-LABEL: selectccogtf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -78,7 +78,7 @@ define i32 @selectccogtf32(float, float, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectccogtf64(double, double, i32, i32) #0 {
+define i32 @selectccogtf64(double, double, i32, i32) {
 ; CHECK-LABEL: selectccogtf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3

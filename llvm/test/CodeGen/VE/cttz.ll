@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define dso_local i64 @func1(i64) local_unnamed_addr #0 {
+define i64 @func1(i64) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s34, -1(%s0)
@@ -12,9 +12,9 @@ define dso_local i64 @func1(i64) local_unnamed_addr #0 {
   ret i64 %2
 }
 
-declare i64 @llvm.cttz.i64(i64, i1) #1
+declare i64 @llvm.cttz.i64(i64, i1)
 
-define dso_local i32 @func2(i32) local_unnamed_addr #0 {
+define i32 @func2(i32) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s34, -1(%s0)
@@ -28,9 +28,9 @@ define dso_local i32 @func2(i32) local_unnamed_addr #0 {
   ret i32 %2
 }
 
-declare i32 @llvm.cttz.i32(i32, i1) #1
+declare i32 @llvm.cttz.i32(i32, i1)
 
-define dso_local i16 @func3(i16) local_unnamed_addr #0 {
+define i16 @func3(i16) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s34, -1(%s0)
@@ -44,9 +44,9 @@ define dso_local i16 @func3(i16) local_unnamed_addr #0 {
   ret i16 %2
 }
 
-declare i16 @llvm.cttz.i16(i16, i1) #1
+declare i16 @llvm.cttz.i16(i16, i1)
 
-define dso_local i8 @func4(i8) local_unnamed_addr #0 {
+define i8 @func4(i8) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s34, -1(%s0)
@@ -60,7 +60,7 @@ define dso_local i8 @func4(i8) local_unnamed_addr #0 {
   ret i8 %2
 }
 
-declare i8 @llvm.cttz.i8(i8, i1) #1
+declare i8 @llvm.cttz.i8(i8, i1)
 
 !2 = !{i64 0, i64 65}
 !3 = !{i32 0, i32 33}

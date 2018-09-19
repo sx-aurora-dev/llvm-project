@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define zeroext i1 @setcceq(i32, i32) #0 {
+define zeroext i1 @setcceq(i32, i32) {
 ; CHECK-LABEL: setcceq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -10,7 +10,7 @@ define zeroext i1 @setcceq(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccne(i32, i32) #0 {
+define zeroext i1 @setccne(i32, i32) {
 ; CHECK-LABEL: setccne:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -20,7 +20,7 @@ define zeroext i1 @setccne(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccugt(i32, i32) #0 {
+define zeroext i1 @setccugt(i32, i32) {
 ; CHECK-LABEL: setccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.w %s34, %s0, %s1
@@ -30,7 +30,7 @@ define zeroext i1 @setccugt(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccuge(i32, i32) #0 {
+define zeroext i1 @setccuge(i32, i32) {
 ; CHECK-LABEL: setccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.w %s34, %s0, %s1
@@ -40,7 +40,7 @@ define zeroext i1 @setccuge(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccult(i32, i32) #0 {
+define zeroext i1 @setccult(i32, i32) {
 ; CHECK-LABEL: setccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.w %s34, %s0, %s1
@@ -50,7 +50,7 @@ define zeroext i1 @setccult(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccule(i32, i32) #0 {
+define zeroext i1 @setccule(i32, i32) {
 ; CHECK-LABEL: setccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.w %s34, %s0, %s1
@@ -60,7 +60,7 @@ define zeroext i1 @setccule(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccsgt(i32, i32) #0 {
+define zeroext i1 @setccsgt(i32, i32) {
 ; CHECK-LABEL: setccsgt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -70,7 +70,7 @@ define zeroext i1 @setccsgt(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccsge(i32, i32) #0 {
+define zeroext i1 @setccsge(i32, i32) {
 ; CHECK-LABEL: setccsge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -80,7 +80,7 @@ define zeroext i1 @setccsge(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccslt(i32, i32) #0 {
+define zeroext i1 @setccslt(i32, i32) {
 ; CHECK-LABEL: setccslt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -90,7 +90,7 @@ define zeroext i1 @setccslt(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccsle(i32, i32) #0 {
+define zeroext i1 @setccsle(i32, i32) {
 ; CHECK-LABEL: setccsle:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1

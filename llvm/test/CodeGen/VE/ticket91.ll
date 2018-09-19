@@ -1,12 +1,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-; ModuleID = 'src/ticket91.c'
-source_filename = "src/ticket91.c"
-target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-unknown-linux-gnu"
-
 ; Function Attrs: nounwind uwtable
-define dso_local void @func(i32* nocapture) local_unnamed_addr #0 {
+define void @func(i32* nocapture) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  lea %s34,176(,%s11)
@@ -14,14 +9,14 @@ define dso_local void @func(i32* nocapture) local_unnamed_addr #0 {
 ; CHECK-NEXT:  or %s35, 0, (0)1
   %2 = alloca [256 x i32], align 16
   %3 = bitcast [256 x i32]* %2 to i8*
-  call void @llvm.lifetime.start.p0i8(i64 1024, i8* nonnull %3) #2
+  call void @llvm.lifetime.start.p0i8(i64 1024, i8* nonnull %3)
   br label %7
 
 ; <label>:4:                                      ; preds = %7
   %5 = getelementptr inbounds [256 x i32], [256 x i32]* %2, i64 0, i64 0
   %6 = load i32, i32* %5, align 16, !tbaa !2
   store i32 %6, i32* %0, align 4, !tbaa !2
-  call void @llvm.lifetime.end.p0i8(i64 1024, i8* nonnull %3) #2
+  call void @llvm.lifetime.end.p0i8(i64 1024, i8* nonnull %3)
   ret void
 
 ; <label>:7:                                      ; preds = %7, %1
@@ -63,20 +58,11 @@ define dso_local void @func(i32* nocapture) local_unnamed_addr #0 {
 }
 
 ; Function Attrs: argmemonly nounwind
-declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture) #1
+declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture)
 
 ; Function Attrs: argmemonly nounwind
-declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture) #1
+declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture)
 
-attributes #0 = { nounwind uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { argmemonly nounwind }
-attributes #2 = { nounwind }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 7.0.0 (https://github.com/llvm-mirror/clang.git 909589b712aa9477290f5c765c4fb2fb335e13d4) (https://github.com/llvm-mirror/llvm.git cc977a6c8a34d7af57b4db2d7cc4ff4254905840)"}
 !2 = !{!3, !3, i64 0}
 !3 = !{!"int", !4, i64 0}
 !4 = !{!"omnipotent char", !5, i64 0}

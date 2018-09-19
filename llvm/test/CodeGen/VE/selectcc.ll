@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define double @selectccf64(double, double, double, double) #0 {
+define double @selectccf64(double, double, double, double) {
 ; CHECK-LABEL: selectccf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -12,7 +12,7 @@ define double @selectccf64(double, double, double, double) #0 {
   ret double %6
 }
 
-define float @selectccf32(float, float, float, float) #0 {
+define float @selectccf32(float, float, float, float) {
 ; CHECK-LABEL: selectccf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
@@ -26,7 +26,7 @@ define float @selectccf32(float, float, float, float) #0 {
   ret float %6
 }
 
-define i64 @selectcci64(i64, i64, i64, i64) #0 {
+define i64 @selectcci64(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectcci64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -38,7 +38,7 @@ define i64 @selectcci64(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i32 @selectcci32(i32, i32, i32, i32) #0 {
+define i32 @selectcci32(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectcci32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -52,7 +52,7 @@ define i32 @selectcci32(i32, i32, i32, i32) #0 {
   ret i32 %6
 }
 
-define i32 @selectcci32_2(i32, i32, i32, i32) #0 {
+define i32 @selectcci32_2(i32, i32, i32, i32) {
 ; CHECK-LABEL: selectcci32_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3
@@ -68,7 +68,7 @@ define i32 @selectcci32_2(i32, i32, i32, i32) #0 {
   ret i32 %7
 }
 
-define zeroext i1 @selectcci1(i32, i32, i1 zeroext, i1 zeroext) #0 {
+define zeroext i1 @selectcci1(i32, i32, i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: selectcci1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 def $sx3

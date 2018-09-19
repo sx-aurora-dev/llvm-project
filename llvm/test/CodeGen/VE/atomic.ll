@@ -1,13 +1,13 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-@c = common dso_local global i8 0, align 32
-@s = common dso_local global i16 0, align 32
-@i = common dso_local global i32 0, align 32
-@l = common dso_local global i64 0, align 32
-@ui = common dso_local global i32 0, align 32
+@c = common global i8 0, align 32
+@s = common global i16 0, align 32
+@i = common global i32 0, align 32
+@l = common global i64 0, align 32
+@ui = common global i32 0, align 32
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_1() local_unnamed_addr #0 {
+define void @test_atomic_store_1() {
 ; CHECK-LABEL: test_atomic_store_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -21,7 +21,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_1seq() local_unnamed_addr #0 {
+define void @test_atomic_store_1seq() {
 ; CHECK-LABEL: test_atomic_store_1seq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -36,7 +36,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_2() local_unnamed_addr #0 {
+define void @test_atomic_store_2() {
 ; CHECK-LABEL: test_atomic_store_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -50,7 +50,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_2seq() local_unnamed_addr #0 {
+define void @test_atomic_store_2seq() {
 ; CHECK-LABEL: test_atomic_store_2seq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -65,7 +65,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_4() local_unnamed_addr #0 {
+define void @test_atomic_store_4() {
 ; CHECK-LABEL: test_atomic_store_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -79,7 +79,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_4cst() local_unnamed_addr #0 {
+define void @test_atomic_store_4cst() {
 ; CHECK-LABEL: test_atomic_store_4cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -94,7 +94,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_8() local_unnamed_addr #0 {
+define void @test_atomic_store_8() {
 ; CHECK-LABEL: test_atomic_store_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -108,7 +108,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_store_8cst() local_unnamed_addr #0 {
+define void @test_atomic_store_8cst() {
 ; CHECK-LABEL: test_atomic_store_8cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -123,7 +123,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_load_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_load_1() {
 ; CHECK-LABEL: test_atomic_load_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, c@hi
@@ -138,7 +138,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_load_1cst() local_unnamed_addr #0 {
+define signext i8 @test_atomic_load_1cst() {
 ; CHECK-LABEL: test_atomic_load_1cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, c@hi
@@ -153,7 +153,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_load_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_load_2() {
 ; CHECK-LABEL: test_atomic_load_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, s@hi
@@ -168,7 +168,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_load_2cst() local_unnamed_addr #0 {
+define signext i16 @test_atomic_load_2cst() {
 ; CHECK-LABEL: test_atomic_load_2cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, s@hi
@@ -183,7 +183,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_load_4() local_unnamed_addr #0 {
+define i32 @test_atomic_load_4() {
 ; CHECK-LABEL: test_atomic_load_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, i@hi
@@ -196,7 +196,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_load_4cst() local_unnamed_addr #0 {
+define i32 @test_atomic_load_4cst() {
 ; CHECK-LABEL: test_atomic_load_4cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, i@hi
@@ -209,7 +209,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_load_8() local_unnamed_addr #0 {
+define i64 @test_atomic_load_8() {
 ; CHECK-LABEL: test_atomic_load_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -222,7 +222,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_load_8cst() local_unnamed_addr #0 {
+define i64 @test_atomic_load_8cst() {
 ; CHECK-LABEL: test_atomic_load_8cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -235,7 +235,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_exchange_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_exchange_1() {
 ; CHECK-LABEL: test_atomic_exchange_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -252,7 +252,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_exchange_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_exchange_2() {
 ; CHECK-LABEL: test_atomic_exchange_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -269,7 +269,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_exchange_4() local_unnamed_addr #0 {
+define i32 @test_atomic_exchange_4() {
 ; CHECK-LABEL: test_atomic_exchange_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -284,7 +284,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_exchange_8() local_unnamed_addr #0 {
+define i64 @test_atomic_exchange_8() {
 ; CHECK-LABEL: test_atomic_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -300,7 +300,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_compare_exchange_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_compare_exchange_1() {
 ; CHECK-LABEL: test_atomic_compare_exchange_1:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:  fencem 3
@@ -337,7 +337,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_compare_exchange_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_compare_exchange_2() {
 ; CHECK-LABEL: test_atomic_compare_exchange_2:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:  fencem 3
@@ -376,7 +376,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_compare_exchange_4() local_unnamed_addr #0 {
+define i32 @test_atomic_compare_exchange_4() {
 ; CHECK-LABEL: test_atomic_compare_exchange_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -396,7 +396,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -416,7 +416,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_relaxed() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_relaxed() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -434,7 +434,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_consume() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_consume() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -453,7 +453,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_acquire() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_acquire() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -472,7 +472,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_release() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_release() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -491,7 +491,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_acq_rel() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_acq_rel() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -511,7 +511,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_compare_exchange_1_weak() local_unnamed_addr #0 {
+define signext i8 @test_atomic_compare_exchange_1_weak() {
 ; CHECK-LABEL: test_atomic_compare_exchange_1_weak:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -540,7 +540,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_compare_exchange_2_weak() local_unnamed_addr #0 {
+define signext i16 @test_atomic_compare_exchange_2_weak() {
 ; CHECK-LABEL: test_atomic_compare_exchange_2_weak:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -570,7 +570,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_compare_exchange_4_weak() local_unnamed_addr #0 {
+define i32 @test_atomic_compare_exchange_4_weak() {
 ; CHECK-LABEL: test_atomic_compare_exchange_4_weak:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -590,7 +590,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_weak() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_weak() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -610,7 +610,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_weak_relaxed() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_weak_relaxed() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -628,7 +628,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_weak_consume() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_weak_consume() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -647,7 +647,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_weak_acquire() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_weak_acquire() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
@@ -666,7 +666,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_weak_release() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_weak_release() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -685,7 +685,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_compare_exchange_8_weak_acq_rel() local_unnamed_addr #0 {
+define i64 @test_atomic_compare_exchange_8_weak_acq_rel() {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -705,7 +705,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local void @test_atomic_fence_relaxed() local_unnamed_addr #1 {
+define void @test_atomic_fence_relaxed() {
 ; CHECK-LABEL: test_atomic_fence_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -714,7 +714,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_fence_consume() local_unnamed_addr #0 {
+define void @test_atomic_fence_consume() {
 ; CHECK-LABEL: test_atomic_fence_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 2
@@ -725,7 +725,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_fence_acquire() local_unnamed_addr #0 {
+define void @test_atomic_fence_acquire() {
 ; CHECK-LABEL: test_atomic_fence_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 2
@@ -736,7 +736,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_fence_release() local_unnamed_addr #0 {
+define void @test_atomic_fence_release() {
 ; CHECK-LABEL: test_atomic_fence_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
@@ -747,7 +747,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_fence_acq_rel() local_unnamed_addr #0 {
+define void @test_atomic_fence_acq_rel() {
 ; CHECK-LABEL: test_atomic_fence_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -758,7 +758,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_fence_seq_cst() local_unnamed_addr #0 {
+define void @test_atomic_fence_seq_cst() {
 ; CHECK-LABEL: test_atomic_fence_seq_cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -769,7 +769,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_fetch_add_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_fetch_add_1() {
 ; CHECK-LABEL: test_atomic_fetch_add_1:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -801,7 +801,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_fetch_add_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_fetch_add_2() {
 ; CHECK-LABEL: test_atomic_fetch_add_2:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -833,7 +833,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_add_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_add_4() {
 ; CHECK-LABEL: test_atomic_fetch_add_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -854,7 +854,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_fetch_add_8() local_unnamed_addr #0 {
+define i64 @test_atomic_fetch_add_8() {
 ; CHECK-LABEL: test_atomic_fetch_add_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -875,7 +875,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_fetch_sub_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_fetch_sub_1() {
 ; CHECK-LABEL: test_atomic_fetch_sub_1:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -907,7 +907,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_fetch_sub_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_fetch_sub_2() {
 ; CHECK-LABEL: test_atomic_fetch_sub_2:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -939,7 +939,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_sub_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_sub_4() {
 ; CHECK-LABEL: test_atomic_fetch_sub_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -960,7 +960,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_fetch_sub_8() local_unnamed_addr #0 {
+define i64 @test_atomic_fetch_sub_8() {
 ; CHECK-LABEL: test_atomic_fetch_sub_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -981,7 +981,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_fetch_and_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_fetch_and_1() {
 ; CHECK-LABEL: test_atomic_fetch_and_1:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1010,7 +1010,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_fetch_and_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_fetch_and_2() {
 ; CHECK-LABEL: test_atomic_fetch_and_2:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1039,7 +1039,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_and_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_and_4() {
 ; CHECK-LABEL: test_atomic_fetch_and_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1060,7 +1060,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_fetch_and_8() local_unnamed_addr #0 {
+define i64 @test_atomic_fetch_and_8() {
 ; CHECK-LABEL: test_atomic_fetch_and_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1081,7 +1081,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_fetch_or_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_fetch_or_1() {
 ; CHECK-LABEL: test_atomic_fetch_or_1:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1109,7 +1109,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_fetch_or_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_fetch_or_2() {
 ; CHECK-LABEL: test_atomic_fetch_or_2:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1137,7 +1137,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_or_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_or_4() {
 ; CHECK-LABEL: test_atomic_fetch_or_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1158,7 +1158,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_fetch_or_8() local_unnamed_addr #0 {
+define i64 @test_atomic_fetch_or_8() {
 ; CHECK-LABEL: test_atomic_fetch_or_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1179,7 +1179,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_fetch_xor_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_fetch_xor_1() {
 ; CHECK-LABEL: test_atomic_fetch_xor_1:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1207,7 +1207,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_fetch_xor_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_fetch_xor_2() {
 ; CHECK-LABEL: test_atomic_fetch_xor_2:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1235,7 +1235,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_xor_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_xor_4() {
 ; CHECK-LABEL: test_atomic_fetch_xor_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1256,7 +1256,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_fetch_xor_8() local_unnamed_addr #0 {
+define i64 @test_atomic_fetch_xor_8() {
 ; CHECK-LABEL: test_atomic_fetch_xor_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1277,7 +1277,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i8 @test_atomic_fetch_nand_1() local_unnamed_addr #0 {
+define signext i8 @test_atomic_fetch_nand_1() {
 ; CHECK-LABEL: test_atomic_fetch_nand_1:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1311,7 +1311,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local signext i16 @test_atomic_fetch_nand_2() local_unnamed_addr #0 {
+define signext i16 @test_atomic_fetch_nand_2() {
 ; CHECK-LABEL: test_atomic_fetch_nand_2:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1345,7 +1345,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_nand_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_nand_4() {
 ; CHECK-LABEL: test_atomic_fetch_nand_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1367,7 +1367,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i64 @test_atomic_fetch_nand_8() local_unnamed_addr #0 {
+define i64 @test_atomic_fetch_nand_8() {
 ; CHECK-LABEL: test_atomic_fetch_nand_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1389,7 +1389,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_max_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_max_4() {
 ; CHECK-LABEL: test_atomic_fetch_max_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1411,7 +1411,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_min_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_min_4() {
 ; CHECK-LABEL: test_atomic_fetch_min_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1437,7 +1437,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_umax_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-LABEL: test_atomic_fetch_umax_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1462,7 +1462,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local i32 @test_atomic_fetch_umin_4() local_unnamed_addr #0 {
+define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-LABEL: test_atomic_fetch_umin_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
@@ -1488,7 +1488,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_clear_1() local_unnamed_addr #0 {
+define void @test_atomic_clear_1() {
 ; CHECK-LABEL: test_atomic_clear_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -1503,7 +1503,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_clear_2() local_unnamed_addr #0 {
+define void @test_atomic_clear_2() {
 ; CHECK-LABEL: test_atomic_clear_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -1518,7 +1518,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_clear_4() local_unnamed_addr #0 {
+define void @test_atomic_clear_4() {
 ; CHECK-LABEL: test_atomic_clear_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -1533,7 +1533,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define dso_local void @test_atomic_clear_8() local_unnamed_addr #0 {
+define void @test_atomic_clear_8() {
 ; CHECK-LABEL: test_atomic_clear_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
@@ -1547,11 +1547,3 @@ entry:
   ret void
 }
 
-attributes #0 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { norecurse nounwind readnone "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-
-!llvm.module.flags = !{!0}
-!llvm.ident = !{!1}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 8.0.0 (https://github.com/llvm-mirror/clang.git 4cec7fd6b9c7f8ad29e5f81e9c8fe893638fac6e) (https://github.com/llvm-mirror/llvm.git d9a3cdf54796b9942d6eec3305d73ea9f473f17e)"}

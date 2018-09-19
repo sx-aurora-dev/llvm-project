@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define dso_local signext i8 @func1(i8 signext, i8 signext) local_unnamed_addr #0 {
+define signext i8 @func1(i8 signext, i8 signext) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, %s1, %s0
@@ -10,7 +10,7 @@ define dso_local signext i8 @func1(i8 signext, i8 signext) local_unnamed_addr #0
   ret i8 %3
 }
 
-define dso_local signext i16 @func2(i16 signext, i16 signext) local_unnamed_addr #0 {
+define signext i16 @func2(i16 signext, i16 signext) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, %s1, %s0
@@ -20,7 +20,7 @@ define dso_local signext i16 @func2(i16 signext, i16 signext) local_unnamed_addr
   ret i16 %3
 }
 
-define dso_local i32 @func3(i32, i32) local_unnamed_addr #0 {
+define i32 @func3(i32, i32) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s0, %s1, %s0
@@ -28,7 +28,7 @@ define dso_local i32 @func3(i32, i32) local_unnamed_addr #0 {
   ret i32 %3
 }
 
-define dso_local i64 @func4(i64, i64) local_unnamed_addr #0 {
+define i64 @func4(i64, i64) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.l %s0, %s1, %s0
@@ -36,7 +36,7 @@ define dso_local i64 @func4(i64, i64) local_unnamed_addr #0 {
   ret i64 %3
 }
 
-define dso_local zeroext i8 @func5(i8 zeroext, i8 zeroext) local_unnamed_addr #0 {
+define zeroext i8 @func5(i8 zeroext, i8 zeroext) {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, %s1, %s0
@@ -45,7 +45,7 @@ define dso_local zeroext i8 @func5(i8 zeroext, i8 zeroext) local_unnamed_addr #0
   ret i8 %3
 }
 
-define dso_local zeroext i16 @func6(i16 zeroext, i16 zeroext) local_unnamed_addr #0 {
+define zeroext i16 @func6(i16 zeroext, i16 zeroext) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, %s1, %s0
@@ -54,7 +54,7 @@ define dso_local zeroext i16 @func6(i16 zeroext, i16 zeroext) local_unnamed_addr
   ret i16 %3
 }
 
-define dso_local i32 @func7(i32, i32) local_unnamed_addr #0 {
+define i32 @func7(i32, i32) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s0, %s1, %s0
@@ -62,7 +62,7 @@ define dso_local i32 @func7(i32, i32) local_unnamed_addr #0 {
   ret i32 %3
 }
 
-define dso_local i64 @func8(i64, i64) local_unnamed_addr #0 {
+define i64 @func8(i64, i64) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.l %s0, %s1, %s0
@@ -70,7 +70,7 @@ define dso_local i64 @func8(i64, i64) local_unnamed_addr #0 {
   ret i64 %3
 }
 
-define dso_local float @func9(float, float) local_unnamed_addr #0 {
+define float @func9(float, float) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmul.s %s0, %s0, %s1
@@ -78,7 +78,7 @@ define dso_local float @func9(float, float) local_unnamed_addr #0 {
   ret float %3
 }
 
-define dso_local double @func10(double, double) local_unnamed_addr #0 {
+define double @func10(double, double) {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmul.d %s0, %s0, %s1
@@ -86,7 +86,7 @@ define dso_local double @func10(double, double) local_unnamed_addr #0 {
   ret double %3
 }
 
-define dso_local signext i8 @func11(i8 signext) local_unnamed_addr #0 {
+define signext i8 @func11(i8 signext) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, 5, %s0
@@ -96,7 +96,7 @@ define dso_local signext i8 @func11(i8 signext) local_unnamed_addr #0 {
   ret i8 %2
 }
 
-define dso_local signext i16 @func12(i16 signext) local_unnamed_addr #0 {
+define signext i16 @func12(i16 signext) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, 5, %s0
@@ -106,7 +106,7 @@ define dso_local signext i16 @func12(i16 signext) local_unnamed_addr #0 {
   ret i16 %2
 }
 
-define dso_local i32 @func13(i32) local_unnamed_addr #0 {
+define i32 @func13(i32) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s0, 5, %s0
@@ -114,7 +114,7 @@ define dso_local i32 @func13(i32) local_unnamed_addr #0 {
   ret i32 %2
 }
 
-define dso_local i64 @func14(i64) local_unnamed_addr #0 {
+define i64 @func14(i64) {
 ; CHECK-LABEL: func14:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.l %s0, 5, %s0
@@ -122,7 +122,7 @@ define dso_local i64 @func14(i64) local_unnamed_addr #0 {
   ret i64 %2
 }
 
-define dso_local zeroext i8 @func15(i8 zeroext) local_unnamed_addr #0 {
+define zeroext i8 @func15(i8 zeroext) {
 ; CHECK-LABEL: func15:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, 5, %s0
@@ -131,7 +131,7 @@ define dso_local zeroext i8 @func15(i8 zeroext) local_unnamed_addr #0 {
   ret i8 %2
 }
 
-define dso_local zeroext i16 @func16(i16 zeroext) local_unnamed_addr #0 {
+define zeroext i16 @func16(i16 zeroext) {
 ; CHECK-LABEL: func16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s34, 5, %s0
@@ -140,7 +140,7 @@ define dso_local zeroext i16 @func16(i16 zeroext) local_unnamed_addr #0 {
   ret i16 %2
 }
 
-define dso_local i32 @func17(i32) local_unnamed_addr #0 {
+define i32 @func17(i32) {
 ; CHECK-LABEL: func17:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.w.sx %s0, 5, %s0
@@ -148,7 +148,7 @@ define dso_local i32 @func17(i32) local_unnamed_addr #0 {
   ret i32 %2
 }
 
-define dso_local i64 @func18(i64) local_unnamed_addr #0 {
+define i64 @func18(i64) {
 ; CHECK-LABEL: func18:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    muls.l %s0, 5, %s0
@@ -156,7 +156,7 @@ define dso_local i64 @func18(i64) local_unnamed_addr #0 {
   ret i64 %2
 }
 
-define dso_local float @func19(float) local_unnamed_addr #0 {
+define float @func19(float) {
 ; CHECK-LABEL: func19:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s34, .LCPI18_0@hi
@@ -166,7 +166,7 @@ define dso_local float @func19(float) local_unnamed_addr #0 {
   ret float %2
 }
 
-define dso_local double @func20(double) local_unnamed_addr #0 {
+define double @func20(double) {
 ; CHECK-LABEL: func20:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s34, .LCPI19_0@hi
@@ -176,7 +176,7 @@ define dso_local double @func20(double) local_unnamed_addr #0 {
   ret double %2
 }
 
-define dso_local i32 @func21(i32) local_unnamed_addr #0 {
+define i32 @func21(i32) {
 ; CHECK-LABEL: func21:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 31
@@ -184,7 +184,7 @@ define dso_local i32 @func21(i32) local_unnamed_addr #0 {
   ret i32 %2
 }
 
-define dso_local i64 @func22(i64) local_unnamed_addr #0 {
+define i64 @func22(i64) {
 ; CHECK-LABEL: func22:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sll %s0, %s0, 31

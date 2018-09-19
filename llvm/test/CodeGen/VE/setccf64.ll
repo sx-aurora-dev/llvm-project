@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define zeroext i1 @setccaf(double, double) #0 {
+define zeroext i1 @setccaf(double, double) {
 ; CHECK-LABEL: setccaf:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -8,7 +8,7 @@ define zeroext i1 @setccaf(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccat(double, double) #0 {
+define zeroext i1 @setccat(double, double) {
 ; CHECK-LABEL: setccat:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 1, (0)1
@@ -16,7 +16,7 @@ define zeroext i1 @setccat(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccoeq(double, double) #0 {
+define zeroext i1 @setccoeq(double, double) {
 ; CHECK-LABEL: setccoeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -26,7 +26,7 @@ define zeroext i1 @setccoeq(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccone(double, double) #0 {
+define zeroext i1 @setccone(double, double) {
 ; CHECK-LABEL: setccone:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -36,7 +36,7 @@ define zeroext i1 @setccone(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccogt(double, double) #0 {
+define zeroext i1 @setccogt(double, double) {
 ; CHECK-LABEL: setccogt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -46,7 +46,7 @@ define zeroext i1 @setccogt(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccoge(double, double) #0 {
+define zeroext i1 @setccoge(double, double) {
 ; CHECK-LABEL: setccoge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -56,7 +56,7 @@ define zeroext i1 @setccoge(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccolt(double, double) #0 {
+define zeroext i1 @setccolt(double, double) {
 ; CHECK-LABEL: setccolt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -66,7 +66,7 @@ define zeroext i1 @setccolt(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccole(double, double) #0 {
+define zeroext i1 @setccole(double, double) {
 ; CHECK-LABEL: setccole:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -76,7 +76,7 @@ define zeroext i1 @setccole(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccord(double, double) #0 {
+define zeroext i1 @setccord(double, double) {
 ; CHECK-LABEL: setccord:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -86,7 +86,7 @@ define zeroext i1 @setccord(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccuno(double, double) #0 {
+define zeroext i1 @setccuno(double, double) {
 ; CHECK-LABEL: setccuno:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -96,7 +96,7 @@ define zeroext i1 @setccuno(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccueq(double, double) #0 {
+define zeroext i1 @setccueq(double, double) {
 ; CHECK-LABEL: setccueq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -106,7 +106,7 @@ define zeroext i1 @setccueq(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccune(double, double) #0 {
+define zeroext i1 @setccune(double, double) {
 ; CHECK-LABEL: setccune:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -116,7 +116,7 @@ define zeroext i1 @setccune(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccugt(double, double) #0 {
+define zeroext i1 @setccugt(double, double) {
 ; CHECK-LABEL: setccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -126,7 +126,7 @@ define zeroext i1 @setccugt(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccuge(double, double) #0 {
+define zeroext i1 @setccuge(double, double) {
 ; CHECK-LABEL: setccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -136,7 +136,7 @@ define zeroext i1 @setccuge(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccult(double, double) #0 {
+define zeroext i1 @setccult(double, double) {
 ; CHECK-LABEL: setccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -146,7 +146,7 @@ define zeroext i1 @setccult(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccule(double, double) #0 {
+define zeroext i1 @setccule(double, double) {
 ; CHECK-LABEL: setccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1

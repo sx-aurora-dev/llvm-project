@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define double @minf64(double, double) #0 {
+define double @minf64(double, double) {
 ; CHECK-LABEL: minf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmin.d %s0, %s0, %s1
@@ -10,7 +10,7 @@ define double @minf64(double, double) #0 {
   ret double %4
 }
 
-define double @min2f64(double, double) #0 {
+define double @min2f64(double, double) {
 ; CHECK-LABEL: min2f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmin.d %s0, %s0, %s1
@@ -20,7 +20,7 @@ define double @min2f64(double, double) #0 {
   ret double %4
 }
 
-define double @minuf64(double, double) #0 {
+define double @minuf64(double, double) {
 ; CHECK-LABEL: minuf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -32,7 +32,7 @@ define double @minuf64(double, double) #0 {
   ret double %4
 }
 
-define double @min2uf64(double, double) #0 {
+define double @min2uf64(double, double) {
 ; CHECK-LABEL: min2uf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -44,7 +44,7 @@ define double @min2uf64(double, double) #0 {
   ret double %4
 }
 
-define float @minf32(float, float) #0 {
+define float @minf32(float, float) {
 ; CHECK-LABEL: minf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmin.s %s0, %s0, %s1
@@ -54,7 +54,7 @@ define float @minf32(float, float) #0 {
   ret float %4
 }
 
-define float @min2f32(float, float) #0 {
+define float @min2f32(float, float) {
 ; CHECK-LABEL: min2f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmin.s %s0, %s0, %s1
@@ -64,7 +64,7 @@ define float @min2f32(float, float) #0 {
   ret float %4
 }
 
-define float @minuf32(float, float) #0 {
+define float @minuf32(float, float) {
 ; CHECK-LABEL: minuf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
@@ -78,7 +78,7 @@ define float @minuf32(float, float) #0 {
   ret float %4
 }
 
-define float @min2uf32(float, float) #0 {
+define float @min2uf32(float, float) {
 ; CHECK-LABEL: min2uf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
@@ -92,7 +92,7 @@ define float @min2uf32(float, float) #0 {
   ret float %4
 }
 
-define i64 @mini64(i64, i64) #0 {
+define i64 @mini64(i64, i64) {
 ; CHECK-LABEL: mini64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    mins.l %s0, %s0, %s1
@@ -102,7 +102,7 @@ define i64 @mini64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i64 @min2i64(i64, i64) #0 {
+define i64 @min2i64(i64, i64) {
 ; CHECK-LABEL: min2i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    mins.l %s0, %s0, %s1
@@ -112,7 +112,7 @@ define i64 @min2i64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i64 @minu64(i64, i64) #0 {
+define i64 @minu64(i64, i64) {
 ; CHECK-LABEL: minu64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -124,7 +124,7 @@ define i64 @minu64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i64 @min2u64(i64, i64) #0 {
+define i64 @min2u64(i64, i64) {
 ; CHECK-LABEL: min2u64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
@@ -136,7 +136,7 @@ define i64 @min2u64(i64, i64) #0 {
   ret i64 %4
 }
 
-define i32 @mini32(i32, i32) #0 {
+define i32 @mini32(i32, i32) {
 ; CHECK-LABEL: mini32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    mins.w.zx %s0, %s0, %s1
@@ -146,7 +146,7 @@ define i32 @mini32(i32, i32) #0 {
   ret i32 %4
 }
 
-define i32 @min2i32(i32, i32) #0 {
+define i32 @min2i32(i32, i32) {
 ; CHECK-LABEL: min2i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    mins.w.zx %s0, %s0, %s1
@@ -156,7 +156,7 @@ define i32 @min2i32(i32, i32) #0 {
   ret i32 %4
 }
 
-define i32 @minu32(i32, i32) #0 {
+define i32 @minu32(i32, i32) {
 ; CHECK-LABEL: minu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
@@ -170,7 +170,7 @@ define i32 @minu32(i32, i32) #0 {
   ret i32 %4
 }
 
-define i32 @min2u32(i32, i32) #0 {
+define i32 @min2u32(i32, i32) {
 ; CHECK-LABEL: min2u32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
@@ -185,7 +185,7 @@ define i32 @min2u32(i32, i32) #0 {
 }
 
 ; this test case crashes llvm
-define zeroext i1 @mini1(i1 zeroext, i1 zeroext) #0 {
+define zeroext i1 @mini1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: mini1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1

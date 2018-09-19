@@ -9,7 +9,7 @@
 @.str.4 = private unnamed_addr constant [6 x i8] c"e=%f\0A\00", align 1
 
 ; Function Attrs: nounwind
-define dso_local i32 @func(i32, ...) local_unnamed_addr #0 {
+define i32 @func(i32, ...) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  st %s18, 48(,%s9)
@@ -63,9 +63,9 @@ define dso_local i32 @func(i32, ...) local_unnamed_addr #0 {
   %2 = alloca i8*, align 8
   %3 = alloca i8*, align 8
   %4 = bitcast i8** %2 to i8*
-  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %4) #2
+  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %4)
   %5 = bitcast i8** %3 to i8*
-  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %5) #2
+  call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %5)
   call void @llvm.va_start(i8* nonnull %4)
   call void @llvm.va_copy(i8* nonnull %5, i8* nonnull %4)
   %6 = va_arg i8** %2, fp128
@@ -134,14 +134,14 @@ define dso_local i32 @func(i32, ...) local_unnamed_addr #0 {
   %68 = fpext float %58 to double
   %69 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @.str.4, i64 0, i64 0), double %68)
   call void @llvm.va_end(i8* nonnull %5)
-  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %5) #2
-  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %4) #2
+  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %5)
+  call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %4)
   ret i32 0
 }
 
-declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture) #1
-declare void @llvm.va_start(i8*) #2
-declare void @llvm.va_copy(i8*, i8*) #2
-declare dso_local i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #3
-declare void @llvm.va_end(i8*) #2
-declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture) #1
+declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture)
+declare void @llvm.va_start(i8*)
+declare void @llvm.va_copy(i8*, i8*)
+declare i32 @printf(i8* nocapture readonly, ...)
+declare void @llvm.va_end(i8*)
+declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture)

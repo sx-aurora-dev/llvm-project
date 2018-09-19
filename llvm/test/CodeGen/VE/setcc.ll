@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define zeroext i1 @setccf64(double, double) #0 {
+define zeroext i1 @setccf64(double, double) {
 ; CHECK-LABEL: setccf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
@@ -10,7 +10,7 @@ define zeroext i1 @setccf64(double, double) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setccf32(float, float) #0 {
+define zeroext i1 @setccf32(float, float) {
 ; CHECK-LABEL: setccf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s1
@@ -20,7 +20,7 @@ define zeroext i1 @setccf32(float, float) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setcci64(i64, i64) #0 {
+define zeroext i1 @setcci64(i64, i64) {
 ; CHECK-LABEL: setcci64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -30,7 +30,7 @@ define zeroext i1 @setcci64(i64, i64) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setcci32(i32, i32) #0 {
+define zeroext i1 @setcci32(i32, i32) {
 ; CHECK-LABEL: setcci32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -40,7 +40,7 @@ define zeroext i1 @setcci32(i32, i32) #0 {
   ret i1 %3
 }
 
-define zeroext i1 @setcci1(i1 zeroext, i1 zeroext) #0 {
+define zeroext i1 @setcci1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: setcci1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    xor %s34, -1, %s1

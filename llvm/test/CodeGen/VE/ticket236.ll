@@ -1,7 +1,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local i64 @test(i32, i32) local_unnamed_addr #0 {
+define i64 @test(i32, i32) {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB0_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0

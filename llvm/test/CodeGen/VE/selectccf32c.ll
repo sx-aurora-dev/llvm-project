@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define float @selectccsgti8(i8, i8, float, float) #0 {
+define float @selectccsgti8(i8, i8, float, float) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
@@ -18,7 +18,7 @@ define float @selectccsgti8(i8, i8, float, float) #0 {
   ret float %6
 }
 
-define float @selectccsgti16(i16, i16, float, float) #0 {
+define float @selectccsgti16(i16, i16, float, float) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
@@ -36,7 +36,7 @@ define float @selectccsgti16(i16, i16, float, float) #0 {
   ret float %6
 }
 
-define float @selectccsgti32(i32, i32, float, float) #0 {
+define float @selectccsgti32(i32, i32, float, float) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
@@ -50,7 +50,7 @@ define float @selectccsgti32(i32, i32, float, float) #0 {
   ret float %6
 }
 
-define float @selectccsgti64(i64, i64, float, float) #0 {
+define float @selectccsgti64(i64, i64, float, float) {
 ; CHECK-LABEL: selectccsgti64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
@@ -64,7 +64,7 @@ define float @selectccsgti64(i64, i64, float, float) #0 {
   ret float %6
 }
 
-define float @selectccogtf32(float, float, float, float) #0 {
+define float @selectccogtf32(float, float, float, float) {
 ; CHECK-LABEL: selectccogtf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
@@ -78,7 +78,7 @@ define float @selectccogtf32(float, float, float, float) #0 {
   ret float %6
 }
 
-define float @selectccogtf64(double, double, float, float) #0 {
+define float @selectccogtf64(double, double, float, float) {
 ; CHECK-LABEL: selectccogtf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3

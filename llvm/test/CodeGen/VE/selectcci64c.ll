@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i64 @selectccsgti8(i8, i8, i64, i64) #0 {
+define i64 @selectccsgti8(i8, i8, i64, i64) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s34, %s1, 24
@@ -16,7 +16,7 @@ define i64 @selectccsgti8(i8, i8, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccsgti16(i16, i16, i64, i64) #0 {
+define i64 @selectccsgti16(i16, i16, i64, i64) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s34, %s1, 16
@@ -32,7 +32,7 @@ define i64 @selectccsgti16(i16, i16, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccsgti32(i32, i32, i64, i64) #0 {
+define i64 @selectccsgti32(i32, i32, i64, i64) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s34, %s0, %s1
@@ -44,7 +44,7 @@ define i64 @selectccsgti32(i32, i32, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccsgti64(i64, i64, i64, i64) #0 {
+define i64 @selectccsgti64(i64, i64, i64, i64) {
 ; CHECK-LABEL: selectccsgti64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s34, %s0, %s1
@@ -56,7 +56,7 @@ define i64 @selectccsgti64(i64, i64, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccogtf32(float, float, i64, i64) #0 {
+define i64 @selectccogtf32(float, float, i64, i64) {
 ; CHECK-LABEL: selectccogtf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s1
@@ -68,7 +68,7 @@ define i64 @selectccogtf32(float, float, i64, i64) #0 {
   ret i64 %6
 }
 
-define i64 @selectccogtf64(double, double, i64, i64) #0 {
+define i64 @selectccogtf64(double, double, i64, i64) {
 ; CHECK-LABEL: selectccogtf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
