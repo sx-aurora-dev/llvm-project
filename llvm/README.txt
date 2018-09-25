@@ -77,6 +77,12 @@ Use clang like below.
 Please see the documentation provided in docs/ for further
 assistance with LLVM.
 
+Intrinsics for SX-Aurora VE
+===========================
+
+See https://sxauroratsubasaresearch.github.io/intrinsics.html.
+
+
 The LLVM Compiler Infrastructure
 ================================
 
