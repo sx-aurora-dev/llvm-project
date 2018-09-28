@@ -9164,6 +9164,18 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
                                       Ops[0]);
     return Builder.CreateExtractValue(Call, 0);
   }
+  case X86::BI__builtin_ia32_lzcnt_u16:
+  case X86::BI__builtin_ia32_lzcnt_u32:
+  case X86::BI__builtin_ia32_lzcnt_u64: {
+    Value *F = CGM.getIntrinsic(Intrinsic::ctlz, Ops[0]->getType());
+    return Builder.CreateCall(F, {Ops[0], Builder.getInt1(false)});
+  }
+  case X86::BI__builtin_ia32_tzcnt_u16:
+  case X86::BI__builtin_ia32_tzcnt_u32:
+  case X86::BI__builtin_ia32_tzcnt_u64: {
+    Value *F = CGM.getIntrinsic(Intrinsic::cttz, Ops[0]->getType());
+    return Builder.CreateCall(F, {Ops[0], Builder.getInt1(false)});
+  }
   case X86::BI__builtin_ia32_undef128:
   case X86::BI__builtin_ia32_undef256:
   case X86::BI__builtin_ia32_undef512:
@@ -11232,6 +11244,28 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     QualType BIRetType = E->getType();
     auto RetTy = ConvertType(BIRetType);
     return Builder.CreateBitCast(ShuffleCall, RetTy);
+  }
+
+  case PPC::BI__builtin_pack_vector_int128: {
+    bool isLittleEndian = getTarget().isLittleEndian();
+    Value *UndefValue =
+        llvm::UndefValue::get(llvm::VectorType::get(Ops[0]->getType(), 2));
+    Value *Res = Builder.CreateInsertElement(
+        UndefValue, Ops[0], (uint64_t)(isLittleEndian ? 1 : 0));
+    Res = Builder.CreateInsertElement(Res, Ops[1],
+                                      (uint64_t)(isLittleEndian ? 0 : 1));
+    return Builder.CreateBitCast(Res, ConvertType(E->getType()));
+  }
+
+  case PPC::BI__builtin_unpack_vector_int128: {
+    ConstantInt *Index = cast<ConstantInt>(Ops[1]);
+    Value *Unpacked = Builder.CreateBitCast(
+        Ops[0], llvm::VectorType::get(ConvertType(E->getType()), 2));
+
+    if (getTarget().isLittleEndian())
+      Index = ConstantInt::get(Index->getType(), 1 - Index->getZExtValue());
+
+    return Builder.CreateExtractElement(Unpacked, Index);
   }
   }
 }
