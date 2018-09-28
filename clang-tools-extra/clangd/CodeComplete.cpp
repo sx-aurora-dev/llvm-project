@@ -116,9 +116,12 @@ CompletionItemKind toCompletionItemKind(index::SymbolKind Kind) {
 
 CompletionItemKind
 toCompletionItemKind(CodeCompletionResult::ResultKind ResKind,
-                     const NamedDecl *Decl) {
+                     const NamedDecl *Decl,
+                     CodeCompletionContext::Kind CtxKind) {
   if (Decl)
     return toCompletionItemKind(index::getSymbolInfo(Decl).Kind);
+  if (CtxKind == CodeCompletionContext::CCC_IncludedFile)
+    return CompletionItemKind::File;
   switch (ResKind) {
   case CodeCompletionResult::RK_Declaration:
     llvm_unreachable("RK_Declaration without Decl");
@@ -328,6 +331,7 @@ struct CodeCompletionBuilder {
   CodeCompletionBuilder(ASTContext &ASTCtx, const CompletionCandidate &C,
                         CodeCompletionString *SemaCCS,
                         const IncludeInserter &Includes, StringRef FileName,
+                        CodeCompletionContext::Kind ContextKind,
                         const CodeCompleteOptions &Opts)
       : ASTCtx(ASTCtx), ExtractDocumentation(Opts.IncludeComments),
         EnableFunctionArgSnippets(Opts.EnableFunctionArgSnippets) {
@@ -343,8 +347,8 @@ struct CodeCompletionBuilder {
               Completion.Scope =
                   splitQualifiedName(printQualifiedName(*ND)).first;
       }
-      Completion.Kind =
-          toCompletionItemKind(C.SemaResult->Kind, C.SemaResult->Declaration);
+      Completion.Kind = toCompletionItemKind(
+          C.SemaResult->Kind, C.SemaResult->Declaration, ContextKind);
       for (const auto &FixIt : C.SemaResult->FixIts) {
         Completion.FixIts.push_back(
             toTextEdit(FixIt, ASTCtx.getSourceManager(), ASTCtx.getLangOpts()));
@@ -478,13 +482,43 @@ private:
     auto *Snippet = onlyValue<&BundledEntry::SnippetSuffix>();
     if (!Snippet)
       // All bundles are function calls.
+      // FIXME(ibiryukov): sometimes add template arguments to a snippet, e.g.
+      // we need to complete 'forward<$1>($0)'.
       return "($0)";
-    if (!Snippet->empty() && !EnableFunctionArgSnippets &&
-        ((Completion.Kind == CompletionItemKind::Function) ||
-         (Completion.Kind == CompletionItemKind::Method)) &&
-        (Snippet->front() == '(') && (Snippet->back() == ')'))
-      // Check whether function has any parameters or not.
-      return Snippet->size() > 2 ? "($0)" : "()";
+    if (EnableFunctionArgSnippets)
+      return *Snippet;
+
+    // Replace argument snippets with a simplified pattern.
+    if (Snippet->empty())
+      return "";
+    if (Completion.Kind == CompletionItemKind::Function ||
+        Completion.Kind == CompletionItemKind::Method) {
+      // Functions snippets can be of 2 types:
+      // - containing only function arguments, e.g.
+      //   foo(${1:int p1}, ${2:int p2});
+      //   We transform this pattern to '($0)' or '()'.
+      // - template arguments and function arguments, e.g.
+      //   foo<${1:class}>(${2:int p1}).
+      //   We transform this pattern to '<$1>()$0' or '<$0>()'.
+
+      bool EmptyArgs = llvm::StringRef(*Snippet).endswith("()");
+      if (Snippet->front() == '<')
+        return EmptyArgs ? "<$1>()$0" : "<$1>($0)";
+      if (Snippet->front() == '(')
+        return EmptyArgs ? "()" : "($0)";
+      return *Snippet; // Not an arg snippet?
+    }
+    if (Completion.Kind == CompletionItemKind::Reference ||
+        Completion.Kind == CompletionItemKind::Class) {
+      if (Snippet->front() != '<')
+        return *Snippet; // Not an arg snippet?
+
+      // Classes and template using aliases can only have template arguments,
+      // e.g. Foo<${1:class}>.
+      if (llvm::StringRef(*Snippet).endswith("<>"))
+        return "<>"; // can happen with defaulted template arguments.
+      return "<$0>";
+    }
     return *Snippet;
   }
 
@@ -653,6 +687,7 @@ bool contextAllowsIndex(enum CodeCompletionContext::Kind K) {
   case CodeCompletionContext::CCC_TypeQualifiers:
   case CodeCompletionContext::CCC_ObjCInstanceMessage:
   case CodeCompletionContext::CCC_ObjCClassMessage:
+  case CodeCompletionContext::CCC_IncludedFile:
   case CodeCompletionContext::CCC_Recovery:
     return false;
   }
@@ -1547,7 +1582,8 @@ private:
                           : nullptr;
       if (!Builder)
         Builder.emplace(Recorder->CCSema->getASTContext(), Item, SemaCCS,
-                        *Inserter, FileName, Opts);
+                        *Inserter, FileName, Recorder->CCContext.getKind(),
+                        Opts);
       else
         Builder->add(Item, SemaCCS);
     }

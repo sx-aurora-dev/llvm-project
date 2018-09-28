@@ -908,7 +908,7 @@ static bool isInterestingIdentifier(ASTReader &Reader, IdentifierInfo &II,
          (IsModule ? II.hasRevertedBuiltin() : II.getObjCOrBuiltinID()) ||
          II.hasRevertedTokenIDToIdentifier() ||
          (!(IsModule && Reader.getPreprocessor().getLangOpts().CPlusPlus) &&
-          II.getFETokenInfo<void>());
+          II.getFETokenInfo());
 }
 
 static bool readBit(unsigned &Bits) {
@@ -11721,6 +11721,9 @@ OMPClause *OMPClauseReader::readClause() {
   case OMPC_nogroup:
     C = new (Context) OMPNogroupClause();
     break;
+  case OMPC_unified_address:
+    C = new (Context) OMPUnifiedAddressClause();
+    break;
   case OMPC_private:
     C = OMPPrivateClause::CreateEmpty(Context, Record.readInt());
     break;
@@ -11948,6 +11951,8 @@ void OMPClauseReader::VisitOMPThreadsClause(OMPThreadsClause *) {}
 void OMPClauseReader::VisitOMPSIMDClause(OMPSIMDClause *) {}
 
 void OMPClauseReader::VisitOMPNogroupClause(OMPNogroupClause *) {}
+
+void OMPClauseReader::VisitOMPUnifiedAddressClause(OMPUnifiedAddressClause *) {}
 
 void OMPClauseReader::VisitOMPPrivateClause(OMPPrivateClause *C) {
   C->setLParenLoc(Record.readSourceLocation());

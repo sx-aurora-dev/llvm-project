@@ -369,7 +369,7 @@ def warn_implicit_function_decl : Warning<
   "implicit declaration of function %0">,
   InGroup<ImplicitFunctionDeclare>, DefaultIgnore;
 def ext_implicit_function_decl : ExtWarn<
-  "implicit declaration of function %0 is invalid in %select{C99|OpenCL}1">,
+  "implicit declaration of function %0 is invalid in C99">,
   InGroup<ImplicitFunctionDeclare>;
 def note_function_suggestion : Note<"did you mean %0?">;
 
@@ -452,10 +452,12 @@ def err_decomp_decl_multiple_bases_with_members : Error<
   "have non-static data members">;
 def err_decomp_decl_ambiguous_base : Error<
   "cannot decompose members of ambiguous base class %1 of %0:%2">;
-def err_decomp_decl_non_public_base : Error<
-  "cannot decompose members of non-public base class %1 of %0">;
-def err_decomp_decl_non_public_member : Error<
-  "cannot decompose non-public member %0 of %1">;
+def err_decomp_decl_inaccessible_base : Error<
+  "cannot decompose members of inaccessible base class %1 of %0">,
+  AccessControl;
+def err_decomp_decl_inaccessible_field : Error<
+  "cannot decompose %select{private|protected}0 member %1 of %3">,
+  AccessControl;
 def err_decomp_decl_anon_union_member : Error<
   "cannot decompose class type %0 because it has an anonymous "
   "%select{struct|union}1 member">;
@@ -2254,8 +2256,6 @@ def err_for_range_incomplete_type : Error<
   "cannot use incomplete type %0 as a range">;
 def err_for_range_iter_deduction_failure : Error<
   "cannot use type %0 as an iterator">;
-def err_for_range_member_begin_end_mismatch : Error<
-  "range type %0 has '%select{begin|end}1' member but no '%select{end|begin}1' member">;
 def ext_for_range_begin_end_types_differ : ExtWarn<
   "'begin' and 'end' returning different types (%0 and %1) is a C++17 extension">,
   InGroup<CXX17>;
@@ -2268,6 +2268,8 @@ def note_in_for_range: Note<
 def err_for_range_invalid: Error<
   "invalid range expression of type %0; no viable '%select{begin|end}1' "
   "function available">;
+def note_for_range_member_begin_end_ignored : Note<
+  "member is not a candidate because range type %0 has no '%select{end|begin}1' member">;
 def err_range_on_array_parameter : Error<
   "cannot build range expression with array function parameter %0 since "
   "parameter with array type %1 is treated as pointer type %2">;
@@ -2498,7 +2500,8 @@ def err_attribute_invalid_vector_type : Error<"invalid vector element type %0">;
 def err_attribute_bad_neon_vector_size : Error<
   "Neon vector size must be 64 or 128 bits">;
 def err_attribute_requires_positive_integer : Error<
-  "%0 attribute requires a positive integral compile time constant expression">;
+  "%0 attribute requires a %select{positive|non-negative}1 "
+  "integral compile time constant expression">;
 def err_attribute_requires_opencl_version : Error<
   "%0 attribute requires OpenCL version %1%select{| or above}2">;
 def warn_unsupported_target_attribute
@@ -2531,8 +2534,6 @@ def err_attribute_argument_type : Error<
   "constant|a string|an identifier}1">;
 def err_attribute_argument_outof_range : Error<
   "%0 attribute requires integer constant between %1 and %2 inclusive">;
-def err_attribute_argument_negative : Error<
-  "negative argument is not allowed for %0 attribute">;
 def err_init_priority_object_attr : Error<
   "can only use 'init_priority' attribute on file-scope definitions "
   "of objects of class type">;
@@ -3008,6 +3009,14 @@ def warn_invalid_capability_name : Warning<
   InGroup<ThreadSafetyAttributes>, DefaultIgnore;
 def warn_thread_attribute_ignored : Warning<
   "ignoring %0 attribute because its argument is invalid">,
+  InGroup<ThreadSafetyAttributes>, DefaultIgnore;
+def warn_thread_attribute_not_on_non_static_member : Warning<
+  "%0 attribute without capability arguments can only be applied to non-static "
+  "methods of a class">,
+  InGroup<ThreadSafetyAttributes>, DefaultIgnore;
+def warn_thread_attribute_not_on_capability_member : Warning<
+  "%0 attribute without capability arguments refers to 'this', but %1 isn't "
+  "annotated with 'capability' or 'scoped_lockable' attribute">,
   InGroup<ThreadSafetyAttributes>, DefaultIgnore;
 def warn_thread_attribute_argument_not_lockable : Warning<
   "%0 attribute requires arguments whose type is annotated "
@@ -8549,6 +8558,8 @@ def err_opencl_scalar_type_rank_greater_than_vector_type : Error<
     "element. (%0 and %1)">;
 def err_bad_kernel_param_type : Error<
   "%0 cannot be used as the type of a kernel parameter">;
+def err_opencl_implicit_function_decl : Error<
+  "implicit declaration of function %0 is invalid in OpenCL">;
 def err_record_with_pointers_kernel_param : Error<
   "%select{struct|union}0 kernel parameters may not contain pointers">;
 def note_within_field_of_type : Note<
@@ -8606,6 +8617,10 @@ def err_opencl_variadic_function : Error<
   "invalid prototype, variadic arguments are not allowed in OpenCL">;
 def err_opencl_requires_extension : Error<
   "use of %select{type|declaration}0 %1 requires %2 extension to be enabled">;
+def warn_opencl_generic_address_space_arg : Warning<
+  "passing non-generic address space pointer to %0"
+  " may cause dynamic conversion affecting performance">,
+  InGroup<Conversion>, DefaultIgnore;
 
 // OpenCL v2.0 s6.13.6 -- Builtin Pipe Functions
 def err_opencl_builtin_pipe_first_arg : Error<
@@ -9058,6 +9073,12 @@ def err_omp_linear_distribute_var_non_loop_iteration : Error<
 def warn_omp_non_trivial_type_mapped : Warning<
   "Non-trivial type %0 is mapped, only trivial types are guaranteed to be mapped correctly">,
   InGroup<OpenMPTarget>;
+def err_omp_requires_clause_redeclaration : Error <
+  "Only one %0 clause can appear on a requires directive in a single translation unit">;
+def note_omp_requires_previous_clause : Note <
+  "%0 clause previously used here">;
+def err_omp_invalid_scope : Error <
+  "'#pragma omp %0' directive must appear only in file scope">;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {
