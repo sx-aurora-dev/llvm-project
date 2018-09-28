@@ -83,6 +83,8 @@ public:
                     BugReport &BR);
 };
 
+/// Finds last store into the given region,
+/// which is different from a given symbolic value.
 class FindLastStoreBRVisitor final : public BugReporterVisitor {
   const MemRegion *R;
   SVal V;
@@ -361,9 +363,6 @@ namespace bugreporter {
 /// \param N A node "downstream" from the evaluation of the statement.
 /// \param S The statement whose value is null or undefined.
 /// \param R The bug report to which visitors should be attached.
-/// \param IsArg Whether the statement is an argument to an inlined function.
-///              If this is the case, \p N \em must be the CallEnter node for
-///              the function.
 /// \param EnableNullFPSuppression Whether we should employ false positive
 ///         suppression (inlined defensive checks, returned null).
 ///
@@ -371,7 +370,6 @@ namespace bugreporter {
 ///         statement. Note that returning \c true does not actually imply
 ///         that any visitors were added.
 bool trackNullOrUndefValue(const ExplodedNode *N, const Stmt *S, BugReport &R,
-                           bool IsArg = false,
                            bool EnableNullFPSuppression = true);
 
 const Expr *getDerefExpr(const Stmt *S);

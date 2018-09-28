@@ -510,6 +510,11 @@ CAMLprim value llvm_is_opaque(LLVMTypeRef StructTy) {
   return Val_bool(LLVMIsOpaqueStruct(StructTy));
 }
 
+/* lltype -> bool */
+CAMLprim value llvm_is_literal(LLVMTypeRef StructTy) {
+  return Val_bool(LLVMIsLiteralStruct(StructTy));
+}
+
 /*--... Operations on array, pointer, and vector types .....................--*/
 
 /* lltype -> lltype array */
@@ -725,6 +730,19 @@ CAMLprim value llvm_set_operand(LLVMValueRef U, value I, LLVMValueRef V) {
 /* llvalue -> int */
 CAMLprim value llvm_num_operands(LLVMValueRef V) {
   return Val_int(LLVMGetNumOperands(V));
+}
+
+/* llvalue -> int array */
+CAMLprim value llvm_indices(LLVMValueRef Instr) {
+  CAMLparam0();
+  CAMLlocal1(indices);
+  unsigned n = LLVMGetNumIndices(Instr);
+  const unsigned *Indices = LLVMGetIndices(Instr);
+  indices = caml_alloc(n, 0);
+  for (unsigned i = 0; i < n; i++) {
+    Op_val(indices)[i] = Val_int(Indices[i]);
+  }
+  CAMLreturn(indices);
 }
 
 /*--... Operations on constants of (mostly) any type .......................--*/
@@ -1599,6 +1617,11 @@ CAMLprim value llvm_remove_string_call_site_attr(LLVMValueRef F, value Kind,
 
 /*--... Operations on call instructions (only) .............................--*/
 
+/* llvalue -> int */
+CAMLprim value llvm_num_arg_operands(LLVMValueRef V) {
+  return Val_int(LLVMGetNumArgOperands(V));
+}
+
 /* llvalue -> bool */
 CAMLprim value llvm_is_tail_call(LLVMValueRef CallInst) {
   return Val_bool(LLVMIsTailCall(CallInst));
@@ -1904,6 +1927,11 @@ CAMLprim value llvm_add_clause(LLVMValueRef LandingPadInst, LLVMValueRef ClauseV
     return Val_unit;
 }
 
+/* llvalue -> bool */
+CAMLprim value llvm_is_cleanup(LLVMValueRef LandingPadInst)
+{
+    return Val_bool(LLVMIsCleanup(LandingPadInst));
+}
 
 /* llvalue -> bool -> unit */
 CAMLprim value llvm_set_cleanup(LLVMValueRef LandingPadInst, value flag)

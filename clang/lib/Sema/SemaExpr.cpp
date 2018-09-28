@@ -266,6 +266,17 @@ bool Sema::DiagnoseUseOfDecl(NamedDecl *D, ArrayRef<SourceLocation> Locs,
       return true;
   }
 
+  if (auto *MD = dyn_cast<CXXMethodDecl>(D)) {
+    // Lambdas are only default-constructible or assignable in C++2a onwards.
+    if (MD->getParent()->isLambda() &&
+        ((isa<CXXConstructorDecl>(MD) &&
+          cast<CXXConstructorDecl>(MD)->isDefaultConstructor()) ||
+         MD->isCopyAssignmentOperator() || MD->isMoveAssignmentOperator())) {
+      Diag(Loc, diag::warn_cxx17_compat_lambda_def_ctor_assign)
+        << !isa<CXXConstructorDecl>(MD);
+    }
+  }
+
   auto getReferencedObjCProp = [](const NamedDecl *D) ->
                                       const ObjCPropertyDecl * {
     if (const auto *MD = dyn_cast<ObjCMethodDecl>(D))
@@ -8086,6 +8097,13 @@ Sema::CheckSingleAssignmentConstraints(QualType LHSType, ExprResult &CallerRHS,
     return Compatible;
   }
 
+  // OpenCL queue_t type assignment.
+  if (LHSType->isQueueT() && RHS.get()->isNullPointerConstant(
+                                 Context, Expr::NPC_ValueDependentIsNull)) {
+    RHS = ImpCastExprToType(RHS.get(), LHSType, CK_NullToPointer);
+    return Compatible;
+  }
+
   // This check seems unnatural, however it is necessary to ensure the proper
   // conversion of functions/arrays. If the conversion were done for all
   // DeclExpr's (created by ActOnIdExpression), it would mess up the unary
@@ -10423,6 +10441,10 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
   }
 
   if (getLangOpts().OpenCLVersion >= 200) {
+    if (LHSType->isQueueT() && RHSType->isQueueT()) {
+      return computeResultTy();
+    }
+
     if (LHSIsNull && RHSType->isQueueT()) {
       LHS = ImpCastExprToType(LHS.get(), RHSType, CK_NullToPointer);
       return computeResultTy();

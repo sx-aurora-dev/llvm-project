@@ -18,12 +18,15 @@
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/SymbolStringPool.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/Debug.h"
 
 #include <list>
 #include <map>
 #include <memory>
 #include <set>
 #include <vector>
+
+#define DEBUG_TYPE "orc"
 
 namespace llvm {
 namespace orc {
@@ -373,6 +376,7 @@ private:
 class AsynchronousSymbolQuery {
   friend class ExecutionSession;
   friend class JITDylib;
+  friend class JITSymbolResolverAdapter;
 
 public:
 
@@ -651,7 +655,9 @@ public:
                            bool AddToMainDylibSearchOrder = true);
 
   /// Allocate a module key for a new module to add to the JIT.
-  VModuleKey allocateVModule() { return ++LastKey; }
+  VModuleKey allocateVModule() {
+    return runSessionLocked([this]() { return ++LastKey; });
+  }
 
   /// Return a module key to the ExecutionSession so that it can be
   ///        re-used. This should only be done once all resources associated
@@ -736,8 +742,13 @@ public:
   /// Materialize the given unit.
   void dispatchMaterialization(JITDylib &JD,
                                std::unique_ptr<MaterializationUnit> MU) {
+    LLVM_DEBUG(dbgs() << "For " << JD.getName() << " compiling "
+                      << MU->getSymbols() << "\n");
     DispatchMaterialization(JD, std::move(MU));
   }
+
+  /// Dump the state of all the JITDylibs in this session.
+  void dump(raw_ostream &OS);
 
 private:
   static void logErrorsToStdErr(Error Err) {
@@ -831,5 +842,7 @@ private:
 
 } // End namespace orc
 } // End namespace llvm
+
+#undef DEBUG_TYPE // "orc"
 
 #endif // LLVM_EXECUTIONENGINE_ORC_CORE_H

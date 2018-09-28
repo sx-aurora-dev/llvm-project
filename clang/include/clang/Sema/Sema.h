@@ -153,6 +153,7 @@ namespace clang {
   class ObjCPropertyDecl;
   class ObjCProtocolDecl;
   class OMPThreadPrivateDecl;
+  class OMPRequiresDecl;
   class OMPDeclareReductionDecl;
   class OMPDeclareSimdDecl;
   class OMPClause;
@@ -1618,6 +1619,8 @@ public:
   void diagnoseEquivalentInternalLinkageDeclarations(
       SourceLocation Loc, const NamedDecl *D,
       ArrayRef<const NamedDecl *> Equiv);
+
+  bool isUsualDeallocationFunction(const CXXMethodDecl *FD);
 
   bool isCompleteType(SourceLocation Loc, QualType T) {
     return !RequireCompleteTypeImpl(Loc, T, nullptr);
@@ -6034,6 +6037,10 @@ public:
   AccessResult CheckMemberAccess(SourceLocation UseLoc,
                                  CXXRecordDecl *NamingClass,
                                  DeclAccessPair Found);
+  AccessResult
+  CheckStructuredBindingMemberAccess(SourceLocation UseLoc,
+                                     CXXRecordDecl *DecomposedClass,
+                                     DeclAccessPair Field);
   AccessResult CheckMemberOperatorAccess(SourceLocation Loc,
                                          Expr *ObjectExpr,
                                          Expr *ArgExpr,
@@ -8708,6 +8715,12 @@ public:
   /// Builds a new OpenMPThreadPrivateDecl and checks its correctness.
   OMPThreadPrivateDecl *CheckOMPThreadPrivateDecl(SourceLocation Loc,
                                                   ArrayRef<Expr *> VarList);
+  /// Called on well-formed '#pragma omp requires'.
+  DeclGroupPtrTy ActOnOpenMPRequiresDirective(SourceLocation Loc,
+                                              ArrayRef<OMPClause *> ClauseList);
+  /// Check restrictions on Requires directive
+  OMPRequiresDecl *CheckOMPRequiresDecl(SourceLocation Loc,
+                                        ArrayRef<OMPClause *> Clauses);
   /// Check if the specified type is allowed to be used in 'omp declare
   /// reduction' construct.
   QualType ActOnOpenMPDeclareReductionType(SourceLocation TyLoc,
@@ -9101,7 +9114,7 @@ public:
                                        SourceLocation StartLoc,
                                        SourceLocation LParenLoc,
                                        SourceLocation EndLoc);
-
+  
   OMPClause *ActOnOpenMPSingleExprWithArgClause(
       OpenMPClauseKind Kind, ArrayRef<unsigned> Arguments, Expr *Expr,
       SourceLocation StartLoc, SourceLocation LParenLoc,
@@ -9149,6 +9162,9 @@ public:
   /// Called on well-formed 'nogroup' clause.
   OMPClause *ActOnOpenMPNogroupClause(SourceLocation StartLoc,
                                       SourceLocation EndLoc);
+  /// Called on well-formed 'unified_address' clause.
+  OMPClause *ActOnOpenMPUnifiedAddressClause(SourceLocation StartLoc,
+                                             SourceLocation EndLoc);
 
   OMPClause *ActOnOpenMPVarListClause(
       OpenMPClauseKind Kind, ArrayRef<Expr *> Vars, Expr *TailExpr,
@@ -10345,6 +10361,7 @@ public:
                                              IdentifierInfo *Macro,
                                              MacroInfo *MacroInfo,
                                              unsigned Argument);
+  void CodeCompleteIncludedFile(llvm::StringRef Dir, bool IsAngled);
   void CodeCompleteNaturalLanguage();
   void CodeCompleteAvailabilityPlatformName();
   void GatherGlobalCodeCompletions(CodeCompletionAllocator &Allocator,
