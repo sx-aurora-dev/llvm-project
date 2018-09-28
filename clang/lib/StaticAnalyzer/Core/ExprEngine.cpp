@@ -189,7 +189,7 @@ ExprEngine::ExprEngine(cross_tu::CrossTranslationUnitContext &CTU,
                this),
       SymMgr(StateMgr.getSymbolManager()),
       svalBuilder(StateMgr.getSValBuilder()), ObjCNoRet(mgr.getASTContext()),
-      ObjCGCEnabled(gcEnabled), BR(mgr, *this),
+      BR(mgr, *this),
       VisitedCallees(VisitedCalleesIn), HowToInline(HowToInlineIn) {
   unsigned TrimInterval = mgr.options.getGraphTrimInterval();
   if (TrimInterval != 0) {
@@ -2947,41 +2947,56 @@ void ExprEngine::VisitMSAsmStmt(const MSAsmStmt *A, ExplodedNode *Pred,
 //===----------------------------------------------------------------------===//
 
 #ifndef NDEBUG
-static ExprEngine* GraphPrintCheckerState;
-static SourceManager* GraphPrintSourceManager;
-
 namespace llvm {
 
 template<>
-struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
+struct DOTGraphTraits<ExplodedGraph*> : public DefaultDOTGraphTraits {
   DOTGraphTraits (bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
 
   // FIXME: Since we do not cache error nodes in ExprEngine now, this does not
   // work.
-  static std::string getNodeAttributes(const ExplodedNode *N, void*) {
+  static std::string getNodeAttributes(const ExplodedNode *N,
+                                       ExplodedGraph *G) {
+    if (N->isSink())
+      return "color=red";
     return {};
   }
 
   // De-duplicate some source location pretty-printing.
-  static void printLocation(raw_ostream &Out, SourceLocation SLoc) {
+  static void printLocation(raw_ostream &Out,
+                            SourceLocation SLoc,
+                            const SourceManager &SM,
+                            StringRef Postfix="\\l") {
     if (SLoc.isFileID()) {
       Out << "\\lline="
-        << GraphPrintSourceManager->getExpansionLineNumber(SLoc)
+        << SM.getExpansionLineNumber(SLoc)
         << " col="
-        << GraphPrintSourceManager->getExpansionColumnNumber(SLoc)
-        << "\\l";
+        << SM.getExpansionColumnNumber(SLoc)
+        << Postfix;
     }
   }
 
   static void dumpProgramPoint(ProgramPoint Loc,
-                               const PrintingPolicy &PP,
+                               const ASTContext &Context,
                                llvm::raw_string_ostream &Out) {
+    const SourceManager &SM = Context.getSourceManager();
     switch (Loc.getKind()) {
     case ProgramPoint::BlockEntranceKind:
       Out << "Block Entrance: B"
           << Loc.castAs<BlockEntrance>().getBlock()->getBlockID();
       break;
 
+    case ProgramPoint::FunctionExitKind: {
+      auto FEP = Loc.getAs<FunctionExitPoint>();
+      Out << "Function Exit: B"
+          << FEP->getBlock()->getBlockID();
+      if (const ReturnStmt *RS = FEP->getStmt()) {
+        Out << "\\l Return: S" << RS->getID(Context) << "\\l";
+        RS->printPretty(Out, /*helper=*/nullptr, Context.getPrintingPolicy(),
+                       /*Indentation=*/2, /*NewlineSymbol=*/"\\l");
+      }
+      break;
+    }
     case ProgramPoint::BlockExitKind:
       assert(false);
       break;
@@ -3019,20 +3034,16 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
     case ProgramPoint::PreImplicitCallKind: {
       ImplicitCallPoint PC = Loc.castAs<ImplicitCallPoint>();
       Out << "PreCall: ";
-
-      // FIXME: Get proper printing options.
-      PC.getDecl()->print(Out, LangOptions());
-      printLocation(Out, PC.getLocation());
+      PC.getDecl()->print(Out, Context.getLangOpts());
+      printLocation(Out, PC.getLocation(), SM);
       break;
     }
 
     case ProgramPoint::PostImplicitCallKind: {
       ImplicitCallPoint PC = Loc.castAs<ImplicitCallPoint>();
       Out << "PostCall: ";
-
-      // FIXME: Get proper printing options.
-      PC.getDecl()->print(Out, LangOptions());
-      printLocation(Out, PC.getLocation());
+      PC.getDecl()->print(Out, Context.getLangOpts());
+      printLocation(Out, PC.getLocation(), SM);
       break;
     }
 
@@ -3045,8 +3056,7 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
       else {
         QualType Ty = Init->getTypeSourceInfo()->getType();
         Ty = Ty.getLocalUnqualifiedType();
-        LangOptions LO; // FIXME.
-        Ty.print(Out, LO);
+        Ty.print(Out, Context.getLangOpts());
       }
       break;
     }
@@ -3060,15 +3070,8 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
         SourceLocation SLoc = T->getBeginLoc();
 
         Out << "\\|Terminator: ";
-        LangOptions LO; // FIXME.
-        E.getSrc()->printTerminator(Out, LO);
-
-        if (SLoc.isFileID()) {
-          Out << "\\lline="
-              << GraphPrintSourceManager->getExpansionLineNumber(SLoc)
-              << " col="
-              << GraphPrintSourceManager->getExpansionColumnNumber(SLoc);
-        }
+        E.getSrc()->printTerminator(Out, Context.getLangOpts());
+        printLocation(Out, SLoc, SM, /*Postfix=*/"");
 
         if (isa<SwitchStmt>(T)) {
           const Stmt *Label = E.getDst()->getLabel();
@@ -3076,13 +3079,15 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
           if (Label) {
             if (const auto *C = dyn_cast<CaseStmt>(Label)) {
               Out << "\\lcase ";
-              LangOptions LO; // FIXME.
               if (C->getLHS())
-                C->getLHS()->printPretty(Out, nullptr, PrintingPolicy(LO));
+                C->getLHS()->printPretty(
+                    Out, nullptr, Context.getPrintingPolicy(),
+                    /*Indentation=*/0, /*NewlineSymbol=*/"\\l");
 
               if (const Stmt *RHS = C->getRHS()) {
                 Out << " .. ";
-                RHS->printPretty(Out, nullptr, PrintingPolicy(LO));
+                RHS->printPretty(Out, nullptr, Context.getPrintingPolicy(),
+                                 /*Indetation=*/0, /*NewlineSymbol=*/"\\l");
               }
 
               Out << ":";
@@ -3112,14 +3117,16 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
       const Stmt *S = Loc.castAs<StmtPoint>().getStmt();
       assert(S != nullptr && "Expecting non-null Stmt");
 
-      Out << S->getStmtClassName() << ' ' << (const void *)S << ' ';
-      S->printPretty(Out, nullptr, PP);
-      printLocation(Out, S->getBeginLoc());
+      Out << S->getStmtClassName() << " S"
+          << S->getID(Context) << " <" << (const void *)S << "> ";
+      S->printPretty(Out, /*helper=*/nullptr, Context.getPrintingPolicy(),
+                     /*Indentation=*/2, /*NewlineSymbol=*/"\\l");
+      printLocation(Out, S->getBeginLoc(), SM, /*Postfix=*/"");
 
       if (Loc.getAs<PreStmt>())
-        Out << "\\lPreStmt\\l;";
+        Out << "\\lPreStmt\\l";
       else if (Loc.getAs<PostLoad>())
-        Out << "\\lPostLoad\\l;";
+        Out << "\\lPostLoad\\l";
       else if (Loc.getAs<PostStore>())
         Out << "\\lPostStore\\l";
       else if (Loc.getAs<PostLValue>())
@@ -3136,7 +3143,7 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
     return N->isTrivial();
   }
 
-  static std::string getNodeLabel(const ExplodedNode *N, void*){
+  static std::string getNodeLabel(const ExplodedNode *N, ExplodedGraph *G){
     std::string sbuf;
     llvm::raw_string_ostream Out(sbuf);
 
@@ -3149,12 +3156,12 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
     }
 
     ProgramStateRef State = N->getState();
-    const auto &PP = State->getStateManager().getContext().getPrintingPolicy();
+    const ASTContext &Context = State->getStateManager().getContext();
 
     // Dump program point for all the previously skipped nodes.
     const ExplodedNode *OtherNode = FirstHiddenNode;
     while (true) {
-      dumpProgramPoint(OtherNode->getLocation(), PP, Out);
+      dumpProgramPoint(OtherNode->getLocation(), Context, Out);
 
       if (const ProgramPointTag *Tag = OtherNode->getLocation().getTag())
         Out << "\\lTag:" << Tag->getTagDescription();
@@ -3169,15 +3176,15 @@ struct DOTGraphTraits<ExplodedNode*> : public DefaultDOTGraphTraits {
 
     Out << "\\l\\|";
 
-    ExplodedGraph &Graph =
-        static_cast<ExprEngine *>(State->getStateManager().getOwningEngine())
-            ->getGraph();
+    Out << "StateID: ST" << State->getID() << ", NodeID: N" << N->getID(G)
+        << " <" << (const void *)N << ">\\|";
 
-    Out << "StateID: " << State->getID() << " (" << (const void *)State.get()
-        << ")"
-        << " NodeID: " << N->getID(&Graph) << " (" << (const void *)N << ")\\|";
-
-    State->printDOT(Out, N->getLocationContext());
+    bool SameAsAllPredecessors =
+        std::all_of(N->pred_begin(), N->pred_end(), [&](const ExplodedNode *P) {
+          return P->getState() == State;
+        });
+    if (!SameAsAllPredecessors)
+      State->printDOT(Out, N->getLocationContext());
     return Out.str();
   }
 };
@@ -3190,11 +3197,6 @@ void ExprEngine::ViewGraph(bool trim) {
   if (trim) {
     std::vector<const ExplodedNode *> Src;
 
-    // Flush any outstanding reports to make sure we cover all the nodes.
-    // This does not cause them to get displayed.
-    for (const auto I : BR)
-      const_cast<BugType *>(I)->FlushReports(BR);
-
     // Iterate through the reports and get their nodes.
     for (BugReporter::EQClasses_iterator
            EI = BR.EQClasses_begin(), EE = BR.EQClasses_end(); EI != EE; ++EI) {
@@ -3203,32 +3205,20 @@ void ExprEngine::ViewGraph(bool trim) {
     }
 
     ViewGraph(Src);
-  }
-  else {
-    GraphPrintCheckerState = this;
-    GraphPrintSourceManager = &getContext().getSourceManager();
-
-    llvm::ViewGraph(*G.roots_begin(), "ExprEngine");
-
-    GraphPrintCheckerState = nullptr;
-    GraphPrintSourceManager = nullptr;
+  } else {
+    llvm::ViewGraph(&G, "ExprEngine");
   }
 #endif
 }
 
 void ExprEngine::ViewGraph(ArrayRef<const ExplodedNode*> Nodes) {
 #ifndef NDEBUG
-  GraphPrintCheckerState = this;
-  GraphPrintSourceManager = &getContext().getSourceManager();
-
   std::unique_ptr<ExplodedGraph> TrimmedG(G.trim(Nodes));
 
-  if (!TrimmedG.get())
+  if (!TrimmedG.get()) {
     llvm::errs() << "warning: Trimmed ExplodedGraph is empty.\n";
-  else
-    llvm::ViewGraph(*TrimmedG->roots_begin(), "TrimmedExprEngine");
-
-  GraphPrintCheckerState = nullptr;
-  GraphPrintSourceManager = nullptr;
+  } else {
+    llvm::ViewGraph(TrimmedG.get(), "TrimmedExprEngine");
+  }
 #endif
 }

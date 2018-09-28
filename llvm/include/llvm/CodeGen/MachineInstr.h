@@ -97,8 +97,14 @@ public:
                                         // contraction operations like fma.
     FmAfn        = 1 << 9,              // Instruction may map to Fast math
                                         // instrinsic approximation.
-    FmReassoc    = 1 << 10              // Instruction supports Fast math
+    FmReassoc    = 1 << 10,             // Instruction supports Fast math
                                         // reassociation of operand order.
+    NoUWrap      = 1 << 11,             // Instruction supports binary operator
+                                        // no unsigned wrap.
+    NoSWrap      = 1 << 12,             // Instruction supports binary operator
+                                        // no signed wrap.
+    IsExact      = 1 << 13              // Instruction supports division is
+                                        // known to be exact.
   };
 
 private:
@@ -1519,6 +1525,9 @@ public:
   /// should be used when merging two MachineInstrs into one. This routine does
   /// not modify the MIFlags of this MachineInstr.
   uint16_t mergeFlagsWith(const MachineInstr& Other) const;
+
+  /// Copy all flags to MachineInst MIFlags
+  void copyIRFlags(const Instruction &I);
 
   /// Break any tie involving OpIdx.
   void untieRegOperand(unsigned OpIdx) {

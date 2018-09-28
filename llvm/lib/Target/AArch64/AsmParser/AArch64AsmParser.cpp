@@ -39,6 +39,7 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/SubtargetFeature.h"
+#include "llvm/MC/MCValue.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -658,7 +659,7 @@ public:
     return DiagnosticPredicateTy::NearMatch;
   }
 
-  bool isSymbolicUImm12Offset(const MCExpr *Expr, unsigned Scale) const {
+  bool isSymbolicUImm12Offset(const MCExpr *Expr) const {
     AArch64MCExpr::VariantKind ELFRefKind;
     MCSymbolRefExpr::VariantKind DarwinRefKind;
     int64_t Addend;
@@ -683,7 +684,7 @@ public:
       // Note that we don't range-check the addend. It's adjusted modulo page
       // size when converted, so there is no "out of range" condition when using
       // @pageoff.
-      return Addend >= 0 && (Addend % Scale) == 0;
+      return true;
     } else if (DarwinRefKind == MCSymbolRefExpr::VK_GOTPAGEOFF ||
                DarwinRefKind == MCSymbolRefExpr::VK_TLVPPAGEOFF) {
       // @gotpageoff/@tlvppageoff can only be used directly, not with an addend.
@@ -699,7 +700,7 @@ public:
 
     const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(getImm());
     if (!MCE)
-      return isSymbolicUImm12Offset(getImm(), Scale);
+      return isSymbolicUImm12Offset(getImm());
 
     int64_t Val = MCE->getValue();
     return (Val % Scale) == 0 && Val >= 0 && (Val / Scale) < 0x1000;
@@ -901,7 +902,7 @@ public:
 
     for (unsigned i = 0; i != AllowedModifiers.size(); ++i) {
       if (ELFRefKind == AllowedModifiers[i])
-        return Addend == 0;
+        return true;
     }
 
     return false;
@@ -2740,6 +2741,29 @@ AArch64AsmParser::tryParseOptionalShiftExtend(OperandVector &Operands) {
   return MatchOperand_Success;
 }
 
+static const struct Extension {
+  const char *Name;
+  const FeatureBitset Features;
+} ExtensionMap[] = {
+  { "crc",  {AArch64::FeatureCRC} },
+  { "sm4",  {AArch64::FeatureSM4} },
+  { "sha3", {AArch64::FeatureSHA3} },
+  { "sha2", {AArch64::FeatureSHA2} },
+  { "aes",  {AArch64::FeatureAES} },
+  { "crypto", {AArch64::FeatureCrypto} },
+  { "fp", {AArch64::FeatureFPARMv8} },
+  { "simd", {AArch64::FeatureNEON} },
+  { "ras", {AArch64::FeatureRAS} },
+  { "lse", {AArch64::FeatureLSE} },
+
+  // FIXME: Unsupported extensions
+  { "pan", {} },
+  { "lor", {} },
+  { "rdma", {} },
+  { "profile", {} },
+};
+
+
 static void setRequiredFeatureString(FeatureBitset FBS, std::string &Str) {
   if (FBS[AArch64::HasV8_1aOps])
     Str += "ARMv8.1a";
@@ -2749,8 +2773,18 @@ static void setRequiredFeatureString(FeatureBitset FBS, std::string &Str) {
     Str += "ARMv8.3a";
   else if (FBS[AArch64::HasV8_4aOps])
     Str += "ARMv8.4a";
-  else
-    Str += "(unknown)";
+  else if (FBS[AArch64::HasV8_5aOps])
+    Str += "ARMv8.5a";
+  else {
+    auto ext = std::find_if(std::begin(ExtensionMap),
+      std::end(ExtensionMap),
+      [&](const Extension& e)
+      // Use & in case multiple features are enabled
+      { return (FBS & e.Features) != FeatureBitset(); }
+    );
+
+    Str += ext != std::end(ExtensionMap) ? ext->Name : "(unknown)";
+  }
 }
 
 void AArch64AsmParser::createSysAlias(uint16_t Encoding, OperandVector &Operands,
@@ -4901,28 +4935,6 @@ bool AArch64AsmParser::ParseDirective(AsmToken DirectiveID) {
   return false;
 }
 
-static const struct {
-  const char *Name;
-  const FeatureBitset Features;
-} ExtensionMap[] = {
-  { "crc",  {AArch64::FeatureCRC} },
-  { "sm4",  {AArch64::FeatureSM4} },
-  { "sha3", {AArch64::FeatureSHA3} },
-  { "sha2", {AArch64::FeatureSHA2} },
-  { "aes",  {AArch64::FeatureAES} },
-  { "crypto", {AArch64::FeatureCrypto} },
-  { "fp", {AArch64::FeatureFPARMv8} },
-  { "simd", {AArch64::FeatureNEON} },
-  { "ras", {AArch64::FeatureRAS} },
-  { "lse", {AArch64::FeatureLSE} },
-
-  // FIXME: Unsupported extensions
-  { "pan", {} },
-  { "lor", {} },
-  { "rdma", {} },
-  { "profile", {} },
-};
-
 static void ExpandCryptoAEK(AArch64::ArchKind ArchKind,
                             SmallVector<StringRef, 4> &RequestedExtensions) {
   const bool NoCrypto =
@@ -4944,6 +4956,7 @@ static void ExpandCryptoAEK(AArch64::ArchKind ArchKind,
       RequestedExtensions.push_back("aes");
       break;
     case AArch64::ArchKind::ARMV8_4A:
+    case AArch64::ArchKind::ARMV8_5A:
       RequestedExtensions.push_back("sm4");
       RequestedExtensions.push_back("sha3");
       RequestedExtensions.push_back("sha2");
@@ -4962,6 +4975,7 @@ static void ExpandCryptoAEK(AArch64::ArchKind ArchKind,
       RequestedExtensions.push_back("noaes");
       break;
     case AArch64::ArchKind::ARMV8_4A:
+    case AArch64::ArchKind::ARMV8_5A:
       RequestedExtensions.push_back("nosm4");
       RequestedExtensions.push_back("nosha3");
       RequestedExtensions.push_back("nosha2");
@@ -5305,28 +5319,14 @@ AArch64AsmParser::classifySymbolRef(const MCExpr *Expr,
     return true;
   }
 
-  const MCBinaryExpr *BE = dyn_cast<MCBinaryExpr>(Expr);
-  if (!BE)
+  // Check that it looks like a symbol + an addend
+  MCValue Res;
+  bool Relocatable = Expr->evaluateAsRelocatable(Res, nullptr, nullptr);
+  if (!Relocatable || !Res.getSymA() || Res.getSymB())
     return false;
 
-  SE = dyn_cast<MCSymbolRefExpr>(BE->getLHS());
-  if (!SE)
-    return false;
-  DarwinRefKind = SE->getKind();
-
-  if (BE->getOpcode() != MCBinaryExpr::Add &&
-      BE->getOpcode() != MCBinaryExpr::Sub)
-    return false;
-
-  // See if the addend is a constant, otherwise there's more going
-  // on here than we can deal with.
-  auto AddendExpr = dyn_cast<MCConstantExpr>(BE->getRHS());
-  if (!AddendExpr)
-    return false;
-
-  Addend = AddendExpr->getValue();
-  if (BE->getOpcode() == MCBinaryExpr::Sub)
-    Addend = -Addend;
+  DarwinRefKind = Res.getSymA()->getKind();
+  Addend = Res.getConstant();
 
   // It's some symbol reference + a constant addend, but really
   // shouldn't use both Darwin and ELF syntax.

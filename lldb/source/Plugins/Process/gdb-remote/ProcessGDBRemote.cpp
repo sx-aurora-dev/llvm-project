@@ -110,12 +110,12 @@ void DumpProcessGDBRemotePacketHistory(void *p, const char *path) {
 
 namespace {
 
-static PropertyDefinition g_properties[] = {
-    {"packet-timeout", OptionValue::eTypeUInt64, true, 1, NULL, NULL,
+static constexpr PropertyDefinition g_properties[] = {
+    {"packet-timeout", OptionValue::eTypeUInt64, true, 1, NULL, {},
      "Specify the default packet timeout in seconds."},
-    {"target-definition-file", OptionValue::eTypeFileSpec, true, 0, NULL, NULL,
+    {"target-definition-file", OptionValue::eTypeFileSpec, true, 0, NULL, {},
      "The file that provides the description for remote target registers."},
-    {NULL, OptionValue::eTypeInvalid, false, 0, NULL, NULL, NULL}};
+    {NULL, OptionValue::eTypeInvalid, false, 0, NULL, {}, NULL}};
 
 enum { ePropertyPacketTimeout, ePropertyTargetDefinitionFile };
 
@@ -4802,7 +4802,7 @@ size_t ProcessGDBRemote::LoadModules(LoadedModuleInfoList &module_list) {
         return true;
 
       lldb::ModuleSP module_copy_sp = module_sp;
-      target.SetExecutableModule(module_copy_sp, false);
+      target.SetExecutableModule(module_copy_sp, eLoadDependentsNo);
       return false;
     });
 

@@ -67,6 +67,7 @@ protected:
   bool HasV8_2aOps = false;
   bool HasV8_3aOps = false;
   bool HasV8_4aOps = false;
+  bool HasV8_5aOps = false;
 
   bool HasFPARMv8 = false;
   bool HasNEON = false;
@@ -123,6 +124,7 @@ protected:
   bool HasArithmeticCbzFusion = false;
   bool HasFuseAddress = false;
   bool HasFuseAES = false;
+  bool HasFuseCryptoEOR = false;
   bool HasFuseCCSelect = false;
   bool HasFuseLiterals = false;
   bool DisableLatencySchedHeuristic = false;
@@ -140,6 +142,9 @@ protected:
 
   // ReserveXRegister[i] - X#i is not available as a general purpose register.
   BitVector ReserveXRegister;
+
+  // CustomCallUsedXRegister[i] - X#i call saved.
+  BitVector CustomCallSavedXRegs;
 
   bool IsLittle;
 
@@ -209,6 +214,7 @@ public:
   bool hasV8_2aOps() const { return HasV8_2aOps; }
   bool hasV8_3aOps() const { return HasV8_3aOps; }
   bool hasV8_4aOps() const { return HasV8_4aOps; }
+  bool hasV8_5aOps() const { return HasV8_5aOps; }
 
   bool hasZeroCycleRegMove() const { return HasZeroCycleRegMove; }
 
@@ -228,6 +234,10 @@ public:
 
   bool isXRegisterReserved(size_t i) const { return ReserveXRegister[i]; }
   unsigned getNumXRegisterReserved() const { return ReserveXRegister.count(); }
+  bool isXRegCustomCalleeSaved(size_t i) const {
+    return CustomCallSavedXRegs[i];
+  }
+  bool hasCustomCallingConv() const { return CustomCallSavedXRegs.any(); }
   bool hasFPARMv8() const { return HasFPARMv8; }
   bool hasNEON() const { return HasNEON; }
   bool hasCrypto() const { return HasCrypto; }
@@ -256,6 +266,7 @@ public:
   bool hasArithmeticCbzFusion() const { return HasArithmeticCbzFusion; }
   bool hasFuseAddress() const { return HasFuseAddress; }
   bool hasFuseAES() const { return HasFuseAES; }
+  bool hasFuseCryptoEOR() const { return HasFuseCryptoEOR; }
   bool hasFuseCCSelect() const { return HasFuseCCSelect; }
   bool hasFuseLiterals() const { return HasFuseLiterals; }
 

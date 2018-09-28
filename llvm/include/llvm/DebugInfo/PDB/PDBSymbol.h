@@ -112,7 +112,8 @@ public:
   /// normally goes on the right side of the symbol.
   virtual void dumpRight(PDBSymDumper &Dumper) const {}
 
-  void defaultDump(raw_ostream &OS, int Indent) const;
+  void defaultDump(raw_ostream &OS, int Indent, PdbSymbolIdField ShowFlags,
+                   PdbSymbolIdField RecurseFlags) const;
   void dumpProperties() const;
   void dumpChildStats() const;
 
@@ -125,8 +126,6 @@ public:
       return nullptr;
     return Enumerator->getNext();
   }
-
-  std::unique_ptr<PDBSymbol> clone() const;
 
   template <typename T>
   std::unique_ptr<ConcreteSymbolEnumerator<T>> findAllChildren() const {

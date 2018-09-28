@@ -379,14 +379,7 @@ defm S_DCACHE_DISCARD_X2 : SM_Pseudo_Discards <"s_dcache_discard_x2">;
 //===----------------------------------------------------------------------===//
 
 
-def smrd_load : PatFrag <(ops node:$ptr), (load node:$ptr), [{
-  auto Ld = cast<LoadSDNode>(N);
-  return Ld->getAlignment() >= 4  &&
-    ((((Ld->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS) || (Ld->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS_32BIT)) && !N->isDivergent()) ||
-    (Subtarget->getScalarizeGlobalBehavior() && Ld->getAddressSpace() == AMDGPUAS::GLOBAL_ADDRESS &&
-     !Ld->isVolatile() && !N->isDivergent() &&
-    static_cast<const SITargetLowering *>(getTargetLowering())->isMemOpHasNoClobberedMemOperand(N)));
-}]>;
+def smrd_load : PatFrag <(ops node:$ptr), (load node:$ptr), [{ return isUniformLoad(N);}]>;
 
 def SMRDImm         : ComplexPattern<i64, 2, "SelectSMRDImm">;
 def SMRDImm32       : ComplexPattern<i64, 2, "SelectSMRDImm32">;
@@ -784,7 +777,7 @@ def : SMRD_Pattern_ci <"S_LOAD_DWORDX16", v16i32>;
 class SMLoad_Pattern_ci <string Instr, ValueType vt> : GCNPat <
   (vt (SIsbuffer_load v4i32:$sbase, (SMRDBufferImm32 i32:$offset), i1:$glc)),
   (!cast<InstSI>(Instr) $sbase, $offset, (as_i1imm $glc))> {
-  let OtherPredicates = [isCI]; // should this be isCIOnly?
+  let OtherPredicates = [isCIOnly];
 }
 
 def : SMLoad_Pattern_ci <"S_BUFFER_LOAD_DWORD_IMM_ci", i32>;

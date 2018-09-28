@@ -22,44 +22,6 @@ class CoreAPIsStandardTest : public CoreAPIsBasedStandardTest {};
 
 namespace {
 
-class SimpleMaterializationUnit : public MaterializationUnit {
-public:
-  using MaterializeFunction =
-      std::function<void(MaterializationResponsibility)>;
-  using DiscardFunction =
-      std::function<void(const JITDylib &, SymbolStringPtr)>;
-  using DestructorFunction = std::function<void()>;
-
-  SimpleMaterializationUnit(
-      SymbolFlagsMap SymbolFlags, MaterializeFunction Materialize,
-      DiscardFunction Discard = DiscardFunction(),
-      DestructorFunction Destructor = DestructorFunction())
-      : MaterializationUnit(std::move(SymbolFlags)),
-        Materialize(std::move(Materialize)), Discard(std::move(Discard)),
-        Destructor(std::move(Destructor)) {}
-
-  ~SimpleMaterializationUnit() override {
-    if (Destructor)
-      Destructor();
-  }
-
-  void materialize(MaterializationResponsibility R) override {
-    Materialize(std::move(R));
-  }
-
-  void discard(const JITDylib &JD, SymbolStringPtr Name) override {
-    if (Discard)
-      Discard(JD, std::move(Name));
-    else
-      llvm_unreachable("Discard not supported");
-  }
-
-private:
-  MaterializeFunction Materialize;
-  DiscardFunction Discard;
-  DestructorFunction Destructor;
-};
-
 TEST_F(CoreAPIsStandardTest, BasicSuccessfulLookup) {
   bool OnResolutionRun = false;
   bool OnReadyRun = false;
@@ -813,6 +775,16 @@ TEST_F(CoreAPIsStandardTest, TestMaterializeWeakSymbol) {
 
   FooResponsibility->resolve(SymbolMap({{Foo, FooSym}}));
   FooResponsibility->emit();
+}
+
+TEST_F(CoreAPIsStandardTest, TestMainJITDylibAndDefaultLookupOrder) {
+  cantFail(ES.getMainJITDylib().define(absoluteSymbols({{Foo, FooSym}})));
+  auto Results = cantFail(ES.lookup({Foo}));
+
+  EXPECT_EQ(Results.size(), 1U) << "Incorrect number of results";
+  EXPECT_EQ(Results.count(Foo), 1U) << "Expected result for 'Foo'";
+  EXPECT_EQ(Results[Foo].getAddress(), FooSym.getAddress())
+      << "Expected result address to match Foo's address";
 }
 
 } // namespace

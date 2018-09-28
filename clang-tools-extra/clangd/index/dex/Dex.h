@@ -6,21 +6,23 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-// This defines Dex - a symbol index implementation based on query iterators
-// over symbol tokens, such as fuzzy matching trigrams, scopes, types, etc.
-// While consuming more memory and having longer build stage due to
-// preprocessing, Dex will have substantially lower latency. It will also allow
-// efficient symbol searching which is crucial for operations like code
-// completion, and can be very important for a number of different code
-// transformations which will be eventually supported by Clangd.
-//
+///
+/// \file
+/// This defines Dex - a symbol index implementation based on query iterators
+/// over symbol tokens, such as fuzzy matching trigrams, scopes, types, etc.
+/// While consuming more memory and having longer build stage due to
+/// preprocessing, Dex will have substantially lower latency. It will also allow
+/// efficient symbol searching which is crucial for operations like code
+/// completion, and can be very important for a number of different code
+/// transformations which will be eventually supported by Clangd.
+///
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_DEX_DEX_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_DEX_DEX_H
 
 #include "Iterator.h"
+#include "PostingList.h"
 #include "Token.h"
 #include "Trigram.h"
 #include "index/Index.h"

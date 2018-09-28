@@ -56,9 +56,9 @@ public:
     bpfeb,          // eBPF or extended BPF or 64-bit BPF (big endian)
     hexagon,        // Hexagon: hexagon
     mips,           // MIPS: mips, mipsallegrex
-    mipsel,         // MIPSEL: mipsel, mipsallegrexel
-    mips64,         // MIPS64: mips64
-    mips64el,       // MIPS64EL: mips64el
+    mipsel,         // MIPSEL: mipsel, mipsallegrexe
+    mips64,         // MIPS64: mips64, mipsn32
+    mips64el,       // MIPS64EL: mips64el, mipsn32el
     msp430,         // MSP430: msp430
     nios2,          // NIOSII: nios2
     ppc,            // PPC: powerpc
@@ -101,6 +101,7 @@ public:
   enum SubArchType {
     NoSubArch,
 
+    ARMSubArch_v8_5a,
     ARMSubArch_v8_4a,
     ARMSubArch_v8_3a,
     ARMSubArch_v8_2a,

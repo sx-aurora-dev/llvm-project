@@ -16,6 +16,7 @@
 #include "hwasan_allocator.h"
 #include "hwasan_mapping.h"
 #include "hwasan_thread.h"
+#include "hwasan_thread_list.h"
 #include "sanitizer_common/sanitizer_allocator_internal.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_flags.h"
@@ -35,6 +36,31 @@ static StackTrace GetStackTraceFromId(u32 id) {
   return res;
 }
 
+// A RAII object that holds a copy of the current thread stack ring buffer.
+// The actual stack buffer may change while we are iterating over it (for
+// example, Printf may call syslog() which can itself be built with hwasan).
+class SavedStackAllocations {
+ public:
+  SavedStackAllocations(StackAllocationsRingBuffer *rb) {
+    uptr size = rb->size() * sizeof(uptr);
+    void *storage =
+        MmapAlignedOrDieOnFatalError(size, size * 2, "saved stack allocations");
+    new (&rb_) StackAllocationsRingBuffer(*rb, storage);
+  }
+
+  ~SavedStackAllocations() {
+    StackAllocationsRingBuffer *rb = get();
+    UnmapOrDie(rb->StartOfStorage(), rb->size() * sizeof(uptr));
+  }
+
+  StackAllocationsRingBuffer *get() {
+    return (StackAllocationsRingBuffer *)&rb_;
+  }
+
+ private:
+  uptr rb_;
+};
+
 class Decorator: public __sanitizer::SanitizerCommonDecorator {
  public:
   Decorator() : SanitizerCommonDecorator() { }
@@ -46,22 +72,26 @@ class Decorator: public __sanitizer::SanitizerCommonDecorator {
   const char *Thread() { return Green(); }
 };
 
-bool FindHeapAllocation(HeapAllocationsRingBuffer *rb,
+// Returns the index of the rb element that matches tagged_addr (plus one),
+// or zero if found nothing.
+uptr FindHeapAllocation(HeapAllocationsRingBuffer *rb,
                         uptr tagged_addr,
                         HeapAllocationRecord *har) {
-  if (!rb) return false;
+  if (!rb) return 0;
   for (uptr i = 0, size = rb->size(); i < size; i++) {
     auto h = (*rb)[i];
     if (h.tagged_addr <= tagged_addr &&
         h.tagged_addr + h.requested_size > tagged_addr) {
       *har = h;
-      return true;
+      return i + 1;
     }
   }
-  return false;
+  return 0;
 }
 
-void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
+void PrintAddressDescription(
+    uptr tagged_addr, uptr access_size,
+    StackAllocationsRingBuffer *current_stack_allocations) {
   Decorator d;
   int num_descriptions_printed = 0;
   uptr untagged_addr = UntagAddr(tagged_addr);
@@ -107,10 +137,10 @@ void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
     }
   }
 
-  Thread::VisitAllLiveThreads([&](Thread *t) {
+  hwasanThreadList().VisitAllLiveThreads([&](Thread *t) {
     // Scan all threads' ring buffers to find if it's a heap-use-after-free.
     HeapAllocationRecord har;
-    if (FindHeapAllocation(t->heap_allocations(), tagged_addr, &har)) {
+    if (uptr D = FindHeapAllocation(t->heap_allocations(), tagged_addr, &har)) {
       Printf("%s", d.Location());
       Printf("%p is located %zd bytes inside of %zd-byte region [%p,%p)\n",
              untagged_addr, untagged_addr - UntagAddr(har.tagged_addr),
@@ -127,6 +157,11 @@ void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
       GetStackTraceFromId(har.alloc_context_id).Print();
       t->Announce();
 
+      // Print a developer note: the index of this heap object
+      // in the thread's deallocation ring buffer.
+      Printf("hwasan_dev_note_heap_rb_distance: %zd %zd\n", D,
+             flags()->heap_history_size);
+
       num_descriptions_printed++;
     }
 
@@ -137,6 +172,25 @@ void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
              t->unique_id());
       Printf("%s", d.Default());
       t->Announce();
+
+      // Temporary report section, needs to be improved.
+      Printf("Previosly allocated frames:\n");
+      auto *sa = (t == GetCurrentThread() && current_stack_allocations)
+                     ? current_stack_allocations
+                     : t->stack_allocations();
+      uptr frames = Min((uptr)flags()->stack_history_size, sa->size());
+      for (uptr i = 0; i < frames; i++) {
+        uptr record = (*sa)[i];
+        if (!record)
+          break;
+        uptr sp = (record >> 48) << 4;
+        uptr pc_mask = (1ULL << 48) - 1;
+        uptr pc = record & pc_mask;
+        uptr fixed_pc = StackTrace::GetNextInstructionPc(pc);
+        StackTrace stack(&fixed_pc, 1);
+        Printf("record: %p pc: %p sp: %p", record, pc, sp);
+        stack.Print();
+      }
 
       num_descriptions_printed++;
     }
@@ -163,13 +217,16 @@ void ReportStats() {}
 void ReportInvalidAccessInsideAddressRange(const char *what, const void *start,
                                            uptr size, uptr offset) {
   ScopedErrorReportLock l;
+  SavedStackAllocations current_stack_allocations(
+      GetCurrentThread()->stack_allocations());
 
   Decorator d;
   Printf("%s", d.Warning());
   Printf("%sTag mismatch in %s%s%s at offset %zu inside [%p, %zu)%s\n",
          d.Warning(), d.Name(), what, d.Warning(), offset, start, size,
          d.Default());
-  PrintAddressDescription((uptr)start + offset, 1);
+  PrintAddressDescription((uptr)start + offset, 1,
+                          current_stack_allocations.get());
   // if (__sanitizer::Verbosity())
   //   DescribeMemoryRange(start, size);
 }
@@ -185,14 +242,17 @@ static void PrintTagsAroundAddr(tag_t *tag_ptr) {
       RoundDownTo(reinterpret_cast<uptr>(tag_ptr), row_len));
   tag_t *beg_row = center_row_beg - row_len * (num_rows / 2);
   tag_t *end_row = center_row_beg + row_len * (num_rows / 2);
+  InternalScopedString s(GetPageSizeCached());
   for (tag_t *row = beg_row; row < end_row; row += row_len) {
-    Printf("%s", row == center_row_beg ? "=>" : "  ");
+    s.append("%s", row == center_row_beg ? "=>" : "  ");
     for (uptr i = 0; i < row_len; i++) {
-      Printf("%s", row + i == tag_ptr ? "[" : " ");
-      Printf("%02x", row[i]);
-      Printf("%s", row + i == tag_ptr ? "]" : " ");
+      s.append("%s", row + i == tag_ptr ? "[" : " ");
+      s.append("%02x", row[i]);
+      s.append("%s", row + i == tag_ptr ? "]" : " ");
     }
-    Printf("%s\n", row == center_row_beg ? "<=" : "  ");
+    s.append("%s\n", row == center_row_beg ? "<=" : "  ");
+    Printf("%s", s.data());
+    s.clear();
   }
 }
 
@@ -214,7 +274,7 @@ void ReportInvalidFree(StackTrace *stack, uptr tagged_addr) {
 
   stack->Print();
 
-  PrintAddressDescription(tagged_addr, 0);
+  PrintAddressDescription(tagged_addr, 0, nullptr);
 
   PrintTagsAroundAddr(tag_ptr);
 
@@ -225,6 +285,8 @@ void ReportInvalidFree(StackTrace *stack, uptr tagged_addr) {
 void ReportTagMismatch(StackTrace *stack, uptr tagged_addr, uptr access_size,
                        bool is_store) {
   ScopedErrorReportLock l;
+  SavedStackAllocations current_stack_allocations(
+      GetCurrentThread()->stack_allocations());
 
   Decorator d;
   Printf("%s", d.Error());
@@ -248,7 +310,8 @@ void ReportTagMismatch(StackTrace *stack, uptr tagged_addr, uptr access_size,
 
   stack->Print();
 
-  PrintAddressDescription(tagged_addr, access_size);
+  PrintAddressDescription(tagged_addr, access_size,
+                          current_stack_allocations.get());
   t->Announce();
 
   PrintTagsAroundAddr(tag_ptr);

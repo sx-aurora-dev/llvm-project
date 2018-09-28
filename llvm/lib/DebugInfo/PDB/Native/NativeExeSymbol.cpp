@@ -34,10 +34,6 @@ NativeExeSymbol::NativeExeSymbol(NativeSession &Session, SymIndexId SymbolId)
     : NativeRawSymbol(Session, PDB_SymType::Exe, SymbolId),
       Dbi(getDbiStreamPtr(Session)) {}
 
-std::unique_ptr<NativeRawSymbol> NativeExeSymbol::clone() const {
-  return llvm::make_unique<NativeExeSymbol>(Session, SymbolId);
-}
-
 std::unique_ptr<IPDBEnumSymbols>
 NativeExeSymbol::findChildren(PDB_SymType Type) const {
   switch (Type) {
@@ -49,6 +45,14 @@ NativeExeSymbol::findChildren(PDB_SymType Type) const {
     return Session.getSymbolCache().createTypeEnumerator(codeview::LF_ENUM);
   case PDB_SymType::PointerType:
     return Session.getSymbolCache().createTypeEnumerator(codeview::LF_POINTER);
+  case PDB_SymType::UDT:
+    return Session.getSymbolCache().createTypeEnumerator(
+        {codeview::LF_STRUCTURE, codeview::LF_CLASS, codeview::LF_UNION,
+         codeview::LF_INTERFACE});
+  case PDB_SymType::FunctionSig:
+    return Session.getSymbolCache().createTypeEnumerator(
+        {codeview::LF_PROCEDURE, codeview::LF_MFUNCTION});
+
   default:
     break;
   }
