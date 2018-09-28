@@ -12,7 +12,7 @@
 #include "Path.h"
 #include "RIFF.h"
 #include "Trace.h"
-#include "index/SymbolYAML.h"
+#include "index/Serialization.h"
 #include "clang/Basic/Version.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -136,6 +136,15 @@ static llvm::cl::opt<bool> EnableIndex(
         "enabled separatedly."),
     llvm::cl::init(true), llvm::cl::Hidden);
 
+static llvm::cl::opt<bool> AllScopesCompletion(
+    "all-scopes-completion",
+    llvm::cl::desc(
+        "If set to true, code completion will include index symbols that are "
+        "not defined in the scopes (e.g. "
+        "namespaces) visible from the code completion point. Such completions "
+        "can insert scope qualifiers."),
+    llvm::cl::init(false), llvm::cl::Hidden);
+
 static llvm::cl::opt<bool>
     ShowOrigins("debug-origin",
                 llvm::cl::desc("Show origins of completion items"),
@@ -169,6 +178,13 @@ static llvm::cl::opt<CompileArgsFrom> CompileArgsFrom(
                                 "'compile_commands.json' files")),
     llvm::cl::init(FilesystemCompileArgs), llvm::cl::Hidden);
 
+static llvm::cl::opt<bool> EnableFunctionArgSnippets(
+    "function-arg-placeholders",
+    llvm::cl::desc("When disabled, completions contain only parentheses for "
+                   "function calls. When enabled, completions also contain "
+                   "placeholders for method parameters."),
+    llvm::cl::init(clangd::CodeCompleteOptions().EnableFunctionArgSnippets));
+
 int main(int argc, char *argv[]) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
   llvm::cl::SetVersionPrinter([](llvm::raw_ostream &OS) {
@@ -177,7 +193,7 @@ int main(int argc, char *argv[]) {
   llvm::cl::ParseCommandLineOptions(
       argc, argv,
       "clangd is a language server that provides IDE-like features to editors. "
-      "\n\nIt should be used via an editor plugin rather than invoked directly."
+      "\n\nIt should be used via an editor plugin rather than invoked directly. "
       "For more information, see:"
       "\n\thttps://clang.llvm.org/extra/clangd.html"
       "\n\thttps://microsoft.github.io/language-server-protocol/");
@@ -296,6 +312,8 @@ int main(int argc, char *argv[]) {
     CCOpts.IncludeIndicator.NoInsert.clear();
   }
   CCOpts.SpeculativeIndexRequest = Opts.StaticIndex;
+  CCOpts.EnableFunctionArgSnippets = EnableFunctionArgSnippets;
+  CCOpts.AllScopes = AllScopesCompletion;
 
   // Initialize and run ClangdLSPServer.
   ClangdLSPServer LSPServer(

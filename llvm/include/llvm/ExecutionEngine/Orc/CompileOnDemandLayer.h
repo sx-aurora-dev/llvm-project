@@ -23,6 +23,7 @@
 #include "llvm/ExecutionEngine/Orc/IndirectionUtils.h"
 #include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
 #include "llvm/ExecutionEngine/Orc/Layer.h"
+#include "llvm/ExecutionEngine/Orc/LazyReexports.h"
 #include "llvm/ExecutionEngine/Orc/Legacy.h"
 #include "llvm/ExecutionEngine/Orc/OrcError.h"
 #include "llvm/ExecutionEngine/RuntimeDyld.h"
@@ -68,34 +69,42 @@ public:
   using IndirectStubsManagerBuilder =
       std::function<std::unique_ptr<IndirectStubsManager>()>;
 
-  using GetAvailableContextFunction = std::function<LLVMContext &()>;
-
   CompileOnDemandLayer2(ExecutionSession &ES, IRLayer &BaseLayer,
-                        JITCompileCallbackManager &CCMgr,
-                        IndirectStubsManagerBuilder BuildIndirectStubsManager,
-                        GetAvailableContextFunction GetAvailableContext);
+                        LazyCallThroughManager &LCTMgr,
+                        IndirectStubsManagerBuilder BuildIndirectStubsManager);
 
-  Error add(JITDylib &V, VModuleKey K, std::unique_ptr<Module> M) override;
+  Error add(JITDylib &V, VModuleKey K, ThreadSafeModule TSM) override;
 
   void emit(MaterializationResponsibility R, VModuleKey K,
-            std::unique_ptr<Module> M) override;
+            ThreadSafeModule TSM) override;
 
 private:
-  using StubManagersMap =
-      std::map<const JITDylib *, std::unique_ptr<IndirectStubsManager>>;
+  struct PerDylibResources {
+  public:
+    PerDylibResources(JITDylib &ImplD,
+                      std::unique_ptr<IndirectStubsManager> ISMgr)
+        : ImplD(ImplD), ISMgr(std::move(ISMgr)) {}
+    JITDylib &getImplDylib() { return ImplD; }
+    IndirectStubsManager &getISManager() { return *ISMgr; }
 
-  IndirectStubsManager &getStubsManager(const JITDylib &JD);
+  private:
+    JITDylib &ImplD;
+    std::unique_ptr<IndirectStubsManager> ISMgr;
+  };
+
+  using PerDylibResourcesMap = std::map<const JITDylib *, PerDylibResources>;
+
+  PerDylibResources &getPerDylibResources(JITDylib &TargetD);
 
   void emitExtractedFunctionsModule(MaterializationResponsibility R,
-                                    std::unique_ptr<Module> M);
+                                    ThreadSafeModule TSM);
 
   mutable std::mutex CODLayerMutex;
 
   IRLayer &BaseLayer;
-  JITCompileCallbackManager &CCMgr;
+  LazyCallThroughManager &LCTMgr;
   IndirectStubsManagerBuilder BuildIndirectStubsManager;
-  StubManagersMap StubsMgrs;
-  GetAvailableContextFunction GetAvailableContext;
+  PerDylibResourcesMap DylibResources;
 };
 
 /// Compile-on-demand layer.
@@ -158,25 +167,6 @@ private:
     return llvm::make_unique<RO>(std::move(ResourcePtr));
   }
 
-  class StaticGlobalRenamer {
-  public:
-    StaticGlobalRenamer() = default;
-    StaticGlobalRenamer(StaticGlobalRenamer &&) = default;
-    StaticGlobalRenamer &operator=(StaticGlobalRenamer &&) = default;
-
-    void rename(Module &M) {
-      for (auto &F : M)
-        if (F.hasLocalLinkage())
-          F.setName("$static." + Twine(NextId++));
-      for (auto &G : M.globals())
-        if (G.hasLocalLinkage())
-          G.setName("$static." + Twine(NextId++));
-    }
-
-  private:
-    unsigned NextId = 0;
-  };
-
   struct LogicalDylib {
     struct SourceModuleEntry {
       std::unique_ptr<Module> SourceMod;
@@ -230,7 +220,7 @@ private:
     VModuleKey K;
     std::shared_ptr<SymbolResolver> BackingResolver;
     std::unique_ptr<IndirectStubsMgrT> StubsMgr;
-    StaticGlobalRenamer StaticRenamer;
+    SymbolLinkagePromoter PromoteSymbols;
     SourceModulesList SourceModules;
     std::vector<VModuleKey> BaseLayerVModuleKeys;
   };
@@ -352,14 +342,9 @@ public:
 private:
   Error addLogicalModule(LogicalDylib &LD, std::unique_ptr<Module> SrcMPtr) {
 
-    // Rename all static functions / globals to $static.X :
-    // This will unique the names across all modules in the logical dylib,
-    // simplifying symbol lookup.
-    LD.StaticRenamer.rename(*SrcMPtr);
-
-    // Bump the linkage and rename any anonymous/private members in SrcM to
-    // ensure that everything will resolve properly after we partition SrcM.
-    makeAllSymbolsExternallyAccessible(*SrcMPtr);
+    // Rename anonymous globals and promote linkage to ensure that everything
+    // will resolve properly after we partition SrcM.
+    LD.PromoteSymbols(*SrcMPtr);
 
     // Create a logical module handle for SrcM within the logical dylib.
     Module &SrcM = *SrcMPtr;

@@ -123,9 +123,6 @@ if (COMPILER_RT_STANDALONE_BUILD)
 
       foreach(lang ${languages})
         set(CMAKE_${lang}_CREATE_STATIC_LIBRARY "\"${CMAKE_LIBTOOL}\" -static ${LIBTOOL_NO_WARNING_FLAG} -o <TARGET> <LINK_FLAGS> <OBJECTS>")
-        # Replace the finish target so that ranlib is not invoked on the
-        # archive.
-        set(CMAKE_${lang}_ARCHIVE_FINISH "")
       endforeach()
     endif()
 
@@ -136,8 +133,6 @@ if (COMPILER_RT_STANDALONE_BUILD)
         foreach(cmd ${CMAKE_${lang}_CREATE_STATIC_LIBRARY})
           list(APPEND CMAKE_${lang}_CREATE_STATIC_LIBRARY_NEW "${dyld_envar} ${cmd}")
         endforeach()
-        set(CMAKE_${lang}_CREATE_STATIC_LIBRARY ${CMAKE_${lang}_CREATE_STATIC_LIBRARY_NEW})
-        set(CMAKE_${lang}_ARCHIVE_FINISH " ")
       endforeach()
     endif()
   endif()
@@ -372,6 +367,8 @@ append_list_if(COMPILER_RT_HAS_WD4291_FLAG /wd4291 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4391_FLAG /wd4391 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4722_FLAG /wd4722 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4800_FLAG /wd4800 SANITIZER_COMMON_CFLAGS)
+
+append_list_if(MINGW -fms-extensions SANITIZER_COMMON_CFLAGS)
 
 # Set common link flags.
 append_list_if(COMPILER_RT_HAS_NODEFAULTLIBS_FLAG -nodefaultlibs SANITIZER_COMMON_LINK_FLAGS)
