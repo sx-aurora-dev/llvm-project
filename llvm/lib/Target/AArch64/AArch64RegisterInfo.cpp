@@ -49,6 +49,8 @@ AArch64RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
     return CSR_AArch64_NoRegs_SaveList;
   if (MF->getFunction().getCallingConv() == CallingConv::AnyReg)
     return CSR_AArch64_AllRegs_SaveList;
+  if (MF->getFunction().getCallingConv() == CallingConv::AArch64_VectorCall)
+    return CSR_AArch64_AAVPCS_SaveList;
   if (MF->getFunction().getCallingConv() == CallingConv::CXX_FAST_TLS)
     return MF->getInfo<AArch64FunctionInfo>()->isSplitCSR() ?
            CSR_AArch64_CXX_TLS_Darwin_PE_SaveList :
@@ -71,6 +73,23 @@ const MCPhysReg *AArch64RegisterInfo::getCalleeSavedRegsViaCopy(
       MF->getInfo<AArch64FunctionInfo>()->isSplitCSR())
     return CSR_AArch64_CXX_TLS_Darwin_ViaCopy_SaveList;
   return nullptr;
+}
+
+void AArch64RegisterInfo::UpdateCustomCalleeSavedRegs(
+    MachineFunction &MF) const {
+  const MCPhysReg *CSRs = getCalleeSavedRegs(&MF);
+  SmallVector<MCPhysReg, 32> UpdatedCSRs;
+  for (const MCPhysReg *I = CSRs; *I; ++I)
+    UpdatedCSRs.push_back(*I);
+
+  for (size_t i = 0; i < AArch64::GPR64commonRegClass.getNumRegs(); ++i) {
+    if (MF.getSubtarget<AArch64Subtarget>().isXRegCustomCalleeSaved(i)) {
+      UpdatedCSRs.push_back(AArch64::GPR64commonRegClass.getRegister(i));
+    }
+  }
+  // Register lists are zero-terminated.
+  UpdatedCSRs.push_back(0);
+  MF.getRegInfo().setCalleeSavedRegs(UpdatedCSRs);
 }
 
 const TargetRegisterClass *
@@ -98,6 +117,8 @@ AArch64RegisterInfo::getCallPreservedMask(const MachineFunction &MF,
   if (CC == CallingConv::CXX_FAST_TLS)
     return SCS ? CSR_AArch64_CXX_TLS_Darwin_SCS_RegMask
                : CSR_AArch64_CXX_TLS_Darwin_RegMask;
+  if (CC == CallingConv::AArch64_VectorCall)
+    return SCS ? CSR_AArch64_AAVPCS_SCS_RegMask : CSR_AArch64_AAVPCS_RegMask;
   if (MF.getSubtarget<AArch64Subtarget>().getTargetLowering()
           ->supportSwiftError() &&
       MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
@@ -116,6 +137,26 @@ const uint32_t *AArch64RegisterInfo::getTLSCallPreservedMask() const {
 
   assert(TT.isOSBinFormatELF() && "Invalid target");
   return CSR_AArch64_TLS_ELF_RegMask;
+}
+
+void AArch64RegisterInfo::UpdateCustomCallPreservedMask(MachineFunction &MF,
+                                                 const uint32_t **Mask) const {
+  uint32_t *UpdatedMask = MF.allocateRegMask();
+  unsigned RegMaskSize = MachineOperand::getRegMaskSize(getNumRegs());
+  memcpy(UpdatedMask, *Mask, sizeof(UpdatedMask[0]) * RegMaskSize);
+
+  for (size_t i = 0; i < AArch64::GPR64commonRegClass.getNumRegs(); ++i) {
+    if (MF.getSubtarget<AArch64Subtarget>().isXRegCustomCalleeSaved(i)) {
+      for (MCSubRegIterator SubReg(AArch64::GPR64commonRegClass.getRegister(i),
+                                   this, true);
+           SubReg.isValid(); ++SubReg) {
+        // See TargetRegisterInfo::getCallPreservedMask for how to interpret the
+        // register mask.
+        UpdatedMask[*SubReg / 32] |= 1u << (*SubReg % 32);
+      }
+    }
+  }
+  *Mask = UpdatedMask;
 }
 
 const uint32_t *

@@ -2705,7 +2705,8 @@ SDValue PPCTargetLowering::LowerBlockAddress(SDValue Op,
 
   // 64-bit SVR4 ABI code is always position-independent.
   // The actual BlockAddress is stored in the TOC.
-  if (Subtarget.isSVR4ABI() && isPositionIndependent()) {
+  if (Subtarget.isSVR4ABI() &&
+      (Subtarget.isPPC64() || isPositionIndependent())) {
     if (Subtarget.isPPC64())
       setUsesTOCBasePtr(DAG);
     SDValue GA = DAG.getTargetBlockAddress(BA, PtrVT, BASDN->getOffset());
@@ -3511,9 +3512,14 @@ SDValue PPCTargetLowering::LowerFormalArguments_32SVR4(
       // Argument stored in memory.
       assert(VA.isMemLoc());
 
+      // Get the extended size of the argument type in stack
       unsigned ArgSize = VA.getLocVT().getStoreSize();
-      int FI = MFI.CreateFixedObject(ArgSize, VA.getLocMemOffset(),
-                                     isImmutable);
+      // Get the actual size of the argument type
+      unsigned ObjSize = VA.getValVT().getStoreSize();
+      unsigned ArgOffset = VA.getLocMemOffset();
+      // Stack objects in PPC32 are right justified.
+      ArgOffset += ArgSize - ObjSize;
+      int FI = MFI.CreateFixedObject(ArgSize, ArgOffset, isImmutable);
 
       // Create load nodes to retrieve arguments from the stack.
       SDValue FIN = DAG.getFrameIndex(FI, PtrVT);
@@ -5468,10 +5474,15 @@ SDValue PPCTargetLowering::LowerCall_32SVR4(
       Arg = PtrOff;
     }
 
-    if (VA.isRegLoc()) {
-      if (Arg.getValueType() == MVT::i1)
-        Arg = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, Arg);
+    // When useCRBits() is true, there can be i1 arguments.
+    // It is because getRegisterType(MVT::i1) => MVT::i1,
+    // and for other integer types getRegisterType() => MVT::i32.
+    // Extend i1 and ensure callee will get i32.
+    if (Arg.getValueType() == MVT::i1)
+      Arg = DAG.getNode(Flags.isSExt() ? ISD::SIGN_EXTEND : ISD::ZERO_EXTEND,
+                        dl, MVT::i32, Arg);
 
+    if (VA.isRegLoc()) {
       seenFloatArg |= VA.getLocVT().isFloatingPoint();
       // Put argument in a physical register.
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
@@ -11890,7 +11901,8 @@ static SDValue combineBVOfConsecutiveLoads(SDNode *N, SelectionDAG &DAG) {
     IsRoundOfExtLoad = LD->getExtensionType() == ISD::EXTLOAD;
   }
   // Not a build vector of (possibly fp_rounded) loads.
-  if (!IsRoundOfExtLoad && FirstInput.getOpcode() != ISD::LOAD)
+  if ((!IsRoundOfExtLoad && FirstInput.getOpcode() != ISD::LOAD) ||
+      N->getNumOperands() == 1)
     return SDValue();
 
   for (int i = 1, e = N->getNumOperands(); i < e; ++i) {

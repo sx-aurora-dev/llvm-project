@@ -19,6 +19,7 @@
 #include "ProtocolHandlers.h"
 #include "clang/Tooling/Core/Replacement.h"
 #include "llvm/ADT/Optional.h"
+#include <memory>
 
 namespace clang {
 namespace clangd {
@@ -26,8 +27,11 @@ namespace clangd {
 class JSONOutput;
 class SymbolIndex;
 
-/// This class provides implementation of an LSP server, glueing the JSON
-/// dispatch and ClangdServer together.
+/// This class exposes ClangdServer's capabilities via Language Server Protocol.
+///
+/// JSONRPCDispatcher binds the implemented ProtocolCallbacks methods
+/// (e.g. onInitialize) to corresponding JSON-RPC methods ("initialize").
+/// The server also supports $/cancelRequest (JSONRPCDispatcher provides this).
 class ClangdLSPServer : private DiagnosticsConsumer, private ProtocolCallbacks {
 public:
   /// If \p CompileCommandsDir has a value, compile_commands.json will be
@@ -76,7 +80,6 @@ private:
   void onRename(RenameParams &Parames) override;
   void onHover(TextDocumentPositionParams &Params) override;
   void onChangeConfiguration(DidChangeConfigurationParams &Params) override;
-  void onCancelRequest(CancelParams &Params) override;
 
   std::vector<Fix> getFixes(StringRef File, const clangd::Diagnostic &D);
 
@@ -168,22 +171,9 @@ private:
   // Server must be the last member of the class to allow its destructor to exit
   // the worker thread that may otherwise run an async callback on partially
   // destructed instance of ClangdLSPServer.
-  ClangdServer Server;
-
-  // Holds task handles for running requets. Key of the map is a serialized
-  // request id.
-  llvm::StringMap<TaskHandle> TaskHandles;
-  std::mutex TaskHandlesMutex;
-
-  // Following three functions are for managing TaskHandles map. They store or
-  // remove a task handle for the request-id stored in current Context.
-  // FIXME(kadircet): Wrap the following three functions in a RAII object to
-  // make sure these do not get misused. The object might be stored in the
-  // Context of the thread or moved around until a reply is generated for the
-  // request.
-  void CleanupTaskHandle();
-  void CreateSpaceForTaskHandle();
-  void StoreTaskHandle(TaskHandle TH);
+  // Set in construtor and destroyed when run() finishes. To ensure all worker
+  // threads exit before run() returns.
+  std::unique_ptr<ClangdServer> Server;
 };
 } // namespace clangd
 } // namespace clang

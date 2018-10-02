@@ -1516,7 +1516,7 @@ void CodeGenFunction::EmitOMPPrivateLoopCounters(
     for (unsigned I = S.getCollapsedNumber(),
                   E = C->getLoopNumIterations().size();
          I < E; ++I) {
-      const auto *DRE = cast<DeclRefExpr>(C->getLoopCunter(I));
+      const auto *DRE = cast<DeclRefExpr>(C->getLoopCounter(I));
       const auto *VD = cast<VarDecl>(DRE->getDecl());
       // Override only those variables that are really emitted already.
       if (LocalDeclMap.count(VD)) {
@@ -3903,6 +3903,7 @@ static void emitOMPAtomicExpr(CodeGenFunction &CGF, OpenMPClauseKind Kind,
   case OMPC_from:
   case OMPC_use_device_ptr:
   case OMPC_is_device_ptr:
+  case OMPC_unified_address:
     llvm_unreachable("Clause is not allowed in 'omp atomic'.");
   }
 }
@@ -4966,7 +4967,7 @@ void CodeGenFunction::EmitSimpleOMPExecutableDirective(
                         E = C->getLoopNumIterations().size();
                I < E; ++I) {
             if (const auto *VD = dyn_cast<OMPCapturedExprDecl>(
-                    cast<DeclRefExpr>(C->getLoopCunter(I))->getDecl())) {
+                    cast<DeclRefExpr>(C->getLoopCounter(I))->getDecl())) {
               // Emit only those that were not explicitly referenced in clauses.
               if (!CGF.LocalDeclMap.count(VD))
                 CGF.EmitVarDecl(*VD);

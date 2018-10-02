@@ -3,7 +3,7 @@
 .\"
 .\" This man page documents only lld's ELF linking support, obtained originally
 .\" from FreeBSD.
-.Dd July 30, 2018
+.Dd September 14, 2018
 .Dt LD.LLD 1
 .Os
 .Sh NAME
@@ -144,6 +144,9 @@ Maximum number of errors to emit before stopping.
 A value of zero indicates that there is no limit.
 .It Fl -error-unresolved-symbols
 Report unresolved symbols as errors.
+.It Fl -execute-only
+Mark executable sections unreadable. This option is currently only
+supported on AArch64.
 .It Fl -exclude-libs Ns = Ns Ar value
 Exclude static libraries from automatic export.
 .It Fl -export-dynamic , Fl E
@@ -442,10 +445,22 @@ Make the main stack executable.
 Stack permissions are recorded in the
 .Dv PT_GNU_STACK
 segment.
+.It Cm global
+Sets the
+.Dv DF_1_GLOBAL flag in the
+.Dv DYNAMIC
+section.
+Different loaders can decide how to handle this flag on their own.
 .It Cm initfirst
 Sets the
 .Dv DF_1_INITFIRST
 flag to indicate the module should be initialized first.
+.It Cm interpose
+Set the
+.Dv DF_1_INTERPOSE
+flag to indicate to the runtime linker that the object is an interposer.
+During symbol resolution interposers are searched after the application
+but before other dependencies.
 .It Cm muldefs
 Do not error if a symbol is defined multiple times.
 The first definition will be used.

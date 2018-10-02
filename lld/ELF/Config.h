@@ -171,6 +171,7 @@ struct Configuration {
   bool Trace;
   bool ThinLTOEmitImportsFiles;
   bool ThinLTOIndexOnly;
+  bool TocOptimize;
   bool UndefinedVersion;
   bool UseAndroidRelrTags = false;
   bool WarnBackrefs;
@@ -184,6 +185,7 @@ struct Configuration {
   bool ZGlobal;
   bool ZHazardplt;
   bool ZInitfirst;
+  bool ZInterpose;
   bool ZKeepTextSectionPrefix;
   bool ZNodelete;
   bool ZNodlopen;

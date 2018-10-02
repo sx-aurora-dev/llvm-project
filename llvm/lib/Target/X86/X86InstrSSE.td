@@ -820,19 +820,6 @@ let Constraints = "$src1 = $dst" in {
                       Sched<[SchedWriteFShuffle.XMM]>, NotMemoryFoldable;
 }
 
-// TODO: This is largely to trick fastisel into ignoring the pattern.
-def UnpckhUnary : PatFrag<(ops node:$src1, node:$src2),
-                          (X86Unpckh node:$src1, node:$src2), [{
-  return N->getOperand(0) == N->getOperand(1);
-}]>;
-
-let Predicates = [UseSSE2] in {
-  // TODO: This is a hack pattern to allow lowering to emit unpckh instead of
-  // movhlps for sse2 without changing a bunch of tests.
-  def : Pat<(v2f64 (UnpckhUnary VR128:$src, VR128:$src)),
-            (MOVHLPSrr VR128:$src, VR128:$src)>;
-}
-
 //===----------------------------------------------------------------------===//
 // SSE 1 & 2 - Conversion Instructions
 //===----------------------------------------------------------------------===//
@@ -2252,12 +2239,30 @@ let Predicates = [HasAVX] in {
                                          SSEPackedSingle>, PS, VEX, VEX_L, VEX_WIG;
   defm VMOVMSKPDY : sse12_extr_sign_mask<VR256, v4f64, "movmskpd",
                                          SSEPackedDouble>, PD, VEX, VEX_L, VEX_WIG;
+
+  // Also support integer VTs to avoid a int->fp bitcast in the DAG.
+  def : Pat<(X86movmsk (v4i32 VR128:$src)),
+            (VMOVMSKPSrr VR128:$src)>;
+  def : Pat<(X86movmsk (v2i64 VR128:$src)),
+            (VMOVMSKPDrr VR128:$src)>;
+  def : Pat<(X86movmsk (v8i32 VR256:$src)),
+            (VMOVMSKPSYrr VR256:$src)>;
+  def : Pat<(X86movmsk (v4i64 VR256:$src)),
+            (VMOVMSKPDYrr VR256:$src)>;
 }
 
 defm MOVMSKPS : sse12_extr_sign_mask<VR128, v4f32, "movmskps",
                                      SSEPackedSingle>, PS;
 defm MOVMSKPD : sse12_extr_sign_mask<VR128, v2f64, "movmskpd",
                                      SSEPackedDouble>, PD;
+
+let Predicates = [UseSSE2] in {
+  // Also support integer VTs to avoid a int->fp bitcast in the DAG.
+  def : Pat<(X86movmsk (v4i32 VR128:$src)),
+            (MOVMSKPSrr VR128:$src)>;
+  def : Pat<(X86movmsk (v2i64 VR128:$src)),
+            (MOVMSKPDrr VR128:$src)>;
+}
 
 //===---------------------------------------------------------------------===//
 // SSE2 - Packed Integer Logical Instructions

@@ -12706,6 +12706,7 @@ Sema::CheckForFunctionRedefinition(FunctionDecl *FD,
        Definition->getDescribedFunctionTemplate() ||
        Definition->getNumTemplateParameterLists())) {
     SkipBody->ShouldSkip = true;
+    SkipBody->Previous = const_cast<FunctionDecl*>(Definition);
     if (auto *TD = Definition->getDescribedFunctionTemplate())
       makeMergedDefinitionVisible(TD);
     makeMergedDefinitionVisible(const_cast<FunctionDecl*>(Definition));
@@ -13359,15 +13360,17 @@ NamedDecl *Sema::ImplicitlyDefineFunction(SourceLocation Loc,
   }
 
   // Extension in C99.  Legal in C90, but warn about it.
-  // OpenCL v2.0 s6.9.u - Implicit function declaration is not supported.
   unsigned diag_id;
   if (II.getName().startswith("__builtin_"))
     diag_id = diag::warn_builtin_unknown;
-  else if (getLangOpts().C99 || getLangOpts().OpenCL)
+  // OpenCL v2.0 s6.9.u - Implicit function declaration is not supported.
+  else if (getLangOpts().OpenCL)
+    diag_id = diag::err_opencl_implicit_function_decl;
+  else if (getLangOpts().C99)
     diag_id = diag::ext_implicit_function_decl;
   else
     diag_id = diag::warn_implicit_function_decl;
-  Diag(Loc, diag_id) << &II << getLangOpts().OpenCL;
+  Diag(Loc, diag_id) << &II;
 
   // If we found a prior declaration of this function, don't bother building
   // another one. We've already pushed that one into scope, so there's nothing
@@ -14034,7 +14037,7 @@ Decl *Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
       // many points during the parsing of a struct declaration (because
       // the #pragma tokens are effectively skipped over during the
       // parsing of the struct).
-      if (TUK == TUK_Definition) {
+      if (TUK == TUK_Definition && (!SkipBody || !SkipBody->ShouldSkip)) {
         AddAlignmentAttributesForRecord(RD);
         AddMsStructLayoutForRecord(RD);
       }
@@ -14465,12 +14468,15 @@ Decl *Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
                   // comparison.
                   SkipBody->CheckSameAsPrevious = true;
                   SkipBody->New = createTagFromNewDecl();
-                  SkipBody->Previous = Hidden;
+                  SkipBody->Previous = Def;
+                  return Def;
                 } else {
                   SkipBody->ShouldSkip = true;
+                  SkipBody->Previous = Def;
                   makeMergedDefinitionVisible(Hidden);
+                  // Carry on and handle it like a normal definition. We'll
+                  // skip starting the definitiion later.
                 }
-                return Def;
               } else if (!IsExplicitSpecializationAfterInstantiation) {
                 // A redeclaration in function prototype scope in C isn't
                 // visible elsewhere, so merely issue a warning.
@@ -14699,7 +14705,7 @@ CreateNewDecl:
     // many points during the parsing of a struct declaration (because
     // the #pragma tokens are effectively skipped over during the
     // parsing of the struct).
-    if (TUK == TUK_Definition) {
+    if (TUK == TUK_Definition && (!SkipBody || !SkipBody->ShouldSkip)) {
       AddAlignmentAttributesForRecord(RD);
       AddMsStructLayoutForRecord(RD);
     }
@@ -14761,7 +14767,7 @@ CreateNewDecl:
   if (PrevDecl)
     CheckRedeclarationModuleOwnership(New, PrevDecl);
 
-  if (TUK == TUK_Definition)
+  if (TUK == TUK_Definition && (!SkipBody || !SkipBody->ShouldSkip))
     New->startDefinition();
 
   ProcessDeclAttributeList(S, New, Attrs);
@@ -14811,6 +14817,8 @@ CreateNewDecl:
       if (auto RD = dyn_cast<RecordDecl>(New))
         RD->completeDefinition();
     return nullptr;
+  } else if (SkipBody && SkipBody->ShouldSkip) {
+    return SkipBody->Previous;
   } else {
     return New;
   }
@@ -16394,7 +16402,7 @@ static void CheckForDuplicateEnumValues(Sema &S, ArrayRef<Decl *> Elements,
   typedef SmallVector<std::unique_ptr<ECDVector>, 3> DuplicatesVector;
 
   typedef llvm::PointerUnion<EnumConstantDecl*, ECDVector*> DeclOrVector;
-  typedef llvm::DenseMap<int64_t, DeclOrVector> ValueToVectorMap;
+  typedef std::unordered_map<int64_t, DeclOrVector> ValueToVectorMap;
 
   // Use int64_t as a key to avoid needing special handling for DenseMap keys.
   auto EnumConstantToKey = [](const EnumConstantDecl *D) {
@@ -16826,6 +16834,10 @@ Sema::DeclGroupPtrTy Sema::ActOnModuleDecl(SourceLocation StartLoc,
   case LangOptions::CMK_ModuleMap:
     Diag(ModuleLoc, diag::err_module_decl_in_module_map_module);
     return nullptr;
+
+  case LangOptions::CMK_HeaderModule:
+    Diag(ModuleLoc, diag::err_module_decl_in_header_module);
+    return nullptr;
   }
 
   assert(ModuleScopes.size() == 1 && "expected to be at global module scope");
@@ -16894,7 +16906,8 @@ Sema::DeclGroupPtrTy Sema::ActOnModuleDecl(SourceLocation StartLoc,
   case ModuleDeclKind::Implementation:
     std::pair<IdentifierInfo *, SourceLocation> ModuleNameLoc(
         PP.getIdentifierInfo(ModuleName), Path[0].second);
-    Mod = getModuleLoader().loadModule(ModuleLoc, Path, Module::AllVisible,
+    Mod = getModuleLoader().loadModule(ModuleLoc, {ModuleNameLoc},
+                                       Module::AllVisible,
                                        /*IsIncludeDirective=*/false);
     if (!Mod) {
       Diag(ModuleLoc, diag::err_module_not_defined) << ModuleName;
@@ -16924,6 +16937,19 @@ Sema::DeclGroupPtrTy Sema::ActOnModuleDecl(SourceLocation StartLoc,
 DeclResult Sema::ActOnModuleImport(SourceLocation StartLoc,
                                    SourceLocation ImportLoc,
                                    ModuleIdPath Path) {
+  // Flatten the module path for a Modules TS module name.
+  std::pair<IdentifierInfo *, SourceLocation> ModuleNameLoc;
+  if (getLangOpts().ModulesTS) {
+    std::string ModuleName;
+    for (auto &Piece : Path) {
+      if (!ModuleName.empty())
+        ModuleName += ".";
+      ModuleName += Piece.first->getName();
+    }
+    ModuleNameLoc = {PP.getIdentifierInfo(ModuleName), Path[0].second};
+    Path = ModuleIdPath(ModuleNameLoc);
+  }
+
   Module *Mod =
       getModuleLoader().loadModule(ImportLoc, Path, Module::AllVisible,
                                    /*IsIncludeDirective=*/false);

@@ -21,13 +21,13 @@ class NativeSession;
 
 class NativeTypeBuiltin : public NativeRawSymbol {
 public:
-  NativeTypeBuiltin(NativeSession &PDBSession, SymIndexId Id, PDB_BuiltinType T,
+  NativeTypeBuiltin(NativeSession &PDBSession, SymIndexId Id,
+                    codeview::ModifierOptions Mods, PDB_BuiltinType T,
                     uint64_t L);
   ~NativeTypeBuiltin() override;
 
-  virtual std::unique_ptr<NativeRawSymbol> clone() const override;
-
-  void dump(raw_ostream &OS, int Indent) const override;
+  void dump(raw_ostream &OS, int Indent, PdbSymbolIdField ShowIdFields,
+            PdbSymbolIdField RecurseIdFields) const override;
 
   PDB_SymType getSymTag() const override;
 
@@ -39,6 +39,7 @@ public:
 
 protected:
   NativeSession &Session;
+  codeview::ModifierOptions Mods;
   PDB_BuiltinType Type;
   uint64_t Length;
 };

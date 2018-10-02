@@ -219,10 +219,7 @@ private:
                    MDNode::get(*C, None));
   }
 
-  std::string UniqueSuffix() {
-    static size_t Count = 0;
-    return "_sancov" + std::to_string(Count++);
-  }
+  Comdat *GetOrCreateFunctionComdat(Function &F);
 
   std::string getSectionName(const std::string &Section) const;
   std::string getSectionStart(const std::string &Section) const;
@@ -239,6 +236,7 @@ private:
   Type *IntptrTy, *IntptrPtrTy, *Int64Ty, *Int64PtrTy, *Int32Ty, *Int32PtrTy,
       *Int16Ty, *Int8Ty, *Int8PtrTy;
   Module *CurModule;
+  std::string CurModuleUniqueId;
   Triple TargetTriple;
   LLVMContext *C;
   const DataLayout *DL;
@@ -309,6 +307,7 @@ bool SanitizerCoverageModule::runOnModule(Module &M) {
   C = &(M.getContext());
   DL = &M.getDataLayout();
   CurModule = &M;
+  CurModuleUniqueId = getUniqueModuleId(CurModule);
   TargetTriple = Triple(M.getTargetTriple());
   FunctionGuardArray = nullptr;
   Function8bitCounterArray = nullptr;
@@ -570,40 +569,35 @@ bool SanitizerCoverageModule::runOnFunction(Function &F) {
   return true;
 }
 
+Comdat *SanitizerCoverageModule::GetOrCreateFunctionComdat(Function &F) {
+  if (auto Comdat = F.getComdat()) return Comdat;
+  if (!TargetTriple.isOSBinFormatELF()) return nullptr;
+  assert(F.hasName());
+  std::string Name = F.getName();
+  if (F.hasLocalLinkage()) {
+    if (CurModuleUniqueId.empty()) return nullptr;
+    Name += CurModuleUniqueId;
+  }
+  auto Comdat = CurModule->getOrInsertComdat(Name);
+  F.setComdat(Comdat);
+  return Comdat;
+}
+
 GlobalVariable *SanitizerCoverageModule::CreateFunctionLocalArrayInSection(
     size_t NumElements, Function &F, Type *Ty, const char *Section) {
   ArrayType *ArrayTy = ArrayType::get(Ty, NumElements);
   auto Array = new GlobalVariable(
       *CurModule, ArrayTy, false, GlobalVariable::PrivateLinkage,
       Constant::getNullValue(ArrayTy), "__sancov_gen_");
-  if (auto Comdat = F.getComdat()) {
+  if (auto Comdat = GetOrCreateFunctionComdat(F))
     Array->setComdat(Comdat);
-  } else {
-    // TODO: Refactor into a helper function and use it in ASan.
-    assert(F.hasName());
-    std::string Name = F.getName();
-    if (F.hasLocalLinkage()) {
-      std::string ModuleId = getUniqueModuleId(CurModule);
-      Name += ModuleId.empty() ? UniqueSuffix() : ModuleId;
-    }
-    Comdat = CurModule->getOrInsertComdat(Name);
-    // Make this IMAGE_COMDAT_SELECT_NODUPLICATES on COFF. Also upgrade private
-    // linkage to internal linkage so that a symbol table entry is emitted. This
-    // is necessary in order to create the comdat group.
-    if (TargetTriple.isOSBinFormatCOFF()) {
-      Comdat->setSelectionKind(Comdat::NoDuplicates);
-      if (F.hasPrivateLinkage())
-        F.setLinkage(GlobalValue::InternalLinkage);
-    }
-    F.setComdat(Comdat);
-    Array->setComdat(Comdat);
-  }
   Array->setSection(getSectionName(Section));
   Array->setAlignment(Ty->isPointerTy() ? DL->getPointerSize()
                                         : Ty->getPrimitiveSizeInBits() / 8);
   GlobalsToAppendToCompilerUsed.push_back(Array);
   MDNode *MD = MDNode::get(F.getContext(), ValueAsMetadata::get(&F));
   Array->addMetadata(LLVMContext::MD_associated, *MD);
+
   return Array;
 }
 

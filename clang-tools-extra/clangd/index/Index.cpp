@@ -41,8 +41,13 @@ SymbolID SymbolID::fromRaw(llvm::StringRef Raw) {
 
 std::string SymbolID::str() const { return toHex(raw()); }
 
-void operator>>(StringRef Str, SymbolID &ID) {
-  ID = SymbolID::fromRaw(fromHex(Str));
+llvm::Expected<SymbolID> SymbolID::fromStr(llvm::StringRef Str) {
+  if (Str.size() != RawSize * 2)
+    return createStringError(llvm::inconvertibleErrorCode(), "Bad ID length");
+  for (char C : Str)
+    if (!isHexDigit(C))
+      return createStringError(llvm::inconvertibleErrorCode(), "Bad hex ID");
+  return fromRaw(fromHex(Str));
 }
 
 raw_ostream &operator<<(raw_ostream &OS, SymbolOrigin O) {
@@ -177,14 +182,14 @@ std::shared_ptr<SymbolIndex> SwapIndex::snapshot() const {
 
 bool fromJSON(const llvm::json::Value &Parameters, FuzzyFindRequest &Request) {
   json::ObjectMapper O(Parameters);
-  int64_t MaxCandidateCount;
+  int64_t Limit;
   bool OK =
       O && O.map("Query", Request.Query) && O.map("Scopes", Request.Scopes) &&
-      O.map("MaxCandidateCount", MaxCandidateCount) &&
+      O.map("Limit", Limit) &&
       O.map("RestrictForCodeCompletion", Request.RestrictForCodeCompletion) &&
       O.map("ProximityPaths", Request.ProximityPaths);
-  if (OK && MaxCandidateCount <= std::numeric_limits<uint32_t>::max())
-    Request.MaxCandidateCount = MaxCandidateCount;
+  if (OK && Limit <= std::numeric_limits<uint32_t>::max())
+    Request.Limit = Limit;
   return OK;
 }
 
@@ -192,7 +197,7 @@ llvm::json::Value toJSON(const FuzzyFindRequest &Request) {
   return json::Object{
       {"Query", Request.Query},
       {"Scopes", json::Array{Request.Scopes}},
-      {"MaxCandidateCount", Request.MaxCandidateCount},
+      {"Limit", Request.Limit},
       {"RestrictForCodeCompletion", Request.RestrictForCodeCompletion},
       {"ProximityPaths", json::Array{Request.ProximityPaths}},
   };

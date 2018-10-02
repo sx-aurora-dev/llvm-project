@@ -104,6 +104,10 @@ foreach i = {1-7,18,20} in
                                              "Reserve X"#i#", making it unavailable "
                                              "as a GPR">;
 
+foreach i = {8-15,18} in
+    def FeatureCallSavedX#i : SubtargetFeature<"call-saved-x"#i,
+         "CustomCallSavedXRegs["#i#"]", "true", "Make X"#i#" callee saved.">;
+
 def FeatureUseAA : SubtargetFeature<"use-aa", "UseAA", "true",
                                     "Use alias analysis during codegen">;
 
@@ -155,6 +159,10 @@ def FeatureFuseAddress : SubtargetFeature<
 def FeatureFuseAES : SubtargetFeature<
     "fuse-aes", "HasFuseAES", "true",
     "CPU fuses AES crypto operations">;
+
+def FeatureFuseCryptoEOR : SubtargetFeature<
+    "fuse-crypto-eor", "HasFuseCryptoEOR", "true",
+    "CPU fuses AES/PMULL and EOR operations">;
 
 def FeatureFuseCCSelect : SubtargetFeature<
     "fuse-csel", "HasFuseCCSelect", "true",
@@ -211,6 +219,9 @@ def HasV8_3aOps : SubtargetFeature<"v8.3a", "HasV8_3aOps", "true",
 
 def HasV8_4aOps : SubtargetFeature<"v8.4a", "HasV8_4aOps", "true",
   "Support ARM v8.4a instructions", [HasV8_3aOps, FeatureDotProd]>;
+
+def HasV8_5aOps : SubtargetFeature<"v8.5a", "HasV8_5aOps", "true",
+  "Support ARM v8.5a instructions", [HasV8_4aOps]>;
 
 //===----------------------------------------------------------------------===//
 // Register File Description
@@ -343,6 +354,7 @@ def ProcCyclone : SubtargetFeature<"cyclone", "ARMProcFamily", "Cyclone",
                                    FeatureDisableLatencySchedHeuristic,
                                    FeatureFPARMv8,
                                    FeatureFuseAES,
+                                   FeatureFuseCryptoEOR,
                                    FeatureNEON,
                                    FeaturePerfMon,
                                    FeatureZCRegMove,
