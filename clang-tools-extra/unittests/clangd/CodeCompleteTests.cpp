@@ -223,11 +223,12 @@ TEST(CompletionTest, Filter) {
 void TestAfterDotCompletion(clangd::CodeCompleteOptions Opts) {
   auto Results = completions(
       R"cpp(
-      #define MACRO X
-
       int global_var;
 
       int global_func();
+
+      // Make sure this is not in preamble.
+      #define MACRO X
 
       struct GlobalClass {};
 
@@ -276,10 +277,11 @@ void TestAfterDotCompletion(clangd::CodeCompleteOptions Opts) {
 void TestGlobalScopeCompletion(clangd::CodeCompleteOptions Opts) {
   auto Results = completions(
       R"cpp(
-      #define MACRO X
-
       int global_var;
       int global_func();
+
+      // Make sure this is not in preamble.
+      #define MACRO X
 
       struct GlobalClass {};
 
@@ -430,10 +432,11 @@ TEST(CompletionTest, Snippets) {
 TEST(CompletionTest, Kinds) {
   auto Results = completions(
       R"cpp(
-          #define MACRO X
           int variable;
           struct Struct {};
           int function();
+          // make sure MACRO is not included in preamble.
+          #define MACRO 10
           int X = ^
       )cpp",
       {func("indexFunction"), var("indexVariable"), cls("indexClass")});
@@ -1738,31 +1741,64 @@ TEST(CompletionTest, CompletionFunctionArgsDisabled) {
   CodeCompleteOptions Opts;
   Opts.EnableSnippets = true;
   Opts.EnableFunctionArgSnippets = false;
-  const std::string Header =
-      R"cpp(
+
+  {
+    auto Results = completions(
+        R"cpp(
       void xfoo();
       void xfoo(int x, int y);
-      void xbar();
-      void f() {
-    )cpp";
-  {
-    auto Results = completions(Header + "\nxfo^", {}, Opts);
+      void f() { xfo^ })cpp",
+        {}, Opts);
     EXPECT_THAT(
         Results.Completions,
         UnorderedElementsAre(AllOf(Named("xfoo"), SnippetSuffix("()")),
                              AllOf(Named("xfoo"), SnippetSuffix("($0)"))));
   }
   {
-    auto Results = completions(Header + "\nxba^", {}, Opts);
+    auto Results = completions(
+        R"cpp(
+      void xbar();
+      void f() { xba^ })cpp",
+        {}, Opts);
     EXPECT_THAT(Results.Completions, UnorderedElementsAre(AllOf(
                                          Named("xbar"), SnippetSuffix("()"))));
   }
   {
     Opts.BundleOverloads = true;
-    auto Results = completions(Header + "\nxfo^", {}, Opts);
+    auto Results = completions(
+        R"cpp(
+      void xfoo();
+      void xfoo(int x, int y);
+      void f() { xfo^ })cpp",
+        {}, Opts);
     EXPECT_THAT(
         Results.Completions,
         UnorderedElementsAre(AllOf(Named("xfoo"), SnippetSuffix("($0)"))));
+  }
+  {
+    auto Results = completions(
+        R"cpp(
+      template <class T, class U>
+      void xfoo(int a, U b);
+      void f() { xfo^ })cpp",
+        {}, Opts);
+    EXPECT_THAT(
+        Results.Completions,
+        UnorderedElementsAre(AllOf(Named("xfoo"), SnippetSuffix("<$1>($0)"))));
+  }
+  {
+    auto Results = completions(
+        R"cpp(
+      template <class T>
+      class foo_class{};
+      template <class T>
+      using foo_alias = T**;
+      void f() { foo_^ })cpp",
+        {}, Opts);
+    EXPECT_THAT(
+        Results.Completions,
+        UnorderedElementsAre(AllOf(Named("foo_class"), SnippetSuffix("<$0>")),
+                             AllOf(Named("foo_alias"), SnippetSuffix("<$0>"))));
   }
 }
 
@@ -1919,6 +1955,21 @@ TEST(CompletionTest, MergeMacrosFromIndexAndSema) {
   EXPECT_THAT(completions("#define Clangd_Macro_Test\nClangd_Macro_T^", {Sym})
                   .Completions,
               UnorderedElementsAre(Named("Clangd_Macro_Test")));
+}
+
+TEST(CompletionTest, NoMacroFromPreambleIfIndexIsSet) {
+  auto Results = completions(
+      R"cpp(#define CLANGD_PREAMBLE x
+
+          int x = 0;
+          #define CLANGD_MAIN x
+          void f() { CLANGD_^ }
+      )cpp",
+      {func("CLANGD_INDEX")});
+  // Index is overriden in code completion options, so the preamble symbol is
+  // not seen.
+  EXPECT_THAT(Results.Completions, UnorderedElementsAre(Named("CLANGD_MAIN"),
+                                                        Named("CLANGD_INDEX")));
 }
 
 TEST(CompletionTest, DeprecatedResults) {
