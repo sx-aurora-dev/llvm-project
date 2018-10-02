@@ -3386,6 +3386,11 @@ ExprResult TreeTransform<Derived>::TransformInitializer(Expr *Init,
   if (Construct && Construct->isStdInitListInitialization())
     return TransformInitializer(Construct->getArg(0), NotCopyInit);
 
+  // Enter a list-init context if this was list initialization.
+  EnterExpressionEvaluationContext Context(
+      getSema(), EnterExpressionEvaluationContext::InitList,
+      Construct->isListInitialization());
+
   SmallVector<Expr*, 8> NewArgs;
   bool ArgChanged = false;
   if (getDerived().TransformExprs(Construct->getArgs(), Construct->getNumArgs(),
@@ -4252,14 +4257,20 @@ QualType TreeTransform<Derived>::RebuildQualifiedType(QualType T,
   // C++ [dcl.fct]p7:
   //   [When] adding cv-qualifications on top of the function type [...] the
   //   cv-qualifiers are ignored.
+  if (T->isFunctionType())
+    return T;
+
   // C++ [dcl.ref]p1:
   //   when the cv-qualifiers are introduced through the use of a typedef-name
   //   or decltype-specifier [...] the cv-qualifiers are ignored.
   // Note that [dcl.ref]p1 lists all cases in which cv-qualifiers can be
   // applied to a reference type.
-  // FIXME: This removes all qualifiers, not just cv-qualifiers!
-  if (T->isFunctionType() || T->isReferenceType())
-    return T;
+  if (T->isReferenceType()) {
+    // The only qualifier that applies to a reference type is restrict.
+    if (!Quals.hasRestrict())
+      return T;
+    Quals = Qualifiers::fromCVRMask(Qualifiers::Restrict);
+  }
 
   // Suppress Objective-C lifetime qualifiers if they don't make sense for the
   // resulting type.
@@ -8408,6 +8419,12 @@ TreeTransform<Derived>::TransformOMPNogroupClause(OMPNogroupClause *C) {
 }
 
 template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPUnifiedAddressClause(
+    OMPUnifiedAddressClause *C) {
+  llvm_unreachable("unified_address clause cannot appear in dependent context");
+}
+
+template <typename Derived>
 OMPClause *
 TreeTransform<Derived>::TransformOMPPrivateClause(OMPPrivateClause *C) {
   llvm::SmallVector<Expr *, 16> Vars;
@@ -9536,6 +9553,9 @@ TreeTransform<Derived>::TransformInitListExpr(InitListExpr *E) {
     E = Syntactic;
 
   bool InitChanged = false;
+
+  EnterExpressionEvaluationContext Context(
+      getSema(), EnterExpressionEvaluationContext::InitList);
 
   SmallVector<Expr*, 4> Inits;
   if (getDerived().TransformExprs(E->getInits(), E->getNumInits(), false,
@@ -10768,9 +10788,14 @@ TreeTransform<Derived>::TransformCXXConstructExpr(CXXConstructExpr *E) {
 
   bool ArgumentChanged = false;
   SmallVector<Expr*, 8> Args;
-  if (getDerived().TransformExprs(E->getArgs(), E->getNumArgs(), true, Args,
-                                  &ArgumentChanged))
-    return ExprError();
+  {
+    EnterExpressionEvaluationContext Context(
+        getSema(), EnterExpressionEvaluationContext::InitList,
+        E->isListInitialization());
+    if (getDerived().TransformExprs(E->getArgs(), E->getNumArgs(), true, Args,
+                                    &ArgumentChanged))
+      return ExprError();
+  }
 
   if (!getDerived().AlwaysRebuild() &&
       T == E->getType() &&
@@ -10853,9 +10878,14 @@ TreeTransform<Derived>::TransformCXXTemporaryObjectExpr(
   bool ArgumentChanged = false;
   SmallVector<Expr*, 8> Args;
   Args.reserve(E->getNumArgs());
-  if (TransformExprs(E->getArgs(), E->getNumArgs(), true, Args,
-                     &ArgumentChanged))
-    return ExprError();
+  {
+    EnterExpressionEvaluationContext Context(
+        getSema(), EnterExpressionEvaluationContext::InitList,
+        E->isListInitialization());
+    if (TransformExprs(E->getArgs(), E->getNumArgs(), true, Args,
+                       &ArgumentChanged))
+      return ExprError();
+  }
 
   if (!getDerived().AlwaysRebuild() &&
       T == E->getTypeSourceInfo() &&
@@ -11147,9 +11177,14 @@ TreeTransform<Derived>::TransformCXXUnresolvedConstructExpr(
   bool ArgumentChanged = false;
   SmallVector<Expr*, 8> Args;
   Args.reserve(E->arg_size());
-  if (getDerived().TransformExprs(E->arg_begin(), E->arg_size(), true, Args,
-                                  &ArgumentChanged))
-    return ExprError();
+  {
+    EnterExpressionEvaluationContext Context(
+        getSema(), EnterExpressionEvaluationContext::InitList,
+        E->isListInitialization());
+    if (getDerived().TransformExprs(E->arg_begin(), E->arg_size(), true, Args,
+                                    &ArgumentChanged))
+      return ExprError();
+  }
 
   if (!getDerived().AlwaysRebuild() &&
       T == E->getTypeSourceInfo() &&

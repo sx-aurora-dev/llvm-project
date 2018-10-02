@@ -167,9 +167,14 @@ private:
   void createSections();
   void createMiscChunks();
   void createImportTables();
+  void appendImportThunks();
+  void locateImportTables(
+      std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map);
   void createExportTable();
   void mergeSections();
+  void readRelocTargets();
   void assignAddresses();
+  void finalizeAddresses();
   void removeEmptySections();
   void createSymbolAndStringTable();
   void openFile(StringRef OutputPath);
@@ -203,6 +208,10 @@ private:
   std::vector<char> Strtab;
   std::vector<llvm::object::coff_symbol16> OutputSymtab;
   IdataContents Idata;
+  Chunk *ImportTableStart = nullptr;
+  uint64_t ImportTableSize = 0;
+  Chunk *IATStart = nullptr;
+  uint64_t IATSize = 0;
   DelayLoadContents DelayIdata;
   EdataContents Edata;
   bool SetNoSEHCharacteristic = false;
@@ -292,16 +301,205 @@ void OutputSection::writeHeaderTo(uint8_t *Buf) {
 } // namespace coff
 } // namespace lld
 
+// Check whether the target address S is in range from a relocation
+// of type RelType at address P.
+static bool isInRange(uint16_t RelType, uint64_t S, uint64_t P, int Margin) {
+  assert(Config->Machine == ARMNT);
+  int64_t Diff = AbsoluteDifference(S, P + 4) + Margin;
+  switch (RelType) {
+  case IMAGE_REL_ARM_BRANCH20T:
+    return isInt<21>(Diff);
+  case IMAGE_REL_ARM_BRANCH24T:
+  case IMAGE_REL_ARM_BLX23T:
+    return isInt<25>(Diff);
+  default:
+    return true;
+  }
+}
+
+// Return the last thunk for the given target if it is in range,
+// or create a new one.
+static std::pair<Defined *, bool>
+getThunk(DenseMap<uint64_t, Defined *> &LastThunks, Defined *Target, uint64_t P,
+         uint16_t Type, int Margin) {
+  Defined *&LastThunk = LastThunks[Target->getRVA()];
+  if (LastThunk && isInRange(Type, LastThunk->getRVA(), P, Margin))
+    return {LastThunk, false};
+  RangeExtensionThunk *C = make<RangeExtensionThunk>(Target);
+  Defined *D = make<DefinedSynthetic>("", C);
+  LastThunk = D;
+  return {D, true};
+}
+
+// This checks all relocations, and for any relocation which isn't in range
+// it adds a thunk after the section chunk that contains the relocation.
+// If the latest thunk for the specific target is in range, that is used
+// instead of creating a new thunk. All range checks are done with the
+// specified margin, to make sure that relocations that originally are in
+// range, but only barely, also get thunks - in case other added thunks makes
+// the target go out of range.
+//
+// After adding thunks, we verify that all relocations are in range (with
+// no extra margin requirements). If this failed, we restart (throwing away
+// the previously created thunks) and retry with a wider margin.
+static bool createThunks(std::vector<Chunk *> &Chunks, int Margin) {
+  bool AddressesChanged = false;
+  DenseMap<uint64_t, Defined *> LastThunks;
+  size_t ThunksSize = 0;
+  // Recheck Chunks.size() each iteration, since we can insert more
+  // elements into it.
+  for (size_t I = 0; I != Chunks.size(); ++I) {
+    SectionChunk *SC = dyn_cast_or_null<SectionChunk>(Chunks[I]);
+    if (!SC)
+      continue;
+    size_t ThunkInsertionSpot = I + 1;
+
+    // Try to get a good enough estimate of where new thunks will be placed.
+    // Offset this by the size of the new thunks added so far, to make the
+    // estimate slightly better.
+    size_t ThunkInsertionRVA = SC->getRVA() + SC->getSize() + ThunksSize;
+    for (size_t J = 0, E = SC->Relocs.size(); J < E; ++J) {
+      const coff_relocation &Rel = SC->Relocs[J];
+      Symbol *&RelocTarget = SC->RelocTargets[J];
+
+      // The estimate of the source address P should be pretty accurate,
+      // but we don't know whether the target Symbol address should be
+      // offset by ThunkSize or not (or by some of ThunksSize but not all of
+      // it), giving us some uncertainty once we have added one thunk.
+      uint64_t P = SC->getRVA() + Rel.VirtualAddress + ThunksSize;
+
+      Defined *Sym = dyn_cast_or_null<Defined>(RelocTarget);
+      if (!Sym)
+        continue;
+
+      uint64_t S = Sym->getRVA();
+
+      if (isInRange(Rel.Type, S, P, Margin))
+        continue;
+
+      // If the target isn't in range, hook it up to an existing or new
+      // thunk.
+      Defined *Thunk;
+      bool WasNew;
+      std::tie(Thunk, WasNew) = getThunk(LastThunks, Sym, P, Rel.Type, Margin);
+      if (WasNew) {
+        Chunk *ThunkChunk = Thunk->getChunk();
+        ThunkChunk->setRVA(
+            ThunkInsertionRVA); // Estimate of where it will be located.
+        Chunks.insert(Chunks.begin() + ThunkInsertionSpot, ThunkChunk);
+        ThunkInsertionSpot++;
+        ThunksSize += ThunkChunk->getSize();
+        ThunkInsertionRVA += ThunkChunk->getSize();
+        AddressesChanged = true;
+      }
+      RelocTarget = Thunk;
+    }
+  }
+  return AddressesChanged;
+}
+
+// Verify that all relocations are in range, with no extra margin requirements.
+static bool verifyRanges(const std::vector<Chunk *> Chunks) {
+  for (Chunk *C : Chunks) {
+    SectionChunk *SC = dyn_cast_or_null<SectionChunk>(C);
+    if (!SC)
+      continue;
+
+    for (size_t J = 0, E = SC->Relocs.size(); J < E; ++J) {
+      const coff_relocation &Rel = SC->Relocs[J];
+      Symbol *RelocTarget = SC->RelocTargets[J];
+
+      Defined *Sym = dyn_cast_or_null<Defined>(RelocTarget);
+      if (!Sym)
+        continue;
+
+      uint64_t P = SC->getRVA() + Rel.VirtualAddress;
+      uint64_t S = Sym->getRVA();
+
+      if (!isInRange(Rel.Type, S, P, 0))
+        return false;
+    }
+  }
+  return true;
+}
+
+// Assign addresses and add thunks if necessary.
+void Writer::finalizeAddresses() {
+  assignAddresses();
+  if (Config->Machine != ARMNT)
+    return;
+
+  size_t OrigNumChunks = 0;
+  for (OutputSection *Sec : OutputSections) {
+    Sec->OrigChunks = Sec->Chunks;
+    OrigNumChunks += Sec->Chunks.size();
+  }
+
+  int Pass = 0;
+  int Margin = 1024 * 100;
+  while (true) {
+    // First check whether we need thunks at all, or if the previous pass of
+    // adding them turned out ok.
+    bool RangesOk = true;
+    size_t NumChunks = 0;
+    for (OutputSection *Sec : OutputSections) {
+      if (!verifyRanges(Sec->Chunks)) {
+        RangesOk = false;
+        break;
+      }
+      NumChunks += Sec->Chunks.size();
+    }
+    if (RangesOk) {
+      if (Pass > 0)
+        log("Added " + Twine(NumChunks - OrigNumChunks) + " thunks with " +
+            "margin " + Twine(Margin) + " in " + Twine(Pass) + " passes");
+      return;
+    }
+
+    if (Pass >= 10)
+      fatal("adding thunks hasn't converged after " + Twine(Pass) + " passes");
+
+    if (Pass > 0) {
+      // If the previous pass didn't work out, reset everything back to the
+      // original conditions before retrying with a wider margin. This should
+      // ideally never happen under real circumstances.
+      for (OutputSection *Sec : OutputSections) {
+        Sec->Chunks = Sec->OrigChunks;
+        for (Chunk *C : Sec->Chunks)
+          C->resetRelocTargets();
+      }
+      Margin *= 2;
+    }
+
+    // Try adding thunks everywhere where it is needed, with a margin
+    // to avoid things going out of range due to the added thunks.
+    bool AddressesChanged = false;
+    for (OutputSection *Sec : OutputSections)
+      AddressesChanged |= createThunks(Sec->Chunks, Margin);
+    // If the verification above thought we needed thunks, we should have
+    // added some.
+    assert(AddressesChanged);
+
+    // Recalculate the layout for the whole image (and verify the ranges at
+    // the start of the next round).
+    assignAddresses();
+
+    Pass++;
+  }
+}
+
 // The main function of the writer.
 void Writer::run() {
   ScopedTimer T1(CodeLayoutTimer);
 
+  createImportTables();
   createSections();
   createMiscChunks();
-  createImportTables();
+  appendImportThunks();
   createExportTable();
   mergeSections();
-  assignAddresses();
+  readRelocTargets();
+  finalizeAddresses();
   removeEmptySections();
   setSectionPermissions();
   createSymbolAndStringTable();
@@ -357,6 +555,110 @@ static void sortBySectionOrder(std::vector<Chunk *> &Chunks) {
                    });
 }
 
+// Sort concrete section chunks from GNU import libraries.
+//
+// GNU binutils doesn't use short import files, but instead produces import
+// libraries that consist of object files, with section chunks for the .idata$*
+// sections. These are linked just as regular static libraries. Each import
+// library consists of one header object, one object file for every imported
+// symbol, and one trailer object. In order for the .idata tables/lists to
+// be formed correctly, the section chunks within each .idata$* section need
+// to be grouped by library, and sorted alphabetically within each library
+// (which makes sure the header comes first and the trailer last).
+static bool fixGnuImportChunks(
+    std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map) {
+  uint32_t RDATA = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+
+  // Make sure all .idata$* section chunks are mapped as RDATA in order to
+  // be sorted into the same sections as our own synthesized .idata chunks.
+  for (auto &Pair : Map) {
+    StringRef SectionName = Pair.first.first;
+    uint32_t OutChars = Pair.first.second;
+    if (!SectionName.startswith(".idata"))
+      continue;
+    if (OutChars == RDATA)
+      continue;
+    std::vector<Chunk *> &SrcVect = Pair.second;
+    std::vector<Chunk *> &DestVect = Map[{SectionName, RDATA}];
+    DestVect.insert(DestVect.end(), SrcVect.begin(), SrcVect.end());
+    SrcVect.clear();
+  }
+
+  bool HasIdata = false;
+  // Sort all .idata$* chunks, grouping chunks from the same library,
+  // with alphabetical ordering of the object fils within a library.
+  for (auto &Pair : Map) {
+    StringRef SectionName = Pair.first.first;
+    if (!SectionName.startswith(".idata"))
+      continue;
+
+    std::vector<Chunk *> &Chunks = Pair.second;
+    if (!Chunks.empty())
+      HasIdata = true;
+    std::stable_sort(Chunks.begin(), Chunks.end(), [&](Chunk *S, Chunk *T) {
+      SectionChunk *SC1 = dyn_cast_or_null<SectionChunk>(S);
+      SectionChunk *SC2 = dyn_cast_or_null<SectionChunk>(T);
+      if (!SC1 || !SC2) {
+        // if SC1, order them ascending. If SC2 or both null,
+        // S is not less than T.
+        return SC1 != nullptr;
+      }
+      // Make a string with "libraryname/objectfile" for sorting, achieving
+      // both grouping by library and sorting of objects within a library,
+      // at once.
+      std::string Key1 =
+          (SC1->File->ParentName + "/" + SC1->File->getName()).str();
+      std::string Key2 =
+          (SC2->File->ParentName + "/" + SC2->File->getName()).str();
+      return Key1 < Key2;
+    });
+  }
+  return HasIdata;
+}
+
+// Add generated idata chunks, for imported symbols and DLLs, and a
+// terminator in .idata$2.
+static void addSyntheticIdata(
+    IdataContents &Idata,
+    std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map) {
+  uint32_t RDATA = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+  Idata.create();
+
+  // Add the .idata content in the right section groups, to allow
+  // chunks from other linked in object files to be grouped together.
+  // See Microsoft PE/COFF spec 5.4 for details.
+  auto Add = [&](StringRef N, std::vector<Chunk *> &V) {
+    std::vector<Chunk *> &DestVect = Map[{N, RDATA}];
+    DestVect.insert(DestVect.end(), V.begin(), V.end());
+  };
+
+  // The loader assumes a specific order of data.
+  // Add each type in the correct order.
+  Add(".idata$2", Idata.Dirs);
+  Add(".idata$4", Idata.Lookups);
+  Add(".idata$5", Idata.Addresses);
+  Add(".idata$6", Idata.Hints);
+  Add(".idata$7", Idata.DLLNames);
+}
+
+// Locate the first Chunk and size of the import directory list and the
+// IAT.
+void Writer::locateImportTables(
+    std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map) {
+  uint32_t RDATA = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+  std::vector<Chunk *> &ImportTables = Map[{".idata$2", RDATA}];
+  if (!ImportTables.empty())
+    ImportTableStart = ImportTables.front();
+  for (Chunk *C : ImportTables)
+    ImportTableSize += C->getSize();
+
+  std::vector<Chunk *> &IAT = Map[{".idata$5", RDATA}];
+  if (!IAT.empty())
+    IATStart = IAT.front();
+  for (Chunk *C : IAT)
+    IATSize += C->getSize();
+}
+
 // Create output section objects and add them to OutputSections.
 void Writer::createSections() {
   // First, create the builtin sections.
@@ -405,10 +707,22 @@ void Writer::createSections() {
     Map[{C->getSectionName(), C->getOutputCharacteristics()}].push_back(C);
   }
 
+  // Even in non MinGW cases, we might need to link against GNU import
+  // libraries.
+  bool HasIdata = fixGnuImportChunks(Map);
+  if (!Idata.empty())
+    HasIdata = true;
+
+  if (HasIdata)
+    addSyntheticIdata(Idata, Map);
+
   // Process an /order option.
   if (!Config->Order.empty())
     for (auto &Pair : Map)
       sortBySectionOrder(Pair.second);
+
+  if (HasIdata)
+    locateImportTables(Map);
 
   // Then create an OutputSection for each section.
   // '$' and all following characters in input section names are
@@ -500,9 +814,6 @@ void Writer::createMiscChunks() {
 // IdataContents class abstracted away the details for us,
 // so we just let it create chunks and add them to the section.
 void Writer::createImportTables() {
-  if (ImportFile::Instances.empty())
-    return;
-
   // Initialize DLLOrder so that import entries are ordered in
   // the same order as in the command line. (That affects DLL
   // initialization order, and this ordering is MSVC-compatible.)
@@ -513,14 +824,6 @@ void Writer::createImportTables() {
     std::string DLL = StringRef(File->DLLName).lower();
     if (Config->DLLOrder.count(DLL) == 0)
       Config->DLLOrder[DLL] = Config->DLLOrder.size();
-
-    if (File->ThunkSym) {
-      if (!isa<DefinedImportThunk>(File->ThunkSym))
-        fatal(toString(*File->ThunkSym) + " was replaced");
-      DefinedImportThunk *Thunk = cast<DefinedImportThunk>(File->ThunkSym);
-      if (File->ThunkLive)
-        TextSec->addChunk(Thunk->getChunk());
-    }
 
     if (File->ImpSym && !isa<DefinedImportData>(File->ImpSym))
       fatal(toString(*File->ImpSym) + " was replaced");
@@ -534,10 +837,25 @@ void Writer::createImportTables() {
       Idata.add(ImpSym);
     }
   }
+}
 
-  if (!Idata.empty())
-    for (Chunk *C : Idata.getChunks())
-      IdataSec->addChunk(C);
+void Writer::appendImportThunks() {
+  if (ImportFile::Instances.empty())
+    return;
+
+  for (ImportFile *File : ImportFile::Instances) {
+    if (!File->Live)
+      continue;
+
+    if (!File->ThunkSym)
+      continue;
+
+    if (!isa<DefinedImportThunk>(File->ThunkSym))
+      fatal(toString(*File->ThunkSym) + " was replaced");
+    DefinedImportThunk *Thunk = cast<DefinedImportThunk>(File->ThunkSym);
+    if (File->ThunkLive)
+      TextSec->addChunk(Thunk->getChunk());
+  }
 
   if (!DelayIdata.empty()) {
     Defined *Helper = cast<Defined>(Config->DelayLoadHelper);
@@ -668,9 +986,9 @@ void Writer::createSymbolAndStringTable() {
 }
 
 void Writer::mergeSections() {
-  if (!PdataSec->getChunks().empty()) {
-    FirstPdata = PdataSec->getChunks().front();
-    LastPdata = PdataSec->getChunks().back();
+  if (!PdataSec->Chunks.empty()) {
+    FirstPdata = PdataSec->Chunks.front();
+    LastPdata = PdataSec->Chunks.back();
   }
 
   for (auto &P : Config->Merge) {
@@ -698,6 +1016,13 @@ void Writer::mergeSections() {
   }
 }
 
+// Visits all sections to initialize their relocation targets.
+void Writer::readRelocTargets() {
+  for (OutputSection *Sec : OutputSections)
+    for_each(parallel::par, Sec->Chunks.begin(), Sec->Chunks.end(),
+             [&](Chunk *C) { C->readRelocTargets(); });
+}
+
 // Visits all sections to assign incremental, non-overlapping RVAs and
 // file offsets.
 void Writer::assignAddresses() {
@@ -715,7 +1040,7 @@ void Writer::assignAddresses() {
       addBaserels();
     uint64_t RawSize = 0, VirtualSize = 0;
     Sec->Header.VirtualAddress = RVA;
-    for (Chunk *C : Sec->getChunks()) {
+    for (Chunk *C : Sec->Chunks) {
       VirtualSize = alignTo(VirtualSize, C->Alignment);
       C->setRVA(RVA + VirtualSize);
       C->OutputSectionOff = VirtualSize;
@@ -849,11 +1174,13 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
     Dir[EXPORT_TABLE].RelativeVirtualAddress = Edata.getRVA();
     Dir[EXPORT_TABLE].Size = Edata.getSize();
   }
-  if (!Idata.empty()) {
-    Dir[IMPORT_TABLE].RelativeVirtualAddress = Idata.getDirRVA();
-    Dir[IMPORT_TABLE].Size = Idata.getDirSize();
-    Dir[IAT].RelativeVirtualAddress = Idata.getIATRVA();
-    Dir[IAT].Size = Idata.getIATSize();
+  if (ImportTableStart) {
+    Dir[IMPORT_TABLE].RelativeVirtualAddress = ImportTableStart->getRVA();
+    Dir[IMPORT_TABLE].Size = ImportTableSize;
+  }
+  if (IATStart) {
+    Dir[IAT].RelativeVirtualAddress = IATStart->getRVA();
+    Dir[IAT].Size = IATSize;
   }
   if (RsrcSec->getVirtualSize()) {
     Dir[RESOURCE_TABLE].RelativeVirtualAddress = RsrcSec->getRVA();
@@ -1185,7 +1512,7 @@ void Writer::writeSections() {
     // ADD instructions).
     if (Sec->Header.Characteristics & IMAGE_SCN_CNT_CODE)
       memset(SecBuf, 0xCC, Sec->getRawSize());
-    for_each(parallel::par, Sec->getChunks().begin(), Sec->getChunks().end(),
+    for_each(parallel::par, Sec->Chunks.begin(), Sec->Chunks.end(),
              [&](Chunk *C) { C->writeTo(SecBuf); });
   }
 }
@@ -1269,12 +1596,13 @@ uint32_t Writer::getSizeOfInitializedData() {
 void Writer::addBaserels() {
   if (!Config->Relocatable)
     return;
+  RelocSec->Chunks.clear();
   std::vector<Baserel> V;
   for (OutputSection *Sec : OutputSections) {
     if (Sec->Header.Characteristics & IMAGE_SCN_MEM_DISCARDABLE)
       continue;
     // Collect all locations for base relocations.
-    for (Chunk *C : Sec->getChunks())
+    for (Chunk *C : Sec->Chunks)
       C->getBaserels(&V);
     // Add the addresses to .reloc section.
     if (!V.empty())

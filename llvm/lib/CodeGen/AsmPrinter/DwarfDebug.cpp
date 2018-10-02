@@ -241,7 +241,7 @@ ArrayRef<DbgVariable::FrameIndexExpr> DbgVariable::getFrameIndexExprs() const {
                         return A.Expr->isFragment();
                       }) &&
          "multiple FI expressions without DW_OP_LLVM_fragment");
-  llvm::sort(FrameIndexExprs.begin(), FrameIndexExprs.end(),
+  llvm::sort(FrameIndexExprs,
              [](const FrameIndexExpr &A, const FrameIndexExpr &B) -> bool {
                return A.Expr->getFragmentInfo()->OffsetInBits <
                       B.Expr->getFragmentInfo()->OffsetInBits;
@@ -612,22 +612,21 @@ void DwarfDebug::constructAndAddImportedEntityDIE(DwarfCompileUnit &TheCU,
 /// Sort and unique GVEs by comparing their fragment offset.
 static SmallVectorImpl<DwarfCompileUnit::GlobalExpr> &
 sortGlobalExprs(SmallVectorImpl<DwarfCompileUnit::GlobalExpr> &GVEs) {
-  llvm::sort(GVEs.begin(), GVEs.end(),
-             [](DwarfCompileUnit::GlobalExpr A,
-                DwarfCompileUnit::GlobalExpr B) {
-               // Sort order: first null exprs, then exprs without fragment
-               // info, then sort by fragment offset in bits.
-               // FIXME: Come up with a more comprehensive comparator so
-               // the sorting isn't non-deterministic, and so the following
-               // std::unique call works correctly.
-               if (!A.Expr || !B.Expr)
-                 return !!B.Expr;
-               auto FragmentA = A.Expr->getFragmentInfo();
-               auto FragmentB = B.Expr->getFragmentInfo();
-               if (!FragmentA || !FragmentB)
-                 return !!FragmentB;
-               return FragmentA->OffsetInBits < FragmentB->OffsetInBits;
-             });
+  llvm::sort(
+      GVEs, [](DwarfCompileUnit::GlobalExpr A, DwarfCompileUnit::GlobalExpr B) {
+        // Sort order: first null exprs, then exprs without fragment
+        // info, then sort by fragment offset in bits.
+        // FIXME: Come up with a more comprehensive comparator so
+        // the sorting isn't non-deterministic, and so the following
+        // std::unique call works correctly.
+        if (!A.Expr || !B.Expr)
+          return !!B.Expr;
+        auto FragmentA = A.Expr->getFragmentInfo();
+        auto FragmentB = B.Expr->getFragmentInfo();
+        if (!FragmentA || !FragmentB)
+          return !!FragmentB;
+        return FragmentA->OffsetInBits < FragmentB->OffsetInBits;
+      });
   GVEs.erase(std::unique(GVEs.begin(), GVEs.end(),
                          [](DwarfCompileUnit::GlobalExpr A,
                             DwarfCompileUnit::GlobalExpr B) {
@@ -674,6 +673,10 @@ void DwarfDebug::beginModule() {
   if (getDwarfVersion() >= 5)
     (useSplitDwarf() ? SkeletonHolder : InfoHolder)
         .setRnglistsTableBaseSym(Asm->createTempSymbol("rnglists_table_base"));
+
+  // Create the symbol that points to the first entry following the debug
+  // address table (.debug_addr) header.
+  AddrPool.setLabel(Asm->createTempSymbol("addr_table_base"));
 
   for (DICompileUnit *CUNode : M->debug_compile_units()) {
     // FIXME: Move local imported entities into a list attached to the
@@ -792,11 +795,9 @@ void DwarfDebug::finalizeModuleInfo() {
       }
       // We don't keep track of which addresses are used in which CU so this
       // is a bit pessimistic under LTO.
-      if (!AddrPool.isEmpty()) {
-        const MCSymbol *Sym = TLOF.getDwarfAddrSection()->getBeginSymbol();
-        SkCU->addSectionLabel(SkCU->getUnitDie(), dwarf::DW_AT_GNU_addr_base,
-                              Sym, Sym);
-      }
+      if (!AddrPool.isEmpty())
+        SkCU->addAddrTableBase();
+
       if (getDwarfVersion() < 5 && !SkCU->getRangeLists().empty()) {
         const MCSymbol *Sym = TLOF.getDwarfRangesSection()->getBeginSymbol();
         SkCU->addSectionLabel(SkCU->getUnitDie(), dwarf::DW_AT_GNU_ranges_base,
@@ -1998,10 +1999,9 @@ void DwarfDebug::emitDebugARanges() {
   }
 
   // Sort the CU list (again, to ensure consistent output order).
-  llvm::sort(CUs.begin(), CUs.end(),
-             [](const DwarfCompileUnit *A, const DwarfCompileUnit *B) {
-               return A->getUniqueID() < B->getUniqueID();
-             });
+  llvm::sort(CUs, [](const DwarfCompileUnit *A, const DwarfCompileUnit *B) {
+    return A->getUniqueID() < B->getUniqueID();
+  });
 
   // Emit an arange table for each CU we used.
   for (DwarfCompileUnit *CU : CUs) {

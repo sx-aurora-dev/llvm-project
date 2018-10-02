@@ -132,7 +132,7 @@ def error_unresolved_symbols: F<"error-unresolved-symbols">,
 defm exclude_libs: Eq<"exclude-libs", "Exclude static libraries from automatic export">;
 
 defm execute_only: B<"execute-only",
-    "Do not mark executable sections readable",
+    "Mark executable sections unreadable",
     "Mark executable sections readable (default)">;
 
 defm export_dynamic: B<"export-dynamic",
@@ -314,6 +314,10 @@ defm target2:
 defm threads: B<"threads",
     "Run the linker multi-threaded (default)",
     "Do not run the linker multi-threaded">;
+
+defm toc_optimize : B<"toc-optimize",
+    "(PowerPC64) Enable TOC related optimizations (default)",
+    "(PowerPC64) Disable TOC related optimizations">;
 
 def trace: F<"trace">, HelpText<"Print the names of the input files">;
 
