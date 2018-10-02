@@ -83,29 +83,31 @@ namespace {
 
 class DebugDirectoryChunk : public Chunk {
 public:
-  DebugDirectoryChunk(const std::vector<Chunk *> &R) : Records(R) {}
+  DebugDirectoryChunk(const std::vector<Chunk *> &R, bool WriteRepro)
+      : Records(R), WriteRepro(WriteRepro) {}
 
   size_t getSize() const override {
-    return Records.size() * sizeof(debug_directory);
+    return (Records.size() + int(WriteRepro)) * sizeof(debug_directory);
   }
 
   void writeTo(uint8_t *B) const override {
     auto *D = reinterpret_cast<debug_directory *>(B + OutputSectionOff);
 
     for (const Chunk *Record : Records) {
-      D->Characteristics = 0;
-      D->TimeDateStamp = 0;
-      D->MajorVersion = 0;
-      D->MinorVersion = 0;
-      D->Type = COFF::IMAGE_DEBUG_TYPE_CODEVIEW;
-      D->SizeOfData = Record->getSize();
-      D->AddressOfRawData = Record->getRVA();
       OutputSection *OS = Record->getOutputSection();
       uint64_t Offs = OS->getFileOff() + (Record->getRVA() - OS->getRVA());
-      D->PointerToRawData = Offs;
-
-      TimeDateStamps.push_back(&D->TimeDateStamp);
+      fillEntry(D, COFF::IMAGE_DEBUG_TYPE_CODEVIEW, Record->getSize(),
+                Record->getRVA(), Offs);
       ++D;
+    }
+
+    if (WriteRepro) {
+      // FIXME: The COFF spec allows either a 0-sized entry to just say
+      // "the timestamp field is really a hash", or a 4-byte size field
+      // followed by that many bytes containing a longer hash (with the
+      // lowest 4 bytes usually being the timestamp in little-endian order).
+      // Consider storing the full 8 bytes computed by xxHash64 here.
+      fillEntry(D, COFF::IMAGE_DEBUG_TYPE_REPRO, 0, 0, 0);
     }
   }
 
@@ -115,8 +117,23 @@ public:
   }
 
 private:
+  void fillEntry(debug_directory *D, COFF::DebugType DebugType, size_t Size,
+                 uint64_t RVA, uint64_t Offs) const {
+    D->Characteristics = 0;
+    D->TimeDateStamp = 0;
+    D->MajorVersion = 0;
+    D->MinorVersion = 0;
+    D->Type = DebugType;
+    D->SizeOfData = Size;
+    D->AddressOfRawData = RVA;
+    D->PointerToRawData = Offs;
+
+    TimeDateStamps.push_back(&D->TimeDateStamp);
+  }
+
   mutable std::vector<support::ulittle32_t *> TimeDateStamps;
   const std::vector<Chunk *> &Records;
+  bool WriteRepro;
 };
 
 class CVDebugRecordChunk : public Chunk {
@@ -150,6 +167,9 @@ private:
   void createSections();
   void createMiscChunks();
   void createImportTables();
+  void appendImportThunks();
+  void locateImportTables(
+      std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map);
   void createExportTable();
   void mergeSections();
   void assignAddresses();
@@ -159,6 +179,7 @@ private:
   template <typename PEHeaderTy> void writeHeader();
   void createSEHTable();
   void createRuntimePseudoRelocs();
+  void insertCtorDtorSymbols();
   void createGuardCFTables();
   void markSymbolsForRVATable(ObjFile *File,
                               ArrayRef<SectionChunk *> SymIdxChunks,
@@ -185,6 +206,10 @@ private:
   std::vector<char> Strtab;
   std::vector<llvm::object::coff_symbol16> OutputSymtab;
   IdataContents Idata;
+  Chunk *ImportTableStart = nullptr;
+  uint64_t ImportTableSize = 0;
+  Chunk *IATStart = nullptr;
+  uint64_t IATSize = 0;
   DelayLoadContents DelayIdata;
   EdataContents Edata;
   bool SetNoSEHCharacteristic = false;
@@ -192,7 +217,6 @@ private:
   DebugDirectoryChunk *DebugDirectory = nullptr;
   std::vector<Chunk *> DebugRecords;
   CVDebugRecordChunk *BuildId = nullptr;
-  Optional<codeview::DebugInfo> PreviousBuildId;
   ArrayRef<uint8_t> SectionTable;
 
   uint64_t FileSize;
@@ -210,6 +234,8 @@ private:
   OutputSection *DidatSec;
   OutputSection *RsrcSec;
   OutputSection *RelocSec;
+  OutputSection *CtorsSec;
+  OutputSection *DtorsSec;
 
   // The first and last .pdata sections in the output file.
   //
@@ -235,6 +261,11 @@ void writeResult() { Writer().run(); }
 
 void OutputSection::addChunk(Chunk *C) {
   Chunks.push_back(C);
+  C->setOutputSection(this);
+}
+
+void OutputSection::insertChunkAtStart(Chunk *C) {
+  Chunks.insert(Chunks.begin(), C);
   C->setOutputSection(this);
 }
 
@@ -268,74 +299,14 @@ void OutputSection::writeHeaderTo(uint8_t *Buf) {
 } // namespace coff
 } // namespace lld
 
-// PDBs are matched against executables using a build id which consists of three
-// components:
-//   1. A 16-bit GUID
-//   2. An age
-//   3. A time stamp.
-//
-// Debuggers and symbol servers match executables against debug info by checking
-// each of these components of the EXE/DLL against the corresponding value in
-// the PDB and failing a match if any of the components differ.  In the case of
-// symbol servers, symbols are cached in a folder that is a function of the
-// GUID.  As a result, in order to avoid symbol cache pollution where every
-// incremental build copies a new PDB to the symbol cache, we must try to re-use
-// the existing GUID if one exists, but bump the age.  This way the match will
-// fail, so the symbol cache knows to use the new PDB, but the GUID matches, so
-// it overwrites the existing item in the symbol cache rather than making a new
-// one.
-static Optional<codeview::DebugInfo> loadExistingBuildId(StringRef Path) {
-  // We don't need to incrementally update a previous build id if we're not
-  // writing codeview debug info.
-  if (!Config->Debug)
-    return None;
-
-  auto ExpectedBinary = llvm::object::createBinary(Path);
-  if (!ExpectedBinary) {
-    consumeError(ExpectedBinary.takeError());
-    return None;
-  }
-
-  auto Binary = std::move(*ExpectedBinary);
-  if (!Binary.getBinary()->isCOFF())
-    return None;
-
-  std::error_code EC;
-  COFFObjectFile File(Binary.getBinary()->getMemoryBufferRef(), EC);
-  if (EC)
-    return None;
-
-  // If the machine of the binary we're outputting doesn't match the machine
-  // of the existing binary, don't try to re-use the build id.
-  if (File.is64() != Config->is64() || File.getMachine() != Config->Machine)
-    return None;
-
-  for (const auto &DebugDir : File.debug_directories()) {
-    if (DebugDir.Type != IMAGE_DEBUG_TYPE_CODEVIEW)
-      continue;
-
-    const codeview::DebugInfo *ExistingDI = nullptr;
-    StringRef PDBFileName;
-    if (auto EC = File.getDebugPDBInfo(ExistingDI, PDBFileName)) {
-      (void)EC;
-      return None;
-    }
-    // We only support writing PDBs in v70 format.  So if this is not a build
-    // id that we recognize / support, ignore it.
-    if (ExistingDI->Signature.CVSignature != OMF::Signature::PDB70)
-      return None;
-    return *ExistingDI;
-  }
-  return None;
-}
-
 // The main function of the writer.
 void Writer::run() {
   ScopedTimer T1(CodeLayoutTimer);
 
+  createImportTables();
   createSections();
   createMiscChunks();
-  createImportTables();
+  appendImportThunks();
   createExportTable();
   mergeSections();
   assignAddresses();
@@ -347,9 +318,6 @@ void Writer::run() {
     fatal("image size (" + Twine(FileSize) + ") " +
         "exceeds maximum allowable size (" + Twine(UINT32_MAX) + ")");
 
-  // We must do this before opening the output file, as it depends on being able
-  // to read the contents of the existing output file.
-  PreviousBuildId = loadExistingBuildId(Config->OutputFile);
   openFile(Config->OutputFile);
   if (Config->is64()) {
     writeHeader<pe32plus_header>();
@@ -358,14 +326,14 @@ void Writer::run() {
   }
   writeSections();
   sortExceptionTable();
-  writeBuildId();
 
   T1.stop();
 
   if (!Config->PDBPath.empty() && Config->Debug) {
     assert(BuildId);
-    createPDB(Symtab, OutputSections, SectionTable, *BuildId->BuildId);
+    createPDB(Symtab, OutputSections, SectionTable, BuildId->BuildId);
   }
+  writeBuildId();
 
   writeMapFile(OutputSections);
 
@@ -395,6 +363,110 @@ static void sortBySectionOrder(std::vector<Chunk *> &Chunks) {
                    [=](const Chunk *A, const Chunk *B) {
                      return GetPriority(A) < GetPriority(B);
                    });
+}
+
+// Sort concrete section chunks from GNU import libraries.
+//
+// GNU binutils doesn't use short import files, but instead produces import
+// libraries that consist of object files, with section chunks for the .idata$*
+// sections. These are linked just as regular static libraries. Each import
+// library consists of one header object, one object file for every imported
+// symbol, and one trailer object. In order for the .idata tables/lists to
+// be formed correctly, the section chunks within each .idata$* section need
+// to be grouped by library, and sorted alphabetically within each library
+// (which makes sure the header comes first and the trailer last).
+static bool fixGnuImportChunks(
+    std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map) {
+  uint32_t RDATA = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+
+  // Make sure all .idata$* section chunks are mapped as RDATA in order to
+  // be sorted into the same sections as our own synthesized .idata chunks.
+  for (auto &Pair : Map) {
+    StringRef SectionName = Pair.first.first;
+    uint32_t OutChars = Pair.first.second;
+    if (!SectionName.startswith(".idata"))
+      continue;
+    if (OutChars == RDATA)
+      continue;
+    std::vector<Chunk *> &SrcVect = Pair.second;
+    std::vector<Chunk *> &DestVect = Map[{SectionName, RDATA}];
+    DestVect.insert(DestVect.end(), SrcVect.begin(), SrcVect.end());
+    SrcVect.clear();
+  }
+
+  bool HasIdata = false;
+  // Sort all .idata$* chunks, grouping chunks from the same library,
+  // with alphabetical ordering of the object fils within a library.
+  for (auto &Pair : Map) {
+    StringRef SectionName = Pair.first.first;
+    if (!SectionName.startswith(".idata"))
+      continue;
+
+    std::vector<Chunk *> &Chunks = Pair.second;
+    if (!Chunks.empty())
+      HasIdata = true;
+    std::stable_sort(Chunks.begin(), Chunks.end(), [&](Chunk *S, Chunk *T) {
+      SectionChunk *SC1 = dyn_cast_or_null<SectionChunk>(S);
+      SectionChunk *SC2 = dyn_cast_or_null<SectionChunk>(T);
+      if (!SC1 || !SC2) {
+        // if SC1, order them ascending. If SC2 or both null,
+        // S is not less than T.
+        return SC1 != nullptr;
+      }
+      // Make a string with "libraryname/objectfile" for sorting, achieving
+      // both grouping by library and sorting of objects within a library,
+      // at once.
+      std::string Key1 =
+          (SC1->File->ParentName + "/" + SC1->File->getName()).str();
+      std::string Key2 =
+          (SC2->File->ParentName + "/" + SC2->File->getName()).str();
+      return Key1 < Key2;
+    });
+  }
+  return HasIdata;
+}
+
+// Add generated idata chunks, for imported symbols and DLLs, and a
+// terminator in .idata$2.
+static void addSyntheticIdata(
+    IdataContents &Idata,
+    std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map) {
+  uint32_t RDATA = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+  Idata.create();
+
+  // Add the .idata content in the right section groups, to allow
+  // chunks from other linked in object files to be grouped together.
+  // See Microsoft PE/COFF spec 5.4 for details.
+  auto Add = [&](StringRef N, std::vector<Chunk *> &V) {
+    std::vector<Chunk *> &DestVect = Map[{N, RDATA}];
+    DestVect.insert(DestVect.end(), V.begin(), V.end());
+  };
+
+  // The loader assumes a specific order of data.
+  // Add each type in the correct order.
+  Add(".idata$2", Idata.Dirs);
+  Add(".idata$4", Idata.Lookups);
+  Add(".idata$5", Idata.Addresses);
+  Add(".idata$6", Idata.Hints);
+  Add(".idata$7", Idata.DLLNames);
+}
+
+// Locate the first Chunk and size of the import directory list and the
+// IAT.
+void Writer::locateImportTables(
+    std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> &Map) {
+  uint32_t RDATA = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+  std::vector<Chunk *> &ImportTables = Map[{".idata$2", RDATA}];
+  if (!ImportTables.empty())
+    ImportTableStart = ImportTables.front();
+  for (Chunk *C : ImportTables)
+    ImportTableSize += C->getSize();
+
+  std::vector<Chunk *> &IAT = Map[{".idata$5", RDATA}];
+  if (!IAT.empty())
+    IATStart = IAT.front();
+  for (Chunk *C : IAT)
+    IATSize += C->getSize();
 }
 
 // Create output section objects and add them to OutputSections.
@@ -430,6 +502,8 @@ void Writer::createSections() {
   DidatSec = CreateSection(".didat", DATA | R);
   RsrcSec = CreateSection(".rsrc", DATA | R);
   RelocSec = CreateSection(".reloc", DATA | DISCARDABLE | R);
+  CtorsSec = CreateSection(".ctors", DATA | R | W);
+  DtorsSec = CreateSection(".dtors", DATA | R | W);
 
   // Then bin chunks by name and output characteristics.
   std::map<std::pair<StringRef, uint32_t>, std::vector<Chunk *>> Map;
@@ -443,16 +517,28 @@ void Writer::createSections() {
     Map[{C->getSectionName(), C->getOutputCharacteristics()}].push_back(C);
   }
 
+  // Even in non MinGW cases, we might need to link against GNU import
+  // libraries.
+  bool HasIdata = fixGnuImportChunks(Map);
+  if (!Idata.empty())
+    HasIdata = true;
+
+  if (HasIdata)
+    addSyntheticIdata(Idata, Map);
+
   // Process an /order option.
   if (!Config->Order.empty())
     for (auto &Pair : Map)
       sortBySectionOrder(Pair.second);
 
+  if (HasIdata)
+    locateImportTables(Map);
+
   // Then create an OutputSection for each section.
   // '$' and all following characters in input section names are
   // discarded when determining output section. So, .text$foo
   // contributes to .text, for example. See PE/COFF spec 3.2.
-  for (auto Pair : Map) {
+  for (auto &Pair : Map) {
     StringRef Name = getOutputSectionName(Pair.first.first);
     uint32_t OutChars = Pair.first.second;
 
@@ -500,20 +586,20 @@ void Writer::createMiscChunks() {
   }
 
   // Create Debug Information Chunks
+  OutputSection *DebugInfoSec = Config->MinGW ? BuildidSec : RdataSec;
+  if (Config->Debug || Config->Repro) {
+    DebugDirectory = make<DebugDirectoryChunk>(DebugRecords, Config->Repro);
+    DebugInfoSec->addChunk(DebugDirectory);
+  }
+
   if (Config->Debug) {
-    DebugDirectory = make<DebugDirectoryChunk>(DebugRecords);
-
-    OutputSection *DebugInfoSec = Config->MinGW ? BuildidSec : RdataSec;
-
     // Make a CVDebugRecordChunk even when /DEBUG:CV is not specified.  We
     // output a PDB no matter what, and this chunk provides the only means of
     // allowing a debugger to match a PDB and an executable.  So we need it even
     // if we're ultimately not going to write CodeView data to the PDB.
-    auto *CVChunk = make<CVDebugRecordChunk>();
-    BuildId = CVChunk;
-    DebugRecords.push_back(CVChunk);
+    BuildId = make<CVDebugRecordChunk>();
+    DebugRecords.push_back(BuildId);
 
-    DebugInfoSec->addChunk(DebugDirectory);
     for (Chunk *C : DebugRecords)
       DebugInfoSec->addChunk(C);
   }
@@ -526,8 +612,11 @@ void Writer::createMiscChunks() {
   if (Config->GuardCF != GuardCFLevel::Off)
     createGuardCFTables();
 
-  if (Config->MinGW)
+  if (Config->MinGW) {
     createRuntimePseudoRelocs();
+
+    insertCtorDtorSymbols();
+  }
 }
 
 // Create .idata section for the DLL-imported symbol table.
@@ -535,9 +624,6 @@ void Writer::createMiscChunks() {
 // IdataContents class abstracted away the details for us,
 // so we just let it create chunks and add them to the section.
 void Writer::createImportTables() {
-  if (ImportFile::Instances.empty())
-    return;
-
   // Initialize DLLOrder so that import entries are ordered in
   // the same order as in the command line. (That affects DLL
   // initialization order, and this ordering is MSVC-compatible.)
@@ -548,14 +634,6 @@ void Writer::createImportTables() {
     std::string DLL = StringRef(File->DLLName).lower();
     if (Config->DLLOrder.count(DLL) == 0)
       Config->DLLOrder[DLL] = Config->DLLOrder.size();
-
-    if (File->ThunkSym) {
-      if (!isa<DefinedImportThunk>(File->ThunkSym))
-        fatal(toString(*File->ThunkSym) + " was replaced");
-      DefinedImportThunk *Thunk = cast<DefinedImportThunk>(File->ThunkSym);
-      if (File->ThunkLive)
-        TextSec->addChunk(Thunk->getChunk());
-    }
 
     if (File->ImpSym && !isa<DefinedImportData>(File->ImpSym))
       fatal(toString(*File->ImpSym) + " was replaced");
@@ -569,10 +647,25 @@ void Writer::createImportTables() {
       Idata.add(ImpSym);
     }
   }
+}
 
-  if (!Idata.empty())
-    for (Chunk *C : Idata.getChunks())
-      IdataSec->addChunk(C);
+void Writer::appendImportThunks() {
+  if (ImportFile::Instances.empty())
+    return;
+
+  for (ImportFile *File : ImportFile::Instances) {
+    if (!File->Live)
+      continue;
+
+    if (!File->ThunkSym)
+      continue;
+
+    if (!isa<DefinedImportThunk>(File->ThunkSym))
+      fatal(toString(*File->ThunkSym) + " was replaced");
+    DefinedImportThunk *Thunk = cast<DefinedImportThunk>(File->ThunkSym);
+    if (File->ThunkLive)
+      TextSec->addChunk(Thunk->getChunk());
+  }
 
   if (!DelayIdata.empty()) {
     Defined *Helper = cast<Defined>(Config->DelayLoadHelper);
@@ -884,11 +977,13 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
     Dir[EXPORT_TABLE].RelativeVirtualAddress = Edata.getRVA();
     Dir[EXPORT_TABLE].Size = Edata.getSize();
   }
-  if (!Idata.empty()) {
-    Dir[IMPORT_TABLE].RelativeVirtualAddress = Idata.getDirRVA();
-    Dir[IMPORT_TABLE].Size = Idata.getDirSize();
-    Dir[IAT].RelativeVirtualAddress = Idata.getIATRVA();
-    Dir[IAT].Size = Idata.getIATSize();
+  if (ImportTableStart) {
+    Dir[IMPORT_TABLE].RelativeVirtualAddress = ImportTableStart->getRVA();
+    Dir[IMPORT_TABLE].Size = ImportTableSize;
+  }
+  if (IATStart) {
+    Dir[IAT].RelativeVirtualAddress = IATStart->getRVA();
+    Dir[IAT].Size = IATSize;
   }
   if (RsrcSec->getVirtualSize()) {
     Dir[RESOURCE_TABLE].RelativeVirtualAddress = RsrcSec->getRVA();
@@ -911,7 +1006,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
                                 : sizeof(object::coff_tls_directory32);
     }
   }
-  if (Config->Debug) {
+  if (DebugDirectory) {
     Dir[DEBUG_DIRECTORY].RelativeVirtualAddress = DebugDirectory->getRVA();
     Dir[DEBUG_DIRECTORY].Size = DebugDirectory->getSize();
   }
@@ -1171,6 +1266,29 @@ void Writer::createRuntimePseudoRelocs() {
   replaceSymbol<DefinedSynthetic>(EndSym, EndSym->getName(), EndOfList);
 }
 
+// MinGW specific.
+// The MinGW .ctors and .dtors lists have sentinels at each end;
+// a (uintptr_t)-1 at the start and a (uintptr_t)0 at the end.
+// There's a symbol pointing to the start sentinel pointer, __CTOR_LIST__
+// and __DTOR_LIST__ respectively.
+void Writer::insertCtorDtorSymbols() {
+  AbsolutePointerChunk *CtorListHead = make<AbsolutePointerChunk>(-1);
+  AbsolutePointerChunk *CtorListEnd = make<AbsolutePointerChunk>(0);
+  AbsolutePointerChunk *DtorListHead = make<AbsolutePointerChunk>(-1);
+  AbsolutePointerChunk *DtorListEnd = make<AbsolutePointerChunk>(0);
+  CtorsSec->insertChunkAtStart(CtorListHead);
+  CtorsSec->addChunk(CtorListEnd);
+  DtorsSec->insertChunkAtStart(DtorListHead);
+  DtorsSec->addChunk(DtorListEnd);
+
+  Symbol *CtorListSym = Symtab->findUnderscore("__CTOR_LIST__");
+  Symbol *DtorListSym = Symtab->findUnderscore("__DTOR_LIST__");
+  replaceSymbol<DefinedSynthetic>(CtorListSym, CtorListSym->getName(),
+                                  CtorListHead);
+  replaceSymbol<DefinedSynthetic>(DtorListSym, DtorListSym->getName(),
+                                  DtorListHead);
+}
+
 // Handles /section options to allow users to overwrite
 // section attributes.
 void Writer::setSectionPermissions() {
@@ -1208,25 +1326,10 @@ void Writer::writeBuildId() {
   //    timestamp as well as a Guid and Age of the PDB.
   // 2) In all cases, the PE COFF file header also contains a timestamp.
   // For reproducibility, instead of a timestamp we want to use a hash of the
-  // binary, however when building with debug info the hash needs to take into
-  // account the debug info, since it's possible to add blank lines to a file
-  // which causes the debug info to change but not the generated code.
-  //
-  // To handle this, we first set the Guid and Age in the debug directory (but
-  // only if we're doing a debug build).  Then, we hash the binary (thus causing
-  // the hash to change if only the debug info changes, since the Age will be
-  // different).  Finally, we write that hash into the debug directory (if
-  // present) as well as the COFF file header (always).
+  // PE contents.
   if (Config->Debug) {
     assert(BuildId && "BuildId is not set!");
-    if (PreviousBuildId.hasValue()) {
-      *BuildId->BuildId = *PreviousBuildId;
-      BuildId->BuildId->PDB70.Age = BuildId->BuildId->PDB70.Age + 1;
-    } else {
-      BuildId->BuildId->Signature.CVSignature = OMF::Signature::PDB70;
-      BuildId->BuildId->PDB70.Age = 1;
-      llvm::getRandomBytes(BuildId->BuildId->PDB70.Signature, 16);
-    }
+    // BuildId->BuildId was filled in when the PDB was written.
   }
 
   // At this point the only fields in the COFF file which remain unset are the

@@ -45,12 +45,14 @@ ParsedAST TestTU::build() const {
 
 SymbolSlab TestTU::headerSymbols() const {
   auto AST = build();
-  return indexAST(AST.getASTContext(), AST.getPreprocessorPtr()).first;
+  return indexHeaderSymbols(AST.getASTContext(), AST.getPreprocessorPtr());
 }
 
+// FIXME: This should return a FileIndex with both preamble and main index.
 std::unique_ptr<SymbolIndex> TestTU::index() const {
-  // FIXME: we should generate proper refs for TestTU.
-  return MemIndex::build(headerSymbols(), RefSlab());
+  auto AST = build();
+  auto Content = indexMainDecls(AST);
+  return MemIndex::build(std::move(Content.first), std::move(Content.second));
 }
 
 const Symbol &findSymbol(const SymbolSlab &Slab, llvm::StringRef QName) {

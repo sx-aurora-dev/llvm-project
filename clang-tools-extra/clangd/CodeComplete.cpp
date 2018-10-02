@@ -40,6 +40,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Index/USRGeneration.h"
+#include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/CodeCompleteConsumer.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Tooling/Core/Replacement.h"
@@ -115,9 +116,12 @@ CompletionItemKind toCompletionItemKind(index::SymbolKind Kind) {
 
 CompletionItemKind
 toCompletionItemKind(CodeCompletionResult::ResultKind ResKind,
-                     const NamedDecl *Decl) {
+                     const NamedDecl *Decl,
+                     CodeCompletionContext::Kind CtxKind) {
   if (Decl)
     return toCompletionItemKind(index::getSymbolInfo(Decl).Kind);
+  if (CtxKind == CodeCompletionContext::CCC_IncludedFile)
+    return CompletionItemKind::File;
   switch (ResKind) {
   case CodeCompletionResult::RK_Declaration:
     llvm_unreachable("RK_Declaration without Decl");
@@ -327,6 +331,7 @@ struct CodeCompletionBuilder {
   CodeCompletionBuilder(ASTContext &ASTCtx, const CompletionCandidate &C,
                         CodeCompletionString *SemaCCS,
                         const IncludeInserter &Includes, StringRef FileName,
+                        CodeCompletionContext::Kind ContextKind,
                         const CodeCompleteOptions &Opts)
       : ASTCtx(ASTCtx), ExtractDocumentation(Opts.IncludeComments),
         EnableFunctionArgSnippets(Opts.EnableFunctionArgSnippets) {
@@ -342,8 +347,8 @@ struct CodeCompletionBuilder {
               Completion.Scope =
                   splitQualifiedName(printQualifiedName(*ND)).first;
       }
-      Completion.Kind =
-          toCompletionItemKind(C.SemaResult->Kind, C.SemaResult->Declaration);
+      Completion.Kind = toCompletionItemKind(
+          C.SemaResult->Kind, C.SemaResult->Declaration, ContextKind);
       for (const auto &FixIt : C.SemaResult->FixIts) {
         Completion.FixIts.push_back(
             toTextEdit(FixIt, ASTCtx.getSourceManager(), ASTCtx.getLangOpts()));
@@ -353,6 +358,8 @@ struct CodeCompletionBuilder {
                   return std::tie(X.range.start.line, X.range.start.character) <
                          std::tie(Y.range.start.line, Y.range.start.character);
                 });
+      Completion.Deprecated |=
+          (C.SemaResult->Availability == CXAvailability_Deprecated);
     }
     if (C.IndexResult) {
       Completion.Origin |= C.IndexResult->Origin;
@@ -362,6 +369,7 @@ struct CodeCompletionBuilder {
         Completion.Kind = toCompletionItemKind(C.IndexResult->SymInfo.Kind);
       if (Completion.Name.empty())
         Completion.Name = C.IndexResult->Name;
+      Completion.Deprecated |= (C.IndexResult->Flags & Symbol::Deprecated);
     }
 
     // Turn absolute path into a literal string that can be #included.
@@ -505,14 +513,15 @@ private:
 };
 
 // Determine the symbol ID for a Sema code completion result, if possible.
-llvm::Optional<SymbolID> getSymbolID(const CodeCompletionResult &R) {
+llvm::Optional<SymbolID> getSymbolID(const CodeCompletionResult &R,
+                                     const SourceManager &SM) {
   switch (R.Kind) {
   case CodeCompletionResult::RK_Declaration:
   case CodeCompletionResult::RK_Pattern: {
     return clang::clangd::getSymbolID(R.Declaration);
   }
   case CodeCompletionResult::RK_Macro:
-    // FIXME: Macros do have USRs, but the CCR doesn't contain enough info.
+    return clang::clangd::getSymbolID(*R.Macro, R.MacroDefInfo, SM);
   case CodeCompletionResult::RK_Keyword:
     return None;
   }
@@ -648,6 +657,7 @@ bool contextAllowsIndex(enum CodeCompletionContext::Kind K) {
   case CodeCompletionContext::CCC_TypeQualifiers:
   case CodeCompletionContext::CCC_ObjCInstanceMessage:
   case CodeCompletionContext::CCC_ObjCClassMessage:
+  case CodeCompletionContext::CCC_IncludedFile:
   case CodeCompletionContext::CCC_Recovery:
     return false;
   }
@@ -1049,11 +1059,19 @@ bool semaCodeComplete(std::unique_ptr<CodeCompleteConsumer> Consumer,
   // We reuse the preamble whether it's valid or not. This is a
   // correctness/performance tradeoff: building without a preamble is slow, and
   // completion is latency-sensitive.
+  // However, if we're completing *inside* the preamble section of the draft,
+  // overriding the preamble will break sema completion. Fortunately we can just
+  // skip all includes in this case; these completions are really simple.
+  bool CompletingInPreamble =
+      ComputePreambleBounds(*CI->getLangOpts(), ContentsBuffer.get(), 0).Size >
+      *Offset;
   // NOTE: we must call BeginSourceFile after prepareCompilerInstance. Otherwise
   // the remapped buffers do not get freed.
   auto Clang = prepareCompilerInstance(
-      std::move(CI), Input.Preamble, std::move(ContentsBuffer),
-      std::move(Input.PCHs), std::move(Input.VFS), DummyDiagsConsumer);
+      std::move(CI), CompletingInPreamble ? nullptr : Input.Preamble,
+      std::move(ContentsBuffer), std::move(Input.PCHs), std::move(Input.VFS),
+      DummyDiagsConsumer);
+  Clang->getPreprocessorOpts().SingleFileParseMode = CompletingInPreamble;
   Clang->setCodeCompletionConsumer(Consumer.release());
 
   SyntaxOnlyAction Action;
@@ -1371,14 +1389,13 @@ private:
     // Build the query.
     FuzzyFindRequest Req;
     if (Opts.Limit)
-      Req.MaxCandidateCount = Opts.Limit;
+      Req.Limit = Opts.Limit;
     Req.Query = Filter->pattern();
     Req.RestrictForCodeCompletion = true;
     Req.Scopes = QueryScopes;
     // FIXME: we should send multiple weighted paths here.
     Req.ProximityPaths.push_back(FileName);
-    vlog("Code complete: fuzzyFind(\"{0}\", scopes=[{1}])", Req.Query,
-         llvm::join(Req.Scopes.begin(), Req.Scopes.end(), ","));
+    vlog("Code complete: fuzzyFind({0:2})", toJSON(Req));
 
     if (SpecFuzzyFind)
       SpecFuzzyFind->NewReq = Req;
@@ -1435,7 +1452,8 @@ private:
     llvm::DenseSet<const Symbol *> UsedIndexResults;
     auto CorrespondingIndexResult =
         [&](const CodeCompletionResult &SemaResult) -> const Symbol * {
-      if (auto SymID = getSymbolID(SemaResult)) {
+      if (auto SymID =
+              getSymbolID(SemaResult, Recorder->CCSema->getSourceManager())) {
         auto I = IndexResults.find(*SymID);
         if (I != IndexResults.end()) {
           UsedIndexResults.insert(&*I);
@@ -1534,7 +1552,8 @@ private:
                           : nullptr;
       if (!Builder)
         Builder.emplace(Recorder->CCSema->getASTContext(), Item, SemaCCS,
-                        *Inserter, FileName, Opts);
+                        *Inserter, FileName, Recorder->CCContext.getKind(),
+                        Opts);
       else
         Builder->add(Item, SemaCCS);
     }
@@ -1623,13 +1642,14 @@ CompletionItem CodeCompletion::render(const CodeCompleteOptions &Opts) const {
   LSP.kind = Kind;
   LSP.detail = BundleSize > 1 ? llvm::formatv("[{0} overloads]", BundleSize)
                               : ReturnType;
+  LSP.deprecated = Deprecated;
   if (InsertInclude)
     LSP.detail += "\n" + InsertInclude->Header;
   LSP.documentation = Documentation;
   LSP.sortText = sortText(Score.Total, Name);
   LSP.filterText = Name;
   LSP.textEdit = {CompletionTokenRange, RequiredQualifier + Name};
-  // Merge continious additionalTextEdits into main edit. The main motivation
+  // Merge continuous additionalTextEdits into main edit. The main motivation
   // behind this is to help LSP clients, it seems most of them are confused when
   // they are provided with additionalTextEdits that are consecutive to main
   // edit.
@@ -1654,6 +1674,7 @@ CompletionItem CodeCompletion::render(const CodeCompleteOptions &Opts) const {
                                              : InsertTextFormat::PlainText;
   if (InsertInclude && InsertInclude->Insertion)
     LSP.additionalTextEdits.push_back(*InsertInclude->Insertion);
+
   return LSP;
 }
 

@@ -587,6 +587,78 @@ define i32 @and_xor_extra_use(i32 %a, i32 %b, i32* %p) {
   ret i32 %r
 }
 
+; (~X | C2) ^ C1 --> ((X & ~C2) ^ -1) ^ C1 --> (X & ~C2) ^ ~C1
+; The extra use (store) is here because the simpler case
+; may be transformed using demanded bits.
+
+define i8 @xor_or_not(i8 %x, i8* %p) {
+; CHECK-LABEL: @xor_or_not(
+; CHECK-NEXT:    [[NX:%.*]] = xor i8 [[X:%.*]], -1
+; CHECK-NEXT:    store i8 [[NX]], i8* [[P:%.*]], align 1
+; CHECK-NEXT:    [[TMP1:%.*]] = and i8 [[X]], -8
+; CHECK-NEXT:    [[R:%.*]] = xor i8 [[TMP1]], -13
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %nx = xor i8 %x, -1
+  store i8 %nx, i8* %p
+  %or = or i8 %nx, 7
+  %r = xor i8 %or, 12
+  ret i8 %r
+}
+
+; Don't do this if the 'or' has extra uses.
+
+define i8 @xor_or_not_uses(i8 %x, i8* %p) {
+; CHECK-LABEL: @xor_or_not_uses(
+; CHECK-NEXT:    [[TMP1:%.*]] = or i8 [[X:%.*]], 7
+; CHECK-NEXT:    [[OR:%.*]] = xor i8 [[TMP1]], -8
+; CHECK-NEXT:    store i8 [[OR]], i8* [[P:%.*]], align 1
+; CHECK-NEXT:    [[R:%.*]] = xor i8 [[TMP1]], -12
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %nx = xor i8 %x, -1
+  %or = or i8 %nx, 7
+  store i8 %or, i8* %p
+  %r = xor i8 %or, 12
+  ret i8 %r
+}
+
+; (~X & C2) ^ C1 --> ((X | ~C2) ^ -1) ^ C1 --> (X | ~C2) ^ ~C1
+; The extra use (store) is here because the simpler case
+; may be transformed using demanded bits.
+
+define i8 @xor_and_not(i8 %x, i8* %p) {
+; CHECK-LABEL: @xor_and_not(
+; CHECK-NEXT:    [[NX:%.*]] = xor i8 [[X:%.*]], -1
+; CHECK-NEXT:    store i8 [[NX]], i8* [[P:%.*]], align 1
+; CHECK-NEXT:    [[TMP1:%.*]] = or i8 [[X]], -43
+; CHECK-NEXT:    [[R:%.*]] = xor i8 [[TMP1]], -32
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %nx = xor i8 %x, -1
+  store i8 %nx, i8* %p
+  %and = and i8 %nx, 42
+  %r = xor i8 %and, 31
+  ret i8 %r
+}
+
+; Don't do this if the 'and' has extra uses.
+
+define i8 @xor_and_not_uses(i8 %x, i8* %p) {
+; CHECK-LABEL: @xor_and_not_uses(
+; CHECK-NEXT:    [[NX:%.*]] = and i8 [[X:%.*]], 42
+; CHECK-NEXT:    [[AND:%.*]] = xor i8 [[NX]], 42
+; CHECK-NEXT:    store i8 [[AND]], i8* [[P:%.*]], align 1
+; CHECK-NEXT:    [[R:%.*]] = xor i8 [[NX]], 53
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %nx = xor i8 %x, -1
+  %and = and i8 %nx, 42
+  store i8 %and, i8* %p
+  %r = xor i8 %and, 31
+  ret i8 %r
+}
+
 ; The tests 39-47 are related to the canonicalization:
 ; %notx = xor i32 %x, -1
 ; %cmp = icmp sgt i32 %notx, %y
@@ -671,8 +743,8 @@ define i32 @test43(i32 %x, i32 %y) {
 define i32 @test44(i32 %x, i32 %y) {
 ; CHECK-LABEL: @test44(
 ; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 -4, [[Y:%.*]]
-; CHECK-NEXT:    [[TMP2:%.*]] = icmp ult i32 [[TMP1]], [[X:%.*]]
-; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[X]], i32 [[TMP1]]
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp ugt i32 [[TMP1]], [[X:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[TMP1]], i32 [[X]]
 ; CHECK-NEXT:    ret i32 [[RES]]
 ;
   %z = add i32 %y, 3 ; thwart complexity-based canonicalization
@@ -685,7 +757,7 @@ define i32 @test44(i32 %x, i32 %y) {
 
 define i32 @test45(i32 %x, i32 %y) {
 ; CHECK-LABEL: @test45(
-; CHECK-NEXT:    [[TMP1:%.*]] = icmp ugt i32 [[Y:%.*]], [[X:%.*]]
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp ult i32 [[X:%.*]], [[Y:%.*]]
 ; CHECK-NEXT:    [[TMP2:%.*]] = select i1 [[TMP1]], i32 [[Y]], i32 [[X]]
 ; CHECK-NEXT:    ret i32 [[TMP2]]
 ;
@@ -729,4 +801,124 @@ define i32 @test47(i32 %x, i32 %y, i32 %z) {
   %add = add i32 %umax, %z
   %res = mul i32 %umin, %add
   ret i32 %res
+}
+
+define i32 @test48(i32 %x) {
+; CHECK-LABEL: @test48(
+; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[X:%.*]], 1
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp slt i32 [[TMP1]], -1
+; CHECK-NEXT:    [[D:%.*]] = select i1 [[TMP2]], i32 [[TMP1]], i32 -1
+; CHECK-NEXT:    ret i32 [[D]]
+;
+  %a = sub i32 -2, %x
+  %b = icmp sgt i32 %a, 0
+  %c = select i1 %b, i32 %a, i32 0
+  %d = xor i32 %c, -1
+  ret i32 %d
+}
+
+define <2 x i32> @test48vec(<2 x i32> %x) {
+; CHECK-LABEL: @test48vec(
+; CHECK-NEXT:    [[TMP1:%.*]] = add <2 x i32> [[X:%.*]], <i32 1, i32 1>
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp slt <2 x i32> [[TMP1]], <i32 -1, i32 -1>
+; CHECK-NEXT:    [[D:%.*]] = select <2 x i1> [[TMP2]], <2 x i32> [[TMP1]], <2 x i32> <i32 -1, i32 -1>
+; CHECK-NEXT:    ret <2 x i32> [[D]]
+;
+  %a = sub <2 x i32> <i32 -2, i32 -2>, %x
+  %b = icmp sgt <2 x i32> %a, zeroinitializer
+  %c = select <2 x i1> %b, <2 x i32> %a, <2 x i32> zeroinitializer
+  %d = xor <2 x i32> %c, <i32 -1, i32 -1>
+  ret <2 x i32> %d
+}
+
+define i32 @test49(i32 %x) {
+; CHECK-LABEL: @test49(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 1, [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp sgt i32 [[TMP1]], 0
+; CHECK-NEXT:    [[D:%.*]] = select i1 [[TMP2]], i32 [[TMP1]], i32 0
+; CHECK-NEXT:    ret i32 [[D]]
+;
+  %a = add i32 %x, -2
+  %b = icmp slt i32 %a, -1
+  %c = select i1 %b, i32 %a, i32 -1
+  %d = xor i32 %c, -1
+  ret i32 %d
+}
+
+define <2 x i32> @test49vec(<2 x i32> %x) {
+; CHECK-LABEL: @test49vec(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub <2 x i32> <i32 1, i32 1>, [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp sgt <2 x i32> [[TMP1]], zeroinitializer
+; CHECK-NEXT:    [[D:%.*]] = select <2 x i1> [[TMP2]], <2 x i32> [[TMP1]], <2 x i32> zeroinitializer
+; CHECK-NEXT:    ret <2 x i32> [[D]]
+;
+  %a = add <2 x i32> %x, <i32 -2, i32 -2>
+  %b = icmp slt <2 x i32> %a, <i32 -1, i32 -1>
+  %c = select <2 x i1> %b, <2 x i32> %a, <2 x i32> <i32 -1, i32 -1>
+  %d = xor <2 x i32> %c, <i32 -1, i32 -1>
+  ret <2 x i32> %d
+}
+
+define i32 @test50(i32 %x, i32 %y) {
+; CHECK-LABEL: @test50(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 1, [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[Y:%.*]], 1
+; CHECK-NEXT:    [[TMP3:%.*]] = icmp slt i32 [[TMP2]], [[TMP1]]
+; CHECK-NEXT:    [[E:%.*]] = select i1 [[TMP3]], i32 [[TMP1]], i32 [[TMP2]]
+; CHECK-NEXT:    ret i32 [[E]]
+;
+  %a = add i32 %x, -2
+  %b = sub i32 -2, %y
+  %c = icmp slt i32 %a, %b
+  %d = select i1 %c, i32 %a, i32 %b
+  %e = xor i32 %d, -1
+  ret i32 %e
+}
+
+define <2 x i32> @test50vec(<2 x i32> %x, <2 x i32> %y) {
+; CHECK-LABEL: @test50vec(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub <2 x i32> <i32 1, i32 1>, [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = add <2 x i32> [[Y:%.*]], <i32 1, i32 1>
+; CHECK-NEXT:    [[TMP3:%.*]] = icmp slt <2 x i32> [[TMP2]], [[TMP1]]
+; CHECK-NEXT:    [[E:%.*]] = select <2 x i1> [[TMP3]], <2 x i32> [[TMP1]], <2 x i32> [[TMP2]]
+; CHECK-NEXT:    ret <2 x i32> [[E]]
+;
+  %a = add <2 x i32> %x, <i32 -2, i32 -2>
+  %b = sub <2 x i32> <i32 -2, i32 -2>, %y
+  %c = icmp slt <2 x i32> %a, %b
+  %d = select <2 x i1> %c, <2 x i32> %a, <2 x i32> %b
+  %e = xor <2 x i32> %d, <i32 -1, i32 -1>
+  ret <2 x i32> %e
+}
+
+define i32 @test51(i32 %x, i32 %y) {
+; CHECK-LABEL: @test51(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 -3, [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[Y:%.*]], -3
+; CHECK-NEXT:    [[TMP3:%.*]] = icmp sgt i32 [[TMP2]], [[TMP1]]
+; CHECK-NEXT:    [[E:%.*]] = select i1 [[TMP3]], i32 [[TMP1]], i32 [[TMP2]]
+; CHECK-NEXT:    ret i32 [[E]]
+;
+  %a = add i32 %x, 2
+  %b = sub i32 2, %y
+  %c = icmp sgt i32 %a, %b
+  %d = select i1 %c, i32 %a, i32 %b
+  %e = xor i32 %d, -1
+  ret i32 %e
+}
+
+define <2 x i32> @test51vec(<2 x i32> %x, <2 x i32> %y) {
+; CHECK-LABEL: @test51vec(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub <2 x i32> <i32 -3, i32 -3>, [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = add <2 x i32> [[Y:%.*]], <i32 -3, i32 -3>
+; CHECK-NEXT:    [[TMP3:%.*]] = icmp sgt <2 x i32> [[TMP2]], [[TMP1]]
+; CHECK-NEXT:    [[E:%.*]] = select <2 x i1> [[TMP3]], <2 x i32> [[TMP1]], <2 x i32> [[TMP2]]
+; CHECK-NEXT:    ret <2 x i32> [[E]]
+;
+  %a = add <2 x i32> %x, <i32 2, i32 2>
+  %b = sub <2 x i32> <i32 2, i32 2>, %y
+  %c = icmp sgt <2 x i32> %a, %b
+  %d = select <2 x i1> %c, <2 x i32> %a, <2 x i32> %b
+  %e = xor <2 x i32> %d, <i32 -1, i32 -1>
+  ret <2 x i32> %e
 }

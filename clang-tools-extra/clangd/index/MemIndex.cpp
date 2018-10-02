@@ -8,16 +8,19 @@
 //===-------------------------------------------------------------------===//
 
 #include "MemIndex.h"
-#include "../FuzzyMatch.h"
-#include "../Logger.h"
-#include <queue>
+#include "FuzzyMatch.h"
+#include "Logger.h"
+#include "Quality.h"
 
 namespace clang {
 namespace clangd {
 
 std::unique_ptr<SymbolIndex> MemIndex::build(SymbolSlab Slab, RefSlab Refs) {
+  // Store Slab size before it is moved.
+  const auto BackingDataSize = Slab.bytes() + Refs.bytes();
   auto Data = std::make_pair(std::move(Slab), std::move(Refs));
-  return llvm::make_unique<MemIndex>(Data.first, Data.second, std::move(Data));
+  return llvm::make_unique<MemIndex>(Data.first, Data.second, std::move(Data),
+                                     BackingDataSize);
 }
 
 bool MemIndex::fuzzyFind(
@@ -26,7 +29,8 @@ bool MemIndex::fuzzyFind(
   assert(!StringRef(Req.Query).contains("::") &&
          "There must be no :: in query.");
 
-  std::priority_queue<std::pair<float, const Symbol *>> Top;
+  TopN<std::pair<float, const Symbol *>> Top(
+      Req.Limit ? *Req.Limit : std::numeric_limits<size_t>::max());
   FuzzyMatcher Filter(Req.Query);
   bool More = false;
   for (const auto Pair : Index) {
@@ -35,19 +39,16 @@ bool MemIndex::fuzzyFind(
     // Exact match against all possible scopes.
     if (!Req.Scopes.empty() && !llvm::is_contained(Req.Scopes, Sym->Scope))
       continue;
-    if (Req.RestrictForCodeCompletion && !Sym->IsIndexedForCodeCompletion)
+    if (Req.RestrictForCodeCompletion &&
+        !(Sym->Flags & Symbol::IndexedForCodeCompletion))
       continue;
 
-    if (auto Score = Filter.match(Sym->Name)) {
-      Top.emplace(-*Score * quality(*Sym), Sym);
-      if (Top.size() > Req.MaxCandidateCount) {
-        More = true;
-        Top.pop();
-      }
-    }
+    if (auto Score = Filter.match(Sym->Name))
+      if (Top.push({*Score * quality(*Sym), Sym}))
+        More = true; // An element with smallest score was discarded.
   }
-  for (; !Top.empty(); Top.pop())
-    Callback(*Top.top().second);
+  for (const auto &Item : std::move(Top).items())
+    Callback(*Item.second);
   return More;
 }
 
@@ -73,7 +74,7 @@ void MemIndex::refs(const RefsRequest &Req,
 }
 
 size_t MemIndex::estimateMemoryUsage() const {
-  return Index.getMemorySize();
+  return Index.getMemorySize() + Refs.getMemorySize() + BackingDataSize;
 }
 
 } // namespace clangd

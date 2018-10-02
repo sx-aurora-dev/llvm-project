@@ -10,11 +10,11 @@
 #include "Annotations.h"
 #include "TestIndex.h"
 #include "TestTU.h"
-#include "gmock/gmock.h"
 #include "index/FileIndex.h"
 #include "index/Index.h"
 #include "index/MemIndex.h"
 #include "index/Merge.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 using testing::_;
@@ -58,11 +58,11 @@ TEST(SwapIndexTest, OldIndexRecycled) {
   auto Token = std::make_shared<int>();
   std::weak_ptr<int> WeakToken = Token;
 
-  SwapIndex S(
-      llvm::make_unique<MemIndex>(SymbolSlab(), RefSlab(), std::move(Token)));
-  EXPECT_FALSE(WeakToken.expired());     // Current MemIndex keeps it alive.
+  SwapIndex S(llvm::make_unique<MemIndex>(
+      SymbolSlab(), RefSlab(), std::move(Token), /*BackingDataSize=*/0));
+  EXPECT_FALSE(WeakToken.expired());      // Current MemIndex keeps it alive.
   S.reset(llvm::make_unique<MemIndex>()); // Now the MemIndex is destroyed.
-  EXPECT_TRUE(WeakToken.expired());      // So the token is too.
+  EXPECT_TRUE(WeakToken.expired());       // So the token is too.
 }
 
 TEST(MemIndexTest, MemIndexDeduplicate) {
@@ -78,10 +78,11 @@ TEST(MemIndexTest, MemIndexLimitedNumMatches) {
   auto I = MemIndex::build(generateNumSymbols(0, 100), RefSlab());
   FuzzyFindRequest Req;
   Req.Query = "5";
-  Req.MaxCandidateCount = 3;
+  Req.Limit = 3;
   bool Incomplete;
   auto Matches = match(*I, Req, &Incomplete);
-  EXPECT_EQ(Matches.size(), Req.MaxCandidateCount);
+  EXPECT_TRUE(Req.Limit);
+  EXPECT_EQ(Matches.size(), *Req.Limit);
   EXPECT_TRUE(Incomplete);
 }
 
@@ -91,7 +92,7 @@ TEST(MemIndexTest, FuzzyMatch) {
       RefSlab());
   FuzzyFindRequest Req;
   Req.Query = "lol";
-  Req.MaxCandidateCount = 2;
+  Req.Limit = 2;
   EXPECT_THAT(match(*I, Req),
               UnorderedElementsAre("LaughingOutLoud", "LittleOldLady"));
 }
@@ -230,7 +231,7 @@ TEST(MergeTest, PreferSymbolWithDefn) {
 TEST(MergeIndexTest, Refs) {
   FileIndex Dyn({"unittest"});
   FileIndex StaticIndex({"unittest"});
-  auto MergedIndex = mergeIndex(&Dyn, &StaticIndex);
+  auto MergedIndex = mergeIndex(&Dyn.index(), &StaticIndex.index());
 
   const char *HeaderCode = "class Foo;";
   auto HeaderSymbols = TestTU::withHeaderCode("class Foo;").headerSymbols();
@@ -243,8 +244,7 @@ TEST(MergeIndexTest, Refs) {
   Test.Code = Test1Code.code();
   Test.Filename = "test.cc";
   auto AST = Test.build();
-  Dyn.update(Test.Filename, &AST.getASTContext(), AST.getPreprocessorPtr(),
-             AST.getLocalTopLevelDecls());
+  Dyn.updateMain(Test.Filename, AST);
 
   // Build static index for test.cc.
   Test.HeaderCode = HeaderCode;
@@ -252,9 +252,7 @@ TEST(MergeIndexTest, Refs) {
   Test.Filename = "test.cc";
   auto StaticAST = Test.build();
   // Add stale refs for test.cc.
-  StaticIndex.update(Test.Filename, &StaticAST.getASTContext(),
-                     StaticAST.getPreprocessorPtr(),
-                     StaticAST.getLocalTopLevelDecls());
+  StaticIndex.updateMain(Test.Filename, StaticAST);
 
   // Add refs for test2.cc
   Annotations Test2Code(R"(class $Foo[[Foo]] {};)");
@@ -263,9 +261,7 @@ TEST(MergeIndexTest, Refs) {
   Test2.Code = Test2Code.code();
   Test2.Filename = "test2.cc";
   StaticAST = Test2.build();
-  StaticIndex.update(Test2.Filename, &StaticAST.getASTContext(),
-                     StaticAST.getPreprocessorPtr(),
-                     StaticAST.getLocalTopLevelDecls());
+  StaticIndex.updateMain(Test2.Filename, StaticAST);
 
   RefsRequest Request;
   Request.IDs = {Foo.ID};

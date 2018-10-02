@@ -22,6 +22,7 @@
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManagers.h"
@@ -132,10 +133,11 @@ bool CGPassManager::RunPassOnSCC(Pass *P, CallGraphSCC &CurSCC,
 
     {
       unsigned InstrCount, SCCCount = 0;
+      StringMap<std::pair<unsigned, unsigned>> FunctionToInstrCount;
       bool EmitICRemark = M.shouldEmitInstrCountChangedRemark();
       TimeRegion PassTimer(getPassTimer(CGSP));
       if (EmitICRemark)
-        InstrCount = initSizeRemarkInfo(M);
+        InstrCount = initSizeRemarkInfo(M, FunctionToInstrCount);
       Changed = CGSP->runOnSCC(CurSCC);
 
       if (EmitICRemark) {
@@ -146,7 +148,8 @@ bool CGPassManager::RunPassOnSCC(Pass *P, CallGraphSCC &CurSCC,
           // Yep. Emit a remark and update InstrCount.
           int64_t Delta =
               static_cast<int64_t>(SCCCount) - static_cast<int64_t>(InstrCount);
-          emitInstrCountChangedRemark(P, M, Delta, InstrCount);
+          emitInstrCountChangedRemark(P, M, Delta, InstrCount,
+                                      FunctionToInstrCount);
           InstrCount = SCCCount;
         }
       }

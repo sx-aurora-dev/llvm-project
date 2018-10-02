@@ -620,7 +620,7 @@ bool ClangUserExpression::Parse(DiagnosticManager &diagnostic_manager,
 ///     The column in the line that contains the absolute position.
 ///     The first character in a line is indexed as 0.
 //------------------------------------------------------------------
-static void AbsPosToLineColumnPos(unsigned abs_pos, llvm::StringRef code,
+static void AbsPosToLineColumnPos(size_t abs_pos, llvm::StringRef code,
                                   unsigned &line, unsigned &column) {
   // Reset to code position to beginning of the file.
   line = 0;
@@ -654,6 +654,8 @@ bool ClangUserExpression::Complete(ExecutionContext &exe_ctx,
 
   if (!PrepareForParsing(diagnostic_manager, exe_ctx))
     return false;
+
+  GetLanguageForExpr(diagnostic_manager, exe_ctx);
 
   if (log)
     log->Printf("Parsing the following code:\n%s", m_transformed_text.c_str());

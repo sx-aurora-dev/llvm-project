@@ -20,7 +20,6 @@
 
 #include <cassert>
 #include <vector>
-#include <mutex>
 
 #ifdef OMPTARGET_DEBUG
 int DebugLevel = 0;
@@ -424,8 +423,10 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
 
         // An STL map is sorted on its keys; use this property
         // to quickly determine when to break out of the loop.
-        if ((uintptr_t) ShadowHstPtrAddr < lb)
+        if ((uintptr_t) ShadowHstPtrAddr < lb) {
+          ++it;
           continue;
+        }
         if ((uintptr_t) ShadowHstPtrAddr >= ub)
           break;
 

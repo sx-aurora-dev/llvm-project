@@ -76,20 +76,22 @@ CGDebugInfo::~CGDebugInfo() {
 }
 
 ApplyDebugLocation::ApplyDebugLocation(CodeGenFunction &CGF,
-                                       SourceLocation TemporaryLocation)
+                                       SourceLocation TemporaryLocation,
+                                       bool ImplicitCode)
     : CGF(&CGF) {
-  init(TemporaryLocation);
+  init(TemporaryLocation, false /* DefaultToEmpty */, ImplicitCode);
 }
 
 ApplyDebugLocation::ApplyDebugLocation(CodeGenFunction &CGF,
                                        bool DefaultToEmpty,
-                                       SourceLocation TemporaryLocation)
+                                       SourceLocation TemporaryLocation,
+                                       bool ImplicitCode)
     : CGF(&CGF) {
-  init(TemporaryLocation, DefaultToEmpty);
+  init(TemporaryLocation, DefaultToEmpty, ImplicitCode);
 }
 
 void ApplyDebugLocation::init(SourceLocation TemporaryLocation,
-                              bool DefaultToEmpty) {
+                              bool DefaultToEmpty, bool ImplicitCode) {
   auto *DI = CGF->getDebugInfo();
   if (!DI) {
     CGF = nullptr;
@@ -102,7 +104,7 @@ void ApplyDebugLocation::init(SourceLocation TemporaryLocation,
     return;
 
   if (TemporaryLocation.isValid()) {
-    DI->EmitLocation(CGF->Builder, TemporaryLocation);
+    DI->EmitLocation(CGF->Builder, TemporaryLocation, ImplicitCode);
     return;
   }
 
@@ -3484,7 +3486,8 @@ void CGDebugInfo::EmitInlineFunctionEnd(CGBuilderTy &Builder) {
   setInlinedAt(llvm::DebugLoc(CurInlinedAt).getInlinedAt());
 }
 
-void CGDebugInfo::EmitLocation(CGBuilderTy &Builder, SourceLocation Loc) {
+void CGDebugInfo::EmitLocation(CGBuilderTy &Builder, SourceLocation Loc,
+                               bool ImplicitCode) {
   // Update our current location
   setLocation(Loc);
 
@@ -3492,8 +3495,9 @@ void CGDebugInfo::EmitLocation(CGBuilderTy &Builder, SourceLocation Loc) {
     return;
 
   llvm::MDNode *Scope = LexicalBlockStack.back();
-  Builder.SetCurrentDebugLocation(llvm::DebugLoc::get(
-      getLineNumber(CurLoc), getColumnNumber(CurLoc), Scope, CurInlinedAt));
+  Builder.SetCurrentDebugLocation(
+      llvm::DebugLoc::get(getLineNumber(CurLoc), getColumnNumber(CurLoc), Scope,
+                          CurInlinedAt, ImplicitCode));
 }
 
 void CGDebugInfo::CreateLexicalBlock(SourceLocation Loc) {
@@ -3540,7 +3544,7 @@ void CGDebugInfo::EmitLexicalBlockEnd(CGBuilderTy &Builder,
   assert(!LexicalBlockStack.empty() && "Region stack mismatch, stack empty!");
 
   // Provide an entry in the line table for the end of the block.
-  EmitLocation(Builder, Loc);
+  EmitLocation(Builder, Loc, true /* ImplicitCode */);
 
   if (DebugKind <= codegenoptions::DebugLineTablesOnly)
     return;
@@ -3556,7 +3560,7 @@ void CGDebugInfo::EmitFunctionEnd(CGBuilderTy &Builder, llvm::Function *Fn) {
   // Pop all regions for this function.
   while (LexicalBlockStack.size() != RCount) {
     // Provide an entry in the line table for the end of the block.
-    EmitLocation(Builder, CurLoc);
+    EmitLocation(Builder, CurLoc, true /* ImplicitCode */);
     LexicalBlockStack.pop_back();
   }
   FnBeginRegionCount.pop_back();
@@ -3565,9 +3569,9 @@ void CGDebugInfo::EmitFunctionEnd(CGBuilderTy &Builder, llvm::Function *Fn) {
     DBuilder.finalizeSubprogram(Fn->getSubprogram());
 }
 
-llvm::DIType *CGDebugInfo::EmitTypeForVarWithBlocksAttr(const VarDecl *VD,
-                                                        uint64_t *XOffset) {
-
+CGDebugInfo::BlockByRefType
+CGDebugInfo::EmitTypeForVarWithBlocksAttr(const VarDecl *VD,
+                                          uint64_t *XOffset) {
   SmallVector<llvm::Metadata *, 5> EltTys;
   QualType FType;
   uint64_t FieldSize, FieldOffset;
@@ -3619,23 +3623,21 @@ llvm::DIType *CGDebugInfo::EmitTypeForVarWithBlocksAttr(const VarDecl *VD,
   }
 
   FType = Type;
-  llvm::DIType *FieldTy = getOrCreateType(FType, Unit);
+  llvm::DIType *WrappedTy = getOrCreateType(FType, Unit);
   FieldSize = CGM.getContext().getTypeSize(FType);
   FieldAlign = CGM.getContext().toBits(Align);
 
   *XOffset = FieldOffset;
-  FieldTy = DBuilder.createMemberType(Unit, VD->getName(), Unit, 0, FieldSize,
-                                      FieldAlign, FieldOffset,
-                                      llvm::DINode::FlagZero, FieldTy);
+  llvm::DIType *FieldTy = DBuilder.createMemberType(
+      Unit, VD->getName(), Unit, 0, FieldSize, FieldAlign, FieldOffset,
+      llvm::DINode::FlagZero, WrappedTy);
   EltTys.push_back(FieldTy);
   FieldOffset += FieldSize;
 
   llvm::DINodeArray Elements = DBuilder.getOrCreateArray(EltTys);
-
-  llvm::DINode::DIFlags Flags = llvm::DINode::FlagBlockByrefStruct;
-
-  return DBuilder.createStructType(Unit, "", Unit, 0, FieldOffset, 0, Flags,
-                                   nullptr, Elements);
+  return {DBuilder.createStructType(Unit, "", Unit, 0, FieldOffset, 0,
+                                    llvm::DINode::FlagZero, nullptr, Elements),
+          WrappedTy};
 }
 
 llvm::DILocalVariable *CGDebugInfo::EmitDeclare(const VarDecl *VD,
@@ -3656,7 +3658,7 @@ llvm::DILocalVariable *CGDebugInfo::EmitDeclare(const VarDecl *VD,
   llvm::DIType *Ty;
   uint64_t XOffset = 0;
   if (VD->hasAttr<BlocksAttr>())
-    Ty = EmitTypeForVarWithBlocksAttr(VD, &XOffset);
+    Ty = EmitTypeForVarWithBlocksAttr(VD, &XOffset).WrappedType;
   else
     Ty = getOrCreateType(VD->getType(), Unit);
 
@@ -3794,7 +3796,7 @@ void CGDebugInfo::EmitDeclareOfBlockDeclRefVariable(
   llvm::DIFile *Unit = getOrCreateFile(VD->getLocation());
   llvm::DIType *Ty;
   if (isByRef)
-    Ty = EmitTypeForVarWithBlocksAttr(VD, &XOffset);
+    Ty = EmitTypeForVarWithBlocksAttr(VD, &XOffset).WrappedType;
   else
     Ty = getOrCreateType(VD->getType(), Unit);
 
@@ -3987,10 +3989,10 @@ void CGDebugInfo::EmitDeclareOfBlockLiteralArgVariable(const CGBlockInfo &block,
     if (capture->isByRef()) {
       TypeInfo PtrInfo = C.getTypeInfo(C.VoidPtrTy);
       auto Align = PtrInfo.AlignIsRequired ? PtrInfo.Align : 0;
-
-      // FIXME: this creates a second copy of this type!
+      // FIXME: This recomputes the layout of the BlockByRefWrapper.
       uint64_t xoffset;
-      fieldType = EmitTypeForVarWithBlocksAttr(variable, &xoffset);
+      fieldType =
+          EmitTypeForVarWithBlocksAttr(variable, &xoffset).BlockByRefWrapper;
       fieldType = DBuilder.createPointerType(fieldType, PtrInfo.Width);
       fieldType = DBuilder.createMemberType(tunit, name, tunit, line,
                                             PtrInfo.Width, Align, offsetInBits,

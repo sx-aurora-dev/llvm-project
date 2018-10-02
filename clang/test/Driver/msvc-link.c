@@ -17,13 +17,13 @@
 // LIBPATH: "-libpath:/usr/lib"
 // LIBPATH: "-nologo"
 
-// RUN: %clang_cl /Brepro -### %s 2>&1 | FileCheck --check-prefix=REPRO %s
+// RUN: %clang_cl /Brepro -### -- %s 2>&1 | FileCheck --check-prefix=REPRO %s
 // REPRO: link.exe"
 // REPRO: "-out:msvc-link.exe"
 // REPRO: "-nologo"
 // REPRO: "-Brepro"
 
-// RUN: %clang_cl /Brepro- -### %s 2>&1 | FileCheck --check-prefix=NOREPRO %s
+// RUN: %clang_cl /Brepro- -### -- %s 2>&1 | FileCheck --check-prefix=NOREPRO %s
 // NOREPRO: link.exe"
 // NOREPRO: "-out:msvc-link.exe"
 // NOREPRO: "-nologo"

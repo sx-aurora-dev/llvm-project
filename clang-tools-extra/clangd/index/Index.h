@@ -19,8 +19,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/StringSaver.h"
 #include <array>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <tuple>
@@ -89,12 +91,12 @@ public:
     return StringRef(reinterpret_cast<const char *>(HashValue.data()), RawSize);
   }
   static SymbolID fromRaw(llvm::StringRef);
+
   // Returns a 40-bytes hex encoded string.
   std::string str() const;
+  static llvm::Expected<SymbolID> fromStr(llvm::StringRef);
 
 private:
-  friend void operator>>(llvm::StringRef Str, SymbolID &ID);
-
   std::array<uint8_t, RawSize> HashValue;
 };
 
@@ -106,14 +108,8 @@ inline llvm::hash_code hash_value(const SymbolID &ID) {
   return llvm::hash_code(Result);
 }
 
-// Write SymbolID into the given stream. SymbolID is encoded as a 40-bytes
-// hex string.
+// Write SymbolID into the given stream. SymbolID is encoded as ID.str().
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const SymbolID &ID);
-
-// Construct SymbolID from a hex string.
-// The HexStr is required to be a 40-bytes hex string, which is encoded from the
-// "<<" operator.
-void operator>>(llvm::StringRef HexStr, SymbolID &ID);
 
 } // namespace clangd
 } // namespace clang
@@ -201,9 +197,6 @@ struct Symbol {
   // The number of translation units that reference this symbol from their main
   // file. This number is only meaningful if aggregated in an index.
   unsigned References = 0;
-  /// Whether or not this symbol is meant to be used for the code completion.
-  /// See also isIndexedForCodeCompletion().
-  bool IsIndexedForCodeCompletion = false;
   /// Where this symbol came from. Usually an index provides a constant value.
   SymbolOrigin Origin = SymbolOrigin::Unknown;
   /// A brief description of the symbol that can be appended in the completion
@@ -244,9 +237,27 @@ struct Symbol {
   ///   any definition.
   llvm::SmallVector<IncludeHeaderWithReferences, 1> IncludeHeaders;
 
-  // FIXME: add extra fields for index scoring signals.
+  enum SymbolFlag : uint8_t {
+    None = 0,
+    /// Whether or not this symbol is meant to be used for the code completion.
+    /// See also isIndexedForCodeCompletion().
+    IndexedForCodeCompletion = 1 << 0,
+    /// Indicates if the symbol is deprecated.
+    Deprecated = 1 << 1,
+  };
+
+  SymbolFlag Flags = SymbolFlag::None;
+  /// FIXME: also add deprecation message and fixit?
 };
+inline Symbol::SymbolFlag  operator|(Symbol::SymbolFlag A, Symbol::SymbolFlag  B) {
+  return static_cast<Symbol::SymbolFlag>(static_cast<uint8_t>(A) |
+                                         static_cast<uint8_t>(B));
+}
+inline Symbol::SymbolFlag &operator|=(Symbol::SymbolFlag &A, Symbol::SymbolFlag B) {
+  return A = A | B;
+}
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const Symbol &S);
+raw_ostream &operator<<(raw_ostream &, Symbol::SymbolFlag);
 
 // Invokes Callback with each StringRef& contained in the Symbol.
 // Useful for deduplicating backing strings.
@@ -420,7 +431,7 @@ struct FuzzyFindRequest {
   std::vector<std::string> Scopes;
   /// \brief The number of top candidates to return. The index may choose to
   /// return more than this, e.g. if it doesn't know which candidates are best.
-  size_t MaxCandidateCount = UINT_MAX;
+  llvm::Optional<uint32_t> Limit;
   /// If set to true, only symbols for completion support will be considered.
   bool RestrictForCodeCompletion = false;
   /// Contextually relevant files (e.g. the file we're code-completing in).
@@ -428,13 +439,15 @@ struct FuzzyFindRequest {
   std::vector<std::string> ProximityPaths;
 
   bool operator==(const FuzzyFindRequest &Req) const {
-    return std::tie(Query, Scopes, MaxCandidateCount, RestrictForCodeCompletion,
+    return std::tie(Query, Scopes, Limit, RestrictForCodeCompletion,
                     ProximityPaths) ==
-           std::tie(Req.Query, Req.Scopes, Req.MaxCandidateCount,
+           std::tie(Req.Query, Req.Scopes, Req.Limit,
                     Req.RestrictForCodeCompletion, Req.ProximityPaths);
   }
   bool operator!=(const FuzzyFindRequest &Req) const { return !(*this == Req); }
 };
+bool fromJSON(const llvm::json::Value &Value, FuzzyFindRequest &Request);
+llvm::json::Value toJSON(const FuzzyFindRequest &Request);
 
 struct LookupRequest {
   llvm::DenseSet<SymbolID> IDs;
@@ -455,7 +468,7 @@ public:
   /// each matched symbol before returning.
   /// If returned Symbols are used outside Callback, they must be deep-copied!
   ///
-  /// Returns true if there may be more results (limited by MaxCandidateCount).
+  /// Returns true if there may be more results (limited by Req.Limit).
   virtual bool
   fuzzyFind(const FuzzyFindRequest &Req,
             llvm::function_ref<void(const Symbol &)> Callback) const = 0;

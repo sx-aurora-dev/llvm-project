@@ -8,15 +8,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "SymbolYAML.h"
-#include "../Trace.h"
 #include "Index.h"
 #include "Serialization.h"
-#include "dex/DexIndex.h"
+#include "Trace.h"
+#include "dex/Dex.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdint>
 
 LLVM_YAML_IS_DOCUMENT_LIST_VECTOR(clang::clangd::Symbol)
 LLVM_YAML_IS_SEQUENCE_VECTOR(clang::clangd::Symbol::IncludeHeaderWithReferences)
@@ -26,6 +27,7 @@ namespace yaml {
 
 using clang::clangd::Symbol;
 using clang::clangd::SymbolID;
+using clang::clangd::SymbolOrigin;
 using clang::clangd::SymbolLocation;
 using clang::index::SymbolInfo;
 using clang::index::SymbolKind;
@@ -39,13 +41,40 @@ struct NormalizedSymbolID {
     OS << ID;
   }
 
-  SymbolID denormalize(IO &) {
-    SymbolID ID;
-    HexString >> ID;
-    return ID;
+  SymbolID denormalize(IO &I) {
+    auto ID = SymbolID::fromStr(HexString);
+    if (!ID) {
+      I.setError(llvm::toString(ID.takeError()));
+      return SymbolID();
+    }
+    return *ID;
   }
 
   std::string HexString;
+};
+
+struct NormalizedSymbolFlag {
+  NormalizedSymbolFlag(IO &) {}
+  NormalizedSymbolFlag(IO &, Symbol::SymbolFlag F) {
+    Flag = static_cast<uint8_t>(F);
+  }
+
+  Symbol::SymbolFlag denormalize(IO &) {
+    return static_cast<Symbol::SymbolFlag>(Flag);
+  }
+
+  uint8_t Flag = 0;
+};
+
+struct NormalizedSymbolOrigin {
+  NormalizedSymbolOrigin(IO &) {}
+  NormalizedSymbolOrigin(IO &, SymbolOrigin O) {
+    Origin = static_cast<uint8_t>(O);
+  }
+
+  SymbolOrigin denormalize(IO &) { return static_cast<SymbolOrigin>(Origin); }
+
+  uint8_t Origin = 0;
 };
 
 template <> struct MappingTraits<SymbolLocation::Position> {
@@ -83,6 +112,10 @@ struct MappingTraits<clang::clangd::Symbol::IncludeHeaderWithReferences> {
 template <> struct MappingTraits<Symbol> {
   static void mapping(IO &IO, Symbol &Sym) {
     MappingNormalization<NormalizedSymbolID, SymbolID> NSymbolID(IO, Sym.ID);
+    MappingNormalization<NormalizedSymbolFlag, Symbol::SymbolFlag> NSymbolFlag(
+        IO, Sym.Flags);
+    MappingNormalization<NormalizedSymbolOrigin, SymbolOrigin> NSymbolOrigin(
+        IO, Sym.Origin);
     IO.mapRequired("ID", NSymbolID->HexString);
     IO.mapRequired("Name", Sym.Name);
     IO.mapRequired("Scope", Sym.Scope);
@@ -91,8 +124,8 @@ template <> struct MappingTraits<Symbol> {
                    SymbolLocation());
     IO.mapOptional("Definition", Sym.Definition, SymbolLocation());
     IO.mapOptional("References", Sym.References, 0u);
-    IO.mapOptional("IsIndexedForCodeCompletion", Sym.IsIndexedForCodeCompletion,
-                   false);
+    IO.mapOptional("Origin", NSymbolOrigin->Origin);
+    IO.mapOptional("Flags", NSymbolFlag->Flag);
     IO.mapOptional("Signature", Sym.Signature);
     IO.mapOptional("CompletionSnippetSuffix", Sym.CompletionSnippetSuffix);
     IO.mapOptional("Documentation", Sym.Documentation);
@@ -185,6 +218,7 @@ std::string SymbolToYAML(Symbol Sym) {
 }
 
 std::unique_ptr<SymbolIndex> loadIndex(llvm::StringRef SymbolFilename,
+                                       llvm::ArrayRef<std::string> URISchemes,
                                        bool UseDex) {
   trace::Span OverallTracer("LoadIndex");
   auto Buffer = llvm::MemoryBuffer::getFile(SymbolFilename);
@@ -209,7 +243,7 @@ std::unique_ptr<SymbolIndex> loadIndex(llvm::StringRef SymbolFilename,
   if (!Slab)
     return nullptr;
   trace::Span Tracer("BuildIndex");
-  return UseDex ? dex::DexIndex::build(std::move(*Slab))
+  return UseDex ? dex::Dex::build(std::move(*Slab), URISchemes)
                 : MemIndex::build(std::move(*Slab), RefSlab());
 }
 

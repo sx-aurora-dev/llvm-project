@@ -562,7 +562,7 @@
 
 // RUN: %clang_cl  -### -- %s 2>&1 | FileCheck -check-prefix=NOCFGUARD %s
 // RUN: %clang_cl /guard:cf- -### -- %s 2>&1 | FileCheck -check-prefix=NOCFGUARD %s
-// NOCFGUARD-NOT: -guardcf
+// NOCFGUARD-NOT: -cfguard
 
 // RUN: %clang_cl /guard:cf -### -- %s 2>&1 | FileCheck -check-prefix=CFGUARD %s
 // RUN: %clang_cl /guard:cf,nochecks -### -- %s 2>&1 | FileCheck -check-prefix=CFGUARD %s
@@ -610,6 +610,7 @@
 // RUN:     -flto \
 // RUN:     -fmerge-all-constants \
 // RUN:     -no-canonical-prefixes \
+// RUN:     -march=skylake \
 // RUN:     --version \
 // RUN:     -Werror /Zs -- %s 2>&1
 

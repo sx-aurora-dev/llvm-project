@@ -265,6 +265,9 @@ def FeatureVMLxForwarding : SubtargetFeature<"vmlx-forwarding",
 def FeaturePref32BitThumb : SubtargetFeature<"32bit", "Pref32BitThumb", "true",
                                              "Prefer 32-bit Thumb instrs">;
 
+def FeaturePrefLoopAlign32 : SubtargetFeature<"loop-align", "PrefLoopAlignment","2",
+                                              "Prefer 32-bit alignment for loops">;
+
 /// Some instructions update CPSR partially, which can add false dependency for
 /// out-of-order implementation, e.g. Cortex-A9, unless each individual bit is
 /// mapped to a separate physical register. Avoid partial CPSR update for these
@@ -491,8 +494,25 @@ def ProcKryo    : SubtargetFeature<"kryo", "ARMProcFamily", "Kryo",
 def ProcSwift   : SubtargetFeature<"swift", "ARMProcFamily", "Swift",
                                    "Swift ARM processors", []>;
 
-def ProcExynosM1 : SubtargetFeature<"exynosm1", "ARMProcFamily", "ExynosM1",
-                                    "Samsung Exynos-Mx processors", []>;
+def ProcExynos  : SubtargetFeature<"exynos", "ARMProcFamily", "Exynos",
+                                   "Samsung Exynos processors",
+                                   [FeatureZCZeroing,
+                                    FeatureUseWideStrideVFP,
+                                    FeatureUseAA,
+                                    FeatureSplatVFPToNeon,
+                                    FeatureSlowVGETLNi32,
+                                    FeatureSlowVDUP32,
+                                    FeatureSlowFPBrcc,
+                                    FeatureProfUnpredicate,
+                                    FeatureHWDivThumb,
+                                    FeatureHWDivARM,
+                                    FeatureHasSlowFPVMLx,
+                                    FeatureHasRetAddrStack,
+                                    FeatureFuseLiterals,
+                                    FeatureFuseAES,
+                                    FeatureExpandMLx,
+                                    FeatureCrypto,
+                                    FeatureCRC]>;
 
 def ProcR4      : SubtargetFeature<"r4", "ARMProcFamily", "CortexR4",
                                    "Cortex-R4 ARM processors", []>;
@@ -936,6 +956,7 @@ def : ProcessorModel<"cortex-r8",   CortexA8Model,      [ARMv7r,
 
 def : ProcessorModel<"cortex-m3", CortexM3Model,        [ARMv7m,
                                                          ProcM3,
+                                                         FeaturePrefLoopAlign32,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcessorModel<"sc300",     CortexM3Model,        [ARMv7m,
@@ -946,6 +967,8 @@ def : ProcessorModel<"cortex-m4", CortexM3Model,        [ARMv7em,
                                                          FeatureVFP4,
                                                          FeatureVFPOnlySP,
                                                          FeatureD16,
+                                                         FeaturePrefLoopAlign32,
+                                                         FeatureHasSlowFPVMLx,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcNoItin<"cortex-m7",                           [ARMv7em,
@@ -960,6 +983,8 @@ def : ProcessorModel<"cortex-m33", CortexM3Model,       [ARMv8mMainline,
                                                          FeatureFPARMv8,
                                                          FeatureD16,
                                                          FeatureVFPOnlySP,
+                                                         FeaturePrefLoopAlign32,
+                                                         FeatureHasSlowFPVMLx,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcNoItin<"cortex-a32",                           [ARMv8a,
@@ -1027,73 +1052,10 @@ def : ProcessorModel<"cyclone",     SwiftModel,         [ARMv8a, ProcSwift,
                                                          FeatureZCZeroing,
                                                          FeatureNoPostRASched]>;
 
-def : ProcNoItin<"exynos-m1",                           [ARMv8a, ProcExynosM1,
-                                                         FeatureZCZeroing,
-                                                         FeatureUseWideStrideVFP,
-                                                         FeatureUseAA,
-                                                         FeatureSplatVFPToNeon,
-                                                         FeatureSlowVGETLNi32,
-                                                         FeatureSlowVDUP32,
-                                                         FeatureSlowFPBrcc,
-                                                         FeatureProfUnpredicate,
-                                                         FeatureHWDivThumb,
-                                                         FeatureHWDivARM,
-                                                         FeatureHasSlowFPVMLx,
-                                                         FeatureHasRetAddrStack,
-                                                         FeatureExpandMLx,
-                                                         FeatureCrypto,
-                                                         FeatureCRC]>;
-
-def : ProcNoItin<"exynos-m2",                           [ARMv8a, ProcExynosM1,
-                                                         FeatureZCZeroing,
-                                                         FeatureUseWideStrideVFP,
-                                                         FeatureUseAA,
-                                                         FeatureSplatVFPToNeon,
-                                                         FeatureSlowVGETLNi32,
-                                                         FeatureSlowVDUP32,
-                                                         FeatureSlowFPBrcc,
-                                                         FeatureProfUnpredicate,
-                                                         FeatureHWDivThumb,
-                                                         FeatureHWDivARM,
-                                                         FeatureHasSlowFPVMLx,
-                                                         FeatureHasRetAddrStack,
-                                                         FeatureExpandMLx,
-                                                         FeatureCrypto,
-                                                         FeatureCRC]>;
-
-def : ProcNoItin<"exynos-m3",                           [ARMv8a, ProcExynosM1,
-                                                         FeatureZCZeroing,
-                                                         FeatureUseWideStrideVFP,
-                                                         FeatureUseAA,
-                                                         FeatureSplatVFPToNeon,
-                                                         FeatureSlowVGETLNi32,
-                                                         FeatureSlowVDUP32,
-                                                         FeatureSlowFPBrcc,
-                                                         FeatureProfUnpredicate,
-                                                         FeatureHWDivThumb,
-                                                         FeatureHWDivARM,
-                                                         FeatureHasSlowFPVMLx,
-                                                         FeatureHasRetAddrStack,
-                                                         FeatureExpandMLx,
-                                                         FeatureCrypto,
-                                                         FeatureCRC]>;
-
-def : ProcNoItin<"exynos-m4",                           [ARMv8a, ProcExynosM1,
-                                                         FeatureZCZeroing,
-                                                         FeatureUseWideStrideVFP,
-                                                         FeatureUseAA,
-                                                         FeatureSplatVFPToNeon,
-                                                         FeatureSlowVGETLNi32,
-                                                         FeatureSlowVDUP32,
-                                                         FeatureSlowFPBrcc,
-                                                         FeatureProfUnpredicate,
-                                                         FeatureHWDivThumb,
-                                                         FeatureHWDivARM,
-                                                         FeatureHasSlowFPVMLx,
-                                                         FeatureHasRetAddrStack,
-                                                         FeatureExpandMLx,
-                                                         FeatureCrypto,
-                                                         FeatureCRC]>;
+def : ProcNoItin<"exynos-m1",                           [ARMv8a, ProcExynos]>;
+def : ProcNoItin<"exynos-m2",                           [ARMv8a, ProcExynos]>;
+def : ProcNoItin<"exynos-m3",                           [ARMv8a, ProcExynos]>;
+def : ProcNoItin<"exynos-m4",                           [ARMv8a, ProcExynos]>;
 
 def : ProcNoItin<"kryo",                                [ARMv8a, ProcKryo,
                                                          FeatureHWDivThumb,

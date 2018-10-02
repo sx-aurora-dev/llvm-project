@@ -31,8 +31,7 @@ class LLJIT {
 public:
   /// Create an LLJIT instance.
   static Expected<std::unique_ptr<LLJIT>>
-  Create(std::unique_ptr<ExecutionSession> ES,
-         std::unique_ptr<TargetMachine> TM, DataLayout DL);
+  Create(std::unique_ptr<TargetMachine> TM, DataLayout DL);
 
   /// Returns a reference to the ExecutionSession for this JIT instance.
   ExecutionSession &getExecutionSession() { return *ES; }
@@ -87,11 +86,14 @@ public:
   /// Runs all not-yet-run static destructors.
   Error runDestructors() { return DtorRunner.run(); }
 
+  /// Returns a reference to the ObjLinkingLayer
+  RTDyldObjectLinkingLayer2 &getObjLinkingLayer() { return ObjLinkingLayer; }
+
 protected:
   LLJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<TargetMachine> TM,
         DataLayout DL);
 
-  std::shared_ptr<RuntimeDyld::MemoryManager> getMemoryManager(VModuleKey K);
+  std::unique_ptr<RuntimeDyld::MemoryManager> getMemoryManager(VModuleKey K);
 
   std::string mangle(StringRef UnmangledName);
 
@@ -117,8 +119,7 @@ class LLLazyJIT : public LLJIT {
 public:
   /// Create an LLLazyJIT instance.
   static Expected<std::unique_ptr<LLLazyJIT>>
-  Create(std::unique_ptr<ExecutionSession> ES,
-         std::unique_ptr<TargetMachine> TM, DataLayout DL, LLVMContext &Ctx);
+  Create(std::unique_ptr<TargetMachine> TM, DataLayout DL, LLVMContext &Ctx);
 
   /// Set an IR transform (e.g. pass manager pipeline) to run on each function
   /// when it is compiled.

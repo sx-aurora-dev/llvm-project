@@ -77,6 +77,7 @@ Matcher<const std::vector<CodeCompletion> &> Has(std::string Name,
   return Contains(AllOf(Named(std::move(Name)), Kind(K)));
 }
 MATCHER(IsDocumented, "") { return !arg.Documentation.empty(); }
+MATCHER(Deprecated, "") { return arg.Deprecated; }
 
 std::unique_ptr<SymbolIndex> memIndex(std::vector<Symbol> Symbols) {
   SymbolSlab::Builder Slab;
@@ -161,7 +162,7 @@ Symbol sym(StringRef QName, index::SymbolKind Kind, StringRef USRFormat) {
   USR += Regex("^.*$").sub(USRFormat, Sym.Name); // e.g. func -> @F@func#
   Sym.ID = SymbolID(USR);
   Sym.SymInfo.Kind = Kind;
-  Sym.IsIndexedForCodeCompletion = true;
+  Sym.Flags |= Symbol::IndexedForCodeCompletion;
   Sym.Origin = SymbolOrigin::Static;
   return Sym;
 }
@@ -222,11 +223,12 @@ TEST(CompletionTest, Filter) {
 void TestAfterDotCompletion(clangd::CodeCompleteOptions Opts) {
   auto Results = completions(
       R"cpp(
-      #define MACRO X
-
       int global_var;
 
       int global_func();
+
+      // Make sure this is not in preamble.
+      #define MACRO X
 
       struct GlobalClass {};
 
@@ -275,10 +277,11 @@ void TestAfterDotCompletion(clangd::CodeCompleteOptions Opts) {
 void TestGlobalScopeCompletion(clangd::CodeCompleteOptions Opts) {
   auto Results = completions(
       R"cpp(
-      #define MACRO X
-
       int global_var;
       int global_func();
+
+      // Make sure this is not in preamble.
+      #define MACRO X
 
       struct GlobalClass {};
 
@@ -429,10 +432,11 @@ TEST(CompletionTest, Snippets) {
 TEST(CompletionTest, Kinds) {
   auto Results = completions(
       R"cpp(
-          #define MACRO X
           int variable;
           struct Struct {};
           int function();
+          // make sure MACRO is not included in preamble.
+          #define MACRO 10
           int X = ^
       )cpp",
       {func("indexFunction"), var("indexVariable"), cls("indexClass")});
@@ -656,6 +660,22 @@ TEST(CompletionTest, IndexSuppressesPreambleCompletions) {
               UnorderedElementsAre(Named("local"), Named("preamble")));
 }
 
+// This verifies that we get normal preprocessor completions in the preamble.
+// This is a regression test for an old bug: if we override the preamble and
+// try to complete inside it, clang kicks our completion point just outside the
+// preamble, resulting in always getting top-level completions.
+TEST(CompletionTest, CompletionInPreamble) {
+  auto Results = completions(R"cpp(
+    #ifnd^ef FOO_H_
+    #define BAR_H_
+    #include <bar.h>
+    int foo() {}
+    #endif
+    )cpp")
+                     .Completions;
+  EXPECT_THAT(Results, ElementsAre(Named("ifndef")));
+}
+
 TEST(CompletionTest, DynamicIndexMultiFile) {
   MockFSProvider FS;
   MockCompilationDatabase CDB;
@@ -720,9 +740,11 @@ TEST(CompletionTest, Documentation) {
 TEST(CompletionTest, GlobalCompletionFiltering) {
 
   Symbol Class = cls("XYZ");
-  Class.IsIndexedForCodeCompletion = false;
+  Class.Flags = static_cast<Symbol::SymbolFlag>(
+      Class.Flags & ~(Symbol::IndexedForCodeCompletion));
   Symbol Func = func("XYZ::foooo");
-  Func.IsIndexedForCodeCompletion = false;
+  Func.Flags = static_cast<Symbol::SymbolFlag>(
+      Func.Flags & ~(Symbol::IndexedForCodeCompletion));
 
   auto Results = completions(R"(//      void f() {
       XYZ::foooo^
@@ -966,6 +988,7 @@ public:
   bool
   fuzzyFind(const FuzzyFindRequest &Req,
             llvm::function_ref<void(const Symbol &)> Callback) const override {
+    std::lock_guard<std::mutex> Lock(Mut);
     Requests.push_back(Req);
     return true;
   }
@@ -981,12 +1004,15 @@ public:
   size_t estimateMemoryUsage() const override { return 0; }
 
   const std::vector<FuzzyFindRequest> consumeRequests() const {
+    std::lock_guard<std::mutex> Lock(Mut);
     auto Reqs = std::move(Requests);
     Requests = {};
     return Reqs;
   }
 
 private:
+  // We need a mutex to handle async fuzzy find requests.
+  mutable std::mutex Mut;
   mutable std::vector<FuzzyFindRequest> Requests;
 };
 
@@ -1370,6 +1396,7 @@ TEST(CompletionTest, Render) {
   EXPECT_EQ(R.documentation, "This is x().");
   EXPECT_THAT(R.additionalTextEdits, IsEmpty());
   EXPECT_EQ(R.sortText, sortText(1.0, "x"));
+  EXPECT_FALSE(R.deprecated);
 
   Opts.EnableSnippets = true;
   R = C.render(Opts);
@@ -1388,6 +1415,10 @@ TEST(CompletionTest, Render) {
   C.BundleSize = 2;
   R = C.render(Opts);
   EXPECT_EQ(R.detail, "[2 overloads]\n\"foo.h\"");
+
+  C.Deprecated = true;
+  R = C.render(Opts);
+  EXPECT_TRUE(R.deprecated);
 }
 
 TEST(CompletionTest, IgnoreRecoveryResults) {
@@ -1880,6 +1911,133 @@ TEST(CompletionTest, NoInsertIncludeIfOnePresent) {
       completions(Server, "#include \"foo.h\"\nFun^", {sym}).Completions,
       UnorderedElementsAre(
           AllOf(Named("Func"), HasInclude("\"foo.h\""), Not(InsertInclude()))));
+}
+
+TEST(CompletionTest, MergeMacrosFromIndexAndSema) {
+  Symbol Sym;
+  Sym.Name = "Clangd_Macro_Test";
+  Sym.ID = SymbolID("c:foo.cpp@8@macro@Clangd_Macro_Test");
+  Sym.SymInfo.Kind = index::SymbolKind::Macro;
+  Sym.Flags |= Symbol::IndexedForCodeCompletion;
+  EXPECT_THAT(completions("#define Clangd_Macro_Test\nClangd_Macro_T^", {Sym})
+                  .Completions,
+              UnorderedElementsAre(Named("Clangd_Macro_Test")));
+}
+
+TEST(CompletionTest, NoMacroFromPreambleIfIndexIsSet) {
+  auto Results = completions(
+      R"cpp(#define CLANGD_PREAMBLE x
+
+          int x = 0;
+          #define CLANGD_MAIN x
+          void f() { CLANGD_^ }
+      )cpp",
+      {func("CLANGD_INDEX")});
+  // Index is overriden in code completion options, so the preamble symbol is
+  // not seen.
+  EXPECT_THAT(Results.Completions, UnorderedElementsAre(Named("CLANGD_MAIN"),
+                                                        Named("CLANGD_INDEX")));
+}
+
+TEST(CompletionTest, DeprecatedResults) {
+  std::string Body = R"cpp(
+    void TestClangd();
+    void TestClangc() __attribute__((deprecated("", "")));
+  )cpp";
+
+  EXPECT_THAT(
+      completions(Body + "int main() { TestClang^ }").Completions,
+      UnorderedElementsAre(AllOf(Named("TestClangd"), Not(Deprecated())),
+                           AllOf(Named("TestClangc"), Deprecated())));
+}
+
+TEST(SignatureHelpTest, InsideArgument) {
+  {
+    const auto Results = signatures(R"cpp(
+      void foo(int x);
+      void foo(int x, int y);
+      int main() { foo(1+^); }
+    )cpp");
+    EXPECT_THAT(
+        Results.signatures,
+        ElementsAre(Sig("foo(int x) -> void", {"int x"}),
+                    Sig("foo(int x, int y) -> void", {"int x", "int y"})));
+    EXPECT_EQ(0, Results.activeParameter);
+  }
+  {
+    const auto Results = signatures(R"cpp(
+      void foo(int x);
+      void foo(int x, int y);
+      int main() { foo(1^); }
+    )cpp");
+    EXPECT_THAT(
+        Results.signatures,
+        ElementsAre(Sig("foo(int x) -> void", {"int x"}),
+                    Sig("foo(int x, int y) -> void", {"int x", "int y"})));
+    EXPECT_EQ(0, Results.activeParameter);
+  }
+  {
+    const auto Results = signatures(R"cpp(
+      void foo(int x);
+      void foo(int x, int y);
+      int main() { foo(1^0); }
+    )cpp");
+    EXPECT_THAT(
+        Results.signatures,
+        ElementsAre(Sig("foo(int x) -> void", {"int x"}),
+                    Sig("foo(int x, int y) -> void", {"int x", "int y"})));
+    EXPECT_EQ(0, Results.activeParameter);
+  }
+  {
+    const auto Results = signatures(R"cpp(
+      void foo(int x);
+      void foo(int x, int y);
+      int bar(int x, int y);
+      int main() { bar(foo(2, 3^)); }
+    )cpp");
+    EXPECT_THAT(Results.signatures, ElementsAre(Sig("foo(int x, int y) -> void",
+                                                    {"int x", "int y"})));
+    EXPECT_EQ(1, Results.activeParameter);
+  }
+}
+
+TEST(SignatureHelpTest, ConstructorInitializeFields) {
+  {
+    const auto Results = signatures(R"cpp(
+      struct A {
+        A(int);
+      };
+      struct B {
+        B() : a_elem(^) {}
+        A a_elem;
+      };
+    )cpp");
+    EXPECT_THAT(Results.signatures, UnorderedElementsAre(
+            Sig("A(int)", {"int"}),
+            Sig("A(A &&)", {"A &&"}),
+            Sig("A(const A &)", {"const A &"})
+        ));
+  }
+  {
+    const auto Results = signatures(R"cpp(
+      struct A {
+        A(int);
+      };
+      struct C {
+        C(int);
+        C(A);
+      };
+      struct B {
+        B() : c_elem(A(1^)) {}
+        C c_elem;
+      };
+    )cpp");
+    EXPECT_THAT(Results.signatures, UnorderedElementsAre(
+            Sig("A(int)", {"int"}),
+            Sig("A(A &&)", {"A &&"}),
+            Sig("A(const A &)", {"const A &"})
+        ));
+  }
 }
 
 } // namespace

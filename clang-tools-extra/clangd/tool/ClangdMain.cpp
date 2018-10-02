@@ -13,7 +13,6 @@
 #include "RIFF.h"
 #include "Trace.h"
 #include "index/SymbolYAML.h"
-#include "index/dex/DexIndex.h"
 #include "clang/Basic/Version.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -36,12 +35,6 @@ static llvm::cl::opt<bool>
            llvm::cl::desc("Use experimental Dex static index."),
            llvm::cl::init(true), llvm::cl::Hidden);
 
-namespace {
-
-enum class PCHStorageFlag { Disk, Memory };
-
-} // namespace
-
 static llvm::cl::opt<Path> CompileCommandsDir(
     "compile-commands-dir",
     llvm::cl::desc("Specify a path to look for compile_commands.json. If path "
@@ -54,10 +47,7 @@ static llvm::cl::opt<unsigned>
                        llvm::cl::init(getDefaultAsyncThreadsCount()));
 
 // FIXME: also support "plain" style where signatures are always omitted.
-enum CompletionStyleFlag {
-  Detailed,
-  Bundled,
-};
+enum CompletionStyleFlag { Detailed, Bundled };
 static llvm::cl::opt<CompletionStyleFlag> CompletionStyle(
     "completion-style",
     llvm::cl::desc("Granularity of code completion suggestions"),
@@ -106,6 +96,7 @@ static llvm::cl::opt<bool> Test(
         "Intended to simplify lit tests."),
     llvm::cl::init(false), llvm::cl::Hidden);
 
+enum PCHStorageFlag { Disk, Memory };
 static llvm::cl::opt<PCHStorageFlag> PCHStorage(
     "pch-storage",
     llvm::cl::desc("Storing PCHs in memory increases memory usages, but may "
@@ -139,10 +130,11 @@ static llvm::cl::opt<Path> InputMirrorFile(
 
 static llvm::cl::opt<bool> EnableIndex(
     "index",
-    llvm::cl::desc("Enable index-based features such as global code completion "
-                   "and searching for symbols. "
-                   "Clang uses an index built from symbols in opened files"),
-    llvm::cl::init(true));
+    llvm::cl::desc(
+        "Enable index-based features. By default, clangd maintains an index "
+        "built from symbols in opened files. Global index support needs to "
+        "enabled separatedly."),
+    llvm::cl::init(true), llvm::cl::Hidden);
 
 static llvm::cl::opt<bool>
     ShowOrigins("debug-origin",
@@ -167,7 +159,6 @@ static llvm::cl::opt<Path> YamlSymbolFile(
     llvm::cl::init(""), llvm::cl::Hidden);
 
 enum CompileArgsFrom { LSPCompileArgs, FilesystemCompileArgs };
-
 static llvm::cl::opt<CompileArgsFrom> CompileArgsFrom(
     "compile_args_from", llvm::cl::desc("The source of compile commands"),
     llvm::cl::values(clEnumValN(LSPCompileArgs, "lsp",
@@ -177,6 +168,13 @@ static llvm::cl::opt<CompileArgsFrom> CompileArgsFrom(
                                 "All compile commands come from the "
                                 "'compile_commands.json' files")),
     llvm::cl::init(FilesystemCompileArgs), llvm::cl::Hidden);
+
+static llvm::cl::opt<bool> EnableFunctionArgSnippets(
+    "function-arg-placeholders",
+    llvm::cl::desc("When disabled, completions contain only parentheses for "
+                   "function calls. When enabled, completions also contain "
+                   "placeholders for method parameters."),
+    llvm::cl::init(clangd::CodeCompleteOptions().EnableFunctionArgSnippets));
 
 int main(int argc, char *argv[]) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
@@ -280,14 +278,17 @@ int main(int argc, char *argv[]) {
     Opts.ResourceDir = ResourceDir;
   Opts.BuildDynamicSymbolIndex = EnableIndex;
   std::unique_ptr<SymbolIndex> StaticIdx;
+  std::future<void> AsyncIndexLoad; // Block exit while loading the index.
   if (EnableIndex && !YamlSymbolFile.empty()) {
     // Load the index asynchronously. Meanwhile SwapIndex returns no results.
     SwapIndex *Placeholder;
     StaticIdx.reset(Placeholder = new SwapIndex(llvm::make_unique<MemIndex>()));
-    runAsync<void>([Placeholder] {
-      if (auto Idx = loadIndex(YamlSymbolFile))
+    AsyncIndexLoad = runAsync<void>([Placeholder, &Opts] {
+      if (auto Idx = loadIndex(YamlSymbolFile, Opts.URISchemes, UseDex))
         Placeholder->reset(std::move(Idx));
     });
+    if (RunSynchronously)
+      AsyncIndexLoad.wait();
   }
   Opts.StaticIndex = StaticIdx.get();
   Opts.AsyncThreadsCount = WorkerThreadsCount;
@@ -302,6 +303,7 @@ int main(int argc, char *argv[]) {
     CCOpts.IncludeIndicator.NoInsert.clear();
   }
   CCOpts.SpeculativeIndexRequest = Opts.StaticIndex;
+  CCOpts.EnableFunctionArgSnippets = EnableFunctionArgSnippets;
 
   // Initialize and run ClangdLSPServer.
   ClangdLSPServer LSPServer(

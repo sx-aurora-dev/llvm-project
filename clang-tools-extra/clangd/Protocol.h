@@ -768,6 +768,9 @@ struct CompletionItem {
   /// themselves.
   std::vector<TextEdit> additionalTextEdits;
 
+  /// Indicates if this item is deprecated.
+  bool deprecated = false;
+
   // TODO(krasimir): The following optional fields defined by the language
   // server protocol are unsupported:
   //
@@ -878,19 +881,10 @@ struct DocumentHighlight {
 llvm::json::Value toJSON(const DocumentHighlight &DH);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const DocumentHighlight &);
 
-struct CancelParams {
-  /// The request id to cancel.
-  /// This can be either a number or string, if it is a number simply print it
-  /// out and always use a string.
-  std::string ID;
+struct ReferenceParams : public TextDocumentPositionParams {
+  // For now, no options like context.includeDeclaration are supported.
 };
-llvm::json::Value toJSON(const CancelParams &);
-llvm::raw_ostream &operator<<(llvm::raw_ostream &, const CancelParams &);
-bool fromJSON(const llvm::json::Value &, CancelParams &);
-
-/// Param can be either of type string or number. Returns the result as a
-/// string.
-llvm::Optional<std::string> parseNumberOrString(const llvm::json::Value *Param);
+bool fromJSON(const llvm::json::Value &, ReferenceParams &);
 
 } // namespace clangd
 } // namespace clang
