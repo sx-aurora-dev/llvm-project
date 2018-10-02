@@ -107,7 +107,7 @@ MCSymbol *WebAssemblyMCInstLower::GetExternalSymbolSymbol(
 
   SmallVector<wasm::ValType, 4> Returns;
   SmallVector<wasm::ValType, 4> Params;
-  GetSignature(Subtarget, Name, Returns, Params);
+  GetLibcallSignature(Subtarget, Name, Returns, Params);
 
   WasmSym->setReturns(std::move(Returns));
   WasmSym->setParams(std::move(Params));
@@ -149,6 +149,8 @@ static wasm::ValType getType(const TargetRegisterClass *RC) {
     return wasm::ValType::F32;
   if (RC == &WebAssembly::F64RegClass)
     return wasm::ValType::F64;
+  if (RC == &WebAssembly::V128RegClass)
+    return wasm::ValType::V128;
   llvm_unreachable("Unexpected register class");
 }
 
