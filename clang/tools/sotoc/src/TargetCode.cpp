@@ -14,6 +14,23 @@
 ///
 //===----------------------------------------------------------------------===//
 
+/*TODO: Adjust transformation of static arrays depending on the pointers given
+        as parameters to the offloading functions.
+
+        Idea for handling static arrays so far: Change the notation of static
+        arrays from array-notation to pointer-notation and handle them.
+          array[i] <=> *(array+i)
+
+        Possible problem: Static arrays are not handled right (or as expected)
+        when creating the __sotoc_var_ pointers and thusly we end up with
+        inconsistancies in the pointers after the transformation.
+
+        Furthermore: As the compiler is unlikely to detect the mentioned
+        inconsistancies (as they are not syntactic [hopefully] but logical) lit
+        will mark the given testcases as PASSED although the data is garbled.
+        Thus a comparison with kwnown-good data should be added to the test.
+*/
+
 #include <sstream>
 
 #include "clang/AST/Decl.h"
@@ -25,6 +42,7 @@
 #include "clang/Lex/Lexer.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/APInt.h"
 
 #include "TargetCode.h"
 
@@ -100,29 +118,45 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
-  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
-       i != e; ++i) {
+  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd(); i != e; ++i) {
     if (!first) {
       Out << ", ";
     }
     first = false;
 
-    Out << (*i)->getType().getAsString() << " ";
-    if (!(*i)->getType().getTypePtr()->isPointerType()) {
-      Out << "*__sotoc_var_";
+    // check for static arrays, because of AST representation and naive getType
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*i)->getType().getTypePtr())){
+      // possibly use t->getSize().toString(10, false) to get the size of the array
+      //TODO: use VarName
+      Out << t->getElementType().getAsString() << " *__sotoc_var_" << (*i)->getDeclName().getAsString();
+
+    } else {
+
+      Out << (*i)->getType().getAsString() << " ";
+      if (!(*i)->getType().getTypePtr()->isPointerType()) {
+        Out << "*__sotoc_var_";
+      }
+      Out << (*i)->getDeclName().getAsString();
+      // todo: use `Name.print` instead
     }
-    Out << (*i)->getDeclName().getAsString();
-    // todo: use `Name.print` instead
   }
   Out << ")\n{\n";
 
   // bring captured scalars into scope
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
-    if (!(*I)->getType().getTypePtr()->isPointerType()) {
+
+    // again check for static arrays
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
       auto VarName = (*I)->getDeclName().getAsString();
-      Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
-          << "*__sotoc_var_" << VarName << ";\n";
+      Out << "  " << t->getElementType().getAsString() << " *"
+          << VarName << "= __sotoc_var_" << VarName << ";\n";
+    } else {
+      if (!(*I)->getType().getTypePtr()->isPointerType()) {
+        auto VarName = (*I)->getDeclName().getAsString();
+        Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
+            << "*__sotoc_var_" << VarName << ";\n";
+      }
     }
   }
   Out << "\n";
@@ -154,10 +188,17 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   // copy values from scalars from scoped vars back into pointers
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
-    if (!(*I)->getType().getTypePtr()->isPointerType()) {
-      auto VarName = (*I)->getDeclName().getAsString();
-      Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
-    }
+
+  /* This part will possibly be needed in some way
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
+       auto VarName = (*I)->getDeclName().getAsString();
+       Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
+    } else {*/
+       if (!(*I)->getType().getTypePtr()->isPointerType()) {
+         auto VarName = (*I)->getDeclName().getAsString();
+         Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
+       }
+  //  }
   }
 
   Out << "\n}\n";
