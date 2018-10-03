@@ -431,6 +431,8 @@ def : Pat<(int_ve_vfdivs_vvv v256f64:$vy, v256f64:$vz), (VFDVsv v256f64:$vy, v25
 def : Pat<(int_ve_vfdivs_vsv f32:$sy, v256f64:$vz), (VFDVsr f32:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vfdivs_vvvmv v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd), (VFDVsvm v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_vfdivs_vsvmv f32:$sy, v256f64:$vz, v4i64:$vm, v256f64:$vd), (VFDVsrm f32:$sy, v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
+def : Pat<(int_ve_vfsqrtd_vv v256f64:$vy), (VFSQRTdv v256f64:$vy)>;
+def : Pat<(int_ve_vfsqrts_vv v256f64:$vy), (VFSQRTsv v256f64:$vy)>;
 def : Pat<(int_ve_vfcmpd_vvv v256f64:$vy, v256f64:$vz), (VFCPdv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vfcmpd_vsv f64:$sy, v256f64:$vz), (VFCPdr f64:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vfcmpd_vvvmv v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd), (VFCPdvm v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
