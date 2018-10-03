@@ -92,6 +92,14 @@ bool EVT::isExtended2048BitVector() const {
   return isExtendedVector() && getExtendedSizeInBits() == 2048;
 }
 
+bool EVT::isExtended8192BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 8192;
+}
+
+bool EVT::isExtended16384BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 16384;
+}
+
 EVT EVT::getExtendedVectorElementType() const {
   assert(isExtended() && "Type is not extended!");
   return EVT::getEVT(cast<VectorType>(LLVMTy)->getElementType());
@@ -145,6 +153,7 @@ std::string EVT::getEVTString() const {
   case MVT::v32i1:   return "v32i1";
   case MVT::v64i1:   return "v64i1";
   case MVT::v128i1:  return "v128i1";
+  case MVT::v256i1:  return "v256i1";
   case MVT::v512i1:  return "v512i1";
   case MVT::v1024i1: return "v1024i1";
   case MVT::v1i8:    return "v1i8";
@@ -232,6 +241,7 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::v32i1:   return VectorType::get(Type::getInt1Ty(Context), 32);
   case MVT::v64i1:   return VectorType::get(Type::getInt1Ty(Context), 64);
   case MVT::v128i1:  return VectorType::get(Type::getInt1Ty(Context), 128);
+  case MVT::v256i1:  return VectorType::get(Type::getInt1Ty(Context), 256);
   case MVT::v512i1:  return VectorType::get(Type::getInt1Ty(Context), 512);
   case MVT::v1024i1: return VectorType::get(Type::getInt1Ty(Context), 1024);
   case MVT::v1i8:    return VectorType::get(Type::getInt8Ty(Context), 1);
