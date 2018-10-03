@@ -811,6 +811,15 @@ multiclass VRCPm<string opcStr, bits<8> opc> {
   }
 }
 
+multiclass VRSQRTm<string opcStr, bits<8> opc> {
+  let cx = 0, cx2 = 0 in defm d : RV2vm<opcStr # ".d", opc, VM>;
+  let cx = 1, cx2 = 0 in defm s : RV2vm<opcStr # ".s", opc, VM>;
+  let cx = 1, cx2 = 1 in defm p : RV2vm<"p" # opcStr, opc, VM>;
+  let cx = 0, cx2 = 0, cs2 = 1 in defm dnex : RV2vm<opcStr # ".d.nex", opc, VM>;
+  let cx = 1, cx2 = 0, cs2 = 1 in defm snex : RV2vm<opcStr # ".s.nex", opc, VM>;
+  let cx = 1, cx2 = 1, cs2 = 1 in defm pnex : RV2vm<"p" # opcStr # ".nex", opc, VM>;
+}
+
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
 defm VFSB : RVDSPm<"vfsub", 0xDC>;
 defm VFMP : RVDSPm<"vfmul", 0xCD>;
@@ -824,7 +833,7 @@ defm VFMSB : RV4DSPm<"vfmsb", 0xF2>;
 defm VFNMAD : RV4DSPm<"vfnmad", 0xE3>;
 defm VFNMSB : RV4DSPm<"vfnmsb", 0xF3>;
 defm VRCP : VRCPm<"vrcp", 0xE1>;
-// VRSQRT
+defm VRSQRT : VRSQRTm<"vrsqrt", 0xF1>;
 // VFIX
 // VFIXX
 // VFLTX
