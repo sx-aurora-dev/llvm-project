@@ -4,25 +4,19 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 option(NECAURORA_USE_TOOLCHAIN_WRAPPERS
-       "build and install executable wrapper around ncc/gcc for easy switching"
-       OFF)
-
-option(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK
-       "install linker and asm wrapper as an symlink to TOOLCHAIN_SYMLINK_PATH
-        incompatible with USE_TOLCHAIN_WRAPPERS"
+       "Build and install executable wrapper around ncc/gcc for easy switching."
        ON)
 
-if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK AND 
-    NECAURORA_USE_TOOLCHAIN_WRAPPERS)
-  message(SEND_ERROR "Options: INSTALL_TOOLCHAIN_SYMLINK and USE_TOOLCHAIN_WRAPPERS are mutually exclusive" )
-endif()
-
-# TODO: Make this more dynamically
-set(NECAURORA_TARGET_COMPILER "/opt/nec/ve/bin/ncc" CACHE FILEPATH "")
-
-if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK)
-  set(NECAURORA_TOOLCHAIN_SYMLINK_PATH "${NECAURORA_TARGET_COMPILER}" CACHE
-      FILEPATH "")
+# Find NEC target compiler.
+find_program(NECAURORA_TARGET_COMPILER ncc
+  DOC "NEC target compiler."
+  PATHS
+    "/opt/nec/ve/bin/")
+if(NOT NECAURORA_TARGET_COMPILER)
+  message(STATUS "NEC target compiler could not be found, defaulting to GCC.")
+  # Use a separate variable to print this message every time.
+  find_program(NECAURORA_TARGET_COMPILER_GCC gcc)
+  set(NECAURORA_TARGET_COMPILER "${NECAURORA_TARGET_COMPILER_GCC}")
 endif()
 
 find_package(NECAURORA_LIBELF)
@@ -53,16 +47,10 @@ if(NECAURORA_USE_TOOLCHAIN_WRAPPERS)
   install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
   add_clang_symlink(necaurora-linker-wrapper necaurora-ofld-tool-wrapper)
   add_clang_symlink(necaurora-asm-wrapper necaurora-ofld-tool-wrapper)
-endif()
+else()
+  install_symlink(${NECAURORA_TARGET_COMPILER}
+                  ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
 
-if(NECAURORA_INSTALL_TOOLCHAIN_SYMLINK)
-    install_symlink(${NECAURORA_TOOLCHAIN_SYMLINK_PATH}
-                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-linker-wrapper)
-
-    install_symlink(${NECAURORA_TOOLCHAIN_SYMLINK_PATH}
-                    ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
-#  TODO: This clang method to create symlinks does not work, 
-#        because the ncc compiler is not a target
-#  add_clang_symlink(necaurora-linker-wrapper ${NECAURORA_TOOLCHAIN_SYMLINK_PATH})
-#  add_clang_symlink(necaurora-asm-wrapper ${NECAURORA_TOOLCHAIN_SYMLINK_PATH})
+  install_symlink(${NECAURORA_TARGET_COMPILER}
+                  ${CMAKE_INSTALL_PREFIX}/bin/necaurora-asm-wrapper)
 endif()
