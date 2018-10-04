@@ -45,6 +45,20 @@ class RV2<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let vw = 0;
 }
 
+multiclass RV2vm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
+  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
+    !strconcat(opcStr, " $vx,$vy"), []> {
+      let m = 0;
+      let sy = 0;
+    }
+
+  def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd), 
+    !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+      let sy = 0;
+      let Constraints = "$vx = $vm";
+    }
+}
+
 class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
         InstrItinClass itin = NoItinerary> 
       : RV<opVal, outs, ins, asmstr, pattern, itin> {
@@ -769,6 +783,11 @@ def VSFAim : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$vm, V6
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 
+multiclass VFSQRTm<string opcStr, bits<8> opc> {
+  let cx = 0 in defm d : RV2vm<opcStr # ".d", opc, VM>;
+  let cx = 1 in defm s : RV2vm<opcStr # ".s", opc, VM>;
+}
+
 multiclass VRCPm<string opcStr, bits<8> opc> {
   def dv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
     !strconcat(opcStr, ".d $vx,$vy"), []> {
@@ -792,11 +811,20 @@ multiclass VRCPm<string opcStr, bits<8> opc> {
   }
 }
 
+multiclass VRSQRTm<string opcStr, bits<8> opc> {
+  let cx = 0, cx2 = 0 in defm d : RV2vm<opcStr # ".d", opc, VM>;
+  let cx = 1, cx2 = 0 in defm s : RV2vm<opcStr # ".s", opc, VM>;
+  let cx = 1, cx2 = 1 in defm p : RV2vm<"p" # opcStr, opc, VM>;
+  let cx = 0, cx2 = 0, cs2 = 1 in defm dnex : RV2vm<opcStr # ".d.nex", opc, VM>;
+  let cx = 1, cx2 = 0, cs2 = 1 in defm snex : RV2vm<opcStr # ".s.nex", opc, VM>;
+  let cx = 1, cx2 = 1, cs2 = 1 in defm pnex : RV2vm<"p" # opcStr # ".nex", opc, VM>;
+}
+
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
 defm VFSB : RVDSPm<"vfsub", 0xDC>;
 defm VFMP : RVDSPm<"vfmul", 0xCD>;
 defm VFDV : RVDSPm<"vfdiv", 0xDD>;
-// VFSQRT
+defm VFSQRT : VFSQRTm<"vfsqrt", 0xED>;
 defm VFCP : RVDSPm<"vfcmp", 0xFC>;
 let cs2 = 0 in defm VFCMa : RVDSPm<"vfmax", 0xBD>;
 let cs2 = 1 in defm VFCMi : RVDSPm<"vfmin", 0xBD>;
@@ -805,7 +833,7 @@ defm VFMSB : RV4DSPm<"vfmsb", 0xF2>;
 defm VFNMAD : RV4DSPm<"vfnmad", 0xE3>;
 defm VFNMSB : RV4DSPm<"vfnmsb", 0xF3>;
 defm VRCP : VRCPm<"vrcp", 0xE1>;
-// VRSQRT
+defm VRSQRT : VRSQRTm<"vrsqrt", 0xF1>;
 // VFIX
 // VFIXX
 // VFLTX
