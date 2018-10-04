@@ -8,7 +8,7 @@ int main(void) {
   int a = 5;
   int z[10];
 
-  #pragma omp target device(0)
+  #pragma omp target device(0) map(tofrom: x,y) map(alloc: z)
   #pragma omp for simd
   for (i = 0; i < 10 ; i++) {
     z[i] = x[i] + a*y[i];
