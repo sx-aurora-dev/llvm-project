@@ -29,6 +29,15 @@
         inconsistancies (as they are not syntactic [hopefully] but logical) lit
         will mark the given testcases as PASSED although the data is garbled.
         Thus a comparison with kwnown-good data should be added to the test.
+
+  TODO: Add functionality for multidimensional, static arrays
+
+        Idea so far: Cast type till NULL, sum up sizes
+        (for malloc [just in case]), pass pointer (as above) and sizes of
+        sub-arrays as parameter and reconstruct in target region.
+
+        Reason: Array and Poiter-notation are not equivalent any more when
+        handling multidimensional arrays.
 */
 
 #include <sstream>
@@ -189,16 +198,16 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
 
-  /* This part will possibly be needed in some way
+
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
        auto VarName = (*I)->getDeclName().getAsString();
        Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
-    } else {*/
+    } else {
        if (!(*I)->getType().getTypePtr()->isPointerType()) {
          auto VarName = (*I)->getDeclName().getAsString();
          Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
        }
-  //  }
+    }
   }
 
   Out << "\n}\n";
