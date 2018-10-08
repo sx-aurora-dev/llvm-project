@@ -34,10 +34,12 @@
 
         Idea so far: Cast type till NULL, sum up sizes
         (for malloc [just in case]), pass pointer (as above) and sizes of
-        sub-arrays as parameter and reconstruct in target region.
+        sub-arrays and reconstruct in target region.
 
-        Reason: Array and Poiter-notation are not equivalent any more when
-        handling multidimensional arrays.
+        A[i][j] = *(A[j] + i) = *(*(A + j) + i)
+        A[i][j][k] = *(A[j][k] + i) = *(*(A[k] + j) + i) = *(*(*(A + k) + j) + i)
+
+        Important: [] have higher precedence then *, so int (*arr)[j] = A (dim(A) = 2)
 */
 
 #include <sstream>
@@ -124,6 +126,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
   auto tmpSL = TCR->getStartLoc();
 
+  int ndim = 1;
+  std::string dim[10] = {"-1","0","0","0","0","0","0","0","0","0"};
+
   std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
@@ -136,11 +141,20 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     // check for static arrays, because of AST representation and naive getType
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*i)->getType().getTypePtr())){
       // possibly use t->getSize().toString(10, false) to get the size of the array
-      //TODO: use VarName
-      Out << t->getElementType().getAsString() << " *__sotoc_var_" << (*i)->getDeclName().getAsString();
+      int d = 0;
+      auto VarName = (*i)->getDeclName().getAsString();
+      auto ot = t;
 
+      //TODO: clean this and look for a better method fix parameter location
+      do {
+        dim[d] = t->getSize().toString(10, false);
+        ++d;
+        ot = t;
+        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
+      } while (t != NULL);
+      Out << ot->getElementType().getAsString() << " *__sotoc_var_" << VarName;
+      ndim = d;
     } else {
-
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
         Out << "*__sotoc_var_";
@@ -158,8 +172,23 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     // again check for static arrays
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
       auto VarName = (*I)->getDeclName().getAsString();
-      Out << "  " << t->getElementType().getAsString() << " *"
-          << VarName << "= __sotoc_var_" << VarName << ";\n";
+      auto ot = t;
+
+      //TODO: Clean this (maybe limit to dim = 2)
+      do {
+        ot = t;
+        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
+      } while (t != NULL);
+
+      Out << "  " << ot->getElementType().getAsString() << " (*"
+          << VarName << ")";
+
+      for (int i = 1; i < ndim; i++) {
+        Out << "[" << dim[i] << "]";
+      }
+
+      Out << " = __sotoc_var_" << VarName << ";\n";
+
     } else {
       if (!(*I)->getType().getTypePtr()->isPointerType()) {
         auto VarName = (*I)->getDeclName().getAsString();
@@ -198,7 +227,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
 
-
+    // decide what to do with multidimensional arrays
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
        auto VarName = (*I)->getDeclName().getAsString();
        Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
