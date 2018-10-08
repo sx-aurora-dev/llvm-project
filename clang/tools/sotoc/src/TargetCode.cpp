@@ -126,8 +126,8 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
   auto tmpSL = TCR->getStartLoc();
 
-  int ndim = 1;
-  std::string dim[10] = {"-1","0","0","0","0","0","0","0","0","0"};
+  int nDim = 1;
+  std::string DimString[10]; //change this to some form of dynamic list
 
   std::stringstream Out;
   bool first = true;
@@ -141,19 +141,19 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     // check for static arrays, because of AST representation and naive getType
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*i)->getType().getTypePtr())){
       // possibly use t->getSize().toString(10, false) to get the size of the array
-      int d = 0;
+      int dim = 0;
       auto VarName = (*i)->getDeclName().getAsString();
-      auto ot = t;
+      auto OrigT = t;
 
-      //TODO: clean this and look for a better method fix parameter location
+      //TODO: clean this
       do {
-        dim[d] = t->getSize().toString(10, false);
-        ++d;
-        ot = t;
+        DimString[dim] = t->getSize().toString(10, false);
+        ++dim;
+        OrigT = t;
         t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
       } while (t != NULL);
-      Out << ot->getElementType().getAsString() << " *__sotoc_var_" << VarName;
-      ndim = d;
+      Out << OrigT->getElementType().getAsString() << " *__sotoc_var_" << VarName;
+      nDim = dim;
     } else {
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
@@ -172,19 +172,19 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     // again check for static arrays
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
       auto VarName = (*I)->getDeclName().getAsString();
-      auto ot = t;
+      auto OrigT = t;
 
-      //TODO: Clean this (maybe limit to dim = 2)
+      //TODO: Clean this
       do {
-        ot = t;
+        OrigT = t;
         t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
       } while (t != NULL);
 
-      Out << "  " << ot->getElementType().getAsString() << " (*"
+      Out << "  " << OrigT->getElementType().getAsString() << " (*"
           << VarName << ")";
 
-      for (int i = 1; i < ndim; i++) {
-        Out << "[" << dim[i] << "]";
+      for (int i = 1; i < nDim; i++) {
+        Out << "[" << DimString[i] << "]";
       }
 
       Out << " = __sotoc_var_" << VarName << ";\n";
