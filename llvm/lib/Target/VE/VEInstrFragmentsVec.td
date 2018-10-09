@@ -107,4 +107,8 @@ def VEpvcmpu : SDNode<"VEISD::INT_PVCMPU", VE2OpVXVMV>;
 def VEpvadds : SDNode<"VEISD::INT_PVADDS", VE2OpVXVMV>;
 def VEpvsubs : SDNode<"VEISD::INT_PVSUBS", VE2OpVXVMV>;
 def VEpvcmps : SDNode<"VEISD::INT_PVCMPS", VE2OpVXVMV>;
+def VEvmaxswsx : SDNode<"VEISD::INT_VMAXSWSX", VE2OpVXVMV>;
+def VEvminswsx : SDNode<"VEISD::INT_VMINSWSX", VE2OpVXVMV>;
+def VEvmaxswzx : SDNode<"VEISD::INT_VMAXSWZX", VE2OpVXVMV>;
+def VEvminswzx : SDNode<"VEISD::INT_VMINSWZX", VE2OpVXVMV>;
 

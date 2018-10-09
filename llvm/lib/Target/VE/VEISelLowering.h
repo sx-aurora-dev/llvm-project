@@ -95,6 +95,10 @@ namespace llvm {
       INT_PVADDS,   // for int_ve_pvadds_vvvMv and int_ve_pvadds_vsvMv
       INT_PVSUBS,   // for int_ve_pvsubs_vvvMv and int_ve_pvsubs_vsvMv
       INT_PVCMPS,   // for int_ve_pvcmps_vvvMv and int_ve_pvcmps_vsvMv
+      INT_VMAXSWSX, // for int_ve_vmaxswsx_vvvmv and int_ve_vmaxswsx_vsvmv
+      INT_VMAXSWZX, // for int_ve_vmaxswzx_vvvmv and int_ve_vmaxswzx_vsvmv
+      INT_VMINSWSX, // for int_ve_vminswsx_vvvmv and int_ve_vminwsx_vsvmv
+      INT_VMINSWZX, // for int_ve_vminswzx_vvvmv and int_ve_vminwzx_vsvmv
     };
   }
 
