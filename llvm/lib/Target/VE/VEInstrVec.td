@@ -1068,7 +1068,7 @@ class VMR2<bits<8> op, string asm>
 }
 
 class VMR1<bits<8> op, string asm> 
-  : RV<op, (outs I64:$sx), (ins VM:$vmy), !strconcat(asm, " $sx,$vmy"),  []> {
+  : RV<op, (outs I64:$sx), (ins VMN:$vmy), !strconcat(asm, " $sx,$vmy"),  []> {
     let sy = 0;
     let vx = 0;
     let vz = 0;

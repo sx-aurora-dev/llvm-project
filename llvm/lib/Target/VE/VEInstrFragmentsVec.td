@@ -60,3 +60,15 @@ def VE1OpMM :
     SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
                          SDTCisSameAs<1, 0>]>;
 def VEnegm : SDNode<"VEISD::INT_NEGM", VE1OpMM>;
+
+//===----------------------------------------------------------------------===//
+// 1-op instructions
+//===----------------------------------------------------------------------===//
+
+// (i64 (PCVM (vNi1 vy)))
+
+def VE1OpSM :
+    SDTypeProfile<1, 1, [SDTCisInt<0>, SDTCisVec<1>, SDTCVecEltisVT<1, i1>]>;
+def VEpcvm : SDNode<"VEISD::INT_PCVM", VE1OpSM>;
+def VElzvm : SDNode<"VEISD::INT_LZVM", VE1OpSM>;
+def VEtovm : SDNode<"VEISD::INT_TOVM", VE1OpSM>;

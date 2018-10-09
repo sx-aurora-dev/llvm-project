@@ -71,6 +71,9 @@ namespace llvm {
       INT_EQVM,     // for int_ve_eqvm_mmm and int_ve_eqvm_MMM
       INT_NNDM,     // for int_ve_nndm_mmm and int_ve_nndm_MMM
       INT_NEGM,     // for int_ve_negm_mm and int_ve_negm_MM
+      INT_PCVM,     // for int_ve_pcvm_sm
+      INT_LZVM,     // for int_ve_lzvm_sm
+      INT_TOVM,     // for int_ve_tovm_sm
     };
   }
 
