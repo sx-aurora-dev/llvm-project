@@ -126,9 +126,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
   auto tmpSL = TCR->getStartLoc();
 
-  //int nDim = 1;
   std::list<int> nDim;
-  //std::string DimString[10]; //change this to some form of dynamic list
   std::list<std::string> DimString;
 
   std::stringstream Out;
@@ -147,25 +145,25 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
       auto VarName = (*i)->getDeclName().getAsString();
       auto OrigT = t;
 
-      //TODO: clean this
+      // extract Sizes from AST by casting type and push to DimString
       do {
-        //DimString[dim] = t->getSize().toString(10, false);
         DimString.push_back(t->getSize().toString(10, false));
         ++dim;
+
         OrigT = t;
         t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
       } while (t != NULL);
-      //Out << OrigT->getElementType().getAsString() << " *__sotoc_var_" << VarName;
-      Out << "void *__sotoc_var_" << VarName;
-      nDim.push_back(dim);
-      //nDim = dim;
+
+      Out << "void *__sotoc_var_" << VarName; // set type to void* to avoid warnings from the compiler
+      nDim.push_back(dim); // push total number of dimensions
+
     } else {
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
         Out << "*__sotoc_var_";
       }
       Out << (*i)->getDeclName().getAsString();
-      // todo: use `Name.print` instead
+      //TODO: use `Name.print` instead
     }
   }
   Out << ")\n{\n";
@@ -179,7 +177,6 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
       auto VarName = (*I)->getDeclName().getAsString();
       auto OrigT = t;
 
-      //TODO: Clean this
       do {
         OrigT = t;
         t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
@@ -188,13 +185,13 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
       Out << "  " << OrigT->getElementType().getAsString() << " (*"
           << VarName << ")";
 
+      // Get number of Dimensions(nDim) and write sizes(DimString)
       for (int i = 1; i < nDim.front(); i++) {
-        //Out << "[" << DimString[i] << "]";
         DimString.pop_front();
         Out << "[" << DimString.front() << "]";
       }
-      DimString.pop_front();
-      nDim.pop_front();
+      DimString.pop_front(); // remove last size
+      nDim.pop_front(); // remove number of dimensions of last variable
 
       Out << " = __sotoc_var_" << VarName << ";\n";
 
@@ -236,7 +233,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
 
-    // decide what to do with multidimensional arrays
+    // if array then already pointer
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
        auto VarName = (*I)->getDeclName().getAsString();
        Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
