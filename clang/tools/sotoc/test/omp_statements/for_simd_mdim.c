@@ -11,7 +11,7 @@ int main(void) {
   int a = 5;
   int z[5][10];
 
-  #pragma omp target device(0) map(tofrom: x,y) map(alloc: z)
+  #pragma omp target device(0) map(tofrom: x,y) map(alloc: z) map(to: i,j,a)
   #pragma omp parallel for simd
   for (i = 0; i < 5; i++) {
     for (j = 0; j < 10; j++) {
