@@ -74,6 +74,21 @@ namespace llvm {
       INT_PCVM,     // for int_ve_pcvm_sm
       INT_LZVM,     // for int_ve_lzvm_sm
       INT_TOVM,     // for int_ve_tovm_sm
+      INT_VADDUL,   // for int_ve_vaddul_vvvmv and int_ve_vaddul_vsvmv
+      INT_VSUBUL,   // for int_ve_vsubul_vvvmv and int_ve_vsubul_vsvmv
+      INT_VCMPUL,   // for int_ve_vcmpul_vvvmv and int_ve_vcmpul_vsvmv
+      INT_VADDUW,   // for int_ve_vadduw_vvvmv and int_ve_vadduw_vsvmv
+      INT_VSUBUW,   // for int_ve_vsubuw_vvvmv and int_ve_vsubuw_vsvmv
+      INT_VCMPUW,   // for int_ve_vcmpuw_vvvmv and int_ve_vcmpuw_vsvmv
+      INT_VADDSWSX, // for int_ve_vaddswsx_vvvmv and int_ve_vaddswsx_vsvmv
+      INT_VSUBSWSX, // for int_ve_vsubswsx_vvvmv and int_ve_vsubswsx_vsvmv
+      INT_VCMPSWSX, // for int_ve_vcmpswsx_vvvmv and int_ve_vcmpswsx_vsvmv
+      INT_VADDSWZX, // for int_ve_vaddswzx_vvvmv and int_ve_vaddswzx_vsvmv
+      INT_VSUBSWZX, // for int_ve_vsubswzx_vvvmv and int_ve_vsubswzx_vsvmv
+      INT_VCMPSWZX, // for int_ve_vcmpswzx_vvvmv and int_ve_vcmpswzx_vsvmv
+      INT_VADDSL,   // for int_ve_vaddsl_vvvmv and int_ve_vaddsl_vsvmv
+      INT_VSUBSL,   // for int_ve_vsubsl_vvvmv and int_ve_vsubsl_vsvmv
+      INT_VCMPSL,   // for int_ve_vcmpsl_vvvmv and int_ve_vcmpsl_vsvmv
     };
   }
 

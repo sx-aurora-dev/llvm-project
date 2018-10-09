@@ -246,8 +246,8 @@ multiclass RVEXm<string opcStr, bits<8> opc> {
 
 // u64, u32, packed u32
 multiclass RVUm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, I64, VM, simm7Op64>; // u64
-  let cx = 0, cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, I32, VM, simm7Op32>; // u32
+  let cx = 0, cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, I64, VMN, simm7Op64>; // u64
+  let cx = 0, cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, I32, VMN, simm7Op32>; // u32
   let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, I64, VM512, simm7Op32>; // packed u32
 }
 
