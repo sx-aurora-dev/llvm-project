@@ -2048,4 +2048,12 @@ def : Pat<(i32 (and i32:$lhs, 0xffff)),
 def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
           (AND32rm0 $lhs, 32)>;
 
+// for VEC instructions
 include "VEInstrVec.td"
+
+// for VEC instruction fragments
+include "VEInstrFragmentsVec.td"
+
+// for VEC intrinsics
+include "VEInstrIntrinsic.td"
+

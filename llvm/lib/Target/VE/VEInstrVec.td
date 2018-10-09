@@ -506,29 +506,29 @@ def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)),
             (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)), sub_f32)>;
 
 let cy = 1 in
-def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
+def LVMr : RR<0xB7, (outs VMN:$vmx), (ins VMN:$vmd, I64:$sy, I64:$sz),
   "lvm $vmx,$sy,$sz", []> {
   let Constraints = "$vmx = $vmd";
 }
 
 let cy = 0 in
-def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, uimm6Op64:$sy, I64:$sz),
+def LVMi : RR<0xB7, (outs VMN:$vmx), (ins VMN:$vmd, uimm6Op64:$sy, I64:$sz),
   "lvm $vmx,$sy,$sz", []> {
   let Constraints = "$vmx = $vmd";
 }
 
-def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, uimm6Op64:$sy, I64:$sz),
+def LVMpi : Pseudo<(outs VMN512:$vmx), (ins VMN512:$vmd, uimm6Op64:$sy, I64:$sz),
   "# lvm $vmx,$sy,$sz", []> {
   let Constraints = "$vmx = $vmd";
 }
 
 let cy = 1 in
-def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
+def SVMr : RR<0xA7, (outs I64:$sx), (ins VMN:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
 
 let cy = 0 in 
-def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,$sy", []>;
+def SVMi : RR<0xA7, (outs I64:$sx), (ins VMN:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,$sy", []>;
 
-def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
+def SVMpi : Pseudo<(outs I64:$sx), (ins VMN512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
 
 multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass RCi, Operand immOp> {
   def r : RV2<opc, (outs V64:$vx), (ins RCi:$sy), 
@@ -1146,5 +1146,15 @@ def : Pat<(v8i64 (int_ve_insert_vm512u VM512:$vmx, VM:$vmy)),
 def : Pat<(v8i64 (int_ve_insert_vm512l VM512:$vmx, VM:$vmy)),
           (v8i64 (INSERT_SUBREG VM512:$vmx, VM:$vmy, sub_vm_even))>;
 
-include "VEInstrIntrinsic.td"
+def : Pat<(v256i1 (bitconvert v4i64:$vm)),
+          (v256i1 (COPY_TO_REGCLASS $vm, VMN))>;
+
+def : Pat<(v4i64 (bitconvert v256i1:$vm)),
+          (v4i64 (COPY_TO_REGCLASS $vm, V64))>;
+
+def : Pat<(v512i1 (bitconvert v8i64:$vmp)),
+          (v512i1 (COPY_TO_REGCLASS $vmp, VMN512))>;
+
+def : Pat<(v8i64 (bitconvert v512i1:$vmp)),
+          (v8i64 (COPY_TO_REGCLASS $vmp, V64))>;
 

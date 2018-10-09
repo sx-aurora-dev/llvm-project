@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "VEISelLowering.h"
+#include "VEIntrinsicsInfo.h"
 #include "MCTargetDesc/VEMCExpr.h"
 #include "VEMachineFunctionInfo.h"
 #include "VERegisterInfo.h"
@@ -29,6 +30,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;
@@ -1439,6 +1441,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setMinStackArgumentAlignment(8);
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
+
+  verifyIntrinsicTables();
 }
 
 const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -1473,6 +1477,8 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
+  case VEISD::INT_LVM:         return "VEISD::INT_LVM";
+  case VEISD::INT_SVM:         return "VEISD::INT_SVM";
   }
   return nullptr;
 }
@@ -2240,8 +2246,42 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                      SelectionDAG &DAG) const {
-  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
   SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+  const IntrinsicData* IntrData = getIntrinsicWithoutChain(IntNo);
+  if (IntrData) {
+    switch (IntrData->Type) {
+    case LOAD: {
+      // Load mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_lvm_mmss (v4i64 %vm), (i64 %index), (i64 %val)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (LVMr
+      //         (v256i1 (bitcast %vm)), %index, %val))))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      SDValue Load = DAG.getNode(IntrData->Opc0, dl, BitcastVT, Bitcast,
+                                 Op.getOperand(2), Op.getOperand(3));
+      return DAG.getBitcast(Op.getValueType(), Load);
+    }
+    case STORE: {
+      // Store mask intrinsics
+      //   Input:
+      //     (i64 (int_ve_svm_sms (v4i64 %vm), (i64 %index)))
+      //   Output:
+      //     (i64 (SVMr
+      //         (v256i1 (bitcast %vm)), %index))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast,
+                         Op.getOperand(2));
+    }
+    }
+  }
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   case Intrinsic::thread_pointer: {

@@ -60,6 +60,10 @@ namespace llvm {
       RET_FLAG,    // Return with a flag operand.
       GLOBAL_BASE_REG, // Global base reg for PIC.
       FLUSHW,      // FLUSH register windows to stack.
+
+      // Intrinsics
+      INT_LVM,      // for int_ve_lvm_mmss and int_ve_lvm_MMss
+      INT_SVM,      // for int_ve_svm_sms and int_ve_svm_sMs
     };
   }
 
