@@ -152,7 +152,8 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
         OrigT = t;
         t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
       } while (t != NULL);
-      Out << OrigT->getElementType().getAsString() << " *__sotoc_var_" << VarName;
+      //Out << OrigT->getElementType().getAsString() << " *__sotoc_var_" << VarName;
+      Out << "void *__sotoc_var_" << VarName;
       nDim = dim;
     } else {
       Out << (*i)->getType().getAsString() << " ";
