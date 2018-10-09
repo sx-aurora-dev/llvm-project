@@ -113,4 +113,24 @@ def VEvmaxswzx : SDNode<"VEISD::INT_VMAXSWZX", VE2OpVXVMV>;
 def VEvminswzx : SDNode<"VEISD::INT_VMINSWZX", VE2OpVXVMV>;
 def VEpvmaxs : SDNode<"VEISD::INT_PVMAXS", VE2OpVXVMV>;
 def VEpvmins : SDNode<"VEISD::INT_PVMINS", VE2OpVXVMV>;
+def VEvmulul : SDNode<"VEISD::INT_VMULUL", VE2OpVXVMV>;
+def VEvmuluw : SDNode<"VEISD::INT_VMULUW", VE2OpVXVMV>;
+def VEvmulswsx : SDNode<"VEISD::INT_VMULSWSX", VE2OpVXVMV>;
+def VEvmulswzx : SDNode<"VEISD::INT_VMULSWZX", VE2OpVXVMV>;
+def VEvmulsl : SDNode<"VEISD::INT_VMULSL", VE2OpVXVMV>;
+
+// Either of 
+// (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base)))
+// (v256f64 (VDVXlim (i64 sy), (v256f64 vz), (v256i1 vm), (v256f64 base)))
+// (v256f64 (VDVXlim2 (v256f64 vz), (i64 sy), (v256i1 vm), (v256f64 base)))
+
+def VE2OpVXXMV :
+    SDTypeProfile<1, 4, [SDTCisVec<0>, 
+                         SDTCisVec<3>, SDTCVecEltisVT<3, i1>,
+                         SDTCisSameAs<4, 0>]>;
+def VEvdivul : SDNode<"VEISD::INT_VDIVUL", VE2OpVXXMV>;
+def VEvdivuw : SDNode<"VEISD::INT_VDIVUW", VE2OpVXXMV>;
+def VEvdivswsx : SDNode<"VEISD::INT_VDIVSWSX", VE2OpVXXMV>;
+def VEvdivswzx : SDNode<"VEISD::INT_VDIVSWZX", VE2OpVXXMV>;
+def VEvdivsl : SDNode<"VEISD::INT_VDIVSL", VE2OpVXXMV>;
 

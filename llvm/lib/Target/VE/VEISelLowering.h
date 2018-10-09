@@ -101,6 +101,21 @@ namespace llvm {
       INT_VMINSWZX, // for int_ve_vminswzx_vvvmv and int_ve_vminwzx_vsvmv
       INT_PVMAXS,   // for int_ve_pvmaxs_vvvMv and int_ve_pvmaxs_vsvMv
       INT_PVMINS,   // for int_ve_pvmins_vvvMv and int_ve_pvmins_vsvMv
+      INT_VMULUL,   // for int_ve_vmulul_vvvmv and int_ve_vmulul_vsvmv
+      INT_VDIVUL,   // for int_ve_vdivul_vvvmv, int_ve_vdivul_vsvmv, and
+                    // int_ve_vdivul_vvsmv
+      INT_VMULUW,   // for int_ve_vmuluw_vvvmv and int_ve_vmuluw_vsvmv
+      INT_VDIVUW,   // for int_ve_vdivuw_vvvmv, int_ve_vdivuw_vsvmv, and
+                    // int_ve_vdivuw_vvsmv
+      INT_VMULSWSX, // for int_ve_vmulswsx_vvvmv and int_ve_vmulswsx_vsvmv
+      INT_VDIVSWSX, // for int_ve_vdivswsx_vvvmv, int_ve_vdivswsx_vsvmv, and
+                    // int_ve_vdivswsx_vvsmv
+      INT_VMULSWZX, // for int_ve_vmulswzx_vvvmv and int_ve_vmulswzx_vsvmv
+      INT_VDIVSWZX, // for int_ve_vdivswzx_vvvmv, int_ve_vdivswzx_vsvmv, and
+                    // int_ve_vdivswzx_vvsmv
+      INT_VMULSL,   // for int_ve_vmulsl_vvvmv and int_ve_vmulsl_vsvmv
+      INT_VDIVSL,   // for int_ve_vdivsl_vvvmv, int_ve_vdivsl_vsvmv, and
+                    // int_ve_vdivsl_vvsmv
     };
   }
 

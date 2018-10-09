@@ -234,14 +234,14 @@ multiclass RV4m<string opcStr, bits<8> opc, RegisterClass ScalarRC, RegisterClas
 
 // u64, u32
 multiclass RVLWm<string opcStr, bits<8> opc> {
-  let cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, I64, VM, simm7Op64>; // u64
-  let cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, I32, VM, simm7Op32>; // u32
+  let cx2 = 0 in defm l : RV3m<opcStr # ".l", opc, I64, VMN, simm7Op64>; // u64
+  let cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, I32, VMN, simm7Op32>; // u32
 }
 
 // i32 (sz,zx)
 multiclass RVEXm<string opcStr, bits<8> opc> {
-  let cx2 = 0 in defm wsx : RV3m<opcStr # ".w.sx", opc, I32, VM, simm7Op32>; // i32 sx
-  let cx2 = 1 in defm wzx : RV3m<opcStr # ".w.zx", opc, I32, VM, simm7Op32>; // i32 zx
+  let cx2 = 0 in defm wsx : RV3m<opcStr # ".w.sx", opc, I32, VMN, simm7Op32>; // i32 sx
+  let cx2 = 1 in defm wzx : RV3m<opcStr # ".w.zx", opc, I32, VMN, simm7Op32>; // i32 zx
 }
 
 // u64, u32, packed u32
@@ -607,16 +607,16 @@ defm VSBX : RVLm<"vsubs", 0x9B>;
 defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
 defm VMPS : RVEXm<"vmuls", 0xCB>; // mul signed 32b sx/zx
 defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
-defm VMPD : RV3m<"vmuls.l.w", 0xD9, I32, VM, simm7Op32>; // mul signed 32b -> 64b
+defm VMPD : RV3m<"vmuls.l.w", 0xD9, I32, VMN, simm7Op32>; // mul signed 32b -> 64b
 
 defm VDIV : RVLWm<"vdivu", 0xE9>;
-let cx2 = 0 in defm VDIVl : RV3DIVBYSm<"vdivu.l", 0xE9, I64, VM, simm7Op64>;
-let cx2 = 1 in defm VDIVw : RV3DIVBYSm<"vdivu.w", 0xE9, I32, VM, simm7Op32>;
+let cx2 = 0 in defm VDIVl : RV3DIVBYSm<"vdivu.l", 0xE9, I64, VMN, simm7Op64>;
+let cx2 = 1 in defm VDIVw : RV3DIVBYSm<"vdivu.w", 0xE9, I32, VMN, simm7Op32>;
 defm VDVS : RVEXm<"vdivs", 0xEB>;
-let cx2 = 0 in defm VDVSwsx : RV3DIVBYSm<"vdivs.w.sx", 0xEB, I32, VM, simm7Op32>;
-let cx2 = 1 in defm VDVSwzx : RV3DIVBYSm<"vdivs.w.zx", 0xEB, I32, VM, simm7Op32>;
+let cx2 = 0 in defm VDVSwsx : RV3DIVBYSm<"vdivs.w.sx", 0xEB, I32, VMN, simm7Op32>;
+let cx2 = 1 in defm VDVSwzx : RV3DIVBYSm<"vdivs.w.zx", 0xEB, I32, VMN, simm7Op32>;
 defm VDVX : RVLm<"vdivs", 0xFB>;
-defm VDVXl : RV3DIVBYSm<"vdivs.l", 0xFB, I64, VM, simm7Op64>;
+defm VDVXl : RV3DIVBYSm<"vdivs.l", 0xFB, I64, VMN, simm7Op64>;
 defm VCMP : RVUm<"vcmpu", 0xB9>;
 defm VCPS : RVWm<"vcmps", 0xFA>;
 defm VCPX : RVLm<"vcmps", 0xBA>;

@@ -1515,6 +1515,16 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VMINSWZX:    return "VEISD::INT_VMINSWZX";
   case VEISD::INT_PVMAXS:      return "VEISD::INT_PVMAXS";
   case VEISD::INT_PVMINS:      return "VEISD::INT_PVMINS";
+  case VEISD::INT_VMULUL:      return "VEISD::INT_VMULUL";
+  case VEISD::INT_VDIVUL:      return "VEISD::INT_VDIVUL";
+  case VEISD::INT_VMULUW:      return "VEISD::INT_VMULUW";
+  case VEISD::INT_VDIVUW:      return "VEISD::INT_VDIVUW";
+  case VEISD::INT_VMULSWSX:    return "VEISD::INT_VMULSWSX";
+  case VEISD::INT_VDIVSWSX:    return "VEISD::INT_VDIVSWSX";
+  case VEISD::INT_VMULSWZX:    return "VEISD::INT_VMULSWZX";
+  case VEISD::INT_VDIVSWZX:    return "VEISD::INT_VDIVSWZX";
+  case VEISD::INT_VMULSL:      return "VEISD::INT_VMULSL";
+  case VEISD::INT_VDIVSL:      return "VEISD::INT_VDIVSL";
   }
   return nullptr;
 }
