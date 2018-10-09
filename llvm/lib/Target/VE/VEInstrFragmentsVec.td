@@ -111,4 +111,6 @@ def VEvmaxswsx : SDNode<"VEISD::INT_VMAXSWSX", VE2OpVXVMV>;
 def VEvminswsx : SDNode<"VEISD::INT_VMINSWSX", VE2OpVXVMV>;
 def VEvmaxswzx : SDNode<"VEISD::INT_VMAXSWZX", VE2OpVXVMV>;
 def VEvminswzx : SDNode<"VEISD::INT_VMINSWZX", VE2OpVXVMV>;
+def VEpvmaxs : SDNode<"VEISD::INT_PVMAXS", VE2OpVXVMV>;
+def VEpvmins : SDNode<"VEISD::INT_PVMINS", VE2OpVXVMV>;
 

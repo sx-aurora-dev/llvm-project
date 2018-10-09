@@ -265,8 +265,8 @@ def : Pat<(VEvmaxswzx i32:$sy, v256f64:$vz, v256i1:$vm, v256f64:$vd), (VCMSawzxr
 def : Pat<(VEvmaxswzx (i32 simm7:$I), v256f64:$vz, v256i1:$vm, v256f64:$vd), (VCMSawzxim (i32 simm7:$I), v256f64:$vz, v256i1:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_pvmaxs_vvv v256f64:$vy, v256f64:$vz), (VCMSapv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_pvmaxs_vsv i64:$sy, v256f64:$vz), (VCMSapr i64:$sy, v256f64:$vz)>;
-def : Pat<(int_ve_pvmaxs_vvvMv v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd), (VCMSapvm v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
-def : Pat<(int_ve_pvmaxs_vsvMv i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$vd), (VCMSaprm i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
+def : Pat<(VEpvmaxs v256f64:$vy, v256f64:$vz, v512i1:$vm, v256f64:$vd), (VCMSapvm v256f64:$vy, v256f64:$vz, v512i1:$vm, v256f64:$vd)>;
+def : Pat<(VEpvmaxs i64:$sy, v256f64:$vz, v512i1:$vm, v256f64:$vd), (VCMSaprm i64:$sy, v256f64:$vz, v512i1:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_vminswsx_vvv v256f64:$vy, v256f64:$vz), (VCMSiwsxv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vminswsx_vsv i32:$sy, v256f64:$vz), (VCMSiwsxr i32:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vminswsx_vsv (i32 simm7:$I), v256f64:$vz), (VCMSiwsxi (i32 simm7:$I), v256f64:$vz)>;
@@ -281,8 +281,8 @@ def : Pat<(VEvminswzx i32:$sy, v256f64:$vz, v256i1:$vm, v256f64:$vd), (VCMSiwzxr
 def : Pat<(VEvminswzx (i32 simm7:$I), v256f64:$vz, v256i1:$vm, v256f64:$vd), (VCMSiwzxim (i32 simm7:$I), v256f64:$vz, v256i1:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_pvmins_vvv v256f64:$vy, v256f64:$vz), (VCMSipv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_pvmins_vsv i64:$sy, v256f64:$vz), (VCMSipr i64:$sy, v256f64:$vz)>;
-def : Pat<(int_ve_pvmins_vvvMv v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd), (VCMSipvm v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
-def : Pat<(int_ve_pvmins_vsvMv i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$vd), (VCMSiprm i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
+def : Pat<(VEpvmins v256f64:$vy, v256f64:$vz, v512i1:$vm, v256f64:$vd), (VCMSipvm v256f64:$vy, v256f64:$vz, v512i1:$vm, v256f64:$vd)>;
+def : Pat<(VEpvmins i64:$sy, v256f64:$vz, v512i1:$vm, v256f64:$vd), (VCMSiprm i64:$sy, v256f64:$vz, v512i1:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_vmaxsl_vvv v256f64:$vy, v256f64:$vz), (VCMXalv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vmaxsl_vsv i64:$sy, v256f64:$vz), (VCMXalr i64:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vmaxsl_vsv (i64 simm7:$I), v256f64:$vz), (VCMXali (i64 simm7:$I), v256f64:$vz)>;
