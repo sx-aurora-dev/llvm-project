@@ -64,6 +64,13 @@ namespace llvm {
       // Intrinsics
       INT_LVM,      // for int_ve_lvm_mmss and int_ve_lvm_MMss
       INT_SVM,      // for int_ve_svm_sms and int_ve_svm_sMs
+
+      INT_ANDM,     // for int_ve_andm_mmm and int_ve_andm_MMM
+      INT_ORM,      // for int_ve_orm_mmm and int_ve_orm_MMM
+      INT_XORM,     // for int_ve_xorm_mmm and int_ve_xorm_MMM
+      INT_EQVM,     // for int_ve_eqvm_mmm and int_ve_eqvm_MMM
+      INT_NNDM,     // for int_ve_nndm_mmm and int_ve_nndm_MMM
+      INT_NEGM,     // for int_ve_negm_mm and int_ve_negm_MM
     };
   }
 

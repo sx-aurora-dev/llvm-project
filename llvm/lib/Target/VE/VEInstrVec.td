@@ -1051,7 +1051,7 @@ defm VSCL : VSCm<"vscl", 0xB3>;
 // 5.3.2.15. Vector Mask Register Instructions
 
 class VMR3<bits<8> op, string asm> 
-  : RV<op, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz),
+  : RV<op, (outs VMN:$vmx), (ins VMN:$vmy, VMN:$vmz),
         !strconcat(asm, " $vmx,$vmy,$vmz"), []> {
   let sy = 0;
   let vw = 0;
@@ -1059,7 +1059,7 @@ class VMR3<bits<8> op, string asm>
 }
 
 class VMR2<bits<8> op, string asm> 
-  : RV<op, (outs VM:$vmx), (ins VM:$vmy),
+  : RV<op, (outs VMN:$vmx), (ins VMN:$vmy),
         !strconcat(asm, " $vmx,$vmy"), []> {
   let sy = 0;
   let vz = 0;
@@ -1086,12 +1086,12 @@ def PCVM : VMR1<0xA4, "pcvm">;
 def LZVM : VMR1<0xA5, "lzvm">;
 def TOVM : VMR1<0xA6, "tovm">;
 
-def ANDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def ORMp  : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def XORMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def EQVMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def NNDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
-def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
+def ANDMp : PseudoVec<(outs VMN512:$vmx), (ins VMN512:$vmy, VMN512:$vmz), "", []>;
+def ORMp  : PseudoVec<(outs VMN512:$vmx), (ins VMN512:$vmy, VMN512:$vmz), "", []>;
+def XORMp : PseudoVec<(outs VMN512:$vmx), (ins VMN512:$vmy, VMN512:$vmz), "", []>;
+def EQVMp : PseudoVec<(outs VMN512:$vmx), (ins VMN512:$vmy, VMN512:$vmz), "", []>;
+def NNDMp : PseudoVec<(outs VMN512:$vmx), (ins VMN512:$vmy, VMN512:$vmz), "", []>;
+def NEGMp : PseudoVec<(outs VMN512:$vmx), (ins VMN512:$vmy), "", []>;
 
 // 5.3.2.16. Vector Control Instructions
 // SVL

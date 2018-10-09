@@ -34,3 +34,29 @@ def VEStoreMask :
                          SDTCisVec<1>, SDTCVecEltisVT<1, i1>,
                          SDTCisInt<2>]>;
 def VEsvm : SDNode<"VEISD::INT_SVM", VEStoreMask>;
+
+//===----------------------------------------------------------------------===//
+// 2-op logical instructions
+//===----------------------------------------------------------------------===//
+
+// (vNi1 (ANDM (vNi1 vy), (vNi1 vz)))
+
+def VE2OpMMM :
+    SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
+                         SDTCisSameAs<1, 0>, SDTCisSameAs<2, 0>]>;
+def VEandm : SDNode<"VEISD::INT_ANDM", VE2OpMMM>;
+def VEorm  : SDNode<"VEISD::INT_ORM", VE2OpMMM>;
+def VExorm : SDNode<"VEISD::INT_XORM", VE2OpMMM>;
+def VEeqvm : SDNode<"VEISD::INT_EQVM", VE2OpMMM>;
+def VEnndm : SDNode<"VEISD::INT_NNDM", VE2OpMMM>;
+
+//===----------------------------------------------------------------------===//
+// 1-op logical instructions
+//===----------------------------------------------------------------------===//
+
+// (vNi1 (NEGM (vNi1 vy)))
+
+def VE1OpMM :
+    SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
+                         SDTCisSameAs<1, 0>]>;
+def VEnegm : SDNode<"VEISD::INT_NEGM", VE1OpMM>;

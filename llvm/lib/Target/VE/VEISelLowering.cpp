@@ -1479,6 +1479,12 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
   case VEISD::INT_LVM:         return "VEISD::INT_LVM";
   case VEISD::INT_SVM:         return "VEISD::INT_SVM";
+  case VEISD::INT_ANDM:        return "VEISD::INT_ANDM";
+  case VEISD::INT_ORM:         return "VEISD::INT_ORM";
+  case VEISD::INT_XORM:        return "VEISD::INT_XORM";
+  case VEISD::INT_EQVM:        return "VEISD::INT_EQVM";
+  case VEISD::INT_NNDM:        return "VEISD::INT_NNDM";
+  case VEISD::INT_NEGM:        return "VEISD::INT_NEGM";
   }
   return nullptr;
 }
@@ -2279,6 +2285,35 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast,
                          Op.getOperand(2));
+    }
+    case OP_MMM: {
+      // 2-operand mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_andm_mmm (v4i64 %vm1), (v4i64 %vm2)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (ANDM
+      //         (v256i1 (bitcast %vm1)), (v256i1 (bitcast %vm2))))))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT,
+                                 DAG.getBitcast(BitcastVT, Op.getOperand(1)),
+                                 DAG.getBitcast(BitcastVT, Op.getOperand(2)));
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_MM: {
+      // 1-operand mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_negm_mmm (v4i64 %vm)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (NEGM
+      //         (v256i1 (bitcast %vm1))))))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT,
+                                 DAG.getBitcast(BitcastVT, Op.getOperand(1)));
+      return DAG.getBitcast(Op.getValueType(), Res);
     }
     }
   }

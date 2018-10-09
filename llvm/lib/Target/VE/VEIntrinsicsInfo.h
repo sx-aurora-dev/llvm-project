@@ -21,6 +21,7 @@ namespace llvm {
 
 enum IntrinsicType : uint16_t {
   LOAD, STORE,
+  OP_MMM, OP_MM,
 };
 
 struct IntrinsicData {
@@ -70,10 +71,22 @@ static const IntrinsicData* getIntrinsicWithChain(unsigned IntNo) {
  * the alphabetical order.
  */
 static const IntrinsicData  IntrinsicsWithoutChain[] = {
+  VE_INTRINSIC_DATA(andm_MMM,           OP_MMM,     VEISD::INT_ANDM, 0),
+  VE_INTRINSIC_DATA(andm_mmm,           OP_MMM,     VEISD::INT_ANDM, 0),
+  VE_INTRINSIC_DATA(eqvm_MMM,           OP_MMM,     VEISD::INT_EQVM, 0),
+  VE_INTRINSIC_DATA(eqvm_mmm,           OP_MMM,     VEISD::INT_EQVM, 0),
   VE_INTRINSIC_DATA(lvm_MMss,           LOAD,       VEISD::INT_LVM, 0),
   VE_INTRINSIC_DATA(lvm_mmss,           LOAD,       VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(negm_MM,            OP_MM,      VEISD::INT_NEGM, 0),
+  VE_INTRINSIC_DATA(negm_mm,            OP_MM,      VEISD::INT_NEGM, 0),
+  VE_INTRINSIC_DATA(nndm_MMM,           OP_MMM,     VEISD::INT_NNDM, 0),
+  VE_INTRINSIC_DATA(nndm_mmm,           OP_MMM,     VEISD::INT_NNDM, 0),
+  VE_INTRINSIC_DATA(orm_MMM,            OP_MMM,     VEISD::INT_ORM, 0),
+  VE_INTRINSIC_DATA(orm_mmm,            OP_MMM,     VEISD::INT_ORM, 0),
   VE_INTRINSIC_DATA(svm_sMs,            STORE,      VEISD::INT_SVM, 0),
   VE_INTRINSIC_DATA(svm_sms,            STORE,      VEISD::INT_SVM, 0),
+  VE_INTRINSIC_DATA(xorm_MMM,           OP_MMM,     VEISD::INT_XORM, 0),
+  VE_INTRINSIC_DATA(xorm_mmm,           OP_MMM,     VEISD::INT_XORM, 0),
 };
 
 /*
