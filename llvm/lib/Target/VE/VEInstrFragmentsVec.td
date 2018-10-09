@@ -101,4 +101,10 @@ def VEvcmpswzx : SDNode<"VEISD::INT_VCMPSWZX", VE2OpVXVMV>;
 def VEvaddsl : SDNode<"VEISD::INT_VADDSL", VE2OpVXVMV>;
 def VEvsubsl : SDNode<"VEISD::INT_VSUBSL", VE2OpVXVMV>;
 def VEvcmpsl : SDNode<"VEISD::INT_VCMPSL", VE2OpVXVMV>;
+def VEpvaddu : SDNode<"VEISD::INT_PVADDU", VE2OpVXVMV>;
+def VEpvsubu : SDNode<"VEISD::INT_PVSUBU", VE2OpVXVMV>;
+def VEpvcmpu : SDNode<"VEISD::INT_PVCMPU", VE2OpVXVMV>;
+def VEpvadds : SDNode<"VEISD::INT_PVADDS", VE2OpVXVMV>;
+def VEpvsubs : SDNode<"VEISD::INT_PVSUBS", VE2OpVXVMV>;
+def VEpvcmps : SDNode<"VEISD::INT_PVCMPS", VE2OpVXVMV>;
 

@@ -89,6 +89,12 @@ namespace llvm {
       INT_VADDSL,   // for int_ve_vaddsl_vvvmv and int_ve_vaddsl_vsvmv
       INT_VSUBSL,   // for int_ve_vsubsl_vvvmv and int_ve_vsubsl_vsvmv
       INT_VCMPSL,   // for int_ve_vcmpsl_vvvmv and int_ve_vcmpsl_vsvmv
+      INT_PVADDU,   // for int_ve_pvaddu_vvvMv and int_ve_pvaddu_vsvMv
+      INT_PVSUBU,   // for int_ve_pvsubu_vvvMv and int_ve_pvsubu_vsvMv
+      INT_PVCMPU,   // for int_ve_pvcmpu_vvvMv and int_ve_pvcmpu_vsvMv
+      INT_PVADDS,   // for int_ve_pvadds_vvvMv and int_ve_pvadds_vsvMv
+      INT_PVSUBS,   // for int_ve_pvsubs_vvvMv and int_ve_pvsubs_vsvMv
+      INT_PVCMPS,   // for int_ve_pvcmps_vvvMv and int_ve_pvcmps_vsvMv
     };
   }
 
