@@ -126,8 +126,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
   auto tmpSL = TCR->getStartLoc();
 
-  int nDim = 1;
-  std::string DimString[10]; //change this to some form of dynamic list
+  //int nDim = 1;
+  std::list<int> nDim;
+  //std::string DimString[10]; //change this to some form of dynamic list
+  std::list<std::string> DimString;
 
   std::stringstream Out;
   bool first = true;
@@ -147,14 +149,16 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
       //TODO: clean this
       do {
-        DimString[dim] = t->getSize().toString(10, false);
+        //DimString[dim] = t->getSize().toString(10, false);
+        DimString.push_back(t->getSize().toString(10, false));
         ++dim;
         OrigT = t;
         t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
       } while (t != NULL);
       //Out << OrigT->getElementType().getAsString() << " *__sotoc_var_" << VarName;
       Out << "void *__sotoc_var_" << VarName;
-      nDim = dim;
+      nDim.push_back(dim);
+      //nDim = dim;
     } else {
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
@@ -184,9 +188,13 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
       Out << "  " << OrigT->getElementType().getAsString() << " (*"
           << VarName << ")";
 
-      for (int i = 1; i < nDim; i++) {
-        Out << "[" << DimString[i] << "]";
+      for (int i = 1; i < nDim.front(); i++) {
+        //Out << "[" << DimString[i] << "]";
+        DimString.pop_front();
+        Out << "[" << DimString.front() << "]";
       }
+      DimString.pop_front();
+      nDim.pop_front();
 
       Out << " = __sotoc_var_" << VarName << ";\n";
 
