@@ -14,6 +14,34 @@
 ///
 //===----------------------------------------------------------------------===//
 
+/*TODO: Adjust transformation of static arrays depending on the pointers given
+        as parameters to the offloading functions.
+
+        Idea for handling static arrays so far: Change the notation of static
+        arrays from array-notation to pointer-notation and handle them.
+          array[i] <=> *(array+i)
+
+        Possible problem: Static arrays are not handled right (or as expected)
+        when creating the __sotoc_var_ pointers and thusly we end up with
+        inconsistancies in the pointers after the transformation.
+
+        Furthermore: As the compiler is unlikely to detect the mentioned
+        inconsistancies (as they are not syntactic [hopefully] but logical) lit
+        will mark the given testcases as PASSED although the data is garbled.
+        Thus a comparison with kwnown-good data should be added to the test.
+
+  TODO: Add functionality for multidimensional, static arrays
+
+        Idea so far: Cast type till NULL, sum up sizes
+        (for malloc [just in case]), pass pointer (as above) and sizes of
+        sub-arrays and reconstruct in target region.
+
+        A[i][j] = *(A[j] + i) = *(*(A + j) + i)
+        A[i][j][k] = *(A[j][k] + i) = *(*(A[k] + j) + i) = *(*(*(A + k) + j) + i)
+
+        Important: [] have higher precedence then *, so int (*arr)[j] = A (dim(A) = 2)
+*/
+
 #include <sstream>
 
 #include "clang/AST/Decl.h"
@@ -25,6 +53,7 @@
 #include "clang/Lex/Lexer.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/APInt.h"
 
 #include "TargetCode.h"
 
@@ -97,32 +126,81 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
   auto tmpSL = TCR->getStartLoc();
 
+  std::list<int> nDim;
+  std::list<std::string> DimString;
+
   std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
-  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
-       i != e; ++i) {
+  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd(); i != e; ++i) {
     if (!first) {
       Out << ", ";
     }
     first = false;
 
-    Out << (*i)->getType().getAsString() << " ";
-    if (!(*i)->getType().getTypePtr()->isPointerType()) {
-      Out << "*__sotoc_var_";
+    // check for static arrays, because of AST representation and naive getType
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*i)->getType().getTypePtr())){
+      // possibly use t->getSize().toString(10, false) to get the size of the array
+      int dim = 0;
+      auto VarName = (*i)->getDeclName().getAsString();
+      auto OrigT = t;
+
+      // extract Sizes from AST by casting type and push to DimString
+      do {
+        DimString.push_back(t->getSize().toString(10, false));
+        ++dim;
+
+        OrigT = t;
+        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
+      } while (t != NULL);
+
+      Out << "void *__sotoc_var_" << VarName; // set type to void* to avoid warnings from the compiler
+      nDim.push_back(dim); // push total number of dimensions
+
+    } else {
+      Out << (*i)->getType().getAsString() << " ";
+      if (!(*i)->getType().getTypePtr()->isPointerType()) {
+        Out << "*__sotoc_var_";
+      }
+      Out << (*i)->getDeclName().getAsString();
+      //TODO: use `Name.print` instead
     }
-    Out << (*i)->getDeclName().getAsString();
-    // todo: use `Name.print` instead
   }
   Out << ")\n{\n";
 
   // bring captured scalars into scope
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
-    if (!(*I)->getType().getTypePtr()->isPointerType()) {
+
+    // again check for static arrays
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
       auto VarName = (*I)->getDeclName().getAsString();
-      Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
-          << "*__sotoc_var_" << VarName << ";\n";
+      auto OrigT = t;
+
+      do {
+        OrigT = t;
+        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
+      } while (t != NULL);
+
+      Out << "  " << OrigT->getElementType().getAsString() << " (*"
+          << VarName << ")";
+
+      // Get number of Dimensions(nDim) and write sizes(DimString)
+      for (int i = 1; i < nDim.front(); i++) {
+        DimString.pop_front();
+        Out << "[" << DimString.front() << "]";
+      }
+      DimString.pop_front(); // remove last size
+      nDim.pop_front(); // remove number of dimensions of last variable
+
+      Out << " = __sotoc_var_" << VarName << ";\n";
+
+    } else {
+      if (!(*I)->getType().getTypePtr()->isPointerType()) {
+        auto VarName = (*I)->getDeclName().getAsString();
+        Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
+            << "*__sotoc_var_" << VarName << ";\n";
+      }
     }
   }
   Out << "\n";
@@ -154,9 +232,16 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   // copy values from scalars from scoped vars back into pointers
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
-    if (!(*I)->getType().getTypePtr()->isPointerType()) {
-      auto VarName = (*I)->getDeclName().getAsString();
-      Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
+
+    // if array then already pointer
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
+       auto VarName = (*I)->getDeclName().getAsString();
+       Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
+    } else {
+       if (!(*I)->getType().getTypePtr()->isPointerType()) {
+         auto VarName = (*I)->getDeclName().getAsString();
+         Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
+       }
     }
   }
 
