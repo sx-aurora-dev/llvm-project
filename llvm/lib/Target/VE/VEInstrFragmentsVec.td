@@ -120,6 +120,20 @@ def VEvmulswzx : SDNode<"VEISD::INT_VMULSWZX", VE2OpVXVMV>;
 def VEvmulsl : SDNode<"VEISD::INT_VMULSL", VE2OpVXVMV>;
 def VEvmaxsl : SDNode<"VEISD::INT_VMAXSL", VE2OpVXVMV>;
 def VEvminsl : SDNode<"VEISD::INT_VMINSL", VE2OpVXVMV>;
+def VEvfaddd : SDNode<"VEISD::INT_VFADDD", VE2OpVXVMV>;
+def VEvfadds : SDNode<"VEISD::INT_VFADDS", VE2OpVXVMV>;
+def VEvfsubd : SDNode<"VEISD::INT_VFSUBD", VE2OpVXVMV>;
+def VEvfsubs : SDNode<"VEISD::INT_VFSUBS", VE2OpVXVMV>;
+def VEvfmuld : SDNode<"VEISD::INT_VFMULD", VE2OpVXVMV>;
+def VEvfmuls : SDNode<"VEISD::INT_VFMULS", VE2OpVXVMV>;
+def VEvfdivd : SDNode<"VEISD::INT_VFDIVD", VE2OpVXVMV>;
+def VEvfdivs : SDNode<"VEISD::INT_VFDIVS", VE2OpVXVMV>;
+def VEvfcmpd : SDNode<"VEISD::INT_VFCMPD", VE2OpVXVMV>;
+def VEvfcmps : SDNode<"VEISD::INT_VFCMPS", VE2OpVXVMV>;
+def VEvfmaxd : SDNode<"VEISD::INT_VFMAXD", VE2OpVXVMV>;
+def VEvfmaxs : SDNode<"VEISD::INT_VFMAXS", VE2OpVXVMV>;
+def VEvfmind : SDNode<"VEISD::INT_VFMIND", VE2OpVXVMV>;
+def VEvfmins : SDNode<"VEISD::INT_VFMINS", VE2OpVXVMV>;
 
 // Either of 
 // (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base)))

@@ -266,8 +266,8 @@ multiclass RVLm<string opcStr, bits<8> opc> {
 // f64, f32, packed f32
 multiclass RVDSPm<string opcStr, bits<8> opc> {
   // last argument should not be used...
-  let cx = 0, cx2 = 0 in defm d : RV3m<opcStr # ".d", opc, I64, VM, simm7Op64>; // double
-  let cx = 1, cx2 = 0 in defm s : RV3m<opcStr # ".s", opc, F32, VM, simm7Op64>; // float
+  let cx = 0, cx2 = 0 in defm d : RV3m<opcStr # ".d", opc, I64, VMN, simm7Op64>; // double
+  let cx = 1, cx2 = 0 in defm s : RV3m<opcStr # ".s", opc, F32, VMN, simm7Op64>; // float
   let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, I64, VM512, simm7Op64>; // packed
 }
 
