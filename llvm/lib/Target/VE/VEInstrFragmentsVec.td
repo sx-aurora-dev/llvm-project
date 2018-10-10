@@ -196,6 +196,10 @@ def VEvslaw : SDNode<"VEISD::INT_VSLAW", VE2OpVVXMV>;
 def VEvslal : SDNode<"VEISD::INT_VSLAL", VE2OpVVXMV>;
 def VEvsraw : SDNode<"VEISD::INT_VSRAW", VE2OpVVXMV>;
 def VEvsral : SDNode<"VEISD::INT_VSRAL", VE2OpVVXMV>;
+def VEpvsll : SDNode<"VEISD::INT_PVSLL", VE2OpVVXMV>;
+def VEpvsrl : SDNode<"VEISD::INT_PVSRL", VE2OpVVXMV>;
+def VEpvsla : SDNode<"VEISD::INT_PVSLA", VE2OpVVXMV>;
+def VEpvsra : SDNode<"VEISD::INT_PVSRA", VE2OpVVXMV>;
 
 //===----------------------------------------------------------------------===//
 // 3-op vector with mask and base register instructions

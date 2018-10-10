@@ -180,6 +180,10 @@ namespace llvm {
       INT_VSLAL,    // for int_ve_vslal_vvvmv or int_ve_vslal_vvsmv
       INT_VSRAW,    // for int_ve_vsraw_vvvmv or int_ve_vsraw_vvsmv
       INT_VSRAL,    // for int_ve_vsral_vvvmv or int_ve_vsral_vvsmv
+      INT_PVSLL,    // for int_ve_pvsll_vvvMv or int_ve_pvsll_vvsMv
+      INT_PVSRL,    // for int_ve_pvsrl_vvvMv or int_ve_pvsrl_vvsMv
+      INT_PVSLA,    // for int_ve_pvsla_vvvMv or int_ve_pvsla_vvsMv
+      INT_PVSRA,    // for int_ve_pvsra_vvvMv or int_ve_pvsra_vvsMv
     };
   }
 

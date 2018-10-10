@@ -721,7 +721,7 @@ multiclass ShiftPacked<string opcStr, bits<8> opc> {
       let m = 0;
   }
 
-  def pvm : RV3<opc, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64:$vd),
+  def pvm : RV3<opc, (outs V64:$vx), (ins V64:$vz, V64:$vy, VMN512:$vm, V64:$vd),
     !strconcat("p", opcStr, " $vx,$vz,$vy,$vm"), []> {
       let cx = 1;
       let cx2 = 1;
@@ -729,7 +729,7 @@ multiclass ShiftPacked<string opcStr, bits<8> opc> {
       let Constraints = "$vx = $vd";
   }
 
-  def prm2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512:$vm, V64:$vd),
+  def prm2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy, VMN512:$vm, V64:$vd),
     !strconcat("p", opcStr, " $vx,$vz,$sy,$vm"), []> {
       let cx = 1;
       let cx2 = 1;
