@@ -260,7 +260,7 @@ multiclass RVWm<string opcStr, bits<8> opc> {
 
 // i64
 multiclass RVLm<string opcStr, bits<8> opc> {
-  defm l : RV3m<opcStr # ".l", opc, I64, VM, simm7Op64>;
+  defm l : RV3m<opcStr # ".l", opc, I64, VMN, simm7Op64>;
 }
 
 // f64, f32, packed f32
