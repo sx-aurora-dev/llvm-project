@@ -134,6 +134,12 @@ def VEvfmaxd : SDNode<"VEISD::INT_VFMAXD", VE2OpVXVMV>;
 def VEvfmaxs : SDNode<"VEISD::INT_VFMAXS", VE2OpVXVMV>;
 def VEvfmind : SDNode<"VEISD::INT_VFMIND", VE2OpVXVMV>;
 def VEvfmins : SDNode<"VEISD::INT_VFMINS", VE2OpVXVMV>;
+def VEpvfadd : SDNode<"VEISD::INT_PVFADD", VE2OpVXVMV>;
+def VEpvfsub : SDNode<"VEISD::INT_PVFSUB", VE2OpVXVMV>;
+def VEpvfmul : SDNode<"VEISD::INT_PVFMUL", VE2OpVXVMV>;
+def VEpvfcmp : SDNode<"VEISD::INT_PVFCMP", VE2OpVXVMV>;
+def VEpvfmax : SDNode<"VEISD::INT_PVFMAX", VE2OpVXVMV>;
+def VEpvfmin : SDNode<"VEISD::INT_PVFMIN", VE2OpVXVMV>;
 
 // Either of 
 // (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base)))
