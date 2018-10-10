@@ -166,6 +166,10 @@ namespace llvm {
       INT_VOR,      // for int_ve_vor_vvvmv or int_ve_vor_vsvmv
       INT_VXOR,     // for int_ve_vxor_vvvmv or int_ve_vxor_vsvmv
       INT_VEQV,     // for int_ve_veqv_vvvmv or int_ve_veqv_vsvmv
+      INT_PVAND,    // for int_ve_pvand_vvvMv or int_ve_pvand_vsvMv
+      INT_PVOR,     // for int_ve_pvor_vvvMv or int_ve_pvor_vsvMv
+      INT_PVXOR,    // for int_ve_pvxor_vvvMv or int_ve_pvxor_vsvMv
+      INT_PVEQV,    // for int_ve_pveqv_vvvMv or int_ve_pveqv_vsvMv
     };
   }
 

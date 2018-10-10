@@ -144,6 +144,10 @@ def VEvand : SDNode<"VEISD::INT_VAND", VE2OpVXVMV>;
 def VEvor : SDNode<"VEISD::INT_VOR", VE2OpVXVMV>;
 def VEvxor : SDNode<"VEISD::INT_VXOR", VE2OpVXVMV>;
 def VEveqv : SDNode<"VEISD::INT_VEQV", VE2OpVXVMV>;
+def VEpvand : SDNode<"VEISD::INT_PVAND", VE2OpVXVMV>;
+def VEpvor : SDNode<"VEISD::INT_PVOR", VE2OpVXVMV>;
+def VEpvxor : SDNode<"VEISD::INT_PVXOR", VE2OpVXVMV>;
+def VEpveqv : SDNode<"VEISD::INT_PVEQV", VE2OpVXVMV>;
 
 // Either of 
 // (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base)))

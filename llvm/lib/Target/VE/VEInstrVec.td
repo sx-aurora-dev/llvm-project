@@ -351,7 +351,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
 
   // TODO: im0, im1
 
-  def pvm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd),
+  def pvm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VMN512:$vm, V64:$vd),
     !strconcat("p", opcStr, " $vx,$vy,$vz,$vm"), []> {
       let cx = 1;
       let cx2 = 1;
@@ -359,7 +359,7 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
       let Constraints = "$vx = $vd";
   }
 
-  def prm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd),
+  def prm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VMN512:$vm, V64:$vd),
     !strconcat("p", opcStr, " $vx,$sy,$vz,$vm"), []> {
       let cx = 1;
       let cx2 = 1;
