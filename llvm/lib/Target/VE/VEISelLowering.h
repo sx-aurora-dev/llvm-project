@@ -174,6 +174,12 @@ namespace llvm {
       INT_VBRDU,    // for int_ve_vbrdu_vsmv_f32
       INT_VBRDL,    // for int_ve_vbrdl_vsmv_i32
       INT_PVBRD,    // for int_ve_pvbrd_vsMv_i64
+      INT_VSLL,     // for int_ve_vsll_vvvmv or int_ve_vsll_vvsmv
+      INT_VSRL,     // for int_ve_vsrl_vvvmv or int_ve_vsrl_vvsmv
+      INT_VSLAW,    // for int_ve_vslaw_vvvmv or int_ve_vslaw_vvsmv
+      INT_VSLAL,    // for int_ve_vslal_vvvmv or int_ve_vslal_vvsmv
+      INT_VSRAW,    // for int_ve_vsraw_vvvmv or int_ve_vsraw_vvsmv
+      INT_VSRAL,    // for int_ve_vsral_vvvmv or int_ve_vsral_vvsmv
     };
   }
 

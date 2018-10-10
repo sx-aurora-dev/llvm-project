@@ -676,7 +676,7 @@ multiclass Shift<string opcStr, bits<8> opc> {
       let m = 0;
   }
 
-  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd),
+  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vz, V64:$vy, VMN:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$vz,$vy,$vm"), []> {
       let cx = 0;
       let cx2 = 0;
@@ -684,7 +684,7 @@ multiclass Shift<string opcStr, bits<8> opc> {
       let Constraints = "$vx = $vd";
   }
 
-  def rm2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd),
+  def rm2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy, VMN:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$vz,$sy,$vm"), []> {
       let cx = 0;
       let cx2 = 0;
@@ -693,7 +693,7 @@ multiclass Shift<string opcStr, bits<8> opc> {
       let Constraints = "$vx = $vd";
   }
 
-  def im2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, uimm6Op64:$sy, VM:$vm, V64:$vd),
+  def im2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, uimm6Op64:$sy, VMN:$vm, V64:$vd),
     !strconcat(opcStr, " $vx,$vz,$sy,$vm"), []> {
       let cx = 0;
       let cx2 = 0;
