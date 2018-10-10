@@ -273,8 +273,8 @@ multiclass RVDSPm<string opcStr, bits<8> opc> {
 
 // f64, f32, packed f32 (4 operands)
 multiclass RV4DSPm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm d : RV4m<opcStr # ".d", opc, I64, VM>; // double
-  let cx = 1, cx2 = 0 in defm s : RV4m<opcStr # ".s", opc, F32, VM>; // float
+  let cx = 0, cx2 = 0 in defm d : RV4m<opcStr # ".d", opc, I64, VMN>; // double
+  let cx = 1, cx2 = 0 in defm s : RV4m<opcStr # ".s", opc, F32, VMN>; // float
   let cx = 1, cx2 = 1 in defm p : RV4m<"p" # opcStr, opc, I64, VM512>; // packed
 }
 
