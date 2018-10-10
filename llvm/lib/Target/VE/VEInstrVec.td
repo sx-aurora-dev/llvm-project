@@ -784,8 +784,8 @@ def VSFAim : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$vm, V6
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 
 multiclass VFSQRTm<string opcStr, bits<8> opc> {
-  let cx = 0 in defm d : RV2vm<opcStr # ".d", opc, VM>;
-  let cx = 1 in defm s : RV2vm<opcStr # ".s", opc, VM>;
+  let cx = 0 in defm d : RV2vm<opcStr # ".d", opc, VMN>;
+  let cx = 1 in defm s : RV2vm<opcStr # ".s", opc, VMN>;
 }
 
 multiclass VRCPm<string opcStr, bits<8> opc> {
@@ -812,12 +812,12 @@ multiclass VRCPm<string opcStr, bits<8> opc> {
 }
 
 multiclass VRSQRTm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm d : RV2vm<opcStr # ".d", opc, VM>;
-  let cx = 1, cx2 = 0 in defm s : RV2vm<opcStr # ".s", opc, VM>;
-  let cx = 1, cx2 = 1 in defm p : RV2vm<"p" # opcStr, opc, VM>;
-  let cx = 0, cx2 = 0, cs2 = 1 in defm dnex : RV2vm<opcStr # ".d.nex", opc, VM>;
-  let cx = 1, cx2 = 0, cs2 = 1 in defm snex : RV2vm<opcStr # ".s.nex", opc, VM>;
-  let cx = 1, cx2 = 1, cs2 = 1 in defm pnex : RV2vm<"p" # opcStr # ".nex", opc, VM>;
+  let cx = 0, cx2 = 0 in defm d : RV2vm<opcStr # ".d", opc, VMN>;
+  let cx = 1, cx2 = 0 in defm s : RV2vm<opcStr # ".s", opc, VMN>;
+  let cx = 1, cx2 = 1 in defm p : RV2vm<"p" # opcStr, opc, VMN>;
+  let cx = 0, cx2 = 0, cs2 = 1 in defm dnex : RV2vm<opcStr # ".d.nex", opc, VMN>;
+  let cx = 1, cx2 = 0, cs2 = 1 in defm snex : RV2vm<opcStr # ".s.nex", opc, VMN>;
+  let cx = 1, cx2 = 1, cs2 = 1 in defm pnex : RV2vm<"p" # opcStr # ".nex", opc, VMN>;
 }
 
 defm VFAD : RVDSPm<"vfadd", 0xCC>;
