@@ -559,14 +559,14 @@ multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass
   }
 }
 
-let cx = 0, cx2 = 0 in defm VBRD : VBRDm<"vbrd", 0x8C, VM, I64, simm7Op64>;   // 64b
-let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C, VM, I64, simm7Op64>; // 32b lower (= i32/u32)
-let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C, VM, I64, simm7Op64>; // 32b uppper(= f32)
-let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C, VM512, I64, simm7Op64>; // 32b packed
+let cx = 0, cx2 = 0 in defm VBRD : VBRDm<"vbrd", 0x8C, VMN, I64, simm7Op64>;   // 64b
+let cx = 1, cx2 = 0 in defm VBRDl : VBRDm<"vbrdl", 0x8C, VMN, I64, simm7Op64>; // 32b lower (= i32/u32)
+let cx = 0, cx2 = 1 in defm VBRDu : VBRDm<"vbrdu", 0x8C, VMN, I64, simm7Op64>; // 32b uppper(= f32)
+let cx = 1, cx2 = 1 in defm VBRDp : VBRDm<"pvbrd", 0x8C, VMN512, I64, simm7Op64>; // 32b packed
 
-let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf64 : VBRDm<"vbrd", 0x8C, VM, I64, simm7Op64>;
-let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf32 : VBRDm<"vbrdu", 0x8C, VM, F32, simm7Op64>;
-let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDi32 : VBRDm<"vbrdl", 0x8C, VM, I32, simm7Op32>;
+let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf64 : VBRDm<"vbrd", 0x8C, VMN, I64, simm7Op64>;
+let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf32 : VBRDm<"vbrdu", 0x8C, VMN, F32, simm7Op64>;
+let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDi32 : VBRDm<"vbrdl", 0x8C, VMN, I32, simm7Op32>;
 
 def VMVr : RV<0x9C, (outs V64:$vx), (ins I32:$sy, V64:$vz),
   "vmv $vx,$sy,$vz", []> {

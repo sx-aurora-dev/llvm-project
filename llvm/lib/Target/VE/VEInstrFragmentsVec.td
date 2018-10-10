@@ -74,6 +74,23 @@ def VElzvm : SDNode<"VEISD::INT_LZVM", VE1OpSM>;
 def VEtovm : SDNode<"VEISD::INT_TOVM", VE1OpSM>;
 
 //===----------------------------------------------------------------------===//
+// 1-op with mask and base register instructions
+//===----------------------------------------------------------------------===//
+
+// Either of
+// (v256f64 (VBRD (f64 sy), (vNi1 vy), (v256f64 base)))
+// (v256f64 (VBRD (i64 sy), (vNi1 vy), (v256f64 base)))
+
+def VE1OpVSMV :
+    SDTypeProfile<1, 3, [SDTCisVec<0>,
+                         SDTCisVec<2>, SDTCVecEltisVT<2, i1>,
+                         SDTCisSameAs<3, 0>]>;
+def VEvbrd : SDNode<"VEISD::INT_VBRD", VE1OpVSMV>;
+def VEvbrdu : SDNode<"VEISD::INT_VBRDU", VE1OpVSMV>;
+def VEvbrdl : SDNode<"VEISD::INT_VBRDL", VE1OpVSMV>;
+def VEpvbrd : SDNode<"VEISD::INT_PVBRD", VE1OpVSMV>;
+
+//===----------------------------------------------------------------------===//
 // 2-op vector with mask and base register instructions
 //===----------------------------------------------------------------------===//
 
