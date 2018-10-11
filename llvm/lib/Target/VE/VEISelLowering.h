@@ -212,6 +212,10 @@ namespace llvm {
       INT_VSC_M,    // for int_ve_vsc_vvm
       INT_VSCU_M,   // for int_ve_vscu_vvm
       INT_VSCL_M,   // for int_ve_vscl_vvm
+      INT_EXTMU,    // for int_ve_extract_vm512u
+      INT_EXTML,    // for int_ve_extract_vm512l
+      INT_INSMU,    // for int_ve_insert_vm512u
+      INT_INSML,    // for int_ve_insert_vm512l
     };
   }
 

@@ -629,3 +629,15 @@ def : Pat<(VEnegm v512i1:$vmy), (NEGMp v512i1:$vmy)>;
 def : Pat<(VEpcvm v256i1:$vmy), (PCVM v256i1:$vmy)>;
 def : Pat<(VElzvm v256i1:$vmy), (LZVM v256i1:$vmy)>;
 def : Pat<(VEtovm v256i1:$vmy), (TOVM v256i1:$vmy)>;
+
+def : Pat<(v256i1 (VEextmu VMN512:$vm)),
+          (v256i1 (EXTRACT_SUBREG VMN512:$vm, sub_vm_odd))>;
+
+def : Pat<(v256i1 (VEextml VMN512:$vm)),
+          (v256i1 (EXTRACT_SUBREG VMN512:$vm, sub_vm_even))>;
+
+def : Pat<(v512i1 (VEinsmu VMN512:$vmx, VMN:$vmy)),
+          (v512i1 (INSERT_SUBREG VMN512:$vmx, VMN:$vmy, sub_vm_odd))>;
+
+def : Pat<(v512i1 (VEinsml VMN512:$vmx, VMN:$vmy)),
+          (v512i1 (INSERT_SUBREG VMN512:$vmx, VMN:$vmy, sub_vm_even))>;

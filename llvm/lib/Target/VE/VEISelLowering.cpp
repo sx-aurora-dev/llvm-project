@@ -1611,6 +1611,10 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VSC_M:       return "VEISD::INT_VSC_M";
   case VEISD::INT_VSCU_M:      return "VEISD::INT_VSCU_M";
   case VEISD::INT_VSCL_M:      return "VEISD::INT_VSCL_M";
+  case VEISD::INT_EXTMU:       return "VEISD::INT_EXTMU";
+  case VEISD::INT_EXTML:       return "VEISD::INT_EXTML";
+  case VEISD::INT_INSMU:       return "VEISD::INT_INSMU";
+  case VEISD::INT_INSML:       return "VEISD::INT_INSML";
   }
   return nullptr;
 }
@@ -2434,10 +2438,14 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       //     (v4i64 (bitcast (v256i1 (NEGM
       //         (v256i1 (bitcast %vm1))))))
       SDValue Mask = Op.getOperand(1);
-      MVT BitcastVT = MVT::getVectorVT(
+      MVT BitcastVT1 = MVT::getVectorVT(
         MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT, Bitcast);
+      SDValue Bitcast = DAG.getBitcast(BitcastVT1, Mask);
+      // Get bitmask for each operand since for the case.
+      //   e.g. (v256i1 (extract_VM512u (v512i1 %vm)))
+      MVT BitcastVT0 = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Bitcast);
       return DAG.getBitcast(Op.getValueType(), Res);
     }
     case OP_XM: {
@@ -2459,12 +2467,20 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       //   Output:
       //     (v4i64 (bitcast (v256i1 (ANDM
       //         (v256i1 (bitcast %vm1)), (v256i1 (bitcast %vm2))))))
-      SDValue Mask = Op.getOperand(1);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT, Bitcast,
-                                 DAG.getBitcast(BitcastVT, Op.getOperand(2)));
+      SDValue Mask1 = Op.getOperand(1);
+      MVT BitcastVT1 = MVT::getVectorVT(
+        MVT::i1, Mask1.getValueType().getSizeInBits());
+      SDValue Bitcast1 = DAG.getBitcast(BitcastVT1, Mask1);
+      // Get bitmask for each operand since for the case.
+      //   e.g. (v512i1 (insert_VM512u (v512i1 %vm1), (v256i1 %vm2)))
+      SDValue Mask2 = Op.getOperand(2);
+      MVT BitcastVT2 = MVT::getVectorVT(
+        MVT::i1, Mask2.getValueType().getSizeInBits());
+      SDValue Bitcast2 = DAG.getBitcast(BitcastVT2, Mask2);
+      MVT BitcastVT0 = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0,
+                                 Bitcast1, Bitcast2);
       return DAG.getBitcast(Op.getValueType(), Res);
     }
     case OP_XXMX: {
