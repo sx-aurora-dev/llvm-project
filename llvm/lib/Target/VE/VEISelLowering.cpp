@@ -1586,6 +1586,14 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VMRGW:       return "VEISD::INT_VMRGW";
   case VEISD::INT_VCP:         return "VEISD::INT_VCP";
   case VEISD::INT_VEX:         return "VEISD::INT_VEX";
+  case VEISD::INT_VFMKL:       return "VEISD::INT_VFMKL";
+  case VEISD::INT_VFMKL_M:     return "VEISD::INT_VFMKL_M";
+  case VEISD::INT_VFMKW:       return "VEISD::INT_VFMKW";
+  case VEISD::INT_VFMKW_M:     return "VEISD::INT_VFMKW_M";
+  case VEISD::INT_VFMKD:       return "VEISD::INT_VFMKD";
+  case VEISD::INT_VFMKD_M:     return "VEISD::INT_VFMKD_M";
+  case VEISD::INT_VFMKS:       return "VEISD::INT_VFMKS";
+  case VEISD::INT_VFMKS_M:     return "VEISD::INT_VFMKS_M";
   }
   return nullptr;
 }
@@ -2475,6 +2483,34 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
                          Op.getOperand(1), Op.getOperand(2),
                          Bitcast, Op.getOperand(4));
+    }
+    case OP_MXX: {
+      // 2-operand intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_vfmkl_mcvm (i64 %cf), (v256i64 %vz)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (VFMKL %cf, %vz))))
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT,
+                                 Op.getOperand(1), Op.getOperand(2));
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_MXXM: {
+      // 2-operand and base mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_vfmkl_mcvm (i64 %cf), (v256i64 %vz), (v4i64 %vm)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (VFMKL
+      //         %cf, %vz, (v256i1 (bitcast %vm1))))))
+      SDValue Mask = Op.getOperand(3);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT,
+                                 Op.getOperand(1), Op.getOperand(2),
+                                 Bitcast);
+      return DAG.getBitcast(Op.getValueType(), Res);
     }
     case OP_XXXXMX: {
       // 3-operand vector calculation with mask and base vector intrinsics

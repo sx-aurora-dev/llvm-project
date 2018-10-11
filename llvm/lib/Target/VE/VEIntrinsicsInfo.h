@@ -26,6 +26,7 @@ enum IntrinsicType : uint16_t {
   OP_XXXM,
   OP_XXXMX,
   OP_XXXXMX,
+  OP_MXX, OP_MXXM,
 };
 
 struct IntrinsicData {
@@ -220,6 +221,14 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(vfmind_vvvmv,       OP_XXXMX,   VEISD::INT_VFMIND, 0),
   VE_INTRINSIC_DATA(vfmins_vsvmv,       OP_XXXMX,   VEISD::INT_VFMINS, 0),
   VE_INTRINSIC_DATA(vfmins_vvvmv,       OP_XXXMX,   VEISD::INT_VFMINS, 0),
+  VE_INTRINSIC_DATA(vfmkd_mcv,          OP_MXX,     VEISD::INT_VFMKD, 0),
+  VE_INTRINSIC_DATA(vfmkd_mcvm,         OP_MXXM,    VEISD::INT_VFMKD_M, 0),
+  VE_INTRINSIC_DATA(vfmkl_mcv,          OP_MXX,     VEISD::INT_VFMKL, 0),
+  VE_INTRINSIC_DATA(vfmkl_mcvm,         OP_MXXM,    VEISD::INT_VFMKL_M, 0),
+  VE_INTRINSIC_DATA(vfmks_mcv,          OP_MXX,     VEISD::INT_VFMKS, 0),
+  VE_INTRINSIC_DATA(vfmks_mcvm,         OP_MXXM,    VEISD::INT_VFMKS_M, 0),
+  VE_INTRINSIC_DATA(vfmkw_mcv,          OP_MXX,     VEISD::INT_VFMKW, 0),
+  VE_INTRINSIC_DATA(vfmkw_mcvm,         OP_MXXM,    VEISD::INT_VFMKW_M, 0),
   VE_INTRINSIC_DATA(vfmsbd_vsvvmv,      OP_XXXXMX,  VEISD::INT_VFMSBD, 0),
   VE_INTRINSIC_DATA(vfmsbd_vvsvmv,      OP_XXXXMX,  VEISD::INT_VFMSBD, 0),
   VE_INTRINSIC_DATA(vfmsbd_vvvvmv,      OP_XXXXMX,  VEISD::INT_VFMSBD, 0),

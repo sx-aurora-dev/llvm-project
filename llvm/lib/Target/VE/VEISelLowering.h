@@ -189,6 +189,14 @@ namespace llvm {
       INT_VMRGW,    // for int_ve_vmrgw_vvvM
       INT_VCP,      // for int_ve_vcp_vvmv
       INT_VEX,      // for int_ve_vex_vvmv
+      INT_VFMKL,    // for int_ve_vfmkl_mcv
+      INT_VFMKL_M,  // for int_ve_vfmkl_mcvm
+      INT_VFMKW,    // for int_ve_vfmkw_mcv
+      INT_VFMKW_M,  // for int_ve_vfmkw_mcvm
+      INT_VFMKD,    // for int_ve_vfmkd_mcv
+      INT_VFMKD_M,  // for int_ve_vfmkd_mcvm
+      INT_VFMKS,    // for int_ve_vfmks_mcv
+      INT_VFMKS_M,  // for int_ve_vfmks_mcvm
     };
   }
 

@@ -882,14 +882,14 @@ def VCPvm : VCPEX<0x8D, "vcp">;
 def VEXvm : VCPEX<0x9D, "vex">;
 
 multiclass VFMKm<string opcStr, bits<8> opc> {
-  def v : RV<opc, (outs VM:$vm), (ins CCOp:$cf, V64:$vz),
+  def v : RV<opc, (outs VMN:$vm), (ins CCOp:$cf, V64:$vz),
     !strconcat(opcStr, ".${cf} $vm,$vz"), []> {
       let sy = 0;
       let vw = 0;
       let m = 0;
     }
 
-  def vm : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz, VM:$vm),
+  def vm : RV<opc, (outs VMN:$vmx), (ins CCOp:$cf, V64:$vz, VMN:$vm),
     !strconcat(opcStr, ".${cf} $vmx,$vz,$vm"), []> {
       let sy = 0;
       let vw = 0;
