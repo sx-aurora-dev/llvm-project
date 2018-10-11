@@ -21,6 +21,7 @@ namespace llvm {
 
 enum IntrinsicType : uint16_t {
   LOAD, STORE,
+  OP_M,
   OP_MMM, OP_MM, OP_XM,
   OP_XXMX,
   OP_XXXM,
@@ -221,6 +222,8 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(vfmind_vvvmv,       OP_XXXMX,   VEISD::INT_VFMIND, 0),
   VE_INTRINSIC_DATA(vfmins_vsvmv,       OP_XXXMX,   VEISD::INT_VFMINS, 0),
   VE_INTRINSIC_DATA(vfmins_vvvmv,       OP_XXXMX,   VEISD::INT_VFMINS, 0),
+  VE_INTRINSIC_DATA(vfmkaf_m,           OP_M,       VEISD::INT_VFMKAF, 0),
+  VE_INTRINSIC_DATA(vfmkat_m,           OP_M,       VEISD::INT_VFMKAT, 0),
   VE_INTRINSIC_DATA(vfmkd_mcv,          OP_MXX,     VEISD::INT_VFMKD, 0),
   VE_INTRINSIC_DATA(vfmkd_mcvm,         OP_MXXM,    VEISD::INT_VFMKD_M, 0),
   VE_INTRINSIC_DATA(vfmkl_mcv,          OP_MXX,     VEISD::INT_VFMKL, 0),

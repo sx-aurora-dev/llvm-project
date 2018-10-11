@@ -905,20 +905,20 @@ let cx = 0, cx2 = 1 in defm VFMFl : VFMKm<"pvfmk.s.lo", 0xB6>;
 
 // at and af 64b
 let sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
-def VFMKat : RV<0xB4, (outs VM:$vm), (ins), "vfmk.l.at $vm", []>;
+def VFMKat : RV<0xB4, (outs VMN:$vm), (ins), "vfmk.l.at $vm", []>;
 
 let sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
-def VFMKaf : RV<0xB4, (outs VM:$vm), (ins), "vfmk.l.af $vm", []>;
+def VFMKaf : RV<0xB4, (outs VMN:$vm), (ins), "vfmk.l.af $vm", []>;
 
 // at and af for 32b lower and upper
 let cx = 0, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
-def VFMSuat : RV<0xB5, (outs VM:$vm), (ins), "pvfmk.w.up.at $vm", []>;
+def VFMSuat : RV<0xB5, (outs VMN:$vm), (ins), "pvfmk.w.up.at $vm", []>;
 let cx = 1, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
-def VFMSlat : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.at $vm", []>;
+def VFMSlat : RV<0xB5, (outs VMN:$vm), (ins), "vfmk.w.at $vm", []>;
 let cx = 0, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
-def VFMSuaf : RV<0xB5, (outs VM:$vm), (ins), "pvfmk.w.up.af $vm", []>;
+def VFMSuaf : RV<0xB5, (outs VMN:$vm), (ins), "pvfmk.w.up.af $vm", []>;
 let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
-def VFMSlaf : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.af $vm", []>;
+def VFMSlaf : RV<0xB5, (outs VMN:$vm), (ins), "vfmk.w.af $vm", []>;
 
 // Pseudo for VM512
 def VFMSpv : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz), 

@@ -36,6 +36,28 @@ def VEStoreMask :
 def VEsvm : SDNode<"VEISD::INT_SVM", VEStoreMask>;
 
 //===----------------------------------------------------------------------===//
+// 0-op vector with base mask register instructions
+//===----------------------------------------------------------------------===//
+
+// (v256i1 (VFMKAT))
+
+def VE0OpM :
+    SDTypeProfile<1, 0, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>]>;
+def VEvfmkat : SDNode<"VEISD::INT_VFMKAT", VE0OpM>;
+def VEvfmkaf : SDNode<"VEISD::INT_VFMKAF", VE0OpM>;
+
+//===----------------------------------------------------------------------===//
+// 1-op logical instructions
+//===----------------------------------------------------------------------===//
+
+// (vNi1 (NEGM (vNi1 vy)))
+
+def VE1OpMM :
+    SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
+                         SDTCisSameAs<1, 0>]>;
+def VEnegm : SDNode<"VEISD::INT_NEGM", VE1OpMM>;
+
+//===----------------------------------------------------------------------===//
 // 2-op logical instructions
 //===----------------------------------------------------------------------===//
 
@@ -49,17 +71,6 @@ def VEorm  : SDNode<"VEISD::INT_ORM", VE2OpMMM>;
 def VExorm : SDNode<"VEISD::INT_XORM", VE2OpMMM>;
 def VEeqvm : SDNode<"VEISD::INT_EQVM", VE2OpMMM>;
 def VEnndm : SDNode<"VEISD::INT_NNDM", VE2OpMMM>;
-
-//===----------------------------------------------------------------------===//
-// 1-op logical instructions
-//===----------------------------------------------------------------------===//
-
-// (vNi1 (NEGM (vNi1 vy)))
-
-def VE1OpMM :
-    SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
-                         SDTCisSameAs<1, 0>]>;
-def VEnegm : SDNode<"VEISD::INT_NEGM", VE1OpMM>;
 
 //===----------------------------------------------------------------------===//
 // 1-op instructions
