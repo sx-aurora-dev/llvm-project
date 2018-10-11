@@ -1581,6 +1581,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_PVSRL:       return "VEISD::INT_PVSRL";
   case VEISD::INT_PVSLA:       return "VEISD::INT_PVSLA";
   case VEISD::INT_PVSRA:       return "VEISD::INT_PVSRA";
+  case VEISD::INT_VSFA:        return "VEISD::INT_VSFA";
   }
   return nullptr;
 }
@@ -2411,7 +2412,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT, Bitcast);
       return DAG.getBitcast(Op.getValueType(), Res);
     }
-    case OP_SM: {
+    case OP_XM: {
       // 1-operand mask intrinsics
       //   Input:
       //     (i64 (int_ve_pcvm_mmm (v4i64 %vm)))
@@ -2423,7 +2424,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast);
     }
-    case OP_VSMV: {
+    case OP_XXMX: {
       // 1-operand with mask and base register intrinsics
       //   Input:
       //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
@@ -2437,7 +2438,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), 
                          Op.getOperand(1), Bitcast, Op.getOperand(3));
     }
-    case OP_VXXMV: {
+    case OP_XXXMX: {
       // 2-operand vector calculation with mask and base vector intrinsics
       //   Input:
       //     (v256f64 (int_ve_vaddul_vvvmv
@@ -2454,14 +2455,14 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                          Op.getOperand(1), Op.getOperand(2),
                          Bitcast, Op.getOperand(4));
     }
-    case OP_VXXVMV: {
+    case OP_XXXXMX: {
       // 3-operand vector calculation with mask and base vector intrinsics
       //   Input:
-      //     (v256f64 (int_ve_vaddul_vvvmv
+      //     (v256f64 (int_ve_vfmadd_vsvvmv
       //                  (v256f64 %v1), (v256f64 %v2), (v256f64 %v3),
       //                  (v4i64 %vm), (v256f64 %vd)))
       //   Output:
-      //     (v256f64 (VADDlvm %v1, %v2, %v3,
+      //     (v256f64 (VFMADD %v1, %v2, %v3,
       //                  (v256i1 (bitcast %vm)), %vd))
       SDValue Mask = Op.getOperand(4);
       MVT BitcastVT = MVT::getVectorVT(

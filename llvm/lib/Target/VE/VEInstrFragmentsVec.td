@@ -231,3 +231,19 @@ def VEpvfmsb : SDNode<"VEISD::INT_PVFMSB", VE3OpVXXVMV>;
 def VEpvfnmad : SDNode<"VEISD::INT_PVFNMAD", VE3OpVXXVMV>;
 def VEpvfnmsb : SDNode<"VEISD::INT_PVFNMSB", VE3OpVXXVMV>;
 
+//===----------------------------------------------------------------------===//
+// 3-op vector with mask and base register instructions
+//===----------------------------------------------------------------------===//
+
+// Either of 
+// (v256f64 (VSFArm (v256f64 vz), (i64 sy), (i64 sz),
+//                  (v256i1 vm), (v256f64 base)))
+
+def VE3OpVVSSMV :
+    SDTypeProfile<1, 5, [SDTCisVec<0>, 
+                         SDTCisSameAs<1, 0>,
+                         SDTCisSameAs<3, 2>,
+                         SDTCisVec<4>, SDTCVecEltisVT<4, i1>,
+                         SDTCisSameAs<5, 0>]>;
+def VEvsfa : SDNode<"VEISD::INT_VSFA", VE3OpVVSSMV>;
+

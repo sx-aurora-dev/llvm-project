@@ -759,7 +759,7 @@ def VSFAr : RV<0xD7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$sy, I64:$sz),
     let m = 0;
   }
 
-def VSFArm : RV<0xD7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$sy, I64:$sz, VM:$vm, V64:$vd),
+def VSFArm : RV<0xD7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$sy, I64:$sz, VMN:$vm, V64:$vd),
   "vsfa $vx,$vz,$sy,$sz,$vm", []> {
     let cy = 0;
     let vy = 0;
@@ -773,7 +773,7 @@ def VSFAi : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz),
     let m = 0;
   }
 
-def VSFAim : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$vm, V64:$vd),
+def VSFAim : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VMN:$vm, V64:$vd),
   "vsfa $vx,$vz,$sy,$sz,$vm", []> {
     let cy = 1;
     let vy = 0;
