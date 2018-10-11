@@ -90,6 +90,16 @@ def VEvbrdu : SDNode<"VEISD::INT_VBRDU", VE1OpVSMV>;
 def VEvbrdl : SDNode<"VEISD::INT_VBRDL", VE1OpVSMV>;
 def VEpvbrd : SDNode<"VEISD::INT_PVBRD", VE1OpVSMV>;
 
+// (v256f64 (VCP (v256f64 sz), (vNi1 vy), (v256f64 base)))
+
+def VE1OpVVMV :
+    SDTypeProfile<1, 3, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>,
+                         SDTCisVec<2>, SDTCVecEltisVT<2, i1>,
+                         SDTCisSameAs<3, 0>]>;
+def VEvcp : SDNode<"VEISD::INT_VCP", VE1OpVVMV>;
+def VEvex : SDNode<"VEISD::INT_VEX", VE1OpVVMV>;
+
 //===----------------------------------------------------------------------===//
 // 2-op vector with mask and base register instructions
 //===----------------------------------------------------------------------===//

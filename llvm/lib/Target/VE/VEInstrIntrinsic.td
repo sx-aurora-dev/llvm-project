@@ -557,8 +557,8 @@ def : Pat<(VEvmrg v256f64:$vy, v256f64:$vz, v256i1:$vm), (VMRGvm v256f64:$vy, v2
 def : Pat<(VEvmrgw v256f64:$vy, v256f64:$vz, v512i1:$vm), (VMRGpvm v256f64:$vy, v256f64:$vz, v512i1:$vm)>;
 def : Pat<(int_ve_vshf_vvvs v256f64:$vy, v256f64:$vz, i64:$sy), (VSHFr v256f64:$vy, v256f64:$vz, i64:$sy)>;
 def : Pat<(int_ve_vshf_vvvs v256f64:$vy, v256f64:$vz, (i64 uimm6:$N)), (VSHFi v256f64:$vy, v256f64:$vz, (i64 uimm6:$N))>;
-def : Pat<(int_ve_vcp_vvmv v256f64:$vz, v4i64:$vm, v256f64:$vd), (VCPvm v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
-def : Pat<(int_ve_vex_vvmv v256f64:$vz, v4i64:$vm, v256f64:$vd), (VEXvm v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
+def : Pat<(VEvcp v256f64:$vz, v256i1:$vm, v256f64:$vd), (VCPvm v256f64:$vz, v256i1:$vm, v256f64:$vd)>;
+def : Pat<(VEvex v256f64:$vz, v256i1:$vm, v256f64:$vd), (VEXvm v256f64:$vz, v256i1:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_vfmkl_mcv (i32 uimm6:$cc), v256f64:$vz), (VFMKv (i32 uimm6:$cc), v256f64:$vz)>;
 def : Pat<(int_ve_vfmkl_mcvm (i32 uimm6:$cc), v256f64:$vz, v4i64:$vm), (VFMKvm (i32 uimm6:$cc), v256f64:$vz, v4i64:$vm)>;
 def : Pat<(int_ve_vfmkat_m ), (VFMKat )>;

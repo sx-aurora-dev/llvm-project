@@ -187,6 +187,8 @@ namespace llvm {
       INT_VSFA,     // for int_ve_vsfa_vvssmv
       INT_VMRG,     // for int_ve_vmrg_vvvm
       INT_VMRGW,    // for int_ve_vmrgw_vvvM
+      INT_VCP,      // for int_ve_vcp_vvmv
+      INT_VEX,      // for int_ve_vex_vvmv
     };
   }
 

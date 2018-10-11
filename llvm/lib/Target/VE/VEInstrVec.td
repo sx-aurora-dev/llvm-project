@@ -872,7 +872,7 @@ def VSHFr : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy),
   "vshf $vx,$vy,$vz,$sy", []>;
 
 class VCPEX<bits<8> opc, string opcStr> 
-  : RV<opc, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd),
+  : RV<opc, (outs V64:$vx), (ins V64:$vz, VMN:$vm, V64:$vd),
   !strconcat(opcStr, " $vx,$vz,$vm"), []> {
     let vy = 0;
     let Constraints = "$vx = $vd";
