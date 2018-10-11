@@ -45,6 +45,8 @@ def VE0OpM :
     SDTypeProfile<1, 0, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>]>;
 def VEvfmkat : SDNode<"VEISD::INT_VFMKAT", VE0OpM>;
 def VEvfmkaf : SDNode<"VEISD::INT_VFMKAF", VE0OpM>;
+def VEpvfmkat : SDNode<"VEISD::INT_PVFMKAT", VE0OpM>;
+def VEpvfmkaf : SDNode<"VEISD::INT_PVFMKAF", VE0OpM>;
 
 //===----------------------------------------------------------------------===//
 // 1-op logical instructions
@@ -125,6 +127,8 @@ def VEvfmkl : SDNode<"VEISD::INT_VFMKL", VE2OpMSV>;
 def VEvfmkw : SDNode<"VEISD::INT_VFMKW", VE2OpMSV>;
 def VEvfmkd : SDNode<"VEISD::INT_VFMKD", VE2OpMSV>;
 def VEvfmks : SDNode<"VEISD::INT_VFMKS", VE2OpMSV>;
+def VEpvfmkw : SDNode<"VEISD::INT_PVFMKW", VE2OpMSV>;
+def VEpvfmks : SDNode<"VEISD::INT_PVFMKS", VE2OpMSV>;
 
 // (v256i1 (VFMKLM (i64 cf), (v256f64 vz), (v256i1 base)))
 
@@ -137,6 +141,8 @@ def VEvfmklm : SDNode<"VEISD::INT_VFMKL_M", VE2OpMSVM>;
 def VEvfmkwm : SDNode<"VEISD::INT_VFMKW_M", VE2OpMSVM>;
 def VEvfmkdm : SDNode<"VEISD::INT_VFMKD_M", VE2OpMSVM>;
 def VEvfmksm : SDNode<"VEISD::INT_VFMKS_M", VE2OpMSVM>;
+def VEpvfmkwm : SDNode<"VEISD::INT_PVFMKW_M", VE2OpMSVM>;
+def VEpvfmksm : SDNode<"VEISD::INT_PVFMKS_M", VE2OpMSVM>;
 
 //===----------------------------------------------------------------------===//
 // 2-op vector with mask and base register instructions

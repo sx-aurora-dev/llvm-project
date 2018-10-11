@@ -197,8 +197,14 @@ namespace llvm {
       INT_VFMKD_M,  // for int_ve_vfmkd_mcvm
       INT_VFMKS,    // for int_ve_vfmks_mcv
       INT_VFMKS_M,  // for int_ve_vfmks_mcvm
-      INT_VFMKAT,    // for int_ve_vfmkat_mcv
-      INT_VFMKAF,    // for int_ve_vfmkaf_mcv
+      INT_VFMKAT,   // for int_ve_vfmkat_mcv
+      INT_VFMKAF,   // for int_ve_vfmkaf_mcv
+      INT_PVFMKW,   // for int_ve_pvfmkw_Mcv
+      INT_PVFMKW_M, // for int_ve_pvfmkw_McvM
+      INT_PVFMKS,   // for int_ve_pvfmks_Mcv
+      INT_PVFMKS_M, // for int_ve_pvfmks_McvM
+      INT_PVFMKAT,  // for int_ve_pvfmkat_mcv
+      INT_PVFMKAF,  // for int_ve_pvfmkaf_mcv
     };
   }
 

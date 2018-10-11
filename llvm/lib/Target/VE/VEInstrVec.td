@@ -921,19 +921,19 @@ let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
 def VFMSlaf : RV<0xB5, (outs VMN:$vm), (ins), "vfmk.w.af $vm", []>;
 
 // Pseudo for VM512
-def VFMSpv : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz), 
+def VFMSpv : PseudoVec<(outs VMN512:$vmx), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vmx,$vz", []>;
-def VFMSpvm : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm), 
+def VFMSpvm : PseudoVec<(outs VMN512:$vmx), (ins CCOp:$cf, V64:$vz, VMN512:$vm), 
                     "# pvfmk.w.${cf} $vmx,$vz,$vm", []> {
                     }
 
-def VFMFpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
+def VFMFpv : PseudoVec<(outs VMN512:$vm), (ins CCOp:$cf, V64:$vz), 
                     "# pvfmk.w.${cf} $vm,$vz", []>;
-def VFMFpvm : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm), 
+def VFMFpvm : PseudoVec<(outs VMN512:$vmx), (ins CCOp:$cf, V64:$vz, VMN512:$vm), 
                     "# pvfmk.w.${cf} $vmx,$vz,$vm", []>;
 
-def VFMKpat : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.at", []>;
-def VFMKpaf : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.af", []>;
+def VFMKpat : PseudoVec<(outs VMN512:$vm), (ins), "# pvfmk.at", []>;
+def VFMKpaf : PseudoVec<(outs VMN512:$vm), (ins), "# pvfmk.af", []>;
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions
