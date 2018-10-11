@@ -167,3 +167,21 @@ define i32 @func10(double, double) {
   %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
   ret i32 %7
 }
+
+define i32 @func11(fp128, fp128) {
+; CHECK-LABEL:  func11:
+; CHECK:        .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:   fcmp.q %s34, %s2, %s0
+; CHECK-NEXT:   brlenan.d 0, %s34, .LBB{{[0-9]+}}_1
+  %3 = fcmp ogt fp128 %0, %1
+  br i1 %3, label %4, label %6
+
+; <label>:4:                                      ; preds = %2
+  %5 = tail call i32 @ret(i32 2)
+  br label %6
+
+; <label>:6:                                      ; preds = %2, %4
+  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
+  ret i32 %7
+}
+
