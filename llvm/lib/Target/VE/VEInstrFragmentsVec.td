@@ -36,6 +36,42 @@ def VEStoreMask :
 def VEsvm : SDNode<"VEISD::INT_SVM", VEStoreMask>;
 
 //===----------------------------------------------------------------------===//
+// Gather with mask instructions
+//===----------------------------------------------------------------------===//
+
+// (v256i64 (VGT (v256i64 vy), (vNi1 vm)))
+
+def VEGatherMask :
+    SDTypeProfile<1, 2, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>,
+                         SDTCisVec<2>, SDTCVecEltisVT<2, i1>]>;
+def VEvgt_m    : SDNode<"VEISD::INT_VGT_M", VEGatherMask,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def VEvgtu_m   : SDNode<"VEISD::INT_VGTU_M", VEGatherMask,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def VEvgtlsx_m : SDNode<"VEISD::INT_VGTLSX_M", VEGatherMask,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def VEvgtlzx_m : SDNode<"VEISD::INT_VGTLZX_M", VEGatherMask,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+
+//===----------------------------------------------------------------------===//
+// Scatter with mask instructions
+//===----------------------------------------------------------------------===//
+
+// (VSC (v256i64 vx), (v256i64 vy), (vNi1 vm))
+
+def VEScatterMask :
+    SDTypeProfile<0, 3, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>,
+                         SDTCisVec<2>, SDTCVecEltisVT<2, i1>]>;
+def VEvsc_m  : SDNode<"VEISD::INT_VSC_M", VEScatterMask,
+                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def VEvscu_m : SDNode<"VEISD::INT_VSCU_M", VEScatterMask,
+                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def VEvscl_m : SDNode<"VEISD::INT_VSCL_M", VEScatterMask,
+                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+
+//===----------------------------------------------------------------------===//
 // 0-op vector with base mask register instructions
 //===----------------------------------------------------------------------===//
 

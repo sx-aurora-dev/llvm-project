@@ -205,6 +205,13 @@ namespace llvm {
       INT_PVFMKS_M, // for int_ve_pvfmks_McvM
       INT_PVFMKAT,  // for int_ve_pvfmkat_mcv
       INT_PVFMKAF,  // for int_ve_pvfmkaf_mcv
+      INT_VGT_M,    // for int_ve_vgt_vvm
+      INT_VGTU_M,   // for int_ve_vgtu_vvm
+      INT_VGTLSX_M, // for int_ve_vgtlsx_vvm
+      INT_VGTLZX_M, // for int_ve_vgtlzx_vvm
+      INT_VSC_M,    // for int_ve_vsc_vvm
+      INT_VSCU_M,   // for int_ve_vscu_vvm
+      INT_VSCL_M,   // for int_ve_vscl_vvm
     };
   }
 
@@ -322,6 +329,7 @@ namespace llvm {
     SDValue LowerF128Compare(SDValue LHS, SDValue RHS, unsigned &SPCC,
                              const SDLoc &DL, SelectionDAG &DAG) const;
 
+    SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
 

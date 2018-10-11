@@ -20,7 +20,8 @@
 namespace llvm {
 
 enum IntrinsicType : uint16_t {
-  LOAD, STORE,
+  GATHER_M, SCATTER_M,
+  OP_MMXX, OP_XMX,
   OP_M,
   OP_MMM, OP_MM, OP_XM,
   OP_XXMX,
@@ -52,12 +53,36 @@ struct IntrinsicData {
   { Intrinsic::ve_##id, type, op0, op1 }
 
 /*
+ * IntrinsicsVoid - the table should be sorted by Intrinsic ID - in
+ * the alphabetical order.
+ */
+static const IntrinsicData IntrinsicsVoid[] = {
+  VE_INTRINSIC_DATA(vsc_vvm,            SCATTER_M,  VEISD::INT_VSC_M, 0),
+  VE_INTRINSIC_DATA(vscl_vvm,           SCATTER_M,  VEISD::INT_VSCL_M, 0),
+  VE_INTRINSIC_DATA(vscu_vvm,           SCATTER_M,  VEISD::INT_VSCU_M, 0),
+};
+
+/*
+ * Find Intrinsic data by intrinsic ID
+ */
+static const IntrinsicData* getIntrinsicVoid(unsigned IntNo) {
+  const IntrinsicData *Data =  std::lower_bound(std::begin(IntrinsicsVoid),
+                                                std::end(IntrinsicsVoid),
+                                                IntNo);
+  if (Data != std::end(IntrinsicsVoid) && Data->Id == IntNo)
+    return Data;
+  return nullptr;
+}
+
+/*
  * IntrinsicsWithChain - the table should be sorted by Intrinsic ID - in
  * the alphabetical order.
  */
 static const IntrinsicData IntrinsicsWithChain[] = {
-  // dummy data
-  VE_INTRINSIC_DATA(lvm_mmss,           LOAD,   VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(vgt_vvm,            GATHER_M,   VEISD::INT_VGT_M, 0),
+  VE_INTRINSIC_DATA(vgtlsx_vvm,         GATHER_M,   VEISD::INT_VGTLSX_M, 0),
+  VE_INTRINSIC_DATA(vgtlzx_vvm,         GATHER_M,   VEISD::INT_VGTLZX_M, 0),
+  VE_INTRINSIC_DATA(vgtu_vvm,           GATHER_M,   VEISD::INT_VGTU_M, 0),
 };
 
 /*
@@ -81,8 +106,8 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(andm_mmm,           OP_MMM,     VEISD::INT_ANDM, 0),
   VE_INTRINSIC_DATA(eqvm_MMM,           OP_MMM,     VEISD::INT_EQVM, 0),
   VE_INTRINSIC_DATA(eqvm_mmm,           OP_MMM,     VEISD::INT_EQVM, 0),
-  VE_INTRINSIC_DATA(lvm_MMss,           LOAD,       VEISD::INT_LVM, 0),
-  VE_INTRINSIC_DATA(lvm_mmss,           LOAD,       VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(lvm_MMss,           OP_MMXX,    VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(lvm_mmss,           OP_MMXX,    VEISD::INT_LVM, 0),
   VE_INTRINSIC_DATA(lzvm_sm,            OP_XM,      VEISD::INT_LZVM, 0),
   VE_INTRINSIC_DATA(negm_MM,            OP_MM,      VEISD::INT_NEGM, 0),
   VE_INTRINSIC_DATA(negm_mm,            OP_MM,      VEISD::INT_NEGM, 0),
@@ -154,8 +179,8 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(pvsubu_vvvMv,       OP_XXXMX,   VEISD::INT_PVSUBU, 0),
   VE_INTRINSIC_DATA(pvxor_vsvMv,        OP_XXXMX,   VEISD::INT_PVXOR, 0),
   VE_INTRINSIC_DATA(pvxor_vvvMv,        OP_XXXMX,   VEISD::INT_PVXOR, 0),
-  VE_INTRINSIC_DATA(svm_sMs,            STORE,      VEISD::INT_SVM, 0),
-  VE_INTRINSIC_DATA(svm_sms,            STORE,      VEISD::INT_SVM, 0),
+  VE_INTRINSIC_DATA(svm_sMs,            OP_XMX,     VEISD::INT_SVM, 0),
+  VE_INTRINSIC_DATA(svm_sms,            OP_XMX,     VEISD::INT_SVM, 0),
   VE_INTRINSIC_DATA(tovm_sm,            OP_XM,      VEISD::INT_TOVM, 0),
   VE_INTRINSIC_DATA(vaddsl_vsvmv,       OP_XXXMX,   VEISD::INT_VADDSL, 0),
   VE_INTRINSIC_DATA(vaddsl_vvvmv,       OP_XXXMX,   VEISD::INT_VADDSL, 0),
@@ -337,6 +362,8 @@ static void verifyIntrinsicTables() {
                         std::end(IntrinsicsWithoutChain)) &&
          std::is_sorted(std::begin(IntrinsicsWithChain),
                         std::end(IntrinsicsWithChain)) &&
+         std::is_sorted(std::begin(IntrinsicsVoid),
+                        std::end(IntrinsicsVoid)) &&
          "Intrinsic data tables should be sorted by Intrinsic ID");
   assert((std::adjacent_find(std::begin(IntrinsicsWithoutChain),
                              std::end(IntrinsicsWithoutChain)) ==
@@ -344,6 +371,9 @@ static void verifyIntrinsicTables() {
          (std::adjacent_find(std::begin(IntrinsicsWithChain),
                              std::end(IntrinsicsWithChain)) ==
           std::end(IntrinsicsWithChain)) &&
+         (std::adjacent_find(std::begin(IntrinsicsVoid),
+                             std::end(IntrinsicsVoid)) ==
+          std::end(IntrinsicsVoid)) &&
          "Intrinsic data tables should have unique entries");
 }
 } // End llvm namespace

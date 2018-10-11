@@ -1423,6 +1423,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SETCC,     MVT::f128, Legal);
   setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
 
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
   // TRAP to expand (which turns it into abort).
@@ -1602,6 +1604,13 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_PVFMKS_M:    return "VEISD::INT_PVFMKS_M";
   case VEISD::INT_PVFMKAT:     return "VEISD::INT_PVFMKAT";
   case VEISD::INT_PVFMKAF:     return "VEISD::INT_PVFMKAF";
+  case VEISD::INT_VGT_M:       return "VEISD::INT_VGT_M";
+  case VEISD::INT_VGTU_M:      return "VEISD::INT_VGTU_M";
+  case VEISD::INT_VGTLSX_M:    return "VEISD::INT_VGTLSX_M";
+  case VEISD::INT_VGTLZX_M:    return "VEISD::INT_VGTLZX_M";
+  case VEISD::INT_VSC_M:       return "VEISD::INT_VSC_M";
+  case VEISD::INT_VSCU_M:      return "VEISD::INT_VSCU_M";
+  case VEISD::INT_VSCL_M:      return "VEISD::INT_VSCL_M";
   }
   return nullptr;
 }
@@ -2368,13 +2377,16 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
 }
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
-                                                     SelectionDAG &DAG) const {
+                                                  SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
   const IntrinsicData* IntrData = getIntrinsicWithoutChain(IntNo);
   if (IntrData) {
     switch (IntrData->Type) {
-    case LOAD: {
+    default:
+      llvm_unreachable("Unknown intrinsic data type");
+      break;
+    case OP_MMXX: {
       // Load mask intrinsics
       //   Input:
       //     (v4i64 (int_ve_lvm_mmss (v4i64 %vm), (i64 %index), (i64 %val)))
@@ -2389,7 +2401,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                  Op.getOperand(2), Op.getOperand(3));
       return DAG.getBitcast(Op.getValueType(), Load);
     }
-    case STORE: {
+    case OP_XMX: {
       // Store mask intrinsics
       //   Input:
       //     (i64 (int_ve_svm_sms (v4i64 %vm), (i64 %index)))
@@ -2700,6 +2712,69 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
+SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  const IntrinsicData* IntrData = getIntrinsicWithChain(IntNo);
+  if (IntrData) {
+    switch (IntrData->Type) {
+    default:
+      llvm_unreachable("Unknown intrinsic data type");
+      break;
+    case GATHER_M: {
+      // Vector gather with mask intrinsics
+      //   Input:
+      //     (v256i64 (int_ve_vgt_vvm (v256i64 %vy), (v4i64 %vm)))
+      //   Output:
+      //     (v256i64 (VGT %vy, (v256i1 (bitcast %vm))))
+      SDValue Chain = Op.getOperand(0);
+      SDValue Mask = Op.getOperand(3);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other);
+      return DAG.getNode(IntrData->Opc0, dl, VTs,
+                         Chain, Op.getOperand(2), Bitcast);
+    }
+    }
+  }
+  switch (IntNo) {
+  default: return SDValue();    // Don't custom lower most intrinsics.
+  }
+}
+
+SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  const IntrinsicData* IntrData = getIntrinsicVoid(IntNo);
+  if (IntrData) {
+    switch (IntrData->Type) {
+    default:
+      llvm_unreachable("Unknown intrinsic data type");
+      break;
+    case SCATTER_M: {
+      // Vector scatter with mask intrinsics
+      //   Input:
+      //     (int_ve_vsc_vvm (v256i64 %vx), (v256i64 %vy), (v4i64 %vm))
+      //   Output:
+      //     (VSC %vx, %vy, (v256i1 (bitcast %vm)))
+      SDValue Chain = Op.getOperand(0);
+      SDValue Mask = Op.getOperand(4);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, MVT::Other,
+                         Chain, Op.getOperand(2), Op.getOperand(3), Bitcast);
+    }
+    }
+  }
+  switch (IntNo) {
+  default: return SDValue();    // Don't custom lower most intrinsics.
+  }
+}
+
 SDValue VETargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
@@ -2739,8 +2814,9 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
     report_fatal_error("UMULO or SMULO expansion is not implemented yet");
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::INTRINSIC_VOID:     return LowerINTRINSIC_VOID(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN:  return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-    //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
   }
 }
 

@@ -993,14 +993,14 @@ multiclass VGTm<string opcStr, bits<8> opc> {
       let m = 0;
   }
 
-  def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
+  def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VMN:$vm),
     !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
       let sy = 0;
       let sz = 0;
       let sw = 0;
   }
 
-  def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm),
+  def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VMN:$vm),
     !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
       let sy = 0;
       let sz = 0;
@@ -1025,14 +1025,14 @@ multiclass VSCm<string opcStr, bits<8> opc> {
       let m = 0;
   }
 
-  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm),
+  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VMN:$vm),
     !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
       let sy = 0;
       let sz = 0;
       let sw = 0;
   }
 
-  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm),
+  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VMN:$vm),
     !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
       let sy = 0;
       let sz = 0;
