@@ -201,6 +201,17 @@ def VEpvsrl : SDNode<"VEISD::INT_PVSRL", VE2OpVVXMV>;
 def VEpvsla : SDNode<"VEISD::INT_PVSLA", VE2OpVVXMV>;
 def VEpvsra : SDNode<"VEISD::INT_PVSRA", VE2OpVVXMV>;
 
+// Either of 
+// (v256f64 (VMRG (v256f64 vy), (v256f64 vz), (v256i1 vm)))
+// (v256f64 (VMRG (i64 sy), (v256f64 vz), (v256i1 vm)))
+
+def VE2OpVXVM :
+    SDTypeProfile<1, 3, [SDTCisVec<0>, 
+                         SDTCisSameAs<2, 0>,
+                         SDTCisVec<3>, SDTCVecEltisVT<3, i1>]>;
+def VEvmrg : SDNode<"VEISD::INT_VMRG", VE2OpVXVM>;
+def VEvmrgw : SDNode<"VEISD::INT_VMRGW", VE2OpVXVM>;
+
 //===----------------------------------------------------------------------===//
 // 3-op vector with mask and base register instructions
 //===----------------------------------------------------------------------===//
@@ -231,11 +242,6 @@ def VEpvfmsb : SDNode<"VEISD::INT_PVFMSB", VE3OpVXXVMV>;
 def VEpvfnmad : SDNode<"VEISD::INT_PVFNMAD", VE3OpVXXVMV>;
 def VEpvfnmsb : SDNode<"VEISD::INT_PVFNMSB", VE3OpVXXVMV>;
 
-//===----------------------------------------------------------------------===//
-// 3-op vector with mask and base register instructions
-//===----------------------------------------------------------------------===//
-
-// Either of 
 // (v256f64 (VSFArm (v256f64 vz), (i64 sy), (i64 sz),
 //                  (v256i1 vm), (v256f64 base)))
 

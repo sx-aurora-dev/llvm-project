@@ -23,6 +23,7 @@ enum IntrinsicType : uint16_t {
   LOAD, STORE,
   OP_MMM, OP_MM, OP_XM,
   OP_XXMX,
+  OP_XXXM,
   OP_XXXMX,
   OP_XXXXMX,
 };
@@ -255,6 +256,8 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(vminswsx_vvvmv,     OP_XXXMX,   VEISD::INT_VMINSWSX, 0),
   VE_INTRINSIC_DATA(vminswzx_vsvmv,     OP_XXXMX,   VEISD::INT_VMINSWZX, 0),
   VE_INTRINSIC_DATA(vminswzx_vvvmv,     OP_XXXMX,   VEISD::INT_VMINSWZX, 0),
+  VE_INTRINSIC_DATA(vmrg_vvvm,          OP_XXXM,    VEISD::INT_VMRG, 0),
+  VE_INTRINSIC_DATA(vmrgw_vvvM,         OP_XXXM,    VEISD::INT_VMRGW, 0),
   VE_INTRINSIC_DATA(vmulsl_vsvmv,       OP_XXXMX,   VEISD::INT_VMULSL, 0),
   VE_INTRINSIC_DATA(vmulsl_vvvmv,       OP_XXXMX,   VEISD::INT_VMULSL, 0),
   VE_INTRINSIC_DATA(vmulswsx_vsvmv,     OP_XXXMX,   VEISD::INT_VMULSWSX, 0),

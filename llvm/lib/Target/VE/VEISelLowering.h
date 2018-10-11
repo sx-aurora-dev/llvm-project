@@ -185,6 +185,8 @@ namespace llvm {
       INT_PVSLA,    // for int_ve_pvsla_vvvMv or int_ve_pvsla_vvsMv
       INT_PVSRA,    // for int_ve_pvsra_vvvMv or int_ve_pvsra_vvsMv
       INT_VSFA,     // for int_ve_vsfa_vvssmv
+      INT_VMRG,     // for int_ve_vmrg_vvvm
+      INT_VMRGW,    // for int_ve_vmrgw_vvvM
     };
   }
 
