@@ -630,6 +630,22 @@ def : Pat<(VEpcvm v256i1:$vmy), (PCVM v256i1:$vmy)>;
 def : Pat<(VElzvm v256i1:$vmy), (LZVM v256i1:$vmy)>;
 def : Pat<(VEtovm v256i1:$vmy), (TOVM v256i1:$vmy)>;
 
+// Pattern Matchings for Vector Intrinsics
+
+def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;
+
+def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
+          (ORrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+                               (LDUri MEMri:$addr0), sub_f32),
+                (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+                               (LDLUri MEMri:$addr1), sub_i32))>;
+
+def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
+          (i64 (MPYrr
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32),
+            (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
+                      (HI32 (i64 0x0000000100000001)))))>;
+
 def : Pat<(v256i1 (VEextmu v512i1:$vm)),
           (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_odd))>;
 

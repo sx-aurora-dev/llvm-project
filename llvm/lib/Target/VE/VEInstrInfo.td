@@ -2048,12 +2048,15 @@ def : Pat<(i32 (and i32:$lhs, 0xffff)),
 def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
           (AND32rm0 $lhs, 32)>;
 
-// for VEC instructions
+// vector instructions
 include "VEInstrVec.td"
 
-// for VEC instruction fragments
+// vector instruction fragments (glue beteen instruction and intrinsics)
 include "VEInstrFragmentsVec.td"
 
-// for VEC intrinsics
+// vector intrinsic patterns
 include "VEInstrIntrinsic.td"
+
+// generic vector instruction patterns
+include "VEInstrPatternsVec.td"
 
