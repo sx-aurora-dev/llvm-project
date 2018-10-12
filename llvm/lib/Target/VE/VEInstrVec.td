@@ -489,6 +489,10 @@ let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0 in
 def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy),
   "lvs ${sx},${vx}(${sy})", []>;
 
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
+def LVSi : RR<0x9E, (outs I64:$sx), (ins V64:$vx, simm7Op64:$sy),
+  "lvs ${sx},${vx}(${sy})", []>;
+
 let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1 in
 def LVSi64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
   "lvs ${sx},${vx}(${sy})", []>;

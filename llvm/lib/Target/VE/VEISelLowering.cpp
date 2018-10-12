@@ -1413,8 +1413,14 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT VT : MVT::vector_valuetypes()) {
-    setOperationAction(ISD::LOAD,  VT, Expand);
-    setOperationAction(ISD::STORE, VT, Expand);
+    setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
+    setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Legal);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Legal);
+    setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
+    setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
+    setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
+    setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
+    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
   }
 
   // VE has FAQ, FSQ, FMQ, and FCQ
