@@ -4,14 +4,32 @@
 
 // Pattern Matchings for Generic Vector Instructions
 
+// Load and store for
+// v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
+
+def : Pat<(v256i32 (load ADDRri:$addr)), 
+          (v256i32 (VLDLsxir 8, (LEAasx ADDRri:$addr)))>;
+
+def : Pat<(v256f32 (load ADDRri:$addr)), 
+          (v256f32 (VLDUir 8, (LEAasx ADDRri:$addr)))>;
+
 def : Pat<(v256f64 (load ADDRri:$addr)), 
           (v256f64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(v256i64 (load ADDRri:$addr)), 
           (v256i64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
 
+def : Pat<(v512i32 (load ADDRri:$addr)), 
+          (v512i32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
+
 def : Pat<(v512f32 (load ADDRri:$addr)), 
           (v512f32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
+
+def : Pat<(store v256i32:$vx, ADDRri:$addr), 
+          (VSTLir v256i32:$vx, 8, (LEAasx ADDRri:$addr))>;
+
+def : Pat<(store v256f32:$vx, ADDRri:$addr), 
+          (VSTUir v256f32:$vx, 8, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(store v256f64:$vx, ADDRri:$addr), 
           (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
@@ -19,11 +37,21 @@ def : Pat<(store v256f64:$vx, ADDRri:$addr),
 def : Pat<(store v256i64:$vx, ADDRri:$addr), 
           (VSTir v256i64:$vx, 8, (LEAasx ADDRri:$addr))>;
 
+def : Pat<(store v512i32:$vx, ADDRri:$addr), 
+          (VSTir v512i32:$vx, 8, (LEAasx ADDRri:$addr))>;
+
 def : Pat<(store v512f32:$vx, ADDRri:$addr), 
           (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr))>;
 
+// fadd for
+// v256f32, v256f64, v512f32.
+
+def : Pat<(fadd v256f32:$vy, v256f32:$vz), (VFADsv v256f32:$vy, v256f32:$vz)>;
 def : Pat<(fadd v256f64:$vy, v256f64:$vz), (VFADdv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
+
+// Bitconvert for mask registers between 
+// v4i64 or v8i64 and v256i1 or v512i1 respectively
 
 def : Pat<(v256i1 (bitconvert v4i64:$vm)),
           (v256i1 (COPY_TO_REGCLASS $vm, VM))>;
@@ -36,9 +64,6 @@ def : Pat<(v512i1 (bitconvert v8i64:$vmp)),
 
 def : Pat<(v8i64 (bitconvert v512i1:$vmp)),
           (v8i64 (COPY_TO_REGCLASS $vmp, V64))>;
-
-// Patterns for vector/scalar conversion
-
 
 // Series of SCALAR_TO_VECTOR for all VE vector types,
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
