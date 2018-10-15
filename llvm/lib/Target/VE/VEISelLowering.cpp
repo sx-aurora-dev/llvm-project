@@ -1421,6 +1421,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
     setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
     setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+
+    setOperationAction(ISD::FADD,  VT, Legal);
+    setOperationAction(ISD::FSUB,  VT, Legal);
+    setOperationAction(ISD::FMUL,  VT, Legal);
+    setOperationAction(ISD::FDIV,  VT, Legal);
   }
 
   // VE has FAQ, FSQ, FMQ, and FCQ
