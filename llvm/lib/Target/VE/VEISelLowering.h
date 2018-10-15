@@ -343,6 +343,14 @@ namespace llvm {
     SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
 
+    // Should we expand the build vector with shuffles?
+    bool shouldExpandBuildVectorWithShuffles(EVT VT,
+        unsigned DefinedValues) const override;
+
+    SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+
     bool ShouldShrinkFPConstant(EVT VT) const override {
       // Do not shrink FP constpool if VT == MVT::f128.
       // (ldd, call _Q_fdtoq) is more expensive than two ldds.

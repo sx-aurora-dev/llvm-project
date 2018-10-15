@@ -1414,9 +1414,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
-    setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Legal);
-    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Legal);
-    setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
+    setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+    setOperationAction(ISD::BUILD_VECTOR,       VT, Custom);
     setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
     setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
     setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
@@ -2806,6 +2806,86 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   }
 }
 
+// Should we expand the build vector with shuffles?
+bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
+  EVT VT, unsigned DefinedValues) const {
+  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR since it cause
+  // an expansion loop.
+  return false;
+}
+
+SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
+                                            SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+
+  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
+  if (BVN->isConstant()) {
+    // All values are either a constant value or undef, so optimize it...
+  }
+  // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
+  return SDValue();
+}
+
+SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Insertion/extraction are legal for unpacked V64 types.
+  if (VT == MVT::v256i32 || VT == MVT::v256f32 ||
+      VT == MVT::v256i64 || VT == MVT::v256f64)
+    return Op;
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // FIXME: needs special treatements for packed V64 types,
+    //        but those are not implemented yet.
+    //
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %packed_v &= 0xffffffff << ((%idx / 2 + 1) * 32)
+    //   %packed_v |= %val << (%idx / 2 * 32)
+    //   %vr = insertelt %vr, %packed_v, %idx
+    //
+    // For now, we ask llvm to expand to more generic slower code by default.
+    return SDValue();
+  }
+
+  // May need to support v4i64 and v8i64.
+  report_fatal_error("EXTRACT_VECTOR_ELT for " + Twine(VT.getEVTString()) +
+                     " is not implemented yet");
+  return SDValue();
+}
+
+SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Insertion/extraction are legal for unpacked V64 types.
+  if (VT == MVT::v256i32 || VT == MVT::v256f32 ||
+      VT == MVT::v256i64 || VT == MVT::v256f64)
+    return Op;
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // FIXME: needs special treatements for packed V64 types,
+    //        but those are not implemented yet.
+    //
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %res = %packed_v & 0xffffffff << (%idx / 2 * 32)
+    //
+    // For now, we ask llvm to expand to more generic slower code by default.
+    return SDValue();
+  }
+
+  // May need to support v4i64 and v8i64.
+  report_fatal_error("EXTRACT_VECTOR_ELT for " + Twine(VT.getEVTString()) +
+                     " is not implemented yet");
+  return SDValue();
+}
+
 SDValue VETargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
@@ -2835,12 +2915,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   case ISD::LOAD:               return LowerLOAD(Op, DAG);
   case ISD::STORE:              return LowerSTORE(Op, DAG);
-  case ISD::FDIV:               // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::DIV_F128), 2);
-    report_fatal_error("FDIV expansion is not implemented yet");
-  case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::SQRT_F128),1);
-    report_fatal_error("FSQRT expansion is not implemented yet");
   case ISD::UMULO:
   case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
     report_fatal_error("UMULO or SMULO expansion is not implemented yet");
@@ -2848,6 +2922,9 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::INTRINSIC_VOID:     return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:  return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
   }
 }
 

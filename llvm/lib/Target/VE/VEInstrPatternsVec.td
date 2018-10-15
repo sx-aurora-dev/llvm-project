@@ -90,7 +90,8 @@ def: Pat<(v256i64 (scalar_to_vector i64:$val)),
          (v256i64 (LSVi (v256i64 (IMPLICIT_DEF)), 0, $val))>;
 
 // Series of INSERT_VECOR_ELT for all VE vector types,
-// v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
+// v256i32, v256i64, v256f32, v256f64.
+// v512i32 and v512f32 is expanded by LowerINSERT_VECTOR_ELT().
 
 def: Pat<(v256i32 (insertelt v256i32:$vec, i32:$val, uimm7:$idx)),
          (v256i32 (LSVi v256i32:$vec, imm:$idx,
@@ -107,24 +108,7 @@ def: Pat<(v256f32 (insertelt v256f32:$vec, f32:$val, i64:$idx)),
          (v256f32 (LSVr v256f32:$vec,
                         (EXTRACT_SUBREG $idx, sub_f32),
                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-/*
-FIXME: need to extract first and merge value
-def: Pat<(v512i32 (insertelt v512i32:$vec, i32:$val, uimm7:$idx)),
-         (v512i32 (LSVi v512i32:$vec, imm:$idx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-def: Pat<(v512i32 (insertelt v512i32:$vec, i32:$val, i64:$idx)),
-         (v512i32 (LSVr v512i32:$vec,
-                        (EXTRACT_SUBREG $idx, sub_i32),
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
 
-def: Pat<(v512f32 (insertelt v512f32:$vec, i32:$val, uimm7:$idx)),
-         (v512f32 (LSVi v512f32:$vec, imm:$idx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-def: Pat<(v512f32 (insertelt v512f32:$vec, i32:$val, i64:$idx)),
-         (v512f32 (LSVr v512f32:$vec,
-                        (EXTRACT_SUBREG $idx, sub_i32),
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-*/
 def: Pat<(v256f64 (insertelt v256f64:$vec, f64:$val, uimm7:$idx)),
          (v256f64 (LSVi v256f64:$vec, imm:$idx,
                         (COPY_TO_REGCLASS $val, I64)))>;
@@ -140,7 +124,8 @@ def: Pat<(v256i64 (insertelt v256i64:$vec, i64:$val, i64:$idx)),
                         (EXTRACT_SUBREG $idx, sub_i32), $val))>;
 
 // Series of EXTRACT_VECOR_ELT for all VE vector types,
-// v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
+// v256i32, v256i64, v256f32, v256f64.
+// v512i32 and v512f32 is expanded by LowerEXTRACT_VECTOR_ELT().
 
 def: Pat<(i32 (extractelt v256i32:$vec, uimm7:$idx)),
          (EXTRACT_SUBREG (LVSi v256i32:$vec, imm:$idx), sub_i32)>;
@@ -151,19 +136,6 @@ def: Pat<(f32 (extractelt v256f32:$vec, uimm7:$idx)),
          (EXTRACT_SUBREG (LVSi v256f32:$vec, imm:$idx), sub_f32)>;
 def: Pat<(f32 (extractelt v256f32:$vec, i64:$idx)),
          (EXTRACT_SUBREG (LVSr v256f32:$vec, $idx), sub_f32)>;
-
-/*
-FIXME: need to adjust idx like 256 -> 128 and extract either one, high or low
-def: Pat<(i32 (extractelt v512i32:$vec, uimm7:$idx)),
-         (EXTRACT_SUBREG (LVSi v512i32:$vec, imm:$idx), sub_f32)>;
-def: Pat<(i32 (extractelt v512i32:$vec, i64:$idx)),
-         (EXTRACT_SUBREG (LVSr v512i32:$vec, $idx), sub_f32)>;
-
-def: Pat<(f32 (extractelt v512f32:$vec, uimm7:$idx)),
-         (EXTRACT_SUBREG (LVSi v512f32:$vec, imm:$idx), sub_f32)>;
-def: Pat<(f32 (extractelt v512f32:$vec, i64:$idx)),
-         (EXTRACT_SUBREG (LVSr v512f32:$vec, $idx), sub_f32)>;
-*/
 
 def: Pat<(f64 (extractelt v256f64:$vec, uimm7:$idx)),
          (LVSi v256f64:$vec, imm:$idx)>;
