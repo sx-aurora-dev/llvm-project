@@ -478,6 +478,15 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
     BuildMI(MBB, I, DL, get(VE::STQri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   }
+  else if (RC == &VE::V64RegClass) {
+    // FIXME: use SX16 as a temporary register
+    unsigned BaseReg = VE::SX16;
+    BuildMI(MBB, I, DL, get(VE::LEAasx), BaseReg).addFrameIndex(FI).addImm(0)
+      .addMemOperand(MMO);
+    BuildMI(MBB, I, DL, get(VE::VSTir))
+      .addReg(SrcReg, getKillRegState(isKill)).addImm(8)
+      .addReg(BaseReg, getKillRegState(true));
+  }
   else
     report_fatal_error("Can't store this register to stack slot");
 }
@@ -508,6 +517,14 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (VE::F128RegClass.hasSubClassEq(RC)) {
     BuildMI(MBB, I, DL, get(VE::LDQri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
+  }
+  else if (RC == &VE::V64RegClass) {
+    // FIXME: use SX16 as a temporary register
+    unsigned BaseReg = VE::SX16;
+    BuildMI(MBB, I, DL, get(VE::LEAasx), BaseReg).addFrameIndex(FI).addImm(0)
+      .addMemOperand(MMO);
+    BuildMI(MBB, I, DL, get(VE::VLDir), DestReg).addImm(8)
+      .addReg(BaseReg, getKillRegState(true));
   }
   else
     report_fatal_error("Can't load this register from stack slot");
