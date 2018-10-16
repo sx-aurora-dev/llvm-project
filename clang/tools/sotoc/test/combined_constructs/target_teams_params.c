@@ -1,6 +1,6 @@
 // RUN: %sotoc-transform-compile
 
-// #include <omp.h>
+#include <omp.h>
 
 // example from IBM knowledge
 int main() {

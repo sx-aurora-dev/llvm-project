@@ -212,8 +212,48 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // Since the runtime can decide to only create one team,
   // target team contructs are ignored right now.
   // TODO: What to do with standalone team constructs?
+/*
   if (TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel) {
     Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
+  }
+*/
+  switch (TCR->TargetCodeKind) {
+    /*case clang::OpenMPDirectiveKind::OMPD_target_teams:{
+      Out << "  #pragma omp teams " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }*/
+    case clang::OpenMPDirectiveKind::OMPD_target_parallel:{
+      Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_parallel_for:{
+      Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd:{
+      Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_simd:{
+      Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute:{
+      Out << "  #pragma omp teams distribute " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for:{
+      Out << "  #pragma omp teams distribute parallel for " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for_simd:{
+      Out << "  #pragma omp teams distribute parallel for simd " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
+    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd:{
+      Out << "  #pragma omp teams distribute simd " << TCR->PrintClauses() << "\n  {\n";
+      break;
+    }
   }
 
   if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
@@ -224,8 +264,16 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   auto tmpSL = TCR->getEndLoc();
 
-  if (TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel) {
-    Out << "  }\n";
+  if (//TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for_simd ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
+    Out << "\n  }";
   }
 
   Out << "\n";
