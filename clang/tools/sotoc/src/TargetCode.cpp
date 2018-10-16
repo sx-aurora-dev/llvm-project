@@ -14,34 +14,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-/*TODO: Adjust transformation of static arrays depending on the pointers given
-        as parameters to the offloading functions.
-
-        Idea for handling static arrays so far: Change the notation of static
-        arrays from array-notation to pointer-notation and handle them.
-          array[i] <=> *(array+i)
-
-        Possible problem: Static arrays are not handled right (or as expected)
-        when creating the __sotoc_var_ pointers and thusly we end up with
-        inconsistancies in the pointers after the transformation.
-
-        Furthermore: As the compiler is unlikely to detect the mentioned
-        inconsistancies (as they are not syntactic [hopefully] but logical) lit
-        will mark the given testcases as PASSED although the data is garbled.
-        Thus a comparison with kwnown-good data should be added to the test.
-
-  TODO: Add functionality for multidimensional, static arrays
-
-        Idea so far: Cast type till NULL, sum up sizes
-        (for malloc [just in case]), pass pointer (as above) and sizes of
-        sub-arrays and reconstruct in target region.
-
-        A[i][j] = *(A[j] + i) = *(*(A + j) + i)
-        A[i][j][k] = *(A[j][k] + i) = *(*(A[k] + j) + i) = *(*(*(A + k) + j) + i)
-
-        Important: [] have higher precedence then *, so int (*arr)[j] = A (dim(A) = 2)
-*/
-
 #include <sstream>
 
 #include "clang/AST/Decl.h"
@@ -212,11 +184,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // Since the runtime can decide to only create one team,
   // target team contructs are ignored right now.
   // TODO: What to do with standalone team constructs?
-/*
-  if (TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel) {
-    Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
-  }
-*/
+
   switch (TCR->TargetCodeKind) {
     /*case clang::OpenMPDirectiveKind::OMPD_target_teams:{
       Out << "  #pragma omp teams " << TCR->PrintClauses() << "\n  {\n";
@@ -237,23 +205,25 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     case clang::OpenMPDirectiveKind::OMPD_target_simd:{
       Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
       break;
-    }
+    }/*
     case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute:{
       Out << "  #pragma omp teams distribute " << TCR->PrintClauses() << "\n  {\n";
       break;
-    }
+    }*/
     case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for:{
-      Out << "  #pragma omp teams distribute parallel for " << TCR->PrintClauses() << "\n  {\n";
+      Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
       break;
     }
     case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for_simd:{
-      Out << "  #pragma omp teams distribute parallel for simd " << TCR->PrintClauses() << "\n  {\n";
+      Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  {\n";
       break;
     }
     case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd:{
-      Out << "  #pragma omp teams distribute simd " << TCR->PrintClauses() << "\n  {\n";
+      Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
       break;
     }
+    default:
+      break;
   }
 
   if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
@@ -269,7 +239,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
+      //TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for_simd ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {

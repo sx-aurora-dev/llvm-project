@@ -159,6 +159,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_reduction:
                   TCR->addOpenMPClause(C);
                   break;
+                default:
+                  break;
               }
             }
             break;
@@ -171,6 +173,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_map:
                 case clang::OpenMPClauseKind::OMPC_use_device_ptr:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -186,6 +190,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_depend:
                   TCR->addOpenMPClause(C);
                   break;
+                default:
+                  break;
               }
             }
             break;
@@ -199,6 +205,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_nowait:
                 case clang::OpenMPClauseKind::OMPC_depend:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -214,6 +222,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_nowait:
                 case clang::OpenMPClauseKind::OMPC_depend:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -231,6 +241,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_thread_limit:
                   TCR->addOpenMPClause(C);
                   break;
+                default:
+                  break;
               }
             }
             break;
@@ -247,6 +259,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_shared:
                 case clang::OpenMPClauseKind::OMPC_reduction:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -269,6 +283,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_ordered:
                 case clang::OpenMPClauseKind::OMPC_linear:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -295,6 +311,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_ordered:
                   TCR->addOpenMPClause(C);
                   break;
+                default:
+                  break;
               }
             }
             break;
@@ -311,6 +329,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_collapse:
                 case clang::OpenMPClauseKind::OMPC_reduction:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -330,6 +350,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_collapse:
                 case clang::OpenMPClauseKind::OMPC_dist_schedule:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -353,6 +375,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_num_teams:
                 case clang::OpenMPClauseKind::OMPC_thread_limit:
                   TCR->addOpenMPClause(C);
+                  break;
+                default:
                   break;
               }
             }
@@ -381,6 +405,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_thread_limit:
                   TCR->addOpenMPClause(C);
                   break;
+                default:
+                  break;
               }
             }
             break;
@@ -404,10 +430,14 @@ bool FindTargetCodeVisitor::processTargetRegion(
                 case clang::OpenMPClauseKind::OMPC_simdlen:
                   TCR->addOpenMPClause(C);
                   break;
+                default:
+                  break;
               }
             }
             break;
           }
+          default:
+            break;
         }
       }
     }
