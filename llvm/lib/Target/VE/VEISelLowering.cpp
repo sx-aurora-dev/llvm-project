@@ -2101,8 +2101,7 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
   return SDValue();
 }
 
-#if 0
-// Custom lower UMULO/SMULO for SPARC. This code is similar to ExpandNode()
+// Custom lower UMULO/SMULO for VE. This code is similar to ExpandNode()
 // in LegalizeDAG.cpp except the order of arguments to the library function.
 static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
                                 const VETargetLowering &TLI)
@@ -2124,7 +2123,7 @@ static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
   SDValue RHS = Op.getOperand(1);
   SDValue HiLHS = DAG.getNode(ISD::SRA, dl, VT, LHS, ShiftAmt);
   SDValue HiRHS = DAG.getNode(ISD::SRA, dl, MVT::i64, RHS, ShiftAmt);
-  SDValue Args[] = { HiLHS, LHS, HiRHS, RHS };
+  SDValue Args[] = { LHS, HiLHS, RHS, HiRHS };
 
   SDValue MulResult = TLI.makeLibCall(DAG,
                                       RTLIB::MUL_I128, WideVT,
@@ -2149,7 +2148,6 @@ static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
   SDValue Ops[2] = { BottomHalf, TopHalf } ;
   return DAG.getMergeValues(Ops, dl);
 }
-#endif
 
 SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
                                             SelectionDAG &DAG) const {
@@ -2426,8 +2424,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                                 //        getLibcallName(RTLIB::SQRT_F128),1);
     report_fatal_error("FSQRT expansion is not implemented yet");
   case ISD::UMULO:
-  case ISD::SMULO:              // return LowerUMULO_SMULO(Op, DAG, *this);
-    report_fatal_error("UMULO or SMULO expansion is not implemented yet");
+  case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
     //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
