@@ -336,11 +336,6 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
     break;
   }
 
-  if (!isPositionIndependent()) {
-    llvm_unreachable("Unsupported uses of %plt in not PIC code");
-    return;
-  }
-
   MCOperand RegLR   = MCOperand::createReg(VE::SX10);   // LR
   MCOperand RegS0   = MCOperand::createReg(VE::SX0);    // S0
   MCOperand RegS12  = MCOperand::createReg(VE::SX12);   // S12
