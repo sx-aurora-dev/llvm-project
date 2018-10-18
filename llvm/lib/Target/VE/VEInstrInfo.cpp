@@ -473,15 +473,19 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (RC == &VE::F32RegClass)
     BuildMI(MBB, I, DL, get(VE::STUri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-#if 0
-  else if (SP::F128RegClass.hasSubClassEq(RC))
-    // Use STQFri irrespective of its legality. If STQ is not legal, it will be
-    // lowered into two STDs in eliminateFrameIndex.
-    BuildMI(MBB, I, DL, get(SP::STQFri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg,  getKillRegState(isKill)).addMemOperand(MMO);
-#endif
+  else if (VE::F128RegClass.hasSubClassEq(RC)) {
+    unsigned SrcHiReg = TRI->getSubReg(SrcReg, VE::sub_even);
+    unsigned SrcLoReg  = TRI->getSubReg(SrcReg, VE::sub_odd);
+    // VE stores LowReg to 8(addr) and HiReg to 0(addr)
+    BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(0)
+      .addReg(SrcHiReg).addMemOperand(MMO);
+    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::STSri))
+      .addFrameIndex(FI).addImm(8)
+      .addReg(SrcLoReg).addMemOperand(MMO);
+    MIB->addRegisterKilled(SrcReg, TRI, true);
+  }
   else
-    llvm_unreachable("Can't store this register to stack slot");
+    report_fatal_error("Can't store this register to stack slot");
 }
 
 void VEInstrInfo::
@@ -507,15 +511,17 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (RC == &VE::F32RegClass)
     BuildMI(MBB, I, DL, get(VE::LDUri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-#if 0
-  else if (VE::F128RegClass.hasSubClassEq(RC))
-    // Use LDQFri irrespective of its legality. If LDQ is not legal, it will be
-    // lowered into two LDDs in eliminateFrameIndex.
-    BuildMI(MBB, I, DL, get(SP::LDQFri), DestReg).addFrameIndex(FI).addImm(0)
+  else if (VE::F128RegClass.hasSubClassEq(RC)) {
+    unsigned DestHiReg = TRI->getSubReg(DestReg, VE::sub_even);
+    unsigned DestLoReg  = TRI->getSubReg(DestReg, VE::sub_odd);
+    // VE loads LowReg from 8(addr) and HiReg from 0(addr)
+    BuildMI(MBB, I, DL, get(VE::LDSri), DestHiReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-#endif
+    BuildMI(MBB, I, DL, get(VE::LDSri), DestLoReg).addFrameIndex(FI).addImm(8)
+      .addMemOperand(MMO);
+  }
   else
-    llvm_unreachable("Can't load this register from stack slot");
+    report_fatal_error("Can't load this register from stack slot");
 }
 
 unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
