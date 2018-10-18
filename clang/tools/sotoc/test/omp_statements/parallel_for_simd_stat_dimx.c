@@ -1,4 +1,5 @@
 // RUN: %sotoc-transform-compile
+// RUN: %run-on-host | FileCheck %s
 
 #include <stdio.h>
 
@@ -41,3 +42,5 @@ int main(void) {
 
   return 0;
 }
+
+// CHECK: 314  296  240  184  152  136  104  96  88  82 {{[[:space:]]+}} 314  296  240  184  152  136  104  96  88  82 {{[[:space:]]+}} 314  296  240  184  152  136  104  96  88  82 {{[[:space:]]+}} 314  296  240  184  152  136  104  96  88  82 {{[[:space:]]+}} 314  296  240  184  152  136  104  96  88  82 {{[[:space:]]}}

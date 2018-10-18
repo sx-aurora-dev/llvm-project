@@ -1,12 +1,11 @@
 // RUN: %sotoc-transform-compile
 
-int main() {
+int main(void) {
+  int j = 0;
 
-  #pragma omp target parallel
+  #pragma omp target parallel device(0) num_threads(10)
   {
-    // non-empty
+    j++;
   }
-
   return 0;
 }
-
