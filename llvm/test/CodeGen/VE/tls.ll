@@ -1,5 +1,8 @@
-; FIXME: doesn't check NOPIC code since nld doesn't work with this.
-;        llc -mtriple ve < %s | FileCheck %s -check-prefix=NOPIC
+; FIXME: even under non-pic mode, llvm needs to generate pic code since nld
+;        doesn't work with non-pic code.  Thefore, we test pic codes for
+;        both cases here.
+;      llc -mtriple ve < %s | FileCheck %s -check-prefix=NOPIC
+; RUN: llc -mtriple ve < %s | FileCheck %s -check-prefix=PIC
 ; RUN: llc -mtriple ve -relocation-model=pic < %s | FileCheck %s -check-prefix=PIC
 
 @x = external thread_local global i32, align 4

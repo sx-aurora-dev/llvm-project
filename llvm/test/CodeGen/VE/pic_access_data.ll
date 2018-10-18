@@ -19,15 +19,18 @@ define i32 @func() {
 ; CHECK-NEXT:  lea %s35, ptr@got_lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s35, ptr@got_hi(%s35)
+; CHECK-NEXT:  lea %s36, src@got_lo
+; CHECK-NEXT:  and %s36, %s36, (32)0
+; CHECK-NEXT:  lea.sl %s36, src@got_hi(%s36)
+; CHECK-NEXT:  adds.l %s36, %s15, %s36
+; CHECK-NEXT:  ld %s36, (,%s36)
 ; CHECK-NEXT:  adds.l %s35, %s15, %s35
 ; CHECK-NEXT:  ld %s35, (,%s35)
+; CHECK-NEXT:  ldl.sx %s36, (,%s36)
 ; CHECK-NEXT:  st %s34, (,%s35)
-; CHECK-NEXT:  lea %s35, src@got_lo
-; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s35, src@got_hi(%s35)
-; CHECK-NEXT:  adds.l %s35, %s15, %s35
-; CHECK-NEXT:  ld %s35, (,%s35)
-; CHECK-NEXT:  ldl.sx %s35, (,%s35)
+; CHECK-NEXT:  or %s0, 1, (0)1
+; CHECK-NEXT:  stl %s36, (,%s34)
+; CHECK-NEXT:  or %s11, 0, %s9
 
   store i32* @dst, i32** @ptr, align 8, !tbaa !3
   %1 = load i32, i32* @src, align 4, !tbaa !7

@@ -358,18 +358,21 @@ multiclass RMNDm<string opcStr, bits<8>opc, SDNode OpNode,
     !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"), []> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rii : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"), []> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rzi : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32),
     !strconcat(opcStr, " $sx, ${imm32}(${sz})"), []> {
     let cy = 0;
     let sy = 0;
+    let hasSideEffects = 0;
     let cz = 1;
   }
   def zii : RM<
@@ -378,6 +381,7 @@ multiclass RMNDm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
   def zzi : RM<
     opc, (outs RC:$sx), (ins immOp2:$imm32),
@@ -386,6 +390,7 @@ multiclass RMNDm<string opcStr, bits<8>opc, SDNode OpNode,
     let sy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
 }
 
