@@ -1,4 +1,5 @@
 // RUN: %sotoc-transform-compile
+// RUN: %run-on-host | FileCheck %s
 
 int main(void) {
 
@@ -11,8 +12,7 @@ int main(void) {
   int a = 5;
   int z[5][10];
 
-  #pragma omp target device(0) map(tofrom: x,y) map(alloc: z) map(to: i,j,a)
-  #pragma omp parallel for simd
+  #pragma omp target parallel for simd device(0) map(tofrom: x,y) map(from: z) map(to: i,j,a)
   for (i = 0; i < 5; i++) {
     for (j = 0; j < 10; j++) {
       z[i][j] = x[i][j] + a*y[i][j];
@@ -20,5 +20,14 @@ int main(void) {
   }
 
 
+  for(i = 0; i < 5; i++) {
+    for (j = 0; j < 10; j++) {
+      printf(" %d ",z[i][j]);
+    }
+    printf("\n");
+  }
+
   return 0;
 }
+
+// CHECK: 157  148  120  92  76  68  52  48  44  41 {{[[:space:]]+}} 157  148  120  92  76  68  52  48  44  41 {{[[:space:]]+}} 157  148  120  92  76  68  52  48  44  41 {{[[:space:]]+}} 157  148  120  92  76  68  52  48  44  41 {{[[:space:]]+}} 157  148  120  92  76  68  52  48  44  41 {{[[:space:]]}}

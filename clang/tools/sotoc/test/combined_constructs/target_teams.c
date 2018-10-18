@@ -1,12 +1,11 @@
 // RUN: %sotoc-transform-compile
 
-int main() {
+int main(void) {
+  int j = 0;
 
-  #pragma omp target teams
+  #pragma omp target teams device(0)
   {
-    // non-empty
+    j++;
   }
-
   return 0;
 }
-
