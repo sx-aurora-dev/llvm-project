@@ -2819,8 +2819,6 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
 
 SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
                                             SelectionDAG &DAG) const {
-  EVT VT = Op.getValueType();
-
   BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
   if (BVN->isConstant()) {
     // All values are either a constant value or undef, so optimize it...
