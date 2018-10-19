@@ -60,6 +60,162 @@ namespace llvm {
       RET_FLAG,    // Return with a flag operand.
       GLOBAL_BASE_REG, // Global base reg for PIC.
       FLUSHW,      // FLUSH register windows to stack.
+
+      // Intrinsics
+      INT_LVM,      // for int_ve_lvm_mmss or int_ve_lvm_MMss
+      INT_SVM,      // for int_ve_svm_sms or int_ve_svm_sMs
+
+      INT_ANDM,     // for int_ve_andm_mmm or int_ve_andm_MMM
+      INT_ORM,      // for int_ve_orm_mmm or int_ve_orm_MMM
+      INT_XORM,     // for int_ve_xorm_mmm or int_ve_xorm_MMM
+      INT_EQVM,     // for int_ve_eqvm_mmm or int_ve_eqvm_MMM
+      INT_NNDM,     // for int_ve_nndm_mmm or int_ve_nndm_MMM
+      INT_NEGM,     // for int_ve_negm_mm or int_ve_negm_MM
+      INT_PCVM,     // for int_ve_pcvm_sm
+      INT_LZVM,     // for int_ve_lzvm_sm
+      INT_TOVM,     // for int_ve_tovm_sm
+      INT_VADDUL,   // for int_ve_vaddul_vvvmv or int_ve_vaddul_vsvmv
+      INT_VSUBUL,   // for int_ve_vsubul_vvvmv or int_ve_vsubul_vsvmv
+      INT_VCMPUL,   // for int_ve_vcmpul_vvvmv or int_ve_vcmpul_vsvmv
+      INT_VADDUW,   // for int_ve_vadduw_vvvmv or int_ve_vadduw_vsvmv
+      INT_VSUBUW,   // for int_ve_vsubuw_vvvmv or int_ve_vsubuw_vsvmv
+      INT_VCMPUW,   // for int_ve_vcmpuw_vvvmv or int_ve_vcmpuw_vsvmv
+      INT_VADDSWSX, // for int_ve_vaddswsx_vvvmv or int_ve_vaddswsx_vsvmv
+      INT_VSUBSWSX, // for int_ve_vsubswsx_vvvmv or int_ve_vsubswsx_vsvmv
+      INT_VCMPSWSX, // for int_ve_vcmpswsx_vvvmv or int_ve_vcmpswsx_vsvmv
+      INT_VADDSWZX, // for int_ve_vaddswzx_vvvmv or int_ve_vaddswzx_vsvmv
+      INT_VSUBSWZX, // for int_ve_vsubswzx_vvvmv or int_ve_vsubswzx_vsvmv
+      INT_VCMPSWZX, // for int_ve_vcmpswzx_vvvmv or int_ve_vcmpswzx_vsvmv
+      INT_VADDSL,   // for int_ve_vaddsl_vvvmv or int_ve_vaddsl_vsvmv
+      INT_VSUBSL,   // for int_ve_vsubsl_vvvmv or int_ve_vsubsl_vsvmv
+      INT_VCMPSL,   // for int_ve_vcmpsl_vvvmv or int_ve_vcmpsl_vsvmv
+      INT_PVADDU,   // for int_ve_pvaddu_vvvMv or int_ve_pvaddu_vsvMv
+      INT_PVSUBU,   // for int_ve_pvsubu_vvvMv or int_ve_pvsubu_vsvMv
+      INT_PVCMPU,   // for int_ve_pvcmpu_vvvMv or int_ve_pvcmpu_vsvMv
+      INT_PVADDS,   // for int_ve_pvadds_vvvMv or int_ve_pvadds_vsvMv
+      INT_PVSUBS,   // for int_ve_pvsubs_vvvMv or int_ve_pvsubs_vsvMv
+      INT_PVCMPS,   // for int_ve_pvcmps_vvvMv or int_ve_pvcmps_vsvMv
+      INT_VMAXSWSX, // for int_ve_vmaxswsx_vvvmv or int_ve_vmaxswsx_vsvmv
+      INT_VMAXSWZX, // for int_ve_vmaxswzx_vvvmv or int_ve_vmaxswzx_vsvmv
+      INT_VMINSWSX, // for int_ve_vminswsx_vvvmv or int_ve_vminswsx_vsvmv
+      INT_VMINSWZX, // for int_ve_vminswzx_vvvmv or int_ve_vminswzx_vsvmv
+      INT_PVMAXS,   // for int_ve_pvmaxs_vvvMv or int_ve_pvmaxs_vsvMv
+      INT_PVMINS,   // for int_ve_pvmins_vvvMv or int_ve_pvmins_vsvMv
+      INT_VMULUL,   // for int_ve_vmulul_vvvmv or int_ve_vmulul_vsvmv
+      INT_VDIVUL,   // for int_ve_vdivul_vvvmv, int_ve_vdivul_vsvmv, or
+                    // int_ve_vdivul_vvsmv
+      INT_VMULUW,   // for int_ve_vmuluw_vvvmv or int_ve_vmuluw_vsvmv
+      INT_VDIVUW,   // for int_ve_vdivuw_vvvmv, int_ve_vdivuw_vsvmv, or
+                    // int_ve_vdivuw_vvsmv
+      INT_VMULSWSX, // for int_ve_vmulswsx_vvvmv or int_ve_vmulswsx_vsvmv
+      INT_VDIVSWSX, // for int_ve_vdivswsx_vvvmv, int_ve_vdivswsx_vsvmv, or
+                    // int_ve_vdivswsx_vvsmv
+      INT_VMULSWZX, // for int_ve_vmulswzx_vvvmv or int_ve_vmulswzx_vsvmv
+      INT_VDIVSWZX, // for int_ve_vdivswzx_vvvmv, int_ve_vdivswzx_vsvmv, or
+                    // int_ve_vdivswzx_vvsmv
+      INT_VMULSL,   // for int_ve_vmulsl_vvvmv or int_ve_vmulsl_vsvmv
+      INT_VDIVSL,   // for int_ve_vdivsl_vvvmv, int_ve_vdivsl_vsvmv, or
+                    // int_ve_vdivsl_vvsmv
+      INT_VMAXSL,   // for int_ve_vmaxsl_vvvmv or int_ve_vmaxsl_vsvmv
+      INT_VMINSL,   // for int_ve_vminsl_vvvmv or int_ve_vminsl_vsvmv
+      INT_VFADDD,   // for int_ve_vfaddd_vvvmv or int_ve_vfaddd_vsvmv
+      INT_VFADDS,   // for int_ve_vfadds_vvvmv or int_ve_vfadds_vsvmv
+      INT_VFSUBD,   // for int_ve_vfsubd_vvvmv or int_ve_vfsubd_vsvmv
+      INT_VFSUBS,   // for int_ve_vfsubs_vvvmv or int_ve_vfsubs_vsvmv
+      INT_VFMULD,   // for int_ve_vfmuld_vvvmv or int_ve_vfmuld_vsvmv
+      INT_VFMULS,   // for int_ve_vfmuls_vvvmv or int_ve_vfmuls_vsvmv
+      INT_VFDIVD,   // for int_ve_vfdivd_vvvmv or int_ve_vfdivd_vsvmv
+      INT_VFDIVS,   // for int_ve_vfdivs_vvvmv or int_ve_vfdivs_vsvmv
+      INT_VFCMPD,   // for int_ve_vfcmpd_vvvmv or int_ve_vfcmpd_vsvmv
+      INT_VFCMPS,   // for int_ve_vfcmps_vvvmv or int_ve_vfcmps_vsvmv
+      INT_VFMAXD,   // for int_ve_vfmaxd_vvvmv or int_ve_vfmaxd_vsvmv
+      INT_VFMAXS,   // for int_ve_vfmaxs_vvvmv or int_ve_vfmaxs_vsvmv
+      INT_VFMIND,   // for int_ve_vfmind_vvvmv or int_ve_vfmind_vsvmv
+      INT_VFMINS,   // for int_ve_vfmins_vvvmv or int_ve_vfmins_vsvmv
+      INT_PVFADD,   // for int_ve_pvfadd_vvvMv or int_ve_pvfadd_vsvMv
+      INT_PVFSUB,   // for int_ve_pvfsub_vvvMv or int_ve_pvfsub_vsvMv
+      INT_PVFMUL,   // for int_ve_pvfmul_vvvMv or int_ve_pvfmul_vsvMv
+      INT_PVFCMP,   // for int_ve_pvfcmp_vvvMv or int_ve_pvfcmp_vsvMv
+      INT_PVFMAX,   // for int_ve_pvfmax_vvvMv or int_ve_pvfmax_vsvMv
+      INT_PVFMIN,   // for int_ve_pvfmin_vvvMv or int_ve_pvfmin_vsvMv
+      INT_VFMADD,   // for int_ve_vfmadd_vvvmv, int_ve_vfmadd_vsvmv, or
+                    // for int_ve_vfmadd_vvsmv
+      INT_VFMADS,   // for int_ve_vfmads_vvvmv, int_ve_vfmads_vsvmv, or
+                    // for int_ve_vfmads_vvsmv
+      INT_VFMSBD,   // for int_ve_vfmsbd_vvvmv, int_ve_vfmsbd_vsvmv, or
+                    // for int_ve_vfmsbd_vvsmv
+      INT_VFMSBS,   // for int_ve_vfmsbs_vvvmv, int_ve_vfmsbs_vsvmv, or
+                    // for int_ve_vfmsbs_vvsmv
+      INT_VFNMADD,  // for int_ve_vfnmadd_vvvmv, int_ve_vfnmadd_vsvmv, or
+                    // for int_ve_vfmmadd_vvsmv
+      INT_VFNMADS,  // for int_ve_vfnmads_vvvmv, int_ve_vfnmads_vsvmv, or
+                    // for int_ve_vfmmads_vvsmv
+      INT_VFNMSBD,  // for int_ve_vfnmsbd_vvvmv, int_ve_vfnmsbd_vsvmv, or
+                    // for int_ve_vfmmsbd_vvsmv
+      INT_VFNMSBS,  // for int_ve_vfnmsbs_vvvmv, int_ve_vfnmsbs_vsvmv, or
+                    // for int_ve_vfmmsbs_vvsmv
+      INT_PVFMAD,   // for int_ve_pvfmad_vvvvMv, int_ve_pvfmad_vsvMv, or
+                    // for int_ve_pvfmad_vvsMv
+      INT_PVFMSB,   // for int_ve_pvfmsb_vvvvMv, int_ve_pvfmsb_vsvMv, or
+                    // for int_ve_pvfmsb_vvsMv
+      INT_PVFNMAD,  // for int_ve_pvfnmad_vvvvMv, int_ve_pvfnmad_vsvMv, or
+                    // for int_ve_pvfnmad_vvsMv
+      INT_PVFNMSB,  // for int_ve_pvfnmsb_vvvvMv, int_ve_pvfnmsb_vsvMv, or
+                    // for int_ve_pvfnmsb_vvsMv
+      INT_VAND,     // for int_ve_vand_vvvmv or int_ve_vand_vsvmv
+      INT_VOR,      // for int_ve_vor_vvvmv or int_ve_vor_vsvmv
+      INT_VXOR,     // for int_ve_vxor_vvvmv or int_ve_vxor_vsvmv
+      INT_VEQV,     // for int_ve_veqv_vvvmv or int_ve_veqv_vsvmv
+      INT_PVAND,    // for int_ve_pvand_vvvMv or int_ve_pvand_vsvMv
+      INT_PVOR,     // for int_ve_pvor_vvvMv or int_ve_pvor_vsvMv
+      INT_PVXOR,    // for int_ve_pvxor_vvvMv or int_ve_pvxor_vsvMv
+      INT_PVEQV,    // for int_ve_pveqv_vvvMv or int_ve_pveqv_vsvMv
+      INT_VBRD,     // for int_ve_vbrd_vsmv_f64, int_ve_vbrd_vsmv_i64,
+      INT_VBRDU,    // for int_ve_vbrdu_vsmv_f32
+      INT_VBRDL,    // for int_ve_vbrdl_vsmv_i32
+      INT_PVBRD,    // for int_ve_pvbrd_vsMv_i64
+      INT_VSLL,     // for int_ve_vsll_vvvmv or int_ve_vsll_vvsmv
+      INT_VSRL,     // for int_ve_vsrl_vvvmv or int_ve_vsrl_vvsmv
+      INT_VSLAW,    // for int_ve_vslaw_vvvmv or int_ve_vslaw_vvsmv
+      INT_VSLAL,    // for int_ve_vslal_vvvmv or int_ve_vslal_vvsmv
+      INT_VSRAW,    // for int_ve_vsraw_vvvmv or int_ve_vsraw_vvsmv
+      INT_VSRAL,    // for int_ve_vsral_vvvmv or int_ve_vsral_vvsmv
+      INT_PVSLL,    // for int_ve_pvsll_vvvMv or int_ve_pvsll_vvsMv
+      INT_PVSRL,    // for int_ve_pvsrl_vvvMv or int_ve_pvsrl_vvsMv
+      INT_PVSLA,    // for int_ve_pvsla_vvvMv or int_ve_pvsla_vvsMv
+      INT_PVSRA,    // for int_ve_pvsra_vvvMv or int_ve_pvsra_vvsMv
+      INT_VSFA,     // for int_ve_vsfa_vvssmv
+      INT_VMRG,     // for int_ve_vmrg_vvvm
+      INT_VMRGW,    // for int_ve_vmrgw_vvvM
+      INT_VCP,      // for int_ve_vcp_vvmv
+      INT_VEX,      // for int_ve_vex_vvmv
+      INT_VFMKL,    // for int_ve_vfmkl_mcv
+      INT_VFMKL_M,  // for int_ve_vfmkl_mcvm
+      INT_VFMKW,    // for int_ve_vfmkw_mcv
+      INT_VFMKW_M,  // for int_ve_vfmkw_mcvm
+      INT_VFMKD,    // for int_ve_vfmkd_mcv
+      INT_VFMKD_M,  // for int_ve_vfmkd_mcvm
+      INT_VFMKS,    // for int_ve_vfmks_mcv
+      INT_VFMKS_M,  // for int_ve_vfmks_mcvm
+      INT_VFMKAT,   // for int_ve_vfmkat_mcv
+      INT_VFMKAF,   // for int_ve_vfmkaf_mcv
+      INT_PVFMKW,   // for int_ve_pvfmkw_Mcv
+      INT_PVFMKW_M, // for int_ve_pvfmkw_McvM
+      INT_PVFMKS,   // for int_ve_pvfmks_Mcv
+      INT_PVFMKS_M, // for int_ve_pvfmks_McvM
+      INT_PVFMKAT,  // for int_ve_pvfmkat_mcv
+      INT_PVFMKAF,  // for int_ve_pvfmkaf_mcv
+      INT_VGT_M,    // for int_ve_vgt_vvm
+      INT_VGTU_M,   // for int_ve_vgtu_vvm
+      INT_VGTLSX_M, // for int_ve_vgtlsx_vvm
+      INT_VGTLZX_M, // for int_ve_vgtlzx_vvm
+      INT_VSC_M,    // for int_ve_vsc_vvm
+      INT_VSCU_M,   // for int_ve_vscu_vvm
+      INT_VSCL_M,   // for int_ve_vscl_vvm
+      INT_EXTMU,    // for int_ve_extract_vm512u
+      INT_EXTML,    // for int_ve_extract_vm512l
+      INT_INSMU,    // for int_ve_insert_vm512u
+      INT_INSML,    // for int_ve_insert_vm512l
     };
   }
 
@@ -177,6 +333,7 @@ namespace llvm {
     SDValue LowerF128Compare(SDValue LHS, SDValue RHS, unsigned &SPCC,
                              const SDLoc &DL, SelectionDAG &DAG) const;
 
+    SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
 
@@ -185,6 +342,14 @@ namespace llvm {
     SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
+
+    // Should we expand the build vector with shuffles?
+    bool shouldExpandBuildVectorWithShuffles(EVT VT,
+        unsigned DefinedValues) const override;
+
+    SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
     bool ShouldShrinkFPConstant(EVT VT) const override {
       // Do not shrink FP constpool if VT == MVT::f128.

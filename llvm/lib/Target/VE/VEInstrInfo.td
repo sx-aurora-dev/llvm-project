@@ -29,6 +29,7 @@ def simm7   : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32  : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def uimm6   : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
+def uimm7   : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
 def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 
 def CCSIOp : PatLeaf<(cond), [{
@@ -2053,4 +2054,15 @@ def : Pat<(i32 (and i32:$lhs, 0xffff)),
 def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
           (AND32rm0 $lhs, 32)>;
 
+// vector instructions
 include "VEInstrVec.td"
+
+// vector instruction fragments (glue beteen instruction and intrinsics)
+include "VEInstrFragmentsVec.td"
+
+// vector intrinsic patterns
+include "VEInstrIntrinsic.td"
+
+// generic vector instruction patterns
+include "VEInstrPatternsVec.td"
+

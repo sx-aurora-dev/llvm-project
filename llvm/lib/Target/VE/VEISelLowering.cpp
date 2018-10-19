@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "VEISelLowering.h"
+#include "VEIntrinsicsInfo.h"
 #include "MCTargetDesc/VEMCExpr.h"
 #include "VEMachineFunctionInfo.h"
 #include "VERegisterInfo.h"
@@ -29,6 +30,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;
@@ -1187,8 +1189,19 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v256f32, &VE::V64RegClass);
   addRegisterClass(MVT::v256f64, &VE::V64RegClass);
   addRegisterClass(MVT::v512f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-  addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
+  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+
+  // FIXME:
+  // Need to add a register class for these types to make those types
+  // leagal in something like following IR.  VE doesn't have v4i64 hardware
+  // register, but C requires it.  Without this, llvm causes "Do not know
+  // how to widen the result of this operator!" errors.
+  //
+  //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
+  //                          ^^^^^ this requires adding register classes here.
+  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
 
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {
@@ -1400,8 +1413,19 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT VT : MVT::vector_valuetypes()) {
-    setOperationAction(ISD::LOAD,  VT, Expand);
-    setOperationAction(ISD::STORE, VT, Expand);
+    setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
+    setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+    setOperationAction(ISD::BUILD_VECTOR,       VT, Custom);
+    setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
+    setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
+    setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
+    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+
+    setOperationAction(ISD::FADD,  VT, Legal);
+    setOperationAction(ISD::FSUB,  VT, Legal);
+    setOperationAction(ISD::FMUL,  VT, Legal);
+    setOperationAction(ISD::FDIV,  VT, Legal);
   }
 
   // VE has FAQ, FSQ, FMQ, and FCQ
@@ -1419,6 +1443,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SETCC,     MVT::f128, Legal);
   setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
 
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
   // TRAP to expand (which turns it into abort).
@@ -1437,6 +1463,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setMinStackArgumentAlignment(8);
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
+
+  verifyIntrinsicTables();
 }
 
 const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -1471,6 +1499,142 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
+  case VEISD::INT_LVM:         return "VEISD::INT_LVM";
+  case VEISD::INT_SVM:         return "VEISD::INT_SVM";
+  case VEISD::INT_ANDM:        return "VEISD::INT_ANDM";
+  case VEISD::INT_ORM:         return "VEISD::INT_ORM";
+  case VEISD::INT_XORM:        return "VEISD::INT_XORM";
+  case VEISD::INT_EQVM:        return "VEISD::INT_EQVM";
+  case VEISD::INT_NNDM:        return "VEISD::INT_NNDM";
+  case VEISD::INT_NEGM:        return "VEISD::INT_NEGM";
+  case VEISD::INT_PCVM:        return "VEISD::INT_PCVM";
+  case VEISD::INT_LZVM:        return "VEISD::INT_LZVM";
+  case VEISD::INT_TOVM:        return "VEISD::INT_TOVM";
+  case VEISD::INT_VADDUL:      return "VEISD::INT_VADDUL";
+  case VEISD::INT_VSUBUL:      return "VEISD::INT_VSUBUL";
+  case VEISD::INT_VCMPUL:      return "VEISD::INT_VCMPUL";
+  case VEISD::INT_VADDUW:      return "VEISD::INT_VADDUW";
+  case VEISD::INT_VSUBUW:      return "VEISD::INT_VSUBUW";
+  case VEISD::INT_VCMPUW:      return "VEISD::INT_VCMPUW";
+  case VEISD::INT_VADDSWSX:    return "VEISD::INT_VADDSWSX";
+  case VEISD::INT_VSUBSWSX:    return "VEISD::INT_VSUBSWSX";
+  case VEISD::INT_VCMPSWSX:    return "VEISD::INT_VCMPSWSX";
+  case VEISD::INT_VADDSWZX:    return "VEISD::INT_VADDSWZX";
+  case VEISD::INT_VSUBSWZX:    return "VEISD::INT_VSUBSWZX";
+  case VEISD::INT_VCMPSWZX:    return "VEISD::INT_VCMPSWZX";
+  case VEISD::INT_VADDSL:      return "VEISD::INT_VADDSL";
+  case VEISD::INT_VSUBSL:      return "VEISD::INT_VSUBSL";
+  case VEISD::INT_VCMPSL:      return "VEISD::INT_VCMPSL";
+  case VEISD::INT_PVADDU:      return "VEISD::INT_PVADDU";
+  case VEISD::INT_PVSUBU:      return "VEISD::INT_PVSUBU";
+  case VEISD::INT_PVCMPU:      return "VEISD::INT_PVCMPU";
+  case VEISD::INT_PVADDS:      return "VEISD::INT_PVADDS";
+  case VEISD::INT_PVSUBS:      return "VEISD::INT_PVSUBS";
+  case VEISD::INT_PVCMPS:      return "VEISD::INT_PVCMPS";
+  case VEISD::INT_VMAXSWSX:    return "VEISD::INT_VMAXSWSX";
+  case VEISD::INT_VMAXSWZX:    return "VEISD::INT_VMAXSWZX";
+  case VEISD::INT_VMINSWSX:    return "VEISD::INT_VMINSWSX";
+  case VEISD::INT_VMINSWZX:    return "VEISD::INT_VMINSWZX";
+  case VEISD::INT_PVMAXS:      return "VEISD::INT_PVMAXS";
+  case VEISD::INT_PVMINS:      return "VEISD::INT_PVMINS";
+  case VEISD::INT_VMULUL:      return "VEISD::INT_VMULUL";
+  case VEISD::INT_VDIVUL:      return "VEISD::INT_VDIVUL";
+  case VEISD::INT_VMULUW:      return "VEISD::INT_VMULUW";
+  case VEISD::INT_VDIVUW:      return "VEISD::INT_VDIVUW";
+  case VEISD::INT_VMULSWSX:    return "VEISD::INT_VMULSWSX";
+  case VEISD::INT_VDIVSWSX:    return "VEISD::INT_VDIVSWSX";
+  case VEISD::INT_VMULSWZX:    return "VEISD::INT_VMULSWZX";
+  case VEISD::INT_VDIVSWZX:    return "VEISD::INT_VDIVSWZX";
+  case VEISD::INT_VMULSL:      return "VEISD::INT_VMULSL";
+  case VEISD::INT_VDIVSL:      return "VEISD::INT_VDIVSL";
+  case VEISD::INT_VMAXSL:      return "VEISD::INT_VMAXSL";
+  case VEISD::INT_VMINSL:      return "VEISD::INT_VMINSL";
+  case VEISD::INT_VFADDD:      return "VEISD::INT_VFADDD";
+  case VEISD::INT_VFADDS:      return "VEISD::INT_VFADDS";
+  case VEISD::INT_VFSUBD:      return "VEISD::INT_VFSUBD";
+  case VEISD::INT_VFSUBS:      return "VEISD::INT_VFSUBS";
+  case VEISD::INT_VFMULD:      return "VEISD::INT_VFMULD";
+  case VEISD::INT_VFMULS:      return "VEISD::INT_VFMULS";
+  case VEISD::INT_VFDIVD:      return "VEISD::INT_VFDIVD";
+  case VEISD::INT_VFDIVS:      return "VEISD::INT_VFDIVS";
+  case VEISD::INT_VFCMPD:      return "VEISD::INT_VFCMPD";
+  case VEISD::INT_VFCMPS:      return "VEISD::INT_VFCMPS";
+  case VEISD::INT_VFMAXD:      return "VEISD::INT_VFMAXD";
+  case VEISD::INT_VFMAXS:      return "VEISD::INT_VFMAXS";
+  case VEISD::INT_VFMIND:      return "VEISD::INT_VFMIND";
+  case VEISD::INT_VFMINS:      return "VEISD::INT_VFMINS";
+  case VEISD::INT_PVFADD:      return "VEISD::INT_PVFADD";
+  case VEISD::INT_PVFSUB:      return "VEISD::INT_PVFSUB";
+  case VEISD::INT_PVFMUL:      return "VEISD::INT_PVFMUL";
+  case VEISD::INT_PVFCMP:      return "VEISD::INT_PVFCMP";
+  case VEISD::INT_PVFMAX:      return "VEISD::INT_PVFMAX";
+  case VEISD::INT_PVFMIN:      return "VEISD::INT_PVFMIN";
+  case VEISD::INT_VFMADD:      return "VEISD::INT_VFMADD";
+  case VEISD::INT_VFMADS:      return "VEISD::INT_VFMADS";
+  case VEISD::INT_VFMSBD:      return "VEISD::INT_VFMSBD";
+  case VEISD::INT_VFMSBS:      return "VEISD::INT_VFMSBS";
+  case VEISD::INT_VFNMADD:     return "VEISD::INT_VFNMADD";
+  case VEISD::INT_VFNMADS:     return "VEISD::INT_VFNMADS";
+  case VEISD::INT_VFNMSBD:     return "VEISD::INT_VFNMSBD";
+  case VEISD::INT_VFNMSBS:     return "VEISD::INT_VFNMSBS";
+  case VEISD::INT_PVFMAD:      return "VEISD::INT_PVFMAD";
+  case VEISD::INT_PVFMSB:      return "VEISD::INT_PVFMSB";
+  case VEISD::INT_PVFNMAD:     return "VEISD::INT_PVFNMAD";
+  case VEISD::INT_PVFNMSB:     return "VEISD::INT_PVFNMSB";
+  case VEISD::INT_VAND:        return "VEISD::INT_VAND";
+  case VEISD::INT_VOR:         return "VEISD::INT_VOR";
+  case VEISD::INT_VXOR:        return "VEISD::INT_VXOR";
+  case VEISD::INT_VEQV:        return "VEISD::INT_VEQV";
+  case VEISD::INT_PVAND:       return "VEISD::INT_PVAND";
+  case VEISD::INT_PVOR:        return "VEISD::INT_PVOR";
+  case VEISD::INT_PVXOR:       return "VEISD::INT_PVXOR";
+  case VEISD::INT_PVEQV:       return "VEISD::INT_PVEQV";
+  case VEISD::INT_VBRD:        return "VEISD::INT_VBRD";
+  case VEISD::INT_VBRDU:       return "VEISD::INT_VBRDU";
+  case VEISD::INT_VBRDL:       return "VEISD::INT_VBRDL";
+  case VEISD::INT_PVBRD:       return "VEISD::INT_PVBRD";
+  case VEISD::INT_VSLL:        return "VEISD::INT_VSLL";
+  case VEISD::INT_VSRL:        return "VEISD::INT_VSRL";
+  case VEISD::INT_VSLAW:       return "VEISD::INT_VSLAW";
+  case VEISD::INT_VSLAL:       return "VEISD::INT_VSLAL";
+  case VEISD::INT_VSRAW:       return "VEISD::INT_VSRAW";
+  case VEISD::INT_VSRAL:       return "VEISD::INT_VSRAL";
+  case VEISD::INT_PVSLL:       return "VEISD::INT_PVSLL";
+  case VEISD::INT_PVSRL:       return "VEISD::INT_PVSRL";
+  case VEISD::INT_PVSLA:       return "VEISD::INT_PVSLA";
+  case VEISD::INT_PVSRA:       return "VEISD::INT_PVSRA";
+  case VEISD::INT_VSFA:        return "VEISD::INT_VSFA";
+  case VEISD::INT_VMRG:        return "VEISD::INT_VMRG";
+  case VEISD::INT_VMRGW:       return "VEISD::INT_VMRGW";
+  case VEISD::INT_VCP:         return "VEISD::INT_VCP";
+  case VEISD::INT_VEX:         return "VEISD::INT_VEX";
+  case VEISD::INT_VFMKL:       return "VEISD::INT_VFMKL";
+  case VEISD::INT_VFMKL_M:     return "VEISD::INT_VFMKL_M";
+  case VEISD::INT_VFMKW:       return "VEISD::INT_VFMKW";
+  case VEISD::INT_VFMKW_M:     return "VEISD::INT_VFMKW_M";
+  case VEISD::INT_VFMKD:       return "VEISD::INT_VFMKD";
+  case VEISD::INT_VFMKD_M:     return "VEISD::INT_VFMKD_M";
+  case VEISD::INT_VFMKS:       return "VEISD::INT_VFMKS";
+  case VEISD::INT_VFMKS_M:     return "VEISD::INT_VFMKS_M";
+  case VEISD::INT_VFMKAT:      return "VEISD::INT_VFMKAT";
+  case VEISD::INT_VFMKAF:      return "VEISD::INT_VFMKAF";
+  case VEISD::INT_PVFMKW:      return "VEISD::INT_PVFMKW";
+  case VEISD::INT_PVFMKW_M:    return "VEISD::INT_PVFMKW_M";
+  case VEISD::INT_PVFMKS:      return "VEISD::INT_PVFMKS";
+  case VEISD::INT_PVFMKS_M:    return "VEISD::INT_PVFMKS_M";
+  case VEISD::INT_PVFMKAT:     return "VEISD::INT_PVFMKAT";
+  case VEISD::INT_PVFMKAF:     return "VEISD::INT_PVFMKAF";
+  case VEISD::INT_VGT_M:       return "VEISD::INT_VGT_M";
+  case VEISD::INT_VGTU_M:      return "VEISD::INT_VGTU_M";
+  case VEISD::INT_VGTLSX_M:    return "VEISD::INT_VGTLSX_M";
+  case VEISD::INT_VGTLZX_M:    return "VEISD::INT_VGTLZX_M";
+  case VEISD::INT_VSC_M:       return "VEISD::INT_VSC_M";
+  case VEISD::INT_VSCU_M:      return "VEISD::INT_VSCU_M";
+  case VEISD::INT_VSCL_M:      return "VEISD::INT_VSCL_M";
+  case VEISD::INT_EXTMU:       return "VEISD::INT_EXTMU";
+  case VEISD::INT_EXTML:       return "VEISD::INT_EXTML";
+  case VEISD::INT_INSMU:       return "VEISD::INT_INSMU";
+  case VEISD::INT_INSML:       return "VEISD::INT_INSML";
   }
   return nullptr;
 }
@@ -2235,9 +2399,203 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
 }
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
-                                                     SelectionDAG &DAG) const {
-  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+                                                  SelectionDAG &DAG) const {
   SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+  const IntrinsicData* IntrData = getIntrinsicWithoutChain(IntNo);
+  if (IntrData) {
+    switch (IntrData->Type) {
+    default:
+      llvm_unreachable("Unknown intrinsic data type");
+      break;
+    case OP_MMXX: {
+      // Load mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_lvm_mmss (v4i64 %vm), (i64 %index), (i64 %val)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (LVMr
+      //         (v256i1 (bitcast %vm)), %index, %val))))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      SDValue Load = DAG.getNode(IntrData->Opc0, dl, BitcastVT, Bitcast,
+                                 Op.getOperand(2), Op.getOperand(3));
+      return DAG.getBitcast(Op.getValueType(), Load);
+    }
+    case OP_XMX: {
+      // Store mask intrinsics
+      //   Input:
+      //     (i64 (int_ve_svm_sms (v4i64 %vm), (i64 %index)))
+      //   Output:
+      //     (i64 (SVMr
+      //         (v256i1 (bitcast %vm)), %index))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast,
+                         Op.getOperand(2));
+    }
+    case OP_M: {
+      // 0-operand intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_vfmkat_m))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (VFMKAT))))
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT);
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_MM: {
+      // 1-operand mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_negm_mmm (v4i64 %vm)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (NEGM
+      //         (v256i1 (bitcast %vm1))))))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT1 = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT1, Mask);
+      // Get bitmask for each operand since for the case.
+      //   e.g. (v256i1 (extract_VM512u (v512i1 %vm)))
+      MVT BitcastVT0 = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Bitcast);
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_XM: {
+      // 1-operand mask intrinsics
+      //   Input:
+      //     (i64 (int_ve_pcvm_mmm (v4i64 %vm)))
+      //   Output:
+      //     (i64 (PCVM (v256i1 (bitcast %vm1))))))
+      SDValue Mask = Op.getOperand(1);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast);
+    }
+    case OP_MMM: {
+      // 2-operand mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_andm_mmm (v4i64 %vm1), (v4i64 %vm2)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (ANDM
+      //         (v256i1 (bitcast %vm1)), (v256i1 (bitcast %vm2))))))
+      SDValue Mask1 = Op.getOperand(1);
+      MVT BitcastVT1 = MVT::getVectorVT(
+        MVT::i1, Mask1.getValueType().getSizeInBits());
+      SDValue Bitcast1 = DAG.getBitcast(BitcastVT1, Mask1);
+      // Get bitmask for each operand since for the case.
+      //   e.g. (v512i1 (insert_VM512u (v512i1 %vm1), (v256i1 %vm2)))
+      SDValue Mask2 = Op.getOperand(2);
+      MVT BitcastVT2 = MVT::getVectorVT(
+        MVT::i1, Mask2.getValueType().getSizeInBits());
+      SDValue Bitcast2 = DAG.getBitcast(BitcastVT2, Mask2);
+      MVT BitcastVT0 = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0,
+                                 Bitcast1, Bitcast2);
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_XXMX: {
+      // 1-operand with mask and base register intrinsics
+      //   Input:
+      //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
+      //                                    (v256i64 %base)))
+      //   Output:
+      //     (v256i64 (VBRD %sy, (v256i1 (bitcast %vm)), %base))
+      SDValue Mask = Op.getOperand(2);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), 
+                         Op.getOperand(1), Bitcast, Op.getOperand(3));
+    }
+    case OP_XXXM: {
+      // 2-operand vector calculation with mask and base vector intrinsics
+      //   Input:
+      //     (v256f64 (int_ve_vaddul_vvvmv
+      //                  (v256f64 %v1), (v256f64 %v2),
+      //                  (v4i64 %vm)))
+      //   Output:
+      //     (v256f64 (VADDlvm %v1, %v2, 
+      //                  (v256i1 (bitcast %vm))))
+      SDValue Mask = Op.getOperand(3);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
+                         Op.getOperand(1), Op.getOperand(2),
+                         Bitcast);
+    }
+    case OP_XXXMX: {
+      // 2-operand vector calculation with mask and base vector intrinsics
+      //   Input:
+      //     (v256f64 (int_ve_vaddul_vvvmv
+      //                  (v256f64 %v1), (v256f64 %v2),
+      //                  (v4i64 %vm), (v256f64 %vd)))
+      //   Output:
+      //     (v256f64 (VADDlvm %v1, %v2, 
+      //                  (v256i1 (bitcast %vm)), %vd))
+      SDValue Mask = Op.getOperand(3);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
+                         Op.getOperand(1), Op.getOperand(2),
+                         Bitcast, Op.getOperand(4));
+    }
+    case OP_MXX: {
+      // 2-operand intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_vfmkl_mcvm (i64 %cf), (v256i64 %vz)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (VFMKL %cf, %vz))))
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT,
+                                 Op.getOperand(1), Op.getOperand(2));
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_MXXM: {
+      // 2-operand and base mask intrinsics
+      //   Input:
+      //     (v4i64 (int_ve_vfmkl_mcvm (i64 %cf), (v256i64 %vz), (v4i64 %vm)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (VFMKL
+      //         %cf, %vz, (v256i1 (bitcast %vm1))))))
+      SDValue Mask = Op.getOperand(3);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT,
+                                 Op.getOperand(1), Op.getOperand(2),
+                                 Bitcast);
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case OP_XXXXMX: {
+      // 3-operand vector calculation with mask and base vector intrinsics
+      //   Input:
+      //     (v256f64 (int_ve_vfmadd_vsvvmv
+      //                  (v256f64 %v1), (v256f64 %v2), (v256f64 %v3),
+      //                  (v4i64 %vm), (v256f64 %vd)))
+      //   Output:
+      //     (v256f64 (VFMADD %v1, %v2, %v3,
+      //                  (v256i1 (bitcast %vm)), %vd))
+      SDValue Mask = Op.getOperand(4);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
+                         Op.getOperand(1), Op.getOperand(2), Op.getOperand(3),
+                         Bitcast, Op.getOperand(5));
+    }
+    }
+  }
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   case Intrinsic::thread_pointer: {
@@ -2388,6 +2746,147 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
+SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  const IntrinsicData* IntrData = getIntrinsicWithChain(IntNo);
+  if (IntrData) {
+    switch (IntrData->Type) {
+    default:
+      llvm_unreachable("Unknown intrinsic data type");
+      break;
+    case GATHER_M: {
+      // Vector gather with mask intrinsics
+      //   Input:
+      //     (v256i64 (int_ve_vgt_vvm (v256i64 %vy), (v4i64 %vm)))
+      //   Output:
+      //     (v256i64 (VGT %vy, (v256i1 (bitcast %vm))))
+      SDValue Chain = Op.getOperand(0);
+      SDValue Mask = Op.getOperand(3);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other);
+      return DAG.getNode(IntrData->Opc0, dl, VTs,
+                         Chain, Op.getOperand(2), Bitcast);
+    }
+    }
+  }
+  switch (IntNo) {
+  default: return SDValue();    // Don't custom lower most intrinsics.
+  }
+}
+
+SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  const IntrinsicData* IntrData = getIntrinsicVoid(IntNo);
+  if (IntrData) {
+    switch (IntrData->Type) {
+    default:
+      llvm_unreachable("Unknown intrinsic data type");
+      break;
+    case SCATTER_M: {
+      // Vector scatter with mask intrinsics
+      //   Input:
+      //     (int_ve_vsc_vvm (v256i64 %vx), (v256i64 %vy), (v4i64 %vm))
+      //   Output:
+      //     (VSC %vx, %vy, (v256i1 (bitcast %vm)))
+      SDValue Chain = Op.getOperand(0);
+      SDValue Mask = Op.getOperand(4);
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Mask.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      return DAG.getNode(IntrData->Opc0, dl, MVT::Other,
+                         Chain, Op.getOperand(2), Op.getOperand(3), Bitcast);
+    }
+    }
+  }
+  switch (IntNo) {
+  default: return SDValue();    // Don't custom lower most intrinsics.
+  }
+}
+
+// Should we expand the build vector with shuffles?
+bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
+  EVT VT, unsigned DefinedValues) const {
+  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR since it cause
+  // an expansion loop.
+  return false;
+}
+
+SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
+                                            SelectionDAG &DAG) const {
+  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
+  if (BVN->isConstant()) {
+    // All values are either a constant value or undef, so optimize it...
+  }
+  // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
+  return SDValue();
+}
+
+SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Insertion/extraction are legal for unpacked V64 types.
+  if (VT == MVT::v256i32 || VT == MVT::v256f32 ||
+      VT == MVT::v256i64 || VT == MVT::v256f64)
+    return Op;
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // FIXME: needs special treatements for packed V64 types,
+    //        but those are not implemented yet.
+    //
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %packed_v &= 0xffffffff << ((%idx / 2 + 1) * 32)
+    //   %packed_v |= %val << (%idx / 2 * 32)
+    //   %vr = insertelt %vr, %packed_v, %idx
+    //
+    // For now, we ask llvm to expand to more generic slower code by default.
+    return SDValue();
+  }
+
+  // May need to support v4i64 and v8i64.
+  report_fatal_error("EXTRACT_VECTOR_ELT for " + Twine(VT.getEVTString()) +
+                     " is not implemented yet");
+  return SDValue();
+}
+
+SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Insertion/extraction are legal for unpacked V64 types.
+  if (VT == MVT::v256i32 || VT == MVT::v256f32 ||
+      VT == MVT::v256i64 || VT == MVT::v256f64)
+    return Op;
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // FIXME: needs special treatements for packed V64 types,
+    //        but those are not implemented yet.
+    //
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %res = %packed_v & 0xffffffff << (%idx / 2 * 32)
+    //
+    // For now, we ask llvm to expand to more generic slower code by default.
+    return SDValue();
+  }
+
+  // May need to support v4i64 and v8i64.
+  report_fatal_error("EXTRACT_VECTOR_ELT for " + Twine(VT.getEVTString()) +
+                     " is not implemented yet");
+  return SDValue();
+}
+
 SDValue VETargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
@@ -2417,17 +2916,15 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   case ISD::LOAD:               return LowerLOAD(Op, DAG);
   case ISD::STORE:              return LowerSTORE(Op, DAG);
-  case ISD::FDIV:               // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::DIV_F128), 2);
-    report_fatal_error("FDIV expansion is not implemented yet");
-  case ISD::FSQRT:              // return LowerF128Op(Op, DAG,
-                                //        getLibcallName(RTLIB::SQRT_F128),1);
-    report_fatal_error("FSQRT expansion is not implemented yet");
   case ISD::UMULO:
   case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::INTRINSIC_VOID:     return LowerINTRINSIC_VOID(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN:  return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-    //report_fatal_error("INTRINSIC_WO_CHAIN expansion is not implemented yet");
+  case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
   }
 }
 
