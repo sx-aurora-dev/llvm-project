@@ -1171,7 +1171,8 @@ let cz = 0, sz = 0 in {
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
-let cy = 0, sy = 0, cz = 1, mayLoad = 1 in {
+let mayLoad = 1 in {
+let cy = 0, sy = 0, cz = 1 in {
 let cx = 0 in
 def LDSri : RM<
     0x01, (outs I64:$sx), (ins MEMri:$addr),
@@ -1213,8 +1214,14 @@ def LD1BUri : RM<
     "ld1b.zx $sx, $addr",
     [(set i32:$sx, (zextloadi8 ADDRri:$addr))]>;
 }
+def LDQri : Pseudo<
+    (outs F128:$sx), (ins MEMri:$addr),
+    "# pseudo ldq $sx, $addr",
+    [(set f128:$sx, (load ADDRri:$addr))]>;
+}
 
-let cx = 0, cy = 0, sy = 0, cz = 1, mayStore = 1 in {
+let mayStore = 1 in {
+let cx = 0, cy = 0, sy = 0, cz = 1 in {
 def STSri : RM<
     0x11, (outs), (ins MEMri:$addr, I64:$sx),
     "st $sx, $addr",
@@ -1235,6 +1242,11 @@ def ST1Bri : RM<
     0x15, (outs), (ins MEMri:$addr, I32:$sx),
     "st1b $sx, $addr",
     [(truncstorei8 i32:$sx, ADDRri:$addr)]>;
+}
+def STQri : Pseudo<
+    (outs), (ins MEMri:$addr, F128:$sx),
+    "# pseudo stq $sx, $addr",
+    [(store f128:$sx, ADDRri:$addr)]>;
 }
 
 def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;

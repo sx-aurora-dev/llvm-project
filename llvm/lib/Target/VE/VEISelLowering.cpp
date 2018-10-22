@@ -1407,8 +1407,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
 
-  // VE has no load/store for f128, but llvm doesn't expand them
-  // automatically, so we need to use Custom here.
+  // LOAD/STORE for f128 needs to be custom lowered to expand two loads/stores
   setOperationAction(ISD::LOAD, MVT::f128, Custom);
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
@@ -2157,21 +2156,28 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
   assert(LdNode && LdNode->getOffset().isUndef()
          && "Unexpected node type");
 
+  SDValue BasePtr = LdNode->getBasePtr();
+  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
+    // For the case of frame index, expanding it here cause dependency
+    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
+    return Op;
+  }
+
   unsigned alignment = LdNode->getAlignment();
   if (alignment > 8)
     alignment = 8;
 
-  SDValue Hi64 =
+  SDValue Lo64 =
       DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LdNode->getBasePtr(),
                   LdNode->getPointerInfo(), alignment,
                   LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
                                          MachineMemOperand::MONone);
   EVT addrVT = LdNode->getBasePtr().getValueType();
-  SDValue LoPtr = DAG.getNode(ISD::ADD, dl, addrVT,
+  SDValue HiPtr = DAG.getNode(ISD::ADD, dl, addrVT,
                               LdNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
-  SDValue Lo64 =
-      DAG.getLoad(MVT::f64, dl, LdNode->getChain(), LoPtr,
+  SDValue Hi64 =
+      DAG.getLoad(MVT::f64, dl, LdNode->getChain(), HiPtr,
                   LdNode->getPointerInfo(), alignment,
                   LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
                                          MachineMemOperand::MONone);
@@ -2179,21 +2185,21 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
   SDValue SubRegEven = DAG.getTargetConstant(VE::sub_even, dl, MVT::i32);
   SDValue SubRegOdd  = DAG.getTargetConstant(VE::sub_odd, dl, MVT::i32);
 
-  // VE stores LowReg to 8(addr) and HiReg to 0(addr)
+  // VE stores Hi64 to 8(addr) and Lo64 to 0(addr)
   SDNode *InFP128 = DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
                                        dl, MVT::f128);
   InFP128 = DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, dl,
                                MVT::f128,
                                SDValue(InFP128, 0),
-                               Lo64,
+                               Hi64,
                                SubRegEven);
   InFP128 = DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, dl,
                                MVT::f128,
                                SDValue(InFP128, 0),
-                               Hi64,
+                               Lo64,
                                SubRegOdd);
-  SDValue OutChains[2] = { SDValue(Hi64.getNode(), 1),
-                           SDValue(Lo64.getNode(), 1) };
+  SDValue OutChains[2] = { SDValue(Lo64.getNode(), 1),
+                           SDValue(Hi64.getNode(), 1) };
   SDValue OutChain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
   SDValue Ops[2] = {SDValue(InFP128,0), OutChain};
   return DAG.getMergeValues(Ops, dl);
@@ -2216,6 +2222,14 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
   assert(StNode && StNode->getOffset().isUndef()
          && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
+    // For the case of frame index, expanding it here cause dependency
+    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
+    return Op;
+  }
+
   SDValue SubRegEven = DAG.getTargetConstant(VE::sub_even, dl, MVT::i32);
   SDValue SubRegOdd  = DAG.getTargetConstant(VE::sub_odd, dl, MVT::i32);
 
@@ -2234,7 +2248,7 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   if (alignment > 8)
     alignment = 8;
 
-  // VE stores LowReg to 8(addr) and HiReg to 0(addr)
+  // VE stores Hi64 to 8(addr) and Lo64 to 0(addr)
   SDValue OutChains[2];
   OutChains[0] =
       DAG.getStore(StNode->getChain(), dl, SDValue(Lo64, 0),
@@ -2242,11 +2256,11 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
                    StNode->isVolatile() ? MachineMemOperand::MOVolatile :
                                           MachineMemOperand::MONone);
   EVT addrVT = StNode->getBasePtr().getValueType();
-  SDValue LoPtr = DAG.getNode(ISD::ADD, dl, addrVT,
+  SDValue HiPtr = DAG.getNode(ISD::ADD, dl, addrVT,
                               StNode->getBasePtr(),
                               DAG.getConstant(8, dl, addrVT));
   OutChains[1] =
-      DAG.getStore(StNode->getChain(), dl, SDValue(Hi64, 0), LoPtr,
+      DAG.getStore(StNode->getChain(), dl, SDValue(Hi64, 0), HiPtr,
                    MachinePointerInfo(), alignment,
                    StNode->isVolatile() ? MachineMemOperand::MOVolatile :
                                           MachineMemOperand::MONone);

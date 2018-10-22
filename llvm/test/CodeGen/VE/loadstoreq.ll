@@ -28,27 +28,23 @@ define void @storeq(fp128* nocapture, fp128) {
 define void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) {
 ; CHECK-LABEL: ld_l_arg:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34,448(,%s11)
-; CHECK-NEXT:    or %s34, 8, %s34
-; CHECK-NEXT:    ld %s34, (,%s34)
-; CHECK-NEXT:    ld %s35, 448(,%s11)
-; CHECK-NEXT:    lea %s36,416(,%s11)
-; CHECK-NEXT:    or %s36, 8, %s36
-; CHECK-NEXT:    ld %s36, (,%s36)
-; CHECK-NEXT:    ld %s37, 416(,%s11)
-; CHECK-NEXT:    ld %s38, 464(,%s11)
-; CHECK-NEXT:    ld %s39, 432(,%s11)
+; CHECK-NEXT:    ld %s34, 464(,%s11)
+; CHECK-NEXT:    ld %s37, 448(,%s11)
+; CHECK-NEXT:    ld %s36, 456(,%s11)
+; CHECK-NEXT:    ld %s35, 432(,%s11)
+; CHECK-NEXT:    ld %s39, 416(,%s11)
+; CHECK-NEXT:    ld %s38, 424(,%s11)
 ; CHECK-NEXT:    st %s2, 8(,%s0)
 ; CHECK-NEXT:    st %s3, (,%s0)
 ; CHECK-NEXT:    st %s4, (,%s0)
 ; CHECK-NEXT:    st %s5, (,%s0)
 ; CHECK-NEXT:    st %s6, (,%s0)
+; CHECK-NEXT:    st %s38, 8(,%s0)
+; CHECK-NEXT:    st %s39, (,%s0)
+; CHECK-NEXT:    st %s35, (,%s0)
 ; CHECK-NEXT:    st %s36, 8(,%s0)
 ; CHECK-NEXT:    st %s37, (,%s0)
-; CHECK-NEXT:    st %s39, (,%s0)
-; CHECK-NEXT:    st %s34, 8(,%s0)
-; CHECK-NEXT:    st %s35, (,%s0)
-; CHECK-NEXT:    st %s38, (,%s0)
+; CHECK-NEXT:    st %s34, (,%s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %10 = bitcast i8* %0 to fp128*
   store volatile fp128 %1, fp128* %10, align 16, !tbaa !2
