@@ -134,6 +134,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
           CS, TargetDirective->getLocStart(), LastVisitedFuncDecl, Context);
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
+        // For more complex data types (like structs) we need to traverse the tree
         DiscoverTypeVisitor.TraverseStmt(CS);
         addTargetRegionArgs(CS, TCR);
         TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);

@@ -15,6 +15,7 @@
 #include <sstream>
 
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclOpenMP.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/LangOptions.h"
@@ -26,6 +27,7 @@
 #include "TargetCodeFragment.h"
 
 void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
+  //Var->print(llvm::outs());
   CapturedVars.push_back(Var);
 }
 
@@ -194,6 +196,17 @@ std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
     }
   }
   return Out.str();
+}
+
+clang::OMPClause* TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
+  for (auto C : OMPClauses){
+    for(auto CC : C->children()) {
+      if (auto CC_DeclRefExpr = llvm::dyn_cast<clang::DeclRefExpr>(CC)){
+        if(i->getCanonicalDecl() == CC_DeclRefExpr->getDecl()) return C;
+      }
+    }
+  }
+  return NULL;
 }
 
 std::string TargetCodeRegion::PrintPretty() {

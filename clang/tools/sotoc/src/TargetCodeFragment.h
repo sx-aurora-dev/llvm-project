@@ -145,6 +145,7 @@ public:
   };
   std::string PrintClauses();
   std::string PrintLocalVarsFromClauses();
+  clang::OMPClause* GetReferredOMPClause(clang::VarDecl *i);
   virtual std::string PrintPretty() override;
   clang::SourceRange getInnerRange() override;
   clang::SourceLocation getStartLoc() override;

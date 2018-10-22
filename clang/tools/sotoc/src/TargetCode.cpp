@@ -105,6 +105,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
   for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd(); i != e; ++i) {
+    auto C = TCR->GetReferredOMPClause(*i);
     if (!first) {
       Out << ", ";
     }
@@ -132,7 +133,13 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     } else {
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
-        Out << "*__sotoc_var_";
+        if(C){
+          // Parameters which are not first private (e.g., explicit mapped vars)
+          // are passed by reference, all others by value.
+          if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_firstprivate)) {
+            Out << "*__sotoc_var_";
+          }
+        }
       }
       Out << (*i)->getDeclName().getAsString();
       //TODO: use `Name.print` instead
@@ -143,6 +150,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // bring captured scalars into scope
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
+    auto C = TCR->GetReferredOMPClause(*I);
 
     // again check for static arrays
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
@@ -169,9 +177,15 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
     } else {
       if (!(*I)->getType().getTypePtr()->isPointerType()) {
-        auto VarName = (*I)->getDeclName().getAsString();
-        Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
-            << "*__sotoc_var_" << VarName << ";\n";
+        if(C){
+          // Parameters which are not first private (e.g., explicit mapped vars)
+          // are passed by reference, all others by value.
+          if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_firstprivate)) {
+            auto VarName = (*I)->getDeclName().getAsString();
+            Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
+                << "*__sotoc_var_" << VarName << ";\n";
+          }
+        }
       }
     }
   }
@@ -250,16 +264,23 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   // copy values from scalars from scoped vars back into pointers
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
+    auto C = TCR->GetReferredOMPClause(*I);
 
     // if array then already pointer
     if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
        auto VarName = (*I)->getDeclName().getAsString();
        Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
     } else {
-       if (!(*I)->getType().getTypePtr()->isPointerType()) {
-         auto VarName = (*I)->getDeclName().getAsString();
-         Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
-       }
+      if (!(*I)->getType().getTypePtr()->isPointerType()) {
+        if(C){
+          // Parameters which are not first private (e.g., explicit mapped vars)
+          // are passed by reference, all others by value.
+          if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_firstprivate)) {
+            auto VarName = (*I)->getDeclName().getAsString();
+            Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
+          }
+        }
+      }
     }
   }
 
