@@ -211,17 +211,15 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
 void
 VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
-                                       int SPAdj, unsigned FIOperandNum,
-                                       RegScavenger *RS) const {
+                                    int SPAdj, unsigned FIOperandNum,
+                                    RegScavenger *RS) const {
   assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
   DebugLoc dl = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   MachineFunction &MF = *MI.getParent()->getParent();
-#if 0
   const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
-#endif
   const VEFrameLowering *TFI = getFrameLowering(MF);
 
   unsigned FrameReg;
@@ -230,36 +228,33 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
 
-#if 0
-  if (!Subtarget.isV9() || !Subtarget.hasHardQuad()) {
-    if (MI.getOpcode() == SP::STQFri) {
-      const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-      unsigned SrcReg = MI.getOperand(2).getReg();
-      unsigned SrcEvenReg = getSubReg(SrcReg, SP::sub_even64);
-      unsigned SrcOddReg  = getSubReg(SrcReg, SP::sub_odd64);
-      MachineInstr *StMI =
-        BuildMI(*MI.getParent(), II, dl, TII.get(SP::STDFri))
-        .addReg(FrameReg).addImm(0).addReg(SrcEvenReg);
-      replaceFI(MF, II, *StMI, dl, 0, Offset, FrameReg);
-      MI.setDesc(TII.get(SP::STDFri));
-      MI.getOperand(2).setReg(SrcOddReg);
-      Offset += 8;
-    } else if (MI.getOpcode() == SP::LDQFri) {
-      const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-      unsigned DestReg     = MI.getOperand(0).getReg();
-      unsigned DestEvenReg = getSubReg(DestReg, SP::sub_even64);
-      unsigned DestOddReg  = getSubReg(DestReg, SP::sub_odd64);
-      MachineInstr *StMI =
-        BuildMI(*MI.getParent(), II, dl, TII.get(SP::LDDFri), DestEvenReg)
-        .addReg(FrameReg).addImm(0);
-      replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
-
-      MI.setDesc(TII.get(SP::LDDFri));
-      MI.getOperand(0).setReg(DestOddReg);
-      Offset += 8;
-    }
+  if (MI.getOpcode() == VE::STQri) {
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    unsigned SrcReg   = MI.getOperand(2).getReg();
+    unsigned SrcHiReg = getSubReg(SrcReg, VE::sub_even);
+    unsigned SrcLoReg = getSubReg(SrcReg, VE::sub_odd);
+    // VE stores HiReg to 8(addr) and LoReg to 0(addr)
+    MachineInstr *StMI =
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::STSri))
+      .addReg(FrameReg).addImm(0).addReg(SrcLoReg);
+    replaceFI(MF, II, *StMI, dl, 0, Offset, FrameReg);
+    MI.setDesc(TII.get(VE::STSri));
+    MI.getOperand(2).setReg(SrcHiReg);
+    Offset += 8;
+  } else if (MI.getOpcode() == VE::LDQri) {
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    unsigned DestReg   = MI.getOperand(0).getReg();
+    unsigned DestHiReg = getSubReg(DestReg, VE::sub_even);
+    unsigned DestLoReg = getSubReg(DestReg, VE::sub_odd);
+    // VE loads HiReg from 8(addr) and LoReg from 0(addr)
+    MachineInstr *StMI =
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDSri), DestLoReg)
+      .addReg(FrameReg).addImm(0);
+    replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
+    MI.setDesc(TII.get(VE::LDSri));
+    MI.getOperand(0).setReg(DestHiReg);
+    Offset += 8;
   }
-#endif
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
 }

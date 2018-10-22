@@ -49,7 +49,8 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
   if (MI.getOpcode() == VE::LDSri || MI.getOpcode() == VE::LDUri ||
       MI.getOpcode() == VE::LDLri || MI.getOpcode() == VE::LDLUri ||
       MI.getOpcode() == VE::LD2Bri || MI.getOpcode() == VE::LD2BUri ||
-      MI.getOpcode() == VE::LD1Bri || MI.getOpcode() == VE::LD1BUri) {
+      MI.getOpcode() == VE::LD1Bri || MI.getOpcode() == VE::LD1BUri ||
+      MI.getOpcode() == VE::LDQri) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -66,9 +67,9 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 /// any side effects other than storing to the stack slot.
 unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
-  if (MI.getOpcode() == VE::STSri || MI.getOpcode() == VE::STUri ||
-      MI.getOpcode() == VE::STLri || MI.getOpcode() == VE::ST2Bri ||
-      MI.getOpcode() == VE::ST1Bri) {
+  if (MI.getOpcode() == VE::STSri  || MI.getOpcode() == VE::STUri ||
+      MI.getOpcode() == VE::STLri  || MI.getOpcode() == VE::ST2Bri ||
+      MI.getOpcode() == VE::ST1Bri || MI.getOpcode() == VE::STQri) {
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
@@ -474,15 +475,8 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
     BuildMI(MBB, I, DL, get(VE::STUri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else if (VE::F128RegClass.hasSubClassEq(RC)) {
-    unsigned SrcHiReg = TRI->getSubReg(SrcReg, VE::sub_even);
-    unsigned SrcLoReg  = TRI->getSubReg(SrcReg, VE::sub_odd);
-    // VE stores LowReg to 8(addr) and HiReg to 0(addr)
-    BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcHiReg).addMemOperand(MMO);
-    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::STSri))
-      .addFrameIndex(FI).addImm(8)
-      .addReg(SrcLoReg).addMemOperand(MMO);
-    MIB->addRegisterKilled(SrcReg, TRI, true);
+    BuildMI(MBB, I, DL, get(VE::STQri)).addFrameIndex(FI).addImm(0)
+      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   }
   else
     report_fatal_error("Can't store this register to stack slot");
@@ -512,12 +506,7 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
     BuildMI(MBB, I, DL, get(VE::LDUri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
   else if (VE::F128RegClass.hasSubClassEq(RC)) {
-    unsigned DestHiReg = TRI->getSubReg(DestReg, VE::sub_even);
-    unsigned DestLoReg  = TRI->getSubReg(DestReg, VE::sub_odd);
-    // VE loads LowReg from 8(addr) and HiReg from 0(addr)
-    BuildMI(MBB, I, DL, get(VE::LDSri), DestHiReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-    BuildMI(MBB, I, DL, get(VE::LDSri), DestLoReg).addFrameIndex(FI).addImm(8)
+    BuildMI(MBB, I, DL, get(VE::LDQri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
   }
   else
