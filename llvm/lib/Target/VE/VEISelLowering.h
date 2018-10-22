@@ -297,6 +297,10 @@ namespace llvm {
     SDValue LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
                          SmallVectorImpl<SDValue> &InVals) const;
 
+    bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
+                        bool isVarArg,
+                        const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
+                        LLVMContext &Context) const override;
     SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
                         const SmallVectorImpl<SDValue> &OutVals,
