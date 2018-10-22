@@ -45,14 +45,14 @@ def CC_VE : CallingConv<[
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
-  CCAssignToStack<8, 8>
+  CCAssignToStack<0, 8>
 ]>;
 
 def CC_VE2 : CallingConv<[
   // All arguments get passed in stack for varargs function or non-prototyped
   // function.
   CCIfType<[f128], CCAssignToStack<16, 16>>,
-  CCAssignToStack<8, 8>
+  CCAssignToStack<0, 8>
 ]>;
 
 def RetCC_VE : CallingConv<[
@@ -75,7 +75,8 @@ def RetCC_VE : CallingConv<[
 
   // long double --> pair of generic 64 bit registers
   CCIfType<[f128],
-           CCAssignToReg<[Q0, Q1, Q2, Q3]>>
+           CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
+                                   [SX0, SX1, SX3, SX5]>>
 ]>;
 
 // Callee-saved registers
