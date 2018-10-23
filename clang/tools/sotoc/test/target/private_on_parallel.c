@@ -1,0 +1,19 @@
+// RUN: %sotoc-transform-compile
+
+int main() {
+  double ux  = 0;
+  double tmp = 0;
+  #pragma omp target map(tofrom: tmp) device(0)
+  {
+    // It works with firstprivate
+#ifdef NOBUG
+    #pragma omp parallel firstprivate(ux) reduction (+: tmp)
+#else
+    #pragma omp parallel private(ux) reduction (+: tmp)
+#endif
+    {
+      ux = 42;
+      tmp += ux;
+    }
+  } 
+}
