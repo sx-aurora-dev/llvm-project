@@ -846,7 +846,51 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FSUB,  VT, Legal);
     setOperationAction(ISD::FMUL,  VT, Legal);
     setOperationAction(ISD::FDIV,  VT, Legal);
+    setOperationAction(ISD::ADD,   VT, Legal);
+    setOperationAction(ISD::SUB,   VT, Legal);
+    setOperationAction(ISD::MUL,   VT, Legal);
+    setOperationAction(ISD::SDIV,  VT, Legal);
+    setOperationAction(ISD::UDIV,  VT, Legal);
   }
+
+  // VE has no packed MUL, SDIV, or UDIV operations.
+  for (MVT VT : { MVT::v512i32, MVT::v512f32 }) {
+    setOperationAction(ISD::MUL,   VT, Expand);
+    setOperationAction(ISD::SDIV,  VT, Expand);
+    setOperationAction(ISD::UDIV,  VT, Expand);
+  }
+
+  // VE has no REM or DIVREM operations.
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::UREM, VT, Expand);
+    setOperationAction(ISD::SREM, VT, Expand);
+    setOperationAction(ISD::SDIVREM, VT, Expand);
+    setOperationAction(ISD::UDIVREM, VT, Expand);
+  }
+
+  // Following code doesn't expand store-trunc as what we expected.
+  // Need to correct this problem.
+  //
+  // Problem before: cannot select store-trunc for t23.
+  //    t22: v4i64 = mul t102, t92
+  //    t23: ch = store<(store 16 into %ir.V), trunc to v4i32> t22:1,
+  //              t22, FrameIndex:i64<5>, undef:i64
+  //
+  // Problem after: cannot select store 32 for t73.
+  //    t22: v4i64 = mul t102, t92
+  //    t73: ch = store<(store 32 into %stack.21)> t0,
+  //              t22, FrameIndex:i64<21>, undef:i64
+#if 0
+  // Expand all vector-vector truncstore and extload
+  for (MVT VT : MVT::vector_valuetypes()) {
+    for (MVT InnerVT : MVT::vector_valuetypes()) {
+      setTruncStoreAction(VT, InnerVT, Expand);
+      setLoadExtAction(ISD::SEXTLOAD, VT, InnerVT, Expand);
+      setLoadExtAction(ISD::ZEXTLOAD, VT, InnerVT, Expand);
+      setLoadExtAction(ISD::EXTLOAD, VT, InnerVT, Expand);
+    }
+  }
+#endif
 
   // VE has FAQ, FSQ, FMQ, and FCQ
   setOperationAction(ISD::FADD,  MVT::f128, Legal);
