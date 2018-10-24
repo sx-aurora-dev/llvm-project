@@ -6,7 +6,7 @@ else()
 endif()
 
 
-set(SOTOC_TEST_COMPILER ${CMAKE_C_COMPILER} CACHE STRING
+set(SOTOC_TEST_COMPILER ${CMAKE_BINARY_DIR}/bin/clang CACHE STRING
     "Compiler to use for testing sotoc")
 
 find_package(PythonInterp REQUIRED)
