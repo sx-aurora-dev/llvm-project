@@ -2287,9 +2287,7 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
     return SDValue();
   }
 
-  // May need to support v4i64 and v8i64.
-  report_fatal_error("EXTRACT_VECTOR_ELT for " + Twine(VT.getEVTString()) +
-                     " is not implemented yet");
+  // May need to support v4i64 and v8i64, but just ask llvm to expand them.
   return SDValue();
 }
 
@@ -2316,9 +2314,7 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
     return SDValue();
   }
 
-  // May need to support v4i64 and v8i64.
-  report_fatal_error("EXTRACT_VECTOR_ELT for " + Twine(VT.getEVTString()) +
-                     " is not implemented yet");
+  // May need to support v4i64 and v8i64, but just ask llvm to expand them.
   return SDValue();
 }
 
@@ -2724,6 +2720,11 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   SDLoc dl(N);
 
   switch (N->getOpcode()) {
+  case ISD::BUILD_VECTOR:
+  case ISD::INSERT_VECTOR_ELT:
+  case ISD::EXTRACT_VECTOR_ELT:
+    // ask llvm to expand vector related instructions if those are not legal.
+    return;
   default:
     llvm_unreachable("Do not know how to custom type legalize this operation!");
   }
