@@ -8,10 +8,10 @@
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
 
 def : Pat<(v256i32 (load ADDRri:$addr)), 
-          (v256i32 (VLDLsxir 8, (LEAasx ADDRri:$addr)))>;
+          (v256i32 (VLDLsxir 4, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(v256f32 (load ADDRri:$addr)), 
-          (v256f32 (VLDUir 8, (LEAasx ADDRri:$addr)))>;
+          (v256f32 (VLDUir 4, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(v256f64 (load ADDRri:$addr)), 
           (v256f64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
@@ -26,10 +26,10 @@ def : Pat<(v512f32 (load ADDRri:$addr)),
           (v512f32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(store v256i32:$vx, ADDRri:$addr), 
-          (VSTLir v256i32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTLir v256i32:$vx, 4, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(store v256f32:$vx, ADDRri:$addr), 
-          (VSTUir v256f32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTUir v256f32:$vx, 4, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(store v256f64:$vx, ADDRri:$addr), 
           (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
