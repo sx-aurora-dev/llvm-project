@@ -8,10 +8,10 @@
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
 
 def : Pat<(v256i32 (load ADDRri:$addr)), 
-          (v256i32 (VLDLsxir 8, (LEAasx ADDRri:$addr)))>;
+          (v256i32 (VLDLsxir 4, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(v256f32 (load ADDRri:$addr)), 
-          (v256f32 (VLDUir 8, (LEAasx ADDRri:$addr)))>;
+          (v256f32 (VLDUir 4, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(v256f64 (load ADDRri:$addr)), 
           (v256f64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
@@ -26,10 +26,10 @@ def : Pat<(v512f32 (load ADDRri:$addr)),
           (v512f32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
 
 def : Pat<(store v256i32:$vx, ADDRri:$addr), 
-          (VSTLir v256i32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTLir v256i32:$vx, 4, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(store v256f32:$vx, ADDRri:$addr), 
-          (VSTUir v256f32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTUir v256f32:$vx, 4, (LEAasx ADDRri:$addr))>;
 
 def : Pat<(store v256f64:$vx, ADDRri:$addr), 
           (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
@@ -43,7 +43,7 @@ def : Pat<(store v512i32:$vx, ADDRri:$addr),
 def : Pat<(store v512f32:$vx, ADDRri:$addr), 
           (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr))>;
 
-// fadd, fsub, fmul, fdiv for
+// fadd, fsub, fmul, and fdiv for
 // v256f32, v256f64, v512f32.
 
 def : Pat<(fadd v256f32:$vy, v256f32:$vz), (VFADsv v256f32:$vy, v256f32:$vz)>;
@@ -61,6 +61,26 @@ def : Pat<(fmul v512f32:$vy, v512f32:$vz), (VFMPpv v512f32:$vy, v512f32:$vz)>;
 def : Pat<(fdiv v256f32:$vy, v256f32:$vz), (VFDVsv v256f32:$vy, v256f32:$vz)>;
 def : Pat<(fdiv v256f64:$vy, v256f64:$vz), (VFDVdv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(fdiv v512f32:$vy, v512f32:$vz), (VFDVpv v512f32:$vy, v512f32:$vz)>;
+
+// add, sub, mul, sdiv, and udiv for
+// v256i32, v256i64, v512i32.
+
+def : Pat<(add v256i32:$vy, v256i32:$vz), (VADSwsxv v256i32:$vy, v256i32:$vz)>;
+def : Pat<(add v256i64:$vy, v256i64:$vz), (VADDlv v256i64:$vy, v256i64:$vz)>;
+def : Pat<(add v512i32:$vy, v512i32:$vz), (VADSpv v512i32:$vy, v512i32:$vz)>;
+
+def : Pat<(sub v256i32:$vy, v256i32:$vz), (VSBSwsxv v256i32:$vy, v256i32:$vz)>;
+def : Pat<(sub v256i64:$vy, v256i64:$vz), (VSUBlv v256i64:$vy, v256i64:$vz)>;
+def : Pat<(sub v512i32:$vy, v512i32:$vz), (VSBSpv v512i32:$vy, v512i32:$vz)>;
+
+def : Pat<(mul v256i32:$vy, v256i32:$vz), (VMPSwsxv v256i32:$vy, v256i32:$vz)>;
+def : Pat<(mul v256i64:$vy, v256i64:$vz), (VMPYlv v256i64:$vy, v256i64:$vz)>;
+
+def : Pat<(sdiv v256i32:$vy, v256i32:$vz), (VDVSwsxv v256i32:$vy, v256i32:$vz)>;
+def : Pat<(sdiv v256i64:$vy, v256i64:$vz), (VDVXlv v256i64:$vy, v256i64:$vz)>;
+
+def : Pat<(udiv v256i32:$vy, v256i32:$vz), (VDIVwv v256i32:$vy, v256i32:$vz)>;
+def : Pat<(udiv v256i64:$vy, v256i64:$vz), (VDIVlv v256i64:$vy, v256i64:$vz)>;
 
 // Bitconvert for mask registers between 
 // v4i64 or v8i64 and v256i1 or v512i1 respectively
