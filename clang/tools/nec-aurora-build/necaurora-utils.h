@@ -4,7 +4,7 @@
 #include <string>
 
 // TODO: Define / use debuging stuff?
-static bool Verbose = false;
+extern bool Verbose;
 
 /// Writes a temp file with content "Content" and a given prefix "Prefix"
 /// and an given extension "Extension".

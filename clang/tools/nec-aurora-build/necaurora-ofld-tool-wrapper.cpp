@@ -37,6 +37,8 @@
 // as naming convention.
 #define VEORUN_BIN "veorun"
 
+bool Verbose = false;
+
 /// This function returns the symbols in the given ELF object "elfObject"
 /// and returns the symbol names in "symbols".
 void getSymsFromELFObj(char *elfObject, std::vector<std::string> *symbols) {
@@ -194,7 +196,9 @@ int main(int argc, char **argv) {
     optind = 0;
 
     for (int i = 1; i < argc; ++i) {
-      cmdLine << " " << argv[i];
+      std::string tmp = argv[i];
+      if(tmp.find("sotoc-path") == std::string::npos)
+        cmdLine << " " << tmp;
     }
   } else {
     if (elf_version(EV_CURRENT) == EV_NONE)
