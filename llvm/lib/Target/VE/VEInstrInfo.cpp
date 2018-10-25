@@ -21,11 +21,20 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "ve"
+
+using namespace llvm;
+
+static cl::opt<bool> ShowSpillMessageVec(
+  "show-spill-message-vec",
+  cl::init(false),
+  cl::desc("Enable diagnostic message for spill/restore of vector or vector mask registers."),
+  cl::Hidden);
 
 using namespace llvm;
 
@@ -458,6 +467,16 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
 
+  if (ShowSpillMessageVec) {
+    if (RC == &VE::V64RegClass) {
+      dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+    } else if (RC == &VE::VMRegClass) {
+      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
+    } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
+      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM512\n";
+    }
+  }
+
   MachineFunction *MF = MBB.getParent();
   const MachineFrameInfo &MFI = MF->getFrameInfo();
   MachineMemOperand *MMO = MF->getMachineMemOperand(
@@ -498,6 +517,16 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                      const TargetRegisterInfo *TRI) const {
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
+
+  if (ShowSpillMessageVec) {
+    if (RC == &VE::V64RegClass) {
+      dbgs() << "spill " << printReg(DestReg, TRI) << " - V64\n";
+    } else if (RC == &VE::VMRegClass) {
+      dbgs() << "spill " << printReg(DestReg, TRI) << " - VM\n";
+    } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
+      dbgs() << "spill " << printReg(DestReg, TRI) << " - VM512\n";
+    }
+  }
 
   MachineFunction *MF = MBB.getParent();
   const MachineFrameInfo &MFI = MF->getFrameInfo();
