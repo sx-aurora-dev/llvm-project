@@ -1105,3 +1105,17 @@ def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, Defs = [VL] in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
+// Pseudo instructions for bitconvert
+
+def VM2V : Pseudo<(outs V64:$vx), (ins VM:$vmy),
+  "# vm2v $vx,$vmy", []>;
+
+def VMP2V : Pseudo<(outs V64:$vx), (ins VM512:$vmy),
+  "# vmp2v $vx,$vmy", []>;
+
+def V2VM : Pseudo<(outs VM:$vmx), (ins V64:$vy),
+  "# v2vm $vmx,$vy", []>;
+
+def V2VMP : Pseudo<(outs VM512:$vmx), (ins V64:$vy),
+  "# v2vmp $vmx,$vy", []>;
+

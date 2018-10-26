@@ -85,17 +85,17 @@ def : Pat<(udiv v256i64:$vy, v256i64:$vz), (VDIVlv v256i64:$vy, v256i64:$vz)>;
 // Bitconvert for mask registers between 
 // v4i64 or v8i64 and v256i1 or v512i1 respectively
 
-def : Pat<(v256i1 (bitconvert v4i64:$vm)),
-          (v256i1 (COPY_TO_REGCLASS $vm, VM))>;
+def : Pat<(v256i1 (bitconvert v4i64:$v)),
+          (v256i1 (V2VM (COPY_TO_REGCLASS $v, V64)))>;
 
 def : Pat<(v4i64 (bitconvert v256i1:$vm)),
-          (v4i64 (COPY_TO_REGCLASS $vm, V64))>;
+          (v4i64 (COPY_TO_REGCLASS (VM2V $vm), V64))>;
 
-def : Pat<(v512i1 (bitconvert v8i64:$vmp)),
-          (v512i1 (COPY_TO_REGCLASS $vmp, VM512))>;
+def : Pat<(v512i1 (bitconvert v8i64:$v)),
+          (v512i1 (V2VMP (COPY_TO_REGCLASS $v, V64)))>;
 
 def : Pat<(v8i64 (bitconvert v512i1:$vmp)),
-          (v8i64 (COPY_TO_REGCLASS $vmp, V64))>;
+          (v8i64 (COPY_TO_REGCLASS (VMP2V $vmp), V64))>;
 
 // Series of SCALAR_TO_VECTOR for all VE vector types,
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
