@@ -52,6 +52,8 @@ public:
   void getTargetDefines(const LangOptions &Opts,
                         MacroBuilder &Builder) const override;
 
+  bool hasSjLjLowering() const override { return true; }
+
   ArrayRef<Builtin::Info> getTargetBuiltins() const override;
 
   BuiltinVaListKind getBuiltinVaListKind() const override {
@@ -84,7 +86,7 @@ public:
   }
 
   int getEHDataRegisterNumber(unsigned RegNo) const override {
-    // R0=ExceptionPointerRegister R1=ExceptionSelectorRegister
+    // S0 = ExceptionPointerRegister, S1 = ExceptionSelectorRegister
     return (RegNo < 2) ? RegNo : -1;
   }
 
