@@ -34,8 +34,9 @@ namespace llvm {
       SELECT_XCC,  // Select between two values using the current XCC flags.
       SELECT_FCC,  // Select between two values using the current FCC flags.
 
-      EH_SJLJ_SETJMP,  // builtin setjmp operation
-      EH_SJLJ_LONGJMP, // builtin longjmp operation
+      EH_SJLJ_SETJMP,           // SjLj exception handling setjmp.
+      EH_SJLJ_LONGJMP,          // SjLj exception handling longjmp.
+      EH_SJLJ_SETUP_DISPATCH,   // SjLj exception handling setup_dispatch.
 
       Hi, Lo,      // Hi/Lo operations, typically on a global address.
 
@@ -318,24 +319,15 @@ namespace llvm {
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
 
-    SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG,
-                                const VETargetLowering &TLI) const ;
-    SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG,
-                                 const VETargetLowering &TLI) const ;
+    SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
     unsigned getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const;
     SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
     SDValue makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
                          SelectionDAG &DAG) const;
     SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
-
-    SDValue LowerF128_LibCallArg(SDValue Chain, ArgListTy &Args, SDValue Arg,
-                                 const SDLoc &DL, SelectionDAG &DAG) const;
-    SDValue LowerF128Op(SDValue Op, SelectionDAG &DAG,
-                        const char *LibFuncName,
-                        unsigned numArgs) const;
-    SDValue LowerF128Compare(SDValue LHS, SDValue RHS, unsigned &SPCC,
-                             const SDLoc &DL, SelectionDAG &DAG) const;
 
     SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
