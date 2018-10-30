@@ -673,11 +673,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BRIND,  MVT::Other, Expand);
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
 
-#if 0
-  // FIXME: VE's SETJMP is not investigated yet.
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
-#endif
+  setOperationAction(ISD::EH_SJLJ_SETUP_DISPATCH, MVT::Other, Custom);
 
   // ATOMICs.
   // Atomics are supported on VE.
@@ -945,6 +943,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::SELECT_FCC:      return "VEISD::SELECT_FCC";
   case VEISD::EH_SJLJ_SETJMP:  return "VEISD::EH_SJLJ_SETJMP";
   case VEISD::EH_SJLJ_LONGJMP: return "VEISD::EH_SJLJ_LONGJMP";
+  case VEISD::EH_SJLJ_SETUP_DISPATCH:   return "VEISD::EH_SJLJ_SETUP_DISPATCH";
   case VEISD::Hi:              return "VEISD::Hi";
   case VEISD::Lo:              return "VEISD::Lo";
   case VEISD::FTOI:            return "VEISD::FTOI";
@@ -1346,102 +1345,27 @@ SDValue VETargetLowering::LowerGlobalTLSAddress(SDValue Op,
 #endif
 }
 
-#if 0
-SDValue VETargetLowering::LowerF128_LibCallArg(SDValue Chain,
-                                                  ArgListTy &Args, SDValue Arg,
-                                                  const SDLoc &DL,
-                                                  SelectionDAG &DAG) const {
-  MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
-  EVT ArgVT = Arg.getValueType();
-  Type *ArgTy = ArgVT.getTypeForEVT(*DAG.getContext());
-
-  ArgListEntry Entry;
-  Entry.Node = Arg;
-  Entry.Ty   = ArgTy;
-
-  if (ArgTy->isFP128Ty()) {
-    // Create a stack object and pass the pointer to the library function.
-    int FI = MFI.CreateStackObject(16, 8, false);
-    SDValue FIPtr = DAG.getFrameIndex(FI, getPointerTy(DAG.getDataLayout()));
-    Chain = DAG.getStore(Chain, DL, Entry.Node, FIPtr, MachinePointerInfo(),
-                         /* Alignment = */ 8);
-
-    Entry.Node = FIPtr;
-    Entry.Ty   = PointerType::getUnqual(ArgTy);
-  }
-  Args.push_back(Entry);
-  return Chain;
+SDValue
+VETargetLowering::LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  return DAG.getNode(VEISD::EH_SJLJ_SETJMP, dl,
+                     DAG.getVTList(MVT::i32, MVT::Other), Op.getOperand(0),
+                     Op.getOperand(1));
 }
 
 SDValue
-VETargetLowering::LowerF128Op(SDValue Op, SelectionDAG &DAG,
-                                 const char *LibFuncName,
-                                 unsigned numArgs) const {
-
-  ArgListTy Args;
-
-  MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
-  auto PtrVT = getPointerTy(DAG.getDataLayout());
-
-  SDValue Callee = DAG.getExternalSymbol(LibFuncName, PtrVT);
-  Type *RetTy = Op.getValueType().getTypeForEVT(*DAG.getContext());
-  Type *RetTyABI = RetTy;
-  SDValue Chain = DAG.getEntryNode();
-  SDValue RetPtr;
-
-  if (RetTy->isFP128Ty()) {
-    // Create a Stack Object to receive the return value of type f128.
-    ArgListEntry Entry;
-    int RetFI = MFI.CreateStackObject(16, 8, false);
-    RetPtr = DAG.getFrameIndex(RetFI, PtrVT);
-    Entry.Node = RetPtr;
-    Entry.Ty   = PointerType::getUnqual(RetTy);
-    if (!1)
-      Entry.IsSRet = true;
-    Entry.IsReturned = false;
-    Args.push_back(Entry);
-    RetTyABI = Type::getVoidTy(*DAG.getContext());
-  }
-
-  assert(Op->getNumOperands() >= numArgs && "Not enough operands!");
-  for (unsigned i = 0, e = numArgs; i != e; ++i) {
-    Chain = LowerF128_LibCallArg(Chain, Args, Op.getOperand(i), SDLoc(Op), DAG);
-  }
-  TargetLowering::CallLoweringInfo CLI(DAG);
-  CLI.setDebugLoc(SDLoc(Op)).setChain(Chain)
-    .setCallee(CallingConv::C, RetTyABI, Callee, std::move(Args));
-
-  std::pair<SDValue, SDValue> CallInfo = LowerCallTo(CLI);
-
-  // chain is in second result.
-  if (RetTyABI == RetTy)
-    return CallInfo.first;
-
-  assert (RetTy->isFP128Ty() && "Unexpected return type!");
-
-  Chain = CallInfo.second;
-
-  // Load RetPtr to get the return value.
-  return DAG.getLoad(Op.getValueType(), SDLoc(Op), Chain, RetPtr,
-                     MachinePointerInfo(), /* Alignment = */ 8);
-}
-#endif
-
-#if 0
-SDValue VETargetLowering::LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG,
-    const VETargetLowering &TLI) const {
-  SDLoc DL(Op);
-  return DAG.getNode(VEISD::EH_SJLJ_SETJMP, DL,
-      DAG.getVTList(MVT::i32, MVT::Other), Op.getOperand(0), Op.getOperand(1));
-
+VETargetLowering::LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  return DAG.getNode(VEISD::EH_SJLJ_LONGJMP, dl, MVT::Other, Op.getOperand(0),
+                     Op.getOperand(1));
 }
 
-SDValue VETargetLowering::LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG,
-    const VETargetLowering &TLI) const {
-  SDLoc DL(Op);
-  return DAG.getNode(VEISD::EH_SJLJ_LONGJMP, DL, MVT::Other, Op.getOperand(0), Op.getOperand(1));
+SDValue VETargetLowering::LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op,
+                                                      SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  return DAG.getNode(VEISD::EH_SJLJ_SETUP_DISPATCH, dl, MVT::Other,
+                     Op.getOperand(0));
 }
-#endif
 
 static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
                             const VETargetLowering &TLI) {
@@ -2381,10 +2305,9 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-  case ISD::EH_SJLJ_SETJMP:     // return LowerEH_SJLJ_SETJMP(Op, DAG, *this);
-    report_fatal_error("EH_SJLJ_SETJMP expansion is not implemented yet");
-  case ISD::EH_SJLJ_LONGJMP:    // return LowerEH_SJLJ_LONGJMP(Op, DAG, *this);
-    report_fatal_error("EH_SJLJ_LONGJMP expansion is not implemented yet");
+  case ISD::EH_SJLJ_SETJMP:     return LowerEH_SJLJ_SETJMP(Op, DAG);
+  case ISD::EH_SJLJ_LONGJMP:    return LowerEH_SJLJ_LONGJMP(Op, DAG);
+  case ISD::EH_SJLJ_SETUP_DISPATCH: return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
   case ISD::VASTART:            return LowerVASTART(Op, DAG, *this);
   case ISD::VAARG:              return LowerVAARG(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG);
@@ -2408,14 +2331,6 @@ VETargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                  MachineBasicBlock *BB) const {
   switch (MI.getOpcode()) {
   default: llvm_unreachable("Unknown Custom Instruction!");
-#if 0
-  case SP::EH_SJLJ_SETJMP32ri:
-  case SP::EH_SJLJ_SETJMP32rr:
-    return emitEHSjLjSetJmp(MI, BB);
-  case SP::EH_SJLJ_LONGJMP32rr:
-  case SP::EH_SJLJ_LONGJMP32ri:
-    return emitEHSjLjLongJmp(MI, BB);
-#endif
   }
 }
 

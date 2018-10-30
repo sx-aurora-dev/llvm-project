@@ -251,6 +251,17 @@ def VEmin : SDNode<"VEISD::MIN", SDTIntBinOp>;
 def VEfmax : SDNode<"VEISD::FMAX", SDTFPBinOp>;
 def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
 
+def VEeh_sjlj_setjmp: SDNode<"VEISD::EH_SJLJ_SETJMP",
+                             SDTypeProfile<1, 1, [SDTCisInt<0>,
+                                                  SDTCisPtrTy<1>]>,
+                             [SDNPHasChain, SDNPSideEffect]>;
+def VEeh_sjlj_longjmp: SDNode<"VEISD::EH_SJLJ_LONGJMP",
+                              SDTypeProfile<0, 1, [SDTCisPtrTy<0>]>,
+                              [SDNPHasChain, SDNPSideEffect]>;
+def VEeh_sjlj_setup_dispatch: SDNode<"VEISD::EH_SJLJ_SETUP_DISPATCH",
+                                     SDTypeProfile<0, 0, []>,
+                                     [SDNPHasChain, SDNPSideEffect]>;
+
 // GETFUNPLT for PIC
 def GetFunPLT : SDNode<"VEISD::GETFUNPLT", SDTIntUnaryOp>;
 
@@ -1428,6 +1439,24 @@ def SVOB : RR<0x30, (outs), (ins), "svob", []>;
 def MEMBARRIER : Pseudo<(outs), (ins), "# MEMBARRIER",
                        [(MemBarrier)] >;
 
+//===----------------------------------------------------------------------===//
+// SJLJ Exception handling intrinsics
+//===----------------------------------------------------------------------===//
+
+let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
+  def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
+                               "# EH_SJLJ_SETJMP",
+                               [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
+  let isTerminator = 1 in {
+  def EH_SjLj_LongJmp : Pseudo<(outs), (ins I64:$buf),
+                               "# EH_SJLJ_LONGJMP",
+                               [(VEeh_sjlj_longjmp I64:$buf)]>;
+  }
+}
+
+let isBarrier = 1, hasSideEffects = 1 in
+  def EH_SjLj_Setup : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
+                             [(VEeh_sjlj_setup_dispatch)]>;
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
