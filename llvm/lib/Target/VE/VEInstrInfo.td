@@ -1644,6 +1644,11 @@ def : Pat<(add (VEhi texternalsym:$in1), (VElo texternalsym:$in2)),
           (LEASLrzi (ANDrm0 (LEAzzi texternalsym:$in2), 32),
                     (texternalsym:$in1))>;
 
+// Address store of mcsym
+def : Pat<(store (i64 mcsym:$src), ADDRri:$dst),
+          (STSri ADDRri:$dst, (LEASLrzi (ANDrm0 (LEAzzi mcsym:$src), 32),
+                                        (mcsym:$src)))>;
+
 // Calls
 def : Pat<(call tglobaladdr:$dst),
           (CALL tglobaladdr:$dst)>;
