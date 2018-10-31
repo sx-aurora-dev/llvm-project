@@ -62,6 +62,11 @@ namespace llvm {
       GLOBAL_BASE_REG, // Global base reg for PIC.
       FLUSHW,      // FLUSH register windows to stack.
 
+      /// A wrapper node for TargetConstantPool, TargetJumpTable,
+      /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
+      /// MCSymbol and TargetBlockAddress.
+      Wrapper,
+
       // Intrinsics
       INT_LVM,      // for int_ve_lvm_mmss or int_ve_lvm_MMss
       INT_SVM,      // for int_ve_svm_sms or int_ve_svm_sMs

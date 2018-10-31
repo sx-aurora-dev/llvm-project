@@ -24,6 +24,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
@@ -676,6 +677,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
   setOperationAction(ISD::EH_SJLJ_SETUP_DISPATCH, MVT::Other, Custom);
+  if (TM.Options.ExceptionModel == ExceptionHandling::SjLj)
+    setLibcallName(RTLIB::UNWIND_RESUME, "_Unwind_SjLj_Resume");
 
   // ATOMICs.
   // Atomics are supported on VE.
@@ -962,6 +965,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
+  case VEISD::Wrapper:         return "VEISD::Wrapper";
   case VEISD::INT_LVM:         return "VEISD::INT_LVM";
   case VEISD::INT_SVM:         return "VEISD::INT_SVM";
   case VEISD::INT_ANDM:        return "VEISD::INT_ANDM";
@@ -1255,17 +1259,17 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue VETargetLowering::LowerGlobalAddress(SDValue Op,
-                                                SelectionDAG &DAG) const {
+                                             SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
 
 SDValue VETargetLowering::LowerConstantPool(SDValue Op,
-                                               SelectionDAG &DAG) const {
+                                            SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
 
 SDValue VETargetLowering::LowerBlockAddress(SDValue Op,
-                                               SelectionDAG &DAG) const {
+                                            SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
 
@@ -2006,6 +2010,20 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 #if 0
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getRegister(SP::G7, PtrVT);
+#endif
+  }
+  case Intrinsic::eh_sjlj_lsda: {
+    MachineFunction &MF = DAG.getMachineFunction();
+    const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+    MVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
+    auto &Context = MF.getMMI().getContext();
+    MCSymbol *S = Context.getOrCreateSymbol(Twine("GCC_except_table") +
+                                            Twine(MF.getFunctionNumber()));
+#if 1
+    return DAG.getMCSymbol(S, PtrVT);
+#else
+    return DAG.getNode(VEISD::Wrapper, dl, Op.getSimpleValueType(),
+                       DAG.getMCSymbol(S, PtrVT));
 #endif
   }
   case Intrinsic::ve_vfdivsA_vvv: {
