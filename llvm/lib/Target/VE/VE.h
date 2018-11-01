@@ -28,7 +28,7 @@ namespace llvm {
   class MachineInstr;
 
   FunctionPass *createVEISelDag(VETargetMachine &TM);
-  FunctionPass *createVEDelaySlotFillerPass();
+  FunctionPass *createVEPromoteToI1Pass();
 
   void LowerVEMachineInstrToMCInst(const MachineInstr *MI,
                                       MCInst &OutMI,
