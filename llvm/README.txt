@@ -8,7 +8,6 @@ Vector Engine (VE).
 Modifications are under the development.  We know following flaws.
 
  - automatic vectorization is not supported yet
- - long double is not fully supported
 
 Please file issues if you have problems.
 
@@ -67,10 +66,9 @@ Use clang like below.
     $ clang -target ve-linux -O3 -fno-vectorize -fno-slp-vectorize \
       -fno-crash-diagnostics -c ...
 
- - Clang without -O3 may cause internal compiler errors.  Adding -O3 option
-   will solve this problem.
- - Clang with -O3 may cause vectorization related errors.  Adding
-   "-fno-vectorize -fno-slp-vectorize" options will solve this problem.
+ - Clang with -O3 may vectorize programs, but llvm backend for VE doesn't
+   support vector instructions yet.  So, add "-fno-vectorize 
+   -fno-slp-vectorize" options to not vectorize programs.
  - -fno-crash-diagnostics avoid generating diagnostics which contain
    compiling source codes under /tmp.
 
