@@ -24,11 +24,15 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "config.h"
 #include "necaurora-utils.h"
 
+bool Verbose = false;
+
 int runSourceTransformation(const std::string &InputPath,
+                            const std::string &SotocPath,
                             std::string &OutputPath) {
   std::stringstream CmdLine;
 
@@ -41,7 +45,6 @@ int runSourceTransformation(const std::string &InputPath,
 
   // find last '.' in string so we can get the filename extension
   size_t PosLastDotInPath = InputPath.rfind(".");
-
   if (PosLastDotInPath == std::string::npos) {
     std::cerr
         << "necaurora-ofld-cc1-wrapper: Input file has no file extension (1)"
@@ -67,7 +70,7 @@ int runSourceTransformation(const std::string &InputPath,
   if (TmpFile == "")
     return -1;
 
-  CmdLine << "sotoc " << InputPath << " -- -fopenmp "
+  CmdLine << SotocPath << " " << InputPath << " -- -fopenmp "
           << ">" << TmpFile;
 
   if (Verbose) {
@@ -81,26 +84,52 @@ int runSourceTransformation(const std::string &InputPath,
 int main(int argc, char **argv) {
 
   int rc;
-
-  if (argc < 2) {
-    std::cerr << "Needs at least one argument\n";
-    return EXIT_FAILURE;
-  }
+  int option;
+  std::stringstream SotocPath;
 
   std::string InputPath(argv[1]);
   std::string SotocOutputPath;
 
   std::stringstream ArgsStream;
 
-  for (int i = 2; i < argc; ++i) {
-    if (std::strcmp(argv[i], "-v") == 0) {
-      Verbose = true;
-    }
+  const char* const short_opts = "v";
 
-    ArgsStream << " " << argv[i];
+  const struct option long_opts[] = {
+    {"sotoc-path", required_argument, nullptr, 'p'},
+    {nullptr, no_argument, nullptr, 0}
+  };
+
+  if (argc < 2) {
+    std::cerr << "Needs at least one argument\n";
+    return EXIT_FAILURE;
   }
 
-  rc = runSourceTransformation(InputPath, SotocOutputPath);
+  for (int i = 2; i < argc; ++i) {
+    std::string tmp = argv[i];
+    if(tmp.find("sotoc-path") == std::string::npos)
+      ArgsStream << " " << tmp;
+  }
+
+  option = 0;
+  opterr = 0; // we just ignore unknown options
+  optind = 0;
+  while ((option = getopt_long(argc, argv, short_opts, long_opts, nullptr)) != -1) {
+    switch (option) {
+    case 'p':
+        SotocPath << optarg;
+      break;
+    case 'v':
+      Verbose = true;
+      break;
+    default:
+      break;
+    }
+  }
+
+  if(SotocPath.str().empty())
+    SotocPath << "sotoc";
+
+  rc = runSourceTransformation(InputPath, SotocPath.str(), SotocOutputPath);
 
   if (rc != 0) {
     std::cerr << "necaurora-ofld-cc1-wrapper: "
