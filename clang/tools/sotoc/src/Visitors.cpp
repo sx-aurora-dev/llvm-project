@@ -86,17 +86,26 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   } else if (auto *LD = llvm::dyn_cast<clang::OMPLoopDirective>(S)) {
     if (auto *TD = llvm::dyn_cast<clang::OMPTargetParallelForDirective>(LD)) {
       processTargetRegion(TD);
-    } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetParallelForSimdDirective>(LD)) {
+    } else if (auto *TD =
+                   llvm::dyn_cast<clang::OMPTargetParallelForSimdDirective>(
+                       LD)) {
       processTargetRegion(TD);
     } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetSimdDirective>(LD)) {
       processTargetRegion(TD);
-    } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetTeamsDistributeDirective>(LD)) {
+    } else if (auto *TD =
+                   llvm::dyn_cast<clang::OMPTargetTeamsDistributeDirective>(
+                       LD)) {
       processTargetRegion(TD);
-    } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetTeamsDistributeParallelForDirective>(LD)) {
+    } else if (auto *TD = llvm::dyn_cast<
+                   clang::OMPTargetTeamsDistributeParallelForDirective>(LD)) {
       processTargetRegion(TD);
-    } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetTeamsDistributeParallelForSimdDirective>(LD)) {
+    } else if (auto *TD = llvm::dyn_cast<
+                   clang::OMPTargetTeamsDistributeParallelForSimdDirective>(
+                   LD)) {
       processTargetRegion(TD);
-    } else if (auto *TD = llvm::dyn_cast<clang::OMPTargetTeamsDistributeSimdDirective>(LD)) {
+    } else if (auto *TD =
+                   llvm::dyn_cast<clang::OMPTargetTeamsDistributeSimdDirective>(
+                       LD)) {
       processTargetRegion(TD);
     }
   }
@@ -122,21 +131,23 @@ bool FindTargetCodeVisitor::processTargetRegion(
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
         // look for nested clause
-        if (auto *CD = CS->getCapturedDecl()){
-          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody())){
-            //CoS->dump();
-            for (auto *ICoS : CoS->children()){
-              if (auto *PD = llvm::dyn_cast<clang::OMPExecutableDirective>(ICoS)){
-                //clang::OMPClause arr[1] = {clang::OMPPrivateClause()};
-                for (auto *PDC : PD->clauses()){
-                    TCR->addOpenMPClause(PDC);
+        if (auto *CD = CS->getCapturedDecl()) {
+          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody())) {
+            // CoS->dump();
+            for (auto *ICoS : CoS->children()) {
+              if (auto *PD =
+                      llvm::dyn_cast<clang::OMPExecutableDirective>(ICoS)) {
+                // clang::OMPClause arr[1] = {clang::OMPPrivateClause()};
+                for (auto *PDC : PD->clauses()) {
+                  TCR->addOpenMPClause(PDC);
                 }
               }
             }
           }
         }
 
-        // For more complex data types (like structs) we need to traverse the tree
+        // For more complex data types (like structs) we need to traverse the
+        // tree
         DiscoverTypeVisitor.TraverseStmt(CS);
         addTargetRegionArgs(CS, TCR);
         TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);

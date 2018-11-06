@@ -27,7 +27,7 @@
 #include "TargetCodeFragment.h"
 
 void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
-  //Var->print(llvm::outs());
+  // Var->print(llvm::outs());
   CapturedVars.push_back(Var);
 }
 
@@ -176,7 +176,7 @@ std::string TargetCodeRegion::PrintClauses() {
     if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_map)) {
       clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
       clang::CharSourceRange CCRange =
-        clang::CharSourceRange::getTokenRange(CRange);
+          clang::CharSourceRange::getTokenRange(CRange);
       Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
     }
   }
@@ -200,11 +200,12 @@ std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
   return Out.str();
 }
 
-clang::OMPClause* TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
-  for (auto C : OMPClauses){
-    for(auto CC : C->children()) {
-      if (auto CC_DeclRefExpr = llvm::dyn_cast<clang::DeclRefExpr>(CC)){
-        if(i->getCanonicalDecl() == CC_DeclRefExpr->getDecl()) return C;
+clang::OMPClause *TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
+  for (auto C : OMPClauses) {
+    for (auto CC : C->children()) {
+      if (auto CC_DeclRefExpr = llvm::dyn_cast<clang::DeclRefExpr>(CC)) {
+        if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
+          return C;
       }
     }
   }

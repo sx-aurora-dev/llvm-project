@@ -23,9 +23,9 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/APInt.h"
 
 #include "TargetCode.h"
 
@@ -104,7 +104,8 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
-  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd(); i != e; ++i) {
+  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
+       i != e; ++i) {
     auto C = TCR->GetReferredOMPClause(*i);
     if (!first) {
       Out << ", ";
@@ -112,8 +113,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     first = false;
 
     // check for static arrays, because of AST representation and naive getType
-    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*i)->getType().getTypePtr())){
-      // possibly use t->getSize().toString(10, false) to get the size of the array
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+            (*i)->getType().getTypePtr())) {
+      // possibly use t->getSize().toString(10, false) to get the size of the
+      // array
       int dim = 0;
       auto VarName = (*i)->getDeclName().getAsString();
       auto OrigT = t;
@@ -124,25 +127,28 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
         ++dim;
 
         OrigT = t;
-        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
+        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+            t->getElementType().getTypePtr());
       } while (t != NULL);
 
-      Out << "void *__sotoc_var_" << VarName; // set type to void* to avoid warnings from the compiler
+      Out << "void *__sotoc_var_"
+          << VarName; // set type to void* to avoid warnings from the compiler
       nDim.push_back(dim); // push total number of dimensions
 
     } else {
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
-        if(C){
+        if (C) {
           // Parameters which are not first private (e.g., explicit mapped vars)
           // are passed by reference, all others by value.
-          if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_firstprivate)) {
+          if (!(C->getClauseKind() ==
+                clang::OpenMPClauseKind::OMPC_firstprivate)) {
             Out << "*__sotoc_var_";
           }
         }
       }
       Out << (*i)->getDeclName().getAsString();
-      //TODO: use `Name.print` instead
+      // TODO: use `Name.print` instead
     }
   }
   Out << ")\n{\n";
@@ -153,17 +159,19 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     auto C = TCR->GetReferredOMPClause(*I);
 
     // again check for static arrays
-    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+            (*I)->getType().getTypePtr())) {
       auto VarName = (*I)->getDeclName().getAsString();
       auto OrigT = t;
 
       do {
         OrigT = t;
-        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(t->getElementType().getTypePtr());
+        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+            t->getElementType().getTypePtr());
       } while (t != NULL);
 
-      Out << "  " << OrigT->getElementType().getAsString() << " (*"
-          << VarName << ")";
+      Out << "  " << OrigT->getElementType().getAsString() << " (*" << VarName
+          << ")";
 
       // Get number of Dimensions(nDim) and write sizes(DimString)
       for (int i = 1; i < nDim.front(); i++) {
@@ -171,18 +179,20 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
         Out << "[" << DimString.front() << "]";
       }
       DimString.pop_front(); // remove last size
-      nDim.pop_front(); // remove number of dimensions of last variable
+      nDim.pop_front();      // remove number of dimensions of last variable
 
       Out << " = __sotoc_var_" << VarName << ";\n";
 
     } else {
       if (!(*I)->getType().getTypePtr()->isPointerType()) {
-        if(C){
+        if (C) {
           // Parameters which are not first private (e.g., explicit mapped vars)
           // are passed by reference, all others by value.
-          if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_firstprivate)) {
+          if (!(C->getClauseKind() ==
+                clang::OpenMPClauseKind::OMPC_firstprivate)) {
             auto VarName = (*I)->getDeclName().getAsString();
-            Out << "  " << (*I)->getType().getAsString() << " " << VarName << " = "
+            Out << "  " << (*I)->getType().getAsString() << " " << VarName
+                << " = "
                 << "*__sotoc_var_" << VarName << ";\n";
           }
         }
@@ -200,44 +210,47 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // TODO: What to do with standalone team constructs?
 
   switch (TCR->TargetCodeKind) {
-    /*case clang::OpenMPDirectiveKind::OMPD_target_teams:{
-      Out << "  #pragma omp teams " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }*/
-    case clang::OpenMPDirectiveKind::OMPD_target_parallel:{
-      Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }
-    case clang::OpenMPDirectiveKind::OMPD_target_parallel_for:{
-      Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }
-    case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd:{
-      Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }
-    case clang::OpenMPDirectiveKind::OMPD_target_simd:{
-      Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }/*
-    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute:{
-      Out << "  #pragma omp teams distribute " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }*/
-    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for:{
-      Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }
-    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for_simd:{
-      Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }
-    case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd:{
-      Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
-      break;
-    }
-    default:
-      break;
+  /*case clang::OpenMPDirectiveKind::OMPD_target_teams:{
+    Out << "  #pragma omp teams " << TCR->PrintClauses() << "\n  {\n";
+    break;
+  }*/
+  case clang::OpenMPDirectiveKind::OMPD_target_parallel: {
+    Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
+    break;
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
+    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
+    break;
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
+    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
+        << "\n  {\n";
+    break;
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_simd: {
+    Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
+    break;
+  } /*
+   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute:{
+     Out << "  #pragma omp teams distribute " << TCR->PrintClauses() << "\n
+   {\n"; break;
+   }*/
+  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
+    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
+    break;
+  }
+  case clang::OpenMPDirectiveKind::
+      OMPD_target_teams_distribute_parallel_for_simd: {
+    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
+        << "\n  {\n";
+    break;
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
+    Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
+    break;
+  }
+  default:
+    break;
   }
 
   if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
@@ -248,15 +261,23 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   auto tmpSL = TCR->getEndLoc();
 
-  if (//TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams ||
+  if ( // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams
+       // ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
+      TCR->TargetCodeKind ==
+          clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
+      TCR->TargetCodeKind ==
+          clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
-      //TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for_simd ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
+      // TCR->TargetCodeKind ==
+      // clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
+      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::
+                                 OMPD_target_teams_distribute_parallel_for ||
+      TCR->TargetCodeKind ==
+          clang::OpenMPDirectiveKind::
+              OMPD_target_teams_distribute_parallel_for_simd ||
+      TCR->TargetCodeKind ==
+          clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
     Out << "\n  }";
   }
 
@@ -267,15 +288,17 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
     auto C = TCR->GetReferredOMPClause(*I);
 
     // if array then already pointer
-    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>((*I)->getType().getTypePtr())){
-       auto VarName = (*I)->getDeclName().getAsString();
-       Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
+    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+            (*I)->getType().getTypePtr())) {
+      auto VarName = (*I)->getDeclName().getAsString();
+      Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
     } else {
       if (!(*I)->getType().getTypePtr()->isPointerType()) {
-        if(C){
+        if (C) {
           // Parameters which are not first private (e.g., explicit mapped vars)
           // are passed by reference, all others by value.
-          if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_firstprivate)) {
+          if (!(C->getClauseKind() ==
+                clang::OpenMPClauseKind::OMPC_firstprivate)) {
             auto VarName = (*I)->getDeclName().getAsString();
             Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
           }
