@@ -173,10 +173,12 @@ std::string TargetCodeRegion::PrintClauses() {
   const clang::LangOptions &LO = Context.getLangOpts();
   std::stringstream Out;
   for (auto C : OMPClauses) {
-    clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
-    clang::CharSourceRange CCRange =
+    if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_map)) {
+      clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
+      clang::CharSourceRange CCRange =
         clang::CharSourceRange::getTokenRange(CRange);
-    Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
+      Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
+    }
   }
   return Out.str();
 }

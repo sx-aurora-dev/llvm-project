@@ -1,7 +1,9 @@
 // RUN: %sotoc-transform-compile
 
+
 int main() {
   double ux  = 0;
+  double tx  = 0;
   double tmp = 0;
   #pragma omp target map(tofrom: tmp) device(0)
   {
@@ -15,5 +17,13 @@ int main() {
       ux = 42;
       tmp += ux;
     }
-  } 
+
+	
+   #pragma omp parallel private(tx) reduction (+: tmp)
+   {
+     tx = 42;
+     tmp += tx;
+   }
+
+  }
 }
