@@ -382,10 +382,23 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   bool IsPICCall = isPositionIndependent();
 
+  // PC-relative references to external symbols should go through $stub.
+  // If so, we need to prepare GlobalBaseReg first.
+  const TargetMachine &TM = DAG.getTarget();
+  const Module *Mod = DAG.getMachineFunction().getFunction().getParent();
+  const GlobalValue *GV = nullptr;
+  if (auto *G = dyn_cast<GlobalAddressSDNode>(Callee))
+    GV = G->getGlobal();
+  bool Local = TM.shouldAssumeDSOLocal(*Mod, GV);
+  bool UsePlt = !Local;
+  MachineFunction &MF = DAG.getMachineFunction();
+
   // Turn GlobalAddress/ExternalSymbol node into a value node
-  // contining the address of them here.
+  // containing the address of them here.
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     if (IsPICCall) {
+      if (UsePlt)
+        Subtarget->getInstrInfo()->getGlobalBaseReg(&MF);
       Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, PtrVT, 0, 0);
       Callee = DAG.getNode(VEISD::GETFUNPLT, DL, PtrVT, Callee);
     } else {
@@ -394,6 +407,8 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     }
   } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     if (IsPICCall) {
+      if (UsePlt)
+        Subtarget->getInstrInfo()->getGlobalBaseReg(&MF);
       Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, 0);
       Callee = DAG.getNode(VEISD::GETFUNPLT, DL, PtrVT, Callee);
     } else {
