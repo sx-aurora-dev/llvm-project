@@ -185,3 +185,54 @@ define i32 @func11(fp128, fp128) {
   ret i32 %7
 }
 
+
+; Function Attrs: nounwind
+define i32 @func12(i128, i128) {
+; CHECK-LABEL: func12:
+; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK-NEXT:    or %s34, 0, (0)1
+; CHECK-NEXT:    cmps.l %s35, %s1, %s3
+; CHECK-NEXT:    or %s36, 0, %s34
+; CHECK-NEXT:    cmov.l.le %s36, (63)0, %s35
+; CHECK-NEXT:    cmpu.l %s37, %s0, %s2
+; CHECK-NEXT:    cmov.l.le %s34, (63)0, %s37
+; CHECK-NEXT:    cmov.l.eq %s36, %s34, %s35
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    brne.w %s36, %s0, .LBB{{[0-9]+}}_2
+  %3 = icmp sgt i128 %0, %1
+  br i1 %3, label %4, label %6
+
+; <label>:4:                                      ; preds = %2
+  %5 = tail call i32 @ret(i32 2)
+  br label %6
+
+; <label>:6:                                      ; preds = %2, %4
+  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
+  ret i32 %7
+}
+
+; Function Attrs: nounwind
+define i32 @func13(i128, i128) {
+; CHECK-LABEL: func13:
+; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK-NEXT:    cmps.l %s34, %s1, %s3
+; CHECK-NEXT:    or %s35, 0, (0)1
+; CHECK-NEXT:    cmpu.l %s36, %s1, %s3
+; CHECK-NEXT:    or %s37, 0, %s35
+; CHECK-NEXT:    cmov.l.le %s37, (63)0, %s36
+; CHECK-NEXT:    cmpu.l %s36, %s0, %s2
+; CHECK-NEXT:    cmov.l.le %s35, (63)0, %s36
+; CHECK-NEXT:    cmov.l.eq %s37, %s35, %s34
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    brne.w %s37, %s0, .LBB{{[0-9]+}}_2
+  %3 = icmp ugt i128 %0, %1
+  br i1 %3, label %4, label %6
+
+; <label>:4:                                      ; preds = %2
+  %5 = tail call i32 @ret(i32 2)
+  br label %6
+
+; <label>:6:                                      ; preds = %2, %4
+  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
+  ret i32 %7
+}
