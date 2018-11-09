@@ -1318,6 +1318,12 @@ SDValue VETargetLowering::LowerToTLSGeneralDynamicModel(
   MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
   MFI.setHasCalls(true);
 
+  // Also generate code to prepare a GOT register if it is PIC.
+  if (isPositionIndependent()) {
+    MachineFunction &MF = DAG.getMachineFunction();
+    Subtarget->getInstrInfo()->getGlobalBaseReg(&MF);
+  }
+
   return Chain;
 }
 
