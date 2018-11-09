@@ -2031,15 +2031,18 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     MachineFunction &MF = DAG.getMachineFunction();
     const TargetLowering &TLI = DAG.getTargetLoweringInfo();
     MVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
-    auto &Context = MF.getMMI().getContext();
-    MCSymbol *S = Context.getOrCreateSymbol(Twine("GCC_except_table") +
-                                            Twine(MF.getFunctionNumber()));
-#if 1
-    return DAG.getMCSymbol(S, PtrVT);
-#else
-    return DAG.getNode(VEISD::Wrapper, dl, Op.getSimpleValueType(),
-                       DAG.getMCSymbol(S, PtrVT));
-#endif
+    const VETargetMachine *TM =
+      static_cast<const VETargetMachine*>(&DAG.getTarget());
+
+    // Creat GCC_except_tableXX string.  The real symbol for that will be
+    // generated in EHStreamer::emitExceptionTable() later.  So, we just
+    // borrow it's name here.
+    TM->getStrList()->push_back(std::string(
+      (Twine("GCC_except_table") + Twine(MF.getFunctionNumber())).str()));
+    SDValue Addr = DAG.getTargetExternalSymbol(TM->getStrList()->back().c_str(),
+                                               PtrVT, 0);
+    return makeHiLoPair(Addr, VEMCExpr::VK_VE_HI32,
+                        VEMCExpr::VK_VE_LO32, DAG);
   }
   case Intrinsic::ve_vfdivsA_vvv: {
 /*

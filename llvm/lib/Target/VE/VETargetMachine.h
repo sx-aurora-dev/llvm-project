@@ -23,6 +23,9 @@ namespace llvm {
 class VETargetMachine : public LLVMTargetMachine {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   VESubtarget Subtarget;
+  // Hold Strings that can be free'd all together with VETargetMachine
+  //   e.g.: "GCC_except_tableXX" string.
+  std::list<std::string> StrList;
 
 public:
   VETargetMachine(const Target &T, const Triple &TT, StringRef CPU,
@@ -34,6 +37,9 @@ public:
   const VESubtarget *getSubtargetImpl() const { return &Subtarget; }
   const VESubtarget *getSubtargetImpl(const Function &) const override {
     return &Subtarget;
+  }
+  std::list<std::string> *getStrList() const {
+    return const_cast<std::list<std::string> *>(&StrList);
   }
 
   // Pass Pipeline Configuration
