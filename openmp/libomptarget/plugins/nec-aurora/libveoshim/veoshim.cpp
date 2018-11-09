@@ -24,9 +24,14 @@ class ShimInfoTy {
 
 public:
   struct veo_proc_handle *getNewProcHandle() {
-    struct veo_proc_handle handle = {0};
+    struct veo_proc_handle handle = { 0 };
     proc_handles.push_back(handle);
     return &proc_handles.back();
+  }
+  ~ShimInfoTy() {
+    for (auto &h : proc_handles) {
+      dlclose(h.dlhandle_veoshim);
+    }
   }
 };
 
@@ -46,26 +51,27 @@ struct veo_proc_handle *veo_proc_create(int ve_node) {
   return ShimInfo.getNewProcHandle();
 }
 
+struct veo_proc_handle *veo_proc_create_static(int ve_node, const char *path) {
+  auto *handle = ShimInfo.getNewProcHandle();
+  veo_load_library(handle, path);
+  return handle;
+}
+
 struct veo_thr_ctxt *veo_context_open(struct veo_proc_handle *proc_handle) {
   struct veo_thr_ctxt *ctx =
       (struct veo_thr_ctxt *)malloc(sizeof(struct veo_thr_ctxt));
-  ctx->veoshim_dlhandle = NULL;
   return ctx;
 }
 
 int veo_context_close(struct veo_thr_ctxt *thread_ctxt) {
-  int ret;
-  if (thread_ctxt->veoshim_dlhandle) {
-    ret = dlclose(thread_ctxt->veoshim_dlhandle);
-    thread_ctxt->veoshim_dlhandle = NULL;
-  }
-  return ret;
+  free(thread_ctxt);
+  return 0;
 }
 
 uint64_t veo_load_library(struct veo_proc_handle *request,
                           const char *filename) {
   void *dlhandle = dlopen(filename, RTLD_NOW);
-  request->reserved = (uint64_t)dlhandle;
+  request->dlhandle_veoshim = dlhandle;
   return (uint64_t)dlhandle;
 }
 

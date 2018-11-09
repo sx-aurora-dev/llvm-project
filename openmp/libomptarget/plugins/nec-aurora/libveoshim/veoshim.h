@@ -18,6 +18,7 @@
 #define VEOSHIM_H
 
 #include <stdint.h>
+#include <string>
 
 #define VEO_REQUEST_ID_INVALID (~0UL)
 
@@ -28,17 +29,18 @@ extern "C" {
 #include <stdlib.h>
 
 struct veo_proc_handle {
-  uint64_t reserved;
+  void *dlhandle_veoshim;
 };
 
 struct veo_thr_ctxt {
-  void *veoshim_dlhandle;
   uint64_t last_return_value;
 };
 
 struct veo_args;
 
 struct veo_proc_handle *veo_proc_create(int ve_node);
+
+struct veo_proc_handle *veo_proc_create_static(int ve_node, const char *path);
 
 struct veo_thr_ctxt *veo_context_open(struct veo_proc_handle *proc_handle);
 

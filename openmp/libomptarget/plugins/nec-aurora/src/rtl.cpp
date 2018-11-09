@@ -273,18 +273,22 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   }
 
   fwrite(Image->ImageStart, ImageSize, 1, ftmp);
-  DP("Wrote target image to %s. ImageSize=%d\n", tmp_name, ImageSize);
+  DP("Wrote target image to %s. ImageSize=%zu\n", tmp_name, ImageSize);
   fclose(ftmp);
 
   // See comment in "__tgt_rtl_init_device"
 #if 1
-  char *VeorunBin = std::getenv("VEORUN_BIN");
-  if (!VeorunBin) {
-    VeorunBin = "veorun";
-    setenv("VEORUN_BIN", VeorunBin, 1);
+  struct veo_proc_handle *proc_handle;
+  // If we have a dynamically linked image, we create the process handle, then
+  // the thread, and then load the image.
+  // If we have a statically linked image, we need to create the process handle
+  // and load the image at the same time with veo_proc_create_static().
+  if (elf_is_dynamic(Image)) {
+    proc_handle = veo_proc_create(ID);
+  } else {
+    proc_handle = veo_proc_create_static(ID, tmp_name);
   }
 
-  struct veo_proc_handle *proc_handle = veo_proc_create(ID);
   if (!proc_handle) {
     // TODO: errno does not seem to be set by VEO
     // DP("veo_proc_create() failed: %s\n", std::strerror(errno));
@@ -319,8 +323,9 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
     DP("Successfully loaded library dynamically\n");
   } else {
-    DP("Symbol table is expected to be in VEORUN_BIN=%s\n", VeorunBin);
+    DP("Symbol table is expected to have been created by veo_create_proc_static()\n");
   }
+
   DynLibTy Lib = {tmp_name, LibHandle};
   DeviceInfo.DynLibs.push_back(Lib);
   DeviceInfo.LibraryHandles[ID] = LibHandle;
