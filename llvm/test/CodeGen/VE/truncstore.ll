@@ -69,8 +69,29 @@ define void @func3(i8 signext) {
 
 declare void @func_lo(i64*)
 
-define void @func4(i16 signext) {
+define void @func4(i8 signext) {
 ; CHECK-LABEL: func4:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
+; CHECK-NEXT:    sra.l %s35, %s34, 63
+; CHECK-NEXT:    lea %s0,-16(,%s9)
+; CHECK-NEXT:    or %s36, 8, %s0
+; CHECK-NEXT:    st %s35, (,%s36)
+; CHECK-NEXT:    st %s34, -16(,%s9)
+  %2 = alloca i128, align 16
+  %3 = bitcast i128* %2 to i8*
+  call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
+  %4 = sext i8 %0 to i128
+  store i128 %4, i128* %2, align 16, !tbaa !10
+  call void @func_i128(i128* nonnull %2)
+  call void @llvm.lifetime.end.p0i8(i64 16, i8* nonnull %3)
+  ret void
+}
+
+declare void @func_i128(i128*)
+
+define void @func5(i16 signext) {
+; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    stl %s0, -4(,%s9)
   %2 = alloca i32, align 4
@@ -83,8 +104,8 @@ define void @func4(i16 signext) {
   ret void
 }
 
-define void @func5(i16 signext) {
-; CHECK-LABEL: func5:
+define void @func6(i16 signext) {
+; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
 ; CHECK-NEXT:    st %s34, -8(,%s9)
@@ -98,8 +119,27 @@ define void @func5(i16 signext) {
   ret void
 }
 
-define void @func6(i32) {
-; CHECK-LABEL: func6:
+define void @func7(i16 signext) {
+; CHECK-LABEL: func7:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
+; CHECK-NEXT:    sra.l %s35, %s34, 63
+; CHECK-NEXT:    lea %s0,-16(,%s9)
+; CHECK-NEXT:    or %s36, 8, %s0
+; CHECK-NEXT:    st %s35, (,%s36)
+; CHECK-NEXT:    st %s34, -16(,%s9)
+  %2 = alloca i128, align 16
+  %3 = bitcast i128* %2 to i8*
+  call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
+  %4 = sext i16 %0 to i128
+  store i128 %4, i128* %2, align 16, !tbaa !10
+  call void @func_i128(i128* nonnull %2)
+  call void @llvm.lifetime.end.p0i8(i64 16, i8* nonnull %3)
+  ret void
+}
+
+define void @func8(i32) {
+; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
 ; CHECK-NEXT:    st %s34, -8(,%s9)
@@ -113,6 +153,43 @@ define void @func6(i32) {
   ret void
 }
 
+define void @func9(i32) {
+; CHECK-LABEL: func9:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
+; CHECK-NEXT:    sra.l %s35, %s34, 63
+; CHECK-NEXT:    lea %s0,-16(,%s9)
+; CHECK-NEXT:    or %s36, 8, %s0
+; CHECK-NEXT:    st %s35, (,%s36)
+; CHECK-NEXT:    st %s34, -16(,%s9)
+  %2 = alloca i128, align 16
+  %3 = bitcast i128* %2 to i8*
+  call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
+  %4 = sext i32 %0 to i128
+  store i128 %4, i128* %2, align 16, !tbaa !10
+  call void @func_i128(i128* nonnull %2)
+  call void @llvm.lifetime.end.p0i8(i64 16, i8* nonnull %3)
+  ret void
+}
+
+define void @func10(i64) {
+; CHECK-LABEL: func10:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sra.l %s35, %s0, 63
+; CHECK-NEXT:    lea %s34,-16(,%s9)
+; CHECK-NEXT:    or %s36, 8, %s34
+; CHECK-NEXT:    st %s35, (,%s36)
+; CHECK-NEXT:    st %s0, -16(,%s9)
+  %2 = alloca i128, align 16
+  %3 = bitcast i128* %2 to i8*
+  call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
+  %4 = sext i64 %0 to i128
+  store i128 %4, i128* %2, align 16, !tbaa !10
+  call void @func_i128(i128* nonnull %2)
+  call void @llvm.lifetime.end.p0i8(i64 16, i8* nonnull %3)
+  ret void
+}
+
 !2 = !{!3, !3, i64 0}
 !3 = !{!"short", !4, i64 0}
 !4 = !{!"omnipotent char", !5, i64 0}
@@ -121,3 +198,5 @@ define void @func6(i32) {
 !7 = !{!"int", !4, i64 0}
 !8 = !{!9, !9, i64 0}
 !9 = !{!"long long", !4, i64 0}
+!10 = !{!11, !11, i64 0}
+!11 = !{!"__int128", !4, i64 0}
