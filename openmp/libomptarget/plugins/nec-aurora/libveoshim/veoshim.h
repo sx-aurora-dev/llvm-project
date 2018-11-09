@@ -36,10 +36,6 @@ struct veo_thr_ctxt {
   uint64_t last_return_value;
 };
 
-struct veo_call_args {
-  uint64_t arguments[8];
-};
-
 struct veo_args;
 
 struct veo_proc_handle *veo_proc_create(int ve_node);
