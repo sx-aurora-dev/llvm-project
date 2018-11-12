@@ -439,6 +439,12 @@
 #define _ve_vrsqrtd_vv __builtin_ve_vrsqrtd_vv
 #define _ve_vrsqrts_vv __builtin_ve_vrsqrts_vv
 #define _ve_pvrsqrt_vv __builtin_ve_pvrsqrt_vv
+#define _ve_vcvtwdsx_vv __builtin_ve_vcvtwdsx_vv
+#define _ve_vcvtwdzx_vv __builtin_ve_vcvtwdzx_vv
+#define _ve_vcvtwssx_vv __builtin_ve_vcvtwssx_vv
+#define _ve_vcvtwszx_vv __builtin_ve_vcvtwszx_vv
+#define _ve_pvcvtws_vv __builtin_ve_pvcvtws_vv
+#define _ve_vcvtld_vv __builtin_ve_vcvtld_vv
 #define _ve_vcvtdw_vv __builtin_ve_vcvtdw_vv
 #define _ve_vcvtsw_vv __builtin_ve_vcvtsw_vv
 #define _ve_pvcvtsw_vv __builtin_ve_pvcvtsw_vv
