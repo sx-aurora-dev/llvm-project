@@ -225,7 +225,7 @@ class Inst:
 
     def hasMask(self):
         if len(self.outs) > 0 and self.outs[0].isMask():
-            return False
+            return True
         for op in self.ins:
             if op.isMask():
                 return True
@@ -1067,7 +1067,10 @@ def gen_pattern(insts):
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
             l = "(int_ve_{} {})".format(ni, argsL)
             r = "({} {})".format(I.instName, argsR)
-            print("def : Pat<{}, {}>;".format(l, r))
+            if I.hasMask():
+                print("// def : Pat<{}, {}>;".format(l, r))
+            else:
+                print("def : Pat<{}, {}>;".format(l, r))
 
 def gen_bulitin(insts):
     for I in insts:
