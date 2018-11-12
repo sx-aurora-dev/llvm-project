@@ -46,6 +46,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define i128 @f2i128(float) {
+; CHECK-LABEL: f2i128
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __fixsfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptosi float %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define zeroext i8 @f2uc(float %a) {
 ; CHECK-LABEL: f2uc
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -84,8 +97,8 @@ entry:
 define i64 @f2ul(float %a) {
 ; CHECK-LABEL: f2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea.sl %s34, .LCPI7_0@hi
-; CHECK-NEXT:  ldu %s34, .LCPI7_0@lo(,%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:  ldu %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:  fcmp.s %s35, %s0, %s34
 ; CHECK-NEXT:  fsub.s %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.d.s %s34, %s34
@@ -102,6 +115,19 @@ define i64 @f2ul(float %a) {
 entry:
   %conv = fptoui float %a to i64
   ret i64 %conv
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @f2ui128(float) {
+; CHECK-LABEL: f2ui128
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __fixunssfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptoui float %0 to i128
+  ret i128 %2
 }
 
 ; Function Attrs: norecurse nounwind readnone
@@ -149,6 +175,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define i128 @d2i128(double) {
+; CHECK-LABEL: d2i128
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __fixdfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptosi double %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define zeroext i8 @d2uc(double %a) {
 ; CHECK-LABEL: d2uc
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -186,8 +225,8 @@ entry:
 define i64 @d2ul(double %a) {
 ; CHECK-LABEL: d2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea.sl %s34, .LCPI15_0@hi
-; CHECK-NEXT:  ld %s34, .LCPI15_0@lo(,%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:  ld %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
 ; CHECK-NEXT:  fcmp.d %s35, %s0, %s34
 ; CHECK-NEXT:  fsub.d %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.l.d.rz %s34, %s34
@@ -202,6 +241,19 @@ define i64 @d2ul(double %a) {
 entry:
   %conv = fptoui double %a to i64
   ret i64 %conv
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @d2ui128(double) {
+; CHECK-LABEL: d2ui128
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __fixunsdfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptoui double %0 to i128
+  ret i128 %2
 }
 
 ; Function Attrs: norecurse nounwind readnone
@@ -253,6 +305,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define i128 @q2i128(fp128) {
+; CHECK-LABEL: q2i128
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __fixtfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixtfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptosi fp128 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define zeroext i8 @q2uc(fp128 %a) {
 ; CHECK-LABEL: q2uc
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -293,12 +358,12 @@ entry:
 define i64 @q2ul(fp128 %a) {
 ; CHECK-LABEL: q2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea %s34, .LCPI23_0@lo
+; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, .LCPI23_0@hi(%s34)
+; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
 ; CHECK-NEXT:  ld %s34, 8(,%s34)
-; CHECK-NEXT:  lea.sl %s36, .LCPI23_0@hi
-; CHECK-NEXT:  ld %s35, .LCPI23_0@lo(,%s36)
+; CHECK-NEXT:  lea.sl %s36, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:  ld %s35, .LCPI{{[0-9]+}}_0@lo(,%s36)
 ; CHECK-NEXT:  fcmp.q %s36, %s0, %s34
 ; CHECK-NEXT:  fsub.q %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.d.q %s34, %s34
@@ -315,5 +380,18 @@ define i64 @q2ul(fp128 %a) {
 entry:
   %conv = fptoui fp128 %a to i64
   ret i64 %conv
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @q2ui128(fp128) {
+; CHECK-LABEL: q2ui128
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __fixunstfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixunstfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptoui fp128 %0 to i128
+  ret i128 %2
 }
 

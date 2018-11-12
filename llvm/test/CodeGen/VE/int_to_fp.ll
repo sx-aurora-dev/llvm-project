@@ -46,6 +46,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define float @i1282f(i128) {
+; CHECK-LABEL: i1282f
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __floattisf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sitofp i128 %0 to float
+  ret float %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define float @uc2f(i8 zeroext %a) {
 ; CHECK-LABEL: uc2f
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -103,6 +116,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define float @ui1282f(i128) {
+; CHECK-LABEL: ui1282f
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __floatuntisf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = uitofp i128 %0 to float
+  ret float %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define double @c2d(i8 signext %a) {
 ; CHECK-LABEL: c2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -147,6 +173,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define double @i1282d(i128) {
+; CHECK-LABEL: i1282d
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __floattidf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sitofp i128 %0 to double
+  ret double %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define double @uc2d(i8 zeroext %a) {
 ; CHECK-LABEL: uc2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -186,8 +225,8 @@ define double @ul2d(i64 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 32
 ; CHECK-NEXT:  lea %s35, 0
-; CHECK-NEXT:  lea.sl %s36, .LCPI15_0@hi
-; CHECK-NEXT:  ld %s36, .LCPI15_0@lo(,%s36)
+; CHECK-NEXT:  lea.sl %s36, .LCPI{{[0-9]+}}_0@hi
+; CHECK-NEXT:  ld %s36, .LCPI{{[0-9]+}}_0@lo(,%s36)
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s37, 1160773632(%s35)
 ; CHECK-NEXT:  or %s34, %s34, %s37
@@ -202,6 +241,19 @@ define double @ul2d(i64 %a) {
 entry:
   %conv = uitofp i64 %a to double
   ret double %conv
+}
+
+; Function Attrs: norecurse nounwind readnone
+define double @ui1282d(i128) {
+; CHECK-LABEL: ui1282d
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __floatuntidf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = uitofp i128 %0 to double
+  ret double %2
 }
 
 ; Function Attrs: norecurse nounwind readnone
@@ -253,6 +305,19 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
+define fp128 @i1282q(i128) {
+; CHECK-LABEL: i1282q
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __floattitf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floattitf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sitofp i128 %0 to fp128
+  ret fp128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
 define fp128 @uc2q(i8 zeroext %a) {
 ; CHECK-LABEL: uc2q
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
@@ -295,9 +360,9 @@ define fp128 @ul2q(i64 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 61
 ; CHECK-NEXT:  and %s34, 4, %s34
-; CHECK-NEXT:  lea %s35, .LCPI23_0@lo
+; CHECK-NEXT:  lea %s35, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s35, .LCPI23_0@hi(%s35)
+; CHECK-NEXT:  lea.sl %s35, .LCPI{{[0-9]+}}_0@hi(%s35)
 ; CHECK-NEXT:  adds.l %s34, %s35, %s34
 ; CHECK-NEXT:  ldu %s34, (,%s34)
 ; CHECK-NEXT:  cvt.q.s %s34, %s34
@@ -308,5 +373,18 @@ define fp128 @ul2q(i64 %a) {
 entry:
   %conv = uitofp i64 %a to fp128
   ret fp128 %conv
+}
+
+; Function Attrs: norecurse nounwind readnone
+define fp128 @ui1282q(i128) {
+; CHECK-LABEL: ui1282q
+; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
+; CHECK-NEXT:    lea %s34, __floatuntitf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floatuntitf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = uitofp i128 %0 to fp128
+  ret fp128 %2
 }
 

@@ -1,5 +1,28 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
+define i128 @func0(i128) {
+; CHECK-LABEL: func0:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s34, 0, (0)1
+; CHECK-NEXT:    cmps.l %s35, %s0, %s34
+; CHECK-NEXT:    lea %s36, -1(%s0)
+; CHECK-NEXT:    xor %s37, -1, %s0
+; CHECK-NEXT:    and %s36, %s37, %s36
+; CHECK-NEXT:    pcnt %s36, %s36
+; CHECK-NEXT:    lea %s37, -1(%s1)
+; CHECK-NEXT:    xor %s38, -1, %s1
+; CHECK-NEXT:    and %s37, %s38, %s37
+; CHECK-NEXT:    pcnt %s37, %s37
+; CHECK-NEXT:    lea %s0, 64(%s37)
+; CHECK-NEXT:    cmov.l.ne %s0, %s36, %s35
+; CHECK-NEXT:    or %s1, 0, %s34
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = tail call i128 @llvm.cttz.i128(i128 %0, i1 true)
+  ret i128 %2
+}
+
+declare i128 @llvm.cttz.i128(i128, i1)
+
 define i64 @func1(i64) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:

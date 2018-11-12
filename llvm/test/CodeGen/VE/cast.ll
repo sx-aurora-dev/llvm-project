@@ -1194,3 +1194,479 @@ define fp128 @uc2q(i8 zeroext) {
   %2 = uitofp i8 %0 to fp128
   ret fp128 %2
 }
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @i128() {
+; CHECK-LABEL: i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, -2147483648
+; CHECK-NEXT:    or %s1, -1, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  ret i128 -2147483648
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ui128() {
+; CHECK-LABEL: ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, -2147483648
+; CHECK-NEXT:    or %s1, -1, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  ret i128 -2147483648
+}
+
+; Function Attrs: norecurse nounwind readnone
+define signext i8 @i1282c(i128) {
+; CHECK-LABEL: i1282c:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sll %s34, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s34, 56
+; CHECK-NEXT:                                          # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i8
+  ret i8 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define signext i8 @ui1282c(i128) {
+; CHECK-LABEL: ui1282c:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sll %s34, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s34, 56
+; CHECK-NEXT:                                          # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i8
+  ret i8 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define zeroext i8 @i1282uc(i128) {
+; CHECK-LABEL: i1282uc:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s0, %s0, (56)0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i8
+  ret i8 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define zeroext i8 @ui1282uc(i128) {
+; CHECK-LABEL: ui1282uc:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s0, %s0, (56)0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i8
+  ret i8 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define signext i16 @i1282s(i128) {
+; CHECK-LABEL: i1282s:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sll %s34, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s34, 48
+; CHECK-NEXT:                                          # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i16
+  ret i16 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define signext i16 @ui1282s(i128) {
+; CHECK-LABEL: ui1282s:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sll %s34, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s34, 48
+; CHECK-NEXT:                                          # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i16
+  ret i16 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define zeroext i16 @i1282us(i128) {
+; CHECK-LABEL: i1282us:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s0, %s0, (48)0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i16
+  ret i16 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define zeroext i16 @ui1282us(i128) {
+; CHECK-LABEL: ui1282us:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s0, %s0, (48)0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i16
+  ret i16 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i32 @i1282i(i128) {
+; CHECK-LABEL: i1282i:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i32
+  ret i32 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i32 @ui1282i(i128) {
+; CHECK-LABEL: ui1282i:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i32
+  ret i32 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i32 @i1282ui(i128) {
+; CHECK-LABEL: i1282ui:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i32
+  ret i32 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i32 @ui1282ui(i128) {
+; CHECK-LABEL: ui1282ui:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i32
+  ret i32 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i64 @i1282ll(i128) {
+; CHECK-LABEL: i1282ll:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i64
+  ret i64 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i64 @ui1282ll(i128) {
+; CHECK-LABEL: ui1282ll:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i64
+  ret i64 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i64 @i1282ull(i128) {
+; CHECK-LABEL: i1282ull:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i64
+  ret i64 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i64 @ui1282ull(i128) {
+; CHECK-LABEL: ui1282ull:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = trunc i128 %0 to i64
+  ret i64 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @i1282ui128(i128 returned) {
+; CHECK-LABEL: i1282ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+  ret i128 %0
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ui1282i128(i128 returned) {
+; CHECK-LABEL: ui1282i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+  ret i128 %0
+}
+
+; Function Attrs: norecurse nounwind readnone
+define float @i1282f(i128) {
+; CHECK-LABEL: i1282f:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __floattisf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sitofp i128 %0 to float
+  ret float %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define float @ui1282f(i128) {
+; CHECK-LABEL: ui1282f:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __floatuntisf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = uitofp i128 %0 to float
+  ret float %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define double @i1282d(i128) {
+; CHECK-LABEL: i1282d:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __floattidf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sitofp i128 %0 to double
+  ret double %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define double @ui1282d(i128) {
+; CHECK-LABEL: ui1282d:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __floatuntidf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = uitofp i128 %0 to double
+  ret double %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @d2i128(double) {
+; CHECK-LABEL: d2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __fixdfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptosi double %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @d2ui128(double) {
+; CHECK-LABEL: d2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __fixunsdfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptoui double %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @f2i128(float) {
+; CHECK-LABEL: f2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __fixsfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptosi float %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @f2ui128(float) {
+; CHECK-LABEL: f2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, __fixunssfti@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(%s34)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = fptoui float %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ll2i128(i64) {
+; CHECK-LABEL: ll2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i64 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ll2ui128(i64) {
+; CHECK-LABEL: ll2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i64 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ull2i128(i64) {
+; CHECK-LABEL: ull2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i64 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ull2ui128(i64) {
+; CHECK-LABEL: ull2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i64 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @i2i128(i32) {
+; CHECK-LABEL: i2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i32 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @i2ui128(i32) {
+; CHECK-LABEL: i2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i32 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ui2i128(i32) {
+; CHECK-LABEL: ui2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i32 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @ui2ui128(i32) {
+; CHECK-LABEL: ui2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i32 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @s2i128(i16 signext) {
+; CHECK-LABEL: s2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i16 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @s2ui128(i16 signext) {
+; CHECK-LABEL: s2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i16 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @us2i128(i16 zeroext) {
+; CHECK-LABEL: us2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i16 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @us2ui128(i16 zeroext) {
+; CHECK-LABEL: us2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i16 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @c2i128(i8 signext) {
+; CHECK-LABEL: c2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i8 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @char2ui128(i8 signext) {
+; CHECK-LABEL: char2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = sext i8 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @uc2i128(i8 zeroext) {
+; CHECK-LABEL: uc2i128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i8 %0 to i128
+  ret i128 %2
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @uc2ui128(i8 zeroext) {
+; CHECK-LABEL: uc2ui128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = zext i8 %0 to i128
+  ret i128 %2
+}
