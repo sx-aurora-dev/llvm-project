@@ -46,17 +46,17 @@ And, cross-compile compiler-rt with compiled clang/llvm and install it.
       -DCOMPILER_RT_BUILD_PROFILE=OFF \
       -DBUILD_SHARED_LIBS=ON \
       -DCMAKE_C_COMPILER=$HOME/.local/bin/clang \
+      -DCMAKE_C_COMPILER_TARGET="ve-linux-none" \
+      -DCMAKE_ASM_COMPILER_TARGET="ve-linux-none" \
       -DCMAKE_AR=$HOME/.local/bin/llvm-ar \
       -DCMAKE_RANLIB=$HOME/.local/bin/llvm-ranlib \
-      -DCMAKE_ASM_COMPILER_TARGET="ve-linux-none" \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux-none" \
       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
       -DLLVM_CONFIG_PATH=$HOME/.local/bin/llvm-config \
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$HOME/.local/lib/clang/8.0.0/ \
-      -DCMAKE_CXX_FLAGS="-I$HOME/.local/ve/include -isystem /opt/nec/ve/musl/include -target ve-linux-none -ccc-gcc-name ve-linux-none -nostdlib" \
+      -DCMAKE_CXX_FLAGS="-nostdlib" \
       -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
-      -DCMAKE_C_FLAGS="-I$HOME/.local/ve/include -isystem /opt/nec/ve/musl/include -target ve-linux-none -ccc-gcc-name ve-linux-none -nostdlib" \
+      -DCMAKE_C_FLAGS="-nostdlib" \
       -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
       ../llvm/projects/compiler-rt
    $ ninja-build install
