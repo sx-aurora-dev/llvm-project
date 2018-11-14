@@ -838,20 +838,18 @@ defm VFNMAD : RV4DSPm<"vfnmad", 0xE3>;
 defm VFNMSB : RV4DSPm<"vfnmsb", 0xF3>;
 defm VRCP : VRCPm<"vrcp", 0xE1>;
 defm VRSQRT : VRSQRTm<"vrsqrt", 0xF1>;
-// VFIX
-// VFIXX
-// VFLTX
 
 multiclass VCVT<bits<8>opc, string opcStr> {
   def v : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
     !strconcat(opcStr, " $vx,$vy"), []>;
 }
 
-multiclass RDm<bits<8> opc, string opcStr> {
-  let vz = 8 in defm rz : VCVT<opc, !strconcat(opcStr, ".rz")>;
-}
-
-defm VFIXXrz : RDm<0xA8, "vcvt.l.d">;
+let cx = 0, cx2 = 0, cs2 = 0 in defm VFIXdsx : VCVT<0xE8, "vcvt.w.d.sx">;
+let cx = 0, cx2 = 1, cs2 = 0 in defm VFIXdzx : VCVT<0xE8, "vcvt.w.d.zx">;
+let cx = 1, cx2 = 0, cs2 = 0 in defm VFIXssx : VCVT<0xE8, "vcvt.w.s.sx">;
+let cx = 1, cx2 = 1, cs2 = 0 in defm VFIXszx : VCVT<0xE8, "vcvt.w.s.zx">;
+let cx = 1, cx2 = 1, cs2 = 1 in defm VFIXp : VCVT<0xE8, "pvcvt.w.s">;
+defm VFIXX : VCVT<0xA8, "vcvt.l.d">;
 let cx = 0, cx2 = 0, cs2 = 0 in defm VFLTd : VCVT<0xF8, "vcvt.d.w">;
 let cx = 1, cx2 = 0, cs2 = 1 in defm VFLTs : VCVT<0xF8, "vcvt.s.w">;
 let cx = 1, cx2 = 1, cs2 = 1 in defm VFLTp : VCVT<0xF8, "pvcvt.s.w">;
