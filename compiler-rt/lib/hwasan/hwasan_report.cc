@@ -16,17 +16,62 @@
 #include "hwasan_allocator.h"
 #include "hwasan_mapping.h"
 #include "hwasan_thread.h"
+#include "hwasan_thread_list.h"
 #include "sanitizer_common/sanitizer_allocator_internal.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_flags.h"
 #include "sanitizer_common/sanitizer_mutex.h"
 #include "sanitizer_common/sanitizer_report_decorator.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
+#include "sanitizer_common/sanitizer_stacktrace_printer.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
 
 using namespace __sanitizer;
 
 namespace __hwasan {
+
+class ScopedReport {
+ public:
+  ScopedReport(bool fatal = false) : error_message_(1), fatal(fatal) {
+    BlockingMutexLock lock(&error_message_lock_);
+    error_message_ptr_ = fatal ? &error_message_ : nullptr;
+  }
+
+  ~ScopedReport() {
+    BlockingMutexLock lock(&error_message_lock_);
+    if (fatal) {
+      SetAbortMessage(error_message_.data());
+      Die();
+    }
+    error_message_ptr_ = nullptr;
+  }
+
+  static void MaybeAppendToErrorMessage(const char *msg) {
+    BlockingMutexLock lock(&error_message_lock_);
+    if (!error_message_ptr_)
+      return;
+    uptr len = internal_strlen(msg);
+    uptr old_size = error_message_ptr_->size();
+    error_message_ptr_->resize(old_size + len);
+    // overwrite old trailing '\0', keep new trailing '\0' untouched.
+    internal_memcpy(&(*error_message_ptr_)[old_size - 1], msg, len);
+  }
+ private:
+  ScopedErrorReportLock error_report_lock_;
+  InternalMmapVector<char> error_message_;
+  bool fatal;
+
+  static InternalMmapVector<char> *error_message_ptr_;
+  static BlockingMutex error_message_lock_;
+};
+
+InternalMmapVector<char> *ScopedReport::error_message_ptr_;
+BlockingMutex ScopedReport::error_message_lock_;
+
+// If there is an active ScopedReport, append to its error message.
+void AppendToErrorMessageBuffer(const char *buffer) {
+  ScopedReport::MaybeAppendToErrorMessage(buffer);
+}
 
 static StackTrace GetStackTraceFromId(u32 id) {
   CHECK(id);
@@ -34,6 +79,31 @@ static StackTrace GetStackTraceFromId(u32 id) {
   CHECK(res.trace);
   return res;
 }
+
+// A RAII object that holds a copy of the current thread stack ring buffer.
+// The actual stack buffer may change while we are iterating over it (for
+// example, Printf may call syslog() which can itself be built with hwasan).
+class SavedStackAllocations {
+ public:
+  SavedStackAllocations(StackAllocationsRingBuffer *rb) {
+    uptr size = rb->size() * sizeof(uptr);
+    void *storage =
+        MmapAlignedOrDieOnFatalError(size, size * 2, "saved stack allocations");
+    new (&rb_) StackAllocationsRingBuffer(*rb, storage);
+  }
+
+  ~SavedStackAllocations() {
+    StackAllocationsRingBuffer *rb = get();
+    UnmapOrDie(rb->StartOfStorage(), rb->size() * sizeof(uptr));
+  }
+
+  StackAllocationsRingBuffer *get() {
+    return (StackAllocationsRingBuffer *)&rb_;
+  }
+
+ private:
+  uptr rb_;
+};
 
 class Decorator: public __sanitizer::SanitizerCommonDecorator {
  public:
@@ -63,10 +133,27 @@ uptr FindHeapAllocation(HeapAllocationsRingBuffer *rb,
   return 0;
 }
 
-void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
+void PrintAddressDescription(
+    uptr tagged_addr, uptr access_size,
+    StackAllocationsRingBuffer *current_stack_allocations) {
   Decorator d;
   int num_descriptions_printed = 0;
   uptr untagged_addr = UntagAddr(tagged_addr);
+
+  // Print some very basic information about the address, if it's a heap.
+  HwasanChunkView chunk = FindHeapChunkByAddress(untagged_addr);
+  if (uptr beg = chunk.Beg()) {
+    uptr size = chunk.ActualSize();
+    Printf("%s[%p,%p) is a %s %s heap chunk; "
+           "size: %zd offset: %zd\n%s",
+           d.Location(),
+           beg, beg + size,
+           chunk.FromSmallHeap() ? "small" : "large",
+           chunk.IsAllocated() ? "allocated" : "unallocated",
+           size, untagged_addr - beg,
+           d.Default());
+  }
+
   // Check if this looks like a heap buffer overflow by scanning
   // the shadow left and right and looking for the first adjacent
   // object with a different memory tag. If that tag matches addr_tag,
@@ -109,7 +196,7 @@ void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
     }
   }
 
-  Thread::VisitAllLiveThreads([&](Thread *t) {
+  hwasanThreadList().VisitAllLiveThreads([&](Thread *t) {
     // Scan all threads' ring buffers to find if it's a heap-use-after-free.
     HeapAllocationRecord har;
     if (uptr D = FindHeapAllocation(t->heap_allocations(), tagged_addr, &har)) {
@@ -127,13 +214,13 @@ void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
       Printf("previously allocated here:\n", t);
       Printf("%s", d.Default());
       GetStackTraceFromId(har.alloc_context_id).Print();
-      t->Announce();
 
       // Print a developer note: the index of this heap object
       // in the thread's deallocation ring buffer.
       Printf("hwasan_dev_note_heap_rb_distance: %zd %zd\n", D,
              flags()->heap_history_size);
 
+      t->Announce();
       num_descriptions_printed++;
     }
 
@@ -145,41 +232,46 @@ void PrintAddressDescription(uptr tagged_addr, uptr access_size) {
       Printf("%s", d.Default());
       t->Announce();
 
+      // Temporary report section, needs to be improved.
+      Printf("Previosly allocated frames:\n");
+      auto *sa = (t == GetCurrentThread() && current_stack_allocations)
+                     ? current_stack_allocations
+                     : t->stack_allocations();
+      uptr frames = Min((uptr)flags()->stack_history_size, sa->size());
+      InternalScopedString frame_desc(GetPageSizeCached() * 2);
+      for (uptr i = 0; i < frames; i++) {
+        uptr record = (*sa)[i];
+        if (!record)
+          break;
+        uptr sp = (record >> 48) << 4;
+        uptr pc_mask = (1ULL << 48) - 1;
+        uptr pc = record & pc_mask;
+        if (SymbolizedStack *frame = Symbolizer::GetOrInit()->SymbolizePC(pc)) {
+          frame_desc.append(" sp: 0x%zx pc: %p ", sp, pc);
+          RenderFrame(&frame_desc, "in %f %s:%l\n", 0, frame->info,
+                      common_flags()->symbolize_vs_style,
+                      common_flags()->strip_path_prefix);
+          frame->ClearAll();
+          if (auto Descr = GetStackFrameDescr(pc))
+            frame_desc.append("  %s\n", Descr);
+        }
+        Printf("%s", frame_desc.data());
+        frame_desc.clear();
+      }
+
       num_descriptions_printed++;
     }
   });
+
+  // Print the remaining threads, as an extra information, 1 line per thread.
+  hwasanThreadList().VisitAllLiveThreads([&](Thread *t) { t->Announce(); });
 
   if (!num_descriptions_printed)
     // We exhausted our possibilities. Bail out.
     Printf("HWAddressSanitizer can not describe address in more detail.\n");
 }
 
-void ReportInvalidAccess(StackTrace *stack, u32 origin) {
-  ScopedErrorReportLock l;
-
-  Decorator d;
-  Printf("%s", d.Warning());
-  Report("WARNING: HWAddressSanitizer: invalid access\n");
-  Printf("%s", d.Default());
-  stack->Print();
-  ReportErrorSummary("invalid-access", stack);
-}
-
 void ReportStats() {}
-
-void ReportInvalidAccessInsideAddressRange(const char *what, const void *start,
-                                           uptr size, uptr offset) {
-  ScopedErrorReportLock l;
-
-  Decorator d;
-  Printf("%s", d.Warning());
-  Printf("%sTag mismatch in %s%s%s at offset %zu inside [%p, %zu)%s\n",
-         d.Warning(), d.Name(), what, d.Warning(), offset, start, size,
-         d.Default());
-  PrintAddressDescription((uptr)start + offset, 1);
-  // if (__sanitizer::Verbosity())
-  //   DescribeMemoryRange(start, size);
-}
 
 static void PrintTagsAroundAddr(tag_t *tag_ptr) {
   Printf(
@@ -187,12 +279,12 @@ static void PrintTagsAroundAddr(tag_t *tag_ptr) {
       "bytes):\n", kShadowAlignment);
 
   const uptr row_len = 16;  // better be power of two.
-  const uptr num_rows = 11;
+  const uptr num_rows = 17;
   tag_t *center_row_beg = reinterpret_cast<tag_t *>(
       RoundDownTo(reinterpret_cast<uptr>(tag_ptr), row_len));
   tag_t *beg_row = center_row_beg - row_len * (num_rows / 2);
   tag_t *end_row = center_row_beg + row_len * (num_rows / 2);
-  InternalScopedString s(GetPageSizeCached());
+  InternalScopedString s(GetPageSizeCached() * 8);
   for (tag_t *row = beg_row; row < end_row; row += row_len) {
     s.append("%s", row == center_row_beg ? "=>" : "  ");
     for (uptr i = 0; i < row_len; i++) {
@@ -201,13 +293,13 @@ static void PrintTagsAroundAddr(tag_t *tag_ptr) {
       s.append("%s", row + i == tag_ptr ? "]" : " ");
     }
     s.append("%s\n", row == center_row_beg ? "<=" : "  ");
-    Printf("%s", s.data());
-    s.clear();
   }
+  Printf("%s", s.data());
 }
 
 void ReportInvalidFree(StackTrace *stack, uptr tagged_addr) {
-  ScopedErrorReportLock l;
+  ScopedReport R(flags()->halt_on_error);
+
   uptr untagged_addr = UntagAddr(tagged_addr);
   tag_t ptr_tag = GetTagFromPointer(tagged_addr);
   tag_t *tag_ptr = reinterpret_cast<tag_t*>(MemToShadow(untagged_addr));
@@ -224,17 +316,18 @@ void ReportInvalidFree(StackTrace *stack, uptr tagged_addr) {
 
   stack->Print();
 
-  PrintAddressDescription(tagged_addr, 0);
+  PrintAddressDescription(tagged_addr, 0, nullptr);
 
   PrintTagsAroundAddr(tag_ptr);
 
   ReportErrorSummary(bug_type, stack);
-  Die();
 }
 
 void ReportTagMismatch(StackTrace *stack, uptr tagged_addr, uptr access_size,
-                       bool is_store) {
-  ScopedErrorReportLock l;
+                       bool is_store, bool fatal) {
+  ScopedReport R(fatal);
+  SavedStackAllocations current_stack_allocations(
+      GetCurrentThread()->stack_allocations());
 
   Decorator d;
   Printf("%s", d.Error());
@@ -258,7 +351,8 @@ void ReportTagMismatch(StackTrace *stack, uptr tagged_addr, uptr access_size,
 
   stack->Print();
 
-  PrintAddressDescription(tagged_addr, access_size);
+  PrintAddressDescription(tagged_addr, access_size,
+                          current_stack_allocations.get());
   t->Announce();
 
   PrintTagsAroundAddr(tag_ptr);

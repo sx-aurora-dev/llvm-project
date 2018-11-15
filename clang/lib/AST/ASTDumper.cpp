@@ -450,6 +450,7 @@ namespace  {
     // OpenMP decls
     void VisitOMPThreadPrivateDecl(const OMPThreadPrivateDecl *D);
     void VisitOMPDeclareReductionDecl(const OMPDeclareReductionDecl *D);
+    void VisitOMPRequiresDecl(const OMPRequiresDecl *D);
     void VisitOMPCapturedExprDecl(const OMPCapturedExprDecl *D);
 
     // C++ Decls
@@ -510,9 +511,13 @@ namespace  {
     void VisitStmt(const Stmt *Node);
     void VisitDeclStmt(const DeclStmt *Node);
     void VisitAttributedStmt(const AttributedStmt *Node);
+    void VisitIfStmt(const IfStmt *Node);
+    void VisitSwitchStmt(const SwitchStmt *Node);
+    void VisitWhileStmt(const WhileStmt *Node);
     void VisitLabelStmt(const LabelStmt *Node);
     void VisitGotoStmt(const GotoStmt *Node);
     void VisitCXXCatchStmt(const CXXCatchStmt *Node);
+    void VisitCaseStmt(const CaseStmt *Node);
     void VisitCapturedStmt(const CapturedStmt *Node);
 
     // OpenMP
@@ -1340,6 +1345,26 @@ void ASTDumper::VisitOMPDeclareReductionDecl(const OMPDeclareReductionDecl *D) {
   }
 }
 
+void ASTDumper::VisitOMPRequiresDecl(const OMPRequiresDecl *D) {
+  for (auto *C : D->clauselists()) {
+    dumpChild([=] {
+      if (!C) {
+        ColorScope Color(*this, NullColor);
+        OS << "<<<NULL>>> OMPClause";
+        return;
+      }
+      {
+        ColorScope Color(*this, AttrColor);
+        StringRef ClauseName(getOpenMPClauseName(C->getClauseKind()));
+        OS << "OMP" << ClauseName.substr(/*Start=*/0, /*N=*/1).upper()
+           << ClauseName.drop_front() << "Clause";
+      }
+      dumpPointer(C);
+      dumpSourceRange(SourceRange(C->getBeginLoc(), C->getEndLoc()));
+    });
+  }
+}
+
 void ASTDumper::VisitOMPCapturedExprDecl(const OMPCapturedExprDecl *D) {
   dumpName(D);
   dumpType(D->getType());
@@ -1999,6 +2024,30 @@ void ASTDumper::VisitAttributedStmt(const AttributedStmt *Node) {
     dumpAttr(*I);
 }
 
+void ASTDumper::VisitIfStmt(const IfStmt *Node) {
+  VisitStmt(Node);
+  if (Node->hasInitStorage())
+    OS << " has_init";
+  if (Node->hasVarStorage())
+    OS << " has_var";
+  if (Node->hasElseStorage())
+    OS << " has_else";
+}
+
+void ASTDumper::VisitSwitchStmt(const SwitchStmt *Node) {
+  VisitStmt(Node);
+  if (Node->hasInitStorage())
+    OS << " has_init";
+  if (Node->hasVarStorage())
+    OS << " has_var";
+}
+
+void ASTDumper::VisitWhileStmt(const WhileStmt *Node) {
+  VisitStmt(Node);
+  if (Node->hasVarStorage())
+    OS << " has_var";
+}
+
 void ASTDumper::VisitLabelStmt(const LabelStmt *Node) {
   VisitStmt(Node);
   OS << " '" << Node->getName() << "'";
@@ -2013,6 +2062,12 @@ void ASTDumper::VisitGotoStmt(const GotoStmt *Node) {
 void ASTDumper::VisitCXXCatchStmt(const CXXCatchStmt *Node) {
   VisitStmt(Node);
   dumpDecl(Node->getExceptionDecl());
+}
+
+void ASTDumper::VisitCaseStmt(const CaseStmt *Node) {
+  VisitStmt(Node);
+  if (Node->caseStmtIsGNURange())
+    OS << " gnu_range";
 }
 
 void ASTDumper::VisitCapturedStmt(const CapturedStmt *Node) {
@@ -2177,7 +2232,7 @@ void ASTDumper::VisitObjCIvarRefExpr(const ObjCIvarRefExpr *Node) {
 
 void ASTDumper::VisitPredefinedExpr(const PredefinedExpr *Node) {
   VisitExpr(Node);
-  OS << " " << PredefinedExpr::getIdentTypeName(Node->getIdentType());
+  OS << " " << PredefinedExpr::getIdentKindName(Node->getIdentKind());
 }
 
 void ASTDumper::VisitCharacterLiteral(const CharacterLiteral *Node) {
@@ -2259,6 +2314,9 @@ void ASTDumper::VisitUnaryExprOrTypeTraitExpr(
     break;
   case UETT_OpenMPRequiredSimdAlign:
     OS << " __builtin_omp_required_simd_align";
+    break;
+  case UETT_PreferredAlignOf:
+    OS << " __alignof";
     break;
   }
   if (Node->isArgumentType())

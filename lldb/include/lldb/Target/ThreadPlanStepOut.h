@@ -10,10 +10,6 @@
 #ifndef liblldb_ThreadPlanStepOut_h_
 #define liblldb_ThreadPlanStepOut_h_
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlan.h"
 #include "lldb/Target/ThreadPlanShouldStopHere.h"
@@ -74,6 +70,7 @@ private:
                                                  // if ShouldStopHere told us
                                                  // to.
   Function *m_immediate_step_from_function;
+  std::vector<lldb::StackFrameSP> m_stepped_past_frames;
   lldb::ValueObjectSP m_return_valobj_sp;
   bool m_calculate_return_value;
 

@@ -10,12 +10,8 @@
 #ifndef LLDB_SBCommandInterpreter_h_
 #define LLDB_SBCommandInterpreter_h_
 
-// C Includes
-// C++ Includes
 #include <memory>
 
-// Other libraries and framework includes
-// Project includes
 #include "lldb/API/SBDebugger.h"
 #include "lldb/API/SBDefines.h"
 
@@ -44,6 +40,10 @@ public:
   bool GetEchoCommands() const;
 
   void SetEchoCommands(bool);
+
+  bool GetEchoCommentCommands() const;
+
+  void SetEchoCommentCommands(bool echo);
 
   bool GetPrintResults() const;
 

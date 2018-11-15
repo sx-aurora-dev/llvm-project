@@ -96,12 +96,11 @@ public:
 
 // Utility function declarations.
 
-/// Returns the object that was constructed by CtorDecl, or None if that isn't
-/// possible.
-// TODO: Refactor this function so that it returns the constructed object's
-// region.
-static Optional<nonloc::LazyCompoundVal>
-getObjectVal(const CXXConstructorDecl *CtorDecl, CheckerContext &Context);
+/// Returns the region that was constructed by CtorDecl, or nullptr if that
+/// isn't possible.
+static const TypedValueRegion *
+getConstructedRegion(const CXXConstructorDecl *CtorDecl,
+                     CheckerContext &Context);
 
 /// Checks whether the object constructed by \p Ctor will be analyzed later
 /// (e.g. if the object is a field of another object, in which case we'd check
@@ -135,11 +134,11 @@ void UninitializedObjectChecker::checkEndFunction(
   if (willObjectBeAnalyzedLater(CtorDecl, Context))
     return;
 
-  Optional<nonloc::LazyCompoundVal> Object = getObjectVal(CtorDecl, Context);
-  if (!Object)
+  const TypedValueRegion *R = getConstructedRegion(CtorDecl, Context);
+  if (!R)
     return;
 
-  FindUninitializedFields F(Context.getState(), Object->getRegion(), Opts);
+  FindUninitializedFields F(Context.getState(), R, Opts);
 
   const UninitFieldMap &UninitFields = F.getUninitFields();
 
@@ -339,14 +338,6 @@ bool FindUninitializedFields::isPrimitiveUninit(const SVal &V) {
 //                       Methods for FieldChainInfo.
 //===----------------------------------------------------------------------===//
 
-const FieldRegion *FieldChainInfo::getUninitRegion() const {
-  assert(!Chain.isEmpty() && "Empty fieldchain!");
-
-  // ImmutableList::getHead() isn't a const method, hence the not too nice
-  // implementation.
-  return (*Chain.begin()).getRegion();
-}
-
 bool FieldChainInfo::contains(const FieldRegion *FR) const {
   for (const FieldNode &Node : Chain) {
     if (Node.isSameRegion(FR))
@@ -360,7 +351,7 @@ bool FieldChainInfo::contains(const FieldRegion *FR) const {
 /// recursive function to print the fieldchain correctly. The last element in
 /// the chain is to be printed by `FieldChainInfo::print`.
 static void printTail(llvm::raw_ostream &Out,
-                      const FieldChainInfo::FieldChainImpl *L);
+                      const FieldChainInfo::FieldChain L);
 
 // FIXME: This function constructs an incorrect string in the following case:
 //
@@ -379,8 +370,7 @@ void FieldChainInfo::printNoteMsg(llvm::raw_ostream &Out) const {
   if (Chain.isEmpty())
     return;
 
-  const FieldChainImpl *L = Chain.getInternalPointer();
-  const FieldNode &LastField = L->getHead();
+  const FieldNode &LastField = getHead();
 
   LastField.printNoteMsg(Out);
   Out << '\'';
@@ -389,45 +379,47 @@ void FieldChainInfo::printNoteMsg(llvm::raw_ostream &Out) const {
     Node.printPrefix(Out);
 
   Out << "this->";
-  printTail(Out, L->getTail());
+  printTail(Out, Chain.getTail());
   LastField.printNode(Out);
   Out << '\'';
 }
 
 static void printTail(llvm::raw_ostream &Out,
-                      const FieldChainInfo::FieldChainImpl *L) {
-  if (!L)
+                      const FieldChainInfo::FieldChain L) {
+  if (L.isEmpty())
     return;
 
-  printTail(Out, L->getTail());
+  printTail(Out, L.getTail());
 
-  L->getHead().printNode(Out);
-  L->getHead().printSeparator(Out);
+  L.getHead().printNode(Out);
+  L.getHead().printSeparator(Out);
 }
 
 //===----------------------------------------------------------------------===//
 //                           Utility functions.
 //===----------------------------------------------------------------------===//
 
-static Optional<nonloc::LazyCompoundVal>
-getObjectVal(const CXXConstructorDecl *CtorDecl, CheckerContext &Context) {
+static const TypedValueRegion *
+getConstructedRegion(const CXXConstructorDecl *CtorDecl,
+                     CheckerContext &Context) {
 
-  Loc ThisLoc = Context.getSValBuilder().getCXXThis(CtorDecl->getParent(),
+  Loc ThisLoc = Context.getSValBuilder().getCXXThis(CtorDecl,
                                                     Context.getStackFrame());
-  // Getting the value for 'this'.
-  SVal This = Context.getState()->getSVal(ThisLoc);
 
-  // Getting the value for '*this'.
-  SVal Object = Context.getState()->getSVal(This.castAs<Loc>());
+  SVal ObjectV = Context.getState()->getSVal(ThisLoc);
 
-  return Object.getAs<nonloc::LazyCompoundVal>();
+  auto *R = ObjectV.getAsRegion()->getAs<TypedValueRegion>();
+  if (R && !R->getValueType()->getAsCXXRecordDecl())
+    return nullptr;
+
+  return R;
 }
 
 static bool willObjectBeAnalyzedLater(const CXXConstructorDecl *Ctor,
                                       CheckerContext &Context) {
 
-  Optional<nonloc::LazyCompoundVal> CurrentObject = getObjectVal(Ctor, Context);
-  if (!CurrentObject)
+  const TypedValueRegion *CurrRegion = getConstructedRegion(Ctor, Context);
+  if (!CurrRegion)
     return false;
 
   const LocationContext *LC = Context.getLocationContext();
@@ -438,14 +430,14 @@ static bool willObjectBeAnalyzedLater(const CXXConstructorDecl *Ctor,
     if (!OtherCtor)
       continue;
 
-    Optional<nonloc::LazyCompoundVal> OtherObject =
-        getObjectVal(OtherCtor, Context);
-    if (!OtherObject)
+    const TypedValueRegion *OtherRegion =
+        getConstructedRegion(OtherCtor, Context);
+    if (!OtherRegion)
       continue;
 
-    // If the CurrentObject is a subregion of OtherObject, it will be analyzed
-    // during the analysis of OtherObject.
-    if (CurrentObject->getRegion()->isSubRegionOf(OtherObject->getRegion()))
+    // If the CurrRegion is a subregion of OtherRegion, it will be analyzed
+    // during the analysis of OtherRegion.
+    if (CurrRegion->isSubRegionOf(OtherRegion))
       return true;
   }
 
@@ -496,12 +488,12 @@ void ento::registerUninitializedObjectChecker(CheckerManager &Mgr) {
   UninitObjCheckerOptions &ChOpts = Chk->Opts;
 
   ChOpts.IsPedantic =
-      AnOpts.getBooleanOption("Pedantic", /*DefaultVal*/ false, Chk);
+      AnOpts.getCheckerBooleanOption("Pedantic", /*DefaultVal*/ false, Chk);
   ChOpts.ShouldConvertNotesToWarnings =
-      AnOpts.getBooleanOption("NotesAsWarnings", /*DefaultVal*/ false, Chk);
-  ChOpts.CheckPointeeInitialization = AnOpts.getBooleanOption(
+      AnOpts.getCheckerBooleanOption("NotesAsWarnings", /*DefaultVal*/ false, Chk);
+  ChOpts.CheckPointeeInitialization = AnOpts.getCheckerBooleanOption(
       "CheckPointeeInitialization", /*DefaultVal*/ false, Chk);
   ChOpts.IgnoredRecordsWithFieldPattern =
-      AnOpts.getOptionAsString("IgnoreRecordsWithField",
+      AnOpts.getCheckerStringOption("IgnoreRecordsWithField",
                                /*DefaultVal*/ "", Chk);
 }

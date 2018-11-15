@@ -10,10 +10,12 @@
 #ifndef LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKCODE_H
 #define LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKCODE_H
 
+#include "RegisterValue.h"
 #include "llvm/MC/MCInst.h"
 #include <string>
 #include <vector>
 
+namespace llvm {
 namespace exegesis {
 
 // A collection of instructions that are to be assembled, executed and measured.
@@ -34,5 +36,6 @@ struct BenchmarkCode {
 };
 
 } // namespace exegesis
+} // namespace llvm
 
 #endif // LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKCODE_H

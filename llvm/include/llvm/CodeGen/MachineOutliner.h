@@ -82,6 +82,9 @@ public:
   /// been used across the sequence.
   LiveRegUnits UsedInSequence;
 
+  /// Target-specific flags for this Candidate's MBB.
+  unsigned Flags = 0x0;
+
   /// Return the number of instructions in this Candidate.
   unsigned getLength() const { return Len; }
 
@@ -120,9 +123,9 @@ public:
   Candidate(unsigned StartIdx, unsigned Len,
             MachineBasicBlock::iterator &FirstInst,
             MachineBasicBlock::iterator &LastInst, MachineBasicBlock *MBB,
-            unsigned FunctionIdx)
+            unsigned FunctionIdx, unsigned Flags)
       : StartIdx(StartIdx), Len(Len), FirstInst(FirstInst), LastInst(LastInst),
-        MBB(MBB), FunctionIdx(FunctionIdx) {}
+        MBB(MBB), FunctionIdx(FunctionIdx), Flags(Flags) {}
   Candidate() {}
 
   /// Used to ensure that \p Candidates are outlined in an order that
@@ -168,9 +171,6 @@ public:
   /// The actual outlined function created.
   /// This is initialized after we go through and create the actual function.
   MachineFunction *MF = nullptr;
-
-  /// A number assigned to this function which appears at the end of its name.
-  unsigned Name;
 
   /// The sequence of integers corresponding to the instructions in this
   /// function.

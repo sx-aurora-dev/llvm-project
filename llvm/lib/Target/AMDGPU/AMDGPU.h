@@ -69,9 +69,17 @@ Pass *createAMDGPUAnnotateKernelFeaturesPass();
 void initializeAMDGPUAnnotateKernelFeaturesPass(PassRegistry &);
 extern char &AMDGPUAnnotateKernelFeaturesID;
 
+FunctionPass *createAMDGPUAtomicOptimizerPass();
+void initializeAMDGPUAtomicOptimizerPass(PassRegistry &);
+extern char &AMDGPUAtomicOptimizerID;
+
 ModulePass *createAMDGPULowerIntrinsicsPass();
 void initializeAMDGPULowerIntrinsicsPass(PassRegistry &);
 extern char &AMDGPULowerIntrinsicsID;
+
+ModulePass *createAMDGPUFixFunctionBitcastsPass();
+void initializeAMDGPUFixFunctionBitcastsPass(PassRegistry &);
+extern char &AMDGPUFixFunctionBitcastsID;
 
 FunctionPass *createAMDGPULowerKernelArgumentsPass();
 void initializeAMDGPULowerKernelArgumentsPass(PassRegistry &);
@@ -190,6 +198,8 @@ extern char &AMDGPUUnifyDivergentExitNodesID;
 
 ImmutablePass *createAMDGPUAAWrapperPass();
 void initializeAMDGPUAAWrapperPassPass(PassRegistry&);
+ImmutablePass *createAMDGPUExternalAAWrapperPass();
+void initializeAMDGPUExternalAAWrapperPass(PassRegistry&);
 
 void initializeAMDGPUArgumentUsageInfoPass(PassRegistry &);
 

@@ -350,7 +350,7 @@ processSTIPredicate(STIPredicateFunction &Fn,
         unsigned OpcodeIdx = Opcode2Index[Opcode];
         if (OpcodeMasks[OpcodeIdx].first[ProcIndex]) {
           std::string Message =
-              "Opcode " + Opcode->getName().str() + 
+              "Opcode " + Opcode->getName().str() +
               " used by multiple InstructionEquivalenceClass definitions.";
           PrintFatalError(EC->getLoc(), Message);
         }
@@ -365,7 +365,7 @@ processSTIPredicate(STIPredicateFunction &Fn,
 
   // Sort OpcodeMappings elements based on their CPU and predicate masks.
   // As a last resort, order elements by opcode identifier.
-  llvm::sort(OpcodeMappings.begin(), OpcodeMappings.end(),
+  llvm::sort(OpcodeMappings,
              [&](const OpcodeMapPair &Lhs, const OpcodeMapPair &Rhs) {
                unsigned LhsIdx = Opcode2Index[Lhs.first];
                unsigned RhsIdx = Opcode2Index[Rhs.first];
@@ -487,16 +487,13 @@ void CodeGenSchedModels::collectOptionalProcessorInfo() {
   // Collect processor RetireControlUnit descriptors if available.
   collectRetireControlUnits();
 
-  // Find pfm counter definitions for each processor.
-  collectPfmCounters();
-
   checkCompleteness();
 }
 
 /// Gather all processor models.
 void CodeGenSchedModels::collectProcModels() {
   RecVec ProcRecords = Records.getAllDerivedDefinitions("Processor");
-  llvm::sort(ProcRecords.begin(), ProcRecords.end(), LessRecordFieldName());
+  llvm::sort(ProcRecords, LessRecordFieldName());
 
   // Reserve space because we can. Reallocation would be ok.
   ProcModels.reserve(ProcRecords.size()+1);
@@ -615,7 +612,7 @@ void CodeGenSchedModels::collectSchedRW() {
   // Find all ReadWrites referenced by SchedAlias. AliasDefs needs to be sorted
   // for the loop below that initializes Alias vectors.
   RecVec AliasDefs = Records.getAllDerivedDefinitions("SchedAlias");
-  llvm::sort(AliasDefs.begin(), AliasDefs.end(), LessRecord());
+  llvm::sort(AliasDefs, LessRecord());
   for (Record *ADef : AliasDefs) {
     Record *MatchDef = ADef->getValueAsDef("MatchRW");
     Record *AliasDef = ADef->getValueAsDef("AliasRW");
@@ -633,12 +630,12 @@ void CodeGenSchedModels::collectSchedRW() {
   }
   // Sort and add the SchedReadWrites directly referenced by instructions or
   // itinerary resources. Index reads and writes in separate domains.
-  llvm::sort(SWDefs.begin(), SWDefs.end(), LessRecord());
+  llvm::sort(SWDefs, LessRecord());
   for (Record *SWDef : SWDefs) {
     assert(!getSchedRWIdx(SWDef, /*IsRead=*/false) && "duplicate SchedWrite");
     SchedWrites.emplace_back(SchedWrites.size(), SWDef);
   }
-  llvm::sort(SRDefs.begin(), SRDefs.end(), LessRecord());
+  llvm::sort(SRDefs, LessRecord());
   for (Record *SRDef : SRDefs) {
     assert(!getSchedRWIdx(SRDef, /*IsRead-*/true) && "duplicate SchedWrite");
     SchedReads.emplace_back(SchedReads.size(), SRDef);
@@ -858,7 +855,7 @@ void CodeGenSchedModels::collectSchedClasses() {
   }
   // Create classes for InstRW defs.
   RecVec InstRWDefs = Records.getAllDerivedDefinitions("InstRW");
-  llvm::sort(InstRWDefs.begin(), InstRWDefs.end(), LessRecord());
+  llvm::sort(InstRWDefs, LessRecord());
   LLVM_DEBUG(dbgs() << "\n+++ SCHED CLASSES (createInstRWClass) +++\n");
   for (Record *RWDef : InstRWDefs)
     createInstRWClass(RWDef);
@@ -1162,7 +1159,7 @@ void CodeGenSchedModels::collectProcItins() {
 // Gather the read/write types for each itinerary class.
 void CodeGenSchedModels::collectProcItinRW() {
   RecVec ItinRWDefs = Records.getAllDerivedDefinitions("ItinRW");
-  llvm::sort(ItinRWDefs.begin(), ItinRWDefs.end(), LessRecord());
+  llvm::sort(ItinRWDefs, LessRecord());
   for (Record *RWDef  : ItinRWDefs) {
     if (!RWDef->getValueInit("SchedModel")->isComplete())
       PrintFatalError(RWDef->getLoc(), "SchedModel is undefined");
@@ -1759,33 +1756,33 @@ void CodeGenSchedModels::collectRegisterFiles() {
     CodeGenProcModel &PM = getProcModel(RF->getValueAsDef("SchedModel"));
     PM.RegisterFiles.emplace_back(CodeGenRegisterFile(RF->getName(),RF));
     CodeGenRegisterFile &CGRF = PM.RegisterFiles.back();
+    CGRF.MaxMovesEliminatedPerCycle =
+        RF->getValueAsInt("MaxMovesEliminatedPerCycle");
+    CGRF.AllowZeroMoveEliminationOnly =
+        RF->getValueAsBit("AllowZeroMoveEliminationOnly");
 
     // Now set the number of physical registers as well as the cost of registers
     // in each register class.
     CGRF.NumPhysRegs = RF->getValueAsInt("NumPhysRegs");
+    if (!CGRF.NumPhysRegs) {
+      PrintFatalError(RF->getLoc(),
+                      "Invalid RegisterFile with zero physical registers");
+    }
+
     RecVec RegisterClasses = RF->getValueAsListOfDefs("RegClasses");
     std::vector<int64_t> RegisterCosts = RF->getValueAsListOfInts("RegCosts");
+    ListInit *MoveElimInfo = RF->getValueAsListInit("AllowMoveElimination");
     for (unsigned I = 0, E = RegisterClasses.size(); I < E; ++I) {
       int Cost = RegisterCosts.size() > I ? RegisterCosts[I] : 1;
-      CGRF.Costs.emplace_back(RegisterClasses[I], Cost);
-    }
-  }
-}
 
-// Collect all the RegisterFile definitions available in this target.
-void CodeGenSchedModels::collectPfmCounters() {
-  for (Record *Def : Records.getAllDerivedDefinitions("PfmIssueCounter")) {
-    CodeGenProcModel &PM = getProcModel(Def->getValueAsDef("SchedModel"));
-    PM.PfmIssueCounterDefs.emplace_back(Def);
-  }
-  for (Record *Def : Records.getAllDerivedDefinitions("PfmCycleCounter")) {
-    CodeGenProcModel &PM = getProcModel(Def->getValueAsDef("SchedModel"));
-    if (PM.PfmCycleCounterDef) {
-      PrintFatalError(Def->getLoc(),
-                      "multiple cycle counters for " +
-                          Def->getValueAsDef("SchedModel")->getName());
+      bool AllowMoveElim = false;
+      if (MoveElimInfo->size() > I) {
+        BitInit *Val = cast<BitInit>(MoveElimInfo->getElement(I));
+        AllowMoveElim = Val->getValue();
+      }
+
+      CGRF.Costs.emplace_back(RegisterClasses[I], Cost, AllowMoveElim);
     }
-    PM.PfmCycleCounterDef = Def;
   }
 }
 
@@ -1859,12 +1856,9 @@ void CodeGenSchedModels::collectProcResources() {
   }
   // Finalize each ProcModel by sorting the record arrays.
   for (CodeGenProcModel &PM : ProcModels) {
-    llvm::sort(PM.WriteResDefs.begin(), PM.WriteResDefs.end(),
-               LessRecord());
-    llvm::sort(PM.ReadAdvanceDefs.begin(), PM.ReadAdvanceDefs.end(),
-               LessRecord());
-    llvm::sort(PM.ProcResourceDefs.begin(), PM.ProcResourceDefs.end(),
-               LessRecord());
+    llvm::sort(PM.WriteResDefs, LessRecord());
+    llvm::sort(PM.ReadAdvanceDefs, LessRecord());
+    llvm::sort(PM.ProcResourceDefs, LessRecord());
     LLVM_DEBUG(
         PM.dump();
         dbgs() << "WriteResDefs: "; for (RecIter RI = PM.WriteResDefs.begin(),

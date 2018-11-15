@@ -32,6 +32,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/TrailingObjects.h"
 
 namespace clang {
   class APValue;
@@ -631,8 +632,13 @@ public:
   /// EvaluateKnownConstInt - Call EvaluateAsRValue and return the folded
   /// integer. This must be called on an expression that constant folds to an
   /// integer.
-  llvm::APSInt EvaluateKnownConstInt(const ASTContext &Ctx,
-                    SmallVectorImpl<PartialDiagnosticAt> *Diag = nullptr) const;
+  llvm::APSInt EvaluateKnownConstInt(
+      const ASTContext &Ctx,
+      SmallVectorImpl<PartialDiagnosticAt> *Diag = nullptr) const;
+
+  llvm::APSInt EvaluateKnownConstIntCheckOverflow(
+      const ASTContext &Ctx,
+      SmallVectorImpl<PartialDiagnosticAt> *Diag = nullptr) const;
 
   void EvaluateForOverflow(const ASTContext &Ctx) const;
 
@@ -863,6 +869,65 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// Wrapper Expressions.
+//===----------------------------------------------------------------------===//
+
+/// FullExpr - Represents a "full-expression" node.
+class FullExpr : public Expr {
+protected:
+ Stmt *SubExpr;
+
+ FullExpr(StmtClass SC, Expr *subexpr)
+    : Expr(SC, subexpr->getType(),
+           subexpr->getValueKind(), subexpr->getObjectKind(),
+           subexpr->isTypeDependent(), subexpr->isValueDependent(),
+           subexpr->isInstantiationDependent(),
+           subexpr->containsUnexpandedParameterPack()), SubExpr(subexpr) {}
+  FullExpr(StmtClass SC, EmptyShell Empty)
+    : Expr(SC, Empty) {}
+public:
+  const Expr *getSubExpr() const { return cast<Expr>(SubExpr); }
+  Expr *getSubExpr() { return cast<Expr>(SubExpr); }
+
+  /// As with any mutator of the AST, be very careful when modifying an
+  /// existing AST to preserve its invariants.
+  void setSubExpr(Expr *E) { SubExpr = E; }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() >= firstFullExprConstant &&
+           T->getStmtClass() <= lastFullExprConstant;
+  }
+};
+
+/// ConstantExpr - An expression that occurs in a constant context.
+class ConstantExpr : public FullExpr {
+public:
+  ConstantExpr(Expr *subexpr)
+    : FullExpr(ConstantExprClass, subexpr) {}
+
+  /// Build an empty constant expression wrapper.
+  explicit ConstantExpr(EmptyShell Empty)
+    : FullExpr(ConstantExprClass, Empty) {}
+
+  SourceLocation getBeginLoc() const LLVM_READONLY {
+    return SubExpr->getBeginLoc();
+  }
+  SourceLocation getEndLoc() const LLVM_READONLY {
+    return SubExpr->getEndLoc();
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ConstantExprClass;
+  }
+
+  // Iterators
+  child_range children() { return child_range(&SubExpr, &SubExpr+1); }
+  const_child_range children() const {
+    return const_child_range(&SubExpr, &SubExpr + 1);
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Primary Expressions.
 //===----------------------------------------------------------------------===//
 
@@ -973,61 +1038,60 @@ class DeclRefExpr final
       private llvm::TrailingObjects<DeclRefExpr, NestedNameSpecifierLoc,
                                     NamedDecl *, ASTTemplateKWAndArgsInfo,
                                     TemplateArgumentLoc> {
+  friend class ASTStmtReader;
+  friend class ASTStmtWriter;
+  friend TrailingObjects;
+
   /// The declaration that we are referencing.
   ValueDecl *D;
-
-  /// The location of the declaration name itself.
-  SourceLocation Loc;
 
   /// Provides source/type location info for the declaration name
   /// embedded in D.
   DeclarationNameLoc DNLoc;
 
   size_t numTrailingObjects(OverloadToken<NestedNameSpecifierLoc>) const {
-    return hasQualifier() ? 1 : 0;
+    return hasQualifier();
   }
 
   size_t numTrailingObjects(OverloadToken<NamedDecl *>) const {
-    return hasFoundDecl() ? 1 : 0;
+    return hasFoundDecl();
   }
 
   size_t numTrailingObjects(OverloadToken<ASTTemplateKWAndArgsInfo>) const {
-    return hasTemplateKWAndArgsInfo() ? 1 : 0;
+    return hasTemplateKWAndArgsInfo();
   }
 
   /// Test whether there is a distinct FoundDecl attached to the end of
   /// this DRE.
   bool hasFoundDecl() const { return DeclRefExprBits.HasFoundDecl; }
 
-  DeclRefExpr(const ASTContext &Ctx,
-              NestedNameSpecifierLoc QualifierLoc,
-              SourceLocation TemplateKWLoc,
-              ValueDecl *D, bool RefersToEnlosingVariableOrCapture,
-              const DeclarationNameInfo &NameInfo,
-              NamedDecl *FoundD,
-              const TemplateArgumentListInfo *TemplateArgs,
-              QualType T, ExprValueKind VK);
+  DeclRefExpr(const ASTContext &Ctx, NestedNameSpecifierLoc QualifierLoc,
+              SourceLocation TemplateKWLoc, ValueDecl *D,
+              bool RefersToEnlosingVariableOrCapture,
+              const DeclarationNameInfo &NameInfo, NamedDecl *FoundD,
+              const TemplateArgumentListInfo *TemplateArgs, QualType T,
+              ExprValueKind VK);
 
   /// Construct an empty declaration reference expression.
-  explicit DeclRefExpr(EmptyShell Empty)
-    : Expr(DeclRefExprClass, Empty) { }
+  explicit DeclRefExpr(EmptyShell Empty) : Expr(DeclRefExprClass, Empty) {}
 
   /// Computes the type- and value-dependence flags for this
   /// declaration reference expression.
-  void computeDependence(const ASTContext &C);
+  void computeDependence(const ASTContext &Ctx);
 
 public:
   DeclRefExpr(ValueDecl *D, bool RefersToEnclosingVariableOrCapture, QualType T,
               ExprValueKind VK, SourceLocation L,
               const DeclarationNameLoc &LocInfo = DeclarationNameLoc())
-    : Expr(DeclRefExprClass, T, VK, OK_Ordinary, false, false, false, false),
-      D(D), Loc(L), DNLoc(LocInfo) {
-    DeclRefExprBits.HasQualifier = 0;
-    DeclRefExprBits.HasTemplateKWAndArgsInfo = 0;
-    DeclRefExprBits.HasFoundDecl = 0;
-    DeclRefExprBits.HadMultipleCandidates = 0;
+      : Expr(DeclRefExprClass, T, VK, OK_Ordinary, false, false, false, false),
+        D(D), DNLoc(LocInfo) {
+    DeclRefExprBits.HasQualifier = false;
+    DeclRefExprBits.HasTemplateKWAndArgsInfo = false;
+    DeclRefExprBits.HasFoundDecl = false;
+    DeclRefExprBits.HadMultipleCandidates = false;
     DeclRefExprBits.RefersToEnclosingVariableOrCapture =
         RefersToEnclosingVariableOrCapture;
+    DeclRefExprBits.Loc = L;
     computeDependence(D->getASTContext());
   }
 
@@ -1047,8 +1111,7 @@ public:
          const TemplateArgumentListInfo *TemplateArgs = nullptr);
 
   /// Construct an empty declaration reference expression.
-  static DeclRefExpr *CreateEmpty(const ASTContext &Context,
-                                  bool HasQualifier,
+  static DeclRefExpr *CreateEmpty(const ASTContext &Context, bool HasQualifier,
                                   bool HasFoundDecl,
                                   bool HasTemplateKWAndArgsInfo,
                                   unsigned NumTemplateArgs);
@@ -1058,11 +1121,11 @@ public:
   void setDecl(ValueDecl *NewD) { D = NewD; }
 
   DeclarationNameInfo getNameInfo() const {
-    return DeclarationNameInfo(getDecl()->getDeclName(), Loc, DNLoc);
+    return DeclarationNameInfo(getDecl()->getDeclName(), getLocation(), DNLoc);
   }
 
-  SourceLocation getLocation() const { return Loc; }
-  void setLocation(SourceLocation L) { Loc = L; }
+  SourceLocation getLocation() const { return DeclRefExprBits.Loc; }
+  void setLocation(SourceLocation L) { DeclRefExprBits.Loc = L; }
   SourceLocation getBeginLoc() const LLVM_READONLY;
   SourceLocation getEndLoc() const LLVM_READONLY;
 
@@ -1107,21 +1170,24 @@ public:
   /// Retrieve the location of the template keyword preceding
   /// this name, if any.
   SourceLocation getTemplateKeywordLoc() const {
-    if (!hasTemplateKWAndArgsInfo()) return SourceLocation();
+    if (!hasTemplateKWAndArgsInfo())
+      return SourceLocation();
     return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->TemplateKWLoc;
   }
 
   /// Retrieve the location of the left angle bracket starting the
   /// explicit template argument list following the name, if any.
   SourceLocation getLAngleLoc() const {
-    if (!hasTemplateKWAndArgsInfo()) return SourceLocation();
+    if (!hasTemplateKWAndArgsInfo())
+      return SourceLocation();
     return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->LAngleLoc;
   }
 
   /// Retrieve the location of the right angle bracket ending the
   /// explicit template argument list following the name, if any.
   SourceLocation getRAngleLoc() const {
-    if (!hasTemplateKWAndArgsInfo()) return SourceLocation();
+    if (!hasTemplateKWAndArgsInfo())
+      return SourceLocation();
     return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->RAngleLoc;
   }
 
@@ -1146,7 +1212,6 @@ public:
   const TemplateArgumentLoc *getTemplateArgs() const {
     if (!hasExplicitTemplateArgs())
       return nullptr;
-
     return getTrailingObjects<TemplateArgumentLoc>();
   }
 
@@ -1155,7 +1220,6 @@ public:
   unsigned getNumTemplateArgs() const {
     if (!hasExplicitTemplateArgs())
       return 0;
-
     return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->NumTemplateArgs;
   }
 
@@ -1193,68 +1257,6 @@ public:
   const_child_range children() const {
     return const_child_range(const_child_iterator(), const_child_iterator());
   }
-
-  friend TrailingObjects;
-  friend class ASTStmtReader;
-  friend class ASTStmtWriter;
-};
-
-/// [C99 6.4.2.2] - A predefined identifier such as __func__.
-class PredefinedExpr : public Expr {
-public:
-  enum IdentType {
-    Func,
-    Function,
-    LFunction, // Same as Function, but as wide string.
-    FuncDName,
-    FuncSig,
-    LFuncSig, // Same as FuncSig, but as as wide string
-    PrettyFunction,
-    /// The same as PrettyFunction, except that the
-    /// 'virtual' keyword is omitted for virtual member functions.
-    PrettyFunctionNoVirtual
-  };
-
-private:
-  SourceLocation Loc;
-  IdentType Type;
-  Stmt *FnName;
-
-public:
-  PredefinedExpr(SourceLocation L, QualType FNTy, IdentType IT,
-                 StringLiteral *SL);
-
-  /// Construct an empty predefined expression.
-  explicit PredefinedExpr(EmptyShell Empty)
-      : Expr(PredefinedExprClass, Empty), Loc(), Type(Func), FnName(nullptr) {}
-
-  IdentType getIdentType() const { return Type; }
-
-  SourceLocation getLocation() const { return Loc; }
-  void setLocation(SourceLocation L) { Loc = L; }
-
-  StringLiteral *getFunctionName();
-  const StringLiteral *getFunctionName() const {
-    return const_cast<PredefinedExpr *>(this)->getFunctionName();
-  }
-
-  static StringRef getIdentTypeName(IdentType IT);
-  static std::string ComputeName(IdentType IT, const Decl *CurrentDecl);
-
-  SourceLocation getBeginLoc() const LLVM_READONLY { return Loc; }
-  SourceLocation getEndLoc() const LLVM_READONLY { return Loc; }
-
-  static bool classof(const Stmt *T) {
-    return T->getStmtClass() == PredefinedExprClass;
-  }
-
-  // Iterators
-  child_range children() { return child_range(&FnName, &FnName + 1); }
-  const_child_range children() const {
-    return const_child_range(&FnName, &FnName + 1);
-  }
-
-  friend class ASTStmtReader;
 };
 
 /// Used by IntegerLiteral/FloatingLiteral to store the numeric without
@@ -1724,6 +1726,91 @@ public:
   }
   const_child_range children() const {
     return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+};
+
+/// [C99 6.4.2.2] - A predefined identifier such as __func__.
+class PredefinedExpr final
+    : public Expr,
+      private llvm::TrailingObjects<PredefinedExpr, Stmt *> {
+  friend class ASTStmtReader;
+  friend TrailingObjects;
+
+  // PredefinedExpr is optionally followed by a single trailing
+  // "Stmt *" for the predefined identifier. It is present if and only if
+  // hasFunctionName() is true and is always a "StringLiteral *".
+
+public:
+  enum IdentKind {
+    Func,
+    Function,
+    LFunction, // Same as Function, but as wide string.
+    FuncDName,
+    FuncSig,
+    LFuncSig, // Same as FuncSig, but as as wide string
+    PrettyFunction,
+    /// The same as PrettyFunction, except that the
+    /// 'virtual' keyword is omitted for virtual member functions.
+    PrettyFunctionNoVirtual
+  };
+
+private:
+  PredefinedExpr(SourceLocation L, QualType FNTy, IdentKind IK,
+                 StringLiteral *SL);
+
+  explicit PredefinedExpr(EmptyShell Empty, bool HasFunctionName);
+
+  /// True if this PredefinedExpr has storage for a function name.
+  bool hasFunctionName() const { return PredefinedExprBits.HasFunctionName; }
+
+  void setFunctionName(StringLiteral *SL) {
+    assert(hasFunctionName() &&
+           "This PredefinedExpr has no storage for a function name!");
+    *getTrailingObjects<Stmt *>() = SL;
+  }
+
+public:
+  /// Create a PredefinedExpr.
+  static PredefinedExpr *Create(const ASTContext &Ctx, SourceLocation L,
+                                QualType FNTy, IdentKind IK, StringLiteral *SL);
+
+  /// Create an empty PredefinedExpr.
+  static PredefinedExpr *CreateEmpty(const ASTContext &Ctx,
+                                     bool HasFunctionName);
+
+  IdentKind getIdentKind() const {
+    return static_cast<IdentKind>(PredefinedExprBits.Kind);
+  }
+
+  SourceLocation getLocation() const { return PredefinedExprBits.Loc; }
+  void setLocation(SourceLocation L) { PredefinedExprBits.Loc = L; }
+
+  StringLiteral *getFunctionName() {
+    return hasFunctionName()
+               ? static_cast<StringLiteral *>(*getTrailingObjects<Stmt *>())
+               : nullptr;
+  }
+
+  const StringLiteral *getFunctionName() const {
+    return hasFunctionName()
+               ? static_cast<StringLiteral *>(*getTrailingObjects<Stmt *>())
+               : nullptr;
+  }
+
+  static StringRef getIdentKindName(IdentKind IK);
+  static std::string ComputeName(IdentKind IK, const Decl *CurrentDecl);
+
+  SourceLocation getBeginLoc() const { return getLocation(); }
+  SourceLocation getEndLoc() const { return getLocation(); }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == PredefinedExprClass;
+  }
+
+  // Iterators
+  child_range children() {
+    return child_range(getTrailingObjects<Stmt *>(),
+                       getTrailingObjects<Stmt *>() + hasFunctionName());
   }
 };
 
@@ -2932,8 +3019,7 @@ class ImplicitCastExpr final
 private:
   ImplicitCastExpr(QualType ty, CastKind kind, Expr *op,
                    unsigned BasePathLength, ExprValueKind VK)
-    : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, BasePathLength) {
-  }
+    : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, BasePathLength) { }
 
   /// Construct an empty implicit cast.
   explicit ImplicitCastExpr(EmptyShell Shell, unsigned PathSize)
@@ -2976,8 +3062,13 @@ public:
 
 inline Expr *Expr::IgnoreImpCasts() {
   Expr *e = this;
-  while (ImplicitCastExpr *ice = dyn_cast<ImplicitCastExpr>(e))
-    e = ice->getSubExpr();
+  while (true)
+    if (ImplicitCastExpr *ice = dyn_cast<ImplicitCastExpr>(e))
+      e = ice->getSubExpr();
+    else if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e))
+      e = ce->getSubExpr();
+    else
+      break;
   return e;
 }
 
