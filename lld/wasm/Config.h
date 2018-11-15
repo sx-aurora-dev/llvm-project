@@ -20,13 +20,15 @@ namespace wasm {
 
 struct Configuration {
   bool AllowUndefined;
-  bool CompressRelocTargets;
+  bool CompressRelocations;
   bool Demangle;
   bool DisableVerify;
   bool ExportAll;
+  bool ExportDynamic;
   bool ExportTable;
   bool GcSections;
   bool ImportMemory;
+  bool SharedMemory;
   bool ImportTable;
   bool MergeDataSegments;
   bool PrintGcSections;

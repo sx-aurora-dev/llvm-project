@@ -748,6 +748,9 @@ Decl *TemplateDeclInstantiator::VisitVarDecl(VarDecl *D,
 
   Var->setImplicit(D->isImplicit());
 
+  if (Var->isStaticLocal())
+    SemaRef.CheckStaticLocalForDllExport(Var);
+
   return Var;
 }
 
@@ -2734,6 +2737,11 @@ Decl *TemplateDeclInstantiator::VisitOMPThreadPrivateDecl(
   Owner->addDecl(TD);
 
   return TD;
+}
+
+Decl *TemplateDeclInstantiator::VisitOMPRequiresDecl(OMPRequiresDecl *D) {
+  llvm_unreachable(
+      "Requires directive cannot be instantiated within a dependent context");
 }
 
 Decl *TemplateDeclInstantiator::VisitOMPDeclareReductionDecl(

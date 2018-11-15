@@ -38,6 +38,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/ilist.h"
 #include "llvm/ADT/ilist_node.h"
+#include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/IRBuilder.h"
 #include <algorithm>
 #include <cassert>
@@ -52,7 +53,8 @@ class LoopVectorizationCostModel;
 class BasicBlock;
 class DominatorTree;
 class InnerLoopVectorizer;
-class InterleaveGroup;
+template <class T> class InterleaveGroup;
+class LoopInfo;
 class raw_ostream;
 class Value;
 class VPBasicBlock;
@@ -316,6 +318,9 @@ struct VPTransformState {
   /// Hold a reference to a mapping between VPValues in VPlan and original
   /// Values they correspond to.
   VPValue2ValueTy VPValue2Value;
+
+  /// Hold the trip count of the scalar loop.
+  Value *TripCount = nullptr;
 
   /// Hold a pointer to InnerLoopVectorizer to reuse its IR generation methods.
   InnerLoopVectorizer *ILV;
@@ -607,7 +612,7 @@ class VPInstruction : public VPUser, public VPRecipeBase {
 
 public:
   /// VPlan opcodes, extending LLVM IR with idiomatics instructions.
-  enum { Not = Instruction::OtherOpsEnd + 1 };
+  enum { Not = Instruction::OtherOpsEnd + 1, ICmpULE };
 
 private:
   typedef unsigned char OpcodeTy;
@@ -768,11 +773,15 @@ public:
 /// or stores into one wide load/store and shuffles.
 class VPInterleaveRecipe : public VPRecipeBase {
 private:
-  const InterleaveGroup *IG;
+  const InterleaveGroup<Instruction> *IG;
+  std::unique_ptr<VPUser> User;
 
 public:
-  VPInterleaveRecipe(const InterleaveGroup *IG)
-      : VPRecipeBase(VPInterleaveSC), IG(IG) {}
+  VPInterleaveRecipe(const InterleaveGroup<Instruction> *IG, VPValue *Mask)
+      : VPRecipeBase(VPInterleaveSC), IG(IG) {
+    if (Mask) // Create a VPInstruction to register as a user of the mask.
+      User.reset(new VPUser({Mask}));
+  }
   ~VPInterleaveRecipe() override = default;
 
   /// Method to support type inquiry through isa, cast, and dyn_cast.
@@ -786,7 +795,7 @@ public:
   /// Print the recipe.
   void print(raw_ostream &O, const Twine &Indent) const override;
 
-  const InterleaveGroup *getInterleaveGroup() { return IG; }
+  const InterleaveGroup<Instruction> *getInterleaveGroup() { return IG; }
 };
 
 /// VPReplicateRecipe replicates a given instruction producing multiple scalar
@@ -1111,6 +1120,10 @@ private:
   // (operators '==' and '<').
   SmallPtrSet<VPValue *, 16> VPExternalDefs;
 
+  /// Represents the backedge taken count of the original loop, for folding
+  /// the tail.
+  VPValue *BackedgeTakenCount = nullptr;
+
   /// Holds a mapping between Values and their corresponding VPValue inside
   /// VPlan.
   Value2VPValueTy Value2VPValue;
@@ -1128,7 +1141,10 @@ public:
     if (Entry)
       VPBlockBase::deleteCFG(Entry);
     for (auto &MapEntry : Value2VPValue)
-      delete MapEntry.second;
+      if (MapEntry.second != BackedgeTakenCount)
+        delete MapEntry.second;
+    if (BackedgeTakenCount)
+      delete BackedgeTakenCount; // Delete once, if in Value2VPValue or not.
     for (VPValue *Def : VPExternalDefs)
       delete Def;
     for (VPValue *CBV : VPCBVs)
@@ -1142,6 +1158,13 @@ public:
   const VPBlockBase *getEntry() const { return Entry; }
 
   VPBlockBase *setEntry(VPBlockBase *Block) { return Entry = Block; }
+
+  /// The backedge taken count of the original loop.
+  VPValue *getOrCreateBackedgeTakenCount() {
+    if (!BackedgeTakenCount)
+      BackedgeTakenCount = new VPValue();
+    return BackedgeTakenCount;
+  }
 
   void addVF(unsigned VF) { VFs.insert(VF); }
 
@@ -1440,6 +1463,48 @@ public:
     assert(To && "Successor to disconnect is null.");
     From->removeSuccessor(To);
     To->removePredecessor(From);
+  }
+};
+
+class VPInterleavedAccessInfo {
+private:
+  DenseMap<VPInstruction *, InterleaveGroup<VPInstruction> *>
+      InterleaveGroupMap;
+
+  /// Type for mapping of instruction based interleave groups to VPInstruction
+  /// interleave groups
+  using Old2NewTy = DenseMap<InterleaveGroup<Instruction> *,
+                             InterleaveGroup<VPInstruction> *>;
+
+  /// Recursively \p Region and populate VPlan based interleave groups based on
+  /// \p IAI.
+  void visitRegion(VPRegionBlock *Region, Old2NewTy &Old2New,
+                   InterleavedAccessInfo &IAI);
+  /// Recursively traverse \p Block and populate VPlan based interleave groups
+  /// based on \p IAI.
+  void visitBlock(VPBlockBase *Block, Old2NewTy &Old2New,
+                  InterleavedAccessInfo &IAI);
+
+public:
+  VPInterleavedAccessInfo(VPlan &Plan, InterleavedAccessInfo &IAI);
+
+  ~VPInterleavedAccessInfo() {
+    SmallPtrSet<InterleaveGroup<VPInstruction> *, 4> DelSet;
+    // Avoid releasing a pointer twice.
+    for (auto &I : InterleaveGroupMap)
+      DelSet.insert(I.second);
+    for (auto *Ptr : DelSet)
+      delete Ptr;
+  }
+
+  /// Get the interleave group that \p Instr belongs to.
+  ///
+  /// \returns nullptr if doesn't have such group.
+  InterleaveGroup<VPInstruction> *
+  getInterleaveGroup(VPInstruction *Instr) const {
+    if (InterleaveGroupMap.count(Instr))
+      return InterleaveGroupMap.find(Instr)->second;
+    return nullptr;
   }
 };
 

@@ -54,13 +54,13 @@
 
 ; Test TypeId summaries:
 
-; Test the AllOnes resolution, and all kinds of WholeProgramDevirtResolution
-; types, including all optional resolution by argument kinds.
-^24 = typeid: (name: "_ZTS1A", summary: (typeTestRes: (kind: allOnes, sizeM1BitWidth: 7), wpdResolutions: ((offset: 0, wpdRes: (kind: branchFunnel)), (offset: 8, wpdRes: (kind: singleImpl, singleImplName: "_ZN1A1nEi")), (offset: 16, wpdRes: (kind: indir, resByArg: (args: (1, 2), byArg: (kind: indir, byte: 2, bit: 3), args: (3), byArg: (kind: uniformRetVal, info: 1), args: (4), byArg: (kind: uniqueRetVal, info: 1), args: (5), byArg: (kind: virtualConstProp)))))))
+^24 = typeid: (name: "_ZTS1C", summary: (typeTestRes: (kind: single, sizeM1BitWidth: 0)))
 ; Test TypeId with other optional fields (alignLog2/sizeM1/bitMask/inlineBits)
 ^25 = typeid: (name: "_ZTS1B", summary: (typeTestRes: (kind: inline, sizeM1BitWidth: 0, alignLog2: 1, sizeM1: 2, bitMask: 3, inlineBits: 4)))
+; Test the AllOnes resolution, and all kinds of WholeProgramDevirtResolution
+; types, including all optional resolution by argument kinds.
+^26 = typeid: (name: "_ZTS1A", summary: (typeTestRes: (kind: allOnes, sizeM1BitWidth: 7), wpdResolutions: ((offset: 0, wpdRes: (kind: branchFunnel)), (offset: 8, wpdRes: (kind: singleImpl, singleImplName: "_ZN1A1nEi")), (offset: 16, wpdRes: (kind: indir, resByArg: (args: (1, 2), byArg: (kind: indir, byte: 2, bit: 3), args: (3), byArg: (kind: uniformRetVal, info: 1), args: (4), byArg: (kind: uniqueRetVal, info: 1), args: (5), byArg: (kind: virtualConstProp)))))))
 ; Test the other kinds of type test resoultions
-^26 = typeid: (name: "_ZTS1C", summary: (typeTestRes: (kind: single, sizeM1BitWidth: 0)))
 ^27 = typeid: (name: "_ZTS1D", summary: (typeTestRes: (kind: byteArray, sizeM1BitWidth: 0)))
 ^28 = typeid: (name: "_ZTS1E", summary: (typeTestRes: (kind: unsat, sizeM1BitWidth: 0)))
 
@@ -81,16 +81,16 @@
 ; CHECK: ^13 = gv: (guid: 12, summaries: (variable: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0))))
 ; CHECK: ^14 = gv: (guid: 13, summaries: (variable: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 1))))
 ; CHECK: ^15 = gv: (guid: 14, summaries: (function: (module: ^1, flags: (linkage: external, notEligibleToImport: 1, live: 1, dsoLocal: 0), insts: 1)))
-; CHECK: ^16 = gv: (guid: 15, summaries: (function: (module: ^1, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 1, funcFlags: (readNone: 1, readOnly: 0, noRecurse: 1, returnDoesNotAlias: 0))))
-; CHECK: ^17 = gv: (guid: 16, summaries: (function: (module: ^1, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 1, funcFlags: (readNone: 0, readOnly: 1, noRecurse: 0, returnDoesNotAlias: 1), calls: ((callee: ^15)))))
+; CHECK: ^16 = gv: (guid: 15, summaries: (function: (module: ^1, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 1, funcFlags: (readNone: 1, readOnly: 0, noRecurse: 1, returnDoesNotAlias: 0, noInline: 0))))
+; CHECK: ^17 = gv: (guid: 16, summaries: (function: (module: ^1, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 1, funcFlags: (readNone: 0, readOnly: 1, noRecurse: 0, returnDoesNotAlias: 1, noInline: 0), calls: ((callee: ^15)))))
 ; CHECK: ^18 = gv: (guid: 17, summaries: (alias: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 1), aliasee: ^14)))
 ; CHECK: ^19 = gv: (guid: 18, summaries: (function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 4, typeIdInfo: (typeTests: (^24, ^26)))))
 ; CHECK: ^20 = gv: (guid: 19, summaries: (function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 8, typeIdInfo: (typeTestAssumeVCalls: (vFuncId: (^27, offset: 16))))))
 ; CHECK: ^21 = gv: (guid: 20, summaries: (function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 5, typeIdInfo: (typeCheckedLoadVCalls: (vFuncId: (^25, offset: 16))))))
 ; CHECK: ^22 = gv: (guid: 21, summaries: (function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 15, typeIdInfo: (typeTestAssumeConstVCalls: ((vFuncId: (^27, offset: 16), args: (42)), (vFuncId: (^27, offset: 24)))))))
 ; CHECK: ^23 = gv: (guid: 22, summaries: (function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 5, typeIdInfo: (typeCheckedLoadConstVCalls: ((vFuncId: (^28, offset: 16), args: (42)))))))
-; CHECK: ^24 = typeid: (name: "_ZTS1A", summary: (typeTestRes: (kind: allOnes, sizeM1BitWidth: 7), wpdResolutions: ((offset: 0, wpdRes: (kind: branchFunnel)), (offset: 8, wpdRes: (kind: singleImpl, singleImplName: "_ZN1A1nEi")), (offset: 16, wpdRes: (kind: indir, resByArg: (args: (1, 2), byArg: (kind: indir, byte: 2, bit: 3), args: (3), byArg: (kind: uniformRetVal, info: 1), args: (4), byArg: (kind: uniqueRetVal, info: 1), args: (5), byArg: (kind: virtualConstProp))))))) ; guid = 7004155349499253778
+; CHECK: ^24 = typeid: (name: "_ZTS1C", summary: (typeTestRes: (kind: single, sizeM1BitWidth: 0))) ; guid = 1884921850105019584
 ; CHECK: ^25 = typeid: (name: "_ZTS1B", summary: (typeTestRes: (kind: inline, sizeM1BitWidth: 0, alignLog2: 1, sizeM1: 2, bitMask: 3, inlineBits: 4))) ; guid = 6203814149063363976
-; CHECK: ^26 = typeid: (name: "_ZTS1C", summary: (typeTestRes: (kind: single, sizeM1BitWidth: 0))) ; guid = 1884921850105019584
+; CHECK: ^26 = typeid: (name: "_ZTS1A", summary: (typeTestRes: (kind: allOnes, sizeM1BitWidth: 7), wpdResolutions: ((offset: 0, wpdRes: (kind: branchFunnel)), (offset: 8, wpdRes: (kind: singleImpl, singleImplName: "_ZN1A1nEi")), (offset: 16, wpdRes: (kind: indir, resByArg: (args: (1, 2), byArg: (kind: indir, byte: 2, bit: 3), args: (3), byArg: (kind: uniformRetVal, info: 1), args: (4), byArg: (kind: uniqueRetVal, info: 1), args: (5), byArg: (kind: virtualConstProp))))))) ; guid = 7004155349499253778
 ; CHECK: ^27 = typeid: (name: "_ZTS1D", summary: (typeTestRes: (kind: byteArray, sizeM1BitWidth: 0))) ; guid = 9614786172484273522
 ; CHECK: ^28 = typeid: (name: "_ZTS1E", summary: (typeTestRes: (kind: unsat, sizeM1BitWidth: 0))) ; guid = 17437243864166745132
