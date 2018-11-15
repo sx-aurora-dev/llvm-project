@@ -80,13 +80,17 @@ def FeatureSPE : SubtargetFeature<"spe", "HasSPE", "true",
 def FeatureSVE : SubtargetFeature<"sve", "HasSVE", "true",
   "Enable Scalable Vector Extension (SVE) instructions">;
 
-/// Cyclone has register move instructions which are "free".
 def FeatureZCRegMove : SubtargetFeature<"zcm", "HasZeroCycleRegMove", "true",
                                         "Has zero-cycle register moves">;
+def FeatureZCZeroingGP : SubtargetFeature<"zcz-gp", "HasZeroCycleZeroingGP", "true",
+                                        "Has zero-cycle zeroing instructions for generic registers">;
 
-/// Cyclone has instructions which zero registers for "free".
+def FeatureZCZeroingFP : SubtargetFeature<"zcz-fp", "HasZeroCycleZeroingFP", "true",
+                                        "Has zero-cycle zeroing instructions for FP registers">;
+
 def FeatureZCZeroing : SubtargetFeature<"zcz", "HasZeroCycleZeroing", "true",
-                                        "Has zero-cycle zeroing instructions">;
+                                        "Has zero-cycle zeroing instructions",
+                                        [FeatureZCZeroingGP, FeatureZCZeroingFP]>;
 
 /// ... but the floating-point version doesn't quite work in rare cases on older
 /// CPUs.
@@ -176,6 +180,10 @@ def FeatureDisableLatencySchedHeuristic : SubtargetFeature<
     "disable-latency-sched-heuristic", "DisableLatencySchedHeuristic", "true",
     "Disable latency scheduling heuristic">;
 
+def FeatureForce32BitJumpTables
+   : SubtargetFeature<"force-32bit-jump-tables", "Force32BitJumpTables", "true",
+                      "Force jump table entries to be 32-bits wide except at MinSize">;
+
 def FeatureRCPC : SubtargetFeature<"rcpc", "HasRCPC", "true",
                                    "Enable support for RCPC extension">;
 
@@ -228,6 +236,9 @@ def FeatureBranchTargetId : SubtargetFeature<"bti", "HasBTI",
 
 def FeatureRandGen : SubtargetFeature<"rand", "HasRandGen",
     "true", "Enable Random Number generation instructions" >;
+
+def FeatureMTE : SubtargetFeature<"mte", "HasMTE",
+    "true", "Enable Memory Tagging Extension" >;
 
 //===----------------------------------------------------------------------===//
 // Architectures.
@@ -397,14 +408,13 @@ def ProcExynosM1 : SubtargetFeature<"exynosm1", "ARMProcFamily", "ExynosM1",
                                      FeatureCRC,
                                      FeatureCrypto,
                                      FeatureExynosCheapAsMoveHandling,
-                                     FeatureFPARMv8,
+                                     FeatureForce32BitJumpTables,
                                      FeatureFuseAES,
-                                     FeatureNEON,
                                      FeaturePerfMon,
                                      FeaturePostRAScheduler,
                                      FeatureSlowMisaligned128Store,
                                      FeatureUseRSqrt,
-                                     FeatureZCZeroing]>;
+                                     FeatureZCZeroingFP]>;
 
 def ProcExynosM2 : SubtargetFeature<"exynosm2", "ARMProcFamily", "ExynosM1",
                                     "Samsung Exynos-M2 processors",
@@ -412,30 +422,28 @@ def ProcExynosM2 : SubtargetFeature<"exynosm2", "ARMProcFamily", "ExynosM1",
                                      FeatureCRC,
                                      FeatureCrypto,
                                      FeatureExynosCheapAsMoveHandling,
-                                     FeatureFPARMv8,
+                                     FeatureForce32BitJumpTables,
                                      FeatureFuseAES,
-                                     FeatureNEON,
                                      FeaturePerfMon,
                                      FeaturePostRAScheduler,
                                      FeatureSlowMisaligned128Store,
-                                     FeatureZCZeroing]>;
+                                     FeatureZCZeroingFP]>;
 
 def ProcExynosM3 : SubtargetFeature<"exynosm3", "ARMProcFamily", "ExynosM3",
                                     "Samsung Exynos-M3 processors",
                                     [FeatureCRC,
                                      FeatureCrypto,
                                      FeatureExynosCheapAsMoveHandling,
-                                     FeatureFPARMv8,
+                                     FeatureForce32BitJumpTables,
                                      FeatureFuseAddress,
                                      FeatureFuseAES,
                                      FeatureFuseCCSelect,
                                      FeatureFuseLiterals,
                                      FeatureLSLFast,
-                                     FeatureNEON,
                                      FeaturePerfMon,
                                      FeaturePostRAScheduler,
                                      FeaturePredictableSelectIsExpensive,
-                                     FeatureZCZeroing]>;
+                                     FeatureZCZeroingFP]>;
 
 def ProcKryo    : SubtargetFeature<"kryo", "ARMProcFamily", "Kryo",
                                    "Qualcomm Kryo processors", [
@@ -479,7 +487,7 @@ def ProcSaphira  : SubtargetFeature<"saphira", "ARMProcFamily", "Saphira",
                                    FeaturePredictableSelectIsExpensive,
                                    FeatureZCZeroing,
                                    FeatureLSLFast,
-                                   HasV8_3aOps]>;
+                                   HasV8_4aOps]>;
 
 def ProcThunderX2T99  : SubtargetFeature<"thunderx2t99", "ARMProcFamily",
                                          "ThunderX2T99",
@@ -538,6 +546,21 @@ def ProcThunderXT83 : SubtargetFeature<"thunderxt83", "ARMProcFamily",
                                        FeaturePredictableSelectIsExpensive,
                                        FeatureNEON]>;
 
+def ProcTSV110 : SubtargetFeature<"tsv110", "ARMProcFamily", "TSV110",
+                                  "HiSilicon TS-V110 processors", [
+                                  HasV8_2aOps,
+                                  FeatureCrypto,
+                                  FeatureCustomCheapAsMoveHandling,
+                                  FeatureFPARMv8,
+                                  FeatureFuseAES,
+                                  FeatureNEON,
+                                  FeaturePerfMon,
+                                  FeaturePostRAScheduler,
+                                  FeatureSPE,
+                                  FeatureFullFP16,
+                                  FeatureFP16FML,
+                                  FeatureDotProd]>;
+
 def : ProcessorModel<"generic", NoSchedModel, [
                      FeatureFPARMv8,
                      FeatureFuseAES,
@@ -570,6 +593,8 @@ def : ProcessorModel<"thunderxt81", ThunderXT8XModel,  [ProcThunderXT81]>;
 def : ProcessorModel<"thunderxt83", ThunderXT8XModel,  [ProcThunderXT83]>;
 // Cavium ThunderX2T9X  Processors. Formerly Broadcom Vulcan.
 def : ProcessorModel<"thunderx2t99", ThunderX2T99Model, [ProcThunderX2T99]>;
+// FIXME: HiSilicon TSV110 is currently modeled as a Cortex-A57.
+def : ProcessorModel<"tsv110", CortexA57Model, [ProcTSV110]>;
 
 //===----------------------------------------------------------------------===//
 // Assembly parser
@@ -618,3 +643,9 @@ def AArch64 : Target {
   let AssemblyWriters = [GenericAsmWriter, AppleAsmWriter];
   let AllowRegisterRenaming = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// Pfm Counters
+//===----------------------------------------------------------------------===//
+
+include "AArch64PfmCounters.td"

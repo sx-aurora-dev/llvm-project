@@ -30,6 +30,11 @@
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
+// Defines llvm::WebAssembly::getStackOpcode to convert register instructions to
+// stack instructions
+#define GET_INSTRMAP_INFO 1
+#include "WebAssemblyGenInstrInfo.inc"
+
 // This disables the removal of registers when lowering into MC, as required
 // by some current tests.
 static cl::opt<bool>
@@ -38,7 +43,6 @@ static cl::opt<bool>
                                " instruction output for test purposes only."),
                       cl::init(false));
 
-static unsigned regInstructionToStackInstruction(unsigned OpCode);
 static void removeRegisterOperands(const MachineInstr *MI, MCInst &OutMI);
 
 MCSymbol *
@@ -51,34 +55,13 @@ WebAssemblyMCInstLower::GetGlobalAddressSymbol(const MachineOperand &MO) const {
     const TargetMachine &TM = MF.getTarget();
     const Function &CurrentFunc = MF.getFunction();
 
-    SmallVector<wasm::ValType, 4> Returns;
-    SmallVector<wasm::ValType, 4> Params;
+    SmallVector<MVT, 1> ResultMVTs;
+    SmallVector<MVT, 4> ParamMVTs;
+    ComputeSignatureVTs(FuncTy, CurrentFunc, TM, ParamMVTs, ResultMVTs);
 
-    wasm::ValType iPTR = MF.getSubtarget<WebAssemblySubtarget>().hasAddr64()
-                             ? wasm::ValType::I64
-                             : wasm::ValType::I32;
-
-    SmallVector<MVT, 4> ResultMVTs;
-    ComputeLegalValueVTs(CurrentFunc, TM, FuncTy->getReturnType(), ResultMVTs);
-    // WebAssembly can't currently handle returning tuples.
-    if (ResultMVTs.size() <= 1)
-      for (MVT ResultMVT : ResultMVTs)
-        Returns.push_back(WebAssembly::toValType(ResultMVT));
-    else
-      Params.push_back(iPTR);
-
-    for (Type *Ty : FuncTy->params()) {
-      SmallVector<MVT, 4> ParamMVTs;
-      ComputeLegalValueVTs(CurrentFunc, TM, Ty, ParamMVTs);
-      for (MVT ParamMVT : ParamMVTs)
-        Params.push_back(WebAssembly::toValType(ParamMVT));
-    }
-
-    if (FuncTy->isVarArg())
-      Params.push_back(iPTR);
-
-    WasmSym->setReturns(std::move(Returns));
-    WasmSym->setParams(std::move(Params));
+    auto Signature = SignatureFromMVTs(ResultMVTs, ParamMVTs);
+    WasmSym->setSignature(Signature.get());
+    Printer.addSignature(std::move(Signature));
     WasmSym->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
   }
 
@@ -108,9 +91,10 @@ MCSymbol *WebAssemblyMCInstLower::GetExternalSymbolSymbol(
   SmallVector<wasm::ValType, 4> Returns;
   SmallVector<wasm::ValType, 4> Params;
   GetLibcallSignature(Subtarget, Name, Returns, Params);
-
-  WasmSym->setReturns(std::move(Returns));
-  WasmSym->setParams(std::move(Params));
+  auto Signature =
+      make_unique<wasm::WasmSignature>(std::move(Returns), std::move(Params));
+  WasmSym->setSignature(Signature.get());
+  Printer.addSignature(std::move(Signature));
   WasmSym->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
 
   return WasmSym;
@@ -203,8 +187,10 @@ void WebAssemblyMCInstLower::Lower(const MachineInstr *MI,
             Params.pop_back();
 
           MCSymbolWasm *WasmSym = cast<MCSymbolWasm>(Sym);
-          WasmSym->setReturns(std::move(Returns));
-          WasmSym->setParams(std::move(Params));
+          auto Signature = make_unique<wasm::WasmSignature>(std::move(Returns),
+                                                            std::move(Params));
+          WasmSym->setSignature(Signature.get());
+          Printer.addSignature(std::move(Signature));
           WasmSym->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
 
           const MCExpr *Expr = MCSymbolRefExpr::create(
@@ -244,6 +230,13 @@ void WebAssemblyMCInstLower::Lower(const MachineInstr *MI,
           (MO.getTargetFlags() & WebAssemblyII::MO_SYMBOL_FUNCTION) != 0,
           (MO.getTargetFlags() & WebAssemblyII::MO_SYMBOL_GLOBAL) != 0);
       break;
+    case MachineOperand::MO_MCSymbol:
+      // This is currently used only for LSDA symbols (GCC_except_table),
+      // because global addresses or other external symbols are handled above.
+      assert(MO.getTargetFlags() == 0 &&
+             "WebAssembly does not use target flags on MCSymbol");
+      MCOp = LowerSymbolOperand(MO.getMCSymbol(), /*Offset=*/0, false, false);
+      break;
     }
 
     OutMI.addOperand(MCOp);
@@ -272,7 +265,8 @@ static void removeRegisterOperands(const MachineInstr *MI, MCInst &OutMI) {
 
   // Transform to _S instruction.
   auto RegOpcode = OutMI.getOpcode();
-  auto StackOpcode = regInstructionToStackInstruction(RegOpcode);
+  auto StackOpcode = WebAssembly::getStackOpcode(RegOpcode);
+  assert(StackOpcode != -1 && "Failed to stackify instruction");
   OutMI.setOpcode(StackOpcode);
 
   // Remove register operands.
@@ -281,23 +275,5 @@ static void removeRegisterOperands(const MachineInstr *MI, MCInst &OutMI) {
     if (MO.isReg()) {
       OutMI.erase(&MO);
     }
-  }
-}
-
-static unsigned regInstructionToStackInstruction(unsigned OpCode) {
-  // For most opcodes, this function could have been implemented as "return
-  // OpCode + 1", but since table-gen alphabetically sorts them, this cannot be
-  // guaranteed (see e.g. BR and BR_IF). Instead we use a giant switch statement
-  // generated by a custom TableGen backend (WebAssemblyStackifierEmitter.cpp)
-  // that emits switch cases of the form
-  //
-  //   case WebAssembly::RegisterInstr: return WebAssembly::StackInstr;
-  //
-  // for every pair of equivalent register and stack instructions.
-  switch (OpCode) {
-  default:
-    llvm_unreachable(
-        "unknown WebAssembly instruction in WebAssemblyMCInstLower pass");
-#include "WebAssemblyGenStackifier.inc"
   }
 }

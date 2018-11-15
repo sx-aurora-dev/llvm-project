@@ -155,6 +155,8 @@ void Writer::createImportSection() {
       Import.Memory.Flags |= WASM_LIMITS_FLAG_HAS_MAX;
       Import.Memory.Maximum = MaxMemoryPages;
     }
+    if (Config->SharedMemory)
+      Import.Memory.Flags |= WASM_LIMITS_FLAG_IS_SHARED;
     writeImport(OS, Import);
   }
 
@@ -214,8 +216,12 @@ void Writer::createMemorySection() {
 
   bool HasMax = MaxMemoryPages != 0;
   writeUleb128(OS, 1, "memory count");
-  writeUleb128(OS, HasMax ? static_cast<unsigned>(WASM_LIMITS_FLAG_HAS_MAX) : 0,
-               "memory limits flags");
+  unsigned Flags = 0;
+  if (HasMax)
+    Flags |= WASM_LIMITS_FLAG_HAS_MAX;
+  if (Config->SharedMemory)
+    Flags |= WASM_LIMITS_FLAG_IS_SHARED;
+  writeUleb128(OS, Flags, "memory limits flags");
   writeUleb128(OS, NumMemoryPages, "initial pages");
   if (HasMax)
     writeUleb128(OS, MaxMemoryPages, "max pages");
@@ -548,8 +554,7 @@ void Writer::createNameSection() {
   for (const Symbol *S : ImportedSymbols) {
     if (auto *F = dyn_cast<FunctionSymbol>(S)) {
       writeUleb128(Sub.OS, F->getFunctionIndex(), "func index");
-      Optional<std::string> Name = demangleItanium(F->getName());
-      writeStr(Sub.OS, Name ? StringRef(*Name) : F->getName(), "symbol name");
+      writeStr(Sub.OS, toString(*S), "symbol name");
     }
   }
   for (const InputFunction *F : InputFunctions) {
@@ -558,8 +563,7 @@ void Writer::createNameSection() {
       if (!F->getDebugName().empty()) {
         writeStr(Sub.OS, F->getDebugName(), "symbol name");
       } else {
-        Optional<std::string> Name = demangleItanium(F->getName());
-        writeStr(Sub.OS, Name ? StringRef(*Name) : F->getName(), "symbol name");
+        writeStr(Sub.OS, maybeDemangleSymbol(F->getName()), "symbol name");
       }
     }
   }
@@ -979,7 +983,7 @@ void Writer::createCtorFunction() {
     OS << BodyContent;
   }
 
-  ArrayRef<uint8_t> Body = toArrayRef(Saver.save(FunctionBody));
+  ArrayRef<uint8_t> Body = arrayRefFromStringRef(Saver.save(FunctionBody));
   cast<SyntheticFunction>(WasmSym::CallCtors->Function)->setBody(Body);
 }
 
@@ -991,7 +995,7 @@ void Writer::calculateInitFunctions() {
     const WasmLinkingData &L = File->getWasmObj()->linkingData();
     for (const WasmInitFunc &F : L.InitFunctions) {
       FunctionSymbol *Sym = File->getFunctionSymbol(F.Symbol);
-      if (*Sym->FunctionType != WasmSignature{{}, WASM_TYPE_NORESULT})
+      if (*Sym->FunctionType != WasmSignature{{}, {}})
         error("invalid signature for init func: " + toString(*Sym));
       InitFunctions.emplace_back(WasmInitEntry{Sym, F.Priority});
     }

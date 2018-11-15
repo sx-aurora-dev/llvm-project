@@ -107,99 +107,25 @@ define <4 x i32> @combine_vec_sdiv_by_minsigned(<4 x i32> %x) {
   ret <4 x i32> %1
 }
 
-; TODO fold (sdiv 0, x) -> 0
+; fold (sdiv 0, x) -> 0
 define i32 @combine_sdiv_zero(i32 %x) {
 ; CHECK-LABEL: combine_sdiv_zero:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    xorl %eax, %eax
-; CHECK-NEXT:    xorl %edx, %edx
-; CHECK-NEXT:    idivl %edi
 ; CHECK-NEXT:    retq
   %1 = sdiv i32 0, %x
   ret i32 %1
 }
 
 define <4 x i32> @combine_vec_sdiv_zero(<4 x i32> %x) {
-; SSE2-LABEL: combine_vec_sdiv_zero:
-; SSE2:       # %bb.0:
-; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[3,1,2,3]
-; SSE2-NEXT:    movd %xmm1, %ecx
-; SSE2-NEXT:    xorl %eax, %eax
-; SSE2-NEXT:    xorl %edx, %edx
-; SSE2-NEXT:    idivl %ecx
-; SSE2-NEXT:    movd %eax, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm2 = xmm0[2,3,0,1]
-; SSE2-NEXT:    movd %xmm2, %ecx
-; SSE2-NEXT:    xorl %eax, %eax
-; SSE2-NEXT:    xorl %edx, %edx
-; SSE2-NEXT:    idivl %ecx
-; SSE2-NEXT:    movd %eax, %xmm2
-; SSE2-NEXT:    punpckldq {{.*#+}} xmm2 = xmm2[0],xmm1[0],xmm2[1],xmm1[1]
-; SSE2-NEXT:    movd %xmm0, %ecx
-; SSE2-NEXT:    xorl %eax, %eax
-; SSE2-NEXT:    xorl %edx, %edx
-; SSE2-NEXT:    idivl %ecx
-; SSE2-NEXT:    movd %eax, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,2,3]
-; SSE2-NEXT:    movd %xmm0, %ecx
-; SSE2-NEXT:    xorl %eax, %eax
-; SSE2-NEXT:    xorl %edx, %edx
-; SSE2-NEXT:    idivl %ecx
-; SSE2-NEXT:    movd %eax, %xmm0
-; SSE2-NEXT:    punpckldq {{.*#+}} xmm1 = xmm1[0],xmm0[0],xmm1[1],xmm0[1]
-; SSE2-NEXT:    punpcklqdq {{.*#+}} xmm1 = xmm1[0],xmm2[0]
-; SSE2-NEXT:    movdqa %xmm1, %xmm0
-; SSE2-NEXT:    retq
-;
-; SSE41-LABEL: combine_vec_sdiv_zero:
-; SSE41:       # %bb.0:
-; SSE41-NEXT:    pextrd $1, %xmm0, %ecx
-; SSE41-NEXT:    xorl %eax, %eax
-; SSE41-NEXT:    xorl %edx, %edx
-; SSE41-NEXT:    idivl %ecx
-; SSE41-NEXT:    movl %eax, %ecx
-; SSE41-NEXT:    movd %xmm0, %esi
-; SSE41-NEXT:    xorl %eax, %eax
-; SSE41-NEXT:    xorl %edx, %edx
-; SSE41-NEXT:    idivl %esi
-; SSE41-NEXT:    movd %eax, %xmm1
-; SSE41-NEXT:    pinsrd $1, %ecx, %xmm1
-; SSE41-NEXT:    pextrd $2, %xmm0, %ecx
-; SSE41-NEXT:    xorl %eax, %eax
-; SSE41-NEXT:    xorl %edx, %edx
-; SSE41-NEXT:    idivl %ecx
-; SSE41-NEXT:    pinsrd $2, %eax, %xmm1
-; SSE41-NEXT:    pextrd $3, %xmm0, %ecx
-; SSE41-NEXT:    xorl %eax, %eax
-; SSE41-NEXT:    xorl %edx, %edx
-; SSE41-NEXT:    idivl %ecx
-; SSE41-NEXT:    pinsrd $3, %eax, %xmm1
-; SSE41-NEXT:    movdqa %xmm1, %xmm0
-; SSE41-NEXT:    retq
+; SSE-LABEL: combine_vec_sdiv_zero:
+; SSE:       # %bb.0:
+; SSE-NEXT:    xorps %xmm0, %xmm0
+; SSE-NEXT:    retq
 ;
 ; AVX-LABEL: combine_vec_sdiv_zero:
 ; AVX:       # %bb.0:
-; AVX-NEXT:    vpextrd $1, %xmm0, %ecx
-; AVX-NEXT:    xorl %eax, %eax
-; AVX-NEXT:    xorl %edx, %edx
-; AVX-NEXT:    idivl %ecx
-; AVX-NEXT:    movl %eax, %ecx
-; AVX-NEXT:    vmovd %xmm0, %esi
-; AVX-NEXT:    xorl %eax, %eax
-; AVX-NEXT:    xorl %edx, %edx
-; AVX-NEXT:    idivl %esi
-; AVX-NEXT:    vmovd %eax, %xmm1
-; AVX-NEXT:    vpinsrd $1, %ecx, %xmm1, %xmm1
-; AVX-NEXT:    vpextrd $2, %xmm0, %ecx
-; AVX-NEXT:    xorl %eax, %eax
-; AVX-NEXT:    xorl %edx, %edx
-; AVX-NEXT:    idivl %ecx
-; AVX-NEXT:    vpinsrd $2, %eax, %xmm1, %xmm1
-; AVX-NEXT:    vpextrd $3, %xmm0, %ecx
-; AVX-NEXT:    xorl %eax, %eax
-; AVX-NEXT:    xorl %edx, %edx
-; AVX-NEXT:    idivl %ecx
-; AVX-NEXT:    vpinsrd $3, %eax, %xmm1, %xmm0
+; AVX-NEXT:    vxorps %xmm0, %xmm0, %xmm0
 ; AVX-NEXT:    retq
   %1 = sdiv <4 x i32> zeroinitializer, %x
   ret <4 x i32> %1
@@ -726,7 +652,8 @@ define <16 x i16> @combine_vec_sdiv_by_pow2b_v16i16(<16 x i16> %x) {
 ; AVX1-NEXT:    vpsraw $1, %xmm3, %xmm3
 ; AVX1-NEXT:    vpblendw {{.*#+}} xmm2 = xmm2[0,1],xmm3[2],xmm2[3,4,5,6],xmm3[7]
 ; AVX1-NEXT:    vinsertf128 $1, %xmm1, %ymm2, %ymm1
-; AVX1-NEXT:    vmovaps {{.*#+}} ymm2 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; AVX1-NEXT:    vbroadcastf128 {{.*#+}} ymm2 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; AVX1-NEXT:    # ymm2 = mem[0,1,0,1]
 ; AVX1-NEXT:    vandps %ymm2, %ymm1, %ymm1
 ; AVX1-NEXT:    vandnps %ymm0, %ymm2, %ymm0
 ; AVX1-NEXT:    vorps %ymm0, %ymm1, %ymm0
@@ -777,7 +704,9 @@ define <16 x i16> @combine_vec_sdiv_by_pow2b_v16i16(<16 x i16> %x) {
 ; XOP-NEXT:    vpaddw %xmm3, %xmm0, %xmm3
 ; XOP-NEXT:    vpshaw %xmm2, %xmm3, %xmm2
 ; XOP-NEXT:    vinsertf128 $1, %xmm1, %ymm2, %ymm1
-; XOP-NEXT:    vpcmov {{.*}}(%rip), %ymm0, %ymm1, %ymm0
+; XOP-NEXT:    vbroadcastf128 {{.*#+}} ymm2 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; XOP-NEXT:    # ymm2 = mem[0,1,0,1]
+; XOP-NEXT:    vpcmov %ymm2, %ymm0, %ymm1, %ymm0
 ; XOP-NEXT:    retq
   %1 = sdiv <16 x i16> %x, <i16 1, i16 4, i16 2, i16 16, i16 8, i16 32, i16 64, i16 2, i16 1, i16 4, i16 2, i16 16, i16 8, i16 32, i16 64, i16 2>
   ret <16 x i16> %1
@@ -960,7 +889,8 @@ define <32 x i16> @combine_vec_sdiv_by_pow2b_v32i16(<32 x i16> %x) {
 ; AVX1-NEXT:    vpsraw $1, %xmm5, %xmm5
 ; AVX1-NEXT:    vpblendw {{.*#+}} xmm5 = xmm6[0,1],xmm5[2],xmm6[3,4,5,6],xmm5[7]
 ; AVX1-NEXT:    vinsertf128 $1, %xmm2, %ymm5, %ymm2
-; AVX1-NEXT:    vmovaps {{.*#+}} ymm5 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; AVX1-NEXT:    vbroadcastf128 {{.*#+}} ymm5 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; AVX1-NEXT:    # ymm5 = mem[0,1,0,1]
 ; AVX1-NEXT:    vandps %ymm5, %ymm2, %ymm2
 ; AVX1-NEXT:    vandnps %ymm0, %ymm5, %ymm0
 ; AVX1-NEXT:    vorps %ymm0, %ymm2, %ymm0
@@ -1055,7 +985,8 @@ define <32 x i16> @combine_vec_sdiv_by_pow2b_v32i16(<32 x i16> %x) {
 ; XOP-NEXT:    vpaddw %xmm5, %xmm0, %xmm5
 ; XOP-NEXT:    vpshaw %xmm3, %xmm5, %xmm5
 ; XOP-NEXT:    vinsertf128 $1, %xmm2, %ymm5, %ymm2
-; XOP-NEXT:    vmovdqa {{.*#+}} ymm5 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; XOP-NEXT:    vbroadcastf128 {{.*#+}} ymm5 = [0,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535]
+; XOP-NEXT:    # ymm5 = mem[0,1,0,1]
 ; XOP-NEXT:    vpcmov %ymm5, %ymm0, %ymm2, %ymm0
 ; XOP-NEXT:    vextractf128 $1, %ymm1, %xmm2
 ; XOP-NEXT:    vpsraw $15, %xmm2, %xmm6
@@ -3238,8 +3169,8 @@ define <16 x i8> @pr38658(<16 x i8> %x) {
 ; AVX512F-NEXT:    vpmovsxbw %xmm0, %ymm1
 ; AVX512F-NEXT:    vpmullw {{.*}}(%rip), %ymm1, %ymm1
 ; AVX512F-NEXT:    vpsrlw $8, %ymm1, %ymm1
-; AVX512F-NEXT:    vextracti128 $1, %ymm1, %xmm2
-; AVX512F-NEXT:    vpackuswb %xmm2, %xmm1, %xmm1
+; AVX512F-NEXT:    vpmovzxwd {{.*#+}} zmm1 = ymm1[0],zero,ymm1[1],zero,ymm1[2],zero,ymm1[3],zero,ymm1[4],zero,ymm1[5],zero,ymm1[6],zero,ymm1[7],zero,ymm1[8],zero,ymm1[9],zero,ymm1[10],zero,ymm1[11],zero,ymm1[12],zero,ymm1[13],zero,ymm1[14],zero,ymm1[15],zero
+; AVX512F-NEXT:    vpmovdb %zmm1, %xmm1
 ; AVX512F-NEXT:    vpaddb %xmm0, %xmm1, %xmm0
 ; AVX512F-NEXT:    vpsrlw $7, %xmm0, %xmm1
 ; AVX512F-NEXT:    vpand {{.*}}(%rip), %xmm1, %xmm1
@@ -3283,4 +3214,22 @@ define <16 x i8> @pr38658(<16 x i8> %x) {
 ; XOP-NEXT:    retq
   %1 = sdiv <16 x i8> %x, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 7>
   ret <16 x i8> %1
+}
+
+define i1 @bool_sdiv(i1 %x, i1 %y) {
+; CHECK-LABEL: bool_sdiv:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    movl %edi, %eax
+; CHECK-NEXT:    # kill: def $al killed $al killed $eax
+; CHECK-NEXT:    retq
+  %r = sdiv i1 %x, %y
+  ret i1 %r
+}
+
+define <4 x i1> @boolvec_sdiv(<4 x i1> %x, <4 x i1> %y) {
+; CHECK-LABEL: boolvec_sdiv:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    retq
+  %r = sdiv <4 x i1> %x, %y
+  ret <4 x i1> %r
 }

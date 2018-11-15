@@ -2835,7 +2835,8 @@ static const ParsedAttr *getMSPropertyAttr(const ParsedAttributesView &list) {
 // Check if there is a field shadowing.
 void Sema::CheckShadowInheritedFields(const SourceLocation &Loc,
                                       DeclarationName FieldName,
-                                      const CXXRecordDecl *RD) {
+                                      const CXXRecordDecl *RD,
+                                      bool DeclIsField) {
   if (Diags.isIgnored(diag::warn_shadow_field, Loc))
     return;
 
@@ -2875,7 +2876,7 @@ void Sema::CheckShadowInheritedFields(const SourceLocation &Loc,
     if (AS_none !=
         CXXRecordDecl::MergeAccess(P.Access, BaseField->getAccess())) {
       Diag(Loc, diag::warn_shadow_field)
-        << FieldName << RD << Base;
+        << FieldName << RD << Base << DeclIsField;
       Diag(BaseField->getLocation(), diag::note_shadow_field);
       Bases.erase(It);
     }
@@ -5706,8 +5707,28 @@ void Sema::checkClassLevelDLLAttribute(CXXRecordDecl *Class) {
       continue;
 
     if (!getDLLAttr(Member)) {
-      auto *NewAttr =
-          cast<InheritableAttr>(ClassAttr->clone(getASTContext()));
+      InheritableAttr *NewAttr = nullptr;
+
+      // Do not export/import inline function when -fno-dllexport-inlines is
+      // passed. But add attribute for later local static var check.
+      if (!getLangOpts().DllExportInlines && MD && MD->isInlined() &&
+          TSK != TSK_ExplicitInstantiationDeclaration &&
+          TSK != TSK_ExplicitInstantiationDefinition) {
+        if (ClassExported) {
+          NewAttr = ::new (getASTContext())
+            DLLExportStaticLocalAttr(ClassAttr->getRange(),
+                                     getASTContext(),
+                                     ClassAttr->getSpellingListIndex());
+        } else {
+          NewAttr = ::new (getASTContext())
+            DLLImportStaticLocalAttr(ClassAttr->getRange(),
+                                     getASTContext(),
+                                     ClassAttr->getSpellingListIndex());
+        }
+      } else {
+        NewAttr = cast<InheritableAttr>(ClassAttr->clone(getASTContext()));
+      }
+
       NewAttr->setInherited(true);
       Member->addAttr(NewAttr);
 
@@ -6451,20 +6472,29 @@ void Sema::CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD) {
   //        copy operation can take a non-const reference) as an implicit
   //        declaration, and
   //     -- not have default arguments.
+  // C++2a changes the second bullet to instead delete the function if it's
+  // defaulted on its first declaration, unless it's "an assignment operator,
+  // and its return type differs or its parameter type is not a reference".
+  bool DeleteOnTypeMismatch = getLangOpts().CPlusPlus2a && First;
+  bool ShouldDeleteForTypeMismatch = false;
   unsigned ExpectedParams = 1;
   if (CSM == CXXDefaultConstructor || CSM == CXXDestructor)
     ExpectedParams = 0;
   if (MD->getNumParams() != ExpectedParams) {
-    // This also checks for default arguments: a copy or move constructor with a
+    // This checks for default arguments: a copy or move constructor with a
     // default argument is classified as a default constructor, and assignment
     // operations and destructors can't have default arguments.
     Diag(MD->getLocation(), diag::err_defaulted_special_member_params)
       << CSM << MD->getSourceRange();
     HadError = true;
   } else if (MD->isVariadic()) {
-    Diag(MD->getLocation(), diag::err_defaulted_special_member_variadic)
-      << CSM << MD->getSourceRange();
-    HadError = true;
+    if (DeleteOnTypeMismatch)
+      ShouldDeleteForTypeMismatch = true;
+    else {
+      Diag(MD->getLocation(), diag::err_defaulted_special_member_variadic)
+        << CSM << MD->getSourceRange();
+      HadError = true;
+    }
   }
 
   const FunctionProtoType *Type = MD->getType()->getAs<FunctionProtoType>();
@@ -6489,9 +6519,13 @@ void Sema::CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD) {
 
     // A defaulted special member cannot have cv-qualifiers.
     if (Type->getTypeQuals()) {
-      Diag(MD->getLocation(), diag::err_defaulted_special_member_quals)
-        << (CSM == CXXMoveAssignment) << getLangOpts().CPlusPlus14;
-      HadError = true;
+      if (DeleteOnTypeMismatch)
+        ShouldDeleteForTypeMismatch = true;
+      else {
+        Diag(MD->getLocation(), diag::err_defaulted_special_member_quals)
+          << (CSM == CXXMoveAssignment) << getLangOpts().CPlusPlus14;
+        HadError = true;
+      }
     }
   }
 
@@ -6504,23 +6538,30 @@ void Sema::CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD) {
     HasConstParam = ReferentType.isConstQualified();
 
     if (ReferentType.isVolatileQualified()) {
-      Diag(MD->getLocation(),
-           diag::err_defaulted_special_member_volatile_param) << CSM;
-      HadError = true;
+      if (DeleteOnTypeMismatch)
+        ShouldDeleteForTypeMismatch = true;
+      else {
+        Diag(MD->getLocation(),
+             diag::err_defaulted_special_member_volatile_param) << CSM;
+        HadError = true;
+      }
     }
 
     if (HasConstParam && !CanHaveConstParam) {
-      if (CSM == CXXCopyConstructor || CSM == CXXCopyAssignment) {
+      if (DeleteOnTypeMismatch)
+        ShouldDeleteForTypeMismatch = true;
+      else if (CSM == CXXCopyConstructor || CSM == CXXCopyAssignment) {
         Diag(MD->getLocation(),
              diag::err_defaulted_special_member_copy_const_param)
           << (CSM == CXXCopyAssignment);
         // FIXME: Explain why this special member can't be const.
+        HadError = true;
       } else {
         Diag(MD->getLocation(),
              diag::err_defaulted_special_member_move_const_param)
           << (CSM == CXXMoveAssignment);
+        HadError = true;
       }
-      HadError = true;
     }
   } else if (ExpectedParams) {
     // A copy assignment operator can take its argument by value, but a
@@ -6582,14 +6623,27 @@ void Sema::CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD) {
                                         EPI));
   }
 
-  if (ShouldDeleteSpecialMember(MD, CSM)) {
+  if (ShouldDeleteForTypeMismatch || ShouldDeleteSpecialMember(MD, CSM)) {
     if (First) {
       SetDeclDeleted(MD, MD->getLocation());
+      if (!inTemplateInstantiation() && !HadError) {
+        Diag(MD->getLocation(), diag::warn_defaulted_method_deleted) << CSM;
+        if (ShouldDeleteForTypeMismatch) {
+          Diag(MD->getLocation(), diag::note_deleted_type_mismatch) << CSM;
+        } else {
+          ShouldDeleteSpecialMember(MD, CSM, nullptr, /*Diagnose*/true);
+        }
+      }
+      if (ShouldDeleteForTypeMismatch && !HadError) {
+        Diag(MD->getLocation(),
+             diag::warn_cxx17_compat_defaulted_method_type_mismatch) << CSM;
+      }
     } else {
       // C++11 [dcl.fct.def.default]p4:
       //   [For a] user-provided explicitly-defaulted function [...] if such a
       //   function is implicitly defined as deleted, the program is ill-formed.
       Diag(MD->getLocation(), diag::err_out_of_line_default_deletes) << CSM;
+      assert(!ShouldDeleteForTypeMismatch && "deleted non-first decl");
       ShouldDeleteSpecialMember(MD, CSM, nullptr, /*Diagnose*/true);
       HadError = true;
     }
@@ -7189,8 +7243,17 @@ bool Sema::ShouldDeleteSpecialMember(CXXMethodDecl *MD, CXXSpecialMember CSM,
   if (getLangOpts().CUDA) {
     // We should delete the special member in CUDA mode if target inference
     // failed.
-    return inferCUDATargetForImplicitSpecialMember(RD, CSM, MD, SMI.ConstArg,
-                                                   Diagnose);
+    // For inherited constructors (non-null ICI), CSM may be passed so that MD
+    // is treated as certain special member, which may not reflect what special
+    // member MD really is. However inferCUDATargetForImplicitSpecialMember
+    // expects CSM to match MD, therefore recalculate CSM.
+    assert(ICI || CSM == getSpecialMember(MD));
+    auto RealCSM = CSM;
+    if (ICI)
+      RealCSM = getSpecialMember(MD);
+
+    return inferCUDATargetForImplicitSpecialMember(RD, RealCSM, MD,
+                                                   SMI.ConstArg, Diagnose);
   }
 
   return false;
@@ -13646,7 +13709,7 @@ VarDecl *Sema::BuildExceptionDeclaration(Scope *S,
 
   // Only the non-fragile NeXT runtime currently supports C++ catches
   // of ObjC types, and no runtime supports catching ObjC types by value.
-  if (!Invalid && getLangOpts().ObjC1) {
+  if (!Invalid && getLangOpts().ObjC) {
     QualType T = ExDeclType;
     if (const ReferenceType *RT = T->getAs<ReferenceType>())
       T = RT->getPointeeType();
