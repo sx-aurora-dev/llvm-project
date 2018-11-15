@@ -21,10 +21,12 @@ namespace clangd {
 // Only a subset of SymbolCollector::Options are respected:
 //   - include paths are always collected, and canonicalized appropriately
 //   - references are always counted
+//   - all references are collected (if RefsCallback is non-null)
 //   - the symbol origin is always Static
 std::unique_ptr<FrontendAction>
 createStaticIndexingAction(SymbolCollector::Options Opts,
-                           std::function<void(SymbolSlab)> SymbolsCallback);
+                           std::function<void(SymbolSlab)> SymbolsCallback,
+                           std::function<void(RefSlab)> RefsCallback);
 
 } // namespace clangd
 } // namespace clang

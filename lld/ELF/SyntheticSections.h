@@ -307,8 +307,6 @@ private:
 
   uint64_t Size = 0;
 
-  size_t LocalEntriesNum = 0;
-
   // Symbol and addend.
   typedef std::pair<Symbol *, int64_t> GotEntry;
 
@@ -340,8 +338,6 @@ private:
     size_t getPageEntriesNum() const;
     // Number of entries require 16-bit index to access.
     size_t getIndexedEntriesNum() const;
-
-    bool isOverflow() const;
   };
 
   // Container of GOT created for each input file.
@@ -685,9 +681,9 @@ public:
     uint64_t CuLength;
   };
 
-  struct NameTypeEntry {
+  struct NameAttrEntry {
     llvm::CachedHashStringRef Name;
-    uint32_t Type;
+    uint32_t CuIndexAndAttrs;
   };
 
   struct GdbChunk {
@@ -968,9 +964,27 @@ private:
   size_t Size = 0;
 };
 
+// This section is used to store the addresses of functions that are called
+// in range-extending thunks on PowerPC64. When producing position dependant
+// code the addresses are link-time constants and the table is written out to
+// the binary. When producing position-dependant code the table is allocated and
+// filled in by the dynamic linker.
+class PPC64LongBranchTargetSection final : public SyntheticSection {
+public:
+  PPC64LongBranchTargetSection();
+  void addEntry(Symbol &Sym);
+  size_t getSize() const override;
+  void writeTo(uint8_t *Buf) override;
+  bool empty() const override;
+  void finalizeContents() override { Finalized = true; }
+
+private:
+  std::vector<const Symbol *> Entries;
+  bool Finalized = false;
+};
+
 InputSection *createInterpSection();
 MergeInputSection *createCommentSection();
-void decompressSections();
 template <class ELFT> void splitSections();
 void mergeSections();
 
@@ -995,6 +1009,7 @@ struct InStruct {
   GotSection *Got;
   GotPltSection *GotPlt;
   IgotPltSection *IgotPlt;
+  PPC64LongBranchTargetSection *PPC64LongBranchTarget;
   MipsGotSection *MipsGot;
   MipsRldMapSection *MipsRldMap;
   PltSection *Plt;

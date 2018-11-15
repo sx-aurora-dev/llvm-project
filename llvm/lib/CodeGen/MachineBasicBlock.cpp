@@ -362,7 +362,7 @@ void MachineBasicBlock::print(raw_ostream &OS, ModuleSlotTracker &MST,
       // Print human readable probabilities as comments.
       OS << "; ";
       for (auto I = succ_begin(), E = succ_end(); I != E; ++I) {
-        const BranchProbability &BP = *getProbabilityIterator(I);
+        const BranchProbability &BP = getSuccProbability(I);
         if (I != succ_begin())
           OS << ", ";
         OS << printMBBReference(**I) << '('
@@ -1380,24 +1380,21 @@ MachineBasicBlock::computeRegisterLiveness(const TargetRegisterInfo *TRI,
 
   // Try searching forwards from Before, looking for reads or defs.
   const_iterator I(Before);
-  // If this is the last insn in the block, don't search forwards.
-  if (I != end()) {
-    for (++I; I != end() && N > 0; ++I) {
-      if (I->isDebugInstr())
-        continue;
+  for (; I != end() && N > 0; ++I) {
+    if (I->isDebugInstr())
+      continue;
 
-      --N;
+    --N;
 
-      MachineOperandIteratorBase::PhysRegInfo Info =
-          ConstMIOperands(*I).analyzePhysReg(Reg, TRI);
+    MachineOperandIteratorBase::PhysRegInfo Info =
+        ConstMIOperands(*I).analyzePhysReg(Reg, TRI);
 
-      // Register is live when we read it here.
-      if (Info.Read)
-        return LQR_Live;
-      // Register is dead if we can fully overwrite or clobber it here.
-      if (Info.FullyDefined || Info.Clobbered)
-        return LQR_Dead;
-    }
+    // Register is live when we read it here.
+    if (Info.Read)
+      return LQR_Live;
+    // Register is dead if we can fully overwrite or clobber it here.
+    if (Info.FullyDefined || Info.Clobbered)
+      return LQR_Dead;
   }
 
   // If we reached the end, it is safe to clobber Reg at the end of a block of
