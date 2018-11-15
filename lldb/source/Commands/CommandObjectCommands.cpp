@@ -7,12 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
 #include "llvm/ADT/StringRef.h"
 
-// Project includes
 #include "CommandObjectCommands.h"
 #include "CommandObjectHelp.h"
 #include "lldb/Core/Debugger.h"
@@ -308,7 +304,8 @@ protected:
       return false;
     }
 
-    FileSpec cmd_file(command[0].ref, true);
+    FileSpec cmd_file(command[0].ref);
+    FileSystem::Instance().Resolve(cmd_file);
     ExecutionContext *exe_ctx = nullptr; // Just use the default context.
 
     // If any options were set, then use them
@@ -319,8 +316,15 @@ protected:
       CommandInterpreterRunOptions options;
       options.SetStopOnContinue(m_options.m_stop_on_continue.GetCurrentValue());
       options.SetStopOnError(m_options.m_stop_on_error.GetCurrentValue());
-      options.SetEchoCommands(!m_options.m_silent_run.GetCurrentValue());
-      options.SetPrintResults(!m_options.m_silent_run.GetCurrentValue());
+
+      // Individual silent setting is override for global command echo settings.
+      if (m_options.m_silent_run.GetCurrentValue()) {
+        options.SetSilent(true);
+      } else {
+        options.SetPrintResults(true);
+        options.SetEchoCommands(m_interpreter.GetEchoCommands());
+        options.SetEchoCommentCommands(m_interpreter.GetEchoCommentCommands());
+      }
 
       m_interpreter.HandleCommandsFromFile(cmd_file, exe_ctx, options, result);
     } else {
