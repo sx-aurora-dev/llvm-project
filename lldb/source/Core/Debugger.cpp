@@ -9,69 +9,71 @@
 
 #include "lldb/Core/Debugger.h"
 
-#include "lldb/Breakpoint/Breakpoint.h" // for Breakpoint, Brea...
-#include "lldb/Core/Event.h"            // for Event, EventData...
+#include "lldb/Breakpoint/Breakpoint.h"
+#include "lldb/Core/Event.h"
 #include "lldb/Core/FormatEntity.h"
-#include "lldb/Core/Listener.h"   // for Listener
-#include "lldb/Core/Mangled.h"    // for Mangled
-#include "lldb/Core/ModuleList.h" // for Mangled
+#include "lldb/Core/Listener.h"
+#include "lldb/Core/Mangled.h"
+#include "lldb/Core/ModuleList.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/StreamAsynchronousIO.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/DataFormatters/DataVisualization.h"
 #include "lldb/Expression/REPL.h"
-#include "lldb/Host/File.h" // for File, File::kInv...
+#include "lldb/Host/File.h"
+#include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Host/Terminal.h"
 #include "lldb/Host/ThreadLauncher.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
-#include "lldb/Interpreter/OptionValue.h" // for OptionValue, Opt...
+#include "lldb/Interpreter/OptionValue.h"
 #include "lldb/Interpreter/OptionValueProperties.h"
 #include "lldb/Interpreter/OptionValueSInt64.h"
 #include "lldb/Interpreter/OptionValueString.h"
-#include "lldb/Interpreter/Property.h"          // for PropertyDefinition
-#include "lldb/Interpreter/ScriptInterpreter.h" // for ScriptInterpreter
+#include "lldb/Interpreter/Property.h"
+#include "lldb/Interpreter/ScriptInterpreter.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/Symbol.h"
-#include "lldb/Symbol/SymbolContext.h" // for SymbolContext
+#include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/Language.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/StructuredDataPlugin.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/TargetList.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Target/ThreadList.h" // for ThreadList
+#include "lldb/Target/ThreadList.h"
 #include "lldb/Utility/AnsiTerminal.h"
-#include "lldb/Utility/Log.h" // for LLDB_LOG_OPTION_...
+#include "lldb/Utility/Log.h"
+#include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/State.h"
-#include "lldb/Utility/Stream.h" // for Stream
+#include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamCallback.h"
 #include "lldb/Utility/StreamString.h"
 
 #if defined(_WIN32)
-#include "lldb/Host/windows/PosixApi.h" // for PATH_MAX
+#include "lldb/Host/windows/PosixApi.h"
 #include "lldb/Host/windows/windows.h"
 #endif
 
-#include "llvm/ADT/None.h"      // for None
-#include "llvm/ADT/STLExtras.h" // for make_unique
+#include "llvm/ADT/None.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/iterator.h" // for iterator_facade_...
+#include "llvm/ADT/iterator.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Threading.h"
-#include "llvm/Support/raw_ostream.h" // for raw_fd_ostream
+#include "llvm/Support/raw_ostream.h"
 
-#include <list>   // for list
-#include <memory> // for make_shared
+#include <list>
+#include <memory>
 #include <mutex>
-#include <set>          // for set
-#include <stdio.h>      // for size_t, NULL
-#include <stdlib.h>     // for getenv
-#include <string.h>     // for strcmp
-#include <string>       // for string
-#include <system_error> // for error_code
+#include <set>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <string>
+#include <system_error>
 
 namespace lldb_private {
 class Address;
@@ -123,6 +125,8 @@ static constexpr OptionEnumValueElement g_language_enumerators[] = {
   "{ at ${line.file.basename}:${line.number}{:${line.column}}}"
 #define IS_OPTIMIZED "{${function.is-optimized} [opt]}"
 
+#define IS_ARTIFICIAL "{${frame.is-artificial} [artificial]}"
+
 #define DEFAULT_THREAD_FORMAT                                                  \
   "thread #${thread.index}: tid = ${thread.id%tid}"                            \
   "{, ${frame.pc}}" MODULE_WITH_FUNC FILE_AND_LINE                             \
@@ -147,11 +151,11 @@ static constexpr OptionEnumValueElement g_language_enumerators[] = {
 
 #define DEFAULT_FRAME_FORMAT                                                   \
   "frame #${frame.index}: ${frame.pc}" MODULE_WITH_FUNC FILE_AND_LINE          \
-      IS_OPTIMIZED "\\n"
+      IS_OPTIMIZED IS_ARTIFICIAL "\\n"
 
 #define DEFAULT_FRAME_FORMAT_NO_ARGS                                           \
   "frame #${frame.index}: ${frame.pc}" MODULE_WITH_FUNC_NO_ARGS FILE_AND_LINE  \
-      IS_OPTIMIZED "\\n"
+      IS_OPTIMIZED IS_ARTIFICIAL "\\n"
 
 // Three parts to this disassembly format specification:
 //   1. If this is a new function/symbol (no previous symbol/function), print
@@ -163,8 +167,8 @@ static constexpr OptionEnumValueElement g_language_enumerators[] = {
 //      address <+offset>:
 #define DEFAULT_DISASSEMBLY_FORMAT                                             \
   "{${function.initial-function}{${module.file.basename}`}{${function.name-"   \
-  "without-args}}:\n}{${function.changed}\n{${module.file.basename}`}{${"      \
-  "function.name-without-args}}:\n}{${current-pc-arrow} "                      \
+  "without-args}}:\\n}{${function.changed}\\n{${module.file.basename}`}{${"    \
+  "function.name-without-args}}:\\n}{${current-pc-arrow} "                     \
   "}${addr-file-or-load}{ "                                                    \
   "<${function.concrete-only-addr-offset-no-padding}>}: "
 
@@ -278,8 +282,7 @@ static constexpr PropertyDefinition g_properties[] = {
     {"frame-format-unique", OptionValue::eTypeFormatEntity, true, 0,
      DEFAULT_FRAME_FORMAT_NO_ARGS, {},
      "The default frame format string to use when displaying stack frame"
-     "information for threads from thread backtrace unique."},
-    {nullptr, OptionValue::eTypeInvalid, true, 0, nullptr, {}, nullptr}};
+     "information for threads from thread backtrace unique."}};
 
 enum {
   ePropertyAutoConfirm = 0,
@@ -408,6 +411,17 @@ void Debugger::SetPrompt(llvm::StringRef p) {
   if (str.length())
     new_prompt = str;
   GetCommandInterpreter().UpdatePrompt(new_prompt);
+}
+
+llvm::StringRef Debugger::GetReproducerPath() const {
+  auto &r = repro::Reproducer::Instance();
+  return r.GetReproducerPath().GetCString();
+}
+
+void Debugger::SetReproducerPath(llvm::StringRef p) {
+  auto &r = repro::Reproducer::Instance();
+  if (auto e = r.SetReproducerPath(FileSpec(p)))
+    llvm::consumeError(std::move(e));
 }
 
 const FormatEntity::Entry *Debugger::GetThreadFormat() const {
@@ -603,16 +617,16 @@ bool Debugger::LoadPlugin(const FileSpec &spec, Status &error) {
   return false;
 }
 
-static FileSpec::EnumerateDirectoryResult
+static FileSystem::EnumerateDirectoryResult
 LoadPluginCallback(void *baton, llvm::sys::fs::file_type ft,
-                   const FileSpec &file_spec) {
+                   llvm::StringRef path) {
   Status error;
 
   static ConstString g_dylibext(".dylib");
   static ConstString g_solibext(".so");
 
   if (!baton)
-    return FileSpec::eEnumerateDirectoryResultQuit;
+    return FileSystem::eEnumerateDirectoryResultQuit;
 
   Debugger *debugger = (Debugger *)baton;
 
@@ -623,18 +637,18 @@ LoadPluginCallback(void *baton, llvm::sys::fs::file_type ft,
   // file type information.
   if (ft == fs::file_type::regular_file || ft == fs::file_type::symlink_file ||
       ft == fs::file_type::type_unknown) {
-    FileSpec plugin_file_spec(file_spec);
-    plugin_file_spec.ResolvePath();
+    FileSpec plugin_file_spec(path);
+    FileSystem::Instance().Resolve(plugin_file_spec);
 
     if (plugin_file_spec.GetFileNameExtension() != g_dylibext &&
         plugin_file_spec.GetFileNameExtension() != g_solibext) {
-      return FileSpec::eEnumerateDirectoryResultNext;
+      return FileSystem::eEnumerateDirectoryResultNext;
     }
 
     Status plugin_load_error;
     debugger->LoadPlugin(plugin_file_spec, plugin_load_error);
 
-    return FileSpec::eEnumerateDirectoryResultNext;
+    return FileSystem::eEnumerateDirectoryResultNext;
   } else if (ft == fs::file_type::directory_file ||
              ft == fs::file_type::symlink_file ||
              ft == fs::file_type::type_unknown) {
@@ -642,10 +656,10 @@ LoadPluginCallback(void *baton, llvm::sys::fs::file_type ft,
     // also do this for unknown as sometimes the directory enumeration might be
     // enumerating a file system that doesn't have correct file type
     // information.
-    return FileSpec::eEnumerateDirectoryResultEnter;
+    return FileSystem::eEnumerateDirectoryResultEnter;
   }
 
-  return FileSpec::eEnumerateDirectoryResultNext;
+  return FileSystem::eEnumerateDirectoryResultNext;
 }
 
 void Debugger::InstanceInitialize() {
@@ -654,16 +668,20 @@ void Debugger::InstanceInitialize() {
   const bool find_other = true;
   char dir_path[PATH_MAX];
   if (FileSpec dir_spec = HostInfo::GetSystemPluginDir()) {
-    if (dir_spec.Exists() && dir_spec.GetPath(dir_path, sizeof(dir_path))) {
-      FileSpec::EnumerateDirectory(dir_path, find_directories, find_files,
-                                   find_other, LoadPluginCallback, this);
+    if (FileSystem::Instance().Exists(dir_spec) &&
+        dir_spec.GetPath(dir_path, sizeof(dir_path))) {
+      FileSystem::Instance().EnumerateDirectory(dir_path, find_directories,
+                                                find_files, find_other,
+                                                LoadPluginCallback, this);
     }
   }
 
   if (FileSpec dir_spec = HostInfo::GetUserPluginDir()) {
-    if (dir_spec.Exists() && dir_spec.GetPath(dir_path, sizeof(dir_path))) {
-      FileSpec::EnumerateDirectory(dir_path, find_directories, find_files,
-                                   find_other, LoadPluginCallback, this);
+    if (FileSystem::Instance().Exists(dir_spec) &&
+        dir_spec.GetPath(dir_path, sizeof(dir_path))) {
+      FileSystem::Instance().EnumerateDirectory(dir_path, find_directories,
+                                                find_files, find_other,
+                                                LoadPluginCallback, this);
     }
   }
 
