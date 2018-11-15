@@ -343,7 +343,7 @@ define <8 x i32> @test11b(<8 x i1> %mask, <8 x i32>* %addr, <8 x i32> %dst) {
 ; AVX512F-LABEL: test11b:
 ; AVX512F:       ## %bb.0:
 ; AVX512F-NEXT:    ## kill: def $ymm1 killed $ymm1 def $zmm1
-; AVX512F-NEXT:    vpmovsxwq %xmm0, %zmm0
+; AVX512F-NEXT:    vpmovzxwq {{.*#+}} zmm0 = xmm0[0],zero,zero,zero,xmm0[1],zero,zero,zero,xmm0[2],zero,zero,zero,xmm0[3],zero,zero,zero,xmm0[4],zero,zero,zero,xmm0[5],zero,zero,zero,xmm0[6],zero,zero,zero,xmm0[7],zero,zero,zero
 ; AVX512F-NEXT:    vpsllq $63, %zmm0, %zmm0
 ; AVX512F-NEXT:    vptestmq %zmm0, %zmm0, %k1
 ; AVX512F-NEXT:    vpblendmd (%rdi), %zmm1, %zmm0 {%k1}
@@ -383,7 +383,7 @@ define <8 x float> @test11c(<8 x i1> %mask, <8 x float>* %addr) {
 ;
 ; AVX512F-LABEL: test11c:
 ; AVX512F:       ## %bb.0:
-; AVX512F-NEXT:    vpmovsxwq %xmm0, %zmm0
+; AVX512F-NEXT:    vpmovzxwq {{.*#+}} zmm0 = xmm0[0],zero,zero,zero,xmm0[1],zero,zero,zero,xmm0[2],zero,zero,zero,xmm0[3],zero,zero,zero,xmm0[4],zero,zero,zero,xmm0[5],zero,zero,zero,xmm0[6],zero,zero,zero,xmm0[7],zero,zero,zero
 ; AVX512F-NEXT:    vpsllq $63, %zmm0, %zmm0
 ; AVX512F-NEXT:    vptestmq %zmm0, %zmm0, %k1
 ; AVX512F-NEXT:    vmovups (%rdi), %zmm0 {%k1} {z}
@@ -423,7 +423,7 @@ define <8 x i32> @test11d(<8 x i1> %mask, <8 x i32>* %addr) {
 ;
 ; AVX512F-LABEL: test11d:
 ; AVX512F:       ## %bb.0:
-; AVX512F-NEXT:    vpmovsxwq %xmm0, %zmm0
+; AVX512F-NEXT:    vpmovzxwq {{.*#+}} zmm0 = xmm0[0],zero,zero,zero,xmm0[1],zero,zero,zero,xmm0[2],zero,zero,zero,xmm0[3],zero,zero,zero,xmm0[4],zero,zero,zero,xmm0[5],zero,zero,zero,xmm0[6],zero,zero,zero,xmm0[7],zero,zero,zero
 ; AVX512F-NEXT:    vpsllq $63, %zmm0, %zmm0
 ; AVX512F-NEXT:    vptestmq %zmm0, %zmm0, %k1
 ; AVX512F-NEXT:    vmovdqu32 (%rdi), %zmm0 {%k1} {z}
@@ -1278,6 +1278,52 @@ define void @trunc_mask(<4 x float> %x, <4 x float>* %ptr, <4 x float> %y, <4 x 
   ret void
 }
 
+; SimplifyDemandedBits eliminates an ashr here.
+
+define void @masked_store_bool_mask_demand_trunc_sext(<4 x double> %x, <4 x double>* %p, <4 x i32> %masksrc) {
+; AVX1-LABEL: masked_store_bool_mask_demand_trunc_sext:
+; AVX1:       ## %bb.0:
+; AVX1-NEXT:    vpslld $31, %xmm1, %xmm1
+; AVX1-NEXT:    vpmovsxdq %xmm1, %xmm2
+; AVX1-NEXT:    vpshufd {{.*#+}} xmm1 = xmm1[2,3,0,1]
+; AVX1-NEXT:    vpmovsxdq %xmm1, %xmm1
+; AVX1-NEXT:    vinsertf128 $1, %xmm1, %ymm2, %ymm1
+; AVX1-NEXT:    vmaskmovpd %ymm0, %ymm1, (%rdi)
+; AVX1-NEXT:    vzeroupper
+; AVX1-NEXT:    retq
+;
+; AVX2-LABEL: masked_store_bool_mask_demand_trunc_sext:
+; AVX2:       ## %bb.0:
+; AVX2-NEXT:    vpslld $31, %xmm1, %xmm1
+; AVX2-NEXT:    vpmovsxdq %xmm1, %ymm1
+; AVX2-NEXT:    vmaskmovpd %ymm0, %ymm1, (%rdi)
+; AVX2-NEXT:    vzeroupper
+; AVX2-NEXT:    retq
+;
+; AVX512F-LABEL: masked_store_bool_mask_demand_trunc_sext:
+; AVX512F:       ## %bb.0:
+; AVX512F-NEXT:    ## kill: def $ymm0 killed $ymm0 def $zmm0
+; AVX512F-NEXT:    vpslld $31, %xmm1, %xmm1
+; AVX512F-NEXT:    vptestmd %zmm1, %zmm1, %k0
+; AVX512F-NEXT:    kshiftlw $12, %k0, %k0
+; AVX512F-NEXT:    kshiftrw $12, %k0, %k1
+; AVX512F-NEXT:    vmovupd %zmm0, (%rdi) {%k1}
+; AVX512F-NEXT:    vzeroupper
+; AVX512F-NEXT:    retq
+;
+; SKX-LABEL: masked_store_bool_mask_demand_trunc_sext:
+; SKX:       ## %bb.0:
+; SKX-NEXT:    vpslld $31, %xmm1, %xmm1
+; SKX-NEXT:    vptestmd %xmm1, %xmm1, %k1
+; SKX-NEXT:    vmovupd %ymm0, (%rdi) {%k1}
+; SKX-NEXT:    vzeroupper
+; SKX-NEXT:    retq
+  %sext = sext <4 x i32> %masksrc to <4 x i64>
+  %boolmask = trunc <4 x i64> %sext to <4 x i1>
+  call void @llvm.masked.store.v4f64.p0v4f64(<4 x double> %x, <4 x double>* %p, i32 4, <4 x i1> %boolmask)
+  ret void
+}
+
 ; This needs to be widened to v4i32.
 ; This used to assert in type legalization. PR38436
 ; FIXME: The codegen for AVX512 should use KSHIFT to zero the upper bits of the mask.
@@ -1290,7 +1336,6 @@ define void @widen_masked_store(<3 x i32> %v, <3 x i32>* %p, <3 x i1> %mask) {
 ; AVX1-NEXT:    vmovd %ecx, %xmm2
 ; AVX1-NEXT:    vpunpcklqdq {{.*#+}} xmm1 = xmm1[0],xmm2[0]
 ; AVX1-NEXT:    vpslld $31, %xmm1, %xmm1
-; AVX1-NEXT:    vpsrad $31, %xmm1, %xmm1
 ; AVX1-NEXT:    vmaskmovps %xmm0, %xmm1, (%rdi)
 ; AVX1-NEXT:    retq
 ;
@@ -1302,7 +1347,6 @@ define void @widen_masked_store(<3 x i32> %v, <3 x i32>* %p, <3 x i1> %mask) {
 ; AVX2-NEXT:    vmovd %ecx, %xmm2
 ; AVX2-NEXT:    vpunpcklqdq {{.*#+}} xmm1 = xmm1[0],xmm2[0]
 ; AVX2-NEXT:    vpslld $31, %xmm1, %xmm1
-; AVX2-NEXT:    vpsrad $31, %xmm1, %xmm1
 ; AVX2-NEXT:    vpmaskmovd %xmm0, %xmm1, (%rdi)
 ; AVX2-NEXT:    retq
 ;
@@ -1336,6 +1380,35 @@ define void @widen_masked_store(<3 x i32> %v, <3 x i32>* %p, <3 x i1> %mask) {
   ret void
 }
 declare void @llvm.masked.store.v3i32(<3 x i32>, <3 x i32>*, i32, <3 x i1>)
+
+define i32 @pr38986(i1 %c, i32* %p) {
+; AVX-LABEL: pr38986:
+; AVX:       ## %bb.0:
+; AVX-NEXT:    testb $1, %dil
+; AVX-NEXT:    ## implicit-def: $eax
+; AVX-NEXT:    je LBB44_2
+; AVX-NEXT:  ## %bb.1: ## %cond.load
+; AVX-NEXT:    movl (%rsi), %eax
+; AVX-NEXT:  LBB44_2: ## %else
+; AVX-NEXT:    retq
+;
+; AVX512-LABEL: pr38986:
+; AVX512:       ## %bb.0:
+; AVX512-NEXT:    testb $1, %dil
+; AVX512-NEXT:    ## implicit-def: $eax
+; AVX512-NEXT:    je LBB44_2
+; AVX512-NEXT:  ## %bb.1: ## %cond.load
+; AVX512-NEXT:    movl (%rsi), %eax
+; AVX512-NEXT:  LBB44_2: ## %else
+; AVX512-NEXT:    retq
+ %vc = insertelement <1 x i1> undef, i1 %c, i32 0
+ %vp = bitcast i32* %p to <1 x i32>*
+ %L = call <1 x i32> @llvm.masked.load.v1i32.p0v1i32 (<1 x i32>* %vp, i32 4, <1 x i1> %vc, <1 x i32> undef)
+ %ret = bitcast <1 x i32> %L to i32
+ ret i32 %ret
+}
+declare <1 x i32>  @llvm.masked.load.v1i32.p0v1i32 (<1 x i32>*, i32, <1 x i1>, <1 x i32>)
+
 
 declare <4 x i32> @llvm.masked.load.v4i32.p0v4i32(<4 x i32>*, i32, <4 x i1>, <4 x i32>)
 declare <2 x i32> @llvm.masked.load.v2i32.p0v2i32(<2 x i32>*, i32, <2 x i1>, <2 x i32>)

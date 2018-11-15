@@ -310,10 +310,8 @@ static void handleWeakUndefines() {
 
     // Add a synthetic dummy for weak undefined functions.  These dummies will
     // be GC'd if not used as the target of any "call" instructions.
-    Optional<std::string> SymName = demangleItanium(Sym->getName());
-    StringRef DebugName =
-        Saver.save("undefined function " +
-                   (SymName ? StringRef(*SymName) : Sym->getName()));
+    std::string SymName = toString(*Sym);
+    StringRef DebugName = Saver.save("undefined function " + SymName);
     SyntheticFunction *Func =
         make<SyntheticFunction>(Sig, Sym->getName(), DebugName);
     Func->setBody(UnreachableFn);
@@ -349,7 +347,9 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   // Handle --help
   if (Args.hasArg(OPT_help)) {
-    Parser.PrintHelp(outs(), ArgsArr[0], "LLVM Linker", false);
+    Parser.PrintHelp(outs(),
+                     (std::string(ArgsArr[0]) + " [options] file...").c_str(),
+                     "LLVM Linker", false);
     return;
   }
 
@@ -379,6 +379,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   errorHandler().FatalWarnings =
       Args.hasFlag(OPT_fatal_warnings, OPT_no_fatal_warnings, false);
   Config->ImportMemory = Args.hasArg(OPT_import_memory);
+  Config->SharedMemory = Args.hasArg(OPT_shared_memory);
   Config->ImportTable = Args.hasArg(OPT_import_table);
   Config->LTOO = args::getInteger(Args, OPT_lto_O, 2);
   Config->LTOPartitions = args::getInteger(Args, OPT_lto_partitions, 1);
@@ -458,7 +459,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     InputGlobal *StackPointer = make<InputGlobal>(Global, nullptr);
     StackPointer->Live = true;
 
-    static WasmSignature NullSignature = {{}, WASM_TYPE_NORESULT};
+    static WasmSignature NullSignature = {{}, {}};
 
     // Add synthetic symbols before any others
     WasmSym::CallCtors = Symtab->addSyntheticFunction(

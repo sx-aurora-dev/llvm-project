@@ -6963,6 +6963,11 @@ QualType ASTReader::GetType(TypeID ID) {
       T = Context.SingletonId; \
       break;
 #include "clang/Basic/OpenCLImageTypes.def"
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+    case PREDEF_TYPE_##Id##_ID: \
+      T = Context.Id##Ty; \
+      break;
+#include "clang/Basic/OpenCLExtensionTypes.def"
     case PREDEF_TYPE_SAMPLER_ID:
       T = Context.OCLSamplerTy;
       break;
@@ -11723,7 +11728,19 @@ OMPClause *OMPClauseReader::readClause() {
   case OMPC_unified_address:
     C = new (Context) OMPUnifiedAddressClause();
     break;
-  case OMPC_private:
+  case OMPC_unified_shared_memory:
+    C = new (Context) OMPUnifiedSharedMemoryClause();
+    break;
+  case OMPC_reverse_offload:
+    C = new (Context) OMPReverseOffloadClause();
+    break;
+  case OMPC_dynamic_allocators:
+    C = new (Context) OMPDynamicAllocatorsClause();
+    break;
+  case OMPC_atomic_default_mem_order:
+    C = new (Context) OMPAtomicDefaultMemOrderClause();
+    break;
+ case OMPC_private:
     C = OMPPrivateClause::CreateEmpty(Context, Record.readInt());
     break;
   case OMPC_firstprivate:
@@ -11952,6 +11969,23 @@ void OMPClauseReader::VisitOMPSIMDClause(OMPSIMDClause *) {}
 void OMPClauseReader::VisitOMPNogroupClause(OMPNogroupClause *) {}
 
 void OMPClauseReader::VisitOMPUnifiedAddressClause(OMPUnifiedAddressClause *) {}
+
+void OMPClauseReader::VisitOMPUnifiedSharedMemoryClause(
+    OMPUnifiedSharedMemoryClause *) {}
+
+void OMPClauseReader::VisitOMPReverseOffloadClause(OMPReverseOffloadClause *) {}
+
+void
+OMPClauseReader::VisitOMPDynamicAllocatorsClause(OMPDynamicAllocatorsClause *) {
+}
+
+void OMPClauseReader::VisitOMPAtomicDefaultMemOrderClause(
+    OMPAtomicDefaultMemOrderClause *C) {
+  C->setAtomicDefaultMemOrderKind(
+      static_cast<OpenMPAtomicDefaultMemOrderClauseKind>(Record.readInt()));
+  C->setLParenLoc(Record.readSourceLocation());
+  C->setAtomicDefaultMemOrderKindKwLoc(Record.readSourceLocation());
+}
 
 void OMPClauseReader::VisitOMPPrivateClause(OMPPrivateClause *C) {
   C->setLParenLoc(Record.readSourceLocation());

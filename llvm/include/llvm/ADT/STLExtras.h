@@ -195,6 +195,12 @@ void adl_swap(T &&lhs, T &&rhs) noexcept(
   adl_detail::adl_swap(std::forward<T>(lhs), std::forward<T>(rhs));
 }
 
+/// Test whether \p RangeOrContainer is empty. Similar to C++17 std::empty.
+template <typename T>
+constexpr bool empty(const T &RangeOrContainer) {
+  return adl_begin(RangeOrContainer) == adl_end(RangeOrContainer);
+}
+
 // mapped_iterator - This is a simple iterator adapter that causes a function to
 // be applied whenever operator* is invoked on the iterator.
 
@@ -1137,6 +1143,12 @@ auto partition(R &&Range, UnaryPredicate P) -> decltype(adl_begin(Range)) {
 template <typename R, typename ForwardIt>
 auto lower_bound(R &&Range, ForwardIt I) -> decltype(adl_begin(Range)) {
   return std::lower_bound(adl_begin(Range), adl_end(Range), I);
+}
+
+template <typename R, typename ForwardIt, typename Compare>
+auto lower_bound(R &&Range, ForwardIt I, Compare C)
+    -> decltype(adl_begin(Range)) {
+  return std::lower_bound(adl_begin(Range), adl_end(Range), I, C);
 }
 
 /// Provide wrappers to std::upper_bound which take ranges instead of having to

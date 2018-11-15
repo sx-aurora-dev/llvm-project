@@ -76,6 +76,9 @@ class CGDebugInfo {
   llvm::DIType *OCLQueueDITy = nullptr;
   llvm::DIType *OCLNDRangeDITy = nullptr;
   llvm::DIType *OCLReserveIDDITy = nullptr;
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+  llvm::DIType *Id##Ty = nullptr;
+#include "clang/Basic/OpenCLExtensionTypes.def"
 
   /// Cache of previously constructed Types.
   llvm::DenseMap<const void *, llvm::TrackingMDRef> TypeCache;
@@ -247,6 +250,11 @@ class CGDebugInfo {
   /// parameters.
   llvm::DINodeArray CollectFunctionTemplateParams(const FunctionDecl *FD,
                                                   llvm::DIFile *Unit);
+
+  /// A helper function to collect debug info for function template
+  /// parameters.
+  llvm::DINodeArray CollectVarTemplateParams(const VarDecl *VD,
+                                             llvm::DIFile *Unit);
 
   /// A helper function to collect debug info for template
   /// parameters.
@@ -603,6 +611,11 @@ private:
                          unsigned LineNo, StringRef LinkageName,
                          llvm::GlobalVariable *Var, llvm::DIScope *DContext);
 
+
+  /// Return flags which enable debug info emission for call sites, provided
+  /// that it is supported and enabled.
+  llvm::DINode::DIFlags getCallSiteRelatedAttrs() const;
+
   /// Get the printing policy for producing names for debug info.
   PrintingPolicy getPrintingPolicy() const;
 
@@ -645,7 +658,9 @@ private:
   /// Collect various properties of a VarDecl.
   void collectVarDeclProps(const VarDecl *VD, llvm::DIFile *&Unit,
                            unsigned &LineNo, QualType &T, StringRef &Name,
-                           StringRef &LinkageName, llvm::DIScope *&VDContext);
+                           StringRef &LinkageName,
+                           llvm::MDTuple *&TemplateParameters,
+                           llvm::DIScope *&VDContext);
 
   /// Allocate a copy of \p A using the DebugInfoNames allocator
   /// and return a reference to it. If multiple arguments are given the strings

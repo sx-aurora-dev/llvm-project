@@ -349,6 +349,12 @@ std::error_code create_hard_link(const Twine &to, const Twine &from);
 std::error_code real_path(const Twine &path, SmallVectorImpl<char> &output,
                           bool expand_tilde = false);
 
+/// Expands ~ expressions to the user's home directory. On Unix ~user
+/// directories are resolved as well.
+///
+/// @param path The path to resolve.
+void expand_tilde(const Twine &path, SmallVectorImpl<char> &output);
+
 /// Get the current path.
 ///
 /// @param result Holds the current path on return.
@@ -1182,7 +1188,6 @@ public:
     SmallString<128> path_storage;
     ec = detail::directory_iterator_construct(
         *State, path.toStringRef(path_storage), FollowSymlinks);
-    update_error_code_for_current_entry(ec);
   }
 
   explicit directory_iterator(const directory_entry &de, std::error_code &ec,
@@ -1191,7 +1196,6 @@ public:
     State = std::make_shared<detail::DirIterState>();
     ec = detail::directory_iterator_construct(
         *State, de.path(), FollowSymlinks);
-    update_error_code_for_current_entry(ec);
   }
 
   /// Construct end iterator.
@@ -1200,7 +1204,6 @@ public:
   // No operator++ because we need error_code.
   directory_iterator &increment(std::error_code &ec) {
     ec = directory_iterator_increment(*State);
-    update_error_code_for_current_entry(ec);
     return *this;
   }
 
@@ -1219,26 +1222,6 @@ public:
 
   bool operator!=(const directory_iterator &RHS) const {
     return !(*this == RHS);
-  }
-  // Other members as required by
-  // C++ Std, 24.1.1 Input iterators [input.iterators]
-
-private:
-  // Checks if current entry is valid and populates error code. For example,
-  // current entry may not exist due to broken symbol links.
-  void update_error_code_for_current_entry(std::error_code &ec) {
-    // Bail out if error has already occured earlier to avoid overwriting it.
-    if (ec)
-      return;
-
-    // Empty directory entry is used to mark the end of an interation, it's not
-    // an error.
-    if (State->CurrentEntry == directory_entry())
-      return;
-
-    ErrorOr<basic_file_status> status = State->CurrentEntry.status();
-    if (!status)
-      ec = status.getError();
   }
 };
 
@@ -1277,8 +1260,15 @@ public:
     if (State->HasNoPushRequest)
       State->HasNoPushRequest = false;
     else {
-      ErrorOr<basic_file_status> status = State->Stack.top()->status();
-      if (status && is_directory(*status)) {
+      file_type type = State->Stack.top()->type();
+      if (type == file_type::symlink_file && Follow) {
+        // Resolve the symlink: is it a directory to recurse into?
+        ErrorOr<basic_file_status> status = State->Stack.top()->status();
+        if (status)
+          type = status->type();
+        // Otherwise broken symlink, and we'll continue.
+      }
+      if (type == file_type::directory_file) {
         State->Stack.push(directory_iterator(*State->Stack.top(), ec, Follow));
         if (State->Stack.top() != end_itr) {
           ++State->Level;
@@ -1342,8 +1332,6 @@ public:
   bool operator!=(const recursive_directory_iterator &RHS) const {
     return !(*this == RHS);
   }
-  // Other members as required by
-  // C++ Std, 24.1.1 Input iterators [input.iterators]
 };
 
 /// @}

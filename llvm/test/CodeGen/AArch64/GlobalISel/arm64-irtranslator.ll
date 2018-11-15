@@ -1530,9 +1530,20 @@ define i32 @test_extractelement(<2 x i32> %vec, i32 %idx) {
 ; CHECK-LABEL: name: test_extractelement
 ; CHECK: [[VEC:%[0-9]+]]:_(<2 x s32>) = COPY $d0
 ; CHECK: [[IDX:%[0-9]+]]:_(s32) = COPY $w0
-; CHECK: [[RES:%[0-9]+]]:_(s32) = G_EXTRACT_VECTOR_ELT [[VEC]](<2 x s32>), [[IDX]](s32)
+; CHECK: [[IDXEXT:%[0-9]+]]:_(s64) = G_SEXT [[IDX]]
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_EXTRACT_VECTOR_ELT [[VEC]](<2 x s32>), [[IDXEXT]](s64)
 ; CHECK: $w0 = COPY [[RES]](s32)
   %res = extractelement <2 x i32> %vec, i32 %idx
+  ret i32 %res
+}
+
+define i32 @test_extractelement_const_idx(<2 x i32> %vec) {
+; CHECK-LABEL: name: test_extractelement
+; CHECK: [[VEC:%[0-9]+]]:_(<2 x s32>) = COPY $d0
+; CHECK: [[IDX:%[0-9]+]]:_(s64) = G_CONSTANT i64 1
+; CHECK: [[RES:%[0-9]+]]:_(s32) = G_EXTRACT_VECTOR_ELT [[VEC]](<2 x s32>), [[IDX]](s64)
+; CHECK: $w0 = COPY [[RES]](s32)
+  %res = extractelement <2 x i32> %vec, i32 1
   ret i32 %res
 }
 
@@ -2205,5 +2216,19 @@ define void @test_blockaddress() {
   store i8* blockaddress(@test_blockaddress, %block), i8** @addr
   indirectbr i8* blockaddress(@test_blockaddress, %block), [label %block]
 block:
+  ret void
+}
+
+%t = type { i32 }
+declare {}* @llvm.invariant.start.p0i8(i64, i8* nocapture) readonly nounwind
+declare void @llvm.invariant.end.p0i8({}*, i64, i8* nocapture) nounwind
+define void @test_invariant_intrin() {
+; CHECK-LABEL: name: test_invariant_intrin
+; CHECK: %{{[0-9]+}}:_(s64) = G_IMPLICIT_DEF
+; CHECK-NEXT: RET_ReallyLR
+  %x = alloca %t
+  %y = bitcast %t* %x to i8*
+  %inv = call {}* @llvm.invariant.start.p0i8(i64 8, i8* %y)
+  call void @llvm.invariant.end.p0i8({}* %inv, i64 8, i8* %y)
   ret void
 }

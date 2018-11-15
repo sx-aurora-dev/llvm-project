@@ -7,11 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
-// C++ Includes
 #include <mutex>
-// Other libraries and framework includes
-// Project includes
 #include "Plugins/ExpressionParser/Clang/ClangASTSource.h"
 #include "Plugins/ExpressionParser/Clang/ClangModulesDeclVendor.h"
 #include "Plugins/ExpressionParser/Clang/ClangPersistentVariables.h"
@@ -415,12 +411,11 @@ Target::CreateAddressInModuleBreakpoint(lldb::addr_t file_addr, bool internal,
                           false);
 }
 
-BreakpointSP
-Target::CreateBreakpoint(const FileSpecList *containingModules,
-                         const FileSpecList *containingSourceFiles,
-                         const char *func_name, uint32_t func_name_type_mask,
-                         LanguageType language, lldb::addr_t offset,
-                         LazyBool skip_prologue, bool internal, bool hardware) {
+BreakpointSP Target::CreateBreakpoint(
+    const FileSpecList *containingModules,
+    const FileSpecList *containingSourceFiles, const char *func_name,
+    FunctionNameType func_name_type_mask, LanguageType language,
+    lldb::addr_t offset, LazyBool skip_prologue, bool internal, bool hardware) {
   BreakpointSP bp_sp;
   if (func_name) {
     SearchFilterSP filter_sp(GetSearchFilterForModuleAndCUList(
@@ -443,9 +438,9 @@ lldb::BreakpointSP
 Target::CreateBreakpoint(const FileSpecList *containingModules,
                          const FileSpecList *containingSourceFiles,
                          const std::vector<std::string> &func_names,
-                         uint32_t func_name_type_mask, LanguageType language,
-                         lldb::addr_t offset, LazyBool skip_prologue,
-                         bool internal, bool hardware) {
+                         FunctionNameType func_name_type_mask,
+                         LanguageType language, lldb::addr_t offset,
+                         LazyBool skip_prologue, bool internal, bool hardware) {
   BreakpointSP bp_sp;
   size_t num_names = func_names.size();
   if (num_names > 0) {
@@ -465,11 +460,13 @@ Target::CreateBreakpoint(const FileSpecList *containingModules,
   return bp_sp;
 }
 
-BreakpointSP Target::CreateBreakpoint(
-    const FileSpecList *containingModules,
-    const FileSpecList *containingSourceFiles, const char *func_names[],
-    size_t num_names, uint32_t func_name_type_mask, LanguageType language,
-    lldb::addr_t offset, LazyBool skip_prologue, bool internal, bool hardware) {
+BreakpointSP
+Target::CreateBreakpoint(const FileSpecList *containingModules,
+                         const FileSpecList *containingSourceFiles,
+                         const char *func_names[], size_t num_names,
+                         FunctionNameType func_name_type_mask,
+                         LanguageType language, lldb::addr_t offset,
+                         LazyBool skip_prologue, bool internal, bool hardware) {
   BreakpointSP bp_sp;
   if (num_names > 0) {
     SearchFilterSP filter_sp(GetSearchFilterForModuleAndCUList(
@@ -771,10 +768,16 @@ bool Target::ProcessIsValid() {
   return (m_process_sp && m_process_sp->IsAlive());
 }
 
-static bool CheckIfWatchpointsExhausted(Target *target, Status &error) {
+static bool CheckIfWatchpointsSupported(Target *target, Status &error) {
   uint32_t num_supported_hardware_watchpoints;
   Status rc = target->GetProcessSP()->GetWatchpointSupportInfo(
       num_supported_hardware_watchpoints);
+
+  // If unable to determine the # of watchpoints available,
+  // assume they are supported.
+  if (rc.Fail())
+    return true;
+
   if (num_supported_hardware_watchpoints == 0) {
     error.SetErrorStringWithFormat(
         "Target supports (%u) hardware watchpoint slots.\n",
@@ -813,7 +816,7 @@ WatchpointSP Target::CreateWatchpoint(lldb::addr_t addr, size_t size,
     error.SetErrorStringWithFormat("invalid watchpoint type: %d", kind);
   }
 
-  if (!CheckIfWatchpointsExhausted(this, error))
+  if (!CheckIfWatchpointsSupported(this, error))
     return wp_sp;
 
   // Currently we only support one watchpoint per address, with total number of
@@ -1572,10 +1575,17 @@ bool Target::SetArchitecture(const ArchSpec &arch_spec, bool set_platform) {
 }
 
 bool Target::MergeArchitecture(const ArchSpec &arch_spec) {
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_TARGET));
   if (arch_spec.IsValid()) {
     if (m_arch.GetSpec().IsCompatibleMatch(arch_spec)) {
       // The current target arch is compatible with "arch_spec", see if we can
       // improve our current architecture using bits from "arch_spec"
+
+      if (log)
+        log->Printf("Target::MergeArchitecture target has arch %s, merging with "
+                    "arch %s", 
+                    m_arch.GetSpec().GetTriple().getTriple().c_str(),
+                    arch_spec.GetTriple().getTriple().c_str());
 
       // Merge bits from arch_spec into "merged_arch" and set our architecture
       ArchSpec merged_arch(m_arch.GetSpec());

@@ -1241,24 +1241,6 @@ static void WriteAsOperandInternal(raw_ostream &Out, const Metadata *MD,
                                    SlotTracker *Machine, const Module *Context,
                                    bool FromValue = false);
 
-static void writeAtomicRMWOperation(raw_ostream &Out,
-                                    AtomicRMWInst::BinOp Op) {
-  switch (Op) {
-  default: Out << " <unknown operation " << Op << ">"; break;
-  case AtomicRMWInst::Xchg: Out << " xchg"; break;
-  case AtomicRMWInst::Add:  Out << " add"; break;
-  case AtomicRMWInst::Sub:  Out << " sub"; break;
-  case AtomicRMWInst::And:  Out << " and"; break;
-  case AtomicRMWInst::Nand: Out << " nand"; break;
-  case AtomicRMWInst::Or:   Out << " or"; break;
-  case AtomicRMWInst::Xor:  Out << " xor"; break;
-  case AtomicRMWInst::Max:  Out << " max"; break;
-  case AtomicRMWInst::Min:  Out << " min"; break;
-  case AtomicRMWInst::UMax: Out << " umax"; break;
-  case AtomicRMWInst::UMin: Out << " umin"; break;
-  }
-}
-
 static void WriteOptimizationInfo(raw_ostream &Out, const User *U) {
   if (const FPMathOperator *FPO = dyn_cast<const FPMathOperator>(U)) {
     // 'Fast' is an abbreviation for all fast-math-flags.
@@ -1928,6 +1910,7 @@ static void writeDICompileUnit(raw_ostream &Out, const DICompileUnit *N,
   Printer.printBool("debugInfoForProfiling", N->getDebugInfoForProfiling(),
                     false);
   Printer.printNameTableKind("nameTableKind", N->getNameTableKind());
+  Printer.printBool("rangesBaseAddress", N->getRangesBaseAddress(), false);
   Out << ")";
 }
 
@@ -2077,6 +2060,7 @@ static void writeDIGlobalVariable(raw_ostream &Out, const DIGlobalVariable *N,
   Printer.printBool("isLocal", N->isLocalToUnit());
   Printer.printBool("isDefinition", N->isDefinition());
   Printer.printMetadata("declaration", N->getRawStaticDataMemberDeclaration());
+  Printer.printMetadata("templateParams", N->getRawTemplateParams());
   Printer.printInt("align", N->getAlignInBits());
   Out << ")";
 }
@@ -2888,6 +2872,7 @@ void AssemblyWriter::printFunctionSummary(const FunctionSummary *FS) {
     Out << ", readOnly: " << FFlags.ReadOnly;
     Out << ", noRecurse: " << FFlags.NoRecurse;
     Out << ", returnDoesNotAlias: " << FFlags.ReturnDoesNotAlias;
+    Out << ", noInline: " << FFlags.NoInline;
     Out << ")";
   }
   if (!FS->calls().empty()) {
@@ -3612,7 +3597,7 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
 
   // Print out the atomicrmw operation
   if (const AtomicRMWInst *RMWI = dyn_cast<AtomicRMWInst>(&I))
-    writeAtomicRMWOperation(Out, RMWI->getOperation());
+    Out << ' ' << AtomicRMWInst::getOperationName(RMWI->getOperation());
 
   // Print out the type of the operands...
   const Value *Operand = I.getNumOperands() ? I.getOperand(0) : nullptr;
