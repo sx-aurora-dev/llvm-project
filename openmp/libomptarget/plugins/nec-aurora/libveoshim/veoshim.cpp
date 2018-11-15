@@ -24,13 +24,15 @@ class ShimInfoTy {
 
 public:
   struct veo_proc_handle *getNewProcHandle() {
-    struct veo_proc_handle handle = { 0 };
+    struct veo_proc_handle handle = { nullptr };
     proc_handles.push_back(handle);
     return &proc_handles.back();
   }
   ~ShimInfoTy() {
     for (auto &h : proc_handles) {
-      dlclose(h.dlhandle_veoshim);
+      if (h.dlhandle_veoshim != NULL) {
+        dlclose(h.dlhandle_veoshim);
+      }
     }
   }
 };
