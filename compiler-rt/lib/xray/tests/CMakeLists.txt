@@ -52,11 +52,6 @@ set(XRAY_UNITTEST_LINK_FLAGS
   -l${SANITIZER_CXX_ABI_LIBRARY})
 
 if (NOT APPLE)
-  append_list_if(COMPILER_RT_HAS_LIBM -lm XRAY_UNITTEST_LINK_FLAGS)
-  append_list_if(COMPILER_RT_HAS_LIBRT -lrt XRAY_UNITTEST_LINK_FLAGS)
-  append_list_if(COMPILER_RT_HAS_LIBDL -ldl XRAY_UNITTEST_LINK_FLAGS)
-  append_list_if(COMPILER_RT_HAS_LIBPTHREAD -pthread XRAY_UNITTEST_LINK_FLAGS)
-
   # Needed by LLVMSupport.
   append_list_if(
     COMPILER_RT_HAS_TERMINFO
@@ -74,6 +69,11 @@ if (NOT APPLE)
     # We also add the actual libraries to link as dependencies.
     list(APPEND XRAY_UNITTEST_LINK_FLAGS -lLLVMXRay -lLLVMSupport -lLLVMTestingSupport)
   endif()
+
+  append_list_if(COMPILER_RT_HAS_LIBM -lm XRAY_UNITTEST_LINK_FLAGS)
+  append_list_if(COMPILER_RT_HAS_LIBRT -lrt XRAY_UNITTEST_LINK_FLAGS)
+  append_list_if(COMPILER_RT_HAS_LIBDL -ldl XRAY_UNITTEST_LINK_FLAGS)
+  append_list_if(COMPILER_RT_HAS_LIBPTHREAD -pthread XRAY_UNITTEST_LINK_FLAGS)
 endif()
 
 macro(add_xray_unittest testname)
@@ -93,6 +93,7 @@ macro(add_xray_unittest testname)
         # the build/test cycle.
         COMPILE_DEPS ${TEST_SOURCES} ${COMPILER_RT_GTEST_SOURCE}
         ${XRAY_HEADERS} ${XRAY_ALL_SOURCE_FILES_ABS_PATHS}
+        "test_helpers.h"
         RUNTIME "${XRAY_RUNTIME_LIBS}"
         DEPS gtest xray llvm-xray LLVMXRay LLVMTestingSupport
         CFLAGS ${XRAY_UNITTEST_CFLAGS}

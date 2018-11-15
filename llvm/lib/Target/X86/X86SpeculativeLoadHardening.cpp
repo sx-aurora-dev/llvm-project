@@ -119,12 +119,6 @@ static cl::opt<bool> HardenIndirectCallsAndJumps(
              "mitigate Spectre v1.2 style attacks."),
     cl::init(true), cl::Hidden);
 
-namespace llvm {
-
-void initializeX86SpeculativeLoadHardeningPassPass(PassRegistry &);
-
-} // end namespace llvm
-
 namespace {
 
 class X86SpeculativeLoadHardeningPass : public MachineFunctionPass {
@@ -828,7 +822,7 @@ X86SpeculativeLoadHardeningPass::tracePredStateThroughCFG(
            "split above!");
 
     // Sort and unique the codes to minimize them.
-    llvm::sort(UncondCodeSeq.begin(), UncondCodeSeq.end());
+    llvm::sort(UncondCodeSeq);
     UncondCodeSeq.erase(std::unique(UncondCodeSeq.begin(), UncondCodeSeq.end()),
                         UncondCodeSeq.end());
 

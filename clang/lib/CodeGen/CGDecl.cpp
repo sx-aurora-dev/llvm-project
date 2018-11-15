@@ -754,9 +754,9 @@ void CodeGenFunction::EmitScalarInit(const Expr *init, const ValueDecl *D,
 
   // If we're emitting a value with lifetime, we have to do the
   // initialization *before* we leave the cleanup scopes.
-  if (const ExprWithCleanups *ewc = dyn_cast<ExprWithCleanups>(init)) {
-    enterFullExpression(ewc);
-    init = ewc->getSubExpr();
+  if (const FullExpr *fe = dyn_cast<FullExpr>(init)) {
+    enterFullExpression(fe);
+    init = fe->getSubExpr();
   }
   CodeGenFunction::RunCleanupsScope Scope(*this);
 
@@ -1066,6 +1066,7 @@ void CodeGenFunction::EmitAndRegisterVariableArrayDimensions(
   // For each dimension stores its QualType and corresponding
   // size-expression Value.
   SmallVector<CodeGenFunction::VlaSizePair, 4> Dimensions;
+  SmallVector<IdentifierInfo *, 4> VLAExprNames;
 
   // Break down the array into individual dimensions.
   QualType Type1D = D.getType();
@@ -1074,8 +1075,14 @@ void CodeGenFunction::EmitAndRegisterVariableArrayDimensions(
     if (auto *C = dyn_cast<llvm::ConstantInt>(VlaSize.NumElts))
       Dimensions.emplace_back(C, Type1D.getUnqualifiedType());
     else {
-      auto SizeExprAddr = CreateDefaultAlignTempAlloca(
-          VlaSize.NumElts->getType(), "__vla_expr");
+      // Generate a locally unique name for the size expression.
+      Twine Name = Twine("__vla_expr") + Twine(VLAExprCounter++);
+      SmallString<12> Buffer;
+      StringRef NameRef = Name.toStringRef(Buffer);
+      auto &Ident = getContext().Idents.getOwn(NameRef);
+      VLAExprNames.push_back(&Ident);
+      auto SizeExprAddr =
+          CreateDefaultAlignTempAlloca(VlaSize.NumElts->getType(), NameRef);
       Builder.CreateStore(VlaSize.NumElts, SizeExprAddr);
       Dimensions.emplace_back(SizeExprAddr.getPointer(),
                               Type1D.getUnqualifiedType());
@@ -1089,20 +1096,20 @@ void CodeGenFunction::EmitAndRegisterVariableArrayDimensions(
   // Register each dimension's size-expression with a DILocalVariable,
   // so that it can be used by CGDebugInfo when instantiating a DISubrange
   // to describe this array.
+  unsigned NameIdx = 0;
   for (auto &VlaSize : Dimensions) {
     llvm::Metadata *MD;
     if (auto *C = dyn_cast<llvm::ConstantInt>(VlaSize.NumElts))
       MD = llvm::ConstantAsMetadata::get(C);
     else {
       // Create an artificial VarDecl to generate debug info for.
-      IdentifierInfo &NameIdent = getContext().Idents.getOwn(
-          cast<llvm::AllocaInst>(VlaSize.NumElts)->getName());
+      IdentifierInfo *NameIdent = VLAExprNames[NameIdx++];
       auto VlaExprTy = VlaSize.NumElts->getType()->getPointerElementType();
       auto QT = getContext().getIntTypeForBitwidth(
           VlaExprTy->getScalarSizeInBits(), false);
       auto *ArtificialDecl = VarDecl::Create(
           getContext(), const_cast<DeclContext *>(D.getDeclContext()),
-          D.getLocation(), D.getLocation(), &NameIdent, QT,
+          D.getLocation(), D.getLocation(), NameIdent, QT,
           getContext().CreateTypeSourceInfo(QT), SC_Auto);
       ArtificialDecl->setImplicit();
 
@@ -1125,8 +1132,8 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
 
   AutoVarEmission emission(D);
 
-  bool isByRef = D.hasAttr<BlocksAttr>();
-  emission.IsByRef = isByRef;
+  bool isEscapingByRef = D.isEscapingByref();
+  emission.IsEscapingByRef = isEscapingByRef;
 
   CharUnits alignment = getContext().getDeclAlign(&D);
 
@@ -1165,8 +1172,8 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
       // in OpenCL.
       if ((!getLangOpts().OpenCL ||
            Ty.getAddressSpace() == LangAS::opencl_constant) &&
-          (CGM.getCodeGenOpts().MergeAllConstants && !NRVO && !isByRef &&
-           CGM.isTypeConstant(Ty, true))) {
+          (CGM.getCodeGenOpts().MergeAllConstants && !NRVO &&
+           !isEscapingByRef && CGM.isTypeConstant(Ty, true))) {
         EmitStaticVarDecl(D, llvm::GlobalValue::InternalLinkage);
 
         // Signal this condition to later callbacks.
@@ -1218,7 +1225,7 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
     } else {
       CharUnits allocaAlignment;
       llvm::Type *allocaTy;
-      if (isByRef) {
+      if (isEscapingByRef) {
         auto &byrefInfo = getBlockByrefInfo(&D);
         allocaTy = byrefInfo.Type;
         allocaAlignment = byrefInfo.ByrefAlignment;
@@ -1418,7 +1425,7 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
   }
 
   // Initialize the structure of a __block variable.
-  if (emission.IsByRef)
+  if (emission.IsEscapingByRef)
     emitByrefStructureInit(emission);
 
   // Initialize the variable here if it doesn't have a initializer and it is a
@@ -1428,7 +1435,7 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
       type.isNonTrivialToPrimitiveDefaultInitialize() ==
           QualType::PDIK_Struct) {
     LValue Dst = MakeAddrLValue(emission.getAllocatedAddress(), type);
-    if (emission.IsByRef)
+    if (emission.IsEscapingByRef)
       drillIntoBlockVariable(*this, Dst, &D);
     defaultInitNonTrivialCStructVar(Dst);
     return;
@@ -1440,7 +1447,7 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
   // Check whether this is a byref variable that's potentially
   // captured and moved by its own initializer.  If so, we'll need to
   // emit the initializer first, then copy into the variable.
-  bool capturedByInit = emission.IsByRef && isCapturedBy(D, Init);
+  bool capturedByInit = emission.IsEscapingByRef && isCapturedBy(D, Init);
 
   Address Loc =
     capturedByInit ? emission.Addr : emission.getObjectAddress(*this);
@@ -1634,7 +1641,8 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
   // If this is a block variable, call _Block_object_destroy
   // (on the unforwarded address). Don't enter this cleanup if we're in pure-GC
   // mode.
-  if (emission.IsByRef && CGM.getLangOpts().getGC() != LangOptions::GCOnly) {
+  if (emission.IsEscapingByRef &&
+      CGM.getLangOpts().getGC() != LangOptions::GCOnly) {
     BlockFieldFlags Flags = BLOCK_FIELD_IS_BYREF;
     if (emission.Variable->getType().isObjCGCWeak())
       Flags |= BLOCK_FIELD_IS_WEAK;

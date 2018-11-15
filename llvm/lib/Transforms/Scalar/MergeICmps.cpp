@@ -98,7 +98,7 @@ BCEAtom visitICmpLoadOperand(Value *const Val) {
     Value *const Addr = LoadI->getOperand(0);
     if (auto *const GEP = dyn_cast<GetElementPtrInst>(Addr)) {
       LLVM_DEBUG(dbgs() << "GEP\n");
-      if (LoadI->isUsedOutsideOfBlock(LoadI->getParent())) {
+      if (GEP->isUsedOutsideOfBlock(LoadI->getParent())) {
         LLVM_DEBUG(dbgs() << "used outside of block\n");
         return {};
       }
@@ -283,8 +283,9 @@ BCECmpBlock visitICmp(const ICmpInst *const CmpI,
     if (!Lhs.Base()) return {};
     auto Rhs = visitICmpLoadOperand(CmpI->getOperand(1));
     if (!Rhs.Base()) return {};
+    const auto &DL = CmpI->getModule()->getDataLayout();
     return BCECmpBlock(std::move(Lhs), std::move(Rhs),
-                       CmpI->getOperand(0)->getType()->getScalarSizeInBits());
+                       DL.getTypeSizeInBits(CmpI->getOperand(0)->getType()));
   }
   return {};
 }
@@ -465,10 +466,9 @@ BCECmpChain::BCECmpChain(const std::vector<BasicBlock *> &Blocks, PHINode &Phi,
 #endif  // MERGEICMPS_DOT_ON
   // Reorder blocks by LHS. We can do that without changing the
   // semantics because we are only accessing dereferencable memory.
-  llvm::sort(Comparisons_.begin(), Comparisons_.end(),
-             [](const BCECmpBlock &a, const BCECmpBlock &b) {
-               return a.Lhs() < b.Lhs();
-             });
+  llvm::sort(Comparisons_, [](const BCECmpBlock &a, const BCECmpBlock &b) {
+    return a.Lhs() < b.Lhs();
+  });
 #ifdef MERGEICMPS_DOT_ON
   errs() << "AFTER REORDERING:\n\n";
   dump();

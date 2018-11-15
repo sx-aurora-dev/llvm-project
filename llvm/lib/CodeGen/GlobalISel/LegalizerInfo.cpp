@@ -51,7 +51,7 @@ raw_ostream &LegalityQuery::print(raw_ostream &OS) const {
 
   OS << Opcode << ", MMOs={";
   for (const auto &MMODescr : MMODescrs) {
-    OS << MMODescr.Size << ", ";
+    OS << MMODescr.SizeInBits << ", ";
   }
   OS << "}";
 
@@ -219,7 +219,7 @@ void LegalizerInfo::computeTables() {
             Opcode, TypeIdx, ElementSize,
             moreToWiderTypesAndLessToWidest(NumElementsActions));
       }
-      llvm::sort(ElementSizesSeen.begin(), ElementSizesSeen.end());
+      llvm::sort(ElementSizesSeen);
       SizeChangeStrategy VectorElementSizeChangeStrategy =
           &unsupportedForDifferentSizes;
       if (TypeIdx < VectorElementSizeChangeStrategies[OpcodeIdx].size() &&
@@ -298,8 +298,7 @@ LegalizeRuleSet &LegalizerInfo::getActionDefinitionsBuilder(
     std::initializer_list<unsigned> Opcodes) {
   unsigned Representative = *Opcodes.begin();
 
-  assert(Opcodes.begin() != Opcodes.end() &&
-         Opcodes.begin() + 1 != Opcodes.end() &&
+  assert(!empty(Opcodes) && Opcodes.begin() + 1 != Opcodes.end() &&
          "Initializer list must have at least two opcodes");
 
   for (auto I = Opcodes.begin() + 1, E = Opcodes.end(); I != E; ++I)
