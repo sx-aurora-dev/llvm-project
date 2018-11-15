@@ -23,6 +23,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Allocator.h"
@@ -407,6 +408,7 @@ public:
     return const_cast<GlobalValueSummary &>(
                          static_cast<const AliasSummary *>(this)->getAliasee());
   }
+  bool hasAliaseeGUID() const { return AliaseeGUID != 0; }
   const GlobalValue::GUID &getAliaseeGUID() const {
     assert(AliaseeGUID && "Unexpected missing aliasee GUID");
     return AliaseeGUID;
@@ -476,13 +478,17 @@ public:
         TypeCheckedLoadConstVCalls;
   };
 
-  /// Function attribute flags. Used to track if a function accesses memory,
-  /// recurses or aliases.
+  /// Flags specific to function summaries.
   struct FFlags {
+    // Function attribute flags. Used to track if a function accesses memory,
+    // recurses or aliases.
     unsigned ReadNone : 1;
     unsigned ReadOnly : 1;
     unsigned NoRecurse : 1;
     unsigned ReturnDoesNotAlias : 1;
+
+    // Indicate if the global value cannot be inlined.
+    unsigned NoInline : 1;
   };
 
   /// Create an empty FunctionSummary (with specified call edges).
@@ -509,8 +515,7 @@ private:
   /// during the initial compile step when the summary index is first built.
   unsigned InstCount;
 
-  /// Function attribute flags. Used to track if a function accesses memory,
-  /// recurses or aliases.
+  /// Function summary specific flags.
   FFlags FunFlags;
 
   /// List of <CalleeValueInfo, CalleeInfo> call edge pairs from this function.
@@ -544,7 +549,7 @@ public:
     return GVS->getSummaryKind() == FunctionKind;
   }
 
-  /// Get function attribute flags.
+  /// Get function summary flags.
   FFlags fflags() const { return FunFlags; }
 
   /// Get the instruction count recorded for this function.
@@ -753,6 +758,11 @@ using ModulePathStringTableTy = StringMap<std::pair<uint64_t, ModuleHash>>;
 /// a particular module, and provide efficient access to their summary.
 using GVSummaryMapTy = DenseMap<GlobalValue::GUID, GlobalValueSummary *>;
 
+/// Map of a type GUID to type id string and summary (multimap used
+/// in case of GUID conflicts).
+using TypeIdSummaryMapTy =
+    std::multimap<GlobalValue::GUID, std::pair<std::string, TypeIdSummary>>;
+
 /// Class to hold module path string table and global value map,
 /// and encapsulate methods for operating on them.
 class ModuleSummaryIndex {
@@ -764,9 +774,9 @@ private:
   /// Holds strings for combined index, mapping to the corresponding module ID.
   ModulePathStringTableTy ModulePathStringTable;
 
-  /// Mapping from type identifiers to summary information for that type
-  /// identifier.
-  std::map<std::string, TypeIdSummary> TypeIdMap;
+  /// Mapping from type identifier GUIDs to type identifier and its summary
+  /// information.
+  TypeIdSummaryMapTy TypeIdMap;
 
   /// Mapping from original ID to GUID. If original ID can map to multiple
   /// GUIDs, it will be mapped to 0.
@@ -1079,23 +1089,29 @@ public:
     return ModulePathStringTable.count(M.getModuleIdentifier());
   }
 
-  const std::map<std::string, TypeIdSummary> &typeIds() const {
-    return TypeIdMap;
-  }
+  const TypeIdSummaryMapTy &typeIds() const { return TypeIdMap; }
 
-  /// This accessor should only be used when exporting because it can mutate the
-  /// map.
+  /// Return an existing or new TypeIdSummary entry for \p TypeId.
+  /// This accessor can mutate the map and therefore should not be used in
+  /// the ThinLTO backends.
   TypeIdSummary &getOrInsertTypeIdSummary(StringRef TypeId) {
-    return TypeIdMap[TypeId];
+    auto TidIter = TypeIdMap.equal_range(GlobalValue::getGUID(TypeId));
+    for (auto It = TidIter.first; It != TidIter.second; ++It)
+      if (It->second.first == TypeId)
+        return It->second.second;
+    auto It = TypeIdMap.insert(
+        {GlobalValue::getGUID(TypeId), {TypeId, TypeIdSummary()}});
+    return It->second.second;
   }
 
   /// This returns either a pointer to the type id summary (if present in the
   /// summary map) or null (if not present). This may be used when importing.
   const TypeIdSummary *getTypeIdSummary(StringRef TypeId) const {
-    auto I = TypeIdMap.find(TypeId);
-    if (I == TypeIdMap.end())
-      return nullptr;
-    return &I->second;
+    auto TidIter = TypeIdMap.equal_range(GlobalValue::getGUID(TypeId));
+    for (auto It = TidIter.first; It != TidIter.second; ++It)
+      if (It->second.first == TypeId)
+        return &It->second.second;
+    return nullptr;
   }
 
   /// Collect for the given module the list of functions it defines

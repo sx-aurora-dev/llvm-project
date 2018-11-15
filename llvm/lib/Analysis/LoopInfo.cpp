@@ -26,6 +26,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
@@ -218,7 +219,7 @@ MDNode *Loop::getLoopID() const {
   SmallVector<BasicBlock *, 4> LatchesBlocks;
   getLoopLatches(LatchesBlocks);
   for (BasicBlock *BB : LatchesBlocks) {
-    TerminatorInst *TI = BB->getTerminator();
+    Instruction *TI = BB->getTerminator();
     MDNode *MD = TI->getMetadata(LLVMContext::MD_loop);
 
     if (!MD)
@@ -249,7 +250,7 @@ void Loop::setLoopID(MDNode *LoopID) const {
          "The loop should have no single latch at this point");
   BasicBlock *H = getHeader();
   for (BasicBlock *BB : this->blocks()) {
-    TerminatorInst *TI = BB->getTerminator();
+    Instruction *TI = BB->getTerminator();
     for (BasicBlock *Successor : successors(TI)) {
       if (Successor == H)
         TI->setMetadata(LLVMContext::MD_loop, LoopID);

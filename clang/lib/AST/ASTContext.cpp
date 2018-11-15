@@ -1241,6 +1241,10 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
     InitBuiltinType(OCLClkEventTy, BuiltinType::OCLClkEvent);
     InitBuiltinType(OCLQueueTy, BuiltinType::OCLQueue);
     InitBuiltinType(OCLReserveIDTy, BuiltinType::OCLReserveID);
+
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+    InitBuiltinType(Id##Ty, BuiltinType::Id);
+#include "clang/Basic/OpenCLExtensionTypes.def"
   }
 
   // Builtin type for __objc_yes and __objc_no
@@ -1892,6 +1896,9 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
     case BuiltinType::Id:
 #include "clang/Basic/OpenCLImageTypes.def"
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+  case BuiltinType::Id:
+#include "clang/Basic/OpenCLExtensionTypes.def"
       AS = getTargetAddressSpace(
           Target->getOpenCLTypeAddrSpace(getOpenCLTypeKind(T)));
       Width = Target->getPointerWidth(AS);
@@ -2295,12 +2302,11 @@ structHasUniqueObjectRepresentations(const ASTContext &Context,
       }
     }
 
-    llvm::sort(
-        Bases.begin(), Bases.end(), [&](const std::pair<QualType, int64_t> &L,
-                                        const std::pair<QualType, int64_t> &R) {
-          return Layout.getBaseClassOffset(L.first->getAsCXXRecordDecl()) <
-                 Layout.getBaseClassOffset(R.first->getAsCXXRecordDecl());
-        });
+    llvm::sort(Bases, [&](const std::pair<QualType, int64_t> &L,
+                          const std::pair<QualType, int64_t> &R) {
+      return Layout.getBaseClassOffset(L.first->getAsCXXRecordDecl()) <
+             Layout.getBaseClassOffset(R.first->getAsCXXRecordDecl());
+    });
 
     for (const auto Base : Bases) {
       int64_t BaseOffset = Context.toBits(
@@ -3698,30 +3704,19 @@ QualType ASTContext::getFunctionTypeInternal(
     assert(!NewIP && "Shouldn't be in the map!"); (void)NewIP;
   }
 
-  // FunctionProtoType objects are allocated with extra bytes after
-  // them for three variable size arrays at the end:
-  //  - parameter types
-  //  - exception types
-  //  - extended parameter information
-  // Instead of the exception types, there could be a noexcept
-  // expression, or information used to resolve the exception
-  // specification.
-  size_t Size =
-      sizeof(FunctionProtoType) + NumArgs * sizeof(QualType) +
-      FunctionProtoType::getExceptionSpecSize(
-          EPI.ExceptionSpec.Type, EPI.ExceptionSpec.Exceptions.size());
+  // Compute the needed size to hold this FunctionProtoType and the
+  // various trailing objects.
+  auto ESH = FunctionProtoType::getExceptionSpecSize(
+      EPI.ExceptionSpec.Type, EPI.ExceptionSpec.Exceptions.size());
+  size_t Size = FunctionProtoType::totalSizeToAlloc<
+      QualType, FunctionType::FunctionTypeExtraBitfields,
+      FunctionType::ExceptionType, Expr *, FunctionDecl *,
+      FunctionProtoType::ExtParameterInfo>(
+      NumArgs, FunctionProtoType::hasExtraBitfields(EPI.ExceptionSpec.Type),
+      ESH.NumExceptionType, ESH.NumExprPtr, ESH.NumFunctionDeclPtr,
+      EPI.ExtParameterInfos ? NumArgs : 0);
 
-  // Put the ExtParameterInfos last.  If all were equal, it would make
-  // more sense to put these before the exception specification, because
-  // it's much easier to skip past them compared to the elaborate switch
-  // required to skip the exception specification.  However, all is not
-  // equal; ExtParameterInfos are used to model very uncommon features,
-  // and it's better not to burden the more common paths.
-  if (EPI.ExtParameterInfos) {
-    Size += NumArgs * sizeof(FunctionProtoType::ExtParameterInfo);
-  }
-
-  auto *FTP = (FunctionProtoType *) Allocate(Size, TypeAlignment);
+  auto *FTP = (FunctionProtoType *)Allocate(Size, TypeAlignment);
   FunctionProtoType::ExtProtoInfo newEPI = EPI;
   new (FTP) FunctionProtoType(ResultTy, ArgArray, Canonical, newEPI);
   Types.push_back(FTP);
@@ -5103,7 +5098,7 @@ bool ASTContext::UnwrapSimilarTypes(QualType &T1, QualType &T2) {
     return true;
   }
 
-  if (getLangOpts().ObjC1) {
+  if (getLangOpts().ObjC) {
     const auto *T1OPType = T1->getAs<ObjCObjectPointerType>();
     const auto *T2OPType = T2->getAs<ObjCObjectPointerType>();
     if (T1OPType && T2OPType) {
@@ -5767,49 +5762,85 @@ int ASTContext::getIntegerTypeOrder(QualType LHS, QualType RHS) const {
 }
 
 TypedefDecl *ASTContext::getCFConstantStringDecl() const {
-  if (!CFConstantStringTypeDecl) {
-    assert(!CFConstantStringTagDecl &&
-           "tag and typedef should be initialized together");
-    CFConstantStringTagDecl = buildImplicitRecord("__NSConstantString_tag");
-    CFConstantStringTagDecl->startDefinition();
+  if (CFConstantStringTypeDecl)
+    return CFConstantStringTypeDecl;
 
-    QualType FieldTypes[4];
-    const char *FieldNames[4];
+  assert(!CFConstantStringTagDecl &&
+         "tag and typedef should be initialized together");
+  CFConstantStringTagDecl = buildImplicitRecord("__NSConstantString_tag");
+  CFConstantStringTagDecl->startDefinition();
 
-    // const int *isa;
-    FieldTypes[0] = getPointerType(IntTy.withConst());
-    FieldNames[0] = "isa";
-    // int flags;
-    FieldTypes[1] = IntTy;
-    FieldNames[1] = "flags";
-    // const char *str;
-    FieldTypes[2] = getPointerType(CharTy.withConst());
-    FieldNames[2] = "str";
-    // long length;
-    FieldTypes[3] = LongTy;
-    FieldNames[3] = "length";
+  struct {
+    QualType Type;
+    const char *Name;
+  } Fields[5];
+  unsigned Count = 0;
 
-    // Create fields
-    for (unsigned i = 0; i < 4; ++i) {
-      FieldDecl *Field = FieldDecl::Create(*this, CFConstantStringTagDecl,
-                                           SourceLocation(),
-                                           SourceLocation(),
-                                           &Idents.get(FieldNames[i]),
-                                           FieldTypes[i], /*TInfo=*/nullptr,
-                                           /*BitWidth=*/nullptr,
-                                           /*Mutable=*/false,
-                                           ICIS_NoInit);
-      Field->setAccess(AS_public);
-      CFConstantStringTagDecl->addDecl(Field);
-    }
+  /// Objective-C ABI
+  ///
+  ///    typedef struct __NSConstantString_tag {
+  ///      const int *isa;
+  ///      int flags;
+  ///      const char *str;
+  ///      long length;
+  ///    } __NSConstantString;
+  ///
+  /// Swift ABI (4.1, 4.2)
+  ///
+  ///    typedef struct __NSConstantString_tag {
+  ///      uintptr_t _cfisa;
+  ///      uintptr_t _swift_rc;
+  ///      _Atomic(uint64_t) _cfinfoa;
+  ///      const char *_ptr;
+  ///      uint32_t _length;
+  ///    } __NSConstantString;
+  ///
+  /// Swift ABI (5.0)
+  ///
+  ///    typedef struct __NSConstantString_tag {
+  ///      uintptr_t _cfisa;
+  ///      uintptr_t _swift_rc;
+  ///      _Atomic(uint64_t) _cfinfoa;
+  ///      const char *_ptr;
+  ///      uintptr_t _length;
+  ///    } __NSConstantString;
 
-    CFConstantStringTagDecl->completeDefinition();
-    // This type is designed to be compatible with NSConstantString, but cannot
-    // use the same name, since NSConstantString is an interface.
-    auto tagType = getTagDeclType(CFConstantStringTagDecl);
-    CFConstantStringTypeDecl =
-        buildImplicitTypedef(tagType, "__NSConstantString");
+  const auto CFRuntime = getLangOpts().CFRuntime;
+  if (static_cast<unsigned>(CFRuntime) <
+      static_cast<unsigned>(LangOptions::CoreFoundationABI::Swift)) {
+    Fields[Count++] = { getPointerType(IntTy.withConst()), "isa" };
+    Fields[Count++] = { IntTy, "flags" };
+    Fields[Count++] = { getPointerType(CharTy.withConst()), "str" };
+    Fields[Count++] = { LongTy, "length" };
+  } else {
+    Fields[Count++] = { getUIntPtrType(), "_cfisa" };
+    Fields[Count++] = { getUIntPtrType(), "_swift_rc" };
+    Fields[Count++] = { getFromTargetType(Target->getUInt64Type()), "_swift_rc" };
+    Fields[Count++] = { getPointerType(CharTy.withConst()), "_ptr" };
+    if (CFRuntime == LangOptions::CoreFoundationABI::Swift4_1 ||
+        CFRuntime == LangOptions::CoreFoundationABI::Swift4_2)
+      Fields[Count++] = { IntTy, "_ptr" };
+    else
+      Fields[Count++] = { getUIntPtrType(), "_ptr" };
   }
+
+  // Create fields
+  for (unsigned i = 0; i < Count; ++i) {
+    FieldDecl *Field =
+        FieldDecl::Create(*this, CFConstantStringTagDecl, SourceLocation(),
+                          SourceLocation(), &Idents.get(Fields[i].Name),
+                          Fields[i].Type, /*TInfo=*/nullptr,
+                          /*BitWidth=*/nullptr, /*Mutable=*/false, ICIS_NoInit);
+    Field->setAccess(AS_public);
+    CFConstantStringTagDecl->addDecl(Field);
+  }
+
+  CFConstantStringTagDecl->completeDefinition();
+  // This type is designed to be compatible with NSConstantString, but cannot
+  // use the same name, since NSConstantString is an interface.
+  auto tagType = getTagDeclType(CFConstantStringTagDecl);
+  CFConstantStringTypeDecl =
+      buildImplicitTypedef(tagType, "__NSConstantString");
 
   return CFConstantStringTypeDecl;
 }
@@ -6004,7 +6035,7 @@ bool ASTContext::BlockRequiresCopying(QualType Ty,
 bool ASTContext::getByrefLifetime(QualType Ty,
                               Qualifiers::ObjCLifetime &LifeTime,
                               bool &HasByrefExtendedLayout) const {
-  if (!getLangOpts().ObjC1 ||
+  if (!getLangOpts().ObjC ||
       getLangOpts().getGC() != LangOptions::NonGC)
     return false;
 
@@ -6476,6 +6507,9 @@ static char getObjCEncodingForPrimitiveKind(const ASTContext *C,
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
     case BuiltinType::Id:
 #include "clang/Basic/OpenCLImageTypes.def"
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+    case BuiltinType::Id:
+#include "clang/Basic/OpenCLExtensionTypes.def"
     case BuiltinType::OCLEvent:
     case BuiltinType::OCLClkEvent:
     case BuiltinType::OCLQueue:
@@ -7682,7 +7716,7 @@ Qualifiers::GC ASTContext::getObjCGCAttrKind(QualType Ty) const {
   if (getLangOpts().getGC() == LangOptions::NonGC)
     return Qualifiers::GCNone;
 
-  assert(getLangOpts().ObjC1);
+  assert(getLangOpts().ObjC);
   Qualifiers::GC GCAttrs = Ty.getObjCGCAttr();
 
   // Default behaviour under objective-C's gc is for ObjC pointers
@@ -9749,6 +9783,10 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
     return true;
 
   if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
+    // Multiversioned functions always have to be emitted, because they are used
+    // by the resolver.
+    if (FD->isMultiVersion())
+      return true;
     // Forward declarations aren't required.
     if (!FD->doesThisDeclarationHaveABody())
       return FD->doesDeclarationForceExternallyVisibleDefinition();

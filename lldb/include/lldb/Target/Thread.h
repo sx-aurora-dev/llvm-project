@@ -10,15 +10,11 @@
 #ifndef liblldb_Thread_h_
 #define liblldb_Thread_h_
 
-// C Includes
-// C++ Includes
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Core/Broadcaster.h"
 #include "lldb/Core/Event.h"
 #include "lldb/Core/UserSettingsController.h"
@@ -57,6 +53,8 @@ public:
   bool GetStepInAvoidsNoDebug() const;
 
   bool GetStepOutAvoidsNoDebug() const;
+  
+  uint64_t GetMaxBacktraceDepth() const;
 };
 
 typedef std::shared_ptr<ThreadProperties> ThreadPropertiesSP;

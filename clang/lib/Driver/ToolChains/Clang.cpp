@@ -1297,21 +1297,28 @@ static bool isNoCommonDefault(const llvm::Triple &Triple) {
   }
 }
 
-void Clang::AddARMTargetArgs(const llvm::Triple &Triple, const ArgList &Args,
-                             ArgStringList &CmdArgs, bool KernelOrKext) const {
+namespace {
+void RenderARMABI(const llvm::Triple &Triple, const ArgList &Args,
+                  ArgStringList &CmdArgs) {
   // Select the ABI to use.
   // FIXME: Support -meabi.
   // FIXME: Parts of this are duplicated in the backend, unify this somehow.
   const char *ABIName = nullptr;
-  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ))
+  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ)) {
     ABIName = A->getValue();
-  else {
+  } else {
     std::string CPU = getCPUName(Args, Triple, /*FromAs*/ false);
     ABIName = llvm::ARM::computeDefaultTargetABI(Triple, CPU).data();
   }
 
   CmdArgs.push_back("-target-abi");
   CmdArgs.push_back(ABIName);
+}
+}
+
+void Clang::AddARMTargetArgs(const llvm::Triple &Triple, const ArgList &Args,
+                             ArgStringList &CmdArgs, bool KernelOrKext) const {
+  RenderARMABI(Triple, Args, CmdArgs);
 
   // Determine floating point ABI from the options & target defaults.
   arm::FloatABI ABI = arm::getARMFloatABI(getToolChain(), Args);
@@ -1423,6 +1430,72 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
   }
 }
 
+// Parse -mbranch-protection=<protection>[+<protection>]* where
+//   <protection> ::= standard | none | [bti,pac-ret[+b-key,+leaf]*]
+// Returns a triple of (return address signing Scope, signing key, require
+// landing pads)
+static std::tuple<StringRef, StringRef, bool>
+ParseAArch64BranchProtection(const Driver &D, const ArgList &Args,
+                             const Arg *A) {
+  StringRef Scope = "none";
+  StringRef Key = "a_key";
+  bool IndirectBranches = false;
+
+  StringRef Value = A->getValue();
+  // This maps onto -mbranch-protection=<scope>+<key>
+
+  if (Value.equals("standard")) {
+    Scope = "non-leaf";
+    Key = "a_key";
+    IndirectBranches = true;
+
+  } else if (!Value.equals("none")) {
+    SmallVector<StringRef, 4> BranchProtection;
+    StringRef(A->getValue()).split(BranchProtection, '+');
+
+    auto Protection = BranchProtection.begin();
+    while (Protection != BranchProtection.end()) {
+      if (Protection->equals("bti"))
+        IndirectBranches = true;
+      else if (Protection->equals("pac-ret")) {
+        Scope = "non-leaf";
+        while (++Protection != BranchProtection.end()) {
+          // Inner loop as "leaf" and "b-key" options must only appear attached
+          // to pac-ret.
+          if (Protection->equals("leaf"))
+            Scope = "all";
+          else if (Protection->equals("b-key"))
+            Key = "b_key";
+          else
+            break;
+        }
+        Protection--;
+      } else
+        D.Diag(diag::err_invalid_branch_protection)
+            << *Protection << A->getAsString(Args);
+      Protection++;
+    }
+  }
+
+  return std::make_tuple(Scope, Key, IndirectBranches);
+}
+
+namespace {
+void RenderAArch64ABI(const llvm::Triple &Triple, const ArgList &Args,
+                      ArgStringList &CmdArgs) {
+  const char *ABIName = nullptr;
+  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ))
+    ABIName = A->getValue();
+  else if (Triple.isOSDarwin())
+    ABIName = "darwinpcs";
+  else
+    ABIName = "aapcs";
+
+  CmdArgs.push_back("-target-abi");
+  CmdArgs.push_back(ABIName);
+}
+}
+
 void Clang::AddAArch64TargetArgs(const ArgList &Args,
                                  ArgStringList &CmdArgs) const {
   const llvm::Triple &Triple = getToolChain().getEffectiveTriple();
@@ -1436,16 +1509,7 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
                     options::OPT_mno_implicit_float, true))
     CmdArgs.push_back("-no-implicit-float");
 
-  const char *ABIName = nullptr;
-  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ))
-    ABIName = A->getValue();
-  else if (Triple.isOSDarwin())
-    ABIName = "darwinpcs";
-  else
-    ABIName = "aapcs";
-
-  CmdArgs.push_back("-target-abi");
-  CmdArgs.push_back(ABIName);
+  RenderAArch64ABI(Triple, Args, CmdArgs);
 
   if (Arg *A = Args.getLastArg(options::OPT_mfix_cortex_a53_835769,
                                options::OPT_mno_fix_cortex_a53_835769)) {
@@ -1470,9 +1534,33 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
       CmdArgs.push_back("-aarch64-enable-global-merge=true");
   }
 
-  if (Arg *A = Args.getLastArg(options::OPT_msign_return_address)) {
+  // Enable/disable return address signing and indirect branch targets.
+  if (Arg *A = Args.getLastArg(options::OPT_msign_return_address_EQ,
+                               options::OPT_mbranch_protection_EQ)) {
+
+    const Driver &D = getToolChain().getDriver();
+
+    StringRef Scope, Key;
+    bool IndirectBranches;
+
+    if (A->getOption().matches(options::OPT_msign_return_address_EQ)) {
+      Scope = A->getValue();
+      if (!Scope.equals("none") && !Scope.equals("non-leaf") &&
+          !Scope.equals("all"))
+        D.Diag(diag::err_invalid_branch_protection)
+            << Scope << A->getAsString(Args);
+      Key = "a_key";
+      IndirectBranches = false;
+    } else
+      std::tie(Scope, Key, IndirectBranches) =
+          ParseAArch64BranchProtection(D, Args, A);
+
     CmdArgs.push_back(
-        Args.MakeArgString(Twine("-msign-return-address=") + A->getValue()));
+        Args.MakeArgString(Twine("-msign-return-address=") + Scope));
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine("-msign-return-address-key=") + Key));
+    if (IndirectBranches)
+      CmdArgs.push_back("-mbranch-target-enforce");
   }
 }
 
@@ -1724,6 +1812,10 @@ void Clang::AddX86TargetArgs(const ArgList &Args,
       Args.hasArg(options::OPT_mkernel) ||
       Args.hasArg(options::OPT_fapple_kext))
     CmdArgs.push_back("-disable-red-zone");
+
+  if (!Args.hasFlag(options::OPT_mtls_direct_seg_refs,
+                    options::OPT_mno_tls_direct_seg_refs, true))
+    CmdArgs.push_back("-mno-tls-direct-seg-refs");
 
   // Default to avoid implicit floating-point for kernel/kext code, but allow
   // that to be overridden with -mno-soft-float.
@@ -3033,8 +3125,8 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
 
   // -gsplit-dwarf should turn on -g and enable the backend dwarf
   // splitting and extraction.
-  // FIXME: Currently only works on Linux.
-  if (T.isOSLinux()) {
+  // FIXME: Currently only works on Linux and Fuchsia.
+  if (T.isOSLinux() || T.isOSFuchsia()) {
     if (!SplitDWARFInlining)
       CmdArgs.push_back("-fno-split-dwarf-inlining");
 
@@ -3095,6 +3187,11 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
                                            options::OPT_gpubnames)
                             ? "-gpubnames"
                             : "-ggnu-pubnames");
+
+  if (Args.hasFlag(options::OPT_fdebug_ranges_base_address,
+                   options::OPT_fno_debug_ranges_base_address, false)) {
+    CmdArgs.push_back("-fdebug-ranges-base-address");
+  }
 
   // -gdwarf-aranges turns on the emission of the aranges section in the
   // backend.
@@ -3158,18 +3255,15 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   bool IsCuda = JA.isOffloading(Action::OFK_Cuda);
   bool IsHIP = JA.isOffloading(Action::OFK_HIP);
   bool IsOpenMPDevice = JA.isDeviceOffloading(Action::OFK_OpenMP);
-  bool IsModulePrecompile =
-      isa<PrecompileJobAction>(JA) && JA.getType() == types::TY_ModuleFile;
   bool IsHeaderModulePrecompile = isa<HeaderModulePrecompileJobAction>(JA);
 
   // A header module compilation doesn't have a main input file, so invent a
   // fake one as a placeholder.
-  // FIXME: Pick the language based on the header file language.
   const char *ModuleName = [&]{
     auto *ModuleNameArg = Args.getLastArg(options::OPT_fmodule_name_EQ);
     return ModuleNameArg ? ModuleNameArg->getValue() : "";
   }();
-  InputInfo HeaderModuleInput(types::TY_CXXModule, ModuleName, ModuleName);
+  InputInfo HeaderModuleInput(Inputs[0].getType(), ModuleName, ModuleName);
 
   const InputInfo &Input =
       IsHeaderModulePrecompile ? HeaderModuleInput : Inputs[0];
@@ -3180,10 +3274,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   for (const InputInfo &I : Inputs) {
     if (&I == &Input) {
       // This is the primary input.
-    } else if (IsModulePrecompile &&
+    } else if (IsHeaderModulePrecompile &&
                types::getPrecompiledType(I.getType()) == types::TY_PCH) {
-      types::ID Expected =
-          types::lookupHeaderTypeForSourceType(Inputs[0].getType());
+      types::ID Expected = HeaderModuleInput.getType();
       if (I.getType() != Expected) {
         D.Diag(diag::err_drv_module_header_wrong_kind)
             << I.getFilename() << types::getTypeName(I.getType())
@@ -3378,13 +3471,116 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     Args.AddLastArg(CmdArgs, options::OPT_save_temps_EQ);
 
   // Embed-bitcode option.
+  // Only white-listed flags below are allowed to be embedded.
   if (C.getDriver().embedBitcodeInObject() && !C.getDriver().isUsingLTO() &&
       (isa<BackendJobAction>(JA) || isa<AssembleJobAction>(JA))) {
     // Add flags implied by -fembed-bitcode.
     Args.AddLastArg(CmdArgs, options::OPT_fembed_bitcode_EQ);
     // Disable all llvm IR level optimizations.
     CmdArgs.push_back("-disable-llvm-passes");
+
+    // reject options that shouldn't be supported in bitcode
+    // also reject kernel/kext
+    static const constexpr unsigned kBitcodeOptionBlacklist[] = {
+        options::OPT_mkernel,
+        options::OPT_fapple_kext,
+        options::OPT_ffunction_sections,
+        options::OPT_fno_function_sections,
+        options::OPT_fdata_sections,
+        options::OPT_fno_data_sections,
+        options::OPT_funique_section_names,
+        options::OPT_fno_unique_section_names,
+        options::OPT_mrestrict_it,
+        options::OPT_mno_restrict_it,
+        options::OPT_mstackrealign,
+        options::OPT_mno_stackrealign,
+        options::OPT_mstack_alignment,
+        options::OPT_mcmodel_EQ,
+        options::OPT_mlong_calls,
+        options::OPT_mno_long_calls,
+        options::OPT_ggnu_pubnames,
+        options::OPT_gdwarf_aranges,
+        options::OPT_fdebug_types_section,
+        options::OPT_fno_debug_types_section,
+        options::OPT_fdwarf_directory_asm,
+        options::OPT_fno_dwarf_directory_asm,
+        options::OPT_mrelax_all,
+        options::OPT_mno_relax_all,
+        options::OPT_ftrap_function_EQ,
+        options::OPT_ffixed_r9,
+        options::OPT_mfix_cortex_a53_835769,
+        options::OPT_mno_fix_cortex_a53_835769,
+        options::OPT_ffixed_x18,
+        options::OPT_mglobal_merge,
+        options::OPT_mno_global_merge,
+        options::OPT_mred_zone,
+        options::OPT_mno_red_zone,
+        options::OPT_Wa_COMMA,
+        options::OPT_Xassembler,
+        options::OPT_mllvm,
+    };
+    for (const auto &A : Args)
+      if (std::find(std::begin(kBitcodeOptionBlacklist),
+                    std::end(kBitcodeOptionBlacklist),
+                    A->getOption().getID()) !=
+          std::end(kBitcodeOptionBlacklist))
+        D.Diag(diag::err_drv_unsupported_embed_bitcode) << A->getSpelling();
+
+    // Render the CodeGen options that need to be passed.
+    if (!Args.hasFlag(options::OPT_foptimize_sibling_calls,
+                      options::OPT_fno_optimize_sibling_calls))
+      CmdArgs.push_back("-mdisable-tail-calls");
+
+    RenderFloatingPointOptions(TC, D, isOptimizationLevelFast(Args), Args,
+                               CmdArgs);
+
+    // Render ABI arguments
+    switch (TC.getArch()) {
+    default: break;
+    case llvm::Triple::arm:
+    case llvm::Triple::armeb:
+    case llvm::Triple::thumbeb:
+      RenderARMABI(Triple, Args, CmdArgs);
+      break;
+    case llvm::Triple::aarch64:
+    case llvm::Triple::aarch64_be:
+      RenderAArch64ABI(Triple, Args, CmdArgs);
+      break;
+    }
+
+    // Optimization level for CodeGen.
+    if (const Arg *A = Args.getLastArg(options::OPT_O_Group)) {
+      if (A->getOption().matches(options::OPT_O4)) {
+        CmdArgs.push_back("-O3");
+        D.Diag(diag::warn_O4_is_O3);
+      } else {
+        A->render(Args, CmdArgs);
+      }
+    }
+
+    // Input/Output file.
+    if (Output.getType() == types::TY_Dependencies) {
+      // Handled with other dependency code.
+    } else if (Output.isFilename()) {
+      CmdArgs.push_back("-o");
+      CmdArgs.push_back(Output.getFilename());
+    } else {
+      assert(Output.isNothing() && "Input output.");
+    }
+
+    for (const auto &II : Inputs) {
+      addDashXForInput(Args, II, CmdArgs);
+      if (II.isFilename())
+        CmdArgs.push_back(II.getFilename());
+      else
+        II.getInputArg().renderAsInput(Args, CmdArgs);
+    }
+
+    C.addCommand(llvm::make_unique<Command>(JA, *this, D.getClangProgramPath(),
+                                            CmdArgs, Inputs));
+    return;
   }
+
   if (C.getDriver().embedBitcodeMarkerOnly() && !C.getDriver().isUsingLTO())
     CmdArgs.push_back("-fembed-bitcode=marker");
 
@@ -3697,7 +3893,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Add the split debug info name to the command lines here so we
   // can propagate it to the backend.
-  bool SplitDWARF = SplitDWARFArg && RawTriple.isOSLinux() &&
+  bool SplitDWARF = SplitDWARFArg &&
+                    (RawTriple.isOSLinux() || RawTriple.isOSFuchsia()) &&
                     (isa<AssembleJobAction>(JA) || isa<CompileJobAction>(JA) ||
                      isa<BackendJobAction>(JA));
   const char *SplitDWARFOut;
@@ -3984,6 +4181,17 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasArg(options::OPT_relocatable_pch))
     CmdArgs.push_back("-relocatable-pch");
 
+  if (const Arg *A = Args.getLastArg(options::OPT_fcf_runtime_abi_EQ)) {
+    static const char *kCFABIs[] = {
+      "standalone", "objc", "swift", "swift-5.0", "swift-4.2", "swift-4.1",
+    };
+
+    if (find(kCFABIs, StringRef(A->getValue())) == std::end(kCFABIs))
+      D.Diag(diag::err_drv_invalid_cf_runtime_abi) << A->getValue();
+    else
+      A->render(Args, CmdArgs);
+  }
+
   if (Arg *A = Args.getLastArg(options::OPT_fconstant_string_class_EQ)) {
     CmdArgs.push_back("-fconstant-string-class");
     CmdArgs.push_back(A->getValue());
@@ -4091,6 +4299,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       Args.AddLastArg(CmdArgs, options::OPT_fopenmp_simd,
                       options::OPT_fno_openmp_simd);
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_version_EQ);
+      Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_cuda_number_of_sm_EQ);
+      Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_cuda_blocks_per_sm_EQ);
 
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
@@ -4238,6 +4448,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     else
       A->render(Args, CmdArgs);
   }
+  Args.AddLastArg(CmdArgs, options::OPT_fprofile_remapping_file_EQ);
 
   RenderBuiltinOptions(TC, RawTriple, Args, CmdArgs);
 
@@ -4803,16 +5014,16 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(Flags));
   }
 
-  if (IsCuda) {
-    // Host-side cuda compilation receives all device-side outputs in a single
-    // fatbin as Inputs[1]. Include the binary with -fcuda-include-gpubinary.
-    if (CudaDeviceInput) {
+  // Host-side cuda compilation receives all device-side outputs in a single
+  // fatbin as Inputs[1]. Include the binary with -fcuda-include-gpubinary.
+  if ((IsCuda || IsHIP) && CudaDeviceInput) {
       CmdArgs.push_back("-fcuda-include-gpubinary");
       CmdArgs.push_back(CudaDeviceInput->getFilename());
-    }
+      if (Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc, false))
+        CmdArgs.push_back("-fgpu-rdc");
+  }
 
-    if (Args.hasFlag(options::OPT_fcuda_rdc, options::OPT_fno_cuda_rdc, false))
-      CmdArgs.push_back("-fcuda-rdc");
+  if (IsCuda) {
     if (Args.hasFlag(options::OPT_fcuda_short_ptr,
                      options::OPT_fno_cuda_short_ptr, false))
       CmdArgs.push_back("-fcuda-short-ptr");
@@ -4947,6 +5158,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                                                         CmdArgs, Inputs));
   } else {
     C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
+  }
+
+  // Make the compile command echo its inputs for /showFilenames.
+  if (Output.getType() == types::TY_Object &&
+      Args.hasFlag(options::OPT__SLASH_showFilenames,
+                   options::OPT__SLASH_showFilenames_, false)) {
+    C.getJobs().getJobs().back()->setPrintInputFilenames(true);
   }
 
   if (Arg *A = Args.getLastArg(options::OPT_pg))
@@ -5286,6 +5504,16 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
 
   if (VolatileOptionID == options::OPT__SLASH_volatile_ms)
     CmdArgs.push_back("-fms-volatile");
+
+ if (Args.hasFlag(options::OPT__SLASH_Zc_dllexportInlines_,
+                  options::OPT__SLASH_Zc_dllexportInlines,
+                  false)) {
+   if (Args.hasArg(options::OPT__SLASH_fallback)) {
+     D.Diag(clang::diag::err_drv_dllexport_inlines_and_fallback);
+   } else {
+    CmdArgs.push_back("-fno-dllexport-inlines");
+   }
+ }
 
   Arg *MostGeneralArg = Args.getLastArg(options::OPT__SLASH_vmg);
   Arg *BestCaseArg = Args.getLastArg(options::OPT__SLASH_vmb);
@@ -5634,8 +5862,9 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
+  const llvm::Triple &T = getToolChain().getTriple();
   if (Args.hasArg(options::OPT_gsplit_dwarf) &&
-      getToolChain().getTriple().isOSLinux()) {
+      (T.isOSLinux() || T.isOSFuchsia())) {
     CmdArgs.push_back("-split-dwarf-file");
     CmdArgs.push_back(SplitDebugName(Args, Input));
   }
