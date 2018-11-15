@@ -29,26 +29,24 @@ namespace orc {
 /// the context to prevent concurrent access by other threads.
 class ThreadSafeContext {
 private:
-
   struct State {
-    State(std::unique_ptr<LLVMContext> Ctx)
-      : Ctx(std::move(Ctx)) {}
+    State(std::unique_ptr<LLVMContext> Ctx) : Ctx(std::move(Ctx)) {}
 
     std::unique_ptr<LLVMContext> Ctx;
     std::recursive_mutex Mutex;
   };
 
 public:
-
   // RAII based lock for ThreadSafeContext.
   class LLVM_NODISCARD Lock {
   private:
     using UnderlyingLock = std::lock_guard<std::recursive_mutex>;
-  public:
 
+  public:
     Lock(std::shared_ptr<State> S)
-      : S(std::move(S)),
-        L(llvm::make_unique<UnderlyingLock>(this->S->Mutex)) {}
+        : S(std::move(S)),
+          L(llvm::make_unique<UnderlyingLock>(this->S->Mutex)) {}
+
   private:
     std::shared_ptr<State> S;
     std::unique_ptr<UnderlyingLock> L;
@@ -66,9 +64,11 @@ public:
 
   /// Returns a pointer to the LLVMContext that was used to construct this
   /// instance, or null if the instance was default constructed.
-  LLVMContext* getContext() {
-    return S ? S->Ctx.get() : nullptr;
-  }
+  LLVMContext *getContext() { return S ? S->Ctx.get() : nullptr; }
+
+  /// Returns a pointer to the LLVMContext that was used to construct this
+  /// instance, or null if the instance was default constructed.
+  const LLVMContext *getContext() const { return S ? S->Ctx.get() : nullptr; }
 
   Lock getLock() {
     assert(S && "Can not lock an empty ThreadSafeContext");
@@ -88,11 +88,17 @@ public:
 
   ThreadSafeModule(ThreadSafeModule &&Other) = default;
 
-  ThreadSafeModule& operator=(ThreadSafeModule &&Other) {
+  ThreadSafeModule &operator=(ThreadSafeModule &&Other) {
     // We have to explicitly define this move operator to copy the fields in
     // reverse order (i.e. module first) to ensure the dependencies are
     // protected: The old module that is being overwritten must be destroyed
     // *before* the context that it depends on.
+    // We also need to lock the context to make sure the module tear-down
+    // does not overlap any other work on the context.
+    if (M) {
+      auto L = getContextLock();
+      M = nullptr;
+    }
     M = std::move(Other.M);
     TSCtx = std::move(Other.TSCtx);
     return *this;
@@ -118,7 +124,10 @@ public:
   }
 
   /// Get the module wrapped by this ThreadSafeModule.
-  Module* getModule() { return M.get(); }
+  Module *getModule() { return M.get(); }
+
+  /// Get the module wrapped by this ThreadSafeModule.
+  const Module *getModule() const { return M.get(); }
 
   /// Take out a lock on the ThreadSafeContext for this module.
   ThreadSafeContext::Lock getContextLock() { return TSCtx.getLock(); }
@@ -127,7 +136,8 @@ public:
   /// wraps a non-null module.
   explicit operator bool() {
     if (M) {
-      assert(TSCtx.getContext() && "Non-null module must have non-null context");
+      assert(TSCtx.getContext() &&
+             "Non-null module must have non-null context");
       return true;
     }
     return false;
@@ -138,8 +148,8 @@ private:
   ThreadSafeContext TSCtx;
 };
 
-using GVPredicate = std::function<bool(const GlobalValue&)>;
-using GVModifier = std::function<void(GlobalValue&)>;
+using GVPredicate = std::function<bool(const GlobalValue &)>;
+using GVModifier = std::function<void(GlobalValue &)>;
 
 /// Clones the given module on to a new context.
 ThreadSafeModule

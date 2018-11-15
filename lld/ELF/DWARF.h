@@ -11,6 +11,7 @@
 #define LLD_ELF_DWARF_H
 
 #include "InputFiles.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/Object/ELF.h"
 
@@ -27,8 +28,9 @@ template <class ELFT> class LLDDwarfObj final : public llvm::DWARFObject {
 public:
   explicit LLDDwarfObj(ObjFile<ELFT> *Obj);
 
-  const llvm::DWARFSection &getInfoSection() const override {
-    return InfoSection;
+  void forEachInfoSections(
+      llvm::function_ref<void(const llvm::DWARFSection &)> F) const override {
+    F(InfoSection);
   }
 
   const llvm::DWARFSection &getRangeSection() const override {
@@ -39,17 +41,18 @@ public:
     return LineSection;
   }
 
-  StringRef getFileName() const override { return ""; }
-  StringRef getAbbrevSection() const override { return AbbrevSection; }
-  StringRef getStringSection() const override { return StrSection; }
-
-  StringRef getGnuPubNamesSection() const override {
+  const llvm::DWARFSection &getGnuPubNamesSection() const override {
     return GnuPubNamesSection;
   }
 
-  StringRef getGnuPubTypesSection() const override {
+  const llvm::DWARFSection &getGnuPubTypesSection() const override {
     return GnuPubTypesSection;
   }
+
+  StringRef getFileName() const override { return ""; }
+  StringRef getAbbrevSection() const override { return AbbrevSection; }
+  StringRef getStringSection() const override { return StrSection; }
+  StringRef getLineStringSection() const override { return LineStringSection; }
 
   bool isLittleEndian() const override {
     return ELFT::TargetEndianness == llvm::support::little;
@@ -64,14 +67,15 @@ private:
                                                uint64_t Pos,
                                                ArrayRef<RelTy> Rels) const;
 
+  LLDDWARFSection GnuPubNamesSection;
+  LLDDWARFSection GnuPubTypesSection;
   LLDDWARFSection InfoSection;
   LLDDWARFSection RangeSection;
   LLDDWARFSection LineSection;
 
   StringRef AbbrevSection;
-  StringRef GnuPubNamesSection;
-  StringRef GnuPubTypesSection;
   StringRef StrSection;
+  StringRef LineStringSection;
 };
 
 } // namespace elf

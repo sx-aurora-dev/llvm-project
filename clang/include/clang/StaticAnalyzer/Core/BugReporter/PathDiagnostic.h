@@ -118,7 +118,7 @@ public:
     /// Only runs visitors, no output generated.
     None,
 
-    /// Used for HTML and text output.
+    /// Used for HTML, SARIF, and text output.
     Minimal,
 
     /// Used for plist output, used for "arrows" generation.
@@ -632,7 +632,7 @@ public:
   }
 
   static std::shared_ptr<PathDiagnosticCallPiece>
-  construct(const ExplodedNode *N, const CallExitEnd &CE,
+  construct(const CallExitEnd &CE,
             const SourceManager &SM);
 
   static PathDiagnosticCallPiece *construct(PathPieces &pieces,

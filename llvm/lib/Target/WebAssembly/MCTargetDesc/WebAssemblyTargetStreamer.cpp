@@ -46,7 +46,7 @@ static void PrintTypes(formatted_raw_ostream &OS, ArrayRef<MVT> Types) {
       First = false;
     else
       OS << ", ";
-    OS << WebAssembly::TypeToString(Type);
+    OS << WebAssembly::TypeToString(WebAssembly::toValType(Type));
   }
   OS << '\n';
 }
@@ -85,22 +85,41 @@ void WebAssemblyTargetAsmStreamer::emitLocal(ArrayRef<MVT> Types) {
 void WebAssemblyTargetAsmStreamer::emitEndFunc() { OS << "\t.endfunc\n"; }
 
 void WebAssemblyTargetAsmStreamer::emitIndirectFunctionType(
-    MCSymbol *Symbol, SmallVectorImpl<MVT> &Params,
-    SmallVectorImpl<MVT> &Results) {
+    MCSymbolWasm *Symbol) {
   OS << "\t.functype\t" << Symbol->getName();
-  if (Results.empty())
+  if (Symbol->getSignature()->Returns.empty())
     OS << ", void";
   else {
-    assert(Results.size() == 1);
-    OS << ", " << WebAssembly::TypeToString(Results.front());
+    assert(Symbol->getSignature()->Returns.size() == 1);
+    OS << ", "
+       << WebAssembly::TypeToString(Symbol->getSignature()->Returns.front());
   }
-  for (auto Ty : Params)
+  for (auto Ty : Symbol->getSignature()->Params)
     OS << ", " << WebAssembly::TypeToString(Ty);
   OS << '\n';
 }
 
-void WebAssemblyTargetAsmStreamer::emitGlobalImport(StringRef name) {
-  OS << "\t.import_global\t" << name << '\n';
+void WebAssemblyTargetAsmStreamer::emitGlobalType(MCSymbolWasm *Sym) {
+  assert(Sym->isGlobal());
+  OS << "\t.globaltype\t" << Sym->getName() << ", " <<
+        WebAssembly::TypeToString(
+          static_cast<wasm::ValType>(Sym->getGlobalType().Type)) <<
+        '\n';
+}
+
+void WebAssemblyTargetAsmStreamer::emitEventType(MCSymbolWasm *Sym) {
+  assert(Sym->isEvent());
+  OS << "\t.eventtype\t" << Sym->getName();
+  if (Sym->getSignature()->Returns.empty())
+    OS << ", void";
+  else {
+    assert(Sym->getSignature()->Returns.size() == 1);
+    OS << ", "
+       << WebAssembly::TypeToString(Sym->getSignature()->Returns.front());
+  }
+  for (auto Ty : Sym->getSignature()->Params)
+    OS << ", " << WebAssembly::TypeToString(Ty);
+  OS << '\n';
 }
 
 void WebAssemblyTargetAsmStreamer::emitImportModule(MCSymbolWasm *Sym,
@@ -114,20 +133,12 @@ void WebAssemblyTargetAsmStreamer::emitIndIdx(const MCExpr *Value) {
 
 void WebAssemblyTargetWasmStreamer::emitParam(MCSymbol *Symbol,
                                               ArrayRef<MVT> Types) {
-  SmallVector<wasm::ValType, 4> Params;
-  for (MVT Ty : Types)
-    Params.push_back(WebAssembly::toValType(Ty));
-
-  cast<MCSymbolWasm>(Symbol)->setParams(std::move(Params));
+  // The Symbol already has its signature
 }
 
 void WebAssemblyTargetWasmStreamer::emitResult(MCSymbol *Symbol,
                                                ArrayRef<MVT> Types) {
-  SmallVector<wasm::ValType, 4> Returns;
-  for (MVT Ty : Types)
-    Returns.push_back(WebAssembly::toValType(Ty));
-
-  cast<MCSymbolWasm>(Symbol)->setReturns(std::move(Returns));
+  // The Symbol already has its signature
 }
 
 void WebAssemblyTargetWasmStreamer::emitLocal(ArrayRef<MVT> Types) {
@@ -155,31 +166,18 @@ void WebAssemblyTargetWasmStreamer::emitIndIdx(const MCExpr *Value) {
 }
 
 void WebAssemblyTargetWasmStreamer::emitIndirectFunctionType(
-    MCSymbol *Symbol, SmallVectorImpl<MVT> &Params,
-    SmallVectorImpl<MVT> &Results) {
-  MCSymbolWasm *WasmSym = cast<MCSymbolWasm>(Symbol);
-  if (WasmSym->isFunction()) {
-    // Symbol already has its arguments and result set.
-    return;
-  }
-
-  SmallVector<wasm::ValType, 4> ValParams;
-  for (MVT Ty : Params)
-    ValParams.push_back(WebAssembly::toValType(Ty));
-
-  SmallVector<wasm::ValType, 1> ValResults;
-  for (MVT Ty : Results)
-    ValResults.push_back(WebAssembly::toValType(Ty));
-
-  WasmSym->setParams(std::move(ValParams));
-  WasmSym->setReturns(std::move(ValResults));
-  WasmSym->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
+    MCSymbolWasm *Symbol) {
+  // Symbol already has its arguments and result set.
+  Symbol->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
 }
 
-void WebAssemblyTargetWasmStreamer::emitGlobalImport(StringRef name) {
-  llvm_unreachable(".global_import is not needed for direct wasm output");
+void WebAssemblyTargetWasmStreamer::emitGlobalType(MCSymbolWasm *Sym) {
+  // Not needed.
 }
 
+void WebAssemblyTargetWasmStreamer::emitEventType(MCSymbolWasm *Sym) {
+  // Not needed.
+}
 void WebAssemblyTargetWasmStreamer::emitImportModule(MCSymbolWasm *Sym,
                                                      StringRef ModuleName) {
   Sym->setModuleName(ModuleName);

@@ -107,6 +107,7 @@ WasmDumper::dumpCustomSection(const WasmSection &WasmSec) {
         break;
       case wasm::WASM_SYMBOL_TYPE_FUNCTION:
       case wasm::WASM_SYMBOL_TYPE_GLOBAL:
+      case wasm::WASM_SYMBOL_TYPE_EVENT:
         Info.ElementIndex = Symbol.ElementIndex;
         break;
       case wasm::WASM_SYMBOL_TYPE_SECTION:
@@ -155,9 +156,13 @@ ErrorOr<WasmYAML::Object *> WasmDumper::dump() {
       for (const auto &FunctionSig : Obj.types()) {
         WasmYAML::Signature Sig;
         Sig.Index = Index++;
-        Sig.ReturnType = FunctionSig.ReturnType;
-        for (const auto &ParamType : FunctionSig.ParamTypes)
-          Sig.ParamTypes.push_back(ParamType);
+        Sig.ReturnType = wasm::WASM_TYPE_NORESULT;
+        assert(FunctionSig.Returns.size() <= 1 &&
+               "Functions with multiple returns are not supported");
+        if (FunctionSig.Returns.size())
+          Sig.ReturnType = static_cast<uint32_t>(FunctionSig.Returns[0]);
+        for (const auto &ParamType : FunctionSig.Params)
+          Sig.ParamTypes.push_back(static_cast<uint32_t>(ParamType));
         TypeSec->Signatures.push_back(Sig);
       }
       S = std::move(TypeSec);
@@ -177,6 +182,10 @@ ErrorOr<WasmYAML::Object *> WasmDumper::dump() {
         case wasm::WASM_EXTERNAL_GLOBAL:
           Im.GlobalImport.Type = Import.Global.Type;
           Im.GlobalImport.Mutable = Import.Global.Mutable;
+          break;
+        case wasm::WASM_EXTERNAL_EVENT:
+          Im.EventImport.Attribute = Import.Event.Attribute;
+          Im.EventImport.SigIndex = Import.Event.SigIndex;
           break;
         case wasm::WASM_EXTERNAL_TABLE:
           Im.TableImport = make_table(Import.Table);
@@ -225,6 +234,18 @@ ErrorOr<WasmYAML::Object *> WasmDumper::dump() {
         GlobalSec->Globals.push_back(G);
       }
       S = std::move(GlobalSec);
+      break;
+    }
+    case wasm::WASM_SEC_EVENT: {
+      auto EventSec = make_unique<WasmYAML::EventSection>();
+      for (auto &Event : Obj.events()) {
+        WasmYAML::Event E;
+        E.Index = Event.Index;
+        E.Attribute = Event.Type.Attribute;
+        E.SigIndex = Event.Type.SigIndex;
+        EventSec->Events.push_back(E);
+      }
+      S = std::move(EventSec);
       break;
     }
     case wasm::WASM_SEC_START: {

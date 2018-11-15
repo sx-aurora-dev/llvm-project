@@ -17,11 +17,10 @@
 #include "HWEventListener.h"
 #include "llvm/Support/Debug.h"
 
+namespace llvm {
 namespace mca {
 
 #define DEBUG_TYPE "llvm-mca"
-
-using namespace llvm;
 
 void Pipeline::addEventListener(HWEventListener *Listener) {
   if (Listener)
@@ -31,26 +30,27 @@ void Pipeline::addEventListener(HWEventListener *Listener) {
 }
 
 bool Pipeline::hasWorkToProcess() {
-  return llvm::any_of(Stages, [](const std::unique_ptr<Stage> &S) {
+  return any_of(Stages, [](const std::unique_ptr<Stage> &S) {
     return S->hasWorkToComplete();
   });
 }
 
-llvm::Error Pipeline::run() {
+Error Pipeline::run() {
   assert(!Stages.empty() && "Unexpected empty pipeline found!");
 
-  while (hasWorkToProcess()) {
+  do {
     notifyCycleBegin();
-    if (llvm::Error Err = runCycle())
+    if (Error Err = runCycle())
       return Err;
     notifyCycleEnd();
     ++Cycles;
-  }
-  return llvm::ErrorSuccess();
+  } while (hasWorkToProcess());
+
+  return ErrorSuccess();
 }
 
-llvm::Error Pipeline::runCycle() {
-  llvm::Error Err = llvm::ErrorSuccess();
+Error Pipeline::runCycle() {
+  Error Err = ErrorSuccess();
   // Update stages before we start processing new instructions.
   for (auto I = Stages.rbegin(), E = Stages.rend(); I != E && !Err; ++I) {
     const std::unique_ptr<Stage> &S = *I;
@@ -94,3 +94,4 @@ void Pipeline::notifyCycleEnd() {
     Listener->onCycleEnd();
 }
 } // namespace mca.
+} // namespace llvm

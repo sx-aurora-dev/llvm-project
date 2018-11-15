@@ -546,7 +546,8 @@ static void updateStackPiecesWithMessage(PathDiagnosticPiece &P,
   }
 }
 
-static void CompactPathDiagnostic(PathPieces &path, const SourceManager& SM);
+static void CompactMacroExpandedPieces(PathPieces &path,
+                                       const SourceManager& SM);
 
 
 std::shared_ptr<PathDiagnosticControlFlowPiece> generateDiagForSwitchOP(
@@ -841,7 +842,7 @@ static void reversePropagateIntererstingSymbols(BugReport &R,
     default:
       if (!isa<CastExpr>(Ex))
         break;
-      // Fall through.
+      LLVM_FALLTHROUGH;
     case Stmt::BinaryOperatorClass:
     case Stmt::UnaryOperatorClass: {
       for (const Stmt *SubStmt : Ex->children()) {
@@ -861,8 +862,7 @@ static void reversePropagateIntererstingSymbols(BugReport &R,
 static void reversePropagateInterestingSymbols(BugReport &R,
                                                InterestingExprs &IE,
                                                const ProgramState *State,
-                                               const LocationContext *CalleeCtx,
-                                               const LocationContext *CallerCtx)
+                                               const LocationContext *CalleeCtx)
 {
   // FIXME: Handle non-CallExpr-based CallEvents.
   const StackFrameContext *Callee = CalleeCtx->getStackFrame();
@@ -967,8 +967,7 @@ static bool isInLoopBody(ParentMap &PM, const Stmt *S, const Stmt *Term) {
 /// Adds a sanitized control-flow diagnostic edge to a path.
 static void addEdgeToPath(PathPieces &path,
                           PathDiagnosticLocation &PrevLoc,
-                          PathDiagnosticLocation NewLoc,
-                          const LocationContext *LC) {
+                          PathDiagnosticLocation NewLoc) {
   if (!NewLoc.isValid())
     return;
 
@@ -1043,7 +1042,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
       // not from declaration.
       if (D->hasBody())
         addEdgeToPath(PD.getActivePath(), PrevLoc,
-            PathDiagnosticLocation::createBegin(D, SM), CalleeLC);
+            PathDiagnosticLocation::createBegin(D, SM));
     }
 
     // Did we visit an entire call?
@@ -1108,7 +1107,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
 
     // We are descending into a call (backwards).  Construct
     // a new call piece to contain the path pieces for that call.
-    auto C = PathDiagnosticCallPiece::construct(N, *CE, SM);
+    auto C = PathDiagnosticCallPiece::construct(*CE, SM);
     // Record the mapping from call piece to LocationContext.
     LCM[&C->path] = CE->getCalleeContext();
 
@@ -1121,7 +1120,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
             N->getLocationContext());
       }
       // Add the edge to the return site.
-      addEdgeToPath(PD.getActivePath(), PrevLoc, C->callReturn, PDB.LC);
+      addEdgeToPath(PD.getActivePath(), PrevLoc, C->callReturn);
       PrevLoc.invalidate();
     }
 
@@ -1151,7 +1150,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
     if (!isa<ObjCForCollectionStmt>(PS->getStmt())) {
       PathDiagnosticLocation L =
         PathDiagnosticLocation(PS->getStmt(), SM, PDB.LC);
-      addEdgeToPath(PD.getActivePath(), PrevLoc, L, PDB.LC);
+      addEdgeToPath(PD.getActivePath(), PrevLoc, L);
     }
 
   } else if (auto BE = P.getAs<BlockEdge>()) {
@@ -1168,8 +1167,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
       const LocationContext *CalleeCtx = PDB.LC;
       if (CallerCtx != CalleeCtx && AddPathEdges) {
         reversePropagateInterestingSymbols(*PDB.getBugReport(), IE,
-            N->getState().get(),
-            CalleeCtx, CallerCtx);
+            N->getState().get(), CalleeCtx);
       }
     }
 
@@ -1194,13 +1192,12 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
           "of the loop");
       p->setPrunable(true);
 
-      addEdgeToPath(PD.getActivePath(), PrevLoc, p->getLocation(), PDB.LC);
+      addEdgeToPath(PD.getActivePath(), PrevLoc, p->getLocation());
       PD.getActivePath().push_front(std::move(p));
 
       if (const auto *CS = dyn_cast_or_null<CompoundStmt>(Body)) {
         addEdgeToPath(PD.getActivePath(), PrevLoc,
-            PathDiagnosticLocation::createEndBrace(CS, SM),
-            PDB.LC);
+            PathDiagnosticLocation::createEndBrace(CS, SM));
       }
     }
 
@@ -1236,13 +1233,13 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
           auto PE = std::make_shared<PathDiagnosticEventPiece>(L, str);
           PE->setPrunable(true);
           addEdgeToPath(PD.getActivePath(), PrevLoc,
-              PE->getLocation(), PDB.LC);
+              PE->getLocation());
           PD.getActivePath().push_front(std::move(PE));
         }
       } else if (isa<BreakStmt>(Term) || isa<ContinueStmt>(Term) ||
           isa<GotoStmt>(Term)) {
         PathDiagnosticLocation L(Term, SM, PDB.LC);
-        addEdgeToPath(PD.getActivePath(), PrevLoc, L, PDB.LC);
+        addEdgeToPath(PD.getActivePath(), PrevLoc, L);
       }
     }
   }
@@ -1269,7 +1266,7 @@ static const Stmt *getStmtParent(const Stmt *S, const ParentMap &PM) {
     if (!S)
       break;
 
-    if (isa<ExprWithCleanups>(S) ||
+    if (isa<FullExpr>(S) ||
         isa<CXXBindTemporaryExpr>(S) ||
         isa<SubstNonTypeTemplateParmExpr>(S))
       continue;
@@ -1540,8 +1537,7 @@ static Optional<size_t> getLengthOnSingleLine(SourceManager &SM,
 /// - if there is an inlined call between the edges instead of a single event.
 /// - if the whole statement is large enough that having subexpression arrows
 ///   might be helpful.
-static void removeContextCycles(PathPieces &Path, SourceManager &SM,
-                                ParentMap &PM) {
+static void removeContextCycles(PathPieces &Path, SourceManager &SM) {
   for (PathPieces::iterator I = Path.begin(), E = Path.end(); I != E; ) {
     // Pattern match the current piece and its successor.
     const auto *PieceI = dyn_cast<PathDiagnosticControlFlowPiece>(I->get());
@@ -1844,7 +1840,7 @@ static bool optimizeEdges(PathPieces &path, SourceManager &SM,
     // and aesthetically pleasing.
     addContextEdges(path, SM, PM, LC);
     // Remove "cyclical" edges that include one or more context edges.
-    removeContextCycles(path, SM, PM);
+    removeContextCycles(path, SM);
     // Hoist edges originating from branch conditions to branches
     // for simple branches.
     simplifySimpleBranches(path);
@@ -1962,8 +1958,7 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
         continue;
 
       if (AddPathEdges)
-        addEdgeToPath(PD->getActivePath(), PrevLoc, Note->getLocation(),
-                      PDB.LC);
+        addEdgeToPath(PD->getActivePath(), PrevLoc, Note->getLocation());
       updateStackPiecesWithMessage(*Note, CallStack);
       PD->getActivePath().push_front(Note);
     }
@@ -1975,11 +1970,9 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
     const StackFrameContext *CalleeLC = PDB.LC->getStackFrame();
     const Decl *D = CalleeLC->getDecl();
     addEdgeToPath(PD->getActivePath(), PrevLoc,
-                  PathDiagnosticLocation::createBegin(D, SM), CalleeLC);
+                  PathDiagnosticLocation::createBegin(D, SM));
   }
 
-  if (!AddPathEdges && GenerateDiagnostics)
-    CompactPathDiagnostic(PD->getMutablePieces(), SM);
 
   // Finally, prune the diagnostic path of uninteresting stuff.
   if (!PD->path.empty()) {
@@ -2013,6 +2006,10 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
     removeRedundantMsgs(PD->getMutablePieces());
     removeEdgesToDefaultInitializers(PD->getMutablePieces());
   }
+
+  if (GenerateDiagnostics && Opts.shouldDisplayMacroExpansions())
+    CompactMacroExpandedPieces(PD->getMutablePieces(), SM);
+
   return PD;
 }
 
@@ -2442,9 +2439,10 @@ bool TrimmedGraph::popNextReportGraph(ReportGraph &GraphWrapper) {
   return true;
 }
 
-/// CompactPathDiagnostic - This function postprocesses a PathDiagnostic object
-///  and collapses PathDiagosticPieces that are expanded by macros.
-static void CompactPathDiagnostic(PathPieces &path, const SourceManager& SM) {
+/// CompactMacroExpandedPieces - This function postprocesses a PathDiagnostic
+/// object and collapses PathDiagosticPieces that are expanded by macros.
+static void CompactMacroExpandedPieces(PathPieces &path,
+                                       const SourceManager& SM) {
   using MacroStackTy =
       std::vector<
           std::pair<std::shared_ptr<PathDiagnosticMacroPiece>, SourceLocation>>;
@@ -2460,7 +2458,7 @@ static void CompactPathDiagnostic(PathPieces &path, const SourceManager& SM) {
 
     // Recursively compact calls.
     if (auto *call = dyn_cast<PathDiagnosticCallPiece>(&*piece)) {
-      CompactPathDiagnostic(call->path, SM);
+      CompactMacroExpandedPieces(call->path, SM);
     }
 
     // Get the location of the PathDiagnosticPiece.
@@ -2574,7 +2572,7 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
     }
 
     for (auto &V : visitors) {
-      auto P = V->VisitNode(NextNode, Pred, BRC, *R);
+      auto P = V->VisitNode(NextNode, BRC, *R);
       if (P)
         (*Notes)[NextNode].push_back(std::move(P));
     }
