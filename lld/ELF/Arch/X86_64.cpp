@@ -43,8 +43,8 @@ public:
   void relaxTlsGdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const override;
   void relaxTlsIeToLe(uint8_t *Loc, RelType Type, uint64_t Val) const override;
   void relaxTlsLdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const override;
-  bool adjustPrologueForCrossSplitStack(uint8_t *Loc,
-                                        uint8_t *End) const override;
+  bool adjustPrologueForCrossSplitStack(uint8_t *Loc, uint8_t *End,
+                                        uint8_t StOther) const override;
 
 private:
   void relaxGotNoPic(uint8_t *Loc, uint64_t Val, uint8_t Op,
@@ -67,7 +67,7 @@ template <class ELFT> X86_64<ELFT>::X86_64() {
   PltEntrySize = 16;
   PltHeaderSize = 16;
   TlsGdRelaxSkip = 2;
-  TrapInstr = 0xcccccccc; // 0xcc = INT3
+  TrapInstr = {0xcc, 0xcc, 0xcc, 0xcc}; // 0xcc = INT3
 
   // Align to the large page size (known as a superpage or huge page).
   // FreeBSD automatically promotes large, superpage-aligned allocations.
@@ -482,7 +482,8 @@ namespace {
 // B) Or a load of a stack pointer offset with an lea to r10 or r11.
 template <>
 bool X86_64<ELF64LE>::adjustPrologueForCrossSplitStack(uint8_t *Loc,
-                                                       uint8_t *End) const {
+                                                       uint8_t *End,
+                                                       uint8_t StOther) const {
   if (Loc + 8 >= End)
     return false;
 
@@ -509,7 +510,8 @@ bool X86_64<ELF64LE>::adjustPrologueForCrossSplitStack(uint8_t *Loc,
 
 template <>
 bool X86_64<ELF32LE>::adjustPrologueForCrossSplitStack(uint8_t *Loc,
-                                                       uint8_t *End) const {
+                                                       uint8_t *End,
+                                                       uint8_t StOther) const {
   llvm_unreachable("Target doesn't support split stacks.");
 }
 

@@ -50,6 +50,7 @@
 #include "SyntheticSections.h"
 #include "Target.h"
 #include "Thunks.h"
+#include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Strings.h"
 #include "llvm/ADT/SmallSet.h"
@@ -270,8 +271,8 @@ handleTlsRelocation(RelType Type, Symbol &Sym, InputSectionBase &C,
 
   // Initial-Exec relocs can be relaxed to Local-Exec if the symbol is locally
   // defined.
-  if (isRelExprOneOf<R_GOT, R_GOT_FROM_END, R_GOT_PC, R_GOT_PAGE_PC, R_GOT_OFF,
-                     R_TLSIE_HINT>(Expr) &&
+  if (isRelExprOneOf<R_GOT, R_GOT_FROM_END, R_GOT_PC, R_AARCH64_GOT_PAGE_PC,
+                     R_GOT_OFF, R_TLSIE_HINT>(Expr) &&
       !Config->Shared && !Sym.IsPreemptible) {
     C.Relocations.push_back({R_RELAX_TLS_IE_TO_LE, Type, Offset, Addend, &Sym});
     return 1;
@@ -330,9 +331,9 @@ static bool needsPlt(RelExpr Expr) {
 // returns false for TLS variables even though they need GOT, because
 // TLS variables uses GOT differently than the regular variables.
 static bool needsGot(RelExpr Expr) {
-  return isRelExprOneOf<R_GOT, R_GOT_OFF, R_MIPS_GOT_LOCAL_PAGE, R_MIPS_GOT_OFF,
-                        R_MIPS_GOT_OFF32, R_GOT_PAGE_PC, R_GOT_PC,
-                        R_GOT_FROM_END>(Expr);
+  return isRelExprOneOf<R_GOT, R_GOT_OFF, R_HEXAGON_GOT, R_MIPS_GOT_LOCAL_PAGE,
+                        R_MIPS_GOT_OFF, R_MIPS_GOT_OFF32, R_AARCH64_GOT_PAGE_PC,
+                        R_GOT_PC, R_GOT_FROM_END>(Expr);
 }
 
 // True if this expression is of the form Sym - X, where X is a position in the
@@ -355,13 +356,14 @@ static bool isRelExpr(RelExpr Expr) {
 static bool isStaticLinkTimeConstant(RelExpr E, RelType Type, const Symbol &Sym,
                                      InputSectionBase &S, uint64_t RelOff) {
   // These expressions always compute a constant
-  if (isRelExprOneOf<
-          R_GOT_FROM_END, R_GOT_OFF, R_TLSLD_GOT_OFF, R_MIPS_GOT_LOCAL_PAGE,
-          R_MIPS_GOTREL, R_MIPS_GOT_OFF, R_MIPS_GOT_OFF32, R_MIPS_GOT_GP_PC,
-          R_MIPS_TLSGD, R_GOT_PAGE_PC, R_GOT_PC, R_GOTONLY_PC,
-          R_GOTONLY_PC_FROM_END, R_PLT_PC, R_TLSGD_GOT, R_TLSGD_GOT_FROM_END,
-          R_TLSGD_PC, R_PPC_CALL_PLT, R_TLSDESC_CALL, R_TLSDESC_PAGE, R_HINT,
-          R_TLSLD_HINT, R_TLSIE_HINT>(E))
+  if (isRelExprOneOf<R_GOT_FROM_END, R_GOT_OFF, R_HEXAGON_GOT, R_TLSLD_GOT_OFF,
+                     R_MIPS_GOT_LOCAL_PAGE, R_MIPS_GOTREL, R_MIPS_GOT_OFF,
+                     R_MIPS_GOT_OFF32, R_MIPS_GOT_GP_PC, R_MIPS_TLSGD,
+                     R_AARCH64_GOT_PAGE_PC, R_GOT_PC, R_GOTONLY_PC,
+                     R_GOTONLY_PC_FROM_END, R_PLT_PC, R_TLSGD_GOT,
+                     R_TLSGD_GOT_FROM_END, R_TLSGD_PC, R_PPC_CALL_PLT,
+                     R_TLSDESC_CALL, R_TLSDESC_PAGE, R_HINT, R_TLSLD_HINT,
+                     R_TLSIE_HINT>(E))
     return true;
 
   // These never do, except if the entire file is position dependent or if
@@ -487,6 +489,7 @@ static void replaceWithDefined(Symbol &Sym, SectionBase *Sec, uint64_t Value,
   Sym.PltIndex = Old.PltIndex;
   Sym.GotIndex = Old.GotIndex;
   Sym.VerdefIndex = Old.VerdefIndex;
+  Sym.PPC64BranchltIndex = Old.PPC64BranchltIndex;
   Sym.IsPreemptible = true;
   Sym.ExportDynamic = true;
   Sym.IsUsedInRegularObj = true;
@@ -581,7 +584,7 @@ static int64_t computeMipsAddend(const RelTy &Rel, const RelTy *End,
   if (PairTy == R_MIPS_NONE)
     return 0;
 
-  const uint8_t *Buf = Sec.Data.data();
+  const uint8_t *Buf = Sec.data().data();
   uint32_t SymIndex = Rel.getSymbol(Config->IsMips64EL);
 
   // To make things worse, paired relocations might not be contiguous in
@@ -609,7 +612,7 @@ static int64_t computeAddend(const RelTy &Rel, const RelTy *End,
   if (RelTy::IsRela) {
     Addend = getAddend<ELFT>(Rel);
   } else {
-    const uint8_t *Buf = Sec.Data.data();
+    const uint8_t *Buf = Sec.data().data();
     Addend = Target->getImplicitAddend(Buf + Rel.r_offset, Type);
   }
 
@@ -961,7 +964,7 @@ static void scanReloc(InputSectionBase &Sec, OffsetGetter &GetOffset, RelTy *&I,
   if (maybeReportUndefined(Sym, Sec, Rel.r_offset))
     return;
 
-  const uint8_t *RelocatedAddr = Sec.Data.begin() + Rel.r_offset;
+  const uint8_t *RelocatedAddr = Sec.data().begin() + Rel.r_offset;
   RelExpr Expr = Target->getRelExpr(Type, Sym, RelocatedAddr);
 
   // Ignore "hint" relocations because they are only markers for relaxation.
@@ -979,12 +982,22 @@ static void scanReloc(InputSectionBase &Sec, OffsetGetter &GetOffset, RelTy *&I,
   // all dynamic symbols that can be resolved within the executable will
   // actually be resolved that way at runtime, because the main exectuable
   // is always at the beginning of a search list. We can leverage that fact.
-  if (Sym.isGnuIFunc())
+  if (Sym.isGnuIFunc()) {
+    if (!Config->ZText && Config->WarnIfuncTextrel) {
+      warn("using ifunc symbols when text relocations are allowed may produce "
+           "a binary that will segfault, if the object file is linked with "
+           "old version of glibc (glibc 2.28 and earlier). If this applies to "
+           "you, consider recompiling the object files without -fPIC and "
+           "without -Wl,-z,notext option. Use -no-warn-ifunc-textrel to "
+           "turn off this warning." +
+           getLocation(Sec, Sym, Offset));
+    }
     Expr = toPlt(Expr);
-  else if (!Sym.IsPreemptible && Expr == R_GOT_PC && !isAbsoluteValue(Sym))
+  } else if (!Sym.IsPreemptible && Expr == R_GOT_PC && !isAbsoluteValue(Sym)) {
     Expr = Target->adjustRelaxExpr(Type, RelocatedAddr, Expr);
-  else if (!Sym.IsPreemptible)
+  } else if (!Sym.IsPreemptible) {
     Expr = fromPlt(Expr);
+  }
 
   // This relocation does not require got entry, but it is relative to got and
   // needs it to be created. Here we request for that.
@@ -1052,6 +1065,43 @@ template <class ELFT> void elf::scanRelocations(InputSectionBase &S) {
     scanRelocs<ELFT>(S, S.relas<ELFT>());
   else
     scanRelocs<ELFT>(S, S.rels<ELFT>());
+}
+
+static bool mergeCmp(const InputSection *A, const InputSection *B) {
+  // std::merge requires a strict weak ordering.
+  if (A->OutSecOff < B->OutSecOff)
+    return true;
+
+  if (A->OutSecOff == B->OutSecOff) {
+    auto *TA = dyn_cast<ThunkSection>(A);
+    auto *TB = dyn_cast<ThunkSection>(B);
+
+    // Check if Thunk is immediately before any specific Target
+    // InputSection for example Mips LA25 Thunks.
+    if (TA && TA->getTargetInputSection() == B)
+      return true;
+
+    // Place Thunk Sections without specific targets before
+    // non-Thunk Sections.
+    if (TA && !TB && !TA->getTargetInputSection())
+      return true;
+  }
+
+  return false;
+}
+
+// Call Fn on every executable InputSection accessed via the linker script
+// InputSectionDescription::Sections.
+static void forEachInputSectionDescription(
+    ArrayRef<OutputSection *> OutputSections,
+    llvm::function_ref<void(OutputSection *, InputSectionDescription *)> Fn) {
+  for (OutputSection *OS : OutputSections) {
+    if (!(OS->Flags & SHF_ALLOC) || !(OS->Flags & SHF_EXECINSTR))
+      continue;
+    for (BaseCommand *BC : OS->SectionCommands)
+      if (auto *ISD = dyn_cast<InputSectionDescription>(BC))
+        Fn(OS, ISD);
+  }
 }
 
 // Thunk Implementation
@@ -1156,6 +1206,7 @@ void ThunkCreator::mergeThunks(ArrayRef<OutputSection *> OutputSections) {
                        [](const std::pair<ThunkSection *, uint32_t> &TS) {
                          return TS.first->getSize() == 0;
                        });
+
         // ISD->ThunkSections contains all created ThunkSections, including
         // those inserted in previous passes. Extract the Thunks created this
         // pass and order them in ascending OutSecOff.
@@ -1171,27 +1222,11 @@ void ThunkCreator::mergeThunks(ArrayRef<OutputSection *> OutputSections) {
         // Merge sorted vectors of Thunks and InputSections by OutSecOff
         std::vector<InputSection *> Tmp;
         Tmp.reserve(ISD->Sections.size() + NewThunks.size());
-        auto MergeCmp = [](const InputSection *A, const InputSection *B) {
-          // std::merge requires a strict weak ordering.
-          if (A->OutSecOff < B->OutSecOff)
-            return true;
-          if (A->OutSecOff == B->OutSecOff) {
-            auto *TA = dyn_cast<ThunkSection>(A);
-            auto *TB = dyn_cast<ThunkSection>(B);
-            // Check if Thunk is immediately before any specific Target
-            // InputSection for example Mips LA25 Thunks.
-            if (TA && TA->getTargetInputSection() == B)
-              return true;
-            if (TA && !TB && !TA->getTargetInputSection())
-              // Place Thunk Sections without specific targets before
-              // non-Thunk Sections.
-              return true;
-          }
-          return false;
-        };
+
         std::merge(ISD->Sections.begin(), ISD->Sections.end(),
                    NewThunks.begin(), NewThunks.end(), std::back_inserter(Tmp),
-                   MergeCmp);
+                   mergeCmp);
+
         ISD->Sections = std::move(Tmp);
       });
 }
@@ -1235,20 +1270,23 @@ ThunkSection *ThunkCreator::getISThunkSec(InputSection *IS) {
   // Find InputSectionRange within Target Output Section (TOS) that the
   // InputSection (IS) that we need to precede is in.
   OutputSection *TOS = IS->getParent();
-  for (BaseCommand *BC : TOS->SectionCommands)
-    if (auto *ISD = dyn_cast<InputSectionDescription>(BC)) {
-      if (ISD->Sections.empty())
-        continue;
-      InputSection *first = ISD->Sections.front();
-      InputSection *last = ISD->Sections.back();
-      if (IS->OutSecOff >= first->OutSecOff &&
-          IS->OutSecOff <= last->OutSecOff) {
-        TS = addThunkSection(TOS, ISD, IS->OutSecOff);
-        ThunkedSections[IS] = TS;
-        break;
-      }
-    }
-  return TS;
+  for (BaseCommand *BC : TOS->SectionCommands) {
+    auto *ISD = dyn_cast<InputSectionDescription>(BC);
+    if (!ISD || ISD->Sections.empty())
+      continue;
+
+    InputSection *First = ISD->Sections.front();
+    InputSection *Last = ISD->Sections.back();
+
+    if (IS->OutSecOff < First->OutSecOff || Last->OutSecOff < IS->OutSecOff)
+      continue;
+
+    TS = addThunkSection(TOS, ISD, IS->OutSecOff);
+    ThunkedSections[IS] = TS;
+    return TS;
+  }
+
+  return nullptr;
 }
 
 // Create one or more ThunkSections per OS that can be used to place Thunks.
@@ -1270,10 +1308,12 @@ ThunkSection *ThunkCreator::getISThunkSec(InputSection *IS) {
 void ThunkCreator::createInitialThunkSections(
     ArrayRef<OutputSection *> OutputSections) {
   uint32_t ThunkSectionSpacing = Target->getThunkSectionSpacing();
+
   forEachInputSectionDescription(
       OutputSections, [&](OutputSection *OS, InputSectionDescription *ISD) {
         if (ISD->Sections.empty())
           return;
+
         uint32_t ISDBegin = ISD->Sections.front()->OutSecOff;
         uint32_t ISDEnd =
             ISD->Sections.back()->OutSecOff + ISD->Sections.back()->getSize();
@@ -1303,13 +1343,14 @@ ThunkSection *ThunkCreator::addThunkSection(OutputSection *OS,
                                             InputSectionDescription *ISD,
                                             uint64_t Off) {
   auto *TS = make<ThunkSection>(OS, Off);
-  ISD->ThunkSections.push_back(std::make_pair(TS, Pass));
+  ISD->ThunkSections.push_back({TS, Pass});
   return TS;
 }
 
 std::pair<Thunk *, bool> ThunkCreator::getThunk(Symbol &Sym, RelType Type,
                                                 uint64_t Src) {
   std::vector<Thunk *> *ThunkVec = nullptr;
+
   // We use (section, offset) pair to find the thunk position if possible so
   // that we create only one thunk for aliased symbols or ICFed sections.
   if (auto *D = dyn_cast<Defined>(&Sym))
@@ -1317,29 +1358,17 @@ std::pair<Thunk *, bool> ThunkCreator::getThunk(Symbol &Sym, RelType Type,
       ThunkVec = &ThunkedSymbolsBySection[{D->Section->Repl, D->Value}];
   if (!ThunkVec)
     ThunkVec = &ThunkedSymbols[&Sym];
+
   // Check existing Thunks for Sym to see if they can be reused
-  for (Thunk *ET : *ThunkVec)
-    if (ET->isCompatibleWith(Type) &&
-        Target->inBranchRange(Type, Src, ET->getThunkTargetSym()->getVA()))
-      return std::make_pair(ET, false);
+  for (Thunk *T : *ThunkVec)
+    if (T->isCompatibleWith(Type) &&
+        Target->inBranchRange(Type, Src, T->getThunkTargetSym()->getVA()))
+      return std::make_pair(T, false);
+
   // No existing compatible Thunk in range, create a new one
   Thunk *T = addThunk(Type, Sym);
   ThunkVec->push_back(T);
   return std::make_pair(T, true);
-}
-
-// Call Fn on every executable InputSection accessed via the linker script
-// InputSectionDescription::Sections.
-void ThunkCreator::forEachInputSectionDescription(
-    ArrayRef<OutputSection *> OutputSections,
-    llvm::function_ref<void(OutputSection *, InputSectionDescription *)> Fn) {
-  for (OutputSection *OS : OutputSections) {
-    if (!(OS->Flags & SHF_ALLOC) || !(OS->Flags & SHF_EXECINSTR))
-      continue;
-    for (BaseCommand *BC : OS->SectionCommands)
-      if (auto *ISD = dyn_cast<InputSectionDescription>(BC))
-        Fn(OS, ISD);
-  }
 }
 
 // Return true if the relocation target is an in range Thunk.
@@ -1347,10 +1376,10 @@ void ThunkCreator::forEachInputSectionDescription(
 // was originally to a Thunk, but is no longer in range we revert the
 // relocation back to its original non-Thunk target.
 bool ThunkCreator::normalizeExistingThunk(Relocation &Rel, uint64_t Src) {
-  if (Thunk *ET = Thunks.lookup(Rel.Sym)) {
+  if (Thunk *T = Thunks.lookup(Rel.Sym)) {
     if (Target->inBranchRange(Rel.Type, Src, Rel.Sym->getVA()))
       return true;
-    Rel.Sym = &ET->Destination;
+    Rel.Sym = &T->Destination;
     if (Rel.Sym->isInPlt())
       Rel.Expr = toPlt(Rel.Expr);
   }
@@ -1384,11 +1413,13 @@ bool ThunkCreator::normalizeExistingThunk(Relocation &Rel, uint64_t Src) {
 // relocation out of range error.
 bool ThunkCreator::createThunks(ArrayRef<OutputSection *> OutputSections) {
   bool AddressesChanged = false;
+
   if (Pass == 0 && Target->getThunkSectionSpacing())
     createInitialThunkSections(OutputSections);
-  else if (Pass == 10)
-    // With Thunk Size much smaller than branch range we expect to
-    // converge quickly; if we get to 10 something has gone wrong.
+
+  // With Thunk Size much smaller than branch range we expect to
+  // converge quickly; if we get to 10 something has gone wrong.
+  if (Pass == 10)
     fatal("thunk creation not converged");
 
   // Create all the Thunks and insert them into synthetic ThunkSections. The
@@ -1411,9 +1442,11 @@ bool ThunkCreator::createThunks(ArrayRef<OutputSection *> OutputSections) {
             if (!Target->needsThunk(Rel.Expr, Rel.Type, IS->File, Src,
                                     *Rel.Sym))
               continue;
+
             Thunk *T;
             bool IsNew;
             std::tie(T, IsNew) = getThunk(*Rel.Sym, Rel.Type, Src);
+
             if (IsNew) {
               // Find or create a ThunkSection for the new Thunk
               ThunkSection *TS;
@@ -1424,13 +1457,16 @@ bool ThunkCreator::createThunks(ArrayRef<OutputSection *> OutputSections) {
               TS->addThunk(T);
               Thunks[T->getThunkTargetSym()] = T;
             }
+
             // Redirect relocation to Thunk, we never go via the PLT to a Thunk
             Rel.Sym = T->getThunkTargetSym();
             Rel.Expr = fromPlt(Rel.Expr);
           }
+
         for (auto &P : ISD->ThunkSections)
           AddressesChanged |= P.first->assignOffsets();
       });
+
   for (auto &P : ThunkedSections)
     AddressesChanged |= P.second->assignOffsets();
 

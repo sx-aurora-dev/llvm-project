@@ -357,7 +357,6 @@ struct FileDescriptor {
 
   ~FileDescriptor() { close(); }
 
-  FileDescriptor() = default;
   FileDescriptor(FileDescriptor const&) = delete;
   FileDescriptor& operator=(FileDescriptor const&) = delete;
 

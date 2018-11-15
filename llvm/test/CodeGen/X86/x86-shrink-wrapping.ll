@@ -427,41 +427,38 @@ if.end:                                           ; preds = %for.body, %if.else
 ; Check that we handle calls to variadic functions correctly.
 ; CHECK-LABEL: callVariadicFunc:
 ;
+; ENABLE: movl %esi, %eax
 ; ENABLE: testl %edi, %edi
 ; ENABLE-NEXT: je [[ELSE_LABEL:LBB[0-9_]+]]
 ;
 ; Prologue code.
 ; CHECK: pushq
 ;
+; DISABLE: movl %esi, %eax
 ; DISABLE: testl %edi, %edi
 ; DISABLE-NEXT: je [[ELSE_LABEL:LBB[0-9_]+]]
 ;
 ; Setup of the varags.
-; CHECK: movl %esi, (%rsp)
-; CHECK-NEXT: xorl %eax, %eax
-; CHECK-NEXT: %esi, %edi
-; CHECK-NEXT: %esi, %edx
-; CHECK-NEXT: %esi, %ecx
-; CHECK-NEXT: %esi, %r8d
-; CHECK-NEXT: %esi, %r9d
+; CHECK:       movl	%eax, (%rsp)
+; CHECK-NEXT:  movl	%eax, %edi
+; CHECK-NEXT:  movl	%eax, %esi
+; CHECK-NEXT:  movl	%eax, %edx
+; CHECK-NEXT:  movl	%eax, %ecx
+; CHECK-NEXT:  movl	%eax, %r8d
+; CHECK-NEXT:  movl	%eax, %r9d
+; CHECK-NEXT:  xorl	%eax, %eax
 ; CHECK-NEXT: callq _someVariadicFunc
-; CHECK-NEXT: movl %eax, %esi
-; CHECK-NEXT: shll $3, %esi
+; CHECK-NEXT: shll $3, %eax
 ;
 ; ENABLE-NEXT: addq $8, %rsp
-; ENABLE-NEXT: movl %esi, %eax
 ; ENABLE-NEXT: retq
 ;
-; DISABLE: jmp [[IFEND_LABEL:LBB[0-9_]+]]
-;
+
 ; CHECK: [[ELSE_LABEL]]: ## %if.else
 ; Shift second argument by one and store into returned register.
-; CHECK: addl %esi, %esi
-;
-; DISABLE: [[IFEND_LABEL]]: ## %if.end
+; CHECK: addl %eax, %eax
 ;
 ; Epilogue code.
-; CHECK-NEXT: movl %esi, %eax
 ; DISABLE-NEXT: popq
 ; CHECK-NEXT: retq
 define i32 @callVariadicFunc(i32 %cond, i32 %N) {
@@ -516,8 +513,7 @@ declare hidden fastcc %struct.temp_slot* @find_temp_slot_from_address(%struct.rt
 ; CHECK: testq   %rdi, %rdi
 ; CHECK-NEXT: je      [[CLEANUP:LBB[0-9_]+]]
 ;
-; CHECK: movzwl  (%rdi), [[BF_LOAD:%e[a-z]+]]
-; CHECK-NEXT: cmpl $66, [[BF_LOAD]]
+; CHECK: cmpw $66, (%rdi)
 ; CHECK-NEXT: jne [[CLEANUP]]
 ;
 ; CHECK: movq 8(%rdi), %rdi

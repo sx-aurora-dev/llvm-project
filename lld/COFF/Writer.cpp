@@ -77,7 +77,7 @@ static const int SectorSize = 512;
 static const int DOSStubSize = sizeof(dos_header) + sizeof(DOSProgram);
 static_assert(DOSStubSize % 8 == 0, "DOSStub size must be multiple of 8");
 
-static const int NumberfOfDataDirectory = 16;
+static const int NumberOfDataDirectory = 16;
 
 namespace {
 
@@ -192,6 +192,7 @@ private:
   void writeSections();
   void writeBuildId();
   void sortExceptionTable();
+  void sortCRTSectionChunks(std::vector<Chunk *> &Chunks);
 
   llvm::Optional<coff_symbol16> createSymbol(Defined *D);
   size_t addEntryToStringTable(StringRef Str);
@@ -732,12 +733,17 @@ void Writer::createSections() {
     StringRef Name = getOutputSectionName(Pair.first.first);
     uint32_t OutChars = Pair.first.second;
 
-    // In link.exe, there is a special case for the I386 target where .CRT
-    // sections are treated as if they have output characteristics DATA | R if
-    // their characteristics are DATA | R | W. This implements the same special
-    // case for all architectures.
-    if (Name == ".CRT")
+    if (Name == ".CRT") {
+      // In link.exe, there is a special case for the I386 target where .CRT
+      // sections are treated as if they have output characteristics DATA | R if
+      // their characteristics are DATA | R | W. This implements the same
+      // special case for all architectures.
       OutChars = DATA | R;
+
+      log("Processing section " + Pair.first.first + " -> " + Name);
+
+      sortCRTSectionChunks(Pair.second);
+    }
 
     OutputSection *Sec = CreateSection(Name, OutChars);
     std::vector<Chunk *> &Chunks = Pair.second;
@@ -1027,7 +1033,7 @@ void Writer::readRelocTargets() {
 // file offsets.
 void Writer::assignAddresses() {
   SizeOfHeaders = DOSStubSize + sizeof(PEMagic) + sizeof(coff_file_header) +
-                  sizeof(data_directory) * NumberfOfDataDirectory +
+                  sizeof(data_directory) * NumberOfDataDirectory +
                   sizeof(coff_section) * OutputSections.size();
   SizeOfHeaders +=
       Config->is64() ? sizeof(pe32plus_header) : sizeof(pe32_header);
@@ -1102,7 +1108,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
   if (!Config->Relocatable)
     COFF->Characteristics |= IMAGE_FILE_RELOCS_STRIPPED;
   COFF->SizeOfOptionalHeader =
-      sizeof(PEHeaderTy) + sizeof(data_directory) * NumberfOfDataDirectory;
+      sizeof(PEHeaderTy) + sizeof(data_directory) * NumberOfDataDirectory;
 
   // Write PE header
   auto *PE = reinterpret_cast<PEHeaderTy *>(Buf);
@@ -1160,7 +1166,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
     PE->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_NO_SEH;
   if (Config->TerminalServerAware)
     PE->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE;
-  PE->NumberOfRvaAndSize = NumberfOfDataDirectory;
+  PE->NumberOfRvaAndSize = NumberOfDataDirectory;
   if (TextSec->getVirtualSize()) {
     PE->BaseOfCode = TextSec->getRVA();
     PE->SizeOfCode = TextSec->getRawSize();
@@ -1169,7 +1175,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
 
   // Write data directory
   auto *Dir = reinterpret_cast<data_directory *>(Buf);
-  Buf += sizeof(*Dir) * NumberfOfDataDirectory;
+  Buf += sizeof(*Dir) * NumberOfDataDirectory;
   if (!Config->Exports.empty()) {
     Dir[EXPORT_TABLE].RelativeVirtualAddress = Edata.getRVA();
     Dir[EXPORT_TABLE].Size = Edata.getSize();
@@ -1575,6 +1581,42 @@ void Writer::sortExceptionTable() {
     return;
   }
   errs() << "warning: don't know how to handle .pdata.\n";
+}
+
+// The CRT section contains, among other things, the array of function
+// pointers that initialize every global variable that is not trivially
+// constructed. The CRT calls them one after the other prior to invoking
+// main().
+//
+// As per C++ spec, 3.6.2/2.3,
+// "Variables with ordered initialization defined within a single
+// translation unit shall be initialized in the order of their definitions
+// in the translation unit"
+//
+// It is therefore critical to sort the chunks containing the function
+// pointers in the order that they are listed in the object file (top to
+// bottom), otherwise global objects might not be initialized in the
+// correct order.
+void Writer::sortCRTSectionChunks(std::vector<Chunk *> &Chunks) {
+  auto SectionChunkOrder = [](const Chunk *A, const Chunk *B) {
+    auto SA = dyn_cast<SectionChunk>(A);
+    auto SB = dyn_cast<SectionChunk>(B);
+    assert(SA && SB && "Non-section chunks in CRT section!");
+
+    StringRef SAObj = SA->File->MB.getBufferIdentifier();
+    StringRef SBObj = SB->File->MB.getBufferIdentifier();
+
+    return SAObj == SBObj && SA->getSectionNumber() < SB->getSectionNumber();
+  };
+  std::stable_sort(Chunks.begin(), Chunks.end(), SectionChunkOrder);
+
+  if (Config->Verbose) {
+    for (auto &C : Chunks) {
+      auto SC = dyn_cast<SectionChunk>(C);
+      log("  " + SC->File->MB.getBufferIdentifier().str() +
+          ", SectionID: " + Twine(SC->getSectionNumber()));
+    }
+  }
 }
 
 OutputSection *Writer::findSection(StringRef Name) {

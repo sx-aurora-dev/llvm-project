@@ -1,4 +1,4 @@
-REQUIRES: windows
+REQUIRES: system-windows
 RUN: clang-cl -m32 /Z7 /c /GS- %S/Inputs/PointerTypeTest.cpp /o %T/PointerTypeTest.cpp.obj
 RUN: link %T/PointerTypeTest.cpp.obj /DEBUG /nodefaultlib /ENTRY:main /OUT:%T/PointerTypeTest.cpp.exe
 RUN: lldb-test symbols %T/PointerTypeTest.cpp.exe | FileCheck %s
@@ -28,7 +28,7 @@ MAIN-SAME:    (int *), scope = local
 MAIN:     Variable{{.*}}, name = "p_member_field"
 MAIN-SAME:    (int ST::*), scope = local
 MAIN:     Variable{{.*}}, name = "p_member_method"
-MAIN-SAME:    (int (ST::*)(int)), scope = local
+MAIN-SAME:    (int (ST::*)(int) __attribute__((thiscall))), scope = local
 
 F:   Function{[[FID2:.*]]}, demangled = {{.*}}f(int)
 F-NEXT:  Block{[[FID2]]}

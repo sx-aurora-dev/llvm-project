@@ -90,7 +90,6 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
     return nullptr;
   }
 
-  case PrintDeclContext:       return llvm::make_unique<DeclContextPrintAction>();
   case PrintPreamble:          return llvm::make_unique<PrintPreambleAction>();
   case PrintPreprocessedInput: {
     if (CI.getPreprocessorOutputOpts().RewriteIncludes ||
@@ -184,7 +183,7 @@ bool ExecuteCompilerInvocation(CompilerInstance *Clang) {
   // Honor -help.
   if (Clang->getFrontendOpts().ShowHelp) {
     std::unique_ptr<OptTable> Opts = driver::createDriverOptTable();
-    Opts->PrintHelp(llvm::outs(), "clang -cc1",
+    Opts->PrintHelp(llvm::outs(), "clang -cc1 [options] file...",
                     "LLVM 'Clang' Compiler: http://clang.llvm.org",
                     /*Include=*/driver::options::CC1Option,
                     /*Exclude=*/0, /*ShowAllAliases=*/false);
@@ -242,10 +241,18 @@ bool ExecuteCompilerInvocation(CompilerInstance *Clang) {
     ento::printCheckerHelp(llvm::outs(), Clang->getFrontendOpts().Plugins);
     return true;
   }
+
+  // Honor -analyzer-list-enabled-checkers.
   if (Clang->getAnalyzerOpts()->ShowEnabledCheckerList) {
     ento::printEnabledCheckerList(llvm::outs(),
                                   Clang->getFrontendOpts().Plugins,
                                   *Clang->getAnalyzerOpts());
+  }
+
+  // Honor -analyzer-config-help.
+  if (Clang->getAnalyzerOpts()->ShowConfigOptionsList) {
+    ento::printAnalyzerConfigList(llvm::outs());
+    return true;
   }
 #endif
 
