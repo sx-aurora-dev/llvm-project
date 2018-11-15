@@ -56,10 +56,14 @@ public:
     // to find at least one summary for the GUID that is global or a local
     // in the referenced module for direct calls.
     LocalLinkageNotInModule,
-    // This corresponse to the NotEligibleToImport being set on the summary,
+    // This corresponds to the NotEligibleToImport being set on the summary,
     // which can happen in a few different cases (e.g. local that can't be
     // renamed or promoted because it is referenced on a llvm*.used variable).
-    NotEligible
+    NotEligible,
+    // This corresponds to NoInline being set on the function summary,
+    // which will happen if it is known that the inliner will not be able
+    // to inline the function (e.g. it is marked with a NoInline attribute).
+    NoInline
   };
 
   /// Information optionally tracked for candidates the importer decided
@@ -197,10 +201,10 @@ std::error_code EmitImportsFiles(
     StringRef ModulePath, StringRef OutputFilename,
     const std::map<std::string, GVSummaryMapTy> &ModuleToSummariesForIndex);
 
-/// Resolve WeakForLinker values in \p TheModule based on the information
+/// Resolve prevailing symbol linkages in \p TheModule based on the information
 /// recorded in the summaries during global summary-based analysis.
-void thinLTOResolveWeakForLinkerModule(Module &TheModule,
-                                       const GVSummaryMapTy &DefinedGlobals);
+void thinLTOResolvePrevailingInModule(Module &TheModule,
+                                      const GVSummaryMapTy &DefinedGlobals);
 
 /// Internalize \p TheModule based on the information recorded in the summaries
 /// during global summary-based analysis.

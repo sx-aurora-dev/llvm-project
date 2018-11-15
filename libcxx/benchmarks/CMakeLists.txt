@@ -11,6 +11,7 @@ set(BENCHMARK_LIBCXX_COMPILE_FLAGS
     -isystem ${LIBCXX_SOURCE_DIR}/include
     -L${LIBCXX_LIBRARY_DIR}
     -Wl,-rpath,${LIBCXX_LIBRARY_DIR}
+    ${SANITIZER_FLAGS}
     )
 if (DEFINED LIBCXX_CXX_ABI_LIBRARY_PATH)
   list(APPEND BENCHMARK_LIBCXX_COMPILE_FLAGS
@@ -67,8 +68,19 @@ add_custom_target(cxx-benchmarks)
 set(BENCHMARK_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(BENCHMARK_LIBCXX_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/benchmark-libcxx)
 set(BENCHMARK_NATIVE_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/benchmark-native)
+
+check_flag_supported("-std=c++17")
+mangle_name("LIBCXX_SUPPORTS_STD_EQ_c++17_FLAG" BENCHMARK_SUPPORTS_STD_CXX17_FLAG)
+if (${BENCHMARK_SUPPORTS_STD_CXX17_FLAG})
+  set(BENCHMARK_DIALECT_FLAG "-std=c++17")
+else()
+  # If the compiler doesn't support -std=c++17, attempt to fall back to -std=c++1z while still
+  # requiring C++17 language features.
+  set(BENCHMARK_DIALECT_FLAG "-std=c++1z")
+endif()
+
 set(BENCHMARK_TEST_COMPILE_FLAGS
-    -std=c++17 -O2
+    ${BENCHMARK_DIALECT_FLAG} -O2
     -I${BENCHMARK_LIBCXX_INSTALL}/include
     -I${LIBCXX_SOURCE_DIR}/test/support
 )
@@ -76,11 +88,13 @@ set(BENCHMARK_TEST_LIBCXX_COMPILE_FLAGS
     -nostdinc++
     -isystem ${LIBCXX_SOURCE_DIR}/include
     ${BENCHMARK_TEST_COMPILE_FLAGS}
+    ${SANITIZER_FLAGS}
     -Wno-user-defined-literals
 )
 set(BENCHMARK_TEST_LIBCXX_LINK_FLAGS
     -nodefaultlibs
     -L${BENCHMARK_LIBCXX_INSTALL}/lib/
+    ${SANITIZER_FLAGS}
 )
 set(BENCHMARK_TEST_NATIVE_COMPILE_FLAGS
   ${BENCHMARK_NATIVE_TARGET_FLAGS}
@@ -95,8 +109,12 @@ split_list(BENCHMARK_TEST_LIBCXX_COMPILE_FLAGS)
 split_list(BENCHMARK_TEST_LIBCXX_LINK_FLAGS)
 split_list(BENCHMARK_TEST_NATIVE_COMPILE_FLAGS)
 split_list(BENCHMARK_TEST_NATIVE_LINK_FLAGS)
+
+set(libcxx_benchmark_targets)
+
 macro(add_benchmark_test name source_file)
   set(libcxx_target ${name}_libcxx)
+  list(APPEND libcxx_benchmark_targets ${libcxx_target})
   add_executable(${libcxx_target} EXCLUDE_FROM_ALL ${source_file})
   add_dependencies(${libcxx_target} cxx google-benchmark-libcxx)
   add_dependencies(cxx-benchmarks ${libcxx_target})
@@ -108,7 +126,13 @@ macro(add_benchmark_test name source_file)
   if (TARGET cxx_experimental)
     target_link_libraries(${libcxx_target} cxx_experimental)
   endif()
+  if (TARGET cxx_filesystem)
+    target_link_libraries(${libcxx_target} cxx_filesystem)
+  endif()
   target_link_libraries(${libcxx_target} -lbenchmark)
+  if (LLVM_USE_SANITIZER)
+    target_link_libraries(${libcxx_target} -ldl)
+  endif()
   set_target_properties(${libcxx_target}
     PROPERTIES
           OUTPUT_NAME "${name}.libcxx.out"
@@ -124,7 +148,7 @@ macro(add_benchmark_test name source_file)
     if (LIBCXX_BENCHMARK_NATIVE_STDLIB STREQUAL "libstdc++")
       target_link_libraries(${native_target} -lstdc++fs)
     elseif (LIBCXX_BENCHMARK_NATIVE_STDLIB STREQUAL "libc++")
-      target_link_libraries(${native_target} -lc++experimental)
+      target_link_libraries(${native_target} -lc++fs -lc++experimental)
     endif()
     if (LIBCXX_HAS_PTHREAD_LIB)
       target_link_libraries(${native_target} -pthread)
@@ -155,3 +179,23 @@ foreach(test_path ${BENCHMARK_TESTS})
   endif()
   add_benchmark_test(${test_name} ${test_file})
 endforeach()
+
+if (LIBCXX_INCLUDE_TESTS)
+  include(AddLLVM)
+
+  if (NOT DEFINED LIBCXX_TEST_DEPS)
+    message(FATAL_ERROR "Expected LIBCXX_TEST_DEPS to be defined")
+  endif()
+
+  configure_lit_site_cfg(
+          ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
+          ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py)
+
+  set(BENCHMARK_LIT_ARGS "--show-all --show-xfail --show-unsupported ${LIT_ARGS_DEFAULT}")
+
+  add_lit_target(check-cxx-benchmarks
+          "Running libcxx benchmarks tests"
+          ${CMAKE_CURRENT_BINARY_DIR}
+          DEPENDS cxx-benchmarks ${LIBCXX_TEST_DEPS}
+          ARGS ${BENCHMARK_LIT_ARGS})
+endif()

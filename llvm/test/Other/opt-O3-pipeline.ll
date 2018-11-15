@@ -28,6 +28,7 @@
 ; CHECK-NEXT:     Force set function attributes
 ; CHECK-NEXT:     Infer set function attributes
 ; CHECK-NEXT:     FunctionPass Manager
+; CHECK-NEXT:       Dominator Tree Construction
 ; CHECK-NEXT:       Call-site splitting
 ; CHECK-NEXT:     Interprocedural Sparse Conditional Constant Propagation
 ; CHECK-NEXT:       Unnamed pass: implement Pass::getPassName()
@@ -62,12 +63,6 @@
 ; CHECK-NEXT:         Function Alias Analysis Results
 ; CHECK-NEXT:         Memory SSA
 ; CHECK-NEXT:         Early CSE w/ MemorySSA
-; CHECK-NEXT:         Post-Dominator Tree Construction
-; CHECK-NEXT:         Basic Alias Analysis (stateless AA impl)
-; CHECK-NEXT:         Function Alias Analysis Results
-; CHECK-NEXT:         Phi Values Analysis
-; CHECK-NEXT:         Memory Dependence Analysis
-; CHECK-NEXT:         Early GVN Hoisting of Expressions
 ; CHECK-NEXT:         Speculatively execute instructions if target has divergent branches
 ; CHECK-NEXT:         Basic Alias Analysis (stateless AA impl)
 ; CHECK-NEXT:         Function Alias Analysis Results

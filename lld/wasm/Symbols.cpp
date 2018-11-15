@@ -105,10 +105,10 @@ bool Symbol::isExported() const {
   if (ForceExport || Config->ExportAll)
     return true;
 
-  if (!Config->ExportDefault)
-    return false;
+  if (Config->ExportDynamic && !isHidden())
+    return true;
 
-  return !isHidden();
+  return false;
 }
 
 uint32_t FunctionSymbol::getFunctionIndex() const {
@@ -226,10 +226,14 @@ void SectionSymbol::setOutputSectionIndex(uint32_t Index) {
 void LazySymbol::fetch() { cast<ArchiveFile>(File)->addMember(&ArchiveSymbol); }
 
 std::string lld::toString(const wasm::Symbol &Sym) {
+  return lld::maybeDemangleSymbol(Sym.getName());
+}
+
+std::string lld::maybeDemangleSymbol(StringRef Name) {
   if (Config->Demangle)
-    if (Optional<std::string> S = demangleItanium(Sym.getName()))
+    if (Optional<std::string> S = demangleItanium(Name))
       return *S;
-  return Sym.getName();
+  return Name;
 }
 
 std::string lld::toString(wasm::Symbol::Kind Kind) {
