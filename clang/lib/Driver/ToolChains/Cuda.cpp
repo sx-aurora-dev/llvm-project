@@ -11,7 +11,6 @@
 #include "CommonArgs.h"
 #include "InputInfo.h"
 #include "clang/Basic/Cuda.h"
-#include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Distro.h"
@@ -23,6 +22,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include <system_error>
 
 using namespace clang::driver;
@@ -398,8 +398,8 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
                                options::OPT_fnoopenmp_relocatable_target,
                                /*Default=*/true);
   else if (JA.isOffloading(Action::OFK_Cuda))
-    Relocatable = Args.hasFlag(options::OPT_fcuda_rdc,
-                               options::OPT_fno_cuda_rdc, /*Default=*/false);
+    Relocatable = Args.hasFlag(options::OPT_fgpu_rdc,
+                               options::OPT_fno_gpu_rdc, /*Default=*/false);
 
   if (Relocatable)
     CmdArgs.push_back("-c");
@@ -609,9 +609,9 @@ void CudaToolChain::addClangTargetOptions(
                            options::OPT_fno_cuda_approx_transcendentals, false))
       CC1Args.push_back("-fcuda-approx-transcendentals");
 
-    if (DriverArgs.hasFlag(options::OPT_fcuda_rdc, options::OPT_fno_cuda_rdc,
+    if (DriverArgs.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
                            false))
-      CC1Args.push_back("-fcuda-rdc");
+      CC1Args.push_back("-fgpu-rdc");
   }
 
   if (DriverArgs.hasArg(options::OPT_nocudalib))

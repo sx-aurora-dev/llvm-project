@@ -1,4 +1,5 @@
-//===-- ThreadSafeModule.cpp - Thread safe Module, Context, and Utilities h-===//
+//===-- ThreadSafeModule.cpp - Thread safe Module, Context, and Utilities
+//h-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -21,19 +22,18 @@ ThreadSafeModule cloneToNewContext(ThreadSafeModule &TSM,
   assert(TSM && "Can not clone null module");
 
   if (!ShouldCloneDef)
-    ShouldCloneDef = [](const GlobalValue&) { return true; };
+    ShouldCloneDef = [](const GlobalValue &) { return true; };
 
   auto Lock = TSM.getContextLock();
 
   SmallVector<char, 1> ClonedModuleBuffer;
 
   {
-    std::vector<GlobalValue *> ClonedDefsInSrc;
+    std::set<GlobalValue *> ClonedDefsInSrc;
     ValueToValueMapTy VMap;
-    auto Tmp = CloneModule(*TSM.getModule(), VMap,
-                           [&](const GlobalValue *GV) {
+    auto Tmp = CloneModule(*TSM.getModule(), VMap, [&](const GlobalValue *GV) {
       if (ShouldCloneDef(*GV)) {
-        ClonedDefsInSrc.push_back(const_cast<GlobalValue *>(GV));
+        ClonedDefsInSrc.insert(const_cast<GlobalValue *>(GV));
         return true;
       }
       return false;

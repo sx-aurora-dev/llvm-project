@@ -4434,7 +4434,7 @@ SubstDefaultTemplateArgument(Sema &SemaRef,
 
   // If the argument type is dependent, instantiate it now based
   // on the previously-computed template arguments.
-  if (ArgType->getType()->isDependentType()) {
+  if (ArgType->getType()->isInstantiationDependentType()) {
     Sema::InstantiatingTemplate Inst(SemaRef, TemplateLoc,
                                      Param, Template, Converted,
                                      SourceRange(TemplateLoc, RAngleLoc));
@@ -9173,10 +9173,8 @@ DeclResult Sema::ActOnExplicitInstantiation(Scope *S,
     if (!HasNoEffect) {
       // Instantiate static data member or variable template.
       Prev->setTemplateSpecializationKind(TSK, D.getIdentifierLoc());
-      if (PrevTemplate) {
-        // Merge attributes.
-        ProcessDeclAttributeList(S, Prev, D.getDeclSpec().getAttributes());
-      }
+      // Merge attributes.
+      ProcessDeclAttributeList(S, Prev, D.getDeclSpec().getAttributes());
       if (TSK == TSK_ExplicitInstantiationDefinition)
         InstantiateVariableDefinition(D.getIdentifierLoc(), Prev);
     }

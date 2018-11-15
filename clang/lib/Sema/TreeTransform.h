@@ -2021,11 +2021,10 @@ public:
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
   StmtResult RebuildCXXForRangeStmt(SourceLocation ForLoc,
-                                    SourceLocation CoawaitLoc,
-                                    SourceLocation ColonLoc,
-                                    Stmt *Range, Stmt *Begin, Stmt *End,
-                                    Expr *Cond, Expr *Inc,
-                                    Stmt *LoopVar,
+                                    SourceLocation CoawaitLoc, Stmt *Init,
+                                    SourceLocation ColonLoc, Stmt *Range,
+                                    Stmt *Begin, Stmt *End, Expr *Cond,
+                                    Expr *Inc, Stmt *LoopVar,
                                     SourceLocation RParenLoc) {
     // If we've just learned that the range is actually an Objective-C
     // collection, treat this as an Objective-C fast enumeration loop.
@@ -2037,17 +2036,24 @@ public:
 
           Expr *RangeExpr = RangeVar->getInit();
           if (!RangeExpr->isTypeDependent() &&
-              RangeExpr->getType()->isObjCObjectPointerType())
-            return getSema().ActOnObjCForCollectionStmt(ForLoc, LoopVar, RangeExpr,
-                                                        RParenLoc);
+              RangeExpr->getType()->isObjCObjectPointerType()) {
+            // FIXME: Support init-statements in Objective-C++20 ranged for
+            // statement.
+            if (Init) {
+              return SemaRef.Diag(Init->getBeginLoc(),
+                                  diag::err_objc_for_range_init_stmt)
+                         << Init->getSourceRange();
+            }
+            return getSema().ActOnObjCForCollectionStmt(ForLoc, LoopVar,
+                                                        RangeExpr, RParenLoc);
+          }
         }
       }
     }
 
-    return getSema().BuildCXXForRangeStmt(ForLoc, CoawaitLoc, ColonLoc,
-                                          Range, Begin, End,
-                                          Cond, Inc, LoopVar, RParenLoc,
-                                          Sema::BFRK_Rebuild);
+    return getSema().BuildCXXForRangeStmt(ForLoc, CoawaitLoc, Init, ColonLoc,
+                                          Range, Begin, End, Cond, Inc, LoopVar,
+                                          RParenLoc, Sema::BFRK_Rebuild);
   }
 
   /// Build a new C++0x range-based for statement.
@@ -2090,8 +2096,8 @@ public:
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
   ExprResult RebuildPredefinedExpr(SourceLocation Loc,
-                                   PredefinedExpr::IdentType IT) {
-    return getSema().BuildPredefinedExpr(Loc, IT);
+                                   PredefinedExpr::IdentKind IK) {
+    return getSema().BuildPredefinedExpr(Loc, IK);
   }
 
   /// Build a new expression that references a declaration.
@@ -3338,8 +3344,8 @@ ExprResult TreeTransform<Derived>::TransformInitializer(Expr *Init,
   if (!Init)
     return Init;
 
-  if (ExprWithCleanups *ExprTemp = dyn_cast<ExprWithCleanups>(Init))
-    Init = ExprTemp->getSubExpr();
+  if (auto *FE = dyn_cast<FullExpr>(Init))
+    Init = FE->getSubExpr();
 
   if (auto *AIL = dyn_cast<ArrayInitLoopExpr>(Init))
     Init = AIL->getCommonExpr();
@@ -7412,6 +7418,11 @@ StmtResult TreeTransform<Derived>::TransformCXXTryStmt(CXXTryStmt *S) {
 template<typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformCXXForRangeStmt(CXXForRangeStmt *S) {
+  StmtResult Init =
+      S->getInit() ? getDerived().TransformStmt(S->getInit()) : StmtResult();
+  if (Init.isInvalid())
+    return StmtError();
+
   StmtResult Range = getDerived().TransformStmt(S->getRangeStmt());
   if (Range.isInvalid())
     return StmtError();
@@ -7445,6 +7456,7 @@ TreeTransform<Derived>::TransformCXXForRangeStmt(CXXForRangeStmt *S) {
 
   StmtResult NewStmt = S;
   if (getDerived().AlwaysRebuild() ||
+      Init.get() != S->getInit() ||
       Range.get() != S->getRangeStmt() ||
       Begin.get() != S->getBeginStmt() ||
       End.get() != S->getEndStmt() ||
@@ -7452,7 +7464,7 @@ TreeTransform<Derived>::TransformCXXForRangeStmt(CXXForRangeStmt *S) {
       Inc.get() != S->getInc() ||
       LoopVar.get() != S->getLoopVarStmt()) {
     NewStmt = getDerived().RebuildCXXForRangeStmt(S->getForLoc(),
-                                                  S->getCoawaitLoc(),
+                                                  S->getCoawaitLoc(), Init.get(),
                                                   S->getColonLoc(), Range.get(),
                                                   Begin.get(), End.get(),
                                                   Cond.get(),
@@ -7470,7 +7482,7 @@ TreeTransform<Derived>::TransformCXXForRangeStmt(CXXForRangeStmt *S) {
   // it now so we have a new statement to attach the body to.
   if (Body.get() != S->getBody() && NewStmt.get() == S) {
     NewStmt = getDerived().RebuildCXXForRangeStmt(S->getForLoc(),
-                                                  S->getCoawaitLoc(),
+                                                  S->getCoawaitLoc(), Init.get(),
                                                   S->getColonLoc(), Range.get(),
                                                   Begin.get(), End.get(),
                                                   Cond.get(),
@@ -8425,6 +8437,33 @@ OMPClause *TreeTransform<Derived>::TransformOMPUnifiedAddressClause(
 }
 
 template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPUnifiedSharedMemoryClause(
+    OMPUnifiedSharedMemoryClause *C) {
+  llvm_unreachable(
+      "unified_shared_memory clause cannot appear in dependent context");
+}
+
+template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPReverseOffloadClause(
+    OMPReverseOffloadClause *C) {
+  llvm_unreachable("reverse_offload clause cannot appear in dependent context");
+}
+
+template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPDynamicAllocatorsClause(
+    OMPDynamicAllocatorsClause *C) {
+  llvm_unreachable(
+      "dynamic_allocators clause cannot appear in dependent context");
+}
+
+template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPAtomicDefaultMemOrderClause(
+    OMPAtomicDefaultMemOrderClause *C) {
+  llvm_unreachable(
+      "atomic_default_mem_order clause cannot appear in dependent context");
+}
+
+template <typename Derived>
 OMPClause *
 TreeTransform<Derived>::TransformOMPPrivateClause(OMPPrivateClause *C) {
   llvm::SmallVector<Expr *, 16> Vars;
@@ -8884,12 +8923,18 @@ TreeTransform<Derived>::TransformOMPIsDevicePtrClause(OMPIsDevicePtrClause *C) {
 //===----------------------------------------------------------------------===//
 template<typename Derived>
 ExprResult
+TreeTransform<Derived>::TransformConstantExpr(ConstantExpr *E) {
+  return TransformExpr(E->getSubExpr());
+}
+
+template<typename Derived>
+ExprResult
 TreeTransform<Derived>::TransformPredefinedExpr(PredefinedExpr *E) {
   if (!E->isTypeDependent())
     return E;
 
   return getDerived().RebuildPredefinedExpr(E->getLocation(),
-                                            E->getIdentType());
+                                            E->getIdentKind());
 }
 
 template<typename Derived>

@@ -10,10 +10,6 @@
 #ifndef LLDB_SBTarget_h_
 #define LLDB_SBTarget_h_
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
-// Project includes
 #include "lldb/API/SBAddress.h"
 #include "lldb/API/SBAttachInfo.h"
 #include "lldb/API/SBBreakpoint.h"
@@ -75,6 +71,31 @@ public:
 
   lldb::SBProcess GetProcess();
 
+  //------------------------------------------------------------------
+  /// Sets whether we should collect statistics on lldb or not.
+  ///
+  /// @param[in] v
+  ///     A boolean to control the collection.
+  /// @return
+  ///     void
+  //------------------------------------------------------------------
+  void SetCollectingStats(bool v);
+
+  //------------------------------------------------------------------
+  /// Returns whether statistics collection are enabled.
+  ///
+  /// @return
+  ///     true if statistics are currently being collected, false
+  ///     otherwise.
+  //------------------------------------------------------------------
+  bool GetCollectingStats();
+
+  //------------------------------------------------------------------
+  /// Returns a dump of the collected statistics.
+  ///
+  /// @return
+  ///     A SBStructuredData with the statistics collected.
+  //------------------------------------------------------------------
   lldb::SBStructuredData GetStatistics();
 
   //------------------------------------------------------------------
