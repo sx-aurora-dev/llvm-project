@@ -1050,6 +1050,10 @@ extern kmp_uint64 __kmp_now_nsec();
 /* TODO: tune for KMP_OS_NETBSD */
 #define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
 #define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
+#elif KMP_OS_HURD
+/* TODO: tune for KMP_OS_HURD */
+#define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
+#define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
 #endif
 
 #if KMP_ARCH_X86 || KMP_ARCH_X86_64
@@ -2148,8 +2152,7 @@ typedef struct kmp_taskgroup {
   std::atomic<kmp_int32>
       cancel_request; // request for cancellation of this taskgroup
   struct kmp_taskgroup *parent; // parent taskgroup
-// TODO: change to OMP_50_ENABLED, need to change build tools for this to work
-#if OMP_45_ENABLED
+#if OMP_50_ENABLED
   // Block of data to perform task reduction
   void *reduce_data; // reduction related info
   kmp_int32 reduce_num_data; // number of data items to reduce
@@ -2161,30 +2164,35 @@ typedef union kmp_depnode kmp_depnode_t;
 typedef struct kmp_depnode_list kmp_depnode_list_t;
 typedef struct kmp_dephash_entry kmp_dephash_entry_t;
 
+// Compiler sends us this info:
 typedef struct kmp_depend_info {
   kmp_intptr_t base_addr;
   size_t len;
   struct {
     bool in : 1;
     bool out : 1;
+    bool mtx : 1;
   } flags;
 } kmp_depend_info_t;
 
+// Internal structures to work with task dependencies:
 struct kmp_depnode_list {
   kmp_depnode_t *node;
   kmp_depnode_list_t *next;
 };
 
+// Max number of mutexinoutset dependencies per node
+#define MAX_MTX_DEPS 4
+
 typedef struct kmp_base_depnode {
-  kmp_depnode_list_t *successors;
-  kmp_task_t *task;
-
-  kmp_lock_t lock;
-
+  kmp_depnode_list_t *successors; /* used under lock */
+  kmp_task_t *task; /* non-NULL if depnode is active, used under lock */
+  kmp_lock_t *mtx_locks[MAX_MTX_DEPS]; /* lock mutexinoutset dependent tasks */
+  kmp_int32 mtx_num_locks; /* number of locks in mtx_locks array */
+  kmp_lock_t lock; /* guards shared fields: task, successors */
 #if KMP_SUPPORT_GRAPH_OUTPUT
   kmp_uint32 id;
 #endif
-
   std::atomic<kmp_int32> npredecessors;
   std::atomic<kmp_int32> nrefs;
 } kmp_base_depnode_t;
@@ -2199,6 +2207,9 @@ struct kmp_dephash_entry {
   kmp_intptr_t addr;
   kmp_depnode_t *last_out;
   kmp_depnode_list_t *last_ins;
+  kmp_depnode_list_t *last_mtxs;
+  kmp_int32 last_flag;
+  kmp_lock_t *mtx_lock; /* is referenced by depnodes w/mutexinoutset dep */
   kmp_dephash_entry_t *next_in_bucket;
 };
 
@@ -3362,7 +3373,7 @@ extern int __kmp_aux_get_affinity_max_proc();
 extern int __kmp_aux_set_affinity_mask_proc(int proc, void **mask);
 extern int __kmp_aux_unset_affinity_mask_proc(int proc, void **mask);
 extern int __kmp_aux_get_affinity_mask_proc(int proc, void **mask);
-extern void __kmp_balanced_affinity(int tid, int team_size);
+extern void __kmp_balanced_affinity(kmp_info_t *th, int team_size);
 #if KMP_OS_LINUX
 extern int kmp_set_thread_affinity_mask_initial(void);
 #endif
@@ -3748,9 +3759,6 @@ KMP_EXPORT void __kmpc_omp_wait_deps(ident_t *loc_ref, kmp_int32 gtid,
                                      kmp_depend_info_t *dep_list,
                                      kmp_int32 ndeps_noalias,
                                      kmp_depend_info_t *noalias_dep_list);
-extern void __kmp_release_deps(kmp_int32 gtid, kmp_taskdata_t *task);
-extern void __kmp_dephash_free_entries(kmp_info_t *thread, kmp_dephash_t *h);
-extern void __kmp_dephash_free(kmp_info_t *thread, kmp_dephash_t *h);
 
 extern kmp_int32 __kmp_omp_task(kmp_int32 gtid, kmp_task_t *new_task,
                                 bool serialize_immediate);
@@ -3772,8 +3780,7 @@ KMP_EXPORT void __kmpc_taskloop(ident_t *loc, kmp_int32 gtid, kmp_task_t *task,
                                 kmp_int32 sched, kmp_uint64 grainsize,
                                 void *task_dup);
 #endif
-// TODO: change to OMP_50_ENABLED, need to change build tools for this to work
-#if OMP_45_ENABLED
+#if OMP_50_ENABLED
 KMP_EXPORT void *__kmpc_task_reduction_init(int gtid, int num_data, void *data);
 KMP_EXPORT void *__kmpc_task_reduction_get_th_data(int gtid, void *tg, void *d);
 #endif

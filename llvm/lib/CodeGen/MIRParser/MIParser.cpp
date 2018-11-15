@@ -752,6 +752,8 @@ bool MIParser::parse(MachineInstr *&MI) {
     Optional<unsigned> TiedDefIdx;
     if (parseMachineOperandAndTargetFlags(MO, TiedDefIdx))
       return true;
+    if (OpCode == TargetOpcode::DBG_VALUE && MO.isReg())
+      MO.setIsDebug();
     Operands.push_back(
         ParsedMachineOperand(MO, Loc, Token.location(), TiedDefIdx));
     if (Token.isNewlineOrEOF() || Token.is(MIToken::coloncolon) ||
@@ -779,6 +781,8 @@ bool MIParser::parse(MachineInstr *&MI) {
     MDNode *Node = nullptr;
     if (parseMDNode(Node))
       return true;
+    if (!isa<DILocation>(Node))
+      return error("referenced metadata is not a DILocation");
     DebugLocation = DebugLoc(Node);
   }
 
