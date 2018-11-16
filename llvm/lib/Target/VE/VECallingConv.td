@@ -15,6 +15,32 @@
 // Aurora VE
 //===----------------------------------------------------------------------===//
 
+def CC_VE_C_Stack: CallingConv<[
+  // F128 are assigned to the stack in 16-byte aligned units
+  CCIfType<[f128], CCAssignToStackWithShadow<0, 16, [SX7]>>,
+
+  // All of the rest are assigned to the stack in 8-byte aligned units.
+  CCAssignToStack<0, 8>
+]>;
+
+def CC_VE_RegCall : CallingConv<[
+  // vector --> generic vector registers
+  CCIfType<[v256i32, v256f32, v512i32, v512f32, v256i64, v256f64],
+           CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
+
+  // vector mask --> generic vector mask registers
+  CCIfType<[v256i1],
+           CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
+
+  // pair of vector mask --> generic vector mask registers
+  CCIfType<[v512i1],
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
+                                   [VM1, VM1, VM3]>>,
+
+  // Alternatively, they are assigned to the stack in 8-byte aligned units.
+  CCDelegateTo<CC_VE_C_Stack>
+]>;
+
 def CC_VE : CallingConv<[
   // All arguments get passed in generic registers if there is space.
 
@@ -43,9 +69,10 @@ def CC_VE : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
+  CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<CC_VE_RegCall>>,
+
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
-  CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
-  CCAssignToStack<0, 8>
+  CCDelegateTo<CC_VE_C_Stack>
 ]>;
 
 def CC_VE2 : CallingConv<[
@@ -53,6 +80,21 @@ def CC_VE2 : CallingConv<[
   // function.
   CCIfType<[f128], CCAssignToStack<16, 16>>,
   CCAssignToStack<0, 8>
+]>;
+
+def RetCC_VE_RegCall : CallingConv<[
+  // vector --> generic vector registers
+  CCIfType<[v256i32, v256f32, v512i32, v512f32, v256i64, v256f64],
+           CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
+
+  // vector mask --> generic vector mask registers
+  CCIfType<[v256i1],
+           CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
+
+  // pair of vector mask --> generic vector mask registers
+  CCIfType<[v512i1],
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
+                                   [VM1, VM1, VM3]>>
 ]>;
 
 def RetCC_VE : CallingConv<[
@@ -76,11 +118,18 @@ def RetCC_VE : CallingConv<[
   // long double --> pair of generic 64 bit registers
   CCIfType<[f128],
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
-                                   [SX0, SX1, SX3, SX5]>>
+                                   [SX0, SX1, SX3, SX5]>>,
+
+  CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<RetCC_VE_RegCall>>
 ]>;
 
 // Callee-saved registers
 def CSR : CalleeSavedRegs<(add (sequence "SX%u", 18, 33))>;
+
+def CSR_RegCall : CalleeSavedRegs<(add (sequence "SX%u", 18, 33),
+                                       (sequence "V%u", 18, 33),
+                                       (sequence "VM%u", 8, 15))>;
+
 
 // vec_expf destroys s0, s1, s5, s6, s11, s61, s62, s63, v0-6, and vm6
 def CSR_vec_expf : CalleeSavedRegs<(add (sequence "SX%u", 2, 4),
