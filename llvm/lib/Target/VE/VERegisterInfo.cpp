@@ -36,18 +36,30 @@ VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {}
 
 const MCPhysReg*
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  return CSR_SaveList;
+  const Function &F = MF->getFunction();
+  CallingConv::ID CC = F.getCallingConv();
+
+  switch (CC) {
+  case CallingConv::X86_RegCall:
+    return CSR_RegCall_SaveList;
+  default:
+    return CSR_SaveList;
+  }
 }
 
 const uint32_t *
 VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                         CallingConv::ID CC) const {
-  if (CC == CallingConv::VE_VEC_EXPF) {
+  switch (CC) {
+  case CallingConv::X86_RegCall:
+    return CSR_RegCall_RegMask;
+  case CallingConv::VE_VEC_EXPF:
     return CSR_vec_expf_RegMask;
-  } else if (CC == CallingConv::VE_LLVM_GROW_STACK) {
+  case CallingConv::VE_LLVM_GROW_STACK:
     return CSR_llvm_grow_stack_RegMask;
+  default:
+    return CSR_RegMask;
   }
-  return CSR_RegMask;
 }
 
 BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
