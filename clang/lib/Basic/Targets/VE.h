@@ -60,6 +60,16 @@ public:
     return TargetInfo::VoidPtrBuiltinVaList;
   }
 
+  CallingConvCheckResult checkCallingConvention(CallingConv CC) const override {
+    switch (CC) {
+    default:
+      return CCCR_Warning;
+    case CC_C:
+    case CC_X86RegCall:
+      return CCCR_OK;
+    }
+  }
+
   const char *getClobbers() const override { return ""; }
 
   ArrayRef<const char *> getGCCRegNames() const override {
