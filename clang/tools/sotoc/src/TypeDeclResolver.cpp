@@ -53,7 +53,10 @@ void TypeDeclResolver::addTypeDecl(clang::TypeDecl *TD) {
             if (!this->AllTypes.count(Dep)) {
               UnresolvedTypes.insert(Dep);
             }
-            this->AllTypes.at(TypeElem).TypeDependencies.insert(Dep);
+            // Fix for enums. TODO: find a better way to avoid duplicates
+            if (TypeElem != Dep) {
+              this->AllTypes.at(TypeElem).TypeDependencies.insert(Dep);
+            }
           });
 
       Visitor.TraverseDecl(TypeElem);
@@ -114,7 +117,8 @@ bool TypeDeclResolver::orderAndWriteCodeFragments(TargetCode &TC) {
 
   if (counter != AllTypes.size()) {
     llvm::errs() << "ERROR: The Type Declaration Resolver encountered a "
-                    "dependecy cylce\n";
+                    "dependecy cylce (counter:"
+                 << counter << ", size: " << AllTypes.size() << "\n";
     return false;
   }
 

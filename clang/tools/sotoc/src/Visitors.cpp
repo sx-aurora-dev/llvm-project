@@ -266,6 +266,12 @@ bool DiscoverTypesInDeclVisitor::VisitDecl(clang::Decl *D) {
 }
 
 bool DiscoverTypesInDeclVisitor::VisitExpr(clang::Expr *E) {
+  if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(E)) {
+    if (auto *ECD = llvm::dyn_cast<clang::EnumConstantDecl>(DRE->getDecl())) {
+      OnEachTypeRef(llvm::cast<clang::EnumDecl>(ECD->getDeclContext()));
+      return true;
+    }
+  }
   if (const clang::Type *TP = E->getType().getTypePtrOrNull()) {
     processType(TP);
   }

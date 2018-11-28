@@ -8,6 +8,8 @@ int main() {
   #pragma omp target
   {
     printf("%d", B);
+    CELL_ENTRIES E = A;
+    printf("%d", E);
   } 
 
 }
