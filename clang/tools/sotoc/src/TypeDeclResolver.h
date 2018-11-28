@@ -34,9 +34,13 @@ struct TypeInfoTy {
   std::set<clang::TypeDecl *> TypeDependencies;
   bool isFromSystemHeader;
   int InDegree;
+  unsigned int CycleState; // 0 = Unvisited by toposort
+                           // 1 = being processed by toposort
+                           // 2 = already processed by toposort
 
   TypeInfoTy(clang::TypeDecl *D, bool isFromSystemHeader)
-      : Decl(D), isFromSystemHeader(isFromSystemHeader), InDegree(0){};
+      : Decl(D), isFromSystemHeader(isFromSystemHeader), InDegree(0),
+        CycleState(0){};
 };
 
 using TypeMap = std::map<clang::TypeDecl *, TypeInfoTy>;
