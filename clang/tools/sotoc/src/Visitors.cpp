@@ -119,6 +119,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
   for (auto i = TargetDirective->child_begin(),
             e = TargetDirective->child_end();
        i != e; ++i) {
+
     if (auto *CS = llvm::dyn_cast<clang::CapturedStmt>(*i)) {
       while (auto *NCS =
                  llvm::dyn_cast<clang::CapturedStmt>(CS->getCapturedStmt())) {
@@ -126,13 +127,14 @@ bool FindTargetCodeVisitor::processTargetRegion(
       }
 
       auto TCR = std::make_shared<TargetCodeRegion>(
-          CS, TargetDirective->getLocStart(), LastVisitedFuncDecl, Context);
+          CS, TargetDirective, LastVisitedFuncDecl, Context);
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
         // look for nested clause
         if (auto *CD = CS->getCapturedDecl()) {
-          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody())) {
+          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody()))
+          {
             // CoS->dump();
             for (auto *ICoS : CoS->children()) {
               if (auto *PD =
@@ -144,7 +146,6 @@ bool FindTargetCodeVisitor::processTargetRegion(
               }
             }
           }
-        }
 
         // For more complex data types (like structs) we need to traverse the
         // tree
@@ -153,263 +154,33 @@ bool FindTargetCodeVisitor::processTargetRegion(
         TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
         TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
 
+        for ( auto C : TargetDirective->clauses()) {
+          TCR->addOpenMPClause(C);
+        }
+
         // For some combined OpenMP constructs we need some of the clauses.
         // This parts figures out which clauses to add (regarding the
         // specification).
 
-        switch (TCR->TargetCodeKind) {
-        case clang::OpenMPDirectiveKind::OMPD_target: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            // case clang::OpenMPClauseKind::OMPC_if:
-            // case clang::OpenMPClauseKind::OMPC_device:
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_private:
-            // case clang::OpenMPClauseKind::OMPC_nowait:
-            // case clang::OpenMPClauseKind::OMPC_depend:
-            // case clang::OpenMPClauseKind::OMPC_defaultmap:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-              // case clang::OpenMPClauseKind::OMPC_is_device_ptr:
-              // case clang::OpenMPClauseKind::OMPC_reduction:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_teams: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_num_teams:
-            case clang::OpenMPClauseKind::OMPC_thread_limit:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_parallel: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_if:
-            case clang::OpenMPClauseKind::OMPC_num_threads:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_proc_bind:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_if:
-            case clang::OpenMPClauseKind::OMPC_num_threads:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_proc_bind:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_schedule:
-            case clang::OpenMPClauseKind::OMPC_ordered:
-            case clang::OpenMPClauseKind::OMPC_linear:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_if:
-            case clang::OpenMPClauseKind::OMPC_num_threads:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_proc_bind:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_schedule:
-            case clang::OpenMPClauseKind::OMPC_safelen:
-            case clang::OpenMPClauseKind::OMPC_simdlen:
-            case clang::OpenMPClauseKind::OMPC_linear:
-            case clang::OpenMPClauseKind::OMPC_aligned:
-            case clang::OpenMPClauseKind::OMPC_ordered:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_simd: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_linear:
-            case clang::OpenMPClauseKind::OMPC_aligned:
-            case clang::OpenMPClauseKind::OMPC_safelen:
-            case clang::OpenMPClauseKind::OMPC_simdlen:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_num_teams:
-            case clang::OpenMPClauseKind::OMPC_thread_limit:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_dist_schedule:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::
-            OMPD_target_teams_distribute_parallel_for: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_dist_schedule:
-            case clang::OpenMPClauseKind::OMPC_if:
-            case clang::OpenMPClauseKind::OMPC_num_threads:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_proc_bind:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_schedule:
-            case clang::OpenMPClauseKind::OMPC_num_teams:
-            case clang::OpenMPClauseKind::OMPC_thread_limit:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::
-            OMPD_target_teams_distribute_parallel_for_simd: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_dist_schedule:
-            case clang::OpenMPClauseKind::OMPC_if:
-            case clang::OpenMPClauseKind::OMPC_num_threads:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_proc_bind:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_schedule:
-            case clang::OpenMPClauseKind::OMPC_linear:
-            case clang::OpenMPClauseKind::OMPC_aligned:
-            case clang::OpenMPClauseKind::OMPC_safelen:
-            case clang::OpenMPClauseKind::OMPC_simdlen:
-            case clang::OpenMPClauseKind::OMPC_num_teams:
-            case clang::OpenMPClauseKind::OMPC_thread_limit:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
-          for (auto C : TargetDirective->clauses()) {
-            switch (C->getClauseKind()) {
-            case clang::OpenMPClauseKind::OMPC_map:
-            case clang::OpenMPClauseKind::OMPC_default:
-            case clang::OpenMPClauseKind::OMPC_private:
-            case clang::OpenMPClauseKind::OMPC_firstprivate:
-            case clang::OpenMPClauseKind::OMPC_shared:
-            case clang::OpenMPClauseKind::OMPC_reduction:
-            case clang::OpenMPClauseKind::OMPC_num_teams:
-            case clang::OpenMPClauseKind::OMPC_thread_limit:
-            case clang::OpenMPClauseKind::OMPC_lastprivate:
-            case clang::OpenMPClauseKind::OMPC_collapse:
-            case clang::OpenMPClauseKind::OMPC_dist_schedule:
-            case clang::OpenMPClauseKind::OMPC_linear:
-            case clang::OpenMPClauseKind::OMPC_aligned:
-            case clang::OpenMPClauseKind::OMPC_safelen:
-            case clang::OpenMPClauseKind::OMPC_simdlen:
-              TCR->addOpenMPClause(C);
-              break;
-            default:
-              break;
-            }
-          }
-          break;
-        }
-        default:
-          break;
         }
       }
     }
+    return true; // why even have a return?
   }
-  return true; // why even have a return?
 }
 
 void FindTargetCodeVisitor::addTargetRegionArgs(
     clang::CapturedStmt *S, std::shared_ptr<TargetCodeRegion> TCR) {
+
   for (const auto &i : S->captures()) {
     TCR->addCapturedVar(i.getCapturedVar());
+  }
+
+  FindLoopStmtVisitor FindLoopVisitor;
+  FindLoopVisitor.TraverseStmt(S);
+
+  for (const auto &i : *FindLoopVisitor.getVarSet()) {
+    // TCR->addCapturedVar(i);
   }
 }
 
@@ -446,6 +217,40 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
         TCD->NeedsSemicolon = true;
       }
       return true;
+    }
+  }
+  return true;
+}
+
+bool FindLoopStmtVisitor::VisitStmt(clang::Stmt *S) {
+  if (auto LS = llvm::dyn_cast<clang::ForStmt>(S)) {
+    FindDeclRefVisitor.TraverseStmt(LS->getInit());
+  }
+  // else if (auto LS = llvm::dyn_cast<clang::DoStmt>(S)) {
+  //   FindDeclRefVisitor.TraverseStmt(LS);
+  // } else if (auto LS = llvm::dyn_cast<clang::WhileStmt>(S)) {
+  //   FindDeclRefVisitor.TraverseStmt(LS);
+  // }
+  return true;
+}
+
+// bool FindDeclRefExprVisitor::VisitDecl(clang::Decl *D) {
+//   printf("VisitDecl\n");
+//   D->dumpColor();
+//   return true;
+// }
+
+bool FindDeclRefExprVisitor::VisitStmt(clang::Stmt *S) {
+  // printf("VisitStmt\n");
+  // S->dumpColor();
+  if (auto DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
+    if (auto DD = llvm::dyn_cast<clang::DeclaratorDecl>(DRE->getDecl())) {
+      if (auto VD = llvm::dyn_cast<clang::VarDecl>(DD)) {
+        if (VD->getNameAsString() != ".reduction.lhs") {
+        // printf("VarDecl\n");
+        VarSet.insert(VD);
+        }
+      }
     }
   }
   return true;

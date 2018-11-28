@@ -173,7 +173,7 @@ std::string TargetCodeRegion::PrintClauses() {
   const clang::LangOptions &LO = Context.getLangOpts();
   std::stringstream Out;
   for (auto C : OMPClauses) {
-    if (!(C->getClauseKind() == clang::OpenMPClauseKind::OMPC_map)) {
+    if (isClausePrintable(C)) {
       clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
       clang::CharSourceRange CCRange =
           clang::CharSourceRange::getTokenRange(CRange);
@@ -210,6 +210,211 @@ clang::OMPClause *TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
     }
   }
   return NULL;
+}
+
+bool TargetCodeRegion::isClausePrintable(clang::OMPClause* C) {
+  switch (TargetCodeFragment::getTargetCodeKind()) {
+  case clang::OpenMPDirectiveKind::OMPD_target: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_if:
+    // case clang::OpenMPClauseKind::OMPC_device:
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_private:
+    // case clang::OpenMPClauseKind::OMPC_nowait:
+    // case clang::OpenMPClauseKind::OMPC_depend:
+    // case clang::OpenMPClauseKind::OMPC_defaultmap:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+      // case clang::OpenMPClauseKind::OMPC_is_device_ptr:
+      // case clang::OpenMPClauseKind::OMPC_reduction:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_teams: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_num_teams:
+    case clang::OpenMPClauseKind::OMPC_thread_limit:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_parallel: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_if:
+    case clang::OpenMPClauseKind::OMPC_num_threads:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_proc_bind:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_if:
+    case clang::OpenMPClauseKind::OMPC_num_threads:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_proc_bind:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_schedule:
+    case clang::OpenMPClauseKind::OMPC_ordered:
+    case clang::OpenMPClauseKind::OMPC_linear:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_if:
+    case clang::OpenMPClauseKind::OMPC_num_threads:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_proc_bind:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_schedule:
+    case clang::OpenMPClauseKind::OMPC_safelen:
+    case clang::OpenMPClauseKind::OMPC_simdlen:
+    case clang::OpenMPClauseKind::OMPC_linear:
+    case clang::OpenMPClauseKind::OMPC_aligned:
+    case clang::OpenMPClauseKind::OMPC_ordered:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_simd: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_linear:
+    case clang::OpenMPClauseKind::OMPC_aligned:
+    case clang::OpenMPClauseKind::OMPC_safelen:
+    case clang::OpenMPClauseKind::OMPC_simdlen:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_num_teams:
+    case clang::OpenMPClauseKind::OMPC_thread_limit:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_dist_schedule:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_dist_schedule:
+    case clang::OpenMPClauseKind::OMPC_if:
+    case clang::OpenMPClauseKind::OMPC_num_threads:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_proc_bind:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_schedule:
+    case clang::OpenMPClauseKind::OMPC_num_teams:
+    case clang::OpenMPClauseKind::OMPC_thread_limit:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::
+      OMPD_target_teams_distribute_parallel_for_simd: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_dist_schedule:
+    case clang::OpenMPClauseKind::OMPC_if:
+    case clang::OpenMPClauseKind::OMPC_num_threads:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_proc_bind:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_schedule:
+    case clang::OpenMPClauseKind::OMPC_linear:
+    case clang::OpenMPClauseKind::OMPC_aligned:
+    case clang::OpenMPClauseKind::OMPC_safelen:
+    case clang::OpenMPClauseKind::OMPC_simdlen:
+    case clang::OpenMPClauseKind::OMPC_num_teams:
+    case clang::OpenMPClauseKind::OMPC_thread_limit:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
+    switch (C->getClauseKind()) {
+    // case clang::OpenMPClauseKind::OMPC_map:
+    case clang::OpenMPClauseKind::OMPC_default:
+    case clang::OpenMPClauseKind::OMPC_private:
+    case clang::OpenMPClauseKind::OMPC_firstprivate:
+    case clang::OpenMPClauseKind::OMPC_shared:
+    case clang::OpenMPClauseKind::OMPC_reduction:
+    case clang::OpenMPClauseKind::OMPC_num_teams:
+    case clang::OpenMPClauseKind::OMPC_thread_limit:
+    case clang::OpenMPClauseKind::OMPC_lastprivate:
+    case clang::OpenMPClauseKind::OMPC_collapse:
+    case clang::OpenMPClauseKind::OMPC_dist_schedule:
+    case clang::OpenMPClauseKind::OMPC_linear:
+    case clang::OpenMPClauseKind::OMPC_aligned:
+    case clang::OpenMPClauseKind::OMPC_safelen:
+    case clang::OpenMPClauseKind::OMPC_simdlen:
+      return true;
+    default:
+      return false;
+    }
+  }
+  default:
+    break;
+  }
 }
 
 std::string TargetCodeRegion::PrintPretty() {

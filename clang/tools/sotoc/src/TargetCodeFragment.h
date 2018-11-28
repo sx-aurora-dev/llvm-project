@@ -15,6 +15,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/PrettyPrinter.h"
+#include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/OpenMPKinds.h"
 
 // forward declaration of clang types
@@ -49,8 +50,8 @@ protected:
   const TargetCodeFragmentKind Kind;
   // Actual class content
 public:
-  bool NeedsSemicolon;                       // TODO: getter method
-  clang::OpenMPDirectiveKind TargetCodeKind; // TODO: getter method
+  bool NeedsSemicolon; // TODO: getter method
+  clang::OpenMPDirectiveKind TargetCodeKind;
   bool HasExtraBraces; // TODO: Determine if this can be used for removing the
                        // addition scope or remove it.
   TargetCodeFragmentKind getKind() const { return Kind; };
@@ -75,6 +76,7 @@ public:
   virtual clang::SourceRange getInnerRange() { return getRealRange(); }
   virtual clang::SourceLocation getStartLoc() = 0;
   virtual clang::SourceLocation getEndLoc() = 0;
+  clang::OpenMPDirectiveKind getTargetCodeKind() { return TargetCodeKind; }
 };
 
 // TargetCodeFragment which has an actual representation in source code
@@ -123,16 +125,17 @@ private:
   std::vector<clang::OMPClause *> OMPClauses;
   std::string ParentFuncName;
   clang::SourceLocation TargetDirectiveLocation;
+  clang::OMPExecutableDirective *TargetDirective;
 
 public:
   TargetCodeRegion(clang::CapturedStmt *Node,
-                   clang::SourceLocation TargetDirectiveLocation,
+                   clang::OMPExecutableDirective *TargetDirective,
                    clang::FunctionDecl *ParentFuncDecl,
                    clang::ASTContext &Context)
       : TargetCodeSourceFragment<clang::CapturedStmt *>(Node, Context,
                                                         TCFK_TargetCodeRegion),
         ParentFuncName(ParentFuncDecl->getNameAsString()),
-        TargetDirectiveLocation(TargetDirectiveLocation) {}
+        TargetDirectiveLocation(TargetDirective->getBeginLoc()) {}
 
   void addCapturedVar(clang::VarDecl *Var);
   void addOpenMPClause(clang::OMPClause *Clause);
@@ -145,7 +148,7 @@ public:
   };
   std::string PrintClauses();
   std::string PrintLocalVarsFromClauses();
-  clang::OMPClause* GetReferredOMPClause(clang::VarDecl *i);
+  clang::OMPClause *GetReferredOMPClause(clang::VarDecl *i);
   virtual std::string PrintPretty() override;
   clang::SourceRange getInnerRange() override;
   clang::SourceLocation getStartLoc() override;
@@ -154,6 +157,7 @@ public:
   clang::SourceLocation getTargetDirectiveLocation() {
     return TargetDirectiveLocation;
   }
+  bool isClausePrintable(clang::OMPClause* C);
 };
 
 // Represents a Function Decl or Var Decl in 'Declare Target'
