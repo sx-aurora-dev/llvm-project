@@ -16,7 +16,6 @@
 #define LLVM_CLANG_LIB_STATICANALYZER_CHECKERS_RETAINCOUNTCHECKER_H
 
 #include "../ClangSACheckers.h"
-#include "../AllocationDiagnostics.h"
 #include "RetainCountDiagnostics.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/DeclCXX.h"
@@ -44,8 +43,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include <cstdarg>
 #include <utility>
-
-using llvm::StrInStrNoCase;
 
 namespace clang {
 namespace ento {
@@ -252,7 +249,6 @@ class RetainCountChecker
                     check::PostStmt<ObjCBoxedExpr>,
                     check::PostStmt<ObjCIvarRefExpr>,
                     check::PostCall,
-                    check::PreStmt<ReturnStmt>,
                     check::RegionChanges,
                     eval::Assume,
                     eval::Call > {
@@ -269,72 +265,24 @@ class RetainCountChecker
   mutable std::unique_ptr<RetainSummaryManager> Summaries;
   mutable SummaryLogTy SummaryLog;
 
-  AnalyzerOptions &Options;
   mutable bool ShouldResetSummaryLog;
 
+public:
   /// Optional setting to indicate if leak reports should include
   /// the allocation line.
-  mutable bool IncludeAllocationLine;
+  bool IncludeAllocationLine;
+  bool ShouldCheckOSObjectRetainCount;
 
-public:
-  RetainCountChecker(AnalyzerOptions &Options)
-      : Options(Options), ShouldResetSummaryLog(false),
-        IncludeAllocationLine(
-            shouldIncludeAllocationSiteInLeakDiagnostics(Options)) {}
+  RetainCountChecker() : ShouldResetSummaryLog(false) {}
 
   ~RetainCountChecker() override { DeleteContainerSeconds(DeadSymbolTags); }
 
-  bool shouldCheckOSObjectRetainCount() const {
-    return Options.getBooleanOption("CheckOSObject", false, this);
-  }
-
   void checkEndAnalysis(ExplodedGraph &G, BugReporter &BR,
-                        ExprEngine &Eng) const {
-    // FIXME: This is a hack to make sure the summary log gets cleared between
-    // analyses of different code bodies.
-    //
-    // Why is this necessary? Because a checker's lifetime is tied to a
-    // translation unit, but an ExplodedGraph's lifetime is just a code body.
-    // Once in a blue moon, a new ExplodedNode will have the same address as an
-    // old one with an associated summary, and the bug report visitor gets very
-    // confused. (To make things worse, the summary lifetime is currently also
-    // tied to a code body, so we get a crash instead of incorrect results.)
-    //
-    // Why is this a bad solution? Because if the lifetime of the ExplodedGraph
-    // changes, things will start going wrong again. Really the lifetime of this
-    // log needs to be tied to either the specific nodes in it or the entire
-    // ExplodedGraph, not to a specific part of the code being analyzed.
-    //
-    // (Also, having stateful local data means that the same checker can't be
-    // used from multiple threads, but a lot of checkers have incorrect
-    // assumptions about that anyway. So that wasn't a priority at the time of
-    // this fix.)
-    //
-    // This happens at the end of analysis, but bug reports are emitted /after/
-    // this point. So we can't just clear the summary log now. Instead, we mark
-    // that the next time we access the summary log, it should be cleared.
+                        ExprEngine &Eng) const;
 
-    // If we never reset the summary log during /this/ code body analysis,
-    // there were no new summaries. There might still have been summaries from
-    // the /last/ analysis, so clear them out to make sure the bug report
-    // visitors don't get confused.
-    if (ShouldResetSummaryLog)
-      SummaryLog.clear();
+  CFRefBug *getLeakWithinFunctionBug(const LangOptions &LOpts) const;
 
-    ShouldResetSummaryLog = !SummaryLog.empty();
-  }
-
-  CFRefBug *getLeakWithinFunctionBug(const LangOptions &LOpts) const {
-    if (!leakWithinFunction)
-      leakWithinFunction.reset(new Leak(this, "Leak"));
-    return leakWithinFunction.get();
-  }
-
-  CFRefBug *getLeakAtReturnBug(const LangOptions &LOpts) const {
-      if (!leakAtReturn)
-        leakAtReturn.reset(new Leak(this, "Leak of returned object"));
-      return leakAtReturn.get();
-  }
+  CFRefBug *getLeakAtReturnBug(const LangOptions &LOpts) const;
 
   RetainSummaryManager &getSummaryManager(ASTContext &Ctx) const {
     // FIXME: We don't support ARC being turned on and off during one analysis.
@@ -342,7 +290,7 @@ public:
     bool ARCEnabled = (bool)Ctx.getLangOpts().ObjCAutoRefCount;
     if (!Summaries) {
       Summaries.reset(new RetainSummaryManager(
-          Ctx, ARCEnabled, shouldCheckOSObjectRetainCount()));
+          Ctx, ARCEnabled, ShouldCheckOSObjectRetainCount));
     } else {
       assert(Summaries->isARCEnabled() == ARCEnabled);
     }
@@ -388,8 +336,7 @@ public:
                      const LocationContext* LCtx,
                      const CallEvent *Call) const;
 
-  void checkPreStmt(const ReturnStmt *S, CheckerContext &C) const;
-  void checkReturnWithRetEffect(const ReturnStmt *S, CheckerContext &C,
+  ExplodedNode* checkReturnWithRetEffect(const ReturnStmt *S, CheckerContext &C,
                                 ExplodedNode *Pred, RetEffect RE, RefVal X,
                                 SymbolRef Sym, ProgramStateRef state) const;
 
@@ -416,12 +363,20 @@ public:
   ProgramStateRef
   handleAutoreleaseCounts(ProgramStateRef state, ExplodedNode *Pred,
                           const ProgramPointTag *Tag, CheckerContext &Ctx,
-                          SymbolRef Sym, RefVal V) const;
+                          SymbolRef Sym,
+                          RefVal V,
+                          const ReturnStmt *S=nullptr) const;
 
   ExplodedNode *processLeaks(ProgramStateRef state,
                              SmallVectorImpl<SymbolRef> &Leaked,
                              CheckerContext &Ctx,
                              ExplodedNode *Pred = nullptr) const;
+
+private:
+  /// Perform the necessary checks and state adjustments at the end of the
+  /// function.
+  /// \p S Return statement, may be null.
+  ExplodedNode * processReturn(const ReturnStmt *S, CheckerContext &C) const;
 };
 
 //===----------------------------------------------------------------------===//

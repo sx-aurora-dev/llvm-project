@@ -8,18 +8,29 @@
 //===----------------------------------------------------------------------===//
 
 #include "FileIndex.h"
-#include "../Logger.h"
+#include "ClangdUnit.h"
+#include "Logger.h"
 #include "SymbolCollector.h"
+#include "index/Index.h"
+#include "index/MemIndex.h"
+#include "index/Merge.h"
+#include "index/dex/Dex.h"
 #include "clang/Index/IndexingAction.h"
+#include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/Preprocessor.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include <memory>
 
+using namespace llvm;
 namespace clang {
 namespace clangd {
 
-std::pair<SymbolSlab, SymbolOccurrenceSlab>
-indexAST(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
-         llvm::Optional<llvm::ArrayRef<Decl *>> TopLevelDecls,
-         llvm::ArrayRef<std::string> URISchemes) {
+static std::pair<SymbolSlab, RefSlab>
+indexSymbols(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
+             ArrayRef<Decl *> DeclsToIndex, bool IsIndexMainAST) {
   SymbolCollector::Options CollectorOpts;
   // FIXME(ioeric): we might also want to collect include headers. We would need
   // to make sure all includes are canonicalized (with CanonicalIncludes), which
@@ -28,8 +39,6 @@ indexAST(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
   // CommentHandler for IWYU pragma) to canonicalize includes.
   CollectorOpts.CollectIncludePath = false;
   CollectorOpts.CountReferences = false;
-  if (!URISchemes.empty())
-    CollectorOpts.URISchemes = URISchemes;
   CollectorOpts.Origin = SymbolOrigin::Dynamic;
 
   index::IndexingOptions IndexOpts;
@@ -37,141 +46,174 @@ indexAST(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
   IndexOpts.SystemSymbolFilter =
       index::IndexingOptions::SystemSymbolFilterKind::DeclarationsOnly;
   IndexOpts.IndexFunctionLocals = false;
-
-  std::vector<Decl *> DeclsToIndex;
-  if (TopLevelDecls)
-    DeclsToIndex.assign(TopLevelDecls->begin(), TopLevelDecls->end());
-  else
-    DeclsToIndex.assign(AST.getTranslationUnitDecl()->decls().begin(),
-                        AST.getTranslationUnitDecl()->decls().end());
-
-  // We only collect occurrences when indexing main AST.
-  // FIXME: this is a hacky way to detect whether we are indexing preamble AST
-  // or main AST, we should make it explicitly.
-  bool IsIndexMainAST = TopLevelDecls.hasValue();
-  if (IsIndexMainAST)
-    CollectorOpts.OccurrenceFilter = AllOccurrenceKinds;
+  if (IsIndexMainAST) {
+    // We only collect refs when indexing main AST.
+    CollectorOpts.RefFilter = RefKind::All;
+  }else {
+    IndexOpts.IndexMacrosInPreprocessor = true;
+    CollectorOpts.CollectMacro = true;
+  }
 
   SymbolCollector Collector(std::move(CollectorOpts));
   Collector.setPreprocessor(PP);
-  index::indexTopLevelDecls(AST, DeclsToIndex, Collector, IndexOpts);
+  index::indexTopLevelDecls(AST, *PP, DeclsToIndex, Collector, IndexOpts);
 
   const auto &SM = AST.getSourceManager();
   const auto *MainFileEntry = SM.getFileEntryForID(SM.getMainFileID());
   std::string FileName = MainFileEntry ? MainFileEntry->getName() : "";
 
   auto Syms = Collector.takeSymbols();
-  auto Occurrences = Collector.takeOccurrences();
-  vlog("index {0}AST for {1}: \n"
+  auto Refs = Collector.takeRefs();
+  vlog("index AST for {0} (main={1}): \n"
        "  symbol slab: {2} symbols, {3} bytes\n"
-       "  occurrence slab: {4} symbols, {5} bytes",
-       IsIndexMainAST ? "Main" : "Preamble", FileName, Syms.size(),
-       Syms.bytes(), Occurrences.size(), Occurrences.bytes());
-  return {std::move(Syms), std::move(Occurrences)};
+       "  ref slab: {4} symbols, {5} refs, {6} bytes",
+       FileName, IsIndexMainAST, Syms.size(), Syms.bytes(), Refs.size(),
+       Refs.numRefs(), Refs.bytes());
+  return {std::move(Syms), std::move(Refs)};
 }
 
-FileIndex::FileIndex(std::vector<std::string> URISchemes)
-    : URISchemes(std::move(URISchemes)) {}
+std::pair<SymbolSlab, RefSlab> indexMainDecls(ParsedAST &AST) {
+  return indexSymbols(AST.getASTContext(), AST.getPreprocessorPtr(),
+                      AST.getLocalTopLevelDecls(),
+                      /*IsIndexMainAST=*/true);
+}
 
-void FileSymbols::update(PathRef Path, std::unique_ptr<SymbolSlab> Slab,
-                         std::unique_ptr<SymbolOccurrenceSlab> Occurrences) {
+SymbolSlab indexHeaderSymbols(ASTContext &AST,
+                              std::shared_ptr<Preprocessor> PP) {
+  std::vector<Decl *> DeclsToIndex(
+      AST.getTranslationUnitDecl()->decls().begin(),
+      AST.getTranslationUnitDecl()->decls().end());
+  return indexSymbols(AST, std::move(PP), DeclsToIndex,
+                      /*IsIndexMainAST=*/false)
+      .first;
+}
+
+void FileSymbols::update(PathRef Path, std::unique_ptr<SymbolSlab> Symbols,
+                         std::unique_ptr<RefSlab> Refs) {
   std::lock_guard<std::mutex> Lock(Mutex);
-  if (!Slab)
-    FileToSlabs.erase(Path);
+  if (!Symbols)
+    FileToSymbols.erase(Path);
   else
-    FileToSlabs[Path] = std::move(Slab);
-  if (!Occurrences)
-    FileToOccurrenceSlabs.erase(Path);
+    FileToSymbols[Path] = std::move(Symbols);
+  if (!Refs)
+    FileToRefs.erase(Path);
   else
-    FileToOccurrenceSlabs[Path] = std::move(Occurrences);
+    FileToRefs[Path] = std::move(Refs);
 }
 
-std::shared_ptr<std::vector<const Symbol *>> FileSymbols::allSymbols() {
-  // The snapshot manages life time of symbol slabs and provides pointers of all
-  // symbols in all slabs.
-  struct Snapshot {
-    std::vector<const Symbol *> Pointers;
-    std::vector<std::shared_ptr<SymbolSlab>> KeepAlive;
-  };
-  auto Snap = std::make_shared<Snapshot>();
+std::unique_ptr<SymbolIndex>
+FileSymbols::buildIndex(IndexType Type, DuplicateHandling DuplicateHandle) {
+  std::vector<std::shared_ptr<SymbolSlab>> SymbolSlabs;
+  std::vector<std::shared_ptr<RefSlab>> RefSlabs;
   {
     std::lock_guard<std::mutex> Lock(Mutex);
-
-    for (const auto &FileAndSlab : FileToSlabs) {
-      Snap->KeepAlive.push_back(FileAndSlab.second);
-      for (const auto &Iter : *FileAndSlab.second)
-        Snap->Pointers.push_back(&Iter);
-    }
+    for (const auto &FileAndSymbols : FileToSymbols)
+      SymbolSlabs.push_back(FileAndSymbols.second);
+    for (const auto &FileAndRefs : FileToRefs)
+      RefSlabs.push_back(FileAndRefs.second);
   }
-  auto *Pointers = &Snap->Pointers;
-  // Use aliasing constructor to keep the snapshot alive along with the
-  // pointers.
-  return {std::move(Snap), Pointers};
-}
-
-std::shared_ptr<MemIndex::OccurrenceMap> FileSymbols::allOccurrences() const {
-  // The snapshot manages life time of symbol occurrence slabs and provides
-  // pointers to all occurrences in all occurrence slabs.
-  struct Snapshot {
-    MemIndex::OccurrenceMap Occurrences; // ID => {Occurrence}
-    std::vector<std::shared_ptr<SymbolOccurrenceSlab>> KeepAlive;
-  };
-
-  auto Snap = std::make_shared<Snapshot>();
-  {
-    std::lock_guard<std::mutex> Lock(Mutex);
-
-    for (const auto &FileAndSlab : FileToOccurrenceSlabs) {
-      Snap->KeepAlive.push_back(FileAndSlab.second);
-      for (const auto &IDAndOccurrences : *FileAndSlab.second) {
-        auto &Occurrences = Snap->Occurrences[IDAndOccurrences.first];
-        for (const auto &Occurrence : IDAndOccurrences.second)
-          Occurrences.push_back(&Occurrence);
+  std::vector<const Symbol *> AllSymbols;
+  std::vector<Symbol> SymsStorage;
+  switch (DuplicateHandle) {
+  case DuplicateHandling::Merge: {
+    DenseMap<SymbolID, Symbol> Merged;
+    for (const auto &Slab : SymbolSlabs) {
+      for (const auto &Sym : *Slab) {
+        auto I = Merged.try_emplace(Sym.ID, Sym);
+        if (!I.second)
+          I.first->second = mergeSymbol(I.first->second, Sym);
       }
     }
+    SymsStorage.reserve(Merged.size());
+    for (auto &Sym : Merged) {
+      SymsStorage.push_back(std::move(Sym.second));
+      AllSymbols.push_back(&SymsStorage.back());
+    }
+    // FIXME: aggregate symbol reference count based on references.
+    break;
+  }
+  case DuplicateHandling::PickOne: {
+    llvm::DenseSet<SymbolID> AddedSymbols;
+    for (const auto &Slab : SymbolSlabs)
+      for (const auto &Sym : *Slab)
+        if (AddedSymbols.insert(Sym.ID).second)
+          AllSymbols.push_back(&Sym);
+    break;
+  }
   }
 
-  return {std::move(Snap), &Snap->Occurrences};
-}
-
-void FileIndex::update(PathRef Path, ASTContext *AST,
-                       std::shared_ptr<Preprocessor> PP,
-                       llvm::Optional<llvm::ArrayRef<Decl *>> TopLevelDecls) {
-  if (!AST) {
-    FSymbols.update(Path, nullptr, nullptr);
-  } else {
-    assert(PP);
-    auto Slab = llvm::make_unique<SymbolSlab>();
-    auto OccurrenceSlab = llvm::make_unique<SymbolOccurrenceSlab>();
-    auto IndexResults = indexAST(*AST, PP, TopLevelDecls, URISchemes);
-    std::tie(*Slab, *OccurrenceSlab) =
-        indexAST(*AST, PP, TopLevelDecls, URISchemes);
-    FSymbols.update(Path, std::move(Slab), std::move(OccurrenceSlab));
+  std::vector<Ref> RefsStorage; // Contiguous ranges for each SymbolID.
+  DenseMap<SymbolID, ArrayRef<Ref>> AllRefs;
+  {
+    DenseMap<SymbolID, SmallVector<Ref, 4>> MergedRefs;
+    size_t Count = 0;
+    for (const auto &RefSlab : RefSlabs)
+      for (const auto &Sym : *RefSlab) {
+        MergedRefs[Sym.first].append(Sym.second.begin(), Sym.second.end());
+        Count += Sym.second.size();
+      }
+    RefsStorage.reserve(Count);
+    AllRefs.reserve(MergedRefs.size());
+    for (auto &Sym : MergedRefs) {
+      auto &SymRefs = Sym.second;
+      // Sorting isn't required, but yields more stable results over rebuilds.
+      llvm::sort(SymRefs);
+      llvm::copy(SymRefs, back_inserter(RefsStorage));
+      AllRefs.try_emplace(
+          Sym.first,
+          ArrayRef<Ref>(&RefsStorage[RefsStorage.size() - SymRefs.size()],
+                        SymRefs.size()));
+    }
   }
-  auto Symbols = FSymbols.allSymbols();
-  Index.build(std::move(Symbols), FSymbols.allOccurrences());
+
+  size_t StorageSize =
+      RefsStorage.size() * sizeof(Ref) + SymsStorage.size() * sizeof(Symbol);
+  for (const auto &Slab : SymbolSlabs)
+    StorageSize += Slab->bytes();
+  for (const auto &RefSlab : RefSlabs)
+    StorageSize += RefSlab->bytes();
+
+  // Index must keep the slabs and contiguous ranges alive.
+  switch (Type) {
+  case IndexType::Light:
+    return llvm::make_unique<MemIndex>(
+        make_pointee_range(AllSymbols), std::move(AllRefs),
+        std::make_tuple(std::move(SymbolSlabs), std::move(RefSlabs),
+                        std::move(RefsStorage), std::move(SymsStorage)),
+        StorageSize);
+  case IndexType::Heavy:
+    return llvm::make_unique<dex::Dex>(
+        make_pointee_range(AllSymbols), std::move(AllRefs),
+        std::make_tuple(std::move(SymbolSlabs), std::move(RefSlabs),
+                        std::move(RefsStorage), std::move(SymsStorage)),
+        StorageSize);
+  }
+  llvm_unreachable("Unknown clangd::IndexType");
 }
 
-bool FileIndex::fuzzyFind(
-    const FuzzyFindRequest &Req,
-    llvm::function_ref<void(const Symbol &)> Callback) const {
-  return Index.fuzzyFind(Req, Callback);
+FileIndex::FileIndex(bool UseDex)
+    : MergedIndex(&MainFileIndex, &PreambleIndex), UseDex(UseDex),
+      PreambleIndex(llvm::make_unique<MemIndex>()),
+      MainFileIndex(llvm::make_unique<MemIndex>()) {}
+
+void FileIndex::updatePreamble(PathRef Path, ASTContext &AST,
+                               std::shared_ptr<Preprocessor> PP) {
+  auto Symbols = indexHeaderSymbols(AST, std::move(PP));
+  PreambleSymbols.update(Path,
+                         llvm::make_unique<SymbolSlab>(std::move(Symbols)),
+                         llvm::make_unique<RefSlab>());
+  PreambleIndex.reset(
+      PreambleSymbols.buildIndex(UseDex ? IndexType::Heavy : IndexType::Light,
+                                 DuplicateHandling::PickOne));
 }
 
-void FileIndex::lookup(
-    const LookupRequest &Req,
-    llvm::function_ref<void(const Symbol &)> Callback) const {
-  Index.lookup(Req, Callback);
-}
-
-void FileIndex::findOccurrences(
-    const OccurrencesRequest &Req,
-    llvm::function_ref<void(const SymbolOccurrence &)> Callback) const {
-  Index.findOccurrences(Req, Callback);
-}
-
-size_t FileIndex::estimateMemoryUsage() const {
-  return Index.estimateMemoryUsage();
+void FileIndex::updateMain(PathRef Path, ParsedAST &AST) {
+  auto Contents = indexMainDecls(AST);
+  MainFileSymbols.update(
+      Path, llvm::make_unique<SymbolSlab>(std::move(Contents.first)),
+      llvm::make_unique<RefSlab>(std::move(Contents.second)));
+  MainFileIndex.reset(
+      MainFileSymbols.buildIndex(IndexType::Light, DuplicateHandling::PickOne));
 }
 
 } // namespace clangd

@@ -7,13 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
-// C++ Includes
-#include <cctype> // for alnum
-// Other libraries and framework includes
+#include <cctype>
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ExternalASTSource.h"
+#include "clang/AST/PrettyPrinter.h"
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceLocation.h"
@@ -58,7 +56,6 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Signals.h"
 
-// Project includes
 #include "ClangDiagnostic.h"
 #include "ClangExpressionParser.h"
 
@@ -380,8 +377,7 @@ ClangExpressionParser::ClangExpressionParser(ExecutionContextScope *exe_scope,
     m_compiler->getLangOpts().CPlusPlus = true;
     break;
   case lldb::eLanguageTypeObjC:
-    m_compiler->getLangOpts().ObjC1 = true;
-    m_compiler->getLangOpts().ObjC2 = true;
+    m_compiler->getLangOpts().ObjC = true;
     // FIXME: the following language option is a temporary workaround,
     // to "ask for ObjC, get ObjC++" (see comment above).
     m_compiler->getLangOpts().CPlusPlus = true;
@@ -402,16 +398,14 @@ ClangExpressionParser::ClangExpressionParser(ExecutionContextScope *exe_scope,
     LLVM_FALLTHROUGH;
   case lldb::eLanguageTypeC_plus_plus_03:
     m_compiler->getLangOpts().CPlusPlus = true;
-    // FIXME: the following language option is a temporary workaround,
-    // to "ask for C++, get ObjC++".  Apple hopes to remove this requirement on
-    // non-Apple platforms, but for now it is needed.
-    m_compiler->getLangOpts().ObjC1 = true;
+    if (process_sp)
+      m_compiler->getLangOpts().ObjC =
+          process_sp->GetLanguageRuntime(lldb::eLanguageTypeObjC) != nullptr;
     break;
   case lldb::eLanguageTypeObjC_plus_plus:
   case lldb::eLanguageTypeUnknown:
   default:
-    m_compiler->getLangOpts().ObjC1 = true;
-    m_compiler->getLangOpts().ObjC2 = true;
+    m_compiler->getLangOpts().ObjC = true;
     m_compiler->getLangOpts().CPlusPlus = true;
     m_compiler->getLangOpts().CPlusPlus11 = true;
     m_compiler->getHeaderSearchOpts().UseLibcxx = true;
@@ -435,7 +429,7 @@ ClangExpressionParser::ClangExpressionParser(ExecutionContextScope *exe_scope,
   // long time parsing and importing debug information.
   m_compiler->getLangOpts().SpellChecking = false;
 
-  if (process_sp && m_compiler->getLangOpts().ObjC1) {
+  if (process_sp && m_compiler->getLangOpts().ObjC) {
     if (process_sp->GetObjCLanguageRuntime()) {
       if (process_sp->GetObjCLanguageRuntime()->GetRuntimeVersion() ==
           ObjCLanguageRuntime::ObjCRuntimeVersions::eAppleObjC_V2)
@@ -564,6 +558,9 @@ class CodeComplete : public CodeCompleteConsumer {
   std::string m_expr;
   unsigned m_position = 0;
   CompletionRequest &m_request;
+  /// The printing policy we use when printing declarations for our completion
+  /// descriptions.
+  clang::PrintingPolicy m_desc_policy;
 
   /// Returns true if the given character can be used in an identifier.
   /// This also returns true for numbers because for completion we usually
@@ -638,10 +635,22 @@ public:
   /// @param[out] position
   ///    The character position of the user cursor in the `expr` parameter.
   ///
-  CodeComplete(CompletionRequest &request, std::string expr, unsigned position)
+  CodeComplete(CompletionRequest &request, clang::LangOptions ops,
+               std::string expr, unsigned position)
       : CodeCompleteConsumer(CodeCompleteOptions(), false),
         m_info(std::make_shared<GlobalCodeCompletionAllocator>()), m_expr(expr),
-        m_position(position), m_request(request) {}
+        m_position(position), m_request(request), m_desc_policy(ops) {
+
+    // Ensure that the printing policy is producing a description that is as
+    // short as possible.
+    m_desc_policy.SuppressScope = true;
+    m_desc_policy.SuppressTagKeyword = true;
+    m_desc_policy.FullyQualifiedName = false;
+    m_desc_policy.TerseOutput = true;
+    m_desc_policy.IncludeNewlines = false;
+    m_desc_policy.UseVoidForZeroParams = false;
+    m_desc_policy.Bool = true;
+  }
 
   /// Deregisters and destroys this code-completion consumer.
   virtual ~CodeComplete() {}
@@ -692,6 +701,7 @@ public:
 
       CodeCompletionResult &R = Results[I];
       std::string ToInsert;
+      std::string Description;
       // Handle the different completion kinds that come from the Sema.
       switch (R.Kind) {
       case CodeCompletionResult::RK_Declaration: {
@@ -705,10 +715,16 @@ public:
             ToInsert += "()";
           else
             ToInsert += "(";
-        }
-        // If we try to complete a namespace, then we can directly append
-        // the '::'.
-        if (const NamespaceDecl *N = dyn_cast<NamespaceDecl>(D)) {
+          raw_string_ostream OS(Description);
+          F->print(OS, m_desc_policy, false);
+          OS.flush();
+        } else if (const VarDecl *V = dyn_cast<VarDecl>(D)) {
+          Description = V->getType().getAsString(m_desc_policy);
+        } else if (const FieldDecl *F = dyn_cast<FieldDecl>(D)) {
+          Description = F->getType().getAsString(m_desc_policy);
+        } else if (const NamespaceDecl *N = dyn_cast<NamespaceDecl>(D)) {
+          // If we try to complete a namespace, then we can directly append
+          // the '::'.
           if (!N->isAnonymousNamespace())
             ToInsert += "::";
         }
@@ -735,7 +751,7 @@ public:
         // with the kind of result the lldb API expects.
         std::string CompletionSuggestion =
             mergeCompletion(m_expr, m_position, ToInsert);
-        m_request.AddCompletion(CompletionSuggestion);
+        m_request.AddCompletion(CompletionSuggestion, Description);
       }
     }
   }
@@ -773,7 +789,8 @@ bool ClangExpressionParser::Complete(CompletionRequest &request, unsigned line,
   // the LLVMUserExpression which exposes the right API. This should never fail
   // as we always have a ClangUserExpression whenever we call this.
   LLVMUserExpression &llvm_expr = *static_cast<LLVMUserExpression *>(&m_expr);
-  CodeComplete CC(request, llvm_expr.GetUserText(), typed_pos);
+  CodeComplete CC(request, m_compiler->getLangOpts(), llvm_expr.GetUserText(),
+                  typed_pos);
   // We don't need a code generator for parsing.
   m_code_generator.reset();
   // Start parsing the expression with our custom code completion consumer.
@@ -1162,9 +1179,9 @@ lldb_private::Status ClangExpressionParser::PrepareForExecution(
 
           if (!dynamic_checkers->Install(install_diagnostics, exe_ctx)) {
             if (install_diagnostics.Diagnostics().size())
-              err.SetErrorString("couldn't install checkers, unknown error");
-            else
               err.SetErrorString(install_diagnostics.GetString().c_str());
+            else
+              err.SetErrorString("couldn't install checkers, unknown error");
 
             return err;
           }

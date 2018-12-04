@@ -29,6 +29,7 @@ add_lldb_library(liblldb SHARED
   SBFrame.cpp
   SBFunction.cpp
   SBHostOS.cpp
+  SBInitializerOptions.cpp
   SBInstruction.cpp
   SBInstructionList.cpp
   SBLanguageRuntime.cpp
@@ -146,6 +147,7 @@ endif()
 if (LLDB_BUILD_FRAMEWORK)
   set_target_properties(liblldb
     PROPERTIES
+    SOVERSION "1.0.0"
     OUTPUT_NAME LLDB
     FRAMEWORK On
     FRAMEWORK_VERSION ${LLDB_FRAMEWORK_VERSION}

@@ -9,9 +9,11 @@
 
 #include "ForRangeCopyCheck.h"
 #include "../utils/DeclRefExprUtils.h"
-#include "../utils/ExprMutationAnalyzer.h"
 #include "../utils/FixItHintUtils.h"
+#include "../utils/Matchers.h"
+#include "../utils/OptionsUtils.h"
 #include "../utils/TypeTraits.h"
+#include "clang/Analysis/Analyses/ExprMutationAnalyzer.h"
 
 using namespace clang::ast_matchers;
 
@@ -21,10 +23,14 @@ namespace performance {
 
 ForRangeCopyCheck::ForRangeCopyCheck(StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      WarnOnAllAutoCopies(Options.get("WarnOnAllAutoCopies", 0)) {}
+      WarnOnAllAutoCopies(Options.get("WarnOnAllAutoCopies", 0)),
+      AllowedTypes(
+          utils::options::parseStringList(Options.get("AllowedTypes", ""))) {}
 
 void ForRangeCopyCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "WarnOnAllAutoCopies", WarnOnAllAutoCopies);
+  Options.store(Opts, "AllowedTypes",
+                utils::options::serializeStringList(AllowedTypes));
 }
 
 void ForRangeCopyCheck::registerMatchers(MatchFinder *Finder) {
@@ -32,7 +38,10 @@ void ForRangeCopyCheck::registerMatchers(MatchFinder *Finder) {
   // initialized through MaterializeTemporaryExpr which indicates a type
   // conversion.
   auto LoopVar = varDecl(
-      hasType(hasCanonicalType(unless(anyOf(referenceType(), pointerType())))),
+      hasType(qualType(
+          unless(anyOf(hasCanonicalType(anyOf(referenceType(), pointerType())),
+                       hasDeclaration(namedDecl(
+                           matchers::matchesAnyListedName(AllowedTypes))))))),
       unless(hasInitializer(expr(hasDescendant(materializeTemporaryExpr())))));
   Finder->addMatcher(cxxForRangeStmt(hasLoopVariable(LoopVar.bind("loopVar")))
                          .bind("forRange"),
@@ -41,6 +50,7 @@ void ForRangeCopyCheck::registerMatchers(MatchFinder *Finder) {
 
 void ForRangeCopyCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Var = Result.Nodes.getNodeAs<VarDecl>("loopVar");
+
   // Ignore code in macros since we can't place the fixes correctly.
   if (Var->getBeginLoc().isMacroID())
     return;
@@ -88,8 +98,7 @@ bool ForRangeCopyCheck::handleCopyIsOnlyConstReferenced(
   // Because the fix (changing to `const auto &`) will introduce an unused
   // compiler warning which can't be suppressed.
   // Since this case is very rare, it is safe to ignore it.
-  if (!utils::ExprMutationAnalyzer(ForRange.getBody(), &Context)
-          .isMutated(&LoopVar) &&
+  if (!ExprMutationAnalyzer(*ForRange.getBody(), Context).isMutated(&LoopVar) &&
       !utils::decl_ref_expr::allDeclRefExprs(LoopVar, *ForRange.getBody(),
                                              Context)
            .empty()) {

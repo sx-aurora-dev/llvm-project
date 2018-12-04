@@ -323,6 +323,10 @@ private:
           kwId == clang::tok::objc_synchronized)
         return 0;
     }
+    // Don't merge block with left brace wrapped after case labels
+    if (TheLine->First->is(tok::l_brace) && I != AnnotatedLines.begin() &&
+        I[-1]->First->isOneOf(tok::kw_case, tok::kw_default))
+      return 0;
     // Try to merge a block with left brace wrapped that wasn't yet covered
     if (TheLine->Last->is(tok::l_brace)) {
       return !Style.BraceWrapping.AfterFunction ||
@@ -423,6 +427,8 @@ private:
                           unsigned Limit) {
     if (Limit == 0 || I + 1 == E ||
         I[1]->First->isOneOf(tok::kw_case, tok::kw_default))
+      return 0;
+    if (I[0]->Last->is(tok::l_brace) || I[1]->First->is(tok::l_brace))
       return 0;
     unsigned NumStmts = 0;
     unsigned Length = 0;
@@ -535,7 +541,7 @@ private:
         Tok->SpacesRequiredBefore = 0;
         Tok->CanBreakBefore = true;
         return 1;
-      } else if (Limit != 0 && !Line.startsWith(tok::kw_namespace) &&
+      } else if (Limit != 0 && !Line.startsWithNamespace() &&
                  !startsExternCBlock(Line)) {
         // We don't merge short records.
         FormatToken *RecordTok = Line.First;
@@ -982,8 +988,7 @@ private:
       Path.push_front(Best);
       Best = Best->Previous;
     }
-    for (std::deque<StateNode *>::iterator I = Path.begin(), E = Path.end();
-         I != E; ++I) {
+    for (auto I = Path.begin(), E = Path.end(); I != E; ++I) {
       unsigned Penalty = 0;
       formatChildren(State, (*I)->NewLine, /*DryRun=*/false, Penalty);
       Penalty += Indenter->addTokenToState(State, (*I)->NewLine, false);
@@ -992,8 +997,8 @@ private:
         printLineState((*I)->Previous->State);
         if ((*I)->NewLine) {
           llvm::dbgs() << "Penalty for placing "
-                       << (*I)->Previous->State.NextToken->Tok.getName() << ": "
-                       << Penalty << "\n";
+                       << (*I)->Previous->State.NextToken->Tok.getName()
+                       << " on a new line: " << Penalty << "\n";
         }
       });
     }
@@ -1160,7 +1165,7 @@ void UnwrappedLineFormatter::formatFirstToken(
   // Remove empty lines after "{".
   if (!Style.KeepEmptyLinesAtTheStartOfBlocks && PreviousLine &&
       PreviousLine->Last->is(tok::l_brace) &&
-      PreviousLine->First->isNot(tok::kw_namespace) &&
+      !PreviousLine->startsWithNamespace() &&
       !startsExternCBlock(*PreviousLine))
     Newlines = 1;
 

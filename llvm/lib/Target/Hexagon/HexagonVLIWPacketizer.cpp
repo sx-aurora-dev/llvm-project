@@ -768,7 +768,7 @@ bool HexagonPacketizerList::canPromoteToNewValueStore(const MachineInstr &MI,
 
   // Make sure that for non-POST_INC stores:
   // 1. The only use of reg is DepReg and no other registers.
-  //    This handles V4 base+index registers.
+  //    This handles base+index registers.
   //    The following store can not be dot new.
   //    Eg.   r0 = add(r0, #3)
   //          memw(r1+r0<<#2) = r0
@@ -838,11 +838,7 @@ static bool isImplicitDependency(const MachineInstr &I, bool CheckDef,
   return false;
 }
 
-// Check to see if an instruction can be dot new
-// There are three kinds.
-// 1. dot new on predicate - V2/V3/V4
-// 2. dot new on stores NV/ST - V4
-// 3. dot new on jump NV/J - V4 -- This is generated in a pass.
+// Check to see if an instruction can be dot new.
 bool HexagonPacketizerList::canPromoteToDotNew(const MachineInstr &MI,
       const SUnit *PacketSU, unsigned DepReg, MachineBasicBlock::iterator &MII,
       const TargetRegisterClass* RC) {
@@ -1075,9 +1071,6 @@ bool HexagonPacketizerList::isSoloInstruction(const MachineInstr &MI) {
   if (MI.isInlineAsm() && !ScheduleInlineAsm)
     return true;
 
-  // From Hexagon V4 Programmer's Reference Manual 3.4.4 Grouping constraints:
-  // trap, pause, barrier, icinva, isync, and syncht are solo instructions.
-  // They must not be grouped with other instructions in a packet.
   if (isSchedBarrier(MI))
     return true;
 
@@ -1111,6 +1104,10 @@ static bool cannotCoexistAsymm(const MachineInstr &MI, const MachineInstr &MJ,
   if (MI.isInlineAsm())
     return MJ.isInlineAsm() || MJ.isBranch() || MJ.isBarrier() ||
            MJ.isCall() || MJ.isTerminator();
+
+  // New-value stores cannot coexist with any other stores.
+  if (HII.isNewValueStore(MI) && MJ.mayStore())
+    return true;
 
   switch (MI.getOpcode()) {
   case Hexagon::S2_storew_locked:
@@ -1285,8 +1282,8 @@ bool HexagonPacketizerList::hasRegMaskDependence(const MachineInstr &I,
   return false;
 }
 
-bool HexagonPacketizerList::hasV4SpecificDependence(const MachineInstr &I,
-                                                    const MachineInstr &J) {
+bool HexagonPacketizerList::hasDualStoreDependence(const MachineInstr &I,
+                                                   const MachineInstr &J) {
   bool SysI = isSystemInstr(I), SysJ = isSystemInstr(J);
   bool StoreI = I.mayStore(), StoreJ = J.mayStore();
   if ((SysI && StoreJ) || (SysJ && StoreI))
@@ -1339,10 +1336,10 @@ bool HexagonPacketizerList::isLegalToPacketizeTogether(SUnit *SUI, SUnit *SUJ) {
   if (Dependence)
     return false;
 
-  // V4 allows dual stores. It does not allow second store, if the first
-  // store is not in SLOT0. New value store, new value jump, dealloc_return
-  // and memop always take SLOT0. Arch spec 3.4.4.2.
-  Dependence = hasV4SpecificDependence(I, J);
+  // Dual-store does not allow second store, if the first store is not
+  // in SLOT0. New value store, new value jump, dealloc_return and memop
+  // always take SLOT0. Arch spec 3.4.4.2.
+  Dependence = hasDualStoreDependence(I, J);
   if (Dependence)
     return false;
 
@@ -1501,10 +1498,10 @@ bool HexagonPacketizerList::isLegalToPacketizeTogether(SUnit *SUI, SUnit *SUJ) {
     }
 
     // For Order dependences:
-    // 1. On V4 or later, volatile loads/stores can be packetized together,
-    //    unless other rules prevent is.
+    // 1. Volatile loads/stores can be packetized together, unless other
+    //    rules prevent is.
     // 2. Store followed by a load is not allowed.
-    // 3. Store followed by a store is only valid on V4 or later.
+    // 3. Store followed by a store is valid.
     // 4. Load followed by any memory operation is allowed.
     if (DepType == SDep::Order) {
       if (!PacketizeVolatiles) {
@@ -1551,7 +1548,7 @@ bool HexagonPacketizerList::isLegalToPacketizeTogether(SUnit *SUI, SUnit *SUJ) {
       continue;
     }
 
-    // For V4, special case ALLOCFRAME. Even though there is dependency
+    // Special case for ALLOCFRAME: even though there is dependency
     // between ALLOCFRAME and subsequent store, allow it to be packetized
     // in a same packet. This implies that the store is using the caller's
     // SP. Hence, offset needs to be updated accordingly.
@@ -1571,6 +1568,7 @@ bool HexagonPacketizerList::isLegalToPacketizeTogether(SUnit *SUI, SUnit *SUJ) {
             if (GlueAllocframeStore)
               continue;
           }
+          break;
         default:
           break;
       }
@@ -1653,6 +1651,9 @@ bool HexagonPacketizerList::isLegalToPruneDependencies(SUnit *SUI, SUnit *SUJ) {
     GlueToNewValueJump = false;
     return false;
   }
+
+  if (!Coexist)
+    return false;
 
   if (ChangedOffset == INT64_MAX && updateOffset(SUI, SUJ)) {
     FoundSequentialDependence = false;

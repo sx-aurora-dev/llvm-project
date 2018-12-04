@@ -21,11 +21,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using namespace llvm;
 namespace clang {
 namespace clangd {
-using namespace llvm;
-
 namespace {
+
 using testing::ElementsAre;
 using testing::Field;
 using testing::IsEmpty;
@@ -36,6 +36,10 @@ class IgnoreDiagnostics : public DiagnosticsConsumer {
   void onDiagnosticsReady(PathRef File,
                           std::vector<Diag> Diagnostics) override {}
 };
+
+MATCHER_P2(FileRange, File, Range, "") {
+  return Location{URIForFile::canonicalize(File, testRoot()), Range} == arg;
+}
 
 // Extracts ranges from an annotated example, and constructs a matcher for a
 // highlight set. Ranges should be named $read/$write as appropriate.
@@ -311,6 +315,47 @@ TEST(GoToDefinition, All) {
   }
 }
 
+TEST(GoToDefinition, Rank) {
+  auto T = Annotations(R"cpp(
+    struct $foo1[[Foo]] {
+      $foo2[[Foo]]();
+      $foo3[[Foo]](Foo&&);
+      $foo4[[Foo]](const char*);
+    };
+
+    Foo $f[[f]]();
+
+    void $g[[g]](Foo foo);
+
+    void call() {
+      const char* $str[[str]] = "123";
+      Foo a = $1^str;
+      Foo b = Foo($2^str);
+      Foo c = $3^f();
+      $4^g($5^f());
+      g($6^str);
+    }
+  )cpp");
+  auto AST = TestTU::withCode(T.code()).build();
+  EXPECT_THAT(findDefinitions(AST, T.point("1")),
+              ElementsAre(RangeIs(T.range("str")), RangeIs(T.range("foo4"))));
+  EXPECT_THAT(findDefinitions(AST, T.point("2")),
+              ElementsAre(RangeIs(T.range("str"))));
+  EXPECT_THAT(findDefinitions(AST, T.point("3")),
+              ElementsAre(RangeIs(T.range("f")), RangeIs(T.range("foo3"))));
+  EXPECT_THAT(findDefinitions(AST, T.point("4")),
+              ElementsAre(RangeIs(T.range("g"))));
+  EXPECT_THAT(findDefinitions(AST, T.point("5")),
+              ElementsAre(RangeIs(T.range("f")), RangeIs(T.range("foo3"))));
+
+  auto DefinitionAtPoint6 = findDefinitions(AST, T.point("6"));
+  EXPECT_EQ(3ul, DefinitionAtPoint6.size());
+  EXPECT_THAT(DefinitionAtPoint6, HasSubsequence(RangeIs(T.range("str")),
+                                                 RangeIs(T.range("foo4"))));
+  EXPECT_THAT(DefinitionAtPoint6, HasSubsequence(RangeIs(T.range("str")),
+                                                 RangeIs(T.range("foo3"))));
+}
+
 TEST(GoToDefinition, RelPathsInCompileCommand) {
   // The source is in "/clangd-test/src".
   // We build in "/clangd-test/build".
@@ -333,7 +378,7 @@ int [[bar_not_preamble]];
   // Make the compilation paths appear as ../src/foo.cpp in the compile
   // commands.
   SmallString<32> RelPathPrefix("..");
-  llvm::sys::path::append(RelPathPrefix, "src");
+  sys::path::append(RelPathPrefix, "src");
   std::string BuildDir = testPath("build");
   MockCompilationDatabase CDB(BuildDir, RelPathPrefix);
 
@@ -355,22 +400,22 @@ int [[bar_not_preamble]];
   auto Locations =
       runFindDefinitions(Server, FooCpp, SourceAnnotations.point("p1"));
   EXPECT_TRUE(bool(Locations)) << "findDefinitions returned an error";
-  EXPECT_THAT(*Locations, ElementsAre(Location{URIForFile{FooCpp},
-                                               SourceAnnotations.range()}));
+  EXPECT_THAT(*Locations,
+              ElementsAre(FileRange(FooCpp, SourceAnnotations.range())));
 
   // Go to a definition in header_in_preamble.h.
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("p2"));
   EXPECT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{URIForFile{HeaderInPreambleH},
-                                   HeaderInPreambleAnnotations.range()}));
+              ElementsAre(FileRange(HeaderInPreambleH,
+                                    HeaderInPreambleAnnotations.range())));
 
   // Go to a definition in header_not_in_preamble.h.
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("p3"));
   EXPECT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{URIForFile{HeaderNotInPreambleH},
-                                   HeaderNotInPreambleAnnotations.range()}));
+              ElementsAre(FileRange(HeaderNotInPreambleH,
+                                    HeaderNotInPreambleAnnotations.range())));
 }
 
 TEST(Hover, All) {
@@ -715,6 +760,15 @@ TEST(Hover, All) {
           "int",
       },
       {
+          R"cpp(// Simple initialization with auto*
+            void foo() {
+              int a = 1;
+              ^auto* i = &a;
+            }
+          )cpp",
+          "int",
+      },
+      {
           R"cpp(// Auto with initializer list.
             namespace std
             {
@@ -786,6 +840,14 @@ TEST(Hover, All) {
           "",
       },
       {
+          R"cpp(// simple trailing return type
+            ^auto main() -> int {
+              return 0;
+            }
+          )cpp",
+          "int",
+      },
+      {
           R"cpp(// auto function return with trailing type
             struct Bar {};
             ^auto test() -> decltype(Bar()) {
@@ -817,6 +879,16 @@ TEST(Hover, All) {
             struct Bar {};
             ^auto& test() {
               return Bar();
+            }
+          )cpp",
+          "struct Bar",
+      },
+      {
+          R"cpp(// auto* in function return
+            struct Bar {};
+            ^auto* test() {
+              Bar* bar;
+              return bar;
             }
           )cpp",
           "struct Bar",
@@ -939,6 +1011,13 @@ TEST(Hover, All) {
           )cpp",
           "",
       },
+      {
+          R"cpp(// More compilcated structured types.
+            int bar();
+            ^auto (*foo)() = bar;
+          )cpp",
+          "int",
+      },
   };
 
   for (const OneTest &Test : Tests) {
@@ -972,7 +1051,6 @@ TEST(GoToInclude, All) {
   Annotations SourceAnnotations(SourceContents);
   FS.Files[FooCpp] = SourceAnnotations.code();
   auto FooH = testPath("foo.h");
-  auto FooHUri = URIForFile{FooH};
 
   const char *HeaderContents = R"cpp([[]]#pragma once
                                      int a;
@@ -988,24 +1066,24 @@ TEST(GoToInclude, All) {
       runFindDefinitions(Server, FooCpp, SourceAnnotations.point());
   ASSERT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{FooHUri, HeaderAnnotations.range()}));
+              ElementsAre(FileRange(FooH, HeaderAnnotations.range())));
 
   // Test include in preamble, last char.
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("2"));
   ASSERT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{FooHUri, HeaderAnnotations.range()}));
+              ElementsAre(FileRange(FooH, HeaderAnnotations.range())));
 
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("3"));
   ASSERT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{FooHUri, HeaderAnnotations.range()}));
+              ElementsAre(FileRange(FooH, HeaderAnnotations.range())));
 
   // Test include outside of preamble.
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("6"));
   ASSERT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{FooHUri, HeaderAnnotations.range()}));
+              ElementsAre(FileRange(FooH, HeaderAnnotations.range())));
 
   // Test a few positions that do not result in Locations.
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("4"));
@@ -1015,12 +1093,12 @@ TEST(GoToInclude, All) {
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("5"));
   ASSERT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{FooHUri, HeaderAnnotations.range()}));
+              ElementsAre(FileRange(FooH, HeaderAnnotations.range())));
 
   Locations = runFindDefinitions(Server, FooCpp, SourceAnnotations.point("7"));
   ASSERT_TRUE(bool(Locations)) << "findDefinitions returned an error";
   EXPECT_THAT(*Locations,
-              ElementsAre(Location{FooHUri, HeaderAnnotations.range()}));
+              ElementsAre(FileRange(FooH, HeaderAnnotations.range())));
 }
 
 TEST(GoToDefinition, WithPreamble) {
@@ -1032,7 +1110,6 @@ TEST(GoToDefinition, WithPreamble) {
   ClangdServer Server(CDB, FS, DiagConsumer, ClangdServer::optsForTest());
 
   auto FooCpp = testPath("foo.cpp");
-  auto FooCppUri = URIForFile{FooCpp};
   // The trigger locations must be the same.
   Annotations FooWithHeader(R"cpp(#include "fo^o.h")cpp");
   Annotations FooWithoutHeader(R"cpp(double    [[fo^o]]();)cpp");
@@ -1040,7 +1117,6 @@ TEST(GoToDefinition, WithPreamble) {
   FS.Files[FooCpp] = FooWithHeader.code();
 
   auto FooH = testPath("foo.h");
-  auto FooHUri = URIForFile{FooH};
   Annotations FooHeader(R"cpp([[]])cpp");
   FS.Files[FooH] = FooHeader.code();
 
@@ -1048,7 +1124,7 @@ TEST(GoToDefinition, WithPreamble) {
   // GoToDefinition goes to a #include file: the result comes from the preamble.
   EXPECT_THAT(
       cantFail(runFindDefinitions(Server, FooCpp, FooWithHeader.point())),
-      ElementsAre(Location{FooHUri, FooHeader.range()}));
+      ElementsAre(FileRange(FooH, FooHeader.range())));
 
   // Only preamble is built, and no AST is built in this request.
   Server.addDocument(FooCpp, FooWithoutHeader.code(), WantDiagnostics::No);
@@ -1056,7 +1132,7 @@ TEST(GoToDefinition, WithPreamble) {
   // stale one.
   EXPECT_THAT(
       cantFail(runFindDefinitions(Server, FooCpp, FooWithoutHeader.point())),
-      ElementsAre(Location{FooCppUri, FooWithoutHeader.range()}));
+      ElementsAre(FileRange(FooCpp, FooWithoutHeader.range())));
 
   // Reset test environment.
   runAddDocument(Server, FooCpp, FooWithHeader.code());
@@ -1065,7 +1141,152 @@ TEST(GoToDefinition, WithPreamble) {
   // Use the AST being built in above request.
   EXPECT_THAT(
       cantFail(runFindDefinitions(Server, FooCpp, FooWithoutHeader.point())),
-      ElementsAre(Location{FooCppUri, FooWithoutHeader.range()}));
+      ElementsAre(FileRange(FooCpp, FooWithoutHeader.range())));
+}
+
+TEST(FindReferences, WithinAST) {
+  const char *Tests[] = {
+      R"cpp(// Local variable
+        int main() {
+          int [[foo]];
+          [[^foo]] = 2;
+          int test1 = [[foo]];
+        }
+      )cpp",
+
+      R"cpp(// Struct
+        namespace ns1 {
+        struct [[Foo]] {};
+        } // namespace ns1
+        int main() {
+          ns1::[[Fo^o]]* Params;
+        }
+      )cpp",
+
+      R"cpp(// Forward declaration
+        class [[Foo]];
+        class [[Foo]] {}
+        int main() {
+          [[Fo^o]] foo;
+        }
+      )cpp",
+
+      R"cpp(// Function
+        int [[foo]](int) {}
+        int main() {
+          auto *X = &[[^foo]];
+          [[foo]](42)
+        }
+      )cpp",
+
+      R"cpp(// Field
+        struct Foo {
+          int [[foo]];
+          Foo() : [[foo]](0) {}
+        };
+        int main() {
+          Foo f;
+          f.[[f^oo]] = 1;
+        }
+      )cpp",
+
+      R"cpp(// Method call
+        struct Foo { int [[foo]](); };
+        int Foo::[[foo]]() {}
+        int main() {
+          Foo f;
+          f.[[^foo]]();
+        }
+      )cpp",
+
+      R"cpp(// Typedef
+        typedef int [[Foo]];
+        int main() {
+          [[^Foo]] bar;
+        }
+      )cpp",
+
+      R"cpp(// Namespace
+        namespace [[ns]] {
+        struct Foo {};
+        } // namespace ns
+        int main() { [[^ns]]::Foo foo; }
+      )cpp",
+  };
+  for (const char *Test : Tests) {
+    Annotations T(Test);
+    auto AST = TestTU::withCode(T.code()).build();
+    std::vector<Matcher<Location>> ExpectedLocations;
+    for (const auto &R : T.ranges())
+      ExpectedLocations.push_back(RangeIs(R));
+    EXPECT_THAT(findReferences(AST, T.point()),
+                ElementsAreArray(ExpectedLocations))
+        << Test;
+  }
+}
+
+TEST(FindReferences, NeedsIndex) {
+  const char *Header = "int foo();";
+  Annotations Main("int main() { [[f^oo]](); }");
+  TestTU TU;
+  TU.Code = Main.code();
+  TU.HeaderCode = Header;
+  auto AST = TU.build();
+
+  // References in main file are returned without index.
+  EXPECT_THAT(findReferences(AST, Main.point(), /*Index=*/nullptr),
+              ElementsAre(RangeIs(Main.range())));
+  Annotations IndexedMain(R"cpp(
+    int main() { [[f^oo]](); }
+  )cpp");
+
+  // References from indexed files are included.
+  TestTU IndexedTU;
+  IndexedTU.Code = IndexedMain.code();
+  IndexedTU.Filename = "Indexed.cpp";
+  IndexedTU.HeaderCode = Header;
+  EXPECT_THAT(findReferences(AST, Main.point(), IndexedTU.index().get()),
+              ElementsAre(RangeIs(Main.range()), RangeIs(IndexedMain.range())));
+
+  // If the main file is in the index, we don't return duplicates.
+  // (even if the references are in a different location)
+  TU.Code = ("\n\n" + Main.code()).str();
+  EXPECT_THAT(findReferences(AST, Main.point(), TU.index().get()),
+              ElementsAre(RangeIs(Main.range())));
+}
+
+TEST(FindReferences, NoQueryForLocalSymbols) {
+  struct RecordingIndex : public MemIndex {
+    mutable Optional<DenseSet<SymbolID>> RefIDs;
+    void refs(const RefsRequest &Req,
+              function_ref<void(const Ref &)>) const override {
+      RefIDs = Req.IDs;
+    }
+  };
+
+  struct Test {
+    StringRef AnnotatedCode;
+    bool WantQuery;
+  } Tests[] = {
+      {"int ^x;", true},
+      // For now we don't assume header structure which would allow skipping.
+      {"namespace { int ^x; }", true},
+      {"static int ^x;", true},
+      // Anything in a function certainly can't be referenced though.
+      {"void foo() { int ^x; }", false},
+      {"void foo() { struct ^x{}; }", false},
+      {"auto lambda = []{ int ^x; };", false},
+  };
+  for (Test T : Tests) {
+    Annotations File(T.AnnotatedCode);
+    RecordingIndex Rec;
+    auto AST = TestTU::withCode(File.code()).build();
+    findReferences(AST, File.point(), &Rec);
+    if (T.WantQuery)
+      EXPECT_NE(Rec.RefIDs, None) << T.AnnotatedCode;
+    else
+      EXPECT_EQ(Rec.RefIDs, None) << T.AnnotatedCode;
+  }
 }
 
 } // namespace

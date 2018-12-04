@@ -29,12 +29,13 @@
 namespace __hwasan {
 
 struct Metadata {
-  u32 requested_size;  // sizes are < 4G.
+  u32 requested_size : 31;  // sizes are < 2G.
+  u32 right_aligned  : 1;
   u32 alloc_context_id;
 };
 
 struct HwasanMapUnmapCallback {
-  void OnMap(uptr p, uptr size) const {}
+  void OnMap(uptr p, uptr size) const { UpdateMemoryUsage(); }
   void OnUnmap(uptr p, uptr size) const {
     // We are about to unmap a chunk of user memory.
     // It can return as user-requested mmap() or another thread stack.
@@ -64,14 +65,8 @@ typedef LargeMmapAllocator<HwasanMapUnmapCallback> SecondaryAllocator;
 typedef CombinedAllocator<PrimaryAllocator, AllocatorCache,
                           SecondaryAllocator> Allocator;
 
-struct HwasanThreadLocalMallocStorage {
-  AllocatorCache allocator_cache;
-  void CommitBack();
 
- private:
-  // These objects are allocated via mmap() and are zero-initialized.
-  HwasanThreadLocalMallocStorage() {}
-};
+void AllocatorSwallowThreadLocalCache(AllocatorCache *cache);
 
 class HwasanChunkView {
  public:
@@ -82,7 +77,9 @@ class HwasanChunkView {
   uptr Beg() const;            // First byte of user memory
   uptr End() const;            // Last byte of user memory
   uptr UsedSize() const;       // Size requested by the user
+  uptr ActualSize() const;     // Size allocated by the allocator.
   u32 GetAllocStackId() const;
+  bool FromSmallHeap() const;
  private:
   uptr block_;
   Metadata *const metadata_;
@@ -92,6 +89,8 @@ HwasanChunkView FindHeapChunkByAddress(uptr address);
 
 // Information about one (de)allocation that happened in the past.
 // These are recorded in a thread-local ring buffer.
+// TODO: this is currently 24 bytes (20 bytes + alignment).
+// Compress it to 16 bytes or extend it to be more useful.
 struct HeapAllocationRecord {
   uptr tagged_addr;
   u32  alloc_context_id;
@@ -101,6 +100,7 @@ struct HeapAllocationRecord {
 
 typedef RingBuffer<HeapAllocationRecord> HeapAllocationsRingBuffer;
 
+void GetAllocatorStats(AllocatorStatCounters s);
 
 } // namespace __hwasan
 

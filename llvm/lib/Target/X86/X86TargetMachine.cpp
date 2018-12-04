@@ -54,24 +54,10 @@ static cl::opt<bool> EnableMachineCombinerPass("x86-machine-combiner",
                                cl::desc("Enable the machine combiner pass"),
                                cl::init(true), cl::Hidden);
 
-static cl::opt<bool> EnableSpeculativeLoadHardening(
-    "x86-speculative-load-hardening",
-    cl::desc("Enable speculative load hardening"), cl::init(false), cl::Hidden);
-
-namespace llvm {
-
-void initializeWinEHStatePassPass(PassRegistry &);
-void initializeFixupLEAPassPass(PassRegistry &);
-void initializeShadowCallStackPass(PassRegistry &);
-void initializeX86CallFrameOptimizationPass(PassRegistry &);
-void initializeX86CmovConverterPassPass(PassRegistry &);
-void initializeX86ExecutionDomainFixPass(PassRegistry &);
-void initializeX86DomainReassignmentPass(PassRegistry &);
-void initializeX86AvoidSFBPassPass(PassRegistry &);
-void initializeX86SpeculativeLoadHardeningPassPass(PassRegistry &);
-void initializeX86FlagsCopyLoweringPassPass(PassRegistry &);
-
-} // end namespace llvm
+static cl::opt<bool> EnableCondBrFoldingPass("x86-condbr-folding",
+                               cl::desc("Enable the conditional branch "
+                                        "folding pass"),
+                               cl::init(false), cl::Hidden);
 
 extern "C" void LLVMInitializeX86Target() {
   // Register the target.
@@ -294,13 +280,14 @@ X86TargetMachine::getSubtargetImpl(const Function &F) const {
     }
   }
 
-  // Extract required-vector-width attribute.
+  // Extract min-legal-vector-width attribute.
   unsigned RequiredVectorWidth = UINT32_MAX;
-  if (F.hasFnAttribute("required-vector-width")) {
-    StringRef Val = F.getFnAttribute("required-vector-width").getValueAsString();
+  if (F.hasFnAttribute("min-legal-vector-width")) {
+    StringRef Val =
+        F.getFnAttribute("min-legal-vector-width").getValueAsString();
     unsigned Width;
     if (!Val.getAsInteger(0, Width)) {
-      Key += ",required-vector-width=";
+      Key += ",min-legal-vector-width=";
       Key += Val;
       RequiredVectorWidth = Width;
     }
@@ -451,6 +438,8 @@ bool X86PassConfig::addGlobalInstructionSelect() {
 }
 
 bool X86PassConfig::addILPOpts() {
+  if (EnableCondBrFoldingPass)
+    addPass(createX86CondBrFolding());
   addPass(&EarlyIfConverterID);
   if (EnableMachineCombinerPass)
     addPass(&MachineCombinerID);
@@ -475,9 +464,7 @@ void X86PassConfig::addPreRegAlloc() {
     addPass(createX86AvoidStoreForwardingBlocks());
   }
 
-  if (EnableSpeculativeLoadHardening)
-    addPass(createX86SpeculativeLoadHardeningPass());
-
+  addPass(createX86SpeculativeLoadHardeningPass());
   addPass(createX86FlagsCopyLoweringPass());
   addPass(createX86WinAllocaExpander());
 }
@@ -510,6 +497,8 @@ void X86PassConfig::addPreEmitPass() {
     addPass(createX86FixupLEAs());
     addPass(createX86EvexToVexInsts());
   }
+  addPass(createX86DiscriminateMemOpsPass());
+  addPass(createX86InsertPrefetchPass());
 }
 
 void X86PassConfig::addPreEmitPass2() {

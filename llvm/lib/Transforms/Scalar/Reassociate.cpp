@@ -126,10 +126,10 @@ XorOpnd::XorOpnd(Value *V) {
     Value *V0 = I->getOperand(0);
     Value *V1 = I->getOperand(1);
     const APInt *C;
-    if (match(V0, PatternMatch::m_APInt(C)))
+    if (match(V0, m_APInt(C)))
       std::swap(V0, V1);
 
-    if (match(V1, PatternMatch::m_APInt(C))) {
+    if (match(V1, m_APInt(C))) {
       ConstPart = *C;
       SymbolicPart = V0;
       isOr = (I->getOpcode() == Instruction::Or);
@@ -205,10 +205,10 @@ unsigned ReassociatePass::getRank(Value *V) {
   for (unsigned i = 0, e = I->getNumOperands(); i != e && Rank != MaxRank; ++i)
     Rank = std::max(Rank, getRank(I->getOperand(i)));
 
-  // If this is a not or neg instruction, do not count it for rank.  This
+  // If this is a 'not' or 'neg' instruction, do not count it for rank. This
   // assures us that X and ~X will have the same rank.
-  if (!BinaryOperator::isNot(I) && !BinaryOperator::isNeg(I) &&
-      !BinaryOperator::isFNeg(I))
+  if (!match(I, m_Not(m_Value())) && !match(I, m_Neg(m_Value())) &&
+      !match(I, m_FNeg(m_Value())))
     ++Rank;
 
   LLVM_DEBUG(dbgs() << "Calculated Rank[" << V->getName() << "] = " << Rank
@@ -574,8 +574,8 @@ static bool LinearizeExprTree(BinaryOperator *I,
       // If this is a multiply expression, turn any internal negations into
       // multiplies by -1 so they can be reassociated.
       if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Op))
-        if ((Opcode == Instruction::Mul && BinaryOperator::isNeg(BO)) ||
-            (Opcode == Instruction::FMul && BinaryOperator::isFNeg(BO))) {
+        if ((Opcode == Instruction::Mul && match(BO, m_Neg(m_Value()))) ||
+            (Opcode == Instruction::FMul && match(BO, m_FNeg(m_Value())))) {
           LLVM_DEBUG(dbgs()
                      << "MORPH LEAF: " << *Op << " (" << Weight << ") TO ");
           BO = LowerNegateToMultiply(BO);
@@ -855,7 +855,7 @@ static Value *NegateValue(Value *V, Instruction *BI,
   // Okay, we need to materialize a negated version of V with an instruction.
   // Scan the use lists of V to see if we have one already.
   for (User *U : V->users()) {
-    if (!BinaryOperator::isNeg(U) && !BinaryOperator::isFNeg(U))
+    if (!match(U, m_Neg(m_Value())) && !match(U, m_FNeg(m_Value())))
       continue;
 
     // We found one!  Now we have to make sure that the definition dominates
@@ -900,7 +900,7 @@ static Value *NegateValue(Value *V, Instruction *BI,
 /// Return true if we should break up this subtract of X-Y into (X + -Y).
 static bool ShouldBreakUpSubtract(Instruction *Sub) {
   // If this is a negation, we can't split it up!
-  if (BinaryOperator::isNeg(Sub) || BinaryOperator::isFNeg(Sub))
+  if (match(Sub, m_Neg(m_Value())) || match(Sub, m_FNeg(m_Value()))) 
     return false;
 
   // Don't breakup X - undef.
@@ -1114,8 +1114,8 @@ static Value *OptimizeAndOrXor(unsigned Opcode,
   for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
     // First, check for X and ~X in the operand list.
     assert(i < Ops.size());
-    if (BinaryOperator::isNot(Ops[i].Op)) {    // Cannot occur for ^.
-      Value *X = BinaryOperator::getNotArgument(Ops[i].Op);
+    Value *X;
+    if (match(Ops[i].Op, m_Not(m_Value(X)))) {    // Cannot occur for ^.
       unsigned FoundX = FindInOperandList(Ops, i, X);
       if (FoundX != i) {
         if (Opcode == Instruction::And)   // ...&X&~X = 0
@@ -1305,7 +1305,7 @@ Value *ReassociatePass::OptimizeXor(Instruction *I,
     Value *V = Ops[i].Op;
     const APInt *C;
     // TODO: Support non-splat vectors.
-    if (match(V, PatternMatch::m_APInt(C))) {
+    if (match(V, m_APInt(C))) {
       ConstOpnd ^= *C;
     } else {
       XorOpnd O(V);
@@ -1461,15 +1461,10 @@ Value *ReassociatePass::OptimizeAdd(Instruction *I,
     }
 
     // Check for X and -X or X and ~X in the operand list.
-    if (!BinaryOperator::isNeg(TheOp) && !BinaryOperator::isFNeg(TheOp) &&
-        !BinaryOperator::isNot(TheOp))
+    Value *X;
+    if (!match(TheOp, m_Neg(m_Value(X))) && !match(TheOp, m_Not(m_Value(X))) &&
+        !match(TheOp, m_FNeg(m_Value(X))))
       continue;
-
-    Value *X = nullptr;
-    if (BinaryOperator::isNeg(TheOp) || BinaryOperator::isFNeg(TheOp))
-      X = BinaryOperator::getNegArgument(TheOp);
-    else if (BinaryOperator::isNot(TheOp))
-      X = BinaryOperator::getNotArgument(TheOp);
 
     unsigned FoundX = FindInOperandList(Ops, i, X);
     if (FoundX == i)
@@ -1477,11 +1472,11 @@ Value *ReassociatePass::OptimizeAdd(Instruction *I,
 
     // Remove X and -X from the operand list.
     if (Ops.size() == 2 &&
-        (BinaryOperator::isNeg(TheOp) || BinaryOperator::isFNeg(TheOp)))
+        (match(TheOp, m_Neg(m_Value())) || match(TheOp, m_FNeg(m_Value()))))
       return Constant::getNullValue(X->getType());
 
     // Remove X and ~X from the operand list.
-    if (Ops.size() == 2 && BinaryOperator::isNot(TheOp))
+    if (Ops.size() == 2 && match(TheOp, m_Not(m_Value())))
       return Constant::getAllOnesValue(X->getType());
 
     Ops.erase(Ops.begin()+i);
@@ -1495,7 +1490,7 @@ Value *ReassociatePass::OptimizeAdd(Instruction *I,
     e -= 2;  // Removed two elements.
 
     // if X and ~X we append -1 to the operand list.
-    if (BinaryOperator::isNot(TheOp)) {
+    if (match(TheOp, m_Not(m_Value()))) {
       Value *V = Constant::getAllOnesValue(X->getType());
       Ops.insert(Ops.end(), ValueEntry(getRank(V), V));
       e += 1;
@@ -2059,7 +2054,7 @@ void ReassociatePass::OptimizeInst(Instruction *I) {
       RedoInsts.insert(I);
       MadeChange = true;
       I = NI;
-    } else if (BinaryOperator::isNeg(I)) {
+    } else if (match(I, m_Neg(m_Value()))) {
       // Otherwise, this is a negation.  See if the operand is a multiply tree
       // and if this is not an inner node of a multiply tree.
       if (isReassociableOp(I->getOperand(1), Instruction::Mul) &&
@@ -2083,7 +2078,7 @@ void ReassociatePass::OptimizeInst(Instruction *I) {
       RedoInsts.insert(I);
       MadeChange = true;
       I = NI;
-    } else if (BinaryOperator::isFNeg(I)) {
+    } else if (match(I, m_FNeg(m_Value()))) {
       // Otherwise, this is a negation.  See if the operand is a multiply tree
       // and if this is not an inner node of a multiply tree.
       if (isReassociableOp(I->getOperand(1), Instruction::FMul) &&
@@ -2130,66 +2125,6 @@ void ReassociatePass::OptimizeInst(Instruction *I) {
     return;
 
   ReassociateExpression(BO);
-}
-
-/// If we have an associative pair of binops with the same opcode and 2 of the 3
-/// operands to that pair of binops are some other matching binop, rearrange the
-/// operands of the associative binops so the matching ops are paired together.
-/// This transform creates factoring opportunities by pairing opcodes.
-/// TODO: Should those factoring optimizations be handled here or InstCombine?
-/// Example:
-///   ((X << S) & Y) & (Z << S) --> ((X << S) & (Z << S)) & Y (reassociation)
-///     --> ((X & Z) << S) & Y (factorize shift from 'and' ops optimization)
-void ReassociatePass::swapOperandsToMatchBinops(BinaryOperator &B) {
-  BinaryOperator *B0, *B1;
-  if (!B.isAssociative() || !B.isCommutative() ||
-      !match(&B, m_BinOp(m_BinOp(B0), m_BinOp(B1))))
-    return;
-
-  // We have (B0 op B1) where both operands are also binops.
-  // Canonicalize a binop with the same opcode as the parent binop (B) to B0 and
-  // a binop with a different opcode to B1.
-  Instruction::BinaryOps TopOpc = B.getOpcode();
-  if (B0->getOpcode() != TopOpc)
-    std::swap(B0, B1);
-
-  // If (1) we don't have a pair of binops with the same opcode or (2) B0 and B1
-  // already have the same opcode, there is nothing to do. If the binop with the
-  // same opcode (B0) has more than one use, reassociation would result in more
-  // instructions, so bail out.
-  Instruction::BinaryOps OtherOpc = B1->getOpcode();
-  if (B0->getOpcode() != TopOpc || !B0->hasOneUse() || OtherOpc == TopOpc)
-    return;
-
-  // Canonicalize a binop that matches B1 to V00 (operand 0 of B0) and a value
-  // that does not match B1 to V01.
-  Value *V00 = B0->getOperand(0), *V01 = B0->getOperand(1);
-  if (!match(V00, m_BinOp()) ||
-      cast<BinaryOperator>(V00)->getOpcode() != OtherOpc)
-    std::swap(V00, V01);
-
-  // We need a binop with the same opcode in V00, and a value with a different
-  // opcode in V01.
-  BinaryOperator *B00, *B01;
-  if (!match(V00, m_BinOp(B00)) || B00->getOpcode() != OtherOpc ||
-      (match(V01, m_BinOp(B01)) && B01->getOpcode() == OtherOpc))
-    return;
-
-  // B00 and B1 are displaced matching binops, so pull them together:
-  // (B00 & V01) & B1  --> (B00 & B1) & V01
-  IRBuilder<> Builder(&B);
-  Builder.SetInstDebugLocation(&B);
-  Value *NewBO1 = Builder.CreateBinOp(TopOpc, B00, B1);
-  Value *NewBO2 = Builder.CreateBinOp(TopOpc, NewBO1, V01);
-
-  // Fast-math-flags propagate from B; wrapping flags are cleared.
-  if (auto *I1 = dyn_cast<Instruction>(NewBO1))
-    I1->copyIRFlags(&B, false);
-  if (auto *I2 = dyn_cast<Instruction>(NewBO2))
-    I2->copyIRFlags(&B, false);
-
-  B.replaceAllUsesWith(NewBO2);
-  return;
 }
 
 void ReassociatePass::ReassociateExpression(BinaryOperator *I) {
@@ -2311,9 +2246,6 @@ void ReassociatePass::ReassociateExpression(BinaryOperator *I) {
   // Now that we ordered and optimized the expressions, splat them back into
   // the expression tree, removing any unneeded nodes.
   RewriteExprTree(I, Ops);
-
-  // Try a final reassociation of the root of the tree.
-  swapOperandsToMatchBinops(*I);
 }
 
 void

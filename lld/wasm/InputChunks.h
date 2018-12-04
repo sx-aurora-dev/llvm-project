@@ -24,17 +24,8 @@
 #include "Config.h"
 #include "InputFiles.h"
 #include "lld/Common/ErrorHandler.h"
+#include "lld/Common/LLVM.h"
 #include "llvm/Object/Wasm.h"
-
-using llvm::object::WasmSection;
-using llvm::object::WasmSegment;
-using llvm::wasm::WasmFunction;
-using llvm::wasm::WasmRelocation;
-using llvm::wasm::WasmSignature;
-
-namespace llvm {
-class raw_ostream;
-}
 
 namespace lld {
 namespace wasm {
@@ -138,7 +129,7 @@ public:
   uint32_t getFunctionInputOffset() const { return getInputSectionOffset(); }
   uint32_t getFunctionCodeOffset() const { return Function->CodeOffset; }
   uint32_t getSize() const override {
-    if (Config->CompressRelocTargets && File) {
+    if (Config->CompressRelocations && File) {
       assert(CompressedSize);
       return CompressedSize;
     }
@@ -165,7 +156,7 @@ public:
 
 protected:
   ArrayRef<uint8_t> data() const override {
-    assert(!Config->CompressRelocTargets);
+    assert(!Config->CompressRelocations);
     return File->CodeSection->Content.slice(getInputSectionOffset(),
                                             Function->Size);
   }

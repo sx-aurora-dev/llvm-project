@@ -10,10 +10,6 @@
 #ifndef liblldb_BreakpointResolver_h_
 #define liblldb_BreakpointResolver_h_
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Core/Address.h"
 #include "lldb/Core/SearchFilter.h"
@@ -158,6 +154,7 @@ public:
     AddressResolver,      // This is an instance of BreakpointResolverAddress
     NameResolver,         // This is an instance of BreakpointResolverName
     FileRegexResolver,
+    PythonResolver,
     ExceptionResolver,
     LastKnownResolverType = ExceptionResolver,
     UnknownResolver
@@ -204,14 +201,19 @@ protected:
     ModuleName,
     NameMaskArray,
     Offset,
+    PythonClassName,
     RegexString,
+    ScriptArgs,
     SectionName,
+    SearchDepth,
     SkipPrologue,
     SymbolNameArray,
     LastOptionName
   };
   static const char
       *g_option_names[static_cast<uint32_t>(OptionNames::LastOptionName)];
+  
+  virtual void NotifyBreakpointSet() {};
 
 public:
   static const char *GetKey(OptionNames enum_value) {

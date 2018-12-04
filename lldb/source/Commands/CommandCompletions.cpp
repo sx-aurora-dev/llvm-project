@@ -7,18 +7,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
 #include <sys/stat.h>
 #if defined(__APPLE__) || defined(__linux__)
 #include <pwd.h>
 #endif
 
-// C++ Includes
-// Other libraries and framework includes
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSet.h"
 
-// Project includes
 #include "lldb/Core/FileSpecList.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
@@ -361,13 +357,13 @@ CommandCompletions::SourceFileCompleter::SourceFileCompleter(
     CompletionRequest &request)
     : CommandCompletions::Completer(interpreter, request),
       m_include_support_files(include_support_files), m_matching_files() {
-  FileSpec partial_spec(m_request.GetCursorArgumentPrefix(), false);
+  FileSpec partial_spec(m_request.GetCursorArgumentPrefix());
   m_file_name = partial_spec.GetFilename().GetCString();
   m_dir_name = partial_spec.GetDirectory().GetCString();
 }
 
-Searcher::Depth CommandCompletions::SourceFileCompleter::GetDepth() {
-  return eDepthCompUnit;
+lldb::SearchDepth CommandCompletions::SourceFileCompleter::GetDepth() {
+  return lldb::eSearchDepthCompUnit;
 }
 
 Searcher::CallbackReturn
@@ -458,8 +454,8 @@ CommandCompletions::SymbolCompleter::SymbolCompleter(
   m_regex.Compile(regex_str);
 }
 
-Searcher::Depth CommandCompletions::SymbolCompleter::GetDepth() {
-  return eDepthModule;
+lldb::SearchDepth CommandCompletions::SymbolCompleter::GetDepth() {
+  return lldb::eSearchDepthModule;
 }
 
 Searcher::CallbackReturn CommandCompletions::SymbolCompleter::SearchCallback(
@@ -501,13 +497,13 @@ size_t CommandCompletions::SymbolCompleter::DoCompletion(SearchFilter *filter) {
 CommandCompletions::ModuleCompleter::ModuleCompleter(
     CommandInterpreter &interpreter, CompletionRequest &request)
     : CommandCompletions::Completer(interpreter, request) {
-  FileSpec partial_spec(m_request.GetCursorArgumentPrefix(), false);
+  FileSpec partial_spec(m_request.GetCursorArgumentPrefix());
   m_file_name = partial_spec.GetFilename().GetCString();
   m_dir_name = partial_spec.GetDirectory().GetCString();
 }
 
-Searcher::Depth CommandCompletions::ModuleCompleter::GetDepth() {
-  return eDepthModule;
+lldb::SearchDepth CommandCompletions::ModuleCompleter::GetDepth() {
+  return lldb::eSearchDepthModule;
 }
 
 Searcher::CallbackReturn CommandCompletions::ModuleCompleter::SearchCallback(

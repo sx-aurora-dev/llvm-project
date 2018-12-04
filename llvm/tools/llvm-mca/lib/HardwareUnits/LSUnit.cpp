@@ -17,11 +17,27 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace llvm;
-
 #define DEBUG_TYPE "llvm-mca"
 
+namespace llvm {
 namespace mca {
+
+LSUnit::LSUnit(const MCSchedModel &SM, unsigned LQ, unsigned SQ,
+               bool AssumeNoAlias)
+    : LQ_Size(LQ), SQ_Size(SQ), NoAlias(AssumeNoAlias) {
+  if (SM.hasExtraProcessorInfo()) {
+    const MCExtraProcessorInfo &EPI = SM.getExtraProcessorInfo();
+    if (!LQ_Size && EPI.LoadQueueID) {
+      const MCProcResourceDesc &LdQDesc = *SM.getProcResource(EPI.LoadQueueID);
+      LQ_Size = LdQDesc.BufferSize;
+    }
+
+    if (!SQ_Size && EPI.StoreQueueID) {
+      const MCProcResourceDesc &StQDesc = *SM.getProcResource(EPI.StoreQueueID);
+      SQ_Size = StQDesc.BufferSize;
+    }
+  }
+}
 
 #ifndef NDEBUG
 void LSUnit::dump() const {
@@ -89,25 +105,32 @@ bool LSUnit::isReady(const InstRef &IR) const {
 
   if (IsALoad && !LoadBarriers.empty()) {
     unsigned LoadBarrierIndex = *LoadBarriers.begin();
+    // A younger load cannot pass a older load barrier.
     if (Index > LoadBarrierIndex)
       return false;
+    // A load barrier cannot pass a older load.
     if (Index == LoadBarrierIndex && Index != *LoadQueue.begin())
       return false;
   }
 
   if (IsAStore && !StoreBarriers.empty()) {
     unsigned StoreBarrierIndex = *StoreBarriers.begin();
+    // A younger store cannot pass a older store barrier.
     if (Index > StoreBarrierIndex)
       return false;
+    // A store barrier cannot pass a older store.
     if (Index == StoreBarrierIndex && Index != *StoreQueue.begin())
       return false;
   }
 
+  // A load may not pass a previous store unless flag 'NoAlias' is set.
+  // A load may pass a previous load.
   if (NoAlias && IsALoad)
     return true;
 
   if (StoreQueue.size()) {
-    // Check if this memory operation is younger than the older store.
+    // A load may not pass a previous store.
+    // A store may not pass a previous store.
     if (Index > *StoreQueue.begin())
       return false;
   }
@@ -123,34 +146,45 @@ bool LSUnit::isReady(const InstRef &IR) const {
     return true;
 
   // There is at least one younger load.
+  //
+  // A store may not pass a previous load.
+  // A load may pass a previous load.
   return !IsAStore;
 }
 
 void LSUnit::onInstructionExecuted(const InstRef &IR) {
+  const InstrDesc &Desc = IR.getInstruction()->getDesc();
   const unsigned Index = IR.getSourceIndex();
-  std::set<unsigned>::iterator it = LoadQueue.find(Index);
-  if (it != LoadQueue.end()) {
-    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
-                      << " has been removed from the load queue.\n");
-    LoadQueue.erase(it);
+  bool IsALoad = Desc.MayLoad;
+  bool IsAStore = Desc.MayStore;
+
+  if (IsALoad) {
+    if (LoadQueue.erase(Index)) {
+      LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
+                        << " has been removed from the load queue.\n");
+    }
+    if (!LoadBarriers.empty() && Index == *LoadBarriers.begin()) {
+      LLVM_DEBUG(
+          dbgs() << "[LSUnit]: Instruction idx=" << Index
+                 << " has been removed from the set of load barriers.\n");
+      LoadBarriers.erase(Index);
+    }
   }
 
-  it = StoreQueue.find(Index);
-  if (it != StoreQueue.end()) {
-    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
-                      << " has been removed from the store queue.\n");
-    StoreQueue.erase(it);
-  }
+  if (IsAStore) {
+    if (StoreQueue.erase(Index)) {
+      LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
+                        << " has been removed from the store queue.\n");
+    }
 
-  if (!StoreBarriers.empty() && Index == *StoreBarriers.begin()) {
-    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
-                      << " has been removed from the set of store barriers.\n");
-    StoreBarriers.erase(StoreBarriers.begin());
-  }
-  if (!LoadBarriers.empty() && Index == *LoadBarriers.begin()) {
-    LLVM_DEBUG(dbgs() << "[LSUnit]: Instruction idx=" << Index
-                      << " has been removed from the set of load barriers.\n");
-    LoadBarriers.erase(LoadBarriers.begin());
+    if (!StoreBarriers.empty() && Index == *StoreBarriers.begin()) {
+      LLVM_DEBUG(
+          dbgs() << "[LSUnit]: Instruction idx=" << Index
+                 << " has been removed from the set of store barriers.\n");
+      StoreBarriers.erase(Index);
+    }
   }
 }
+
 } // namespace mca
+} // namespace llvm

@@ -16,7 +16,24 @@
 #include "VSCodeForward.h"
 
 namespace lldb_vscode {
-  
+
+//------------------------------------------------------------------
+/// Emplace a StringRef in a json::Object after enusring that the
+/// string is valid UTF8. If not, first call llvm::json::fixUTF8
+/// before emplacing.
+///
+/// @param[in] obj
+///     A JSON object that we will attempt to emplace the value in
+///
+/// @param[in] key
+///     The key to use when emplacing the value
+///
+/// @param[in] str
+///     The string to emplace
+//------------------------------------------------------------------
+void EmplaceSafeString(llvm::json::Object &obj, llvm::StringRef key,
+                       llvm::StringRef str);
+
 //------------------------------------------------------------------
 /// Extract simple values as a string.
 ///
@@ -379,7 +396,7 @@ llvm::json::Value CreateThreadStopped(lldb::SBThread &thread, uint32_t stop_id);
 /// object:
 ///   "name" - the name of the variable
 ///   "value" - the value of the variable as a string
-///   "type" - the typename of the varaible as a string
+///   "type" - the typename of the variable as a string
 ///   "id" - a unique identifier for a value in case there are multiple
 ///          variables with the same name. Other parts of the VSCode
 ///          protocol refer to values by name so this can help
@@ -401,7 +418,7 @@ llvm::json::Value CreateThreadStopped(lldb::SBThread &thread, uint32_t stop_id);
 ///     might be asked to expand itself.
 ///
 /// @param[in] varID
-///     A unique variable indentifier to help in properly identifying
+///     A unique variable identifier to help in properly identifying
 ///     variables with the same name. This is an extension to the
 ///     VS protocol.
 ///

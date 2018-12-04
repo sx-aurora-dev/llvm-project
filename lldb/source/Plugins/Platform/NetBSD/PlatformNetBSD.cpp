@@ -10,15 +10,11 @@
 #include "PlatformNetBSD.h"
 #include "lldb/Host/Config.h"
 
-// C Includes
 #include <stdio.h>
 #ifndef LLDB_DISABLE_POSIX
 #include <sys/utsname.h>
 #endif
 
-// C++ Includes
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Host/HostInfo.h"
@@ -271,8 +267,8 @@ PlatformNetBSD::DebugProcess(ProcessLaunchInfo &launch_info, Debugger &debugger,
   if (target == nullptr) {
     LLDB_LOG(log, "creating new target");
     TargetSP new_target_sp;
-    error = debugger.GetTargetList().CreateTarget(debugger, "", "", false,
-                                                  nullptr, new_target_sp);
+    error = debugger.GetTargetList().CreateTarget(
+        debugger, "", "", eLoadDependentsNo, nullptr, new_target_sp);
     if (error.Fail()) {
       LLDB_LOG(log, "failed to create new target: {0}", error);
       return process_sp;

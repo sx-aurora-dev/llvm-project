@@ -62,7 +62,7 @@ void ObjFile::dumpInfo() const {
 
 // Relocations contain either symbol or type indices.  This function takes a
 // relocation and returns relocated index (i.e. translates from the input
-// sybmol/type space to the output symbol/type space).
+// symbol/type space to the output symbol/type space).
 uint32_t ObjFile::calcNewIndex(const WasmRelocation &Reloc) const {
   if (Reloc.Type == R_WEBASSEMBLY_TYPE_INDEX_LEB) {
     assert(TypeIsUsed[Reloc.Index]);
@@ -149,8 +149,9 @@ uint32_t ObjFile::calcNewValue(const WasmRelocation &Reloc) const {
     return getGlobalSymbol(Reloc.Index)->getGlobalIndex();
   case R_WEBASSEMBLY_FUNCTION_OFFSET_I32:
     if (auto *Sym = dyn_cast<DefinedFunction>(getFunctionSymbol(Reloc.Index))) {
-      return Sym->Function->OutputOffset +
-             Sym->Function->getFunctionCodeOffset() + Reloc.Addend;
+      if (Sym->isLive())
+        return Sym->Function->OutputOffset +
+               Sym->Function->getFunctionCodeOffset() + Reloc.Addend;
     }
     return 0;
   case R_WEBASSEMBLY_SECTION_OFFSET_I32:

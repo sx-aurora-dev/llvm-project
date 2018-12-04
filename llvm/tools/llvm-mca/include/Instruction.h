@@ -16,7 +16,9 @@
 #ifndef LLVM_TOOLS_LLVM_MCA_INSTRUCTION_H
 #define LLVM_TOOLS_LLVM_MCA_INSTRUCTION_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/MathExtras.h"
 
 #ifndef NDEBUG
@@ -24,9 +26,8 @@
 #endif
 
 #include <memory>
-#include <set>
-#include <vector>
 
+namespace llvm {
 namespace mca {
 
 constexpr int UNKNOWN_CYCLES = -512;
@@ -86,7 +87,7 @@ class ReadState;
 /// register write. It also tracks how many cycles are left before the write
 /// back stage.
 class WriteState {
-  const WriteDescriptor &WD;
+  const WriteDescriptor *WD;
   // On instruction issue, this field is set equal to the write latency.
   // Before instruction issue, this field defaults to -512, a special
   // value that represents an "unknown" number of cycles.
@@ -98,9 +99,21 @@ class WriteState {
   // field RegisterID from WD.
   unsigned RegisterID;
 
+  // Physical register file that serves register RegisterID.
+  unsigned PRFID;
+
   // True if this write implicitly clears the upper portion of RegisterID's
   // super-registers.
   bool ClearsSuperRegs;
+
+  // True if this write is from a dependency breaking zero-idiom instruction.
+  bool WritesZero;
+
+  // True if this write has been eliminated at register renaming stage.
+  // Example: a register move doesn't consume scheduler/pipleline resources if
+  // it is eliminated at register renaming stage. It still consumes
+  // decode bandwidth, and ROB entries.
+  bool IsEliminated;
 
   // This field is set if this is a partial register write, and it has a false
   // dependency on any previous write of the same register (or a portion of it).
@@ -108,8 +121,10 @@ class WriteState {
   // that we don't break the WAW, and the two writes can be merged together.
   const WriteState *DependentWrite;
 
-  // Number of writes that are in a WAW dependency with this write.
-  unsigned NumWriteUsers;
+  // A partial write that is in a false dependency with this write.
+  WriteState *PartialWrite;
+
+  unsigned DependentWriteCyclesLeft;
 
   // A list of dependent reads. Users is a set of dependent
   // reads. A dependent read is added to the set only if CyclesLeft
@@ -117,32 +132,59 @@ class WriteState {
   // gets notified with the actual CyclesLeft.
 
   // The 'second' element of a pair is a "ReadAdvance" number of cycles.
-  std::set<std::pair<ReadState *, int>> Users;
+  SmallVector<std::pair<ReadState *, int>, 4> Users;
 
 public:
   WriteState(const WriteDescriptor &Desc, unsigned RegID,
-             bool clearsSuperRegs = false)
-      : WD(Desc), CyclesLeft(UNKNOWN_CYCLES), RegisterID(RegID),
-        ClearsSuperRegs(clearsSuperRegs), DependentWrite(nullptr),
-        NumWriteUsers(0U) {}
-  WriteState(const WriteState &Other) = delete;
-  WriteState &operator=(const WriteState &Other) = delete;
+             bool clearsSuperRegs = false, bool writesZero = false)
+      : WD(&Desc), CyclesLeft(UNKNOWN_CYCLES), RegisterID(RegID),
+        PRFID(0), ClearsSuperRegs(clearsSuperRegs), WritesZero(writesZero),
+        IsEliminated(false), DependentWrite(nullptr), PartialWrite(nullptr),
+        DependentWriteCyclesLeft(0) {}
+
+  WriteState(const WriteState &Other) = default;
+  WriteState &operator=(const WriteState &Other) = default;
 
   int getCyclesLeft() const { return CyclesLeft; }
-  unsigned getWriteResourceID() const { return WD.SClassOrWriteResourceID; }
+  unsigned getWriteResourceID() const { return WD->SClassOrWriteResourceID; }
   unsigned getRegisterID() const { return RegisterID; }
-  unsigned getLatency() const { return WD.Latency; }
+  unsigned getRegisterFileID() const { return PRFID; }
+  unsigned getLatency() const { return WD->Latency; }
 
   void addUser(ReadState *Use, int ReadAdvance);
+  void addUser(WriteState *Use);
 
-  unsigned getNumUsers() const { return Users.size() + NumWriteUsers; }
+  unsigned getDependentWriteCyclesLeft() const { return DependentWriteCyclesLeft; }
+
+  unsigned getNumUsers() const {
+    unsigned NumUsers = Users.size();
+    if (PartialWrite)
+      ++NumUsers;
+    return NumUsers;
+  }
+
   bool clearsSuperRegisters() const { return ClearsSuperRegs; }
+  bool isWriteZero() const { return WritesZero; }
+  bool isEliminated() const { return IsEliminated; }
+  bool isExecuted() const {
+    return CyclesLeft != UNKNOWN_CYCLES && CyclesLeft <= 0;
+  }
 
   const WriteState *getDependentWrite() const { return DependentWrite; }
-  void setDependentWrite(WriteState *Other) {
-    DependentWrite = Other;
-    ++Other->NumWriteUsers;
+  void setDependentWrite(WriteState *Other) { DependentWrite = Other; }
+  void writeStartEvent(unsigned Cycles) {
+    DependentWriteCyclesLeft = Cycles;
+    DependentWrite = nullptr;
   }
+
+  void setWriteZero() { WritesZero = true; }
+  void setEliminated() {
+    assert(Users.empty() && "Write is in an inconsistent state.");
+    CyclesLeft = 0;
+    IsEliminated = true;
+  }
+
+  void setPRF(unsigned PRF) { PRFID = PRF; }
 
   // On every cycle, update CyclesLeft and notify dependent users.
   void cycleEvent();
@@ -158,9 +200,11 @@ public:
 /// A read may be dependent on more than one write. This occurs when some
 /// writes only partially update the register associated to this read.
 class ReadState {
-  const ReadDescriptor &RD;
+  const ReadDescriptor *RD;
   // Physical register identified associated to this read.
   unsigned RegisterID;
+  // Physical register file that serves register RegisterID.
+  unsigned PRFID;
   // Number of writes that contribute to the definition of RegisterID.
   // In the absence of partial register updates, the number of DependentWrites
   // cannot be more than one.
@@ -177,20 +221,27 @@ class ReadState {
   // This field is set to true only if there are no dependent writes, and
   // there are no `CyclesLeft' to wait.
   bool IsReady;
+  // True if this is a read from a known zero register.
+  bool IsZero;
+  // True if this register read is from a dependency-breaking instruction.
+  bool IndependentFromDef;
 
 public:
   ReadState(const ReadDescriptor &Desc, unsigned RegID)
-      : RD(Desc), RegisterID(RegID), DependentWrites(0),
-        CyclesLeft(UNKNOWN_CYCLES), TotalCycles(0), IsReady(true) {}
-  ReadState(const ReadState &Other) = delete;
-  ReadState &operator=(const ReadState &Other) = delete;
+      : RD(&Desc), RegisterID(RegID), PRFID(0), DependentWrites(0),
+        CyclesLeft(UNKNOWN_CYCLES), TotalCycles(0), IsReady(true),
+        IsZero(false), IndependentFromDef(false) {}
 
-  const ReadDescriptor &getDescriptor() const { return RD; }
-  unsigned getSchedClass() const { return RD.SchedClassID; }
+  const ReadDescriptor &getDescriptor() const { return *RD; }
+  unsigned getSchedClass() const { return RD->SchedClassID; }
   unsigned getRegisterID() const { return RegisterID; }
+  unsigned getRegisterFileID() const { return PRFID; }
 
   bool isReady() const { return IsReady; }
-  bool isImplicitRead() const { return RD.isImplicitRead(); }
+  bool isImplicitRead() const { return RD->isImplicitRead(); }
+
+  bool isIndependentFromDef() const { return IndependentFromDef; }
+  void setIndependentFromDef() { IndependentFromDef = true; }
 
   void cycleEvent();
   void writeStartEvent(unsigned Cycles);
@@ -198,6 +249,10 @@ public:
     DependentWrites = Writes;
     IsReady = !Writes;
   }
+
+  bool isReadZero() const { return IsZero; }
+  void setReadZero() { IsZero = true; }
+  void setPRF(unsigned ID) { PRFID = ID; }
 };
 
 /// A sequence of cycles.
@@ -233,7 +288,7 @@ public:
 
   bool isValid() const { return Begin <= End; }
   unsigned size() const { return End - Begin; };
-  void Subtract(unsigned Cycles) {
+  void subtract(unsigned Cycles) {
     assert(End >= Cycles);
     End -= Cycles;
   }
@@ -262,15 +317,16 @@ struct ResourceUsage {
 
 /// An instruction descriptor
 struct InstrDesc {
-  std::vector<WriteDescriptor> Writes; // Implicit writes are at the end.
-  std::vector<ReadDescriptor> Reads;   // Implicit reads are at the end.
+  SmallVector<WriteDescriptor, 4> Writes; // Implicit writes are at the end.
+  SmallVector<ReadDescriptor, 4> Reads;   // Implicit reads are at the end.
 
   // For every resource used by an instruction of this kind, this vector
   // reports the number of "consumed cycles".
-  std::vector<std::pair<uint64_t, ResourceUsage>> Resources;
+  SmallVector<std::pair<uint64_t, ResourceUsage>, 4> Resources;
 
   // A list of buffered resources consumed by this instruction.
-  std::vector<uint64_t> Buffers;
+  SmallVector<uint64_t, 4> Buffers;
+
   unsigned MaxLatency;
   // Number of MicroOps for this instruction.
   unsigned NumMicroOps;
@@ -281,15 +337,65 @@ struct InstrDesc {
 
   // A zero latency instruction doesn't consume any scheduler resources.
   bool isZeroLatency() const { return !MaxLatency && Resources.empty(); }
+
+  InstrDesc() = default;
+  InstrDesc(const InstrDesc &Other) = delete;
+  InstrDesc &operator=(const InstrDesc &Other) = delete;
+};
+
+/// Base class for instructions consumed by the simulation pipeline.
+///
+/// This class tracks data dependencies as well as generic properties
+/// of the instruction.
+class InstructionBase {
+  const InstrDesc &Desc;
+
+  // This field is set for instructions that are candidates for move
+  // elimination. For more information about move elimination, see the
+  // definition of RegisterMappingTracker in RegisterFile.h
+  bool IsOptimizableMove;
+
+  // Output dependencies.
+  // One entry per each implicit and explicit register definition.
+  SmallVector<WriteState, 4> Defs;
+
+  // Input dependencies.
+  // One entry per each implicit and explicit register use.
+  SmallVector<ReadState, 4> Uses;
+
+public:
+  InstructionBase(const InstrDesc &D) : Desc(D), IsOptimizableMove(false) {}
+
+  SmallVectorImpl<WriteState> &getDefs() { return Defs; }
+  const ArrayRef<WriteState> getDefs() const { return Defs; }
+  SmallVectorImpl<ReadState> &getUses() { return Uses; }
+  const ArrayRef<ReadState> getUses() const { return Uses; }
+  const InstrDesc &getDesc() const { return Desc; }
+
+  unsigned getLatency() const { return Desc.MaxLatency; }
+
+  bool hasDependentUsers() const {
+    return any_of(Defs,
+                  [](const WriteState &Def) { return Def.getNumUsers() > 0; });
+  }
+
+  unsigned getNumUsers() const {
+    unsigned NumUsers = 0;
+    for (const WriteState &Def : Defs)
+      NumUsers += Def.getNumUsers();
+    return NumUsers;
+  }
+
+  // Returns true if this instruction is a candidate for move elimination.
+  bool isOptimizableMove() const { return IsOptimizableMove; }
+  void setOptimizableMove() { IsOptimizableMove = true; }
 };
 
 /// An instruction propagated through the simulated instruction pipeline.
 ///
 /// This class is used to monitor changes to the internal state of instructions
 /// that are sent to the various components of the simulated hardware pipeline.
-class Instruction {
-  const InstrDesc &Desc;
-
+class Instruction : public InstructionBase {
   enum InstrStage {
     IS_INVALID,   // Instruction in an invalid state.
     IS_AVAILABLE, // Instruction dispatched but operands are not ready.
@@ -309,51 +415,13 @@ class Instruction {
   // Retire Unit token ID for this instruction.
   unsigned RCUTokenID;
 
-  bool IsDepBreaking;
-
-  using UniqueDef = std::unique_ptr<WriteState>;
-  using UniqueUse = std::unique_ptr<ReadState>;
-  using VecDefs = std::vector<UniqueDef>;
-  using VecUses = std::vector<UniqueUse>;
-
-  // Output dependencies.
-  // One entry per each implicit and explicit register definition.
-  VecDefs Defs;
-
-  // Input dependencies.
-  // One entry per each implicit and explicit register use.
-  VecUses Uses;
-
 public:
   Instruction(const InstrDesc &D)
-      : Desc(D), Stage(IS_INVALID), CyclesLeft(UNKNOWN_CYCLES), RCUTokenID(0),
-        IsDepBreaking(false) {}
-  Instruction(const Instruction &Other) = delete;
-  Instruction &operator=(const Instruction &Other) = delete;
+      : InstructionBase(D), Stage(IS_INVALID), CyclesLeft(UNKNOWN_CYCLES),
+        RCUTokenID(0) {}
 
-  VecDefs &getDefs() { return Defs; }
-  const VecDefs &getDefs() const { return Defs; }
-  VecUses &getUses() { return Uses; }
-  const VecUses &getUses() const { return Uses; }
-  const InstrDesc &getDesc() const { return Desc; }
   unsigned getRCUTokenID() const { return RCUTokenID; }
   int getCyclesLeft() const { return CyclesLeft; }
-
-  bool hasDependentUsers() const {
-    return llvm::any_of(Defs, [](const UniqueDef &Def) {
-      return Def->getNumUsers() > 0;
-    });
-  }
-
-  bool isDependencyBreaking() const { return IsDepBreaking; }
-  void setDependencyBreaking() { IsDepBreaking = true; }
-
-  unsigned getNumUsers() const {
-    unsigned NumUsers = 0;
-    for (const UniqueDef &Def : Defs)
-      NumUsers += Def->getNumUsers();
-    return NumUsers;
-  }
 
   // Transition to the dispatch stage, and assign a RCUToken to this
   // instruction. The RCUToken is used to track the completion of every
@@ -378,6 +446,15 @@ public:
   bool isExecuted() const { return Stage == IS_EXECUTED; }
   bool isRetired() const { return Stage == IS_RETIRED; }
 
+  bool isEliminated() const {
+    return isReady() && getDefs().size() &&
+           all_of(getDefs(),
+                  [](const WriteState &W) { return W.isEliminated(); });
+  }
+
+  // Forces a transition from state IS_AVAILABLE to state IS_EXECUTED.
+  void forceExecuted();
+
   void retire() {
     assert(isExecuted() && "Instruction is in an invalid state!");
     Stage = IS_RETIRED;
@@ -389,29 +466,32 @@ public:
 /// An InstRef contains both a SourceMgr index and Instruction pair.  The index
 /// is used as a unique identifier for the instruction.  MCA will make use of
 /// this index as a key throughout MCA.
-class InstRef : public std::pair<unsigned, Instruction *> {
-public:
-  InstRef() : std::pair<unsigned, Instruction *>(0, nullptr) {}
-  InstRef(unsigned Index, Instruction *I)
-      : std::pair<unsigned, Instruction *>(Index, I) {}
+class InstRef {
+  std::pair<unsigned, Instruction *> Data;
 
-  unsigned getSourceIndex() const { return first; }
-  Instruction *getInstruction() { return second; }
-  const Instruction *getInstruction() const { return second; }
+public:
+  InstRef() : Data(std::make_pair(0, nullptr)) {}
+  InstRef(unsigned Index, Instruction *I) : Data(std::make_pair(Index, I)) {}
+
+  bool operator==(const InstRef &Other) const { return Data == Other.Data; }
+
+  unsigned getSourceIndex() const { return Data.first; }
+  Instruction *getInstruction() { return Data.second; }
+  const Instruction *getInstruction() const { return Data.second; }
 
   /// Returns true if this references a valid instruction.
-  bool isValid() const { return second != nullptr; }
+  operator bool() const { return Data.second != nullptr; }
 
   /// Invalidate this reference.
-  void invalidate() { second = nullptr; }
+  void invalidate() { Data.second = nullptr; }
 
 #ifndef NDEBUG
-  void print(llvm::raw_ostream &OS) const { OS << getSourceIndex(); }
+  void print(raw_ostream &OS) const { OS << getSourceIndex(); }
 #endif
 };
 
 #ifndef NDEBUG
-inline llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const InstRef &IR) {
+inline raw_ostream &operator<<(raw_ostream &OS, const InstRef &IR) {
   IR.print(OS);
   return OS;
 }
@@ -433,11 +513,22 @@ public:
   unsigned getSourceIndex() const { return Data.first; }
   const WriteState *getWriteState() const { return Data.second; }
   WriteState *getWriteState() { return Data.second; }
-  void invalidate() { Data = std::make_pair(INVALID_IID, nullptr); }
-
-  bool isValid() const {
-    return Data.first != INVALID_IID && Data.second != nullptr;
+  void invalidate() { Data.second = nullptr; }
+  bool isWriteZero() const {
+    assert(isValid() && "Invalid null WriteState found!");
+    return getWriteState()->isWriteZero();
   }
+
+  /// Returns true if this register write has been executed, and the new
+  /// register value is therefore available to users.
+  bool isAvailable() const {
+    if (getSourceIndex() == INVALID_IID)
+      return false;
+    const WriteState *WS = getWriteState();
+    return !WS || WS->isExecuted();
+  }
+
+  bool isValid() const { return Data.first != INVALID_IID && Data.second; }
   bool operator==(const WriteRef &Other) const { return Data == Other.Data; }
 
 #ifndef NDEBUG
@@ -446,5 +537,6 @@ public:
 };
 
 } // namespace mca
+} // namespace llvm
 
 #endif

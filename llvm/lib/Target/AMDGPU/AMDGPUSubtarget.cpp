@@ -124,10 +124,8 @@ GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
   return *this;
 }
 
-AMDGPUSubtarget::AMDGPUSubtarget(const Triple &TT,
-                                             const FeatureBitset &FeatureBits) :
+AMDGPUSubtarget::AMDGPUSubtarget(const Triple &TT) :
   TargetTriple(TT),
-  SubtargetFeatureBits(FeatureBits),
   Has16BitInsts(false),
   HasMadMixInsts(false),
   FP32Denormals(false),
@@ -139,17 +137,19 @@ AMDGPUSubtarget::AMDGPUSubtarget(const Triple &TT,
   HasInv2PiInlineImm(false),
   HasFminFmaxLegacy(true),
   EnablePromoteAlloca(false),
+  HasTrigReducedRange(false),
   LocalMemorySize(0),
   WavefrontSize(0)
   { }
 
 GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
-                                 const GCNTargetMachine &TM) :
+                           const GCNTargetMachine &TM) :
     AMDGPUGenSubtargetInfo(TT, GPU, FS),
-    AMDGPUSubtarget(TT, getFeatureBits()),
+    AMDGPUSubtarget(TT),
     TargetTriple(TT),
     Gen(SOUTHERN_ISLANDS),
     IsaVersion(ISAVersion0_0_0),
+    InstrItins(getInstrItineraryForCPU(GPU)),
     LDSBankCount(0),
     MaxPrivateElementSize(0),
 
@@ -171,7 +171,6 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     DebuggerEmitPrologue(false),
 
     EnableHugePrivateBuffer(false),
-    EnableVGPRSpilling(false),
     EnableLoadStoreOpt(false),
     EnableUnsafeDSOffsetFolding(false),
     EnableSIScheduler(false),
@@ -199,7 +198,7 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     HasDPP(false),
     HasR128A16(false),
     HasDLInsts(false),
-    D16PreservesUnusedBits(false),
+    EnableSRAMECC(false),
     FlatAddressSpace(false),
     FlatInstOffsets(false),
     FlatGlobalInsts(false),
@@ -448,7 +447,7 @@ unsigned AMDGPUSubtarget::getKernArgSegmentSize(const Function &F,
 R600Subtarget::R600Subtarget(const Triple &TT, StringRef GPU, StringRef FS,
                              const TargetMachine &TM) :
   R600GenSubtargetInfo(TT, GPU, FS),
-  AMDGPUSubtarget(TT, getFeatureBits()),
+  AMDGPUSubtarget(TT),
   InstrInfo(*this),
   FrameLowering(TargetFrameLowering::StackGrowsUp, getStackAlignment(), 0),
   FMA(false),
@@ -478,10 +477,6 @@ void GCNSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
   // Enabling ShouldTrackLaneMasks crashes the SI Machine Scheduler.
   if (!enableSIScheduler())
     Policy.ShouldTrackLaneMasks = true;
-}
-
-bool GCNSubtarget::isVGPRSpillingEnabled(const Function& F) const {
-  return EnableVGPRSpilling || !AMDGPU::isShader(F.getCallingConv());
 }
 
 unsigned GCNSubtarget::getOccupancyWithNumSGPRs(unsigned SGPRs) const {
