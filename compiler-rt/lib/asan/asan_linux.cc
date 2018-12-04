@@ -126,7 +126,7 @@ uptr FindDynamicShadowStart() {
   uptr map_size = shadow_size + left_padding + alignment;
 
   uptr map_start = (uptr)MmapNoAccess(map_size);
-  CHECK(map_start);
+  CHECK_NE(map_start, ~(uptr)0);
 
   uptr shadow_start = RoundUpTo(map_start + left_padding, alignment);
   UnmapFromTo(map_start, shadow_start - left_padding);
@@ -246,6 +246,13 @@ void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
 
 void *AsanDlSymNext(const char *sym) {
   return dlsym(RTLD_NEXT, sym);
+}
+
+bool HandleDlopenInit() {
+  // Not supported on this platform.
+  static_assert(!SANITIZER_SUPPORTS_INIT_FOR_DLOPEN,
+                "Expected SANITIZER_SUPPORTS_INIT_FOR_DLOPEN to be false");
+  return false;
 }
 
 } // namespace __asan

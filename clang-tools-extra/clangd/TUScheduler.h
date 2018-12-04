@@ -72,9 +72,10 @@ public:
   /// in this callback (obtained via ParsedAST::getLocalTopLevelDecls) to obtain
   /// optimal performance.
   virtual void onMainAST(PathRef Path, ParsedAST &AST) {}
-};
 
-ParsingCallbacks &noopParsingCallbacks();
+  /// Called whenever the diagnostics for \p File are produced.
+  virtual void onDiagnostics(PathRef File, std::vector<Diag> Diags) {}
+};
 
 /// Handles running tasks for ClangdServer and managing the resources (e.g.,
 /// preambles and ASTs) for opened files.
@@ -86,7 +87,7 @@ ParsingCallbacks &noopParsingCallbacks();
 class TUScheduler {
 public:
   TUScheduler(unsigned AsyncThreadsCount, bool StorePreamblesInMemory,
-              ParsingCallbacks &ASTCallbacks,
+              std::unique_ptr<ParsingCallbacks> ASTCallbacks,
               std::chrono::steady_clock::duration UpdateDebounce,
               ASTRetentionPolicy RetentionPolicy);
   ~TUScheduler();
@@ -102,13 +103,18 @@ public:
 
   /// Schedule an update for \p File. Adds \p File to a list of tracked files if
   /// \p File was not part of it before.
-  /// FIXME(ibiryukov): remove the callback from this function.
-  void update(PathRef File, ParseInputs Inputs, WantDiagnostics WD,
-              llvm::unique_function<void(std::vector<Diag>)> OnUpdated);
+  /// If diagnostics are requested (Yes), and the context is cancelled before
+  /// they are prepared, they may be skipped if eventual-consistency permits it
+  /// (i.e. WantDiagnostics is downgraded to Auto).
+  void update(PathRef File, ParseInputs Inputs, WantDiagnostics WD);
 
   /// Remove \p File from the list of tracked files and schedule removal of its
-  /// resources.
+  /// resources. Pending diagnostics for closed files may not be delivered, even
+  /// if requested with WantDiags::Auto or WantDiags::Yes.
   void remove(PathRef File);
+
+  /// Schedule an async task with no dependencies.
+  void run(llvm::StringRef Name, llvm::unique_function<void()> Action);
 
   /// Schedule an async read of the AST. \p Action will be called when AST is
   /// ready. The AST passed to \p Action refers to the version of \p File
@@ -116,22 +122,35 @@ public:
   /// \p Action is executed.
   /// If an error occurs during processing, it is forwarded to the \p Action
   /// callback.
+  /// If the context is cancelled before the AST is ready, the callback will
+  /// receive a CancelledError.
   void runWithAST(llvm::StringRef Name, PathRef File,
                   Callback<InputsAndAST> Action);
 
-  /// Schedule an async read of the Preamble.
-  /// The preamble may be stale, generated from an older version of the file.
-  /// Reading from locations in the preamble may cause the files to be re-read.
-  /// This gives callers two options:
-  /// - validate that the preamble is still valid, and only use it in this case
-  /// - accept that preamble contents may be outdated, and try to avoid reading
-  ///   source code from headers.
+  /// Controls whether preamble reads wait for the preamble to be up-to-date.
+  enum PreambleConsistency {
+    /// The preamble is generated from the current version of the file.
+    /// If the content was recently updated, we will wait until we have a
+    /// preamble that reflects that update.
+    /// This is the slowest option, and may be delayed by other tasks.
+    Consistent,
+    /// The preamble may be generated from an older version of the file.
+    /// Reading from locations in the preamble may cause files to be re-read.
+    /// This gives callers two options:
+    /// - validate that the preamble is still valid, and only use it if so
+    /// - accept that the preamble contents may be outdated, and try to avoid
+    ///   reading source code from headers.
+    /// This is the fastest option, usually a preamble is available immediately.
+    Stale,
+  };
+  /// Schedule an async read of the preamble.
   /// If there's no preamble yet (because the file was just opened), we'll wait
-  /// for it to build. The preamble may still be null if it fails to build or is
-  /// empty.
-  /// If an error occurs during processing, it is forwarded to the \p Action
-  /// callback.
+  /// for it to build. The result may be null if it fails to build or is empty.
+  /// If an error occurs, it is forwarded to the \p Action callback.
+  /// Context cancellation is ignored and should be handled by the Action.
+  /// (In practice, the Action is almost always executed immediately).
   void runWithPreamble(llvm::StringRef Name, PathRef File,
+                       PreambleConsistency Consistency,
                        Callback<InputsAndPreamble> Action);
 
   /// Wait until there are no scheduled or running tasks.
@@ -157,7 +176,7 @@ public:
 private:
   const bool StorePreamblesInMemory;
   const std::shared_ptr<PCHContainerOperations> PCHOps;
-  ParsingCallbacks &Callbacks;
+  std::unique_ptr<ParsingCallbacks> Callbacks; // not nullptr
   Semaphore Barrier;
   llvm::StringMap<std::unique_ptr<FileData>> Files;
   std::unique_ptr<ASTCache> IdleASTs;
@@ -169,7 +188,7 @@ private:
 };
 
 /// Runs \p Action asynchronously with a new std::thread. The context will be
-/// propogated.
+/// propagated.
 template <typename T>
 std::future<T> runAsync(llvm::unique_function<T()> Action) {
   return std::async(std::launch::async,

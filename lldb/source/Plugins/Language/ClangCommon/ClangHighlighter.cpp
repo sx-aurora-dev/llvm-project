@@ -130,6 +130,7 @@ determineClangStyle(const ClangHighlighter &highlighter,
 
 void ClangHighlighter::Highlight(const HighlightStyle &options,
                                  llvm::StringRef line,
+                                 llvm::Optional<size_t> cursor_pos,
                                  llvm::StringRef previous_lines,
                                  Stream &result) const {
   using namespace clang;
@@ -154,7 +155,8 @@ void ClangHighlighter::Highlight(const HighlightStyle &options,
   // Let's just enable the latest ObjC and C++ which should get most tokens
   // right.
   LangOptions Opts;
-  Opts.ObjC2 = true;
+  Opts.ObjC = true;
+  // FIXME: This should probably set CPlusPlus, CPlusPlus11, ... too
   Opts.CPlusPlus17 = true;
   Opts.LineComment = true;
 
@@ -168,6 +170,8 @@ void ClangHighlighter::Highlight(const HighlightStyle &options,
   // True once we actually lexed the user provided line.
   bool found_user_line = false;
 
+  // True if we already highlighted the token under the cursor, false otherwise.
+  bool highlighted_cursor = false;
   Token token;
   bool exit = false;
   while (!exit) {
@@ -204,11 +208,22 @@ void ClangHighlighter::Highlight(const HighlightStyle &options,
     if (tok_str.empty())
       continue;
 
+    // If the cursor is inside this token, we have to apply the 'selected'
+    // highlight style before applying the actual token color.
+    llvm::StringRef to_print = tok_str;
+    StreamString storage;
+    auto end = start + token.getLength();
+    if (cursor_pos && end > *cursor_pos && !highlighted_cursor) {
+      highlighted_cursor = true;
+      options.selected.Apply(storage, tok_str);
+      to_print = storage.GetString();
+    }
+
     // See how we are supposed to highlight this token.
     HighlightStyle::ColorStyle color =
         determineClangStyle(*this, token, tok_str, options, in_pp_directive);
 
-    color.Apply(result, tok_str);
+    color.Apply(result, to_print);
   }
 
   // If we went over the whole file but couldn't find our own file, then

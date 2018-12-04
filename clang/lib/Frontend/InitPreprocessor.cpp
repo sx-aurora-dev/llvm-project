@@ -421,7 +421,7 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
   Builder.defineMacro("__STDC_UTF_16__", "1");
   Builder.defineMacro("__STDC_UTF_32__", "1");
 
-  if (LangOpts.ObjC1)
+  if (LangOpts.ObjC)
     Builder.defineMacro("__OBJC__");
 
   // OpenCL v1.0/1.1 s6.9, v1.2/2.0 s6.10: Preprocessor Directives and Macros.
@@ -558,15 +558,15 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
   if (LangOpts.RelaxedTemplateTemplateArgs)
     Builder.defineMacro("__cpp_template_template_args", "201611L");
 
+  // C++20 features.
+  if (LangOpts.Char8)
+    Builder.defineMacro("__cpp_char8_t", "201811L");
+
   // TS features.
   if (LangOpts.ConceptsTS)
     Builder.defineMacro("__cpp_experimental_concepts", "1L");
   if (LangOpts.CoroutinesTS)
     Builder.defineMacro("__cpp_coroutines", "201703L");
-
-  // Potential future breaking changes.
-  if (LangOpts.Char8)
-    Builder.defineMacro("__cpp_char8_t", "201803L");
 }
 
 static void InitializePredefinedMacros(const TargetInfo &TI,
@@ -635,7 +635,7 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   if (!LangOpts.MSVCCompat && LangOpts.CPlusPlus11)
     Builder.defineMacro("__GXX_EXPERIMENTAL_CXX0X__");
 
-  if (LangOpts.ObjC1) {
+  if (LangOpts.ObjC) {
     if (LangOpts.ObjCRuntime.isNonFragile()) {
       Builder.defineMacro("__OBJC2__");
 
@@ -699,7 +699,7 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   if (!LangOpts.NoConstantCFStrings)
       Builder.defineMacro("__CONSTANT_CFSTRINGS__");
 
-  if (LangOpts.ObjC2)
+  if (LangOpts.ObjC)
     Builder.defineMacro("OBJC_NEW_PROPERTIES");
 
   if (LangOpts.PascalStrings)
@@ -1016,7 +1016,7 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro("__strong", "__attribute__((objc_gc(strong)))");
     Builder.defineMacro("__autoreleasing", "");
     Builder.defineMacro("__unsafe_unretained", "");
-  } else if (LangOpts.ObjC1) {
+  } else if (LangOpts.ObjC) {
     Builder.defineMacro("__weak", "__attribute__((objc_ownership(weak)))");
     Builder.defineMacro("__strong", "__attribute__((objc_ownership(strong)))");
     Builder.defineMacro("__autoreleasing",
@@ -1099,49 +1099,6 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   TI.getTargetDefines(LangOpts, Builder);
 }
 
-/// Initialize macros based on AuxTargetInfo.
-static void InitializePredefinedAuxMacros(const TargetInfo &AuxTI,
-                                          const LangOptions &LangOpts,
-                                          MacroBuilder &Builder) {
-  auto AuxTriple = AuxTI.getTriple();
-
-  // Define basic target macros needed by at least bits/wordsize.h and
-  // bits/mathinline.h.
-  // On PowerPC, explicitely set _CALL_ELF macro needed for gnu/stubs.h.
-  switch (AuxTriple.getArch()) {
-  case llvm::Triple::x86_64:
-    Builder.defineMacro("__x86_64__");
-    break;
-  case llvm::Triple::ppc64:
-    Builder.defineMacro("__powerpc64__");
-    Builder.defineMacro("_CALL_ELF", "1");
-    break;
-  case llvm::Triple::ppc64le:
-    Builder.defineMacro("__powerpc64__");
-    Builder.defineMacro("_CALL_ELF", "2");
-    break;
-  default:
-    break;
-  }
-
-  // libc++ needs to find out the object file format and threading API.
-  if (AuxTriple.getOS() == llvm::Triple::Linux) {
-    Builder.defineMacro("__ELF__");
-    Builder.defineMacro("__linux__");
-    // Used in features.h. If this is omitted, math.h doesn't declare float
-    // versions of the functions in bits/mathcalls.h.
-    if (LangOpts.CPlusPlus)
-      Builder.defineMacro("_GNU_SOURCE");
-  } else if (AuxTriple.isOSDarwin()) {
-    Builder.defineMacro("__APPLE__");
-    Builder.defineMacro("__MACH__");
-  } else if (AuxTriple.isOSWindows()) {
-    Builder.defineMacro("_WIN32");
-    if (AuxTriple.isWindowsGNUEnvironment())
-      Builder.defineMacro("__MINGW32__");
-  }
-}
-
 /// InitializePreprocessor - Initialize the preprocessor getting it and the
 /// environment ready to process a single file. This returns true on error.
 ///
@@ -1163,13 +1120,17 @@ void clang::InitializePreprocessor(
 
   // Install things like __POWERPC__, __GNUC__, etc into the macro table.
   if (InitOpts.UsePredefines) {
-    InitializePredefinedMacros(PP.getTargetInfo(), LangOpts, FEOpts, Builder);
+    // FIXME: This will create multiple definitions for most of the predefined
+    // macros. This is not the right way to handle this.
     if ((LangOpts.CUDA || LangOpts.OpenMPIsDevice) && PP.getAuxTargetInfo())
-      InitializePredefinedAuxMacros(*PP.getAuxTargetInfo(), LangOpts, Builder);
+      InitializePredefinedMacros(*PP.getAuxTargetInfo(), LangOpts, FEOpts,
+                                 Builder);
+
+    InitializePredefinedMacros(PP.getTargetInfo(), LangOpts, FEOpts, Builder);
 
     // Install definitions to make Objective-C++ ARC work well with various
     // C++ Standard Library implementations.
-    if (LangOpts.ObjC1 && LangOpts.CPlusPlus &&
+    if (LangOpts.ObjC && LangOpts.CPlusPlus &&
         (LangOpts.ObjCAutoRefCount || LangOpts.ObjCWeak)) {
       switch (InitOpts.ObjCXXARCStandardLibrary) {
       case ARCXX_nolib:

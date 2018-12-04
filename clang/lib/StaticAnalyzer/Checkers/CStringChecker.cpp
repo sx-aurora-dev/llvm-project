@@ -553,7 +553,8 @@ void CStringChecker::emitNullArgBug(CheckerContext &C, ProgramStateRef State,
     BuiltinBug *BT = static_cast<BuiltinBug *>(BT_Null.get());
     auto Report = llvm::make_unique<BugReport>(*BT, WarningMsg, N);
     Report->addRange(S->getSourceRange());
-    bugreporter::trackNullOrUndefValue(N, S, *Report);
+    if (const auto *Ex = dyn_cast<Expr>(S))
+      bugreporter::trackExpressionValue(N, Ex, *Report);
     C.emitReport(std::move(Report));
   }
 }
@@ -2384,9 +2385,6 @@ void CStringChecker::checkLiveSymbols(ProgramStateRef state,
 
 void CStringChecker::checkDeadSymbols(SymbolReaper &SR,
     CheckerContext &C) const {
-  if (!SR.hasDeadSymbols())
-    return;
-
   ProgramStateRef state = C.getState();
   CStringLengthTy Entries = state->get<CStringLength>();
   if (Entries.isEmpty())

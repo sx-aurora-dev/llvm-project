@@ -667,6 +667,14 @@ TEST(Matcher, VarDecl_Storage) {
   EXPECT_TRUE(matches("void f() { static int X; }", M));
 }
 
+TEST(Matcher, VarDecl_IsStaticLocal) {
+  auto M = varDecl(isStaticLocal());
+  EXPECT_TRUE(matches("void f() { static int X; }", M));
+  EXPECT_TRUE(notMatches("static int X;", M));
+  EXPECT_TRUE(notMatches("void f() { int X; }", M));
+  EXPECT_TRUE(notMatches("int X;", M));
+}
+
 TEST(Matcher, VarDecl_StorageDuration) {
   std::string T =
     "void f() { int x; static int y; } int a;static int b;extern int c;";
@@ -765,6 +773,11 @@ TEST(IsArrow, MatchesMemberVariablesViaArrow) {
                       memberExpr(isArrow())));
   EXPECT_TRUE(notMatches("class Y { void x() { (*this).y; } int y; };",
                          memberExpr(isArrow())));
+  EXPECT_TRUE(matches("template <class T> class Y { void x() { this->m; } };",
+                      cxxDependentScopeMemberExpr(isArrow())));
+  EXPECT_TRUE(
+      notMatches("template <class T> class Y { void x() { (*this).m; } };",
+                 cxxDependentScopeMemberExpr(isArrow())));
 }
 
 TEST(IsArrow, MatchesStaticMemberVariablesViaArrow) {
@@ -783,6 +796,14 @@ TEST(IsArrow, MatchesMemberCallsViaArrow) {
                       memberExpr(isArrow())));
   EXPECT_TRUE(notMatches("class Y { void x() { Y y; y.x(); } };",
                          memberExpr(isArrow())));
+  EXPECT_TRUE(
+      matches("class Y { template <class T> void x() { this->x<T>(); } };",
+              unresolvedMemberExpr(isArrow())));
+  EXPECT_TRUE(matches("class Y { template <class T> void x() { x<T>(); } };",
+                      unresolvedMemberExpr(isArrow())));
+  EXPECT_TRUE(
+      notMatches("class Y { template <class T> void x() { (*this).x<T>(); } };",
+                 unresolvedMemberExpr(isArrow())));
 }
 
 TEST(ConversionDeclaration, IsExplicit) {
@@ -1766,6 +1787,48 @@ TEST(IsInTemplateInstantiation, Sharing) {
   EXPECT_TRUE(matches(
     "int j; template<typename T> void A(T t) { j += t; } void x() { A(0); }",
     Matcher));
+}
+
+TEST(IsInstantiationDependent, MatchesNonValueTypeDependent) {
+  EXPECT_TRUE(matches(
+      "template<typename T> void f() { (void) sizeof(sizeof(T() + T())); }",
+      expr(isInstantiationDependent())));
+}
+
+TEST(IsInstantiationDependent, MatchesValueDependent) {
+  EXPECT_TRUE(matches("template<int T> int f() { return T; }",
+                      expr(isInstantiationDependent())));
+}
+
+TEST(IsInstantiationDependent, MatchesTypeDependent) {
+  EXPECT_TRUE(matches("template<typename T> T f() { return T(); }",
+                      expr(isInstantiationDependent())));
+}
+
+TEST(IsTypeDependent, MatchesTypeDependent) {
+  EXPECT_TRUE(matches("template<typename T> T f() { return T(); }",
+                      expr(isTypeDependent())));
+}
+
+TEST(IsTypeDependent, NotMatchesValueDependent) {
+  EXPECT_TRUE(notMatches("template<int T> int f() { return T; }",
+                         expr(isTypeDependent())));
+}
+
+TEST(IsValueDependent, MatchesValueDependent) {
+  EXPECT_TRUE(matches("template<int T> int f() { return T; }",
+                      expr(isValueDependent())));
+}
+
+TEST(IsValueDependent, MatchesTypeDependent) {
+  EXPECT_TRUE(matches("template<typename T> T f() { return T(); }",
+                      expr(isValueDependent())));
+}
+
+TEST(IsValueDependent, MatchesInstantiationDependent) {
+  EXPECT_TRUE(matches(
+      "template<typename T> void f() { (void) sizeof(sizeof(T() + T())); }",
+      expr(isValueDependent())));
 }
 
 TEST(IsExplicitTemplateSpecialization,

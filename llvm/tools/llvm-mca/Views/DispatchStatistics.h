@@ -24,7 +24,7 @@
 /// GROUP   - Static restrictions on the dispatch group: 0
 ///
 ///
-/// Dispatch Logic - number of cycles where we saw N instructions dispatched:
+/// Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 /// [# dispatched], [# cycles]
 ///  0,              15  (11.5%)
 ///  2,              4  (3.1%)
@@ -39,6 +39,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include <map>
 
+namespace llvm {
 namespace mca {
 
 class DispatchStatistics : public View {
@@ -80,5 +81,6 @@ public:
   }
 };
 } // namespace mca
+} // namespace llvm
 
 #endif

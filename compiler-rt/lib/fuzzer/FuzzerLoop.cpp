@@ -38,7 +38,6 @@
 
 namespace fuzzer {
 static const size_t kMaxUnitSizeToPrint = 256;
-static const size_t kUpdateMutationWeightRuns = 10000;
 
 thread_local bool Fuzzer::IsMyThread;
 
@@ -276,7 +275,8 @@ NO_SANITIZE_MEMORY
 void Fuzzer::AlarmCallback() {
   assert(Options.UnitTimeoutSec > 0);
   // In Windows Alarm callback is executed by a different thread.
-#if !LIBFUZZER_WINDOWS
+  // NetBSD's current behavior needs this change too.
+#if !LIBFUZZER_WINDOWS && !LIBFUZZER_NETBSD
   if (!InFuzzingThread())
     return;
 #endif
@@ -361,7 +361,6 @@ void Fuzzer::PrintFinalStats() {
     TPC.DumpCoverage();
   if (Options.PrintCorpusStats)
     Corpus.PrintStats();
-  if (Options.PrintMutationStats) MD.PrintMutationStats();
   if (!Options.PrintFinalStats)
     return;
   size_t ExecPerSec = execPerSec();
@@ -550,9 +549,6 @@ static bool LooseMemeq(const uint8_t *A, const uint8_t *B, size_t Size) {
 
 void Fuzzer::ExecuteCallback(const uint8_t *Data, size_t Size) {
   TPC.RecordInitialStack();
-  if (Options.UseWeightedMutations &&
-      TotalNumberOfRuns % kUpdateMutationWeightRuns == 0)
-    MD.UpdateDistribution();
   TotalNumberOfRuns++;
   assert(InFuzzingThread());
   if (SMR.IsClient())

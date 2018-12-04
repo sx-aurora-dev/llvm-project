@@ -327,6 +327,8 @@ class DwarfDebug : public DebugHandlerBase {
   /// used to keep track of which types we have emitted type units for.
   DenseMap<const MDNode *, uint64_t> TypeSignatures;
 
+  DenseMap<const MCSection *, const MCSymbol *> SectionLabels;
+
   SmallVector<
       std::pair<std::unique_ptr<DwarfTypeUnit>, const DICompositeType *>, 1>
       TypeUnitsUnderConstruction;
@@ -406,8 +408,7 @@ class DwarfDebug : public DebugHandlerBase {
     return InfoHolder.getUnits();
   }
 
-  using InlinedVariable = DbgValueHistoryMap::InlinedVariable;
-  using InlinedLabel = DbgLabelInstrMap::InlinedLabel;
+  using InlinedEntity = DbgValueHistoryMap::InlinedEntity;
 
   void ensureAbstractEntityIsCreated(DwarfCompileUnit &CU,
                                      const DINode *Node,
@@ -424,6 +425,10 @@ class DwarfDebug : public DebugHandlerBase {
 
   /// Construct a DIE for this abstract scope.
   void constructAbstractSubprogramScopeDIE(DwarfCompileUnit &SrcCU, LexicalScope *Scope);
+
+  /// Construct DIEs for call site entries describing the calls in \p MF.
+  void constructCallSiteEntryDIEs(const DISubprogram &SP, DwarfCompileUnit &CU,
+                                  DIE &ScopeDIE, const MachineFunction &MF);
 
   template <typename DataT>
   void addAccelNameImpl(const DICompileUnit &CU, AccelTable<DataT> &AppleAccel,
@@ -487,9 +492,7 @@ class DwarfDebug : public DebugHandlerBase {
 
   /// Emit address ranges into a debug ranges section.
   void emitDebugRanges();
-
-  /// Emit range lists into a DWARF v5 debug rnglists section.
-  void emitDebugRnglists();
+  void emitDebugRangesDWO();
 
   /// Emit macros into a debug macinfo section.
   void emitDebugMacinfo();
@@ -550,7 +553,7 @@ class DwarfDebug : public DebugHandlerBase {
 
   /// Populate LexicalScope entries with variables' info.
   void collectEntityInfo(DwarfCompileUnit &TheCU, const DISubprogram *SP,
-                         DenseSet<InlinedVariable> &ProcessedVars);
+                         DenseSet<InlinedEntity> &ProcessedVars);
 
   /// Build the location list for all DBG_VALUEs in the
   /// function that describe the same variable.
@@ -559,7 +562,7 @@ class DwarfDebug : public DebugHandlerBase {
 
   /// Collect variable information from the side table maintained by MF.
   void collectVariableInfoFromMFTable(DwarfCompileUnit &TheCU,
-                                      DenseSet<InlinedVariable> &P);
+                                      DenseSet<InlinedEntity> &P);
 
   /// Emit the reference to the section.
   void emitSectionReference(const DwarfCompileUnit &CU);
@@ -720,6 +723,9 @@ public:
   bool tuneForLLDB() const { return DebuggerTuning == DebuggerKind::LLDB; }
   bool tuneForSCE() const { return DebuggerTuning == DebuggerKind::SCE; }
   /// @}
+
+  void addSectionLabel(const MCSymbol *Sym);
+  const MCSymbol *getSectionLabel(const MCSection *S);
 };
 
 } // end namespace llvm

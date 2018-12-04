@@ -21,7 +21,6 @@
 #include "Thunks.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
-#include "llvm/Object/Decompressor.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/Endian.h"
@@ -64,11 +63,11 @@ InputSectionBase::InputSectionBase(InputFile *File, uint64_t Flags,
                                    StringRef Name, Kind SectionKind)
     : SectionBase(SectionKind, Name, Flags, Entsize, Alignment, Type, Info,
                   Link),
-      File(File), Data(Data) {
+      File(File), RawData(Data) {
   // In order to reduce memory allocation, we assume that mergeable
   // sections are smaller than 4 GiB, which is not an unreasonable
   // assumption as of 2017.
-  if (SectionKind == SectionBase::Merge && Data.size() > UINT32_MAX)
+  if (SectionKind == SectionBase::Merge && RawData.size() > UINT32_MAX)
     error(toString(this) + ": section too large");
 
   NumRelocations = 0;
@@ -80,6 +79,17 @@ InputSectionBase::InputSectionBase(InputFile *File, uint64_t Flags,
   if (!isPowerOf2_64(V))
     fatal(toString(File) + ": section sh_addralign is not a power of 2");
   this->Alignment = V;
+
+  // In ELF, each section can be compressed by zlib, and if compressed,
+  // section name may be mangled by appending "z" (e.g. ".zdebug_info").
+  // If that's the case, demangle section name so that we can handle a
+  // section as if it weren't compressed.
+  if ((Flags & SHF_COMPRESSED) || Name.startswith(".zdebug")) {
+    if (!zlib::isAvailable())
+      error(toString(File) + ": contains a compressed section, " +
+            "but zlib is not available");
+    parseCompressedHeader();
+  }
 }
 
 // Drop SHF_GROUP bit unless we are producing a re-linkable object file.
@@ -128,13 +138,25 @@ InputSectionBase::InputSectionBase(ObjFile<ELFT> &File,
 size_t InputSectionBase::getSize() const {
   if (auto *S = dyn_cast<SyntheticSection>(this))
     return S->getSize();
+  if (UncompressedSize >= 0)
+    return UncompressedSize;
+  return RawData.size();
+}
 
-  return Data.size();
+void InputSectionBase::uncompress() const {
+  size_t Size = UncompressedSize;
+  UncompressedBuf.reset(new char[Size]);
+
+  if (Error E =
+          zlib::uncompress(toStringRef(RawData), UncompressedBuf.get(), Size))
+    fatal(toString(this) +
+          ": uncompress failed: " + llvm::toString(std::move(E)));
+  RawData = makeArrayRef((uint8_t *)UncompressedBuf.get(), Size);
 }
 
 uint64_t InputSectionBase::getOffsetInFile() const {
   const uint8_t *FileStart = (const uint8_t *)File->MB.getBufferStart();
-  const uint8_t *SecStart = Data.begin();
+  const uint8_t *SecStart = data().begin();
   return SecStart - FileStart;
 }
 
@@ -180,34 +202,70 @@ OutputSection *SectionBase::getOutputSection() {
   return Sec ? Sec->getParent() : nullptr;
 }
 
-// Decompress section contents if required. Note that this function
-// is called from parallelForEach, so it must be thread-safe.
-void InputSectionBase::maybeDecompress() {
-  if (DecompressBuf)
+// When a section is compressed, `RawData` consists with a header followed
+// by zlib-compressed data. This function parses a header to initialize
+// `UncompressedSize` member and remove the header from `RawData`.
+void InputSectionBase::parseCompressedHeader() {
+  typedef typename ELF64LE::Chdr Chdr64;
+  typedef typename ELF32LE::Chdr Chdr32;
+
+  // Old-style header
+  if (Name.startswith(".zdebug")) {
+    if (!toStringRef(RawData).startswith("ZLIB")) {
+      error(toString(this) + ": corrupted compressed section header");
+      return;
+    }
+    RawData = RawData.slice(4);
+
+    if (RawData.size() < 8) {
+      error(toString(this) + ": corrupted compressed section header");
+      return;
+    }
+
+    UncompressedSize = read64be(RawData.data());
+    RawData = RawData.slice(8);
+
+    // Restore the original section name.
+    // (e.g. ".zdebug_info" -> ".debug_info")
+    Name = Saver.save("." + Name.substr(2));
     return;
-  if (!(Flags & SHF_COMPRESSED) && !Name.startswith(".zdebug"))
-    return;
+  }
 
-  // Decompress a section.
-  Decompressor Dec = check(Decompressor::create(Name, toStringRef(Data),
-                                                Config->IsLE, Config->Is64));
-
-  size_t Size = Dec.getDecompressedSize();
-  DecompressBuf.reset(new char[Size + Name.size()]());
-  if (Error E = Dec.decompress({DecompressBuf.get(), Size}))
-    fatal(toString(this) +
-          ": decompress failed: " + llvm::toString(std::move(E)));
-
-  Data = makeArrayRef((uint8_t *)DecompressBuf.get(), Size);
+  assert(Flags & SHF_COMPRESSED);
   Flags &= ~(uint64_t)SHF_COMPRESSED;
 
-  // A section name may have been altered if compressed. If that's
-  // the case, restore the original name. (i.e. ".zdebug_" -> ".debug_")
-  if (Name.startswith(".zdebug")) {
-    DecompressBuf[Size] = '.';
-    memcpy(&DecompressBuf[Size + 1], Name.data() + 2, Name.size() - 2);
-    Name = StringRef(&DecompressBuf[Size], Name.size() - 1);
+  // New-style 64-bit header
+  if (Config->Is64) {
+    if (RawData.size() < sizeof(Chdr64)) {
+      error(toString(this) + ": corrupted compressed section");
+      return;
+    }
+
+    auto *Hdr = reinterpret_cast<const Chdr64 *>(RawData.data());
+    if (Hdr->ch_type != ELFCOMPRESS_ZLIB) {
+      error(toString(this) + ": unsupported compression type");
+      return;
+    }
+
+    UncompressedSize = Hdr->ch_size;
+    RawData = RawData.slice(sizeof(*Hdr));
+    return;
   }
+
+  // New-style 32-bit header
+  if (RawData.size() < sizeof(Chdr32)) {
+    error(toString(this) + ": corrupted compressed section");
+    return;
+  }
+
+  auto *Hdr = reinterpret_cast<const Chdr32 *>(RawData.data());
+  if (Hdr->ch_type != ELFCOMPRESS_ZLIB) {
+    error(toString(this) + ": unsupported compression type");
+    return;
+  }
+
+  UncompressedSize = Hdr->ch_size;
+  RawData = RawData.slice(sizeof(*Hdr));
 }
 
 InputSection *InputSectionBase::getLinkOrderDep() const {
@@ -356,7 +414,7 @@ void InputSection::copyRelocations(uint8_t *Buf, ArrayRef<RelTy> Rels) {
     // Output section VA is zero for -r, so r_offset is an offset within the
     // section, but for --emit-relocs it is an virtual address.
     P->r_offset = Sec->getVA(Rel.r_offset);
-    P->setSymbolAndType(InX::SymTab->getSymbolIndex(&Sym), Type,
+    P->setSymbolAndType(In.SymTab->getSymbolIndex(&Sym), Type,
                         Config->IsMips64EL);
 
     if (Sym.Type == STT_SECTION) {
@@ -374,14 +432,14 @@ void InputSection::copyRelocations(uint8_t *Buf, ArrayRef<RelTy> Rels) {
         error("STT_SECTION symbol should be defined");
         continue;
       }
-      SectionBase *Section = D->Section;
-      if (Section == &InputSection::Discarded) {
+      SectionBase *Section = D->Section->Repl;
+      if (!Section->Live) {
         P->setSymbolAndType(0, 0, false);
         continue;
       }
 
       int64_t Addend = getAddend<ELFT>(Rel);
-      const uint8_t *BufLoc = Sec->Data.begin() + Rel.r_offset;
+      const uint8_t *BufLoc = Sec->data().begin() + Rel.r_offset;
       if (!RelTy::IsRela)
         Addend = Target->getImplicitAddend(BufLoc, Type);
 
@@ -487,7 +545,7 @@ static uint64_t getARMStaticBase(const Symbol &Sym) {
 //
 // This function returns the R_RISCV_PCREL_HI20 relocation from
 // R_RISCV_PCREL_LO12's symbol and addend.
-Relocation *lld::elf::getRISCVPCRelHi20(const Symbol *Sym, uint64_t Addend) {
+static Relocation *getRISCVPCRelHi20(const Symbol *Sym, uint64_t Addend) {
   const Defined *D = cast<Defined>(Sym);
   InputSection *IS = cast<InputSection>(D->Section);
 
@@ -508,6 +566,31 @@ Relocation *lld::elf::getRISCVPCRelHi20(const Symbol *Sym, uint64_t Addend) {
   return nullptr;
 }
 
+// A TLS symbol's virtual address is relative to the TLS segment. Add a
+// target-specific adjustment to produce a thread-pointer-relative offset.
+static int64_t getTlsTpOffset() {
+  switch (Config->EMachine) {
+  case EM_ARM:
+  case EM_AARCH64:
+    // Variant 1. The thread pointer points to a TCB with a fixed 2-word size,
+    // followed by a variable amount of alignment padding, followed by the TLS
+    // segment.
+    return alignTo(Config->Wordsize * 2, Out::TlsPhdr->p_align);
+  case EM_386:
+  case EM_X86_64:
+    // Variant 2. The TLS segment is located just before the thread pointer.
+    return -Out::TlsPhdr->p_memsz;
+  case EM_PPC64:
+    // The thread pointer points to a fixed offset from the start of the
+    // executable's TLS segment. An offset of 0x7000 allows a signed 16-bit
+    // offset to reach 0x1000 of TCB/thread-library data and 0xf000 of the
+    // program's TLS segment.
+    return -0x7000;
+  default:
+    llvm_unreachable("unhandled Config->EMachine");
+  }
+}
+
 static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
                                  uint64_t P, const Symbol &Sym, RelExpr Expr) {
   switch (Expr) {
@@ -522,33 +605,37 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
   case R_ARM_SBREL:
     return Sym.getVA(A) - getARMStaticBase(Sym);
   case R_GOT:
+  case R_GOT_PLT:
   case R_RELAX_TLS_GD_TO_IE_ABS:
     return Sym.getGotVA() + A;
   case R_GOTONLY_PC:
-    return InX::Got->getVA() + A - P;
+    return In.Got->getVA() + A - P;
   case R_GOTONLY_PC_FROM_END:
-    return InX::Got->getVA() + A - P + InX::Got->getSize();
+    return In.Got->getVA() + A - P + In.Got->getSize();
   case R_GOTREL:
-    return Sym.getVA(A) - InX::Got->getVA();
+    return Sym.getVA(A) - In.Got->getVA();
   case R_GOTREL_FROM_END:
-    return Sym.getVA(A) - InX::Got->getVA() - InX::Got->getSize();
+    return Sym.getVA(A) - In.Got->getVA() - In.Got->getSize();
   case R_GOT_FROM_END:
   case R_RELAX_TLS_GD_TO_IE_END:
-    return Sym.getGotOffset() + A - InX::Got->getSize();
+    return Sym.getGotOffset() + A - In.Got->getSize();
   case R_TLSLD_GOT_OFF:
   case R_GOT_OFF:
   case R_RELAX_TLS_GD_TO_IE_GOT_OFF:
     return Sym.getGotOffset() + A;
-  case R_GOT_PAGE_PC:
-  case R_RELAX_TLS_GD_TO_IE_PAGE_PC:
+  case R_AARCH64_GOT_PAGE_PC:
+  case R_AARCH64_GOT_PAGE_PC_PLT:
+  case R_AARCH64_RELAX_TLS_GD_TO_IE_PAGE_PC:
     return getAArch64Page(Sym.getGotVA() + A) - getAArch64Page(P);
   case R_GOT_PC:
   case R_RELAX_TLS_GD_TO_IE:
     return Sym.getGotVA() + A - P;
+  case R_HEXAGON_GOT:
+    return Sym.getGotVA() - In.GotPlt->getVA();
   case R_MIPS_GOTREL:
-    return Sym.getVA(A) - InX::MipsGot->getGp(File);
+    return Sym.getVA(A) - In.MipsGot->getGp(File);
   case R_MIPS_GOT_GP:
-    return InX::MipsGot->getGp(File) + A;
+    return In.MipsGot->getGp(File) + A;
   case R_MIPS_GOT_GP_PC: {
     // R_MIPS_LO16 expression has R_MIPS_GOT_GP_PC type iif the target
     // is _gp_disp symbol. In that case we should use the following
@@ -557,7 +644,7 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
     // microMIPS variants of these relocations use slightly different
     // expressions: AHL + GP - P + 3 for %lo() and AHL + GP - P - 1 for %hi()
     // to correctly handle less-sugnificant bit of the microMIPS symbol.
-    uint64_t V = InX::MipsGot->getGp(File) + A - P;
+    uint64_t V = In.MipsGot->getGp(File) + A - P;
     if (Type == R_MIPS_LO16 || Type == R_MICROMIPS_LO16)
       V += 4;
     if (Type == R_MICROMIPS_LO16 || Type == R_MICROMIPS_HI16)
@@ -568,38 +655,34 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
     // If relocation against MIPS local symbol requires GOT entry, this entry
     // should be initialized by 'page address'. This address is high 16-bits
     // of sum the symbol's value and the addend.
-    return InX::MipsGot->getVA() +
-           InX::MipsGot->getPageEntryOffset(File, Sym, A) -
-           InX::MipsGot->getGp(File);
+    return In.MipsGot->getVA() + In.MipsGot->getPageEntryOffset(File, Sym, A) -
+           In.MipsGot->getGp(File);
   case R_MIPS_GOT_OFF:
   case R_MIPS_GOT_OFF32:
     // In case of MIPS if a GOT relocation has non-zero addend this addend
     // should be applied to the GOT entry content not to the GOT entry offset.
     // That is why we use separate expression type.
-    return InX::MipsGot->getVA() +
-           InX::MipsGot->getSymEntryOffset(File, Sym, A) -
-           InX::MipsGot->getGp(File);
+    return In.MipsGot->getVA() + In.MipsGot->getSymEntryOffset(File, Sym, A) -
+           In.MipsGot->getGp(File);
   case R_MIPS_TLSGD:
-    return InX::MipsGot->getVA() + InX::MipsGot->getGlobalDynOffset(File, Sym) -
-           InX::MipsGot->getGp(File);
+    return In.MipsGot->getVA() + In.MipsGot->getGlobalDynOffset(File, Sym) -
+           In.MipsGot->getGp(File);
   case R_MIPS_TLSLD:
-    return InX::MipsGot->getVA() + InX::MipsGot->getTlsIndexOffset(File) -
-           InX::MipsGot->getGp(File);
-  case R_PAGE_PC:
-  case R_PLT_PAGE_PC: {
-    uint64_t Dest;
-    if (Sym.isUndefWeak())
-      Dest = getAArch64Page(A);
-    else
-      Dest = getAArch64Page(Sym.getVA(A));
-    return Dest - getAArch64Page(P);
+    return In.MipsGot->getVA() + In.MipsGot->getTlsIndexOffset(File) -
+           In.MipsGot->getGp(File);
+  case R_AARCH64_PAGE_PC: {
+    uint64_t Val = Sym.isUndefWeak() ? A : Sym.getVA(A);
+    return getAArch64Page(Val) - getAArch64Page(P);
+  }
+  case R_AARCH64_PLT_PAGE_PC: {
+    uint64_t Val = Sym.isUndefWeak() ? A : Sym.getPltVA() + A;
+    return getAArch64Page(Val) - getAArch64Page(P);
   }
   case R_RISCV_PC_INDIRECT: {
-    const Relocation *HiRel = getRISCVPCRelHi20(&Sym, A);
-    if (!HiRel)
-      return 0;
-    return getRelocTargetVA(File, HiRel->Type, HiRel->Addend, Sym.getVA(),
-                            *HiRel->Sym, HiRel->Expr);
+    if (const Relocation *HiRel = getRISCVPCRelHi20(&Sym, A))
+      return getRelocTargetVA(File, HiRel->Type, HiRel->Addend, Sym.getVA(),
+                              *HiRel->Sym, HiRel->Expr);
+    return 0;
   }
   case R_PC: {
     uint64_t Dest;
@@ -631,16 +714,12 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
       return 0;
 
     // PPC64 V2 ABI describes two entry points to a function. The global entry
-    // point sets up the TOC base pointer. When calling a local function, the
-    // call should branch to the local entry point rather than the global entry
-    // point. Section 3.4.1 describes using the 3 most significant bits of the
-    // st_other field to find out how many instructions there are between the
-    // local and global entry point.
-    uint8_t StOther = (Sym.StOther >> 5) & 7;
-    if (StOther == 0 || StOther == 1)
-      return SymVA - P;
-
-    return SymVA - P + (1LL << StOther);
+    // point is used for calls where the caller and callee (may) have different
+    // TOC base pointers and r2 needs to be modified to hold the TOC base for
+    // the callee. For local calls the caller and callee share the same
+    // TOC base and so the TOC pointer initialization code should be skipped by
+    // branching to the local entry point.
+    return SymVA - P + getPPC64GlobalEntryToLocalEntryOffset(Sym.StOther);
   }
   case R_PPC_TOC:
     return getPPC64TocBase() + A;
@@ -657,46 +736,29 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
     // statically to zero.
     if (Sym.isTls() && Sym.isUndefWeak())
       return 0;
-
-    // For TLS variant 1 the TCB is a fixed size, whereas for TLS variant 2 the
-    // TCB is on unspecified size and content. Targets that implement variant 1
-    // should set TcbSize.
-    if (Target->TcbSize) {
-      // PPC64 V2 ABI has the thread pointer offset into the middle of the TLS
-      // storage area by TlsTpOffset for efficient addressing TCB and up to
-      // 4KB – 8 B of other thread library information (placed before the TCB).
-      // Subtracting this offset will get the address of the first TLS block.
-      if (Target->TlsTpOffset)
-        return Sym.getVA(A) - Target->TlsTpOffset;
-
-      // If thread pointer is not offset into the middle, the first thing in the
-      // TLS storage area is the TCB. Add the TcbSize to get the address of the
-      // first TLS block.
-      return Sym.getVA(A) + alignTo(Target->TcbSize, Out::TlsPhdr->p_align);
-    }
-    return Sym.getVA(A) - Out::TlsPhdr->p_memsz;
+    return Sym.getVA(A) + getTlsTpOffset();
   case R_RELAX_TLS_GD_TO_LE_NEG:
   case R_NEG_TLS:
     return Out::TlsPhdr->p_memsz - Sym.getVA(A);
   case R_SIZE:
     return Sym.getSize() + A;
   case R_TLSDESC:
-    return InX::Got->getGlobalDynAddr(Sym) + A;
-  case R_TLSDESC_PAGE:
-    return getAArch64Page(InX::Got->getGlobalDynAddr(Sym) + A) -
+    return In.Got->getGlobalDynAddr(Sym) + A;
+  case R_AARCH64_TLSDESC_PAGE:
+    return getAArch64Page(In.Got->getGlobalDynAddr(Sym) + A) -
            getAArch64Page(P);
   case R_TLSGD_GOT:
-    return InX::Got->getGlobalDynOffset(Sym) + A;
+    return In.Got->getGlobalDynOffset(Sym) + A;
   case R_TLSGD_GOT_FROM_END:
-    return InX::Got->getGlobalDynOffset(Sym) + A - InX::Got->getSize();
+    return In.Got->getGlobalDynOffset(Sym) + A - In.Got->getSize();
   case R_TLSGD_PC:
-    return InX::Got->getGlobalDynAddr(Sym) + A - P;
+    return In.Got->getGlobalDynAddr(Sym) + A - P;
   case R_TLSLD_GOT_FROM_END:
-    return InX::Got->getTlsIndexOff() + A - InX::Got->getSize();
+    return In.Got->getTlsIndexOff() + A - In.Got->getSize();
   case R_TLSLD_GOT:
-    return InX::Got->getTlsIndexOff() + A;
+    return In.Got->getTlsIndexOff() + A;
   case R_TLSLD_PC:
-    return InX::Got->getTlsIndexVA() + A - P;
+    return In.Got->getTlsIndexVA() + A - P;
   default:
     llvm_unreachable("invalid expression");
   }
@@ -832,10 +894,10 @@ void InputSectionBase::relocateAlloc(uint8_t *Buf, uint8_t *BufEnd) {
     case R_RELAX_TLS_GD_TO_LE_NEG:
       Target->relaxTlsGdToLe(BufLoc, Type, TargetVA);
       break;
+    case R_AARCH64_RELAX_TLS_GD_TO_IE_PAGE_PC:
     case R_RELAX_TLS_GD_TO_IE:
     case R_RELAX_TLS_GD_TO_IE_ABS:
     case R_RELAX_TLS_GD_TO_IE_GOT_OFF:
-    case R_RELAX_TLS_GD_TO_IE_PAGE_PC:
     case R_RELAX_TLS_GD_TO_IE_END:
       Target->relaxTlsGdToIe(BufLoc, Type, TargetVA);
       break;
@@ -879,14 +941,13 @@ static void switchMorestackCallsToMorestackNonSplit(
   }
 
   // Sort both collections to compare addresses efficiently.
-  llvm::sort(MorestackCalls.begin(), MorestackCalls.end(),
-             [](const Relocation *L, const Relocation *R) {
-               return L->Offset < R->Offset;
-             });
+  llvm::sort(MorestackCalls, [](const Relocation *L, const Relocation *R) {
+    return L->Offset < R->Offset;
+  });
   std::vector<Defined *> Functions(Prologues.begin(), Prologues.end());
-  llvm::sort(
-      Functions.begin(), Functions.end(),
-      [](const Defined *L, const Defined *R) { return L->Value < R->Value; });
+  llvm::sort(Functions, [](const Defined *L, const Defined *R) {
+    return L->Value < R->Value;
+  });
 
   auto It = MorestackCalls.begin();
   for (Defined *F : Functions) {
@@ -947,7 +1008,7 @@ void InputSectionBase::adjustSplitStackFunctionPrologues(uint8_t *Buf,
     // conservative.
     if (Defined *D = dyn_cast<Defined>(Rel.Sym))
       if (InputSection *IS = cast_or_null<InputSection>(D->Section))
-        if (!IS || IS->getFile<ELFT>()->SplitStack)
+        if (!IS || !IS->getFile<ELFT>() || IS->getFile<ELFT>()->SplitStack)
           continue;
 
     if (enclosingPrologueAttempted(Rel.Offset, Prologues))
@@ -956,7 +1017,7 @@ void InputSectionBase::adjustSplitStackFunctionPrologues(uint8_t *Buf,
     if (Defined *F = getEnclosingFunction<ELFT>(Rel.Offset)) {
       Prologues.insert(F);
       if (Target->adjustPrologueForCrossSplitStack(Buf + getOffset(F->Value),
-                                                   End))
+                                                   End, F->StOther))
         continue;
       if (!getFile<ELFT>()->SomeNoSplitStack)
         error(lld::toString(this) + ": " + F->getName() +
@@ -964,7 +1025,9 @@ void InputSectionBase::adjustSplitStackFunctionPrologues(uint8_t *Buf,
               " (without -fsplit-stack), but couldn't adjust its prologue");
     }
   }
-  switchMorestackCallsToMorestackNonSplit(Prologues, MorestackCalls);
+
+  if (Target->NeedsMoreStackNonSplit)
+    switchMorestackCallsToMorestackNonSplit(Prologues, MorestackCalls);
 }
 
 template <class ELFT> void InputSection::writeTo(uint8_t *Buf) {
@@ -993,10 +1056,23 @@ template <class ELFT> void InputSection::writeTo(uint8_t *Buf) {
     return;
   }
 
+  // If this is a compressed section, uncompress section contents directly
+  // to the buffer.
+  if (UncompressedSize >= 0 && !UncompressedBuf) {
+    size_t Size = UncompressedSize;
+    if (Error E = zlib::uncompress(toStringRef(RawData),
+                                   (char *)(Buf + OutSecOff), Size))
+      fatal(toString(this) +
+            ": uncompress failed: " + llvm::toString(std::move(E)));
+    uint8_t *BufEnd = Buf + OutSecOff + Size;
+    relocate<ELFT>(Buf, BufEnd);
+    return;
+  }
+
   // Copy section contents from source object file to output file
   // and then apply relocations.
-  memcpy(Buf + OutSecOff, Data.data(), Data.size());
-  uint8_t *BufEnd = Buf + OutSecOff + Data.size();
+  memcpy(Buf + OutSecOff, data().data(), data().size());
+  uint8_t *BufEnd = Buf + OutSecOff + data().size();
   relocate<ELFT>(Buf, BufEnd);
 }
 
@@ -1047,7 +1123,7 @@ template <class ELFT> void EhInputSection::split() {
 template <class ELFT, class RelTy>
 void EhInputSection::split(ArrayRef<RelTy> Rels) {
   unsigned RelI = 0;
-  for (size_t Off = 0, End = Data.size(); Off != End;) {
+  for (size_t Off = 0, End = data().size(); Off != End;) {
     size_t Size = readEhRecordSize(this, Off);
     Pieces.emplace_back(Off, this, Size, getReloc(Off, Size, Rels, RelI));
     // The empty record is the end marker.
@@ -1127,65 +1203,48 @@ void MergeInputSection::splitIntoPieces() {
   assert(Pieces.empty());
 
   if (Flags & SHF_STRINGS)
-    splitStrings(Data, Entsize);
+    splitStrings(data(), Entsize);
   else
-    splitNonStrings(Data, Entsize);
+    splitNonStrings(data(), Entsize);
 
   OffsetMap.reserve(Pieces.size());
   for (size_t I = 0, E = Pieces.size(); I != E; ++I)
     OffsetMap[Pieces[I].InputOff] = I;
 }
 
-template <class It, class T, class Compare>
-static It fastUpperBound(It First, It Last, const T &Value, Compare Comp) {
-  size_t Size = std::distance(First, Last);
-  assert(Size != 0);
-  while (Size != 1) {
-    size_t H = Size / 2;
-    const It MI = First + H;
-    Size -= H;
-    First = Comp(Value, *MI) ? First : First + H;
-  }
-  return Comp(Value, *First) ? First : First + 1;
-}
-
-// Do binary search to get a section piece at a given input offset.
-static SectionPiece *findSectionPiece(MergeInputSection *Sec, uint64_t Offset) {
-  if (Sec->Data.size() <= Offset)
-    fatal(toString(Sec) + ": entry is past the end of the section");
-
-  // Find the element this offset points to.
-  auto I = fastUpperBound(
-      Sec->Pieces.begin(), Sec->Pieces.end(), Offset,
-      [](const uint64_t &A, const SectionPiece &B) { return A < B.InputOff; });
-  --I;
-  return &*I;
-}
-
 SectionPiece *MergeInputSection::getSectionPiece(uint64_t Offset) {
+  if (this->data().size() <= Offset)
+    fatal(toString(this) + ": offset is outside the section");
+
   // Find a piece starting at a given offset.
   auto It = OffsetMap.find(Offset);
   if (It != OffsetMap.end())
     return &Pieces[It->second];
 
   // If Offset is not at beginning of a section piece, it is not in the map.
-  // In that case we need to search from the original section piece vector.
-  return findSectionPiece(this, Offset);
+  // In that case we need to  do a binary search of the original section piece vector.
+  size_t Size = Pieces.size();
+  size_t Idx = 0;
+
+  while (Size != 1) {
+    size_t H = Size / 2;
+    Size -= H;
+    if (Pieces[Idx + H].InputOff <= Offset)
+      Idx += H;
+  }
+  if (Offset < Pieces[Idx].InputOff)
+    --Idx;
+  return &Pieces[Idx];
 }
 
 // Returns the offset in an output section for a given input offset.
 // Because contents of a mergeable section is not contiguous in output,
 // it is not just an addition to a base output offset.
 uint64_t MergeInputSection::getParentOffset(uint64_t Offset) const {
-  // Find a string starting at a given offset.
-  auto It = OffsetMap.find(Offset);
-  if (It != OffsetMap.end())
-    return Pieces[It->second].OutputOff;
-
   // If Offset is not at beginning of a section piece, it is not in the map.
   // In that case we need to search from the original section piece vector.
   const SectionPiece &Piece =
-      *findSectionPiece(const_cast<MergeInputSection *>(this), Offset);
+      *(const_cast<MergeInputSection *>(this)->getSectionPiece (Offset));
   uint64_t Addend = Offset - Piece.InputOff;
   return Piece.OutputOff + Addend;
 }

@@ -165,7 +165,7 @@ static MemoryAccessKind checkFunctionMemoryAccess(Function &F, bool ThisBody,
 
         AAMDNodes AAInfo;
         I->getAAMetadata(AAInfo);
-        MemoryLocation Loc(Arg, MemoryLocation::UnknownSize, AAInfo);
+        MemoryLocation Loc(Arg, LocationSize::unknown(), AAInfo);
 
         // Skip accesses to local or constant memory as they don't impact the
         // externally visible mod/ref behavior.
@@ -280,6 +280,13 @@ static bool addReadAttrs(const SCCNodeSet &SCCNodes, AARGetterT &&AARGetter) {
     F->removeFnAttr(Attribute::ReadOnly);
     F->removeFnAttr(Attribute::ReadNone);
     F->removeFnAttr(Attribute::WriteOnly);
+
+    if (!WritesMemory && !ReadsMemory) {
+      // Clear out any "access range attributes" if readnone was deduced.
+      F->removeFnAttr(Attribute::ArgMemOnly);
+      F->removeFnAttr(Attribute::InaccessibleMemOnly);
+      F->removeFnAttr(Attribute::InaccessibleMemOrArgMemOnly);
+    }
 
     // Add in the new attribute.
     if (WritesMemory && !ReadsMemory)

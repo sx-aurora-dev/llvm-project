@@ -73,7 +73,7 @@ function(add_llvm_symbol_exports target_name export_file)
       VERBATIM
       COMMENT "Creating export file for ${target_name}")
     set_property(TARGET ${target_name} APPEND_STRING PROPERTY
-                 LINK_FLAGS " -Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}")
+                 LINK_FLAGS " -Wl,-exported_symbols_list,\"${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}\"")
   elseif(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
     set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                  LINK_FLAGS " -Wl,-bE:${export_file}")
@@ -93,10 +93,10 @@ function(add_llvm_symbol_exports target_name export_file)
       COMMENT "Creating export file for ${target_name}")
     if (${LLVM_LINKER_IS_SOLARISLD})
       set_property(TARGET ${target_name} APPEND_STRING PROPERTY
-                   LINK_FLAGS "  -Wl,-M,${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}")
+                   LINK_FLAGS "  -Wl,-M,\"${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}\"")
     else()
       set_property(TARGET ${target_name} APPEND_STRING PROPERTY
-                   LINK_FLAGS "  -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}")
+                   LINK_FLAGS "  -Wl,--version-script,\"${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}\"")
     endif()
   else()
     set(native_export_file "${target_name}.def")
@@ -580,7 +580,7 @@ function(llvm_add_library name)
 
   if(ARG_SHARED OR ARG_MODULE)
     llvm_externalize_debuginfo(${name})
-    llvm_codesign(${name})
+    llvm_codesign(TARGET ${name})
   endif()
 endfunction()
 
@@ -635,6 +635,7 @@ macro(add_llvm_library name)
     set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS_BUILDTREE_ONLY ${name})
   else()
     if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY OR ${name} STREQUAL "LTO" OR
+        ${name} STREQUAL "OptRemarks" OR
         (LLVM_LINK_LLVM_DYLIB AND ${name} STREQUAL "LLVM"))
       set(install_dir lib${LLVM_LIBDIR_SUFFIX})
       if(ARG_SHARED OR BUILD_SHARED_LIBS)
@@ -707,7 +708,12 @@ endmacro(add_llvm_loadable_module name)
 
 
 macro(add_llvm_executable name)
-  cmake_parse_arguments(ARG "DISABLE_LLVM_LINK_LLVM_DYLIB;IGNORE_EXTERNALIZE_DEBUGINFO;NO_INSTALL_RPATH" "" "DEPENDS" ${ARGN})
+  cmake_parse_arguments(ARG
+    "DISABLE_LLVM_LINK_LLVM_DYLIB;IGNORE_EXTERNALIZE_DEBUGINFO;NO_INSTALL_RPATH"
+    "ENTITLEMENTS"
+    "DEPENDS"
+    ${ARGN})
+
   llvm_process_sources( ALL_FILES ${ARG_UNPARSED_ARGUMENTS} )
 
   list(APPEND LLVM_COMMON_DEPENDS ${ARG_DEPENDS})
@@ -786,7 +792,7 @@ macro(add_llvm_executable name)
     target_link_libraries(${name} PRIVATE ${LLVM_PTHREAD_LIB})
   endif()
 
-  llvm_codesign(${name})
+  llvm_codesign(TARGET ${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})
 endmacro(add_llvm_executable name)
 
 function(export_executable_symbols target)
@@ -1120,6 +1126,17 @@ function(add_unittest test_suite test_name)
   endif ()
 endfunction()
 
+# Use for test binaries that call llvm::getInputFileDirectory(). Use of this
+# is discouraged.
+function(add_unittest_with_input_files test_suite test_name)
+  set(LLVM_UNITTEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+  configure_file(
+    ${LLVM_MAIN_SRC_DIR}/unittests/unittest.cfg.in
+    ${CMAKE_CURRENT_BINARY_DIR}/llvm.srcdir.txt)
+
+  add_unittest(${test_suite} ${test_name} ${ARGN})
+endfunction()
+
 # Generic support for adding a benchmark.
 function(add_benchmark benchmark_name)
   if( NOT LLVM_BUILD_BENCHMARKS )
@@ -1129,6 +1146,7 @@ function(add_benchmark benchmark_name)
   add_llvm_executable(${benchmark_name} IGNORE_EXTERNALIZE_DEBUGINFO NO_INSTALL_RPATH ${ARGN})
   set(outdir ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR})
   set_output_directory(${benchmark_name} BINARY_DIR ${outdir} LIBRARY_DIR ${outdir})
+  set_property(TARGET ${benchmark_name} PROPERTY FOLDER "Utils")
   target_link_libraries(${benchmark_name} PRIVATE benchmark)
 endfunction()
 
@@ -1255,10 +1273,6 @@ function(configure_lit_site_cfg site_in site_out)
     set(TARGET_TRIPLE "\"+config.target_triple+\"")
   endif()
 
-  string(CONCAT LIT_SITE_CFG_IN_FOOTER
-     "import lit.llvm\n"
-     "lit.llvm.initialize(lit_config, config)\n")
-
   configure_file(${site_in} ${site_out} @ONLY)
   if (EXISTS "${ARG_MAIN_CONFIG}")
     set(PYTHON_STATEMENT "map_config('${ARG_MAIN_CONFIG}', '${site_out}')")
@@ -1359,6 +1373,7 @@ function(add_lit_target target comment)
       COMMAND ${CMAKE_COMMAND} -E echo "${target} does nothing, no tools built.")
     message(STATUS "${target} does nothing.")
   endif()
+
   if (ARG_DEPENDS)
     add_dependencies(${target} ${ARG_DEPENDS})
   endif()
@@ -1582,6 +1597,13 @@ function(llvm_externalize_debuginfo name)
     endif()
   endif()
 
+  if(LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR)
+    if(APPLE)
+      set(output_name "$<TARGET_FILE_NAME:${name}>.dSYM")
+      set(output_path "-o=${LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR}/${output_name}")
+    endif()
+  endif()
+
   if(APPLE)
     if(CMAKE_CXX_FLAGS MATCHES "-flto"
       OR CMAKE_CXX_FLAGS_${uppercase_CMAKE_BUILD_TYPE} MATCHES "-flto")
@@ -1594,7 +1616,7 @@ function(llvm_externalize_debuginfo name)
       set(CMAKE_DSYMUTIL xcrun dsymutil)
     endif()
     add_custom_command(TARGET ${name} POST_BUILD
-      COMMAND ${CMAKE_DSYMUTIL} $<TARGET_FILE:${name}>
+      COMMAND ${CMAKE_DSYMUTIL} ${output_path} $<TARGET_FILE:${name}>
       ${strip_command}
       )
   else()
@@ -1606,7 +1628,14 @@ function(llvm_externalize_debuginfo name)
   endif()
 endfunction()
 
-function(llvm_codesign name)
+# Usage: llvm_codesign(TARGET name [ENTITLEMENTS file])
+#
+# Code-sign the given TARGET with the global LLVM_CODESIGNING_IDENTITY or skip
+# if undefined. Customize capabilities by passing a file path to ENTITLEMENTS.
+#
+function(llvm_codesign)
+  cmake_parse_arguments(ARG "" "TARGET;ENTITLEMENTS" "" ${ARGN})
+
   if(NOT LLVM_CODESIGNING_IDENTITY)
     return()
   endif()
@@ -1622,12 +1651,16 @@ function(llvm_codesign name)
         OUTPUT_VARIABLE CMAKE_CODESIGN_ALLOCATE
       )
     endif()
+    if(DEFINED ARG_ENTITLEMENTS)
+      set(PASS_ENTITLEMENTS --entitlements ${ARG_ENTITLEMENTS})
+    endif()
+
     add_custom_command(
-      TARGET ${name} POST_BUILD
+      TARGET ${ARG_TARGET} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E
               env CODESIGN_ALLOCATE=${CMAKE_CODESIGN_ALLOCATE}
               ${CMAKE_CODESIGN} -s ${LLVM_CODESIGNING_IDENTITY}
-              $<TARGET_FILE:${name}>
+              ${PASS_ENTITLEMENTS} $<TARGET_FILE:${ARG_TARGET}>
     )
   endif()
 endfunction()

@@ -275,8 +275,7 @@ void llvm::simplifyLoopAfterUnroll(Loop *L, bool SimplifyIVs, LoopInfo *LI,
   // inserted code, doing constant propagation and dead code elimination as we
   // go.
   const DataLayout &DL = L->getHeader()->getModule()->getDataLayout();
-  const std::vector<BasicBlock *> &NewLoopBlocks = L->getBlocks();
-  for (BasicBlock *BB : NewLoopBlocks) {
+  for (BasicBlock *BB : L->getBlocks()) {
     for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E;) {
       Instruction *Inst = &*I++;
 
@@ -782,7 +781,7 @@ LoopUnrollResult llvm::UnrollLoop(
         // there is no such latch.
         NewIDom = Latches.back();
         for (BasicBlock *IterLatch : Latches) {
-          TerminatorInst *Term = IterLatch->getTerminator();
+          Instruction *Term = IterLatch->getTerminator();
           if (isa<BranchInst>(Term) && cast<BranchInst>(Term)->isConditional()) {
             NewIDom = IterLatch;
             break;

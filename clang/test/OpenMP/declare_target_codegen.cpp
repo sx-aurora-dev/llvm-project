@@ -12,7 +12,8 @@
 
 // SIMD-ONLY-NOT: {{__kmpc|__tgt}}
 
-// CHECK-NOT: define {{.*}}{{baz1|baz4|maini1}}
+// CHECK-NOT: define {{.*}}{{baz1|baz4|maini1|Base|virtual_}}
+// CHECK-DAG: Bake
 // CHECK-NOT: @{{hhh|ggg|fff|eee}} =
 // CHECK-DAG: @aaa = external global i32,
 // CHECK-DAG: @bbb = global i32 0,
@@ -78,7 +79,7 @@ public:
 
 int foo();
 
-int baz1();
+static int baz1() { return 0; }
 
 int baz2();
 
@@ -140,7 +141,75 @@ int baz5() {
   return a;
 }
 
+template <typename T>
+struct Base {
+  virtual ~Base() {}
+};
+
+template class Base<int>;
+
+template <typename T>
+struct Bake {
+  virtual ~Bake() {}
+};
+
+#pragma omp declare target
+template class Bake<int>;
+#pragma omp end declare target
+
+struct BaseNonT {
+  virtual ~BaseNonT() {}
+};
+
+#pragma omp declare target
+struct BakeNonT {
+  virtual ~BakeNonT() {}
+};
+#pragma omp end declare target
+
+template <typename T>
+struct B {
+  virtual void virtual_foo();
+};
+
+void new_bar() { new B<int>(); }
+
+template <typename T>
+void B<T>::virtual_foo() {
+#pragma omp target
+  {}
+}
+
+struct A {
+  virtual void emitted() {}
+};
+
+template <typename T>
+struct C : public A {
+  virtual void emitted();
+};
+
+template <typename T>
+void C<T>::emitted() {
+#pragma omp target
+  {}
+}
+
+int main() {
+  A *X = new C<int>();
+  X->emitted();
+  return 0;
+}
+
+// CHECK-DAG: define {{.*}}void @__omp_offloading_{{.*}}virtual_foo{{.*}}_l[[@LINE-25]]()
+// CHECK-DAG: define {{.*}}void @__omp_offloading_{{.*}}emitted{{.*}}_l[[@LINE-11]]()
+
 // CHECK-DAG: declare extern_weak signext i32 @__create()
 
-// CHECK-NOT: define {{.*}}{{baz1|baz4|maini1}}
+// CHECK-NOT: define {{.*}}{{baz1|baz4|maini1|Base|virtual_}}
+
+// CHECK-DAG: !{i32 1, !"aaa", i32 0, i32 {{[0-9]+}}}
+// CHECK-DAG: !{i32 1, !"ccc", i32 0, i32 {{[0-9]+}}}
+// CHECK-DAG: !{{{.+}}virtual_foo
+
 #endif // HEADER

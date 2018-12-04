@@ -335,37 +335,37 @@ unsigned HexagonInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
 /// This function checks if the instruction or bundle of instructions
 /// has load from stack slot and returns frameindex and machine memory
 /// operand of that instruction if true.
-bool HexagonInstrInfo::hasLoadFromStackSlot(const MachineInstr &MI,
-                                           const MachineMemOperand *&MMO,
-                                           int &FrameIndex) const {
+bool HexagonInstrInfo::hasLoadFromStackSlot(
+    const MachineInstr &MI,
+    SmallVectorImpl<const MachineMemOperand *> &Accesses) const {
   if (MI.isBundle()) {
     const MachineBasicBlock *MBB = MI.getParent();
     MachineBasicBlock::const_instr_iterator MII = MI.getIterator();
     for (++MII; MII != MBB->instr_end() && MII->isInsideBundle(); ++MII)
-      if (TargetInstrInfo::hasLoadFromStackSlot(*MII, MMO, FrameIndex))
+      if (TargetInstrInfo::hasLoadFromStackSlot(*MII, Accesses))
         return true;
     return false;
   }
 
-  return TargetInstrInfo::hasLoadFromStackSlot(MI, MMO, FrameIndex);
+  return TargetInstrInfo::hasLoadFromStackSlot(MI, Accesses);
 }
 
 /// This function checks if the instruction or bundle of instructions
 /// has store to stack slot and returns frameindex and machine memory
 /// operand of that instruction if true.
-bool HexagonInstrInfo::hasStoreToStackSlot(const MachineInstr &MI,
-                                           const MachineMemOperand *&MMO,
-                                           int &FrameIndex) const {
+bool HexagonInstrInfo::hasStoreToStackSlot(
+    const MachineInstr &MI,
+    SmallVectorImpl<const MachineMemOperand *> &Accesses) const {
   if (MI.isBundle()) {
     const MachineBasicBlock *MBB = MI.getParent();
     MachineBasicBlock::const_instr_iterator MII = MI.getIterator();
     for (++MII; MII != MBB->instr_end() && MII->isInsideBundle(); ++MII)
-      if (TargetInstrInfo::hasStoreToStackSlot(*MII, MMO, FrameIndex))
+      if (TargetInstrInfo::hasStoreToStackSlot(*MII, Accesses))
         return true;
     return false;
   }
 
-  return TargetInstrInfo::hasStoreToStackSlot(MI, MMO, FrameIndex);
+  return TargetInstrInfo::hasStoreToStackSlot(MI, Accesses);
 }
 
 /// This function can analyze one/two way branching only and should (mostly) be
@@ -2894,14 +2894,15 @@ bool HexagonInstrInfo::addLatencyToSchedule(const MachineInstr &MI1,
 }
 
 /// Get the base register and byte offset of a load/store instr.
-bool HexagonInstrInfo::getMemOpBaseRegImmOfs(MachineInstr &LdSt,
-      unsigned &BaseReg, int64_t &Offset, const TargetRegisterInfo *TRI)
-      const {
+bool HexagonInstrInfo::getMemOperandWithOffset(
+    MachineInstr &LdSt, MachineOperand *&BaseOp, int64_t &Offset,
+    const TargetRegisterInfo *TRI) const {
   unsigned AccessSize = 0;
-  int OffsetVal = 0;
-  BaseReg = getBaseAndOffset(LdSt, OffsetVal, AccessSize);
-  Offset = OffsetVal;
-  return BaseReg != 0;
+  BaseOp = getBaseAndOffset(LdSt, Offset, AccessSize);
+  assert(!BaseOp || BaseOp->isReg() &&
+                        "getMemOperandWithOffset only supports base "
+                        "operands of type register.");
+  return BaseOp != nullptr;
 }
 
 /// Can these instructions execute at the same time in a bundle.
@@ -3108,21 +3109,22 @@ unsigned HexagonInstrInfo::getAddrMode(const MachineInstr &MI) const {
 
 // Returns the base register in a memory access (load/store). The offset is
 // returned in Offset and the access size is returned in AccessSize.
-// If the base register has a subregister or the offset field does not contain
-// an immediate value, return 0.
-unsigned HexagonInstrInfo::getBaseAndOffset(const MachineInstr &MI,
-      int &Offset, unsigned &AccessSize) const {
+// If the base operand has a subregister or the offset field does not contain
+// an immediate value, return nullptr.
+MachineOperand *HexagonInstrInfo::getBaseAndOffset(const MachineInstr &MI,
+                                                   int64_t &Offset,
+                                                   unsigned &AccessSize) const {
   // Return if it is not a base+offset type instruction or a MemOp.
   if (getAddrMode(MI) != HexagonII::BaseImmOffset &&
       getAddrMode(MI) != HexagonII::BaseLongOffset &&
       !isMemOp(MI) && !isPostIncrement(MI))
-    return 0;
+    return nullptr;
 
   AccessSize = getMemAccessSize(MI);
 
   unsigned BasePos = 0, OffsetPos = 0;
   if (!getBaseAndOffsetPosition(MI, BasePos, OffsetPos))
-    return 0;
+    return nullptr;
 
   // Post increment updates its EA after the mem access,
   // so we need to treat its offset as zero.
@@ -3131,14 +3133,14 @@ unsigned HexagonInstrInfo::getBaseAndOffset(const MachineInstr &MI,
   } else {
     const MachineOperand &OffsetOp = MI.getOperand(OffsetPos);
     if (!OffsetOp.isImm())
-      return 0;
+      return nullptr;
     Offset = OffsetOp.getImm();
   }
 
   const MachineOperand &BaseOp = MI.getOperand(BasePos);
   if (BaseOp.getSubReg() != 0)
-    return 0;
-  return BaseOp.getReg();
+    return nullptr;
+  return &const_cast<MachineOperand&>(BaseOp);
 }
 
 /// Return the position of the base and offset operands for this instruction.

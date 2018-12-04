@@ -868,6 +868,15 @@ EmitMachineNode(SDNode *Node, bool IsClone, bool IsCloned,
 
     if (Flags.hasAllowReassociation())
       MI->setFlag(MachineInstr::MIFlag::FmReassoc);
+
+    if (Flags.hasNoUnsignedWrap())
+      MI->setFlag(MachineInstr::MIFlag::NoUWrap);
+
+    if (Flags.hasNoSignedWrap())
+      MI->setFlag(MachineInstr::MIFlag::NoSWrap);
+
+    if (Flags.hasExact())
+      MI->setFlag(MachineInstr::MIFlag::IsExact);
   }
 
   // Emit all of the actual operands of this instruction, adding them to the
@@ -950,7 +959,7 @@ EmitMachineNode(SDNode *Node, bool IsClone, bool IsCloned,
   }
 
   // Finally mark unused registers as dead.
-  if (!UsedRegs.empty() || II.getImplicitDefs())
+  if (!UsedRegs.empty() || II.getImplicitDefs() || II.hasOptionalDef())
     MIB->setPhysRegsDeadExcept(UsedRegs, *TRI);
 
   // Run post-isel target hook to adjust this instruction if needed.

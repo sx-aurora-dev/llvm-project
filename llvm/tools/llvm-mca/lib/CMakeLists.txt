@@ -14,8 +14,8 @@ add_library(LLVMMCA
   Instruction.cpp
   Pipeline.cpp
   Stages/DispatchStage.cpp
+  Stages/EntryStage.cpp
   Stages/ExecuteStage.cpp
-  Stages/FetchStage.cpp
   Stages/InstructionTables.cpp
   Stages/RetireStage.cpp
   Stages/Stage.cpp
@@ -24,7 +24,6 @@ add_library(LLVMMCA
 
 llvm_update_compile_flags(LLVMMCA)
 llvm_map_components_to_libnames(libs
-  CodeGen
   MC
   Support
   )

@@ -561,6 +561,7 @@ bool MipsAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
         O << '$' << MipsInstPrinter::getRegisterName(Reg);
         return false;
       }
+      break;
     }
     case 'w':
       // Print MSA registers for the 'f' constraint
@@ -1203,8 +1204,7 @@ void MipsAsmPrinter::PrintDebugValueComment(const MachineInstr *MI,
 
 // Emit .dtprelword or .dtpreldword directive
 // and value for debug thread local expression.
-void MipsAsmPrinter::EmitDebugThreadLocal(const MCExpr *Value,
-                                          unsigned Size) const {
+void MipsAsmPrinter::EmitDebugValue(const MCExpr *Value, unsigned Size) const {
   switch (Size) {
   case 4:
     OutStreamer->EmitDTPRel32Value(Value);
@@ -1240,8 +1240,12 @@ void MipsAsmPrinter::NaClAlignIndirectJumpTargets(MachineFunction &MF) {
 
 bool MipsAsmPrinter::isLongBranchPseudo(int Opcode) const {
   return (Opcode == Mips::LONG_BRANCH_LUi
+          || Opcode == Mips::LONG_BRANCH_LUi2Op
+          || Opcode == Mips::LONG_BRANCH_LUi2Op_64
           || Opcode == Mips::LONG_BRANCH_ADDiu
-          || Opcode == Mips::LONG_BRANCH_DADDiu);
+          || Opcode == Mips::LONG_BRANCH_ADDiu2Op
+          || Opcode == Mips::LONG_BRANCH_DADDiu
+          || Opcode == Mips::LONG_BRANCH_DADDiu2Op);
 }
 
 // Force static initialization.

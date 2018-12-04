@@ -752,6 +752,8 @@ bool MIParser::parse(MachineInstr *&MI) {
     Optional<unsigned> TiedDefIdx;
     if (parseMachineOperandAndTargetFlags(MO, TiedDefIdx))
       return true;
+    if (OpCode == TargetOpcode::DBG_VALUE && MO.isReg())
+      MO.setIsDebug();
     Operands.push_back(
         ParsedMachineOperand(MO, Loc, Token.location(), TiedDefIdx));
     if (Token.isNewlineOrEOF() || Token.is(MIToken::coloncolon) ||
@@ -779,6 +781,8 @@ bool MIParser::parse(MachineInstr *&MI) {
     MDNode *Node = nullptr;
     if (parseMDNode(Node))
       return true;
+    if (!isa<DILocation>(Node))
+      return error("referenced metadata is not a DILocation");
     DebugLocation = DebugLoc(Node);
   }
 
@@ -963,7 +967,10 @@ bool MIParser::parseInstruction(unsigned &OpCode, unsigned &Flags) {
          Token.is(MIToken::kw_arcp) ||
          Token.is(MIToken::kw_contract) ||
          Token.is(MIToken::kw_afn) ||
-         Token.is(MIToken::kw_reassoc)) {
+         Token.is(MIToken::kw_reassoc) ||
+         Token.is(MIToken::kw_nuw) ||
+         Token.is(MIToken::kw_nsw) ||
+         Token.is(MIToken::kw_exact)) {
     // Mine frame and fast math flags
     if (Token.is(MIToken::kw_frame_setup))
       Flags |= MachineInstr::FrameSetup;
@@ -983,6 +990,12 @@ bool MIParser::parseInstruction(unsigned &OpCode, unsigned &Flags) {
       Flags |= MachineInstr::FmAfn;
     if (Token.is(MIToken::kw_reassoc))
       Flags |= MachineInstr::FmReassoc;
+    if (Token.is(MIToken::kw_nuw))
+      Flags |= MachineInstr::NoUWrap;
+    if (Token.is(MIToken::kw_nsw))
+      Flags |= MachineInstr::NoSWrap;
+    if (Token.is(MIToken::kw_exact))
+      Flags |= MachineInstr::IsExact;
 
     lex();
   }

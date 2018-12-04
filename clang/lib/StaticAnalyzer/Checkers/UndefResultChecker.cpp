@@ -69,6 +69,7 @@ static bool isLeftShiftResultUnrepresentable(const BinaryOperator *B,
   ProgramStateRef State = C.getState();
   const llvm::APSInt *LHS = SB.getKnownValue(State, C.getSVal(B->getLHS()));
   const llvm::APSInt *RHS = SB.getKnownValue(State, C.getSVal(B->getRHS()));
+  assert(LHS && RHS && "Values unknown, inconsistent state");
   return (unsigned)RHS->getZExtValue() > LHS->countLeadingZeros();
 }
 
@@ -173,10 +174,10 @@ void UndefResultChecker::checkPostStmt(const BinaryOperator *B,
     auto report = llvm::make_unique<BugReport>(*BT, OS.str(), N);
     if (Ex) {
       report->addRange(Ex->getSourceRange());
-      bugreporter::trackNullOrUndefValue(N, Ex, *report);
+      bugreporter::trackExpressionValue(N, Ex, *report);
     }
     else
-      bugreporter::trackNullOrUndefValue(N, B, *report);
+      bugreporter::trackExpressionValue(N, B, *report);
 
     C.emitReport(std::move(report));
   }

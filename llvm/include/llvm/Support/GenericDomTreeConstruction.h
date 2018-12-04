@@ -1191,6 +1191,20 @@ struct SemiNCAInfo {
     });
     LLVM_DEBUG(dbgs() << "\n");
 
+    // Recalculate the DominatorTree when the number of updates
+    // exceeds a threshold, which usually makes direct updating slower than
+    // recalculation. We select this threshold proportional to the
+    // size of the DominatorTree. The constant is selected
+    // by choosing the one with an acceptable performance on some real-world
+    // inputs.
+
+    // Make unittests of the incremental algorithm work
+    if (DT.DomTreeNodes.size() <= 100) {
+      if (NumLegalized > DT.DomTreeNodes.size())
+        CalculateFromScratch(DT, &BUI);
+    } else if (NumLegalized > DT.DomTreeNodes.size() / 40)
+      CalculateFromScratch(DT, &BUI);
+
     // If the DominatorTree was recalculated at some point, stop the batch
     // updates. Full recalculations ignore batch updates and look at the actual
     // CFG.
@@ -1386,10 +1400,9 @@ struct SemiNCAInfo {
       // Make a copy and sort it such that it is possible to check if there are
       // no gaps between DFS numbers of adjacent children.
       SmallVector<TreeNodePtr, 8> Children(Node->begin(), Node->end());
-      llvm::sort(Children.begin(), Children.end(),
-                 [](const TreeNodePtr Ch1, const TreeNodePtr Ch2) {
-                   return Ch1->getDFSNumIn() < Ch2->getDFSNumIn();
-                 });
+      llvm::sort(Children, [](const TreeNodePtr Ch1, const TreeNodePtr Ch2) {
+        return Ch1->getDFSNumIn() < Ch2->getDFSNumIn();
+      });
 
       auto PrintChildrenError = [Node, &Children, PrintNodeAndDFSNums](
           const TreeNodePtr FirstCh, const TreeNodePtr SecondCh) {
