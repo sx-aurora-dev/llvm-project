@@ -16,6 +16,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <cstdlib>
 
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
@@ -29,7 +30,9 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Process.h"
 
+#include "Debug.h"
 #include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
@@ -85,6 +88,8 @@ public:
   }
 };
 
+int SotocDebugLevel = 0;
+
 static llvm::cl::OptionCategory SotocCategory("sotoc options");
 static llvm::cl::extrahelp
     MoreHelp("\nExtracts code in OpenMP target regions from source file and "
@@ -94,6 +99,12 @@ int main(int argc, const char **argv) {
   clang::tooling::CommonOptionsParser option(argc, argv, SotocCategory);
   clang::tooling::ClangTool tool(option.getCompilations(),
                                  option.getSourcePathList());
+
+#ifdef SOTOC_DEBUG
+  SotocDebugLevel = std::atoi(sys::Process::GetEnv("SOTOC_DEBUG").getValueOr("0").c_str());
+#endif
+
+  DEBUGP("starting source transformation tool");
 
   return tool.run(
       clang::tooling::newFrontendActionFactory<SourceTransformAction>().get());

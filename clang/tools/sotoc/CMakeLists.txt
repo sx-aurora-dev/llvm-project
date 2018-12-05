@@ -73,6 +73,11 @@ endif()
 #  -D__STDC_CONSTANT_MACROS
 #  )
 
+set(SOTOC_DEBUG_OUTPUT OFF CACHE BOOL "Compiles sotoc with possible debug output")
+if (SOTOC_DEBUG_OUTPUT)
+  add_definitions(-DSOTOC_DEBUG)
+endif()
+
 ################################################################################
 # Link, install and tests
 ################################################################################
