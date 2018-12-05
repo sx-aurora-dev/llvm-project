@@ -12,13 +12,15 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <queue>
+#include <memory>
 
 #include "clang/AST/Decl.h"
 
 #include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
+#include "Visitors.h"
+
 
 template <class VisitorClass>
 void DeclResolver<VisitorClass>::addDecl(clang::Decl *D) {
@@ -75,7 +77,7 @@ void DeclResolver<VisitorClass>::topoSortUtil(
 
   visited[D] = true;
 
-  for (auto DepDecl : AllDecls[D].DeclDependencies) {
+  for (auto DepDecl : AllDecls.at(D).DeclDependencies) {
     if (!visited[DepDecl]) {
       topoSortUtil(q, visited, DepDecl);
     }
@@ -110,9 +112,13 @@ void DeclResolver<VisitorClass>::orderAndAddFragments(TargetCode &TC) {
 
   std::stack<clang::Decl *> orderStack;
   while (!orderStack.empty()) {
-    auto codeDecl = std::make_shared<TargetCodeDecl>(orderStack.pop);
-    codeDecl.NeedsSemicolon =
-        true; // TODO: this wont hurt but is not always necessary
+    auto codeDecl = std::make_shared<TargetCodeDecl>(orderStack.top());
+    orderStack.pop();
+
+    // TODO: this wont hurt but is not always necessary
+    codeDecl->NeedsSemicolon = true;
     TC.addCodeFragmentFront(codeDecl);
   }
 }
+
+template class DeclResolver<DiscoverTypesInDeclVisitor>;

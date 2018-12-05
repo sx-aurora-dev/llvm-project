@@ -13,6 +13,7 @@
 
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "llvm/ADT/Optional.h"
+#include "DeclResolver.h"
 
 namespace clang {
 class Stmt;
@@ -31,7 +32,6 @@ class TargetCode;
 class TargetCodeFragment;
 class TargetCodeRegion;
 
-class TypeDeclResolver;
 
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
 
@@ -42,9 +42,9 @@ class DiscoverTypesInDeclVisitor
   void processType(const clang::Type *D);
 
 public:
+  DiscoverTypesInDeclVisitor(DeclResolver<DiscoverTypesInDeclVisitor> &Types);
   DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
-      : OnEachTypeRef(F) {}
-  DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
+      : OnEachTypeRef(F) {};
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
@@ -83,7 +83,7 @@ class FindTargetCodeVisitor
   clang::ASTContext &Context;
 
   TargetCode &TargetCodeInfo;
-  TypeDeclResolver &Types;
+  DeclResolver<DiscoverTypesInDeclVisitor> &Types;
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
   FindDeclRefExprVisitor FindDeclRefVisitor;
 
@@ -91,7 +91,7 @@ class FindTargetCodeVisitor
   std::unordered_set<std::string> FuncDeclWithoutBody;
 
 public:
-  FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types,
+  FindTargetCodeVisitor(TargetCode &Code, DeclResolver<DiscoverTypesInDeclVisitor> &Types,
                         clang::ASTContext &Context)
       : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types),
         Context(Context) {}
@@ -104,25 +104,3 @@ private:
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
 
-#if 0
-class RewriteTargetRegionsVisitor
-    : public clang::RecursiveASTVisitor<RewriteTargetRegionsVisitor> {
-
-  clang::Rewriter &TargetCodeRewriter;
-  TargetCodeRegion &TargetRegion;
-  // We store the result of SourceLocation::getRawEncoding() here because we
-  // cannot store SourceLocation of the DeclRefExpr themselves.
-  // There care cases were one source location has multiple DeclRefExpr and
-  // would get rewritten multiple times which leads to incorrect syntax.
-  std::unordered_set<unsigned> RewrittenRefs;
-
-public:
-  RewriteTargetRegionsVisitor(clang::Rewriter &TargetCodeRewriter,
-                              TargetCodeRegion &TCR)
-      : TargetCodeRewriter(TargetCodeRewriter), TargetRegion(TCR){};
-  bool VisitStmt(clang::Stmt *S);
-
-private:
-  void rewriteVar(clang::DeclRefExpr *Var);
-};
-#endif

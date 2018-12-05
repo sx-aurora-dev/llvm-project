@@ -32,7 +32,7 @@
 
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
-#include "TypeDeclResolver.h"
+#include "DeclResolver.h"
 #include "Visitors.h"
 
 using namespace clang::tooling;
@@ -41,7 +41,7 @@ using namespace llvm;
 class TargetRegionTransformer : public clang::ASTConsumer {
   TargetCode &Code;
   clang::Rewriter &TargetCodeRewriter;
-  TypeDeclResolver Types;
+  DeclResolver<DiscoverTypesInDeclVisitor> Types;
 
 public:
   TargetRegionTransformer(TargetCode &Code, clang::Rewriter &TargetCodeRewriter)
@@ -51,20 +51,7 @@ public:
     // read target code information from AST into TargetCode
     FindTargetCodeVisitor FindCodeVisitor(Code, Types, Context);
     FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
-
-    // rewrite capture variables in all target regions into pointers
-#if 0
-    for (auto i = Code.getCodeFragmentsBegin(), e = Code.getCodeFragmentsEnd();
-           i != e; ++i) {
-      if (auto *TCR = llvm::dyn_cast<TargetCodeRegion>(i->get())) {
-        RewriteTargetRegionsVisitor RegionRewriteVisitor(TargetCodeRewriter,
-                                                         *TCR);
-        RegionRewriteVisitor.TraverseStmt(TCR->getNode()->getCapturedStmt());
-        // TODO: fix this ^
-      }
-    }
-#endif
-    Types.orderAndWriteCodeFragments(Code);
+    Types.orderAndAddFragments(Code);
   }
 };
 

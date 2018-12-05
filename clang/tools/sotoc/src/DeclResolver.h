@@ -20,6 +20,8 @@
 #include <stack>
 #include <unordered_set>
 
+llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
+
 namespace clang {
 class Decl;
 }
@@ -61,7 +63,7 @@ public:
    * to the \ref TargetCode object in the correct order.
    * \param TC the TargetCode object, the fragments will be added to.
    */
-  bool orderAndAddFragments(TargetCode &TC);
+  void orderAndAddFragments(TargetCode &TC);
 
 private:
   /** This functions does a topological sorting on the dependency graph of all

@@ -28,7 +28,7 @@
 
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
-#include "TypeDeclResolver.h"
+#include "DeclResolver.h"
 #include "Visitors.h"
 
 static bool stmtNeedsSemicolon(const clang::Stmt *S) {
@@ -324,6 +324,6 @@ void DiscoverTypesInDeclVisitor::processType(const clang::Type *TP) {
 }
 
 DiscoverTypesInDeclVisitor::DiscoverTypesInDeclVisitor(
-    TypeDeclResolver &Types) {
-  OnEachTypeRef = [&Types](clang::TypeDecl *D) { Types.addTypeDecl(D); };
+    DeclResolver<DiscoverTypesInDeclVisitor> &Types) {
+  OnEachTypeRef = [&Types](clang::Decl *D) { Types.addDecl(D); };
 }
