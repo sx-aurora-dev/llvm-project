@@ -58,7 +58,7 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
   // we dont want to include the original system header in which D was
   // declared, but the system header which exposes D to the user's file
   // (the last system header in the include stack)
-  auto IncludedFile = SM.getFileID(D->getLocStart());
+  auto IncludedFile = SM.getFileID(D->getBeginLoc());
   auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
 
   while (SM.isInSystemHeader(SM.getLocForStartOfFile(IncludingFile.first))) {
@@ -72,7 +72,7 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
 
 static bool isInSystemHeader(clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
-  clang::SourceLocation Loc = D->getLocStart();
+  clang::SourceLocation Loc = D->getBeginLoc();
   return SM.isInSystemHeader(Loc);
 }
 

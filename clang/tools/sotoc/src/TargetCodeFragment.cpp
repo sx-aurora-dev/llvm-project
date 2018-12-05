@@ -71,7 +71,7 @@ static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
     }
   }
 
-  return S->getLocEnd();
+  return S->getEndLoc();
 }
 
 // TODO: REMOVE this
@@ -104,7 +104,7 @@ clang::SourceLocation TargetCodeRegion::getStartLoc() {
   clang::SourceManager &SM = Context.getSourceManager();
   const clang::LangOptions &LO = Context.getLangOpts();
   auto TokenBegin =
-      clang::Lexer::GetBeginningOfToken(getNode()->getLocStart(), SM, LO);
+      clang::Lexer::GetBeginningOfToken(getNode()->getBeginLoc(), SM, LO);
   if (hasRegionCompoundStmt(getNode())) {
 
 #if 0
@@ -133,7 +133,7 @@ clang::SourceLocation TargetCodeRegion::getStartLoc() {
     // (the '#' and the 'pragma').
     return findPreviousToken(findPreviousToken(TokenBegin, SM, LO), SM, LO);
   } else {
-    return getNode()->getLocStart();
+    return getNode()->getBeginLoc();
   }
 }
 
@@ -142,7 +142,7 @@ clang::SourceLocation TargetCodeRegion::getEndLoc() {
   const clang::LangOptions &LO = Context.getLangOpts();
   auto N = getNode();
   if (hasRegionCompoundStmt(N)) {
-    return clang::Lexer::GetBeginningOfToken(N->getLocEnd(), SM, LO)
+    return clang::Lexer::GetBeginningOfToken(N->getEndLoc(), SM, LO)
         .getLocWithOffset(-1); // TODO: If I set this to"1" it works too. I
                                // think it was here to remove addition scope
                                // which i get with "printPretty". Does this
@@ -150,7 +150,7 @@ clang::SourceLocation TargetCodeRegion::getEndLoc() {
   } else if (hasRegionOMPStmt(N)) {
     return getOMPStmtSourceLocEnd(N);
   } else {
-    return N->getLocEnd();
+    return N->getEndLoc();
   }
 }
 
@@ -174,7 +174,7 @@ std::string TargetCodeRegion::PrintClauses() {
   std::stringstream Out;
   for (auto C : OMPClauses) {
     if (isClausePrintable(C)) {
-      clang::SourceRange CRange(C->getLocStart(), C->getLocEnd());
+      clang::SourceRange CRange(C->getBeginLoc(), C->getEndLoc());
       clang::CharSourceRange CCRange =
           clang::CharSourceRange::getTokenRange(CRange);
       Out << std::string(clang::Lexer::getSourceText(CCRange, SM, LO)) << " ";
