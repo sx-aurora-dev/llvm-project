@@ -20,6 +20,7 @@
 
 using namespace llvm;
 using namespace llvm::wasm;
+using namespace llvm::object;
 using namespace lld;
 using namespace lld::wasm;
 
@@ -97,6 +98,8 @@ static void reportTypeError(const Symbol *Existing, const InputFile *File,
         " in " + toString(File));
 }
 
+// Check the type of new symbol matches that of the symbol is replacing.
+// For functions this can also involve verifying that the signatures match.
 static void checkFunctionType(Symbol *Existing, const InputFile *File,
                               const WasmSignature *NewSig) {
   auto ExistingFunction = dyn_cast<FunctionSymbol>(Existing);
@@ -121,8 +124,6 @@ static void checkFunctionType(Symbol *Existing, const InputFile *File,
          toString(*NewSig) + " in " + toString(File));
 }
 
-// Check the type of new symbol matches that of the symbol is replacing.
-// For functions this can also involve verifying that the signatures match.
 static void checkGlobalType(const Symbol *Existing, const InputFile *File,
                             const WasmGlobalType *NewType) {
   if (!isa<GlobalSymbol>(Existing)) {
@@ -201,7 +202,9 @@ static bool shouldReplace(const Symbol *Existing, InputFile *NewFile,
 Symbol *SymbolTable::addDefinedFunction(StringRef Name, uint32_t Flags,
                                         InputFile *File,
                                         InputFunction *Function) {
-  LLVM_DEBUG(dbgs() << "addDefinedFunction: " << Name << "\n");
+  LLVM_DEBUG(dbgs() << "addDefinedFunction: " << Name << " ["
+                    << (Function ? toString(Function->Signature) : "none")
+                    << "]\n");
   Symbol *S;
   bool WasInserted;
   std::tie(S, WasInserted) = insert(Name, File);
@@ -214,8 +217,16 @@ Symbol *SymbolTable::addDefinedFunction(StringRef Name, uint32_t Flags,
   if (Function)
     checkFunctionType(S, File, &Function->Signature);
 
-  if (shouldReplace(S, File, Flags))
-    replaceSymbol<DefinedFunction>(S, Name, Flags, File, Function);
+  if (shouldReplace(S, File, Flags)) {
+    // If the new defined function doesn't have signture (i.e. bitcode
+    // functions) but the old symbols does then preserve the old signature
+    const WasmSignature *OldSig = nullptr;
+    if (auto* F = dyn_cast<FunctionSymbol>(S))
+      OldSig = F->FunctionType;
+    auto NewSym = replaceSymbol<DefinedFunction>(S, Name, Flags, File, Function);
+    if (!NewSym->FunctionType)
+      NewSym->FunctionType = OldSig;
+  }
   return S;
 }
 
@@ -263,7 +274,8 @@ Symbol *SymbolTable::addDefinedGlobal(StringRef Name, uint32_t Flags,
 Symbol *SymbolTable::addUndefinedFunction(StringRef Name, uint32_t Flags,
                                           InputFile *File,
                                           const WasmSignature *Sig) {
-  LLVM_DEBUG(dbgs() << "addUndefinedFunction: " << Name << "\n");
+  LLVM_DEBUG(dbgs() << "addUndefinedFunction: " << Name <<
+             " [" << (Sig ? toString(*Sig) : "none") << "]\n");
 
   Symbol *S;
   bool WasInserted;

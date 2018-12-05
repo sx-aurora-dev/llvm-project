@@ -434,9 +434,8 @@ TEST(Error, CatchErrorFromHandler) {
 TEST(Error, StringError) {
   std::string Msg;
   raw_string_ostream S(Msg);
-  logAllUnhandledErrors(make_error<StringError>("foo" + Twine(42),
-                                                inconvertibleErrorCode()),
-                        S, "");
+  logAllUnhandledErrors(
+      make_error<StringError>("foo" + Twine(42), inconvertibleErrorCode()), S);
   EXPECT_EQ(S.str(), "foo42\n") << "Unexpected StringError log result";
 
   auto EC =
@@ -451,13 +450,13 @@ TEST(Error, createStringError) {
   std::string Msg;
   raw_string_ostream S(Msg);
   logAllUnhandledErrors(createStringError(EC, "foo%s%d0x%" PRIx8, Bar, 1, 0xff),
-                        S, "");
+                        S);
   EXPECT_EQ(S.str(), "foobar10xff\n")
     << "Unexpected createStringError() log result";
 
   S.flush();
   Msg.clear();
-  logAllUnhandledErrors(createStringError(EC, Bar), S, "");
+  logAllUnhandledErrors(createStringError(EC, Bar), S);
   EXPECT_EQ(S.str(), "bar\n")
     << "Unexpected createStringError() (overloaded) log result";
 
@@ -874,6 +873,9 @@ TEST(Error, FileErrorTest) {
       },
       "");
 #endif
+  // Not allowed, would fail at compile-time
+  //consumeError(createFileError("file.bin", ErrorSuccess()));
+
   Error E1 = make_error<CustomError>(1);
   Error FE1 = createFileError("file.bin", std::move(E1));
   EXPECT_EQ(toString(std::move(FE1)).compare("'file.bin': CustomError {1}"), 0);

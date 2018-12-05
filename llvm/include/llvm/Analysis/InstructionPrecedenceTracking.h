@@ -27,15 +27,27 @@
 namespace llvm {
 
 class InstructionPrecedenceTracking {
-  // Maps a block to the topmost special instruction in it.
+  // Maps a block to the topmost special instruction in it. If the value is
+  // nullptr, it means that it is known that this block does not contain any
+  // special instructions.
   DenseMap<const BasicBlock *, const Instruction *> FirstSpecialInsts;
   // Allows to answer queries about precedence of instructions within one block.
   OrderedInstructions OI;
-  // Blocks for which we have the up-to-date cached information.
-  SmallPtrSet<const BasicBlock *, 8> KnownBlocks;
 
   // Fills information about the given block's special instructions.
   void fill(const BasicBlock *BB);
+
+#ifndef NDEBUG
+  /// Asserts that the cached info for \p BB is up-to-date. This helps to catch
+  /// the usage error of accessing a block without properly invalidating after a
+  /// previous transform.
+  void validate(const BasicBlock *BB) const;
+
+  /// Asserts whether or not the contents of this tracking is up-to-date. This
+  /// helps to catch the usage error of accessing a block without properly
+  /// invalidating after a previous transform.
+  void validateAll() const;
+#endif
 
 protected:
   InstructionPrecedenceTracking(DominatorTree *DT)
@@ -96,6 +108,31 @@ public:
 
   /// Returns true if the first ICFI of Insn's block exists and dominates Insn.
   bool isDominatedByICFIFromSameBlock(const Instruction *Insn) {
+    return isPreceededBySpecialInstruction(Insn);
+  }
+
+  virtual bool isSpecialInstruction(const Instruction *Insn) const;
+};
+
+class MemoryWriteTracking : public InstructionPrecedenceTracking {
+public:
+  MemoryWriteTracking(DominatorTree *DT) : InstructionPrecedenceTracking(DT) {}
+
+  /// Returns the topmost instruction that may write memory from the given
+  /// basic block. Returns nullptr if there is no such instructions in the block.
+  const Instruction *getFirstMemoryWrite(const BasicBlock *BB) {
+    return getFirstSpecialInstruction(BB);
+  }
+
+  /// Returns true if at least one instruction from the given basic block may
+  /// write memory.
+  bool mayWriteToMemory(const BasicBlock *BB) {
+    return hasSpecialInstructions(BB);
+  }
+
+  /// Returns true if the first memory writing instruction of Insn's block
+  /// exists and dominates Insn.
+  bool isDominatedByMemoryWriteFromSameBlock(const Instruction *Insn) {
     return isPreceededBySpecialInstruction(Insn);
   }
 

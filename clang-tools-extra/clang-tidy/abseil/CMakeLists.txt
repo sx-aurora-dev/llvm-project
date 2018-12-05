@@ -2,13 +2,17 @@ set(LLVM_LINK_COMPONENTS support)
 
 add_clang_library(clangTidyAbseilModule
   AbseilTidyModule.cpp
+  DurationComparisonCheck.cpp
   DurationDivisionCheck.cpp
+  DurationFactoryFloatCheck.cpp
+  DurationFactoryScaleCheck.cpp
+  DurationRewriter.cpp
   FasterStrsplitDelimiterCheck.cpp
   NoInternalDependenciesCheck.cpp
   NoNamespaceCheck.cpp
   RedundantStrcatCallsCheck.cpp
-  StringFindStartswithCheck.cpp
   StrCatAppendCheck.cpp
+  StringFindStartswithCheck.cpp
 
   LINK_LIBS
   clangAST
@@ -17,4 +21,5 @@ add_clang_library(clangTidyAbseilModule
   clangLex
   clangTidy
   clangTidyUtils
+  clangTooling
   )

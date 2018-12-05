@@ -9,6 +9,7 @@
 #include "llvm/DebugInfo/PDB/DIA/DIASession.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumDebugStreams.h"
+#include "llvm/DebugInfo/PDB/DIA/DIAEnumFrameData.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumInjectedSources.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumLineNumbers.h"
 #include "llvm/DebugInfo/PDB/DIA/DIAEnumSectionContribs.h"
@@ -187,7 +188,8 @@ bool DIASession::addressForRVA(uint32_t RVA, uint32_t &Section,
   return false;
 }
 
-std::unique_ptr<PDBSymbol> DIASession::getSymbolById(uint32_t SymbolId) const {
+std::unique_ptr<PDBSymbol>
+DIASession::getSymbolById(SymIndexId SymbolId) const {
   CComPtr<IDiaSymbol> LocatedSymbol;
   if (S_OK != Session->symbolById(SymbolId, &LocatedSymbol))
     return nullptr;
@@ -406,7 +408,7 @@ DIASession::getInjectedSources() const {
   if (!Files)
     return nullptr;
 
-  return llvm::make_unique<DIAEnumInjectedSources>(*this, Files);
+  return llvm::make_unique<DIAEnumInjectedSources>(Files);
 }
 
 std::unique_ptr<IPDBEnumSectionContribs>
@@ -417,4 +419,14 @@ DIASession::getSectionContribs() const {
     return nullptr;
 
   return llvm::make_unique<DIAEnumSectionContribs>(*this, Sections);
+}
+
+std::unique_ptr<IPDBEnumFrameData>
+DIASession::getFrameData() const {
+  CComPtr<IDiaEnumFrameData> FD =
+      getTableEnumerator<IDiaEnumFrameData>(*Session);
+  if (!FD)
+    return nullptr;
+
+  return llvm::make_unique<DIAEnumFrameData>(FD);
 }

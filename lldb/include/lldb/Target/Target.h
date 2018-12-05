@@ -10,16 +10,12 @@
 #ifndef liblldb_Target_h_
 #define liblldb_Target_h_
 
-// C Includes
-// C++ Includes
 #include <list>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Breakpoint/BreakpointList.h"
 #include "lldb/Breakpoint/BreakpointName.h"
 #include "lldb/Breakpoint/WatchpointList.h"
@@ -41,7 +37,7 @@
 
 namespace lldb_private {
 
-extern OptionEnumValueElement g_dynamic_value_types[];
+OptionEnumValues GetDynamicValueTypes();
 
 typedef enum InlineStrategy {
   eInlineBreakpointsNever = 0,
@@ -60,6 +56,12 @@ typedef enum LoadCWDlldbinitFile {
   eLoadCWDlldbinitFalse,
   eLoadCWDlldbinitWarn
 } LoadCWDlldbinitFile;
+
+typedef enum LoadDependentFiles {
+  eLoadDependentsDefault,
+  eLoadDependentsYes,
+  eLoadDependentsNo,
+} LoadDependentFiles;
 
 //----------------------------------------------------------------------
 // TargetProperties
@@ -195,6 +197,10 @@ public:
   void SetInjectLocalVariables(ExecutionContext *exe_ctx, bool b);
 
   bool GetUseModernTypeLookup() const;
+
+  void SetRequireHardwareBreakpoints(bool b);
+
+  bool GetRequireHardwareBreakpoints() const;
 
 private:
   //------------------------------------------------------------------
@@ -602,14 +608,12 @@ public:
   // eLazyBoolCalculate, we use the current target setting, else we use the
   // values passed in. func_name_type_mask is or'ed values from the
   // FunctionNameType enum.
-  lldb::BreakpointSP CreateBreakpoint(const FileSpecList *containingModules,
-                                      const FileSpecList *containingSourceFiles,
-                                      const char *func_name,
-                                      uint32_t func_name_type_mask,
-                                      lldb::LanguageType language,
-                                      lldb::addr_t offset,
-                                      LazyBool skip_prologue, bool internal,
-                                      bool request_hardware);
+  lldb::BreakpointSP CreateBreakpoint(
+      const FileSpecList *containingModules,
+      const FileSpecList *containingSourceFiles, const char *func_name,
+      lldb::FunctionNameType func_name_type_mask, lldb::LanguageType language,
+      lldb::addr_t offset, LazyBool skip_prologue, bool internal,
+      bool request_hardware);
 
   lldb::BreakpointSP
   CreateExceptionBreakpoint(enum lldb::LanguageType language, bool catch_bp,
@@ -617,25 +621,34 @@ public:
                             Args *additional_args = nullptr,
                             Status *additional_args_error = nullptr);
 
+  lldb::BreakpointSP
+  CreateScriptedBreakpoint(const llvm::StringRef class_name,
+                           const FileSpecList *containingModules,
+                           const FileSpecList *containingSourceFiles,
+                           bool internal,
+                           bool request_hardware,
+                           StructuredData::ObjectSP extra_args_sp,
+                           Status *creation_error = nullptr);
+
   // This is the same as the func_name breakpoint except that you can specify a
   // vector of names.  This is cheaper than a regular expression breakpoint in
   // the case where you just want to set a breakpoint on a set of names you
   // already know. func_name_type_mask is or'ed values from the
   // FunctionNameType enum.
-  lldb::BreakpointSP
-  CreateBreakpoint(const FileSpecList *containingModules,
-                   const FileSpecList *containingSourceFiles,
-                   const char *func_names[], size_t num_names,
-                   uint32_t func_name_type_mask, lldb::LanguageType language,
-                   lldb::addr_t offset, LazyBool skip_prologue, bool internal,
-                   bool request_hardware);
+  lldb::BreakpointSP CreateBreakpoint(
+      const FileSpecList *containingModules,
+      const FileSpecList *containingSourceFiles, const char *func_names[],
+      size_t num_names, lldb::FunctionNameType func_name_type_mask,
+      lldb::LanguageType language, lldb::addr_t offset, LazyBool skip_prologue,
+      bool internal, bool request_hardware);
 
   lldb::BreakpointSP
   CreateBreakpoint(const FileSpecList *containingModules,
                    const FileSpecList *containingSourceFiles,
                    const std::vector<std::string> &func_names,
-                   uint32_t func_name_type_mask, lldb::LanguageType language,
-                   lldb::addr_t m_offset, LazyBool skip_prologue, bool internal,
+                   lldb::FunctionNameType func_name_type_mask,
+                   lldb::LanguageType language, lldb::addr_t m_offset,
+                   LazyBool skip_prologue, bool internal,
                    bool request_hardware);
 
   // Use this to create a general breakpoint:
@@ -673,7 +686,6 @@ public:
                                const BreakpointOptions &options,
                                const BreakpointName::Permissions &permissions);
  void ApplyNameToBreakpoints(BreakpointName &bp_name);
-   
   
   // This takes ownership of the name obj passed in.
   void AddBreakpointName(BreakpointName *bp_name);
@@ -761,9 +773,9 @@ public:
   /// that doesn't have code in it, LLDB_INVALID_ADDRESS will be
   /// returned.
   //------------------------------------------------------------------
-  lldb::addr_t GetOpcodeLoadAddress(
-      lldb::addr_t load_addr,
-      AddressClass addr_class = AddressClass::eInvalid) const;
+  lldb::addr_t
+  GetOpcodeLoadAddress(lldb::addr_t load_addr,
+                       AddressClass addr_class = AddressClass::eInvalid) const;
 
   // Get load_addr as breakable load address for this target. Take a addr and
   // check if for any reason there is a better address than this to put a
@@ -834,14 +846,16 @@ public:
   ///     A shared pointer reference to the module that will become
   ///     the main executable for this process.
   ///
-  /// @param[in] get_dependent_files
+  /// @param[in] load_dependent_files
   ///     If \b true then ask the object files to track down any
   ///     known dependent files.
   ///
   /// @see ObjectFile::GetDependentModules (FileSpecList&)
   /// @see Process::GetImages()
   //------------------------------------------------------------------
-  void SetExecutableModule(lldb::ModuleSP &module_sp, bool get_dependent_files);
+  void SetExecutableModule(
+      lldb::ModuleSP &module_sp,
+      LoadDependentFiles load_dependent_files = eLoadDependentsDefault);
 
   bool LoadScriptingResources(std::list<Status> &errors,
                               Stream *feedback_stream = nullptr,

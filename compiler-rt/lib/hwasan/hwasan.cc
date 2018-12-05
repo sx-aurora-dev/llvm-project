@@ -17,6 +17,7 @@
 #include "hwasan_poisoning.h"
 #include "hwasan_report.h"
 #include "hwasan_thread.h"
+#include "hwasan_thread_list.h"
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_flags.h"
@@ -87,7 +88,18 @@ static void InitializeFlags() {
     cf.check_printf = false;
     cf.intercept_tls_get_addr = true;
     cf.exitcode = 99;
+    // Sigtrap is used in error reporting.
     cf.handle_sigtrap = kHandleSignalExclusive;
+
+#if SANITIZER_ANDROID
+    // Let platform handle other signals. It is better at reporting them then we
+    // are.
+    cf.handle_segv = kHandleSignalNo;
+    cf.handle_sigbus = kHandleSignalNo;
+    cf.handle_abort = kHandleSignalNo;
+    cf.handle_sigill = kHandleSignalNo;
+    cf.handle_sigfpe = kHandleSignalNo;
+#endif
     OverrideCommonFlags(cf);
   }
 
@@ -147,17 +159,90 @@ void GetStackTrace(BufferedStackTrace *stack, uptr max_s, uptr pc, uptr bp,
                 request_fast_unwind);
 }
 
-void PrintWarning(uptr pc, uptr bp) {
-  GET_FATAL_STACK_TRACE_PC_BP(pc, bp);
-  ReportInvalidAccess(&stack, 0);
-}
-
 static void HWAsanCheckFailed(const char *file, int line, const char *cond,
                               u64 v1, u64 v2) {
   Report("HWAddressSanitizer CHECK failed: %s:%d \"%s\" (0x%zx, 0x%zx)\n", file,
          line, cond, (uptr)v1, (uptr)v2);
   PRINT_CURRENT_STACK_CHECK();
   Die();
+}
+
+static constexpr uptr kMemoryUsageBufferSize = 4096;
+
+static void HwasanFormatMemoryUsage(InternalScopedString &s) {
+  HwasanThreadList &thread_list = hwasanThreadList();
+  auto thread_stats = thread_list.GetThreadStats();
+  auto *sds = StackDepotGetStats();
+  AllocatorStatCounters asc;
+  GetAllocatorStats(asc);
+  s.append(
+      "HWASAN pid: %d rss: %zd threads: %zd stacks: %zd"
+      " thr_aux: %zd stack_depot: %zd uniq_stacks: %zd"
+      " heap: %zd",
+      internal_getpid(), GetRSS(), thread_stats.n_live_threads,
+      thread_stats.total_stack_size,
+      thread_stats.n_live_threads * thread_list.MemoryUsedPerThread(),
+      sds->allocated, sds->n_uniq_ids, asc[AllocatorStatMapped]);
+}
+
+#if SANITIZER_ANDROID
+static char *memory_usage_buffer = nullptr;
+
+#define PR_SET_VMA 0x53564d41
+#define PR_SET_VMA_ANON_NAME 0
+
+static void InitMemoryUsage() {
+  memory_usage_buffer =
+      (char *)MmapOrDie(kMemoryUsageBufferSize, "memory usage string");
+  CHECK(memory_usage_buffer);
+  memory_usage_buffer[0] = '\0';
+  CHECK(internal_prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME,
+                       (uptr)memory_usage_buffer, kMemoryUsageBufferSize,
+                       (uptr)memory_usage_buffer) == 0);
+}
+
+void UpdateMemoryUsage() {
+  if (!flags()->export_memory_stats)
+    return;
+  if (!memory_usage_buffer)
+    InitMemoryUsage();
+  InternalScopedString s(kMemoryUsageBufferSize);
+  HwasanFormatMemoryUsage(s);
+  internal_strncpy(memory_usage_buffer, s.data(), kMemoryUsageBufferSize - 1);
+  memory_usage_buffer[kMemoryUsageBufferSize - 1] = '\0';
+}
+#else
+void UpdateMemoryUsage() {}
+#endif
+
+struct FrameDescription {
+  uptr PC;
+  const char *Descr;
+};
+
+struct FrameDescriptionArray {
+  FrameDescription *beg, *end;
+};
+
+static InternalMmapVectorNoCtor<FrameDescriptionArray> AllFrames;
+
+void InitFrameDescriptors(uptr b, uptr e) {
+  FrameDescription *beg = reinterpret_cast<FrameDescription *>(b);
+  FrameDescription *end = reinterpret_cast<FrameDescription *>(e);
+  // Must have at least one entry, which we can use for a linked list.
+  CHECK_GE(end - beg, 1U);
+  AllFrames.push_back({beg, end});
+  if (Verbosity())
+    for (FrameDescription *frame_descr = beg; frame_descr < end; frame_descr++)
+      Printf("Frame: %p %s\n", frame_descr->PC, frame_descr->Descr);
+}
+
+const char *GetStackFrameDescr(uptr pc) {
+  for (uptr i = 0, n = AllFrames.size(); i < n; i++)
+    for (auto p = AllFrames[i].beg; p < AllFrames[i].end; p++)
+      if (p->PC == pc)
+        return p->Descr;
+  return nullptr;
 }
 
 } // namespace __hwasan
@@ -178,6 +263,10 @@ void __hwasan_shadow_init() {
   hwasan_shadow_inited = 1;
 }
 
+void __hwasan_init_frames(uptr beg, uptr end) {
+  InitFrameDescriptors(beg, end);
+}
+
 void __hwasan_init() {
   CHECK(!hwasan_init_is_running);
   if (hwasan_inited) return;
@@ -195,9 +284,15 @@ void __hwasan_init() {
   __sanitizer_set_report_path(common_flags()->log_path);
 
   DisableCoreDumperIfNecessary();
+
   __hwasan_shadow_init();
+
+  InitThreads();
+  hwasanThreadList().CreateCurrentThread();
+
   MadviseShadow();
 
+  SetPrintfAndReportCallback(AppendToErrorMessageBuffer);
   // This may call libc -> needs initialized shadow.
   AndroidLogInit();
 
@@ -210,12 +305,9 @@ void __hwasan_init() {
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
   HwasanTSDInit();
+  HwasanTSDThreadInit();
 
   HwasanAllocatorInit();
-
-  Thread *main_thread = Thread::Create(nullptr, nullptr);
-  SetCurrentThread(main_thread);
-  main_thread->Init();
 
 #if HWASAN_CONTAINS_UBSAN
   __ubsan::InitAsPlugin();
@@ -428,6 +520,12 @@ void __hwasan_handle_longjmp(const void *sp_dst) {
     return;
   }
   TagMemory(sp, dst - sp, 0);
+}
+
+void __hwasan_print_memory_usage() {
+  InternalScopedString s(kMemoryUsageBufferSize);
+  HwasanFormatMemoryUsage(s);
+  Printf("%s\n", s.data());
 }
 
 static const u8 kFallbackTag = 0xBB;

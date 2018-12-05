@@ -176,8 +176,8 @@ class CommandLineCompletionTestCase(TestBase):
 
     @skipIfFreeBSD  # timing out on the FreeBSD buildbot
     def test_settings_s_dash(self):
-        """Test that 'settings set -' completes to 'settings set -g'."""
-        self.complete_from_to('settings set -', 'settings set -g')
+        """Test that 'settings set --g' completes to 'settings set --global'."""
+        self.complete_from_to('settings set --g', 'settings set --global')
 
     @skipIfFreeBSD  # timing out on the FreeBSD buildbot
     def test_settings_clear_th(self):
@@ -273,6 +273,22 @@ class CommandLineCompletionTestCase(TestBase):
         self.complete_from_to("watchpoint set variable foo --watch ", ["read", "write", "read_write"])
         self.complete_from_to("watchpoint set variable foo --watch w", "watchpoint set variable foo --watch write")
         self.complete_from_to('watchpoint set variable foo -w read_', 'watchpoint set variable foo -w read_write')
+
+    def test_completion_description_commands(self):
+        """Test descriptions of top-level command completions"""
+        self.check_completion_with_desc("", [
+            ["command", "Commands for managing custom LLDB commands."],
+            ["bugreport", "Commands for creating domain-specific bug reports."]
+        ])
+
+        self.check_completion_with_desc("pl", [
+            ["platform", "Commands to manage and create platforms."],
+            ["plugin", "Commands for managing LLDB plugins."]
+        ])
+
+        # Just check that this doesn't crash.
+        self.check_completion_with_desc("comman", [])
+        self.check_completion_with_desc("non-existent-command", [])
 
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24489")
     def test_symbol_name(self):

@@ -97,10 +97,14 @@ private:
   /// lies between to valid DIEs.
   std::map<uint64_t, std::set<uint32_t>> ReferenceToDIEOffsets;
   uint32_t NumDebugLineErrors = 0;
+  // Used to relax some checks that do not currently work portably
+  bool IsObjectFile;
+  bool IsMachOObject;
 
   raw_ostream &error() const;
   raw_ostream &warn() const;
   raw_ostream &note() const;
+  raw_ostream &dump(const DWARFDie &Die, unsigned indent = 0) const;
 
   /// Verifies the abbreviations section.
   ///
@@ -147,13 +151,13 @@ private:
   ///  - That the root DIE is a unit DIE.
   ///  - If a unit type is provided, that the unit DIE matches the unit type.
   ///  - The DIE ranges.
+  ///  - That call site entries are only nested within subprograms with a
+  ///    DW_AT_call attribute.
   ///
   /// \param Unit      The DWARF Unit to verify.
-  /// \param UnitType  An optional unit type which will be used to verify the
-  ///                  type of the unit DIE.
   ///
   /// \returns The number of errors that occurred during verification.
-  unsigned verifyUnitContents(DWARFUnit &Unit, uint8_t UnitType = 0);
+  unsigned verifyUnitContents(DWARFUnit &Unit);
 
   /// Verifies the unit headers and contents in a .debug_info or .debug_types
   /// section.
@@ -164,6 +168,12 @@ private:
   /// \returns The number of errors that occurred during verification.
   unsigned verifyUnitSection(const DWARFSection &S,
                              DWARFSectionKind SectionKind);
+
+  /// Verifies that a call site entry is nested within a subprogram with a
+  /// DW_AT_call attribute.
+  ///
+  /// \returns Number of errors that occurred during verification.
+  unsigned verifyDebugInfoCallSite(const DWARFDie &Die);
 
   /// Verify that all Die ranges are valid.
   ///
@@ -279,8 +289,8 @@ private:
 
 public:
   DWARFVerifier(raw_ostream &S, DWARFContext &D,
-                DIDumpOptions DumpOpts = DIDumpOptions::getForSingleDIE())
-      : OS(S), DCtx(D), DumpOpts(std::move(DumpOpts)) {}
+                DIDumpOptions DumpOpts = DIDumpOptions::getForSingleDIE());
+
   /// Verify the information in any of the following sections, if available:
   /// .debug_abbrev, debug_abbrev.dwo
   ///

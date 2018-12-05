@@ -19,7 +19,6 @@
 #include "sanitizer_common/sanitizer_flags.h"
 #include "xray/xray_interface.h"
 #include "xray/xray_log_interface.h"
-
 #include "xray_flags.h"
 #include "xray_profile_collector.h"
 #include "xray_profiling_flags.h"
@@ -69,7 +68,7 @@ static ProfilingData &getThreadLocalData() XRAY_NEVER_INSTRUMENT {
   }();
   (void)ThreadOnce;
 
-  auto &TLD = *reinterpret_cast<ProfilingData*>(&ThreadStorage);
+  auto &TLD = *reinterpret_cast<ProfilingData *>(&ThreadStorage);
 
   if (UNLIKELY(TLD.Allocators == nullptr || TLD.FCT == nullptr)) {
     auto *Allocators =
@@ -134,21 +133,20 @@ XRayLogFlushStatus profilingFlush() XRAY_NEVER_INSTRUMENT {
       if (Verbosity())
         Report("profiling: No data to flush.\n");
     } else {
-      int Fd = getLogFD();
-      if (Fd == -1) {
+      LogWriter *LW = LogWriter::Open();
+      if (LW == nullptr) {
         if (Verbosity())
           Report("profiling: Failed to flush to file, dropping data.\n");
       } else {
         // Now for each of the buffers, write out the profile data as we would
         // see it in memory, verbatim.
         while (B.Data != nullptr && B.Size != 0) {
-          retryingWriteAll(Fd, reinterpret_cast<const char *>(B.Data),
-                           reinterpret_cast<const char *>(B.Data) + B.Size);
+          LW->WriteAll(reinterpret_cast<const char *>(B.Data),
+                       reinterpret_cast<const char *>(B.Data) + B.Size);
           B = profileCollectorService::nextBuffer(B);
         }
-        // Then we close out the file.
-        internal_close(Fd);
       }
+      LogWriter::Close(LW);
     }
   }
 
@@ -167,11 +165,13 @@ namespace {
 
 thread_local atomic_uint8_t ReentranceGuard{0};
 
-static void postCurrentThreadFCT(ProfilingData &TLD) {
+static void postCurrentThreadFCT(ProfilingData &TLD) XRAY_NEVER_INSTRUMENT {
   if (TLD.Allocators == nullptr || TLD.FCT == nullptr)
     return;
 
-  profileCollectorService::post(*TLD.FCT, GetTid());
+  if (!TLD.FCT->getRoots().empty())
+    profileCollectorService::post(*TLD.FCT, GetTid());
+
   cleanupTLD();
 }
 
@@ -197,11 +197,11 @@ void profilingHandleArg0(int32_t FuncId,
   switch (Entry) {
   case XRayEntryType::ENTRY:
   case XRayEntryType::LOG_ARGS_ENTRY:
-    TLD.FCT->enterFunction(FuncId, TSC);
+    TLD.FCT->enterFunction(FuncId, TSC, CPU);
     break;
   case XRayEntryType::EXIT:
   case XRayEntryType::TAIL:
-    TLD.FCT->exitFunction(FuncId, TSC);
+    TLD.FCT->exitFunction(FuncId, TSC, CPU);
     break;
   default:
     // FIXME: Handle bugs.
@@ -227,10 +227,15 @@ XRayLogInitStatus profilingFinalize() XRAY_NEVER_INSTRUMENT {
   // Wait a grace period to allow threads to see that we're finalizing.
   SleepForMillis(profilingFlags()->grace_period_ms);
 
-  // We also want to make sure that the current thread's data is cleaned up,
-  // if we have any.
+  // We also want to make sure that the current thread's data is cleaned up, if
+  // we have any. We need to ensure that the call to postCurrentThreadFCT() is
+  // guarded by our recursion guard.
   auto &TLD = getThreadLocalData();
-  postCurrentThreadFCT(TLD);
+  {
+    RecursionGuard G(ReentranceGuard);
+    if (G)
+      postCurrentThreadFCT(TLD);
+  }
 
   // Then we force serialize the log data.
   profileCollectorService::serialize();
@@ -241,15 +246,8 @@ XRayLogInitStatus profilingFinalize() XRAY_NEVER_INSTRUMENT {
 }
 
 XRayLogInitStatus
-profilingLoggingInit(size_t BufferSize, size_t BufferMax, void *Options,
-                     size_t OptionsSize) XRAY_NEVER_INSTRUMENT {
-  if (BufferSize != 0 || BufferMax != 0) {
-    if (Verbosity())
-      Report("__xray_log_init() being used, and is unsupported. Use "
-             "__xray_log_init_mode(...) instead. Bailing out.");
-    return XRayLogInitStatus::XRAY_LOG_UNINITIALIZED;
-  }
-
+profilingLoggingInit(UNUSED size_t BufferSize, UNUSED size_t BufferMax,
+                     void *Options, size_t OptionsSize) XRAY_NEVER_INSTRUMENT {
   s32 CurrentStatus = XRayLogInitStatus::XRAY_LOG_UNINITIALIZED;
   if (!atomic_compare_exchange_strong(&ProfilerLogStatus, &CurrentStatus,
                                       XRayLogInitStatus::XRAY_LOG_INITIALIZING,
@@ -291,7 +289,13 @@ profilingLoggingInit(size_t BufferSize, size_t BufferMax, void *Options,
       if (TLD.Allocators == nullptr && TLD.FCT == nullptr)
         return;
 
-      postCurrentThreadFCT(TLD);
+      {
+        // If we're somehow executing this while inside a non-reentrant-friendly
+        // context, we skip attempting to post the current thread's data.
+        RecursionGuard G(ReentranceGuard);
+        if (G)
+          postCurrentThreadFCT(TLD);
+      }
     });
 
     // We also need to set up an exit handler, so that we can get the profile

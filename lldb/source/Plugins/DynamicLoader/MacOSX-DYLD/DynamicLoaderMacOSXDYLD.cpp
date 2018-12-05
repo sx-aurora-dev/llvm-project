@@ -75,6 +75,7 @@ DynamicLoader *DynamicLoaderMacOSXDYLD::CreateInstance(Process *process,
       case llvm::Triple::IOS:
       case llvm::Triple::TvOS:
       case llvm::Triple::WatchOS:
+      // NEED_BRIDGEOS_TRIPLE case llvm::Triple::BridgeOS:
         create = triple_ref.getVendor() == llvm::Triple::Apple;
         break;
       default:
@@ -692,9 +693,7 @@ bool DynamicLoaderMacOSXDYLD::ReadImageInfos(
                                        error);
       // don't resolve the path
       if (error.Success()) {
-        const bool resolve_path = false;
-        image_infos[i].file_spec.SetFile(raw_path, resolve_path,
-                                         FileSpec::Style::native);
+        image_infos[i].file_spec.SetFile(raw_path, FileSpec::Style::native);
       }
     }
     return true;
@@ -893,7 +892,8 @@ uint32_t DynamicLoaderMacOSXDYLD::ParseLoadCommands(const DataExtractor &data,
           const lldb::offset_t name_offset =
               load_cmd_offset + data.GetU32(&offset);
           const char *path = data.PeekCStr(name_offset);
-          lc_id_dylinker->SetFile(path, true, FileSpec::Style::native);
+          lc_id_dylinker->SetFile(path, FileSpec::Style::native);
+          FileSystem::Instance().Resolve(*lc_id_dylinker);
         }
         break;
 
@@ -975,9 +975,8 @@ void DynamicLoaderMacOSXDYLD::UpdateImageInfosHeaderAndLoadCommands(
         // re-add it back to make sure it is always in the list.
         ModuleSP dyld_module_sp(GetDYLDModule());
 
-        const bool get_dependent_images = false;
         m_process->GetTarget().SetExecutableModule(exe_module_sp,
-                                                   get_dependent_images);
+                                                   eLoadDependentsNo);
 
         if (dyld_module_sp) {
           if (target.GetImages().AppendIfNeeded(dyld_module_sp)) {

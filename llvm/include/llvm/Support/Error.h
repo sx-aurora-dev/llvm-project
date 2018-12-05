@@ -322,7 +322,7 @@ private:
 /// Subclass of Error for the sole purpose of identifying the success path in
 /// the type system. This allows to catch invalid conversion to Expected<T> at
 /// compile time.
-class ErrorSuccess : public Error {};
+class ErrorSuccess final : public Error {};
 
 inline ErrorSuccess Error::success() { return ErrorSuccess(); }
 
@@ -953,10 +953,14 @@ Expected<T> handleExpected(Expected<T> ValOrErr, RecoveryFtor &&RecoveryPath,
 /// will be printed before the first one is logged. A newline will be printed
 /// after each error.
 ///
+/// This function is compatible with the helpers from Support/WithColor.h. You
+/// can pass any of them as the OS. Please consider using them instead of
+/// including 'error: ' in the ErrorBanner.
+///
 /// This is useful in the base level of your program to allow clean termination
 /// (allowing clean deallocation of resources, etc.), while reporting error
 /// information to the user.
-void logAllUnhandledErrors(Error E, raw_ostream &OS, Twine ErrorBanner);
+void logAllUnhandledErrors(Error E, raw_ostream &OS, Twine ErrorBanner = {});
 
 /// Write all error messages (if any) in E to a string. The newline character
 /// is used to separate error messages.
@@ -1171,8 +1175,7 @@ Error createStringError(std::error_code EC, char const *Msg);
 /// show more detailed information to the user.
 class FileError final : public ErrorInfo<FileError> {
 
-  template <class Err>
-  friend Error createFileError(std::string, Err);
+  friend Error createFileError(std::string, Error);
 
 public:
   void log(raw_ostream &OS) const override {
@@ -1207,10 +1210,11 @@ private:
 
 /// Concatenate a source file path and/or name with an Error. The resulting
 /// Error is unchecked.
-template <class Err>
-inline Error createFileError(std::string F, Err E) {
+inline Error createFileError(std::string F, Error E) {
   return FileError::build(F, std::move(E));
 }
+
+Error createFileError(std::string F, ErrorSuccess) = delete;
 
 /// Helper for check-and-exit error handling.
 ///

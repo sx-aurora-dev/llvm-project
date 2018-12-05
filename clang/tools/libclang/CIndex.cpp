@@ -1044,7 +1044,7 @@ bool CursorVisitor::VisitObjCContainerDecl(ObjCContainerDecl *D) {
   }
 
   // Now sort the Decls so that they appear in lexical order.
-  llvm::sort(DeclsInContainer.begin(), DeclsInContainer.end(),
+  llvm::sort(DeclsInContainer,
              [&SM](Decl *A, Decl *B) {
                SourceLocation L_A = A->getBeginLoc();
                SourceLocation L_B = B->getBeginLoc();
@@ -1519,6 +1519,9 @@ bool CursorVisitor::VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   case BuiltinType::Id:
 #include "clang/Basic/OpenCLImageTypes.def"
+#define EXT_OPAQUE_TYPE(ExtTYpe, Id, Ext) \
+  case BuiltinType::Id:
+#include "clang/Basic/OpenCLExtensionTypes.def"
   case BuiltinType::OCLSampler:
   case BuiltinType::OCLEvent:
   case BuiltinType::OCLClkEvent:
@@ -2206,6 +2209,21 @@ void OMPClauseEnqueue::VisitOMPThreadsClause(const OMPThreadsClause *) {}
 void OMPClauseEnqueue::VisitOMPSIMDClause(const OMPSIMDClause *) {}
 
 void OMPClauseEnqueue::VisitOMPNogroupClause(const OMPNogroupClause *) {}
+
+void OMPClauseEnqueue::VisitOMPUnifiedAddressClause(
+    const OMPUnifiedAddressClause *) {}
+
+void OMPClauseEnqueue::VisitOMPUnifiedSharedMemoryClause(
+    const OMPUnifiedSharedMemoryClause *) {}
+
+void OMPClauseEnqueue::VisitOMPReverseOffloadClause(
+    const OMPReverseOffloadClause *) {}
+
+void OMPClauseEnqueue::VisitOMPDynamicAllocatorsClause(
+    const OMPDynamicAllocatorsClause *) {}
+
+void OMPClauseEnqueue::VisitOMPAtomicDefaultMemOrderClause(
+    const OMPAtomicDefaultMemOrderClause *) {}
 
 void OMPClauseEnqueue::VisitOMPDeviceClause(const OMPDeviceClause *C) {
   Visitor->AddStmt(C->getDevice());
@@ -6220,6 +6238,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::Import:
   case Decl::OMPThreadPrivate:
   case Decl::OMPDeclareReduction:
+  case Decl::OMPRequires:
   case Decl::ObjCTypeParam:
   case Decl::BuiltinTemplate:
   case Decl::PragmaComment:
@@ -6921,7 +6940,7 @@ AnnotateTokensWorker::DetermineChildActions(CXCursor Cursor) const {
     if (const ImplicitCastExpr *ICE = dyn_cast<ImplicitCastExpr>(Callee)) {
       const Expr *SubExpr = ICE->getSubExpr();
       if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(SubExpr)) {
-        const Decl *parentDecl = getCursorParentDecl(Cursor);
+        const Decl *parentDecl = getCursorDecl(Cursor);
         CXTranslationUnit TU = clang_Cursor_getTranslationUnit(Cursor);
 
         // Visit the DeclRefExpr as last.
@@ -7144,7 +7163,7 @@ AnnotateTokensWorker::Visit(CXCursor cursor, CXCursor parent) {
   //  MyCXXClass foo; // Make sure we don't annotate 'foo' as a CallExpr cursor.
   if (clang_isExpression(cursorK) && MoreTokens()) {
     const Expr *E = getCursorExpr(cursor);
-    if (const Decl *D = getCursorParentDecl(cursor)) {
+    if (const Decl *D = getCursorDecl(cursor)) {
       const unsigned I = NextToken();
       if (E->getBeginLoc().isValid() && D->getLocation().isValid() &&
           E->getBeginLoc() == D->getLocation() &&
@@ -7799,11 +7818,11 @@ static void getCursorPlatformAvailabilityForDecl(
   if (AvailabilityAttrs.empty())
     return;
 
-  llvm::sort(AvailabilityAttrs.begin(), AvailabilityAttrs.end(),
+  llvm::sort(AvailabilityAttrs,
              [](AvailabilityAttr *LHS, AvailabilityAttr *RHS) {
                return LHS->getPlatform()->getName() <
                       RHS->getPlatform()->getName();
-            });
+             });
   ASTContext &Ctx = D->getASTContext();
   auto It = std::unique(
       AvailabilityAttrs.begin(), AvailabilityAttrs.end(),
@@ -8919,16 +8938,3 @@ cxindex::Logger::~Logger() {
     OS << "--------------------------------------------------\n";
   }
 }
-
-#ifdef CLANG_TOOL_EXTRA_BUILD
-// This anchor is used to force the linker to link the clang-tidy plugin.
-extern volatile int ClangTidyPluginAnchorSource;
-static int LLVM_ATTRIBUTE_UNUSED ClangTidyPluginAnchorDestination =
-    ClangTidyPluginAnchorSource;
-
-// This anchor is used to force the linker to link the clang-include-fixer
-// plugin.
-extern volatile int ClangIncludeFixerPluginAnchorSource;
-static int LLVM_ATTRIBUTE_UNUSED ClangIncludeFixerPluginAnchorDestination =
-    ClangIncludeFixerPluginAnchorSource;
-#endif

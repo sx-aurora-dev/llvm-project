@@ -99,8 +99,6 @@ def err_fe_unable_to_interface_with_target : Error<
     "unable to interface with target machine">;
 def err_fe_unable_to_open_output : Error<
     "unable to open output file '%0': '%1'">;
-def err_fe_pth_file_has_no_source_header : Error<
-    "PTH file '%0' does not designate an original source header file for -include-pth">;
 def warn_fe_macro_contains_embedded_newline : Warning<
     "macro '%0' contains embedded newline; text after the newline is ignored">;
 def warn_fe_cc_print_header_failure : Warning<
@@ -187,6 +185,8 @@ def err_module_build_requires_fmodules : Error<
   "module compilation requires '-fmodules'">;
 def err_module_interface_requires_modules_ts : Error<
   "module interface compilation requires '-fmodules-ts'">;
+def err_header_module_requires_modules : Error<
+  "header module compilation requires '-fmodules' or '-fmodules-ts'">;
 def warn_module_config_mismatch : Warning<
   "module file %0 cannot be loaded due to a configuration mismatch with the current "
   "compilation">, InGroup<DiagGroup<"module-file-config-mismatch">>, DefaultError;
@@ -224,6 +224,10 @@ def remark_module_build_done : Remark<"finished building module '%0'">,
 def err_modules_embed_file_not_found :
   Error<"file '%0' specified by '-fmodules-embed-file=' not found">,
   DefaultFatal;
+def err_module_header_file_not_found :
+  Error<"module header file '%0' not found">, DefaultFatal;
+def err_module_header_file_invalid :
+  Error<"unexpected module header file input '%0'">, DefaultFatal;
 
 def err_test_module_file_extension_version : Error<
   "test module file extension '%0' has different version (%1.%2) than expected "
@@ -238,7 +242,7 @@ def warn_option_invalid_ocl_version : Warning<
   "OpenCL version %0 does not support the option '%1'">, InGroup<Deprecated>;
 
 def warn_stdlibcxx_not_found : Warning<
-  "include path for stdlibc++ headers not found; pass '-std=libc++' on the "
+  "include path for stdlibc++ headers not found; pass '-stdlib=libc++' on the "
   "command line to use the libc++ standard library instead">,
   InGroup<DiagGroup<"stdlibcxx-not-found">>;
 }

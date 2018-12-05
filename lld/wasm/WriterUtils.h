@@ -13,9 +13,6 @@
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Object/Wasm.h"
-#include "llvm/Support/raw_ostream.h"
-
-using llvm::raw_ostream;
 
 namespace lld {
 namespace wasm {
@@ -35,7 +32,8 @@ void writeU8(raw_ostream &OS, uint8_t byte, const Twine &Msg);
 
 void writeU32(raw_ostream &OS, uint32_t Number, const Twine &Msg);
 
-void writeValueType(raw_ostream &OS, uint8_t Type, const Twine &Msg);
+void writeValueType(raw_ostream &OS, llvm::wasm::ValType Type,
+                    const Twine &Msg);
 
 void writeSig(raw_ostream &OS, const llvm::wasm::WasmSignature &Sig);
 
