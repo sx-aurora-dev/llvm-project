@@ -50,6 +50,33 @@ public:
   bool VisitType(clang::Type *T);
 };
 
+class FindDeclRefExprVisitor
+    : public clang::RecursiveASTVisitor<FindDeclRefExprVisitor> {
+
+  std::unordered_set<clang::VarDecl *> VarSet;
+
+public:
+  FindDeclRefExprVisitor() {}
+  bool VisitStmt(clang::Stmt *S);
+  // bool VisitDecl(clang::Decl *D);
+  std::unordered_set<clang::VarDecl *>* getVarSet() {
+    return &VarSet;
+  }
+};
+
+class FindLoopStmtVisitor
+  : public clang::RecursiveASTVisitor<FindLoopStmtVisitor> {
+
+  FindDeclRefExprVisitor FindDeclRefVisitor;
+
+public:
+  FindLoopStmtVisitor() {}
+  bool VisitStmt(clang::Stmt *S);
+  std::unordered_set<clang::VarDecl *>* getVarSet() {
+    return FindDeclRefVisitor.getVarSet();
+  }
+};
+
 class FindTargetCodeVisitor
     : public clang::RecursiveASTVisitor<FindTargetCodeVisitor> {
 
@@ -58,6 +85,7 @@ class FindTargetCodeVisitor
   TargetCode &TargetCodeInfo;
   TypeDeclResolver &Types;
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
+  FindDeclRefExprVisitor FindDeclRefVisitor;
 
   clang::FunctionDecl *LastVisitedFuncDecl;
   std::unordered_set<std::string> FuncDeclWithoutBody;
