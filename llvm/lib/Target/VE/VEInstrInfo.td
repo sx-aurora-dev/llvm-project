@@ -1455,8 +1455,8 @@ let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
 }
 
 let isBarrier = 1, hasSideEffects = 1 in
-  def EH_SjLj_Setup : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
-                             [(VEeh_sjlj_setup_dispatch)]>;
+  def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
+                                      [(VEeh_sjlj_setup_dispatch)]>;
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
