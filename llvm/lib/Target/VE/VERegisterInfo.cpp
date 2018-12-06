@@ -62,6 +62,11 @@ VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
   }
 }
 
+const uint32_t*
+VERegisterInfo::getNoPreservedMask() const {
+  return CSR_NoRegs_RegMask;
+}
+
 BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
   Reserved.set(VE::SX8);        // stack limit

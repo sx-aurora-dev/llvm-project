@@ -62,8 +62,7 @@ static MCOperand LowerOperand(const MachineInstr *MI,
     report_fatal_error("unsupported MO_TargetIndex operand type");
     break;
   case MachineOperand::MO_JumpTableIndex:
-    report_fatal_error("unsupported MO_JumpTableIndex operand type");
-    break;
+    return LowerSymbolOperand(MI, MO, AP.GetJTISymbol(MO.getIndex()), AP);
   case MachineOperand::MO_RegisterLiveOut:
     report_fatal_error("unsupported MO_RegistrLiveOut operand type");
     break;
@@ -114,7 +113,6 @@ void llvm::LowerVEMachineInstrToMCInst(const MachineInstr *MI,
                                           MCInst &OutMI,
                                           AsmPrinter &AP)
 {
-
   OutMI.setOpcode(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
