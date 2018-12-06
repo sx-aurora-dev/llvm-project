@@ -1614,9 +1614,10 @@ bool TargetLowering::SimplifyDemandedVectorElts(
       unsigned Idx = CIdx->getZExtValue();
       if (!DemandedElts[Idx])
         return TLO.CombineTo(Op, Vec);
-      DemandedElts.clearBit(Idx);
 
-      if (SimplifyDemandedVectorElts(Vec, DemandedElts, KnownUndef,
+      APInt DemandedVecElts(DemandedElts);
+      DemandedVecElts.clearBit(Idx);
+      if (SimplifyDemandedVectorElts(Vec, DemandedVecElts, KnownUndef,
                                      KnownZero, TLO, Depth + 1))
         return true;
 
@@ -1736,7 +1737,6 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     }
     break;
   }
-  case ISD::ANY_EXTEND_VECTOR_INREG:
   case ISD::SIGN_EXTEND_VECTOR_INREG:
   case ISD::ZERO_EXTEND_VECTOR_INREG: {
     APInt SrcUndef, SrcZero;
@@ -1769,7 +1769,6 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     break;
   }
   case ISD::TRUNCATE:
-  case ISD::ANY_EXTEND:
   case ISD::SIGN_EXTEND:
   case ISD::ZERO_EXTEND:
     if (SimplifyDemandedVectorElts(Op.getOperand(0), DemandedElts, KnownUndef,
@@ -2998,8 +2997,11 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
 
 /// Returns true (and the GlobalValue and the offset) if the node is a
 /// GlobalAddress + offset.
-bool TargetLowering::isGAPlusOffset(SDNode *N, const GlobalValue *&GA,
+bool TargetLowering::isGAPlusOffset(SDNode *WN, const GlobalValue *&GA,
                                     int64_t &Offset) const {
+
+  SDNode *N = unwrapAddress(SDValue(WN, 0)).getNode();
+
   if (auto *GASD = dyn_cast<GlobalAddressSDNode>(N)) {
     GA = GASD->getGlobal();
     Offset += GASD->getOffset();
@@ -4110,6 +4112,54 @@ bool TargetLowering::expandMUL(SDNode *N, SDValue &Lo, SDValue &Hi, EVT HiLoVT,
   return Ok;
 }
 
+bool TargetLowering::expandFunnelShift(SDNode *Node, SDValue &Result,
+                                       SelectionDAG &DAG) const {
+  EVT VT = Node->getValueType(0);
+
+  if (VT.isVector() && (!isOperationLegalOrCustom(ISD::SHL, VT) ||
+                        !isOperationLegalOrCustom(ISD::SRL, VT) ||
+                        !isOperationLegalOrCustom(ISD::SUB, VT) ||
+                        !isOperationLegalOrCustomOrPromote(ISD::OR, VT)))
+    return false;
+
+  // fshl: (X << (Z % BW)) | (Y >> (BW - (Z % BW)))
+  // fshr: (X << (BW - (Z % BW))) | (Y >> (Z % BW))
+  SDValue X = Node->getOperand(0);
+  SDValue Y = Node->getOperand(1);
+  SDValue Z = Node->getOperand(2);
+
+  unsigned EltSizeInBits = VT.getScalarSizeInBits();
+  bool IsFSHL = Node->getOpcode() == ISD::FSHL;
+  SDLoc DL(SDValue(Node, 0));
+
+  EVT ShVT = Z.getValueType();
+  SDValue BitWidthC = DAG.getConstant(EltSizeInBits, DL, ShVT);
+  SDValue Zero = DAG.getConstant(0, DL, ShVT);
+
+  SDValue ShAmt;
+  if (isPowerOf2_32(EltSizeInBits)) {
+    SDValue Mask = DAG.getConstant(EltSizeInBits - 1, DL, ShVT);
+    ShAmt = DAG.getNode(ISD::AND, DL, ShVT, Z, Mask);
+  } else {
+    ShAmt = DAG.getNode(ISD::UREM, DL, ShVT, Z, BitWidthC);
+  }
+
+  SDValue InvShAmt = DAG.getNode(ISD::SUB, DL, ShVT, BitWidthC, ShAmt);
+  SDValue ShX = DAG.getNode(ISD::SHL, DL, VT, X, IsFSHL ? ShAmt : InvShAmt);
+  SDValue ShY = DAG.getNode(ISD::SRL, DL, VT, Y, IsFSHL ? InvShAmt : ShAmt);
+  SDValue Or = DAG.getNode(ISD::OR, DL, VT, ShX, ShY);
+
+  // If (Z % BW == 0), then the opposite direction shift is shift-by-bitwidth,
+  // and that is undefined. We must compare and select to avoid UB.
+  EVT CCVT = getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(), ShVT);
+
+  // For fshl, 0-shift returns the 1st arg (X).
+  // For fshr, 0-shift returns the 2nd arg (Y).
+  SDValue IsZeroShift = DAG.getSetCC(DL, CCVT, ShAmt, Zero, ISD::SETEQ);
+  Result = DAG.getSelect(DL, VT, IsZeroShift, IsFSHL ? X : Y, Or);
+  return true;
+}
+
 bool TargetLowering::expandFP_TO_SINT(SDNode *Node, SDValue &Result,
                                SelectionDAG &DAG) const {
   SDValue Src = Node->getOperand(0);
@@ -4200,20 +4250,39 @@ bool TargetLowering::expandFP_TO_UINT(SDNode *Node, SDValue &Result,
     return true;
   }
 
-  // Expand based on maximum range of FP_TO_SINT:
-  // True = fp_to_sint(Src)
-  // False = 0x8000000000000000 + fp_to_sint(Src - 0x8000000000000000)
-  // Result = select (Src < 0x8000000000000000), True, False
   SDValue Cst = DAG.getConstantFP(APF, dl, SrcVT);
   SDValue Sel = DAG.getSetCC(dl, SetCCVT, Src, Cst, ISD::SETLT);
 
-  SDValue True = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Src);
-  // TODO: Should any fast-math-flags be set for the FSUB?
-  SDValue False = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT,
-                              DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Cst));
-  False = DAG.getNode(ISD::XOR, dl, DstVT, False,
-                      DAG.getConstant(SignMask, dl, DstVT));
-  Result = DAG.getSelect(dl, DstVT, Sel, True, False);
+  bool Strict = shouldUseStrictFP_TO_INT(SrcVT, DstVT, /*IsSigned*/ false);
+  if (Strict) {
+    // Expand based on maximum range of FP_TO_SINT, if the value exceeds the
+    // signmask then offset (the result of which should be fully representable).
+    // Sel = Src < 0x8000000000000000
+    // Val = select Sel, Src, Src - 0x8000000000000000
+    // Ofs = select Sel, 0, 0x8000000000000000
+    // Result = fp_to_sint(Val) ^ Ofs
+
+    // TODO: Should any fast-math-flags be set for the FSUB?
+    SDValue Val = DAG.getSelect(dl, SrcVT, Sel, Src,
+                                DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Cst));
+    SDValue Ofs = DAG.getSelect(dl, DstVT, Sel, DAG.getConstant(0, dl, DstVT),
+                                DAG.getConstant(SignMask, dl, DstVT));
+    Result = DAG.getNode(ISD::XOR, dl, DstVT,
+                         DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Val), Ofs);
+  } else {
+    // Expand based on maximum range of FP_TO_SINT:
+    // True = fp_to_sint(Src)
+    // False = 0x8000000000000000 + fp_to_sint(Src - 0x8000000000000000)
+    // Result = select (Src < 0x8000000000000000), True, False
+
+    SDValue True = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Src);
+    // TODO: Should any fast-math-flags be set for the FSUB?
+    SDValue False = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT,
+                                DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Cst));
+    False = DAG.getNode(ISD::XOR, dl, DstVT, False,
+                        DAG.getConstant(SignMask, dl, DstVT));
+    Result = DAG.getSelect(dl, DstVT, Sel, True, False);
+  }
   return true;
 }
 

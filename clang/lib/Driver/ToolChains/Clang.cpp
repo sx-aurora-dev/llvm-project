@@ -1152,42 +1152,26 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
       bool IsFirstImplicitInclude = !RenderedImplicitInclude;
       RenderedImplicitInclude = true;
 
-      // Use PCH if the user requested it.
-      bool UsePCH = D.CCCUsePCH;
-
-      bool FoundPTH = false;
       bool FoundPCH = false;
       SmallString<128> P(A->getValue());
       // We want the files to have a name like foo.h.pch. Add a dummy extension
       // so that replace_extension does the right thing.
       P += ".dummy";
-      if (UsePCH) {
-        llvm::sys::path::replace_extension(P, "pch");
-        if (llvm::sys::fs::exists(P))
-          FoundPCH = true;
-      }
+      llvm::sys::path::replace_extension(P, "pch");
+      if (llvm::sys::fs::exists(P))
+        FoundPCH = true;
 
       if (!FoundPCH) {
-        llvm::sys::path::replace_extension(P, "pth");
-        if (llvm::sys::fs::exists(P))
-          FoundPTH = true;
-      }
-
-      if (!FoundPCH && !FoundPTH) {
         llvm::sys::path::replace_extension(P, "gch");
         if (llvm::sys::fs::exists(P)) {
-          FoundPCH = UsePCH;
-          FoundPTH = !UsePCH;
+          FoundPCH = true;
         }
       }
 
-      if (FoundPCH || FoundPTH) {
+      if (FoundPCH) {
         if (IsFirstImplicitInclude) {
           A->claim();
-          if (UsePCH)
-            CmdArgs.push_back("-include-pch");
-          else
-            CmdArgs.push_back("-include-pth");
+          CmdArgs.push_back("-include-pch");
           CmdArgs.push_back(Args.MakeArgString(P));
           continue;
         } else {
@@ -2844,7 +2828,6 @@ static void RenderObjCOptions(const ToolChain &TC, const Driver &D,
   // When ObjectiveC legacy runtime is in effect on MacOSX, turn on the option
   // to do Array/Dictionary subscripting by default.
   if (Arch == llvm::Triple::x86 && T.isMacOSX() &&
-      !T.isMacOSXVersionLT(10, 7) &&
       Runtime.getKind() == ObjCRuntime::FragileMacOSX && Runtime.isNeXTFamily())
     CmdArgs.push_back("-fobjc-subscripting-legacy-runtime");
 
@@ -3467,19 +3450,14 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     // Also ignore explicit -force_cpusubtype_ALL option.
     (void)Args.hasArg(options::OPT_force__cpusubtype__ALL);
   } else if (isa<PrecompileJobAction>(JA)) {
-    // Use PCH if the user requested it.
-    bool UsePCH = D.CCCUsePCH;
-
     if (JA.getType() == types::TY_Nothing)
       CmdArgs.push_back("-fsyntax-only");
     else if (JA.getType() == types::TY_ModuleFile)
       CmdArgs.push_back(IsHeaderModulePrecompile
                             ? "-emit-header-module"
                             : "-emit-module-interface");
-    else if (UsePCH)
-      CmdArgs.push_back("-emit-pch");
     else
-      CmdArgs.push_back("-emit-pth");
+      CmdArgs.push_back("-emit-pch");
   } else if (isa<VerifyPCHJobAction>(JA)) {
     CmdArgs.push_back("-verify-pch");
   } else {
@@ -3970,7 +3948,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   const char *SplitDWARFOut;
   if (SplitDWARF) {
     CmdArgs.push_back("-split-dwarf-file");
-    SplitDWARFOut = SplitDebugName(Args, Input, Output);
+    SplitDWARFOut = SplitDebugName(Args, Output);
     CmdArgs.push_back(SplitDWARFOut);
   }
 
@@ -5247,8 +5225,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // Claim some arguments which clang supports automatically.
 
   // -fpch-preprocess is used with gcc to add a special marker in the output to
-  // include the PCH file. Clang's PTH solution is completely transparent, so we
-  // do not need to deal with it at all.
+  // include the PCH file.
   Args.ClaimAllArgs(options::OPT_fpch_preprocess);
 
   // Claim some arguments which clang doesn't support, but we don't
@@ -5938,7 +5915,7 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   if ((getDebugFissionKind(D, Args, A) == DwarfFissionKind::Split) &&
       (T.isOSLinux() || T.isOSFuchsia())) {
     CmdArgs.push_back("-split-dwarf-file");
-    CmdArgs.push_back(SplitDebugName(Args, Input, Output));
+    CmdArgs.push_back(SplitDebugName(Args, Output));
   }
 
   assert(Input.isFilename() && "Invalid input.");

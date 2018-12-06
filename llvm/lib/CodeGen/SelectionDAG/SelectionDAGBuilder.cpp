@@ -1032,8 +1032,19 @@ SDValue SelectionDAGBuilder::getRoot() {
   }
 
   // Otherwise, we have to make a token factor node.
-  SDValue Root = DAG.getNode(ISD::TokenFactor, getCurSDLoc(), MVT::Other,
-                             PendingLoads);
+  // If we have >= 2^16 loads then split across multiple token factors as
+  // there's a 64k limit on the number of SDNode operands.
+  SDValue Root;
+  size_t Limit = (1 << 16) - 1;
+  while (PendingLoads.size() > Limit) {
+    unsigned SliceIdx = PendingLoads.size() - Limit;
+    auto ExtractedTFs = ArrayRef<SDValue>(PendingLoads).slice(SliceIdx, Limit);
+    SDValue NewTF =
+        DAG.getNode(ISD::TokenFactor, getCurSDLoc(), MVT::Other, ExtractedTFs);
+    PendingLoads.erase(PendingLoads.begin() + SliceIdx, PendingLoads.end());
+    PendingLoads.emplace_back(NewTF);
+  }
+  Root = DAG.getNode(ISD::TokenFactor, getCurSDLoc(), MVT::Other, PendingLoads);
   PendingLoads.clear();
   DAG.setRoot(Root);
   return Root;
@@ -5740,6 +5751,12 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     SDValue Zero = DAG.getConstant(0, sdl, VT);
     SDValue ShAmt = DAG.getNode(ISD::UREM, sdl, VT, Z, BitWidthC);
 
+    auto FunnelOpcode = IsFSHL ? ISD::FSHL : ISD::FSHR;
+    if (TLI.isOperationLegalOrCustom(FunnelOpcode, VT)) {
+      setValue(&I, DAG.getNode(FunnelOpcode, sdl, VT, X, Y, Z));
+      return nullptr;
+    }
+
     // When X == Y, this is rotate. If the data type has a power-of-2 size, we
     // avoid the select that is necessary in the general case to filter out
     // the 0-shift possibility that leads to UB.
@@ -6337,6 +6354,42 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     // MachineFunction in SelectionDAGISel::PrepareEHLandingPad. We can safely
     // delete it now.
     return nullptr;
+  case Intrinsic::objc_autorelease:
+    return "objc_autorelease";
+  case Intrinsic::objc_autoreleasePoolPop:
+    return "objc_autoreleasePoolPop";
+  case Intrinsic::objc_autoreleasePoolPush:
+    return "objc_autoreleasePoolPush";
+  case Intrinsic::objc_autoreleaseReturnValue:
+    return "objc_autoreleaseReturnValue";
+  case Intrinsic::objc_copyWeak:
+    return "objc_copyWeak";
+  case Intrinsic::objc_destroyWeak:
+    return "objc_destroyWeak";
+  case Intrinsic::objc_initWeak:
+    return "objc_initWeak";
+  case Intrinsic::objc_loadWeak:
+    return "objc_loadWeak";
+  case Intrinsic::objc_loadWeakRetained:
+    return "objc_loadWeakRetained";
+  case Intrinsic::objc_moveWeak:
+    return "objc_moveWeak";
+  case Intrinsic::objc_release:
+    return "objc_release";
+  case Intrinsic::objc_retain:
+    return "objc_retain";
+  case Intrinsic::objc_retainAutorelease:
+    return "objc_retainAutorelease";
+  case Intrinsic::objc_retainAutoreleaseReturnValue:
+    return "objc_retainAutoreleaseReturnValue";
+  case Intrinsic::objc_retainAutoreleasedReturnValue:
+    return "objc_retainAutoreleasedReturnValue";
+  case Intrinsic::objc_retainBlock:
+    return "objc_retainBlock";
+  case Intrinsic::objc_storeStrong:
+    return "objc_storeStrong";
+  case Intrinsic::objc_storeWeak:
+    return "objc_storeWeak";
   }
 }
 

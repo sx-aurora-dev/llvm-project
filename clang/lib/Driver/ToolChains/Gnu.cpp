@@ -817,7 +817,7 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
   if (Args.hasArg(options::OPT_gsplit_dwarf) &&
       getToolChain().getTriple().isOSLinux())
     SplitDebugInfo(getToolChain(), C, *this, JA, Args, Output,
-                   SplitDebugName(Args, Inputs[0], Output));
+                   SplitDebugName(Args, Output));
 }
 
 namespace {
@@ -2435,7 +2435,7 @@ bool Generic_GCC::isPICDefault() const {
   case llvm::Triple::x86_64:
     return getTriple().isOSWindows();
   case llvm::Triple::ppc64:
-  case llvm::Triple::ppc64le:
+    // Big endian PPC is PIC by default
     return !getTriple().isOSBinFormatMachO() && !getTriple().isMacOSX();
   case llvm::Triple::mips64:
   case llvm::Triple::mips64el:

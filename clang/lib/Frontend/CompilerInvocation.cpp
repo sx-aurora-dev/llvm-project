@@ -1115,6 +1115,11 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   }
   Opts.SanitizeAddressGlobalsDeadStripping =
       Args.hasArg(OPT_fsanitize_address_globals_dead_stripping);
+  if (Arg *A = Args.getLastArg(OPT_fsanitize_address_use_odr_indicator,
+                               OPT_fno_sanitize_address_use_odr_indicator)) {
+    Opts.SanitizeAddressUseOdrIndicator =
+        A->getOption().getID() == OPT_fsanitize_address_use_odr_indicator;
+  }
   Opts.SSPBufferSize =
       getLastArgIntValue(Args, OPT_stack_protector_buffer_size, 8, Diags);
   Opts.StackRealignment = Args.hasArg(OPT_mstackrealign);
@@ -1619,8 +1624,6 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       Opts.ProgramAction = frontend::GenerateHeaderModule; break;
     case OPT_emit_pch:
       Opts.ProgramAction = frontend::GeneratePCH; break;
-    case OPT_emit_pth:
-      Opts.ProgramAction = frontend::GeneratePTH; break;
     case OPT_init_only:
       Opts.ProgramAction = frontend::InitOnly; break;
     case OPT_fsyntax_only:
@@ -3020,7 +3023,6 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::GenerateModuleInterface:
   case frontend::GenerateHeaderModule:
   case frontend::GeneratePCH:
-  case frontend::GeneratePTH:
   case frontend::ParseSyntaxOnly:
   case frontend::ModuleFileInfo:
   case frontend::VerifyPCH:
@@ -3049,15 +3051,10 @@ static void ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
                                   DiagnosticsEngine &Diags,
                                   frontend::ActionKind Action) {
   Opts.ImplicitPCHInclude = Args.getLastArgValue(OPT_include_pch);
-  Opts.ImplicitPTHInclude = Args.getLastArgValue(OPT_include_pth);
   Opts.PCHWithHdrStop = Args.hasArg(OPT_pch_through_hdrstop_create) ||
                         Args.hasArg(OPT_pch_through_hdrstop_use);
   Opts.PCHWithHdrStopCreate = Args.hasArg(OPT_pch_through_hdrstop_create);
   Opts.PCHThroughHeader = Args.getLastArgValue(OPT_pch_through_header_EQ);
-  if (const Arg *A = Args.getLastArg(OPT_token_cache))
-      Opts.TokenCache = A->getValue();
-  else
-    Opts.TokenCache = Opts.ImplicitPTHInclude;
   Opts.UsePredefines = !Args.hasArg(OPT_undef);
   Opts.DetailedRecord = Args.hasArg(OPT_detailed_preprocessing_record);
   Opts.DisablePCHValidation = Args.hasArg(OPT_fno_validate_pch);
