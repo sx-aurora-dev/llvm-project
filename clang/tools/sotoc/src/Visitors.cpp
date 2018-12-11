@@ -51,7 +51,7 @@ static bool stmtNeedsSemicolon(const clang::Stmt *S) {
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
 
-  if (!SM.isInSystemHeader(D->getLocStart())) {
+  if (!SM.isInSystemHeader(D->getBeginLoc())) {
     return llvm::Optional<std::string>();
   }
 
