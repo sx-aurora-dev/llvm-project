@@ -146,6 +146,15 @@ public:
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsEnd() {
     return CapturedVars.end();
   };
+  std::vector<clang::OMPClause *>* getOMPClauses(){
+    return &OMPClauses;
+  }
+  std::vector<clang::OMPClause *>::const_iterator getOMPClausesBegin(){
+    return OMPClauses.begin();
+  }
+  std::vector<clang::OMPClause *>::const_iterator getOMPClausesEnd(){
+    return OMPClauses.end();
+  }
   std::string PrintClauses();
   std::string PrintLocalVarsFromClauses();
   clang::OMPClause *GetReferredOMPClause(clang::VarDecl *i);
