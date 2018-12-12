@@ -169,7 +169,7 @@ define i32 @func10(i32, i32) {
 define i32 @func11(float, float) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brlenan.s %s0, %s1, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brle.s %s0, %s1, .LBB{{[0-9]+}}_1
   %3 = fcmp ogt float %0, %1
   br i1 %3, label %4, label %6
 
@@ -185,7 +185,7 @@ define i32 @func11(float, float) {
 define i32 @func12(float, float) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brltnan.s %s0, %s1, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brlt.s %s0, %s1, .LBB{{[0-9]+}}_1
   %3 = fcmp oge float %0, %1
   br i1 %3, label %4, label %6
 
@@ -201,7 +201,7 @@ define i32 @func12(float, float) {
 define i32 @func13(float, float) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brgenan.s %s0, %s1, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brge.s %s0, %s1, .LBB{{[0-9]+}}_1
   %3 = fcmp olt float %0, %1
   br i1 %3, label %4, label %6
 
@@ -217,7 +217,7 @@ define i32 @func13(float, float) {
 define i32 @func14(float, float) {
 ; CHECK-LABEL: func14:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brgtnan.s %s0, %s1, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brgt.s %s0, %s1, .LBB{{[0-9]+}}_1
   %3 = fcmp ole float %0, %1
   br i1 %3, label %4, label %6
 
@@ -313,7 +313,7 @@ define i32 @func19(float, float) {
 define i32 @func20(float, float) {
 ; CHECK-LABEL: func20:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brnenan.s %s0, %s1, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brne.s %s0, %s1, .LBB{{[0-9]+}}_1
   %3 = fcmp oeq float %0, %1
   br i1 %3, label %4, label %6
 
@@ -329,7 +329,7 @@ define i32 @func20(float, float) {
 define i32 @func21(float, float) {
 ; CHECK-LABEL: func21:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    breqnan.s %s0, %s1, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    breq.s %s0, %s1, .LBB{{[0-9]+}}_1
   %3 = fcmp one float %0, %1
   br i1 %3, label %4, label %6
 
