@@ -111,12 +111,12 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
   case VECC::CC_LE:     return VECC::CC_G;
   case VECC::CC_NUM:    return VECC::CC_NAN;
   case VECC::CC_NAN:    return VECC::CC_NUM;
-  case VECC::CC_GNAN:   return VECC::CC_LENAN;
-  case VECC::CC_LNAN:   return VECC::CC_GENAN;
-  case VECC::CC_NENAN:  return VECC::CC_EQNAN;
-  case VECC::CC_EQNAN:  return VECC::CC_NENAN;
-  case VECC::CC_GENAN:  return VECC::CC_LNAN;
-  case VECC::CC_LENAN:  return VECC::CC_GNAN;
+  case VECC::CC_GNAN:   return VECC::CC_LE;
+  case VECC::CC_LNAN:   return VECC::CC_GE;
+  case VECC::CC_NENAN:  return VECC::CC_EQ;
+  case VECC::CC_EQNAN:  return VECC::CC_NE;
+  case VECC::CC_GENAN:  return VECC::CC_L;
+  case VECC::CC_LENAN:  return VECC::CC_G;
   case VECC::CC_AT:     return VECC::CC_AF;
   }
   llvm_unreachable("Invalid cond code");
