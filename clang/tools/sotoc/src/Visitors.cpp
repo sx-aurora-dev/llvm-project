@@ -51,7 +51,7 @@ static bool stmtNeedsSemicolon(const clang::Stmt *S) {
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
 
-  if (!SM.isInSystemHeader(D->getLocStart())) {
+  if (!SM.isInSystemHeader(D->getBeginLoc())) {
     return llvm::Optional<std::string>();
   }
 
@@ -147,20 +147,16 @@ bool FindTargetCodeVisitor::processTargetRegion(
             }
           }
 
-        // For more complex data types (like structs) we need to traverse the
-        // tree
-        DiscoverTypeVisitor.TraverseStmt(CS);
-        addTargetRegionArgs(CS, TCR);
-        TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
-        TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
+          for ( auto C : TargetDirective->clauses()) {
+            TCR->addOpenMPClause(C);
+          }
 
-        for ( auto C : TargetDirective->clauses()) {
-          TCR->addOpenMPClause(C);
-        }
-
-        // For some combined OpenMP constructs we need some of the clauses.
-        // This parts figures out which clauses to add (regarding the
-        // specification).
+          // For more complex data types (like structs) we need to traverse the
+          // tree
+          DiscoverTypeVisitor.TraverseStmt(CS);
+          addTargetRegionArgs(CS, TCR);
+          TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
+          TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
 
         }
       }
@@ -183,7 +179,18 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
 
   // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
   for (const auto i : *FindLoopVisitor.getVarSet()) {
+
     // i->print(llvm::outs());
+    for (auto j : *TCR->getOMPClauses()) {
+      for (auto CC : j->children()) {
+        if (auto CC_DeclRefExpr = llvm::dyn_cast<clang::DeclRefExpr>(CC)) {
+          // CC_DeclRefExpr->dumpColor();
+          if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
+            tmpSet.insert(i);
+        }
+      }
+    }
+
     for (auto j = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
          j != e; ++j) {
       if (i->getCanonicalDecl() == *j) {

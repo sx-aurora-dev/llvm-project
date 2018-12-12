@@ -256,7 +256,7 @@ bool TargetCodeRegion::isClausePrintable(clang::OMPClause* C) {
     case clang::OpenMPClauseKind::OMPC_private:
     case clang::OpenMPClauseKind::OMPC_firstprivate:
     case clang::OpenMPClauseKind::OMPC_shared:
-    case clang::OpenMPClauseKind::OMPC_reduction:
+    // case clang::OpenMPClauseKind::OMPC_reduction:
       return true;
     default:
       return false;
