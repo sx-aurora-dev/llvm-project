@@ -83,16 +83,7 @@ Optional<std::string> toURI(const SourceManager &SM, StringRef Path,
   }
 
   sys::path::remove_dots(AbsolutePath, /*remove_dot_dot=*/true);
-
-  std::string ErrMsg;
-  for (const auto &Scheme : Opts.URISchemes) {
-    auto U = URI::create(AbsolutePath, Scheme);
-    if (U)
-      return U->toString();
-    ErrMsg += toString(U.takeError()) + "\n";
-  }
-  log("Failed to create an URI for file {0}: {1}", AbsolutePath, ErrMsg);
-  return None;
+  return URI::create(AbsolutePath).toString();
 }
 
 // All proto generated headers should start with this line.
@@ -225,7 +216,7 @@ Optional<SymbolLocation> getTokenLocation(SourceLocation TokLoc,
     return None;
   FileURIStorage = std::move(*U);
   SymbolLocation Result;
-  Result.FileURI = FileURIStorage;
+  Result.FileURI = FileURIStorage.c_str();
   auto Range = getTokenRange(TokLoc, SM, LangOpts);
   Result.Start = Range.first;
   Result.End = Range.second;
@@ -269,7 +260,7 @@ void SymbolCollector::initialize(ASTContext &Ctx) {
 }
 
 bool SymbolCollector::shouldCollectSymbol(const NamedDecl &ND,
-                                          ASTContext &ASTCtx,
+                                          const ASTContext &ASTCtx,
                                           const Options &Opts) {
   if (ND.isImplicit())
     return false;
@@ -524,7 +515,7 @@ void SymbolCollector::finish() {
             Ref R;
             R.Location.Start = Range.first;
             R.Location.End = Range.second;
-            R.Location.FileURI = *FileURI;
+            R.Location.FileURI = FileURI->c_str();
             R.Kind = toRefKind(LocAndRole.second);
             Refs.insert(*ID, R);
           }
@@ -595,6 +586,13 @@ const Symbol *SymbolCollector::addDeclaration(const NamedDecl &ND,
   S.ReturnType = ReturnType;
   if (!Include.empty())
     S.IncludeHeaders.emplace_back(Include, 1);
+
+  llvm::Optional<OpaqueType> TypeStorage;
+  if (S.Flags & Symbol::IndexedForCodeCompletion) {
+    TypeStorage = OpaqueType::fromCompletionResult(*ASTCtx, SymbolCompletion);
+    if (TypeStorage)
+      S.Type = TypeStorage->raw();
+  }
 
   S.Origin = Opts.Origin;
   if (ND.getAvailability() == AR_Deprecated)

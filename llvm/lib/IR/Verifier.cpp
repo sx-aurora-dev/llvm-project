@@ -281,6 +281,9 @@ class Verifier : public InstVisitor<Verifier>, VerifierSupport {
   /// Whether the current function has a DISubprogram attached to it.
   bool HasDebugInfo = false;
 
+  /// Whether source was present on the first DIFile encountered in each CU.
+  DenseMap<const DICompileUnit *, bool> HasSourceDebugInfo;
+
   /// Stores the count of how many objects were passed to llvm.localescape for a
   /// given function and the largest index passed to llvm.localrecover.
   DenseMap<Function *, std::pair<unsigned, unsigned>> FrameEscapeInfo;
@@ -519,6 +522,9 @@ private:
   /// Module-level verification that all @llvm.experimental.deoptimize
   /// declarations share the same calling convention.
   void verifyDeoptimizeCallingConvs();
+
+  /// Verify all-or-nothing property of DIFile source attribute within a CU.
+  void verifySourceDebugInfo(const DICompileUnit &U, const DIFile &F);
 };
 
 } // end anonymous namespace
@@ -1032,6 +1038,8 @@ void Verifier::visitDICompileUnit(const DICompileUnit &N) {
   AssertDI(!N.getFile()->getFilename().empty(), "invalid filename", &N,
            N.getFile());
 
+  verifySourceDebugInfo(N, *N.getFile());
+
   AssertDI((N.getEmissionKind() <= DICompileUnit::LastEmissionKind),
            "invalid emission kind", &N);
 
@@ -1109,6 +1117,8 @@ void Verifier::visitDISubprogram(const DISubprogram &N) {
     AssertDI(N.isDistinct(), "subprogram definitions must be distinct", &N);
     AssertDI(Unit, "subprogram definitions must have a compile unit", &N);
     AssertDI(isa<DICompileUnit>(Unit), "invalid unit type", &N, Unit);
+    if (N.getFile())
+      verifySourceDebugInfo(*N.getUnit(), *N.getFile());
   } else {
     // Subprogram declarations (part of the type hierarchy).
     AssertDI(!Unit, "subprogram declarations must not have a compile unit", &N);
@@ -1930,6 +1940,7 @@ void Verifier::verifyStatepoint(ImmutableCallSite CS) {
 
   // Verify that the types of the call parameter arguments match
   // the type of the wrapped callee.
+  AttributeList Attrs = CS.getAttributes();
   for (int i = 0; i < NumParams; i++) {
     Type *ParamType = TargetFuncType->getParamType(i);
     Type *ArgType = CS.getArgument(5 + i)->getType();
@@ -1937,6 +1948,12 @@ void Verifier::verifyStatepoint(ImmutableCallSite CS) {
            "gc.statepoint call argument does not match wrapped "
            "function type",
            &CI);
+
+    if (TargetFuncType->isVarArg()) {
+      AttributeSet ArgAttrs = Attrs.getParamAttributes(5 + i);
+      Assert(!ArgAttrs.hasAttribute(Attribute::StructRet),
+             "Attribute 'sret' cannot be used for vararg call arguments!", &CI);
+    }
   }
 
   const int EndCallArgsInx = 4 + NumCallArgs;
@@ -2814,8 +2831,13 @@ void Verifier::verifyCallSite(CallSite CS) {
         SawReturned = true;
       }
 
-      Assert(!ArgAttrs.hasAttribute(Attribute::StructRet),
-             "Attribute 'sret' cannot be used for vararg call arguments!", I);
+      // Statepoint intrinsic is vararg but the wrapped function may be not.
+      // Allow sret here and check the wrapped function in verifyStatepoint.
+      if (CS.getCalledFunction() == nullptr ||
+          CS.getCalledFunction()->getIntrinsicID() !=
+            Intrinsic::experimental_gc_statepoint)
+        Assert(!ArgAttrs.hasAttribute(Attribute::StructRet),
+               "Attribute 'sret' cannot be used for vararg call arguments!", I);
 
       if (ArgAttrs.hasAttribute(Attribute::InAlloca))
         Assert(Idx == CS.arg_size() - 1, "inalloca isn't on the last argument!",
@@ -3910,6 +3932,10 @@ void Verifier::visitInstruction(Instruction &I) {
     }
   }
 
+  // Get a pointer to the call base of the instruction if it is some form of
+  // call.
+  const CallBase *CBI = dyn_cast<CallBase>(&I);
+
   for (unsigned i = 0, e = I.getNumOperands(); i != e; ++i) {
     Assert(I.getOperand(i) != nullptr, "Instruction has null operand!", &I);
 
@@ -3922,10 +3948,9 @@ void Verifier::visitInstruction(Instruction &I) {
     if (Function *F = dyn_cast<Function>(I.getOperand(i))) {
       // Check to make sure that the "address of" an intrinsic function is never
       // taken.
-      Assert(
-          !F->isIntrinsic() ||
-              i == (isa<CallInst>(I) ? e - 1 : isa<InvokeInst>(I) ? e - 3 : 0),
-          "Cannot take the address of an intrinsic!", &I);
+      Assert(!F->isIntrinsic() ||
+                 (CBI && &CBI->getCalledOperandUse() == &I.getOperandUse(i)),
+             "Cannot take the address of an intrinsic!", &I);
       Assert(
           !F->isIntrinsic() || isa<CallInst>(I) ||
               F->getIntrinsicID() == Intrinsic::donothing ||
@@ -3951,8 +3976,7 @@ void Verifier::visitInstruction(Instruction &I) {
     } else if (isa<Instruction>(I.getOperand(i))) {
       verifyDominatesUse(I, i);
     } else if (isa<InlineAsm>(I.getOperand(i))) {
-      Assert((i + 1 == e && isa<CallInst>(I)) ||
-                 (i + 3 == e && isa<InvokeInst>(I)),
+      Assert(CBI && &CBI->getCalledOperandUse() == &I.getOperandUse(i),
              "Cannot take the address of an inline asm!", &I);
     } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(I.getOperand(i))) {
       if (CE->getType()->isPtrOrPtrVectorTy() ||
@@ -4728,6 +4752,14 @@ void Verifier::verifyDeoptimizeCallingConvs() {
            "calling convention",
            First, F);
   }
+}
+
+void Verifier::verifySourceDebugInfo(const DICompileUnit &U, const DIFile &F) {
+  bool HasSource = F.getSource().hasValue();
+  if (!HasSourceDebugInfo.count(&U))
+    HasSourceDebugInfo[&U] = HasSource;
+  AssertDI(HasSource == HasSourceDebugInfo[&U],
+           "inconsistent use of embedded source");
 }
 
 //===----------------------------------------------------------------------===//

@@ -37,16 +37,16 @@ namespace object {
 class WasmSymbol {
 public:
   WasmSymbol(const wasm::WasmSymbolInfo &Info,
-             const wasm::WasmSignature *FunctionType,
              const wasm::WasmGlobalType *GlobalType,
-             const wasm::WasmEventType *EventType)
-      : Info(Info), FunctionType(FunctionType), GlobalType(GlobalType),
-        EventType(EventType) {}
+             const wasm::WasmEventType *EventType,
+             const wasm::WasmSignature *Signature)
+      : Info(Info), GlobalType(GlobalType), EventType(EventType),
+        Signature(Signature) {}
 
   const wasm::WasmSymbolInfo &Info;
-  const wasm::WasmSignature *FunctionType;
   const wasm::WasmGlobalType *GlobalType;
   const wasm::WasmEventType *EventType;
+  const wasm::WasmSignature *Signature;
 
   bool isTypeFunction() const {
     return Info.Kind == wasm::WASM_SYMBOL_TYPE_FUNCTION;
@@ -129,6 +129,7 @@ public:
 
   static bool classof(const Binary *v) { return v->isWasm(); }
 
+  const wasm::WasmDylinkInfo &dylinkInfo() const { return DylinkInfo; }
   ArrayRef<wasm::WasmSignature> types() const { return Signatures; }
   ArrayRef<uint32_t> functionTypes() const { return FunctionTypes; }
   ArrayRef<wasm::WasmImport> imports() const { return Imports; }
@@ -245,6 +246,7 @@ private:
   Error parseDataSection(ReadContext &Ctx);
 
   // Custom section types
+  Error parseDylinkSection(ReadContext &Ctx);
   Error parseNameSection(ReadContext &Ctx);
   Error parseLinkingSection(ReadContext &Ctx);
   Error parseLinkingSectionSymtab(ReadContext &Ctx);
@@ -253,6 +255,7 @@ private:
 
   wasm::WasmObjectHeader Header;
   std::vector<WasmSection> Sections;
+  wasm::WasmDylinkInfo DylinkInfo;
   std::vector<wasm::WasmSignature> Signatures;
   std::vector<uint32_t> FunctionTypes;
   std::vector<wasm::WasmTable> Tables;

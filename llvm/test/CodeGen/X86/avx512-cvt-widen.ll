@@ -502,33 +502,19 @@ define <8 x i16> @f64to8us(<8 x double> %f) {
 }
 
 define <8 x i8> @f64to8uc(<8 x double> %f) {
-; ALL-LABEL: f64to8uc:
-; ALL:       # %bb.0:
-; ALL-NEXT:    vpermilpd {{.*#+}} xmm1 = xmm0[1,0]
-; ALL-NEXT:    vcvttsd2si %xmm1, %eax
-; ALL-NEXT:    vcvttsd2si %xmm0, %ecx
-; ALL-NEXT:    vmovd %ecx, %xmm1
-; ALL-NEXT:    vpinsrb $1, %eax, %xmm1, %xmm1
-; ALL-NEXT:    vextractf128 $1, %ymm0, %xmm2
-; ALL-NEXT:    vcvttsd2si %xmm2, %eax
-; ALL-NEXT:    vpinsrb $2, %eax, %xmm1, %xmm1
-; ALL-NEXT:    vpermilpd {{.*#+}} xmm2 = xmm2[1,0]
-; ALL-NEXT:    vcvttsd2si %xmm2, %eax
-; ALL-NEXT:    vpinsrb $3, %eax, %xmm1, %xmm1
-; ALL-NEXT:    vextractf32x4 $2, %zmm0, %xmm2
-; ALL-NEXT:    vcvttsd2si %xmm2, %eax
-; ALL-NEXT:    vpinsrb $4, %eax, %xmm1, %xmm1
-; ALL-NEXT:    vpermilpd {{.*#+}} xmm2 = xmm2[1,0]
-; ALL-NEXT:    vcvttsd2si %xmm2, %eax
-; ALL-NEXT:    vpinsrb $5, %eax, %xmm1, %xmm1
-; ALL-NEXT:    vextractf32x4 $3, %zmm0, %xmm0
-; ALL-NEXT:    vcvttsd2si %xmm0, %eax
-; ALL-NEXT:    vpinsrb $6, %eax, %xmm1, %xmm1
-; ALL-NEXT:    vpermilpd {{.*#+}} xmm0 = xmm0[1,0]
-; ALL-NEXT:    vcvttsd2si %xmm0, %eax
-; ALL-NEXT:    vpinsrb $7, %eax, %xmm1, %xmm0
-; ALL-NEXT:    vzeroupper
-; ALL-NEXT:    retq
+; NOVL-LABEL: f64to8uc:
+; NOVL:       # %bb.0:
+; NOVL-NEXT:    vcvttpd2dq %zmm0, %ymm0
+; NOVL-NEXT:    vpmovdb %zmm0, %xmm0
+; NOVL-NEXT:    vzeroupper
+; NOVL-NEXT:    retq
+;
+; VL-LABEL: f64to8uc:
+; VL:       # %bb.0:
+; VL-NEXT:    vcvttpd2dq %zmm0, %ymm0
+; VL-NEXT:    vpmovdb %ymm0, %xmm0
+; VL-NEXT:    vzeroupper
+; VL-NEXT:    retq
   %res = fptoui <8 x double> %f to <8 x i8>
   ret <8 x i8> %res
 }
@@ -637,6 +623,43 @@ define <8 x i32> @f64to8si(<8 x double> %a) {
 ; ALL-NEXT:    retq
   %b = fptosi <8 x double> %a to <8 x i32>
   ret <8 x i32> %b
+}
+
+define <8 x i16> @f64to8ss(<8 x double> %f) {
+; NOVL-LABEL: f64to8ss:
+; NOVL:       # %bb.0:
+; NOVL-NEXT:    vcvttpd2dq %zmm0, %ymm0
+; NOVL-NEXT:    vpmovdw %zmm0, %ymm0
+; NOVL-NEXT:    # kill: def $xmm0 killed $xmm0 killed $ymm0
+; NOVL-NEXT:    vzeroupper
+; NOVL-NEXT:    retq
+;
+; VL-LABEL: f64to8ss:
+; VL:       # %bb.0:
+; VL-NEXT:    vcvttpd2dq %zmm0, %ymm0
+; VL-NEXT:    vpmovdw %ymm0, %xmm0
+; VL-NEXT:    vzeroupper
+; VL-NEXT:    retq
+  %res = fptosi <8 x double> %f to <8 x i16>
+  ret <8 x i16> %res
+}
+
+define <8 x i8> @f64to8sc(<8 x double> %f) {
+; NOVL-LABEL: f64to8sc:
+; NOVL:       # %bb.0:
+; NOVL-NEXT:    vcvttpd2dq %zmm0, %ymm0
+; NOVL-NEXT:    vpmovdb %zmm0, %xmm0
+; NOVL-NEXT:    vzeroupper
+; NOVL-NEXT:    retq
+;
+; VL-LABEL: f64to8sc:
+; VL:       # %bb.0:
+; VL-NEXT:    vcvttpd2dq %zmm0, %ymm0
+; VL-NEXT:    vpmovdb %ymm0, %xmm0
+; VL-NEXT:    vzeroupper
+; VL-NEXT:    retq
+  %res = fptosi <8 x double> %f to <8 x i8>
+  ret <8 x i8> %res
 }
 
 define <4 x i32> @f64to4si(<4 x double> %a) {
@@ -1645,9 +1668,8 @@ define <2 x double> @sbto2f64(<2 x double> %a) {
 ; NOVL:       # %bb.0:
 ; NOVL-NEXT:    vxorpd %xmm1, %xmm1, %xmm1
 ; NOVL-NEXT:    vcmpltpd %xmm0, %xmm1, %xmm0
-; NOVL-NEXT:    vpmovqd %zmm0, %ymm0
+; NOVL-NEXT:    vpermilps {{.*#+}} xmm0 = xmm0[0,2,2,3]
 ; NOVL-NEXT:    vcvtdq2pd %xmm0, %xmm0
-; NOVL-NEXT:    vzeroupper
 ; NOVL-NEXT:    retq
 ;
 ; VLDQ-LABEL: sbto2f64:
