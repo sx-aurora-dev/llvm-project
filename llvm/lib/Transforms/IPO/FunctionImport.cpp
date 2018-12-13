@@ -293,11 +293,21 @@ static void computeImportForReferencedGlobals(
 
     LLVM_DEBUG(dbgs() << " ref -> " << VI << "\n");
 
+    // If this is a local variable, make sure we import the copy
+    // in the caller's module. The only time a local variable can
+    // share an entry in the index is if there is a local with the same name
+    // in another module that had the same source file name (in a different
+    // directory), where each was compiled in their own directory so there
+    // was not distinguishing path.
+    auto LocalNotInModule = [&](const GlobalValueSummary *RefSummary) -> bool {
+      return GlobalValue::isLocalLinkage(RefSummary->linkage()) &&
+             RefSummary->modulePath() != Summary.modulePath();
+    };
+
     for (auto &RefSummary : VI.getSummaryList())
-      if (RefSummary->getSummaryKind() == GlobalValueSummary::GlobalVarKind &&
-          !RefSummary->notEligibleToImport() &&
-          !GlobalValue::isInterposableLinkage(RefSummary->linkage()) &&
-          RefSummary->refs().empty()) {
+      if (isa<GlobalVarSummary>(RefSummary.get()) &&
+          canImportGlobalVar(RefSummary.get()) &&
+          !LocalNotInModule(RefSummary.get())) {
         auto ILI = ImportList[RefSummary->modulePath()].insert(VI.getGUID());
         // Only update stat if we haven't already imported this variable.
         if (ILI.second)
@@ -824,6 +834,25 @@ void llvm::computeDeadSymbols(
   NumLiveSymbols += LiveSymbols;
 }
 
+// Compute dead symbols and propagate constants in combined index.
+void llvm::computeDeadSymbolsWithConstProp(
+    ModuleSummaryIndex &Index,
+    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols,
+    function_ref<PrevailingType(GlobalValue::GUID)> isPrevailing,
+    bool ImportEnabled) {
+  computeDeadSymbols(Index, GUIDPreservedSymbols, isPrevailing);
+  if (ImportEnabled) {
+    Index.propagateConstants(GUIDPreservedSymbols);
+  } else {
+    // If import is disabled we should drop read-only attribute
+    // from all summaries to prevent internalization.
+    for (auto &P : Index)
+      for (auto &S : P.second.SummaryList)
+        if (auto *GVS = dyn_cast<GlobalVarSummary>(S.get()))
+          GVS->setReadOnly(false);
+  }
+}
+
 /// Compute the set of summaries needed for a ThinLTO backend compilation of
 /// \p ModulePath.
 void llvm::gatherImportedSummariesForModule(
@@ -1020,6 +1049,18 @@ static Function *replaceAliasWithAliasee(Module *SrcModule, GlobalAlias *GA) {
   return NewFn;
 }
 
+// Internalize values that we marked with specific attribute
+// in processGlobalForThinLTO.
+static void internalizeImmutableGVs(Module &M) {
+  for (auto &GV : M.globals())
+    // Skip GVs which have been converted to declarations
+    // by dropDeadSymbols.
+    if (!GV.isDeclaration() && GV.hasAttribute("thinlto-internalize")) {
+      GV.setLinkage(GlobalValue::InternalLinkage);
+      GV.setVisibility(GlobalValue::DefaultVisibility);
+    }
+}
+
 // Automatically import functions in Module \p DestModule based on the summaries
 // index.
 Expected<bool> FunctionImporter::importFunctions(
@@ -1142,6 +1183,8 @@ Expected<bool> FunctionImporter::importFunctions(
     ImportedCount += GlobalsToImport.size();
     NumImportedModules++;
   }
+
+  internalizeImmutableGVs(DestModule);
 
   NumImportedFunctions += (ImportedCount - ImportedGVCount);
   NumImportedGlobalVars += ImportedGVCount;

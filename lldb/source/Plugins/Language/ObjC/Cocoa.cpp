@@ -770,20 +770,19 @@ typedef union {
 } TaggedDoubleBits;
 
 static uint64_t decodeExponent(uint64_t exp) {
-  int64_t exp7 = exp;
   // Tagged exponent field is 7-bit signed. Sign-extend the value to 64 bits
   // before performing arithmetic.
-  int64_t exp11 = ((exp7 << 57) >> 57) + TAGGED_DATE_EXPONENT_BIAS;
-  return exp11;
+  return llvm::SignExtend64<7>(exp) + TAGGED_DATE_EXPONENT_BIAS;
 }
 
 static uint64_t decodeTaggedTimeInterval(uint64_t encodedTimeInterval) {
   if (encodedTimeInterval == 0)
     return 0.0;
   if (encodedTimeInterval == std::numeric_limits<uint64_t>::max())
-    return -0.0;
+    return (uint64_t)-0.0;
 
-  TaggedDoubleBits encodedBits = { .i = encodedTimeInterval };
+  TaggedDoubleBits encodedBits = {};
+  encodedBits.i = encodedTimeInterval;
   DoubleBits decodedBits;
 
   // Sign and fraction are represented exactly.
