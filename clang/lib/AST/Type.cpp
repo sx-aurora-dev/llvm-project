@@ -291,6 +291,14 @@ QualType QualType::getSingleStepDesugaredTypeImpl(QualType type,
   return Context.getQualifiedType(desugar, split.Quals);
 }
 
+// Check that no type class is polymorphic. LLVM style RTTI should be used
+// instead. If absolutely needed an exception can still be added here by
+// defining the appropriate macro (but please don't do this).
+#define TYPE(CLASS, BASE) \
+  static_assert(!std::is_polymorphic<CLASS##Type>::value, \
+                #CLASS "Type should not be polymorphic!");
+#include "clang/AST/TypeNodes.def"
+
 QualType Type::getLocallyUnqualifiedSingleStepDesugaredType() const {
   switch (getTypeClass()) {
 #define ABSTRACT_TYPE(Class, Parent)
@@ -2824,6 +2832,7 @@ StringRef FunctionType::getNameForCallConv(CallingConv CC) {
   case CC_X86RegCall : return "regcall";
   case CC_AAPCS: return "aapcs";
   case CC_AAPCS_VFP: return "aapcs-vfp";
+  case CC_AArch64VectorCall: return "aarch64_vector_pcs";
   case CC_IntelOclBicc: return "intel_ocl_bicc";
   case CC_SpirFunction: return "spir_function";
   case CC_OpenCLKernel: return "opencl_kernel";
@@ -3216,6 +3225,7 @@ bool AttributedType::isCallingConv() const {
   case attr::RegCall:
   case attr::SwiftCall:
   case attr::VectorCall:
+  case attr::AArch64VectorPcs:
   case attr::Pascal:
   case attr::MSABI:
   case attr::SysVABI:

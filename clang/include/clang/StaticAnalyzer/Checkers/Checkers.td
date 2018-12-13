@@ -290,6 +290,9 @@ def DeleteWithNonVirtualDtorChecker : Checker<"DeleteWithNonVirtualDtor">,
   HelpText<"Reports destructions of polymorphic objects with a non-virtual "
            "destructor in their base class">;
 
+def EnumCastOutOfRangeChecker : Checker<"EnumCastOutOfRange">,
+  HelpText<"Check integer to enumeration casts for out of range values">;
+
 def InvalidatedIteratorChecker : Checker<"InvalidatedIterator">,
   HelpText<"Check for use of invalidated iterators">;
 
@@ -300,9 +303,8 @@ def MismatchedIteratorChecker : Checker<"MismatchedIterator">,
   HelpText<"Check for use of iterators of different containers where iterators "
            "of the same container are expected">;
 
-def MisusedMovedObjectChecker: Checker<"MisusedMovedObject">,
-     HelpText<"Method calls on a moved-from object and copying a moved-from "
-              "object will be reported">;
+def MoveChecker: Checker<"Move">,
+     HelpText<"Find use-after-move bugs in C++">;
 
 def UninitializedObjectChecker: Checker<"UninitializedObject">,
      HelpText<"Reports uninitialized fields after object construction">;
@@ -517,6 +519,9 @@ def MacOSKeychainAPIChecker : Checker<"SecKeychainAPI">,
 
 def ObjCPropertyChecker : Checker<"ObjCProperty">,
   HelpText<"Check for proper uses of Objective-C properties">;
+
+def OSObjectRetainCountChecker : Checker<"OSObjectRetainCount">,
+  HelpText<"Check for leaks and improper reference count management for OSObject">;
 
 } // end "osx"
 
