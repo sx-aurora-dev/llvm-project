@@ -1459,6 +1459,14 @@ let isBarrier = 1, hasSideEffects = 1, usesCustomInserter = 1 in
                                       [(VEeh_sjlj_setup_dispatch)]>;
 
 //===----------------------------------------------------------------------===//
+// Dummy instruction for CPU flow control
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
+  def TRAP    : Pseudo<(outs), (ins), "# TRAP", [(trap)]>;
+}
+
+//===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly
 //===----------------------------------------------------------------------===//
 

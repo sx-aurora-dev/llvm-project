@@ -2462,7 +2462,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   DispatchBB->setIsEHPad(true);
 
   MachineBasicBlock *TrapBB = MF->CreateMachineBasicBlock();
-  //BuildMI(TrapBB, DL, TII->get(VE::TRAP));
+  BuildMI(TrapBB, DL, TII->get(VE::TRAP));
   BuildMI(TrapBB, DL, TII->get(VE::NOP));
   DispatchBB->addSuccessor(TrapBB);
 
@@ -2582,14 +2582,10 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
-    // ldl.sx  OReg, *(Tmp2)
+    // ldl.sx  OReg64, *(Tmp2)
     BuildMI(DispContBB, DL, TII->get(VE::LDSri), OReg64)
         .addReg(Tmp2)
         .addImm(0);
-#if 0
-    // movsx OReg64, OReg
-    BuildMI(DispContBB, DL, TII->get(X86::MOVSX64rr32), OReg64).addReg(OReg);
-#endif
     // add     TReg, BReg, OReg64
     BuildMI(DispContBB, DL, TII->get(VE::ADDri), TReg)
         .addReg(OReg64)
