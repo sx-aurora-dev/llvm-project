@@ -103,12 +103,12 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
   case VECC::CC_IGE:    return VECC::CC_IL;
   case VECC::CC_ILE:    return VECC::CC_IG;
   case VECC::CC_AF:     return VECC::CC_AT;
-  case VECC::CC_G:      return VECC::CC_LE;
-  case VECC::CC_L:      return VECC::CC_GE;
-  case VECC::CC_NE:     return VECC::CC_EQ;
-  case VECC::CC_EQ:     return VECC::CC_NE;
-  case VECC::CC_GE:     return VECC::CC_L;
-  case VECC::CC_LE:     return VECC::CC_G;
+  case VECC::CC_G:      return VECC::CC_LENAN;
+  case VECC::CC_L:      return VECC::CC_GENAN;
+  case VECC::CC_NE:     return VECC::CC_EQNAN;
+  case VECC::CC_EQ:     return VECC::CC_NENAN;
+  case VECC::CC_GE:     return VECC::CC_LNAN;
+  case VECC::CC_LE:     return VECC::CC_GNAN;
   case VECC::CC_NUM:    return VECC::CC_NAN;
   case VECC::CC_NAN:    return VECC::CC_NUM;
   case VECC::CC_GNAN:   return VECC::CC_LE;
