@@ -345,7 +345,7 @@ define i32 @func21(float, float) {
 define i32 @func22(float, float) {
 ; CHECK-LABEL: func22:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    breq.s %s0, %s1, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    breqnan.s %s0, %s1, .LBB{{[0-9]+}}_2
   %3 = fcmp ueq float %0, %1
   br i1 %3, label %4, label %6
 
