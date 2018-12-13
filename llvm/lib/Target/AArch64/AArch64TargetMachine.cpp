@@ -275,8 +275,10 @@ AArch64TargetMachine::AArch64TargetMachine(const Target &T, const Triple &TT,
   }
 
   // Enable GlobalISel at or below EnableGlobalISelAt0.
-  if (getOptLevel() <= EnableGlobalISelAtO)
+  if (getOptLevel() <= EnableGlobalISelAtO) {
     setGlobalISel(true);
+    setGlobalISelAbort(GlobalISelAbortMode::Disable);
+  }
 
   // AArch64 supports the MachineOutliner.
   setMachineOutliner(true);
@@ -419,8 +421,10 @@ void AArch64PassConfig::addIRPasses() {
   TargetPassConfig::addIRPasses();
 
   // Match interleaved memory accesses to ldN/stN intrinsics.
-  if (TM->getOptLevel() != CodeGenOpt::None)
+  if (TM->getOptLevel() != CodeGenOpt::None) {
+    addPass(createInterleavedLoadCombinePass());
     addPass(createInterleavedAccessPass());
+  }
 
   if (TM->getOptLevel() == CodeGenOpt::Aggressive && EnableGEPOpt) {
     // Call SeparateConstOffsetFromGEP pass to extract constants within indices

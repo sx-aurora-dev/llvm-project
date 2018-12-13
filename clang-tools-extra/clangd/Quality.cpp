@@ -324,8 +324,8 @@ static float scopeBoost(ScopeDistance &Distance,
     return 1;
   auto D = Distance.distance(*SymbolScope);
   if (D == FileDistance::Unreachable)
-    return 0.4f;
-  return std::max(0.5, 2.0 * std::pow(0.6, D / 2.0));
+    return 0.6f;
+  return std::max(0.65, 2.0 * std::pow(0.6, D / 2.0));
 }
 
 float SymbolRelevanceSignals::evaluate() const {
@@ -369,6 +369,9 @@ float SymbolRelevanceSignals::evaluate() const {
     }
   }
 
+  if (TypeMatchesPreferred)
+    Score *= 5.0;
+
   // Penalize non-instance members when they are accessed via a class instance.
   if (!IsInstanceMember &&
       (Context == CodeCompletionContext::CCC_DotMemberAccess ||
@@ -411,6 +414,10 @@ raw_ostream &operator<<(raw_ostream &OS, const SymbolRelevanceSignals &S) {
   if (S.ScopeProximityMatch)
     OS << formatv("\tIndex scope boost: {0}\n",
                   scopeBoost(*S.ScopeProximityMatch, S.SymbolScope));
+
+  OS << formatv(
+      "\tType matched preferred: {0} (Context type: {1}, Symbol type: {2}\n",
+      S.TypeMatchesPreferred, S.HadContextType, S.HadSymbolType);
 
   return OS;
 }

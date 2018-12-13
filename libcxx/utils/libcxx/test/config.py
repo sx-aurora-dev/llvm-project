@@ -307,7 +307,7 @@ class Configuration(object):
         elif self.use_system_cxx_lib == 'false':
             self.use_system_cxx_lib = False
         elif self.use_system_cxx_lib:
-            assert os.path.isdir(self.use_system_cxx_lib)
+            assert os.path.isdir(self.use_system_cxx_lib), "the specified use_system_cxx_lib parameter (%s) is not a valid directory" % self.use_system_cxx_lib
         self.lit_config.note(
             "inferred use_system_cxx_lib as: %r" % self.use_system_cxx_lib)
 
@@ -338,9 +338,6 @@ class Configuration(object):
 
     def configure_use_clang_verify(self):
         '''If set, run clang with -verify on failing tests.'''
-        if self.with_availability:
-            self.use_clang_verify = False
-            return
         self.use_clang_verify = self.get_lit_bool('use_clang_verify')
         if self.use_clang_verify is None:
             # NOTE: We do not test for the -verify flag directly because
@@ -446,7 +443,7 @@ class Configuration(object):
         # Run a compile test for the -fsized-deallocation flag. This is needed
         # in test/std/language.support/support.dynamic/new.delete
         if self.cxx.hasCompileFlag('-fsized-deallocation'):
-            self.config.available_features.add('fsized-deallocation')
+            self.config.available_features.add('-fsized-deallocation')
 
         if self.cxx.hasCompileFlag('-faligned-allocation'):
             self.config.available_features.add('-faligned-allocation')
@@ -931,9 +928,6 @@ class Configuration(object):
         self.cxx.addWarningFlagIfSupported('-Wunused-variable')
         self.cxx.addWarningFlagIfSupported('-Wunused-parameter')
         self.cxx.addWarningFlagIfSupported('-Wunreachable-code')
-        # FIXME: Enable the two warnings below.
-        # self.cxx.addWarningFlagIfSupported('-Wno-conversion')
-        self.cxx.addWarningFlagIfSupported('-Wno-unused-local-typedef')
         std = self.get_lit_conf('std', None)
         if std in ['c++98', 'c++03']:
             # The '#define static_assert' provided by libc++ in C++03 mode

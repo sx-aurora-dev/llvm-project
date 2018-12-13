@@ -418,10 +418,22 @@ llvm::StringRef Debugger::GetReproducerPath() const {
   return r.GetReproducerPath().GetCString();
 }
 
-void Debugger::SetReproducerPath(llvm::StringRef p) {
-  auto &r = repro::Reproducer::Instance();
-  if (auto e = r.SetReproducerPath(FileSpec(p)))
-    llvm::consumeError(std::move(e));
+llvm::Error Debugger::SetReproducerReplay(llvm::StringRef p) {
+  llvm::Optional<FileSpec> arg = llvm::None;
+
+  if (!p.empty())
+    arg = FileSpec(p);
+
+  return repro::Reproducer::Instance().SetReplay(arg);
+}
+
+llvm::Error Debugger::SetReproducerCapture(bool b) {
+  llvm::Optional<FileSpec> arg = llvm::None;
+
+  if (b)
+    arg = HostInfo::GetReproducerTempDir();
+
+  return repro::Reproducer::Instance().SetCapture(arg);
 }
 
 const FormatEntity::Entry *Debugger::GetThreadFormat() const {

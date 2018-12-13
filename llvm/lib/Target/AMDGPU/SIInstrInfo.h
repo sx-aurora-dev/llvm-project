@@ -89,6 +89,14 @@ private:
   void lowerScalarXnor(SetVectorType &Worklist,
                        MachineInstr &Inst) const;
 
+  void splitScalarNotBinop(SetVectorType &Worklist,
+                           MachineInstr &Inst,
+                           unsigned Opcode) const;
+
+  void splitScalarBinOpN2(SetVectorType &Worklist,
+                          MachineInstr &Inst,
+                          unsigned Opcode) const;
+
   void splitScalar64BitUnaryOp(SetVectorType &Worklist,
                                MachineInstr &Inst, unsigned Opcode) const;
 
@@ -164,12 +172,11 @@ public:
                                int64_t &Offset1,
                                int64_t &Offset2) const override;
 
-  bool getMemOpBaseRegImmOfs(MachineInstr &LdSt, unsigned &BaseReg,
-                             int64_t &Offset,
-                             const TargetRegisterInfo *TRI) const final;
+  bool getMemOperandWithOffset(MachineInstr &LdSt, MachineOperand *&BaseOp,
+                               int64_t &Offset,
+                               const TargetRegisterInfo *TRI) const final;
 
-  bool shouldClusterMemOps(MachineInstr &FirstLdSt, unsigned BaseReg1,
-                           MachineInstr &SecondLdSt, unsigned BaseReg2,
+  bool shouldClusterMemOps(MachineOperand &BaseOp1, MachineOperand &BaseOp2,
                            unsigned NumLoads) const override;
 
   bool shouldScheduleLoadsNear(SDNode *Load0, SDNode *Load1, int64_t Offset0,
@@ -953,6 +960,9 @@ namespace AMDGPU {
 
   LLVM_READONLY
   int getSOPKOp(uint16_t Opcode);
+
+  LLVM_READONLY
+  int getGlobalSaddrOp(uint16_t Opcode);
 
   const uint64_t RSRC_DATA_FORMAT = 0xf00000000000LL;
   const uint64_t RSRC_ELEMENT_SIZE_SHIFT = (32 + 19);
