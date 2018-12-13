@@ -41,6 +41,8 @@ FunctionPass *createSIAnnotateControlFlowPass();
 FunctionPass *createSIFoldOperandsPass();
 FunctionPass *createSIPeepholeSDWAPass();
 FunctionPass *createSILowerI1CopiesPass();
+FunctionPass *createSIFixupVectorISelPass();
+FunctionPass *createSIAddIMGInitPass();
 FunctionPass *createSIShrinkInstructionsPass();
 FunctionPass *createSILoadStoreOptimizerPass();
 FunctionPass *createSIWholeQuadModePass();
@@ -122,6 +124,9 @@ extern char &SIFixSGPRCopiesID;
 void initializeSIFixVGPRCopiesPass(PassRegistry &);
 extern char &SIFixVGPRCopiesID;
 
+void initializeSIFixupVectorISelPass(PassRegistry &);
+extern char &SIFixupVectorISelID;
+
 void initializeSILowerI1CopiesPass(PassRegistry &);
 extern char &SILowerI1CopiesID;
 
@@ -148,6 +153,9 @@ extern char &AMDGPUSimplifyLibCallsID;
 
 void initializeAMDGPUUseNativeCallsPass(PassRegistry &);
 extern char &AMDGPUUseNativeCallsID;
+
+void initializeSIAddIMGInitPass(PassRegistry &);
+extern char &SIAddIMGInitID;
 
 void initializeAMDGPUPerfHintAnalysisPass(PassRegistry &);
 extern char &AMDGPUPerfHintAnalysisID;

@@ -6186,7 +6186,10 @@ PerformConstructorInitialization(Sema &S,
     TypeSourceInfo *TSInfo = Entity.getTypeSourceInfo();
     if (!TSInfo)
       TSInfo = S.Context.getTrivialTypeSourceInfo(Entity.getType(), Loc);
-    SourceRange ParenOrBraceRange = Kind.getParenOrBraceRange();
+    SourceRange ParenOrBraceRange =
+        (Kind.getKind() == InitializationKind::IK_DirectList)
+        ? SourceRange(LBraceLoc, RBraceLoc)
+        : Kind.getParenOrBraceRange();
 
     if (auto *Shadow = dyn_cast<ConstructorUsingShadowDecl>(
             Step.Function.FoundDecl.getDecl())) {
@@ -7258,12 +7261,20 @@ ExprResult Sema::TemporaryMaterializationConversion(Expr *E) {
   return CreateMaterializeTemporaryExpr(E->getType(), E, false);
 }
 
-ExprResult
-InitializationSequence::Perform(Sema &S,
-                                const InitializedEntity &Entity,
-                                const InitializationKind &Kind,
-                                MultiExprArg Args,
-                                QualType *ResultType) {
+ExprResult Sema::PerformQualificationConversion(Expr *E, QualType Ty,
+                                                ExprValueKind VK,
+                                                CheckedConversionKind CCK) {
+  CastKind CK = (Ty.getAddressSpace() != E->getType().getAddressSpace())
+                    ? CK_AddressSpaceConversion
+                    : CK_NoOp;
+  return ImpCastExprToType(E, Ty, CK, VK, /*BasePath=*/nullptr, CCK);
+}
+
+ExprResult InitializationSequence::Perform(Sema &S,
+                                           const InitializedEntity &Entity,
+                                           const InitializationKind &Kind,
+                                           MultiExprArg Args,
+                                           QualType *ResultType) {
   if (Failed()) {
     Diagnose(S, Entity, Kind, Args);
     return ExprError();
@@ -7651,12 +7662,11 @@ InitializationSequence::Perform(Sema &S,
     case SK_QualificationConversionRValue: {
       // Perform a qualification conversion; these can never go wrong.
       ExprValueKind VK =
-          Step->Kind == SK_QualificationConversionLValue ?
-              VK_LValue :
-              (Step->Kind == SK_QualificationConversionXValue ?
-                   VK_XValue :
-                   VK_RValue);
-      CurInit = S.ImpCastExprToType(CurInit.get(), Step->Type, CK_NoOp, VK);
+          Step->Kind == SK_QualificationConversionLValue
+              ? VK_LValue
+              : (Step->Kind == SK_QualificationConversionXValue ? VK_XValue
+                                                                : VK_RValue);
+      CurInit = S.PerformQualificationConversion(CurInit.get(), Step->Type, VK);
       break;
     }
 
@@ -8040,8 +8050,9 @@ InitializationSequence::Perform(Sema &S,
           break;
         }
 
-        llvm::APSInt Result;
-        Init->EvaluateAsInt(Result, S.Context);
+        Expr::EvalResult EVResult;
+        Init->EvaluateAsInt(EVResult, S.Context);
+        llvm::APSInt Result = EVResult.Val.getInt();
         const uint64_t SamplerValue = Result.getLimitedValue();
         // 32-bit value of sampler's initializer is interpreted as
         // bit-field with the following structure:
@@ -8268,7 +8279,8 @@ bool InitializationSequence::Diagnose(Sema &S,
     break;
   case FK_UTF8StringIntoPlainChar:
     S.Diag(Kind.getLocation(),
-           diag::err_array_init_utf8_string_into_char);
+           diag::err_array_init_utf8_string_into_char)
+      << S.getLangOpts().CPlusPlus2a;
     break;
   case FK_ArrayTypeMismatch:
   case FK_NonConstantArrayInit:

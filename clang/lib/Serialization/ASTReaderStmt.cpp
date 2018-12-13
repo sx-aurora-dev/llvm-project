@@ -595,22 +595,35 @@ void ASTStmtReader::VisitImaginaryLiteral(ImaginaryLiteral *E) {
 
 void ASTStmtReader::VisitStringLiteral(StringLiteral *E) {
   VisitExpr(E);
-  unsigned Len = Record.readInt();
-  assert(Record.peekInt() == E->getNumConcatenated() &&
+
+  // NumConcatenated, Length and CharByteWidth are set by the empty
+  // ctor since they are needed to allocate storage for the trailing objects.
+  unsigned NumConcatenated = Record.readInt();
+  unsigned Length = Record.readInt();
+  unsigned CharByteWidth = Record.readInt();
+  assert((NumConcatenated == E->getNumConcatenated()) &&
          "Wrong number of concatenated tokens!");
-  Record.skipInts(1);
-  auto kind = static_cast<StringLiteral::StringKind>(Record.readInt());
-  bool isPascal = Record.readInt();
+  assert((Length == E->getLength()) && "Wrong Length!");
+  assert((CharByteWidth == E->getCharByteWidth()) && "Wrong character width!");
+  E->StringLiteralBits.Kind = Record.readInt();
+  E->StringLiteralBits.IsPascal = Record.readInt();
 
-  // Read string data
-  auto B = &Record.peekInt();
-  SmallString<16> Str(B, B + Len);
-  E->setString(Record.getContext(), Str, kind, isPascal);
-  Record.skipInts(Len);
+  // The character width is originally computed via mapCharByteWidth.
+  // Check that the deserialized character width is consistant with the result
+  // of calling mapCharByteWidth.
+  assert((CharByteWidth ==
+          StringLiteral::mapCharByteWidth(Record.getContext().getTargetInfo(),
+                                          E->getKind())) &&
+         "Wrong character width!");
 
-  // Read source locations
-  for (unsigned I = 0, N = E->getNumConcatenated(); I != N; ++I)
+  // Deserialize the trailing array of SourceLocation.
+  for (unsigned I = 0; I < NumConcatenated; ++I)
     E->setStrTokenLoc(I, ReadSourceLocation());
+
+  // Deserialize the trailing array of char holding the string data.
+  char *StrData = E->getStrDataAsChar();
+  for (unsigned I = 0; I < Length * CharByteWidth; ++I)
+    StrData[I] = Record.readInt();
 }
 
 void ASTStmtReader::VisitCharacterLiteral(CharacterLiteral *E) {
@@ -630,10 +643,9 @@ void ASTStmtReader::VisitParenExpr(ParenExpr *E) {
 void ASTStmtReader::VisitParenListExpr(ParenListExpr *E) {
   VisitExpr(E);
   unsigned NumExprs = Record.readInt();
-  E->Exprs = new (Record.getContext()) Stmt*[NumExprs];
-  for (unsigned i = 0; i != NumExprs; ++i)
-    E->Exprs[i] = Record.readSubStmt();
-  E->NumExprs = NumExprs;
+  assert((NumExprs == E->getNumExprs()) && "Wrong NumExprs!");
+  for (unsigned I = 0; I != NumExprs; ++I)
+    E->getTrailingObjects<Stmt *>()[I] = Record.readSubStmt();
   E->LParenLoc = ReadSourceLocation();
   E->RParenLoc = ReadSourceLocation();
 }
@@ -1460,21 +1472,21 @@ void ASTStmtReader::VisitCXXThisExpr(CXXThisExpr *E) {
 
 void ASTStmtReader::VisitCXXThrowExpr(CXXThrowExpr *E) {
   VisitExpr(E);
-  E->ThrowLoc = ReadSourceLocation();
-  E->Op = Record.readSubExpr();
-  E->IsThrownVariableInScope = Record.readInt();
+  E->CXXThrowExprBits.ThrowLoc = ReadSourceLocation();
+  E->Operand = Record.readSubExpr();
+  E->CXXThrowExprBits.IsThrownVariableInScope = Record.readInt();
 }
 
 void ASTStmtReader::VisitCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   VisitExpr(E);
   E->Param = ReadDeclAs<ParmVarDecl>();
-  E->Loc = ReadSourceLocation();
+  E->CXXDefaultArgExprBits.Loc = ReadSourceLocation();
 }
 
 void ASTStmtReader::VisitCXXDefaultInitExpr(CXXDefaultInitExpr *E) {
   VisitExpr(E);
   E->Field = ReadDeclAs<FieldDecl>();
-  E->Loc = ReadSourceLocation();
+  E->CXXDefaultInitExprBits.Loc = ReadSourceLocation();
 }
 
 void ASTStmtReader::VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *E) {
@@ -2423,8 +2435,11 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_STRING_LITERAL:
-      S = StringLiteral::CreateEmpty(Context,
-                                     Record[ASTStmtReader::NumExprFields + 1]);
+      S = StringLiteral::CreateEmpty(
+          Context,
+          /* NumConcatenated=*/Record[ASTStmtReader::NumExprFields + 0],
+          /* Length=*/Record[ASTStmtReader::NumExprFields + 1],
+          /* CharByteWidth=*/Record[ASTStmtReader::NumExprFields + 2]);
       break;
 
     case EXPR_CHARACTER_LITERAL:
@@ -2436,7 +2451,9 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_PAREN_LIST:
-      S = new (Context) ParenListExpr(Empty);
+      S = ParenListExpr::CreateEmpty(
+          Context,
+          /* NumExprs=*/Record[ASTStmtReader::NumExprFields + 0]);
       break;
 
     case EXPR_UNARY_OPERATOR:

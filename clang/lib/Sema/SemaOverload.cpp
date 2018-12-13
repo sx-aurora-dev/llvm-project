@@ -3900,6 +3900,31 @@ CompareStandardConversionSequences(Sema &S, SourceLocation Loc,
           S.Context.getTypeSize(SCS1.getToType(2)))
     return ImplicitConversionSequence::Better;
 
+  // Prefer a compatible vector conversion over a lax vector conversion
+  // For example:
+  //
+  // typedef float __v4sf __attribute__((__vector_size__(16)));
+  // void f(vector float);
+  // void f(vector signed int);
+  // int main() {
+  //   __v4sf a;
+  //   f(a);
+  // }
+  // Here, we'd like to choose f(vector float) and not
+  // report an ambiguous call error
+  if (SCS1.Second == ICK_Vector_Conversion &&
+      SCS2.Second == ICK_Vector_Conversion) {
+    bool SCS1IsCompatibleVectorConversion = S.Context.areCompatibleVectorTypes(
+        SCS1.getFromType(), SCS1.getToType(2));
+    bool SCS2IsCompatibleVectorConversion = S.Context.areCompatibleVectorTypes(
+        SCS2.getFromType(), SCS2.getToType(2));
+
+    if (SCS1IsCompatibleVectorConversion != SCS2IsCompatibleVectorConversion)
+      return SCS1IsCompatibleVectorConversion
+                 ? ImplicitConversionSequence::Better
+                 : ImplicitConversionSequence::Worse;
+  }
+
   return ImplicitConversionSequence::Indistinguishable;
 }
 
@@ -5444,7 +5469,7 @@ static ExprResult CheckConvertedConstantExpression(Sema &S, Expr *From,
 
     if (Notes.empty()) {
       // It's a constant expression.
-      return new (S.Context) ConstantExpr(Result.get());
+      return ConstantExpr::Create(S.Context, Result.get());
     }
   }
 

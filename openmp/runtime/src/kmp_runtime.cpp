@@ -2132,6 +2132,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
         master_th->th.th_task_state_top++;
 #if KMP_NESTED_HOT_TEAMS
         if (master_th->th.th_hot_teams &&
+            active_level < __kmp_hot_teams_max_level &&
             team == master_th->th.th_hot_teams[active_level].hot_team) {
           // Restore master's nested state if nested hot team
           master_th->th.th_task_state =
@@ -2649,6 +2650,8 @@ void __kmp_set_num_threads(int new_nth, int gtid) {
 
   KMP_COUNT_VALUE(OMP_set_numthreads, new_nth);
   thread = __kmp_threads[gtid];
+  if (thread->th.th_current_task->td_icvs.nproc == new_nth)
+    return; // nothing to do
 
   __kmp_save_internal_controls(thread);
 

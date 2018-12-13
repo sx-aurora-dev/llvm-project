@@ -120,25 +120,25 @@ CompilerInvocationBase::~CompilerInvocationBase() = default;
 
 static unsigned getOptimizationLevel(ArgList &Args, InputKind IK,
                                      DiagnosticsEngine &Diags) {
-  unsigned DefaultOpt = 0;
+  unsigned DefaultOpt = llvm::CodeGenOpt::None;
   if (IK.getLanguage() == InputKind::OpenCL && !Args.hasArg(OPT_cl_opt_disable))
-    DefaultOpt = 2;
+    DefaultOpt = llvm::CodeGenOpt::Default;
 
   if (Arg *A = Args.getLastArg(options::OPT_O_Group)) {
     if (A->getOption().matches(options::OPT_O0))
-      return 0;
+      return llvm::CodeGenOpt::None;
 
     if (A->getOption().matches(options::OPT_Ofast))
-      return 3;
+      return llvm::CodeGenOpt::Aggressive;
 
     assert(A->getOption().matches(options::OPT_O));
 
     StringRef S(A->getValue());
     if (S == "s" || S == "z" || S.empty())
-      return 2;
+      return llvm::CodeGenOpt::Default;
 
     if (S == "g")
-      return 1;
+      return llvm::CodeGenOpt::Less;
 
     return getLastArgIntValue(Args, OPT_O, DefaultOpt, Diags);
   }
@@ -593,12 +593,29 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.DwarfVersion = getLastArgIntValue(Args, OPT_dwarf_version_EQ, 0, Diags);
   Opts.DebugColumnInfo = Args.hasArg(OPT_dwarf_column_info);
   Opts.EmitCodeView = Args.hasArg(OPT_gcodeview);
+  Opts.CodeViewGHash = Args.hasArg(OPT_gcodeview_ghash);
   Opts.MacroDebugInfo = Args.hasArg(OPT_debug_info_macro);
   Opts.WholeProgramVTables = Args.hasArg(OPT_fwhole_program_vtables);
   Opts.LTOVisibilityPublicStd = Args.hasArg(OPT_flto_visibility_public_std);
-  Opts.EnableSplitDwarf = Args.hasArg(OPT_enable_split_dwarf);
   Opts.SplitDwarfFile = Args.getLastArgValue(OPT_split_dwarf_file);
   Opts.SplitDwarfInlining = !Args.hasArg(OPT_fno_split_dwarf_inlining);
+
+  if (Arg *A =
+          Args.getLastArg(OPT_enable_split_dwarf, OPT_enable_split_dwarf_EQ)) {
+    if (A->getOption().matches(options::OPT_enable_split_dwarf)) {
+      Opts.setSplitDwarfMode(CodeGenOptions::SplitFileFission);
+    } else {
+      StringRef Name = A->getValue();
+      if (Name == "single")
+        Opts.setSplitDwarfMode(CodeGenOptions::SingleFileFission);
+      else if (Name == "split")
+        Opts.setSplitDwarfMode(CodeGenOptions::SplitFileFission);
+      else
+        Diags.Report(diag::err_drv_invalid_value)
+            << A->getAsString(Args) << Name;
+    }
+  }
+
   Opts.DebugTypeExtRefs = Args.hasArg(OPT_dwarf_ext_refs);
   Opts.DebugExplicitImport = Args.hasArg(OPT_dwarf_explicit_import);
   Opts.DebugFwdTemplateParams = Args.hasArg(OPT_debug_forward_template_params);
@@ -812,6 +829,10 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
     Opts.CoverageExtraChecksum = Args.hasArg(OPT_coverage_cfg_checksum);
     Opts.CoverageNoFunctionNamesInData =
         Args.hasArg(OPT_coverage_no_function_names_in_data);
+    Opts.ProfileFilterFiles =
+        Args.getLastArgValue(OPT_fprofile_filter_files_EQ);
+    Opts.ProfileExcludeFiles =
+        Args.getLastArgValue(OPT_fprofile_exclude_files_EQ);
     Opts.CoverageExitBlockBeforeBody =
         Args.hasArg(OPT_coverage_exit_block_before_body);
     if (Args.hasArg(OPT_coverage_version_EQ)) {
@@ -2459,7 +2480,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
-  Opts.Char8 = Args.hasArg(OPT_fchar8__t);
+  Opts.Char8 = Args.hasFlag(OPT_fchar8__t, OPT_fno_char8__t, Opts.CPlusPlus2a);
   if (const Arg *A = Args.getLastArg(OPT_fwchar_type_EQ)) {
     Opts.WCharSize = llvm::StringSwitch<unsigned>(A->getValue())
                          .Case("char", 1)
@@ -3280,21 +3301,6 @@ uint64_t getLastArgUInt64Value(const ArgList &Args, OptSpecifier Id,
                                uint64_t Default,
                                DiagnosticsEngine *Diags) {
   return getLastArgIntValueImpl<uint64_t>(Args, Id, Default, Diags);
-}
-
-void BuryPointer(const void *Ptr) {
-  // This function may be called only a small fixed amount of times per each
-  // invocation, otherwise we do actually have a leak which we want to report.
-  // If this function is called more than kGraveYardMaxSize times, the pointers
-  // will not be properly buried and a leak detector will report a leak, which
-  // is what we want in such case.
-  static const size_t kGraveYardMaxSize = 16;
-  LLVM_ATTRIBUTE_UNUSED static const void *GraveYard[kGraveYardMaxSize];
-  static std::atomic<unsigned> GraveYardSize;
-  unsigned Idx = GraveYardSize++;
-  if (Idx >= kGraveYardMaxSize)
-    return;
-  GraveYard[Idx] = Ptr;
 }
 
 IntrusiveRefCntPtr<llvm::vfs::FileSystem>

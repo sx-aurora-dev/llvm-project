@@ -1084,19 +1084,19 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
     break;
   }
   case ISD::ZERO_EXTEND: {
-    unsigned OperandBitWidth = Op.getOperand(0).getScalarValueSizeInBits();
+    SDValue Src = Op.getOperand(0);
+    unsigned InBits = Src.getScalarValueSizeInBits();
 
     // If none of the top bits are demanded, convert this into an any_extend.
-    if (DemandedBits.getActiveBits() <= OperandBitWidth)
-      return TLO.CombineTo(Op, TLO.DAG.getNode(ISD::ANY_EXTEND, dl, VT,
-                                               Op.getOperand(0)));
+    if (DemandedBits.getActiveBits() <= InBits)
+      return TLO.CombineTo(Op, TLO.DAG.getNode(ISD::ANY_EXTEND, dl, VT, Src));
 
-    APInt InMask = DemandedBits.trunc(OperandBitWidth);
-    if (SimplifyDemandedBits(Op.getOperand(0), InMask, Known, TLO, Depth+1))
+    APInt InDemandedBits = DemandedBits.trunc(InBits);
+    if (SimplifyDemandedBits(Src, InDemandedBits, Known, TLO, Depth+1))
       return true;
     assert(!Known.hasConflict() && "Bits known to be one AND zero?");
     Known = Known.zext(BitWidth);
-    Known.Zero.setBitsFrom(OperandBitWidth);
+    Known.Zero.setBitsFrom(InBits);
     break;
   }
   case ISD::SIGN_EXTEND: {
@@ -1143,9 +1143,10 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
     break;
   }
   case ISD::ANY_EXTEND: {
-    unsigned OperandBitWidth = Op.getOperand(0).getScalarValueSizeInBits();
-    APInt InMask = DemandedBits.trunc(OperandBitWidth);
-    if (SimplifyDemandedBits(Op.getOperand(0), InMask, Known, TLO, Depth+1))
+    SDValue Src = Op.getOperand(0);
+    unsigned InBits = Src.getScalarValueSizeInBits();
+    APInt InDemandedBits = DemandedBits.trunc(InBits);
+    if (SimplifyDemandedBits(Src, InDemandedBits, Known, TLO, Depth+1))
       return true;
     assert(!Known.hasConflict() && "Bits known to be one AND zero?");
     Known = Known.zext(BitWidth);
@@ -1360,7 +1361,9 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
         if (C->isOpaque())
           return false;
     }
-    return TLO.CombineTo(Op, TLO.DAG.getConstant(Known.One, dl, VT));
+    // TODO: Handle float bits as well.
+    if (VT.isInteger())
+      return TLO.CombineTo(Op, TLO.DAG.getConstant(Known.One, dl, VT));
   }
 
   return false;
@@ -1459,6 +1462,23 @@ bool TargetLowering::SimplifyDemandedVectorElts(
                                      TLO, Depth + 1))
         return true;
 
+      // Try calling SimplifyDemandedBits, converting demanded elts to the bits
+      // of the large element.
+      // TODO - bigendian once we have test coverage.
+      if (TLO.DAG.getDataLayout().isLittleEndian()) {
+        unsigned SrcEltSizeInBits = SrcVT.getScalarSizeInBits();
+        APInt SrcDemandedBits = APInt::getNullValue(SrcEltSizeInBits);
+        for (unsigned i = 0; i != NumElts; ++i)
+          if (DemandedElts[i]) {
+            unsigned Ofs = (i % Scale) * EltSizeInBits;
+            SrcDemandedBits.setBits(Ofs, Ofs + EltSizeInBits);
+          }
+
+        KnownBits Known;
+        if (SimplifyDemandedBits(Src, SrcDemandedBits, Known, TLO, Depth + 1))
+          return true;
+      }
+
       // If the src element is zero/undef then all the output elements will be -
       // only demanded elements are guaranteed to be correct.
       for (unsigned i = 0; i != NumSrcElts; ++i) {
@@ -1551,7 +1571,7 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     EVT SubVT = Sub.getValueType();
     unsigned NumSubElts = SubVT.getVectorNumElements();
     const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(2))->getAPIntValue();
-    if (Idx.uge(NumElts - NumSubElts))
+    if (Idx.ugt(NumElts - NumSubElts))
       break;
     unsigned SubIdx = Idx.getZExtValue();
     APInt SubElts = DemandedElts.extractBits(NumSubElts, SubIdx);
@@ -4153,24 +4173,32 @@ bool TargetLowering::expandFP_TO_UINT(SDNode *Node, SDValue &Result,
                            !isOperationLegalOrCustomOrPromote(ISD::XOR, SrcVT)))
     return false;
 
+  // If the maximum float value is smaller then the signed integer range,
+  // the destination signmask can't be represented by the float, so we can
+  // just use FP_TO_SINT directly.
+  const fltSemantics &APFSem = DAG.EVTToAPFloatSemantics(SrcVT);
+  APFloat APF(APFSem, APInt::getNullValue(SrcVT.getScalarSizeInBits()));
+  APInt SignMask = APInt::getSignMask(DstVT.getScalarSizeInBits());
+  if (APFloat::opOverflow &
+      APF.convertFromAPInt(SignMask, false, APFloat::rmNearestTiesToEven)) {
+    Result = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Src);
+    return true;
+  }
+
   // Expand based on maximum range of FP_TO_SINT:
   // True = fp_to_sint(Src)
   // False = 0x8000000000000000 + fp_to_sint(Src - 0x8000000000000000)
   // Result = select (Src < 0x8000000000000000), True, False
-  APFloat apf(DAG.EVTToAPFloatSemantics(SrcVT),
-              APInt::getNullValue(SrcVT.getScalarSizeInBits()));
-  APInt x = APInt::getSignMask(DstVT.getScalarSizeInBits());
-  (void)apf.convertFromAPInt(x, false, APFloat::rmNearestTiesToEven);
+  SDValue Cst = DAG.getConstantFP(APF, dl, SrcVT);
+  SDValue Sel = DAG.getSetCC(dl, SetCCVT, Src, Cst, ISD::SETLT);
 
-  SDValue Tmp1 = DAG.getConstantFP(apf, dl, SrcVT);
-  SDValue Tmp2 = DAG.getSetCC(dl, SetCCVT, Src, Tmp1, ISD::SETLT);
   SDValue True = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Src);
   // TODO: Should any fast-math-flags be set for the FSUB?
   SDValue False = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT,
-                              DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Tmp1));
-  False =
-      DAG.getNode(ISD::XOR, dl, DstVT, False, DAG.getConstant(x, dl, DstVT));
-  Result = DAG.getSelect(dl, DstVT, Tmp2, True, False);
+                              DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Cst));
+  False = DAG.getNode(ISD::XOR, dl, DstVT, False,
+                      DAG.getConstant(SignMask, dl, DstVT));
+  Result = DAG.getSelect(dl, DstVT, Sel, True, False);
   return true;
 }
 

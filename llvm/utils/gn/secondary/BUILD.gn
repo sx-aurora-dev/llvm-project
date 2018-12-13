@@ -1,0 +1,12 @@
+group("default") {
+  deps = [
+    "//llvm/utils/TableGen:llvm-tblgen",
+    "//llvm/tools/llvm-undname",
+  ]
+}
+
+# A pool called "console" in the root BUILD.gn is magic and represents ninja's
+# built-in console pool. (Requires a GN with `gn --version` >= 552353.)
+pool("console") {
+  depth = 1
+}

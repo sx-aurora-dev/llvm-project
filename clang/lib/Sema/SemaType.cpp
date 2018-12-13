@@ -116,6 +116,7 @@ static void diagnoseBadTypeAttribute(Sema &S, const ParsedAttr &attr,
   case ParsedAttr::AT_Pascal:                                                  \
   case ParsedAttr::AT_SwiftCall:                                               \
   case ParsedAttr::AT_VectorCall:                                              \
+  case ParsedAttr::AT_AArch64VectorPcs:                                        \
   case ParsedAttr::AT_MSABI:                                                   \
   case ParsedAttr::AT_SysVABI:                                                 \
   case ParsedAttr::AT_Pcs:                                                     \
@@ -2232,10 +2233,6 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
 
     T = Context.getConstantArrayType(T, ConstVal, ASM, Quals);
   }
-
-  if (ArraySize && !CurContext->isFunctionOrMethod())
-    // A file-scoped array must have a constant array size.
-    ArraySize = new (Context) ConstantExpr(ArraySize);
 
   // OpenCL v1.2 s6.9.d: variable length arrays are not supported.
   if (getLangOpts().OpenCL && T->isVariableArrayType()) {
@@ -6657,6 +6654,8 @@ static Attr *getCCTypeAttr(ASTContext &Ctx, ParsedAttr &Attr) {
     return createSimpleAttr<SwiftCallAttr>(Ctx, Attr);
   case ParsedAttr::AT_VectorCall:
     return createSimpleAttr<VectorCallAttr>(Ctx, Attr);
+  case ParsedAttr::AT_AArch64VectorPcs:
+    return createSimpleAttr<AArch64VectorPcsAttr>(Ctx, Attr);
   case ParsedAttr::AT_Pcs: {
     // The attribute may have had a fixit applied where we treated an
     // identifier as a string literal.  The contents of the string are valid,
@@ -7181,7 +7180,8 @@ static void deduceOpenCLImplicitAddrSpace(TypeProcessingState &State,
   bool IsPointee =
       ChunkIndex > 0 &&
       (D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::Pointer ||
-       D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::BlockPointer);
+       D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::BlockPointer ||
+       D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::Reference);
   bool IsFuncReturnType =
       ChunkIndex > 0 &&
       D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::Function;
@@ -7204,7 +7204,7 @@ static void deduceOpenCLImplicitAddrSpace(TypeProcessingState &State,
       (T->isVoidType() && !IsPointee))
     return;
 
-  LangAS ImpAddr;
+  LangAS ImpAddr = LangAS::Default;
   // Put OpenCL automatic variable in private address space.
   // OpenCL v1.2 s6.5:
   // The default address space name for arguments to a function in a
@@ -7226,7 +7226,10 @@ static void deduceOpenCLImplicitAddrSpace(TypeProcessingState &State,
     if (IsPointee) {
       ImpAddr = LangAS::opencl_generic;
     } else {
-      if (D.getContext() == DeclaratorContext::FileContext) {
+      if (D.getContext() == DeclaratorContext::TemplateArgContext ||
+          T->isDependentType()) {
+        // Do not deduce address space for non-pointee type in templates.
+      } else if (D.getContext() == DeclaratorContext::FileContext) {
         ImpAddr = LangAS::opencl_global;
       } else {
         if (D.getDeclSpec().getStorageClassSpec() == DeclSpec::SCS_static ||

@@ -5284,6 +5284,13 @@ QualType TreeTransform<Derived>::TransformFunctionProtoType(
     if (ResultType.isNull())
       return QualType();
 
+    // Return type can not be qualified with an address space.
+    if (ResultType.getAddressSpace() != LangAS::Default) {
+      SemaRef.Diag(TL.getReturnLoc().getBeginLoc(),
+                   diag::err_attribute_address_function_type);
+      return QualType();
+    }
+
     if (getDerived().TransformFunctionTypeParams(
             TL.getBeginLoc(), TL.getParams(),
             TL.getTypePtr()->param_type_begin(),
@@ -6770,6 +6777,9 @@ TreeTransform<Derived>::TransformDoStmt(DoStmt *S) {
 template<typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformForStmt(ForStmt *S) {
+  if (getSema().getLangOpts().OpenMP)
+    getSema().startOpenMPLoop();
+
   // Transform the initialization statement
   StmtResult Init = getDerived().TransformStmt(S->getInit());
   if (Init.isInvalid())
