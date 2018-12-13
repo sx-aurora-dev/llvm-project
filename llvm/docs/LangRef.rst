@@ -1643,19 +1643,15 @@ example:
 ``speculative_load_hardening``
     This attribute indicates that
     `Speculative Load Hardening <https://llvm.org/docs/SpeculativeLoadHardening.html>`_
-    should be enabled for the function body. This is a best-effort attempt to
-    mitigate all known speculative execution information leak vulnerabilities
-    that are based on the fundamental principles of modern processors'
-    speculative execution. These vulnerabilities are classified as "Spectre
-    variant #1" vulnerabilities typically. Notably, this does not attempt to
-    mitigate any vulnerabilities where the speculative execution and/or
-    prediction devices of specific processors can be *completely* undermined
-    (such as "Branch Target Injection", a.k.a, "Spectre variant #2"). Instead,
-    this is a target-independent request to harden against the completely
-    generic risk posed by speculative execution to incorrectly load secret data,
-    making it available to some micro-architectural side-channel for information
-    leak. For a processor without any speculative execution or predictors, this
-    is expected to be a no-op.
+    should be enabled for the function body.
+
+    Speculative Load Hardening is a best-effort mitigation against
+    information leak attacks that make use of control flow
+    miss-speculation - specifically miss-speculation of whether a branch
+    is taken or not. Typically vulnerabilities enabling such attacks are
+    classified as "Spectre variant #1". Notably, this does not attempt to
+    mitigate against miss-speculation of branch target, classified as
+    "Spectre variant #2" vulnerabilities.
 
     When inlining, the attribute is sticky. Inlining a function that carries
     this attribute will cause the caller to gain the attribute. This is intended
@@ -6790,6 +6786,55 @@ Semantics:
 
 The '``unreachable``' instruction has no defined semantics.
 
+.. _unaryops:
+
+Unary Operations
+-----------------
+
+Unary operators require a single operand, execute an operation on
+it, and produce a single value. The operand might represent multiple
+data, as is the case with the :ref:`vector <t_vector>` data type. The
+result value has the same type as its operand.
+
+.. _i_fneg:
+
+'``fneg``' Instruction
+^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      <result> = fneg [fast-math flags]* <ty> <op1>   ; yields ty:result
+
+Overview:
+"""""""""
+
+The '``fneg``' instruction returns the negation of its operand.
+
+Arguments:
+""""""""""
+
+The argument to the '``fneg``' instruction must be a
+:ref:`floating-point <t_floating>` or :ref:`vector <t_vector>` of
+floating-point values. 
+
+Semantics:
+""""""""""
+
+The value produced is a copy of the operand with its sign bit flipped.
+This instruction can also take any number of :ref:`fast-math
+flags <fastmath>`, which are optimization hints to enable otherwise
+unsafe floating-point optimizations:
+
+Example:
+""""""""
+
+.. code-block:: text
+
+      <result> = fneg float %val          ; yields float:result = -%var
+
 .. _binaryops:
 
 Binary Operations
@@ -6964,9 +7009,6 @@ Overview:
 """""""""
 
 The '``fsub``' instruction returns the difference of its two operands.
-
-Note that the '``fsub``' instruction is used to represent the '``fneg``'
-instruction present in most other intermediate representations.
 
 Arguments:
 """"""""""
@@ -12530,6 +12572,206 @@ Examples:
       %obit = extractvalue {i32, i1} %res, 1
       br i1 %obit, label %overflow, label %normal
 
+Saturation Arithmetic Intrinsics
+---------------------------------
+
+Saturation arithmetic is a version of arithmetic in which operations are
+limited to a fixed range between a minimum and maximum value. If the result of
+an operation is greater than the maximum value, the result is set (or
+"clamped") to this maximum. If it is below the minimum, it is clamped to this
+minimum.
+
+
+'``llvm.sadd.sat.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax
+"""""""
+
+This is an overloaded intrinsic. You can use ``llvm.sadd.sat``
+on any integer bit width or vectors of integers.
+
+::
+
+      declare i16 @llvm.sadd.sat.i16(i16 %a, i16 %b)
+      declare i32 @llvm.sadd.sat.i32(i32 %a, i32 %b)
+      declare i64 @llvm.sadd.sat.i64(i64 %a, i64 %b)
+      declare <4 x i32> @llvm.sadd.sat.v4i32(<4 x i32> %a, <4 x i32> %b)
+
+Overview
+"""""""""
+
+The '``llvm.sadd.sat``' family of intrinsic functions perform signed
+saturation addition on the 2 arguments.
+
+Arguments
+""""""""""
+
+The arguments (%a and %b) and the result may be of integer types of any bit
+width, but they must have the same bit width. ``%a`` and ``%b`` are the two
+values that will undergo signed addition.
+
+Semantics:
+""""""""""
+
+The maximum value this operation can clamp to is the largest signed value
+representable by the bit width of the arguments. The minimum value is the
+smallest signed value representable by this bit width.
+
+
+Examples
+"""""""""
+
+.. code-block:: llvm
+
+      %res = call i4 @llvm.sadd.sat.i4(i4 1, i4 2)  ; %res = 3
+      %res = call i4 @llvm.sadd.sat.i4(i4 5, i4 6)  ; %res = 7
+      %res = call i4 @llvm.sadd.sat.i4(i4 -4, i4 2)  ; %res = -2
+      %res = call i4 @llvm.sadd.sat.i4(i4 -4, i4 -5)  ; %res = -8
+
+
+'``llvm.uadd.sat.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax
+"""""""
+
+This is an overloaded intrinsic. You can use ``llvm.uadd.sat``
+on any integer bit width or vectors of integers.
+
+::
+
+      declare i16 @llvm.uadd.sat.i16(i16 %a, i16 %b)
+      declare i32 @llvm.uadd.sat.i32(i32 %a, i32 %b)
+      declare i64 @llvm.uadd.sat.i64(i64 %a, i64 %b)
+      declare <4 x i32> @llvm.uadd.sat.v4i32(<4 x i32> %a, <4 x i32> %b)
+
+Overview
+"""""""""
+
+The '``llvm.uadd.sat``' family of intrinsic functions perform unsigned
+saturation addition on the 2 arguments.
+
+Arguments
+""""""""""
+
+The arguments (%a and %b) and the result may be of integer types of any bit
+width, but they must have the same bit width. ``%a`` and ``%b`` are the two
+values that will undergo unsigned addition.
+
+Semantics:
+""""""""""
+
+The maximum value this operation can clamp to is the largest unsigned value
+representable by the bit width of the arguments. Because this is an unsigned
+operation, the result will never saturate towards zero.
+
+
+Examples
+"""""""""
+
+.. code-block:: llvm
+
+      %res = call i4 @llvm.uadd.sat.i4(i4 1, i4 2)  ; %res = 3
+      %res = call i4 @llvm.uadd.sat.i4(i4 5, i4 6)  ; %res = 11
+      %res = call i4 @llvm.uadd.sat.i4(i4 8, i4 8)  ; %res = 15
+
+
+'``llvm.ssub.sat.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax
+"""""""
+
+This is an overloaded intrinsic. You can use ``llvm.ssub.sat``
+on any integer bit width or vectors of integers.
+
+::
+
+      declare i16 @llvm.ssub.sat.i16(i16 %a, i16 %b)
+      declare i32 @llvm.ssub.sat.i32(i32 %a, i32 %b)
+      declare i64 @llvm.ssub.sat.i64(i64 %a, i64 %b)
+      declare <4 x i32> @llvm.ssub.sat.v4i32(<4 x i32> %a, <4 x i32> %b)
+
+Overview
+"""""""""
+
+The '``llvm.ssub.sat``' family of intrinsic functions perform signed
+saturation subtraction on the 2 arguments.
+
+Arguments
+""""""""""
+
+The arguments (%a and %b) and the result may be of integer types of any bit
+width, but they must have the same bit width. ``%a`` and ``%b`` are the two
+values that will undergo signed subtraction.
+
+Semantics:
+""""""""""
+
+The maximum value this operation can clamp to is the largest signed value
+representable by the bit width of the arguments. The minimum value is the
+smallest signed value representable by this bit width.
+
+
+Examples
+"""""""""
+
+.. code-block:: llvm
+
+      %res = call i4 @llvm.ssub.sat.i4(i4 2, i4 1)  ; %res = 1
+      %res = call i4 @llvm.ssub.sat.i4(i4 2, i4 6)  ; %res = -4
+      %res = call i4 @llvm.ssub.sat.i4(i4 -4, i4 5)  ; %res = -8
+      %res = call i4 @llvm.ssub.sat.i4(i4 4, i4 -5)  ; %res = 7
+
+
+'``llvm.usub.sat.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax
+"""""""
+
+This is an overloaded intrinsic. You can use ``llvm.usub.sat``
+on any integer bit width or vectors of integers.
+
+::
+
+      declare i16 @llvm.usub.sat.i16(i16 %a, i16 %b)
+      declare i32 @llvm.usub.sat.i32(i32 %a, i32 %b)
+      declare i64 @llvm.usub.sat.i64(i64 %a, i64 %b)
+      declare <4 x i32> @llvm.usub.sat.v4i32(<4 x i32> %a, <4 x i32> %b)
+
+Overview
+"""""""""
+
+The '``llvm.usub.sat``' family of intrinsic functions perform unsigned
+saturation subtraction on the 2 arguments.
+
+Arguments
+""""""""""
+
+The arguments (%a and %b) and the result may be of integer types of any bit
+width, but they must have the same bit width. ``%a`` and ``%b`` are the two
+values that will undergo unsigned subtraction.
+
+Semantics:
+""""""""""
+
+The minimum value this operation can clamp to is 0, which is the smallest
+unsigned value representable by the bit width of the unsigned arguments.
+Because this is an unsigned operation, the result will never saturate towards
+the largest possible value representable by this bit width.
+
+
+Examples
+"""""""""
+
+.. code-block:: llvm
+
+      %res = call i4 @llvm.usub.sat.i4(i4 2, i4 1)  ; %res = 1
+      %res = call i4 @llvm.usub.sat.i4(i4 2, i4 6)  ; %res = 0
+
+
 Specialised Arithmetic Intrinsics
 ---------------------------------
 
@@ -14868,7 +15110,7 @@ Syntax:
 
 ::
 
-      declare void @llvm.trap() noreturn nounwind
+      declare void @llvm.trap() cold noreturn nounwind
 
 Overview:
 """""""""
@@ -15362,6 +15604,145 @@ if"); and this allows for "check widening" type optimizations.
 ``@llvm.experimental.guard`` cannot be invoked.
 
 
+'``llvm.experimental.widenable.condition``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare i1 @llvm.experimental.widenable.condition()
+
+Overview:
+"""""""""
+
+This intrinsic represents a "widenable condition" which is
+boolean expressions with the following property: whether this
+expression is `true` or `false`, the program is correct and
+well-defined.
+
+Together with :ref:`deoptimization operand bundles <deopt_opbundles>`,
+``@llvm.experimental.widenable.condition`` allows frontends to
+express guards or checks on optimistic assumptions made during
+compilation and represent them as branch instructions on special
+conditions.
+
+While this may appear similar in semantics to `undef`, it is very
+different in that an invocation produces a particular, singular
+value. It is also intended to be lowered late, and remain available
+for specific optimizations and transforms that can benefit from its
+special properties.
+
+Arguments:
+""""""""""
+
+None.
+
+Semantics:
+""""""""""
+
+The intrinsic ``@llvm.experimental.widenable.condition()``
+returns either `true` or `false`. For each evaluation of a call
+to this intrinsic, the program must be valid and correct both if
+it returns `true` and if it returns `false`. This allows
+transformation passes to replace evaluations of this intrinsic
+with either value whenever one is beneficial.
+
+When used in a branch condition, it allows us to choose between
+two alternative correct solutions for the same problem, like
+in example below:
+
+.. code-block:: text
+
+    %cond = call i1 @llvm.experimental.widenable.condition()
+    br i1 %cond, label %solution_1, label %solution_2
+
+  label %fast_path:
+    ; Apply memory-consuming but fast solution for a task.
+
+  label %slow_path:
+    ; Cheap in memory but slow solution.
+
+Whether the result of intrinsic's call is `true` or `false`,
+it should be correct to pick either solution. We can switch
+between them by replacing the result of
+``@llvm.experimental.widenable.condition`` with different
+`i1` expressions.
+
+This is how it can be used to represent guards as widenable branches:
+
+.. code-block:: text
+
+  block:
+    ; Unguarded instructions
+    call void @llvm.experimental.guard(i1 %cond, <args...>) ["deopt"(<deopt_args...>)]
+    ; Guarded instructions
+
+Can be expressed in an alternative equivalent form of explicit branch using
+``@llvm.experimental.widenable.condition``:
+
+.. code-block:: text
+
+  block:
+    ; Unguarded instructions
+    %widenable_condition = call i1 @llvm.experimental.widenable.condition()
+    %guard_condition = and i1 %cond, %widenable_condition
+    br i1 %guard_condition, label %guarded, label %deopt
+
+  guarded:
+    ; Guarded instructions
+
+  deopt:
+    call type @llvm.experimental.deoptimize(<args...>) [ "deopt"(<deopt_args...>) ]
+
+So the block `guarded` is only reachable when `%cond` is `true`,
+and it should be valid to go to the block `deopt` whenever `%cond`
+is `true` or `false`.
+
+``@llvm.experimental.widenable.condition`` will never throw, thus
+it cannot be invoked.
+
+Guard widening:
+"""""""""""""""
+
+When ``@llvm.experimental.widenable.condition()`` is used in
+condition of a guard represented as explicit branch, it is
+legal to widen the guard's condition with any additional
+conditions.
+
+Guard widening looks like replacement of
+
+.. code-block:: text
+
+  %widenable_cond = call i1 @llvm.experimental.widenable.condition()
+  %guard_cond = and i1 %cond, %widenable_cond
+  br i1 %guard_cond, label %guarded, label %deopt
+
+with
+
+.. code-block:: text
+
+  %widenable_cond = call i1 @llvm.experimental.widenable.condition()
+  %new_cond = and i1 %any_other_cond, %widenable_cond
+  %new_guard_cond = and i1 %cond, %new_cond
+  br i1 %new_guard_cond, label %guarded, label %deopt
+
+for this branch. Here `%any_other_cond` is an arbitrarily chosen
+well-defined `i1` value. By making guard widening, we may
+impose stricter conditions on `guarded` block and bail to the
+deopt when the new condition is not met.
+
+Lowering:
+"""""""""
+
+Default lowering strategy is replacing the result of
+call of ``@llvm.experimental.widenable.condition``  with
+constant `true`. However it is always correct to replace
+it with any other `i1` value. Any pass can
+freely do it if it can benefit from non-default lowering.
+
+
 '``llvm.load.relative``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -15697,3 +16078,263 @@ lowered to a call to the symbol ``__llvm_memset_element_unordered_atomic_*``. Wh
 is replaced with an actual element size.
 
 The optimizer is allowed to inline the memory assignment when it's profitable to do so.
+
+Objective-C ARC Runtime Intrinsics
+----------------------------------
+
+LLVM provides intrinsics that lower to Objective-C ARC runtime entry points.
+LLVM is aware of the semantics of these functions, and optimizes based on that
+knowledge. You can read more about the details of Objective-C ARC `here
+<https://clang.llvm.org/docs/AutomaticReferenceCounting.html>`_.
+
+'``llvm.objc.autorelease``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.autorelease(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autorelease <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-autorelease>`_.
+
+'``llvm.objc.autoreleasePoolPop``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.autoreleasePoolPop(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autoreleasePoolPop <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-autoreleasepoolpop-void-pool>`_.
+
+'``llvm.objc.autoreleasePoolPush``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.autoreleasePoolPush()
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autoreleasePoolPush <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-autoreleasepoolpush-void>`_.
+
+'``llvm.objc.autoreleaseReturnValue``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.autoreleaseReturnValue(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autoreleaseReturnValue <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-autoreleasereturnvalue>`_.
+
+'``llvm.objc.copyWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.copyWeak(i8**, i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_copyWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-copyweak-id-dest-id-src>`_.
+
+'``llvm.objc.destroyWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.destroyWeak(i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_destroyWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-destroyweak-id-object>`_.
+
+'``llvm.objc.initWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.initWeak(i8**, i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_initWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-initweak>`_.
+
+'``llvm.objc.loadWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.loadWeak(i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_loadWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-loadweak>`_.
+
+'``llvm.objc.loadWeakRetained``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.loadWeakRetained(i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_loadWeakRetained <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-loadweakretained>`_.
+
+'``llvm.objc.moveWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.moveWeak(i8**, i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_moveWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-moveweak-id-dest-id-src>`_.
+
+'``llvm.objc.release``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.release(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_release <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-release-id-value>`_.
+
+'``llvm.objc.retain``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retain(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retain <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retain>`_.
+
+'``llvm.objc.retainAutorelease``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainAutorelease(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainAutorelease <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainautorelease>`_.
+
+'``llvm.objc.retainAutoreleaseReturnValue``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainAutoreleaseReturnValue(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainAutoreleaseReturnValue <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainautoreleasereturnvalue>`_.
+
+'``llvm.objc.retainAutoreleasedReturnValue``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainAutoreleasedReturnValue(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainAutoreleasedReturnValue <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainautoreleasedreturnvalue>`_.
+
+'``llvm.objc.retainBlock``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainBlock(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainBlock <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainblock>`_.
+
+'``llvm.objc.storeStrong``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.storeStrong(i8**, i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_storeStrong <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-storestrong-id-object-id-value>`_.
+
+'``llvm.objc.storeWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.storeWeak(i8**, i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_storeWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-storeweak>`_.

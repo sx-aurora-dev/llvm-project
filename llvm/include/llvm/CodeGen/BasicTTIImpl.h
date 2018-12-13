@@ -1008,6 +1008,7 @@ public:
                                  unsigned VF = 1) {
     unsigned RetVF = (RetTy->isVectorTy() ? RetTy->getVectorNumElements() : 1);
     assert((RetVF == 1 || VF == 1) && "VF > 1 and RetVF is a vector type");
+    auto *ConcreteTTI = static_cast<T *>(this);
 
     switch (IID) {
     default: {
@@ -1033,29 +1034,24 @@ public:
         ScalarizationCost += getOperandsScalarizationOverhead(Args, VF);
       }
 
-      return static_cast<T *>(this)->
-        getIntrinsicInstrCost(IID, RetTy, Types, FMF, ScalarizationCost);
+      return ConcreteTTI->getIntrinsicInstrCost(IID, RetTy, Types, FMF,
+                                                ScalarizationCost);
     }
     case Intrinsic::masked_scatter: {
       assert(VF == 1 && "Can't vectorize types here.");
       Value *Mask = Args[3];
       bool VarMask = !isa<Constant>(Mask);
       unsigned Alignment = cast<ConstantInt>(Args[2])->getZExtValue();
-      return
-        static_cast<T *>(this)->getGatherScatterOpCost(Instruction::Store,
-                                                       Args[0]->getType(),
-                                                       Args[1], VarMask,
-                                                       Alignment);
+      return ConcreteTTI->getGatherScatterOpCost(
+          Instruction::Store, Args[0]->getType(), Args[1], VarMask, Alignment);
     }
     case Intrinsic::masked_gather: {
       assert(VF == 1 && "Can't vectorize types here.");
       Value *Mask = Args[2];
       bool VarMask = !isa<Constant>(Mask);
       unsigned Alignment = cast<ConstantInt>(Args[1])->getZExtValue();
-      return
-        static_cast<T *>(this)->getGatherScatterOpCost(Instruction::Load,
-                                                       RetTy, Args[0], VarMask,
-                                                       Alignment);
+      return ConcreteTTI->getGatherScatterOpCost(Instruction::Load, RetTy,
+                                                 Args[0], VarMask, Alignment);
     }
     case Intrinsic::experimental_vector_reduce_add:
     case Intrinsic::experimental_vector_reduce_mul:
@@ -1071,6 +1067,45 @@ public:
     case Intrinsic::experimental_vector_reduce_umax:
     case Intrinsic::experimental_vector_reduce_umin:
       return getIntrinsicInstrCost(IID, RetTy, Args[0]->getType(), FMF);
+    case Intrinsic::fshl:
+    case Intrinsic::fshr: {
+      Value *X = Args[0];
+      Value *Y = Args[1];
+      Value *Z = Args[2];
+      TTI::OperandValueProperties OpPropsX, OpPropsY, OpPropsZ, OpPropsBW;
+      TTI::OperandValueKind OpKindX = TTI::getOperandInfo(X, OpPropsX);
+      TTI::OperandValueKind OpKindY = TTI::getOperandInfo(Y, OpPropsY);
+      TTI::OperandValueKind OpKindZ = TTI::getOperandInfo(Z, OpPropsZ);
+      TTI::OperandValueKind OpKindBW = TTI::OK_UniformConstantValue;
+      OpPropsBW = isPowerOf2_32(RetTy->getScalarSizeInBits()) ? TTI::OP_PowerOf2
+                                                              : TTI::OP_None;
+      // fshl: (X << (Z % BW)) | (Y >> (BW - (Z % BW)))
+      // fshr: (X << (BW - (Z % BW))) | (Y >> (Z % BW))
+      unsigned Cost = 0;
+      Cost += ConcreteTTI->getArithmeticInstrCost(BinaryOperator::Or, RetTy);
+      Cost += ConcreteTTI->getArithmeticInstrCost(BinaryOperator::Sub, RetTy);
+      Cost += ConcreteTTI->getArithmeticInstrCost(BinaryOperator::Shl, RetTy,
+                                                  OpKindX, OpKindZ, OpPropsX);
+      Cost += ConcreteTTI->getArithmeticInstrCost(BinaryOperator::LShr, RetTy,
+                                                  OpKindY, OpKindZ, OpPropsY);
+      // Non-constant shift amounts requires a modulo.
+      if (OpKindZ != TTI::OK_UniformConstantValue &&
+          OpKindZ != TTI::OK_NonUniformConstantValue)
+        Cost += ConcreteTTI->getArithmeticInstrCost(BinaryOperator::URem, RetTy,
+                                                    OpKindZ, OpKindBW, OpPropsZ,
+                                                    OpPropsBW);
+      // For non-rotates (X != Y) we must add shift-by-zero handling costs.
+      if (X != Y) {
+        Type *CondTy = Type::getInt1Ty(RetTy->getContext());
+        if (RetVF > 1)
+          CondTy = VectorType::get(CondTy, RetVF);
+        Cost += ConcreteTTI->getCmpSelInstrCost(BinaryOperator::ICmp, RetTy,
+                                                CondTy, nullptr);
+        Cost += ConcreteTTI->getCmpSelInstrCost(BinaryOperator::Select, RetTy,
+                                                CondTy, nullptr);
+      }
+      return Cost;
+    }
     }
   }
 
@@ -1396,7 +1431,7 @@ public:
       ShuffleCost += (IsPairwise + 1) *
                      ConcreteTTI->getShuffleCost(TTI::SK_ExtractSubvector, Ty,
                                                  NumVecElts, SubTy);
-      ArithCost += ConcreteTTI->getArithmeticInstrCost(Opcode, Ty);
+      ArithCost += ConcreteTTI->getArithmeticInstrCost(Opcode, SubTy);
       Ty = SubTy;
       ++LongVectorCount;
     }
@@ -1409,7 +1444,8 @@ public:
                                                0, Ty);
     ArithCost += (NumReduxLevels - LongVectorCount) *
                  ConcreteTTI->getArithmeticInstrCost(Opcode, Ty);
-    return ShuffleCost + ArithCost + getScalarizationOverhead(Ty, false, true);
+    return ShuffleCost + ArithCost +
+           ConcreteTTI->getVectorInstrCost(Instruction::ExtractElement, Ty, 0);
   }
 
   /// Try to calculate op costs for min/max reduction operations.
@@ -1440,16 +1476,17 @@ public:
     while (NumVecElts > MVTLen) {
       NumVecElts /= 2;
       Type *SubTy = VectorType::get(ScalarTy, NumVecElts);
+      CondTy = VectorType::get(ScalarCondTy, NumVecElts);
+
       // Assume the pairwise shuffles add a cost.
       ShuffleCost += (IsPairwise + 1) *
                      ConcreteTTI->getShuffleCost(TTI::SK_ExtractSubvector, Ty,
                                                  NumVecElts, SubTy);
       MinMaxCost +=
-          ConcreteTTI->getCmpSelInstrCost(CmpOpcode, Ty, CondTy, nullptr) +
-          ConcreteTTI->getCmpSelInstrCost(Instruction::Select, Ty, CondTy,
+          ConcreteTTI->getCmpSelInstrCost(CmpOpcode, SubTy, CondTy, nullptr) +
+          ConcreteTTI->getCmpSelInstrCost(Instruction::Select, SubTy, CondTy,
                                           nullptr);
       Ty = SubTy;
-      CondTy = VectorType::get(ScalarCondTy, NumVecElts);
       ++LongVectorCount;
     }
     // The minimal length of the vector is limited by the real length of vector
@@ -1464,13 +1501,10 @@ public:
         (ConcreteTTI->getCmpSelInstrCost(CmpOpcode, Ty, CondTy, nullptr) +
          ConcreteTTI->getCmpSelInstrCost(Instruction::Select, Ty, CondTy,
                                          nullptr));
-    // Need 3 extractelement instructions for scalarization + an additional
-    // scalar select instruction.
+    // The last min/max should be in vector registers and we counted it above.
+    // So just need a single extractelement.
     return ShuffleCost + MinMaxCost +
-           3 * getScalarizationOverhead(Ty, /*Insert=*/false,
-                                        /*Extract=*/true) +
-           ConcreteTTI->getCmpSelInstrCost(Instruction::Select, ScalarTy,
-                                           ScalarCondTy, nullptr);
+           ConcreteTTI->getVectorInstrCost(Instruction::ExtractElement, Ty, 0);
   }
 
   unsigned getVectorSplitCost() { return 1; }
