@@ -67,6 +67,12 @@ The improvements are...
 Improvements to clang-tidy
 --------------------------
 
+- New :doc:`abseil-duration-comparison
+  <clang-tidy/checks/abseil-duration-comparison>` check.
+
+  Checks for comparisons which should be done in the ``absl::Duration`` domain
+  instead of the float of integer domains.
+
 - New :doc:`abseil-duration-division
   <clang-tidy/checks/abseil-duration-division>` check.
 
@@ -80,6 +86,12 @@ Improvements to clang-tidy
   Checks for cases where the floating-point overloads of various
   ``absl::Duration`` factory functions are called when the more-efficient
   integer versions could be used instead.
+
+- New :doc:`abseil-duration-factory-scale
+  <clang-tidy/checks/abseil-duration-factory-scale>` check.
+
+  Checks for cases where arguments to ``absl::Duration`` factory functions are
+  scaled internally and could be changed to a different factory function.
 
 - New :doc:`abseil-faster-strsplit-delimiter
   <clang-tidy/checks/abseil-faster-strsplit-delimiter>` check.
@@ -110,6 +122,13 @@ Improvements to clang-tidy
   Flags uses of ``absl::StrCat()`` to append to a ``std::string``. Suggests
   ``absl::StrAppend()`` should be used instead.
 
+- New :doc:`abseil-upgrade-duration-conversions
+  <clang-tidy/checks/abseil-upgrade-duration-conversions>` check.
+
+  Finds calls to ``absl::Duration`` arithmetic operators and factories whose
+  argument needs an explicit cast to continue compiling after upcoming API
+  changes.
+
 - New :doc:`bugprone-too-small-loop-variable
   <clang-tidy/checks/bugprone-too-small-loop-variable>` check.
 
@@ -123,12 +142,24 @@ Improvements to clang-tidy
   Finds macro usage that is considered problematic because better language
   constructs exist for the task.
 
+- New :doc:`google-objc-function-naming
+  <clang-tidy/checks/google-objc-function-naming>` check.
+
+  Checks that function names in function declarations comply with the naming
+  conventions described in the Google Objective-C Style Guide.
+
 - New :doc:`misc-non-private-member-variables-in-classes
   <clang-tidy/checks/misc-non-private-member-variables-in-classes>` check.
 
   Finds classes that not only contain the data (non-static member variables),
   but also have logic (non-static member functions), and diagnoses all member
   variables that have any other scope other than ``private``.
+
+- New :doc:`modernize-avoid-c-arrays
+  <clang-tidy/checks/modernize-avoid-c-arrays>` check.
+
+  Finds C-style array types and recommend to use ``std::array<>`` /
+  ``std::vector<>``.
 
 - New :doc:`modernize-concat-nested-namespaces
   <clang-tidy/checks/modernize-concat-nested-namespaces>` check.
@@ -173,11 +204,21 @@ Improvements to clang-tidy
   <clang-tidy/checks/readability-uppercase-literal-suffix>`
   added.
 
+- New alias :doc:`cppcoreguidelines-avoid-c-arrays
+  <clang-tidy/checks/cppcoreguidelines-avoid-c-arrays>`
+  to :doc:`modernize-avoid-c-arrays
+  <clang-tidy/checks/modernize-avoid-c-arrays>` added.
+
 - New alias :doc:`cppcoreguidelines-non-private-member-variables-in-classes
   <clang-tidy/checks/cppcoreguidelines-non-private-member-variables-in-classes>`
   to :doc:`misc-non-private-member-variables-in-classes
   <clang-tidy/checks/misc-non-private-member-variables-in-classes>`
   added.
+
+- New alias :doc:`hicpp-avoid-c-arrays
+  <clang-tidy/checks/hicpp-avoid-c-arrays>`
+  to :doc:`modernize-avoid-c-arrays
+  <clang-tidy/checks/modernize-avoid-c-arrays>` added.
 
 - New alias :doc:`hicpp-uppercase-literal-suffix
   <clang-tidy/checks/hicpp-uppercase-literal-suffix>` to
@@ -188,6 +229,18 @@ Improvements to clang-tidy
 - The :doc:`readability-redundant-smartptr-get
   <clang-tidy/checks/readability-redundant-smartptr-get>` check does not warn
   about calls inside macros anymore by default.
+
+- The :doc:`cppcoreguidelines-narrowing-conversions
+  <clang-tidy/checks/cppcoreguidelines-narrowing-conversions>` check now
+  detects more narrowing conversions:
+  - integer to narrower signed integer (this is compiler implementation defined),
+  - integer - floating point narrowing conversions,
+  - floating point - integer narrowing conversions,
+  - constants with narrowing conversions (even in ternary operator).
+
+- The :doc:`objc-property-declaration
+  <clang-tidy/checks/objc-property-declaration>` check now ignores the
+  `Acronyms` and `IncludeDefaultAcronyms` options.
 
 Improvements to include-fixer
 -----------------------------

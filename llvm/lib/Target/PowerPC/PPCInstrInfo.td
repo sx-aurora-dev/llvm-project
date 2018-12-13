@@ -1994,15 +1994,15 @@ def LMW : DForm_1<46, (outs gprc:$rD), (ins memri:$src),
 
 // Unindexed (r+i) Stores.
 let PPC970_Unit = 2, mayStore = 1, mayLoad = 0 in {
-def STB  : DForm_1<38, (outs), (ins gprc:$rS, memri:$src),
-                   "stb $rS, $src", IIC_LdStStore,
-                   [(truncstorei8 i32:$rS, iaddr:$src)]>;
-def STH  : DForm_1<44, (outs), (ins gprc:$rS, memri:$src),
-                   "sth $rS, $src", IIC_LdStStore,
-                   [(truncstorei16 i32:$rS, iaddr:$src)]>;
-def STW  : DForm_1<36, (outs), (ins gprc:$rS, memri:$src),
-                   "stw $rS, $src", IIC_LdStStore,
-                   [(store i32:$rS, iaddr:$src)]>;
+def STB  : DForm_1<38, (outs), (ins gprc:$rS, memri:$dst),
+                   "stb $rS, $dst", IIC_LdStStore,
+                   [(truncstorei8 i32:$rS, iaddr:$dst)]>;
+def STH  : DForm_1<44, (outs), (ins gprc:$rS, memri:$dst),
+                   "sth $rS, $dst", IIC_LdStStore,
+                   [(truncstorei16 i32:$rS, iaddr:$dst)]>;
+def STW  : DForm_1<36, (outs), (ins gprc:$rS, memri:$dst),
+                   "stw $rS, $dst", IIC_LdStStore,
+                   [(store i32:$rS, iaddr:$dst)]>;
 let Predicates = [HasFPU] in {
 def STFS : DForm_1<52, (outs), (ins f4rc:$rS, memri:$dst),
                    "stfs $rS, $dst", IIC_LdStSTFD,
@@ -2016,13 +2016,13 @@ def STFD : DForm_1<54, (outs), (ins f8rc:$rS, memri:$dst),
 // Unindexed (r+i) Stores with Update (preinc).
 let PPC970_Unit = 2, mayStore = 1, mayLoad = 0 in {
 def STBU  : DForm_1<39, (outs ptr_rc_nor0:$ea_res), (ins gprc:$rS, memri:$dst),
-                    "stbu $rS, $dst", IIC_LdStStoreUpd, []>,
+                    "stbu $rS, $dst", IIC_LdStSTU, []>,
                     RegConstraint<"$dst.reg = $ea_res">, NoEncode<"$ea_res">;
 def STHU  : DForm_1<45, (outs ptr_rc_nor0:$ea_res), (ins gprc:$rS, memri:$dst),
-                    "sthu $rS, $dst", IIC_LdStStoreUpd, []>,
+                    "sthu $rS, $dst", IIC_LdStSTU, []>,
                     RegConstraint<"$dst.reg = $ea_res">, NoEncode<"$ea_res">;
 def STWU  : DForm_1<37, (outs ptr_rc_nor0:$ea_res), (ins gprc:$rS, memri:$dst),
-                    "stwu $rS, $dst", IIC_LdStStoreUpd, []>,
+                    "stwu $rS, $dst", IIC_LdStSTU, []>,
                     RegConstraint<"$dst.reg = $ea_res">, NoEncode<"$ea_res">;
 let Predicates = [HasFPU] in {
 def STFSU : DForm_1<53, (outs ptr_rc_nor0:$ea_res), (ins f4rc:$rS, memri:$dst),
@@ -2090,19 +2090,19 @@ def STFDX : XForm_28_memOp<31, 727, (outs), (ins f8rc:$frS, memrr:$dst),
 let PPC970_Unit = 2, mayStore = 1, mayLoad = 0 in {
 def STBUX : XForm_8_memOp<31, 247, (outs ptr_rc_nor0:$ea_res),
                           (ins gprc:$rS, memrr:$dst),
-                          "stbux $rS, $dst", IIC_LdStStoreUpd, []>,
+                          "stbux $rS, $dst", IIC_LdStSTUX, []>,
                           RegConstraint<"$dst.ptrreg = $ea_res">,
                           NoEncode<"$ea_res">,
                           PPC970_DGroup_Cracked;
 def STHUX : XForm_8_memOp<31, 439, (outs ptr_rc_nor0:$ea_res),
                           (ins gprc:$rS, memrr:$dst),
-                          "sthux $rS, $dst", IIC_LdStStoreUpd, []>,
+                          "sthux $rS, $dst", IIC_LdStSTUX, []>,
                           RegConstraint<"$dst.ptrreg = $ea_res">,
                           NoEncode<"$ea_res">,
                           PPC970_DGroup_Cracked;
 def STWUX : XForm_8_memOp<31, 183, (outs ptr_rc_nor0:$ea_res),
                           (ins gprc:$rS, memrr:$dst),
-                          "stwux $rS, $dst", IIC_LdStStoreUpd, []>,
+                          "stwux $rS, $dst", IIC_LdStSTUX, []>,
                           RegConstraint<"$dst.ptrreg = $ea_res">,
                           NoEncode<"$ea_res">,
                           PPC970_DGroup_Cracked;

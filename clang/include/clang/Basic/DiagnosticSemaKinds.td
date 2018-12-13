@@ -622,11 +622,6 @@ def err_invalid_cpu_supports : Error<"invalid cpu feature string for builtin">;
 def err_invalid_cpu_is : Error<"invalid cpu name for builtin">;
 def err_invalid_cpu_specific_dispatch_value : Error<
 "invalid option '%0' for %select{cpu_specific|cpu_dispatch}1">;
-def err_builtin_needs_feature : Error<"%0 needs target feature %1">;
-def err_function_needs_feature
-    : Error<"always_inline function %1 requires target feature '%2', but would "
-            "be inlined into function %0 that is compiled without support for "
-            "'%2'">;
 def warn_builtin_unknown : Warning<"use of unknown builtin %0">,
   InGroup<ImplicitFunctionDeclare>, DefaultError;
 def warn_cstruct_memaccess : Warning<
@@ -1659,7 +1654,7 @@ def err_member_function_call_bad_type : Error<
 def warn_call_to_pure_virtual_member_function_from_ctor_dtor : Warning<
   "call to pure virtual member function %0 has undefined behavior; "
   "overrides of %0 in subclasses are not available in the "
-  "%select{constructor|destructor}1 of %2">;
+  "%select{constructor|destructor}1 of %2">, InGroup<PureVirtualCallFromCtorDtor>;
 
 def select_special_member_kind : TextSubstitution<
   "%select{default constructor|copy constructor|move constructor|"
@@ -2362,6 +2357,13 @@ def warn_cxx11_compat_constexpr_body_invalid_stmt : Warning<
   "use of this statement in a constexpr %select{function|constructor}0 "
   "is incompatible with C++ standards before C++14">,
   InGroup<CXXPre14Compat>, DefaultIgnore;
+def ext_constexpr_body_invalid_stmt_cxx2a : ExtWarn<
+  "use of this statement in a constexpr %select{function|constructor}0 "
+  "is a C++2a extension">, InGroup<CXX2a>;
+def warn_cxx17_compat_constexpr_body_invalid_stmt : Warning<
+  "use of this statement in a constexpr %select{function|constructor}0 "
+  "is incompatible with C++ standards before C++2a">,
+  InGroup<CXXPre2aCompat>, DefaultIgnore;
 def ext_constexpr_type_definition : ExtWarn<
   "type definition in a constexpr %select{function|constructor}0 "
   "is a C++14 extension">, InGroup<CXX14>;
@@ -2414,6 +2416,16 @@ def note_constexpr_body_previous_return : Note<
   "previous return statement is here">;
 def err_constexpr_function_try_block : Error<
   "function try block not allowed in constexpr %select{function|constructor}0">;
+
+// c++2a function try blocks in constexpr
+def ext_constexpr_function_try_block_cxx2a : ExtWarn<
+  "function try block in constexpr %select{function|constructor}0 is "
+  "a C++2a extension">, InGroup<CXX2a>;
+def warn_cxx17_compat_constexpr_function_try_block : Warning<
+  "function try block in constexpr %select{function|constructor}0 is "
+  "incompatible with C++ standards before C++2a">,
+  InGroup<CXXPre2aCompat>, DefaultIgnore;
+
 def err_constexpr_union_ctor_no_init : Error<
   "constexpr union constructor does not initialize any member">;
 def err_constexpr_ctor_missing_init : Error<
@@ -2634,6 +2646,8 @@ def err_field_with_address_space : Error<
   "field may not be qualified with an address space">;
 def err_compound_literal_with_address_space : Error<
   "compound literal in function scope may not be qualified with an address space">;
+def err_address_space_mismatch_templ_inst : Error<
+  "conflicting address space qualifiers are provided between types %0 and %1">;
 def err_attr_objc_ownership_redundant : Error<
   "the type %0 is already explicitly ownership-qualified">;
 def err_invalid_nsnumber_type : Error<
@@ -2878,20 +2892,6 @@ def err_attribute_weakref_without_alias : Error<
   "weakref declaration of %0 must also have an alias attribute">;
 def err_alias_not_supported_on_darwin : Error <
   "aliases are not supported on darwin">;
-def err_alias_to_undefined : Error<
-  "%select{alias|ifunc}0 must point to a defined %select{variable or |}1function">;
-def warn_alias_to_weak_alias : Warning<
-  "%select{alias|ifunc}2 will always resolve to %0 even if weak definition of %1 is overridden">,
-  InGroup<IgnoredAttributes>;
-def warn_alias_with_section : Warning<
-  "%select{alias|ifunc}1 will not be in section '%0' but in the same section as the %select{aliasee|resolver}2">,
-  InGroup<IgnoredAttributes>;
-def err_duplicate_mangled_name : Error<
-  "definition with same mangled name '%0' as another definition">;
-def err_cyclic_alias : Error<
-  "%select{alias|ifunc}0 definition is part of a cycle">;
-def err_ifunc_resolver_return : Error<
-  "ifunc resolver function must return a pointer">;
 def warn_attribute_wrong_decl_type_str : Warning<
   "%0 attribute only applies to %1">, InGroup<IgnoredAttributes>;
 def err_attribute_wrong_decl_type_str : Error<
@@ -4806,16 +4806,18 @@ def err_nested_redefinition : Error<"nested redefinition of %0">;
 def err_use_with_wrong_tag : Error<
   "use of %0 with tag type that does not match previous declaration">;
 def warn_struct_class_tag_mismatch : Warning<
-    "%select{struct|interface|class}0%select{| template}1 %2 was previously "
-    "declared as a %select{struct|interface|class}3%select{| template}1">,
-    InGroup<MismatchedTags>, DefaultIgnore;
+  "%select{struct|interface|class}0%select{| template}1 %2 was previously "
+  "declared as a %select{struct|interface|class}3%select{| template}1; "
+  "this is valid, but may result in linker errors under the Microsoft C++ ABI">,
+  InGroup<MismatchedTags>, DefaultIgnore;
 def warn_struct_class_previous_tag_mismatch : Warning<
-    "%2 defined as %select{a struct|an interface|a class}0%select{| template}1 "
-    "here but previously declared as "
-    "%select{a struct|an interface|a class}3%select{| template}1">,
-     InGroup<MismatchedTags>, DefaultIgnore;
+  "%2 defined as %select{a struct|an interface|a class}0%select{| template}1 "
+  "here but previously declared as "
+  "%select{a struct|an interface|a class}3%select{| template}1; "
+  "this is valid, but may result in linker errors under the Microsoft C++ ABI">,
+  InGroup<MismatchedTags>, DefaultIgnore;
 def note_struct_class_suggestion : Note<
-    "did you mean %select{struct|interface|class}0 here?">;
+  "did you mean %select{struct|interface|class}0 here?">;
 def ext_forward_ref_enum : Extension<
   "ISO C forbids forward references to 'enum' types">;
 def err_forward_ref_enum : Error<
@@ -5809,8 +5811,14 @@ def err_array_init_plain_string_into_char8_t : Error<
 def note_array_init_plain_string_into_char8_t : Note<
   "add 'u8' prefix to form a 'char8_t' string literal">;
 def err_array_init_utf8_string_into_char : Error<
-  "initialization of char array with UTF-8 string literal is not permitted "
-  "by '-fchar8_t'">;
+  "%select{|ISO C++20 does not permit }0initialization of char array with "
+  "UTF-8 string literal%select{ is not permitted by '-fchar8_t'|}0">;
+def warn_cxx2a_compat_utf8_string : Warning<
+  "type of UTF-8 string literal will change from array of const char to "
+  "array of const char8_t in C++2a">, InGroup<CXX2aCompat>, DefaultIgnore;
+def note_cxx2a_compat_utf8_string_remove_u8 : Note<
+  "remove 'u8' prefix to avoid a change of behavior; "
+  "Clang encodes unprefixed narrow string literals as UTF-8">;
 def err_array_init_different_type : Error<
   "cannot initialize array %diff{of type $ with array of type $|"
   "with different type of array}0,1">;
@@ -7137,9 +7145,6 @@ def warn_atomic_op_has_invalid_memory_order : Warning<
   InGroup<DiagGroup<"atomic-memory-ordering">>;
 def err_atomic_op_has_invalid_synch_scope : Error<
   "synchronization scope argument to atomic operation is invalid">;
-def warn_atomic_op_misaligned : Warning<
-  "%select{large|misaligned}0 atomic operation may incur "
-  "significant performance penalty">, InGroup<DiagGroup<"atomic-alignment">>;
 def warn_atomic_implicit_seq_cst : Warning<
   "implicit use of sequentially-consistent atomic may incur stronger memory barriers than necessary">,
   InGroup<DiagGroup<"atomic-implicit-seq-cst">>, DefaultIgnore;
@@ -7403,8 +7408,6 @@ let CategoryName = "Inline Assembly Issue" in {
     "invalid input constraint '%0' in asm">;
   def err_asm_immediate_expected : Error<"constraint '%0' expects "
     "an integer constant expression">;
-  def err_asm_invalid_type_in_input : Error<
-    "invalid type %0 in asm input for constraint '%1'">;
   def err_asm_tying_incompatible_types : Error<
     "unsupported inline asm: input with type "
     "%diff{$ matching output with type $|}0,1">;
@@ -9308,22 +9311,6 @@ def warn_not_a_doxygen_trailing_member_comment : Warning<
   "not a Doxygen trailing comment">, InGroup<Documentation>, DefaultIgnore;
 } // end of documentation issue category
 
-let CategoryName = "Instrumentation Issue" in {
-def warn_profile_data_out_of_date : Warning<
-  "profile data may be out of date: of %0 function%s0, %1 %plural{1:has|:have}1"
-  " mismatched data that will be ignored">,
-  InGroup<ProfileInstrOutOfDate>;
-def warn_profile_data_missing : Warning<
-  "profile data may be incomplete: of %0 function%s0, %1 %plural{1:has|:have}1"
-  " no data">,
-  InGroup<ProfileInstrMissing>,
-  DefaultIgnore;
-def warn_profile_data_unprofiled : Warning<
-  "no profile data available for file \"%0\"">,
-  InGroup<ProfileInstrUnprofiled>;
-
-} // end of instrumentation issue category
-
 let CategoryName = "Nullability Issue" in {
 
 def warn_mismatched_nullability_attr : Warning<
@@ -9538,4 +9525,13 @@ def err_std_compare_type_not_supported : Error<
    "member '%2' is missing|"
    "the type is not trivially copyable|"
    "the type does not have the expected form}1">;
+
+def warn_dereference_of_noderef_type : Warning<
+  "dereferencing %0; was declared with a 'noderef' type">, InGroup<NoDeref>;
+def warn_dereference_of_noderef_type_no_decl : Warning<
+  "dereferencing expression marked as 'noderef'">, InGroup<NoDeref>;
+def warn_noderef_on_non_pointer_or_array : Warning<
+  "'noderef' can only be used on an array or pointer type">, InGroup<IgnoredAttributes>;
+def warn_noderef_to_dereferenceable_pointer : Warning<
+  "casting to dereferenceable pointer removes 'noderef' attribute">, InGroup<NoDeref>;
 } // end of sema component.

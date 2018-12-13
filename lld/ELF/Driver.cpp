@@ -275,7 +275,7 @@ static void initLLVM() {
 
 // Some command line options or some combinations of them are not allowed.
 // This function checks for such errors.
-static void checkOptions(opt::InputArgList &Args) {
+static void checkOptions() {
   // The MIPS ABI as of 2016 does not support the GNU-style symbol lookup
   // table which is a relatively new feature.
   if (Config->EMachine == EM_MIPS && Config->GnuHash)
@@ -350,8 +350,8 @@ static bool isKnownZFlag(StringRef S) {
          S == "execstack" || S == "global" || S == "hazardplt" ||
          S == "initfirst" || S == "interpose" ||
          S == "keep-text-section-prefix" || S == "lazy" || S == "muldefs" ||
-         S == "nocombreloc" || S == "nocopyreloc" || S == "nodelete" ||
-         S == "nodlopen" || S == "noexecstack" ||
+         S == "nocombreloc" || S == "nocopyreloc" || S == "nodefaultlib" ||
+         S == "nodelete" || S == "nodlopen" || S == "noexecstack" ||
          S == "nokeep-text-section-prefix" || S == "norelro" || S == "notext" ||
          S == "now" || S == "origin" || S == "relro" || S == "retpolineplt" ||
          S == "rodynamic" || S == "text" || S == "wxneeded" ||
@@ -429,7 +429,7 @@ void LinkerDriver::main(ArrayRef<const char *> ArgsArr) {
 
   inferMachineType();
   setConfigs(Args);
-  checkOptions(Args);
+  checkOptions();
   if (errorCount())
     return;
 
@@ -876,6 +876,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->ZInterpose = hasZOption(Args, "interpose");
   Config->ZKeepTextSectionPrefix = getZFlag(
       Args, "keep-text-section-prefix", "nokeep-text-section-prefix", false);
+  Config->ZNodefaultlib = hasZOption(Args, "nodefaultlib");
   Config->ZNodelete = hasZOption(Args, "nodelete");
   Config->ZNodlopen = hasZOption(Args, "nodlopen");
   Config->ZNow = getZFlag(Args, "now", "lazy", false);

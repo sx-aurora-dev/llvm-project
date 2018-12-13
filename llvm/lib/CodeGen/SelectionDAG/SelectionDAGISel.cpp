@@ -697,10 +697,10 @@ void SelectionDAGISel::ComputeLiveOutVRegInfo() {
     if (!TargetRegisterInfo::isVirtualRegister(DestReg))
       continue;
 
-    // Ignore non-scalar or non-integer values.
+    // Ignore non-integer values.
     SDValue Src = N->getOperand(2);
     EVT SrcVT = Src.getValueType();
-    if (!SrcVT.isInteger() || SrcVT.isVector())
+    if (!SrcVT.isInteger())
       continue;
 
     unsigned NumSignBits = CurDAG->ComputeNumSignBits(Src);
@@ -3207,6 +3207,18 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
                                 N.getNode()))
         break;
       continue;
+    case OPC_CheckPredicateWithOperands: {
+      unsigned OpNum = MatcherTable[MatcherIndex++];
+      SmallVector<SDValue, 8> Operands;
+
+      for (unsigned i = 0; i < OpNum; ++i)
+        Operands.push_back(RecordedNodes[MatcherTable[MatcherIndex++]].first);
+
+      unsigned PredNo = MatcherTable[MatcherIndex++];
+      if (!CheckNodePredicateWithOperands(N.getNode(), PredNo, Operands))
+        break;
+      continue;
+    }
     case OPC_CheckComplexPat: {
       unsigned CPNum = MatcherTable[MatcherIndex++];
       unsigned RecNo = MatcherTable[MatcherIndex++];
