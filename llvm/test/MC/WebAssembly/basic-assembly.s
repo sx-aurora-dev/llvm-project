@@ -7,8 +7,8 @@
     .type    test0,@function
 test0:
     # Test all types:
-    .param      i32, i64
-    .result     i32
+    .functype   test0 (i32, i64) -> (i32)
+    .eventtype  __cpp_exception i32
     .local      f32, f64, v128, v128
     # Explicit getlocal/setlocal:
     get_local   2
@@ -66,8 +66,8 @@ test0:
 
 # CHECK:           .text
 # CHECK-LABEL: test0:
-# CHECK-NEXT:      .param      i32, i64
-# CHECK-NEXT:      .result     i32
+# CHECK-NEXT:      .functype test0 (i32, i64) -> (i32)
+# CHECK-NEXT:      .eventtype  __cpp_exception i32
 # CHECK-NEXT:      .local      f32, f64
 # CHECK-NEXT:      get_local   2
 # CHECK-NEXT:      set_local   2

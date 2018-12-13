@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/FrontendTool/Utils.h"
 #include "clang/ARCMigrate/ARCMTActions.h"
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Config/config.h"
@@ -23,10 +22,12 @@
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/FrontendTool/Utils.h"
 #include "clang/Rewrite/Frontend/FrontendActions.h"
 #include "clang/StaticAnalyzer/Frontend/FrontendActions.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
+#include "llvm/Support/BuryPointer.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/ErrorHandling.h"
 using namespace clang;
@@ -64,7 +65,6 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case GenerateHeaderModule:
     return llvm::make_unique<GenerateHeaderModuleAction>();
   case GeneratePCH:            return llvm::make_unique<GeneratePCHAction>();
-  case GeneratePTH:            return llvm::make_unique<GeneratePTHAction>();
   case InitOnly:               return llvm::make_unique<InitOnlyAction>();
   case ParseSyntaxOnly:        return llvm::make_unique<SyntaxOnlyAction>();
   case ModuleFileInfo:         return llvm::make_unique<DumpModuleInfoAction>();
@@ -265,7 +265,7 @@ bool ExecuteCompilerInvocation(CompilerInstance *Clang) {
     return false;
   bool Success = Clang->ExecuteAction(*Act);
   if (Clang->getFrontendOpts().DisableFree)
-    BuryPointer(std::move(Act));
+    llvm::BuryPointer(std::move(Act));
   return Success;
 }
 

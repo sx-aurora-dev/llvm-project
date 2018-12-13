@@ -70,14 +70,15 @@ class FileEntry {
   bool IsNamedPipe;
   bool InPCH;
   bool IsValid;               // Is this \c FileEntry initialized and valid?
+  bool DeferredOpen;          // Created by getFile(OpenFile=0); may open later.
 
   /// The open file, if it is owned by the \p FileEntry.
   mutable std::unique_ptr<llvm::vfs::File> File;
 
 public:
   FileEntry()
-      : UniqueID(0, 0), IsNamedPipe(false), InPCH(false), IsValid(false)
-  {}
+      : UniqueID(0, 0), IsNamedPipe(false), InPCH(false), IsValid(false),
+        DeferredOpen(false) {}
 
   FileEntry(const FileEntry &) = delete;
   FileEntry &operator=(const FileEntry &) = delete;
@@ -103,6 +104,10 @@ public:
   void closeFile() const {
     File.reset(); // rely on destructor to close File
   }
+
+  // Only for use in tests to see if deferred opens are happening, rather than
+  // relying on RealPathName being empty.
+  bool isOpenForTests() const { return File != nullptr; }
 };
 
 struct FileData;
@@ -171,6 +176,9 @@ class FileManager : public RefCountedBase<FileManager> {
   /// Add all ancestors of the given path (pointing to either a file
   /// or a directory) as virtual directories.
   void addAncestorsAsVirtualDirs(StringRef Path);
+
+  /// Fills the RealPathName in file entry.
+  void fillRealPathName(FileEntry *UFE, llvm::StringRef FileName);
 
 public:
   FileManager(const FileSystemOptions &FileSystemOpts,

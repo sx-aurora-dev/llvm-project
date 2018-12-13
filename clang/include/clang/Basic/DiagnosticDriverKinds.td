@@ -299,6 +299,9 @@ def err_analyzer_config_no_value : Error<
   "analyzer-config option '%0' has a key but no value">;
 def err_analyzer_config_multiple_values : Error<
   "analyzer-config option '%0' should contain only one '='">;
+def err_analyzer_config_invalid_input : Error<
+  "invalid input for analyzer-config option '%0', that expects %1 value">;
+def err_analyzer_config_unknown : Error<"unknown analyzer-config '%0'">;
 
 def err_drv_invalid_hvx_length : Error<
   "-mhvx-length is not supported without a -mhvx/-mhvx= flag">;
@@ -357,7 +360,7 @@ def warn_drv_unsupported_pic_with_mabicalls : Warning<
   "%select{implicit usage of|}1 -mabicalls and the N64 ABI">,
   InGroup<OptionIgnored>;
 def err_drv_unsupported_noabicalls_pic : Error<
-  "position-independent code requires ‘-mabicalls’">;
+  "position-independent code requires '-mabicalls'">;
 def err_drv_unsupported_indirect_jump_opt : Error<
   "'-mindirect-jump=%0' is unsupported with the '%1' architecture">;
 def err_drv_unknown_indirect_jump_opt : Error<
