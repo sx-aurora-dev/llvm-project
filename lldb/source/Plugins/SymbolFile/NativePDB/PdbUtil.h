@@ -12,6 +12,7 @@
 
 #include "lldb/lldb-enumerations.h"
 
+#include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/DebugInfo/CodeView/SymbolRecord.h"
 #include "llvm/DebugInfo/CodeView/TypeRecord.h"
 #include "llvm/DebugInfo/PDB/PDBTypes.h"
@@ -19,8 +20,16 @@
 #include <tuple>
 #include <utility>
 
+namespace llvm {
+namespace pdb {
+class TpiStream;
+}
+} // namespace llvm
+
 namespace lldb_private {
 namespace npdb {
+
+struct PdbTypeSymId;
 
 struct CVTagRecord {
   enum Kind { Class, Struct, Union, Enum };
@@ -101,12 +110,19 @@ inline bool IsValidRecord(const llvm::codeview::ProcRefSym &sym) {
 bool IsForwardRefUdt(llvm::codeview::CVType cvt);
 bool IsTagRecord(llvm::codeview::CVType cvt);
 
+bool IsForwardRefUdt(const PdbTypeSymId &id, llvm::pdb::TpiStream &tpi);
+bool IsTagRecord(const PdbTypeSymId &id, llvm::pdb::TpiStream &tpi);
+
 lldb::AccessType TranslateMemberAccess(llvm::codeview::MemberAccess access);
 llvm::codeview::TypeIndex GetFieldListIndex(llvm::codeview::CVType cvt);
 llvm::codeview::TypeIndex
 LookThroughModifierRecord(llvm::codeview::CVType modifier);
 
 llvm::StringRef DropNameScope(llvm::StringRef name);
+
+size_t GetTypeSizeForSimpleKind(llvm::codeview::SimpleTypeKind kind);
+lldb::BasicType
+GetCompilerTypeForSimpleKind(llvm::codeview::SimpleTypeKind kind);
 
 } // namespace npdb
 } // namespace lldb_private

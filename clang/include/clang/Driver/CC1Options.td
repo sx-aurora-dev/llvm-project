@@ -138,6 +138,12 @@ def analyzer_list_enabled_checkers : Flag<["-"], "analyzer-list-enabled-checkers
 def analyzer_config : Separate<["-"], "analyzer-config">,
   HelpText<"Choose analyzer options to enable">;
 
+def analyzer_config_compatibility_mode : Separate<["-"], "analyzer-config-compatibility-mode">,
+  HelpText<"Don't emit errors on invalid analyzer-config inputs">;
+
+def analyzer_config_compatibility_mode_EQ : Joined<["-"], "analyzer-config-compatibility-mode=">,
+  Alias<analyzer_config_compatibility_mode>;
+
 //===----------------------------------------------------------------------===//
 // Migrator Options
 //===----------------------------------------------------------------------===//
@@ -556,8 +562,6 @@ def emit_module_interface : Flag<["-"], "emit-module-interface">,
   HelpText<"Generate pre-compiled module file from a C++ module interface">;
 def emit_header_module : Flag<["-"], "emit-header-module">,
   HelpText<"Generate pre-compiled module file from a set of header files">;
-def emit_pth : Flag<["-"], "emit-pth">,
-  HelpText<"Generate pre-tokenized header file">;
 def emit_pch : Flag<["-"], "emit-pch">,
   HelpText<"Generate pre-compiled header file">;
 def emit_llvm_bc : Flag<["-"], "emit-llvm-bc">,
@@ -788,15 +792,11 @@ def internal_externc_isystem : JoinedOrSeparate<["-"], "internal-externc-isystem
 // Preprocessor Options
 //===----------------------------------------------------------------------===//
 
-def include_pth : Separate<["-"], "include-pth">, MetaVarName<"<file>">,
-  HelpText<"Include file before parsing">;
 def chain_include : Separate<["-"], "chain-include">, MetaVarName<"<file>">,
   HelpText<"Include and chain a header file after turning it into PCH">;
 def preamble_bytes_EQ : Joined<["-"], "preamble-bytes=">,
   HelpText<"Assume that the precompiled header is a precompiled preamble "
            "covering the first N bytes of the main file">;
-def token_cache : Separate<["-"], "token-cache">, MetaVarName<"<path>">,
-  HelpText<"Use specified token cache file">;
 def detailed_preprocessing_record : Flag<["-"], "detailed-preprocessing-record">,
   HelpText<"include a detailed record of preprocessing actions">;
 
