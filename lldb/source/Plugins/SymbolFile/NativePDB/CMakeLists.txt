@@ -1,6 +1,8 @@
 add_lldb_library(lldbPluginSymbolFileNativePDB PLUGIN
   CompileUnitIndex.cpp
+  DWARFLocationExpression.cpp
   PdbIndex.cpp
+  PdbSymUid.cpp
   PdbUtil.cpp
   SymbolFileNativePDB.cpp
   UdtRecordCompleter.cpp

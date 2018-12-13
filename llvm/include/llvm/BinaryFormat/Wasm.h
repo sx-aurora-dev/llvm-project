@@ -35,6 +35,13 @@ struct WasmObjectHeader {
   uint32_t Version;
 };
 
+struct WasmDylinkInfo {
+  uint32_t MemorySize; // Memory size in bytes
+  uint32_t MemoryAlignment;  // P2 alignment of memory
+  uint32_t TableSize;  // Table size in elements
+  uint32_t TableAlignment;  // P2 alignment of table
+};
+
 struct WasmExport {
   StringRef Name;
   uint8_t Kind;
@@ -192,7 +199,7 @@ enum : unsigned {
   WASM_SEC_ELEM = 9,     // Elements section
   WASM_SEC_CODE = 10,    // Function bodies (code)
   WASM_SEC_DATA = 11,    // Data segments
-  WASM_SEC_EVENT = 12    // Event declarations
+  WASM_SEC_EVENT = 13    // Event declarations
 };
 
 // Type immediate encodings used in various contexts.

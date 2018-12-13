@@ -56,6 +56,8 @@ private:
 
   ExecutionMode getExecutionMode() const;
 
+  bool requiresFullRuntime() const { return RequiresFullRuntime; }
+
   /// Emit the worker function for the current target region.
   void emitWorkerFunction(WorkerFunctionState &WST);
 
@@ -180,6 +182,16 @@ protected:
     return "__omp_outlined__";
   }
 
+  /// Check if the default location must be constant.
+  /// Constant for NVPTX for better optimization.
+  bool isDefaultLocationConstant() const override { return true; }
+
+  /// Returns additional flags that can be stored in reserved_2 field of the
+  /// default location.
+  /// For NVPTX target contains data about SPMD/Non-SPMD execution mode +
+  /// Full/Lightweight runtime mode. Used for better optimization.
+  unsigned getDefaultLocationReserved2Flags() const override;
+
 public:
   explicit CGOpenMPRuntimeNVPTX(CodeGenModule &CGM);
   void clear() override;
@@ -261,6 +273,18 @@ public:
                         llvm::Value *OutlinedFn,
                         ArrayRef<llvm::Value *> CapturedVars,
                         const Expr *IfCond) override;
+
+  /// Emit an implicit/explicit barrier for OpenMP threads.
+  /// \param Kind Directive for which this implicit barrier call must be
+  /// generated. Must be OMPD_barrier for explicit barrier generation.
+  /// \param EmitChecks true if need to emit checks for cancellation barriers.
+  /// \param ForceSimpleCall true simple barrier call must be emitted, false if
+  /// runtime class decides which one to emit (simple or with cancellation
+  /// checks).
+  ///
+  void emitBarrierCall(CodeGenFunction &CGF, SourceLocation Loc,
+                       OpenMPDirectiveKind Kind, bool EmitChecks = true,
+                       bool ForceSimpleCall = false) override;
 
   /// Emits a critical region.
   /// \param CriticalName Name of the critical region.
@@ -356,12 +380,20 @@ public:
   void adjustTargetSpecificDataForLambdas(
       CodeGenFunction &CGF, const OMPExecutableDirective &D) const override;
 
+  /// Perform check on requires decl to ensure that target architecture
+  /// supports unified addressing
+  void checkArchForUnifiedAddressing(CodeGenModule &CGM,
+                                     const OMPRequiresDecl *D) const override;
+
 private:
   /// Track the execution mode when codegening directives within a target
   /// region. The appropriate mode (SPMD/NON-SPMD) is set on entry to the
   /// target region and used by containing directives such as 'parallel'
   /// to emit optimized code.
   ExecutionMode CurrentExecutionMode = EM_Unknown;
+
+  /// Check if the full runtime is required (default - yes).
+  bool RequiresFullRuntime = true;
 
   /// true if we're emitting the code for the target region and next parallel
   /// region is L0 for sure.
@@ -431,6 +463,10 @@ private:
   /// Shared pointer for the global memory in the global memory buffer used for
   /// the given kernel.
   llvm::GlobalVariable *KernelStaticGlobalized = nullptr;
+  /// Pair of the Non-SPMD team and all reductions variables in this team
+  /// region.
+  std::pair<const Decl *, llvm::SmallVector<const ValueDecl *, 4>>
+      TeamAndReductions;
 };
 
 } // CodeGen namespace.

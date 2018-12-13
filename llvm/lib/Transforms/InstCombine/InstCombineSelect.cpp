@@ -1866,8 +1866,7 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
       // MAX(~a, C)  -> ~MIN(a, ~C)
       // MIN(~a, ~b) -> ~MAX(a, b)
       // MIN(~a, C)  -> ~MAX(a, ~C)
-      auto moveNotAfterMinMax = [&](Value *X, Value *Y,
-                                    bool Swapped) -> Instruction * {
+      auto moveNotAfterMinMax = [&](Value *X, Value *Y) -> Instruction * {
         Value *A;
         if (match(X, m_Not(m_Value(A))) && !X->hasNUsesOrMore(3) &&
             !IsFreeToInvert(A, A->hasOneUse()) &&
@@ -1880,14 +1879,8 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
           if (MDNode *MD = SI.getMetadata(LLVMContext::MD_prof)) {
             cast<SelectInst>(NewMinMax)->setMetadata(LLVMContext::MD_prof, MD);
             // Swap the metadata if the operands are swapped.
-            if (Swapped) {
-              assert(X == SI.getFalseValue() && Y == SI.getTrueValue() &&
-                     "Unexpected operands.");
+            if (X == SI.getFalseValue() && Y == SI.getTrueValue())
               cast<SelectInst>(NewMinMax)->swapProfMetadata();
-            } else {
-              assert(X == SI.getTrueValue() && Y == SI.getFalseValue() &&
-                     "Unexpected operands.");
-            }
           }
 
           return BinaryOperator::CreateNot(NewMinMax);
@@ -1896,9 +1889,9 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
         return nullptr;
       };
 
-      if (Instruction *I = moveNotAfterMinMax(LHS, RHS, /*Swapped*/false))
+      if (Instruction *I = moveNotAfterMinMax(LHS, RHS))
         return I;
-      if (Instruction *I = moveNotAfterMinMax(RHS, LHS, /*Swapped*/true))
+      if (Instruction *I = moveNotAfterMinMax(RHS, LHS))
         return I;
 
       if (Instruction *I = factorizeMinMaxTree(SPF, LHS, RHS, Builder))
@@ -2025,24 +2018,6 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
       if (V != &SI)
         return replaceInstUsesWith(SI, V);
       return &SI;
-    }
-  }
-
-  // See if we can determine the result of this select based on a dominating
-  // condition.
-  BasicBlock *Parent = SI.getParent();
-  if (BasicBlock *Dom = Parent->getSinglePredecessor()) {
-    auto *PBI = dyn_cast_or_null<BranchInst>(Dom->getTerminator());
-    if (PBI && PBI->isConditional() &&
-        PBI->getSuccessor(0) != PBI->getSuccessor(1) &&
-        (PBI->getSuccessor(0) == Parent || PBI->getSuccessor(1) == Parent)) {
-      bool CondIsTrue = PBI->getSuccessor(0) == Parent;
-      Optional<bool> Implication = isImpliedCondition(
-          PBI->getCondition(), SI.getCondition(), DL, CondIsTrue);
-      if (Implication) {
-        Value *V = *Implication ? TrueVal : FalseVal;
-        return replaceInstUsesWith(SI, V);
-      }
     }
   }
 

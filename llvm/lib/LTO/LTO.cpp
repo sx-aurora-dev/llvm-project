@@ -61,10 +61,10 @@ cl::opt<bool> EnableLTOInternalization(
     "enable-lto-internalization", cl::init(true), cl::Hidden,
     cl::desc("Enable global value internalization in LTO"));
 
-// Returns a unique hash for the Module considering the current list of
+// Computes a unique hash for the Module considering the current list of
 // export/import and other global analysis results.
 // The hash is produced in \p Key.
-static void computeCacheKey(
+void llvm::computeLTOCacheKey(
     SmallString<40> &Key, const Config &Conf, const ModuleSummaryIndex &Index,
     StringRef ModuleID, const FunctionImporter::ImportMapTy &ImportList,
     const FunctionImporter::ExportSetTy &ExportList,
@@ -132,6 +132,7 @@ static void computeCacheKey(
   AddUnsigned(Conf.CGFileType);
   AddUnsigned(Conf.OptLevel);
   AddUnsigned(Conf.UseNewPM);
+  AddUnsigned(Conf.Freestanding);
   AddString(Conf.OptPipeline);
   AddString(Conf.AAPipeline);
   AddString(Conf.OverrideTriple);
@@ -187,6 +188,8 @@ static void computeCacheKey(
       AddUnsigned(VI.isDSOLocal());
       AddUsedCfiGlobal(VI.getGUID());
     }
+    if (auto *GVS = dyn_cast<GlobalVarSummary>(GS))
+      AddUnsigned(GVS->isReadOnly());
     if (auto *FS = dyn_cast<FunctionSummary>(GS)) {
       for (auto &TT : FS->type_tests())
         UsedTypeIds.insert(TT);
@@ -218,8 +221,14 @@ static void computeCacheKey(
   // Imported functions may introduce new uses of type identifier resolutions,
   // so we need to collect their used resolutions as well.
   for (auto &ImpM : ImportList)
-    for (auto &ImpF : ImpM.second)
-      AddUsedThings(Index.findSummaryInModule(ImpF, ImpM.first()));
+    for (auto &ImpF : ImpM.second) {
+      GlobalValueSummary *S = Index.findSummaryInModule(ImpF, ImpM.first());
+      AddUsedThings(S);
+      // If this is an alias, we also care about any types/etc. that the aliasee
+      // may reference.
+      if (auto *AS = dyn_cast_or_null<AliasSummary>(S))
+        AddUsedThings(AS->getBaseObject());
+    }
 
   auto AddTypeIdSummary = [&](StringRef TId, const TypeIdSummary &S) {
     AddString(TId);
@@ -356,7 +365,10 @@ static void thinLTOInternalizeAndPromoteGUID(
                // Ignore local and appending linkage values since the linker
                // doesn't resolve them.
                !GlobalValue::isLocalLinkage(S->linkage()) &&
-               !GlobalValue::isAppendingLinkage(S->linkage()))
+               S->linkage() != GlobalValue::AppendingLinkage &&
+               // We can't internalize available_externally globals because this
+               // can break function pointer equality.
+               S->linkage() != GlobalValue::AvailableExternallyLinkage)
       S->setLinkage(GlobalValue::InternalLinkage);
   }
 }
@@ -809,7 +821,8 @@ Error LTO::run(AddStreamFn AddStream, NativeObjectCache Cache) {
       return PrevailingType::Unknown;
     return It->second;
   };
-  computeDeadSymbols(ThinLTO.CombinedIndex, GUIDPreservedSymbols, isPrevailing);
+  computeDeadSymbolsWithConstProp(ThinLTO.CombinedIndex, GUIDPreservedSymbols,
+                                  isPrevailing, Conf.OptLevel > 0);
 
   // Setup output file to emit statistics.
   std::unique_ptr<ToolOutputFile> StatsFile = nullptr;
@@ -980,9 +993,9 @@ public:
 
     SmallString<40> Key;
     // The module may be cached, this helps handling it.
-    computeCacheKey(Key, Conf, CombinedIndex, ModuleID, ImportList, ExportList,
-                    ResolvedODR, DefinedGlobals, CfiFunctionDefs,
-                    CfiFunctionDecls);
+    computeLTOCacheKey(Key, Conf, CombinedIndex, ModuleID, ImportList,
+                       ExportList, ResolvedODR, DefinedGlobals, CfiFunctionDefs,
+                       CfiFunctionDecls);
     if (AddStreamFn CacheAddStream = Cache(Task, Key))
       return RunThinBackend(CacheAddStream);
 
