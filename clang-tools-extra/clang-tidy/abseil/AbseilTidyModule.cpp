@@ -10,14 +10,17 @@
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
+#include "DurationComparisonCheck.h"
 #include "DurationDivisionCheck.h"
 #include "DurationFactoryFloatCheck.h"
+#include "DurationFactoryScaleCheck.h"
 #include "FasterStrsplitDelimiterCheck.h"
 #include "NoInternalDependenciesCheck.h"
 #include "NoNamespaceCheck.h"
 #include "RedundantStrcatCallsCheck.h"
 #include "StringFindStartswithCheck.h"
 #include "StrCatAppendCheck.h"
+#include "UpgradeDurationConversionsCheck.h"
 
 namespace clang {
 namespace tidy {
@@ -26,10 +29,14 @@ namespace abseil {
 class AbseilModule : public ClangTidyModule {
 public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
+    CheckFactories.registerCheck<DurationComparisonCheck>(
+        "abseil-duration-comparison");
     CheckFactories.registerCheck<DurationDivisionCheck>(
         "abseil-duration-division");
     CheckFactories.registerCheck<DurationFactoryFloatCheck>(
         "abseil-duration-factory-float");
+    CheckFactories.registerCheck<DurationFactoryScaleCheck>(
+        "abseil-duration-factory-scale");
     CheckFactories.registerCheck<FasterStrsplitDelimiterCheck>(
         "abseil-faster-strsplit-delimiter");
     CheckFactories.registerCheck<NoInternalDependenciesCheck>(
@@ -41,6 +48,8 @@ public:
         "abseil-str-cat-append");
     CheckFactories.registerCheck<StringFindStartswithCheck>(
         "abseil-string-find-startswith");
+    CheckFactories.registerCheck<UpgradeDurationConversionsCheck>(
+        "abseil-upgrade-duration-conversions");
   }
 };
 

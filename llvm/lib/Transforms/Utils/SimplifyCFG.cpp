@@ -693,7 +693,7 @@ Value *SimplifyCFGOpt::isValueEqualityComparison(Instruction *TI) {
   if (SwitchInst *SI = dyn_cast<SwitchInst>(TI)) {
     // Do not permit merging of large switch instructions into their
     // predecessors unless there is only one predecessor.
-    if (SI->getNumSuccessors() * pred_size(SI->getParent()) <= 128)
+    if (!SI->getParent()->hasNPredecessorsOrMore(128 / SI->getNumSuccessors()))
       CV = SI->getCondition();
   } else if (BranchInst *BI = dyn_cast<BranchInst>(TI))
     if (BI->isConditional() && BI->getCondition()->hasOneUse())
@@ -1375,7 +1375,7 @@ HoistTerminator:
   // As the parent basic block terminator is a branch instruction which is
   // removed at the end of the current transformation, use its previous
   // non-debug instruction, as the reference insertion point, which will
-  // provide the debug location for the instruction being hoisted. For BBs
+  // provide the debug location for generated select instructions. For BBs
   // with only debug instructions, use an empty debug location.
   Instruction *InsertPt =
       BIParent->getTerminator()->getPrevNonDebugInstruction();
@@ -1389,15 +1389,16 @@ HoistTerminator:
     NT->takeName(I1);
   }
 
-  // The instruction NT being hoisted, is the terminator for the true branch,
-  // with debug location (DILocation) within that branch. We can't retain
-  // its original debug location value, otherwise 'select' instructions that
-  // are created from any PHI nodes, will take its debug location, giving
-  // the impression that those 'select' instructions are in the true branch,
-  // causing incorrect stepping, affecting the debug experience.
-  NT->setDebugLoc(InsertPt ? InsertPt->getDebugLoc() : DebugLoc());
+  // Ensure terminator gets a debug location, even an unknown one, in case
+  // it involves inlinable calls.
+  NT->applyMergedLocation(I1->getDebugLoc(), I2->getDebugLoc());
 
   IRBuilder<NoFolder> Builder(NT);
+  // If an earlier instruction in this BB had a location, adopt it, otherwise
+  // clear debug locations.
+  Builder.SetCurrentDebugLocation(InsertPt ? InsertPt->getDebugLoc()
+                                           : DebugLoc());
+
   // Hoisting one of the terminators from our successor is a great thing.
   // Unfortunately, the successors of the if/else blocks may have PHI nodes in
   // them.  If they do, all PHI entries for BB1/BB2 must agree for all PHI
@@ -2890,7 +2891,7 @@ static Value *ensureValueAvailableInSuccessor(Value *V, BasicBlock *BB,
       if (!AlternativeV)
         break;
 
-      assert(pred_size(Succ) == 2);
+      assert(Succ->hasNPredecessors(2));
       auto PredI = pred_begin(Succ);
       BasicBlock *OtherPredBB = *PredI == BB ? *++PredI : *PredI;
       if (PHI->getIncomingValueForBlock(OtherPredBB) == AlternativeV)
@@ -5774,7 +5775,7 @@ bool SimplifyCFGOpt::SimplifyUncondBranch(BranchInst *BI,
   // backedge, so we can eliminate BB.
   bool NeedCanonicalLoop =
       Options.NeedCanonicalLoop &&
-      (LoopHeaders && pred_size(BB) > 1 &&
+      (LoopHeaders && BB->hasNPredecessorsOrMore(2) &&
        (LoopHeaders->count(BB) || LoopHeaders->count(Succ)));
   BasicBlock::iterator I = BB->getFirstNonPHIOrDbg()->getIterator();
   if (I->isTerminator() && BB != &BB->getParent()->getEntryBlock() &&
@@ -5853,28 +5854,17 @@ bool SimplifyCFGOpt::SimplifyCondBranch(BranchInst *BI, IRBuilder<> &Builder) {
   if (SimplifyBranchOnICmpChain(BI, Builder, DL))
     return true;
 
-  // If this basic block has a single dominating predecessor block and the
-  // dominating block's condition implies BI's condition, we know the direction
-  // of the BI branch.
-  if (BasicBlock *Dom = BB->getSinglePredecessor()) {
-    auto *PBI = dyn_cast_or_null<BranchInst>(Dom->getTerminator());
-    if (PBI && PBI->isConditional() &&
-        PBI->getSuccessor(0) != PBI->getSuccessor(1)) {
-      assert(PBI->getSuccessor(0) == BB || PBI->getSuccessor(1) == BB);
-      bool CondIsTrue = PBI->getSuccessor(0) == BB;
-      Optional<bool> Implication = isImpliedCondition(
-          PBI->getCondition(), BI->getCondition(), DL, CondIsTrue);
-      if (Implication) {
-        // Turn this into a branch on constant.
-        auto *OldCond = BI->getCondition();
-        ConstantInt *CI = *Implication
-                              ? ConstantInt::getTrue(BB->getContext())
-                              : ConstantInt::getFalse(BB->getContext());
-        BI->setCondition(CI);
-        RecursivelyDeleteTriviallyDeadInstructions(OldCond);
-        return requestResimplify();
-      }
-    }
+  // If this basic block has dominating predecessor blocks and the dominating
+  // blocks' conditions imply BI's condition, we know the direction of BI.
+  Optional<bool> Imp = isImpliedByDomCondition(BI->getCondition(), BI, DL);
+  if (Imp) {
+    // Turn this into a branch on constant.
+    auto *OldCond = BI->getCondition();
+    ConstantInt *TorF = *Imp ? ConstantInt::getTrue(BB->getContext())
+                             : ConstantInt::getFalse(BB->getContext());
+    BI->setCondition(TorF);
+    RecursivelyDeleteTriviallyDeadInstructions(OldCond);
+    return requestResimplify();
   }
 
   // If this basic block is ONLY a compare and a branch, and if a predecessor

@@ -544,10 +544,14 @@ typedef int PACKED_REDUCTION_METHOD_T;
 
 #if KMP_OS_WINDOWS
 #define USE_CBLKDATA
+#if KMP_MSVC_COMPAT
 #pragma warning(push)
 #pragma warning(disable : 271 310)
+#endif
 #include <windows.h>
+#if KMP_MSVC_COMPAT
 #pragma warning(pop)
+#endif
 #endif
 
 #if KMP_OS_UNIX
@@ -560,7 +564,7 @@ typedef int PACKED_REDUCTION_METHOD_T;
 
 // GROUP_AFFINITY is already defined for _MSC_VER>=1600 (VS2010 and later).
 #if KMP_OS_WINDOWS
-#if _MSC_VER < 1600
+#if _MSC_VER < 1600 && KMP_MSVC_COMPAT
 typedef struct GROUP_AFFINITY {
   KAFFINITY Mask;
   WORD Group;
@@ -1042,6 +1046,10 @@ extern kmp_uint64 __kmp_now_nsec();
 /* TODO: tune for KMP_OS_DARWIN */
 #define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
 #define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
+#elif KMP_OS_DRAGONFLY
+/* TODO: tune for KMP_OS_DRAGONFLY */
+#define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
+#define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
 #elif KMP_OS_FREEBSD
 /* TODO: tune for KMP_OS_FREEBSD */
 #define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
@@ -1052,6 +1060,10 @@ extern kmp_uint64 __kmp_now_nsec();
 #define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
 #elif KMP_OS_HURD
 /* TODO: tune for KMP_OS_HURD */
+#define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
+#define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
+#elif KMP_OS_OPENBSD
+/* TODO: tune for KMP_OS_OPENBSD */
 #define KMP_INIT_WAIT 1024U /* initial number of spin-tests   */
 #define KMP_NEXT_WAIT 512U /* susequent number of spin-tests */
 #endif
@@ -2221,6 +2233,18 @@ typedef struct kmp_dephash {
   kmp_uint32 nconflicts;
 #endif
 } kmp_dephash_t;
+
+#if OMP_50_ENABLED
+typedef struct kmp_task_affinity_info {
+  kmp_intptr_t base_addr;
+  size_t len;
+  struct {
+    bool flag1 : 1;
+    bool flag2 : 1;
+    kmp_int32 reserved : 30;
+  } flags;
+} kmp_task_affinity_info_t;
+#endif
 
 #endif
 
@@ -3783,6 +3807,9 @@ KMP_EXPORT void __kmpc_taskloop(ident_t *loc, kmp_int32 gtid, kmp_task_t *task,
 #if OMP_50_ENABLED
 KMP_EXPORT void *__kmpc_task_reduction_init(int gtid, int num_data, void *data);
 KMP_EXPORT void *__kmpc_task_reduction_get_th_data(int gtid, void *tg, void *d);
+KMP_EXPORT kmp_int32 __kmpc_omp_reg_task_with_affinity(
+    ident_t *loc_ref, kmp_int32 gtid, kmp_task_t *new_task, kmp_int32 naffins,
+    kmp_task_affinity_info_t *affin_list);
 #endif
 
 #endif

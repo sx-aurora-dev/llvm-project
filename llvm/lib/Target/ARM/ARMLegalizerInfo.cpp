@@ -75,6 +75,13 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
   const LLT s32 = LLT::scalar(32);
   const LLT s64 = LLT::scalar(64);
 
+  if (ST.isThumb()) {
+    // FIXME: merge with the code for non-Thumb.
+    computeTables();
+    verify(*ST.getInstrInfo());
+    return;
+  }
+
   getActionDefinitionsBuilder(G_GLOBAL_VALUE).legalFor({p0});
   getActionDefinitionsBuilder(G_FRAME_INDEX).legalFor({p0});
 
@@ -108,6 +115,22 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
   getActionDefinitionsBuilder(G_PTRTOINT).legalFor({{s32, p0}});
 
   getActionDefinitionsBuilder({G_ASHR, G_LSHR, G_SHL}).legalFor({s32});
+
+  if (ST.hasV5TOps()) {
+    getActionDefinitionsBuilder(G_CTLZ)
+        .legalFor({s32})
+        .clampScalar(0, s32, s32);
+    getActionDefinitionsBuilder(G_CTLZ_ZERO_UNDEF)
+        .lowerFor({s32})
+        .clampScalar(0, s32, s32);
+  } else {
+    getActionDefinitionsBuilder(G_CTLZ_ZERO_UNDEF)
+        .libcallFor({s32})
+        .clampScalar(0, s32, s32);
+    getActionDefinitionsBuilder(G_CTLZ)
+        .lowerFor({s32})
+        .clampScalar(0, s32, s32);
+  }
 
   getActionDefinitionsBuilder(G_GEP).legalFor({{p0, s32}});
 
@@ -302,7 +325,8 @@ ARMLegalizerInfo::getFCmpLibcalls(CmpInst::Predicate Predicate,
 
 bool ARMLegalizerInfo::legalizeCustom(MachineInstr &MI,
                                       MachineRegisterInfo &MRI,
-                                      MachineIRBuilder &MIRBuilder) const {
+                                      MachineIRBuilder &MIRBuilder,
+                                      GISelChangeObserver &Observer) const {
   using namespace TargetOpcode;
 
   MIRBuilder.setInstr(MI);

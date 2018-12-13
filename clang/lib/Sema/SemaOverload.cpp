@@ -3900,6 +3900,31 @@ CompareStandardConversionSequences(Sema &S, SourceLocation Loc,
           S.Context.getTypeSize(SCS1.getToType(2)))
     return ImplicitConversionSequence::Better;
 
+  // Prefer a compatible vector conversion over a lax vector conversion
+  // For example:
+  //
+  // typedef float __v4sf __attribute__((__vector_size__(16)));
+  // void f(vector float);
+  // void f(vector signed int);
+  // int main() {
+  //   __v4sf a;
+  //   f(a);
+  // }
+  // Here, we'd like to choose f(vector float) and not
+  // report an ambiguous call error
+  if (SCS1.Second == ICK_Vector_Conversion &&
+      SCS2.Second == ICK_Vector_Conversion) {
+    bool SCS1IsCompatibleVectorConversion = S.Context.areCompatibleVectorTypes(
+        SCS1.getFromType(), SCS1.getToType(2));
+    bool SCS2IsCompatibleVectorConversion = S.Context.areCompatibleVectorTypes(
+        SCS2.getFromType(), SCS2.getToType(2));
+
+    if (SCS1IsCompatibleVectorConversion != SCS2IsCompatibleVectorConversion)
+      return SCS1IsCompatibleVectorConversion
+                 ? ImplicitConversionSequence::Better
+                 : ImplicitConversionSequence::Worse;
+  }
+
   return ImplicitConversionSequence::Indistinguishable;
 }
 
@@ -5444,7 +5469,7 @@ static ExprResult CheckConvertedConstantExpression(Sema &S, Expr *From,
 
     if (Notes.empty()) {
       // It's a constant expression.
-      return new (S.Context) ConstantExpr(Result.get());
+      return ConstantExpr::Create(S.Context, Result.get());
     }
   }
 
@@ -6404,7 +6429,12 @@ void Sema::AddFunctionCandidates(const UnresolvedSetImpl &Fns,
         if (Expr *E = Args[0]) {
           // Use the explicit base to restrict the lookup:
           ObjectType = E->getType();
-          ObjectClassification = E->Classify(Context);
+          // Pointers in the object arguments are implicitly dereferenced, so we
+          // always classify them as l-values.
+          if (!ObjectType.isNull() && ObjectType->isPointerType())
+            ObjectClassification = Expr::Classification::makeSimpleLValue();
+          else
+            ObjectClassification = E->Classify(Context);
         } // .. else there is an implicit base.
         FunctionArgs = Args.slice(1);
       }
@@ -8909,12 +8939,14 @@ Sema::AddArgumentDependentLookupCandidates(DeclarationName Name,
       if (ExplicitTemplateArgs)
         continue;
 
-      AddOverloadCandidate(FD, FoundDecl, Args, CandidateSet, false,
+      AddOverloadCandidate(FD, FoundDecl, Args, CandidateSet,
+                           /*SupressUserConversions=*/false,
                            PartialOverloading);
-    } else
-      AddTemplateOverloadCandidate(cast<FunctionTemplateDecl>(*I),
-                                   FoundDecl, ExplicitTemplateArgs,
-                                   Args, CandidateSet, PartialOverloading);
+    } else {
+     AddTemplateOverloadCandidate(
+          cast<FunctionTemplateDecl>(*I), FoundDecl, ExplicitTemplateArgs, Args,
+          CandidateSet, /*SupressUserConversions=*/false, PartialOverloading);
+    }
   }
 }
 
@@ -8947,25 +8979,28 @@ static Comparison compareEnableIfAttrs(const Sema &S, const FunctionDecl *Cand1,
   auto Cand1Attrs = Cand1->specific_attrs<EnableIfAttr>();
   auto Cand2Attrs = Cand2->specific_attrs<EnableIfAttr>();
 
-  auto Cand1I = Cand1Attrs.begin();
   llvm::FoldingSetNodeID Cand1ID, Cand2ID;
-  for (EnableIfAttr *Cand2A : Cand2Attrs) {
+  for (auto Pair : zip_longest(Cand1Attrs, Cand2Attrs)) {
+    Optional<EnableIfAttr *> Cand1A = std::get<0>(Pair);
+    Optional<EnableIfAttr *> Cand2A = std::get<1>(Pair);
+
+    // It's impossible for Cand1 to be better than (or equal to) Cand2 if Cand1
+    // has fewer enable_if attributes than Cand2, and vice versa.
+    if (!Cand1A)
+      return Comparison::Worse;
+    if (!Cand2A)
+      return Comparison::Better;
+
     Cand1ID.clear();
     Cand2ID.clear();
 
-    // It's impossible for Cand1 to be better than (or equal to) Cand2 if Cand1
-    // has fewer enable_if attributes than Cand2.
-    auto Cand1A = Cand1I++;
-    if (Cand1A == Cand1Attrs.end())
-      return Comparison::Worse;
-
-    Cand1A->getCond()->Profile(Cand1ID, S.getASTContext(), true);
-    Cand2A->getCond()->Profile(Cand2ID, S.getASTContext(), true);
+    (*Cand1A)->getCond()->Profile(Cand1ID, S.getASTContext(), true);
+    (*Cand2A)->getCond()->Profile(Cand2ID, S.getASTContext(), true);
     if (Cand1ID != Cand2ID)
       return Comparison::Worse;
   }
 
-  return Cand1I == Cand1Attrs.end() ? Comparison::Equal : Comparison::Better;
+  return Comparison::Equal;
 }
 
 static bool isBetterMultiversionCandidate(const OverloadCandidate &Cand1,
@@ -12811,7 +12846,8 @@ Sema::BuildCallToMemberFunction(Scope *S, Expr *MemExprE,
 
     CXXMemberCallExpr *call
       = new (Context) CXXMemberCallExpr(Context, MemExprE, Args,
-                                        resultType, valueKind, RParenLoc);
+                                        resultType, valueKind, RParenLoc,
+                                        proto->getNumParams());
 
     if (CheckCallReturnType(proto->getReturnType(), op->getRHS()->getBeginLoc(),
                             call, nullptr))
@@ -12961,9 +12997,11 @@ Sema::BuildCallToMemberFunction(Scope *S, Expr *MemExprE,
   ResultType = ResultType.getNonLValueExprType(Context);
 
   assert(Method && "Member call to something that isn't a method?");
+  const auto *Proto = Method->getType()->getAs<FunctionProtoType>();
   CXXMemberCallExpr *TheCall =
     new (Context) CXXMemberCallExpr(Context, MemExprE, Args,
-                                    ResultType, VK, RParenLoc);
+                                    ResultType, VK, RParenLoc,
+                                    Proto->getNumParams());
 
   // Check for a valid return type.
   if (CheckCallReturnType(Method->getReturnType(), MemExpr->getMemberLoc(),
@@ -12983,8 +13021,6 @@ Sema::BuildCallToMemberFunction(Scope *S, Expr *MemExprE,
   }
 
   // Convert the rest of the arguments
-  const FunctionProtoType *Proto =
-    Method->getType()->getAs<FunctionProtoType>();
   if (ConvertArgumentsForCall(TheCall, MemExpr, Method, Proto, Args,
                               RParenLoc))
     return ExprError();
@@ -13232,29 +13268,14 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
   if (NewFn.isInvalid())
     return true;
 
+  // The number of argument slots to allocate in the call. If we have default
+  // arguments we need to allocate space for them as well. We additionally
+  // need one more slot for the object parameter.
+  unsigned NumArgsSlots = 1 + std::max<unsigned>(Args.size(), NumParams);
+
   // Build the full argument list for the method call (the implicit object
   // parameter is placed at the beginning of the list).
-  SmallVector<Expr *, 8> MethodArgs(Args.size() + 1);
-  MethodArgs[0] = Object.get();
-  std::copy(Args.begin(), Args.end(), MethodArgs.begin() + 1);
-
-  // Once we've built TheCall, all of the expressions are properly
-  // owned.
-  QualType ResultTy = Method->getReturnType();
-  ExprValueKind VK = Expr::getValueKindForType(ResultTy);
-  ResultTy = ResultTy.getNonLValueExprType(Context);
-
-  CXXOperatorCallExpr *TheCall = new (Context)
-      CXXOperatorCallExpr(Context, OO_Call, NewFn.get(), MethodArgs, ResultTy,
-                          VK, RParenLoc, FPOptions());
-
-  if (CheckCallReturnType(Method->getReturnType(), LParenLoc, TheCall, Method))
-    return true;
-
-  // We may have default arguments. If so, we need to allocate more
-  // slots in the call for them.
-  if (Args.size() < NumParams)
-    TheCall->setNumArgs(Context, NumParams + 1);
+  SmallVector<Expr *, 8> MethodArgs(NumArgsSlots);
 
   bool IsError = false;
 
@@ -13266,7 +13287,7 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
     IsError = true;
   else
     Object = ObjRes;
-  TheCall->setArg(0, Object.get());
+  MethodArgs[0] = Object.get();
 
   // Check the argument types.
   for (unsigned i = 0; i != NumParams; i++) {
@@ -13295,7 +13316,7 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
       Arg = DefArg.getAs<Expr>();
     }
 
-    TheCall->setArg(i + 1, Arg);
+    MethodArgs[i + 1] = Arg;
   }
 
   // If this is a variadic call, handle args passed through "...".
@@ -13305,13 +13326,26 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
       ExprResult Arg = DefaultVariadicArgumentPromotion(Args[i], VariadicMethod,
                                                         nullptr);
       IsError |= Arg.isInvalid();
-      TheCall->setArg(i + 1, Arg.get());
+      MethodArgs[i + 1] = Arg.get();
     }
   }
 
-  if (IsError) return true;
+  if (IsError)
+    return true;
 
   DiagnoseSentinelCalls(Method, LParenLoc, Args);
+
+  // Once we've built TheCall, all of the expressions are properly owned.
+  QualType ResultTy = Method->getReturnType();
+  ExprValueKind VK = Expr::getValueKindForType(ResultTy);
+  ResultTy = ResultTy.getNonLValueExprType(Context);
+
+  CXXOperatorCallExpr *TheCall = new (Context)
+      CXXOperatorCallExpr(Context, OO_Call, NewFn.get(), MethodArgs, ResultTy,
+                          VK, RParenLoc, FPOptions());
+
+  if (CheckCallReturnType(Method->getReturnType(), LParenLoc, TheCall, Method))
+    return true;
 
   if (CheckFunctionCall(Method, TheCall, Proto))
     return true;

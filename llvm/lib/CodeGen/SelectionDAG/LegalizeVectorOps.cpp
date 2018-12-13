@@ -132,6 +132,7 @@ class VectorLegalizer {
   SDValue ExpandCTPOP(SDValue Op);
   SDValue ExpandCTLZ(SDValue Op);
   SDValue ExpandCTTZ(SDValue Op);
+  SDValue ExpandFunnelShift(SDValue Op);
   SDValue ExpandFMINNUM_FMAXNUM(SDValue Op);
   SDValue ExpandStrictFPOp(SDValue Op);
 
@@ -244,7 +245,11 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
         if (SDValue Lowered = TLI.LowerOperation(Result, DAG)) {
           assert(Lowered->getNumValues() == Op->getNumValues() &&
                  "Unexpected number of results");
-          Changed = Lowered != Result;
+          if (Lowered != Result) {
+            // Make sure the new code is also legal.
+            Lowered = LegalizeOp(Lowered);
+            Changed = true;
+          }
           return TranslateLegalizeResults(Op, Lowered);
         }
         LLVM_FALLTHROUGH;
@@ -266,7 +271,11 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
         return TranslateLegalizeResults(Op, Result);
       case TargetLowering::Custom: {
         SDValue Lowered = TLI.LowerOperation(Result, DAG);
-        Changed = Lowered != Result;
+        if (Lowered != Result) {
+          // Make sure the new code is also legal.
+          Lowered = LegalizeOp(Lowered);
+          Changed = true;
+        }
         return TranslateLegalizeResults(Op, Lowered);
       }
       case TargetLowering::Expand:
@@ -322,6 +331,8 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
   case ISD::ADD:
   case ISD::SUB:
   case ISD::MUL:
+  case ISD::MULHS:
+  case ISD::MULHU:
   case ISD::SDIV:
   case ISD::UDIV:
   case ISD::SREM:
@@ -739,6 +750,9 @@ SDValue VectorLegalizer::Expand(SDValue Op) {
   case ISD::CTTZ:
   case ISD::CTTZ_ZERO_UNDEF:
     return ExpandCTTZ(Op);
+  case ISD::FSHL:
+  case ISD::FSHR:
+    return ExpandFunnelShift(Op);
   case ISD::FMINNUM:
   case ISD::FMAXNUM:
     return ExpandFMINNUM_FMAXNUM(Op);
@@ -1116,32 +1130,34 @@ SDValue VectorLegalizer::ExpandFSUB(SDValue Op) {
 }
 
 SDValue VectorLegalizer::ExpandCTPOP(SDValue Op) {
-  // Attempt to expand using TargetLowering.
   SDValue Result;
   if (TLI.expandCTPOP(Op.getNode(), Result, DAG))
     return Result;
 
-  // Otherwise go ahead and unroll.
   return DAG.UnrollVectorOp(Op.getNode());
 }
 
 SDValue VectorLegalizer::ExpandCTLZ(SDValue Op) {
-  // Attempt to expand using TargetLowering.
   SDValue Result;
   if (TLI.expandCTLZ(Op.getNode(), Result, DAG))
     return Result;
 
-  // Otherwise go ahead and unroll.
   return DAG.UnrollVectorOp(Op.getNode());
 }
 
 SDValue VectorLegalizer::ExpandCTTZ(SDValue Op) {
-  // Attempt to expand using TargetLowering.
   SDValue Result;
   if (TLI.expandCTTZ(Op.getNode(), Result, DAG))
     return Result;
 
-  // Otherwise go ahead and unroll.
+  return DAG.UnrollVectorOp(Op.getNode());
+}
+
+SDValue VectorLegalizer::ExpandFunnelShift(SDValue Op) {
+  SDValue Result;
+  if (TLI.expandFunnelShift(Op.getNode(), Result, DAG))
+    return Result;
+
   return DAG.UnrollVectorOp(Op.getNode());
 }
 
