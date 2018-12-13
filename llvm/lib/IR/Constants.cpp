@@ -184,18 +184,15 @@ bool Constant::isNotMinSignedValue() const {
   if (const ConstantFP *CFP = dyn_cast<ConstantFP>(this))
     return !CFP->getValueAPF().bitcastToAPInt().isMinSignedValue();
 
-  // Check for constant vectors which are splats of INT_MIN values.
-  if (const ConstantVector *CV = dyn_cast<ConstantVector>(this))
-    if (Constant *Splat = CV->getSplatValue())
-      return Splat->isNotMinSignedValue();
-
-  // Check for constant vectors which are splats of INT_MIN values.
-  if (const ConstantDataVector *CV = dyn_cast<ConstantDataVector>(this)) {
-    if (CV->isSplat()) {
-      if (CV->getElementType()->isFloatingPointTy())
-        return !CV->getElementAsAPFloat(0).bitcastToAPInt().isMinSignedValue();
-      return !CV->getElementAsAPInt(0).isMinSignedValue();
+  // Check that vectors don't contain INT_MIN
+  if (this->getType()->isVectorTy()) {
+    unsigned NumElts = this->getType()->getVectorNumElements();
+    for (unsigned i = 0; i != NumElts; ++i) {
+      Constant *Elt = this->getAggregateElement(i);
+      if (!Elt || !Elt->isNotMinSignedValue())
+        return false;
     }
+    return true;
   }
 
   // It *may* contain INT_MIN, we can't tell.
@@ -722,14 +719,36 @@ Constant *ConstantFP::get(Type *Ty, StringRef Str) {
   return C;
 }
 
-Constant *ConstantFP::getNaN(Type *Ty, bool Negative, unsigned Type) {
+Constant *ConstantFP::getNaN(Type *Ty, bool Negative, uint64_t Payload) {
   const fltSemantics &Semantics = *TypeToFloatSemantics(Ty->getScalarType());
-  APFloat NaN = APFloat::getNaN(Semantics, Negative, Type);
+  APFloat NaN = APFloat::getNaN(Semantics, Negative, Payload);
   Constant *C = get(Ty->getContext(), NaN);
 
   if (VectorType *VTy = dyn_cast<VectorType>(Ty))
     return ConstantVector::getSplat(VTy->getNumElements(), C);
 
+  return C;
+}
+
+Constant *ConstantFP::getQNaN(Type *Ty, bool Negative, APInt *Payload) {
+  const fltSemantics &Semantics = *TypeToFloatSemantics(Ty->getScalarType());
+  APFloat NaN = APFloat::getQNaN(Semantics, Negative, Payload);
+  Constant *C = get(Ty->getContext(), NaN);
+  
+  if (VectorType *VTy = dyn_cast<VectorType>(Ty))
+    return ConstantVector::getSplat(VTy->getNumElements(), C);
+  
+  return C;
+}
+
+Constant *ConstantFP::getSNaN(Type *Ty, bool Negative, APInt *Payload) {
+  const fltSemantics &Semantics = *TypeToFloatSemantics(Ty->getScalarType());
+  APFloat NaN = APFloat::getSNaN(Semantics, Negative, Payload);
+  Constant *C = get(Ty->getContext(), NaN);
+  
+  if (VectorType *VTy = dyn_cast<VectorType>(Ty))
+    return ConstantVector::getSplat(VTy->getNumElements(), C);
+  
   return C;
 }
 
@@ -940,7 +959,7 @@ ConstantAggregate::ConstantAggregate(CompositeType *T, ValueTy VT,
                                      ArrayRef<Constant *> V)
     : Constant(T, VT, OperandTraits<ConstantAggregate>::op_end(this) - V.size(),
                V.size()) {
-  std::copy(V.begin(), V.end(), op_begin());
+  llvm::copy(V, op_begin());
 
   // Check that types match, unless this is an opaque struct.
   if (auto *ST = dyn_cast<StructType>(T))

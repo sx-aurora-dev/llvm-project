@@ -90,6 +90,9 @@ namespace object {
 cl::opt<bool> SectionContents("contents",
                               cl::desc("Dump each section's contents"),
                               cl::sub(ObjectFileSubcommand));
+cl::opt<bool> SectionDependentModules("dep-modules",
+                                      cl::desc("Dump each dependent module"),
+                                      cl::sub(ObjectFileSubcommand));
 cl::list<std::string> InputFilenames(cl::Positional, cl::desc("<input files>"),
                                      cl::OneOrMore,
                                      cl::sub(ObjectFileSubcommand));
@@ -612,8 +615,7 @@ Expected<Error (*)(lldb_private::Module &)> opts::symbols::getAction() {
 
   if (DumpAST) {
     if (Find != FindType::None)
-      return make_string_error(
-          "Cannot both search and dump AST.");
+      return make_string_error("Cannot both search and dump AST.");
     if (Regex || !Context.empty() || !Name.empty() || !File.empty() ||
         Line != 0)
       return make_string_error(
@@ -724,6 +726,14 @@ static int dumpObjectFiles(Debugger &Dbg) {
     ModuleSpec Spec{FileSpec(File)};
 
     auto ModulePtr = std::make_shared<lldb_private::Module>(Spec);
+
+    ObjectFile *ObjectPtr = ModulePtr->GetObjectFile();
+    if (!ObjectPtr) {
+      WithColor::error() << File << " not recognised as an object file\n";
+      HadErrors = 1;
+      continue;
+    }
+
     // Fetch symbol vendor before we get the section list to give the symbol
     // vendor a chance to populate it.
     ModulePtr->GetSymbolVendor();
@@ -734,9 +744,14 @@ static int dumpObjectFiles(Debugger &Dbg) {
       continue;
     }
 
+    Printer.formatLine("Plugin name: {0}", ObjectPtr->GetPluginName());
     Printer.formatLine("Architecture: {0}",
                        ModulePtr->GetArchitecture().GetTriple().getTriple());
     Printer.formatLine("UUID: {0}", ModulePtr->GetUUID().GetAsString());
+    Printer.formatLine("Executable: {0}", ObjectPtr->IsExecutable());
+    Printer.formatLine("Stripped: {0}", ObjectPtr->IsStripped());
+    Printer.formatLine("Type: {0}", ObjectPtr->GetType());
+    Printer.formatLine("Strata: {0}", ObjectPtr->GetStrata());
 
     size_t Count = Sections->GetNumSections(0);
     Printer.formatLine("Showing {0} sections", Count);
@@ -755,6 +770,20 @@ static int dumpObjectFiles(Debugger &Dbg) {
         S->GetSectionData(Data);
         ArrayRef<uint8_t> Bytes = {Data.GetDataStart(), Data.GetDataEnd()};
         Printer.formatBinary("Data: ", Bytes, 0);
+      }
+      Printer.NewLine();
+    }
+
+    if (opts::object::SectionDependentModules) {
+      // A non-empty section list ensures a valid object file.
+      auto Obj = ModulePtr->GetObjectFile();
+      FileSpecList Files;
+      auto Count = Obj->GetDependentModules(Files);
+      Printer.formatLine("Showing {0} dependent module(s)", Count);
+      for (size_t I = 0; I < Files.GetSize(); ++I) {
+        AutoIndent Indent(Printer, 2);
+        Printer.formatLine("Name: {0}",
+                           Files.GetFileSpecAtIndex(I).GetCString());
       }
       Printer.NewLine();
     }
@@ -832,8 +861,8 @@ bool opts::irmemorymap::evalMalloc(StringRef Line,
     ++Probe;
   }
 
-  // Insert the new allocation into the interval map. Use unique allocation IDs
-  // to inhibit interval coalescing.
+  // Insert the new allocation into the interval map. Use unique allocation
+  // IDs to inhibit interval coalescing.
   static unsigned AllocationID = 0;
   if (Size)
     State.Allocations.insert(Addr, EndOfRegion, AllocationID++);
@@ -934,8 +963,13 @@ int main(int argc, const char *argv[]) {
   cl::ParseCommandLineOptions(argc, argv, "LLDB Testing Utility\n");
 
   SystemLifetimeManager DebuggerLifetime;
-  DebuggerLifetime.Initialize(llvm::make_unique<SystemInitializerTest>(),
-                              nullptr);
+  if (auto e = DebuggerLifetime.Initialize(
+          llvm::make_unique<SystemInitializerTest>(), {}, nullptr)) {
+    WithColor::error() << "initialization failed: " << toString(std::move(e))
+                       << '\n';
+    return 1;
+  }
+
   CleanUp TerminateDebugger([&] { DebuggerLifetime.Terminate(); });
 
   auto Dbg = lldb_private::Debugger::CreateInstance();

@@ -24,6 +24,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/CodeGen/WasmEHFuncInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/Function.h"
@@ -122,13 +123,21 @@ WebAssemblyTargetLowering::WebAssemblyTargetLowering(
       for (auto Op : {ISD::SADDSAT, ISD::UADDSAT})
         setOperationAction(Op, T, Legal);
 
-  for (auto T : {MVT::i32, MVT::i64}) {
-    // Expand unavailable integer operations.
-    for (auto Op :
-         {ISD::BSWAP, ISD::SMUL_LOHI, ISD::UMUL_LOHI, ISD::MULHS, ISD::MULHU,
-          ISD::SDIVREM, ISD::UDIVREM, ISD::SHL_PARTS, ISD::SRA_PARTS,
-          ISD::SRL_PARTS, ISD::ADDC, ISD::ADDE, ISD::SUBC, ISD::SUBE}) {
+  // Expand unavailable integer operations.
+  for (auto Op :
+       {ISD::BSWAP, ISD::SMUL_LOHI, ISD::UMUL_LOHI, ISD::MULHS, ISD::MULHU,
+        ISD::SDIVREM, ISD::UDIVREM, ISD::SHL_PARTS, ISD::SRA_PARTS,
+        ISD::SRL_PARTS, ISD::ADDC, ISD::ADDE, ISD::SUBC, ISD::SUBE}) {
+    for (auto T : {MVT::i32, MVT::i64}) {
       setOperationAction(Op, T, Expand);
+    }
+    if (Subtarget->hasSIMD128()) {
+      for (auto T : {MVT::v16i8, MVT::v8i16, MVT::v4i32}) {
+        setOperationAction(Op, T, Expand);
+      }
+      if (EnableUnimplementedWasmSIMDInstrs) {
+        setOperationAction(Op, MVT::v2i64, Expand);
+      }
     }
   }
 
@@ -234,6 +243,7 @@ WebAssemblyTargetLowering::WebAssemblyTargetLowering(
 
   // Exception handling intrinsics
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
 
   setMaxAtomicSizeInBitsSupported(64);
 }
@@ -882,6 +892,8 @@ SDValue WebAssemblyTargetLowering::LowerOperation(SDValue Op,
   case ISD::EXTRACT_VECTOR_ELT:
   case ISD::INSERT_VECTOR_ELT:
     return LowerAccessVectorElement(Op, DAG);
+  case ISD::INTRINSIC_VOID:
+    return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::VECTOR_SHUFFLE:
     return LowerVECTOR_SHUFFLE(Op, DAG);
   case ISD::SHL:
@@ -1041,6 +1053,44 @@ WebAssemblyTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                             Twine(MF.getFunctionNumber()));
     return DAG.getNode(WebAssemblyISD::Wrapper, DL, VT,
                        DAG.getMCSymbol(S, PtrVT));
+  }
+  }
+}
+
+SDValue
+WebAssemblyTargetLowering::LowerINTRINSIC_VOID(SDValue Op,
+                                               SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  SDLoc DL(Op);
+
+  switch (IntNo) {
+  default:
+    return {}; // Don't custom lower most intrinsics.
+
+  case Intrinsic::wasm_throw: {
+    int Tag = cast<ConstantSDNode>(Op.getOperand(2).getNode())->getZExtValue();
+    switch (Tag) {
+    case CPP_EXCEPTION: {
+      const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+      MVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
+      const char *SymName = MF.createExternalSymbolName("__cpp_exception");
+      SDValue SymNode =
+          DAG.getNode(WebAssemblyISD::Wrapper, DL, PtrVT,
+                      DAG.getTargetExternalSymbol(
+                          SymName, PtrVT, WebAssemblyII::MO_SYMBOL_EVENT));
+      return DAG.getNode(WebAssemblyISD::THROW, DL,
+                         MVT::Other, // outchain type
+                         {
+                             Op.getOperand(0), // inchain
+                             SymNode,          // exception symbol
+                             Op.getOperand(3)  // thrown value
+                         });
+    }
+    default:
+      llvm_unreachable("Invalid tag!");
+    }
+    break;
   }
   }
 }

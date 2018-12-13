@@ -25,10 +25,10 @@
 
 #if defined(__x86_64__)
 #define GET_LINK_MAP_BY_DLOPEN_HANDLE(handle) \
-  _GET_LINK_MAP_BY_DLOPEN_HANDLE(handle, 312)
+  _GET_LINK_MAP_BY_DLOPEN_HANDLE(handle, 264)
 #elif defined(__i386__)
 #define GET_LINK_MAP_BY_DLOPEN_HANDLE(handle) \
-  _GET_LINK_MAP_BY_DLOPEN_HANDLE(handle, 164)
+  _GET_LINK_MAP_BY_DLOPEN_HANDLE(handle, 136)
 #endif
 
 namespace __sanitizer {
@@ -60,6 +60,27 @@ extern unsigned struct_timespec_sz;
 extern unsigned struct_sembuf_sz;
 
 extern unsigned struct_kevent_sz;
+extern unsigned struct_FTS_sz;
+extern unsigned struct_FTSENT_sz;
+
+extern unsigned struct_regex_sz;
+extern unsigned struct_regmatch_sz;
+
+struct __sanitizer_regmatch {
+  OFF_T rm_so;
+  OFF_T rm_eo;
+};
+
+typedef struct __sanitizer_modctl_load {
+  const char *ml_filename;
+  int ml_flags;
+  const char *ml_props;
+  uptr ml_propslen;
+} __sanitizer_modctl_load_t;
+extern const int modctl_load;
+extern const int modctl_unload;
+extern const int modctl_stat;
+extern const int modctl_exists;
 
 union __sanitizer_sigval {
   int sival_int;
@@ -459,6 +480,8 @@ struct __sanitizer_ttyent {
   char *ty_comment;
   char *ty_class;
 };
+
+extern const unsigned long __sanitizer_bufsiz;
 
 #define IOC_NRBITS 8
 #define IOC_TYPEBITS 8
@@ -2200,6 +2223,36 @@ extern unsigned IOCTL_SNDCTL_DSP_SILENCE;
 
 extern const int si_SEGV_MAPERR;
 extern const int si_SEGV_ACCERR;
+
+extern const unsigned SHA1_CTX_sz;
+extern const unsigned SHA1_return_length;
+
+extern const unsigned MD4_CTX_sz;
+extern const unsigned MD4_return_length;
+
+extern const unsigned RMD160_CTX_sz;
+extern const unsigned RMD160_return_length;
+
+extern const unsigned MD5_CTX_sz;
+extern const unsigned MD5_return_length;
+
+extern const unsigned fpos_t_sz;
+
+extern const unsigned MD2_CTX_sz;
+extern const unsigned MD2_return_length;
+
+#define SHA2_EXTERN(LEN)                          \
+  extern const unsigned SHA##LEN##_CTX_sz;        \
+  extern const unsigned SHA##LEN##_return_length; \
+  extern const unsigned SHA##LEN##_block_length;  \
+  extern const unsigned SHA##LEN##_digest_length
+
+SHA2_EXTERN(224);
+SHA2_EXTERN(256);
+SHA2_EXTERN(384);
+SHA2_EXTERN(512);
+
+#undef SHA2_EXTERN
 }  // namespace __sanitizer
 
 #define CHECK_TYPE_SIZE(TYPE) \
