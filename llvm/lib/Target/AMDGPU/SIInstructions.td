@@ -247,7 +247,7 @@ def SI_LOOP : CFPseudoInstSI <
   (outs), (ins SReg_64:$saved, brtarget:$target),
   [(AMDGPUloop i64:$saved, bb:$target)], 1, 1> {
   let Size = 8;
-  let isBranch = 0;
+  let isBranch = 1;
   let hasSideEffects = 1;
 }
 
@@ -307,6 +307,7 @@ def SI_ILLEGAL_COPY : SPseudoInstSI <
 def SI_BR_UNDEF : SPseudoInstSI <(outs), (ins sopp_brtarget:$simm16)> {
   let isTerminator = 1;
   let usesCustomInserter = 1;
+  let isBranch = 1;
 }
 
 def SI_PS_LIVE : PseudoInstSI <
@@ -1536,15 +1537,15 @@ def : GCNPat <
 } // End SubtargetPredicate = HasVOP3PInsts
 
 
-// def : GCNPat <
-//   (v2f16 (scalar_to_vector f16:$src0)),
-//   (COPY $src0)
-// >;
+def : GCNPat <
+  (v2f16 (scalar_to_vector f16:$src0)),
+  (COPY $src0)
+>;
 
-// def : GCNPat <
-//   (v2i16 (scalar_to_vector i16:$src0)),
-//   (COPY $src0)
-// >;
+def : GCNPat <
+  (v2i16 (scalar_to_vector i16:$src0)),
+  (COPY $src0)
+>;
 
 def : GCNPat <
   (v4i16 (scalar_to_vector i16:$src0)),

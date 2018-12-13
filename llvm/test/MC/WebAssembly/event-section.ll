@@ -1,6 +1,5 @@
-; XFAIL: *
-; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling -verify-machineinstrs %s -o - | obj2yaml | FileCheck %s
-; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling -verify-machineinstrs %s -o - | llvm-readobj -s | FileCheck -check-prefix=SEC %s
+; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling %s -o - | obj2yaml | FileCheck %s
+; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling %s -o - | llvm-readobj -s | FileCheck -check-prefix=SEC %s
 
 target triple = "wasm32-unknown-unknown"
 
@@ -41,7 +40,7 @@ define i32 @test_throw1(i8* %p) {
 ; CHECK-NEXT:         Offset:          0x00000006
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_EVENT_INDEX_LEB
 ; CHECK-NEXT:         Index:           1
-; CHECK-NEXT:         Offset:          0x00000013
+; CHECK-NEXT:         Offset:          0x00000011
 
 ; CHECK:        - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
@@ -54,6 +53,6 @@ define i32 @test_throw1(i8* %p) {
 ; CHECK-NEXT:         Flags:           [ BINDING_WEAK ]
 ; CHECK-NEXT:         Event:           0
 
-; SEC:          Type: EVENT (0xC)
+; SEC:          Type: EVENT (0xD)
 ; SEC-NEXT:     Size: 3
 ; SEC-NEXT:     Offset: 97

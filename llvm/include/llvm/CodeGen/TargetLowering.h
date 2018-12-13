@@ -269,6 +269,14 @@ public:
     return true;
   }
 
+  /// Return true if it is profitable to convert a select of FP constants into
+  /// a constant pool load whose address depends on the select condition. The
+  /// parameter may be used to differentiate a select with FP compare from
+  /// integer compare.
+  virtual bool reduceSelectOfFPConstantLoads(bool IsFPSetCC) const {
+    return true;
+  }
+
   /// Return true if multiple condition registers are available.
   bool hasMultipleConditionRegisters() const {
     return HasMultipleConditionRegisters;
@@ -1738,6 +1746,16 @@ public:
     return false;
   }
 
+  /// Return true if it is more correct/profitable to use strict FP_TO_INT
+  /// conversion operations - canonicalizing the FP source value instead of
+  /// converting all cases and then selecting based on value.
+  /// This may be true if the target throws exceptions for out of bounds
+  /// conversions or has fast FP CMOV.
+  virtual bool shouldUseStrictFP_TO_INT(EVT FpVT, EVT IntVT,
+                                        bool IsSigned) const {
+    return false;
+  }
+
   //===--------------------------------------------------------------------===//
   // TargetLowering Configuration Methods - These methods should be invoked by
   // the derived class constructor to configure this object for the target.
@@ -2209,6 +2227,12 @@ public:
   }
 
   virtual bool isZExtFree(EVT FromTy, EVT ToTy) const {
+    return false;
+  }
+
+  /// Return true if sign-extension from FromTy to ToTy is cheaper than
+  /// zero-extension.
+  virtual bool isSExtCheaperThanZExt(EVT FromTy, EVT ToTy) const {
     return false;
   }
 
@@ -3664,6 +3688,12 @@ public:
                  SelectionDAG &DAG, MulExpansionKind Kind,
                  SDValue LL = SDValue(), SDValue LH = SDValue(),
                  SDValue RL = SDValue(), SDValue RH = SDValue()) const;
+
+  /// Expand funnel shift.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandFunnelShift(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
 
   /// Expand float(f32) to SINT(i64) conversion
   /// \param N Node to expand

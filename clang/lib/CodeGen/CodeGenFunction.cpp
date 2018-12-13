@@ -28,10 +28,10 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/Basic/Builtins.h"
+#include "clang/Basic/CodeGenOptions.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
-#include "clang/Frontend/CodeGenOptions.h"
-#include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Intrinsics.h"
@@ -1073,9 +1073,8 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
     // Count the implicit return.
     if (!endsWithReturn(D))
       ++NumReturnExprs;
-  } else if (CurFnInfo->getReturnInfo().getKind() == ABIArgInfo::Indirect &&
-             !hasScalarEvaluationKind(CurFnInfo->getReturnType())) {
-    // Indirect aggregate return; emit returned value directly into sret slot.
+  } else if (CurFnInfo->getReturnInfo().getKind() == ABIArgInfo::Indirect) {
+    // Indirect return; emit returned value directly into sret slot.
     // This reduces code size, and affects correctness in C++.
     auto AI = CurFn->arg_begin();
     if (CurFnInfo->getReturnInfo().isSRetAfterThis())
@@ -1513,10 +1512,11 @@ bool CodeGenFunction::ConstantFoldsToSimpleInteger(const Expr *Cond,
                                                    bool AllowLabels) {
   // FIXME: Rename and handle conversion of other evaluatable things
   // to bool.
-  llvm::APSInt Int;
-  if (!Cond->EvaluateAsInt(Int, getContext()))
+  Expr::EvalResult Result;
+  if (!Cond->EvaluateAsInt(Result, getContext()))
     return false;  // Not foldable, not integer or not fully evaluatable.
 
+  llvm::APSInt Int = Result.Val.getInt();
   if (!AllowLabels && CodeGenFunction::ContainsLabel(Cond))
     return false;  // Contains a label.
 

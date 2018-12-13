@@ -36,14 +36,14 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CharInfo.h"
+#include "clang/Basic/CodeGenOptions.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/Version.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
-#include "clang/Frontend/CodeGenOptions.h"
-#include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -457,6 +457,9 @@ void CodeGenModule::Release() {
   if (CodeGenOpts.EmitCodeView) {
     // Indicate that we want CodeView in the metadata.
     getModule().addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+  }
+  if (CodeGenOpts.CodeViewGHash) {
+    getModule().addModuleFlag(llvm::Module::Warning, "CodeViewGHash", 1);
   }
   if (CodeGenOpts.ControlFlowGuard) {
     // We want function ID tables for Control Flow Guard.
@@ -963,12 +966,19 @@ static std::string getMangledNameImpl(const CodeGenModule &CGM, GlobalDecl GD,
 
   if (const auto *FD = dyn_cast<FunctionDecl>(ND))
     if (FD->isMultiVersion() && !OmitMultiVersionMangling) {
-      if (FD->isCPUDispatchMultiVersion() || FD->isCPUSpecificMultiVersion())
+      switch (FD->getMultiVersionKind()) {
+      case MultiVersionKind::CPUDispatch:
+      case MultiVersionKind::CPUSpecific:
         AppendCPUSpecificCPUDispatchMangling(CGM,
                                              FD->getAttr<CPUSpecificAttr>(),
                                              GD.getMultiVersionIndex(), Out);
-      else
+        break;
+      case MultiVersionKind::Target:
         AppendTargetMangling(CGM, FD->getAttr<TargetAttr>(), Out);
+        break;
+      case MultiVersionKind::None:
+        llvm_unreachable("None multiversion type isn't valid here");
+      }
     }
 
   return Out.str();
@@ -993,8 +1003,10 @@ void CodeGenModule::UpdateMultiVersionNames(GlobalDecl GD,
            "Other GD should now be a multiversioned function");
     // OtherFD is the version of this function that was mangled BEFORE
     // becoming a MultiVersion function.  It potentially needs to be updated.
-    const FunctionDecl *OtherFD =
-        OtherGD.getCanonicalDecl().getDecl()->getAsFunction();
+    const FunctionDecl *OtherFD = OtherGD.getCanonicalDecl()
+                                      .getDecl()
+                                      ->getAsFunction()
+                                      ->getMostRecentDecl();
     std::string OtherName = getMangledNameImpl(*this, OtherGD, OtherFD);
     // This is so that if the initial version was already the 'default'
     // version, we don't try to update it.
@@ -2573,11 +2585,22 @@ void CodeGenModule::emitCPUDispatchDefinition(GlobalDecl GD) {
 
     llvm::Constant *Func = GetGlobalValue(MangledName);
 
-    if (!Func)
+    if (!Func) {
+      GlobalDecl ExistingDecl = Manglings.lookup(MangledName);
+      if (ExistingDecl.getDecl() &&
+          ExistingDecl.getDecl()->getAsFunction()->isDefined()) {
+        EmitGlobalFunctionDefinition(ExistingDecl, nullptr);
+        Func = GetGlobalValue(MangledName);
+      } else {
+        if (!ExistingDecl.getDecl())
+          ExistingDecl = GD.getWithMultiVersionIndex(Index);
+
       Func = GetOrCreateLLVMFunction(
-          MangledName, DeclTy, GD.getWithMultiVersionIndex(Index),
+          MangledName, DeclTy, ExistingDecl,
           /*ForVTable=*/false, /*DontDefer=*/true,
           /*IsThunk=*/false, llvm::AttributeList(), ForDefinition);
+      }
+    }
 
     llvm::SmallVector<StringRef, 32> Features;
     Target.getCPUSpecificCPUDispatchFeatures(II->getName(), Features);

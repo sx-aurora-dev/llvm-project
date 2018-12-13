@@ -518,17 +518,23 @@ void ASTStmtWriter::VisitImaginaryLiteral(ImaginaryLiteral *E) {
 
 void ASTStmtWriter::VisitStringLiteral(StringLiteral *E) {
   VisitExpr(E);
-  Record.push_back(E->getByteLength());
+
+  // Store the various bits of data of StringLiteral.
   Record.push_back(E->getNumConcatenated());
+  Record.push_back(E->getLength());
+  Record.push_back(E->getCharByteWidth());
   Record.push_back(E->getKind());
   Record.push_back(E->isPascal());
-  // FIXME: String data should be stored as a blob at the end of the
-  // StringLiteral. However, we can't do so now because we have no
-  // provision for coping with abbreviations when we're jumping around
-  // the AST file during deserialization.
-  Record.append(E->getBytes().begin(), E->getBytes().end());
+
+  // Store the trailing array of SourceLocation.
   for (unsigned I = 0, N = E->getNumConcatenated(); I != N; ++I)
     Record.AddSourceLocation(E->getStrTokenLoc(I));
+
+  // Store the trailing array of char holding the string data.
+  StringRef StrData = E->getBytes();
+  for (unsigned I = 0, N = E->getByteLength(); I != N; ++I)
+    Record.push_back(StrData[I]);
+
   Code = serialization::EXPR_STRING_LITERAL;
 }
 
@@ -553,11 +559,11 @@ void ASTStmtWriter::VisitParenExpr(ParenExpr *E) {
 
 void ASTStmtWriter::VisitParenListExpr(ParenListExpr *E) {
   VisitExpr(E);
-  Record.push_back(E->NumExprs);
-  for (unsigned i=0; i != E->NumExprs; ++i)
-    Record.AddStmt(E->Exprs[i]);
-  Record.AddSourceLocation(E->LParenLoc);
-  Record.AddSourceLocation(E->RParenLoc);
+  Record.push_back(E->getNumExprs());
+  for (auto *SubStmt : E->exprs())
+    Record.AddStmt(SubStmt);
+  Record.AddSourceLocation(E->getLParenLoc());
+  Record.AddSourceLocation(E->getRParenLoc());
   Code = serialization::EXPR_PAREN_LIST;
 }
 
@@ -655,8 +661,8 @@ void ASTStmtWriter::VisitMemberExpr(MemberExpr *E) {
   if (E->hasQualifier())
     Record.AddNestedNameSpecifierLoc(E->getQualifierLoc());
 
-  Record.push_back(E->HasTemplateKWAndArgsInfo);
-  if (E->HasTemplateKWAndArgsInfo) {
+  Record.push_back(E->hasTemplateKWAndArgsInfo());
+  if (E->hasTemplateKWAndArgsInfo()) {
     Record.AddSourceLocation(E->getTemplateKeywordLoc());
     unsigned NumTemplateArgs = E->getNumTemplateArgs();
     Record.push_back(NumTemplateArgs);
@@ -1500,7 +1506,7 @@ void ASTStmtWriter::VisitCXXDeleteExpr(CXXDeleteExpr *E) {
   Record.push_back(E->doesUsualArrayDeleteWantSize());
   Record.AddDeclRef(E->getOperatorDelete());
   Record.AddStmt(E->getArgument());
-  Record.AddSourceLocation(E->getSourceRange().getBegin());
+  Record.AddSourceLocation(E->getBeginLoc());
 
   Code = serialization::EXPR_CXX_DELETE;
 }
