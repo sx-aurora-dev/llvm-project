@@ -2379,9 +2379,6 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
   MachineRegisterInfo *MRI = &MF->getRegInfo();
   const VEInstrInfo *TII = Subtarget->getInstrInfo();
 
-  MVT PVT = getPointerTy(MF->getDataLayout());
-  assert(PVT == MVT::i64 && "Invalid Pointer Size!");
-
   const TargetRegisterClass *TRC = &VE::I64RegClass;
   unsigned Tmp1 = MRI->createVirtualRegister(TRC);
   unsigned Tmp2 = MRI->createVirtualRegister(TRC);
