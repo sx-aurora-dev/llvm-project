@@ -2563,7 +2563,6 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   case MachineJumpTableInfo::EK_LabelDifference32: {
     // for the case of PIC, generates these codes
 
-    // unsigned OReg = MRI->createVirtualRegister(&VE::I32RegClass);
     unsigned OReg64 = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
 
@@ -2574,7 +2573,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg64)
         .addImm(2);
-    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)" 
+    // FIXME: combine these add and ldl into "ldl     OReg64, *(BReg, Tmp1)" 
     // add     Tmp2, BReg, Tmp1
     BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
         .addReg(Tmp1)
