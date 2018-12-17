@@ -1275,7 +1275,8 @@ def BC : CF<
 // to make finding unconditional jump easy.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isCodeGenOnly = 1 in {
+    isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1,
+    hasDelaySlot = 1, isCodeGenOnly = 1 in {
 def BArr : CF<
     0x19, (outs), (ins MEMrr:$addr),
     "b.l $addr",
@@ -1454,9 +1455,17 @@ let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
   }
 }
 
-let isBarrier = 1, hasSideEffects = 1 in
-  def EH_SjLj_Setup : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
-                             [(VEeh_sjlj_setup_dispatch)]>;
+let isBarrier = 1, hasSideEffects = 1, usesCustomInserter = 1 in
+  def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
+                                      [(VEeh_sjlj_setup_dispatch)]>;
+
+//===----------------------------------------------------------------------===//
+// Dummy instruction for CPU flow control
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
+  def TRAP    : Pseudo<(outs), (ins), "# TRAP", [(trap)]>;
+}
 
 //===----------------------------------------------------------------------===//
 // Instructions for CodeGenOnly

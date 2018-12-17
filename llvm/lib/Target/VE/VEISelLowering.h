@@ -379,6 +379,10 @@ namespace llvm {
                                         MachineBasicBlock *MBB) const;
     MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
                                          MachineBasicBlock *MBB) const;
+    MachineBasicBlock *EmitSjLjDispatchBlock(MachineInstr &MI,
+                                             MachineBasicBlock *BB) const;
+    void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
+                                MachineBasicBlock *DispatchBB, int FI) const;
   };
 } // end namespace llvm
 
