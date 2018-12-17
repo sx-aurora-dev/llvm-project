@@ -1275,7 +1275,8 @@ def BC : CF<
 // to make finding unconditional jump easy.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isCodeGenOnly = 1 in {
+    isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1,
+    hasDelaySlot = 1, isCodeGenOnly = 1 in {
 def BArr : CF<
     0x19, (outs), (ins MEMrr:$addr),
     "b.l $addr",
