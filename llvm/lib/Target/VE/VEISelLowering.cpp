@@ -2507,8 +2507,17 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   // IReg is used as an index in a memory operand and therefore can't be SP
   unsigned IReg = MRI->createVirtualRegister(&VE::I32RegClass);
   addFrameReference(BuildMI(DispatchBB, DL, TII->get(VE::LDLri), IReg), FI, 8);
-  BuildMI(DispatchBB, DL, TII->get(VE::BCRWir)).addImm(VECC::CC_ILE)
-      .addImm(LPadList.size()).addReg(IReg).addMBB(TrapBB);
+  if (LPadList.size() < 63) {
+    BuildMI(DispatchBB, DL, TII->get(VE::BCRWir)).addImm(VECC::CC_ILE)
+        .addImm(LPadList.size()).addReg(IReg).addMBB(TrapBB);
+  } else {
+    assert(LPadList.size() <= 0x7FFFFFFF && "Too large Landing Pad!");
+    unsigned TmpReg = MRI->createVirtualRegister(&VE::I32RegClass);
+    BuildMI(DispatchBB, DL, TII->get(VE::LEA32zzi), TmpReg)
+        .addImm(LPadList.size());
+    BuildMI(DispatchBB, DL, TII->get(VE::BCRWrr)).addImm(VECC::CC_ILE)
+        .addReg(TmpReg).addReg(IReg).addMBB(TrapBB);
+  }
 
   unsigned BReg = MRI->createVirtualRegister(&VE::I64RegClass);
   unsigned IReg64 = MRI->createVirtualRegister(&VE::I64RegClass);
@@ -2563,7 +2572,6 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   case MachineJumpTableInfo::EK_LabelDifference32: {
     // for the case of PIC, generates these codes
 
-    // unsigned OReg = MRI->createVirtualRegister(&VE::I32RegClass);
     unsigned OReg64 = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
 
@@ -2574,7 +2582,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg64)
         .addImm(2);
-    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)" 
+    // FIXME: combine these add and ldl into "ldl     OReg64, *(BReg, Tmp1)" 
     // add     Tmp2, BReg, Tmp1
     BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
         .addReg(Tmp1)
