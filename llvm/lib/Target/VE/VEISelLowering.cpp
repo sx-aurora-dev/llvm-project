@@ -2396,7 +2396,7 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
       .addReg(Tmp2).addMBB(DispatchBB, VEMCExpr::VK_VE_HI32);
 
   MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(Op));
-  addFrameReference(MIB, FI, 56);
+  addFrameReference(MIB, FI, 56 + 16);
   MIB.addReg(VR);
 }
 
