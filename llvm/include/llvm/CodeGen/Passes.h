@@ -334,7 +334,7 @@ namespace llvm {
   /// createSjLjEHPreparePass - This pass adapts exception handling code to use
   /// the GCC-style builtin setjmp/longjmp (sjlj) to handling EH control flow.
   ///
-  FunctionPass *createSjLjEHPreparePass();
+  FunctionPass *createSjLjEHPreparePass(bool Use64BitsData = false);
 
   /// createWasmEHPass - This pass adapts exception handling code to use
   /// WebAssembly's exception handling scheme.
