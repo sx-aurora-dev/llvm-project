@@ -26,9 +26,9 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 
+#include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
-#include "DeclResolver.h"
 #include "Visitors.h"
 
 static bool stmtNeedsSemicolon(const clang::Stmt *S) {
@@ -70,7 +70,7 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
       std::string(SM.getFilename(SM.getLocForStartOfFile(IncludedFile))));
 }
 
-static bool isInSystemHeader(clang::Decl *D) {
+static bool isInSystemHeader(const clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
   clang::SourceLocation Loc = D->getBeginLoc();
   return SM.isInSystemHeader(Loc);
@@ -221,7 +221,7 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
 
     auto search = FuncDeclWithoutBody.find(FD->getNameAsString());
     if (search != FuncDeclWithoutBody.end()) {
-      TargetCodeInfo.addCodeFragment(std::make_shared<TargetCodeDecl>(D));
+      Functions.addDecl(D);
       FuncDeclWithoutBody.erase(search);
     }
   }
@@ -324,6 +324,25 @@ void DiscoverTypesInDeclVisitor::processType(const clang::Type *TP) {
 }
 
 DiscoverTypesInDeclVisitor::DiscoverTypesInDeclVisitor(
-    DeclResolver<DiscoverTypesInDeclVisitor> &Types) {
+    TypeDeclResolver &Types) {
   OnEachTypeRef = [&Types](clang::Decl *D) { Types.addDecl(D); };
+}
+
+DiscoverFunctionsInDeclVisitor::DiscoverFunctionsInDeclVisitor(
+    FunctionDeclResolver &Functions) {
+  OnEachFuncRef = [&Functions](clang::FunctionDecl *FD) {
+    Functions.addDecl(FD);
+  };
+}
+
+bool DiscoverFunctionsInDeclVisitor::VisitExpr(clang::Expr *E) {
+  clang::DeclRefExpr *DRE = llvm::dyn_cast<clang::DeclRefExpr>(E);
+  if (DRE != nullptr) {
+    if (auto *D = DRE->getDecl()) {
+      if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
+        OnEachFuncRef(FD);
+      }
+    }
+  }
+  return true;
 }

@@ -30,9 +30,9 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
-#include "DeclResolver.h"
 #include "Visitors.h"
 
 using namespace clang::tooling;
@@ -41,16 +41,21 @@ using namespace llvm;
 class TargetRegionTransformer : public clang::ASTConsumer {
   TargetCode &Code;
   clang::Rewriter &TargetCodeRewriter;
-  DeclResolver<DiscoverTypesInDeclVisitor> Types;
 
 public:
   TargetRegionTransformer(TargetCode &Code, clang::Rewriter &TargetCodeRewriter)
-      : Types(), Code(Code), TargetCodeRewriter(TargetCodeRewriter) {}
+      : Code(Code), TargetCodeRewriter(TargetCodeRewriter) {}
 
   void HandleTranslationUnit(clang::ASTContext &Context) final {
+    // create space to store information types and functions
+    TypeDeclResolver Types;
+    // Functinos are... special because they can reference new types
+    FunctionDeclResolver Functions(Types);
+
     // read target code information from AST into TargetCode
-    FindTargetCodeVisitor FindCodeVisitor(Code, Types, Context);
+    FindTargetCodeVisitor FindCodeVisitor(Code, Types, Functions, Context);
     FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
+    Functions.orderAndAddFragments(Code);
     Types.orderAndAddFragments(Code);
   }
 };

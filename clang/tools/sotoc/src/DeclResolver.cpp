@@ -21,9 +21,33 @@
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
 
+static bool isHeaderOpenMPHeader(std::string header_path) {
+  if (header_path.substr(header_path.find_last_of("/\\") + 1) == "omp.h") {
+    return true;
+  }
+  return false;
+}
 
-template <class VisitorClass>
-void DeclResolver<VisitorClass>::addDecl(clang::Decl *D) {
+static bool isDeclInOpenMPHeader(clang::Decl *D) {
+  // if a Decl is exposed by omp.h, that means omp.h is somewhere on the include
+  // stack, we want to include omp.h and not copy any decl. This is an issue
+  // because omp.h may not be a system header
+
+  clang::SourceManager &SM = D->getASTContext().getSourceManager();
+  auto IncludedFile = SM.getFileID(D->getLocStart());
+  auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+
+  while (IncludedFile != SM.getMainFileID()) {
+    if (isHeaderOpenMPHeader(SM.getFileEntryForID(IncludedFile)->getName())) {
+      return true;
+    }
+    IncludedFile = IncludingFile.first;
+    IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+  }
+  return false;
+}
+
+void DeclResolver::addDecl(clang::Decl *D) {
 
   if (AllDecls.count(D) != 0) {
     // we have already resolved this Decl
@@ -35,45 +59,57 @@ void DeclResolver<VisitorClass>::addDecl(clang::Decl *D) {
 
   while (!UnresolvedDecls.empty()) {
     auto ResolveDeclIter = UnresolvedDecls.begin();
-    auto ResolveDecl = *ResolveDeclIter;
+    clang::Decl *ResolveDecl = *ResolveDeclIter;
     auto Header = getSystemHeaderForDecl(ResolveDecl);
-
     if (Header.hasValue()) {
       // The Decl is inside a system header, so it does not depend on
       // any other declaration. So we add the Decl and then we are
       // finished
       AllDecls.emplace(
           std::make_pair(ResolveDecl, DeclInfo(ResolveDecl, true)));
+      RequiredSystemHeaders.insert(Header.getValue());
+      NonDependentDecls.insert(ResolveDecl);
+    } else if (isDeclInOpenMPHeader(D)) {
+      // TODO: this is basically a workaround for omp.h decls to not get copied
+      AllDecls.emplace(
+          std::make_pair(ResolveDecl, DeclInfo(ResolveDecl, true)));
+      RequiredSystemHeaders.insert("include/omp.h");
+      NonDependentDecls.insert(ResolveDecl);
     } else {
-      // This Decl may have other Decls that is depends on.
 
-      // Add Decl if we haven't already
+      // Add our decl if we haven't already
       if (!AllDecls.count(ResolveDecl)) {
         AllDecls.emplace(
             std::make_pair(ResolveDecl, DeclInfo(ResolveDecl, false)));
       }
 
-      VisitorClass Visitor([&D, &UnresolvedDecls, this](clang::Decl *Dep) {
-        if (!this->AllDecls.count(Dep)) {
-          UnresolvedDecls.insert(Dep);
-        }
-        // Fix for enums. TODO: find a better way to avoid duplicates
-        if (D != Dep) {
-          this->AllDecls.at(D).DeclDependencies.insert(Dep);
-        }
-      });
-
-      Visitor.TraverseDecl(D);
-      onNewUserDecl(ResolveDecl);
+      // This Decl may have other Decls that is depends on.
+      // Add Decl if we haven't already
+      findDependDecls(D, UnresolvedDecls);
     }
     UnresolvedDecls.erase(ResolveDeclIter);
   }
 }
 
-template <class VisitorClass>
-void DeclResolver<VisitorClass>::topoSortUtil(
-    std::stack<clang::Decl *> &q, std::map<clang::Decl *, bool> &visited,
-    clang::Decl *D) {
+void DeclResolver::findDependDecls(
+    clang::Decl *D, std::unordered_set<clang::Decl *> &UnresolvedDecls) {
+  // Construct a visitor which searches through the Decl D for references to
+  // other decls, because we need to add those too or our target code may not
+  // compile.
+  runOwnVisitor(D, [&D, &UnresolvedDecls, this](clang::Decl *Dep) {
+    if (!this->AllDecls.count(Dep)) {
+      UnresolvedDecls.insert(Dep);
+    }
+    // Fix for enums. TODO: find a better way to avoid duplicates
+    if (D != Dep) {
+      this->AllDecls.at(D).DeclDependencies.insert(Dep);
+    }
+  });
+}
+
+void DeclResolver::topoSortUtil(std::stack<clang::Decl *> &q,
+                                std::map<clang::Decl *, bool> &visited,
+                                clang::Decl *D) {
 
   visited[D] = true;
 
@@ -85,8 +121,7 @@ void DeclResolver<VisitorClass>::topoSortUtil(
   q.push(D);
 }
 
-template <class VisitorClass>
-void DeclResolver<VisitorClass>::topoSort(std::stack<clang::Decl *> &q) {
+void DeclResolver::topoSort(std::stack<clang::Decl *> &q) {
   // Previously we used Kuhn's algorithm to make the topo sort. However,
   // since we now also need to do the same thing for functions, and not just
   // for types anymore, and functions can be forward-declared, we may need
@@ -103,22 +138,41 @@ void DeclResolver<VisitorClass>::topoSort(std::stack<clang::Decl *> &q) {
   }
 }
 
-template <class VisitorClass>
-void DeclResolver<VisitorClass>::orderAndAddFragments(TargetCode &TC) {
+void DeclResolver::orderAndAddFragments(TargetCode &TC) {
 
   for (auto &Header : RequiredSystemHeaders) {
     TC.addHeader(Header);
   }
 
   std::stack<clang::Decl *> orderStack;
+  topoSort(orderStack);
   while (!orderStack.empty()) {
-    auto codeDecl = std::make_shared<TargetCodeDecl>(orderStack.top());
-    orderStack.pop();
+    if (!AllDecls.at(orderStack.top()).IsFromSystemHeader) {
+      auto codeDecl = std::make_shared<TargetCodeDecl>(orderStack.top());
 
-    // TODO: this wont hurt but is not always necessary
-    codeDecl->NeedsSemicolon = true;
-    TC.addCodeFragmentFront(codeDecl);
+      // TODO: this wont hurt but is not always necessary
+      codeDecl->NeedsSemicolon = true;
+      auto r = TC.addCodeFragmentFront(codeDecl);
+    }
+    orderStack.pop();
   }
 }
 
-template class DeclResolver<DiscoverTypesInDeclVisitor>;
+void TypeDeclResolver::runOwnVisitor(clang::Decl *D,
+                                     std::function<void(clang::Decl *Dep)> Fn) {
+  DiscoverTypesInDeclVisitor Visitor(Fn);
+  Visitor.TraverseDecl(D);
+}
+
+void FunctionDeclResolver::runOwnVisitor(
+    clang::Decl *D, std::function<void(clang::Decl *Dep)> Fn) {
+  DiscoverFunctionsInDeclVisitor Visitor(Fn);
+  Visitor.TraverseDecl(D);
+}
+
+void FunctionDeclResolver::findDependDecls(
+    clang::Decl *D, std::unordered_set<clang::Decl *> &UnresolvedDecls) {
+  this->DeclResolver::findDependDecls(D, UnresolvedDecls);
+  DiscoverTypesInDeclVisitor TypesVisitor(Types);
+  TypesVisitor.TraverseDecl(D);
+}

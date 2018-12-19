@@ -20,7 +20,7 @@
 #include <stack>
 #include <unordered_set>
 
-llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
+llvm::Optional<std::string> getSystemHeaderForDecl(const clang::Decl *D);
 
 namespace clang {
 class Decl;
@@ -29,7 +29,7 @@ class Decl;
 class TargetCode;
 
 struct DeclInfo {
-  clang::Decl *Decl;
+  const clang::Decl *Decl;
   std::set<clang::Decl *> DeclDependencies;
   std::set<clang::Decl *> ForwardDecls;
   bool IsFromSystemHeader;
@@ -42,18 +42,12 @@ using DeclMap = std::map<clang::Decl *, DeclInfo>;
 
 //! Records, orders and finds the dependencies of Decls  (TypeDecls or
 //! FunctionDecls)
-template <class VisitorClass> class DeclResolver {
+class DeclResolver {
   DeclMap AllDecls;
   std::set<clang::Decl *> NonDependentDecls;
   std::set<std::string> RequiredSystemHeaders;
-  std::function<void(clang::Decl *)> onNewUserDecl;
 
 public:
-  DeclResolver(std::function<void(clang::Decl *)> onNewUserDecl)
-      : onNewUserDecl(onNewUserDecl){};
-  DeclResolver() {
-    onNewUserDecl = [](clang::Decl *) {};
-  };
   /** Records a Decl and automatically adds all Decls that this Decl depends
    * on.
    * \param D the Decl to be added to the resolver.
@@ -65,6 +59,21 @@ public:
    */
   void orderAndAddFragments(TargetCode &TC);
 
+protected:
+  virtual void runOwnVisitor(clang::Decl *D,
+                             std::function<void(clang::Decl *Dep)> Fn) = 0;
+  /** This function uses a visitor to find references to other declarations in
+   * the declaration being added. If the declaration being added references
+   * other declarations outside the standard library, we need to add those
+   * declaration to the target code too.
+   * \param D the declaration that was added via \ref addDecl.
+   * \param UnresolvedDecls a set of declarations which D depends on and which
+   * are currently unresolved.
+   */
+  virtual void
+  findDependDecls(clang::Decl *D,
+                  std::unordered_set<clang::Decl *> &UnresolvedDecls);
+
 private:
   /** This functions does a topological sorting on the dependency graph of all
    * Decls recorded into this object by calling \ref addDecl.
@@ -75,4 +84,24 @@ private:
   /// Helper function for \ref topoSort, to do an recursive DFS.
   void topoSortUtil(std::stack<clang::Decl *> &q,
                     std::map<clang::Decl *, bool> &visited, clang::Decl *D);
+};
+
+class TypeDeclResolver : public DeclResolver {
+private:
+  void runOwnVisitor(clang::Decl *D,
+                     std::function<void(clang::Decl *Dep)> Fn) override;
+};
+
+class FunctionDeclResolver : public DeclResolver {
+  TypeDeclResolver &Types;
+
+public:
+  FunctionDeclResolver(TypeDeclResolver &Types) : Types(Types){};
+
+private:
+  void runOwnVisitor(clang::Decl *D,
+                     std::function<void(clang::Decl *Dep)> Fn) override;
+  void
+  findDependDecls(clang::Decl *D,
+                  std::unordered_set<clang::Decl *> &UnresolvedDecls) override;
 };

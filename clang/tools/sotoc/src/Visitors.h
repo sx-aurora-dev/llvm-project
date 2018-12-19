@@ -11,9 +11,9 @@
 
 #include <unordered_set>
 
+#include "DeclResolver.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "llvm/ADT/Optional.h"
-#include "DeclResolver.h"
 
 namespace clang {
 class Stmt;
@@ -42,13 +42,27 @@ class DiscoverTypesInDeclVisitor
   void processType(const clang::Type *D);
 
 public:
-  DiscoverTypesInDeclVisitor(DeclResolver<DiscoverTypesInDeclVisitor> &Types);
+  DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
       : OnEachTypeRef(F) {};
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
 };
+
+class DiscoverFunctionsInDeclVisitor
+    : public clang::RecursiveASTVisitor<DiscoverFunctionsInDeclVisitor> {
+
+  std::function<void(clang::FunctionDecl *)> OnEachFuncRef;
+
+public:
+  DiscoverFunctionsInDeclVisitor(FunctionDeclResolver &Functions);
+  DiscoverFunctionsInDeclVisitor(std::function<void(clang::FunctionDecl *)> F)
+      : OnEachFuncRef(F){};
+
+  bool VisitExpr(clang::Expr *E);
+};
+
 
 class FindDeclRefExprVisitor
     : public clang::RecursiveASTVisitor<FindDeclRefExprVisitor> {
@@ -83,17 +97,21 @@ class FindTargetCodeVisitor
   clang::ASTContext &Context;
 
   TargetCode &TargetCodeInfo;
-  DeclResolver<DiscoverTypesInDeclVisitor> &Types;
+  TypeDeclResolver &Types;
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
+  DiscoverFunctionsInDeclVisitor DiscoverFunctionVisitor;
+  FunctionDeclResolver &Functions;
   FindDeclRefExprVisitor FindDeclRefVisitor;
 
   clang::FunctionDecl *LastVisitedFuncDecl;
   std::unordered_set<std::string> FuncDeclWithoutBody;
 
 public:
-  FindTargetCodeVisitor(TargetCode &Code, DeclResolver<DiscoverTypesInDeclVisitor> &Types,
+  FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types,
+                        FunctionDeclResolver &Functions,
                         clang::ASTContext &Context)
       : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types),
+        DiscoverFunctionVisitor(Functions), Functions(Functions),
         Context(Context) {}
   bool VisitStmt(clang::Stmt *S);
   bool VisitDecl(clang::Decl *D);
