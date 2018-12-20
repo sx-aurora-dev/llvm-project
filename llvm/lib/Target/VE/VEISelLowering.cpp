@@ -2049,8 +2049,15 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       (Twine("GCC_except_table") + Twine(MF.getFunctionNumber())).str()));
     SDValue Addr = DAG.getTargetExternalSymbol(TM->getStrList()->back().c_str(),
                                                PtrVT, 0);
-    return makeHiLoPair(Addr, VEMCExpr::VK_VE_HI32,
-                        VEMCExpr::VK_VE_LO32, DAG);
+    if (isPositionIndependent()) {
+      Addr = makeHiLoPair(Addr, VEMCExpr::VK_VE_GOTOFF_HI32,
+                          VEMCExpr::VK_VE_GOTOFF_LO32, DAG);
+      SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, dl, PtrVT);
+      return DAG.getNode(ISD::ADD, dl, PtrVT, GlobalBase, Addr);
+    } else {
+      return makeHiLoPair(Addr, VEMCExpr::VK_VE_HI32,
+                          VEMCExpr::VK_VE_LO32, DAG);
+    }
   }
   case Intrinsic::ve_vfdivsA_vvv: {
 /*
@@ -2525,15 +2532,33 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
   unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
 
-  // lea     %Tmp1, .LJTI0_0@lo
-  // and     %Tmp2, %Tmp1, (32)0
-  // lea.sl  %BReg, .LJTI0_0@hi(%Tmp2)
-  BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
-      .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
-  BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
-      .addReg(Tmp1).addImm(32);
-  BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), BReg)
-      .addReg(Tmp2).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_HI32);
+  if (isPositionIndependent()) {
+    // Create following instructions for local linkage PIC code.
+    //     lea %Tmp1, .LJTI0_0@gotoff_lo
+    //     and %Tmp2, %Tmp1, (32)0
+    //     lea.sl %Tmp3, .LJTI0_0@gotoff_hi(%Tmp2)
+    //     adds.l %BReg, %s15, %Tmp3                  ; %s15がGOT
+    // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
+    unsigned Tmp3 = MRI->createVirtualRegister(&VE::I64RegClass);
+    BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_LO32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), Tmp3)
+        .addReg(Tmp2).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_HI32);
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg)
+        .addReg(VE::SX15).addReg(Tmp3);
+  } else {
+    // lea     %Tmp1, .LJTI0_0@lo
+    // and     %Tmp2, %Tmp1, (32)0
+    // lea.sl  %BReg, .LJTI0_0@hi(%Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), BReg)
+        .addReg(Tmp2).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_HI32);
+  }
 
   // and     IReg64, IReg, (32)0
   BuildMI(DispContBB, DL, TII->get(TargetOpcode::SUBREG_TO_REG), IReg64)
@@ -2554,8 +2579,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addReg(IReg64)
         .addImm(3);
     // FIXME: combine these add and lds into "lds     TReg, *(BReg, Tmp1)" 
-    // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
+    // adds.l  Tmp2, BReg, Tmp1
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // lds     TReg, *(Tmp2)
@@ -2584,15 +2609,15 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(2);
     // FIXME: combine these add and ldl into "ldl     OReg64, *(BReg, Tmp1)" 
     // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // ldl.sx  OReg64, *(Tmp2)
     BuildMI(DispContBB, DL, TII->get(VE::LDSri), OReg64)
         .addReg(Tmp2)
         .addImm(0);
-    // add     TReg, BReg, OReg64
-    BuildMI(DispContBB, DL, TII->get(VE::ADDri), TReg)
+    // adds.l  TReg, BReg, OReg64
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
         .addReg(OReg64)
         .addReg(BReg);
     // jmpq *(TReg)
