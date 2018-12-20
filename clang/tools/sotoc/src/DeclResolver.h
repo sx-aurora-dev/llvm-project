@@ -31,7 +31,8 @@ class TargetCode;
 struct DeclInfo {
   const clang::Decl *Decl;
   std::set<clang::Decl *> DeclDependencies;
-  std::set<clang::Decl *> ForwardDecls;
+  // std::set<clang::Decl *> ForwardDecls;  // for the moment we solve this
+  // differently
   bool IsFromSystemHeader;
 
   DeclInfo(clang::Decl *D, bool isFromSysHeader)

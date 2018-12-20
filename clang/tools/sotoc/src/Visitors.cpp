@@ -341,6 +341,10 @@ bool DiscoverFunctionsInDeclVisitor::VisitExpr(clang::Expr *E) {
     if (auto *D = DRE->getDecl()) {
       if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
         OnEachFuncRef(FD);
+        auto *FDDefinition = FD->getDefinition();
+        if (FDDefinition != FD && FDDefinition != NULL) {
+          OnEachFuncRef(FDDefinition);
+        }
       }
     }
   }

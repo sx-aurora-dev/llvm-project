@@ -1,5 +1,6 @@
 // RUN: %sotoc-transform-compile
 // RUN: %run-on-host | FileCheck %s
+#include <stdio.h>
 
 int main(void) {
 
