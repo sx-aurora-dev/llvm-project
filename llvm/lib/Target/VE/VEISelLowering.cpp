@@ -2382,14 +2382,27 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 /// MachineJumpTableInfo::JTEntryKind enum.
 unsigned VETargetLowering::getJumpTableEncoding() const {
   // VE doesn't support GOT32 style of labels in the current version of nas.
-  // There is no way to generate other than simple BlockAddress even if it
-  // is PIC mode.  We hope it works in all casese, but not sure.
-  //    .8bytes  .LBB0_2
+  // So, we generates a following entry for each jump table.
+  //    .4bytes  .LBB0_2-<function name>
   if (isPositionIndependent())
-    return MachineJumpTableInfo::EK_BlockAddress;
+    return MachineJumpTableInfo::EK_Custom32;
 
   // Otherwise, use the normal jump table encoding heuristics.
   return TargetLowering::getJumpTableEncoding();
+}
+
+const MCExpr *
+VETargetLowering::LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
+                                            const MachineBasicBlock *MBB,
+                                            unsigned uid,MCContext &Ctx) const{
+  assert(isPositionIndependent());
+  // VE doesn't support GOT32 style of labels in the current version of nas.
+  // So, we generates a following entry for each jump table.
+  //    .4bytes  .LBB0_2-<function name>
+  auto Value = MCSymbolRefExpr::create(MBB->getSymbol(), Ctx);
+  MCSymbol *Sym = Ctx.getOrCreateSymbol(MBB->getParent()->getName().data());
+  auto Base = MCSymbolRefExpr::create(Sym, Ctx);
+  return MCBinaryExpr::createSub(Value, Base, Ctx);
 }
 
 void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
@@ -2407,15 +2420,33 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
   unsigned VR = MRI->createVirtualRegister(TRC);
   unsigned Op = VE::STSri;
 
-  // lea     %tmp1, DispatchBB@lo
-  // and     %tmp2, %tmp1, (32)0
-  // lea.sl  %vr, DispatchBB@hi(%tmp2)
-  BuildMI(*MBB, MI, DL, TII->get(VE::LEAzzi), Tmp1)
-      .addMBB(DispatchBB, VEMCExpr::VK_VE_LO32);
-  BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
-      .addReg(Tmp1).addImm(32);
-  BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrzi), VR)
-      .addReg(Tmp2).addMBB(DispatchBB, VEMCExpr::VK_VE_HI32);
+  if (isPositionIndependent()) {
+    // Create following instructions for local linkage PIC code.
+    //     lea %Tmp1, DispatchBB@gotoff_lo
+    //     and %Tmp2, %Tmp1, (32)0
+    //     lea.sl %Tmp3, DispatchBB@gotoff_hi(%Tmp2)
+    //     adds.l %VR, %s15, %Tmp3                  ; %s15 is GOT
+    // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
+    unsigned Tmp3 = MRI->createVirtualRegister(&VE::I64RegClass);
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_LO32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrzi), Tmp3)
+        .addReg(Tmp2).addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_HI32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ADXrr), VR)
+        .addReg(VE::SX15).addReg(Tmp3);
+  } else {
+    // lea     %Tmp1, DispatchBB@lo
+    // and     %Tmp2, %Tmp1, (32)0
+    // lea.sl  %VR, DispatchBB@hi(%Tmp2)
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addMBB(DispatchBB, VEMCExpr::VK_VE_LO32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrzi), VR)
+        .addReg(Tmp2).addMBB(DispatchBB, VEMCExpr::VK_VE_HI32);
+  }
 
   MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(Op));
   addFrameReference(MIB, FI, 56 + 16);
@@ -2582,7 +2613,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
 
   switch (JTE) {
   case MachineJumpTableInfo::EK_BlockAddress: {
-    // Generate simple block address code for both PIC and noPIC models.
+    // Generate simple block address code for no-PIC model.
 
     unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
@@ -2614,7 +2645,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     // recognize it, so doesn't use this atm.
 
     // for the case of PIC, generates these codes
-    unsigned OReg64 = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned OReg = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
 
     unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
@@ -2624,18 +2655,18 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg)
         .addImm(2);
-    // FIXME: combine these add and ldl into "ldl     OReg64, *(BReg, Tmp1)" 
+    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)" 
     // add     Tmp2, BReg, Tmp1
     BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
-    // ldl.sx  OReg64, *(Tmp2)
-    BuildMI(DispContBB, DL, TII->get(VE::LDLri), OReg64)
+    // ldl.sx  OReg, *(Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::LDLri), OReg)
         .addReg(Tmp2)
         .addImm(0);
-    // adds.l  TReg, BReg, OReg64
+    // adds.l  TReg, BReg, OReg
     BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
-        .addReg(OReg64)
+        .addReg(OReg)
         .addReg(BReg);
     // jmpq *(TReg)
     BuildMI(DispContBB, DL, TII->get(VE::BAri))
@@ -2644,6 +2675,60 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     break;
   }
 #endif
+  case MachineJumpTableInfo::EK_Custom32: {
+    // for the case of PIC, generates these codes
+
+    assert(isPositionIndependent());
+    unsigned OReg = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
+
+    unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
+
+    // sll     Tmp1, IReg, 2
+    BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
+        .addReg(IReg)
+        .addImm(2);
+    // FIXME: combine these add and ldl into "ldl.zx   OReg, *(BReg, Tmp1)" 
+    // add     Tmp2, BReg, Tmp1
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
+        .addReg(Tmp1)
+        .addReg(BReg);
+    // ldl.zx  OReg, *(Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::LDLUri), OReg)
+        .addReg(Tmp2)
+        .addImm(0);
+
+    // Create following instructions for local linkage PIC code.
+    //     lea %Tmp3, fun@gotoff_lo
+    //     and %Tmp4, %Tmp3, (32)0
+    //     lea.sl %Tmp5, fun@gotoff_hi(%Tmp4)
+    //     adds.l %BReg2, %s15, %Tmp5                  ; %s15 is GOT
+    // FIXME: use lea.sl %BReg2, fun@gotoff_hi(%Tmp4, %s15)
+    unsigned Tmp3 = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned Tmp4 = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned Tmp5 = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned BReg2 = MRI->createVirtualRegister(&VE::I64RegClass);
+    const char* FunName = DispContBB->getParent()->getName().data();
+    BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp3)
+        .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_LO32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp4)
+        .addReg(Tmp3).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), Tmp5)
+        .addReg(Tmp4).addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_HI32);
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg2)
+        .addReg(VE::SX15).addReg(Tmp5);
+
+    // adds.l  TReg, BReg2, OReg
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
+        .addReg(OReg)
+        .addReg(BReg2);
+    // jmpq *(TReg)
+    BuildMI(DispContBB, DL, TII->get(VE::BAri))
+        .addReg(TReg)
+        .addImm(0);
+    break;
+  }
   default:
     llvm_unreachable("Unexpected jump table encoding");
   }

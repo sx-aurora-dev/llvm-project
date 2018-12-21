@@ -360,6 +360,11 @@ namespace llvm {
 
     unsigned getJumpTableEncoding() const override;
 
+    const MCExpr *
+    LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
+                              const MachineBasicBlock *MBB, unsigned uid,
+                              MCContext &Ctx) const override;
+
     bool shouldInsertFencesForAtomic(const Instruction *I) const override {
       // VE uses Release consistency, so need fence for each atomics.
       return true;
