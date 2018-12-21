@@ -1239,7 +1239,7 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
       //     lea %s35, %gotoff_lo(.LCPI0_0)
       //     and %s35, %s35, (32)0
       //     lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35)
-      //     adds.l %s35, %s15, %s35                  ; %s15がGOT
+      //     adds.l %s35, %s15, %s35                  ; %s15 is GOT
       // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
       SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFF_HI32,
                                   VEMCExpr::VK_VE_GOTOFF_LO32, DAG);
@@ -1250,7 +1250,7 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
       //     lea %s35, %got_lo(.LCPI0_0)
       //     and %s35, %s35, (32)0
       //     lea.sl %s35, %got_hi(.LCPI0_0)(%s35)
-      //     adds.l %s35, %s15, %s35                  ; %s15がGOT
+      //     adds.l %s35, %s15, %s35                  ; %s15 is GOT
       //     ld     %s35, (,%s35)
       // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
       SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOT_HI32,
@@ -2049,8 +2049,15 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       (Twine("GCC_except_table") + Twine(MF.getFunctionNumber())).str()));
     SDValue Addr = DAG.getTargetExternalSymbol(TM->getStrList()->back().c_str(),
                                                PtrVT, 0);
-    return makeHiLoPair(Addr, VEMCExpr::VK_VE_HI32,
-                        VEMCExpr::VK_VE_LO32, DAG);
+    if (isPositionIndependent()) {
+      Addr = makeHiLoPair(Addr, VEMCExpr::VK_VE_GOTOFF_HI32,
+                          VEMCExpr::VK_VE_GOTOFF_LO32, DAG);
+      SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, dl, PtrVT);
+      return DAG.getNode(ISD::ADD, dl, PtrVT, GlobalBase, Addr);
+    } else {
+      return makeHiLoPair(Addr, VEMCExpr::VK_VE_HI32,
+                          VEMCExpr::VK_VE_LO32, DAG);
+    }
   }
   case Intrinsic::ve_vfdivsA_vvv: {
 /*
@@ -2370,6 +2377,21 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
+/// Return the entry encoding for a jump table in the
+/// current function.  The returned value is a member of the
+/// MachineJumpTableInfo::JTEntryKind enum.
+unsigned VETargetLowering::getJumpTableEncoding() const {
+  // VE doesn't support GOT32 style of labels in the current version of nas.
+  // There is no way to generate other than simple BlockAddress even if it
+  // is PIC mode.  We hope it works in all casese, but not sure.
+  //    .8bytes  .LBB0_2
+  if (isPositionIndependent())
+    return MachineJumpTableInfo::EK_BlockAddress;
+
+  // Otherwise, use the normal jump table encoding heuristics.
+  return TargetLowering::getJumpTableEncoding();
+}
+
 void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
                                               MachineBasicBlock *MBB,
                                               MachineBasicBlock *DispatchBB,
@@ -2504,58 +2526,75 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   BuildMI(DispatchBB, DL, TII->get(VE::NOP))
       .addRegMask(RI.getNoPreservedMask());
 
+  if (isPositionIndependent()) {
+    // Force to generate GETGOT, since current implementation doesn't recover
+    // GOT register correctly.
+    BuildMI(DispatchBB, DL, TII->get(VE::GETGOT), VE::SX15);
+  }
+
   // IReg is used as an index in a memory operand and therefore can't be SP
-  unsigned IReg = MRI->createVirtualRegister(&VE::I32RegClass);
-  addFrameReference(BuildMI(DispatchBB, DL, TII->get(VE::LDLri), IReg), FI, 8);
+  unsigned IReg = MRI->createVirtualRegister(&VE::I64RegClass);
+  addFrameReference(BuildMI(DispatchBB, DL, TII->get(VE::LDLUri), IReg), FI, 8);
   if (LPadList.size() < 63) {
-    BuildMI(DispatchBB, DL, TII->get(VE::BCRWir)).addImm(VECC::CC_ILE)
+    BuildMI(DispatchBB, DL, TII->get(VE::BCRLir)).addImm(VECC::CC_ILE)
         .addImm(LPadList.size()).addReg(IReg).addMBB(TrapBB);
   } else {
     assert(LPadList.size() <= 0x7FFFFFFF && "Too large Landing Pad!");
-    unsigned TmpReg = MRI->createVirtualRegister(&VE::I32RegClass);
-    BuildMI(DispatchBB, DL, TII->get(VE::LEA32zzi), TmpReg)
+    unsigned TmpReg = MRI->createVirtualRegister(&VE::I64RegClass);
+    BuildMI(DispatchBB, DL, TII->get(VE::LEAzzi), TmpReg)
         .addImm(LPadList.size());
-    BuildMI(DispatchBB, DL, TII->get(VE::BCRWrr)).addImm(VECC::CC_ILE)
+    BuildMI(DispatchBB, DL, TII->get(VE::BCRLrr)).addImm(VECC::CC_ILE)
         .addReg(TmpReg).addReg(IReg).addMBB(TrapBB);
   }
 
   unsigned BReg = MRI->createVirtualRegister(&VE::I64RegClass);
-  unsigned IReg64 = MRI->createVirtualRegister(&VE::I64RegClass);
 
   unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
   unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
 
-  // lea     %Tmp1, .LJTI0_0@lo
-  // and     %Tmp2, %Tmp1, (32)0
-  // lea.sl  %BReg, .LJTI0_0@hi(%Tmp2)
-  BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
-      .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
-  BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
-      .addReg(Tmp1).addImm(32);
-  BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), BReg)
-      .addReg(Tmp2).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_HI32);
-
-  // and     IReg64, IReg, (32)0
-  BuildMI(DispContBB, DL, TII->get(TargetOpcode::SUBREG_TO_REG), IReg64)
-      .addImm(0)
-      .addReg(IReg)
-      .addImm(VE::sub_i32);
+  if (isPositionIndependent()) {
+    // Create following instructions for local linkage PIC code.
+    //     lea %Tmp1, .LJTI0_0@gotoff_lo
+    //     and %Tmp2, %Tmp1, (32)0
+    //     lea.sl %Tmp3, .LJTI0_0@gotoff_hi(%Tmp2)
+    //     adds.l %BReg, %s15, %Tmp3                  ; %s15 is GOT
+    // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
+    unsigned Tmp3 = MRI->createVirtualRegister(&VE::I64RegClass);
+    BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_LO32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), Tmp3)
+        .addReg(Tmp2).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_HI32);
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg)
+        .addReg(VE::SX15).addReg(Tmp3);
+  } else {
+    // lea     %Tmp1, .LJTI0_0@lo
+    // and     %Tmp2, %Tmp1, (32)0
+    // lea.sl  %BReg, .LJTI0_0@hi(%Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::LEASLrzi), BReg)
+        .addReg(Tmp2).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_HI32);
+  }
 
   switch (JTE) {
   case MachineJumpTableInfo::EK_BlockAddress: {
-    // for the case of no PIC, generates these codes
+    // Generate simple block address code for both PIC and noPIC models.
 
     unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
 
-    // sll     Tmp1, IReg64, 3
+    // sll     Tmp1, IReg, 3
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
-        .addReg(IReg64)
+        .addReg(IReg)
         .addImm(3);
     // FIXME: combine these add and lds into "lds     TReg, *(BReg, Tmp1)" 
-    // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
+    // adds.l  Tmp2, BReg, Tmp1
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // lds     TReg, *(Tmp2)
@@ -2569,30 +2608,33 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0);
     break;
   }
+#if 0
   case MachineJumpTableInfo::EK_LabelDifference32: {
-    // for the case of PIC, generates these codes
+    // This code is what regular architecture does, but nas doesn't
+    // recognize it, so doesn't use this atm.
 
+    // for the case of PIC, generates these codes
     unsigned OReg64 = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
 
     unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
     unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
 
-    // sll     Tmp1, IReg64, 2
+    // sll     Tmp1, IReg, 2
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
-        .addReg(IReg64)
+        .addReg(IReg)
         .addImm(2);
     // FIXME: combine these add and ldl into "ldl     OReg64, *(BReg, Tmp1)" 
     // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADDri), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // ldl.sx  OReg64, *(Tmp2)
-    BuildMI(DispContBB, DL, TII->get(VE::LDSri), OReg64)
+    BuildMI(DispContBB, DL, TII->get(VE::LDLri), OReg64)
         .addReg(Tmp2)
         .addImm(0);
-    // add     TReg, BReg, OReg64
-    BuildMI(DispContBB, DL, TII->get(VE::ADDri), TReg)
+    // adds.l  TReg, BReg, OReg64
+    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
         .addReg(OReg64)
         .addReg(BReg);
     // jmpq *(TReg)
@@ -2601,6 +2643,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0);
     break;
   }
+#endif
   default:
     llvm_unreachable("Unexpected jump table encoding");
   }

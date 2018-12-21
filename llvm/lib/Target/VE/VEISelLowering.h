@@ -358,6 +358,8 @@ namespace llvm {
       return VT != MVT::f128;
     }
 
+    unsigned getJumpTableEncoding() const override;
+
     bool shouldInsertFencesForAtomic(const Instruction *I) const override {
       // VE uses Release consistency, so need fence for each atomics.
       return true;
