@@ -3353,8 +3353,8 @@ inline Registers_ve::Registers_ve(const void *registers) {
                 "ve registers do not fit into unw_context_t");
   memcpy(&_registers, static_cast<const uint8_t *>(registers),
          sizeof(_registers));
-  static_assert(sizeof(_registers) == 67,
-                "expected vector register offset to be 67");
+  static_assert(sizeof(_registers) == 536,
+                "expected vector register offset to be 536");
 }
 
 inline Registers_ve::Registers_ve() {
@@ -3480,6 +3480,112 @@ inline const char *Registers_ve::getRegisterName(int regNum) {
     return "s9";
   case UNW_VE_S10:
     return "s10";
+  case UNW_VE_S11:
+    return "s11";
+  case UNW_VE_S12:
+    return "s12";
+  case UNW_VE_S13:
+    return "s13";
+  case UNW_VE_S14:
+    return "s14";
+  case UNW_VE_S15:
+    return "s15";
+  case UNW_VE_S16:
+    return "s16";
+  case UNW_VE_S17:
+    return "s17";
+  case UNW_VE_S18:
+    return "s18";
+  case UNW_VE_S19:
+    return "s19";
+  case UNW_VE_S20:
+    return "s20";
+  case UNW_VE_S21:
+    return "s21";
+  case UNW_VE_S22:
+    return "s22";
+  case UNW_VE_S23:
+    return "s23";
+  case UNW_VE_S24:
+    return "s24";
+  case UNW_VE_S25:
+    return "s25";
+  case UNW_VE_S26:
+    return "s26";
+  case UNW_VE_S27:
+    return "s27";
+  case UNW_VE_S28:
+    return "s28";
+  case UNW_VE_S29:
+    return "s29";
+  case UNW_VE_S30:
+    return "s30";
+  case UNW_VE_S31:
+    return "s31";
+  case UNW_VE_S32:
+    return "s32";
+  case UNW_VE_S33:
+    return "s33";
+  case UNW_VE_S34:
+    return "s34";
+  case UNW_VE_S35:
+    return "s35";
+  case UNW_VE_S36:
+    return "s36";
+  case UNW_VE_S37:
+    return "s37";
+  case UNW_VE_S38:
+    return "s38";
+  case UNW_VE_S39:
+    return "s39";
+  case UNW_VE_S40:
+    return "s40";
+  case UNW_VE_S41:
+    return "s41";
+  case UNW_VE_S42:
+    return "s42";
+  case UNW_VE_S43:
+    return "s43";
+  case UNW_VE_S44:
+    return "s44";
+  case UNW_VE_S45:
+    return "s45";
+  case UNW_VE_S46:
+    return "s46";
+  case UNW_VE_S47:
+    return "s47";
+  case UNW_VE_S48:
+    return "s48";
+  case UNW_VE_S49:
+    return "s49";
+  case UNW_VE_S50:
+    return "s50";
+  case UNW_VE_S51:
+    return "s51";
+  case UNW_VE_S52:
+    return "s52";
+  case UNW_VE_S53:
+    return "s53";
+  case UNW_VE_S54:
+    return "s54";
+  case UNW_VE_S55:
+    return "s55";
+  case UNW_VE_S56:
+    return "s56";
+  case UNW_VE_S57:
+    return "s57";
+  case UNW_VE_S58:
+    return "s58";
+  case UNW_VE_S59:
+    return "s59";
+  case UNW_VE_S60:
+    return "s60";
+  case UNW_VE_S61:
+    return "s61";
+  case UNW_VE_S62:
+    return "s62";
+  case UNW_VE_S63:
+    return "s63";
   }
   return "unknown register";
 }
