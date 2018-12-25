@@ -2641,8 +2641,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   }
 #if 0
   case MachineJumpTableInfo::EK_LabelDifference32: {
-    // This code is what regular architecture does, but nas doesn't
-    // recognize it, so doesn't use this atm.
+    // This code is what regular architecture does, but nas doesn't generate
+    // LabelDifference32 correctly, so doesn't use this atm.
 
     // for the case of PIC, generates these codes
     unsigned OReg = MRI->createVirtualRegister(&VE::I64RegClass);
@@ -2788,7 +2788,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     LP->setIsEHPad(false);
 
   // The instruction is gone now.
-  // MI.eraseFromParent();
+  MI.eraseFromParent();
   return BB;
 }
 

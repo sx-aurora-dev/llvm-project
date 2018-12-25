@@ -79,8 +79,6 @@ namespace {
                                            const MCSubtargetInfo &STI);
     void LowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
                                             const MCSubtargetInfo &STI);
-    void LowerEH_SJLJ_SETUP_DISPATCHAndEmitMCInsts(const MachineInstr *MI,
-                                            const MCSubtargetInfo &STI);
     void LowerVM2VAndEmitMCInsts(const MachineInstr *MI,
                                  const MCSubtargetInfo &STI);
     void LowerVMP2VAndEmitMCInsts(const MachineInstr *MI,
@@ -459,45 +457,6 @@ void VEAsmPrinter::LowerEH_SJLJ_LONGJMPAndEmitMCInsts(
   return;
 }
 
-void VEAsmPrinter::LowerEH_SJLJ_SETUP_DISPATCHAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  //   sic $dest
-  //   lea $dest, 32($dest)     // $dest points 0f
-  //   st $dest, 8(,$src)
-  //   lea $dest, 0
-  //   br.l 16                  // br 1f
-  // 0:
-  //   lea $dest, 1
-  // 1:
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SIC)
-    .addReg(DestReg));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LEArzi)
-    .addReg(DestReg)
-    .addReg(DestReg)
-    .addImm(32));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::STSri)
-    .addReg(SrcReg)
-    .addImm(8)
-    .addReg(DestReg));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LEAzzi)
-    .addReg(DestReg)
-    .addImm(0));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::BCRLa)
-    .addImm(16));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LEAzzi)
-    .addReg(DestReg)
-    .addImm(1));
-}
-
 void VEAsmPrinter::LowerVM2VAndEmitMCInsts(
     const MachineInstr *MI, const MCSubtargetInfo &STI) {
   // FIXME: using sx16 as a temporary register.
@@ -659,11 +618,6 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
   case VE::EH_SjLj_LongJmp:
     LowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
-#if 0
-  case VE::EH_SjLj_Setup_Dispatch:
-    LowerEH_SJLJ_SETUP_DISPATCHAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-#endif
   case VE::VM2V:
     LowerVM2VAndEmitMCInsts(MI, getSubtargetInfo());
     return;
