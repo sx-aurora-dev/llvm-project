@@ -67,6 +67,9 @@ _LIBUNWIND_EXPORT int unw_init_local(unw_cursor_t *cursor,
 # define REGISTER_KIND Registers_mips_newabi
 #elif defined(__mips__)
 # warning The MIPS architecture is not supported with this ABI and environment!
+#elif defined(__ve__)
+# warning The VE architecture is not supported with this ABI and environment!
+# define REGISTER_KIND Registers_ve
 #else
 # error Architecture not supported
 #endif

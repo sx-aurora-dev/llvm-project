@@ -23,6 +23,7 @@
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_ARM       287
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_OR1K      32
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_MIPS      65
+#define _LIBUNWIND_HIGHEST_DWARF_REGISTER_VE        143
 
 #if defined(_LIBUNWIND_IS_NATIVE_ONLY)
 # if defined(__i386__)
@@ -109,6 +110,11 @@
 #    error "Unsupported MIPS ABI and/or environment"
 #  endif
 #  define _LIBUNWIND_HIGHEST_DWARF_REGISTER _LIBUNWIND_HIGHEST_DWARF_REGISTER_MIPS
+# elif defined(__ve__)
+#  define _LIBUNWIND_TARGET_VE
+#  define _LIBUNWIND_CONTEXT_SIZE 74
+#  define _LIBUNWIND_CURSOR_SIZE 15
+#  define _LIBUNWIND_HIGHEST_DWARF_REGISTER _LIBUNWIND_HIGHEST_DWARF_REGISTER_VE
 # else
 #  error "Unsupported architecture."
 # endif

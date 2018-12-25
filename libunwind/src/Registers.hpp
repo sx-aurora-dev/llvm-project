@@ -3306,6 +3306,185 @@ inline const char *Registers_mips_newabi::getRegisterName(int regNum) {
   }
 }
 #endif // _LIBUNWIND_TARGET_MIPS_NEWABI
+
+#if defined(_LIBUNWIND_TARGET_VE)
+/// Registers_ve holds the register state of a thread in a VE process.
+class _LIBUNWIND_HIDDEN Registers_ve {
+public:
+  Registers_ve();
+  Registers_ve(const void *registers);
+
+  bool        validRegister(int num) const;
+  uint64_t    getRegister(int num) const;
+  void        setRegister(int num, uint64_t value);
+  bool        validFloatRegister(int num) const;
+  double      getFloatRegister(int num) const;
+  void        setFloatRegister(int num, double value);
+  bool        validVectorRegister(int num) const;
+  v128        getVectorRegister(int num) const;
+  void        setVectorRegister(int num, v128 value);
+  const char *getRegisterName(int num);
+  void        jumpto();
+  static int  lastDwarfRegNum() { return _LIBUNWIND_HIGHEST_DWARF_REGISTER_VE; }
+
+  uint64_t  getSP() const         { return _registers.__s[11]; }
+  void      setSP(uint64_t value) { _registers.__s[11] = value; }
+  uint64_t  getIP() const         { return _registers.__ic; }
+  void      setIP(uint64_t value) { _registers.__ic = value; }
+
+private:
+  struct ve_thread_state_t {
+    uint64_t __s[64];   // s0-s64
+    uint64_t __ic;      // Instruction counter (IC)
+    uint64_t __vixr;    // Vector Index Register
+    uint64_t __vl;      // Vector Length Register
+  };
+
+  ve_thread_state_t _registers; // total 67 registers
+
+  // Currently no vector registers is preserved since libunwind
+  // supports only 128-bit vector registers.
+
+  static int getScalarRegNum(int num);
+};
+
+inline Registers_ve::Registers_ve(const void *registers) {
+  static_assert((check_fit<Registers_ve, unw_context_t>::does_fit),
+                "ve registers do not fit into unw_context_t");
+  memcpy(&_registers, static_cast<const uint8_t *>(registers),
+         sizeof(_registers));
+  static_assert(sizeof(_registers) == 67,
+                "expected vector register offset to be 67");
+}
+
+inline Registers_ve::Registers_ve() {
+  memset(&_registers, 0, sizeof(_registers));
+}
+
+inline bool Registers_ve::validRegister(int regNum) const {
+  if (regNum >= UNW_VE_S0 && regNum <= UNW_VE_S63)
+    return true;
+
+  switch (regNum) {
+  case UNW_REG_IP:
+  case UNW_REG_SP:
+  case UNW_VE_VIXR:
+  case UNW_VE_VL:
+    return true;
+  default:
+    return false;
+  }
+}
+
+inline int Registers_ve::getScalarRegNum(int num)
+{
+  if (num >= UNW_VE_S0 && num <= UNW_VE_S63)
+    return num - UNW_VE_S0;
+  return 0;
+}
+
+inline uint64_t Registers_ve::getRegister(int regNum) const {
+  if (num >= UNW_VE_S0 && num <= UNW_VE_S63)
+    return _registers.__s[getScalarRegNum(regNum)];
+
+  switch (regNum) {
+  case UNW_REG_IP:
+    return _registers.__ic;
+  case UNW_REG_SP:
+    return _registers.__s[11];
+  case UNW_VE_VIXR:
+    return _registers.__vixr;
+  case UNW_VE_VL:
+    return _registers.__vl;
+  }
+  _LIBUNWIND_ABORT("unsupported ve register");
+}
+
+inline void Registers_ve::setRegister(int regNum, uint64_t value) {
+  if (num >= UNW_VE_S0 && num <= UNW_VE_S63) {
+    _registers.__s[getScalarRegNum(regNum)] = value;
+    return;
+  }
+
+  switch (regNum) {
+  case UNW_REG_IP:
+    _registers.__ic = value;
+    return;
+  case UNW_REG_SP:
+    _registers.__s[11] = value;
+    return;
+  case UNW_VE_VIXR:
+    _registers.__vixr = value;
+    return;
+  case UNW_VE_VL:
+    _registers.__vl = value;
+    return;
+  }
+  _LIBUNWIND_ABORT("unsupported ve register");
+}
+
+inline bool Registers_ve::validFloatRegister(int /* regNum */) const {
+  return false;
+}
+
+inline double Registers_ve::getFloatRegister(int /* regNum */) const {
+  _LIBUNWIND_ABORT("VE float support not implemented");
+}
+
+inline void Registers_ve::setFloatRegister(int /* regNum */,
+                                           double /* value */) {
+  _LIBUNWIND_ABORT("VE float support not implemented");
+}
+
+inline bool Registers_ve::validVectorRegister(int /* regNum */) const {
+  return false;
+}
+
+inline v128 Registers_ve::getVectorRegister(int /* regNum */) const {
+  _LIBUNWIND_ABORT("VE vector support not implemented");
+}
+
+inline void Registers_ve::setVectorRegister(int /* regNum */, v128 /* value */) {
+  _LIBUNWIND_ABORT("VE vector support not implemented");
+}
+
+inline const char *Registers_ve::getRegisterName(int regNum) {
+  switch (regNum) {
+  case UNW_REG_IP:
+    return "ip";
+  case UNW_REG_SP:
+    return "sp";
+  case UNW_VE_VIXR:
+    return "vixr";
+  case UNW_VE_VL:
+    return "vl";
+  case UNW_VE_S0:
+    return "s0";
+  case UNW_VE_S1:
+    return "s1";
+  case UNW_VE_S2:
+    return "s2";
+  case UNW_VE_S3:
+    return "s3";
+  case UNW_VE_S4:
+    return "s4";
+  case UNW_VE_S5:
+    return "s5";
+  case UNW_VE_S6:
+    return "s6";
+  case UNW_VE_S7:
+    return "s7";
+  case UNW_VE_S8:
+    return "s8";
+  case UNW_VE_S9:
+    return "s9";
+  case UNW_VE_S10:
+    return "s10";
+  }
+  return "unknown register";
+}
+#endif // _LIBUNWIND_TARGET_PPC64
+
 } // namespace libunwind
 
 #endif // __REGISTERS_HPP__
