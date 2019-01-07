@@ -11,33 +11,70 @@ Modifications are under the development.  We know following flaws.
 
 Please file issues if you have problems.
 
+Prerequisites
+=============
+
+ - ncc for VE
+
 How to compile LLVM for NEC SX-Aurora VE
 ========================================
 
-First, check out llvm and clang like below.
+First, check out llvm, clang, and other libraries like below.
 
+    $ mkdir work
+    $ cd work
     $ git clone https://github.com/SXAuroraTSUBASAResearch/llvm.git \
       llvm -b develop
     $ git clone https://github.com/SXAuroraTSUBASAResearch/clang.git \
       llvm/tools/clang -b develop
     $ git clone https://github.com/SXAuroraTSUBASAResearch/compiler-rt.git \
       llvm/projects/compiler-rt -b develop
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/libunwind.git \
+      llvm/projects/libunwind -b develop
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/libcxx.git \
+      llvm/projects/libcxx -b develop
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/libcxxabi.git \
+      llvm/projects/libcxxabi -b develop
 
 Then, compile clang/llvm with ninja and install it.
 
+    $ cd work
     $ mkdir build
     $ cd build
+    $ export DEST=$HOME/.local
     $ cmake3 -G Ninja \
       -DCMAKE_BUILD_TYPE="Release" \
       -DLLVM_TARGETS_TO_BUILD="VE;X86" \
-      -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+      -DCMAKE_INSTALL_PREFIX=$DEST \
       ../llvm
+    $ ninja-build
     $ ninja-build install
 
-And, cross-compile compiler-rt with compiled clang/llvm and install it.
+How to cross-compile CSU for NEC SX-Aurora VE
+=============================================
 
+First, check out ve-csu like below.
+
+    $ cd work
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/ve-csu.git \
+      ve-csu
+
+Then, cross-compile it with clang/llvm for VE and install it.
+
+    $ cd work/ve-csu
+    $ export DEST=$HOME/.local
+    $ make
+    $ make DEST=$DEST/lib/clang/8.0.0/lib/linux/ve install
+
+How to cross-compile Compiler-RT for NEC SX-Aurora VE
+=====================================================
+
+Cross-compile compiler-rt with clang/llvm for VE and install it.
+
+    $ cd work
     $ mkdir build-compiler-rt
     $ cd build-compiler-rt
+    $ export DEST=$HOME/.local
     $ cmake3 -G Ninja \
       -DCOMPILER_RT_BUILD_BUILTINS=ON \
       -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
@@ -45,21 +82,115 @@ And, cross-compile compiler-rt with compiled clang/llvm and install it.
       -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
       -DCOMPILER_RT_BUILD_PROFILE=OFF \
       -DBUILD_SHARED_LIBS=ON \
-      -DCMAKE_C_COMPILER=$HOME/.local/bin/clang \
+      -DCMAKE_C_COMPILER=$DEST/bin/clang \
       -DCMAKE_C_COMPILER_TARGET="ve-linux-none" \
       -DCMAKE_ASM_COMPILER_TARGET="ve-linux-none" \
-      -DCMAKE_AR=$HOME/.local/bin/llvm-ar \
-      -DCMAKE_RANLIB=$HOME/.local/bin/llvm-ranlib \
+      -DCMAKE_AR=$DEST/bin/llvm-ar \
+      -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
-      -DLLVM_CONFIG_PATH=$HOME/.local/bin/llvm-config \
+      -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DCMAKE_BUILD_TYPE="Release" \
-      -DCMAKE_INSTALL_PREFIX=$HOME/.local/lib/clang/8.0.0/ \
+      -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
       -DCMAKE_CXX_FLAGS="-nostdlib" \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
       -DCMAKE_C_FLAGS="-nostdlib" \
-      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_C_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
       ../llvm/projects/compiler-rt
-   $ ninja-build install
+    $ ninja-build
+    $ ninja-build install
+
+How to cross-compile other libraries for NEC SX-Aurora VE
+=========================================================
+
+Cross-compile libunwind with clang/llvm for VE and install it.
+
+    $ cd work
+    $ mkdir build-libunwind
+    $ cd build-libunwind
+    $ export DEST=$HOME/.local
+    $ cmake3 -G Ninja \
+      -DLIBUNWIND_TARGET_TRIPLE="ve-linux" \
+      -DCMAKE_C_COMPILER=$DEST/bin/clang \
+      -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
+      -DCMAKE_AR=$DEST/bin/llvm-ar \
+      -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
+      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
+      -DLLVM_ENABLE_LIBCXX=ON \
+      -DCMAKE_BUILD_TYPE="Release" \
+      -DDEFAULT_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/lib/linux/ve/ \
+      -DCMAKE_CXX_FLAGS="-nostdlib -fsjlj-exceptions" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_C_FLAGS="-nostdlib -fsjlj-exceptions" \
+      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      ../llvm/projects/libunwind
+    $ ninja-build
+    $ ninja-build install
+
+Cross-compile libcxxabi with clang/llvm for VE and install it.
+
+    $ cd work
+    $ mkdir build-libcxxabi
+    $ cd build-libcxxabi
+    $ export DEST=$HOME/.local
+    $ cmake3 -G Ninja \
+      -DCMAKE_C_COMPILER=$DEST/bin/clang \
+      -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
+      -DCMAKE_AR=$DEST/bin/llvm-ar \
+      -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
+      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
+      -DCMAKE_BUILD_TYPE="Release" \
+      -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
+      -DDEFAULT_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/lib/linux/ve/ \
+      -DCMAKE_SHARED_LINKER_FLAGS="-L$DEST/lib/clang/8.0.0/lib/linux/ve/lib" \
+      -DLIBCXXABI_USE_LLVM_UNWINDER=YES \
+      -DCMAKE_CXX_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_C_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DLLVM_PATH=../llvm \
+      -DLLVM_MAIN_SRC_DIR=../llvm \
+      -DLLVM_ENABLE_LIBCXX=True \
+      -DLIBCXXABI_USE_COMPILER_RT=True \
+      -DLIBCXXABI_HAS_NOSTDINCXX_FLAG=True \
+      ../llvm/projects/libcxxabi
+    $ ninja-build
+    $ ninja-build install
+
+Cross-compile libcxx with clang/llvm for VE and install it.
+
+    $ cd work
+    $ mkdir build-libcxx
+    $ cd build-libcxx
+    $ export DEST=$HOME/.local
+    $ cmake3 -G Ninja \
+      -DLIBCXX_HAS_MUSL_LIBC=True \
+      -DLIBCXX_USE_COMPILER_RT=True \
+      -DLIBCXX_TARGET_TRIPLE="ve-linux" \
+      -DCMAKE_C_COMPILER=$DEST/bin/clang \
+      -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
+      -DCMAKE_AR=$DEST/bin/llvm-ar \
+      -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
+      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
+      -DCMAKE_BUILD_TYPE="Release" \
+      -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
+      -DDEFAULT_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/lib/linux/ve/ \
+      -DCMAKE_C_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_CXX_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      ../llvm/projects/libcxx
+    $ ninja-build
+    $ ninja-build install
+
+
+How to use clang/llvm for VE
+============================
 
 Use clang like below.
 
