@@ -75,12 +75,19 @@ public:
   void AddCXXStdlibLibArgs(const llvm::opt::ArgList &Args,
                            llvm::opt::ArgStringList &CmdArgs) const override;
 
+  llvm::ExceptionHandling GetExceptionModel(
+        const llvm::opt::ArgList &Args) const override;
+
+  CXXStdlibType
+  GetCXXStdlibType(const llvm::opt::ArgList &Args) const override {
+    return ToolChain::CST_Libcxx;
+  }
+
   RuntimeLibType GetDefaultRuntimeLibType() const override {
     return ToolChain::RLT_CompilerRT;
   }
 
   const char *getDefaultLinker() const override { return "nld"; }
-
 };
 
 } // end namespace toolchains

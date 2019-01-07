@@ -338,9 +338,8 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const bool IsVE = ToolChain.getTriple().isVE();
   const bool IsPIE = getPIE(Args, ToolChain);
   const bool HasCRTBeginEndFiles =
-      (ToolChain.getTriple().hasEnvironment() ||
-       (ToolChain.getTriple().getVendor() != llvm::Triple::MipsTechnologies)) &&
-      !IsVE;
+      ToolChain.getTriple().hasEnvironment() ||
+      (ToolChain.getTriple().getVendor() != llvm::Triple::MipsTechnologies);
 
   ArgStringList CmdArgs;
 
