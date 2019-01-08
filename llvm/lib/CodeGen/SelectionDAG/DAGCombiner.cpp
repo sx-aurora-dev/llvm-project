@@ -94,6 +94,10 @@ static cl::opt<bool>
 UseTBAA("combiner-use-tbaa", cl::Hidden, cl::init(true),
         cl::desc("Enable DAG combiner's use of TBAA"));
 
+static cl::opt<bool>
+UseVectorStore("combiner-use-vector-store", cl::Hidden, cl::init(true),
+        cl::desc("Enable DAG combiner's use of vector store"));
+
 #ifndef NDEBUG
 static cl::opt<std::string>
 CombinerAAOnlyFunc("combiner-aa-only-func", cl::Hidden,
@@ -165,11 +169,24 @@ namespace {
       ForCodeSize = DAG.getMachineFunction().getFunction().optForSize();
 
       MaximumLegalStoreInBits = 0;
-      for (MVT VT : MVT::all_valuetypes())
-        if (EVT(VT).isSimple() && VT != MVT::Other &&
-            TLI.isTypeLegal(EVT(VT)) &&
-            VT.getSizeInBits() >= MaximumLegalStoreInBits)
-          MaximumLegalStoreInBits = VT.getSizeInBits();
+      if (UseVectorStore) {
+        for (MVT VT : MVT::all_valuetypes())
+          if (EVT(VT).isSimple() && VT != MVT::Other &&
+              TLI.isTypeLegal(EVT(VT)) &&
+              VT.getSizeInBits() >= MaximumLegalStoreInBits)
+            MaximumLegalStoreInBits = VT.getSizeInBits();
+      } else {
+        for (MVT VT : MVT::integer_valuetypes())
+          if (EVT(VT).isSimple() && VT != MVT::Other &&
+              TLI.isTypeLegal(EVT(VT)) &&
+              VT.getSizeInBits() >= MaximumLegalStoreInBits)
+            MaximumLegalStoreInBits = VT.getSizeInBits();
+        for (MVT VT : MVT::fp_valuetypes())
+          if (EVT(VT).isSimple() && VT != MVT::Other &&
+              TLI.isTypeLegal(EVT(VT)) &&
+              VT.getSizeInBits() >= MaximumLegalStoreInBits)
+            MaximumLegalStoreInBits = VT.getSizeInBits();
+      }
     }
 
     /// Add to the worklist making sure its instance is at the back (next to be
