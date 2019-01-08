@@ -114,7 +114,12 @@ mark_as_advanced(
 ################################################################################
 find_package(CUDA QUIET)
 
-set(LIBOMPTARGET_DEP_CUDA_FOUND ${CUDA_FOUND})
+if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
+  set(LIBOMPTARGET_DEP_CUDA_FOUND ${CUDA_FOUND})
+else(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
+  # force to not compile CUDA libomptarget while compiling native VE libomp
+  set(LIBOMPTARGET_DEP_CUDA_FOUND "FALSE")
+endif(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
 set(LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS})
 
 mark_as_advanced(
