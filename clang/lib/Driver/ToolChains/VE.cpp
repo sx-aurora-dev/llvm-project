@@ -228,12 +228,7 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   assert((GetCXXStdlibType(Args) == ToolChain::CST_Libcxx) &&
          "Only -lc++ (aka libxx) is supported in this toolchain.");
 
-  auto P = getArchSpecificLibPath() + "/lib";
-  CmdArgs.push_back(Args.MakeArgString("-L" + P));
-  CmdArgs.push_back(Args.MakeArgString("-rpath=" + P));
-  auto P2 = getArchSpecificLibPath();
-  CmdArgs.push_back(Args.MakeArgString("-L" + P2));
-  CmdArgs.push_back(Args.MakeArgString("-rpath=" + P2));
+  tools::addArchSpecificRPath(*this, Args, CmdArgs);
 
   CmdArgs.push_back("-lc++");
   CmdArgs.push_back("-lc++abi");
