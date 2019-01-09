@@ -35,6 +35,8 @@ First, check out llvm, clang, and other libraries like below.
       llvm/projects/libcxx -b develop
     $ git clone https://github.com/SXAuroraTSUBASAResearch/libcxxabi.git \
       llvm/projects/libcxxabi -b develop
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/openmp.git \
+      llvm/projects/openmp -b develop
 
 Then, compile clang/llvm with ninja and install it.
 
@@ -119,7 +121,8 @@ Cross-compile libunwind with clang/llvm for VE and install it.
       -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DLLVM_ENABLE_LIBCXX=ON \
       -DCMAKE_BUILD_TYPE="Release" \
-      -DDEFAULT_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/lib/linux/ve/ \
+      -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
+      -DLIBUNWIND_LIBDIR_SUFFIX=/linux/ve/ \
       -DCMAKE_CXX_FLAGS="-nostdlib -fsjlj-exceptions" \
       -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
       -DCMAKE_C_FLAGS="-nostdlib -fsjlj-exceptions" \
@@ -144,12 +147,11 @@ Cross-compile libcxxabi with clang/llvm for VE and install it.
       -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
-      -DDEFAULT_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/lib/linux/ve/ \
-      -DCMAKE_SHARED_LINKER_FLAGS="-L$DEST/lib/clang/8.0.0/lib/linux/ve/lib" \
+      -DLIBCXXABI_LIBDIR_SUFFIX=/linux/ve/ \
       -DLIBCXXABI_USE_LLVM_UNWINDER=YES \
-      -DCMAKE_CXX_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_CXX_FLAGS="-nostdlib++ -fsjlj-exceptions" \
       -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
-      -DCMAKE_C_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_C_FLAGS="-nostdlib++ -fsjlj-exceptions" \
       -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
       -DLLVM_PATH=../llvm \
       -DLLVM_MAIN_SRC_DIR=../llvm \
@@ -179,12 +181,37 @@ Cross-compile libcxx with clang/llvm for VE and install it.
       -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
-      -DDEFAULT_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/lib/linux/ve/ \
-      -DCMAKE_C_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DLIBCXX_LIBDIR_SUFFIX=/linux/ve/ \
+      -DCMAKE_C_FLAGS="-nostdlib++ -fsjlj-exceptions" \
       -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
-      -DCMAKE_CXX_FLAGS="-target ve-linux -nostdlib++ -fsjlj-exceptions" \
+      -DCMAKE_CXX_FLAGS="-nostdlib++ -fsjlj-exceptions" \
       -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
       ../llvm/projects/libcxx
+    $ ninja-build
+    $ ninja-build install
+
+Cross-compile OpenMP with clang/llvm for VE and install it.
+
+    $ cd work
+    $ mkdir build-openmp
+    $ cd build-openmp
+    $ export DEST=$HOME/.local
+    $ cmake3 -G Ninja \
+      -DCMAKE_C_COMPILER=$DEST/bin/clang \
+      -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
+      -DCMAKE_AR=$DEST/bin/llvm-ar \
+      -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
+      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_BUILD_TYPE="Release" \
+      -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
+      -DOPENMP_LIBDIR_SUFFIX=/linux/ve \
+      -DCMAKE_CXX_FLAGS="" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize -mllvm -combiner-use-vector-store=false" \
+      -DCMAKE_C_FLAGS="" \
+      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize -mllvm -combiner-use-vector-store=false" \
+      -DLIBOMP_ARCH="ve" \
+      ../llvm/projects/openmp
     $ ninja-build
     $ ninja-build install
 
