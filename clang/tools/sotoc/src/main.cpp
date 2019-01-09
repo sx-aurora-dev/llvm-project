@@ -30,9 +30,9 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
-#include "TypeDeclResolver.h"
 #include "Visitors.h"
 
 using namespace clang::tooling;
@@ -41,30 +41,22 @@ using namespace llvm;
 class TargetRegionTransformer : public clang::ASTConsumer {
   TargetCode &Code;
   clang::Rewriter &TargetCodeRewriter;
-  TypeDeclResolver Types;
 
 public:
   TargetRegionTransformer(TargetCode &Code, clang::Rewriter &TargetCodeRewriter)
-      : Types(), Code(Code), TargetCodeRewriter(TargetCodeRewriter) {}
+      : Code(Code), TargetCodeRewriter(TargetCodeRewriter) {}
 
   void HandleTranslationUnit(clang::ASTContext &Context) final {
-    // read target code information from AST into TargetCode
-    FindTargetCodeVisitor FindCodeVisitor(Code, Types, Context);
-    FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
+    // create space to store information types and functions
+    TypeDeclResolver Types;
+    // Functinos are... special because they can reference new types
+    FunctionDeclResolver Functions(Types);
 
-    // rewrite capture variables in all target regions into pointers
-#if 0
-    for (auto i = Code.getCodeFragmentsBegin(), e = Code.getCodeFragmentsEnd();
-           i != e; ++i) {
-      if (auto *TCR = llvm::dyn_cast<TargetCodeRegion>(i->get())) {
-        RewriteTargetRegionsVisitor RegionRewriteVisitor(TargetCodeRewriter,
-                                                         *TCR);
-        RegionRewriteVisitor.TraverseStmt(TCR->getNode()->getCapturedStmt());
-        // TODO: fix this ^
-      }
-    }
-#endif
-    Types.orderAndWriteCodeFragments(Code);
+    // read target code information from AST into TargetCode
+    FindTargetCodeVisitor FindCodeVisitor(Code, Types, Functions, Context);
+    FindCodeVisitor.TraverseDecl(Context.getTranslationUnitDecl());
+    Functions.orderAndAddFragments(Code);
+    Types.orderAndAddFragments(Code);
   }
 };
 

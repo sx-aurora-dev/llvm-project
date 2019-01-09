@@ -11,6 +11,7 @@
 
 #include <unordered_set>
 
+#include "DeclResolver.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "llvm/ADT/Optional.h"
 
@@ -31,7 +32,6 @@ class TargetCode;
 class TargetCodeFragment;
 class TargetCodeRegion;
 
-class TypeDeclResolver;
 
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
 
@@ -42,13 +42,27 @@ class DiscoverTypesInDeclVisitor
   void processType(const clang::Type *D);
 
 public:
-  DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
-      : OnEachTypeRef(F) {}
   DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
+  DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
+      : OnEachTypeRef(F) {};
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
 };
+
+class DiscoverFunctionsInDeclVisitor
+    : public clang::RecursiveASTVisitor<DiscoverFunctionsInDeclVisitor> {
+
+  std::function<void(clang::FunctionDecl *)> OnEachFuncRef;
+
+public:
+  DiscoverFunctionsInDeclVisitor(FunctionDeclResolver &Functions);
+  DiscoverFunctionsInDeclVisitor(std::function<void(clang::FunctionDecl *)> F)
+      : OnEachFuncRef(F){};
+
+  bool VisitExpr(clang::Expr *E);
+};
+
 
 class FindDeclRefExprVisitor
     : public clang::RecursiveASTVisitor<FindDeclRefExprVisitor> {
@@ -85,6 +99,8 @@ class FindTargetCodeVisitor
   TargetCode &TargetCodeInfo;
   TypeDeclResolver &Types;
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
+  DiscoverFunctionsInDeclVisitor DiscoverFunctionVisitor;
+  FunctionDeclResolver &Functions;
   FindDeclRefExprVisitor FindDeclRefVisitor;
 
   clang::FunctionDecl *LastVisitedFuncDecl;
@@ -92,8 +108,10 @@ class FindTargetCodeVisitor
 
 public:
   FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types,
+                        FunctionDeclResolver &Functions,
                         clang::ASTContext &Context)
       : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types),
+        DiscoverFunctionVisitor(Functions), Functions(Functions),
         Context(Context) {}
   bool VisitStmt(clang::Stmt *S);
   bool VisitDecl(clang::Decl *D);
@@ -104,25 +122,3 @@ private:
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
 
-#if 0
-class RewriteTargetRegionsVisitor
-    : public clang::RecursiveASTVisitor<RewriteTargetRegionsVisitor> {
-
-  clang::Rewriter &TargetCodeRewriter;
-  TargetCodeRegion &TargetRegion;
-  // We store the result of SourceLocation::getRawEncoding() here because we
-  // cannot store SourceLocation of the DeclRefExpr themselves.
-  // There care cases were one source location has multiple DeclRefExpr and
-  // would get rewritten multiple times which leads to incorrect syntax.
-  std::unordered_set<unsigned> RewrittenRefs;
-
-public:
-  RewriteTargetRegionsVisitor(clang::Rewriter &TargetCodeRewriter,
-                              TargetCodeRegion &TCR)
-      : TargetCodeRewriter(TargetCodeRewriter), TargetRegion(TCR){};
-  bool VisitStmt(clang::Stmt *S);
-
-private:
-  void rewriteVar(clang::DeclRefExpr *Var);
-};
-#endif

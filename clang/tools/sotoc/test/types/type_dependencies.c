@@ -9,7 +9,7 @@ enum MyEnum {
 
 struct MyOtherStruct {
   int two;
-  enum MyEnum three
+  enum MyEnum three;
 };
 
 typedef struct {
