@@ -34,7 +34,7 @@ static bool isDeclInOpenMPHeader(clang::Decl *D) {
   // because omp.h may not be a system header
 
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
-  auto IncludedFile = SM.getFileID(D->getLocStart());
+  auto IncludedFile = SM.getFileID(D->getBeginLoc());
   auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
 
   while (IncludedFile != SM.getMainFileID()) {
