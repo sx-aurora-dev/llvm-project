@@ -32,9 +32,15 @@ class TargetCode;
 class TargetCodeFragment;
 class TargetCodeRegion;
 
+class TypeDeclResolver;
 
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
 
+/// Traverses (parts of) the AST to find DeclRefExpr that refer to types that
+/// need to be present for that part of the AST to compile correctly. The
+/// visitor is not only used to search through target regions and functions, but
+/// also through type declarations themselves, in order to also find types that
+/// the already found types depend on to compile.
 class DiscoverTypesInDeclVisitor
     : public clang::RecursiveASTVisitor<DiscoverTypesInDeclVisitor> {
 
@@ -45,6 +51,7 @@ public:
   DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
       : OnEachTypeRef(F) {};
+  DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
@@ -91,11 +98,14 @@ public:
   }
 };
 
+/// Traverses the AST to find target and process target regions and function and
+/// variables that are annotated by an 'omp declare target' target pragma.
 class FindTargetCodeVisitor
     : public clang::RecursiveASTVisitor<FindTargetCodeVisitor> {
 
   clang::ASTContext &Context;
 
+  /// The collection where target regions and other code is added to.
   TargetCode &TargetCodeInfo;
   TypeDeclResolver &Types;
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
@@ -103,7 +113,11 @@ class FindTargetCodeVisitor
   FunctionDeclResolver &Functions;
   FindDeclRefExprVisitor FindDeclRefVisitor;
 
+  /// The last function the visitor traversed. This is stored to be able to
+  /// later compute the function name for the target region.
   clang::FunctionDecl *LastVisitedFuncDecl;
+  /// Function with 'omp declare target' pragma, for which the visitor has not
+  /// yet found a body.
   std::unordered_set<std::string> FuncDeclWithoutBody;
 
 public:
@@ -121,4 +135,3 @@ private:
   void addTargetRegionArgs(clang::CapturedStmt *S,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
-
