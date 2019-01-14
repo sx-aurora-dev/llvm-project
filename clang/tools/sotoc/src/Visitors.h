@@ -44,7 +44,9 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
 class DiscoverTypesInDeclVisitor
     : public clang::RecursiveASTVisitor<DiscoverTypesInDeclVisitor> {
 
+  /// Function run on the declaration of each type found by the visitor.
   std::function<void(clang::TypeDecl *)> OnEachTypeRef;
+  /// Retrieves the declaration of the type found and passes it on.
   void processType(const clang::Type *D);
 
 public:
@@ -106,9 +108,16 @@ class FindTargetCodeVisitor
 
   /// The collection where target regions and other code is added to.
   TargetCode &TargetCodeInfo;
+  /// A collection of all types required by the target code found (and
+  /// referenced by other required types).
   TypeDeclResolver &Types;
+  /// A Visitor to find references to the types required by the target code.
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
+  /// A Visitor to find references to all functions required by the target
+  /// code.
   DiscoverFunctionsInDeclVisitor DiscoverFunctionVisitor;
+  /// Collection of all functions referenced and required by target code (and
+  /// referenced by other required functions).
   FunctionDeclResolver &Functions;
   FindDeclRefExprVisitor FindDeclRefVisitor;
 

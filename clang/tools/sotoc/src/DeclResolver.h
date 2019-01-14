@@ -87,12 +87,17 @@ private:
                     std::map<clang::Decl *, bool> &visited, clang::Decl *D);
 };
 
+/// Implements DeclResolver for types (typedefs, structs enums) used in target
+/// regions.
 class TypeDeclResolver : public DeclResolver {
 private:
   void runOwnVisitor(clang::Decl *D,
                      std::function<void(clang::Decl *Dep)> Fn) override;
 };
 
+/// Implements DeclResolver for functions used in target regions.
+/// Does also search for additional types in the functions found and adds them
+/// to a TypeDeclResolver instance.
 class FunctionDeclResolver : public DeclResolver {
   TypeDeclResolver &Types;
 
