@@ -51,7 +51,6 @@ public:
   DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
       : OnEachTypeRef(F) {};
-  DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
