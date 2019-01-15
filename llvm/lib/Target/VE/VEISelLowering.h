@@ -368,7 +368,6 @@ namespace llvm {
     bool shouldExpandBuildVectorWithShuffles(EVT VT,
         unsigned DefinedValues) const override;
 
-    SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
@@ -410,6 +409,9 @@ namespace llvm {
                                              MachineBasicBlock *BB) const;
     void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
                                 MachineBasicBlock *DispatchBB, int FI) const;
+
+  private:
+    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return true; }
   };
 } // end namespace llvm
 

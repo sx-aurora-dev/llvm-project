@@ -968,6 +968,16 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTruncStoreAction(MVT::f128, MVT::f32, Expand);
   setTruncStoreAction(MVT::f128, MVT::f64, Expand);
 
+  // custom splat handling
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
+  }
+
+  // currently unsupported math functions
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::FABS, VT, Expand);
+  }
+
   // Custom legalize GlobalAddress nodes into LO/HI parts.
   setOperationAction(ISD::GlobalAddress, PtrVT, Custom);
   setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
@@ -1003,6 +1013,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::EH_SJLJ_SETUP_DISPATCH, MVT::Other, Custom);
   if (TM.Options.ExceptionModel == ExceptionHandling::SjLj)
     setLibcallName(RTLIB::UNWIND_RESUME, "_Unwind_SjLj_Resume");
+
+  setTargetDAGCombine(ISD::FADD);
+  //setTargetDAGCombine(ISD::FMA);
 
   // ATOMICs.
   // Atomics are supported on VE.
@@ -1050,6 +1063,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   for (MVT VT : MVT::fp_valuetypes()) {
     // VE has no sclar FMA instruction
     setOperationAction(ISD::FMA, VT, Expand);
+    setOperationAction(ISD::FMAD, VT, Expand);
     setOperationAction(ISD::FREM, VT, Expand);
     setOperationAction(ISD::FNEG, VT, Expand);
     setOperationAction(ISD::FABS, VT, Expand);
@@ -1123,6 +1137,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // Bits operations
+  setOperationAction(ISD::BITCAST, MVT::v256i64, Custom);
+
   setOperationAction(ISD::BITREVERSE, MVT::i32, Legal);
   setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
   setOperationAction(ISD::BSWAP, MVT::i32, Legal);
@@ -1165,7 +1181,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
     setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
     setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
-    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
 
     setOperationAction(ISD::FADD,  VT, Legal);
     setOperationAction(ISD::FSUB,  VT, Legal);
@@ -1176,6 +1192,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MUL,   VT, Legal);
     setOperationAction(ISD::SDIV,  VT, Legal);
     setOperationAction(ISD::UDIV,  VT, Legal);
+
+    setOperationAction(ISD::SHL,   VT, Legal);
+
+    setOperationAction(ISD::MSCATTER,   VT, Custom);
+    setOperationAction(ISD::MGATHER,   VT, Custom);
+
+    setOperationAction(ISD::MLOAD, VT, Custom);
   }
 
   // VE has no packed MUL, SDIV, or UDIV operations.
@@ -1242,6 +1265,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
   // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
   setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
+
+// vector fma // TESTING
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::FMA, VT, Legal);
+    setOperationAction(ISD::FNEG, VT, Legal);
+    //setOperationAction(ISD::FMAD, VT, Legal);
+  }
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
@@ -2584,16 +2614,6 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   return false;
 }
 
-SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
-                                            SelectionDAG &DAG) const {
-  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
-  if (BVN->isConstant()) {
-    // All values are either a constant value or undef, so optimize it...
-  }
-  // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
-  return SDValue();
-}
-
 SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
@@ -2815,6 +2835,15 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+
+  case ISD::BITCAST:            return LowerBitcast(Op, DAG);
+
+  case ISD::VECTOR_SHUFFLE:     return LowerSHUFFLE_VECTOR(Op, DAG);
+
+  case ISD::MSCATTER:
+  case ISD::MGATHER:            return LowerMGATHER_MSCATTER(Op, DAG);
+
+  case ISD::MLOAD:              return LowerMLOAD(Op, DAG);
   }
 }
 
@@ -3591,9 +3620,14 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   case ISD::BUILD_VECTOR:
   case ISD::INSERT_VECTOR_ELT:
   case ISD::EXTRACT_VECTOR_ELT:
+  case ISD::VECTOR_SHUFFLE:
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+  case ISD::MLOAD:
     // ask llvm to expand vector related instructions if those are not legal.
     return;
   default:
+    LLVM_DEBUG(N->dumpr(&DAG));
     llvm_unreachable("Do not know how to custom type legalize this operation!");
   }
 }
