@@ -98,10 +98,13 @@ public:
     // we want to return __tgt_target_table, which contains a pointer to the
     // the element after the last entry in the table.
     // If we didnt own the memory then we would have undefined behaviour
-    if (!(T.capacity() > T.size())) {
+    // if (!(T.capacity() > T.size())) {
+      // DP("DEBUG_2 %zx \n",T.size());
       __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
       T.push_back(DummyEntry);
-    }
+    // }
+
+    // DP("DEBUG_1 %zx, %d \n",T.size(),T.capacity());
 
     FuncOrGblEntry[device_id].Table.EntriesBegin = &T.front();
     FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back();
