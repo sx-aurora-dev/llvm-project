@@ -179,3 +179,152 @@ def: Pat<(i64 (extractelt v256i64:$vec, uimm7:$idx)),
 def: Pat<(i64 (extractelt v256i64:$vec, i64:$idx)),
          (LVSr v256i64:$vec, $idx)>;
 
+// Custom ISDs
+// VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
+// VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
+
+def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
+def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
+
+def vec_scatter   : SDNode<"VEISD::VEC_SCATTER", SDTypeProfile<0, 2, [SDTCisVec<0>, SDTCisVec<1>]>, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def vec_gather   : SDNode<"VEISD::VEC_GATHER", SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>]>, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+
+def vec_lvl   : SDNode<"VEISD::VEC_LVL", SDTypeProfile<0, 1, []>, [SDNPHasChain]>;
+
+def vec_rotate   : SDNode<"VEISD::VEC_VMV", SDTypeProfile<1, 2, []>>;
+def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)), (VMVr i32:$sy, v256f64:$vz)>;
+def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)), (VMVi (i32 simm7:$I), v256f64:$vz)>;
+
+// Shuffle
+// TODO
+
+// Scatter
+def : Pat<(vec_scatter v256i64:$vx, v256i64:$vy), (VSCv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(vec_scatter v256f64:$vx, v256i64:$vy), (VSCv v256f64:$vx, v256i64:$vy)>;
+
+// Gather
+def : Pat<(v256i64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy)>;
+def : Pat<(v256f64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy)>;
+
+// LVL
+def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
+
+// Broadcast
+def : Pat<(v256f64 (scalar_to_vector f64:$sy)), (VBRDf64r f64:$sy)>;
+
+def : Pat<(v256i64 (vec_broadcast i64:$sy)), (VBRDr i64:$sy)>;
+def : Pat<(v256f64 (vec_broadcast f64:$sy)), (VBRDf64r f64:$sy)>;
+def : Pat<(v256i32 (vec_broadcast i32:$sy)), (VBRDi32r i32:$sy)>; 
+def : Pat<(v256f32 (vec_broadcast f32:$sy)), (VBRDf32r f32:$sy)>;
+// def : Pat<(v512f32 (vec_broadcast f32:$sy)), (VBRDpr f32:$sy)>; 
+def : Pat<(v512i32 (vec_broadcast i64:$sy)), (VBRDpr i64:$sy)>; 
+
+// Condition Code
+def : Pat<(setcc v256i64:$vx, v256i64:$vy, CCSIOp:$cond),
+          (v256i1 (VFMKv (icond2cc $cond), (VCMPlv v256i64:$vx, v256i64:$vy)))>;
+
+def : Pat<(setcc v256f64:$vx, v256f64:$vy, CCSIOp:$cond),
+          (v256i1 (VFMKv (fcond2cc $cond), (VCMPwv v256f64:$vx, v256f64:$vy)))>;
+
+// (VFMKv (i32 uimm6:$cc), v256f64:$vz)
+
+// def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
+//           (EXTRACT_SUBREG
+//               (CMOVLrm0 )>;
+// 
+// def : Pat<(setcc v256i64:$vx, v256i64:$vy, $cc),
+//           (VFMKv (i32 uimm6:( $cc)), v256f64:$vz)>;
+
+// Vector Select
+
+def : Pat<(v256f64 (vselect v256i1:$m, v256f64:$vy, v256f64:$vz)), 
+          (v256f64 (VMRGvm v256f64:$vz, v256f64:$vy, v256i1:$m))>; 
+def : Pat<(v512f32 (vselect v512i1:$m, v512f32:$vy, v512f32:$vz)),
+          (VMRGpvm v512f32:$vz, v512f32:$vy, v512i1:$m)>;
+
+// Sequence
+
+def : Pat<(v256i32 (vec_seq (i32 1))), (VSEQlv)>;
+def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv)>;
+def : Pat<(v256i64 (vec_seq (i64 1))), (VSEQv)>;
+
+// Format Conversions
+
+// sint -> floating-point
+
+def : Pat<(v256f64 (sint_to_fp v256i64:$vx)), (VFLTXv $vx)>;
+def : Pat<(v256f64 (sint_to_fp v256i32:$vx)), (VFLTdv $vx)>;
+def : Pat<(v256f32 (sint_to_fp v256i32:$vx)), (VFLTsv $vx)>;
+def : Pat<(v512f32 (sint_to_fp v512i32:$vx)), (VFLTpv $vx)>;
+
+// Double-Precision Arithmetic
+
+def : Pat<(fadd (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz), (VFADdr f64:$sy, v256f64:$vz)>; 
+def : Pat<(fadd v256f64:$vy, v256f64:$vz), (VFADdv v256f64:$vy, v256f64:$vz)>;
+
+def : Pat<(fsub (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz), (VFSBdr f64:$sy, v256f64:$vz)>; 
+def : Pat<(fsub v256f64:$vy, v256f64:$vz), (VFSBdv v256f64:$vy, v256f64:$vz)>;
+
+def : Pat<(fmul (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz), (VFMPdr f64:$sy, v256f64:$vz)>; 
+def : Pat<(fmul v256f64:$vy, v256f64:$vz), (VFMPdv v256f64:$vy, v256f64:$vz)>;
+
+def : Pat<(fdiv (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz), (VFDVdr f64:$sy, v256f64:$vz)>; 
+def : Pat<(fdiv v256f64:$vy, v256f64:$vz), (VFDVdv v256f64:$vy, v256f64:$vz)>;
+
+def : Pat<(fma v256f64:$vz, v256f64:$vw, (v256f64 (fneg v256f64:$vy))), (VFMSBdv v256f64:$vy, v256f64:$vz, v256f64:$vw)>;
+
+def : Pat<(fma (v256f64 (vec_broadcast f64:$sy)), v256f64:$vw, v256f64:$vy), (VFMADdr2 v256f64:$vy, f64:$sy, v256f64:$vw)>;
+def : Pat<(fma v256f64:$vw, (v256f64 (vec_broadcast f64:$sy)), v256f64:$vy), (VFMADdr2 v256f64:$vy, f64:$sy, v256f64:$vw)>;
+def : Pat<(fma v256f64:$vz, v256f64:$vw, (v256f64 (vec_broadcast f64:$sy))), (VFMADdr f64:$sy, v256f64:$vz, v256f64:$vw)>;
+def : Pat<(fma v256f64:$vz, v256f64:$vw, v256f64:$vy), (VFMADdv v256f64:$vy, v256f64:$vz, v256f64:$vw)>;
+
+def : Pat<(fneg v256f64:$vz), (VFSBdr (i64 0), v256f64:$vz)>;
+
+// Packed Single-Precision Arithmetic
+
+def : Pat<(fadd (vec_broadcast i64:$sy), v512f32:$vz), (VFADpr i64:$sy, v512f32:$vz)>;
+def : Pat<(fadd v512f32:$vy, v512f32:$vz), (VFADpv v512f32:$vy, v512f32:$vz)>;
+
+def : Pat<(fsub (vec_broadcast i64:$sy), v512f32:$vz), (VFSBpr i64:$sy, v512f32:$vz)>;
+def : Pat<(fsub v512f32:$vy, v512f32:$vz), (VFSBpv v512f32:$vy, v512f32:$vz)>;
+
+def : Pat<(fmul (vec_broadcast i64:$sy), v512f32:$vz), (VFMPpr i64:$sy, v512f32:$vz)>;
+def : Pat<(fmul v512f32:$vy, v512f32:$vz), (VFMPpv v512f32:$vy, v512f32:$vz)>;
+
+def : Pat<(fdiv (v512f32 (vec_broadcast i64:$sy)), v512f32:$vz), (VFDVpr i64:$sy, v512f32:$vz)>; 
+def : Pat<(fdiv v512f32:$vy, v512f32:$vz), (VFDVpv v512f32:$vy, v512f32:$vz)>;
+
+def : Pat<(fma v512f32:$vz, v512f32:$vw, (v512f32 (fneg v512f32:$vy))), (VFMSBpv v512f32:$vy, v512f32:$vz, v512f32:$vw)>;
+
+def : Pat<(fma (v256f32 (vec_broadcast i64:$sy)), v256f32:$vw, v256f32:$vy), (VFMADpr2 v256f32:$vy, i64:$sy, v256f32:$vw)>;
+def : Pat<(fma v256f32:$vw, (v256f32 (vec_broadcast i64:$sy)), v256f32:$vy), (VFMADpr2 v256f32:$vy, i64:$sy, v256f32:$vw)>;
+def : Pat<(fma v256f32:$vz, v256f32:$vw, (v256f32 (vec_broadcast i64:$sy))), (VFMADpr i64:$sy, v256f32:$vz, v256f32:$vw)>;
+def : Pat<(fma v256f32:$vz, v256f32:$vw, v256f32:$vy), (VFMADpv v256f32:$vy, v256f32:$vz, v256f32:$vw)>;
+
+def : Pat<(fneg v512f32:$vz), (VFSBpr (i64 0), v512f32:$vz)>;
+
+// Integer Arithmetic
+
+def : Pat<(add v512i32:$vx, v512i32:$vy), (VADDpv v512i32:$vx, v512i32:$vy)>;
+def : Pat<(add v256i32:$vx, v256i32:$vy), (VADDlv v256i32:$vx, v256i32:$vy)>;
+def : Pat<(add v256i64:$vx, v256i64:$vy), (VADXlv v256i64:$vx, v256i64:$vy)>;
+
+def : Pat<(add v512i32:$vx, v512i32:$vy), (VADDpv v512i32:$vx, v512i32:$vy)>;
+def : Pat<(add v256i32:$vx, v256i32:$vy), (VADDlv v256i32:$vx, v256i32:$vy)>;
+def : Pat<(add v256i64:$vx, v256i64:$vy), (VADXlv v256i64:$vx, v256i64:$vy)>;
+
+def : Pat<(add v512i32:$vx, v512i32:$vy), (VADDpv v512i32:$vx, v512i32:$vy)>;
+def : Pat<(add v256i32:$vx, v256i32:$vy), (VADDlv v256i32:$vx, v256i32:$vy)>;
+def : Pat<(add v256i64:$vx, v256i64:$vy), (VADXlv v256i64:$vx, v256i64:$vy)>;
+
+// Logic
+def : Pat<(and v256i64:$vx, v256i64:$vy), (VANDv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(or  v256i64:$vx, v256i64:$vy), (VORv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(xor v256i64:$vx, v256i64:$vy), (VXORv v256i64:$vx, v256i64:$vy)>;
+
+// Shifts
+def : Pat<(shl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))), (VSLAXr2 v256i64:$vx, i64:$sy)>;
+def : Pat<(srl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))), (VSRLr2 v256i64:$vx, i64:$sy)>;
+
+def : Pat<(shl v256i64:$vx, v256i64:$vy), (VSLAXv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(srl v256i64:$vx, v256i64:$vy), (VSRLv v256i64:$vx, v256i64:$vy)>;
