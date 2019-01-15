@@ -401,9 +401,6 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   // ignore team num and thread limit.
   std::vector<void *> ptrs(NumArgs);
 
-  // TODO: Do we still need this?
-  assert(NumArgs <= 8); // the api can only handle 8 args at a time.
-
   struct veo_args *TargetArgs;
   TargetArgs = veo_args_alloc();
 
