@@ -230,7 +230,7 @@ namespace llvm {
   public:
     VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
-    
+
     /// computeKnownBitsForTargetNode - Determine which of the bits specified
     /// in Mask are known to be either zero or one and return them in the
     /// KnownZero/KnownOne bitsets.
@@ -323,6 +323,15 @@ namespace llvm {
     SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerSHUFFLE_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
