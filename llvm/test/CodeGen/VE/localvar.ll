@@ -22,9 +22,9 @@ define void @test(i32) {
 ; CHECK-NEXT:    lea %s13, 64
 ; CHECK-NEXT:    and %s13, %s13, (32)0
 ; CHECK-NEXT:    lea.sl %s11, 0(%s11, %s13)
+; CHECK-NEXT:    lea %s1, 176(%s11)
 ; CHECK-NEXT:    lea.sl %s35, p@hi
 ; CHECK-NEXT:    ld %s0, p@lo(,%s35)
-; CHECK-NEXT:    lea %s1, 176(%s11)
 ; CHECK-NEXT:    adds.w.sx %s34, %s34, (0)1
 ; CHECK-NEXT:    sll %s2, %s34, 3
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
