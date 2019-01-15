@@ -271,7 +271,8 @@ def GetTLSAddr : SDNode<"VEISD::GETTLSADDR", SDT_SPCall,
                          SDNPVariadic]>;
 
 // GETSTACKTOP
-def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone>;
+def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone,
+                        [SDNPHasChain, SDNPSideEffect]>;
 
 // MEMBARRIER
 def MemBarrier : SDNode<"VEISD::MEMBARRIER", SDTNone,
