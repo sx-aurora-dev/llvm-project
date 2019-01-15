@@ -62,6 +62,17 @@ namespace llvm {
       GLOBAL_BASE_REG, // Global base reg for PIC.
       FLUSHW,      // FLUSH register windows to stack.
 
+      VEC_BROADCAST,   // a scalar value is broadcast across all vector lanes (Operand 0: the broadcast register)
+      VEC_SEQ,         // sequence vector match (Operand 0: the constant stride)
+
+      VEC_VMV,
+
+      /// Scatter and gather instructions.
+      VEC_GATHER,
+      VEC_SCATTER,
+
+      VEC_LVL,
+
       /// A wrapper node for TargetConstantPool, TargetJumpTable,
       /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
       /// MCSymbol and TargetBlockAddress.

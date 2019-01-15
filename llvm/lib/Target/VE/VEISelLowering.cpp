@@ -1289,6 +1289,12 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
+  case VEISD::VEC_BROADCAST:   return "VEISD::VEC_BROADCAST";
+  case VEISD::VEC_LVL:         return "VEISD::VEC_LVL";
+  case VEISD::VEC_SEQ:         return "VEISD::VEC_SEQ";
+  case VEISD::VEC_VMV:         return "VEISD::VEC_VMV";
+  case VEISD::VEC_SCATTER:     return "VEISD::VEC_SCATTER";
+  case VEISD::VEC_GATHER:      return "VEISD::VEC_GATHER";
   case VEISD::Wrapper:         return "VEISD::Wrapper";
   case VEISD::INT_LVM:         return "VEISD::INT_LVM";
   case VEISD::INT_SVM:         return "VEISD::INT_SVM";
