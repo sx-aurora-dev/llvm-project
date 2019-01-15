@@ -1651,12 +1651,12 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
 
   SDNode *Hi64 = DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG,
                                     dl,
-                                    MVT::f64,
+                                    MVT::i64,
                                     StNode->getValue(),
                                     SubRegEven);
   SDNode *Lo64 = DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG,
                                     dl,
-                                    MVT::f64,
+                                    MVT::i64,
                                     StNode->getValue(),
                                     SubRegOdd);
 

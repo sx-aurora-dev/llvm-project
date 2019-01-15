@@ -171,7 +171,7 @@ def: Pat<(f32 (extractelt v256f32:$vec, i64:$idx)),
 
 def: Pat<(f64 (extractelt v256f64:$vec, uimm7:$idx)),
          (LVSi v256f64:$vec, imm:$idx)>;
-def: Pat<(f64 (extractelt v256f64:$vec, f64:$idx)),
+def: Pat<(f64 (extractelt v256f64:$vec, i64:$idx)),
          (LVSr v256f64:$vec, $idx)>;
 
 def: Pat<(i64 (extractelt v256i64:$vec, uimm7:$idx)),
