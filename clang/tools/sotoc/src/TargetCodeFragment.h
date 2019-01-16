@@ -75,6 +75,8 @@ public:
 
   virtual ~TargetCodeFragment() = 0;
 
+  /// Tries to use Clang's PrettyPrinter when possible (this is currently only
+  /// for target regions).
   virtual std::string PrintPretty() = 0;
   /// Get the source range of the fragment.
   virtual clang::SourceRange getRealRange() = 0;
@@ -138,9 +140,15 @@ public:
   virtual std::string PrintPretty() override;
   clang::SourceRange getRealRange() override;
   clang::SourceRange getInnerRange() override;
+  /// Returns a source location at the start of a pragma in the captured
+  /// statment.
   clang::SourceLocation getStartLoc();
   clang::SourceLocation getEndLoc();
+  /// Returns the name of the function in which the target region is declared.
   const std::string getParentFuncName();
+  /// Returns the SourceLocation for the target directive (we need the source
+  /// location of the first pragma of the target region to compose the name of
+  ///  the function generated for that region)
   clang::SourceLocation getTargetDirectiveLocation();
   bool isClausePrintable(clang::OMPClause *C);
 };
