@@ -70,12 +70,6 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
       std::string(SM.getFilename(SM.getLocForStartOfFile(IncludedFile))));
 }
 
-static bool isInSystemHeader(const clang::Decl *D) {
-  clang::SourceManager &SM = D->getASTContext().getSourceManager();
-  clang::SourceLocation Loc = D->getBeginLoc();
-  return SM.isInSystemHeader(Loc);
-}
-
 bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   if (auto *TD = llvm::dyn_cast<clang::OMPTargetDirective>(S)) {
     processTargetRegion(TD);
@@ -133,8 +127,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
 
         // look for nested clause
         if (auto *CD = CS->getCapturedDecl()) {
-          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody()))
-          {
+          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody())) {
             // CoS->dump();
             for (auto *ICoS : CoS->children()) {
               if (auto *PD =
@@ -147,7 +140,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
             }
           }
 
-          for ( auto C : TargetDirective->clauses()) {
+          for (auto C : TargetDirective->clauses()) {
             TCR->addOpenMPClause(C);
           }
 
@@ -157,12 +150,11 @@ bool FindTargetCodeVisitor::processTargetRegion(
           addTargetRegionArgs(CS, TCR);
           TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
           TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
-
         }
       }
     }
-    return true; // why even have a return?
   }
+  return true;
 }
 
 void FindTargetCodeVisitor::addTargetRegionArgs(
@@ -175,7 +167,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
   FindLoopStmtVisitor FindLoopVisitor;
   FindLoopVisitor.TraverseStmt(S);
 
-  std::unordered_set<clang::VarDecl*> tmpSet;
+  std::unordered_set<clang::VarDecl *> tmpSet;
 
   // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
   for (const auto i : *FindLoopVisitor.getVarSet()) {
