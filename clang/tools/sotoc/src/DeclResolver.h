@@ -49,6 +49,7 @@ class DeclResolver {
   std::set<std::string> RequiredSystemHeaders;
 
 public:
+  virtual ~DeclResolver() = 0;
   /** Records a Decl and automatically adds all Decls that this Decl depends
    * on.
    * \param D the Decl to be added to the resolver.

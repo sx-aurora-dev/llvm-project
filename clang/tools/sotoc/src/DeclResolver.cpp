@@ -47,6 +47,8 @@ static bool isDeclInOpenMPHeader(clang::Decl *D) {
   return false;
 }
 
+DeclResolver::~DeclResolver() {}
+
 void DeclResolver::addDecl(clang::Decl *D) {
 
   if (AllDecls.count(D) != 0) {
@@ -152,7 +154,7 @@ void DeclResolver::orderAndAddFragments(TargetCode &TC) {
 
       // TODO: this wont hurt but is not always necessary
       codeDecl->NeedsSemicolon = true;
-      auto r = TC.addCodeFragmentFront(codeDecl);
+      TC.addCodeFragmentFront(codeDecl);
     }
     orderStack.pop();
   }

@@ -52,7 +52,7 @@ class DiscoverTypesInDeclVisitor
 public:
   DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
-      : OnEachTypeRef(F) {};
+      : OnEachTypeRef(F){};
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
@@ -71,7 +71,6 @@ public:
   bool VisitExpr(clang::Expr *E);
 };
 
-
 class FindDeclRefExprVisitor
     : public clang::RecursiveASTVisitor<FindDeclRefExprVisitor> {
 
@@ -81,20 +80,18 @@ public:
   FindDeclRefExprVisitor() {}
   bool VisitStmt(clang::Stmt *S);
   // bool VisitDecl(clang::Decl *D);
-  std::unordered_set<clang::VarDecl *>* getVarSet() {
-    return &VarSet;
-  }
+  std::unordered_set<clang::VarDecl *> *getVarSet() { return &VarSet; }
 };
 
 class FindLoopStmtVisitor
-  : public clang::RecursiveASTVisitor<FindLoopStmtVisitor> {
+    : public clang::RecursiveASTVisitor<FindLoopStmtVisitor> {
 
   FindDeclRefExprVisitor FindDeclRefVisitor;
 
 public:
   FindLoopStmtVisitor() {}
   bool VisitStmt(clang::Stmt *S);
-  std::unordered_set<clang::VarDecl *>* getVarSet() {
+  std::unordered_set<clang::VarDecl *> *getVarSet() {
     return FindDeclRefVisitor.getVarSet();
   }
 };
@@ -108,9 +105,6 @@ class FindTargetCodeVisitor
 
   /// The collection where target regions and other code is added to.
   TargetCode &TargetCodeInfo;
-  /// A collection of all types required by the target code found (and
-  /// referenced by other required types).
-  TypeDeclResolver &Types;
   /// A Visitor to find references to the types required by the target code.
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
   /// A Visitor to find references to all functions required by the target
@@ -132,9 +126,8 @@ public:
   FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types,
                         FunctionDeclResolver &Functions,
                         clang::ASTContext &Context)
-      : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types),
-        DiscoverFunctionVisitor(Functions), Functions(Functions),
-        Context(Context) {}
+      : Context(Context), TargetCodeInfo(Code), DiscoverTypeVisitor(Types),
+        DiscoverFunctionVisitor(Functions), Functions(Functions){};
   bool VisitStmt(clang::Stmt *S);
   bool VisitDecl(clang::Decl *D);
 
