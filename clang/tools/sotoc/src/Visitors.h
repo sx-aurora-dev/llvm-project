@@ -58,6 +58,14 @@ public:
   bool VisitType(clang::Type *T);
 };
 
+/// Traverses (parts of) the AST to find DeclRefExpr that refer to functions
+/// that need to be present for that part of the AST to compile correctly.
+/// This way functions declared and defined in the same compilation unit do
+/// not need to be annotated by the 'omp declare target' pragma.
+/// The Visitor is not only used to search through target regions, but also
+/// through the found functions themselves and through functions that are
+/// annotated with the 'omp declare target' pragma, to find all necessary
+/// dependencies recursively.
 class DiscoverFunctionsInDeclVisitor
     : public clang::RecursiveASTVisitor<DiscoverFunctionsInDeclVisitor> {
 
@@ -132,7 +140,12 @@ public:
   bool VisitDecl(clang::Decl *D);
 
 private:
+  /// Extracts the necessary information about the target region from the AST,
+  /// such as captured variables and relevant OpenMP clauses, and adds an
+  /// TargetCodeRegion to the TargetCode instance.
   bool processTargetRegion(clang::OMPExecutableDirective *TargetDirective);
+  /// Finds and adds all variables required by the target regions as arguments
+  /// to the generated function.
   void addTargetRegionArgs(clang::CapturedStmt *S,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
