@@ -147,6 +147,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
           // For more complex data types (like structs) we need to traverse the
           // tree
           DiscoverTypeVisitor.TraverseStmt(CS);
+          DiscoverFunctionVisitor.TraverseStmt(CS);
           addTargetRegionArgs(CS, TCR);
           TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
           TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
