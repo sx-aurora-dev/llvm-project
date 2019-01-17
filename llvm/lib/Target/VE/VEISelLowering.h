@@ -233,6 +233,21 @@ namespace llvm {
       INT_EXTML,    // for int_ve_extract_vm512l
       INT_INSMU,    // for int_ve_insert_vm512u
       INT_INSML,    // for int_ve_insert_vm512l
+      INT_VLD,      // for int_ve_vld_vss
+      INT_VLDU,     // for int_ve_vldu_vss
+      INT_VLDLSX,   // for int_ve_vldlsx_vss
+      INT_VLDLZX,   // for int_ve_vldlzx_vss
+      INT_VLD2D,    // for int_ve_vld2d_vss
+      INT_VLDU2D,   // for int_ve_vldu2d_vss
+      INT_VLDL2DSX, // for int_ve_vldl2dsx_vss
+      INT_VLDL2DZX, // for int_ve_vldl2dzx_vss
+      INT_VST,      // for int_ve_vst_vss
+      INT_VSTU,     // for int_ve_vstu_vss
+      INT_VSTL,     // for int_ve_vstl_vss
+      INT_VST2D,    // for int_ve_vst2d_vss
+      INT_VSTU2D,   // for int_ve_vstu2d_vss
+      INT_VSTL2D,   // for int_ve_vstl2d_vss
+      INT_LVL,      // for int_ve_lvl
     };
   }
 

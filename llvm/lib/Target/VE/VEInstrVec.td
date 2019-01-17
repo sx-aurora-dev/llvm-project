@@ -29,12 +29,14 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Inst{47-40} = vy;
     let Inst{55-48} = vz;
     let Inst{63-56} = vw;
-    let Uses = [VL]; // vector length register
+    // Not using implicit Uses
+    // let Uses = [VL]; // vector length register
 }
 
 class PseudoVec<dag outs, dag ins, string asmstr, list<dag> pattern> 
   : Pseudo<outs, ins, asmstr, pattern> {
-    let Uses = [VL]; // vector length register
+    // Not using implicit Uses
+    // let Uses = [VL]; // vector length register
   }
 
 
@@ -394,7 +396,8 @@ class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Inst{39-32} = vx;
     let Inst{47-40} = vy;
     let Inst{63-57} = sw;
-    let Uses = [VL]; // vector length register
+    // Not using implicit Uses
+    // let Uses = [VL]; // vector length register
 }
 
 // VLD, VST
@@ -408,23 +411,23 @@ class RVM0<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 // 5.3.2.7. Vector Transfer Instructions
 
 multiclass VLDm<string opcStr, bits<8> opc> {
-  def rr : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
+  def rr : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
       let vc = 0;
       let cy = 1;
   }
-  def ir : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz),
+  def ir : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
       let vc = 0;
       let cy = 0;
   }
-  def rz : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz),
+  def rz : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,0"), []> {
       let vc = 0;
       let cy = 1;
       let cz = 0;
   }
-  def iz : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz),
+  def iz : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,0"), []> {
       let vc = 0;
       let cy = 0;
@@ -433,23 +436,23 @@ multiclass VLDm<string opcStr, bits<8> opc> {
 }
 
 multiclass VSTm<string opcStr, bits<8> opc> {
-  def rr : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
+  def rr : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
       let vc = 0;
       let cy = 1;
   }
-  def ir : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
+  def ir : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,$sz"), []> {
       let vc = 0;
       let cy = 0;
   }
-  def rz : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz),
+  def rz : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,0"), []> {
       let vc = 0;
       let cy = 1;
       let cz = 0;
   }
-  def iz : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz),
+  def iz : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz, VLS:$vl),
     !strconcat(opcStr, " $vx,$sy,0"), []> {
       let vc = 0;
       let cy = 0;
@@ -467,6 +470,7 @@ defm VLDU2D : VLDm<"vldu2d", 0xC2>;
 let vo = 0 in defm VLDL2Dsx : VLDm<"vldl2d.sx", 0xC3>;
 let vo = 1 in defm VLDL2Dzx : VLDm<"vldl2d.zx", 0xC3>;
 
+let DisableEncoding = "$vl" in {
 defm VST : VSTm<"vst", 0x91>;
 defm VSTU : VSTm<"vstu", 0x92>;
 defm VSTL : VSTm<"vstl", 0x93>;
@@ -474,6 +478,7 @@ defm VSTL : VSTm<"vstl", 0x93>;
 defm VST2D  : VSTm<"vst2d", 0xD1>;
 defm VSTU2D : VSTm<"vstu2d", 0xD2>;
 defm VSTL2D : VSTm<"vstl2d", 0xD3>;
+}
 
 def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I32:$sy, I64:$sz), 
   "lsv ${vx}(${sy}),$sz", []> {
@@ -619,6 +624,9 @@ def LDVMri : Pseudo<
 def LDVM512ri : Pseudo<
     (outs VM512:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm512 $vmx, $addr", []>;
+def LDVLri : Pseudo<
+    (outs VLS:$vl), (ins MEMri:$addr),
+    "# pseudo ldvls $vl, $addr", []>;
 }
 let mayStore = 1, hasSideEffects = 0 in {
 def STVRri : Pseudo<
@@ -630,6 +638,9 @@ def STVMri : Pseudo<
 def STVM512ri : Pseudo<
     (outs), (ins MEMri:$addr, VM512:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
+def STVLri : Pseudo<
+    (outs), (ins MEMri:$addr, VLS:$vl),
+    "# pseudo stvl $addr, $vl", []>;
 }
 
 // 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
@@ -1164,8 +1175,11 @@ def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 // SMVL
 // LVIX
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, Defs = [VL] in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0 in
 def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
+
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl" in
+def SVL : RR<0x2F, (outs I32:$sx), (ins VLS:$vl), "svl $sx", []>;
 
 // Pseudo instructions for bitconvert
 

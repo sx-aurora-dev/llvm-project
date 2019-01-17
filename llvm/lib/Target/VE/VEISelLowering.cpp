@@ -1462,6 +1462,21 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_EXTML:       return "VEISD::INT_EXTML";
   case VEISD::INT_INSMU:       return "VEISD::INT_INSMU";
   case VEISD::INT_INSML:       return "VEISD::INT_INSML";
+  case VEISD::INT_VLD:         return "VEISD::INT_VLD";
+  case VEISD::INT_VLDU:        return "VEISD::INT_VLDU";
+  case VEISD::INT_VLDLSX:      return "VEISD::INT_VLDLSX";
+  case VEISD::INT_VLDLZX:      return "VEISD::INT_VLDLZX";
+  case VEISD::INT_VLD2D:       return "VEISD::INT_VLD2D";
+  case VEISD::INT_VLDU2D:      return "VEISD::INT_VLDU2D";
+  case VEISD::INT_VLDL2DSX:    return "VEISD::INT_VLDL2DSX";
+  case VEISD::INT_VLDL2DZX:    return "VEISD::INT_VLDL2DZX";
+  case VEISD::INT_VST:         return "VEISD::INT_VST";
+  case VEISD::INT_VSTU:        return "VEISD::INT_VSTU";
+  case VEISD::INT_VSTL:        return "VEISD::INT_VSTL";
+  case VEISD::INT_VST2D:       return "VEISD::INT_VST2D";
+  case VEISD::INT_VSTU2D:      return "VEISD::INT_VSTU2D";
+  case VEISD::INT_VSTL2D:      return "VEISD::INT_VSTL2D";
+  case VEISD::INT_LVL:         return "VEISD::INT_LVL";
   }
   return nullptr;
 }
@@ -2590,6 +2605,21 @@ SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
       return DAG.getNode(IntrData->Opc0, dl, VTs,
                          Chain, Op.getOperand(2), Bitcast);
     }
+    case VLD: {
+      // Vector load with vector length register
+      //   Input:
+      //     (v256i64 (int_ve_vld_vss (i64 %sy), (i64 %sz)))
+      //   Output:
+      //     (v256i64 (VLD %sy, %sz, %vl))
+      SDValue Chain = Op.getOperand(0);
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
+      Chain = VL.getValue(1);
+      SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other);
+      return DAG.getNode(IntrData->Opc0, dl, VTs,
+                         Chain, Op.getOperand(2), Op.getOperand(3), VL);
+    }
     }
   }
   switch (IntNo) {
@@ -2607,6 +2637,23 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
     default:
       llvm_unreachable("Unknown intrinsic data type");
       break;
+    case LVL: {
+      // 1-operand load VL.  Intrinsic is void, but we need to copy value
+      // to Vector Length reigster.  So, we make a copy instruction here.
+      // A copy instruction to VL is converted to LVL instruction later.
+      //   Input:
+      //     (int_ve_lvl (i32 val))
+      //   Output:
+      //     (i32 (copy %val))
+      SDValue Chain = Op.getOperand(0);
+      SDValue Inp = Op.getOperand(2);
+      MachineFunction &MF = DAG.getMachineFunction();
+
+      // We re-use single virtual register multiple times.
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      Chain = DAG.getCopyToReg(Chain, dl, VLReg, Inp);
+      return Chain;
+    }
     case SCATTER_M: {
       // Vector scatter with mask intrinsics
       //   Input:
@@ -2620,6 +2667,21 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
       SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
       return DAG.getNode(IntrData->Opc0, dl, MVT::Other,
                          Chain, Op.getOperand(2), Op.getOperand(3), Bitcast);
+    }
+    case VST: {
+      // Vector store with vector length register
+      //   Input:
+      //     (int_ve_vst_vss (v256i64 %vx), (i64 %sy), (i64 %sz)))
+      //   Output:
+      //     (VST %vx, %sy, %sz, %vl))
+      SDValue Chain = Op.getOperand(0);
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
+      Chain = VL.getValue(1);
+      return DAG.getNode(IntrData->Opc0, dl, MVT::Other,
+                         Chain, Op.getOperand(2), Op.getOperand(3),
+                         Op.getOperand(4), VL);
     }
     }
   }

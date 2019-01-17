@@ -21,6 +21,7 @@ namespace llvm {
 
 enum IntrinsicType : uint16_t {
   GATHER_M, SCATTER_M,
+  VLD, VST, LVL,
   OP_MMXX, OP_XMX,
   OP_M,
   OP_MMM, OP_MM, OP_XM,
@@ -57,9 +58,16 @@ struct IntrinsicData {
  * the alphabetical order.
  */
 static const IntrinsicData IntrinsicsVoid[] = {
+  VE_INTRINSIC_DATA(lvl,                LVL,        VEISD::INT_LVL, 0),
   VE_INTRINSIC_DATA(vsc_vvm,            SCATTER_M,  VEISD::INT_VSC_M, 0),
   VE_INTRINSIC_DATA(vscl_vvm,           SCATTER_M,  VEISD::INT_VSCL_M, 0),
   VE_INTRINSIC_DATA(vscu_vvm,           SCATTER_M,  VEISD::INT_VSCU_M, 0),
+  VE_INTRINSIC_DATA(vst_vss,            VST,        VEISD::INT_VST, 0),
+  VE_INTRINSIC_DATA(vst2d_vss,          VST,        VEISD::INT_VST2D, 0),
+  VE_INTRINSIC_DATA(vstl_vss,           VST,        VEISD::INT_VSTL, 0),
+  VE_INTRINSIC_DATA(vstl2d_vss,         VST,        VEISD::INT_VSTL2D, 0),
+  VE_INTRINSIC_DATA(vstu_vss,           VST,        VEISD::INT_VSTU, 0),
+  VE_INTRINSIC_DATA(vstu2d_vss,         VST,        VEISD::INT_VSTU2D, 0),
 };
 
 /*
@@ -83,6 +91,14 @@ static const IntrinsicData IntrinsicsWithChain[] = {
   VE_INTRINSIC_DATA(vgtlsx_vvm,         GATHER_M,   VEISD::INT_VGTLSX_M, 0),
   VE_INTRINSIC_DATA(vgtlzx_vvm,         GATHER_M,   VEISD::INT_VGTLZX_M, 0),
   VE_INTRINSIC_DATA(vgtu_vvm,           GATHER_M,   VEISD::INT_VGTU_M, 0),
+  VE_INTRINSIC_DATA(vld_vss,            VLD,        VEISD::INT_VLD, 0),
+  VE_INTRINSIC_DATA(vld2d_vss,          VLD,        VEISD::INT_VLD2D, 0),
+  VE_INTRINSIC_DATA(vldl2dsx_vss,       VLD,        VEISD::INT_VLDL2DSX, 0),
+  VE_INTRINSIC_DATA(vldl2dzx_vss,       VLD,        VEISD::INT_VLDL2DZX, 0),
+  VE_INTRINSIC_DATA(vldlsx_vss,         VLD,        VEISD::INT_VLDLSX, 0),
+  VE_INTRINSIC_DATA(vldlzx_vss,         VLD,        VEISD::INT_VLDLZX, 0),
+  VE_INTRINSIC_DATA(vldu_vss,           VLD,        VEISD::INT_VLDU, 0),
+  VE_INTRINSIC_DATA(vldu2d_vss,         VLD,        VEISD::INT_VLDU2D, 0),
 };
 
 /*

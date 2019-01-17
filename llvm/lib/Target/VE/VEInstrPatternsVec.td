@@ -8,40 +8,40 @@
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
 
 def : Pat<(v256i32 (load ADDRri:$addr)), 
-          (v256i32 (VLDLsxir 4, (LEAasx ADDRri:$addr)))>;
+          (v256i32 (VLDLsxir 4, (LEAasx ADDRri:$addr), 256))>;
 
 def : Pat<(v256f32 (load ADDRri:$addr)), 
-          (v256f32 (VLDUir 4, (LEAasx ADDRri:$addr)))>;
+          (v256f32 (VLDUir 4, (LEAasx ADDRri:$addr), 256))>;
 
 def : Pat<(v256f64 (load ADDRri:$addr)), 
-          (v256f64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
+          (v256f64 (VLDir 8, (LEAasx ADDRri:$addr), 256))>;
 
 def : Pat<(v256i64 (load ADDRri:$addr)), 
-          (v256i64 (VLDir 8, (LEAasx ADDRri:$addr)))>;
+          (v256i64 (VLDir 8, (LEAasx ADDRri:$addr), 256))>;
 
 def : Pat<(v512i32 (load ADDRri:$addr)), 
-          (v512i32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
+          (v512i32 (VLDir 8, (LEAasx ADDRri:$addr), 256))>;
 
 def : Pat<(v512f32 (load ADDRri:$addr)), 
-          (v512f32 (VLDir 8, (LEAasx ADDRri:$addr)))>;
+          (v512f32 (VLDir 8, (LEAasx ADDRri:$addr), 256))>;
 
 def : Pat<(store v256i32:$vx, ADDRri:$addr), 
-          (VSTLir v256i32:$vx, 4, (LEAasx ADDRri:$addr))>;
+          (VSTLir v256i32:$vx, 4, (LEAasx ADDRri:$addr), 256)>;
 
 def : Pat<(store v256f32:$vx, ADDRri:$addr), 
-          (VSTUir v256f32:$vx, 4, (LEAasx ADDRri:$addr))>;
+          (VSTUir v256f32:$vx, 4, (LEAasx ADDRri:$addr), 256)>;
 
 def : Pat<(store v256f64:$vx, ADDRri:$addr), 
-          (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr), 256)>;
 
 def : Pat<(store v256i64:$vx, ADDRri:$addr), 
-          (VSTir v256i64:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTir v256i64:$vx, 8, (LEAasx ADDRri:$addr), 256)>;
 
 def : Pat<(store v512i32:$vx, ADDRri:$addr), 
-          (VSTir v512i32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTir v512i32:$vx, 8, (LEAasx ADDRri:$addr), 256)>;
 
 def : Pat<(store v512f32:$vx, ADDRri:$addr), 
-          (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr))>;
+          (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr), 256)>;
 
 // fadd, fsub, fmul, and fdiv for
 // v256f32, v256f64, v512f32.

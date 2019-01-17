@@ -143,7 +143,32 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(VE::SB17);
 
   // VL register is reserved
-  Reserved.set(VE::VL);
+  // Reserved.set(VE::VL);
+
+  // Other Misc registers are reserved
+  Reserved.set(VE::UCC);
+  Reserved.set(VE::PSW);
+  Reserved.set(VE::SAR);
+  Reserved.set(VE::PMMR);
+  Reserved.set(VE::PMCR0);
+  Reserved.set(VE::PMCR1);
+  Reserved.set(VE::PMCR2);
+  Reserved.set(VE::PMCR3);
+  Reserved.set(VE::PMC0);
+  Reserved.set(VE::PMC1);
+  Reserved.set(VE::PMC2);
+  Reserved.set(VE::PMC3);
+  Reserved.set(VE::PMC4);
+  Reserved.set(VE::PMC5);
+  Reserved.set(VE::PMC6);
+  Reserved.set(VE::PMC7);
+  Reserved.set(VE::PMC8);
+  Reserved.set(VE::PMC9);
+  Reserved.set(VE::PMC10);
+  Reserved.set(VE::PMC11);
+  Reserved.set(VE::PMC12);
+  Reserved.set(VE::PMC13);
+  Reserved.set(VE::PMC14);
 
   // sx18-sx33 are callee-saved registers
   // sx34-sx63 are temporary registers
@@ -282,7 +307,8 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     unsigned SrcReg = MI.getOperand(2).getReg();
     bool isKill = MI.getOperand(2).isKill();
-    // FIXME: use SX16 as a temporary register
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
     unsigned TmpReg = VE::SX16;
     for (int i = 0; i < 3; ++i) {
       BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVMi), TmpReg)
@@ -313,7 +339,8 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     unsigned DestReg = MI.getOperand(0).getReg();
-    // FIXME: use SX16 as a temporary register
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
     unsigned TmpReg = VE::SX16;
     BuildMI(*MI.getParent(), II, dl, TII.get(VE::IMPLICIT_DEF), DestReg);
     for (int i = 0; i < 3; ++i) {
@@ -335,7 +362,8 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     unsigned SrcLoReg = getSubReg(SrcReg, VE::sub_vm_even);
     unsigned SrcHiReg = getSubReg(SrcReg, VE::sub_vm_odd);
     bool isKill = MI.getOperand(2).isKill();
-    // FIXME: use SX16 as a temporary register
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
     unsigned TmpReg = VE::SX16;
     // store low part of VMP
     MachineInstr *LastMI = nullptr;
@@ -376,7 +404,8 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     unsigned DestReg   = MI.getOperand(0).getReg();
     unsigned DestLoReg = getSubReg(DestReg, VE::sub_vm_even);
     unsigned DestHiReg = getSubReg(DestReg, VE::sub_vm_odd);
-    // FIXME: use SX16 as a temporary register
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
     unsigned TmpReg = VE::SX16;
     BuildMI(*MI.getParent(), II, dl, TII.get(VE::IMPLICIT_DEF), DestReg);
     for (int i = 0; i < 4; ++i) {
@@ -401,6 +430,28 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
     BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVMi), DestHiReg)
       .addReg(DestHiReg).addImm(3).addReg(TmpReg, getKillRegState(true));
+  } else if (MI.getOpcode() == VE::STVLri) {
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    unsigned SrcReg = MI.getOperand(2).getReg();
+    bool isKill = MI.getOperand(2).isKill();
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
+    unsigned TmpReg = VE::SX16;
+    BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVL), TmpReg)
+      .addReg(SrcReg, getKillRegState(isKill));
+    MI.setDesc(TII.get(VE::STSri));
+    MI.getOperand(2).setReg(TmpReg);
+  } else if (MI.getOpcode() == VE::LDVLri) {
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
+    unsigned TmpReg = VE::SX16;
+    MI.setDesc(TII.get(VE::LDSri));
+    MI.getOperand(0).ChangeToRegister(TmpReg, true);
+    // MI.getOperand(0).setReg(TmpReg);
+    // LVL doesn't require VL register.
+    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL))
+      .addReg(TmpReg, getKillRegState(true));
   }
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);

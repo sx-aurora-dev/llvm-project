@@ -22,6 +22,9 @@ namespace llvm {
   private:
     unsigned GlobalBaseReg;
 
+    /// VectorLengthReg - Holds the virtual register for VL register.
+    unsigned VectorLengthReg;
+
     /// VarArgsFrameOffset - Frame offset to start of varargs area.
     int VarArgsFrameOffset;
 
@@ -33,14 +36,19 @@ namespace llvm {
     bool IsLeafProc;
   public:
     VEMachineFunctionInfo()
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
+      : GlobalBaseReg(0), VectorLengthReg(0),
+        VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}
     explicit VEMachineFunctionInfo(MachineFunction &MF)
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
+      : GlobalBaseReg(0), VectorLengthReg(0),
+        VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}
 
     unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
     void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
+
+    unsigned getVectorLengthReg() const { return VectorLengthReg; }
+    void setVectorLengthReg(unsigned Reg) { VectorLengthReg = Reg; }
 
     int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
     void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
