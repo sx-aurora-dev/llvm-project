@@ -58,6 +58,313 @@ VETargetLowering::CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
 }
 
 SDValue
+VETargetLowering::LowerBitcast(SDValue Op, SelectionDAG &DAG) const {
+  if (Op.getSimpleValueType() == MVT::v256i64 && Op.getOperand(0).getSimpleValueType() == MVT::v256f64) {
+    LLVM_DEBUG(dbgs() << "Lowering bitcast of similar types.\n");
+    return Op.getOperand(0);
+  } else {
+    return Op;
+  }
+}
+
+SDValue
+VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering gather or scatter\n");
+  SDLoc dl(Op);
+  //dbgs() << "\nNext Instr:\n";
+  //Op.dumpr(&DAG);
+
+  MaskedGatherScatterSDNode *N = cast<MaskedGatherScatterSDNode>(Op.getNode());
+
+  SDValue Index = N->getIndex();
+  SDValue BasePtr = N->getBasePtr();
+  SDValue Mask = N->getMask();
+  SDValue Chain = N->getChain();
+
+  SDValue PassThru;
+  SDValue Source;
+
+  if (Op.getOpcode() == ISD::MGATHER) {
+    MaskedGatherSDNode *N = cast<MaskedGatherSDNode>(Op.getNode());
+    PassThru = N->getPassThru();
+  } else if (Op.getOpcode() == ISD::MSCATTER) {
+    MaskedScatterSDNode *N = cast<MaskedScatterSDNode>(Op.getNode());
+    Source = N->getValue();
+  } else {
+    return SDValue();
+  }
+
+  MVT IndexVT = Index.getSimpleValueType();
+  //MVT MaskVT = Mask.getSimpleValueType();
+  //MVT BasePtrVT = BasePtr.getSimpleValueType();
+
+  // vindex = vindex + baseptr;
+  SDValue BaseBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, BasePtr);
+  SDValue ScaleBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, N->getScale());
+
+  SDValue index_addr = DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
+
+  SDValue addresses = DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, index_addr});
+
+  // TODO: vmx = svm (mask);
+  //Mask.dumpr(&DAG);
+  if (Mask.getOpcode() != ISD::BUILD_VECTOR || Mask.getNumOperands() != 256) {
+    LLVM_DEBUG(dbgs() << "Cannot handle gathers with complex masks.\n");
+    return SDValue();
+  }
+  for (unsigned i = 0; i < 256; i++) {
+    const SDValue Operand = Mask.getOperand(i);
+    if (Operand.getOpcode() != ISD::Constant) {
+      LLVM_DEBUG(dbgs() << "Cannot handle gather masks with complex elements.\n");
+      return SDValue();
+    }
+    if (Mask.getConstantOperandVal(i) != 1) {
+      LLVM_DEBUG(dbgs() << "Cannot handle gather masks with elements != 1.\n");
+      return SDValue();
+    }
+  }
+
+  if (Op.getOpcode() == ISD::MGATHER) {
+    // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
+    SDValue load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(), {Chain, addresses});
+    //load.dumpr(&DAG);
+
+    // TODO: merge (vt, default, vmx);
+    //PassThru.dumpr(&DAG);
+    // We can safely ignore PassThru right now, the mask is guaranteed to be constant 1s.
+
+    return load;
+  } else {
+    SDValue store = DAG.getNode(VEISD::VEC_SCATTER, dl, Op.getNode()->getVTList(), {Chain, Source, addresses});
+    //store.dumpr(&DAG);
+    return store;
+  }
+}
+
+SDValue
+VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering MLOAD\n");
+  LLVM_DEBUG(Op.dumpr(&DAG));
+  SDLoc dl(Op);
+
+  MaskedLoadSDNode *N = cast<MaskedLoadSDNode>(Op.getNode());
+
+  SDValue BasePtr = N->getBasePtr();
+  SDValue Mask = N->getMask();
+  SDValue Chain = N->getChain();
+  SDValue PassThru = N->getPassThru();
+
+  MachinePointerInfo info = N->getPointerInfo();
+
+  if (Mask.getOpcode() != ISD::BUILD_VECTOR || Mask.getNumOperands() != 256) {
+    LLVM_DEBUG(dbgs() << "Cannot handle gathers with complex masks.\n");
+    return SDValue();
+  }
+
+  int firstzero = 256;
+
+  for (unsigned i = 0; i < 256; i++) {
+    const SDValue Operand = Mask.getOperand(i);
+    if (Operand.getOpcode() != ISD::Constant) {
+      LLVM_DEBUG(dbgs() << "Cannot handle load masks with complex elements.\n");
+      return SDValue();
+    }
+    if (Mask.getConstantOperandVal(i) != 1) {
+      if (firstzero == 256)
+        firstzero = i;
+      if (!PassThru.isUndef() && !PassThru.getOperand(i).isUndef()) {
+        LLVM_DEBUG(dbgs() << "Cannot handle passthru.\n");
+        return SDValue();
+      }
+    } else {
+      if (firstzero != 256) {
+        LLVM_DEBUG(dbgs() << "Cannot handle mixed load masks.\n");
+        return SDValue();
+      }
+    }
+  }
+
+  EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+
+  Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other, {Chain, DAG.getConstant(firstzero, dl, i32)});
+
+  SDValue load = DAG.getLoad(Op.getSimpleValueType(), dl, Chain, BasePtr, info);
+
+  Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other, {load.getValue(1), DAG.getConstant(256, dl, i32)});
+
+  SDValue merge = DAG.getMergeValues({load, Chain}, dl);
+  LLVM_DEBUG(dbgs() << "Becomes\n");
+  LLVM_DEBUG(merge.dumpr(&DAG));
+  return merge;
+}
+
+SDValue
+VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering BUILD_VECTOR\n");
+  auto & bvNode = *cast<BuildVectorSDNode>(Chain);
+
+  SDLoc DL(Chain);
+
+// match VEC_BROADCAST
+  bool allUndef = true;
+  unsigned first_def = -1;
+  for (unsigned i = 0; i < bvNode.getNumOperands(); ++i) {
+    if (!bvNode.getOperand(i).isUndef()) {
+      allUndef = false;
+      first_def = i;
+      break;
+    }
+  }
+
+  if (allUndef) {
+    return DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(),
+                                  bvNode.getOperand(0));
+  }
+
+  bool isBroadcast = true;
+  for (unsigned i = first_def + 1; i < bvNode.getNumOperands(); ++i) {
+    if (bvNode.getOperand(first_def) != bvNode.getOperand(i) && !bvNode.getOperand(i).isUndef()) {
+      isBroadcast = false;
+      break;
+    }
+  }
+
+  if (isBroadcast) {
+    return DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(),
+                                  bvNode.getOperand(first_def));
+  }
+
+
+// match VEC_SEQ(stride) patterns
+  // identify a constant stride vector
+  bool hasConstantStride = true;
+
+  // whether the constant is a repetition of ascending indices, eg <0, 1, 2, 3, 0, 1, 2, 3, ..>
+  bool hasBlockStride = false;
+
+  // whether the constant is an ascending sequence of repeated indices, eg <0, 0, 1, 1, 2, 2, 3, 3 ..>
+  bool hasBlockStride2 = false;
+
+  bool firstStride = true;
+  int64_t blockLength = 0;
+  int64_t stride = 0;
+  int64_t lastElemValue = 0;
+  MVT elemTy;
+
+  for (unsigned i = 0; i < bvNode.getNumOperands(); ++i) {
+    if (hasBlockStride) {
+      if (i % blockLength == 0)
+        stride = 1;
+      else
+        stride = 0;
+    }
+
+    if (bvNode.getOperand(i).isUndef()) {
+      if (hasBlockStride2 && i % blockLength == 0)
+        lastElemValue = 0;
+      else
+        lastElemValue += stride;
+      continue;
+    }
+
+    // is this an immediate constant value?
+    auto * constNumElem = dyn_cast<ConstantSDNode>(bvNode.getOperand(i));
+    if (!constNumElem) {
+      hasConstantStride = false;
+      hasBlockStride = false;
+      hasBlockStride2 = false;
+      break;
+    }
+
+    // read value
+    int64_t elemValue = constNumElem->getSExtValue();
+    elemTy = constNumElem->getSimpleValueType(0);
+
+    if (i > first_def && firstStride) {
+      // first stride
+      stride = (elemValue - lastElemValue) / (i - first_def);
+      firstStride = false;
+    } else if (i > first_def) {
+      // later stride
+      if (hasBlockStride2 && elemValue == 0 && i % blockLength == 0) {
+        lastElemValue = 0;
+        continue;
+      }
+      int64_t thisStride = elemValue - lastElemValue;
+      if (thisStride != stride) {
+        hasConstantStride = false;
+        if (!hasBlockStride && thisStride == 1 && stride == 0 && lastElemValue == 0) {
+          hasBlockStride = true;
+          blockLength = i;
+        } else if (!hasBlockStride2 && elemValue == 0 && lastElemValue + 1 == i) {
+          hasBlockStride2 = true;
+          blockLength = i;
+        } else {
+          break;
+        }
+      }
+    }
+
+    // track last elem value
+    lastElemValue = elemValue;
+  }
+
+  // detected a proper stride pattern
+  if (hasConstantStride) {
+    SDValue seq = DAG.getNode(VEISD::VEC_SEQ, DL, Chain.getSimpleValueType(),
+                                  DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
+    if (stride == 1)
+      return seq;
+
+    SDValue const_stride = DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(), DAG.getConstant(stride, DL, elemTy));
+    return DAG.getNode(ISD::MUL, DL, Chain.getSimpleValueType(), {seq, const_stride});
+  }
+
+  // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
+  // constant == VSEQ >> log2(blockLength)
+  if (hasBlockStride) {
+    int64_t blockLengthLog = log2(blockLength);
+
+    if (pow(2, blockLengthLog) == blockLength) {
+      SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Chain.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
+      SDValue shiftbroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 64), 256), DAG.getConstant(blockLengthLog, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
+
+      SDValue shift = DAG.getNode(ISD::SRL, DL, Chain.getSimpleValueType(), {sequence, shiftbroadcast});
+      return shift;
+    }
+  }
+
+  // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
+  // constant == VSEQ % blockLength
+  if (hasBlockStride2) {
+    int64_t blockLengthLog = log2(blockLength);
+
+    if (pow(2, blockLengthLog) == blockLength) {
+      SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Chain.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
+      SDValue modulobroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 64), 256), DAG.getConstant(blockLength - 1, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
+
+      SDValue modulo = DAG.getNode(ISD::AND, DL, Chain.getSimpleValueType(), {sequence, modulobroadcast});
+
+      return modulo;
+    }
+  }
+
+  // default to element-wise insertion
+  SDValue newVector = DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(),
+                                  bvNode.getOperand(0));
+
+  for (unsigned i = 0; i < bvNode.getNumOperands(); ++i) {
+    newVector = DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Chain.getSimpleValueType(),
+        newVector,
+        bvNode.getOperand(i),
+        DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64))
+    );
+  }
+
+  return newVector;
+}
+
+SDValue
 VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                               bool IsVarArg,
                               const SmallVectorImpl<ISD::OutputArg> &Outs,
@@ -661,6 +968,16 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTruncStoreAction(MVT::f128, MVT::f32, Expand);
   setTruncStoreAction(MVT::f128, MVT::f64, Expand);
 
+  // custom splat handling
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
+  }
+
+  // currently unsupported math functions
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::FABS, VT, Expand);
+  }
+
   // Custom legalize GlobalAddress nodes into LO/HI parts.
   setOperationAction(ISD::GlobalAddress, PtrVT, Custom);
   setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
@@ -696,6 +1013,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::EH_SJLJ_SETUP_DISPATCH, MVT::Other, Custom);
   if (TM.Options.ExceptionModel == ExceptionHandling::SjLj)
     setLibcallName(RTLIB::UNWIND_RESUME, "_Unwind_SjLj_Resume");
+
+  setTargetDAGCombine(ISD::FADD);
+  //setTargetDAGCombine(ISD::FMA);
 
   // ATOMICs.
   // Atomics are supported on VE.
@@ -743,6 +1063,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   for (MVT VT : MVT::fp_valuetypes()) {
     // VE has no sclar FMA instruction
     setOperationAction(ISD::FMA, VT, Expand);
+    setOperationAction(ISD::FMAD, VT, Expand);
     setOperationAction(ISD::FREM, VT, Expand);
     setOperationAction(ISD::FNEG, VT, Expand);
     setOperationAction(ISD::FABS, VT, Expand);
@@ -816,6 +1137,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // Bits operations
+  setOperationAction(ISD::BITCAST, MVT::v256i64, Custom);
+
   setOperationAction(ISD::BITREVERSE, MVT::i32, Legal);
   setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
   setOperationAction(ISD::BSWAP, MVT::i32, Legal);
@@ -858,7 +1181,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
     setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
     setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
-    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
 
     setOperationAction(ISD::FADD,  VT, Legal);
     setOperationAction(ISD::FSUB,  VT, Legal);
@@ -869,6 +1192,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MUL,   VT, Legal);
     setOperationAction(ISD::SDIV,  VT, Legal);
     setOperationAction(ISD::UDIV,  VT, Legal);
+
+    setOperationAction(ISD::SHL,   VT, Legal);
+
+    setOperationAction(ISD::MSCATTER,   VT, Custom);
+    setOperationAction(ISD::MGATHER,   VT, Custom);
+
+    setOperationAction(ISD::MLOAD, VT, Custom);
   }
 
   // VE has no packed MUL, SDIV, or UDIV operations.
@@ -936,6 +1266,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
   setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
 
+// vector fma // TESTING
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::FMA, VT, Legal);
+    setOperationAction(ISD::FNEG, VT, Legal);
+    //setOperationAction(ISD::FMAD, VT, Legal);
+  }
+
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
   // Set function alignment to 16 bytes (4 bits)
@@ -982,6 +1319,12 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
   case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
   case VEISD::FLUSHW:          return "VEISD::FLUSHW";
+  case VEISD::VEC_BROADCAST:   return "VEISD::VEC_BROADCAST";
+  case VEISD::VEC_LVL:         return "VEISD::VEC_LVL";
+  case VEISD::VEC_SEQ:         return "VEISD::VEC_SEQ";
+  case VEISD::VEC_VMV:         return "VEISD::VEC_VMV";
+  case VEISD::VEC_SCATTER:     return "VEISD::VEC_SCATTER";
+  case VEISD::VEC_GATHER:      return "VEISD::VEC_GATHER";
   case VEISD::Wrapper:         return "VEISD::Wrapper";
   case VEISD::INT_LVM:         return "VEISD::INT_LVM";
   case VEISD::INT_SVM:         return "VEISD::INT_SVM";
@@ -1651,12 +1994,12 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
 
   SDNode *Hi64 = DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG,
                                     dl,
-                                    MVT::f64,
+                                    MVT::i64,
                                     StNode->getValue(),
                                     SubRegEven);
   SDNode *Lo64 = DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG,
                                     dl,
-                                    MVT::f64,
+                                    MVT::i64,
                                     StNode->getValue(),
                                     SubRegOdd);
 
@@ -1942,7 +2285,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       MVT BitcastVT = MVT::getVectorVT(
         MVT::i1, Mask.getValueType().getSizeInBits());
       SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), 
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
                          Op.getOperand(1), Bitcast, Op.getOperand(3));
     }
     case OP_XXXM: {
@@ -1952,7 +2295,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       //                  (v256f64 %v1), (v256f64 %v2),
       //                  (v4i64 %vm)))
       //   Output:
-      //     (v256f64 (VADDlvm %v1, %v2, 
+      //     (v256f64 (VADDlvm %v1, %v2,
       //                  (v256i1 (bitcast %vm))))
       SDValue Mask = Op.getOperand(3);
       MVT BitcastVT = MVT::getVectorVT(
@@ -1969,7 +2312,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       //                  (v256f64 %v1), (v256f64 %v2),
       //                  (v4i64 %vm), (v256f64 %vd)))
       //   Output:
-      //     (v256f64 (VADDlvm %v1, %v2, 
+      //     (v256f64 (VADDlvm %v1, %v2,
       //                  (v256i1 (bitcast %vm)), %vd))
       SDValue Mask = Op.getOperand(3);
       MVT BitcastVT = MVT::getVectorVT(
@@ -2271,16 +2614,6 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   return false;
 }
 
-SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
-                                            SelectionDAG &DAG) const {
-  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
-  if (BVN->isConstant()) {
-    // All values are either a constant value or undef, so optimize it...
-  }
-  // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
-  return SDValue();
-}
-
 SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
@@ -2308,6 +2641,134 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
 
   // May need to support v4i64 and v8i64, but just ask llvm to expand them.
   return SDValue();
+}
+
+SDValue VETargetLowering::LowerSHUFFLE_VECTOR(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
+  SDLoc dl(Op);
+  ShuffleVectorSDNode *ShuffleInstr = cast<ShuffleVectorSDNode>(Op.getNode());
+
+  SDValue firstVec = ShuffleInstr->getOperand(0);
+  int firstVecLength = firstVec.getSimpleValueType().getVectorNumElements();
+  SDValue secondVec = ShuffleInstr->getOperand(1);
+  int secondVecLength = secondVec.getSimpleValueType().getVectorNumElements();
+
+  MVT ElementType = Op.getSimpleValueType().getScalarType();
+  int resultSize = Op.getSimpleValueType().getVectorNumElements();
+
+  if (ShuffleInstr->isSplat()) {
+    int index = ShuffleInstr->getSplatIndex();
+    if (index >= firstVecLength) {
+      index -= firstVecLength;
+      SDValue elem = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, dl, ElementType, {secondVec, DAG.getConstant(index, dl, EVT::getIntegerVT(*DAG.getContext(), 64))});
+      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(), elem);
+    } else {
+      SDValue elem = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, dl, ElementType, {firstVec, DAG.getConstant(index, dl, EVT::getIntegerVT(*DAG.getContext(), 64))});
+      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(), elem);
+    }
+  }
+
+  if (firstVecLength != 256 || secondVecLength != 256 || resultSize != 256) {
+    LLVM_DEBUG(dbgs() << "Invalid vector lengths\n");
+    return SDValue();
+  }
+
+  int firstrot = 256;
+  int secondrot = 256;
+  int firstsecond = 256;
+  bool inv_order;
+
+  if (ShuffleInstr->getMaskElt(0) < 256) {
+    inv_order = false;
+  } else {
+    inv_order = true;
+  }
+
+  for (int i = 0; i < 256; i++) {
+    int mask_value = ShuffleInstr->getMaskElt(i);
+
+    if (mask_value < 0) // Undef
+      continue;
+
+    if (mask_value < 256) {
+      if (firstsecond != 256 && !inv_order) {
+        LLVM_DEBUG(dbgs() << "Mixing\n");
+        return SDValue();
+      }
+
+      if (firstsecond == 256 && inv_order)
+        firstsecond = i;
+
+      if (firstrot == 256)
+        firstrot = i - mask_value;
+      else if (firstrot != i - mask_value) {
+        LLVM_DEBUG(dbgs() << "Bad first rot\n");
+        return SDValue();
+      }
+    } else { //mask_value >= 256
+      if (firstsecond != 256 && inv_order) {
+        LLVM_DEBUG(dbgs() << "Mixing\n");
+        return SDValue();
+      }
+
+      if (firstsecond == 256 && !inv_order)
+        firstsecond = i;
+
+      mask_value -= 256;
+
+      if (secondrot == 256)
+        secondrot = i - mask_value;
+      else if (secondrot != i - mask_value) {
+        LLVM_DEBUG(dbgs() << "Bad second rot\n");
+        return SDValue();
+      }
+    }
+  }
+
+  if (firstrot < 0)
+    firstrot *= -1;
+  else
+    firstrot = 256 - firstrot;
+  if (secondrot < 0)
+    secondrot *= -1;
+  else
+    secondrot = 256 - secondrot;
+
+  SDValue firstrotated = firstrot % 256 != 0 ? DAG.getNode(VEISD::VEC_VMV, dl, firstVec.getSimpleValueType(), {DAG.getConstant(firstrot % 256, dl, EVT::getIntegerVT(*DAG.getContext(), 32)), firstVec}) : firstVec;
+  SDValue secondrotated = secondrot % 256 != 0 ? DAG.getNode(VEISD::VEC_VMV, dl, secondVec.getSimpleValueType(), {DAG.getConstant(secondrot % 256, dl, EVT::getIntegerVT(*DAG.getContext(), 32)), secondVec}) : secondVec;
+
+  EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+  EVT v256i1 = EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 1), 256);
+
+  //TODO: use LVM and SVM instructions!
+  int block = firstsecond / 64;
+  int secondblock = firstsecond % 64;
+
+  SDValue Mask = DAG.getUNDEF(v256i1);
+
+  for (int i = 0; i < block; i++) {
+    //set blocks to all 0s
+    SDValue mask = inv_order ? DAG.getConstant(0xffffffffffffffff, dl, i64) : DAG.getConstant(0, dl, i64);
+    SDValue index = DAG.getConstant(i, dl, i64);
+    Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, index, mask});
+  }
+
+  SDValue mask = DAG.getConstant(0xffffffffffffffff, dl, i64);
+  if (!inv_order)
+    mask = DAG.getNode(ISD::SRL, dl, i64, {mask, DAG.getConstant(secondblock, dl, i64)});
+  else
+    mask = DAG.getNode(ISD::SHL, dl, i64, {mask, DAG.getConstant(64 - secondblock, dl, i64)});
+  Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, DAG.getConstant(block, dl, i64), mask});
+
+  for (int i = block + 1; i < 4; i++) {
+    //set blocks to all 1s
+    SDValue mask = inv_order ? DAG.getConstant(0, dl, i64) : DAG.getConstant(0xffffffffffffffff, dl, i64);
+    SDValue index = DAG.getConstant(i, dl, i64);
+    Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, index, mask});
+  }
+
+  SDValue returnValue = DAG.getNode(VEISD::INT_VMRG, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask});
+  return returnValue;
 }
 
 SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
@@ -2374,6 +2835,15 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+
+  case ISD::BITCAST:            return LowerBitcast(Op, DAG);
+
+  case ISD::VECTOR_SHUFFLE:     return LowerSHUFFLE_VECTOR(Op, DAG);
+
+  case ISD::MSCATTER:
+  case ISD::MGATHER:            return LowerMGATHER_MSCATTER(Op, DAG);
+
+  case ISD::MLOAD:              return LowerMLOAD(Op, DAG);
   }
 }
 
@@ -2623,7 +3093,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg)
         .addImm(3);
-    // FIXME: combine these add and lds into "lds     TReg, *(BReg, Tmp1)" 
+    // FIXME: combine these add and lds into "lds     TReg, *(BReg, Tmp1)"
     // adds.l  Tmp2, BReg, Tmp1
     BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
@@ -2655,7 +3125,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg)
         .addImm(2);
-    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)" 
+    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)"
     // add     Tmp2, BReg, Tmp1
     BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
@@ -2689,7 +3159,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg)
         .addImm(2);
-    // FIXME: combine these add and ldl into "ldl.zx   OReg, *(BReg, Tmp1)" 
+    // FIXME: combine these add and ldl into "ldl.zx   OReg, *(BReg, Tmp1)"
     // add     Tmp2, BReg, Tmp1
     BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
         .addReg(Tmp1)
@@ -3150,9 +3620,14 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   case ISD::BUILD_VECTOR:
   case ISD::INSERT_VECTOR_ELT:
   case ISD::EXTRACT_VECTOR_ELT:
+  case ISD::VECTOR_SHUFFLE:
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+  case ISD::MLOAD:
     // ask llvm to expand vector related instructions if those are not legal.
     return;
   default:
+    LLVM_DEBUG(N->dumpr(&DAG));
     llvm_unreachable("Do not know how to custom type legalize this operation!");
   }
 }
