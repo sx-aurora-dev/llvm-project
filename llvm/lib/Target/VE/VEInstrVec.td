@@ -578,7 +578,7 @@ def VMVr : RV<0x9C, (outs V64:$vx), (ins I32:$sy, V64:$vz),
     let vy = 0;
   }
 
-def VMVi : RV<0x9C, (outs V64:$vx), (ins simm7Op32:$sy, V64:$vz),
+def VMVi : RV<0x9C, (outs V64:$vx), (ins uimm7Op32:$sy, V64:$vz),
   "vmv $vx,$sy,$vz", []> {
     let cy = 0;
     let vy = 0;

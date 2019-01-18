@@ -201,6 +201,10 @@ def simm32Op64 : Operand<i64> {
   let DecoderMethod = "DecodeSIMM32";
 }
 
+def uimm7Op32 : Operand<i32> {
+  let DecoderMethod = "DecodeUIMM6";
+}
+
 def uimm6Op32 : Operand<i32> {
   let DecoderMethod = "DecodeUIMM6";
 }
