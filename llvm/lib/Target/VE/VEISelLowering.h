@@ -62,6 +62,17 @@ namespace llvm {
       GLOBAL_BASE_REG, // Global base reg for PIC.
       FLUSHW,      // FLUSH register windows to stack.
 
+      VEC_BROADCAST,   // a scalar value is broadcast across all vector lanes (Operand 0: the broadcast register)
+      VEC_SEQ,         // sequence vector match (Operand 0: the constant stride)
+
+      VEC_VMV,
+
+      /// Scatter and gather instructions.
+      VEC_GATHER,
+      VEC_SCATTER,
+
+      VEC_LVL,
+
       /// A wrapper node for TargetConstantPool, TargetJumpTable,
       /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
       /// MCSymbol and TargetBlockAddress.
@@ -230,7 +241,7 @@ namespace llvm {
   public:
     VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
-    
+
     /// computeKnownBitsForTargetNode - Determine which of the bits specified
     /// in Mask are known to be either zero or one and return them in the
     /// KnownZero/KnownOne bitsets.
@@ -323,6 +334,15 @@ namespace llvm {
     SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerSHUFFLE_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
+
+    SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
@@ -348,7 +368,6 @@ namespace llvm {
     bool shouldExpandBuildVectorWithShuffles(EVT VT,
         unsigned DefinedValues) const override;
 
-    SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
@@ -390,6 +409,9 @@ namespace llvm {
                                              MachineBasicBlock *BB) const;
     void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
                                 MachineBasicBlock *DispatchBB, int FI) const;
+
+  private:
+    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return true; }
   };
 } // end namespace llvm
 
