@@ -53,7 +53,7 @@ def : Pat<(VEvbrdl (i32 simm7:$I), v256i1:$vm, v256f64:$vd), (VBRDi32im (i32 sim
 def : Pat<(int_ve_pvbrd_vs_i64 i64:$sy), (VBRDpr i64:$sy)>;
 def : Pat<(VEpvbrd i64:$sy, v512i1:$vm, v256f64:$vd), (VBRDprm i64:$sy, v512i1:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_vmv_vsv i32:$sy, v256f64:$vz), (VMVr i32:$sy, v256f64:$vz)>;
-def : Pat<(int_ve_vmv_vsv (i32 simm7:$I), v256f64:$vz), (VMVi (i32 simm7:$I), v256f64:$vz)>;
+def : Pat<(int_ve_vmv_vsv uimm7:$I, v256f64:$vz), (VMVi (i32 uimm7:$I), v256f64:$vz)>;
 def : Pat<(int_ve_vaddul_vvv v256f64:$vy, v256f64:$vz), (VADDlv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vaddul_vsv i64:$sy, v256f64:$vz), (VADDlr i64:$sy, v256f64:$vz)>;
 def : Pat<(int_ve_vaddul_vsv (i64 simm7:$I), v256f64:$vz), (VADDli (i64 simm7:$I), v256f64:$vz)>;
