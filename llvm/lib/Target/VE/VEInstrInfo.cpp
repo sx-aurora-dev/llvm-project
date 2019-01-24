@@ -493,91 +493,18 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (RC == &VE::F32RegClass)
     BuildMI(MBB, I, DL, get(VE::STUri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (VE::F128RegClass.hasSubClassEq(RC)) {
+  else if (VE::F128RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::STQri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  }
-  else if (RC == &VE::V64RegClass) {
-    // FIXME: use SX16 as a temporary register
-    unsigned TmpReg = VE::SX16;
-    BuildMI(MBB, I, DL, get(VE::LEAasx), TmpReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-    BuildMI(MBB, I, DL, get(VE::VSTir))
-      .addReg(SrcReg, getKillRegState(isKill)).addImm(8)
-      .addReg(TmpReg, getKillRegState(true));
-  }
-  else if (RC == &VE::VMRegClass) {
-    // FIXME: use SX16 as a temporary register
-    unsigned TmpReg = VE::SX16;
-    MachineInstr *LastMI = nullptr;
-    for (int i = 0; i < 4; ++i) {
-      LastMI =
-        BuildMI(MBB, I, DL, get(VE::SVMi), TmpReg).addReg(SrcReg).addImm(i)
-          .getInstr();
-      BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(8*i)
-        .addReg(TmpReg, getKillRegState(true)).addMemOperand(MMO);
-    }
-    if (isKill)
-      LastMI->addRegisterKilled(SrcReg, TRI);
-  }
-  else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-    if (TargetRegisterInfo::isPhysicalRegister(SrcReg)) {
-      unsigned SrcRegLo = TRI->getSubReg(SrcReg, VE::sub_vm_even);
-      unsigned SrcRegHi = TRI->getSubReg(SrcReg, VE::sub_vm_odd);
-      // FIXME: use SX16 as a temporary register
-      unsigned TmpReg = VE::SX16;
-      // store low part of VMP
-      MachineInstr *LastMI = nullptr;
-      for (int i = 0; i < 4; ++i) {
-        LastMI =
-          BuildMI(MBB, I, DL, get(VE::SVMi), TmpReg).addReg(SrcRegLo).addImm(i)
-            .getInstr();
-        BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(8*i)
-          .addReg(TmpReg, getKillRegState(true)).addMemOperand(MMO);
-      }
-      if (isKill)
-        LastMI->addRegisterKilled(SrcRegLo, TRI);
-      // store high part of VMP
-      for (int i = 0; i < 4; ++i) {
-        LastMI =
-          BuildMI(MBB, I, DL, get(VE::SVMi), TmpReg).addReg(SrcRegHi).addImm(i)
-            .getInstr();
-        BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(8*(i+4))
-          .addReg(TmpReg, getKillRegState(true)).addMemOperand(MMO);
-      }
-      if (isKill) {
-        LastMI->addRegisterKilled(SrcRegHi, TRI);
-        // Add implicit super-register kills to the particular MI.
-        LastMI->addRegisterKilled(SrcReg, TRI);
-      }
-    } else {
-      // FIXME: use SX16 as a temporary register
-      unsigned TmpReg = VE::SX16;
-      // store low part of VMP
-      MachineInstr *LastMI = nullptr;
-      for (int i = 0; i < 4; ++i) {
-        LastMI =
-          BuildMI(MBB, I, DL, get(VE::SVMi), TmpReg)
-            .addReg(SrcReg, 0, VE::sub_vm_even).addImm(i)
-            .getInstr();
-        BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(8*i)
-          .addReg(TmpReg, getKillRegState(true)).addMemOperand(MMO);
-      }
-      // store high part of VMP
-      for (int i = 0; i < 4; ++i) {
-        LastMI =
-          BuildMI(MBB, I, DL, get(VE::SVMi), TmpReg)
-            .addReg(SrcReg, 0, VE::sub_vm_odd).addImm(i)
-            .getInstr();
-        BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(8*(i+4))
-          .addReg(TmpReg, getKillRegState(true)).addMemOperand(MMO);
-      }
-      if (isKill) {
-        // Add implicit super-register kills to the particular MI.
-        LastMI->addRegisterKilled(SrcReg, TRI);
-      }
-    }
-  }
+  else if (RC == &VE::V64RegClass)
+    BuildMI(MBB, I, DL, get(VE::STVRri)).addFrameIndex(FI).addImm(0)
+      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+  else if (RC == &VE::VMRegClass)
+    BuildMI(MBB, I, DL, get(VE::STVMri)).addFrameIndex(FI).addImm(0)
+      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+  else if (VE::VM512RegClass.hasSubClassEq(RC))
+    BuildMI(MBB, I, DL, get(VE::STVM512ri)).addFrameIndex(FI).addImm(0)
+      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else
     report_fatal_error("Can't store this register to stack slot");
 }
@@ -615,77 +542,18 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (RC == &VE::F32RegClass)
     BuildMI(MBB, I, DL, get(VE::LDUri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  else if (VE::F128RegClass.hasSubClassEq(RC)) {
+  else if (VE::F128RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::LDQri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-  }
-  else if (RC == &VE::V64RegClass) {
-    // FIXME: use SX16 as a temporary register
-    unsigned TmpReg = VE::SX16;
-    BuildMI(MBB, I, DL, get(VE::LEAasx), TmpReg).addFrameIndex(FI).addImm(0)
+  else if (RC == &VE::V64RegClass)
+    BuildMI(MBB, I, DL, get(VE::LDVRri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-    BuildMI(MBB, I, DL, get(VE::VLDir), DestReg).addImm(8)
-      .addReg(TmpReg, getKillRegState(true));
-  }
-  else if (RC == &VE::VMRegClass) {
-    BuildMI(MBB, I, DL, get(VE::IMPLICIT_DEF), DestReg);
-    // FIXME: use SX16 as a temporary register
-    unsigned TmpReg = VE::SX16;
-    for (int i = 0; i < 4; ++i) {
-      BuildMI(MBB, I, DL, get(VE::LDSri), TmpReg).addFrameIndex(FI).addImm(8*i)
-        .addMemOperand(MMO);
-      BuildMI(MBB, I, DL, get(VE::LVMi), DestReg).addReg(DestReg)
-        .addImm(i).addReg(TmpReg, getKillRegState(true));
-    }
-  }
-  else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-    BuildMI(MBB, I, DL, get(VE::IMPLICIT_DEF), DestReg);
-    if (TargetRegisterInfo::isPhysicalRegister(DestReg)) {
-      unsigned DestRegLo = TRI->getSubReg(DestReg, VE::sub_vm_even);
-      unsigned DestRegHi = TRI->getSubReg(DestReg, VE::sub_vm_odd);
-      // FIXME: use SX16 as a temporary register
-      unsigned TmpReg = VE::SX16;
-      // store low part of VMP
-      for (int i = 0; i < 4; ++i) {
-        BuildMI(MBB, I, DL, get(VE::LDSri), TmpReg).addFrameIndex(FI).addImm(8*i)
-          .addMemOperand(MMO);
-        BuildMI(MBB, I, DL, get(VE::LVMi), DestRegLo).addReg(DestRegLo)
-          .addImm(i).addReg(TmpReg, getKillRegState(true));
-      }
-      // store high part of VMP
-      MachineInstr *LastMI = nullptr;
-      for (int i = 0; i < 4; ++i) {
-        BuildMI(MBB, I, DL, get(VE::LDSri), TmpReg).addFrameIndex(FI)
-          .addImm(8*(i+4)).addMemOperand(MMO);
-        LastMI =
-          BuildMI(MBB, I, DL, get(VE::LVMi), DestRegHi).addReg(DestRegHi)
-            .addImm(i).addReg(TmpReg, getKillRegState(true)).getInstr();
-      }
-      // Add implicit super-register defs to the particular MI.
-      LastMI->addRegisterDefined(DestReg, TRI);
-    } else {
-      // FIXME: use SX16 as a temporary register
-      unsigned TmpReg = VE::SX16;
-      // store low part of VMP
-      for (int i = 0; i < 4; ++i) {
-        BuildMI(MBB, I, DL, get(VE::LDSri), TmpReg).addFrameIndex(FI).addImm(8*i)
-          .addMemOperand(MMO);
-        MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::LVMi));
-        MIB.addReg(DestReg, RegState::Define, VE::sub_vm_even)
-          .addReg(DestReg, 0, VE::sub_vm_even)
-          .addImm(i).addReg(TmpReg, getKillRegState(true));
-      }
-      // store high part of VMP
-      for (int i = 0; i < 4; ++i) {
-        BuildMI(MBB, I, DL, get(VE::LDSri), TmpReg).addFrameIndex(FI)
-          .addImm(8*(i+4)).addMemOperand(MMO);
-        MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::LVMi));
-        MIB.addReg(DestReg, RegState::Define, VE::sub_vm_odd)
-          .addReg(DestReg, 0, VE::sub_vm_odd)
-          .addImm(i).addReg(TmpReg, getKillRegState(true));
-      }
-    }
-  }
+  else if (RC == &VE::VMRegClass)
+    BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg).addFrameIndex(FI).addImm(0)
+      .addMemOperand(MMO);
+  else if (VE::VM512RegClass.hasSubClassEq(RC))
+    BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg).addFrameIndex(FI).addImm(0)
+      .addMemOperand(MMO);
   else
     report_fatal_error("Can't load this register from stack slot");
 }
