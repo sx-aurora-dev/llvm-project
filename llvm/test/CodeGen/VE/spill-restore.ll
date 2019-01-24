@@ -17,8 +17,8 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    or %s0, 0, %s18
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    vld %v0,8,%s18
-; CHECK-NEXT:    lea %s16,-4096(,%s9)            # 2048-byte Folded Spill
-; CHECK-NEXT:    vst %v0,8,%s16
+; CHECK-NEXT:    lea %s16,-4096(,%s9)
+; CHECK-NEXT:    vst %v0,8,%s16                  # 2048-byte Folded Spill
 ; CHECK-NEXT:    lea %s34, puts@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s12, puts@hi(%s34)
@@ -26,7 +26,9 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s0, .Lstr@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
-; CHECK-NEXT:    lea %s16,-4096(,%s9)            # 2048-byte Folded Reload
+; CHECK-NEXT:    lea %s16,-4096(,%s9)
+; CHECK-NEXT:    vld %v0,8,%s16                  # 2048-byte Folded Reload
+; CHECK-NEXT:    vadds.w.sx %v0,3,%v0
   %1 = alloca [256 x i64], align 8
   %2 = bitcast [256 x i64]* %1 to i8*
   call void @llvm.lifetime.start.p0i8(i64 2048, i8* nonnull %2)
