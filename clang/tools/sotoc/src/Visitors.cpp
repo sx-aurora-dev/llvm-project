@@ -183,7 +183,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
     // i->print(llvm::outs());
     for (auto j : *TCR->getOMPClauses()) {
       for (auto CC : j->children()) {
-        if (auto CC_DeclRefExpr = llvm::dyn_cast<clang::DeclRefExpr>(CC)) {
+        if (auto CC_DeclRefExpr = llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
           // CC_DeclRefExpr->dumpColor();
           if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
             tmpSet.insert(i);

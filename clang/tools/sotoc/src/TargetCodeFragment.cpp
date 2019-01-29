@@ -203,7 +203,7 @@ std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
 clang::OMPClause *TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
   for (auto C : OMPClauses) {
     for (auto CC : C->children()) {
-      if (auto CC_DeclRefExpr = llvm::dyn_cast<clang::DeclRefExpr>(CC)) {
+      if (auto CC_DeclRefExpr = llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
         if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
           return C;
       }

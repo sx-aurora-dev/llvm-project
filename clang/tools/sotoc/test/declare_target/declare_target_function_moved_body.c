@@ -1,4 +1,7 @@
 // RUN: %sotoc-transform-compile
+// RUN: %run-on-host | FileCheck %s
+
+#include <stdio.h>
 
 #pragma omp declare target
 
@@ -9,11 +12,12 @@ int add_one_to_var(int var);
 int main(void) {
   int h = 0;
 
-  #pragma omp target device(0)
+#pragma omp target device(0) map(tofrom: h)
   {
     h = add_one_to_var(h);
   }
 
+  printf("%d",h);
 
   return 0;
 }
@@ -22,3 +26,5 @@ int main(void) {
 int add_one_to_var(int var) {
   return var + 1;
 }
+
+// CHECK: 1

@@ -219,12 +219,12 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
-    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
+    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
     Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
-        << "\n  {\n";
+        << "\n  ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_simd: {
@@ -236,13 +236,13 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
    {\n"; break;
    }*/
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
-    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  {\n";
+    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  ";
     break;
   }
   case clang::OpenMPDirectiveKind::
       OMPD_target_teams_distribute_parallel_for_simd: {
     Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
-        << "\n  {\n";
+        << "\n  ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
@@ -264,18 +264,18 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   if ( // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams
        // ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel ||
-      TCR->TargetCodeKind ==
-          clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
-      TCR->TargetCodeKind ==
-          clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
+      // TCR->TargetCodeKind ==
+          // clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
+      // TCR->TargetCodeKind ==
+          // clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
       // TCR->TargetCodeKind ==
       // clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::
-                                 OMPD_target_teams_distribute_parallel_for ||
-      TCR->TargetCodeKind ==
-          clang::OpenMPDirectiveKind::
-              OMPD_target_teams_distribute_parallel_for_simd ||
+      // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::
+                                 // OMPD_target_teams_distribute_parallel_for ||
+      // TCR->TargetCodeKind ==
+          // clang::OpenMPDirectiveKind::
+              // OMPD_target_teams_distribute_parallel_for_simd ||
       TCR->TargetCodeKind ==
           clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
     Out << "\n  }";
