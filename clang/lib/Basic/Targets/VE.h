@@ -74,20 +74,70 @@ public:
 
   ArrayRef<const char *> getGCCRegNames() const override {
     static const char *const GCCRegNames[] = {
-        "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
-        "sl",  "fp",  "lr",  "sp", "s12", "s13",  "tp", "got",
-       "plt", "s17", "s18", "s19", "s20", "s21", "s22", "s23",
-       "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31",
-       "s32", "s33", "s34", "s35", "s36", "s37", "s38", "s39",
-       "s40", "s41", "s42", "s43", "s44", "s45", "s46", "s47",
-       "s48", "s49", "s50", "s51", "s52", "s53", "s54", "s55",
-       "s56", "s57", "s58", "s59", "s60", "s61", "s62", "s63",
+      // Regular registers
+        "sx0",  "sx1",  "sx2",  "sx3",  "sx4",  "sx5",  "sx6",  "sx7",
+        "sx8",  "sx9", "sx10", "sx11", "sx12", "sx13", "sx14", "sx15",
+       "sx16", "sx17", "sx18", "sx19", "sx20", "sx21", "sx22", "sx23",
+       "sx24", "sx25", "sx26", "sx27", "sx28", "sx29", "sx30", "sx31",
+       "sx32", "sx33", "sx34", "sx35", "sx36", "sx37", "sx38", "sx39",
+       "sx40", "sx41", "sx42", "sx43", "sx44", "sx45", "sx46", "sx47",
+       "sx48", "sx49", "sx50", "sx51", "sx52", "sx53", "sx54", "sx55",
+       "sx56", "sx57", "sx58", "sx59", "sx60", "sx61", "sx62", "sx63",
+      // Vector registers
+        "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",
+        "v8",  "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+       "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+       "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
+       "v32", "v33", "v34", "v35", "v36", "v37", "v38", "v39",
+       "v40", "v41", "v42", "v43", "v44", "v45", "v46", "v47",
+       "v48", "v49", "v50", "v51", "v52", "v53", "v54", "v55",
+       "v56", "v57", "v58", "v59", "v60", "v61", "v62", "v63",
+      // Special registers
+        "vl",  "vixr",  "ucc", "psw", "sar", "pmmr",
+        "pmcr0", "pmcr1", "pmcr2", "pmcr3",
+        "pmc0", "pmc1", "pmc2", "pmc3", "pmc4", "pmc5", "pmc6", "pmc7",
+        "pmc8", "pmc9", "pmc10", "pmc11", "pmc12", "pmc13", "pmc14",
     };
     return llvm::makeArrayRef(GCCRegNames);
   }
 
   ArrayRef<TargetInfo::GCCRegAlias> getGCCRegAliases() const override {
-    return None;
+    const TargetInfo::GCCRegAlias GCCRegAliases[] = {
+       {{"s0"},  "sx0"},  {{"s1"},  "sx1"},
+       {{"s2"},  "sx2"},  {{"s3"},  "sx3"},
+       {{"s4"},  "sx4"},  {{"s5"},  "sx5"},
+       {{"s6"},  "sx6"},  {{"s7"},  "sx7"},
+       {{"s8", "sl"},  "sx8"},     {{"s9", "fp"},  "sx9"},
+      {{"s10", "lr"}, "sx10"},    {{"s11", "sp"}, "sx11"},
+      {{"s12", "outer"}, "sx12"}, {{"s13"}, "sx13"},
+      {{"s14", "tp"}, "sx14"},    {{"s15", "got"}, "sx15"},
+      {{"s16", "plt"}, "sx16"},   {{"s17", "info"}, "sx17"},
+      {{"s18"}, "sx18"}, {{"s19"}, "sx19"},
+      {{"s20"}, "sx20"}, {{"s21"}, "sx21"},
+      {{"s22"}, "sx22"}, {{"s23"}, "sx23"},
+      {{"s24"}, "sx24"}, {{"s25"}, "sx25"},
+      {{"s26"}, "sx26"}, {{"s27"}, "sx27"},
+      {{"s28"}, "sx28"}, {{"s29"}, "sx29"},
+      {{"s30"}, "sx30"}, {{"s31"}, "sx31"},
+      {{"s32"}, "sx32"}, {{"s33"}, "sx33"},
+      {{"s34"}, "sx34"}, {{"s35"}, "sx35"},
+      {{"s36"}, "sx36"}, {{"s37"}, "sx37"},
+      {{"s38"}, "sx38"}, {{"s39"}, "sx39"},
+      {{"s40"}, "sx40"}, {{"s41"}, "sx41"},
+      {{"s42"}, "sx42"}, {{"s43"}, "sx43"},
+      {{"s44"}, "sx44"}, {{"s45"}, "sx45"},
+      {{"s46"}, "sx46"}, {{"s47"}, "sx47"},
+      {{"s48"}, "sx48"}, {{"s49"}, "sx49"},
+      {{"s50"}, "sx50"}, {{"s51"}, "sx51"},
+      {{"s52"}, "sx52"}, {{"s53"}, "sx53"},
+      {{"s54"}, "sx54"}, {{"s55"}, "sx55"},
+      {{"s56"}, "sx56"}, {{"s57"}, "sx57"},
+      {{"s58"}, "sx58"}, {{"s59"}, "sx59"},
+      {{"s60"}, "sx60"}, {{"s61"}, "sx61"},
+      {{"s62"}, "sx62"}, {{"s63"}, "sx63"},
+      {{"vix"}, "vixr"}, {{"usrcc"}, "ucc"},
+    };
+    return llvm::makeArrayRef(GCCRegAliases);
   }
 
   bool validateAsmConstraint(const char *&Name,
