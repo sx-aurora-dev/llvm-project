@@ -52,12 +52,20 @@ class DiscoverTypesInDeclVisitor
 public:
   DiscoverTypesInDeclVisitor(TypeDeclResolver &Types);
   DiscoverTypesInDeclVisitor(std::function<void(clang::TypeDecl *)> F)
-      : OnEachTypeRef(F) {};
+      : OnEachTypeRef(F){};
   bool VisitDecl(clang::Decl *D);
   bool VisitExpr(clang::Expr *D);
   bool VisitType(clang::Type *T);
 };
 
+/// Traverses (parts of) the AST to find DeclRefExpr that refer to functions
+/// that need to be present for that part of the AST to compile correctly.
+/// This way functions declared and defined in the same compilation unit do
+/// not need to be annotated by the 'omp declare target' pragma.
+/// The Visitor is not only used to search through target regions, but also
+/// through the found functions themselves and through functions that are
+/// annotated with the 'omp declare target' pragma, to find all necessary
+/// dependencies recursively.
 class DiscoverFunctionsInDeclVisitor
     : public clang::RecursiveASTVisitor<DiscoverFunctionsInDeclVisitor> {
 
@@ -71,7 +79,6 @@ public:
   bool VisitExpr(clang::Expr *E);
 };
 
-
 class FindDeclRefExprVisitor
     : public clang::RecursiveASTVisitor<FindDeclRefExprVisitor> {
 
@@ -81,20 +88,18 @@ public:
   FindDeclRefExprVisitor() {}
   bool VisitStmt(clang::Stmt *S);
   // bool VisitDecl(clang::Decl *D);
-  std::unordered_set<clang::VarDecl *>* getVarSet() {
-    return &VarSet;
-  }
+  std::unordered_set<clang::VarDecl *> *getVarSet() { return &VarSet; }
 };
 
 class FindLoopStmtVisitor
-  : public clang::RecursiveASTVisitor<FindLoopStmtVisitor> {
+    : public clang::RecursiveASTVisitor<FindLoopStmtVisitor> {
 
   FindDeclRefExprVisitor FindDeclRefVisitor;
 
 public:
   FindLoopStmtVisitor() {}
   bool VisitStmt(clang::Stmt *S);
-  std::unordered_set<clang::VarDecl *>* getVarSet() {
+  std::unordered_set<clang::VarDecl *> *getVarSet() {
     return FindDeclRefVisitor.getVarSet();
   }
 };
@@ -108,9 +113,6 @@ class FindTargetCodeVisitor
 
   /// The collection where target regions and other code is added to.
   TargetCode &TargetCodeInfo;
-  /// A collection of all types required by the target code found (and
-  /// referenced by other required types).
-  TypeDeclResolver &Types;
   /// A Visitor to find references to the types required by the target code.
   DiscoverTypesInDeclVisitor DiscoverTypeVisitor;
   /// A Visitor to find references to all functions required by the target
@@ -132,14 +134,18 @@ public:
   FindTargetCodeVisitor(TargetCode &Code, TypeDeclResolver &Types,
                         FunctionDeclResolver &Functions,
                         clang::ASTContext &Context)
-      : TargetCodeInfo(Code), Types(Types), DiscoverTypeVisitor(Types),
-        DiscoverFunctionVisitor(Functions), Functions(Functions),
-        Context(Context) {}
+      : Context(Context), TargetCodeInfo(Code), DiscoverTypeVisitor(Types),
+        DiscoverFunctionVisitor(Functions), Functions(Functions){};
   bool VisitStmt(clang::Stmt *S);
   bool VisitDecl(clang::Decl *D);
 
 private:
+  /// Extracts the necessary information about the target region from the AST,
+  /// such as captured variables and relevant OpenMP clauses, and adds an
+  /// TargetCodeRegion to the TargetCode instance.
   bool processTargetRegion(clang::OMPExecutableDirective *TargetDirective);
+  /// Finds and adds all variables required by the target regions as arguments
+  /// to the generated function.
   void addTargetRegionArgs(clang::CapturedStmt *S,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };

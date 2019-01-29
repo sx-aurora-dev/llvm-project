@@ -27,15 +27,12 @@
 #include "TargetCodeFragment.h"
 
 void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
-  // Var->print(llvm::outs());
   CapturedVars.push_back(Var);
 }
 
 void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause) {
   OMPClauses.push_back(Clause);
 }
-
-// TODO: this is a mess
 
 static bool hasRegionCompoundStmt(const clang::Stmt *S) {
   if (const auto *SS = llvm::dyn_cast<clang::CapturedStmt>(S)) {
@@ -74,19 +71,10 @@ static clang::SourceLocation getOMPStmtSourceLocEnd(const clang::Stmt *S) {
   return S->getEndLoc();
 }
 
-// TODO: REMOVE this
-clang::SourceLocation TargetCodeDecl::getStartLoc() {
-  llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getStartLoc()\n";
-}
-
-clang::SourceLocation TargetCodeDecl::getEndLoc() {
-  llvm::errs() << "NOT IMPLEMENTED: TargetCodeDecl::getEndLoc()\n";
-}
-
 // TODO: Implement recursiv for an arbitrary depth?
-clang::SourceLocation findPreviousToken(clang::SourceLocation Loc,
-                                        clang::SourceManager &SM,
-                                        const clang::LangOptions &LO) {
+static clang::SourceLocation findPreviousToken(clang::SourceLocation Loc,
+                                               clang::SourceManager &SM,
+                                               const clang::LangOptions &LO) {
   clang::Token token;
 
   Loc = clang::Lexer::GetBeginningOfToken(Loc, SM, LO);
@@ -100,12 +88,14 @@ clang::SourceLocation findPreviousToken(clang::SourceLocation Loc,
   return token.getLocation();
 }
 
+TargetCodeFragment::~TargetCodeFragment() {}
+
 clang::SourceLocation TargetCodeRegion::getStartLoc() {
   clang::SourceManager &SM = Context.getSourceManager();
   const clang::LangOptions &LO = Context.getLangOpts();
-  auto TokenBegin =
-      clang::Lexer::GetBeginningOfToken(getNode()->getBeginLoc(), SM, LO);
-  if (hasRegionCompoundStmt(getNode())) {
+  auto TokenBegin = clang::Lexer::GetBeginningOfToken(
+      CapturedStmtNode->getBeginLoc(), SM, LO);
+  if (hasRegionCompoundStmt(CapturedStmtNode)) {
 
 #if 0
     // This piece of code could be used to check if we start with a new scope.
@@ -128,19 +118,19 @@ clang::SourceLocation TargetCodeRegion::getStartLoc() {
 #endif
 
     return TokenBegin;
-  } else if (hasRegionOMPStmt(getNode())) {
+  } else if (hasRegionOMPStmt(CapturedStmtNode)) {
     // We have to go backwards 2 tokens in case of an OMP statement
     // (the '#' and the 'pragma').
     return findPreviousToken(findPreviousToken(TokenBegin, SM, LO), SM, LO);
   } else {
-    return getNode()->getBeginLoc();
+    return CapturedStmtNode->getBeginLoc();
   }
 }
 
 clang::SourceLocation TargetCodeRegion::getEndLoc() {
   clang::SourceManager &SM = Context.getSourceManager();
   const clang::LangOptions &LO = Context.getLangOpts();
-  auto N = getNode();
+  auto N = CapturedStmtNode;
   if (hasRegionCompoundStmt(N)) {
     return clang::Lexer::GetBeginningOfToken(N->getEndLoc(), SM, LO)
         .getLocWithOffset(-1); // TODO: If I set this to"1" it works too. I
@@ -154,16 +144,21 @@ clang::SourceLocation TargetCodeRegion::getEndLoc() {
   }
 }
 
+const std::string TargetCodeRegion::getParentFuncName() {
+  return ParentFunctionDecl->getNameInfo().getAsString();
+}
+
+clang::SourceLocation TargetCodeRegion::getTargetDirectiveLocation() {
+  return TargetDirective->getBeginLoc();
+}
+
+clang::SourceRange TargetCodeRegion::getRealRange() {
+  return CapturedStmtNode->getSourceRange();
+}
+
 clang::SourceRange TargetCodeRegion::getInnerRange() {
   auto InnerLocStart = getStartLoc();
   auto InnerLocEnd = getEndLoc();
-#if 0
-  clang::SourceManager &SM = Context.getSourceManager();
-  // TODO: Remove this code at some point. It is
-  // only useful for printf debugging.
-  llvm::outs() << "InnerRange: " << InnerLocStart.printToString(SM)
-    << " <--> " << InnerLocEnd.printToString(SM) << "\n";
-#endif
   return clang::SourceRange(InnerLocStart, InnerLocEnd);
 }
 
@@ -212,7 +207,7 @@ clang::OMPClause *TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
   return NULL;
 }
 
-bool TargetCodeRegion::isClausePrintable(clang::OMPClause* C) {
+bool TargetCodeRegion::isClausePrintable(clang::OMPClause *C) {
   switch (TargetCodeFragment::getTargetCodeKind()) {
   case clang::OpenMPDirectiveKind::OMPD_target: {
     switch (C->getClauseKind()) {
@@ -256,7 +251,7 @@ bool TargetCodeRegion::isClausePrintable(clang::OMPClause* C) {
     case clang::OpenMPClauseKind::OMPC_private:
     case clang::OpenMPClauseKind::OMPC_firstprivate:
     case clang::OpenMPClauseKind::OMPC_shared:
-    // case clang::OpenMPClauseKind::OMPC_reduction:
+      // case clang::OpenMPClauseKind::OMPC_reduction:
       return true;
     default:
       return false;
@@ -415,6 +410,7 @@ bool TargetCodeRegion::isClausePrintable(clang::OMPClause* C) {
   default:
     break;
   }
+  return false;
 }
 
 std::string TargetCodeRegion::PrintPretty() {
@@ -423,22 +419,19 @@ std::string TargetCodeRegion::PrintPretty() {
   // One issue here: Addition braces (i.e., scope) in some cases.
   std::string PrettyStr = "";
   llvm::raw_string_ostream PrettyOS(PrettyStr);
-  if (Node != NULL)
-    Node->printPretty(PrettyOS, NULL, PP);
+  if (CapturedStmtNode != NULL)
+    CapturedStmtNode->printPretty(PrettyOS, NULL, PP);
   return PrettyOS.str();
+}
+
+clang::SourceRange TargetCodeDecl::getRealRange() {
+  return DeclNode->getSourceRange();
 }
 
 std::string TargetCodeDecl::PrintPretty() {
   std::string PrettyStr = "";
   llvm::raw_string_ostream PrettyOS(PrettyStr);
-  if (Node != NULL) {
-#if 0
-    clang::SourceManager &SM = Context.getSourceManager();
-    // TODO: Remove this code at some point. It is
-    // only useful for printf debugging.
-    llvm::outs() << "DeclPrintRange: " << Node->getSourceRange().getBegin().printToString(SM)
-      << " <--> " << Node->getSourceRange().getEnd().printToString(SM) << "\n";
-#endif
+  if (DeclNode != NULL) {
     // I would prefer a pretty printing function as for the Stmts. However, this
     // does not exist at all.
     // Node->getBody()->printPretty(PrettyOS, NULL, PP);
