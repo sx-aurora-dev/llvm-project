@@ -473,10 +473,15 @@
 #define _ve_pvfmks_Mcv __builtin_ve_pvfmks_Mcv
 #define _ve_pvfmks_McvM __builtin_ve_pvfmks_McvM
 #define _ve_vsumwsx_vv __builtin_ve_vsumwsx_vv
+#define _ve_vsumwsx_vvm __builtin_ve_vsumwsx_vvm
 #define _ve_vsumwzx_vv __builtin_ve_vsumwzx_vv
+#define _ve_vsumwzx_vvm __builtin_ve_vsumwzx_vvm
 #define _ve_vsuml_vv __builtin_ve_vsuml_vv
+#define _ve_vsuml_vvm __builtin_ve_vsuml_vvm
 #define _ve_vfsumd_vv __builtin_ve_vfsumd_vv
+#define _ve_vfsumd_vvm __builtin_ve_vfsumd_vvm
 #define _ve_vfsums_vv __builtin_ve_vfsums_vv
+#define _ve_vfsums_vvm __builtin_ve_vfsums_vvm
 #define _ve_vrmaxswfstsx_vv __builtin_ve_vrmaxswfstsx_vv
 #define _ve_vrmaxswlstsx_vv __builtin_ve_vrmaxswlstsx_vv
 #define _ve_vrmaxswfstzx_vv __builtin_ve_vrmaxswfstzx_vv
