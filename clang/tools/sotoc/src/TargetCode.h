@@ -20,7 +20,7 @@
 
 namespace clang {
 class SourceManager;
-};
+}
 
 using TargetCodeFragmentDeque = std::deque<std::shared_ptr<TargetCodeFragment>>;
 

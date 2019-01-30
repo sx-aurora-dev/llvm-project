@@ -25,7 +25,7 @@ class SourceRange;
 class Decl;
 class VarDecl;
 class CapturedStmt;
-}; // namespace clang
+} // namespace clang
 
 /// An abstract base class for all fragments of the original code (except header
 /// includes) that need to be copied to our generated source code. This includes
