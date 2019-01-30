@@ -511,7 +511,7 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else if (RC == &VE::V64RegClass)
     BuildMI(MBB, I, DL, get(VE::STVRri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+      .addReg(SrcReg, getKillRegState(isKill)).addImm(256).addMemOperand(MMO);
   else if (RC == &VE::VMRegClass)
     BuildMI(MBB, I, DL, get(VE::STVMri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
@@ -563,7 +563,7 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       .addMemOperand(MMO);
   else if (RC == &VE::V64RegClass)
     BuildMI(MBB, I, DL, get(VE::LDVRri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
+      .addImm(256).addMemOperand(MMO);
   else if (RC == &VE::VMRegClass)
     BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
@@ -602,13 +602,16 @@ unsigned VEInstrInfo::getVectorLengthReg(MachineFunction *MF) const {
   if (VectorLengthReg != 0)
     return VectorLengthReg;
 
-  return createVectorLengthReg(MF);
+  unsigned VL = MF->addLiveIn(VE::VL, &VE::VLSRegClass);
+  VEFI->setVectorLengthReg(VL);
+
+  return VL;
 }
 
 unsigned VEInstrInfo::createVectorLengthReg(MachineFunction *MF) const {
   // Create the register. FIXME: The code to initialize it might be required...
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
 #if 0
+  MachineRegisterInfo &RegInfo = MF->getRegInfo();
   // try to register VL to livein
   unsigned PVL = VE::VL;
   unsigned VL;
@@ -619,7 +622,12 @@ unsigned VEInstrInfo::createVectorLengthReg(MachineFunction *MF) const {
     VL = RegInfo.getLiveInVirtReg(PVL);
   }
 #else
+#if 1
+  MachineRegisterInfo &RegInfo = MF->getRegInfo();
   unsigned VL = RegInfo.createVirtualRegister(&VE::VLSRegClass);
+#else
+  unsigned VL = MF->addLiveIn(VE::VL, &VE::VLSRegClass);
+#endif
 #endif
   VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
   VEFI->setVectorLengthReg(VL);
@@ -646,14 +654,18 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   unsigned VMYu = getVM512Upper(MI.getOperand(1).getReg());
   unsigned VMYl = getVM512Lower(MI.getOperand(1).getReg());
 
-  if (MI.getNumOperands() > 3) { // includes VL
+  switch (MI.getOpcode()) {
+  default: {
       unsigned VMZu = getVM512Upper(MI.getOperand(2).getReg());
       unsigned VMZl = getVM512Lower(MI.getOperand(2).getReg());
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
-  } else {
+      break;
+  }
+  case VE::NEGMp:
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
+      break;
   }
   MI.eraseFromParent();
 }

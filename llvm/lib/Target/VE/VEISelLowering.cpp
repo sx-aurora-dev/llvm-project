@@ -2638,21 +2638,15 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
       llvm_unreachable("Unknown intrinsic data type");
       break;
     case LVL: {
-      // 1-operand load VL.  Intrinsic is void, but we need to copy value
-      // to Vector Length reigster.  So, we make a copy instruction here.
-      // A copy instruction to VL is converted to LVL instruction later.
+      // 1-operand load VL.  We convert it to COPY here for the ease of
+      // post-processing in finalizeLowering().  We update virtual register
+      // to maintain SSA form in that function.
       //   Input:
       //     (int_ve_lvl (i32 val))
       //   Output:
-      //     (i32 (copy %val))
+      //     (copy vl, %val)
       SDValue Chain = Op.getOperand(0);
-      SDValue Inp = Op.getOperand(2);
-      MachineFunction &MF = DAG.getMachineFunction();
-
-      // We re-use single virtual register multiple times.
-      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
-      Chain = DAG.getCopyToReg(Chain, dl, VLReg, Inp);
-      return Chain;
+      return DAG.getCopyToReg(Chain, dl, VE::VL, Op.getOperand(2));
     }
     case SCATTER_M: {
       // Vector scatter with mask intrinsics
@@ -3727,4 +3721,61 @@ bool VETargetLowering::useLoadStackGuardNode() const {
 void VETargetLowering::insertSSPDeclarations(Module &M) const {
   if (!Subtarget->isTargetLinux())
     return TargetLowering::insertSSPDeclarations(M);
+}
+
+void VETargetLowering::updateVL(MachineFunction& MF) const {
+  // This MachineFunction is using VL, so need to patch among the
+  // instructions using and defining VL.
+
+  LLVM_DEBUG(dbgs() << "Update VLReg def and use to make it match to SSA");
+  unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+
+  // First, try to patch simple case (def-use in each basic block).
+  int num_use_livein = 0;
+  int num_def = 0;
+  for (auto &MBB : MF) {
+    bool use_livein = true;
+    unsigned newVL = 0;
+    for (auto &MI : MBB) {
+      auto chk = MI.readsWritesVirtualRegister(VLReg);
+      if (chk.first && use_livein) {
+        LLVM_DEBUG(dbgs() << MI);
+        // use VL without specifying it
+        num_use_livein++;
+      } else if (chk.second && use_livein) {
+        assert(MI.readsRegister(VE::VL));
+        LLVM_DEBUG(dbgs() << MI);
+        // this MI copies VL at entry
+        num_def++;
+      } else if (chk.first) {
+        switch (MI.getOpcode()) {
+        case VE::VLDir:
+        case VE::VSTir:
+          MI.getOperand(3).ChangeToRegister(newVL, false);
+          break;
+        }
+        LLVM_DEBUG(dbgs() << MI);
+      } else if (MI.definesRegister(VE::VL)) {
+        num_def++;
+        // defines VL
+        use_livein = false;
+        newVL = Subtarget->getInstrInfo()->createVectorLengthReg(&MF);
+        MI.getOperand(0).ChangeToRegister(newVL, true);
+        LLVM_DEBUG(dbgs() << MI);
+      }
+    }
+  }
+  if (num_use_livein != 0 && num_def > 1) {
+    llvm_unreachable("re-calculation of PHI is not implemented yet");
+  }
+}
+
+void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
+  // Directly fetch VL to avoid new allocation
+  VEMachineFunctionInfo *VEFI = MF.getInfo<VEMachineFunctionInfo>();
+  unsigned VLReg = VEFI->getVectorLengthReg();
+  if (VLReg != 0) {
+    updateVL(MF);
+  }
+  TargetLoweringBase::finalizeLowering(MF);
 }

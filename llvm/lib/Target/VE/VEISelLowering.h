@@ -424,6 +424,8 @@ namespace llvm {
                                              MachineBasicBlock *BB) const;
     void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
                                 MachineBasicBlock *DispatchBB, int FI) const;
+    void updateVL(MachineFunction &MF) const;
+    void finalizeLowering(MachineFunction &MF) const override;
 
   private:
     bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return true; }

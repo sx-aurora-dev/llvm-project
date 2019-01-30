@@ -616,8 +616,8 @@ def PFCHVi : RVM0<0x80, (outs), (ins simm7Op64:$sy, I64:$sz),
 
 let mayLoad = 1, hasSideEffects = 0 in {
 def LDVRri : Pseudo<
-    (outs V64:$vx), (ins MEMri:$addr),
-    "# pseudo ldvr $vx, $addr", []>;
+    (outs V64:$vx), (ins MEMri:$addr, VLS:$vl),
+    "# pseudo ldvr $vx, $addr, $vl", []>;
 def LDVMri : Pseudo<
     (outs VM:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm $vmx, $addr", []>;
@@ -630,8 +630,8 @@ def LDVLri : Pseudo<
 }
 let mayStore = 1, hasSideEffects = 0 in {
 def STVRri : Pseudo<
-    (outs), (ins MEMri:$addr, V64:$vx),
-    "# pseudo stvr $addr, $vx", []>;
+    (outs), (ins MEMri:$addr, V64:$vx, VLS:$vl),
+    "# pseudo stvr $addr, $vx, $vl", []>;
 def STVMri : Pseudo<
     (outs), (ins MEMri:$addr, VM:$vmx),
     "# pseudo stvm $addr, $vmx", []>;
