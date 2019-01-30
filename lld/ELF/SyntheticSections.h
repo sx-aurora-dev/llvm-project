@@ -21,8 +21,8 @@
 #ifndef LLD_ELF_SYNTHETIC_SECTION_H
 #define LLD_ELF_SYNTHETIC_SECTION_H
 
+#include "DWARF.h"
 #include "EhFrame.h"
-#include "GdbIndex.h"
 #include "InputSection.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/MC/StringTableBuilder.h"
@@ -170,7 +170,9 @@ private:
 class BssSection final : public SyntheticSection {
 public:
   BssSection(StringRef Name, uint64_t Size, uint32_t Alignment);
-  void writeTo(uint8_t *) override {}
+  void writeTo(uint8_t *) override {
+    llvm_unreachable("unexpected writeTo() call for SHT_NOBITS section");
+  }
   bool empty() const override { return getSize() == 0; }
   size_t getSize() const override { return Size; }
 
@@ -307,8 +309,6 @@ private:
 
   uint64_t Size = 0;
 
-  size_t LocalEntriesNum = 0;
-
   // Symbol and addend.
   typedef std::pair<Symbol *, int64_t> GotEntry;
 
@@ -340,8 +340,6 @@ private:
     size_t getPageEntriesNum() const;
     // Number of entries require 16-bit index to access.
     size_t getIndexedEntriesNum() const;
-
-    bool isOverflow() const;
   };
 
   // Container of GOT created for each input file.
@@ -536,6 +534,7 @@ struct RelativeReloc {
 class RelrBaseSection : public SyntheticSection {
 public:
   RelrBaseSection();
+  bool empty() const override { return Relocs.empty(); }
   std::vector<RelativeReloc> Relocs;
 };
 
@@ -660,13 +659,13 @@ public:
   size_t getSize() const override;
   bool empty() const override { return Entries.empty(); }
   void addSymbols();
-
   template <class ELFT> void addEntry(Symbol &Sym);
+
+  size_t HeaderSize;
 
 private:
   unsigned getPltRelocOff() const;
   std::vector<std::pair<const Symbol *, unsigned>> Entries;
-  size_t HeaderSize;
   bool IsIplt;
 };
 
@@ -684,9 +683,9 @@ public:
     uint64_t CuLength;
   };
 
-  struct NameTypeEntry {
+  struct NameAttrEntry {
     llvm::CachedHashStringRef Name;
-    uint32_t Type;
+    uint32_t CuIndexAndAttrs;
   };
 
   struct GdbChunk {
@@ -756,11 +755,7 @@ public:
 // shall be contained in the DT_VERDEFNUM entry of the .dynamic section.
 // The section shall contain an array of Elf_Verdef structures, optionally
 // followed by an array of Elf_Verdaux structures.
-template <class ELFT>
 class VersionDefinitionSection final : public SyntheticSection {
-  typedef typename ELFT::Verdef Elf_Verdef;
-  typedef typename ELFT::Verdaux Elf_Verdaux;
-
 public:
   VersionDefinitionSection();
   void finalizeContents() override;
@@ -768,6 +763,7 @@ public:
   void writeTo(uint8_t *Buf) override;
 
 private:
+  enum { EntrySize = 28 };
   void writeOne(uint8_t *Buf, uint32_t Index, StringRef Name, size_t NameOff);
 
   unsigned FileDefNameOff;
@@ -781,8 +777,6 @@ private:
 // the own object or in any of the dependencies.
 template <class ELFT>
 class VersionTableSection final : public SyntheticSection {
-  typedef typename ELFT::Versym Elf_Versym;
-
 public:
   VersionTableSection();
   void finalizeContents() override;
@@ -972,9 +966,27 @@ private:
   size_t Size = 0;
 };
 
+// This section is used to store the addresses of functions that are called
+// in range-extending thunks on PowerPC64. When producing position dependant
+// code the addresses are link-time constants and the table is written out to
+// the binary. When producing position-dependant code the table is allocated and
+// filled in by the dynamic linker.
+class PPC64LongBranchTargetSection final : public SyntheticSection {
+public:
+  PPC64LongBranchTargetSection();
+  void addEntry(Symbol &Sym);
+  size_t getSize() const override;
+  void writeTo(uint8_t *Buf) override;
+  bool empty() const override;
+  void finalizeContents() override { Finalized = true; }
+
+private:
+  std::vector<const Symbol *> Entries;
+  bool Finalized = false;
+};
+
 InputSection *createInterpSection();
 MergeInputSection *createCommentSection();
-void decompressSections();
 template <class ELFT> void splitSections();
 void mergeSections();
 
@@ -982,46 +994,48 @@ Defined *addSyntheticLocal(StringRef Name, uint8_t Type, uint64_t Value,
                            uint64_t Size, InputSectionBase &Section);
 
 // Linker generated sections which can be used as inputs.
-struct InX {
-  static InputSection *ARMAttributes;
-  static BssSection *Bss;
-  static BssSection *BssRelRo;
-  static BuildIdSection *BuildId;
-  static EhFrameHeader *EhFrameHdr;
-  static EhFrameSection *EhFrame;
-  static SyntheticSection *Dynamic;
-  static StringTableSection *DynStrTab;
-  static SymbolTableBaseSection *DynSymTab;
-  static GnuHashTableSection *GnuHashTab;
-  static HashTableSection *HashTab;
-  static InputSection *Interp;
-  static GdbIndexSection *GdbIndex;
-  static GotSection *Got;
-  static GotPltSection *GotPlt;
-  static IgotPltSection *IgotPlt;
-  static MipsGotSection *MipsGot;
-  static MipsRldMapSection *MipsRldMap;
-  static PltSection *Plt;
-  static PltSection *Iplt;
-  static RelocationBaseSection *RelaDyn;
-  static RelrBaseSection *RelrDyn;
-  static RelocationBaseSection *RelaPlt;
-  static RelocationBaseSection *RelaIplt;
-  static StringTableSection *ShStrTab;
-  static StringTableSection *StrTab;
-  static SymbolTableBaseSection *SymTab;
-  static SymtabShndxSection* SymTabShndx;
+struct InStruct {
+  InputSection *ARMAttributes;
+  BssSection *Bss;
+  BssSection *BssRelRo;
+  BuildIdSection *BuildId;
+  EhFrameHeader *EhFrameHdr;
+  EhFrameSection *EhFrame;
+  SyntheticSection *Dynamic;
+  StringTableSection *DynStrTab;
+  SymbolTableBaseSection *DynSymTab;
+  GnuHashTableSection *GnuHashTab;
+  HashTableSection *HashTab;
+  InputSection *Interp;
+  GdbIndexSection *GdbIndex;
+  GotSection *Got;
+  GotPltSection *GotPlt;
+  IgotPltSection *IgotPlt;
+  PPC64LongBranchTargetSection *PPC64LongBranchTarget;
+  MipsGotSection *MipsGot;
+  MipsRldMapSection *MipsRldMap;
+  PltSection *Plt;
+  PltSection *Iplt;
+  RelocationBaseSection *RelaDyn;
+  RelrBaseSection *RelrDyn;
+  RelocationBaseSection *RelaPlt;
+  RelocationBaseSection *RelaIplt;
+  StringTableSection *ShStrTab;
+  StringTableSection *StrTab;
+  SymbolTableBaseSection *SymTab;
+  SymtabShndxSection *SymTabShndx;
+  VersionDefinitionSection *VerDef;
 };
 
-template <class ELFT> struct In {
-  static VersionDefinitionSection<ELFT> *VerDef;
+extern InStruct In;
+
+template <class ELFT> struct InX {
   static VersionTableSection<ELFT> *VerSym;
   static VersionNeedSection<ELFT> *VerNeed;
 };
 
-template <class ELFT> VersionDefinitionSection<ELFT> *In<ELFT>::VerDef;
-template <class ELFT> VersionTableSection<ELFT> *In<ELFT>::VerSym;
-template <class ELFT> VersionNeedSection<ELFT> *In<ELFT>::VerNeed;
+template <class ELFT> VersionTableSection<ELFT> *InX<ELFT>::VerSym;
+template <class ELFT> VersionNeedSection<ELFT> *InX<ELFT>::VerNeed;
 } // namespace elf
 } // namespace lld
 

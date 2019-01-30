@@ -592,6 +592,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(arm_apcscc);
   KEYWORD(arm_aapcscc);
   KEYWORD(arm_aapcs_vfpcc);
+  KEYWORD(aarch64_vector_pcs);
   KEYWORD(msp430_intrcc);
   KEYWORD(avr_intrcc);
   KEYWORD(avr_signalcc);
@@ -678,6 +679,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(sanitize_hwaddress);
   KEYWORD(sanitize_thread);
   KEYWORD(sanitize_memory);
+  KEYWORD(speculative_load_hardening);
   KEYWORD(swifterror);
   KEYWORD(swiftself);
   KEYWORD(uwtable);
@@ -738,6 +740,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(readOnly);
   KEYWORD(noRecurse);
   KEYWORD(returnDoesNotAlias);
+  KEYWORD(noInline);
   KEYWORD(calls);
   KEYWORD(callee);
   KEYWORD(hotness);
@@ -785,6 +788,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(info);
   KEYWORD(byte);
   KEYWORD(bit);
+  KEYWORD(varFlags);
 
 #undef KEYWORD
 
@@ -819,6 +823,8 @@ lltok::Kind LLLexer::LexIdentifier() {
       return lltok::kw_##STR;                                                  \
     }                                                                          \
   } while (false)
+
+  INSTKEYWORD(fneg,  FNeg);
 
   INSTKEYWORD(add,   Add);  INSTKEYWORD(fadd,   FAdd);
   INSTKEYWORD(sub,   Sub);  INSTKEYWORD(fsub,   FSub);
@@ -897,6 +903,11 @@ lltok::Kind LLLexer::LexIdentifier() {
   if (Keyword.startswith("DIFlag")) {
     StrVal.assign(Keyword.begin(), Keyword.end());
     return lltok::DIFlag;
+  }
+
+  if (Keyword.startswith("DISPFlag")) {
+    StrVal.assign(Keyword.begin(), Keyword.end());
+    return lltok::DISPFlag;
   }
 
   if (Keyword.startswith("CSK_")) {

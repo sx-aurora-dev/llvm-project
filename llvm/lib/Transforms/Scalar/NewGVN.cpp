@@ -777,7 +777,7 @@ private:
 
   // Reachability handling.
   void updateReachableEdge(BasicBlock *, BasicBlock *);
-  void processOutgoingEdges(TerminatorInst *, BasicBlock *);
+  void processOutgoingEdges(Instruction *, BasicBlock *);
   Value *findConditionEquivalence(Value *) const;
 
   // Elimination.
@@ -959,8 +959,7 @@ static bool isCopyOfAPHI(const Value *V) {
 // order. The BlockInstRange numbers are generated in an RPO walk of the basic
 // blocks.
 void NewGVN::sortPHIOps(MutableArrayRef<ValPair> Ops) const {
-  llvm::sort(Ops.begin(), Ops.end(),
-             [&](const ValPair &P1, const ValPair &P2) {
+  llvm::sort(Ops, [&](const ValPair &P1, const ValPair &P2) {
     return BlockInstRange.lookup(P1.second).first <
            BlockInstRange.lookup(P2.second).first;
   });
@@ -1087,9 +1086,13 @@ const Expression *NewGVN::checkSimplificationResults(Expression *E,
   CongruenceClass *CC = ValueToClass.lookup(V);
   if (CC) {
     if (CC->getLeader() && CC->getLeader() != I) {
-      // Don't add temporary instructions to the user lists.
-      if (!AllTempInstructions.count(I))
-        addAdditionalUsers(V, I);
+      // If we simplified to something else, we need to communicate
+      // that we're users of the value we simplified to.
+      if (I != V) {
+        // Don't add temporary instructions to the user lists.
+        if (!AllTempInstructions.count(I))
+          addAdditionalUsers(V, I);
+      }
       return createVariableOrConstant(CC->getLeader());
     }
     if (CC->getDefiningExpr()) {
@@ -1752,7 +1755,7 @@ NewGVN::performSymbolicPHIEvaluation(ArrayRef<ValPair> PHIOps,
     return true;
   });
   // If we are left with no operands, it's dead.
-  if (Filtered.begin() == Filtered.end()) {
+  if (empty(Filtered)) {
     // If it has undef at this point, it means there are no-non-undef arguments,
     // and thus, the value of the phi node must be undef.
     if (HasUndef) {
@@ -2484,7 +2487,7 @@ Value *NewGVN::findConditionEquivalence(Value *Cond) const {
 }
 
 // Process the outgoing edges of a block for reachability.
-void NewGVN::processOutgoingEdges(TerminatorInst *TI, BasicBlock *B) {
+void NewGVN::processOutgoingEdges(Instruction *TI, BasicBlock *B) {
   // Evaluate reachability of terminator instruction.
   BranchInst *BR;
   if ((BR = dyn_cast<BranchInst>(TI)) && BR->isConditional()) {
@@ -3134,7 +3137,7 @@ void NewGVN::valueNumberInstruction(Instruction *I) {
       auto *Symbolized = createUnknownExpression(I);
       performCongruenceFinding(I, Symbolized);
     }
-    processOutgoingEdges(dyn_cast<TerminatorInst>(I), I->getParent());
+    processOutgoingEdges(I, I->getParent());
   }
 }
 
@@ -3172,8 +3175,7 @@ bool NewGVN::singleReachablePHIPath(
   auto FilteredPhiArgs =
       make_filter_range(MP->operands(), ReachableOperandPred);
   SmallVector<const Value *, 32> OperandList;
-  std::copy(FilteredPhiArgs.begin(), FilteredPhiArgs.end(),
-            std::back_inserter(OperandList));
+  llvm::copy(FilteredPhiArgs, std::back_inserter(OperandList));
   bool Okay = is_splat(OperandList);
   if (Okay)
     return singleReachablePHIPath(Visited, cast<MemoryAccess>(OperandList[0]),
@@ -3497,9 +3499,11 @@ bool NewGVN::runGVN() {
     if (!ToErase->use_empty())
       ToErase->replaceAllUsesWith(UndefValue::get(ToErase->getType()));
 
-    if (ToErase->getParent())
-      ToErase->eraseFromParent();
+    assert(ToErase->getParent() &&
+           "BB containing ToErase deleted unexpectedly!");
+    ToErase->eraseFromParent();
   }
+	Changed |= !InstructionsToErase.empty();
 
   // Delete all unreachable blocks.
   auto UnreachableBlockPred = [&](const BasicBlock &BB) {
@@ -3953,7 +3957,7 @@ bool NewGVN::eliminateInstructions(Function &F) {
         convertClassToDFSOrdered(*CC, DFSOrderedSet, UseCounts, ProbablyDead);
 
         // Sort the whole thing.
-        llvm::sort(DFSOrderedSet.begin(), DFSOrderedSet.end());
+        llvm::sort(DFSOrderedSet);
         for (auto &VD : DFSOrderedSet) {
           int MemberDFSIn = VD.DFSIn;
           int MemberDFSOut = VD.DFSOut;
@@ -4116,7 +4120,7 @@ bool NewGVN::eliminateInstructions(Function &F) {
     // If we have possible dead stores to look at, try to eliminate them.
     if (CC->getStoreCount() > 0) {
       convertClassToLoadsAndStores(*CC, PossibleDeadStores);
-      llvm::sort(PossibleDeadStores.begin(), PossibleDeadStores.end());
+      llvm::sort(PossibleDeadStores);
       ValueDFSStack EliminationStack;
       for (auto &VD : PossibleDeadStores) {
         int MemberDFSIn = VD.DFSIn;

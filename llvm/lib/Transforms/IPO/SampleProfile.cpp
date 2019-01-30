@@ -96,6 +96,13 @@ static cl::opt<std::string> SampleProfileFile(
     "sample-profile-file", cl::init(""), cl::value_desc("filename"),
     cl::desc("Profile file loaded by -sample-profile"), cl::Hidden);
 
+// The named file contains a set of transformations that may have been applied
+// to the symbol names between the program from which the sample data was
+// collected and the current program's symbols.
+static cl::opt<std::string> SampleProfileRemappingFile(
+    "sample-profile-remapping-file", cl::init(""), cl::value_desc("filename"),
+    cl::desc("Profile remapping file loaded by -sample-profile"), cl::Hidden);
+
 static cl::opt<unsigned> SampleProfileMaxPropagateIterations(
     "sample-profile-max-propagate-iterations", cl::init(100),
     cl::desc("Maximum number of iterations to go through when propagating "
@@ -183,12 +190,12 @@ private:
 class SampleProfileLoader {
 public:
   SampleProfileLoader(
-      StringRef Name, bool IsThinLTOPreLink,
+      StringRef Name, StringRef RemapName, bool IsThinLTOPreLink,
       std::function<AssumptionCache &(Function &)> GetAssumptionCache,
       std::function<TargetTransformInfo &(Function &)> GetTargetTransformInfo)
       : GetAC(std::move(GetAssumptionCache)),
         GetTTI(std::move(GetTargetTransformInfo)), Filename(Name),
-        IsThinLTOPreLink(IsThinLTOPreLink) {}
+        RemappingFilename(RemapName), IsThinLTOPreLink(IsThinLTOPreLink) {}
 
   bool doInitialization(Module &M);
   bool runOnModule(Module &M, ModuleAnalysisManager *AM,
@@ -282,6 +289,9 @@ protected:
   /// Name of the profile file to load.
   std::string Filename;
 
+  /// Name of the profile remapping file to load.
+  std::string RemappingFilename;
+
   /// Flag indicating whether the profile input loaded successfully.
   bool ProfileIsValid = false;
 
@@ -311,13 +321,14 @@ public:
 
   SampleProfileLoaderLegacyPass(StringRef Name = SampleProfileFile,
                                 bool IsThinLTOPreLink = false)
-      : ModulePass(ID), SampleLoader(Name, IsThinLTOPreLink,
-                                     [&](Function &F) -> AssumptionCache & {
-                                       return ACT->getAssumptionCache(F);
-                                     },
-                                     [&](Function &F) -> TargetTransformInfo & {
-                                       return TTIWP->getTTI(F);
-                                     }) {
+      : ModulePass(ID),
+        SampleLoader(Name, SampleProfileRemappingFile, IsThinLTOPreLink,
+                     [&](Function &F) -> AssumptionCache & {
+                       return ACT->getAssumptionCache(F);
+                     },
+                     [&](Function &F) -> TargetTransformInfo & {
+                       return TTIWP->getTTI(F);
+                     }) {
     initializeSampleProfileLoaderLegacyPassPass(
         *PassRegistry::getPassRegistry());
   }
@@ -643,8 +654,6 @@ SampleProfileLoader::findCalleeFunctionSamples(const Instruction &Inst) const {
   if (FS == nullptr)
     return nullptr;
 
-  std::string CalleeGUID;
-  CalleeName = getRepInFormat(CalleeName, Reader->getFormat(), CalleeGUID);
   return FS->findFunctionSamplesAt(LineLocation(FunctionSamples::getOffset(DIL),
                                                 DIL->getBaseDiscriminator()),
                                    CalleeName);
@@ -683,10 +692,12 @@ SampleProfileLoader::findIndirectCallFunctionSamples(
       Sum += NameFS.second.getEntrySamples();
       R.push_back(&NameFS.second);
     }
-    llvm::sort(R.begin(), R.end(),
-               [](const FunctionSamples *L, const FunctionSamples *R) {
-                 return L->getEntrySamples() > R->getEntrySamples();
-               });
+    llvm::sort(R, [](const FunctionSamples *L, const FunctionSamples *R) {
+      if (L->getEntrySamples() != R->getEntrySamples())
+        return L->getEntrySamples() > R->getEntrySamples();
+      return FunctionSamples::getGUID(L->getName()) <
+             FunctionSamples::getGUID(R->getName());
+    });
   }
   return R;
 }
@@ -760,7 +771,6 @@ bool SampleProfileLoader::inlineHotFunctions(
     Function &F, DenseSet<GlobalValue::GUID> &InlinedGUIDs) {
   DenseSet<Instruction *> PromotedInsns;
   bool Changed = false;
-  bool isCompact = (Reader->getFormat() == SPF_Compact_Binary);
   while (true) {
     bool LocalChanged = false;
     SmallVector<Instruction *, 10> CIS;
@@ -792,19 +802,16 @@ bool SampleProfileLoader::inlineHotFunctions(
         for (const auto *FS : findIndirectCallFunctionSamples(*I, Sum)) {
           if (IsThinLTOPreLink) {
             FS->findInlinedFunctions(InlinedGUIDs, F.getParent(),
-                                     PSI->getOrCompHotCountThreshold(),
-                                     isCompact);
+                                     PSI->getOrCompHotCountThreshold());
             continue;
           }
-          auto CalleeFunctionName = FS->getName();
+          auto CalleeFunctionName = FS->getFuncNameInModule(F.getParent());
           // If it is a recursive call, we do not inline it as it could bloat
           // the code exponentially. There is way to better handle this, e.g.
           // clone the caller first, and inline the cloned caller if it is
           // recursive. As llvm does not inline recursive calls, we will
           // simply ignore it instead of handling it explicitly.
-          std::string FGUID;
-          auto Fname = getRepInFormat(F.getName(), Reader->getFormat(), FGUID);
-          if (CalleeFunctionName == Fname)
+          if (CalleeFunctionName == F.getName())
             continue;
 
           const char *Reason = "Callee function not available";
@@ -834,8 +841,7 @@ bool SampleProfileLoader::inlineHotFunctions(
           LocalChanged = true;
       } else if (IsThinLTOPreLink) {
         findCalleeFunctionSamples(*I)->findInlinedFunctions(
-            InlinedGUIDs, F.getParent(), PSI->getOrCompHotCountThreshold(),
-            isCompact);
+            InlinedGUIDs, F.getParent(), PSI->getOrCompHotCountThreshold());
       }
     }
     if (LocalChanged) {
@@ -1177,14 +1183,13 @@ static SmallVector<InstrProfValueData, 2> SortCallTargets(
     const SampleRecord::CallTargetMap &M) {
   SmallVector<InstrProfValueData, 2> R;
   for (auto I = M.begin(); I != M.end(); ++I)
-    R.push_back({Function::getGUID(I->getKey()), I->getValue()});
-  llvm::sort(R.begin(), R.end(),
-             [](const InstrProfValueData &L, const InstrProfValueData &R) {
-               if (L.Count == R.Count)
-                 return L.Value > R.Value;
-               else
-                 return L.Count > R.Count;
-             });
+    R.push_back({FunctionSamples::getGUID(I->getKey()), I->getValue()});
+  llvm::sort(R, [](const InstrProfValueData &L, const InstrProfValueData &R) {
+    if (L.Count == R.Count)
+      return L.Value > R.Value;
+    else
+      return L.Count > R.Count;
+  });
   return R;
 }
 
@@ -1292,7 +1297,7 @@ void SampleProfileLoader::propagateWeights(Function &F) {
         }
       }
     }
-    TerminatorInst *TI = BB->getTerminator();
+    Instruction *TI = BB->getTerminator();
     if (TI->getNumSuccessors() == 1)
       continue;
     if (!isa<BranchInst>(TI) && !isa<SwitchInst>(TI))
@@ -1519,12 +1524,28 @@ bool SampleProfileLoader::doInitialization(Module &M) {
     return false;
   }
   Reader = std::move(ReaderOrErr.get());
+  Reader->collectFuncsToUse(M);
   ProfileIsValid = (Reader->read() == sampleprof_error::success);
+
+  if (!RemappingFilename.empty()) {
+    // Apply profile remappings to the loaded profile data if requested.
+    // For now, we only support remapping symbols encoded using the Itanium
+    // C++ ABI's name mangling scheme.
+    ReaderOrErr = SampleProfileReaderItaniumRemapper::create(
+        RemappingFilename, Ctx, std::move(Reader));
+    if (std::error_code EC = ReaderOrErr.getError()) {
+      std::string Msg = "Could not open profile remapping file: " + EC.message();
+      Ctx.diagnose(DiagnosticInfoSampleProfile(Filename, Msg));
+      return false;
+    }
+    Reader = std::move(ReaderOrErr.get());
+    ProfileIsValid = (Reader->read() == sampleprof_error::success);
+  }
   return true;
 }
 
 ModulePass *llvm::createSampleProfileLoaderPass() {
-  return new SampleProfileLoaderLegacyPass(SampleProfileFile);
+  return new SampleProfileLoaderLegacyPass();
 }
 
 ModulePass *llvm::createSampleProfileLoaderPass(StringRef Name) {
@@ -1533,6 +1554,7 @@ ModulePass *llvm::createSampleProfileLoaderPass(StringRef Name) {
 
 bool SampleProfileLoader::runOnModule(Module &M, ModuleAnalysisManager *AM,
                                       ProfileSummaryInfo *_PSI) {
+  FunctionSamples::GUIDToFuncNameMapper Mapper(M);
   if (!ProfileIsValid)
     return false;
 
@@ -1577,7 +1599,7 @@ bool SampleProfileLoaderLegacyPass::runOnModule(Module &M) {
   ACT = &getAnalysis<AssumptionCacheTracker>();
   TTIWP = &getAnalysis<TargetTransformInfoWrapperPass>();
   ProfileSummaryInfo *PSI =
-      getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
+      &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
   return SampleLoader.runOnModule(M, nullptr, PSI);
 }
 
@@ -1616,6 +1638,8 @@ PreservedAnalyses SampleProfileLoaderPass::run(Module &M,
 
   SampleProfileLoader SampleLoader(
       ProfileFileName.empty() ? SampleProfileFile : ProfileFileName,
+      ProfileRemappingFileName.empty() ? SampleProfileRemappingFile
+                                       : ProfileRemappingFileName,
       IsThinLTOPreLink, GetAssumptionCache, GetTTI);
 
   SampleLoader.doInitialization(M);

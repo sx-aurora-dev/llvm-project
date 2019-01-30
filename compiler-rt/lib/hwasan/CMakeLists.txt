@@ -10,6 +10,7 @@ set(HWASAN_RTL_SOURCES
   hwasan_poisoning.cc
   hwasan_report.cc
   hwasan_thread.cc
+  hwasan_thread_list.cc
   )
 
 set(HWASAN_RTL_CXX_SOURCES
@@ -25,8 +26,9 @@ set(HWASAN_RTL_HEADERS
   hwasan_mapping.h
   hwasan_poisoning.h
   hwasan_report.h
-  hwasan_thread.h)
-
+  hwasan_thread.h
+  hwasan_thread_list.h
+  )
 
 set(HWASAN_DEFINITIONS)
 append_list_if(COMPILER_RT_HWASAN_WITH_INTERCEPTORS HWASAN_WITH_INTERCEPTORS=1 HWASAN_DEFINITIONS)
@@ -38,6 +40,14 @@ append_list_if(COMPILER_RT_HAS_FPIC_FLAG -fPIC HWASAN_RTL_CFLAGS)
 append_list_if(COMPILER_RT_HAS_FFREESTANDING_FLAG -ffreestanding HWASAN_RTL_CFLAGS)
 
 set(HWASAN_DYNAMIC_LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS})
+
+if(ANDROID)
+# Put most Sanitizer shared libraries in the global group. For more details, see
+# android-changes-for-ndk-developers.md#changes-to-library-search-order
+  if (COMPILER_RT_HAS_Z_GLOBAL)
+    list(APPEND HWASAN_DYNAMIC_LINK_FLAGS -Wl,-z,global)
+  endif()
+endif()
 
 set(HWASAN_DYNAMIC_CFLAGS ${HWASAN_RTL_CFLAGS})
 append_list_if(COMPILER_RT_HAS_FTLS_MODEL_INITIAL_EXEC
@@ -51,6 +61,10 @@ append_list_if(COMPILER_RT_HAS_LIBRT rt HWASAN_DYNAMIC_LIBS)
 append_list_if(COMPILER_RT_HAS_LIBM m HWASAN_DYNAMIC_LIBS)
 append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread HWASAN_DYNAMIC_LIBS)
 
+if (TARGET cxx-headers OR HAVE_LIBCXX)
+  set(HWASAN_DEPS cxx-headers)
+endif()
+
 # Static runtime library.
 add_compiler_rt_component(hwasan)
 
@@ -59,26 +73,30 @@ add_compiler_rt_object_libraries(RTHwasan
   SOURCES ${HWASAN_RTL_SOURCES}
   ADDITIONAL_HEADERS ${HWASAN_RTL_HEADERS}
   CFLAGS ${HWASAN_RTL_CFLAGS}
-  DEFS ${HWASAN_DEFINITIONS})
+  DEFS ${HWASAN_DEFINITIONS}
+  DEPS ${HWASAN_DEPS})
 add_compiler_rt_object_libraries(RTHwasan_cxx
   ARCHS ${HWASAN_SUPPORTED_ARCH}
   SOURCES ${HWASAN_RTL_CXX_SOURCES}
   ADDITIONAL_HEADERS ${HWASAN_RTL_HEADERS}
   CFLAGS ${HWASAN_RTL_CFLAGS}
-  DEFS ${HWASAN_DEFINITIONS})
+  DEFS ${HWASAN_DEFINITIONS}
+  DEPS ${HWASAN_DEPS})
 add_compiler_rt_object_libraries(RTHwasan_dynamic
   ARCHS ${HWASAN_SUPPORTED_ARCH}
   SOURCES ${HWASAN_RTL_SOURCES} ${HWASAN_RTL_CXX_SOURCES}
   ADDITIONAL_HEADERS ${HWASAN_RTL_HEADERS}
   CFLAGS ${HWASAN_DYNAMIC_CFLAGS}
-  DEFS ${HWASAN_DEFINITIONS})
+  DEFS ${HWASAN_DEFINITIONS}
+  DEPS ${HWASAN_DEPS})
 
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cc "")
 add_compiler_rt_object_libraries(RTHwasan_dynamic_version_script_dummy
   ARCHS ${HWASAN_SUPPORTED_ARCH}
   SOURCES ${CMAKE_CURRENT_BINARY_DIR}/dummy.cc
   CFLAGS ${HWASAN_DYNAMIC_CFLAGS}
-  DEFS ${HWASAN_DEFINITIONS})
+  DEFS ${HWASAN_DEFINITIONS}
+  DEPS ${HWASAN_DEPS})
 
 foreach(arch ${HWASAN_SUPPORTED_ARCH})
   add_compiler_rt_runtime(clang_rt.hwasan

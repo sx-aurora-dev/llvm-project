@@ -31,9 +31,9 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Execution.h"
-#include "clang/Tooling/StandaloneExecution.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -55,32 +55,37 @@ static llvm::cl::opt<std::string>
                  llvm::cl::init("docs"), llvm::cl::cat(ClangDocCategory));
 
 static llvm::cl::opt<bool>
-    DumpMapperResult("dump-mapper",
-                     llvm::cl::desc("Dump mapper results to bitcode file."),
-                     llvm::cl::init(false), llvm::cl::cat(ClangDocCategory));
-
-static llvm::cl::opt<bool> DumpIntermediateResult(
-    "dump-intermediate",
-    llvm::cl::desc("Dump intermediate results to bitcode file."),
-    llvm::cl::init(false), llvm::cl::cat(ClangDocCategory));
-
-static llvm::cl::opt<bool>
     PublicOnly("public", llvm::cl::desc("Document only public declarations."),
                llvm::cl::init(false), llvm::cl::cat(ClangDocCategory));
-
-enum OutputFormatTy {
-  yaml,
-};
-
-static llvm::cl::opt<OutputFormatTy> FormatEnum(
-    "format", llvm::cl::desc("Format for outputted docs."),
-    llvm::cl::values(clEnumVal(yaml, "Documentation in YAML format.")),
-    llvm::cl::init(yaml), llvm::cl::cat(ClangDocCategory));
 
 static llvm::cl::opt<bool> DoxygenOnly(
     "doxygen",
     llvm::cl::desc("Use only doxygen-style comments to generate docs."),
     llvm::cl::init(false), llvm::cl::cat(ClangDocCategory));
+
+enum OutputFormatTy {
+  md,
+  yaml,
+};
+
+static llvm::cl::opt<OutputFormatTy>
+    FormatEnum("format", llvm::cl::desc("Format for outputted docs."),
+               llvm::cl::values(clEnumValN(OutputFormatTy::yaml, "yaml",
+                                           "Documentation in YAML format."),
+                                clEnumValN(OutputFormatTy::md, "md",
+                                           "Documentation in MD format.")),
+               llvm::cl::init(OutputFormatTy::yaml),
+               llvm::cl::cat(ClangDocCategory));
+
+std::string getFormatString() {
+  switch (FormatEnum) {
+  case OutputFormatTy::yaml:
+    return "yaml";
+  case OutputFormatTy::md:
+    return "md";
+  }
+  llvm_unreachable("Unknown OutputFormatTy");
+}
 
 bool CreateDirectory(const Twine &DirName, bool ClearDirectory = false) {
   std::error_code OK;
@@ -98,26 +103,6 @@ bool CreateDirectory(const Twine &DirName, bool ClearDirectory = false) {
     llvm::errs() << "Unable to create documentation directories.\n";
     return true;
   }
-  return false;
-}
-
-bool DumpResultToFile(const Twine &DirName, const Twine &FileName,
-                      StringRef Buffer, bool ClearDirectory = false) {
-  std::error_code OK;
-  llvm::SmallString<128> IRRootPath;
-  llvm::sys::path::native(OutDirectory, IRRootPath);
-  llvm::sys::path::append(IRRootPath, DirName);
-  if (CreateDirectory(IRRootPath, ClearDirectory))
-    return true;
-  llvm::sys::path::append(IRRootPath, FileName);
-  std::error_code OutErrorInfo;
-  llvm::raw_fd_ostream OS(IRRootPath, OutErrorInfo, llvm::sys::fs::F_None);
-  if (OutErrorInfo != OK) {
-    llvm::errs() << "Error opening documentation file.\n";
-    return true;
-  }
-  OS << Buffer;
-  OS.close();
   return false;
 }
 
@@ -155,14 +140,6 @@ getInfoOutputFile(StringRef Root,
   return Path;
 }
 
-std::string getFormatString(OutputFormatTy Ty) {
-  switch (Ty) {
-  case yaml:
-    return "yaml";
-  }
-  llvm_unreachable("Unknown OutputFormatTy");
-}
-
 // Iterate through tool results and build string map of info vectors from the
 // encoded bitstreams.
 bool bitcodeResultsToInfos(
@@ -191,19 +168,21 @@ int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
   std::error_code OK;
 
-  // Fail early if an invalid format was provided.
-  std::string Format = getFormatString(FormatEnum);
-  auto G = doc::findGeneratorByName(Format);
-  if (!G) {
-    llvm::errs() << toString(G.takeError()) << "\n";
-    return 1;
-  }
-
+  ExecutorName.setInitialValue("all-TUs");
   auto Exec = clang::tooling::createExecutorFromCommandLineArgs(
       argc, argv, ClangDocCategory);
 
   if (!Exec) {
     llvm::errs() << toString(Exec.takeError()) << "\n";
+    return 1;
+  }
+
+  // Fail early if an invalid format was provided.
+  std::string Format = getFormatString();
+  llvm::outs() << "Emiting docs in " << Format << " format.\n";
+  auto G = doc::findGeneratorByName(Format);
+  if (!G) {
+    llvm::errs() << toString(G.takeError()) << "\n";
     return 1;
   }
 
@@ -225,17 +204,6 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-  if (DumpMapperResult) {
-    bool Err = false;
-    Exec->get()->getToolResults()->forEachResult(
-        [&](StringRef Key, StringRef Value) {
-          Err = DumpResultToFile("bc", Key + ".bc", Value);
-        });
-    if (Err)
-      llvm::errs() << "Error dumping map results.\n";
-    return Err;
-  }
-
   // Collect values into output by key.
   // In ToolResults, the Key is the hashed USR and the value is the
   // bitcode-encoded representation of the Info object.
@@ -253,15 +221,6 @@ int main(int argc, const char **argv) {
       continue;
     }
 
-    if (DumpIntermediateResult) {
-      SmallString<4096> Buffer;
-      llvm::BitstreamWriter Stream(Buffer);
-      doc::ClangDocBitcodeWriter Writer(Stream);
-      Writer.dispatchInfoForWrite(Reduced.get().get());
-      if (DumpResultToFile("bc", Group.getKey() + ".bc", Buffer))
-        llvm::errs() << "Error dumping to bitcode.\n";
-      continue;
-    }
     doc::Info *I = Reduced.get().get();
 
     auto InfoPath =
@@ -277,8 +236,8 @@ int main(int argc, const char **argv) {
       continue;
     }
 
-    if (G->get()->generateDocForInfo(I, InfoOS))
-      llvm::errs() << "Unable to generate docs for info.\n";
+    if (auto Err = G->get()->generateDocForInfo(I, InfoOS))
+      llvm::errs() << toString(std::move(Err)) << "\n";
   }
 
   return 0;

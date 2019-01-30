@@ -614,10 +614,6 @@ public:
     return SourceRange(LocStart, RBraceLoc);
   }
 
-  LLVM_ATTRIBUTE_DEPRECATED(SourceLocation getLocStart() const LLVM_READONLY,
-                            "Use getBeginLoc instead") {
-    return getBeginLoc();
-  }
   SourceLocation getBeginLoc() const LLVM_READONLY { return LocStart; }
   SourceLocation getRBraceLoc() const { return RBraceLoc; }
   void setLocStart(SourceLocation L) { LocStart = L; }
@@ -739,10 +735,6 @@ public:
 
   SourceRange getSourceRange() const override LLVM_READONLY;
 
-  LLVM_ATTRIBUTE_DEPRECATED(SourceLocation getLocStart() const LLVM_READONLY,
-                            "Use getBeginLoc instead") {
-    return getBeginLoc();
-  }
   SourceLocation getBeginLoc() const LLVM_READONLY {
     return getOuterLocStart();
   }
@@ -973,6 +965,8 @@ protected:
     /// Defines kind of the ImplicitParamDecl: 'this', 'self', 'vtt', '_cmd' or
     /// something else.
     unsigned ImplicitParamKind : 3;
+
+    unsigned EscapingByref : 1;
   };
 
   union {
@@ -1415,6 +1409,19 @@ public:
     NonParmVarDeclBits.PreviousDeclInSameBlockScope = Same;
   }
 
+  /// Indicates the capture is a __block variable that is captured by a block
+  /// that can potentially escape (a block for which BlockDecl::doesNotEscape
+  /// returns false).
+  bool isEscapingByref() const;
+
+  /// Indicates the capture is a __block variable that is never captured by an
+  /// escaping block.
+  bool isNonEscapingByref() const;
+
+  void setEscapingByref() {
+    NonParmVarDeclBits.EscapingByref = true;
+  }
+
   /// Retrieve the variable declaration from which this variable could
   /// be instantiated, if it is an instantiation (rather than a non-template).
   VarDecl *getTemplateInstantiationPattern() const;
@@ -1710,6 +1717,13 @@ private:
 
   void setParameterIndexLarge(unsigned parameterIndex);
   unsigned getParameterIndexLarge() const;
+};
+
+enum class MultiVersionKind {
+  None,
+  Target,
+  CPUSpecific,
+  CPUDispatch
 };
 
 /// Represents a function declaration or definition.
@@ -2219,12 +2233,22 @@ public:
     getCanonicalDecl()->FunctionDeclBits.IsMultiVersion = V;
   }
 
+  /// Gets the kind of multiversioning attribute this declaration has. Note that
+  /// this can return a value even if the function is not multiversion, such as
+  /// the case of 'target'.
+  MultiVersionKind getMultiVersionKind() const;
+
+
   /// True if this function is a multiversioned dispatch function as a part of
   /// the cpu_specific/cpu_dispatch functionality.
   bool isCPUDispatchMultiVersion() const;
   /// True if this function is a multiversioned processor specific function as a
   /// part of the cpu_specific/cpu_dispatch functionality.
   bool isCPUSpecificMultiVersion() const;
+
+  /// True if this function is a multiversioned dispatch function as a part of
+  /// the target functionality.
+  bool isTargetMultiVersion() const;
 
   void setPreviousDeclaration(FunctionDecl * PrevDecl);
 
@@ -2277,8 +2301,7 @@ public:
   unsigned getMinRequiredArguments() const;
 
   QualType getReturnType() const {
-    assert(getType()->getAs<FunctionType>() && "Expected a FunctionType!");
-    return getType()->getAs<FunctionType>()->getReturnType();
+    return getType()->castAs<FunctionType>()->getReturnType();
   }
 
   /// Attempt to compute an informative source range covering the
@@ -2286,14 +2309,22 @@ public:
   /// limited representation in the AST.
   SourceRange getReturnTypeSourceRange() const;
 
+  /// Get the declared return type, which may differ from the actual return
+  /// type if the return type is deduced.
+  QualType getDeclaredReturnType() const {
+    auto *TSI = getTypeSourceInfo();
+    QualType T = TSI ? TSI->getType() : getType();
+    return T->castAs<FunctionType>()->getReturnType();
+  }
+
   /// Attempt to compute an informative source range covering the
   /// function exception specification, if any.
   SourceRange getExceptionSpecSourceRange() const;
 
   /// Determine the type of an expression that calls this function.
   QualType getCallResultType() const {
-    assert(getType()->getAs<FunctionType>() && "Expected a FunctionType!");
-    return getType()->getAs<FunctionType>()->getCallResultType(getASTContext());
+    return getType()->castAs<FunctionType>()->getCallResultType(
+        getASTContext());
   }
 
   /// Returns the WarnUnusedResultAttr that is either declared on this
@@ -2876,10 +2907,6 @@ public:
   const Type *getTypeForDecl() const { return TypeForDecl; }
   void setTypeForDecl(const Type *TD) { TypeForDecl = TD; }
 
-  LLVM_ATTRIBUTE_DEPRECATED(SourceLocation getLocStart() const LLVM_READONLY,
-                            "Use getBeginLoc instead") {
-    return getBeginLoc();
-  }
   SourceLocation getBeginLoc() const LLVM_READONLY { return LocStart; }
   void setLocStart(SourceLocation L) { LocStart = L; }
   SourceRange getSourceRange() const override LLVM_READONLY {
@@ -3870,6 +3897,14 @@ public:
     /// variable.
     bool isByRef() const { return VariableAndFlags.getInt() & flag_isByRef; }
 
+    bool isEscapingByref() const {
+      return getVariable()->isEscapingByref();
+    }
+
+    bool isNonEscapingByref() const {
+      return getVariable()->isNonEscapingByref();
+    }
+
     /// Whether this is a nested capture, i.e. the variable captured
     /// is not from outside the immediately enclosing function/block.
     bool isNested() const { return VariableAndFlags.getInt() & flag_isNested; }
@@ -4207,10 +4242,6 @@ public:
   SourceLocation getRBraceLoc() const { return RBraceLoc; }
   void setRBraceLoc(SourceLocation L) { RBraceLoc = L; }
 
-  LLVM_ATTRIBUTE_DEPRECATED(SourceLocation getLocEnd() const LLVM_READONLY,
-                            "Use getEndLoc instead") {
-    return getEndLoc();
-  }
   SourceLocation getEndLoc() const LLVM_READONLY {
     if (RBraceLoc.isValid())
       return RBraceLoc;

@@ -1,5 +1,6 @@
-; RUN: opt -S -basicaa -licm < %s | FileCheck %s
-; RUN: opt -aa-pipeline=basic-aa -passes='require<opt-remark-emit>,loop(licm)' -S %s | FileCheck %s
+; REQUIRES: asserts
+; RUN: opt -S -basicaa -licm -ipt-expensive-asserts=true < %s | FileCheck %s
+; RUN: opt -aa-pipeline=basic-aa -passes='require<opt-remark-emit>,loop(licm)' -ipt-expensive-asserts=true -S %s | FileCheck %s
 target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
@@ -449,6 +450,153 @@ if.false:
 backedge:
   %merge = phi i32 [ %a, %if.true ], [ %b, %if.false ]
   %iv.next = add i32 %iv, %merge
+  %loop.cond = icmp ult i32 %iv.next, %load
+  br i1 %loop.cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+; Check that we can hoist a mustexecute load from backedge even if something
+; throws after it.
+define void @test_hoist_from_backedge_01(i32* %p, i32 %n) {
+
+; CHECK-LABEL: @test_hoist_from_backedge_01(
+; CHECK:       entry:
+; CHECK-NEXT:  %load = load i32, i32* %p
+; CHECK-NOT:   load i32
+
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i32 [ 0, %entry ], [ %iv.next, %backedge ]
+  %dummy = phi i32 [ 0, %entry ], [ %merge, %backedge ]
+  %cond = icmp slt i32 %iv, %n
+  br i1 %cond, label %if.true, label %if.false
+
+if.true:
+  %a = add i32 %iv, %iv
+  br label %backedge
+
+if.false:
+  %b = mul i32 %iv, %iv
+  br label %backedge
+
+backedge:
+  %merge = phi i32 [ %a, %if.true ], [ %b, %if.false ]
+  %iv.next = add i32 %iv, %merge
+  %load = load i32, i32* %p
+  call void @may_throw()
+  %loop.cond = icmp ult i32 %iv.next, %load
+  br i1 %loop.cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+; Check that we don't hoist the load if something before it can throw.
+define void @test_hoist_from_backedge_02(i32* %p, i32 %n) {
+
+; CHECK-LABEL: @test_hoist_from_backedge_02(
+; CHECK:       entry:
+; CHECK:       loop:
+; CHECK:       %load = load i32, i32* %p
+
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i32 [ 0, %entry ], [ %iv.next, %backedge ]
+  %dummy = phi i32 [ 0, %entry ], [ %merge, %backedge ]
+  %cond = icmp slt i32 %iv, %n
+  br i1 %cond, label %if.true, label %if.false
+
+if.true:
+  %a = add i32 %iv, %iv
+  br label %backedge
+
+if.false:
+  %b = mul i32 %iv, %iv
+  br label %backedge
+
+backedge:
+  %merge = phi i32 [ %a, %if.true ], [ %b, %if.false ]
+  %iv.next = add i32 %iv, %merge
+  call void @may_throw()
+  %load = load i32, i32* %p
+  %loop.cond = icmp ult i32 %iv.next, %load
+  br i1 %loop.cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+define void @test_hoist_from_backedge_03(i32* %p, i32 %n) {
+
+; CHECK-LABEL: @test_hoist_from_backedge_03(
+; CHECK:       entry:
+; CHECK:       loop:
+; CHECK:       %load = load i32, i32* %p
+
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i32 [ 0, %entry ], [ %iv.next, %backedge ]
+  %dummy = phi i32 [ 0, %entry ], [ %merge, %backedge ]
+  %cond = icmp slt i32 %iv, %n
+  br i1 %cond, label %if.true, label %if.false
+
+if.true:
+  %a = add i32 %iv, %iv
+  br label %backedge
+
+if.false:
+  %b = mul i32 %iv, %iv
+  call void @may_throw()
+  br label %backedge
+
+backedge:
+  %merge = phi i32 [ %a, %if.true ], [ %b, %if.false ]
+  %iv.next = add i32 %iv, %merge
+  %load = load i32, i32* %p
+  %loop.cond = icmp ult i32 %iv.next, %load
+  br i1 %loop.cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+define void @test_hoist_from_backedge_04(i32* %p, i32 %n) {
+
+; CHECK-LABEL: @test_hoist_from_backedge_04(
+; CHECK:       entry:
+; CHECK:       loop:
+; CHECK:       %load = load i32, i32* %p
+
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i32 [ 0, %entry ], [ %iv.next, %backedge ]
+  %dummy = phi i32 [ 0, %entry ], [ %merge, %backedge ]
+  call void @may_throw()
+  %cond = icmp slt i32 %iv, %n
+  br i1 %cond, label %if.true, label %if.false
+
+if.true:
+  %a = add i32 %iv, %iv
+  br label %backedge
+
+if.false:
+  %b = mul i32 %iv, %iv
+  br label %backedge
+
+backedge:
+  %merge = phi i32 [ %a, %if.true ], [ %b, %if.false ]
+  %iv.next = add i32 %iv, %merge
+  %load = load i32, i32* %p
   %loop.cond = icmp ult i32 %iv.next, %load
   br i1 %loop.cond, label %loop, label %exit
 

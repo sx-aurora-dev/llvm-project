@@ -31,6 +31,11 @@ __device__ omptarget_nvptx_Queue<omptarget_nvptx_SimpleThreadPrivateContext,
                                  OMP_STATE_COUNT>
     omptarget_nvptx_device_simpleState[MAX_SM];
 
+__device__ omptarget_nvptx_SimpleMemoryManager
+    omptarget_nvptx_simpleMemoryManager;
+__device__ __shared__ uint32_t usedMemIdx;
+__device__ __shared__ uint32_t usedSlotIdx;
+
 // Pointer to this team's OpenMP state object
 __device__ __shared__
     omptarget_nvptx_ThreadPrivateContext *omptarget_nvptx_threadPrivateContext;

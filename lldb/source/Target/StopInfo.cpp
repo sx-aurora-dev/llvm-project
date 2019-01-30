@@ -7,12 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
-// C++ Includes
 #include <string>
 
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Breakpoint/StoppointCallbackContext.h"
@@ -333,6 +329,19 @@ protected:
             // commands when we see the same breakpoint hit a second time.
 
             m_should_stop_is_valid = true;
+
+            // It is possible that the user has a breakpoint at the same site
+            // as the completed plan had (e.g. user has a breakpoint
+            // on a module entry point, and `ThreadPlanCallFunction` ends
+            // also there). We can't find an internal breakpoint in the loop
+            // later because it was already removed on the plan completion.
+            // So check if the plan was completed, and stop if so.
+            if (thread_sp->CompletedPlanOverridesBreakpoint()) {
+              m_should_stop = true;
+              thread_sp->ResetStopInfo();
+              return;
+            }
+
             if (log)
               log->Printf("StopInfoBreakpoint::PerformAction - Hit a "
                           "breakpoint while running an expression,"
@@ -720,14 +729,18 @@ protected:
                 StopInfoSP stored_stop_info_sp = thread_sp->GetStopInfo();
                 assert(stored_stop_info_sp.get() == this);
 
+                Status new_plan_status;
                 ThreadPlanSP new_plan_sp(
                     thread_sp->QueueThreadPlanForStepSingleInstruction(
-                        false,  // step-over
-                        false,  // abort_other_plans
-                        true)); // stop_other_threads
-                new_plan_sp->SetIsMasterPlan(true);
-                new_plan_sp->SetOkayToDiscard(false);
-                new_plan_sp->SetPrivate(true);
+                        false, // step-over
+                        false, // abort_other_plans
+                        true,  // stop_other_threads
+                        new_plan_status));
+                if (new_plan_sp && new_plan_status.Success()) {
+                  new_plan_sp->SetIsMasterPlan(true);
+                  new_plan_sp->SetOkayToDiscard(false);
+                  new_plan_sp->SetPrivate(true);
+                }
                 process_sp->GetThreadList().SetSelectedThreadByID(
                     thread_sp->GetID());
                 process_sp->ResumeSynchronous(nullptr);

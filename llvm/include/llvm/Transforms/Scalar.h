@@ -26,7 +26,6 @@ class ModulePass;
 class Pass;
 class GetElementPtrInst;
 class PassInfo;
-class TerminatorInst;
 class TargetLowering;
 class TargetMachine;
 
@@ -391,12 +390,6 @@ FunctionPass *createLowerExpectIntrinsicPass();
 // calls such as sqrt.
 //
 FunctionPass *createPartiallyInlineLibCallsPass();
-
-//===----------------------------------------------------------------------===//
-//
-// ScalarizerPass - Converts vector operations into scalar operations
-//
-FunctionPass *createScalarizerPass();
 
 //===----------------------------------------------------------------------===//
 //

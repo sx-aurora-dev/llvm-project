@@ -115,7 +115,7 @@ ModuleSP DynamicLoaderDarwin::FindTargetModuleForImageInfo(
     // No UUID, we must rely upon the cached module modification time and the
     // modification time of the file on disk
     if (module_sp->GetModificationTime() !=
-        FileSystem::GetModificationTime(module_sp->GetFileSpec()))
+        FileSystem::Instance().GetModificationTime(module_sp->GetFileSpec()))
       module_sp.reset();
   }
 
@@ -374,7 +374,7 @@ bool DynamicLoaderDarwin::JSONImageInformationIntoImageInfo(
     image_infos[i].mod_date =
         image->GetValueForKey("mod_date")->GetAsInteger()->GetValue();
     image_infos[i].file_spec.SetFile(
-        image->GetValueForKey("pathname")->GetAsString()->GetValue(), false,
+        image->GetValueForKey("pathname")->GetAsString()->GetValue(),
         FileSpec::Style::native);
 
     StructuredData::Dictionary *mh =
@@ -400,6 +400,8 @@ bool DynamicLoaderDarwin::JSONImageInformationIntoImageInfo(
         image_infos[i].os_type = llvm::Triple::TvOS;
       else if (os_name == "watchos")
         image_infos[i].os_type = llvm::Triple::WatchOS;
+      // NEED_BRIDGEOS_TRIPLE else if (os_name == "bridgeos")
+      // NEED_BRIDGEOS_TRIPLE   image_infos[i].os_type = llvm::Triple::BridgeOS;
     }
     if (image->HasKey("min_version_os_sdk")) {
       image_infos[i].min_version_os_sdk =
@@ -513,11 +515,12 @@ void DynamicLoaderDarwin::UpdateSpecialBinariesFromNewImageInfos(
   const size_t image_infos_size = image_infos.size();
   for (size_t i = 0; i < image_infos_size; i++) {
     if (image_infos[i].header.filetype == llvm::MachO::MH_DYLINKER) {
-      // In a "simulator" process (an x86 process that is ios/tvos/watchos) we
-      // will have two dyld modules -- a "dyld" that we want to keep track of,
-      // and a "dyld_sim" which we don't need to keep track of here. If the
-      // target is an x86 system and the OS of the dyld binary is
-      // ios/tvos/watchos, then we are looking at dyld_sym.
+      // In a "simulator" process (an x86 process that is 
+      // ios/tvos/watchos/bridgeos) we will have two dyld modules -- 
+      // a "dyld" that we want to keep track of, and a "dyld_sim" which 
+      // we don't need to keep track of here. If the target is an x86 
+      // system and the OS of the dyld binary is ios/tvos/watchos/bridgeos, 
+      // then we are looking at dyld_sym.
 
       // debugserver has only recently (late 2016) started sending up the os
       // type for each binary it sees -- so if we don't have an os type, use a
@@ -531,6 +534,7 @@ void DynamicLoaderDarwin::UpdateSpecialBinariesFromNewImageInfos(
         if (image_infos[i].os_type != llvm::Triple::OSType::IOS &&
             image_infos[i].os_type != llvm::Triple::TvOS &&
             image_infos[i].os_type != llvm::Triple::WatchOS) {
+            // NEED_BRIDGEOS_TRIPLE image_infos[i].os_type != llvm::Triple::BridgeOS) {
           dyld_idx = i;
         }
       }
@@ -555,8 +559,7 @@ void DynamicLoaderDarwin::UpdateSpecialBinariesFromNewImageInfos(
       target.GetImages().AppendIfNeeded(exe_module_sp);
       UpdateImageLoadAddress(exe_module_sp.get(), image_infos[exe_idx]);
       if (exe_module_sp.get() != target.GetExecutableModulePointer()) {
-        const bool get_dependent_images = false;
-        target.SetExecutableModule(exe_module_sp, get_dependent_images);
+        target.SetExecutableModule(exe_module_sp, eLoadDependentsNo);
       }
     }
   }
@@ -1124,6 +1127,10 @@ bool DynamicLoaderDarwin::UseDYLDSPI(Process *process) {
     // watchOS 3 and newer
     if (os_type == llvm::Triple::WatchOS && version >= llvm::VersionTuple(3))
       use_new_spi_interface = true;
+
+    // NEED_BRIDGEOS_TRIPLE // Any BridgeOS
+    // NEED_BRIDGEOS_TRIPLE if (os_type == llvm::Triple::BridgeOS)
+    // NEED_BRIDGEOS_TRIPLE   use_new_spi_interface = true;
   }
 
   if (log) {

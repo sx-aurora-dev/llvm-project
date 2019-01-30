@@ -43,21 +43,29 @@ public:
   bool shouldNegate() const { return NegatePredicate; }
   bool shouldExpandForMC() const { return ExpandForMC; }
   unsigned getIndentLevel() const { return IndentLevel; }
+  StringRef getTargetName() const { return TargetName; }
 
   void setByRef(bool Value) { EmitCallsByRef = Value; }
   void flipNegatePredicate() { NegatePredicate = !NegatePredicate; }
   void setNegatePredicate(bool Value) { NegatePredicate = Value; }
   void setExpandForMC(bool Value) { ExpandForMC = Value; }
+  void setIndentLevel(unsigned Level) { IndentLevel = Level; }
   void increaseIndentLevel() { ++IndentLevel; }
   void decreaseIndentLevel() { --IndentLevel; }
-  void setIndentLevel(unsigned Level) { IndentLevel = Level; }
 
   using RecVec = std::vector<Record *>;
   void expandTrue(raw_ostream &OS);
   void expandFalse(raw_ostream &OS);
-  void expandCheckImmOperand(raw_ostream &OS, int OpIndex, int ImmVal);
-  void expandCheckImmOperand(raw_ostream &OS, int OpIndex, StringRef ImmVal);
-  void expandCheckRegOperand(raw_ostream &OS, int OpIndex, const Record *Reg);
+  void expandCheckImmOperand(raw_ostream &OS, int OpIndex, int ImmVal,
+                             StringRef FunctionMapper);
+  void expandCheckImmOperand(raw_ostream &OS, int OpIndex, StringRef ImmVal,
+                             StringRef FunctionMapperer);
+  void expandCheckImmOperandSimple(raw_ostream &OS, int OpIndex,
+                                   StringRef FunctionMapper);
+  void expandCheckRegOperand(raw_ostream &OS, int OpIndex, const Record *Reg,
+                             StringRef FunctionMapper);
+  void expandCheckRegOperandSimple(raw_ostream &OS, int OpIndex,
+                                   StringRef FunctionMapper);
   void expandCheckSameRegOperand(raw_ostream &OS, int First, int Second);
   void expandCheckNumOperands(raw_ostream &OS, int NumOps);
   void expandCheckOpcode(raw_ostream &OS, const Record *Inst);
@@ -79,6 +87,36 @@ public:
   void expandOpcodeSwitchStatement(raw_ostream &OS, const RecVec &Cases,
                                    const Record *Default);
   void expandStatement(raw_ostream &OS, const Record *Rec);
+};
+
+// Forward declarations.
+class STIPredicateFunction;
+class OpcodeGroup;
+
+class STIPredicateExpander : public PredicateExpander {
+  StringRef ClassPrefix;
+  bool ExpandDefinition;
+
+  STIPredicateExpander(const PredicateExpander &) = delete;
+  STIPredicateExpander &operator=(const PredicateExpander &) = delete;
+
+  void expandHeader(raw_ostream &OS, const STIPredicateFunction &Fn);
+  void expandPrologue(raw_ostream &OS, const STIPredicateFunction &Fn);
+  void expandOpcodeGroup(raw_ostream &OS, const OpcodeGroup &Group,
+                         bool ShouldUpdateOpcodeMask);
+  void expandBody(raw_ostream &OS, const STIPredicateFunction &Fn);
+  void expandEpilogue(raw_ostream &OS, const STIPredicateFunction &Fn);
+
+public:
+  STIPredicateExpander(StringRef Target)
+      : PredicateExpander(Target), ClassPrefix(), ExpandDefinition(false) {}
+
+  bool shouldExpandDefinition() const { return ExpandDefinition; }
+  StringRef getClassPrefix() const { return ClassPrefix; }
+  void setClassPrefix(StringRef S) { ClassPrefix = S; }
+  void setExpandDefinition(bool Value) { ExpandDefinition = Value; }
+
+  void expandSTIPredicate(raw_ostream &OS, const STIPredicateFunction &Fn);
 };
 
 } // namespace llvm

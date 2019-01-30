@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.cplusplus.MisusedMovedObject -std=c++11 -verify -analyzer-output=text -analyzer-config exploration_strategy=unexplored_first_queue %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.cplusplus.MisusedMovedObject -std=c++11 -analyzer-config exploration_strategy=dfs -verify -analyzer-output=text -DDFS=1 %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.cplusplus.MisusedMovedObject -std=c++11 -verify -analyzer-output=text -analyzer-config exploration_strategy=unexplored_first_queue,eagerly-assume=false %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.cplusplus.MisusedMovedObject -std=c++11 -analyzer-config exploration_strategy=dfs,eagerly-assume=false -verify -analyzer-output=text -DDFS=1 %s
 
 namespace std {
 
@@ -638,7 +638,10 @@ void ifStmtSequencesDeclAndConditionTest() {
   }
 }
 
-class C : public A {};
+struct C : public A {
+  [[clang::reinitializes]] void reinit();
+};
+
 void subRegionMoveTest() {
   {
     A a;
@@ -672,9 +675,38 @@ void resetSuperClass() {
   C c2 = c; // no-warning
 }
 
+void resetSuperClass2() {
+  C c;
+  C c1 = std::move(c);
+  c.reinit();
+  C c2 = c; // no-warning
+}
+
 void reportSuperClass() {
   C c;
   C c1 = std::move(c); // expected-note {{'c' became 'moved-from' here}}
   c.foo();             // expected-warning {{Method call on a 'moved-from' object 'c'}} expected-note {{Method call on a 'moved-from' object 'c'}}
   C c2 = c;            // no-warning
+}
+
+struct Empty {};
+
+Empty inlinedCall() {
+  // Used to warn because region 'e' failed to be cleaned up because no symbols
+  // have ever died during the analysis and the checkDeadSymbols callback
+  // was skipped entirely.
+  Empty e{};
+  return e; // no-warning
+}
+
+void checkInlinedCallZombies() {
+  while (true)
+    inlinedCall();
+}
+
+void checkLoopZombies() {
+  while (true) {
+    Empty e{};
+    Empty f = std::move(e); // no-warning
+  }
 }

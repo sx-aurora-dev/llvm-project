@@ -16,7 +16,6 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Sema/DelayedDiagnostic.h"
 #include "clang/Sema/Lookup.h"
-#include "clang/Sema/LoopHint.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "llvm/ADT/StringExtras.h"
 
@@ -304,7 +303,7 @@ static Attr *handleOpenCLUnrollHint(Sema &S, Stmt *St, const ParsedAttr &A,
     if (Val <= 0) {
       S.Diag(A.getRange().getBegin(),
              diag::err_attribute_requires_positive_integer)
-          << A;
+          << A << /* positive */ 0;
       return nullptr;
     }
     UnrollFactor = Val;

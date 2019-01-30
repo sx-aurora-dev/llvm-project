@@ -7,12 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
 #include "llvm/ADT/StringRef.h"
 
-// Project includes
 #include "Plugins/Process/Utility/RegisterContextDarwin_arm.h"
 #include "Plugins/Process/Utility/RegisterContextDarwin_arm64.h"
 #include "Plugins/Process/Utility/RegisterContextDarwin_i386.h"
@@ -46,7 +42,7 @@
 #include "lldb/Utility/Timer.h"
 #include "lldb/Utility/UUID.h"
 
-#include "lldb/Utility/SafeMachO.h"
+#include "lldb/Host/SafeMachO.h"
 
 #include "llvm/Support/MemoryBuffer.h"
 
@@ -1191,21 +1187,28 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
 
           case eSectionTypeDebug:
           case eSectionTypeDWARFDebugAbbrev:
+          case eSectionTypeDWARFDebugAbbrevDwo:
           case eSectionTypeDWARFDebugAddr:
           case eSectionTypeDWARFDebugAranges:
           case eSectionTypeDWARFDebugCuIndex:
           case eSectionTypeDWARFDebugFrame:
           case eSectionTypeDWARFDebugInfo:
+          case eSectionTypeDWARFDebugInfoDwo:
           case eSectionTypeDWARFDebugLine:
+          case eSectionTypeDWARFDebugLineStr:
           case eSectionTypeDWARFDebugLoc:
+          case eSectionTypeDWARFDebugLocLists:
           case eSectionTypeDWARFDebugMacInfo:
           case eSectionTypeDWARFDebugMacro:
           case eSectionTypeDWARFDebugNames:
           case eSectionTypeDWARFDebugPubNames:
           case eSectionTypeDWARFDebugPubTypes:
           case eSectionTypeDWARFDebugRanges:
+          case eSectionTypeDWARFDebugRngLists:
           case eSectionTypeDWARFDebugStr:
+          case eSectionTypeDWARFDebugStrDwo:
           case eSectionTypeDWARFDebugStrOffsets:
+          case eSectionTypeDWARFDebugStrOffsetsDwo:
           case eSectionTypeDWARFDebugTypes:
           case eSectionTypeDWARFAppleNames:
           case eSectionTypeDWARFAppleTypes:
@@ -1455,6 +1458,7 @@ static lldb::SectionType GetSectionType(uint32_t flags,
   static ConstString g_sect_name_dwarf_debug_info("__debug_info");
   static ConstString g_sect_name_dwarf_debug_line("__debug_line");
   static ConstString g_sect_name_dwarf_debug_loc("__debug_loc");
+  static ConstString g_sect_name_dwarf_debug_loclists("__debug_loclists");
   static ConstString g_sect_name_dwarf_debug_macinfo("__debug_macinfo");
   static ConstString g_sect_name_dwarf_debug_names("__debug_names");
   static ConstString g_sect_name_dwarf_debug_pubnames("__debug_pubnames");
@@ -1484,6 +1488,8 @@ static lldb::SectionType GetSectionType(uint32_t flags,
     return eSectionTypeDWARFDebugLine;
   if (section_name == g_sect_name_dwarf_debug_loc)
     return eSectionTypeDWARFDebugLoc;
+  if (section_name == g_sect_name_dwarf_debug_loclists)
+    return eSectionTypeDWARFDebugLocLists;
   if (section_name == g_sect_name_dwarf_debug_macinfo)
     return eSectionTypeDWARFDebugMacInfo;
   if (section_name == g_sect_name_dwarf_debug_names)
@@ -1493,7 +1499,7 @@ static lldb::SectionType GetSectionType(uint32_t flags,
   if (section_name == g_sect_name_dwarf_debug_pubtypes)
     return eSectionTypeDWARFDebugPubTypes;
   if (section_name == g_sect_name_dwarf_debug_ranges)
-    return eSectionTypeDWARFDebugRanges;
+    return eSectionTypeDWARFDebugRanges; 
   if (section_name == g_sect_name_dwarf_debug_str)
     return eSectionTypeDWARFDebugStr;
   if (section_name == g_sect_name_dwarf_debug_types)
@@ -2177,7 +2183,7 @@ size_t ObjectFileMachO::ParseSymtab() {
       uint32_t name_offset = cmd_offset + m_data.GetU32(&offset);
       const char *path = m_data.PeekCStr(name_offset);
       if (path) {
-        FileSpec file_spec(path, false);
+        FileSpec file_spec(path);
         // Strip the path if there is @rpath, @executable, etc so we just use
         // the basename
         if (path[0] == '@')
@@ -2331,14 +2337,6 @@ size_t ObjectFileMachO::ParseSymtab() {
             if (nlist_data_sp)
               nlist_data.SetData(nlist_data_sp, 0,
                                  nlist_data_sp->GetByteSize());
-            // Load strings individually from memory when loading from memory
-            // since shared cache string tables contain strings for all symbols
-            // from all shared cached libraries DataBufferSP strtab_data_sp
-            // (ReadMemory (process_sp, strtab_addr,
-            // strtab_data_byte_size));
-            // if (strtab_data_sp)
-            //    strtab_data.SetData (strtab_data_sp, 0,
-            //    strtab_data_sp->GetByteSize());
             if (m_dysymtab.nindirectsyms != 0) {
               const addr_t indirect_syms_addr = linkedit_load_addr +
                                                 m_dysymtab.indirectsymoff -
@@ -2350,6 +2348,22 @@ size_t ObjectFileMachO::ParseSymtab() {
                 indirect_symbol_index_data.SetData(
                     indirect_syms_data_sp, 0,
                     indirect_syms_data_sp->GetByteSize());
+              // If this binary is outside the shared cache, 
+              // cache the string table.
+              // Binaries in the shared cache all share a giant string table, and
+              // we can't share the string tables across multiple ObjectFileMachO's,
+              // so we'd end up re-reading this mega-strtab for every binary
+              // in the shared cache - it would be a big perf problem.
+              // For binaries outside the shared cache, it's faster to read the
+              // entire strtab at once instead of piece-by-piece as we process
+              // the nlist records.
+              if ((m_header.flags & 0x80000000u) == 0) {
+                DataBufferSP strtab_data_sp (ReadMemory (process_sp, strtab_addr, 
+                      strtab_data_byte_size));
+                if (strtab_data_sp) {
+                  strtab_data.SetData (strtab_data_sp, 0, strtab_data_sp->GetByteSize());
+                }
+              }
             }
           }
           if (memory_module_load_level >=
@@ -2622,7 +2636,7 @@ size_t ObjectFileMachO::ParseSymtab() {
       // shared cache UUID in the development or non-development shared caches
       // on disk.
       if (process_shared_cache_uuid.IsValid()) {
-        if (dsc_development_filespec.Exists()) {
+        if (FileSystem::Instance().Exists(dsc_development_filespec)) {
           UUID dsc_development_uuid = GetSharedCacheUUID(
               dsc_development_filespec, byte_order, addr_byte_size);
           if (dsc_development_uuid.IsValid() &&
@@ -2631,7 +2645,8 @@ size_t ObjectFileMachO::ParseSymtab() {
             dsc_uuid = dsc_development_uuid;
           }
         }
-        if (!dsc_uuid.IsValid() && dsc_nondevelopment_filespec.Exists()) {
+        if (!dsc_uuid.IsValid() &&
+            FileSystem::Instance().Exists(dsc_nondevelopment_filespec)) {
           UUID dsc_nondevelopment_uuid = GetSharedCacheUUID(
               dsc_nondevelopment_filespec, byte_order, addr_byte_size);
           if (dsc_nondevelopment_uuid.IsValid() &&
@@ -2644,8 +2659,8 @@ size_t ObjectFileMachO::ParseSymtab() {
 
       // Failing a UUID match, prefer the development dyld_shared cache if both
       // are present.
-      if (!dsc_filespec.Exists()) {
-        if (dsc_development_filespec.Exists()) {
+      if (!FileSystem::Instance().Exists(dsc_filespec)) {
+        if (FileSystem::Instance().Exists(dsc_development_filespec)) {
           dsc_filespec = dsc_development_filespec;
         } else {
           dsc_filespec = dsc_nondevelopment_filespec;
@@ -3053,11 +3068,11 @@ size_t ObjectFileMachO::ParseSymtab() {
                                   // file so you end up with a path that looks
                                   // like "/tmp/src//tmp/src/"
                                   FileSpec so_dir(so_path, false);
-                                  if (!so_dir.Exists()) {
+                                  if (!FileSystem::Instance().Exists(so_dir)) {
                                     so_dir.SetFile(
                                         &full_so_path[double_slash_pos + 1],
                                         false);
-                                    if (so_dir.Exists()) {
+                                    if (FileSystem::Instance().Exists(so_dir)) {
                                       // Trim off the incorrect path
                                       full_so_path.erase(0,
                                                          double_slash_pos + 1);
@@ -4002,11 +4017,11 @@ size_t ObjectFileMachO::ParseSymtab() {
                     // string in the DW_AT_comp_dir, and the second is the
                     // directory for the source file so you end up with a path
                     // that looks like "/tmp/src//tmp/src/"
-                    FileSpec so_dir(so_path, false);
-                    if (!so_dir.Exists()) {
-                      so_dir.SetFile(&full_so_path[double_slash_pos + 1], false,
+                    FileSpec so_dir(so_path);
+                    if (!FileSystem::Instance().Exists(so_dir)) {
+                      so_dir.SetFile(&full_so_path[double_slash_pos + 1],
                                      FileSpec::Style::native);
-                      if (so_dir.Exists()) {
+                      if (FileSystem::Instance().Exists(so_dir)) {
                         // Trim off the incorrect path
                         full_so_path.erase(0, double_slash_pos + 1);
                       }
@@ -4870,20 +4885,77 @@ bool ObjectFileMachO::GetUUID(const llvm::MachO::mach_header &header,
   return false;
 }
 
-static const char *GetOSName(uint32_t cmd) {
+static llvm::StringRef GetOSName(uint32_t cmd) {
   switch (cmd) {
   case llvm::MachO::LC_VERSION_MIN_IPHONEOS:
-    return "ios";
+    return llvm::Triple::getOSTypeName(llvm::Triple::IOS);
   case llvm::MachO::LC_VERSION_MIN_MACOSX:
-    return "macosx";
+    return llvm::Triple::getOSTypeName(llvm::Triple::MacOSX);
   case llvm::MachO::LC_VERSION_MIN_TVOS:
-    return "tvos";
+    return llvm::Triple::getOSTypeName(llvm::Triple::TvOS);
   case llvm::MachO::LC_VERSION_MIN_WATCHOS:
-    return "watchos";
+    return llvm::Triple::getOSTypeName(llvm::Triple::WatchOS);
   default:
     llvm_unreachable("unexpected LC_VERSION load command");
   }
 }
+
+namespace {
+  struct OSEnv {
+    llvm::StringRef os_type;
+    llvm::StringRef environment;
+    OSEnv(uint32_t cmd) {
+      switch (cmd) {
+      case PLATFORM_MACOS:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::MacOSX);
+        return;
+      case PLATFORM_IOS:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::IOS);
+        return;
+      case PLATFORM_TVOS:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::TvOS);
+        return;
+      case PLATFORM_WATCHOS:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::WatchOS);
+        return;
+// NEED_BRIDGEOS_TRIPLE      case PLATFORM_BRIDGEOS:
+// NEED_BRIDGEOS_TRIPLE        os_type = llvm::Triple::getOSTypeName(llvm::Triple::BridgeOS);
+// NEED_BRIDGEOS_TRIPLE        return;
+#if defined (PLATFORM_IOSSIMULATOR) && defined (PLATFORM_TVOSSIMULATOR) && defined (PLATFORM_WATCHOSSIMULATOR)
+      case PLATFORM_IOSSIMULATOR:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::IOS);
+        environment =
+            llvm::Triple::getEnvironmentTypeName(llvm::Triple::Simulator);
+        return;
+      case PLATFORM_TVOSSIMULATOR:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::TvOS);
+        environment =
+            llvm::Triple::getEnvironmentTypeName(llvm::Triple::Simulator);
+        return;
+      case PLATFORM_WATCHOSSIMULATOR:
+        os_type = llvm::Triple::getOSTypeName(llvm::Triple::WatchOS);
+        environment =
+            llvm::Triple::getEnvironmentTypeName(llvm::Triple::Simulator);
+        return;
+#endif
+      default: {
+        Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_SYMBOLS |
+                                                        LIBLLDB_LOG_PROCESS));
+        if (log)
+          log->Printf("unsupported platform in LC_BUILD_VERSION");
+      }
+      }
+    }
+  };
+
+  struct MinOS {
+    uint32_t major_version, minor_version, patch_version;
+    MinOS(uint32_t version)
+        : major_version(version >> 16),
+          minor_version((version >> 8) & 0xffu),
+          patch_version(version & 0xffu) {}
+  };
+} // namespace
 
 bool ObjectFileMachO::GetArchitecture(const llvm::MachO::mach_header &header,
                                       const lldb_private::DataExtractor &data,
@@ -4916,40 +4988,71 @@ bool ObjectFileMachO::GetArchitecture(const llvm::MachO::mach_header &header,
       return true;
     } else {
       struct load_command load_cmd;
+      llvm::SmallString<16> os_name;
+      llvm::raw_svector_ostream os(os_name);
 
+      // See if there is an LC_VERSION_MIN_* load command that can give
+      // us the OS type.
       lldb::offset_t offset = lc_offset;
       for (uint32_t i = 0; i < header.ncmds; ++i) {
         const lldb::offset_t cmd_offset = offset;
         if (data.GetU32(&offset, &load_cmd, 2) == NULL)
           break;
 
-        uint32_t major, minor, patch;
         struct version_min_command version_min;
-
-        llvm::SmallString<16> os_name;
-        llvm::raw_svector_ostream os(os_name);
-
         switch (load_cmd.cmd) {
         case llvm::MachO::LC_VERSION_MIN_IPHONEOS:
         case llvm::MachO::LC_VERSION_MIN_MACOSX:
         case llvm::MachO::LC_VERSION_MIN_TVOS:
-        case llvm::MachO::LC_VERSION_MIN_WATCHOS:
+        case llvm::MachO::LC_VERSION_MIN_WATCHOS: {
           if (load_cmd.cmdsize != sizeof(version_min))
             break;
-          data.ExtractBytes(cmd_offset,
-                            sizeof(version_min), data.GetByteOrder(),
-                            &version_min);
-          major = version_min.version >> 16;
-          minor = (version_min.version >> 8) & 0xffu;
-          patch = version_min.version & 0xffu;
-          os << GetOSName(load_cmd.cmd) << major << '.' << minor << '.'
-             << patch;
+          if (data.ExtractBytes(cmd_offset, sizeof(version_min),
+                                data.GetByteOrder(), &version_min) == 0)
+            break;
+          MinOS min_os(version_min.version);
+          os << GetOSName(load_cmd.cmd) << min_os.major_version << '.'
+             << min_os.minor_version << '.' << min_os.patch_version;
           triple.setOSName(os.str());
           return true;
+        }
         default:
           break;
         }
 
+        offset = cmd_offset + load_cmd.cmdsize;
+      }
+
+      // See if there is an LC_BUILD_VERSION load command that can give
+      // us the OS type.
+
+      offset = lc_offset;
+      for (uint32_t i = 0; i < header.ncmds; ++i) {
+        const lldb::offset_t cmd_offset = offset;
+        if (data.GetU32(&offset, &load_cmd, 2) == NULL)
+          break;
+        do {
+          if (load_cmd.cmd == llvm::MachO::LC_BUILD_VERSION) {
+            struct build_version_command build_version;
+            if (load_cmd.cmdsize < sizeof(build_version)) {
+              // Malformed load command.
+              break;
+            }
+            if (data.ExtractBytes(cmd_offset, sizeof(build_version),
+                                  data.GetByteOrder(), &build_version) == 0)
+              break;
+            MinOS min_os(build_version.minos);
+            OSEnv os_env(build_version.platform);
+            if (os_env.os_type.empty())
+              break;
+            os << os_env.os_type << min_os.major_version << '.'
+               << min_os.minor_version << '.' << min_os.patch_version;
+            triple.setOSName(os.str());
+            if (!os_env.environment.empty())
+              triple.setEnvironmentName(os_env.environment);
+            return true;
+          }
+        } while (0);
         offset = cmd_offset + load_cmd.cmdsize;
       }
 
@@ -4985,9 +5088,6 @@ uint32_t ObjectFileMachO::GetDependentModules(FileSpecList &files) {
     std::vector<std::string> rpath_paths;
     std::vector<std::string> rpath_relative_paths;
     std::vector<std::string> at_exec_relative_paths;
-    const bool resolve_path = false; // Don't resolve the dependent file paths
-                                     // since they may not reside on this
-                                     // system
     uint32_t i;
     for (i = 0; i < m_header.ncmds; ++i) {
       const uint32_t cmd_offset = offset;
@@ -5016,7 +5116,7 @@ uint32_t ObjectFileMachO::GetDependentModules(FileSpecList &files) {
                 at_exec_relative_paths.push_back(path 
                                                  + strlen("@executable_path"));
             } else {
-              FileSpec file_spec(path, resolve_path);
+              FileSpec file_spec(path);
               if (files.AppendIfUnique(file_spec))
                 count++;
             }
@@ -5031,8 +5131,8 @@ uint32_t ObjectFileMachO::GetDependentModules(FileSpecList &files) {
     }
 
     FileSpec this_file_spec(m_file);
-    this_file_spec.ResolvePath();
-    
+    FileSystem::Instance().Resolve(this_file_spec);
+
     if (!rpath_paths.empty()) {
       // Fixup all LC_RPATH values to be absolute paths
       std::string loader_path("@loader_path");
@@ -5053,8 +5153,10 @@ uint32_t ObjectFileMachO::GetDependentModules(FileSpecList &files) {
           path += rpath_relative_path;
           // It is OK to resolve this path because we must find a file on disk
           // for us to accept it anyway if it is rpath relative.
-          FileSpec file_spec(path, true);
-          if (file_spec.Exists() && files.AppendIfUnique(file_spec)) {
+          FileSpec file_spec(path);
+          FileSystem::Instance().Resolve(file_spec);
+          if (FileSystem::Instance().Exists(file_spec) &&
+              files.AppendIfUnique(file_spec)) {
             count++;
             break;
           }
@@ -5071,7 +5173,8 @@ uint32_t ObjectFileMachO::GetDependentModules(FileSpecList &files) {
       for (const auto &at_exec_relative_path : at_exec_relative_paths) {
         FileSpec file_spec = 
             exec_dir.CopyByAppendingPathComponent(at_exec_relative_path);
-        if (file_spec.Exists() && files.AppendIfUnique(file_spec))
+        if (FileSystem::Instance().Exists(file_spec) &&
+            files.AppendIfUnique(file_spec))
           count++;
       }
     }
@@ -5717,8 +5820,30 @@ llvm::VersionTuple ObjectFileMachO::GetMinimumOSVersion() {
             m_min_os_version = llvm::VersionTuple(xxxx, yy, zz);
             break;
           }
+        } 
+      } else if (lc.cmd == llvm::MachO::LC_BUILD_VERSION) {
+        // struct build_version_command {
+        //     uint32_t    cmd;            /* LC_BUILD_VERSION */
+        //     uint32_t    cmdsize;        /* sizeof(struct build_version_command) plus */
+        //                                 /* ntools * sizeof(struct build_tool_version) */
+        //     uint32_t    platform;       /* platform */
+        //     uint32_t    minos;          /* X.Y.Z is encoded in nibbles xxxx.yy.zz */
+        //     uint32_t    sdk;            /* X.Y.Z is encoded in nibbles xxxx.yy.zz */
+        //     uint32_t    ntools;         /* number of tool entries following this */
+        // };
+
+        offset += 4;  // skip platform
+        uint32_t minos = m_data.GetU32(&offset);
+
+        const uint32_t xxxx = minos >> 16;
+        const uint32_t yy = (minos >> 8) & 0xffu;
+        const uint32_t zz = minos & 0xffu;
+        if (xxxx) {
+            m_min_os_version = llvm::VersionTuple(xxxx, yy, zz);
+            break;
         }
       }
+
       offset = load_cmd_offset + lc.cmdsize;
     }
 
@@ -5763,6 +5888,46 @@ uint32_t ObjectFileMachO::GetSDKVersion(uint32_t *versions,
         }
       }
       offset = load_cmd_offset + lc.cmdsize;
+    }
+
+    if (success == false)
+    {
+        offset = MachHeaderSizeFromMagic(m_header.magic);
+        for (uint32_t i = 0; success == false && i < m_header.ncmds; ++i) 
+        {
+            const lldb::offset_t load_cmd_offset = offset;
+
+            version_min_command lc;
+            if (m_data.GetU32(&offset, &lc.cmd, 2) == NULL)
+                break;
+            if (lc.cmd == llvm::MachO::LC_BUILD_VERSION)
+            {
+                // struct build_version_command {
+                //     uint32_t    cmd;            /* LC_BUILD_VERSION */
+                //     uint32_t    cmdsize;        /* sizeof(struct build_version_command) plus */
+                //                                 /* ntools * sizeof(struct build_tool_version) */
+                //     uint32_t    platform;       /* platform */
+                //     uint32_t    minos;          /* X.Y.Z is encoded in nibbles xxxx.yy.zz */
+                //     uint32_t    sdk;            /* X.Y.Z is encoded in nibbles xxxx.yy.zz */
+                //     uint32_t    ntools;         /* number of tool entries following this */
+                // };
+
+                offset += 4;  // skip platform
+                uint32_t minos = m_data.GetU32(&offset);
+
+                const uint32_t xxxx = minos >> 16;
+                const uint32_t yy = (minos >> 8) & 0xffu;
+                const uint32_t zz = minos & 0xffu;
+                if (xxxx) 
+                {
+                    m_sdk_versions.push_back (xxxx);
+                    m_sdk_versions.push_back (yy);
+                    m_sdk_versions.push_back (zz);
+                    success = true;
+                }
+            }
+            offset = load_cmd_offset + lc.cmdsize;
+        }
     }
 
     if (success == false) {
@@ -5934,6 +6099,7 @@ bool ObjectFileMachO::SaveCore(const lldb::ProcessSP &process_sp,
          target_triple.getOS() == llvm::Triple::IOS ||
          target_triple.getOS() == llvm::Triple::WatchOS ||
          target_triple.getOS() == llvm::Triple::TvOS)) {
+         // NEED_BRIDGEOS_TRIPLE target_triple.getOS() == llvm::Triple::BridgeOS)) {
       bool make_core = false;
       switch (target_arch.GetMachine()) {
       case llvm::Triple::aarch64:
@@ -6162,10 +6328,10 @@ bool ObjectFileMachO::SaveCore(const lldb::ProcessSP &process_sp,
 
           File core_file;
           std::string core_file_path(outfile.GetPath());
-          error = core_file.Open(core_file_path.c_str(),
-                                 File::eOpenOptionWrite |
-                                     File::eOpenOptionTruncate |
-                                     File::eOpenOptionCanCreate);
+          error = FileSystem::Instance().Open(core_file, outfile,
+                                              File::eOpenOptionWrite |
+                                                  File::eOpenOptionTruncate |
+                                                  File::eOpenOptionCanCreate);
           if (error.Success()) {
             // Read 1 page at a time
             uint8_t bytes[0x1000];

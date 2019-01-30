@@ -10,9 +10,9 @@
 #include "UnnecessaryValueParamCheck.h"
 
 #include "../utils/DeclRefExprUtils.h"
-#include "../utils/ExprMutationAnalyzer.h"
 #include "../utils/FixItHintUtils.h"
 #include "../utils/Matchers.h"
+#include "../utils/OptionsUtils.h"
 #include "../utils/TypeTraits.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Lexer.h"
@@ -69,17 +69,22 @@ UnnecessaryValueParamCheck::UnnecessaryValueParamCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       IncludeStyle(utils::IncludeSorter::parseIncludeStyle(
-          Options.getLocalOrGlobal("IncludeStyle", "llvm"))) {}
+          Options.getLocalOrGlobal("IncludeStyle", "llvm"))),
+      AllowedTypes(
+          utils::options::parseStringList(Options.get("AllowedTypes", ""))) {}
 
 void UnnecessaryValueParamCheck::registerMatchers(MatchFinder *Finder) {
   // This check is specific to C++ and doesn't apply to languages like
   // Objective-C.
   if (!getLangOpts().CPlusPlus)
     return;
-  const auto ExpensiveValueParamDecl =
-      parmVarDecl(hasType(hasCanonicalType(allOf(
-                      unless(referenceType()), matchers::isExpensiveToCopy()))),
-                  decl().bind("param"));
+  const auto ExpensiveValueParamDecl = parmVarDecl(
+      hasType(qualType(
+          hasCanonicalType(matchers::isExpensiveToCopy()),
+          unless(anyOf(hasCanonicalType(referenceType()),
+                       hasDeclaration(namedDecl(
+                           matchers::matchesAnyListedName(AllowedTypes))))))),
+      decl().bind("param"));
   Finder->addMatcher(
       functionDecl(hasBody(stmt()), isDefinition(), unless(isImplicit()),
                    unless(cxxMethodDecl(anyOf(isOverride(), isFinal()))),
@@ -92,21 +97,11 @@ void UnnecessaryValueParamCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Param = Result.Nodes.getNodeAs<ParmVarDecl>("param");
   const auto *Function = Result.Nodes.getNodeAs<FunctionDecl>("functionDecl");
 
-  // Do not trigger on non-const value parameters when they are mutated either
-  // within the function body or within init expression(s) when the function is
-  // a ctor.
-  if (utils::ExprMutationAnalyzer(Function->getBody(), Result.Context)
-          .isMutated(Param))
+  FunctionParmMutationAnalyzer &Analyzer =
+      MutationAnalyzers.try_emplace(Function, *Function, *Result.Context)
+          .first->second;
+  if (Analyzer.isMutated(Param))
     return;
-  // CXXCtorInitializer might also mutate Param but they're not part of function
-  // body, so check them separately here.
-  if (const auto *Ctor = dyn_cast<CXXConstructorDecl>(Function)) {
-    for (const auto *Init : Ctor->inits()) {
-      if (utils::ExprMutationAnalyzer(Init->getInit(), Result.Context)
-              .isMutated(Param))
-        return;
-    }
-  }
 
   const bool IsConstQualified =
       Param->getType().getCanonicalType().isConstQualified();
@@ -184,6 +179,12 @@ void UnnecessaryValueParamCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "IncludeStyle",
                 utils::IncludeSorter::toString(IncludeStyle));
+  Options.store(Opts, "AllowedTypes",
+                utils::options::serializeStringList(AllowedTypes));
+}
+
+void UnnecessaryValueParamCheck::onEndOfTranslationUnit() {
+  MutationAnalyzers.clear();
 }
 
 void UnnecessaryValueParamCheck::handleMoveFix(const ParmVarDecl &Var,

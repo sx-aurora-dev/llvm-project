@@ -86,9 +86,13 @@ static bool IsGlobalType(const MCValue &Target) {
   return RefA && RefA->getKind() == MCSymbolRefExpr::VK_WebAssembly_GLOBAL;
 }
 
-unsigned
-WebAssemblyWasmObjectWriter::getRelocType(const MCValue &Target,
-                                          const MCFixup &Fixup) const {
+static bool IsEventType(const MCValue &Target) {
+  const MCSymbolRefExpr *RefA = Target.getSymA();
+  return RefA && RefA->getKind() == MCSymbolRefExpr::VK_WebAssembly_EVENT;
+}
+
+unsigned WebAssemblyWasmObjectWriter::getRelocType(const MCValue &Target,
+                                                   const MCFixup &Fixup) const {
   // WebAssembly functions are not allocated in the data address space. To
   // resolve a pointer to a function, we must use a special relocation type.
   bool IsFunction = IsFunctionExpr(Fixup.getValue());
@@ -107,6 +111,8 @@ WebAssemblyWasmObjectWriter::getRelocType(const MCValue &Target,
       return wasm::R_WEBASSEMBLY_TYPE_INDEX_LEB;
     if (IsFunction)
       return wasm::R_WEBASSEMBLY_FUNCTION_INDEX_LEB;
+    if (IsEventType(Target))
+      return wasm::R_WEBASSEMBLY_EVENT_INDEX_LEB;
     return wasm::R_WEBASSEMBLY_MEMORY_ADDR_LEB;
   case FK_Data_4:
     if (IsFunction)

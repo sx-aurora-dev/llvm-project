@@ -18,28 +18,34 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
+namespace llvm {
 namespace mca {
-
-using namespace llvm;
 
 #define DEBUG_TYPE "llvm-mca"
 ResourceStrategy::~ResourceStrategy() = default;
 
-void DefaultResourceStrategy::skipMask(uint64_t Mask) {
-  NextInSequenceMask &= (~Mask);
-  if (!NextInSequenceMask) {
-    NextInSequenceMask = ResourceUnitMask ^ RemovedFromNextInSequence;
-    RemovedFromNextInSequence = 0;
-  }
-}
-
 uint64_t DefaultResourceStrategy::select(uint64_t ReadyMask) {
   // This method assumes that ReadyMask cannot be zero.
-  uint64_t CandidateMask = llvm::PowerOf2Floor(NextInSequenceMask);
-  while (!(ReadyMask & CandidateMask)) {
-    skipMask(CandidateMask);
-    CandidateMask = llvm::PowerOf2Floor(NextInSequenceMask);
+  uint64_t CandidateMask = ReadyMask & NextInSequenceMask;
+  if (CandidateMask) {
+    CandidateMask = PowerOf2Floor(CandidateMask);
+    NextInSequenceMask &= (CandidateMask | (CandidateMask - 1));
+    return CandidateMask;
   }
+
+  NextInSequenceMask = ResourceUnitMask ^ RemovedFromNextInSequence;
+  RemovedFromNextInSequence = 0;
+  CandidateMask = ReadyMask & NextInSequenceMask;
+
+  if (CandidateMask) {
+    CandidateMask = PowerOf2Floor(CandidateMask);
+    NextInSequenceMask &= (CandidateMask | (CandidateMask - 1));
+    return CandidateMask;
+  }
+
+  NextInSequenceMask = ResourceUnitMask;
+  CandidateMask = PowerOf2Floor(ReadyMask & NextInSequenceMask);
+  NextInSequenceMask &= (CandidateMask | (CandidateMask - 1));
   return CandidateMask;
 }
 
@@ -48,15 +54,21 @@ void DefaultResourceStrategy::used(uint64_t Mask) {
     RemovedFromNextInSequence |= Mask;
     return;
   }
-  skipMask(Mask);
+ 
+  NextInSequenceMask &= (~Mask);
+  if (NextInSequenceMask)
+    return;
+
+  NextInSequenceMask = ResourceUnitMask ^ RemovedFromNextInSequence;
+  RemovedFromNextInSequence = 0;
 }
 
 ResourceState::ResourceState(const MCProcResourceDesc &Desc, unsigned Index,
                              uint64_t Mask)
     : ProcResourceDescIndex(Index), ResourceMask(Mask),
-      BufferSize(Desc.BufferSize) {
-  if (llvm::countPopulation(ResourceMask) > 1)
-    ResourceSizeMask = ResourceMask ^ llvm::PowerOf2Floor(ResourceMask);
+      BufferSize(Desc.BufferSize), IsAGroup(countPopulation(ResourceMask)>1) {
+  if (IsAGroup)
+    ResourceSizeMask = ResourceMask ^ PowerOf2Floor(ResourceMask);
   else
     ResourceSizeMask = (1ULL << Desc.NumUnits) - 1;
   ReadyMask = ResourceSizeMask;
@@ -66,7 +78,7 @@ ResourceState::ResourceState(const MCProcResourceDesc &Desc, unsigned Index,
 
 bool ResourceState::isReady(unsigned NumUnits) const {
   return (!isReserved() || isADispatchHazard()) &&
-         llvm::countPopulation(ReadyMask) >= NumUnits;
+         countPopulation(ReadyMask) >= NumUnits;
 }
 
 ResourceStateEvent ResourceState::isBufferAvailable() const {
@@ -87,7 +99,7 @@ void ResourceState::dump() const {
 #endif
 
 static unsigned getResourceStateIndex(uint64_t Mask) {
-  return std::numeric_limits<uint64_t>::digits - llvm::countLeadingZeros(Mask);
+  return std::numeric_limits<uint64_t>::digits - countLeadingZeros(Mask);
 }
 
 static std::unique_ptr<ResourceStrategy>
@@ -97,8 +109,7 @@ getStrategyFor(const ResourceState &RS) {
   return std::unique_ptr<ResourceStrategy>(nullptr);
 }
 
-ResourceManager::ResourceManager(const MCSchedModel &SM)
-    : ProcResID2Mask(SM.getNumProcResourceKinds()) {
+ResourceManager::ResourceManager(const MCSchedModel &SM) {
   computeProcResourceMasks(SM, ProcResID2Mask);
   Resources.resize(SM.getNumProcResourceKinds());
   Strategies.resize(SM.getNumProcResourceKinds());
@@ -149,8 +160,14 @@ ResourceRef ResourceManager::selectPipe(uint64_t ResourceID) {
 
 void ResourceManager::use(const ResourceRef &RR) {
   // Mark the sub-resource referenced by RR as used.
-  ResourceState &RS = *Resources[getResourceStateIndex(RR.first)];
+  unsigned RSID = getResourceStateIndex(RR.first);
+  ResourceState &RS = *Resources[RSID];
   RS.markSubResourceAsUsed(RR.second);
+  // Remember to update the resource strategy for non-group resources with
+  // multiple units.
+  if (RS.getNumUnits() > 1)
+    Strategies[RSID]->used(RR.second);
+
   // If there are still available units in RR.first,
   // then we are done.
   if (RS.isReady())
@@ -218,13 +235,12 @@ void ResourceManager::releaseBuffers(ArrayRef<uint64_t> Buffers) {
 }
 
 bool ResourceManager::canBeIssued(const InstrDesc &Desc) const {
-  return std::all_of(Desc.Resources.begin(), Desc.Resources.end(),
-                     [&](const std::pair<uint64_t, const ResourceUsage> &E) {
-                       unsigned NumUnits =
-                           E.second.isReserved() ? 0U : E.second.NumUnits;
-                       unsigned Index = getResourceStateIndex(E.first);
-                       return Resources[Index]->isReady(NumUnits);
-                     });
+  return all_of(
+      Desc.Resources, [&](const std::pair<uint64_t, const ResourceUsage> &E) {
+        unsigned NumUnits = E.second.isReserved() ? 0U : E.second.NumUnits;
+        unsigned Index = getResourceStateIndex(E.first);
+        return Resources[Index]->isReady(NumUnits);
+      });
 }
 
 // Returns true if all resources are in-order, and there is at least one
@@ -247,7 +263,7 @@ bool ResourceManager::mustIssueImmediately(const InstrDesc &Desc) const {
 
 void ResourceManager::issueInstruction(
     const InstrDesc &Desc,
-    SmallVectorImpl<std::pair<ResourceRef, double>> &Pipes) {
+    SmallVectorImpl<std::pair<ResourceRef, ResourceCycles>> &Pipes) {
   for (const std::pair<uint64_t, ResourceUsage> &R : Desc.Resources) {
     const CycleSegment &CS = R.second.CS;
     if (!CS.size()) {
@@ -263,8 +279,8 @@ void ResourceManager::issueInstruction(
       // Replace the resource mask with a valid processor resource index.
       const ResourceState &RS = *Resources[getResourceStateIndex(Pipe.first)];
       Pipe.first = RS.getProcResourceID();
-      Pipes.emplace_back(
-          std::pair<ResourceRef, double>(Pipe, static_cast<double>(CS.size())));
+      Pipes.emplace_back(std::pair<ResourceRef, ResourceCycles>(
+          Pipe, ResourceCycles(CS.size())));
     } else {
       assert((countPopulation(R.first) > 1) && "Expected a group!");
       // Mark this group as reserved.
@@ -307,3 +323,4 @@ void ResourceManager::releaseResource(uint64_t ResourceID) {
 }
 
 } // namespace mca
+} // namespace llvm

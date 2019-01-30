@@ -23,6 +23,7 @@
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/InstructionSimplify.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -30,6 +31,7 @@
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/InstVisitor.h"
@@ -137,7 +139,7 @@ class CallAnalyzer : public InstVisitor<CallAnalyzer, bool> {
   bool HasReturn;
   bool HasIndirectBr;
   bool HasUninlineableIntrinsic;
-  bool UsesVarArgs;
+  bool InitsVargArgs;
 
   /// Number of bytes allocated statically by the callee.
   uint64_t AllocatedSize;
@@ -283,7 +285,7 @@ public:
         IsCallerRecursive(false), IsRecursiveCall(false),
         ExposesReturnsTwice(false), HasDynamicAlloca(false),
         ContainsNoDuplicateCall(false), HasReturn(false), HasIndirectBr(false),
-        HasUninlineableIntrinsic(false), UsesVarArgs(false), AllocatedSize(0),
+        HasUninlineableIntrinsic(false), InitsVargArgs(false), AllocatedSize(0),
         NumInstructions(0), NumVectorInstructions(0), VectorBonus(0),
         SingleBBBonus(0), EnableLoadElimination(true), LoadEliminationCost(0),
         NumConstantArgs(0), NumConstantOffsetPtrArgs(0), NumAllocaArgs(0),
@@ -720,6 +722,7 @@ bool CallAnalyzer::visitCastInst(CastInst &I) {
   case Instruction::FPToSI:
     if (TTI.getFPOpCost(I.getType()) == TargetTransformInfo::TCC_Expensive)
       Cost += InlineConstants::CallPenalty;
+    break;
   default:
     break;
   }
@@ -1239,8 +1242,7 @@ bool CallAnalyzer::visitCallSite(CallSite CS) {
         HasUninlineableIntrinsic = true;
         return false;
       case Intrinsic::vastart:
-      case Intrinsic::vaend:
-        UsesVarArgs = true;
+        InitsVargArgs = true;
         return false;
       }
     }
@@ -1587,7 +1589,7 @@ CallAnalyzer::analyzeBlock(BasicBlock *BB,
       IR = "indirect branch";
     else if (HasUninlineableIntrinsic)
       IR = "uninlinable intrinsic";
-    else if (UsesVarArgs)
+    else if (InitsVargArgs)
       IR = "varargs";
     if (!IR) {
       if (ORE)
@@ -1832,7 +1834,7 @@ InlineResult CallAnalyzer::analyzeCall(CallSite CS) {
     if (!IR)
       return IR;
 
-    TerminatorInst *TI = BB->getTerminator();
+    Instruction *TI = BB->getTerminator();
 
     // Add in the live successors by first checking whether we have terminator
     // that may be simplified based on the values simplified by this call.
@@ -1884,6 +1886,24 @@ InlineResult CallAnalyzer::analyzeCall(CallSite CS) {
   // is not actually duplicated, just moved).
   if (!OnlyOneCallAndLocalLinkage && ContainsNoDuplicateCall)
     return "noduplicate";
+
+  // Loops generally act a lot like calls in that they act like barriers to
+  // movement, require a certain amount of setup, etc. So when optimising for
+  // size, we penalise any call sites that perform loops. We do this after all
+  // other costs here, so will likely only be dealing with relatively small
+  // functions (and hence DT and LI will hopefully be cheap).
+  if (Caller->optForMinSize()) {
+    DominatorTree DT(F);
+    LoopInfo LI(DT);
+    int NumLoops = 0;
+    for (Loop *L : LI) {
+      // Ignore loops that will not be executed
+      if (DeadBlocks.count(L->getHeader()))
+        continue;
+      NumLoops++;
+    }
+    Cost += NumLoops * InlineConstants::CallPenalty;
+  }
 
   // We applied the maximum possible vector bonus at the beginning. Now,
   // subtract the excess bonus, if any, from the Threshold before
@@ -2079,9 +2099,8 @@ bool llvm::isInlineViable(Function &F) {
         // Disallow inlining functions that call @llvm.localescape. Doing this
         // correctly would require major changes to the inliner.
         case llvm::Intrinsic::localescape:
-        // Disallow inlining of functions that access VarArgs.
+        // Disallow inlining of functions that initialize VarArgs with va_start.
         case llvm::Intrinsic::vastart:
-        case llvm::Intrinsic::vaend:
           return false;
         }
     }

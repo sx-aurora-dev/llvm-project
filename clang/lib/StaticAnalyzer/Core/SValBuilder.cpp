@@ -362,9 +362,9 @@ Optional<SVal> SValBuilder::getConstantVal(const Expr *E) {
       return None;
 
     ASTContext &Ctx = getContext();
-    llvm::APSInt Result;
+    Expr::EvalResult Result;
     if (E->EvaluateAsInt(Result, Ctx))
-      return makeIntVal(Result);
+      return makeIntVal(Result.Val.getInt());
 
     if (Loc::isLocType(E->getType()))
       if (E->isNullPointerConstant(Ctx, Expr::NPC_ValueDependentIsNotNull))
@@ -375,8 +375,7 @@ Optional<SVal> SValBuilder::getConstantVal(const Expr *E) {
   }
 }
 
-SVal SValBuilder::makeSymExprValNN(ProgramStateRef State,
-                                   BinaryOperator::Opcode Op,
+SVal SValBuilder::makeSymExprValNN(BinaryOperator::Opcode Op,
                                    NonLoc LHS, NonLoc RHS,
                                    QualType ResultTy) {
   const SymExpr *symLHS = LHS.getAsSymExpr();
@@ -386,7 +385,7 @@ SVal SValBuilder::makeSymExprValNN(ProgramStateRef State,
   // instead of generating an Unknown value and propagate the taint info to it.
   const unsigned MaxComp = StateMgr.getOwningEngine()
                                ->getAnalysisManager()
-                               .options.getMaxSymbolComplexity();
+                               .options.MaxSymbolComplexity;
 
   if (symLHS && symRHS &&
       (symLHS->computeComplexity() + symRHS->computeComplexity()) <  MaxComp)

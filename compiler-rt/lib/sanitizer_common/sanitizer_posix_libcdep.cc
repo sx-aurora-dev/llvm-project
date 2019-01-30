@@ -94,10 +94,12 @@ static rlim_t getlim(int res) {
 }
 
 static void setlim(int res, rlim_t lim) {
-  // The following magic is to prevent clang from replacing it with memset.
-  volatile struct rlimit rlim;
+  struct rlimit rlim;
+  if (getrlimit(res, const_cast<struct rlimit *>(&rlim))) {
+    Report("ERROR: %s getrlimit() failed %d\n", SanitizerToolName, errno);
+    Die();
+  }
   rlim.rlim_cur = lim;
-  rlim.rlim_max = lim;
   if (setrlimit(res, const_cast<struct rlimit *>(&rlim))) {
     Report("ERROR: %s setrlimit() failed %d\n", SanitizerToolName, errno);
     Die();
@@ -387,18 +389,13 @@ void *MmapFixedNoAccess(uptr fixed_addr, uptr size, const char *name) {
   unsigned flags = MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE;
   if (fd == -1) flags |= MAP_ANON;
 
-  uptr p = internal_mmap((void *)fixed_addr, size, PROT_NONE, flags, fd, 0);
-  if (internal_iserror(p))
-    return nullptr;
-  return (void *)p;
+  return (void *)internal_mmap((void *)fixed_addr, size, PROT_NONE, flags, fd,
+                               0);
 }
 
 void *MmapNoAccess(uptr size) {
   unsigned flags = MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
-  uptr p = internal_mmap(nullptr, size, PROT_NONE, flags, -1, 0);
-  if (internal_iserror(p))
-    return nullptr;
-  return (void *)p;
+  return (void *)internal_mmap(nullptr, size, PROT_NONE, flags, -1, 0);
 }
 
 // This function is defined elsewhere if we intercepted pthread_attr_getstack.

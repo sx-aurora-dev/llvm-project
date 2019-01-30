@@ -13,10 +13,12 @@ add_lldb_library(lldbPluginCPlusPlusLanguage PLUGIN
   LibCxxQueue.cpp
   LibCxxTuple.cpp
   LibCxxUnorderedMap.cpp
+  LibCxxVariant.cpp
   LibCxxVector.cpp
   LibStdcpp.cpp
   LibStdcppTuple.cpp
   LibStdcppUniquePointer.cpp
+  MSVCUndecoratedNameParser.cpp
 
   LINK_LIBS
     lldbCore

@@ -14,8 +14,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicrosoftDemangleNodes.h"
+#include "llvm/Demangle/MicrosoftDemangle.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Demangle/MicrosoftDemangleNodes.h"
 
 #include "llvm/Demangle/Compiler.h"
 #include "llvm/Demangle/StringView.h"
@@ -33,19 +34,10 @@ static bool startsWithDigit(StringView S) {
   return !S.empty() && std::isdigit(S.front());
 }
 
-enum class QualifierMangleMode { Drop, Mangle, Result };
 
 struct NodeList {
   Node *N = nullptr;
   NodeList *Next = nullptr;
-};
-
-enum class FunctionIdentifierCodeGroup { Basic, Under, DoubleUnder };
-
-enum NameBackrefBehavior : uint8_t {
-  NBB_None = 0,          // don't save any names as backrefs.
-  NBB_Template = 1 << 0, // save template instanations.
-  NBB_Simple = 1 << 1,   // save simple names.
 };
 
 static bool isMemberPointer(StringView MangledName) {
@@ -246,151 +238,6 @@ demanglePointerCVQualifiers(StringView &MangledName) {
   return std::make_pair(Q_None, PointerAffinity::Pointer);
 }
 
-namespace {
-
-struct BackrefContext {
-  static constexpr size_t Max = 10;
-
-  TypeNode *FunctionParams[Max];
-  size_t FunctionParamCount = 0;
-
-  // The first 10 BackReferences in a mangled name can be back-referenced by
-  // special name @[0-9]. This is a storage for the first 10 BackReferences.
-  NamedIdentifierNode *Names[Max];
-  size_t NamesCount = 0;
-};
-
-// Demangler class takes the main role in demangling symbols.
-// It has a set of functions to parse mangled symbols into Type instances.
-// It also has a set of functions to cnovert Type instances to strings.
-class Demangler {
-public:
-  Demangler() = default;
-  virtual ~Demangler() = default;
-
-  // You are supposed to call parse() first and then check if error is true.  If
-  // it is false, call output() to write the formatted name to the given stream.
-  SymbolNode *parse(StringView &MangledName);
-
-  // True if an error occurred.
-  bool Error = false;
-
-  void dumpBackReferences();
-
-private:
-  SymbolNode *demangleEncodedSymbol(StringView &MangledName,
-                                    QualifiedNameNode *QN);
-
-  VariableSymbolNode *demangleVariableEncoding(StringView &MangledName,
-                                               StorageClass SC);
-  FunctionSymbolNode *demangleFunctionEncoding(StringView &MangledName);
-
-  Qualifiers demanglePointerExtQualifiers(StringView &MangledName);
-
-  // Parser functions. This is a recursive-descent parser.
-  TypeNode *demangleType(StringView &MangledName, QualifierMangleMode QMM);
-  PrimitiveTypeNode *demanglePrimitiveType(StringView &MangledName);
-  CustomTypeNode *demangleCustomType(StringView &MangledName);
-  TagTypeNode *demangleClassType(StringView &MangledName);
-  PointerTypeNode *demanglePointerType(StringView &MangledName);
-  PointerTypeNode *demangleMemberPointerType(StringView &MangledName);
-  FunctionSignatureNode *demangleFunctionType(StringView &MangledName,
-                                              bool HasThisQuals);
-
-  ArrayTypeNode *demangleArrayType(StringView &MangledName);
-
-  NodeArrayNode *demangleTemplateParameterList(StringView &MangledName);
-  NodeArrayNode *demangleFunctionParameterList(StringView &MangledName);
-
-  std::pair<uint64_t, bool> demangleNumber(StringView &MangledName);
-  uint64_t demangleUnsigned(StringView &MangledName);
-  int64_t demangleSigned(StringView &MangledName);
-
-  void memorizeString(StringView s);
-  void memorizeIdentifier(IdentifierNode *Identifier);
-
-  /// Allocate a copy of \p Borrowed into memory that we own.
-  StringView copyString(StringView Borrowed);
-
-  QualifiedNameNode *demangleFullyQualifiedTypeName(StringView &MangledName);
-  QualifiedNameNode *demangleFullyQualifiedSymbolName(StringView &MangledName);
-
-  IdentifierNode *demangleUnqualifiedTypeName(StringView &MangledName,
-                                              bool Memorize);
-  IdentifierNode *demangleUnqualifiedSymbolName(StringView &MangledName,
-                                                NameBackrefBehavior NBB);
-
-  QualifiedNameNode *demangleNameScopeChain(StringView &MangledName,
-                                            IdentifierNode *UnqualifiedName);
-  IdentifierNode *demangleNameScopePiece(StringView &MangledName);
-
-  NamedIdentifierNode *demangleBackRefName(StringView &MangledName);
-  IdentifierNode *demangleTemplateInstantiationName(StringView &MangledName,
-                                                    NameBackrefBehavior NBB);
-  IdentifierNode *demangleFunctionIdentifierCode(StringView &MangledName);
-  IdentifierNode *
-  demangleFunctionIdentifierCode(StringView &MangledName,
-                                 FunctionIdentifierCodeGroup Group);
-  StructorIdentifierNode *demangleStructorIdentifier(StringView &MangledName,
-                                                     bool IsDestructor);
-  ConversionOperatorIdentifierNode *
-  demangleConversionOperatorIdentifier(StringView &MangledName);
-  LiteralOperatorIdentifierNode *
-  demangleLiteralOperatorIdentifier(StringView &MangledName);
-
-  SymbolNode *demangleSpecialIntrinsic(StringView &MangledName);
-  SpecialTableSymbolNode *
-  demangleSpecialTableSymbolNode(StringView &MangledName,
-                                 SpecialIntrinsicKind SIK);
-  LocalStaticGuardVariableNode *
-  demangleLocalStaticGuard(StringView &MangledName);
-  VariableSymbolNode *demangleUntypedVariable(ArenaAllocator &Arena,
-                                              StringView &MangledName,
-                                              StringView VariableName);
-  VariableSymbolNode *
-  demangleRttiBaseClassDescriptorNode(ArenaAllocator &Arena,
-                                      StringView &MangledName);
-  FunctionSymbolNode *demangleDynamicStructorFunction(StringView &MangledName,
-                                                      bool IsDestructor);
-
-  NamedIdentifierNode *demangleSimpleName(StringView &MangledName,
-                                          bool Memorize);
-  NamedIdentifierNode *demangleAnonymousNamespaceName(StringView &MangledName);
-  NamedIdentifierNode *demangleLocallyScopedNamePiece(StringView &MangledName);
-  EncodedStringLiteralNode *demangleStringLiteral(StringView &MangledName);
-  FunctionSymbolNode *demangleVcallThunkNode(StringView &MangledName);
-
-  StringView demangleSimpleString(StringView &MangledName, bool Memorize);
-
-  FuncClass demangleFunctionClass(StringView &MangledName);
-  CallingConv demangleCallingConvention(StringView &MangledName);
-  StorageClass demangleVariableStorageClass(StringView &MangledName);
-  void demangleThrowSpecification(StringView &MangledName);
-  wchar_t demangleWcharLiteral(StringView &MangledName);
-  uint8_t demangleCharLiteral(StringView &MangledName);
-
-  std::pair<Qualifiers, bool> demangleQualifiers(StringView &MangledName);
-
-  // Memory allocator.
-  ArenaAllocator Arena;
-
-  // A single type uses one global back-ref table for all function params.
-  // This means back-refs can even go "into" other types.  Examples:
-  //
-  //  // Second int* is a back-ref to first.
-  //  void foo(int *, int*);
-  //
-  //  // Second int* is not a back-ref to first (first is not a function param).
-  //  int* foo(int*);
-  //
-  //  // Second int* is a back-ref to first (ALL function types share the same
-  //  // back-ref map.
-  //  using F = void(*)(int*);
-  //  F G(int *);
-  BackrefContext Backrefs;
-};
-} // namespace
-
 StringView Demangler::copyString(StringView Borrowed) {
   char *Stable = Arena.allocUnalignedBuffer(Borrowed.size() + 1);
   std::strcpy(Stable, Borrowed.begin());
@@ -520,16 +367,51 @@ Demangler::demangleRttiBaseClassDescriptorNode(ArenaAllocator &Arena,
   return VSN;
 }
 
-FunctionSymbolNode *
-Demangler::demangleDynamicStructorFunction(StringView &MangledName,
-                                           bool IsDestructor) {
+FunctionSymbolNode *Demangler::demangleInitFiniStub(StringView &MangledName,
+                                                    bool IsDestructor) {
   DynamicStructorIdentifierNode *DSIN =
       Arena.alloc<DynamicStructorIdentifierNode>();
   DSIN->IsDestructor = IsDestructor;
-  DSIN->Name = demangleFullyQualifiedTypeName(MangledName);
-  QualifiedNameNode *QNN = synthesizeQualifiedName(Arena, DSIN);
-  FunctionSymbolNode *FSN = demangleFunctionEncoding(MangledName);
-  FSN->Name = QNN;
+
+  bool IsKnownStaticDataMember = false;
+  if (MangledName.consumeFront('?'))
+    IsKnownStaticDataMember = true;
+
+  QualifiedNameNode *QN = demangleFullyQualifiedSymbolName(MangledName);
+
+  SymbolNode *Symbol = demangleEncodedSymbol(MangledName, QN);
+  FunctionSymbolNode *FSN = nullptr;
+  Symbol->Name = QN;
+
+  if (Symbol->kind() == NodeKind::VariableSymbol) {
+    DSIN->Variable = static_cast<VariableSymbolNode *>(Symbol);
+
+    // Older versions of clang mangled this type of symbol incorrectly.  They
+    // would omit the leading ? and they would only emit a single @ at the end.
+    // The correct mangling is a leading ? and 2 trailing @ signs.  Handle
+    // both cases.
+    int AtCount = IsKnownStaticDataMember ? 2 : 1;
+    for (int I = 0; I < AtCount; ++I) {
+      if (MangledName.consumeFront('@'))
+        continue;
+      Error = true;
+      return nullptr;
+    }
+
+    FSN = demangleFunctionEncoding(MangledName);
+    FSN->Name = synthesizeQualifiedName(Arena, DSIN);
+  } else {
+    if (IsKnownStaticDataMember) {
+      // This was supposed to be a static data member, but we got a function.
+      Error = true;
+      return nullptr;
+    }
+
+    FSN = static_cast<FunctionSymbolNode *>(Symbol);
+    DSIN->Name = Symbol->Name;
+    FSN->Name = synthesizeQualifiedName(Arena, DSIN);
+  }
+
   return FSN;
 }
 
@@ -569,9 +451,9 @@ SymbolNode *Demangler::demangleSpecialIntrinsic(StringView &MangledName) {
   case SpecialIntrinsicKind::RttiBaseClassDescriptor:
     return demangleRttiBaseClassDescriptorNode(Arena, MangledName);
   case SpecialIntrinsicKind::DynamicInitializer:
-    return demangleDynamicStructorFunction(MangledName, false);
+    return demangleInitFiniStub(MangledName, false);
   case SpecialIntrinsicKind::DynamicAtexitDestructor:
-    return demangleDynamicStructorFunction(MangledName, true);
+    return demangleInitFiniStub(MangledName, true);
   default:
     break;
   }
@@ -617,7 +499,7 @@ Demangler::demangleLiteralOperatorIdentifier(StringView &MangledName) {
   return N;
 }
 
-IntrinsicFunctionKind
+static IntrinsicFunctionKind
 translateIntrinsicFunctionCode(char CH, FunctionIdentifierCodeGroup Group) {
   // Not all ? identifiers are intrinsics *functions*.  This function only maps
   // operator codes for the special functions, all others are handled elsewhere,
@@ -837,6 +719,8 @@ SymbolNode *Demangler::parse(StringView &MangledName) {
   // What follows is a main symbol name. This may include namespaces or class
   // back references.
   QualifiedNameNode *QN = demangleFullyQualifiedSymbolName(MangledName);
+  if (Error)
+    return nullptr;
 
   SymbolNode *Symbol = demangleEncodedSymbol(MangledName, QN);
   if (Symbol) {
@@ -847,6 +731,16 @@ SymbolNode *Demangler::parse(StringView &MangledName) {
     return nullptr;
 
   return Symbol;
+}
+
+TagTypeNode *Demangler::parseTagUniqueName(StringView &MangledName) {
+  if (!MangledName.consumeFront(".?A"))
+    return nullptr;
+  MangledName.consumeFront(".?A");
+  if (MangledName.empty())
+    return nullptr;
+
+  return demangleClassType(MangledName);
 }
 
 // <type-encoding> ::= <storage-class> <variable-type>
@@ -979,7 +873,10 @@ NamedIdentifierNode *Demangler::demangleBackRefName(StringView &MangledName) {
 void Demangler::memorizeIdentifier(IdentifierNode *Identifier) {
   // Render this class template name into a string buffer so that we can
   // memorize it for the purpose of back-referencing.
-  OutputStream OS = OutputStream::create(nullptr, nullptr, 1024);
+  OutputStream OS;
+  if (!initializeOutputStream(nullptr, nullptr, OS, 1024))
+    // FIXME: Propagate out-of-memory as an error?
+    std::terminate();
   Identifier->output(OS, OF_Default);
   OS << '\0';
   char *Name = OS.getBuffer();
@@ -1180,7 +1077,7 @@ static void outputEscapedChar(OutputStream &OS, unsigned C) {
   outputHex(OS, C);
 }
 
-unsigned countTrailingNullBytes(const uint8_t *StringBytes, int Length) {
+static unsigned countTrailingNullBytes(const uint8_t *StringBytes, int Length) {
   const uint8_t *End = StringBytes + Length - 1;
   unsigned Count = 0;
   while (Length > 0 && *End == 0) {
@@ -1191,7 +1088,8 @@ unsigned countTrailingNullBytes(const uint8_t *StringBytes, int Length) {
   return Count;
 }
 
-unsigned countEmbeddedNulls(const uint8_t *StringBytes, unsigned Length) {
+static unsigned countEmbeddedNulls(const uint8_t *StringBytes,
+                                   unsigned Length) {
   unsigned Result = 0;
   for (unsigned I = 0; I < Length; ++I) {
     if (*StringBytes++ == 0)
@@ -1200,8 +1098,8 @@ unsigned countEmbeddedNulls(const uint8_t *StringBytes, unsigned Length) {
   return Result;
 }
 
-unsigned guessCharByteSize(const uint8_t *StringBytes, unsigned NumChars,
-                           unsigned NumBytes) {
+static unsigned guessCharByteSize(const uint8_t *StringBytes, unsigned NumChars,
+                                  unsigned NumBytes) {
   assert(NumBytes > 0);
 
   // If the number of bytes is odd, this is guaranteed to be a char string.
@@ -1309,7 +1207,9 @@ Demangler::demangleStringLiteral(StringView &MangledName) {
   if (MangledName.empty())
     goto StringLiteralError;
 
-  OS = OutputStream::create(nullptr, nullptr, 1024);
+  if (!initializeOutputStream(nullptr, nullptr, OS, 1024))
+    // FIXME: Propagate out-of-memory as an error?
+    std::terminate();
   if (IsWcharT) {
     Result->Char = CharKind::Wchar;
     if (StringByteSize > 64)
@@ -1325,10 +1225,9 @@ Demangler::demangleStringLiteral(StringView &MangledName) {
         goto StringLiteralError;
     }
   } else {
-    if (StringByteSize > 32)
-      Result->IsTruncated = true;
-
-    constexpr unsigned MaxStringByteLength = 32;
+    // The max byte length is actually 32, but some compilers mangled strings
+    // incorrectly, so we have to assume it can go higher.
+    constexpr unsigned MaxStringByteLength = 32 * 4;
     uint8_t StringBytes[MaxStringByteLength];
 
     unsigned BytesDecoded = 0;
@@ -1336,6 +1235,9 @@ Demangler::demangleStringLiteral(StringView &MangledName) {
       assert(StringByteSize >= 1);
       StringBytes[BytesDecoded++] = demangleCharLiteral(MangledName);
     }
+
+    if (StringByteSize > BytesDecoded)
+      Result->IsTruncated = true;
 
     unsigned CharBytes =
         guessCharByteSize(StringBytes, BytesDecoded, StringByteSize);
@@ -1427,7 +1329,10 @@ Demangler::demangleLocallyScopedNamePiece(StringView &MangledName) {
     return nullptr;
 
   // Render the parent symbol's name into a buffer.
-  OutputStream OS = OutputStream::create(nullptr, nullptr, 1024);
+  OutputStream OS;
+  if (!initializeOutputStream(nullptr, nullptr, OS, 1024))
+    // FIXME: Propagate out-of-memory as an error?
+    std::terminate();
   OS << '`';
   Scope->output(OS, OF_Default);
   OS << '\'';
@@ -1587,6 +1492,10 @@ FuncClass Demangler::demangleFunctionClass(StringView &MangledName) {
     return FuncClass(FC_Private | FC_Virtual);
   case 'F':
     return FuncClass(FC_Private | FC_Virtual);
+  case 'G':
+    return FuncClass(FC_Private | FC_StaticThisAdjust);
+  case 'H':
+    return FuncClass(FC_Private | FC_StaticThisAdjust | FC_Far);
   case 'I':
     return FuncClass(FC_Protected);
   case 'J':
@@ -1760,7 +1669,6 @@ TypeNode *Demangler::demangleType(StringView &MangledName,
     Ty = demangleCustomType(MangledName);
   } else {
     Ty = demanglePrimitiveType(MangledName);
-    assert(Ty && !Error);
     if (!Ty || Error)
       return Ty;
   }
@@ -1976,14 +1884,14 @@ PointerTypeNode *Demangler::demangleMemberPointerType(StringView &MangledName) {
   Pointer->Quals = Qualifiers(Pointer->Quals | ExtQuals);
 
   if (MangledName.consumeFront("8")) {
-    Pointer->ClassParent = demangleFullyQualifiedSymbolName(MangledName);
+    Pointer->ClassParent = demangleFullyQualifiedTypeName(MangledName);
     Pointer->Pointee = demangleFunctionType(MangledName, true);
   } else {
     Qualifiers PointeeQuals = Q_None;
     bool IsMember = false;
     std::tie(PointeeQuals, IsMember) = demangleQualifiers(MangledName);
     assert(IsMember);
-    Pointer->ClassParent = demangleFullyQualifiedSymbolName(MangledName);
+    Pointer->ClassParent = demangleFullyQualifiedTypeName(MangledName);
 
     Pointer->Pointee = demangleType(MangledName, QualifierMangleMode::Drop);
     Pointer->Pointee->Quals = PointeeQuals;
@@ -2121,18 +2029,21 @@ Demangler::demangleTemplateParameterList(StringView &MangledName) {
   size_t Count = 0;
 
   while (!Error && !MangledName.startsWith('@')) {
+    if (MangledName.consumeFront("$S") || MangledName.consumeFront("$$V") ||
+        MangledName.consumeFront("$$$V") || MangledName.consumeFront("$$Z")) {
+      // parameter pack separator
+      continue;
+    }
+
     ++Count;
+
     // Template parameter lists don't participate in back-referencing.
     *Current = Arena.alloc<NodeList>();
 
     NodeList &TP = **Current;
 
     TemplateParameterReferenceNode *TPRN = nullptr;
-    if (MangledName.consumeFront("$S") || MangledName.consumeFront("$$V") ||
-        MangledName.consumeFront("$$$V")) {
-      // Empty parameter pack.
-      TP.N = nullptr;
-    } else if (MangledName.consumeFront("$$Y")) {
+    if (MangledName.consumeFront("$$Y")) {
       // Template alias
       TP.N = demangleFullyQualifiedTypeName(MangledName);
     } else if (MangledName.consumeFront("$$B")) {
@@ -2244,7 +2155,9 @@ void Demangler::dumpBackReferences() {
               (int)Backrefs.FunctionParamCount);
 
   // Create an output stream so we can render each type.
-  OutputStream OS = OutputStream::create(nullptr, 0, 1024);
+  OutputStream OS;
+  if (!initializeOutputStream(nullptr, nullptr, OS, 1024))
+    std::terminate();
   for (size_t I = 0; I < Backrefs.FunctionParamCount; ++I) {
     OS.setCurrentPosition(0);
 
@@ -2269,21 +2182,29 @@ void Demangler::dumpBackReferences() {
 
 char *llvm::microsoftDemangle(const char *MangledName, char *Buf, size_t *N,
                               int *Status, MSDemangleFlags Flags) {
+  int InternalStatus = demangle_success;
   Demangler D;
+  OutputStream S;
+
   StringView Name{MangledName};
-  SymbolNode *S = D.parse(Name);
+  SymbolNode *AST = D.parse(Name);
 
   if (Flags & MSDF_DumpBackrefs)
     D.dumpBackReferences();
-  OutputStream OS = OutputStream::create(Buf, N, 1024);
-  if (D.Error) {
-    OS << MangledName;
-    *Status = llvm::demangle_invalid_mangled_name;
-  } else {
-    S->output(OS, OF_Default);
-    *Status = llvm::demangle_success;
+
+  if (D.Error)
+    InternalStatus = demangle_invalid_mangled_name;
+  else if (!initializeOutputStream(Buf, N, S, 1024))
+    InternalStatus = demangle_memory_alloc_failure;
+  else {
+    AST->output(S, OF_Default);
+    S += '\0';
+    if (N != nullptr)
+      *N = S.getCurrentPosition();
+    Buf = S.getBuffer();
   }
 
-  OS << '\0';
-  return OS.getBuffer();
+  if (Status)
+    *Status = InternalStatus;
+  return InternalStatus == demangle_success ? Buf : nullptr;
 }

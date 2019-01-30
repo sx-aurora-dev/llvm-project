@@ -978,11 +978,14 @@ Expected<Constant *> IRLinker::linkGlobalValueProto(GlobalValue *SGV,
   // containing a GV from the source module, in which case SGV will be
   // the same as DGV and NewGV, and TypeMap.get() will assert since it
   // assumes it is being invoked on a type in the source module.
-  if (DGV && NewGV != SGV)
-    C = ConstantExpr::getBitCast(NewGV, TypeMap.get(SGV->getType()));
+  if (DGV && NewGV != SGV) {
+    C = ConstantExpr::getPointerBitCastOrAddrSpaceCast(
+      NewGV, TypeMap.get(SGV->getType()));
+  }
 
   if (DGV && NewGV != DGV) {
-    DGV->replaceAllUsesWith(ConstantExpr::getBitCast(NewGV, DGV->getType()));
+    DGV->replaceAllUsesWith(
+      ConstantExpr::getPointerBitCastOrAddrSpaceCast(NewGV, DGV->getType()));
     DGV->eraseFromParent();
   }
 
@@ -1059,11 +1062,6 @@ void IRLinker::prepareCompileUnitsForImport() {
     ValueMap.MD()[CU->getRawEnumTypes()].reset(nullptr);
     ValueMap.MD()[CU->getRawMacros()].reset(nullptr);
     ValueMap.MD()[CU->getRawRetainedTypes()].reset(nullptr);
-    // We import global variables only temporarily in order for instcombine
-    // and globalopt to perform constant folding and static constructor
-    // evaluation. After that elim-avail-extern will covert imported globals
-    // back to declarations, so we don't need debug info for them.
-    ValueMap.MD()[CU->getRawGlobalVariables()].reset(nullptr);
 
     // Imported entities only need to be mapped in if they have local
     // scope, as those might correspond to an imported entity inside a
@@ -1227,8 +1225,14 @@ Error IRLinker::linkModuleFlagsMetadata() {
     case Module::Warning: {
       // Emit a warning if the values differ.
       if (SrcOp->getOperand(2) != DstOp->getOperand(2)) {
-        emitWarning("linking module flags '" + ID->getString() +
-                    "': IDs have conflicting values");
+        std::string str;
+        raw_string_ostream(str)
+            << "linking module flags '" << ID->getString()
+            << "': IDs have conflicting values ('" << *SrcOp->getOperand(2)
+            << "' from " << SrcM->getModuleIdentifier() << " with '"
+            << *DstOp->getOperand(2) << "' from " << DstM.getModuleIdentifier()
+            << ')';
+        emitWarning(str);
       }
       continue;
     }

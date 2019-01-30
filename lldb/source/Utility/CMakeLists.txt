@@ -9,7 +9,7 @@ if ( CMAKE_SYSTEM_NAME MATCHES "Windows" )
 endif ()
 
 if (NOT LLDB_DISABLE_LIBEDIT)
-  list(APPEND LLDB_SYSTEM_LIBS edit)
+  list(APPEND LLDB_SYSTEM_LIBS ${libedit_LIBRARIES})
 endif()
 if (NOT LLDB_DISABLE_CURSES)
   list(APPEND LLDB_SYSTEM_LIBS ${CURSES_LIBRARIES})
@@ -22,7 +22,9 @@ if (NOT HAVE_CXX_ATOMICS64_WITHOUT_LIB )
     list(APPEND LLDB_SYSTEM_LIBS atomic)
 endif()
 
-list(APPEND LLDB_SYSTEM_LIBS ${Backtrace_LIBRARY})
+if(Backtrace_FOUND)
+  list(APPEND LLDB_SYSTEM_LIBS ${Backtrace_LIBRARY})
+endif()
 
 if (NOT LLDB_DISABLE_PYTHON AND NOT LLVM_BUILD_STATIC)
   list(APPEND LLDB_SYSTEM_LIBS ${PYTHON_LIBRARIES})
@@ -61,6 +63,7 @@ add_lldb_library(lldbUtility
   Range.cpp
   RegisterValue.cpp
   RegularExpression.cpp
+  Reproducer.cpp
   Scalar.cpp
   SelectHelper.cpp
   SharingPtr.cpp

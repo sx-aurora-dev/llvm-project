@@ -71,6 +71,7 @@ class MCTargetOptions;
 class MDNode;
 class Module;
 class raw_ostream;
+class StackMaps;
 class TargetLoweringObjectFile;
 class TargetMachine;
 
@@ -365,6 +366,9 @@ public:
   /// emit the proxies we previously omitted in EmitGlobalVariable.
   void emitGlobalGOTEquivs();
 
+  /// Emit the stack maps.
+  void emitStackMaps(StackMaps &SM);
+
   //===------------------------------------------------------------------===//
   // Overridable Hooks
   //===------------------------------------------------------------------===//
@@ -542,7 +546,7 @@ public:
   ///
   /// \p Value - The value to emit.
   /// \p Size - The size of the integer (in bytes) to emit.
-  virtual void EmitDebugThreadLocal(const MCExpr *Value, unsigned Size) const;
+  virtual void EmitDebugValue(const MCExpr *Value, unsigned Size) const;
 
   //===------------------------------------------------------------------===//
   // Dwarf Lowering Routines
@@ -630,6 +634,11 @@ private:
   /// This method formats and emits the specified machine instruction that is an
   /// inline asm.
   void EmitInlineAsm(const MachineInstr *MI) const;
+
+  /// Add inline assembly info to the diagnostics machinery, so we can
+  /// emit file and position info. Returns SrcMgr memory buffer position.
+  unsigned addInlineAsmDiagBuffer(StringRef AsmStr,
+                                  const MDNode *LocMDNode) const;
 
   //===------------------------------------------------------------------===//
   // Internal Implementation Details

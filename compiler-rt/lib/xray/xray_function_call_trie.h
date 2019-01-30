@@ -15,9 +15,10 @@
 #ifndef XRAY_FUNCTION_CALL_TRIE_H
 #define XRAY_FUNCTION_CALL_TRIE_H
 
-#include "sanitizer_common/sanitizer_allocator_internal.h"
+#include "xray_defs.h"
 #include "xray_profiling_flags.h"
 #include "xray_segmented_array.h"
+#include <limits>
 #include <memory> // For placement new.
 #include <utility>
 
@@ -113,16 +114,18 @@ public:
   struct Node {
     Node *Parent;
     NodeIdPairArray Callees;
-    int64_t CallCount;
-    int64_t CumulativeLocalTime; // Typically in TSC deltas, not wall-time.
+    uint64_t CallCount;
+    uint64_t CumulativeLocalTime; // Typically in TSC deltas, not wall-time.
     int32_t FId;
 
     // We add a constructor here to allow us to inplace-construct through
     // Array<...>'s AppendEmplace.
-    Node(Node *P, NodeIdPairAllocatorType &A, int64_t CC, int64_t CLT,
-         int32_t F)
-        : Parent(P), Callees(A), CallCount(CC), CumulativeLocalTime(CLT),
-          FId(F) {}
+    Node(Node *P, NodeIdPairAllocatorType &A, uint64_t CC, uint64_t CLT,
+         int32_t F) XRAY_NEVER_INSTRUMENT : Parent(P),
+                                            Callees(A),
+                                            CallCount(CC),
+                                            CumulativeLocalTime(CLT),
+                                            FId(F) {}
 
     // TODO: Include the compact histogram.
   };
@@ -131,10 +134,14 @@ private:
   struct ShadowStackEntry {
     uint64_t EntryTSC;
     Node *NodePtr;
+    uint16_t EntryCPU;
 
     // We add a constructor here to allow us to inplace-construct through
     // Array<...>'s AppendEmplace.
-    ShadowStackEntry(uint64_t T, Node *N) : EntryTSC{T}, NodePtr{N} {}
+    ShadowStackEntry(uint64_t T, Node *N, uint16_t C) XRAY_NEVER_INSTRUMENT
+        : EntryTSC{T},
+          NodePtr{N},
+          EntryCPU{C} {}
   };
 
   using NodeArray = Array<Node>;
@@ -158,8 +165,9 @@ public:
     Allocators(const Allocators &) = delete;
     Allocators &operator=(const Allocators &) = delete;
 
-    Allocators(Allocators &&O)
-        : NodeAllocator(O.NodeAllocator), RootAllocator(O.RootAllocator),
+    Allocators(Allocators &&O) XRAY_NEVER_INSTRUMENT
+        : NodeAllocator(O.NodeAllocator),
+          RootAllocator(O.RootAllocator),
           ShadowStackAllocator(O.ShadowStackAllocator),
           NodeIdPairAllocator(O.NodeIdPairAllocator) {
       O.NodeAllocator = nullptr;
@@ -168,7 +176,7 @@ public:
       O.NodeIdPairAllocator = nullptr;
     }
 
-    Allocators &operator=(Allocators &&O) {
+    Allocators &operator=(Allocators &&O) XRAY_NEVER_INSTRUMENT {
       {
         auto Tmp = O.NodeAllocator;
         O.NodeAllocator = this->NodeAllocator;
@@ -192,58 +200,54 @@ public:
       return *this;
     }
 
-    ~Allocators() {
+    ~Allocators() XRAY_NEVER_INSTRUMENT {
       // Note that we cannot use delete on these pointers, as they need to be
       // returned to the sanitizer_common library's internal memory tracking
       // system.
       if (NodeAllocator != nullptr) {
         NodeAllocator->~NodeAllocatorType();
-        InternalFree(NodeAllocator);
+        deallocate(NodeAllocator);
         NodeAllocator = nullptr;
       }
       if (RootAllocator != nullptr) {
         RootAllocator->~RootAllocatorType();
-        InternalFree(RootAllocator);
+        deallocate(RootAllocator);
         RootAllocator = nullptr;
       }
       if (ShadowStackAllocator != nullptr) {
         ShadowStackAllocator->~ShadowStackAllocatorType();
-        InternalFree(ShadowStackAllocator);
+        deallocate(ShadowStackAllocator);
         ShadowStackAllocator = nullptr;
       }
       if (NodeIdPairAllocator != nullptr) {
         NodeIdPairAllocator->~NodeIdPairAllocatorType();
-        InternalFree(NodeIdPairAllocator);
+        deallocate(NodeIdPairAllocator);
         NodeIdPairAllocator = nullptr;
       }
     }
   };
 
   // TODO: Support configuration of options through the arguments.
-  static Allocators InitAllocators() {
+  static Allocators InitAllocators() XRAY_NEVER_INSTRUMENT {
     return InitAllocatorsCustom(profilingFlags()->per_thread_allocator_max);
   }
 
-  static Allocators InitAllocatorsCustom(uptr Max) {
+  static Allocators InitAllocatorsCustom(uptr Max) XRAY_NEVER_INSTRUMENT {
     Allocators A;
-    auto NodeAllocator = reinterpret_cast<Allocators::NodeAllocatorType *>(
-        InternalAlloc(sizeof(Allocators::NodeAllocatorType)));
+    auto NodeAllocator = allocate<Allocators::NodeAllocatorType>();
     new (NodeAllocator) Allocators::NodeAllocatorType(Max);
     A.NodeAllocator = NodeAllocator;
 
-    auto RootAllocator = reinterpret_cast<Allocators::RootAllocatorType *>(
-        InternalAlloc(sizeof(Allocators::RootAllocatorType)));
+    auto RootAllocator = allocate<Allocators::RootAllocatorType>();
     new (RootAllocator) Allocators::RootAllocatorType(Max);
     A.RootAllocator = RootAllocator;
 
     auto ShadowStackAllocator =
-        reinterpret_cast<Allocators::ShadowStackAllocatorType *>(
-            InternalAlloc(sizeof(Allocators::ShadowStackAllocatorType)));
+        allocate<Allocators::ShadowStackAllocatorType>();
     new (ShadowStackAllocator) Allocators::ShadowStackAllocatorType(Max);
     A.ShadowStackAllocator = ShadowStackAllocator;
 
-    auto NodeIdPairAllocator = reinterpret_cast<NodeIdPairAllocatorType *>(
-        InternalAlloc(sizeof(NodeIdPairAllocatorType)));
+    auto NodeIdPairAllocator = allocate<NodeIdPairAllocatorType>();
     new (NodeIdPairAllocator) NodeIdPairAllocatorType(Max);
     A.NodeIdPairAllocator = NodeIdPairAllocator;
     return A;
@@ -256,22 +260,24 @@ private:
   NodeIdPairAllocatorType *NodeIdPairAllocator = nullptr;
 
 public:
-  explicit FunctionCallTrie(const Allocators &A)
-      : Nodes(*A.NodeAllocator), Roots(*A.RootAllocator),
+  explicit FunctionCallTrie(const Allocators &A) XRAY_NEVER_INSTRUMENT
+      : Nodes(*A.NodeAllocator),
+        Roots(*A.RootAllocator),
         ShadowStack(*A.ShadowStackAllocator),
         NodeIdPairAllocator(A.NodeIdPairAllocator) {}
 
-  void enterFunction(const int32_t FId, uint64_t TSC) {
+  void enterFunction(const int32_t FId, uint64_t TSC,
+                     uint16_t CPU) XRAY_NEVER_INSTRUMENT {
     DCHECK_NE(FId, 0);
     // This function primarily deals with ensuring that the ShadowStack is
     // consistent and ready for when an exit event is encountered.
     if (UNLIKELY(ShadowStack.empty())) {
       auto NewRoot =
-          Nodes.AppendEmplace(nullptr, *NodeIdPairAllocator, 0, 0, FId);
+          Nodes.AppendEmplace(nullptr, *NodeIdPairAllocator, 0u, 0u, FId);
       if (UNLIKELY(NewRoot == nullptr))
         return;
       Roots.Append(NewRoot);
-      ShadowStack.AppendEmplace(TSC, NewRoot);
+      ShadowStack.AppendEmplace(TSC, NewRoot, CPU);
       return;
     }
 
@@ -285,23 +291,24 @@ public:
         [FId](const NodeIdPair &NR) { return NR.FId == FId; });
     if (Callee != nullptr) {
       CHECK_NE(Callee->NodePtr, nullptr);
-      ShadowStack.AppendEmplace(TSC, Callee->NodePtr);
+      ShadowStack.AppendEmplace(TSC, Callee->NodePtr, CPU);
       return;
     }
 
     // This means we've never seen this stack before, create a new node here.
     auto NewNode =
-        Nodes.AppendEmplace(TopNode, *NodeIdPairAllocator, 0, 0, FId);
+        Nodes.AppendEmplace(TopNode, *NodeIdPairAllocator, 0u, 0u, FId);
     if (UNLIKELY(NewNode == nullptr))
       return;
     DCHECK_NE(NewNode, nullptr);
     TopNode->Callees.AppendEmplace(NewNode, FId);
-    ShadowStack.AppendEmplace(TSC, NewNode);
+    ShadowStack.AppendEmplace(TSC, NewNode, CPU);
     DCHECK_NE(ShadowStack.back().NodePtr, nullptr);
     return;
   }
 
-  void exitFunction(int32_t FId, uint64_t TSC) {
+  void exitFunction(int32_t FId, uint64_t TSC,
+                    uint16_t CPU) XRAY_NEVER_INSTRUMENT {
     // When we exit a function, we look up the ShadowStack to see whether we've
     // entered this function before. We do as little processing here as we can,
     // since most of the hard work would have already been done at function
@@ -311,7 +318,24 @@ public:
       const auto &Top = ShadowStack.back();
       auto TopNode = Top.NodePtr;
       DCHECK_NE(TopNode, nullptr);
-      auto LocalTime = TSC - Top.EntryTSC;
+
+      // We may encounter overflow on the TSC we're provided, which may end up
+      // being less than the TSC when we first entered the function.
+      //
+      // To get the accurate measurement of cycles, we need to check whether
+      // we've overflowed (TSC < Top.EntryTSC) and then account the difference
+      // between the entry TSC and the max for the TSC counter (max of uint64_t)
+      // then add the value of TSC. We can prove that the maximum delta we will
+      // get is at most the 64-bit unsigned value, since the difference between
+      // a TSC of 0 and a Top.EntryTSC of 1 is (numeric_limits<uint64_t>::max()
+      // - 1) + 1.
+      //
+      // NOTE: This assumes that TSCs are synchronised across CPUs.
+      // TODO: Count the number of times we've seen CPU migrations.
+      uint64_t LocalTime =
+          Top.EntryTSC > TSC
+              ? (std::numeric_limits<uint64_t>::max() - Top.EntryTSC) + TSC
+              : TSC - Top.EntryTSC;
       TopNode->CallCount++;
       TopNode->CumulativeLocalTime += LocalTime - CumulativeTreeTime;
       CumulativeTreeTime += LocalTime;
@@ -323,7 +347,7 @@ public:
     }
   }
 
-  const RootArray &getRoots() const { return Roots; }
+  const RootArray &getRoots() const XRAY_NEVER_INSTRUMENT { return Roots; }
 
   // The deepCopyInto operation will update the provided FunctionCallTrie by
   // re-creating the contents of this particular FunctionCallTrie in the other
@@ -338,7 +362,7 @@ public:
   // synchronisation of both "this" and |O|.
   //
   // This function must *not* be called with a non-empty FunctionCallTrie |O|.
-  void deepCopyInto(FunctionCallTrie &O) const {
+  void deepCopyInto(FunctionCallTrie &O) const XRAY_NEVER_INSTRUMENT {
     DCHECK(O.getRoots().empty());
 
     // We then push the root into a stack, to use as the parent marker for new
@@ -394,7 +418,7 @@ public:
   //
   // This function is *not* thread-safe, and may require external
   // synchronisation of both "this" and |O|.
-  void mergeInto(FunctionCallTrie &O) const {
+  void mergeInto(FunctionCallTrie &O) const XRAY_NEVER_INSTRUMENT {
     struct NodeAndTarget {
       FunctionCallTrie::Node *OrigNode;
       FunctionCallTrie::Node *TargetNode;
@@ -409,8 +433,8 @@ public:
       auto R = O.Roots.find_element(
           [&](const Node *Node) { return Node->FId == Root->FId; });
       if (R == nullptr) {
-        TargetRoot = O.Nodes.AppendEmplace(nullptr, *O.NodeIdPairAllocator, 0,
-                                           0, Root->FId);
+        TargetRoot = O.Nodes.AppendEmplace(nullptr, *O.NodeIdPairAllocator, 0u,
+                                           0u, Root->FId);
         if (UNLIKELY(TargetRoot == nullptr))
           return;
 
@@ -435,7 +459,7 @@ public:
               });
           if (TargetCallee == nullptr) {
             auto NewTargetNode = O.Nodes.AppendEmplace(
-                NT.TargetNode, *O.NodeIdPairAllocator, 0, 0, Callee.FId);
+                NT.TargetNode, *O.NodeIdPairAllocator, 0u, 0u, Callee.FId);
 
             if (UNLIKELY(NewTargetNode == nullptr))
               return;

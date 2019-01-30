@@ -709,7 +709,7 @@ static Value *simplifyX86round(IntrinsicInst &II,
   }
 
   Intrinsic::ID ID = (RoundControl == 2) ? Intrinsic::ceil : Intrinsic::floor;
-  Value *Res = Builder.CreateIntrinsic(ID, {Src}, &II);
+  Value *Res = Builder.CreateUnaryIntrinsic(ID, Src, &II);
   if (!IsScalar) {
     if (auto *C = dyn_cast<Constant>(Mask))
       if (C->isAllOnesValue())
@@ -1837,6 +1837,17 @@ Instruction *InstCombiner::visitVACopyInst(VACopyInst &I) {
   return nullptr;
 }
 
+static Instruction *canonicalizeConstantArg0ToArg1(CallInst &Call) {
+  assert(Call.getNumArgOperands() > 1 && "Need at least 2 args to swap");
+  Value *Arg0 = Call.getArgOperand(0), *Arg1 = Call.getArgOperand(1);
+  if (isa<Constant>(Arg0) && !isa<Constant>(Arg1)) {
+    Call.setArgOperand(0, Arg1);
+    Call.setArgOperand(1, Arg0);
+    return &Call;
+  }
+  return nullptr;
+}
+
 /// CallInst simplification. This mostly only handles folding of intrinsic
 /// instructions. For normal calls, it allows visitCallSite to do the heavy
 /// lifting.
@@ -1990,18 +2001,49 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       return I;
     break;
 
+  case Intrinsic::fshl:
+  case Intrinsic::fshr: {
+    const APInt *SA;
+    if (match(II->getArgOperand(2), m_APInt(SA))) {
+      Value *Op0 = II->getArgOperand(0), *Op1 = II->getArgOperand(1);
+      unsigned BitWidth = SA->getBitWidth();
+      uint64_t ShiftAmt = SA->urem(BitWidth);
+      assert(ShiftAmt != 0 && "SimplifyCall should have handled zero shift");
+      // Normalize to funnel shift left.
+      if (II->getIntrinsicID() == Intrinsic::fshr)
+        ShiftAmt = BitWidth - ShiftAmt;
+
+      // fshl(X, 0, C) -> shl X, C
+      // fshl(X, undef, C) -> shl X, C
+      if (match(Op1, m_Zero()) || match(Op1, m_Undef()))
+        return BinaryOperator::CreateShl(
+            Op0, ConstantInt::get(II->getType(), ShiftAmt));
+
+      // fshl(0, X, C) -> lshr X, (BW-C)
+      // fshl(undef, X, C) -> lshr X, (BW-C)
+      if (match(Op0, m_Zero()) || match(Op0, m_Undef()))
+        return BinaryOperator::CreateLShr(
+            Op1, ConstantInt::get(II->getType(), BitWidth - ShiftAmt));
+    }
+
+    // The shift amount (operand 2) of a funnel shift is modulo the bitwidth,
+    // so only the low bits of the shift amount are demanded if the bitwidth is
+    // a power-of-2.
+    unsigned BitWidth = II->getType()->getScalarSizeInBits();
+    if (!isPowerOf2_32(BitWidth))
+      break;
+    APInt Op2Demanded = APInt::getLowBitsSet(BitWidth, Log2_32_Ceil(BitWidth));
+    KnownBits Op2Known(BitWidth);
+    if (SimplifyDemandedBits(II, 2, Op2Demanded, Op2Known))
+      return &CI;
+    break;
+  }
   case Intrinsic::uadd_with_overflow:
   case Intrinsic::sadd_with_overflow:
   case Intrinsic::umul_with_overflow:
   case Intrinsic::smul_with_overflow:
-    if (isa<Constant>(II->getArgOperand(0)) &&
-        !isa<Constant>(II->getArgOperand(1))) {
-      // Canonicalize constants into the RHS.
-      Value *LHS = II->getArgOperand(0);
-      II->setArgOperand(0, II->getArgOperand(1));
-      II->setArgOperand(1, LHS);
-      return II;
-    }
+    if (Instruction *I = canonicalizeConstantArg0ToArg1(CI))
+      return I;
     LLVM_FALLTHROUGH;
 
   case Intrinsic::usub_with_overflow:
@@ -2019,30 +2061,164 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     break;
   }
 
-  case Intrinsic::minnum:
-  case Intrinsic::maxnum: {
+  case Intrinsic::uadd_sat:
+  case Intrinsic::sadd_sat:
+    if (Instruction *I = canonicalizeConstantArg0ToArg1(CI))
+      return I;
+    LLVM_FALLTHROUGH;
+  case Intrinsic::usub_sat:
+  case Intrinsic::ssub_sat: {
     Value *Arg0 = II->getArgOperand(0);
     Value *Arg1 = II->getArgOperand(1);
-    // Canonicalize constants to the RHS.
-    if (isa<ConstantFP>(Arg0) && !isa<ConstantFP>(Arg1)) {
-      II->setArgOperand(0, Arg1);
-      II->setArgOperand(1, Arg0);
-      return II;
+    Intrinsic::ID IID = II->getIntrinsicID();
+
+    // Make use of known overflow information.
+    OverflowResult OR;
+    switch (IID) {
+    default:
+      llvm_unreachable("Unexpected intrinsic!");
+    case Intrinsic::uadd_sat:
+      OR = computeOverflowForUnsignedAdd(Arg0, Arg1, II);
+      if (OR == OverflowResult::NeverOverflows)
+        return BinaryOperator::CreateNUWAdd(Arg0, Arg1);
+      if (OR == OverflowResult::AlwaysOverflows)
+        return replaceInstUsesWith(*II,
+                                   ConstantInt::getAllOnesValue(II->getType()));
+      break;
+    case Intrinsic::usub_sat:
+      OR = computeOverflowForUnsignedSub(Arg0, Arg1, II);
+      if (OR == OverflowResult::NeverOverflows)
+        return BinaryOperator::CreateNUWSub(Arg0, Arg1);
+      if (OR == OverflowResult::AlwaysOverflows)
+        return replaceInstUsesWith(*II,
+                                   ConstantInt::getNullValue(II->getType()));
+      break;
+    case Intrinsic::sadd_sat:
+      if (willNotOverflowSignedAdd(Arg0, Arg1, *II))
+        return BinaryOperator::CreateNSWAdd(Arg0, Arg1);
+      break;
+    case Intrinsic::ssub_sat:
+      if (willNotOverflowSignedSub(Arg0, Arg1, *II))
+        return BinaryOperator::CreateNSWSub(Arg0, Arg1);
+      break;
     }
 
+    // ssub.sat(X, C) -> sadd.sat(X, -C) if C != MIN
+    Constant *C;
+    if (IID == Intrinsic::ssub_sat && match(Arg1, m_Constant(C)) &&
+        C->isNotMinSignedValue()) {
+      Value *NegVal = ConstantExpr::getNeg(C);
+      return replaceInstUsesWith(
+          *II, Builder.CreateBinaryIntrinsic(
+              Intrinsic::sadd_sat, Arg0, NegVal));
+    }
+
+    // sat(sat(X + Val2) + Val) -> sat(X + (Val+Val2))
+    // sat(sat(X - Val2) - Val) -> sat(X - (Val+Val2))
+    // if Val and Val2 have the same sign
+    if (auto *Other = dyn_cast<IntrinsicInst>(Arg0)) {
+      Value *X;
+      const APInt *Val, *Val2;
+      APInt NewVal;
+      bool IsUnsigned =
+          IID == Intrinsic::uadd_sat || IID == Intrinsic::usub_sat;
+      if (Other->getIntrinsicID() == II->getIntrinsicID() &&
+          match(Arg1, m_APInt(Val)) &&
+          match(Other->getArgOperand(0), m_Value(X)) &&
+          match(Other->getArgOperand(1), m_APInt(Val2))) {
+        if (IsUnsigned)
+          NewVal = Val->uadd_sat(*Val2);
+        else if (Val->isNonNegative() == Val2->isNonNegative()) {
+          bool Overflow;
+          NewVal = Val->sadd_ov(*Val2, Overflow);
+          if (Overflow) {
+            // Both adds together may add more than SignedMaxValue
+            // without saturating the final result.
+            break;
+          }
+        } else {
+          // Cannot fold saturated addition with different signs.
+          break;
+        }
+
+        return replaceInstUsesWith(
+            *II, Builder.CreateBinaryIntrinsic(
+                     IID, X, ConstantInt::get(II->getType(), NewVal)));
+      }
+    }
+    break;
+  }
+
+  case Intrinsic::minnum:
+  case Intrinsic::maxnum:
+  case Intrinsic::minimum:
+  case Intrinsic::maximum: {
+    if (Instruction *I = canonicalizeConstantArg0ToArg1(CI))
+      return I;
+    Value *Arg0 = II->getArgOperand(0);
+    Value *Arg1 = II->getArgOperand(1);
+    Intrinsic::ID IID = II->getIntrinsicID();
     Value *X, *Y;
     if (match(Arg0, m_FNeg(m_Value(X))) && match(Arg1, m_FNeg(m_Value(Y))) &&
         (Arg0->hasOneUse() || Arg1->hasOneUse())) {
       // If both operands are negated, invert the call and negate the result:
-      // minnum(-X, -Y) --> -(maxnum(X, Y))
-      // maxnum(-X, -Y) --> -(minnum(X, Y))
-      Intrinsic::ID NewIID = II->getIntrinsicID() == Intrinsic::maxnum ?
-          Intrinsic::minnum : Intrinsic::maxnum;
-      Value *NewCall = Builder.CreateIntrinsic(NewIID, { X, Y }, II);
+      // min(-X, -Y) --> -(max(X, Y))
+      // max(-X, -Y) --> -(min(X, Y))
+      Intrinsic::ID NewIID;
+      switch (IID) {
+      case Intrinsic::maxnum:
+        NewIID = Intrinsic::minnum;
+        break;
+      case Intrinsic::minnum:
+        NewIID = Intrinsic::maxnum;
+        break;
+      case Intrinsic::maximum:
+        NewIID = Intrinsic::minimum;
+        break;
+      case Intrinsic::minimum:
+        NewIID = Intrinsic::maximum;
+        break;
+      default:
+        llvm_unreachable("unexpected intrinsic ID");
+      }
+      Value *NewCall = Builder.CreateBinaryIntrinsic(NewIID, X, Y, II);
       Instruction *FNeg = BinaryOperator::CreateFNeg(NewCall);
       FNeg->copyIRFlags(II);
       return FNeg;
     }
+
+    // m(m(X, C2), C1) -> m(X, C)
+    const APFloat *C1, *C2;
+    if (auto *M = dyn_cast<IntrinsicInst>(Arg0)) {
+      if (M->getIntrinsicID() == IID && match(Arg1, m_APFloat(C1)) &&
+          ((match(M->getArgOperand(0), m_Value(X)) &&
+            match(M->getArgOperand(1), m_APFloat(C2))) ||
+           (match(M->getArgOperand(1), m_Value(X)) &&
+            match(M->getArgOperand(0), m_APFloat(C2))))) {
+        APFloat Res(0.0);
+        switch (IID) {
+        case Intrinsic::maxnum:
+          Res = maxnum(*C1, *C2);
+          break;
+        case Intrinsic::minnum:
+          Res = minnum(*C1, *C2);
+          break;
+        case Intrinsic::maximum:
+          Res = maximum(*C1, *C2);
+          break;
+        case Intrinsic::minimum:
+          Res = minimum(*C1, *C2);
+          break;
+        default:
+          llvm_unreachable("unexpected intrinsic ID");
+        }
+        Instruction *NewCall = Builder.CreateBinaryIntrinsic(
+            IID, X, ConstantFP::get(Arg0->getType(), Res));
+        NewCall->copyIRFlags(II);
+        return replaceInstUsesWith(*II, NewCall);
+      }
+    }
+
     break;
   }
   case Intrinsic::fmuladd: {
@@ -2060,17 +2236,12 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     LLVM_FALLTHROUGH;
   }
   case Intrinsic::fma: {
-    Value *Src0 = II->getArgOperand(0);
-    Value *Src1 = II->getArgOperand(1);
-
-    // Canonicalize constant multiply operand to Src1.
-    if (isa<Constant>(Src0) && !isa<Constant>(Src1)) {
-      II->setArgOperand(0, Src1);
-      II->setArgOperand(1, Src0);
-      std::swap(Src0, Src1);
-    }
+    if (Instruction *I = canonicalizeConstantArg0ToArg1(CI))
+      return I;
 
     // fma fneg(x), fneg(y), z -> fma x, y, z
+    Value *Src0 = II->getArgOperand(0);
+    Value *Src1 = II->getArgOperand(1);
     Value *X, *Y;
     if (match(Src0, m_FNeg(m_Value(X))) && match(Src1, m_FNeg(m_Value(Y)))) {
       II->setArgOperand(0, X);
@@ -2116,8 +2287,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     Value *ExtSrc;
     if (match(II->getArgOperand(0), m_OneUse(m_FPExt(m_Value(ExtSrc))))) {
       // Narrow the call: intrinsic (fpext x) -> fpext (intrinsic x)
-      Value *NarrowII = Builder.CreateIntrinsic(II->getIntrinsicID(),
-                                                { ExtSrc }, II);
+      Value *NarrowII =
+          Builder.CreateUnaryIntrinsic(II->getIntrinsicID(), ExtSrc, II);
       return new FPExtInst(NarrowII, II->getType());
     }
     break;
@@ -2138,7 +2309,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     Value *X;
     if (match(II->getArgOperand(0), m_OneUse(m_FNeg(m_Value(X))))) {
       // sin(-x) --> -sin(x)
-      Value *NewSin = Builder.CreateIntrinsic(Intrinsic::sin, { X }, II);
+      Value *NewSin = Builder.CreateUnaryIntrinsic(Intrinsic::sin, X, II);
       Instruction *FNeg = BinaryOperator::CreateFNeg(NewSin);
       FNeg->copyFastMathFlags(II);
       return FNeg;
@@ -2929,16 +3100,10 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   case Intrinsic::x86_avx_blendv_ps_256:
   case Intrinsic::x86_avx_blendv_pd_256:
   case Intrinsic::x86_avx2_pblendvb: {
-    // Convert blendv* to vector selects if the mask is constant.
-    // This optimization is convoluted because the intrinsic is defined as
-    // getting a vector of floats or doubles for the ps and pd versions.
-    // FIXME: That should be changed.
-
+    // fold (blend A, A, Mask) -> A
     Value *Op0 = II->getArgOperand(0);
     Value *Op1 = II->getArgOperand(1);
     Value *Mask = II->getArgOperand(2);
-
-    // fold (blend A, A, Mask) -> A
     if (Op0 == Op1)
       return replaceInstUsesWith(CI, Op0);
 
@@ -2951,6 +3116,33 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       Constant *NewSelector = getNegativeIsTrueBoolVec(ConstantMask);
       return SelectInst::Create(NewSelector, Op1, Op0, "blendv");
     }
+
+    // Convert to a vector select if we can bypass casts and find a boolean
+    // vector condition value.
+    Value *BoolVec;
+    Mask = peekThroughBitcast(Mask);
+    if (match(Mask, m_SExt(m_Value(BoolVec))) &&
+        BoolVec->getType()->isVectorTy() &&
+        BoolVec->getType()->getScalarSizeInBits() == 1) {
+      assert(Mask->getType()->getPrimitiveSizeInBits() ==
+             II->getType()->getPrimitiveSizeInBits() &&
+             "Not expecting mask and operands with different sizes");
+
+      unsigned NumMaskElts = Mask->getType()->getVectorNumElements();
+      unsigned NumOperandElts = II->getType()->getVectorNumElements();
+      if (NumMaskElts == NumOperandElts)
+        return SelectInst::Create(BoolVec, Op1, Op0);
+
+      // If the mask has less elements than the operands, each mask bit maps to
+      // multiple elements of the operands. Bitcast back and forth.
+      if (NumMaskElts < NumOperandElts) {
+        Value *CastOp0 = Builder.CreateBitCast(Op0, Mask->getType());
+        Value *CastOp1 = Builder.CreateBitCast(Op1, Mask->getType());
+        Value *Sel = Builder.CreateSelect(BoolVec, CastOp1, CastOp0);
+        return new BitCastInst(Sel, II->getType());
+      }
+    }
+
     break;
   }
 
@@ -3407,21 +3599,13 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
 
     bool Signed = II->getIntrinsicID() == Intrinsic::amdgcn_sbfe;
 
-    // TODO: Also emit sub if only width is constant.
-    if (!CWidth && COffset && Offset == 0) {
-      Constant *KSize = ConstantInt::get(COffset->getType(), IntSize);
-      Value *ShiftVal = Builder.CreateSub(KSize, II->getArgOperand(2));
-      ShiftVal = Builder.CreateZExt(ShiftVal, II->getType());
-
-      Value *Shl = Builder.CreateShl(Src, ShiftVal);
-      Value *RightShift = Signed ? Builder.CreateAShr(Shl, ShiftVal)
-                                 : Builder.CreateLShr(Shl, ShiftVal);
-      RightShift->takeName(II);
-      return replaceInstUsesWith(*II, RightShift);
-    }
-
     if (!CWidth || !COffset)
       break;
+
+    // The case of Width == 0 is handled above, which makes this tranformation
+    // safe.  If Width == 0, then the ashr and lshr instructions become poison
+    // value since the shift amount would be equal to the bit size.
+    assert(Width != 0);
 
     // TODO: This allows folding to undef when the hardware has specific
     // behavior?
@@ -3711,7 +3895,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     // Scan down this block to see if there is another stack restore in the
     // same block without an intervening call/alloca.
     BasicBlock::iterator BI(II);
-    TerminatorInst *TI = II->getParent()->getTerminator();
+    Instruction *TI = II->getParent()->getTerminator();
     bool CannotRemove = false;
     for (++BI; &*BI != TI; ++BI) {
       if (isa<AllocaInst>(BI)) {
@@ -3838,8 +4022,11 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         return replaceInstUsesWith(*II, ConstantPointerNull::get(PT));
 
       // isKnownNonNull -> nonnull attribute
-      if (isKnownNonZero(DerivedPtr, DL, 0, &AC, II, &DT))
+      if (!II->hasRetAttr(Attribute::NonNull) &&
+          isKnownNonZero(DerivedPtr, DL, 0, &AC, II, &DT)) {
         II->addAttribute(AttributeList::ReturnIndex, Attribute::NonNull);
+        return II;
+      }
     }
 
     // TODO: bitcast(relocate(p)) -> relocate(bitcast(p))
@@ -3939,7 +4126,11 @@ Instruction *InstCombiner::tryOptimizeCall(CallInst *CI) {
   auto InstCombineRAUW = [this](Instruction *From, Value *With) {
     replaceInstUsesWith(*From, With);
   };
-  LibCallSimplifier Simplifier(DL, &TLI, ORE, InstCombineRAUW);
+  auto InstCombineErase = [this](Instruction *I) {
+    eraseInstFromFunction(*I);
+  };
+  LibCallSimplifier Simplifier(DL, &TLI, ORE, InstCombineRAUW,
+                               InstCombineErase);
   if (Value *With = Simplifier.optimizeCall(CI)) {
     ++NumSimplified;
     return CI->use_empty() ? CI : replaceInstUsesWith(*CI, With);

@@ -97,8 +97,8 @@ public:
 
 char WebAssemblyCFGStackify::ID = 0;
 INITIALIZE_PASS(WebAssemblyCFGStackify, DEBUG_TYPE,
-                "Insert BLOCK and LOOP markers for WebAssembly scopes",
-                false, false)
+                "Insert BLOCK and LOOP markers for WebAssembly scopes", false,
+                false)
 
 FunctionPass *llvm::createWebAssemblyCFGStackify() {
   return new WebAssemblyCFGStackify();
@@ -309,6 +309,8 @@ void WebAssemblyCFGStackify::placeBlockMarker(MachineBasicBlock &MBB) {
   // Local expression tree should go after the BLOCK.
   for (auto I = Header->getFirstTerminator(), E = Header->begin(); I != E;
        --I) {
+    if (std::prev(I)->isDebugInstr() || std::prev(I)->isPosition())
+      continue;
     if (WebAssembly::isChild(*std::prev(I), MFI))
       AfterSet.insert(&*std::prev(I));
     else
@@ -531,6 +533,8 @@ void WebAssemblyCFGStackify::placeTryMarker(MachineBasicBlock &MBB) {
   // Local expression tree should go after the TRY.
   for (auto I = Header->getFirstTerminator(), E = Header->begin(); I != E;
        --I) {
+    if (std::prev(I)->isDebugInstr() || std::prev(I)->isPosition())
+      continue;
     if (WebAssembly::isChild(*std::prev(I), MFI))
       AfterSet.insert(&*std::prev(I));
     else
@@ -633,10 +637,18 @@ void WebAssemblyCFGStackify::fixEndsAtEndOfFunction(MachineFunction &MF) {
 
   WebAssembly::ExprType retType;
   switch (MFI.getResults().front().SimpleTy) {
-  case MVT::i32: retType = WebAssembly::ExprType::I32; break;
-  case MVT::i64: retType = WebAssembly::ExprType::I64; break;
-  case MVT::f32: retType = WebAssembly::ExprType::F32; break;
-  case MVT::f64: retType = WebAssembly::ExprType::F64; break;
+  case MVT::i32:
+    retType = WebAssembly::ExprType::I32;
+    break;
+  case MVT::i64:
+    retType = WebAssembly::ExprType::I64;
+    break;
+  case MVT::f32:
+    retType = WebAssembly::ExprType::F32;
+    break;
+  case MVT::f64:
+    retType = WebAssembly::ExprType::F64;
+    break;
   case MVT::v16i8:
   case MVT::v8i16:
   case MVT::v4i32:
@@ -645,8 +657,11 @@ void WebAssemblyCFGStackify::fixEndsAtEndOfFunction(MachineFunction &MF) {
   case MVT::v2f64:
     retType = WebAssembly::ExprType::V128;
     break;
-  case MVT::ExceptRef: retType = WebAssembly::ExprType::ExceptRef; break;
-  default: llvm_unreachable("unexpected return type");
+  case MVT::ExceptRef:
+    retType = WebAssembly::ExprType::ExceptRef;
+    break;
+  default:
+    llvm_unreachable("unexpected return type");
   }
 
   for (MachineBasicBlock &MBB : reverse(MF)) {
@@ -669,9 +684,8 @@ void WebAssemblyCFGStackify::fixEndsAtEndOfFunction(MachineFunction &MF) {
 
 // WebAssembly functions end with an end instruction, as if the function body
 // were a block.
-static void AppendEndToFunction(
-    MachineFunction &MF,
-    const WebAssemblyInstrInfo &TII) {
+static void AppendEndToFunction(MachineFunction &MF,
+                                const WebAssemblyInstrInfo &TII) {
   BuildMI(MF.back(), MF.back().end(),
           MF.back().findPrevDebugLoc(MF.back().end()),
           TII.get(WebAssembly::END_FUNCTION));
@@ -725,7 +739,20 @@ void WebAssemblyCFGStackify::rewriteDepthImmediates(MachineFunction &MF) {
       case WebAssembly::CATCH_I32:
       case WebAssembly::CATCH_I64:
       case WebAssembly::CATCH_ALL:
-        EHPadStack.push_back(&MBB);
+        // Currently the only case there are more than one catch for a try is
+        // for catch terminate pad, in the form of
+        //   try
+        //   catch
+        //     call @__clang_call_terminate
+        //     unreachable
+        //   catch_all
+        //     call @std::terminate
+        //     unreachable
+        //   end
+        // So we shouldn't push the current BB for the second catch_all block
+        // here.
+        if (!WebAssembly::isCatchAllTerminatePad(MBB))
+          EHPadStack.push_back(&MBB);
         break;
 
       case WebAssembly::LOOP:
@@ -753,7 +780,7 @@ void WebAssemblyCFGStackify::rewriteDepthImmediates(MachineFunction &MF) {
       case WebAssembly::RETHROW_TO_CALLER: {
         MachineInstr *Rethrow =
             BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(WebAssembly::RETHROW))
-                .addImm(Stack.size());
+                .addImm(EHPadStack.size());
         MI.eraseFromParent();
         I = MachineBasicBlock::reverse_iterator(Rethrow);
         break;

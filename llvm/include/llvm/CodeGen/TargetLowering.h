@@ -29,7 +29,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Analysis/DivergenceAnalysis.h"
+#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
@@ -163,6 +163,7 @@ public:
     LLOnly,  // Expand the (load) instruction into just a load-linked, which has
              // greater atomic guarantees than a normal load.
     CmpXChg, // Expand the instruction into cmpxchg; used by at least X86.
+    MaskedIntrinsic, // Use a target-specific intrinsic for the LL/SC loop.
   };
 
   /// Enum that specifies when a multiplication should be expanded.
@@ -268,6 +269,14 @@ public:
     return true;
   }
 
+  /// Return true if it is profitable to convert a select of FP constants into
+  /// a constant pool load whose address depends on the select condition. The
+  /// parameter may be used to differentiate a select with FP compare from
+  /// integer compare.
+  virtual bool reduceSelectOfFPConstantLoads(bool IsFPSetCC) const {
+    return true;
+  }
+
   /// Return true if multiple condition registers are available.
   bool hasMultipleConditionRegisters() const {
     return HasMultipleConditionRegisters;
@@ -278,7 +287,7 @@ public:
 
   /// Return the preferred vector type legalization action.
   virtual TargetLoweringBase::LegalizeTypeAction
-  getPreferredVectorAction(EVT VT) const {
+  getPreferredVectorAction(MVT VT) const {
     // The default action for one element vectors is to scalarize
     if (VT.getVectorNumElements() == 1)
       return TypeScalarizeVector;
@@ -818,6 +827,12 @@ public:
       case ISD::STRICT_FLOG2: EqOpc = ISD::FLOG2; break;
       case ISD::STRICT_FRINT: EqOpc = ISD::FRINT; break;
       case ISD::STRICT_FNEARBYINT: EqOpc = ISD::FNEARBYINT; break;
+      case ISD::STRICT_FMAXNUM: EqOpc = ISD::FMAXNUM; break;
+      case ISD::STRICT_FMINNUM: EqOpc = ISD::FMINNUM; break;
+      case ISD::STRICT_FCEIL: EqOpc = ISD::FCEIL; break;
+      case ISD::STRICT_FFLOOR: EqOpc = ISD::FFLOOR; break;
+      case ISD::STRICT_FROUND: EqOpc = ISD::FROUND; break;
+      case ISD::STRICT_FTRUNC: EqOpc = ISD::FTRUNC; break;
     }
 
     auto Action = getOperationAction(EqOpc, VT);
@@ -1206,13 +1221,15 @@ public:
   /// reduce runtime.
   virtual bool ShouldShrinkFPConstant(EVT) const { return true; }
 
-  // Return true if it is profitable to reduce the given load node to a smaller
-  // type.
-  //
-  // e.g. (i16 (trunc (i32 (load x))) -> i16 load x should be performed
-  virtual bool shouldReduceLoadWidth(SDNode *Load,
-                                     ISD::LoadExtType ExtTy,
+  /// Return true if it is profitable to reduce a load to a smaller type.
+  /// Example: (i16 (trunc (i32 (load x))) -> i16 load x
+  virtual bool shouldReduceLoadWidth(SDNode *Load, ISD::LoadExtType ExtTy,
                                      EVT NewVT) const {
+    // By default, assume that it is cheaper to extract a subvector from a wide
+    // vector load rather than creating multiple narrow vector loads.
+    if (NewVT.isVector() && !Load->hasOneUse())
+      return false;
+
     return true;
   }
 
@@ -1435,6 +1452,12 @@ public:
     return PrefLoopAlignment;
   }
 
+  /// Should loops be aligned even when the function is marked OptSize (but not
+  /// MinSize).
+  virtual bool alignLoopsWithOptSize() const {
+    return false;
+  }
+
   /// If the target has a standard location for the stack protector guard,
   /// returns the address of that location. Otherwise, returns nullptr.
   /// DEPRECATED: please override useLoadStackGuardNode and customize
@@ -1556,6 +1579,26 @@ public:
     llvm_unreachable("Store conditional unimplemented on this target");
   }
 
+  /// Perform a masked atomicrmw using a target-specific intrinsic. This
+  /// represents the core LL/SC loop which will be lowered at a late stage by
+  /// the backend.
+  virtual Value *emitMaskedAtomicRMWIntrinsic(IRBuilder<> &Builder,
+                                              AtomicRMWInst *AI,
+                                              Value *AlignedAddr, Value *Incr,
+                                              Value *Mask, Value *ShiftAmt,
+                                              AtomicOrdering Ord) const {
+    llvm_unreachable("Masked atomicrmw expansion unimplemented on this target");
+  }
+
+  /// Perform a masked cmpxchg using a target-specific intrinsic. This
+  /// represents the core LL/SC loop which will be lowered at a late stage by
+  /// the backend.
+  virtual Value *emitMaskedAtomicCmpXchgIntrinsic(
+      IRBuilder<> &Builder, AtomicCmpXchgInst *CI, Value *AlignedAddr,
+      Value *CmpVal, Value *NewVal, Value *Mask, AtomicOrdering Ord) const {
+    llvm_unreachable("Masked cmpxchg expansion unimplemented on this target");
+  }
+
   /// Inserts in the IR a target-specific intrinsic specifying a fence.
   /// It is called by AtomicExpandPass before expanding an
   ///   AtomicRMW/AtomicCmpXchg/AtomicStore/AtomicLoad
@@ -1632,11 +1675,11 @@ public:
     return AtomicExpansionKind::None;
   }
 
-  /// Returns true if the given atomic cmpxchg should be expanded by the
-  /// IR-level AtomicExpand pass into a load-linked/store-conditional sequence
-  /// (through emitLoadLinked() and emitStoreConditional()).
-  virtual bool shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *AI) const {
-    return false;
+  /// Returns how the given atomic cmpxchg should be expanded by the IR-level
+  /// AtomicExpand pass.
+  virtual AtomicExpansionKind
+  shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *AI) const {
+    return AtomicExpansionKind::None;
   }
 
   /// Returns how the IR-level AtomicExpand pass should expand the given
@@ -1691,6 +1734,15 @@ public:
   /// transformed into simple math ops with the condition value. For example:
   /// select Cond, C1, C1-1 --> add (zext Cond), C1-1
   virtual bool convertSelectOfConstantsToMath(EVT VT) const {
+    return false;
+  }
+
+  /// Return true if it is profitable to transform an integer
+  /// multiplication-by-constant into simpler operations like shifts and adds.
+  /// This may be true if the target does not directly support the
+  /// multiplication operation for the specified type or the sequence of simpler
+  /// ops is faster than the multiply.
+  virtual bool decomposeMulByConstant(EVT VT, SDValue C) const {
     return false;
   }
 
@@ -2022,6 +2074,14 @@ public:
     return true;
   }
 
+  /// Return true if the specified immediate is legal for the value input of a
+  /// store instruction.
+  virtual bool isLegalStoreImmediate(int64_t Value) const {
+    // Default implementation assumes that at least 0 works since it is likely
+    // that a zero register exists or a zero immediate is allowed.
+    return Value == 0;
+  }
+
   /// Return true if it's significantly cheaper to shift a vector by a uniform
   /// scalar than by an amount which will vary across each lane. On x86, for
   /// example, there is a "psllw" instruction for the former case, but no simple
@@ -2055,8 +2115,8 @@ public:
     case ISD::ADDE:
     case ISD::FMINNUM:
     case ISD::FMAXNUM:
-    case ISD::FMINNAN:
-    case ISD::FMAXNAN:
+    case ISD::FMINIMUM:
+    case ISD::FMAXIMUM:
       return true;
     default: return false;
     }
@@ -2157,6 +2217,12 @@ public:
   }
 
   virtual bool isZExtFree(EVT FromTy, EVT ToTy) const {
+    return false;
+  }
+
+  /// Return true if sign-extension from FromTy to ToTy is cheaper than
+  /// zero-extension.
+  virtual bool isSExtCheaperThanZExt(EVT FromTy, EVT ToTy) const {
     return false;
   }
 
@@ -2655,7 +2721,7 @@ public:
 
   virtual bool isSDNodeSourceOfDivergence(const SDNode *N,
                                           FunctionLoweringInfo *FLI,
-                                          DivergenceAnalysis *DA) const {
+                                          LegacyDivergenceAnalysis *DA) const {
     return false;
   }
 
@@ -2810,7 +2876,8 @@ public:
                             unsigned Depth = 0,
                             bool AssumeSingleUse = false) const;
 
-  /// Helper wrapper around SimplifyDemandedBits
+  /// Helper wrapper around SimplifyDemandedBits.
+  /// Adds Op back to the worklist upon success.
   bool SimplifyDemandedBits(SDValue Op, const APInt &DemandedMask,
                             DAGCombinerInfo &DCI) const;
 
@@ -2833,7 +2900,8 @@ public:
                                   TargetLoweringOpt &TLO, unsigned Depth = 0,
                                   bool AssumeSingleUse = false) const;
 
-  /// Helper wrapper around SimplifyDemandedVectorElts
+  /// Helper wrapper around SimplifyDemandedVectorElts.
+  /// Adds Op back to the worklist upon success.
   bool SimplifyDemandedVectorElts(SDValue Op, const APInt &DemandedElts,
                                   APInt &KnownUndef, APInt &KnownZero,
                                   DAGCombinerInfo &DCI) const;
@@ -2870,10 +2938,21 @@ public:
   /// elements, returning true on success. Otherwise, analyze the expression and
   /// return a mask of KnownUndef and KnownZero elements for the expression
   /// (used to simplify the caller). The KnownUndef/Zero elements may only be
-  /// accurate for those bits in the DemandedMask
+  /// accurate for those bits in the DemandedMask.
   virtual bool SimplifyDemandedVectorEltsForTargetNode(
       SDValue Op, const APInt &DemandedElts, APInt &KnownUndef,
       APInt &KnownZero, TargetLoweringOpt &TLO, unsigned Depth = 0) const;
+
+  /// Attempt to simplify any target nodes based on the demanded bits,
+  /// returning true on success. Otherwise, analyze the
+  /// expression and return a mask of KnownOne and KnownZero bits for the
+  /// expression (used to simplify the caller).  The KnownZero/One bits may only
+  /// be accurate for those bits in the DemandedMask.
+  virtual bool SimplifyDemandedBitsForTargetNode(SDValue Op,
+                                                 const APInt &DemandedBits,
+                                                 KnownBits &Known,
+                                                 TargetLoweringOpt &TLO,
+                                                 unsigned Depth = 0) const;
 
   /// If \p SNaN is false, \returns true if \p Op is known to never be any
   /// NaN. If \p sNaN is true, returns if \p Op is known to never be a signaling
@@ -3606,6 +3685,42 @@ public:
   /// \returns True, if the expansion was successful, false otherwise
   bool expandFP_TO_SINT(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
 
+  /// Expand float to UINT conversion
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandFP_TO_UINT(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Expand UINT(i64) to double(f64) conversion
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandUINT_TO_FP(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Expand fminnum/fmaxnum into fminnum_ieee/fmaxnum_ieee with quieted inputs.
+  SDValue expandFMINNUM_FMAXNUM(SDNode *N, SelectionDAG &DAG) const;
+
+  /// Expand CTPOP nodes. Expands vector/scalar CTPOP nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandCTPOP(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Expand CTLZ/CTLZ_ZERO_UNDEF nodes. Expands vector/scalar CTLZ nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandCTLZ(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Expand CTTZ/CTTZ_ZERO_UNDEF nodes. Expands vector/scalar CTTZ nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandCTTZ(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
   /// Turn load of vector type into a load of the individual elements.
   /// \param LD load to expand
   /// \returns MERGE_VALUEs of the scalar loads with their chains.
@@ -3642,6 +3757,11 @@ public:
   /// bounds.
   SDValue getVectorElementPointer(SelectionDAG &DAG, SDValue VecPtr, EVT VecVT,
                                   SDValue Index) const;
+
+  /// Method for building the DAG expansion of ISD::[US][ADD|SUB]SAT. This
+  /// method accepts integers or vectors of integers as its arguments.
+  SDValue getExpandedSaturationAdditionSubtraction(SDNode *Node,
+                                                   SelectionDAG &DAG) const;
 
   //===--------------------------------------------------------------------===//
   // Instruction Emitting Hooks

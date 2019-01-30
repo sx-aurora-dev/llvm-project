@@ -10,13 +10,9 @@
 #ifndef liblldb_ClangHighlighter_h_
 #define liblldb_ClangHighlighter_h_
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
 #include "lldb/Utility/Stream.h"
 #include "llvm/ADT/StringSet.h"
 
-// Project includes
 #include "lldb/Core/Highlighter.h"
 
 namespace lldb_private {
@@ -29,6 +25,7 @@ public:
   llvm::StringRef GetName() const override { return "clang"; }
 
   void Highlight(const HighlightStyle &options, llvm::StringRef line,
+                 llvm::Optional<size_t> cursor_pos,
                  llvm::StringRef previous_lines, Stream &s) const override;
 
   /// Returns true if the given string represents a keywords in any Clang

@@ -17,6 +17,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace clang {
@@ -115,6 +116,17 @@ private:
   mutable std::condition_variable TasksReachedZero;
   std::size_t InFlightTasks = 0;
 };
+
+enum class ThreadPriority {
+  Low = 0,
+  Normal = 1,
+};
+void setThreadPriority(std::thread &T, ThreadPriority Priority);
+// Avoid the use of scheduler policies that may starve low-priority threads.
+// This prevents tests from timing out on loaded systems.
+// Affects subsequent setThreadPriority() calls.
+void preventThreadStarvationInTests();
+
 } // namespace clangd
 } // namespace clang
 #endif

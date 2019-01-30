@@ -7,10 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
-// Project includes
 #include "CommandObjectHelp.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandObjectMultiword.h"
@@ -71,11 +67,11 @@ CommandObjectHelp::CommandObjectHelp(CommandInterpreter &interpreter)
 
 CommandObjectHelp::~CommandObjectHelp() = default;
 
-static OptionDefinition g_help_options[] = {
+static constexpr OptionDefinition g_help_options[] = {
     // clang-format off
-  {LLDB_OPT_SET_ALL, false, "hide-aliases",         'a', OptionParser::eNoArgument, nullptr, nullptr, 0, eArgTypeNone, "Hide aliases in the command list."},
-  {LLDB_OPT_SET_ALL, false, "hide-user-commands",   'u', OptionParser::eNoArgument, nullptr, nullptr, 0, eArgTypeNone, "Hide user-defined commands from the list."},
-  {LLDB_OPT_SET_ALL, false, "show-hidden-commands", 'h', OptionParser::eNoArgument, nullptr, nullptr, 0, eArgTypeNone, "Include commands prefixed with an underscore."},
+  {LLDB_OPT_SET_ALL, false, "hide-aliases",         'a', OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone, "Hide aliases in the command list."},
+  {LLDB_OPT_SET_ALL, false, "hide-user-commands",   'u', OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone, "Hide user-defined commands from the list."},
+  {LLDB_OPT_SET_ALL, false, "show-hidden-commands", 'h', OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone, "Include commands prefixed with an underscore."},
     // clang-format on
 };
 

@@ -51,6 +51,7 @@ ARM::ARM() {
   RelativeRel = R_ARM_RELATIVE;
   IRelativeRel = R_ARM_IRELATIVE;
   GotRel = R_ARM_GLOB_DAT;
+  NoneRel = R_ARM_NONE;
   PltRel = R_ARM_JUMP_SLOT;
   TlsGotRel = R_ARM_TLS_TPOFF32;
   TlsModuleIndexRel = R_ARM_TLS_DTPMOD32;
@@ -60,9 +61,7 @@ ARM::ARM() {
   GotPltEntrySize = 4;
   PltEntrySize = 16;
   PltHeaderSize = 32;
-  TrapInstr = 0xd4d4d4d4;
-  // ARM uses Variant 1 TLS
-  TcbSize = 8;
+  TrapInstr = {0xd4, 0xd4, 0xd4, 0xd4};
   NeedsThunks = true;
 }
 
@@ -147,7 +146,7 @@ RelType ARM::getDynRel(RelType Type) const {
 }
 
 void ARM::writeGotPlt(uint8_t *Buf, const Symbol &) const {
-  write32le(Buf, InX::Plt->getVA());
+  write32le(Buf, In.Plt->getVA());
 }
 
 void ARM::writeIgotPlt(uint8_t *Buf, const Symbol &S) const {
@@ -168,8 +167,8 @@ static void writePltHeaderLong(uint8_t *Buf) {
       0xd4, 0xd4, 0xd4, 0xd4, //     Pad to 32-byte boundary
       0xd4, 0xd4, 0xd4, 0xd4};
   memcpy(Buf, PltData, sizeof(PltData));
-  uint64_t GotPlt = InX::GotPlt->getVA();
-  uint64_t L1 = InX::Plt->getVA() + 8;
+  uint64_t GotPlt = In.GotPlt->getVA();
+  uint64_t L1 = In.Plt->getVA() + 8;
   write32le(Buf + 16, GotPlt - L1 - 8);
 }
 
@@ -187,7 +186,7 @@ void ARM::writePltHeader(uint8_t *Buf) const {
       0xe5bef000, //     ldr pc, [lr, #0x00000NNN] &(.got.plt -L1 - 4)
   };
 
-  uint64_t Offset = InX::GotPlt->getVA() - InX::Plt->getVA() - 4;
+  uint64_t Offset = In.GotPlt->getVA() - In.Plt->getVA() - 4;
   if (!llvm::isUInt<27>(Offset)) {
     // We cannot encode the Offset, use the long form.
     writePltHeaderLong(Buf);
@@ -197,10 +196,10 @@ void ARM::writePltHeader(uint8_t *Buf) const {
   write32le(Buf + 4, PltData[1] | ((Offset >> 20) & 0xff));
   write32le(Buf + 8, PltData[2] | ((Offset >> 12) & 0xff));
   write32le(Buf + 12, PltData[3] | (Offset & 0xfff));
-  write32le(Buf + 16, TrapInstr); // Pad to 32-byte boundary
-  write32le(Buf + 20, TrapInstr);
-  write32le(Buf + 24, TrapInstr);
-  write32le(Buf + 28, TrapInstr);
+  memcpy(Buf + 16, TrapInstr.data(), 4); // Pad to 32-byte boundary
+  memcpy(Buf + 20, TrapInstr.data(), 4);
+  memcpy(Buf + 24, TrapInstr.data(), 4);
+  memcpy(Buf + 28, TrapInstr.data(), 4);
 }
 
 void ARM::addPltHeaderSymbols(InputSection &IS) const {
@@ -249,7 +248,7 @@ void ARM::writePlt(uint8_t *Buf, uint64_t GotPltEntryAddr,
   write32le(Buf + 0, PltData[0] | ((Offset >> 20) & 0xff));
   write32le(Buf + 4, PltData[1] | ((Offset >> 12) & 0xff));
   write32le(Buf + 8, PltData[2] | (Offset & 0xfff));
-  write32le(Buf + 12, TrapInstr); // Pad to 16-byte boundary
+  memcpy(Buf + 12, TrapInstr.data(), 4); // Pad to 16-byte boundary
 }
 
 void ARM::addPltSymbols(InputSection &IS, uint64_t Off) const {
@@ -514,6 +513,12 @@ void ARM::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
               (read16le(Loc + 2) & 0x8f00) | // opcode
                   ((Val << 4) & 0x7000) |    // imm3
                   (Val & 0x00ff));           // imm8
+    break;
+  case R_ARM_V4BX:
+    // V4BX is just a marker to indicate there's a "bx rN" instruction at the
+    // given address. It can be used to implement a special linker mode which
+    // rewrites ARMv4T inputs to ARMv4. Since we support only ARMv4 input and
+    // not ARMv4 output, we can just ignore it.
     break;
   default:
     error(getErrorLocation(Loc) + "unrecognized reloc " + Twine(Type));

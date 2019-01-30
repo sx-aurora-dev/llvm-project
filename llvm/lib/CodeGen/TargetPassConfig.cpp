@@ -39,6 +39,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Threading.h"
+#include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils.h"
@@ -107,10 +108,10 @@ static cl::opt<bool> PrintISelInput("print-isel-input", cl::Hidden,
     cl::desc("Print LLVM IR input to isel pass"));
 static cl::opt<bool> PrintGCInfo("print-gc", cl::Hidden,
     cl::desc("Dump garbage collector data"));
-static cl::opt<bool> VerifyMachineCode("verify-machineinstrs", cl::Hidden,
-    cl::desc("Verify generated machine code"),
-    cl::init(false),
-    cl::ZeroOrMore);
+static cl::opt<cl::boolOrDefault>
+    VerifyMachineCode("verify-machineinstrs", cl::Hidden,
+                      cl::desc("Verify generated machine code"),
+                      cl::ZeroOrMore);
 enum RunOutliner { AlwaysOutline, NeverOutline, TargetDefault };
 // Enable or disable the MachineOutliner.
 static cl::opt<RunOutliner> EnableMachineOutliner(
@@ -136,13 +137,15 @@ static cl::opt<std::string> PrintMachineInstrs(
     "print-machineinstrs", cl::ValueOptional, cl::desc("Print machine instrs"),
     cl::value_desc("pass-name"), cl::init("option-unspecified"), cl::Hidden);
 
-static cl::opt<int> EnableGlobalISelAbort(
+static cl::opt<GlobalISelAbortMode> EnableGlobalISelAbort(
     "global-isel-abort", cl::Hidden,
     cl::desc("Enable abort calls when \"global\" instruction selection "
-             "fails to lower/select an instruction: 0 disable the abort, "
-             "1 enable the abort, and "
-             "2 disable the abort but emit a diagnostic on failure"),
-    cl::init(1));
+             "fails to lower/select an instruction"),
+    cl::values(
+        clEnumValN(GlobalISelAbortMode::Disable, "0", "Disable the abort"),
+        clEnumValN(GlobalISelAbortMode::Enable, "1", "Enable the abort"),
+        clEnumValN(GlobalISelAbortMode::DisableWithDiag, "2",
+                   "Disable the abort but emit a diagnostic on failure")));
 
 // Temporary option to allow experimenting with MachineScheduler as a post-RA
 // scheduler. Targets can "properly" enable this with
@@ -383,6 +386,9 @@ TargetPassConfig::TargetPassConfig(LLVMTargetMachine &TM, PassManagerBase &pm)
   if (TM.Options.EnableIPRA)
     setRequiresCodeGenSCCOrder();
 
+  if (EnableGlobalISelAbort.getNumOccurrences())
+    TM.Options.GlobalISelAbort = EnableGlobalISelAbort;
+
   setStartStopPasses();
 }
 
@@ -418,8 +424,13 @@ TargetPassConfig::TargetPassConfig()
                      "triple set?");
 }
 
-bool TargetPassConfig::hasLimitedCodeGenPipeline() const {
-  return StartBefore || StartAfter || StopBefore || StopAfter;
+bool TargetPassConfig::willCompleteCodeGenPipeline() {
+  return StopBeforeOpt.empty() && StopAfterOpt.empty();
+}
+
+bool TargetPassConfig::hasLimitedCodeGenPipeline() {
+  return !StartBeforeOpt.empty() || !StartAfterOpt.empty() ||
+         !willCompleteCodeGenPipeline();
 }
 
 std::string
@@ -552,7 +563,7 @@ void TargetPassConfig::addPrintPass(const std::string &Banner) {
 }
 
 void TargetPassConfig::addVerifyPass(const std::string &Banner) {
-  bool Verify = VerifyMachineCode;
+  bool Verify = VerifyMachineCode == cl::BOU_TRUE;
 #ifdef EXPENSIVE_CHECKS
   if (VerifyMachineCode == cl::BOU_UNSET)
     Verify = TM->isMachineVerifierClean();
@@ -715,8 +726,11 @@ bool TargetPassConfig::addCoreISelPasses() {
   // Enable FastISel with -fast-isel, but allow that to be overridden.
   TM->setO0WantsFastISel(EnableFastISelOption != cl::BOU_FALSE);
   if (EnableFastISelOption == cl::BOU_TRUE ||
-      (TM->getOptLevel() == CodeGenOpt::None && TM->getO0WantsFastISel()))
+      (TM->getOptLevel() == CodeGenOpt::None && TM->getO0WantsFastISel() &&
+       !TM->Options.EnableGlobalISel)) {
     TM->setFastISel(true);
+    TM->setGlobalISel(false);
+  }
 
   // Ask the target for an instruction selector.
   // Explicitly enabling fast-isel should override implicitly enabled
@@ -724,8 +738,10 @@ bool TargetPassConfig::addCoreISelPasses() {
   if (EnableGlobalISelOption == cl::BOU_TRUE ||
       (EnableGlobalISelOption == cl::BOU_UNSET &&
        TM->Options.EnableGlobalISel && EnableFastISelOption != cl::BOU_TRUE)) {
+    TM->setGlobalISel(true);
     TM->setFastISel(false);
 
+    SaveAndRestore<bool> SavedAddingMachinePasses(AddingMachinePasses, true);
     if (addIRTranslator())
       return true;
 
@@ -804,15 +820,17 @@ void TargetPassConfig::addMachinePasses() {
   AddingMachinePasses = true;
 
   // Insert a machine instr printer pass after the specified pass.
-  if (!StringRef(PrintMachineInstrs.getValue()).equals("") &&
-      !StringRef(PrintMachineInstrs.getValue()).equals("option-unspecified")) {
-    const PassRegistry *PR = PassRegistry::getPassRegistry();
-    const PassInfo *TPI = PR->getPassInfo(PrintMachineInstrs.getValue());
-    const PassInfo *IPI = PR->getPassInfo(StringRef("machineinstr-printer"));
-    assert (TPI && IPI && "Pass ID not registered!");
-    const char *TID = (const char *)(TPI->getTypeInfo());
-    const char *IID = (const char *)(IPI->getTypeInfo());
-    insertPass(TID, IID);
+  StringRef PrintMachineInstrsPassName = PrintMachineInstrs.getValue();
+  if (!PrintMachineInstrsPassName.equals("") &&
+      !PrintMachineInstrsPassName.equals("option-unspecified")) {
+    if (const PassInfo *TPI = getPassInfo(PrintMachineInstrsPassName)) {
+      const PassRegistry *PR = PassRegistry::getPassRegistry();
+      const PassInfo *IPI = PR->getPassInfo(StringRef("machineinstr-printer"));
+      assert(IPI && "failed to get \"machineinstr-printer\" PassInfo!");
+      const char *TID = (const char *)(TPI->getTypeInfo());
+      const char *IID = (const char *)(IPI->getTypeInfo());
+      insertPass(TID, IID);
+    }
   }
 
   // Print the instruction selected machine code...
@@ -981,7 +999,8 @@ bool TargetPassConfig::getOptimizeRegAlloc() const {
 }
 
 /// RegisterRegAlloc's global Registry tracks allocator registration.
-MachinePassRegistry RegisterRegAlloc::Registry;
+MachinePassRegistry<RegisterRegAlloc::FunctionPassCtor>
+    RegisterRegAlloc::Registry;
 
 /// A dummy default pass factory indicates whether the register allocator is
 /// overridden on the command line.
@@ -1155,14 +1174,9 @@ void TargetPassConfig::addBlockPlacement() {
 /// GlobalISel Configuration
 //===---------------------------------------------------------------------===//
 bool TargetPassConfig::isGlobalISelAbortEnabled() const {
-  if (EnableGlobalISelAbort.getNumOccurrences() > 0)
-    return EnableGlobalISelAbort == 1;
-
-  // When no abort behaviour is specified, we don't abort if the target says
-  // that GISel is enabled.
-  return !TM->Options.EnableGlobalISel;
+  return TM->Options.GlobalISelAbort == GlobalISelAbortMode::Enable;
 }
 
 bool TargetPassConfig::reportDiagnosticWhenGlobalISelFallback() const {
-  return EnableGlobalISelAbort == 2;
+  return TM->Options.GlobalISelAbort == GlobalISelAbortMode::DisableWithDiag;
 }
