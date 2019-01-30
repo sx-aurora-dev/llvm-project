@@ -81,9 +81,10 @@ void getSymsFromELFObj(char *elfObject, std::vector<std::string> *symbols) {
         GElf_Sym sym;
         gelf_getsym(data, i, &sym);
 
-        // We need all global function entris in the link table
+        // We need all global functions and global variables in the link table
         if (GELF_ST_BIND(sym.st_info) == STB_GLOBAL &&
-            GELF_ST_TYPE(sym.st_info) == STT_FUNC) {
+            (GELF_ST_TYPE(sym.st_info) == STT_FUNC ||
+             GELF_ST_TYPE(sym.st_info) ==  STT_OBJECT)) {
           char *symName;
 
           // if the sh_type equals SHT_SYMTAB, then sh_link holds the
@@ -107,14 +108,13 @@ std::string generateSymTabCode(const std::vector<std::string> *symbols) {
   std::stringstream out;
   out << "#include <stdlib.h>\n";
   out << "#include <string.h>\n";
-  out << "typedef unsigned long ulong;\n\n";
 
-  for (auto s : (*symbols)) {
-    out << "extern ulong " << s << ";" << std::endl;
+  for (std::string s : (*symbols)) {
+    out << "extern unsigned long " << s << ";" << std::endl;
   }
 
   out << std::endl;
-  out << "typedef struct { char *n; ulong v; } SYM;\n";
+  out << "typedef struct { char *n; unsigned long v; } SYM;\n";
   out << "SYM *_veo_static_symtable = NULL;\n";
   out << std::endl;
   out << "void _init_static_symtable(void) {\n";
@@ -126,7 +126,7 @@ std::string generateSymTabCode(const std::vector<std::string> *symbols) {
 
   for (auto s : (*symbols)) {
     out << "  s[i].n = strdup(\"" << s << "\");";
-    out << " s[i++].v = (ulong)&" << s << ";" << std::endl;
+    out << " s[i++].v = (unsigned long)&" << s << ";" << std::endl;
   }
   out << "  s[i].n = NULL; s[i++].v = 0UL;\n";
   out << "}\n";
