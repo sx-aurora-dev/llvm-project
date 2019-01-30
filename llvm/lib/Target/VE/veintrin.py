@@ -69,18 +69,18 @@ class Op(object):
         else:
             return "{}:${}".format(self.ty.ValueType, self.name_)
 
-    def dagOpR(self):
-        if self.kind == 's':
-            if self.ty.ValueType == 'i32':
-                return "(INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:${}, sub_i32)".format(self.name_)
-            elif self.ty.ValueType == 'f32':
-                return "(EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:${}, sub_f32), sub_i32)".format(self.name_)
-            elif self.ty.ValueType == 'f64':
-                return "(COPY_TO_REGCLASS f64:${}, I64)".format(self.name_)
-            else:
-                return self.dagOp()
-        else:
-            return self.dagOp()
+#    def dagOpR(self):
+#        if self.kind == 's':
+#            if self.ty.ValueType == 'i32':
+#                return "(INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:${}, sub_i32)".format(self.name_)
+#            elif self.ty.ValueType == 'f32':
+#                return "(EXTRACT_SUBREG (INSERT_SUBREG (i64 (IMPLICIT_DEF)), f32:${}, sub_f32), sub_i32)".format(self.name_)
+#            elif self.ty.ValueType == 'f64':
+#                return "(COPY_TO_REGCLASS f64:${}, I64)".format(self.name_)
+#            else:
+#                return self.dagOp()
+#        else:
+#            return self.dagOp()
 
     def isImm(self): return self.kind == 'I' or self.kind == 'N' or self.kind == "Z"
     def isReg(self): return self.kind == 'v' or self.kind == 's'
@@ -148,16 +148,17 @@ class ImmOp(Op):
 
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
 def ImmN(ty): return ImmOp("I", ty, "N", "uimm6")
+def UImm7(ty): return ImmOp("I", ty, "N", "uimm7")
 def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7") # FIXME: simm7?
 
-class OL(list):
-    def __init__(self):
-        super(OL, self).__init__(self)
-
-    def __init__(self, l):
-        super(OL, self).__init__(self)
-        for i in l:
-            self.append(i)
+#class OL(list):
+#    def __init__(self):
+#        super(OL, self).__init__(self)
+#
+#    def __init__(self, l):
+#        super(OL, self).__init__(self)
+#        for i in l:
+#            self.append(i)
 
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
 def Args_vsv(tyV, tyS = None): 
@@ -197,6 +198,8 @@ class Inst:
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
+        self.customLowering_ = False
+        self.hasMaskBaseReg_ = True
 
     def hasImmOp(self):
         for op in self.ins:
@@ -287,6 +290,21 @@ class Inst:
 
     def hasExpr(self):
         return self.expr != None
+
+    # TODO: this will be removed if all masked instructions use customLowering
+    def customLowering(self):
+        self.customLowering_ = True
+        return self
+
+    def isCustomLowering(self):
+        return self.customLowering_
+
+    def noMaskBaseReg(self):
+        self.hasMaskBaseReg_ = False
+        return self
+
+    def hasMaskBaseReg(self):
+        return self.hasMask() and self.hasMaskBaseReg_
 
 class TestFunc:
     def __init__(self, header, definition, ref):
@@ -475,7 +493,10 @@ class TestGenerator:
             vld, vst = self.get_vld_vst_inst(I, op)
             stride = I.stride(op)
             body += indent + "__vr {} = _ve_{}({}, p{});\n".format(op.regName(), vld, stride, op.regName())
-            body += indent + "{} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args + [op.regName()]))
+            if I.hasMaskBaseReg():
+                body += indent + "{} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args + [op.regName()]))
+            else:
+                body += indent + "{} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args))
         else:
             body += indent + "__vr {} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args))
     
@@ -1030,6 +1051,13 @@ class InstTable:
             sf = self.args_to_func_suffix(op)
             self.add(Inst(opc, inst+si, asm, asm+sf, [], op, False).noTest().writeMem())
 
+    def VSUM(self, opc, inst, asm, baseOps):
+        OL = []
+        for op in baseOps:
+            OL.append(op)
+            OL.append(op + [VM])
+        self.InstX(opc, inst, asm, OL).customLowering().noMaskBaseReg()
+
 def cmpwrite(filename, data):
     need_write = True
     try:
@@ -1042,7 +1070,6 @@ def cmpwrite(filename, data):
         print("write " + filename)
         with open(filename, "w") as f:
             f.write(data)
-
 
 def gen_test(insts, directory):
     for I in insts:
@@ -1088,7 +1115,17 @@ def gen_mktest(insts):
             intrin = I.intrinsicName()
             print("python mktest.py {name} gen/tests/{name}.ll gen/tests/{name}.s {asm} > tmp/gen-intrin-{name}.ll".format(name=intrin, asm=I.asm()))
 
+def gen_lowering(inst):
+    for I in insts:
+        if I.hasMask() and I.isCustomLowering():
+            print("case Intrinsic::ve_{}: return LowerIntrinsicWithMask(Op, DAG, VE::{});"
+                  .format(I.intrinsicName(), I.instName, len(I.ins)))
+
 T = InstTable()
+
+#
+# Start of instruction definition
+#
 
 T.Section("5.3.2.7. Vector Transfer Instructions", 18)
 T.VLDm(0x81, "VLD", "vld")
@@ -1118,7 +1155,7 @@ T.InstX(0xA7, "SVMi", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]]).noTest()
 T.InstX(0xA7, "SVMpi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]]).noTest()
 T.VBRDm(0x8C)
 T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
-T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), ImmI(T_u32), VZ(T_u64)]]).noTest()
+T.InstX(0x9C, "VMV", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
 
 O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
           [VX(T_i64), SY(T_i32), VZ(T_i32)], 
@@ -1235,11 +1272,11 @@ T.InstX(0x00, "VFMFp", "pvfmk.s", [[VMX512, CCOp, VZ(T_f32), VM512]], None, True
 
 
 T.Section("5.3.2.13. Vector Recursive Relation Instructions", 32)
-T.InstX(0xEA, "VSUMSsx", "vsum.w.sx", [[VX(T_i32), VY(T_i32)]])
-T.InstX(0xEA, "VSUMSzx", "vsum.w.zx", [[VX(T_i32), VY(T_i32)]])
-T.InstX(0xAA, "VSUMX", "vsum.l", [[VX(T_i64), VY(T_i64)]])
-T.InstX(0xEC, "VFSUMd", "vfsum.d", [[VX(T_f64), VY(T_f64)]])
-T.InstX(0xEC, "VFSUMs", "vfsum.s", [[VX(T_f32), VY(T_f32)]])
+T.VSUM(0xEA, "VSUMSsx", "vsum.w.sx", [[VX(T_i32), VY(T_i32)]])
+T.VSUM(0xEA, "VSUMSzx", "vsum.w.zx", [[VX(T_i32), VY(T_i32)]])
+T.VSUM(0xAA, "VSUMX", "vsum.l", [[VX(T_i64), VY(T_i64)]])
+T.VSUM(0xEC, "VFSUMd", "vfsum.d", [[VX(T_f64), VY(T_f64)]])
+T.VSUM(0xEC, "VFSUMs", "vfsum.s", [[VX(T_f32), VY(T_f32)]])
 T.FLm(0xBB, "VMAXSa{fl}sx", "vrmaxs.w{fl}.sx", [[VX(T_i32), VY(T_i32)]])
 T.FLm(0xBB, "VMAXSa{fl}zx", "vrmaxs.w{fl}.zx", [[VX(T_u32), VY(T_u32)]])
 T.FLm(0xBB, "VMAXSi{fl}sx", "vrmins.w{fl}.sx", [[VX(T_i32), VY(T_i32)]])
@@ -1261,7 +1298,7 @@ T.NoImpl("VFISM")
 T.NoImpl("VFIMA")
 T.NoImpl("VFIMS")
 
-T.Section("5.3.2.14. Vector Gatering/Scattering Instructions", 33)
+T.Section("5.3.2.14. Vector Gathering/Scattering Instructions", 33)
 T.VGTm(0xA1, "VGT", "vgt")
 T.VGTm(0xA2, "VGTU", "vgtu")
 T.VGTm(0xA3, "VGTLsx", "vgtl.sx")
@@ -1306,6 +1343,10 @@ T.Dummy("", "__vm _ve_extract_vm512l(__vm512 vm)", "")
 T.Dummy("", "__vm512 _ve_insert_vm512u(__vm512 vmx, __vm vmy)", "")
 T.Dummy("", "__vm512 _ve_insert_vm512l(__vm512 vmx, __vm vmy)", "")
 
+#
+# End of instruction definition
+#
+
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -1322,6 +1363,7 @@ parser.add_argument('-a', dest="opt_all", action="store_true")
 parser.add_argument('--html', dest="opt_html", action="store_true")
 parser.add_argument('--html-no-link', action="store_true")
 parser.add_argument('--mktest', dest="opt_mktest", action="store_true")
+parser.add_argument('-l', dest="opt_lowering", action="store_true")
 args, others = parser.parse_known_args()
 
 
@@ -1384,6 +1426,8 @@ if args.html_no_link:
     HtmlManualPrinter().printAll(T, True)
 if args.opt_mktest:
     gen_mktest(insts)
+if args.opt_lowering:
+    gen_lowering(insts)
 
 if args.opt_manual:
     ManualInstPrinter().printAll(insts)

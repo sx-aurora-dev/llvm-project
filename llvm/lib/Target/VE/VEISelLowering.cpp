@@ -2171,6 +2171,28 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
   llvm_unreachable("Unknown fence ordering in emitTrailingFence");
 }
 
+static SDValue LowerIntrinsicWithMask(SDValue Intrin, SelectionDAG& DAG, uint64_t Opc)
+{
+    SDLoc dl(Intrin);
+    SmallVector<SDValue, 8> Ops;
+
+    // Op0 is intrinsic number and ignored
+    for (unsigned i = 1; i < Intrin.getNumOperands(); ++i) {
+        SDValue Op = Intrin.getOperand(i);
+        if (Op.getValueType() == MVT::v4i64) {
+            //SDValue Mask = Op.getOperand(i);
+            MVT BitcastVT 
+                = MVT::getVectorVT(MVT::i1, Op.getValueType().getSizeInBits());
+            SDValue Bitcast = DAG.getBitcast(BitcastVT, Op);
+            Ops.push_back(Bitcast);
+        } else {
+            Ops.push_back(Op);
+        }
+    }
+
+    return SDValue(DAG.getMachineNode(Opc, dl, Intrin.getValueType(), Ops), 0);
+}
+
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                   SelectionDAG &DAG) const {
   SDLoc dl(Op);
@@ -2540,6 +2562,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     SDValue RV = DAG.getCopyFromReg(Chain, dl, VE::V0, MVT::v256f64, InGlue);
     return RV;
   }
+#include "VEISelLoweringIntrinsic.inc"
   }
 }
 
