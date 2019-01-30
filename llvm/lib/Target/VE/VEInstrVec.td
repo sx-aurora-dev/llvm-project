@@ -974,6 +974,11 @@ multiclass RVRECm<string opcStr, bits<8> opc> {
   def v : RV2<opc, (outs V64:$vx), (ins V64:$vy),
     !strconcat(opcStr, " $vx,$vy"), []> {
       let sy = 0;
+      let m = 0;
+    }
+  def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
+    !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+      let sy = 0;
     }
 }
 let cx2 = 0 in defm VSUMSsx : RVRECm<"vsum.w.sx", 0xEA>;
