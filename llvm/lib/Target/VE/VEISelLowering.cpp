@@ -3727,7 +3727,7 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
   // This MachineFunction is using VL, so need to patch among the
   // instructions using and defining VL.
 
-  LLVM_DEBUG(dbgs() << "Update VLReg def and use to make it match to SSA");
+  LLVM_DEBUG(dbgs() << "Update VLReg def and use to make it match to SSA\n");
   unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
 
   // First, try to patch simple case (def-use in each basic block).
@@ -3748,12 +3748,9 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
         // this MI copies VL at entry
         num_def++;
       } else if (chk.first) {
-        switch (MI.getOpcode()) {
-        case VE::VLDir:
-        case VE::VSTir:
-          MI.getOperand(3).ChangeToRegister(newVL, false);
-          break;
-        }
+        int numOp = MI.findRegisterUseOperandIdx(VLReg);
+        assert(numOp > 0);
+        MI.getOperand(numOp).ChangeToRegister(newVL, false);
         LLVM_DEBUG(dbgs() << MI);
       } else if (MI.definesRegister(VE::VL)) {
         num_def++;
@@ -3761,6 +3758,8 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
         use_livein = false;
         newVL = Subtarget->getInstrInfo()->createVectorLengthReg(&MF);
         MI.getOperand(0).ChangeToRegister(newVL, true);
+        LLVM_DEBUG(dbgs() << MI);
+      } else {
         LLVM_DEBUG(dbgs() << MI);
       }
     }
