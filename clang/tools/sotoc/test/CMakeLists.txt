@@ -9,6 +9,10 @@ endif()
 set(SOTOC_TEST_COMPILER ${CMAKE_BINARY_DIR}/bin/clang CACHE STRING
     "Compiler to use for testing sotoc")
 
+# We assume libomp is available in the lib dir
+set(SOTOC_LIBOMP_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
+set(SOTOC_OMP_HEADER_DIR ${CMAKE_BINARY_DIR}/projects/openmp/runtime/src)
+
 find_package(PythonInterp REQUIRED)
 
 if(NOT PYTHONINTERP_FOUND)
@@ -30,7 +34,6 @@ endif()
 
 
 set(SOTOC_LIT_ARGS -v --no-progress-bar)
-
 
 add_custom_target(check-sotoc
   COMMAND ${PYTHON_EXECUTABLE} ${SOTOC_LLVM_LIT_EXECUTABLE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
