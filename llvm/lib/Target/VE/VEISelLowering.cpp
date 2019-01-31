@@ -1420,6 +1420,10 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VBRDU:       return "VEISD::INT_VBRDU";
   case VEISD::INT_VBRDL:       return "VEISD::INT_VBRDL";
   case VEISD::INT_PVBRD:       return "VEISD::INT_PVBRD";
+  case VEISD::INT_VBRD_M:      return "VEISD::INT_VBRD_M";
+  case VEISD::INT_VBRDU_M:     return "VEISD::INT_VBRDU_M";
+  case VEISD::INT_VBRDL_M:     return "VEISD::INT_VBRDL_M";
+  case VEISD::INT_PVBRD_M:     return "VEISD::INT_PVBRD_M";
   case VEISD::INT_VSLL:        return "VEISD::INT_VSLL";
   case VEISD::INT_VSRL:        return "VEISD::INT_VSRL";
   case VEISD::INT_VSLAW:       return "VEISD::INT_VSLAW";
@@ -2310,19 +2314,34 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                  Bitcast1, Bitcast2);
       return DAG.getBitcast(Op.getValueType(), Res);
     }
+    case ADD_VL: {
+      // 1-operand intrinsic with hidden VL
+      //   Input:
+      //     (v256i64 (int_ve_vbrd_vs_i64 (i64 %sy)))
+      //   Output:
+      //     (v256i64 (VBRD %sy, %vl))
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
+                         Op.getOperand(1), VL);
+    }
     case OP_XXMX: {
-      // 1-operand with mask and base register intrinsics
+      // 1-operand intrinsic with mask, base register, and hidden VL
       //   Input:
       //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
       //                                    (v256i64 %base)))
       //   Output:
-      //     (v256i64 (VBRD %sy, (v256i1 (bitcast %vm)), %base))
+      //     (v256i64 (VBRD_M %sy, (v256i1 (bitcast %vm)), %base, %vl))
       SDValue Mask = Op.getOperand(2);
       MVT BitcastVT = MVT::getVectorVT(
         MVT::i1, Mask.getValueType().getSizeInBits());
       SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
-                         Op.getOperand(1), Bitcast, Op.getOperand(3));
+                         Op.getOperand(1), Bitcast, Op.getOperand(3), VL);
     }
     case OP_XXXM: {
       // 2-operand vector calculation with mask and base vector intrinsics

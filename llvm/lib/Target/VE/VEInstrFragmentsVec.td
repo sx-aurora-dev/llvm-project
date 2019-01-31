@@ -198,21 +198,36 @@ def VElzvm : SDNode<"VEISD::INT_LZVM", VE1OpSM>;
 def VEtovm : SDNode<"VEISD::INT_TOVM", VE1OpSM>;
 
 //===----------------------------------------------------------------------===//
-// 1-op with mask and base register instructions
+// 1-op instructios with hidden VL instructions
 //===----------------------------------------------------------------------===//
 
 // Either of
-// (v256f64 (VBRD (f64 sy), (vNi1 vy), (v256f64 base)))
-// (v256f64 (VBRD (i64 sy), (vNi1 vy), (v256f64 base)))
+// (v256f64 (VBRD (f64 sy), (VLS vl)))
+// (v256f64 (VBRD (i64 sy), (VLS vl)))
+
+def VE1OpVS :
+    SDTypeProfile<1, 2, [SDTCisVec<0>]>;
+def INT_VBRD : SDNode<"VEISD::INT_VBRD", VE1OpVS>;
+def INT_VBRDU : SDNode<"VEISD::INT_VBRDU", VE1OpVS>;
+def INT_VBRDL : SDNode<"VEISD::INT_VBRDL", VE1OpVS>;
+def INT_PVBRD : SDNode<"VEISD::INT_PVBRD", VE1OpVS>;
+
+//===----------------------------------------------------------------------===//
+// 1-op instructions with mask, base register, and hidden VL
+//===----------------------------------------------------------------------===//
+
+// Either of
+// (v256f64 (VBRDM (f64 sy), (vNi1 vy), (v256f64 base), (VLS vl)))
+// (v256f64 (VBRDM (i64 sy), (vNi1 vy), (v256f64 base), (VLS vl)))
 
 def VE1OpVSMV :
-    SDTypeProfile<1, 3, [SDTCisVec<0>,
+    SDTypeProfile<1, 4, [SDTCisVec<0>,
                          SDTCisVec<2>, SDTCVecEltisVT<2, i1>,
                          SDTCisSameAs<3, 0>]>;
-def VEvbrd : SDNode<"VEISD::INT_VBRD", VE1OpVSMV>;
-def VEvbrdu : SDNode<"VEISD::INT_VBRDU", VE1OpVSMV>;
-def VEvbrdl : SDNode<"VEISD::INT_VBRDL", VE1OpVSMV>;
-def VEpvbrd : SDNode<"VEISD::INT_PVBRD", VE1OpVSMV>;
+def INT_VBRD_M : SDNode<"VEISD::INT_VBRD_M", VE1OpVSMV>;
+def INT_VBRDU_M : SDNode<"VEISD::INT_VBRDU_M", VE1OpVSMV>;
+def INT_VBRDL_M : SDNode<"VEISD::INT_VBRDL_M", VE1OpVSMV>;
+def INT_PVBRD_M : SDNode<"VEISD::INT_PVBRD_M", VE1OpVSMV>;
 
 // (v256f64 (VCP (v256f64 sz), (vNi1 vy), (v256f64 base)))
 

@@ -210,14 +210,14 @@ def : Pat<(v256f64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy)>;
 def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
 
 // Broadcast
-def : Pat<(v256f64 (scalar_to_vector f64:$sy)), (VBRDf64r f64:$sy)>;
+def : Pat<(v256f64 (scalar_to_vector f64:$sy)), (VBRDf64r f64:$sy, 256)>;
 
-def : Pat<(v256i64 (vec_broadcast i64:$sy)), (VBRDr i64:$sy)>;
-def : Pat<(v256f64 (vec_broadcast f64:$sy)), (VBRDf64r f64:$sy)>;
-def : Pat<(v256i32 (vec_broadcast i32:$sy)), (VBRDi32r i32:$sy)>; 
-def : Pat<(v256f32 (vec_broadcast f32:$sy)), (VBRDf32r f32:$sy)>;
-// def : Pat<(v512f32 (vec_broadcast f32:$sy)), (VBRDpr f32:$sy)>; 
-def : Pat<(v512i32 (vec_broadcast i64:$sy)), (VBRDpr i64:$sy)>; 
+def : Pat<(v256i64 (vec_broadcast i64:$sy)), (VBRDr i64:$sy, 256)>;
+def : Pat<(v256f64 (vec_broadcast f64:$sy)), (VBRDf64r f64:$sy, 256)>;
+def : Pat<(v256i32 (vec_broadcast i32:$sy)), (VBRDi32r i32:$sy, 256)>; 
+def : Pat<(v256f32 (vec_broadcast f32:$sy)), (VBRDf32r f32:$sy, 256)>;
+// def : Pat<(v512f32 (vec_broadcast f32:$sy)), (VBRDpr f32:$sy, 256)>; 
+def : Pat<(v512i32 (vec_broadcast i64:$sy)), (VBRDpr i64:$sy, 256)>; 
 
 // Condition Code
 def : Pat<(setcc v256i64:$vx, v256i64:$vy, CCSIOp:$cond),

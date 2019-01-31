@@ -540,31 +540,37 @@ def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,
 def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
 
 multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass RCi, Operand immOp> {
-  def r : RV2<opc, (outs V64:$vx), (ins RCi:$sy), 
-    !strconcat(opcStr, " $vx,$sy"), []> {
-      let cy = 1;
-      let vy = 0;
-      let m = 0;
+  def r : RV2<opc, (outs V64:$vx), (ins RCi:$sy, VLS:$vl), 
+              !strconcat(opcStr, " $vx,$sy"), []> {
+    let cy = 1;
+    let vy = 0;
+    let m = 0;
+    let DisableEncoding = "$vl";
   }
-  def i : RV2<opc, (outs V64:$vx), (ins immOp:$sy), 
-    !strconcat(opcStr, " $vx,$sy"), []> {
-      let cy = 0;
-      let vy = 0;
-      let m = 0;
-  }
-
-  def rm : RV2<opc, (outs V64:$vx), (ins RCi:$sy, MaskRC:$vm, V64:$vd), 
-    !strconcat(opcStr, " $vx,$sy,$vm"), []> {
-      let cy = 1;
-      let vy = 0;
-      let Constraints = "$vx = $vd";
+  def i : RV2<opc, (outs V64:$vx), (ins immOp:$sy, VLS:$vl), 
+              !strconcat(opcStr, " $vx,$sy"), []> {
+    let cy = 0;
+    let vy = 0;
+    let m = 0;
+    let DisableEncoding = "$vl";
   }
 
-  def im : RV2<opc, (outs V64:$vx), (ins immOp:$sy, MaskRC:$vm, V64:$vd), 
-    !strconcat(opcStr, " $vx,$sy,$vm"), []> {
-      let cy = 0;
-      let vy = 0;
-      let Constraints = "$vx = $vd";
+  def rm : RV2<opc, (outs V64:$vx),
+               (ins RCi:$sy, MaskRC:$vm, V64:$vd, VLS:$vl), 
+               !strconcat(opcStr, " $vx,$sy,$vm"), []> {
+    let cy = 1;
+    let vy = 0;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
+
+  def im : RV2<opc, (outs V64:$vx),
+               (ins immOp:$sy, MaskRC:$vm, V64:$vd, VLS:$vl), 
+               !strconcat(opcStr, " $vx,$sy,$vm"), []> {
+    let cy = 0;
+    let vy = 0;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
   }
 }
 
