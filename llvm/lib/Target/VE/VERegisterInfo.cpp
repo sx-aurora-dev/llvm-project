@@ -211,14 +211,14 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   // vector load/store.
   if (MI.getOpcode() == VE::LDVRri || MI.getOpcode() == VE::STVRri) {
     // Original MI is:
-    //   STVRri frame-index, offset, reg (, memory operand)
+    //   STVRri frame-index, offset, reg, 256 (, memory operand)
     // or
-    //   LDVRri reg, frame-index, offset (, memory operand)
+    //   LDVRri reg, frame-index, offset, 256 (, memory operand)
     // Convert it to:
     //   LEA    tmp-reg, frame-reg, offset
-    //   VSTir  reg, 8, tmp-reg
+    //   VSTir  reg, 8, tmp-reg, 256 (ignored)
     // or
-    //   VLDir  reg, 8, tmp-reg
+    //   VLDir  reg, 8, tmp-reg, 256 (ignored)
     int opc = MI.getOpcode() == VE::LDVRri ? VE::VLDir : VE::VSTir;
     int regi = MI.getOpcode() == VE::LDVRri ? 0 : 2;
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
