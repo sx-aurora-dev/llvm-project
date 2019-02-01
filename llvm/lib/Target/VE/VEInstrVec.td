@@ -1322,13 +1322,14 @@ class VMR2<bits<8> op, string asm>
   let m = 0;
 }
 
-class VMR1<bits<8> op, string asm> 
-  : RV<op, (outs I64:$sx), (ins VM:$vmy), !strconcat(asm, " $sx,$vmy"),  []> {
-    let sy = 0;
-    let vx = 0;
-    let vz = 0;
-    let vw = 0;
-    let m = 0;
+class VMR1VL<bits<8> op, string asm> 
+  : RV<op, (outs I64:$sx), (ins VM:$vmy, VLS:$vl),
+       !strconcat(asm, " $sx,$vmy"),  []> {
+    bits<7> sx;
+    bits<4> vmy;
+    let Inst{15-9} = sx;
+    let Inst{47-44} = vmy;
+    let DisableEncoding = "$vl";
 }
 
 def ANDM : VMR3<0x84, "andm">;
@@ -1337,9 +1338,9 @@ def XORM : VMR3<0x86, "xorm">;
 def EQVM : VMR3<0x87, "eqvm">;
 def NNDM : VMR3<0x94, "nndm">;
 def NEGM : VMR2<0x95, "negm">;
-def PCVM : VMR1<0xA4, "pcvm">;
-def LZVM : VMR1<0xA5, "lzvm">;
-def TOVM : VMR1<0xA6, "tovm">;
+def PCVM : VMR1VL<0xA4, "pcvm">;
+def LZVM : VMR1VL<0xA5, "lzvm">;
+def TOVM : VMR1VL<0xA6, "tovm">;
 
 def ANDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def ORMp  : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;

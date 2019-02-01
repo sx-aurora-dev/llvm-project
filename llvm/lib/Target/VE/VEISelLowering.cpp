@@ -2315,18 +2315,6 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Bitcast);
       return DAG.getBitcast(Op.getValueType(), Res);
     }
-    case OP_XM: {
-      // 1-operand mask intrinsics
-      //   Input:
-      //     (i64 (int_ve_pcvm_mmm (v4i64 %vm)))
-      //   Output:
-      //     (i64 (PCVM (v256i1 (bitcast %vm1))))))
-      SDValue Mask = Op.getOperand(1);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast);
-    }
     case OP_MMM: {
       // 2-operand mask intrinsics
       //   Input:

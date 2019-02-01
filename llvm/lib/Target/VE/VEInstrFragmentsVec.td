@@ -220,19 +220,19 @@ def VEinsmu : SDNode<"VEISD::INT_INSMU", VE2OpMMM2>;
 def VEinsml : SDNode<"VEISD::INT_INSML", VE2OpMMM2>;
 
 //===----------------------------------------------------------------------===//
-// 1-op instructions
+// 1-op instructions with hidden VL
 //===----------------------------------------------------------------------===//
 
-// (i64 (PCVM (vNi1 vy)))
+// (i64 (PCVM (vNi1 vy), (VLS vl)))
 
-def VE1OpSM :
-    SDTypeProfile<1, 1, [SDTCisInt<0>, SDTCisVec<1>, SDTCVecEltisVT<1, i1>]>;
-def VEpcvm : SDNode<"VEISD::INT_PCVM", VE1OpSM>;
-def VElzvm : SDNode<"VEISD::INT_LZVM", VE1OpSM>;
-def VEtovm : SDNode<"VEISD::INT_TOVM", VE1OpSM>;
+def VE1OpSMVL :
+    SDTypeProfile<1, 2, [SDTCisInt<0>, SDTCisVec<1>, SDTCVecEltisVT<1, i1>]>;
+def INT_PCVM : SDNode<"VEISD::INT_PCVM", VE1OpSMVL>;
+def INT_LZVM : SDNode<"VEISD::INT_LZVM", VE1OpSMVL>;
+def INT_TOVM : SDNode<"VEISD::INT_TOVM", VE1OpSMVL>;
 
 //===----------------------------------------------------------------------===//
-// 1-op instructios with hidden VL instructions
+// 1-op instructios with hidden VL
 //===----------------------------------------------------------------------===//
 
 // Either of

@@ -630,9 +630,9 @@ def : Pat<(VEnndm v256i1:$vmy, v256i1:$vmz), (NNDM v256i1:$vmy, v256i1:$vmz)>;
 def : Pat<(VEnndm v512i1:$vmy, v512i1:$vmz), (NNDMp v512i1:$vmy, v512i1:$vmz)>;
 def : Pat<(VEnegm v256i1:$vmy), (NEGM v256i1:$vmy)>;
 def : Pat<(VEnegm v512i1:$vmy), (NEGMp v512i1:$vmy)>;
-def : Pat<(VEpcvm v256i1:$vmy), (PCVM v256i1:$vmy)>;
-def : Pat<(VElzvm v256i1:$vmy), (LZVM v256i1:$vmy)>;
-def : Pat<(VEtovm v256i1:$vmy), (TOVM v256i1:$vmy)>;
+def : Pat<(INT_PCVM v256i1:$vmy, VLS:$vl), (PCVM v256i1:$vmy, $vl)>;
+def : Pat<(INT_LZVM v256i1:$vmy, VLS:$vl), (LZVM v256i1:$vmy, $vl)>;
+def : Pat<(INT_TOVM v256i1:$vmy, VLS:$vl), (TOVM v256i1:$vmy, $vl)>;
 
 // Pattern Matchings for Vector Intrinsics
 
