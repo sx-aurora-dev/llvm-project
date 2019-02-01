@@ -634,19 +634,6 @@ def : Pat<(VEpcvm v256i1:$vmy), (PCVM v256i1:$vmy)>;
 def : Pat<(VElzvm v256i1:$vmy), (LZVM v256i1:$vmy)>;
 def : Pat<(VEtovm v256i1:$vmy), (TOVM v256i1:$vmy)>;
 
-def : Pat<(int_ve_vcvtwdsx_vv v256f64:$vy),   (VFIXdsxv v256f64:$vy, 0)>;
-def : Pat<(int_ve_vcvtwdsxrz_vv v256f64:$vy), (VFIXdsxrzv v256f64:$vy, 8)>;
-def : Pat<(int_ve_vcvtwdzx_vv v256f64:$vy),   (VFIXdzxv v256f64:$vy, 0)>;
-def : Pat<(int_ve_vcvtwdzxrz_vv v256f64:$vy), (VFIXdzxrzv v256f64:$vy, 8)>;
-def : Pat<(int_ve_vcvtwssx_vv v256f64:$vy),   (VFIXszxv v256f64:$vy, 0)>;
-def : Pat<(int_ve_vcvtwssxrz_vv v256f64:$vy), (VFIXszxrzv v256f64:$vy, 8)>;
-def : Pat<(int_ve_vcvtwszx_vv v256f64:$vy),   (VFIXszxv v256f64:$vy, 0)>;
-def : Pat<(int_ve_vcvtwszxrz_vv v256f64:$vy), (VFIXszxrzv v256f64:$vy, 8)>;
-def : Pat<(int_ve_pvcvtws_vv v256f64:$vy),    (VFIXpv v256f64:$vy, 0)>;
-def : Pat<(int_ve_pvcvtwsrz_vv v256f64:$vy),  (VFIXprzv v256f64:$vy, 8)>;
-def : Pat<(int_ve_vcvtld_vv v256f64:$vy),     (VFIXXv v256f64:$vy, 0)>;
-def : Pat<(int_ve_vcvtldrz_vv v256f64:$vy),   (VFIXXrzv v256f64:$vy, 8)>;
-
 // Pattern Matchings for Vector Intrinsics
 
 def : Pat<(int_ve_lvl i32:$sy), (LVL i32:$sy)>;

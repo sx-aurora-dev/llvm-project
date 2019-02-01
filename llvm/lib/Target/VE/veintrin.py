@@ -864,6 +864,7 @@ class InstTable:
                "sm"   : "", # PCMV, etc
                "sM"   : "", # PCMV, etc
                "vvmv" : "vm", # VCP, VEX
+               "vvMv" : "vm", # VFIXp
                "vvm"  : "vm", # VGT, VSC
 
                "vvvvMv" : "vm", # VFMAD, etc
@@ -899,8 +900,9 @@ class InstTable:
             IL.add(i)
         return IL
 
-    def InstXM(self, opc, baseInstName, asm, OL, expr = None, pseudo = None):
-        OL = self.addMask(OL)
+    def InstXM(self, opc, baseInstName, asm, OL, expr = None, pseudo = False):
+        vm = VM512 if asm[0] == 'p' else VM
+        OL = self.addMask(OL, vm)
         return self.InstX(opc, baseInstName, asm, OL, expr, pseudo)
 
 
@@ -1062,9 +1064,9 @@ class InstTable:
 
     def VFIX(self, opc, inst, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
-        T.InstX(opc, inst, asm, OL, expr).noPat()
+        T.InstXM(opc, inst, asm, OL, expr).customLowering()
         expr = "{0} = (" + ty + ")({1})"
-        T.InstX(opc, inst, asm+".rz", OL, expr).noPat()
+        T.InstXM(opc, inst + "rz", asm+".rz", OL, expr).customLowering()
 
 def cmpwrite(filename, data):
     need_write = True
@@ -1248,9 +1250,9 @@ T.Inst2f(0xF1, "vrsqrt", "VRSQRT", "{0} = 1.0f / std::sqrt({1})", True)
 T.NoImpl("VRSQRTnex")
 T.VFIX(0xE8, "VFIXdsx", "vcvt.w.d.sx", [[VX(T_i32), VY(T_f64)]], "int")
 T.VFIX(0xE8, "VFIXdzx", "vcvt.w.d.zx", [[VX(T_i32), VY(T_f64)]], "unsigned int")
-T.VFIX(0xE8, "VFIXdzx", "vcvt.w.s.sx", [[VX(T_i32), VY(T_f32)]], "int")
-T.VFIX(0xE8, "VFIXdzx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "unsigned int")
-T.VFIX(0xE8, "pVFIX", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "int")
+T.VFIX(0xE8, "VFIXssx", "vcvt.w.s.sx", [[VX(T_i32), VY(T_f32)]], "int")
+T.VFIX(0xE8, "VFIXszx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "unsigned int")
+T.VFIX(0xE8, "VFIXp", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "int")
 T.VFIX(0xA8, "VFIXX", "vcvt.l.d", [[VX(T_i64), VY(T_f64)]], "long long")
 T.InstX(0xF8, "VFLTd", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
 T.InstX(0xF8, "VFLTs", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
