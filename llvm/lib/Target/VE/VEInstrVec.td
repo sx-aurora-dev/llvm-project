@@ -483,20 +483,22 @@ multiclass RVLOGm<string opcStr, bits<8> opc> {
 class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
         InstrItinClass itin = NoItinerary> 
     : InstVE<outs, ins, asmstr, pattern, itin> {
-    bits<1> vo = 0; // overtake(?)
-    bits<1> vc = 0; // cached(?) or uncached(?)
+    bits<1> cx = 0;
+    bits<1> vc = 1; // 1: leave vector data in LLC, 0: released from LLC
     bits<1> cs = 0; // use sw operand(1) or not(0)
     bits<1> cy = 0; // y operand is immediate(0) or register(1)
-    bits<1> cz = 1; // z operand is zero(0) or register(1)
-    bits<8> vx;
-    bits<8> vy;
-    bits<7> sy;
-    bits<7> sz;
-    bits<7> sw;
-    bits<4> m;
+    bits<1> cz = 0; // z operand is zero(0) or register(1)
+    bits<8> vx = 0;
+    bits<8> vy = 0;
+    bits<7> sy = 0;
+    bits<7> sz = 0;
+    bits<7> sw = 0;
+    bits<4> m = 0;
     let op = opVal;
-    let Inst{8} = vo;
+    let Inst{8} = cx;
     let Inst{9} = vc;
+    let Inst{10} = cs;
+    let Inst{11} = 0;
     let Inst{15-12} = m;
     let Inst{16} = cy;
     let Inst{23-17} = sy;
@@ -504,88 +506,121 @@ class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
     let Inst{31-25} = sz;
     let Inst{39-32} = vx;
     let Inst{47-40} = vy;
+    let Inst{55-48} = 0;
+    let Inst{56} = 0;
     let Inst{63-57} = sw;
-    // Not using implicit Uses
-    // let Uses = [VL]; // vector length register
-}
-
-// VLD, VST
-class RVM0<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
-        InstrItinClass itin = NoItinerary> 
-    : RVM<opVal, outs, ins, asmstr, pattern, itin> {
-      let vy = 0;
-      let sw = 0;
 }
 
 // 5.3.2.7. Vector Transfer Instructions
 
+multiclass VLDCm<string opcStr, bits<8> opc> {
+  def rr : RVM<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+    let cy = 1;
+    let cz = 1;
+    let DisableEncoding = "$vl";
+  }
+  def ir : RVM<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,$sz"), []> {
+    let cy = 0;
+    let cz = 1;
+    let DisableEncoding = "$vl";
+  }
+  def rz : RVM<opc, (outs V64:$vx), (ins simm7Op64:$sy, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,0"), []> {
+    let cy = 1;
+    let cz = 0;
+    let DisableEncoding = "$vl";
+  }
+  def iz : RVM<opc, (outs V64:$vx), (ins I64:$sy, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,0"), []> {
+    let cy = 0;
+    let cz = 0;
+    let DisableEncoding = "$vl";
+  }
+}
+
 multiclass VLDm<string opcStr, bits<8> opc> {
-  def rr : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-    let vc = 0;
+  let vc = 1 in defm "" : VLDCm<opcStr, opc>;
+  let vc = 0 in defm nc : VLDCm<!strconcat(opcStr, ".nc"), opc>;
+}
+
+multiclass VSTCm<string opcStr, bits<8> opc> {
+  def rr : RVM<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,$sz"), []> {
     let cy = 1;
+    let cz = 1;
     let DisableEncoding = "$vl";
   }
-  def ir : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-    let vc = 0;
+  def ir : RVM<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,$sz"), []> {
     let cy = 0;
+    let cz = 1;
     let DisableEncoding = "$vl";
   }
-  def rz : RVM0<opc, (outs V64:$vx), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,0"), []> {
-    let vc = 0;
+  def rz : RVM<opc, (outs), (ins V64:$vx, simm7Op64:$sy, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,0"), []> {
     let cy = 1;
     let cz = 0;
     let DisableEncoding = "$vl";
   }
-  def iz : RVM0<opc, (outs V64:$vx), (ins I64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,0"), []> {
-    let vc = 0;
+  def iz : RVM<opc, (outs), (ins V64:$vx, I64:$sy, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,0"), []> {
     let cy = 0;
     let cz = 0;
+    let DisableEncoding = "$vl";
+  }
+  def rrm : RVM<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, VLS:$vl),
+                !strconcat(opcStr, " $vx,$sy,$sz,$vm"), []> {
+    bits<4> vm;
+    let cy = 1;
+    let cz = 1;
+    let m = vm;
+    let DisableEncoding = "$vl";
+  }
+  def irm : RVM<opc, (outs),
+                (ins V64:$vx, simm7Op64:$sy, I64:$sz, VM:$vm, VLS:$vl),
+                !strconcat(opcStr, " $vx,$sy,$sz,$vm"), []> {
+    bits<4> vm;
+    let cy = 0;
+    let cz = 1;
+    let m = vm;
+    let DisableEncoding = "$vl";
+  }
+  def rzm : RVM<opc, (outs), (ins V64:$vx, simm7Op64:$sy, VM:$vm, VLS:$vl),
+                !strconcat(opcStr, " $vx,$sy,0,$vm"), []> {
+    bits<4> vm;
+    let cy = 1;
+    let cz = 0;
+    let m = vm;
+    let DisableEncoding = "$vl";
+  }
+  def izm : RVM<opc, (outs), (ins V64:$vx, I64:$sy, VM:$vm, VLS:$vl),
+                !strconcat(opcStr, " $vx,$sy,0,$vm"), []> {
+    bits<4> vm;
+    let cy = 0;
+    let cz = 0;
+    let m = vm;
     let DisableEncoding = "$vl";
   }
 }
 
 multiclass VSTm<string opcStr, bits<8> opc> {
-  def rr : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-    let vc = 0;
-    let cy = 1;
-    let DisableEncoding = "$vl";
-  }
-  def ir : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,$sz"), []> {
-    let vc = 0;
-    let cy = 0;
-    let DisableEncoding = "$vl";
-  }
-  def rz : RVM0<opc, (outs), (ins V64:$vx, simm7Op64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,0"), []> {
-    let vc = 0;
-    let cy = 1;
-    let cz = 0;
-    let DisableEncoding = "$vl";
-  }
-  def iz : RVM0<opc, (outs), (ins V64:$vx, I64:$sy, I64:$sz, VLS:$vl),
-                !strconcat(opcStr, " $vx,$sy,0"), []> {
-    let vc = 0;
-    let cy = 0;
-    let cz = 0;
-    let DisableEncoding = "$vl";
-  }
+  let vc = 1, cx = 0 in defm "" : VSTCm<opcStr, opc>;
+  let vc = 0, cx = 0 in defm nc : VSTCm<!strconcat(opcStr, ".nc"), opc>;
+  let vc = 1, cx = 1 in defm ot : VSTCm<!strconcat(opcStr, ".ot"), opc>;
+  let vc = 0, cx = 1 in defm ncot : VSTCm<!strconcat(opcStr, ".nc.ot"), opc>;
 }
 
 defm VLD : VLDm<"vld", 0x81>;
 defm VLDU : VLDm<"vldu", 0x82>;
-let vo = 0 in defm VLDLsx : VLDm<"vldl.sx", 0x83>;
-let vo = 1 in defm VLDLzx : VLDm<"vldl.zx", 0x83>;
+let cx = 0 in defm VLDLsx : VLDm<"vldl.sx", 0x83>;
+let cx = 1 in defm VLDLzx : VLDm<"vldl.zx", 0x83>;
 
 defm VLD2D  : VLDm<"vld2d", 0xC1>;
 defm VLDU2D : VLDm<"vldu2d", 0xC2>;
-let vo = 0 in defm VLDL2Dsx : VLDm<"vldl2d.sx", 0xC3>;
-let vo = 1 in defm VLDL2Dzx : VLDm<"vldl2d.zx", 0xC3>;
+let cx = 0 in defm VLDL2Dsx : VLDm<"vldl2d.sx", 0xC3>;
+let cx = 1 in defm VLDL2Dzx : VLDm<"vldl2d.zx", 0xC3>;
 
 defm VST : VSTm<"vst", 0x91>;
 defm VSTU : VSTm<"vstu", 0x92>;
@@ -712,19 +747,17 @@ def VMVi : RV<0x9C, (outs V64:$vx), (ins uimm7Op32:$sy, V64:$vz),
     let vy = 0;
   }
 
-def PFCHVr : RVM0<0x80, (outs), (ins I64:$sy, I64:$sz),
-  "pfchv $sy,$sz", []> {
-    let vc = 0;
+def PFCHVr : RVM<0x80, (outs), (ins I64:$sy, I64:$sz),
+                 "pfchv $sy,$sz", []> {
     let cy = 1;
-    let vx = 0;
+    let cz = 1;
     let hasSideEffects = 1;
   }
 
-def PFCHVi : RVM0<0x80, (outs), (ins simm7Op64:$sy, I64:$sz),
-  "pfchv $sy,$sz", []> {
-    let vc = 0;
+def PFCHVi : RVM<0x80, (outs), (ins simm7Op64:$sy, I64:$sz),
+                 "pfchv $sy,$sz", []> {
     let cy = 0;
-    let vx = 0;
+    let cz = 1;
     let hasSideEffects = 1;
   }
 
@@ -1196,74 +1229,68 @@ let cx = 1, cs = 1 in defm VFMAXis : FLm<0xAD, "vfrmin.s">;
 
 // 5.3.2.14. Vector Gatering/Scattering Instructions
 
-multiclass VGTm<string opcStr, bits<8> opc> {
+multiclass VGTCm<string opcStr, bits<8> opc> {
   def v : RVM<opc, (outs V64:$vx), (ins V64:$vy),
-    !strconcat(opcStr, " $vx,$vy,0,0"), []> {
-      let sy = 0;
-      let sz = 0;
-      let sw = 0;
-      let m = 0;
+              !strconcat(opcStr, " $vx,$vy,0,0"), []> {
+    let cs = 0;
   }
-
   def r : RVM<opc, (outs V64:$vx), (ins I64:$sw),
-    !strconcat(opcStr, " $vx,$sw,0,0"), []> {
-      let sy = 0;
-      let sz = 0;
-      let vy = 0;
-      let m = 0;
+              !strconcat(opcStr, " $vx,$sw,0,0"), []> {
+    let cs = 1;
   }
-
   def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
-    !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
-      let sy = 0;
-      let sz = 0;
-      let sw = 0;
+               !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
+    bits<4> vm;
+    let cs = 0;
+    let m = vm;
   }
-
   def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm),
-    !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
-      let sy = 0;
-      let sz = 0;
-      let vy = 0;
+               !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
+    bits<4> vm;
+    let cs = 1;
+    let m = vm;
+  }
+}
+
+multiclass VGTm<string opcStr, bits<8> opc> {
+  let vc = 1 in defm "" : VGTCm<opcStr, opc>;
+  let vc = 0 in defm nc : VGTCm<!strconcat(opcStr, ".nc"), opc>;
+}
+
+multiclass VSCCm<string opcStr, bits<8> opc> {
+  def v : RVM<opc, (outs), (ins V64:$vx, V64:$vy),
+              !strconcat(opcStr, " $vx,$vy,0,0"), []> {
+    let cs = 0;
+  }
+  def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw),
+              !strconcat(opcStr, " $vx,$sw,0,0"), []> {
+    let cs = 1;
+  }
+  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm),
+               !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
+    bits<4> vm;
+    let cs = 0;
+    let m = vm;
+  }
+  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm),
+               !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
+    bits<4> vm;
+    let cs = 1;
+    let m = vm;
   }
 }
 
 multiclass VSCm<string opcStr, bits<8> opc> {
-  def v : RVM<opc, (outs), (ins V64:$vx, V64:$vy),
-    !strconcat(opcStr, " $vx,$vy,0,0"), []> {
-      let sy = 0;
-      let sz = 0;
-      let sw = 0;
-      let m = 0;
-  }
-
-  def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw),
-    !strconcat(opcStr, " $vx,$sw,0,0"), []> {
-      let sy = 0;
-      let sz = 0;
-      let vy = 0;
-      let m = 0;
-  }
-
-  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm),
-    !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
-      let sy = 0;
-      let sz = 0;
-      let sw = 0;
-  }
-
-  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm),
-    !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
-      let sy = 0;
-      let sz = 0;
-      let vy = 0;
-  }
+  let vc = 1, cx = 0 in defm "" : VSCCm<opcStr, opc>;
+  let vc = 0, cx = 0 in defm nc : VSCCm<!strconcat(opcStr, ".nc"), opc>;
+  let vc = 1, cx = 1 in defm ot : VSCCm<!strconcat(opcStr, ".ot"), opc>;
+  let vc = 0, cx = 1 in defm ncot : VSCCm<!strconcat(opcStr, ".nc.ot"), opc>;
 }
 
 defm VGT : VGTm<"vgt", 0xA1>;
 defm VGTU : VGTm<"vgtu", 0xA2>;
-let vo = 0 in defm VGTLsx : VGTm<"vgtl.sx", 0xA3>;
-let vo = 1 in defm VGTLzx : VGTm<"vgtl.zx", 0xA3>;
+let cx = 0 in defm VGTLsx : VGTm<"vgtl.sx", 0xA3>;
+let cx = 1 in defm VGTLzx : VGTm<"vgtl.zx", 0xA3>;
 defm VSC : VSCm<"vsc", 0xB1>;
 defm VSCU : VSCm<"vscu", 0xB2>;
 defm VSCL : VSCm<"vscl", 0xB3>;
