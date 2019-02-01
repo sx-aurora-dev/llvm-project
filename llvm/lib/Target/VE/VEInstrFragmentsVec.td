@@ -288,6 +288,13 @@ def INT_VADDSWZX : SDNode<"VEISD::INT_VADDSWZX", VE2OpVXVVL>;
 def INT_VADDSL : SDNode<"VEISD::INT_VADDSL", VE2OpVXVVL>;
 def INT_PVADDU : SDNode<"VEISD::INT_PVADDU", VE2OpVXVVL>;
 def INT_PVADDS : SDNode<"VEISD::INT_PVADDS", VE2OpVXVVL>;
+def INT_VSUBUL : SDNode<"VEISD::INT_VSUBUL", VE2OpVXVVL>;
+def INT_VSUBUW : SDNode<"VEISD::INT_VSUBUW", VE2OpVXVVL>;
+def INT_VSUBSWSX : SDNode<"VEISD::INT_VSUBSWSX", VE2OpVXVVL>;
+def INT_VSUBSWZX : SDNode<"VEISD::INT_VSUBSWZX", VE2OpVXVVL>;
+def INT_VSUBSL : SDNode<"VEISD::INT_VSUBSL", VE2OpVXVVL>;
+def INT_PVSUBU : SDNode<"VEISD::INT_PVSUBU", VE2OpVXVVL>;
+def INT_PVSUBS : SDNode<"VEISD::INT_PVSUBS", VE2OpVXVVL>;
 
 //===----------------------------------------------------------------------===//
 // 2-op instructions with mask, base register, and hidden VL
@@ -311,6 +318,13 @@ def INT_VADDSWZX_M : SDNode<"VEISD::INT_VADDSWZX_M", VE2OpVXVMVVL>;
 def INT_VADDSL_M : SDNode<"VEISD::INT_VADDSL_M", VE2OpVXVMVVL>;
 def INT_PVADDU_M : SDNode<"VEISD::INT_PVADDU_M", VE2OpVXVMVVL>;
 def INT_PVADDS_M : SDNode<"VEISD::INT_PVADDS_M", VE2OpVXVMVVL>;
+def INT_VSUBUL_M : SDNode<"VEISD::INT_VSUBUL_M", VE2OpVXVMVVL>;
+def INT_VSUBUW_M : SDNode<"VEISD::INT_VSUBUW_M", VE2OpVXVMVVL>;
+def INT_VSUBSWSX_M : SDNode<"VEISD::INT_VSUBSWSX_M", VE2OpVXVMVVL>;
+def INT_VSUBSWZX_M : SDNode<"VEISD::INT_VSUBSWZX_M", VE2OpVXVMVVL>;
+def INT_VSUBSL_M : SDNode<"VEISD::INT_VSUBSL_M", VE2OpVXVMVVL>;
+def INT_PVSUBU_M : SDNode<"VEISD::INT_PVSUBU_M", VE2OpVXVMVVL>;
+def INT_PVSUBS_M : SDNode<"VEISD::INT_PVSUBS_M", VE2OpVXVMVVL>;
 
 //===----------------------------------------------------------------------===//
 // 2-op vector with mask and base register instructions
@@ -328,19 +342,12 @@ def VE2OpVXVMV :
 def VEvfaddd : SDNode<"VEISD::INT_VFADDD", VE2OpVXVMV>;
 def VEvfadds : SDNode<"VEISD::INT_VFADDS", VE2OpVXVMV>;
 def VEpvfadd : SDNode<"VEISD::INT_PVFADD", VE2OpVXVMV>;
-def VEvsubul : SDNode<"VEISD::INT_VSUBUL", VE2OpVXVMV>;
 def VEvcmpul : SDNode<"VEISD::INT_VCMPUL", VE2OpVXVMV>;
-def VEvsubuw : SDNode<"VEISD::INT_VSUBUW", VE2OpVXVMV>;
 def VEvcmpuw : SDNode<"VEISD::INT_VCMPUW", VE2OpVXVMV>;
-def VEvsubswsx : SDNode<"VEISD::INT_VSUBSWSX", VE2OpVXVMV>;
 def VEvcmpswsx : SDNode<"VEISD::INT_VCMPSWSX", VE2OpVXVMV>;
-def VEvsubswzx : SDNode<"VEISD::INT_VSUBSWZX", VE2OpVXVMV>;
 def VEvcmpswzx : SDNode<"VEISD::INT_VCMPSWZX", VE2OpVXVMV>;
-def VEvsubsl : SDNode<"VEISD::INT_VSUBSL", VE2OpVXVMV>;
 def VEvcmpsl : SDNode<"VEISD::INT_VCMPSL", VE2OpVXVMV>;
-def VEpvsubu : SDNode<"VEISD::INT_PVSUBU", VE2OpVXVMV>;
 def VEpvcmpu : SDNode<"VEISD::INT_PVCMPU", VE2OpVXVMV>;
-def VEpvsubs : SDNode<"VEISD::INT_PVSUBS", VE2OpVXVMV>;
 def VEpvcmps : SDNode<"VEISD::INT_PVCMPS", VE2OpVXVMV>;
 def VEvmaxswsx : SDNode<"VEISD::INT_VMAXSWSX", VE2OpVXVMV>;
 def VEvminswsx : SDNode<"VEISD::INT_VMINSWSX", VE2OpVXVMV>;

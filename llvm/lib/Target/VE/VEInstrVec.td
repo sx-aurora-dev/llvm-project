@@ -770,9 +770,9 @@ def STVLri : Pseudo<
 defm VADD : RVUVLm<"vaddu", 0xC8>;
 defm VADS : RVWVLm<"vadds", 0xCA>;
 defm VADX : RVLVLm<"vadds", 0x8B>;
-defm VSUB : RVUm<"vsubu", 0xD8>;
-defm VSBS : RVWm<"vsubs", 0xDA>;
-defm VSBX : RVLm<"vsubs", 0x9B>;
+defm VSUB : RVUVLm<"vsubu", 0xD8>;
+defm VSBS : RVWVLm<"vsubs", 0xDA>;
+defm VSBX : RVLVLm<"vsubs", 0x9B>;
 defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
 defm VMPS : RVEXm<"vmuls", 0xCB>; // mul signed 32b sx/zx
 defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
