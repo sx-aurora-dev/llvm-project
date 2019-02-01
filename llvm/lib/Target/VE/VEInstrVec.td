@@ -875,18 +875,46 @@ multiclass VCVT<bits<8>opc, string opcStr> {
     !strconcat(opcStr, " $vx,$vy"), []>;
 }
 
-let cx = 0, cx2 = 0, cs2 = 0 in defm VFIXdsx : VCVT<0xE8, "vcvt.w.d.sx">;
-let cx = 0, cx2 = 1, cs2 = 0 in defm VFIXdzx : VCVT<0xE8, "vcvt.w.d.zx">;
-let cx = 1, cx2 = 0, cs2 = 0 in defm VFIXssx : VCVT<0xE8, "vcvt.w.s.sx">;
-let cx = 1, cx2 = 1, cs2 = 0 in defm VFIXszx : VCVT<0xE8, "vcvt.w.s.zx">;
-let cx = 1, cx2 = 1, cs2 = 1 in defm VFIXp : VCVT<0xE8, "pvcvt.w.s">;
-defm VFIXX : VCVT<0xA8, "vcvt.l.d">;
+multiclass VFIX<bits<8>opc, string opcStr, RegisterClass MaskRC> {
+  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy),
+    !strconcat(opcStr, " $vx,$vy"), []> {
+      let vz = 0;
+      let m = 0;
+    }
+
+  def rzv : RV3<opc, (outs V64:$vx), (ins V64:$vy),
+    !strconcat(opcStr, ".rz $vx,$vy"), []> {
+      let vz = 8;
+      let m = 0;
+    }
+
+  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd),
+    !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+      let vz = 0;
+      let Constraints = "$vx = $vd";
+    }
+
+  def rzvm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd),
+    !strconcat(opcStr, ".rz $vx,$vy,$vm"), []> {
+      let vz = 8;
+      let Constraints = "$vx = $vd";
+    }
+}
+
+let cx = 0, cx2 = 0, cs2 = 0 in defm VFIXdsx : VFIX<0xE8, "vcvt.w.d.sx", VM>;
+let cx = 0, cx2 = 1, cs2 = 0 in defm VFIXdzx : VFIX<0xE8, "vcvt.w.d.zx", VM>;
+let cx = 1, cx2 = 0, cs2 = 0 in defm VFIXssx : VFIX<0xE8, "vcvt.w.s.sx", VM>;
+let cx = 1, cx2 = 1, cs2 = 0 in defm VFIXszx : VFIX<0xE8, "vcvt.w.s.zx", VM>;
+let cx = 1, cx2 = 1, cs2 = 1 in defm VFIXp : VFIX<0xE8, "pvcvt.w.s", VM512>;
+defm VFIXX : VFIX<0xA8, "vcvt.l.d", VM>;
+
 let cx = 0, cx2 = 0, cs2 = 0 in defm VFLTd : VCVT<0xF8, "vcvt.d.w">;
 let cx = 1, cx2 = 0, cs2 = 1 in defm VFLTs : VCVT<0xF8, "vcvt.s.w">;
 let cx = 1, cx2 = 1, cs2 = 1 in defm VFLTp : VCVT<0xF8, "pvcvt.s.w">;
 defm VFLTX : VCVT<0xB8, "vcvt.d.l">;
 defm VCVD : VCVT<0x8F, "vcvt.d.s">;
 defm VCVS : VCVT<0x9F, "vcvt.s.d">;
+
 
 // 5.3.2.12. Vector Mask Arithmetic Instructions
 

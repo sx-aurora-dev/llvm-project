@@ -200,6 +200,7 @@ class Inst:
         self.hasBuiltin_ = True
         self.customLowering_ = False
         self.hasMaskBaseReg_ = True
+        self.hasPat_ = True
 
     def hasImmOp(self):
         for op in self.ins:
@@ -292,19 +293,15 @@ class Inst:
         return self.expr != None
 
     # TODO: this will be removed if all masked instructions use customLowering
-    def customLowering(self):
-        self.customLowering_ = True
-        return self
+    def customLowering(self): self.customLowering_ = True; return self
+    def isCustomLowering(self): return self.customLowering_
 
-    def isCustomLowering(self):
-        return self.customLowering_
+    def noMaskBaseReg(self): self.hasMaskBaseReg_ = False; return self
+    def hasMaskBaseReg(self): return self.hasMask() and self.hasMaskBaseReg_
 
-    def noMaskBaseReg(self):
-        self.hasMaskBaseReg_ = False
-        return self
+    def noPat(self): self.hasPat_ = False
+    def hasPat(self): return self.hasPat_
 
-    def hasMaskBaseReg(self):
-        return self.hasMask() and self.hasMaskBaseReg_
 
 class TestFunc:
     def __init__(self, header, definition, ref):
@@ -867,6 +864,7 @@ class InstTable:
                "sm"   : "", # PCMV, etc
                "sM"   : "", # PCMV, etc
                "vvmv" : "vm", # VCP, VEX
+               "vvMv" : "vm", # VFIXp
                "vvm"  : "vm", # VGT, VSC
 
                "vvvvMv" : "vm", # VFMAD, etc
@@ -901,6 +899,12 @@ class InstTable:
             self.add(i)
             IL.add(i)
         return IL
+
+    def InstXM(self, opc, baseInstName, asm, OL, expr = None, pseudo = False):
+        vm = VM512 if asm[0] == 'p' else VM
+        OL = self.addMask(OL, vm)
+        return self.InstX(opc, baseInstName, asm, OL, expr, pseudo)
+
 
     def addMask(self, ary, MaskOp = VM):
         tmp = []
@@ -1058,6 +1062,12 @@ class InstTable:
             OL.append(op + [VM])
         self.InstX(opc, inst, asm, OL).customLowering().noMaskBaseReg()
 
+    def VFIX(self, opc, inst, asm, OL, ty):
+        expr = "{0} = (" + ty + ")({1}+0.5)"
+        T.InstXM(opc, inst, asm, OL, expr).customLowering()
+        expr = "{0} = (" + ty + ")({1})"
+        T.InstXM(opc, inst + "rz", asm+".rz", OL, expr).customLowering()
+
 def cmpwrite(filename, data):
     need_write = True
     try:
@@ -1088,7 +1098,7 @@ def gen_intrinsic_def(insts):
 
 def gen_pattern(insts):
     for I in insts:
-        if I.hasInst():
+        if I.hasInst()and I.hasPat():
             argsL = ", ".join([op.dagOp() for op in I.ins])
             argsR = ", ".join([op.dagOp() for op in I.ins])
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
@@ -1238,12 +1248,12 @@ T.Inst4f(0xF3, "vfnmsb", "VFNMSB", "{0} =  - ({2} * {3} - {1})")
 T.Inst2f(0xE1, "vrcp", "VRCP", "{0} = 1.0f / {1}")
 T.Inst2f(0xF1, "vrsqrt", "VRSQRT", "{0} = 1.0f / std::sqrt({1})", True)
 T.NoImpl("VRSQRTnex")
-T.InstX(0xE8, "VFIXdsx", "vcvt.w.d.sx", [[VX(T_i32), VY(T_f64)]], "{0} = (int)({1}+0.5)")
-T.InstX(0xE8, "VFIXdzx", "vcvt.w.d.zx", [[VX(T_i32), VY(T_f64)]], "{0} = (unsigned int)({1}+0.5)")
-T.InstX(0xE8, "VFIXssx", "vcvt.w.s.sx", [[VX(T_i32), VY(T_f32)]], "{0} = (int)({1}+0.5)")
-T.InstX(0xE8, "VFIXszx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "{0} = (unsigned int)({1}+0.5)")
-T.InstX(0xE8, "VFIXp", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "{0} = (int)({1}+0.5)")
-T.InstX(0xA8, "VFIXX", "vcvt.l.d", [[VX(T_i64), VY(T_f64)]], "{0} = (long long)({1}+0.5)")
+T.VFIX(0xE8, "VFIXdsx", "vcvt.w.d.sx", [[VX(T_i32), VY(T_f64)]], "int")
+T.VFIX(0xE8, "VFIXdzx", "vcvt.w.d.zx", [[VX(T_i32), VY(T_f64)]], "unsigned int")
+T.VFIX(0xE8, "VFIXssx", "vcvt.w.s.sx", [[VX(T_i32), VY(T_f32)]], "int")
+T.VFIX(0xE8, "VFIXszx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "unsigned int")
+T.VFIX(0xE8, "VFIXp", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "int")
+T.VFIX(0xA8, "VFIXX", "vcvt.l.d", [[VX(T_i64), VY(T_f64)]], "long long")
 T.InstX(0xF8, "VFLTd", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
 T.InstX(0xF8, "VFLTs", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
 T.InstX(0xF8, "VFLTp", "pvcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")

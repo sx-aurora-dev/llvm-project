@@ -2179,8 +2179,7 @@ static SDValue LowerIntrinsicWithMask(SDValue Intrin, SelectionDAG& DAG, uint64_
     // Op0 is intrinsic number and ignored
     for (unsigned i = 1; i < Intrin.getNumOperands(); ++i) {
         SDValue Op = Intrin.getOperand(i);
-        if (Op.getValueType() == MVT::v4i64) {
-            //SDValue Mask = Op.getOperand(i);
+        if (Op.getValueType() == MVT::v4i64 || Op.getValueType() == MVT::v8i64) {
             MVT BitcastVT 
                 = MVT::getVectorVT(MVT::i1, Op.getValueType().getSizeInBits());
             SDValue Bitcast = DAG.getBitcast(BitcastVT, Op);
