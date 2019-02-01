@@ -79,8 +79,10 @@ def : Pat<(sub v256i64:$vy, v256i64:$vz),
 def : Pat<(sub v512i32:$vy, v512i32:$vz),
           (VSBSpv v512i32:$vy, v512i32:$vz, 256)>;
 
-def : Pat<(mul v256i32:$vy, v256i32:$vz), (VMPSwsxv v256i32:$vy, v256i32:$vz)>;
-def : Pat<(mul v256i64:$vy, v256i64:$vz), (VMPYlv v256i64:$vy, v256i64:$vz)>;
+def : Pat<(mul v256i32:$vy, v256i32:$vz),
+          (VMPSwsxv v256i32:$vy, v256i32:$vz, 256)>;
+def : Pat<(mul v256i64:$vy, v256i64:$vz),
+          (VMPYlv v256i64:$vy, v256i64:$vz, 256)>;
 
 def : Pat<(sdiv v256i32:$vy, v256i32:$vz), (VDVSwsxv v256i32:$vy, v256i32:$vz)>;
 def : Pat<(sdiv v256i64:$vy, v256i64:$vz), (VDVXlv v256i64:$vy, v256i64:$vz)>;

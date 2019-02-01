@@ -149,19 +149,26 @@ namespace llvm {
       INT_VMINSWZX_M,   // for int_ve_vminswzx_vvvmv or int_ve_vminswzx_vsvmv
       INT_PVMINS_M,     // for int_ve_pvmins_vvvMv or int_ve_pvmins_vsvMv
       INT_VMINSL_M,     // for int_ve_vminsl_vvvmv or int_ve_vminsl_vsvmv
-      INT_VMULUL,   // for int_ve_vmulul_vvvmv or int_ve_vmulul_vsvmv
+      INT_VMULUL,       // for int_ve_vmulul_vvv or int_ve_vmulul_vsv
+      INT_VMULUW,       // for int_ve_vmuluw_vvv or int_ve_vmuluw_vsv
+      INT_VMULSWSX,     // for int_ve_vmulswsx_vvv or int_ve_vmulswsx_vsv
+      INT_VMULSWZX,     // for int_ve_vmulswzx_vvv or int_ve_vmulswzx_vsv
+      INT_VMULSL,       // for int_ve_vmulsl_vvv or int_ve_vmulsl_vsv
+      INT_VMULSLW,      // for int_ve_vmulslw_vvv or int_ve_vmulslw_vsv
+      INT_VMULUL_M,     // for int_ve_vmulul_vvvmv or int_ve_vmulul_vsvmv
+      INT_VMULUW_M,     // for int_ve_vmuluw_vvvmv or int_ve_vmuluw_vsvmv
+      INT_VMULSWSX_M,   // for int_ve_vmulswsx_vvvmv or int_ve_vmulswsx_vsvmv
+      INT_VMULSWZX_M,   // for int_ve_vmulswzx_vvvmv or int_ve_vmulswzx_vsvmv
+      INT_VMULSL_M,     // for int_ve_vmulsl_vvvmv or int_ve_vmulsl_vsvmv
+      INT_VMULSLW_M,
       INT_VDIVUL,   // for int_ve_vdivul_vvvmv, int_ve_vdivul_vsvmv, or
                     // int_ve_vdivul_vvsmv
-      INT_VMULUW,   // for int_ve_vmuluw_vvvmv or int_ve_vmuluw_vsvmv
       INT_VDIVUW,   // for int_ve_vdivuw_vvvmv, int_ve_vdivuw_vsvmv, or
                     // int_ve_vdivuw_vvsmv
-      INT_VMULSWSX, // for int_ve_vmulswsx_vvvmv or int_ve_vmulswsx_vsvmv
       INT_VDIVSWSX, // for int_ve_vdivswsx_vvvmv, int_ve_vdivswsx_vsvmv, or
                     // int_ve_vdivswsx_vvsmv
-      INT_VMULSWZX, // for int_ve_vmulswzx_vvvmv or int_ve_vmulswzx_vsvmv
       INT_VDIVSWZX, // for int_ve_vdivswzx_vvvmv, int_ve_vdivswzx_vsvmv, or
                     // int_ve_vdivswzx_vvsmv
-      INT_VMULSL,   // for int_ve_vmulsl_vvvmv or int_ve_vmulsl_vsvmv
       INT_VDIVSL,   // for int_ve_vdivsl_vvvmv, int_ve_vdivsl_vsvmv, or
                     // int_ve_vdivsl_vvsmv
       INT_VFADDD,   // for int_ve_vfaddd_vvvmv or int_ve_vfaddd_vsvmv

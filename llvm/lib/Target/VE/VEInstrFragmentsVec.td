@@ -344,6 +344,12 @@ def INT_VMINSWSX : SDNode<"VEISD::INT_VMINSWSX", VE2OpVXVVL>;
 def INT_VMINSWZX : SDNode<"VEISD::INT_VMINSWZX", VE2OpVXVVL>;
 def INT_PVMINS : SDNode<"VEISD::INT_PVMINS", VE2OpVXVVL>;
 def INT_VMINSL : SDNode<"VEISD::INT_VMINSL", VE2OpVXVVL>;
+def INT_VMULUL : SDNode<"VEISD::INT_VMULUL", VE2OpVXVVL>;
+def INT_VMULUW : SDNode<"VEISD::INT_VMULUW", VE2OpVXVVL>;
+def INT_VMULSWSX : SDNode<"VEISD::INT_VMULSWSX", VE2OpVXVVL>;
+def INT_VMULSWZX : SDNode<"VEISD::INT_VMULSWZX", VE2OpVXVVL>;
+def INT_VMULSL : SDNode<"VEISD::INT_VMULSL", VE2OpVXVVL>;
+def INT_VMULSLW : SDNode<"VEISD::INT_VMULSLW", VE2OpVXVVL>;
 
 //===----------------------------------------------------------------------===//
 // 2-op instructions with mask, base register, and hidden VL
@@ -389,6 +395,12 @@ def INT_VMINSWSX_M : SDNode<"VEISD::INT_VMINSWSX_M", VE2OpVXVMVVL>;
 def INT_VMINSWZX_M : SDNode<"VEISD::INT_VMINSWZX_M", VE2OpVXVMVVL>;
 def INT_PVMINS_M : SDNode<"VEISD::INT_PVMINS_M", VE2OpVXVMVVL>;
 def INT_VMINSL_M : SDNode<"VEISD::INT_VMINSL_M", VE2OpVXVMVVL>;
+def INT_VMULUL_M : SDNode<"VEISD::INT_VMULUL_M", VE2OpVXVMVVL>;
+def INT_VMULUW_M : SDNode<"VEISD::INT_VMULUW_M", VE2OpVXVMVVL>;
+def INT_VMULSWSX_M : SDNode<"VEISD::INT_VMULSWSX_M", VE2OpVXVMVVL>;
+def INT_VMULSWZX_M : SDNode<"VEISD::INT_VMULSWZX_M", VE2OpVXVMVVL>;
+def INT_VMULSL_M : SDNode<"VEISD::INT_VMULSL_M", VE2OpVXVMVVL>;
+def INT_VMULSLW_M : SDNode<"VEISD::INT_VMULSLW_M", VE2OpVXVMVVL>;
 
 //===----------------------------------------------------------------------===//
 // 2-op vector with mask and base register instructions
@@ -406,11 +418,6 @@ def VE2OpVXVMV :
 def VEvfaddd : SDNode<"VEISD::INT_VFADDD", VE2OpVXVMV>;
 def VEvfadds : SDNode<"VEISD::INT_VFADDS", VE2OpVXVMV>;
 def VEpvfadd : SDNode<"VEISD::INT_PVFADD", VE2OpVXVMV>;
-def VEvmulul : SDNode<"VEISD::INT_VMULUL", VE2OpVXVMV>;
-def VEvmuluw : SDNode<"VEISD::INT_VMULUW", VE2OpVXVMV>;
-def VEvmulswsx : SDNode<"VEISD::INT_VMULSWSX", VE2OpVXVMV>;
-def VEvmulswzx : SDNode<"VEISD::INT_VMULSWZX", VE2OpVXVMV>;
-def VEvmulsl : SDNode<"VEISD::INT_VMULSL", VE2OpVXVMV>;
 def VEvfsubd : SDNode<"VEISD::INT_VFSUBD", VE2OpVXVMV>;
 def VEvfsubs : SDNode<"VEISD::INT_VFSUBS", VE2OpVXVMV>;
 def VEvfmuld : SDNode<"VEISD::INT_VFMULD", VE2OpVXVMV>;

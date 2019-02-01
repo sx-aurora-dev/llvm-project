@@ -125,33 +125,26 @@ multiclass RV3VLm<string opcStr, bits<8> opc, RegisterClass ScalarRC,
   def i : RV3<opc, (outs V64:$vx), (ins immOp:$sy, V64:$vz, VLS:$vl),
               !strconcat(opcStr, " $vx,$sy,$vz"), []> {
     let cs = 1;
-    let cs2 = 0;
     let cy = 0;
-    let vy = 0;
     let DisableEncoding = "$vl";
   }
   def r : RV3<opc, (outs V64:$vx), (ins ScalarRC:$sy, V64:$vz, VLS:$vl),
               !strconcat(opcStr, " $vx,$sy,$vz"), []> {
     let cs = 1;
-    let cs2 = 0;
     let cy = 1;
-    let vy = 0;
     let DisableEncoding = "$vl";
   }
   def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VLS:$vl),
               !strconcat(opcStr, " $vx,$vy,$vz"), []> {
     let cs = 0;
-    let cs2 = 0;
-    let sy = 0;
     let DisableEncoding = "$vl";
   }
   def im : RV3<opc, (outs V64:$vx),
                (ins immOp:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
                !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    bits<4> vm;
     let cs = 1;
-    let cs2 = 0;
-    let vy = 0;
+    let cy = 0;
+    bits<4> vm;
     let m = vm;
     let Constraints = "$vx = $vd";
     let DisableEncoding = "$vl";
@@ -159,11 +152,9 @@ multiclass RV3VLm<string opcStr, bits<8> opc, RegisterClass ScalarRC,
   def rm : RV3<opc, (outs V64:$vx),
                (ins ScalarRC:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
                !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    bits<4> vm;
     let cs = 1;
-    let cs2 = 0;
     let cy = 1;
-    let vy = 0;
+    bits<4> vm;
     let m = vm;
     let Constraints = "$vx = $vd";
     let DisableEncoding = "$vl";
@@ -171,8 +162,8 @@ multiclass RV3VLm<string opcStr, bits<8> opc, RegisterClass ScalarRC,
   def vm : RV3<opc, (outs V64:$vx),
                (ins V64:$vy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+    let cs = 0;
     bits<4> vm;
-    let sy = 0;
     let m = vm;
     let Constraints = "$vx = $vd";
     let DisableEncoding = "$vl";
@@ -316,10 +307,24 @@ multiclass RVLWm<string opcStr, bits<8> opc> {
   let cx2 = 1 in defm w : RV3m<opcStr # ".w", opc, I32, VM, simm7Op32>; // u32
 }
 
+// u64, u32
+multiclass RVLWVLm<string opcStr, bits<8> opc> {
+  let cx2 = 0 in defm l : RV3VLm<opcStr # ".l", opc, I64, VM, simm7Op64>; // u64
+  let cx2 = 1 in defm w : RV3VLm<opcStr # ".w", opc, I32, VM, simm7Op32>; // u32
+}
+
 // i32 (sz,zx)
 multiclass RVEXm<string opcStr, bits<8> opc> {
   let cx2 = 0 in defm wsx : RV3m<opcStr # ".w.sx", opc, I32, VM, simm7Op32>; // i32 sx
   let cx2 = 1 in defm wzx : RV3m<opcStr # ".w.zx", opc, I32, VM, simm7Op32>; // i32 zx
+}
+
+// i32 (sz,zx)
+multiclass RVEXVLm<string opcStr, bits<8> opc> {
+  let cx2 = 0 in
+  defm wsx : RV3VLm<opcStr # ".w.sx", opc, I32, VM, simm7Op32>; // i32 sx
+  let cx2 = 1 in
+  defm wzx : RV3VLm<opcStr # ".w.zx", opc, I32, VM, simm7Op32>; // i32 zx
 }
 
 // u64, u32, packed u32
@@ -358,7 +363,7 @@ multiclass RVWVLm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 1 in
   defm wzx : RV3VLm<opcStr # ".w.zx", opc, I32, VM, simm7Op32>; // i32 zx
   let cx = 1, cx2 = 1 in
-  defm p : RV3VLm<"p" # opcStr, opc, I64, VM512, simm7Op32>;       // packed i32
+  defm p : RV3VLm<"p" # opcStr, opc, I64, VM512, simm7Op32>;    // packed i32
 }
 
 // i64
@@ -806,10 +811,10 @@ defm VADX : RVLVLm<"vadds", 0x8B>;
 defm VSUB : RVUVLm<"vsubu", 0xD8>;
 defm VSBS : RVWVLm<"vsubs", 0xDA>;
 defm VSBX : RVLVLm<"vsubs", 0x9B>;
-defm VMPY : RVLWm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
-defm VMPS : RVEXm<"vmuls", 0xCB>; // mul signed 32b sx/zx
-defm VMPX : RVLm<"vmuls", 0xDB>;   // mul signed 64b
-defm VMPD : RV3m<"vmuls.l.w", 0xD9, I32, VM, simm7Op32>; // mul signed 32b -> 64b
+defm VMPY : RVLWVLm<"vmulu", 0xC9>;   // mul unsigned 64b/32b
+defm VMPS : RVEXVLm<"vmuls", 0xCB>; // mul signed 32b sx/zx
+defm VMPX : RVLVLm<"vmuls", 0xDB>;   // mul signed 64b
+defm VMPD : RV3VLm<"vmuls.l.w", 0xD9, I32, VM, simm7Op32>; // mul signed 32b -> 64b
 
 defm VDIV : RVLWm<"vdivu", 0xE9>;
 let cx2 = 0 in defm VDIVl : RV3DIVBYSm<"vdivu.l", 0xE9, I64, VM, simm7Op64>;
