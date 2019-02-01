@@ -1338,24 +1338,31 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_LZVM:        return "VEISD::INT_LZVM";
   case VEISD::INT_TOVM:        return "VEISD::INT_TOVM";
   case VEISD::INT_VADDUL:      return "VEISD::INT_VADDUL";
+  case VEISD::INT_VADDUW:      return "VEISD::INT_VADDUW";
+  case VEISD::INT_VADDSWSX:    return "VEISD::INT_VADDSWSX";
+  case VEISD::INT_VADDSWZX:    return "VEISD::INT_VADDSWZX";
+  case VEISD::INT_VADDSL:      return "VEISD::INT_VADDSL";
+  case VEISD::INT_PVADDU:      return "VEISD::INT_PVADDU";
+  case VEISD::INT_PVADDS:      return "VEISD::INT_PVADDS";
+  case VEISD::INT_VADDUL_M:    return "VEISD::INT_VADDUL_M";
+  case VEISD::INT_VADDUW_M:    return "VEISD::INT_VADDUW_M";
+  case VEISD::INT_VADDSWSX_M:  return "VEISD::INT_VADDSWSX_M";
+  case VEISD::INT_VADDSWZX_M:  return "VEISD::INT_VADDSWZX_M";
+  case VEISD::INT_VADDSL_M:    return "VEISD::INT_VADDSL_M";
+  case VEISD::INT_PVADDU_M:    return "VEISD::INT_PVADDU_M";
+  case VEISD::INT_PVADDS_M:    return "VEISD::INT_PVADDS_M";
   case VEISD::INT_VSUBUL:      return "VEISD::INT_VSUBUL";
   case VEISD::INT_VCMPUL:      return "VEISD::INT_VCMPUL";
-  case VEISD::INT_VADDUW:      return "VEISD::INT_VADDUW";
   case VEISD::INT_VSUBUW:      return "VEISD::INT_VSUBUW";
   case VEISD::INT_VCMPUW:      return "VEISD::INT_VCMPUW";
-  case VEISD::INT_VADDSWSX:    return "VEISD::INT_VADDSWSX";
   case VEISD::INT_VSUBSWSX:    return "VEISD::INT_VSUBSWSX";
   case VEISD::INT_VCMPSWSX:    return "VEISD::INT_VCMPSWSX";
-  case VEISD::INT_VADDSWZX:    return "VEISD::INT_VADDSWZX";
   case VEISD::INT_VSUBSWZX:    return "VEISD::INT_VSUBSWZX";
   case VEISD::INT_VCMPSWZX:    return "VEISD::INT_VCMPSWZX";
-  case VEISD::INT_VADDSL:      return "VEISD::INT_VADDSL";
   case VEISD::INT_VSUBSL:      return "VEISD::INT_VSUBSL";
   case VEISD::INT_VCMPSL:      return "VEISD::INT_VCMPSL";
-  case VEISD::INT_PVADDU:      return "VEISD::INT_PVADDU";
   case VEISD::INT_PVSUBU:      return "VEISD::INT_PVSUBU";
   case VEISD::INT_PVCMPU:      return "VEISD::INT_PVCMPU";
-  case VEISD::INT_PVADDS:      return "VEISD::INT_PVADDS";
   case VEISD::INT_PVSUBS:      return "VEISD::INT_PVSUBS";
   case VEISD::INT_PVCMPS:      return "VEISD::INT_PVCMPS";
   case VEISD::INT_VMAXSWSX:    return "VEISD::INT_VMAXSWSX";
@@ -2315,17 +2322,59 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       return DAG.getBitcast(Op.getValueType(), Res);
     }
     case ADD_VL: {
-      // 1-operand intrinsic with hidden VL
+      // Add hiddnen VL
       //   Input:
       //     (v256i64 (int_ve_vbrd_vs_i64 (i64 %sy)))
       //   Output:
       //     (v256i64 (VBRD %sy, %vl))
+      SmallVector<SDValue, 8> Ops;
+
+      // Ignore operand 0 since it is intrinsic number.
+      // Copy rests of operands.
+      for (unsigned i = 1; i < Op.getNumOperands(); ++i) {
+        Ops.push_back(Op.getOperand(i));
+      }
+      // Add hidden VL
       MachineFunction &MF = DAG.getMachineFunction();
       unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
       SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
-      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
-                         Op.getOperand(1), VL);
+      Ops.push_back(VL);
+
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
     }
+
+    case CONVM_VL: {
+      // Convert a bitmask and adds hidden VL
+      //   Input:
+      //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
+      //                                    (v256i64 %base)))
+      //   Output:
+      //     (v256i64 (VBRD_M %sy, (v256i1 (bitcast %vm)), %base, %vl))
+      SmallVector<SDValue, 8> Ops;
+
+      // Ignore operand 0 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 1; i < Op.getNumOperands(); ++i) {
+        if (Op.getOperand(i).getValueType() == MVT::v4i64 ||
+            Op.getOperand(i).getValueType() == MVT::v8i64) {
+          SDValue Mask = Op.getOperand(i);
+          MVT BitcastVT = MVT::getVectorVT(
+            MVT::i1, Mask.getValueType().getSizeInBits());
+          SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+          Ops.push_back(Bitcast);
+        } else {
+          Ops.push_back(Op.getOperand(i));
+        }
+      }
+      // Add hidden VL
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
+      Ops.push_back(VL);
+
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
+    }
+
     case OP_XXMX: {
       // 1-operand intrinsic with mask, base register, and hidden VL
       //   Input:

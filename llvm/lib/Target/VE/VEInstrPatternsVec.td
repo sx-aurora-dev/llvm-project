@@ -65,9 +65,12 @@ def : Pat<(fdiv v512f32:$vy, v512f32:$vz), (VFDVpv v512f32:$vy, v512f32:$vz)>;
 // add, sub, mul, sdiv, and udiv for
 // v256i32, v256i64, v512i32.
 
-def : Pat<(add v256i32:$vy, v256i32:$vz), (VADSwsxv v256i32:$vy, v256i32:$vz)>;
-def : Pat<(add v256i64:$vy, v256i64:$vz), (VADDlv v256i64:$vy, v256i64:$vz)>;
-def : Pat<(add v512i32:$vy, v512i32:$vz), (VADSpv v512i32:$vy, v512i32:$vz)>;
+def : Pat<(add v256i32:$vy, v256i32:$vz),
+          (VADSwsxv v256i32:$vy, v256i32:$vz, 256)>;
+def : Pat<(add v256i64:$vy, v256i64:$vz),
+          (VADDlv v256i64:$vy, v256i64:$vz, 256)>;
+def : Pat<(add v512i32:$vy, v512i32:$vz),
+          (VADSpv v512i32:$vy, v512i32:$vz, 256)>;
 
 def : Pat<(sub v256i32:$vy, v256i32:$vz), (VSBSwsxv v256i32:$vy, v256i32:$vz)>;
 def : Pat<(sub v256i64:$vy, v256i64:$vz), (VSUBlv v256i64:$vy, v256i64:$vz)>;
@@ -305,17 +308,26 @@ def : Pat<(fneg v512f32:$vz), (VFSBpr (i64 0), v512f32:$vz)>;
 
 // Integer Arithmetic
 
-def : Pat<(add v512i32:$vx, v512i32:$vy), (VADDpv v512i32:$vx, v512i32:$vy)>;
-def : Pat<(add v256i32:$vx, v256i32:$vy), (VADDlv v256i32:$vx, v256i32:$vy)>;
-def : Pat<(add v256i64:$vx, v256i64:$vy), (VADXlv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(add v512i32:$vx, v512i32:$vy),
+          (VADDpv v512i32:$vx, v512i32:$vy, 256)>;
+def : Pat<(add v256i32:$vx, v256i32:$vy),
+          (VADDlv v256i32:$vx, v256i32:$vy, 256)>;
+def : Pat<(add v256i64:$vx, v256i64:$vy),
+          (VADXlv v256i64:$vx, v256i64:$vy, 256)>;
 
-def : Pat<(add v512i32:$vx, v512i32:$vy), (VADDpv v512i32:$vx, v512i32:$vy)>;
-def : Pat<(add v256i32:$vx, v256i32:$vy), (VADDlv v256i32:$vx, v256i32:$vy)>;
-def : Pat<(add v256i64:$vx, v256i64:$vy), (VADXlv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(add v512i32:$vx, v512i32:$vy),
+          (VADDpv v512i32:$vx, v512i32:$vy, 256)>;
+def : Pat<(add v256i32:$vx, v256i32:$vy),
+          (VADDlv v256i32:$vx, v256i32:$vy, 256)>;
+def : Pat<(add v256i64:$vx, v256i64:$vy),
+          (VADXlv v256i64:$vx, v256i64:$vy, 256)>;
 
-def : Pat<(add v512i32:$vx, v512i32:$vy), (VADDpv v512i32:$vx, v512i32:$vy)>;
-def : Pat<(add v256i32:$vx, v256i32:$vy), (VADDlv v256i32:$vx, v256i32:$vy)>;
-def : Pat<(add v256i64:$vx, v256i64:$vy), (VADXlv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(add v512i32:$vx, v512i32:$vy),
+          (VADDpv v512i32:$vx, v512i32:$vy, 256)>;
+def : Pat<(add v256i32:$vx, v256i32:$vy),
+          (VADDlv v256i32:$vx, v256i32:$vy, 256)>;
+def : Pat<(add v256i64:$vx, v256i64:$vy),
+          (VADXlv v256i64:$vx, v256i64:$vy, 256)>;
 
 // Logic
 def : Pat<(and v256i64:$vx, v256i64:$vy), (VANDv v256i64:$vx, v256i64:$vy)>;
