@@ -2687,35 +2687,67 @@ SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     default:
       llvm_unreachable("Unknown intrinsic data type");
       break;
-    case GATHER_M: {
-      // Vector gather with mask intrinsics
+    case ADD_VL: {
+      // Add hiddnen VL
       //   Input:
-      //     (v256i64 (int_ve_vgt_vvm (v256i64 %vy), (v4i64 %vm)))
+      //     (v256i64 (int_ve_vbrd_vs_i64 (i64 %sy)))
       //   Output:
-      //     (v256i64 (VGT %vy, (v256i1 (bitcast %vm))))
+      //     (v256i64 (VBRD %sy, %vl))
+      SmallVector<SDValue, 8> Ops;
+
       SDValue Chain = Op.getOperand(0);
-      SDValue Mask = Op.getOperand(3);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other);
-      return DAG.getNode(IntrData->Opc0, dl, VTs,
-                         Chain, Op.getOperand(2), Bitcast);
-    }
-    case VLD: {
-      // Vector load with vector length register
-      //   Input:
-      //     (v256i64 (int_ve_vld_vss (i64 %sy), (i64 %sz)))
-      //   Output:
-      //     (v256i64 (VLD %sy, %sz, %vl))
-      SDValue Chain = Op.getOperand(0);
+      Ops.push_back(Chain);
+      // Ignore operand 1 since it is intrinsic number.
+      // Copy rests of operands.
+      for (unsigned i = 2; i < Op.getNumOperands(); ++i) {
+        Ops.push_back(Op.getOperand(i));
+      }
+      // Add hidden VL
       MachineFunction &MF = DAG.getMachineFunction();
       unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
       SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
       Chain = VL.getValue(1);
+      Ops[0] = Chain;
+      Ops.push_back(VL);
+
       SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other);
-      return DAG.getNode(IntrData->Opc0, dl, VTs,
-                         Chain, Op.getOperand(2), Op.getOperand(3), VL);
+      return DAG.getNode(IntrData->Opc0, dl, VTs, Ops);
+    }
+    case CONVM_VL: {
+      // Convert a bitmask and adds hidden VL
+      //   Input:
+      //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
+      //                                    (v256i64 %base)))
+      //   Output:
+      //     (v256i64 (VBRD_M %sy, (v256i1 (bitcast %vm)), %base, %vl))
+      SmallVector<SDValue, 8> Ops;
+
+      SDValue Chain = Op.getOperand(0);
+      Ops.push_back(Chain);
+      // Ignore operand 1 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 2; i < Op.getNumOperands(); ++i) {
+        if (Op.getOperand(i).getValueType() == MVT::v4i64 ||
+            Op.getOperand(i).getValueType() == MVT::v8i64) {
+          SDValue Mask = Op.getOperand(i);
+          MVT BitcastVT = MVT::getVectorVT(
+            MVT::i1, Mask.getValueType().getSizeInBits());
+          SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+          Ops.push_back(Bitcast);
+        } else {
+          Ops.push_back(Op.getOperand(i));
+        }
+      }
+      // Add hidden VL
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
+      Chain = VL.getValue(1);
+      Ops[0] = Chain;
+      Ops.push_back(VL);
+
+      SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other);
+      return DAG.getNode(IntrData->Opc0, dl, VTs, Ops);
     }
     }
   }
@@ -2745,34 +2777,65 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
       SDValue Chain = Op.getOperand(0);
       return DAG.getCopyToReg(Chain, dl, VE::VL, Op.getOperand(2));
     }
-    case SCATTER_M: {
-      // Vector scatter with mask intrinsics
+    case ADD_VL: {
+      // Add hiddnen VL
       //   Input:
-      //     (int_ve_vsc_vvm (v256i64 %vx), (v256i64 %vy), (v4i64 %vm))
+      //     (v256i64 (int_ve_vbrd_vs_i64 (i64 %sy)))
       //   Output:
-      //     (VSC %vx, %vy, (v256i1 (bitcast %vm)))
+      //     (v256i64 (VBRD %sy, %vl))
+      SmallVector<SDValue, 8> Ops;
+
       SDValue Chain = Op.getOperand(0);
-      SDValue Mask = Op.getOperand(4);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      return DAG.getNode(IntrData->Opc0, dl, MVT::Other,
-                         Chain, Op.getOperand(2), Op.getOperand(3), Bitcast);
-    }
-    case VST: {
-      // Vector store with vector length register
-      //   Input:
-      //     (int_ve_vst_vss (v256i64 %vx), (i64 %sy), (i64 %sz)))
-      //   Output:
-      //     (VST %vx, %sy, %sz, %vl))
-      SDValue Chain = Op.getOperand(0);
+      Ops.push_back(Chain);
+      // Ignore operand 1 since it is intrinsic number.
+      // Copy rests of operands.
+      for (unsigned i = 2; i < Op.getNumOperands(); ++i) {
+        Ops.push_back(Op.getOperand(i));
+      }
+      // Add hidden VL
       MachineFunction &MF = DAG.getMachineFunction();
       unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
       SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
       Chain = VL.getValue(1);
-      return DAG.getNode(IntrData->Opc0, dl, MVT::Other,
-                         Chain, Op.getOperand(2), Op.getOperand(3),
-                         Op.getOperand(4), VL);
+      Ops[0] = Chain;
+      Ops.push_back(VL);
+
+      return DAG.getNode(IntrData->Opc0, dl, MVT::Other, Ops);
+    }
+    case CONVM_VL: {
+      // Convert a bitmask and adds hidden VL
+      //   Input:
+      //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
+      //                                    (v256i64 %base)))
+      //   Output:
+      //     (v256i64 (VBRD_M %sy, (v256i1 (bitcast %vm)), %base, %vl))
+      SmallVector<SDValue, 8> Ops;
+
+      SDValue Chain = Op.getOperand(0);
+      Ops.push_back(Chain);
+      // Ignore operand 1 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 2; i < Op.getNumOperands(); ++i) {
+        if (Op.getOperand(i).getValueType() == MVT::v4i64 ||
+            Op.getOperand(i).getValueType() == MVT::v8i64) {
+          SDValue Mask = Op.getOperand(i);
+          MVT BitcastVT = MVT::getVectorVT(
+            MVT::i1, Mask.getValueType().getSizeInBits());
+          SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+          Ops.push_back(Bitcast);
+        } else {
+          Ops.push_back(Op.getOperand(i));
+        }
+      }
+      // Add hidden VL
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
+      Chain = VL.getValue(1);
+      Ops[0] = Chain;
+      Ops.push_back(VL);
+
+      return DAG.getNode(IntrData->Opc0, dl, MVT::Other, Ops);
     }
     }
   }
