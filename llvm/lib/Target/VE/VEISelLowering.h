@@ -105,7 +105,6 @@ namespace llvm {
       INT_VADDSL_M,     // for int_ve_vaddsl_vvvmv or int_ve_vaddsl_vsvmv
       INT_PVADDU_M,     // for int_ve_pvaddu_vvvMv or int_ve_pvaddu_vsvMv
       INT_PVADDS_M,     // for int_ve_pvadds_vvvMv or int_ve_pvadds_vsvMv
-
       INT_VSUBUL,       // for int_ve_vsubul_vvv or int_ve_vsubul_vsv
       INT_VSUBUW,       // for int_ve_vsubuw_vvv or int_ve_vsubuw_vsv
       INT_VSUBSWSX,     // for int_ve_vsubswsx_vvv or int_ve_vsubswsx_vsv
@@ -120,13 +119,20 @@ namespace llvm {
       INT_VSUBSL_M,     // for int_ve_vsubsl_vvvmv or int_ve_vsubsl_vsvmv
       INT_PVSUBU_M,     // for int_ve_pvsubu_vvvMv or int_ve_pvsubu_vsvMv
       INT_PVSUBS_M,     // for int_ve_pvsubs_vvvMv or int_ve_pvsubs_vsvMv
-      INT_VCMPUL,   // for int_ve_vcmpul_vvvmv or int_ve_vcmpul_vsvmv
-      INT_VCMPUW,   // for int_ve_vcmpuw_vvvmv or int_ve_vcmpuw_vsvmv
-      INT_VCMPSWSX, // for int_ve_vcmpswsx_vvvmv or int_ve_vcmpswsx_vsvmv
-      INT_VCMPSWZX, // for int_ve_vcmpswzx_vvvmv or int_ve_vcmpswzx_vsvmv
-      INT_VCMPSL,   // for int_ve_vcmpsl_vvvmv or int_ve_vcmpsl_vsvmv
-      INT_PVCMPU,   // for int_ve_pvcmpu_vvvMv or int_ve_pvcmpu_vsvMv
-      INT_PVCMPS,   // for int_ve_pvcmps_vvvMv or int_ve_pvcmps_vsvMv
+      INT_VCMPUL,       // for int_ve_vcmpul_vvv or int_ve_vcmpul_vsv
+      INT_VCMPUW,       // for int_ve_vcmpuw_vvv or int_ve_vcmpuw_vsv
+      INT_VCMPSWSX,     // for int_ve_vcmpswsx_vvv or int_ve_vcmpswsx_vsv
+      INT_VCMPSWZX,     // for int_ve_vcmpswzx_vvv or int_ve_vcmpswzx_vsv
+      INT_VCMPSL,       // for int_ve_vcmpsl_vvv or int_ve_vcmpsl_vsv
+      INT_PVCMPU,       // for int_ve_pvcmpu_vvv or int_ve_pvcmpu_vsv
+      INT_PVCMPS,       // for int_ve_pvcmps_vvv or int_ve_pvcmps_vsv
+      INT_VCMPUL_M,     // for int_ve_vcmpul_vvvmv or int_ve_vcmpul_vsvmv
+      INT_VCMPUW_M,     // for int_ve_vcmpuw_vvvmv or int_ve_vcmpuw_vsvmv
+      INT_VCMPSWSX_M,   // for int_ve_vcmpswsx_vvvmv or int_ve_vcmpswsx_vsvmv
+      INT_VCMPSWZX_M,   // for int_ve_vcmpswzx_vvvmv or int_ve_vcmpswzx_vsvmv
+      INT_VCMPSL_M,     // for int_ve_vcmpsl_vvvmv or int_ve_vcmpsl_vsvmv
+      INT_PVCMPU_M,     // for int_ve_pvcmpu_vvvMv or int_ve_pvcmpu_vsvMv
+      INT_PVCMPS_M,     // for int_ve_pvcmps_vvvMv or int_ve_pvcmps_vsvMv
       INT_VMAXSWSX, // for int_ve_vmaxswsx_vvvmv or int_ve_vmaxswsx_vsvmv
       INT_VMAXSWZX, // for int_ve_vmaxswzx_vvvmv or int_ve_vmaxswzx_vsvmv
       INT_VMINSWSX, // for int_ve_vminswsx_vvvmv or int_ve_vminswsx_vsvmv

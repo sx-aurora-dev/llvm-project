@@ -786,9 +786,9 @@ let cx2 = 0 in defm VDVSwsx : RV3DIVBYSm<"vdivs.w.sx", 0xEB, I32, VM, simm7Op32>
 let cx2 = 1 in defm VDVSwzx : RV3DIVBYSm<"vdivs.w.zx", 0xEB, I32, VM, simm7Op32>;
 defm VDVX : RVLm<"vdivs", 0xFB>;
 defm VDVXl : RV3DIVBYSm<"vdivs.l", 0xFB, I64, VM, simm7Op64>;
-defm VCMP : RVUm<"vcmpu", 0xB9>;
-defm VCPS : RVWm<"vcmps", 0xFA>;
-defm VCPX : RVLm<"vcmps", 0xBA>;
+defm VCMP : RVUVLm<"vcmpu", 0xB9>;
+defm VCPS : RVWVLm<"vcmps", 0xFA>;
+defm VCPX : RVLVLm<"vcmps", 0xBA>;
 let cs2 = 0 in defm VCMSa : RVWm<"vmaxs", 0x8A>;
 let cs2 = 1 in defm VCMSi : RVWm<"vmins", 0x8A>;
 let cs2 = 0 in defm VCMXa : RVLm<"vmaxs", 0x9A>;
