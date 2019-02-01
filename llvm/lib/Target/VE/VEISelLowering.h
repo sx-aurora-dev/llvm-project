@@ -133,12 +133,22 @@ namespace llvm {
       INT_VCMPSL_M,     // for int_ve_vcmpsl_vvvmv or int_ve_vcmpsl_vsvmv
       INT_PVCMPU_M,     // for int_ve_pvcmpu_vvvMv or int_ve_pvcmpu_vsvMv
       INT_PVCMPS_M,     // for int_ve_pvcmps_vvvMv or int_ve_pvcmps_vsvMv
-      INT_VMAXSWSX, // for int_ve_vmaxswsx_vvvmv or int_ve_vmaxswsx_vsvmv
-      INT_VMAXSWZX, // for int_ve_vmaxswzx_vvvmv or int_ve_vmaxswzx_vsvmv
-      INT_VMINSWSX, // for int_ve_vminswsx_vvvmv or int_ve_vminswsx_vsvmv
-      INT_VMINSWZX, // for int_ve_vminswzx_vvvmv or int_ve_vminswzx_vsvmv
-      INT_PVMAXS,   // for int_ve_pvmaxs_vvvMv or int_ve_pvmaxs_vsvMv
-      INT_PVMINS,   // for int_ve_pvmins_vvvMv or int_ve_pvmins_vsvMv
+      INT_VMAXSWSX,     // for int_ve_vmaxswsx_vvv or int_ve_vmaxswsx_vsv
+      INT_VMAXSWZX,     // for int_ve_vmaxswzx_vvv or int_ve_vmaxswzx_vsv
+      INT_PVMAXS,       // for int_ve_pvmaxs_vvv or int_ve_pvmaxs_vsv
+      INT_VMAXSL,       // for int_ve_vmaxsl_vvv or int_ve_vmaxsl_vsv
+      INT_VMAXSWSX_M,   // for int_ve_vmaxswsx_vvvmv or int_ve_vmaxswsx_vsvmv
+      INT_VMAXSWZX_M,   // for int_ve_vmaxswzx_vvvmv or int_ve_vmaxswzx_vsvmv
+      INT_PVMAXS_M,     // for int_ve_pvmaxs_vvvMv or int_ve_pvmaxs_vsvMv
+      INT_VMAXSL_M,     // for int_ve_vmaxsl_vvvmv or int_ve_vmaxsl_vsvmv
+      INT_VMINSWSX,     // for int_ve_vminswsx_vvv or int_ve_vminswsx_vsv
+      INT_VMINSWZX,     // for int_ve_vminswzx_vvv or int_ve_vminswzx_vsv
+      INT_PVMINS,       // for int_ve_pvmins_vvv or int_ve_pvmins_vsv
+      INT_VMINSL,       // for int_ve_vminsl_vvv or int_ve_vminsl_vsv
+      INT_VMINSWSX_M,   // for int_ve_vminswsx_vvvmv or int_ve_vminswsx_vsvmv
+      INT_VMINSWZX_M,   // for int_ve_vminswzx_vvvmv or int_ve_vminswzx_vsvmv
+      INT_PVMINS_M,     // for int_ve_pvmins_vvvMv or int_ve_pvmins_vsvMv
+      INT_VMINSL_M,     // for int_ve_vminsl_vvvmv or int_ve_vminsl_vsvmv
       INT_VMULUL,   // for int_ve_vmulul_vvvmv or int_ve_vmulul_vsvmv
       INT_VDIVUL,   // for int_ve_vdivul_vvvmv, int_ve_vdivul_vsvmv, or
                     // int_ve_vdivul_vvsmv
@@ -154,8 +164,6 @@ namespace llvm {
       INT_VMULSL,   // for int_ve_vmulsl_vvvmv or int_ve_vmulsl_vsvmv
       INT_VDIVSL,   // for int_ve_vdivsl_vvvmv, int_ve_vdivsl_vsvmv, or
                     // int_ve_vdivsl_vvsmv
-      INT_VMAXSL,   // for int_ve_vmaxsl_vvvmv or int_ve_vmaxsl_vsvmv
-      INT_VMINSL,   // for int_ve_vminsl_vvvmv or int_ve_vminsl_vsvmv
       INT_VFADDD,   // for int_ve_vfaddd_vvvmv or int_ve_vfaddd_vsvmv
       INT_VFADDS,   // for int_ve_vfadds_vvvmv or int_ve_vfadds_vsvmv
       INT_VFSUBD,   // for int_ve_vfsubd_vvvmv or int_ve_vfsubd_vsvmv
