@@ -1230,25 +1230,29 @@ let cx = 1, cs = 1 in defm VFMAXis : FLm<0xAD, "vfrmin.s">;
 // 5.3.2.14. Vector Gatering/Scattering Instructions
 
 multiclass VGTCm<string opcStr, bits<8> opc> {
-  def v : RVM<opc, (outs V64:$vx), (ins V64:$vy),
+  def v : RVM<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl),
               !strconcat(opcStr, " $vx,$vy,0,0"), []> {
     let cs = 0;
+    let DisableEncoding = "$vl";
   }
-  def r : RVM<opc, (outs V64:$vx), (ins I64:$sw),
+  def r : RVM<opc, (outs V64:$vx), (ins I64:$sw, VLS:$vl),
               !strconcat(opcStr, " $vx,$sw,0,0"), []> {
     let cs = 1;
+    let DisableEncoding = "$vl";
   }
-  def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
+  def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
     bits<4> vm;
     let cs = 0;
     let m = vm;
+    let DisableEncoding = "$vl";
   }
-  def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm),
+  def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
     bits<4> vm;
     let cs = 1;
     let m = vm;
+    let DisableEncoding = "$vl";
   }
 }
 
@@ -1258,25 +1262,29 @@ multiclass VGTm<string opcStr, bits<8> opc> {
 }
 
 multiclass VSCCm<string opcStr, bits<8> opc> {
-  def v : RVM<opc, (outs), (ins V64:$vx, V64:$vy),
+  def v : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VLS:$vl),
               !strconcat(opcStr, " $vx,$vy,0,0"), []> {
     let cs = 0;
+    let DisableEncoding = "$vl";
   }
-  def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw),
+  def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VLS:$vl),
               !strconcat(opcStr, " $vx,$sw,0,0"), []> {
     let cs = 1;
+    let DisableEncoding = "$vl";
   }
-  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm),
+  def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
     bits<4> vm;
     let cs = 0;
     let m = vm;
+    let DisableEncoding = "$vl";
   }
-  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm),
+  def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
     bits<4> vm;
     let cs = 1;
     let m = vm;
+    let DisableEncoding = "$vl";
   }
 }
 

@@ -60,9 +60,12 @@ struct IntrinsicData {
  */
 static const IntrinsicData IntrinsicsVoid[] = {
   VE_INTRINSIC_DATA(lvl,                LVL,        VEISD::INT_LVL, 0),
-  VE_INTRINSIC_DATA(vsc_vvm,            SCATTER_M,  VEISD::INT_VSC_M, 0),
-  VE_INTRINSIC_DATA(vscl_vvm,           SCATTER_M,  VEISD::INT_VSCL_M, 0),
-  VE_INTRINSIC_DATA(vscu_vvm,           SCATTER_M,  VEISD::INT_VSCU_M, 0),
+  VE_INTRINSIC_DATA(vsc_vv,             ADD_VL,     VEISD::INT_VSC, 0),
+  VE_INTRINSIC_DATA(vsc_vvm,            CONVM_VL,   VEISD::INT_VSC_M, 0),
+  VE_INTRINSIC_DATA(vscl_vv,            ADD_VL,     VEISD::INT_VSCL, 0),
+  VE_INTRINSIC_DATA(vscl_vvm,           CONVM_VL,   VEISD::INT_VSCL_M, 0),
+  VE_INTRINSIC_DATA(vscu_vv,            ADD_VL,     VEISD::INT_VSCU, 0),
+  VE_INTRINSIC_DATA(vscu_vvm,           CONVM_VL,   VEISD::INT_VSCU_M, 0),
   VE_INTRINSIC_DATA(vst_vss,            VST,        VEISD::INT_VST, 0),
   VE_INTRINSIC_DATA(vst2d_vss,          VST,        VEISD::INT_VST2D, 0),
   VE_INTRINSIC_DATA(vstl_vss,           VST,        VEISD::INT_VSTL, 0),
@@ -88,10 +91,14 @@ static const IntrinsicData* getIntrinsicVoid(unsigned IntNo) {
  * the alphabetical order.
  */
 static const IntrinsicData IntrinsicsWithChain[] = {
-  VE_INTRINSIC_DATA(vgt_vvm,            GATHER_M,   VEISD::INT_VGT_M, 0),
-  VE_INTRINSIC_DATA(vgtlsx_vvm,         GATHER_M,   VEISD::INT_VGTLSX_M, 0),
-  VE_INTRINSIC_DATA(vgtlzx_vvm,         GATHER_M,   VEISD::INT_VGTLZX_M, 0),
-  VE_INTRINSIC_DATA(vgtu_vvm,           GATHER_M,   VEISD::INT_VGTU_M, 0),
+  VE_INTRINSIC_DATA(vgt_vv,             ADD_VL,     VEISD::INT_VGT, 0),
+  VE_INTRINSIC_DATA(vgt_vvm,            CONVM_VL,   VEISD::INT_VGT_M, 0),
+  VE_INTRINSIC_DATA(vgtlsx_vv,          ADD_VL,     VEISD::INT_VGTLSX, 0),
+  VE_INTRINSIC_DATA(vgtlsx_vvm,         CONVM_VL,   VEISD::INT_VGTLSX_M, 0),
+  VE_INTRINSIC_DATA(vgtlzx_vv,          ADD_VL,     VEISD::INT_VGTLZX, 0),
+  VE_INTRINSIC_DATA(vgtlzx_vvm,         CONVM_VL,   VEISD::INT_VGTLZX_M, 0),
+  VE_INTRINSIC_DATA(vgtu_vv,            ADD_VL,     VEISD::INT_VGTU, 0),
+  VE_INTRINSIC_DATA(vgtu_vvm,           CONVM_VL,   VEISD::INT_VGTU_M, 0),
   VE_INTRINSIC_DATA(vld_vss,            VLD,        VEISD::INT_VLD, 0),
   VE_INTRINSIC_DATA(vld2d_vss,          VLD,        VEISD::INT_VLD2D, 0),
   VE_INTRINSIC_DATA(vldl2dsx_vss,       VLD,        VEISD::INT_VLDL2DSX, 0),

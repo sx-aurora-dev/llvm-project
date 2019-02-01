@@ -205,12 +205,12 @@ def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)), (VMVi (i32 simm7:$
 // TODO
 
 // Scatter
-def : Pat<(vec_scatter v256i64:$vx, v256i64:$vy), (VSCv v256i64:$vx, v256i64:$vy)>;
-def : Pat<(vec_scatter v256f64:$vx, v256i64:$vy), (VSCv v256f64:$vx, v256i64:$vy)>;
+def : Pat<(vec_scatter v256i64:$vx, v256i64:$vy), (VSCv v256i64:$vx, v256i64:$vy, 256)>;
+def : Pat<(vec_scatter v256f64:$vx, v256i64:$vy), (VSCv v256f64:$vx, v256i64:$vy, 256)>;
 
 // Gather
-def : Pat<(v256i64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy)>;
-def : Pat<(v256f64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy)>;
+def : Pat<(v256i64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy, 256)>;
+def : Pat<(v256f64 (vec_gather v256i64:$vy)), (VGTv v256i64:$vy, 256)>;
 
 // LVL
 def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;

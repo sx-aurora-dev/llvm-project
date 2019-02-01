@@ -94,40 +94,74 @@ def VELoadVL :
 def VElvl : SDNode<"VEISD::INT_LVL", VELoadVL, [SDNPHasChain]>;
 
 //===----------------------------------------------------------------------===//
-// Gather with mask instructions
+// Gather instructions with hidden VL
 //===----------------------------------------------------------------------===//
 
-// (v256i64 (VGT (v256i64 vy), (vNi1 vm)))
+// (v256i64 (VGT (v256i64 vy), (VLS vl)))
+
+def VEGather :
+    SDTypeProfile<1, 2, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>]>;
+def INT_VGT    : SDNode<"VEISD::INT_VGT", VEGather,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGTU   : SDNode<"VEISD::INT_VGTU", VEGather,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGTLSX : SDNode<"VEISD::INT_VGTLSX", VEGather,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGTLZX : SDNode<"VEISD::INT_VGTLZX", VEGather,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+
+//===----------------------------------------------------------------------===//
+// Gather instructions with mask and hidden VL
+//===----------------------------------------------------------------------===//
+
+// (v256i64 (VGT (v256i64 vy), (vNi1 vm), (VLS vl)))
 
 def VEGatherMask :
-    SDTypeProfile<1, 2, [SDTCisVec<0>,
+    SDTypeProfile<1, 3, [SDTCisVec<0>,
                          SDTCisSameAs<1, 0>,
                          SDTCisVec<2>, SDTCVecEltisVT<2, i1>]>;
-def VEvgt_m    : SDNode<"VEISD::INT_VGT_M", VEGatherMask,
-                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvgtu_m   : SDNode<"VEISD::INT_VGTU_M", VEGatherMask,
-                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvgtlsx_m : SDNode<"VEISD::INT_VGTLSX_M", VEGatherMask,
-                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvgtlzx_m : SDNode<"VEISD::INT_VGTLZX_M", VEGatherMask,
-                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGT_M    : SDNode<"VEISD::INT_VGT_M", VEGatherMask,
+                          [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGTU_M   : SDNode<"VEISD::INT_VGTU_M", VEGatherMask,
+                          [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGTLSX_M : SDNode<"VEISD::INT_VGTLSX_M", VEGatherMask,
+                          [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VGTLZX_M : SDNode<"VEISD::INT_VGTLZX_M", VEGatherMask,
+                          [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
-// Scatter with mask instructions
+// Scatter instructionos with hidden VL
 //===----------------------------------------------------------------------===//
 
-// (VSC (v256i64 vx), (v256i64 vy), (vNi1 vm))
+// (VSC (v256i64 vx), (v256i64 vy), (VLS vl))
+
+def VEScatter :
+    SDTypeProfile<0, 3, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>]>;
+def INT_VSC  : SDNode<"VEISD::INT_VSC", VEScatter,
+                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSCU : SDNode<"VEISD::INT_VSCU", VEScatter,
+                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSCL : SDNode<"VEISD::INT_VSCL", VEScatter,
+                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+
+//===----------------------------------------------------------------------===//
+// Scatter instructionos with mask and hidden VL
+//===----------------------------------------------------------------------===//
+
+// (VSC (v256i64 vx), (v256i64 vy), (vNi1 vm), (VLS vl))
 
 def VEScatterMask :
-    SDTypeProfile<0, 3, [SDTCisVec<0>,
+    SDTypeProfile<0, 4, [SDTCisVec<0>,
                          SDTCisSameAs<1, 0>,
                          SDTCisVec<2>, SDTCVecEltisVT<2, i1>]>;
-def VEvsc_m  : SDNode<"VEISD::INT_VSC_M", VEScatterMask,
-                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvscu_m : SDNode<"VEISD::INT_VSCU_M", VEScatterMask,
-                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvscl_m : SDNode<"VEISD::INT_VSCL_M", VEScatterMask,
-                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSC_M  : SDNode<"VEISD::INT_VSC_M", VEScatterMask,
+                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSCU_M : SDNode<"VEISD::INT_VSCU_M", VEScatterMask,
+                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSCL_M : SDNode<"VEISD::INT_VSCL_M", VEScatterMask,
+                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
 // 0-op vector with base mask register instructions
