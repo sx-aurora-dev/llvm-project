@@ -84,11 +84,15 @@ def : Pat<(mul v256i32:$vy, v256i32:$vz),
 def : Pat<(mul v256i64:$vy, v256i64:$vz),
           (VMPYlv v256i64:$vy, v256i64:$vz, 256)>;
 
-def : Pat<(sdiv v256i32:$vy, v256i32:$vz), (VDVSwsxv v256i32:$vy, v256i32:$vz)>;
-def : Pat<(sdiv v256i64:$vy, v256i64:$vz), (VDVXlv v256i64:$vy, v256i64:$vz)>;
+def : Pat<(sdiv v256i32:$vy, v256i32:$vz),
+          (VDVSwsxv v256i32:$vy, v256i32:$vz, 256)>;
+def : Pat<(sdiv v256i64:$vy, v256i64:$vz),
+          (VDVXlv v256i64:$vy, v256i64:$vz, 256)>;
 
-def : Pat<(udiv v256i32:$vy, v256i32:$vz), (VDIVwv v256i32:$vy, v256i32:$vz)>;
-def : Pat<(udiv v256i64:$vy, v256i64:$vz), (VDIVlv v256i64:$vy, v256i64:$vz)>;
+def : Pat<(udiv v256i32:$vy, v256i32:$vz),
+          (VDIVwv v256i32:$vy, v256i32:$vz, 256)>;
+def : Pat<(udiv v256i64:$vy, v256i64:$vz),
+          (VDIVlv v256i64:$vy, v256i64:$vz, 256)>;
 
 // Bitconvert for mask registers between 
 // v4i64 or v8i64 and v256i1 or v512i1 respectively

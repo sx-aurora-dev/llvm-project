@@ -351,6 +351,19 @@ def INT_VMULSWZX : SDNode<"VEISD::INT_VMULSWZX", VE2OpVXVVL>;
 def INT_VMULSL : SDNode<"VEISD::INT_VMULSL", VE2OpVXVVL>;
 def INT_VMULSLW : SDNode<"VEISD::INT_VMULSLW", VE2OpVXVVL>;
 
+// Either of 
+// (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (VLS vl)))
+// (v256f64 (VDVXlim (i64 sy), (v256f64 vz), (VLS vl)))
+// (v256f64 (VDVXlim2 (v256f64 vz), (i64 sy), (VLS vl)))
+
+def VE2OpVXXVL :
+    SDTypeProfile<1, 3, [SDTCisVec<0>]>;
+def INT_VDIVUL : SDNode<"VEISD::INT_VDIVUL", VE2OpVXXVL>;
+def INT_VDIVUW : SDNode<"VEISD::INT_VDIVUW", VE2OpVXXVL>;
+def INT_VDIVSWSX : SDNode<"VEISD::INT_VDIVSWSX", VE2OpVXXVL>;
+def INT_VDIVSWZX : SDNode<"VEISD::INT_VDIVSWZX", VE2OpVXXVL>;
+def INT_VDIVSL : SDNode<"VEISD::INT_VDIVSL", VE2OpVXXVL>;
+
 //===----------------------------------------------------------------------===//
 // 2-op instructions with mask, base register, and hidden VL
 //===----------------------------------------------------------------------===//
@@ -402,6 +415,24 @@ def INT_VMULSWZX_M : SDNode<"VEISD::INT_VMULSWZX_M", VE2OpVXVMVVL>;
 def INT_VMULSL_M : SDNode<"VEISD::INT_VMULSL_M", VE2OpVXVMVVL>;
 def INT_VMULSLW_M : SDNode<"VEISD::INT_VMULSLW_M", VE2OpVXVMVVL>;
 
+// Either of 
+// (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base),
+//                   (VLS vl)))
+// (v256f64 (VDVXlim (i64 sy), (v256f64 vz), (v256i1 vm), (v256f64 base),
+//                   (VLS vl)))
+// (v256f64 (VDVXlim2 (v256f64 vz), (i64 sy), (v256i1 vm), (v256f64 base),
+//                    (VLS vl)))
+
+def VE2OpVXXMVVL :
+    SDTypeProfile<1, 5, [SDTCisVec<0>, 
+                         SDTCisVec<3>, SDTCVecEltisVT<3, i1>,
+                         SDTCisSameAs<4, 0>]>;
+def INT_VDIVUL_M : SDNode<"VEISD::INT_VDIVUL_M", VE2OpVXXMVVL>;
+def INT_VDIVUW_M : SDNode<"VEISD::INT_VDIVUW_M", VE2OpVXXMVVL>;
+def INT_VDIVSWSX_M : SDNode<"VEISD::INT_VDIVSWSX_M", VE2OpVXXMVVL>;
+def INT_VDIVSWZX_M : SDNode<"VEISD::INT_VDIVSWZX_M", VE2OpVXXMVVL>;
+def INT_VDIVSL_M : SDNode<"VEISD::INT_VDIVSL_M", VE2OpVXXMVVL>;
+
 //===----------------------------------------------------------------------===//
 // 2-op vector with mask and base register instructions
 //===----------------------------------------------------------------------===//
@@ -443,21 +474,6 @@ def VEpvand : SDNode<"VEISD::INT_PVAND", VE2OpVXVMV>;
 def VEpvor : SDNode<"VEISD::INT_PVOR", VE2OpVXVMV>;
 def VEpvxor : SDNode<"VEISD::INT_PVXOR", VE2OpVXVMV>;
 def VEpveqv : SDNode<"VEISD::INT_PVEQV", VE2OpVXVMV>;
-
-// Either of 
-// (v256f64 (VDVXlrm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base)))
-// (v256f64 (VDVXlim (i64 sy), (v256f64 vz), (v256i1 vm), (v256f64 base)))
-// (v256f64 (VDVXlim2 (v256f64 vz), (i64 sy), (v256i1 vm), (v256f64 base)))
-
-def VE2OpVXXMV :
-    SDTypeProfile<1, 4, [SDTCisVec<0>, 
-                         SDTCisVec<3>, SDTCVecEltisVT<3, i1>,
-                         SDTCisSameAs<4, 0>]>;
-def VEvdivul : SDNode<"VEISD::INT_VDIVUL", VE2OpVXXMV>;
-def VEvdivuw : SDNode<"VEISD::INT_VDIVUW", VE2OpVXXMV>;
-def VEvdivswsx : SDNode<"VEISD::INT_VDIVSWSX", VE2OpVXXMV>;
-def VEvdivswzx : SDNode<"VEISD::INT_VDIVSWZX", VE2OpVXXMV>;
-def VEvdivsl : SDNode<"VEISD::INT_VDIVSL", VE2OpVXXMV>;
 
 // Either of 
 // (v256f64 (VSRAXvm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base)))

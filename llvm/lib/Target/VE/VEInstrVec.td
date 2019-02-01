@@ -170,41 +170,45 @@ multiclass RV3VLm<string opcStr, bits<8> opc, RegisterClass ScalarRC,
   }
 }
 
-multiclass RV3DIVBYSm<string opcStr, bits<8> opc, RegisterClass ScalarRC, RegisterClass MaskRC, Operand immOp>
+multiclass RV3DIVBYSm<string opcStr, bits<8> opc, RegisterClass ScalarRC,
+                      RegisterClass MaskRC, Operand immOp>
 {
-  def i2 : RV3<opc, (outs V64:$vx), (ins V64:$vy, immOp:$sy),
-    !strconcat(opcStr, " $vx,$vy,$sy"), []> {
-      let cs = 1;
-      let cs2 = 1;
-      let cy = 0;
-      let vy = 0;
-    }
-  def r2 : RV3<opc, (outs V64:$vx), (ins V64:$vy, ScalarRC:$sy),
-    !strconcat(opcStr, " $vx,$vy,$sy"), []> {
-      let cs = 1;
-      let cs2 = 1;
-      let cy = 1;
-      let vy = 0;
-    }
-  def im2 : RV3<opc, (outs V64:$vx), (ins V64:$vy, immOp:$sy, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$sy,$vm"), []> {
-      bits<4> vm;
-      let cs = 1;
-      let cs2 = 1;
-      let vy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
-  def rm2 : RV3<opc, (outs V64:$vx), (ins V64:$vy, ScalarRC:$sy, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$sy,$vm"), []> {
-      bits<4> vm;
-      let cs = 1;
-      let cs2 = 1;
-      let cy = 1;
-      let vy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
+  def i2 : RV3<opc, (outs V64:$vx), (ins V64:$vy, immOp:$sy, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$sy"), []> {
+    let cs = 1;
+    let cs2 = 1;
+    let cy = 0;
+    let DisableEncoding = "$vl";
+  }
+  def r2 : RV3<opc, (outs V64:$vx), (ins V64:$vy, ScalarRC:$sy, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$sy"), []> {
+    let cs = 1;
+    let cs2 = 1;
+    let cy = 1;
+    let DisableEncoding = "$vl";
+  }
+  def im2 : RV3<opc, (outs V64:$vx),
+                (ins V64:$vy, immOp:$sy, MaskRC:$vm, V64:$vd, VLS:$vl),
+                !strconcat(opcStr, " $vx,$vy,$sy,$vm"), []> {
+    let cs = 1;
+    let cs2 = 1;
+    let cy = 0;
+    bits<4> vm;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
+  def rm2 : RV3<opc, (outs V64:$vx),
+                (ins V64:$vy, ScalarRC:$sy, MaskRC:$vm, V64:$vd, VLS:$vl),
+                !strconcat(opcStr, " $vx,$vy,$sy,$vm"), []> {
+    let cs = 1;
+    let cs2 = 1;
+    let cy = 1;
+    bits<4> vm;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
 }
 
 // Fused
@@ -816,13 +820,13 @@ defm VMPS : RVEXVLm<"vmuls", 0xCB>; // mul signed 32b sx/zx
 defm VMPX : RVLVLm<"vmuls", 0xDB>;   // mul signed 64b
 defm VMPD : RV3VLm<"vmuls.l.w", 0xD9, I32, VM, simm7Op32>; // mul signed 32b -> 64b
 
-defm VDIV : RVLWm<"vdivu", 0xE9>;
+defm VDIV : RVLWVLm<"vdivu", 0xE9>;
 let cx2 = 0 in defm VDIVl : RV3DIVBYSm<"vdivu.l", 0xE9, I64, VM, simm7Op64>;
 let cx2 = 1 in defm VDIVw : RV3DIVBYSm<"vdivu.w", 0xE9, I32, VM, simm7Op32>;
-defm VDVS : RVEXm<"vdivs", 0xEB>;
+defm VDVS : RVEXVLm<"vdivs", 0xEB>;
 let cx2 = 0 in defm VDVSwsx : RV3DIVBYSm<"vdivs.w.sx", 0xEB, I32, VM, simm7Op32>;
 let cx2 = 1 in defm VDVSwzx : RV3DIVBYSm<"vdivs.w.zx", 0xEB, I32, VM, simm7Op32>;
-defm VDVX : RVLm<"vdivs", 0xFB>;
+defm VDVX : RVLVLm<"vdivs", 0xFB>;
 defm VDVXl : RV3DIVBYSm<"vdivs.l", 0xFB, I64, VM, simm7Op64>;
 defm VCMP : RVUVLm<"vcmpu", 0xB9>;
 defm VCPS : RVWVLm<"vcmps", 0xFA>;
