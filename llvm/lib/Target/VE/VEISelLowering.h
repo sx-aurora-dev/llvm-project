@@ -225,14 +225,22 @@ namespace llvm {
                     // for int_ve_pvfnmad_vvsMv
       INT_PVFNMSB,  // for int_ve_pvfnmsb_vvvvMv, int_ve_pvfnmsb_vsvMv, or
                     // for int_ve_pvfnmsb_vvsMv
-      INT_VAND,     // for int_ve_vand_vvvmv or int_ve_vand_vsvmv
-      INT_VOR,      // for int_ve_vor_vvvmv or int_ve_vor_vsvmv
-      INT_VXOR,     // for int_ve_vxor_vvvmv or int_ve_vxor_vsvmv
-      INT_VEQV,     // for int_ve_veqv_vvvmv or int_ve_veqv_vsvmv
-      INT_PVAND,    // for int_ve_pvand_vvvMv or int_ve_pvand_vsvMv
-      INT_PVOR,     // for int_ve_pvor_vvvMv or int_ve_pvor_vsvMv
-      INT_PVXOR,    // for int_ve_pvxor_vvvMv or int_ve_pvxor_vsvMv
-      INT_PVEQV,    // for int_ve_pveqv_vvvMv or int_ve_pveqv_vsvMv
+      INT_VAND,     // for int_ve_vand_vvv or int_ve_vand_vsv
+      INT_PVAND,    // for int_ve_pvand_vvv or int_ve_pvand_vsv
+      INT_VAND_M,   // for int_ve_vand_vvvmv or int_ve_vand_vsvmv
+      INT_PVAND_M,  // for int_ve_pvand_vvvMv or int_ve_pvand_vsvMv
+      INT_VOR,      // for int_ve_vor_vvv or int_ve_vor_vsv
+      INT_PVOR,     // for int_ve_pvor_vvv or int_ve_pvor_vsv
+      INT_VOR_M,    // for int_ve_vor_vvvmv or int_ve_vor_vsvmv
+      INT_PVOR_M,   // for int_ve_pvor_vvvMv or int_ve_pvor_vsvMv
+      INT_VXOR,     // for int_ve_vxor_vvv or int_ve_vxor_vsv
+      INT_PVXOR,    // for int_ve_pvxor_vvv or int_ve_pvxor_vsv
+      INT_VXOR_M,   // for int_ve_vxor_vvvmv or int_ve_vxor_vsvmv
+      INT_PVXOR_M,  // for int_ve_pvxor_vvvMv or int_ve_pvxor_vsvMv
+      INT_VEQV,     // for int_ve_veqv_vvv or int_ve_veqv_vsv
+      INT_PVEQV,    // for int_ve_pveqv_vvv or int_ve_pveqv_vsv
+      INT_VEQV_M,   // for int_ve_veqv_vvvmv or int_ve_veqv_vsvmv
+      INT_PVEQV_M,  // for int_ve_pveqv_vvvMv or int_ve_pveqv_vsvMv
       INT_VBRD,     // for int_ve_vbrd_vs_f64, int_ve_vbrd_vs_i64,
       INT_VBRDU,    // for int_ve_vbrdu_vs_f32
       INT_VBRDL,    // for int_ve_vbrdl_vs_i32

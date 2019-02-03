@@ -390,103 +390,82 @@ multiclass RV4DSPm<string opcStr, bits<8> opc> {
   let cx = 1, cx2 = 1 in defm p : RV4m<"p" # opcStr, opc, I64, VM512>; // packed
 }
 
-multiclass RVLOGm<string opcStr, bits<8> opc> {
-  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
-    !strconcat(opcStr, " $vx,$vy,$vz"), []> {
-      let cx = 0;
-      let cx2 = 0;
-      let cs = 0;
-      let m = 0;
+multiclass RVLOGCm<string opcStr, bits<8> opc> {
+  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VLS:$vl),
+              !strconcat(opcStr, " $vx,$vy,$vz"), []> {
+    let cs = 0;
   }
-
-  def r : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
-    !strconcat(opcStr, " $vx,$sy,$vz"), []> {
-      let cx = 0;
-      let cx2 = 0;
-      let cs = 1;
-      let cy = 1;
-      let m = 0;
+  def r : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VLS:$vl),
+              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+    let cs = 1;
+    let cy = 1;
   }
-
-  def i0 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
-    !strconcat(opcStr, " $vx,(${sy})0,$vz"), []> {
-      let cx = 0;
-      let cx2 = 0;
-      let cs = 1;
-      let cy = 0;
-      let sy{6} = 1;
-      let m = 0;
+  def i0 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, VLS:$vl),
+               !strconcat(opcStr, " $vx,(${sy})0,$vz"), []> {
+    let cs = 1;
+    let cy = 0;
+    let sy{6} = 1;
   }
-
-  def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz),
-    !strconcat(opcStr, " $vx,(${sy})1,$vz"), []> {
-      let cx = 0;
-      let cx2 = 0;
-      let cs = 1;
-      let cy = 0;
-      let m = 0;
+  def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, VLS:$vl),
+               !strconcat(opcStr, " $vx,(${sy})1,$vz"), []> {
+    let cs = 1;
+    let cy = 0;
+    let sy{6} = 0;
   }
+}
 
-  def pv : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz),
-    !strconcat("p", opcStr, " $vx,$vy,$vz"), []> {
-      let cx = 1;
-      let cx2 = 1;
-      let cs = 0;
-      let m = 0;
-  }
-
-  def pr : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz),
-    !strconcat("p", opcStr, " $vx,$sy,$vz"), []> {
-      let cx = 1;
-      let cx2 = 1;
-      let cs = 1;
-      let cy = 1;
-      let m = 0;
-  }
-
-  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+multiclass RVLOGMm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
+  def vm : RV3<opc, (outs V64:$vx),
+               (ins V64:$vy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
     bits<4> vm;
-    let cx = 0;
-    let cx2 = 0;
     let cs = 0;
     let m = vm;
     let Constraints = "$vx = $vd";
   }
-
-  def rm : RV3<opc, (outs V64:$vx), (ins I64:$vy, V64:$vz, VM:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+  def rm : RV3<opc, (outs V64:$vx),
+               (ins I64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
     bits<4> vm;
-    let cx = 0;
-    let cx2 = 0;
     let cs = 1;
     let cy = 1;
     let m = vm;
     let Constraints = "$vx = $vd";
   }
-
-  // TODO: im0, im1
-
-  def pvm : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd),
-    !strconcat("p", opcStr, " $vx,$vy,$vz,$vm"), []> {
-      bits<4> vm;
-      let cx = 1;
-      let cx2 = 1;
-      let cs = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
+  def i0m : RV3<opc, (outs V64:$vx),
+                (ins uimm6Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+                !strconcat(opcStr, " $vx,(${sy})0,$vz,$vm"), []> {
+    bits<4> vm;
+    let cs = 1;
+    let cy = 0;
+    let sy{6} = 1;
+    let m = vm;
+    let Constraints = "$vx = $vd";
   }
-
-  def prm : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd),
-    !strconcat("p", opcStr, " $vx,$sy,$vz,$vm"), []> {
-      bits<4> vm;
-      let cx = 1;
-      let cx2 = 1;
-      let cs = 1;
-      let cy = 1;
-      let m = vm;
-      let Constraints = "$vx = $vd";
+  def i1m : RV3<opc, (outs V64:$vx),
+                (ins uimm6Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+                !strconcat(opcStr, " $vx,(${sy})1,$vz,$vm"), []> {
+    bits<4> vm;
+    let cs = 1;
+    let cy = 0;
+    let sy{6} = 0;
+    let m = vm;
+    let Constraints = "$vx = $vd";
   }
+}
+
+multiclass RVLOGm<string opcStr, bits<8> opc> {
+  let cx = 0, cx2 = 0 in defm "" : RVLOGCm<opcStr, opc>;
+  let cx = 0, cx2 = 1 in defm l : RVLOGCm<!strconcat("p", opcStr, ".lo"), opc>;
+  let cx = 1, cx2 = 0 in defm u : RVLOGCm<!strconcat("p", opcStr, ".up"), opc>;
+  let cx = 1, cx2 = 1 in defm p : RVLOGCm<!strconcat("p", opcStr), opc>;
+  let cx = 0, cx2 = 0 in defm "" : RVLOGMm<opcStr, opc, VM>;
+  let cx = 0, cx2 = 1 in defm l : RVLOGMm<!strconcat("p", opcStr, ".lo"),
+                                          opc, VM>;
+  let cx = 1, cx2 = 0 in defm u : RVLOGMm<!strconcat("p", opcStr, ".up"),
+                                          opc, VM>;
+  let cx = 1, cx2 = 1 in defm p : RVLOGMm<!strconcat("p", opcStr),
+                                          opc, VM512>;
 }
 
 class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,

@@ -341,9 +341,9 @@ def : Pat<(add v256i64:$vx, v256i64:$vy),
           (VADXlv v256i64:$vx, v256i64:$vy, 256)>;
 
 // Logic
-def : Pat<(and v256i64:$vx, v256i64:$vy), (VANDv v256i64:$vx, v256i64:$vy)>;
-def : Pat<(or  v256i64:$vx, v256i64:$vy), (VORv v256i64:$vx, v256i64:$vy)>;
-def : Pat<(xor v256i64:$vx, v256i64:$vy), (VXORv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(and v256i64:$vx, v256i64:$vy), (VANDv v256i64:$vx, v256i64:$vy, 256)>;
+def : Pat<(or  v256i64:$vx, v256i64:$vy), (VORv v256i64:$vx, v256i64:$vy, 256)>;
+def : Pat<(xor v256i64:$vx, v256i64:$vy), (VXORv v256i64:$vx, v256i64:$vy, 256)>;
 
 // Shifts
 def : Pat<(shl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))), (VSLAXr2 v256i64:$vx, i64:$sy)>;
