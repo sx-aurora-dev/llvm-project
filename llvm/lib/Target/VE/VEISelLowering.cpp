@@ -1537,6 +1537,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VSTU2D:      return "VEISD::INT_VSTU2D";
   case VEISD::INT_VSTL2D:      return "VEISD::INT_VSTL2D";
   case VEISD::INT_LVL:         return "VEISD::INT_LVL";
+  case VEISD::INT_VMV:         return "VEISD::INT_VMV";
   }
   return nullptr;
 }

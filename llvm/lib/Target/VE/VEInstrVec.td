@@ -690,7 +690,6 @@ multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass
     let vy = 0;
     let DisableEncoding = "$vl";
   }
-
   def rm : RV2<opc, (outs V64:$vx),
                (ins RCi:$sy, MaskRC:$vm, V64:$vd, VLS:$vl), 
                !strconcat(opcStr, " $vx,$sy,$vm"), []> {
@@ -701,7 +700,6 @@ multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass
     let Constraints = "$vx = $vd";
     let DisableEncoding = "$vl";
   }
-
   def im : RV2<opc, (outs V64:$vx),
                (ins immOp:$sy, MaskRC:$vm, V64:$vd, VLS:$vl), 
                !strconcat(opcStr, " $vx,$sy,$vm"), []> {
@@ -723,17 +721,36 @@ let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf64 : VBRDm<"vbrd", 0x8C, VM,
 let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf32 : VBRDm<"vbrdu", 0x8C, VM, F32, simm7Op64>;
 let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDi32 : VBRDm<"vbrdl", 0x8C, VM, I32, simm7Op32>;
 
-def VMVr : RV<0x9C, (outs V64:$vx), (ins I32:$sy, V64:$vz),
-  "vmv $vx,$sy,$vz", []> {
+multiclass VMVm<string opcStr, bits<8> opc> {
+  def r : RV<opc, (outs V64:$vx), (ins I32:$sy, V64:$vz, VLS:$vl),
+             !strconcat(opcStr, " $vx,$sy,$vz"), []> {
     let cy = 1;
-    let vy = 0;
+    let DisableEncoding = "$vl";
   }
-
-def VMVi : RV<0x9C, (outs V64:$vx), (ins uimm7Op32:$sy, V64:$vz),
-  "vmv $vx,$sy,$vz", []> {
+  def i : RVM<opc, (outs V64:$vx), (ins uimm7Op32:$sy, V64:$vz, VLS:$vl),
+              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
     let cy = 0;
-    let vy = 0;
+    let DisableEncoding = "$vl";
   }
+  def rm : RV<opc, (outs V64:$vx),
+              (ins I32:$sy, V64:$vz, VM:$vm, VLS:$vl),
+              !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+    bits<4> vm;
+    let cy = 1;
+    let m = vm;
+    let DisableEncoding = "$vl";
+  }
+  def im : RVM<opc, (outs V64:$vx),
+               (ins uimm7Op32:$sy, V64:$vz, VM:$vm, VLS:$vl),
+               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+    bits<4> vm;
+    let cy = 0;
+    let m = vm;
+    let DisableEncoding = "$vl";
+  }
+}
+
+defm VMV : VMVm<"vmv", 0x9C>;
 
 def PFCHVr : RVM<0x80, (outs), (ins I64:$sy, I64:$sz),
                  "pfchv $sy,$sz", []> {

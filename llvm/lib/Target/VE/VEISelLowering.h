@@ -313,6 +313,7 @@ namespace llvm {
       INT_VSTU2D,   // for int_ve_vstu2d_vss
       INT_VSTL2D,   // for int_ve_vstl2d_vss
       INT_LVL,      // for int_ve_lvl
+      INT_VMV,      // for int_ve_vmv_vsv
     };
   }
 

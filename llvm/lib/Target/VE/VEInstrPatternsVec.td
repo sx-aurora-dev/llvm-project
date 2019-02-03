@@ -204,8 +204,8 @@ def vec_gather   : SDNode<"VEISD::VEC_GATHER", SDTypeProfile<1, 1, [SDTCisVec<0>
 def vec_lvl   : SDNode<"VEISD::VEC_LVL", SDTypeProfile<0, 1, []>, [SDNPHasChain]>;
 
 def vec_rotate   : SDNode<"VEISD::VEC_VMV", SDTypeProfile<1, 2, []>>;
-def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)), (VMVr i32:$sy, v256f64:$vz)>;
-def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)), (VMVi (i32 simm7:$I), v256f64:$vz)>;
+def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)), (VMVr i32:$sy, v256f64:$vz, 256)>;
+def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)), (VMVi (i32 simm7:$I), v256f64:$vz, 256)>;
 
 // Shuffle
 // TODO

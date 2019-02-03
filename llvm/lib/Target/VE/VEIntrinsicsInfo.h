@@ -432,6 +432,7 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(vmuluw_vsvmv,       CONVM_VL,   VEISD::INT_VMULUW_M, 0),
   VE_INTRINSIC_DATA(vmuluw_vvv,         ADD_VL,     VEISD::INT_VMULUW, 0),
   VE_INTRINSIC_DATA(vmuluw_vvvmv,       CONVM_VL,   VEISD::INT_VMULUW_M, 0),
+  VE_INTRINSIC_DATA(vmv_vsv,            ADD_VL,     VEISD::INT_VMV, 0),
   VE_INTRINSIC_DATA(vor_vsv,            ADD_VL,     VEISD::INT_VOR, 0),
   VE_INTRINSIC_DATA(vor_vsvmv,          CONVM_VL,   VEISD::INT_VOR_M, 0),
   VE_INTRINSIC_DATA(vor_vvv,            ADD_VL,     VEISD::INT_VOR, 0),
