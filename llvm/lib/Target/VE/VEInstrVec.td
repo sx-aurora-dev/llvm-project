@@ -861,7 +861,6 @@ multiclass Shift<string opcStr, bits<8> opc, RegisterClass MaskRC> {
     let cs = 0;
     let DisableEncoding = "$vl";
   }
-
   // vvs is r2 (vsv is r)
   def r2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy, VLS:$vl),
                !strconcat(opcStr, " $vx,$vz,$sy"), []> {
@@ -869,14 +868,12 @@ multiclass Shift<string opcStr, bits<8> opc, RegisterClass MaskRC> {
     let cy = 1;
     let DisableEncoding = "$vl";
   }
-
   def i2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, uimm6Op64:$sy, VLS:$vl),
                !strconcat(opcStr, " $vx,$vz,$sy"), []> {
     let cs = 1;
     let cy = 0;
     let DisableEncoding = "$vl";
   }
-
   def vm : RV3<opc, (outs V64:$vx),
                (ins V64:$vz, V64:$vy, MaskRC:$vm, V64:$vd, VLS:$vl),
                !strconcat(opcStr, " $vx,$vz,$vy,$vm"), []> {
@@ -934,38 +931,45 @@ defm VSRA : Shift<"vsra.w", 0xF6, VM>;
 defm VSRA : ShiftPacked<"vsra", 0xF6>;
 defm VSRAX : Shift<"vsra.l", 0xD5, VM>;
 
-def VSFAr : RV<0xD7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$sy, I64:$sz),
-  "vsfa $vx,$vz,$sy,$sz", []> {
-    let cy = 0;
-    let vy = 0;
-    let m = 0;
-  }
-
-def VSFArm : RV<0xD7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$sy, I64:$sz, VM:$vm, V64:$vd),
-  "vsfa $vx,$vz,$sy,$sz,$vm", []> {
-    bits<4> vm;
-    let cy = 0;
-    let vy = 0;
-    let m = vm;
-    let Constraints = "$vx = $vd";
-  }
-
-def VSFAi : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz),
-  "vsfa $vx,$vz,$sy,$sz", []> {
+multiclass ShiftAdd<string opcStr, bits<8> opc, RegisterClass MaskRC> {
+  // vvs is r2 (vsv is r)
+  def r2 : RV3<opc, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vz,$sy,$sz"), []> {
     let cy = 1;
-    let vy = 0;
-    let m = 0;
+    let cz = 1;
+    let DisableEncoding = "$vl";
   }
-
-def VSFAim : RV<0xD7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$vm, V64:$vd),
-  "vsfa $vx,$vz,$sy,$sz,$vm", []> {
+  def i2 : RV3<opc, (outs V64:$vx),
+               (ins V64:$vz, uimm6Op64:$sy, I64:$sz, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vz,$sy,$sz"), []> {
+    let cy = 0;
+    let cz = 1;
+    let DisableEncoding = "$vl";
+  }
+  def rm2 : RV3<opc, (outs V64:$vx),
+                (ins V64:$vz, I64:$sy, I64:$sz, MaskRC:$vm, V64:$vd, VLS:$vl),
+                !strconcat(opcStr, " $vx,$vz,$sy,$sz,$vm"), []> {
     bits<4> vm;
     let cy = 1;
-    let vy = 0;
+    let cz = 1;
     let m = vm;
+    let DisableEncoding = "$vl";
     let Constraints = "$vx = $vd";
   }
+  def im2 : RV3<opc, (outs V64:$vx),
+                (ins V64:$vz, uimm6Op64:$sy, I64:$sz, MaskRC:$vm, V64:$vd,
+                     VLS:$vl),
+                !strconcat(opcStr, " $vx,$vz,$sy,$sz,$vm"), []> {
+    bits<4> vm;
+    let cy = 0;
+    let cz = 1;
+    let m = vm;
+    let DisableEncoding = "$vl";
+    let Constraints = "$vx = $vd";
+  }
+}
 
+defm VSFA : ShiftAdd<"vsfa", 0xD7, VM>;
 
 // 5.3.2.11 Vector Floating-Point Arithmetic Operation Instructions
 

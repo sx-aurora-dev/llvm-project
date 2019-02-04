@@ -269,7 +269,8 @@ namespace llvm {
       INT_VSRAW_M,  // for int_ve_vsraw_vvvmv or int_ve_vsraw_vvsmv
       INT_VSRAL_M,  // for int_ve_vsral_vvvmv or int_ve_vsral_vvsmv
       INT_PVSRA_M,  // for int_ve_pvsra_vvvMv or int_ve_pvsra_vvsMv
-      INT_VSFA,     // for int_ve_vsfa_vvssmv
+      INT_VSFA,     // for int_ve_vsfa_vvss
+      INT_VSFA_M,   // for int_ve_vsfa_vvssmv
       INT_VMRG,     // for int_ve_vmrg_vvvm
       INT_VMRGW,    // for int_ve_vmrgw_vvvM
       INT_VCP,      // for int_ve_vcp_vvmv

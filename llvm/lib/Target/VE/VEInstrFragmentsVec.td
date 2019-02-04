@@ -549,7 +549,19 @@ def VEvmrg : SDNode<"VEISD::INT_VMRG", VE2OpVXVM>;
 def VEvmrgw : SDNode<"VEISD::INT_VMRGW", VE2OpVXVM>;
 
 //===----------------------------------------------------------------------===//
-// 3-op vector with mask and base register instructions
+// 3-op vector instruction with hidden VL
+//===----------------------------------------------------------------------===//
+
+// (v256f64 (VSFArm (v256f64 vz), (i64 sy), (i64 sz), (VLS vl)))
+
+def VE3OpVVSSVL :
+    SDTypeProfile<1, 4, [SDTCisVec<0>, 
+                         SDTCisSameAs<1, 0>,
+                         SDTCisSameAs<3, 2>]>;
+def INT_VSFA : SDNode<"VEISD::INT_VSFA", VE3OpVVSSVL>;
+
+//===----------------------------------------------------------------------===//
+// 3-op vector instruction with mask, base register, and hidden VL
 //===----------------------------------------------------------------------===//
 
 // Either of 
@@ -579,13 +591,13 @@ def VEpvfnmad : SDNode<"VEISD::INT_PVFNMAD", VE3OpVXXVMV>;
 def VEpvfnmsb : SDNode<"VEISD::INT_PVFNMSB", VE3OpVXXVMV>;
 
 // (v256f64 (VSFArm (v256f64 vz), (i64 sy), (i64 sz),
-//                  (v256i1 vm), (v256f64 base)))
+//                  (v256i1 vm), (v256f64 base), (VLS vl)))
 
-def VE3OpVVSSMV :
-    SDTypeProfile<1, 5, [SDTCisVec<0>, 
+def VE3OpVVSSMVVL :
+    SDTypeProfile<1, 6, [SDTCisVec<0>, 
                          SDTCisSameAs<1, 0>,
                          SDTCisSameAs<3, 2>,
                          SDTCisVec<4>, SDTCVecEltisVT<4, i1>,
                          SDTCisSameAs<5, 0>]>;
-def VEvsfa : SDNode<"VEISD::INT_VSFA", VE3OpVVSSMV>;
+def INT_VSFA_M : SDNode<"VEISD::INT_VSFA_M", VE3OpVVSSMVVL>;
 
