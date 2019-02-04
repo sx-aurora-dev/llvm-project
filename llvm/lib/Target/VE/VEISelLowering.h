@@ -408,6 +408,16 @@ namespace llvm {
       INT_VCVTDS,       // for int_ve_vcvtds_vv
       INT_VCVTSD,       // for int_ve_vcvtsd_vv
       INT_VSHF,         // for int_ve_vshf_vvvs
+      INT_VSUMWSX,      // for int_ve_vsumwsx_vv
+      INT_VSUMWSX_M,    // for int_ve_vsumwsx_vvm
+      INT_VSUMWZX,      // for int_ve_vsumwzx_vv
+      INT_VSUMWZX_M,    // for int_ve_vsumwzx_vvm
+      INT_VSUML,        // for int_ve_vsuml_vv
+      INT_VSUML_M,      // for int_ve_vsuml_vvm
+      INT_VFSUMD,       // for int_ve_vfsums_vv
+      INT_VFSUMD_M,     // for int_ve_vfsums_vvm
+      INT_VFSUMS,       // for int_ve_vfsums_vv
+      INT_VFSUMS_M,     // for int_ve_vfsums_vvm
     };
   }
 

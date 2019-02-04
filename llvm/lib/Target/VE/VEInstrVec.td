@@ -1168,26 +1168,42 @@ let DisableEncoding = "$vl" in {
   def VFMKpaf : PseudoVec<(outs VM512:$vm), (ins VLS:$vl), "# pvfmk.af", []>;
 }
 
-
 // 5.3.2.13. Vector Recursive Relation Instructions
 multiclass RVRECm<string opcStr, bits<8> opc> {
   def v : RV2<opc, (outs V64:$vx), (ins V64:$vy),
-    !strconcat(opcStr, " $vx,$vy"), []> {
-      let sy = 0;
-      let m = 0;
-    }
+              !strconcat(opcStr, " $vx,$vy"), []> {
+    let sy = 0;
+    let m = 0;
+  }
   def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
-    !strconcat(opcStr, " $vx,$vy,$vm"), []> {
-      bits<4> vm;
-      let sy = 0;
-      let m = vm;
-    }
+               !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+    bits<4> vm;
+    let sy = 0;
+    let m = vm;
+  }
 }
-let cx2 = 0 in defm VSUMSsx : RVRECm<"vsum.w.sx", 0xEA>;
-let cx2 = 1 in defm VSUMSzx : RVRECm<"vsum.w.zx", 0xEA>;
-defm VSUMX : RVRECm<"vsum.l", 0xAA>;
-let cx = 0 in defm VFSUMd : RVRECm<"vfsum.d", 0xEC>;
-let cx = 1 in defm VFSUMs : RVRECm<"vfsum.s", 0xEC>;
+
+// 5.3.2.13. Vector Recursive Relation Instructions
+multiclass RVRECVLm<string opcStr, bits<8> opc> {
+  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl),
+              !strconcat(opcStr, " $vx,$vy"), []> {
+    let sy = 0;
+    let m = 0;
+    let DisableEncoding = "$vl";
+  }
+  def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+    bits<4> vm;
+    let sy = 0;
+    let m = vm;
+    let DisableEncoding = "$vl";
+  }
+}
+let cx2 = 0 in defm VSUMSsx : RVRECVLm<"vsum.w.sx", 0xEA>;
+let cx2 = 1 in defm VSUMSzx : RVRECVLm<"vsum.w.zx", 0xEA>;
+defm VSUMX : RVRECVLm<"vsum.l", 0xAA>;
+let cx = 0 in defm VFSUMd : RVRECVLm<"vfsum.d", 0xEC>;
+let cx = 1 in defm VFSUMs : RVRECVLm<"vfsum.s", 0xEC>;
 
 multiclass FLSXm<bits<8> opc, string opcStr>
 {

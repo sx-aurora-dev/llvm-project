@@ -11,9 +11,9 @@ case Intrinsic::ve_pvcvtws_vvMv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIX
 case Intrinsic::ve_pvcvtwsrz_vvMv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIXprzvm);
 case Intrinsic::ve_vcvtld_vvmv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIXXvm);
 case Intrinsic::ve_vcvtldrz_vvmv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIXXrzvm);
-#endif
 case Intrinsic::ve_vsumwsx_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VSUMSsxvm);
 case Intrinsic::ve_vsumwzx_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VSUMSzxvm);
 case Intrinsic::ve_vsuml_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VSUMXvm);
 case Intrinsic::ve_vfsumd_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VFSUMdvm);
 case Intrinsic::ve_vfsums_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VFSUMsvm);
+#endif

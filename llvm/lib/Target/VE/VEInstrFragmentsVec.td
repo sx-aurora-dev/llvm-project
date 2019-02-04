@@ -259,7 +259,6 @@ def INT_PVRSQRT : SDNode<"VEISD::INT_PVRSQRT", VE1OpVVVL>;
 def INT_VRCPD : SDNode<"VEISD::INT_VRCPD", VE1OpVVVL>;
 def INT_VRCPS : SDNode<"VEISD::INT_VRCPS", VE1OpVVVL>;
 def INT_PVRCP : SDNode<"VEISD::INT_PVRCP", VE1OpVVVL>;
-
 def INT_VCVTWDSX : SDNode<"VEISD::INT_VCVTWDSX", VE1OpVVVL>;
 def INT_VCVTWDSXRZ : SDNode<"VEISD::INT_VCVTWDSXRZ", VE1OpVVVL>;
 def INT_VCVTWDZX : SDNode<"VEISD::INT_VCVTWDZX", VE1OpVVVL>;
@@ -278,6 +277,27 @@ def INT_PVCVTSW : SDNode<"VEISD::INT_PVCVTSW", VE1OpVVVL>;
 def INT_VCVTDL : SDNode<"VEISD::INT_VCVTDL", VE1OpVVVL>;
 def INT_VCVTDS : SDNode<"VEISD::INT_VCVTDS", VE1OpVVVL>;
 def INT_VCVTSD : SDNode<"VEISD::INT_VCVTSD", VE1OpVVVL>;
+def INT_VSUMWSX : SDNode<"VEISD::INT_VSUMWSX", VE1OpVVVL>;
+def INT_VSUMWZX : SDNode<"VEISD::INT_VSUMWZX", VE1OpVVVL>;
+def INT_VSUML : SDNode<"VEISD::INT_VSUML", VE1OpVVVL>;
+def INT_VFSUMD : SDNode<"VEISD::INT_VFSUMD", VE1OpVVVL>;
+def INT_VFSUMS : SDNode<"VEISD::INT_VFSUMS", VE1OpVVVL>;
+
+//===----------------------------------------------------------------------===//
+// 1-op instructions with mask and hidden VL
+//===----------------------------------------------------------------------===//
+
+// (v256f64 (VSUMWSX (v256f64 sz), (vNi1 vy), (VLS vl)))
+
+def VE1OpVVMVL :
+    SDTypeProfile<1, 3, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>,
+                         SDTCisVec<2>, SDTCVecEltisVT<2, i1>]>;
+def INT_VSUMWSX_M : SDNode<"VEISD::INT_VSUMWSX_M", VE1OpVVMVL>;
+def INT_VSUMWZX_M : SDNode<"VEISD::INT_VSUMWZX_M", VE1OpVVMVL>;
+def INT_VSUML_M : SDNode<"VEISD::INT_VSUML_M", VE1OpVVMVL>;
+def INT_VFSUMD_M : SDNode<"VEISD::INT_VFSUMD_M", VE1OpVVMVL>;
+def INT_VFSUMS_M : SDNode<"VEISD::INT_VFSUMS_M", VE1OpVVMVL>;
 
 //===----------------------------------------------------------------------===//
 // 1-op instructions with mask, base register, and hidden VL
