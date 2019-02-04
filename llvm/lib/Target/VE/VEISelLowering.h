@@ -325,6 +325,11 @@ namespace llvm {
       INT_VSTL2D,   // for int_ve_vstl2d_vss
       INT_LVL,      // for int_ve_lvl
       INT_VMV,      // for int_ve_vmv_vsv
+      INT_VFSQRTD,  // for int_ve_vfsqrtd_vv
+      INT_VFSQRTS,  // for int_ve_vfsqrts_vv
+      INT_VRSQRTD,  // for int_ve_vrsqrtd_vv
+      INT_VRSQRTS,  // for int_ve_vrsqrts_vv
+      INT_PVRSQRT,  // for int_ve_pvrsqrt_vv
     };
   }
 

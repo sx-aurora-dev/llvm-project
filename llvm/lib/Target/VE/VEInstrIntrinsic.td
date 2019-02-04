@@ -431,8 +431,8 @@ def : Pat<(int_ve_vfdivs_vvv v256f64:$vy, v256f64:$vz), (VFDVsv v256f64:$vy, v25
 def : Pat<(int_ve_vfdivs_vsv f32:$sy, v256f64:$vz), (VFDVsr f32:$sy, v256f64:$vz)>;
 // def : Pat<(int_ve_vfdivs_vvvmv v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd), (VFDVsvm v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
 // def : Pat<(int_ve_vfdivs_vsvmv f32:$sy, v256f64:$vz, v4i64:$vm, v256f64:$vd), (VFDVsrm f32:$sy, v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
-def : Pat<(int_ve_vfsqrtd_vv v256f64:$vy), (VFSQRTdv v256f64:$vy)>;
-def : Pat<(int_ve_vfsqrts_vv v256f64:$vy), (VFSQRTsv v256f64:$vy)>;
+// def : Pat<(int_ve_vfsqrtd_vv v256f64:$vy), (VFSQRTdv v256f64:$vy)>;
+// def : Pat<(int_ve_vfsqrts_vv v256f64:$vy), (VFSQRTsv v256f64:$vy)>;
 def : Pat<(int_ve_vfcmpd_vvv v256f64:$vy, v256f64:$vz), (VFCPdv v256f64:$vy, v256f64:$vz)>;
 def : Pat<(int_ve_vfcmpd_vsv f64:$sy, v256f64:$vz), (VFCPdr f64:$sy, v256f64:$vz)>;
 // def : Pat<(int_ve_vfcmpd_vvvmv v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd), (VFCPdvm v256f64:$vy, v256f64:$vz, v4i64:$vm, v256f64:$vd)>;
@@ -544,9 +544,9 @@ def : Pat<(int_ve_pvfnmsb_vvsv v256f64:$vy, i64:$sy, v256f64:$vw), (VFNMSBpr2 v2
 def : Pat<(int_ve_vrcpd_vv v256f64:$vy), (VRCPdv v256f64:$vy)>;
 def : Pat<(int_ve_vrcps_vv v256f64:$vy), (VRCPsv v256f64:$vy)>;
 def : Pat<(int_ve_pvrcp_vv v256f64:$vy), (VRCPpv v256f64:$vy)>;
-def : Pat<(int_ve_vrsqrtd_vv v256f64:$vy), (VRSQRTdv v256f64:$vy)>;
-def : Pat<(int_ve_vrsqrts_vv v256f64:$vy), (VRSQRTsv v256f64:$vy)>;
-def : Pat<(int_ve_pvrsqrt_vv v256f64:$vy), (VRSQRTpv v256f64:$vy)>;
+// def : Pat<(int_ve_vrsqrtd_vv v256f64:$vy), (VRSQRTdv v256f64:$vy)>;
+// def : Pat<(int_ve_vrsqrts_vv v256f64:$vy), (VRSQRTsv v256f64:$vy)>;
+// def : Pat<(int_ve_pvrsqrt_vv v256f64:$vy), (VRSQRTpv v256f64:$vy)>;
 def : Pat<(int_ve_vcvtwdsx_vv v256f64:$vy), (VFIXdsxv v256f64:$vy)>;
 // def : Pat<(int_ve_vcvtwdsx_vvmv v256f64:$vy, v4i64:$vm, v256f64:$vd), (VFIXdsxvm v256f64:$vy, v4i64:$vm, v256f64:$vd)>;
 def : Pat<(int_ve_vcvtwdsxrz_vv v256f64:$vy), (VFIXdsxrzv v256f64:$vy)>;

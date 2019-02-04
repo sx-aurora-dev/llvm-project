@@ -49,18 +49,18 @@ class RV2<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 }
 
 multiclass RV2vm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
-  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
-    !strconcat(opcStr, " $vx,$vy"), []> {
-      let sy = 0;
-    }
-
-  def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd), 
-    !strconcat(opcStr, " $vx,$vy,$vm"), []> {
-      bits<4> vm;
-      let sy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vm";
-    }
+  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl), 
+              !strconcat(opcStr, " $vx,$vy"), []> {
+    let sy = 0;
+  }
+  def vm : RV2<opc, (outs V64:$vx),
+               (ins V64:$vy, MaskRC:$vm, V64:$vd, VLS:$vl), 
+               !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+    bits<4> vm;
+    let sy = 0;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+  }
 }
 
 class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,

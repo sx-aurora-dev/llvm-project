@@ -239,12 +239,23 @@ def INT_TOVM : SDNode<"VEISD::INT_TOVM", VE1OpSMVL>;
 // (v256f64 (VBRD (f64 sy), (VLS vl)))
 // (v256f64 (VBRD (i64 sy), (VLS vl)))
 
-def VE1OpVS :
+def VE1OpVSVL :
     SDTypeProfile<1, 2, [SDTCisVec<0>]>;
-def INT_VBRD : SDNode<"VEISD::INT_VBRD", VE1OpVS>;
-def INT_VBRDU : SDNode<"VEISD::INT_VBRDU", VE1OpVS>;
-def INT_VBRDL : SDNode<"VEISD::INT_VBRDL", VE1OpVS>;
-def INT_PVBRD : SDNode<"VEISD::INT_PVBRD", VE1OpVS>;
+def INT_VBRD : SDNode<"VEISD::INT_VBRD", VE1OpVSVL>;
+def INT_VBRDU : SDNode<"VEISD::INT_VBRDU", VE1OpVSVL>;
+def INT_VBRDL : SDNode<"VEISD::INT_VBRDL", VE1OpVSVL>;
+def INT_PVBRD : SDNode<"VEISD::INT_PVBRD", VE1OpVSVL>;
+
+// Either of
+// (v256f64 (VRSQRT (v256f64 vy), (VLS vl)))
+
+def VE1OpVVVL :
+    SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCisSameAs<1, 0>]>;
+def INT_VFSQRTD : SDNode<"VEISD::INT_VFSQRTD", VE1OpVVVL>;
+def INT_VFSQRTS : SDNode<"VEISD::INT_VFSQRTS", VE1OpVVVL>;
+def INT_VRSQRTD : SDNode<"VEISD::INT_VRSQRTD", VE1OpVVVL>;
+def INT_VRSQRTS : SDNode<"VEISD::INT_VRSQRTS", VE1OpVVVL>;
+def INT_PVRSQRT : SDNode<"VEISD::INT_PVRSQRT", VE1OpVVVL>;
 
 //===----------------------------------------------------------------------===//
 // 1-op instructions with mask, base register, and hidden VL
@@ -272,6 +283,20 @@ def VE1OpVVMV :
                          SDTCisSameAs<3, 0>]>;
 def VEvcp : SDNode<"VEISD::INT_VCP", VE1OpVVMV>;
 def VEvex : SDNode<"VEISD::INT_VEX", VE1OpVVMV>;
+
+// (v256f64 (VRSQRT (v256f64 sz), (vNi1 vy), (v256f64 base), (VLS vl)))
+
+def VE1OpVVMVVL :
+    SDTypeProfile<1, 4, [SDTCisVec<0>,
+                         SDTCisSameAs<1, 0>,
+                         SDTCisVec<2>, SDTCVecEltisVT<2, i1>,
+                         SDTCisSameAs<3, 0>]>;
+def INT_VFSQRTD_M : SDNode<"VEISD::INT_VFSQRTD_M", VE1OpVVMVVL>;
+def INT_VFSQRTS_M : SDNode<"VEISD::INT_VFSQRTS_M", VE1OpVVMVVL>;
+def INT_VRSQRTD_M : SDNode<"VEISD::INT_VRSQRTD_M", VE1OpVVMVVL>;
+def INT_VRSQRTS_M : SDNode<"VEISD::INT_VRSQRTS_M", VE1OpVVMVVL>;
+def INT_PVRSQRT_M : SDNode<"VEISD::INT_PVRSQRT_M", VE1OpVVMVVL>;
+
 
 //===----------------------------------------------------------------------===//
 // 2-op vector with base mask register instructions
