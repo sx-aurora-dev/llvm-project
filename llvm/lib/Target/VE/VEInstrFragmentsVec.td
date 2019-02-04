@@ -21,7 +21,7 @@ def VELoadMask :
     SDTypeProfile<1, 3, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
                          SDTCisSameAs<1, 0>, SDTCisInt<2>,
                          SDTCisVT<3, i64>]>;
-def VElvm : SDNode<"VEISD::INT_LVM", VELoadMask>;
+def INT_LVM : SDNode<"VEISD::INT_LVM", VELoadMask>;
 
 //===----------------------------------------------------------------------===//
 // Store Mask instructions
@@ -33,61 +33,59 @@ def VEStoreMask :
     SDTypeProfile<1, 2, [SDTCisVT<0, i64>,
                          SDTCisVec<1>, SDTCVecEltisVT<1, i1>,
                          SDTCisInt<2>]>;
-def VEsvm : SDNode<"VEISD::INT_SVM", VEStoreMask>;
+def INT_SVM : SDNode<"VEISD::INT_SVM", VEStoreMask>;
 
 //===----------------------------------------------------------------------===//
 // Vector Load instructions
 //===----------------------------------------------------------------------===//
 
-// (v256i64 (VLD (i64 base), (i64 skip), (i64 vl)))
+// (v256i64 (VLD (i64 base), (i64 skip), (VLS vl)))
 
 def VEVecLoad :
     SDTypeProfile<1, 3, [SDTCisVec<0>, SDTCisVT<1, i64>, SDTCisVT<2, i64>]>;
-//                         SDTCisVT<3, i64>]>;
-def VEvld : SDNode<"VEISD::INT_VLD", VEVecLoad,
-                   [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvldu : SDNode<"VEISD::INT_VLDU", VEVecLoad,
-                    [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvldlsx : SDNode<"VEISD::INT_VLDLSX", VEVecLoad,
-                      [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvldlzx : SDNode<"VEISD::INT_VLDLZX", VEVecLoad,
-                      [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvld2d : SDNode<"VEISD::INT_VLD2D", VEVecLoad,
+def INT_VLD : SDNode<"VEISD::INT_VLD", VEVecLoad,
                      [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvldu2d : SDNode<"VEISD::INT_VLDU2D", VEVecLoad,
+def INT_VLDU : SDNode<"VEISD::INT_VLDU", VEVecLoad,
                       [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvldl2dsx : SDNode<"VEISD::INT_VLDL2DSX", VEVecLoad,
+def INT_VLDLSX : SDNode<"VEISD::INT_VLDLSX", VEVecLoad,
                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def VEvldl2dzx : SDNode<"VEISD::INT_VLDL2DZX", VEVecLoad,
+def INT_VLDLZX : SDNode<"VEISD::INT_VLDLZX", VEVecLoad,
                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VLD2D : SDNode<"VEISD::INT_VLD2D", VEVecLoad,
+                       [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VLDU2D : SDNode<"VEISD::INT_VLDU2D", VEVecLoad,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VLDL2DSX : SDNode<"VEISD::INT_VLDL2DSX", VEVecLoad,
+                          [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def INT_VLDL2DZX : SDNode<"VEISD::INT_VLDL2DZX", VEVecLoad,
+                          [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
 // Vector Store instructions
 //===----------------------------------------------------------------------===//
 
-// (VST (v256i64 vx), (i64 base), (i64 skip), (i64 vl))
+// (VST (v256i64 vx), (i64 base), (i64 skip), (VLS vl))
 
 def VEVecStore :
     SDTypeProfile<0, 4, [SDTCisVec<0>, SDTCisVT<1, i64>, SDTCisVT<2, i64>]>;
-//                         SDTCisVT<3, i64>]>;
-def VEvst : SDNode<"VEISD::INT_VST", VEVecStore,
-                   [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvstu : SDNode<"VEISD::INT_VSTU", VEVecStore,
-                    [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvstl : SDNode<"VEISD::INT_VSTL", VEVecStore,
-                    [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvst2d : SDNode<"VEISD::INT_VST2D", VEVecStore,
+def INT_VST : SDNode<"VEISD::INT_VST", VEVecStore,
                      [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvstu2d : SDNode<"VEISD::INT_VSTU2D", VEVecStore,
+def INT_VSTU : SDNode<"VEISD::INT_VSTU", VEVecStore,
                       [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def VEvstl2d : SDNode<"VEISD::INT_VSTL2D", VEVecStore,
+def INT_VSTL : SDNode<"VEISD::INT_VSTL", VEVecStore,
                       [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VST2D : SDNode<"VEISD::INT_VST2D", VEVecStore,
+                       [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSTU2D : SDNode<"VEISD::INT_VSTU2D", VEVecStore,
+                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def INT_VSTL2D : SDNode<"VEISD::INT_VSTL2D", VEVecStore,
+                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
 // Load VL
 //===----------------------------------------------------------------------===//
 
-// (LVL (i32 val))
+// (LVL (VLS val))
 
 def VELoadVL :
     SDTypeProfile<0, 1, [SDTCisVT<0, i32>]>;
