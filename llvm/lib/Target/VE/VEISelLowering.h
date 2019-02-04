@@ -317,8 +317,8 @@ namespace llvm {
       INT_VSFA_M,   // for int_ve_vsfa_vvssmv
       INT_VMRG_M,   // for int_ve_vmrg_vvvm
       INT_VMRGW_M,  // for int_ve_vmrgw_vvvM
-      INT_VCP,      // for int_ve_vcp_vvmv
-      INT_VEX,      // for int_ve_vex_vvmv
+      INT_VCP_M,    // for int_ve_vcp_vvmv
+      INT_VEX_M,    // for int_ve_vex_vvmv
       INT_VFMKL,    // for int_ve_vfmkl_mcv
       INT_VFMKL_M,  // for int_ve_vfmkl_mcvm
       INT_VFMKW,    // for int_ve_vfmkw_mcv
@@ -407,6 +407,7 @@ namespace llvm {
       INT_VCVTDL,       // for int_ve_vcvtdl_vv
       INT_VCVTDS,       // for int_ve_vcvtds_vv
       INT_VCVTSD,       // for int_ve_vcvtsd_vv
+      INT_VSHF,         // for int_ve_vshf_vvvs
     };
   }
 

@@ -1013,7 +1013,9 @@ defm VRSQRT : VRSQRTm<"vrsqrt", 0xF1>;
 
 multiclass VCVT<bits<8>opc, string opcStr> {
   def v : RV2<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl), 
-    !strconcat(opcStr, " $vx,$vy"), []>;
+              !strconcat(opcStr, " $vx,$vy"), []> {
+    let DisableEncoding = "$vl";
+  }
 }
 
 multiclass VFIXCm<bits<8>opc, string opcStr, RegisterClass MaskRC> {
@@ -1023,6 +1025,7 @@ multiclass VFIXCm<bits<8>opc, string opcStr, RegisterClass MaskRC> {
     let m = 0;
     let vz{7-4} = 0;
     let vz{3-0} = rvz;
+    let DisableEncoding = "$vl";
   }
   def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,$vm"), []> {
@@ -1032,6 +1035,7 @@ multiclass VFIXCm<bits<8>opc, string opcStr, RegisterClass MaskRC> {
     let vz{7-4} = 0;
     let vz{3-0} = rvz;
     let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
   }
 }
 
@@ -1060,24 +1064,40 @@ defm VCVS : VCVT<0x9F, "vcvt.s.d">;
 let cx = 0, cs = 0 in
 def VMRGvm : RV<0xD6, (outs V64:$vx),
                 (ins V64:$vy, V64:$vz, VM:$vm, VLS:$vl),
-                "vmrg $vx,$vy,$vz,$vm", []>;
+                "vmrg $vx,$vy,$vz,$vm", []> {
+  bits<4> vm;
+  let m = vm;
+  let DisableEncoding = "$vl";
+}
 let cx = 1, cs = 0 in
 def VMRGpvm : RV<0xD6, (outs V64:$vx),
                  (ins V64:$vy, V64:$vz, VM512:$vm, VLS:$vl),
-                 "vmrg.w $vx,$vy,$vz,$vm", []>;
+                 "vmrg.w $vx,$vy,$vz,$vm", []> {
+  bits<4> vm;
+  let m = vm;
+  let DisableEncoding = "$vl";
+}
 
 let cy = 0 in
-def VSHFi : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, uimm6Op64:$sy),
-  "vshf $vx,$vy,$vz,$sy", []>;
+def VSHFi : RV3<0xBC, (outs V64:$vx),
+                (ins V64:$vy, V64:$vz, uimm6Op64:$sy, VLS:$vl),
+                "vshf $vx,$vy,$vz,$sy", []> {
+  let DisableEncoding = "$vl";
+}
 let cy = 1 in
-def VSHFr : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy),
-  "vshf $vx,$vy,$vz,$sy", []>;
+def VSHFr : RV3<0xBC, (outs V64:$vx),
+                (ins V64:$vy, V64:$vz, I64:$sy, VLS:$vl),
+                "vshf $vx,$vy,$vz,$sy", []> {
+  let DisableEncoding = "$vl";
+}
 
 class VCPEX<bits<8> opc, string opcStr> 
-  : RV<opc, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd),
-  !strconcat(opcStr, " $vx,$vz,$vm"), []> {
-    let vy = 0;
-    let Constraints = "$vx = $vd";
+  : RV<opc, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd, VLS:$vl),
+       !strconcat(opcStr, " $vx,$vz,$vm"), []> {
+  bits<4> vm;
+  let m = vm;
+  let Constraints = "$vx = $vd";
+  let DisableEncoding = "$vl";
 }
 
 def VCPvm : VCPEX<0x8D, "vcp">;
