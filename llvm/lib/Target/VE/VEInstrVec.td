@@ -1057,12 +1057,14 @@ defm VCVS : VCVT<0x9F, "vcvt.s.d">;
 
 // 5.3.2.12. Vector Mask Arithmetic Instructions
 
-let cx = 0, cs = 1 in
-def VMRGvm : RV<0xD6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm),
-  "vmrg $vx,$vy,$vz,$vm", []>;
-let cx = 1, cs = 1 in
-def VMRGpvm : RV<0xD6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm),
-  "vmrg.w $vx,$vy,$vz,$vm", []>;
+let cx = 0, cs = 0 in
+def VMRGvm : RV<0xD6, (outs V64:$vx),
+                (ins V64:$vy, V64:$vz, VM:$vm, VLS:$vl),
+                "vmrg $vx,$vy,$vz,$vm", []>;
+let cx = 1, cs = 0 in
+def VMRGpvm : RV<0xD6, (outs V64:$vx),
+                 (ins V64:$vy, V64:$vz, VM512:$vm, VLS:$vl),
+                 "vmrg.w $vx,$vy,$vz,$vm", []>;
 
 let cy = 0 in
 def VSHFi : RV3<0xBC, (outs V64:$vx), (ins V64:$vy, V64:$vz, uimm6Op64:$sy),

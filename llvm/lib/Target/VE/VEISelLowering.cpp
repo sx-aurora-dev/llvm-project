@@ -1527,8 +1527,8 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_PVSRA_M:     return "VEISD::INT_PVSRA_M";
   case VEISD::INT_VSFA:        return "VEISD::INT_VSFA";
   case VEISD::INT_VSFA_M:      return "VEISD::INT_VSFA_M";
-  case VEISD::INT_VMRG:        return "VEISD::INT_VMRG";
-  case VEISD::INT_VMRGW:       return "VEISD::INT_VMRGW";
+  case VEISD::INT_VMRG_M:      return "VEISD::INT_VMRG_M";
+  case VEISD::INT_VMRGW_M:     return "VEISD::INT_VMRGW_M";
   case VEISD::INT_VCP:         return "VEISD::INT_VCP";
   case VEISD::INT_VEX:         return "VEISD::INT_VEX";
   case VEISD::INT_VFMKL:       return "VEISD::INT_VFMKL";
@@ -2511,40 +2511,6 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
                          Op.getOperand(1), Bitcast, Op.getOperand(3), VL);
     }
-    case OP_XXXM: {
-      // 2-operand vector calculation with mask and base vector intrinsics
-      //   Input:
-      //     (v256f64 (int_ve_vaddul_vvvmv
-      //                  (v256f64 %v1), (v256f64 %v2),
-      //                  (v4i64 %vm)))
-      //   Output:
-      //     (v256f64 (VADDlvm %v1, %v2,
-      //                  (v256i1 (bitcast %vm))))
-      SDValue Mask = Op.getOperand(3);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
-                         Op.getOperand(1), Op.getOperand(2),
-                         Bitcast);
-    }
-    case OP_XXXMX: {
-      // 2-operand vector calculation with mask and base vector intrinsics
-      //   Input:
-      //     (v256f64 (int_ve_vaddul_vvvmv
-      //                  (v256f64 %v1), (v256f64 %v2),
-      //                  (v4i64 %vm), (v256f64 %vd)))
-      //   Output:
-      //     (v256f64 (VADDlvm %v1, %v2,
-      //                  (v256i1 (bitcast %vm)), %vd))
-      SDValue Mask = Op.getOperand(3);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
-                         Op.getOperand(1), Op.getOperand(2),
-                         Bitcast, Op.getOperand(4));
-    }
     case OP_MXX: {
       // 2-operand intrinsics
       //   Input:
@@ -3107,7 +3073,8 @@ SDValue VETargetLowering::LowerSHUFFLE_VECTOR(SDValue Op, SelectionDAG &DAG) con
     Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, index, mask});
   }
 
-  SDValue returnValue = DAG.getNode(VEISD::INT_VMRG, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask});
+  SDValue resultSizeConst = DAG.getConstant(256, dl, i64);
+  SDValue returnValue = DAG.getNode(VEISD::INT_VMRG_M, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask, resultSizeConst});
   return returnValue;
 }
 

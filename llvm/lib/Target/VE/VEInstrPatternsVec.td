@@ -266,9 +266,9 @@ def : Pat<(setcc v256f64:$vx, v256f64:$vy, CCSIOp:$cond),
 // Vector Select
 
 def : Pat<(v256f64 (vselect v256i1:$m, v256f64:$vy, v256f64:$vz)), 
-          (v256f64 (VMRGvm v256f64:$vz, v256f64:$vy, v256i1:$m))>; 
+          (v256f64 (VMRGvm v256f64:$vz, v256f64:$vy, v256i1:$m, 256))>; 
 def : Pat<(v512f32 (vselect v512i1:$m, v512f32:$vy, v512f32:$vz)),
-          (VMRGpvm v512f32:$vz, v512f32:$vy, v512i1:$m)>;
+          (VMRGpvm v512f32:$vz, v512f32:$vy, v512i1:$m, 256)>;
 
 // Sequence
 
