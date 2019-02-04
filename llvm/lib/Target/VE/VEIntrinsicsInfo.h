@@ -25,8 +25,9 @@ enum IntrinsicType : uint16_t {
   CONVM_VL,     // Add bitcasts for vector mask arguments and add VL.
   RETM_VL,      // Add a bitcast for vector mask return value, add bitcasts
                 // for vector mask arguments, and add VL.
-  OP_MMXX, OP_XMX,
-  OP_MMM, OP_MM,
+  CONVM,        // Add bitcasts for vector mask arguments.
+  RETM,         // Add a bitcast for vector mask return value and add bitcasts
+                // for vector mask arguments.
 };
 
 struct IntrinsicData {
@@ -122,23 +123,23 @@ static const IntrinsicData* getIntrinsicWithChain(unsigned IntNo) {
  * the alphabetical order.
  */
 static const IntrinsicData  IntrinsicsWithoutChain[] = {
-  VE_INTRINSIC_DATA(andm_MMM,           OP_MMM,     VEISD::INT_ANDM, 0),
-  VE_INTRINSIC_DATA(andm_mmm,           OP_MMM,     VEISD::INT_ANDM, 0),
-  VE_INTRINSIC_DATA(eqvm_MMM,           OP_MMM,     VEISD::INT_EQVM, 0),
-  VE_INTRINSIC_DATA(eqvm_mmm,           OP_MMM,     VEISD::INT_EQVM, 0),
-  VE_INTRINSIC_DATA(extract_vm512l,     OP_MM,      VEISD::INT_EXTML, 0),
-  VE_INTRINSIC_DATA(extract_vm512u,     OP_MM,      VEISD::INT_EXTMU, 0),
-  VE_INTRINSIC_DATA(insert_vm512l,      OP_MMM,     VEISD::INT_INSML, 0),
-  VE_INTRINSIC_DATA(insert_vm512u,      OP_MMM,     VEISD::INT_INSMU, 0),
-  VE_INTRINSIC_DATA(lvm_MMss,           OP_MMXX,    VEISD::INT_LVM, 0),
-  VE_INTRINSIC_DATA(lvm_mmss,           OP_MMXX,    VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(andm_MMM,           RETM,       VEISD::INT_ANDM, 0),
+  VE_INTRINSIC_DATA(andm_mmm,           RETM,       VEISD::INT_ANDM, 0),
+  VE_INTRINSIC_DATA(eqvm_MMM,           RETM,       VEISD::INT_EQVM, 0),
+  VE_INTRINSIC_DATA(eqvm_mmm,           RETM,       VEISD::INT_EQVM, 0),
+  VE_INTRINSIC_DATA(extract_vm512l,     RETM,       VEISD::INT_EXTML, 0),
+  VE_INTRINSIC_DATA(extract_vm512u,     RETM,       VEISD::INT_EXTMU, 0),
+  VE_INTRINSIC_DATA(insert_vm512l,      RETM,       VEISD::INT_INSML, 0),
+  VE_INTRINSIC_DATA(insert_vm512u,      RETM,       VEISD::INT_INSMU, 0),
+  VE_INTRINSIC_DATA(lvm_MMss,           RETM,       VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(lvm_mmss,           RETM,       VEISD::INT_LVM, 0),
   VE_INTRINSIC_DATA(lzvm_sm,            CONVM_VL,   VEISD::INT_LZVM, 0),
-  VE_INTRINSIC_DATA(negm_MM,            OP_MM,      VEISD::INT_NEGM, 0),
-  VE_INTRINSIC_DATA(negm_mm,            OP_MM,      VEISD::INT_NEGM, 0),
-  VE_INTRINSIC_DATA(nndm_MMM,           OP_MMM,     VEISD::INT_NNDM, 0),
-  VE_INTRINSIC_DATA(nndm_mmm,           OP_MMM,     VEISD::INT_NNDM, 0),
-  VE_INTRINSIC_DATA(orm_MMM,            OP_MMM,     VEISD::INT_ORM, 0),
-  VE_INTRINSIC_DATA(orm_mmm,            OP_MMM,     VEISD::INT_ORM, 0),
+  VE_INTRINSIC_DATA(negm_MM,            RETM,       VEISD::INT_NEGM, 0),
+  VE_INTRINSIC_DATA(negm_mm,            RETM,       VEISD::INT_NEGM, 0),
+  VE_INTRINSIC_DATA(nndm_MMM,           RETM,       VEISD::INT_NNDM, 0),
+  VE_INTRINSIC_DATA(nndm_mmm,           RETM,       VEISD::INT_NNDM, 0),
+  VE_INTRINSIC_DATA(orm_MMM,            RETM,       VEISD::INT_ORM, 0),
+  VE_INTRINSIC_DATA(orm_mmm,            RETM,       VEISD::INT_ORM, 0),
   VE_INTRINSIC_DATA(pcvm_sm,            CONVM_VL,   VEISD::INT_PCVM, 0),
   VE_INTRINSIC_DATA(pvadds_vsv,         ADD_VL,     VEISD::INT_PVADDS, 0),
   VE_INTRINSIC_DATA(pvadds_vsvMv,       CONVM_VL,   VEISD::INT_PVADDS_M, 0),
@@ -267,8 +268,8 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(pvxor_vsvMv,        CONVM_VL,   VEISD::INT_PVXOR_M, 0),
   VE_INTRINSIC_DATA(pvxor_vvv,          ADD_VL,     VEISD::INT_PVXOR, 0),
   VE_INTRINSIC_DATA(pvxor_vvvMv,        CONVM_VL,   VEISD::INT_PVXOR_M, 0),
-  VE_INTRINSIC_DATA(svm_sMs,            OP_XMX,     VEISD::INT_SVM, 0),
-  VE_INTRINSIC_DATA(svm_sms,            OP_XMX,     VEISD::INT_SVM, 0),
+  VE_INTRINSIC_DATA(svm_sMs,            CONVM,      VEISD::INT_SVM, 0),
+  VE_INTRINSIC_DATA(svm_sms,            CONVM,      VEISD::INT_SVM, 0),
   VE_INTRINSIC_DATA(tovm_sm,            CONVM_VL,   VEISD::INT_TOVM, 0),
   VE_INTRINSIC_DATA(vaddsl_vsv,         ADD_VL,     VEISD::INT_VADDSL, 0),
   VE_INTRINSIC_DATA(vaddsl_vsvmv,       CONVM_VL,   VEISD::INT_VADDSL_M, 0),
@@ -637,8 +638,8 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(vxor_vsvmv,         CONVM_VL,   VEISD::INT_VXOR_M, 0),
   VE_INTRINSIC_DATA(vxor_vvv,           ADD_VL,     VEISD::INT_VXOR, 0),
   VE_INTRINSIC_DATA(vxor_vvvmv,         CONVM_VL,   VEISD::INT_VXOR_M, 0),
-  VE_INTRINSIC_DATA(xorm_MMM,           OP_MMM,     VEISD::INT_XORM, 0),
-  VE_INTRINSIC_DATA(xorm_mmm,           OP_MMM,     VEISD::INT_XORM, 0),
+  VE_INTRINSIC_DATA(xorm_MMM,           RETM,       VEISD::INT_XORM, 0),
+  VE_INTRINSIC_DATA(xorm_mmm,           RETM,       VEISD::INT_XORM, 0),
 };
 
 /*

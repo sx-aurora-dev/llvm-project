@@ -185,15 +185,15 @@ def INT_PVFMKAF : SDNode<"VEISD::INT_PVFMKAF", VE0OpMVL>;
 def VE1OpMM :
     SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
                          SDTCisSameAs<1, 0>]>;
-def VEnegm : SDNode<"VEISD::INT_NEGM", VE1OpMM>;
+def INT_NEGM : SDNode<"VEISD::INT_NEGM", VE1OpMM>;
 
 // (v256i1 (EXTMU (v512i1 vy)))
 
 def VE1OpMM2 :
     SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
                          SDTCisVec<1>, SDTCVecEltisVT<1, i1>]>;
-def VEextmu : SDNode<"VEISD::INT_EXTMU", VE1OpMM2>;
-def VEextml : SDNode<"VEISD::INT_EXTML", VE1OpMM2>;
+def INT_EXTMU : SDNode<"VEISD::INT_EXTMU", VE1OpMM2>;
+def INT_EXTML : SDNode<"VEISD::INT_EXTML", VE1OpMM2>;
 
 //===----------------------------------------------------------------------===//
 // 2-op logical instructions
@@ -204,11 +204,11 @@ def VEextml : SDNode<"VEISD::INT_EXTML", VE1OpMM2>;
 def VE2OpMMM :
     SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
                          SDTCisSameAs<1, 0>, SDTCisSameAs<2, 0>]>;
-def VEandm : SDNode<"VEISD::INT_ANDM", VE2OpMMM>;
-def VEorm  : SDNode<"VEISD::INT_ORM",  VE2OpMMM>;
-def VExorm : SDNode<"VEISD::INT_XORM", VE2OpMMM>;
-def VEeqvm : SDNode<"VEISD::INT_EQVM", VE2OpMMM>;
-def VEnndm : SDNode<"VEISD::INT_NNDM", VE2OpMMM>;
+def INT_ANDM : SDNode<"VEISD::INT_ANDM", VE2OpMMM>;
+def INT_ORM  : SDNode<"VEISD::INT_ORM",  VE2OpMMM>;
+def INT_XORM : SDNode<"VEISD::INT_XORM", VE2OpMMM>;
+def INT_EQVM : SDNode<"VEISD::INT_EQVM", VE2OpMMM>;
+def INT_NNDM : SDNode<"VEISD::INT_NNDM", VE2OpMMM>;
 
 // (v512i1 (INSMU (v512i1 vy), (v256i1 vz)))
 
@@ -216,8 +216,8 @@ def VE2OpMMM2 :
     SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCVecEltisVT<0, i1>,
                          SDTCisSameAs<1, 0>,
                          SDTCisVec<2>, SDTCVecEltisVT<2, i1>]>;
-def VEinsmu : SDNode<"VEISD::INT_INSMU", VE2OpMMM2>;
-def VEinsml : SDNode<"VEISD::INT_INSML", VE2OpMMM2>;
+def INT_INSMU : SDNode<"VEISD::INT_INSMU", VE2OpMMM2>;
+def INT_INSML : SDNode<"VEISD::INT_INSML", VE2OpMMM2>;
 
 //===----------------------------------------------------------------------===//
 // 1-op instructions with hidden VL

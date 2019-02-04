@@ -2392,76 +2392,6 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     default:
       llvm_unreachable("Unknown intrinsic data type");
       break;
-    case OP_MMXX: {
-      // Load mask intrinsics
-      //   Input:
-      //     (v4i64 (int_ve_lvm_mmss (v4i64 %vm), (i64 %index), (i64 %val)))
-      //   Output:
-      //     (v4i64 (bitcast (v256i1 (LVMr
-      //         (v256i1 (bitcast %vm)), %index, %val))))
-      SDValue Mask = Op.getOperand(1);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      SDValue Load = DAG.getNode(IntrData->Opc0, dl, BitcastVT, Bitcast,
-                                 Op.getOperand(2), Op.getOperand(3));
-      return DAG.getBitcast(Op.getValueType(), Load);
-    }
-    case OP_XMX: {
-      // Store mask intrinsics
-      //   Input:
-      //     (i64 (int_ve_svm_sms (v4i64 %vm), (i64 %index)))
-      //   Output:
-      //     (i64 (SVMr
-      //         (v256i1 (bitcast %vm)), %index))
-      SDValue Mask = Op.getOperand(1);
-      MVT BitcastVT = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
-      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Bitcast,
-                         Op.getOperand(2));
-    }
-    case OP_MM: {
-      // 1-operand mask intrinsics
-      //   Input:
-      //     (v4i64 (int_ve_negm_mmm (v4i64 %vm)))
-      //   Output:
-      //     (v4i64 (bitcast (v256i1 (NEGM
-      //         (v256i1 (bitcast %vm1))))))
-      SDValue Mask = Op.getOperand(1);
-      MVT BitcastVT1 = MVT::getVectorVT(
-        MVT::i1, Mask.getValueType().getSizeInBits());
-      SDValue Bitcast = DAG.getBitcast(BitcastVT1, Mask);
-      // Get bitmask for each operand since for the case.
-      //   e.g. (v256i1 (extract_VM512u (v512i1 %vm)))
-      MVT BitcastVT0 = MVT::getVectorVT(
-        MVT::i1, Op.getValueType().getSizeInBits());
-      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Bitcast);
-      return DAG.getBitcast(Op.getValueType(), Res);
-    }
-    case OP_MMM: {
-      // 2-operand mask intrinsics
-      //   Input:
-      //     (v4i64 (int_ve_andm_mmm (v4i64 %vm1), (v4i64 %vm2)))
-      //   Output:
-      //     (v4i64 (bitcast (v256i1 (ANDM
-      //         (v256i1 (bitcast %vm1)), (v256i1 (bitcast %vm2))))))
-      SDValue Mask1 = Op.getOperand(1);
-      MVT BitcastVT1 = MVT::getVectorVT(
-        MVT::i1, Mask1.getValueType().getSizeInBits());
-      SDValue Bitcast1 = DAG.getBitcast(BitcastVT1, Mask1);
-      // Get bitmask for each operand since for the case.
-      //   e.g. (v512i1 (insert_VM512u (v512i1 %vm1), (v256i1 %vm2)))
-      SDValue Mask2 = Op.getOperand(2);
-      MVT BitcastVT2 = MVT::getVectorVT(
-        MVT::i1, Mask2.getValueType().getSizeInBits());
-      SDValue Bitcast2 = DAG.getBitcast(BitcastVT2, Mask2);
-      MVT BitcastVT0 = MVT::getVectorVT(
-        MVT::i1, Op.getValueType().getSizeInBits());
-      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0,
-                                 Bitcast1, Bitcast2);
-      return DAG.getBitcast(Op.getValueType(), Res);
-    }
     case ADD_VL: {
       // Add hiddnen VL
       //   Input:
@@ -2514,6 +2444,31 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
     }
+    case CONVM: {
+      // Convert a bitmask and adds hidden VL
+      //   Input:
+      //     (v256i64 (int_ve_vbrd_vsmv_i64 (i64 %sy), (v4i64 %vm),
+      //                                    (v256i64 %base)))
+      //   Output:
+      //     (v256i64 (VBRD_M %sy, (v256i1 (bitcast %vm)), %base, %vl))
+      SmallVector<SDValue, 8> Ops;
+
+      // Ignore operand 0 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 1; i < Op.getNumOperands(); ++i) {
+        if (Op.getOperand(i).getValueType() == MVT::v4i64 ||
+            Op.getOperand(i).getValueType() == MVT::v8i64) {
+          SDValue Mask = Op.getOperand(i);
+          MVT BitcastVT = MVT::getVectorVT(
+            MVT::i1, Mask.getValueType().getSizeInBits());
+          SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+          Ops.push_back(Bitcast);
+        } else {
+          Ops.push_back(Op.getOperand(i));
+        }
+      }
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
+    }
     case RETM_VL: {
       // Return bitmask, convert bitmask, and adds hidden VL
       //   Input:
@@ -2542,6 +2497,35 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
       Ops.push_back(VL);
 
+      // Get bitmask for each operand since for the case.
+      //   e.g. (v256i1 (extract_VM512u (v512i1 %vm)))
+      MVT BitcastVT0 = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Ops);
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case RETM: {
+      // Return bitmask, convert bitmask, and adds hidden VL
+      //   Input:
+      //     (v4i64 (int_ve_negm_mmm (v4i64 %vm), (VLS %vl)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (NEGM (v256i1 (bitcast %vm)), %vl))))
+      SmallVector<SDValue, 8> Ops;
+
+      // Ignore operand 0 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 1; i < Op.getNumOperands(); ++i) {
+        if (Op.getOperand(i).getValueType() == MVT::v4i64 ||
+            Op.getOperand(i).getValueType() == MVT::v8i64) {
+          SDValue Mask = Op.getOperand(i);
+          MVT BitcastVT = MVT::getVectorVT(
+            MVT::i1, Mask.getValueType().getSizeInBits());
+          SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+          Ops.push_back(Bitcast);
+        } else {
+          Ops.push_back(Op.getOperand(i));
+        }
+      }
       // Get bitmask for each operand since for the case.
       //   e.g. (v256i1 (extract_VM512u (v512i1 %vm)))
       MVT BitcastVT0 = MVT::getVectorVT(

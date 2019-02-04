@@ -649,18 +649,18 @@ def : Pat<(INT_VSCU v256f64:$vx, v256f64:$vy, VLS:$vl), (VSCUv v256f64:$vx, v256
 def : Pat<(INT_VSCU_M v256f64:$vx, v256f64:$vy, v256i1:$vm, VLS:$vl), (VSCUvm v256f64:$vx, v256f64:$vy, v256i1:$vm, $vl)>;
 def : Pat<(INT_VSCL v256f64:$vx, v256f64:$vy, VLS:$vl), (VSCLv v256f64:$vx, v256f64:$vy, $vl)>;
 def : Pat<(INT_VSCL_M v256f64:$vx, v256f64:$vy, v256i1:$vm, VLS:$vl), (VSCLvm v256f64:$vx, v256f64:$vy, v256i1:$vm, $vl)>;
-def : Pat<(VEandm v256i1:$vmy, v256i1:$vmz), (ANDM v256i1:$vmy, v256i1:$vmz)>;
-def : Pat<(VEandm v512i1:$vmy, v512i1:$vmz), (ANDMp v512i1:$vmy, v512i1:$vmz)>;
-def : Pat<(VEorm v256i1:$vmy, v256i1:$vmz), (ORM v256i1:$vmy, v256i1:$vmz)>;
-def : Pat<(VEorm v512i1:$vmy, v512i1:$vmz), (ORMp v512i1:$vmy, v512i1:$vmz)>;
-def : Pat<(VExorm v256i1:$vmy, v256i1:$vmz), (XORM v256i1:$vmy, v256i1:$vmz)>;
-def : Pat<(VExorm v512i1:$vmy, v512i1:$vmz), (XORMp v512i1:$vmy, v512i1:$vmz)>;
-def : Pat<(VEeqvm v256i1:$vmy, v256i1:$vmz), (EQVM v256i1:$vmy, v256i1:$vmz)>;
-def : Pat<(VEeqvm v512i1:$vmy, v512i1:$vmz), (EQVMp v512i1:$vmy, v512i1:$vmz)>;
-def : Pat<(VEnndm v256i1:$vmy, v256i1:$vmz), (NNDM v256i1:$vmy, v256i1:$vmz)>;
-def : Pat<(VEnndm v512i1:$vmy, v512i1:$vmz), (NNDMp v512i1:$vmy, v512i1:$vmz)>;
-def : Pat<(VEnegm v256i1:$vmy), (NEGM v256i1:$vmy)>;
-def : Pat<(VEnegm v512i1:$vmy), (NEGMp v512i1:$vmy)>;
+def : Pat<(INT_ANDM v256i1:$vmy, v256i1:$vmz), (ANDM v256i1:$vmy, v256i1:$vmz)>;
+def : Pat<(INT_ANDM v512i1:$vmy, v512i1:$vmz), (ANDMp v512i1:$vmy, v512i1:$vmz)>;
+def : Pat<(INT_ORM v256i1:$vmy, v256i1:$vmz), (ORM v256i1:$vmy, v256i1:$vmz)>;
+def : Pat<(INT_ORM v512i1:$vmy, v512i1:$vmz), (ORMp v512i1:$vmy, v512i1:$vmz)>;
+def : Pat<(INT_XORM v256i1:$vmy, v256i1:$vmz), (XORM v256i1:$vmy, v256i1:$vmz)>;
+def : Pat<(INT_XORM v512i1:$vmy, v512i1:$vmz), (XORMp v512i1:$vmy, v512i1:$vmz)>;
+def : Pat<(INT_EQVM v256i1:$vmy, v256i1:$vmz), (EQVM v256i1:$vmy, v256i1:$vmz)>;
+def : Pat<(INT_EQVM v512i1:$vmy, v512i1:$vmz), (EQVMp v512i1:$vmy, v512i1:$vmz)>;
+def : Pat<(INT_NNDM v256i1:$vmy, v256i1:$vmz), (NNDM v256i1:$vmy, v256i1:$vmz)>;
+def : Pat<(INT_NNDM v512i1:$vmy, v512i1:$vmz), (NNDMp v512i1:$vmy, v512i1:$vmz)>;
+def : Pat<(INT_NEGM v256i1:$vmy), (NEGM v256i1:$vmy)>;
+def : Pat<(INT_NEGM v512i1:$vmy), (NEGMp v512i1:$vmy)>;
 def : Pat<(INT_PCVM v256i1:$vmy, VLS:$vl), (PCVM v256i1:$vmy, $vl)>;
 def : Pat<(INT_LZVM v256i1:$vmy, VLS:$vl), (LZVM v256i1:$vmy, $vl)>;
 def : Pat<(INT_TOVM v256i1:$vmy, VLS:$vl), (TOVM v256i1:$vmy, $vl)>;
@@ -681,14 +681,14 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
             (LEASLrzi (ANDrm0 (LEAzzi (LO32 (i64 0x0000000100000001))), 32),
                       (HI32 (i64 0x0000000100000001)))))>;
 
-def : Pat<(v256i1 (VEextmu v512i1:$vm)),
+def : Pat<(v256i1 (INT_EXTMU v512i1:$vm)),
           (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_odd))>;
 
-def : Pat<(v256i1 (VEextml v512i1:$vm)),
+def : Pat<(v256i1 (INT_EXTML v512i1:$vm)),
           (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_even))>;
 
-def : Pat<(v512i1 (VEinsmu v512i1:$vmx, v256i1:$vmy)),
+def : Pat<(v512i1 (INT_INSMU v512i1:$vmx, v256i1:$vmy)),
           (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_odd))>;
 
-def : Pat<(v512i1 (VEinsml v512i1:$vmx, v256i1:$vmy)),
+def : Pat<(v512i1 (INT_INSML v512i1:$vmx, v256i1:$vmy)),
           (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_even))>;
