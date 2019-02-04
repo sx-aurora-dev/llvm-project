@@ -383,6 +383,14 @@ multiclass RVDSPm<string opcStr, bits<8> opc> {
   let cx = 1, cx2 = 1 in defm p : RV3m<"p" # opcStr, opc, I64, VM512, simm7Op64>; // packed
 }
 
+// f64, f32, packed f32
+multiclass RVDSPVLm<string opcStr, bits<8> opc> {
+  // last argument should not be used...
+  let cx = 0, cx2 = 0 in defm d : RV3VLm<opcStr # ".d", opc, I64, VM, simm7Op64>; // double
+  let cx = 1, cx2 = 0 in defm s : RV3VLm<opcStr # ".s", opc, F32, VM, simm7Op64>; // float
+  let cx = 1, cx2 = 1 in defm p : RV3VLm<"p" # opcStr, opc, I64, VM512, simm7Op64>; // packed
+}
+
 // f64, f32, packed f32 (4 operands)
 multiclass RV4DSPm<string opcStr, bits<8> opc> {
   let cx = 0, cx2 = 0 in defm d : RV4m<opcStr # ".d", opc, I64, VM>; // double
@@ -993,7 +1001,7 @@ multiclass VRSQRTm<string opcStr, bits<8> opc> {
   let cx = 1, cx2 = 1, cs2 = 1 in defm pnex : RV2vm<"p" # opcStr # ".nex", opc, VM>;
 }
 
-defm VFAD : RVDSPm<"vfadd", 0xCC>;
+defm VFAD : RVDSPVLm<"vfadd", 0xCC>;
 defm VFSB : RVDSPm<"vfsub", 0xDC>;
 defm VFMP : RVDSPm<"vfmul", 0xCD>;
 defm VFDV : RVDSPm<"vfdiv", 0xDD>;

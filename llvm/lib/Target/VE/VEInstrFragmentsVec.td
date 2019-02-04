@@ -390,6 +390,9 @@ def INT_PVXOR : SDNode<"VEISD::INT_PVXOR", VE2OpVXVVL>;
 def INT_VEQV : SDNode<"VEISD::INT_VEQV", VE2OpVXVVL>;
 def INT_PVEQV : SDNode<"VEISD::INT_PVEQV", VE2OpVXVVL>;
 def INT_VMV : SDNode<"VEISD::INT_VMV", VE2OpVXVVL>;
+def INT_VFADDD : SDNode<"VEISD::INT_VFADDD", VE2OpVXVVL>;
+def INT_VFADDS : SDNode<"VEISD::INT_VFADDS", VE2OpVXVVL>;
+def INT_PVFADD : SDNode<"VEISD::INT_PVFADD", VE2OpVXVVL>;
 
 // Either of 
 // (v256f64 (VSRAXvm (v256f64 vy), (v256f64 vz), (VLS vl)))
@@ -493,6 +496,9 @@ def INT_VXOR_M : SDNode<"VEISD::INT_VXOR_M", VE2OpVXVMVVL>;
 def INT_PVXOR_M : SDNode<"VEISD::INT_PVXOR_M", VE2OpVXVMVVL>;
 def INT_VEQV_M : SDNode<"VEISD::INT_VEQV_M", VE2OpVXVMVVL>;
 def INT_PVEQV_M : SDNode<"VEISD::INT_PVEQV_M", VE2OpVXVMVVL>;
+def INT_VFADDD_M : SDNode<"VEISD::INT_VFADDD_M", VE2OpVXVMVVL>;
+def INT_VFADDS_M : SDNode<"VEISD::INT_VFADDS_M", VE2OpVXVMVVL>;
+def INT_PVFADD_M : SDNode<"VEISD::INT_PVFADD_M", VE2OpVXVMVVL>;
 
 // Either of 
 // (v256f64 (VSRAXvm (v256f64 vy), (v256f64 vz), (v256i1 vm), (v256f64 base),
@@ -547,9 +553,6 @@ def VE2OpVXVMV :
                          SDTCisSameAs<2, 0>,
                          SDTCisVec<3>, SDTCVecEltisVT<3, i1>,
                          SDTCisSameAs<4, 0>]>;
-def VEvfaddd : SDNode<"VEISD::INT_VFADDD", VE2OpVXVMV>;
-def VEvfadds : SDNode<"VEISD::INT_VFADDS", VE2OpVXVMV>;
-def VEpvfadd : SDNode<"VEISD::INT_PVFADD", VE2OpVXVMV>;
 def VEvfsubd : SDNode<"VEISD::INT_VFSUBD", VE2OpVXVMV>;
 def VEvfsubs : SDNode<"VEISD::INT_VFSUBS", VE2OpVXVMV>;
 def VEvfmuld : SDNode<"VEISD::INT_VFMULD", VE2OpVXVMV>;

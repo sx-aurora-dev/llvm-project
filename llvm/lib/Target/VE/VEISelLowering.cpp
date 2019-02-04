@@ -1419,6 +1419,10 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VDIVSL_M:    return "VEISD::INT_VDIVSL_M";
   case VEISD::INT_VFADDD:      return "VEISD::INT_VFADDD";
   case VEISD::INT_VFADDS:      return "VEISD::INT_VFADDS";
+  case VEISD::INT_PVFADD:      return "VEISD::INT_PVFADD";
+  case VEISD::INT_VFADDD_M:    return "VEISD::INT_VFADDD_M";
+  case VEISD::INT_VFADDS_M:    return "VEISD::INT_VFADDS_M";
+  case VEISD::INT_PVFADD_M:    return "VEISD::INT_PVFADD_M";
   case VEISD::INT_VFSUBD:      return "VEISD::INT_VFSUBD";
   case VEISD::INT_VFSUBS:      return "VEISD::INT_VFSUBS";
   case VEISD::INT_VFMULD:      return "VEISD::INT_VFMULD";
@@ -1431,7 +1435,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VFMAXS:      return "VEISD::INT_VFMAXS";
   case VEISD::INT_VFMIND:      return "VEISD::INT_VFMIND";
   case VEISD::INT_VFMINS:      return "VEISD::INT_VFMINS";
-  case VEISD::INT_PVFADD:      return "VEISD::INT_PVFADD";
   case VEISD::INT_PVFSUB:      return "VEISD::INT_PVFSUB";
   case VEISD::INT_PVFMUL:      return "VEISD::INT_PVFMUL";
   case VEISD::INT_PVFCMP:      return "VEISD::INT_PVFCMP";
@@ -2587,7 +2590,11 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     V0 = Op.getOperand(1);
     V1 = Op.getOperand(2);
 
-    V5 = SDValue(DAG.getMachineNode(VE::VRCPsv, dl, VT, V1), 0);  // V5 = 1.0f / V1
+    MachineFunction &MF = DAG.getMachineFunction();
+    unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+    SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
+
+    V5 = SDValue(DAG.getMachineNode(VE::VRCPsv, dl, VT, V1, VL), 0);  // V5 = 1.0f / V1
     S0 = SDValue(DAG.getMachineNode(VE::LEASLzzi, dl, MVT::i64,
                                     DAG.getTargetConstant(0x3f800000, dl, MVT::i64)), 0); // S0 = 1.0f
     S0 = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl, MVT::f32,
@@ -2613,7 +2620,11 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     V0 = Op.getOperand(1);
     V1 = Op.getOperand(2);
 
-    V5 = SDValue(DAG.getMachineNode(VE::VRCPpv, dl, VT, V1), 0);  // V5 = 1.0f / V1
+    MachineFunction &MF = DAG.getMachineFunction();
+    unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+    SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
+
+    V5 = SDValue(DAG.getMachineNode(VE::VRCPpv, dl, VT, V1, VL), 0);  // V5 = 1.0f / V1
     // S0 = 1.0f|1.0f
     S1 = SDValue(DAG.getMachineNode(VE::LEAzzi, dl, MVT::i64,
                                     DAG.getTargetConstant(0x3f800000, dl, MVT::i64)), 0);
@@ -2654,7 +2665,11 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     S0 = Op.getOperand(1);
     V0 = Op.getOperand(2);
 
-    V4 = SDValue(DAG.getMachineNode(VE::VRCPsv, dl, VT, V0), 0);  // V4 = 1.0f / V0
+    MachineFunction &MF = DAG.getMachineFunction();
+    unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+    SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
+
+    V4 = SDValue(DAG.getMachineNode(VE::VRCPsv, dl, VT, V0, VL), 0);  // V4 = 1.0f / V0
     S1 = SDValue(DAG.getMachineNode(VE::LEASLzzi, dl, MVT::i64,
                                     DAG.getTargetConstant(0x3f800000, dl, MVT::i64)), 0); // S1 = 1.0f
     S1 = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl, MVT::f32,
