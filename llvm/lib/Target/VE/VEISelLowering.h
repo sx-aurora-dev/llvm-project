@@ -221,30 +221,54 @@ namespace llvm {
       INT_VFMIND_M,     // for int_ve_vfmind_vvvmv or int_ve_vfmind_vsvmv
       INT_VFMINS_M,     // for int_ve_vfmins_vvvmv or int_ve_vfmins_vsvmv
       INT_PVFMIN_M,     // for int_ve_pvfmin_vvvMv or int_ve_pvfmin_vsvMv
-      INT_VFMADD,   // for int_ve_vfmadd_vvvmv, int_ve_vfmadd_vsvmv, or
-                    // for int_ve_vfmadd_vvsmv
-      INT_VFMADS,   // for int_ve_vfmads_vvvmv, int_ve_vfmads_vsvmv, or
-                    // for int_ve_vfmads_vvsmv
-      INT_VFMSBD,   // for int_ve_vfmsbd_vvvmv, int_ve_vfmsbd_vsvmv, or
-                    // for int_ve_vfmsbd_vvsmv
-      INT_VFMSBS,   // for int_ve_vfmsbs_vvvmv, int_ve_vfmsbs_vsvmv, or
-                    // for int_ve_vfmsbs_vvsmv
-      INT_VFNMADD,  // for int_ve_vfnmadd_vvvmv, int_ve_vfnmadd_vsvmv, or
-                    // for int_ve_vfmmadd_vvsmv
-      INT_VFNMADS,  // for int_ve_vfnmads_vvvmv, int_ve_vfnmads_vsvmv, or
-                    // for int_ve_vfmmads_vvsmv
-      INT_VFNMSBD,  // for int_ve_vfnmsbd_vvvmv, int_ve_vfnmsbd_vsvmv, or
-                    // for int_ve_vfmmsbd_vvsmv
-      INT_VFNMSBS,  // for int_ve_vfnmsbs_vvvmv, int_ve_vfnmsbs_vsvmv, or
-                    // for int_ve_vfmmsbs_vvsmv
-      INT_PVFMAD,   // for int_ve_pvfmad_vvvvMv, int_ve_pvfmad_vsvMv, or
-                    // for int_ve_pvfmad_vvsMv
-      INT_PVFMSB,   // for int_ve_pvfmsb_vvvvMv, int_ve_pvfmsb_vsvMv, or
-                    // for int_ve_pvfmsb_vvsMv
-      INT_PVFNMAD,  // for int_ve_pvfnmad_vvvvMv, int_ve_pvfnmad_vsvMv, or
-                    // for int_ve_pvfnmad_vvsMv
-      INT_PVFNMSB,  // for int_ve_pvfnmsb_vvvvMv, int_ve_pvfnmsb_vsvMv, or
-                    // for int_ve_pvfnmsb_vvsMv
+      INT_VFMADD,       // for int_ve_vfmadd_vvv, int_ve_vfmadd_vsv, or
+                        // for int_ve_vfmadd_vvs
+      INT_VFMADS,       // for int_ve_vfmads_vvv, int_ve_vfmads_vsv, or
+                        // for int_ve_vfmads_vvs
+      INT_PVFMAD,       // for int_ve_pvfmad_vvvv, int_ve_pvfmad_vsv, or
+                        // for int_ve_pvfmad_vvs
+      INT_VFMADD_M,     // for int_ve_vfmadd_vvvmv, int_ve_vfmadd_vsvmv, or
+                        // for int_ve_vfmadd_vvsmv
+      INT_VFMADS_M,     // for int_ve_vfmads_vvvmv, int_ve_vfmads_vsvmv, or
+                        // for int_ve_vfmads_vvsmv
+      INT_PVFMAD_M,     // for int_ve_pvfmad_vvvvMv, int_ve_pvfmad_vsvMv, or
+                        // for int_ve_pvfmad_vvsMv
+      INT_VFMSBD,       // for int_ve_vfmsbd_vvv, int_ve_vfmsbd_vsv, or
+                        // for int_ve_vfmsbd_vvs
+      INT_VFMSBS,       // for int_ve_vfmsbs_vvv, int_ve_vfmsbs_vsv, or
+                        // for int_ve_vfmsbs_vvs
+      INT_PVFMSB,       // for int_ve_pvfmsb_vvvv, int_ve_pvfmsb_vsv, or
+                        // for int_ve_pvfmsb_vvs
+      INT_VFMSBD_M,     // for int_ve_vfmsbd_vvvmv, int_ve_vfmsbd_vsvmv, or
+                        // for int_ve_vfmsbd_vvsmv
+      INT_VFMSBS_M,     // for int_ve_vfmsbs_vvvmv, int_ve_vfmsbs_vsvmv, or
+                        // for int_ve_vfmsbs_vvsmv
+      INT_PVFMSB_M,     // for int_ve_pvfmsb_vvvvMv, int_ve_pvfmsb_vsvMv, or
+                        // for int_ve_pvfmsb_vvsMv
+      INT_VFNMADD,      // for int_ve_vfnmadd_vvv, int_ve_vfnmadd_vsv, or
+                        // for int_ve_vfmmadd_vvs
+      INT_VFNMADS,      // for int_ve_vfnmads_vvv, int_ve_vfnmads_vsv, or
+                        // for int_ve_vfmmads_vvs
+      INT_PVFNMAD,      // for int_ve_pvfnmad_vvvv, int_ve_pvfnmad_vsv, or
+                        // for int_ve_pvfnmad_vvs
+      INT_VFNMADD_M,    // for int_ve_vfnmadd_vvvmv, int_ve_vfnmadd_vsvmv, or
+                        // for int_ve_vfmmadd_vvsmv
+      INT_VFNMADS_M,    // for int_ve_vfnmads_vvvmv, int_ve_vfnmads_vsvmv, or
+                        // for int_ve_vfmmads_vvsmv
+      INT_PVFNMAD_M,    // for int_ve_pvfnmad_vvvvMv, int_ve_pvfnmad_vsvMv, or
+                        // for int_ve_pvfnmad_vvsMv
+      INT_VFNMSBD,      // for int_ve_vfnmsbd_vvv, int_ve_vfnmsbd_vsv, or
+                        // for int_ve_vfmmsbd_vvs
+      INT_VFNMSBS,      // for int_ve_vfnmsbs_vvv, int_ve_vfnmsbs_vsv, or
+                        // for int_ve_vfmmsbs_vvs
+      INT_PVFNMSB,      // for int_ve_pvfnmsb_vvvv, int_ve_pvfnmsb_vsv, or
+                        // for int_ve_pvfnmsb_vvs
+      INT_VFNMSBD_M,    // for int_ve_vfnmsbd_vvvmv, int_ve_vfnmsbd_vsvmv, or
+                        // for int_ve_vfmmsbd_vvsmv
+      INT_VFNMSBS_M,    // for int_ve_vfnmsbs_vvvmv, int_ve_vfnmsbs_vsvmv, or
+                        // for int_ve_vfmmsbs_vvsmv
+      INT_PVFNMSB_M,    // for int_ve_pvfnmsb_vvvvMv, int_ve_pvfnmsb_vsvMv, or
+                        // for int_ve_pvfnmsb_vvsMv
       INT_VAND,     // for int_ve_vand_vvv or int_ve_vand_vsv
       INT_PVAND,    // for int_ve_pvand_vvv or int_ve_pvand_vsv
       INT_VAND_M,   // for int_ve_vand_vvvmv or int_ve_vand_vsvmv

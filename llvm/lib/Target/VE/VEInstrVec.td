@@ -213,96 +213,99 @@ multiclass RV3DIVBYSm<string opcStr, bits<8> opc, RegisterClass ScalarRC,
 
 // Fused
 multiclass RV4m<string opcStr, bits<8> opc, RegisterClass ScalarRC, RegisterClass MaskRC> {
-  // V64:$vx = (simm7:$sy or I64:$sy or V64:$vz) opc V64:$vz
-  def v : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw),
-    !strconcat(opcStr, " $vx,$vy,$vz,$vw"), []> {
-      let cs = 0;
-      let cs2 = 0;
-      let sy = 0;
-      let m = 0;
-    }
-  def i : RV<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz, V64:$vw),
-    !strconcat(opcStr, " $vx,$sy,$vz,$vw"), []> {
-      let cs = 1;
-      let cs2 = 0;
-      let cy = 0;
-      let vy = 0;
-      let m = 0;
-    }
-  def r : RV<opc, (outs V64:$vx), (ins ScalarRC:$sy, V64:$vz, V64:$vw),
-    !strconcat(opcStr, " $vx,$sy,$vz,$vw"), []> {
-      let cs = 1;
-      let cs2 = 0;
-      let cy = 1;
-      let vy = 0;
-      let m = 0;
-    }
-  def i2 : RV<opc, (outs V64:$vx), (ins V64:$vy, simm7Op64:$sy, V64:$vw),
-    !strconcat(opcStr, " $vx,$vy,$sy,$vw"), []> {
-      let cs = 0;
-      let cs2 = 1;
-      let cy = 0;
-      let vy = 0;
-      let m = 0;
-    }
-  def r2 : RV<opc, (outs V64:$vx), (ins V64:$vy, ScalarRC:$sy, V64:$vw),
-    !strconcat(opcStr, " $vx,$vy,$sy,$vw"), []> {
-      let cs = 0;
-      let cs2 = 1;
-      let cy = 1;
-      let vy = 0;
-      let m = 0;
-    }
-
-  def vm : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$vz,$vw,$vm"), []> {
-      bits<4> vm;
-      let cs = 0;
-      let cs2 = 0;
-      let sy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
-  def im : RV<opc, (outs V64:$vx), (ins simm7Op64:$sy, V64:$vz, V64:$vw, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$sy,$vz,$vw,$vm"), []> {
-      bits<4> vm;
-      let cs = 1;
-      let cs2 = 0;
-      let cy = 0;
-      let vy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
-  def rm : RV<opc, (outs V64:$vx), (ins ScalarRC:$sy, V64:$vz, V64:$vw, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$sy,$vz,$vw,$vm"), []> {
-      bits<4> vm;
-      let cs = 1;
-      let cs2 = 0;
-      let cy = 1;
-      let vy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
-  def i2m : RV<opc, (outs V64:$vx), (ins V64:$vy, simm7Op64:$sy, V64:$vw, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$sy,$vw,$vm"), []> {
-      bits<4> vm;
-      let cs = 0;
-      let cs2 = 1;
-      let cy = 0;
-      let vy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
-  def r2m : RV<opc, (outs V64:$vx), (ins V64:$vy, ScalarRC:$sy, V64:$vw, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$sy,$vw,$vm"), []> {
-      bits<4> vm;
-      let cs = 0;
-      let cs2 = 1;
-      let cy = 1;
-      let vy = 0;
-      let m = vm;
-      let Constraints = "$vx = $vd";
-    }
+  def v : RV<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VLS:$vl),
+             !strconcat(opcStr, " $vx,$vy,$vz,$vw"), []> {
+    let cs = 0;
+    let cs2 = 0;
+    let DisableEncoding = "$vl";
+  }
+  def i : RV<opc, (outs V64:$vx),
+             (ins simm7Op64:$sy, V64:$vz, V64:$vw, VLS:$vl),
+             !strconcat(opcStr, " $vx,$sy,$vz,$vw"), []> {
+    let cs = 1;
+    let cs2 = 0;
+    let cy = 0;
+    let DisableEncoding = "$vl";
+  }
+  def r : RV<opc, (outs V64:$vx),
+             (ins ScalarRC:$sy, V64:$vz, V64:$vw, VLS:$vl),
+             !strconcat(opcStr, " $vx,$sy,$vz,$vw"), []> {
+    let cs = 1;
+    let cs2 = 0;
+    let cy = 1;
+    let DisableEncoding = "$vl";
+  }
+  def i2 : RV<opc, (outs V64:$vx),
+              (ins V64:$vy, simm7Op64:$sy, V64:$vw, VLS:$vl),
+              !strconcat(opcStr, " $vx,$vy,$sy,$vw"), []> {
+    let cs = 0;
+    let cs2 = 1;
+    let cy = 0;
+    let DisableEncoding = "$vl";
+  }
+  def r2 : RV<opc, (outs V64:$vx),
+              (ins V64:$vy, ScalarRC:$sy, V64:$vw, VLS:$vl),
+              !strconcat(opcStr, " $vx,$vy,$sy,$vw"), []> {
+    let cs = 0;
+    let cs2 = 1;
+    let cy = 1;
+    let DisableEncoding = "$vl";
+  }
+  def vm : RV<opc, (outs V64:$vx),
+              (ins V64:$vy, V64:$vz, V64:$vw, MaskRC:$vm, V64:$vd, VLS:$vl),
+              !strconcat(opcStr, " $vx,$vy,$vz,$vw,$vm"), []> {
+    bits<4> vm;
+    let cs = 0;
+    let cs2 = 0;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
+  def im : RV<opc, (outs V64:$vx),
+              (ins simm7Op64:$sy, V64:$vz, V64:$vw, MaskRC:$vm, V64:$vd, VLS:$vl),
+              !strconcat(opcStr, " $vx,$sy,$vz,$vw,$vm"), []> {
+    bits<4> vm;
+    let cs = 1;
+    let cs2 = 0;
+    let cy = 0;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
+  def rm : RV<opc, (outs V64:$vx),
+              (ins ScalarRC:$sy, V64:$vz, V64:$vw, MaskRC:$vm, V64:$vd, VLS:$vl),
+              !strconcat(opcStr, " $vx,$sy,$vz,$vw,$vm"), []> {
+    bits<4> vm;
+    let cs = 1;
+    let cs2 = 0;
+    let cy = 1;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
+  def i2m : RV<opc, (outs V64:$vx),
+               (ins V64:$vy, simm7Op64:$sy, V64:$vw, MaskRC:$vm, V64:$vd, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$sy,$vw,$vm"), []> {
+    bits<4> vm;
+    let cs = 0;
+    let cs2 = 1;
+    let cy = 0;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
+  def r2m : RV<opc, (outs V64:$vx),
+               (ins V64:$vy, ScalarRC:$sy, V64:$vw, MaskRC:$vm, V64:$vd, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$sy,$vw,$vm"), []> {
+    bits<4> vm;
+    let cs = 0;
+    let cs2 = 1;
+    let cy = 1;
+    let vy = 0;
+    let m = vm;
+    let Constraints = "$vx = $vd";
+    let DisableEncoding = "$vl";
+  }
 }
 
 // u64, u32
