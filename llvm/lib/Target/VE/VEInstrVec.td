@@ -1170,21 +1170,6 @@ let DisableEncoding = "$vl" in {
 
 // 5.3.2.13. Vector Recursive Relation Instructions
 multiclass RVRECm<string opcStr, bits<8> opc> {
-  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy),
-              !strconcat(opcStr, " $vx,$vy"), []> {
-    let sy = 0;
-    let m = 0;
-  }
-  def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm),
-               !strconcat(opcStr, " $vx,$vy,$vm"), []> {
-    bits<4> vm;
-    let sy = 0;
-    let m = vm;
-  }
-}
-
-// 5.3.2.13. Vector Recursive Relation Instructions
-multiclass RVRECVLm<string opcStr, bits<8> opc> {
   def v : RV2<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl),
               !strconcat(opcStr, " $vx,$vy"), []> {
     let sy = 0;
@@ -1199,36 +1184,36 @@ multiclass RVRECVLm<string opcStr, bits<8> opc> {
     let DisableEncoding = "$vl";
   }
 }
-let cx2 = 0 in defm VSUMSsx : RVRECVLm<"vsum.w.sx", 0xEA>;
-let cx2 = 1 in defm VSUMSzx : RVRECVLm<"vsum.w.zx", 0xEA>;
-defm VSUMX : RVRECVLm<"vsum.l", 0xAA>;
-let cx = 0 in defm VFSUMd : RVRECVLm<"vfsum.d", 0xEC>;
-let cx = 1 in defm VFSUMs : RVRECVLm<"vfsum.s", 0xEC>;
+let cx2 = 0 in defm VSUMSsx : RVRECm<"vsum.w.sx", 0xEA>;
+let cx2 = 1 in defm VSUMSzx : RVRECm<"vsum.w.zx", 0xEA>;
+defm VSUMX : RVRECm<"vsum.l", 0xAA>;
+let cx = 0 in defm VFSUMd : RVRECm<"vfsum.d", 0xEC>;
+let cx = 1 in defm VFSUMs : RVRECm<"vfsum.s", 0xEC>;
 
 multiclass FLSXm<bits<8> opc, string opcStr>
 {
-  let cx2 = 0, cs2 = 0 in defm fsx : RVRECm<opcStr#".fst.sx", opc>;
-  let cx2 = 1, cs2 = 0 in defm fzx : RVRECm<opcStr#".fst.zx", opc>;
-  let cx2 = 0, cs2 = 1 in defm lsx : RVRECm<opcStr#".lst.sx", opc>;
-  let cx2 = 1, cs2 = 1 in defm lzx : RVRECm<opcStr#".lst.zx", opc>;
+  let cx2 = 0, cs = 0 in defm fsx : RVRECm<opcStr#".fst.sx", opc>;
+  let cx2 = 1, cs = 0 in defm fzx : RVRECm<opcStr#".fst.zx", opc>;
+  let cx2 = 0, cs = 1 in defm lsx : RVRECm<opcStr#".lst.sx", opc>;
+  let cx2 = 1, cs = 1 in defm lzx : RVRECm<opcStr#".lst.zx", opc>;
 }
 
 multiclass FLm<bits<8> opc, string opcStr>
 {
-  let cs2 = 0 in defm f : RVRECm<opcStr#".fst", opc>;
-  let cs2 = 1 in defm l : RVRECm<opcStr#".lst", opc>;
+  let cs2 = 0, cs = 0 in defm f : RVRECm<opcStr#".fst", opc>;
+  let cs2 = 1, cs = 1 in defm l : RVRECm<opcStr#".lst", opc>;
 }
 
-let cs = 0 in defm VMAXSa : FLSXm<0xBB, "vrmaxs.w">;
-let cs = 1 in defm VMAXSi : FLSXm<0xBB, "vrmins.w">;
+let cs2 = 0 in defm VMAXSa : FLSXm<0xBB, "vrmaxs.w">;
+let cs2 = 1 in defm VMAXSi : FLSXm<0xBB, "vrmins.w">;
 
-let cs = 0 in defm VMAXXa : FLm<0xAB, "vrmaxs.l">;
-let cs = 1 in defm VMAXXi : FLm<0xAB, "vrmins.l">;
+let cs2 = 0 in defm VMAXXa : FLm<0xAB, "vrmaxs.l">;
+let cs2 = 1 in defm VMAXXi : FLm<0xAB, "vrmins.l">;
 
-let cx = 0, cs = 0 in defm VFMAXad : FLm<0xAD, "vfrmax.d">;
-let cx = 1, cs = 0 in defm VFMAXas : FLm<0xAD, "vfrmax.s">;
-let cx = 0, cs = 1 in defm VFMAXid : FLm<0xAD, "vfrmin.d">;
-let cx = 1, cs = 1 in defm VFMAXis : FLm<0xAD, "vfrmin.s">;
+let cx = 0, cs2 = 0 in defm VFMAXad : FLm<0xAD, "vfrmax.d">;
+let cx = 1, cs2 = 0 in defm VFMAXas : FLm<0xAD, "vfrmax.s">;
+let cx = 0, cs2 = 1 in defm VFMAXid : FLm<0xAD, "vfrmin.d">;
+let cx = 1, cs2 = 1 in defm VFMAXis : FLm<0xAD, "vfrmin.s">;
 
 // 5.3.2.14. Vector Gatering/Scattering Instructions
 

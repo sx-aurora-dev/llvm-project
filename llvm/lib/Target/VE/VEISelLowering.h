@@ -418,6 +418,26 @@ namespace llvm {
       INT_VFSUMD_M,     // for int_ve_vfsums_vvm
       INT_VFSUMS,       // for int_ve_vfsums_vv
       INT_VFSUMS_M,     // for int_ve_vfsums_vvm
+      INT_VRMAXSWFSTSX, // for int_ve_vrmaxswfstsx_vv
+      INT_VRMAXSWLSTSX, // for int_ve_vrmaxswlstsx_vv
+      INT_VRMAXSWFSTZX, // for int_ve_vrmaxswfstzx_vv
+      INT_VRMAXSWLSTZX, // for int_ve_vrmaxswlstzx_vv
+      INT_VRMINSWFSTSX, // for int_ve_vrminswfstsx_vv
+      INT_VRMINSWLSTSX, // for int_ve_vrminswlstsx_vv
+      INT_VRMINSWFSTZX, // for int_ve_vrminswfstzx_vv
+      INT_VRMINSWLSTZX, // for int_ve_vrminswlstzx_vv
+      INT_VRMAXSLFST,   // for int_ve_vrmaxslfst_vv
+      INT_VRMAXSLLST,   // for int_ve_vrmaxsllst_vv
+      INT_VRMINSLFST,   // for int_ve_vrminslfst_vv
+      INT_VRMINSLLST,   // for int_ve_vrminsllst_vv
+      INT_VFRMAXDFST,   // for int_ve_vfrmaxdfst_vv
+      INT_VFRMAXDLST,   // for int_ve_vfrmaxdlst_vv
+      INT_VFRMAXSFST,   // for int_ve_vfrmaxsfst_vv
+      INT_VFRMAXSLST,   // for int_ve_vfrmaxslst_vv
+      INT_VFRMINDFST,   // for int_ve_vfrmindfst_vv
+      INT_VFRMINDLST,   // for int_ve_vfrmindlst_vv
+      INT_VFRMINSFST,   // for int_ve_vfrminsfst_vv
+      INT_VFRMINSLST,   // for int_ve_vfrminslst_vv
     };
   }
 
