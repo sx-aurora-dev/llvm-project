@@ -59,6 +59,16 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
   // declared, but the system header which exposes D to the user's file
   // (the last system header in the include stack)
   auto IncludedFile = SM.getFileID(D->getBeginLoc());
+
+  // Fix for problems with math.h
+  // If our declaration is really a macro expansion, we need to find the actual
+  // spelling location first.
+  bool SLocInvalid = false;
+  auto SLocEntry = SM.getSLocEntry(IncludedFile, &SLocInvalid);
+  if (SLocEntry.isExpansion()) {
+    IncludedFile = SM.getFileID(SLocEntry.getExpansion().getSpellingLoc());
+  }
+
   auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
 
   while (SM.isInSystemHeader(SM.getLocForStartOfFile(IncludingFile.first))) {
