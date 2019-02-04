@@ -2462,7 +2462,6 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
     }
-
     case CONVM_VL: {
       // Convert a bitmask and adds hidden VL
       //   Input:
@@ -2494,7 +2493,41 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
     }
+    case RETM_VL: {
+      // Return bitmask, convert bitmask, and adds hidden VL
+      //   Input:
+      //     (v4i64 (int_ve_negm_mmm (v4i64 %vm), (VLS %vl)))
+      //   Output:
+      //     (v4i64 (bitcast (v256i1 (NEGM (v256i1 (bitcast %vm)), %vl))))
+      SmallVector<SDValue, 8> Ops;
 
+      // Ignore operand 0 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 1; i < Op.getNumOperands(); ++i) {
+        if (Op.getOperand(i).getValueType() == MVT::v4i64 ||
+            Op.getOperand(i).getValueType() == MVT::v8i64) {
+          SDValue Mask = Op.getOperand(i);
+          MVT BitcastVT = MVT::getVectorVT(
+            MVT::i1, Mask.getValueType().getSizeInBits());
+          SDValue Bitcast = DAG.getBitcast(BitcastVT, Mask);
+          Ops.push_back(Bitcast);
+        } else {
+          Ops.push_back(Op.getOperand(i));
+        }
+      }
+      // Add hidden VL
+      MachineFunction &MF = DAG.getMachineFunction();
+      unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+      SDValue VL = DAG.getCopyFromReg(DAG.getEntryNode(), dl, VLReg, MVT::i32);
+      Ops.push_back(VL);
+
+      // Get bitmask for each operand since for the case.
+      //   e.g. (v256i1 (extract_VM512u (v512i1 %vm)))
+      MVT BitcastVT0 = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Ops);
+      return DAG.getBitcast(Op.getValueType(), Res);
+    }
     case OP_MXX: {
       // 2-operand intrinsics
       //   Input:

@@ -248,11 +248,11 @@ def : Pat<(v512i32 (vec_broadcast i64:$sy)), (VBRDpr i64:$sy, 256)>;
 // Condition Code
 def : Pat<(setcc v256i64:$vx, v256i64:$vy, CCSIOp:$cond),
           (v256i1 (VFMKv (icond2cc $cond),
-                         (VCMPlv v256i64:$vx, v256i64:$vy, 256)))>;
+                         (VCMPlv v256i64:$vx, v256i64:$vy, 256), 256))>;
 
 def : Pat<(setcc v256f64:$vx, v256f64:$vy, CCSIOp:$cond),
           (v256i1 (VFMKv (fcond2cc $cond),
-                         (VCMPwv v256f64:$vx, v256f64:$vy, 256)))>;
+                         (VCMPwv v256f64:$vx, v256f64:$vy, 256), 256))>;
 
 // (VFMKv (i32 uimm6:$cc), v256f64:$vz)
 

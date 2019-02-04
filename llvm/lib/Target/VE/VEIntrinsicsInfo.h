@@ -21,11 +21,12 @@ namespace llvm {
 
 enum IntrinsicType : uint16_t {
   LVL,
-  ADD_VL, CONVM_VL,
+  ADD_VL,       // Add VL explicitly
+  CONVM_VL,     // Add bitcasts for vector mask arguments and add VL.
+  RETM_VL,      // Add a bitcast for vector mask return value, add bitcasts
+                // for vector mask arguments, and add VL.
   OP_MMXX, OP_XMX,
-  OP_M,
   OP_MMM, OP_MM,
-  OP_MXX, OP_MXXM,
 };
 
 struct IntrinsicData {
@@ -192,12 +193,12 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(pvfmin_vsvMv,       CONVM_VL,   VEISD::INT_PVFMIN_M, 0),
   VE_INTRINSIC_DATA(pvfmin_vvv,         ADD_VL,     VEISD::INT_PVFMIN, 0),
   VE_INTRINSIC_DATA(pvfmin_vvvMv,       CONVM_VL,   VEISD::INT_PVFMIN_M, 0),
-  VE_INTRINSIC_DATA(pvfmkaf_M,          OP_M,       VEISD::INT_PVFMKAF, 0),
-  VE_INTRINSIC_DATA(pvfmkat_M,          OP_M,       VEISD::INT_PVFMKAT, 0),
-  VE_INTRINSIC_DATA(pvfmks_Mcv,         OP_MXX,     VEISD::INT_PVFMKS, 0),
-  VE_INTRINSIC_DATA(pvfmks_McvM,        OP_MXXM,    VEISD::INT_PVFMKS_M, 0),
-  VE_INTRINSIC_DATA(pvfmkw_Mcv,         OP_MXX,     VEISD::INT_PVFMKW, 0),
-  VE_INTRINSIC_DATA(pvfmkw_McvM,        OP_MXXM,    VEISD::INT_PVFMKW_M, 0),
+  VE_INTRINSIC_DATA(pvfmkaf_M,          RETM_VL,    VEISD::INT_PVFMKAF, 0),
+  VE_INTRINSIC_DATA(pvfmkat_M,          RETM_VL,    VEISD::INT_PVFMKAT, 0),
+  VE_INTRINSIC_DATA(pvfmks_Mcv,         RETM_VL,    VEISD::INT_PVFMKS, 0),
+  VE_INTRINSIC_DATA(pvfmks_McvM,        RETM_VL,    VEISD::INT_PVFMKS_M, 0),
+  VE_INTRINSIC_DATA(pvfmkw_Mcv,         RETM_VL,    VEISD::INT_PVFMKW, 0),
+  VE_INTRINSIC_DATA(pvfmkw_McvM,        RETM_VL,    VEISD::INT_PVFMKW_M, 0),
   VE_INTRINSIC_DATA(pvfmsb_vsvv,        ADD_VL,     VEISD::INT_PVFMSB, 0),
   VE_INTRINSIC_DATA(pvfmsb_vsvvMv,      CONVM_VL,   VEISD::INT_PVFMSB_M, 0),
   VE_INTRINSIC_DATA(pvfmsb_vvsv,        ADD_VL,     VEISD::INT_PVFMSB, 0),
@@ -434,16 +435,16 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(vfmins_vsvmv,       CONVM_VL,   VEISD::INT_VFMINS_M, 0),
   VE_INTRINSIC_DATA(vfmins_vvv,         ADD_VL,     VEISD::INT_VFMINS, 0),
   VE_INTRINSIC_DATA(vfmins_vvvmv,       CONVM_VL,   VEISD::INT_VFMINS_M, 0),
-  VE_INTRINSIC_DATA(vfmkaf_m,           OP_M,       VEISD::INT_VFMKAF, 0),
-  VE_INTRINSIC_DATA(vfmkat_m,           OP_M,       VEISD::INT_VFMKAT, 0),
-  VE_INTRINSIC_DATA(vfmkd_mcv,          OP_MXX,     VEISD::INT_VFMKD, 0),
-  VE_INTRINSIC_DATA(vfmkd_mcvm,         OP_MXXM,    VEISD::INT_VFMKD_M, 0),
-  VE_INTRINSIC_DATA(vfmkl_mcv,          OP_MXX,     VEISD::INT_VFMKL, 0),
-  VE_INTRINSIC_DATA(vfmkl_mcvm,         OP_MXXM,    VEISD::INT_VFMKL_M, 0),
-  VE_INTRINSIC_DATA(vfmks_mcv,          OP_MXX,     VEISD::INT_VFMKS, 0),
-  VE_INTRINSIC_DATA(vfmks_mcvm,         OP_MXXM,    VEISD::INT_VFMKS_M, 0),
-  VE_INTRINSIC_DATA(vfmkw_mcv,          OP_MXX,     VEISD::INT_VFMKW, 0),
-  VE_INTRINSIC_DATA(vfmkw_mcvm,         OP_MXXM,    VEISD::INT_VFMKW_M, 0),
+  VE_INTRINSIC_DATA(vfmkaf_m,           RETM_VL,    VEISD::INT_VFMKAF, 0),
+  VE_INTRINSIC_DATA(vfmkat_m,           RETM_VL,    VEISD::INT_VFMKAT, 0),
+  VE_INTRINSIC_DATA(vfmkd_mcv,          RETM_VL,    VEISD::INT_VFMKD, 0),
+  VE_INTRINSIC_DATA(vfmkd_mcvm,         RETM_VL,    VEISD::INT_VFMKD_M, 0),
+  VE_INTRINSIC_DATA(vfmkl_mcv,          RETM_VL,    VEISD::INT_VFMKL, 0),
+  VE_INTRINSIC_DATA(vfmkl_mcvm,         RETM_VL,    VEISD::INT_VFMKL_M, 0),
+  VE_INTRINSIC_DATA(vfmks_mcv,          RETM_VL,    VEISD::INT_VFMKS, 0),
+  VE_INTRINSIC_DATA(vfmks_mcvm,         RETM_VL,    VEISD::INT_VFMKS_M, 0),
+  VE_INTRINSIC_DATA(vfmkw_mcv,          RETM_VL,    VEISD::INT_VFMKW, 0),
+  VE_INTRINSIC_DATA(vfmkw_mcvm,         RETM_VL,    VEISD::INT_VFMKW_M, 0),
   VE_INTRINSIC_DATA(vfmsbd_vsvv,        ADD_VL,     VEISD::INT_VFMSBD, 0),
   VE_INTRINSIC_DATA(vfmsbd_vsvvmv,      CONVM_VL,   VEISD::INT_VFMSBD_M, 0),
   VE_INTRINSIC_DATA(vfmsbd_vvsv,        ADD_VL,     VEISD::INT_VFMSBD, 0),

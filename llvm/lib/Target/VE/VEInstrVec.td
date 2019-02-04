@@ -1104,27 +1104,25 @@ def VCPvm : VCPEX<0x8D, "vcp">;
 def VEXvm : VCPEX<0x9D, "vex">;
 
 multiclass VFMKm<string opcStr, bits<8> opc> {
-  def v : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz),
-    !strconcat(opcStr, ".${cf} $vmx,$vz"), []> {
-      bits<4> vmx;
-      bits<4> cf;
-      let sy = 0;
-      let vw = 0;
-      let Inst{39-36} = vmx;
-      let Inst{47-44} = cf;
-    }
+  def v : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz, VLS:$vl),
+             !strconcat(opcStr, ".${cf} $vmx,$vz"), []> {
+    bits<4> vmx;
+    bits<4> cf;
+    let Inst{39-36} = vmx;
+    let Inst{47-44} = cf;
+    let DisableEncoding = "$vl";
+  }
 
-  def vm : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz, VM:$vm),
-    !strconcat(opcStr, ".${cf} $vmx,$vz,$vm"), []> {
-      bits<4> vm;
-      bits<4> vmx;
-      bits<4> cf;
-      let sy = 0;
-      let vw = 0;
-      let m = vm;
-      let Inst{39-36} = vmx;
-      let Inst{47-44} = cf;
-    }
+  def vm : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz, VM:$vm, VLS:$vl),
+              !strconcat(opcStr, ".${cf} $vmx,$vz,$vm"), []> {
+    bits<4> vm;
+    bits<4> vmx;
+    bits<4> cf;
+    let m = vm;
+    let Inst{39-36} = vmx;
+    let Inst{47-44} = cf;
+    let DisableEncoding = "$vl";
+  }
 }
 
 let cx = 0 in defm VFMK : VFMKm<"vfmk.l", 0xB4>;
@@ -1135,36 +1133,40 @@ let cx = 1, cx2 = 0 in defm VFMFs : VFMKm<"vfmk.s", 0xB6>;
 let cx = 0, cx2 = 1 in defm VFMFl : VFMKm<"pvfmk.s.lo", 0xB6>;
 
 // at and af 64b
-let sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
-def VFMKat : RV<0xB4, (outs VM:$vm), (ins), "vfmk.l.at $vm", []>;
-
-let sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
-def VFMKaf : RV<0xB4, (outs VM:$vm), (ins), "vfmk.l.af $vm", []>;
+let DisableEncoding = "$vl" in {
+  let sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
+  def VFMKat : RV<0xB4, (outs VM:$vm), (ins VLS:$vl), "vfmk.l.at $vm", []>;
+  let sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
+  def VFMKaf : RV<0xB4, (outs VM:$vm), (ins VLS:$vl), "vfmk.l.af $vm", []>;
+}
 
 // at and af for 32b lower and upper
-let cx = 0, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
-def VFMSuat : RV<0xB5, (outs VM:$vm), (ins), "pvfmk.w.up.at $vm", []>;
-let cx = 1, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
-def VFMSlat : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.at $vm", []>;
-let cx = 0, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
-def VFMSuaf : RV<0xB5, (outs VM:$vm), (ins), "pvfmk.w.up.af $vm", []>;
-let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
-def VFMSlaf : RV<0xB5, (outs VM:$vm), (ins), "vfmk.w.af $vm", []>;
+let DisableEncoding = "$vl" in {
+  let cx = 0, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
+  def VFMSuat : RV<0xB5, (outs VM:$vm), (ins VLS:$vl), "pvfmk.w.up.at $vm", []>;
+  let cx = 1, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
+  def VFMSlat : RV<0xB5, (outs VM:$vm), (ins VLS:$vl), "vfmk.w.at $vm", []>;
+  let cx = 0, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
+  def VFMSuaf : RV<0xB5, (outs VM:$vm), (ins VLS:$vl), "pvfmk.w.up.af $vm", []>;
+  let cx = 1, sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
+  def VFMSlaf : RV<0xB5, (outs VM:$vm), (ins VLS:$vl), "vfmk.w.af $vm", []>;
+}
 
 // Pseudo for VM512
-def VFMSpv : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz), 
-                    "# pvfmk.w.${cf} $vmx,$vz", []>;
-def VFMSpvm : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm), 
-                    "# pvfmk.w.${cf} $vmx,$vz,$vm", []> {
-                    }
-
-def VFMFpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz), 
-                    "# pvfmk.w.${cf} $vm,$vz", []>;
-def VFMFpvm : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm), 
-                    "# pvfmk.w.${cf} $vmx,$vz,$vm", []>;
-
-def VFMKpat : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.at", []>;
-def VFMKpaf : PseudoVec<(outs VM512:$vm), (ins), "# pvfmk.af", []>;
+let DisableEncoding = "$vl" in {
+  def VFMSpv : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VLS:$vl), 
+                         "# pvfmk.w.${cf} $vmx,$vz", []>;
+  def VFMSpvm : PseudoVec<(outs VM512:$vmx),
+                          (ins CCOp:$cf, V64:$vz, VM512:$vm, VLS:$vl), 
+                          "# pvfmk.w.${cf} $vmx,$vz,$vm", []>;
+  def VFMFpv : PseudoVec<(outs VM512:$vm), (ins CCOp:$cf, V64:$vz, VLS:$vl), 
+                         "# pvfmk.w.${cf} $vm,$vz", []>;
+  def VFMFpvm : PseudoVec<(outs VM512:$vmx),
+                          (ins CCOp:$cf, V64:$vz, VM512:$vm, VLS:$vl), 
+                          "# pvfmk.w.${cf} $vmx,$vz,$vm", []>;
+  def VFMKpat : PseudoVec<(outs VM512:$vm), (ins VLS:$vl), "# pvfmk.at", []>;
+  def VFMKpaf : PseudoVec<(outs VM512:$vm), (ins VLS:$vl), "# pvfmk.af", []>;
+}
 
 
 // 5.3.2.13. Vector Recursive Relation Instructions
