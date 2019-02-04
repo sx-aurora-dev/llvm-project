@@ -204,8 +204,10 @@ def vec_gather   : SDNode<"VEISD::VEC_GATHER", SDTypeProfile<1, 1, [SDTCisVec<0>
 def vec_lvl   : SDNode<"VEISD::VEC_LVL", SDTypeProfile<0, 1, []>, [SDNPHasChain]>;
 
 def vec_rotate   : SDNode<"VEISD::VEC_VMV", SDTypeProfile<1, 2, []>>;
-def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)), (VMVr i32:$sy, v256f64:$vz, 256)>;
-def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)), (VMVi (i32 simm7:$I), v256f64:$vz, 256)>;
+def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)),
+          (VMVr i32:$sy, v256f64:$vz, 256)>;
+def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)),
+          (VMVi (i32 simm7:$I), v256f64:$vz, 256)>;
 
 // Shuffle
 // TODO
@@ -346,8 +348,12 @@ def : Pat<(or  v256i64:$vx, v256i64:$vy), (VORv v256i64:$vx, v256i64:$vy, 256)>;
 def : Pat<(xor v256i64:$vx, v256i64:$vy), (VXORv v256i64:$vx, v256i64:$vy, 256)>;
 
 // Shifts
-def : Pat<(shl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))), (VSLAXr2 v256i64:$vx, i64:$sy)>;
-def : Pat<(srl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))), (VSRLr2 v256i64:$vx, i64:$sy)>;
+def : Pat<(shl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))),
+          (VSLAXr2 v256i64:$vx, i64:$sy, 256)>;
+def : Pat<(srl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))),
+          (VSRLr2 v256i64:$vx, i64:$sy, 256)>;
 
-def : Pat<(shl v256i64:$vx, v256i64:$vy), (VSLAXv v256i64:$vx, v256i64:$vy)>;
-def : Pat<(srl v256i64:$vx, v256i64:$vy), (VSRLv v256i64:$vx, v256i64:$vy)>;
+def : Pat<(shl v256i64:$vx, v256i64:$vy),
+          (VSLAXv v256i64:$vx, v256i64:$vy, 256)>;
+def : Pat<(srl v256i64:$vx, v256i64:$vy),
+          (VSRLv v256i64:$vx, v256i64:$vy, 256)>;

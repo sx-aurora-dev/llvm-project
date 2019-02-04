@@ -249,16 +249,26 @@ namespace llvm {
       INT_VBRDU_M,  // for int_ve_vbrdu_vsmv_f32
       INT_VBRDL_M,  // for int_ve_vbrdl_vsmv_i32
       INT_PVBRD_M,  // for int_ve_pvbrd_vsMv_i64
-      INT_VSLL,     // for int_ve_vsll_vvvmv or int_ve_vsll_vvsmv
-      INT_VSRL,     // for int_ve_vsrl_vvvmv or int_ve_vsrl_vvsmv
-      INT_VSLAW,    // for int_ve_vslaw_vvvmv or int_ve_vslaw_vvsmv
-      INT_VSLAL,    // for int_ve_vslal_vvvmv or int_ve_vslal_vvsmv
-      INT_VSRAW,    // for int_ve_vsraw_vvvmv or int_ve_vsraw_vvsmv
-      INT_VSRAL,    // for int_ve_vsral_vvvmv or int_ve_vsral_vvsmv
-      INT_PVSLL,    // for int_ve_pvsll_vvvMv or int_ve_pvsll_vvsMv
-      INT_PVSRL,    // for int_ve_pvsrl_vvvMv or int_ve_pvsrl_vvsMv
-      INT_PVSLA,    // for int_ve_pvsla_vvvMv or int_ve_pvsla_vvsMv
-      INT_PVSRA,    // for int_ve_pvsra_vvvMv or int_ve_pvsra_vvsMv
+      INT_VSLL,     // for int_ve_vsll_vvv or int_ve_vsll_vvs
+      INT_PVSLL,    // for int_ve_pvsll_vvv or int_ve_pvsll_vvs
+      INT_VSLL_M,   // for int_ve_vsll_vvvmv or int_ve_vsll_vvsmv
+      INT_PVSLL_M,  // for int_ve_pvsll_vvvMv or int_ve_pvsll_vvsMv
+      INT_VSRL,     // for int_ve_vsrl_vvv or int_ve_vsrl_vvs
+      INT_PVSRL,    // for int_ve_pvsrl_vvv or int_ve_pvsrl_vvs
+      INT_VSRL_M,   // for int_ve_vsrl_vvvmv or int_ve_vsrl_vvsmv
+      INT_PVSRL_M,  // for int_ve_pvsrl_vvvMv or int_ve_pvsrl_vvsMv
+      INT_VSLAW,    // for int_ve_vslaw_vvv or int_ve_vslaw_vvs
+      INT_VSLAL,    // for int_ve_vslal_vvv or int_ve_vslal_vvs
+      INT_PVSLA,    // for int_ve_pvsla_vvv or int_ve_pvsla_vvs
+      INT_VSLAW_M,  // for int_ve_vslaw_vvvmv or int_ve_vslaw_vvsmv
+      INT_VSLAL_M,  // for int_ve_vslal_vvvmv or int_ve_vslal_vvsmv
+      INT_PVSLA_M,  // for int_ve_pvsla_vvvMv or int_ve_pvsla_vvsMv
+      INT_VSRAW,    // for int_ve_vsraw_vvv or int_ve_vsraw_vvs
+      INT_VSRAL,    // for int_ve_vsral_vvv or int_ve_vsral_vvs
+      INT_PVSRA,    // for int_ve_pvsra_vvv or int_ve_pvsra_vvs
+      INT_VSRAW_M,  // for int_ve_vsraw_vvvmv or int_ve_vsraw_vvsmv
+      INT_VSRAL_M,  // for int_ve_vsral_vvvmv or int_ve_vsral_vvsmv
+      INT_PVSRA_M,  // for int_ve_pvsra_vvvMv or int_ve_pvsra_vvsMv
       INT_VSFA,     // for int_ve_vsfa_vvssmv
       INT_VMRG,     // for int_ve_vmrg_vvvm
       INT_VMRGW,    // for int_ve_vmrgw_vvvM
