@@ -1425,21 +1425,38 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_PVFADD_M:    return "VEISD::INT_PVFADD_M";
   case VEISD::INT_VFSUBD:      return "VEISD::INT_VFSUBD";
   case VEISD::INT_VFSUBS:      return "VEISD::INT_VFSUBS";
+  case VEISD::INT_PVFSUB:      return "VEISD::INT_PVFSUB";
+  case VEISD::INT_VFSUBD_M:    return "VEISD::INT_VFSUBD_M";
+  case VEISD::INT_VFSUBS_M:    return "VEISD::INT_VFSUBS_M";
+  case VEISD::INT_PVFSUB_M:    return "VEISD::INT_PVFSUB_M";
   case VEISD::INT_VFMULD:      return "VEISD::INT_VFMULD";
   case VEISD::INT_VFMULS:      return "VEISD::INT_VFMULS";
+  case VEISD::INT_PVFMUL:      return "VEISD::INT_PVFMUL";
+  case VEISD::INT_VFMULD_M:    return "VEISD::INT_VFMULD_M";
+  case VEISD::INT_VFMULS_M:    return "VEISD::INT_VFMULS_M";
+  case VEISD::INT_PVFMUL_M:    return "VEISD::INT_PVFMUL_M";
   case VEISD::INT_VFDIVD:      return "VEISD::INT_VFDIVD";
   case VEISD::INT_VFDIVS:      return "VEISD::INT_VFDIVS";
+  case VEISD::INT_VFDIVD_M:    return "VEISD::INT_VFDIVD_M";
+  case VEISD::INT_VFDIVS_M:    return "VEISD::INT_VFDIVS_M";
   case VEISD::INT_VFCMPD:      return "VEISD::INT_VFCMPD";
   case VEISD::INT_VFCMPS:      return "VEISD::INT_VFCMPS";
+  case VEISD::INT_PVFCMP:      return "VEISD::INT_PVFCMP";
+  case VEISD::INT_VFCMPD_M:    return "VEISD::INT_VFCMPD_M";
+  case VEISD::INT_VFCMPS_M:    return "VEISD::INT_VFCMPS_M";
+  case VEISD::INT_PVFCMP_M:    return "VEISD::INT_PVFCMP_M";
   case VEISD::INT_VFMAXD:      return "VEISD::INT_VFMAXD";
   case VEISD::INT_VFMAXS:      return "VEISD::INT_VFMAXS";
+  case VEISD::INT_PVFMAX:      return "VEISD::INT_PVFMAX";
+  case VEISD::INT_VFMAXD_M:    return "VEISD::INT_VFMAXD_M";
+  case VEISD::INT_VFMAXS_M:    return "VEISD::INT_VFMAXS_M";
+  case VEISD::INT_PVFMAX_M:    return "VEISD::INT_PVFMAX_M";
   case VEISD::INT_VFMIND:      return "VEISD::INT_VFMIND";
   case VEISD::INT_VFMINS:      return "VEISD::INT_VFMINS";
-  case VEISD::INT_PVFSUB:      return "VEISD::INT_PVFSUB";
-  case VEISD::INT_PVFMUL:      return "VEISD::INT_PVFMUL";
-  case VEISD::INT_PVFCMP:      return "VEISD::INT_PVFCMP";
-  case VEISD::INT_PVFMAX:      return "VEISD::INT_PVFMAX";
   case VEISD::INT_PVFMIN:      return "VEISD::INT_PVFMIN";
+  case VEISD::INT_VFMIND_M:    return "VEISD::INT_VFMIND_M";
+  case VEISD::INT_VFMINS_M:    return "VEISD::INT_VFMINS_M";
+  case VEISD::INT_PVFMIN_M:    return "VEISD::INT_PVFMIN_M";
   case VEISD::INT_VFMADD:      return "VEISD::INT_VFMADD";
   case VEISD::INT_VFMADS:      return "VEISD::INT_VFMADS";
   case VEISD::INT_VFMSBD:      return "VEISD::INT_VFMSBD";
@@ -2601,7 +2618,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                     S0, SubRegF32), 0);
     V4 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S0, V1, V5), 0); // V4 = -(V1*V5-S0)
     V3 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V5, V5, V4), 0); // V3 = V5*V4+V5
-    V2 = SDValue(DAG.getMachineNode(VE::VFMPsv,   dl, VT, V0, V3), 0);     // V1 = V0*V3
+    V2 = SDValue(DAG.getMachineNode(VE::VFMPsv,   dl, VT, V0, V3, VL), 0);     // V1 = V0*V3
     V4 = SDValue(DAG.getMachineNode(VE::VFNMSBsv, dl, VT, V0, V2, V1), 0); // V4 = -(V2*V1-V0)
     V2 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V2, V5, V4), 0); // V2 = V5*V4+V2
     V0 = SDValue(DAG.getMachineNode(VE::VFNMSBsv, dl, VT, V0, V2, V1), 0); // v3 = -(V2*V1-S0)
@@ -2633,7 +2650,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                     DAG.getTargetConstant(0x3f800000, dl, MVT::i64)), 0);
     V4 = SDValue(DAG.getMachineNode(VE::VFNMSBpr, dl, VT, S0, V1, V5), 0); // V4 = -(V1*V5-S0)
     V3 = SDValue(DAG.getMachineNode(VE::VFMADpv,  dl, VT, V5, V5, V4), 0); // V3 = V5*V4+V5
-    V2 = SDValue(DAG.getMachineNode(VE::VFMPpv,   dl, VT, V0, V3), 0);     // V1 = V0*V3
+    V2 = SDValue(DAG.getMachineNode(VE::VFMPpv,   dl, VT, V0, V3, VL), 0);     // V1 = V0*V3
     V4 = SDValue(DAG.getMachineNode(VE::VFNMSBpv, dl, VT, V0, V2, V1), 0); // V4 = -(V2*V1-V0)
     V2 = SDValue(DAG.getMachineNode(VE::VFMADpv,  dl, VT, V2, V5, V4), 0); // V2 = V5*V4+V2
     V0 = SDValue(DAG.getMachineNode(VE::VFNMSBpv, dl, VT, V0, V2, V1), 0); // v3 = -(V2*V1-S0)
@@ -2676,7 +2693,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                     S1, SubRegF32), 0);
     V2 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S1, V0, V4), 0); // V2 = -(V0*V4-S1)
     V2 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V4, V4, V2), 0); // V2 = V4*V2+V4
-    V1 = SDValue(DAG.getMachineNode(VE::VFMPsr,   dl, VT, S0, V2), 0);     // V1 = S0*V2
+    V1 = SDValue(DAG.getMachineNode(VE::VFMPsr,   dl, VT, S0, V2, VL), 0);     // V1 = S0*V2
     V3 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S0, V1, V0), 0); // V3 = -(V1*V0-S0)
     V1 = SDValue(DAG.getMachineNode(VE::VFMADsv,  dl, VT, V1, V4, V3), 0); // V1 = V4*V3+V1
     V3 = SDValue(DAG.getMachineNode(VE::VFNMSBsr, dl, VT, S0, V1, V0), 0); // v3 = -(V1*V0-S0)
