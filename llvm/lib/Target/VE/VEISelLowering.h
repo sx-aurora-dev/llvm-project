@@ -330,6 +330,9 @@ namespace llvm {
       INT_VRSQRTD,  // for int_ve_vrsqrtd_vv
       INT_VRSQRTS,  // for int_ve_vrsqrts_vv
       INT_PVRSQRT,  // for int_ve_pvrsqrt_vv
+      INT_VRCPD,    // for int_ve_vrcpd_vv
+      INT_VRCPS,    // for int_ve_vrcps_vv
+      INT_PVRCP,    // for int_ve_pvrcp_vv
     };
   }
 

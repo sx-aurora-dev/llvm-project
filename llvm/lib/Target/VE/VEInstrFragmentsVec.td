@@ -256,6 +256,9 @@ def INT_VFSQRTS : SDNode<"VEISD::INT_VFSQRTS", VE1OpVVVL>;
 def INT_VRSQRTD : SDNode<"VEISD::INT_VRSQRTD", VE1OpVVVL>;
 def INT_VRSQRTS : SDNode<"VEISD::INT_VRSQRTS", VE1OpVVVL>;
 def INT_PVRSQRT : SDNode<"VEISD::INT_PVRSQRT", VE1OpVVVL>;
+def INT_VRCPD : SDNode<"VEISD::INT_VRCPD", VE1OpVVVL>;
+def INT_VRCPS : SDNode<"VEISD::INT_VRCPS", VE1OpVVVL>;
+def INT_PVRCP : SDNode<"VEISD::INT_PVRCP", VE1OpVVVL>;
 
 //===----------------------------------------------------------------------===//
 // 1-op instructions with mask, base register, and hidden VL
@@ -296,6 +299,9 @@ def INT_VFSQRTS_M : SDNode<"VEISD::INT_VFSQRTS_M", VE1OpVVMVVL>;
 def INT_VRSQRTD_M : SDNode<"VEISD::INT_VRSQRTD_M", VE1OpVVMVVL>;
 def INT_VRSQRTS_M : SDNode<"VEISD::INT_VRSQRTS_M", VE1OpVVMVVL>;
 def INT_PVRSQRT_M : SDNode<"VEISD::INT_PVRSQRT_M", VE1OpVVMVVL>;
+def INT_VRCPD_M : SDNode<"VEISD::INT_VRCPD_M", VE1OpVVMVVL>;
+def INT_VRCPS_M : SDNode<"VEISD::INT_VRCPS_M", VE1OpVVMVVL>;
+def INT_PVRCP_M : SDNode<"VEISD::INT_PVRCP_M", VE1OpVVMVVL>;
 
 
 //===----------------------------------------------------------------------===//

@@ -979,26 +979,9 @@ multiclass VFSQRTm<string opcStr, bits<8> opc> {
 }
 
 multiclass VRCPm<string opcStr, bits<8> opc> {
-  def dv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
-    !strconcat(opcStr, ".d $vx,$vy"), []> {
-      let cy = 1;
-      let sy = 0;
-  }
-
-  def sv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
-    !strconcat(opcStr, ".s $vx,$vy"), []> {
-      let cx = 1;
-      let cy = 1;
-      let sy = 0;
-  }
-
-  def pv : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
-    !strconcat("p"#opcStr, " $vx,$vy"), []> {
-      let cx = 1;
-      let cx2 = 1;
-      let cy = 1;
-      let sy = 0;
-  }
+  let cx = 0, cx2 = 0 in defm d : RV2vm<opcStr # ".d", opc, VM>;
+  let cx = 1, cx2 = 0 in defm s : RV2vm<opcStr # ".s", opc, VM>;
+  let cx = 1, cx2 = 1 in defm p : RV2vm<"p" # opcStr, opc, VM>;
 }
 
 multiclass VRSQRTm<string opcStr, bits<8> opc> {

@@ -547,9 +547,9 @@ def : Pat<(int_ve_pvfnmsb_vvsv v256f64:$vy, i64:$sy, v256f64:$vw), (VFNMSBpr2 v2
 def : Pat<(VEpvfnmsb v256f64:$vy, v256f64:$vz, v256f64:$vw, v512i1:$vm, v256f64:$vd), (VFNMSBpvm v256f64:$vy, v256f64:$vz, v256f64:$vw, v512i1:$vm, v256f64:$vd)>;
 def : Pat<(VEpvfnmsb i64:$sy, v256f64:$vz, v256f64:$vw, v512i1:$vm, v256f64:$vd), (VFNMSBprm i64:$sy, v256f64:$vz, v256f64:$vw, v512i1:$vm, v256f64:$vd)>;
 def : Pat<(VEpvfnmsb v256f64:$vy, i64:$sy, v256f64:$vw, v512i1:$vm, v256f64:$vd), (VFNMSBpr2m v256f64:$vy, i64:$sy, v256f64:$vw, v512i1:$vm, v256f64:$vd)>;
-def : Pat<(int_ve_vrcpd_vv v256f64:$vy), (VRCPdv v256f64:$vy)>;
-def : Pat<(int_ve_vrcps_vv v256f64:$vy), (VRCPsv v256f64:$vy)>;
-def : Pat<(int_ve_pvrcp_vv v256f64:$vy), (VRCPpv v256f64:$vy)>;
+def : Pat<(INT_VRCPD v256f64:$vy, VLS:$vl), (VRCPdv v256f64:$vy, $vl)>;
+def : Pat<(INT_VRCPS v256f64:$vy, VLS:$vl), (VRCPsv v256f64:$vy, $vl)>;
+def : Pat<(INT_PVRCP v256f64:$vy, VLS:$vl), (VRCPpv v256f64:$vy, $vl)>;
 def : Pat<(INT_VRSQRTD v256f64:$vy, VLS:$vl), (VRSQRTdv v256f64:$vy, $vl)>;
 def : Pat<(INT_VRSQRTS v256f64:$vy, VLS:$vl), (VRSQRTsv v256f64:$vy, $vl)>;
 def : Pat<(INT_PVRSQRT v256f64:$vy, VLS:$vl), (VRSQRTpv v256f64:$vy, $vl)>;
