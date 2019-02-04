@@ -377,6 +377,36 @@ namespace llvm {
       INT_VRCPD,    // for int_ve_vrcpd_vv
       INT_VRCPS,    // for int_ve_vrcps_vv
       INT_PVRCP,    // for int_ve_pvrcp_vv
+      INT_VCVTWDSX,     // for int_ve_vcvtwdsx_vv
+      INT_VCVTWDSX_M,   // for int_ve_vcvtwdsx_vvmv
+      INT_VCVTWDSXRZ,   // for int ve_vcvtwdsxrz_vv
+      INT_VCVTWDSXRZ_M, // for int_ve_vcvtwdsxrz_vvmv
+      INT_VCVTWDZX,     // for int_ve_vcvtwdzx_vv
+      INT_VCVTWDZX_M,   // for int_ve_vcvtwdzx_vvmv
+      INT_VCVTWDZXRZ,   // for int_ve_vcvtwdzxrz_vv
+      INT_VCVTWDZXRZ_M, // for int_ve_vcvtwdzxrz_vvmv
+      INT_VCVTWSSX,     // for int_ve_vcvtwssx_vv
+      INT_VCVTWSSX_M,   // for int_ve_vcvtwssx_vvmv
+      INT_VCVTWSSXRZ,   // for int_ve_vcvtwssxrz_vv
+      INT_VCVTWSSXRZ_M, // for int_ve_vcvtwssxrz_vvmv
+      INT_VCVTWSZX,     // for int_ve_vcvtwszx_vv
+      INT_VCVTWSZX_M,   // for int_ve_vcvtwszx_vvmv
+      INT_VCVTWSZXRZ,   // for int_ve_vcvtwszxrz_vv
+      INT_VCVTWSZXRZ_M, // for int_ve_vcvtwszxrz_vvmv
+      INT_PVCVTWS,      // for int_ve_pvcvtws_vv
+      INT_PVCVTWS_M,    // for int_ve_pvcvtws_vvmv
+      INT_PVCVTWSRZ,    // for int_ve_pvctwsrz_vv
+      INT_PVCVTWSRZ_M,  // for int_ve_pvctwsrz_vvmv
+      INT_VCVTLD,       // for int_ve_vcvtld_vv
+      INT_VCVTLD_M,     // for int_ve_vcvtld_vvmv
+      INT_VCVTLDRZ,     // for int_ve_vcvtldrz_vv
+      INT_VCVTLDRZ_M,   // for int_ve_vcvtldrz_vvmv
+      INT_VCVTDW,       // for int_ve_vcvtdw_vv
+      INT_VCVTSW,       // for int_ve_vcvtsw_vv
+      INT_PVCVTSW,      // for int_ve_pvcvtsw_vv
+      INT_VCVTDL,       // for int_ve_vcvtdl_vv
+      INT_VCVTDS,       // for int_ve_vcvtds_vv
+      INT_VCVTSD,       // for int_ve_vcvtsd_vv
     };
   }
 

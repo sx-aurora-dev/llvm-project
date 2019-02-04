@@ -280,10 +280,10 @@ def : Pat<(v256i64 (vec_seq (i64 1))), (VSEQv)>;
 
 // sint -> floating-point
 
-def : Pat<(v256f64 (sint_to_fp v256i64:$vx)), (VFLTXv $vx)>;
-def : Pat<(v256f64 (sint_to_fp v256i32:$vx)), (VFLTdv $vx)>;
-def : Pat<(v256f32 (sint_to_fp v256i32:$vx)), (VFLTsv $vx)>;
-def : Pat<(v512f32 (sint_to_fp v512i32:$vx)), (VFLTpv $vx)>;
+def : Pat<(v256f64 (sint_to_fp v256i64:$vx)), (VFLTXv $vx, 256)>;
+def : Pat<(v256f64 (sint_to_fp v256i32:$vx)), (VFLTdv $vx, 256)>;
+def : Pat<(v256f32 (sint_to_fp v256i32:$vx)), (VFLTsv $vx, 256)>;
+def : Pat<(v512f32 (sint_to_fp v512i32:$vx)), (VFLTpv $vx, 256)>;
 
 // Double-Precision Arithmetic
 

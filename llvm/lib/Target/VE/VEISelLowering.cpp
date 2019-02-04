@@ -1589,6 +1589,36 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_VRCPD:       return "VEISD::INT_VRCPD";
   case VEISD::INT_VRCPS:       return "VEISD::INT_VRCPS";
   case VEISD::INT_PVRCP:       return "VEISD::INT_PVRCP";
+  case VEISD::INT_VCVTWDSX:    return "VEISD::INT_VCVTWDSX";
+  case VEISD::INT_VCVTWDSX_M:  return "VEISD::INT_VCVTWDSX_M";
+  case VEISD::INT_VCVTWDSXRZ:  return "VEISD::INT_VCVTWDSXRZ";
+  case VEISD::INT_VCVTWDSXRZ_M:return "VEISD::INT_VCVTWDSXRZ_M";
+  case VEISD::INT_VCVTWDZX:    return "VEISD::INT_VCVTWDZX";
+  case VEISD::INT_VCVTWDZX_M:  return "VEISD::INT_VCVTWDZX_M";
+  case VEISD::INT_VCVTWDZXRZ:  return "VEISD::INT_VCVTWDZXRZ";
+  case VEISD::INT_VCVTWDZXRZ_M:return "VEISD::INT_VCVTWDZXRZ_M";
+  case VEISD::INT_VCVTWSSX:    return "VEISD::INT_VCVTWSSX";
+  case VEISD::INT_VCVTWSSX_M:  return "VEISD::INT_VCVTWSSX_M";
+  case VEISD::INT_VCVTWSSXRZ:  return "VEISD::INT_VCVTWSSXRZ";
+  case VEISD::INT_VCVTWSSXRZ_M:return "VEISD::INT_VCVTWSSXRZ_M";
+  case VEISD::INT_VCVTWSZX:    return "VEISD::INT_VCVTWSZX";
+  case VEISD::INT_VCVTWSZX_M:  return "VEISD::INT_VCVTWSZX_M";
+  case VEISD::INT_VCVTWSZXRZ:  return "VEISD::INT_VCVTWSZXRZ";
+  case VEISD::INT_VCVTWSZXRZ_M:return "VEISD::INT_VCVTWSZXRZ_M";
+  case VEISD::INT_PVCVTWS:     return "VEISD::INT_PVCVTWS";
+  case VEISD::INT_PVCVTWS_M:   return "VEISD::INT_PVCVTWS_M";
+  case VEISD::INT_PVCVTWSRZ:   return "VEISD::INT_PVCVTWSRZ";
+  case VEISD::INT_PVCVTWSRZ_M: return "VEISD::INT_PVCVTWSRZ_M";
+  case VEISD::INT_VCVTLD:      return "VEISD::INT_VCVTLD";
+  case VEISD::INT_VCVTLD_M:    return "VEISD::INT_VCVTLD_M";
+  case VEISD::INT_VCVTLDRZ:    return "VEISD::INT_VCVTLDRZ";
+  case VEISD::INT_VCVTLDRZ_M:  return "VEISD::INT_VCVTLDRZ_M";
+  case VEISD::INT_VCVTDW:      return "VEISD::INT_VCVTDW";
+  case VEISD::INT_VCVTSW:      return "VEISD::INT_VCVTSW";
+  case VEISD::INT_PVCVTSW:     return "VEISD::INT_PVCVTSW";
+  case VEISD::INT_VCVTDL:      return "VEISD::INT_VCVTDL";
+  case VEISD::INT_VCVTDS:      return "VEISD::INT_VCVTDS";
+  case VEISD::INT_VCVTSD:      return "VEISD::INT_VCVTSD";
   }
   return nullptr;
 }

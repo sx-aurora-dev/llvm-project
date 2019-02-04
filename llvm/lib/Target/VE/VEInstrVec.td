@@ -1012,34 +1012,32 @@ defm VRCP : VRCPm<"vrcp", 0xE1>;
 defm VRSQRT : VRSQRTm<"vrsqrt", 0xF1>;
 
 multiclass VCVT<bits<8>opc, string opcStr> {
-  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy), 
+  def v : RV2<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl), 
     !strconcat(opcStr, " $vx,$vy"), []>;
 }
 
+multiclass VFIXCm<bits<8>opc, string opcStr, RegisterClass MaskRC> {
+  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl),
+              !strconcat(opcStr, " $vx,$vy"), []> {
+    bits<4> rvz;
+    let m = 0;
+    let vz{7-4} = 0;
+    let vz{3-0} = rvz;
+  }
+  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd, VLS:$vl),
+               !strconcat(opcStr, " $vx,$vy,$vm"), []> {
+    bits<4> rvz;
+    bits<4> vm;
+    let m = vm;
+    let vz{7-4} = 0;
+    let vz{3-0} = rvz;
+    let Constraints = "$vx = $vd";
+  }
+}
+
 multiclass VFIX<bits<8>opc, string opcStr, RegisterClass MaskRC> {
-  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy),
-    !strconcat(opcStr, " $vx,$vy"), []> {
-      let vz = 0;
-      let m = 0;
-    }
-
-  def rzv : RV3<opc, (outs V64:$vx), (ins V64:$vy),
-    !strconcat(opcStr, ".rz $vx,$vy"), []> {
-      let vz = 8;
-      let m = 0;
-    }
-
-  def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, " $vx,$vy,$vm"), []> {
-      let vz = 0;
-      let Constraints = "$vx = $vd";
-    }
-
-  def rzvm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd),
-    !strconcat(opcStr, ".rz $vx,$vy,$vm"), []> {
-      let vz = 8;
-      let Constraints = "$vx = $vd";
-    }
+  let rvz = 0 in defm "" : VFIXCm<opc, opcStr, MaskRC>;
+  let rvz = 8 in defm rz : VFIXCm<opc, !strconcat(opcStr, ".rz"), MaskRC>;
 }
 
 let cx = 0, cx2 = 0, cs2 = 0 in defm VFIXdsx : VFIX<0xE8, "vcvt.w.d.sx", VM>;
