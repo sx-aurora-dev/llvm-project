@@ -162,7 +162,20 @@ def INT_VSCL_M : SDNode<"VEISD::INT_VSCL_M", VEScatterMask,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
-// 0-op vector with base mask register instructions
+// 0-op instruction with hidden VL
+//===----------------------------------------------------------------------===//
+
+// (v256i64 (VSEQ (VLS vl)))
+
+def VE0OpVL :
+    SDTypeProfile<1, 1, [SDTCisVec<0>]>;
+def INT_VSEQ : SDNode<"VEISD::INT_VSEQ", VE0OpVL>;
+def INT_PVSEQLO : SDNode<"VEISD::INT_PVSEQLO", VE0OpVL>;
+def INT_PVSEQUP : SDNode<"VEISD::INT_PVSEQUP", VE0OpVL>;
+def INT_PVSEQ : SDNode<"VEISD::INT_PVSEQ", VE0OpVL>;
+
+//===----------------------------------------------------------------------===//
+// 0-op instruction with vector mask register and hidden VL
 //===----------------------------------------------------------------------===//
 
 // (v256i1 (VFMKAT (VLS vl)))
@@ -173,6 +186,10 @@ def INT_VFMKAT : SDNode<"VEISD::INT_VFMKAT", VE0OpMVL>;
 def INT_VFMKAF : SDNode<"VEISD::INT_VFMKAF", VE0OpMVL>;
 def INT_PVFMKAT : SDNode<"VEISD::INT_PVFMKAT", VE0OpMVL>;
 def INT_PVFMKAF : SDNode<"VEISD::INT_PVFMKAF", VE0OpMVL>;
+def INT_VSEQ_M : SDNode<"VEISD::INT_VSEQ_M", VE0OpMVL>;
+def INT_PVSEQLO_M : SDNode<"VEISD::INT_PVSEQLO_M", VE0OpMVL>;
+def INT_PVSEQUP_M : SDNode<"VEISD::INT_PVSEQUP_M", VE0OpMVL>;
+def INT_PVSEQ_M : SDNode<"VEISD::INT_PVSEQ_M", VE0OpMVL>;
 
 //===----------------------------------------------------------------------===//
 // 1-op logical instructions

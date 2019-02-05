@@ -272,9 +272,9 @@ def : Pat<(v512f32 (vselect v512i1:$m, v512f32:$vy, v512f32:$vz)),
 
 // Sequence
 
-def : Pat<(v256i32 (vec_seq (i32 1))), (VSEQlv)>;
-def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv)>;
-def : Pat<(v256i64 (vec_seq (i64 1))), (VSEQv)>;
+def : Pat<(v256i32 (vec_seq (i32 1))), (VSEQlv 256)>;
+def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv 256)>;
+def : Pat<(v256i64 (vec_seq (i64 1))), (VSEQv 256)>;
 
 // Format Conversions
 

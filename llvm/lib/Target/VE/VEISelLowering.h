@@ -438,6 +438,14 @@ namespace llvm {
       INT_VFRMINDLST,   // for int_ve_vfrmindlst_vv
       INT_VFRMINSFST,   // for int_ve_vfrminsfst_vv
       INT_VFRMINSLST,   // for int_ve_vfrminslst_vv
+      INT_VSEQ,         // for int_ve_vseq_v
+      INT_PVSEQLO,      // for int_ve_pvseqlo_v
+      INT_PVSEQUP,      // for int_ve_pvsequp_v
+      INT_PVSEQ,        // for int_ve_pvseq_v
+      INT_VSEQ_M,
+      INT_PVSEQLO_M,
+      INT_PVSEQUP_M,
+      INT_PVSEQ_M,
     };
   }
 

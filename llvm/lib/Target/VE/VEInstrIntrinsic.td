@@ -327,10 +327,10 @@ def : Pat<(int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy), (LVSf32r v256f64:$vx, i32:$
 // def : Pat<(int_ve_pveqv_vsv i64:$sy, v256f64:$vz), (VEQVpr i64:$sy, v256f64:$vz)>;
 // def : Pat<(int_ve_pveqv_vvvMv v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd), (VEQVpvm v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
 // def : Pat<(int_ve_pveqv_vsvMv i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$vd), (VEQVprm i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$vd)>;
-def : Pat<(int_ve_vseq_v ), (VSEQv )>;
-def : Pat<(int_ve_pvseqlo_v ), (VSEQlv )>;
-def : Pat<(int_ve_pvsequp_v ), (VSEQuv )>;
-def : Pat<(int_ve_pvseq_v ), (VSEQpv )>;
+// def : Pat<(int_ve_vseq_v ), (VSEQv )>;
+// def : Pat<(int_ve_pvseqlo_v ), (VSEQlv )>;
+// def : Pat<(int_ve_pvsequp_v ), (VSEQuv )>;
+// def : Pat<(int_ve_pvseq_v ), (VSEQpv )>;
 // def : Pat<(int_ve_vsll_vvv v256f64:$vz, v256f64:$vy), (VSLLv v256f64:$vz, v256f64:$vy)>;
 // def : Pat<(int_ve_vsll_vvs v256f64:$vz, i64:$sy), (VSLLr2 v256f64:$vz, i64:$sy)>;
 // def : Pat<(int_ve_vsll_vvs v256f64:$vz, (i64 uimm6:$N)), (VSLLi2 v256f64:$vz, (i64 uimm6:$N))>;

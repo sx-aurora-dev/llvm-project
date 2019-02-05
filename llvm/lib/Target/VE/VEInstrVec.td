@@ -841,20 +841,23 @@ defm VOR  : RVLOGm<"vor", 0xC5>;
 defm VXOR : RVLOGm<"vxor", 0xC6>;
 defm VEQV : RVLOGm<"veqv", 0xC7>;
 
-multiclass VSEQm<string opcStr> {
-  def v : RV<0x99, (outs V64:$vx), (ins), !strconcat(opcStr, " $vx"), []> {
-    let vy = 0;
-    let vz = 0;
-    let vw = 0;
-    let m = 0;
-    let sy = 0;
+multiclass VSEQm<string opcStr, RegisterClass RegMask> {
+  def v : RV<0x99, (outs V64:$vx), (ins VLS:$vl),
+             !strconcat(opcStr, " $vx"), []> {
+    let DisableEncoding = "$vl";
+  }
+  def vm : RV<0x99, (outs V64:$vx), (ins RegMask:$vm, VLS:$vl),
+             !strconcat(opcStr, " $vx"), []> {
+    bits<4> vm;
+    let m = vm;
+    let DisableEncoding = "$vl";
   }
 }
 
-let cx = 0, cx2 = 0 in defm VSEQ : VSEQm<"vseq">;
-let cx = 0, cx2 = 1 in defm VSEQl : VSEQm<"pvseq.lo">;
-let cx = 1, cx2 = 0 in defm VSEQu : VSEQm<"pvseq.up">;
-let cx = 1, cx2 = 1 in defm VSEQp : VSEQm<"pvseq">;
+let cx = 0, cx2 = 0 in defm VSEQ : VSEQm<"vseq", VM>;
+let cx = 0, cx2 = 1 in defm VSEQl : VSEQm<"pvseq.lo", VM>;
+let cx = 1, cx2 = 0 in defm VSEQu : VSEQm<"pvseq.up", VM>;
+let cx = 1, cx2 = 1 in defm VSEQp : VSEQm<"pvseq", VM512>;
 
 // 5.3.2.10. Vector Shift Instructions
 
