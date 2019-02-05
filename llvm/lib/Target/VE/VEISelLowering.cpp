@@ -3963,42 +3963,115 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
   unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
 
   // First, try to patch simple case (def-use in each basic block).
-  int num_use_livein = 0;
-  int num_def = 0;
+  struct vlinfo {
+    unsigned vl;
+    bool use_before_def;
+    bool def;
+    bool add_phi;
+  };
+  std::map<MachineBasicBlock*, vlinfo> mbbs;
   for (auto &MBB : MF) {
+    mbbs[&MBB].vl = VLReg;
+    mbbs[&MBB].use_before_def = false;
+    mbbs[&MBB].def = false;
+    mbbs[&MBB].add_phi = false;
     bool use_livein = true;
     unsigned newVL = 0;
     for (auto &MI : MBB) {
       auto chk = MI.readsWritesVirtualRegister(VLReg);
       if (chk.first && use_livein) {
-        LLVM_DEBUG(dbgs() << MI);
         // use VL without specifying it
-        num_use_livein++;
+        mbbs[&MBB].use_before_def = true;
+        LLVM_DEBUG(dbgs() << MI);
       } else if (chk.second && use_livein) {
+        // this MI copies VL at entry
         assert(MI.readsRegister(VE::VL));
         LLVM_DEBUG(dbgs() << MI);
-        // this MI copies VL at entry
-        num_def++;
       } else if (chk.first) {
+        // use defined VL
         int numOp = MI.findRegisterUseOperandIdx(VLReg);
         assert(numOp > 0);
         MI.getOperand(numOp).ChangeToRegister(newVL, false);
+        mbbs[&MBB].def = true;
         LLVM_DEBUG(dbgs() << MI);
       } else if (MI.definesRegister(VE::VL)) {
-        num_def++;
         // defines VL
         use_livein = false;
         newVL = Subtarget->getInstrInfo()->createVectorLengthReg(&MF);
         MI.getOperand(0).ChangeToRegister(newVL, true);
+        mbbs[&MBB].vl = newVL;
+        mbbs[&MBB].def = true;
         LLVM_DEBUG(dbgs() << MI);
       } else {
         LLVM_DEBUG(dbgs() << MI);
       }
     }
   }
-  if (num_use_livein != 0 && num_def > 1) {
-    llvm_unreachable("re-calculation of PHI is not implemented yet");
+  bool Changed;
+  do {
+    Changed = false;
+    for (auto &MBB : MF) {
+      if (mbbs[&MBB].def && !mbbs[&MBB].use_before_def)
+        continue;
+      if (mbbs[&MBB].add_phi)
+        continue;
+      if (MBB.pred_empty())
+        continue;
+      // check whether need phi or not
+      unsigned VL = mbbs[*MBB.pred_begin()].vl;
+      bool need_phi = false;
+      for (auto I = MBB.pred_begin(); ++I != MBB.pred_end();) {
+        if (VL != mbbs[*I].vl) {
+          need_phi = true;
+          break;
+        }
+      }
+      if (need_phi) {
+        unsigned newVL = Subtarget->getInstrInfo()->createVectorLengthReg(&MF);
+        mbbs[&MBB].def = true;
+        bool single_def = true;
+        if (mbbs[&MBB].use_before_def) {
+          for (auto &MI : MBB) {
+            auto chk = MI.readsWritesVirtualRegister(VLReg);
+            if (chk.first) {
+              int numOp = MI.findRegisterUseOperandIdx(VLReg);
+              assert(numOp > 0);
+              MI.getOperand(numOp).ChangeToRegister(newVL, false);
+            } else if (chk.second) {
+              single_def = false;
+              break;
+            }
+          }
+          mbbs[&MBB].use_before_def = false;
+        }
+        if (single_def)
+          mbbs[&MBB].vl = newVL;
+        mbbs[&MBB].add_phi = true;
+        Changed = true;
+      } else {
+        mbbs[&MBB].vl = mbbs[*MBB.pred_begin()].vl;
+        if (mbbs[&MBB].use_before_def) {
+        }
+      }
+    }
+  } while (Changed);
+  // Add phi
+  const VEInstrInfo *TII = Subtarget->getInstrInfo();
+  for (auto &MBB : MF) {
+    if (mbbs[&MBB].add_phi) {
+      MachineBasicBlock::iterator MBBI = MBB.getFirstNonDebugInstr();
+      DebugLoc DL = MBBI->getDebugLoc();
+      MachineInstrBuilder MIB =
+        BuildMI(MBB, MBB.begin(), DL,
+                TII->get(TargetOpcode::PHI), mbbs[&MBB].vl);
+      for (auto I = MBB.pred_begin(); I != MBB.pred_end(); ++I) {
+        MIB.addReg(mbbs[*I].vl)
+           .addMBB(*I);
+      }
+    }
   }
+  LLVM_DEBUG(dbgs() << "Updated VLReg and insns\n");
+  LLVM_DEBUG(MF.dump());
 }
 
 void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
