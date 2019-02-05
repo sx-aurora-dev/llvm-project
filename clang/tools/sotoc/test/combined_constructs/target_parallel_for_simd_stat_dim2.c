@@ -13,7 +13,7 @@ int main(void) {
   int a = 5;
   int z[5][10];
 
-  #pragma omp target parallel for simd device(0) map(tofrom: x,y) map(from: z) map(to: i,j,a)
+  #pragma omp target parallel for simd device(0) map(tofrom: x,y) map(from: z) map(to: i,a) private(j)
   for (i = 0; i < 5; i++) {
     for (j = 0; j < 10; j++) {
       z[i][j] = x[i][j] + a*y[i][j];
