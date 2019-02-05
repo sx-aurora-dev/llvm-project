@@ -28,6 +28,7 @@ enum IntrinsicType : uint16_t {
   CONVM,        // Add bitcasts for vector mask arguments.
   RETM,         // Add a bitcast for vector mask return value and add bitcasts
                 // for vector mask arguments.
+  NOTHING,      // Nothing to do.  Just change intrinsic operation.
 };
 
 struct IntrinsicData {
@@ -131,8 +132,12 @@ static const IntrinsicData  IntrinsicsWithoutChain[] = {
   VE_INTRINSIC_DATA(extract_vm512u,     RETM,       VEISD::INT_EXTMU, 0),
   VE_INTRINSIC_DATA(insert_vm512l,      RETM,       VEISD::INT_INSML, 0),
   VE_INTRINSIC_DATA(insert_vm512u,      RETM,       VEISD::INT_INSMU, 0),
+  VE_INTRINSIC_DATA(lsv_vvss,           NOTHING,    VEISD::INT_LSV, 0),
   VE_INTRINSIC_DATA(lvm_MMss,           RETM,       VEISD::INT_LVM, 0),
   VE_INTRINSIC_DATA(lvm_mmss,           RETM,       VEISD::INT_LVM, 0),
+  VE_INTRINSIC_DATA(lvs_svs_f32,        NOTHING,    VEISD::INT_LVS, 0),
+  VE_INTRINSIC_DATA(lvs_svs_f64,        NOTHING,    VEISD::INT_LVS, 0),
+  VE_INTRINSIC_DATA(lvs_svs_u64,        NOTHING,    VEISD::INT_LVS, 0),
   VE_INTRINSIC_DATA(lzvm_sm,            CONVM_VL,   VEISD::INT_LZVM, 0),
   VE_INTRINSIC_DATA(negm_MM,            RETM,       VEISD::INT_NEGM, 0),
   VE_INTRINSIC_DATA(negm_mm,            RETM,       VEISD::INT_NEGM, 0),

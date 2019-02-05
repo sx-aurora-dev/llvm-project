@@ -1658,6 +1658,8 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_PVSEQLO_M:   return "VEISD::INT_PVSEQLO_M";
   case VEISD::INT_PVSEQUP_M:   return "VEISD::INT_PVSEQUP_M";
   case VEISD::INT_PVSEQ_M:     return "VEISD::INT_PVSEQ_M";
+  case VEISD::INT_LSV:         return "VEISD::INT_LSV";
+  case VEISD::INT_LVS:         return "VEISD::INT_LVS";
   }
   return nullptr;
 }
@@ -2540,6 +2542,21 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
         MVT::i1, Op.getValueType().getSizeInBits());
       SDValue Res =  DAG.getNode(IntrData->Opc0, dl, BitcastVT0, Ops);
       return DAG.getBitcast(Op.getValueType(), Res);
+    }
+    case NOTHING: {
+      // Just create new SD node
+      //   Input:
+      //     (v256i64 (int_ve_lsv_vvss (v256i64 %vr), (i32 %ind), (i64 %val)))
+      //   Output:
+      //     (v256i64 (LVS vr, ind, val))
+      SmallVector<SDValue, 8> Ops;
+
+      // Ignore operand 0 since it is intrinsic number.
+      // Copy rests of operands while converting bitmask.
+      for (unsigned i = 1; i < Op.getNumOperands(); ++i) {
+        Ops.push_back(Op.getOperand(i));
+      }
+      return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(), Ops);
     }
     }
   }

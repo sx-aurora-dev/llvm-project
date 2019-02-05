@@ -446,6 +446,9 @@ namespace llvm {
       INT_PVSEQLO_M,
       INT_PVSEQUP_M,
       INT_PVSEQ_M,
+      INT_LSV,          // for int_ve_lsv_vvss
+      INT_LVS,          // for int_lvs_svs_u64, int_lvs_svs_f64, and
+                        // int_ve_lvs_svs_f32
     };
   }
 

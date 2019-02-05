@@ -382,6 +382,16 @@ def INT_VCP_M : SDNode<"VEISD::INT_VCP_M", VE1OpVVMVVL>;
 def INT_VEX_M : SDNode<"VEISD::INT_VEX_M", VE1OpVVMVVL>;
 
 //===----------------------------------------------------------------------===//
+// 2-op instructions
+//===----------------------------------------------------------------------===//
+
+// (f64 (LVS (v256f64 vz), (i32 sy)))
+
+def VE2OpSVS :
+    SDTypeProfile<1, 2, [SDTCisVec<1>, SDTCisInt<2>]>;
+def INT_LVS : SDNode<"VEISD::INT_LVS", VE2OpSVS>;
+
+//===----------------------------------------------------------------------===//
 // 2-op instruction with base mask and hidden VL
 //===----------------------------------------------------------------------===//
 
@@ -664,6 +674,18 @@ def INT_VDIVUW_M : SDNode<"VEISD::INT_VDIVUW_M", VE2OpVXXMVVL>;
 def INT_VDIVSWSX_M : SDNode<"VEISD::INT_VDIVSWSX_M", VE2OpVXXMVVL>;
 def INT_VDIVSWZX_M : SDNode<"VEISD::INT_VDIVSWZX_M", VE2OpVXXMVVL>;
 def INT_VDIVSL_M : SDNode<"VEISD::INT_VDIVSL_M", VE2OpVXXMVVL>;
+
+//===----------------------------------------------------------------------===//
+// 3-op vector instruction
+//===----------------------------------------------------------------------===//
+
+// (v256f64 (LSV (v256f64 vz), (i32 sy), (i64 sz)))
+
+def VE3OpVVSS :
+    SDTypeProfile<1, 3, [SDTCisVec<0>, 
+                         SDTCisSameAs<1, 0>,
+                         SDTCisInt<2>, SDTCisInt<3>]>;
+def INT_LSV : SDNode<"VEISD::INT_LSV", VE3OpVVSS>;
 
 //===----------------------------------------------------------------------===//
 // 3-op vector instruction with hidden VL
