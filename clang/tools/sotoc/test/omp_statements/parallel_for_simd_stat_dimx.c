@@ -17,7 +17,7 @@ int main(void) {
   int a = 5;
   int z[5][10];
 
-  #pragma omp target device(0) map(tofrom: x,y) map(from: z) map(to: i,j,k,a)
+  #pragma omp target device(0) map(tofrom: x,y) map(from: z) map(to: i,j,a) private(k)
   for (j = 0; j < 5; j++) {
     for (k = 0; k < 10; k++) {
       z[j][k] = 0;
