@@ -16,6 +16,7 @@
 
 #include "clang/AST/Decl.h"
 
+#include "Debug.h"
 #include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
@@ -36,6 +37,8 @@ static bool isDeclInOpenMPHeader(clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
   auto IncludedFile = SM.getFileID(D->getBeginLoc());
   auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+
+  DEBUGPDECL(D, "Check if is in OpenMP header: ");
 
   while (IncludedFile != SM.getMainFileID()) {
     if (isHeaderOpenMPHeader(SM.getFileEntryForID(IncludedFile)->getName())) {
