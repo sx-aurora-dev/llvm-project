@@ -5,6 +5,7 @@
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Option/ArgList.h"
+#include <vector>
 
 using namespace clang;
 using namespace clang::driver;
@@ -18,6 +19,7 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
                                           const llvm::opt::ArgList &Args,
                                           const char *LinkingOutput) const {
   ArgStringList CmdArgs;
+  std::vector<llvm::opt::Arg*> PPargs;
 
   // We need to pass the input source, one file at a time, as first argument to
   // the compiler wrapper.
@@ -62,7 +64,18 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
           A->getOption().matches(options::OPT_W_Group))
         continue;
 
+      if(A->getOption().matches(options::OPT_Preprocessor_Group)){
+         PPargs.push_back(A);
+        continue;
+      }
+
       A->render(Args, CmdArgs);
+    }
+  }
+
+  for(auto &A : PPargs) {
+    for(uint i = 0; i<A->getNumValues();++i){
+      CmdArgs.push_back(Args.MakeArgString(("-" + std::string(A->getOption().getName()) + A->getValue(i)).c_str()));
     }
   }
 
@@ -115,6 +128,7 @@ void necauroratools::OffloadCompilerWrapper::RenderExtraToolArgs(const JobAction
   default:
     D.Diag(diag::err_drv_invalid_gcc_output_type) << getTypeName(JA.getType());
   }
+
 }
 
 void necauroratools::Assembler::RenderExtraToolArgs(const JobAction &JA,

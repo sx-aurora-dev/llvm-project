@@ -33,7 +33,7 @@ bool Verbose = false;
 
 int runSourceTransformation(const std::string &InputPath,
                             const std::string &SotocPath,
-                            std::string &OutputPath) {
+                            std::string &OutputPath, const std::string &ArgsString) {
   std::stringstream CmdLine;
 
   // find last '/' in string so we can get just the filename
@@ -70,8 +70,8 @@ int runSourceTransformation(const std::string &InputPath,
   if (TmpFile == "")
     return -1;
 
-  CmdLine << SotocPath << " " << InputPath << " -- -fopenmp "
-          << ">" << TmpFile;
+  CmdLine << SotocPath << " " << InputPath << " -- "
+          << ArgsString << " > " << TmpFile;
 
   if (Verbose) {
     std::cout << "  \"" << CmdLine.str() << "\"\n";
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
   if(SotocPath.str().empty())
     SotocPath << "sotoc";
 
-  rc = runSourceTransformation(InputPath, SotocPath.str(), SotocOutputPath);
+  rc = runSourceTransformation(InputPath, SotocPath.str(), SotocOutputPath, ArgsStream.str());
 
   if (rc != 0) {
     std::cerr << "necaurora-ofld-cc1-wrapper: "
