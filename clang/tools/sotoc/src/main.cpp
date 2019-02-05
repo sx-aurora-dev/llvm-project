@@ -104,7 +104,7 @@ int main(int argc, const char **argv) {
   SotocDebugLevel = std::atoi(sys::Process::GetEnv("SOTOC_DEBUG").getValueOr("0").c_str());
 #endif
 
-  DEBUGP("starting source transformation tool");
+  DEBUGP("Starting source transformation tool");
 
   return tool.run(
       clang::tooling::newFrontendActionFactory<SourceTransformAction>().get());

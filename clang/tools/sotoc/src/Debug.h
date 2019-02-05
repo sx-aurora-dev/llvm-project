@@ -24,10 +24,22 @@ extern int SotocDebugLevel;
   do {                                         \
     if (SotocDebugLevel > 0) {                 \
       llvm::errs() << "Sotoc: " << llvm::formatv(__VA_ARGS__);  \
+      llvm::errs() << "\n";                    \
     }                                          \
   } while (false)
+
+#define DEBUGPDECL(decl, ...)                  \
+  do {                                         \
+    if (SotocDebugLevel > 0) {                 \
+      llvm::errs() << "Sotoc: " << llvm::formatv(__VA_ARGS__);  \
+      decl->print(llvm::errs());               \
+      llvm::errs() << "\n";                    \
+    }                                          \
+  } while (false)
+
 #else // OMPTARGET_DEBUG
 #define DEBUGP(...)                            \
     {}
 #endif // OMPTARGET_DEBUG
+
 

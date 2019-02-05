@@ -30,6 +30,7 @@
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
+#include "Debug.h"
 
 static bool stmtNeedsSemicolon(const clang::Stmt *S) {
   while (1) {
@@ -50,6 +51,8 @@ static bool stmtNeedsSemicolon(const clang::Stmt *S) {
 
 llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
+
+  DEBUGPDECL(D, "Get system header for Decl: ");
 
   if (!SM.isInSystemHeader(D->getBeginLoc())) {
     return llvm::Optional<std::string>();
