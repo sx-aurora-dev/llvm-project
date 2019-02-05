@@ -235,6 +235,17 @@ def INT_INSMU : SDNode<"VEISD::INT_INSMU", VE2OpMMM2>;
 def INT_INSML : SDNode<"VEISD::INT_INSML", VE2OpMMM2>;
 
 //===----------------------------------------------------------------------===//
+// 2-op prefetch instructions with hidden VL
+//===----------------------------------------------------------------------===//
+
+// (PFCH (i64 sy), (i64 sz), (VLS vl)))
+
+def VE2OpSSVL :
+    SDTypeProfile<0, 3, [SDTCisInt<0>, SDTCisInt<1>]>;
+def INT_PFCHV : SDNode<"VEISD::INT_PFCHV", VE2OpSSVL,
+                       [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+
+//===----------------------------------------------------------------------===//
 // 1-op instructions with hidden VL
 //===----------------------------------------------------------------------===//
 

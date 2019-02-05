@@ -449,6 +449,7 @@ namespace llvm {
       INT_LSV,          // for int_ve_lsv_vvss
       INT_LVS,          // for int_lvs_svs_u64, int_lvs_svs_f64, and
                         // int_ve_lvs_svs_f32
+      INT_PFCHV,        // for int_ve_pfchv
     };
   }
 

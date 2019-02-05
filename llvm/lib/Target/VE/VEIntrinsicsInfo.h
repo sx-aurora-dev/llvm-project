@@ -58,6 +58,7 @@ struct IntrinsicData {
  */
 static const IntrinsicData IntrinsicsVoid[] = {
   VE_INTRINSIC_DATA(lvl,                LVL,        VEISD::INT_LVL, 0),
+  VE_INTRINSIC_DATA(pfchv,              ADD_VL,     VEISD::INT_PFCHV, 0),
   VE_INTRINSIC_DATA(vsc_vv,             ADD_VL,     VEISD::INT_VSC, 0),
   VE_INTRINSIC_DATA(vsc_vvm,            CONVM_VL,   VEISD::INT_VSC_M, 0),
   VE_INTRINSIC_DATA(vscl_vv,            ADD_VL,     VEISD::INT_VSCL, 0),
