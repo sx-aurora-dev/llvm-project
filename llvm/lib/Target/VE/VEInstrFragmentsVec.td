@@ -89,7 +89,7 @@ def INT_VSTL2D : SDNode<"VEISD::INT_VSTL2D", VEVecStore,
 
 def VELoadVL :
     SDTypeProfile<0, 1, [SDTCisVT<0, i32>]>;
-def VElvl : SDNode<"VEISD::INT_LVL", VELoadVL, [SDNPHasChain]>;
+def INT_LVL : SDNode<"VEISD::INT_LVL", VELoadVL, [SDNPHasChain]>;
 
 //===----------------------------------------------------------------------===//
 // Gather instructions with hidden VL

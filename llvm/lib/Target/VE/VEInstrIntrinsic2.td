@@ -667,7 +667,7 @@ def : Pat<(INT_TOVM v256i1:$vmy, VLS:$vl), (TOVM v256i1:$vmy, $vl)>;
 
 // Pattern Matchings for Vector Intrinsics
 
-def : Pat<(VElvl i32:$sy), (LVL i32:$sy)>;
+def : Pat<(INT_LVL i32:$sy), (LVL i32:$sy)>;
 
 def : Pat<(i64 (int_ve_pack_f32p ADDRri:$addr0, ADDRri:$addr1)),
           (ORrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
