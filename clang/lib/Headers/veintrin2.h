@@ -536,6 +536,10 @@
 #define _ve_vscu_vvm __builtin_ve_vscu_vvm
 #define _ve_vscl_vv __builtin_ve_vscl_vv
 #define _ve_vscl_vvm __builtin_ve_vscl_vvm
+#define _ve_vscuot_vv __builtin_ve_vscuot_vv
+#define _ve_vscuot_vvm __builtin_ve_vscuot_vvm
+#define _ve_vsclot_vv __builtin_ve_vsclot_vv
+#define _ve_vsclot_vvm __builtin_ve_vsclot_vvm
 #define _ve_andm_mmm __builtin_ve_andm_mmm
 #define _ve_andm_MMM __builtin_ve_andm_MMM
 #define _ve_orm_mmm __builtin_ve_orm_mmm
