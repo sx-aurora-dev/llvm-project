@@ -1322,6 +1322,8 @@ T.VSCm(0xB1, "VSC", "vsc")
 T.VSCm(0xB1, "VSCot", "vsc.ot").oldLowering()
 T.VSCm(0xB2, "VSCU", "vscu")
 T.VSCm(0xB3, "VSCL", "vscl")
+T.VSCm(0xB2, "VSCUot", "vscu.ot").oldLowering()
+T.VSCm(0xB3, "VSCLot", "vscl.ot").oldLowering()
 
 T.Section("5.3.2.15. Vector Mask Register Instructions", 34)
 T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
