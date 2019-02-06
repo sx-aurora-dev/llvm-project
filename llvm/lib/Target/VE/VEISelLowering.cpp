@@ -4026,10 +4026,18 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
           break;
         }
       }
-      if (need_phi) {
-        unsigned newVL = Subtarget->getInstrInfo()->createVectorLengthReg(&MF);
-        mbbs[&MBB].def = true;
-        bool single_def = true;
+      // Update used VL in instructions in this MBB
+      if (need_phi || mbbs[&MBB].vl != mbbs[*MBB.pred_begin()].vl) {
+        // New VL is newly created virtual register for the case of new PHI.
+        // Or, new VL is pred's VL for the case of not new PHI.
+        unsigned newVL =
+          need_phi ? Subtarget->getInstrInfo()->createVectorLengthReg(&MF) :
+                     mbbs[*MBB.pred_begin()].vl;
+        // New PHI means def.
+        if (need_phi)
+          mbbs[&MBB].def = true;
+        bool need_to_update_liveout_vl = true;
+        // This MBB has instructions using old VL, so update them.
         if (mbbs[&MBB].use_before_def) {
           for (auto &MI : MBB) {
             auto chk = MI.readsWritesVirtualRegister(VLReg);
@@ -4038,20 +4046,21 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
               assert(numOp > 0);
               MI.getOperand(numOp).ChangeToRegister(newVL, false);
             } else if (chk.second) {
-              single_def = false;
+              // This MBB has its own def, so liveout VL has already pointed it.
+              // It means update it is not required.
+              need_to_update_liveout_vl = false;
               break;
             }
           }
-          mbbs[&MBB].use_before_def = false;
+          // We add def for the case of new PHI, so disable flag.
+          if (need_phi)
+            mbbs[&MBB].use_before_def = false;
         }
-        if (single_def)
+        if (need_to_update_liveout_vl)
           mbbs[&MBB].vl = newVL;
-        mbbs[&MBB].add_phi = true;
+        if (need_phi)
+          mbbs[&MBB].add_phi = true;
         Changed = true;
-      } else {
-        mbbs[&MBB].vl = mbbs[*MBB.pred_begin()].vl;
-        if (mbbs[&MBB].use_before_def) {
-        }
       }
     }
   } while (Changed);
