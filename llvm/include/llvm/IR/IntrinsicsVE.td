@@ -1,5 +1,6 @@
 let TargetPrefix = "ve" in {
   def int_ve_lvl : GCCBuiltin<"__builtin_ve_lvl">, Intrinsic<[], [llvm_i32_ty]>;
+  def int_ve_svob : GCCBuiltin<"__builtin_ve_svob">, Intrinsic<[], [], [IntrHasSideEffects]>;
 
   def int_ve_lvm_MMss : GCCBuiltin<"__builtin_ve_lvm_MMss">, Intrinsic<[LLVMType<v8i64>], [LLVMType<v8i64>, LLVMType<i64>, LLVMType<i64>], [IntrNoMem]>;
   def int_ve_svm_sMs : GCCBuiltin<"__builtin_ve_svm_sMs">, Intrinsic<[LLVMType<i64>], [LLVMType<v8i64>, LLVMType<i64>], [IntrNoMem]>;

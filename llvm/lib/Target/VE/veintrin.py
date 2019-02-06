@@ -198,7 +198,7 @@ class Inst:
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
-        self.customLowering_ = False
+        self.oldLowering_ = False
         self.hasMaskBaseReg_ = True
         self.hasPat_ = True
 
@@ -292,9 +292,8 @@ class Inst:
     def hasExpr(self):
         return self.expr != None
 
-    # TODO: this will be removed if all masked instructions use customLowering
-    def customLowering(self): self.customLowering_ = True; return self
-    def isCustomLowering(self): return self.customLowering_
+    def oldLowering(self): self.oldLowering_ = True; return self
+    def isOldLowering(self): return self.oldLowering_
 
     def noMaskBaseReg(self): self.hasMaskBaseReg_ = False; return self
     def hasMaskBaseReg(self): return self.hasMask() and self.hasMaskBaseReg_
@@ -1050,23 +1049,29 @@ class InstTable:
         #O_s = [VX(T_u64), SW(T_u64)]
         O = [O_v, O_vm]
 
+        baseIntrinName = re.sub(r'\.', '', asm)
+
+        L = InstList()
         for op in O:
             si = self.args_to_inst_suffix(op)
             sf = self.args_to_func_suffix(op)
-            self.add(Inst(opc, inst+si, asm, asm+sf, [], op, False).noTest().writeMem())
+            L.Inst(opc, inst+si, asm, baseIntrinName+sf, [], op, False).noTest().writeMem()
+            #self.add(Inst(opc, inst+si, asm, baseIntrinName+sf, [], op, False).noTest().writeMem()
+
+        return self.addList(L)
 
     def VSUM(self, opc, inst, asm, baseOps):
         OL = []
         for op in baseOps:
             OL.append(op)
             OL.append(op + [VM])
-        self.InstX(opc, inst, asm, OL).customLowering().noMaskBaseReg()
+        self.InstX(opc, inst, asm, OL).noMaskBaseReg()
 
     def VFIX(self, opc, inst, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
-        T.InstXM(opc, inst, asm, OL, expr).customLowering()
+        T.InstXM(opc, inst, asm, OL, expr)
         expr = "{0} = (" + ty + ")({1})"
-        T.InstXM(opc, inst + "rz", asm+".rz", OL, expr).customLowering()
+        T.InstXM(opc, inst + "rz", asm+".rz", OL, expr)
 
 def cmpwrite(filename, data):
     need_write = True
@@ -1103,10 +1108,8 @@ def gen_pattern(insts):
             argsR = ", ".join([op.dagOp() for op in I.ins])
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
             l = "(int_ve_{} {})".format(ni, argsL)
-            r = "({} {})".format(I.instName, argsR)
-            if I.hasMask():
-                print("// def : Pat<{}, {}>;".format(l, r))
-            else:
+            r = "({} {}, VLS)".format(I.instName, argsR)
+            if I.isOldLowering() and (not I.hasMask()):
                 print("def : Pat<{}, {}>;".format(l, r))
 
 def gen_bulitin(insts):
@@ -1123,11 +1126,13 @@ def gen_mktest(insts):
     for I in insts:
         if I.hasTest() and I.asm():
             intrin = I.intrinsicName()
-            print("python mktest.py {name} gen/tests/{name}.ll gen/tests/{name}.s {asm} > tmp/gen-intrin-{name}.ll".format(name=intrin, asm=I.asm()))
+            print("python mktest.py {name} gen/tests/{name}.ll"
+                  " gen/tests/{name}.s {asm} > tmp/gen-intrin-{name}.ll"
+                  .format(name=intrin, asm=I.asm()))
 
 def gen_lowering(inst):
     for I in insts:
-        if I.hasMask() and I.isCustomLowering():
+        if I.hasMask() and I.isOldLowering():
             print("case Intrinsic::ve_{}: return LowerIntrinsicWithMask(Op, DAG, VE::{});"
                   .format(I.intrinsicName(), I.instName, len(I.ins)))
 
@@ -1314,6 +1319,7 @@ T.VGTm(0xA2, "VGTU", "vgtu")
 T.VGTm(0xA3, "VGTLsx", "vgtl.sx")
 T.VGTm(0xA3, "VGTLzx", "vgtl.zx")
 T.VSCm(0xB1, "VSC", "vsc")
+T.VSCm(0xB1, "VSCot", "vsc.ot").oldLowering()
 T.VSCm(0xB2, "VSCU", "vscu")
 T.VSCm(0xB3, "VSCL", "vscl")
 
@@ -1340,6 +1346,9 @@ T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")
 T.NoImpl("SVL")
 T.NoImpl("SMVL")
 T.NoImpl("LVIX")
+
+T.Section("5.3.2.17. Control Instructions", 35)
+T.Dummy("SVOB", "void _ve_svob(void)", "svob");
 
 T.Section("Others", None)
 T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")

@@ -2389,7 +2389,7 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
   llvm_unreachable("Unknown fence ordering in emitTrailingFence");
 }
 
-#if 0
+#if 1
 static SDValue LowerIntrinsicWithMask(SDValue Intrin, SelectionDAG& DAG, uint64_t Opc)
 {
     SDLoc dl(Intrin);
