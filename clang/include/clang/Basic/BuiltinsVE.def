@@ -18,6 +18,7 @@
 //BUILTIN(__builtin_dummy, "Si", "nc")
 
 BUILTIN(__builtin_ve_lvl, "vUi", "nr")
+BUILTIN(__builtin_ve_svob, "v", "nr")
 //BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "nr")
 
 BUILTIN(__builtin_ve_lvm_MMss, "V8ULiV8ULiCLUiCLUiC", "n")

@@ -530,6 +530,8 @@
 #define _ve_vgtlzx_vvm __builtin_ve_vgtlzx_vvm
 #define _ve_vsc_vv __builtin_ve_vsc_vv
 #define _ve_vsc_vvm __builtin_ve_vsc_vvm
+#define _ve_vscot_vv __builtin_ve_vscot_vv
+#define _ve_vscot_vvm __builtin_ve_vscot_vvm
 #define _ve_vscu_vv __builtin_ve_vscu_vv
 #define _ve_vscu_vvm __builtin_ve_vscu_vvm
 #define _ve_vscl_vv __builtin_ve_vscl_vv

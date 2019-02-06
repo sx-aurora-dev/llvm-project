@@ -65,6 +65,7 @@ enum VShuffleCodes {
  */
 
 #define _ve_lvl(l) __builtin_ve_lvl(l)
+#define _ve_svob() __builtin_ve_svob()
 
 #define _ve_lvm_MMss __builtin_ve_lvm_MMss
 #define _ve_svm_sMs __builtin_ve_svm_sMs
