@@ -1,3 +1,4 @@
+#if 0
 case Intrinsic::ve_vcvtwdsx_vvmv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIXdsxvm);
 case Intrinsic::ve_vcvtwdsxrz_vvmv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIXdsxrzvm);
 case Intrinsic::ve_vcvtwdzx_vvmv: return LowerIntrinsicWithMask(Op, DAG, VE::VFIXdzxvm);
@@ -15,3 +16,4 @@ case Intrinsic::ve_vsumwzx_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VSUMS
 case Intrinsic::ve_vsuml_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VSUMXvm);
 case Intrinsic::ve_vfsumd_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VFSUMdvm);
 case Intrinsic::ve_vfsums_vvm: return LowerIntrinsicWithMask(Op, DAG, VE::VFSUMsvm);
+#endif

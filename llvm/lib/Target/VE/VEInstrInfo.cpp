@@ -402,6 +402,19 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     MovMI->addRegisterDefined(DestReg, TRI);
     if (KillSrc)
       MovMI->addRegisterKilled(SrcReg, TRI);
+  } else if (VE::VLSRegClass.contains(DestReg, SrcReg)) {
+    // FIXME: use SX16 as a temporary register
+    unsigned TmpReg = VE::SX16;
+    BuildMI(MBB, I, DL, get(VE::SVL), TmpReg)
+      .addReg(SrcReg, getKillRegState(KillSrc));
+    BuildMI(MBB, I, DL, get(VE::LVL))
+      .addReg(TmpReg, getKillRegState(true));
+  } else if (VE::VLSRegClass.contains(SrcReg)) {
+    BuildMI(MBB, I, DL, get(VE::SVL), DestReg)
+      .addReg(SrcReg, getKillRegState(KillSrc));
+  } else if (VE::VLSRegClass.contains(DestReg)) {
+    BuildMI(MBB, I, DL, get(VE::LVL))
+      .addReg(SrcReg, getKillRegState(KillSrc));
   } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
     dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
@@ -498,12 +511,15 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else if (RC == &VE::V64RegClass)
     BuildMI(MBB, I, DL, get(VE::STVRri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+      .addReg(SrcReg, getKillRegState(isKill)).addImm(256).addMemOperand(MMO);
   else if (RC == &VE::VMRegClass)
     BuildMI(MBB, I, DL, get(VE::STVMri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else if (VE::VM512RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::STVM512ri)).addFrameIndex(FI).addImm(0)
+      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+  else if (RC == &VE::VLSRegClass)
+    BuildMI(MBB, I, DL, get(VE::STVLri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else
     report_fatal_error("Can't store this register to stack slot");
@@ -547,19 +563,21 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       .addMemOperand(MMO);
   else if (RC == &VE::V64RegClass)
     BuildMI(MBB, I, DL, get(VE::LDVRri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
+      .addImm(256).addMemOperand(MMO);
   else if (RC == &VE::VMRegClass)
     BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
   else if (VE::VM512RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
+  else if (RC == &VE::VLSRegClass)
+    BuildMI(MBB, I, DL, get(VE::LDVLri), DestReg).addFrameIndex(FI).addImm(0)
+      .addMemOperand(MMO);
   else
     report_fatal_error("Can't load this register from stack slot");
 }
 
-unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
-{
+unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const {
   VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
   unsigned GlobalBaseReg = VEFI->getGlobalBaseReg();
   if (GlobalBaseReg != 0)
@@ -576,6 +594,45 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const
   BuildMI(FirstMBB, MBBI, dl, get(VE::GETGOT), GlobalBaseReg);
   VEFI->setGlobalBaseReg(GlobalBaseReg);
   return GlobalBaseReg;
+}
+
+unsigned VEInstrInfo::getVectorLengthReg(MachineFunction *MF) const {
+  VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
+  unsigned VectorLengthReg = VEFI->getVectorLengthReg();
+  if (VectorLengthReg != 0)
+    return VectorLengthReg;
+
+  unsigned VL = MF->addLiveIn(VE::VL, &VE::VLSRegClass);
+  VEFI->setVectorLengthReg(VL);
+
+  return VL;
+}
+
+unsigned VEInstrInfo::createVectorLengthReg(MachineFunction *MF) const {
+  // Create the register. FIXME: The code to initialize it might be required...
+#if 0
+  MachineRegisterInfo &RegInfo = MF->getRegInfo();
+  // try to register VL to livein
+  unsigned PVL = VE::VL;
+  unsigned VL;
+  if (!RegInfo.isLiveIn(PVL)) {
+    VL = RegInfo.createVirtualRegister(&VE::VLSRegClass);
+    RegInfo.addLiveIn(PVL, VL);
+  } else {
+    VL = RegInfo.getLiveInVirtReg(PVL);
+  }
+#else
+#if 1
+  MachineRegisterInfo &RegInfo = MF->getRegInfo();
+  unsigned VL = RegInfo.createVirtualRegister(&VE::VLSRegClass);
+#else
+  unsigned VL = MF->addLiveIn(VE::VL, &VE::VLSRegClass);
+#endif
+#endif
+  VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
+  VEFI->setVectorLengthReg(VL);
+
+  return VL;
 }
 
 static int getVM512Upper(int no)
@@ -597,14 +654,18 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   unsigned VMYu = getVM512Upper(MI.getOperand(1).getReg());
   unsigned VMYl = getVM512Lower(MI.getOperand(1).getReg());
 
-  if (MI.getNumOperands() > 3) { // includes VL
+  switch (MI.getOpcode()) {
+  default: {
       unsigned VMZu = getVM512Upper(MI.getOperand(2).getReg());
       unsigned VMZl = getVM512Lower(MI.getOperand(2).getReg());
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
-  } else {
+      break;
+  }
+  case VE::NEGMp:
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
+      break;
   }
   MI.eraseFromParent();
 }

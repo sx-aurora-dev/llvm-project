@@ -4,6 +4,8 @@
 define dso_local <16 x i32> @insert_test(<16 x i32>) local_unnamed_addr #0 {
 ; CHECK-LABEL: insert_test:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, 256
+; CHECK-NEXT:    lvl %s34
 ; CHECK-NEXT:    lea %s34,240(,%s9)
 ; CHECK-NEXT:    vldl.sx %v0,4,%s34
 ; CHECK-NEXT:    or %s34, 2, (0)1
@@ -35,6 +37,8 @@ define dso_local <16 x i32> @insert_test(<16 x i32>) local_unnamed_addr #0 {
 define dso_local i32 @extract_test(<16 x i32>) local_unnamed_addr #0 {
 ; CHECK-LABEL: extract_test:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s34, 256
+; CHECK-NEXT:    lvl %s34
 ; CHECK-NEXT:    lea %s34,240(,%s9)
 ; CHECK-NEXT:    vldl.sx %v0,4,%s34
 ; CHECK-NEXT:    lvs %s0,%v0(0)

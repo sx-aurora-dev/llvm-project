@@ -3,6 +3,8 @@
 define x86_regcallcc <256 x i32> @__regcall3__calc1(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__calc1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  vadds.w.sx %v0,%v1,%v0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %3 = add <256 x i32> %1, %0
@@ -12,6 +14,8 @@ define x86_regcallcc <256 x i32> @__regcall3__calc1(<256 x i32>, <256 x i32>) {
 define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: calc2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  lea %s34,416(,%s11)
 ; CHECK-NEXT:  vldl.sx %v0,4,%s34
 ; CHECK-NEXT:  lea %s34,1440(,%s11)
@@ -27,6 +31,8 @@ define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 define x86_regcallcc <256 x i32> @__regcall3__calc3(<256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__calc3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  lea %s34,416(,%s11)
 ; CHECK-NEXT:  vldl.sx %v8,4,%s34
 ; CHECK-NEXT:  vadds.w.sx %v0,%v1,%v0
@@ -61,6 +67,8 @@ define x86_regcallcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <2
 ; CHECK-NEXT:  vor %v0,(0)1,%v1
 ; CHECK-NEXT:  vor %v1,(0)1,%v2
 ; CHECK-NEXT:  bsic %lr, (,%s12)
+; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  vadds.w.sx %v0,%v0,%v18
 ; CHECK-NEXT:  lea %s16,-2048(,%s9)
 ; CHECK-NEXT:  vld %v18,8,%s16                 # 2048-byte Folded Reload
