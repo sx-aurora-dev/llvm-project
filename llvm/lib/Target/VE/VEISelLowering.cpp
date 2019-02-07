@@ -186,10 +186,12 @@ VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
 
   EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
 
+  // FIXME: LVL instruction has output VL now, need to update VEC_LVL too.
   Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other, {Chain, DAG.getConstant(firstzero, dl, i32)});
 
   SDValue load = DAG.getLoad(Op.getSimpleValueType(), dl, Chain, BasePtr, info);
 
+  // FIXME: LVL instruction has output VL now, need to update VEC_LVL too.
   Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other, {load.getValue(1), DAG.getConstant(256, dl, i32)});
 
   SDValue merge = DAG.getMergeValues({load, Chain}, dl);

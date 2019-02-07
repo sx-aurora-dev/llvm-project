@@ -469,12 +469,12 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MI.getOperand(2).setReg(TmpReg);
   } else if (MI.getOpcode() == VE::LDVLri) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    unsigned DestReg = MI.getOperand(0).getReg();
     unsigned TmpReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
     MI.setDesc(TII.get(VE::LDLri));
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
     // MI.getOperand(0).setReg(TmpReg);
-    // LVL doesn't require VL register.
-    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL))
+    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL), DestReg)
       .addReg(TmpReg, getKillRegState(true));
   }
 
