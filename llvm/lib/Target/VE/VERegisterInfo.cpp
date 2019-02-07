@@ -34,6 +34,16 @@ using namespace llvm;
 // VE uses %s10 == %lp to keep return address
 VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {}
 
+bool VERegisterInfo::requiresRegisterScavenging(
+    const MachineFunction &MF) const {
+  return true;
+}
+
+bool VERegisterInfo::requiresFrameIndexScavenging(
+    const MachineFunction &MF) const {
+  return true;
+}
+
 const MCPhysReg*
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   const Function &F = MF->getFunction();
@@ -225,16 +235,34 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     unsigned Reg = MI.getOperand(regi).getReg();
     bool isKill = MI.getOperand(regi).isKill();
 
-    // FIXME: it would be better to scavenge a register here instead of
-    // reserving SX16 all of the time.
-    unsigned TmpReg = VE::SX16;
-    BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAasx), TmpReg)
+    // Prepare for VL
+    unsigned VLReg = MF.getRegInfo().createVirtualRegister(&VE::VLSRegClass);
+    if (MI.getOperand(3).isImm()) {
+      int64_t val = MI.getOperand(3).getImm();
+      if (val >= 0 && val < 64) {
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LVL), VLReg)
+          .addImm(val);
+      } else {
+        unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAzzi), Tmp1)
+          .addImm(val);
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::COPY), VLReg)
+          .addReg(Tmp1);
+      }
+    } else {
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::COPY), VLReg)
+        .add(MI.getOperand(3));
+    }
+
+    unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
+    BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAasx), Tmp1)
       .addReg(FramePtr).addImm(Offset);
 
     MI.setDesc(TII.get(opc));
     MI.getOperand(0).ChangeToRegister(Reg, false, false, isKill);
     MI.getOperand(1).ChangeToImmediate(8);
-    MI.getOperand(2).ChangeToRegister(TmpReg, false, false, true);
+    MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
+    MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
     return;
   }
 
@@ -434,23 +462,19 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     unsigned SrcReg = MI.getOperand(2).getReg();
     bool isKill = MI.getOperand(2).isKill();
-    // FIXME: it would be better to scavenge a register here instead of
-    // reserving SX16 all of the time.
-    unsigned TmpReg = VE::SX16;
+    unsigned TmpReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
     BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVL), TmpReg)
       .addReg(SrcReg, getKillRegState(isKill));
-    MI.setDesc(TII.get(VE::STSri));
+    MI.setDesc(TII.get(VE::STLri));
     MI.getOperand(2).setReg(TmpReg);
   } else if (MI.getOpcode() == VE::LDVLri) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    // FIXME: it would be better to scavenge a register here instead of
-    // reserving SX16 all of the time.
-    unsigned TmpReg = VE::SX16;
-    MI.setDesc(TII.get(VE::LDSri));
+    unsigned DestReg = MI.getOperand(0).getReg();
+    unsigned TmpReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
+    MI.setDesc(TII.get(VE::LDLri));
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
     // MI.getOperand(0).setReg(TmpReg);
-    // LVL doesn't require VL register.
-    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL))
+    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL), DestReg)
       .addReg(TmpReg, getKillRegState(true));
   }
 

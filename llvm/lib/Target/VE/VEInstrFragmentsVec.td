@@ -85,11 +85,11 @@ def INT_VSTL2D : SDNode<"VEISD::INT_VSTL2D", VEVecStore,
 // Load VL
 //===----------------------------------------------------------------------===//
 
-// (LVL (VLS val))
+// (VLS (LVL (VLS val)))
 
 def VELoadVL :
-    SDTypeProfile<0, 1, [SDTCisVT<0, i32>]>;
-def INT_LVL : SDNode<"VEISD::INT_LVL", VELoadVL, [SDNPHasChain]>;
+    SDTypeProfile<1, 1, [SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
+def INT_LVL : SDNode<"VEISD::INT_LVL", VELoadVL>;
 
 //===----------------------------------------------------------------------===//
 // Gather instructions with hidden VL

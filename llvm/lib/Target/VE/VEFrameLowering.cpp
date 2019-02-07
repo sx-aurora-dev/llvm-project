@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
@@ -424,6 +425,19 @@ void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
+  // If we use VL in this function, create an emergency spill slot for VL.
+  if (MF.getRegInfo().isPhysRegUsed(VE::VL)) {
+    MachineFrameInfo &MFI = MF.getFrameInfo();
+    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+    const TargetRegisterClass &RC = VE::VLSRegClass;
+    // FIXME: we may need emergency spill slot not only for VLS but also
+    // I64 base regiseter.  Add latter if we get an error.
+    unsigned Size = TRI->getSpillSize(RC);
+    unsigned Align = TRI->getSpillAlignment(RC);
+    int FI = MFI.CreateStackObject(Size, Align, false);
+    RS->addScavengingFrameIndex(FI);
+  }
+
   if (!DisableLeafProc && isLeafProc(MF)) {
     VEMachineFunctionInfo *MFI = MF.getInfo<VEMachineFunctionInfo>();
     MFI->setLeafProc(true);

@@ -10,7 +10,7 @@ define dso_local <16 x i32> @insert_test(<16 x i32>) local_unnamed_addr #0 {
 ; CHECK-NEXT:    vldl.sx %v0,4,%s34
 ; CHECK-NEXT:    or %s34, 2, (0)1
 ; CHECK-NEXT:    lsv %v0(0),%s34
-; CHECK-NEXT:    lea %s34,-2048(,%s9)
+; CHECK-NEXT:    lea %s34,-2056(,%s9)
 ; CHECK-NEXT:    vstl %v0,4,%s34
 ; CHECK-NEXT:    vld %v0,8,%s34
 ; CHECK-NEXT:    lvs %s34,%v0(7)

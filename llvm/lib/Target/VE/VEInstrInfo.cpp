@@ -407,13 +407,13 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned TmpReg = VE::SX16;
     BuildMI(MBB, I, DL, get(VE::SVL), TmpReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
-    BuildMI(MBB, I, DL, get(VE::LVL))
+    BuildMI(MBB, I, DL, get(VE::LVL), DestReg)
       .addReg(TmpReg, getKillRegState(true));
   } else if (VE::VLSRegClass.contains(SrcReg)) {
     BuildMI(MBB, I, DL, get(VE::SVL), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
   } else if (VE::VLSRegClass.contains(DestReg)) {
-    BuildMI(MBB, I, DL, get(VE::LVL))
+    BuildMI(MBB, I, DL, get(VE::LVL), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
   } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
@@ -483,6 +483,8 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+    } else if (RC == &VE::VLSRegClass) {
+      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VLS\n";
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -536,6 +538,8 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
+    } else if (RC == &VE::VLSRegClass) {
+      dbgs() << "restore " << printReg(DestReg, TRI) << " - VLS\n";
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
