@@ -1133,7 +1133,7 @@ def gen_mktest(insts):
 def gen_lowering(inst):
     for I in insts:
         if I.hasMask() and I.isOldLowering():
-            print("case Intrinsic::ve_{}: return LowerIntrinsicWithMask(Op, DAG, VE::{});"
+            print("case Intrinsic::ve_{}: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::{});"
                   .format(I.intrinsicName(), I.instName, len(I.ins)))
 
 T = InstTable()

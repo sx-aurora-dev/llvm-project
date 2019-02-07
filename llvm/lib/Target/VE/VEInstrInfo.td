@@ -52,6 +52,14 @@ def CCUIOp : PatLeaf<(cond), [{
   }
 }]>;
 
+def GetVL : SDNodeXForm<imm, [{
+  // Get a virtual register for VL and return it.
+  MachineFunction& MF = CurDAG->getMachineFunction();
+  unsigned VLReg = MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
+  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg, MVT::i32);
+}]>;
+
+
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((unsigned)(N->getZExtValue() & 0xffffffff),
                                    SDLoc(N), MVT::i64);
