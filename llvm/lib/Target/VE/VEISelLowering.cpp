@@ -2389,28 +2389,57 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
   llvm_unreachable("Unknown fence ordering in emitTrailingFence");
 }
 
-#if 1
-static SDValue LowerIntrinsicWithMask(SDValue Intrin, SelectionDAG& DAG, uint64_t Opc)
-{
-    SDLoc dl(Intrin);
-    SmallVector<SDValue, 8> Ops;
+static SDValue LowerIntrinsicWithMaskAndVL(SDValue Intrin,
+                                           SelectionDAG& DAG,
+                                           const VESubtarget *Subtarget,
+                                           uint64_t Opc) {
+  // Check Opcode
+  bool WithChain = false;
+  switch (Intrin.getOpcode()) {
+  default:
+    llvm_unreachable("Unknown opCode in LowerIntrinsicWithMaskAndVL");
+    break;
+  case ISD::INTRINSIC_VOID:     WithChain = true; break;
+  case ISD::INTRINSIC_W_CHAIN:  WithChain = true; break;
+  case ISD::INTRINSIC_WO_CHAIN: WithChain = false; break;
+  }
 
-    // Op0 is intrinsic number and ignored
-    for (unsigned i = 1; i < Intrin.getNumOperands(); ++i) {
-        SDValue Op = Intrin.getOperand(i);
-        if (Op.getValueType() == MVT::v4i64 || Op.getValueType() == MVT::v8i64) {
-            MVT BitcastVT 
-                = MVT::getVectorVT(MVT::i1, Op.getValueType().getSizeInBits());
-            SDValue Bitcast = DAG.getBitcast(BitcastVT, Op);
-            Ops.push_back(Bitcast);
-        } else {
-            Ops.push_back(Op);
-        }
+  // Decides StartIndex and Chain
+  int StartIndex = 0;
+  SDValue Chain;
+  if (WithChain) {
+    // Operand(0) points Chain, Operand(1) points intrinsic number, so skip them
+    StartIndex = 2;
+    Chain = Intrin.getOperand(0);
+  } else {
+    // Operand(0) points intrinsic number, so skip it
+    StartIndex = 1;
+    Chain = DAG.getEntryNode();
+  }
+
+  SDLoc dl(Intrin);
+  SmallVector<SDValue, 8> Ops;
+
+  // Copy operands and insert bitcast for mask operands.
+  for (unsigned i = StartIndex; i < Intrin.getNumOperands(); ++i) {
+    SDValue Op = Intrin.getOperand(i);
+    if (Op.getValueType() == MVT::v4i64 || Op.getValueType() == MVT::v8i64) {
+      MVT BitcastVT = MVT::getVectorVT(
+        MVT::i1, Op.getValueType().getSizeInBits());
+      SDValue Bitcast = DAG.getBitcast(BitcastVT, Op);
+      Ops.push_back(Bitcast);
+    } else {
+      Ops.push_back(Op);
     }
+  }
+  // Add hidden VL
+  MachineFunction &MF = DAG.getMachineFunction();
+  unsigned VLReg = Subtarget->getInstrInfo()->getVectorLengthReg(&MF);
+  SDValue VL = DAG.getCopyFromReg(Chain, dl, VLReg, MVT::i32);
+  Ops.push_back(VL);
 
-    return SDValue(DAG.getMachineNode(Opc, dl, Intrin.getValueType(), Ops), 0);
+  return SDValue(DAG.getMachineNode(Opc, dl, Intrin.getValueType(), Ops), 0);
 }
-#endif
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                   SelectionDAG &DAG) const {
@@ -2843,6 +2872,7 @@ SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   }
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
+#include "VEISelLoweringIntrinsic.inc"
   }
 }
 
@@ -2931,6 +2961,7 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   }
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
+#include "VEISelLoweringIntrinsic.inc"
   }
 }
 
