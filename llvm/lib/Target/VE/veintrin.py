@@ -1108,7 +1108,7 @@ def gen_pattern(insts):
             argsR = ", ".join([op.dagOp() for op in I.ins])
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
             l = "(int_ve_{} {})".format(ni, argsL)
-            r = "({} {}, VLS)".format(I.instName, argsR)
+            r = "({} {}, (GetVL (i32 0)))".format(I.instName, argsR)
             if I.isOldLowering() and (not I.hasMask()):
                 print("def : Pat<{}, {}>;".format(l, r))
 
