@@ -40,6 +40,8 @@ extern int SotocDebugLevel;
 #else // OMPTARGET_DEBUG
 #define DEBUGP(...)                            \
     {}
+#define DEBUGPDECL(...)                        \
+    {}
 #endif // OMPTARGET_DEBUG
 
 
