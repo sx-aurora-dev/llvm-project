@@ -2036,3 +2036,39 @@ entry:
   store atomic i8 0, i8* bitcast (i128* @it to i8*) seq_cst, align 32
   ret void
 }
+
+; Function Attrs: norecurse nounwind
+define i64 @test_atomic_compare_exchange_8stk() {
+; CHECK-LABEL: test_atomic_compare_exchange_8stk:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  cas.l %s34, 192(%s11), %s34
+; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  or %s35, 0, (0)1
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
+; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = alloca i64, align 32
+  %1 = cmpxchg i64* %0, i64 undef, i64 undef seq_cst seq_cst
+  %2 = extractvalue { i64, i1 } %1, 1
+  %conv = zext i1 %2 to i64
+  ret i64 %conv
+}
+
+; Function Attrs: norecurse nounwind
+define void @test_atomic_clear_8stk() {
+; CHECK-LABEL: test_atomic_clear_8stk:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  or %s34, 0, (0)1
+; CHECK-NEXT:  st1b %s34, 192(,%s11)
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = alloca i64, align 32
+  %1 = bitcast i64* %0 to i8*
+  store atomic i8 0, i8* %1 seq_cst, align 32
+  ret void
+}
