@@ -198,7 +198,8 @@ std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
 clang::OMPClause *TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
   for (auto C : OMPClauses) {
     for (auto CC : C->children()) {
-      if (auto CC_DeclRefExpr = llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
+      if (auto CC_DeclRefExpr =
+              llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
         if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
           return C;
       }
@@ -425,23 +426,32 @@ std::string TargetCodeRegion::PrintPretty() {
 }
 
 clang::SourceRange TargetCodeDecl::getRealRange() {
-  return DeclNode->getSourceRange();
+  // return DeclNode->getSourceRange();
+  // return DeclNode->getSourceRange();
+  auto &SM = DeclNode->getASTContext().getSourceManager();
+  return clang::SourceRange(SM.getSpellingLoc(DeclNode->getBeginLoc()),
+                            SM.getSpellingLoc(DeclNode->getEndLoc()));
 }
 
 std::string TargetCodeDecl::PrintPretty() {
   std::string PrettyStr = "";
   llvm::raw_string_ostream PrettyOS(PrettyStr);
-  if (DeclNode != NULL) {
-    // I would prefer a pretty printing function as for the Stmts. However, this
-    // does not exist at all.
-    // Node->getBody()->printPretty(PrettyOS, NULL, PP);
 
-    // This was ok before I merged the llvm-mirror at 10th of July, 2018.
-    // After that the pragma omp declare target" is printed as well, which is
-    // wrong and does not fit to the SourceRange we get. As a workaournd we
-    // return an empty string, which implies that we do not have to rewrite the
-    // code at all
-    // Node->print(PrettyOS, PP);
+  // This hack solves our problem with structs and enums being autoexpanded#
+  // sometimes (See comment in Issue #20.
+  clang::PrintingPolicy LocalPP(PP);
+  if (llvm::isa<clang::TypedefDecl>(DeclNode)) {
+    LocalPP.IncludeTagDefinition = 1;
   }
-  return PrettyOS.str();
+  DeclNode->print(PrettyOS, LocalPP);
+
+  // This hack removes '#pragma omp declare target' from the output
+  std::string outString = PrettyOS.str();
+  const char *declareTargetPragma = "#pragma omp declare target";
+
+  if (outString.compare(0, strlen(declareTargetPragma), declareTargetPragma) ==
+      0) {
+    outString = outString.substr(strlen(declareTargetPragma));
+  }
+  return outString;
 }

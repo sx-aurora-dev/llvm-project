@@ -36,6 +36,12 @@ static bool isDeclInOpenMPHeader(clang::Decl *D) {
 
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
   auto IncludedFile = SM.getFileID(D->getBeginLoc());
+  bool SLocInvalid = false;
+  auto SLocEntry = SM.getSLocEntry(IncludedFile, &SLocInvalid);
+  if (SLocEntry.isExpansion()) {
+    IncludedFile = SM.getFileID(SLocEntry.getExpansion().getSpellingLoc());
+  }
+
   auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
 
   DEBUGPDECL(D, "Check if is in OpenMP header: ");
