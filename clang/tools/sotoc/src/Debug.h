@@ -23,7 +23,7 @@ extern int SotocDebugLevel;
 #define DEBUGP(...)                            \
   do {                                         \
     if (SotocDebugLevel > 0) {                 \
-      llvm::errs() << "Sotoc: " << llvm::formatv(__VA_ARGS__);  \
+      llvm::errs() << "Sotoc: " << __VA_ARGS__;  \
       llvm::errs() << "\n";                    \
     }                                          \
   } while (false)

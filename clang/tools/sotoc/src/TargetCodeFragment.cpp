@@ -156,6 +156,13 @@ clang::SourceRange TargetCodeRegion::getRealRange() {
   return CapturedStmtNode->getSourceRange();
 }
 
+clang::SourceRange TargetCodeRegion::getSpellingRange() {
+  auto &SM = CapturedStmtNode->getCapturedDecl()->getASTContext().getSourceManager();
+  auto InnerRange = getInnerRange();
+  return clang::SourceRange(SM.getSpellingLoc(InnerRange.getBegin()),
+                            SM.getSpellingLoc(InnerRange.getEnd()));
+}
+
 clang::SourceRange TargetCodeRegion::getInnerRange() {
   auto InnerLocStart = getStartLoc();
   auto InnerLocEnd = getEndLoc();
@@ -428,9 +435,17 @@ std::string TargetCodeRegion::PrintPretty() {
 clang::SourceRange TargetCodeDecl::getRealRange() {
   // return DeclNode->getSourceRange();
   // return DeclNode->getSourceRange();
+  //auto &SM = DeclNode->getASTContext().getSourceManager();
+  //return clang::SourceRange(SM.getSpellingLoc(DeclNode->getBeginLoc()),
+  //                          SM.getSpellingLoc(DeclNode->getEndLoc()));
+  return DeclNode->getSourceRange();
+}
+
+clang::SourceRange TargetCodeDecl::getSpellingRange() {
   auto &SM = DeclNode->getASTContext().getSourceManager();
-  return clang::SourceRange(SM.getSpellingLoc(DeclNode->getBeginLoc()),
-                            SM.getSpellingLoc(DeclNode->getEndLoc()));
+  auto InnerRange = getInnerRange();
+  return clang::SourceRange(SM.getSpellingLoc(InnerRange.getBegin()),
+                            SM.getSpellingLoc(InnerRange.getEnd()));
 }
 
 std::string TargetCodeDecl::PrintPretty() {
