@@ -70,7 +70,7 @@ public:
         HasExtraBraces(false), Context(Context), PP(Context.getLangOpts()) {
     PP.Indentation = 1;
     PP.SuppressSpecifiers = 0;
-    PP.IncludeTagDefinition = 1;
+    PP.IncludeTagDefinition = 0;
   };
 
   virtual ~TargetCodeFragment() = 0;
