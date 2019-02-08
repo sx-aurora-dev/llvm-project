@@ -201,22 +201,6 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
       LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
   }
 
-  // Replace frame index with a frame pointer reference directly
-  // if the instruction is scalar load/store.
-  if (MI.getOpcode() == VE::LDSri  || MI.getOpcode() == VE::LDUri ||
-      MI.getOpcode() == VE::LDLri  || MI.getOpcode() == VE::LDLUri ||
-      MI.getOpcode() == VE::LD2Bri || MI.getOpcode() == VE::LD2BUri ||
-      MI.getOpcode() == VE::LD1Bri || MI.getOpcode() == VE::LD1BUri ||
-      MI.getOpcode() == VE::STSri  || MI.getOpcode() == VE::STUri ||
-      MI.getOpcode() == VE::STLri  || MI.getOpcode() == VE::ST2Bri ||
-      MI.getOpcode() == VE::ST1Bri || MI.getOpcode() == VE::LEAasx) {
-    // VE has 32 bit offset field, so no need to expand a target instruction.
-    // Directly encode it.
-    MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
-    MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
-    return;
-  }
-
   // Replace frame index with a temporal register if the instruction is
   // vector load/store.
   if (MI.getOpcode() == VE::LDVRri || MI.getOpcode() == VE::STVRri) {
@@ -266,7 +250,11 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     return;
   }
 
-  report_fatal_error("replaceFI for this instruction is not implemented yet");
+  // Otherwise, replace frame index with a frame pointer reference directly.
+  // VE has 32 bit offset field, so no need to expand a target instruction.
+  // Directly encode it.
+  MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
+  MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
 }
 
 
