@@ -10,6 +10,10 @@ enum MyEnum {
 struct MyOtherStruct {
   int two;
   enum MyEnum three;
+  enum MyInlineEnum {
+    FOUR,
+    FIVE
+  } four;
 };
 
 typedef struct {
