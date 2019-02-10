@@ -946,12 +946,24 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
+  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
   addRegisterClass(MVT::v256i32, &VE::V64RegClass);
   addRegisterClass(MVT::v256i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
   addRegisterClass(MVT::v256f32, &VE::V64RegClass);
   addRegisterClass(MVT::v256f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v2i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v2i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v2f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v2f64, &VE::V64RegClass);
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
@@ -1185,41 +1197,107 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT VT : MVT::vector_valuetypes()) {
-    setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
-    setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
-    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
-    setOperationAction(ISD::BUILD_VECTOR,       VT, Custom);
-    setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
-    setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
-    setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
+    if (VT.getVectorElementType() == MVT::i8 ||
+        VT.getVectorElementType() == MVT::i16) {
+      // VE doesn't support vXi8 and vXi16 value types, so mark
+      // them all as expanded
+
+      // Expand all vector-i8/i16-vector truncstore and extload
+      for (MVT OuterVT : MVT::vector_valuetypes()) {
+        setTruncStoreAction(OuterVT, VT, Expand);
+        setLoadExtAction(ISD::SEXTLOAD, OuterVT, VT, Expand);
+        setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
+        setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
+      }
+      setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
+      setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+
+      setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
+      setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
+      setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
+      setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
+      setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
+      setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
+      setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+
+      setOperationAction(ISD::FABS,  VT, Expand);
+      setOperationAction(ISD::FNEG,  VT, Expand);
+      setOperationAction(ISD::FADD,  VT, Expand);
+      setOperationAction(ISD::FSUB,  VT, Expand);
+      setOperationAction(ISD::FMUL,  VT, Expand);
+      setOperationAction(ISD::FDIV,  VT, Expand);
+      setOperationAction(ISD::ADD,   VT, Expand);
+      setOperationAction(ISD::SUB,   VT, Expand);
+      setOperationAction(ISD::MUL,   VT, Expand);
+      setOperationAction(ISD::SDIV,  VT, Expand);
+      setOperationAction(ISD::UDIV,  VT, Expand);
+
+      setOperationAction(ISD::SHL,   VT, Expand);
+
+      setOperationAction(ISD::MSCATTER, VT, Expand);
+      setOperationAction(ISD::MGATHER,  VT, Expand);
+      setOperationAction(ISD::MLOAD,    VT, Expand);
+
+      // VE doesn't have instructions for fp<->uint, so expand them by llvm
+      setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
+      setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+    } else {
+      if (VT.getVectorNumElements() == 2) {
+        // FIXME: it is not possible to write 
+        // "Pat<(v2i64 (sext v2i32:$vx)), ...>;" patterns because of
+        // unknown "vtInt:  (vt:{ *:[Other] })" errors.
+        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+      }
+
+      setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
+      setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
+      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+      setOperationAction(ISD::BUILD_VECTOR,       VT, Custom);
+      setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
+      setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
+      setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
 #if 0
-    // FIXME: temporary disabling LowerBUILD_VECTOR added by
-    // https://github.com/SXAuroraTSUBASAResearch/llvm/pull/2 since
-    // this doesn't work with test-suite/SingleSource/UnitTests/Vector/build.c.
-    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
+      // FIXME: temporary disabling LowerSHUFFLE_VECTOR added by
+      // https://github.com/SXAuroraTSUBASAResearch/llvm/pull/2 since
+      // this doesn't work with test-suite/SingleSource/UnitTests/Vector/build.c.
+      setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
 #else
-    setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+      setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
 #endif
 
-    // currently unsupported math functions
-    setOperationAction(ISD::FABS, VT, Expand);
+      // currently unsupported math functions
+      setOperationAction(ISD::FABS,  VT, Expand);
 
-    setOperationAction(ISD::FADD,  VT, Legal);
-    setOperationAction(ISD::FSUB,  VT, Legal);
-    setOperationAction(ISD::FMUL,  VT, Legal);
-    setOperationAction(ISD::FDIV,  VT, Legal);
-    setOperationAction(ISD::ADD,   VT, Legal);
-    setOperationAction(ISD::SUB,   VT, Legal);
-    setOperationAction(ISD::MUL,   VT, Legal);
-    setOperationAction(ISD::SDIV,  VT, Legal);
-    setOperationAction(ISD::UDIV,  VT, Legal);
+      // supported calculations
+      setOperationAction(ISD::FNEG,  VT, Legal);
+      setOperationAction(ISD::FADD,  VT, Legal);
+      setOperationAction(ISD::FSUB,  VT, Legal);
+      setOperationAction(ISD::FMUL,  VT, Legal);
+      setOperationAction(ISD::FDIV,  VT, Legal);
+      setOperationAction(ISD::ADD,   VT, Legal);
+      setOperationAction(ISD::SUB,   VT, Legal);
+      setOperationAction(ISD::MUL,   VT, Legal);
+      setOperationAction(ISD::SDIV,  VT, Legal);
+      setOperationAction(ISD::UDIV,  VT, Legal);
 
-    setOperationAction(ISD::SHL,   VT, Legal);
+      setOperationAction(ISD::SHL,   VT, Legal);
 
-    setOperationAction(ISD::MSCATTER,   VT, Custom);
-    setOperationAction(ISD::MGATHER,   VT, Custom);
+      setOperationAction(ISD::MSCATTER,   VT, Custom);
+      setOperationAction(ISD::MGATHER,   VT, Custom);
 
-    setOperationAction(ISD::MLOAD, VT, Custom);
+      setOperationAction(ISD::MLOAD, VT, Custom);
+
+      // VE doesn't have instructions for fp<->uint, so expand them by llvm
+      if (VT.getVectorElementType() == MVT::i32) {
+        setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
+        setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+      } else {
+        setOperationAction(ISD::FP_TO_UINT, VT, Expand);
+        setOperationAction(ISD::UINT_TO_FP, VT, Expand);
+      }
+    }
   }
 
   // VE has no packed MUL, SDIV, or UDIV operations.
@@ -1236,30 +1314,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SDIVREM, VT, Expand);
     setOperationAction(ISD::UDIVREM, VT, Expand);
   }
-
-  // Following code doesn't expand store-trunc as what we expected.
-  // Need to correct this problem.
-  //
-  // Problem before: cannot select store-trunc for t23.
-  //    t22: v4i64 = mul t102, t92
-  //    t23: ch = store<(store 16 into %ir.V), trunc to v4i32> t22:1,
-  //              t22, FrameIndex:i64<5>, undef:i64
-  //
-  // Problem after: cannot select store 32 for t73.
-  //    t22: v4i64 = mul t102, t92
-  //    t73: ch = store<(store 32 into %stack.21)> t0,
-  //              t22, FrameIndex:i64<21>, undef:i64
-#if 0
-  // Expand all vector-vector truncstore and extload
-  for (MVT VT : MVT::vector_valuetypes()) {
-    for (MVT InnerVT : MVT::vector_valuetypes()) {
-      setTruncStoreAction(VT, InnerVT, Expand);
-      setLoadExtAction(ISD::SEXTLOAD, VT, InnerVT, Expand);
-      setLoadExtAction(ISD::ZEXTLOAD, VT, InnerVT, Expand);
-      setLoadExtAction(ISD::EXTLOAD, VT, InnerVT, Expand);
-    }
-  }
-#endif
 
   // VE has FAQ, FSQ, FMQ, and FCQ
   setOperationAction(ISD::FADD,  MVT::f128, Legal);
@@ -1290,7 +1344,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 // vector fma // TESTING
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::FMA, VT, Legal);
-    setOperationAction(ISD::FNEG, VT, Legal);
     //setOperationAction(ISD::FMAD, VT, Legal);
   }
 

@@ -4,145 +4,200 @@
 
 // Pattern Matchings for Generic Vector Instructions
 
+// Pattern Fragments for sextload/zextload/truncstore of vector types
+
+def extloadv256i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v256i32;
+}]>;
+def sextloadv256i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v256i32;
+}]>;
+def zextloadv256i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v256i32;
+}]>;
+def extloadv8i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v8i32;
+}]>;
+def sextloadv8i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v8i32;
+}]>;
+def zextloadv8i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v8i32;
+}]>;
+def extloadv4i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v4i32;
+}]>;
+def sextloadv4i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v4i32;
+}]>;
+def zextloadv4i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v4i32;
+}]>;
+def extloadv2i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v2i32;
+}]>;
+def sextloadv2i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v2i32;
+}]>;
+def zextloadv2i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
+  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v2i32;
+}]>;
+def truncstorev256i32 : PatFrag<(ops node:$val, node:$ptr),
+                                (truncstore node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v256i32;
+}]>;
+def truncstorev8i32 : PatFrag<(ops node:$val, node:$ptr),
+                              (truncstore node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v8i32;
+}]>;
+def truncstorev4i32 : PatFrag<(ops node:$val, node:$ptr),
+                              (truncstore node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v4i32;
+}]>;
+def truncstorev2i32 : PatFrag<(ops node:$val, node:$ptr),
+                              (truncstore node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v2i32;
+}]>;
+
 // Load and store for
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
 
-def : Pat<(v256i32 (load ADDRri:$addr)), 
-          (v256i32 (VLDLsxir 4, (LEAasx ADDRri:$addr),
-                             (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
-
-def : Pat<(v256f32 (load ADDRri:$addr)), 
-          (v256f32 (VLDUir 4, (LEAasx ADDRri:$addr),
-                           (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
-
-def : Pat<(v256f64 (load ADDRri:$addr)), 
-          (v256f64 (VLDir 8, (LEAasx ADDRri:$addr),
-                          (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
-
-def : Pat<(v256i64 (load ADDRri:$addr)), 
-          (v256i64 (VLDir 8, (LEAasx ADDRri:$addr),
-                          (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
-
-def : Pat<(v512i32 (load ADDRri:$addr)), 
+def : Pat<(v512i32 (load ADDRri:$addr)),
           (v512i32 (VLDir 8, (LEAasx ADDRri:$addr),
                           (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
 
-def : Pat<(v512f32 (load ADDRri:$addr)), 
+def : Pat<(v512f32 (load ADDRri:$addr)),
           (v512f32 (VLDir 8, (LEAasx ADDRri:$addr),
                           (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
 
-def : Pat<(store v256i32:$vx, ADDRri:$addr), 
-          (VSTLir v256i32:$vx, 4, (LEAasx ADDRri:$addr),
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+multiclass load_for_vector_length<int length> {
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
+              (load ADDRri:$addr)),
+            (VLDLsxir 4, (LEAasx ADDRri:$addr),
+                         (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
+              (load ADDRri:$addr)),
+            (VLDUir 4, (LEAasx ADDRri:$addr),
+                       (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
+              (load ADDRri:$addr)),
+            (VLDir 8, (LEAasx ADDRri:$addr),
+                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+              (load ADDRri:$addr)),
+            (VLDir 8, (LEAasx ADDRri:$addr),
+                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+              (!cast<PatFrag>("extloadv" # !cast<string>(length) # "i32")
+                 ADDRri:$addr)),
+            (VLDLzxir 4, (LEAasx ADDRri:$addr),
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+              (!cast<PatFrag>("sextloadv" # !cast<string>(length) # "i32")
+                 ADDRri:$addr)),
+            (VLDLsxir 4, (LEAasx ADDRri:$addr),
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+              (!cast<PatFrag>("zextloadv" # !cast<string>(length) # "i32")
+                 ADDRri:$addr)),
+            (VLDLzxir 4, (LEAasx ADDRri:$addr),
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
 
-def : Pat<(store v256f32:$vx, ADDRri:$addr), 
-          (VSTUir v256f32:$vx, 4, (LEAasx ADDRri:$addr),
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+defm : load_for_vector_length<256>;
+defm : load_for_vector_length<8>;
+defm : load_for_vector_length<4>;
+defm : load_for_vector_length<2>;
 
-def : Pat<(store v256f64:$vx, ADDRri:$addr), 
-          (VSTir v256f64:$vx, 8, (LEAasx ADDRri:$addr),
-                 (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(store v256i64:$vx, ADDRri:$addr), 
-          (VSTir v256i64:$vx, 8, (LEAasx ADDRri:$addr),
-                 (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(store v512i32:$vx, ADDRri:$addr), 
+def : Pat<(store v512i32:$vx, ADDRri:$addr),
           (VSTir v512i32:$vx, 8, (LEAasx ADDRri:$addr),
                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(store v512f32:$vx, ADDRri:$addr), 
+def : Pat<(store v512f32:$vx, ADDRri:$addr),
           (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr),
                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-// fadd, fsub, fmul, and fdiv for
-// v256f32, v256f64, v512f32.
+multiclass store_for_vector_length<int length> {
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
+                   ADDRri:$addr),
+            (VSTLir !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
+                    4, (LEAasx ADDRri:$addr),
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+                   ADDRri:$addr),
+            (VSTUir !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+                    4, (LEAasx ADDRri:$addr),
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+                   ADDRri:$addr),
+            (VSTir !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+                    8, (LEAasx ADDRri:$addr),
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+                   ADDRri:$addr),
+            (VSTir !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+                    8, (LEAasx ADDRri:$addr),
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(!cast<PatFrag>("truncstorev" # !cast<string>(length) # "i32")
+               !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+               ADDRri:$addr),
+            (VSTLir $vx, 4, (LEAasx ADDRri:$addr),
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 
-def : Pat<(fadd v256f32:$vy, v256f32:$vz),
-        (VFADsv v256f32:$vy, v256f32:$vz,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fadd v256f64:$vy, v256f64:$vz),
-          (VFADdv v256f64:$vy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fadd v512f32:$vy, v512f32:$vz),
-          (VFADpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+}
 
-def : Pat<(fsub v256f32:$vy, v256f32:$vz),
-          (VFSBsv v256f32:$vy, v256f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fsub v256f64:$vy, v256f64:$vz),
-          (VFSBdv v256f64:$vy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fsub v512f32:$vy, v512f32:$vz),
-          (VFSBpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+defm : store_for_vector_length<256>;
+defm : store_for_vector_length<8>;
+defm : store_for_vector_length<4>;
+defm : store_for_vector_length<2>;
 
-def : Pat<(fmul v256f32:$vy, v256f32:$vz),
-          (VFMPsv v256f32:$vy, v256f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fmul v256f64:$vy, v256f64:$vz),
-          (VFMPdv v256f64:$vy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fmul v512f32:$vy, v512f32:$vz),
-          (VFMPpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+// Format Conversions
 
-def : Pat<(fdiv v256f32:$vy, v256f32:$vz),
-          (VFDVsv v256f32:$vy, v256f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fdiv v256f64:$vy, v256f64:$vz),
-          (VFDVdv v256f64:$vy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fdiv v512f32:$vy, v512f32:$vz),
-          (VFDVpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+// sint -> floating-point
 
-// add, sub, mul, sdiv, and udiv for
-// v256i32, v256i64, v512i32.
+def : Pat<(v512f32 (sint_to_fp v512i32:$vx)),
+          (VFLTpv $vx, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(add v256i32:$vy, v256i32:$vz),
-          (VADSwsxv v256i32:$vy, v256i32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i64:$vy, v256i64:$vz),
-          (VADDlv v256i64:$vy, v256i64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v512i32:$vy, v512i32:$vz),
-          (VADSpv v512i32:$vy, v512i32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+multiclass ifconv_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                   ValueType vf32, ValueType vf64> {
+  def : Pat<(vf64 (sint_to_fp vi64:$vx)),
+            (VFLTXv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vf64 (sint_to_fp vi32:$vx)),
+            (VFLTdv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vf32 (sint_to_fp vi32:$vx)),
+            (VFLTsv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
 
-def : Pat<(sub v256i32:$vy, v256i32:$vz),
-          (VSBSwsxv v256i32:$vy, v256i32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(sub v256i64:$vy, v256i64:$vz),
-          (VSUBlv v256i64:$vy, v256i64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(sub v512i32:$vy, v512i32:$vz),
-          (VSBSpv v512i32:$vy, v512i32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+defm : ifconv_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : ifconv_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : ifconv_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : ifconv_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
-def : Pat<(mul v256i32:$vy, v256i32:$vz),
-          (VMPSwsxv v256i32:$vy, v256i32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(mul v256i64:$vy, v256i64:$vz),
-          (VMPYlv v256i64:$vy, v256i64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+// sext and zext
 
-def : Pat<(sdiv v256i32:$vy, v256i32:$vz),
-          (VDVSwsxv v256i32:$vy, v256i32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(sdiv v256i64:$vy, v256i64:$vz),
-          (VDVXlv v256i64:$vy, v256i64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+  def : Pat<(vi64 (sext vi32:$vx)),
+            (VADSwsxi 0, $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vi64 (zext vi32:$vx)),
+            (VADSwzxi 0, $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
 
-def : Pat<(udiv v256i32:$vy, v256i32:$vz),
-          (VDIVwv v256i32:$vy, v256i32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(udiv v256i64:$vy, v256i64:$vz),
-          (VDIVlv v256i64:$vy, v256i64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+defm : ext_for_vector_length<256, v256i32, v256i64>;
+defm : ext_for_vector_length<8, v8i32, v8i64>;
+defm : ext_for_vector_length<4, v4i32, v4i64>;
+// FIXME: it is not possible to use following pattern.
+// defm : ext_for_vector_length<2, v2i32, v2i64>;
 
-// Bitconvert for mask registers between 
+// Bitconvert for mask registers between
+// v256i64 and v256f64.
+
+def : Pat<(v256f64 (bitconvert v256i64:$vi)),
+          (COPY_TO_REGCLASS $vi, V64)>;
+
+def : Pat<(v256i64 (bitconvert v256f64:$vf)),
+          (COPY_TO_REGCLASS $vf, V64)>;
+
+// Bitconvert for mask registers between
 // v4i64 or v8i64 and v256i1 or v512i1 respectively
 
 def : Pat<(v256i1 (bitconvert v4i64:$v)),
@@ -290,13 +345,13 @@ def : Pat<(v256i64 (vec_broadcast i64:$sy)),
 def : Pat<(v256f64 (vec_broadcast f64:$sy)),
           (VBRDf64r f64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 def : Pat<(v256i32 (vec_broadcast i32:$sy)),
-          (VBRDi32r i32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
+          (VBRDi32r i32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 def : Pat<(v256f32 (vec_broadcast f32:$sy)),
           (VBRDf32r f32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 // def : Pat<(v512f32 (vec_broadcast f32:$sy)),
-//           (VBRDpr f32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
+//           (VBRDpr f32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 def : Pat<(v512i32 (vec_broadcast i64:$sy)),
-          (VBRDpr i64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
+          (VBRDpr i64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 // Condition Code
 def : Pat<(setcc v256i64:$vx, v256i64:$vy, CCSIOp:$cond),
@@ -316,15 +371,15 @@ def : Pat<(setcc v256f64:$vx, v256f64:$vy, CCSIOp:$cond),
 // def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
 //           (EXTRACT_SUBREG
 //               (CMOVLrm0 )>;
-// 
+//
 // def : Pat<(setcc v256i64:$vx, v256i64:$vy, $cc),
 //           (VFMKv (i32 uimm6:( $cc)), v256f64:$vz)>;
 
 // Vector Select
 
-def : Pat<(v256f64 (vselect v256i1:$m, v256f64:$vy, v256f64:$vz)), 
+def : Pat<(v256f64 (vselect v256i1:$m, v256f64:$vy, v256f64:$vz)),
           (v256f64 (VMRGvm v256f64:$vz, v256f64:$vy, v256i1:$m,
-                           (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>; 
+                           (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
 def : Pat<(v512f32 (vselect v512i1:$m, v512f32:$vy, v512f32:$vz)),
           (VMRGpvm v512f32:$vz, v512f32:$vy, v512i1:$m,
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -335,48 +390,126 @@ def : Pat<(v256i32 (vec_seq (i32 1))), (VSEQlv 256)>;
 def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv 256)>;
 def : Pat<(v256i64 (vec_seq (i64 1))), (VSEQv 256)>;
 
-// Format Conversions
-
-// sint -> floating-point
-
-def : Pat<(v256f64 (sint_to_fp v256i64:$vx)),
-          (VFLTXv $vx, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256f64 (sint_to_fp v256i32:$vx)),
-          (VFLTdv $vx, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256f32 (sint_to_fp v256i32:$vx)),
-          (VFLTsv $vx, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v512f32 (sint_to_fp v512i32:$vx)),
-          (VFLTpv $vx, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
 // Double-Precision Arithmetic
+//
+// fadd, fsub, fmul, and fdiv for
+//   v512f32,
+//   v256f32, v256f64,
+//   v8f32, v8f64,
+//   v4f32, v4f64,
+//   v2f32, v2f64,
 
-def : Pat<(fadd (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz),
-          (VFADdr f64:$sy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
-def : Pat<(fadd v256f64:$vy, v256f64:$vz),
-          (VFADdv v256f64:$vy, v256f64:$vz,
+def : Pat<(fadd v512f32:$vy, v512f32:$vz),
+          (VFADpv v512f32:$vy, v512f32:$vz,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fsub v512f32:$vy, v512f32:$vz),
+          (VFSBpv v512f32:$vy, v512f32:$vz,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fmul v512f32:$vy, v512f32:$vz),
+          (VFMPpv v512f32:$vy, v512f32:$vz,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fdiv v512f32:$vy, v512f32:$vz),
+          (VFDVpv v512f32:$vy, v512f32:$vz,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(fsub (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz),
-          (VFSBdr f64:$sy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
-def : Pat<(fsub v256f64:$vy, v256f64:$vz),
-          (VFSBdv v256f64:$vy, v256f64:$vz,
+def : Pat<(fadd (vec_broadcast i64:$sy), v512f32:$vz),
+          (VFADpr i64:$sy, v512f32:$vz,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fsub (vec_broadcast i64:$sy), v512f32:$vz),
+          (VFSBpr i64:$sy, v512f32:$vz,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fmul (vec_broadcast i64:$sy), v512f32:$vz),
+          (VFMPpr i64:$sy, v512f32:$vz,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fdiv (v512f32 (vec_broadcast i64:$sy)), v512f32:$vz),
+          (VFDVpr i64:$sy, v512f32:$vz,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(fmul (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz),
-          (VFMPdr f64:$sy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
-def : Pat<(fmul v256f64:$vy, v256f64:$vz),
-          (VFMPdv v256f64:$vy, v256f64:$vz,
+multiclass farith_for_vector_length<int length, ValueType vf32,
+                                    ValueType vf64> {
+  def : Pat<(fadd vf32:$vy, vf32:$vz),
+            (VFADsv vf32:$vy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fadd vf64:$vy, vf64:$vz),
+            (VFADdv vf64:$vy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fadd (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+            (VFADsr f32:$sy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fadd (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+            (VFADdr f64:$sy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fsub vf32:$vy, vf32:$vz),
+            (VFSBsv vf32:$vy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fsub vf64:$vy, vf64:$vz),
+            (VFSBdv vf64:$vy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fsub (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+            (VFSBsr f32:$sy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fsub (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+            (VFSBdr f64:$sy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fmul vf32:$vy, vf32:$vz),
+            (VFMPsv vf32:$vy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fmul vf64:$vy, vf64:$vz),
+            (VFMPdv vf64:$vy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fmul (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+            (VFMPsr f32:$sy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fmul (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+            (VFMPdr f64:$sy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fdiv vf32:$vy, vf32:$vz),
+            (VFDVsv vf32:$vy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fdiv vf64:$vy, vf64:$vz),
+            (VFDVdv vf64:$vy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fdiv (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+            (VFDVsr f32:$sy, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fdiv (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+            (VFDVdr f64:$sy, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : farith_for_vector_length<256, v256f32, v256f64>;
+defm : farith_for_vector_length<8, v8f32, v8f64>;
+defm : farith_for_vector_length<4, v4f32, v4f64>;
+defm : farith_for_vector_length<2, v2f32, v2f64>;
+
+// fneg for
+//   v512f32,
+//   v256f32, v256f64,
+//   v8f32, v8f64,
+//   v4f32, v4f64,
+//   v2f32, v2f64,
+
+def : Pat<(fneg v512f32:$vz),
+          (VFSBpi 0, v512f32:$vz,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(fdiv (v256f64 (vec_broadcast f64:$sy)), v256f64:$vz),
-          (VFDVdr f64:$sy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
-def : Pat<(fdiv v256f64:$vy, v256f64:$vz),
-          (VFDVdv v256f64:$vy, v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+multiclass fneg_for_vector_length<int length, ValueType vf32, ValueType vf64> {
+  def : Pat<(fneg vf32:$vz),
+            (VFSBsi 0, vf32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(fneg vf64:$vz),
+            (VFSBdi 0, vf64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : fneg_for_vector_length<256, v256f32, v256f64>;
+defm : fneg_for_vector_length<8, v8f32, v8f64>;
+defm : fneg_for_vector_length<4, v4f32, v4f64>;
+defm : fneg_for_vector_length<2, v2f32, v2f64>;
+
+// fma for
+//   v512f32,
+//   v256f64
 
 def : Pat<(fma v256f64:$vz, v256f64:$vw, (v256f64 (fneg v256f64:$vy))),
           (VFMSBdv v256f64:$vy, v256f64:$vz, v256f64:$vw,
@@ -395,39 +528,7 @@ def : Pat<(fma v256f64:$vz, v256f64:$vw, v256f64:$vy),
           (VFMADdv v256f64:$vy, v256f64:$vz, v256f64:$vw,
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(fneg v256f64:$vz),
-          (VFSBdr (i64 0), v256f64:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
 // Packed Single-Precision Arithmetic
-
-def : Pat<(fadd (vec_broadcast i64:$sy), v512f32:$vz),
-          (VFADpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fadd v512f32:$vy, v512f32:$vz),
-          (VFADpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(fsub (vec_broadcast i64:$sy), v512f32:$vz),
-          (VFSBpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fsub v512f32:$vy, v512f32:$vz),
-          (VFSBpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(fmul (vec_broadcast i64:$sy), v512f32:$vz),
-          (VFMPpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fmul v512f32:$vy, v512f32:$vz),
-          (VFMPpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(fdiv (v512f32 (vec_broadcast i64:$sy)), v512f32:$vz),
-          (VFDVpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>; 
-def : Pat<(fdiv v512f32:$vy, v512f32:$vz),
-          (VFDVpv v512f32:$vy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 def : Pat<(fma v512f32:$vz, v512f32:$vw, (v512f32 (fneg v512f32:$vy))),
           (VFMSBpv v512f32:$vy, v512f32:$vz, v512f32:$vw,
@@ -446,64 +547,174 @@ def : Pat<(fma v256f32:$vz, v256f32:$vw, v256f32:$vy),
           (VFMADpv v256f32:$vy, v256f32:$vz, v256f32:$vw,
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(fneg v512f32:$vz),
-          (VFSBpr (i64 0), v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
 // Integer Arithmetic
+//
+// add and sub for v512i32
+// add, sub, mul, sdiv, and udiv for
+//   v256i32, v256i64
+//   v8i32, v8i64
+//   v4i32, v4i64
+//   v2i32, v2i64
 
-def : Pat<(add v512i32:$vx, v512i32:$vy),
-          (VADDpv v512i32:$vx, v512i32:$vy,
+def : Pat<(add v512i32:$vy, v512i32:$vz),
+          (VADSpv v512i32:$vy, v512i32:$vz,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i32:$vx, v256i32:$vy),
-          (VADDlv v256i32:$vx, v256i32:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i64:$vx, v256i64:$vy),
-          (VADXlv v256i64:$vx, v256i64:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(add v512i32:$vx, v512i32:$vy),
-          (VADDpv v512i32:$vx, v512i32:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i32:$vx, v256i32:$vy),
-          (VADDlv v256i32:$vx, v256i32:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i64:$vx, v256i64:$vy),
-          (VADXlv v256i64:$vx, v256i64:$vy,
+def : Pat<(sub v512i32:$vy, v512i32:$vz),
+          (VSBSpv v512i32:$vy, v512i32:$vz,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(add v512i32:$vx, v512i32:$vy),
-          (VADDpv v512i32:$vx, v512i32:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i32:$vx, v256i32:$vy),
-          (VADDlv v256i32:$vx, v256i32:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(add v256i64:$vx, v256i64:$vy),
-          (VADXlv v256i64:$vx, v256i64:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+  def : Pat<(add vi32:$vy, vi32:$vz),
+            (VADSwsxv vi32:$vy, vi32:$vz,
+                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(add vi64:$vy, vi64:$vz),
+            (VADXlv vi64:$vy, vi64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sub vi32:$vy, vi32:$vz),
+            (VSBSwsxv vi32:$vy, vi32:$vz,
+                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sub vi64:$vy, vi64:$vz),
+            (VSBXlv vi64:$vy, vi64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(mul vi32:$vy, vi32:$vz),
+            (VMPSwsxv vi32:$vy, vi32:$vz,
+                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(mul vi64:$vy, vi64:$vz),
+            (VMPXlv vi64:$vy, vi64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sdiv vi32:$vy, vi32:$vz),
+            (VDVSwsxv vi32:$vy, vi32:$vz,
+                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sdiv vi64:$vy, vi64:$vz),
+            (VDVXlv vi64:$vy, vi64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(udiv vi32:$vy, vi32:$vz),
+            (VDIVwv vi32:$vy, vi32:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(udiv vi64:$vy, vi64:$vz),
+            (VDIVlv vi64:$vy, vi64:$vz,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : arith_for_vector_length<256, v256i32, v256i64>;
+defm : arith_for_vector_length<8, v8i32, v8i64>;
+defm : arith_for_vector_length<4, v4i32, v4i64>;
+defm : arith_for_vector_length<2, v2i32, v2i64>;
 
 // Logic
-def : Pat<(and v256i64:$vx, v256i64:$vy),
-          (VANDv v256i64:$vx, v256i64:$vy,
+//
+// and, or, and xor for v512i32
+// and, or, and xor for
+//   v256i32, v256i64
+//   v8i32, v8i64
+//   v4i32, v4i64
+//   v2i32, v2i64
+
+def : Pat<(and v512i32:$vx, v512i32:$vy),
+          (VANDpv v512i32:$vx, v512i32:$vy,
                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(or  v256i64:$vx, v256i64:$vy),
-          (VORv v256i64:$vx, v256i64:$vy,
+def : Pat<(or  v512i32:$vx, v512i32:$vy),
+          (VORpv v512i32:$vx, v512i32:$vy,
                 (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(xor v256i64:$vx, v256i64:$vy),
-          (VXORv v256i64:$vx, v256i64:$vy,
+def : Pat<(xor v512i32:$vx, v512i32:$vy),
+          (VXORpv v512i32:$vx, v512i32:$vy,
                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+
+multiclass logic_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+  def : Pat<(and vi64:$vx, vi64:$vy),
+            (VANDv vi64:$vx, vi64:$vy,
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(or  vi64:$vx, vi64:$vy),
+            (VORv vi64:$vx, vi64:$vy,
+                  (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(xor vi64:$vx, vi64:$vy),
+            (VXORv vi64:$vx, vi64:$vy,
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(and vi32:$vx, vi32:$vy),
+            (VANDlv vi32:$vx, vi32:$vy,
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(or  vi32:$vx, vi32:$vy),
+            (VORlv vi32:$vx, vi32:$vy,
+                  (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(xor vi32:$vx, vi32:$vy),
+            (VXORlv vi32:$vx, vi32:$vy,
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : logic_for_vector_length<256, v256i32, v256i64>;
+defm : logic_for_vector_length<8, v8i32, v8i64>;
+defm : logic_for_vector_length<4, v4i32, v4i64>;
+defm : logic_for_vector_length<2, v2i32, v2i64>;
 
 // Shifts
-def : Pat<(shl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))),
-          (VSLAXr2 v256i64:$vx, i64:$sy,
+//
+// shl, srl, and sra for v512i32
+// shl, srl, and sra for
+//   v256i32, v256i64
+//   v8i32, v8i64
+//   v4i32, v4i64
+//   v2i32, v2i64
+
+def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i64:$sy))),
+          (VSLLpr2 v512i32:$vx, i64:$sy,
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(srl v256i64:$vx, (v256i64 (vec_broadcast i64:$sy))),
-          (VSRLr2 v256i64:$vx, i64:$sy,
+def : Pat<(srl v512i32:$vx, (v512i32 (vec_broadcast i64:$sy))),
+          (VSRLpr2 v512i32:$vx, i64:$sy,
+                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(sra v512i32:$vx, (v512i32 (vec_broadcast i64:$sy))),
+          (VSRApr2 v512i32:$vx, i64:$sy,
+                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+
+def : Pat<(shl v512i32:$vx, v512i32:$vy),
+          (VSLLpv v512i32:$vx, v512i32:$vy,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(srl v512i32:$vx, v512i32:$vy),
+          (VSRLpv v512i32:$vx, v512i32:$vy,
+                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(sra v512i32:$vx, v512i32:$vy),
+          (VSRApv v512i32:$vx, v512i32:$vy,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(shl v256i64:$vx, v256i64:$vy),
-          (VSLAXv v256i64:$vx, v256i64:$vy,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(srl v256i64:$vx, v256i64:$vy),
-          (VSRLv v256i64:$vx, v256i64:$vy,
-                 (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+multiclass shift_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+  def : Pat<(shl vi64:$vx, (vi64 (vec_broadcast i64:$sy))),
+            (VSLAXr2 vi64:$vx, i64:$sy,
+                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(srl vi64:$vx, (vi64 (vec_broadcast i64:$sy))),
+            (VSRLr2 vi64:$vx, i64:$sy,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sra vi64:$vx, (vi64 (vec_broadcast i64:$sy))),
+            (VSRAXr2 vi64:$vx, i64:$sy,
+                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(shl vi64:$vx, vi64:$vy),
+            (VSLAXv vi64:$vx, vi64:$vy,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(srl vi64:$vx, vi64:$vy),
+            (VSRLv vi64:$vx, vi64:$vy,
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sra vi64:$vx, vi64:$vy),
+            (VSRAXv vi64:$vx, vi64:$vy,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(shl vi32:$vx, (vi32 (vec_broadcast i64:$sy))),
+            (VSLAlr2 vi32:$vx, i64:$sy,
+                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(srl vi32:$vx, (vi32 (vec_broadcast i64:$sy))),
+            (VSRLlr2 vi32:$vx, i64:$sy,
+                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sra vi32:$vx, (vi32 (vec_broadcast i64:$sy))),
+            (VSRAlr2 vi32:$vx, i64:$sy,
+                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(shl vi32:$vx, vi32:$vy),
+            (VSLAlv vi32:$vx, vi32:$vy,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(srl vi32:$vx, vi32:$vy),
+            (VSRLlv vi32:$vx, vi32:$vy,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(sra vi32:$vx, vi32:$vy),
+            (VSRAlv vi32:$vx, vi32:$vy,
+                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : shift_for_vector_length<256, v256i32, v256i64>;
+defm : shift_for_vector_length<8, v8i32, v8i64>;
+defm : shift_for_vector_length<4, v4i32, v4i64>;
+defm : shift_for_vector_length<2, v2i32, v2i64>;
