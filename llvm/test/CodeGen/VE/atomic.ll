@@ -407,23 +407,24 @@ define signext i8 @test_atomic_compare_exchange_1() {
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
 ; CHECK-NEXT:  and %s34, -4, %s34
-; CHECK-NEXT:  ldl.sx %s36, (,%s34)
-; CHECK-NEXT:  lea %s35, -256
-; CHECK-NEXT:  and %s38, %s36, %s35
+; CHECK-NEXT:  ldl.sx %s35, (,%s34)
+; CHECK-NEXT:  lea %s36, -256
+; CHECK-NEXT:  and %s38, %s35, %s36
 ; CHECK-NEXT:  or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:  or %s35, 0, %s38
 ; CHECK-NEXT:  or %s37, 0, %s38
-; CHECK-NEXT:  cas.w %s38, (%s34), %s38
-; CHECK-NEXT:  cmps.w.sx %s36, %s38, %s37
-; CHECK-NEXT:  breq.w %s38, %s37, .LBB{{[0-9]+}}_3
+; CHECK-NEXT:  cas.w %s37, (%s34), %s38
+; CHECK-NEXT:  breq.w %s37, %s38, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %partword.cmpxchg.failure
-; CHECK-NEXT:  #   in Loop: Header=BB{{[0-9]+}}_1 Depth=1
-; CHECK-NEXT:  and %s38, %s38, %s35
-; CHECK-NEXT:  brne.w %s37, %s38, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:  #   in Loop: Header=BB25_1 Depth=1
+; CHECK-NEXT:  and %s38, %s37, %s36
+; CHECK-NEXT:  brne.w %s35, %s38, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s36
+; CHECK-NEXT:  cmps.w.sx %s34, %s37, %s35
+; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -447,20 +448,21 @@ define signext i16 @test_atomic_compare_exchange_2() {
 ; CHECK-NEXT:  ld2b.zx %s35, (,%s35)
 ; CHECK-NEXT:  sla.w.sx %s38, %s35, 16
 ; CHECK-NEXT:  or %s0, 0, (0)1
-; CHECK-NEXT:  lea %s35, -65536
+; CHECK-NEXT:  lea %s37, -65536
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  or %s37, 0, %s38
-; CHECK-NEXT:  cas.w %s38, (%s34), %s38
-; CHECK-NEXT:  cmps.w.sx %s36, %s38, %s37
-; CHECK-NEXT:  breq.w %s38, %s37, .LBB{{[0-9]+}}_3
+; CHECK-NEXT:  or %s35, 0, %s38
+; CHECK-NEXT:  or %s36, 0, %s38
+; CHECK-NEXT:  cas.w %s36, (%s34), %s38
+; CHECK-NEXT:  breq.w %s36, %s38, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %partword.cmpxchg.failure
 ; CHECK-NEXT:  #   in Loop: Header=BB{{[0-9]+}}_1 Depth=1
-; CHECK-NEXT:  and %s38, %s38, %s35
-; CHECK-NEXT:  brne.w %s37, %s38, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:  and %s38, %s36, %s37
+; CHECK-NEXT:  brne.w %s35, %s38, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s36
+; CHECK-NEXT:  cmps.w.sx %s34, %s36, %s35
+; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:

@@ -341,6 +341,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
         (set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm7:$sy)), (Ty simm32:$imm32)))*/]> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rzi : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32),
@@ -359,6 +360,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
   def zzi : RM<
     opc, (outs RC:$sx), (ins immOp2:$imm32),
@@ -370,6 +372,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let sy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
 }
 
@@ -426,12 +429,14 @@ multiclass RRCASm<string opcStr, bits<8>opc, SDNode OpNode,
     !strconcat(opcStr, " $sx, $addr, $sy"), []> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def asi : RM<
     opc, (outs RC:$sx), (ins MEMASri:$addr, immOp:$sy, RC:$sd),
     !strconcat(opcStr, " $sx, $addr, $sy"), []> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rir : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32, RC:$sy, RC:$sd),
@@ -439,6 +444,7 @@ multiclass RRCASm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 1;
     let cz = 1;
     let isCodeGenOnly = 1;
+    let hasSideEffects = 0;
   }
   def rii : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32, immOp:$sy, RC:$sd),
@@ -446,6 +452,7 @@ multiclass RRCASm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 1;
     let isCodeGenOnly = 1;
+    let hasSideEffects = 0;
   }
   def zii : RM<
     opc, (outs RC:$sx), (ins immOp2:$imm32, immOp:$sy, RC:$sd),
@@ -453,6 +460,7 @@ multiclass RRCASm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
 }
 
@@ -476,7 +484,7 @@ multiclass RRNDmrr<string opcStr, bits<8>opc, SDNode OpNode,
                  RegisterClass RCi, ValueType Tyi> {
   def rr : RR<opc, (outs RCo:$sx), (ins RCi:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"), []>
-           { let cy = 1; let cz = 1; }
+           { let cy = 1; let cz = 1; let hasSideEffects = 0; }
 }
 
 multiclass RRmri<string opcStr, bits<8>opc, SDNode OpNode,
@@ -504,7 +512,7 @@ multiclass RRNDmir<string opcStr, bits<8>opc, SDNode OpNode,
                    RegisterClass RCi, ValueType Tyi, Operand immOp> {
   def ri : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"), []>
-           { let cy = 0; let cz = 1; }
+           { let cy = 0; let cz = 1; let hasSideEffects = 0; }
 }
 
 multiclass RRmiz<string opcStr, bits<8>opc, SDNode OpNode,
@@ -521,7 +529,7 @@ multiclass RRNDmiz<string opcStr, bits<8>opc, SDNode OpNode,
                    RegisterClass RCi, ValueType Tyi, Operand immOp> {
   def zi : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
               !strconcat(opcStr, " $sx, $sy"), []>
-           { let cy = 0; let cz = 0; let sz = 0; }
+           { let cy = 0; let cz = 0; let sz = 0; let hasSideEffects = 0; }
 }
 
 multiclass RRNDmrm<string opcStr, bits<8>opc, SDNode OpNode,
@@ -698,6 +706,7 @@ multiclass RRINDm<string opcStr, bits<8>opc, SDNode OpNode,
     []> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def ri : RR<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
@@ -705,6 +714,7 @@ multiclass RRINDm<string opcStr, bits<8>opc, SDNode OpNode,
     []> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rm0 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz, I32:$sy),
@@ -748,6 +758,7 @@ multiclass RRINDm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
 }
 
@@ -763,6 +774,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     []> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def ri : RR<
     opc, (outs I64:$sx), (ins CCOp:$cf, I64:$sz, immOp:$sy, I64:$sd),
@@ -770,6 +782,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     []> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rm0 : RR<
     opc, (outs I64:$sx), (ins CCOp:$cf, RC:$sy, immOp2:$sz, I64:$sd),
@@ -858,6 +871,7 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
     !strconcat(opcStr, " $sy, $sz, $imm32"), []> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def ir : CF<
     opc, (outs),
@@ -865,6 +879,7 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
     !strconcat(opcStr, " $sy, $sz, $imm32"), []> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rm0 : CF<
     opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
@@ -906,6 +921,7 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
     let sz = 0;
     let cf = 15;  /* AT */
     let isBarrier = 1;
+    let hasSideEffects = 0;
   }
 }
 
@@ -923,6 +939,7 @@ multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode,
     !strconcat(opcStr, " $sx, $sy"),
     [/* (set Tyo:$sx, (OpNode (Tyi simm7:$sy))) */]> {
       let cy = 0;
+      let hasSideEffects = 0;
     }
 }
 
@@ -945,7 +962,7 @@ let cx = 0, cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op64, uimm6Op32>;
 
 // NOP instruction
-let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0 in
+let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0, hasSideEffects = 0 in
 def NOP : RR<0x79, (outs), (ins), "nop", []>;
 
 // LEA and LEASL instruction (load 32 bit imm to low or high part)
@@ -1278,7 +1295,7 @@ def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, $sx)>;
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
 def BC : CF<
     0x19, (outs), (ins CCOp:$cf, I64:$sy, brtarget32:$imm32),
     "b.${cf}.l $sy, $imm32",
@@ -1304,6 +1321,7 @@ def BAri : CF<
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
     cz = 1,
     isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+let hasSideEffects = 0 in
 def BN : CF<
     0x19, (outs), (ins brtarget32:$imm32),
     "b.af.l $imm32",
@@ -1321,7 +1339,7 @@ def RET : CF<
 
 // Branch and Save IC
 
-let cx = 0, cy = 0, cy = 0, cz = 1 /* , Uses = [IC] */ in
+let cx = 0, cy = 0, cy = 0, cz = 1, hasSideEffects = 0 /* , Uses = [IC] */ in
 def BSIC : RM<0x08, (outs), (ins I64:$sx, I64:$sz), "bsic $sx, (, ${sz})", []>;
 
 // Branch instruction
@@ -1335,7 +1353,7 @@ let cx = 1, cx2 = 1, bpf = 0 /* NONE */ in
 defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32, uimm6Op32>;
 
 // Load and Store host memory instructions
-let cx = 0, cy = 0, cz = 1 in {
+let cx = 0, cy = 0, cz = 1, hasSideEffects = 0 in {
 let sy = 3 in
 def LHMri : RM<
     0x21, (outs I64:$sx), (ins MEMASri:$addr),
@@ -1358,7 +1376,7 @@ def LHM1Bri : RM<
     []>;
 }
 
-let cx = 0, cy = 0, cz = 1 in {
+let cx = 0, cy = 0, cz = 1, hasSideEffects = 0 in {
 let sy = 3 in
 def SHMri : RM<
     0x31, (outs), (ins MEMASri:$addr, I64:$sx),
@@ -1381,13 +1399,13 @@ def SHM1Bri : RM<
     []>;
 }
 
-let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0 in
+let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def MONC : RR<
     0x3F, (outs), (ins),
     "monc",
     []>;
 
-let cx = 1, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0 in
+let cx = 1, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def MONCT : RR<
     0x3F, (outs), (ins),
     "monc.hdb",
@@ -1395,7 +1413,7 @@ def MONCT : RR<
 
 // Save Instruction Counter
 
-let cx = 0, cy = 0, sy = 0, cz = 0, sz = 0 /* , Uses = [IC] */ in
+let cx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 /* , Uses = [IC] */ in
 def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx", []>;
 
 // Test and Set 1 AM (multiple length swap)
@@ -1703,7 +1721,7 @@ def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
 //===----------------------------------------------------------------------===//
 
 // GETGOT for PIC
-let Defs = [SX15 /* %got */, SX16 /* %plt */] in {
+let Defs = [SX15 /* %got */, SX16 /* %plt */], hasSideEffects = 0 in {
   def GETGOT : Pseudo<(outs getGOT:$getpcseq), (ins), "$getpcseq", [] >;
 }
 
@@ -1735,10 +1753,11 @@ def ADJCALLSTACKUP : Pseudo<(outs), (ins i64imm:$amt1, i64imm:$amt2),
                             [(callseq_end timm:$amt1, timm:$amt2)]>;
 }
 
-let Defs = [SX8], Uses = [SX8, SX11] in
+let Defs = [SX8], Uses = [SX8, SX11], hasSideEffects = 0 in
 def EXTEND_STACK : Pseudo<(outs), (ins),
                           "# EXTEND STACK",
                           []>;
+let  hasSideEffects = 0 in
 def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
