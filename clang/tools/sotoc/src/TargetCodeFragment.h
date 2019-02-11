@@ -83,6 +83,9 @@ public:
   /// Gets the 'inner' source range. This can differ for target regions from the
   /// source range.
   virtual clang::SourceRange getInnerRange() { return getRealRange(); };
+  /// Get the spelling source range. That is the range without macro
+  /// expansions.
+  virtual clang::SourceRange getSpellingRange() = 0;
   /// Accessor to TargetCodeKind
   clang::OpenMPDirectiveKind getTargetCodeKind() { return TargetCodeKind; };
 };
@@ -140,6 +143,7 @@ public:
   virtual std::string PrintPretty() override;
   clang::SourceRange getRealRange() override;
   clang::SourceRange getInnerRange() override;
+  clang::SourceRange getSpellingRange() override;
   /// Returns a source location at the start of a pragma in the captured
   /// statment.
   clang::SourceLocation getStartLoc();
@@ -174,4 +178,5 @@ public:
 
   virtual std::string PrintPretty() override;
   clang::SourceRange getRealRange() override;
+  clang::SourceRange getSpellingRange() override;
 };

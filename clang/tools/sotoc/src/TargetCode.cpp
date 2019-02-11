@@ -75,7 +75,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
 
     // This is a workaround, since "Decl::print" includes "pragma omp declare".
     if (PrettyCode != "")
-      TargetCodeRewriter.ReplaceText(Frag->getInnerRange(), PrettyCode);
+      TargetCodeRewriter.ReplaceText(Frag->getSpellingRange(), PrettyCode);
 
     if (TCR) {
       generateFunctionPrologue(TCR);
@@ -85,7 +85,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
       generateFunctionEpilogue(TCR);
     }
     Out << "\n";
-    Out << TargetCodeRewriter.getRewrittenText(Frag->getInnerRange());
+    Out << TargetCodeRewriter.getRewrittenText(Frag->getSpellingRange());
 
     if (Frag->NeedsSemicolon) {
       Out << ";";

@@ -65,6 +65,8 @@ void DeclResolver::addDecl(clang::Decl *D) {
     return;
   }
 
+  DEBUGPDECL(D, "Add declaration to resolver: ");
+
   std::unordered_set<clang::Decl *> UnresolvedDecls;
   UnresolvedDecls.insert(D);
 
@@ -161,9 +163,11 @@ void DeclResolver::orderAndAddFragments(TargetCode &TC) {
     if (!AllDecls.at(orderStack.top()).IsFromSystemHeader) {
       auto codeDecl = std::make_shared<TargetCodeDecl>(orderStack.top());
 
+      DEBUGPDECL(orderStack.top(), "Generating Fragment for Decl: ");
       // TODO: this wont hurt but is not always necessary
       codeDecl->NeedsSemicolon = true;
-      TC.addCodeFragmentFront(codeDecl);
+      bool added = TC.addCodeFragmentFront(codeDecl);
+      DEBUGP("Decl was a duplicate: " << !added);
     }
     orderStack.pop();
   }
