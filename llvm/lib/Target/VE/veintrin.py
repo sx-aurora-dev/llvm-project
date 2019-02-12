@@ -695,7 +695,10 @@ class InstList:
         self.a.append(I)
         return self
     def Inst(self, *args):
-        return self.add(Inst(*args))
+        #return self.add(Inst(*args))
+        I = Inst(*args)
+        self.add(I)
+        return I
     def __iter__(self):
         return self.a.__iter__()
     def __getattr__(self, attrname):
@@ -753,12 +756,16 @@ class InstTable:
         #O.append([VX(T_u64), SY(T_u64), ImmZ(T_voidcp)])
         #O.append([VX(T_u64), ImmI(T_u64), ImmZ(T_voidcp)])
 
-        self.InstX(opc, inst, asm, O).noTest().readMem()
+        return self.InstX(opc, inst, asm, O).noTest().readMem()
 
     def VSTm(self, opc, inst, asm):
+        O_rr = [VX(T_u64), SY(T_u64), SZ(T_voidp)]
+        O_ir = [VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
         L = InstList()
-        L.Inst(opc, inst+"rr", asm, asm+"_vss", [], [VX(T_u64), SY(T_u64), SZ(T_voidp)])
-        L.Inst(opc, inst+"ir", asm, asm+"_vss", [], [VX(T_u64), ImmI(T_u64), SZ(T_voidp)])
+        L.Inst(opc, inst+"rr", asm, asm+"_vss", [], O_rr)
+        L.Inst(opc, inst+"ir", asm, asm+"_vss", [], O_ir)
+        L.Inst(opc, inst+"otrr", asm+".ot", asm+"ot_vss",  [], O_rr).oldLowering()
+        L.Inst(opc, inst+"otrr", asm+".ot", asm+"ot_vss",  [], O_ir).oldLowering()
         #L.Inst(opc, inst+"rz", asm, asm, [], [VX(T_u64), SY(T_u64), ImmZ(T_voidp)])
         #L.Inst(opc, inst+"iz", asm, asm, [], [VX(T_u64), ImmI(T_u64), ImmZ(T_voidp)])
         self.addList(L).noTest().writeMem()
@@ -1131,10 +1138,17 @@ def gen_mktest(insts):
                   .format(name=intrin, asm=I.asm()))
 
 def gen_lowering(inst):
+    ary = []
     for I in insts:
         if I.hasMask() and I.isOldLowering():
-            print("case Intrinsic::ve_{}: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::{});"
-                  .format(I.intrinsicName(), I.instName, len(I.ins)))
+            ary.append("case Intrinsic::ve_{}: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::{});"
+                       .format(I.intrinsicName(), I.instName, len(I.ins)))
+#            print("case Intrinsic::ve_{}: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::{});"
+#                  .format(I.intrinsicName(), I.instName, len(I.ins)))
+    # uniq because multiple Insts have the same intrinsic. ex VSTotrr and VSTotir
+    ary = list(set(ary)) 
+    for l in ary:
+        print(l)
 
 T = InstTable()
 
