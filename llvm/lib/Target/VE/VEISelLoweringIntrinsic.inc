@@ -1,12 +1,3 @@
-case Intrinsic::ve_vstlot_vss: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSTLotrr);
+case Intrinsic::ve_vscuot_vvm: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCUotvm);
 case Intrinsic::ve_vsclot_vvm: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCLotvm);
 case Intrinsic::ve_vscot_vvm: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCotvm);
-case Intrinsic::ve_vscuot_vv: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCUotv);
-case Intrinsic::ve_vstu2dot_vss: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSTU2Dotrr);
-case Intrinsic::ve_vscuot_vvm: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCUotvm);
-case Intrinsic::ve_vstl2dot_vss: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSTL2Dotrr);
-case Intrinsic::ve_vst2dot_vss: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VST2Dotrr);
-case Intrinsic::ve_vscot_vv: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCotv);
-case Intrinsic::ve_vsclot_vv: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSCLotv);
-case Intrinsic::ve_vstuot_vss: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSTUotrr);
-case Intrinsic::ve_vstot_vss: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::VSTotrr);
