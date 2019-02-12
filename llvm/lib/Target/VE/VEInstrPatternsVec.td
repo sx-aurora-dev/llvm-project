@@ -213,28 +213,41 @@ def : Pat<(v8i64 (bitconvert v512i1:$vmp)),
           (v8i64 (COPY_TO_REGCLASS (VMP2V $vmp), V64))>;
 
 // Series of SCALAR_TO_VECTOR for all VE vector types,
-// v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
+//   v512i32, v512f32
+//   v256i32, v256i64, v256f32, v256f64,
+//   v8i32, v8i64, v8f32, v8f64,
+//   v4i32, v4i64, v4f32, v4f64,
+//   v2i32, v2i64, v2f32, v2f64,
 //
 // NOTE: Need to use sub_f32 for v512i32 since v512i32 uses
 //       upper 32 bits (0..31) first.
 
-def: Pat<(v256i32 (scalar_to_vector i32:$val)),
-         (v256i32 (LSVi (v256i32 (IMPLICIT_DEF)), 0,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32)))>;
-def: Pat<(v256f32 (scalar_to_vector f32:$val)),
-         (v256f32 (LSVi (v256f32 (IMPLICIT_DEF)), 0,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
 def: Pat<(v512i32 (scalar_to_vector i32:$val)),
          (v512i32 (LSVi (v512i32 (IMPLICIT_DEF)), 0,
                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
 def: Pat<(v512f32 (scalar_to_vector f32:$val)),
          (v512f32 (LSVi (v512f32 (IMPLICIT_DEF)), 0,
                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-def: Pat<(v256f64 (scalar_to_vector f64:$val)),
-         (v256f64 (LSVi (v256f64 (IMPLICIT_DEF)), 0,
-                        (COPY_TO_REGCLASS $val, I64)))>;
-def: Pat<(v256i64 (scalar_to_vector i64:$val)),
-         (v256i64 (LSVi (v256i64 (IMPLICIT_DEF)), 0, $val))>;
+
+multiclass s2v_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                 ValueType vf32, ValueType vf64> {
+  def: Pat<(vi32 (scalar_to_vector i32:$val)),
+           (LSVi (vi32 (IMPLICIT_DEF)), 0,
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
+  def: Pat<(vi64 (scalar_to_vector i64:$val)),
+           (LSVi (vi64 (IMPLICIT_DEF)), 0, $val)>;
+  def: Pat<(vf32 (scalar_to_vector f32:$val)),
+           (LSVi (vf32 (IMPLICIT_DEF)), 0,
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+  def: Pat<(vf64 (scalar_to_vector f64:$val)),
+           (LSVi (vf64 (IMPLICIT_DEF)), 0,
+                 (COPY_TO_REGCLASS $val, I64))>;
+}
+
+defm : s2v_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : s2v_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : s2v_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : s2v_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Series of INSERT_VECOR_ELT for all VE vector types,
 // v256i32, v256i64, v256f32, v256f64.
