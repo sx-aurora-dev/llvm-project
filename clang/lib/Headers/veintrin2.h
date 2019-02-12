@@ -7,11 +7,17 @@
 #define _ve_vldl2dsx_vss __builtin_ve_vldl2dsx_vss
 #define _ve_vldl2dzx_vss __builtin_ve_vldl2dzx_vss
 #define _ve_vst_vss __builtin_ve_vst_vss
+#define _ve_vstot_vss __builtin_ve_vstot_vss
 #define _ve_vstu_vss __builtin_ve_vstu_vss
+#define _ve_vstuot_vss __builtin_ve_vstuot_vss
 #define _ve_vstl_vss __builtin_ve_vstl_vss
+#define _ve_vstlot_vss __builtin_ve_vstlot_vss
 #define _ve_vst2d_vss __builtin_ve_vst2d_vss
+#define _ve_vst2dot_vss __builtin_ve_vst2dot_vss
 #define _ve_vstu2d_vss __builtin_ve_vstu2d_vss
+#define _ve_vstu2dot_vss __builtin_ve_vstu2dot_vss
 #define _ve_vstl2d_vss __builtin_ve_vstl2d_vss
+#define _ve_vstl2dot_vss __builtin_ve_vstl2dot_vss
 #define _ve_pfchv __builtin_ve_pfchv
 #define _ve_lsv_vvss __builtin_ve_lsv_vvss
 #define _ve_lvs_svs_u64 __builtin_ve_lvs_svs_u64
