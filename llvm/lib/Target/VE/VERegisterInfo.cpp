@@ -231,7 +231,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAzzi), Tmp1)
           .addImm(val);
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::COPY), VLReg)
-          .addReg(Tmp1);
+          .addReg(Tmp1, getKillRegState(true));
       }
     } else {
       BuildMI(*MI.getParent(), II, dl, TII.get(VE::COPY), VLReg)
