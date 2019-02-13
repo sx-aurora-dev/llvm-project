@@ -406,9 +406,20 @@ def : Pat<(v512f32 (vselect v512i1:$m, v512f32:$vy, v512f32:$vz)),
 
 // Sequence
 
-def : Pat<(v256i32 (vec_seq (i32 1))), (VSEQlv 256)>;
 def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv 256)>;
-def : Pat<(v256i64 (vec_seq (i64 1))), (VSEQv 256)>;
+
+multiclass vseq_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+  def : Pat<(vi32 (vec_seq (i32 1))),
+            (VSEQlv length)>;
+  def : Pat<(vi64 (vec_seq (i64 1))),
+            (VSEQv length)>;
+}
+
+defm : vseq_for_vector_length<256, v256i32, v256i64>;
+defm : vseq_for_vector_length<8, v8i32, v8i64>;
+defm : vseq_for_vector_length<4, v4i32, v4i64>;
+defm : vseq_for_vector_length<2, v2i32, v2i64>;
+
 
 // Double-Precision Arithmetic
 //
