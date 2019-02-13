@@ -350,21 +350,28 @@ def : Pat<(v256f64 (vec_gather v256i64:$vy)),
 def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
 
 // Broadcast
-def : Pat<(v256f64 (scalar_to_vector f64:$sy)),
-          (VBRDf64r f64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(v256i64 (vec_broadcast i64:$sy)),
-          (VBRDr i64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256f64 (vec_broadcast f64:$sy)),
-          (VBRDf64r f64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256i32 (vec_broadcast i32:$sy)),
-          (VBRDi32r i32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256f32 (vec_broadcast f32:$sy)),
-          (VBRDf32r f32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 // def : Pat<(v512f32 (vec_broadcast f32:$sy)),
 //           (VBRDpr f32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 def : Pat<(v512i32 (vec_broadcast i64:$sy)),
           (VBRDpr i64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+
+multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                  ValueType vf32, ValueType vf64> {
+  def : Pat<(vi32 (vec_broadcast i32:$sy)),
+            (VBRDi32r i32:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vf32 (vec_broadcast f32:$sy)),
+            (VBRDf32r f32:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vi64 (vec_broadcast i64:$sy)),
+            (VBRDr i64:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vf64 (vec_broadcast f64:$sy)),
+            (VBRDf64r f64:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : vbrd_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : vbrd_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : vbrd_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Condition Code
 def : Pat<(setcc v256i64:$vx, v256i64:$vy, CCSIOp:$cond),
