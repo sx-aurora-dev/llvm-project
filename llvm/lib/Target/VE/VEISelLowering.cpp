@@ -200,46 +200,59 @@ VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   return merge;
 }
 
-#if 0
-// FIXME: temporary disabling LowerBUILD_VECTOR added by
-// https://github.com/SXAuroraTSUBASAResearch/llvm/pull/2 since
-// this doesn't work with test-suite/SingleSource/UnitTests/Vector/build.c.
+static bool isBroadCast(BuildVectorSDNode *BVN,
+                        bool &AllUndef, unsigned &FirstDef) {
+  // Check UNDEF or FirstDef
+  AllUndef = true;
+  FirstDef = 0;
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    if (!BVN->getOperand(i).isUndef()) {
+      AllUndef = false;
+      FirstDef = i;
+      break;
+    }
+  }
+  if (AllUndef)
+    return true;
+  // Check boradcast
+  for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
+    if (BVN->getOperand(FirstDef) != BVN->getOperand(i) &&
+        !BVN->getOperand(i).isUndef()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 SDValue
-VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
+VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering BUILD_VECTOR\n");
-  auto & bvNode = *cast<BuildVectorSDNode>(Chain);
+  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
 
-  SDLoc DL(Chain);
+  SDLoc DL(Op);
 
-// match VEC_BROADCAST
-  bool allUndef = true;
-  unsigned first_def = -1;
-  for (unsigned i = 0; i < bvNode.getNumOperands(); ++i) {
-    if (!bvNode.getOperand(i).isUndef()) {
-      allUndef = false;
-      first_def = i;
-      break;
+  // match VEC_BROADCAST
+  bool AllUndef;
+  unsigned FirstDef;
+  if (isBroadCast(BVN, AllUndef, FirstDef)) {
+    if (AllUndef) {
+      LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
+      LLVM_DEBUG(BVN->getOperand(0)->dump());
+      return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                         BVN->getOperand(0));
+    } else {
+      LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
+      LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+      return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                         BVN->getOperand(FirstDef));
     }
   }
 
-  if (allUndef) {
-    return DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(),
-                                  bvNode.getOperand(0));
+#if 0
+  if (BVN->isConstant()) {
+    // All values are either a constant value or undef, so optimize it...
   }
-
-  bool isBroadcast = true;
-  for (unsigned i = first_def + 1; i < bvNode.getNumOperands(); ++i) {
-    if (bvNode.getOperand(first_def) != bvNode.getOperand(i) && !bvNode.getOperand(i).isUndef()) {
-      isBroadcast = false;
-      break;
-    }
-  }
-
-  if (isBroadcast) {
-    return DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(),
-                                  bvNode.getOperand(first_def));
-  }
-
+#endif
 
 // match VEC_SEQ(stride) patterns
   // identify a constant stride vector
@@ -257,7 +270,7 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
   int64_t lastElemValue = 0;
   MVT elemTy;
 
-  for (unsigned i = 0; i < bvNode.getNumOperands(); ++i) {
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
     if (hasBlockStride) {
       if (i % blockLength == 0)
         stride = 1;
@@ -265,7 +278,7 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
         stride = 0;
     }
 
-    if (bvNode.getOperand(i).isUndef()) {
+    if (BVN->getOperand(i).isUndef()) {
       if (hasBlockStride2 && i % blockLength == 0)
         lastElemValue = 0;
       else
@@ -274,7 +287,7 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
     }
 
     // is this an immediate constant value?
-    auto * constNumElem = dyn_cast<ConstantSDNode>(bvNode.getOperand(i));
+    auto * constNumElem = dyn_cast<ConstantSDNode>(BVN->getOperand(i));
     if (!constNumElem) {
       hasConstantStride = false;
       hasBlockStride = false;
@@ -286,11 +299,11 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
     int64_t elemValue = constNumElem->getSExtValue();
     elemTy = constNumElem->getSimpleValueType(0);
 
-    if (i > first_def && firstStride) {
+    if (i > FirstDef && firstStride) {
       // first stride
-      stride = (elemValue - lastElemValue) / (i - first_def);
+      stride = (elemValue - lastElemValue) / (i - FirstDef);
       firstStride = false;
-    } else if (i > first_def) {
+    } else if (i > FirstDef) {
       // later stride
       if (hasBlockStride2 && elemValue == 0 && i % blockLength == 0) {
         lastElemValue = 0;
@@ -317,13 +330,19 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
 
   // detected a proper stride pattern
   if (hasConstantStride) {
-    SDValue seq = DAG.getNode(VEISD::VEC_SEQ, DL, Chain.getSimpleValueType(),
+    SDValue seq = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
                                   DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
-    if (stride == 1)
+    if (stride == 1) {
+      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ ");
+      LLVM_DEBUG(seq.dump());
       return seq;
+    }
 
-    SDValue const_stride = DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(), DAG.getConstant(stride, DL, elemTy));
-    return DAG.getNode(ISD::MUL, DL, Chain.getSimpleValueType(), {seq, const_stride});
+    SDValue const_stride = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(stride, DL, elemTy));
+    SDValue ret = DAG.getNode(ISD::MUL, DL, Op.getSimpleValueType(), {seq, const_stride});
+    LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST");
+    LLVM_DEBUG(ret.dump());
+    return ret;
   }
 
   // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
@@ -332,10 +351,12 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
     int64_t blockLengthLog = log2(blockLength);
 
     if (pow(2, blockLengthLog) == blockLength) {
-      SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Chain.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
+      SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
       SDValue shiftbroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 64), 256), DAG.getConstant(blockLengthLog, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
 
-      SDValue shift = DAG.getNode(ISD::SRL, DL, Chain.getSimpleValueType(), {sequence, shiftbroadcast});
+      SDValue shift = DAG.getNode(ISD::SRL, DL, Op.getSimpleValueType(), {sequence, shiftbroadcast});
+      LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST");
+      LLVM_DEBUG(shift.dump());
       return shift;
     }
   }
@@ -346,40 +367,40 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Chain, SelectionDAG &DAG) const {
     int64_t blockLengthLog = log2(blockLength);
 
     if (pow(2, blockLengthLog) == blockLength) {
-      SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Chain.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
+      SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
       SDValue modulobroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 64), 256), DAG.getConstant(blockLength - 1, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
 
-      SDValue modulo = DAG.getNode(ISD::AND, DL, Chain.getSimpleValueType(), {sequence, modulobroadcast});
+      SDValue modulo = DAG.getNode(ISD::AND, DL, Op.getSimpleValueType(), {sequence, modulobroadcast});
 
+      LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST");
+      LLVM_DEBUG(modulo.dump());
       return modulo;
     }
   }
 
+  // FIXME: disable LowerBUILD_VECTOR's INSERT_VECTOR_ELT
+  // added by https://github.com/SXAuroraTSUBASAResearch/llvm/pull/2 since
+  // this cause inifinity loop on
+  // test-suite/SingleSource/UnitTests/Vector/build.c.
+#if 0
   // default to element-wise insertion
-  SDValue newVector = DAG.getNode(VEISD::VEC_BROADCAST, DL, Chain.getSimpleValueType(),
-                                  bvNode.getOperand(0));
+  SDValue newVector = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                                  BVN->getOperand(0));
 
-  for (unsigned i = 0; i < bvNode.getNumOperands(); ++i) {
-    newVector = DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Chain.getSimpleValueType(),
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    newVector = DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getSimpleValueType(),
         newVector,
-        bvNode.getOperand(i),
+        BVN->getOperand(i),
         DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64))
     );
   }
 
   return newVector;
-}
 #else
-SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
-                                            SelectionDAG &DAG) const {
-  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
-  if (BVN->isConstant()) {
-    // All values are either a constant value or undef, so optimize it...
-  }
   // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
   return SDValue();
-}
 #endif
+}
 
 SDValue
 VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
@@ -989,7 +1010,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::EXTLOAD,  VT, MVT::i1, Promote);
-    setTruncStoreAction(MVT::i64, MVT::i1, Expand);
+    setTruncStoreAction(VT, MVT::i1, Expand);
   }
 
   // Turn FP truncstore into trunc + store.
