@@ -332,6 +332,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     [(set Ty:$sx, (OpNode (OpNode Ty:$sy, Ty:$sz), (Ty simm32:$imm32)))]> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rii : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, immOp2:$imm32),
@@ -350,6 +351,7 @@ multiclass RMm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let sy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def zii : RM<
     opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$imm32),
@@ -476,7 +478,7 @@ multiclass RRmrr<string opcStr, bits<8>opc, SDNode OpNode,
   def rr : RR<opc, (outs RCo:$sx), (ins RCi:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode Tyi:$sy, Tyi:$sz))]>
-           { let cy = 1; let cz = 1; }
+           { let cy = 1; let cz = 1; let hasSideEffects = 0; }
 }
 
 multiclass RRNDmrr<string opcStr, bits<8>opc, SDNode OpNode,
@@ -495,7 +497,7 @@ multiclass RRmri<string opcStr, bits<8>opc, SDNode OpNode,
   def ri : RR<opc, (outs RCo:$sx), (ins RCi:$sz, immOp:$sy),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode Tyi:$sz, (Tyi simm7:$sy)))]>
-           { let cy = 0; let cz = 1; }
+           { let cy = 0; let cz = 1; let hasSideEffects = 0; }
 }
 
 multiclass RRmir<string opcStr, bits<8>opc, SDNode OpNode,
@@ -504,7 +506,7 @@ multiclass RRmir<string opcStr, bits<8>opc, SDNode OpNode,
   def ri : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), Tyi:$sz))]>
-           { let cy = 0; let cz = 1; }
+           { let cy = 0; let cz = 1; let hasSideEffects = 0; }
 }
 
 multiclass RRNDmir<string opcStr, bits<8>opc, SDNode OpNode,
@@ -521,7 +523,7 @@ multiclass RRmiz<string opcStr, bits<8>opc, SDNode OpNode,
   def zi : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
               !strconcat(opcStr, " $sx, $sy"),
               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), 0))]>
-           { let cy = 0; let cz = 0; let sz = 0; }
+           { let cy = 0; let cz = 0; let sz = 0; let hasSideEffects = 0; }
 }
 
 multiclass RRNDmiz<string opcStr, bits<8>opc, SDNode OpNode,
@@ -642,6 +644,7 @@ multiclass RRIm<string opcStr, bits<8>opc, SDNode OpNode,
     [(set Ty:$sx, (OpNode Ty:$sz, i32:$sy))]> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def ri : RR<
     opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
@@ -649,6 +652,7 @@ multiclass RRIm<string opcStr, bits<8>opc, SDNode OpNode,
     [(set Ty:$sx, (OpNode Ty:$sz, (i32 simm7:$sy)))]> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def rm0 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz, I32:$sy),
@@ -692,6 +696,7 @@ multiclass RRIm<string opcStr, bits<8>opc, SDNode OpNode,
     let cy = 0;
     let cz = 0;
     let sz = 0;
+    let hasSideEffects = 0;
   }
 }
 
@@ -832,6 +837,7 @@ multiclass RRI2m<string opcStr, bits<8>opc, SDNode OpNode,
     [(set Ty:$sx, (OpNode Ty:$sz))]> {
     let cy = 1;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def i : RR<
     opc, (outs RC:$sx), (ins RC:$sz),
@@ -839,6 +845,7 @@ multiclass RRI2m<string opcStr, bits<8>opc, SDNode OpNode,
     [(set Ty:$sx, (OpNode Ty:$sz))]> {
     let cy = 0;
     let cz = 1;
+    let hasSideEffects = 0;
   }
   def m0 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz),
@@ -934,6 +941,7 @@ multiclass CVTm<string opcStr, bits<8> opc, SDNode OpNode,
     !strconcat(opcStr, " $sx, $sy"),
     [(set Tyo:$sx, (OpNode Tyi:$sy))]> {
       let cy = 1;
+      let hasSideEffects = 0;
     }
   def i : RR<opc, (outs RCo:$sx), (ins immOp:$sy), 
     !strconcat(opcStr, " $sx, $sy"),
@@ -977,7 +985,7 @@ let cx = 1 in
 defm LEASL32 : RMNDm<"lea.sl", 0x06, add, I32, i32, simm7Op32, simm32Op32>;
 }
 
-let cx = 0, cy = 1, cz = 0, sz = 0 in {
+let cx = 0, cy = 1, cz = 0, sz = 0, hasSideEffects = 0 in {
   def LEAasx : RM<
       0x06, (outs I64:$sx), (ins MEMri:$addr),
       "lea $sx,$addr", [(set iPTR:$sx, ADDRri:$addr)]>;
@@ -1212,7 +1220,7 @@ let cz = 0, sz = 0 in {
 
 // Load and Store instructions
 // As 1st step, only uses sz and imm32 to represent $addr
-let mayLoad = 1 in {
+let mayLoad = 1, hasSideEffects = 0 in {
 let cy = 0, sy = 0, cz = 1 in {
 let cx = 0 in
 def LDSri : RM<
@@ -1261,7 +1269,7 @@ def LDQri : Pseudo<
     [(set f128:$sx, (load ADDRri:$addr))]>;
 }
 
-let mayStore = 1 in {
+let mayStore = 1, hasSideEffects = 0 in {
 let cx = 0, cy = 0, sy = 0, cz = 1 in {
 def STSri : RM<
     0x11, (outs), (ins MEMri:$addr, I64:$sx),
@@ -1306,7 +1314,7 @@ def BC : CF<
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1,
     isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1,
-    hasDelaySlot = 1, isCodeGenOnly = 1 in {
+    hasDelaySlot = 1, isCodeGenOnly = 1, hasSideEffects = 0 in {
 def BArr : CF<
     0x19, (outs), (ins MEMrr:$addr),
     "b.l $addr",
@@ -1320,8 +1328,7 @@ def BAri : CF<
 // Jump never instruction is also a special case of jump.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
     cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
-let hasSideEffects = 0 in
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
 def BN : CF<
     0x19, (outs), (ins brtarget32:$imm32),
     "b.af.l $imm32",
@@ -1331,7 +1338,7 @@ def BN : CF<
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1, sz = 0x10 /* SX10 */, imm32 = 0, Uses = [SX10],
     isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1,
-    isCodeGenOnly = 1 in
+    isCodeGenOnly = 1, hasSideEffects = 0 in
 def RET : CF<
     0x19, (outs), (ins),
     "b.l (,%lr)",
@@ -1448,7 +1455,7 @@ def : Pat<(i64 (atomic_cmp_swap_64 ADDRri:$src, i64:$cmp, i64:$new)),
 
 // Transfer Control Instruction
 
-let avo = 0, c2 = 0, c1 = 0, c0 = 0 in {
+let avo = 0, c2 = 0, c1 = 0, c0 = 0, hasSideEffects = 1 in {
   let lf = 0, sf = 1 in
   def FENCEstore : RRFENCE<0x20, (outs), (ins), "fencem 1", []>;
   let lf = 1, sf = 0 in
@@ -1463,11 +1470,11 @@ def : Pat<(int_ve_fencem3), (FENCEloadstore)>;
 
 // Set Vector Out-of-order memory access Boundary
 
-let sx = 0, sy = 0, sz = 0 in
+let sx = 0, sy = 0, sz = 0, hasSideEffects = 1 in
 def SVOB : RR<0x30, (outs), (ins), "svob", []>;
 
 // MEMBARRIER
-
+let hasSideEffects = 1 in
 def MEMBARRIER : Pseudo<(outs), (ins), "# MEMBARRIER",
                        [(MemBarrier)] >;
 
@@ -1505,7 +1512,7 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
 let isCodeGenOnly = 1 in {
 
 // Call instruction
-let Defs = [SX10], Uses = [SX11], hasDelaySlot = 1, isCall = 1 in {
+let Defs = [SX10], Uses = [SX11], hasDelaySlot = 1, isCall = 1, hasSideEffects = 0 in {
 let cx = 0, sx = 10, cy = 0, sy = 0, cz = 0, sz = 0 in
 def CALL : RM<
     0x08, (outs), (ins calltarget:$imm32, variable_ops),
@@ -1726,6 +1733,7 @@ let Defs = [SX15 /* %got */, SX16 /* %plt */], hasSideEffects = 0 in {
 }
 
 // GETFUNPLT for PIC
+let hasSideEffects = 0 in
 def GETFUNPLT : Pseudo<(outs I64:$dst), (ins i64imm:$addr),
                        "$dst, $addr",
                        [(set iPTR:$dst, (GetFunPLT tglobaladdr:$addr))] >;
@@ -1736,7 +1744,7 @@ def : Pat<(GetFunPLT texternalsym:$dst),
           (GETFUNPLT texternalsym:$dst)>;
 
 // GETTLSADDR for TLS
-let Defs = [SX0, SX10, SX12] in
+let Defs = [SX0, SX10, SX12], hasSideEffects = 0 in
 def GETTLSADDR : Pseudo<(outs), (ins i64imm:$addr),
                         "# GETTLSADDR $addr",
                         [(GetTLSAddr tglobaltlsaddr:$addr)] >;
@@ -1744,7 +1752,7 @@ def GETTLSADDR : Pseudo<(outs), (ins i64imm:$addr),
 def : Pat<(GetTLSAddr tglobaltlsaddr:$dst),
           (GETTLSADDR tglobaltlsaddr:$dst)>;
 
-let Defs = [SX11], Uses = [SX11] in {
+let Defs = [SX11], Uses = [SX11], hasSideEffects = 0 in {
 def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i64imm:$amt, i64imm:$amt2),
                               "# ADJCALLSTACKDOWN $amt, $amt2",
                               [(callseq_start timm:$amt, timm:$amt2)]>;
@@ -1766,7 +1774,7 @@ def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
 // These calls are needed to probe the stack when allocating more over
 // %s8 (%sl - stack limit).
 
-let Uses = [SX11] in
+let Uses = [SX11], hasSideEffects = 1 in
 def GETSTACKTOP : Pseudo<(outs I64:$dst), (ins),
                          "# GET STACK TOP",
                          [(set iPTR:$dst, (GetStackTop))]>;
