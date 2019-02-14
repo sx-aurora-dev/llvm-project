@@ -174,8 +174,17 @@ bool FindTargetCodeVisitor::processTargetRegion(
 void FindTargetCodeVisitor::addTargetRegionArgs(
     clang::CapturedStmt *S, std::shared_ptr<TargetCodeRegion> TCR) {
 
+  DEBUGP("Add target region args");
   for (const auto &i : S->captures()) {
-    TCR->addCapturedVar(i.getCapturedVar());
+    if(!(i.capturesVariableArrayType())) {
+      clang::VarDecl* var = i.getCapturedVar();
+      DEBUGP("captured Var: " + var->getNameAsString());
+      TCR->addCapturedVar(var);
+    } else {
+      // Not sure what exactly is caputred here. It looks like we have an
+      // additional capture in cases of VATs.
+      DEBUGP("Current capture is a variable-length array type (skipped)");
+    }
   }
 
   FindLoopStmtVisitor FindLoopVisitor;
@@ -185,7 +194,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
 
   // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
   for (const auto i : *FindLoopVisitor.getVarSet()) {
-
+    DEBUGP("Iterating var set");
     // i->print(llvm::outs());
     for (auto j : *TCR->getOMPClauses()) {
       for (auto CC : j->children()) {
@@ -201,6 +210,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
          j != e; ++j) {
       if (i->getCanonicalDecl() == *j) {
         // i->print(llvm::outs());
+        DEBUGPDECL(i, "Add captured var: ");
         // FindLoopVisitor.getVarSet()->erase(i);
         tmpSet.insert(i);
       }

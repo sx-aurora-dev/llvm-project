@@ -28,6 +28,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "TargetCode.h"
+#include "Debug.h"
 
 bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
                                  bool PushFront) {
@@ -100,7 +101,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
   std::list<int> nDim;
   std::list<std::string> DimString;
-
+  std::string elemType;
   std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
@@ -112,30 +113,20 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     }
     first = false;
 
-    // check for static arrays, because of AST representation and naive getType
-    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+    // check for constant or variable length arrays, because of 
+    // AST representation and naive getType
+    if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
             (*i)->getType().getTypePtr())) {
-      // possibly use t->getSize().toString(10, false) to get the size of the
-      // array
+      DEBUGP("Generating code for array type");
       int dim = 0;
-      auto VarName = (*i)->getDeclName().getAsString();
-      auto OrigT = t;
 
-      // extract Sizes from AST by casting type and push to DimString
-      do {
-        DimString.push_back(t->getSize().toString(10, false));
-        ++dim;
+      handleArrays(&t, DimString, dim, TCR, elemType);
 
-        OrigT = t;
-        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
-            t->getElementType().getTypePtr());
-      } while (t != NULL);
-
-      Out << "void *__sotoc_var_"
-          << VarName; // set type to void* to avoid warnings from the compiler
+      // set type to void* to avoid warnings from the compiler
+      Out << "void *__sotoc_var_";
       nDim.push_back(dim); // push total number of dimensions
-
     } else {
+      DEBUGP("Generating code for non-array type");
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
         if (C) {
@@ -147,9 +138,8 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
           }
         }
       }
-      Out << (*i)->getDeclName().getAsString();
-      // TODO: use `Name.print` instead
     }
+    Out << (*i)->getDeclName().getAsString();
   }
   Out << ")\n{\n";
 
@@ -157,20 +147,17 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
        I != E; ++I) {
     auto C = TCR->GetReferredOMPClause(*I);
-
-    // again check for static arrays
-    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+    // again check for constant and variable-length arrays
+    if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
             (*I)->getType().getTypePtr())) {
       auto VarName = (*I)->getDeclName().getAsString();
-      auto OrigT = t;
 
       do {
-        OrigT = t;
-        t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+        t = clang::dyn_cast_or_null<clang::ArrayType>(
             t->getElementType().getTypePtr());
       } while (t != NULL);
 
-      Out << "  " << OrigT->getElementType().getAsString() << " (*" << VarName
+      Out << "  " << elemType << " (*" << VarName
           << ")";
 
       // Get number of Dimensions(nDim) and write sizes(DimString)
@@ -288,7 +275,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
     auto C = TCR->GetReferredOMPClause(*I);
 
     // if array then already pointer
-    if (auto t = clang::dyn_cast_or_null<clang::ConstantArrayType>(
+    if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
             (*I)->getType().getTypePtr())) {
       auto VarName = (*I)->getDeclName().getAsString();
       Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
@@ -328,4 +315,49 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
       << llvm::format("_%x_", FileID) << TCR->getParentFuncName() << "_l"
       << LineNum;
   return FunctionName;
+}
+
+void TargetCode::handleArrays(const clang::ArrayType **t,
+                              std::list<std::string>& DimString,
+                              int& dim, TargetCodeRegion *TCR,
+                              std::string& elemType) {
+  auto OrigT = *t;
+
+  if(!t) {
+    return;
+  } else {
+    // We just remember the last element type
+    elemType = OrigT->getElementType().getAsString();
+    DEBUGP("The last QualType of the array is: " + elemType);
+  }
+
+  if (auto t1 = clang::dyn_cast_or_null<clang::ConstantArrayType>(OrigT)) {
+    DEBUGP("ArrayType is CAT");
+    DimString.push_back(t1->getSize().toString(10, false));
+    ++dim;
+
+
+  } else if (auto t1 = clang::dyn_cast_or_null<clang::VariableArrayType>(OrigT)) {
+    DEBUGP("ArrayType VAT");
+    std::string PrettyStr = "";
+    llvm::raw_string_ostream PrettyOS(PrettyStr);
+    clang::PrintingPolicy PP(TCR->GetLangOpts());
+    t1->getSizeExpr()->printPretty(PrettyOS, NULL, PP);
+    DimString.push_back(PrettyOS.str());
+    ++dim;
+
+  } else {
+    DEBUGP("No more array dimensions");
+    // Restore t if we dont have an array type anymore
+    *t = OrigT;
+    return;
+  }
+
+
+  (*t) = clang::dyn_cast_or_null<clang::ArrayType>(OrigT->getElementType().getTypePtr());
+  if(*t) {
+    // Recursively handle all dimensions
+    handleArrays(t, DimString, dim, TCR, elemType);
+  }
+
 }

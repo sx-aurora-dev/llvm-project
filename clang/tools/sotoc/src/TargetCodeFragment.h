@@ -88,6 +88,8 @@ public:
   virtual clang::SourceRange getSpellingRange() = 0;
   /// Accessor to TargetCodeKind
   clang::OpenMPDirectiveKind getTargetCodeKind() { return TargetCodeKind; };
+  /// Accessor to lang opts of the current context
+  const clang::LangOptions& GetLangOpts() {return Context.getLangOpts(); }
 };
 
 /// Represents one target region.
