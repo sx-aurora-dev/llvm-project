@@ -421,6 +421,16 @@ bool VEFrameLowering::isLeafProc(MachineFunction &MF) const
            || hasFP(MF));                  // need %fp
 }
 
+static void addScavengingSlotFor(RegScavenger* RS,
+                                 const TargetRegisterClass& RC,
+                                 const TargetRegisterInfo& TRI,
+                                 MachineFrameInfo& MFI) {
+  unsigned Size = TRI.getSpillSize(RC);
+  unsigned Align = TRI.getSpillAlignment(RC);
+  int FI = MFI.CreateStackObject(Size, Align, false);
+  RS->addScavengingFrameIndex(FI);
+}
+
 void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
@@ -429,13 +439,10 @@ void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
   if (MF.getRegInfo().isPhysRegUsed(VE::VL)) {
     MachineFrameInfo &MFI = MF.getFrameInfo();
     const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-    const TargetRegisterClass &RC = VE::VLSRegClass;
-    // FIXME: we may need emergency spill slot not only for VLS but also
-    // I64 base regiseter.  Add latter if we get an error.
-    unsigned Size = TRI->getSpillSize(RC);
-    unsigned Align = TRI->getSpillAlignment(RC);
-    int FI = MFI.CreateStackObject(Size, Align, false);
-    RS->addScavengingFrameIndex(FI);
+    // We need emergency slots for one VLS and one I64 register class since
+    // we use both in replaceFI function.
+    addScavengingSlotFor(RS, VE::VLSRegClass, *TRI, MFI);
+    addScavengingSlotFor(RS, VE::I64RegClass, *TRI, MFI);
   }
 
   if (!DisableLeafProc && isLeafProc(MF)) {
