@@ -16,54 +16,20 @@
 define i32 @func(i32, ...) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  st %s18, 48(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s19, 56(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s20, 64(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s21, 72(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s22, 80(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s23, 88(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s24, 96(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:  st %s25, 104(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s26, 112(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s27, 120(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s28, 128(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s29, 136(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s30, 144(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s31, 152(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s32, 160(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  st %s33, 168(,%s9)              # 8-byte Folded Spill
-; CHECK-NEXT:  lea %s34, 184(%s9)
-; CHECK-NEXT:  st %s34, -24(,%s9)
-; CHECK-NEXT:  lea %s34, 192(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ldl.sx %s1, 184(,%s9)
-; CHECK-NEXT:  lea %s34, 200(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld2b.sx %s20, 192(,%s9)
-; CHECK-NEXT:  lea %s34, 208(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld1b.sx %s21, 200(,%s9)
-; CHECK-NEXT:  lea %s34, 216(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ldl.sx %s22, 208(,%s9)
-; CHECK-NEXT:  lea %s34, 224(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld2b.zx %s23, 216(,%s9)
-; CHECK-NEXT:  lea %s34, 232(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld1b.zx %s24, 224(,%s9)
-; CHECK-NEXT:  lea %s34, 240(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ldu %s18, 232(,%s9)
-; CHECK-NEXT:  lea %s34, 248(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld %s26, 240(,%s9)
-; CHECK-NEXT:  lea %s34, 256(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld %s27, 248(,%s9)
-; CHECK-NEXT:  lea %s34, 264(%s9)
-; CHECK-NEXT:  st %s34, -16(,%s9)
-; CHECK-NEXT:  ld %s28, 256(,%s9)
+; CHECK:       ldl.sx %s1, 184(,%s9)
+; CHECK:       ld2b.sx %s20, 192(,%s9)
+; CHECK:       ld1b.sx %s21, 200(,%s9)
+; CHECK:       ldl.sx %s22, 208(,%s9)
+; CHECK:       ld2b.zx %s23, 216(,%s9)
+; CHECK:       ld1b.zx %s24, 224(,%s9)
+; CHECK:       ldu %s18, 232(,%s9)
+; CHECK:       ld %s26, 240(,%s9)
+; CHECK:       ld %s27, 248(,%s9)
+; CHECK:       ld %s28, 256(,%s9)
+; CHECK:       ld %s29, 264(,%s9)
+; CHECK:       ld %s32, 272(,%s9)
+; CHECK:       ld %s30, 280(,%s9)
+; CHECK:       ld %s31, 288(,%s9)
 
   %2 = alloca i8*, align 8
   %3 = alloca i8*, align 8
