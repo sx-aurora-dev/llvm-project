@@ -55,11 +55,14 @@ VEInstrInfo::VEInstrInfo(VESubtarget &ST)
 /// any side effects other than loading from the stack slot.
 unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                              int &FrameIndex) const {
-  if (MI.getOpcode() == VE::LDSri || MI.getOpcode() == VE::LDUri ||
-      MI.getOpcode() == VE::LDLri || MI.getOpcode() == VE::LDLUri ||
-      MI.getOpcode() == VE::LD2Bri || MI.getOpcode() == VE::LD2BUri ||
-      MI.getOpcode() == VE::LD1Bri || MI.getOpcode() == VE::LD1BUri ||
-      MI.getOpcode() == VE::LDQri) {
+  if (MI.getOpcode() == VE::LDSri ||            // I64
+      MI.getOpcode() == VE::LDLri ||            // I32
+      MI.getOpcode() == VE::LDUri ||            // F32
+      MI.getOpcode() == VE::LDQri ||            // F128 (pseudo)
+      MI.getOpcode() == VE::LDVRri ||           // V64 (pseudo)
+      MI.getOpcode() == VE::LDVMri ||           // VM (pseudo)
+      MI.getOpcode() == VE::LDVM512ri ||        // VM512 (pseudo)
+      MI.getOpcode() == VE::LDVLri) {           // VL (pseudo)
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -75,10 +78,15 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 /// not, return 0.  This predicate must return 0 if the instruction has
 /// any side effects other than storing to the stack slot.
 unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
-                                            int &FrameIndex) const {
-  if (MI.getOpcode() == VE::STSri  || MI.getOpcode() == VE::STUri ||
-      MI.getOpcode() == VE::STLri  || MI.getOpcode() == VE::ST2Bri ||
-      MI.getOpcode() == VE::ST1Bri || MI.getOpcode() == VE::STQri) {
+                                         int &FrameIndex) const {
+  if (MI.getOpcode() == VE::STSri ||            // I64
+      MI.getOpcode() == VE::STLri ||            // I32
+      MI.getOpcode() == VE::STUri ||            // F32
+      MI.getOpcode() == VE::STQri ||            // F128 (pseudo)
+      MI.getOpcode() == VE::STVRri ||           // V64 (pseudo)
+      MI.getOpcode() == VE::STVMri ||           // VM (pseudo)
+      MI.getOpcode() == VE::STVM512ri ||        // VM512 (pseudo)
+      MI.getOpcode() == VE::STVLri) {           // VL (pseudo)
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();

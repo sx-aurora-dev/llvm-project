@@ -21,6 +21,11 @@
 
 namespace llvm {
 struct VERegisterInfo : public VEGenRegisterInfo {
+private:
+  // VLS register class's Pressure Set ID.
+  unsigned VLSPSetID;
+
+public:
   VERegisterInfo();
 
   /// Code Generation virtual methods...
@@ -45,6 +50,8 @@ struct VERegisterInfo : public VEGenRegisterInfo {
 
   bool canRealignStack(const MachineFunction &MF) const override;
 
+  unsigned getRegPressureSetLimit(const MachineFunction &MF,
+                                  unsigned Idx) const override;
 };
 
 } // end namespace llvm
