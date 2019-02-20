@@ -27,16 +27,17 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "TargetCode.h"
 #include "Debug.h"
+#include "TargetCode.h"
 
 bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
                                  bool PushFront) {
   for (auto &F : CodeFragments) {
     // Reject Fragments which are inside Fragments which we already have
-    if (SM.isPointWithin(Frag->getRealRange().getBegin(),
-                         F->getRealRange().getBegin(),
-                         F->getRealRange().getEnd()) ||
+    if ((SM.isPointWithin(Frag->getRealRange().getBegin(),
+                          F->getRealRange().getBegin(),
+                          F->getRealRange().getEnd()) &&
+         Frag->getRealRange().getBegin() != F->getRealRange().getBegin()) ||
         SM.isPointWithin(Frag->getRealRange().getEnd(),
                          F->getRealRange().getBegin(),
                          F->getRealRange().getEnd())) {
@@ -113,7 +114,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     }
     first = false;
 
-    // check for constant or variable length arrays, because of 
+    // check for constant or variable length arrays, because of
     // AST representation and naive getType
     if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
             (*i)->getType().getTypePtr())) {
@@ -157,8 +158,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
             t->getElementType().getTypePtr());
       } while (t != NULL);
 
-      Out << "  " << elemType << " (*" << VarName
-          << ")";
+      Out << "  " << elemType << " (*" << VarName << ")";
 
       // Get number of Dimensions(nDim) and write sizes(DimString)
       for (int i = 1; i < nDim.front(); i++) {
@@ -210,8 +210,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
-        << "\n  ";
+    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_simd: {
@@ -228,8 +227,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   }
   case clang::OpenMPDirectiveKind::
       OMPD_target_teams_distribute_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
-        << "\n  ";
+    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
@@ -252,17 +250,17 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
        // ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel ||
       // TCR->TargetCodeKind ==
-          // clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
+      // clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
       // TCR->TargetCodeKind ==
-          // clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
+      // clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
       TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
       // TCR->TargetCodeKind ==
       // clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
       // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::
-                                 // OMPD_target_teams_distribute_parallel_for ||
+      // OMPD_target_teams_distribute_parallel_for ||
       // TCR->TargetCodeKind ==
-          // clang::OpenMPDirectiveKind::
-              // OMPD_target_teams_distribute_parallel_for_simd ||
+      // clang::OpenMPDirectiveKind::
+      // OMPD_target_teams_distribute_parallel_for_simd ||
       TCR->TargetCodeKind ==
           clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
     Out << "\n  }";
@@ -318,12 +316,11 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
 }
 
 void TargetCode::handleArrays(const clang::ArrayType **t,
-                              std::list<std::string>& DimString,
-                              int& dim, TargetCodeRegion *TCR,
-                              std::string& elemType) {
+                              std::list<std::string> &DimString, int &dim,
+                              TargetCodeRegion *TCR, std::string &elemType) {
   auto OrigT = *t;
 
-  if(!t) {
+  if (!t) {
     return;
   } else {
     // We just remember the last element type
@@ -336,8 +333,8 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
     DimString.push_back(t1->getSize().toString(10, false));
     ++dim;
 
-
-  } else if (auto t1 = clang::dyn_cast_or_null<clang::VariableArrayType>(OrigT)) {
+  } else if (auto t1 =
+                 clang::dyn_cast_or_null<clang::VariableArrayType>(OrigT)) {
     DEBUGP("ArrayType VAT");
     std::string PrettyStr = "";
     llvm::raw_string_ostream PrettyOS(PrettyStr);
@@ -353,11 +350,10 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
     return;
   }
 
-
-  (*t) = clang::dyn_cast_or_null<clang::ArrayType>(OrigT->getElementType().getTypePtr());
-  if(*t) {
+  (*t) = clang::dyn_cast_or_null<clang::ArrayType>(
+      OrigT->getElementType().getTypePtr());
+  if (*t) {
     // Recursively handle all dimensions
     handleArrays(t, DimString, dim, TCR, elemType);
   }
-
 }
