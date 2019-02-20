@@ -15,37 +15,6 @@
 
 namespace clang {
 namespace driver {
-namespace tools {
-
-namespace VE {
-// For VE, we do not need to instantiate tools for PreProcess, PreCompile and
-// Compile.
-// We simply use "clang -cc1" for those actions.
-class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
-public:
-  Assembler(const ToolChain &TC) : Tool("VE::Assembler", "nas", TC) {}
-
-  bool hasIntegratedCPP() const override { return false; }
-  void ConstructJob(Compilation &C, const JobAction &JA,
-                    const InputInfo &Output, const InputInfoList &Inputs,
-                    const llvm::opt::ArgList &TCArgs,
-                    const char *LinkingOutput) const override;
-};
-
-class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
-public:
-  Linker(const ToolChain &TC) : Tool("VE::Linker", "nld", TC) {}
-
-  bool hasIntegratedCPP() const override { return false; }
-  bool isLinkJob() const override { return true; }
-  void ConstructJob(Compilation &C, const JobAction &JA,
-                    const InputInfo &Output, const InputInfoList &Inputs,
-                    const llvm::opt::ArgList &TCArgs,
-                    const char *LinkingOutput) const override;
-};
-} // end namespace VE.
-} // end namespace tools
-
 namespace toolchains {
 
 class LLVM_LIBRARY_VISIBILITY VEToolChain : public Linux {
