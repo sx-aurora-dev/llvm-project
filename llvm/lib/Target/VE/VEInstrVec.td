@@ -1095,6 +1095,7 @@ multiclass VCVT<bits<8>opc, string opcStr> {
   def v : RV2<opc, (outs V64:$vx), (ins V64:$vy, VLS:$vl), 
               !strconcat(opcStr, " $vx,$vy"), []> {
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
@@ -1106,6 +1107,7 @@ multiclass VFIXCm<bits<8>opc, string opcStr, RegisterClass MaskRC> {
     let vz{7-4} = 0;
     let vz{3-0} = rvz;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RV3<opc, (outs V64:$vx), (ins V64:$vy, MaskRC:$vm, V64:$vd, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,$vm"), []> {
@@ -1116,6 +1118,7 @@ multiclass VFIXCm<bits<8>opc, string opcStr, RegisterClass MaskRC> {
     let vz{3-0} = rvz;
     let Constraints = "$vx = $vd";
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
@@ -1148,6 +1151,7 @@ def VMRGvm : RV<0xD6, (outs V64:$vx),
   bits<4> vm;
   let m = vm;
   let DisableEncoding = "$vl";
+  let hasSideEffects = 0;
 }
 let cx = 1, cs = 0 in
 def VMRGpvm : RV<0xD6, (outs V64:$vx),
@@ -1156,6 +1160,7 @@ def VMRGpvm : RV<0xD6, (outs V64:$vx),
   bits<4> vm;
   let m = vm;
   let DisableEncoding = "$vl";
+  let hasSideEffects = 0;
 }
 
 let cy = 0 in
@@ -1163,12 +1168,14 @@ def VSHFi : RV3<0xBC, (outs V64:$vx),
                 (ins V64:$vy, V64:$vz, uimm6Op64:$sy, VLS:$vl),
                 "vshf $vx,$vy,$vz,$sy", []> {
   let DisableEncoding = "$vl";
+  let hasSideEffects = 0;
 }
 let cy = 1 in
 def VSHFr : RV3<0xBC, (outs V64:$vx),
                 (ins V64:$vy, V64:$vz, I64:$sy, VLS:$vl),
                 "vshf $vx,$vy,$vz,$sy", []> {
   let DisableEncoding = "$vl";
+  let hasSideEffects = 0;
 }
 
 class VCPEX<bits<8> opc, string opcStr> 
@@ -1180,8 +1187,10 @@ class VCPEX<bits<8> opc, string opcStr>
   let DisableEncoding = "$vl";
 }
 
+let hasSideEffects = 0 in {
 def VCPvm : VCPEX<0x8D, "vcp">;
 def VEXvm : VCPEX<0x9D, "vex">;
+}
 
 multiclass VFMKm<string opcStr, bits<8> opc> {
   def v : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz, VLS:$vl),
@@ -1191,6 +1200,7 @@ multiclass VFMKm<string opcStr, bits<8> opc> {
     let Inst{39-36} = vmx;
     let Inst{47-44} = cf;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 
   def vm : RV<opc, (outs VM:$vmx), (ins CCOp:$cf, V64:$vz, VM:$vm, VLS:$vl),
@@ -1202,6 +1212,7 @@ multiclass VFMKm<string opcStr, bits<8> opc> {
     let Inst{39-36} = vmx;
     let Inst{47-44} = cf;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
@@ -1213,7 +1224,7 @@ let cx = 1, cx2 = 0 in defm VFMFs : VFMKm<"vfmk.s", 0xB6>;
 let cx = 0, cx2 = 1 in defm VFMFl : VFMKm<"pvfmk.s.lo", 0xB6>;
 
 // at and af 64b
-let DisableEncoding = "$vl" in {
+let DisableEncoding = "$vl", hasSideEffects = 0 in {
   let sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
   def VFMKat : RV<0xB4, (outs VM:$vm), (ins VLS:$vl), "vfmk.l.at $vm", []>;
   let sy = 0, vy = 0x0, vz = 0, vw = 0, m = 0 in
@@ -1221,7 +1232,7 @@ let DisableEncoding = "$vl" in {
 }
 
 // at and af for 32b lower and upper
-let DisableEncoding = "$vl" in {
+let DisableEncoding = "$vl", hasSideEffects = 0 in {
   let cx = 0, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
   def VFMSuat : RV<0xB5, (outs VM:$vm), (ins VLS:$vl), "pvfmk.w.up.at $vm", []>;
   let cx = 1, sy = 0, vy = 0xf, vz = 0, vw = 0, m = 0 in
@@ -1233,7 +1244,7 @@ let DisableEncoding = "$vl" in {
 }
 
 // Pseudo for VM512
-let DisableEncoding = "$vl" in {
+let DisableEncoding = "$vl", hasSideEffects = 0 in {
   def VFMSpv : PseudoVec<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VLS:$vl), 
                          "# pvfmk.w.${cf} $vmx,$vz", []>;
   def VFMSpvm : PseudoVec<(outs VM512:$vmx),
@@ -1255,6 +1266,7 @@ multiclass RVRECm<string opcStr, bits<8> opc> {
     let sy = 0;
     let m = 0;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RV2<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,$vm"), []> {
@@ -1262,6 +1274,7 @@ multiclass RVRECm<string opcStr, bits<8> opc> {
     let sy = 0;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 let cx2 = 0 in defm VSUMSsx : RVRECm<"vsum.w.sx", 0xEA>;
