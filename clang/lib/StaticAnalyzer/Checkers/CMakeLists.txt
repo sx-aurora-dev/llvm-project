@@ -22,7 +22,6 @@ add_clang_library(clangStaticAnalyzerCheckers
   CheckSizeofPointer.cpp
   CheckerDocumentation.cpp
   ChrootChecker.cpp
-  ClangCheckers.cpp
   CloneChecker.cpp
   ConversionChecker.cpp
   CXXSelfAssignmentChecker.cpp
@@ -72,6 +71,7 @@ add_clang_library(clangStaticAnalyzerCheckers
   ObjCSelfInitChecker.cpp
   ObjCSuperDeallocChecker.cpp
   ObjCUnusedIVarsChecker.cpp
+  OSObjectCStyleCast.cpp
   PaddingChecker.cpp
   PointerArithChecker.cpp
   PointerSubChecker.cpp

@@ -1,9 +1,8 @@
 //===-- sanitizer_platform_limits_freebsd.h -------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -48,6 +47,7 @@ namespace __sanitizer {
   extern unsigned timeval_sz;
   extern unsigned uid_t_sz;
   extern unsigned gid_t_sz;
+  extern unsigned fpos_t_sz;
   extern unsigned mbstate_t_sz;
   extern unsigned struct_timezone_sz;
   extern unsigned struct_tms_sz;
@@ -61,6 +61,12 @@ namespace __sanitizer {
   extern unsigned struct_rlimit_sz;
   extern unsigned struct_utimbuf_sz;
   extern unsigned struct_timespec_sz;
+  extern unsigned struct_regmatch_sz;
+  extern unsigned struct_regex_sz;
+  extern unsigned struct_FTS_sz;
+  extern unsigned struct_FTSENT_sz;
+  extern const int unvis_valid;
+  extern const int unvis_validpush;
 
   struct __sanitizer_iocb {
     u64   aio_data;
@@ -621,6 +627,9 @@ namespace __sanitizer {
 
   typedef struct __sanitizer_cap_rights __sanitizer_cap_rights_t;
   extern unsigned struct_cap_rights_sz;
+
+  extern unsigned struct_fstab_sz;
+  extern unsigned struct_StringList_sz;
 } // namespace __sanitizer
 
 #define CHECK_TYPE_SIZE(TYPE) \
