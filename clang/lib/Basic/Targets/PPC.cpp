@@ -1,9 +1,8 @@
 //===--- PPC.cpp - Implement PPC target feature support -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -83,8 +82,8 @@ void PPCTargetInfo::getTargetDefines(const LangOptions &Opts,
   if (getTriple().getArch() == llvm::Triple::ppc64le) {
     Builder.defineMacro("_LITTLE_ENDIAN");
   } else {
-    if (getTriple().getOS() != llvm::Triple::NetBSD &&
-        getTriple().getOS() != llvm::Triple::OpenBSD)
+    if (!getTriple().isOSNetBSD() &&
+        !getTriple().isOSOpenBSD())
       Builder.defineMacro("_BIG_ENDIAN");
   }
 

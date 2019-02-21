@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,7 +14,7 @@
 #define __OMPT_INTERNAL_H__
 
 #include "ompt-event-specific.h"
-#include "ompt.h"
+#include "omp-tools.h"
 
 #define OMPT_VERSION 1
 
@@ -54,13 +53,13 @@ typedef struct ompt_callbacks_active_s {
       (info->td_flags.merged_if0 ? ompt_task_mergeable : 0x0)
 
 typedef struct {
-  omp_frame_t frame;
+  ompt_frame_t frame;
   ompt_data_t task_data;
   struct kmp_taskdata *scheduling_parent;
   int thread_num;
 #if OMP_40_ENABLED
   int ndeps;
-  ompt_task_dependence_t *deps;
+  ompt_dependence_t *deps;
 #endif /* OMP_40_ENABLED */
 } ompt_task_info_t;
 
@@ -81,8 +80,8 @@ typedef struct {
   ompt_data_t task_data; /* stored here from implicit barrier-begin until
                             implicit-task-end */
   void *return_address; /* stored here on entry of runtime */
-  omp_state_t state;
-  omp_wait_id_t wait_id;
+  ompt_state_t state;
+  ompt_wait_id_t wait_id;
   int ompt_task_yielded;
   void *idle_frame;
 } ompt_thread_info_t;

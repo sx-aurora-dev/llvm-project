@@ -1,9 +1,8 @@
 //===-- X86InstrInfo.h - X86 Instruction Information ------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -453,7 +452,10 @@ public:
   /// conservative. If it cannot definitely determine the safety after visiting
   /// a few instructions in each direction it assumes it's not safe.
   bool isSafeToClobberEFLAGS(MachineBasicBlock &MBB,
-                             MachineBasicBlock::iterator I) const;
+                             MachineBasicBlock::iterator I) const {
+    return MBB.computeRegisterLiveness(&RI, X86::EFLAGS, I, 4) ==
+           MachineBasicBlock::LQR_Dead;
+  }
 
   /// True if MI has a condition code def, e.g. EFLAGS, that is
   /// not marked dead.
@@ -584,9 +586,9 @@ protected:
                        const MachineOperand *&Destination) const override;
 
 private:
-  /// This is a helper for convertToThreeAddress for 16-bit instructions.
+  /// This is a helper for convertToThreeAddress for 8 and 16-bit instructions.
   /// We use 32-bit LEA to form 3-address code by promoting to a 32-bit
-  /// super-register and then truncating back down to a 16-bit sub-register.
+  /// super-register and then truncating back down to a 8/16-bit sub-register.
   MachineInstr *convertToThreeAddressWithLEA(unsigned MIOpc,
                                              MachineFunction::iterator &MFI,
                                              MachineInstr &MI,

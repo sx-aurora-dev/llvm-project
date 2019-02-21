@@ -1,9 +1,8 @@
 //===- Symbols.cpp --------------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -117,7 +116,7 @@ bool Symbol::isExported() const {
   if (Config->ExportDynamic && !isHidden())
     return true;
 
-  return false;
+  return Flags & WASM_SYMBOL_EXPORTED;
 }
 
 uint32_t FunctionSymbol::getFunctionIndex() const {
@@ -293,4 +292,17 @@ std::string lld::toString(wasm::Symbol::Kind Kind) {
     return "SectionKind";
   }
   llvm_unreachable("invalid symbol kind");
+}
+
+// Print out a log message for --trace-symbol.
+void lld::wasm::printTraceSymbol(Symbol *Sym) {
+  std::string S;
+  if (Sym->isUndefined())
+    S = ": reference to ";
+  else if (Sym->isLazy())
+    S = ": lazy definition of ";
+  else
+    S = ": definition of ";
+
+  message(toString(Sym->getFile()) + S + Sym->getName());
 }

@@ -1,9 +1,8 @@
 //===--- CC1Options.td - Options for clang -cc1 ---------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,6 +26,8 @@ def triple : Separate<["-"], "triple">,
   HelpText<"Specify target triple (e.g. i686-apple-darwin9)">;
 def target_abi : Separate<["-"], "target-abi">,
   HelpText<"Target a particular ABI type">;
+def target_sdk_version_EQ : Joined<["-"], "target-sdk-version=">,
+  HelpText<"The version of target SDK used for compilation">;
 
 }
 
@@ -106,7 +107,7 @@ def analyzer_checker : Separate<["-"], "analyzer-checker">,
   ValuesCode<[{
     const char *Values =
     #define GET_CHECKERS
-    #define CHECKER(FULLNAME, CLASS, HT)  FULLNAME ","
+    #define CHECKER(FULLNAME, CLASS, HT, DOC_URI)  FULLNAME ","
     #include "clang/StaticAnalyzer/Checkers/Checkers.inc"
     #undef GET_CHECKERS
     #define GET_PACKAGES
@@ -161,12 +162,16 @@ let Flags = [CC1Option, CC1AsOption, NoDriverOption] in {
 def debug_info_kind_EQ : Joined<["-"], "debug-info-kind=">;
 def debug_info_macro : Flag<["-"], "debug-info-macro">,
   HelpText<"Emit macro debug information">;
+def default_function_attr : Separate<["-"], "default-function-attr">,
+  HelpText<"Apply given attribute to all functions">;
 def dwarf_version_EQ : Joined<["-"], "dwarf-version=">;
 def debugger_tuning_EQ : Joined<["-"], "debugger-tuning=">;
 def fdebug_compilation_dir : Separate<["-"], "fdebug-compilation-dir">,
   HelpText<"The compilation directory to embed in the debug info.">;
 def dwarf_debug_flags : Separate<["-"], "dwarf-debug-flags">,
   HelpText<"The string to embed in the Dwarf debug flags record.">;
+def record_command_line : Separate<["-"], "record-command-line">,
+  HelpText<"The string to embed in the .LLVM.command.line section.">;
 def compress_debug_sections : Flag<["-", "--"], "compress-debug-sections">,
     HelpText<"DWARF debug sections compression">;
 def compress_debug_sections_EQ : Joined<["-"], "compress-debug-sections=">,
@@ -697,6 +702,8 @@ def fvisibility : Separate<["-"], "fvisibility">,
   HelpText<"Default type and symbol visibility">;
 def ftype_visibility : Separate<["-"], "ftype-visibility">,
   HelpText<"Default type visibility">;
+def fapply_global_visibility_to_externs : Flag<["-"], "fapply-global-visibility-to-externs">,
+  HelpText<"Apply global symbol visibility to external declarations without an explicit visibility">;
 def ftemplate_depth : Separate<["-"], "ftemplate-depth">,
   HelpText<"Maximum depth of recursive template instantiation">;
 def foperator_arrow_depth : Separate<["-"], "foperator-arrow-depth">,
