@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -364,7 +363,7 @@ static inline void __kmp_acquire_atomic_lock(kmp_atomic_lock_t *lck,
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.ompt_callback_mutex_acquire) {
     ompt_callbacks.ompt_callback(ompt_callback_mutex_acquire)(
-        ompt_mutex_atomic, 0, kmp_mutex_impl_queuing, (omp_wait_id_t)lck,
+        ompt_mutex_atomic, 0, kmp_mutex_impl_queuing, (ompt_wait_id_t)lck,
         OMPT_GET_RETURN_ADDRESS(0));
   }
 #endif
@@ -374,7 +373,7 @@ static inline void __kmp_acquire_atomic_lock(kmp_atomic_lock_t *lck,
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.ompt_callback_mutex_acquired) {
     ompt_callbacks.ompt_callback(ompt_callback_mutex_acquired)(
-        ompt_mutex_atomic, (omp_wait_id_t)lck, OMPT_GET_RETURN_ADDRESS(0));
+        ompt_mutex_atomic, (ompt_wait_id_t)lck, OMPT_GET_RETURN_ADDRESS(0));
   }
 #endif
 }
@@ -390,7 +389,7 @@ static inline void __kmp_release_atomic_lock(kmp_atomic_lock_t *lck,
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.ompt_callback_mutex_released) {
     ompt_callbacks.ompt_callback(ompt_callback_mutex_released)(
-        ompt_mutex_atomic, (omp_wait_id_t)lck, OMPT_GET_RETURN_ADDRESS(0));
+        ompt_mutex_atomic, (ompt_wait_id_t)lck, OMPT_GET_RETURN_ADDRESS(0));
   }
 #endif
 }

@@ -1,9 +1,8 @@
 //===--------- supporti.h - NVPTX OpenMP support functions ------- CUDA -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -130,11 +129,11 @@ INLINE int GetNumberOfWorkersInTeam() { return GetMasterThreadID(); }
 // or a serial region by the master.  If the master (whose CUDA thread
 // id is GetMasterThreadID()) calls this routine, we return 0 because
 // it is a shadow for the first worker.
-INLINE int GetLogicalThreadIdInBlock() {
+INLINE int GetLogicalThreadIdInBlock(bool isSPMDExecutionMode) {
   // Implemented using control flow (predication) instead of with a modulo
   // operation.
   int tid = GetThreadIdInBlock();
-  if (isGenericMode() && tid >= GetMasterThreadID())
+  if (!isSPMDExecutionMode && tid >= GetMasterThreadID())
     return 0;
   else
     return tid;
@@ -155,8 +154,7 @@ INLINE int GetOmpThreadId(int threadId, bool isSPMDExecutionMode,
     ASSERT0(LT_FUSSY, isSPMDExecutionMode,
             "Uninitialized runtime with non-SPMD mode.");
     // For level 2 parallelism all parallel regions are executed sequentially.
-    if (omptarget_nvptx_simpleThreadPrivateContext
-            ->InL2OrHigherParallelRegion())
+    if (parallelLevel > 0)
       rc = 0;
     else
       rc = GetThreadIdInBlock();
@@ -177,8 +175,7 @@ INLINE int GetNumberOfOmpThreads(int threadId, bool isSPMDExecutionMode,
     ASSERT0(LT_FUSSY, isSPMDExecutionMode,
             "Uninitialized runtime with non-SPMD mode.");
     // For level 2 parallelism all parallel regions are executed sequentially.
-    if (omptarget_nvptx_simpleThreadPrivateContext
-            ->InL2OrHigherParallelRegion())
+    if (parallelLevel > 0)
       rc = 1;
     else
       rc = GetNumberOfThreadsInBlock();
@@ -214,13 +211,15 @@ INLINE int IsTeamMaster(int ompThreadId) { return (ompThreadId == 0); }
 // get OpenMP number of procs
 
 // Get the number of processors in the device.
-INLINE int GetNumberOfProcsInDevice() {
-  if (isGenericMode())
+INLINE int GetNumberOfProcsInDevice(bool isSPMDExecutionMode) {
+  if (!isSPMDExecutionMode)
     return GetNumberOfWorkersInTeam();
   return GetNumberOfThreadsInBlock();
 }
 
-INLINE int GetNumberOfProcsInTeam() { return GetNumberOfProcsInDevice(); }
+INLINE int GetNumberOfProcsInTeam(bool isSPMDExecutionMode) {
+  return GetNumberOfProcsInDevice(isSPMDExecutionMode);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Memory
@@ -231,19 +230,20 @@ INLINE unsigned long PadBytes(unsigned long size,
 {
   // compute the necessary padding to satisfy alignment constraint
   ASSERT(LT_FUSSY, (alignment & (alignment - 1)) == 0,
-         "alignment %ld is not a power of 2\n", alignment);
+         "alignment %lu is not a power of 2\n", alignment);
   return (~(unsigned long)size + 1) & (alignment - 1);
 }
 
 INLINE void *SafeMalloc(size_t size, const char *msg) // check if success
 {
   void *ptr = malloc(size);
-  PRINT(LD_MEM, "malloc data of size %zu for %s: 0x%llx\n", size, msg, P64(ptr));
+  PRINT(LD_MEM, "malloc data of size %llu for %s: 0x%llx\n",
+        (unsigned long long)size, msg, (unsigned long long)ptr);
   return ptr;
 }
 
 INLINE void *SafeFree(void *ptr, const char *msg) {
-  PRINT(LD_MEM, "free data ptr 0x%llx for %s\n", P64(ptr), msg);
+  PRINT(LD_MEM, "free data ptr 0x%llx for %s\n", (unsigned long long)ptr, msg);
   free(ptr);
   return NULL;
 }

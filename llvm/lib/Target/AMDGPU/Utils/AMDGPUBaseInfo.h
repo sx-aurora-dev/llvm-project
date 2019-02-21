@@ -1,9 +1,8 @@
 //===- AMDGPUBaseInfo.h - Top level definitions for AMDGPU ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -220,6 +219,24 @@ int getMIMGOpcode(unsigned BaseOpcode, unsigned MIMGEncoding,
 
 LLVM_READONLY
 int getMaskedMIMGOp(unsigned Opc, unsigned NewChannels);
+
+LLVM_READONLY
+int getMUBUFBaseOpcode(unsigned Opc);
+
+LLVM_READONLY
+int getMUBUFOpcode(unsigned BaseOpc, unsigned Dwords);
+
+LLVM_READONLY
+int getMUBUFDwords(unsigned Opc);
+
+LLVM_READONLY
+bool getMUBUFHasVAddr(unsigned Opc);
+
+LLVM_READONLY
+bool getMUBUFHasSrsrc(unsigned Opc);
+
+LLVM_READONLY
+bool getMUBUFHasSoffset(unsigned Opc);
 
 LLVM_READONLY
 int getMCOpcode(uint16_t Opcode, unsigned Gen);
@@ -472,11 +489,8 @@ int64_t getSMRDEncodedOffset(const MCSubtargetInfo &ST, int64_t ByteOffset);
 /// not the encoded offset.
 bool isLegalSMRDImmOffset(const MCSubtargetInfo &ST, int64_t ByteOffset);
 
-// Given Imm, split it into the values to put into the SOffset and ImmOffset
-// fields in an MUBUF instruction. Return false if it is not possible (due to a
-// hardware bug needing a workaround).
 bool splitMUBUFOffset(uint32_t Imm, uint32_t &SOffset, uint32_t &ImmOffset,
-                      const GCNSubtarget *Subtarget);
+                      const GCNSubtarget *Subtarget, uint32_t Align = 4);
 
 /// \returns true if the intrinsic is divergent
 bool isIntrinsicSourceOfDivergence(unsigned IntrID);

@@ -1,28 +1,20 @@
 //===-- Driver.cpp ----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "Driver.h"
 
-#include "lldb/API/SBBreakpoint.h"
 #include "lldb/API/SBCommandInterpreter.h"
 #include "lldb/API/SBCommandReturnObject.h"
-#include "lldb/API/SBCommunication.h"
 #include "lldb/API/SBDebugger.h"
-#include "lldb/API/SBEvent.h"
 #include "lldb/API/SBHostOS.h"
 #include "lldb/API/SBLanguageRuntime.h"
-#include "lldb/API/SBListener.h"
-#include "lldb/API/SBProcess.h"
 #include "lldb/API/SBStream.h"
 #include "lldb/API/SBStringList.h"
-#include "lldb/API/SBTarget.h"
-#include "lldb/API/SBThread.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ConvertUTF.h"
@@ -76,7 +68,7 @@ enum ID {
 #include "Options.inc"
 #undef PREFIX
 
-static const opt::OptTable::Info InfoTable[] = {
+const opt::OptTable::Info InfoTable[] = {
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELPTEXT, METAVAR, VALUES)                                      \
   {                                                                            \
@@ -98,7 +90,7 @@ static void reset_stdin_termios();
 static bool g_old_stdin_termios_is_valid = false;
 static struct termios g_old_stdin_termios;
 
-static Driver *g_driver = NULL;
+static Driver *g_driver = nullptr;
 
 // In the Driver::MainLoop, we change the terminal settings.  This function is
 // added as an atexit handler to make sure we clean them up.
@@ -110,63 +102,31 @@ static void reset_stdin_termios() {
 }
 
 Driver::Driver()
-    : SBBroadcaster("Driver"), m_debugger(SBDebugger::Create(false)),
-      m_option_data() {
+    : SBBroadcaster("Driver"), m_debugger(SBDebugger::Create(false)) {
   // We want to be able to handle CTRL+D in the terminal to have it terminate
   // certain input
   m_debugger.SetCloseInputOnEOF(false);
   g_driver = this;
 }
 
-Driver::~Driver() { g_driver = NULL; }
+Driver::~Driver() { g_driver = nullptr; }
 
-Driver::OptionData::OptionData()
-    : m_args(), m_script_lang(lldb::eScriptLanguageDefault), m_core_file(),
-      m_crash_log(), m_initial_commands(), m_after_file_commands(),
-      m_after_crash_commands(), m_debug_mode(false), m_source_quietly(false),
-      m_print_version(false), m_print_python_path(false), m_wait_for(false),
-      m_repl(false), m_repl_lang(eLanguageTypeUnknown), m_repl_options(),
-      m_process_name(), m_process_pid(LLDB_INVALID_PROCESS_ID),
-      m_use_external_editor(false), m_batch(false), m_seen_options() {}
-
-Driver::OptionData::~OptionData() {}
-
-void Driver::OptionData::Clear() {
-  m_args.clear();
-  m_script_lang = lldb::eScriptLanguageDefault;
-  m_initial_commands.clear();
-  m_after_file_commands.clear();
-
-  // If there is a local .lldbinit, add that to the
-  // list of things to be sourced, if the settings
-  // permit it.
+void Driver::OptionData::AddLocalLLDBInit() {
+  // If there is a local .lldbinit, add that to the list of things to be
+  // sourced, if the settings permit it.
   SBFileSpec local_lldbinit(".lldbinit", true);
-
   SBFileSpec homedir_dot_lldb = SBHostOS::GetUserHomeDirectory();
   homedir_dot_lldb.AppendPathComponent(".lldbinit");
 
-  // Only read .lldbinit in the current working directory
-  // if it's not the same as the .lldbinit in the home
-  // directory (which is already being read in).
+  // Only read .lldbinit in the current working directory if it's not the same
+  // as the .lldbinit in the home directory (which is already being read in).
   if (local_lldbinit.Exists() && strcmp(local_lldbinit.GetDirectory(),
                                         homedir_dot_lldb.GetDirectory()) != 0) {
-    char path[2048];
-    local_lldbinit.GetPath(path, 2047);
+    char path[PATH_MAX];
+    local_lldbinit.GetPath(path, sizeof(path));
     InitialCmdEntry entry(path, true, true, true);
     m_after_file_commands.push_back(entry);
   }
-
-  m_debug_mode = false;
-  m_source_quietly = false;
-  m_print_version = false;
-  m_print_python_path = false;
-  m_use_external_editor = false;
-  m_wait_for = false;
-  m_process_name.erase();
-  m_batch = false;
-  m_after_crash_commands.clear();
-
-  m_process_pid = LLDB_INVALID_PROCESS_ID;
 }
 
 void Driver::OptionData::AddInitialCommand(std::string command,
@@ -201,17 +161,15 @@ void Driver::OptionData::AddInitialCommand(std::string command,
     command_set->push_back(InitialCmdEntry(command, is_file, false));
 }
 
-void Driver::ResetOptionValues() { m_option_data.Clear(); }
-
 const char *Driver::GetFilename() const {
   if (m_option_data.m_args.empty())
-    return NULL;
+    return nullptr;
   return m_option_data.m_args.front().c_str();
 }
 
 const char *Driver::GetCrashLogFilename() const {
   if (m_option_data.m_crash_log.empty())
-    return NULL;
+    return nullptr;
   return m_option_data.m_crash_log.c_str();
 }
 
@@ -242,7 +200,7 @@ void Driver::WriteCommandsForSourcing(CommandPlacement placement,
       // file in the current working directory), only read it if
       // target.load-cwd-lldbinit is 'true'.
       if (command_entry.is_cwd_lldbinit_file_read) {
-        SBStringList strlist = m_debugger.GetInternalVariableValue(
+        SBStringList strlist = lldb::SBDebugger::GetInternalVariableValue(
             "target.load-cwd-lldbinit", m_debugger.GetInstanceName());
         if (strlist.GetSize() == 1 &&
             strcmp(strlist.GetStringAtIndex(0), "warn") == 0) {
@@ -269,7 +227,8 @@ void Driver::WriteCommandsForSourcing(CommandPlacement placement,
       }
       bool source_quietly =
           m_option_data.m_source_quietly || command_entry.source_quietly;
-      strm.Printf("command source -s %i '%s'\n", source_quietly, command);
+      strm.Printf("command source -s %i '%s'\n",
+                  static_cast<int>(source_quietly), command);
     } else
       strm.Printf("%s\n", command);
   }
@@ -284,7 +243,7 @@ bool Driver::GetDebugMode() const { return m_option_data.m_debug_mode; }
 // user only wanted help or version information.
 SBError Driver::ProcessArgs(const opt::InputArgList &args, bool &exiting) {
   SBError error;
-  ResetOptionValues();
+  m_option_data.AddLocalLLDBInit();
 
   // This is kind of a pain, but since we make the debugger in the Driver's
   // constructor, we can't know at that point whether we should read in init
@@ -336,11 +295,11 @@ SBError Driver::ProcessArgs(const opt::InputArgList &args, bool &exiting) {
     auto arg_value = arg->getValue();
     SBFileSpec file(arg_value);
     if (file.Exists()) {
-      m_option_data.m_args.push_back(arg_value);
+      m_option_data.m_args.emplace_back(arg_value);
     } else if (file.ResolveExecutableLocation()) {
       char path[PATH_MAX];
       file.GetPath(path, sizeof(path));
-      m_option_data.m_args.push_back(path);
+      m_option_data.m_args.emplace_back(path);
     } else {
       error.SetErrorStringWithFormat(
           "file specified in --file (-f) option doesn't exist: '%s'",
@@ -351,7 +310,7 @@ SBError Driver::ProcessArgs(const opt::InputArgList &args, bool &exiting) {
 
   if (auto *arg = args.getLastArg(OPT_arch)) {
     auto arg_value = arg->getValue();
-    if (!m_debugger.SetDefaultArchitecture(arg_value)) {
+    if (!lldb::SBDebugger::SetDefaultArchitecture(arg_value)) {
       error.SetErrorStringWithFormat(
           "invalid architecture in the -a or --arch option: '%s'", arg_value);
       return error;
@@ -365,21 +324,6 @@ SBError Driver::ProcessArgs(const opt::InputArgList &args, bool &exiting) {
 
   if (args.hasArg(OPT_no_use_colors)) {
     m_option_data.m_debug_mode = true;
-  }
-
-  if (auto *arg = args.getLastArg(OPT_reproducer)) {
-    auto arg_value = arg->getValue();
-    SBFileSpec file(arg_value);
-    if (file.Exists()) {
-      SBError repro_error = m_debugger.ReplayReproducer(arg_value);
-      if (repro_error.Fail())
-        return repro_error;
-    } else {
-      error.SetErrorStringWithFormat("file specified in --reproducer "
-                                     "(-z) option doesn't exist: '%s'",
-                                     arg_value);
-      return error;
-    }
   }
 
   if (args.hasArg(OPT_no_use_colors)) {
@@ -421,13 +365,14 @@ SBError Driver::ProcessArgs(const opt::InputArgList &args, bool &exiting) {
     }
   }
 
-  if (auto *arg = args.getLastArg(OPT_repl)) {
-    auto arg_value = arg->getValue();
+  if (args.hasArg(OPT_repl)) {
     m_option_data.m_repl = true;
-    if (arg_value && arg_value[0])
+  }
+
+  if (auto *arg = args.getLastArg(OPT_repl_)) {
+    m_option_data.m_repl = true;
+    if (auto arg_value = arg->getValue())
       m_option_data.m_repl_options = arg_value;
-    else
-      m_option_data.m_repl_options.clear();
   }
 
   // We need to process the options below together as their relative order
@@ -493,14 +438,14 @@ SBError Driver::ProcessArgs(const opt::InputArgList &args, bool &exiting) {
     // Any argument following -- is an argument for the inferior.
     if (auto *arg = args.getLastArgNoClaim(OPT_REM)) {
       for (auto value : arg->getValues())
-        m_option_data.m_args.push_back(value);
+        m_option_data.m_args.emplace_back(value);
     }
-  } else if (args.getLastArgNoClaim()) {
+  } else if (args.getLastArgNoClaim() != nullptr) {
     WithColor::warning() << "program arguments are ignored when attaching.\n";
   }
 
   if (m_option_data.m_print_version) {
-    llvm::outs() << m_debugger.GetVersionString() << '\n';
+    llvm::outs() << lldb::SBDebugger::GetVersionString() << '\n';
     exiting = true;
     return error;
   }
@@ -527,7 +472,7 @@ static ::FILE *PrepareCommandsForSourcing(const char *commands_data,
                                           size_t commands_size, int fds[2]) {
   enum PIPES { READ, WRITE }; // Constants 0 and 1 for READ and WRITE
 
-  ::FILE *commands_file = NULL;
+  ::FILE *commands_file = nullptr;
   fds[0] = -1;
   fds[1] = -1;
   int err = 0;
@@ -560,7 +505,7 @@ static ::FILE *PrepareCommandsForSourcing(const char *commands_data,
       // Now open the read file descriptor in a FILE * that we can give to
       // the debugger as an input handle
       commands_file = fdopen(fds[READ], "r");
-      if (commands_file) {
+      if (commands_file != nullptr) {
         fds[READ] = -1; // The FILE * 'commands_file' now owns the read
                         // descriptor Hand ownership if the FILE * over to the
                         // debugger for "commands_file".
@@ -623,9 +568,9 @@ int Driver::MainLoop() {
   // Disabling stdin buffering with MSVC's 2015 CRT exposes a bug in fgets
   // which causes it to miss newlines depending on whether there have been an
   // odd or even number of characters.  Bug has been reported to MS via Connect.
-  ::setbuf(stdin, NULL);
+  ::setbuf(stdin, nullptr);
 #endif
-  ::setbuf(stdout, NULL);
+  ::setbuf(stdout, nullptr);
 
   m_debugger.SetErrorFileHandle(stderr, false);
   m_debugger.SetOutputFileHandle(stdout, false);
@@ -635,7 +580,7 @@ int Driver::MainLoop() {
   m_debugger.SetUseExternalEditor(m_option_data.m_use_external_editor);
 
   struct winsize window_size;
-  if (isatty(STDIN_FILENO) &&
+  if ((isatty(STDIN_FILENO) != 0) &&
       ::ioctl(STDIN_FILENO, TIOCGWINSZ, &window_size) == 0) {
     if (window_size.ws_col > 0)
       m_debugger.SetTerminalWidth(window_size.ws_col);
@@ -666,7 +611,7 @@ int Driver::MainLoop() {
   const size_t num_args = m_option_data.m_args.size();
   if (num_args > 0) {
     char arch_name[64];
-    if (m_debugger.GetDefaultArchitecture(arch_name, sizeof(arch_name)))
+    if (lldb::SBDebugger::GetDefaultArchitecture(arch_name, sizeof(arch_name)))
       commands_stream.Printf("target create --arch=%s %s", arch_name,
                              EscapeString(m_option_data.m_args[0]).c_str());
     else
@@ -714,13 +659,13 @@ int Driver::MainLoop() {
   bool spawn_thread = false;
 
   if (m_option_data.m_repl) {
-    const char *repl_options = NULL;
+    const char *repl_options = nullptr;
     if (!m_option_data.m_repl_options.empty())
       repl_options = m_option_data.m_repl_options.c_str();
     SBError error(m_debugger.RunREPL(m_option_data.m_repl_lang, repl_options));
     if (error.Fail()) {
       const char *error_cstr = error.GetCString();
-      if (error_cstr && error_cstr[0])
+      if ((error_cstr != nullptr) && (error_cstr[0] != 0))
         WithColor::error() << error_cstr << '\n';
       else
         WithColor::error() << error.GetError() << '\n';
@@ -736,12 +681,12 @@ int Driver::MainLoop() {
     // track that.
     bool quit_requested = false;
     bool stopped_for_crash = false;
-    if (commands_data && commands_size) {
+    if ((commands_data != nullptr) && (commands_size != 0u)) {
       int initial_commands_fds[2];
       bool success = true;
       FILE *commands_file = PrepareCommandsForSourcing(
           commands_data, commands_size, initial_commands_fds);
-      if (commands_file) {
+      if (commands_file != nullptr) {
         m_debugger.SetInputFileHandle(commands_file, true);
 
         // Set the debugger into Sync mode when running the command file.
@@ -770,7 +715,7 @@ int Driver::MainLoop() {
           const size_t crash_commands_size = crash_commands_stream.GetSize();
           commands_file = PrepareCommandsForSourcing(
               crash_commands_data, crash_commands_size, crash_command_fds);
-          if (commands_file) {
+          if (commands_file != nullptr) {
             bool local_quit_requested;
             bool local_stopped_for_crash;
             m_debugger.SetInputFileHandle(commands_file, true);
@@ -825,9 +770,9 @@ void Driver::ResizeWindow(unsigned short col) {
 
 void sigwinch_handler(int signo) {
   struct winsize window_size;
-  if (isatty(STDIN_FILENO) &&
+  if ((isatty(STDIN_FILENO) != 0) &&
       ::ioctl(STDIN_FILENO, TIOCGWINSZ, &window_size) == 0) {
-    if ((window_size.ws_col > 0) && g_driver != NULL) {
+    if ((window_size.ws_col > 0) && g_driver != nullptr) {
       g_driver->ResizeWindow(window_size.ws_col);
     }
   }
@@ -835,7 +780,7 @@ void sigwinch_handler(int signo) {
 
 void sigint_handler(int signo) {
   static std::atomic_flag g_interrupt_sent = ATOMIC_FLAG_INIT;
-  if (g_driver) {
+  if (g_driver != nullptr) {
     if (!g_interrupt_sent.test_and_set()) {
       g_driver->GetDebugger().DispatchInputInterrupt();
       g_interrupt_sent.clear();
@@ -847,7 +792,7 @@ void sigint_handler(int signo) {
 }
 
 void sigtstp_handler(int signo) {
-  if (g_driver)
+  if (g_driver != nullptr)
     g_driver->GetDebugger().SaveInputTerminalState();
 
   signal(signo, SIG_DFL);
@@ -856,7 +801,7 @@ void sigtstp_handler(int signo) {
 }
 
 void sigcont_handler(int signo) {
-  if (g_driver)
+  if (g_driver != nullptr)
     g_driver->GetDebugger().RestoreInputTerminalState();
 
   signal(signo, SIG_DFL);
@@ -928,7 +873,8 @@ main(int argc, char const *argv[])
 
   // Parse arguments.
   LLDBOptTable T;
-  unsigned MAI, MAC;
+  unsigned MAI;
+  unsigned MAC;
   ArrayRef<const char *> arg_arr = makeArrayRef(argv + 1, argc - 1);
   opt::InputArgList input_args = T.ParseArgs(arg_arr, MAI, MAC);
 
@@ -942,7 +888,26 @@ main(int argc, char const *argv[])
                          << '\n';
   }
 
-  SBDebugger::Initialize();
+  SBInitializerOptions options;
+  if (auto *arg = input_args.getLastArg(OPT_capture)) {
+    auto arg_value = arg->getValue();
+    options.SetReproducerPath(arg_value);
+    options.SetCaptureReproducer(true);
+  }
+
+  if (auto *arg = input_args.getLastArg(OPT_replay)) {
+    auto arg_value = arg->getValue();
+    options.SetReplayReproducer(true);
+    options.SetReproducerPath(arg_value);
+  }
+
+  SBError error = SBDebugger::Initialize(options);
+  if (error.Fail()) {
+    WithColor::error() << "initialization failed: " << error.GetCString()
+                       << '\n';
+    return 1;
+  }
+
   SBHostOS::ThreadCreated("<lldb.driver.main-thread>");
 
   signal(SIGINT, sigint_handler);

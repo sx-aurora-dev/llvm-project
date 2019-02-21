@@ -1,10 +1,9 @@
 #
 #//===----------------------------------------------------------------------===//
 #//
-#//                     The LLVM Compiler Infrastructure
-#//
-#// This file is dual licensed under the MIT and the University of Illinois Open
-#// Source Licenses. See LICENSE.txt for details.
+#// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#// See https://llvm.org/LICENSE.txt for license information.
+#// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #//
 #//===----------------------------------------------------------------------===//
 #
@@ -50,6 +49,7 @@ function(libomp_get_c_and_cxxflags_common flags)
   libomp_append(flags_local /GS LIBOMP_HAVE_GS_FLAG)
   libomp_append(flags_local /EHsc LIBOMP_HAVE_EHSC_FLAG)
   libomp_append(flags_local /Oy- LIBOMP_HAVE_OY__FLAG)
+  libomp_append(flags_local -mrtm LIBOMP_HAVE_MRTM_FLAG)
   # Intel(R) C Compiler flags
   libomp_append(flags_local /Qsafeseh LIBOMP_HAVE_QSAFESEH_FLAG)
   libomp_append(flags_local -Qoption,cpp,--extended_float_types LIBOMP_HAVE_EXTENDED_FLOAT_TYPES_FLAG)
@@ -158,6 +158,11 @@ function(libomp_get_libflags libflags)
   if(${IA32})
     libomp_append(libflags_local -lirc_pic LIBOMP_HAVE_IRC_PIC_LIBRARY)
   endif()
+  IF(${CMAKE_SYSTEM_NAME} MATCHES "DragonFly")
+    libomp_append(libflags_local "-Wl,--no-as-needed" LIBOMP_HAVE_AS_NEEDED_FLAG)
+    libomp_append(libflags_local "-lm")
+    libomp_append(libflags_local "-Wl,--as-needed" LIBOMP_HAVE_AS_NEEDED_FLAG)
+  ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "DragonFly")
   IF(${CMAKE_SYSTEM_NAME} MATCHES "NetBSD")
     libomp_append(libflags_local -lm)
   ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "NetBSD")

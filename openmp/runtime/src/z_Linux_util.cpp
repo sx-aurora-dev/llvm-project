@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +21,7 @@
 #include "kmp_wait_release.h"
 #include "kmp_wrapper_getpid.h"
 
-#if !KMP_OS_FREEBSD && !KMP_OS_NETBSD
+#if !KMP_OS_DRAGONFLY && !KMP_OS_FREEBSD && !KMP_OS_NETBSD && !KMP_OS_OPENBSD
 #include <alloca.h>
 #endif
 #include <math.h> // HUGE_VAL.
@@ -50,8 +49,11 @@
 #elif KMP_OS_DARWIN
 #include <mach/mach.h>
 #include <sys/sysctl.h>
-#elif KMP_OS_FREEBSD
+#elif KMP_OS_DRAGONFLY || KMP_OS_FREEBSD
 #include <pthread_np.h>
+#elif KMP_OS_NETBSD
+#include <sys/types.h>
+#include <sys/sysctl.h>
 #endif
 
 #include <ctype.h>
@@ -444,7 +446,8 @@ void __kmp_terminate_thread(int gtid) {
    determined exactly, FALSE if incremental refinement is necessary. */
 static kmp_int32 __kmp_set_stack_info(int gtid, kmp_info_t *th) {
   int stack_data;
-#if KMP_OS_LINUX || KMP_OS_FREEBSD || KMP_OS_NETBSD || KMP_OS_HURD
+#if KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||     \
+        KMP_OS_HURD
   pthread_attr_t attr;
   int status;
   size_t size = 0;
@@ -458,7 +461,7 @@ static kmp_int32 __kmp_set_stack_info(int gtid, kmp_info_t *th) {
     /* Fetch the real thread attributes */
     status = pthread_attr_init(&attr);
     KMP_CHECK_SYSFAIL("pthread_attr_init", status);
-#if KMP_OS_FREEBSD || KMP_OS_NETBSD
+#if KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD
     status = pthread_attr_get_np(pthread_self(), &attr);
     KMP_CHECK_SYSFAIL("pthread_attr_get_np", status);
 #else
@@ -482,7 +485,8 @@ static kmp_int32 __kmp_set_stack_info(int gtid, kmp_info_t *th) {
     TCW_4(th->th.th_info.ds.ds_stackgrow, FALSE);
     return TRUE;
   }
-#endif /* KMP_OS_LINUX || KMP_OS_FREEBSD || KMP_OS_NETBSD */
+#endif /* KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||
+              KMP_OS_HURD */
   /* Use incremental refinement starting from initial conservative estimate */
   TCW_PTR(th->th.th_info.ds.ds_stacksize, 0);
   TCW_PTR(th->th.th_info.ds.ds_stackbase, &stack_data);
@@ -496,7 +500,8 @@ static void *__kmp_launch_worker(void *thr) {
   sigset_t new_set, old_set;
 #endif /* KMP_BLOCK_SIGNALS */
   void *exit_val;
-#if KMP_OS_LINUX || KMP_OS_FREEBSD || KMP_OS_NETBSD || KMP_OS_HURD
+#if KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||     \
+        KMP_OS_OPENBSD || KMP_OS_HURD
   void *volatile padding = 0;
 #endif
   int gtid;
@@ -544,7 +549,8 @@ static void *__kmp_launch_worker(void *thr) {
   KMP_CHECK_SYSFAIL("pthread_sigmask", status);
 #endif /* KMP_BLOCK_SIGNALS */
 
-#if KMP_OS_LINUX || KMP_OS_FREEBSD || KMP_OS_NETBSD
+#if KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||     \
+        KMP_OS_OPENBSD
   if (__kmp_stkoffset > 0 && gtid > 0) {
     padding = KMP_ALLOCA(gtid * __kmp_stkoffset);
   }
@@ -1407,6 +1413,21 @@ void __kmp_suspend_uninitialize_thread(kmp_info_t *th) {
   }
 }
 
+// return true if lock obtained, false otherwise
+int __kmp_try_suspend_mx(kmp_info_t *th) {
+  return (pthread_mutex_trylock(&th->th.th_suspend_mx.m_mutex) == 0);
+}
+
+void __kmp_lock_suspend_mx(kmp_info_t *th) {
+  int status = pthread_mutex_lock(&th->th.th_suspend_mx.m_mutex);
+  KMP_CHECK_SYSFAIL("pthread_mutex_lock", status);
+}
+
+void __kmp_unlock_suspend_mx(kmp_info_t *th) {
+  int status = pthread_mutex_unlock(&th->th.th_suspend_mx.m_mutex);
+  KMP_CHECK_SYSFAIL("pthread_mutex_unlock", status);
+}
+
 /* This routine puts the calling thread to sleep after setting the
    sleep bit for the indicated flag variable to true. */
 template <class C>
@@ -1430,7 +1451,15 @@ static inline void __kmp_suspend_template(int th_gtid, C *flag) {
   /* TODO: shouldn't this use release semantics to ensure that
      __kmp_suspend_initialize_thread gets called first? */
   old_spin = flag->set_sleeping();
-
+#if OMP_50_ENABLED
+  if (__kmp_dflt_blocktime == KMP_MAX_BLOCKTIME &&
+      __kmp_pause_status != kmp_soft_paused) {
+    flag->unset_sleeping();
+    status = pthread_mutex_unlock(&th->th.th_suspend_mx.m_mutex);
+    KMP_CHECK_SYSFAIL("pthread_mutex_unlock", status);
+    return;
+  }
+#endif
   KF_TRACE(5, ("__kmp_suspend_template: T#%d set sleep bit for spin(%p)==%x,"
                " was %x\n",
                th_gtid, flag->get(), flag->load(), old_spin));
@@ -1764,7 +1793,8 @@ static int __kmp_get_xproc(void) {
 
   int r = 0;
 
-#if KMP_OS_LINUX || KMP_OS_FREEBSD || KMP_OS_NETBSD || KMP_OS_HURD
+#if KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||     \
+        KMP_OS_OPENBSD || KMP_OS_HURD
 
   r = sysconf(_SC_NPROCESSORS_ONLN);
 
@@ -1927,20 +1957,27 @@ void __kmp_elapsed_tick(double *t) { *t = 1 / (double)CLOCKS_PER_SEC; }
 kmp_uint64 __kmp_now_nsec() {
   struct timeval t;
   gettimeofday(&t, NULL);
-  return KMP_NSEC_PER_SEC * t.tv_sec + 1000 * t.tv_usec;
+  kmp_uint64 nsec = (kmp_uint64)KMP_NSEC_PER_SEC * (kmp_uint64)t.tv_sec +
+                    (kmp_uint64)1000 * (kmp_uint64)t.tv_usec;
+  return nsec;
 }
 
 #if KMP_ARCH_X86 || KMP_ARCH_X86_64
 /* Measure clock ticks per millisecond */
 void __kmp_initialize_system_tick() {
+  kmp_uint64 now, nsec2, diff;
   kmp_uint64 delay = 100000; // 50~100 usec on most machines.
   kmp_uint64 nsec = __kmp_now_nsec();
   kmp_uint64 goal = __kmp_hardware_timestamp() + delay;
-  kmp_uint64 now;
   while ((now = __kmp_hardware_timestamp()) < goal)
     ;
-  __kmp_ticks_per_msec =
-      (kmp_uint64)(1e6 * (delay + (now - goal)) / (__kmp_now_nsec() - nsec));
+  nsec2 = __kmp_now_nsec();
+  diff = nsec2 - nsec;
+  if (diff > 0) {
+    kmp_uint64 tpms = (kmp_uint64)(1e6 * (delay + (now - goal)) / diff);
+    if (tpms > 0)
+      __kmp_ticks_per_msec = tpms;
+  }
 }
 #endif
 
@@ -2010,9 +2047,39 @@ int __kmp_is_address_mapped(void *addr) {
     found = 1;
   }
 
-#elif KMP_OS_FREEBSD || KMP_OS_NETBSD
+#elif KMP_OS_NETBSD
 
-  // FIXME(FreeBSD, NetBSD): Implement this
+  int mib[5];
+  mib[0] = CTL_VM;
+  mib[1] = VM_PROC;
+  mib[2] = VM_PROC_MAP;
+  mib[3] = getpid();
+  mib[4] = sizeof(struct kinfo_vmentry);
+
+  size_t size;
+  rc = sysctl(mib, __arraycount(mib), NULL, &size, NULL, 0);
+  KMP_ASSERT(!rc);
+  KMP_ASSERT(size);
+
+  size = size * 4 / 3;
+  struct kinfo_vmentry *kiv = (struct kinfo_vmentry *)KMP_INTERNAL_MALLOC(size);
+  KMP_ASSERT(kiv);
+
+  rc = sysctl(mib, __arraycount(mib), kiv, &size, NULL, 0);
+  KMP_ASSERT(!rc);
+  KMP_ASSERT(size);
+
+  for (size_t i = 0; i < size; i++) {
+    if (kiv[i].kve_start >= (uint64_t)addr &&
+        kiv[i].kve_end <= (uint64_t)addr) {
+      found = 1;
+      break;
+    }
+  }
+  KMP_INTERNAL_FREE(kiv);
+#elif KMP_OS_DRAGONFLY || KMP_OS_OPENBSD
+
+  // FIXME(DragonFly, OpenBSD): Implement this
   found = 1;
 
 #else
@@ -2027,7 +2094,7 @@ int __kmp_is_address_mapped(void *addr) {
 
 #ifdef USE_LOAD_BALANCE
 
-#if KMP_OS_DARWIN
+#if KMP_OS_DARWIN || KMP_OS_NETBSD
 
 // The function returns the rounded value of the system load average
 // during given time interval which depends on the value of

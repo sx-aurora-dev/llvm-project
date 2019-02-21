@@ -1,9 +1,8 @@
 //===--- PlistDiagnostics.cpp - Plist Diagnostics for Paths -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -471,7 +470,7 @@ static void printBugPath(llvm::raw_ostream &o, const FIDMap& FM,
 
   o << "   </array>\n";
 
-  if (!AnOpts.shouldDisplayMacroExpansions())
+  if (!AnOpts.ShouldDisplayMacroExpansions)
     return;
 
   o << "   <key>macro_expansions</key>\n"
@@ -704,7 +703,7 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
     EmitString(o << "  ", SM.getFileEntryForID(FID)->getName()) << '\n';
   o << " </array>\n";
 
-  if (llvm::AreStatisticsEnabled() && AnOpts.shouldSerializeStats()) {
+  if (llvm::AreStatisticsEnabled() && AnOpts.ShouldSerializeStats) {
     o << " <key>statistics</key>\n";
     std::string stats;
     llvm::raw_string_ostream os(stats);
@@ -861,7 +860,7 @@ static std::string getMacroNameAndPrintExpansion(TokenPrinter &Printer,
     assert(II &&
           "This token is an identifier but has no IdentifierInfo!");
 
-    // If this token is a macro that should be expanded inside the currect
+    // If this token is a macro that should be expanded inside the current
     // macro.
     if (const MacroInfo *MI =
                          getMacroInfoForLocation(PP, SM, II, T.getLocation())) {
@@ -869,7 +868,7 @@ static std::string getMacroNameAndPrintExpansion(TokenPrinter &Printer,
 
       // If this is a function-like macro, skip its arguments, as
       // getExpandedMacro() already printed them. If this is the case, let's
-      // first jumo to the '(' token.
+      // first jump to the '(' token.
       if (MI->getNumParams() != 0)
         It = getMatchingRParen(++It, E);
       continue;
@@ -903,8 +902,6 @@ static std::string getMacroNameAndPrintExpansion(TokenPrinter &Printer,
       }
       continue;
     }
-
-    // TODO: Handle tok::hash and tok::hashhash.
 
     // If control reached here, then this token isn't a macro identifier, nor an
     // unexpanded macro argument that we need to handle, print it.
@@ -962,7 +959,7 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
   //   CALL_FN(someFunctionName(param1, param2))
   // we will find tok::l_paren, tok::r_paren, and tok::comma that do not divide
   // actual macro arguments, or do not represent the macro argument's closing
-  // parantheses, so we'll count how many parantheses aren't closed yet.
+  // parentheses, so we'll count how many parentheses aren't closed yet.
   // If ParanthesesDepth
   //   * = 0, then there are no more arguments to lex.
   //   * = 1, then if we find a tok::comma, we can start lexing the next arg.
@@ -1094,14 +1091,25 @@ void MacroArgMap::expandFromPrevMacro(const MacroArgMap &Super) {
 }
 
 void TokenPrinter::printToken(const Token &Tok) {
-  // If the tokens were already space separated, or if they must be to avoid
-  // them being implicitly pasted, add a space between them.
   // If this is the first token to be printed, don't print space.
-  if (PrevTok.isNot(tok::unknown) && (Tok.hasLeadingSpace() ||
-      ConcatInfo.AvoidConcat(PrevPrevTok, PrevTok, Tok)))
-    OS << ' ';
+  if (PrevTok.isNot(tok::unknown)) {
+    // If the tokens were already space separated, or if they must be to avoid
+    // them being implicitly pasted, add a space between them.
+    if(Tok.hasLeadingSpace() || ConcatInfo.AvoidConcat(PrevPrevTok, PrevTok,
+                                                       Tok)) {
+      // AvoidConcat doesn't check for ##, don't print a space around it.
+      if (PrevTok.isNot(tok::hashhash) && Tok.isNot(tok::hashhash)) {
+        OS << ' ';
+      }
+    }
+  }
 
-  OS << PP.getSpelling(Tok);
+  if (!Tok.isOneOf(tok::hash, tok::hashhash)) {
+    if (PrevTok.is(tok::hash))
+      OS << '\"' << PP.getSpelling(Tok) << '\"';
+    else
+      OS << PP.getSpelling(Tok);
+  }
 
   PrevPrevTok = PrevTok;
   PrevTok = Tok;

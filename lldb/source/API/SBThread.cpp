@@ -1,9 +1,8 @@
 //===-- SBThread.cpp --------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -44,6 +43,8 @@
 #include "lldb/API/SBThreadPlan.h"
 #include "lldb/API/SBValue.h"
 #include "lldb/lldb-enumerations.h"
+
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -291,7 +292,7 @@ bool SBThread::GetStopReasonExtendedInfoAsJSON(lldb::SBStream &stream) {
 SBThreadCollection
 SBThread::GetStopReasonExtendedBacktraces(InstrumentationRuntimeType type) {
   ThreadCollectionSP threads;
-  threads.reset(new ThreadCollection());
+  threads = std::make_shared<ThreadCollection>();
 
   std::unique_lock<std::recursive_mutex> lock;
   ExecutionContext exe_ctx(m_opaque_sp.get(), lock);
@@ -571,7 +572,7 @@ bool SBThread::GetInfoItemByPathAsString(const char *path, SBStream &strm) {
             success = true;
           }
           if (node->GetType() == eStructuredDataTypeBoolean) {
-            if (node->GetAsBoolean()->GetValue() == true)
+            if (node->GetAsBoolean()->GetValue())
               strm.Printf("true");
             else
               strm.Printf("false");
@@ -1470,7 +1471,7 @@ SBThread SBThread::GetExtendedBacktraceThread(const char *type) {
     }
   }
 
-  if (log && sb_origin_thread.IsValid() == false)
+  if (log && !sb_origin_thread.IsValid())
     log->Printf("SBThread(%p)::GetExtendedBacktraceThread() is not returning a "
                 "Valid thread",
                 static_cast<void *>(exe_ctx.GetThreadPtr()));
@@ -1491,13 +1492,12 @@ SBValue SBThread::GetCurrentException() {
   return SBValue(thread_sp->GetCurrentException());
 }
 
-/* TODO(kubamracek)
 SBThread SBThread::GetCurrentExceptionBacktrace() {
   ThreadSP thread_sp(m_opaque_sp->GetThreadSP());
   if (!thread_sp) return SBThread();
 
   return SBThread(thread_sp->GetCurrentExceptionBacktrace());
-}*/
+}
 
 bool SBThread::SafeToCallFunctions() {
   ThreadSP thread_sp(m_opaque_sp->GetThreadSP());

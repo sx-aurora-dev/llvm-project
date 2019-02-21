@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1108,7 +1107,7 @@ __kmp_acquire_queuing_lock_timed_template(kmp_queuing_lock_t *lck,
   kmp_int32 need_mf = 1;
 
 #if OMPT_SUPPORT
-  omp_state_t prev_state = omp_state_undefined;
+  ompt_state_t prev_state = ompt_state_undefined;
 #endif
 
   KA_TRACE(1000,
@@ -1216,7 +1215,7 @@ __kmp_acquire_queuing_lock_timed_template(kmp_queuing_lock_t *lck,
 #endif
 
 #if OMPT_SUPPORT
-        if (ompt_enabled.enabled && prev_state != omp_state_undefined) {
+        if (ompt_enabled.enabled && prev_state != ompt_state_undefined) {
           /* change the state before clearing wait_id */
           this_thr->th.ompt_thread_info.state = prev_state;
           this_thr->th.ompt_thread_info.wait_id = 0;
@@ -1231,11 +1230,11 @@ __kmp_acquire_queuing_lock_timed_template(kmp_queuing_lock_t *lck,
     }
 
 #if OMPT_SUPPORT
-    if (ompt_enabled.enabled && prev_state == omp_state_undefined) {
+    if (ompt_enabled.enabled && prev_state == ompt_state_undefined) {
       /* this thread will spin; set wait_id before entering wait state */
       prev_state = this_thr->th.ompt_thread_info.state;
       this_thr->th.ompt_thread_info.wait_id = (uint64_t)lck;
-      this_thr->th.ompt_thread_info.state = omp_state_wait_lock;
+      this_thr->th.ompt_thread_info.state = ompt_state_wait_lock;
     }
 #endif
 
@@ -1716,7 +1715,9 @@ static void __kmp_set_queuing_lock_flags(kmp_queuing_lock_t *lck,
 
 /* RTM Adaptive locks */
 
-#if KMP_COMPILER_ICC && __INTEL_COMPILER >= 1300
+#if (KMP_COMPILER_ICC && __INTEL_COMPILER >= 1300) ||                          \
+    (KMP_COMPILER_MSVC && _MSC_VER >= 1700) ||                                 \
+    (KMP_COMPILER_CLANG && KMP_MSVC_COMPAT)
 
 #include <immintrin.h>
 #define SOFT_ABORT_MASK (_XABORT_RETRY | _XABORT_CONFLICT | _XABORT_EXPLICIT)
@@ -2872,6 +2873,47 @@ static int __kmp_unset_indirect_lock_with_checks(kmp_dyna_lock_t *lock,
 static int __kmp_test_indirect_lock_with_checks(kmp_dyna_lock_t *lock,
                                                 kmp_int32);
 
+// Lock function definitions for the union parameter type
+#define KMP_FOREACH_LOCK_KIND(m, a) m(ticket, a) m(queuing, a) m(drdpa, a)
+
+#define expand1(lk, op)                                                        \
+  static void __kmp_##op##_##lk##_##lock(kmp_user_lock_p lock) {               \
+    __kmp_##op##_##lk##_##lock(&lock->lk);                                     \
+  }
+#define expand2(lk, op)                                                        \
+  static int __kmp_##op##_##lk##_##lock(kmp_user_lock_p lock,                  \
+                                        kmp_int32 gtid) {                      \
+    return __kmp_##op##_##lk##_##lock(&lock->lk, gtid);                        \
+  }
+#define expand3(lk, op)                                                        \
+  static void __kmp_set_##lk##_##lock_flags(kmp_user_lock_p lock,              \
+                                            kmp_lock_flags_t flags) {          \
+    __kmp_set_##lk##_lock_flags(&lock->lk, flags);                             \
+  }
+#define expand4(lk, op)                                                        \
+  static void __kmp_set_##lk##_##lock_location(kmp_user_lock_p lock,           \
+                                               const ident_t *loc) {           \
+    __kmp_set_##lk##_lock_location(&lock->lk, loc);                            \
+  }
+
+KMP_FOREACH_LOCK_KIND(expand1, init)
+KMP_FOREACH_LOCK_KIND(expand1, init_nested)
+KMP_FOREACH_LOCK_KIND(expand1, destroy)
+KMP_FOREACH_LOCK_KIND(expand1, destroy_nested)
+KMP_FOREACH_LOCK_KIND(expand2, acquire)
+KMP_FOREACH_LOCK_KIND(expand2, acquire_nested)
+KMP_FOREACH_LOCK_KIND(expand2, release)
+KMP_FOREACH_LOCK_KIND(expand2, release_nested)
+KMP_FOREACH_LOCK_KIND(expand2, test)
+KMP_FOREACH_LOCK_KIND(expand2, test_nested)
+KMP_FOREACH_LOCK_KIND(expand3, )
+KMP_FOREACH_LOCK_KIND(expand4, )
+
+#undef expand1
+#undef expand2
+#undef expand3
+#undef expand4
+
 // Jump tables for the indirect lock functions
 // Only fill in the odd entries, that avoids the need to shift out the low bit
 
@@ -3357,7 +3399,7 @@ static void __kmp_init_nested_futex_lock_with_checks(kmp_futex_lock_t *lck) {
 #endif
 
 static int __kmp_is_ticket_lock_initialized(kmp_ticket_lock_t *lck) {
-  return lck == lck->lk.initialized;
+  return lck == lck->lk.self;
 }
 
 static void __kmp_init_ticket_lock_with_checks(kmp_ticket_lock_t *lck) {

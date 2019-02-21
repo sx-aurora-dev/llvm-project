@@ -1,9 +1,8 @@
 //===- SyntheticSections.cpp ----------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,7 +14,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "SyntheticSections.h"
-#include "Bits.h"
 #include "Config.h"
 #include "InputFiles.h"
 #include "LinkerScript.h"
@@ -58,6 +56,17 @@ using llvm::support::endian::write32le;
 using llvm::support::endian::write64le;
 
 constexpr size_t MergeNoTailSection::NumShards;
+
+static uint64_t readUint(uint8_t *Buf) {
+  return Config->Is64 ? read64(Buf) : read32(Buf);
+}
+
+static void writeUint(uint8_t *Buf, uint64_t Val) {
+  if (Config->Is64)
+    write64(Buf, Val);
+  else
+    write32(Buf, Val);
+}
 
 // Returns an LLD version string.
 static ArrayRef<uint8_t> getVersion() {
@@ -1133,7 +1142,6 @@ IgotPltSection::IgotPltSection()
                        Target->GotPltEntrySize, getIgotPltName()) {}
 
 void IgotPltSection::addEntry(Symbol &Sym) {
-  Sym.IsInIgot = true;
   assert(Sym.PltIndex == Entries.size());
   Entries.push_back(&Sym);
 }
@@ -1296,6 +1304,8 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   }
   if (!Config->ZText)
     DtFlags |= DF_TEXTREL;
+  if (Config->HasStaticTlsModel)
+    DtFlags |= DF_STATIC_TLS;
 
   if (DtFlags)
     addInt(DT_FLAGS, DtFlags);
@@ -1313,7 +1323,9 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   if (!Config->Shared && !Config->Relocatable && !Config->ZRodynamic)
     addInt(DT_DEBUG, 0);
 
-  this->Link = In.DynStrTab->getParent()->SectionIndex;
+  if (OutputSection *Sec = In.DynStrTab->getParent())
+    this->Link = Sec->SectionIndex;
+
   if (!In.RelaDyn->empty()) {
     addInSec(In.RelaDyn->DynamicTag, In.RelaDyn);
     addSize(In.RelaDyn->SizeDynamicTag, In.RelaDyn->getParent());
@@ -1506,10 +1518,15 @@ void RelocationBaseSection::finalizeContents() {
   // relocations due to IFUNC (e.g. strcpy). sh_link will be set to 0 in that
   // case.
   InputSection *SymTab = Config->Relocatable ? In.SymTab : In.DynSymTab;
-  getParent()->Link = SymTab ? SymTab->getParent()->SectionIndex : 0;
+  if (SymTab && SymTab->getParent())
+    getParent()->Link = SymTab->getParent()->SectionIndex;
+  else
+    getParent()->Link = 0;
 
-  if (In.RelaIplt == this || In.RelaPlt == this)
+  if (In.RelaPlt == this)
     getParent()->Info = In.GotPlt->getParent()->SectionIndex;
+  if (In.RelaIplt == this)
+    getParent()->Info = In.IgotPlt->getParent()->SectionIndex;
 }
 
 RelrBaseSection::RelrBaseSection()
@@ -1798,7 +1815,7 @@ template <class ELFT> bool RelrSection<ELFT>::updateAllocSize() {
   std::vector<uint64_t> Offsets;
   for (const RelativeReloc &Rel : Relocs)
     Offsets.push_back(Rel.getOffset());
-  llvm::sort(Offsets.begin(), Offsets.end());
+  llvm::sort(Offsets);
 
   // For each leading relocation, find following ones that can be folded
   // as a bitmap and fold them.
@@ -1863,7 +1880,8 @@ static bool sortMipsSymbols(const SymbolTableEntry &L,
 }
 
 void SymbolTableBaseSection::finalizeContents() {
-  getParent()->Link = StrTabSec.getParent()->SectionIndex;
+  if (OutputSection *Sec = StrTabSec.getParent())
+    getParent()->Link = Sec->SectionIndex;
 
   if (this->Type != SHT_DYNSYM) {
     sortSymTabSymbols();
@@ -1992,6 +2010,11 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *Buf) {
       ESym->setBindingAndType(Sym->computeBinding(), Sym->Type);
       ESym->setVisibility(Sym->Visibility);
     }
+
+    // The 3 most significant bits of st_other are used by OpenPOWER ABI.
+    // See getPPC64GlobalEntryToLocalEntryOffset() for more details.
+    if (Config->EMachine == EM_PPC64)
+      ESym->st_other |= Sym->StOther & 0xe0;
 
     ESym->st_name = Ent.StrTabOffset;
     ESym->st_shndx = getSymSectionIndex(Ent.Sym);
@@ -2123,7 +2146,8 @@ GnuHashTableSection::GnuHashTableSection()
 }
 
 void GnuHashTableSection::finalizeContents() {
-  getParent()->Link = In.DynSymTab->getParent()->SectionIndex;
+  if (OutputSection *Sec = In.DynSymTab->getParent())
+    getParent()->Link = Sec->SectionIndex;
 
   // Computes bloom filter size in word size. We want to allocate 12
   // bits for each symbol. It must be a power of two.
@@ -2169,6 +2193,8 @@ void GnuHashTableSection::writeTo(uint8_t *Buf) {
 void GnuHashTableSection::writeBloomFilter(uint8_t *Buf) {
   unsigned C = Config->Is64 ? 64 : 32;
   for (const Entry &Sym : Symbols) {
+    // When C = 64, we choose a word with bits [6:...] and set 1 to two bits in
+    // the word using bits [0:5] and [26:31].
     size_t I = (Sym.Hash / C) & (MaskWords - 1);
     uint64_t Val = readUint(Buf + I * Config->Wordsize);
     Val |= uint64_t(1) << (Sym.Hash % C);
@@ -2253,7 +2279,8 @@ HashTableSection::HashTableSection()
 }
 
 void HashTableSection::finalizeContents() {
-  getParent()->Link = In.DynSymTab->getParent()->SectionIndex;
+  if (OutputSection *Sec = In.DynSymTab->getParent())
+    getParent()->Link = Sec->SectionIndex;
 
   unsigned NumEntries = 2;                       // nbucket and nchain.
   NumEntries += In.DynSymTab->getNumSymbols();   // The chain entries.
@@ -2321,10 +2348,8 @@ void PltSection::writeTo(uint8_t *Buf) {
 template <class ELFT> void PltSection::addEntry(Symbol &Sym) {
   Sym.PltIndex = Entries.size();
   RelocationBaseSection *PltRelocSection = In.RelaPlt;
-  if (IsIplt) {
+  if (IsIplt)
     PltRelocSection = In.RelaIplt;
-    Sym.IsInIplt = true;
-  }
   unsigned RelOff =
       static_cast<RelocationSection<ELFT> *>(PltRelocSection)->getRelocOffset();
   Entries.push_back(std::make_pair(&Sym, RelOff));
@@ -2404,11 +2429,14 @@ readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
 
   uint32_t CuIdx = 0;
   for (std::unique_ptr<DWARFUnit> &Cu : Dwarf.compile_units()) {
-    DWARFAddressRangesVector Ranges;
-    Cu->collectAddressRanges(Ranges);
+    Expected<DWARFAddressRangesVector> Ranges = Cu->collectAddressRanges();
+    if (!Ranges) {
+      error(toString(Sec) + ": " + toString(Ranges.takeError()));
+      return {};
+    }
 
     ArrayRef<InputSectionBase *> Sections = Sec->File->getSections();
-    for (DWARFAddressRange &R : Ranges) {
+    for (DWARFAddressRange &R : *Ranges) {
       InputSectionBase *S = Sections[R.SectionIndex];
       if (!S || S == &InputSection::Discarded || !S->Live)
         continue;
@@ -2421,6 +2449,7 @@ readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
     }
     ++CuIdx;
   }
+
   return Ret;
 }
 
@@ -2685,7 +2714,8 @@ void VersionDefinitionSection::finalizeContents() {
   for (VersionDefinition &V : Config->VersionDefinitions)
     V.NameOff = In.DynStrTab->addString(V.Name);
 
-  getParent()->Link = In.DynStrTab->getParent()->SectionIndex;
+  if (OutputSection *Sec = In.DynStrTab->getParent())
+    getParent()->Link = Sec->SectionIndex;
 
   // sh_info should be set to the number of definitions. This fact is missed in
   // documentation, but confirmed by binutils community:
@@ -2829,7 +2859,8 @@ template <class ELFT> void VersionNeedSection<ELFT>::writeTo(uint8_t *Buf) {
 }
 
 template <class ELFT> void VersionNeedSection<ELFT>::finalizeContents() {
-  getParent()->Link = In.DynStrTab->getParent()->SectionIndex;
+  if (OutputSection *Sec = In.DynStrTab->getParent())
+    getParent()->Link = Sec->SectionIndex;
   getParent()->Info = Needed.size();
 }
 

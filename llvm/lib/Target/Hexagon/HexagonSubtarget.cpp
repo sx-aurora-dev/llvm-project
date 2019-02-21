@@ -1,9 +1,8 @@
 //===- HexagonSubtarget.cpp - Hexagon Subtarget Information ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -98,6 +97,7 @@ HexagonSubtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS) {
       {"hexagonv60", Hexagon::ArchEnum::V60},
       {"hexagonv62", Hexagon::ArchEnum::V62},
       {"hexagonv65", Hexagon::ArchEnum::V65},
+      {"hexagonv66", Hexagon::ArchEnum::V66},
   };
 
   auto FoundIt = CpuTable.find(CPUString);

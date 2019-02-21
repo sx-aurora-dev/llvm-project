@@ -1,9 +1,8 @@
 //===-- SBDebugger.cpp ------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -125,13 +124,23 @@ SBDebugger &SBDebugger::operator=(const SBDebugger &rhs) {
 }
 
 void SBDebugger::Initialize() {
+  SBInitializerOptions options;
+  SBDebugger::Initialize(options);
+}
+
+lldb::SBError SBDebugger::Initialize(SBInitializerOptions &options) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_API));
 
   if (log)
     log->Printf("SBDebugger::Initialize ()");
 
-  g_debugger_lifetime->Initialize(llvm::make_unique<SystemInitializerFull>(),
-                                  LoadPlugin);
+  SBError error;
+  if (auto e = g_debugger_lifetime->Initialize(
+          llvm::make_unique<SystemInitializerFull>(), *options.m_opaque_up,
+          LoadPlugin)) {
+    error.SetError(Status(std::move(e)));
+  }
+  return error;
 }
 
 void SBDebugger::Terminate() { g_debugger_lifetime->Terminate(); }
@@ -1055,17 +1064,6 @@ const char *SBDebugger::GetReproducerPath() const {
   return (m_opaque_sp
               ? ConstString(m_opaque_sp->GetReproducerPath()).GetCString()
               : nullptr);
-}
-
-SBError SBDebugger::ReplayReproducer(const char *p) {
-  SBError sb_error;
-  if (m_opaque_sp) {
-    auto error =
-        m_opaque_sp->SetReproducerReplay(llvm::StringRef::withNullAsEmpty(p));
-    std::string error_str = llvm::toString(std::move(error));
-    sb_error.ref().SetErrorString(error_str);
-  }
-  return sb_error;
 }
 
 ScriptLanguage SBDebugger::GetScriptLanguage() const {

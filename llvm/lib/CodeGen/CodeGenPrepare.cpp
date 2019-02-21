@@ -1,9 +1,8 @@
 //===- CodeGenPrepare.cpp - Prepare a function for code generation --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -376,6 +375,8 @@ class TypePromotionTransaction;
         SmallVectorImpl<Instruction *> &SpeculativelyMovedExts);
     bool splitBranchCondition(Function &F);
     bool simplifyOffsetableRelocate(Instruction &I);
+
+    bool tryToSinkFreeOperands(Instruction *I);
   };
 
 } // end anonymous namespace
@@ -653,6 +654,16 @@ bool CodeGenPrepare::isMergingEmptyBlockProfitable(BasicBlock *BB,
       !(BB->getSinglePredecessor() &&
         BB->getSinglePredecessor()->getSingleSuccessor()))
     return false;
+
+  // Skip merging if the block's successor is also a successor to any callbr
+  // that leads to this block.
+  // FIXME: Is this really needed? Is this a correctness issue?
+  for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
+    if (auto *CBI = dyn_cast<CallBrInst>((*PI)->getTerminator()))
+      for (unsigned i = 0, e = CBI->getNumSuccessors(); i != e; ++i)
+        if (DestBB == CBI->getSuccessor(i))
+          return false;
+  }
 
   // Try to skip merging if the unique predecessor of BB is terminated by a
   // switch or indirect branch instruction, and BB is used as an incoming block
@@ -1148,54 +1159,54 @@ static bool OptimizeNoopCopyExpression(CastInst *CI, const TargetLowering &TLI,
   return SinkCast(CI);
 }
 
-/// Try to combine CI into a call to the llvm.uadd.with.overflow intrinsic if
-/// possible.
-///
-/// Return true if any changes were made.
-static bool CombineUAddWithOverflow(CmpInst *CI) {
+static void replaceMathCmpWithIntrinsic(BinaryOperator *BO, CmpInst *Cmp,
+                                        Instruction *InsertPt,
+                                        Intrinsic::ID IID) {
+  IRBuilder<> Builder(InsertPt);
+  Value *MathOV = Builder.CreateBinaryIntrinsic(IID, BO->getOperand(0),
+                                                BO->getOperand(1));
+  Value *Math = Builder.CreateExtractValue(MathOV, 0, "math");
+  Value *OV = Builder.CreateExtractValue(MathOV, 1, "ov");
+  BO->replaceAllUsesWith(Math);
+  Cmp->replaceAllUsesWith(OV);
+  BO->eraseFromParent();
+  Cmp->eraseFromParent();
+}
+
+/// Try to combine the compare into a call to the llvm.uadd.with.overflow
+/// intrinsic. Return true if any changes were made.
+static bool combineToUAddWithOverflow(CmpInst *Cmp, const TargetLowering &TLI,
+                                      const DataLayout &DL) {
   Value *A, *B;
-  Instruction *AddI;
-  if (!match(CI,
-             m_UAddWithOverflow(m_Value(A), m_Value(B), m_Instruction(AddI))))
+  BinaryOperator *Add;
+  if (!match(Cmp, m_UAddWithOverflow(m_Value(A), m_Value(B), m_BinOp(Add))))
     return false;
 
-  Type *Ty = AddI->getType();
+  // Allow the transform as long as we have an integer type that is not
+  // obviously illegal and unsupported.
+  Type *Ty = Add->getType();
   if (!isa<IntegerType>(Ty))
     return false;
+  EVT CodegenVT = TLI.getValueType(DL, Ty);
+  if (!CodegenVT.isSimple() && TLI.isOperationExpand(ISD::UADDO, CodegenVT))
+    return false;
 
-  // We don't want to move around uses of condition values this late, so we we
+  // We don't want to move around uses of condition values this late, so we
   // check if it is legal to create the call to the intrinsic in the basic
-  // block containing the icmp:
-
-  if (AddI->getParent() != CI->getParent() && !AddI->hasOneUse())
+  // block containing the icmp.
+  if (Add->getParent() != Cmp->getParent() && !Add->hasOneUse())
     return false;
 
 #ifndef NDEBUG
   // Someday m_UAddWithOverflow may get smarter, but this is a safe assumption
   // for now:
-  if (AddI->hasOneUse())
-    assert(*AddI->user_begin() == CI && "expected!");
+  if (Add->hasOneUse())
+    assert(*Add->user_begin() == Cmp && "expected!");
 #endif
 
-  Module *M = CI->getModule();
-  Value *F = Intrinsic::getDeclaration(M, Intrinsic::uadd_with_overflow, Ty);
-
-  auto *InsertPt = AddI->hasOneUse() ? CI : AddI;
-
-  DebugLoc Loc = CI->getDebugLoc();
-  auto *UAddWithOverflow =
-      CallInst::Create(F, {A, B}, "uadd.overflow", InsertPt);
-  UAddWithOverflow->setDebugLoc(Loc);
-  auto *UAdd = ExtractValueInst::Create(UAddWithOverflow, 0, "uadd", InsertPt);
-  UAdd->setDebugLoc(Loc);
-  auto *Overflow =
-      ExtractValueInst::Create(UAddWithOverflow, 1, "overflow", InsertPt);
-  Overflow->setDebugLoc(Loc);
-
-  CI->replaceAllUsesWith(Overflow);
-  AddI->replaceAllUsesWith(UAdd);
-  CI->eraseFromParent();
-  AddI->eraseFromParent();
+  Instruction *InPt = Add->hasOneUse() ? cast<Instruction>(Cmp)
+                                       : cast<Instruction>(Add);
+  replaceMathCmpWithIntrinsic(Add, Cmp, InPt, Intrinsic::uadd_with_overflow);
   return true;
 }
 
@@ -1205,18 +1216,19 @@ static bool CombineUAddWithOverflow(CmpInst *CI) {
 /// lose; some adjustment may be wanted there.
 ///
 /// Return true if any changes are made.
-static bool SinkCmpExpression(CmpInst *CI, const TargetLowering *TLI) {
-  BasicBlock *DefBB = CI->getParent();
+static bool sinkCmpExpression(CmpInst *Cmp, const TargetLowering &TLI) {
+  if (TLI.hasMultipleConditionRegisters())
+    return false;
 
   // Avoid sinking soft-FP comparisons, since this can move them into a loop.
-  if (TLI && TLI->useSoftFloat() && isa<FCmpInst>(CI))
+  if (TLI.useSoftFloat() && isa<FCmpInst>(Cmp))
     return false;
 
   // Only insert a cmp in each block once.
   DenseMap<BasicBlock*, CmpInst*> InsertedCmps;
 
   bool MadeChange = false;
-  for (Value::user_iterator UI = CI->user_begin(), E = CI->user_end();
+  for (Value::user_iterator UI = Cmp->user_begin(), E = Cmp->user_end();
        UI != E; ) {
     Use &TheUse = UI.getUse();
     Instruction *User = cast<Instruction>(*UI);
@@ -1230,6 +1242,7 @@ static bool SinkCmpExpression(CmpInst *CI, const TargetLowering *TLI) {
 
     // Figure out which BB this cmp is used in.
     BasicBlock *UserBB = User->getParent();
+    BasicBlock *DefBB = Cmp->getParent();
 
     // If this user is in the same block as the cmp, don't change the cmp.
     if (UserBB == DefBB) continue;
@@ -1241,10 +1254,11 @@ static bool SinkCmpExpression(CmpInst *CI, const TargetLowering *TLI) {
       BasicBlock::iterator InsertPt = UserBB->getFirstInsertionPt();
       assert(InsertPt != UserBB->end());
       InsertedCmp =
-          CmpInst::Create(CI->getOpcode(), CI->getPredicate(),
-                          CI->getOperand(0), CI->getOperand(1), "", &*InsertPt);
+          CmpInst::Create(Cmp->getOpcode(), Cmp->getPredicate(),
+                          Cmp->getOperand(0), Cmp->getOperand(1), "",
+                          &*InsertPt);
       // Propagate the debug info.
-      InsertedCmp->setDebugLoc(CI->getDebugLoc());
+      InsertedCmp->setDebugLoc(Cmp->getDebugLoc());
     }
 
     // Replace a use of the cmp with a use of the new cmp.
@@ -1254,19 +1268,20 @@ static bool SinkCmpExpression(CmpInst *CI, const TargetLowering *TLI) {
   }
 
   // If we removed all uses, nuke the cmp.
-  if (CI->use_empty()) {
-    CI->eraseFromParent();
+  if (Cmp->use_empty()) {
+    Cmp->eraseFromParent();
     MadeChange = true;
   }
 
   return MadeChange;
 }
 
-static bool OptimizeCmpExpression(CmpInst *CI, const TargetLowering *TLI) {
-  if (SinkCmpExpression(CI, TLI))
+static bool optimizeCmpExpression(CmpInst *Cmp, const TargetLowering &TLI,
+                                  const DataLayout &DL) {
+  if (sinkCmpExpression(Cmp, TLI))
     return true;
 
-  if (CombineUAddWithOverflow(CI))
+  if (combineToUAddWithOverflow(Cmp, TLI, DL))
     return true;
 
   return false;
@@ -1704,9 +1719,23 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, bool &ModifiedDT) {
   if (II) {
     switch (II->getIntrinsicID()) {
     default: break;
+    case Intrinsic::experimental_widenable_condition: {
+      // Give up on future widening oppurtunties so that we can fold away dead
+      // paths and merge blocks before going into block-local instruction
+      // selection.   
+      if (II->use_empty()) {
+        II->eraseFromParent();
+        return true;
+      }
+      Constant *RetVal = ConstantInt::getTrue(II->getContext());
+      resetIteratorIfInvalidatedWhileCalling(BB, [&]() {
+        replaceAndRecursivelySimplify(CI, RetVal, TLInfo, nullptr);
+      });
+      return true;
+    }
     case Intrinsic::objectsize: {
       // Lower all uses of llvm.objectsize.*
-      ConstantInt *RetVal =
+      Value *RetVal =
           lowerObjectSizeCall(II, *DL, TLInfo, /*MustSucceed=*/true);
 
       resetIteratorIfInvalidatedWhileCalling(BB, [&]() {
@@ -1735,6 +1764,7 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, bool &ModifiedDT) {
       InsertedInsts.insert(ExtVal);
       return true;
     }
+
     case Intrinsic::launder_invariant_group:
     case Intrinsic::strip_invariant_group: {
       Value *ArgVal = II->getArgOperand(0);
@@ -1846,10 +1876,8 @@ bool CodeGenPrepare::dupRetToEnableTailCallOpts(BasicBlock *BB) {
   // return is the first instruction in the block.
   if (PN) {
     BasicBlock::iterator BI = BB->begin();
-    do { ++BI; } while (isa<DbgInfoIntrinsic>(BI));
-    if (&*BI == BCI)
-      // Also skip over the bitcast.
-      ++BI;
+    // Skip over debug and the bitcast.
+    do { ++BI; } while (isa<DbgInfoIntrinsic>(BI) || &*BI == BCI);
     if (&*BI != RetI)
       return false;
   } else {
@@ -2362,6 +2390,8 @@ class TypePromotionTransaction {
 
     /// Keep track of the original uses (pair Instruction, Index).
     SmallVector<InstructionAndIdx, 4> OriginalUses;
+    /// Keep track of the debug users.
+    SmallVector<DbgValueInst *, 1> DbgValues;
 
     using use_iterator = SmallVectorImpl<InstructionAndIdx>::iterator;
 
@@ -2375,6 +2405,10 @@ class TypePromotionTransaction {
         Instruction *UserI = cast<Instruction>(U.getUser());
         OriginalUses.push_back(InstructionAndIdx(UserI, U.getOperandNo()));
       }
+      // Record the debug uses separately. They are not in the instruction's
+      // use list, but they are replaced by RAUW.
+      findDbgValues(DbgValues, Inst);
+
       // Now, we can replace the uses.
       Inst->replaceAllUsesWith(New);
     }
@@ -2386,6 +2420,15 @@ class TypePromotionTransaction {
                         EndIt = OriginalUses.end();
            UseIt != EndIt; ++UseIt) {
         UseIt->Inst->setOperand(UseIt->Idx, Inst);
+      }
+      // RAUW has replaced all original uses with references to the new value,
+      // including the debug uses. Since we are undoing the replacements,
+      // the original debug uses must also be reinstated to maintain the
+      // correctness and utility of debug value instructions.
+      for (auto *DVI: DbgValues) {
+        LLVMContext &Ctx = Inst->getType()->getContext();
+        auto *MV = MetadataAsValue::get(Ctx, ValueAsMetadata::get(Inst));
+        DVI->setOperand(0, MV);
       }
     }
   };
@@ -5145,11 +5188,11 @@ bool CodeGenPrepare::splitLargeGEPOffsets() {
       }
 
       // Generate a new GEP to replace the current one.
-      IRBuilder<> Builder(GEP);
+      LLVMContext &Ctx = GEP->getContext();
       Type *IntPtrTy = DL->getIntPtrType(GEP->getType());
       Type *I8PtrTy =
-          Builder.getInt8PtrTy(GEP->getType()->getPointerAddressSpace());
-      Type *I8Ty = Builder.getInt8Ty();
+          Type::getInt8PtrTy(Ctx, GEP->getType()->getPointerAddressSpace());
+      Type *I8Ty = Type::getInt8Ty(Ctx);
 
       if (!NewBaseGEP) {
         // Create a new base if we don't have one yet.  Find the insertion
@@ -5185,6 +5228,7 @@ bool CodeGenPrepare::splitLargeGEPOffsets() {
         NewGEPBases.insert(NewBaseGEP);
       }
 
+      IRBuilder<> Builder(GEP);
       Value *NewGEP = NewBaseGEP;
       if (Offset == BaseOffset) {
         if (GEP->getType() != I8PtrTy)
@@ -5942,6 +5986,48 @@ bool CodeGenPrepare::optimizeShuffleVectorInst(ShuffleVectorInst *SVI) {
   return MadeChange;
 }
 
+bool CodeGenPrepare::tryToSinkFreeOperands(Instruction *I) {
+  // If the operands of I can be folded into a target instruction together with
+  // I, duplicate and sink them.
+  SmallVector<Use *, 4> OpsToSink;
+  if (!TLI || !TLI->shouldSinkOperands(I, OpsToSink))
+    return false;
+
+  // OpsToSink can contain multiple uses in a use chain (e.g.
+  // (%u1 with %u1 = shufflevector), (%u2 with %u2 = zext %u1)). The dominating
+  // uses must come first, which means they are sunk first, temporarily creating
+  // invalid IR. This will be fixed once their dominated users are sunk and
+  // updated.
+  BasicBlock *TargetBB = I->getParent();
+  bool Changed = false;
+  SmallVector<Use *, 4> ToReplace;
+  for (Use *U : OpsToSink) {
+    auto *UI = cast<Instruction>(U->get());
+    if (UI->getParent() == TargetBB || isa<PHINode>(UI))
+      continue;
+    ToReplace.push_back(U);
+  }
+
+  SmallPtrSet<Instruction *, 4> MaybeDead;
+  for (Use *U : ToReplace) {
+    auto *UI = cast<Instruction>(U->get());
+    Instruction *NI = UI->clone();
+    MaybeDead.insert(UI);
+    LLVM_DEBUG(dbgs() << "Sinking " << *UI << " to user " << *I << "\n");
+    NI->insertBefore(I);
+    InsertedInsts.insert(NI);
+    U->set(NI);
+    Changed = true;
+  }
+
+  // Remove instructions that are dead after sinking.
+  for (auto *I : MaybeDead)
+    if (!I->hasNUsesOrMore(1))
+      I->eraseFromParent();
+
+  return Changed;
+}
+
 bool CodeGenPrepare::optimizeSwitchInst(SwitchInst *SI) {
   if (!TLI || !DL)
     return false;
@@ -6685,8 +6771,8 @@ bool CodeGenPrepare::optimizeInst(Instruction *I, bool &ModifiedDT) {
   }
 
   if (CmpInst *CI = dyn_cast<CmpInst>(I))
-    if (!TLI || !TLI->hasMultipleConditionRegisters())
-      return OptimizeCmpExpression(CI, TLI);
+    if (TLI && optimizeCmpExpression(CI, *TLI, *DL))
+      return true;
 
   if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
     LI->setMetadata(LLVMContext::MD_invariant_group, nullptr);
@@ -6755,6 +6841,9 @@ bool CodeGenPrepare::optimizeInst(Instruction *I, bool &ModifiedDT) {
     }
     return false;
   }
+
+  if (tryToSinkFreeOperands(I))
+    return true;
 
   if (CallInst *CI = dyn_cast<CallInst>(I))
     return optimizeCallInst(CI, ModifiedDT);

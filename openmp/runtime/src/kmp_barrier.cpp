@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1253,7 +1252,7 @@ int __kmp_barrier(enum barrier_type bt, int gtid, int is_split,
     // It is OK to report the barrier state after the barrier begin callback.
     // According to the OMPT specification, a compliant implementation may
     // even delay reporting this state until the barrier begins to wait.
-    this_thr->th.ompt_thread_info.state = omp_state_wait_barrier;
+    this_thr->th.ompt_thread_info.state = ompt_state_wait_barrier;
   }
 #endif
 
@@ -1502,7 +1501,7 @@ int __kmp_barrier(enum barrier_type bt, int gtid, int is_split,
           my_task_data, return_address);
     }
 #endif
-    this_thr->th.ompt_thread_info.state = omp_state_work_parallel;
+    this_thr->th.ompt_thread_info.state = ompt_state_work_parallel;
   }
 #endif
   ANNOTATE_BARRIER_END(&team->t.t_bar);
@@ -1624,7 +1623,7 @@ void __kmp_join_barrier(int gtid) {
     if (!KMP_MASTER_TID(ds_tid))
       this_thr->th.ompt_thread_info.task_data = *OMPT_CUR_TASK_DATA(this_thr);
 #endif
-    this_thr->th.ompt_thread_info.state = omp_state_wait_barrier_implicit;
+    this_thr->th.ompt_thread_info.state = ompt_state_wait_barrier_implicit;
   }
 #endif
 
@@ -1698,6 +1697,11 @@ void __kmp_join_barrier(int gtid) {
     if (__kmp_tasking_mode != tskm_immediate_exec) {
       __kmp_task_team_wait(this_thr, team USE_ITT_BUILD_ARG(itt_sync_obj));
     }
+#if OMP_50_ENABLED
+    if (__kmp_display_affinity) {
+      KMP_CHECK_UPDATE(team->t.t_display_affinity, 0);
+    }
+#endif
 #if KMP_STATS_ENABLED
     // Have master thread flag the workers to indicate they are now waiting for
     // next parallel region, Also wake them up so they switch their timers to
@@ -1882,12 +1886,12 @@ void __kmp_fork_barrier(int gtid, int tid) {
 
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled &&
-      this_thr->th.ompt_thread_info.state == omp_state_wait_barrier_implicit) {
+      this_thr->th.ompt_thread_info.state == ompt_state_wait_barrier_implicit) {
     int ds_tid = this_thr->th.th_info.ds.ds_tid;
     ompt_data_t *task_data = (team)
                                  ? OMPT_CUR_TASK_DATA(this_thr)
                                  : &(this_thr->th.ompt_thread_info.task_data);
-    this_thr->th.ompt_thread_info.state = omp_state_overhead;
+    this_thr->th.ompt_thread_info.state = ompt_state_overhead;
 #if OMPT_OPTIONAL
     void *codeptr = NULL;
     if (KMP_MASTER_TID(ds_tid) &&
@@ -1905,7 +1909,7 @@ void __kmp_fork_barrier(int gtid, int tid) {
 #endif
     if (!KMP_MASTER_TID(ds_tid) && ompt_enabled.ompt_callback_implicit_task) {
       ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
-          ompt_scope_end, NULL, task_data, 0, ds_tid);
+          ompt_scope_end, NULL, task_data, 0, ds_tid, ompt_task_implicit); // TODO: Can this be ompt_task_initial?
     }
   }
 #endif
@@ -1985,6 +1989,19 @@ void __kmp_fork_barrier(int gtid, int tid) {
   }
 #endif
 #if OMP_50_ENABLED
+  // Perform the display affinity functionality
+  if (__kmp_display_affinity) {
+    if (team->t.t_display_affinity
+#if KMP_AFFINITY_SUPPORTED
+        || (__kmp_affinity_type == affinity_balanced && team->t.t_size_changed)
+#endif
+            ) {
+      // NULL means use the affinity-format-var ICV
+      __kmp_aux_display_affinity(gtid, NULL);
+      this_thr->th.th_prev_num_threads = team->t.t_nproc;
+      this_thr->th.th_prev_level = team->t.t_level;
+    }
+  }
   if (!KMP_MASTER_TID(tid))
     KMP_CHECK_UPDATE(this_thr->th.th_def_allocator, team->t.t_def_allocator);
 #endif
