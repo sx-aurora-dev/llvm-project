@@ -1,9 +1,8 @@
 //===- Decl.cpp - Declaration AST Node Implementation ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,6 +13,7 @@
 #include "clang/AST/Decl.h"
 #include "Linkage.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/CanonicalType.h"
@@ -49,7 +49,6 @@
 #include "clang/Basic/TargetCXXABI.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/Visibility.h"
-#include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/None.h"
@@ -3231,20 +3230,6 @@ SourceRange FunctionDecl::getExceptionSpecSourceRange() const {
   return FTL.getExceptionSpecRange();
 }
 
-const Attr *FunctionDecl::getUnusedResultAttr() const {
-  QualType RetType = getReturnType();
-  if (const auto *Ret = RetType->getAsRecordDecl()) {
-    if (const auto *R = Ret->getAttr<WarnUnusedResultAttr>())
-      return R;
-  } else if (const auto *ET = RetType->getAs<EnumType>()) {
-    if (const EnumDecl *ED = ET->getDecl()) {
-      if (const auto *R = ED->getAttr<WarnUnusedResultAttr>())
-        return R;
-    }
-  }
-  return getAttr<WarnUnusedResultAttr>();
-}
-
 /// For an inline function definition in C, or for a gnu_inline function
 /// in C++, determine whether the definition will be externally visible.
 ///
@@ -3687,6 +3672,10 @@ unsigned FunctionDecl::getMemoryFunctionKind() const {
   case Builtin::BImemcmp:
     return Builtin::BImemcmp;
 
+  case Builtin::BI__builtin_bcmp:
+  case Builtin::BIbcmp:
+    return Builtin::BIbcmp;
+
   case Builtin::BI__builtin_strncpy:
   case Builtin::BI__builtin___strncpy_chk:
   case Builtin::BIstrncpy:
@@ -3727,6 +3716,8 @@ unsigned FunctionDecl::getMemoryFunctionKind() const {
         return Builtin::BImemmove;
       else if (FnInfo->isStr("memcmp"))
         return Builtin::BImemcmp;
+      else if (FnInfo->isStr("bcmp"))
+        return Builtin::BIbcmp;
       else if (FnInfo->isStr("strncpy"))
         return Builtin::BIstrncpy;
       else if (FnInfo->isStr("strncmp"))

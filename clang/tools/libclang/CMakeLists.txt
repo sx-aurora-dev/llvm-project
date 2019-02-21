@@ -36,10 +36,12 @@ set(SOURCES
 set(LIBS
   clangAST
   clangBasic
+  clangDriver
   clangFrontend
   clangIndex
   clangLex
   clangSema
+  clangSerialization
   clangTooling
 )
 
@@ -73,7 +75,7 @@ if(MSVC)
   set(LLVM_EXPORTED_SYMBOL_FILE)
 endif()
 
-if( LLVM_ENABLE_PIC )
+if(LLVM_ENABLE_PIC OR WIN32)
   set(ENABLE_SHARED SHARED)
 endif()
 
@@ -147,7 +149,7 @@ install(DIRECTORY ../../include/clang-c
 add_custom_target(libclang-headers)
 set_target_properties(libclang-headers PROPERTIES FOLDER "Misc")
 
-if (NOT CMAKE_CONFIGURATION_TYPES) # don't add this for IDE's.
+if (NOT LLVM_ENABLE_IDE)
   add_llvm_install_targets(install-libclang-headers
                            COMPONENT libclang-headers)
 endif()
@@ -163,7 +165,7 @@ foreach(PythonVersion ${CLANG_PYTHON_BINDINGS_VERSIONS})
           DESTINATION
             "lib${LLVM_LIBDIR_SUFFIX}/python${PythonVersion}/site-packages")
 endforeach()
-if(NOT CMAKE_CONFIGURATION_TYPES)
+if(NOT LLVM_ENABLE_IDE)
   add_custom_target(libclang-python-bindings)
   add_llvm_install_targets(install-libclang-python-bindings
                            COMPONENT

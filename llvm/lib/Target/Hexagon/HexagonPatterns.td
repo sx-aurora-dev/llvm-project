@@ -1,9 +1,8 @@
 //==- HexagonPatterns.td - Target Description for Hexagon -*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -177,6 +176,11 @@ def UDEC32: SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(V-32, SDLoc(N), MVT::i32);
 }]>;
 
+class Subi<int From>: SDNodeXForm<imm,
+  "int32_t V = " # From # " - N->getSExtValue();" #
+  "return CurDAG->getTargetConstant(V, SDLoc(N), MVT::i32);"
+>;
+
 def Log2_32: SDNodeXForm<imm, [{
   uint32_t V = N->getZExtValue();
   return CurDAG->getTargetConstant(Log2_32(V), SDLoc(N), MVT::i32);
@@ -218,6 +222,8 @@ def I1toI32:  OutPatFrag<(ops node:$Rs), (C2_muxii (i1 $Rs), 1, 0)>;
 def I32toI1:  OutPatFrag<(ops node:$Rs), (i1 (C2_cmpgtui (i32 $Rs), (i32 0)))>;
 def ToZext64: OutPatFrag<(ops node:$Rs), (i64 (A4_combineir 0, (i32 $Rs)))>;
 def ToSext64: OutPatFrag<(ops node:$Rs), (i64 (A2_sxtw (i32 $Rs)))>;
+def ToAext64: OutPatFrag<(ops node:$Rs),
+  (REG_SEQUENCE DoubleRegs, (i32 (IMPLICIT_DEF)), isub_hi, (i32 $Rs), isub_lo)>;
 
 def Combinew: OutPatFrag<(ops node:$Rs, node:$Rt),
   (REG_SEQUENCE DoubleRegs, $Rs, isub_hi, $Rt, isub_lo)>;
@@ -811,9 +817,9 @@ def: Pat<(select (not I1:$Pu), F32:$Rt, f32ImmPred:$I),
          (C2_muxri I1:$Pu, (ftoi $I), F32:$Rt)>;
 
 def: Pat<(select I1:$Pu, V4I8:$Rs, V4I8:$Rt),
-         (LoReg (C2_vmux I1:$Pu, (ToZext64 $Rs), (ToZext64 $Rt)))>;
+         (LoReg (C2_vmux I1:$Pu, (ToAext64 $Rs), (ToAext64 $Rt)))>;
 def: Pat<(select I1:$Pu, V2I16:$Rs, V2I16:$Rt),
-         (LoReg (C2_vmux I1:$Pu, (ToZext64 $Rs), (ToZext64 $Rt)))>;
+         (LoReg (C2_vmux I1:$Pu, (ToAext64 $Rs), (ToAext64 $Rt)))>;
 def: Pat<(select I1:$Pu, V2I32:$Rs, V2I32:$Rt),
          (Combinew (C2_mux I1:$Pu, (HiReg $Rs), (HiReg $Rt)),
                    (C2_mux I1:$Pu, (LoReg $Rs), (LoReg $Rt)))>;
@@ -993,10 +999,90 @@ def: OpR_RR_pat<S2_asr_r_p, Sra, i64, I64, I32>;
 def: OpR_RR_pat<S2_lsr_r_p, Srl, i64, I64, I32>;
 def: OpR_RR_pat<S2_asl_r_p, Shl, i64, I64, I32>;
 
-let Predicates = [HasV60] in {
+// Funnel shifts.
+def IsMul8_U3: PatLeaf<(i32 imm), [{
+  uint64_t V = N->getZExtValue();
+  return V % 8 == 0 && isUInt<3>(V / 8);
+}]>;
+
+def Divu8: SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue() / 8, SDLoc(N), MVT::i32);
+}]>;
+
+// Funnel shift-left.
+def FShl32i: OutPatFrag<(ops node:$Rs, node:$Rt, node:$S),
+  (HiReg (S2_asl_i_p (Combinew $Rs, $Rt), $S))>;
+def FShl32r: OutPatFrag<(ops node:$Rs, node:$Rt, node:$Ru),
+  (HiReg (S2_asl_r_p (Combinew $Rs, $Rt), $Ru))>;
+
+def FShl64i: OutPatFrag<(ops node:$Rs, node:$Rt, node:$S),
+  (S2_lsr_i_p_or (S2_asl_i_p $Rt, $S),  $Rs, (Subi<64> $S))>;
+def FShl64r: OutPatFrag<(ops node:$Rs, node:$Rt, node:$Ru),
+  (S2_lsr_r_p_or (S2_asl_r_p $Rt, $Ru), $Rs, (A2_subri 64, $Ru))>;
+
+// Combined SDNodeXForm: (Divu8 (Subi<64> $S))
+def Divu64_8: SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant((64 - N->getSExtValue()) / 8,
+                                   SDLoc(N), MVT::i32);
+}]>;
+
+// Special cases:
+let AddedComplexity = 100 in {
+  def: Pat<(fshl I32:$Rs, I32:$Rt, (i32 16)),
+           (A2_combine_hl I32:$Rs, I32:$Rt)>;
+  def: Pat<(fshl I64:$Rs, I64:$Rt, IsMul8_U3:$S),
+           (S2_valignib I64:$Rs, I64:$Rt, (Divu64_8 $S))>;
+}
+
+let Predicates = [HasV60], AddedComplexity = 50 in {
   def: OpR_RI_pat<S6_rol_i_r, Rol, i32, I32, u5_0ImmPred>;
   def: OpR_RI_pat<S6_rol_i_p, Rol, i64, I64, u6_0ImmPred>;
 }
+let AddedComplexity = 30 in {
+  def: Pat<(rotl I32:$Rs, u5_0ImmPred:$S),          (FShl32i $Rs, $Rs, imm:$S)>;
+  def: Pat<(rotl I64:$Rs, u6_0ImmPred:$S),          (FShl64i $Rs, $Rs, imm:$S)>;
+  def: Pat<(fshl I32:$Rs, I32:$Rt, u5_0ImmPred:$S), (FShl32i $Rs, $Rt, imm:$S)>;
+  def: Pat<(fshl I64:$Rs, I64:$Rt, u6_0ImmPred:$S), (FShl64i $Rs, $Rt, imm:$S)>;
+}
+def: Pat<(rotl I32:$Rs, I32:$Rt),           (FShl32r $Rs, $Rs, $Rt)>;
+def: Pat<(rotl I64:$Rs, I32:$Rt),           (FShl64r $Rs, $Rs, $Rt)>;
+def: Pat<(fshl I32:$Rs, I32:$Rt, I32:$Ru),  (FShl32r $Rs, $Rt, $Ru)>;
+def: Pat<(fshl I64:$Rs, I64:$Rt, I32:$Ru),  (FShl64r $Rs, $Rt, $Ru)>;
+
+// Funnel shift-right.
+def FShr32i: OutPatFrag<(ops node:$Rs, node:$Rt, node:$S),
+  (LoReg (S2_lsr_i_p (Combinew $Rs, $Rt), $S))>;
+def FShr32r: OutPatFrag<(ops node:$Rs, node:$Rt, node:$Ru),
+  (LoReg (S2_lsr_r_p (Combinew $Rs, $Rt), $Ru))>;
+
+def FShr64i: OutPatFrag<(ops node:$Rs, node:$Rt, node:$S),
+  (S2_asl_i_p_or (S2_lsr_i_p $Rt, $S),  $Rs, (Subi<64> $S))>;
+def FShr64r: OutPatFrag<(ops node:$Rs, node:$Rt, node:$Ru),
+  (S2_asl_r_p_or (S2_lsr_r_p $Rt, $Ru), $Rs, (A2_subri 64, $Ru))>;
+
+// Special cases:
+let AddedComplexity = 100 in {
+  def: Pat<(fshr I32:$Rs, I32:$Rt, (i32 16)),
+           (A2_combine_hl I32:$Rs, I32:$Rt)>;
+  def: Pat<(fshr I64:$Rs, I64:$Rt, IsMul8_U3:$S),
+           (S2_valignib I64:$Rs, I64:$Rt, (Divu8 $S))>;
+}
+
+let Predicates = [HasV60], AddedComplexity = 50 in {
+  def: Pat<(rotr I32:$Rs, u5_0ImmPred:$S), (S6_rol_i_r I32:$Rs, (Subi<32> $S))>;
+  def: Pat<(rotr I64:$Rs, u6_0ImmPred:$S), (S6_rol_i_p I64:$Rs, (Subi<64> $S))>;
+}
+let AddedComplexity = 30 in {
+  def: Pat<(rotr I32:$Rs, u5_0ImmPred:$S),          (FShr32i $Rs, $Rs, imm:$S)>;
+  def: Pat<(rotr I64:$Rs, u6_0ImmPred:$S),          (FShr64i $Rs, $Rs, imm:$S)>;
+  def: Pat<(fshr I32:$Rs, I32:$Rt, u5_0ImmPred:$S), (FShr32i $Rs, $Rt, imm:$S)>;
+  def: Pat<(fshr I64:$Rs, I64:$Rt, u6_0ImmPred:$S), (FShr64i $Rs, $Rt, imm:$S)>;
+}
+def: Pat<(rotr I32:$Rs, I32:$Rt),           (FShr32r $Rs, $Rs, $Rt)>;
+def: Pat<(rotr I64:$Rs, I32:$Rt),           (FShr64r $Rs, $Rs, $Rt)>;
+def: Pat<(fshr I32:$Rs, I32:$Rt, I32:$Ru),  (FShr32r $Rs, $Rt, $Ru)>;
+def: Pat<(fshr I64:$Rs, I64:$Rt, I32:$Ru),  (FShr64r $Rs, $Rt, $Ru)>;
+
 
 def: Pat<(sra (add (sra I32:$Rs, u5_0ImmPred:$u5), 1), (i32 1)),
          (S2_asr_i_r_rnd I32:$Rs, imm:$u5)>;
@@ -1167,6 +1253,19 @@ def: Pat<(srl V4I16:$b, (v4i16 (HexagonVSPLAT u4_0ImmPred:$c))),
          (S2_lsr_i_vh V4I16:$b, imm:$c)>;
 def: Pat<(shl V4I16:$b, (v4i16 (HexagonVSPLAT u4_0ImmPred:$c))),
          (S2_asl_i_vh V4I16:$b, imm:$c)>;
+
+def: Pat<(HexagonVASR V2I16:$Rs, u4_0ImmPred:$S),
+         (LoReg (S2_asr_i_vh (ToAext64 $Rs), imm:$S))>;
+def: Pat<(HexagonVASL V2I16:$Rs, u4_0ImmPred:$S),
+         (LoReg (S2_asl_i_vh (ToAext64 $Rs), imm:$S))>;
+def: Pat<(HexagonVLSR V2I16:$Rs, u4_0ImmPred:$S),
+         (LoReg (S2_lsr_i_vh (ToAext64 $Rs), imm:$S))>;
+def: Pat<(HexagonVASR V2I16:$Rs, I32:$Rt),
+         (LoReg (S2_asr_i_vh (ToAext64 $Rs), I32:$Rt))>;
+def: Pat<(HexagonVASL V2I16:$Rs, I32:$Rt),
+         (LoReg (S2_asl_i_vh (ToAext64 $Rs), I32:$Rt))>;
+def: Pat<(HexagonVLSR V2I16:$Rs, I32:$Rt),
+         (LoReg (S2_lsr_i_vh (ToAext64 $Rs), I32:$Rt))>;
 
 
 // --(9) Arithmetic/bitwise ----------------------------------------------
@@ -1512,9 +1611,9 @@ def: Pat<(add V2I32:$Rx, (mul V2I32:$Rs, V2I32:$Rt)),
 // Add/subtract two v4i8: Hexagon does not have an insn for this one, so
 // we use the double add v8i8, and use only the low part of the result.
 def: Pat<(add V4I8:$Rs, V4I8:$Rt),
-         (LoReg (A2_vaddub (ToZext64 $Rs), (ToZext64 $Rt)))>;
+         (LoReg (A2_vaddub (ToAext64 $Rs), (ToAext64 $Rt)))>;
 def: Pat<(sub V4I8:$Rs, V4I8:$Rt),
-         (LoReg (A2_vsubub (ToZext64 $Rs), (ToZext64 $Rt)))>;
+         (LoReg (A2_vsubub (ToAext64 $Rs), (ToAext64 $Rt)))>;
 
 // Use M2_vmpy2s_s0 for half-word vector multiply. It multiplies two
 // half-words, and saturates the result to a 32-bit value, except the
@@ -1863,10 +1962,10 @@ let AddedComplexity = 20 in {
 }
 
 let AddedComplexity = 30 in {
-  defm: Loadxim_pat<extloadi1,    i64, ToZext64, anyimm0, L2_loadrub_io>;
-  defm: Loadxim_pat<extloadi8,    i64, ToZext64, anyimm0, L2_loadrub_io>;
-  defm: Loadxim_pat<extloadi16,   i64, ToZext64, anyimm1, L2_loadruh_io>;
-  defm: Loadxim_pat<extloadi32,   i64, ToZext64, anyimm2, L2_loadri_io>;
+  defm: Loadxim_pat<extloadi1,    i64, ToAext64, anyimm0, L2_loadrub_io>;
+  defm: Loadxim_pat<extloadi8,    i64, ToAext64, anyimm0, L2_loadrub_io>;
+  defm: Loadxim_pat<extloadi16,   i64, ToAext64, anyimm1, L2_loadruh_io>;
+  defm: Loadxim_pat<extloadi32,   i64, ToAext64, anyimm2, L2_loadri_io>;
   defm: Loadxim_pat<zextloadi1,   i64, ToZext64, anyimm0, L2_loadrub_io>;
   defm: Loadxim_pat<zextloadi8,   i64, ToZext64, anyimm0, L2_loadrub_io>;
   defm: Loadxim_pat<zextloadi16,  i64, ToZext64, anyimm1, L2_loadruh_io>;
@@ -1901,13 +2000,13 @@ let AddedComplexity  = 60 in {
 
   def: Loadxum_pat<sextloadi8,  i64, anyimm0, ToSext64, L4_loadrb_ur>;
   def: Loadxum_pat<zextloadi8,  i64, anyimm0, ToZext64, L4_loadrub_ur>;
-  def: Loadxum_pat<extloadi8,   i64, anyimm0, ToZext64, L4_loadrub_ur>;
+  def: Loadxum_pat<extloadi8,   i64, anyimm0, ToAext64, L4_loadrub_ur>;
   def: Loadxum_pat<sextloadi16, i64, anyimm1, ToSext64, L4_loadrh_ur>;
   def: Loadxum_pat<zextloadi16, i64, anyimm1, ToZext64, L4_loadruh_ur>;
-  def: Loadxum_pat<extloadi16,  i64, anyimm1, ToZext64, L4_loadruh_ur>;
+  def: Loadxum_pat<extloadi16,  i64, anyimm1, ToAext64, L4_loadruh_ur>;
   def: Loadxum_pat<sextloadi32, i64, anyimm2, ToSext64, L4_loadri_ur>;
   def: Loadxum_pat<zextloadi32, i64, anyimm2, ToZext64, L4_loadri_ur>;
-  def: Loadxum_pat<extloadi32,  i64, anyimm2, ToZext64, L4_loadri_ur>;
+  def: Loadxum_pat<extloadi32,  i64, anyimm2, ToAext64, L4_loadri_ur>;
 }
 
 let AddedComplexity = 40 in {
@@ -1947,25 +2046,25 @@ let AddedComplexity = 20 in {
 }
 
 let AddedComplexity = 40 in {
-  def: Loadxrm_shl_pat<extloadi8,    i64, ToZext64, L4_loadrub_rr>;
+  def: Loadxrm_shl_pat<extloadi8,    i64, ToAext64, L4_loadrub_rr>;
   def: Loadxrm_shl_pat<zextloadi8,   i64, ToZext64, L4_loadrub_rr>;
   def: Loadxrm_shl_pat<sextloadi8,   i64, ToSext64, L4_loadrb_rr>;
-  def: Loadxrm_shl_pat<extloadi16,   i64, ToZext64, L4_loadruh_rr>;
+  def: Loadxrm_shl_pat<extloadi16,   i64, ToAext64, L4_loadruh_rr>;
   def: Loadxrm_shl_pat<zextloadi16,  i64, ToZext64, L4_loadruh_rr>;
   def: Loadxrm_shl_pat<sextloadi16,  i64, ToSext64, L4_loadrh_rr>;
-  def: Loadxrm_shl_pat<extloadi32,   i64, ToZext64, L4_loadri_rr>;
+  def: Loadxrm_shl_pat<extloadi32,   i64, ToAext64, L4_loadri_rr>;
   def: Loadxrm_shl_pat<zextloadi32,  i64, ToZext64, L4_loadri_rr>;
   def: Loadxrm_shl_pat<sextloadi32,  i64, ToSext64, L4_loadri_rr>;
 }
 
 let AddedComplexity = 20 in {
-  def: Loadxrm_add_pat<extloadi8,    i64, ToZext64, L4_loadrub_rr>;
+  def: Loadxrm_add_pat<extloadi8,    i64, ToAext64, L4_loadrub_rr>;
   def: Loadxrm_add_pat<zextloadi8,   i64, ToZext64, L4_loadrub_rr>;
   def: Loadxrm_add_pat<sextloadi8,   i64, ToSext64, L4_loadrb_rr>;
-  def: Loadxrm_add_pat<extloadi16,   i64, ToZext64, L4_loadruh_rr>;
+  def: Loadxrm_add_pat<extloadi16,   i64, ToAext64, L4_loadruh_rr>;
   def: Loadxrm_add_pat<zextloadi16,  i64, ToZext64, L4_loadruh_rr>;
   def: Loadxrm_add_pat<sextloadi16,  i64, ToSext64, L4_loadrh_rr>;
-  def: Loadxrm_add_pat<extloadi32,   i64, ToZext64, L4_loadri_rr>;
+  def: Loadxrm_add_pat<extloadi32,   i64, ToAext64, L4_loadri_rr>;
   def: Loadxrm_add_pat<zextloadi32,  i64, ToZext64, L4_loadri_rr>;
   def: Loadxrm_add_pat<sextloadi32,  i64, ToSext64, L4_loadri_rr>;
 }
@@ -1997,13 +2096,13 @@ let AddedComplexity  = 60 in {
 }
 
 let AddedComplexity  = 30 in {
-  def: Loadam_pat<extloadi8,      i64, anyimm0, ToZext64, PS_loadrubabs>;
+  def: Loadam_pat<extloadi8,      i64, anyimm0, ToAext64, PS_loadrubabs>;
   def: Loadam_pat<sextloadi8,     i64, anyimm0, ToSext64, PS_loadrbabs>;
   def: Loadam_pat<zextloadi8,     i64, anyimm0, ToZext64, PS_loadrubabs>;
-  def: Loadam_pat<extloadi16,     i64, anyimm1, ToZext64, PS_loadruhabs>;
+  def: Loadam_pat<extloadi16,     i64, anyimm1, ToAext64, PS_loadruhabs>;
   def: Loadam_pat<sextloadi16,    i64, anyimm1, ToSext64, PS_loadrhabs>;
   def: Loadam_pat<zextloadi16,    i64, anyimm1, ToZext64, PS_loadruhabs>;
-  def: Loadam_pat<extloadi32,     i64, anyimm2, ToZext64, PS_loadriabs>;
+  def: Loadam_pat<extloadi32,     i64, anyimm2, ToAext64, PS_loadriabs>;
   def: Loadam_pat<sextloadi32,    i64, anyimm2, ToSext64, PS_loadriabs>;
   def: Loadam_pat<zextloadi32,    i64, anyimm2, ToZext64, PS_loadriabs>;
 
@@ -2039,13 +2138,13 @@ let AddedComplexity  = 100 in {
 }
 
 let AddedComplexity  = 70 in {
-  def: Loadam_pat<extloadi8,      i64, addrgp,  ToZext64, L2_loadrubgp>;
+  def: Loadam_pat<extloadi8,      i64, addrgp,  ToAext64, L2_loadrubgp>;
   def: Loadam_pat<sextloadi8,     i64, addrgp,  ToSext64, L2_loadrbgp>;
   def: Loadam_pat<zextloadi8,     i64, addrgp,  ToZext64, L2_loadrubgp>;
-  def: Loadam_pat<extloadi16,     i64, addrgp,  ToZext64, L2_loadruhgp>;
+  def: Loadam_pat<extloadi16,     i64, addrgp,  ToAext64, L2_loadruhgp>;
   def: Loadam_pat<sextloadi16,    i64, addrgp,  ToSext64, L2_loadrhgp>;
   def: Loadam_pat<zextloadi16,    i64, addrgp,  ToZext64, L2_loadruhgp>;
-  def: Loadam_pat<extloadi32,     i64, addrgp,  ToZext64, L2_loadrigp>;
+  def: Loadam_pat<extloadi32,     i64, addrgp,  ToAext64, L2_loadrigp>;
   def: Loadam_pat<sextloadi32,    i64, addrgp,  ToSext64, L2_loadrigp>;
   def: Loadam_pat<zextloadi32,    i64, addrgp,  ToZext64, L2_loadrigp>;
 

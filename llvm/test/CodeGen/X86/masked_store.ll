@@ -145,7 +145,7 @@ define void @store_v8i32_v8i32(<8 x i32> %trigger, <8 x i32>* %addr, <8 x i32> %
 ; SSE2-NEXT:  ## %bb.1: ## %cond.store
 ; SSE2-NEXT:    movd %xmm2, (%rdi)
 ; SSE2-NEXT:  LBB2_2: ## %else
-; SSE2-NEXT:    packssdw %xmm0, %xmm4
+; SSE2-NEXT:    psrlq $16, %xmm4
 ; SSE2-NEXT:    movd %xmm4, %eax
 ; SSE2-NEXT:    shrl $16, %eax
 ; SSE2-NEXT:    testb $1, %al
@@ -330,17 +330,14 @@ define void @store_v2f32_v2i32(<2 x i32> %trigger, <2 x float>* %addr, <2 x floa
 ; SSE4-LABEL: store_v2f32_v2i32:
 ; SSE4:       ## %bb.0:
 ; SSE4-NEXT:    pxor %xmm2, %xmm2
-; SSE4-NEXT:    movdqa %xmm0, %xmm3
-; SSE4-NEXT:    pblendw {{.*#+}} xmm3 = xmm3[0,1],xmm2[2,3],xmm3[4,5],xmm2[6,7]
-; SSE4-NEXT:    pcmpeqq %xmm2, %xmm3
-; SSE4-NEXT:    pextrb $0, %xmm3, %eax
+; SSE4-NEXT:    pblendw {{.*#+}} xmm0 = xmm0[0,1],xmm2[2,3],xmm0[4,5],xmm2[6,7]
+; SSE4-NEXT:    pcmpeqq %xmm2, %xmm0
+; SSE4-NEXT:    pextrb $0, %xmm0, %eax
 ; SSE4-NEXT:    testb $1, %al
 ; SSE4-NEXT:    je LBB3_2
 ; SSE4-NEXT:  ## %bb.1: ## %cond.store
 ; SSE4-NEXT:    movss %xmm1, (%rdi)
 ; SSE4-NEXT:  LBB3_2: ## %else
-; SSE4-NEXT:    pblendw {{.*#+}} xmm0 = xmm0[0,1],xmm2[2,3],xmm0[4,5],xmm2[6,7]
-; SSE4-NEXT:    pcmpeqq %xmm2, %xmm0
 ; SSE4-NEXT:    pextrb $8, %xmm0, %eax
 ; SSE4-NEXT:    testb $1, %al
 ; SSE4-NEXT:    je LBB3_4
@@ -417,17 +414,14 @@ define void @store_v2i32_v2i32(<2 x i32> %trigger, <2 x i32>* %addr, <2 x i32> %
 ; SSE4-LABEL: store_v2i32_v2i32:
 ; SSE4:       ## %bb.0:
 ; SSE4-NEXT:    pxor %xmm2, %xmm2
-; SSE4-NEXT:    movdqa %xmm0, %xmm3
-; SSE4-NEXT:    pblendw {{.*#+}} xmm3 = xmm3[0,1],xmm2[2,3],xmm3[4,5],xmm2[6,7]
-; SSE4-NEXT:    pcmpeqq %xmm2, %xmm3
-; SSE4-NEXT:    pextrb $0, %xmm3, %eax
+; SSE4-NEXT:    pblendw {{.*#+}} xmm0 = xmm0[0,1],xmm2[2,3],xmm0[4,5],xmm2[6,7]
+; SSE4-NEXT:    pcmpeqq %xmm2, %xmm0
+; SSE4-NEXT:    pextrb $0, %xmm0, %eax
 ; SSE4-NEXT:    testb $1, %al
 ; SSE4-NEXT:    je LBB4_2
 ; SSE4-NEXT:  ## %bb.1: ## %cond.store
 ; SSE4-NEXT:    movss %xmm1, (%rdi)
 ; SSE4-NEXT:  LBB4_2: ## %else
-; SSE4-NEXT:    pblendw {{.*#+}} xmm0 = xmm0[0,1],xmm2[2,3],xmm0[4,5],xmm2[6,7]
-; SSE4-NEXT:    pcmpeqq %xmm2, %xmm0
 ; SSE4-NEXT:    pextrb $8, %xmm0, %eax
 ; SSE4-NEXT:    testb $1, %al
 ; SSE4-NEXT:    je LBB4_4

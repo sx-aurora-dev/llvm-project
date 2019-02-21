@@ -1,9 +1,8 @@
 //===- X86DiscriminateMemOps.cpp - Unique IDs for Mem Ops -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -21,8 +20,19 @@
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ProfileData/SampleProfReader.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Transforms/IPO/SampleProfile.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "x86-discriminate-memops"
+
+static cl::opt<bool> EnableDiscriminateMemops(
+    DEBUG_TYPE, cl::init(false),
+    cl::desc("Generate unique debug info for each instruction with a memory "
+             "operand. Should be enabled for profile-drived cache prefetching, "
+             "both in the build of the binary being profiled, as well as in "
+             "the build of the binary consuming the profile."),
+    cl::Hidden);
 
 namespace {
 
@@ -64,6 +74,9 @@ char X86DiscriminateMemOps::ID = 0;
 X86DiscriminateMemOps::X86DiscriminateMemOps() : MachineFunctionPass(ID) {}
 
 bool X86DiscriminateMemOps::runOnMachineFunction(MachineFunction &MF) {
+  if (!EnableDiscriminateMemops)
+    return false;
+
   DISubprogram *FDI = MF.getFunction().getSubprogram();
   if (!FDI || !FDI->getUnit()->getDebugInfoForProfiling())
     return false;
@@ -72,7 +85,7 @@ bool X86DiscriminateMemOps::runOnMachineFunction(MachineFunction &MF) {
   // have any debug info.
   const DILocation *ReferenceDI =
       DILocation::get(FDI->getContext(), FDI->getLine(), 0, FDI);
-
+  assert(ReferenceDI && "ReferenceDI should not be nullptr");
   DenseMap<Location, unsigned> MemOpDiscriminators;
   MemOpDiscriminators[diToLocation(ReferenceDI)] = 0;
 
@@ -105,18 +118,38 @@ bool X86DiscriminateMemOps::runOnMachineFunction(MachineFunction &MF) {
       if (!DI) {
         DI = ReferenceDI;
       }
-      DenseSet<unsigned> &Set = Seen[diToLocation(DI)];
+      Location L = diToLocation(DI);
+      DenseSet<unsigned> &Set = Seen[L];
       const std::pair<DenseSet<unsigned>::iterator, bool> TryInsert =
           Set.insert(DI->getBaseDiscriminator());
       if (!TryInsert.second) {
-        DI = DI->setBaseDiscriminator(++MemOpDiscriminators[diToLocation(DI)]);
+        unsigned BF, DF, CI = 0;
+        DILocation::decodeDiscriminator(DI->getDiscriminator(), BF, DF, CI);
+        Optional<unsigned> EncodedDiscriminator = DILocation::encodeDiscriminator(
+            MemOpDiscriminators[L] + 1, DF, CI);
+
+        if (!EncodedDiscriminator) {
+          // FIXME(mtrofin): The assumption is that this scenario is infrequent/OK
+          // not to support. If evidence points otherwise, we can explore synthesizeing
+          // unique DIs by adding fake line numbers, or by constructing 64 bit
+          // discriminators.
+          LLVM_DEBUG(dbgs() << "Unable to create a unique discriminator "
+                     "for instruction with memory operand in: "
+                     << DI->getFilename() << " Line: " << DI->getLine()
+                     << " Column: " << DI->getColumn()
+                     << ". This is likely due to a large macro expansion. \n");
+          continue;
+        }
+        // Since we were able to encode, bump the MemOpDiscriminators.
+        ++MemOpDiscriminators[L];
+        DI = DI->cloneWithDiscriminator(EncodedDiscriminator.getValue());
+        assert(DI && "DI should not be nullptr");
         updateDebugInfo(&MI, DI);
         Changed = true;
-        const std::pair<DenseSet<unsigned>::iterator, bool> MustInsert =
+        std::pair<DenseSet<unsigned>::iterator, bool> MustInsert =
             Set.insert(DI->getBaseDiscriminator());
-        (void)MustInsert; // silence warning.
-        assert(MustInsert.second &&
-               "New discriminator shouldn't be present in set");
+        (void)MustInsert; // Silence warning in release build.
+        assert(MustInsert.second && "New discriminator shouldn't be present in set");
       }
 
       // Bump the reference DI to avoid cramming discriminators on line 0.

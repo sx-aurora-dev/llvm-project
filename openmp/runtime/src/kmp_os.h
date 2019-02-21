@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,6 +37,14 @@
 
 #ifndef KMP_MEM_CONS_MODEL
 #define KMP_MEM_CONS_MODEL KMP_MEM_CONS_VOLATILE
+#endif
+
+#ifndef __has_cpp_attribute
+#define __has_cpp_attribute(x) 0
+#endif
+
+#ifndef __has_attribute
+#define __has_attribute(x) 0
 #endif
 
 /* ------------------------- Compiler recognition ---------------------- */
@@ -86,9 +93,12 @@
    128-bit extended precision type yet */
 typedef long double _Quad;
 #elif KMP_COMPILER_GCC
+/* GCC on NetBSD lacks __multc3/__divtc3 builtins needed for quad */
+#if !KMP_OS_NETBSD
 typedef __float128 _Quad;
 #undef KMP_HAVE_QUAD
 #define KMP_HAVE_QUAD 1
+#endif
 #elif KMP_COMPILER_MSVC
 typedef long double _Quad;
 #endif
@@ -102,6 +112,7 @@ typedef long double _Quad;
 
 #define KMP_USE_X87CONTROL 0
 #if KMP_OS_WINDOWS
+#define KMP_END_OF_LINE "\r\n"
 typedef char kmp_int8;
 typedef unsigned char kmp_uint8;
 typedef short kmp_int16;
@@ -137,6 +148,7 @@ typedef unsigned __int64 kmp_uintptr_t;
 #endif /* KMP_OS_WINDOWS */
 
 #if KMP_OS_UNIX
+#define KMP_END_OF_LINE "\n"
 typedef char kmp_int8;
 typedef unsigned char kmp_uint8;
 typedef short kmp_int16;
@@ -291,6 +303,20 @@ extern "C" {
 #endif /* CACHE_LINE */
 
 #define KMP_CACHE_PREFETCH(ADDR) /* nothing */
+
+// Define attribute that indicates that the fall through from the previous 
+// case label is intentional and should not be diagnosed by a compiler
+//   Code from libcxx/include/__config
+// Use a function like macro to imply that it must be followed by a semicolon
+#if __cplusplus > 201402L && __has_cpp_attribute(fallthrough)
+#  define KMP_FALLTHROUGH() [[fallthrough]]
+#elif __has_cpp_attribute(clang::fallthrough)
+#  define KMP_FALLTHROUGH() [[clang::fallthrough]]
+#elif __has_attribute(fallthough) || __GNUC__ >= 7
+#  define KMP_FALLTHROUGH() __attribute__((__fallthrough__))
+#else
+#  define KMP_FALLTHROUGH() ((void)0)
+#endif
 
 // Define attribute that indicates a function does not return
 #if __cplusplus >= 201103L

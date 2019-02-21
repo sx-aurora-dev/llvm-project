@@ -1,9 +1,8 @@
 //==--- Attr.td - attribute definitions -----------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -103,13 +102,6 @@ def ObjCInstanceMethod : SubsetSubject<ObjCMethod,
                                        [{S->isInstanceMethod()}],
                                        "Objective-C instance methods">;
 
-def ObjCInterfaceDeclInitMethod : SubsetSubject<ObjCMethod,
-                               [{S->getMethodFamily() == OMF_init &&
-                                 (isa<ObjCInterfaceDecl>(S->getDeclContext()) ||
-                                  (isa<ObjCCategoryDecl>(S->getDeclContext()) &&
-            cast<ObjCCategoryDecl>(S->getDeclContext())->IsClassExtension()))}],
-            "init methods of interface or class extension declarations">;
-
 def Struct : SubsetSubject<Record,
                            [{!S->isUnion()}], "structs">;
 
@@ -189,6 +181,9 @@ class VariadicIdentifierArgument<string name> : Argument<name, 1>;
 
 // Like VariadicUnsignedArgument except values are ParamIdx.
 class VariadicParamIdxArgument<string name> : Argument<name, 1>;
+
+// A list of identifiers matching parameters or ParamIdx indices.
+class VariadicParamOrParamIdxArgument<string name> : Argument<name, 1>;
 
 // Like VariadicParamIdxArgument but for a single function parameter index.
 class ParamIdxArgument<string name, bit opt = 0> : Argument<name, opt>;
@@ -300,6 +295,7 @@ def OpenCL : LangOpt<"OpenCL">;
 def RenderScript : LangOpt<"RenderScript">;
 def ObjC : LangOpt<"ObjC">;
 def BlocksSupported : LangOpt<"Blocks">;
+def ObjCAutoRefCount : LangOpt<"ObjCAutoRefCount">;
 
 // Defines targets for target-specific attributes. Empty lists are unchecked.
 class TargetSpec {
@@ -328,6 +324,7 @@ def TargetMSP430 : TargetArch<["msp430"]>;
 def TargetRISCV : TargetArch<["riscv32", "riscv64"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetAnyX86 : TargetArch<["x86", "x86_64"]>;
+def TargetWebAssembly : TargetArch<["wasm32", "wasm64"]>;
 def TargetWindows : TargetArch<["x86", "x86_64", "arm", "thumb", "aarch64"]> {
   let OSes = ["Win32"];
 }
@@ -714,7 +711,8 @@ def Availability : InheritableAttr {
   let Args = [IdentifierArgument<"platform">, VersionArgument<"introduced">,
               VersionArgument<"deprecated">, VersionArgument<"obsoleted">,
               BoolArgument<"unavailable">, StringArgument<"message">,
-              BoolArgument<"strict">, StringArgument<"replacement">];
+              BoolArgument<"strict">, StringArgument<"replacement">,
+              IntArgument<"priority">];
   let AdditionalMembers =
 [{static llvm::StringRef getPrettyPlatformName(llvm::StringRef Platform) {
     return llvm::StringSwitch<llvm::StringRef>(Platform)
@@ -840,13 +838,25 @@ def OSConsumed : InheritableParamAttr {
 
 def OSReturnsRetained : InheritableAttr {
   let Spellings = [Clang<"os_returns_retained">];
-  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
+  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty, ParmVar]>;
   let Documentation = [RetainBehaviorDocs];
 }
 
 def OSReturnsNotRetained : InheritableAttr {
   let Spellings = [Clang<"os_returns_not_retained">];
-  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
+  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty, ParmVar]>;
+  let Documentation = [RetainBehaviorDocs];
+}
+
+def OSReturnsRetainedOnZero : InheritableAttr {
+  let Spellings = [Clang<"os_returns_retained_on_zero">];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [RetainBehaviorDocs];
+}
+
+def OSReturnsRetainedOnNonZero : InheritableAttr {
+  let Spellings = [Clang<"os_returns_retained_on_non_zero">];
+  let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [RetainBehaviorDocs];
 }
 
@@ -1197,6 +1207,13 @@ def FormatArg : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
+def Callback : InheritableAttr {
+  let Spellings = [Clang<"callback">];
+  let Args = [VariadicParamOrParamIdxArgument<"Encoding">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [CallbackDocs];
+}
+
 def GNUInline : InheritableAttr {
   let Spellings = [GCC<"gnu_inline">];
   let Subjects = SubjectList<[Function]>;
@@ -1281,6 +1298,12 @@ def MayAlias : InheritableAttr {
   // FIXME: this is a type attribute in GCC, but a declaration attribute here.
   let Spellings = [GCC<"may_alias">];
   let Documentation = [Undocumented];
+}
+
+def MIGServerRoutine : InheritableAttr {
+  let Spellings = [Clang<"mig_server_routine">];
+  let Subjects = SubjectList<[Function, ObjCMethod, Block]>;
+  let Documentation = [MIGConventionDocs];
 }
 
 def MSABI : DeclOrTypeAttr {
@@ -1487,6 +1510,22 @@ def AMDGPUNumVGPR : InheritableAttr {
   let Subjects = SubjectList<[Function], ErrorDiag, "kernel functions">;
 }
 
+def WebAssemblyImportModule : InheritableAttr,
+                              TargetSpecificAttr<TargetWebAssembly> {
+  let Spellings = [Clang<"import_module">];
+  let Args = [StringArgument<"ImportModule">];
+  let Documentation = [WebAssemblyImportModuleDocs];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+}
+
+def WebAssemblyImportName : InheritableAttr,
+                            TargetSpecificAttr<TargetWebAssembly> {
+  let Spellings = [Clang<"import_name">];
+  let Args = [StringArgument<"ImportName">];
+  let Documentation = [WebAssemblyImportNameDocs];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+}
+
 def NoSplitStack : InheritableAttr {
   let Spellings = [GCC<"no_split_stack">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
@@ -1525,6 +1564,13 @@ def PassObjectSize : InheritableParamAttr {
   let Args = [IntArgument<"Type">];
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [PassObjectSizeDocs];
+}
+
+def FortifyStdLib : InheritableAttr {
+  let Spellings = [Clang<"fortify_stdlib">];
+  let Args = [IntArgument<"Type">, IntArgument<"Flag">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [FortifyStdLibDocs];
 }
 
 // Nullability type attributes.
@@ -1718,6 +1764,13 @@ def ObjCRootClass : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
+def ObjCNonLazyClass : Attr {
+  let Spellings = [Clang<"objc_nonlazy_class">];
+  let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
+  let LangOpts = [ObjC];
+  let Documentation = [ObjCNonLazyClassDocs];
+}
+
 def ObjCSubclassingRestricted : InheritableAttr {
   let Spellings = [Clang<"objc_subclassing_restricted">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
@@ -1732,7 +1785,7 @@ def ObjCExplicitProtocolImpl : InheritableAttr {
 
 def ObjCDesignatedInitializer : Attr {
   let Spellings = [Clang<"objc_designated_initializer">];
-  let Subjects = SubjectList<[ObjCInterfaceDeclInitMethod], ErrorDiag>;
+  let Subjects = SubjectList<[ObjCMethod], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
@@ -2867,7 +2920,9 @@ def LoopHint : Attr {
   /// unroll_count: unrolls loop 'Value' times.
   /// unroll_and_jam: attempt to unroll and jam loop if State == Enable.
   /// unroll_and_jam_count: unroll and jams loop 'Value' times.
-  /// distribute: attempt to distribute loop if State == Enable
+  /// distribute: attempt to distribute loop if State == Enable.
+  /// pipeline: disable pipelining loop if State == Disable.
+  /// pipeline_initiation_interval: create loop schedule with initiation interval equal to 'Value'.
 
   /// #pragma unroll <argument> directive
   /// <no arg>: fully unrolls loop.
@@ -2882,10 +2937,10 @@ def LoopHint : Attr {
   let Args = [EnumArgument<"Option", "OptionType",
                           ["vectorize", "vectorize_width", "interleave", "interleave_count",
                            "unroll", "unroll_count", "unroll_and_jam", "unroll_and_jam_count",
-                           "distribute"],
+                           "pipeline", "pipeline_initiation_interval", "distribute"],
                           ["Vectorize", "VectorizeWidth", "Interleave", "InterleaveCount",
                            "Unroll", "UnrollCount", "UnrollAndJam", "UnrollAndJamCount",
-                           "Distribute"]>,
+                           "PipelineDisabled", "PipelineInitiationInterval", "Distribute"]>,
               EnumArgument<"State", "LoopHintState",
                            ["enable", "disable", "numeric", "assume_safety", "full"],
                            ["Enable", "Disable", "Numeric", "AssumeSafety", "Full"]>,
@@ -2902,6 +2957,8 @@ def LoopHint : Attr {
     case UnrollCount: return "unroll_count";
     case UnrollAndJam: return "unroll_and_jam";
     case UnrollAndJamCount: return "unroll_and_jam_count";
+    case PipelineDisabled: return "pipeline";
+    case PipelineInitiationInterval: return "pipeline_initiation_interval";
     case Distribute: return "distribute";
     }
     llvm_unreachable("Unhandled LoopHint option.");
@@ -3130,4 +3187,23 @@ def SpeculativeLoadHardening : InheritableAttr {
   let Spellings = [Clang<"speculative_load_hardening">];
   let Subjects = SubjectList<[Function, ObjCMethod], ErrorDiag>;
   let Documentation = [SpeculativeLoadHardeningDocs];
+}
+
+def NoSpeculativeLoadHardening : InheritableAttr {
+  let Spellings = [Clang<"no_speculative_load_hardening">];
+  let Subjects = SubjectList<[Function, ObjCMethod], ErrorDiag>;
+  let Documentation = [NoSpeculativeLoadHardeningDocs];
+}
+
+def Uninitialized : InheritableAttr {
+  let Spellings = [Clang<"uninitialized", 0>];
+  let Subjects = SubjectList<[LocalVar]>;
+  let Documentation = [UninitializedDocs];
+}
+
+def ObjCExternallyRetained : InheritableAttr {
+  let LangOpts = [ObjCAutoRefCount];
+  let Spellings = [Clang<"objc_externally_retained">];
+  let Subjects = SubjectList<[NonParmVar, Function, Block, ObjCMethod]>;
+  let Documentation = [ObjCExternallyRetainedDocs];
 }
