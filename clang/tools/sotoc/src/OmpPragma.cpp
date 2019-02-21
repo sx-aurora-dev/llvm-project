@@ -246,6 +246,7 @@ void OmpPragma::printClauses(llvm::raw_ostream &Out) {
     // the users code (is explicit)
     if (isClausePrintable(C) && !C->isImplicit()) {
       Printer.Visit(C);
+      Out << " ";
     }
   }
 }
