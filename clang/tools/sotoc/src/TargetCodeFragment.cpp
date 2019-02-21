@@ -214,6 +214,7 @@ public:
         llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(E)) {
       auto *Directive = llvm::cast<clang::OMPExecutableDirective>(E);
       OmpPragma(Directive, PP).printReplacement(OS);
+      OS << "\n";
       Directive->child_begin()->printPretty(OS, this, PP);
       return true;
     }
@@ -259,9 +260,9 @@ std::string TargetCodeDecl::PrintPretty() {
   if (llvm::isa<clang::TypedefDecl>(DeclNode)) {
     LocalPP.IncludeTagDefinition = 1;
   }
-  
+
   TargetRegionPrinterHelper Helper(PP);
-  
+
   DeclNode->print(PrettyOS, LocalPP, 0, false, &Helper);
 
   // This hack removes '#pragma omp declare target' from the output

@@ -9,14 +9,17 @@ void OmpPragma::printReplacement(llvm::raw_ostream &Out) {
     Out << "  #pragma omp parallel ";
     break;
   }
+  case clang::OpenMPDirectiveKind::OMPD_teams_distribute_parallel_for:
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
     Out << "  #pragma omp parallel for ";
     break;
   }
+  case clang::OpenMPDirectiveKind::OMPD_teams_distribute_parallel_for_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
     Out << "  #pragma omp parallel for simd ";
     break;
   }
+  case clang::OpenMPDirectiveKind::OMPD_teams_distribute_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_simd: {
     Out << "  #pragma omp simd ";
