@@ -1,9 +1,8 @@
 //===-- DWARFLocationExpression.cpp -----------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,6 +14,7 @@
 #include "lldb/Expression/DWARFExpression.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/DataBufferHeap.h"
+
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/DebugInfo/CodeView/TypeDeserializer.h"
 #include "llvm/DebugInfo/CodeView/TypeIndex.h"
@@ -22,12 +22,33 @@
 #include "llvm/Support/Endian.h"
 
 #include "PdbUtil.h"
+#include "CodeViewRegisterMapping.h"
+#include "PdbFPOProgramToDWARFExpression.h"
 
 using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::npdb;
 using namespace llvm::codeview;
 using namespace llvm::pdb;
+
+uint32_t GetGenericRegisterNumber(llvm::codeview::RegisterId register_id) {
+  if (register_id == llvm::codeview::RegisterId::VFRAME)
+    return LLDB_REGNUM_GENERIC_FP;
+
+  return LLDB_INVALID_REGNUM;
+}
+
+static uint32_t GetRegisterNumber(llvm::Triple::ArchType arch_type,
+                                  llvm::codeview::RegisterId register_id,
+                                  RegisterKind &register_kind) {
+  register_kind = eRegisterKindLLDB;
+  uint32_t reg_num = GetLLDBRegisterNumber(arch_type, register_id);
+  if (reg_num != LLDB_INVALID_REGNUM)
+    return reg_num;
+
+  register_kind = eRegisterKindGeneric;
+  return GetGenericRegisterNumber(register_id);
+}
 
 static bool IsSimpleTypeSignedInteger(SimpleTypeKind kind) {
   switch (kind) {
@@ -107,6 +128,73 @@ static DWARFExpression MakeLocationExpressionInternal(lldb::ModuleSP module,
   return result;
 }
 
+static DWARFExpression MakeRegisterBasedLocationExpressionInternal(
+    llvm::codeview::RegisterId reg, llvm::Optional<int32_t> relative_offset,
+    lldb::ModuleSP module) {
+  return MakeLocationExpressionInternal(
+      module, [&](Stream &stream, RegisterKind &register_kind) -> bool {
+        uint32_t reg_num = GetRegisterNumber(
+            module->GetArchitecture().GetMachine(), reg, register_kind);
+        if (reg_num == LLDB_INVALID_REGNUM)
+          return false;
+
+        if (reg_num > 31) {
+          llvm::dwarf::LocationAtom base = relative_offset
+                                               ? llvm::dwarf::DW_OP_bregx
+                                               : llvm::dwarf::DW_OP_regx;
+          stream.PutHex8(base);
+          stream.PutULEB128(reg_num);
+        } else {
+          llvm::dwarf::LocationAtom base = relative_offset
+                                               ? llvm::dwarf::DW_OP_breg0
+                                               : llvm::dwarf::DW_OP_reg0;
+          stream.PutHex8(base + reg_num);
+        }
+
+        if (relative_offset)
+          stream.PutSLEB128(*relative_offset);
+
+        return true;
+      });
+}
+
+DWARFExpression lldb_private::npdb::MakeEnregisteredLocationExpression(
+    llvm::codeview::RegisterId reg, lldb::ModuleSP module) {
+  return MakeRegisterBasedLocationExpressionInternal(reg, llvm::None, module);
+}
+
+DWARFExpression lldb_private::npdb::MakeRegRelLocationExpression(
+    llvm::codeview::RegisterId reg, int32_t offset, lldb::ModuleSP module) {
+  return MakeRegisterBasedLocationExpressionInternal(reg, offset, module);
+}
+
+static bool EmitVFrameEvaluationDWARFExpression(
+    llvm::StringRef program, llvm::Triple::ArchType arch_type, Stream &stream) {
+  // VFrame value always stored in $TO pseudo-register
+  return TranslateFPOProgramToDWARFExpression(program, "$T0", arch_type,
+                                              stream);
+}
+
+DWARFExpression lldb_private::npdb::MakeVFrameRelLocationExpression(
+    llvm::StringRef fpo_program, int32_t offset, lldb::ModuleSP module) {
+  return MakeLocationExpressionInternal(
+      module, [&](Stream &stream, RegisterKind &register_kind) -> bool {
+        const ArchSpec &architecture = module->GetArchitecture();
+
+        if (!EmitVFrameEvaluationDWARFExpression(fpo_program, architecture.GetMachine(),
+                                                 stream))
+          return false;
+
+        stream.PutHex8(llvm::dwarf::DW_OP_consts);
+        stream.PutSLEB128(offset);
+        stream.PutHex8(llvm::dwarf::DW_OP_plus);
+
+        register_kind = eRegisterKindLLDB;
+
+        return true;
+      });
+}
+
 DWARFExpression lldb_private::npdb::MakeGlobalLocationExpression(
     uint16_t section, uint32_t offset, ModuleSP module) {
   assert(section > 0);
@@ -119,13 +207,7 @@ DWARFExpression lldb_private::npdb::MakeGlobalLocationExpression(
         SectionList *section_list = module->GetSectionList();
         assert(section_list);
 
-        // Section indices in PDB are 1-based, but in DWARF they are 0-based, so
-        // we need to subtract 1.
-        uint32_t section_idx = section - 1;
-        if (section_idx >= section_list->GetSize())
-          return false;
-
-        auto section_ptr = section_list->GetSectionAtIndex(section_idx);
+        auto section_ptr = section_list->FindSectionByID(section);
         if (!section_ptr)
           return false;
 

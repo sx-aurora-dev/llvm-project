@@ -1,4 +1,4 @@
-; RUN: llc -filetype=obj %s -o - | obj2yaml | FileCheck %s
+; RUN: llc -filetype=obj -thread-model=single %s -o - | obj2yaml | FileCheck %s
 
 target triple = "wasm32-unknown-unknown"
 
@@ -13,20 +13,20 @@ target triple = "wasm32-unknown-unknown"
 ; CHECK:        - Type:            DATA
 ; CHECK-NEXT:     Segments:        
 ; CHECK-NEXT:       - SectionOffset:   6
-; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         InitFlags:       0
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           0
 ; CHECK-NEXT:         Content:         '08000000'
 ; CHECK-NEXT:       - SectionOffset:   15
-; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         InitFlags:       0
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           8
 ; CHECK-NEXT:         Content:         '01000000030000000700000000000000'
 ; CHECK-NEXT:       - SectionOffset:   36
-; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         InitFlags:       0
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           24
 ; CHECK-NEXT:         Content:         '08000000'
@@ -60,14 +60,14 @@ target triple = "wasm32-unknown-unknown"
 ; CHECK-NEXT:     SegmentInfo:    
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         Name:            .data.global0
-; CHECK-NEXT:         Alignment:       8
+; CHECK-NEXT:         Alignment:       3
 ; CHECK-NEXT:         Flags:           [ ]
 ; CHECK-NEXT:       - Index:           1
 ; CHECK-NEXT:         Name:            .sec1
-; CHECK-NEXT:         Alignment:       8
+; CHECK-NEXT:         Alignment:       3
 ; CHECK-NEXT:         Flags:           [ ]
 ; CHECK-NEXT:       - Index:           2
 ; CHECK-NEXT:         Name:            .sec2
-; CHECK-NEXT:         Alignment:       8
+; CHECK-NEXT:         Alignment:       3
 ; CHECK-NEXT:         Flags:           [ ]
 ; CHECK-NEXT: ...

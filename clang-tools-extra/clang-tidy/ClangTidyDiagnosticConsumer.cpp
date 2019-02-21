@@ -1,9 +1,8 @@
 //===--- tools/extra/clang-tidy/ClangTidyDiagnosticConsumer.cpp ----------=== //
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -319,7 +318,7 @@ static bool IsNOLINTFound(StringRef NolintDirectiveText, StringRef Line,
   return true;
 }
 
-static bool LineIsMarkedWithNOLINT(SourceManager &SM, SourceLocation Loc,
+static bool LineIsMarkedWithNOLINT(const SourceManager &SM, SourceLocation Loc,
                                    unsigned DiagID,
                                    const ClangTidyContext &Context) {
   bool Invalid;
@@ -365,8 +364,8 @@ static bool LineIsMarkedWithNOLINT(SourceManager &SM, SourceLocation Loc,
   return false;
 }
 
-static bool LineIsMarkedWithNOLINTinMacro(SourceManager &SM, SourceLocation Loc,
-                                          unsigned DiagID,
+static bool LineIsMarkedWithNOLINTinMacro(const SourceManager &SM,
+                                          SourceLocation Loc, unsigned DiagID,
                                           const ClangTidyContext &Context) {
   while (true) {
     if (LineIsMarkedWithNOLINT(SM, Loc, DiagID, Context))

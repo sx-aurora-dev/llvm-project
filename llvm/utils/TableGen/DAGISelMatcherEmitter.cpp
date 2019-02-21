@@ -1,9 +1,8 @@
 //===- DAGISelMatcherEmitter.cpp - Matcher Emitter ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -259,7 +258,7 @@ void MatcherTableEmitter::EmitPatternMatchTable(raw_ostream &OS) {
 
   OS << "\n};";
   OS << "\nreturn StringRef(PATTERN_MATCH_TABLE[Index]);";
-  OS << "\n}";
+  OS << "\n}\n";
   EndEmitFunction(OS);
 
   BeginEmitFunction(OS, "StringRef", "getIncludePathForIndex(unsigned Index)",
@@ -273,7 +272,7 @@ void MatcherTableEmitter::EmitPatternMatchTable(raw_ostream &OS) {
 
   OS << "\n};";
   OS << "\nreturn StringRef(INCLUDE_PATH_TABLE[Index]);";
-  OS << "\n}";
+  OS << "\n}\n";
   EndEmitFunction(OS);
 }
 
