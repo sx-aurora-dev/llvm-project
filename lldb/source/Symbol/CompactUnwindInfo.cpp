@@ -1,9 +1,8 @@
 //===-- CompactUnwindInfo.cpp -----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,9 +17,11 @@
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
-#include <algorithm>
 
 #include "llvm/Support/MathExtras.h"
+
+#include <algorithm>
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -183,8 +184,7 @@ bool CompactUnwindInfo::GetUnwindPlan(Target &target, Address addr,
     if (function_info.encoding == 0)
       return false;
 
-    ArchSpec arch;
-    if (m_objfile.GetArchitecture(arch)) {
+    if (ArchSpec arch = m_objfile.GetArchitecture()) {
 
       Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
       if (log && log->GetVerbose()) {
@@ -259,14 +259,14 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
     m_objfile.GetModule()->LogMessage(
         log, "Reading compact unwind first-level indexes");
 
-  if (m_unwindinfo_data_computed == false) {
+  if (!m_unwindinfo_data_computed) {
     if (m_section_sp->IsEncrypted()) {
       // Can't get section contents of a protected/encrypted section until we
       // have a live process and can read them out of memory.
       if (process_sp.get() == nullptr)
         return;
-      m_section_contents_if_encrypted.reset(
-          new DataBufferHeap(m_section_sp->GetByteSize(), 0));
+      m_section_contents_if_encrypted =
+          std::make_shared<DataBufferHeap>(m_section_sp->GetByteSize(), 0);
       Status error;
       if (process_sp->ReadMemory(
               m_section_sp->GetLoadBaseAddress(&process_sp->GetTarget()),
@@ -338,8 +338,7 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
     // };
 
     bool clear_address_zeroth_bit = false;
-    ArchSpec arch;
-    if (m_objfile.GetArchitecture(arch)) {
+    if (ArchSpec arch = m_objfile.GetArchitecture()) {
       if (arch.GetTriple().getArch() == llvm::Triple::arm ||
           arch.GetTriple().getArch() == llvm::Triple::thumb)
         clear_address_zeroth_bit = true;
@@ -529,7 +528,7 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
       --it;
   }
 
-  if (it->sentinal_entry == true) {
+  if (it->sentinal_entry) {
     return false;
   }
 
@@ -925,7 +924,7 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
       for (uint32_t i = 0; i < register_count; i++) {
         int renum = 0;
         for (int j = 1; j < 7; j++) {
-          if (used[j] == false) {
+          if (!used[j]) {
             if (renum == permunreg[i]) {
               registers[i] = j;
               used[j] = true;
@@ -1187,7 +1186,7 @@ bool CompactUnwindInfo::CreateUnwindPlan_i386(Target &target,
       for (uint32_t i = 0; i < register_count; i++) {
         int renum = 0;
         for (int j = 1; j < 7; j++) {
-          if (used[j] == false) {
+          if (!used[j]) {
             if (renum == permunreg[i]) {
               registers[i] = j;
               used[j] = true;

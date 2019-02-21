@@ -1,9 +1,8 @@
 //===- ARMISelLowering.h - ARM DAG Lowering Interface -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -568,6 +567,8 @@ class VectorType;
       return HasStandaloneRem;
     }
 
+    bool shouldExpandShift(SelectionDAG &DAG, SDNode *N) const override;
+
     CCAssignFn *CCAssignFnForCall(CallingConv::ID CC, bool isVarArg) const;
     CCAssignFn *CCAssignFnForReturn(CallingConv::ID CC, bool isVarArg) const;
 
@@ -593,6 +594,8 @@ class VectorType;
     bool isDesirableToCommuteWithShift(const SDNode *N,
                                        CombineLevel Level) const override;
 
+    bool shouldFoldShiftPairToMask(const SDNode *N,
+                                   CombineLevel Level) const override;
   protected:
     std::pair<const TargetRegisterClass *, uint8_t>
     findRepresentativeClass(const TargetRegisterInfo *TRI,

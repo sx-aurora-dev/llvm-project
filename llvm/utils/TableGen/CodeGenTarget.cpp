@@ -1,9 +1,8 @@
 //===- CodeGenTarget.cpp - CodeGen Target Class Wrapper -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,8 +20,10 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Timer.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
+#include "llvm/TableGen/TableGenBackend.h"
 #include <algorithm>
 using namespace llvm;
 
@@ -334,6 +335,8 @@ CodeGenSchedModels &CodeGenTarget::getSchedModels() const {
 }
 
 void CodeGenTarget::ReadInstructions() const {
+  NamedRegionTimer T("Read Instructions", "Time spent reading instructions",
+                     "CodeGenTarget", "CodeGenTarget", TimeRegions);
   std::vector<Record*> Insts = Records.getAllDerivedDefinitions("Instruction");
   if (Insts.size() <= 2)
     PrintFatalError("No 'Instruction' subclasses defined!");
@@ -499,9 +502,10 @@ ComplexPattern::ComplexPattern(Record *R) {
     } else if (PropList[i]->getName() == "SDNPWantParent") {
       Properties |= 1 << SDNPWantParent;
     } else {
-      PrintFatalError("Unsupported SD Node property '" +
-                      PropList[i]->getName() + "' on ComplexPattern '" +
-                      R->getName() + "'!");
+      PrintFatalError(R->getLoc(), "Unsupported SD Node property '" +
+                                       PropList[i]->getName() +
+                                       "' on ComplexPattern '" + R->getName() +
+                                       "'!");
     }
 }
 
@@ -537,6 +541,7 @@ CodeGenIntrinsicTable::CodeGenIntrinsicTable(const RecordKeeper &RC,
 CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
   TheDef = R;
   std::string DefName = R->getName();
+  ArrayRef<SMLoc> DefLoc = R->getLoc();
   ModRef = ReadWriteMem;
   Properties = 0;
   isOverloaded = false;
@@ -551,7 +556,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
 
   if (DefName.size() <= 4 ||
       std::string(DefName.begin(), DefName.begin() + 4) != "int_")
-    PrintFatalError("Intrinsic '" + DefName + "' does not start with 'int_'!");
+    PrintFatalError(DefLoc,
+                    "Intrinsic '" + DefName + "' does not start with 'int_'!");
 
   EnumName = std::string(DefName.begin()+4, DefName.end());
 
@@ -573,7 +579,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
     // Verify it starts with "llvm.".
     if (Name.size() <= 5 ||
         std::string(Name.begin(), Name.begin() + 5) != "llvm.")
-      PrintFatalError("Intrinsic '" + DefName + "'s name does not start with 'llvm.'!");
+      PrintFatalError(DefLoc, "Intrinsic '" + DefName +
+                                  "'s name does not start with 'llvm.'!");
   }
 
   // If TargetPrefix is specified, make sure that Name starts with
@@ -582,8 +589,9 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
     if (Name.size() < 6+TargetPrefix.size() ||
         std::string(Name.begin() + 5, Name.begin() + 6 + TargetPrefix.size())
         != (TargetPrefix + "."))
-      PrintFatalError("Intrinsic '" + DefName + "' does not start with 'llvm." +
-        TargetPrefix + ".'!");
+      PrintFatalError(DefLoc, "Intrinsic '" + DefName +
+                                  "' does not start with 'llvm." +
+                                  TargetPrefix + ".'!");
   }
 
   // Parse the list of return types.
@@ -615,7 +623,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
 
     // Reject invalid types.
     if (VT == MVT::isVoid)
-      PrintFatalError("Intrinsic '" + DefName + " has void in result type list!");
+      PrintFatalError(DefLoc, "Intrinsic '" + DefName +
+                                  " has void in result type list!");
 
     IS.RetVTs.push_back(VT);
     IS.RetTypeDefs.push_back(TyEl);
@@ -633,7 +642,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
         PrintError(R->getLoc(),
                    "Parameter #" + Twine(i) + " has out of bounds matching "
                    "number " + Twine(MatchTy));
-        PrintFatalError(Twine("ParamTypes is ") + TypeList->getAsString());
+        PrintFatalError(DefLoc,
+                        Twine("ParamTypes is ") + TypeList->getAsString());
       }
       VT = OverloadedVTs[MatchTy];
       // It only makes sense to use the extended and truncated vector element
@@ -641,7 +651,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
       // overloaded, all the types can be specified directly.
       assert(((!TyEl->isSubClassOf("LLVMExtendedType") &&
                !TyEl->isSubClassOf("LLVMTruncatedType") &&
-               !TyEl->isSubClassOf("LLVMVectorSameWidth")) ||
+               !TyEl->isSubClassOf("LLVMScalarOrSameVectorWidth")) ||
               VT == MVT::iAny || VT == MVT::vAny) &&
              "Expected iAny or vAny type");
     } else
@@ -654,7 +664,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
 
     // Reject invalid types.
     if (VT == MVT::isVoid && i != e-1 /*void at end means varargs*/)
-      PrintFatalError("Intrinsic '" + DefName + " has void in result type list!");
+      PrintFatalError(DefLoc, "Intrinsic '" + DefName +
+                                  " has void in result type list!");
 
     IS.ParamVTs.push_back(VT);
     IS.ParamTypeDefs.push_back(TyEl);
