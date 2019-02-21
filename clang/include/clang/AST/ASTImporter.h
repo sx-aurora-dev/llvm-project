@@ -1,9 +1,8 @@
 //===- ASTImporter.h - Importing ASTs from other Contexts -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,6 +32,8 @@
 namespace clang {
 
 class ASTContext;
+class Attr;
+class ASTImporterLookupTable;
 class CXXBaseSpecifier;
 class CXXCtorInitializer;
 class Decl;
@@ -42,8 +43,8 @@ class FileManager;
 class NamedDecl;
 class Stmt;
 class TagDecl;
+class TranslationUnitDecl;
 class TypeSourceInfo;
-class Attr;
 
   class ImportError : public llvm::ErrorInfo<ImportError> {
   public:
@@ -80,12 +81,21 @@ class Attr;
   /// Imports selected nodes from one AST context into another context,
   /// merging AST nodes where appropriate.
   class ASTImporter {
+    friend class ASTNodeImporter;
   public:
     using NonEquivalentDeclSet = llvm::DenseSet<std::pair<Decl *, Decl *>>;
     using ImportedCXXBaseSpecifierMap =
         llvm::DenseMap<const CXXBaseSpecifier *, CXXBaseSpecifier *>;
 
   private:
+
+    /// Pointer to the import specific lookup table, which may be shared
+    /// amongst several ASTImporter objects.
+    /// This is an externally managed resource (and should exist during the
+    /// lifetime of the ASTImporter object)
+    /// If not set then the original C/C++ lookup is used.
+    ASTImporterLookupTable *LookupTable = nullptr;
+
     /// The contexts we're importing to and from.
     ASTContext &ToContext, &FromContext;
 
@@ -106,6 +116,10 @@ class Attr;
     /// context to the corresponding declarations in the "to" context.
     llvm::DenseMap<Decl *, Decl *> ImportedDecls;
 
+    /// Mapping from the already-imported declarations in the "to"
+    /// context to the corresponding declarations in the "from" context.
+    llvm::DenseMap<Decl *, Decl *> ImportedFromDecls;
+
     /// Mapping from the already-imported statements in the "from"
     /// context to the corresponding statements in the "to" context.
     llvm::DenseMap<Stmt *, Stmt *> ImportedStmts;
@@ -123,9 +137,13 @@ class Attr;
     /// (which we have already complained about).
     NonEquivalentDeclSet NonEquivalentDecls;
 
+    using FoundDeclsTy = SmallVector<NamedDecl *, 2>;
+    FoundDeclsTy findDeclsInToCtx(DeclContext *DC, DeclarationName Name);
+
+    void AddToLookupTable(Decl *ToD);
+
   public:
-    /// Create a new AST importer.
-    ///
+
     /// \param ToContext The context we'll be importing into.
     ///
     /// \param ToFileManager The file manager we'll be importing into.
@@ -137,9 +155,14 @@ class Attr;
     /// \param MinimalImport If true, the importer will attempt to import
     /// as little as it can, e.g., by importing declarations as forward
     /// declarations that can be completed at a later point.
+    ///
+    /// \param LookupTable The importer specific lookup table which may be
+    /// shared amongst several ASTImporter objects.
+    /// If not set then the original C/C++ lookup is used.
     ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
                 ASTContext &FromContext, FileManager &FromFileManager,
-                bool MinimalImport);
+                bool MinimalImport,
+                ASTImporterLookupTable *LookupTable = nullptr);
 
     virtual ~ASTImporter();
 
@@ -208,8 +231,12 @@ class Attr;
 
     /// Return the copy of the given declaration in the "to" context if
     /// it has already been imported from the "from" context.  Otherwise return
-    /// NULL.
-    Decl *GetAlreadyImportedOrNull(Decl *FromD);
+    /// nullptr.
+    Decl *GetAlreadyImportedOrNull(const Decl *FromD) const;
+
+    /// Return the translation unit from where the declaration was
+    /// imported. If it does not exist nullptr is returned.
+    TranslationUnitDecl *GetFromTU(Decl *ToD);
 
     /// Import the given declaration context from the "from"
     /// AST context into the "to" AST context.

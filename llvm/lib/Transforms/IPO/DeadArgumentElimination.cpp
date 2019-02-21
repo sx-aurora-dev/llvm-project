@@ -1,9 +1,8 @@
 //===- DeadArgumentElimination.cpp - Eliminate dead arguments -------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -164,7 +163,7 @@ bool DeadArgumentEliminationPass::DeleteDeadVarargs(Function &Fn) {
   unsigned NumArgs = Params.size();
 
   // Create the new function body and insert it into the module...
-  Function *NF = Function::Create(NFTy, Fn.getLinkage());
+  Function *NF = Function::Create(NFTy, Fn.getLinkage(), Fn.getAddressSpace());
   NF->copyAttributesFrom(&Fn);
   NF->setComdat(Fn.getComdat());
   Fn.getParent()->getFunctionList().insert(Fn.getIterator(), NF);
@@ -863,7 +862,7 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
     return false;
 
   // Create the new function body and insert it into the module...
-  Function *NF = Function::Create(NFTy, F->getLinkage());
+  Function *NF = Function::Create(NFTy, F->getLinkage(), F->getAddressSpace());
   NF->copyAttributesFrom(F);
   NF->setComdat(F->getComdat());
   NF->setAttributes(NewPAL);
@@ -939,7 +938,7 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
       NewCS = InvokeInst::Create(NF, II->getNormalDest(), II->getUnwindDest(),
                                  Args, OpBundles, "", Call->getParent());
     } else {
-      NewCS = CallInst::Create(NF, Args, OpBundles, "", Call);
+      NewCS = CallInst::Create(NFTy, NF, Args, OpBundles, "", Call);
       cast<CallInst>(NewCS.getInstruction())
           ->setTailCallKind(cast<CallInst>(Call)->getTailCallKind());
     }
