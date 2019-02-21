@@ -380,7 +380,7 @@ endfunction(set_windows_version_resource_properties)
 function(llvm_add_library name)
   cmake_parse_arguments(ARG
     "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH"
-    "OUTPUT_NAME;PLUGIN_TOOL"
+    "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS"
     "ADDITIONAL_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS;OBJLIBS"
     ${ARGN})
   list(APPEND LLVM_COMMON_DEPENDS ${ARG_DEPENDS})
@@ -584,7 +584,7 @@ function(llvm_add_library name)
 
   if(ARG_SHARED OR ARG_MODULE)
     llvm_externalize_debuginfo(${name})
-    llvm_codesign(TARGET ${name})
+    llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})
   endif()
 endfunction()
 
@@ -616,11 +616,13 @@ endfunction()
 
 macro(add_llvm_library name)
   cmake_parse_arguments(ARG
-    "SHARED;BUILDTREE_ONLY"
+    "SHARED;BUILDTREE_ONLY;MODULE"
     ""
     ""
     ${ARGN})
-  if( BUILD_SHARED_LIBS OR ARG_SHARED )
+  if(ARG_MODULE)
+    llvm_add_library(${name} MODULE ${ARG_UNPARSED_ARGUMENTS})
+  elseif( BUILD_SHARED_LIBS OR ARG_SHARED )
     llvm_add_library(${name} SHARED ${ARG_UNPARSED_ARGUMENTS})
   else()
     llvm_add_library(${name} ${ARG_UNPARSED_ARGUMENTS})
@@ -629,11 +631,14 @@ macro(add_llvm_library name)
   # Libraries that are meant to only be exposed via the build tree only are
   # never installed and are only exported as a target in the special build tree
   # config file.
-  if (NOT ARG_BUILDTREE_ONLY)
+  if (NOT ARG_BUILDTREE_ONLY AND NOT ARG_MODULE)
     set_property( GLOBAL APPEND PROPERTY LLVM_LIBS ${name} )
   endif()
 
-  if( EXCLUDE_FROM_ALL )
+  if (ARG_MODULE AND NOT TARGET ${name})
+    # Add empty "phony" target
+    add_custom_target(${name})
+  elseif( EXCLUDE_FROM_ALL )
     set_target_properties( ${name} PROPERTIES EXCLUDE_FROM_ALL ON)
   elseif(ARG_BUILDTREE_ONLY)
     set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS_BUILDTREE_ONLY ${name})
@@ -642,7 +647,7 @@ macro(add_llvm_library name)
         ${name} STREQUAL "OptRemarks" OR
         (LLVM_LINK_LLVM_DYLIB AND ${name} STREQUAL "LLVM"))
       set(install_dir lib${LLVM_LIBDIR_SUFFIX})
-      if(ARG_SHARED OR BUILD_SHARED_LIBS)
+      if(ARG_MODULE OR ARG_SHARED OR BUILD_SHARED_LIBS)
         if(WIN32 OR CYGWIN OR MINGW)
           set(install_type RUNTIME)
           set(install_dir bin)
@@ -651,6 +656,10 @@ macro(add_llvm_library name)
         endif()
       else()
         set(install_type ARCHIVE)
+      endif()
+
+      if (ARG_MODULE)
+        set(install_type LIBRARY)
       endif()
 
       if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
@@ -672,44 +681,12 @@ macro(add_llvm_library name)
     endif()
     set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS ${name})
   endif()
-  set_target_properties(${name} PROPERTIES FOLDER "Libraries")
-endmacro(add_llvm_library name)
-
-macro(add_llvm_loadable_module name)
-  llvm_add_library(${name} MODULE ${ARGN})
-  if(NOT TARGET ${name})
-    # Add empty "phony" target
-    add_custom_target(${name})
+  if (ARG_MODULE)
+    set_target_properties(${name} PROPERTIES FOLDER "Loadable modules")
   else()
-    if( EXCLUDE_FROM_ALL )
-      set_target_properties( ${name} PROPERTIES EXCLUDE_FROM_ALL ON)
-    else()
-      if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-        if(WIN32 OR CYGWIN)
-          # DLL platform
-          set(dlldir "bin")
-        else()
-          set(dlldir "lib${LLVM_LIBDIR_SUFFIX}")
-        endif()
-
-        if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
-            NOT LLVM_DISTRIBUTION_COMPONENTS)
-          set(export_to_llvmexports EXPORT LLVMExports)
-          set_property(GLOBAL PROPERTY LLVM_HAS_EXPORTS True)
-        endif()
-
-        install(TARGETS ${name}
-                ${export_to_llvmexports}
-                LIBRARY DESTINATION ${dlldir}
-                ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX})
-      endif()
-      set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS ${name})
-    endif()
+    set_target_properties(${name} PROPERTIES FOLDER "Libraries")
   endif()
-
-  set_target_properties(${name} PROPERTIES FOLDER "Loadable modules")
-endmacro(add_llvm_loadable_module name)
-
+endmacro(add_llvm_library name)
 
 macro(add_llvm_executable name)
   cmake_parse_arguments(ARG
@@ -796,7 +773,7 @@ macro(add_llvm_executable name)
     target_link_libraries(${name} PRIVATE ${LLVM_PTHREAD_LIB})
   endif()
 
-  llvm_codesign(TARGET ${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})
+  llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})
 endmacro(add_llvm_executable name)
 
 function(export_executable_symbols target)
@@ -934,14 +911,27 @@ macro(add_llvm_utility name)
 
   add_llvm_executable(${name} DISABLE_LLVM_LINK_LLVM_DYLIB ${ARGN})
   set_target_properties(${name} PROPERTIES FOLDER "Utils")
-  if( LLVM_INSTALL_UTILS AND LLVM_BUILD_UTILS )
-    install (TARGETS ${name}
-      RUNTIME DESTINATION ${LLVM_UTILS_INSTALL_DIR}
-      COMPONENT ${name})
-    if (NOT LLVM_ENABLE_IDE)
-      add_llvm_install_targets(install-${name}
-                               DEPENDS ${name}
-                               COMPONENT ${name})
+  if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+    if (LLVM_INSTALL_UTILS AND LLVM_BUILD_UTILS)
+      if (${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
+          NOT LLVM_DISTRIBUTION_COMPONENTS)
+        set(export_to_llvmexports EXPORT LLVMExports)
+        set_property(GLOBAL PROPERTY LLVM_HAS_EXPORTS True)
+      endif()
+
+      install(TARGETS ${name}
+              ${export_to_llvmexports}
+              RUNTIME DESTINATION ${LLVM_UTILS_INSTALL_DIR}
+              COMPONENT ${name})
+
+      if (NOT LLVM_ENABLE_IDE)
+        add_llvm_install_targets(install-${name}
+                                 DEPENDS ${name}
+                                 COMPONENT ${name})
+      endif()
+      set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS ${name})
+    elseif(LLVM_BUILD_UTILS)
+      set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS_BUILDTREE_ONLY ${name})
     endif()
   endif()
 endmacro(add_llvm_utility name)
@@ -1300,7 +1290,6 @@ function(get_llvm_lit_path base_dir file_name)
   cmake_parse_arguments(ARG "ALLOW_EXTERNAL" "" "" ${ARGN})
 
   if (ARG_ALLOW_EXTERNAL)
-    set(LLVM_DEFAULT_EXTERNAL_LIT "${LLVM_EXTERNAL_LIT}")
     set (LLVM_EXTERNAL_LIT "" CACHE STRING "Command used to spawn lit")
     if ("${LLVM_EXTERNAL_LIT}" STREQUAL "")
       set(LLVM_EXTERNAL_LIT "${LLVM_DEFAULT_EXTERNAL_LIT}")
@@ -1635,19 +1624,24 @@ function(llvm_externalize_debuginfo name)
   endif()
 endfunction()
 
-# Usage: llvm_codesign(TARGET name [ENTITLEMENTS file])
-#
-# Code-sign the given TARGET with the global LLVM_CODESIGNING_IDENTITY or skip
-# if undefined. Customize capabilities by passing a file path to ENTITLEMENTS.
-#
-function(llvm_codesign)
-  cmake_parse_arguments(ARG "" "TARGET;ENTITLEMENTS" "" ${ARGN})
+# Usage: llvm_codesign(name [ENTITLEMENTS file])
+function(llvm_codesign name)
+  cmake_parse_arguments(ARG "" "ENTITLEMENTS" "" ${ARGN})
 
   if(NOT LLVM_CODESIGNING_IDENTITY)
     return()
   endif()
 
-  if(APPLE)
+  if(CMAKE_GENERATOR STREQUAL "Xcode")
+    set_target_properties(${name} PROPERTIES
+      XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ${LLVM_CODESIGNING_IDENTITY}
+    )
+    if(DEFINED ARG_ENTITLEMENTS)
+      set_target_properties(${name} PROPERTIES
+        XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${ARG_ENTITLEMENTS}
+      )
+    endif()
+  elseif(APPLE)
     if(NOT CMAKE_CODESIGN)
       set(CMAKE_CODESIGN xcrun codesign)
     endif()
@@ -1659,15 +1653,15 @@ function(llvm_codesign)
       )
     endif()
     if(DEFINED ARG_ENTITLEMENTS)
-      set(PASS_ENTITLEMENTS --entitlements ${ARG_ENTITLEMENTS})
+      set(pass_entitlements --entitlements ${ARG_ENTITLEMENTS})
     endif()
 
     add_custom_command(
-      TARGET ${ARG_TARGET} POST_BUILD
+      TARGET ${name} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E
               env CODESIGN_ALLOCATE=${CMAKE_CODESIGN_ALLOCATE}
               ${CMAKE_CODESIGN} -s ${LLVM_CODESIGNING_IDENTITY}
-              ${PASS_ENTITLEMENTS} $<TARGET_FILE:${ARG_TARGET}>
+              ${pass_entitlements} $<TARGET_FILE:${name}>
     )
   endif()
 endfunction()
@@ -1723,35 +1717,38 @@ function(setup_dependency_debugging name)
   set_target_properties(${name} PROPERTIES RULE_LAUNCH_COMPILE ${sandbox_command})
 endfunction()
 
-# Figure out if we can track VC revisions.
-function(find_first_existing_file out_var)
-  foreach(file ${ARGN})
-    if(EXISTS "${file}")
-      set(${out_var} "${file}" PARENT_SCOPE)
-      return()
-    endif()
-  endforeach()
-endfunction()
-
-macro(find_first_existing_vc_file out_var path)
-    find_program(git_executable NAMES git git.exe git.cmd)
-    # Run from a subdirectory to force git to print an absolute path.
-    execute_process(COMMAND ${git_executable} rev-parse --git-dir
-      WORKING_DIRECTORY ${path}/cmake
-      RESULT_VARIABLE git_result
-      OUTPUT_VARIABLE git_dir
-      ERROR_QUIET)
-    if(git_result EQUAL 0)
-      string(STRIP "${git_dir}" git_dir)
-      set(${out_var} "${git_dir}/logs/HEAD")
-      # some branchless cases (e.g. 'repo') may not yet have .git/logs/HEAD
-      if (NOT EXISTS "${git_dir}/logs/HEAD")
-        file(WRITE "${git_dir}/logs/HEAD" "")
+function(find_first_existing_vc_file path out_var)
+  if(NOT EXISTS "${path}")
+    return()
+  endif()
+  if(EXISTS "${path}/.svn")
+    set(svn_files
+      "${path}/.svn/wc.db"   # SVN 1.7
+      "${path}/.svn/entries" # SVN 1.6
+    )
+    foreach(file IN LISTS svn_files)
+      if(EXISTS "${file}")
+        set(${out_var} "${file}" PARENT_SCOPE)
+        return()
       endif()
-    else()
-      find_first_existing_file(${out_var}
-        "${path}/.svn/wc.db"   # SVN 1.7
-        "${path}/.svn/entries" # SVN 1.6
-      )
+    endforeach()
+  else()
+    find_package(Git)
+    if(GIT_FOUND)
+      execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --git-dir
+        WORKING_DIRECTORY ${path}
+        RESULT_VARIABLE git_result
+        OUTPUT_VARIABLE git_output
+        ERROR_QUIET)
+      if(git_result EQUAL 0)
+        string(STRIP "${git_output}" git_output)
+        get_filename_component(git_dir ${git_output} ABSOLUTE BASE_DIR ${path})
+        # Some branchless cases (e.g. 'repo') may not yet have .git/logs/HEAD
+        if (NOT EXISTS "${git_dir}/logs/HEAD")
+          file(WRITE "${git_dir}/logs/HEAD" "")
+        endif()
+        set(${out_var} "${git_dir}/logs/HEAD" PARENT_SCOPE)
+      endif()
     endif()
-endmacro()
+  endif()
+endfunction()

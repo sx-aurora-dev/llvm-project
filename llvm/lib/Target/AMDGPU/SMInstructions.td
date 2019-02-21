@@ -1,9 +1,8 @@
 //===---- SMInstructions.td - Scalar Memory Instruction Defintions --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,7 +33,6 @@ class SM_Pseudo <string opName, dag outs, dag ins, string asmOps, list<dag> patt
   let hasSideEffects = 0;
   let UseNamedOperandTable = 1;
   let SchedRW = [WriteSMEM];
-  let SubtargetPredicate = isGCN;
 
   string Mnemonic = opName;
   string AsmOperands = asmOps;
@@ -684,7 +682,22 @@ def S_DCACHE_INV_VOL_ci : SMRD_Real_ci <0x1d, S_DCACHE_INV_VOL>;
 // Scalar Memory Patterns
 //===----------------------------------------------------------------------===//
 
-def smrd_load : PatFrag <(ops node:$ptr), (load node:$ptr), [{ return isUniformLoad(N);}]>;
+def smrd_load : PatFrag <(ops node:$ptr), (load node:$ptr), [{ return isUniformLoad(N);}]> {
+  let GISelPredicateCode = [{
+    if (!MI.hasOneMemOperand())
+      return false;
+    if (!isInstrUniform(MI))
+      return false;
+
+    // FIXME: We should probably be caching this.
+    SmallVector<GEPInfo, 4> AddrInfo;
+    getAddrModeInfo(MI, MRI, AddrInfo);
+
+    if (hasVgprParts(AddrInfo))
+      return false;
+    return true;
+  }];
+}
 
 def SMRDImm         : ComplexPattern<i64, 2, "SelectSMRDImm">;
 def SMRDImm32       : ComplexPattern<i64, 2, "SelectSMRDImm32">;
@@ -711,6 +724,12 @@ multiclass SMRD_Pattern <string Instr, ValueType vt> {
   def : GCNPat <
     (smrd_load (SMRDSgpr i64:$sbase, i32:$offset)),
     (vt (!cast<SM_Pseudo>(Instr#"_SGPR") $sbase, $offset, 0))
+  >;
+
+  // 4. No offset
+  def : GCNPat <
+    (vt (smrd_load (i64 SReg_64:$sbase))),
+    (vt (!cast<SM_Pseudo>(Instr#"_IMM") i64:$sbase, 0, 0))
   >;
 }
 

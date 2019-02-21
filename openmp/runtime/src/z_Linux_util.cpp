@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1414,6 +1413,21 @@ void __kmp_suspend_uninitialize_thread(kmp_info_t *th) {
   }
 }
 
+// return true if lock obtained, false otherwise
+int __kmp_try_suspend_mx(kmp_info_t *th) {
+  return (pthread_mutex_trylock(&th->th.th_suspend_mx.m_mutex) == 0);
+}
+
+void __kmp_lock_suspend_mx(kmp_info_t *th) {
+  int status = pthread_mutex_lock(&th->th.th_suspend_mx.m_mutex);
+  KMP_CHECK_SYSFAIL("pthread_mutex_lock", status);
+}
+
+void __kmp_unlock_suspend_mx(kmp_info_t *th) {
+  int status = pthread_mutex_unlock(&th->th.th_suspend_mx.m_mutex);
+  KMP_CHECK_SYSFAIL("pthread_mutex_unlock", status);
+}
+
 /* This routine puts the calling thread to sleep after setting the
    sleep bit for the indicated flag variable to true. */
 template <class C>
@@ -1437,7 +1451,15 @@ static inline void __kmp_suspend_template(int th_gtid, C *flag) {
   /* TODO: shouldn't this use release semantics to ensure that
      __kmp_suspend_initialize_thread gets called first? */
   old_spin = flag->set_sleeping();
-
+#if OMP_50_ENABLED
+  if (__kmp_dflt_blocktime == KMP_MAX_BLOCKTIME &&
+      __kmp_pause_status != kmp_soft_paused) {
+    flag->unset_sleeping();
+    status = pthread_mutex_unlock(&th->th.th_suspend_mx.m_mutex);
+    KMP_CHECK_SYSFAIL("pthread_mutex_unlock", status);
+    return;
+  }
+#endif
   KF_TRACE(5, ("__kmp_suspend_template: T#%d set sleep bit for spin(%p)==%x,"
                " was %x\n",
                th_gtid, flag->get(), flag->load(), old_spin));
@@ -1935,20 +1957,27 @@ void __kmp_elapsed_tick(double *t) { *t = 1 / (double)CLOCKS_PER_SEC; }
 kmp_uint64 __kmp_now_nsec() {
   struct timeval t;
   gettimeofday(&t, NULL);
-  return KMP_NSEC_PER_SEC * t.tv_sec + 1000 * t.tv_usec;
+  kmp_uint64 nsec = (kmp_uint64)KMP_NSEC_PER_SEC * (kmp_uint64)t.tv_sec +
+                    (kmp_uint64)1000 * (kmp_uint64)t.tv_usec;
+  return nsec;
 }
 
 #if KMP_ARCH_X86 || KMP_ARCH_X86_64
 /* Measure clock ticks per millisecond */
 void __kmp_initialize_system_tick() {
+  kmp_uint64 now, nsec2, diff;
   kmp_uint64 delay = 100000; // 50~100 usec on most machines.
   kmp_uint64 nsec = __kmp_now_nsec();
   kmp_uint64 goal = __kmp_hardware_timestamp() + delay;
-  kmp_uint64 now;
   while ((now = __kmp_hardware_timestamp()) < goal)
     ;
-  __kmp_ticks_per_msec =
-      (kmp_uint64)(1e6 * (delay + (now - goal)) / (__kmp_now_nsec() - nsec));
+  nsec2 = __kmp_now_nsec();
+  diff = nsec2 - nsec;
+  if (diff > 0) {
+    kmp_uint64 tpms = (kmp_uint64)(1e6 * (delay + (now - goal)) / diff);
+    if (tpms > 0)
+      __kmp_ticks_per_msec = tpms;
+  }
 }
 #endif
 

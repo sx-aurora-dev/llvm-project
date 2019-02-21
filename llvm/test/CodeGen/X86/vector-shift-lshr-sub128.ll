@@ -702,8 +702,8 @@ define <2 x i8> @var_shift_v2i8(<2 x i8> %a, <2 x i8> %b) nounwind {
 ; AVX1:       # %bb.0:
 ; AVX1-NEXT:    vmovddup {{.*#+}} xmm2 = [1.2598673968951787E-321,1.2598673968951787E-321]
 ; AVX1-NEXT:    # xmm2 = mem[0,0]
-; AVX1-NEXT:    vandpd %xmm2, %xmm1, %xmm1
-; AVX1-NEXT:    vandpd %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vandps %xmm2, %xmm1, %xmm1
+; AVX1-NEXT:    vandps %xmm2, %xmm0, %xmm0
 ; AVX1-NEXT:    vpsrlq %xmm1, %xmm0, %xmm2
 ; AVX1-NEXT:    vpshufd {{.*#+}} xmm1 = xmm1[2,3,0,1]
 ; AVX1-NEXT:    vpsrlq %xmm1, %xmm0, %xmm0
@@ -722,9 +722,9 @@ define <2 x i8> @var_shift_v2i8(<2 x i8> %a, <2 x i8> %b) nounwind {
 ; XOPAVX1:       # %bb.0:
 ; XOPAVX1-NEXT:    vmovddup {{.*#+}} xmm2 = [1.2598673968951787E-321,1.2598673968951787E-321]
 ; XOPAVX1-NEXT:    # xmm2 = mem[0,0]
-; XOPAVX1-NEXT:    vandpd %xmm2, %xmm0, %xmm0
-; XOPAVX1-NEXT:    vandpd %xmm2, %xmm1, %xmm1
-; XOPAVX1-NEXT:    vxorpd %xmm2, %xmm2, %xmm2
+; XOPAVX1-NEXT:    vandps %xmm2, %xmm0, %xmm0
+; XOPAVX1-NEXT:    vandps %xmm2, %xmm1, %xmm1
+; XOPAVX1-NEXT:    vxorps %xmm2, %xmm2, %xmm2
 ; XOPAVX1-NEXT:    vpsubq %xmm1, %xmm2, %xmm1
 ; XOPAVX1-NEXT:    vpshlq %xmm1, %xmm0, %xmm0
 ; XOPAVX1-NEXT:    retq
@@ -861,15 +861,13 @@ define <2 x i32> @splatvar_shift_v2i32(<2 x i32> %a, <2 x i32> %b) nounwind {
 ; X32-SSE:       # %bb.0:
 ; X32-SSE-NEXT:    movdqa {{.*#+}} xmm2 = [4294967295,0,4294967295,0]
 ; X32-SSE-NEXT:    pand %xmm2, %xmm0
-; X32-SSE-NEXT:    pshufd {{.*#+}} xmm3 = xmm1[0,1,0,1]
-; X32-SSE-NEXT:    pand %xmm2, %xmm3
+; X32-SSE-NEXT:    pand %xmm1, %xmm2
+; X32-SSE-NEXT:    movdqa %xmm0, %xmm3
+; X32-SSE-NEXT:    psrlq %xmm2, %xmm3
 ; X32-SSE-NEXT:    pxor %xmm2, %xmm2
 ; X32-SSE-NEXT:    movss {{.*#+}} xmm2 = xmm1[0],xmm2[1,2,3]
-; X32-SSE-NEXT:    movdqa %xmm0, %xmm1
-; X32-SSE-NEXT:    psrlq %xmm2, %xmm1
-; X32-SSE-NEXT:    psrlq %xmm3, %xmm0
-; X32-SSE-NEXT:    movsd {{.*#+}} xmm1 = xmm0[0],xmm1[1]
-; X32-SSE-NEXT:    movapd %xmm1, %xmm0
+; X32-SSE-NEXT:    psrlq %xmm2, %xmm0
+; X32-SSE-NEXT:    movsd {{.*#+}} xmm0 = xmm3[0],xmm0[1]
 ; X32-SSE-NEXT:    retl
   %splat = shufflevector <2 x i32> %b, <2 x i32> undef, <2 x i32> zeroinitializer
   %shift = lshr <2 x i32> %a, %splat
@@ -1491,7 +1489,7 @@ define <2 x i8> @splatvar_shift_v2i8(<2 x i8> %a, <2 x i8> %b) nounwind {
 ; AVX1:       # %bb.0:
 ; AVX1-NEXT:    vmovddup {{.*#+}} xmm2 = [1.2598673968951787E-321,1.2598673968951787E-321]
 ; AVX1-NEXT:    # xmm2 = mem[0,0]
-; AVX1-NEXT:    vandpd %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vandps %xmm2, %xmm0, %xmm0
 ; AVX1-NEXT:    vpshufb {{.*#+}} xmm1 = xmm1[0],zero,zero,zero,zero,zero,zero,zero,xmm1[0],zero,zero,zero,zero,zero,zero,zero
 ; AVX1-NEXT:    vpsrlq %xmm1, %xmm0, %xmm2
 ; AVX1-NEXT:    vpshufd {{.*#+}} xmm1 = xmm1[2,3,0,1]
@@ -1511,9 +1509,9 @@ define <2 x i8> @splatvar_shift_v2i8(<2 x i8> %a, <2 x i8> %b) nounwind {
 ; XOPAVX1:       # %bb.0:
 ; XOPAVX1-NEXT:    vmovddup {{.*#+}} xmm2 = [1.2598673968951787E-321,1.2598673968951787E-321]
 ; XOPAVX1-NEXT:    # xmm2 = mem[0,0]
-; XOPAVX1-NEXT:    vandpd %xmm2, %xmm0, %xmm0
+; XOPAVX1-NEXT:    vandps %xmm2, %xmm0, %xmm0
 ; XOPAVX1-NEXT:    vpshufb {{.*#+}} xmm1 = xmm1[0],zero,zero,zero,zero,zero,zero,zero,xmm1[0],zero,zero,zero,zero,zero,zero,zero
-; XOPAVX1-NEXT:    vxorpd %xmm2, %xmm2, %xmm2
+; XOPAVX1-NEXT:    vxorps %xmm2, %xmm2, %xmm2
 ; XOPAVX1-NEXT:    vpsubq %xmm1, %xmm2, %xmm1
 ; XOPAVX1-NEXT:    vpshlq %xmm1, %xmm0, %xmm0
 ; XOPAVX1-NEXT:    retq

@@ -5,10 +5,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -127,6 +126,11 @@ class kmp_stats_list;
 
 #if OMPT_SUPPORT
 #include "ompt-internal.h"
+#endif
+
+#if OMP_50_ENABLED
+// Affinity format function
+#include "kmp_str.h"
 #endif
 
 // 0 - no fast memory allocation, alignment: 8-byte on x86, 16-byte on x64.
@@ -796,6 +800,12 @@ typedef struct kmp_nested_proc_bind_t {
 extern kmp_nested_proc_bind_t __kmp_nested_proc_bind;
 
 #endif /* OMP_40_ENABLED */
+
+#if OMP_50_ENABLED
+extern int __kmp_display_affinity;
+extern char *__kmp_affinity_format;
+static const size_t KMP_AFFINITY_FORMAT_SIZE = 512;
+#endif // OMP_50_ENABLED
 
 #if KMP_AFFINITY_SUPPORTED
 #define KMP_PLACE_ALL (-1)
@@ -1837,6 +1847,7 @@ typedef struct kmp_internal_control {
 #endif
   int nproc; /* internal control for #threads for next parallel region (per
                 thread) */
+  int thread_limit; /* internal control for thread-limit-var */
   int max_active_levels; /* internal control for max_active_levels */
   kmp_r_sched_t
       sched; /* internal control for runtime schedule {sched,chunk} pair */
@@ -2066,6 +2077,9 @@ typedef struct kmp_local {
 
 #define set__nproc(xthread, xval)                                              \
   (((xthread)->th.th_current_task->td_icvs.nproc) = (xval))
+
+#define set__thread_limit(xthread, xval)                                       \
+  (((xthread)->th.th_current_task->td_icvs.thread_limit) = (xval))
 
 #define set__max_active_levels(xthread, xval)                                  \
   (((xthread)->th.th_current_task->td_icvs.max_active_levels) = (xval))
@@ -2448,6 +2462,26 @@ typedef struct kmp_teams_size {
 } kmp_teams_size_t;
 #endif
 
+// This struct stores a thread that acts as a "root" for a contention
+// group. Contention groups are rooted at kmp_root threads, but also at
+// each master thread of each team created in the teams construct.
+// This struct therefore also stores a thread_limit associated with
+// that contention group, and a counter to track the number of threads
+// active in that contention group. Each thread has a list of these: CG
+// root threads have an entry in their list in which cg_root refers to
+// the thread itself, whereas other workers in the CG will have a
+// single entry where cg_root is same as the entry containing their CG
+// root. When a thread encounters a teams construct, it will add a new
+// entry to the front of its list, because it now roots a new CG.
+typedef struct kmp_cg_root {
+  kmp_info_p *cg_root; // "root" thread for a contention group
+  // The CG root's limit comes from OMP_THREAD_LIMIT for root threads, or
+  // thread_limit clause for teams masters
+  kmp_int32 cg_thread_limit;
+  kmp_int32 cg_nthreads; // Count of active threads in CG rooted at cg_root
+  struct kmp_cg_root *up; // pointer to higher level CG root in list
+} kmp_cg_root_t;
+
 // OpenMP thread data structures
 
 typedef struct KMP_ALIGN_CACHE kmp_base_info {
@@ -2506,6 +2540,10 @@ typedef struct KMP_ALIGN_CACHE kmp_base_info {
   int th_first_place; /* first place in partition */
   int th_last_place; /* last place in partition */
 #endif
+#endif
+#if OMP_50_ENABLED
+  int th_prev_level; /* previous level for affinity format */
+  int th_prev_num_threads; /* previous num_threads for affinity format */
 #endif
 #if USE_ITT_BUILD
   kmp_uint64 th_bar_arrive_time; /* arrival to barrier timestamp */
@@ -2591,6 +2629,7 @@ typedef struct KMP_ALIGN_CACHE kmp_base_info {
 #if KMP_OS_UNIX
   std::atomic<bool> th_blocking;
 #endif
+  kmp_cg_root_t *th_cg_roots; // list of cg_roots associated with this thread
 } kmp_base_info_t;
 
 typedef union KMP_ALIGN_CACHE kmp_info {
@@ -2700,6 +2739,9 @@ typedef struct KMP_ALIGN_CACHE kmp_base_team {
   int t_first_place; // first & last place in parent thread's partition.
   int t_last_place; // Restore these values to master after par region.
 #endif // OMP_40_ENABLED && KMP_AFFINITY_SUPPORTED
+#if OMP_50_ENABLED
+  int t_display_affinity;
+#endif
   int t_size_changed; // team size was changed?: 0: no, 1: yes, -1: changed via
 // omp_set_num_threads() call
 #if OMP_50_ENABLED
@@ -2779,7 +2821,6 @@ typedef struct kmp_base_root {
   kmp_lock_t r_begin_lock;
   volatile int r_begin;
   int r_blocktime; /* blocktime for this root and descendants */
-  int r_cg_nthreads; // count of active threads in a contention group
 } kmp_base_root_t;
 
 typedef union KMP_ALIGN_CACHE kmp_root {
@@ -3142,9 +3183,9 @@ extern kmp_global_t __kmp_global; /* global status */
 
 extern kmp_info_t __kmp_monitor;
 // For Debugging Support Library
-extern std::atomic<kmp_uint32> __kmp_team_counter;
+extern std::atomic<kmp_int32> __kmp_team_counter;
 // For Debugging Support Library
-extern std::atomic<kmp_uint32> __kmp_task_counter;
+extern std::atomic<kmp_int32> __kmp_task_counter;
 
 #if USE_DEBUGGER
 #define _KMP_GEN_ID(counter)                                                   \
@@ -3383,6 +3424,8 @@ extern void __kmp_runtime_destroy(void);
 #if KMP_AFFINITY_SUPPORTED
 extern char *__kmp_affinity_print_mask(char *buf, int buf_len,
                                        kmp_affin_mask_t *mask);
+extern kmp_str_buf_t *__kmp_affinity_str_buf_mask(kmp_str_buf_t *buf,
+                                                  kmp_affin_mask_t *mask);
 extern void __kmp_affinity_initialize(void);
 extern void __kmp_affinity_uninitialize(void);
 extern void __kmp_affinity_set_init_mask(
@@ -3402,6 +3445,14 @@ extern void __kmp_balanced_affinity(kmp_info_t *th, int team_size);
 extern int kmp_set_thread_affinity_mask_initial(void);
 #endif
 #endif /* KMP_AFFINITY_SUPPORTED */
+#if OMP_50_ENABLED
+// No need for KMP_AFFINITY_SUPPORTED guard as only one field in the
+// format string is for affinity, so platforms that do not support
+// affinity can still use the other fields, e.g., %n for num_threads
+extern size_t __kmp_aux_capture_affinity(int gtid, const char *format,
+                                         kmp_str_buf_t *buffer);
+extern void __kmp_aux_display_affinity(int gtid, const char *format);
+#endif
 
 extern void __kmp_cleanup_hierarchy();
 extern void __kmp_get_hierarchy(kmp_uint32 nproc, kmp_bstate_t *thr_bar);
@@ -3438,6 +3489,10 @@ extern void __kmp_reap_monitor(kmp_info_t *th);
 #endif
 extern void __kmp_reap_worker(kmp_info_t *th);
 extern void __kmp_terminate_thread(int gtid);
+
+extern int __kmp_try_suspend_mx(kmp_info_t *th);
+extern void __kmp_lock_suspend_mx(kmp_info_t *th);
+extern void __kmp_unlock_suspend_mx(kmp_info_t *th);
 
 extern void __kmp_suspend_32(int th_gtid, kmp_flag_32 *flag);
 extern void __kmp_suspend_64(int th_gtid, kmp_flag_64 *flag);
@@ -3505,6 +3560,7 @@ extern int __kmp_barrier(enum barrier_type bt, int gtid, int is_split,
                          size_t reduce_size, void *reduce_data,
                          void (*reduce)(void *, void *));
 extern void __kmp_end_split_barrier(enum barrier_type bt, int gtid);
+extern int __kmp_barrier_gomp_cancel(int gtid);
 
 /*!
  * Tell the fork call which compiler generated the fork call, and therefore how
@@ -3554,6 +3610,8 @@ KMP_EXPORT int __kmpc_invoke_task_func(int gtid);
 #if OMP_40_ENABLED
 extern int __kmp_invoke_teams_master(int gtid);
 extern void __kmp_teams_master(int gtid);
+extern int __kmp_aux_get_team_num();
+extern int __kmp_aux_get_num_teams();
 #endif
 extern void __kmp_save_internal_controls(kmp_info_t *thread);
 extern void __kmp_user_set_library(enum library_type arg);
@@ -3969,6 +4027,40 @@ typedef enum kmp_target_offload_kind kmp_target_offload_kind_t;
 extern kmp_target_offload_kind_t __kmp_target_offload;
 extern int __kmpc_get_target_offload();
 #endif
+
+#if OMP_40_ENABLED
+// Constants used in libomptarget
+#define KMP_DEVICE_DEFAULT -1 // This is libomptarget's default device.
+#define KMP_HOST_DEVICE -10 // This is what it is in libomptarget, go figure.
+#define KMP_DEVICE_ALL -11 // This is libomptarget's "all devices".
+#endif // OMP_40_ENABLED
+
+#if OMP_50_ENABLED
+// OMP Pause Resource
+
+// The following enum is used both to set the status in __kmp_pause_status, and
+// as the internal equivalent of the externally-visible omp_pause_resource_t.
+typedef enum kmp_pause_status_t {
+  kmp_not_paused = 0, // status is not paused, or, requesting resume
+  kmp_soft_paused = 1, // status is soft-paused, or, requesting soft pause
+  kmp_hard_paused = 2 // status is hard-paused, or, requesting hard pause
+} kmp_pause_status_t;
+
+// This stores the pause state of the runtime
+extern kmp_pause_status_t __kmp_pause_status;
+extern int __kmpc_pause_resource(kmp_pause_status_t level);
+extern int __kmp_pause_resource(kmp_pause_status_t level);
+// Soft resume sets __kmp_pause_status, and wakes up all threads.
+extern void __kmp_resume_if_soft_paused();
+// Hard resume simply resets the status to not paused. Library will appear to
+// be uninitialized after hard pause. Let OMP constructs trigger required
+// initializations.
+static inline void __kmp_resume_if_hard_paused() {
+  if (__kmp_pause_status == kmp_hard_paused) {
+    __kmp_pause_status = kmp_not_paused;
+  }
+}
+#endif // OMP_50_ENABLED
 
 #ifdef __cplusplus
 }

@@ -1,9 +1,8 @@
 //===- InstCombineVectorOps.cpp -------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,42 +45,34 @@ using namespace PatternMatch;
 #define DEBUG_TYPE "instcombine"
 
 /// Return true if the value is cheaper to scalarize than it is to leave as a
-/// vector operation. isConstant indicates whether we're extracting one known
-/// element. If false we're extracting a variable index.
-//
-// FIXME: It's possible to create more instructions that previously existed.
-static bool cheapToScalarize(Value *V, bool isConstant) {
-  if (Constant *C = dyn_cast<Constant>(V)) {
-    if (isConstant) return true;
+/// vector operation. IsConstantExtractIndex indicates whether we are extracting
+/// one known element from a vector constant.
+///
+/// FIXME: It's possible to create more instructions than previously existed.
+static bool cheapToScalarize(Value *V, bool IsConstantExtractIndex) {
+  // If we can pick a scalar constant value out of a vector, that is free.
+  if (auto *C = dyn_cast<Constant>(V))
+    return IsConstantExtractIndex || C->getSplatValue();
 
-    // If all elts are the same, we can extract it and use any of the values.
-    if (Constant *Op0 = C->getAggregateElement(0U)) {
-      for (unsigned i = 1, e = V->getType()->getVectorNumElements(); i != e;
-           ++i)
-        if (C->getAggregateElement(i) != Op0)
-          return false;
-      return true;
-    }
-  }
-  Instruction *I = dyn_cast<Instruction>(V);
-  if (!I) return false;
+  // An insertelement to the same constant index as our extract will simplify
+  // to the scalar inserted element. An insertelement to a different constant
+  // index is irrelevant to our extract.
+  if (match(V, m_InsertElement(m_Value(), m_Value(), m_ConstantInt())))
+    return IsConstantExtractIndex;
 
-  // Insert element gets simplified to the inserted element or is deleted if
-  // this is constant idx extract element and its a constant idx insertelt.
-  if (I->getOpcode() == Instruction::InsertElement && isConstant &&
-      isa<ConstantInt>(I->getOperand(2)))
+  if (match(V, m_OneUse(m_Load(m_Value()))))
     return true;
-  if (I->getOpcode() == Instruction::Load && I->hasOneUse())
-    return true;
-  if (BinaryOperator *BO = dyn_cast<BinaryOperator>(I))
-    if (BO->hasOneUse() &&
-        (cheapToScalarize(BO->getOperand(0), isConstant) ||
-         cheapToScalarize(BO->getOperand(1), isConstant)))
+
+  Value *V0, *V1;
+  if (match(V, m_OneUse(m_BinOp(m_Value(V0), m_Value(V1)))))
+    if (cheapToScalarize(V0, IsConstantExtractIndex) ||
+        cheapToScalarize(V1, IsConstantExtractIndex))
       return true;
-  if (CmpInst *CI = dyn_cast<CmpInst>(I))
-    if (CI->hasOneUse() &&
-        (cheapToScalarize(CI->getOperand(0), isConstant) ||
-         cheapToScalarize(CI->getOperand(1), isConstant)))
+
+  CmpInst::Predicate UnusedPred;
+  if (match(V, m_OneUse(m_Cmp(UnusedPred, m_Value(V0), m_Value(V1)))))
+    if (cheapToScalarize(V0, IsConstantExtractIndex) ||
+        cheapToScalarize(V1, IsConstantExtractIndex))
       return true;
 
   return false;
@@ -1505,6 +1496,11 @@ static Instruction *foldIdentityExtractShuffle(ShuffleVectorInst &Shuf) {
   Value *X, *Y;
   Constant *Mask;
   if (!match(Op0, m_ShuffleVector(m_Value(X), m_Value(Y), m_Constant(Mask))))
+    return nullptr;
+
+  // Be conservative with shuffle transforms. If we can't kill the 1st shuffle,
+  // then combining may result in worse codegen.
+  if (!Op0->hasOneUse())
     return nullptr;
 
   // We are extracting a subvector from a shuffle. Remove excess elements from
