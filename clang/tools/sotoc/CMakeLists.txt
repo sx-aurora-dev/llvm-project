@@ -29,7 +29,8 @@ set(SOTOC_SOURCES src/main.cpp
                   src/TargetCode.cpp
                   src/TargetCodeFragment.cpp
                   src/Visitors.cpp
-                  src/DeclResolver.cpp)
+                  src/DeclResolver.cpp
+                  src/OmpPragma.cpp)
 
 
 ################################################################################
