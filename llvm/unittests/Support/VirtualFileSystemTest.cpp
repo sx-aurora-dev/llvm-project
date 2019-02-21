@@ -1,9 +1,8 @@
 //===- unittests/Support/VirtualFileSystem.cpp -------------- VFS tests ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -741,6 +740,43 @@ TEST(VirtualFileSystemTest, HiddenInIteration) {
     ASSERT_NE(E, I);
     EXPECT_EQ(sys::fs::file_type::regular_file, I->type());
   }
+}
+
+TEST(ProxyFileSystemTest, Basic) {
+  IntrusiveRefCntPtr<vfs::InMemoryFileSystem> Base(
+      new vfs::InMemoryFileSystem());
+  vfs::ProxyFileSystem PFS(Base);
+
+  Base->addFile("/a", 0, MemoryBuffer::getMemBuffer("test"));
+
+  auto Stat = PFS.status("/a");
+  ASSERT_FALSE(Stat.getError());
+
+  auto File = PFS.openFileForRead("/a");
+  ASSERT_FALSE(File.getError());
+  EXPECT_EQ("test", (*(*File)->getBuffer("ignored"))->getBuffer());
+
+  std::error_code EC;
+  vfs::directory_iterator I = PFS.dir_begin("/", EC);
+  ASSERT_FALSE(EC);
+  ASSERT_EQ("/a", I->path());
+  I.increment(EC);
+  ASSERT_FALSE(EC);
+  ASSERT_EQ(vfs::directory_iterator(), I);
+
+  ASSERT_FALSE(PFS.setCurrentWorkingDirectory("/"));
+
+  auto PWD = PFS.getCurrentWorkingDirectory();
+  ASSERT_FALSE(PWD.getError());
+  ASSERT_EQ("/", *PWD);
+
+  SmallString<16> Path;
+  ASSERT_FALSE(PFS.getRealPath("a", Path));
+  ASSERT_EQ("/a", Path);
+
+  bool Local = true;
+  ASSERT_FALSE(PFS.isLocal("/a", Local));
+  EXPECT_FALSE(Local);
 }
 
 class InMemoryFileSystemTest : public ::testing::Test {

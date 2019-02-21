@@ -1,13 +1,12 @@
 //===-- Target.cpp ----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include <mutex>
+#include "lldb/Target/Target.h"
 #include "Plugins/ExpressionParser/Clang/ClangASTSource.h"
 #include "Plugins/ExpressionParser/Clang/ClangModulesDeclVendor.h"
 #include "Plugins/ExpressionParser/Clang/ClangPersistentVariables.h"
@@ -20,12 +19,11 @@
 #include "lldb/Breakpoint/BreakpointResolverScripted.h"
 #include "lldb/Breakpoint/Watchpoint.h"
 #include "lldb/Core/Debugger.h"
-#include "lldb/Core/Event.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/Section.h"
 #include "lldb/Core/SearchFilter.h"
+#include "lldb/Core/Section.h"
 #include "lldb/Core/SourceManager.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/StructuredDataImpl.h"
@@ -50,15 +48,16 @@
 #include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/SystemRuntime.h"
-#include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadSpec.h"
+#include "lldb/Utility/Event.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/State.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
+#include <mutex>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -194,6 +193,8 @@ void Target::DeleteCurrentProcess() {
 const lldb::ProcessSP &Target::CreateProcess(ListenerSP listener_sp,
                                              llvm::StringRef plugin_name,
                                              const FileSpec *crash_file) {
+  if (!listener_sp)
+    listener_sp = GetDebugger().GetListener();
   DeleteCurrentProcess();
   m_process_sp = Process::FindPlugin(shared_from_this(), plugin_name,
                                      listener_sp, crash_file);
@@ -762,7 +763,7 @@ void Target::GetBreakpointNames(std::vector<std::string> &names)
   for (auto bp_name : m_breakpoint_names) {
     names.push_back(bp_name.first.AsCString());
   }
-  std::sort(names.begin(), names.end());
+  llvm::sort(names.begin(), names.end());
 }
 
 bool Target::ProcessIsValid() {
@@ -2832,18 +2833,7 @@ Status Target::Launch(ProcessLaunchInfo &launch_info, Stream *stream) {
 
   PlatformSP platform_sp(GetPlatform());
 
-  // Finalize the file actions, and if none were given, default to opening up a
-  // pseudo terminal
-  const bool default_to_use_pty = platform_sp ? platform_sp->IsHost() : false;
-  if (log)
-    log->Printf("Target::%s have platform=%s, platform_sp->IsHost()=%s, "
-                "default_to_use_pty=%s",
-                __FUNCTION__, platform_sp ? "true" : "false",
-                platform_sp ? (platform_sp->IsHost() ? "true" : "false")
-                            : "n/a",
-                default_to_use_pty ? "true" : "false");
-
-  launch_info.FinalizeFileActions(this, default_to_use_pty);
+  FinalizeFileActions(launch_info);
 
   if (state == eStateConnected) {
     if (launch_info.GetFlags().Test(eLaunchFlagLaunchInTTY)) {
@@ -2864,22 +2854,15 @@ Status Target::Launch(ProcessLaunchInfo &launch_info, Stream *stream) {
       log->Printf("Target::%s asking the platform to debug the process",
                   __FUNCTION__);
 
-    // Get a weak pointer to the previous process if we have one
-    ProcessWP process_wp;
-    if (m_process_sp)
-      process_wp = m_process_sp;
+    // If there was a previous process, delete it before we make the new one.
+    // One subtle point, we delete the process before we release the reference
+    // to m_process_sp.  That way even if we are the last owner, the process
+    // will get Finalized before it gets destroyed.
+    DeleteCurrentProcess();
+    
     m_process_sp =
         GetPlatform()->DebugProcess(launch_info, debugger, this, error);
 
-    // Cleanup the old process since someone might still have a strong
-    // reference to this process and we would like to allow it to cleanup as
-    // much as it can without the object being destroyed. We try to lock the
-    // shared pointer and if that works, then someone else still has a strong
-    // reference to the process.
-
-    ProcessSP old_process_sp(process_wp.lock());
-    if (old_process_sp)
-      old_process_sp->Finalize();
   } else {
     if (log)
       log->Printf("Target::%s the platform doesn't know how to debug a "
@@ -2891,8 +2874,7 @@ Status Target::Launch(ProcessLaunchInfo &launch_info, Stream *stream) {
     } else {
       // Use a Process plugin to construct the process.
       const char *plugin_name = launch_info.GetProcessPluginName();
-      CreateProcess(launch_info.GetListenerForProcess(debugger), plugin_name,
-                    nullptr);
+      CreateProcess(launch_info.GetListener(), plugin_name, nullptr);
     }
 
     // Since we didn't have a platform launch the process, launch it here.
@@ -3067,6 +3049,86 @@ Status Target::Attach(ProcessAttachInfo &attach_info, Stream *stream) {
   return error;
 }
 
+void Target::FinalizeFileActions(ProcessLaunchInfo &info) {
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
+
+  // Finalize the file actions, and if none were given, default to opening up a
+  // pseudo terminal
+  PlatformSP platform_sp = GetPlatform();
+  const bool default_to_use_pty =
+      m_platform_sp ? m_platform_sp->IsHost() : false;
+  LLDB_LOG(
+      log,
+      "have platform={0}, platform_sp->IsHost()={1}, default_to_use_pty={2}",
+      bool(platform_sp),
+      platform_sp ? (platform_sp->IsHost() ? "true" : "false") : "n/a",
+      default_to_use_pty);
+
+  // If nothing for stdin or stdout or stderr was specified, then check the
+  // process for any default settings that were set with "settings set"
+  if (info.GetFileActionForFD(STDIN_FILENO) == nullptr ||
+      info.GetFileActionForFD(STDOUT_FILENO) == nullptr ||
+      info.GetFileActionForFD(STDERR_FILENO) == nullptr) {
+    LLDB_LOG(log, "at least one of stdin/stdout/stderr was not set, evaluating "
+                  "default handling");
+
+    if (info.GetFlags().Test(eLaunchFlagLaunchInTTY)) {
+      // Do nothing, if we are launching in a remote terminal no file actions
+      // should be done at all.
+      return;
+    }
+
+    if (info.GetFlags().Test(eLaunchFlagDisableSTDIO)) {
+      LLDB_LOG(log, "eLaunchFlagDisableSTDIO set, adding suppression action "
+                    "for stdin, stdout and stderr");
+      info.AppendSuppressFileAction(STDIN_FILENO, true, false);
+      info.AppendSuppressFileAction(STDOUT_FILENO, false, true);
+      info.AppendSuppressFileAction(STDERR_FILENO, false, true);
+    } else {
+      // Check for any values that might have gotten set with any of: (lldb)
+      // settings set target.input-path (lldb) settings set target.output-path
+      // (lldb) settings set target.error-path
+      FileSpec in_file_spec;
+      FileSpec out_file_spec;
+      FileSpec err_file_spec;
+      // Only override with the target settings if we don't already have an
+      // action for in, out or error
+      if (info.GetFileActionForFD(STDIN_FILENO) == nullptr)
+        in_file_spec = GetStandardInputPath();
+      if (info.GetFileActionForFD(STDOUT_FILENO) == nullptr)
+        out_file_spec = GetStandardOutputPath();
+      if (info.GetFileActionForFD(STDERR_FILENO) == nullptr)
+        err_file_spec = GetStandardErrorPath();
+
+      LLDB_LOG(log, "target stdin='{0}', target stdout='{1}', stderr='{1}'",
+               in_file_spec, out_file_spec, err_file_spec);
+
+      if (in_file_spec) {
+        info.AppendOpenFileAction(STDIN_FILENO, in_file_spec, true, false);
+        LLDB_LOG(log, "appended stdin open file action for {0}", in_file_spec);
+      }
+
+      if (out_file_spec) {
+        info.AppendOpenFileAction(STDOUT_FILENO, out_file_spec, false, true);
+        LLDB_LOG(log, "appended stdout open file action for {0}",
+                 out_file_spec);
+      }
+
+      if (err_file_spec) {
+        info.AppendOpenFileAction(STDERR_FILENO, err_file_spec, false, true);
+        LLDB_LOG(log, "appended stderr open file action for {0}",
+                 err_file_spec);
+      }
+
+      if (default_to_use_pty &&
+          (!in_file_spec || !out_file_spec || !err_file_spec)) {
+        llvm::Error Err = info.SetUpPtyRedirection();
+        LLDB_LOG_ERROR(log, std::move(Err), "SetUpPtyRedirection failed: {0}");
+      }
+    }
+  }
+}
+
 //--------------------------------------------------------------
 // Target::StopHook
 //--------------------------------------------------------------
@@ -3239,7 +3301,8 @@ static constexpr PropertyDefinition g_properties[] = {
          "whose paths don't match the local file system."},
     {"debug-file-search-paths", OptionValue::eTypeFileSpecList, false, 0,
      nullptr, {},
-     "List of directories to be searched when locating debug symbol files."},
+     "List of directories to be searched when locating debug symbol files. "
+     "See also symbols.enable-external-lookup."},
     {"clang-module-search-paths", OptionValue::eTypeFileSpecList, false, 0,
      nullptr, {},
      "List of directories to be searched when locating modules for Clang."},
@@ -3363,6 +3426,8 @@ static constexpr PropertyDefinition g_properties[] = {
     {"display-runtime-support-values", OptionValue::eTypeBoolean, false, false,
      nullptr, {}, "If true, LLDB will show variables that are meant to "
                   "support the operation of a language's runtime support."},
+    {"display-recognized-arguments", OptionValue::eTypeBoolean, false, false,
+     nullptr, {}, "Show recognized arguments in variable listings by default."},
     {"non-stop-mode", OptionValue::eTypeBoolean, false, 0, nullptr, {},
      "Disable lock-step debugging, instead control threads independently."},
     {"require-hardware-breakpoint", OptionValue::eTypeBoolean, false, 0,
@@ -3411,6 +3476,7 @@ enum {
   ePropertyDisplayExpressionsInCrashlogs,
   ePropertyTrapHandlerNames,
   ePropertyDisplayRuntimeSupportValues,
+  ePropertyDisplayRecognizedArguments,
   ePropertyNonStopModeEnabled,
   ePropertyRequireHardwareBreakpoints,
   ePropertyExperimental,
@@ -3967,6 +4033,16 @@ bool TargetProperties::GetDisplayRuntimeSupportValues() const {
 
 void TargetProperties::SetDisplayRuntimeSupportValues(bool b) {
   const uint32_t idx = ePropertyDisplayRuntimeSupportValues;
+  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
+}
+
+bool TargetProperties::GetDisplayRecognizedArguments() const {
+  const uint32_t idx = ePropertyDisplayRecognizedArguments;
+  return m_collection_sp->GetPropertyAtIndexAsBoolean(nullptr, idx, false);
+}
+
+void TargetProperties::SetDisplayRecognizedArguments(bool b) {
+  const uint32_t idx = ePropertyDisplayRecognizedArguments;
   m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
 }
 

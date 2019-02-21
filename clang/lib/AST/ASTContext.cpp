@@ -1,9 +1,8 @@
 //===- ASTContext.cpp - Context to hold long-lived AST nodes --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -3768,10 +3767,11 @@ QualType ASTContext::getFunctionTypeInternal(
   size_t Size = FunctionProtoType::totalSizeToAlloc<
       QualType, FunctionType::FunctionTypeExtraBitfields,
       FunctionType::ExceptionType, Expr *, FunctionDecl *,
-      FunctionProtoType::ExtParameterInfo>(
+      FunctionProtoType::ExtParameterInfo, Qualifiers>(
       NumArgs, FunctionProtoType::hasExtraBitfields(EPI.ExceptionSpec.Type),
       ESH.NumExceptionType, ESH.NumExprPtr, ESH.NumFunctionDeclPtr,
-      EPI.ExtParameterInfos ? NumArgs : 0);
+      EPI.ExtParameterInfos ? NumArgs : 0,
+      EPI.TypeQuals.hasNonFastQualifiers() ? 1 : 0);
 
   auto *FTP = (FunctionProtoType *)Allocate(Size, TypeAlignment);
   FunctionProtoType::ExtProtoInfo newEPI = EPI;
@@ -4319,7 +4319,7 @@ TemplateArgument ASTContext::getInjectedTemplateArg(NamedDecl *Param) {
     Arg = TemplateArgument(ArgType);
   } else if (auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(Param)) {
     Expr *E = new (*this) DeclRefExpr(
-        NTTP, /*enclosing*/false,
+        *this, NTTP, /*enclosing*/ false,
         NTTP->getType().getNonLValueExprType(*this),
         Expr::getValueKindForType(NTTP->getType()), NTTP->getLocation());
 
@@ -8580,7 +8580,7 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
     if (lproto->isVariadic() != rproto->isVariadic())
       return {};
 
-    if (lproto->getTypeQuals() != rproto->getTypeQuals())
+    if (lproto->getMethodQuals() != rproto->getMethodQuals())
       return {};
 
     SmallVector<FunctionProtoType::ExtParameterInfo, 4> newParamInfos;
@@ -9517,6 +9517,10 @@ QualType ASTContext::GetBuiltinType(unsigned Id,
                                     GetBuiltinTypeError &Error,
                                     unsigned *IntegerConstantArgs) const {
   const char *TypeStr = BuiltinInfo.getTypeString(Id);
+  if (TypeStr[0] == '\0') {
+    Error = GE_Missing_type;
+    return {};
+  }
 
   SmallVector<QualType, 8> ArgTypes;
 
@@ -10484,7 +10488,13 @@ unsigned char ASTContext::getFixedPointIBits(QualType Ty) const {
 }
 
 FixedPointSemantics ASTContext::getFixedPointSemantics(QualType Ty) const {
-  assert(Ty->isFixedPointType());
+  assert((Ty->isFixedPointType() || Ty->isIntegerType()) &&
+         "Can only get the fixed point semantics for a "
+         "fixed point or integer type.");
+  if (Ty->isIntegerType())
+    return FixedPointSemantics::GetIntegerSemantics(getIntWidth(Ty),
+                                                    Ty->isSignedIntegerType());
+
   bool isSigned = Ty->isSignedFixedPointType();
   return FixedPointSemantics(
       static_cast<unsigned>(getTypeSize(Ty)), getFixedPointScale(Ty), isSigned,
@@ -10500,4 +10510,39 @@ APFixedPoint ASTContext::getFixedPointMax(QualType Ty) const {
 APFixedPoint ASTContext::getFixedPointMin(QualType Ty) const {
   assert(Ty->isFixedPointType());
   return APFixedPoint::getMin(getFixedPointSemantics(Ty));
+}
+
+QualType ASTContext::getCorrespondingSignedFixedPointType(QualType Ty) const {
+  assert(Ty->isUnsignedFixedPointType() &&
+         "Expected unsigned fixed point type");
+  const auto *BTy = Ty->getAs<BuiltinType>();
+
+  switch (BTy->getKind()) {
+  case BuiltinType::UShortAccum:
+    return ShortAccumTy;
+  case BuiltinType::UAccum:
+    return AccumTy;
+  case BuiltinType::ULongAccum:
+    return LongAccumTy;
+  case BuiltinType::SatUShortAccum:
+    return SatShortAccumTy;
+  case BuiltinType::SatUAccum:
+    return SatAccumTy;
+  case BuiltinType::SatULongAccum:
+    return SatLongAccumTy;
+  case BuiltinType::UShortFract:
+    return ShortFractTy;
+  case BuiltinType::UFract:
+    return FractTy;
+  case BuiltinType::ULongFract:
+    return LongFractTy;
+  case BuiltinType::SatUShortFract:
+    return SatShortFractTy;
+  case BuiltinType::SatUFract:
+    return SatFractTy;
+  case BuiltinType::SatULongFract:
+    return SatLongFractTy;
+  default:
+    llvm_unreachable("Unexpected unsigned fixed point type");
+  }
 }

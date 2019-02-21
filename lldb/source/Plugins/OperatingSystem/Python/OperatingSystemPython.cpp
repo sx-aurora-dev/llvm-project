@@ -1,9 +1,8 @@
 //===-- OperatingSystemPython.cpp --------------------------------*- C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -213,7 +212,7 @@ bool OperatingSystemPython::UpdateThreadList(ThreadList &old_thread_list,
   // beginning of the list
   uint32_t insert_idx = 0;
   for (uint32_t core_idx = 0; core_idx < num_cores; ++core_idx) {
-    if (core_used_map[core_idx] == false) {
+    if (!core_used_map[core_idx]) {
       new_thread_list.InsertThread(
           core_thread_list.GetThreadAtIndex(core_idx, false), insert_idx);
       ++insert_idx;

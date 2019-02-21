@@ -1,9 +1,8 @@
 //===-- ThreadGDBRemote.cpp -------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -197,13 +196,10 @@ void ThreadGDBRemote::SetQueueLibdispatchQueueAddress(
 }
 
 bool ThreadGDBRemote::ThreadHasQueueInformation() const {
-  if (m_thread_dispatch_qaddr != 0 &&
-      m_thread_dispatch_qaddr != LLDB_INVALID_ADDRESS &&
-      m_dispatch_queue_t != LLDB_INVALID_ADDRESS &&
-      m_queue_kind != eQueueKindUnknown && m_queue_serial_number != 0) {
-    return true;
-  }
-  return false;
+  return m_thread_dispatch_qaddr != 0 &&
+         m_thread_dispatch_qaddr != LLDB_INVALID_ADDRESS &&
+         m_dispatch_queue_t != LLDB_INVALID_ADDRESS &&
+         m_queue_kind != eQueueKindUnknown && m_queue_serial_number != 0;
 }
 
 LazyBool ThreadGDBRemote::GetAssociatedWithLibdispatchQueue() {

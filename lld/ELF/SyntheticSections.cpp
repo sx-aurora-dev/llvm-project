@@ -1,9 +1,8 @@
 //===- SyntheticSections.cpp ----------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1513,8 +1512,10 @@ void RelocationBaseSection::finalizeContents() {
   else
     getParent()->Link = 0;
 
-  if (In.RelaIplt == this || In.RelaPlt == this)
+  if (In.RelaPlt == this)
     getParent()->Info = In.GotPlt->getParent()->SectionIndex;
+  if (In.RelaIplt == this)
+    getParent()->Info = In.IgotPlt->getParent()->SectionIndex;
 }
 
 RelrBaseSection::RelrBaseSection()
@@ -1803,7 +1804,7 @@ template <class ELFT> bool RelrSection<ELFT>::updateAllocSize() {
   std::vector<uint64_t> Offsets;
   for (const RelativeReloc &Rel : Relocs)
     Offsets.push_back(Rel.getOffset());
-  llvm::sort(Offsets.begin(), Offsets.end());
+  llvm::sort(Offsets);
 
   // For each leading relocation, find following ones that can be folded
   // as a bitmap and fold them.
@@ -2176,6 +2177,8 @@ void GnuHashTableSection::writeTo(uint8_t *Buf) {
 void GnuHashTableSection::writeBloomFilter(uint8_t *Buf) {
   unsigned C = Config->Is64 ? 64 : 32;
   for (const Entry &Sym : Symbols) {
+    // When C = 64, we choose a word with bits [6:...] and set 1 to two bits in
+    // the word using bits [0:5] and [26:31].
     size_t I = (Sym.Hash / C) & (MaskWords - 1);
     uint64_t Val = readUint(Buf + I * Config->Wordsize);
     Val |= uint64_t(1) << (Sym.Hash % C);
@@ -2412,11 +2415,14 @@ readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
 
   uint32_t CuIdx = 0;
   for (std::unique_ptr<DWARFUnit> &Cu : Dwarf.compile_units()) {
-    DWARFAddressRangesVector Ranges;
-    Cu->collectAddressRanges(Ranges);
+    Expected<DWARFAddressRangesVector> Ranges = Cu->collectAddressRanges();
+    if (!Ranges) {
+      error(toString(Sec) + ": " + toString(Ranges.takeError()));
+      return {};
+    }
 
     ArrayRef<InputSectionBase *> Sections = Sec->File->getSections();
-    for (DWARFAddressRange &R : Ranges) {
+    for (DWARFAddressRange &R : *Ranges) {
       InputSectionBase *S = Sections[R.SectionIndex];
       if (!S || S == &InputSection::Discarded || !S->Live)
         continue;
@@ -2429,6 +2435,7 @@ readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
     }
     ++CuIdx;
   }
+
   return Ret;
 }
 

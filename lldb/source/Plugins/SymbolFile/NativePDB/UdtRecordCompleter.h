@@ -1,9 +1,8 @@
 //===-- SymbolFileNativePDB.h -----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,14 +18,21 @@
 
 namespace clang {
 class CXXBaseSpecifier;
+class QualType;
 class TagDecl;
 } // namespace clang
+
+namespace llvm {
+namespace pdb {
+class TpiStream;
+}
+} // namespace llvm
 
 namespace lldb_private {
 class Type;
 class CompilerType;
 namespace npdb {
-class SymbolFileNativePDB;
+class PdbAstBuilder;
 
 class UdtRecordCompleter : public llvm::codeview::TypeVisitorCallbacks {
   union UdtTagRecord {
@@ -39,14 +45,15 @@ class UdtRecordCompleter : public llvm::codeview::TypeVisitorCallbacks {
   PdbTypeSymId m_id;
   CompilerType &m_derived_ct;
   clang::TagDecl &m_tag_decl;
-  SymbolFileNativePDB &m_symbol_file;
+  PdbAstBuilder &m_ast_builder;
+  llvm::pdb::TpiStream &m_tpi;
   std::vector<std::unique_ptr<clang::CXXBaseSpecifier>> m_bases;
   ClangASTImporter::LayoutInfo m_layout;
 
 public:
   UdtRecordCompleter(PdbTypeSymId id, CompilerType &derived_ct,
-                     clang::TagDecl &tag_decl,
-                     SymbolFileNativePDB &symbol_file);
+                     clang::TagDecl &tag_decl, PdbAstBuilder &ast_builder,
+                     llvm::pdb::TpiStream &tpi);
 
 #define MEMBER_RECORD(EnumName, EnumVal, Name)                                 \
   llvm::Error visitKnownMember(llvm::codeview::CVMemberRecord &CVR,            \
@@ -57,9 +64,12 @@ public:
   void complete();
 
 private:
-  lldb::opaque_compiler_type_t
-  AddBaseClassForTypeIndex(llvm::codeview::TypeIndex ti,
-                           llvm::codeview::MemberAccess access);
+  clang::QualType AddBaseClassForTypeIndex(llvm::codeview::TypeIndex ti,
+                                           llvm::codeview::MemberAccess access);
+  void AddMethod(llvm::StringRef name, llvm::codeview::TypeIndex type_idx,
+                 llvm::codeview::MemberAccess access,
+                 llvm::codeview::MethodOptions options,
+                 llvm::codeview::MemberAttributes attrs);
 };
 
 } // namespace npdb

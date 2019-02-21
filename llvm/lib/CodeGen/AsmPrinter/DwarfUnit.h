@@ -1,9 +1,8 @@
 //===-- llvm/CodeGen/DwarfUnit.h - Dwarf Compile Unit ---*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -48,7 +47,9 @@ protected:
 
   /// Target of Dwarf emission.
   AsmPrinter *Asm;
-  MCSymbol *EndLabel;
+
+  /// Emitted at the end of the CU and used to compute the CU Length field.
+  MCSymbol *EndLabel = nullptr;
 
   // Holders for some common dwarf information.
   DwarfDebug *DD;
@@ -276,9 +277,6 @@ public:
 
   /// Add the DW_AT_loclists_base attribute to the unit DIE.
   void addLoclistsBase();
-
-  /// Add the DW_AT_addr_base attribute to the unit DIE.
-  void addAddrTableBase();
 
   virtual DwarfCompileUnit &getCU() = 0;
 

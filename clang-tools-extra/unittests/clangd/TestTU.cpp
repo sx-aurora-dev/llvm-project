@@ -1,9 +1,8 @@
 //===--- TestTU.cpp - Scratch source files for testing --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +15,6 @@
 #include "clang/Frontend/PCHContainerOperations.h"
 #include "clang/Frontend/Utils.h"
 
-using namespace llvm;
 namespace clang {
 namespace clangd {
 
@@ -37,9 +35,16 @@ ParsedAST TestTU::build() const {
   Inputs.CompileCommand.Directory = testRoot();
   Inputs.Contents = Code;
   Inputs.FS = buildTestFS({{FullFilename, Code}, {FullHeaderName, HeaderCode}});
+  Inputs.Opts = ParseOptions();
+  Inputs.Opts.ClangTidyOpts.Checks = ClangTidyChecks;
+  Inputs.Index = ExternalIndex;
+  if (Inputs.Index)
+    Inputs.Opts.SuggestMissingIncludes = true;
   auto PCHs = std::make_shared<PCHContainerOperations>();
+  auto CI = buildCompilerInvocation(Inputs);
+  assert(CI && "Failed to build compilation invocation.");
   auto Preamble =
-      buildPreamble(FullFilename, *createInvocationFromCommandLine(Cmd),
+      buildPreamble(FullFilename, *CI,
                     /*OldPreamble=*/nullptr,
                     /*OldCompileCommand=*/Inputs.CompileCommand, Inputs, PCHs,
                     /*StoreInMemory=*/true, /*PreambleCallback=*/nullptr);
@@ -65,7 +70,7 @@ std::unique_ptr<SymbolIndex> TestTU::index() const {
   return std::move(Idx);
 }
 
-const Symbol &findSymbol(const SymbolSlab &Slab, StringRef QName) {
+const Symbol &findSymbol(const SymbolSlab &Slab, llvm::StringRef QName) {
   const Symbol *Result = nullptr;
   for (const Symbol &S : Slab) {
     if (QName != (S.Scope + S.Name).str())
@@ -86,13 +91,13 @@ const Symbol &findSymbol(const SymbolSlab &Slab, StringRef QName) {
   return *Result;
 }
 
-const NamedDecl &findDecl(ParsedAST &AST, StringRef QName) {
-  SmallVector<StringRef, 4> Components;
+const NamedDecl &findDecl(ParsedAST &AST, llvm::StringRef QName) {
+  llvm::SmallVector<llvm::StringRef, 4> Components;
   QName.split(Components, "::");
 
   auto &Ctx = AST.getASTContext();
   auto LookupDecl = [&Ctx](const DeclContext &Scope,
-                           StringRef Name) -> const NamedDecl & {
+                           llvm::StringRef Name) -> const NamedDecl & {
     auto LookupRes = Scope.lookup(DeclarationName(&Ctx.Idents.get(Name)));
     assert(!LookupRes.empty() && "Lookup failed");
     assert(LookupRes.size() == 1 && "Lookup returned multiple results");
@@ -111,7 +116,7 @@ const NamedDecl &findDecl(ParsedAST &AST,
                           std::function<bool(const NamedDecl &)> Filter) {
   struct Visitor : RecursiveASTVisitor<Visitor> {
     decltype(Filter) F;
-    SmallVector<const NamedDecl *, 1> Decls;
+    llvm::SmallVector<const NamedDecl *, 1> Decls;
     bool VisitNamedDecl(const NamedDecl *ND) {
       if (F(*ND))
         Decls.push_back(ND);
@@ -127,7 +132,7 @@ const NamedDecl &findDecl(ParsedAST &AST,
   return *Visitor.Decls.front();
 }
 
-const NamedDecl &findUnqualifiedDecl(ParsedAST &AST, StringRef Name) {
+const NamedDecl &findUnqualifiedDecl(ParsedAST &AST, llvm::StringRef Name) {
   return findDecl(AST, [Name](const NamedDecl &ND) {
     if (auto *ID = ND.getIdentifier())
       if (ID->getName() == Name)

@@ -1,9 +1,8 @@
 //===- yaml2elf - Convert YAML to a ELF object file -----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -196,7 +195,7 @@ void ELFState<ELFT>::initELFHeader(Elf_Ehdr &Header) {
   Header.e_ident[EI_DATA] = IsLittleEndian ? ELFDATA2LSB : ELFDATA2MSB;
   Header.e_ident[EI_VERSION] = EV_CURRENT;
   Header.e_ident[EI_OSABI] = Doc.Header.OSABI;
-  Header.e_ident[EI_ABIVERSION] = 0;
+  Header.e_ident[EI_ABIVERSION] = Doc.Header.ABIVersion;
   Header.e_type = Doc.Header.Type;
   Header.e_machine = Doc.Header.Machine;
   Header.e_version = EV_CURRENT;

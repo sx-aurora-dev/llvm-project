@@ -1,9 +1,8 @@
 //===-LTO.cpp - LLVM Link Time Optimizer ----------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,6 +24,7 @@
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/LTO/LTOBackend.h"
+#include "llvm/LTO/SummaryBasedOptimizations.h"
 #include "llvm/Linker/IRMover.h"
 #include "llvm/Object/IRObjectFile.h"
 #include "llvm/Support/Error.h"
@@ -42,6 +42,7 @@
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/Utils/FunctionImportUtils.h"
 #include "llvm/Transforms/Utils/SplitModule.h"
 
 #include <set>
@@ -544,6 +545,15 @@ Error LTO::addModule(InputFile &Input, unsigned ModI,
   if (!LTOInfo)
     return LTOInfo.takeError();
 
+  if (EnableSplitLTOUnit.hasValue()) {
+    // If only some modules were split, flag this in the index so that
+    // we can skip or error on optimizations that need consistently split
+    // modules (whole program devirt and lower type tests).
+    if (EnableSplitLTOUnit.getValue() != LTOInfo->EnableSplitLTOUnit)
+      ThinLTO.CombinedIndex.setPartiallySplitLTOUnits();
+  } else
+    EnableSplitLTOUnit = LTOInfo->EnableSplitLTOUnit;
+
   BitcodeModule BM = Input.Mods[ModI];
   auto ModSyms = Input.module_symbols(ModI);
   addModuleToGlobalRes(ModSyms, {ResI, ResE},
@@ -691,8 +701,12 @@ LTO::addRegularLTO(BitcodeModule BM, ArrayRef<InputFile::Symbol> Syms,
       }
 
       // Set the 'local' flag based on the linker resolution for this symbol.
-      if (Res.FinalDefinitionInLinkageUnit)
+      if (Res.FinalDefinitionInLinkageUnit) {
         GV->setDSOLocal(true);
+        if (GV->hasDLLImportStorageClass())
+          GV->setDLLStorageClass(GlobalValue::DLLStorageClassTypes::
+                                 DefaultStorageClass);
+      }
     }
     // Common resolution: collect the maximum size/alignment over all commons.
     // We also record if we see an instance of a common as prevailing, so that
@@ -1169,6 +1183,9 @@ Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache) {
   for (auto &Mod : ThinLTO.ModuleMap)
     if (!ModuleToDefinedGVSummaries.count(Mod.first))
       ModuleToDefinedGVSummaries.try_emplace(Mod.first);
+
+  // Synthesize entry counts for functions in the CombinedIndex.
+  computeSyntheticCounts(ThinLTO.CombinedIndex);
 
   StringMap<FunctionImporter::ImportMapTy> ImportLists(
       ThinLTO.ModuleMap.size());

@@ -1,9 +1,8 @@
 //===-- sanitizer_platform_limits_freebsd.cc ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,6 +17,8 @@
 
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <fts.h>
+#include <fstab.h>
 #include <grp.h>
 #include <limits.h>
 #include <net/if.h>
@@ -25,6 +26,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <regex.h>
 #include <signal.h>
 #include <stddef.h>
 #include <sys/mman.h>
@@ -62,9 +64,11 @@
 #include <net/ppp_defs.h>
 #include <glob.h>
 #include <stdio.h>
+#include <stringlist.h>
 #include <term.h>
 #include <utmpx.h>
 #include <wchar.h>
+#include <vis.h>
 
 #define _KERNEL  // to declare 'shminfo' structure
 # include <sys/shm.h>
@@ -104,6 +108,7 @@ namespace __sanitizer {
   unsigned timeval_sz = sizeof(timeval);
   unsigned uid_t_sz = sizeof(uid_t);
   unsigned gid_t_sz = sizeof(gid_t);
+  unsigned fpos_t_sz = sizeof(fpos_t);
   unsigned mbstate_t_sz = sizeof(mbstate_t);
   unsigned sigset_t_sz = sizeof(sigset_t);
   unsigned struct_timezone_sz = sizeof(struct timezone);
@@ -123,6 +128,12 @@ namespace __sanitizer {
   unsigned struct_statvfs_sz = sizeof(struct statvfs);
   unsigned struct_shminfo_sz = sizeof(struct shminfo);
   unsigned struct_shm_info_sz = sizeof(struct shm_info);
+  unsigned struct_regmatch_sz = sizeof(regmatch_t);
+  unsigned struct_regex_sz = sizeof(regex_t);
+  unsigned struct_fstab_sz = sizeof(struct fstab);
+  unsigned struct_FTS_sz = sizeof(FTS);
+  unsigned struct_FTSENT_sz = sizeof(FTSENT);
+  unsigned struct_StringList_sz = sizeof(StringList);
 
   const uptr sig_ign = (uptr)SIG_IGN;
   const uptr sig_dfl = (uptr)SIG_DFL;
@@ -337,6 +348,8 @@ namespace __sanitizer {
 
   const int si_SEGV_MAPERR = SEGV_MAPERR;
   const int si_SEGV_ACCERR = SEGV_ACCERR;
+  const int unvis_valid = UNVIS_VALID;
+  const int unvis_validpush = UNVIS_VALIDPUSH;
 } // namespace __sanitizer
 
 using namespace __sanitizer;
@@ -493,7 +506,7 @@ CHECK_SIZE_AND_OFFSET(group, gr_passwd);
 CHECK_SIZE_AND_OFFSET(group, gr_gid);
 CHECK_SIZE_AND_OFFSET(group, gr_mem);
 
-#if HAVE_RPC_XDR_H || HAVE_TIRPC_RPC_XDR_H
+#if HAVE_RPC_XDR_H
 CHECK_TYPE_SIZE(XDR);
 CHECK_SIZE_AND_OFFSET(XDR, x_op);
 CHECK_SIZE_AND_OFFSET(XDR, x_ops);

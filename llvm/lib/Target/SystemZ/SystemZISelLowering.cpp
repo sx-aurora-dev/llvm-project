@@ -1,9 +1,8 @@
 //===-- SystemZISelLowering.cpp - SystemZ DAG lowering implementation -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -527,6 +526,7 @@ SystemZTargetLowering::SystemZTargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::STORE);
   setTargetDAGCombine(ISD::EXTRACT_VECTOR_ELT);
   setTargetDAGCombine(ISD::FP_ROUND);
+  setTargetDAGCombine(ISD::FP_EXTEND);
   setTargetDAGCombine(ISD::BSWAP);
   setTargetDAGCombine(ISD::SDIV);
   setTargetDAGCombine(ISD::UDIV);
@@ -2218,8 +2218,7 @@ static void adjustForRedundantAnd(SelectionDAG &DAG, const SDLoc &DL,
   auto *Mask = dyn_cast<ConstantSDNode>(C.Op0.getOperand(1));
   if (!Mask)
     return;
-  KnownBits Known;
-  DAG.computeKnownBits(C.Op0.getOperand(0), Known);
+  KnownBits Known = DAG.computeKnownBits(C.Op0.getOperand(0));
   if ((~Known.Zero).getZExtValue() & ~Mask->getZExtValue())
     return;
 
@@ -3165,10 +3164,9 @@ SDValue SystemZTargetLowering::lowerOR(SDValue Op, SelectionDAG &DAG) const {
   assert(Op.getValueType() == MVT::i64 && "Should be 64-bit operation");
 
   // Get the known-zero masks for each operand.
-  SDValue Ops[] = { Op.getOperand(0), Op.getOperand(1) };
-  KnownBits Known[2];
-  DAG.computeKnownBits(Ops[0], Known[0]);
-  DAG.computeKnownBits(Ops[1], Known[1]);
+  SDValue Ops[] = {Op.getOperand(0), Op.getOperand(1)};
+  KnownBits Known[2] = {DAG.computeKnownBits(Ops[0]),
+                        DAG.computeKnownBits(Ops[1])};
 
   // See if the upper 32 bits of one operand and the lower 32 bits of the
   // other are known zero.  They are the low and high operands respectively.
@@ -3351,8 +3349,7 @@ SDValue SystemZTargetLowering::lowerCTPOP(SDValue Op,
   }
 
   // Get the known-zero mask for the operand.
-  KnownBits Known;
-  DAG.computeKnownBits(Op, Known);
+  KnownBits Known = DAG.computeKnownBits(Op);
   unsigned NumSignificantBits = (~Known.Zero).getActiveBits();
   if (NumSignificantBits == 0)
     return DAG.getConstant(0, DL, VT);
@@ -5485,7 +5482,7 @@ SDValue SystemZTargetLowering::combineFP_ROUND(
   // (fpround (extract_vector_elt X 0))
   // (fpround (extract_vector_elt X 1)) ->
   // (extract_vector_elt (VROUND X) 0)
-  // (extract_vector_elt (VROUND X) 1)
+  // (extract_vector_elt (VROUND X) 2)
   //
   // This is a special case since the target doesn't really support v2f32s.
   SelectionDAG &DAG = DCI.DAG;
@@ -5519,6 +5516,53 @@ SDValue SystemZTargetLowering::combineFP_ROUND(
           SDValue Extract0 =
             DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SDLoc(Op0), MVT::f32,
                         VRound, DAG.getConstant(0, SDLoc(Op0), MVT::i32));
+          return Extract0;
+        }
+      }
+    }
+  }
+  return SDValue();
+}
+
+SDValue SystemZTargetLowering::combineFP_EXTEND(
+    SDNode *N, DAGCombinerInfo &DCI) const {
+  // (fpextend (extract_vector_elt X 0))
+  // (fpextend (extract_vector_elt X 2)) ->
+  // (extract_vector_elt (VEXTEND X) 0)
+  // (extract_vector_elt (VEXTEND X) 1)
+  //
+  // This is a special case since the target doesn't really support v2f32s.
+  SelectionDAG &DAG = DCI.DAG;
+  SDValue Op0 = N->getOperand(0);
+  if (N->getValueType(0) == MVT::f64 &&
+      Op0.hasOneUse() &&
+      Op0.getOpcode() == ISD::EXTRACT_VECTOR_ELT &&
+      Op0.getOperand(0).getValueType() == MVT::v4f32 &&
+      Op0.getOperand(1).getOpcode() == ISD::Constant &&
+      cast<ConstantSDNode>(Op0.getOperand(1))->getZExtValue() == 0) {
+    SDValue Vec = Op0.getOperand(0);
+    for (auto *U : Vec->uses()) {
+      if (U != Op0.getNode() &&
+          U->hasOneUse() &&
+          U->getOpcode() == ISD::EXTRACT_VECTOR_ELT &&
+          U->getOperand(0) == Vec &&
+          U->getOperand(1).getOpcode() == ISD::Constant &&
+          cast<ConstantSDNode>(U->getOperand(1))->getZExtValue() == 2) {
+        SDValue OtherExtend = SDValue(*U->use_begin(), 0);
+        if (OtherExtend.getOpcode() == ISD::FP_EXTEND &&
+            OtherExtend.getOperand(0) == SDValue(U, 0) &&
+            OtherExtend.getValueType() == MVT::f64) {
+          SDValue VExtend = DAG.getNode(SystemZISD::VEXTEND, SDLoc(N),
+                                        MVT::v2f64, Vec);
+          DCI.AddToWorklist(VExtend.getNode());
+          SDValue Extract1 =
+            DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SDLoc(U), MVT::f64,
+                        VExtend, DAG.getConstant(1, SDLoc(U), MVT::i32));
+          DCI.AddToWorklist(Extract1.getNode());
+          DAG.ReplaceAllUsesOfValueWith(OtherExtend, Extract1);
+          SDValue Extract0 =
+            DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SDLoc(Op0), MVT::f64,
+                        VExtend, DAG.getConstant(0, SDLoc(Op0), MVT::i32));
           return Extract0;
         }
       }
@@ -5731,6 +5775,12 @@ SDValue SystemZTargetLowering::combineIntDIVREM(
   return SDValue();
 }
 
+SDValue SystemZTargetLowering::unwrapAddress(SDValue N) const {
+  if (N->getOpcode() == SystemZISD::PCREL_WRAPPER)
+    return N->getOperand(0);
+  return N;
+}
+
 SDValue SystemZTargetLowering::PerformDAGCombine(SDNode *N,
                                                  DAGCombinerInfo &DCI) const {
   switch(N->getOpcode()) {
@@ -5745,6 +5795,7 @@ SDValue SystemZTargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::EXTRACT_VECTOR_ELT: return combineEXTRACT_VECTOR_ELT(N, DCI);
   case SystemZISD::JOIN_DWORDS: return combineJOIN_DWORDS(N, DCI);
   case ISD::FP_ROUND:           return combineFP_ROUND(N, DCI);
+  case ISD::FP_EXTEND:          return combineFP_EXTEND(N, DCI);
   case ISD::BSWAP:              return combineBSWAP(N, DCI);
   case SystemZISD::BR_CCMASK:   return combineBR_CCMASK(N, DCI);
   case SystemZISD::SELECT_CCMASK: return combineSELECT_CCMASK(N, DCI);
@@ -5863,10 +5914,10 @@ static void computeKnownBitsBinOp(const SDValue Op, KnownBits &Known,
                                   unsigned OpNo) {
   APInt Src0DemE = getDemandedSrcElements(Op, DemandedElts, OpNo);
   APInt Src1DemE = getDemandedSrcElements(Op, DemandedElts, OpNo + 1);
-  unsigned SrcBitWidth = Op.getOperand(OpNo).getScalarValueSizeInBits();
-  KnownBits LHSKnown(SrcBitWidth), RHSKnown(SrcBitWidth);
-  DAG.computeKnownBits(Op.getOperand(OpNo), LHSKnown, Src0DemE, Depth + 1);
-  DAG.computeKnownBits(Op.getOperand(OpNo + 1), RHSKnown, Src1DemE, Depth + 1);
+  KnownBits LHSKnown =
+      DAG.computeKnownBits(Op.getOperand(OpNo), Src0DemE, Depth + 1);
+  KnownBits RHSKnown =
+      DAG.computeKnownBits(Op.getOperand(OpNo + 1), Src1DemE, Depth + 1);
   Known.Zero = LHSKnown.Zero & RHSKnown.Zero;
   Known.One = LHSKnown.One & RHSKnown.One;
 }
@@ -5932,9 +5983,8 @@ SystemZTargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
     case Intrinsic::s390_vuplf: {
       SDValue SrcOp = Op.getOperand(1);
       unsigned SrcBitWidth = SrcOp.getScalarValueSizeInBits();
-      Known = KnownBits(SrcBitWidth);
       APInt SrcDemE = getDemandedSrcElements(Op, DemandedElts, 0);
-      DAG.computeKnownBits(SrcOp, Known, SrcDemE, Depth + 1);
+      Known = DAG.computeKnownBits(SrcOp, SrcDemE, Depth + 1);
       if (IsLogical) {
         Known = Known.zext(BitWidth);
         Known.Zero.setBitsFrom(SrcBitWidth);
@@ -5953,7 +6003,7 @@ SystemZTargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
       break;
     case SystemZISD::REPLICATE: {
       SDValue SrcOp = Op.getOperand(0);
-      DAG.computeKnownBits(SrcOp, Known, Depth + 1);
+      Known = DAG.computeKnownBits(SrcOp, Depth + 1);
       if (Known.getBitWidth() < BitWidth && isa<ConstantSDNode>(SrcOp))
         Known = Known.sext(BitWidth); // VREPI sign extends the immedate.
       break;
@@ -6168,7 +6218,8 @@ static void createPHIsForSelects(MachineBasicBlock::iterator MIItBegin,
   // destination registers, and the registers that went into the PHI.
   DenseMap<unsigned, std::pair<unsigned, unsigned>> RegRewriteTable;
 
-  for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd; ++MIIt) {
+  for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd;
+       MIIt = skipDebugInstructionsForward(++MIIt, MIItEnd)) {
     unsigned DestReg = MIIt->getOperand(0).getReg();
     unsigned TrueReg = MIIt->getOperand(1).getReg();
     unsigned FalseReg = MIIt->getOperand(2).getReg();
@@ -6192,6 +6243,8 @@ static void createPHIsForSelects(MachineBasicBlock::iterator MIItBegin,
     // Add this PHI to the rewrite table.
     RegRewriteTable[DestReg] = std::make_pair(TrueReg, FalseReg);
   }
+
+  MF->getProperties().reset(MachineFunctionProperties::Property::NoPHIs);
 }
 
 // Implement EmitInstrWithCustomInserter for pseudo Select* instruction MI.
@@ -6209,8 +6262,8 @@ SystemZTargetLowering::emitSelect(MachineInstr &MI,
   // same condition code value, we want to expand all of them into
   // a single pair of basic blocks using the same condition.
   MachineInstr *LastMI = &MI;
-  MachineBasicBlock::iterator NextMIIt =
-      std::next(MachineBasicBlock::iterator(MI));
+  MachineBasicBlock::iterator NextMIIt = skipDebugInstructionsForward(
+      std::next(MachineBasicBlock::iterator(MI)), MBB->end());
 
   if (isSelectPseudo(MI))
     while (NextMIIt != MBB->end() && isSelectPseudo(*NextMIIt) &&
@@ -6218,7 +6271,7 @@ SystemZTargetLowering::emitSelect(MachineInstr &MI,
            (NextMIIt->getOperand(4).getImm() == CCMask ||
             NextMIIt->getOperand(4).getImm() == (CCValid ^ CCMask))) {
       LastMI = &*NextMIIt;
-      ++NextMIIt;
+      NextMIIt = skipDebugInstructionsForward(++NextMIIt, MBB->end());
     }
 
   MachineBasicBlock *StartMBB = MBB;
@@ -6251,8 +6304,8 @@ SystemZTargetLowering::emitSelect(MachineInstr &MI,
   //  ...
   MBB = JoinMBB;
   MachineBasicBlock::iterator MIItBegin = MachineBasicBlock::iterator(MI);
-  MachineBasicBlock::iterator MIItEnd =
-      std::next(MachineBasicBlock::iterator(LastMI));
+  MachineBasicBlock::iterator MIItEnd = skipDebugInstructionsForward(
+      std::next(MachineBasicBlock::iterator(LastMI)), MBB->end());
   createPHIsForSelects(MIItBegin, MIItEnd, StartMBB, FalseMBB, MBB);
 
   StartMBB->erase(MIItBegin, MIItEnd);

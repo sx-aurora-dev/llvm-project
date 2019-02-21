@@ -1,9 +1,8 @@
 //===-- GDBRemoteCommunication.cpp ------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -77,6 +76,11 @@ GDBRemoteCommunication::~GDBRemoteCommunication() {
   if (IsConnected()) {
     Disconnect();
   }
+
+#if defined(HAVE_LIBCOMPRESSION)
+  if (m_decompression_scratch)
+    free (m_decompression_scratch);
+#endif
 
   // Stop the communications read thread which is used to parse all incoming
   // packets.  This function will block until the read thread returns.
@@ -532,7 +536,7 @@ bool GDBRemoteCommunication::DecompressPacket() {
   size_t decompressed_bytes = 0;
 
   if (decompressed_bufsize != ULONG_MAX) {
-    decompressed_buffer = (uint8_t *)malloc(decompressed_bufsize + 1);
+    decompressed_buffer = (uint8_t *)malloc(decompressed_bufsize);
     if (decompressed_buffer == nullptr) {
       m_bytes.erase(0, size_of_first_packet);
       return false;
@@ -540,11 +544,10 @@ bool GDBRemoteCommunication::DecompressPacket() {
   }
 
 #if defined(HAVE_LIBCOMPRESSION)
-  // libcompression is weak linked so check that compression_decode_buffer() is
-  // available
   if (m_compression_type == CompressionType::ZlibDeflate ||
       m_compression_type == CompressionType::LZFSE ||
-      m_compression_type == CompressionType::LZ4) {
+      m_compression_type == CompressionType::LZ4 || 
+      m_compression_type == CompressionType::LZMA) {
     compression_algorithm compression_type;
     if (m_compression_type == CompressionType::LZFSE)
       compression_type = COMPRESSION_LZFSE;
@@ -555,16 +558,33 @@ bool GDBRemoteCommunication::DecompressPacket() {
     else if (m_compression_type == CompressionType::LZMA)
       compression_type = COMPRESSION_LZMA;
 
-    // If we have the expected size of the decompressed payload, we can
-    // allocate the right-sized buffer and do it.  If we don't have that
-    // information, we'll need to try decoding into a big buffer and if the
-    // buffer wasn't big enough, increase it and try again.
+    if (m_decompression_scratch_type != m_compression_type) {
+      if (m_decompression_scratch) {
+        free (m_decompression_scratch);
+        m_decompression_scratch = nullptr;
+      }
+      size_t scratchbuf_size = 0;
+      if (m_compression_type == CompressionType::LZFSE)
+        scratchbuf_size = compression_decode_scratch_buffer_size (COMPRESSION_LZFSE);
+      else if (m_compression_type == CompressionType::LZ4)
+        scratchbuf_size = compression_decode_scratch_buffer_size (COMPRESSION_LZ4_RAW);
+      else if (m_compression_type == CompressionType::ZlibDeflate)
+        scratchbuf_size = compression_decode_scratch_buffer_size (COMPRESSION_ZLIB);
+      else if (m_compression_type == CompressionType::LZMA)
+        scratchbuf_size = compression_decode_scratch_buffer_size (COMPRESSION_LZMA);
+      else if (m_compression_type == CompressionType::LZFSE)
+        scratchbuf_size = compression_decode_scratch_buffer_size (COMPRESSION_LZFSE);
+      if (scratchbuf_size > 0) {
+        m_decompression_scratch = (void*) malloc (scratchbuf_size);
+        m_decompression_scratch_type = m_compression_type;
+      }
+    }
 
     if (decompressed_bufsize != ULONG_MAX && decompressed_buffer != nullptr) {
       decompressed_bytes = compression_decode_buffer(
-          decompressed_buffer, decompressed_bufsize + 10,
-          (uint8_t *)unescaped_content.data(), unescaped_content.size(), NULL,
-          compression_type);
+          decompressed_buffer, decompressed_bufsize,
+          (uint8_t *)unescaped_content.data(), unescaped_content.size(), 
+          m_decompression_scratch, compression_type);
     }
   }
 #endif
@@ -656,7 +676,7 @@ GDBRemoteCommunication::CheckForPacket(const uint8_t *src, size_t src_len,
     // Size of packet before it is decompressed, for logging purposes
     size_t original_packet_size = m_bytes.size();
     if (CompressionIsEnabled()) {
-      if (DecompressPacket() == false) {
+      if (!DecompressPacket()) {
         packet.Clear();
         return GDBRemoteCommunication::PacketType::Standard;
       }
@@ -1051,9 +1071,9 @@ Status GDBRemoteCommunication::StartDebugserverProcess(
                         __FUNCTION__, error.AsCString());
           return error;
         }
-        int write_fd = socket_pipe.GetWriteFileDescriptor();
+        pipe_t write = socket_pipe.GetWritePipe();
         debugserver_args.AppendArgument(llvm::StringRef("--pipe"));
-        debugserver_args.AppendArgument(llvm::to_string(write_fd));
+        debugserver_args.AppendArgument(llvm::to_string(write));
         launch_info.AppendCloseFileAction(socket_pipe.GetReadFileDescriptor());
 #endif
       } else {
@@ -1243,7 +1263,7 @@ void GDBRemoteCommunication::DumpHistory(Stream &strm) { m_history.Dump(strm); }
 
 void GDBRemoteCommunication::SetHistoryStream(llvm::raw_ostream *strm) {
   m_history.SetStream(strm);
-};
+}
 
 llvm::Error
 GDBRemoteCommunication::ConnectLocally(GDBRemoteCommunication &client,

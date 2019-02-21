@@ -1,9 +1,8 @@
 //===- Driver.cpp ---------------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -224,7 +223,7 @@ void LinkerDriver::addFile(StringRef Path, bool WithLOption) {
     return;
   }
   case file_magic::elf_shared_object:
-    if (Config->Relocatable) {
+    if (Config->Static || Config->Relocatable) {
       error("attempted static link of dynamic object " + Path);
       return;
     }
@@ -402,13 +401,11 @@ void LinkerDriver::main(ArrayRef<const char *> ArgsArr) {
     Expected<std::unique_ptr<TarWriter>> ErrOrWriter =
         TarWriter::create(Path, path::stem(Path));
     if (ErrOrWriter) {
-      Tar = ErrOrWriter->get();
+      Tar = std::move(*ErrOrWriter);
       Tar->append("response.txt", createResponseFile(Args));
       Tar->append("version.txt", getLLDVersion() + "\n");
-      make<std::unique_ptr<TarWriter>>(std::move(*ErrOrWriter));
     } else {
-      error(Twine("--reproduce: failed to open ") + Path + ": " +
-            toString(ErrOrWriter.takeError()));
+      error("--reproduce: " + toString(ErrOrWriter.takeError()));
     }
   }
 
@@ -759,6 +756,9 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
       Args.hasFlag(OPT_allow_multiple_definition,
                    OPT_no_allow_multiple_definition, false) ||
       hasZOption(Args, "muldefs");
+  Config->AllowShlibUndefined =
+      Args.hasFlag(OPT_allow_shlib_undefined, OPT_no_allow_shlib_undefined,
+                   Args.hasArg(OPT_shared));
   Config->AuxiliaryList = args::getStrings(Args, OPT_auxiliary);
   Config->Bsymbolic = Args.hasArg(OPT_Bsymbolic);
   Config->BsymbolicFunctions = Args.hasArg(OPT_Bsymbolic_functions);
@@ -776,6 +776,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->DynamicLinker = getDynamicLinker(Args);
   Config->EhFrameHdr =
       Args.hasFlag(OPT_eh_frame_hdr, OPT_no_eh_frame_hdr, false);
+  Config->EmitLLVM = Args.hasArg(OPT_plugin_opt_emit_llvm, false);
   Config->EmitRelocs = Args.hasArg(OPT_emit_relocs);
   Config->CallGraphProfileSort = Args.hasFlag(
       OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
@@ -1007,6 +1008,7 @@ static void setConfigs(opt::InputArgList &Args) {
   Config->Endianness = Config->IsLE ? endianness::little : endianness::big;
   Config->IsMips64EL = (K == ELF64LEKind && M == EM_MIPS);
   Config->Pic = Config->Pie || Config->Shared;
+  Config->PicThunk = Args.hasArg(OPT_pic_veneer, Config->Pic);
   Config->Wordsize = Config->Is64 ? 8 : 4;
 
   // ELF defines two different ways to store relocation addends as shown below:
@@ -1551,6 +1553,9 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   Out::ElfHeader = make<OutputSection>("", 0, SHF_ALLOC);
   Out::ElfHeader->Size = sizeof(typename ELFT::Ehdr);
 
+  // Create wrapped symbols for -wrap option.
+  std::vector<WrappedSymbol> Wrapped = addWrappedSymbols<ELFT>(Args);
+
   // We need to create some reserved symbols such as _end. Create them.
   if (!Config->Relocatable)
     addReservedSymbols();
@@ -1562,9 +1567,6 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   // name "foo@ver1") rather do harm, so we don't call this if -r is given.
   if (!Config->Relocatable)
     Symtab->scanVersionScript();
-
-  // Create wrapped symbols for -wrap option.
-  std::vector<WrappedSymbol> Wrapped = addWrappedSymbols<ELFT>(Args);
 
   // Do link-time optimization if given files are LLVM bitcode files.
   // This compiles bitcode files into real object files.
@@ -1579,6 +1581,12 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   // files" and not object files. Index file creation is already done
   // in addCombinedLTOObject, so we are done if that's the case.
   if (Config->ThinLTOIndexOnly)
+    return;
+
+  // Likewise, --plugin-opt=emit-llvm is an option to make LTO create
+  // an output file in bitcode and exit, so that you can just get a
+  // combined bitcode file.
+  if (Config->EmitLLVM)
     return;
 
   // Apply symbol renames for -wrap.

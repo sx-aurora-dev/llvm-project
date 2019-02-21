@@ -1,9 +1,8 @@
 //===- SymbolRecordHelpers.h ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -51,6 +50,7 @@ inline bool symbolEndsScope(SymbolKind Kind) {
 /// Given a symbol P for which symbolOpensScope(P) == true, return the
 /// corresponding end offset.
 uint32_t getScopeEndOffset(const CVSymbol &Symbol);
+uint32_t getScopeParentOffset(const CVSymbol &Symbol);
 
 CVSymbolArray limitSymbolArrayToScope(const CVSymbolArray &Symbols,
                                       uint32_t ScopeBegin);

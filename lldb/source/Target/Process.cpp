@@ -1,9 +1,8 @@
 //===-- Process.cpp ---------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,7 +16,6 @@
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Breakpoint/StoppointCallbackContext.h"
 #include "lldb/Core/Debugger.h"
-#include "lldb/Core/Event.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
@@ -62,6 +60,7 @@
 #include "lldb/Target/ThreadPlan.h"
 #include "lldb/Target/ThreadPlanBase.h"
 #include "lldb/Target/UnixSignals.h"
+#include "lldb/Utility/Event.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/NameMatches.h"
 #include "lldb/Utility/SelectHelper.h"
@@ -3291,6 +3290,11 @@ Status Process::PrivateResume() {
           m_thread_list.DidResume();
           if (log)
             log->Printf("Process thinks the process has resumed.");
+        } else {
+          if (log)
+            log->Printf(
+                "Process::PrivateResume() DoResume failed.");
+          return error;
         }
       }
     } else {
@@ -6030,7 +6034,7 @@ Process::AdvanceAddressToNextBranchInstruction(Address default_stop_addr,
 }
 
 Status
-Process::GetMemoryRegions(std::vector<lldb::MemoryRegionInfoSP> &region_list) {
+Process::GetMemoryRegions(lldb_private::MemoryRegionInfos &region_list) {
 
   Status error;
 
@@ -6038,17 +6042,17 @@ Process::GetMemoryRegions(std::vector<lldb::MemoryRegionInfoSP> &region_list) {
 
   region_list.clear();
   do {
-    lldb::MemoryRegionInfoSP region_info(new lldb_private::MemoryRegionInfo());
-    error = GetMemoryRegionInfo(range_end, *region_info);
+    lldb_private::MemoryRegionInfo region_info;
+    error = GetMemoryRegionInfo(range_end, region_info);
     // GetMemoryRegionInfo should only return an error if it is unimplemented.
     if (error.Fail()) {
       region_list.clear();
       break;
     }
 
-    range_end = region_info->GetRange().GetRangeEnd();
-    if (region_info->GetMapped() == MemoryRegionInfo::eYes) {
-      region_list.push_back(region_info);
+    range_end = region_info.GetRange().GetRangeEnd();
+    if (region_info.GetMapped() == MemoryRegionInfo::eYes) {
+      region_list.push_back(std::move(region_info));
     }
   } while (range_end != LLDB_INVALID_ADDRESS);
 

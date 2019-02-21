@@ -1,9 +1,8 @@
 //===-- AppleObjCRuntimeV2.cpp ----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -454,7 +453,7 @@ bool AppleObjCRuntimeV2::GetDynamicTypeAndAddress(
       }
     }
   }
-  return class_type_or_name.IsEmpty() == false;
+  return !class_type_or_name.IsEmpty();
 }
 
 //------------------------------------------------------------------
@@ -1852,8 +1851,8 @@ void AppleObjCRuntimeV2::UpdateISAToDescriptorMapIfNeeded() {
       // warn if:
       // - we could not run either expression
       // - we found fewer than num_classes_to_warn_at classes total
-      if ((false == shared_cache_update_result.m_update_ran) ||
-          (false == dynamic_update_result.m_update_ran))
+      if ((!shared_cache_update_result.m_update_ran) ||
+          (!dynamic_update_result.m_update_ran))
         WarnIfNoClassesCached(
             SharedCacheWarningReason::eExpressionExecutionFailure);
       else if (dynamic_update_result.m_num_found +
@@ -2428,7 +2427,7 @@ AppleObjCRuntimeV2::NonPointerISACache::NonPointerISACache(
 ObjCLanguageRuntime::ClassDescriptorSP
 AppleObjCRuntimeV2::NonPointerISACache::GetClassDescriptor(ObjCISA isa) {
   ObjCISA real_isa = 0;
-  if (EvaluateNonPointerISA(isa, real_isa) == false)
+  if (!EvaluateNonPointerISA(isa, real_isa))
     return ObjCLanguageRuntime::ClassDescriptorSP();
   auto cache_iter = m_cache.find(real_isa);
   if (cache_iter != m_cache.end())
@@ -2630,6 +2629,9 @@ class ObjCExceptionRecognizedStackFrame : public RecognizedStackFrame {
     exception = ValueObjectConstResult::Create(frame_sp.get(), value,
                                                ConstString("exception"));
     exception = exception->GetDynamicValue(eDynamicDontRunTarget);
+      
+    m_arguments = ValueObjectListSP(new ValueObjectList());
+    m_arguments->Append(exception);
   }
 
   ValueObjectSP exception;

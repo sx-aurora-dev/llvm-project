@@ -1,9 +1,8 @@
 //===--- CodeGenModule.h - Per-Module state for LLVM CodeGen ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -128,11 +127,19 @@ struct ObjCEntrypoints {
   /// void objc_autoreleasePoolPop(void*);
   llvm::Constant *objc_autoreleasePoolPop;
 
+  /// void objc_autoreleasePoolPop(void*);
+  /// Note this method is used when we are using exception handling
+  llvm::Constant *objc_autoreleasePoolPopInvoke;
+
   /// void *objc_autoreleasePoolPush(void);
   llvm::Constant *objc_autoreleasePoolPush;
 
   /// id objc_autorelease(id);
   llvm::Constant *objc_autorelease;
+
+  /// id objc_autorelease(id);
+  /// Note this is the runtime method not the intrinsic.
+  llvm::Constant *objc_autoreleaseRuntimeFunction;
 
   /// id objc_autoreleaseReturnValue(id);
   llvm::Constant *objc_autoreleaseReturnValue;
@@ -158,6 +165,10 @@ struct ObjCEntrypoints {
   /// id objc_retain(id);
   llvm::Constant *objc_retain;
 
+  /// id objc_retain(id);
+  /// Note this is the runtime method not the intrinsic.
+  llvm::Constant *objc_retainRuntimeFunction;
+
   /// id objc_retainAutorelease(id);
   llvm::Constant *objc_retainAutorelease;
 
@@ -172,6 +183,10 @@ struct ObjCEntrypoints {
 
   /// void objc_release(id);
   llvm::Constant *objc_release;
+
+  /// void objc_release(id);
+  /// Note this is the runtime method not the intrinsic.
+  llvm::Constant *objc_releaseRuntimeFunction;
 
   /// void objc_storeStrong(id*, id);
   llvm::Constant *objc_storeStrong;
@@ -1228,6 +1243,10 @@ public:
   void EmitOMPDeclareReduction(const OMPDeclareReductionDecl *D,
                                CodeGenFunction *CGF = nullptr);
 
+  /// Emit a code for declare mapper construct.
+  void EmitOMPDeclareMapper(const OMPDeclareMapperDecl *D,
+                            CodeGenFunction *CGF = nullptr);
+
   /// Emit a code for requires directive.
   /// \param D Requires declaration
   void EmitOMPRequiresDecl(const OMPRequiresDecl *D);
@@ -1407,6 +1426,9 @@ private:
 
   /// Emit the Clang version as llvm.ident metadata.
   void EmitVersionIdentMetadata();
+
+  /// Emit the Clang commandline as llvm.commandline metadata.
+  void EmitCommandLineMetadata();
 
   /// Emits target specific Metadata for global declarations.
   void EmitTargetMetadata();

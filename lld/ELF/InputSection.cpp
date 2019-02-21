@@ -1,9 +1,8 @@
 //===- InputSection.cpp ---------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -288,14 +287,17 @@ Defined *InputSectionBase::getEnclosingFunction(uint64_t Offset) {
 // Returns a source location string. Used to construct an error message.
 template <class ELFT>
 std::string InputSectionBase::getLocation(uint64_t Offset) {
+  std::string SecAndOffset = (Name + "+0x" + utohexstr(Offset)).str();
+
   // We don't have file for synthetic sections.
   if (getFile<ELFT>() == nullptr)
-    return (Config->OutputFile + ":(" + Name + "+0x" + utohexstr(Offset) + ")")
+    return (Config->OutputFile + ":(" + SecAndOffset + ")")
         .str();
 
   // First check if we can get desired values from debugging information.
   if (Optional<DILineInfo> Info = getFile<ELFT>()->getDILineInfo(this, Offset))
-    return Info->FileName + ":" + std::to_string(Info->Line);
+    return Info->FileName + ":" + std::to_string(Info->Line) + ":(" +
+           SecAndOffset + ")";
 
   // File->SourceFile contains STT_FILE symbol that contains a
   // source file name. If it's missing, we use an object file name.
@@ -304,10 +306,10 @@ std::string InputSectionBase::getLocation(uint64_t Offset) {
     SrcFile = toString(File);
 
   if (Defined *D = getEnclosingFunction<ELFT>(Offset))
-    return SrcFile + ":(function " + toString(*D) + ")";
+    return SrcFile + ":(function " + toString(*D) + ": " + SecAndOffset + ")";
 
   // If there's no symbol, print out the offset in the section.
-  return (SrcFile + ":(" + Name + "+0x" + utohexstr(Offset) + ")").str();
+  return (SrcFile + ":(" + SecAndOffset + ")");
 }
 
 // This function is intended to be used for constructing an error message.
@@ -575,6 +577,10 @@ static int64_t getTlsTpOffset() {
     // Variant 1. The thread pointer points to a TCB with a fixed 2-word size,
     // followed by a variable amount of alignment padding, followed by the TLS
     // segment.
+    //
+    // NB: While the ARM/AArch64 ABI formally has a 2-word TCB size, lld
+    // effectively increases the TCB size to 8 words for Android compatibility.
+    // It accomplishes this by increasing the segment's alignment.
     return alignTo(Config->Wordsize * 2, Out::TlsPhdr->p_align);
   case EM_386:
   case EM_X86_64:
@@ -671,11 +677,11 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
     return In.MipsGot->getVA() + In.MipsGot->getTlsIndexOffset(File) -
            In.MipsGot->getGp(File);
   case R_AARCH64_PAGE_PC: {
-    uint64_t Val = Sym.isUndefWeak() ? A : Sym.getVA(A);
+    uint64_t Val = Sym.isUndefWeak() ? P + A : Sym.getVA(A);
     return getAArch64Page(Val) - getAArch64Page(P);
   }
   case R_AARCH64_PLT_PAGE_PC: {
-    uint64_t Val = Sym.isUndefWeak() ? A : Sym.getPltVA() + A;
+    uint64_t Val = Sym.isUndefWeak() ? P + A : Sym.getPltVA() + A;
     return getAArch64Page(Val) - getAArch64Page(P);
   }
   case R_RISCV_PC_INDIRECT: {

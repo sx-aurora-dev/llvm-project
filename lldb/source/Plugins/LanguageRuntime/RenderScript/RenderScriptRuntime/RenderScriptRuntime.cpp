@@ -1,9 +1,8 @@
 //===-- RenderScriptRuntime.cpp ---------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -2074,10 +2073,8 @@ bool RenderScriptRuntime::JITElementPacked(Element &elem,
 
   // If this Element has subelements then JIT rsaElementGetSubElements() for
   // details about its fields
-  if (*elem.field_count.get() > 0 && !JITSubelements(elem, context, frame_ptr))
-    return false;
-
-  return true;
+  return !(*elem.field_count.get() > 0 &&
+           !JITSubelements(elem, context, frame_ptr));
 }
 
 // JITs the RS runtime for information about the subelements/fields of a struct
@@ -2300,10 +2297,7 @@ bool RenderScriptRuntime::RefreshAllocation(AllocationDetails *alloc,
   SetElementSize(alloc->element);
 
   // Use GetOffsetPointer() to infer size of the allocation
-  if (!JITAllocationSize(alloc, frame_ptr))
-    return false;
-
-  return true;
+  return JITAllocationSize(alloc, frame_ptr);
 }
 
 // Function attempts to set the type_name member of the paramaterised Element

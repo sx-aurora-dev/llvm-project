@@ -1,9 +1,8 @@
 //===-- ProcessGDBRemote.cpp ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -157,17 +156,24 @@ static const ProcessKDPPropertiesSP &GetGlobalPluginProperties() {
   return g_settings_sp;
 }
 
+struct ProcessGDBRemoteInfo {
+  static const char *name;
+  static const char *file;
+};
+
+const char *ProcessGDBRemoteInfo::name = "gdb-remote";
+const char *ProcessGDBRemoteInfo::file = "gdb-remote.yaml";
+
 class ProcessGDBRemoteProvider
     : public repro::Provider<ProcessGDBRemoteProvider> {
 public:
+  typedef ProcessGDBRemoteInfo info;
+
   ProcessGDBRemoteProvider(const FileSpec &directory) : Provider(directory) {
-    m_info.name = "gdb-remote";
-    m_info.files.push_back("gdb-remote.yaml");
   }
 
   raw_ostream *GetHistoryStream() {
-    FileSpec history_file =
-        GetRoot().CopyByAppendingPathComponent("gdb-remote.yaml");
+    FileSpec history_file = GetRoot().CopyByAppendingPathComponent(info::file);
 
     std::error_code EC;
     m_stream_up = llvm::make_unique<raw_fd_ostream>(history_file.GetPath(), EC,
@@ -1528,7 +1534,7 @@ Status ProcessGDBRemote::DoResume() {
           new EventDataBytes(continue_packet.GetString().data(),
                              continue_packet.GetSize()));
 
-      if (listener_sp->GetEvent(event_sp, std::chrono::seconds(5)) == false) {
+      if (!listener_sp->GetEvent(event_sp, std::chrono::seconds(5))) {
         error.SetErrorString("Resume timed out.");
         if (log)
           log->Printf("ProcessGDBRemote::DoResume: Resume timed out.");
@@ -1882,7 +1888,7 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
           bool handled = false;
           bool did_exec = false;
           if (!reason.empty()) {
-            if (reason.compare("trace") == 0) {
+            if (reason == "trace") {
               addr_t pc = thread_sp->GetRegisterContext()->GetPC();
               lldb::BreakpointSiteSP bp_site_sp = thread_sp->GetProcess()
                                                       ->GetBreakpointSiteList()
@@ -1900,7 +1906,7 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
                 thread_sp->SetStopInfo(
                     StopInfo::CreateStopReasonToTrace(*thread_sp));
               handled = true;
-            } else if (reason.compare("breakpoint") == 0) {
+            } else if (reason == "breakpoint") {
               addr_t pc = thread_sp->GetRegisterContext()->GetPC();
               lldb::BreakpointSiteSP bp_site_sp = thread_sp->GetProcess()
                                                       ->GetBreakpointSiteList()
@@ -1921,9 +1927,9 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
                   thread_sp->SetStopInfo(invalid_stop_info_sp);
                 }
               }
-            } else if (reason.compare("trap") == 0) {
+            } else if (reason == "trap") {
               // Let the trap just use the standard signal stop reason below...
-            } else if (reason.compare("watchpoint") == 0) {
+            } else if (reason == "watchpoint") {
               StringExtractor desc_extractor(description.c_str());
               addr_t wp_addr = desc_extractor.GetU64(LLDB_INVALID_ADDRESS);
               uint32_t wp_index = desc_extractor.GetU32(LLDB_INVALID_INDEX32);
@@ -1955,11 +1961,11 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
               thread_sp->SetStopInfo(StopInfo::CreateStopReasonWithWatchpointID(
                   *thread_sp, watch_id, wp_hit_addr));
               handled = true;
-            } else if (reason.compare("exception") == 0) {
+            } else if (reason == "exception") {
               thread_sp->SetStopInfo(StopInfo::CreateStopReasonWithException(
                   *thread_sp, description.c_str()));
               handled = true;
-            } else if (reason.compare("exec") == 0) {
+            } else if (reason == "exec") {
               did_exec = true;
               thread_sp->SetStopInfo(
                   StopInfo::CreateStopReasonWithExec(*thread_sp));
@@ -1984,7 +1990,7 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
             }
           }
 
-          if (!handled && signo && did_exec == false) {
+          if (!handled && signo && !did_exec) {
             if (signo == SIGTRAP) {
               // Currently we are going to assume SIGTRAP means we are either
               // hitting a breakpoint or hardware single stepping.
@@ -2698,7 +2704,7 @@ void ProcessGDBRemote::SetLastStopPacket(
 
     // We are are not using non-stop mode, there can only be one last stop
     // reply packet, so clear the list.
-    if (GetTarget().GetNonStopModeEnabled() == false)
+    if (!GetTarget().GetNonStopModeEnabled())
       m_stop_packet_stack.clear();
 
     // Add this stop packet to the stop packet stack This stack will get popped
@@ -3432,16 +3438,10 @@ Status ProcessGDBRemote::ConnectToReplayServer(repro::Loader *loader) {
   if (!loader)
     return Status("No loader provided.");
 
-  auto provider_info = loader->GetProviderInfo("gdb-remote");
-  if (!provider_info)
-    return Status("No provider for gdb-remote.");
-
-  if (provider_info->files.empty())
-    return Status("Provider for  gdb-remote contains no files.");
-
   // Construct replay history path.
-  FileSpec history_file = loader->GetRoot().CopyByAppendingPathComponent(
-      provider_info->files.front());
+  FileSpec history_file = loader->GetFile<ProcessGDBRemoteInfo>();
+  if (!history_file)
+    return Status("No provider for gdb-remote.");
 
   // Enable replay mode.
   m_replay_mode = true;

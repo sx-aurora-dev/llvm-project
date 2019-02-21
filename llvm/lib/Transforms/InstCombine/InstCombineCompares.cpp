@@ -1,9 +1,8 @@
 //===- InstCombineCompares.cpp --------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -522,11 +521,9 @@ static Value *evaluateGEPOffsetExpression(User *GEP, InstCombiner &IC,
   }
 
   // Otherwise, there is an index.  The computation we will do will be modulo
-  // the pointer size, so get it.
-  uint64_t PtrSizeMask = ~0ULL >> (64-IntPtrWidth);
-
-  Offset &= PtrSizeMask;
-  VariableScale &= PtrSizeMask;
+  // the pointer size.
+  Offset = SignExtend64(Offset, IntPtrWidth);
+  VariableScale = SignExtend64(VariableScale, IntPtrWidth);
 
   // To do this transformation, any constant index must be a multiple of the
   // variable scale factor.  For example, we can evaluate "12 + 4*i" as "3 + i",
@@ -1294,8 +1291,8 @@ static Instruction *processUGT_ADDCST_ADD(ICmpInst &I, Value *A, Value *B,
   // use the sadd_with_overflow intrinsic to efficiently compute both the
   // result and the overflow bit.
   Type *NewType = IntegerType::get(OrigAdd->getContext(), NewWidth);
-  Value *F = Intrinsic::getDeclaration(I.getModule(),
-                                       Intrinsic::sadd_with_overflow, NewType);
+  Function *F = Intrinsic::getDeclaration(
+      I.getModule(), Intrinsic::sadd_with_overflow, NewType);
 
   InstCombiner::BuilderTy &Builder = IC.Builder;
 
@@ -2613,8 +2610,9 @@ Instruction *InstCombiner::foldICmpInstWithConstant(ICmpInst &Cmp) {
       return I;
   }
 
-  if (Instruction *I = foldICmpIntrinsicWithConstant(Cmp, *C))
-    return I;
+  if (auto *II = dyn_cast<IntrinsicInst>(Cmp.getOperand(0)))
+    if (Instruction *I = foldICmpIntrinsicWithConstant(Cmp, II, *C))
+      return I;
 
   return nullptr;
 }
@@ -2758,15 +2756,12 @@ Instruction *InstCombiner::foldICmpBinOpEqualityWithConstant(ICmpInst &Cmp,
   return nullptr;
 }
 
-/// Fold an icmp with LLVM intrinsic and constant operand: icmp Pred II, C.
-Instruction *InstCombiner::foldICmpIntrinsicWithConstant(ICmpInst &Cmp,
-                                                         const APInt &C) {
-  IntrinsicInst *II = dyn_cast<IntrinsicInst>(Cmp.getOperand(0));
-  if (!II || !Cmp.isEquality())
-    return nullptr;
-
-  // Handle icmp {eq|ne} <intrinsic>, Constant.
+/// Fold an equality icmp with LLVM intrinsic and constant operand.
+Instruction *InstCombiner::foldICmpEqIntrinsicWithConstant(ICmpInst &Cmp,
+                                                           IntrinsicInst *II,
+                                                           const APInt &C) {
   Type *Ty = II->getType();
+  unsigned BitWidth = C.getBitWidth();
   switch (II->getIntrinsicID()) {
   case Intrinsic::bswap:
     Worklist.Add(II);
@@ -2775,27 +2770,104 @@ Instruction *InstCombiner::foldICmpIntrinsicWithConstant(ICmpInst &Cmp,
     return &Cmp;
 
   case Intrinsic::ctlz:
-  case Intrinsic::cttz:
+  case Intrinsic::cttz: {
     // ctz(A) == bitwidth(A)  ->  A == 0 and likewise for !=
-    if (C == C.getBitWidth()) {
+    if (C == BitWidth) {
       Worklist.Add(II);
       Cmp.setOperand(0, II->getArgOperand(0));
       Cmp.setOperand(1, ConstantInt::getNullValue(Ty));
       return &Cmp;
     }
+
+    // ctz(A) == C -> A & Mask1 == Mask2, where Mask2 only has bit C set
+    // and Mask1 has bits 0..C+1 set. Similar for ctl, but for high bits.
+    // Limit to one use to ensure we don't increase instruction count.
+    unsigned Num = C.getLimitedValue(BitWidth);
+    if (Num != BitWidth && II->hasOneUse()) {
+      bool IsTrailing = II->getIntrinsicID() == Intrinsic::cttz;
+      APInt Mask1 = IsTrailing ? APInt::getLowBitsSet(BitWidth, Num + 1)
+                               : APInt::getHighBitsSet(BitWidth, Num + 1);
+      APInt Mask2 = IsTrailing
+        ? APInt::getOneBitSet(BitWidth, Num)
+        : APInt::getOneBitSet(BitWidth, BitWidth - Num - 1);
+      Cmp.setOperand(0, Builder.CreateAnd(II->getArgOperand(0), Mask1));
+      Cmp.setOperand(1, ConstantInt::get(Ty, Mask2));
+      Worklist.Add(II);
+      return &Cmp;
+    }
     break;
+  }
 
   case Intrinsic::ctpop: {
     // popcount(A) == 0  ->  A == 0 and likewise for !=
     // popcount(A) == bitwidth(A)  ->  A == -1 and likewise for !=
     bool IsZero = C.isNullValue();
-    if (IsZero || C == C.getBitWidth()) {
+    if (IsZero || C == BitWidth) {
       Worklist.Add(II);
       Cmp.setOperand(0, II->getArgOperand(0));
       auto *NewOp =
           IsZero ? Constant::getNullValue(Ty) : Constant::getAllOnesValue(Ty);
       Cmp.setOperand(1, NewOp);
       return &Cmp;
+    }
+    break;
+  }
+  default:
+    break;
+  }
+
+  return nullptr;
+}
+
+/// Fold an icmp with LLVM intrinsic and constant operand: icmp Pred II, C.
+Instruction *InstCombiner::foldICmpIntrinsicWithConstant(ICmpInst &Cmp,
+                                                         IntrinsicInst *II,
+                                                         const APInt &C) {
+  if (Cmp.isEquality())
+    return foldICmpEqIntrinsicWithConstant(Cmp, II, C);
+
+  Type *Ty = II->getType();
+  unsigned BitWidth = C.getBitWidth();
+  switch (II->getIntrinsicID()) {
+  case Intrinsic::ctlz: {
+    // ctlz(0bXXXXXXXX) > 3 -> 0bXXXXXXXX < 0b00010000
+    if (Cmp.getPredicate() == ICmpInst::ICMP_UGT && C.ult(BitWidth)) {
+      unsigned Num = C.getLimitedValue();
+      APInt Limit = APInt::getOneBitSet(BitWidth, BitWidth - Num - 1);
+      return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT,
+                             II->getArgOperand(0), ConstantInt::get(Ty, Limit));
+    }
+
+    // ctlz(0bXXXXXXXX) < 3 -> 0bXXXXXXXX > 0b00011111
+    if (Cmp.getPredicate() == ICmpInst::ICMP_ULT &&
+        C.uge(1) && C.ule(BitWidth)) {
+      unsigned Num = C.getLimitedValue();
+      APInt Limit = APInt::getLowBitsSet(BitWidth, BitWidth - Num);
+      return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT,
+                             II->getArgOperand(0), ConstantInt::get(Ty, Limit));
+    }
+    break;
+  }
+  case Intrinsic::cttz: {
+    // Limit to one use to ensure we don't increase instruction count.
+    if (!II->hasOneUse())
+      return nullptr;
+
+    // cttz(0bXXXXXXXX) > 3 -> 0bXXXXXXXX & 0b00001111 == 0
+    if (Cmp.getPredicate() == ICmpInst::ICMP_UGT && C.ult(BitWidth)) {
+      APInt Mask = APInt::getLowBitsSet(BitWidth, C.getLimitedValue() + 1);
+      return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
+                             Builder.CreateAnd(II->getArgOperand(0), Mask),
+                             ConstantInt::getNullValue(Ty));
+    }
+
+    // cttz(0bXXXXXXXX) < 3 -> 0bXXXXXXXX & 0b00000111 != 0
+    if (Cmp.getPredicate() == ICmpInst::ICMP_ULT &&
+        C.uge(1) && C.ule(BitWidth)) {
+      APInt Mask = APInt::getLowBitsSet(BitWidth, C.getLimitedValue());
+      return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE,
+                             Builder.CreateAnd(II->getArgOperand(0), Mask),
+                             ConstantInt::getNullValue(Ty));
     }
     break;
   }
@@ -4067,8 +4139,8 @@ static Instruction *processUMulZExtIdiom(ICmpInst &I, Value *MulVal,
     MulA = Builder.CreateZExt(A, MulType);
   if (WidthB < MulWidth)
     MulB = Builder.CreateZExt(B, MulType);
-  Value *F = Intrinsic::getDeclaration(I.getModule(),
-                                       Intrinsic::umul_with_overflow, MulType);
+  Function *F = Intrinsic::getDeclaration(
+      I.getModule(), Intrinsic::umul_with_overflow, MulType);
   CallInst *Call = Builder.CreateCall(F, {MulA, MulB}, "umul");
   IC.Worklist.Add(MulInstr);
 
