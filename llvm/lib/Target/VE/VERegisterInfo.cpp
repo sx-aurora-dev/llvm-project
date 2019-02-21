@@ -224,6 +224,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     int regi = MI.getOpcode() == VE::LDVRri ? 0 : 2;
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
     unsigned Reg = MI.getOperand(regi).getReg();
+    bool isDef = MI.getOperand(regi).isDef();
     bool isKill = MI.getOperand(regi).isKill();
 
     // Prepare for VL
@@ -250,7 +251,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
       .addReg(FramePtr).addImm(Offset);
 
     MI.setDesc(TII.get(opc));
-    MI.getOperand(0).ChangeToRegister(Reg, false, false, isKill);
+    MI.getOperand(0).ChangeToRegister(Reg, isDef, false, isKill);
     MI.getOperand(1).ChangeToImmediate(8);
     MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
     MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
