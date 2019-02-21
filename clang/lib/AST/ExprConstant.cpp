@@ -1,9 +1,8 @@
 //===--- ExprConstant.cpp - Expression Constant Evaluator -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -44,6 +43,7 @@
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Builtins.h"
+#include "clang/Basic/FixedPoint.h"
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/raw_ostream.h"
@@ -609,6 +609,15 @@ namespace {
         precision = (precision * 59 + 195) / 196;
         SmallVector<char, 32> Buffer;
         F.toString(Buffer, precision);
+        *Diag << StringRef(Buffer.data(), Buffer.size());
+      }
+      return *this;
+    }
+
+    OptionalDiagnostic &operator<<(const APFixedPoint &FX) {
+      if (Diag) {
+        SmallVector<char, 32> Buffer;
+        FX.toString(Buffer);
         *Diag << StringRef(Buffer.data(), Buffer.size());
       }
       return *this;
@@ -1290,6 +1299,14 @@ void EvalInfo::addCallStack(unsigned Limit) {
   }
 }
 
+/// Kinds of access we can perform on an object, for diagnostics.
+enum AccessKinds {
+  AK_Read,
+  AK_Assign,
+  AK_Increment,
+  AK_Decrement
+};
+
 namespace {
   struct ComplexValue {
   private:
@@ -1395,19 +1412,34 @@ namespace {
       set(B, true);
     }
 
+  private:
     // Check that this LValue is not based on a null pointer. If it is, produce
     // a diagnostic and mark the designator as invalid.
-    bool checkNullPointer(EvalInfo &Info, const Expr *E,
-                          CheckSubobjectKind CSK) {
+    template <typename GenDiagType>
+    bool checkNullPointerDiagnosingWith(const GenDiagType &GenDiag) {
       if (Designator.Invalid)
         return false;
       if (IsNullPtr) {
-        Info.CCEDiag(E, diag::note_constexpr_null_subobject)
-          << CSK;
+        GenDiag();
         Designator.setInvalid();
         return false;
       }
       return true;
+    }
+
+  public:
+    bool checkNullPointer(EvalInfo &Info, const Expr *E,
+                          CheckSubobjectKind CSK) {
+      return checkNullPointerDiagnosingWith([&Info, E, CSK] {
+        Info.CCEDiag(E, diag::note_constexpr_null_subobject) << CSK;
+      });
+    }
+
+    bool checkNullPointerForFoldAccess(EvalInfo &Info, const Expr *E,
+                                       AccessKinds AK) {
+      return checkNullPointerDiagnosingWith([&Info, E, AK] {
+        Info.FFDiag(E, diag::note_constexpr_access_null) << AK;
+      });
     }
 
     // Check this LValue refers to an object. If not, set the designator to be
@@ -1589,6 +1621,14 @@ static bool EvaluateComplex(const Expr *E, ComplexValue &Res, EvalInfo &Info);
 static bool EvaluateAtomic(const Expr *E, const LValue *This, APValue &Result,
                            EvalInfo &Info);
 static bool EvaluateAsRValue(EvalInfo &Info, const Expr *E, APValue &Result);
+
+/// Evaluate an integer or fixed point expression into an APResult.
+static bool EvaluateFixedPointOrInteger(const Expr *E, APFixedPoint &Result,
+                                        EvalInfo &Info);
+
+/// Evaluate only a fixed point expression into an APResult.
+static bool EvaluateFixedPoint(const Expr *E, APFixedPoint &Result,
+                               EvalInfo &Info);
 
 //===----------------------------------------------------------------------===//
 // Misc utilities
@@ -2003,6 +2043,9 @@ static bool HandleConversionToBool(const APValue &Val, bool &Result) {
     return false;
   case APValue::Int:
     Result = Val.getInt().getBoolValue();
+    return true;
+  case APValue::FixedPoint:
+    Result = Val.getFixedPoint().getBoolValue();
     return true;
   case APValue::Float:
     Result = !Val.getFloat().isZero();
@@ -2746,14 +2789,6 @@ static bool diagnoseUnreadableFields(EvalInfo &Info, const Expr *E,
   return false;
 }
 
-/// Kinds of access we can perform on an object, for diagnostics.
-enum AccessKinds {
-  AK_Read,
-  AK_Assign,
-  AK_Increment,
-  AK_Decrement
-};
-
 namespace {
 /// A handle to a complete object (an object that is not a subobject of
 /// another object).
@@ -3424,19 +3459,31 @@ struct CompoundAssignSubobjectHandler {
     if (!checkConst(SubobjType))
       return false;
 
-    if (!SubobjType->isIntegerType() || !RHS.isInt()) {
+    if (!SubobjType->isIntegerType()) {
       // We don't support compound assignment on integer-cast-to-pointer
       // values.
       Info.FFDiag(E);
       return false;
     }
 
-    APSInt LHS = HandleIntToIntCast(Info, E, PromotedLHSType,
-                                    SubobjType, Value);
-    if (!handleIntIntBinOp(Info, E, LHS, Opcode, RHS.getInt(), LHS))
-      return false;
-    Value = HandleIntToIntCast(Info, E, SubobjType, PromotedLHSType, LHS);
-    return true;
+    if (RHS.isInt()) {
+      APSInt LHS =
+          HandleIntToIntCast(Info, E, PromotedLHSType, SubobjType, Value);
+      if (!handleIntIntBinOp(Info, E, LHS, Opcode, RHS.getInt(), LHS))
+        return false;
+      Value = HandleIntToIntCast(Info, E, SubobjType, PromotedLHSType, LHS);
+      return true;
+    } else if (RHS.isFloat()) {
+      APFloat FValue(0.0);
+      return HandleIntToFloatCast(Info, E, SubobjType, Value, PromotedLHSType,
+                                  FValue) &&
+             handleFloatFloatBinOp(Info, E, FValue, Opcode, RHS.getFloat()) &&
+             HandleFloatToIntCast(Info, E, PromotedLHSType, FValue, SubobjType,
+                                  Value);
+    }
+
+    Info.FFDiag(E);
+    return false;
   }
   bool found(APFloat &Value, QualType SubobjType) {
     return checkConst(SubobjType) &&
@@ -4435,7 +4482,7 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
     if (!handleLValueToRValueConversion(Info, Args[0], Args[0]->getType(),
                                         RHS, RHSValue))
       return false;
-    if (!handleAssignment(Info, Args[0], *This, MD->getThisType(Info.Ctx),
+    if (!handleAssignment(Info, Args[0], *This, MD->getThisType(),
                           RHSValue))
       return false;
     This->moveInto(Result);
@@ -6097,7 +6144,8 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
 
     return true;
   }
-
+  case Builtin::BI__builtin_launder:
+    return evaluatePointer(E->getArg(0), Result);
   case Builtin::BIstrchr:
   case Builtin::BIwcschr:
   case Builtin::BImemchr:
@@ -6129,9 +6177,27 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
         return false;
       MaxLength = N.getExtValue();
     }
-
-    QualType CharTy = E->getArg(0)->getType()->getPointeeType();
-
+    // We cannot find the value if there are no candidates to match against.
+    if (MaxLength == 0u)
+      return ZeroInitialization(E);
+    if (!Result.checkNullPointerForFoldAccess(Info, E, AK_Read) ||
+        Result.Designator.Invalid)
+      return false;
+    QualType CharTy = Result.Designator.getType(Info.Ctx);
+    bool IsRawByte = BuiltinOp == Builtin::BImemchr ||
+                     BuiltinOp == Builtin::BI__builtin_memchr;
+    assert(IsRawByte ||
+           Info.Ctx.hasSameUnqualifiedType(
+               CharTy, E->getArg(0)->getType()->getPointeeType()));
+    // Pointers to const void may point to objects of incomplete type.
+    if (IsRawByte && CharTy->isIncompleteType()) {
+      Info.FFDiag(E, diag::note_constexpr_ltor_incomplete_type) << CharTy;
+      return false;
+    }
+    // Give up on byte-oriented matching against multibyte elements.
+    // FIXME: We can compare the bytes in the correct order.
+    if (IsRawByte && Info.Ctx.getTypeSizeInChars(CharTy) != CharUnits::One())
+      return false;
     // Figure out what value we're actually looking for (after converting to
     // the corresponding unsigned type if necessary).
     uint64_t DesiredVal;
@@ -7444,53 +7510,27 @@ class FixedPointExprEvaluator
   FixedPointExprEvaluator(EvalInfo &info, APValue &result)
       : ExprEvaluatorBaseTy(info), Result(result) {}
 
-  bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
-    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
-    assert(SI.isSigned() == E->getType()->isSignedFixedPointType() &&
-           "Invalid evaluation result.");
-    assert(SI.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
-           "Invalid evaluation result.");
-    Result = APValue(SI);
-    return true;
-  }
-  bool Success(const llvm::APSInt &SI, const Expr *E) {
-    return Success(SI, E, Result);
-  }
-
-  bool Success(const llvm::APInt &I, const Expr *E, APValue &Result) {
-    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
-    assert(I.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
-           "Invalid evaluation result.");
-    Result = APValue(APSInt(I));
-    Result.getInt().setIsUnsigned(E->getType()->isUnsignedFixedPointType());
-    return true;
-  }
   bool Success(const llvm::APInt &I, const Expr *E) {
-    return Success(I, E, Result);
+    return Success(
+        APFixedPoint(I, Info.Ctx.getFixedPointSemantics(E->getType())), E);
   }
 
-  bool Success(uint64_t Value, const Expr *E, APValue &Result) {
-    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
-    Result = APValue(Info.Ctx.MakeIntValue(Value, E->getType()));
-    return true;
-  }
   bool Success(uint64_t Value, const Expr *E) {
-    return Success(Value, E, Result);
-  }
-
-  bool Success(CharUnits Size, const Expr *E) {
-    return Success(Size.getQuantity(), E);
+    return Success(
+        APFixedPoint(Value, Info.Ctx.getFixedPointSemantics(E->getType())), E);
   }
 
   bool Success(const APValue &V, const Expr *E) {
-    if (V.isLValue() || V.isAddrLabelDiff()) {
-      Result = V;
-      return true;
-    }
-    return Success(V.getInt(), E);
+    return Success(V.getFixedPoint(), E);
   }
 
-  bool ZeroInitialization(const Expr *E) { return Success(0, E); }
+  bool Success(const APFixedPoint &V, const Expr *E) {
+    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
+    assert(V.getWidth() == Info.Ctx.getIntWidth(E->getType()) &&
+           "Invalid evaluation result.");
+    Result = APValue(V);
+    return true;
+  }
 
   //===--------------------------------------------------------------------===//
   //                            Visitor Methods
@@ -7500,7 +7540,9 @@ class FixedPointExprEvaluator
     return Success(E->getValue(), E);
   }
 
+  bool VisitCastExpr(const CastExpr *E);
   bool VisitUnaryOperator(const UnaryOperator *E);
+  bool VisitBinaryOperator(const BinaryOperator *E);
 };
 } // end anonymous namespace
 
@@ -7530,6 +7572,36 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
   }
   Result = Val.getInt();
   return true;
+}
+
+static bool EvaluateFixedPoint(const Expr *E, APFixedPoint &Result,
+                               EvalInfo &Info) {
+  if (E->getType()->isFixedPointType()) {
+    APValue Val;
+    if (!FixedPointExprEvaluator(Info, Val).Visit(E))
+      return false;
+    if (!Val.isFixedPoint())
+      return false;
+
+    Result = Val.getFixedPoint();
+    return true;
+  }
+  return false;
+}
+
+static bool EvaluateFixedPointOrInteger(const Expr *E, APFixedPoint &Result,
+                                        EvalInfo &Info) {
+  if (E->getType()->isIntegerType()) {
+    auto FXSema = Info.Ctx.getFixedPointSemantics(E->getType());
+    APSInt Val;
+    if (!EvaluateInteger(E, Val, Info))
+      return false;
+    Result = APFixedPoint(Val, FXSema);
+    return true;
+  } else if (E->getType()->isFixedPointType()) {
+    return EvaluateFixedPoint(E, Result, Info);
+  }
+  return false;
 }
 
 /// Check whether the given declaration can be directly converted to an integral
@@ -8118,6 +8190,7 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
   default:
     return ExprEvaluatorBaseTy::VisitCallExpr(E);
 
+  case Builtin::BI__builtin_dynamic_object_size:
   case Builtin::BI__builtin_object_size: {
     // The type was checked when we built the expression.
     unsigned Type =
@@ -8385,8 +8458,6 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
         !EvaluatePointer(E->getArg(1), String2, Info))
       return false;
 
-    QualType CharTy = E->getArg(0)->getType()->getPointeeType();
-
     uint64_t MaxLength = uint64_t(-1);
     if (BuiltinOp != Builtin::BIstrcmp &&
         BuiltinOp != Builtin::BIwcscmp &&
@@ -8397,6 +8468,88 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
         return false;
       MaxLength = N.getExtValue();
     }
+
+    // Empty substrings compare equal by definition.
+    if (MaxLength == 0u)
+      return Success(0, E);
+
+    if (!String1.checkNullPointerForFoldAccess(Info, E, AK_Read) ||
+        !String2.checkNullPointerForFoldAccess(Info, E, AK_Read) ||
+        String1.Designator.Invalid || String2.Designator.Invalid)
+      return false;
+
+    QualType CharTy1 = String1.Designator.getType(Info.Ctx);
+    QualType CharTy2 = String2.Designator.getType(Info.Ctx);
+
+    bool IsRawByte = BuiltinOp == Builtin::BImemcmp ||
+                     BuiltinOp == Builtin::BI__builtin_memcmp;
+
+    assert(IsRawByte ||
+           (Info.Ctx.hasSameUnqualifiedType(
+                CharTy1, E->getArg(0)->getType()->getPointeeType()) &&
+            Info.Ctx.hasSameUnqualifiedType(CharTy1, CharTy2)));
+
+    const auto &ReadCurElems = [&](APValue &Char1, APValue &Char2) {
+      return handleLValueToRValueConversion(Info, E, CharTy1, String1, Char1) &&
+             handleLValueToRValueConversion(Info, E, CharTy2, String2, Char2) &&
+             Char1.isInt() && Char2.isInt();
+    };
+    const auto &AdvanceElems = [&] {
+      return HandleLValueArrayAdjustment(Info, E, String1, CharTy1, 1) &&
+             HandleLValueArrayAdjustment(Info, E, String2, CharTy2, 1);
+    };
+
+    if (IsRawByte) {
+      uint64_t BytesRemaining = MaxLength;
+      // Pointers to const void may point to objects of incomplete type.
+      if (CharTy1->isIncompleteType()) {
+        Info.FFDiag(E, diag::note_constexpr_ltor_incomplete_type) << CharTy1;
+        return false;
+      }
+      if (CharTy2->isIncompleteType()) {
+        Info.FFDiag(E, diag::note_constexpr_ltor_incomplete_type) << CharTy2;
+        return false;
+      }
+      uint64_t CharTy1Width{Info.Ctx.getTypeSize(CharTy1)};
+      CharUnits CharTy1Size = Info.Ctx.toCharUnitsFromBits(CharTy1Width);
+      // Give up on comparing between elements with disparate widths.
+      if (CharTy1Size != Info.Ctx.getTypeSizeInChars(CharTy2))
+        return false;
+      uint64_t BytesPerElement = CharTy1Size.getQuantity();
+      assert(BytesRemaining && "BytesRemaining should not be zero: the "
+                               "following loop considers at least one element");
+      while (true) {
+        APValue Char1, Char2;
+        if (!ReadCurElems(Char1, Char2))
+          return false;
+        // We have compatible in-memory widths, but a possible type and
+        // (for `bool`) internal representation mismatch.
+        // Assuming two's complement representation, including 0 for `false` and
+        // 1 for `true`, we can check an appropriate number of elements for
+        // equality even if they are not byte-sized.
+        APSInt Char1InMem = Char1.getInt().extOrTrunc(CharTy1Width);
+        APSInt Char2InMem = Char2.getInt().extOrTrunc(CharTy1Width);
+        if (Char1InMem.ne(Char2InMem)) {
+          // If the elements are byte-sized, then we can produce a three-way
+          // comparison result in a straightforward manner.
+          if (BytesPerElement == 1u) {
+            // memcmp always compares unsigned chars.
+            return Success(Char1InMem.ult(Char2InMem) ? -1 : 1, E);
+          }
+          // The result is byte-order sensitive, and we have multibyte elements.
+          // FIXME: We can compare the remaining bytes in the correct order.
+          return false;
+        }
+        if (!AdvanceElems())
+          return false;
+        if (BytesRemaining <= BytesPerElement)
+          break;
+        BytesRemaining -= BytesPerElement;
+      }
+      // Enough elements are equal to account for the memcmp limit.
+      return Success(0, E);
+    }
+
     bool StopAtNull = (BuiltinOp != Builtin::BImemcmp &&
                        BuiltinOp != Builtin::BIwmemcmp &&
                        BuiltinOp != Builtin::BI__builtin_memcmp &&
@@ -8407,11 +8560,10 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
                   BuiltinOp == Builtin::BI__builtin_wcscmp ||
                   BuiltinOp == Builtin::BI__builtin_wcsncmp ||
                   BuiltinOp == Builtin::BI__builtin_wmemcmp;
+
     for (; MaxLength; --MaxLength) {
       APValue Char1, Char2;
-      if (!handleLValueToRValueConversion(Info, E, CharTy, String1, Char1) ||
-          !handleLValueToRValueConversion(Info, E, CharTy, String2, Char2) ||
-          !Char1.isInt() || !Char2.isInt())
+      if (!ReadCurElems(Char1, Char2))
         return false;
       if (Char1.getInt() != Char2.getInt()) {
         if (IsWide) // wmemcmp compares with wchar_t signedness.
@@ -8422,8 +8574,7 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
       if (StopAtNull && !Char1.getInt())
         return Success(0, E);
       assert(!(StopAtNull && !Char2.getInt()));
-      if (!HandleLValueArrayAdjustment(Info, E, String1, CharTy, 1) ||
-          !HandleLValueArrayAdjustment(Info, E, String2, CharTy, 1))
+      if (!AdvanceElems())
         return false;
     }
     // We hit the strncmp / memcmp limit.
@@ -9654,7 +9805,7 @@ bool IntExprEvaluator::VisitCastExpr(const CastExpr *E) {
     APValue Val;
     if (!Evaluate(Val, Info, SubExpr))
       return false;
-    return Success(Val.getInt().getBoolValue(), E);
+    return Success(Val.getFixedPoint().getBoolValue(), E);
   }
 
   case CK_IntegralCast: {
@@ -9774,16 +9925,13 @@ bool FixedPointExprEvaluator::VisitUnaryOperator(const UnaryOperator *E) {
       return Visit(E->getSubExpr());
     case UO_Minus: {
       if (!Visit(E->getSubExpr())) return false;
-      if (!Result.isInt()) return Error(E);
-      const APSInt &Value = Result.getInt();
-      if (Value.isSigned() && Value.isMinSignedValue() && E->canOverflow()) {
-        SmallString<64> S;
-        FixedPointValueToString(S, Value,
-                                Info.Ctx.getTypeInfo(E->getType()).Width);
-        Info.CCEDiag(E, diag::note_constexpr_overflow) << S << E->getType();
-        if (Info.noteUndefinedBehavior()) return false;
-      }
-      return Success(-Value, E);
+      if (!Result.isFixedPoint())
+        return Error(E);
+      bool Overflowed;
+      APFixedPoint Negated = Result.getFixedPoint().negate(&Overflowed);
+      if (Overflowed && !HandleOverflow(Info, E, Negated, E->getType()))
+        return false;
+      return Success(Negated, E);
     }
     case UO_LNot: {
       bool bres;
@@ -9792,6 +9940,61 @@ bool FixedPointExprEvaluator::VisitUnaryOperator(const UnaryOperator *E) {
       return Success(!bres, E);
     }
   }
+}
+
+bool FixedPointExprEvaluator::VisitCastExpr(const CastExpr *E) {
+  const Expr *SubExpr = E->getSubExpr();
+  QualType DestType = E->getType();
+  assert(DestType->isFixedPointType() &&
+         "Expected destination type to be a fixed point type");
+  auto DestFXSema = Info.Ctx.getFixedPointSemantics(DestType);
+
+  switch (E->getCastKind()) {
+  case CK_FixedPointCast: {
+    APFixedPoint Src(Info.Ctx.getFixedPointSemantics(SubExpr->getType()));
+    if (!EvaluateFixedPoint(SubExpr, Src, Info))
+      return false;
+    bool Overflowed;
+    APFixedPoint Result = Src.convert(DestFXSema, &Overflowed);
+    if (Overflowed && !HandleOverflow(Info, E, Result, DestType))
+      return false;
+    return Success(Result, E);
+  }
+  case CK_NoOp:
+  case CK_LValueToRValue:
+    return ExprEvaluatorBaseTy::VisitCastExpr(E);
+  default:
+    return Error(E);
+  }
+}
+
+bool FixedPointExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
+  const Expr *LHS = E->getLHS();
+  const Expr *RHS = E->getRHS();
+  FixedPointSemantics ResultFXSema =
+      Info.Ctx.getFixedPointSemantics(E->getType());
+
+  APFixedPoint LHSFX(Info.Ctx.getFixedPointSemantics(LHS->getType()));
+  if (!EvaluateFixedPointOrInteger(LHS, LHSFX, Info))
+    return false;
+  APFixedPoint RHSFX(Info.Ctx.getFixedPointSemantics(RHS->getType()));
+  if (!EvaluateFixedPointOrInteger(RHS, RHSFX, Info))
+    return false;
+
+  switch (E->getOpcode()) {
+  case BO_Add: {
+    bool AddOverflow, ConversionOverflow;
+    APFixedPoint Result = LHSFX.add(RHSFX, &AddOverflow)
+                              .convert(ResultFXSema, &ConversionOverflow);
+    if ((AddOverflow || ConversionOverflow) &&
+        !HandleOverflow(Info, E, Result, E->getType()))
+      return false;
+    return Success(Result, E);
+  }
+  default:
+    return false;
+  }
+  llvm_unreachable("Should've exited before this");
 }
 
 //===----------------------------------------------------------------------===//
@@ -10805,6 +11008,23 @@ static bool EvaluateAsInt(const Expr *E, Expr::EvalResult &ExprResult,
   return true;
 }
 
+static bool EvaluateAsFixedPoint(const Expr *E, Expr::EvalResult &ExprResult,
+                                 const ASTContext &Ctx,
+                                 Expr::SideEffectsKind AllowSideEffects,
+                                 EvalInfo &Info) {
+  if (!E->getType()->isFixedPointType())
+    return false;
+
+  if (!::EvaluateAsRValue(E, ExprResult, Ctx, Info))
+    return false;
+
+  if (!ExprResult.Val.isFixedPoint() ||
+      hasUnacceptableSideEffect(ExprResult, AllowSideEffects))
+    return false;
+
+  return true;
+}
+
 /// EvaluateAsRValue - Return true if this is a constant which we can fold using
 /// any crazy technique (that has nothing to do with language standards) that
 /// we want to.  If this function returns true, it returns the folded constant
@@ -10828,6 +11048,12 @@ bool Expr::EvaluateAsInt(EvalResult &Result, const ASTContext &Ctx,
                          SideEffectsKind AllowSideEffects) const {
   EvalInfo Info(Ctx, Result, EvalInfo::EM_IgnoreSideEffects);
   return ::EvaluateAsInt(this, Result, Ctx, AllowSideEffects, Info);
+}
+
+bool Expr::EvaluateAsFixedPoint(EvalResult &Result, const ASTContext &Ctx,
+                                SideEffectsKind AllowSideEffects) const {
+  EvalInfo Info(Ctx, Result, EvalInfo::EM_IgnoreSideEffects);
+  return ::EvaluateAsFixedPoint(this, Result, Ctx, AllowSideEffects, Info);
 }
 
 bool Expr::EvaluateAsFloat(APFloat &Result, const ASTContext &Ctx,

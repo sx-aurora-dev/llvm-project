@@ -1,9 +1,8 @@
 //===--- Options.td - Options for clang -----------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -675,7 +674,7 @@ def fno_coroutines_ts : Flag <["-"], "fno-coroutines-ts">, Group<f_Group>,
   Flags<[DriverOption]>;
 
 def fembed_bitcode_EQ : Joined<["-"], "fembed-bitcode=">,
-    Group<f_Group>, Flags<[DriverOption, CC1Option]>, MetaVarName<"<option>">,
+    Group<f_Group>, Flags<[DriverOption, CC1Option, CC1AsOption]>, MetaVarName<"<option>">,
     HelpText<"Embed LLVM bitcode (option: off, all, bitcode, marker)">;
 def fembed_bitcode : Flag<["-"], "fembed-bitcode">, Group<f_Group>,
   Alias<fembed_bitcode_EQ>, AliasArgs<["all"]>,
@@ -799,6 +798,12 @@ def fcomment_block_commands : CommaJoined<["-"], "fcomment-block-commands=">, Gr
   HelpText<"Treat each comma separated argument in <arg> as a documentation comment block command">,
   MetaVarName<"<arg>">;
 def fparse_all_comments : Flag<["-"], "fparse-all-comments">, Group<f_clang_Group>, Flags<[CC1Option]>;
+def frecord_command_line : Flag<["-"], "frecord-command-line">,
+  Group<f_clang_Group>;
+def fno_record_command_line : Flag<["-"], "fno-record-command-line">,
+  Group<f_clang_Group>;
+def : Flag<["-"], "frecord-gcc-switches">, Alias<frecord_command_line>;
+def : Flag<["-"], "fno-record-gcc-switches">, Alias<fno_record_command_line>;
 def fcommon : Flag<["-"], "fcommon">, Group<f_Group>;
 def fcompile_resource_EQ : Joined<["-"], "fcompile-resource=">, Group<f_Group>;
 def fcomplete_member_pointers : Flag<["-"], "fcomplete-member-pointers">, Group<f_clang_Group>,
@@ -992,6 +997,10 @@ def fno_sanitize_address_use_odr_indicator
     : Flag<["-"], "fno-sanitize-address-use-odr-indicator">,
       Group<f_clang_Group>,
       HelpText<"Disable ODR indicator globals">;
+def fsanitize_hwaddress_abi_EQ
+    : Joined<["-"], "fsanitize-hwaddress-abi=">,
+      Group<f_clang_Group>,
+      HelpText<"Select the HWAddressSanitizer ABI to target (interceptor or platform, default interceptor)">;
 def fsanitize_recover : Flag<["-"], "fsanitize-recover">, Group<f_clang_Group>;
 def fno_sanitize_recover : Flag<["-"], "fno-sanitize-recover">,
                            Flags<[CoreOption, DriverOption]>,
@@ -1564,6 +1573,10 @@ def fopenmp_cuda_number_of_sm_EQ : Joined<["-"], "fopenmp-cuda-number-of-sm=">, 
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fopenmp_cuda_blocks_per_sm_EQ : Joined<["-"], "fopenmp-cuda-blocks-per-sm=">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
+def fopenmp_optimistic_collapse : Flag<["-"], "fopenmp-optimistic-collapse">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
+def fno_openmp_optimistic_collapse : Flag<["-"], "fno-openmp-optimistic-collapse">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>;
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;
 def fno_escaping_block_tail_calls : Flag<["-"], "fno-escaping-block-tail-calls">, Group<f_Group>, Flags<[CC1Option]>;
@@ -1599,6 +1612,9 @@ def frwpi : Flag<["-"], "frwpi">, Group<f_Group>;
 def fno_rwpi : Flag<["-"], "fno-rwpi">, Group<f_Group>;
 def fplugin_EQ : Joined<["-"], "fplugin=">, Group<f_Group>, Flags<[DriverOption]>, MetaVarName<"<dsopath>">,
   HelpText<"Load the named plugin (dynamic shared object)">;
+def fpass_plugin_EQ : Joined<["-"], "fpass-plugin=">,
+  Group<f_Group>, Flags<[CC1Option]>, MetaVarName<"<dsopath>">,
+  HelpText<"Load pass plugin from a dynamic shared object file (only with new pass manager).">;
 def fpreserve_as_comments : Flag<["-"], "fpreserve-as-comments">, Group<f_Group>;
 def fno_preserve_as_comments : Flag<["-"], "fno-preserve-as-comments">, Group<f_Group>, Flags<[CC1Option]>,
   HelpText<"Do not preserve comments in inline assembly">;
@@ -1633,11 +1649,24 @@ def fno_signed_char : Flag<["-"], "fno-signed-char">, Group<f_Group>,
     Flags<[CC1Option]>, HelpText<"Char is unsigned">;
 def fsplit_stack : Flag<["-"], "fsplit-stack">, Group<f_Group>;
 def fstack_protector_all : Flag<["-"], "fstack-protector-all">, Group<f_Group>,
-  HelpText<"Force the usage of stack protectors for all functions">;
+  HelpText<"Enable stack protectors for all functions">;
 def fstack_protector_strong : Flag<["-"], "fstack-protector-strong">, Group<f_Group>,
-  HelpText<"Use a strong heuristic to apply stack protectors to functions">;
+  HelpText<"Enable stack protectors for some functions vulnerable to stack smashing. "
+           "Compared to -fstack-protector, this uses a stronger heuristic "
+           "that includes functions containing arrays of any size (and any type), "
+           "as well as any calls to alloca or the taking of an address from a local variable">;
 def fstack_protector : Flag<["-"], "fstack-protector">, Group<f_Group>,
-  HelpText<"Enable stack protectors for functions potentially vulnerable to stack smashing">;
+  HelpText<"Enable stack protectors for some functions vulnerable to stack smashing. "
+           "This uses a loose heuristic which considers functions vulnerable "
+           "if they contain a char (or 8bit integer) array or constant sized calls to "
+           "alloca, which are of greater size than ssp-buffer-size (default: 8 bytes). "
+           "All variable sized calls to alloca are considered vulnerable">;
+def ftrivial_auto_var_init : Joined<["-"], "ftrivial-auto-var-init=">, Group<f_Group>,
+  Flags<[CC1Option]>, HelpText<"Initialize trivial automatic stack variables: uninitialized (default)"
+  " | pattern">, Values<"uninitialized,pattern">;
+def enable_trivial_var_init_zero : Joined<["-"], "enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang">,
+  Flags<[CC1Option]>,
+  HelpText<"Trivial automatic variable initialization to zero is only here for benchmarks, it'll eventually be removed, and I'm OK with that because I'm only using it to benchmark">;
 def fstandalone_debug : Flag<["-"], "fstandalone-debug">, Group<f_Group>, Flags<[CoreOption]>,
   HelpText<"Emit full debug info for all types used by the program">;
 def fno_standalone_debug : Flag<["-"], "fno-standalone-debug">, Group<f_Group>, Flags<[CoreOption]>,
@@ -1749,6 +1778,11 @@ def fwhole_program_vtables : Flag<["-"], "fwhole-program-vtables">, Group<f_Grou
   HelpText<"Enables whole-program vtable optimization. Requires -flto">;
 def fno_whole_program_vtables : Flag<["-"], "fno-whole-program-vtables">, Group<f_Group>,
   Flags<[CoreOption]>;
+def fsplit_lto_unit : Flag<["-"], "fsplit-lto-unit">, Group<f_Group>,
+  Flags<[CoreOption, CC1Option]>,
+  HelpText<"Enables splitting of the LTO unit.">;
+def fno_split_lto_unit : Flag<["-"], "fno-split-lto-unit">, Group<f_Group>,
+  Flags<[CoreOption]>;
 def fforce_emit_vtables : Flag<["-"], "fforce-emit-vtables">, Group<f_Group>,
     Flags<[CC1Option]>,
     HelpText<"Emits more virtual tables to improve devirtualization">;
@@ -1854,9 +1888,12 @@ def gcoff : Joined<["-"], "gcoff">, Group<g_Group>, Flags<[Unsupported]>;
 def gxcoff : Joined<["-"], "gxcoff">, Group<g_Group>, Flags<[Unsupported]>;
 def gvms : Joined<["-"], "gvms">, Group<g_Group>, Flags<[Unsupported]>;
 def gtoggle : Flag<["-"], "gtoggle">, Group<g_flags_Group>, Flags<[Unsupported]>;
-def grecord_gcc_switches : Flag<["-"], "grecord-gcc-switches">, Group<g_flags_Group>;
-def gno_record_gcc_switches : Flag<["-"], "gno-record-gcc-switches">,
+def grecord_command_line : Flag<["-"], "grecord-command-line">,
   Group<g_flags_Group>;
+def gno_record_command_line : Flag<["-"], "gno-record-command-line">,
+  Group<g_flags_Group>;
+def : Flag<["-"], "grecord-gcc-switches">, Alias<grecord_command_line>;
+def : Flag<["-"], "gno-record-gcc-switches">, Alias<gno_record_command_line>;
 def gstrict_dwarf : Flag<["-"], "gstrict-dwarf">, Group<g_flags_Group>;
 def gno_strict_dwarf : Flag<["-"], "gno-strict-dwarf">, Group<g_flags_Group>;
 def gcolumn_info : Flag<["-"], "gcolumn-info">, Group<g_flags_Group>, Flags<[CoreOption]>;
@@ -2000,6 +2037,7 @@ def mfloat_abi_EQ : Joined<["-"], "mfloat-abi=">, Group<m_Group>, Values<"soft,s
 def mfpmath_EQ : Joined<["-"], "mfpmath=">, Group<m_Group>;
 def mfpu_EQ : Joined<["-"], "mfpu=">, Group<m_Group>;
 def mhwdiv_EQ : Joined<["-"], "mhwdiv=">, Group<m_Group>;
+def mhwmult_EQ : Joined<["-"], "mhwmult=">, Group<m_Group>;
 def mglobal_merge : Flag<["-"], "mglobal-merge">, Group<m_Group>, Flags<[CC1Option]>,
   HelpText<"Enable merging of globals">;
 def mhard_float : Flag<["-"], "mhard-float">, Group<m_Group>;
@@ -2111,6 +2149,8 @@ def mbranch_protection_EQ : Joined<["-"], "mbranch-protection=">,
   HelpText<"Enforce targets of indirect branches and function returns">;
 
 def msimd128 : Flag<["-"], "msimd128">, Group<m_wasm_Features_Group>;
+def munimplemented_simd128 : Flag<["-"], "munimplemented-simd128">, Group<m_wasm_Features_Group>;
+def mno_unimplemented_simd128 : Flag<["-"], "mno-unimplemented-simd128">, Group<m_wasm_Features_Group>;
 def mno_simd128 : Flag<["-"], "mno-simd128">, Group<m_wasm_Features_Group>;
 def mnontrapping_fptoint : Flag<["-"], "mnontrapping-fptoint">, Group<m_wasm_Features_Group>;
 def mno_nontrapping_fptoint : Flag<["-"], "mno-nontrapping-fptoint">, Group<m_wasm_Features_Group>;
@@ -2118,6 +2158,8 @@ def msign_ext : Flag<["-"], "msign-ext">, Group<m_wasm_Features_Group>;
 def mno_sign_ext : Flag<["-"], "mno-sign-ext">, Group<m_wasm_Features_Group>;
 def mexception_handing : Flag<["-"], "mexception-handling">, Group<m_wasm_Features_Group>;
 def mno_exception_handing : Flag<["-"], "mno-exception-handling">, Group<m_wasm_Features_Group>;
+def mbulk_memory : Flag<["-"], "mbulk-memory">, Group<m_wasm_Features_Group>;
+def mno_bulk_memory : Flag<["-"], "mno-bulk-memory">, Group<m_wasm_Features_Group>;
 
 def mamdgpu_debugger_abi : Joined<["-"], "mamdgpu-debugger-abi=">,
   Flags<[HelpHidden]>,
@@ -2380,6 +2422,14 @@ def modd_spreg : Flag<["-"], "modd-spreg">, Group<m_mips_Features_Group>,
 def mno_odd_spreg : Flag<["-"], "mno-odd-spreg">, Group<m_mips_Features_Group>,
   HelpText<"Disable odd single-precision floating point registers">,
   Flags<[HelpHidden]>;
+def mrelax_pic_calls : Flag<["-"], "mrelax-pic-calls">,
+  Group<m_mips_Features_Group>,
+  HelpText<"Produce relaxation hints for linkers to try optimizing PIC "
+           "call sequences into direct calls (MIPS only)">, Flags<[HelpHidden]>;
+def mno_relax_pic_calls : Flag<["-"], "mno-relax-pic-calls">,
+  Group<m_mips_Features_Group>,
+  HelpText<"Do not produce relaxation hints for linkers to try optimizing PIC "
+           "call sequences into direct calls (MIPS only)">, Flags<[HelpHidden]>;
 def mglibc : Flag<["-"], "mglibc">, Group<m_libc_Group>, Flags<[HelpHidden]>;
 def muclibc : Flag<["-"], "muclibc">, Group<m_libc_Group>, Flags<[HelpHidden]>;
 def module_file_info : Flag<["-"], "module-file-info">, Flags<[DriverOption,CC1Option]>, Group<Action_Group>,

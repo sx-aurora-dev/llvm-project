@@ -1,9 +1,8 @@
 //===-- Stream.cpp ----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -93,9 +92,9 @@ void Stream::QuotedCString(const char *cstr, const char *format) {
 //------------------------------------------------------------------
 void Stream::Address(uint64_t addr, uint32_t addr_size, const char *prefix,
                      const char *suffix) {
-  if (prefix == NULL)
+  if (prefix == nullptr)
     prefix = "";
-  if (suffix == NULL)
+  if (suffix == nullptr)
     suffix = "";
   //    int addr_width = m_addr_size << 1;
   //    Printf ("%s0x%0*" PRIx64 "%s", prefix, addr_width, addr, suffix);

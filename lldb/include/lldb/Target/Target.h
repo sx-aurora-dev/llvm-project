@@ -1,9 +1,8 @@
 //===-- Target.h ------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +19,6 @@
 #include "lldb/Breakpoint/BreakpointName.h"
 #include "lldb/Breakpoint/WatchpointList.h"
 #include "lldb/Core/Architecture.h"
-#include "lldb/Core/Broadcaster.h"
 #include "lldb/Core/Disassembler.h"
 #include "lldb/Core/ModuleList.h"
 #include "lldb/Core/UserSettingsController.h"
@@ -31,6 +29,7 @@
 #include "lldb/Target/ProcessLaunchInfo.h"
 #include "lldb/Target/SectionLoadHistory.h"
 #include "lldb/Utility/ArchSpec.h"
+#include "lldb/Utility/Broadcaster.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Timeout.h"
 #include "lldb/lldb-public.h"
@@ -187,6 +186,10 @@ public:
   bool GetDisplayRuntimeSupportValues() const;
 
   void SetDisplayRuntimeSupportValues(bool b);
+
+  bool GetDisplayRecognizedArguments() const;
+
+  void SetDisplayRecognizedArguments(bool b);
 
   const ProcessLaunchInfo &GetProcessLaunchInfo();
 
@@ -529,7 +532,9 @@ public:
   //------------------------------------------------------------------
   void Dump(Stream *s, lldb::DescriptionLevel description_level);
 
-  const lldb::ProcessSP &CreateProcess(lldb::ListenerSP listener,
+  // If listener_sp is null, the listener of the owning Debugger object will be
+  // used.
+  const lldb::ProcessSP &CreateProcess(lldb::ListenerSP listener_sp,
                                        llvm::StringRef plugin_name,
                                        const FileSpec *crash_file);
 
@@ -1347,6 +1352,8 @@ private:
   void PrimeFromDummyTarget(Target *dummy_target);
 
   void AddBreakpoint(lldb::BreakpointSP breakpoint_sp, bool internal);
+
+  void FinalizeFileActions(ProcessLaunchInfo &info);
 
   DISALLOW_COPY_AND_ASSIGN(Target);
 };

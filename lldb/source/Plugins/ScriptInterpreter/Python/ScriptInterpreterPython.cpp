@@ -1,9 +1,8 @@
 //===-- ScriptInterpreterPython.cpp -----------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -208,7 +207,7 @@ ScriptInterpreterPython::Locker::Locker(ScriptInterpreterPython *py_interpreter,
       m_python_interpreter(py_interpreter) {
   DoAcquireLock();
   if ((on_entry & InitSession) == InitSession) {
-    if (DoInitSession(on_entry, in, out, err) == false) {
+    if (!DoInitSession(on_entry, in, out, err)) {
       // Don't teardown the session if we didn't init it.
       m_teardown_session = false;
     }
@@ -2838,7 +2837,7 @@ bool ScriptInterpreterPython::LoadScriptingModule(
 
     bool was_imported = (was_imported_globally || was_imported_locally);
 
-    if (was_imported == true && can_reload == false) {
+    if (was_imported && !can_reload) {
       error.SetErrorString("module already imported");
       return false;
     }

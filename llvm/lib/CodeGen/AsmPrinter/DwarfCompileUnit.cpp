@@ -1,9 +1,8 @@
 //===- llvm/CodeGen/DwarfCompileUnit.cpp - Dwarf Compile Units ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1124,4 +1123,13 @@ bool DwarfCompileUnit::isDwoUnit() const {
 bool DwarfCompileUnit::includeMinimalInlineScopes() const {
   return getCUNode()->getEmissionKind() == DICompileUnit::LineTablesOnly ||
          (DD->useSplitDwarf() && !Skeleton);
+}
+
+void DwarfCompileUnit::addAddrTableBase() {
+  const TargetLoweringObjectFile &TLOF = Asm->getObjFileLowering();
+  MCSymbol *Label = DD->getAddressPool().getLabel();
+  addSectionLabel(getUnitDie(),
+                  getDwarfVersion() >= 5 ? dwarf::DW_AT_addr_base
+                                         : dwarf::DW_AT_GNU_addr_base,
+                  Label, TLOF.getDwarfAddrSection()->getBeginSymbol());
 }

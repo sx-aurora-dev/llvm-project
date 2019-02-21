@@ -1,9 +1,8 @@
 //===- ARMFastISel.cpp - ARM FastISel implementation ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -244,8 +243,6 @@ class ARMFastISel final : public FastISel {
 };
 
 } // end anonymous namespace
-
-#include "ARMGenCallingConv.inc"
 
 // DefinesOptionalPredicate - This is different from DefinesPredicate in that
 // we don't care about implicit defs here, just places we'll need to add a
@@ -2951,7 +2948,8 @@ bool ARMFastISel::tryToFoldLoadIntoMI(MachineInstr *MI, unsigned OpNo,
   unsigned ResultReg = MI->getOperand(0).getReg();
   if (!ARMEmitLoad(VT, ResultReg, Addr, LI->getAlignment(), isZExt, false))
     return false;
-  MI->eraseFromParent();
+  MachineBasicBlock::iterator I(MI);
+  removeDeadCode(I, std::next(I));
   return true;
 }
 

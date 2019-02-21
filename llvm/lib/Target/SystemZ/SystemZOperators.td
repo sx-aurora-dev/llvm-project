@@ -1,9 +1,8 @@
 //===-- SystemZOperators.td - SystemZ-specific operators ------*- tblgen-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -745,37 +744,37 @@ class z_vllez<ValueType scalartype, SDPatternOperator load, int index>
 def z_vllezi8  : z_vllez<i32, anyextloadi8, 7>;
 def z_vllezi16 : z_vllez<i32, anyextloadi16, 3>;
 def z_vllezi32 : z_vllez<i32, load, 1>;
-def z_vllezi64 : PatFrag<(ops node:$addr),
-                         (z_join_dwords (i64 (load node:$addr)), (i64 0))>;
+def z_vllezi64 : PatFrags<(ops node:$addr),
+                          [(z_vector_insert (z_vzero),
+                                            (i64 (load node:$addr)), (i32 0)),
+                           (z_join_dwords (i64 (load node:$addr)), (i64 0))]>;
 // We use high merges to form a v4f32 from four f32s.  Propagating zero
 // into all elements but index 1 gives this expression.
 def z_vllezf32 : PatFrag<(ops node:$addr),
-                         (bitconvert
-                          (z_merge_high
-                           (v2i64
-                            (z_unpackl_high
-                             (v4i32
-                              (bitconvert
-                               (v4f32 (scalar_to_vector
-                                       (f32 (load node:$addr)))))))),
-                           (v2i64 (z_vzero))))>;
+                         (z_merge_high
+                          (v2i64
+                           (z_unpackl_high
+                            (v4i32
+                             (bitconvert
+                              (v4f32 (scalar_to_vector
+                                      (f32 (load node:$addr)))))))),
+                          (v2i64 (z_vzero)))>;
 def z_vllezf64 : PatFrag<(ops node:$addr),
                          (z_merge_high
-                          (scalar_to_vector (f64 (load node:$addr))),
+                          (v2f64 (scalar_to_vector (f64 (load node:$addr)))),
                           (z_vzero))>;
 
 // Similarly for the high element of a zeroed vector.
 def z_vllezli32 : z_vllez<i32, load, 0>;
 def z_vllezlf32 : PatFrag<(ops node:$addr),
-                          (bitconvert
-                           (z_merge_high
-                            (v2i64
-                             (bitconvert
-                              (z_merge_high
-                               (v4f32 (scalar_to_vector
-                                       (f32 (load node:$addr)))),
-                               (v4f32 (z_vzero))))),
-                            (v2i64 (z_vzero))))>;
+                          (z_merge_high
+                           (v2i64
+                            (bitconvert
+                             (z_merge_high
+                              (v4f32 (scalar_to_vector
+                                      (f32 (load node:$addr)))),
+                              (v4f32 (z_vzero))))),
+                           (v2i64 (z_vzero)))>;
 
 // Store one element of a vector.
 class z_vste<ValueType scalartype, SDPatternOperator store>

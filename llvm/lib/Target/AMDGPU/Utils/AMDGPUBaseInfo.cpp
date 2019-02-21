@@ -1,9 +1,8 @@
 //===- AMDGPUBaseInfo.cpp - AMDGPU Base encoding information --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -126,6 +125,49 @@ int getMaskedMIMGOp(unsigned Opc, unsigned NewChannels) {
       getMIMGOpcodeHelper(OrigInfo->BaseOpcode, OrigInfo->MIMGEncoding,
                           NewChannels, OrigInfo->VAddrDwords);
   return NewInfo ? NewInfo->Opcode : -1;
+}
+
+struct MUBUFInfo {
+  uint16_t Opcode;
+  uint16_t BaseOpcode;
+  uint8_t dwords;
+  bool has_vaddr;
+  bool has_srsrc;
+  bool has_soffset;
+};
+
+#define GET_MUBUFInfoTable_DECL
+#define GET_MUBUFInfoTable_IMPL
+#include "AMDGPUGenSearchableTables.inc"
+
+int getMUBUFBaseOpcode(unsigned Opc) {
+  const MUBUFInfo *Info = getMUBUFInfoFromOpcode(Opc);
+  return Info ? Info->BaseOpcode : -1;
+}
+
+int getMUBUFOpcode(unsigned BaseOpc, unsigned Dwords) {
+  const MUBUFInfo *Info = getMUBUFInfoFromBaseOpcodeAndDwords(BaseOpc, Dwords);
+  return Info ? Info->Opcode : -1;
+}
+
+int getMUBUFDwords(unsigned Opc) {
+  const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
+  return Info ? Info->dwords : 0;
+}
+
+bool getMUBUFHasVAddr(unsigned Opc) {
+  const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
+  return Info ? Info->has_vaddr : false;
+}
+
+bool getMUBUFHasSrsrc(unsigned Opc) {
+  const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
+  return Info ? Info->has_srsrc : false;
+}
+
+bool getMUBUFHasSoffset(unsigned Opc) {
+  const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
+  return Info ? Info->has_soffset : false;
 }
 
 // Wrapper for Tablegen'd function.  enum Subtarget is not defined in any

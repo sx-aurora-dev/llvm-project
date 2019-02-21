@@ -1,9 +1,8 @@
 //==- CheckSecuritySyntaxOnly.cpp - Basic security checks --------*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Basic/TargetInfo.h"
@@ -29,10 +28,10 @@ static bool isArc4RandomAvailable(const ASTContext &Ctx) {
   const llvm::Triple &T = Ctx.getTargetInfo().getTriple();
   return T.getVendor() == llvm::Triple::Apple ||
          T.getOS() == llvm::Triple::CloudABI ||
-         T.getOS() == llvm::Triple::FreeBSD ||
-         T.getOS() == llvm::Triple::NetBSD ||
-         T.getOS() == llvm::Triple::OpenBSD ||
-         T.getOS() == llvm::Triple::DragonFly;
+         T.isOSFreeBSD() ||
+         T.isOSNetBSD() ||
+         T.isOSOpenBSD() ||
+         T.isOSDragonFly();
 }
 
 namespace {
@@ -651,14 +650,14 @@ void WalkAST::checkCall_strcpy(const CallExpr *CE, const FunctionDecl *FD) {
 
   const auto *Target = CE->getArg(0)->IgnoreImpCasts(),
              *Source = CE->getArg(1)->IgnoreImpCasts();
-  if (const auto *DeclRef = dyn_cast<DeclRefExpr>(Target))
-    if (const auto *Array = dyn_cast<ConstantArrayType>(DeclRef->getType())) {
-      uint64_t ArraySize = BR.getContext().getTypeSize(Array) / 8;
-      if (const auto *String = dyn_cast<StringLiteral>(Source)) {
-        if (ArraySize >= String->getLength() + 1)
-          return;
-      }
+
+  if (const auto *Array = dyn_cast<ConstantArrayType>(Target->getType())) {
+    uint64_t ArraySize = BR.getContext().getTypeSize(Array) / 8;
+    if (const auto *String = dyn_cast<StringLiteral>(Source)) {
+      if (ArraySize >= String->getLength() + 1)
+        return;
     }
+  }
 
   // Issue a warning.
   PathDiagnosticLocation CELoc =
@@ -906,12 +905,23 @@ public:
 };
 }
 
+void ento::registerSecuritySyntaxChecker(CheckerManager &mgr) {
+  mgr.registerChecker<SecuritySyntaxChecker>();
+}
+
+bool ento::shouldRegisterSecuritySyntaxChecker(const LangOptions &LO) {
+  return true;
+}
+
 #define REGISTER_CHECKER(name)                                                 \
   void ento::register##name(CheckerManager &mgr) {                             \
-    SecuritySyntaxChecker *checker =                                           \
-        mgr.registerChecker<SecuritySyntaxChecker>();                          \
+    SecuritySyntaxChecker *checker =  mgr.getChecker<SecuritySyntaxChecker>(); \
     checker->filter.check_##name = true;                                       \
     checker->filter.checkName_##name = mgr.getCurrentCheckName();              \
+  }                                                                            \
+                                                                               \
+  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
+    return true;                                                               \
   }
 
 REGISTER_CHECKER(bcmp)

@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -86,9 +85,12 @@
    128-bit extended precision type yet */
 typedef long double _Quad;
 #elif KMP_COMPILER_GCC
+/* GCC on NetBSD lacks __multc3/__divtc3 builtins needed for quad */
+#if !KMP_OS_NETBSD
 typedef __float128 _Quad;
 #undef KMP_HAVE_QUAD
 #define KMP_HAVE_QUAD 1
+#endif
 #elif KMP_COMPILER_MSVC
 typedef long double _Quad;
 #endif
@@ -102,6 +104,7 @@ typedef long double _Quad;
 
 #define KMP_USE_X87CONTROL 0
 #if KMP_OS_WINDOWS
+#define KMP_END_OF_LINE "\r\n"
 typedef char kmp_int8;
 typedef unsigned char kmp_uint8;
 typedef short kmp_int16;
@@ -137,6 +140,7 @@ typedef unsigned __int64 kmp_uintptr_t;
 #endif /* KMP_OS_WINDOWS */
 
 #if KMP_OS_UNIX
+#define KMP_END_OF_LINE "\n"
 typedef char kmp_int8;
 typedef unsigned char kmp_uint8;
 typedef short kmp_int16;

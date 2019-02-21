@@ -1,9 +1,8 @@
 //===-- ObjectFile.cpp ------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -588,9 +587,7 @@ bool ObjectFile::SplitArchivePathWithObject(const char *path_with_object,
         regex_match.GetMatchAtIndex(path_with_object, 2, obj)) {
       archive_file.SetFile(path, FileSpec::Style::native);
       archive_object.SetCString(obj.c_str());
-      if (must_exist && !FileSystem::Instance().Exists(archive_file))
-        return false;
-      return true;
+      return !(must_exist && !FileSystem::Instance().Exists(archive_file));
     }
   }
   return false;

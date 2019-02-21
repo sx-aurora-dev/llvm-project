@@ -1,9 +1,8 @@
 //===- ELFYAML.cpp - ELF YAMLIO implementation ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -753,6 +752,7 @@ void MappingTraits<ELFYAML::FileHeader>::mapping(IO &IO,
   IO.mapRequired("Class", FileHdr.Class);
   IO.mapRequired("Data", FileHdr.Data);
   IO.mapOptional("OSABI", FileHdr.OSABI, ELFYAML::ELF_ELFOSABI(0));
+  IO.mapOptional("ABIVersion", FileHdr.ABIVersion, Hex8(0));
   IO.mapRequired("Type", FileHdr.Type);
   IO.mapRequired("Machine", FileHdr.Machine);
   IO.mapOptional("Flags", FileHdr.Flags, ELFYAML::ELF_EF(0));

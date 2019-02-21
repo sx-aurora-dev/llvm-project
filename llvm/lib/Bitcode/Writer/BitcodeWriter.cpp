@@ -1,9 +1,8 @@
 //===- Bitcode/Writer/BitcodeWriter.cpp - Bitcode Writer ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -560,6 +559,8 @@ static unsigned getEncodedRMWOperation(AtomicRMWInst::BinOp Op) {
   case AtomicRMWInst::Min: return bitc::RMW_MIN;
   case AtomicRMWInst::UMax: return bitc::RMW_UMAX;
   case AtomicRMWInst::UMin: return bitc::RMW_UMIN;
+  case AtomicRMWInst::FAdd: return bitc::RMW_FADD;
+  case AtomicRMWInst::FSub: return bitc::RMW_FSUB;
   }
 }
 
@@ -3601,7 +3602,7 @@ void ModuleBitcodeWriterBase::writeModuleLevelReferences(
 // Current version for the summary.
 // This is bumped whenever we introduce changes in the way some record are
 // interpreted, like flags for instance.
-static const uint64_t INDEX_VERSION = 5;
+static const uint64_t INDEX_VERSION = 6;
 
 /// Emit the per-module summary section alongside the rest of
 /// the module's bitcode.
@@ -3617,6 +3618,13 @@ void ModuleBitcodeWriterBase::writePerModuleGlobalValueSummary() {
                        4);
 
   Stream.EmitRecord(bitc::FS_VERSION, ArrayRef<uint64_t>{INDEX_VERSION});
+
+  // Write the index flags.
+  uint64_t Flags = 0;
+  // Bits 1-3 are set only in the combined index, skip them.
+  if (Index->enableSplitLTOUnit())
+    Flags |= 0x8;
+  Stream.EmitRecord(bitc::FS_FLAGS, ArrayRef<uint64_t>{Flags});
 
   if (Index->begin() == Index->end()) {
     Stream.ExitBlock();
@@ -3732,6 +3740,12 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
     Flags |= 0x1;
   if (Index.skipModuleByDistributedBackend())
     Flags |= 0x2;
+  if (Index.hasSyntheticEntryCounts())
+    Flags |= 0x4;
+  if (Index.enableSplitLTOUnit())
+    Flags |= 0x8;
+  if (Index.partiallySplitLTOUnits())
+    Flags |= 0x10;
   Stream.EmitRecord(bitc::FS_FLAGS, ArrayRef<uint64_t>{Flags});
 
   for (const auto &GVI : valueIds()) {
@@ -3747,6 +3761,7 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // flags
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8));   // instcount
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // fflags
+  Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8));   // entrycount
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // numrefs
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // immutablerefcnt
   // numrefs x valueid, n x (valueid)
@@ -3861,6 +3876,8 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
     NameVals.push_back(getEncodedGVSummaryFlags(FS->flags()));
     NameVals.push_back(FS->instCount());
     NameVals.push_back(getEncodedFFlags(FS->fflags()));
+    NameVals.push_back(FS->entryCount());
+
     // Fill in below
     NameVals.push_back(0); // numrefs
     NameVals.push_back(0); // immutablerefcnt
@@ -3875,8 +3892,8 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
         ImmutableRefCnt++;
       Count++;
     }
-    NameVals[5] = Count;
-    NameVals[6] = ImmutableRefCnt;
+    NameVals[6] = Count;
+    NameVals[7] = ImmutableRefCnt;
 
     bool HasProfileData = false;
     for (auto &EI : FS->calls()) {

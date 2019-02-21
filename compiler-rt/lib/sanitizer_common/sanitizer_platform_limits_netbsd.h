@@ -1,9 +1,8 @@
 //===-- sanitizer_platform_limits_netbsd.h --------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -65,6 +64,8 @@ extern unsigned struct_FTSENT_sz;
 
 extern unsigned struct_regex_sz;
 extern unsigned struct_regmatch_sz;
+
+extern unsigned struct_fstab_sz;
 
 struct __sanitizer_regmatch {
   OFF_T rm_so;
@@ -446,8 +447,36 @@ struct __sanitizer_wordexp_t {
   uptr we_nbytes;
 };
 
-typedef char __sanitizer_FILE;
-#define SANITIZER_HAS_STRUCT_FILE 0
+struct __sanitizer_FILE {
+  unsigned char *_p;
+  int _r;
+  int _w;
+  unsigned short _flags;
+  short _file;
+  struct {
+    unsigned char *_base;
+    int _size;
+  } _bf;
+  int _lbfsize;
+  void *_cookie;
+  int (*_close)(void *ptr);
+  u64 (*_read)(void *, void *, uptr);
+  u64 (*_seek)(void *, u64, int);
+  uptr (*_write)(void *, const void *, uptr);
+  struct {
+    unsigned char *_base;
+    int _size;
+  } _ext;
+  unsigned char *_up;
+  int _ur;
+  unsigned char _ubuf[3];
+  unsigned char _nbuf[1];
+  int (*_flush)(void *ptr);
+  char _lb_unused[sizeof(uptr)];
+  int _blksize;
+  u64 _offset;
+};
+#define SANITIZER_HAS_STRUCT_FILE 1
 
 extern int shmctl_ipc_stat;
 
@@ -959,6 +988,7 @@ extern unsigned struct_RF_ComponentLabel_sz;
 extern unsigned struct_RF_SingleComponent_sz;
 extern unsigned struct_RF_ProgressInfo_sz;
 extern unsigned struct_nvlist_ref_sz;
+extern unsigned struct_StringList_sz;
 
 
 // A special value to mark ioctls that are not present on the target platform,
@@ -1549,6 +1579,22 @@ extern unsigned IOCTL_SPKRTONE;
 extern unsigned IOCTL_SPKRTUNE;
 extern unsigned IOCTL_SPKRGETVOL;
 extern unsigned IOCTL_SPKRSETVOL;
+#if 0 /* interfaces are WIP */
+extern unsigned IOCTL_NVMM_IOC_CAPABILITY;
+extern unsigned IOCTL_NVMM_IOC_MACHINE_CREATE;
+extern unsigned IOCTL_NVMM_IOC_MACHINE_DESTROY;
+extern unsigned IOCTL_NVMM_IOC_MACHINE_CONFIGURE;
+extern unsigned IOCTL_NVMM_IOC_VCPU_CREATE;
+extern unsigned IOCTL_NVMM_IOC_VCPU_DESTROY;
+extern unsigned IOCTL_NVMM_IOC_VCPU_SETSTATE;
+extern unsigned IOCTL_NVMM_IOC_VCPU_GETSTATE;
+extern unsigned IOCTL_NVMM_IOC_VCPU_INJECT;
+extern unsigned IOCTL_NVMM_IOC_VCPU_RUN;
+extern unsigned IOCTL_NVMM_IOC_GPA_MAP;
+extern unsigned IOCTL_NVMM_IOC_GPA_UNMAP;
+extern unsigned IOCTL_NVMM_IOC_HVA_MAP;
+extern unsigned IOCTL_NVMM_IOC_HVA_UNMAP;
+#endif
 extern unsigned IOCTL_AUTOFSREQUEST;
 extern unsigned IOCTL_AUTOFSDONE;
 extern unsigned IOCTL_BIOCGBLEN;
@@ -2054,6 +2100,7 @@ extern unsigned IOCTL_SIOCGLINKSTR;
 extern unsigned IOCTL_SIOCSLINKSTR;
 extern unsigned IOCTL_SIOCGETHERCAP;
 extern unsigned IOCTL_SIOCGIFINDEX;
+extern unsigned IOCTL_SIOCSETHERCAP;
 extern unsigned IOCTL_SIOCGUMBINFO;
 extern unsigned IOCTL_SIOCSUMBPARAM;
 extern unsigned IOCTL_SIOCGUMBPARAM;
@@ -2253,6 +2300,44 @@ SHA2_EXTERN(384);
 SHA2_EXTERN(512);
 
 #undef SHA2_EXTERN
+
+extern const int unvis_valid;
+extern const int unvis_validpush;
+
+struct __sanitizer_cdbr {
+  void (*unmap)(void *, void *, uptr);
+  void *cookie;
+  u8 *mmap_base;
+  uptr mmap_size;
+
+  u8 *hash_base;
+  u8 *offset_base;
+  u8 *data_base;
+
+  u32 data_size;
+  u32 entries;
+  u32 entries_index;
+  u32 seed;
+
+  u8 offset_size;
+  u8 index_size;
+
+  u32 entries_m;
+  u32 entries_index_m;
+  u8 entries_s1, entries_s2;
+  u8 entries_index_s1, entries_index_s2;
+};
+
+struct __sanitizer_cdbw {
+  uptr data_counter;
+  uptr data_allocated;
+  uptr data_size;
+  uptr *data_len;
+  void **data_ptr;
+  uptr hash_size;
+  void *hash;
+  uptr key_counter;
+};
 }  // namespace __sanitizer
 
 #define CHECK_TYPE_SIZE(TYPE) \

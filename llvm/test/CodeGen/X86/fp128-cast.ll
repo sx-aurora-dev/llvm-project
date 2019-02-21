@@ -845,7 +845,6 @@ define fp128 @TestTruncCopysign(fp128 %x, i32 %n) nounwind {
 ; X64-NEXT:    pushq %rax
 ; X64-NEXT:    callq __trunctfdf2
 ; X64-NEXT:    movsd {{.*#+}} xmm1 = mem[0],zero
-; X64-NEXT:    movlhps {{.*#+}} xmm1 = xmm1[0,0]
 ; X64-NEXT:    andps {{.*}}(%rip), %xmm0
 ; X64-NEXT:    orps %xmm1, %xmm0
 ; X64-NEXT:    callq __extenddftf2
@@ -867,7 +866,6 @@ define fp128 @TestTruncCopysign(fp128 %x, i32 %n) nounwind {
 ; X64_NO_MMX-NEXT:    callq __trunctfdf2
 ; X64_NO_MMX-NEXT:    andps {{.*}}(%rip), %xmm0
 ; X64_NO_MMX-NEXT:    movsd {{.*#+}} xmm1 = mem[0],zero
-; X64_NO_MMX-NEXT:    movlhps {{.*#+}} xmm1 = xmm1[0,0]
 ; X64_NO_MMX-NEXT:    orps %xmm1, %xmm0
 ; X64_NO_MMX-NEXT:    callq __extenddftf2
 ; X64_NO_MMX-NEXT:    addq $8, %rsp
@@ -902,7 +900,7 @@ define fp128 @TestTruncCopysign(fp128 %x, i32 %n) nounwind {
 ; X32-NEXT:    fstp %st(1)
 ; X32-NEXT:    fldz
 ; X32-NEXT:  .LBB17_3: # %if.then
-; X32-NEXT:    fstp %st(0)
+; X32-NEXT:    fstp %st
 ; X32-NEXT:    subl $16, %esp
 ; X32-NEXT:    leal {{[0-9]+}}(%esp), %eax
 ; X32-NEXT:    movl %eax, (%esp)

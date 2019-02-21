@@ -1,9 +1,8 @@
 //==--- InstrEmitter.cpp - Emit MachineInstrs for the SelectionDAG class ---==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -652,6 +651,12 @@ void InstrEmitter::EmitRegSequence(SDNode *Node,
   const MCInstrDesc &II = TII->get(TargetOpcode::REG_SEQUENCE);
   MachineInstrBuilder MIB = BuildMI(*MF, Node->getDebugLoc(), II, NewVReg);
   unsigned NumOps = Node->getNumOperands();
+  // If the input pattern has a chain, then the root of the corresponding
+  // output pattern will get a chain as well. This can happen to be a
+  // REG_SEQUENCE (which is not "guarded" by countOperands/CountResults).
+  if (NumOps && Node->getOperand(NumOps-1).getValueType() == MVT::Other)
+    --NumOps; // Ignore chain if it exists.
+
   assert((NumOps & 1) == 1 &&
          "REG_SEQUENCE must have an odd number of operands!");
   for (unsigned i = 1; i != NumOps; ++i) {

@@ -1,9 +1,8 @@
 //===-- DWARFExpression.cpp -------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1839,7 +1838,7 @@ bool DWARFExpression::Evaluate(
           error_ptr->SetErrorString(
               "Expression stack needs at least 1 item for DW_OP_abs.");
         return false;
-      } else if (stack.back().ResolveValue(exe_ctx).AbsoluteValue() == false) {
+      } else if (!stack.back().ResolveValue(exe_ctx).AbsoluteValue()) {
         if (error_ptr)
           error_ptr->SetErrorString(
               "Failed to take the absolute value of the first stack item.");
@@ -1972,7 +1971,7 @@ bool DWARFExpression::Evaluate(
               "Expression stack needs at least 1 item for DW_OP_neg.");
         return false;
       } else {
-        if (stack.back().ResolveValue(exe_ctx).UnaryNegate() == false) {
+        if (!stack.back().ResolveValue(exe_ctx).UnaryNegate()) {
           if (error_ptr)
             error_ptr->SetErrorString("Unary negate failed.");
           return false;
@@ -1993,7 +1992,7 @@ bool DWARFExpression::Evaluate(
               "Expression stack needs at least 1 item for DW_OP_not.");
         return false;
       } else {
-        if (stack.back().ResolveValue(exe_ctx).OnesComplement() == false) {
+        if (!stack.back().ResolveValue(exe_ctx).OnesComplement()) {
           if (error_ptr)
             error_ptr->SetErrorString("Logical NOT failed.");
           return false;
@@ -2100,8 +2099,8 @@ bool DWARFExpression::Evaluate(
       } else {
         tmp = stack.back();
         stack.pop_back();
-        if (stack.back().ResolveValue(exe_ctx).ShiftRightLogical(
-                tmp.ResolveValue(exe_ctx)) == false) {
+        if (!stack.back().ResolveValue(exe_ctx).ShiftRightLogical(
+                tmp.ResolveValue(exe_ctx))) {
           if (error_ptr)
             error_ptr->SetErrorString("DW_OP_shr failed.");
           return false;
@@ -3204,7 +3203,7 @@ static bool print_dwarf_exp_op(Stream &s, const DataExtractor &data,
     break;
   default:
     s.Printf("UNKNOWN ONE-OPERAND OPCODE, #%u", opcode);
-    return true;
+    return false;
   }
 
   switch (size) {
@@ -3250,7 +3249,7 @@ static bool print_dwarf_exp_op(Stream &s, const DataExtractor &data,
     break;
   }
 
-  return false;
+  return true;
 }
 
 bool DWARFExpression::PrintDWARFExpression(Stream &s, const DataExtractor &data,

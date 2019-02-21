@@ -45,6 +45,7 @@ add_lldb_library(lldbUtility
   ArchSpec.cpp
   Args.cpp
   Baton.cpp
+  Broadcaster.cpp
   Connection.cpp
   ConstString.cpp
   CompletionRequest.cpp
@@ -53,14 +54,16 @@ add_lldb_library(lldbUtility
   DataEncoder.cpp
   DataExtractor.cpp
   Environment.cpp
+  FileCollector.cpp
+  Event.cpp
   FileSpec.cpp
   IOObject.cpp
   JSON.cpp
   LLDBAssert.cpp
+  Listener.cpp
   Log.cpp
   Logging.cpp
   NameMatches.cpp
-  Range.cpp
   RegisterValue.cpp
   RegularExpression.cpp
   Reproducer.cpp

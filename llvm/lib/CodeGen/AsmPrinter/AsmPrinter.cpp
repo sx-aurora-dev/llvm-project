@@ -1,9 +1,8 @@
 //===- AsmPrinter.cpp - Common AsmPrinter code ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/AsmPrinter.h"
-#include "AsmPrinterHandler.h"
 #include "CodeViewDebug.h"
 #include "DwarfDebug.h"
 #include "DwarfException.h"
@@ -36,6 +34,7 @@
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/CodeGen/AsmPrinterHandler.h"
 #include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GCMetadataPrinter.h"
 #include "llvm/CodeGen/GCStrategy.h"
@@ -232,6 +231,12 @@ void AsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst) {
   S.EmitInstruction(Inst, getSubtargetInfo());
 }
 
+void AsmPrinter::emitInitialRawDwarfLocDirective(const MachineFunction &MF) {
+  assert(DD && "Dwarf debug file is not defined.");
+  assert(OutStreamer->hasRawTextSupport() && "Expected assembly output mode.");
+  (void)DD->emitInitialLocDirective(MF, /*CUID=*/0);
+}
+
 /// getCurrentSection() - Return the current section we are emitting to.
 const MCSection *AsmPrinter::getCurrentSection() const {
   return OutStreamer->getCurrentSectionOnly();
@@ -263,7 +268,7 @@ bool AsmPrinter::doInitialization(Module &M) {
   // use the directive, where it would need the same conditionalization
   // anyway.
   const Triple &Target = TM.getTargetTriple();
-  OutStreamer->EmitVersionForTarget(Target);
+  OutStreamer->EmitVersionForTarget(Target, M.getSDKVersion());
 
   // Allow the target to emit any magic that it wants at the start of the file.
   EmitStartOfAsmFile(M);
@@ -657,6 +662,9 @@ void AsmPrinter::EmitFunctionHeader() {
 
   if (MAI->hasDotTypeDotSizeDirective())
     OutStreamer->EmitSymbolAttribute(CurrentFnSym, MCSA_ELF_TypeFunction);
+
+  if (F.hasFnAttribute(Attribute::Cold))
+    OutStreamer->EmitSymbolAttribute(CurrentFnSym, MCSA_Cold);
 
   if (isVerbose()) {
     F.printAsOperand(OutStreamer->GetCommentOS(),
@@ -1499,6 +1507,9 @@ bool AsmPrinter::doFinalization(Module &M) {
   // Emit llvm.ident metadata in an '.ident' directive.
   EmitModuleIdents(M);
 
+  // Emit bytes for llvm.commandline metadata.
+  EmitModuleCommandLines(M);
+
   // Emit __morestack address if needed for indirect calls.
   if (MMI->usesMorestackAddr()) {
     unsigned Align = 1;
@@ -2006,6 +2017,29 @@ void AsmPrinter::EmitModuleIdents(Module &M) {
       OutStreamer->EmitIdent(S->getString());
     }
   }
+}
+
+void AsmPrinter::EmitModuleCommandLines(Module &M) {
+  MCSection *CommandLine = getObjFileLowering().getSectionForCommandLines();
+  if (!CommandLine)
+    return;
+
+  const NamedMDNode *NMD = M.getNamedMetadata("llvm.commandline");
+  if (!NMD || !NMD->getNumOperands())
+    return;
+
+  OutStreamer->PushSection();
+  OutStreamer->SwitchSection(CommandLine);
+  OutStreamer->EmitZeros(1);
+  for (unsigned i = 0, e = NMD->getNumOperands(); i != e; ++i) {
+    const MDNode *N = NMD->getOperand(i);
+    assert(N->getNumOperands() == 1 &&
+           "llvm.commandline metadata entry can have only one operand");
+    const MDString *S = cast<MDString>(N->getOperand(0));
+    OutStreamer->EmitBytes(S->getString());
+    OutStreamer->EmitZeros(1);
+  }
+  OutStreamer->PopSection();
 }
 
 //===--------------------------------------------------------------------===//

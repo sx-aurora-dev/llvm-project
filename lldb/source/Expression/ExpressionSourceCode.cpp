@@ -1,9 +1,8 @@
 //===-- ExpressionSourceCode.cpp --------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -105,10 +104,7 @@ public:
       if (m_file_stack.back() != m_current_file)
         return true;
 
-      if (line >= m_current_file_line)
-        return false;
-      else
-        return true;
+      return line < m_current_file_line;
     default:
       return false;
     }
@@ -378,7 +374,5 @@ bool ExpressionSourceCode::GetOriginalBodyBounds(
     return false;
   start_loc += strlen(start_marker);
   end_loc = transformed_text.find(end_marker);
-  if (end_loc == std::string::npos)
-    return false;
-  return true;
+  return end_loc != std::string::npos;
 }
