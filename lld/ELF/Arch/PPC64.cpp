@@ -1,9 +1,8 @@
 //===- PPC64.cpp ----------------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -99,10 +98,16 @@ unsigned elf::getPPC64GlobalEntryToLocalEntryOffset(uint8_t StOther) {
   return 0;
 }
 
+bool elf::isPPC64SmallCodeModelTocReloc(RelType Type) {
+  // The only small code model relocations that access the .toc section.
+  return Type == R_PPC64_TOC16 || Type == R_PPC64_TOC16_DS;
+}
+
 namespace {
 class PPC64 final : public TargetInfo {
 public:
   PPC64();
+  int getTlsGdRelaxSkip(RelType Type) const override;
   uint32_t calcEFlags() const override;
   RelExpr getRelExpr(RelType Type, const Symbol &S,
                      const uint8_t *Loc) const override;
@@ -231,6 +236,20 @@ PPC64::PPC64() {
   DefaultImageBase = 0x10000000;
 
   write32(TrapInstr.data(), 0x7fe00008);
+}
+
+int PPC64::getTlsGdRelaxSkip(RelType Type) const {
+  // A __tls_get_addr call instruction is marked with 2 relocations:
+  //
+  //   R_PPC64_TLSGD / R_PPC64_TLSLD: marker relocation
+  //   R_PPC64_REL24: __tls_get_addr
+  //
+  // After the relaxation we no longer call __tls_get_addr and should skip both
+  // relocations to not create a false dependence on __tls_get_addr being
+  // defined.
+  if (Type == R_PPC64_TLSGD || Type == R_PPC64_TLSLD)
+    return 2;
+  return 1;
 }
 
 static uint32_t getEFlags(InputFile *File) {
@@ -412,6 +431,13 @@ void PPC64::relaxTlsIeToLe(uint8_t *Loc, RelType Type, uint64_t Val) const {
 RelExpr PPC64::getRelExpr(RelType Type, const Symbol &S,
                           const uint8_t *Loc) const {
   switch (Type) {
+  case R_PPC64_GOT16:
+  case R_PPC64_GOT16_DS:
+  case R_PPC64_GOT16_HA:
+  case R_PPC64_GOT16_HI:
+  case R_PPC64_GOT16_LO:
+  case R_PPC64_GOT16_LO_DS:
+    return R_GOT_OFF;
   case R_PPC64_TOC16:
   case R_PPC64_TOC16_DS:
   case R_PPC64_TOC16_HA:
@@ -526,30 +552,36 @@ static std::pair<RelType, uint64_t> toAddr16Rel(RelType Type, uint64_t Val) {
 
   switch (Type) {
   // TOC biased relocation.
+  case R_PPC64_GOT16:
   case R_PPC64_GOT_TLSGD16:
   case R_PPC64_GOT_TLSLD16:
   case R_PPC64_TOC16:
     return {R_PPC64_ADDR16, TocBiasedVal};
+  case R_PPC64_GOT16_DS:
   case R_PPC64_TOC16_DS:
   case R_PPC64_GOT_TPREL16_DS:
   case R_PPC64_GOT_DTPREL16_DS:
     return {R_PPC64_ADDR16_DS, TocBiasedVal};
+  case R_PPC64_GOT16_HA:
   case R_PPC64_GOT_TLSGD16_HA:
   case R_PPC64_GOT_TLSLD16_HA:
   case R_PPC64_GOT_TPREL16_HA:
   case R_PPC64_GOT_DTPREL16_HA:
   case R_PPC64_TOC16_HA:
     return {R_PPC64_ADDR16_HA, TocBiasedVal};
+  case R_PPC64_GOT16_HI:
   case R_PPC64_GOT_TLSGD16_HI:
   case R_PPC64_GOT_TLSLD16_HI:
   case R_PPC64_GOT_TPREL16_HI:
   case R_PPC64_GOT_DTPREL16_HI:
   case R_PPC64_TOC16_HI:
     return {R_PPC64_ADDR16_HI, TocBiasedVal};
+  case R_PPC64_GOT16_LO:
   case R_PPC64_GOT_TLSGD16_LO:
   case R_PPC64_GOT_TLSLD16_LO:
   case R_PPC64_TOC16_LO:
     return {R_PPC64_ADDR16_LO, TocBiasedVal};
+  case R_PPC64_GOT16_LO_DS:
   case R_PPC64_TOC16_LO_DS:
   case R_PPC64_GOT_TPREL16_LO_DS:
   case R_PPC64_GOT_DTPREL16_LO_DS:
@@ -584,15 +616,27 @@ static std::pair<RelType, uint64_t> toAddr16Rel(RelType Type, uint64_t Val) {
   }
 }
 
-static bool isTocRelType(RelType Type) {
-  return Type == R_PPC64_TOC16_HA || Type == R_PPC64_TOC16_LO_DS ||
-         Type == R_PPC64_TOC16_LO;
+static bool isTocOptType(RelType Type) {
+  switch (Type) {
+  case R_PPC64_GOT16_HA:
+  case R_PPC64_GOT16_LO_DS:
+  case R_PPC64_TOC16_HA:
+  case R_PPC64_TOC16_LO_DS:
+  case R_PPC64_TOC16_LO:
+    return true;
+  default:
+    return false;
+  }
 }
 
 void PPC64::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
-  // For a TOC-relative relocation, proceed in terms of the corresponding
-  // ADDR16 relocation type.
-  bool IsTocRelType = isTocRelType(Type);
+  // We need to save the original relocation type to use in diagnostics, and
+  // use the original type to determine if we should toc-optimize the
+  // instructions being relocated.
+  RelType OriginalType = Type;
+  bool ShouldTocOptimize =  isTocOptType(Type);
+  // For dynamic thread pointer relative, toc-relative, and got-indirect
+  // relocations, proceed in terms of the corresponding ADDR16 relocation type.
   std::tie(Type, Val) = toAddr16Rel(Type, Val);
 
   switch (Type) {
@@ -605,22 +649,22 @@ void PPC64::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
   }
   case R_PPC64_ADDR16:
   case R_PPC64_TPREL16:
-    checkInt(Loc, Val, 16, Type);
+    checkInt(Loc, Val, 16, OriginalType);
     write16(Loc, Val);
     break;
   case R_PPC64_ADDR16_DS:
   case R_PPC64_TPREL16_DS: {
-    checkInt(Loc, Val, 16, Type);
+    checkInt(Loc, Val, 16, OriginalType);
     // DQ-form instructions use bits 28-31 as part of the instruction encoding
     // DS-form instructions only use bits 30-31.
     uint16_t Mask = isDQFormInstruction(readInstrFromHalf16(Loc)) ? 0xF : 0x3;
-    checkAlignment(Loc, lo(Val), Mask + 1, Type);
+    checkAlignment(Loc, lo(Val), Mask + 1, OriginalType);
     write16(Loc, (read16(Loc) & Mask) | lo(Val));
   } break;
   case R_PPC64_ADDR16_HA:
   case R_PPC64_REL16_HA:
   case R_PPC64_TPREL16_HA:
-    if (Config->TocOptimize && IsTocRelType && ha(Val) == 0)
+    if (Config->TocOptimize && ShouldTocOptimize && ha(Val) == 0)
       writeInstrFromHalf16(Loc, 0x60000000);
     else
       write16(Loc, ha(Val));
@@ -652,7 +696,7 @@ void PPC64::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
     // When the high-adjusted part of a toc relocation evalutes to 0, it is
     // changed into a nop. The lo part then needs to be updated to use the
     // toc-pointer register r2, as the base register.
-    if (Config->TocOptimize && IsTocRelType && ha(Val) == 0) {
+    if (Config->TocOptimize && ShouldTocOptimize && ha(Val) == 0) {
       uint32_t Instr = readInstrFromHalf16(Loc);
       if (isInstructionUpdateForm(Instr))
         error(getErrorLocation(Loc) +
@@ -669,8 +713,8 @@ void PPC64::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
     // DS-form instructions only use bits 30-31.
     uint32_t Inst = readInstrFromHalf16(Loc);
     uint16_t Mask = isDQFormInstruction(Inst) ? 0xF : 0x3;
-    checkAlignment(Loc, lo(Val), Mask + 1, Type);
-    if (Config->TocOptimize && IsTocRelType && ha(Val) == 0) {
+    checkAlignment(Loc, lo(Val), Mask + 1, OriginalType);
+    if (Config->TocOptimize && ShouldTocOptimize && ha(Val) == 0) {
       // When the high-adjusted part of a toc relocation evalutes to 0, it is
       // changed into a nop. The lo part then needs to be updated to use the toc
       // pointer register r2, as the base register.

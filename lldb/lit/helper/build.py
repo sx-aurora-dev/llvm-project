@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 from __future__ import print_function
 
 import argparse
@@ -151,6 +153,9 @@ def format_text(lines, indent_0, indent_n):
     return result
 
 def print_environment(env):
+    if env is None:
+        print('    Inherited')
+        return
     for e in env:
         value = env[e]
         lines = value.split(os.pathsep)
@@ -207,7 +212,7 @@ def find_toolchain(compiler, tools_dir):
     return 'unknown'
 
 class Builder(object):
-    def __init__(self, toolchain_type, args):
+    def __init__(self, toolchain_type, args, obj_ext):
         self.toolchain_type = toolchain_type
         self.inputs = args.inputs
         self.arch = args.arch
@@ -219,10 +224,50 @@ class Builder(object):
         self.mode = args.mode
         self.nodefaultlib = args.nodefaultlib
         self.verbose = args.verbose
+        self.obj_ext = obj_ext
+
+    def _exe_file_name(self):
+        assert self.mode != 'compile'
+        return self.output
+
+    def _output_name(self, input, extension, with_executable=False):
+        basename = os.path.splitext(os.path.basename(input))[0] + extension
+        if with_executable:
+            exe_basename = os.path.basename(self._exe_file_name())
+            basename = exe_basename + '-' + basename
+
+        output = os.path.join(self.outdir, basename)
+        return os.path.normpath(output)
+
+    def _obj_file_names(self):
+        if self.mode == 'link':
+            return self.inputs
+
+        if self.mode == 'compile-and-link':
+            # Object file names should factor in both the input file (source)
+            # name and output file (executable) name, to ensure that two tests
+            # which share a common source file don't race to write the same
+            # object file.
+            return [self._output_name(x, self.obj_ext, True) for x in self.inputs]
+
+        if self.mode == 'compile' and self.output:
+            return [self.output]
+
+        return [self._output_name(x, self.obj_ext) for x in self.inputs]
+
+    def build_commands(self):
+        commands = []
+        if self.mode == 'compile' or self.mode == 'compile-and-link':
+            for input, output in zip(self.inputs, self._obj_file_names()):
+                commands.append(self._get_compilation_command(input, output))
+        if self.mode == 'link' or self.mode == 'compile-and-link':
+            commands.append(self._get_link_command())
+        return commands
+
 
 class MsvcBuilder(Builder):
     def __init__(self, toolchain_type, args):
-        Builder.__init__(self, toolchain_type, args)
+        Builder.__init__(self, toolchain_type, args, '.obj')
 
         self.msvc_arch_str = 'x86' if self.arch == '32' else 'x64'
 
@@ -238,19 +283,17 @@ class MsvcBuilder(Builder):
                     print('Using alternate compiler "{0}" to match selected target.'.format(self.compiler))
 
         if self.mode == 'link' or self.mode == 'compile-and-link':
-            self.linker = self._find_linker('link') if toolchain_type == 'msvc' else self._find_linker('lld-link')
+            self.linker = self._find_linker('link') if toolchain_type == 'msvc' else self._find_linker('lld-link', args.tools_dir)
             if not self.linker:
                 raise ValueError('Unable to find an appropriate linker.')
 
         self.compile_env, self.link_env = self._get_visual_studio_environment()
 
-    def _find_linker(self, name):
-        if sys.platform == 'win32':
-            name = name + '.exe'
+    def _find_linker(self, name, search_paths=[]):
         compiler_dir = os.path.dirname(self.compiler)
-        linker_path = os.path.join(compiler_dir, name)
-        if not os.path.exists(linker_path):
-            raise ValueError('Could not find \'{}\''.format(linker_path))
+        linker_path = find_executable(name, [compiler_dir] + search_paths)
+        if linker_path is None:
+            raise ValueError('Could not find \'{}\''.format(name))
         return linker_path
 
     def _get_vc_install_dir(self):
@@ -486,46 +529,16 @@ class MsvcBuilder(Builder):
             linkenv.update(defaultenv)
         return (compileenv, linkenv)
 
-    def _output_name(self, input, extension, with_executable=False):
-        basename = os.path.splitext(os.path.basename(input))[0] + extension
-        if with_executable:
-            exe_basename = os.path.basename(self._exe_file_name())
-            basename = exe_basename + '-' + basename
-
-        output = os.path.join(self.outdir, basename)
-        return os.path.normpath(output)
-
     def _ilk_file_names(self):
         if self.mode == 'link':
             return []
 
         return [self._output_name(x, '.ilk') for x in self.inputs]
 
-    def _obj_file_names(self):
-        if self.mode == 'link':
-            return self.inputs
-
-        if self.mode == 'compile-and-link':
-            # Object file names should factor in both the input file (source)
-            # name and output file (executable) name, to ensure that two tests
-            # which share a common source file don't race to write the same
-            # object file.
-            return [self._output_name(x, '.obj', True) for x in self.inputs]
-
-        if self.mode == 'compile' and self.output:
-            return [self.output]
-
-        return [self._output_name(x, '.obj') for x in self.inputs]
-
     def _pdb_file_name(self):
         if self.mode == 'compile':
             return None
         return os.path.splitext(self.output)[0] + '.pdb'
-
-    def _exe_file_name(self):
-        if self.mode == 'compile':
-            return None
-        return self.output
 
     def _get_compilation_command(self, source, obj):
         args = []
@@ -551,6 +564,7 @@ class MsvcBuilder(Builder):
         if self.toolchain_type == 'clang-cl':
             args.append('-Xclang')
             args.append('-fkeep-static-consts')
+            args.append('-fms-compatibility-version=19')
         args.append('/c')
 
         args.append('/Fo' + obj)
@@ -586,10 +600,6 @@ class MsvcBuilder(Builder):
         return commands
 
     def output_files(self):
-        outdir = os.path.dirname(self.output)
-        file = os.path.basename(self.output)
-        name, ext = os.path.splitext(file)
-
         outputs = []
         if self.mode == 'compile' or self.mode == 'compile-and-link':
             outputs.extend(self._ilk_file_names())
@@ -602,13 +612,56 @@ class MsvcBuilder(Builder):
 
 class GccBuilder(Builder):
     def __init__(self, toolchain_type, args):
-        Builder.__init__(self, toolchain_type, args)
+        Builder.__init__(self, toolchain_type, args, '.o')
 
-    def build_commands(self):
-        pass
+    def _get_compilation_command(self, source, obj):
+        args = []
+
+        args.append(self.compiler)
+        args.append('-m' + self.arch)
+
+        args.append('-g')
+        if self.opt == 'none':
+            args.append('-O0')
+        elif self.opt == 'basic':
+            args.append('-O2')
+        elif self.opt == 'lto':
+            args.append('-flto=thin')
+        if self.nodefaultlib:
+            args.append('-nostdinc')
+            args.append('-static')
+        args.append('-c')
+
+        args.extend(['-o', obj])
+        args.append(source)
+
+        return ('compiling', [source], obj, None, args)
+
+    def _get_link_command(self):
+        args = []
+        args.append(self.compiler)
+        args.append('-m' + self.arch)
+        if self.nodefaultlib:
+            args.append('-nostdlib')
+            args.append('-static')
+            main_symbol = 'main'
+            if sys.platform == 'darwin':
+                main_symbol = '_main'
+            args.append('-Wl,-e,' + main_symbol)
+        args.extend(['-o', self._exe_file_name()])
+        args.extend(self._obj_file_names())
+
+        return ('linking', self._obj_file_names(), self._exe_file_name(), None, args)
+
 
     def output_files(self):
-        pass
+        outputs = []
+        if self.mode == 'compile' or self.mode == 'compile-and-link':
+            outputs.extend(self._obj_file_names())
+        if self.mode == 'link' or self.mode == 'compile-and-link':
+            outputs.append(self._exe_file_name())
+
+        return outputs
 
 def indent(text, spaces):
     def prefixed_lines():
