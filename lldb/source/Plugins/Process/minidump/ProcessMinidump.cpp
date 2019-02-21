@@ -1,19 +1,26 @@
 //===-- ProcessMinidump.cpp -------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "ProcessMinidump.h"
+
 #include "ThreadMinidump.h"
 
+#include "lldb/Core/DumpDataExtractor.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
+#include "lldb/Interpreter/CommandInterpreter.h"
+#include "lldb/Interpreter/CommandObject.h"
+#include "lldb/Interpreter/CommandObjectMultiword.h"
+#include "lldb/Interpreter/CommandReturnObject.h"
+#include "lldb/Interpreter/OptionArgParser.h"
+#include "lldb/Interpreter/OptionGroupBoolean.h"
 #include "lldb/Target/JITLoaderList.h"
 #include "lldb/Target/MemoryRegionInfo.h"
 #include "lldb/Target/SectionLoadList.h"
@@ -27,8 +34,8 @@
 #include "llvm/Support/Threading.h"
 
 #include "Plugins/Process/Utility/StopInfoMachException.h"
-// C includes
-// C++ includes
+
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -73,7 +80,7 @@ public:
         section_sp, module->base_of_image);
   }
 
-  ObjectFile *GetObjectFile() override { return nullptr; }
+ObjectFile *GetObjectFile() override { return nullptr; }
 
   SectionList *GetSectionList() override {
     return Module::GetUnifiedSectionList();
@@ -284,33 +291,36 @@ ArchSpec ProcessMinidump::GetArchitecture() {
 
 Status ProcessMinidump::GetMemoryRegionInfo(lldb::addr_t load_addr,
                                             MemoryRegionInfo &range_info) {
-  Status error;
-  auto info = m_minidump_parser.GetMemoryRegionInfo(load_addr);
-  if (!info) {
-    error.SetErrorString("No valid MemoryRegionInfo found!");
-    return error;
-  }
-  range_info = info.getValue();
-  return error;
+  range_info = m_minidump_parser.GetMemoryRegionInfo(load_addr);
+  return Status();
+}
+
+Status ProcessMinidump::GetMemoryRegions(
+    lldb_private::MemoryRegionInfos &region_list) {
+  region_list = m_minidump_parser.GetMemoryRegions();
+  return Status();
 }
 
 void ProcessMinidump::Clear() { Process::m_thread_list.Clear(); }
 
 bool ProcessMinidump::UpdateThreadList(ThreadList &old_thread_list,
                                        ThreadList &new_thread_list) {
-  uint32_t num_threads = 0;
-  if (m_thread_list.size() > 0)
-    num_threads = m_thread_list.size();
+  for (const MinidumpThread& thread : m_thread_list) {
+    MinidumpLocationDescriptor context_location = thread.thread_context;
 
-  for (lldb::tid_t tid = 0; tid < num_threads; ++tid) {
+    // If the minidump contains an exception context, use it
+    if (m_active_exception != nullptr &&
+        m_active_exception->thread_id == thread.thread_id) {
+      context_location = m_active_exception->thread_context;
+    }
+
     llvm::ArrayRef<uint8_t> context;
     if (!m_is_wow64)
-      context = m_minidump_parser.GetThreadContext(m_thread_list[tid]);
+      context = m_minidump_parser.GetThreadContext(context_location);
     else
-      context = m_minidump_parser.GetThreadContextWow64(m_thread_list[tid]);
+      context = m_minidump_parser.GetThreadContextWow64(thread);
 
-    lldb::ThreadSP thread_sp(
-        new ThreadMinidump(*this, m_thread_list[tid], context));
+    lldb::ThreadSP thread_sp(new ThreadMinidump(*this, thread, context));
     new_thread_list.AddThread(thread_sp);
   }
   return new_thread_list.GetSize(false) > 0;
@@ -399,8 +409,379 @@ bool ProcessMinidump::GetProcessInfo(ProcessInstanceInfo &info) {
 // try to set up symbolic breakpoints, which in turn may force loading more
 // debug information than needed.
 JITLoaderList &ProcessMinidump::GetJITLoaders() {
-  if (!m_jit_loaders_ap) {
-    m_jit_loaders_ap = llvm::make_unique<JITLoaderList>();
+  if (!m_jit_loaders_up) {
+    m_jit_loaders_up = llvm::make_unique<JITLoaderList>();
   }
-  return *m_jit_loaders_ap;
+  return *m_jit_loaders_up;
+}
+
+#define INIT_BOOL(VAR, LONG, SHORT, DESC) \
+    VAR(LLDB_OPT_SET_1, false, LONG, SHORT, DESC, false, true)
+#define APPEND_OPT(VAR) \
+    m_option_group.Append(&VAR, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1)
+
+class CommandObjectProcessMinidumpDump : public CommandObjectParsed {
+private:
+  OptionGroupOptions m_option_group;
+  OptionGroupBoolean m_dump_all;
+  OptionGroupBoolean m_dump_directory;
+  OptionGroupBoolean m_dump_linux_cpuinfo;
+  OptionGroupBoolean m_dump_linux_proc_status;
+  OptionGroupBoolean m_dump_linux_lsb_release;
+  OptionGroupBoolean m_dump_linux_cmdline;
+  OptionGroupBoolean m_dump_linux_environ;
+  OptionGroupBoolean m_dump_linux_auxv;
+  OptionGroupBoolean m_dump_linux_maps;
+  OptionGroupBoolean m_dump_linux_proc_stat;
+  OptionGroupBoolean m_dump_linux_proc_uptime;
+  OptionGroupBoolean m_dump_linux_proc_fd;
+  OptionGroupBoolean m_dump_linux_all;
+  OptionGroupBoolean m_fb_app_data;
+  OptionGroupBoolean m_fb_build_id;
+  OptionGroupBoolean m_fb_version;
+  OptionGroupBoolean m_fb_java_stack;
+  OptionGroupBoolean m_fb_dalvik;
+  OptionGroupBoolean m_fb_unwind;
+  OptionGroupBoolean m_fb_error_log;
+  OptionGroupBoolean m_fb_app_state;
+  OptionGroupBoolean m_fb_abort;
+  OptionGroupBoolean m_fb_thread;
+  OptionGroupBoolean m_fb_logcat;
+  OptionGroupBoolean m_fb_all;
+
+  void SetDefaultOptionsIfNoneAreSet() {
+    if (m_dump_all.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_all.GetOptionValue().GetCurrentValue() ||
+        m_fb_all.GetOptionValue().GetCurrentValue() ||
+        m_dump_directory.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_cpuinfo.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_proc_status.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_lsb_release.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_cmdline.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_environ.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_auxv.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_maps.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_proc_stat.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_proc_uptime.GetOptionValue().GetCurrentValue() ||
+        m_dump_linux_proc_fd.GetOptionValue().GetCurrentValue() ||
+        m_fb_app_data.GetOptionValue().GetCurrentValue() ||
+        m_fb_build_id.GetOptionValue().GetCurrentValue() ||
+        m_fb_version.GetOptionValue().GetCurrentValue() ||
+        m_fb_java_stack.GetOptionValue().GetCurrentValue() ||
+        m_fb_dalvik.GetOptionValue().GetCurrentValue() ||
+        m_fb_unwind.GetOptionValue().GetCurrentValue() ||
+        m_fb_error_log.GetOptionValue().GetCurrentValue() ||
+        m_fb_app_state.GetOptionValue().GetCurrentValue() ||
+        m_fb_abort.GetOptionValue().GetCurrentValue() ||
+        m_fb_thread.GetOptionValue().GetCurrentValue() ||
+        m_fb_logcat.GetOptionValue().GetCurrentValue())
+      return;
+    // If no options were set, then dump everything
+    m_dump_all.GetOptionValue().SetCurrentValue(true);
+  }
+  bool DumpAll() const {
+    return m_dump_all.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpDirectory() const {
+    return DumpAll() ||
+        m_dump_directory.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinux() const {
+    return DumpAll() || m_dump_linux_all.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxCPUInfo() const {
+    return DumpLinux() ||
+        m_dump_linux_cpuinfo.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxProcStatus() const {
+    return DumpLinux() ||
+        m_dump_linux_proc_status.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxProcStat() const {
+    return DumpLinux() ||
+        m_dump_linux_proc_stat.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxLSBRelease() const {
+    return DumpLinux() ||
+        m_dump_linux_lsb_release.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxCMDLine() const {
+    return DumpLinux() ||
+        m_dump_linux_cmdline.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxEnviron() const {
+    return DumpLinux() ||
+        m_dump_linux_environ.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxAuxv() const {
+    return DumpLinux() ||
+        m_dump_linux_auxv.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxMaps() const {
+    return DumpLinux() ||
+        m_dump_linux_maps.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxProcUptime() const {
+    return DumpLinux() ||
+        m_dump_linux_proc_uptime.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpLinuxProcFD() const {
+    return DumpLinux() ||
+        m_dump_linux_proc_fd.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebook() const {
+    return DumpAll() || m_fb_all.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookAppData() const {
+    return DumpFacebook() || m_fb_app_data.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookBuildID() const {
+    return DumpFacebook() || m_fb_build_id.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookVersionName() const {
+    return DumpFacebook() || m_fb_version.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookJavaStack() const {
+    return DumpFacebook() || m_fb_java_stack.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookDalvikInfo() const {
+    return DumpFacebook() || m_fb_dalvik.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookUnwindSymbols() const {
+    return DumpFacebook() || m_fb_unwind.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookErrorLog() const {
+    return DumpFacebook() || m_fb_error_log.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookAppStateLog() const {
+    return DumpFacebook() || m_fb_app_state.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookAbortReason() const {
+    return DumpFacebook() || m_fb_abort.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookThreadName() const {
+    return DumpFacebook() || m_fb_thread.GetOptionValue().GetCurrentValue();
+  }
+  bool DumpFacebookLogcat() const {
+    return DumpFacebook() || m_fb_logcat.GetOptionValue().GetCurrentValue();
+  }
+public:
+
+  CommandObjectProcessMinidumpDump(CommandInterpreter &interpreter)
+  : CommandObjectParsed(interpreter, "process plugin dump",
+      "Dump information from the minidump file.", NULL),
+    m_option_group(),
+    INIT_BOOL(m_dump_all, "all", 'a',
+              "Dump the everything in the minidump."),
+    INIT_BOOL(m_dump_directory, "directory", 'd',
+              "Dump the minidump directory map."),
+    INIT_BOOL(m_dump_linux_cpuinfo, "cpuinfo", 'C',
+              "Dump linux /proc/cpuinfo."),
+    INIT_BOOL(m_dump_linux_proc_status, "status", 's',
+              "Dump linux /proc/<pid>/status."),
+    INIT_BOOL(m_dump_linux_lsb_release, "lsb-release", 'r',
+              "Dump linux /etc/lsb-release."),
+    INIT_BOOL(m_dump_linux_cmdline, "cmdline", 'c',
+              "Dump linux /proc/<pid>/cmdline."),
+    INIT_BOOL(m_dump_linux_environ, "environ", 'e',
+              "Dump linux /proc/<pid>/environ."),
+    INIT_BOOL(m_dump_linux_auxv, "auxv", 'x',
+              "Dump linux /proc/<pid>/auxv."),
+    INIT_BOOL(m_dump_linux_maps, "maps", 'm',
+              "Dump linux /proc/<pid>/maps."),
+    INIT_BOOL(m_dump_linux_proc_stat, "stat", 'S',
+              "Dump linux /proc/<pid>/stat."),
+    INIT_BOOL(m_dump_linux_proc_uptime, "uptime", 'u',
+              "Dump linux process uptime."),
+    INIT_BOOL(m_dump_linux_proc_fd, "fd", 'f',
+              "Dump linux /proc/<pid>/fd."),
+    INIT_BOOL(m_dump_linux_all, "linux", 'l',
+              "Dump all linux streams."),
+    INIT_BOOL(m_fb_app_data, "fb-app-data", 1,
+              "Dump Facebook application custom data."),
+    INIT_BOOL(m_fb_build_id, "fb-build-id", 2,
+              "Dump the Facebook build ID."),
+    INIT_BOOL(m_fb_version, "fb-version", 3,
+              "Dump Facebook application version string."),
+    INIT_BOOL(m_fb_java_stack, "fb-java-stack", 4,
+              "Dump Facebook java stack."),
+    INIT_BOOL(m_fb_dalvik, "fb-dalvik-info", 5,
+              "Dump Facebook Dalvik info."),
+    INIT_BOOL(m_fb_unwind, "fb-unwind-symbols", 6,
+              "Dump Facebook unwind symbols."),
+    INIT_BOOL(m_fb_error_log, "fb-error-log", 7,
+              "Dump Facebook error log."),
+    INIT_BOOL(m_fb_app_state, "fb-app-state-log", 8,
+              "Dump Facebook java stack."),
+    INIT_BOOL(m_fb_abort, "fb-abort-reason", 9,
+              "Dump Facebook abort reason."),
+    INIT_BOOL(m_fb_thread, "fb-thread-name", 10,
+              "Dump Facebook thread name."),
+    INIT_BOOL(m_fb_logcat, "fb-logcat", 11,
+              "Dump Facebook logcat."),
+    INIT_BOOL(m_fb_all, "facebook", 12, "Dump all Facebook streams.") {
+    APPEND_OPT(m_dump_all);
+    APPEND_OPT(m_dump_directory);
+    APPEND_OPT(m_dump_linux_cpuinfo);
+    APPEND_OPT(m_dump_linux_proc_status);
+    APPEND_OPT(m_dump_linux_lsb_release);
+    APPEND_OPT(m_dump_linux_cmdline);
+    APPEND_OPT(m_dump_linux_environ);
+    APPEND_OPT(m_dump_linux_auxv);
+    APPEND_OPT(m_dump_linux_maps);
+    APPEND_OPT(m_dump_linux_proc_stat);
+    APPEND_OPT(m_dump_linux_proc_uptime);
+    APPEND_OPT(m_dump_linux_proc_fd);
+    APPEND_OPT(m_dump_linux_all);
+    APPEND_OPT(m_fb_app_data);
+    APPEND_OPT(m_fb_build_id);
+    APPEND_OPT(m_fb_version);
+    APPEND_OPT(m_fb_java_stack);
+    APPEND_OPT(m_fb_dalvik);
+    APPEND_OPT(m_fb_unwind);
+    APPEND_OPT(m_fb_error_log);
+    APPEND_OPT(m_fb_app_state);
+    APPEND_OPT(m_fb_abort);
+    APPEND_OPT(m_fb_thread);
+    APPEND_OPT(m_fb_logcat);
+    APPEND_OPT(m_fb_all);
+    m_option_group.Finalize();
+  }
+
+  ~CommandObjectProcessMinidumpDump() {}
+
+  Options *GetOptions() override { return &m_option_group; }
+
+  bool DoExecute(Args &command, CommandReturnObject &result) override {
+    const size_t argc = command.GetArgumentCount();
+    if (argc > 0) {
+      result.AppendErrorWithFormat("'%s' take no arguments, only options",
+                                   m_cmd_name.c_str());
+      result.SetStatus(eReturnStatusFailed);
+      return false;
+    }
+    SetDefaultOptionsIfNoneAreSet();
+
+    ProcessMinidump *process = static_cast<ProcessMinidump *>(
+        m_interpreter.GetExecutionContext().GetProcessPtr());
+    result.SetStatus(eReturnStatusSuccessFinishResult);
+    Stream &s = result.GetOutputStream();
+    MinidumpParser &minidump = process->m_minidump_parser;
+    if (DumpDirectory()) {
+      s.Printf("RVA        SIZE       TYPE       MinidumpStreamType\n");
+      s.Printf("---------- ---------- ---------- --------------------------\n");
+      for (const auto &pair: minidump.GetDirectoryMap())
+        s.Printf("0x%8.8x 0x%8.8x 0x%8.8x %s\n", (uint32_t)pair.second.rva,
+                 (uint32_t)pair.second.data_size, pair.first,
+                 MinidumpParser::GetStreamTypeAsString(pair.first).data());
+      s.Printf("\n");
+    }
+    auto DumpTextStream = [&](MinidumpStreamType stream_type,
+                              llvm::StringRef label) -> void {
+      auto bytes = minidump.GetStream(stream_type);
+      if (!bytes.empty()) {
+        if (label.empty())
+          label = MinidumpParser::GetStreamTypeAsString((uint32_t)stream_type);
+        s.Printf("%s:\n%s\n\n", label.data(), bytes.data());
+      }
+    };
+    auto DumpBinaryStream = [&](MinidumpStreamType stream_type,
+                                llvm::StringRef label) -> void {
+      auto bytes = minidump.GetStream(stream_type);
+      if (!bytes.empty()) {
+        if (label.empty())
+          label = MinidumpParser::GetStreamTypeAsString((uint32_t)stream_type);
+        s.Printf("%s:\n", label.data());
+        DataExtractor data(bytes.data(), bytes.size(), eByteOrderLittle,
+                           process->GetAddressByteSize());
+        DumpDataExtractor(data, &s, 0, lldb::eFormatBytesWithASCII, 1,
+                          bytes.size(), 16, 0, 0, 0);
+        s.Printf("\n\n");
+      }
+    };
+
+    if (DumpLinuxCPUInfo())
+      DumpTextStream(MinidumpStreamType::LinuxCPUInfo, "/proc/cpuinfo");
+    if (DumpLinuxProcStatus())
+      DumpTextStream(MinidumpStreamType::LinuxProcStatus, "/proc/PID/status");
+    if (DumpLinuxLSBRelease())
+      DumpTextStream(MinidumpStreamType::LinuxLSBRelease, "/etc/lsb-release");
+    if (DumpLinuxCMDLine())
+      DumpTextStream(MinidumpStreamType::LinuxCMDLine, "/proc/PID/cmdline");
+    if (DumpLinuxEnviron())
+      DumpTextStream(MinidumpStreamType::LinuxEnviron, "/proc/PID/environ");
+    if (DumpLinuxAuxv())
+      DumpBinaryStream(MinidumpStreamType::LinuxAuxv, "/proc/PID/auxv");
+    if (DumpLinuxMaps())
+      DumpTextStream(MinidumpStreamType::LinuxMaps, "/proc/PID/maps");
+    if (DumpLinuxProcStat())
+      DumpTextStream(MinidumpStreamType::LinuxProcStat, "/proc/PID/stat");
+    if (DumpLinuxProcUptime())
+      DumpTextStream(MinidumpStreamType::LinuxProcUptime, "uptime");
+    if (DumpLinuxProcFD())
+      DumpTextStream(MinidumpStreamType::LinuxProcFD, "/proc/PID/fd");
+    if (DumpFacebookAppData())
+      DumpTextStream(MinidumpStreamType::FacebookAppCustomData,
+                     "Facebook App Data");
+    if (DumpFacebookBuildID()) {
+      auto bytes = minidump.GetStream(MinidumpStreamType::FacebookBuildID);
+      if (bytes.size() >= 4) {
+        DataExtractor data(bytes.data(), bytes.size(), eByteOrderLittle,
+                           process->GetAddressByteSize());
+        lldb::offset_t offset = 0;
+        uint32_t build_id = data.GetU32(&offset);
+        s.Printf("Facebook Build ID:\n");
+        s.Printf("%u\n", build_id);
+        s.Printf("\n");
+      }
+    }
+    if (DumpFacebookVersionName())
+      DumpTextStream(MinidumpStreamType::FacebookAppVersionName,
+                     "Facebook Version String");
+    if (DumpFacebookJavaStack())
+      DumpTextStream(MinidumpStreamType::FacebookJavaStack,
+                     "Facebook Java Stack");
+    if (DumpFacebookDalvikInfo())
+      DumpTextStream(MinidumpStreamType::FacebookDalvikInfo,
+                     "Facebook Dalvik Info");
+    if (DumpFacebookUnwindSymbols())
+      DumpBinaryStream(MinidumpStreamType::FacebookUnwindSymbols,
+                       "Facebook Unwind Symbols Bytes");
+    if (DumpFacebookErrorLog())
+      DumpTextStream(MinidumpStreamType::FacebookDumpErrorLog,
+                     "Facebook Error Log");
+    if (DumpFacebookAppStateLog())
+      DumpTextStream(MinidumpStreamType::FacebookAppStateLog,
+                     "Faceook Application State Log");
+    if (DumpFacebookAbortReason())
+      DumpTextStream(MinidumpStreamType::FacebookAbortReason,
+                     "Facebook Abort Reason");
+    if (DumpFacebookThreadName())
+      DumpTextStream(MinidumpStreamType::FacebookThreadName,
+                     "Facebook Thread Name");
+    if (DumpFacebookLogcat())
+      DumpTextStream(MinidumpStreamType::FacebookLogcat,
+                     "Facebook Logcat");
+    return true;
+  }
+};
+
+class CommandObjectMultiwordProcessMinidump : public CommandObjectMultiword {
+public:
+  CommandObjectMultiwordProcessMinidump(CommandInterpreter &interpreter)
+    : CommandObjectMultiword(interpreter, "process plugin",
+          "Commands for operating on a ProcessMinidump process.",
+          "process plugin <subcommand> [<subcommand-options>]") {
+    LoadSubCommand("dump",
+        CommandObjectSP(new CommandObjectProcessMinidumpDump(interpreter)));
+  }
+
+  ~CommandObjectMultiwordProcessMinidump() {}
+};
+
+CommandObject *ProcessMinidump::GetPluginCommandObject() {
+  if (!m_command_sp)
+    m_command_sp = std::make_shared<CommandObjectMultiwordProcessMinidump>(
+        GetTarget().GetDebugger().GetCommandInterpreter());
+  return m_command_sp.get();
 }

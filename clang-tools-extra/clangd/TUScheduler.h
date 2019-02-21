@@ -1,9 +1,8 @@
 //===--- TUScheduler.h -------------------------------------------*-C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,6 +12,7 @@
 #include "ClangdUnit.h"
 #include "Function.h"
 #include "Threading.h"
+#include "index/CanonicalIncludes.h"
 #include "llvm/ADT/StringMap.h"
 #include <future>
 
@@ -62,7 +62,7 @@ struct TUAction {
     Idle, // Indicates the worker thread is idle, and ready to run any upcoming
           // actions.
   };
-  TUAction(State S, llvm::StringRef Name) : S(S), Name(Name){};
+  TUAction(State S, llvm::StringRef Name) : S(S), Name(Name) {}
   State S;
   /// The name of the action currently running, e.g. Update, GoToDef, Hover.
   /// Empty if we are in the idle state.
@@ -77,6 +77,8 @@ struct TUStatus {
     /// Indicates whether we reused the prebuilt AST.
     bool ReuseAST = false;
   };
+  /// Serialize this to an LSP file status item.
+  FileStatus render(PathRef File) const;
 
   TUAction Action;
   BuildDetails Details;
@@ -90,7 +92,8 @@ public:
   /// contains only AST nodes from the #include directives at the start of the
   /// file. AST node in the current file should be observed on onMainAST call.
   virtual void onPreambleAST(PathRef Path, ASTContext &Ctx,
-                             std::shared_ptr<clang::Preprocessor> PP) {}
+                             std::shared_ptr<clang::Preprocessor> PP,
+                             const CanonicalIncludes &) {}
   /// Called on the AST built for the file itself. Note that preamble AST nodes
   /// are not deserialized and should be processed in the onPreambleAST call
   /// instead.
@@ -224,12 +227,13 @@ private:
 /// propagated.
 template <typename T>
 std::future<T> runAsync(llvm::unique_function<T()> Action) {
-  return std::async(std::launch::async,
-                    [](llvm::unique_function<T()> &&Action, Context Ctx) {
-                      WithContext WithCtx(std::move(Ctx));
-                      return Action();
-                    },
-                    std::move(Action), Context::current().clone());
+  return std::async(
+      std::launch::async,
+      [](llvm::unique_function<T()> &&Action, Context Ctx) {
+        WithContext WithCtx(std::move(Ctx));
+        return Action();
+      },
+      std::move(Action), Context::current().clone());
 }
 
 } // namespace clangd

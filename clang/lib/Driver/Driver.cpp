@@ -1,9 +1,8 @@
 //===--- Driver.cpp - Clang GCC Compatible Driver -------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,6 +28,7 @@
 #include "ToolChains/Hurd.h"
 #include "ToolChains/Lanai.h"
 #include "ToolChains/Linux.h"
+#include "ToolChains/MSP430.h"
 #include "ToolChains/MSVC.h"
 #include "ToolChains/MinGW.h"
 #include "ToolChains/Minix.h"
@@ -90,6 +90,33 @@ using namespace clang::driver;
 using namespace clang;
 using namespace llvm::opt;
 
+// static
+std::string Driver::GetResourcesPath(StringRef BinaryPath,
+                                     StringRef CustomResourceDir) {
+  // Since the resource directory is embedded in the module hash, it's important
+  // that all places that need it call this function, so that they get the
+  // exact same string ("a/../b/" and "b/" get different hashes, for example).
+
+  // Dir is bin/ or lib/, depending on where BinaryPath is.
+  std::string Dir = llvm::sys::path::parent_path(BinaryPath);
+
+  SmallString<128> P(Dir);
+  if (CustomResourceDir != "") {
+    llvm::sys::path::append(P, CustomResourceDir);
+  } else {
+    // On Windows, libclang.dll is in bin/.
+    // On non-Windows, libclang.so/.dylib is in lib/.
+    // With a static-library build of libclang, LibClangPath will contain the
+    // path of the embedding binary, which for LLVM binaries will be in bin/.
+    // ../lib gets us to lib/ in both cases.
+    P = llvm::sys::path::parent_path(Dir);
+    llvm::sys::path::append(P, Twine("lib") + CLANG_LIBDIR_SUFFIX, "clang",
+                            CLANG_VERSION_STRING);
+  }
+
+  return P.str();
+}
+
 Driver::Driver(StringRef ClangExecutable, StringRef TargetTriple,
                DiagnosticsEngine &Diags,
                IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS)
@@ -120,17 +147,7 @@ Driver::Driver(StringRef ClangExecutable, StringRef TargetTriple,
 #endif
 
   // Compute the path to the resource directory.
-  StringRef ClangResourceDir(CLANG_RESOURCE_DIR);
-  SmallString<128> P(Dir);
-  if (ClangResourceDir != "") {
-    llvm::sys::path::append(P, ClangResourceDir);
-  } else {
-    StringRef ClangLibdirSuffix(CLANG_LIBDIR_SUFFIX);
-    P = llvm::sys::path::parent_path(Dir);
-    llvm::sys::path::append(P, Twine("lib") + ClangLibdirSuffix, "clang",
-                            CLANG_VERSION_STRING);
-  }
-  ResourceDir = P.str();
+  ResourceDir = GetResourcesPath(ClangExecutable, CLANG_RESOURCE_DIR);
 }
 
 void Driver::ParseDriverMode(StringRef ProgramName,
@@ -304,6 +321,7 @@ DerivedArgList *Driver::TranslateInputArgs(const InputArgList &Args) const {
   DerivedArgList *DAL = new DerivedArgList(Args);
 
   bool HasNostdlib = Args.hasArg(options::OPT_nostdlib);
+  bool HasNostdlibxx = Args.hasArg(options::OPT_nostdlibxx);
   bool HasNodefaultlib = Args.hasArg(options::OPT_nodefaultlibs);
   for (Arg *A : Args) {
     // Unfortunately, we have to parse some forwarding options (-Xassembler,
@@ -348,7 +366,8 @@ DerivedArgList *Driver::TranslateInputArgs(const InputArgList &Args) const {
       StringRef Value = A->getValue();
 
       // Rewrite unless -nostdlib is present.
-      if (!HasNostdlib && !HasNodefaultlib && Value == "stdc++") {
+      if (!HasNostdlib && !HasNodefaultlib && !HasNostdlibxx &&
+          Value == "stdc++") {
         DAL->AddFlagArg(A, Opts->getOption(options::OPT_Z_reserved_lib_stdcxx));
         continue;
       }
@@ -1510,7 +1529,7 @@ void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
     if (TC.isThreadModelSupported(A->getValue()))
       OS << "Thread model: " << A->getValue();
   } else
-    OS << "Thread model: " << TC.getThreadModel();
+    OS << "Thread model: " << TC.getThreadModel(C.getArgs());
   OS << '\n';
 
   // Print out the install directory.
@@ -1557,8 +1576,7 @@ void Driver::HandleAutocompletions(StringRef PassedFlags) const {
 
   // We want to show cc1-only options only when clang is invoked with -cc1 or
   // -Xclang.
-  if (std::find(Flags.begin(), Flags.end(), "-Xclang") != Flags.end() ||
-      std::find(Flags.begin(), Flags.end(), "-cc1") != Flags.end())
+  if (llvm::is_contained(Flags, "-Xclang") || llvm::is_contained(Flags, "-cc1"))
     DisableFlags &= ~options::NoDriverOption;
 
   StringRef Cur;
@@ -2056,7 +2074,8 @@ void Driver::BuildInputs(const ToolChain &TC, DerivedArgList &Args,
           Ty = types::TY_C;
         } else {
           // Otherwise lookup by extension.
-          // Fallback is C if invoked as C preprocessor or Object otherwise.
+          // Fallback is C if invoked as C preprocessor, C++ if invoked with
+          // clang-cl /E, or Object otherwise.
           // We use a host hook here because Darwin at least has its own
           // idea of what .s is.
           if (const char *Ext = strrchr(Value, '.'))
@@ -2065,6 +2084,8 @@ void Driver::BuildInputs(const ToolChain &TC, DerivedArgList &Args,
           if (Ty == types::TY_INVALID) {
             if (CCCIsCPP())
               Ty = types::TY_C;
+            else if (IsCLMode() && Args.hasArgNoClaim(options::OPT_E))
+              Ty = types::TY_CXX;
             else
               Ty = types::TY_Object;
           }
@@ -2319,6 +2340,18 @@ class OffloadingActionBuilder final {
       // If this is an unbundling action use it as is for each CUDA toolchain.
       if (auto *UA = dyn_cast<OffloadUnbundlingJobAction>(HostAction)) {
         CudaDeviceActions.clear();
+        auto *IA = cast<InputAction>(UA->getInputs().back());
+        std::string FileName = IA->getInputArg().getAsString(Args);
+        // Check if the type of the file is the same as the action. Do not
+        // unbundle it if it is not. Do not unbundle .so files, for example,
+        // which are not object files.
+        if (IA->getType() == types::TY_Object &&
+            (!llvm::sys::path::has_extension(FileName) ||
+             types::lookupTypeForExtension(
+                 llvm::sys::path::extension(FileName).drop_front()) !=
+                 types::TY_Object))
+          return ABRT_Inactive;
+
         for (auto Arch : GpuArchList) {
           CudaDeviceActions.push_back(UA);
           UA->registerDependentActionInfo(ToolChains[0], CudaArchToString(Arch),
@@ -4462,6 +4495,17 @@ std::string Driver::GetTemporaryPath(StringRef Prefix, StringRef Suffix) const {
   return Path.str();
 }
 
+std::string Driver::GetTemporaryDirectory(StringRef Prefix) const {
+  SmallString<128> Path;
+  std::error_code EC = llvm::sys::fs::createUniqueDirectory(Prefix, Path);
+  if (EC) {
+    Diag(clang::diag::err_unable_to_make_temp) << EC.message();
+    return "";
+  }
+
+  return Path.str();
+}
+
 std::string Driver::GetClPchPath(Compilation &C, StringRef BaseName) const {
   SmallString<128> Output;
   if (Arg *FpArg = C.getArgs().getLastArg(options::OPT__SLASH_Fp)) {
@@ -4611,6 +4655,10 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         break;
       case llvm::Triple::avr:
         TC = llvm::make_unique<toolchains::AVRToolChain>(*this, Target, Args);
+        break;
+      case llvm::Triple::msp430:
+        TC =
+            llvm::make_unique<toolchains::MSP430ToolChain>(*this, Target, Args);
         break;
       case llvm::Triple::riscv32:
       case llvm::Triple::riscv64:

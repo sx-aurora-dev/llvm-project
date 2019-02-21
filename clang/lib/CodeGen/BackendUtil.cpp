@@ -1,9 +1,8 @@
 //===--- BackendUtil.cpp - LLVM Backend Utilities -------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -37,6 +36,7 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/BuryPointer.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -53,12 +53,16 @@
 #include "llvm/Transforms/IPO/ThinLTOBitcodeWriter.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Instrumentation.h"
+#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/BoundsChecking.h"
 #include "llvm/Transforms/Instrumentation/GCOVProfiler.h"
+#include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
+#include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
 #include "llvm/Transforms/ObjCARC.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/Utils/CanonicalizeAliases.h"
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
 #include <memory>
@@ -240,15 +244,15 @@ static void addAddressSanitizerPasses(const PassManagerBuilder &Builder,
   bool UseGlobalsGC = asanUseGlobalsGC(T, CGOpts);
   PM.add(createAddressSanitizerFunctionPass(/*CompileKernel*/ false, Recover,
                                             UseAfterScope));
-  PM.add(createAddressSanitizerModulePass(/*CompileKernel*/ false, Recover,
-                                          UseGlobalsGC, UseOdrIndicator));
+  PM.add(createModuleAddressSanitizerLegacyPassPass(
+      /*CompileKernel*/ false, Recover, UseGlobalsGC, UseOdrIndicator));
 }
 
 static void addKernelAddressSanitizerPasses(const PassManagerBuilder &Builder,
                                             legacy::PassManagerBase &PM) {
   PM.add(createAddressSanitizerFunctionPass(
       /*CompileKernel*/ true, /*Recover*/ true, /*UseAfterScope*/ false));
-  PM.add(createAddressSanitizerModulePass(
+  PM.add(createModuleAddressSanitizerLegacyPassPass(
       /*CompileKernel*/ true, /*Recover*/ true, /*UseGlobalsGC*/ true,
       /*UseOdrIndicator*/ false));
 }
@@ -276,7 +280,8 @@ static void addGeneralOptsForMemorySanitizer(const PassManagerBuilder &Builder,
   const CodeGenOptions &CGOpts = BuilderWrapper.getCGOpts();
   int TrackOrigins = CGOpts.SanitizeMemoryTrackOrigins;
   bool Recover = CGOpts.SanitizeRecover.has(SanitizerKind::Memory);
-  PM.add(createMemorySanitizerPass(TrackOrigins, Recover, CompileKernel));
+  PM.add(createMemorySanitizerLegacyPassPass(
+      MemorySanitizerOptions{TrackOrigins, Recover, CompileKernel}));
 
   // MemorySanitizer inserts complex instrumentation that mostly follows
   // the logic of the original code, but operates on "shadow" values.
@@ -303,7 +308,7 @@ static void addKernelMemorySanitizerPass(const PassManagerBuilder &Builder,
 
 static void addThreadSanitizerPass(const PassManagerBuilder &Builder,
                                    legacy::PassManagerBase &PM) {
-  PM.add(createThreadSanitizerPass());
+  PM.add(createThreadSanitizerLegacyPassPass());
 }
 
 static void addDataFlowSanitizerPass(const PassManagerBuilder &Builder,
@@ -812,6 +817,8 @@ void EmitAssemblyHelper::EmitAssembly(BackendAction Action,
         if (!ThinLinkOS)
           return;
       }
+      TheModule->addModuleFlag(Module::Error, "EnableSplitLTOUnit",
+                               CodeGenOpts.EnableSplitLTOUnit);
       PerModulePasses.add(createWriteThinLTOBitcodePass(
           *OS, ThinLinkOS ? &ThinLinkOS->os() : nullptr));
     } else {
@@ -822,12 +829,15 @@ void EmitAssemblyHelper::EmitAssembly(BackendAction Action,
            !CodeGenOpts.DisableLLVMPasses &&
            llvm::Triple(TheModule->getTargetTriple()).getVendor() !=
                llvm::Triple::Apple);
-      if (EmitLTOSummary && !TheModule->getModuleFlag("ThinLTO"))
-        TheModule->addModuleFlag(Module::Error, "ThinLTO", uint32_t(0));
+      if (EmitLTOSummary) {
+        if (!TheModule->getModuleFlag("ThinLTO"))
+          TheModule->addModuleFlag(Module::Error, "ThinLTO", uint32_t(0));
+        TheModule->addModuleFlag(Module::Error, "EnableSplitLTOUnit",
+                                 CodeGenOpts.EnableSplitLTOUnit);
+      }
 
-      PerModulePasses.add(
-          createBitcodeWriterPass(*OS, CodeGenOpts.EmitLLVMUseLists,
-                                  EmitLTOSummary));
+      PerModulePasses.add(createBitcodeWriterPass(
+          *OS, CodeGenOpts.EmitLLVMUseLists, EmitLTOSummary));
     }
     break;
 
@@ -908,6 +918,30 @@ static PassBuilder::OptimizationLevel mapToLevel(const CodeGenOptions &Opts) {
   }
 }
 
+void addSanitizersAtO0(ModulePassManager &MPM, const Triple &TargetTriple,
+                       const LangOptions &LangOpts,
+                       const CodeGenOptions &CodeGenOpts) {
+  if (LangOpts.Sanitize.has(SanitizerKind::Address)) {
+    MPM.addPass(RequireAnalysisPass<ASanGlobalsMetadataAnalysis, Module>());
+    bool Recover = CodeGenOpts.SanitizeRecover.has(SanitizerKind::Address);
+    MPM.addPass(createModuleToFunctionPassAdaptor(
+        AddressSanitizerPass(/*CompileKernel=*/false, Recover,
+                             CodeGenOpts.SanitizeAddressUseAfterScope)));
+    bool ModuleUseAfterScope = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
+    MPM.addPass(ModuleAddressSanitizerPass(
+        /*CompileKernel=*/false, Recover, ModuleUseAfterScope,
+        CodeGenOpts.SanitizeAddressUseOdrIndicator));
+  }
+
+  if (LangOpts.Sanitize.has(SanitizerKind::Memory)) {
+    MPM.addPass(createModuleToFunctionPassAdaptor(MemorySanitizerPass({})));
+  }
+
+  if (LangOpts.Sanitize.has(SanitizerKind::Thread)) {
+    MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+  }
+}
+
 /// A clean version of `EmitAssembly` that uses the new pass manager.
 ///
 /// Not all features are currently supported in this system, but where
@@ -954,6 +988,17 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
 
   PassBuilder PB(TM.get(), PGOOpt);
 
+  // Attempt to load pass plugins and register their callbacks with PB.
+  for (auto &PluginFN : CodeGenOpts.PassPlugins) {
+    auto PassPlugin = PassPlugin::Load(PluginFN);
+    if (PassPlugin) {
+      PassPlugin->registerPassBuilderCallbacks(PB);
+    } else {
+      Diags.Report(diag::err_fe_unable_to_load_plugin)
+          << PluginFN << toString(PassPlugin.takeError());
+    }
+  }
+
   LoopAnalysisManager LAM(CodeGenOpts.DebugPassManager);
   FunctionAnalysisManager FAM(CodeGenOpts.DebugPassManager);
   CGSCCAnalysisManager CGAM(CodeGenOpts.DebugPassManager);
@@ -995,9 +1040,11 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
       if (LangOpts.Sanitize.has(SanitizerKind::LocalBounds))
         MPM.addPass(createModuleToFunctionPassAdaptor(BoundsCheckingPass()));
 
-      // Lastly, add a semantically necessary pass for LTO.
-      if (IsLTO || IsThinLTO)
+      // Lastly, add semantically necessary passes for LTO.
+      if (IsLTO || IsThinLTO) {
+        MPM.addPass(CanonicalizeAliasesPass());
         MPM.addPass(NameAnonGlobalPass());
+      }
     } else {
       // Map our optimization levels into one of the distinct levels used to
       // configure the pipeline.
@@ -1005,11 +1052,45 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
 
       // Register callbacks to schedule sanitizer passes at the appropriate part of
       // the pipeline.
+      // FIXME: either handle asan/the remaining sanitizers or error out
       if (LangOpts.Sanitize.has(SanitizerKind::LocalBounds))
         PB.registerScalarOptimizerLateEPCallback(
             [](FunctionPassManager &FPM, PassBuilder::OptimizationLevel Level) {
               FPM.addPass(BoundsCheckingPass());
             });
+      if (LangOpts.Sanitize.has(SanitizerKind::Memory))
+        PB.registerOptimizerLastEPCallback(
+            [](FunctionPassManager &FPM, PassBuilder::OptimizationLevel Level) {
+              FPM.addPass(MemorySanitizerPass({}));
+            });
+      if (LangOpts.Sanitize.has(SanitizerKind::Thread))
+        PB.registerOptimizerLastEPCallback(
+            [](FunctionPassManager &FPM, PassBuilder::OptimizationLevel Level) {
+              FPM.addPass(ThreadSanitizerPass());
+            });
+      if (LangOpts.Sanitize.has(SanitizerKind::Address)) {
+        PB.registerPipelineStartEPCallback([&](ModulePassManager &MPM) {
+          MPM.addPass(
+              RequireAnalysisPass<ASanGlobalsMetadataAnalysis, Module>());
+        });
+        bool Recover = CodeGenOpts.SanitizeRecover.has(SanitizerKind::Address);
+        bool UseAfterScope = CodeGenOpts.SanitizeAddressUseAfterScope;
+        PB.registerOptimizerLastEPCallback(
+            [Recover, UseAfterScope](FunctionPassManager &FPM,
+                                     PassBuilder::OptimizationLevel Level) {
+              FPM.addPass(AddressSanitizerPass(
+                  /*CompileKernel=*/false, Recover, UseAfterScope));
+            });
+        bool ModuleUseAfterScope = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
+        bool UseOdrIndicator = CodeGenOpts.SanitizeAddressUseOdrIndicator;
+        PB.registerPipelineStartEPCallback(
+            [Recover, ModuleUseAfterScope,
+             UseOdrIndicator](ModulePassManager &MPM) {
+              MPM.addPass(ModuleAddressSanitizerPass(
+                  /*CompileKernel=*/false, Recover, ModuleUseAfterScope,
+                  UseOdrIndicator));
+            });
+      }
       if (Optional<GCOVOptions> Options = getGCOVOptions(CodeGenOpts))
         PB.registerPipelineStartEPCallback([Options](ModulePassManager &MPM) {
           MPM.addPass(GCOVProfilerPass(*Options));
@@ -1018,16 +1099,21 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
       if (IsThinLTO) {
         MPM = PB.buildThinLTOPreLinkDefaultPipeline(
             Level, CodeGenOpts.DebugPassManager);
+        MPM.addPass(CanonicalizeAliasesPass());
         MPM.addPass(NameAnonGlobalPass());
       } else if (IsLTO) {
         MPM = PB.buildLTOPreLinkDefaultPipeline(Level,
                                                 CodeGenOpts.DebugPassManager);
+        MPM.addPass(CanonicalizeAliasesPass());
         MPM.addPass(NameAnonGlobalPass());
       } else {
         MPM = PB.buildPerModuleDefaultPipeline(Level,
                                                CodeGenOpts.DebugPassManager);
       }
     }
+
+    if (CodeGenOpts.OptimizationLevel == 0)
+      addSanitizersAtO0(MPM, TargetTriple, LangOpts, CodeGenOpts);
   }
 
   // FIXME: We still use the legacy pass manager to do code generation. We
@@ -1048,6 +1134,8 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
         if (!ThinLinkOS)
           return;
       }
+      TheModule->addModuleFlag(Module::Error, "EnableSplitLTOUnit",
+                               CodeGenOpts.EnableSplitLTOUnit);
       MPM.addPass(ThinLTOBitcodeWriterPass(*OS, ThinLinkOS ? &ThinLinkOS->os()
                                                            : nullptr));
     } else {
@@ -1058,11 +1146,14 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
            !CodeGenOpts.DisableLLVMPasses &&
            llvm::Triple(TheModule->getTargetTriple()).getVendor() !=
                llvm::Triple::Apple);
-      if (EmitLTOSummary && !TheModule->getModuleFlag("ThinLTO"))
-        TheModule->addModuleFlag(Module::Error, "ThinLTO", uint32_t(0));
-
-      MPM.addPass(BitcodeWriterPass(*OS, CodeGenOpts.EmitLLVMUseLists,
-                                    EmitLTOSummary));
+      if (EmitLTOSummary) {
+        if (!TheModule->getModuleFlag("ThinLTO"))
+          TheModule->addModuleFlag(Module::Error, "ThinLTO", uint32_t(0));
+        TheModule->addModuleFlag(Module::Error, "EnableSplitLTOUnit",
+                                 CodeGenOpts.EnableSplitLTOUnit);
+      }
+      MPM.addPass(
+          BitcodeWriterPass(*OS, CodeGenOpts.EmitLLVMUseLists, EmitLTOSummary));
     }
     break;
 

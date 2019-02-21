@@ -1,9 +1,8 @@
 //===- Target.td - Target Independent TableGen interface ---*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -909,7 +908,7 @@ class InstrInfo {
 }
 
 // Standard Pseudo Instructions.
-// This list must match TargetOpcodes.h and CodeGenTarget.cpp.
+// This list must match TargetOpcodes.def.
 // Only these instructions are allowed in the TargetOpcode namespace.
 // Ensure mayLoad and mayStore have a default value, so as not to break
 // targets that set guessInstructionProperties=0. Any local definition of
@@ -933,6 +932,15 @@ def INLINEASM : StandardPseudoInstruction {
   let InOperandList = (ins variable_ops);
   let AsmString = "";
   let hasSideEffects = 0;  // Note side effect is encoded in an operand.
+}
+def INLINEASM_BR : StandardPseudoInstruction {
+  let OutOperandList = (outs);
+  let InOperandList = (ins variable_ops);
+  let AsmString = "";
+  let hasSideEffects = 0;  // Note side effect is encoded in an operand.
+  let isTerminator = 1;
+  let isBranch = 1;
+  let isIndirectBranch = 1;
 }
 def CFI_INSTRUCTION : StandardPseudoInstruction {
   let OutOperandList = (outs);
