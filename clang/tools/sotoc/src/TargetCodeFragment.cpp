@@ -259,7 +259,10 @@ std::string TargetCodeDecl::PrintPretty() {
   if (llvm::isa<clang::TypedefDecl>(DeclNode)) {
     LocalPP.IncludeTagDefinition = 1;
   }
-  DeclNode->print(PrettyOS, LocalPP);
+  
+  TargetRegionPrinterHelper Helper(PP);
+  
+  DeclNode->print(PrettyOS, LocalPP, 0, false, &Helper);
 
   // This hack removes '#pragma omp declare target' from the output
   std::string outString = PrettyOS.str();
