@@ -62,8 +62,8 @@ void VEFrameLowering::emitPrologueInsns(
     .addReg(VE::SX11).addImm(24).addReg(VE::SX15);
   BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
     .addReg(VE::SX11).addImm(32).addReg(VE::SX16);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::ORri))
-    .addReg(VE::SX9).addReg(VE::SX11).addImm(0);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::SX9)
+    .addReg(VE::SX11).addImm(0);
 }
 
 void VEFrameLowering::emitEpilogueInsns(
@@ -82,8 +82,8 @@ void VEFrameLowering::emitEpilogueInsns(
   //    ld %lr, 8(,%sp)
   //    ld %fp, 0(,%sp)
 
-  BuildMI(MBB, MBBI, dl, TII.get(VE::ORri))
-    .addReg(VE::SX11).addReg(VE::SX9).addImm(0);
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::SX11)
+    .addReg(VE::SX9).addImm(0);
   BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX16)
     .addReg(VE::SX11).addImm(32);
   BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX15)
