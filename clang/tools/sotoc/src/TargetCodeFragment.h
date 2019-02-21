@@ -89,7 +89,8 @@ public:
   /// Accessor to TargetCodeKind
   clang::OpenMPDirectiveKind getTargetCodeKind() { return TargetCodeKind; };
   /// Accessor to lang opts of the current context
-  const clang::LangOptions& GetLangOpts() {return Context.getLangOpts(); }
+  const clang::LangOptions &GetLangOpts() { return Context.getLangOpts(); }
+  clang::PrintingPolicy getPP() { return PP; };
 };
 
 /// Represents one target region.
@@ -139,7 +140,9 @@ public:
   std::vector<clang::OMPClause *>::const_iterator getOMPClausesEnd() {
     return OMPClauses.end();
   }
-  std::string PrintClauses();
+  bool hasCombineConstruct() {
+    return TargetCodeKind != clang::OpenMPDirectiveKind::OMPD_target;
+  }
   std::string PrintLocalVarsFromClauses();
   clang::OMPClause *GetReferredOMPClause(clang::VarDecl *i);
   virtual std::string PrintPretty() override;
@@ -156,7 +159,6 @@ public:
   /// location of the first pragma of the target region to compose the name of
   ///  the function generated for that region)
   clang::SourceLocation getTargetDirectiveLocation();
-  bool isClausePrintable(clang::OMPClause *C);
 };
 
 /// This class represents a declaration, i.e. a function, global varialbe, or

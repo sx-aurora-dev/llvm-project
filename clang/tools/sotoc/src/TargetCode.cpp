@@ -27,8 +27,9 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "TargetCode.h"
 #include "Debug.h"
+#include "OmpPragma.h"
+#include "TargetCode.h"
 
 bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
                                  bool PushFront) {
@@ -97,12 +98,14 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
 
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
+  std::string Prologue;
+  llvm::raw_string_ostream Out(Prologue);
+
   auto tmpSL = TCR->getStartLoc();
 
   std::list<int> nDim;
   std::list<std::string> DimString;
   std::string elemType;
-  std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
   for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
@@ -113,7 +116,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     }
     first = false;
 
-    // check for constant or variable length arrays, because of 
+    // check for constant or variable length arrays, because of
     // AST representation and naive getType
     if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
             (*i)->getType().getTypePtr())) {
@@ -157,8 +160,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
             t->getElementType().getTypePtr());
       } while (t != NULL);
 
-      Out << "  " << elemType << " (*" << VarName
-          << ")";
+      Out << "  " << elemType << " (*" << VarName << ")";
 
       // Get number of Dimensions(nDim) and write sizes(DimString)
       for (int i = 1; i < nDim.front(); i++) {
@@ -196,49 +198,14 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // target team contructs are ignored right now.
   // TODO: What to do with standalone team constructs?
 
-  switch (TCR->TargetCodeKind) {
-  /*case clang::OpenMPDirectiveKind::OMPD_target_teams:{
-    Out << "  #pragma omp teams " << TCR->PrintClauses() << "\n  {\n";
-    break;
-  }*/
-  case clang::OpenMPDirectiveKind::OMPD_target_parallel: {
-    Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
-    break;
+  if (TCR->hasCombineConstruct()) {
+    OmpPragma Pragma(TCR);
+    Pragma.printReplacement(Out);
+    if (Pragma.needsStructuredBlock()) {
+      Out << "\n{";
+    }
   }
-  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
-    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
-        << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::OMPD_target_simd: {
-    Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
-    break;
-  } /*
-   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute:{
-     Out << "  #pragma omp teams distribute " << TCR->PrintClauses() << "\n
-   {\n"; break;
-   }*/
-  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
-    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::
-      OMPD_target_teams_distribute_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses()
-        << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
-    Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
-    break;
-  }
-  default:
-    break;
-  }
+  Out << "\n";
 
   if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
     llvm::errs() << "ERROR: Prologue was not written\n";
@@ -248,24 +215,8 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   auto tmpSL = TCR->getEndLoc();
 
-  if ( // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams
-       // ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel ||
-      // TCR->TargetCodeKind ==
-          // clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
-      // TCR->TargetCodeKind ==
-          // clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
-      // TCR->TargetCodeKind ==
-      // clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
-      // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::
-                                 // OMPD_target_teams_distribute_parallel_for ||
-      // TCR->TargetCodeKind ==
-          // clang::OpenMPDirectiveKind::
-              // OMPD_target_teams_distribute_parallel_for_simd ||
-      TCR->TargetCodeKind ==
-          clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
-    Out << "\n  }";
+  if (OmpPragma(TCR).needsStructuredBlock()) {
+    Out << "\n}";
   }
 
   Out << "\n";
@@ -318,12 +269,11 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
 }
 
 void TargetCode::handleArrays(const clang::ArrayType **t,
-                              std::list<std::string>& DimString,
-                              int& dim, TargetCodeRegion *TCR,
-                              std::string& elemType) {
+                              std::list<std::string> &DimString, int &dim,
+                              TargetCodeRegion *TCR, std::string &elemType) {
   auto OrigT = *t;
 
-  if(!t) {
+  if (!t) {
     return;
   } else {
     // We just remember the last element type
@@ -336,8 +286,8 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
     DimString.push_back(t1->getSize().toString(10, false));
     ++dim;
 
-
-  } else if (auto t1 = clang::dyn_cast_or_null<clang::VariableArrayType>(OrigT)) {
+  } else if (auto t1 =
+                 clang::dyn_cast_or_null<clang::VariableArrayType>(OrigT)) {
     DEBUGP("ArrayType VAT");
     std::string PrettyStr = "";
     llvm::raw_string_ostream PrettyOS(PrettyStr);
@@ -353,11 +303,10 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
     return;
   }
 
-
-  (*t) = clang::dyn_cast_or_null<clang::ArrayType>(OrigT->getElementType().getTypePtr());
-  if(*t) {
+  (*t) = clang::dyn_cast_or_null<clang::ArrayType>(
+      OrigT->getElementType().getTypePtr());
+  if (*t) {
     // Recursively handle all dimensions
     handleArrays(t, DimString, dim, TCR, elemType);
   }
-
 }

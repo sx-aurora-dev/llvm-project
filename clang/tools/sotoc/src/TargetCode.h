@@ -27,8 +27,6 @@ using TargetCodeFragmentDeque = std::deque<std::shared_ptr<TargetCodeFragment>>;
 /// A collection of all code from the input file that needs to be copied to the
 /// target source file.
 class TargetCode {
-  // std::unordered_set<VarDecl*> GlobalVarialesDecl; //TODO: we will use this
-  // to avoid capturing global vars
 
   /// Collection of all code locations that need to be copied.
   TargetCodeFragmentDeque CodeFragments;
@@ -67,10 +65,12 @@ public:
 
 private:
   /// Generates a function prologue for a target region.
-  /// This prologue consists of a function declaration and code to copy local variables into scope.
+  /// This prologue consists of a function declaration and code to copy local
+  /// variables into scope.
   void generateFunctionPrologue(TargetCodeRegion *TCR);
   /// Generates a function epilogue for a target region.
-  /// This prologue consists of a code to copy variables from the local scope back.
+  /// This prologue consists of a code to copy variables from the local scope
+  /// back.
   void generateFunctionEpilogue(TargetCodeRegion *TCR);
   /// Generate a function name for a target region.
   std::string generateFunctionName(TargetCodeRegion *TCR);
@@ -84,7 +84,6 @@ private:
   /// \param TCR The target code region
   /// \param returns the last element type (i.e., the type of the array)
   void handleArrays(const clang::ArrayType **t,
-      std::list<std::string>& DimString,
-      int& dim, TargetCodeRegion *TCR,
-      std::string& elemType);
+                    std::list<std::string> &DimString, int &dim,
+                    TargetCodeRegion *TCR, std::string &elemType);
 };

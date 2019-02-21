@@ -26,11 +26,11 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 
+#include "Debug.h"
 #include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
-#include "Debug.h"
 
 static bool stmtNeedsSemicolon(const clang::Stmt *S) {
   while (1) {
@@ -176,8 +176,8 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
 
   DEBUGP("Add target region args");
   for (const auto &i : S->captures()) {
-    if(!(i.capturesVariableArrayType())) {
-      clang::VarDecl* var = i.getCapturedVar();
+    if (!(i.capturesVariableArrayType())) {
+      clang::VarDecl *var = i.getCapturedVar();
       DEBUGP("captured Var: " + var->getNameAsString());
       TCR->addCapturedVar(var);
     } else {
@@ -198,7 +198,8 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
     // i->print(llvm::outs());
     for (auto j : *TCR->getOMPClauses()) {
       for (auto CC : j->children()) {
-        if (auto CC_DeclRefExpr = llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
+        if (auto CC_DeclRefExpr =
+                llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
           // CC_DeclRefExpr->dumpColor();
           if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
             tmpSet.insert(i);
