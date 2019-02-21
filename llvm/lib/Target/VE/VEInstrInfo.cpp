@@ -723,8 +723,8 @@ static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
 
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc dl = MI.getDebugLoc();
-    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper)).addReg(VMu);
-    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower)).addReg(VMl);
+    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper), VMu);
+    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower), VMl);
 
     if (hasCond) {
         Bu = Bu.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
@@ -736,6 +736,12 @@ static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
         Bu.addReg(VMu3);
         Bl.addReg(VMl3);
     }
+    MachineFunction *MF = MBB->getParent();
+    const VEInstrInfo &TII =
+      *static_cast<const VEInstrInfo *>(MF->getSubtarget().getInstrInfo());
+    unsigned VLReg = TII.getVectorLengthReg(MF);
+    Bu.addReg(VLReg);
+    Bl.addReg(VLReg);
 
     MI.eraseFromParent();
 }
