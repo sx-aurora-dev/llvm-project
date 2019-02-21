@@ -1,9 +1,8 @@
 //===- ModuleDebugStream.cpp - PDB Module Info Stream Access --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +10,9 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/DebugInfo/CodeView/DebugChecksumsSubsection.h"
+#include "llvm/DebugInfo/CodeView/SymbolDeserializer.h"
 #include "llvm/DebugInfo/CodeView/SymbolRecord.h"
+#include "llvm/DebugInfo/CodeView/SymbolRecordHelpers.h"
 #include "llvm/DebugInfo/PDB/Native/DbiModuleDescriptor.h"
 #include "llvm/DebugInfo/PDB/Native/RawError.h"
 #include "llvm/Support/BinaryStreamReader.h"
@@ -75,6 +76,11 @@ Error ModuleDebugStreamRef::reload() {
                                 "Unexpected bytes in module stream.");
 
   return Error::success();
+}
+
+const codeview::CVSymbolArray
+ModuleDebugStreamRef::getSymbolArrayForScope(uint32_t ScopeBegin) const {
+  return limitSymbolArrayToScope(SymbolArray, ScopeBegin);
 }
 
 BinarySubstreamRef ModuleDebugStreamRef::getSymbolsSubstream() const {
