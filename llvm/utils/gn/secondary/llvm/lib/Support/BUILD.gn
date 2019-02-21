@@ -19,18 +19,23 @@ static_library("Support") {
     # both Support and ADT.
     "//llvm/include/llvm/Config:abi-breaking",
     "//llvm/include/llvm/Config:llvm-config",
+
+    # public_dep because public header TargetSelect.h includes these .def files.
+    "//llvm/include/llvm/Config:write_target_def_files",
   ]
   include_dirs = [
     "Unix",
     "Windows",
   ]
   sources = [
+    "AArch64TargetParser.cpp",
     "AMDGPUMetadata.cpp",
     "APFloat.cpp",
     "APInt.cpp",
     "APSInt.cpp",
     "ARMAttributeParser.cpp",
     "ARMBuildAttrs.cpp",
+    "ARMTargetParser.cpp",
     "ARMWinEH.cpp",
     "Allocator.cpp",
     "BinaryStreamError.cpp",
@@ -39,6 +44,7 @@ static_library("Support") {
     "BinaryStreamWriter.cpp",
     "BlockFrequency.cpp",
     "BranchProbability.cpp",
+    "BuryPointer.cpp",
     "COM.cpp",
     "CachePruning.cpp",
     "Chrono.cpp",
@@ -82,6 +88,7 @@ static_library("Support") {
     "MathExtras.cpp",
     "MemoryBuffer.cpp",
     "NativeFormatting.cpp",
+    "Optional.cpp",
     "Options.cpp",
     "Parallel.cpp",
     "PluginLoader.cpp",
@@ -149,7 +156,7 @@ static_library("Support") {
 
   libs = []
 
-  if (host_os == "linux") {
+  if (current_os == "linux" || current_os == "android") {
     libs += [ "dl" ]
   }
 }

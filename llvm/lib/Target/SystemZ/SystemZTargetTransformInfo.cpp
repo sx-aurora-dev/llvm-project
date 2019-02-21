@@ -1,9 +1,8 @@
 //===-- SystemZTargetTransformInfo.cpp - SystemZ-specific TTI -------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -467,9 +466,6 @@ int SystemZTTIImpl::getArithmeticInstrCost(
     if (Opcode == Instruction::FRem)
       return LIBCALL_COST;
 
-    if (Opcode == Instruction::LShr || Opcode == Instruction::AShr)
-      return (ScalarBits >= 32 ? 1 : 2 /*ext*/);
-
     // Or requires one instruction, although it has custom handling for i64.
     if (Opcode == Instruction::Or)
       return 1;
@@ -484,12 +480,8 @@ int SystemZTTIImpl::getArithmeticInstrCost(
       return (SignedDivRem ? SDivPow2Cost : 1);
     if (DivRemConst)
       return DivMulSeqCost;
-    if (SignedDivRem)
-      // sext of op(s) for narrow types
-      return DivInstrCost + (ScalarBits < 32 ? 3 : (ScalarBits == 32 ? 1 : 0));
-    if (UnsignedDivRem)
-      // Clearing of low 64 bit reg + sext of op(s) for narrow types + dl[g]r
-      return DivInstrCost + (ScalarBits < 32 ? 3 : 1);
+    if (SignedDivRem || UnsignedDivRem)
+      return DivInstrCost;
   }
 
   // Fallback to the default implementation.
@@ -779,6 +771,18 @@ int SystemZTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
   return BaseT::getCastInstrCost(Opcode, Dst, Src, I);
 }
 
+// Scalar i8 / i16 operations will typically be made after first extending
+// the operands to i32.
+static unsigned getOperandsExtensionCost(const Instruction *I) {
+  unsigned ExtCost = 0;
+  for (Value *Op : I->operands())
+    // A load of i8 or i16 sign/zero extends to i32.
+    if (!isa<LoadInst>(Op) && !isa<ConstantInt>(Op))
+      ExtCost++;
+
+  return ExtCost;
+}
+
 int SystemZTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
                                        Type *CondTy, const Instruction *I) {
   if (ValTy->isVectorTy()) {
@@ -834,18 +838,19 @@ int SystemZTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
   else { // Scalar
     switch (Opcode) {
     case Instruction::ICmp: {
+      // A loaded value compared with 0 with multiple users becomes Load and
+      // Test. The load is then not foldable, so return 0 cost for the ICmp.
+      unsigned ScalarBits = ValTy->getScalarSizeInBits();
+      if (I != nullptr && ScalarBits >= 32)
+        if (LoadInst *Ld = dyn_cast<LoadInst>(I->getOperand(0)))
+          if (const ConstantInt *C = dyn_cast<ConstantInt>(I->getOperand(1)))
+            if (!Ld->hasOneUse() && Ld->getParent() == I->getParent() &&
+                C->getZExtValue() == 0)
+              return 0;
+
       unsigned Cost = 1;
-      if (ValTy->isIntegerTy() && ValTy->getScalarSizeInBits() <= 16) {
-        if (I != nullptr) {
-          // Single instruction for comparison of memory with a small immediate.
-          if (const LoadInst* Ld = dyn_cast<LoadInst>(I->getOperand(0))) {
-            const Instruction *FoldedValue = nullptr;
-            if (isFoldableLoad(Ld, FoldedValue))
-              return Cost;
-          }
-        }
-        Cost += 2; // extend both operands
-      }
+      if (ValTy->isIntegerTy() && ValTy->getScalarSizeInBits() <= 16)
+        Cost += (I != nullptr ? getOperandsExtensionCost(I) : 2);
       return Cost;
     }
     case Instruction::Select:

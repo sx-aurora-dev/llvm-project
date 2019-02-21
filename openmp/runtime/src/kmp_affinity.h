@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -375,26 +374,26 @@ class KMPNativeAffinity : public KMPAffinity {
       mask[i / BITS_PER_MASK_T] &= ~((mask_t)1 << (i % BITS_PER_MASK_T));
     }
     void zero() override {
-      for (size_t i = 0; i < __kmp_num_proc_groups; ++i)
+      for (int i = 0; i < __kmp_num_proc_groups; ++i)
         mask[i] = 0;
     }
     void copy(const KMPAffinity::Mask *src) override {
       const Mask *convert = static_cast<const Mask *>(src);
-      for (size_t i = 0; i < __kmp_num_proc_groups; ++i)
+      for (int i = 0; i < __kmp_num_proc_groups; ++i)
         mask[i] = convert->mask[i];
     }
     void bitwise_and(const KMPAffinity::Mask *rhs) override {
       const Mask *convert = static_cast<const Mask *>(rhs);
-      for (size_t i = 0; i < __kmp_num_proc_groups; ++i)
+      for (int i = 0; i < __kmp_num_proc_groups; ++i)
         mask[i] &= convert->mask[i];
     }
     void bitwise_or(const KMPAffinity::Mask *rhs) override {
       const Mask *convert = static_cast<const Mask *>(rhs);
-      for (size_t i = 0; i < __kmp_num_proc_groups; ++i)
+      for (int i = 0; i < __kmp_num_proc_groups; ++i)
         mask[i] |= convert->mask[i];
     }
     void bitwise_not() override {
-      for (size_t i = 0; i < __kmp_num_proc_groups; ++i)
+      for (int i = 0; i < __kmp_num_proc_groups; ++i)
         mask[i] = ~(mask[i]);
     }
     int begin() const override {

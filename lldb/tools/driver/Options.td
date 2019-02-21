@@ -46,7 +46,8 @@ def: Flag<["-"], "P">,
   HelpText<"Alias for --python-path">,
   Group<grp_scripting>;
 
-def script_language: Separate<["--", "-"], "script-language">, MetaVarName<"<language>">,
+def script_language: Separate<["--", "-"], "script-language">,
+  MetaVarName<"<language>">,
   HelpText<"Tells the debugger to use the specified scripting language for user-defined scripts.">,
   Group<grp_scripting>;
 def: Separate<["-"], "l">,
@@ -57,12 +58,21 @@ def: Separate<["-"], "l">,
 // Repl options.
 def grp_repl : OptionGroup<"repl">, HelpText<"REPL">;
 
-def repl: Separate<["--", "-"], "repl">,
+def repl: Flag<["--", "-"], "repl">,
   HelpText<"Runs lldb in REPL mode with a stub process.">,
   Group<grp_repl>;
-def: Separate<["-"], "r">,
+def: Flag<["-"], "r">,
   Alias<repl>,
   HelpText<"Alias for --repl">,
+  Group<grp_repl>;
+def repl_: Joined<["--", "-"], "repl=">,
+  MetaVarName<"<flags>">,
+  HelpText<"Runs lldb in REPL mode with a stub process with the given flags.">,
+  Group<grp_repl>;
+def: Joined<["-"], "r=">,
+  MetaVarName<"<flags>">,
+  Alias<repl_>,
+  HelpText<"Alias for --repl=<flags>">,
   Group<grp_repl>;
 
 def repl_language: Separate<["--", "-"], "repl-language">,
@@ -209,11 +219,11 @@ def: Flag<["-"], "d">,
   Alias<debug>,
   HelpText<"Alias for --debug">;
 
-def reproducer: Separate<["--", "-"], "reproducer">,
+def capture: Separate<["--", "-"], "capture">,
   MetaVarName<"<filename>">,
-  HelpText<"Tells the debugger to use the fullpath to <filename> as a reproducer.">;
-def: Separate<["-"], "z">,
-  Alias<file>,
-  HelpText<"Alias for --reproducer">;
+  HelpText<"Tells the debugger to capture a reproducer to <filename>.">;
+def replay: Separate<["--", "-"], "replay">,
+  MetaVarName<"<filename>">,
+  HelpText<"Tells the debugger to replay a reproducer from <filename>.">;
 
 def REM : R<["--"], "">;

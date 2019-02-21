@@ -1,9 +1,8 @@
 //===--- FunctionNamingCheck.cpp - clang-tidy -----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -98,8 +97,9 @@ void FunctionNamingCheck::registerMatchers(MatchFinder *Finder) {
   // main.
   Finder->addMatcher(
       functionDecl(
-          unless(isExpansionInSystemHeader()),
-          unless(anyOf(isMain(), matchesName(validFunctionNameRegex(true)),
+          unless(anyOf(isExpansionInSystemHeader(), cxxMethodDecl(),
+                       hasAncestor(namespaceDecl()), isMain(),
+                       matchesName(validFunctionNameRegex(true)),
                        allOf(isStaticStorageClass(),
                              matchesName(validFunctionNameRegex(false))))))
           .bind("function"),
@@ -109,10 +109,12 @@ void FunctionNamingCheck::registerMatchers(MatchFinder *Finder) {
 void FunctionNamingCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *MatchedDecl = Result.Nodes.getNodeAs<FunctionDecl>("function");
 
+  bool IsGlobal = MatchedDecl->getStorageClass() != SC_Static;
   diag(MatchedDecl->getLocation(),
-       "function name %0 not using function naming conventions described by "
-       "Google Objective-C style guide")
-      << MatchedDecl << generateFixItHint(MatchedDecl);
+       "%select{static function|function in global namespace}1 named %0 must "
+       "%select{be in|have an appropriate prefix followed by}1 Pascal case as "
+       "required by Google Objective-C style guide")
+      << MatchedDecl << IsGlobal << generateFixItHint(MatchedDecl);
 }
 
 } // namespace objc

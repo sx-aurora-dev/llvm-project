@@ -1,13 +1,13 @@
 //===-- Reproducer.cpp ------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Utility/Reproducer.h"
+#include "lldb/Utility/LLDBAssert.h"
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Threading.h"
@@ -18,8 +18,46 @@ using namespace lldb_private::repro;
 using namespace llvm;
 using namespace llvm::yaml;
 
-Reproducer &Reproducer::Instance() {
-  static Reproducer g_reproducer;
+Reproducer &Reproducer::Instance() { return *InstanceImpl(); }
+
+llvm::Error Reproducer::Initialize(ReproducerMode mode,
+                                   llvm::Optional<FileSpec> root) {
+  lldbassert(!InstanceImpl() && "Already initialized.");
+  InstanceImpl().emplace();
+
+  switch (mode) {
+  case ReproducerMode::Capture: {
+    if (!root) {
+      SmallString<128> repro_dir;
+      auto ec = sys::fs::createUniqueDirectory("reproducer", repro_dir);
+      if (ec)
+        return make_error<StringError>(
+            "unable to create unique reproducer directory", ec);
+      root.emplace(repro_dir);
+    } else {
+      auto ec = sys::fs::create_directory(root->GetPath());
+      if (ec)
+        return make_error<StringError>("unable to create reproducer directory",
+                                       ec);
+    }
+    return Instance().SetCapture(root);
+  } break;
+  case ReproducerMode::Replay:
+    return Instance().SetReplay(root);
+  case ReproducerMode::Off:
+    break;
+  };
+
+  return Error::success();
+}
+
+void Reproducer::Terminate() {
+  lldbassert(InstanceImpl() && "Already terminated.");
+  InstanceImpl().reset();
+}
+
+Optional<Reproducer> &Reproducer::InstanceImpl() {
+  static Optional<Reproducer> g_reproducer;
   return g_reproducer;
 }
 
@@ -59,11 +97,12 @@ llvm::Error Reproducer::SetCapture(llvm::Optional<FileSpec> root) {
         "cannot generate a reproducer when replay one",
         inconvertibleErrorCode());
 
-  if (root)
-    m_generator.emplace(*root);
-  else
+  if (!root) {
     m_generator.reset();
+    return Error::success();
+  }
 
+  m_generator.emplace(*root);
   return Error::success();
 }
 
@@ -75,13 +114,14 @@ llvm::Error Reproducer::SetReplay(llvm::Optional<FileSpec> root) {
         "cannot replay a reproducer when generating one",
         inconvertibleErrorCode());
 
-  if (root) {
-    m_loader.emplace(*root);
-    if (auto e = m_loader->LoadIndex())
-      return e;
-  } else {
+  if (!root) {
     m_loader.reset();
+    return Error::success();
   }
+
+  m_loader.emplace(*root);
+  if (auto e = m_loader->LoadIndex())
+    return e;
 
   return Error::success();
 }
@@ -137,10 +177,13 @@ void Generator::AddProvidersToIndex() {
                                                 sys::fs::OpenFlags::F_None);
   yaml::Output yout(*strm);
 
+  std::vector<std::string> files;
+  files.reserve(m_providers.size());
   for (auto &provider : m_providers) {
-    auto &provider_info = provider.second->GetInfo();
-    yout << const_cast<ProviderInfo &>(provider_info);
+    files.emplace_back(provider.second->GetFile());
   }
+
+  yout << files;
 }
 
 Loader::Loader(const FileSpec &root) : m_root(root), m_loaded(false) {}
@@ -153,32 +196,30 @@ llvm::Error Loader::LoadIndex() {
 
   auto error_or_file = MemoryBuffer::getFile(index.GetPath());
   if (auto err = error_or_file.getError())
-    return errorCodeToError(err);
+    return make_error<StringError>("unable to load reproducer index", err);
 
-  std::vector<ProviderInfo> provider_info;
   yaml::Input yin((*error_or_file)->getBuffer());
-  yin >> provider_info;
-
+  yin >> m_files;
   if (auto err = yin.error())
-    return errorCodeToError(err);
+    return make_error<StringError>("unable to read reproducer index", err);
 
-  for (auto &info : provider_info)
-    m_provider_info[info.name] = info;
+  // Sort files to speed up search.
+  llvm::sort(m_files);
 
+  // Remember that we've loaded the index.
   m_loaded = true;
 
   return llvm::Error::success();
 }
 
-llvm::Optional<ProviderInfo> Loader::GetProviderInfo(StringRef name) {
+bool Loader::HasFile(StringRef file) {
   assert(m_loaded);
-
-  auto it = m_provider_info.find(name);
-  if (it == m_provider_info.end())
-    return llvm::None;
-
-  return it->second;
+  auto it = std::lower_bound(m_files.begin(), m_files.end(), file.str());
+  return (it != m_files.end()) && (*it == file);
 }
 
 void ProviderBase::anchor() {}
 char ProviderBase::ID = 0;
+char FileProvider::ID = 0;
+const char *FileInfo::name = "files";
+const char *FileInfo::file = "files.yaml";

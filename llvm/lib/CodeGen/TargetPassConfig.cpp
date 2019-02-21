@@ -1,9 +1,8 @@
 //===- TargetPassConfig.cpp - Target independent code generation passes ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -345,11 +344,39 @@ static AnalysisID getPassIDFromName(StringRef PassName) {
   return PI ? PI->getTypeInfo() : nullptr;
 }
 
+static std::pair<StringRef, unsigned>
+getPassNameAndInstanceNum(StringRef PassName) {
+  StringRef Name, InstanceNumStr;
+  std::tie(Name, InstanceNumStr) = PassName.split(',');
+
+  unsigned InstanceNum = 0;
+  if (!InstanceNumStr.empty() && InstanceNumStr.getAsInteger(10, InstanceNum))
+    report_fatal_error("invalid pass instance specifier " + PassName);
+
+  return std::make_pair(Name, InstanceNum);
+}
+
 void TargetPassConfig::setStartStopPasses() {
-  StartBefore = getPassIDFromName(StartBeforeOpt);
-  StartAfter = getPassIDFromName(StartAfterOpt);
-  StopBefore = getPassIDFromName(StopBeforeOpt);
-  StopAfter = getPassIDFromName(StopAfterOpt);
+  StringRef StartBeforeName;
+  std::tie(StartBeforeName, StartBeforeInstanceNum) =
+    getPassNameAndInstanceNum(StartBeforeOpt);
+
+  StringRef StartAfterName;
+  std::tie(StartAfterName, StartAfterInstanceNum) =
+    getPassNameAndInstanceNum(StartAfterOpt);
+
+  StringRef StopBeforeName;
+  std::tie(StopBeforeName, StopBeforeInstanceNum)
+    = getPassNameAndInstanceNum(StopBeforeOpt);
+
+  StringRef StopAfterName;
+  std::tie(StopAfterName, StopAfterInstanceNum)
+    = getPassNameAndInstanceNum(StopAfterOpt);
+
+  StartBefore = getPassIDFromName(StartBeforeName);
+  StartAfter = getPassIDFromName(StartAfterName);
+  StopBefore = getPassIDFromName(StopBeforeName);
+  StopAfter = getPassIDFromName(StopAfterName);
   if (StartBefore && StartAfter)
     report_fatal_error(Twine(StartBeforeOptName) + Twine(" and ") +
                        Twine(StartAfterOptName) + Twine(" specified!"));
@@ -493,9 +520,9 @@ void TargetPassConfig::addPass(Pass *P, bool verifyAfter, bool printAfter) {
   // and shouldn't reference it.
   AnalysisID PassID = P->getPassID();
 
-  if (StartBefore == PassID)
+  if (StartBefore == PassID && StartBeforeCount++ == StartBeforeInstanceNum)
     Started = true;
-  if (StopBefore == PassID)
+  if (StopBefore == PassID && StopBeforeCount++ == StopBeforeInstanceNum)
     Stopped = true;
   if (Started && !Stopped) {
     std::string Banner;
@@ -518,9 +545,11 @@ void TargetPassConfig::addPass(Pass *P, bool verifyAfter, bool printAfter) {
   } else {
     delete P;
   }
-  if (StopAfter == PassID)
+
+  if (StopAfter == PassID && StopAfterCount++ == StopAfterInstanceNum)
     Stopped = true;
-  if (StartAfter == PassID)
+
+  if (StartAfter == PassID && StartAfterCount++ == StartAfterInstanceNum)
     Started = true;
   if (Stopped && !Started)
     report_fatal_error("Cannot stop compilation after pass that is not run");
@@ -725,22 +754,33 @@ void TargetPassConfig::addISelPrepare() {
 bool TargetPassConfig::addCoreISelPasses() {
   // Enable FastISel with -fast-isel, but allow that to be overridden.
   TM->setO0WantsFastISel(EnableFastISelOption != cl::BOU_FALSE);
-  if (EnableFastISelOption == cl::BOU_TRUE ||
-      (TM->getOptLevel() == CodeGenOpt::None && TM->getO0WantsFastISel() &&
-       !TM->Options.EnableGlobalISel)) {
+
+  // Determine an instruction selector.
+  enum class SelectorType { SelectionDAG, FastISel, GlobalISel };
+  SelectorType Selector;
+
+  if (EnableFastISelOption == cl::BOU_TRUE)
+    Selector = SelectorType::FastISel;
+  else if (EnableGlobalISelOption == cl::BOU_TRUE ||
+           (TM->Options.EnableGlobalISel &&
+            EnableGlobalISelOption != cl::BOU_FALSE))
+    Selector = SelectorType::GlobalISel;
+  else if (TM->getOptLevel() == CodeGenOpt::None && TM->getO0WantsFastISel())
+    Selector = SelectorType::FastISel;
+  else
+    Selector = SelectorType::SelectionDAG;
+
+  // Set consistently TM->Options.EnableFastISel and EnableGlobalISel.
+  if (Selector == SelectorType::FastISel) {
     TM->setFastISel(true);
     TM->setGlobalISel(false);
+  } else if (Selector == SelectorType::GlobalISel) {
+    TM->setFastISel(false);
+    TM->setGlobalISel(true);
   }
 
-  // Ask the target for an instruction selector.
-  // Explicitly enabling fast-isel should override implicitly enabled
-  // global-isel.
-  if (EnableGlobalISelOption == cl::BOU_TRUE ||
-      (EnableGlobalISelOption == cl::BOU_UNSET &&
-       TM->Options.EnableGlobalISel && EnableFastISelOption != cl::BOU_TRUE)) {
-    TM->setGlobalISel(true);
-    TM->setFastISel(false);
-
+  // Add instruction selector passes.
+  if (Selector == SelectorType::GlobalISel) {
     SaveAndRestore<bool> SavedAddingMachinePasses(AddingMachinePasses, true);
     if (addIRTranslator())
       return true;
@@ -1179,4 +1219,8 @@ bool TargetPassConfig::isGlobalISelAbortEnabled() const {
 
 bool TargetPassConfig::reportDiagnosticWhenGlobalISelFallback() const {
   return TM->Options.GlobalISelAbort == GlobalISelAbortMode::DisableWithDiag;
+}
+
+bool TargetPassConfig::isGISelCSEEnabled() const {
+  return getOptLevel() != CodeGenOpt::Level::None;
 }

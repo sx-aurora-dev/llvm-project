@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,17 +31,17 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_BARRIER)(void) {
   MKLOC(loc, "GOMP_barrier");
   KA_TRACE(20, ("GOMP_barrier: T#%d\n", gtid));
 #if OMPT_SUPPORT && OMPT_OPTIONAL
-  omp_frame_t *ompt_frame;
+  ompt_frame_t *ompt_frame;
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    ompt_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
   __kmpc_barrier(&loc, gtid);
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.enabled) {
-    ompt_frame->enter_frame = NULL;
+    ompt_frame->enter_frame = ompt_data_none;
   }
 #endif
 }
@@ -120,6 +119,10 @@ int KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SINGLE_START)(void) {
   if (!TCR_4(__kmp_init_parallel))
     __kmp_parallel_initialize();
 
+#if OMP_50_ENABLED
+  __kmp_resume_if_soft_paused();
+#endif
+
   // 3rd parameter == FALSE prevents kmp_enter_single from pushing a
   // workshare when USE_CHECKS is defined.  We need to avoid the push,
   // as there is no corresponding GOMP_single_end() call.
@@ -168,6 +171,10 @@ void *KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SINGLE_COPY_START)(void) {
   if (!TCR_4(__kmp_init_parallel))
     __kmp_parallel_initialize();
 
+#if OMP_50_ENABLED
+  __kmp_resume_if_soft_paused();
+#endif
+
   // If this is the first thread to enter, return NULL.  The generated code will
   // then call GOMP_single_copy_end() for this thread only, with the
   // copyprivate data pointer as an argument.
@@ -178,10 +185,10 @@ void *KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SINGLE_COPY_START)(void) {
 // and for all other threads to reach this point.
 
 #if OMPT_SUPPORT && OMPT_OPTIONAL
-  omp_frame_t *ompt_frame;
+  ompt_frame_t *ompt_frame;
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    ompt_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
@@ -198,7 +205,7 @@ void *KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SINGLE_COPY_START)(void) {
   __kmp_barrier(bs_plain_barrier, gtid, FALSE, 0, NULL, NULL);
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.enabled) {
-    ompt_frame->enter_frame = NULL;
+    ompt_frame->enter_frame = ompt_data_none;
   }
 #endif
   return retval;
@@ -214,10 +221,10 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SINGLE_COPY_END)(void *data) {
   // propagated to all threads before trying to reuse the t_copypriv_data field.
   __kmp_team_from_gtid(gtid)->t.t_copypriv_data = data;
 #if OMPT_SUPPORT && OMPT_OPTIONAL
-  omp_frame_t *ompt_frame;
+  ompt_frame_t *ompt_frame;
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    ompt_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
@@ -230,7 +237,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SINGLE_COPY_END)(void *data) {
   __kmp_barrier(bs_plain_barrier, gtid, FALSE, 0, NULL, NULL);
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.enabled) {
-    ompt_frame->enter_frame = NULL;
+    ompt_frame->enter_frame = ompt_data_none;
   }
 #endif
 }
@@ -284,8 +291,8 @@ static
                                  void *data) {
 #if OMPT_SUPPORT
   kmp_info_t *thr;
-  omp_frame_t *ompt_frame;
-  omp_state_t enclosing_state;
+  ompt_frame_t *ompt_frame;
+  ompt_state_t enclosing_state;
 
   if (ompt_enabled.enabled) {
     // get pointer to thread data structure
@@ -293,11 +300,11 @@ static
 
     // save enclosing task state; set current state for task
     enclosing_state = thr->th.ompt_thread_info.state;
-    thr->th.ompt_thread_info.state = omp_state_work_parallel;
+    thr->th.ompt_thread_info.state = ompt_state_work_parallel;
 
     // set task frame
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->exit_frame = OMPT_GET_FRAME_ADDRESS(0);
+    ompt_frame->exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
   }
 #endif
 
@@ -306,7 +313,7 @@ static
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
     // clear task frame
-    ompt_frame->exit_frame = NULL;
+    ompt_frame->exit_frame = ompt_data_none;
 
     // restore enclosing state
     thr->th.ompt_thread_info.state = enclosing_state;
@@ -331,18 +338,18 @@ static
 
 #if OMPT_SUPPORT
   kmp_info_t *thr;
-  omp_frame_t *ompt_frame;
-  omp_state_t enclosing_state;
+  ompt_frame_t *ompt_frame;
+  ompt_state_t enclosing_state;
 
   if (ompt_enabled.enabled) {
     thr = __kmp_threads[*gtid];
     // save enclosing task state; set current state for task
     enclosing_state = thr->th.ompt_thread_info.state;
-    thr->th.ompt_thread_info.state = omp_state_work_parallel;
+    thr->th.ompt_thread_info.state = ompt_state_work_parallel;
 
     // set task frame
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->exit_frame = OMPT_GET_FRAME_ADDRESS(0);
+    ompt_frame->exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
   }
 #endif
 
@@ -352,7 +359,7 @@ static
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
     // clear task frame
-    ompt_frame->exit_frame = NULL;
+    ompt_frame->exit_frame = ompt_data_none;
 
     // reset enclosing state
     thr->th.ompt_thread_info.state = enclosing_state;
@@ -400,10 +407,10 @@ static
       ompt_team_size = __kmp_team_from_gtid(gtid)->t.t_nproc;
       ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
           ompt_scope_begin, &(team_info->parallel_data),
-          &(task_info->task_data), ompt_team_size, __kmp_tid_from_gtid(gtid));
+          &(task_info->task_data), ompt_team_size, __kmp_tid_from_gtid(gtid), ompt_task_implicit); // TODO: Can this be ompt_task_initial?
       task_info->thread_num = __kmp_tid_from_gtid(gtid);
     }
-    thr->th.ompt_thread_info.state = omp_state_work_parallel;
+    thr->th.ompt_thread_info.state = ompt_state_work_parallel;
   }
 #endif
 }
@@ -422,11 +429,11 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL_START)(void (*task)(void *),
   int gtid = __kmp_entry_gtid();
 
 #if OMPT_SUPPORT
-  omp_frame_t *parent_frame, *frame;
+  ompt_frame_t *parent_frame, *frame;
 
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &parent_frame, NULL, NULL);
-    parent_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    parent_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
@@ -448,7 +455,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL_START)(void (*task)(void *),
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &frame, NULL, NULL);
-    frame->exit_frame = OMPT_GET_FRAME_ADDRESS(1);
+    frame->exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
   }
 #endif
 }
@@ -471,7 +478,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL_END)(void) {
       // Implicit task is finished here, in the barrier we might schedule
       // deferred tasks,
       // these don't see the implicit task on the stack
-      OMPT_CUR_TASK_INFO(thr)->frame.exit_frame = NULL;
+      OMPT_CUR_TASK_INFO(thr)->frame.exit_frame = ompt_data_none;
     }
 #endif
 
@@ -764,17 +771,17 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_LOOP_END)(void) {
   KA_TRACE(20, ("GOMP_loop_end: T#%d\n", gtid))
 
 #if OMPT_SUPPORT && OMPT_OPTIONAL
-  omp_frame_t *ompt_frame;
+  ompt_frame_t *ompt_frame;
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    ompt_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
   __kmp_barrier(bs_plain_barrier, gtid, FALSE, 0, NULL, NULL);
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.enabled) {
-    ompt_frame->enter_frame = NULL;
+    ompt_frame->enter_frame = ompt_data_none;
   }
 #endif
 
@@ -1075,16 +1082,16 @@ LOOP_DOACROSS_RUNTIME_START_ULL(
 #if OMPT_SUPPORT && OMPT_OPTIONAL
 
 #define OMPT_LOOP_PRE()                                                        \
-  omp_frame_t *parent_frame;                                                   \
+  ompt_frame_t *parent_frame;                                                  \
   if (ompt_enabled.enabled) {                                                  \
     __ompt_get_task_info_internal(0, NULL, NULL, &parent_frame, NULL, NULL);   \
-    parent_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);                     \
+    parent_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);                 \
     OMPT_STORE_RETURN_ADDRESS(gtid);                                           \
   }
 
 #define OMPT_LOOP_POST()                                                       \
   if (ompt_enabled.enabled) {                                                  \
-    parent_frame->enter_frame = NULL;                                          \
+    parent_frame->enter_frame = ompt_data_none;                                \
   }
 
 #else
@@ -1164,7 +1171,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_TASK)(void (*func)(void *), void *data,
   if (ompt_enabled.enabled) {
     OMPT_STORE_RETURN_ADDRESS(gtid);
     current_task = __kmp_threads[gtid]->th.th_current_task;
-    current_task->ompt_task_info.frame.enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    current_task->ompt_task_info.frame.enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
   }
 #endif
 
@@ -1198,8 +1205,8 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_TASK)(void (*func)(void *), void *data,
       taskdata = KMP_TASK_TO_TASKDATA(task);
       oldInfo = thread->th.ompt_thread_info;
       thread->th.ompt_thread_info.wait_id = 0;
-      thread->th.ompt_thread_info.state = omp_state_work_parallel;
-      taskdata->ompt_task_info.frame.exit_frame = OMPT_GET_FRAME_ADDRESS(0);
+      thread->th.ompt_thread_info.state = ompt_state_work_parallel;
+      taskdata->ompt_task_info.frame.exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
       OMPT_STORE_RETURN_ADDRESS(gtid);
     }
 #endif
@@ -1211,13 +1218,13 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_TASK)(void (*func)(void *), void *data,
 #if OMPT_SUPPORT
     if (ompt_enabled.enabled) {
       thread->th.ompt_thread_info = oldInfo;
-      taskdata->ompt_task_info.frame.exit_frame = NULL;
+      taskdata->ompt_task_info.frame.exit_frame = ompt_data_none;
     }
 #endif
   }
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
-    current_task->ompt_task_info.frame.enter_frame = NULL;
+    current_task->ompt_task_info.frame.enter_frame = ompt_data_none;
   }
 #endif
 
@@ -1302,11 +1309,11 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL_SECTIONS_START)(
   int gtid = __kmp_entry_gtid();
 
 #if OMPT_SUPPORT
-  omp_frame_t *parent_frame;
+  ompt_frame_t *parent_frame;
 
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &parent_frame, NULL, NULL);
-    parent_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    parent_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
@@ -1328,7 +1335,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL_SECTIONS_START)(
 
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
-    parent_frame->enter_frame = NULL;
+    parent_frame->enter_frame = ompt_data_none;
   }
 #endif
 
@@ -1342,17 +1349,17 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_SECTIONS_END)(void) {
   KA_TRACE(20, ("GOMP_sections_end: T#%d\n", gtid))
 
 #if OMPT_SUPPORT
-  omp_frame_t *ompt_frame;
+  ompt_frame_t *ompt_frame;
   if (ompt_enabled.enabled) {
     __ompt_get_task_info_internal(0, NULL, NULL, &ompt_frame, NULL, NULL);
-    ompt_frame->enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    ompt_frame->enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
   __kmp_barrier(bs_plain_barrier, gtid, FALSE, 0, NULL, NULL);
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
-    ompt_frame->enter_frame = NULL;
+    ompt_frame->enter_frame = ompt_data_none;
   }
 #endif
 
@@ -1383,7 +1390,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL)(void (*task)(void *),
   ompt_task_info_t *parent_task_info, *task_info;
   if (ompt_enabled.enabled) {
     parent_task_info = __ompt_get_task_info_object(0);
-    parent_task_info->frame.enter_frame = OMPT_GET_FRAME_ADDRESS(1);
+    parent_task_info->frame.enter_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
     OMPT_STORE_RETURN_ADDRESS(gtid);
   }
 #endif
@@ -1403,7 +1410,7 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL)(void (*task)(void *),
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
     task_info = __ompt_get_task_info_object(0);
-    task_info->frame.exit_frame = OMPT_GET_FRAME_ADDRESS(0);
+    task_info->frame.exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
   }
 #endif
   task(data);
@@ -1415,8 +1422,8 @@ void KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL)(void (*task)(void *),
   KMP_EXPAND_NAME(KMP_API_NAME_GOMP_PARALLEL_END)();
 #if OMPT_SUPPORT
   if (ompt_enabled.enabled) {
-    task_info->frame.exit_frame = NULL;
-    parent_task_info->frame.enter_frame = NULL;
+    task_info->frame.exit_frame = ompt_data_none;
+    parent_task_info->frame.enter_frame = ompt_data_none;
   }
 #endif
 }

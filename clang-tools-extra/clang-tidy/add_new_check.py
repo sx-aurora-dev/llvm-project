@@ -2,10 +2,9 @@
 #
 #===- add_new_check.py - clang-tidy check generator ----------*- python -*--===#
 #
-#                     The LLVM Compiler Infrastructure
-#
-# This file is distributed under the University of Illinois Open Source
-# License. See LICENSE.TXT for details.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
 #===------------------------------------------------------------------------===#
 
@@ -61,10 +60,9 @@ def write_header(module_path, module, check_name, check_name_camel):
     f.write('*- C++ -*-===//')
     f.write("""
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -112,10 +110,9 @@ def write_implementation(module_path, module, check_name_camel):
     f.write('-===//')
     f.write("""
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -200,23 +197,47 @@ def add_release_notes(module_path, module, check_name):
   with open(filename, 'r') as f:
     lines = f.readlines()
 
+  lineMatcher = re.compile('Improvements to clang-tidy')
+  nextSectionMatcher = re.compile('Improvements to include-fixer')
+  checkerMatcher = re.compile('- New :doc:`(.*)')
+
   print('Updating %s...' % filename)
   with open(filename, 'w') as f:
     note_added = False
     header_found = False
+    next_header_found = False
+    add_note_here = False
 
     for line in lines:
       if not note_added:
-        match = re.search('Improvements to clang-tidy', line)
+        match = lineMatcher.match(line)
+        match_next = nextSectionMatcher.match(line)
+        match_checker = checkerMatcher.match(line)
+        if match_checker:
+          last_checker = match_checker.group(1)
+          if last_checker > check_name_dashes:
+            add_note_here = True
+
+        if match_next:
+          next_header_found = True
+          add_note_here = True
+
         if match:
           header_found = True
-        elif header_found:
+          f.write(line)
+          continue
+
+        if line.startswith('----'):
+          f.write(line)
+          continue
+
+        if header_found and add_note_here:
           if not line.startswith('----'):
-            f.write("""
-- New :doc:`%s
+            f.write("""- New :doc:`%s
   <clang-tidy/checks/%s>` check.
 
   FIXME: add release notes.
+
 """ % (check_name_dashes, check_name_dashes))
             note_added = True
 

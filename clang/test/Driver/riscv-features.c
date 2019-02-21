@@ -1,5 +1,3 @@
-// REQUIRES: riscv-registered-target
-
 // RUN: %clang -target riscv32-unknown-elf -### %s -fsyntax-only 2>&1 | FileCheck %s
 // RUN: %clang -target riscv64-unknown-elf -### %s -fsyntax-only 2>&1 | FileCheck %s
 
@@ -11,5 +9,5 @@
 
 // RELAX: "-target-feature" "+relax"
 // NO-RELAX: "-target-feature" "-relax"
-// DEFAULT-NOT: "-target-feature" "+relax"
+// DEFAULT: "-target-feature" "+relax"
 // DEFAULT-NOT: "-target-feature" "-relax"
