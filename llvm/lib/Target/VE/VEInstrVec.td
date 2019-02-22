@@ -1421,6 +1421,7 @@ class VMR1VL<bits<8> op, string asm>
     let DisableEncoding = "$vl";
 }
 
+let hasSideEffects = 0 in {
 def ANDM : VMR3<0x84, "andm">;
 def ORM :  VMR3<0x85, "orm">;
 def XORM : VMR3<0x86, "xorm">;
@@ -1437,6 +1438,7 @@ def XORMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def EQVMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def NNDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
+}
 
 // 5.3.2.16. Vector Control Instructions
 // SVL
