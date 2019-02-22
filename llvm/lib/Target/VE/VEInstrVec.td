@@ -1315,11 +1315,13 @@ multiclass VGTCm<string opcStr, bits<8> opc> {
               !strconcat(opcStr, " $vx,$vy,0,0"), []> {
     let cs = 0;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def r : RVM<opc, (outs V64:$vx), (ins I64:$sw, VLS:$vl),
               !strconcat(opcStr, " $vx,$sw,0,0"), []> {
     let cs = 1;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
@@ -1327,6 +1329,7 @@ multiclass VGTCm<string opcStr, bits<8> opc> {
     let cs = 0;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
@@ -1334,6 +1337,7 @@ multiclass VGTCm<string opcStr, bits<8> opc> {
     let cs = 1;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
@@ -1347,11 +1351,13 @@ multiclass VSCCm<string opcStr, bits<8> opc> {
               !strconcat(opcStr, " $vx,$vy,0,0"), []> {
     let cs = 0;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VLS:$vl),
               !strconcat(opcStr, " $vx,$sw,0,0"), []> {
     let cs = 1;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
@@ -1359,6 +1365,7 @@ multiclass VSCCm<string opcStr, bits<8> opc> {
     let cs = 0;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
@@ -1366,6 +1373,7 @@ multiclass VSCCm<string opcStr, bits<8> opc> {
     let cs = 1;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
@@ -1413,6 +1421,7 @@ class VMR1VL<bits<8> op, string asm>
     let DisableEncoding = "$vl";
 }
 
+let hasSideEffects = 0 in {
 def ANDM : VMR3<0x84, "andm">;
 def ORM :  VMR3<0x85, "orm">;
 def XORM : VMR3<0x86, "xorm">;
@@ -1429,20 +1438,22 @@ def XORMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def EQVMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def NNDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
+}
 
 // 5.3.2.16. Vector Control Instructions
 // SVL
 // SMVL
 // LVIX
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl" in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
 def LVL : RR<0xBF, (outs VLS:$vl), (ins I32:$sy), "lvl $sy", []>;
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl" in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
 def SVL : RR<0x2F, (outs I32:$sx), (ins VLS:$vl), "svl $sx", []>;
 
 // Pseudo instructions for bitconvert
 
+let hasSideEffects = 0 in {
 def VM2V : Pseudo<(outs V64:$vx), (ins VM:$vmy),
   "# vm2v $vx,$vmy", []>;
 
@@ -1454,4 +1465,5 @@ def V2VM : Pseudo<(outs VM:$vmx), (ins V64:$vy),
 
 def V2VMP : Pseudo<(outs VM512:$vmx), (ins V64:$vy),
   "# v2vmp $vmx,$vy", []>;
+}
 

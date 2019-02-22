@@ -207,65 +207,33 @@ define void @VM512V64_test2(i32) {
 ; ENABLE-NEXT:      pvadds %v0,%v0,%v0,%vm2
 ; ENABLE-NEXT:      vstl %v0,4,%s34
 ; DISABLE-LABEL:  VM512V64_test2:
-; DISABLE:        .LBB{{[0-9]+}}_4:
+; DISABLE:        .LBB{{[0-9]+}}_5:
 ; DISABLE-NEXT:     lea.sl %s34, pIn@hi
 ; DISABLE-NEXT:     ld %s34, pIn@lo(,%s34)
 ; DISABLE-NEXT:     vldu %v0,4,%s34
 ; DISABLE-NEXT:     vfmk.s.eq %vm2,%v0
 ; DISABLE-NEXT:     pvfmk.s.lo.eq %vm3,%v0
-; DISABLE-NEXT:     svm %s16,%vm2,0
-; DISABLE-NEXT:     lsv %v1(0),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,1
-; DISABLE-NEXT:     lsv %v1(1),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,2
-; DISABLE-NEXT:     lsv %v1(2),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,3
-; DISABLE-NEXT:     lsv %v1(3),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,0
-; DISABLE-NEXT:     lsv %v1(4),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,1
-; DISABLE-NEXT:     lsv %v1(5),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,2
-; DISABLE-NEXT:     lsv %v1(6),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,3
-; DISABLE-NEXT:     lsv %v1(7),%s16
-; DISABLE-NEXT:     nndm %vm2,%vm2,%vm2
-; DISABLE-NEXT:     nndm %vm3,%vm3,%vm3
+; DISABLE-NEXT:     nndm %vm4,%vm2,%vm2
+; DISABLE-NEXT:     nndm %vm5,%vm3,%vm3
 ; DISABLE-NEXT:     or %s35, 1, (0)1
-; DISABLE-NEXT:     svm %s16,%vm2,0
-; DISABLE-NEXT:     lsv %v2(0),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,1
-; DISABLE-NEXT:     lsv %v2(1),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,2
-; DISABLE-NEXT:     lsv %v2(2),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,3
-; DISABLE-NEXT:     lsv %v2(3),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,0
-; DISABLE-NEXT:     lsv %v2(4),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,1
-; DISABLE-NEXT:     lsv %v2(5),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,2
-; DISABLE-NEXT:     lsv %v2(6),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,3
-; DISABLE-NEXT:     lsv %v2(7),%s16
-; DISABLE-NEXT:     brlt.w %s0, %s35, .LBB3_2
-; DISABLE:        .LBB{{[0-9]+}}_1:
-; DISABLE-NEXT:     lvs %s16,%v2(0)
-; DISABLE-NEXT:     lvm %vm2,0,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(1)
-; DISABLE-NEXT:     lvm %vm2,1,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(2)
-; DISABLE-NEXT:     lvm %vm2,2,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(3)
-; DISABLE-NEXT:     lvm %vm2,3,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(4)
-; DISABLE-NEXT:     lvm %vm3,0,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(5)
-; DISABLE-NEXT:     lvm %vm3,1,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(6)
-; DISABLE-NEXT:     lvm %vm3,2,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(7)
-; DISABLE-NEXT:     lvm %vm3,3,%s16
+; DISABLE-NEXT:     svm %s16,%vm4,0
+; DISABLE-NEXT:     lsv %v1(0),%s16
+; DISABLE-NEXT:     svm %s16,%vm4,1
+; DISABLE-NEXT:     lsv %v1(1),%s16
+; DISABLE-NEXT:     svm %s16,%vm4,2
+; DISABLE-NEXT:     lsv %v1(2),%s16
+; DISABLE-NEXT:     svm %s16,%vm4,3
+; DISABLE-NEXT:     lsv %v1(3),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,0
+; DISABLE-NEXT:     lsv %v1(4),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,1
+; DISABLE-NEXT:     lsv %v1(5),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,2
+; DISABLE-NEXT:     lsv %v1(6),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,3
+; DISABLE-NEXT:     lsv %v1(7),%s16
+; DISABLE-NEXT:     brlt.w %s0, %s35, .LBB{{[0-9]+}}_3
+; DISABLE:        .LBB{{[0-9]+}}_2:
 ; DISABLE-NEXT:     lvs %s16,%v1(0)
 ; DISABLE-NEXT:     lvm %vm4,0,%s16
 ; DISABLE-NEXT:     lvs %s16,%v1(1)
@@ -282,41 +250,41 @@ define void @VM512V64_test2(i32) {
 ; DISABLE-NEXT:     lvm %vm5,2,%s16
 ; DISABLE-NEXT:     lvs %s16,%v1(7)
 ; DISABLE-NEXT:     lvm %vm5,3,%s16
-; DISABLE-NEXT:     nndm %vm2,%vm4,%vm2
-; DISABLE-NEXT:     nndm %vm3,%vm5,%vm3
-; DISABLE-NEXT:     svm %s16,%vm2,0
-; DISABLE-NEXT:     lsv %v2(0),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,1
-; DISABLE-NEXT:     lsv %v2(1),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,2
-; DISABLE-NEXT:     lsv %v2(2),%s16
-; DISABLE-NEXT:     svm %s16,%vm2,3
-; DISABLE-NEXT:     lsv %v2(3),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,0
-; DISABLE-NEXT:     lsv %v2(4),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,1
-; DISABLE-NEXT:     lsv %v2(5),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,2
-; DISABLE-NEXT:     lsv %v2(6),%s16
-; DISABLE-NEXT:     svm %s16,%vm3,3
-; DISABLE-NEXT:     lsv %v2(7),%s16
-; DISABLE-NEXT:     brlt.w %s0, %s35, .LBB3_1
-; DISABLE:        .LBB{{[0-9]+}}_2:
-; DISABLE-NEXT:     lvs %s16,%v2(0)
+; DISABLE-NEXT:     nndm %vm4,%vm2,%vm4
+; DISABLE-NEXT:     nndm %vm5,%vm3,%vm5
+; DISABLE-NEXT:     svm %s16,%vm4,0
+; DISABLE-NEXT:     lsv %v1(0),%s16
+; DISABLE-NEXT:     svm %s16,%vm4,1
+; DISABLE-NEXT:     lsv %v1(1),%s16
+; DISABLE-NEXT:     svm %s16,%vm4,2
+; DISABLE-NEXT:     lsv %v1(2),%s16
+; DISABLE-NEXT:     svm %s16,%vm4,3
+; DISABLE-NEXT:     lsv %v1(3),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,0
+; DISABLE-NEXT:     lsv %v1(4),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,1
+; DISABLE-NEXT:     lsv %v1(5),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,2
+; DISABLE-NEXT:     lsv %v1(6),%s16
+; DISABLE-NEXT:     svm %s16,%vm5,3
+; DISABLE-NEXT:     lsv %v1(7),%s16
+; DISABLE-NEXT:     brlt.w %s0, %s35, .LBB{{[0-9]+}}_2
+; DISABLE:        .LBB{{[0-9]+}}_3:
+; DISABLE-NEXT:     lvs %s16,%v1(0)
 ; DISABLE-NEXT:     lvm %vm2,0,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(1)
+; DISABLE-NEXT:     lvs %s16,%v1(1)
 ; DISABLE-NEXT:     lvm %vm2,1,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(2)
+; DISABLE-NEXT:     lvs %s16,%v1(2)
 ; DISABLE-NEXT:     lvm %vm2,2,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(3)
+; DISABLE-NEXT:     lvs %s16,%v1(3)
 ; DISABLE-NEXT:     lvm %vm2,3,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(4)
+; DISABLE-NEXT:     lvs %s16,%v1(4)
 ; DISABLE-NEXT:     lvm %vm3,0,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(5)
+; DISABLE-NEXT:     lvs %s16,%v1(5)
 ; DISABLE-NEXT:     lvm %vm3,1,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(6)
+; DISABLE-NEXT:     lvs %s16,%v1(6)
 ; DISABLE-NEXT:     lvm %vm3,2,%s16
-; DISABLE-NEXT:     lvs %s16,%v2(7)
+; DISABLE-NEXT:     lvs %s16,%v1(7)
 ; DISABLE-NEXT:     lvm %vm3,3,%s16
 ; DISABLE-NEXT:     pvadds %v0,%v0,%v0,%vm2
 ; DISABLE-NEXT:     vstl %v0,4,%s34
