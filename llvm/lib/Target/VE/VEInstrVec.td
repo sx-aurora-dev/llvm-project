@@ -1445,14 +1445,15 @@ def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 // SMVL
 // LVIX
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl" in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 1 in
 def LVL : RR<0xBF, (outs VLS:$vl), (ins I32:$sy), "lvl $sy", []>;
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl" in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
 def SVL : RR<0x2F, (outs I32:$sx), (ins VLS:$vl), "svl $sx", []>;
 
 // Pseudo instructions for bitconvert
 
+let hasSideEffects = 0 in {
 def VM2V : Pseudo<(outs V64:$vx), (ins VM:$vmy),
   "# vm2v $vx,$vmy", []>;
 
@@ -1464,4 +1465,5 @@ def V2VM : Pseudo<(outs VM:$vmx), (ins V64:$vy),
 
 def V2VMP : Pseudo<(outs VM512:$vmx), (ins V64:$vy),
   "# v2vmp $vmx,$vy", []>;
+}
 
