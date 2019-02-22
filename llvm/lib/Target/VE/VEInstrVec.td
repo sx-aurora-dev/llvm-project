@@ -1315,11 +1315,13 @@ multiclass VGTCm<string opcStr, bits<8> opc> {
               !strconcat(opcStr, " $vx,$vy,0,0"), []> {
     let cs = 0;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def r : RVM<opc, (outs V64:$vx), (ins I64:$sw, VLS:$vl),
               !strconcat(opcStr, " $vx,$sw,0,0"), []> {
     let cs = 1;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RVM<opc, (outs V64:$vx), (ins V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
@@ -1327,6 +1329,7 @@ multiclass VGTCm<string opcStr, bits<8> opc> {
     let cs = 0;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def rm : RVM<opc, (outs V64:$vx), (ins I64:$sw, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
@@ -1334,6 +1337,7 @@ multiclass VGTCm<string opcStr, bits<8> opc> {
     let cs = 1;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
@@ -1347,11 +1351,13 @@ multiclass VSCCm<string opcStr, bits<8> opc> {
               !strconcat(opcStr, " $vx,$vy,0,0"), []> {
     let cs = 0;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def r : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VLS:$vl),
               !strconcat(opcStr, " $vx,$sw,0,0"), []> {
     let cs = 1;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RVM<opc, (outs), (ins V64:$vx, V64:$vy, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$vy,0,0,$vm"), []> {
@@ -1359,6 +1365,7 @@ multiclass VSCCm<string opcStr, bits<8> opc> {
     let cs = 0;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def rm : RVM<opc, (outs), (ins V64:$vx, I64:$sw, VM:$vm, VLS:$vl),
                !strconcat(opcStr, " $vx,$sw,0,0,$vm"), []> {
@@ -1366,6 +1373,7 @@ multiclass VSCCm<string opcStr, bits<8> opc> {
     let cs = 1;
     let m = vm;
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
 }
 
