@@ -1445,7 +1445,7 @@ def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 // SMVL
 // LVIX
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 1 in
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
 def LVL : RR<0xBF, (outs VLS:$vl), (ins I32:$sy), "lvl $sy", []>;
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
