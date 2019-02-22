@@ -3037,8 +3037,12 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
 // Should we expand the build vector with shuffles?
 bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   EVT VT, unsigned DefinedValues) const {
-  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR since it cause
-  // an expansion loop.
+  // FIXME: Change this to true or expression once we implement custom
+  // expansion of VECTOR_SHUFFLE completely.
+
+  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR atm.  Because, it causes
+  // infinity expand loop between both instructions since VECTOR_SHUFFLE
+  // is not implemented completely yet.
   return false;
 }
 
