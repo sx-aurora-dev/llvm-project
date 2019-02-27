@@ -531,6 +531,7 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     case llvm::Triple::ve:
       Path = "/opt/nec/ve/musl/lib/";
       ArchName = "ve";
+      break;
     default:
       ArchName = Triple.getArchName().str();
     }
