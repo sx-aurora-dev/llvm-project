@@ -821,7 +821,6 @@ def PFCHVr : RVM<0x80, (outs), (ins I64:$sy, I64:$sz, VLS:$vl),
                  "pfchv $sy,$sz", []> {
     let cy = 1;
     let cz = 1;
-    let hasSideEffects = 1;
     let DisableEncoding = "$vl";
     let hasSideEffects = 0;
   }
@@ -830,7 +829,6 @@ def PFCHVi : RVM<0x80, (outs), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
                  "pfchv $sy,$sz", []> {
     let cy = 0;
     let cz = 1;
-    let hasSideEffects = 1;
     let DisableEncoding = "$vl";
     let hasSideEffects = 0;
   }
