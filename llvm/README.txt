@@ -11,13 +11,45 @@ Modifications are under the development.  We know following flaws.
 
 Please file issues if you have problems.
 
-Prerequisites
-=============
+Prerequisites to build
+======================
 
- - ncc for VE
+ - gcc 5.1 or above for host
 
-How to compile LLVM for NEC SX-Aurora VE
-========================================
+Prerequisites to use
+====================
+
+LLVM for VE supports only glibc environment.  Please be advised to
+update VE environment if you are using musl environment.
+
+Following packages are required.
+Note that these packages are included in the veos software package,
+or available from <https://sx-aurora.com/repos/veos/common/x86_64/>.
+
+ - binutils-ve
+ - glibc-ve
+ - glibc-ve-devel
+ - kernel-headers-ve
+
+RPM package contents
+====================
+
+We release an RPM package of LLVM for VE.  It contains following pre-compiled
+programs and libraries.
+
+ - clang (C compiler)
+ - clang++ (C++ compiler)
+ - compier-rt library (runtime library)
+ - ve-csu library (crtbeing.o/crtend.o from NetBSD CSU)
+ - libc++ library (for C++)
+ - libc++abi library (for libc++)
+ - libcunwind library (for libc++abi)
+ - openmp library (OpenMP)
+
+Files are installed into /opt/nec/nosupport/llvm-<version> directory.
+
+How to compile LLVM for NEC SX-Aurora VE by hand
+================================================
 
 First, check out llvm, clang, and other libraries like below.
 
@@ -65,7 +97,7 @@ Then, cross-compile it with clang/llvm for VE and install it.
 
     $ cd work/ve-csu
     $ export DEST=$HOME/.local
-    $ make
+    $ make TARGET=ve-linux
     $ make DEST=$DEST/lib/clang/8.0.0/lib/linux/ve install
 
 How to cross-compile Compiler-RT for NEC SX-Aurora VE
@@ -85,8 +117,8 @@ Cross-compile compiler-rt with clang/llvm for VE and install it.
       -DCOMPILER_RT_BUILD_PROFILE=OFF \
       -DBUILD_SHARED_LIBS=ON \
       -DCMAKE_C_COMPILER=$DEST/bin/clang \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux-none" \
-      -DCMAKE_ASM_COMPILER_TARGET="ve-linux-none" \
+      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_ASM_COMPILER_TARGET="ve-linux" \
       -DCMAKE_AR=$DEST/bin/llvm-ar \
       -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
@@ -123,10 +155,10 @@ Cross-compile libunwind with clang/llvm for VE and install it.
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
       -DLIBUNWIND_LIBDIR_SUFFIX=/linux/ve/ \
-      -DCMAKE_CXX_FLAGS="-nostdlib -fsjlj-exceptions" \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
-      -DCMAKE_C_FLAGS="-nostdlib -fsjlj-exceptions" \
-      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_CXX_FLAGS="-nostdlib" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_C_FLAGS="-nostdlib" \
+      -DCMAKE_C_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
       ../llvm/projects/libunwind
     $ ninja-build
     $ ninja-build install
@@ -149,10 +181,10 @@ Cross-compile libcxxabi with clang/llvm for VE and install it.
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
       -DLIBCXXABI_LIBDIR_SUFFIX=/linux/ve/ \
       -DLIBCXXABI_USE_LLVM_UNWINDER=YES \
-      -DCMAKE_CXX_FLAGS="-nostdlib++ -fsjlj-exceptions" \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
-      -DCMAKE_C_FLAGS="-nostdlib++ -fsjlj-exceptions" \
-      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_CXX_FLAGS="-nostdlib++" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_C_FLAGS="-nostdlib++" \
+      -DCMAKE_C_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
       -DLLVM_PATH=../llvm \
       -DLLVM_MAIN_SRC_DIR=../llvm \
       -DLLVM_ENABLE_LIBCXX=True \
@@ -169,7 +201,6 @@ Cross-compile libcxx with clang/llvm for VE and install it.
     $ cd build-libcxx
     $ export DEST=$HOME/.local
     $ cmake3 -G Ninja \
-      -DLIBCXX_HAS_MUSL_LIBC=True \
       -DLIBCXX_USE_COMPILER_RT=True \
       -DLIBCXX_TARGET_TRIPLE="ve-linux" \
       -DCMAKE_C_COMPILER=$DEST/bin/clang \
@@ -182,10 +213,10 @@ Cross-compile libcxx with clang/llvm for VE and install it.
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
       -DLIBCXX_LIBDIR_SUFFIX=/linux/ve/ \
-      -DCMAKE_C_FLAGS="-nostdlib++ -fsjlj-exceptions" \
-      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
-      -DCMAKE_CXX_FLAGS="-nostdlib++ -fsjlj-exceptions" \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_C_FLAGS="-nostdlib++" \
+      -DCMAKE_C_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
+      -DCMAKE_CXX_FLAGS="-nostdlib++" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize" \
       ../llvm/projects/libcxx
     $ ninja-build
     $ ninja-build install
@@ -207,9 +238,9 @@ Cross-compile OpenMP with clang/llvm for VE and install it.
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/8.0.0/ \
       -DOPENMP_LIBDIR_SUFFIX=/linux/ve \
       -DCMAKE_CXX_FLAGS="" \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize -mllvm -combiner-use-vector-store=false" \
+      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize -mllvm -combiner-use-vector-store=false" \
       -DCMAKE_C_FLAGS="" \
-      -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-vectorize -fno-slp-vectorize -mllvm -combiner-use-vector-store=false" \
+      -DCMAKE_C_FLAGS_RELEASE="-O3 -fno-vectorize -fno-slp-vectorize -mllvm -combiner-use-vector-store=false" \
       -DLIBOMP_ARCH="ve" \
       ../llvm/projects/openmp
     $ ninja-build
@@ -219,10 +250,10 @@ Cross-compile OpenMP with clang/llvm for VE and install it.
 How to use clang/llvm for VE
 ============================
 
-Use clang like below.
+Use clang like below.  Clang++ is also available.
 
     $ clang -target ve-linux -O3 -fno-vectorize -fno-slp-vectorize \
-      -fno-crash-diagnostics -c ...
+      -fno-crash-diagnostics ...
 
  - Clang with -O3 may vectorize programs, but llvm backend for VE doesn't
    support vector instructions yet.  So, add "-fno-vectorize 
