@@ -35,7 +35,7 @@ void OmpPragma::printReplacement(llvm::raw_ostream &Out) {
     break;
   }
   default:
-    break;
+    return;
   }
   printClauses(Out);
 }
@@ -151,7 +151,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return false;
     }
   }
-  /*case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute: {
+  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute: {
     switch (Clause->getClauseKind()) {
     // case clang::OpenMPClauseKind::OMPC_map:
     case clang::OpenMPClauseKind::OMPC_default:
@@ -167,7 +167,8 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     default:
       return false;
     }
-  }*/
+  }
+  case clang::OpenMPDirectiveKind::OMPD_teams_distribute_parallel_for:
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
     switch (Clause->getClauseKind()) {
     // case clang::OpenMPClauseKind::OMPC_map:
@@ -189,6 +190,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return false;
     }
   }
+  case clang::OpenMPDirectiveKind::OMPD_teams_distribute_parallel_for_simd:
   case clang::OpenMPDirectiveKind::
       OMPD_target_teams_distribute_parallel_for_simd: {
     switch (Clause->getClauseKind()) {
@@ -215,6 +217,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return false;
     }
   }
+  case clang::OpenMPDirectiveKind::OMPD_teams_distribute_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
     switch (Clause->getClauseKind()) {
     // case clang::OpenMPClauseKind::OMPC_map:
