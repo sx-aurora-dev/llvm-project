@@ -909,6 +909,7 @@ multiclass VSEQm<string opcStr, RegisterClass RegMask> {
   def v : RV<0x99, (outs V64:$vx), (ins VLS:$vl),
              !strconcat(opcStr, " $vx"), []> {
     let DisableEncoding = "$vl";
+    let hasSideEffects = 0;
   }
   def vm : RV<0x99, (outs V64:$vx), (ins RegMask:$vm, VLS:$vl),
              !strconcat(opcStr, " $vx"), []> {
