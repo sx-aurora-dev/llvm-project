@@ -1279,14 +1279,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
       setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
-#if 0
-      // FIXME: temporary disabling LowerSHUFFLE_VECTOR added by
-      // https://github.com/SXAuroraTSUBASAResearch/llvm/pull/2 since
-      // this doesn't work with test-suite/SingleSource/UnitTests/Vector/build.c.
       setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
-#else
-      setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
-#endif
 
       // currently unsupported math functions
       setOperationAction(ISD::FABS,  VT, Expand);
@@ -3044,8 +3037,12 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
 // Should we expand the build vector with shuffles?
 bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   EVT VT, unsigned DefinedValues) const {
-  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR since it cause
-  // an expansion loop.
+  // FIXME: Change this to true or expression once we implement custom
+  // expansion of VECTOR_SHUFFLE completely.
+
+  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR atm.  Because, it causes
+  // infinity expand loop between both instructions since VECTOR_SHUFFLE
+  // is not implemented completely yet.
   return false;
 }
 
@@ -3078,7 +3075,7 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
   return SDValue();
 }
 
-SDValue VETargetLowering::LowerSHUFFLE_VECTOR(SDValue Op, SelectionDAG &DAG) const {
+SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
   SDLoc dl(Op);
   ShuffleVectorSDNode *ShuffleInstr = cast<ShuffleVectorSDNode>(Op.getNode());
@@ -3103,6 +3100,7 @@ SDValue VETargetLowering::LowerSHUFFLE_VECTOR(SDValue Op, SelectionDAG &DAG) con
     }
   }
 
+  // Supports v256 shuffles only atm.
   if (firstVecLength != 256 || secondVecLength != 256 || resultSize != 256) {
     LLVM_DEBUG(dbgs() << "Invalid vector lengths\n");
     return SDValue();
@@ -3274,7 +3272,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   case ISD::BITCAST:            return LowerBitcast(Op, DAG);
 
-  case ISD::VECTOR_SHUFFLE:     return LowerSHUFFLE_VECTOR(Op, DAG);
+  case ISD::VECTOR_SHUFFLE:     return LowerVECTOR_SHUFFLE(Op, DAG);
 
   case ISD::MSCATTER:
   case ISD::MGATHER:            return LowerMGATHER_MSCATTER(Op, DAG);
