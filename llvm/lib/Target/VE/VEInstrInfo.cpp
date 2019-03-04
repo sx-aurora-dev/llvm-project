@@ -727,21 +727,27 @@ static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
     MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower), VMl);
 
     if (hasCond) {
-        Bu = Bu.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
-        Bl = Bl.addImm(MI.getOperand(1).getImm()).addReg(MI.getOperand(2).getReg());
+        unsigned Cond = MI.getOperand(2).getReg();
+        Bu = Bu.addImm(MI.getOperand(1).getImm()).addReg(Cond);
+        Bl = Bl.addImm(MI.getOperand(1).getImm()).addReg(Cond);
+        if (hasMask) {
+            unsigned VMu3 = getVM512Upper(MI.getOperand(3).getReg());
+            unsigned VMl3 = getVM512Lower(MI.getOperand(3).getReg());
+            Bu.addReg(VMu3);
+            Bl.addReg(VMl3);
+            unsigned VL = MI.getOperand(4).getReg();
+            Bu.addReg(VL);
+            Bl.addReg(VL);
+        } else {
+            unsigned VL = MI.getOperand(3).getReg();
+            Bu.addReg(VL);
+            Bl.addReg(VL);
+        }
+    } else {
+        unsigned VL = MI.getOperand(1).getReg();
+        Bu.addReg(VL);
+        Bl.addReg(VL);
     }
-    if (hasMask) {
-        unsigned VMu3 = getVM512Upper(MI.getOperand(3).getReg());
-        unsigned VMl3 = getVM512Lower(MI.getOperand(3).getReg());
-        Bu.addReg(VMu3);
-        Bl.addReg(VMl3);
-    }
-    MachineFunction *MF = MBB->getParent();
-    const VEInstrInfo &TII =
-      *static_cast<const VEInstrInfo *>(MF->getSubtarget().getInstrInfo());
-    unsigned VLReg = TII.getVectorLengthReg(MF);
-    Bu.addReg(VLReg);
-    Bl.addReg(VLReg);
 
     MI.eraseFromParent();
 }
