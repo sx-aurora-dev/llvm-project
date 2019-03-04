@@ -1564,8 +1564,10 @@ def : Pat<(i64 imm:$val),
 // Cast to i1
 // Following patterns are not used by llvm, unfortunately.
 // Need to investigate them later.
-def : Pat<(sext_inreg I32:$src, i1), (AND32rm0 $src, 63)>;
-def : Pat<(sext_inreg i64:$src, i1), (ANDrm0 $src, 63)>;
+def : Pat<(sext_inreg I32:$src, i1),
+          (SRAri (SLAri $src, 31), 31)>;
+def : Pat<(sext_inreg I64:$src, i1),
+          (SRAXri (SLLri $src, 63), 63)>;
 
 // Cast to i8
 def : Pat<(sext_inreg I32:$src, i8),
