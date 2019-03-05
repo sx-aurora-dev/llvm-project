@@ -1,4 +1,4 @@
-
+// RUN: %sotoc-transform-compile
 typedef char data_t;
 typedef int calc_t;
 
