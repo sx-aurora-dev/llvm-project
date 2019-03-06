@@ -37,7 +37,7 @@ bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
     if ((SM.isPointWithin(Frag->getRealRange().getBegin(),
                           F->getRealRange().getBegin(),
                           F->getRealRange().getEnd()) &&
-         Frag->getRealRange().getBegin() != F->getRealRange().getBegin()) ||
+         Frag->getRealRange().getBegin() != F->getRealRange().getBegin()) &&
         SM.isPointWithin(Frag->getRealRange().getEnd(),
                          F->getRealRange().getBegin(),
                          F->getRealRange().getEnd())) {

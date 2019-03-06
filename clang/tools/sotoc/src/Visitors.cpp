@@ -245,22 +245,11 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
   // search Decl attributes for 'omp declare target' attr
   for (auto &attr : D->attrs()) {
     if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
-      auto SystemHeader = getSystemHeaderForDecl(D);
-      if (SystemHeader.hasValue()) {
-        TargetCodeInfo.addHeader(SystemHeader.getValue());
-        return true;
-      }
-
-      auto TCD = std::make_shared<TargetCodeDecl>(D);
-      TargetCodeInfo.addCodeFragment(TCD);
-      DiscoverTypeVisitor.TraverseDecl(D);
+      Functions.addDecl(D);
       if (FD) {
         if (FD->hasBody() && !FD->doesThisDeclarationHaveABody()) {
           FuncDeclWithoutBody.insert(FD->getNameAsString());
         }
-      }
-      if (!D->hasBody() || (FD && !FD->doesThisDeclarationHaveABody())) {
-        TCD->NeedsSemicolon = true;
       }
       return true;
     }

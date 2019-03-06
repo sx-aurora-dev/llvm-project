@@ -98,7 +98,7 @@ void DeclResolver::addDecl(clang::Decl *D) {
 
       // This Decl may have other Decls that is depends on.
       // Add Decl if we haven't already
-      findDependDecls(D, UnresolvedDecls);
+      findDependDecls(ResolveDecl, UnresolvedDecls);
     }
     UnresolvedDecls.erase(ResolveDeclIter);
   }
@@ -111,6 +111,7 @@ void DeclResolver::findDependDecls(
   // compile.
   runOwnVisitor(D, [&D, &UnresolvedDecls, this](clang::Decl *Dep) {
     if (!this->AllDecls.count(Dep)) {
+      DEBUGPDECL(Dep, "Found referred decl: ");
       UnresolvedDecls.insert(Dep);
     }
     // Fix for enums. TODO: find a better way to avoid duplicates
@@ -181,6 +182,7 @@ void TypeDeclResolver::runOwnVisitor(clang::Decl *D,
 
 void FunctionDeclResolver::runOwnVisitor(
     clang::Decl *D, std::function<void(clang::Decl *Dep)> Fn) {
+  DEBUGPDECL(D, "Searching for referred decls in function " );
   DiscoverFunctionsInDeclVisitor Visitor(Fn);
   Visitor.TraverseDecl(D);
 }
