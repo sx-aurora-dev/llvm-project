@@ -14,34 +14,32 @@
 
 #pragma once
 
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/raw_ostream.h"
 
 #ifdef SOTOC_DEBUG
 extern int SotocDebugLevel;
 
-#define DEBUGP(...)                            \
-  do {                                         \
-    if (SotocDebugLevel > 0) {                 \
-      llvm::errs() << "Sotoc: " << __VA_ARGS__;  \
-      llvm::errs() << "\n";                    \
-    }                                          \
+#define DEBUGP(...)                                                            \
+  do {                                                                         \
+    if (SotocDebugLevel > 0) {                                                 \
+      llvm::errs() << "Sotoc: " << __VA_ARGS__;                                \
+      llvm::errs() << "\n";                                                    \
+    }                                                                          \
   } while (false)
 
-#define DEBUGPDECL(decl, ...)                  \
-  do {                                         \
-    if (SotocDebugLevel > 0) {                 \
-      llvm::errs() << "Sotoc: " << llvm::formatv(__VA_ARGS__);  \
-      decl->print(llvm::errs());               \
-      llvm::errs() << "\n";                    \
-    }                                          \
+#define DEBUGPDECL(decl, ...)                                                  \
+  do {                                                                         \
+    if (SotocDebugLevel > 0) {                                                 \
+      llvm::errs() << "Sotoc: " << llvm::formatv(__VA_ARGS__);                 \
+      decl->print(llvm::errs());                                               \
+      llvm::errs() << "\n";                                                    \
+    }                                                                          \
   } while (false)
 
 #else // OMPTARGET_DEBUG
-#define DEBUGP(...)                            \
-    {}
-#define DEBUGPDECL(...)                        \
-    {}
+#define DEBUGP(...)                                                            \
+  {}
+#define DEBUGPDECL(...)                                                        \
+  {}
 #endif // OMPTARGET_DEBUG
-
-

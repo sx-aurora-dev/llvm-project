@@ -26,11 +26,11 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 
+#include "Debug.h"
 #include "DeclResolver.h"
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
-#include "Debug.h"
 
 static bool stmtNeedsSemicolon(const clang::Stmt *S) {
   while (1) {
@@ -119,6 +119,21 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   return true;
 }
 
+class CollectOMPClausesVisitor : public clang::RecursiveASTVisitor<CollectOMPClausesVisitor> {
+  std::shared_ptr<TargetCodeRegion> TCR;
+public:
+  CollectOMPClausesVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
+      :  TCR(TCR) {};
+  bool VisitStmt(clang::Stmt *S) {
+    if (auto *OED = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
+      for (auto *Clause : OED->clauses()) {
+        TCR->addOpenMPClause(Clause);
+      }
+    }
+    return true;
+  };
+};
+
 bool FindTargetCodeVisitor::processTargetRegion(
     clang::OMPExecutableDirective *TargetDirective) {
   // TODO: Not sure why to iterate the children, because I think there
@@ -139,32 +154,18 @@ bool FindTargetCodeVisitor::processTargetRegion(
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
         // look for nested clause
-        if (auto *CD = CS->getCapturedDecl()) {
-          if (auto *CoS = llvm::dyn_cast<clang::CompoundStmt>(CD->getBody())) {
-            // CoS->dump();
-            for (auto *ICoS : CoS->children()) {
-              if (auto *PD =
-                      llvm::dyn_cast<clang::OMPExecutableDirective>(ICoS)) {
-                // clang::OMPClause arr[1] = {clang::OMPPrivateClause()};
-                for (auto *PDC : PD->clauses()) {
-                  TCR->addOpenMPClause(PDC);
-                }
-              }
-            }
-          }
-
-          for (auto C : TargetDirective->clauses()) {
-            TCR->addOpenMPClause(C);
-          }
-
-          // For more complex data types (like structs) we need to traverse the
-          // tree
-          DiscoverTypeVisitor.TraverseStmt(CS);
-          DiscoverFunctionVisitor.TraverseStmt(CS);
-          addTargetRegionArgs(CS, TCR);
-          TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
-          TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
+        CollectOMPClausesVisitor(TCR).TraverseStmt(CS);
+        for (auto C : TargetDirective->clauses()) {
+          TCR->addOpenMPClause(C);
         }
+
+        // For more complex data types (like structs) we need to traverse the
+        // tree
+        DiscoverTypeVisitor.TraverseStmt(CS);
+        DiscoverFunctionVisitor.TraverseStmt(CS);
+        addTargetRegionArgs(CS, TCR);
+        TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
+        TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
       }
     }
   }
@@ -176,8 +177,8 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
 
   DEBUGP("Add target region args");
   for (const auto &i : S->captures()) {
-    if(!(i.capturesVariableArrayType())) {
-      clang::VarDecl* var = i.getCapturedVar();
+    if (!(i.capturesVariableArrayType())) {
+      clang::VarDecl *var = i.getCapturedVar();
       DEBUGP("captured Var: " + var->getNameAsString());
       TCR->addCapturedVar(var);
     } else {
@@ -198,7 +199,8 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
     // i->print(llvm::outs());
     for (auto j : *TCR->getOMPClauses()) {
       for (auto CC : j->children()) {
-        if (auto CC_DeclRefExpr = llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
+        if (auto CC_DeclRefExpr =
+                llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
           // CC_DeclRefExpr->dumpColor();
           if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
             tmpSet.insert(i);

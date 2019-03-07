@@ -28,6 +28,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "Debug.h"
+#include "OmpPragma.h"
 #include "TargetCode.h"
 
 bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
@@ -98,12 +99,14 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
 
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
 
+  std::string Prologue;
+  llvm::raw_string_ostream Out(Prologue);
+
   auto tmpSL = TCR->getStartLoc();
 
   std::list<int> nDim;
   std::list<std::string> DimString;
   std::string elemType;
-  std::stringstream Out;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
   for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
@@ -191,52 +194,16 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
   // Generate local declarations.
   Out << TCR->PrintLocalVarsFromClauses();
 
-  // Handle combined OpenMP constructs.
-  // Since the runtime can decide to only create one team,
-  // target team contructs are ignored right now.
-  // TODO: What to do with standalone team constructs?
-
-  switch (TCR->TargetCodeKind) {
-  /*case clang::OpenMPDirectiveKind::OMPD_target_teams:{
-    Out << "  #pragma omp teams " << TCR->PrintClauses() << "\n  {\n";
-    break;
-  }*/
-  case clang::OpenMPDirectiveKind::OMPD_target_parallel: {
-    Out << "  #pragma omp parallel " << TCR->PrintClauses() << "\n  {\n";
-    break;
+  // The runtime can decide to only create one team.
+  // Therfore, replace target teams constructs.
+  if (TCR->hasCombineConstruct()) {
+    OmpPragma Pragma(TCR);
+    Pragma.printReplacement(Out);
+    if (Pragma.needsStructuredBlock()) {
+      Out << "\n{";
+    }
   }
-  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
-    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::OMPD_target_simd: {
-    Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
-    break;
-  } /*
-   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute:{
-     Out << "  #pragma omp teams distribute " << TCR->PrintClauses() << "\n
-   {\n"; break;
-   }*/
-  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
-    Out << "  #pragma omp parallel for " << TCR->PrintClauses() << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::
-      OMPD_target_teams_distribute_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd " << TCR->PrintClauses() << "\n  ";
-    break;
-  }
-  case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd: {
-    Out << "  #pragma omp simd " << TCR->PrintClauses() << "\n  {\n";
-    break;
-  }
-  default:
-    break;
-  }
+  Out << "\n";
 
   if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
     llvm::errs() << "ERROR: Prologue was not written\n";
@@ -246,24 +213,8 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   std::stringstream Out;
   auto tmpSL = TCR->getEndLoc();
 
-  if ( // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_teams
-       // ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_parallel ||
-      // TCR->TargetCodeKind ==
-      // clang::OpenMPDirectiveKind::OMPD_target_parallel_for ||
-      // TCR->TargetCodeKind ==
-      // clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd ||
-      TCR->TargetCodeKind == clang::OpenMPDirectiveKind::OMPD_target_simd ||
-      // TCR->TargetCodeKind ==
-      // clang::OpenMPDirectiveKind::OMPD_target_teams_distribute ||
-      // TCR->TargetCodeKind == clang::OpenMPDirectiveKind::
-      // OMPD_target_teams_distribute_parallel_for ||
-      // TCR->TargetCodeKind ==
-      // clang::OpenMPDirectiveKind::
-      // OMPD_target_teams_distribute_parallel_for_simd ||
-      TCR->TargetCodeKind ==
-          clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd) {
-    Out << "\n  }";
+  if (OmpPragma(TCR).needsStructuredBlock()) {
+    Out << "\n}";
   }
 
   Out << "\n";
