@@ -76,6 +76,8 @@ int veo_args_set_u64(struct veo_args *arg, int argnum, uint64_t u64);
 
 void veo_args_free(struct veo_args *arg);
 
+const int veo_api_version(void);
+
 #ifdef __cplusplus
 }
 #endif

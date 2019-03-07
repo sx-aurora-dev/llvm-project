@@ -46,6 +46,9 @@ static int DebugLevel = 0;
 
 #define NUMBER_OF_DEVICES 1 // TODO: find out how many nodes we can have
 
+#define VEO_MIN_VERSION 4
+#define VEO_MAX_VERSION 4
+
 struct DynLibTy {
   char *FileName;
   uint64_t VeoLibHandle;
@@ -198,6 +201,16 @@ int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *Image) {
 // Initialize the specified device. In case of success return 0; otherwise
 // return an error code.
 int32_t __tgt_rtl_init_device(int32_t ID) {
+  // First of all: check the veo API version
+  int veo_version = veo_api_version();
+  if (veo_version < VEO_MIN_VERSION) {
+    DP("veo_get_version() reported version %i. Minimum supported veo api version is %i\n", veo_version, VEO_MIN_VERSION);
+    return -1;
+  } else if (veo_version > VEO_MAX_VERSION) {
+    DP("veo_get_version() reported version %i, Maximum supported veo api version is %i\n", veo_version, VEO_MAX_VERSION);
+    return -2;
+  }
+  DP("Available VEO version: %i (supported)\n", veo_version);
 // we will try to use 1 context per device
 
 // TODO: At the moment we do not initilize the device here, but in
