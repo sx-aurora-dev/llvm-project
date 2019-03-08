@@ -1562,8 +1562,6 @@ def : Pat<(i64 imm:$val),
 // When registers hold i32 values, the high bits are don't care.
 
 // Cast to i1
-// Following patterns are not used by llvm, unfortunately.
-// Need to investigate them later.
 def : Pat<(sext_inreg I32:$src, i1),
           (SRAri (SLAri $src, 31), 31)>;
 def : Pat<(sext_inreg I64:$src, i1),
