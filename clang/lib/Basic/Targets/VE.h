@@ -102,7 +102,7 @@ public:
   }
 
   ArrayRef<TargetInfo::GCCRegAlias> getGCCRegAliases() const override {
-    const TargetInfo::GCCRegAlias GCCRegAliases[] = {
+    static const TargetInfo::GCCRegAlias GCCRegAliases[] = {
        {{"s0"},  "sx0"},  {{"s1"},  "sx1"},
        {{"s2"},  "sx2"},  {{"s3"},  "sx3"},
        {{"s4"},  "sx4"},  {{"s5"},  "sx5"},
