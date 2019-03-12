@@ -299,7 +299,19 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
     int64_t elemValue = constNumElem->getSExtValue();
     elemTy = constNumElem->getSimpleValueType(0);
 
-    if (i > FirstDef && firstStride) {
+    if (i == FirstDef) {
+      // FIXME: Currently, this code requies that first value of vseq
+      // is zero.  This is possible to enhance like thses instructions:
+      //        VSEQ $v0
+      //        VBRD $v1, 2
+      //        VADD $v0, $v0, $v1
+      if (elemValue != 0) {
+        hasConstantStride = false;
+        hasBlockStride = false;
+        hasBlockStride2 = false;
+        break;
+      }
+    } else if (i > FirstDef && firstStride) {
       // first stride
       stride = (elemValue - lastElemValue) / (i - FirstDef);
       firstStride = false;
@@ -319,6 +331,9 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
           hasBlockStride2 = true;
           blockLength = i;
         } else {
+          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
+          hasBlockStride = false;
+          hasBlockStride2 = false;
           break;
         }
       }
@@ -333,14 +348,15 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
     SDValue seq = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
                                   DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
     if (stride == 1) {
-      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ ");
+      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
       LLVM_DEBUG(seq.dump());
       return seq;
     }
 
     SDValue const_stride = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(stride, DL, elemTy));
     SDValue ret = DAG.getNode(ISD::MUL, DL, Op.getSimpleValueType(), {seq, const_stride});
-    LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST");
+    LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
+    LLVM_DEBUG(const_stride.dump());
     LLVM_DEBUG(ret.dump());
     return ret;
   }
@@ -352,10 +368,12 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
-      SDValue shiftbroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 64), 256), DAG.getConstant(blockLengthLog, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
+      SDValue shiftbroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(blockLengthLog, DL, elemTy));
 
       SDValue shift = DAG.getNode(ISD::SRL, DL, Op.getSimpleValueType(), {sequence, shiftbroadcast});
-      LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST");
+      LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(shiftbroadcast.dump());
       LLVM_DEBUG(shift.dump());
       return shift;
     }
@@ -368,38 +386,20 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
-      SDValue modulobroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 64), 256), DAG.getConstant(blockLength - 1, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
+      SDValue modulobroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(blockLength - 1, DL, elemTy));
 
       SDValue modulo = DAG.getNode(ISD::AND, DL, Op.getSimpleValueType(), {sequence, modulobroadcast});
 
-      LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST");
+      LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(modulobroadcast.dump());
       LLVM_DEBUG(modulo.dump());
       return modulo;
     }
   }
 
-  // FIXME: disable LowerBUILD_VECTOR's INSERT_VECTOR_ELT
-  // added by https://github.com/SXAuroraTSUBASAResearch/llvm/pull/2 since
-  // this cause inifinity loop on
-  // test-suite/SingleSource/UnitTests/Vector/build.c.
-#if 0
-  // default to element-wise insertion
-  SDValue newVector = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
-                                  BVN->getOperand(0));
-
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    newVector = DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getSimpleValueType(),
-        newVector,
-        BVN->getOperand(i),
-        DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64))
-    );
-  }
-
-  return newVector;
-#else
   // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
   return SDValue();
-#endif
 }
 
 SDValue
