@@ -210,6 +210,7 @@ public:
   bool handledStmt(clang::Stmt *E, llvm::raw_ostream &OS) {
     if (llvm::isa<clang::OMPTeamsDirective>(E) ||
         llvm::isa<clang::OMPTeamsDistributeDirective>(E) ||
+        llvm::isa<clang::OMPTeamsDistributeSimdDirective>(E) ||
         llvm::isa<clang::OMPTeamsDistributeParallelForDirective>(E) ||
         llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(E) ||
         llvm::isa<clang::OMPDistributeDirective>(E)) {
