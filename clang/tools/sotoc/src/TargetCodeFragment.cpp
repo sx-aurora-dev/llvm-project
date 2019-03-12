@@ -211,7 +211,8 @@ public:
     if (llvm::isa<clang::OMPTeamsDirective>(E) ||
         llvm::isa<clang::OMPTeamsDistributeDirective>(E) ||
         llvm::isa<clang::OMPTeamsDistributeParallelForDirective>(E) ||
-        llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(E)) {
+        llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(E) ||
+        llvm::isa<clang::OMPDistributeDirective>(E)) {
       auto *Directive = llvm::cast<clang::OMPExecutableDirective>(E);
       OmpPragma(Directive, PP).printReplacement(OS);
       OS << "\n";
