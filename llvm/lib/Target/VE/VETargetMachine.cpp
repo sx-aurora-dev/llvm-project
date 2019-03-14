@@ -42,8 +42,18 @@ static std::string computeDataLayout(const Triple &T) {
   // Stack alignment is 64 bits
   Ret += "-S64";
 
-  // Vector alignment is 64 bits
-  Ret += "-v16384:64:64";
+  // Vector alignments are 64 bits
+  // Need to define all of them.  Otherwise, each alignment becomes
+  // the size of each data by default.
+  Ret += "-v64:64:64";          // for v2f32
+  Ret += "-v128:64:64";
+  Ret += "-v256:64:64";
+  Ret += "-v512:64:64";
+  Ret += "-v1024:64:64";
+  Ret += "-v2014:64:64";
+  Ret += "-v4096:64:64";
+  Ret += "-v8192:64:64";
+  Ret += "-v16384:64:64";       // for v256f64
 
   return Ret;
 }
