@@ -27,6 +27,7 @@ int main (void)
     #pragma omp single
     {
         printf ("%lld", a);
+        fflush(0);
     }
   }
 
