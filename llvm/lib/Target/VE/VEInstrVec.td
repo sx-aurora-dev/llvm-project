@@ -817,21 +817,18 @@ multiclass VMVm<string opcStr, bits<8> opc> {
 
 defm VMV : VMVm<"vmv", 0x9C>;
 
-def PFCHVr : RVM<0x80, (outs), (ins I64:$sy, I64:$sz, VLS:$vl),
-                 "pfchv $sy,$sz", []> {
+let hasSideEffects = 0, DisableEncoding = "$vl" in {
+  def PFCHVr : RVM<0x80, (outs), (ins I64:$sy, I64:$sz, VLS:$vl),
+                   "pfchv $sy,$sz", []> {
     let cy = 1;
     let cz = 1;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
   }
-
-def PFCHVi : RVM<0x80, (outs), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
-                 "pfchv $sy,$sz", []> {
+  def PFCHVi : RVM<0x80, (outs), (ins simm7Op64:$sy, I64:$sz, VLS:$vl),
+                   "pfchv $sy,$sz", []> {
     let cy = 0;
     let cz = 1;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
   }
+}
 
 // Pseudo instructions for VR/VM/VM512 spill/restore
 //
