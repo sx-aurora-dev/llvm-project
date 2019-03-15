@@ -1218,10 +1218,18 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT VT : MVT::vector_valuetypes()) {
-    if (VT.getVectorElementType() == MVT::i8 ||
-        VT.getVectorElementType() == MVT::i16) {
-      // VE doesn't support vXi8 and vXi16 value types, so mark
-      // them all as expanded
+    if (VT.getVectorElementType() == MVT::i1 ||
+        VT.getVectorElementType() == MVT::i8 ||
+        VT.getVectorElementType() == MVT::i16 ||
+        VT.getVectorNumElements() == 16 ||
+        VT.getVectorNumElements() == 32 ||
+        VT.getVectorNumElements() == 64 ||
+        VT.getVectorNumElements() == 128) {
+      // VE uses vXi1 types but has no generic operations.
+      // VE doesn't support vXi8 and vXi16 value types.
+      // LLVM doesn't support whole types (i32/i64/f32/f64) of
+      // each length (16/32/64/128).
+      // So, we mark them all as expanded.
 
       // Expand all vector-i8/i16-vector truncstore and extload
       for (MVT OuterVT : MVT::vector_valuetypes()) {

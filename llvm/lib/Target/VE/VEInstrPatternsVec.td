@@ -158,7 +158,7 @@ defm : store_for_vector_length<2>;
 def : Pat<(v512f32 (sint_to_fp v512i32:$vx)),
           (VFLTpv $vx, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-multiclass ifconv_for_vector_length<int length, ValueType vi32, ValueType vi64,
+multiclass i2f_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                    ValueType vf32, ValueType vf64> {
   def : Pat<(vf64 (sint_to_fp vi64:$vx)),
             (VFLTXv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
@@ -168,12 +168,13 @@ multiclass ifconv_for_vector_length<int length, ValueType vi32, ValueType vi64,
             (VFLTsv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
-defm : ifconv_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-defm : ifconv_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-defm : ifconv_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-defm : ifconv_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+defm : i2f_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : i2f_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : i2f_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : i2f_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // sext and zext
+// FIXME: we may need anyext too.
 
 multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(vi64 (sext vi32:$vx)),
@@ -185,7 +186,8 @@ multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64> {
 defm : ext_for_vector_length<256, v256i32, v256i64>;
 defm : ext_for_vector_length<8, v8i32, v8i64>;
 defm : ext_for_vector_length<4, v4i32, v4i64>;
-// FIXME: it is not possible to use following pattern.
+// FIXME: tblgen produces errors on following pattern.  It is not
+// possible to fix erros and use following pattern.
 // defm : ext_for_vector_length<2, v2i32, v2i64>;
 
 // Bitconvert for mask registers between
@@ -250,62 +252,78 @@ defm : s2v_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
 defm : s2v_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Series of INSERT_VECOR_ELT for all VE vector types,
-// v256i32, v256i64, v256f32, v256f64.
+//   v256i32, v256i64, v256f32, v256f64,
+//   v8i32, v8i64, v8f32, v8f64,
+//   v4i32, v4i64, v4f32, v4f64,
+//   v2i32, v2i64, v2f32, v2f64,
 // v512i32 and v512f32 is expanded by LowerINSERT_VECTOR_ELT().
 
-def: Pat<(v256i32 (insertelt v256i32:$vec, i32:$val, uimm7:$idx)),
-         (v256i32 (LSVi v256i32:$vec, imm:$idx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32)))>;
-def: Pat<(v256i32 (insertelt v256i32:$vec, i32:$val, i64:$idx)),
-         (v256i32 (LSVr v256i32:$vec,
-                        (EXTRACT_SUBREG $idx, sub_i32),
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32)))>;
+multiclass ive_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                 ValueType vf32, ValueType vf64> {
+  def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, uimm7:$idx)),
+           (LSVi vi32:$vec, imm:$idx,
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
+  def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, i64:$idx)),
+           (LSVr vi32:$vec,
+                 (EXTRACT_SUBREG $idx, sub_i32),
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
+  def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, uimm7:$idx)),
+           (LSVi vi64:$vec, imm:$idx, $val)>;
+  def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, i64:$idx)),
+           (LSVr vi64:$vec,
+                 (EXTRACT_SUBREG $idx, sub_i32), $val)>;
+  def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, uimm7:$idx)),
+           (LSVi vf32:$vec, imm:$idx,
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+  def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, i64:$idx)),
+           (LSVr vf32:$vec,
+                 (EXTRACT_SUBREG $idx, sub_i32),
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+  def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, uimm7:$idx)),
+           (LSVi vf64:$vec, imm:$idx,
+                 (COPY_TO_REGCLASS $val, I64))>;
+  def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, i64:$idx)),
+           (LSVr vf64:$vec,
+                 (EXTRACT_SUBREG $idx, sub_i32),
+                 (COPY_TO_REGCLASS $val, I64))>;
+}
 
-def: Pat<(v256f32 (insertelt v256f32:$vec, f32:$val, uimm7:$idx)),
-         (v256f32 (LSVi v256f32:$vec, imm:$idx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-def: Pat<(v256f32 (insertelt v256f32:$vec, f32:$val, i64:$idx)),
-         (v256f32 (LSVr v256f32:$vec,
-                        (EXTRACT_SUBREG $idx, sub_f32),
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
-
-def: Pat<(v256f64 (insertelt v256f64:$vec, f64:$val, uimm7:$idx)),
-         (v256f64 (LSVi v256f64:$vec, imm:$idx,
-                        (COPY_TO_REGCLASS $val, I64)))>;
-def: Pat<(v256f64 (insertelt v256f64:$vec, f64:$val, i64:$idx)),
-         (v256f64 (LSVr v256f64:$vec,
-                        (EXTRACT_SUBREG $idx, sub_i32),
-                        (COPY_TO_REGCLASS $val, I64)))>;
-
-def: Pat<(v256i64 (insertelt v256i64:$vec, i64:$val, uimm7:$idx)),
-         (v256i64 (LSVi v256i64:$vec, imm:$idx, $val))>;
-def: Pat<(v256i64 (insertelt v256i64:$vec, i64:$val, i64:$idx)),
-         (v256i64 (LSVr v256i64:$vec,
-                        (EXTRACT_SUBREG $idx, sub_i32), $val))>;
+defm : ive_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : ive_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : ive_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : ive_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Series of EXTRACT_VECOR_ELT for all VE vector types,
-// v256i32, v256i64, v256f32, v256f64.
+//   v256i32, v256i64, v256f32, v256f64,
+//   v8i32, v8i64, v8f32, v8f64,
+//   v4i32, v4i64, v4f32, v4f64,
+//   v2i32, v2i64, v2f32, v2f64,
 // v512i32 and v512f32 is expanded by LowerEXTRACT_VECTOR_ELT().
 
-def: Pat<(i32 (extractelt v256i32:$vec, uimm7:$idx)),
-         (EXTRACT_SUBREG (LVSi v256i32:$vec, imm:$idx), sub_i32)>;
-def: Pat<(i32 (extractelt v256i32:$vec, i64:$idx)),
-         (EXTRACT_SUBREG (LVSr v256i32:$vec, $idx), sub_i32)>;
+multiclass eve_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                 ValueType vf32, ValueType vf64> {
+  def: Pat<(i32 (extractelt vi32:$vec, uimm7:$idx)),
+           (EXTRACT_SUBREG (LVSi vi32:$vec, imm:$idx), sub_i32)>;
+  def: Pat<(i32 (extractelt vi32:$vec, i64:$idx)),
+           (EXTRACT_SUBREG (LVSr vi32:$vec, $idx), sub_i32)>;
+  def: Pat<(i64 (extractelt vi64:$vec, uimm7:$idx)),
+           (LVSi vi64:$vec, imm:$idx)>;
+  def: Pat<(i64 (extractelt vi64:$vec, i64:$idx)),
+           (LVSr vi64:$vec, $idx)>;
+  def: Pat<(f32 (extractelt vf32:$vec, uimm7:$idx)),
+           (EXTRACT_SUBREG (LVSi vf32:$vec, imm:$idx), sub_f32)>;
+  def: Pat<(f32 (extractelt vf32:$vec, i64:$idx)),
+           (EXTRACT_SUBREG (LVSr vf32:$vec, $idx), sub_f32)>;
+  def: Pat<(f64 (extractelt vf64:$vec, uimm7:$idx)),
+           (LVSi vf64:$vec, imm:$idx)>;
+  def: Pat<(f64 (extractelt vf64:$vec, i64:$idx)),
+           (LVSr vf64:$vec, $idx)>;
+}
 
-def: Pat<(f32 (extractelt v256f32:$vec, uimm7:$idx)),
-         (EXTRACT_SUBREG (LVSi v256f32:$vec, imm:$idx), sub_f32)>;
-def: Pat<(f32 (extractelt v256f32:$vec, i64:$idx)),
-         (EXTRACT_SUBREG (LVSr v256f32:$vec, $idx), sub_f32)>;
-
-def: Pat<(f64 (extractelt v256f64:$vec, uimm7:$idx)),
-         (LVSi v256f64:$vec, imm:$idx)>;
-def: Pat<(f64 (extractelt v256f64:$vec, i64:$idx)),
-         (LVSr v256f64:$vec, $idx)>;
-
-def: Pat<(i64 (extractelt v256i64:$vec, uimm7:$idx)),
-         (LVSi v256i64:$vec, imm:$idx)>;
-def: Pat<(i64 (extractelt v256i64:$vec, i64:$idx)),
-         (LVSr v256i64:$vec, $idx)>;
+defm : eve_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : eve_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : eve_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Custom ISDs
 // VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
