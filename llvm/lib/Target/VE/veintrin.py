@@ -243,6 +243,10 @@ class Inst:
         self.prop_ = ["IntrWriteMem"]
         return self
 
+    def inaccessibleMemOrArgMemOnly(self):
+        self.prop_ = ["IntrInaccessibleMemOrArgMemOnly"]
+        return self
+
     def hasSideEffects(self):
         self.prop_ = ["IntrHasSideEffects"]
 
@@ -1171,8 +1175,8 @@ T.VSTm(0x93, "VSTL", "vstl")
 T.VSTm(0xD1, "VST2D", "vst2d")
 T.VSTm(0xD2, "VSTU2D", "vstu2d")
 T.VSTm(0xD3, "VSTL2D", "vstl2d")
-T.add(Inst(0x80, "PFCHVr", "pfchv", "pfchv", [], [SY(T_i64), SZ(T_voidcp)])).noTest().hasSideEffects()
-T.add(Inst(0x80, "PFCHVi", "pfchv", "pfchv", [], [ImmI(T_i64), SZ(T_voidcp)])).noTest().hasSideEffects()
+T.add(Inst(0x80, "PFCHVr", "pfchv", "pfchv", [], [SY(T_i64), SZ(T_voidcp)])).noTest().inaccessibleMemOrArgMemOnly()
+T.add(Inst(0x80, "PFCHVi", "pfchv", "pfchv", [], [ImmI(T_i64), SZ(T_voidcp)])).noTest().inaccessibleMemOrArgMemOnly()
 T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
 #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
 T.LVSm(0x9E)
