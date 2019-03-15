@@ -17,9 +17,9 @@
 // dummy builtins (needs to define at least one here)
 //BUILTIN(__builtin_dummy, "Si", "nc")
 
-BUILTIN(__builtin_ve_lvl, "vUi", "nr")
-BUILTIN(__builtin_ve_svob, "v", "nr")
-//BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "nr")
+BUILTIN(__builtin_ve_lvl, "vUi", "n")
+BUILTIN(__builtin_ve_svob, "v", "n")
+//BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "n")
 
 BUILTIN(__builtin_ve_lvm_MMss, "V8ULiV8ULiCLUiCLUiC", "n")
 BUILTIN(__builtin_ve_svm_sMs, "LUiV8ULiCLUiC", "n")
