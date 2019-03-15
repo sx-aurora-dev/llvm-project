@@ -8,6 +8,7 @@ find_program(NECAURORA_TARGET_COMPILER ncc
   DOC "NEC target compiler."
   PATHS
     "/opt/nec/ve/bin/")
+
 if(NOT NECAURORA_TARGET_COMPILER)
   message(STATUS "NEC target compiler could not be found, defaulting to GCC.")
   # Use a separate variable to print this message every time.
@@ -15,11 +16,32 @@ if(NOT NECAURORA_TARGET_COMPILER)
   set(NECAURORA_TARGET_COMPILER "${NECAURORA_TARGET_COMPILER_GCC}")
 endif()
 
+find_library(
+   NECAURORA_LIBVEORUN_STATIC_LIBRARY
+  NAMES
+    libveorun.a
+  PATHS
+    /usr/lib
+    /usr/local/lib
+    /opt/local/lib
+    /sw/lib
+    /opt/nec/ve/lib
+    ENV LIBRARY_PATH
+    ENV LD_LIBRARY_PATH)
+
+set(NECAURORA_STATIC_LINKING_AVAILABLE 1)
+
+if (NOT NECAURORA_LIBVEORUN_STATIC_LIBRARY)
+    set(LIBVEORUN_STATIC_PATH "${NECAURORA_LIBVEORUN_STATIC_LIBRARY}")
+    set(NECAURORA_STATIC_LINKING_AVAILABLE 0)
+endif()
+
 find_package(NECAURORA_LIBELF)
 if(NOT NECAURORA_LIBELF_FOUND)
   # TODO: Really fatal error? Can we just exclude static linking?
   message(FATAL_ERROR "LIBELF not found.")
 endif()
+
 configure_file(config.h.in config.h @ONLY)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
