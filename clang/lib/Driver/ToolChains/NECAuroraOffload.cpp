@@ -12,14 +12,13 @@ using namespace clang::driver;
 using namespace clang::driver::tools;
 using namespace llvm::opt;
 
-
 void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
                                           const InputInfo &Output,
                                           const InputInfoList &Inputs,
                                           const llvm::opt::ArgList &Args,
                                           const char *LinkingOutput) const {
   ArgStringList CmdArgs;
-  std::vector<llvm::opt::Arg*> PPargs;
+  std::vector<llvm::opt::Arg *> PPargs;
 
   // We need to pass the input source, one file at a time, as first argument to
   // the compiler wrapper.
@@ -51,8 +50,9 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
         !A->getOption().hasFlag(options::DriverOption) &&
         !A->getOption().hasFlag(options::LinkerInput)) {
 
-      // MR_MARKER: because we are the offloading compiler, we dont have to claim(?)
-      //A->claim();
+      // MR_MARKER: because we are the offloading compiler, we dont have to
+      // claim(?)
+      // A->claim();
 
       // Don't forward any -g arguments to assembly steps.
       if (isa<AssembleJobAction>(JA) &&
@@ -64,8 +64,8 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
           A->getOption().matches(options::OPT_W_Group))
         continue;
 
-      if(A->getOption().matches(options::OPT_Preprocessor_Group)){
-         PPargs.push_back(A);
+      if (A->getOption().matches(options::OPT_Preprocessor_Group)) {
+        PPargs.push_back(A);
         continue;
       }
 
@@ -73,9 +73,11 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  for(auto &A : PPargs) {
-    for(uint i = 0; i<A->getNumValues();++i){
-      CmdArgs.push_back(Args.MakeArgString(("-" + std::string(A->getOption().getName()) + A->getValue(i)).c_str()));
+  for (auto &A : PPargs) {
+    for (uint i = 0; i < A->getNumValues(); ++i) {
+      CmdArgs.push_back(Args.MakeArgString(
+          ("-" + std::string(A->getOption().getName()) + A->getValue(i))
+              .c_str()));
     }
   }
 
@@ -89,19 +91,20 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fsyntax-only");
   }
 
-  const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath(ToolName));
+  const char *Exec =
+      Args.MakeArgString(getToolChain().GetProgramPath(ToolName));
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void necauroratools::Common::anchor() {}
 
-void necauroratools::Linker::RenderExtraToolArgs(const JobAction &JA,
-                                                 llvm::opt::ArgStringList &CmdArgs) const {
+void necauroratools::Linker::RenderExtraToolArgs(
+    const JobAction &JA, llvm::opt::ArgStringList &CmdArgs) const {
   // no extra args, just hope for the best
 }
 
-void necauroratools::OffloadCompilerWrapper::RenderExtraToolArgs(const JobAction &JA,
-                                                   llvm::opt::ArgStringList &CmdArgs) const {
+void necauroratools::OffloadCompilerWrapper::RenderExtraToolArgs(
+    const JobAction &JA, llvm::opt::ArgStringList &CmdArgs) const {
   // the same as for Gnu
   const Driver &D = getToolChain().getDriver();
 
@@ -128,16 +131,15 @@ void necauroratools::OffloadCompilerWrapper::RenderExtraToolArgs(const JobAction
   default:
     D.Diag(diag::err_drv_invalid_gcc_output_type) << getTypeName(JA.getType());
   }
-
 }
 
-void necauroratools::Assembler::RenderExtraToolArgs(const JobAction &JA,
-                                                    llvm::opt::ArgStringList &CmdArgs) const {
+void necauroratools::Assembler::RenderExtraToolArgs(
+    const JobAction &JA, llvm::opt::ArgStringList &CmdArgs) const {
   CmdArgs.push_back("-S");
 }
 
-
-Tool *toolchains::NECAuroraOffloadToolChain::SelectTool(const JobAction &JA) const {
+Tool *
+toolchains::NECAuroraOffloadToolChain::SelectTool(const JobAction &JA) const {
   switch (JA.getKind()) {
   case Action::PreprocessJobClass:
   case Action::CompileJobClass:

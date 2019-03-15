@@ -23,19 +23,13 @@ endif()
 configure_file(config.h.in config.h @ONLY)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable(necaurora-ofld-cc1-wrapper
-               necaurora-ofld-cc1-wrapper.cpp
-               necaurora-utils.cpp)
+add_executable(necaurora-ofld-wrapper
+               necaurora-ofld-wrapper.cpp
+               compiler.cpp
+               linker.cpp
+               utils.cpp)
 
-add_executable(necaurora-ofld-tool-wrapper
-               necaurora-ofld-tool-wrapper.cpp
-               necaurora-utils.cpp)
-target_link_libraries(necaurora-ofld-tool-wrapper
+target_link_libraries(necaurora-ofld-wrapper
                       ${NECAURORA_LIBELF_LIBRARIES})
 
-install(TARGETS necaurora-ofld-cc1-wrapper DESTINATION bin)
-
-
-install(TARGETS necaurora-ofld-tool-wrapper DESTINATION bin)
-add_clang_symlink(necaurora-linker-wrapper necaurora-ofld-tool-wrapper)
-add_clang_symlink(necaurora-asm-wrapper necaurora-ofld-tool-wrapper)
+install(TARGETS necaurora-ofld-wrapper DESTINATION bin)
