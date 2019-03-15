@@ -24,7 +24,7 @@ update VE environment if you are using musl environment.
 
 Following packages are required.
 Note that these packages are included in the veos software package,
-or available from <https://sx-aurora.com/repos/veos/common/x86_64/>.
+or available from a site (https://sx-aurora.com/repos/veos/common/x86_64/).
 
  - binutils-ve
  - glibc-ve
@@ -47,6 +47,20 @@ following pre-compiled programs and libraries.
  - openmp library (OpenMP)
 
 Files are installed into /opt/nec/nosupport/llvm-<version> directory.
+
+How to compile LLVM for NEC SX-Aurora VE automatically
+======================================================
+
+Use llvm-dev tool.  This retrieves source files, configures not only host
+programs but also cross-compiling libraries, compiles all of them,
+and installs all under ./install directory.
+
+    $ git clone https://github.com/SXAuroraTSUBASAResearch/llvm-dev.git
+    $ cd llvm-dev
+    $ make shallow
+    $ make
+    $ ls install
+    bin  include  lib  libexec  share
 
 How to compile LLVM for NEC SX-Aurora VE by hand
 ================================================
