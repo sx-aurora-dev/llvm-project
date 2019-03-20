@@ -120,7 +120,7 @@ int runStaticLinker(const std::vector<const char *> &ObjectFiles,
 
   CmdLine << getTargetCompiler() << " "
           << LIBVEORUN_STATIC_PATH
-          << " -fopenmp -fopenmp-static " << SymTabPath << " " << Args;
+          << " " << SymTabPath << " " << Args;
   if (Verbose) {
     std::cerr << "  \"" << CmdLine.str() << "\"" << std::endl;
   }

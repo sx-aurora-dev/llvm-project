@@ -44,10 +44,10 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   std::stringstream ArgsStream;
   Mode = ToolMode::Unknown;
   bool StaticLinkerFlag = false;
+  bool SharedFlag = false;
   SotocPath = "sotoc";
   // TODO make this more flexible
   InputFile = argv[1];
-
 
   for (int i = 2; i < argc; ++i) {
     if (strcmp(argv[i], "-c") == 0) {
@@ -78,6 +78,9 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else if (strcmp(argv[i], "-Xlinker -fopenmp-static") == 0) {
       StaticLinkerFlag = true;
       continue;
+    } else if (strcmp(argv[i], "-shared") == 0) {
+      SharedFlag = true;
+      continue;
     } else if (strcmp(argv[i] + strlen(argv[i] - 2), ".o") == 0) {
       ArgsStream << argv[i] << " ";
       ObjectFiles.push_back(argv[i]);
@@ -88,10 +91,13 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   }
 
   if (Mode == ToolMode::Unknown) {
+
     if (StaticLinkerFlag) {
       Mode = ToolMode::StaticLinker;
     } else {
-    Mode = ToolMode::Passthrough;
+      if (SharedFlag) {
+        ArgsStream << "-shared";
+      }
     }
   }
 
