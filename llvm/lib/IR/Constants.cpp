@@ -1,9 +1,8 @@
 //===-- Constants.cpp - Implement Constant nodes --------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -261,6 +260,16 @@ bool Constant::containsUndefElement() const {
   return false;
 }
 
+bool Constant::containsConstantExpression() const {
+  if (!getType()->isVectorTy())
+    return false;
+  for (unsigned i = 0, e = getType()->getVectorNumElements(); i != e; ++i)
+    if (isa<ConstantExpr>(getAggregateElement(i)))
+      return true;
+
+  return false;
+}
+
 /// Constructor to create a '0' constant of arbitrary type.
 Constant *Constant::getNullValue(Type *Ty) {
   switch (Ty->getTypeID()) {
@@ -350,8 +359,12 @@ Constant *Constant::getAggregateElement(unsigned Elt) const {
 
 Constant *Constant::getAggregateElement(Constant *Elt) const {
   assert(isa<IntegerType>(Elt->getType()) && "Index must be an integer");
-  if (ConstantInt *CI = dyn_cast<ConstantInt>(Elt))
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(Elt)) {
+    // Check if the constant fits into an uint64_t.
+    if (CI->getValue().getActiveBits() > 64)
+      return nullptr;
     return getAggregateElement(CI->getZExtValue());
+  }
   return nullptr;
 }
 
@@ -719,14 +732,36 @@ Constant *ConstantFP::get(Type *Ty, StringRef Str) {
   return C;
 }
 
-Constant *ConstantFP::getNaN(Type *Ty, bool Negative, unsigned Type) {
+Constant *ConstantFP::getNaN(Type *Ty, bool Negative, uint64_t Payload) {
   const fltSemantics &Semantics = *TypeToFloatSemantics(Ty->getScalarType());
-  APFloat NaN = APFloat::getNaN(Semantics, Negative, Type);
+  APFloat NaN = APFloat::getNaN(Semantics, Negative, Payload);
   Constant *C = get(Ty->getContext(), NaN);
 
   if (VectorType *VTy = dyn_cast<VectorType>(Ty))
     return ConstantVector::getSplat(VTy->getNumElements(), C);
 
+  return C;
+}
+
+Constant *ConstantFP::getQNaN(Type *Ty, bool Negative, APInt *Payload) {
+  const fltSemantics &Semantics = *TypeToFloatSemantics(Ty->getScalarType());
+  APFloat NaN = APFloat::getQNaN(Semantics, Negative, Payload);
+  Constant *C = get(Ty->getContext(), NaN);
+  
+  if (VectorType *VTy = dyn_cast<VectorType>(Ty))
+    return ConstantVector::getSplat(VTy->getNumElements(), C);
+  
+  return C;
+}
+
+Constant *ConstantFP::getSNaN(Type *Ty, bool Negative, APInt *Payload) {
+  const fltSemantics &Semantics = *TypeToFloatSemantics(Ty->getScalarType());
+  APFloat NaN = APFloat::getSNaN(Semantics, Negative, Payload);
+  Constant *C = get(Ty->getContext(), NaN);
+  
+  if (VectorType *VTy = dyn_cast<VectorType>(Ty))
+    return ConstantVector::getSplat(VTy->getNumElements(), C);
+  
   return C;
 }
 
@@ -1973,9 +2008,8 @@ Constant *ConstantExpr::getGetElementPtr(Type *Ty, Constant *C,
   if (!Ty)
     Ty = cast<PointerType>(C->getType()->getScalarType())->getElementType();
   else
-    assert(
-        Ty ==
-        cast<PointerType>(C->getType()->getScalarType())->getContainedType(0u));
+    assert(Ty ==
+           cast<PointerType>(C->getType()->getScalarType())->getElementType());
 
   if (Constant *FC =
           ConstantFoldGetElementPtr(Ty, C, InBounds, InRangeIndex, Idxs))

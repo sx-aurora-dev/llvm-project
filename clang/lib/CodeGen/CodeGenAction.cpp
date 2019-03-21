@@ -1,9 +1,8 @@
 //===--- CodeGenAction.cpp - LLVM Code Generation Frontend Action ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,6 +19,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/BackendUtil.h"
 #include "clang/CodeGen/ModuleBuilder.h"
+#include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Lex/Preprocessor.h"
@@ -31,6 +31,7 @@
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/RemarkStreamer.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/Pass.h"
@@ -277,8 +278,14 @@ namespace clang {
           return;
         }
 
-        Ctx.setDiagnosticsOutputFile(
-            llvm::make_unique<yaml::Output>(OptRecordFile->os()));
+        Ctx.setRemarkStreamer(llvm::make_unique<RemarkStreamer>(
+            CodeGenOpts.OptRecordFile, OptRecordFile->os()));
+
+        if (!CodeGenOpts.OptRecordPasses.empty())
+          if (Error E = Ctx.getRemarkStreamer()->setFilter(
+                  CodeGenOpts.OptRecordPasses))
+            Diags.Report(diag::err_drv_optimization_remark_pattern)
+                << toString(std::move(E)) << CodeGenOpts.OptRecordPasses;
 
         if (CodeGenOpts.getProfileUse() != CodeGenOptions::ProfileNone)
           Ctx.setDiagnosticsHotnessRequested(true);
@@ -549,12 +556,16 @@ const FullSourceLoc BackendConsumer::getBestLocationFromDebugLoc(
   SourceLocation DILoc;
 
   if (D.isLocationAvailable()) {
-    D.getLocation(&Filename, &Line, &Column);
-    const FileEntry *FE = FileMgr.getFile(Filename);
-    if (FE && Line > 0) {
-      // If -gcolumn-info was not used, Column will be 0. This upsets the
-      // source manager, so pass 1 if Column is not set.
-      DILoc = SourceMgr.translateFileLineCol(FE, Line, Column ? Column : 1);
+    D.getLocation(Filename, Line, Column);
+    if (Line > 0) {
+      const FileEntry *FE = FileMgr.getFile(Filename);
+      if (!FE)
+        FE = FileMgr.getFile(D.getAbsolutePath());
+      if (FE) {
+        // If -gcolumn-info was not used, Column will be 0. This upsets the
+        // source manager, so pass 1 if Column is not set.
+        DILoc = SourceMgr.translateFileLineCol(FE, Line, Column ? Column : 1);
+      }
     }
     BadDebugInfo = DILoc.isInvalid();
   }

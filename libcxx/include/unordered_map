@@ -1,10 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- unordered_map -----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -384,6 +383,12 @@ template <class Key, class T, class Hash, class Pred, class Alloc>
               unordered_multimap<Key, T, Hash, Pred, Alloc>& y)
               noexcept(noexcept(x.swap(y)));
 
+template <class K, class T, class H, class P, class A, class Predicate>
+    void erase_if(unordered_set<K, T, H, P, A>& c, Predicate pred);       // C++20
+
+template <class K, class T, class H, class P, class A, class Predicate>
+    void erase_if(unordered_multiset<K, T, H, P, A>& c, Predicate pred);  // C++20
+
 template <class Key, class T, class Hash, class Pred, class Alloc>
     bool
     operator==(const unordered_multimap<Key, T, Hash, Pred, Alloc>& x,
@@ -414,7 +419,8 @@ template <class Key, class T, class Hash, class Pred, class Alloc>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-template <class _Key, class _Cp, class _Hash, bool _IsEmpty>
+template <class _Key, class _Cp, class _Hash,
+          bool = is_empty<_Hash>::value && !__libcpp_is_final<_Hash>::value>
 class __unordered_map_hasher
     : private _Hash
 {
@@ -482,7 +488,8 @@ swap(__unordered_map_hasher<_Key, _Cp, _Hash, __b>& __x,
     __x.swap(__y);
 }
 
-template <class _Key, class _Cp, class _Pred, bool _IsEmpty>
+template <class _Key, class _Cp, class _Pred,
+          bool = is_empty<_Pred>::value && !__libcpp_is_final<_Pred>::value>
 class __unordered_map_equal
     : private _Pred
 {
@@ -845,6 +852,7 @@ public:
     typedef const value_type&                              const_reference;
     static_assert((is_same<value_type, typename allocator_type::value_type>::value),
                   "Invalid allocator::value_type");
+    static_assert(sizeof(__diagnose_unordered_container_requirements<_Key, _Hash, _Pred>(0)), "");
 
 private:
     typedef __hash_value_type<key_type, mapped_type>                 __value_type;
@@ -1594,10 +1602,8 @@ _Tp&
 unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::at(const key_type& __k)
 {
     iterator __i = find(__k);
-#ifndef _LIBCPP_NO_EXCEPTIONS
     if (__i == end())
-        throw out_of_range("unordered_map::at: key not found");
-#endif  // _LIBCPP_NO_EXCEPTIONS
+        __throw_out_of_range("unordered_map::at: key not found");
     return __i->second;
 }
 
@@ -1606,10 +1612,8 @@ const _Tp&
 unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::at(const key_type& __k) const
 {
     const_iterator __i = find(__k);
-#ifndef _LIBCPP_NO_EXCEPTIONS
     if (__i == end())
-        throw out_of_range("unordered_map::at: key not found");
-#endif  // _LIBCPP_NO_EXCEPTIONS
+        __throw_out_of_range("unordered_map::at: key not found");
     return __i->second;
 }
 
@@ -1622,6 +1626,13 @@ swap(unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
 {
     __x.swap(__y);
 }
+
+#if _LIBCPP_STD_VER > 17
+template <class _Key, class _Tp, class _Hash, class _Pred, class _Alloc, class _Predicate>
+inline _LIBCPP_INLINE_VISIBILITY
+void erase_if(unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __c, _Predicate __pred)
+{ __libcpp_erase_if_container(__c, __pred); }
+#endif
 
 template <class _Key, class _Tp, class _Hash, class _Pred, class _Alloc>
 bool
@@ -1667,6 +1678,7 @@ public:
     typedef const value_type&                              const_reference;
     static_assert((is_same<value_type, typename allocator_type::value_type>::value),
                   "Invalid allocator::value_type");
+    static_assert(sizeof(__diagnose_unordered_container_requirements<_Key, _Hash, _Pred>(0)), "");
 
 private:
     typedef __hash_value_type<key_type, mapped_type>                 __value_type;
@@ -2238,6 +2250,13 @@ swap(unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
 {
     __x.swap(__y);
 }
+
+#if _LIBCPP_STD_VER > 17
+template <class _Key, class _Tp, class _Hash, class _Pred, class _Alloc, class _Predicate>
+inline _LIBCPP_INLINE_VISIBILITY
+void erase_if(unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __c, _Predicate __pred)
+{ __libcpp_erase_if_container(__c, __pred); }
+#endif
 
 template <class _Key, class _Tp, class _Hash, class _Pred, class _Alloc>
 bool

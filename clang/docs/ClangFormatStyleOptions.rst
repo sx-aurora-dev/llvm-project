@@ -137,13 +137,13 @@ the configuration (without a prefix: ``Auto``).
     <http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml>`_
   * ``Chromium``
     A style complying with `Chromium's style guide
-    <http://www.chromium.org/developers/coding-style>`_
+    <https://www.chromium.org/developers/coding-style>`_
   * ``Mozilla``
     A style complying with `Mozilla's style guide
     <https://developer.mozilla.org/en-US/docs/Developer_Guide/Coding_Style>`_
   * ``WebKit``
     A style complying with `WebKit's style guide
-    <http://www.webkit.org/coding/coding-style.html>`_
+    <https://www.webkit.org/coding/coding-style.html>`_
 
 .. START_FORMAT_STYLE_OPTIONS
 
@@ -365,10 +365,47 @@ the configuration (without a prefix: ``Auto``).
       };
       void f() { bar(); }
 
+**AllowShortIfStatementsOnASingleLine** (``ShortIfStyle``)
+  Dependent on the value, ``if (a) return 0;`` can be put on a
+  single line.
 
+  Possible values:
 
-**AllowShortIfStatementsOnASingleLine** (``bool``)
-  If ``true``, ``if (a) return;`` can be put on a single line.
+  * ``SIS_Never`` (in configuration: ``Never``)
+    Do not allow short if functions.
+
+    .. code-block:: c++
+
+       if (a)
+         return;
+       else
+         return;
+
+  * ``SIS_WithoutElse`` (in configuration: ``WithoutElse``)
+    Allow short if functions on the same line, as long as else
+    is not a compound statement.
+
+    .. code-block:: c++
+
+       if (a) return;
+       else
+         return;
+
+       if (a)
+         return;
+       else {
+         return;
+       }
+
+  * ``SIS_Always`` (in configuration: ``Always``)
+    Allow short if statements even if the else is a compound statement.
+
+    .. code-block:: c++
+
+       if (a) return;
+       else {
+          return;
+       }
 
 **AllowShortLoopsOnASingleLine** (``bool``)
   If ``true``, ``while (true) continue;`` can be put on a single
@@ -925,19 +962,28 @@ the configuration (without a prefix: ``Auto``).
 
     .. code-block:: c++
 
-      try {
+      try
+      {
         foo();
       }
-      catch () {
+      catch ()
+      {
       }
       void foo() { bar(); }
-      class foo {
+      class foo
+      {
       };
-      if (foo()) {
+      if (foo())
+      {
       }
-      else {
+      else
+      {
       }
-      enum X : int { A, B };
+      enum X : int
+      {
+        A,
+        B
+      };
 
   * ``BS_GNU`` (in configuration: ``GNU``)
     Always break before braces and add an extra level of indentation to
@@ -1278,7 +1324,7 @@ the configuration (without a prefix: ``Auto``).
   used for ordering ``#includes``.
 
   `POSIX extended
-  <http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html>`_
+  <https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html>`_
   regular expressions are supported.
 
   These regular expressions are matched against the filename of an include
@@ -1365,6 +1411,16 @@ the configuration (without a prefix: ``Auto``).
        #  endif
        #endif
 
+  * ``PPDIS_BeforeHash`` (in configuration: ``BeforeHash``)
+    Indents directives before the hash.
+
+    .. code-block:: c++
+
+       #if FOO
+         #if BAR
+           #include <foo>
+         #endif
+       #endif
 
 
 **IndentWidth** (``unsigned``)
@@ -1398,7 +1454,7 @@ the configuration (without a prefix: ``Auto``).
 **JavaImportGroups** (``std::vector<std::string>``)
   A vector of prefixes ordered by the desired groups for Java imports.
 
-  Each group is seperated by a newline. Static imports will also follow the
+  Each group is separated by a newline. Static imports will also follow the
   same grouping convention above all non-static imports. One group's prefix
   can be a subset of another - the longest prefix is always matched. Within
   a group, the imports are ordered lexicographically.

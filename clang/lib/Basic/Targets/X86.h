@@ -1,9 +1,8 @@
 //===--- X86.h - Declare X86 target feature support -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -122,8 +121,6 @@ protected:
 
   CPUKind getCPUKind(StringRef CPU) const;
 
-  std::string getCPUKindCanonicalName(CPUKind Kind) const;
-
   enum FPMathKind { FP_Default, FP_SSE, FP_387 } FPMath = FP_Default;
 
 public:
@@ -199,7 +196,7 @@ public:
                                   StringRef Expression) const override {
     StringRef::iterator I, E;
     for (I = Constraint.begin(), E = Constraint.end(); I != E; ++I) {
-      if (isalpha(*I))
+      if (isalpha(*I) || *I == '@')
         break;
     }
     if (I == E)

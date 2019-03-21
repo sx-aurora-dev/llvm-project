@@ -1,9 +1,8 @@
 //===-- SymbolFileDWARFDwo.h ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -70,7 +69,7 @@ protected:
       const DWARFDeclContext &die_decl_ctx) override;
 
   lldb::TypeSP FindCompleteObjCDefinitionTypeForDIE(
-      const DWARFDIE &die, const lldb_private::ConstString &type_name,
+      const DWARFDIE &die, lldb_private::ConstString type_name,
       bool must_be_implementation) override;
 
   SymbolFileDWARF *GetBaseSymbolFile();

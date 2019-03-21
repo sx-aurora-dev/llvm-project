@@ -1,9 +1,8 @@
 //===-- ProcessorTrace.h -------------------------------------- -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -119,17 +118,17 @@ public:
   // ---------------------------------------------------------------------
   /// Read data from a cyclic buffer
   ///
-  /// @param[in] [out] buf
+  /// \param[in] [out] buf
   ///     Destination buffer, the buffer will be truncated to written size.
   ///
-  /// @param[in] src
+  /// \param[in] src
   ///     Source buffer which must be a cyclic buffer.
   ///
-  /// @param[in] src_cyc_index
+  /// \param[in] src_cyc_index
   ///     The index pointer (start of the valid data in the cyclic
   ///     buffer).
   ///
-  /// @param[in] offset
+  /// \param[in] offset
   ///     The offset to begin reading the data in the cyclic buffer.
   // ---------------------------------------------------------------------
   static void ReadCyclicBuffer(llvm::MutableArrayRef<uint8_t> &dst,

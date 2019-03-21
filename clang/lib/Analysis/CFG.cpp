@@ -1,9 +1,8 @@
 //===- CFG.cpp - Classes for representing and building CFGs ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1379,6 +1378,15 @@ void CFGBuilder::findConstructionContexts(
     findConstructionContexts(Layer, CO->getRHS());
     break;
   }
+  case Stmt::InitListExprClass: {
+    auto *ILE = cast<InitListExpr>(Child);
+    if (ILE->isTransparent()) {
+      findConstructionContexts(Layer, ILE->getInit(0));
+      break;
+    }
+    // TODO: Handle other cases. For now, fail to find construction contexts.
+    break;
+  }
   default:
     break;
   }
@@ -2459,7 +2467,8 @@ CFGBlock *CFGBuilder::VisitCallExpr(CallExpr *C, AddStmtChoice asc) {
       NoReturn = true;
     if (FD->hasAttr<NoThrowAttr>())
       AddEHEdge = false;
-    if (FD->getBuiltinID() == Builtin::BI__builtin_object_size)
+    if (FD->getBuiltinID() == Builtin::BI__builtin_object_size ||
+        FD->getBuiltinID() == Builtin::BI__builtin_dynamic_object_size)
       OmitArguments = true;
   }
 

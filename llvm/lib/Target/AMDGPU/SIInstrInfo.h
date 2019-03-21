@@ -1,9 +1,8 @@
 //===- SIInstrInfo.h - SI Instruction Info Interface ------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -121,9 +120,9 @@ private:
   void addUsersToMoveToVALUWorklist(unsigned Reg, MachineRegisterInfo &MRI,
                                     SetVectorType &Worklist) const;
 
-  void
-  addSCCDefUsersToVALUWorklist(MachineInstr &SCCDefInst,
-                               SetVectorType &Worklist) const;
+  void addSCCDefUsersToVALUWorklist(MachineOperand &Op,
+                                    MachineInstr &SCCDefInst,
+                                    SetVectorType &Worklist) const;
 
   const TargetRegisterClass *
   getDestEquivalentVGPRClass(const MachineInstr &Inst) const;
@@ -450,6 +449,8 @@ public:
     return get(Opcode).TSFlags & SIInstrFlags::DS;
   }
 
+  bool isAlwaysGDS(uint16_t Opcode) const;
+
   static bool isMIMG(const MachineInstr &MI) {
     return MI.getDesc().TSFlags & SIInstrFlags::MIMG;
   }
@@ -604,6 +605,14 @@ public:
       return MI.getDesc().TSFlags & ClampFlags;
   }
 
+  static bool usesFPDPRounding(const MachineInstr &MI) {
+    return MI.getDesc().TSFlags & SIInstrFlags::FPDPRounding;
+  }
+
+  bool usesFPDPRounding(uint16_t Opcode) const {
+    return get(Opcode).TSFlags & SIInstrFlags::FPDPRounding;
+  }
+
   bool isVGPRCopy(const MachineInstr &MI) const {
     assert(MI.isCopy());
     unsigned Dest = MI.getOperand(0).getReg();
@@ -753,10 +762,6 @@ public:
     return RI.getRegSizeInBits(*getOpRegClass(MI, OpNo)) / 8;
   }
 
-  /// \returns true if it is legal for the operand at index \p OpNo
-  /// to read a VGPR.
-  bool canReadVGPR(const MachineInstr &MI, unsigned OpNo) const;
-
   /// Legalize the \p OpIndex operand of this instruction by inserting
   /// a MOV.  For example:
   /// ADD_I32_e32 VGPR0, 15
@@ -828,7 +833,7 @@ public:
   void insertReturn(MachineBasicBlock &MBB) const;
   /// Return the number of wait states that result from executing this
   /// instruction.
-  unsigned getNumWaitStates(const MachineInstr &MI) const;
+  static unsigned getNumWaitStates(const MachineInstr &MI);
 
   /// Returns the operand named \p Op.  If \p MI does not have an
   /// operand named \c Op, this function returns nullptr.
@@ -947,6 +952,12 @@ TargetInstrInfo::RegSubRegPair getRegSequenceSubReg(MachineInstr &MI,
 /// Following another subreg of a reg:subreg isn't supported.
 MachineInstr *getVRegSubRegDef(const TargetInstrInfo::RegSubRegPair &P,
                                MachineRegisterInfo &MRI);
+
+/// \brief Return true if EXEC mask isnt' changed between the def and
+/// all uses of VReg. Currently if def and uses are in different BBs -
+/// simply return false. Should be run on SSA.
+bool isEXECMaskConstantBetweenDefAndUses(unsigned VReg,
+                                         MachineRegisterInfo &MRI);
 
 namespace AMDGPU {
 

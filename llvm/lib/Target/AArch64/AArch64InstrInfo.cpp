@@ -1,9 +1,8 @@
 //===- AArch64InstrInfo.cpp - AArch64 Instruction Information -------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -705,10 +704,10 @@ bool AArch64InstrInfo::isAsCheapAsAMove(const MachineInstr &MI) const {
   // Secondly, check cases specific to sub-targets.
 
   if (Subtarget.hasExynosCheapAsMoveHandling()) {
-    if (isExynosResetFast(MI) || isExynosShiftExtFast(MI))
+    if (isExynosCheapAsMove(MI))
       return true;
-    else
-      return MI.isAsCheapAsAMove();
+
+    return MI.isAsCheapAsAMove();
   }
 
   // Finally, check generic cases.
@@ -757,211 +756,6 @@ bool AArch64InstrInfo::isAsCheapAsAMove(const MachineInstr &MI) const {
   }
 
   llvm_unreachable("Unknown opcode to check as cheap as a move!");
-}
-
-bool AArch64InstrInfo::isExynosResetFast(const MachineInstr &MI) {
-  unsigned Reg, Imm, Shift;
-
-  switch (MI.getOpcode()) {
-  default:
-    return false;
-
-  // MOV Rd, SP
-  case AArch64::ADDWri:
-  case AArch64::ADDXri:
-    if (!MI.getOperand(1).isReg() || !MI.getOperand(2).isImm())
-      return false;
-
-    Reg = MI.getOperand(1).getReg();
-    Imm = MI.getOperand(2).getImm();
-    return ((Reg == AArch64::WSP || Reg == AArch64::SP) && Imm == 0);
-
-  // Literal
-  case AArch64::ADR:
-  case AArch64::ADRP:
-    return true;
-
-  // MOVI Vd, #0
-  case AArch64::MOVID:
-  case AArch64::MOVIv8b_ns:
-  case AArch64::MOVIv2d_ns:
-  case AArch64::MOVIv16b_ns:
-    Imm = MI.getOperand(1).getImm();
-    return (Imm == 0);
-
-  // MOVI Vd, #0
-  case AArch64::MOVIv2i32:
-  case AArch64::MOVIv4i16:
-  case AArch64::MOVIv4i32:
-  case AArch64::MOVIv8i16:
-    Imm = MI.getOperand(1).getImm();
-    Shift = MI.getOperand(2).getImm();
-    return (Imm == 0 && Shift == 0);
-
-  // MOV Rd, Imm
-  case AArch64::MOVNWi:
-  case AArch64::MOVNXi:
-
-  // MOV Rd, Imm
-  case AArch64::MOVZWi:
-  case AArch64::MOVZXi:
-    return true;
-
-  // MOV Rd, Imm
-  case AArch64::ORRWri:
-  case AArch64::ORRXri:
-    if (!MI.getOperand(1).isReg())
-      return false;
-
-    Reg = MI.getOperand(1).getReg();
-    Imm = MI.getOperand(2).getImm();
-    return ((Reg == AArch64::WZR || Reg == AArch64::XZR) && Imm == 0);
-
-  // MOV Rd, Rm
-  case AArch64::ORRWrs:
-  case AArch64::ORRXrs:
-    if (!MI.getOperand(1).isReg())
-      return false;
-
-    Reg = MI.getOperand(1).getReg();
-    Imm = MI.getOperand(3).getImm();
-    Shift = AArch64_AM::getShiftValue(Imm);
-    return ((Reg == AArch64::WZR || Reg == AArch64::XZR) && Shift == 0);
-  }
-}
-
-bool AArch64InstrInfo::isExynosLdStExtFast(const MachineInstr &MI) {
-  unsigned Imm;
-  AArch64_AM::ShiftExtendType Ext;
-
-  switch (MI.getOpcode()) {
-  default:
-    return false;
-
-  // WriteLD
-  case AArch64::PRFMroW:
-  case AArch64::PRFMroX:
-
-  // WriteLDIdx
-  case AArch64::LDRBBroW:
-  case AArch64::LDRBBroX:
-  case AArch64::LDRHHroW:
-  case AArch64::LDRHHroX:
-  case AArch64::LDRSBWroW:
-  case AArch64::LDRSBWroX:
-  case AArch64::LDRSBXroW:
-  case AArch64::LDRSBXroX:
-  case AArch64::LDRSHWroW:
-  case AArch64::LDRSHWroX:
-  case AArch64::LDRSHXroW:
-  case AArch64::LDRSHXroX:
-  case AArch64::LDRSWroW:
-  case AArch64::LDRSWroX:
-  case AArch64::LDRWroW:
-  case AArch64::LDRWroX:
-  case AArch64::LDRXroW:
-  case AArch64::LDRXroX:
-
-  case AArch64::LDRBroW:
-  case AArch64::LDRBroX:
-  case AArch64::LDRDroW:
-  case AArch64::LDRDroX:
-  case AArch64::LDRHroW:
-  case AArch64::LDRHroX:
-  case AArch64::LDRSroW:
-  case AArch64::LDRSroX:
-
-  // WriteSTIdx
-  case AArch64::STRBBroW:
-  case AArch64::STRBBroX:
-  case AArch64::STRHHroW:
-  case AArch64::STRHHroX:
-  case AArch64::STRWroW:
-  case AArch64::STRWroX:
-  case AArch64::STRXroW:
-  case AArch64::STRXroX:
-
-  case AArch64::STRBroW:
-  case AArch64::STRBroX:
-  case AArch64::STRDroW:
-  case AArch64::STRDroX:
-  case AArch64::STRHroW:
-  case AArch64::STRHroX:
-  case AArch64::STRSroW:
-  case AArch64::STRSroX:
-    Imm = MI.getOperand(3).getImm();
-    Ext = AArch64_AM::getMemExtendType(Imm);
-    return (Ext == AArch64_AM::SXTX || Ext == AArch64_AM::UXTX);
-  }
-}
-
-bool AArch64InstrInfo::isExynosShiftExtFast(const MachineInstr &MI) {
-  unsigned Imm, Shift;
-  AArch64_AM::ShiftExtendType Ext;
-
-  switch (MI.getOpcode()) {
-  default:
-    return false;
-
-  // WriteI
-  case AArch64::ADDSWri:
-  case AArch64::ADDSXri:
-  case AArch64::ADDWri:
-  case AArch64::ADDXri:
-  case AArch64::SUBSWri:
-  case AArch64::SUBSXri:
-  case AArch64::SUBWri:
-  case AArch64::SUBXri:
-    return true;
-
-  // WriteISReg
-  case AArch64::ADDSWrs:
-  case AArch64::ADDSXrs:
-  case AArch64::ADDWrs:
-  case AArch64::ADDXrs:
-  case AArch64::ANDSWrs:
-  case AArch64::ANDSXrs:
-  case AArch64::ANDWrs:
-  case AArch64::ANDXrs:
-  case AArch64::BICSWrs:
-  case AArch64::BICSXrs:
-  case AArch64::BICWrs:
-  case AArch64::BICXrs:
-  case AArch64::EONWrs:
-  case AArch64::EONXrs:
-  case AArch64::EORWrs:
-  case AArch64::EORXrs:
-  case AArch64::ORNWrs:
-  case AArch64::ORNXrs:
-  case AArch64::ORRWrs:
-  case AArch64::ORRXrs:
-  case AArch64::SUBSWrs:
-  case AArch64::SUBSXrs:
-  case AArch64::SUBWrs:
-  case AArch64::SUBXrs:
-    Imm = MI.getOperand(3).getImm();
-    Shift = AArch64_AM::getShiftValue(Imm);
-    Ext = AArch64_AM::getShiftType(Imm);
-    return (Shift == 0 || (Shift <= 3 && Ext == AArch64_AM::LSL));
-
-  // WriteIEReg
-  case AArch64::ADDSWrx:
-  case AArch64::ADDSXrx:
-  case AArch64::ADDSXrx64:
-  case AArch64::ADDWrx:
-  case AArch64::ADDXrx:
-  case AArch64::ADDXrx64:
-  case AArch64::SUBSWrx:
-  case AArch64::SUBSXrx:
-  case AArch64::SUBSXrx64:
-  case AArch64::SUBWrx:
-  case AArch64::SUBXrx:
-  case AArch64::SUBXrx64:
-    Imm = MI.getOperand(3).getImm();
-    Shift = AArch64_AM::getArithShiftValue(Imm);
-    Ext = AArch64_AM::getArithExtendType(Imm);
-    return (Shift == 0 || (Shift <= 3 && Ext == AArch64_AM::UXTX));
-  }
 }
 
 bool AArch64InstrInfo::isFalkorShiftExtFast(const MachineInstr &MI) {
@@ -1169,6 +963,18 @@ bool AArch64InstrInfo::isSchedulingBoundary(const MachineInstr &MI,
                                             const MachineFunction &MF) const {
   if (TargetInstrInfo::isSchedulingBoundary(MI, MBB, MF))
     return true;
+  switch (MI.getOpcode()) {
+  case AArch64::HINT:
+    // CSDB hints are scheduling barriers.
+    if (MI.getOperand(0).getImm() == 0x14)
+      return true;
+    break;
+  case AArch64::DSB:
+  case AArch64::ISB:
+    // DSB and ISB also are scheduling barriers.
+    return true;
+  default:;
+  }
   return isSEHInstruction(MI);
 }
 
@@ -2485,6 +2291,31 @@ void AArch64InstrInfo::copyPhysRegTuple(MachineBasicBlock &MBB,
   }
 }
 
+void AArch64InstrInfo::copyGPRRegTuple(MachineBasicBlock &MBB,
+                                       MachineBasicBlock::iterator I,
+                                       DebugLoc DL, unsigned DestReg,
+                                       unsigned SrcReg, bool KillSrc,
+                                       unsigned Opcode, unsigned ZeroReg,
+                                       llvm::ArrayRef<unsigned> Indices) const {
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  unsigned NumRegs = Indices.size();
+
+#ifndef NDEBUG
+  uint16_t DestEncoding = TRI->getEncodingValue(DestReg);
+  uint16_t SrcEncoding = TRI->getEncodingValue(SrcReg);
+  assert(DestEncoding % NumRegs == 0 && SrcEncoding % NumRegs == 0 &&
+         "GPR reg sequences should not be able to overlap");
+#endif
+
+  for (unsigned SubReg = 0; SubReg != NumRegs; ++SubReg) {
+    const MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(Opcode));
+    AddSubReg(MIB, DestReg, Indices[SubReg], RegState::Define, TRI);
+    MIB.addReg(ZeroReg);
+    AddSubReg(MIB, SrcReg, Indices[SubReg], getKillRegState(KillSrc), TRI);
+    MIB.addImm(0);
+  }
+}
+
 void AArch64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                    MachineBasicBlock::iterator I,
                                    const DebugLoc &DL, unsigned DestReg,
@@ -2621,6 +2452,22 @@ void AArch64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     static const unsigned Indices[] = {AArch64::qsub0, AArch64::qsub1};
     copyPhysRegTuple(MBB, I, DL, DestReg, SrcReg, KillSrc, AArch64::ORRv16i8,
                      Indices);
+    return;
+  }
+
+  if (AArch64::XSeqPairsClassRegClass.contains(DestReg) &&
+      AArch64::XSeqPairsClassRegClass.contains(SrcReg)) {
+    static const unsigned Indices[] = {AArch64::sube64, AArch64::subo64};
+    copyGPRRegTuple(MBB, I, DL, DestReg, SrcReg, KillSrc, AArch64::ORRXrs,
+                    AArch64::XZR, Indices);
+    return;
+  }
+
+  if (AArch64::WSeqPairsClassRegClass.contains(DestReg) &&
+      AArch64::WSeqPairsClassRegClass.contains(SrcReg)) {
+    static const unsigned Indices[] = {AArch64::sube32, AArch64::subo32};
+    copyGPRRegTuple(MBB, I, DL, DestReg, SrcReg, KillSrc, AArch64::ORRWrs,
+                    AArch64::WZR, Indices);
     return;
   }
 
@@ -4944,7 +4791,8 @@ AArch64InstrInfo::getSerializableBitmaskMachineOperandTargetFlags() const {
   static const std::pair<unsigned, const char *> TargetFlags[] = {
       {MO_COFFSTUB, "aarch64-coffstub"},
       {MO_GOT, "aarch64-got"},   {MO_NC, "aarch64-nc"},
-      {MO_TLS, "aarch64-tls"},   {MO_DLLIMPORT, "aarch64-dllimport"}};
+      {MO_S, "aarch64-s"},       {MO_TLS, "aarch64-tls"},
+      {MO_DLLIMPORT, "aarch64-dllimport"}};
   return makeArrayRef(TargetFlags);
 }
 
@@ -5522,6 +5370,14 @@ AArch64InstrInfo::getOutliningType(MachineBasicBlock::iterator &MIT,
   if (MI.readsRegister(AArch64::W30, &getRegisterInfo()) ||
       MI.modifiesRegister(AArch64::W30, &getRegisterInfo()))
     return outliner::InstrType::Illegal;
+
+  // Don't outline BTI instructions, because that will prevent the outlining
+  // site from being indirectly callable.
+  if (MI.getOpcode() == AArch64::HINT) {
+    int64_t Imm = MI.getOperand(0).getImm();
+    if (Imm == 32 || Imm == 34 || Imm == 36 || Imm == 38)
+      return outliner::InstrType::Illegal;
+  }
 
   return outliner::InstrType::Legal;
 }

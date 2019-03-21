@@ -1,9 +1,8 @@
 //===-- llvm/CodeGen/DwarfUnit.cpp - Dwarf Type and Compile Units ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -47,21 +46,26 @@ using namespace llvm;
 
 #define DEBUG_TYPE "dwarfdebug"
 
-DIEDwarfExpression::DIEDwarfExpression(const AsmPrinter &AP, DwarfUnit &DU,
+DIEDwarfExpression::DIEDwarfExpression(const AsmPrinter &AP,
+                                       DwarfCompileUnit &CU,
                                        DIELoc &DIE)
-    : DwarfExpression(AP.getDwarfVersion()), AP(AP), DU(DU),
+    : DwarfExpression(AP.getDwarfVersion(), CU), AP(AP),
       DIE(DIE) {}
 
 void DIEDwarfExpression::emitOp(uint8_t Op, const char* Comment) {
-  DU.addUInt(DIE, dwarf::DW_FORM_data1, Op);
+  CU.addUInt(DIE, dwarf::DW_FORM_data1, Op);
 }
 
 void DIEDwarfExpression::emitSigned(int64_t Value) {
-  DU.addSInt(DIE, dwarf::DW_FORM_sdata, Value);
+  CU.addSInt(DIE, dwarf::DW_FORM_sdata, Value);
 }
 
 void DIEDwarfExpression::emitUnsigned(uint64_t Value) {
-  DU.addUInt(DIE, dwarf::DW_FORM_udata, Value);
+  CU.addUInt(DIE, dwarf::DW_FORM_udata, Value);
+}
+
+void DIEDwarfExpression::emitBaseTypeRef(uint64_t Idx) {
+  CU.addBaseTypeRef(DIE, Idx);
 }
 
 bool DIEDwarfExpression::isFrameRegister(const TargetRegisterInfo &TRI,
@@ -619,6 +623,32 @@ DIE *DwarfTypeUnit::createTypeDIE(const DICompositeType *Ty) {
   return &TyDIE;
 }
 
+DIE *DwarfUnit::createTypeDIE(const DIScope *Context, DIE &ContextDIE,
+                              const DIType *Ty) {
+  // Create new type.
+  DIE &TyDIE = createAndAddDIE(Ty->getTag(), ContextDIE, Ty);
+
+  updateAcceleratorTables(Context, Ty, TyDIE);
+
+  if (auto *BT = dyn_cast<DIBasicType>(Ty))
+    constructTypeDIE(TyDIE, BT);
+  else if (auto *STy = dyn_cast<DISubroutineType>(Ty))
+    constructTypeDIE(TyDIE, STy);
+  else if (auto *CTy = dyn_cast<DICompositeType>(Ty)) {
+    if (DD->generateTypeUnits() && !Ty->isForwardDecl())
+      if (MDString *TypeId = CTy->getRawIdentifier()) {
+        DD->addDwarfTypeUnitType(getCU(), TypeId->getString(), TyDIE, CTy);
+        // Skip updating the accelerator tables since this is not the full type.
+        return &TyDIE;
+      }
+    constructTypeDIE(TyDIE, CTy);
+  } else {
+    constructTypeDIE(TyDIE, cast<DIDerivedType>(Ty));
+  }
+
+  return &TyDIE;
+}
+
 DIE *DwarfUnit::getOrCreateTypeDIE(const MDNode *TyNode) {
   if (!TyNode)
     return nullptr;
@@ -642,28 +672,8 @@ DIE *DwarfUnit::getOrCreateTypeDIE(const MDNode *TyNode) {
   if (DIE *TyDIE = getDIE(Ty))
     return TyDIE;
 
-  // Create new type.
-  DIE &TyDIE = createAndAddDIE(Ty->getTag(), *ContextDIE, Ty);
-
-  updateAcceleratorTables(Context, Ty, TyDIE);
-
-  if (auto *BT = dyn_cast<DIBasicType>(Ty))
-    constructTypeDIE(TyDIE, BT);
-  else if (auto *STy = dyn_cast<DISubroutineType>(Ty))
-    constructTypeDIE(TyDIE, STy);
-  else if (auto *CTy = dyn_cast<DICompositeType>(Ty)) {
-    if (DD->generateTypeUnits() && !Ty->isForwardDecl())
-      if (MDString *TypeId = CTy->getRawIdentifier()) {
-        DD->addDwarfTypeUnitType(getCU(), TypeId->getString(), TyDIE, CTy);
-        // Skip updating the accelerator tables since this is not the full type.
-        return &TyDIE;
-      }
-    constructTypeDIE(TyDIE, CTy);
-  } else {
-    constructTypeDIE(TyDIE, cast<DIDerivedType>(Ty));
-  }
-
-  return &TyDIE;
+  return static_cast<DwarfUnit *>(ContextDIE->getUnit())
+      ->createTypeDIE(Context, *ContextDIE, Ty);
 }
 
 void DwarfUnit::updateAcceleratorTables(const DIScope *Context,
@@ -1107,7 +1117,8 @@ DIE *DwarfUnit::getOrCreateSubprogramDIE(const DISubprogram *SP, bool Minimal) {
   if (SP->isDefinition())
     return &SPDie;
 
-  applySubprogramAttributes(SP, SPDie);
+  static_cast<DwarfUnit *>(SPDie.getUnit())
+      ->applySubprogramAttributes(SP, SPDie);
   return &SPDie;
 }
 
@@ -1261,6 +1272,12 @@ void DwarfUnit::applySubprogramAttributes(const DISubprogram *SP, DIE &SPDie,
 
   if (SP->isMainSubprogram())
     addFlag(SPDie, dwarf::DW_AT_main_subprogram);
+  if (SP->isPure())
+    addFlag(SPDie, dwarf::DW_AT_pure);
+  if (SP->isElemental())
+    addFlag(SPDie, dwarf::DW_AT_elemental);
+  if (SP->isRecursive())
+    addFlag(SPDie, dwarf::DW_AT_recursive);
 }
 
 void DwarfUnit::constructSubrangeDIE(DIE &Buffer, const DISubrange *SR,
@@ -1361,7 +1378,7 @@ void DwarfUnit::constructEnumTypeDIE(DIE &Buffer, const DICompositeType *CTy) {
   if (DTy) {
     if (DD->getDwarfVersion() >= 3)
       addType(Buffer, DTy);
-    if (DD->getDwarfVersion() >= 4 && (CTy->getFlags() & DINode::FlagFixedEnum))
+    if (DD->getDwarfVersion() >= 4 && (CTy->getFlags() & DINode::FlagEnumClass))
       addFlag(Buffer, dwarf::DW_AT_enum_class);
   }
 
@@ -1553,7 +1570,14 @@ DIE *DwarfUnit::getOrCreateStaticMemberDIE(const DIDerivedType *DT) {
 void DwarfUnit::emitCommonHeader(bool UseOffsets, dwarf::UnitType UT) {
   // Emit size of content not including length itself
   Asm->OutStreamer->AddComment("Length of Unit");
-  Asm->emitInt32(getHeaderSize() + getUnitDie().getSize());
+  if (!DD->useSectionsAsReferences()) {
+    StringRef Prefix = isDwoUnit() ? "debug_info_dwo_" : "debug_info_";
+    MCSymbol *BeginLabel = Asm->createTempSymbol(Prefix + "start");
+    EndLabel = Asm->createTempSymbol(Prefix + "end");
+    Asm->EmitLabelDifference(EndLabel, BeginLabel, 4);
+    Asm->OutStreamer->EmitLabel(BeginLabel);
+  } else
+    Asm->emitInt32(getHeaderSize() + getUnitDie().getSize());
 
   Asm->OutStreamer->AddComment("DWARF version number");
   unsigned Version = DD->getDwarfVersion();
@@ -1663,13 +1687,4 @@ void DwarfUnit::addLoclistsBase() {
   addSectionLabel(getUnitDie(), dwarf::DW_AT_loclists_base,
                   DU->getLoclistsTableBaseSym(),
                   TLOF.getDwarfLoclistsSection()->getBeginSymbol());
-}
-
-void DwarfUnit::addAddrTableBase() {
-  const TargetLoweringObjectFile &TLOF = Asm->getObjFileLowering();
-  MCSymbol *Label = DD->getAddressPool().getLabel();
-  addSectionLabel(getUnitDie(),
-                  getDwarfVersion() >= 5 ? dwarf::DW_AT_addr_base
-                                         : dwarf::DW_AT_GNU_addr_base,
-                  Label, TLOF.getDwarfAddrSection()->getBeginSymbol());
 }

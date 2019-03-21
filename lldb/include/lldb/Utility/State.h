@@ -1,9 +1,8 @@
 //===-- State.h -------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,10 +20,10 @@ namespace lldb_private {
 //------------------------------------------------------------------
 /// Converts a StateType to a C string.
 ///
-/// @param[in] state
+/// \param[in] state
 ///     The StateType object to convert.
 ///
-/// @return
+/// \return
 ///     A NULL terminated C string that describes \a state. The
 ///     returned string comes from constant string buffers and does
 ///     not need to be freed.
@@ -35,10 +34,10 @@ const char *StateAsCString(lldb::StateType state);
 /// Check if a state represents a state where the process or thread
 /// is running.
 ///
-/// @param[in] state
+/// \param[in] state
 ///     The StateType enumeration value
 ///
-/// @return
+/// \return
 ///     \b true if the state represents a process or thread state
 ///     where the process or thread is running, \b false otherwise.
 //------------------------------------------------------------------
@@ -51,14 +50,14 @@ bool StateIsRunningState(lldb::StateType state);
 /// yet. The \a must_exist argument tells us which of these cases is
 /// desired.
 ///
-/// @param[in] state
+/// \param[in] state
 ///     The StateType enumeration value
 ///
-/// @param[in] must_exist
+/// \param[in] must_exist
 ///     A boolean that indicates the thread must also be alive
 ///     so states like unloaded or exited won't return true.
 ///
-/// @return
+/// \return
 ///     \b true if the state represents a process or thread state
 ///     where the process or thread is stopped. If \a must_exist is
 ///     \b true, then the process can't be exited or unloaded,

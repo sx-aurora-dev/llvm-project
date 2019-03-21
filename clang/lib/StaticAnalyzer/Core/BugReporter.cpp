@@ -1,9 +1,8 @@
 //===- BugReporter.cpp - Generate PathDiagnostics for bugs ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -820,7 +819,7 @@ void generateMinimalDiagForBlockEdge(const ExplodedNode *N, BlockEdge BE,
 // and values by tracing interesting calculations backwards through evaluated
 // expressions along a path.  This is probably overly complicated, but the idea
 // is that if an expression computed an "interesting" value, the child
-// expressions are are also likely to be "interesting" as well (which then
+// expressions are also likely to be "interesting" as well (which then
 // propagates to the values they in turn compute).  This reverse propagation
 // is needed to track interesting correlations across function call boundaries,
 // where formal arguments bind to actual arguments, etc.  This is also needed
@@ -1247,7 +1246,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
 
 static std::unique_ptr<PathDiagnostic>
 generateEmptyDiagnosticForReport(BugReport *R, SourceManager &SM) {
-  BugType &BT = R->getBugType();
+  const BugType &BT = R->getBugType();
   return llvm::make_unique<PathDiagnostic>(
       R->getBugType().getCheckName(), R->getDeclWithIssue(),
       R->getBugType().getName(), R->getDescription(),
@@ -2684,7 +2683,7 @@ GRBugReporter::generatePathDiagnostics(
   return Out;
 }
 
-void BugReporter::Register(BugType *BT) {
+void BugReporter::Register(const BugType *BT) {
   BugTypes = F.add(BugTypes, BT);
 }
 
@@ -2718,7 +2717,7 @@ void BugReporter::emitReport(std::unique_ptr<BugReport> R) {
   R->Profile(ID);
 
   // Lookup the equivance class.  If there isn't one, create it.
-  BugType& BT = R->getBugType();
+  const BugType& BT = R->getBugType();
   Register(&BT);
   void *InsertPos;
   BugReportEquivClass* EQ = EQClasses.FindNodeOrInsertPos(ID, InsertPos);
@@ -2836,7 +2835,7 @@ FindReportInEquivalenceClass(BugReportEquivClass& EQ,
                              SmallVectorImpl<BugReport*> &bugReports) {
   BugReportEquivClass::iterator I = EQ.begin(), E = EQ.end();
   assert(I != E);
-  BugType& BT = I->getBugType();
+  const BugType& BT = I->getBugType();
 
   // If we don't need to suppress any of the nodes because they are
   // post-dominated by a sink, simply add all the nodes in the equivalence class

@@ -1,9 +1,8 @@
 //===- MachOObjectFile.cpp - Mach-O object file binding -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -919,6 +918,10 @@ static Error checkLinkerOptCommand(const MachOObjectFile &Obj,
     if (left > 0) {
       i++;
       uint32_t NullPos = StringRef(string, left).find('\0');
+      if (0xffffffff == NullPos)
+        return malformedError("load command " + Twine(LoadCommandIndex) +
+                              " LC_LINKER_OPTION string #" + Twine(i) +
+                              " is not NULL terminated");
       uint32_t len = std::min(NullPos, left) + 1;
       string += len;
       left -= len;
@@ -1664,30 +1667,30 @@ Error MachOObjectFile::checkSymbolTable() const {
       NStrx = STE.n_strx;
       NValue = STE.n_value;
     }
-    if ((NType & MachO::N_STAB) == 0 &&
-        (NType & MachO::N_TYPE) == MachO::N_SECT) {
-      if (NSect == 0 || NSect > Sections.size())
-        return malformedError("bad section index: " + Twine((int)NSect) +
-                              " for symbol at index " + Twine(SymbolIndex));
-    }
-    if ((NType & MachO::N_STAB) == 0 &&
-        (NType & MachO::N_TYPE) == MachO::N_INDR) {
-      if (NValue >= S.strsize)
-        return malformedError("bad n_value: " + Twine((int)NValue) + " past "
-                              "the end of string table, for N_INDR symbol at "
-                              "index " + Twine(SymbolIndex));
-    }
-    if ((Flags & MachO::MH_TWOLEVEL) == MachO::MH_TWOLEVEL &&
-        (((NType & MachO::N_TYPE) == MachO::N_UNDF && NValue == 0) ||
-         (NType & MachO::N_TYPE) == MachO::N_PBUD)) {
-      uint32_t LibraryOrdinal = MachO::GET_LIBRARY_ORDINAL(NDesc);
-      if (LibraryOrdinal != 0 &&
-          LibraryOrdinal != MachO::EXECUTABLE_ORDINAL &&
-          LibraryOrdinal != MachO::DYNAMIC_LOOKUP_ORDINAL &&
-          LibraryOrdinal - 1 >= Libraries.size() ) {
-        return malformedError("bad library ordinal: " + Twine(LibraryOrdinal) +
-                            " for symbol at index " + Twine(SymbolIndex));
+    if ((NType & MachO::N_STAB) == 0) {
+      if ((NType & MachO::N_TYPE) == MachO::N_SECT) {
+        if (NSect == 0 || NSect > Sections.size())
+          return malformedError("bad section index: " + Twine((int)NSect) +
+                                " for symbol at index " + Twine(SymbolIndex));
       }
+      if ((NType & MachO::N_TYPE) == MachO::N_INDR) {
+        if (NValue >= S.strsize)
+          return malformedError("bad n_value: " + Twine((int)NValue) + " past "
+                                "the end of string table, for N_INDR symbol at "
+                                "index " + Twine(SymbolIndex));
+      }
+      if ((Flags & MachO::MH_TWOLEVEL) == MachO::MH_TWOLEVEL &&
+          (((NType & MachO::N_TYPE) == MachO::N_UNDF && NValue == 0) ||
+           (NType & MachO::N_TYPE) == MachO::N_PBUD)) {
+            uint32_t LibraryOrdinal = MachO::GET_LIBRARY_ORDINAL(NDesc);
+            if (LibraryOrdinal != 0 &&
+                LibraryOrdinal != MachO::EXECUTABLE_ORDINAL &&
+                LibraryOrdinal != MachO::DYNAMIC_LOOKUP_ORDINAL &&
+                LibraryOrdinal - 1 >= Libraries.size() ) {
+              return malformedError("bad library ordinal: " + Twine(LibraryOrdinal) +
+                                    " for symbol at index " + Twine(SymbolIndex));
+            }
+          }
     }
     if (NStrx >= S.strsize)
       return malformedError("bad string table index: " + Twine((int)NStrx) +
@@ -2242,9 +2245,18 @@ uint8_t MachOObjectFile::getRelocationLength(DataRefImpl Rel) const {
 // one of the two following forms:
 //      libFoo.A.dylib
 //      libFoo.dylib
+//
 // The library may have a suffix trailing the name Foo of the form:
 //      libFoo_profile.A.dylib
 //      libFoo_profile.dylib
+// These dyld image suffixes are separated from the short name by a '_'
+// character. Because the '_' character is commonly used to separate words in
+// filenames guessLibraryShortName() cannot reliably separate a dylib's short
+// name from an arbitrary image suffix; imagine if both the short name and the
+// suffix contains an '_' character! To better deal with this ambiguity,
+// guessLibraryShortName() will recognize only "_debug" and "_profile" as valid
+// Suffix values. Calling code needs to be tolerant of guessLibraryShortName()
+// guessing incorrectly.
 //
 // The Name of the dynamic library is also recognized as a library name if it
 // has the following form:
@@ -2252,7 +2264,6 @@ uint8_t MachOObjectFile::getRelocationLength(DataRefImpl Rel) const {
 //
 // If the Name of the dynamic library is none of the forms above then a NULL
 // StringRef is returned.
-//
 StringRef MachOObjectFile::guessLibraryShortName(StringRef Name,
                                                  bool &isFramework,
                                                  StringRef &Suffix) {
@@ -2272,7 +2283,10 @@ StringRef MachOObjectFile::guessLibraryShortName(StringRef Name,
   Idx = Foo.rfind('_');
   if (Idx != Foo.npos && Foo.size() >= 2) {
     Suffix = Foo.slice(Idx, Foo.npos);
-    Foo = Foo.slice(0, Idx);
+    if (Suffix != "_debug" && Suffix != "_profile")
+      Suffix = StringRef();
+    else
+      Foo = Foo.slice(0, Idx);
   }
 
   // First look for the form Foo.framework/Foo
@@ -2333,10 +2347,14 @@ guess_library:
   else
     b = b+1;
   // ignore any suffix after an underbar like Foo_profile.A.dylib
-  Idx = Name.find('_', b);
+  Idx = Name.rfind('_');
   if (Idx != Name.npos && Idx != b) {
     Lib = Name.slice(b, Idx);
     Suffix = Name.slice(Idx, a);
+    if (Suffix != "_debug" && Suffix != "_profile") {
+      Suffix = StringRef();
+      Lib = Name.slice(b, a);
+    }
   }
   else
     Lib = Name.slice(b, a);
@@ -2438,7 +2456,7 @@ basic_symbol_iterator MachOObjectFile::symbol_end() const {
   return basic_symbol_iterator(SymbolRef(DRI, this));
 }
 
-basic_symbol_iterator MachOObjectFile::getSymbolByIndex(unsigned Index) const {
+symbol_iterator MachOObjectFile::getSymbolByIndex(unsigned Index) const {
   MachO::symtab_command Symtab = getSymtabLoadCommand();
   if (!SymtabLoadCmd || Index >= Symtab.nsyms)
     report_fatal_error("Requested symbol index is out of range.");
@@ -3102,8 +3120,8 @@ void MachORebaseEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3127,8 +3145,8 @@ void MachORebaseEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_ADD_ADDR_ULEB " + Twine(error) +
                             " for opcode at: 0x" +
@@ -3142,8 +3160,8 @@ void MachORebaseEntry::moveNext() {
                                        SegmentOffset) << "\n");
       break;
     case MachO::REBASE_OPCODE_ADD_ADDR_IMM_SCALED:
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_ADD_ADDR_IMM_SCALED " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3152,8 +3170,8 @@ void MachORebaseEntry::moveNext() {
         return;
       }
       SegmentOffset += ImmValue * PointerSize;
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              false);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize);
       if (error) {
         *E =
             malformedError("for REBASE_OPCODE_ADD_ADDR_IMM_SCALED "
@@ -3169,15 +3187,6 @@ void MachORebaseEntry::moveNext() {
                                        SegmentOffset) << "\n");
       break;
     case MachO::REBASE_OPCODE_DO_REBASE_IMM_TIMES:
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
-      if (error) {
-        *E = malformedError("for REBASE_OPCODE_DO_REBASE_IMM_TIMES " +
-                            Twine(error) + " for opcode at: 0x" +
-                            Twine::utohexstr(OpcodeStart - Opcodes.begin()));
-        moveToEnd();
-        return;
-      }
       AdvanceAmount = PointerSize;
       Skip = 0;
       Count = ImmValue;
@@ -3185,8 +3194,8 @@ void MachORebaseEntry::moveNext() {
         RemainingLoopCount = ImmValue - 1;
       else
         RemainingLoopCount = 0;
-      error = O->RebaseEntryCheckCountAndSkip(Count, Skip, PointerSize,
-                                              SegmentIndex, SegmentOffset);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize, Count, Skip);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_DO_REBASE_IMM_TIMES " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3203,15 +3212,6 @@ void MachORebaseEntry::moveNext() {
                  << "\n");
       return;
     case MachO::REBASE_OPCODE_DO_REBASE_ULEB_TIMES:
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
-      if (error) {
-        *E = malformedError("for REBASE_OPCODE_DO_REBASE_ULEB_TIMES " +
-                            Twine(error) + " for opcode at: 0x" +
-                            Twine::utohexstr(OpcodeStart - Opcodes.begin()));
-        moveToEnd();
-        return;
-      }
       AdvanceAmount = PointerSize;
       Skip = 0;
       Count = readULEB128(&error);
@@ -3226,8 +3226,8 @@ void MachORebaseEntry::moveNext() {
         RemainingLoopCount = Count - 1;
       else
         RemainingLoopCount = 0;
-      error = O->RebaseEntryCheckCountAndSkip(Count, Skip, PointerSize,
-                                              SegmentIndex, SegmentOffset);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize, Count, Skip);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_DO_REBASE_ULEB_TIMES " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3244,15 +3244,6 @@ void MachORebaseEntry::moveNext() {
                  << "\n");
       return;
     case MachO::REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB:
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
-      if (error) {
-        *E = malformedError("for REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB " +
-                            Twine(error) + " for opcode at: 0x" +
-                            Twine::utohexstr(OpcodeStart - Opcodes.begin()));
-        moveToEnd();
-        return;
-      }
       Skip = readULEB128(&error);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB " +
@@ -3264,8 +3255,8 @@ void MachORebaseEntry::moveNext() {
       AdvanceAmount = Skip + PointerSize;
       Count = 1;
       RemainingLoopCount = 0;
-      error = O->RebaseEntryCheckCountAndSkip(Count, Skip, PointerSize,
-                                              SegmentIndex, SegmentOffset);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize, Count, Skip);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3282,16 +3273,6 @@ void MachORebaseEntry::moveNext() {
                  << "\n");
       return;
     case MachO::REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_ULEB:
-      error = O->RebaseEntryCheckSegAndOffset(SegmentIndex, SegmentOffset,
-                                              true);
-      if (error) {
-        *E = malformedError("for REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_"
-                            "ULEB " +
-                            Twine(error) + " for opcode at: 0x" +
-                            Twine::utohexstr(OpcodeStart - Opcodes.begin()));
-        moveToEnd();
-        return;
-      }
       Count = readULEB128(&error);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_"
@@ -3316,8 +3297,8 @@ void MachORebaseEntry::moveNext() {
       }
       AdvanceAmount = Skip + PointerSize;
 
-      error = O->RebaseEntryCheckCountAndSkip(Count, Skip, PointerSize,
-                                              SegmentIndex, SegmentOffset);
+      error = O->RebaseEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                               PointerSize, Count, Skip);
       if (error) {
         *E = malformedError("for REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_"
                             "ULEB " +
@@ -3624,7 +3605,8 @@ void MachOBindEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset, true);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                             PointerSize);
       if (error) {
         *E = malformedError("for BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3648,7 +3630,8 @@ void MachOBindEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset, true);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                             PointerSize);
       if (error) {
         *E = malformedError("for BIND_OPCODE_ADD_ADDR_ULEB " + Twine(error) +
                             " for opcode at: 0x" +
@@ -3664,7 +3647,8 @@ void MachOBindEntry::moveNext() {
     case MachO::BIND_OPCODE_DO_BIND:
       AdvanceAmount = PointerSize;
       RemainingLoopCount = 0;
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset, true);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                             PointerSize);
       if (error) {
         *E = malformedError("for BIND_OPCODE_DO_BIND " + Twine(error) +
                             " for opcode at: 0x" +
@@ -3701,7 +3685,8 @@ void MachOBindEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset, true);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                             PointerSize);
       if (error) {
         *E = malformedError("for BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3737,8 +3722,8 @@ void MachOBindEntry::moveNext() {
       // Note, this is not really an error until the next bind but make no sense
       // for a BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB to not be followed by another
       // bind operation.
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset +
-                                            AdvanceAmount, false);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset +
+                                            AdvanceAmount, PointerSize);
       if (error) {
         *E = malformedError("for BIND_OPCODE_ADD_ADDR_ULEB (after adding "
                             "ULEB) " +
@@ -3764,7 +3749,8 @@ void MachOBindEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset, true);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                             PointerSize);
       if (error) {
         *E = malformedError("for BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED " +
                             Twine(error) + " for opcode at: 0x" +
@@ -3792,8 +3778,8 @@ void MachOBindEntry::moveNext() {
       }
       AdvanceAmount = ImmValue * PointerSize + PointerSize;
       RemainingLoopCount = 0;
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset +
-                                            AdvanceAmount, false);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset +
+                                             AdvanceAmount, PointerSize);
       if (error) {
         *E =
             malformedError("for BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED "
@@ -3839,15 +3825,6 @@ void MachOBindEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->BindEntryCheckSegAndOffset(SegmentIndex, SegmentOffset, true);
-      if (error) {
-        *E =
-            malformedError("for BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB " +
-                           Twine(error) + " for opcode at: 0x" +
-                           Twine::utohexstr(OpcodeStart - Opcodes.begin()));
-        moveToEnd();
-        return;
-      }
       if (SymbolName == StringRef()) {
         *E = malformedError(
             "for BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB "
@@ -3866,8 +3843,8 @@ void MachOBindEntry::moveNext() {
         moveToEnd();
         return;
       }
-      error = O->BindEntryCheckCountAndSkip(Count, Skip, PointerSize,
-                                            SegmentIndex, SegmentOffset);
+      error = O->BindEntryCheckSegAndOffsets(SegmentIndex, SegmentOffset,
+                                             PointerSize, Count, Skip);
       if (error) {
         *E =
             malformedError("for BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB " +
@@ -3990,53 +3967,40 @@ BindRebaseSegInfo::BindRebaseSegInfo(const object::MachOObjectFile *Obj) {
   MaxSegIndex = CurSegIndex;
 }
 
-// For use with a SegIndex,SegOffset pair in MachOBindEntry::moveNext() to
-// validate a MachOBindEntry or MachORebaseEntry.
-const char * BindRebaseSegInfo::checkSegAndOffset(int32_t SegIndex,
-                                                  uint64_t SegOffset,
-                                                  bool endInvalid) {
+// For use with a SegIndex, SegOffset, and PointerSize triple in
+// MachOBindEntry::moveNext() to validate a MachOBindEntry or MachORebaseEntry.
+//
+// Given a SegIndex, SegOffset, and PointerSize, verify a valid section exists
+// that fully contains a pointer at that location. Multiple fixups in a bind
+// (such as with the BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB opcode) can
+// be tested via the Count and Skip parameters.
+const char * BindRebaseSegInfo::checkSegAndOffsets(int32_t SegIndex,
+                                                   uint64_t SegOffset,
+                                                   uint8_t PointerSize,
+                                                   uint32_t Count,
+                                                   uint32_t Skip) {
   if (SegIndex == -1)
     return "missing preceding *_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB";
   if (SegIndex >= MaxSegIndex)
     return "bad segIndex (too large)";
-  for (const SectionInfo &SI : Sections) {
-    if (SI.SegmentIndex != SegIndex)
-      continue;
-    if (SI.OffsetInSegment > SegOffset)
-      continue;
-    if (SegOffset > (SI.OffsetInSegment + SI.Size))
-      continue;
-    if (endInvalid && SegOffset >= (SI.OffsetInSegment + SI.Size))
-      continue;
-    return nullptr;
-  }
-  return "bad segOffset, too large";
-}
-
-// For use in MachOBindEntry::moveNext() to validate a MachOBindEntry for
-// the BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB opcode and for use in
-// MachORebaseEntry::moveNext() to validate a MachORebaseEntry for
-// REBASE_OPCODE_DO_*_TIMES* opcodes.  The SegIndex and SegOffset must have
-// been already checked.
-const char * BindRebaseSegInfo::checkCountAndSkip(uint32_t Count, uint32_t Skip,
-                                                  uint8_t PointerSize,
-                                                  int32_t SegIndex,
-                                                  uint64_t SegOffset) {
-  const SectionInfo &SI = findSection(SegIndex, SegOffset);
-  uint64_t addr = SI.SegmentStartAddress + SegOffset;
-  if (addr >= SI.Address + SI.Size)
-    return "bad segOffset, too large";
-  uint64_t i = 0;
-  if (Count > 1)
-    i = (Skip + PointerSize) * (Count - 1);
-  else if (Count == 1)
-    i = Skip + PointerSize;
-  if (addr + i >= SI.Address + SI.Size) {
-    // For rebase opcodes they can step from one section to another.
-    uint64_t TrailingSegOffset = (addr + i) - SI.SegmentStartAddress;
-    const char *error = checkSegAndOffset(SegIndex, TrailingSegOffset, false);
-    if (error)
-      return "bad count and skip, too large";
+  for (uint32_t i = 0; i < Count; ++i) {
+    uint32_t Start = SegOffset + i * (PointerSize + Skip);
+    uint32_t End = Start + PointerSize;
+    bool Found = false;
+    for (const SectionInfo &SI : Sections) {
+      if (SI.SegmentIndex != SegIndex)
+        continue;
+      if ((SI.OffsetInSegment<=Start) && (Start<(SI.OffsetInSegment+SI.Size))) {
+        if (End <= SI.OffsetInSegment + SI.Size) {
+          Found = true;
+          break;
+        }
+        else
+          return "bad offset, extends beyond section boundary";
+      }
+    }
+    if (!Found)
+      return "bad offset, not in section";
   }
   return nullptr;
 }

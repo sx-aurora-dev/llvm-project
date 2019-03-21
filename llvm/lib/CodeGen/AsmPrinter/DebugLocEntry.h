@@ -1,9 +1,8 @@
 //===-- llvm/CodeGen/DebugLocEntry.h - Entry in debug_loc list -*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -149,8 +148,10 @@ public:
   }
 
   /// Lower this entry into a DWARF expression.
-  void finalize(const AsmPrinter &AP, DebugLocStream::ListBuilder &List,
-                const DIBasicType *BT);
+  void finalize(const AsmPrinter &AP,
+                DebugLocStream::ListBuilder &List,
+                const DIBasicType *BT,
+                DwarfCompileUnit &TheCU);
 };
 
 /// Compare two Values for equality.

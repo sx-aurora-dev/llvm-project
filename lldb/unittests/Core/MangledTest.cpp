@@ -1,9 +1,8 @@
 //===-- MangledTest.cpp -----------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,7 +31,7 @@ TEST(MangledTest, ResultForValidName) {
   bool IsMangled = true;
 
   Mangled TheMangled(MangledName, IsMangled);
-  const ConstString &TheDemangled =
+  ConstString TheDemangled =
       TheMangled.GetDemangledName(eLanguageTypeC_plus_plus);
 
   ConstString ExpectedResult("void a::b::c<int, int, int>(unsigned long)");
@@ -44,7 +43,7 @@ TEST(MangledTest, EmptyForInvalidName) {
   bool IsMangled = true;
 
   Mangled TheMangled(MangledName, IsMangled);
-  const ConstString &TheDemangled =
+  ConstString TheDemangled =
       TheMangled.GetDemangledName(eLanguageTypeC_plus_plus);
 
   EXPECT_STREQ("", TheDemangled.GetCString());

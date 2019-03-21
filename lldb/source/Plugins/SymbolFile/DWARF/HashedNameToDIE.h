@@ -1,9 +1,8 @@
 //===-- HashedNameToDIE.h ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -105,8 +104,6 @@ public:
 
     bool Read(const lldb_private::DWARFDataExtractor &data,
               lldb::offset_t *offset_ptr, DIEInfo &hash_data) const;
-
-    void Dump(lldb_private::Stream &strm, const DIEInfo &hash_data) const;
   };
 
   // A class for reading and using a saved hash table from a block of data

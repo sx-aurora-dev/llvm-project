@@ -1,9 +1,8 @@
 //===-- llvm/BinaryFormat/Dwarf.cpp - Dwarf Framework ------------*- C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,6 +12,7 @@
 
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
@@ -143,6 +143,8 @@ StringRef llvm::dwarf::OperationEncodingString(unsigned Encoding) {
   case DW_OP_##NAME:                                                           \
     return "DW_OP_" #NAME;
 #include "llvm/BinaryFormat/Dwarf.def"
+  case DW_OP_LLVM_convert:
+    return "DW_OP_LLVM_convert";
   case DW_OP_LLVM_fragment:
     return "DW_OP_LLVM_fragment";
   }
@@ -153,6 +155,7 @@ unsigned llvm::dwarf::getOperationEncoding(StringRef OperationEncodingString) {
 #define HANDLE_DW_OP(ID, NAME, VERSION, VENDOR)                                \
   .Case("DW_OP_" #NAME, DW_OP_##NAME)
 #include "llvm/BinaryFormat/Dwarf.def"
+      .Case("DW_OP_LLVM_convert", DW_OP_LLVM_convert)
       .Case("DW_OP_LLVM_fragment", DW_OP_LLVM_fragment)
       .Default(0);
 }
@@ -300,7 +303,7 @@ StringRef llvm::dwarf::LanguageString(unsigned Language) {
   switch (Language) {
   default:
     return StringRef();
-#define HANDLE_DW_LANG(ID, NAME, VERSION, VENDOR)                              \
+#define HANDLE_DW_LANG(ID, NAME, LOWER_BOUND, VERSION, VENDOR)                 \
   case DW_LANG_##NAME:                                                         \
     return "DW_LANG_" #NAME;
 #include "llvm/BinaryFormat/Dwarf.def"
@@ -309,7 +312,7 @@ StringRef llvm::dwarf::LanguageString(unsigned Language) {
 
 unsigned llvm::dwarf::getLanguage(StringRef LanguageString) {
   return StringSwitch<unsigned>(LanguageString)
-#define HANDLE_DW_LANG(ID, NAME, VERSION, VENDOR)                              \
+#define HANDLE_DW_LANG(ID, NAME, LOWER_BOUND, VERSION, VENDOR)                 \
   .Case("DW_LANG_" #NAME, DW_LANG_##NAME)
 #include "llvm/BinaryFormat/Dwarf.def"
       .Default(0);
@@ -319,7 +322,7 @@ unsigned llvm::dwarf::LanguageVersion(dwarf::SourceLanguage Lang) {
   switch (Lang) {
   default:
     return 0;
-#define HANDLE_DW_LANG(ID, NAME, VERSION, VENDOR)                              \
+#define HANDLE_DW_LANG(ID, NAME, LOWER_BOUND, VERSION, VENDOR)                 \
   case DW_LANG_##NAME:                                                         \
     return VERSION;
 #include "llvm/BinaryFormat/Dwarf.def"
@@ -330,9 +333,20 @@ unsigned llvm::dwarf::LanguageVendor(dwarf::SourceLanguage Lang) {
   switch (Lang) {
   default:
     return 0;
-#define HANDLE_DW_LANG(ID, NAME, VERSION, VENDOR)                              \
+#define HANDLE_DW_LANG(ID, NAME, LOWER_BOUND, VERSION, VENDOR)                 \
   case DW_LANG_##NAME:                                                         \
     return DWARF_VENDOR_##VENDOR;
+#include "llvm/BinaryFormat/Dwarf.def"
+  }
+}
+
+Optional<unsigned> llvm::dwarf::LanguageLowerBound(dwarf::SourceLanguage Lang) {
+  switch (Lang) {
+  default:
+    return None;
+#define HANDLE_DW_LANG(ID, NAME, LOWER_BOUND, VERSION, VENDOR)                 \
+  case DW_LANG_##NAME:                                                         \
+    return LOWER_BOUND;
 #include "llvm/BinaryFormat/Dwarf.def"
   }
 }
@@ -455,14 +469,32 @@ StringRef llvm::dwarf::RangeListEncodingString(unsigned Encoding) {
   }
 }
 
-StringRef llvm::dwarf::CallFrameString(unsigned Encoding) {
+StringRef llvm::dwarf::CallFrameString(unsigned Encoding,
+    Triple::ArchType Arch) {
+  assert(Arch != llvm::Triple::ArchType::UnknownArch);
+#define SELECT_AARCH64 (Arch == llvm::Triple::aarch64_be || Arch == llvm::Triple::aarch64)
+#define SELECT_MIPS64 Arch == llvm::Triple::mips64
+#define SELECT_SPARC (Arch == llvm::Triple::sparc || Arch == llvm::Triple::sparcv9)
+#define SELECT_X86 (Arch == llvm::Triple::x86 || Arch == llvm::Triple::x86_64)
+#define HANDLE_DW_CFA(ID, NAME)
+#define HANDLE_DW_CFA_PRED(ID, NAME, PRED) \
+  if (ID == Encoding && PRED) \
+    return "DW_CFA_" #NAME;
+#include "llvm/BinaryFormat/Dwarf.def"
+
   switch (Encoding) {
   default:
     return StringRef();
+#define HANDLE_DW_CFA_PRED(ID, NAME, PRED)
 #define HANDLE_DW_CFA(ID, NAME)                                                \
   case DW_CFA_##NAME:                                                          \
     return "DW_CFA_" #NAME;
 #include "llvm/BinaryFormat/Dwarf.def"
+
+#undef SELECT_X86
+#undef SELECT_SPARC
+#undef SELECT_MIPS64
+#undef SELECT_AARCH64
   }
 }
 

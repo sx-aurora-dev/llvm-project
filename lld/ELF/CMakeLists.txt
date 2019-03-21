@@ -15,6 +15,7 @@ add_lld_library(lldELF
   Arch/Hexagon.cpp
   Arch/Mips.cpp
   Arch/MipsArchTree.cpp
+  Arch/MSP430.cpp
   Arch/PPC.cpp
   Arch/PPC64.cpp
   Arch/RISCV.cpp
@@ -26,7 +27,6 @@ add_lld_library(lldELF
   Driver.cpp
   DriverUtils.cpp
   EhFrame.cpp
-  Filesystem.cpp
   ICF.cpp
   InputFiles.cpp
   InputSection.cpp

@@ -1,9 +1,8 @@
 //===-- AMDGPUAsmPrinter.cpp - AMDGPU assembly printer  -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,6 +45,7 @@
 
 using namespace llvm;
 using namespace llvm::AMDGPU;
+using namespace llvm::AMDGPU::HSAMD;
 
 // TODO: This should get the default rounding mode from the kernel. We just set
 // the default here, but this could change if the OpenCL rounding mode pragmas
@@ -99,13 +99,17 @@ extern "C" void LLVMInitializeAMDGPUAsmPrinter() {
 AMDGPUAsmPrinter::AMDGPUAsmPrinter(TargetMachine &TM,
                                    std::unique_ptr<MCStreamer> Streamer)
   : AsmPrinter(TM, std::move(Streamer)) {
+    if (IsaInfo::hasCodeObjectV3(getGlobalSTI()))
+      HSAMetadataStream.reset(new MetadataStreamerV3());
+    else
+      HSAMetadataStream.reset(new MetadataStreamerV2());
 }
 
 StringRef AMDGPUAsmPrinter::getPassName() const {
   return "AMDGPU Assembly Printer";
 }
 
-const MCSubtargetInfo* AMDGPUAsmPrinter::getSTI() const {
+const MCSubtargetInfo *AMDGPUAsmPrinter::getGlobalSTI() const {
   return TM.getMCSubtargetInfo();
 }
 
@@ -116,15 +120,12 @@ AMDGPUTargetStreamer* AMDGPUAsmPrinter::getTargetStreamer() const {
 }
 
 void AMDGPUAsmPrinter::EmitStartOfAsmFile(Module &M) {
-  if (IsaInfo::hasCodeObjectV3(getSTI())) {
+  if (IsaInfo::hasCodeObjectV3(getGlobalSTI())) {
     std::string ExpectedTarget;
     raw_string_ostream ExpectedTargetOS(ExpectedTarget);
-    IsaInfo::streamIsaVersion(getSTI(), ExpectedTargetOS);
+    IsaInfo::streamIsaVersion(getGlobalSTI(), ExpectedTargetOS);
 
     getTargetStreamer()->EmitDirectiveAMDGCNTarget(ExpectedTarget);
-
-    if (TM.getTargetTriple().getOS() == Triple::AMDHSA)
-      return;
   }
 
   if (TM.getTargetTriple().getOS() != Triple::AMDHSA &&
@@ -132,53 +133,43 @@ void AMDGPUAsmPrinter::EmitStartOfAsmFile(Module &M) {
     return;
 
   if (TM.getTargetTriple().getOS() == Triple::AMDHSA)
-    HSAMetadataStream.begin(M);
+    HSAMetadataStream->begin(M);
 
   if (TM.getTargetTriple().getOS() == Triple::AMDPAL)
-    readPALMetadata(M);
+    getTargetStreamer()->getPALMetadata()->readFromIR(M);
+
+  if (IsaInfo::hasCodeObjectV3(getGlobalSTI()))
+    return;
 
   // HSA emits NT_AMDGPU_HSA_CODE_OBJECT_VERSION for code objects v2.
   if (TM.getTargetTriple().getOS() == Triple::AMDHSA)
     getTargetStreamer()->EmitDirectiveHSACodeObjectVersion(2, 1);
 
   // HSA and PAL emit NT_AMDGPU_HSA_ISA for code objects v2.
-  IsaVersion Version = getIsaVersion(getSTI()->getCPU());
+  IsaVersion Version = getIsaVersion(getGlobalSTI()->getCPU());
   getTargetStreamer()->EmitDirectiveHSACodeObjectISA(
       Version.Major, Version.Minor, Version.Stepping, "AMD", "AMDGPU");
 }
 
 void AMDGPUAsmPrinter::EmitEndOfAsmFile(Module &M) {
-  // TODO: Add metadata to code object v3.
-  if (IsaInfo::hasCodeObjectV3(getSTI()) &&
-      TM.getTargetTriple().getOS() == Triple::AMDHSA)
-    return;
-
   // Following code requires TargetStreamer to be present.
   if (!getTargetStreamer())
     return;
 
-  // Emit ISA Version (NT_AMD_AMDGPU_ISA).
-  std::string ISAVersionString;
-  raw_string_ostream ISAVersionStream(ISAVersionString);
-  IsaInfo::streamIsaVersion(getSTI(), ISAVersionStream);
-  getTargetStreamer()->EmitISAVersion(ISAVersionStream.str());
+  if (!IsaInfo::hasCodeObjectV3(getGlobalSTI())) {
+    // Emit ISA Version (NT_AMD_AMDGPU_ISA).
+    std::string ISAVersionString;
+    raw_string_ostream ISAVersionStream(ISAVersionString);
+    IsaInfo::streamIsaVersion(getGlobalSTI(), ISAVersionStream);
+    getTargetStreamer()->EmitISAVersion(ISAVersionStream.str());
+  }
 
   // Emit HSA Metadata (NT_AMD_AMDGPU_HSA_METADATA).
   if (TM.getTargetTriple().getOS() == Triple::AMDHSA) {
-    HSAMetadataStream.end();
-    getTargetStreamer()->EmitHSAMetadata(HSAMetadataStream.getHSAMetadata());
-  }
-
-  // Emit PAL Metadata (NT_AMD_AMDGPU_PAL_METADATA).
-  if (TM.getTargetTriple().getOS() == Triple::AMDPAL) {
-    // Copy the PAL metadata from the map where we collected it into a vector,
-    // then write it as a .note.
-    PALMD::Metadata PALMetadataVector;
-    for (auto i : PALMetadataMap) {
-      PALMetadataVector.push_back(i.first);
-      PALMetadataVector.push_back(i.second);
-    }
-    getTargetStreamer()->EmitPALMetadata(PALMetadataVector);
+    HSAMetadataStream->end();
+    bool Success = HSAMetadataStream->emitTo(*getTargetStreamer());
+    (void)Success;
+    assert(Success && "Malformed HSA Metadata");
   }
 }
 
@@ -211,18 +202,16 @@ void AMDGPUAsmPrinter::EmitFunctionBodyStart() {
     getTargetStreamer()->EmitAMDKernelCodeT(KernelCode);
   }
 
-  if (TM.getTargetTriple().getOS() != Triple::AMDHSA)
-    return;
-
-  if (!STM.hasCodeObjectV3() && STM.isAmdHsaOS())
-    HSAMetadataStream.emitKernel(*MF, CurrentProgramInfo);
+  if (STM.isAmdHsaOS())
+    HSAMetadataStream->emitKernel(*MF, CurrentProgramInfo);
 }
 
 void AMDGPUAsmPrinter::EmitFunctionBodyEnd() {
   const SIMachineFunctionInfo &MFI = *MF->getInfo<SIMachineFunctionInfo>();
   if (!MFI.isEntryFunction())
     return;
-  if (!IsaInfo::hasCodeObjectV3(getSTI()) ||
+
+  if (!IsaInfo::hasCodeObjectV3(getGlobalSTI()) ||
       TM.getTargetTriple().getOS() != Triple::AMDHSA)
     return;
 
@@ -240,23 +229,25 @@ void AMDGPUAsmPrinter::EmitFunctionBodyEnd() {
   if (ReadOnlySection.getAlignment() < 64)
     ReadOnlySection.setAlignment(64);
 
+  const MCSubtargetInfo &STI = MF->getSubtarget();
+
   SmallString<128> KernelName;
   getNameWithPrefix(KernelName, &MF->getFunction());
   getTargetStreamer()->EmitAmdhsaKernelDescriptor(
-      *getSTI(), KernelName, getAmdhsaKernelDescriptor(*MF, CurrentProgramInfo),
+      STI, KernelName, getAmdhsaKernelDescriptor(*MF, CurrentProgramInfo),
       CurrentProgramInfo.NumVGPRsForWavesPerEU,
       CurrentProgramInfo.NumSGPRsForWavesPerEU -
-          IsaInfo::getNumExtraSGPRs(getSTI(),
+          IsaInfo::getNumExtraSGPRs(&STI,
                                     CurrentProgramInfo.VCCUsed,
                                     CurrentProgramInfo.FlatUsed),
       CurrentProgramInfo.VCCUsed, CurrentProgramInfo.FlatUsed,
-      hasXNACK(*getSTI()));
+      hasXNACK(STI));
 
   Streamer.PopSection();
 }
 
 void AMDGPUAsmPrinter::EmitFunctionEntryLabel() {
-  if (IsaInfo::hasCodeObjectV3(getSTI()) &&
+  if (IsaInfo::hasCodeObjectV3(getGlobalSTI()) &&
       TM.getTargetTriple().getOS() == Triple::AMDHSA) {
     AsmPrinter::EmitFunctionEntryLabel();
     return;
@@ -270,8 +261,7 @@ void AMDGPUAsmPrinter::EmitFunctionEntryLabel() {
     getTargetStreamer()->EmitAMDGPUSymbolType(
         SymbolName, ELF::STT_AMDGPU_HSA_KERNEL);
   }
-  const GCNSubtarget &STI = MF->getSubtarget<GCNSubtarget>();
-  if (STI.dumpCode()) {
+  if (STM.dumpCode()) {
     // Disassemble function name label to text.
     DisasmLines.push_back(MF->getName().str() + ":");
     DisasmLineMaxLen = std::max(DisasmLineMaxLen, DisasmLines.back().size());
@@ -306,27 +296,6 @@ void AMDGPUAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
 bool AMDGPUAsmPrinter::doFinalization(Module &M) {
   CallGraphResourceInfo.clear();
   return AsmPrinter::doFinalization(M);
-}
-
-// For the amdpal OS type, read the amdgpu.pal.metadata supplied by the
-// frontend into our PALMetadataMap, ready for per-function modification.  It
-// is a NamedMD containing an MDTuple containing a number of MDNodes each of
-// which is an integer value, and each two integer values forms a key=value
-// pair that we store as PALMetadataMap[key]=value in the map.
-void AMDGPUAsmPrinter::readPALMetadata(Module &M) {
-  auto NamedMD = M.getNamedMetadata("amdgpu.pal.metadata");
-  if (!NamedMD || !NamedMD->getNumOperands())
-    return;
-  auto Tuple = dyn_cast<MDTuple>(NamedMD->getOperand(0));
-  if (!Tuple)
-    return;
-  for (unsigned I = 0, E = Tuple->getNumOperands() & -2; I != E; I += 2) {
-    auto Key = mdconst::dyn_extract<ConstantInt>(Tuple->getOperand(I));
-    auto Val = mdconst::dyn_extract<ConstantInt>(Tuple->getOperand(I + 1));
-    if (!Key || !Val)
-      continue;
-    PALMetadataMap[Key->getZExtValue()] = Val->getZExtValue();
-  }
 }
 
 // Print comments that apply to both callable functions and entry points.
@@ -482,15 +451,6 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 
     OutStreamer->emitRawComment(
       " WaveLimiterHint : " + Twine(MFI->needsWaveLimiter()), false);
-
-    if (MF.getSubtarget<GCNSubtarget>().debuggerEmitPrologue()) {
-      OutStreamer->emitRawComment(
-        " DebuggerWavefrontPrivateSegmentOffsetSGPR: s" +
-        Twine(CurrentProgramInfo.DebuggerWavefrontPrivateSegmentOffsetSGPR), false);
-      OutStreamer->emitRawComment(
-        " DebuggerPrivateSegmentBufferSGPR: s" +
-        Twine(CurrentProgramInfo.DebuggerPrivateSegmentBufferSGPR), false);
-    }
 
     OutStreamer->emitRawComment(
       " COMPUTE_PGM_RSRC2:USER_SGPR: " +
@@ -664,6 +624,9 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         case AMDGPU::SRC_PRIVATE_LIMIT:
           continue;
 
+        case AMDGPU::SRC_POPS_EXITING_WAVE_ID:
+          llvm_unreachable("src_pops_exiting_wave_id should not be used");
+
         case AMDGPU::NoRegister:
           assert(MI.isDebugInstr());
           continue;
@@ -683,6 +646,9 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         case AMDGPU::XNACK_MASK_LO:
         case AMDGPU::XNACK_MASK_HI:
           llvm_unreachable("xnack_mask registers should not be used");
+
+        case AMDGPU::LDS_DIRECT:
+          llvm_unreachable("lds_direct register should not be used");
 
         case AMDGPU::TBA:
         case AMDGPU::TBA_LO:
@@ -764,8 +730,7 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
 
           // 48 SGPRs - vcc, - flat_scr, -xnack
           int MaxSGPRGuess =
-              47 - IsaInfo::getNumExtraSGPRs(getSTI(), true,
-                                             ST.hasFlatAddressSpace());
+            47 - IsaInfo::getNumExtraSGPRs(&ST, true, ST.hasFlatAddressSpace());
           MaxSGPR = std::max(MaxSGPR, MaxSGPRGuess);
           MaxVGPR = std::max(MaxVGPR, 23);
 
@@ -776,9 +741,19 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         } else {
           // We force CodeGen to run in SCC order, so the callee's register
           // usage etc. should be the cumulative usage of all callees.
+
           auto I = CallGraphResourceInfo.find(Callee);
-          assert(I != CallGraphResourceInfo.end() &&
-                 "callee should have been handled before caller");
+          if (I == CallGraphResourceInfo.end()) {
+            // Avoid crashing on undefined behavior with an illegal call to a
+            // kernel. If a callsite's calling convention doesn't match the
+            // function's, it's undefined behavior. If the callsite calling
+            // convention does match, that would have errored earlier.
+            // FIXME: The verifier shouldn't allow this.
+            if (AMDGPU::isEntryFunctionCC(Callee->getCallingConv()))
+              report_fatal_error("invalid call to entry function");
+
+            llvm_unreachable("callee should have been handled before caller");
+          }
 
           MaxSGPR = std::max(I->second.NumExplicitSGPR - 1, MaxSGPR);
           MaxVGPR = std::max(I->second.NumVGPR - 1, MaxVGPR);
@@ -822,14 +797,12 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
 
   const GCNSubtarget &STM = MF.getSubtarget<GCNSubtarget>();
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
-  const SIInstrInfo *TII = STM.getInstrInfo();
-  const SIRegisterInfo *RI = &TII->getRegisterInfo();
 
   // TODO(scott.linder): The calculations related to SGPR/VGPR blocks are
   // duplicated in part in AMDGPUAsmParser::calculateGPRBlocks, and could be
   // unified.
   unsigned ExtraSGPRs = IsaInfo::getNumExtraSGPRs(
-      getSTI(), ProgInfo.VCCUsed, ProgInfo.FlatUsed);
+      &STM, ProgInfo.VCCUsed, ProgInfo.FlatUsed);
 
   // Check the addressable register limit before we add ExtraSGPRs.
   if (STM.getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS &&
@@ -914,16 +887,6 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
       &STM, ProgInfo.NumSGPRsForWavesPerEU);
   ProgInfo.VGPRBlocks = IsaInfo::getNumVGPRBlocks(
       &STM, ProgInfo.NumVGPRsForWavesPerEU);
-
-  // Update DebuggerWavefrontPrivateSegmentOffsetSGPR and
-  // DebuggerPrivateSegmentBufferSGPR fields if "amdgpu-debugger-emit-prologue"
-  // attribute was requested.
-  if (STM.debuggerEmitPrologue()) {
-    ProgInfo.DebuggerWavefrontPrivateSegmentOffsetSGPR =
-      RI->getHWRegIndex(MFI->getScratchWaveOffsetReg());
-    ProgInfo.DebuggerPrivateSegmentBufferSGPR =
-      RI->getHWRegIndex(MFI->getScratchRSrcReg());
-  }
 
   // Set the value to initialize FP_ROUND and FP_DENORM parts of the mode
   // register.
@@ -1050,70 +1013,33 @@ void AMDGPUAsmPrinter::EmitProgramInfoSI(const MachineFunction &MF,
 
 // This is the equivalent of EmitProgramInfoSI above, but for when the OS type
 // is AMDPAL.  It stores each compute/SPI register setting and other PAL
-// metadata items into the PALMetadataMap, combining with any provided by the
-// frontend as LLVM metadata. Once all functions are written, PALMetadataMap is
-// then written as a single block in the .note section.
+// metadata items into the PALMD::Metadata, combining with any provided by the
+// frontend as LLVM metadata. Once all functions are written, the PAL metadata
+// is then written as a single block in the .note section.
 void AMDGPUAsmPrinter::EmitPALMetadata(const MachineFunction &MF,
        const SIProgramInfo &CurrentProgramInfo) {
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
-  // Given the calling convention, calculate the register number for rsrc1. In
-  // principle the register number could change in future hardware, but we know
-  // it is the same for gfx6-9 (except that LS and ES don't exist on gfx9), so
-  // we can use the same fixed value that .AMDGPU.config has for Mesa. Note
-  // that we use a register number rather than a byte offset, so we need to
-  // divide by 4.
-  unsigned Rsrc1Reg = getRsrcReg(MF.getFunction().getCallingConv()) / 4;
-  unsigned Rsrc2Reg = Rsrc1Reg + 1;
-  // Also calculate the PAL metadata key for *S_SCRATCH_SIZE. It can be used
-  // with a constant offset to access any non-register shader-specific PAL
-  // metadata key.
-  unsigned ScratchSizeKey = PALMD::Key::CS_SCRATCH_SIZE;
-  switch (MF.getFunction().getCallingConv()) {
-    case CallingConv::AMDGPU_PS:
-      ScratchSizeKey = PALMD::Key::PS_SCRATCH_SIZE;
-      break;
-    case CallingConv::AMDGPU_VS:
-      ScratchSizeKey = PALMD::Key::VS_SCRATCH_SIZE;
-      break;
-    case CallingConv::AMDGPU_GS:
-      ScratchSizeKey = PALMD::Key::GS_SCRATCH_SIZE;
-      break;
-    case CallingConv::AMDGPU_ES:
-      ScratchSizeKey = PALMD::Key::ES_SCRATCH_SIZE;
-      break;
-    case CallingConv::AMDGPU_HS:
-      ScratchSizeKey = PALMD::Key::HS_SCRATCH_SIZE;
-      break;
-    case CallingConv::AMDGPU_LS:
-      ScratchSizeKey = PALMD::Key::LS_SCRATCH_SIZE;
-      break;
-  }
-  unsigned NumUsedVgprsKey = ScratchSizeKey +
-      PALMD::Key::VS_NUM_USED_VGPRS - PALMD::Key::VS_SCRATCH_SIZE;
-  unsigned NumUsedSgprsKey = ScratchSizeKey +
-      PALMD::Key::VS_NUM_USED_SGPRS - PALMD::Key::VS_SCRATCH_SIZE;
-  PALMetadataMap[NumUsedVgprsKey] = CurrentProgramInfo.NumVGPRsForWavesPerEU;
-  PALMetadataMap[NumUsedSgprsKey] = CurrentProgramInfo.NumSGPRsForWavesPerEU;
+  auto CC = MF.getFunction().getCallingConv();
+  auto MD = getTargetStreamer()->getPALMetadata();
+
+  MD->setEntryPoint(CC, MF.getFunction().getName());
+  MD->setNumUsedVgprs(CC, CurrentProgramInfo.NumVGPRsForWavesPerEU);
+  MD->setNumUsedSgprs(CC, CurrentProgramInfo.NumSGPRsForWavesPerEU);
   if (AMDGPU::isCompute(MF.getFunction().getCallingConv())) {
-    PALMetadataMap[Rsrc1Reg] |= CurrentProgramInfo.ComputePGMRSrc1;
-    PALMetadataMap[Rsrc2Reg] |= CurrentProgramInfo.ComputePGMRSrc2;
-    // ScratchSize is in bytes, 16 aligned.
-    PALMetadataMap[ScratchSizeKey] |=
-        alignTo(CurrentProgramInfo.ScratchSize, 16);
+    MD->setRsrc1(CC, CurrentProgramInfo.ComputePGMRSrc1);
+    MD->setRsrc2(CC, CurrentProgramInfo.ComputePGMRSrc2);
   } else {
-    PALMetadataMap[Rsrc1Reg] |= S_00B028_VGPRS(CurrentProgramInfo.VGPRBlocks) |
-        S_00B028_SGPRS(CurrentProgramInfo.SGPRBlocks);
+    MD->setRsrc1(CC, S_00B028_VGPRS(CurrentProgramInfo.VGPRBlocks) |
+        S_00B028_SGPRS(CurrentProgramInfo.SGPRBlocks));
     if (CurrentProgramInfo.ScratchBlocks > 0)
-      PALMetadataMap[Rsrc2Reg] |= S_00B84C_SCRATCH_EN(1);
-    // ScratchSize is in bytes, 16 aligned.
-    PALMetadataMap[ScratchSizeKey] |=
-        alignTo(CurrentProgramInfo.ScratchSize, 16);
+      MD->setRsrc2(CC, S_00B84C_SCRATCH_EN(1));
   }
+  // ScratchSize is in bytes, 16 aligned.
+  MD->setScratchSize(CC, alignTo(CurrentProgramInfo.ScratchSize, 16));
   if (MF.getFunction().getCallingConv() == CallingConv::AMDGPU_PS) {
-    PALMetadataMap[Rsrc2Reg] |=
-        S_00B02C_EXTRA_LDS_SIZE(CurrentProgramInfo.LDSBlocks);
-    PALMetadataMap[R_0286CC_SPI_PS_INPUT_ENA / 4] |= MFI->getPSInputEnable();
-    PALMetadataMap[R_0286D0_SPI_PS_INPUT_ADDR / 4] |= MFI->getPSInputAddr();
+    MD->setRsrc2(CC, S_00B02C_EXTRA_LDS_SIZE(CurrentProgramInfo.LDSBlocks));
+    MD->setSpiPsInputEna(MFI->getPSInputEnable());
+    MD->setSpiPsInputAddr(MFI->getPSInputAddr());
   }
 }
 
@@ -1141,7 +1067,7 @@ void AMDGPUAsmPrinter::getAmdKernelCode(amd_kernel_code_t &Out,
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
   const GCNSubtarget &STM = MF.getSubtarget<GCNSubtarget>();
 
-  AMDGPU::initDefaultAMDKernelCodeT(Out, getSTI());
+  AMDGPU::initDefaultAMDKernelCodeT(Out, &STM);
 
   Out.compute_pgm_resource_registers =
       CurrentProgramInfo.ComputePGMRSrc1 |
@@ -1178,9 +1104,6 @@ void AMDGPUAsmPrinter::getAmdKernelCode(amd_kernel_code_t &Out,
   if (MFI->hasDispatchPtr())
     Out.code_properties |= AMD_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_PTR;
 
-  if (STM.debuggerSupported())
-    Out.code_properties |= AMD_CODE_PROPERTY_IS_DEBUG_SUPPORTED;
-
   if (STM.isXNACKEnabled())
     Out.code_properties |= AMD_CODE_PROPERTY_IS_XNACK_SUPPORTED;
 
@@ -1195,13 +1118,6 @@ void AMDGPUAsmPrinter::getAmdKernelCode(amd_kernel_code_t &Out,
   // 2^n.  The minimum alignment is 2^4 = 16.
   Out.kernarg_segment_alignment = std::max((size_t)4,
       countTrailingZeros(MaxKernArgAlign));
-
-  if (STM.debuggerEmitPrologue()) {
-    Out.debug_wavefront_private_segment_offset_sgpr =
-      CurrentProgramInfo.DebuggerWavefrontPrivateSegmentOffsetSGPR;
-    Out.debug_private_segment_buffer_sgpr =
-      CurrentProgramInfo.DebuggerPrivateSegmentBufferSGPR;
-  }
 }
 
 bool AMDGPUAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,

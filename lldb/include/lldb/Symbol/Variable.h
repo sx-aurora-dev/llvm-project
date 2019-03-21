@@ -1,26 +1,24 @@
 //===-- Variable.h -----------------------------------------------*- C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Variable_h_
 #define liblldb_Variable_h_
 
-#include <memory>
-#include <vector>
-
 #include "lldb/Core/Mangled.h"
-#include "lldb/Core/RangeMap.h"
 #include "lldb/Expression/DWARFExpression.h"
 #include "lldb/Symbol/Declaration.h"
 #include "lldb/Utility/CompletionRequest.h"
+#include "lldb/Utility/RangeMap.h"
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-private.h"
+#include <memory>
+#include <vector>
 
 namespace lldb_private {
 
@@ -59,7 +57,7 @@ public:
   // namespace)::i", this function will allow a generic match function that can
   // be called by commands and expression parsers to make sure we match
   // anything we come across.
-  bool NameMatches(const ConstString &name) const;
+  bool NameMatches(ConstString name) const;
 
   bool NameMatches(const RegularExpression &regex) const;
 

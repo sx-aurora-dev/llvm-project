@@ -1,9 +1,8 @@
 //===-- DWARFDebugInfoEntry.h -----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -75,8 +74,7 @@ public:
                    const DWARFFormValue::FixedFormSizes &fixed_form_sizes,
                    lldb::offset_t *offset_ptr);
 
-  bool Extract(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-               lldb::offset_t *offset_ptr);
+  bool Extract(const DWARFUnit *cu, lldb::offset_t *offset_ptr);
 
   bool LookupAddress(const dw_addr_t address, SymbolFileDWARF *dwarf2Data,
                      const DWARFUnit *cu,
@@ -108,11 +106,6 @@ public:
   uint64_t GetAttributeValueAsReference(
       SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
       const dw_attr_t attr, uint64_t fail_value,
-      bool check_specification_or_abstract_origin = false) const;
-
-  int64_t GetAttributeValueAsSigned(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      const dw_attr_t attr, int64_t fail_value,
       bool check_specification_or_abstract_origin = false) const;
 
   uint64_t GetAttributeValueAsAddress(
@@ -168,19 +161,11 @@ public:
   void Dump(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
             lldb_private::Stream &s, uint32_t recurse_depth) const;
 
-  void DumpAncestry(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-                    const DWARFDebugInfoEntry *oldest, lldb_private::Stream &s,
-                    uint32_t recurse_depth) const;
-
   static void
   DumpAttribute(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
                 const lldb_private::DWARFDataExtractor &debug_info_data,
                 lldb::offset_t *offset_ptr, lldb_private::Stream &s,
                 dw_attr_t attr, DWARFFormValue &form_value);
-  // This one dumps the comp unit name, objfile name and die offset for this die
-  // so the stream S.
-  void DumpLocation(SymbolFileDWARF *dwarf2Data, DWARFUnit *cu,
-                    lldb_private::Stream &s) const;
 
   bool
   GetDIENamesAndRanges(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
@@ -231,8 +216,7 @@ public:
     return HasChildren() ? this + 1 : NULL;
   }
 
-  void GetDeclContextDIEs(DWARFUnit *cu,
-                          DWARFDIECollection &decl_context_dies) const;
+  std::vector<DWARFDIE> GetDeclContextDIEs(DWARFUnit *cu) const;
 
   void GetDWARFDeclContext(SymbolFileDWARF *dwarf2Data, DWARFUnit *cu,
                            DWARFDeclContext &dwarf_decl_ctx) const;
@@ -268,10 +252,6 @@ public:
   void SetSiblingIndex(uint32_t idx) { m_sibling_idx = idx; }
 
   void SetParentIndex(uint32_t idx) { m_parent_idx = idx; }
-
-  static void
-  DumpDIECollection(lldb_private::Stream &strm,
-                    DWARFDebugInfoEntry::collection &die_collection);
 
 protected:
   dw_offset_t

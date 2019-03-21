@@ -1,9 +1,8 @@
 //===-- File.h --------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,6 +14,7 @@
 #include "lldb/Utility/Status.h"
 #include "lldb/lldb-private.h"
 
+#include <mutex>
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -22,7 +22,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class File File.h "lldb/Host/File.h"
+/// \class File File.h "lldb/Host/File.h"
 /// A file class.
 ///
 /// A file class that divides abstracts the LLDB core from host file
@@ -33,6 +33,8 @@ public:
   static int kInvalidDescriptor;
   static FILE *kInvalidStream;
 
+  // NB this enum is used in the lldb platform gdb-remote packet
+  // vFile:open: and existing values cannot be modified.
   enum OpenOptions {
     eOpenOptionRead = (1u << 0),  // Open file for reading
     eOpenOptionWrite = (1u << 1), // Open file for writing
@@ -87,13 +89,13 @@ public:
   /// This allows code to check a File object to see if it contains anything
   /// valid using code such as:
   ///
-  /// @code
+  /// \code
   /// File file(...);
   /// if (file)
   /// { ...
-  /// @endcode
+  /// \endcode
   ///
-  /// @return
+  /// \return
   ///     A pointer to this object if either the directory or filename
   ///     is valid, nullptr otherwise.
   //------------------------------------------------------------------
@@ -105,13 +107,13 @@ public:
   /// This allows code to check a File object to see if it is invalid using
   /// code such as:
   ///
-  /// @code
+  /// \code
   /// File file(...);
   /// if (!file)
   /// { ...
-  /// @endcode
+  /// \endcode
   ///
-  /// @return
+  /// \return
   ///     Returns \b true if the object has an empty directory and
   ///     filename, \b false otherwise.
   //------------------------------------------------------------------
@@ -120,7 +122,7 @@ public:
   //------------------------------------------------------------------
   /// Get the file spec for this file.
   ///
-  /// @return
+  /// \return
   ///     A reference to the file specification object.
   //------------------------------------------------------------------
   Status GetFileSpec(FileSpec &file_spec) const;
@@ -146,14 +148,14 @@ public:
   /// that takes an "off_t &offset" to ensure correct operation in multi-
   /// threaded environments.
   ///
-  /// @param[in] buf
+  /// \param[in] buf
   ///     A buffer where to put the bytes that are read.
   ///
-  /// @param[in,out] num_bytes
+  /// \param[in,out] num_bytes
   ///     The number of bytes to read form the current file position
   ///     which gets modified with the number of bytes that were read.
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -166,15 +168,15 @@ public:
   /// that takes an "off_t &offset" to ensure correct operation in multi-
   /// threaded environments.
   ///
-  /// @param[in] buf
+  /// \param[in] buf
   ///     A buffer where to put the bytes that are read.
   ///
-  /// @param[in,out] num_bytes
+  /// \param[in,out] num_bytes
   ///     The number of bytes to write to the current file position
   ///     which gets modified with the number of bytes that were
   ///     written.
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -186,18 +188,18 @@ public:
   /// NOTE: This function is NOT thread safe, other threads that
   /// access this object might also change the current file position. For
   /// thread safe reads and writes see the following functions: @see
-  /// File::Read (void *, size_t, off_t &) @see File::Write (const void *,
+  /// File::Read (void *, size_t, off_t &) \see File::Write (const void *,
   /// size_t, off_t &)
   ///
-  /// @param[in] offset
+  /// \param[in] offset
   ///     The offset to seek to within the file relative to the
   ///     beginning of the file.
   ///
-  /// @param[in] error_ptr
+  /// \param[in] error_ptr
   ///     A pointer to a lldb_private::Status object that will be
   ///     filled in if non-nullptr.
   ///
-  /// @return
+  /// \return
   ///     The resulting seek offset, or -1 on error.
   //------------------------------------------------------------------
   off_t SeekFromStart(off_t offset, Status *error_ptr = nullptr);
@@ -208,18 +210,18 @@ public:
   /// NOTE: This function is NOT thread safe, other threads that
   /// access this object might also change the current file position. For
   /// thread safe reads and writes see the following functions: @see
-  /// File::Read (void *, size_t, off_t &) @see File::Write (const void *,
+  /// File::Read (void *, size_t, off_t &) \see File::Write (const void *,
   /// size_t, off_t &)
   ///
-  /// @param[in] offset
+  /// \param[in] offset
   ///     The offset to seek to within the file relative to the
   ///     current file position.
   ///
-  /// @param[in] error_ptr
+  /// \param[in] error_ptr
   ///     A pointer to a lldb_private::Status object that will be
   ///     filled in if non-nullptr.
   ///
-  /// @return
+  /// \return
   ///     The resulting seek offset, or -1 on error.
   //------------------------------------------------------------------
   off_t SeekFromCurrent(off_t offset, Status *error_ptr = nullptr);
@@ -230,19 +232,19 @@ public:
   /// NOTE: This function is NOT thread safe, other threads that
   /// access this object might also change the current file position. For
   /// thread safe reads and writes see the following functions: @see
-  /// File::Read (void *, size_t, off_t &) @see File::Write (const void *,
+  /// File::Read (void *, size_t, off_t &) \see File::Write (const void *,
   /// size_t, off_t &)
   ///
-  /// @param[in,out] offset
+  /// \param[in,out] offset
   ///     The offset to seek to within the file relative to the
   ///     end of the file which gets filled in with the resulting
   ///     absolute file offset.
   ///
-  /// @param[in] error_ptr
+  /// \param[in] error_ptr
   ///     A pointer to a lldb_private::Status object that will be
   ///     filled in if non-nullptr.
   ///
-  /// @return
+  /// \return
   ///     The resulting seek offset, or -1 on error.
   //------------------------------------------------------------------
   off_t SeekFromEnd(off_t offset, Status *error_ptr = nullptr);
@@ -254,19 +256,19 @@ public:
   /// own file position markers and reads on other threads won't mess up the
   /// current read.
   ///
-  /// @param[in] dst
+  /// \param[in] dst
   ///     A buffer where to put the bytes that are read.
   ///
-  /// @param[in,out] num_bytes
+  /// \param[in,out] num_bytes
   ///     The number of bytes to read form the current file position
   ///     which gets modified with the number of bytes that were read.
   ///
-  /// @param[in,out] offset
+  /// \param[in,out] offset
   ///     The offset within the file from which to read \a num_bytes
   ///     bytes. This offset gets incremented by the number of bytes
   ///     that were read.
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -279,25 +281,25 @@ public:
   /// own file position markers and reads on other threads won't mess up the
   /// current read.
   ///
-  /// @param[in,out] num_bytes
+  /// \param[in,out] num_bytes
   ///     The number of bytes to read form the current file position
   ///     which gets modified with the number of bytes that were read.
   ///
-  /// @param[in,out] offset
+  /// \param[in,out] offset
   ///     The offset within the file from which to read \a num_bytes
   ///     bytes. This offset gets incremented by the number of bytes
   ///     that were read.
   ///
-  /// @param[in] null_terminate
+  /// \param[in] null_terminate
   ///     Ensure that the data that is read is terminated with a NULL
   ///     character so that the data can be used as a C string.
   ///
-  /// @param[out] data_buffer_sp
+  /// \param[out] data_buffer_sp
   ///     A data buffer to create and fill in that will contain any
   ///     data that is read from the file. This buffer will be reset
   ///     if an error occurs.
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -312,20 +314,20 @@ public:
   /// own locking externally to avoid multiple people writing to the file at
   /// the same time.
   ///
-  /// @param[in] src
+  /// \param[in] src
   ///     A buffer containing the bytes to write.
   ///
-  /// @param[in,out] num_bytes
+  /// \param[in,out] num_bytes
   ///     The number of bytes to write to the file at offset \a offset.
   ///     \a num_bytes gets modified with the number of bytes that
   ///     were read.
   ///
-  /// @param[in,out] offset
+  /// \param[in,out] offset
   ///     The offset within the file at which to write \a num_bytes
   ///     bytes. This offset gets incremented by the number of bytes
   ///     that were written.
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -334,7 +336,7 @@ public:
   //------------------------------------------------------------------
   /// Flush the current stream
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -343,7 +345,7 @@ public:
   //------------------------------------------------------------------
   /// Sync to disk.
   ///
-  /// @return
+  /// \return
   ///     An error object that indicates success or the reason for
   ///     failure.
   //------------------------------------------------------------------
@@ -352,7 +354,7 @@ public:
   //------------------------------------------------------------------
   /// Get the permissions for a this file.
   ///
-  /// @return
+  /// \return
   ///     Bits logical OR'ed together from the permission bits defined
   ///     in lldb_private::File::Permissions.
   //------------------------------------------------------------------
@@ -361,7 +363,7 @@ public:
   //------------------------------------------------------------------
   /// Return true if this file is interactive.
   ///
-  /// @return
+  /// \return
   ///     True if this file is a terminal (tty or pty), false
   ///     otherwise.
   //------------------------------------------------------------------
@@ -374,7 +376,7 @@ public:
   /// if the terminal has a width and height so we can do cursor movement and
   /// other terminal manipulations by sending escape sequences.
   ///
-  /// @return
+  /// \return
   ///     True if this file is a terminal (tty, not a pty) that has
   ///     a non-zero width and height, false otherwise.
   //------------------------------------------------------------------
@@ -387,10 +389,10 @@ public:
   ///
   /// Print some formatted output to the stream.
   ///
-  /// @param[in] format
+  /// \param[in] format
   ///     A printf style format string.
   ///
-  /// @param[in] ...
+  /// \param[in] ...
   ///     Variable arguments that are needed for the printf style
   ///     format string \a format.
   //------------------------------------------------------------------
@@ -419,6 +421,7 @@ protected:
   LazyBool m_is_interactive;
   LazyBool m_is_real_terminal;
   LazyBool m_supports_colors;
+  std::mutex offset_access_mutex;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(File);

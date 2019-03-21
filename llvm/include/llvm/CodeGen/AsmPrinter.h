@@ -1,9 +1,8 @@
 //===- llvm/CodeGen/AsmPrinter.h - AsmPrinter Framework ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -122,9 +121,6 @@ public:
   using GOTEquivUsePair = std::pair<const GlobalVariable *, unsigned>;
   MapVector<const MCSymbol *, GOTEquivUsePair> GlobalGOTEquivs;
 
-  /// Enable print [latency:throughput] in output.
-  bool EnablePrintSchedInfo = false;
-
 private:
   MCSymbol *CurrentFnBegin = nullptr;
   MCSymbol *CurrentFnEnd = nullptr;
@@ -138,6 +134,9 @@ private:
 
   static char ID;
 
+protected:
+  /// Protected struct HandlerInfo and Handlers permit target extended
+  /// AsmPrinter adds their own handlers.
   struct HandlerInfo {
     AsmPrinterHandler *Handler;
     const char *TimerName;
@@ -223,6 +222,9 @@ public:
   const MCSubtargetInfo &getSubtargetInfo() const;
 
   void EmitToStreamer(MCStreamer &S, const MCInst &Inst);
+
+  /// Emits inital debug location directive.
+  void emitInitialRawDwarfLocDirective(const MachineFunction &MF);
 
   /// Return the current section we are emitting to.
   const MCSection *getCurrentSection() const;
@@ -508,7 +510,7 @@ public:
   void EmitSLEB128(int64_t Value, const char *Desc = nullptr) const;
 
   /// Emit the specified unsigned leb128 value.
-  void EmitULEB128(uint64_t Value, const char *Desc = nullptr) const;
+  void EmitULEB128(uint64_t Value, const char *Desc = nullptr, unsigned PadTo = 0) const;
 
   /// Emit a .byte 42 directive that corresponds to an encoding.  If verbose
   /// assembly output is enabled, we output comments describing the encoding.
@@ -656,6 +658,8 @@ private:
   void EmitLLVMUsedList(const ConstantArray *InitList);
   /// Emit llvm.ident metadata in an '.ident' directive.
   void EmitModuleIdents(Module &M);
+  /// Emit bytes for llvm.commandline metadata.
+  void EmitModuleCommandLines(Module &M);
   void EmitXXStructorList(const DataLayout &DL, const Constant *List,
                           bool isCtor);
 

@@ -1,9 +1,8 @@
 //===-- Symbol.cpp ----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -146,7 +145,7 @@ FileSpec Symbol::GetReExportedSymbolSharedLibrary() const {
   return FileSpec();
 }
 
-void Symbol::SetReExportedSymbolName(const ConstString &name) {
+void Symbol::SetReExportedSymbolName(ConstString name) {
   SetType(eSymbolTypeReExported);
   // For eSymbolTypeReExported, the "const char *" from a ConstString is used
   // as the offset in the address range base address.
@@ -326,7 +325,7 @@ uint32_t Symbol::GetPrologueByteSize() {
   return 0;
 }
 
-bool Symbol::Compare(const ConstString &name, SymbolType type) const {
+bool Symbol::Compare(ConstString name, SymbolType type) const {
   if (type == eSymbolTypeAny || m_type == type)
     return m_mangled.GetMangledName() == name ||
            m_mangled.GetDemangledName(GetLanguage()) == name;

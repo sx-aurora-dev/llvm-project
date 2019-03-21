@@ -1,9 +1,8 @@
 //===-- TypeSystem.h ------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -132,6 +131,9 @@ public:
   virtual bool DeclContextIsClassMethod(
       void *opaque_decl_ctx, lldb::LanguageType *language_ptr,
       bool *is_instance_method_ptr, ConstString *language_object_name_ptr) = 0;
+
+  virtual bool DeclContextIsContainedInLookup(void *opaque_decl_ctx,
+                                              void *other_opaque_decl_ctx) = 0;
 
   //----------------------------------------------------------------------
   // Tests
@@ -271,8 +273,9 @@ public:
   // Exploring the type
   //----------------------------------------------------------------------
 
-  virtual uint64_t GetBitSize(lldb::opaque_compiler_type_t type,
-                              ExecutionContextScope *exe_scope) = 0;
+  virtual llvm::Optional<uint64_t>
+  GetBitSize(lldb::opaque_compiler_type_t type,
+             ExecutionContextScope *exe_scope) = 0;
 
   virtual lldb::Encoding GetEncoding(lldb::opaque_compiler_type_t type,
                                      uint64_t &count) = 0;
@@ -283,7 +286,7 @@ public:
                                   bool omit_empty_base_classes,
                                   const ExecutionContext *exe_ctx) = 0;
 
-  virtual CompilerType GetBuiltinTypeByName(const ConstString &name);
+  virtual CompilerType GetBuiltinTypeByName(ConstString name);
 
   virtual lldb::BasicType
   GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) = 0;
@@ -291,7 +294,7 @@ public:
   virtual void ForEachEnumerator(
       lldb::opaque_compiler_type_t type,
       std::function<bool(const CompilerType &integer_type,
-                         const ConstString &name,
+                         ConstString name,
                          const llvm::APSInt &value)> const &callback) {}
 
   virtual uint32_t GetNumFields(lldb::opaque_compiler_type_t type) = 0;
@@ -355,6 +358,12 @@ public:
   // Dumping types
   //----------------------------------------------------------------------
 
+#ifndef NDEBUG
+  /// Convenience LLVM-style dump method for use in the debugger only.
+  LLVM_DUMP_METHOD virtual void
+  dump(lldb::opaque_compiler_type_t type) const = 0;
+#endif
+  
   virtual void DumpValue(lldb::opaque_compiler_type_t type,
                          ExecutionContext *exe_ctx, Stream *s,
                          lldb::Format format, const DataExtractor &data,
@@ -449,7 +458,8 @@ public:
   GetUserExpression(llvm::StringRef expr, llvm::StringRef prefix,
                     lldb::LanguageType language,
                     Expression::ResultType desired_type,
-                    const EvaluateExpressionOptions &options) {
+                    const EvaluateExpressionOptions &options,
+                    ValueObject *ctx_obj) {
     return nullptr;
   }
 

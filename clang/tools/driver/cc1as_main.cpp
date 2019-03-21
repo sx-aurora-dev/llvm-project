@@ -1,9 +1,8 @@
 //===-- cc1as_main.cpp - Clang Assembler  ---------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,6 +32,7 @@
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
@@ -132,6 +132,7 @@ struct AssemblerInvocation {
   unsigned NoExecStack : 1;
   unsigned FatalWarnings : 1;
   unsigned IncrementalLinkerCompatible : 1;
+  unsigned EmbedBitcode : 1;
 
   /// The name of the relocation model to use.
   std::string RelocationModel;
@@ -153,6 +154,7 @@ public:
     FatalWarnings = 0;
     IncrementalLinkerCompatible = 0;
     DwarfVersion = 0;
+    EmbedBitcode = 0;
   }
 
   static bool CreateFromArgs(AssemblerInvocation &Res,
@@ -284,6 +286,16 @@ bool AssemblerInvocation::CreateFromArgs(AssemblerInvocation &Opts,
       Args.hasArg(OPT_mincremental_linker_compatible);
   Opts.SymbolDefs = Args.getAllArgValues(OPT_defsym);
 
+  // EmbedBitcode Option. If -fembed-bitcode is enabled, set the flag.
+  // EmbedBitcode behaves the same for all embed options for assembly files.
+  if (auto *A = Args.getLastArg(OPT_fembed_bitcode_EQ)) {
+    Opts.EmbedBitcode = llvm::StringSwitch<unsigned>(A->getValue())
+                            .Case("all", 1)
+                            .Case("bitcode", 1)
+                            .Case("marker", 1)
+                            .Default(0);
+  }
+
   return Success;
 }
 
@@ -324,7 +336,7 @@ static bool ExecuteAssembler(AssemblerInvocation &Opts,
   SourceMgr SrcMgr;
 
   // Tell SrcMgr about this buffer, which is what the parser will pick up.
-  SrcMgr.AddNewSourceBuffer(std::move(*Buffer), SMLoc());
+  unsigned BufferIndex = SrcMgr.AddNewSourceBuffer(std::move(*Buffer), SMLoc());
 
   // Record the location of the include directories so that the lexer can find
   // it later.
@@ -381,12 +393,21 @@ static bool ExecuteAssembler(AssemblerInvocation &Opts,
     Ctx.setDwarfDebugProducer(StringRef(Opts.DwarfDebugProducer));
   if (!Opts.DebugCompilationDir.empty())
     Ctx.setCompilationDir(Opts.DebugCompilationDir);
+  else {
+    // If no compilation dir is set, try to use the current directory.
+    SmallString<128> CWD;
+    if (!sys::fs::current_path(CWD))
+      Ctx.setCompilationDir(CWD);
+  }
   if (!Opts.DebugPrefixMap.empty())
     for (const auto &KV : Opts.DebugPrefixMap)
       Ctx.addDebugPrefixMapEntry(KV.first, KV.second);
   if (!Opts.MainFileName.empty())
     Ctx.setMainFileName(StringRef(Opts.MainFileName));
   Ctx.setDwarfVersion(Opts.DwarfVersion);
+  if (Opts.GenDwarfForAssembly)
+    Ctx.setGenDwarfRootFile(Opts.InputFile,
+                            SrcMgr.getMemoryBuffer(BufferIndex)->getBuffer());
 
   // Build up the feature string from the target feature list.
   std::string FS;
@@ -447,6 +468,16 @@ static bool ExecuteAssembler(AssemblerInvocation &Opts,
         Opts.RelaxAll, Opts.IncrementalLinkerCompatible,
         /*DWARFMustBeAtTheEnd*/ true));
     Str.get()->InitSections(Opts.NoExecStack);
+  }
+
+  // When -fembed-bitcode is passed to clang_as, a 1-byte marker
+  // is emitted in __LLVM,__asm section if the object file is MachO format.
+  if (Opts.EmbedBitcode && Ctx.getObjectFileInfo()->getObjectFileType() ==
+                               MCObjectFileInfo::IsMachO) {
+    MCSection *AsmLabel = Ctx.getMachOSection(
+        "__LLVM", "__asm", MachO::S_REGULAR, 4, SectionKind::getReadOnly());
+    Str.get()->SwitchSection(AsmLabel);
+    Str.get()->EmitZeros(1);
   }
 
   // Assembly to object compilation should leverage assembly info.

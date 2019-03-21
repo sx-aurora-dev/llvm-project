@@ -1,9 +1,8 @@
 //===-- Host.h --------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,6 +26,9 @@ namespace lldb_private {
 
 class FileAction;
 class ProcessLaunchInfo;
+class ProcessInstanceInfo;
+class ProcessInstanceInfoList;
+class ProcessInstanceInfoMatch;
 
 //----------------------------------------------------------------------
 // Exit Type for inferior processes
@@ -56,7 +58,7 @@ inline bool operator==(WaitStatus a, WaitStatus b) {
 inline bool operator!=(WaitStatus a, WaitStatus b) { return !(a == b); }
 
 //----------------------------------------------------------------------
-/// @class Host Host.h "lldb/Host/Host.h"
+/// \class Host Host.h "lldb/Host/Host.h"
 /// A class that provides host computer information.
 ///
 /// Host is a class that answers information about the host operating system.
@@ -84,24 +86,24 @@ public:
   /// If the child process exits, the monitoring will automatically stop after
   /// the callback returned regardless of the callback return value.
   ///
-  /// @param[in] callback
+  /// \param[in] callback
   ///     A function callback to call when a child receives a signal
   ///     (if \a monitor_signals is true) or a child exits.
   ///
-  /// @param[in] pid
+  /// \param[in] pid
   ///     The process ID of a child process to monitor, -1 for all
   ///     processes.
   ///
-  /// @param[in] monitor_signals
+  /// \param[in] monitor_signals
   ///     If \b true the callback will get called when the child
   ///     process gets a signal. If \b false, the callback will only
   ///     get called if the child process exits.
   ///
-  /// @return
+  /// \return
   ///     A thread handle that can be used to cancel the thread that
   ///     was spawned to monitor \a pid.
   ///
-  /// @see static void Host::StopMonitoringChildProcess (uint32_t)
+  /// \see static void Host::StopMonitoringChildProcess (uint32_t)
   //------------------------------------------------------------------
   static HostThread
   StartMonitoringChildProcess(const MonitorChildProcessCallback &callback,
@@ -117,7 +119,7 @@ public:
   //------------------------------------------------------------------
   /// Get the process ID for the calling process.
   ///
-  /// @return
+  /// \return
   ///     The process ID for the current process.
   //------------------------------------------------------------------
   static lldb::pid_t GetCurrentProcessID();
@@ -128,7 +130,7 @@ public:
   /// Get the thread token (the one returned by ThreadCreate when the thread
   /// was created) for the calling thread in the current process.
   ///
-  /// @return
+  /// \return
   ///     The thread token for the calling thread in the current process.
   //------------------------------------------------------------------
   static lldb::thread_t GetCurrentThread();
@@ -142,10 +144,10 @@ public:
   /// code is running in for loading resources that are relative to your
   /// binary.
   ///
-  /// @param[in] host_addr
+  /// \param[in] host_addr
   ///     The pointer to some code in the current process.
   ///
-  /// @return
+  /// \return
   ///     \b A file spec with the module that contains \a host_addr,
   ///     which may be invalid if \a host_addr doesn't fall into
   ///     any valid module address range.
@@ -157,15 +159,15 @@ public:
   /// the bundle directory from the path itself, this function will change a
   /// path to a file within a bundle to the bundle directory itself.
   ///
-  /// @param[in] file
+  /// \param[in] file
   ///     A file spec that might point to a file in a bundle.
   ///
-  /// @param[out] bundle_directory
+  /// \param[out] bundle_directory
   ///     An object will be filled in with the bundle directory for
   ///     the bundle when \b true is returned. Otherwise \a file is
   ///     left untouched and \b false is returned.
   ///
-  /// @return
+  /// \return
   ///     \b true if \a file was resolved in \a bundle_directory,
   ///     \b false otherwise.
   //------------------------------------------------------------------
@@ -177,12 +179,12 @@ public:
   /// represents an executable bundle (like the MacOSX app bundles), then
   /// locate the executable within the containing bundle.
   ///
-  /// @param[in,out] file
+  /// \param[in,out] file
   ///     A file spec that currently points to the bundle that will
   ///     be filled in with the executable path within the bundle
   ///     if \b true is returned. Otherwise \a file is left untouched.
   ///
-  /// @return
+  /// \return
   ///     \b true if \a file was resolved, \b false if this function
   ///     was not able to resolve the path.
   //------------------------------------------------------------------
@@ -197,8 +199,6 @@ public:
 
   static bool GetProcessInfo(lldb::pid_t pid, ProcessInstanceInfo &proc_info);
 
-  static const lldb::UnixSignalsSP &GetUnixSignals();
-
   /// Launch the process specified in launch_info. The monitoring callback in
   /// launch_info must be set, and it will be called when the process
   /// terminates.
@@ -207,9 +207,9 @@ public:
   //------------------------------------------------------------------
   /// Perform expansion of the command-line for this launch info This can
   /// potentially involve wildcard expansion
-  //  environment variable replacement, and whatever other
-  //  argument magic the platform defines as part of its typical
-  //  user experience
+  /// environment variable replacement, and whatever other
+  /// argument magic the platform defines as part of its typical
+  /// user experience
   //------------------------------------------------------------------
   static Status ShellExpandArguments(ProcessLaunchInfo &launch_info);
 

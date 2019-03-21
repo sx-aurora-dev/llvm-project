@@ -1,9 +1,8 @@
 ##===-- lldbutil.py ------------------------------------------*- Python -*-===##
 ##
-# The LLVM Compiler Infrastructure
-##
-# This file is distributed under the University of Illinois Open Source
-# License. See LICENSE.TXT for details.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ##
 ##===----------------------------------------------------------------------===##
 
@@ -85,7 +84,7 @@ def int_to_bytearray(val, bytesize):
         return None
 
     packed = struct.pack(fmt, val)
-    return bytearray(map(ord, packed))
+    return bytearray(ord(x) for x in packed)
 
 
 def bytearray_to_int(bytes, bytesize):
@@ -707,7 +706,7 @@ def get_function_names(thread):
     def GetFuncName(i):
         return thread.GetFrameAtIndex(i).GetFunctionName()
 
-    return map(GetFuncName, range(thread.GetNumFrames()))
+    return [GetFuncName(i) for i in range(thread.GetNumFrames())]
 
 
 def get_symbol_names(thread):
@@ -717,7 +716,7 @@ def get_symbol_names(thread):
     def GetSymbol(i):
         return thread.GetFrameAtIndex(i).GetSymbol().GetName()
 
-    return map(GetSymbol, range(thread.GetNumFrames()))
+    return [GetSymbol(i) for i in range(thread.GetNumFrames())]
 
 
 def get_pc_addresses(thread):
@@ -727,7 +726,7 @@ def get_pc_addresses(thread):
     def GetPCAddress(i):
         return thread.GetFrameAtIndex(i).GetPCAddress()
 
-    return map(GetPCAddress, range(thread.GetNumFrames()))
+    return [GetPCAddress(i) for i in range(thread.GetNumFrames())]
 
 
 def get_filenames(thread):
@@ -738,7 +737,7 @@ def get_filenames(thread):
         return thread.GetFrameAtIndex(
             i).GetLineEntry().GetFileSpec().GetFilename()
 
-    return map(GetFilename, range(thread.GetNumFrames()))
+    return [GetFilename(i) for i in range(thread.GetNumFrames())]
 
 
 def get_line_numbers(thread):
@@ -748,7 +747,7 @@ def get_line_numbers(thread):
     def GetLineNumber(i):
         return thread.GetFrameAtIndex(i).GetLineEntry().GetLine()
 
-    return map(GetLineNumber, range(thread.GetNumFrames()))
+    return [GetLineNumber(i) for i in range(thread.GetNumFrames())]
 
 
 def get_module_names(thread):
@@ -759,7 +758,7 @@ def get_module_names(thread):
         return thread.GetFrameAtIndex(
             i).GetModule().GetFileSpec().GetFilename()
 
-    return map(GetModuleName, range(thread.GetNumFrames()))
+    return [GetModuleName(i) for i in range(thread.GetNumFrames())]
 
 
 def get_stack_frames(thread):
@@ -769,7 +768,7 @@ def get_stack_frames(thread):
     def GetStackFrame(i):
         return thread.GetFrameAtIndex(i)
 
-    return map(GetStackFrame, range(thread.GetNumFrames()))
+    return [GetStackFrame(i) for i in range(thread.GetNumFrames())]
 
 
 def print_stacktrace(thread, string_buffer=False):

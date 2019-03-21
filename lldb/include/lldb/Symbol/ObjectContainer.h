@@ -1,9 +1,8 @@
 //===-- ObjectContainer.h ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +19,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class ObjectContainer ObjectContainer.h "lldb/Symbol/ObjectContainer.h"
+/// \class ObjectContainer ObjectContainer.h "lldb/Symbol/ObjectContainer.h"
 /// A plug-in interface definition class for object containers.
 ///
 /// Object containers contain object files from one or more architectures, and
@@ -66,7 +65,7 @@ public:
   /// supplied stream \a s. The dumping should include the section list if it
   /// has been parsed, and the symbol table if it has been parsed.
   ///
-  /// @param[in] s
+  /// \param[in] s
   ///     The stream to which to dump the object description.
   //------------------------------------------------------------------
   virtual void Dump(Stream *s) const = 0;
@@ -76,18 +75,18 @@ public:
   ///
   /// Copies the architecture specification for index \a idx.
   ///
-  /// @param[in] idx
+  /// \param[in] idx
   ///     The architecture index to extract.
   ///
-  /// @param[out] arch
+  /// \param[out] arch
   ///     A architecture object that will be filled in if \a idx is a
   ///     architecture valid index.
   ///
-  /// @return
+  /// \return
   ///     Returns \b true if \a idx is valid and \a arch has been
   ///     filled in, \b false otherwise.
   ///
-  /// @see ObjectContainer::GetNumArchitectures() const
+  /// \see ObjectContainer::GetNumArchitectures() const
   //------------------------------------------------------------------
   virtual bool GetArchitectureAtIndex(uint32_t idx, ArchSpec &arch) const {
     return false;
@@ -99,7 +98,7 @@ public:
   /// Some files contain many object files, and this function allows access to
   /// an object's offset within the file.
   ///
-  /// @return
+  /// \return
   ///     The offset in bytes into the file. Defaults to zero for
   ///     simple object files that a represented by an entire file.
   //------------------------------------------------------------------
@@ -110,7 +109,7 @@ public:
   //------------------------------------------------------------------
   /// Get the number of objects within this object file (archives).
   ///
-  /// @return
+  /// \return
   ///     Zero for object files that are not archives, or the number
   ///     of objects contained in the archive.
   //------------------------------------------------------------------
@@ -124,7 +123,7 @@ public:
   /// one architecture should override this function and return an appropriate
   /// value.
   ///
-  /// @return
+  /// \return
   ///     The number of architectures contained in this object file.
   //------------------------------------------------------------------
   virtual size_t GetNumArchitectures() const { return 0; }
@@ -138,7 +137,7 @@ public:
   /// false should be returned and the next plug-in can attempt to parse an
   /// object file.
   ///
-  /// @return
+  /// \return
   ///     Returns \b true if the header was parsed successfully, \b
   ///     false otherwise.
   //------------------------------------------------------------------
@@ -156,7 +155,7 @@ public:
   /// state from any previously selected architecture and prepare to return
   /// information for the new architecture.
   ///
-  /// @return
+  /// \return
   ///     Returns a pointer to the object file of the requested \a
   ///     arch and optional \a name. Returns nullptr of no such object
   ///     file exists in the container.

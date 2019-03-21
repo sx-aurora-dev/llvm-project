@@ -1,9 +1,8 @@
 //===-- AsmPrinterDwarf.cpp - AsmPrinter Dwarf Support --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -43,11 +42,11 @@ void AsmPrinter::EmitSLEB128(int64_t Value, const char *Desc) const {
   OutStreamer->EmitSLEB128IntValue(Value);
 }
 
-void AsmPrinter::EmitULEB128(uint64_t Value, const char *Desc) const {
+void AsmPrinter::EmitULEB128(uint64_t Value, const char *Desc, unsigned PadTo) const {
   if (isVerbose() && Desc)
     OutStreamer->AddComment(Desc);
 
-  OutStreamer->EmitULEB128IntValue(Value);
+  OutStreamer->EmitULEB128IntValue(Value, PadTo);
 }
 
 /// Emit something like ".uleb128 Hi-Lo".
@@ -211,6 +210,9 @@ void AsmPrinter::emitCFIInstruction(const MCCFIInstruction &Inst) const {
     break;
   case MCCFIInstruction::OpWindowSave:
     OutStreamer->EmitCFIWindowSave();
+    break;
+  case MCCFIInstruction::OpNegateRAState:
+    OutStreamer->EmitCFINegateRAState();
     break;
   case MCCFIInstruction::OpSameValue:
     OutStreamer->EmitCFISameValue(Inst.getRegister());

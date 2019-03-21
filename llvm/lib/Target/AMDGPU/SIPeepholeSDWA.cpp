@@ -1,9 +1,8 @@
 //===- SIPeepholeSDWA.cpp - Peephole optimization for SDWA instructions ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -348,8 +347,8 @@ uint64_t SDWASrcOperand::getSrcMods(const SIInstrInfo *TII,
   if (Abs || Neg) {
     assert(!Sext &&
            "Float and integer src modifiers can't be set simulteniously");
-    Mods |= Abs ? SISrcMods::ABS : 0;
-    Mods ^= Neg ? SISrcMods::NEG : 0;
+    Mods |= Abs ? SISrcMods::ABS : 0u;
+    Mods ^= Neg ? SISrcMods::NEG : 0u;
   } else if (Sext) {
     Mods |= SISrcMods::SEXT;
   }

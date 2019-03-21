@@ -1,9 +1,8 @@
 //===-- ClangASTContext.h ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,6 +23,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ExternalASTMerger.h"
 #include "clang/AST/TemplateBase.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "Plugins/ExpressionParser/Clang/ClangPersistentVariables.h"
@@ -121,7 +121,7 @@ public:
   bool HasExternalSource();
 
   void SetExternalSource(
-      llvm::IntrusiveRefCntPtr<clang::ExternalASTSource> &ast_source_ap);
+      llvm::IntrusiveRefCntPtr<clang::ExternalASTSource> &ast_source_up);
 
   void RemoveExternalSource();
 
@@ -168,9 +168,9 @@ public:
                                    lldb::BasicType type);
 
   static CompilerType GetBasicType(clang::ASTContext *ast,
-                                   const ConstString &name);
+                                   ConstString name);
 
-  static lldb::BasicType GetBasicTypeEnumeration(const ConstString &name);
+  static lldb::BasicType GetBasicTypeEnumeration(ConstString name);
 
   CompilerType GetBuiltinTypeForDWARFEncodingAndBitSize(const char *type_name,
                                                         uint32_t dw_ate,
@@ -211,7 +211,7 @@ public:
 
   template <typename RecordDeclType>
   CompilerType
-  GetTypeForIdentifier(const ConstString &type_name,
+  GetTypeForIdentifier(ConstString type_name,
                        clang::DeclContext *decl_context = nullptr) {
     CompilerType compiler_type;
 
@@ -243,13 +243,13 @@ public:
   }
 
   CompilerType CreateStructForIdentifier(
-      const ConstString &type_name,
+      ConstString type_name,
       const std::initializer_list<std::pair<const char *, CompilerType>>
           &type_fields,
       bool packed = false);
 
   CompilerType GetOrCreateStructForIdentifier(
-      const ConstString &type_name,
+      ConstString type_name,
       const std::initializer_list<std::pair<const char *, CompilerType>>
           &type_fields,
       bool packed = false);
@@ -354,11 +354,13 @@ public:
   //------------------------------------------------------------------
 
   clang::NamespaceDecl *
-  GetUniqueNamespaceDeclaration(const char *name, clang::DeclContext *decl_ctx);
+  GetUniqueNamespaceDeclaration(const char *name, clang::DeclContext *decl_ctx,
+                                bool is_inline = false);
 
   static clang::NamespaceDecl *
   GetUniqueNamespaceDeclaration(clang::ASTContext *ast, const char *name,
-                                clang::DeclContext *decl_ctx);
+                                clang::DeclContext *decl_ctx,
+                                bool is_inline = false);
 
   //------------------------------------------------------------------
   // Function Types
@@ -401,7 +403,8 @@ public:
                                                type_quals, cc);
   }
 
-  clang::ParmVarDecl *CreateParameterDeclaration(const char *name,
+  clang::ParmVarDecl *CreateParameterDeclaration(clang::DeclContext *decl_ctx,
+                                                 const char *name,
                                                  const CompilerType &param_type,
                                                  int storage);
 
@@ -504,6 +507,9 @@ public:
                                 lldb::LanguageType *language_ptr,
                                 bool *is_instance_method_ptr,
                                 ConstString *language_object_name_ptr) override;
+
+  bool DeclContextIsContainedInLookup(void *opaque_decl_ctx,
+                                      void *other_opaque_decl_ctx) override;
 
   //----------------------------------------------------------------------
   // Clang specific clang::DeclContext functions
@@ -724,13 +730,16 @@ public:
   // Exploring the type
   //----------------------------------------------------------------------
 
-  uint64_t GetByteSize(lldb::opaque_compiler_type_t type,
+  llvm::Optional<uint64_t> GetByteSize(lldb::opaque_compiler_type_t type,
                        ExecutionContextScope *exe_scope) {
-    return (GetBitSize(type, exe_scope) + 7) / 8;
+    if (llvm::Optional<uint64_t> bit_size = GetBitSize(type, exe_scope))
+      return (*bit_size + 7) / 8;
+    return llvm::None;
   }
 
-  uint64_t GetBitSize(lldb::opaque_compiler_type_t type,
-                      ExecutionContextScope *exe_scope) override;
+  llvm::Optional<uint64_t>
+  GetBitSize(lldb::opaque_compiler_type_t type,
+             ExecutionContextScope *exe_scope) override;
 
   lldb::Encoding GetEncoding(lldb::opaque_compiler_type_t type,
                              uint64_t &count) override;
@@ -743,19 +752,19 @@ public:
                           bool omit_empty_base_classes,
                           const ExecutionContext *exe_ctx) override;
 
-  CompilerType GetBuiltinTypeByName(const ConstString &name) override;
+  CompilerType GetBuiltinTypeByName(ConstString name) override;
 
   lldb::BasicType
   GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) override;
 
   static lldb::BasicType
   GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type,
-                          const ConstString &name);
+                          ConstString name);
 
   void ForEachEnumerator(
       lldb::opaque_compiler_type_t type,
       std::function<bool(const CompilerType &integer_type,
-                         const ConstString &name,
+                         ConstString name,
                          const llvm::APSInt &value)> const &callback) override;
 
   uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override;
@@ -901,6 +910,9 @@ public:
   clang::EnumConstantDecl *AddEnumerationValueToEnumerationType(
       const CompilerType &enum_type, const Declaration &decl, const char *name,
       int64_t enum_value, uint32_t enum_value_bit_size);
+  clang::EnumConstantDecl *AddEnumerationValueToEnumerationType(
+      const CompilerType &enum_type, const Declaration &decl, const char *name,
+      const llvm::APSInt &value);
 
   CompilerType GetEnumerationIntegerType(lldb::opaque_compiler_type_t type);
 
@@ -922,6 +934,13 @@ public:
   //----------------------------------------------------------------------
   // Dumping types
   //----------------------------------------------------------------------
+#ifndef NDEBUG
+  /// Convenience LLVM-style dump method for use in the debugger only.
+  /// In contrast to the other \p Dump() methods this directly invokes
+  /// \p clang::QualType::dump().
+  LLVM_DUMP_METHOD void dump(lldb::opaque_compiler_type_t type) const override;
+#endif
+
   void Dump(Stream &s);
 
   void DumpValue(lldb::opaque_compiler_type_t type, ExecutionContext *exe_ctx,
@@ -1011,22 +1030,22 @@ protected:
   //------------------------------------------------------------------
   // clang-format off
     std::string                                     m_target_triple;
-    std::unique_ptr<clang::ASTContext>              m_ast_ap;
-    std::unique_ptr<clang::LangOptions>             m_language_options_ap;
-    std::unique_ptr<clang::FileManager>             m_file_manager_ap;
-    std::unique_ptr<clang::FileSystemOptions>       m_file_system_options_ap;
-    std::unique_ptr<clang::SourceManager>           m_source_manager_ap;
-    std::unique_ptr<clang::DiagnosticsEngine>       m_diagnostics_engine_ap;
-    std::unique_ptr<clang::DiagnosticConsumer>      m_diagnostic_consumer_ap;
+    std::unique_ptr<clang::ASTContext>              m_ast_up;
+    std::unique_ptr<clang::LangOptions>             m_language_options_up;
+    std::unique_ptr<clang::FileManager>             m_file_manager_up;
+    std::unique_ptr<clang::FileSystemOptions>       m_file_system_options_up;
+    std::unique_ptr<clang::SourceManager>           m_source_manager_up;
+    std::unique_ptr<clang::DiagnosticsEngine>       m_diagnostics_engine_up;
+    std::unique_ptr<clang::DiagnosticConsumer>      m_diagnostic_consumer_up;
     std::shared_ptr<clang::TargetOptions>           m_target_options_rp;
-    std::unique_ptr<clang::TargetInfo>              m_target_info_ap;
-    std::unique_ptr<clang::IdentifierTable>         m_identifier_table_ap;
-    std::unique_ptr<clang::SelectorTable>           m_selector_table_ap;
-    std::unique_ptr<clang::Builtin::Context>        m_builtins_ap;
-    std::unique_ptr<DWARFASTParserClang>            m_dwarf_ast_parser_ap;
-    std::unique_ptr<PDBASTParser>                   m_pdb_ast_parser_ap;
-    std::unique_ptr<ClangASTSource>                 m_scratch_ast_source_ap;
-    std::unique_ptr<clang::MangleContext>           m_mangle_ctx_ap;
+    std::unique_ptr<clang::TargetInfo>              m_target_info_up;
+    std::unique_ptr<clang::IdentifierTable>         m_identifier_table_up;
+    std::unique_ptr<clang::SelectorTable>           m_selector_table_up;
+    std::unique_ptr<clang::Builtin::Context>        m_builtins_up;
+    std::unique_ptr<DWARFASTParserClang>            m_dwarf_ast_parser_up;
+    std::unique_ptr<PDBASTParser>                   m_pdb_ast_parser_up;
+    std::unique_ptr<ClangASTSource>                 m_scratch_ast_source_up;
+    std::unique_ptr<clang::MangleContext>           m_mangle_ctx_up;
     CompleteTagDeclCallback                         m_callback_tag_decl;
     CompleteObjCInterfaceDeclCallback               m_callback_objc_decl;
     void *                                          m_callback_baton;
@@ -1053,7 +1072,8 @@ public:
   GetUserExpression(llvm::StringRef expr, llvm::StringRef prefix,
                     lldb::LanguageType language,
                     Expression::ResultType desired_type,
-                    const EvaluateExpressionOptions &options) override;
+                    const EvaluateExpressionOptions &options,
+                    ValueObject *ctx_obj) override;
 
   FunctionCaller *GetFunctionCaller(const CompilerType &return_type,
                                     const Address &function_address,

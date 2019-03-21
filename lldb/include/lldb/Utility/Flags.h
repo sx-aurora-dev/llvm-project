@@ -1,9 +1,8 @@
 //===-- Flags.h -------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +15,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class Flags Flags.h "lldb/Utility/Flags.h"
+/// \class Flags Flags.h "lldb/Utility/Flags.h"
 /// A class to manage flags.
 ///
 /// The Flags class managed flag bits and allows testing and modification of
@@ -35,7 +34,7 @@ public:
   /// Constructs this object with \a mask as the initial value for all of the
   /// flags.
   ///
-  /// @param[in] mask
+  /// \param[in] mask
   ///     The initial value for all flags.
   //----------------------------------------------------------------------
   Flags(ValueType flags = 0) : m_flags(flags) {}
@@ -45,7 +44,7 @@ public:
   ///
   /// Construct and copy the flags from \a rhs.
   ///
-  /// @param[in] rhs
+  /// \param[in] rhs
   ///     A const Flags object reference to copy.
   //----------------------------------------------------------------------
   Flags(const Flags &rhs) : m_flags(rhs.m_flags) {}
@@ -58,7 +57,7 @@ public:
   //----------------------------------------------------------------------
   /// Get accessor for all flags.
   ///
-  /// @return
+  /// \return
   ///     Returns all of the flags as a Flags::ValueType.
   //----------------------------------------------------------------------
   ValueType Get() const { return m_flags; }
@@ -66,7 +65,7 @@ public:
   //----------------------------------------------------------------------
   /// Return the number of flags that can be represented in this object.
   ///
-  /// @return
+  /// \return
   ///     The maximum number bits in this flag object.
   //----------------------------------------------------------------------
   size_t GetBitSize() const { return sizeof(ValueType) * 8; }
@@ -74,7 +73,7 @@ public:
   //----------------------------------------------------------------------
   /// Set accessor for all flags.
   ///
-  /// @param[in] flags
+  /// \param[in] flags
   ///     The bits with which to replace all of the current flags.
   //----------------------------------------------------------------------
   void Reset(ValueType flags) { m_flags = flags; }
@@ -82,10 +81,10 @@ public:
   //----------------------------------------------------------------------
   /// Clear one or more flags.
   ///
-  /// @param[in] mask
+  /// \param[in] mask
   ///     A bitfield containing one or more flags.
   ///
-  /// @return
+  /// \return
   ///     The new flags after clearing all bits from \a mask.
   //----------------------------------------------------------------------
   ValueType Clear(ValueType mask = ~(ValueType)0) {
@@ -96,10 +95,10 @@ public:
   //----------------------------------------------------------------------
   /// Set one or more flags by logical OR'ing \a mask with the current flags.
   ///
-  /// @param[in] mask
+  /// \param[in] mask
   ///     A bitfield containing one or more flags.
   ///
-  /// @return
+  /// \return
   ///     The new flags after setting all bits from \a mask.
   //----------------------------------------------------------------------
   ValueType Set(ValueType mask) {
@@ -110,7 +109,7 @@ public:
   //----------------------------------------------------------------------
   /// Test if all bits in \a mask are 1 in the current flags
   ///
-  /// @return
+  /// \return
   ///     \b true if all flags in \a mask are 1, \b false
   ///     otherwise.
   //----------------------------------------------------------------------
@@ -119,7 +118,7 @@ public:
   //----------------------------------------------------------------------
   /// Test one or more flags.
   ///
-  /// @return
+  /// \return
   ///     \b true if any flags in \a mask are 1, \b false
   ///     otherwise.
   //----------------------------------------------------------------------
@@ -128,7 +127,7 @@ public:
   //----------------------------------------------------------------------
   /// Test a single flag bit.
   ///
-  /// @return
+  /// \return
   ///     \b true if \a bit is set, \b false otherwise.
   //----------------------------------------------------------------------
   bool Test(ValueType bit) const { return (m_flags & bit) != 0; }
@@ -136,7 +135,7 @@ public:
   //----------------------------------------------------------------------
   /// Test if all bits in \a mask are clear.
   ///
-  /// @return
+  /// \return
   ///     \b true if \b all flags in \a mask are clear, \b false
   ///     otherwise.
   //----------------------------------------------------------------------
@@ -147,7 +146,7 @@ public:
   //----------------------------------------------------------------------
   /// Test a single flag bit to see if it is clear (zero).
   ///
-  /// @return
+  /// \return
   ///     \b true if \a bit is 0, \b false otherwise.
   //----------------------------------------------------------------------
   bool IsClear(ValueType bit) const { return (m_flags & bit) == 0; }
@@ -155,7 +154,7 @@ public:
   //----------------------------------------------------------------------
   /// Get the number of zero bits in \a m_flags.
   ///
-  /// @return
+  /// \return
   ///     The number of bits that are set to 0 in the current flags.
   //----------------------------------------------------------------------
   size_t ClearCount() const {
@@ -170,7 +169,7 @@ public:
   //----------------------------------------------------------------------
   /// Get the number of one bits in \a m_flags.
   ///
-  /// @return
+  /// \return
   ///     The number of bits that are set to 1 in the current flags.
   //----------------------------------------------------------------------
   size_t SetCount() const {

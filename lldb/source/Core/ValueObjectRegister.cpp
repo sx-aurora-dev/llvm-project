@@ -1,9 +1,8 @@
 //===-- ValueObjectRegister.cpp ---------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -187,7 +186,7 @@ ValueObject *ValueObjectRegisterSet::CreateChildAtIndex(
 }
 
 lldb::ValueObjectSP
-ValueObjectRegisterSet::GetChildMemberWithName(const ConstString &name,
+ValueObjectRegisterSet::GetChildMemberWithName(ConstString name,
                                                bool can_create) {
   ValueObject *valobj = NULL;
   if (m_reg_ctx_sp && m_reg_set) {
@@ -204,7 +203,7 @@ ValueObjectRegisterSet::GetChildMemberWithName(const ConstString &name,
 }
 
 size_t
-ValueObjectRegisterSet::GetIndexOfChildWithName(const ConstString &name) {
+ValueObjectRegisterSet::GetIndexOfChildWithName(ConstString name) {
   if (m_reg_ctx_sp && m_reg_set) {
     const RegisterInfo *reg_info =
         m_reg_ctx_sp->GetRegisterInfoByName(name.AsCString());

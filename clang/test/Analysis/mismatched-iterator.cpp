@@ -100,7 +100,7 @@ void good_move_find2(std::vector<int> &v1, std::vector<int> &v2, int n) {
 void good_move_find3(std::vector<int> &v1, std::vector<int> &v2, int n) {
   auto i0 = v2.cend();
   v1 = std::move(v2);
-  v2.push_back(n);
+  v2.push_back(n); // expected-warning{{Method called on moved-from object of type 'std::vector'}}
   std::find(v2.cbegin(), i0, n); // no-warning
 }
 
@@ -125,6 +125,7 @@ void bad_move_find1(std::vector<int> &v1, std::vector<int> &v2, int n) {
   auto i0 = v2.cbegin();
   v1 = std::move(v2);
   std::find(i0, v2.cend(), n); // expected-warning{{Iterators of different containers used where the same container is expected}}
+                               // expected-warning@-1{{Method called on moved-from object of type 'std::vector'}}
 }
 
 void bad_insert_find(std::vector<int> &v1, std::vector<int> &v2, int n, int m) {
@@ -167,12 +168,14 @@ void bad_move(std::vector<int> &v1, std::vector<int> &v2) {
   const auto i0 = ++v2.cbegin();
   v1 = std::move(v2);
   v2.erase(i0); // expected-warning{{Container accessed using foreign iterator argument}}
+                // expected-warning@-1{{Method called on moved-from object of type 'std::vector'}}
 }
 
 void bad_move_find2(std::vector<int> &v1, std::vector<int> &v2, int n) {
   auto i0 = --v2.cend();
   v1 = std::move(v2);
   std::find(i0, v2.cend(), n); // expected-warning{{Iterators of different containers used where the same container is expected}}
+                               // expected-warning@-1{{Method called on moved-from object of type 'std::vector'}}
 }
 
 void bad_move_find3(std::vector<int> &v1, std::vector<int> &v2, int n) {
@@ -185,4 +188,18 @@ void bad_comparison(std::vector<int> &v1, std::vector<int> &v2) {
   if (v1.cbegin() != v2.cend()) { // expected-warning{{Iterators of different containers used where the same container is expected}}
     *v1.cbegin();
   }
+}
+
+std::vector<int> &return_vector_ref();
+
+void ignore_conjured1() {
+  std::vector<int> &v1 = return_vector_ref(), &v2 = return_vector_ref();
+
+  v2.erase(v1.cbegin()); // no-warning
+}
+
+void ignore_conjured2() {
+  std::vector<int> &v1 = return_vector_ref(), &v2 = return_vector_ref();
+
+  if (v1.cbegin() == v2.cbegin()) {} //no-warning
 }

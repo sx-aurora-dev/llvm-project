@@ -1,9 +1,8 @@
 //===-- ObjDumper.cpp - Base dumper class -----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -36,7 +35,6 @@ static Expected<object::SectionRef>
 getSecNameOrIndexAsSecRef(const object::ObjectFile *Obj, StringRef SecName) {
   char *StrPtr;
   long SectionIndex = strtol(SecName.data(), &StrPtr, 10);
-  object::SectionRef Section;
   long SecIndex;
   if (Obj->isELF())
     SecIndex = 0;
@@ -117,7 +115,8 @@ void ObjDumper::printSectionAsHex(const object::ObjectFile *Obj,
     uint8_t i;
     uint8_t k;
 
-    W.startLine() << format_hex(SecPtr - SecContent, 10);
+    W.startLine() << format_hex(Section.getAddress() + (SecPtr - SecContent),
+                                10);
     W.startLine() << ' ';
     for (i = 0; TmpSecPtr < SecEnd && i < 4; ++i) {
       for (k = 0; TmpSecPtr < SecEnd && k < 4; k++, TmpSecPtr++) {

@@ -1,9 +1,8 @@
 //===-- X86InstrArithmetic.td - Integer Arithmetic Instrs --*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -422,22 +421,34 @@ def NOT64m : RI<0xF7, MRM2m, (outs), (ins i64mem:$dst), "not{q}\t$dst",
 } // SchedRW
 } // CodeSize
 
+def X86add_flag_nocf : PatFrag<(ops node:$lhs, node:$rhs),
+                               (X86add_flag node:$lhs, node:$rhs), [{
+  return hasNoCarryFlagUses(SDValue(N, 1));
+}]>;
+
+def X86sub_flag_nocf : PatFrag<(ops node:$lhs, node:$rhs),
+                               (X86sub_flag node:$lhs, node:$rhs), [{
+  // Only use DEC if the result is used.
+  return !SDValue(N, 0).use_empty() && hasNoCarryFlagUses(SDValue(N, 1));
+}]>;
+
 // TODO: inc/dec is slow for P4, but fast for Pentium-M.
 let Defs = [EFLAGS] in {
 let Constraints = "$src1 = $dst", SchedRW = [WriteALU] in {
-let CodeSize = 2 in
+let isConvertibleToThreeAddress = 1, CodeSize = 2 in { // Can xform into LEA.
 def INC8r  : I<0xFE, MRM0r, (outs GR8 :$dst), (ins GR8 :$src1),
                "inc{b}\t$dst",
-               [(set GR8:$dst, EFLAGS, (X86inc_flag GR8:$src1))]>;
-let isConvertibleToThreeAddress = 1, CodeSize = 2 in { // Can xform into LEA.
+               [(set GR8:$dst, EFLAGS, (X86add_flag_nocf GR8:$src1, 1))]>;
 def INC16r : I<0xFF, MRM0r, (outs GR16:$dst), (ins GR16:$src1),
                "inc{w}\t$dst",
-               [(set GR16:$dst, EFLAGS, (X86inc_flag GR16:$src1))]>, OpSize16;
+               [(set GR16:$dst, EFLAGS, (X86add_flag_nocf GR16:$src1, 1))]>,
+               OpSize16;
 def INC32r : I<0xFF, MRM0r, (outs GR32:$dst), (ins GR32:$src1),
                "inc{l}\t$dst",
-               [(set GR32:$dst, EFLAGS, (X86inc_flag GR32:$src1))]>, OpSize32;
+               [(set GR32:$dst, EFLAGS, (X86add_flag_nocf GR32:$src1, 1))]>,
+               OpSize32;
 def INC64r : RI<0xFF, MRM0r, (outs GR64:$dst), (ins GR64:$src1), "inc{q}\t$dst",
-                [(set GR64:$dst, EFLAGS, (X86inc_flag GR64:$src1))]>;
+                [(set GR64:$dst, EFLAGS, (X86add_flag_nocf GR64:$src1, 1))]>;
 } // isConvertibleToThreeAddress = 1, CodeSize = 2
 
 // Short forms only valid in 32-bit mode. Selected during MCInst lowering.
@@ -471,19 +482,20 @@ let Predicates = [UseIncDec, In64BitMode] in {
 } // CodeSize = 2, SchedRW
 
 let Constraints = "$src1 = $dst", SchedRW = [WriteALU] in {
-let CodeSize = 2 in
+let isConvertibleToThreeAddress = 1, CodeSize = 2 in { // Can xform into LEA.
 def DEC8r  : I<0xFE, MRM1r, (outs GR8 :$dst), (ins GR8 :$src1),
                "dec{b}\t$dst",
-               [(set GR8:$dst, EFLAGS, (X86dec_flag GR8:$src1))]>;
-let isConvertibleToThreeAddress = 1, CodeSize = 2 in { // Can xform into LEA.
+               [(set GR8:$dst, EFLAGS, (X86sub_flag_nocf GR8:$src1, 1))]>;
 def DEC16r : I<0xFF, MRM1r, (outs GR16:$dst), (ins GR16:$src1),
                "dec{w}\t$dst",
-               [(set GR16:$dst, EFLAGS, (X86dec_flag GR16:$src1))]>, OpSize16;
+               [(set GR16:$dst, EFLAGS, (X86sub_flag_nocf GR16:$src1, 1))]>,
+               OpSize16;
 def DEC32r : I<0xFF, MRM1r, (outs GR32:$dst), (ins GR32:$src1),
                "dec{l}\t$dst",
-               [(set GR32:$dst, EFLAGS, (X86dec_flag GR32:$src1))]>, OpSize32;
+               [(set GR32:$dst, EFLAGS, (X86sub_flag_nocf GR32:$src1, 1))]>,
+               OpSize32;
 def DEC64r : RI<0xFF, MRM1r, (outs GR64:$dst), (ins GR64:$src1), "dec{q}\t$dst",
-                [(set GR64:$dst, EFLAGS, (X86dec_flag GR64:$src1))]>;
+                [(set GR64:$dst, EFLAGS, (X86sub_flag_nocf GR64:$src1, 1))]>;
 } // isConvertibleToThreeAddress = 1, CodeSize = 2
 
 // Short forms only valid in 32-bit mode. Selected during MCInst lowering.
@@ -590,16 +602,16 @@ def invalid_node : SDNode<"<<invalid_node>>", SDTIntLeaf,[],"<<invalid_node>>">;
 
 
 def Xi8  : X86TypeInfo<i8, "b", GR8, loadi8, i8mem,
-                       Imm8, i8imm, imm8_su, i8imm, invalid_node,
+                       Imm8, i8imm, relocImm8_su, i8imm, invalid_node,
                        0, OpSizeFixed, 0>;
 def Xi16 : X86TypeInfo<i16, "w", GR16, loadi16, i16mem,
-                       Imm16, i16imm, imm16_su, i16i8imm, i16immSExt8_su,
+                       Imm16, i16imm, relocImm16_su, i16i8imm, i16immSExt8_su,
                        1, OpSize16, 0>;
 def Xi32 : X86TypeInfo<i32, "l", GR32, loadi32, i32mem,
-                       Imm32, i32imm, imm32_su, i32i8imm, i32immSExt8_su,
+                       Imm32, i32imm, relocImm32_su, i32i8imm, i32immSExt8_su,
                        1, OpSize32, 0>;
 def Xi64 : X86TypeInfo<i64, "q", GR64, loadi64, i64mem,
-                       Imm32S, i64i32imm, i64immSExt32_su, i64i8imm, i64immSExt8_su,
+                       Imm32S, i64i32imm, i64relocImmSExt32_su, i64i8imm, i64immSExt8_su,
                        1, OpSizeFixed, 1>;
 
 /// ITy - This instruction base class takes the type info for the instruction.
@@ -913,8 +925,8 @@ multiclass ArithBinOp_RF<bits<8> BaseOpc, bits<8> BaseOpc2, bits<8> BaseOpc4,
   let Defs = [EFLAGS] in {
     let Constraints = "$src1 = $dst" in {
       let isCommutable = CommutableRR in {
-        def NAME#8rr  : BinOpRR_RF<BaseOpc, mnemonic, Xi8 , opnodeflag>;
         let isConvertibleToThreeAddress = ConvertibleToThreeAddress in {
+          def NAME#8rr  : BinOpRR_RF<BaseOpc, mnemonic, Xi8 , opnodeflag>;
           def NAME#16rr : BinOpRR_RF<BaseOpc, mnemonic, Xi16, opnodeflag>;
           def NAME#32rr : BinOpRR_RF<BaseOpc, mnemonic, Xi32, opnodeflag>;
           def NAME#64rr : BinOpRR_RF<BaseOpc, mnemonic, Xi64, opnodeflag>;
@@ -931,9 +943,9 @@ multiclass ArithBinOp_RF<bits<8> BaseOpc, bits<8> BaseOpc2, bits<8> BaseOpc4,
       def NAME#32rm  : BinOpRM_RF<BaseOpc2, mnemonic, Xi32, opnodeflag>;
       def NAME#64rm  : BinOpRM_RF<BaseOpc2, mnemonic, Xi64, opnodeflag>;
 
-      def NAME#8ri   : BinOpRI_RF<0x80, mnemonic, Xi8 , opnodeflag, RegMRM>;
-
       let isConvertibleToThreeAddress = ConvertibleToThreeAddress in {
+        def NAME#8ri   : BinOpRI_RF<0x80, mnemonic, Xi8 , opnodeflag, RegMRM>;
+
         // NOTE: These are order specific, we want the ri8 forms to be listed
         // first so that they are slightly preferred to the ri forms.
         def NAME#16ri8 : BinOpRI8_RF<0x82, mnemonic, Xi16, opnodeflag, RegMRM>;
@@ -1212,16 +1224,21 @@ def X86testpat : PatFrag<(ops node:$lhs, node:$rhs),
 let isCompare = 1 in {
   let Defs = [EFLAGS] in {
     let isCommutable = 1 in {
-      def TEST8rr  : BinOpRR_F<0x84, "test", Xi8 , X86testpat>;
-      def TEST16rr : BinOpRR_F<0x84, "test", Xi16, X86testpat>;
-      def TEST32rr : BinOpRR_F<0x84, "test", Xi32, X86testpat>;
-      def TEST64rr : BinOpRR_F<0x84, "test", Xi64, X86testpat>;
+      // Avoid selecting these and instead use a test+and. Post processing will
+      // combine them. This gives bunch of other patterns that start with
+      // and a chance to match.
+      def TEST8rr  : BinOpRR_F<0x84, "test", Xi8 , null_frag>;
+      def TEST16rr : BinOpRR_F<0x84, "test", Xi16, null_frag>;
+      def TEST32rr : BinOpRR_F<0x84, "test", Xi32, null_frag>;
+      def TEST64rr : BinOpRR_F<0x84, "test", Xi64, null_frag>;
     } // isCommutable
 
-    def TEST8mr    : BinOpMR_F<0x84, "test", Xi8 , X86testpat>;
-    def TEST16mr   : BinOpMR_F<0x84, "test", Xi16, X86testpat>;
-    def TEST32mr   : BinOpMR_F<0x84, "test", Xi32, X86testpat>;
-    def TEST64mr   : BinOpMR_F<0x84, "test", Xi64, X86testpat>;
+    let hasSideEffects = 0, mayLoad = 1 in {
+    def TEST8mr    : BinOpMR_F<0x84, "test", Xi8 , null_frag>;
+    def TEST16mr   : BinOpMR_F<0x84, "test", Xi16, null_frag>;
+    def TEST32mr   : BinOpMR_F<0x84, "test", Xi32, null_frag>;
+    def TEST64mr   : BinOpMR_F<0x84, "test", Xi64, null_frag>;
+    }
 
     def TEST8ri    : BinOpRI_F<0xF6, "test", Xi8 , X86testpat, MRM0r>;
     def TEST16ri   : BinOpRI_F<0xF6, "test", Xi16, X86testpat, MRM0r>;

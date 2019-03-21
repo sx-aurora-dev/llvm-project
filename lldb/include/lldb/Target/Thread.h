@@ -1,9 +1,8 @@
 //===-- Thread.h ------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,12 +14,12 @@
 #include <string>
 #include <vector>
 
-#include "lldb/Core/Broadcaster.h"
-#include "lldb/Core/Event.h"
 #include "lldb/Core/UserSettingsController.h"
 #include "lldb/Target/ExecutionContextScope.h"
 #include "lldb/Target/RegisterCheckpoint.h"
 #include "lldb/Target/StackFrameList.h"
+#include "lldb/Utility/Broadcaster.h"
+#include "lldb/Utility/Event.h"
 #include "lldb/Utility/StructuredData.h"
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
@@ -39,7 +38,7 @@ public:
   /// The regular expression returned determines symbols that this
   /// thread won't stop in during "step-in" operations.
   ///
-  /// @return
+  /// \return
   ///    A pointer to a regular expression to compare against symbols,
   ///    or nullptr if all symbols are allowed.
   ///
@@ -92,9 +91,9 @@ public:
 
     ~ThreadEventData() override;
 
-    static const ConstString &GetFlavorString();
+    static ConstString GetFlavorString();
 
-    const ConstString &GetFlavor() const override {
+    ConstString GetFlavor() const override {
       return ThreadEventData::GetFlavorString();
     }
 
@@ -134,11 +133,11 @@ public:
   //------------------------------------------------------------------
   /// Constructor
   ///
-  /// @param [in] process
+  /// \param [in] process
   ///
-  /// @param [in] tid
+  /// \param [in] tid
   ///
-  /// @param [in] use_invalid_index_id
+  /// \param [in] use_invalid_index_id
   ///     Optional parameter, defaults to false.  The only subclass that
   ///     is likely to set use_invalid_index_id == true is the HistoryThread
   ///     class.  In that case, the Thread we are constructing represents
@@ -189,7 +188,7 @@ public:
   /// to force the thread to run (e.g. the "thread continue" command, or are
   /// resetting the state
   /// (e.g. in SBThread::Resume()), then pass true to override_suspend.
-  /// @return
+  /// \return
   ///    The User resume state for this thread.
   //------------------------------------------------------------------
   void SetResumeState(lldb::StateType state, bool override_suspend = false) {
@@ -205,7 +204,7 @@ public:
   /// this
   /// thread to run.
   ///
-  /// @return
+  /// \return
   ///    The User resume state for this thread.
   //------------------------------------------------------------------
   lldb::StateType GetResumeState() const { return m_resume_state; }
@@ -280,7 +279,7 @@ public:
   /// message).
   //------------------------------------------------------------------
   StructuredData::ObjectSP GetExtendedInfo() {
-    if (m_extended_info_fetched == false) {
+    if (!m_extended_info_fetched) {
       m_extended_info = FetchThreadExtendedInfo();
       m_extended_info_fetched = true;
     }
@@ -299,7 +298,7 @@ public:
   /// queue, or it may be unknown whether it is associated with a libdispatch
   /// queue.
   ///
-  /// @return
+  /// \return
   ///     eLazyBoolNo if this thread is definitely not associated with a
   ///     libdispatch queue (e.g. on a non-Darwin system where GCD aka
   ///     libdispatch is not available).
@@ -327,7 +326,7 @@ public:
   /// queues and incrementing, a QueueID will not be reused for a
   /// different queue during the lifetime of a process.
   ///
-  /// @return
+  /// \return
   ///     A QueueID if the Thread subclass implements this, else
   ///     LLDB_INVALID_QUEUE_ID.
   //------------------------------------------------------------------
@@ -341,7 +340,7 @@ public:
   /// If this Thread is doing work on behalf of a libdispatch/GCD queue,
   /// retrieve the Queue name.
   ///
-  /// @return
+  /// \return
   ///     The Queue name, if the Thread subclass implements this, else
   ///     nullptr.
   //------------------------------------------------------------------
@@ -357,7 +356,7 @@ public:
   /// eQueueKindConcurrent, indicating that this queue processes work
   /// items serially or concurrently.
   ///
-  /// @return
+  /// \return
   ///     The Queue kind, if the Thread subclass implements this, else
   ///     eQueueKindUnknown.
   //------------------------------------------------------------------
@@ -368,7 +367,7 @@ public:
   //------------------------------------------------------------------
   /// Retrieve the Queue for this thread, if any.
   ///
-  /// @return
+  /// \return
   ///     A QueueSP for the queue that is currently associated with this
   ///     thread.
   ///     An empty shared pointer indicates that this thread is not
@@ -389,7 +388,7 @@ public:
   /// lifetime and should not be used to identify a queue uniquely.  Use
   /// the GetQueueID() call for that.
   ///
-  /// @return
+  /// \return
   ///     The Queue's libdispatch_queue_t address if the Thread subclass
   ///     implements this, else LLDB_INVALID_ADDRESS.
   //------------------------------------------------------------------
@@ -506,20 +505,20 @@ public:
   /// This function is designed to be used by commands where the
   /// process is publicly stopped.
   ///
-  /// @param[in] source_step
+  /// \param[in] source_step
   ///     If true and the frame has debug info, then do a source level
   ///     step in, else do a single instruction step in.
   ///
-  /// @param[in] step_in_avoids_code_without_debug_info
+  /// \param[in] step_in_avoids_code_without_debug_info
   ///     If \a true, then avoid stepping into code that doesn't have
   ///     debug info, else step into any code regardless of whether it
   ///     has debug info.
   ///
-  /// @param[in] step_out_avoids_code_without_debug_info
+  /// \param[in] step_out_avoids_code_without_debug_info
   ///     If \a true, then if you step out to code with no debug info, keep
   ///     stepping out till you get to code with debug info.
   ///
-  /// @return
+  /// \return
   ///     An error that describes anything that went wrong
   //------------------------------------------------------------------
   virtual Status
@@ -533,11 +532,11 @@ public:
   /// This function is designed to be used by commands where the
   /// process is publicly stopped.
   ///
-  /// @param[in] source_step
+  /// \param[in] source_step
   ///     If true and the frame has debug info, then do a source level
   ///     step over, else do a single instruction step over.
   ///
-  /// @return
+  /// \return
   ///     An error that describes anything that went wrong
   //------------------------------------------------------------------
   virtual Status StepOver(
@@ -550,7 +549,7 @@ public:
   /// This function is designed to be used by commands where the
   /// process is publicly stopped.
   ///
-  /// @return
+  /// \return
   ///     An error that describes anything that went wrong
   //------------------------------------------------------------------
   virtual Status StepOut();
@@ -560,7 +559,7 @@ public:
   /// Most OSs maintain a per-thread pointer (e.g. the FS register on
   /// x64), which we return the value of here.
   ///
-  /// @return
+  /// \return
   ///     LLDB_INVALID_ADDRESS if not supported, otherwise the thread
   ///     pointer value.
   //------------------------------------------------------------------
@@ -569,12 +568,12 @@ public:
   //------------------------------------------------------------------
   /// Retrieves the per-module TLS block for a thread.
   ///
-  /// @param[in] module
+  /// \param[in] module
   ///     The module to query TLS data for.
   ///
-  /// @param[in] tls_file_addr
+  /// \param[in] tls_file_addr
   ///     The thread local address in module
-  /// @return
+  /// \return
   ///     If the thread has TLS data allocated for the
   ///     module, the address of the TLS block. Otherwise
   ///     LLDB_INVALID_ADDRESS is returned.
@@ -589,7 +588,7 @@ public:
   /// process of execution, for instance) which can make it unsafe for
   /// functions to be called.
   ///
-  /// @return
+  /// \return
   ///     True if it is safe to call functions on this thread.
   ///     False if function calls should be avoided on this thread.
   //------------------------------------------------------------------
@@ -627,12 +626,12 @@ public:
   /// one you probably want to call through to the Process one for anything
   /// your plugin doesn't explicitly handle.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -642,21 +641,21 @@ public:
   /// Queues the plan used to step one instruction from the current PC of \a
   /// thread.
   ///
-  /// @param[in] step_over
+  /// \param[in] step_over
   ///    \b true if we step over calls to functions, false if we step in.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -668,19 +667,19 @@ public:
   /// Queues the plan used to step through an address range, stepping  over
   /// function calls.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] type
+  /// \param[in] type
   ///    Type of step to do, only eStepTypeInto and eStepTypeOver are supported
   ///    by this plan.
   ///
-  /// @param[in] range
+  /// \param[in] range
   ///    The address range to step through.
   ///
-  /// @param[in] addr_context
+  /// \param[in] addr_context
   ///    When dealing with stepping through inlined functions the current PC is
   ///    not enough information to know
   ///    what "step" means.  For instance a series of nested inline functions
@@ -689,18 +688,18 @@ public:
   ///    is supposed to be out of.
   //   FIXME: Currently unused.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @param[in] step_out_avoids_code_without_debug_info
+  /// \param[in] step_out_avoids_code_without_debug_info
   ///    If eLazyBoolYes, if the step over steps out it will continue to step
   ///    out till it comes to a frame with debug info.
   ///    If eLazyBoolCalculate, we will consult the default set in the thread.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -723,19 +722,19 @@ public:
   /// Queues the plan used to step through an address range, stepping into
   /// functions.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] type
+  /// \param[in] type
   ///    Type of step to do, only eStepTypeInto and eStepTypeOver are supported
   ///    by this plan.
   ///
-  /// @param[in] range
+  /// \param[in] range
   ///    The address range to step through.
   ///
-  /// @param[in] addr_context
+  /// \param[in] addr_context
   ///    When dealing with stepping through inlined functions the current PC is
   ///    not enough information to know
   ///    what "step" means.  For instance a series of nested inline functions
@@ -744,27 +743,27 @@ public:
   ///    is supposed to be out of.
   //   FIXME: Currently unused.
   ///
-  /// @param[in] step_in_target
+  /// \param[in] step_in_target
   ///    Name if function we are trying to step into.  We will step out if we
   ///    don't land in that function.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @param[in] step_in_avoids_code_without_debug_info
+  /// \param[in] step_in_avoids_code_without_debug_info
   ///    If eLazyBoolYes we will step out if we step into code with no debug
   ///    info.
   ///    If eLazyBoolCalculate we will consult the default set in the thread.
   ///
-  /// @param[in] step_out_avoids_code_without_debug_info
+  /// \param[in] step_out_avoids_code_without_debug_info
   ///    If eLazyBoolYes, if the step over steps out it will continue to step
   ///    out till it comes to a frame with debug info.
   ///    If eLazyBoolCalculate, it will consult the default set in the thread.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -789,12 +788,12 @@ public:
   /// Queue the plan used to step out of the function at the current PC of
   /// \a thread.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] addr_context
+  /// \param[in] addr_context
   ///    When dealing with stepping through inlined functions the current PC is
   ///    not enough information to know
   ///    what "step" means.  For instance a series of nested inline functions
@@ -803,25 +802,25 @@ public:
   ///    is supposed to be out of.
   //   FIXME: Currently unused.
   ///
-  /// @param[in] first_insn
+  /// \param[in] first_insn
   ///     \b true if this is the first instruction of a function.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[in] stop_vote
-  /// @param[in] run_vote
+  /// \param[in] stop_vote
+  /// \param[in] run_vote
   ///    See standard meanings for the stop & run votes in ThreadPlan.h.
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @param[in] step_out_avoids_code_without_debug_info
+  /// \param[in] step_out_avoids_code_without_debug_info
   ///    If eLazyBoolYes, if the step over steps out it will continue to step
   ///    out till it comes to a frame with debug info.
   ///    If eLazyBoolCalculate, it will consult the default set in the thread.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -838,12 +837,12 @@ public:
   /// be used by other thread plans when they need to retain control of the step
   /// out.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] addr_context
+  /// \param[in] addr_context
   ///    When dealing with stepping through inlined functions the current PC is
   ///    not enough information to know
   ///    what "step" means.  For instance a series of nested inline functions
@@ -852,23 +851,23 @@ public:
   ///    is supposed to be out of.
   //   FIXME: Currently unused.
   ///
-  /// @param[in] first_insn
+  /// \param[in] first_insn
   ///     \b true if this is the first instruction of a function.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[in] stop_vote
+  /// \param[in] stop_vote
   ///
-  /// @param[in] run_vote
+  /// \param[in] run_vote
   ///    See standard meanings for the stop & run votes in ThreadPlan.h.
   ///
-  /// @param[in] frame_idx
+  /// \param[in] frame_idx
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @param[in] continue_to_next_branch
+  /// \param[in] continue_to_next_branch
   ///    Normally this will enqueue a plan that will put a breakpoint on the
   ///    return address and continue
   ///    to there.  If continue_to_next_branch is true, this is an operation not
@@ -885,7 +884,7 @@ public:
   ///    registers which are overwritten
   ///    before the next branch instruction.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -898,23 +897,23 @@ public:
   /// Gets the plan used to step through the code that steps from a function
   /// call site at the current PC into the actual function call.
   ///
-  /// @param[in] return_stack_id
+  /// \param[in] return_stack_id
   ///    The stack id that we will return to (by setting backstop breakpoints on
   ///    the return
   ///    address to that frame) if we fail to step through.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -928,21 +927,21 @@ public:
   /// This is a simple plan, mostly useful as a backstop when you are continuing
   /// for some particular purpose.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @param[in] target_addr
+  /// \param[in] target_addr
   ///    The address to which we're running.
   ///
-  /// @param[in] stop_other_threads
+  /// \param[in] stop_other_threads
   ///    \b true if we will stop other threads while we single step this one.
   ///
-  /// @param[out] status
+  /// \param[out] status
   ///     A status with an error if queuing failed.
   ///
-  /// @return
+  /// \return
   ///     A shared pointer to the newly queued thread plan, or nullptr if the
   ///     plan could not be queued.
   //------------------------------------------------------------------
@@ -965,7 +964,7 @@ public:
   //------------------------------------------------------------------
   /// Gets the plan which will execute next on the plan stack.
   ///
-  /// @return
+  /// \return
   ///     A pointer to the next executed plan.
   //------------------------------------------------------------------
   ThreadPlan *GetCurrentPlan();
@@ -974,7 +973,7 @@ public:
   /// Unwinds the thread stack for the innermost expression plan currently
   /// on the thread plan stack.
   ///
-  /// @return
+  /// \return
   ///     An error if the thread plan could not be unwound.
   //------------------------------------------------------------------
 
@@ -984,7 +983,7 @@ public:
   /// Gets the outer-most plan that was popped off the plan stack in the
   /// most recent stop.  Useful for printing the stop reason accurately.
   ///
-  /// @return
+  /// \return
   ///     A pointer to the last completed plan.
   //------------------------------------------------------------------
   lldb::ThreadPlanSP GetCompletedPlan();
@@ -992,7 +991,7 @@ public:
   //------------------------------------------------------------------
   /// Gets the outer-most return value from the completed plans
   ///
-  /// @return
+  /// \return
   ///     A ValueObjectSP, either empty if there is no return value,
   ///     or containing the return value.
   //------------------------------------------------------------------
@@ -1001,7 +1000,7 @@ public:
   //------------------------------------------------------------------
   /// Gets the outer-most expression variable from the completed plans
   ///
-  /// @return
+  /// \return
   ///     A ExpressionVariableSP, either empty if there is no
   ///     plan completed an expression during the current stop
   ///     or the expression variable that was made for the completed expression.
@@ -1012,10 +1011,10 @@ public:
   ///  Checks whether the given plan is in the completed plans for this
   ///  stop.
   ///
-  /// @param[in] plan
+  /// \param[in] plan
   ///     Pointer to the plan you're checking.
   ///
-  /// @return
+  /// \return
   ///     Returns true if the input plan is in the completed plan stack,
   ///     false otherwise.
   //------------------------------------------------------------------
@@ -1025,10 +1024,10 @@ public:
   ///  Checks whether the given plan is in the discarded plans for this
   ///  stop.
   ///
-  /// @param[in] plan
+  /// \param[in] plan
   ///     Pointer to the plan you're checking.
   ///
-  /// @return
+  /// \return
   ///     Returns true if the input plan is in the discarded plan stack,
   ///     false otherwise.
   //------------------------------------------------------------------
@@ -1037,7 +1036,7 @@ public:
   //------------------------------------------------------------------
   /// Check if we have completed plan to override breakpoint stop reason
   ///
-  /// @return
+  /// \return
   ///     Returns true if completed plan stack is not empty
   ///     false otherwise.
   //------------------------------------------------------------------
@@ -1046,15 +1045,15 @@ public:
   //------------------------------------------------------------------
   /// Queues a generic thread plan.
   ///
-  /// @param[in] plan_sp
+  /// \param[in] plan_sp
   ///    The plan to queue.
   ///
-  /// @param[in] abort_other_plans
+  /// \param[in] abort_other_plans
   ///    \b true if we discard the currently queued plans and replace them with
   ///    this one.
   ///    Otherwise this plan will go on the end of the plan stack.
   ///
-  /// @return
+  /// \return
   ///     A pointer to the last completed plan.
   //------------------------------------------------------------------
   Status QueueThreadPlan(lldb::ThreadPlanSP &plan_sp, bool abort_other_plans);
@@ -1072,7 +1071,7 @@ public:
   /// and
   /// including up_to_plan_sp.
   //
-  // @param[in] up_to_plan_sp
+  // \param[in] up_to_plan_sp
   //   Discard all plans up to and including this one.
   //------------------------------------------------------------------
   void DiscardThreadPlansUpToPlan(lldb::ThreadPlanSP &up_to_plan_sp);
@@ -1085,11 +1084,11 @@ public:
   /// including the plan in that matches \a thread_index counting only
   /// the non-Private plans.
   ///
-  /// @param[in] up_to_plan_sp
+  /// \param[in] up_to_plan_sp
   ///   Discard all plans up to and including this user plan given by this
   ///   index.
   ///
-  /// @return
+  /// \return
   ///    \b true if there was a thread plan with that user index, \b false
   ///    otherwise.
   //------------------------------------------------------------------
@@ -1098,7 +1097,7 @@ public:
   //------------------------------------------------------------------
   /// Prints the current plan stack.
   ///
-  /// @param[in] s
+  /// \param[in] s
   ///    The stream to which to dump the plan stack info.
   ///
   //------------------------------------------------------------------
@@ -1201,7 +1200,7 @@ public:
   // Thread subclasses should call Thread::SetStopInfo(...) with the reason the
   // thread stopped.
   //
-  // @return
+  // \return
   //      True if Thread::SetStopInfo(...) was called, false otherwise.
   //----------------------------------------------------------------------
   virtual bool CalculateStopInfo() = 0;
@@ -1237,7 +1236,7 @@ public:
   /// Some Thread subclasses may maintain a token to help with providing
   /// an extended backtrace.  The SystemRuntime plugin will set/request this.
   ///
-  /// @param [in] token
+  /// \param [in] token
   //----------------------------------------------------------------------
   virtual void SetExtendedBacktraceToken(uint64_t token) {}
 
@@ -1247,7 +1246,7 @@ public:
   /// Some Thread subclasses may maintain a token to help with providing
   /// an extended backtrace.  The SystemRuntime plugin will set/request this.
   ///
-  /// @return
+  /// \return
   ///     The token needed by the SystemRuntime to create an extended backtrace.
   ///     LLDB_INVALID_ADDRESS is returned if no token is available.
   //----------------------------------------------------------------------
@@ -1255,8 +1254,7 @@ public:
 
   lldb::ValueObjectSP GetCurrentException();
 
-  // TODO(kubamracek): Extract backtrace from ValueObjectSP into ThreadSP
-  // lldb::ThreadSP GetCurrentExceptionBacktrace();
+  lldb::ThreadSP GetCurrentExceptionBacktrace();
 
 protected:
   friend class ThreadPlan;
@@ -1349,7 +1347,7 @@ protected:
                                             ///thread plan logic for the current
                                             ///resume.
   /// It gets set in Thread::ShouldResume.
-  std::unique_ptr<lldb_private::Unwind> m_unwinder_ap;
+  std::unique_ptr<lldb_private::Unwind> m_unwinder_up;
   bool m_destroy_called; // This is used internally to make sure derived Thread
                          // classes call DestroyThread.
   LazyBool m_override_should_notify;

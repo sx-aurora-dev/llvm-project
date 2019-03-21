@@ -1,9 +1,8 @@
 //===-- ASTStructExtractor.h ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +18,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class ASTStructExtractor ASTStructExtractor.h
+/// \class ASTStructExtractor ASTStructExtractor.h
 /// "lldb/Expression/ASTStructExtractor.h" Extracts and describes the argument
 /// structure for a wrapped function.
 ///
@@ -39,16 +38,16 @@ public:
   //----------------------------------------------------------------------
   /// Constructor
   ///
-  /// @param[in] passthrough
+  /// \param[in] passthrough
   ///     Since the ASTs must typically go through to the Clang code generator
   ///     in order to produce LLVM IR, this SemaConsumer must allow them to
   ///     pass to the next step in the chain after processing.  Passthrough is
   ///     the next ASTConsumer, or NULL if none is required.
   ///
-  /// @param[in] struct_name
+  /// \param[in] struct_name
   ///     The name of the structure to extract from the wrapper function.
   ///
-  /// @param[in] function
+  /// \param[in] function
   ///     The caller object whose members should be populated with information
   ///     about the argument struct.  ClangFunctionCaller friends
   ///     ASTStructExtractor
@@ -65,7 +64,7 @@ public:
   //----------------------------------------------------------------------
   /// Link this consumer with a particular AST context
   ///
-  /// @param[in] Context
+  /// \param[in] Context
   ///     This AST context will be used for types and identifiers, and also
   ///     forwarded to the passthrough consumer, if one exists.
   //----------------------------------------------------------------------
@@ -75,7 +74,7 @@ public:
   /// Examine a list of Decls to find the function $__lldb_expr and transform
   /// its code
   ///
-  /// @param[in] D
+  /// \param[in] D
   ///     The list of Decls to search.  These may contain LinkageSpecDecls,
   ///     which need to be searched recursively.  That job falls to
   ///     TransformTopLevelDecl.
@@ -110,7 +109,7 @@ public:
   //----------------------------------------------------------------------
   /// Set the Sema object to use when performing transforms, and pass it on
   ///
-  /// @param[in] S
+  /// \param[in] S
   ///     The Sema to use.  Because Sema isn't externally visible, this class
   ///     casts it to an Action for actual use.
   //----------------------------------------------------------------------
@@ -126,7 +125,7 @@ private:
   /// Hunt the given FunctionDecl for the argument struct and place
   /// information about it into m_function
   ///
-  /// @param[in] F
+  /// \param[in] F
   ///     The FunctionDecl to hunt.
   //----------------------------------------------------------------------
   void ExtractFromFunctionDecl(clang::FunctionDecl *F);
@@ -136,7 +135,7 @@ private:
   /// function name, recursing as necessary through LinkageSpecDecls, and
   /// calling ExtractFromFunctionDecl on anything that was found
   ///
-  /// @param[in] D
+  /// \param[in] D
   ///     The Decl to hunt.
   //----------------------------------------------------------------------
   void ExtractFromTopLevelDecl(clang::Decl *D);

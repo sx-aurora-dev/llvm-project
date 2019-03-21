@@ -1,9 +1,8 @@
 //===-- lib/divtf3.c - Quad-precision division --------------------*- C -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -182,6 +181,18 @@ COMPILER_RT_ABI fp_t __divtf3(fp_t a, fp_t b) {
         return fromRep(infRep | quotientSign);
     }
     else if (writtenExponent < 1) {
+        if (writtenExponent == 0) {
+            // Check whether the rounded result is normal.
+            const bool round = (residual << 1) > bSignificand;
+            // Clear the implicit bit.
+            rep_t absResult = quotient & significandMask;
+            // Round.
+            absResult += round;
+            if (absResult & ~significandMask) {
+                // The rounded result is normal; return it.
+                return fromRep(absResult | quotientSign);
+            }
+        }
         // Flush denormals to zero.  In the future, it would be nice to add
         // code to round them correctly.
         return fromRep(quotientSign);

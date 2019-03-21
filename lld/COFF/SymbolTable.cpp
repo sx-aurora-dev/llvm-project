@@ -1,9 +1,8 @@
 //===- SymbolTable.cpp ----------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -51,12 +50,7 @@ void SymbolTable::addFile(InputFile *File) {
     ImportFile::Instances.push_back(F);
   }
 
-  StringRef S = File->getDirectives();
-  if (S.empty())
-    return;
-
-  log("Directives: " + toString(File) + ": " + S);
-  Driver->parseDirectives(S);
+  Driver->parseDirectives(File);
 }
 
 static void errorOrWarn(const Twine &S) {
@@ -400,7 +394,7 @@ Symbol *SymbolTable::addRegular(InputFile *F, StringRef N,
   return S;
 }
 
-std::pair<Symbol *, bool>
+std::pair<DefinedRegular *, bool>
 SymbolTable::addComdat(InputFile *F, StringRef N,
                        const coff_symbol_generic *Sym) {
   Symbol *S;
@@ -409,11 +403,12 @@ SymbolTable::addComdat(InputFile *F, StringRef N,
   if (WasInserted || !isa<DefinedRegular>(S)) {
     replaceSymbol<DefinedRegular>(S, F, N, /*IsCOMDAT*/ true,
                                   /*IsExternal*/ true, Sym, nullptr);
-    return {S, true};
+    return {cast<DefinedRegular>(S), true};
   }
-  if (!cast<DefinedRegular>(S)->isCOMDAT())
+  auto *ExistingSymbol = cast<DefinedRegular>(S);
+  if (!ExistingSymbol->isCOMDAT())
     reportDuplicate(S, F);
-  return {S, false};
+  return {ExistingSymbol, false};
 }
 
 Symbol *SymbolTable::addCommon(InputFile *F, StringRef N, uint64_t Size,

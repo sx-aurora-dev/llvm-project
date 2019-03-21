@@ -1,9 +1,8 @@
 //===-- SIDefines.h - SI Helper Macros ----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 /// \file
 //===----------------------------------------------------------------------===//
@@ -88,12 +87,15 @@ enum : uint64_t {
   IsPacked = UINT64_C(1) << 49,
 
   // Is a D16 buffer instruction.
-  D16Buf = UINT64_C(1) << 50
+  D16Buf = UINT64_C(1) << 50,
+
+  // Uses floating point double precision rounding mode
+  FPDPRounding = UINT64_C(1) << 51
 };
 
 // v_cmp_class_* etc. use a 10-bit mask for what operation is checked.
 // The result is true if any of these tests are true.
-enum ClassFlags {
+enum ClassFlags : unsigned {
   S_NAN = 1 << 0,        // Signaling NaN
   Q_NAN = 1 << 1,        // Quiet NaN
   N_INFINITY = 1 << 2,   // Negative infinity
@@ -108,7 +110,7 @@ enum ClassFlags {
 }
 
 namespace AMDGPU {
-  enum OperandType {
+  enum OperandType : unsigned {
     /// Operands with register or 32-bit immediate
     OPERAND_REG_IMM_INT32 = MCOI::OPERAND_FIRST_TARGET,
     OPERAND_REG_IMM_INT64,
@@ -158,7 +160,7 @@ enum StackTypes : uint8_t {
 // Input operand modifiers bit-masks
 // NEG and SEXT share same bit-mask because they can't be set simultaneously.
 namespace SISrcMods {
-  enum {
+  enum : unsigned {
    NEG = 1 << 0,   // Floating-point negate modifier
    ABS = 1 << 1,   // Floating-point absolute modifier
    SEXT = 1 << 0,  // Integer sign-extend modifier
@@ -170,7 +172,7 @@ namespace SISrcMods {
 }
 
 namespace SIOutMods {
-  enum {
+  enum : unsigned {
     NONE = 0,
     MUL2 = 1,
     MUL4 = 2,
@@ -178,17 +180,33 @@ namespace SIOutMods {
   };
 }
 
+namespace AMDGPU {
 namespace VGPRIndexMode {
-  enum {
-    SRC0_ENABLE = 1 << 0,
-    SRC1_ENABLE = 1 << 1,
-    SRC2_ENABLE = 1 << 2,
-    DST_ENABLE = 1 << 3
-  };
-}
+
+enum Id : unsigned { // id of symbolic names
+  ID_SRC0 = 0,
+  ID_SRC1,
+  ID_SRC2,
+  ID_DST,
+
+  ID_MIN = ID_SRC0,
+  ID_MAX = ID_DST
+};
+
+enum EncBits : unsigned {
+  OFF = 0,
+  SRC0_ENABLE = 1 << ID_SRC0,
+  SRC1_ENABLE = 1 << ID_SRC1,
+  SRC2_ENABLE = 1 << ID_SRC2,
+  DST_ENABLE = 1 << ID_DST,
+  ENABLE_MASK = SRC0_ENABLE | SRC1_ENABLE | SRC2_ENABLE | DST_ENABLE
+};
+
+} // namespace VGPRIndexMode
+} // namespace AMDGPU
 
 namespace AMDGPUAsmVariants {
-  enum {
+  enum : unsigned {
     DEFAULT = 0,
     VOP3 = 1,
     SDWA = 2,
@@ -200,7 +218,7 @@ namespace AMDGPUAsmVariants {
 namespace AMDGPU {
 namespace EncValues { // Encoding values of enum9/8/7 operands
 
-enum {
+enum : unsigned {
   SGPR_MIN = 0,
   SGPR_MAX = 101,
   TTMP_VI_MIN = 112,
@@ -259,7 +277,7 @@ enum Op { // Both GS and SYS operation IDs.
   OP_SYS_MASK_ = (((1 << OP_SYS_WIDTH_) - 1) << OP_SHIFT_)
 };
 
-enum StreamId { // Stream ID, (2) [9:8].
+enum StreamId : unsigned { // Stream ID, (2) [9:8].
   STREAM_ID_DEFAULT_ = 0,
   STREAM_ID_LAST_ = 4,
   STREAM_ID_FIRST_ = STREAM_ID_DEFAULT_,
@@ -290,7 +308,7 @@ enum Id { // HwRegCode, (6) [5:0]
   ID_MASK_ = (((1 << ID_WIDTH_) - 1) << ID_SHIFT_)
 };
 
-enum Offset { // Offset, (5) [10:6]
+enum Offset : unsigned { // Offset, (5) [10:6]
   OFFSET_DEFAULT_ = 0,
   OFFSET_SHIFT_ = 6,
   OFFSET_WIDTH_ = 5,
@@ -300,7 +318,7 @@ enum Offset { // Offset, (5) [10:6]
   OFFSET_SRC_PRIVATE_BASE = 0
 };
 
-enum WidthMinusOne { // WidthMinusOne, (5) [15:11]
+enum WidthMinusOne : unsigned { // WidthMinusOne, (5) [15:11]
   WIDTH_M1_DEFAULT_ = 31,
   WIDTH_M1_SHIFT_ = 11,
   WIDTH_M1_WIDTH_ = 5,
@@ -314,7 +332,7 @@ enum WidthMinusOne { // WidthMinusOne, (5) [15:11]
 
 namespace Swizzle { // Encoding of swizzle macro used in ds_swizzle_b32.
 
-enum Id { // id of symbolic names
+enum Id : unsigned { // id of symbolic names
   ID_QUAD_PERM = 0,
   ID_BITMASK_PERM,
   ID_SWAP,
@@ -322,7 +340,7 @@ enum Id { // id of symbolic names
   ID_BROADCAST
 };
 
-enum EncBits {
+enum EncBits : unsigned {
 
   // swizzle mode encodings
 
@@ -354,7 +372,7 @@ enum EncBits {
 
 namespace SDWA {
 
-enum SdwaSel {
+enum SdwaSel : unsigned {
   BYTE_0 = 0,
   BYTE_1 = 1,
   BYTE_2 = 2,
@@ -364,13 +382,13 @@ enum SdwaSel {
   DWORD = 6,
 };
 
-enum DstUnused {
+enum DstUnused : unsigned {
   UNUSED_PAD = 0,
   UNUSED_SEXT = 1,
   UNUSED_PRESERVE = 2,
 };
 
-enum SDWA9EncValues{
+enum SDWA9EncValues : unsigned {
   SRC_SGPR_MASK = 0x100,
   SRC_VGPR_MASK = 0xFF,
   VOPC_DST_VCC_MASK = 0x80,
@@ -388,7 +406,7 @@ enum SDWA9EncValues{
 
 namespace DPP {
 
-enum DppCtrl {
+enum DppCtrl : unsigned {
   QUAD_PERM_FIRST   = 0,
   QUAD_PERM_LAST    = 0xFF,
   DPP_UNUSED1       = 0x100,
