@@ -1,9 +1,8 @@
 //===- CodeExtractor.cpp - Unit tests for CodeExtractor -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -59,8 +58,7 @@ TEST(CodeExtractor, ExitStub) {
                                            getBlockByName(Func, "body1"),
                                            getBlockByName(Func, "body2") };
 
-  DominatorTree DT(*Func);
-  CodeExtractor CE(Candidates, &DT);
+  CodeExtractor CE(Candidates);
   EXPECT_TRUE(CE.isEligible());
 
   Function *Outlined = CE.extractCodeRegion();
@@ -110,8 +108,7 @@ TEST(CodeExtractor, ExitPHIOnePredFromRegion) {
     getBlockByName(Func, "extracted2")
   };
 
-  DominatorTree DT(*Func);
-  CodeExtractor CE(ExtractedBlocks, &DT);
+  CodeExtractor CE(ExtractedBlocks);
   EXPECT_TRUE(CE.isEligible());
 
   Function *Outlined = CE.extractCodeRegion();
@@ -127,4 +124,105 @@ TEST(CodeExtractor, ExitPHIOnePredFromRegion) {
   EXPECT_FALSE(verifyFunction(*Outlined));
   EXPECT_FALSE(verifyFunction(*Func));
 }
+
+TEST(CodeExtractor, StoreOutputInvokeResultAfterEHPad) {
+  LLVMContext Ctx;
+  SMDiagnostic Err;
+  std::unique_ptr<Module> M(parseAssemblyString(R"invalid(
+    declare i8 @hoge()
+
+    define i32 @foo() personality i8* null {
+      entry:
+        %call = invoke i8 @hoge()
+                to label %invoke.cont unwind label %lpad
+
+      invoke.cont:                                      ; preds = %entry
+        unreachable
+
+      lpad:                                             ; preds = %entry
+        %0 = landingpad { i8*, i32 }
+                catch i8* null
+        br i1 undef, label %catch, label %finally.catchall
+
+      catch:                                            ; preds = %lpad
+        %call2 = invoke i8 @hoge()
+                to label %invoke.cont2 unwind label %lpad2
+
+      invoke.cont2:                                    ; preds = %catch
+        %call3 = invoke i8 @hoge()
+                to label %invoke.cont3 unwind label %lpad2
+
+      invoke.cont3:                                    ; preds = %invoke.cont2
+        unreachable
+
+      lpad2:                                           ; preds = %invoke.cont2, %catch
+        %ex.1 = phi i8* [ undef, %invoke.cont2 ], [ null, %catch ]
+        %1 = landingpad { i8*, i32 }
+                catch i8* null
+        br label %finally.catchall
+
+      finally.catchall:                                 ; preds = %lpad33, %lpad
+        %ex.2 = phi i8* [ %ex.1, %lpad2 ], [ null, %lpad ]
+        unreachable
+    }
+  )invalid", Err, Ctx));
+
+	if (!M) {
+    Err.print("unit", errs());
+    exit(1);
+  }
+
+  Function *Func = M->getFunction("foo");
+  EXPECT_FALSE(verifyFunction(*Func, &errs()));
+
+  SmallVector<BasicBlock *, 2> ExtractedBlocks{
+    getBlockByName(Func, "catch"),
+    getBlockByName(Func, "invoke.cont2"),
+    getBlockByName(Func, "invoke.cont3"),
+    getBlockByName(Func, "lpad2")
+  };
+
+  CodeExtractor CE(ExtractedBlocks);
+  EXPECT_TRUE(CE.isEligible());
+
+  Function *Outlined = CE.extractCodeRegion();
+  EXPECT_TRUE(Outlined);
+  EXPECT_FALSE(verifyFunction(*Outlined, &errs()));
+  EXPECT_FALSE(verifyFunction(*Func, &errs()));
+}
+
+TEST(CodeExtractor, StoreOutputInvokeResultInExitStub) {
+  LLVMContext Ctx;
+  SMDiagnostic Err;
+  std::unique_ptr<Module> M(parseAssemblyString(R"invalid(
+    declare i32 @bar()
+
+    define i32 @foo() personality i8* null {
+    entry:
+      %0 = invoke i32 @bar() to label %exit unwind label %lpad
+
+    exit:
+      ret i32 %0
+
+    lpad:
+      %1 = landingpad { i8*, i32 }
+              cleanup
+      resume { i8*, i32 } %1
+    }
+  )invalid",
+                                                Err, Ctx));
+
+  Function *Func = M->getFunction("foo");
+  SmallVector<BasicBlock *, 1> Blocks{ getBlockByName(Func, "entry"),
+                                       getBlockByName(Func, "lpad") };
+
+  CodeExtractor CE(Blocks);
+  EXPECT_TRUE(CE.isEligible());
+
+  Function *Outlined = CE.extractCodeRegion();
+  EXPECT_TRUE(Outlined);
+  EXPECT_FALSE(verifyFunction(*Outlined));
+  EXPECT_FALSE(verifyFunction(*Func));
+}
+
 } // end anonymous namespace

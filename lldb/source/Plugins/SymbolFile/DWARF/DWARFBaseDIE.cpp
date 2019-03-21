@@ -1,9 +1,8 @@
 //===-- DWARFBaseDIE.cpp ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -53,15 +52,6 @@ uint64_t DWARFBaseDIE::GetAttributeValueAsUnsigned(const dw_attr_t attr,
   if (IsValid())
     return m_die->GetAttributeValueAsUnsigned(GetDWARF(), GetCU(), attr,
                                               fail_value);
-  else
-    return fail_value;
-}
-
-int64_t DWARFBaseDIE::GetAttributeValueAsSigned(const dw_attr_t attr,
-                                            int64_t fail_value) const {
-  if (IsValid())
-    return m_die->GetAttributeValueAsSigned(GetDWARF(), GetCU(), attr,
-                                            fail_value);
   else
     return fail_value;
 }
@@ -124,13 +114,6 @@ dw_offset_t DWARFBaseDIE::GetOffset() const {
     return DW_INVALID_OFFSET;
 }
 
-dw_offset_t DWARFBaseDIE::GetCompileUnitRelativeOffset() const {
-  if (IsValid())
-    return m_die->GetOffset() - m_cu->GetOffset();
-  else
-    return DW_INVALID_OFFSET;
-}
-
 SymbolFileDWARF *DWARFBaseDIE::GetDWARF() const {
   if (m_cu)
     return m_cu->GetSymbolFileDWARF();
@@ -170,12 +153,6 @@ size_t DWARFBaseDIE::GetAttributes(DWARFAttributes &attributes,
   if (depth == 0)
     attributes.Clear();
   return 0;
-}
-
-void DWARFBaseDIE::Dump(lldb_private::Stream *s,
-                    const uint32_t recurse_depth) const {
-  if (s && IsValid())
-    m_die->Dump(GetDWARF(), GetCU(), *s, recurse_depth);
 }
 
 bool operator==(const DWARFBaseDIE &lhs, const DWARFBaseDIE &rhs) {

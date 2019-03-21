@@ -1,9 +1,8 @@
 //===--- Linux.h - Linux ToolChain Implementations --------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1007,8 +1006,6 @@ SanitizerMask Linux::getSupportedSanitizers() const {
     Res |= SanitizerKind::Thread;
   if (IsX86_64)
     Res |= SanitizerKind::KernelMemory;
-  if (IsX86_64 || IsMIPS64)
-    Res |= SanitizerKind::Efficiency;
   if (IsX86 || IsX86_64)
     Res |= SanitizerKind::Function;
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsX86 || IsMIPS || IsArmArch ||

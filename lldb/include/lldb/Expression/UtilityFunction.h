@@ -1,10 +1,9 @@
 //===-- UtilityFunction.h ----------------------------------------*- C++
 //-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,7 +20,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class UtilityFunction UtilityFunction.h
+/// \class UtilityFunction UtilityFunction.h
 /// "lldb/Expression/UtilityFunction.h" Encapsulates a bit of source code that
 /// provides a function that is callable
 ///
@@ -32,30 +31,35 @@ namespace lldb_private {
 //----------------------------------------------------------------------
 class UtilityFunction : public Expression {
 public:
+  /// LLVM-style RTTI support.
+  static bool classof(const Expression *E) {
+    return E->getKind() == eKindUtilityFunction;
+  }
+  
   //------------------------------------------------------------------
   /// Constructor
   ///
-  /// @param[in] text
+  /// \param[in] text
   ///     The text of the function.  Must be a full translation unit.
   ///
-  /// @param[in] name
+  /// \param[in] name
   ///     The name of the function, as used in the text.
   //------------------------------------------------------------------
   UtilityFunction(ExecutionContextScope &exe_scope, const char *text,
-                  const char *name);
+                  const char *name, ExpressionKind kind);
 
   ~UtilityFunction() override;
 
   //------------------------------------------------------------------
   /// Install the utility function into a process
   ///
-  /// @param[in] diagnostic_manager
+  /// \param[in] diagnostic_manager
   ///     A diagnostic manager to print parse errors and warnings to.
   ///
-  /// @param[in] exe_ctx
+  /// \param[in] exe_ctx
   ///     The execution context to install the utility function to.
   ///
-  /// @return
+  /// \return
   ///     True on success (no errors); false otherwise.
   //------------------------------------------------------------------
   virtual bool Install(DiagnosticManager &diagnostic_manager,
@@ -67,10 +71,10 @@ public:
   /// Especially useful if the function dereferences nullptr to indicate a
   /// failed assert.
   ///
-  /// @param[in] pc
+  /// \param[in] pc
   ///     The program counter to check.
   ///
-  /// @return
+  /// \return
   ///     True if the program counter falls within the function's bounds;
   ///     false if not (or the function is not JIT compiled)
   //------------------------------------------------------------------

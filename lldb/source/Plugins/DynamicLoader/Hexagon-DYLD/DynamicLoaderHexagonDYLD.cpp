@@ -1,9 +1,8 @@
 //===-- DynamicLoaderHexagonDYLD.cpp ----------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,6 +19,8 @@
 #include "lldb/Utility/Log.h"
 
 #include "DynamicLoaderHexagonDYLD.h"
+
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -58,7 +59,7 @@ static lldb::addr_t findSymbolAddress(Process *proc, ConstString findName) {
   for (size_t i = 0; i < symtab->GetNumSymbols(); i++) {
     const Symbol *sym = symtab->SymbolAtIndex(i);
     assert(sym != nullptr);
-    const ConstString &symName = sym->GetName();
+    ConstString symName = sym->GetName();
 
     if (ConstString::Compare(findName, symName) == 0) {
       Address addr = sym->GetAddress();
@@ -242,9 +243,9 @@ void DynamicLoaderHexagonDYLD::UpdateLoadedSections(ModuleSP module,
   }
 }
 
-/// Removes the loaded sections from the target in @p module.
+/// Removes the loaded sections from the target in \p module.
 ///
-/// @param module The module to traverse.
+/// \param module The module to traverse.
 void DynamicLoaderHexagonDYLD::UnloadSections(const ModuleSP module) {
   Target &target = m_process->GetTarget();
   const SectionList *sections = GetSectionListFromModule(module);
@@ -453,9 +454,10 @@ DynamicLoaderHexagonDYLD::GetStepThroughTrampolinePlan(Thread &thread,
     AddressVector::iterator start = addrs.begin();
     AddressVector::iterator end = addrs.end();
 
-    std::sort(start, end);
+    llvm::sort(start, end);
     addrs.erase(std::unique(start, end), end);
-    thread_plan_sp.reset(new ThreadPlanRunToAddress(thread, addrs, stop));
+    thread_plan_sp =
+        std::make_shared<ThreadPlanRunToAddress>(thread, addrs, stop);
   }
 
   return thread_plan_sp;

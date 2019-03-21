@@ -1,9 +1,8 @@
 //===-- IteratorChecker.cpp ---------------------------------------*- C++ -*--//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -66,7 +65,7 @@
 // making an assumption e.g. `S1 + n == S2 + m` we store `S1 - S2 == m - n` as
 // a constraint which we later retrieve when doing an actual comparison.
 
-#include "ClangSACheckers.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -399,14 +398,14 @@ bool isZero(ProgramStateRef State, const NonLoc &Val);
 
 IteratorChecker::IteratorChecker() {
   OutOfRangeBugType.reset(
-      new BugType(this, "Iterator out of range", "Misuse of STL APIs"));
-  OutOfRangeBugType->setSuppressOnSink(true);
+      new BugType(this, "Iterator out of range", "Misuse of STL APIs",
+                  /*SuppressOnSink=*/true));
   MismatchedBugType.reset(
-      new BugType(this, "Iterator(s) mismatched", "Misuse of STL APIs"));
-  MismatchedBugType->setSuppressOnSink(true);
+      new BugType(this, "Iterator(s) mismatched", "Misuse of STL APIs",
+                  /*SuppressOnSink=*/true));
   InvalidatedBugType.reset(
-      new BugType(this, "Iterator invalidated", "Misuse of STL APIs"));
-  InvalidatedBugType->setSuppressOnSink(true);
+      new BugType(this, "Iterator invalidated", "Misuse of STL APIs",
+                  /*SuppressOnSink=*/true));
 }
 
 void IteratorChecker::checkPreCall(const CallEvent &Call,
@@ -551,7 +550,7 @@ void IteratorChecker::checkPreCall(const CallEvent &Call,
     // 
     // In this case the first two arguments to f() must be iterators must belong
     // to the same container and the last to also to the same container but
-    // not neccessarily to the same as the first two.
+    // not necessarily to the same as the first two.
 
     if (!ChecksEnabled[CK_MismatchedIteratorChecker])
       return;
@@ -1099,14 +1098,34 @@ void IteratorChecker::verifyMatch(CheckerContext &C, const SVal &Iter,
   // Verify match between a container and the container of an iterator
   Cont = Cont->getMostDerivedObjectRegion();
 
+  if (const auto *ContSym = Cont->getSymbolicBase()) {
+    if (isa<SymbolConjured>(ContSym->getSymbol()))
+      return;
+  }
+
   auto State = C.getState();
   const auto *Pos = getIteratorPosition(State, Iter);
-  if (Pos && Pos->getContainer() != Cont) {
+  if (!Pos)
+    return;
+
+  const auto *IterCont = Pos->getContainer();
+
+  // Skip symbolic regions based on conjured symbols. Two conjured symbols
+  // may or may not be the same. For example, the same function can return
+  // the same or a different container but we get different conjured symbols
+  // for each call. This may cause false positives so omit them from the check.
+  if (const auto *ContSym = IterCont->getSymbolicBase()) {
+    if (isa<SymbolConjured>(ContSym->getSymbol()))
+      return;
+  }
+
+  if (IterCont != Cont) {
     auto *N = C.generateNonFatalErrorNode(State);
     if (!N) {
       return;
     }
-    reportMismatchedBug("Container accessed using foreign iterator argument.", Iter, Cont, C, N);
+    reportMismatchedBug("Container accessed using foreign iterator argument.",
+                        Iter, Cont, C, N);
   }
 }
 
@@ -1115,8 +1134,31 @@ void IteratorChecker::verifyMatch(CheckerContext &C, const SVal &Iter1,
   // Verify match between the containers of two iterators
   auto State = C.getState();
   const auto *Pos1 = getIteratorPosition(State, Iter1);
+  if (!Pos1)
+    return;
+
+  const auto *IterCont1 = Pos1->getContainer();
+
+  // Skip symbolic regions based on conjured symbols. Two conjured symbols
+  // may or may not be the same. For example, the same function can return
+  // the same or a different container but we get different conjured symbols
+  // for each call. This may cause false positives so omit them from the check.
+  if (const auto *ContSym = IterCont1->getSymbolicBase()) {
+    if (isa<SymbolConjured>(ContSym->getSymbol()))
+      return;
+  }
+
   const auto *Pos2 = getIteratorPosition(State, Iter2);
-  if (Pos1 && Pos2 && Pos1->getContainer() != Pos2->getContainer()) {
+  if (!Pos2)
+    return;
+
+  const auto *IterCont2 = Pos2->getContainer();
+  if (const auto *ContSym = IterCont2->getSymbolicBase()) {
+    if (isa<SymbolConjured>(ContSym->getSymbol()))
+      return;
+  }
+
+  if (IterCont1 != IterCont2) {
     auto *N = C.generateNonFatalErrorNode(State);
     if (!N)
       return;
@@ -1213,7 +1255,7 @@ void IteratorChecker::handleAssign(CheckerContext &C, const SVal &Cont,
       const auto OldCData = getContainerData(State, OldContReg);
       if (OldCData) {
         if (const auto OldEndSym = OldCData->getEnd()) {
-          // If we already assigned an "end" symbol to the old conainer, then
+          // If we already assigned an "end" symbol to the old container, then
           // first reassign all iterator positions to the new container which
           // are not past the container (thus not greater or equal to the
           // current "end" symbol).
@@ -2379,7 +2421,6 @@ bool compare(ProgramStateRef State, SymbolRef Sym1, SymbolRef Sym2,
   return compare(State, nonloc::SymbolVal(Sym1), nonloc::SymbolVal(Sym2), Opc);
 }
 
-
 bool compare(ProgramStateRef State, NonLoc NL1, NonLoc NL2,
              BinaryOperator::Opcode Opc) {
   auto &SVB = State->getStateManager().getSValBuilder();
@@ -2395,12 +2436,24 @@ bool compare(ProgramStateRef State, NonLoc NL1, NonLoc NL2,
 
 } // namespace
 
+void ento::registerIteratorModeling(CheckerManager &mgr) {
+  mgr.registerChecker<IteratorChecker>();
+}
+
+bool ento::shouldRegisterIteratorModeling(const LangOptions &LO) {
+  return true;
+}
+
 #define REGISTER_CHECKER(name)                                                 \
   void ento::register##name(CheckerManager &Mgr) {                             \
-    auto *checker = Mgr.registerChecker<IteratorChecker>();                    \
+    auto *checker = Mgr.getChecker<IteratorChecker>();                         \
     checker->ChecksEnabled[IteratorChecker::CK_##name] = true;                 \
     checker->CheckNames[IteratorChecker::CK_##name] =                          \
         Mgr.getCurrentCheckName();                                             \
+  }                                                                            \
+                                                                               \
+  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
+    return true;                                                               \
   }
 
 REGISTER_CHECKER(IteratorRangeChecker)

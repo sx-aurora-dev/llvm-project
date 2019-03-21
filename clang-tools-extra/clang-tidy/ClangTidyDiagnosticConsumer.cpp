@@ -1,9 +1,8 @@
 //===--- tools/extra/clang-tidy/ClangTidyDiagnosticConsumer.cpp ----------=== //
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -255,7 +254,11 @@ bool ClangTidyContext::treatAsError(StringRef CheckName) const {
   return WarningAsErrorFilter->contains(CheckName);
 }
 
-StringRef ClangTidyContext::getCheckName(unsigned DiagnosticID) const {
+std::string ClangTidyContext::getCheckName(unsigned DiagnosticID) const {
+  std::string ClangWarningOption =
+      DiagEngine->getDiagnosticIDs()->getWarningOptionForDiag(DiagnosticID);
+  if (!ClangWarningOption.empty())
+    return "clang-diagnostic-" + ClangWarningOption;
   llvm::DenseMap<unsigned, std::string>::const_iterator I =
       CheckNamesByDiagnosticID.find(DiagnosticID);
   if (I != CheckNamesByDiagnosticID.end())
@@ -306,7 +309,7 @@ static bool IsNOLINTFound(StringRef NolintDirectiveText, StringRef Line,
           Line.substr(BracketIndex, BracketEndIndex - BracketIndex);
       // Allow disabling all the checks with "*".
       if (ChecksStr != "*") {
-        StringRef CheckName = Context.getCheckName(DiagID);
+        std::string CheckName = Context.getCheckName(DiagID);
         // Allow specifying a few check names, delimited with comma.
         SmallVector<StringRef, 1> Checks;
         ChecksStr.split(Checks, ',', -1, false);
@@ -319,7 +322,7 @@ static bool IsNOLINTFound(StringRef NolintDirectiveText, StringRef Line,
   return true;
 }
 
-static bool LineIsMarkedWithNOLINT(SourceManager &SM, SourceLocation Loc,
+static bool LineIsMarkedWithNOLINT(const SourceManager &SM, SourceLocation Loc,
                                    unsigned DiagID,
                                    const ClangTidyContext &Context) {
   bool Invalid;
@@ -365,8 +368,8 @@ static bool LineIsMarkedWithNOLINT(SourceManager &SM, SourceLocation Loc,
   return false;
 }
 
-static bool LineIsMarkedWithNOLINTinMacro(SourceManager &SM, SourceLocation Loc,
-                                          unsigned DiagID,
+static bool LineIsMarkedWithNOLINTinMacro(const SourceManager &SM,
+                                          SourceLocation Loc, unsigned DiagID,
                                           const ClangTidyContext &Context) {
   while (true) {
     if (LineIsMarkedWithNOLINT(SM, Loc, DiagID, Context))
@@ -403,13 +406,7 @@ void ClangTidyDiagnosticConsumer::HandleDiagnostic(
            "A diagnostic note can only be appended to a message.");
   } else {
     finalizeLastError();
-    StringRef WarningOption =
-        Context.DiagEngine->getDiagnosticIDs()->getWarningOptionForDiag(
-            Info.getID());
-    std::string CheckName = !WarningOption.empty()
-                                ? ("clang-diagnostic-" + WarningOption).str()
-                                : Context.getCheckName(Info.getID()).str();
-
+    std::string CheckName = Context.getCheckName(Info.getID());
     if (CheckName.empty()) {
       // This is a compiler diagnostic without a warning option. Assign check
       // name based on its level.

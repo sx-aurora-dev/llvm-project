@@ -1,9 +1,8 @@
 //===-- Status.h ------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,7 +27,7 @@ class raw_ostream;
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class Status Status.h "lldb/Utility/Status.h" An error handling class.
+/// \class Status Status.h "lldb/Utility/Status.h" An error handling class.
 ///
 /// This class is designed to be able to hold any error code that can be
 /// encountered on a given platform. The errors are stored as a value of type
@@ -57,10 +56,10 @@ public:
   ///
   /// Initialize the error object with a generic success value.
   ///
-  /// @param[in] err
+  /// \param[in] err
   ///     An error code.
   ///
-  /// @param[in] type
+  /// \param[in] type
   ///     The type for \a err.
   //------------------------------------------------------------------
   Status();
@@ -77,10 +76,10 @@ public:
   //------------------------------------------------------------------
   /// Assignment operator.
   ///
-  /// @param[in] err
+  /// \param[in] err
   ///     An error code.
   ///
-  /// @return
+  /// \return
   ///     A const reference to this object.
   //------------------------------------------------------------------
   const Status &operator=(const Status &rhs);
@@ -100,7 +99,7 @@ public:
   /// from a callback that is appropriate for the type of the error and will
   /// be cached until the error value is changed or cleared.
   ///
-  /// @return
+  /// \return
   ///     The error as a NULL terminated C string value if the error
   ///     is valid and is able to be converted to a string value,
   ///     NULL otherwise.
@@ -118,7 +117,7 @@ public:
   //------------------------------------------------------------------
   /// Test for error condition.
   ///
-  /// @return
+  /// \return
   ///     \b true if this object contains an error, \b false
   ///     otherwise.
   //------------------------------------------------------------------
@@ -127,7 +126,7 @@ public:
   //------------------------------------------------------------------
   /// Access the error value.
   ///
-  /// @return
+  /// \return
   ///     The error value.
   //------------------------------------------------------------------
   ValueType GetError() const;
@@ -135,7 +134,7 @@ public:
   //------------------------------------------------------------------
   /// Access the error type.
   ///
-  /// @return
+  /// \return
   ///     The error type enumeration value.
   //------------------------------------------------------------------
   lldb::ErrorType GetType() const;
@@ -146,7 +145,7 @@ public:
   /// Set accesssor for the error value to \a err and the error type to \c
   /// MachKernel.
   ///
-  /// @param[in] err
+  /// \param[in] err
   ///     A mach error code.
   //------------------------------------------------------------------
   void SetMachError(uint32_t err);
@@ -162,10 +161,10 @@ public:
   /// Set accesssor for the error value to \a err and the error type to \a
   /// type.
   ///
-  /// @param[in] err
+  /// \param[in] err
   ///     A mach error code.
   ///
-  /// @param[in] type
+  /// \param[in] type
   ///     The type for \a err.
   //------------------------------------------------------------------
   void SetError(ValueType err, lldb::ErrorType type);
@@ -196,7 +195,7 @@ public:
   /// will remain until the error value is cleared or a new error value/type
   /// is assigned.
   ///
-  /// @param err_str
+  /// \param err_str
   ///     The new custom error string to copy and cache.
   //------------------------------------------------------------------
   void SetErrorString(llvm::StringRef err_str);
@@ -204,7 +203,7 @@ public:
   //------------------------------------------------------------------
   /// Set the current error string to a formatted error string.
   ///
-  /// @param format
+  /// \param format
   ///     A printf style format string
   //------------------------------------------------------------------
   int SetErrorStringWithFormat(const char *format, ...)
@@ -223,7 +222,7 @@ public:
   /// Returns true if the error code in this object is considered a successful
   /// return value.
   ///
-  /// @return
+  /// \return
   ///     \b true if this object contains an value that describes
   ///     success (non-erro), \b false otherwise.
   //------------------------------------------------------------------
@@ -235,7 +234,7 @@ public:
   /// Returns true if the error code in this object was caused by an
   /// interrupt. At present only supports Posix EINTR.
   ///
-  /// @return
+  /// \return
   ///     \b true if this object contains an value that describes
   ///     failure due to interrupt, \b false otherwise.
   //------------------------------------------------------------------

@@ -1,9 +1,8 @@
 //===-- FunctionCaller.cpp ---------------------------------------*- C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,7 +37,8 @@ FunctionCaller::FunctionCaller(ExecutionContextScope &exe_scope,
                                const Address &functionAddress,
                                const ValueList &arg_value_list,
                                const char *name)
-    : Expression(exe_scope), m_execution_unit_sp(), m_parser(),
+    : Expression(exe_scope, eKindFunctionCaller),
+      m_execution_unit_sp(), m_parser(),
       m_jit_module_wp(), m_name(name ? name : "<unknown>"),
       m_function_ptr(NULL), m_function_addr(functionAddress),
       m_function_return_type(return_type),

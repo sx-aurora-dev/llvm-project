@@ -1,9 +1,8 @@
 //===-- SIISelLowering.h - SI DAG Lowering Interface ------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -141,6 +140,7 @@ private:
   SDValue performOrCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performXorCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performZeroExtendCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue performSignExtendInRegCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performClassCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue getCanonicalConstantFP(SelectionDAG &DAG, const SDLoc &SL, EVT VT,
                                  const APFloat &C) const;
@@ -156,6 +156,7 @@ private:
   SDValue performExtractVectorEltCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performInsertVectorEltCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
+  SDValue reassociateScalarOps(SDNode *N, SelectionDAG &DAG) const;
   unsigned getFusedOpcode(const SelectionDAG &DAG,
                           const SDNode *N0, const SDNode *N1) const;
   SDValue performAddCombine(SDNode *N, DAGCombinerInfo &DCI) const;
@@ -170,12 +171,9 @@ private:
   SDValue performRcpCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   bool isLegalFlatAddressingMode(const AddrMode &AM) const;
-  bool isLegalGlobalAddressingMode(const AddrMode &AM) const;
   bool isLegalMUBUFAddressingMode(const AddrMode &AM) const;
 
   unsigned isCFIntrinsic(const SDNode *Intr) const;
-
-  void createDebuggerPrologueStackObjects(MachineFunction &MF) const;
 
   /// \returns True if fixup needs to be emitted for given global value \p GV,
   /// false otherwise.
@@ -195,6 +193,15 @@ private:
   void setBufferOffsets(SDValue CombinedOffset, SelectionDAG &DAG,
                         SDValue *Offsets, unsigned Align = 4) const;
 
+  // Handle 8 bit and 16 bit buffer loads
+  SDValue handleByteShortBufferLoads(SelectionDAG &DAG, EVT LoadVT, SDLoc DL,
+                                     ArrayRef<SDValue> Ops, MemSDNode *M) const;
+
+  // Handle 8 bit and 16 bit buffer stores
+  SDValue handleByteShortBufferStores(SelectionDAG &DAG, EVT VDataType,
+                                      SDLoc DL, SDValue Ops[],
+                                      MemSDNode *M) const;
+
 public:
   SITargetLowering(const TargetMachine &tm, const GCNSubtarget &STI);
 
@@ -212,6 +219,7 @@ public:
                             SmallVectorImpl<Value*> &/*Ops*/,
                             Type *&/*AccessTy*/) const override;
 
+  bool isLegalGlobalAddressingMode(const AddrMode &AM) const;
   bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM, Type *Ty,
                              unsigned AS,
                              Instruction *I = nullptr) const override;
@@ -352,6 +360,7 @@ public:
                                     const SelectionDAG &DAG,
                                     bool SNaN = false,
                                     unsigned Depth = 0) const override;
+  AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *) const override;
 };
 
 } // End namespace llvm

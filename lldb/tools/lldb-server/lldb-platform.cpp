@@ -1,9 +1,8 @@
 //===-- lldb-platform.cpp ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -242,11 +241,11 @@ int main_platform(int argc, char *argv[]) {
     return -1;
 
   // Make a port map for a port range that was specified.
-  if (min_gdbserver_port < max_gdbserver_port) {
+  if (min_gdbserver_port && min_gdbserver_port < max_gdbserver_port) {
     for (uint16_t port = min_gdbserver_port; port < max_gdbserver_port; ++port)
       gdbserver_portmap[port] = LLDB_INVALID_PROCESS_ID;
-  } else if (min_gdbserver_port != max_gdbserver_port) {
-    fprintf(stderr, "error: --min-gdbserver-port (%u) is greater than "
+  } else if (min_gdbserver_port || max_gdbserver_port) {
+    fprintf(stderr, "error: --min-gdbserver-port (%u) is not lower than "
                     "--max-gdbserver-port (%u)\n",
             min_gdbserver_port, max_gdbserver_port);
     option_error = 3;

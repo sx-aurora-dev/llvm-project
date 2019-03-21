@@ -1,9 +1,8 @@
 //===- TBEHandler.h ---------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===-----------------------------------------------------------------------===/
 ///
@@ -17,6 +16,7 @@
 #define LLVM_TEXTAPI_ELF_TBEHANDLER_H
 
 #include "llvm/Support/VersionTuple.h"
+#include "llvm/Support/Error.h"
 #include <memory>
 
 namespace llvm {
@@ -32,14 +32,12 @@ class ELFStub;
 
 const VersionTuple TBEVersionCurrent(1, 0);
 
-class TBEHandler {
-public:
-  /// Attempts to read an ELF interface file from a StringRef buffer.
-  std::unique_ptr<ELFStub> readFile(StringRef Buf);
+/// Attempts to read an ELF interface file from a StringRef buffer.
+Expected<std::unique_ptr<ELFStub>> readTBEFromBuffer(StringRef Buf);
 
-  /// Attempts to write an ELF interface file to a raw_ostream.
-  Error writeFile(raw_ostream &OS, const ELFStub &Stub);
-};
+/// Attempts to write an ELF interface file to a raw_ostream.
+Error writeTBEToOutputStream(raw_ostream &OS, const ELFStub &Stub);
+
 } // end namespace elfabi
 } // end namespace llvm
 

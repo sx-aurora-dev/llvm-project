@@ -1,9 +1,8 @@
 //===-- REPL.h --------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +11,10 @@
 
 #include <string>
 
-#include "lldb/../../source/Commands/CommandObjectExpression.h"
+#include "lldb/Core/IOHandler.h"
 #include "lldb/Interpreter/OptionGroupFormat.h"
 #include "lldb/Interpreter/OptionGroupValueObjectDisplay.h"
+#include "lldb/Target/Target.h"
 
 namespace lldb_private {
 
@@ -35,25 +35,25 @@ public:
   /// Get a REPL with an existing target (or, failing that, a debugger to use),
   /// and (optional) extra arguments for the compiler.
   ///
-  /// @param[out] error
+  /// \param[out] error
   ///     If this language is supported but the REPL couldn't be created, this
   ///     error is populated with the reason.
   ///
-  /// @param[in] language
+  /// \param[in] language
   ///     The language to create a REPL for.
   ///
-  /// @param[in] debugger
+  /// \param[in] debugger
   ///     If provided, and target is nullptr, the debugger to use when setting
   ///     up a top-level REPL.
   ///
-  /// @param[in] target
+  /// \param[in] target
   ///     If provided, the target to put the REPL inside.
   ///
-  /// @param[in] repl_options
+  /// \param[in] repl_options
   ///     If provided, additional options for the compiler when parsing REPL
   ///     expressions.
   ///
-  /// @return
+  /// \return
   ///     The range of the containing object in the target process.
   //------------------------------------------------------------------
   static lldb::REPLSP Create(Status &Status, lldb::LanguageType language,
@@ -69,9 +69,8 @@ public:
     m_varobj_options = options;
   }
 
-  void
-  SetCommandOptions(const CommandObjectExpression::CommandOptions &options) {
-    m_command_options = options;
+  void SetEvaluateOptions(const EvaluateExpressionOptions &options) {
+    m_expr_options = options;
   }
 
   void SetCompilerOptions(const char *options) {
@@ -86,7 +85,7 @@ public:
   //------------------------------------------------------------------
   // IOHandler::Delegate functions
   //------------------------------------------------------------------
-  void IOHandlerActivated(IOHandler &io_handler) override;
+  void IOHandlerActivated(IOHandler &io_handler, bool interactive) override;
 
   bool IOHandlerInterrupt(IOHandler &io_handler) override;
 
@@ -146,7 +145,7 @@ protected:
 
   OptionGroupFormat m_format_options = OptionGroupFormat(lldb::eFormatDefault);
   OptionGroupValueObjectDisplay m_varobj_options;
-  CommandObjectExpression::CommandOptions m_command_options;
+  EvaluateExpressionOptions m_expr_options;
   std::string m_compiler_options;
 
   bool m_enable_auto_indent = true;

@@ -1,9 +1,8 @@
 //===-- X86AsmParser.cpp - Parse X86 assembly to MCInst instructions ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +10,6 @@
 #include "MCTargetDesc/X86BaseInfo.h"
 #include "MCTargetDesc/X86MCExpr.h"
 #include "MCTargetDesc/X86TargetStreamer.h"
-#include "X86AsmInstrumentation.h"
 #include "X86AsmParserCommon.h"
 #include "X86Operand.h"
 #include "llvm/ADT/STLExtras.h"
@@ -71,7 +69,6 @@ static const char OpPrecedence[] = {
 
 class X86AsmParser : public MCTargetAsmParser {
   ParseInstructionInfo *InstInfo;
-  std::unique_ptr<X86AsmInstrumentation> Instrumentation;
   bool Code16GCC;
 
 private:
@@ -90,13 +87,14 @@ private:
   }
 
   unsigned MatchInstruction(const OperandVector &Operands, MCInst &Inst,
-                            uint64_t &ErrorInfo, bool matchingInlineAsm,
-                            unsigned VariantID = 0) {
+                            uint64_t &ErrorInfo, FeatureBitset &MissingFeatures,
+                            bool matchingInlineAsm, unsigned VariantID = 0) {
     // In Code16GCC mode, match as 32-bit.
     if (Code16GCC)
       SwitchMode(X86::Mode32Bit);
     unsigned rv = MatchInstructionImpl(Operands, Inst, ErrorInfo,
-                                       matchingInlineAsm, VariantID);
+                                       MissingFeatures, matchingInlineAsm,
+                                       VariantID);
     if (Code16GCC)
       SwitchMode(X86::Mode16Bit);
     return rv;
@@ -804,8 +802,8 @@ private:
     return Parser.Error(L, Msg, Range);
   }
 
-  std::nullptr_t ErrorOperand(SMLoc Loc, StringRef Msg) {
-    Error(Loc, Msg);
+  std::nullptr_t ErrorOperand(SMLoc Loc, StringRef Msg, SMRange R = SMRange()) {
+    Error(Loc, Msg, R);
     return nullptr;
   }
 
@@ -835,7 +833,10 @@ private:
                                      InlineAsmIdentifierInfo &Info,
                                      bool IsUnevaluatedOperand, SMLoc &End);
 
-  std::unique_ptr<X86Operand> ParseMemOperand(unsigned SegReg, SMLoc MemStart);
+  std::unique_ptr<X86Operand> ParseMemOperand(unsigned SegReg,
+                                              const MCExpr *&Disp,
+                                              const SMLoc &StartLoc,
+                                              SMLoc &EndLoc);
 
   bool ParseIntelMemoryOperandSize(unsigned &Size);
   std::unique_ptr<X86Operand>
@@ -872,7 +873,7 @@ private:
   void MatchFPUWaitAlias(SMLoc IDLoc, X86Operand &Op, OperandVector &Operands,
                          MCStreamer &Out, bool MatchingInlineAsm);
 
-  bool ErrorMissingFeature(SMLoc IDLoc, uint64_t ErrorInfo,
+  bool ErrorMissingFeature(SMLoc IDLoc, const FeatureBitset &MissingFeatures,
                            bool MatchingInlineAsm);
 
   bool MatchAndEmitATTInstruction(SMLoc IDLoc, unsigned &Opcode,
@@ -911,7 +912,7 @@ private:
     MCSubtargetInfo &STI = copySTI();
     FeatureBitset AllModes({X86::Mode64Bit, X86::Mode32Bit, X86::Mode16Bit});
     FeatureBitset OldMode = STI.getFeatureBits() & AllModes;
-    uint64_t FB = ComputeAvailableFeatures(
+    FeatureBitset FB = ComputeAvailableFeatures(
       STI.ToggleFeature(OldMode.flip(mode)));
     setAvailableFeatures(FB);
 
@@ -948,13 +949,9 @@ public:
 
     // Initialize the set of available features.
     setAvailableFeatures(ComputeAvailableFeatures(getSTI().getFeatureBits()));
-    Instrumentation.reset(
-        CreateX86AsmInstrumentation(Options, Parser.getContext(), STI));
   }
 
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
-
-  void SetFrameRegister(unsigned RegNo) override;
 
   bool parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) override;
 
@@ -1011,8 +1008,7 @@ static bool CheckBaseRegAndIndexRegAndScale(unsigned BaseReg, unsigned IndexReg,
   // and then only in non-64-bit modes.
   if (X86MCRegisterClasses[X86::GR16RegClassID].contains(BaseReg) &&
       (Is64BitMode || (BaseReg != X86::BX && BaseReg != X86::BP &&
-                       BaseReg != X86::SI && BaseReg != X86::DI)) &&
-      BaseReg != X86::DX) {
+                       BaseReg != X86::SI && BaseReg != X86::DI))) {
     ErrMsg = "invalid 16-bit base register";
     return true;
   }
@@ -1103,15 +1099,17 @@ bool X86AsmParser::ParseRegister(unsigned &RegNo,
     if (RegNo == X86::RIZ || RegNo == X86::RIP ||
         X86MCRegisterClasses[X86::GR64RegClassID].contains(RegNo) ||
         X86II::isX86_64NonExtLowByteReg(RegNo) ||
-        X86II::isX86_64ExtendedReg(RegNo))
-      return Error(StartLoc, "register %"
-                   + Tok.getString() + " is only available in 64-bit mode",
+        X86II::isX86_64ExtendedReg(RegNo)) {
+      StringRef RegName = Tok.getString();
+      Parser.Lex(); // Eat register name.
+      return Error(StartLoc,
+                   "register %" + RegName + " is only available in 64-bit mode",
                    SMRange(StartLoc, EndLoc));
+    }
   }
 
   // Parse "%st" as "%st(0)" and "%st(1)", which is multiple tokens.
-  if (RegNo == 0 && (Tok.getString() == "st" || Tok.getString() == "ST")) {
-    RegNo = X86::ST0;
+  if (RegNo == X86::ST0) {
     Parser.Lex(); // Eat 'st'
 
     // Check to see if we have '(4)' after %st.
@@ -1187,10 +1185,6 @@ bool X86AsmParser::ParseRegister(unsigned &RegNo,
 
   Parser.Lex(); // Eat identifier token.
   return false;
-}
-
-void X86AsmParser::SetFrameRegister(unsigned RegNo) {
-  Instrumentation->SetInitialFrameRegister(RegNo);
 }
 
 std::unique_ptr<X86Operand> X86AsmParser::DefaultMemSIOperand(SMLoc Loc) {
@@ -1651,6 +1645,8 @@ X86AsmParser::ParseRoundingModeOp(SMLoc Start) {
   const AsmToken &Tok = Parser.getTok();
   // Eat "{" and mark the current place.
   const SMLoc consumedToken = consumeToken();
+  if (Tok.isNot(AsmToken::Identifier))
+    return ErrorOperand(Tok.getLoc(), "Expected an identifier after {");
   if (Tok.getIdentifier().startswith("r")){
     int rndMode = StringSwitch<int>(Tok.getIdentifier())
       .Case("rn", X86::STATIC_ROUNDING::TO_NEAREST_INT)
@@ -1936,48 +1932,60 @@ std::unique_ptr<X86Operand> X86AsmParser::ParseIntelOperand() {
 std::unique_ptr<X86Operand> X86AsmParser::ParseATTOperand() {
   MCAsmParser &Parser = getParser();
   switch (getLexer().getKind()) {
-  default:
-    // Parse a memory operand with no segment register.
-    return ParseMemOperand(0, Parser.getTok().getLoc());
-  case AsmToken::Percent: {
-    // Read the register.
-    unsigned RegNo;
-    SMLoc Start, End;
-    if (ParseRegister(RegNo, Start, End)) return nullptr;
-    if (RegNo == X86::EIZ || RegNo == X86::RIZ) {
-      Error(Start, "%eiz and %riz can only be used as index registers",
-            SMRange(Start, End));
-      return nullptr;
-    }
-    if (RegNo == X86::RIP) {
-      Error(Start, "%rip can only be used as a base register",
-            SMRange(Start, End));
-      return nullptr;
-    }
-
-    // If this is a segment register followed by a ':', then this is the start
-    // of a memory reference, otherwise this is a normal register reference.
-    if (getLexer().isNot(AsmToken::Colon))
-      return X86Operand::CreateReg(RegNo, Start, End);
-
-    if (!X86MCRegisterClasses[X86::SEGMENT_REGRegClassID].contains(RegNo))
-      return ErrorOperand(Start, "invalid segment register");
-
-    getParser().Lex(); // Eat the colon.
-    return ParseMemOperand(RegNo, Start);
-  }
   case AsmToken::Dollar: {
-    // $42 -> immediate.
+    // $42 or $ID -> immediate.
     SMLoc Start = Parser.getTok().getLoc(), End;
     Parser.Lex();
     const MCExpr *Val;
-    if (getParser().parseExpression(Val, End))
+    // This is an immediate, so we should not parse a register. Do a precheck
+    // for '%' to supercede intra-register parse errors.
+    SMLoc L = Parser.getTok().getLoc();
+    if (check(getLexer().is(AsmToken::Percent), L,
+              "expected immediate expression") ||
+        getParser().parseExpression(Val, End) ||
+        check(isa<X86MCExpr>(Val), L, "expected immediate expression"))
       return nullptr;
     return X86Operand::CreateImm(Val, Start, End);
   }
-  case AsmToken::LCurly:{
+  case AsmToken::LCurly: {
     SMLoc Start = Parser.getTok().getLoc();
     return ParseRoundingModeOp(Start);
+  }
+  default: {
+    // This a memory operand or a register. We have some parsing complications
+    // as a '(' may be part of an immediate expression or the addressing mode
+    // block. This is complicated by the fact that an assembler-level variable
+    // may refer either to a register or an immediate expression.
+
+    SMLoc Loc = Parser.getTok().getLoc(), EndLoc;
+    const MCExpr *Expr = nullptr;
+    unsigned Reg = 0;
+    if (getLexer().isNot(AsmToken::LParen)) {
+      // No '(' so this is either a displacement expression or a register.
+      if (Parser.parseExpression(Expr, EndLoc))
+        return nullptr;
+      if (auto *RE = dyn_cast<X86MCExpr>(Expr)) {
+        // Segment Register. Reset Expr and copy value to register.
+        Expr = nullptr;
+        Reg = RE->getRegNo();
+
+        // Sanity check register.
+        if (Reg == X86::EIZ || Reg == X86::RIZ)
+          return ErrorOperand(
+              Loc, "%eiz and %riz can only be used as index registers",
+              SMRange(Loc, EndLoc));
+        if (Reg == X86::RIP)
+          return ErrorOperand(Loc, "%rip can only be used as a base register",
+                              SMRange(Loc, EndLoc));
+        // Return register that are not segment prefixes immediately.
+        if (!Parser.parseOptionalToken(AsmToken::Colon))
+          return X86Operand::CreateReg(Reg, Loc, EndLoc);
+        if (!X86MCRegisterClasses[X86::SEGMENT_REGRegClassID].contains(Reg))
+          return ErrorOperand(Loc, "invalid segment register");
+      }
+    }
+    // This is a Memory operand.
+    return ParseMemOperand(Reg, Expr, Loc, EndLoc);
   }
   }
 }
@@ -2087,199 +2095,201 @@ bool X86AsmParser::HandleAVX512Operand(OperandVector &Operands,
   return false;
 }
 
-/// ParseMemOperand: segment: disp(basereg, indexreg, scale).  The '%ds:' prefix
-/// has already been parsed if present.
+/// ParseMemOperand: 'seg : disp(basereg, indexreg, scale)'.  The '%ds:' prefix
+/// has already been parsed if present. disp may be provided as well.
 std::unique_ptr<X86Operand> X86AsmParser::ParseMemOperand(unsigned SegReg,
-                                                          SMLoc MemStart) {
-
+                                                          const MCExpr *&Disp,
+                                                          const SMLoc &StartLoc,
+                                                          SMLoc &EndLoc) {
   MCAsmParser &Parser = getParser();
-  // We have to disambiguate a parenthesized expression "(4+5)" from the start
-  // of a memory operand with a missing displacement "(%ebx)" or "(,%eax)".  The
-  // only way to do this without lookahead is to eat the '(' and see what is
-  // after it.
-  const MCExpr *Disp = MCConstantExpr::create(0, getParser().getContext());
-  if (getLexer().isNot(AsmToken::LParen)) {
-    SMLoc ExprEnd;
-    if (getParser().parseExpression(Disp, ExprEnd)) return nullptr;
-    // Disp may be a variable, handle register values.
-    if (auto *RE = dyn_cast<X86MCExpr>(Disp))
-      return X86Operand::CreateReg(RE->getRegNo(), MemStart, ExprEnd);
+  SMLoc Loc;
+  // Based on the initial passed values, we may be in any of these cases, we are
+  // in one of these cases (with current position (*)):
 
-    // After parsing the base expression we could either have a parenthesized
-    // memory address or not.  If not, return now.  If so, eat the (.
-    if (getLexer().isNot(AsmToken::LParen)) {
-      // Unless we have a segment register, treat this as an immediate.
-      if (SegReg == 0)
-        return X86Operand::CreateMem(getPointerWidth(), Disp, MemStart, ExprEnd);
-      return X86Operand::CreateMem(getPointerWidth(), SegReg, Disp, 0, 0, 1,
-                                   MemStart, ExprEnd);
+  //   1. seg : * disp  (base-index-scale-expr)
+  //   2. seg : *(disp) (base-index-scale-expr)
+  //   3. seg :       *(base-index-scale-expr)
+  //   4.        disp  *(base-index-scale-expr)
+  //   5.      *(disp)  (base-index-scale-expr)
+  //   6.             *(base-index-scale-expr)
+  //   7.  disp *
+  //   8. *(disp)
+
+  // If we do not have an displacement yet, check if we're in cases 4 or 6 by
+  // checking if the first object after the parenthesis is a register (or an
+  // identifier referring to a register) and parse the displacement or default
+  // to 0 as appropriate.
+  auto isAtMemOperand = [this]() {
+    if (this->getLexer().isNot(AsmToken::LParen))
+      return false;
+    AsmToken Buf[2];
+    StringRef Id;
+    auto TokCount = this->getLexer().peekTokens(Buf, true);
+    if (TokCount == 0)
+      return false;
+    switch (Buf[0].getKind()) {
+    case AsmToken::Percent:
+    case AsmToken::Comma:
+      return true;
+    // These lower cases are doing a peekIdentifier.
+    case AsmToken::At:
+    case AsmToken::Dollar:
+      if ((TokCount > 1) &&
+          (Buf[1].is(AsmToken::Identifier) || Buf[1].is(AsmToken::String)) &&
+          (Buf[0].getLoc().getPointer() + 1 == Buf[1].getLoc().getPointer()))
+        Id = StringRef(Buf[0].getLoc().getPointer(),
+                       Buf[1].getIdentifier().size() + 1);
+      break;
+    case AsmToken::Identifier:
+    case AsmToken::String:
+      Id = Buf[0].getIdentifier();
+      break;
+    default:
+      return false;
     }
-
-    // Eat the '('.
-    Parser.Lex();
-  } else {
-    // Okay, we have a '('.  We don't know if this is an expression or not, but
-    // so we have to eat the ( to see beyond it.
-    SMLoc LParenLoc = Parser.getTok().getLoc();
-    Parser.Lex(); // Eat the '('.
-
-    if (getLexer().is(AsmToken::Percent) || getLexer().is(AsmToken::Comma)) {
-      // Nothing to do here, fall into the code below with the '(' part of the
-      // memory operand consumed.
-    } else {
-      SMLoc ExprEnd;
-      getLexer().UnLex(AsmToken(AsmToken::LParen, "("));
-
-      // It must be either an parenthesized expression, or an expression that
-      // begins from a parenthesized expression, parse it now. Example: (1+2) or
-      // (1+2)+3
-      if (getParser().parseExpression(Disp, ExprEnd))
-        return nullptr;
-
-      // After parsing the base expression we could either have a parenthesized
-      // memory address or not.  If not, return now.  If so, eat the (.
-      if (getLexer().isNot(AsmToken::LParen)) {
-        // Unless we have a segment register, treat this as an immediate.
-        if (SegReg == 0)
-          return X86Operand::CreateMem(getPointerWidth(), Disp, LParenLoc,
-                                       ExprEnd);
-        return X86Operand::CreateMem(getPointerWidth(), SegReg, Disp, 0, 0, 1,
-                                     MemStart, ExprEnd);
+    // We have an ID. Check if it is bound to a register.
+    if (!Id.empty()) {
+      MCSymbol *Sym = this->getContext().getOrCreateSymbol(Id);
+      if (Sym->isVariable()) {
+        auto V = Sym->getVariableValue(/*SetUsed*/ false);
+        return isa<X86MCExpr>(V);
       }
+    }
+    return false;
+  };
 
-      // Eat the '('.
-      Parser.Lex();
+  if (!Disp) {
+    // Parse immediate if we're not at a mem operand yet.
+    if (!isAtMemOperand()) {
+      if (Parser.parseTokenLoc(Loc) || Parser.parseExpression(Disp, EndLoc))
+        return nullptr;
+      assert(!isa<X86MCExpr>(Disp) && "Expected non-register here.");
+    } else {
+      // Disp is implicitly zero if we haven't parsed it yet.
+      Disp = MCConstantExpr::create(0, Parser.getContext());
     }
   }
 
-  // If we reached here, then we just ate the ( of the memory operand.  Process
+  // We are now either at the end of the operand or at the '(' at the start of a
+  // base-index-scale-expr.
+
+  if (!parseOptionalToken(AsmToken::LParen)) {
+    if (SegReg == 0)
+      return X86Operand::CreateMem(getPointerWidth(), Disp, StartLoc, EndLoc);
+    return X86Operand::CreateMem(getPointerWidth(), SegReg, Disp, 0, 0, 1,
+                                 StartLoc, EndLoc);
+  }
+
+  // If we reached here, then eat the '(' and Process
   // the rest of the memory operand.
   unsigned BaseReg = 0, IndexReg = 0, Scale = 1;
-  SMLoc IndexLoc, BaseLoc;
+  SMLoc BaseLoc = getLexer().getLoc();
+  const MCExpr *E;
+  StringRef ErrMsg;
 
-  if (getLexer().is(AsmToken::Percent)) {
-    SMLoc StartLoc, EndLoc;
-    BaseLoc = Parser.getTok().getLoc();
-    if (ParseRegister(BaseReg, StartLoc, EndLoc)) return nullptr;
-    if (BaseReg == X86::EIZ || BaseReg == X86::RIZ) {
-      Error(StartLoc, "eiz and riz can only be used as index registers",
-            SMRange(StartLoc, EndLoc));
+  // Parse BaseReg if one is provided.
+  if (getLexer().isNot(AsmToken::Comma) && getLexer().isNot(AsmToken::RParen)) {
+    if (Parser.parseExpression(E, EndLoc) ||
+        check(!isa<X86MCExpr>(E), BaseLoc, "expected register here"))
       return nullptr;
-    }
+
+    // Sanity check register.
+    BaseReg = cast<X86MCExpr>(E)->getRegNo();
+    if (BaseReg == X86::EIZ || BaseReg == X86::RIZ)
+      return ErrorOperand(BaseLoc,
+                          "eiz and riz can only be used as index registers",
+                          SMRange(BaseLoc, EndLoc));
   }
 
-  if (getLexer().is(AsmToken::Comma)) {
-    Parser.Lex(); // Eat the comma.
-    IndexLoc = Parser.getTok().getLoc();
-
+  if (parseOptionalToken(AsmToken::Comma)) {
     // Following the comma we should have either an index register, or a scale
     // value. We don't support the later form, but we want to parse it
     // correctly.
     //
-    // Not that even though it would be completely consistent to support syntax
-    // like "1(%eax,,1)", the assembler doesn't. Use "eiz" or "riz" for this.
-    if (getLexer().is(AsmToken::Percent)) {
-      SMLoc L;
-      if (ParseRegister(IndexReg, L, L))
+    // Even though it would be completely consistent to support syntax like
+    // "1(%eax,,1)", the assembler doesn't. Use "eiz" or "riz" for this.
+    if (getLexer().isNot(AsmToken::RParen)) {
+      if (Parser.parseTokenLoc(Loc) || Parser.parseExpression(E, EndLoc))
         return nullptr;
-      if (BaseReg == X86::RIP) {
-        Error(IndexLoc, "%rip as base register can not have an index register");
-        return nullptr;
-      }
-      if (IndexReg == X86::RIP) {
-        Error(IndexLoc, "%rip is not allowed as an index register");
-        return nullptr;
-      }
 
-      if (getLexer().isNot(AsmToken::RParen)) {
-        // Parse the scale amount:
-        //  ::= ',' [scale-expression]
-        if (parseToken(AsmToken::Comma, "expected comma in scale expression"))
-          return nullptr;
+      if (!isa<X86MCExpr>(E)) {
+        // We've parsed an unexpected Scale Value instead of an index
+        // register. Interpret it as an absolute.
+        int64_t ScaleVal;
+        if (!E->evaluateAsAbsolute(ScaleVal, getStreamer().getAssemblerPtr()))
+          return ErrorOperand(Loc, "expected absolute expression");
+        if (ScaleVal != 1)
+          Warning(Loc, "scale factor without index register is ignored");
+        Scale = 1;
+      } else { // IndexReg Found.
+        IndexReg = cast<X86MCExpr>(E)->getRegNo();
 
-        if (getLexer().isNot(AsmToken::RParen)) {
-          SMLoc Loc = Parser.getTok().getLoc();
+        if (BaseReg == X86::RIP)
+          return ErrorOperand(
+              Loc, "%rip as base register can not have an index register");
+        if (IndexReg == X86::RIP)
+          return ErrorOperand(Loc, "%rip is not allowed as an index register");
 
-          int64_t ScaleVal;
-          if (getParser().parseAbsoluteExpression(ScaleVal)){
-            Error(Loc, "expected scale expression");
-            return nullptr;
+        if (parseOptionalToken(AsmToken::Comma)) {
+          // Parse the scale amount:
+          //  ::= ',' [scale-expression]
+
+          // A scale amount without an index is ignored.
+          if (getLexer().isNot(AsmToken::RParen)) {
+            int64_t ScaleVal;
+            if (Parser.parseTokenLoc(Loc) ||
+                Parser.parseAbsoluteExpression(ScaleVal))
+              return ErrorOperand(Loc, "expected scale expression");
+            Scale = (unsigned)ScaleVal;
+            // Validate the scale amount.
+            if (X86MCRegisterClasses[X86::GR16RegClassID].contains(BaseReg) &&
+                Scale != 1)
+              return ErrorOperand(Loc,
+                                  "scale factor in 16-bit address must be 1");
+            if (checkScale(Scale, ErrMsg))
+              return ErrorOperand(Loc, ErrMsg);
           }
-
-          // Validate the scale amount.
-          if (X86MCRegisterClasses[X86::GR16RegClassID].contains(BaseReg) &&
-              ScaleVal != 1) {
-            Error(Loc, "scale factor in 16-bit address must be 1");
-            return nullptr;
-          }
-          if (ScaleVal != 1 && ScaleVal != 2 && ScaleVal != 4 &&
-              ScaleVal != 8) {
-            Error(Loc, "scale factor in address must be 1, 2, 4 or 8");
-            return nullptr;
-          }
-          Scale = (unsigned)ScaleVal;
         }
       }
-    } else if (getLexer().isNot(AsmToken::RParen)) {
-      // A scale amount without an index is ignored.
-      // index.
-      SMLoc Loc = Parser.getTok().getLoc();
-
-      int64_t Value;
-      if (getParser().parseAbsoluteExpression(Value))
-        return nullptr;
-
-      if (Value != 1)
-        Warning(Loc, "scale factor without index register is ignored");
-      Scale = 1;
     }
   }
 
   // Ok, we've eaten the memory operand, verify we have a ')' and eat it too.
-  SMLoc MemEnd = Parser.getTok().getEndLoc();
   if (parseToken(AsmToken::RParen, "unexpected token in memory operand"))
     return nullptr;
 
-  // This is a terrible hack to handle "out[s]?[bwl]? %al, (%dx)" ->
-  // "outb %al, %dx".  Out doesn't take a memory form, but this is a widely
-  // documented form in various unofficial manuals, so a lot of code uses it.
-  if (BaseReg == X86::DX && IndexReg == 0 && Scale == 1 &&
-      SegReg == 0 && isa<MCConstantExpr>(Disp) &&
-      cast<MCConstantExpr>(Disp)->getValue() == 0)
+  // This is to support otherwise illegal operand (%dx) found in various
+  // unofficial manuals examples (e.g. "out[s]?[bwl]? %al, (%dx)") and must now
+  // be supported. Mark such DX variants separately fix only in special cases.
+  if (BaseReg == X86::DX && IndexReg == 0 && Scale == 1 && SegReg == 0 &&
+      isa<MCConstantExpr>(Disp) && cast<MCConstantExpr>(Disp)->getValue() == 0)
     return X86Operand::CreateDXReg(BaseLoc, BaseLoc);
 
-  StringRef ErrMsg;
   if (CheckBaseRegAndIndexRegAndScale(BaseReg, IndexReg, Scale, is64BitMode(),
-                                      ErrMsg)) {
-    Error(BaseLoc, ErrMsg);
-    return nullptr;
-  }
+                                      ErrMsg))
+    return ErrorOperand(BaseLoc, ErrMsg);
 
   if (SegReg || BaseReg || IndexReg)
     return X86Operand::CreateMem(getPointerWidth(), SegReg, Disp, BaseReg,
-                                 IndexReg, Scale, MemStart, MemEnd);
-  return X86Operand::CreateMem(getPointerWidth(), Disp, MemStart, MemEnd);
+                                 IndexReg, Scale, StartLoc, EndLoc);
+  return X86Operand::CreateMem(getPointerWidth(), Disp, StartLoc, EndLoc);
 }
 
 // Parse either a standard primary expression or a register.
 bool X86AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
   MCAsmParser &Parser = getParser();
-  if (Parser.parsePrimaryExpr(Res, EndLoc)) {
+  // See if this is a register first.
+  if (getTok().is(AsmToken::Percent) ||
+      (isParsingIntelSyntax() && getTok().is(AsmToken::Identifier) &&
+       MatchRegisterName(Parser.getTok().getString()))) {
     SMLoc StartLoc = Parser.getTok().getLoc();
-    // Normal Expression parse fails, check if it could be a register.
     unsigned RegNo;
-    bool TryRegParse =
-        getTok().is(AsmToken::Percent) ||
-        (isParsingIntelSyntax() && getTok().is(AsmToken::Identifier));
-    if (!TryRegParse || ParseRegister(RegNo, StartLoc, EndLoc))
+    if (ParseRegister(RegNo, StartLoc, EndLoc))
       return true;
-    // Clear previous parse error and return correct expression.
-    Parser.clearPendingErrors();
     Res = X86MCExpr::create(RegNo, Parser.getContext());
     return false;
   }
-
-  return false;
+  return Parser.parsePrimaryExpr(Res, EndLoc);
 }
 
 bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
@@ -2308,13 +2318,15 @@ bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       PatchedName != "setb" && PatchedName != "setnb")
     PatchedName = PatchedName.substr(0, Name.size()-1);
 
+  unsigned ComparisonCode = ~0U;
+
   // FIXME: Hack to recognize cmp<comparison code>{ss,sd,ps,pd}.
   if ((PatchedName.startswith("cmp") || PatchedName.startswith("vcmp")) &&
       (PatchedName.endswith("ss") || PatchedName.endswith("sd") ||
        PatchedName.endswith("ps") || PatchedName.endswith("pd"))) {
     bool IsVCMP = PatchedName[0] == 'v';
     unsigned CCIdx = IsVCMP ? 4 : 3;
-    unsigned ComparisonCode = StringSwitch<unsigned>(
+    unsigned CC = StringSwitch<unsigned>(
       PatchedName.slice(CCIdx, PatchedName.size() - 2))
       .Case("eq",       0x00)
       .Case("eq_oq",    0x00)
@@ -2364,26 +2376,29 @@ bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       .Case("gt_oq",    0x1E)
       .Case("true_us",  0x1F)
       .Default(~0U);
-    if (ComparisonCode != ~0U && (IsVCMP || ComparisonCode < 8)) {
+    if (CC != ~0U && (IsVCMP || CC < 8)) {
+      if (PatchedName.endswith("ss"))
+        PatchedName = IsVCMP ? "vcmpss" : "cmpss";
+      else if (PatchedName.endswith("sd"))
+        PatchedName = IsVCMP ? "vcmpsd" : "cmpsd";
+      else if (PatchedName.endswith("ps"))
+        PatchedName = IsVCMP ? "vcmpps" : "cmpps";
+      else if (PatchedName.endswith("pd"))
+        PatchedName = IsVCMP ? "vcmppd" : "cmppd";
+      else
+        llvm_unreachable("Unexpecte suffix!");
 
-      Operands.push_back(X86Operand::CreateToken(PatchedName.slice(0, CCIdx),
-                                                 NameLoc));
-
-      const MCExpr *ImmOp = MCConstantExpr::create(ComparisonCode,
-                                                   getParser().getContext());
-      Operands.push_back(X86Operand::CreateImm(ImmOp, NameLoc, NameLoc));
-
-      PatchedName = PatchedName.substr(PatchedName.size() - 2);
+      ComparisonCode = CC;
     }
   }
 
   // FIXME: Hack to recognize vpcmp<comparison code>{ub,uw,ud,uq,b,w,d,q}.
   if (PatchedName.startswith("vpcmp") &&
-      (PatchedName.endswith("b") || PatchedName.endswith("w") ||
-       PatchedName.endswith("d") || PatchedName.endswith("q"))) {
-    unsigned CCIdx = PatchedName.drop_back().back() == 'u' ? 2 : 1;
-    unsigned ComparisonCode = StringSwitch<unsigned>(
-      PatchedName.slice(5, PatchedName.size() - CCIdx))
+      (PatchedName.back() == 'b' || PatchedName.back() == 'w' ||
+       PatchedName.back() == 'd' || PatchedName.back() == 'q')) {
+    unsigned SuffixSize = PatchedName.drop_back().back() == 'u' ? 2 : 1;
+    unsigned CC = StringSwitch<unsigned>(
+      PatchedName.slice(5, PatchedName.size() - SuffixSize))
       .Case("eq",    0x0) // Only allowed on unsigned. Checked below.
       .Case("lt",    0x1)
       .Case("le",    0x2)
@@ -2393,24 +2408,26 @@ bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       .Case("nle",   0x6)
       //.Case("true",  0x7) // Not a documented alias.
       .Default(~0U);
-    if (ComparisonCode != ~0U && (ComparisonCode != 0 || CCIdx == 2)) {
-      Operands.push_back(X86Operand::CreateToken("vpcmp", NameLoc));
-
-      const MCExpr *ImmOp = MCConstantExpr::create(ComparisonCode,
-                                                   getParser().getContext());
-      Operands.push_back(X86Operand::CreateImm(ImmOp, NameLoc, NameLoc));
-
-      PatchedName = PatchedName.substr(PatchedName.size() - CCIdx);
+    if (CC != ~0U && (CC != 0 || SuffixSize == 2)) {
+      switch (PatchedName.back()) {
+      default: llvm_unreachable("Unexpected character!");
+      case 'b': PatchedName = SuffixSize == 2 ? "vpcmpub" : "vpcmpb"; break;
+      case 'w': PatchedName = SuffixSize == 2 ? "vpcmpuw" : "vpcmpw"; break;
+      case 'd': PatchedName = SuffixSize == 2 ? "vpcmpud" : "vpcmpd"; break;
+      case 'q': PatchedName = SuffixSize == 2 ? "vpcmpuq" : "vpcmpq"; break;
+      }
+      // Set up the immediate to push into the operands later.
+      ComparisonCode = CC;
     }
   }
 
   // FIXME: Hack to recognize vpcom<comparison code>{ub,uw,ud,uq,b,w,d,q}.
   if (PatchedName.startswith("vpcom") &&
-      (PatchedName.endswith("b") || PatchedName.endswith("w") ||
-       PatchedName.endswith("d") || PatchedName.endswith("q"))) {
-    unsigned CCIdx = PatchedName.drop_back().back() == 'u' ? 2 : 1;
-    unsigned ComparisonCode = StringSwitch<unsigned>(
-      PatchedName.slice(5, PatchedName.size() - CCIdx))
+      (PatchedName.back() == 'b' || PatchedName.back() == 'w' ||
+       PatchedName.back() == 'd' || PatchedName.back() == 'q')) {
+    unsigned SuffixSize = PatchedName.drop_back().back() == 'u' ? 2 : 1;
+    unsigned CC = StringSwitch<unsigned>(
+      PatchedName.slice(5, PatchedName.size() - SuffixSize))
       .Case("lt",    0x0)
       .Case("le",    0x1)
       .Case("gt",    0x2)
@@ -2420,14 +2437,16 @@ bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       .Case("false", 0x6)
       .Case("true",  0x7)
       .Default(~0U);
-    if (ComparisonCode != ~0U) {
-      Operands.push_back(X86Operand::CreateToken("vpcom", NameLoc));
-
-      const MCExpr *ImmOp = MCConstantExpr::create(ComparisonCode,
-                                                   getParser().getContext());
-      Operands.push_back(X86Operand::CreateImm(ImmOp, NameLoc, NameLoc));
-
-      PatchedName = PatchedName.substr(PatchedName.size() - CCIdx);
+    if (CC != ~0U) {
+      switch (PatchedName.back()) {
+      default: llvm_unreachable("Unexpected character!");
+      case 'b': PatchedName = SuffixSize == 2 ? "vpcomub" : "vpcomb"; break;
+      case 'w': PatchedName = SuffixSize == 2 ? "vpcomuw" : "vpcomw"; break;
+      case 'd': PatchedName = SuffixSize == 2 ? "vpcomud" : "vpcomd"; break;
+      case 'q': PatchedName = SuffixSize == 2 ? "vpcomuq" : "vpcomq"; break;
+      }
+      // Set up the immediate to push into the operands later.
+      ComparisonCode = CC;
     }
   }
 
@@ -2500,6 +2519,13 @@ bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
 
   Operands.push_back(X86Operand::CreateToken(PatchedName, NameLoc));
 
+  // Push the immediate if we extracted one from the mnemonic.
+  if (ComparisonCode != ~0U && !isParsingIntelSyntax()) {
+    const MCExpr *ImmOp = MCConstantExpr::create(ComparisonCode,
+                                                 getParser().getContext());
+    Operands.push_back(X86Operand::CreateImm(ImmOp, NameLoc, NameLoc));
+  }
+
   // This does the actual operand parsing.  Don't parse any more if we have a
   // prefix juxtaposed with an operation like "lock incl 4(%rax)", because we
   // just want to parse the "lock" as the first instruction and the "incl" as
@@ -2532,6 +2558,13 @@ bool X86AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
         (getLexer().is(AsmToken::LCurly) || getLexer().is(AsmToken::RCurly));
     if (getLexer().isNot(AsmToken::EndOfStatement) && !CurlyAsEndOfStatement)
       return TokError("unexpected token in argument list");
+  }
+
+  // Push the immediate if we extracted one from the mnemonic.
+  if (ComparisonCode != ~0U && isParsingIntelSyntax()) {
+    const MCExpr *ImmOp = MCConstantExpr::create(ComparisonCode,
+                                                 getParser().getContext());
+    Operands.push_back(X86Operand::CreateImm(ImmOp, NameLoc, NameLoc));
   }
 
   // Consume the EndOfStatement or the prefix separator Slash
@@ -2846,9 +2879,7 @@ static const char *getSubtargetFeatureName(uint64_t Val);
 
 void X86AsmParser::EmitInstruction(MCInst &Inst, OperandVector &Operands,
                                    MCStreamer &Out) {
-  Instrumentation->InstrumentAndEmitInstruction(
-      Inst, Operands, getContext(), MII, Out,
-      getParser().shouldPrintSchedInfo());
+  Out.EmitInstruction(Inst, getSTI());
 }
 
 bool X86AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
@@ -2888,17 +2919,16 @@ void X86AsmParser::MatchFPUWaitAlias(SMLoc IDLoc, X86Operand &Op,
   }
 }
 
-bool X86AsmParser::ErrorMissingFeature(SMLoc IDLoc, uint64_t ErrorInfo,
+bool X86AsmParser::ErrorMissingFeature(SMLoc IDLoc,
+                                       const FeatureBitset &MissingFeatures,
                                        bool MatchingInlineAsm) {
-  assert(ErrorInfo && "Unknown missing feature!");
+  assert(MissingFeatures.any() && "Unknown missing feature!");
   SmallString<126> Msg;
   raw_svector_ostream OS(Msg);
   OS << "instruction requires:";
-  uint64_t Mask = 1;
-  for (unsigned i = 0; i < (sizeof(ErrorInfo)*8-1); ++i) {
-    if (ErrorInfo & Mask)
-      OS << ' ' << getSubtargetFeatureName(ErrorInfo & Mask);
-    Mask <<= 1;
+  for (unsigned i = 0, e = MissingFeatures.size(); i != e; ++i) {
+    if (MissingFeatures[i])
+      OS << ' ' << getSubtargetFeatureName(i);
   }
   return Error(IDLoc, OS.str(), SMRange(), MatchingInlineAsm);
 }
@@ -2935,8 +2965,9 @@ bool X86AsmParser::MatchAndEmitATTInstruction(SMLoc IDLoc, unsigned &Opcode,
     Inst.setFlags(Prefixes);
 
   // First, try a direct match.
-  switch (MatchInstruction(Operands, Inst, ErrorInfo, MatchingInlineAsm,
-                           isParsingIntelSyntax())) {
+  FeatureBitset MissingFeatures;
+  switch (MatchInstruction(Operands, Inst, ErrorInfo, MissingFeatures,
+                           MatchingInlineAsm, isParsingIntelSyntax())) {
   default: llvm_unreachable("Unexpected match result!");
   case Match_Success:
     if (!MatchingInlineAsm && validateInstruction(Inst, Operands))
@@ -2954,7 +2985,7 @@ bool X86AsmParser::MatchAndEmitATTInstruction(SMLoc IDLoc, unsigned &Opcode,
     Opcode = Inst.getOpcode();
     return false;
   case Match_MissingFeature:
-    return ErrorMissingFeature(IDLoc, ErrorInfo, MatchingInlineAsm);
+    return ErrorMissingFeature(IDLoc, MissingFeatures, MatchingInlineAsm);
   case Match_InvalidOperand:
     WasOriginallyInvalidOperand = true;
     break;
@@ -2984,16 +3015,17 @@ bool X86AsmParser::MatchAndEmitATTInstruction(SMLoc IDLoc, unsigned &Opcode,
 
   // Check for the various suffix matches.
   uint64_t ErrorInfoIgnore;
-  uint64_t ErrorInfoMissingFeature = 0; // Init suppresses compiler warnings.
+  FeatureBitset ErrorInfoMissingFeatures; // Init suppresses compiler warnings.
   unsigned Match[4];
 
   for (unsigned I = 0, E = array_lengthof(Match); I != E; ++I) {
     Tmp.back() = Suffixes[I];
     Match[I] = MatchInstruction(Operands, Inst, ErrorInfoIgnore,
-                                MatchingInlineAsm, isParsingIntelSyntax());
+                                MissingFeatures, MatchingInlineAsm,
+                                isParsingIntelSyntax());
     // If this returned as a missing feature failure, remember that.
     if (Match[I] == Match_MissingFeature)
-      ErrorInfoMissingFeature = ErrorInfoIgnore;
+      ErrorInfoMissingFeatures = MissingFeatures;
   }
 
   // Restore the old token.
@@ -3070,8 +3102,8 @@ bool X86AsmParser::MatchAndEmitATTInstruction(SMLoc IDLoc, unsigned &Opcode,
   // missing feature.
   if (std::count(std::begin(Match), std::end(Match),
                  Match_MissingFeature) == 1) {
-    ErrorInfo = ErrorInfoMissingFeature;
-    return ErrorMissingFeature(IDLoc, ErrorInfoMissingFeature,
+    ErrorInfo = Match_MissingFeature;
+    return ErrorMissingFeature(IDLoc, ErrorInfoMissingFeatures,
                                MatchingInlineAsm);
   }
 
@@ -3135,7 +3167,8 @@ bool X86AsmParser::MatchAndEmitIntelInstruction(SMLoc IDLoc, unsigned &Opcode,
   }
 
   SmallVector<unsigned, 8> Match;
-  uint64_t ErrorInfoMissingFeature = 0;
+  FeatureBitset ErrorInfoMissingFeatures;
+  FeatureBitset MissingFeatures;
 
   // If unsized push has immediate operand we should default the default pointer
   // size for the size.
@@ -3155,7 +3188,7 @@ bool X86AsmParser::MatchAndEmitIntelInstruction(SMLoc IDLoc, unsigned &Opcode,
         Op.setTokenValue(Tmp);
         // Do match in ATT mode to allow explicit suffix usage.
         Match.push_back(MatchInstruction(Operands, Inst, ErrorInfo,
-                                         MatchingInlineAsm,
+                                         MissingFeatures, MatchingInlineAsm,
                                          false /*isParsingIntelSyntax()*/));
         Op.setTokenValue(Base);
       }
@@ -3172,13 +3205,14 @@ bool X86AsmParser::MatchAndEmitIntelInstruction(SMLoc IDLoc, unsigned &Opcode,
       uint64_t ErrorInfoIgnore;
       unsigned LastOpcode = Inst.getOpcode();
       unsigned M = MatchInstruction(Operands, Inst, ErrorInfoIgnore,
-                                    MatchingInlineAsm, isParsingIntelSyntax());
+                                    MissingFeatures, MatchingInlineAsm,
+                                    isParsingIntelSyntax());
       if (Match.empty() || LastOpcode != Inst.getOpcode())
         Match.push_back(M);
 
       // If this returned as a missing feature failure, remember that.
       if (Match.back() == Match_MissingFeature)
-        ErrorInfoMissingFeature = ErrorInfoIgnore;
+        ErrorInfoMissingFeatures = MissingFeatures;
     }
 
     // Restore the size of the unsized memory operand if we modified it.
@@ -3190,10 +3224,11 @@ bool X86AsmParser::MatchAndEmitIntelInstruction(SMLoc IDLoc, unsigned &Opcode,
   // matching with the unsized operand.
   if (Match.empty()) {
     Match.push_back(MatchInstruction(
-        Operands, Inst, ErrorInfo, MatchingInlineAsm, isParsingIntelSyntax()));
+        Operands, Inst, ErrorInfo, MissingFeatures, MatchingInlineAsm,
+        isParsingIntelSyntax()));
     // If this returned as a missing feature failure, remember that.
     if (Match.back() == Match_MissingFeature)
-      ErrorInfoMissingFeature = ErrorInfo;
+      ErrorInfoMissingFeatures = MissingFeatures;
   }
 
   // Restore the size of the unsized memory operand if we modified it.
@@ -3215,7 +3250,8 @@ bool X86AsmParser::MatchAndEmitIntelInstruction(SMLoc IDLoc, unsigned &Opcode,
       UnsizedMemOp->getMemFrontendSize()) {
     UnsizedMemOp->Mem.Size = UnsizedMemOp->getMemFrontendSize();
     unsigned M = MatchInstruction(
-        Operands, Inst, ErrorInfo, MatchingInlineAsm, isParsingIntelSyntax());
+        Operands, Inst, ErrorInfo, MissingFeatures, MatchingInlineAsm,
+        isParsingIntelSyntax());
     if (M == Match_Success)
       NumSuccessfulMatches = 1;
 
@@ -3255,8 +3291,8 @@ bool X86AsmParser::MatchAndEmitIntelInstruction(SMLoc IDLoc, unsigned &Opcode,
   // missing feature.
   if (std::count(std::begin(Match), std::end(Match),
                  Match_MissingFeature) == 1) {
-    ErrorInfo = ErrorInfoMissingFeature;
-    return ErrorMissingFeature(IDLoc, ErrorInfoMissingFeature,
+    ErrorInfo = Match_MissingFeature;
+    return ErrorMissingFeature(IDLoc, ErrorInfoMissingFeatures,
                                MatchingInlineAsm);
   }
 

@@ -1,9 +1,8 @@
 //===-- SBAttachInfo.h ------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,10 +27,10 @@ public:
   /// This function implies that a future call to SBTarget::Attach(...)
   /// will be synchronous.
   ///
-  /// @param[in] path
+  /// \param[in] path
   ///     A full or partial name for the process to attach to.
   ///
-  /// @param[in] wait_for
+  /// \param[in] wait_for
   ///     If \b false, attach to an existing process whose name matches.
   ///     If \b true, then wait for the next process whose name matches.
   //------------------------------------------------------------------
@@ -43,14 +42,14 @@ public:
   /// Future calls to SBTarget::Attach(...) will be synchronous or
   /// asynchronous depending on the \a async argument.
   ///
-  /// @param[in] path
+  /// \param[in] path
   ///     A full or partial name for the process to attach to.
   ///
-  /// @param[in] wait_for
+  /// \param[in] wait_for
   ///     If \b false, attach to an existing process whose name matches.
   ///     If \b true, then wait for the next process whose name matches.
   ///
-  /// @param[in] async
+  /// \param[in] async
   ///     If \b false, then the SBTarget::Attach(...) call will be a
   ///     synchronous call with no way to cancel the attach in
   ///     progress.
@@ -86,7 +85,7 @@ public:
   /// This function implies that a call to SBTarget::Attach(...) will
   /// be synchronous.
   ///
-  /// @param[in] b
+  /// \param[in] b
   ///     If \b false, attach to an existing process whose name matches.
   ///     If \b true, then wait for the next process whose name matches.
   //------------------------------------------------------------------
@@ -99,11 +98,11 @@ public:
   /// Future calls to SBTarget::Attach(...) will be synchronous or
   /// asynchronous depending on the \a async argument.
   ///
-  /// @param[in] b
+  /// \param[in] b
   ///     If \b false, attach to an existing process whose name matches.
   ///     If \b true, then wait for the next process whose name matches.
   ///
-  /// @param[in] async
+  /// \param[in] async
   ///     If \b false, then the SBTarget::Attach(...) call will be a
   ///     synchronous call with no way to cancel the attach in
   ///     progress.

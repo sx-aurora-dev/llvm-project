@@ -1,15 +1,15 @@
 //===-- Platform.cpp --------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
 #include <csignal>
 #include <fstream>
+#include <memory>
 #include <vector>
 
 #include "llvm/Support/FileSystem.h"
@@ -79,7 +79,7 @@ ConstString PlatformProperties::GetSettingName() {
 }
 
 PlatformProperties::PlatformProperties() {
-  m_collection_sp.reset(new OptionValueProperties(GetSettingName()));
+  m_collection_sp = std::make_shared<OptionValueProperties>(GetSettingName());
   m_collection_sp->Initialize(g_properties);
 
   auto module_cache_dir = GetModuleCacheDirectory();
@@ -180,7 +180,7 @@ Platform::LocateExecutableScriptingResources(Target *target, Module &module,
 }
 
 // PlatformSP
-// Platform::FindPlugin (Process *process, const ConstString &plugin_name)
+// Platform::FindPlugin (Process *process, ConstString plugin_name)
 //{
 //    PlatformCreateInstance create_callback = nullptr;
 //    if (plugin_name)
@@ -267,7 +267,7 @@ bool Platform::GetModuleSpec(const FileSpec &module_file_spec,
                                              module_spec);
 }
 
-PlatformSP Platform::Find(const ConstString &name) {
+PlatformSP Platform::Find(ConstString name) {
   if (name) {
     static ConstString g_host_platform_name("host");
     if (name == g_host_platform_name)
@@ -282,7 +282,7 @@ PlatformSP Platform::Find(const ConstString &name) {
   return PlatformSP();
 }
 
-PlatformSP Platform::Create(const ConstString &name, Status &error) {
+PlatformSP Platform::Create(ConstString name, Status &error) {
   PlatformCreateInstance create_callback = nullptr;
   lldb::PlatformSP platform_sp;
   if (name) {
@@ -384,10 +384,10 @@ Platform::Platform(bool is_host)
     : m_is_host(is_host), m_os_version_set_while_connected(false),
       m_system_arch_set_while_connected(false), m_sdk_sysroot(), m_sdk_build(),
       m_working_dir(), m_remote_url(), m_name(), m_system_arch(), m_mutex(),
-      m_uid_map(), m_gid_map(), m_max_uid_name_len(0), m_max_gid_name_len(0),
-      m_supports_rsync(false), m_rsync_opts(), m_rsync_prefix(),
-      m_supports_ssh(false), m_ssh_opts(), m_ignores_remote_hostname(false),
-      m_trap_handlers(), m_calculated_trap_handlers(false),
+      m_max_uid_name_len(0), m_max_gid_name_len(0), m_supports_rsync(false),
+      m_rsync_opts(), m_rsync_prefix(), m_supports_ssh(false), m_ssh_opts(),
+      m_ignores_remote_hostname(false), m_trap_handlers(),
+      m_calculated_trap_handlers(false),
       m_module_cache(llvm::make_unique<ModuleCache>()) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_OBJECT));
   if (log)
@@ -834,34 +834,6 @@ bool Platform::SetRemoteWorkingDirectory(const FileSpec &working_dir) {
   return true;
 }
 
-const char *Platform::GetUserName(uint32_t uid) {
-#if !defined(LLDB_DISABLE_POSIX)
-  const char *user_name = GetCachedUserName(uid);
-  if (user_name)
-    return user_name;
-  if (IsHost()) {
-    std::string name;
-    if (HostInfo::LookupUserName(uid, name))
-      return SetCachedUserName(uid, name.c_str(), name.size());
-  }
-#endif
-  return nullptr;
-}
-
-const char *Platform::GetGroupName(uint32_t gid) {
-#if !defined(LLDB_DISABLE_POSIX)
-  const char *group_name = GetCachedGroupName(gid);
-  if (group_name)
-    return group_name;
-  if (IsHost()) {
-    std::string name;
-    if (HostInfo::LookupGroupName(gid, name))
-      return SetCachedGroupName(gid, name.c_str(), name.size());
-  }
-#endif
-  return nullptr;
-}
-
 bool Platform::SetOSVersion(llvm::VersionTuple version) {
   if (IsHost()) {
     // We don't need anyone setting the OS version for the host platform, we
@@ -1060,11 +1032,11 @@ Status Platform::LaunchProcess(ProcessLaunchInfo &launch_info) {
       uint32_t num_resumes = GetResumeCountForLaunchInfo(launch_info);
       if (log) {
         const FileSpec &shell = launch_info.GetShell();
-        const char *shell_str = (shell) ? shell.GetPath().c_str() : "<null>";
+        std::string shell_str = (shell) ? shell.GetPath() : "<null>";
         log->Printf(
             "Platform::%s GetResumeCountForLaunchInfo() returned %" PRIu32
             ", shell is '%s'",
-            __FUNCTION__, num_resumes, shell_str);
+            __FUNCTION__, num_resumes, shell_str.c_str());
       }
 
       if (!launch_info.ConvertArgumentsForLaunchingInShell(
@@ -1296,7 +1268,7 @@ Status Platform::PutFile(const FileSpec &source, const FileSpec &destination,
     return error;
   if (dest_file == UINT64_MAX)
     return Status("unable to open target file");
-  lldb::DataBufferSP buffer_sp(new DataBufferHeap(1024, 0));
+  lldb::DataBufferSP buffer_sp(new DataBufferHeap(1024 * 16, 0));
   uint64_t offset = 0;
   for (;;) {
     size_t bytes_read = buffer_sp->GetByteSize();
@@ -1586,14 +1558,14 @@ Status Platform::GetRemoteSharedModule(const ModuleSpec &module_spec,
     if (process->GetModuleSpec(module_spec.GetFileSpec(),
                                module_spec.GetArchitecture(),
                                resolved_module_spec)) {
-      if (module_spec.GetUUID().IsValid() == false ||
+      if (!module_spec.GetUUID().IsValid() ||
           module_spec.GetUUID() == resolved_module_spec.GetUUID()) {
         got_module_spec = true;
       }
     }
   }
 
-  if (module_spec.GetArchitecture().IsValid() == false) {
+  if (!module_spec.GetArchitecture().IsValid()) {
     Status error;
     // No valid architecture was specified, ask the platform for the
     // architectures that we should be using (in the correct order) and see if
@@ -1616,7 +1588,7 @@ Status Platform::GetRemoteSharedModule(const ModuleSpec &module_spec,
     // Get module information from a target.
     if (!GetModuleSpec(module_spec.GetFileSpec(), module_spec.GetArchitecture(),
                        resolved_module_spec)) {
-      if (module_spec.GetUUID().IsValid() == false ||
+      if (!module_spec.GetUUID().IsValid() ||
           module_spec.GetUUID() == resolved_module_spec.GetUUID()) {
         return module_resolver(module_spec);
       }
@@ -1740,9 +1712,9 @@ const UnixSignalsSP &Platform::GetRemoteUnixSignals() {
   return s_default_unix_signals_sp;
 }
 
-const UnixSignalsSP &Platform::GetUnixSignals() {
+UnixSignalsSP Platform::GetUnixSignals() {
   if (IsHost())
-    return Host::GetUnixSignals();
+    return UnixSignals::CreateForHost();
   return GetRemoteUnixSignals();
 }
 

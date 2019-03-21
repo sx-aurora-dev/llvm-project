@@ -1,9 +1,8 @@
 //===-- SIFoldOperands.cpp - Fold operands --- ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 /// \file
 //===----------------------------------------------------------------------===//
@@ -763,14 +762,23 @@ static bool tryFoldInst(const SIInstrInfo *TII,
       Opc == AMDGPU::V_CNDMASK_B64_PSEUDO) {
     const MachineOperand *Src0 = TII->getNamedOperand(*MI, AMDGPU::OpName::src0);
     const MachineOperand *Src1 = TII->getNamedOperand(*MI, AMDGPU::OpName::src1);
-    if (Src1->isIdenticalTo(*Src0)) {
+    int Src1ModIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src1_modifiers);
+    int Src0ModIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src0_modifiers);
+    if (Src1->isIdenticalTo(*Src0) &&
+        (Src1ModIdx == -1 || !MI->getOperand(Src1ModIdx).getImm()) &&
+        (Src0ModIdx == -1 || !MI->getOperand(Src0ModIdx).getImm())) {
       LLVM_DEBUG(dbgs() << "Folded " << *MI << " into ");
+      auto &NewDesc =
+          TII->get(Src0->isReg() ? (unsigned)AMDGPU::COPY : getMovOpc(false));
       int Src2Idx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src2);
       if (Src2Idx != -1)
         MI->RemoveOperand(Src2Idx);
       MI->RemoveOperand(AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src1));
-      mutateCopyOp(*MI, TII->get(Src0->isReg() ? (unsigned)AMDGPU::COPY
-                                               : getMovOpc(false)));
+      if (Src1ModIdx != -1)
+        MI->RemoveOperand(Src1ModIdx);
+      if (Src0ModIdx != -1)
+        MI->RemoveOperand(Src0ModIdx);
+      mutateCopyOp(*MI, NewDesc);
       LLVM_DEBUG(dbgs() << *MI << '\n');
       return true;
     }
@@ -854,13 +862,17 @@ void SIFoldOperands::foldInstOperand(MachineInstr &MI,
     }
   } else {
     // Folding register.
+    SmallVector <MachineRegisterInfo::use_iterator, 4> UsesToProcess;
     for (MachineRegisterInfo::use_iterator
            Use = MRI->use_begin(Dst.getReg()), E = MRI->use_end();
          Use != E; ++Use) {
-      MachineInstr *UseMI = Use->getParent();
+      UsesToProcess.push_back(Use);
+    }
+    for (auto U : UsesToProcess) {
+      MachineInstr *UseMI = U->getParent();
 
-      foldOperand(OpToFold, UseMI, Use.getOperandNo(),
-                  FoldList, CopiesToReplace);
+      foldOperand(OpToFold, UseMI, U.getOperandNo(),
+        FoldList, CopiesToReplace);
     }
   }
 
@@ -922,7 +934,8 @@ const MachineOperand *SIFoldOperands::isClamp(const MachineInstr &MI) const {
 
     // Having a 0 op_sel_hi would require swizzling the output in the source
     // instruction, which we can't do.
-    unsigned UnsetMods = (Op == AMDGPU::V_PK_MAX_F16) ? SISrcMods::OP_SEL_1 : 0;
+    unsigned UnsetMods = (Op == AMDGPU::V_PK_MAX_F16) ? SISrcMods::OP_SEL_1
+                                                      : 0u;
     if (Src0Mods != UnsetMods && Src1Mods != UnsetMods)
       return nullptr;
     return Src0;

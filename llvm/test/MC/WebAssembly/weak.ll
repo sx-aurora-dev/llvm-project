@@ -13,14 +13,14 @@ entry:
 }
 
 ; CHECK:        - Type:            IMPORT
-; CHECK-NEXT:     Imports:         
+; CHECK-NEXT:     Imports:
 ; CHECK:            - Module:          env
 ; CHECK-NEXT:         Field:           __linear_memory
 ; CHECK:            - Module:          env
 ; CHECK-NEXT:         Field:           __indirect_function_table
 
 
-; CHECK:          SymbolTable:      
+; CHECK:          SymbolTable:
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Name:            weak_function
@@ -30,4 +30,9 @@ entry:
 ; CHECK-NEXT:         Kind:            DATA
 ; CHECK-NEXT:         Name:            weak_external_data
 ; CHECK-NEXT:         Flags:           [ BINDING_WEAK, UNDEFINED ]
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            target_features
+; CHECK-NEXT:     Features:
+; CHECK-NEXT:       - Prefix:          DISALLOWED
+; CHECK-NEXT:         Name:            atomics
 ; CHECK-NEXT: ...

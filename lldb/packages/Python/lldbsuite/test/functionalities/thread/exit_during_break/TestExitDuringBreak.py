@@ -23,9 +23,7 @@ class ExitDuringBreakpointTestCase(TestBase):
         # Find the line number for our breakpoint.
         self.breakpoint = line_number('main.cpp', '// Set breakpoint here')
 
-    @expectedFailureAll(
-        oslist=["linux"],
-        bugnumber="llvm.org/pr15824 thread states not properly maintained")
+    @expectedFailureNetBSD
     def test(self):
         """Test thread exit during breakpoint handling."""
         self.build(dictionary=self.getBuildFlags())

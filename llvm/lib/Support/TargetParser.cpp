@@ -1,9 +1,8 @@
 //===-- TargetParser - Parser for target features ---------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -170,12 +169,14 @@ void AMDGPU::fillValidArchListR600(SmallVectorImpl<StringRef> &Values) {
 }
 
 AMDGPU::IsaVersion AMDGPU::getIsaVersion(StringRef GPU) {
-  if (GPU == "generic")
-    return {7, 0, 0};
-
   AMDGPU::GPUKind AK = parseArchAMDGCN(GPU);
-  if (AK == AMDGPU::GPUKind::GK_NONE)
+  if (AK == AMDGPU::GPUKind::GK_NONE) {
+    if (GPU == "generic-hsa")
+      return {7, 0, 0};
+    if (GPU == "generic")
+      return {6, 0, 0};
     return {0, 0, 0};
+  }
 
   switch (AK) {
   case GK_GFX600: return {6, 0, 0};

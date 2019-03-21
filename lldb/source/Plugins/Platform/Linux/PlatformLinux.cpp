@@ -1,9 +1,8 @@
 //===-- PlatformLinux.cpp ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -46,7 +45,7 @@ PlatformSP PlatformLinux::CreateInstance(bool force, const ArchSpec *arch) {
            arch ? arch->GetTriple().getTriple() : "<null>");
 
   bool create = force;
-  if (create == false && arch && arch->IsValid()) {
+  if (!create && arch && arch->IsValid()) {
     const llvm::Triple &triple = arch->GetTriple();
     switch (triple.getOS()) {
     case llvm::Triple::Linux:
@@ -264,6 +263,25 @@ bool PlatformLinux::CanDebugProcess() {
   }
 }
 
+std::vector<std::string>
+PlatformLinux::GetSystemIncludeDirectories(lldb::LanguageType lang) {
+  std::string sys_root = GetSDKRootDirectory().AsCString("");
+  switch (lang) {
+  case lldb::eLanguageTypeC:
+  case lldb::eLanguageTypeC89:
+  case lldb::eLanguageTypeC99:
+  case lldb::eLanguageTypeC11:
+  case lldb::eLanguageTypeC_plus_plus:
+  case lldb::eLanguageTypeC_plus_plus_03:
+  case lldb::eLanguageTypeC_plus_plus_11:
+  case lldb::eLanguageTypeC_plus_plus_14:
+  case lldb::eLanguageTypeObjC_plus_plus:
+    return {sys_root + "/usr/include/"};
+  default:
+    return {};
+  }
+}
+
 // For local debugging, Linux will override the debug logic to use llgs-launch
 // rather than lldb-launch, llgs-attach.  This differs from current lldb-
 // launch, debugserver-attach approach on MacOSX.
@@ -318,8 +336,8 @@ PlatformLinux::DebugProcess(ProcessLaunchInfo &launch_info, Debugger &debugger,
 
   // Now create the gdb-remote process.
   LLDB_LOG(log, "having target create process with gdb-remote plugin");
-  process_sp = target->CreateProcess(
-      launch_info.GetListenerForProcess(debugger), "gdb-remote", nullptr);
+  process_sp =
+      target->CreateProcess(launch_info.GetListener(), "gdb-remote", nullptr);
 
   if (!process_sp) {
     error.SetErrorString("CreateProcess() failed for gdb-remote process");

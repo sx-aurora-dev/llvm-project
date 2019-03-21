@@ -1,9 +1,8 @@
 //===--- PPCallbacksTracker.cpp - Preprocessor tracker -*--*---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -89,10 +88,10 @@ static const char *const MappingStrings[] = { "0",          "MAP_IGNORE",
 
 // PPCallbacksTracker functions.
 
-PPCallbacksTracker::PPCallbacksTracker(llvm::SmallSet<std::string, 4> &Ignore,
+PPCallbacksTracker::PPCallbacksTracker(const FilterType &Filters,
                                        std::vector<CallbackCall> &CallbackCalls,
                                        clang::Preprocessor &PP)
-    : CallbackCalls(CallbackCalls), Ignore(Ignore), PP(PP) {}
+    : CallbackCalls(CallbackCalls), Filters(Filters), PP(PP) {}
 
 PPCallbacksTracker::~PPCallbacksTracker() {}
 
@@ -298,6 +297,22 @@ void PPCallbacksTracker::PragmaWarningPop(clang::SourceLocation Loc) {
   appendArgument("Loc", Loc);
 }
 
+// Callback invoked when a #pragma execution_character_set(push) directive
+// is read.
+void PPCallbacksTracker::PragmaExecCharsetPush(clang::SourceLocation Loc,
+                                               clang::StringRef Str) {
+  beginCallback("PragmaExecCharsetPush");
+  appendArgument("Loc", Loc);
+  appendArgument("Charset", Str);
+}
+
+// Callback invoked when a #pragma execution_character_set(pop) directive
+// is read.
+void PPCallbacksTracker::PragmaExecCharsetPop(clang::SourceLocation Loc) {
+  beginCallback("PragmaExecCharsetPop");
+  appendArgument("Loc", Loc);
+}
+
 // Called by Preprocessor::HandleMacroExpandedIdentifier when a
 // macro invocation is found.
 void
@@ -410,7 +425,14 @@ void PPCallbacksTracker::Endif(clang::SourceLocation Loc,
 
 // Start a new callback.
 void PPCallbacksTracker::beginCallback(const char *Name) {
-  DisableTrace = Ignore.count(std::string(Name));
+  auto R = CallbackIsEnabled.try_emplace(Name, false);
+  if (R.second) {
+    llvm::StringRef N(Name);
+    for (const std::pair<llvm::GlobPattern, bool> &Filter : Filters)
+      if (Filter.first.match(N))
+        R.first->second = Filter.second;
+  }
+  DisableTrace = !R.first->second;
   if (DisableTrace)
     return;
   CallbackCalls.push_back(CallbackCall(Name));

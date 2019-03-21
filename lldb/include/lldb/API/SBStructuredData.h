@@ -1,9 +1,8 @@
 //===-- SBStructuredData.h --------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,6 +27,8 @@ public:
   ~SBStructuredData();
 
   lldb::SBStructuredData &operator=(const lldb::SBStructuredData &rhs);
+
+  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -88,17 +89,17 @@ public:
   //------------------------------------------------------------------
   /// Provides the string value if this data structure is a string type.
   ///
-  /// @param[out] dst
+  /// \param[out] dst
   ///     pointer where the string value will be written. In case it is null,
   ///     nothing will be written at @dst.
   ///
-  /// @param[in] dst_len
+  /// \param[in] dst_len
   ///     max number of characters that can be written at @dst. In case it is
   ///     zero, nothing will be written at @dst. If this length is not enough
   ///     to write the complete string value, (dst_len-1) bytes of the string
   ///     value will be written at @dst followed by a null character.
   ///
-  /// @return
+  /// \return
   ///     Returns the byte size needed to completely write the string value at
   ///     @dst in all cases.
   //------------------------------------------------------------------

@@ -1,9 +1,8 @@
 //===- Driver.h -------------------------------------------------*- C++ -*-===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -70,7 +69,7 @@ public:
   void link(llvm::ArrayRef<const char *> Args);
 
   // Used by the resolver to parse .drectve section contents.
-  void parseDirectives(StringRef S);
+  void parseDirectives(InputFile *File);
 
   // Used by ArchiveFile to enqueue members.
   void enqueueArchiveMember(const Archive::Child &C, StringRef SymName,
@@ -96,6 +95,8 @@ private:
 
   // Library search path. The first element is always "" (current directory).
   std::vector<StringRef> SearchPaths;
+
+  void maybeExportMinGWSymbols(const llvm::opt::InputArgList &Args);
 
   // We don't want to add the same file more than once.
   // Files are uniquified by their filesystem and file number.
@@ -157,6 +158,9 @@ void parseMerge(StringRef);
 void parseSection(StringRef);
 void parseAligncomm(StringRef);
 
+// Parses a string in the form of "[:<integer>]"
+void parseFunctionPadMin(llvm::opt::Arg *A, llvm::COFF::MachineTypes Machine);
+
 // Parses a string in the form of "EMBED[,=<integer>]|NO".
 void parseManifest(StringRef Arg);
 
@@ -176,7 +180,7 @@ void assignExportOrdinals();
 // if value matches previous values for the key.
 // This feature used in the directive section to reject
 // incompatible objects.
-void checkFailIfMismatch(StringRef Arg);
+void checkFailIfMismatch(StringRef Arg, StringRef Source);
 
 // Convert Windows resource files (.res files) to a .obj file.
 MemoryBufferRef convertResToCOFF(ArrayRef<MemoryBufferRef> MBs);

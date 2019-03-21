@@ -1,9 +1,8 @@
 //==--- DiagnosticDriverKinds.td - libdriver diagnostics ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -52,6 +51,10 @@ def err_drv_invalid_rtlib_name : Error<
   "invalid runtime library name in argument '%0'">;
 def err_drv_unsupported_rtlib_for_platform : Error<
   "unsupported runtime library '%0' for platform '%1'">;
+def err_drv_invalid_unwindlib_name : Error<
+  "invalid unwind library name in argument '%0'">;
+def err_drv_incompatible_unwindlib : Error<
+  "--rtlib=libgcc requires --unwindlib=libgcc">;
 def err_drv_invalid_stdlib_name : Error<
   "invalid library name in argument '%0'">;
 def err_drv_invalid_output_with_multiple_archs : Error<
@@ -97,6 +100,8 @@ def err_drv_clang_unsupported : Error<
   "the clang compiler does not support '%0'">;
 def err_drv_clang_unsupported_opt_cxx_darwin_i386 : Error<
   "the clang compiler does not support '%0' for C++ on Darwin/i386">;
+def err_drv_clang_unsupported_opt_pg_darwin: Error<
+  "the clang compiler does not support -pg option on %select{Darwin|versions of OS X 10.9 and later}0">;
 def err_drv_clang_unsupported_opt_faltivec : Error<
   "the clang compiler does not support '%0', %1">;
 def err_drv_command_failed : Error<
@@ -302,6 +307,8 @@ def err_analyzer_config_multiple_values : Error<
 def err_analyzer_config_invalid_input : Error<
   "invalid input for analyzer-config option '%0', that expects %1 value">;
 def err_analyzer_config_unknown : Error<"unknown analyzer-config '%0'">;
+def err_analyzer_checker_option_invalid_input : Error<
+  "invalid input for checker option '%0', that expects %1">;
 
 def err_drv_invalid_hvx_length : Error<
   "-mhvx-length is not supported without a -mhvx/-mhvx= flag">;
@@ -405,4 +412,24 @@ def warn_drv_experimental_isel_incomplete_opt : Warning<
 def warn_drv_moutline_unsupported_opt : Warning<
   "The '%0' architecture does not support -moutline; flag ignored">,
   InGroup<OptionIgnored>;
+
+def warn_drv_darwin_sdk_invalid_settings : Warning<
+  "SDK settings were ignored as 'SDKSettings.json' could not be parsed">,
+  InGroup<DiagGroup<"darwin-sdk-settings">>;
+
+def err_drv_trivial_auto_var_init_zero_disabled : Error<
+  "-ftrivial-auto-var-init=zero hasn't been enabled. Enable it at your own peril for benchmarking purpose only with "
+  "-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang">;
+
+def warn_drv_msp430_hwmult_unsupported : Warning<"the given MCU does not "
+  "support hardware multiply, but -mhwmult is set to %0.">,
+   InGroup<InvalidCommandLineArgument>;
+def warn_drv_msp430_hwmult_mismatch : Warning<"the given MCU supports %0 "
+  "hardware multiply, but -mhwmult is set to %1.">,
+   InGroup<InvalidCommandLineArgument>;
+def warn_drv_msp430_hwmult_no_device : Warning<"no MCU device specified, but "
+  "'-mhwmult' is set to 'auto', assuming no hardware multiply. Use -mmcu to "
+  "specify a MSP430 device, or -mhwmult to set hardware multiply type "
+  "explicitly.">, InGroup<InvalidCommandLineArgument>;
+
 }

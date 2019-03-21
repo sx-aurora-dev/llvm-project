@@ -1,9 +1,8 @@
 //===-- ClangFunctionCaller.h -----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +25,7 @@ class ASTStructExtractor;
 class ClangExpressionParser;
 
 //----------------------------------------------------------------------
-/// @class ClangFunctionCaller ClangFunctionCaller.h
+/// \class ClangFunctionCaller ClangFunctionCaller.h
 /// "lldb/Expression/ClangFunctionCaller.h" Encapsulates a function that can
 /// be called.
 ///
@@ -62,6 +61,11 @@ class ClangExpressionParser;
 class ClangFunctionCaller : public FunctionCaller {
   friend class ASTStructExtractor;
 
+  /// LLVM-style RTTI support.
+  static bool classof(const Expression *E) {
+    return E->getKind() == eKindClangFunctionCaller;
+  }
+
   class ClangFunctionCallerHelper : public ClangExpressionHelper {
   public:
     ClangFunctionCallerHelper(ClangFunctionCaller &owner) : m_owner(owner) {}
@@ -78,7 +82,7 @@ class ClangFunctionCaller : public FunctionCaller {
     /// Return the object that the parser should allow to access ASTs. May be
     /// NULL if the ASTs do not need to be transformed.
     ///
-    /// @param[in] passthrough
+    /// \param[in] passthrough
     ///     The ASTConsumer that the returned transformer should send
     ///     the ASTs to after transformation.
     //------------------------------------------------------------------
@@ -97,21 +101,21 @@ public:
   //------------------------------------------------------------------
   /// Constructor
   ///
-  /// @param[in] exe_scope
+  /// \param[in] exe_scope
   ///     An execution context scope that gets us at least a target and
   ///     process.
   ///
-  /// @param[in] ast_context
+  /// \param[in] ast_context
   ///     The AST context to evaluate argument types in.
   ///
-  /// @param[in] return_qualtype
+  /// \param[in] return_qualtype
   ///     An opaque Clang QualType for the function result.  Should be
   ///     defined in ast_context.
   ///
-  /// @param[in] function_address
+  /// \param[in] function_address
   ///     The address of the function to call.
   ///
-  /// @param[in] arg_value_list
+  /// \param[in] arg_value_list
   ///     The default values to use when calling this function.  Can
   ///     be overridden using WriteFunctionArguments().
   //------------------------------------------------------------------
@@ -125,15 +129,15 @@ public:
   //------------------------------------------------------------------
   /// Compile the wrapper function
   ///
-  /// @param[in] thread_to_use_sp
+  /// \param[in] thread_to_use_sp
   ///     Compilation might end up calling functions.  Pass in the thread you
   ///     want the compilation to use.  If you pass in an empty ThreadSP it will
   ///     use the currently selected thread.
   ///
-  /// @param[in] diagnostic_manager
+  /// \param[in] diagnostic_manager
   ///     The diagnostic manager to report parser errors to.
   ///
-  /// @return
+  /// \return
   ///     The number of errors.
   //------------------------------------------------------------------
   unsigned CompileFunction(lldb::ThreadSP thread_to_use_sp,

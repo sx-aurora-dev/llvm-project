@@ -1,9 +1,8 @@
 //===-- DWARFBaseDIE.h -----------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +18,6 @@ class DWARFAttributes;
 class DWARFUnit;
 class DWARFDebugInfoEntry;
 class DWARFDeclContext;
-class DWARFDIECollection;
 class SymbolFileDWARF;
 
 class DWARFBaseDIE {
@@ -98,8 +96,6 @@ public:
 
   dw_offset_t GetOffset() const;
 
-  dw_offset_t GetCompileUnitRelativeOffset() const;
-
   //----------------------------------------------------------------------
   // Get the LLDB user ID for this DIE. This is often just the DIE offset,
   // but it might have a SymbolFileDWARF::GetID() in the high 32 bits if
@@ -129,9 +125,6 @@ public:
   uint64_t GetAttributeValueAsUnsigned(const dw_attr_t attr,
                                        uint64_t fail_value) const;
 
-  int64_t GetAttributeValueAsSigned(const dw_attr_t attr,
-                                    int64_t fail_value) const;
-
   uint64_t GetAttributeValueAsReference(const dw_attr_t attr,
                                         uint64_t fail_value) const;
 
@@ -139,12 +132,6 @@ public:
                                       uint64_t fail_value) const;
 
   size_t GetAttributes(DWARFAttributes &attributes, uint32_t depth = 0) const;
-
-  //----------------------------------------------------------------------
-  // Pretty printing
-  //----------------------------------------------------------------------
-
-  void Dump(lldb_private::Stream *s, const uint32_t recurse_depth) const;
 
 protected:
   DWARFUnit *m_cu;

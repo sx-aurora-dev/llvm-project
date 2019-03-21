@@ -1,9 +1,8 @@
 //===-- ExecutionContext.h --------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,7 +41,7 @@ namespace lldb_private {
 //===----------------------------------------------------------------------===//
 
 //----------------------------------------------------------------------
-/// @class ExecutionContextRef ExecutionContext.h
+/// \class ExecutionContextRef ExecutionContext.h
 /// "lldb/Target/ExecutionContext.h"
 /// A class that holds a weak reference to an execution context.
 ///
@@ -172,7 +171,7 @@ public:
   /// a weak reference to the target's process, use the
   /// ExecutionContextRef::SetContext() functions.
   ///
-  /// @see ExecutionContextRef::SetContext(const lldb::TargetSP &, bool)
+  /// \see ExecutionContextRef::SetContext(const lldb::TargetSP &, bool)
   //------------------------------------------------------------------
   void SetTargetSP(const lldb::TargetSP &target_sp);
 
@@ -189,7 +188,7 @@ public:
   /// a weak reference to the target, use the
   /// ExecutionContextRef::SetContext() functions.
   ///
-  /// @see ExecutionContextRef::SetContext(const lldb::ProcessSP &)
+  /// \see ExecutionContextRef::SetContext(const lldb::ProcessSP &)
   //------------------------------------------------------------------
   void SetProcessSP(const lldb::ProcessSP &process_sp);
 
@@ -206,7 +205,7 @@ public:
   /// a weak reference to the thread's process and target, use the
   /// ExecutionContextRef::SetContext() functions.
   ///
-  /// @see ExecutionContextRef::SetContext(const lldb::ThreadSP &)
+  /// \see ExecutionContextRef::SetContext(const lldb::ThreadSP &)
   //------------------------------------------------------------------
   void SetThreadSP(const lldb::ThreadSP &thread_sp);
 
@@ -223,7 +222,7 @@ public:
   /// a weak reference to the frame's thread, process and target, use the
   /// ExecutionContextRef::SetContext() functions.
   ///
-  /// @see ExecutionContextRef::SetContext(const lldb::StackFrameSP &)
+  /// \see ExecutionContextRef::SetContext(const lldb::StackFrameSP &)
   //------------------------------------------------------------------
   void SetFrameSP(const lldb::StackFrameSP &frame_sp);
 
@@ -239,7 +238,7 @@ public:
   /// Get accessor that creates a strong reference from the weak target
   /// reference contained in this object.
   ///
-  /// @returns
+  /// \returns
   ///     A shared pointer to a target that is not guaranteed to be valid.
   //------------------------------------------------------------------
   lldb::TargetSP GetTargetSP() const;
@@ -248,7 +247,7 @@ public:
   /// Get accessor that creates a strong reference from the weak process
   /// reference contained in this object.
   ///
-  /// @returns
+  /// \returns
   ///     A shared pointer to a process that is not guaranteed to be valid.
   //------------------------------------------------------------------
   lldb::ProcessSP GetProcessSP() const;
@@ -257,7 +256,7 @@ public:
   /// Get accessor that creates a strong reference from the weak thread
   /// reference contained in this object.
   ///
-  /// @returns
+  /// \returns
   ///     A shared pointer to a thread that is not guaranteed to be valid.
   //------------------------------------------------------------------
   lldb::ThreadSP GetThreadSP() const;
@@ -266,7 +265,7 @@ public:
   /// Get accessor that creates a strong reference from the weak frame
   /// reference contained in this object.
   ///
-  /// @returns
+  /// \returns
   ///     A shared pointer to a frame that is not guaranteed to be valid.
   //------------------------------------------------------------------
   lldb::StackFrameSP GetFrameSP() const;
@@ -276,7 +275,7 @@ public:
   ///
   /// Create strong references to any execution context objects that are still
   /// valid. Any of the returned shared pointers in the ExecutionContext
-  /// objects is not guaranteed to be valid. @returns
+  /// objects is not guaranteed to be valid. \returns
   ///     An execution context object that has strong references to
   ///     any valid weak references in this object.
   //------------------------------------------------------------------
@@ -317,7 +316,7 @@ protected:
 };
 
 //----------------------------------------------------------------------
-/// @class ExecutionContext ExecutionContext.h
+/// \class ExecutionContext ExecutionContext.h
 /// "lldb/Target/ExecutionContext.h"
 /// A class that contains an execution context.
 ///
@@ -390,13 +389,13 @@ public:
   ///
   /// Initialize with process \a p, thread \a t, and frame index \a f.
   ///
-  /// @param[in] process
+  /// \param[in] process
   ///     The process for this execution context.
   ///
-  /// @param[in] thread
+  /// \param[in] thread
   ///     The thread for this execution context.
   ///
-  /// @param[in] frame
+  /// \param[in] frame
   ///     The frame index for this execution context.
   //------------------------------------------------------------------
   ExecutionContext(Process *process, Thread *thread = nullptr,
@@ -434,7 +433,7 @@ public:
   /// validate this pointer so that this accessor can freely be used without
   /// having to check for nullptr each time.
   ///
-  /// @see ExecutionContext::HasTargetScope() const @see
+  /// \see ExecutionContext::HasTargetScope() const @see
   /// ExecutionContext::HasProcessScope() const @see
   /// ExecutionContext::HasThreadScope() const @see
   /// ExecutionContext::HasFrameScope() const
@@ -449,7 +448,7 @@ public:
   /// pointer so that this accessor can freely be used without having to check
   /// for nullptr each time.
   ///
-  /// @see ExecutionContext::HasProcessScope() const @see
+  /// \see ExecutionContext::HasProcessScope() const @see
   /// ExecutionContext::HasThreadScope() const @see
   /// ExecutionContext::HasFrameScope() const
   //------------------------------------------------------------------
@@ -463,7 +462,7 @@ public:
   /// accessor can freely be used without having to check for nullptr each
   /// time.
   ///
-  /// @see ExecutionContext::HasThreadScope() const @see
+  /// \see ExecutionContext::HasThreadScope() const @see
   /// ExecutionContext::HasFrameScope() const
   //------------------------------------------------------------------
   Thread *GetThreadPtr() const { return m_thread_sp.get(); }
@@ -475,7 +474,7 @@ public:
   /// to pre-validate this pointer so that this accessor can freely be used
   /// without having to check for nullptr each time.
   ///
-  /// @see ExecutionContext::HasFrameScope() const
+  /// \see ExecutionContext::HasFrameScope() const
   //------------------------------------------------------------------
   StackFrame *GetFramePtr() const { return m_frame_sp.get(); }
 
@@ -486,7 +485,7 @@ public:
   /// HasThreadScope(), or HasFrameScope() prior to calling this function to
   /// ensure that this ExecutionContext object contains a valid target.
   ///
-  /// @see ExecutionContext::HasTargetScope() const @see
+  /// \see ExecutionContext::HasTargetScope() const @see
   /// ExecutionContext::HasProcessScope() const @see
   /// ExecutionContext::HasThreadScope() const @see
   /// ExecutionContext::HasFrameScope() const
@@ -500,7 +499,7 @@ public:
   /// HasFrameScope() prior to calling this  function to ensure that this
   /// ExecutionContext object contains a valid target.
   ///
-  /// @see ExecutionContext::HasProcessScope() const @see
+  /// \see ExecutionContext::HasProcessScope() const @see
   /// ExecutionContext::HasThreadScope() const @see
   /// ExecutionContext::HasFrameScope() const
   //------------------------------------------------------------------
@@ -513,7 +512,7 @@ public:
   /// calling this  function to ensure that  this ExecutionContext object
   /// contains a valid target.
   ///
-  /// @see ExecutionContext::HasThreadScope() const @see
+  /// \see ExecutionContext::HasThreadScope() const @see
   /// ExecutionContext::HasFrameScope() const
   //------------------------------------------------------------------
   Thread &GetThreadRef() const;
@@ -524,7 +523,7 @@ public:
   /// Clients should call HasFrameScope() prior to calling this function to
   /// ensure that  this ExecutionContext object contains a valid target.
   ///
-  /// @see ExecutionContext::HasFrameScope() const
+  /// \see ExecutionContext::HasFrameScope() const
   //------------------------------------------------------------------
   StackFrame &GetFrameRef() const;
 

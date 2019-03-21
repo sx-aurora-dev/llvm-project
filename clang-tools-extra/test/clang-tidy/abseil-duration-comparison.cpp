@@ -1,62 +1,6 @@
-// RUN: %check_clang_tidy %s abseil-duration-comparison %t
+// RUN: %check_clang_tidy %s abseil-duration-comparison %t -- -- -I%S/Inputs
 
-// Mimic the implementation of absl::Duration
-namespace absl {
-
-class Duration {};
-class Time{};
-
-Duration Nanoseconds(long long);
-Duration Microseconds(long long);
-Duration Milliseconds(long long);
-Duration Seconds(long long);
-Duration Minutes(long long);
-Duration Hours(long long);
-
-#define GENERATE_DURATION_FACTORY_OVERLOADS(NAME) \
-  Duration NAME(float n);                         \
-  Duration NAME(double n);                        \
-  template <typename T>                           \
-  Duration NAME(T n);
-
-GENERATE_DURATION_FACTORY_OVERLOADS(Nanoseconds);
-GENERATE_DURATION_FACTORY_OVERLOADS(Microseconds);
-GENERATE_DURATION_FACTORY_OVERLOADS(Milliseconds);
-GENERATE_DURATION_FACTORY_OVERLOADS(Seconds);
-GENERATE_DURATION_FACTORY_OVERLOADS(Minutes);
-GENERATE_DURATION_FACTORY_OVERLOADS(Hours);
-#undef GENERATE_DURATION_FACTORY_OVERLOADS
-
-using int64_t = long long int;
-
-double ToDoubleHours(Duration d);
-double ToDoubleMinutes(Duration d);
-double ToDoubleSeconds(Duration d);
-double ToDoubleMilliseconds(Duration d);
-double ToDoubleMicroseconds(Duration d);
-double ToDoubleNanoseconds(Duration d);
-int64_t ToInt64Hours(Duration d);
-int64_t ToInt64Minutes(Duration d);
-int64_t ToInt64Seconds(Duration d);
-int64_t ToInt64Milliseconds(Duration d);
-int64_t ToInt64Microseconds(Duration d);
-int64_t ToInt64Nanoseconds(Duration d);
-
-// Relational Operators
-constexpr bool operator<(Duration lhs, Duration rhs);
-constexpr bool operator>(Duration lhs, Duration rhs);
-constexpr bool operator>=(Duration lhs, Duration rhs);
-constexpr bool operator<=(Duration lhs, Duration rhs);
-constexpr bool operator==(Duration lhs, Duration rhs);
-constexpr bool operator!=(Duration lhs, Duration rhs);
-
-// Additive Operators
-inline Time operator+(Time lhs, Duration rhs);
-inline Time operator+(Duration lhs, Time rhs);
-inline Time operator-(Time lhs, Duration rhs);
-inline Duration operator-(Time lhs, Time rhs);
-
-}  // namespace absl
+#include "absl/time/time.h"
 
 void f() {
   double x;
@@ -182,6 +126,33 @@ void f() {
   b = (y + 5) * 10 > absl::ToDoubleMilliseconds(d1);
   // CHECK-MESSAGES: [[@LINE-1]]:7: warning: perform comparison in the duration domain [abseil-duration-comparison]
   // CHECK-FIXES: absl::Milliseconds((y + 5) * 10) > d1;
+
+  // We should still transform the expression inside this macro invocation
+#define VALUE_IF(v, e) v ? (e) : 0
+  int a = VALUE_IF(1, 5 > absl::ToDoubleSeconds(d1));
+  // CHECK-MESSAGES: [[@LINE-1]]:23: warning: perform comparison in the duration domain [abseil-duration-comparison]
+  // CHECK-FIXES: VALUE_IF(1, absl::Seconds(5) > d1);
+#undef VALUE_IF
+
+#define VALUE_IF_2(e) (e)
+#define VALUE_IF(v, e) v ? VALUE_IF_2(e) : VALUE_IF_2(0)
+  int a2 = VALUE_IF(1, 5 > absl::ToDoubleSeconds(d1));
+  // CHECK-MESSAGES: [[@LINE-1]]:24: warning: perform comparison in the duration domain [abseil-duration-comparison]
+  // CHECK-FIXES: VALUE_IF(1, absl::Seconds(5) > d1);
+#undef VALUE_IF
+#undef VALUE_IF_2
+
+#define VALUE_IF_2(e) (e)
+#define VALUE_IF(v, e, type) (v ? VALUE_IF_2(absl::To##type##Seconds(e)) : 0)
+  int a3 = VALUE_IF(1, d1, Double);
+#undef VALUE_IF
+#undef VALUE_IF_2
+
+#define VALUE_IF_2(e) (e)
+#define VALUE_IF(v, e, type) (v ? (5 > VALUE_IF_2(absl::To##type##Seconds(e))) : 0)
+  int a4 = VALUE_IF(1, d1, Double);
+#undef VALUE_IF
+#undef VALUE_IF_2
 
   // These should not match
   b = 6 < 4;

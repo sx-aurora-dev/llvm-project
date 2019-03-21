@@ -1,9 +1,8 @@
 //===-- MIUtilString.cpp ----------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,7 +37,8 @@ CMIUtilString::CMIUtilString() : std::string() {}
 // Return:  None.
 // Throws:  None.
 //--
-CMIUtilString::CMIUtilString(const char *vpData) : std::string(vpData) {}
+CMIUtilString::CMIUtilString(const char *vpData)
+  : std::string(WithNullAsEmpty(vpData)) {}
 
 //++
 //------------------------------------------------------------------------------------
@@ -59,7 +59,7 @@ CMIUtilString::CMIUtilString(const std::string &vrStr) : std::string(vrStr) {}
 // Throws:  None.
 //--
 CMIUtilString &CMIUtilString::operator=(const char *vpRhs) {
-  assign(vpRhs);
+  assign(WithNullAsEmpty(vpRhs));
   return *this;
 }
 
@@ -104,12 +104,10 @@ CMIUtilString CMIUtilString::FormatPriv(const CMIUtilString &vrFormat,
   MIint n = vrFormat.size();
 
   // IOR: mysterious crash in this function on some windows builds not able to
-  // duplicate
-  // but found article which may be related. Crash occurs in vsnprintf() or
-  // va_copy()
+  // duplicate but found article which may be related. Crash occurs in
+  // vsnprintf() or va_copy().
   // Duplicate vArgs va_list argument pointer to ensure that it can be safely
-  // used in
-  // a new frame
+  // used in a new frame.
   // http://julipedia.meroh.net/2011/09/using-vacopy-to-safely-pass-ap.html
   va_list argsDup;
   va_copy(argsDup, vArgs);
@@ -128,8 +126,8 @@ CMIUtilString CMIUtilString::FormatPriv(const CMIUtilString &vrFormat,
     pFormatted.reset(new char[n + 1]); // +1 for safety margin
     ::strncpy(&pFormatted[0], vrFormat.c_str(), n);
 
-    //  We need to restore the variable argument list pointer to the start again
-    //  before running vsnprintf() more then once
+    // We need to restore the variable argument list pointer to the start again
+    // before running vsnprintf() more then once
     va_copy(argsDup, argsCpy);
 
     nFinal = ::vsnprintf(&pFormatted[0], n, vrFormat.c_str(), argsDup);
@@ -161,7 +159,8 @@ CMIUtilString CMIUtilString::FormatPriv(const CMIUtilString &vrFormat,
 CMIUtilString CMIUtilString::Format(const char *vFormating, ...) {
   va_list args;
   va_start(args, vFormating);
-  CMIUtilString strResult = CMIUtilString::FormatPriv(vFormating, args);
+  CMIUtilString strResult =
+      CMIUtilString::FormatPriv(WithNullAsEmpty(vFormating), args);
   va_end(args);
 
   return strResult;
@@ -378,10 +377,7 @@ bool CMIUtilString::IsNumber() const {
     return false;
 
   const size_t nPos = find_first_not_of("-.0123456789");
-  if (nPos != std::string::npos)
-    return false;
-
-  return true;
+  return nPos == std::string::npos;
 }
 
 //++
@@ -399,10 +395,7 @@ bool CMIUtilString::IsHexadecimalNumber() const {
 
   // Skip '0x..' prefix
   const size_t nPos = find_first_not_of("01234567890ABCDEFabcedf", 2);
-  if (nPos != std::string::npos)
-    return false;
-
-  return true;
+  return nPos == std::string::npos;
 }
 
 //++
@@ -419,10 +412,7 @@ bool CMIUtilString::ExtractNumber(MIint64 &vwrNumber) const {
   vwrNumber = 0;
 
   if (!IsNumber()) {
-    if (ExtractNumberFromHexadecimal(vwrNumber))
-      return true;
-
-    return false;
+    return ExtractNumberFromHexadecimal(vwrNumber);
   }
 
   std::stringstream ss(const_cast<CMIUtilString &>(*this));
@@ -467,7 +457,7 @@ bool CMIUtilString::ExtractNumberFromHexadecimal(MIint64 &vwrNumber) const {
 // Throws:  None.
 //--
 bool CMIUtilString::IsAllValidAlphaAndNumeric(const char *vpText) {
-  const size_t len = ::strlen(vpText);
+  const size_t len = ::strlen(WithNullAsEmpty(vpText));
   if (len == 0)
     return false;
 
@@ -639,10 +629,7 @@ bool CMIUtilString::IsQuoted() const {
     return false;
 
   const size_t nLen = length();
-  if ((nLen > 0) && (at(nLen - 1) != cQuote))
-    return false;
-
-  return true;
+  return !((nLen > 0) && (at(nLen - 1) != cQuote));
 }
 
 //++

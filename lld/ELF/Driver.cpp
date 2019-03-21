@@ -1,9 +1,8 @@
 //===- Driver.cpp ---------------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,7 +24,6 @@
 
 #include "Driver.h"
 #include "Config.h"
-#include "Filesystem.h"
 #include "ICF.h"
 #include "InputFiles.h"
 #include "InputSection.h"
@@ -41,6 +39,7 @@
 #include "lld/Common/Args.h"
 #include "lld/Common/Driver.h"
 #include "lld/Common/ErrorHandler.h"
+#include "lld/Common/Filesystem.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Strings.h"
 #include "lld/Common/TargetOptionsCommandFlags.h"
@@ -130,7 +129,7 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef Emul) {
           .Cases("elf32btsmip", "elf32btsmipn32", {ELF32BEKind, EM_MIPS})
           .Cases("elf32ltsmip", "elf32ltsmipn32", {ELF32LEKind, EM_MIPS})
           .Case("elf32lriscv", {ELF32LEKind, EM_RISCV})
-          .Case("elf32ppc", {ELF32BEKind, EM_PPC})
+          .Cases("elf32ppc", "elf32ppclinux", {ELF32BEKind, EM_PPC})
           .Case("elf64btsmip", {ELF64BEKind, EM_MIPS})
           .Case("elf64ltsmip", {ELF64LEKind, EM_MIPS})
           .Case("elf64lriscv", {ELF64LEKind, EM_RISCV})
@@ -214,7 +213,15 @@ void LinkerDriver::addFile(StringRef Path, bool WithLOption) {
     // understand the LLVM bitcode file. It is a pretty common error, so
     // we'll handle it as if it had a symbol table.
     if (!File->isEmpty() && !File->hasSymbolTable()) {
-      for (const auto &P : getArchiveMembers(MBRef))
+      // Check if all members are bitcode files. If not, ignore, which is the
+      // default action without the LTO hack described above.
+      for (const std::pair<MemoryBufferRef, uint64_t> &P :
+           getArchiveMembers(MBRef))
+        if (identify_magic(P.first.getBuffer()) != file_magic::bitcode)
+          return;
+
+      for (const std::pair<MemoryBufferRef, uint64_t> &P :
+           getArchiveMembers(MBRef))
         Files.push_back(make<LazyObjFile>(P.first, Path, P.second));
       return;
     }
@@ -224,7 +231,7 @@ void LinkerDriver::addFile(StringRef Path, bool WithLOption) {
     return;
   }
   case file_magic::elf_shared_object:
-    if (Config->Relocatable) {
+    if (Config->Static || Config->Relocatable) {
       error("attempted static link of dynamic object " + Path);
       return;
     }
@@ -371,6 +378,7 @@ void LinkerDriver::main(ArrayRef<const char *> ArgsArr) {
 
   // Interpret this flag early because error() depends on them.
   errorHandler().ErrorLimit = args::getInteger(Args, OPT_error_limit, 20);
+  checkZOptions(Args);
 
   // Handle -help
   if (Args.hasArg(OPT_help)) {
@@ -402,18 +410,15 @@ void LinkerDriver::main(ArrayRef<const char *> ArgsArr) {
     Expected<std::unique_ptr<TarWriter>> ErrOrWriter =
         TarWriter::create(Path, path::stem(Path));
     if (ErrOrWriter) {
-      Tar = ErrOrWriter->get();
+      Tar = std::move(*ErrOrWriter);
       Tar->append("response.txt", createResponseFile(Args));
       Tar->append("version.txt", getLLDVersion() + "\n");
-      make<std::unique_ptr<TarWriter>>(std::move(*ErrOrWriter));
     } else {
-      error(Twine("--reproduce: failed to open ") + Path + ": " +
-            toString(ErrOrWriter.takeError()));
+      error("--reproduce: " + toString(ErrOrWriter.takeError()));
     }
   }
 
   readConfigs(Args);
-  checkZOptions(Args);
 
   // The behavior of -v or --version is a bit strange, but this is
   // needed for compatibility with GNU linkers.
@@ -759,6 +764,9 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
       Args.hasFlag(OPT_allow_multiple_definition,
                    OPT_no_allow_multiple_definition, false) ||
       hasZOption(Args, "muldefs");
+  Config->AllowShlibUndefined =
+      Args.hasFlag(OPT_allow_shlib_undefined, OPT_no_allow_shlib_undefined,
+                   Args.hasArg(OPT_shared));
   Config->AuxiliaryList = args::getStrings(Args, OPT_auxiliary);
   Config->Bsymbolic = Args.hasArg(OPT_Bsymbolic);
   Config->BsymbolicFunctions = Args.hasArg(OPT_Bsymbolic_functions);
@@ -776,6 +784,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->DynamicLinker = getDynamicLinker(Args);
   Config->EhFrameHdr =
       Args.hasFlag(OPT_eh_frame_hdr, OPT_no_eh_frame_hdr, false);
+  Config->EmitLLVM = Args.hasArg(OPT_plugin_opt_emit_llvm, false);
   Config->EmitRelocs = Args.hasArg(OPT_emit_relocs);
   Config->CallGraphProfileSort = Args.hasFlag(
       OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
@@ -799,6 +808,8 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
       Args.hasArg(OPT_ignore_function_address_equality);
   Config->Init = Args.getLastArgValue(OPT_init, "_init");
   Config->LTOAAPipeline = Args.getLastArgValue(OPT_lto_aa_pipeline);
+  Config->LTOCSProfileGenerate = Args.hasArg(OPT_lto_cs_profile_generate);
+  Config->LTOCSProfileFile = Args.getLastArgValue(OPT_lto_cs_profile_file);
   Config->LTODebugPassManager = Args.hasArg(OPT_lto_debug_pass_manager);
   Config->LTONewPassManager = Args.hasArg(OPT_lto_new_pass_manager);
   Config->LTONewPmPasses = Args.getLastArgValue(OPT_lto_newpm_passes);
@@ -815,6 +826,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->OFormatBinary = isOutputFormatBinary(Args);
   Config->Omagic = Args.hasFlag(OPT_omagic, OPT_no_omagic, false);
   Config->OptRemarksFilename = Args.getLastArgValue(OPT_opt_remarks_filename);
+  Config->OptRemarksPasses = Args.getLastArgValue(OPT_opt_remarks_passes);
   Config->OptRemarksWithHotness = Args.hasArg(OPT_opt_remarks_with_hotness);
   Config->Optimize = args::getInteger(Args, OPT_O, 1);
   Config->OrphanHandling = getOrphanHandling(Args);
@@ -1007,6 +1019,7 @@ static void setConfigs(opt::InputArgList &Args) {
   Config->Endianness = Config->IsLE ? endianness::little : endianness::big;
   Config->IsMips64EL = (K == ELF64LEKind && M == EM_MIPS);
   Config->Pic = Config->Pie || Config->Shared;
+  Config->PicThunk = Args.hasArg(OPT_pic_veneer, Config->Pic);
   Config->Wordsize = Config->Is64 ? 8 : 4;
 
   // ELF defines two different ways to store relocation addends as shown below:
@@ -1222,7 +1235,6 @@ static DenseSet<StringRef> getExcludeLibs(opt::InputArgList &Args) {
 // A special library name "ALL" means all archive files.
 //
 // This is not a popular option, but some programs such as bionic libc use it.
-template <class ELFT>
 static void excludeLibs(opt::InputArgList &Args) {
   DenseSet<StringRef> Libs = getExcludeLibs(Args);
   bool All = Libs.count("ALL");
@@ -1411,7 +1423,7 @@ static std::vector<WrappedSymbol> addWrappedSymbols(opt::InputArgList &Args) {
 // When this function is executed, only InputFiles and symbol table
 // contain pointers to symbol objects. We visit them to replace pointers,
 // so that wrapped symbols are swapped as instructed by the command line.
-template <class ELFT> static void wrapSymbols(ArrayRef<WrappedSymbol> Wrapped) {
+static void wrapSymbols(ArrayRef<WrappedSymbol> Wrapped) {
   DenseMap<Symbol *, Symbol *> Map;
   for (const WrappedSymbol &W : Wrapped) {
     Map[W.Sym] = W.Wrap;
@@ -1441,8 +1453,6 @@ static const char *LibcallRoutineNames[] = {
 // all linker scripts have already been parsed.
 template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   Target = getTarget();
-  InX<ELFT>::VerSym = nullptr;
-  InX<ELFT>::VerNeed = nullptr;
 
   Config->MaxPageSize = getMaxPageSize(Args);
   Config->ImageBase = getImageBase(Args);
@@ -1544,12 +1554,15 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
 
   // Handle the -exclude-libs option.
   if (Args.hasArg(OPT_exclude_libs))
-    excludeLibs<ELFT>(Args);
+    excludeLibs(Args);
 
   // Create ElfHeader early. We need a dummy section in
   // addReservedSymbols to mark the created symbols as not absolute.
   Out::ElfHeader = make<OutputSection>("", 0, SHF_ALLOC);
   Out::ElfHeader->Size = sizeof(typename ELFT::Ehdr);
+
+  // Create wrapped symbols for -wrap option.
+  std::vector<WrappedSymbol> Wrapped = addWrappedSymbols<ELFT>(Args);
 
   // We need to create some reserved symbols such as _end. Create them.
   if (!Config->Relocatable)
@@ -1562,9 +1575,6 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   // name "foo@ver1") rather do harm, so we don't call this if -r is given.
   if (!Config->Relocatable)
     Symtab->scanVersionScript();
-
-  // Create wrapped symbols for -wrap option.
-  std::vector<WrappedSymbol> Wrapped = addWrappedSymbols<ELFT>(Args);
 
   // Do link-time optimization if given files are LLVM bitcode files.
   // This compiles bitcode files into real object files.
@@ -1581,9 +1591,15 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   if (Config->ThinLTOIndexOnly)
     return;
 
+  // Likewise, --plugin-opt=emit-llvm is an option to make LTO create
+  // an output file in bitcode and exit, so that you can just get a
+  // combined bitcode file.
+  if (Config->EmitLLVM)
+    return;
+
   // Apply symbol renames for -wrap.
   if (!Wrapped.empty())
-    wrapSymbols<ELFT>(Wrapped);
+    wrapSymbols(Wrapped);
 
   // Now that we have a complete list of input files.
   // Beyond this point, no new files are added.

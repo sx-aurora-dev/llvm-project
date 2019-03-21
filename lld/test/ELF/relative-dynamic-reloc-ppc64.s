@@ -14,10 +14,10 @@
 // CHECK-NEXT:   Section ({{.*}}) .rela.dyn {
 // CHECK-NEXT:     0x[[FOO_ADDR:.*]] R_PPC64_RELATIVE - 0x[[FOO_ADDR]]
 // CHECK-NEXT:     0x[[BAR_ADDR:.*]] R_PPC64_RELATIVE - 0x[[BAR_ADDR]]
-// CHECK-NEXT:     0x10010 R_PPC64_RELATIVE - 0x10009
+// CHECK-NEXT:     0x20010 R_PPC64_RELATIVE - 0x20009
 // CHECK-NEXT:     0x{{.*}} R_PPC64_RELATIVE - 0x[[ZED_ADDR:.*]]
 // CHECK-NEXT:     0x{{.*}} R_PPC64_RELATIVE - 0x[[FOO_ADDR]]
-// CHECK-NEXT:     0x10028 R_PPC64_ADDR64 external 0x0
+// CHECK-NEXT:     0x20028 R_PPC64_ADDR64 external 0x0
 // CHECK-NEXT:   }
 // CHECK-NEXT: ]
 
@@ -32,7 +32,7 @@
 
 // CHECK:      DynamicSymbols [
 // CHECK-NEXT:   Symbol {
-// CHECK-NEXT:     Name: @
+// CHECK-NEXT:     Name:
 // CHECK-NEXT:     Value: 0x0
 // CHECK-NEXT:     Size: 0
 // CHECK-NEXT:     Binding: Local
@@ -41,7 +41,7 @@
 // CHECK-NEXT:     Section: Undefined
 // CHECK-NEXT:   }
 // CHECK-NEXT:   Symbol {
-// CHECK-NEXT:     Name: external@
+// CHECK-NEXT:     Name: external
 // CHECK-NEXT:     Value: 0x0
 // CHECK-NEXT:     Size: 0
 // CHECK-NEXT:     Binding: Global

@@ -1,9 +1,8 @@
 //===-- Decoder.h -----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +30,7 @@
 
 namespace ptdecoder_private {
 //----------------------------------------------------------------------
-/// @class Instruction
+/// \class Instruction
 /// Represents an assembly instruction containing raw
 ///     instruction bytes, instruction address along with information
 ///     regarding execution flow context and Intel(R) Processor Trace
@@ -81,7 +80,7 @@ private:
 };
 
 //---------------------------------------------------------------------------
-/// @class InstructionList
+/// \class InstructionList
 /// Represents a list of assembly instructions. Each instruction is of
 ///     type Instruction.
 //---------------------------------------------------------------------------
@@ -111,7 +110,7 @@ private:
 };
 
 //----------------------------------------------------------------------
-/// @class TraceOptions
+/// \class TraceOptions
 /// Provides Intel(R) Processor Trace specific configuration options and
 ///     other information obtained by decoding and post-processing the trace
 ///     data. Currently, this information comprises of the total number of
@@ -127,7 +126,7 @@ public:
   /// Get total number of assembly instructions obtained after decoding the
   /// complete Intel(R) Processor Trace data obtained from LLDB.
   ///
-  /// @return
+  /// \return
   ///     Total number of instructions.
   //------------------------------------------------------------------
   uint32_t getInstructionLogSize() const { return m_insn_log_size; }
@@ -135,7 +134,7 @@ public:
   //------------------------------------------------------------------
   /// Set total number of assembly instructions.
   ///
-  /// @param[in] size
+  /// \param[in] size
   ///     Value to be set.
   //------------------------------------------------------------------
   void setInstructionLogSize(uint32_t size) { m_insn_log_size = size; }
@@ -145,7 +144,7 @@ private:
 };
 
 //----------------------------------------------------------------------
-/// @class Decoder
+/// \class Decoder
 /// This class makes use of Intel(R) Processor Trace hardware feature
 ///     (implememted inside LLDB) to gather trace data for an inferior (being
 ///     debugged with LLDB) to provide meaningful information out of it.

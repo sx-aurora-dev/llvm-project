@@ -1,9 +1,8 @@
 //===-- SBValue.h -----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,6 +27,8 @@ public:
   lldb::SBValue &operator=(const lldb::SBValue &rhs);
 
   ~SBValue();
+
+  explicit operator bool() const;
 
   bool IsValid();
 
@@ -111,9 +112,7 @@ public:
 
   lldb::SBTypeFilter GetTypeFilter();
 
-#ifndef LLDB_DISABLE_PYTHON
   lldb::SBTypeSynthetic GetTypeSynthetic();
-#endif
 
   lldb::SBValue GetChildAtIndex(uint32_t idx);
 
@@ -176,20 +175,20 @@ public:
   /// that aren't in the array bounds using positive or negative
   /// indexes.
   ///
-  /// @param[in] idx
+  /// \param[in] idx
   ///     The index of the child value to get
   ///
-  /// @param[in] use_dynamic
+  /// \param[in] use_dynamic
   ///     An enumeration that specifies whether to get dynamic values,
   ///     and also if the target can be run to figure out the dynamic
   ///     type of the child value.
   ///
-  /// @param[in] can_create_synthetic
+  /// \param[in] can_create_synthetic
   ///     If \b true, then allow child values to be created by index
   ///     for pointers and arrays for indexes that normally wouldn't
   ///     be allowed.
   ///
-  /// @return
+  /// \return
   ///     A new SBValue object that represents the child member value.
   //------------------------------------------------------------------
   lldb::SBValue GetChildAtIndex(uint32_t idx,
@@ -225,17 +224,17 @@ public:
   /// data type is a T* or T[], and extract item_count elements
   /// of type T from it, copying their contents in an SBData.
   ///
-  /// @param[in] item_idx
+  /// \param[in] item_idx
   ///     The index of the first item to retrieve. For an array
   ///     this is equivalent to array[item_idx], for a pointer
   ///     to *(pointer + item_idx). In either case, the measurement
   ///     unit for item_idx is the sizeof(T) rather than the byte
   ///
-  /// @param[in] item_count
+  /// \param[in] item_count
   ///     How many items should be copied into the output. By default
   ///     only one item is copied, but more can be asked for.
   ///
-  /// @return
+  /// \return
   ///     An SBData with the contents of the copied items, on success.
   ///     An empty SBData otherwise.
   //------------------------------------------------------------------
@@ -247,7 +246,7 @@ public:
   /// This method will read the contents of this object in memory
   /// and copy them into an SBData for future use.
   ///
-  /// @return
+  /// \return
   ///     An SBData with the contents of this SBValue, on success.
   ///     An empty SBData otherwise.
   //------------------------------------------------------------------
@@ -269,7 +268,7 @@ public:
   /// pointers, references, arrays and more. Again, it does so without
   /// doing any expensive type completion.
   ///
-  /// @return
+  /// \return
   ///     Returns \b true if the SBValue might have children, or \b
   ///     false otherwise.
   //------------------------------------------------------------------
@@ -307,6 +306,13 @@ public:
   bool GetExpressionPath(lldb::SBStream &description,
                          bool qualify_cxx_base_classes);
 
+  lldb::SBValue EvaluateExpression(const char *expr) const;
+  lldb::SBValue EvaluateExpression(const char *expr,
+                                   const SBExpressionOptions &options) const;
+  lldb::SBValue EvaluateExpression(const char *expr,
+                                   const SBExpressionOptions &options,
+                                   const char *name) const;
+
   SBValue(const lldb::ValueObjectSP &value_sp);
 
   //------------------------------------------------------------------
@@ -314,22 +320,22 @@ public:
   ///
   /// Sets a watchpoint on the value.
   ///
-  /// @param[in] resolve_location
+  /// \param[in] resolve_location
   ///     Resolve the location of this value once and watch its address.
   ///     This value must currently be set to \b true as watching all
   ///     locations of a variable or a variable path is not yet supported,
   ///     though we plan to support it in the future.
   ///
-  /// @param[in] read
+  /// \param[in] read
   ///     Stop when this value is accessed.
   ///
-  /// @param[in] write
+  /// \param[in] write
   ///     Stop when this value is modified
   ///
-  /// @param[out] error
+  /// \param[out] error
   ///     An error object. Contains the reason if there is some failure.
   ///
-  /// @return
+  /// \return
   ///     An SBWatchpoint object. This object might not be valid upon
   ///     return due to a value not being contained in memory, too
   ///     large, or watchpoint resources are not available or all in
@@ -346,22 +352,22 @@ public:
   ///
   /// Sets a watchpoint on the value.
   ///
-  /// @param[in] resolve_location
+  /// \param[in] resolve_location
   ///     Resolve the location of this value once and watch its address.
   ///     This value must currently be set to \b true as watching all
   ///     locations of a variable or a variable path is not yet supported,
   ///     though we plan to support it in the future.
   ///
-  /// @param[in] read
+  /// \param[in] read
   ///     Stop when this value is accessed.
   ///
-  /// @param[in] write
+  /// \param[in] write
   ///     Stop when this value is modified
   ///
-  /// @param[out] error
+  /// \param[out] error
   ///     An error object. Contains the reason if there is some failure.
   ///
-  /// @return
+  /// \return
   ///     An SBWatchpoint object. This object might not be valid upon
   ///     return due to a value not being contained in memory, too
   ///     large, or watchpoint resources are not available or all in
@@ -379,7 +385,7 @@ public:
   /// already
   /// holding the two above-mentioned locks.
   ///
-  /// @return
+  /// \return
   ///     A ValueObjectSP of the best kind (static, dynamic or synthetic) we
   ///     can cons up, in accordance with the SBValue's settings.
   //------------------------------------------------------------------
@@ -407,13 +413,13 @@ protected:
   /// ValueObject.h/cpp or somewhere else convenient.  We haven't needed to so
   /// far.
   ///
-  /// @param[in] value_locker
+  /// \param[in] value_locker
   ///     An object that will hold the Target API, and Process RunLocks, and
   ///     auto-destroy them when it goes out of scope.  Currently this is only
   ///     useful in
   ///     SBValue.cpp.
   ///
-  /// @return
+  /// \return
   ///     A ValueObjectSP of the best kind (static, dynamic or synthetic) we
   ///     can cons up, in accordance with the SBValue's settings.
   //------------------------------------------------------------------

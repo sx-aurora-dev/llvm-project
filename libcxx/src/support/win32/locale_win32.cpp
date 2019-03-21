@@ -1,10 +1,9 @@
 // -*- C++ -*-
 //===-------------------- support/win32/locale_win32.cpp ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -88,10 +87,16 @@ int wctob_l( wint_t c, locale_t loc )
 
 int snprintf_l(char *ret, size_t n, locale_t loc, const char *format, ...)
 {
+#if !defined(_LIBCPP_MSVCRT)
     __libcpp_locale_guard __current(loc);
+#endif
     va_list ap;
     va_start( ap, format );
+#if defined(_LIBCPP_MSVCRT)
+    int result = _vsnprintf_l( ret, n, format, loc, ap );
+#else
     int result = vsnprintf( ret, n, format, ap );
+#endif
     va_end(ap);
     return result;
 }

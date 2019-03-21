@@ -121,6 +121,8 @@
 // RUN: %clang -### -S -fcoverage-mapping -fno-coverage-mapping %s 2>&1 | FileCheck -check-prefix=CHECK-DISABLE-COVERAGE %s
 // RUN: %clang -### -S -fprofile-instr-generate -fcoverage-mapping -fno-coverage-mapping %s 2>&1 | FileCheck -check-prefix=CHECK-DISABLE-COVERAGE %s
 // RUN: %clang -### -S -fprofile-remapping-file foo/bar.txt %s 2>&1 | FileCheck -check-prefix=CHECK-PROFILE-REMAP %s
+// RUN: %clang -### -S -forder-file-instrumentation %s 2>&1 | FileCheck -check-prefix=CHECK-ORDERFILE-INSTR %s
+// RUN: %clang -### -flto -forder-file-instrumentation %s 2>&1 | FileCheck -check-prefix=CHECK-ORDERFILE-INSTR-LTO %s
 // CHECK-PROFILE-GENERATE: "-fprofile-instrument=clang"
 // CHECK-PROFILE-GENERATE-LLVM: "-fprofile-instrument=llvm"
 // CHECK-PROFILE-GENERATE-DIR: "-fprofile-instrument-path=/some/dir{{/|\\\\}}{{.*}}"
@@ -132,6 +134,10 @@
 // CHECK-COVERAGE-AND-GEN: '-fcoverage-mapping' only allowed with '-fprofile-instr-generate'
 // CHECK-DISABLE-COVERAGE-NOT: "-fcoverage-mapping"
 // CHECK-PROFILE-REMAP: "-fprofile-remapping-file=foo/bar.txt"
+// CHECK-ORDERFILE-INSTR: "-forder-file-instrumentation"
+// CHECK-ORDERFILE-INSTR: "-enable-order-file-instrumentation"
+// CHECK-ORDERFILE-INSTR-LTO: "-forder-file-instrumentation"
+// CHECK-ORDERFILE-INSTR-LTO-NOT: "-enable-order-file-instrumentation"
 
 // RUN: %clang -### -S -fprofile-use %s 2>&1 | FileCheck -check-prefix=CHECK-PROFILE-USE %s
 // RUN: %clang -### -S -fprofile-instr-use %s 2>&1 | FileCheck -check-prefix=CHECK-PROFILE-USE %s
@@ -542,3 +548,27 @@
 // RUN: %clang -### -S -fomit-frame-pointer -fno-omit-frame-pointer -pg %s 2>&1 | FileCheck -check-prefix=CHECK-MIX-NO-OMIT-FP-PG %s
 // CHECK-NO-MIX-OMIT-FP-PG: '-fomit-frame-pointer' not allowed with '-pg'
 // CHECK-MIX-NO-OMIT-FP-PG-NOT: '-fomit-frame-pointer' not allowed with '-pg'
+
+// RUN: %clang -### -S -target x86_64-unknown-linux -frecord-gcc-switches %s 2>&1 | FileCheck -check-prefix=CHECK-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -fno-record-gcc-switches %s 2>&1 | FileCheck -check-prefix=CHECK-NO-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -fno-record-gcc-switches -frecord-gcc-switches %s 2>&1 | FileCheck -check-prefix=CHECK-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -frecord-gcc-switches -fno-record-gcc-switches %s 2>&1 | FileCheck -check-prefix=CHECK-NO-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -frecord-command-line %s 2>&1 | FileCheck -check-prefix=CHECK-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -fno-record-command-line %s 2>&1 | FileCheck -check-prefix=CHECK-NO-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -fno-record-command-line -frecord-command-line %s 2>&1 | FileCheck -check-prefix=CHECK-RECORD-GCC-SWITCHES %s
+// RUN: %clang -### -S -target x86_64-unknown-linux -frecord-command-line -fno-record-command-line %s 2>&1 | FileCheck -check-prefix=CHECK-NO-RECORD-GCC-SWITCHES %s
+// Test with a couple examples of non-ELF object file formats
+// RUN: %clang -### -S -target x86_64-unknown-macosx -frecord-command-line %s 2>&1 | FileCheck -check-prefix=CHECK-RECORD-GCC-SWITCHES-ERROR %s
+// RUN: %clang -### -S -target x86_64-unknown-windows -frecord-command-line %s 2>&1 | FileCheck -check-prefix=CHECK-RECORD-GCC-SWITCHES-ERROR %s
+// CHECK-RECORD-GCC-SWITCHES: "-record-command-line"
+// CHECK-NO-RECORD-GCC-SWITCHES-NOT: "-record-command-line"
+// CHECK-RECORD-GCC-SWITCHES-ERROR: error: unsupported option '-frecord-command-line' for target
+
+// RUN: %clang -### -S -ftrivial-auto-var-init=uninitialized %s 2>&1 | FileCheck -check-prefix=CHECK-TRIVIAL-UNINIT %s
+// RUN: %clang -### -S -ftrivial-auto-var-init=pattern %s 2>&1 | FileCheck -check-prefix=CHECK-TRIVIAL-PATTERN %s
+// RUN: %clang -### -S -ftrivial-auto-var-init=zero -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang %s 2>&1 | FileCheck -check-prefix=CHECK-TRIVIAL-ZERO-GOOD %s
+// RUN: %clang -### -S -ftrivial-auto-var-init=zero %s 2>&1 | FileCheck -check-prefix=CHECK-TRIVIAL-ZERO-BAD %s
+// CHECK-TRIVIAL-UNINIT-NOT: hasn't been enabled
+// CHECK-TRIVIAL-PATTERN-NOT: hasn't been enabled
+// CHECK-TRIVIAL-ZERO-GOOD-NOT: hasn't been enabled
+// CHECK-TRIVIAL-ZERO-BAD: hasn't been enabled

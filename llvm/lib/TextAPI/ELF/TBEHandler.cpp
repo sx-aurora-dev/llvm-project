@@ -1,9 +1,8 @@
 //===- TBEHandler.cpp -----------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===-----------------------------------------------------------------------===/
 
@@ -105,6 +104,7 @@ template <> struct MappingTraits<ELFSymbol> {
       IO.mapRequired("Size", Symbol.Size);
     }
     IO.mapOptional("Undefined", Symbol.Undefined, false);
+    IO.mapOptional("Weak", Symbol.Weak, false);
     IO.mapOptional("Warning", Symbol.Warning);
   }
 
@@ -126,30 +126,13 @@ template <> struct CustomMappingTraits<std::set<ELFSymbol>> {
   }
 };
 
-/// YAML traits for generic string vectors (i.e. list of needed libraries).
-template <> struct SequenceTraits<std::vector<std::string>> {
-  static size_t size(IO &IO, std::vector<std::string> &List) {
-    return List.size();
-  }
-
-  static std::string &element(IO &IO, std::vector<std::string> &List,
-                              size_t Index) {
-    if (Index >= List.size())
-      List.resize(Index + 1);
-    return List[Index];
-  }
-
-  // Compacts list of needed libraries into a single line.
-  static const bool flow = true;
-};
-
 /// YAML traits for ELFStub objects.
 template <> struct MappingTraits<ELFStub> {
   static void mapping(IO &IO, ELFStub &Stub) {
     if (!IO.mapTag("!tapi-tbe", true))
       IO.setError("Not a .tbe YAML file.");
     IO.mapRequired("TbeVersion", Stub.TbeVersion);
-    IO.mapRequired("SoName", Stub.SoName);
+    IO.mapOptional("SoName", Stub.SoName);
     IO.mapRequired("Arch", (ELFArchMapper &)Stub.Arch);
     IO.mapOptional("NeededLibs", Stub.NeededLibs);
     IO.mapRequired("Symbols", Stub.Symbols);
@@ -159,16 +142,17 @@ template <> struct MappingTraits<ELFStub> {
 } // end namespace yaml
 } // end namespace llvm
 
-std::unique_ptr<ELFStub> TBEHandler::readFile(StringRef Buf) {
+Expected<std::unique_ptr<ELFStub>> elfabi::readTBEFromBuffer(StringRef Buf) {
   yaml::Input YamlIn(Buf);
   std::unique_ptr<ELFStub> Stub(new ELFStub());
   YamlIn >> *Stub;
-  if (YamlIn.error())
-    return nullptr;
-  return Stub;
+  if (std::error_code Err = YamlIn.error())
+    return createStringError(Err, "YAML failed reading as TBE");
+
+  return std::move(Stub);
 }
 
-Error TBEHandler::writeFile(raw_ostream &OS, const ELFStub &Stub) {
+Error elfabi::writeTBEToOutputStream(raw_ostream &OS, const ELFStub &Stub) {
   yaml::Output YamlOut(OS, NULL, /*WrapColumn =*/0);
 
   YamlOut << const_cast<ELFStub &>(Stub);

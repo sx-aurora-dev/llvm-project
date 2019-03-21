@@ -1,9 +1,8 @@
 //===-- StopInfo.cpp --------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -367,9 +366,8 @@ protected:
                           "continuing: %s.",
                           m_should_stop ? "true" : "false");
             process->GetTarget().GetDebugger().GetAsyncOutputStream()->Printf(
-                "Warning: hit breakpoint while "
-                "running function, skipping commands and conditions to prevent "
-                "recursion.");
+                "Warning: hit breakpoint while running function, skipping "
+                "commands and conditions to prevent recursion.\n");
             return;
           }
 
@@ -543,9 +541,9 @@ protected:
               __FUNCTION__, m_value);
       }
 
-      if ((m_should_stop == false || internal_breakpoint)
-          && thread_sp->CompletedPlanOverridesBreakpoint()) {
-        
+      if ((!m_should_stop || internal_breakpoint) &&
+          thread_sp->CompletedPlanOverridesBreakpoint()) {
+
         // Override should_stop decision when we have completed step plan
         // additionally to the breakpoint
         m_should_stop = true;

@@ -1,9 +1,8 @@
 //== RegionStore.cpp - Field-sensitive store model --------------*- C++ -*--==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -131,10 +130,6 @@ namespace llvm {
     return os;
   }
 
-  template <typename T> struct isPodLike;
-  template <> struct isPodLike<BindingKey> {
-    static const bool value = true;
-  };
 } // end llvm namespace
 
 #ifndef NDEBUG
@@ -347,11 +342,9 @@ public:
     : StoreManager(mgr), Features(f),
       RBFactory(mgr.getAllocator()), CBFactory(mgr.getAllocator()),
       SmallStructLimit(0) {
-    if (SubEngine *Eng = StateMgr.getOwningEngine()) {
-      AnalyzerOptions &Options = Eng->getAnalysisManager().options;
-      SmallStructLimit =
-        Options.RegionStoreSmallStructLimit;
-    }
+    SubEngine &Eng = StateMgr.getOwningEngine();
+    AnalyzerOptions &Options = Eng.getAnalysisManager().options;
+    SmallStructLimit = Options.RegionStoreSmallStructLimit;
   }
 
 
@@ -2341,11 +2334,56 @@ RegionBindingsRef RegionStoreManager::bindStruct(RegionBindingsConstRef B,
   if (V.isUnknown() || !V.getAs<nonloc::CompoundVal>())
     return bindAggregate(B, R, UnknownVal());
 
+  // The raw CompoundVal is essentially a symbolic InitListExpr: an (immutable)
+  // list of other values. It appears pretty much only when there's an actual
+  // initializer list expression in the program, and the analyzer tries to
+  // unwrap it as soon as possible.
+  // This code is where such unwrap happens: when the compound value is put into
+  // the object that it was supposed to initialize (it's an *initializer* list,
+  // after all), instead of binding the whole value to the whole object, we bind
+  // sub-values to sub-objects. Sub-values may themselves be compound values,
+  // and in this case the procedure becomes recursive.
+  // FIXME: The annoying part about compound values is that they don't carry
+  // any sort of information about which value corresponds to which sub-object.
+  // It's simply a list of values in the middle of nowhere; we expect to match
+  // them to sub-objects, essentially, "by index": first value binds to
+  // the first field, second value binds to the second field, etc.
+  // It would have been much safer to organize non-lazy compound values as
+  // a mapping from fields/bases to values.
   const nonloc::CompoundVal& CV = V.castAs<nonloc::CompoundVal>();
   nonloc::CompoundVal::iterator VI = CV.begin(), VE = CV.end();
 
-  RecordDecl::field_iterator FI, FE;
   RegionBindingsRef NewB(B);
+
+  // In C++17 aggregates may have base classes, handle those as well.
+  // They appear before fields in the initializer list / compound value.
+  if (const auto *CRD = dyn_cast<CXXRecordDecl>(RD)) {
+    assert(CRD->isAggregate() &&
+           "Non-aggregates are constructed with a constructor!");
+
+    for (const auto &B : CRD->bases()) {
+      // (Multiple inheritance is fine though.)
+      assert(!B.isVirtual() && "Aggregates cannot have virtual base classes!");
+
+      if (VI == VE)
+        break;
+
+      QualType BTy = B.getType();
+      assert(BTy->isStructureOrClassType() && "Base classes must be classes!");
+
+      const CXXRecordDecl *BRD = BTy->getAsCXXRecordDecl();
+      assert(BRD && "Base classes must be C++ classes!");
+
+      const CXXBaseObjectRegion *BR =
+          MRMgr.getCXXBaseObjectRegion(BRD, R, /*IsVirtual=*/false);
+
+      NewB = bindStruct(NewB, BR, *VI);
+
+      ++VI;
+    }
+  }
+
+  RecordDecl::field_iterator FI, FE;
 
   for (FI = RD->field_begin(), FE = RD->field_end(); FI != FE; ++FI) {
 
@@ -2393,10 +2431,7 @@ RegionStoreManager::bindAggregate(RegionBindingsConstRef B,
 namespace {
 class RemoveDeadBindingsWorker
     : public ClusterAnalysis<RemoveDeadBindingsWorker> {
-  using ChildrenListTy = SmallVector<const SymbolDerived *, 4>;
-  using MapParentsToDerivedTy = llvm::DenseMap<SymbolRef, ChildrenListTy>;
-
-  MapParentsToDerivedTy ParentsToDerived;
+  SmallVector<const SymbolicRegion *, 12> Postponed;
   SymbolReaper &SymReaper;
   const StackFrameContext *CurrentLCtx;
 
@@ -2417,10 +2452,8 @@ public:
 
   bool AddToWorkList(const MemRegion *R);
 
+  bool UpdatePostponed();
   void VisitBinding(SVal V);
-
-private:
-  void populateWorklistFromSymbol(SymbolRef s);
 };
 }
 
@@ -2440,11 +2473,10 @@ void RemoveDeadBindingsWorker::VisitAddedToCluster(const MemRegion *baseR,
   }
 
   if (const SymbolicRegion *SR = dyn_cast<SymbolicRegion>(baseR)) {
-    if (SymReaper.isLive(SR->getSymbol())) {
+    if (SymReaper.isLive(SR->getSymbol()))
       AddToWorkList(SR, &C);
-    } else if (const auto *SD = dyn_cast<SymbolDerived>(SR->getSymbol())) {
-      ParentsToDerived[SD->getParentSymbol()].push_back(SD);
-    }
+    else
+      Postponed.push_back(SR);
 
     return;
   }
@@ -2457,7 +2489,7 @@ void RemoveDeadBindingsWorker::VisitAddedToCluster(const MemRegion *baseR,
   // CXXThisRegion in the current or parent location context is live.
   if (const CXXThisRegion *TR = dyn_cast<CXXThisRegion>(baseR)) {
     const auto *StackReg =
-      cast<StackArgumentsSpaceRegion>(TR->getSuperRegion());
+        cast<StackArgumentsSpaceRegion>(TR->getSuperRegion());
     const StackFrameContext *RegCtx = StackReg->getStackFrame();
     if (CurrentLCtx &&
         (RegCtx == CurrentLCtx || RegCtx->isParentOf(CurrentLCtx)))
@@ -2501,15 +2533,6 @@ void RemoveDeadBindingsWorker::VisitBinding(SVal V) {
   // If V is a region, then add it to the worklist.
   if (const MemRegion *R = V.getAsRegion()) {
     AddToWorkList(R);
-
-    if (const auto *TVR = dyn_cast<TypedValueRegion>(R)) {
-      DefinedOrUnknownSVal RVS =
-          RM.getSValBuilder().getRegionValueSymbolVal(TVR);
-      if (const MemRegion *SR = RVS.getAsRegion()) {
-        AddToWorkList(SR);
-      }
-    }
-
     SymReaper.markLive(R);
 
     // All regions captured by a block are also live.
@@ -2523,30 +2546,25 @@ void RemoveDeadBindingsWorker::VisitBinding(SVal V) {
 
 
   // Update the set of live symbols.
-  for (auto SI = V.symbol_begin(), SE = V.symbol_end(); SI != SE; ++SI) {
-    populateWorklistFromSymbol(*SI);
-
-    for (const auto *SD : ParentsToDerived[*SI])
-      populateWorklistFromSymbol(SD);
-
+  for (auto SI = V.symbol_begin(), SE = V.symbol_end(); SI!=SE; ++SI)
     SymReaper.markLive(*SI);
-  }
 }
 
-void RemoveDeadBindingsWorker::populateWorklistFromSymbol(SymbolRef S) {
-  if (const auto *SD = dyn_cast<SymbolData>(S)) {
-    if (Loc::isLocType(SD->getType()) && !SymReaper.isLive(SD)) {
-      const SymbolicRegion *SR = RM.getRegionManager().getSymbolicRegion(SD);
+bool RemoveDeadBindingsWorker::UpdatePostponed() {
+  // See if any postponed SymbolicRegions are actually live now, after
+  // having done a scan.
+  bool Changed = false;
 
-      if (B.contains(SR))
-        AddToWorkList(SR);
-
-      const SymbolicRegion *SHR =
-          RM.getRegionManager().getSymbolicHeapRegion(SD);
-      if (B.contains(SHR))
-        AddToWorkList(SHR);
+  for (auto I = Postponed.begin(), E = Postponed.end(); I != E; ++I) {
+    if (const SymbolicRegion *SR = *I) {
+      if (SymReaper.isLive(SR->getSymbol())) {
+        Changed |= AddToWorkList(SR);
+        *I = nullptr;
+      }
     }
   }
+
+  return Changed;
 }
 
 StoreRef RegionStoreManager::removeDeadBindings(Store store,
@@ -2562,7 +2580,7 @@ StoreRef RegionStoreManager::removeDeadBindings(Store store,
     W.AddToWorkList(*I);
   }
 
-  W.RunWorkList();
+  do W.RunWorkList(); while (W.UpdatePostponed());
 
   // We have now scanned the store, marking reachable regions and symbols
   // as live.  We now remove all the regions that are dead from the store

@@ -14,7 +14,7 @@
 # DSO-NEXT:   Symbols [
 # DSO-NEXT:     Symbol {
 # DSO-NEXT:       Version: 0
-# DSO-NEXT:       Name: @
+# DSO-NEXT:       Name:
 # DSO-NEXT:     }
 # DSO-NEXT:     Symbol {
 # DSO-NEXT:       Version: 2
@@ -70,13 +70,13 @@
 
 # MAIN:      Version symbols {
 # MAIN-NEXT:   Section Name: .gnu.version
-# MAIN-NEXT:   Address: 0x200228
-# MAIN-NEXT:   Offset: 0x228
+# MAIN-NEXT:   Address: 0x200260
+# MAIN-NEXT:   Offset: 0x260
 # MAIN-NEXT:   Link: 1
 # MAIN-NEXT:   Symbols [
 # MAIN-NEXT:     Symbol {
 # MAIN-NEXT:       Version: 0
-# MAIN-NEXT:       Name: @
+# MAIN-NEXT:       Name:
 # MAIN-NEXT:     }
 # MAIN-NEXT:     Symbol {
 # MAIN-NEXT:       Version: 2

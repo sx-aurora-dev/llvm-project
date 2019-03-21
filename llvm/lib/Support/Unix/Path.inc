@@ -1,9 +1,8 @@
 //===- llvm/Support/Unix/Path.inc - Unix Path Implementation ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -56,7 +55,7 @@
 
 #include <sys/types.h>
 #if !defined(__APPLE__) && !defined(__OpenBSD__) && !defined(__FreeBSD__) &&   \
-    !defined(__linux__)
+    !defined(__linux__) && !defined(__FreeBSD_kernel__)
 #include <sys/statvfs.h>
 #define STATVFS statvfs
 #define FSTATVFS fstatvfs
@@ -108,7 +107,11 @@ test_dir(char ret[PATH_MAX], const char *dir, const char *bin)
   struct stat sb;
   char fullpath[PATH_MAX];
 
-  snprintf(fullpath, PATH_MAX, "%s/%s", dir, bin);
+  int chars = snprintf(fullpath, PATH_MAX, "%s/%s", dir, bin);
+  // We cannot write PATH_MAX characters because the string will be terminated
+  // with a null character. Fail if truncation happened.
+  if (chars >= PATH_MAX)
+    return 1;
   if (!realpath(fullpath, ret))
     return 1;
   if (stat(fullpath, &sb) != 0)

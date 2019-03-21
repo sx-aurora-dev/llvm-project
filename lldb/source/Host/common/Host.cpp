@@ -1,9 +1,8 @@
 //===-- Host.cpp ------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -47,17 +46,16 @@
 
 #include <csignal>
 
+#include "lldb/Host/FileAction.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Host/HostProcess.h"
 #include "lldb/Host/MonitoringProcessLauncher.h"
+#include "lldb/Host/ProcessLaunchInfo.h"
 #include "lldb/Host/ProcessLauncher.h"
 #include "lldb/Host/ThreadLauncher.h"
 #include "lldb/Host/posix/ConnectionFileDescriptorPosix.h"
-#include "lldb/Target/FileAction.h"
-#include "lldb/Target/ProcessLaunchInfo.h"
-#include "lldb/Target/UnixSignals.h"
 #include "lldb/Utility/DataBufferLLVM.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
@@ -496,7 +494,7 @@ Status Host::RunShellCommand(const Args &args, const FileSpec &working_dir,
 
   if (working_dir)
     launch_info.SetWorkingDirectory(working_dir);
-  llvm::SmallString<PATH_MAX> output_file_path;
+  llvm::SmallString<64> output_file_path;
 
   if (command_output_ptr) {
     // Create a temporary file to get the stdout/stderr and redirect the output
@@ -613,12 +611,6 @@ bool Host::OpenFileInExternalEditor(const FileSpec &file_spec,
 }
 
 #endif
-
-const UnixSignalsSP &Host::GetUnixSignals() {
-  static const auto s_unix_signals_sp =
-      UnixSignals::Create(HostInfo::GetArchitecture());
-  return s_unix_signals_sp;
-}
 
 std::unique_ptr<Connection> Host::CreateDefaultConnection(llvm::StringRef url) {
 #if defined(_WIN32)

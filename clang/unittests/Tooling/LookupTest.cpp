@@ -1,9 +1,8 @@
 //===- unittest/Tooling/LookupTest.cpp ------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -130,20 +129,38 @@ TEST(LookupTest, replaceNestedFunctionName) {
 
   // If the shortest name is ambiguous, we need to add more qualifiers.
   Visitor.OnCall = [&](CallExpr *Expr) {
-    EXPECT_EQ("::a::y::bar", replaceCallExpr(Expr, "::a::y::bar"));
+    EXPECT_EQ("a::y::bar", replaceCallExpr(Expr, "::a::y::bar"));
   };
   Visitor.runOver(R"(
     namespace a {
-    namespace b {
-    namespace x { void foo() {} }
-    namespace y { void foo() {} }
-    }
+     namespace b {
+      namespace x { void foo() {} }
+      namespace y { void foo() {} }
+     }
     }
 
     namespace a {
-    namespace b {
-    void f() { x::foo(); }
+     namespace b {
+      void f() { x::foo(); }
+     }
+    })");
+
+  Visitor.OnCall = [&](CallExpr *Expr) {
+    // y::bar would be ambiguous due to "a::b::y".
+    EXPECT_EQ("::y::bar", replaceCallExpr(Expr, "::y::bar"));
+  };
+  Visitor.runOver(R"(
+    namespace a {
+     namespace b {
+      void foo() {}
+      namespace y { }
+     }
     }
+
+    namespace a {
+     namespace b {
+      void f() { foo(); }
+     }
     })");
 
   Visitor.OnCall = [&](CallExpr *Expr) {

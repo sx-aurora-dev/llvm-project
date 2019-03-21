@@ -1,9 +1,8 @@
 //===- TargetPassConfig.cpp - Target independent code generation passes ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -408,7 +407,7 @@ TargetPassConfig::TargetPassConfig(LLVMTargetMachine &TM, PassManagerBase &pm)
     TM.Options.EnableIPRA = EnableIPRA;
   else {
     // If not explicitly specified, use target default.
-    TM.Options.EnableIPRA = TM.useIPRA();
+    TM.Options.EnableIPRA |= TM.useIPRA();
   }
 
   if (TM.Options.EnableIPRA)
@@ -755,22 +754,33 @@ void TargetPassConfig::addISelPrepare() {
 bool TargetPassConfig::addCoreISelPasses() {
   // Enable FastISel with -fast-isel, but allow that to be overridden.
   TM->setO0WantsFastISel(EnableFastISelOption != cl::BOU_FALSE);
-  if (EnableFastISelOption == cl::BOU_TRUE ||
-      (TM->getOptLevel() == CodeGenOpt::None && TM->getO0WantsFastISel() &&
-       !TM->Options.EnableGlobalISel)) {
+
+  // Determine an instruction selector.
+  enum class SelectorType { SelectionDAG, FastISel, GlobalISel };
+  SelectorType Selector;
+
+  if (EnableFastISelOption == cl::BOU_TRUE)
+    Selector = SelectorType::FastISel;
+  else if (EnableGlobalISelOption == cl::BOU_TRUE ||
+           (TM->Options.EnableGlobalISel &&
+            EnableGlobalISelOption != cl::BOU_FALSE))
+    Selector = SelectorType::GlobalISel;
+  else if (TM->getOptLevel() == CodeGenOpt::None && TM->getO0WantsFastISel())
+    Selector = SelectorType::FastISel;
+  else
+    Selector = SelectorType::SelectionDAG;
+
+  // Set consistently TM->Options.EnableFastISel and EnableGlobalISel.
+  if (Selector == SelectorType::FastISel) {
     TM->setFastISel(true);
     TM->setGlobalISel(false);
+  } else if (Selector == SelectorType::GlobalISel) {
+    TM->setFastISel(false);
+    TM->setGlobalISel(true);
   }
 
-  // Ask the target for an instruction selector.
-  // Explicitly enabling fast-isel should override implicitly enabled
-  // global-isel.
-  if (EnableGlobalISelOption == cl::BOU_TRUE ||
-      (EnableGlobalISelOption == cl::BOU_UNSET &&
-       TM->Options.EnableGlobalISel && EnableFastISelOption != cl::BOU_TRUE)) {
-    TM->setGlobalISel(true);
-    TM->setFastISel(false);
-
+  // Add instruction selector passes.
+  if (Selector == SelectorType::GlobalISel) {
     SaveAndRestore<bool> SavedAddingMachinePasses(AddingMachinePasses, true);
     if (addIRTranslator())
       return true;
@@ -887,13 +897,9 @@ void TargetPassConfig::addMachinePasses() {
   // Run register allocation and passes that are tightly coupled with it,
   // including phi elimination and scheduling.
   if (getOptimizeRegAlloc())
-    addOptimizedRegAlloc(createRegAllocPass(true));
-  else {
-    if (RegAlloc != &useDefaultRegisterAllocator &&
-        RegAlloc != &createFastRegisterAllocator)
-      report_fatal_error("Must use fast (default) register allocator for unoptimized regalloc.");
-    addFastRegAlloc(createRegAllocPass(false));
-  }
+    addOptimizedRegAlloc();
+  else
+    addFastRegAlloc();
 
   // Run post-ra passes.
   addPostRegAlloc();
@@ -1028,10 +1034,6 @@ bool TargetPassConfig::getOptimizeRegAlloc() const {
   llvm_unreachable("Invalid optimize-regalloc state");
 }
 
-/// RegisterRegAlloc's global Registry tracks allocator registration.
-MachinePassRegistry<RegisterRegAlloc::FunctionPassCtor>
-    RegisterRegAlloc::Registry;
-
 /// A dummy default pass factory indicates whether the register allocator is
 /// overridden on the command line.
 static llvm::once_flag InitializeDefaultRegisterAllocatorFlag;
@@ -1087,6 +1089,33 @@ FunctionPass *TargetPassConfig::createRegAllocPass(bool Optimized) {
   return createTargetRegisterAllocator(Optimized);
 }
 
+bool TargetPassConfig::addRegAssignmentFast() {
+  if (RegAlloc != &useDefaultRegisterAllocator &&
+      RegAlloc != &createFastRegisterAllocator)
+    report_fatal_error("Must use fast (default) register allocator for unoptimized regalloc.");
+
+  addPass(createRegAllocPass(false));
+  return true;
+}
+
+bool TargetPassConfig::addRegAssignmentOptimized() {
+  // Add the selected register allocation pass.
+  addPass(createRegAllocPass(true));
+
+  // Allow targets to change the register assignments before rewriting.
+  addPreRewrite();
+
+  // Finally rewrite virtual registers.
+  addPass(&VirtRegRewriterID);
+  // Perform stack slot coloring and post-ra machine LICM.
+  //
+  // FIXME: Re-enable coloring with register when it's capable of adding
+  // kill markers.
+  addPass(&StackSlotColoringID);
+
+  return true;
+}
+
 /// Return true if the default global register allocator is in use and
 /// has not be overriden on the command line with '-regalloc=...'
 bool TargetPassConfig::usingDefaultRegAlloc() const {
@@ -1095,18 +1124,17 @@ bool TargetPassConfig::usingDefaultRegAlloc() const {
 
 /// Add the minimum set of target-independent passes that are required for
 /// register allocation. No coalescing or scheduling.
-void TargetPassConfig::addFastRegAlloc(FunctionPass *RegAllocPass) {
+void TargetPassConfig::addFastRegAlloc() {
   addPass(&PHIEliminationID, false);
   addPass(&TwoAddressInstructionPassID, false);
 
-  if (RegAllocPass)
-    addPass(RegAllocPass);
+  addRegAssignmentFast();
 }
 
 /// Add standard target-independent passes that are tightly coupled with
 /// optimized register allocation, including coalescing, machine instruction
 /// scheduling, and register allocation itself.
-void TargetPassConfig::addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
+void TargetPassConfig::addOptimizedRegAlloc() {
   addPass(&DetectDeadLanesID, false);
 
   addPass(&ProcessImplicitDefsID, false);
@@ -1138,22 +1166,7 @@ void TargetPassConfig::addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
   // PreRA instruction scheduling.
   addPass(&MachineSchedulerID);
 
-  if (RegAllocPass) {
-    // Add the selected register allocation pass.
-    addPass(RegAllocPass);
-
-    // Allow targets to change the register assignments before rewriting.
-    addPreRewrite();
-
-    // Finally rewrite virtual registers.
-    addPass(&VirtRegRewriterID);
-
-    // Perform stack slot coloring and post-ra machine LICM.
-    //
-    // FIXME: Re-enable coloring with register when it's capable of adding
-    // kill markers.
-    addPass(&StackSlotColoringID);
-
+  if (addRegAssignmentOptimized()) {
     // Copy propagate to forward register uses and try to eliminate COPYs that
     // were not coalesced.
     addPass(&MachineCopyPropagationID);
@@ -1209,4 +1222,8 @@ bool TargetPassConfig::isGlobalISelAbortEnabled() const {
 
 bool TargetPassConfig::reportDiagnosticWhenGlobalISelFallback() const {
   return TM->Options.GlobalISelAbort == GlobalISelAbortMode::DisableWithDiag;
+}
+
+bool TargetPassConfig::isGISelCSEEnabled() const {
+  return getOptLevel() != CodeGenOpt::Level::None;
 }

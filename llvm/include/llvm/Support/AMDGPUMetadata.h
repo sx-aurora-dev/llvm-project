@@ -1,9 +1,8 @@
 //===--- AMDGPUMetadata.h ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -431,6 +430,21 @@ std::error_code fromString(std::string String, Metadata &HSAMetadata);
 /// Converts \p HSAMetadata to \p String.
 std::error_code toString(Metadata HSAMetadata, std::string &String);
 
+//===----------------------------------------------------------------------===//
+// HSA metadata for v3 code object.
+//===----------------------------------------------------------------------===//
+namespace V3 {
+/// HSA metadata major version.
+constexpr uint32_t VersionMajor = 1;
+/// HSA metadata minor version.
+constexpr uint32_t VersionMinor = 0;
+
+/// HSA metadata beginning assembler directive.
+constexpr char AssemblerDirectiveBegin[] = ".amdgpu_metadata";
+/// HSA metadata ending assembler directive.
+constexpr char AssemblerDirectiveEnd[] = ".end_amdgpu_metadata";
+} // end namespace V3
+
 } // end namespace HSAMD
 
 //===----------------------------------------------------------------------===//
@@ -438,11 +452,30 @@ std::error_code toString(Metadata HSAMetadata, std::string &String);
 //===----------------------------------------------------------------------===//
 namespace PALMD {
 
-/// PAL metadata assembler directive.
+/// PAL metadata (old linear format) assembler directive.
 constexpr char AssemblerDirective[] = ".amd_amdgpu_pal_metadata";
+
+/// PAL metadata (new MsgPack format) beginning assembler directive.
+constexpr char AssemblerDirectiveBegin[] = ".amdgpu_pal_metadata";
+
+/// PAL metadata (new MsgPack format) ending assembler directive.
+constexpr char AssemblerDirectiveEnd[] = ".end_amdgpu_pal_metadata";
 
 /// PAL metadata keys.
 enum Key : uint32_t {
+  R_2E12_COMPUTE_PGM_RSRC1 = 0x2e12,
+  R_2D4A_SPI_SHADER_PGM_RSRC1_LS = 0x2d4a,
+  R_2D0A_SPI_SHADER_PGM_RSRC1_HS = 0x2d0a,
+  R_2CCA_SPI_SHADER_PGM_RSRC1_ES = 0x2cca,
+  R_2C8A_SPI_SHADER_PGM_RSRC1_GS = 0x2c8a,
+  R_2C4A_SPI_SHADER_PGM_RSRC1_VS = 0x2c4a,
+  R_2C0A_SPI_SHADER_PGM_RSRC1_PS = 0x2c0a,
+  R_2E00_COMPUTE_DISPATCH_INITIATOR = 0x2e00,
+  R_A1B3_SPI_PS_INPUT_ENA = 0xa1b3,
+  R_A1B4_SPI_PS_INPUT_ADDR = 0xa1b4,
+  R_A1B6_SPI_PS_IN_CONTROL = 0xa1b6,
+  R_A2D5_VGT_SHADER_STAGES_EN = 0xa2d5,
+
   LS_NUM_USED_VGPRS = 0x10000021,
   HS_NUM_USED_VGPRS = 0x10000022,
   ES_NUM_USED_VGPRS = 0x10000023,
@@ -467,12 +500,6 @@ enum Key : uint32_t {
   PS_SCRATCH_SIZE = 0x10000049,
   CS_SCRATCH_SIZE = 0x1000004a
 };
-
-/// PAL metadata represented as a vector.
-typedef std::vector<uint32_t> Metadata;
-
-/// Converts \p PALMetadata to \p String.
-std::error_code toString(const Metadata &PALMetadata, std::string &String);
 
 } // end namespace PALMD
 } // end namespace AMDGPU

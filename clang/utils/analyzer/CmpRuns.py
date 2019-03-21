@@ -25,6 +25,7 @@ Usage:
     diff = compareResults(resultsA, resultsB)
 
 """
+from __future__ import division, print_function
 
 from collections import defaultdict
 
@@ -72,6 +73,21 @@ class AnalysisDiagnostic(object):
             return fileName[len(root) + 1:]
         return fileName
 
+    def getRootFileName(self):
+        path = self._data['path']
+        if not path:
+            return self.getFileName()
+        p = path[0]
+        if 'location' in p:
+            fIdx = p['location']['file']
+        else: # control edge
+            fIdx = path[0]['edges'][0]['start'][0]['file']
+        out = self._report.files[fIdx]
+        root = self._report.run.root
+        if out.startswith(root):
+            return out[len(root):]
+        return out
+
     def getLine(self):
         return self._loc['line']
 
@@ -105,7 +121,13 @@ class AnalysisDiagnostic(object):
             funcnamePostfix = "#" + self._data['issue_context']
         else:
             funcnamePostfix = ""
-        return '%s%s:%d:%d, %s: %s' % (self.getFileName(),
+        rootFilename = self.getRootFileName()
+        fileName = self.getFileName()
+        if rootFilename != fileName:
+            filePrefix = "[%s] %s" % (rootFilename, fileName)
+        else:
+            filePrefix = rootFilename
+        return '%s%s:%d:%d, %s: %s' % (filePrefix,
                                        funcnamePostfix,
                                        self.getLine(),
                                        self.getColumn(), self.getCategory(),
@@ -297,17 +319,17 @@ def deriveStats(results):
             combined_data['PathsLength'].append(diagnostic.getPathLength())
 
     for stat in results.stats:
-        for key, value in stat.iteritems():
+        for key, value in stat.items():
             combined_data[key].append(value)
     combined_stats = {}
-    for key, values in combined_data.iteritems():
+    for key, values in combined_data.items():
         combined_stats[str(key)] = {
             "max": max(values),
             "min": min(values),
             "mean": sum(values) / len(values),
             "90th %tile": computePercentile(values, 0.9),
             "95th %tile": computePercentile(values, 0.95),
-            "median": sorted(values)[len(values) / 2],
+            "median": sorted(values)[len(values) // 2],
             "total": sum(values)
         }
     return combined_stats
@@ -318,7 +340,7 @@ def compareStats(resultsA, resultsB):
     statsB = deriveStats(resultsB)
     keys = sorted(statsA.keys())
     for key in keys:
-        print key
+        print(key)
         for kkey in statsA[key]:
             valA = float(statsA[key][kkey])
             valB = float(statsB[key][kkey])
@@ -331,7 +353,7 @@ def compareStats(resultsA, resultsB):
                         report = Colors.GREEN + report + Colors.CLEAR
                     elif ratio > 0.2:
                         report = Colors.RED + report + Colors.CLEAR
-            print "\t %s %s" % (kkey, report)
+            print("\t %s %s" % (kkey, report))
 
 def dumpScanBuildResultsDiff(dirA, dirB, opts, deleteEmpty=True,
                              Stdout=sys.stdout):

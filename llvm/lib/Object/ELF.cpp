@@ -1,9 +1,8 @@
 //===- ELF.cpp - ELF object file implementation ---------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -154,7 +153,7 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
 
 #undef ELF_RELOC
 
-uint32_t llvm::object::getELFRelrRelocationType(uint32_t Machine) {
+uint32_t llvm::object::getELFRelativeRelocationType(uint32_t Machine) {
   switch (Machine) {
   case ELF::EM_X86_64:
     return ELF::R_X86_64_RELATIVE;
@@ -220,8 +219,8 @@ StringRef llvm::object::getELFSectionTypeName(uint32_t Machine, unsigned Type) {
     switch (Type) {
       STRINGIFY_ENUM_CASE(ELF, SHT_MIPS_REGINFO);
       STRINGIFY_ENUM_CASE(ELF, SHT_MIPS_OPTIONS);
-      STRINGIFY_ENUM_CASE(ELF, SHT_MIPS_ABIFLAGS);
       STRINGIFY_ENUM_CASE(ELF, SHT_MIPS_DWARF);
+      STRINGIFY_ENUM_CASE(ELF, SHT_MIPS_ABIFLAGS);
     }
     break;
   default:
@@ -300,7 +299,7 @@ ELFFile<ELFT>::decode_relrs(Elf_Relr_Range relrs) const {
   Elf_Rela Rela;
   Rela.r_info = 0;
   Rela.r_addend = 0;
-  Rela.setType(getRelrRelocationType(), false);
+  Rela.setType(getRelativeRelocationType(), false);
   std::vector<Elf_Rela> Relocs;
 
   // Word type: uint32_t for Elf32, and uint64_t for Elf64.
@@ -425,7 +424,7 @@ ELFFile<ELFT>::android_relas(const Elf_Shdr *Sec) const {
 }
 
 template <class ELFT>
-const char *ELFFile<ELFT>::getDynamicTagAsString(unsigned Arch,
+std::string ELFFile<ELFT>::getDynamicTagAsString(unsigned Arch,
                                                  uint64_t Type) const {
 #define DYNAMIC_STRINGIFY_ENUM(tag, value)                                     \
   case value:                                                                  \
@@ -439,6 +438,7 @@ const char *ELFFile<ELFT>::getDynamicTagAsString(unsigned Arch,
 #include "llvm/BinaryFormat/DynamicTags.def"
 #undef HEXAGON_DYNAMIC_TAG
     }
+    break;
 
   case ELF::EM_MIPS:
     switch (Type) {
@@ -446,6 +446,7 @@ const char *ELFFile<ELFT>::getDynamicTagAsString(unsigned Arch,
 #include "llvm/BinaryFormat/DynamicTags.def"
 #undef MIPS_DYNAMIC_TAG
     }
+    break;
 
   case ELF::EM_PPC64:
     switch (Type) {
@@ -453,6 +454,7 @@ const char *ELFFile<ELFT>::getDynamicTagAsString(unsigned Arch,
 #include "llvm/BinaryFormat/DynamicTags.def"
 #undef PPC64_DYNAMIC_TAG
     }
+    break;
   }
 #undef DYNAMIC_TAG
   switch (Type) {
@@ -471,12 +473,12 @@ const char *ELFFile<ELFT>::getDynamicTagAsString(unsigned Arch,
 #undef DYNAMIC_TAG_MARKER
 #undef DYNAMIC_STRINGIFY_ENUM
   default:
-    return "unknown";
+    return "<unknown:>0x" + utohexstr(Type, true);
   }
 }
 
 template <class ELFT>
-const char *ELFFile<ELFT>::getDynamicTagAsString(uint64_t Type) const {
+std::string ELFFile<ELFT>::getDynamicTagAsString(uint64_t Type) const {
   return getDynamicTagAsString(getHeader()->e_machine, Type);
 }
 

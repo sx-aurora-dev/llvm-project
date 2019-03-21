@@ -1,9 +1,8 @@
 //===--- UppercaseLiteralSuffixCheck.cpp - clang-tidy ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -183,12 +182,14 @@ UppercaseLiteralSuffixCheck::UppercaseLiteralSuffixCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       NewSuffixes(
-          utils::options::parseStringList(Options.get("NewSuffixes", ""))) {}
+          utils::options::parseStringList(Options.get("NewSuffixes", ""))),
+      IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", 1) != 0) {}
 
 void UppercaseLiteralSuffixCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "NewSuffixes",
                 utils::options::serializeStringList(NewSuffixes));
+  Options.store(Opts, "IgnoreMacros", IgnoreMacros);
 }
 
 void UppercaseLiteralSuffixCheck::registerMatchers(MatchFinder *Finder) {
@@ -216,6 +217,8 @@ bool UppercaseLiteralSuffixCheck::checkBoundMatch(
   // We might have a suffix that is already uppercase.
   if (auto Details = shouldReplaceLiteralSuffix<LiteralType>(
           *Literal, NewSuffixes, *Result.SourceManager, getLangOpts())) {
+    if (Details->LiteralLocation.getBegin().isMacroID() && IgnoreMacros)
+      return true;
     auto Complaint = diag(Details->LiteralLocation.getBegin(),
                           "%0 literal has suffix '%1', which is not uppercase")
                      << LiteralType::Name << Details->OldSuffix;

@@ -1,9 +1,8 @@
 //===- Symbols.cpp --------------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,10 +18,13 @@
 using namespace llvm;
 using namespace llvm::object;
 
+using namespace lld::coff;
+
 // Returns a symbol name for an error message.
 std::string lld::toString(coff::Symbol &B) {
-  if (Optional<std::string> S = lld::demangleMSVC(B.getName()))
-    return ("\"" + *S + "\" (" + B.getName() + ")").str();
+  if (Config->Demangle)
+    if (Optional<std::string> S = lld::demangleMSVC(B.getName()))
+      return *S;
   return B.getName();
 }
 

@@ -1,9 +1,8 @@
 //===--- Format.h - Format C++ code -----------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -242,8 +241,38 @@ struct FormatStyle {
   /// single line.
   ShortFunctionStyle AllowShortFunctionsOnASingleLine;
 
+  /// Different styles for handling short if lines
+  enum ShortIfStyle {
+    /// Never put short ifs on the same line.
+    /// \code
+    ///   if (a)
+    ///     return ;
+    ///   else {
+    ///     return;
+    ///   }
+    /// \endcode
+    SIS_Never,
+    /// Without else put short ifs on the same line only if
+    /// the else is not a compound statement.
+    /// \code
+    ///   if (a) return;
+    ///   else
+    ///     return;
+    /// \endcode
+    SIS_WithoutElse,
+    /// Always put short ifs on the same line if
+    /// the else is not a compound statement or not.
+    /// \code
+    ///   if (a) return;
+    ///   else {
+    ///     return;
+    ///   }
+    /// \endcode
+    SIS_Always,
+  };
+
   /// If ``true``, ``if (a) return;`` can be put on a single line.
-  bool AllowShortIfStatementsOnASingleLine;
+  ShortIfStyle AllowShortIfStatementsOnASingleLine;
 
   /// If ``true``, ``while (true) continue;`` can be put on a single
   /// line.
@@ -1097,7 +1126,16 @@ struct FormatStyle {
     ///    #  endif
     ///    #endif
     /// \endcode
-    PPDIS_AfterHash
+    PPDIS_AfterHash,
+    /// Indents directives before the hash.
+    /// \code
+    ///    #if FOO
+    ///      #if BAR
+    ///        #include <foo>
+    ///      #endif
+    ///    #endif
+    /// \endcode
+    PPDIS_BeforeHash
   };
 
   /// The preprocessor directive indenting style to use.
@@ -1850,7 +1888,8 @@ private:
 
 /// Returns a format style complying with the LLVM coding standards:
 /// http://llvm.org/docs/CodingStandards.html.
-FormatStyle getLLVMStyle();
+FormatStyle getLLVMStyle(
+    FormatStyle::LanguageKind Language = FormatStyle::LanguageKind::LK_Cpp);
 
 /// Returns a format style complying with one of Google's style guides:
 /// http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml.
@@ -2059,6 +2098,8 @@ inline StringRef getLanguageName(FormatStyle::LanguageKind Language) {
     return "JavaScript";
   case FormatStyle::LK_Proto:
     return "Proto";
+  case FormatStyle::LK_TableGen:
+    return "TableGen";
   case FormatStyle::LK_TextProto:
     return "TextProto";
   default:

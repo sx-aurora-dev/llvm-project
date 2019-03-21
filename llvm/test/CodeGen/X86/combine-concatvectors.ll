@@ -5,8 +5,6 @@ define void @PR32957(<2 x float>* %in, <8 x float>* %out) {
 ; CHECK-LABEL: PR32957:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vmovsd {{.*#+}} xmm0 = mem[0],zero
-; CHECK-NEXT:    vxorps %xmm1, %xmm1, %xmm1
-; CHECK-NEXT:    vblendps {{.*#+}} xmm0 = xmm0[0,1],xmm1[2,3]
 ; CHECK-NEXT:    vmovaps %ymm0, (%rsi)
 ; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
@@ -17,4 +15,25 @@ define void @PR32957(<2 x float>* %in, <8 x float>* %out) {
   %ins2 = insertelement <8 x float> %ins, float %ext2, i64 1
   store <8 x float> %ins2, <8 x float>* %out, align 32
   ret void
+}
+
+declare { i8, double } @fun()
+
+; Check that this does not fail to combine concat_vectors of a value from
+; merge_values through a bitcast.
+define void @d(i1 %cmp) {
+; CHECK-LABEL: d:
+; CHECK:       # %bb.0: # %bar
+; CHECK-NEXT:    pushq %rax
+; CHECK-NEXT:    .cfi_def_cfa_offset 16
+; CHECK-NEXT:    callq fun
+bar:
+  %val = call { i8, double } @fun()
+  %extr = extractvalue { i8, double } %val, 1
+  %bc = bitcast double %extr to <2 x float>
+  br label %baz
+
+baz:
+  %extr1 = extractelement <2 x float> %bc, i64 0
+  unreachable
 }

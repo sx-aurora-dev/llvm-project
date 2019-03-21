@@ -1,9 +1,8 @@
 //===-- ScriptInterpreterPython.h -------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -311,22 +310,6 @@ public:
   bool GenerateWatchpointCommandCallbackData(StringList &input,
                                              std::string &output) override;
 
-  //    static size_t
-  //    GenerateBreakpointOptionsCommandCallback (void *baton,
-  //                                              InputReader &reader,
-  //                                              lldb::InputReaderAction
-  //                                              notification,
-  //                                              const char *bytes,
-  //                                              size_t bytes_len);
-  //
-  //    static size_t
-  //    GenerateWatchpointOptionsCommandCallback (void *baton,
-  //                                              InputReader &reader,
-  //                                              lldb::InputReaderAction
-  //                                              notification,
-  //                                              const char *bytes,
-  //                                              size_t bytes_len);
-
   static bool BreakpointCallbackFunction(void *baton,
                                          StoppointCallbackContext *context,
                                          lldb::user_id_t break_id,
@@ -460,7 +443,7 @@ public:
   //----------------------------------------------------------------------
   // IOHandlerDelegate
   //----------------------------------------------------------------------
-  void IOHandlerActivated(IOHandler &io_handler) override;
+  void IOHandlerActivated(IOHandler &io_handler, bool interactive) override;
 
   void IOHandlerInputComplete(IOHandler &io_handler,
                               std::string &data) override;

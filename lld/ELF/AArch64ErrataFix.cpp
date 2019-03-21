@@ -1,9 +1,8 @@
 //===- AArch64ErrataFix.cpp -----------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // This file implements Section Patching for the purpose of working around
@@ -488,6 +487,7 @@ void AArch64Err843419Patcher::insertPatches(
   uint64_t ISLimit;
   uint64_t PrevISLimit = ISD.Sections.front()->OutSecOff;
   uint64_t PatchUpperBound = PrevISLimit + Target->getThunkSectionSpacing();
+  uint64_t OutSecAddr = ISD.Sections.front()->getParent()->Addr;
 
   // Set the OutSecOff of patches to the place where we want to insert them.
   // We use a similar strategy to Thunk placement. Place patches roughly
@@ -498,7 +498,7 @@ void AArch64Err843419Patcher::insertPatches(
     ISLimit = IS->OutSecOff + IS->getSize();
     if (ISLimit > PatchUpperBound) {
       while (PatchIt != PatchEnd) {
-        if ((*PatchIt)->getLDSTAddr() >= PrevISLimit)
+        if ((*PatchIt)->getLDSTAddr() - OutSecAddr >= PrevISLimit)
           break;
         (*PatchIt)->OutSecOff = PrevISLimit;
         ++PatchIt;

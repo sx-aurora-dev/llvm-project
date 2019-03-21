@@ -1,9 +1,8 @@
 //===- ELFStub.h ------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===-----------------------------------------------------------------------===/
 ///
@@ -54,7 +53,7 @@ class ELFStub {
 // TODO: Add support for symbol versioning.
 public:
   VersionTuple TbeVersion;
-  std::string SoName;
+  Optional<std::string> SoName;
   ELFArch Arch;
   std::vector<std::string> NeededLibs;
   std::set<ELFSymbol> Symbols;

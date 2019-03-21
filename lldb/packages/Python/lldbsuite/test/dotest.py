@@ -650,8 +650,11 @@ def get_llvm_bin_dirs():
         "llvm-build/Release/x86_64/bin",
         "llvm-build/Debug/x86_64/bin",
         "llvm-build/Ninja-DebugAssert/llvm-macosx-x86_64/bin",
+        "llvm-build/Ninja-DebugAssert+asan/llvm-macosx-x86_64/bin",
         "llvm-build/Ninja-ReleaseAssert/llvm-macosx-x86_64/bin",
+        "llvm-build/Ninja-ReleaseAssert+asan/llvm-macosx-x86_64/bin",
         "llvm-build/Ninja-RelWithDebInfoAssert/llvm-macosx-x86_64/bin",
+        "llvm-build/Ninja-RelWithDebInfoAssert+asan/llvm-macosx-x86_64/bin",
     ]
     for p in paths_to_try:
         path = os.path.join(lldb_root_path, p)
@@ -1061,14 +1064,15 @@ def getMyCommandLine():
 
 def checkDsymForUUIDIsNotOn():
     cmd = ["defaults", "read", "com.apple.DebugSymbols"]
-    pipe = subprocess.Popen(
+    process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
-    cmd_output = pipe.stdout.read()
-    if cmd_output and "DBGFileMappedPaths = " in cmd_output:
+    cmd_output = process.stdout.read()
+    output_str = cmd_output.decode("utf-8")
+    if "DBGFileMappedPaths = " in output_str:
         print("%s =>" % ' '.join(cmd))
-        print(cmd_output)
+        print(output_str)
         print(
             "Disable automatic lookup and caching of dSYMs before running the test suite!")
         print("Exiting...")

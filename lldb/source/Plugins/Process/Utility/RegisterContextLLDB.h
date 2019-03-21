@@ -1,10 +1,9 @@
 //===-- RegisterContextLLDB.h --------------------------------------------*- C++
 //-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -117,7 +116,7 @@ private:
   /// Given a SymbolContext, determines if this is a trap handler function
   /// aka asynchronous signal handler.
   ///
-  /// @return
+  /// \return
   ///     Returns true if the SymbolContext is a trap handler.
   //------------------------------------------------------------------
   bool IsTrapHandlerSymbol(lldb_private::Process *process,
@@ -164,7 +163,7 @@ private:
   /// better.  This is mostly helping to work around problems where the
   /// assembly language inspection fails on hand-written assembly code.
   ///
-  /// @return
+  /// \return
   ///     Returns true if a fallback unwindplan was found & was installed.
   //------------------------------------------------------------------
   bool TryFallbackUnwindPlan();

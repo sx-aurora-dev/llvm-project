@@ -7,16 +7,17 @@
 ; indexing of vectors.
 
 ; GCN-LABEL: {{^}}extract_w_offset:
-; GCN-DAG: s_load_dword [[IN:s[0-9]+]]
+; GCN-DAG: s_load_dword [[IN0:s[0-9]+]]
 ; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, 4.0
 ; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, 0x40400000
-; GCN-DAG: v_mov_b32_e32 [[BASEREG:v[0-9]+]], 2.0
-; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, 1.0
+; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, 2.0
+; GCN-DAG: v_mov_b32_e32 [[BASEREG:v[0-9]+]], 1.0
+; GCN-DAG: s_add_i32 [[IN:s[0-9]+]], [[IN0]], 1
 
 ; MOVREL-DAG: s_mov_b32 m0, [[IN]]
 ; MOVREL: v_movrels_b32_e32 v{{[0-9]+}}, [[BASEREG]]
 
-; IDXMODE: s_set_gpr_idx_on [[IN]], src0{{$}}
+; IDXMODE: s_set_gpr_idx_on [[IN]], gpr_idx(SRC0){{$}}
 ; IDXMODE-NEXT: v_mov_b32_e32 v{{[0-9]+}}, [[BASEREG]]
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @extract_w_offset(float addrspace(1)* %out, i32 %in) {
@@ -29,19 +30,20 @@ entry:
 
 ; XXX: Could do v_or_b32 directly
 ; GCN-LABEL: {{^}}extract_w_offset_salu_use_vector:
+; GCN-DAG: s_or_b32
+; GCN-DAG: s_or_b32
+; GCN-DAG: s_or_b32
+; GCN-DAG: s_or_b32
 ; MOVREL: s_mov_b32 m0
-; GCN-DAG: s_or_b32
-; GCN-DAG: s_or_b32
-; GCN-DAG: s_or_b32
-; GCN-DAG: s_or_b32
 ; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, s{{[0-9]+}}
 ; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, s{{[0-9]+}}
 ; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, s{{[0-9]+}}
 ; GCN-DAG: v_mov_b32_e32 v{{[0-9]+}}, s{{[0-9]+}}
+
 
 ; MOVREL: v_movrels_b32_e32
 
-; IDXMODE: s_set_gpr_idx_on s{{[0-9]+}}, src0{{$}}
+; IDXMODE: s_set_gpr_idx_on s{{[0-9]+}}, gpr_idx(SRC0){{$}}
 ; IDXMODE-NEXT: v_mov_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @extract_w_offset_salu_use_vector(i32 addrspace(1)* %out, i32 %in, <16 x i32> %or.val) {
@@ -63,7 +65,7 @@ entry:
 ; MOVREL-DAG: s_mov_b32 m0, [[IN]]
 ; MOVREL: v_movrels_b32_e32 v{{[0-9]+}}, [[BASEREG]]
 
-; IDXMODE: s_set_gpr_idx_on [[IN]], src0{{$}}
+; IDXMODE: s_set_gpr_idx_on [[IN]], gpr_idx(SRC0){{$}}
 ; IDXMODE-NEXT: v_mov_b32_e32 v{{[0-9]+}}, [[BASEREG]]
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @extract_wo_offset(float addrspace(1)* %out, i32 %in) {
@@ -81,7 +83,7 @@ entry:
 ; IDXMODE: s_addk_i32 [[ADD_IDX:s[0-9]+]], 0xfe00{{$}}
 ; IDXMODE: v_mov_b32_e32 v14, 15
 ; IDXMODE: v_mov_b32_e32 v15, 16
-; IDXMODE-NEXT: s_set_gpr_idx_on [[ADD_IDX]], src0{{$}}
+; IDXMODE-NEXT: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(SRC0){{$}}
 ; IDXMODE-NEXT: v_mov_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @extract_neg_offset_sgpr(i32 addrspace(1)* %out, i32 %offset) {
@@ -114,7 +116,7 @@ entry:
 ; IDXMODE: v_mov_b32_e32 v13,
 ; IDXMODE: v_mov_b32_e32 v14,
 ; IDXMODE: v_mov_b32_e32 v15,
-; IDXMODE-NEXT: s_set_gpr_idx_on [[ADD_IDX]], src0{{$}}
+; IDXMODE-NEXT: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(SRC0){{$}}
 ; IDXMODE-NEXT: v_mov_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @extract_neg_offset_sgpr_loaded(i32 addrspace(1)* %out, <16 x i32> %vec0, <16 x i32> %vec1, i32 %offset) {
@@ -139,7 +141,7 @@ entry:
 ; MOVREL: v_movrels_b32_e32 [[RESULT:v[0-9]+]], v1
 
 ; IDXMODE: s_addk_i32 [[ADD_IDX:s[0-9]+]], 0xfe00
-; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], src0
+; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(SRC0)
 ; IDXMODE: v_mov_b32_e32 [[RESULT:v[0-9]+]], v1
 ; IDXMODE: s_set_gpr_idx_off
 
@@ -176,7 +178,8 @@ entry:
 }
 
 ; GCN-LABEL: {{^}}insert_w_offset:
-; GCN-DAG: s_load_dword [[IN:s[0-9]+]]
+; GCN-DAG: s_load_dword [[IN0:s[0-9]+]]
+; MOVREL-DAG: s_add_i32 [[IN:s[0-9]+]], [[IN0]], 1
 ; MOVREL-DAG: s_mov_b32 m0, [[IN]]
 ; GCN-DAG: v_mov_b32_e32 v[[ELT0:[0-9]+]], 1.0
 ; GCN-DAG: v_mov_b32_e32 v[[ELT1:[0-9]+]], 2.0
@@ -185,7 +188,7 @@ entry:
 ; GCN-DAG: v_mov_b32_e32 v[[ELT15:[0-9]+]], 0x41800000
 ; GCN-DAG: v_mov_b32_e32 v[[INS:[0-9]+]], 0x41880000
 
-; MOVREL: v_movreld_b32_e32 v[[ELT1]], v[[INS]]
+; MOVREL: v_movreld_b32_e32 v[[ELT0]], v[[INS]]
 ; MOVREL: buffer_store_dwordx4 v{{\[}}[[ELT0]]:[[ELT3]]{{\]}}
 define amdgpu_kernel void @insert_w_offset(<16 x float> addrspace(1)* %out, i32 %in) {
 entry:
@@ -195,13 +198,58 @@ entry:
   ret void
 }
 
+; GCN-LABEL: {{^}}insert_unsigned_base_plus_offset:
+; GCN-DAG: s_load_dword [[IN:s[0-9]+]]
+; GCN-DAG: v_mov_b32_e32 [[ELT0:v[0-9]+]], 1.0
+; GCN-DAG: v_mov_b32_e32 [[ELT1:v[0-9]+]], 2.0
+; GCN-DAG: s_and_b32 [[BASE:s[0-9]+]], [[IN]], 0xffff
+
+; MOVREL: s_mov_b32 m0, [[BASE]]
+; MOVREL: v_movreld_b32_e32 [[ELT1]], v{{[0-9]+}}
+
+; IDXMODE: s_set_gpr_idx_on [[BASE]], gpr_idx(DST)
+; IDXMODE-NEXT: v_mov_b32_e32 [[ELT1]], v{{[0-9]+}}
+; IDXMODE-NEXT: s_set_gpr_idx_off
+define amdgpu_kernel void @insert_unsigned_base_plus_offset(<16 x float> addrspace(1)* %out, i16 %in) {
+entry:
+  %base = zext i16 %in to i32
+  %add = add i32 %base, 1
+  %ins = insertelement <16 x float> <float 1.0, float 2.0, float 3.0, float 4.0, float 5.0, float 6.0, float 7.0, float 8.0, float 9.0, float 10.0, float 11.0, float 12.0, float 13.0, float 14.0, float 15.0, float 16.0>, float 17.0, i32 %add
+  store <16 x float> %ins, <16 x float> addrspace(1)* %out
+  ret void
+}
+
+; GCN-LABEL: {{^}}insert_signed_base_plus_offset:
+; GCN-DAG: s_load_dword [[IN:s[0-9]+]]
+; GCN-DAG: v_mov_b32_e32 [[ELT0:v[0-9]+]], 1.0
+; GCN-DAG: v_mov_b32_e32 [[ELT1:v[0-9]+]], 2.0
+
+; GCN-DAG: s_sext_i32_i16 [[BASE:s[0-9]+]], [[IN]]
+; GCN-DAG: s_add_i32 [[BASE_PLUS_OFFSET:s[0-9]+]], [[BASE]], 1
+
+; MOVREL: s_mov_b32 m0, [[BASE_PLUS_OFFSET]]
+; MOVREL: v_movreld_b32_e32 [[ELT0]], v{{[0-9]+}}
+
+; IDXMODE: s_set_gpr_idx_on [[BASE_PLUS_OFFSET]], gpr_idx(DST)
+; IDXMODE-NEXT: v_mov_b32_e32 [[ELT0]], v{{[0-9]+}}
+; IDXMODE-NEXT: s_set_gpr_idx_off
+define amdgpu_kernel void @insert_signed_base_plus_offset(<16 x float> addrspace(1)* %out, i16 %in) {
+entry:
+  %base = sext i16 %in to i32
+  %add = add i32 %base, 1
+  %ins = insertelement <16 x float> <float 1.0, float 2.0, float 3.0, float 4.0, float 5.0, float 6.0, float 7.0, float 8.0, float 9.0, float 10.0, float 11.0, float 12.0, float 13.0, float 14.0, float 15.0, float 16.0>, float 17.0, i32 %add
+  store <16 x float> %ins, <16 x float> addrspace(1)* %out
+  ret void
+}
+
+
 ; GCN-LABEL: {{^}}insert_wo_offset:
 ; GCN: s_load_dword [[IN:s[0-9]+]]
 
 ; MOVREL: s_mov_b32 m0, [[IN]]
 ; MOVREL: v_movreld_b32_e32 v[[ELT0:[0-9]+]]
 
-; IDXMODE: s_set_gpr_idx_on [[IN]], dst
+; IDXMODE: s_set_gpr_idx_on [[IN]], gpr_idx(DST)
 ; IDXMODE-NEXT: v_mov_b32_e32 v[[ELT0:[0-9]+]], v{{[0-9]+}}
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 
@@ -219,7 +267,7 @@ entry:
 ; MOVREL: v_movreld_b32_e32 v0, 16
 
 ; IDXMODE: s_addk_i32 [[ADD_IDX:s[0-9]+]], 0xfe00{{$}}
-; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], dst
+; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(DST)
 ; IDXMODE-NEXT: v_mov_b32_e32 v0, 16
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @insert_neg_offset_sgpr(i32 addrspace(1)* %in, <16 x i32> addrspace(1)* %out, i32 %offset) {
@@ -239,7 +287,7 @@ entry:
 ; MOVREL: v_movreld_b32_e32 v0, 5
 
 ; IDXMODE: s_addk_i32 [[ADD_IDX:s[0-9]+]], 0xfe00{{$}}
-; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], dst
+; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(DST)
 ; IDXMODE-NEXT: v_mov_b32_e32 v0, 5
 ; IDXMODE-NEXT: s_set_gpr_idx_off
 define amdgpu_kernel void @insert_neg_offset_sgpr_loadreg(i32 addrspace(1)* %in, <16 x i32> addrspace(1)* %out, <16 x i32> %vec, i32 %offset) {
@@ -279,7 +327,7 @@ entry:
 ; MOVREL: v_movreld_b32_e32 [[VEC_ELT0]], 33
 
 ; IDXMODE: s_addk_i32 [[ADD_IDX:s[0-9]+]], 0xfe00{{$}}
-; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], dst
+; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(DST)
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, 33
 ; IDXMODE: s_set_gpr_idx_off
 
@@ -325,7 +373,7 @@ entry:
 ; MOVREL: v_movreld_b32_e32 [[VEC_ELT0]], [[VAL]]
 
 ; IDXMODE: s_add_i32 [[ADD_IDX:s[0-9]+]], [[READLANE]], -16
-; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], dst
+; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(DST)
 ; IDXMODE: v_mov_b32_e32 [[VEC_ELT0]], [[VAL]]
 ; IDXMODE: s_set_gpr_idx_off
 
@@ -354,8 +402,12 @@ entry:
 
 ; GCN: s_mov_b64 [[MASK:s\[[0-9]+:[0-9]+\]]], exec
 
+; GCN: s_waitcnt vmcnt(0)
+; PREGFX9: v_add_{{i32|u32}}_e32 [[IDX1:v[0-9]+]], vcc, 1, [[IDX0]]
+; GFX9: v_add_{{i32|u32}}_e32 [[IDX1:v[0-9]+]], 1, [[IDX0]]
+
+
 ; GCN: [[LOOP0:BB[0-9]+_[0-9]+]]:
-; GCN-NEXT: s_waitcnt vmcnt(0)
 ; GCN-NEXT: v_readfirstlane_b32 [[READLANE:s[0-9]+]], [[IDX0]]
 ; GCN: v_cmp_eq_u32_e32 vcc, [[READLANE]], [[IDX0]]
 ; GCN: s_and_saveexec_b64 vcc, vcc
@@ -363,7 +415,7 @@ entry:
 ; MOVREL: s_mov_b32 m0, [[READLANE]]
 ; MOVREL: v_movrels_b32_e32 [[MOVREL0:v[0-9]+]], [[VEC_ELT0]]
 
-; IDXMODE: s_set_gpr_idx_on [[READLANE]], src0
+; IDXMODE: s_set_gpr_idx_on [[READLANE]], gpr_idx(SRC0)
 ; IDXMODE: v_mov_b32_e32 [[MOVREL0:v[0-9]+]], [[VEC_ELT0]]
 ; IDXMODE: s_set_gpr_idx_off
 
@@ -373,20 +425,20 @@ entry:
 ; FIXME: Redundant copy
 ; GCN: s_mov_b64 exec, [[MASK]]
 
-; GCN: v_mov_b32_e32 [[VEC_ELT1_2:v[0-9]+]], [[S_ELT1]]
+; GCN: v_mov_b32_e32 [[VEC_ELT0_2:v[0-9]+]], [[S_ELT0]]
 
 ; GCN: s_mov_b64 [[MASK2:s\[[0-9]+:[0-9]+\]]], exec
 
 ; GCN: [[LOOP1:BB[0-9]+_[0-9]+]]:
-; GCN-NEXT: v_readfirstlane_b32 [[READLANE:s[0-9]+]], [[IDX0]]
-; GCN: v_cmp_eq_u32_e32 vcc, [[READLANE]], [[IDX0]]
+; GCN-NEXT: v_readfirstlane_b32 [[READLANE:s[0-9]+]], [[IDX1]]
+; GCN: v_cmp_eq_u32_e32 vcc, [[READLANE]], [[IDX1]]
 ; GCN: s_and_saveexec_b64 vcc, vcc
 
 ; MOVREL: s_mov_b32 m0, [[READLANE]]
-; MOVREL-NEXT: v_movrels_b32_e32 [[MOVREL1:v[0-9]+]], [[VEC_ELT1_2]]
+; MOVREL-NEXT: v_movrels_b32_e32 [[MOVREL1:v[0-9]+]], [[VEC_ELT0_2]]
 
-; IDXMODE: s_set_gpr_idx_on [[READLANE]], src0
-; IDXMODE-NEXT: v_mov_b32_e32 [[MOVREL1:v[0-9]+]], [[VEC_ELT1_2]]
+; IDXMODE: s_set_gpr_idx_on [[READLANE]], gpr_idx(SRC0)
+; IDXMODE-NEXT: v_mov_b32_e32 [[MOVREL1:v[0-9]+]], [[VEC_ELT0_2]]
 ; IDXMODE: s_set_gpr_idx_off
 
 ; GCN-NEXT: s_xor_b64 exec, exec, vcc
@@ -464,11 +516,11 @@ bb7:                                              ; preds = %bb4, %bb1
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, 0x41900000
 ; IDXMODE: s_waitcnt
 ; IDXMODE: s_add_i32 [[ARG]], [[ARG]], -16
-; IDXMODE: s_set_gpr_idx_on [[ARG]], dst
+; IDXMODE: s_set_gpr_idx_on [[ARG]], gpr_idx(DST)
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, 4.0
 ; IDXMODE: s_set_gpr_idx_off
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, 0x41b0cccd
-; IDXMODE: s_set_gpr_idx_on [[ARG]], dst
+; IDXMODE: s_set_gpr_idx_on [[ARG]], gpr_idx(DST)
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, -4.0
 ; IDXMODE: s_set_gpr_idx_off
 
@@ -492,13 +544,15 @@ bb:
 
 ; offset puts outside of superegister bounaries, so clamp to 1st element.
 ; GCN-LABEL: {{^}}extract_largest_inbounds_offset:
-; GCN-DAG: buffer_load_dwordx4 v{{\[}}[[LO_ELT:[0-9]+]]:[[HI_ELT:[0-9]+]]{{\].* offset:48}}
-; GCN-DAG: s_load_dword [[IDX:s[0-9]+]]
-; MOVREL: s_mov_b32 m0, [[IDX]]
-; MOVREL: v_movrels_b32_e32 [[EXTRACT:v[0-9]+]], v[[HI_ELT]]
+; GCN-DAG: buffer_load_dwordx4 v{{\[}}[[LO_ELT:[0-9]+]]:[[HI_ELT:[0-9]+]]
+; GCN-DAG: s_load_dword [[IDX0:s[0-9]+]]
+; GCN-DAG: s_add_i32 [[IDX:s[0-9]+]], [[IDX0]], 15
 
-; IDXMODE: s_set_gpr_idx_on [[IDX]], src0
-; IDXMODE: v_mov_b32_e32 [[EXTRACT:v[0-9]+]], v[[HI_ELT]]
+; MOVREL: s_mov_b32 m0, [[IDX]]
+; MOVREL: v_movrels_b32_e32 [[EXTRACT:v[0-9]+]], v[[LO_ELT]]
+
+; IDXMODE: s_set_gpr_idx_on [[IDX]], gpr_idx(SRC0)
+; IDXMODE: v_mov_b32_e32 [[EXTRACT:v[0-9]+]], v[[LO_ELT]]
 ; IDXMODE: s_set_gpr_idx_off
 
 ; GCN: buffer_store_dword [[EXTRACT]]
@@ -514,11 +568,12 @@ entry:
 ; GCN-LABEL: {{^}}extract_out_of_bounds_offset:
 ; GCN-DAG: buffer_load_dwordx4 v{{\[}}[[LO_ELT:[0-9]+]]:[[HI_ELT:[0-9]+]]{{\]}}
 ; GCN-DAG: s_load_dword [[IDX:s[0-9]+]]
-; MOVREL: s_add_i32 m0, [[IDX]], 16
+; GCN: s_add_i32 [[ADD_IDX:s[0-9]+]], [[IDX]], 16
+
+; MOVREL: s_mov_b32 m0, [[ADD_IDX]]
 ; MOVREL: v_movrels_b32_e32 [[EXTRACT:v[0-9]+]], v[[LO_ELT]]
 
-; IDXMODE: s_add_i32 [[ADD_IDX:s[0-9]+]], [[IDX]], 16
-; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], src0
+; IDXMODE: s_set_gpr_idx_on [[ADD_IDX]], gpr_idx(SRC0)
 ; IDXMODE: v_mov_b32_e32 [[EXTRACT:v[0-9]+]], v[[LO_ELT]]
 ; IDXMODE: s_set_gpr_idx_off
 
@@ -532,18 +587,15 @@ entry:
   ret void
 }
 
-; Test that the or is folded into the base address register instead of
-; added to m0
-
 ; GCN-LABEL: {{^}}extractelement_v16i32_or_index:
 ; GCN: s_load_dword [[IDX_IN:s[0-9]+]]
 ; GCN: s_lshl_b32 [[IDX_SHL:s[0-9]+]], [[IDX_IN]]
-; GCN-NOT: [[IDX_SHL]]
+; GCN: s_or_b32 [[IDX_FIN:s[0-9]+]], [[IDX_SHL]], 1
 
-; MOVREL: s_mov_b32 m0, [[IDX_SHL]]
+; MOVREL: s_mov_b32 m0, [[IDX_FIN]]
 ; MOVREL: v_movrels_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 
-; IDXMODE: s_set_gpr_idx_on [[IDX_SHL]], src0
+; IDXMODE: s_set_gpr_idx_on [[IDX_FIN]], gpr_idx(SRC0)
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 ; IDXMODE: s_set_gpr_idx_off
 define amdgpu_kernel void @extractelement_v16i32_or_index(i32 addrspace(1)* %out, <16 x i32> addrspace(1)* %in, i32 %idx.in) {
@@ -559,12 +611,12 @@ entry:
 ; GCN-LABEL: {{^}}insertelement_v16f32_or_index:
 ; GCN: s_load_dword [[IDX_IN:s[0-9]+]]
 ; GCN: s_lshl_b32 [[IDX_SHL:s[0-9]+]], [[IDX_IN]]
-; GCN-NOT: [[IDX_SHL]]
+; GCN: s_or_b32 [[IDX_FIN:s[0-9]+]], [[IDX_SHL]], 1
 
-; MOVREL: s_mov_b32 m0, [[IDX_SHL]]
+; MOVREL: s_mov_b32 m0, [[IDX_FIN]]
 ; MOVREL: v_movreld_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 
-; IDXMODE: s_set_gpr_idx_on [[IDX_SHL]], dst
+; IDXMODE: s_set_gpr_idx_on [[IDX_FIN]], gpr_idx(DST)
 ; IDXMODE: v_mov_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}
 ; IDXMODE: s_set_gpr_idx_off
 define amdgpu_kernel void @insertelement_v16f32_or_index(<16 x float> addrspace(1)* %out, <16 x float> %a, i32 %idx.in) nounwind {

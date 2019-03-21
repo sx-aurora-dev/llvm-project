@@ -1,9 +1,8 @@
 //===- LLVMContextImpl.h - The LLVMContextImpl opaque class -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -38,6 +37,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/RemarkStreamer.h"
 #include "llvm/IR/TrackingMDRef.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Casting.h"
@@ -1227,7 +1227,7 @@ public:
   bool RespectDiagnosticFilters = false;
   bool DiagnosticsHotnessRequested = false;
   uint64_t DiagnosticsHotnessThreshold = 0;
-  std::unique_ptr<yaml::Output> DiagnosticsOutputFile;
+  std::unique_ptr<RemarkStreamer> RemarkDiagStreamer;
 
   LLVMContext::YieldCallbackTy YieldCallback = nullptr;
   void *YieldOpaqueHandle = nullptr;

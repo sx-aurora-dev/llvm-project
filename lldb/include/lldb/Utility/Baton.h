@@ -1,9 +1,8 @@
 //===-- Baton.h -------------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +21,7 @@ class Stream;
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class Baton Baton.h "lldb/Core/Baton.h"
+/// \class Baton Baton.h "lldb/Core/Baton.h"
 /// A class designed to wrap callback batons so they can cleanup
 ///        any acquired resources
 ///
