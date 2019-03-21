@@ -237,6 +237,13 @@ namespace std {
     return static_cast<RvalRef>(a);
   }
 
+  template <class T>
+  void swap(T &a, T &b) {
+    T c(std::move(a));
+    a = std::move(b);
+    b = std::move(c);
+  }
+
   template<typename T>
   class vector {
     typedef T value_type;
@@ -770,6 +777,22 @@ namespace std {
 
 }
 
+#if __cplusplus >= 201103L
+namespace std {
+  template <typename T> // TODO: Implement the stub for deleter.
+  class unique_ptr {
+  public:
+    unique_ptr(const unique_ptr &) = delete;
+    unique_ptr(unique_ptr &&);
+
+    T *get() const;
+
+    typename std::add_lvalue_reference<T>::type operator*() const;
+    T *operator->() const;
+  };
+}
+#endif
+
 #ifdef TEST_INLINABLE_ALLOCATORS
 namespace std {
   void *malloc(size_t);
@@ -799,3 +822,26 @@ extern char *__cxa_demangle(const char *mangled_name,
                             int *status);
 }}
 namespace abi = __cxxabiv1;
+
+namespace std {
+  template<class ForwardIt>
+  bool is_sorted(ForwardIt first, ForwardIt last);
+
+  template <class RandomIt>
+  void nth_element(RandomIt first, RandomIt nth, RandomIt last);
+
+  template<class RandomIt>
+  void partial_sort(RandomIt first, RandomIt middle, RandomIt last);
+
+  template<class RandomIt>
+  void sort (RandomIt first, RandomIt last);
+
+  template<class RandomIt>
+  void stable_sort(RandomIt first, RandomIt last);
+
+  template<class BidirIt, class UnaryPredicate>
+  BidirIt partition(BidirIt first, BidirIt last, UnaryPredicate p);
+
+  template<class BidirIt, class UnaryPredicate>
+  BidirIt stable_partition(BidirIt first, BidirIt last, UnaryPredicate p);
+}

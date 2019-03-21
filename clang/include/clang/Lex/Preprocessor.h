@@ -1,9 +1,8 @@
 //===- Preprocessor.h - C Language Family Preprocessor ----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -29,7 +28,6 @@
 #include "clang/Lex/ModuleLoader.h"
 #include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/PPCallbacks.h"
-#include "clang/Lex/PTHLexer.h"
 #include "clang/Lex/Token.h"
 #include "clang/Lex/TokenLexer.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -73,13 +71,11 @@ class FileEntry;
 class FileManager;
 class HeaderSearch;
 class MacroArgs;
-class MemoryBufferCache;
 class PragmaHandler;
 class PragmaNamespace;
 class PreprocessingRecord;
 class PreprocessorLexer;
 class PreprocessorOptions;
-class PTHManager;
 class ScratchBuffer;
 class TargetInfo;
 
@@ -135,17 +131,12 @@ class Preprocessor {
   const TargetInfo *AuxTarget = nullptr;
   FileManager       &FileMgr;
   SourceManager     &SourceMgr;
-  MemoryBufferCache &PCMCache;
   std::unique_ptr<ScratchBuffer> ScratchBuf;
   HeaderSearch      &HeaderInfo;
   ModuleLoader      &TheModuleLoader;
 
   /// External source of macros.
   ExternalPreprocessorSource *ExternalSource;
-
-  /// An optional PTHManager object used for getting tokens from
-  /// a token cache rather than lexing the original source file.
-  std::unique_ptr<PTHManager> PTH;
 
   /// A BumpPtrAllocator object used to quickly allocate and release
   /// objects internal to the Preprocessor.
@@ -179,6 +170,9 @@ class Preprocessor {
   IdentifierInfo *Ident__is_target_vendor;         // __is_target_vendor
   IdentifierInfo *Ident__is_target_os;             // __is_target_os
   IdentifierInfo *Ident__is_target_environment;    // __is_target_environment
+
+  // Weak, only valid (and set) while InMacroArgs is true.
+  Token* ArgMacro;
 
   SourceLocation DATELoc, TIMELoc;
 
@@ -325,6 +319,10 @@ class Preprocessor {
   /// This is used when loading a precompiled preamble.
   std::pair<int, bool> SkipMainFilePreamble;
 
+  /// Whether we hit an error due to reaching max allowed include depth. Allows
+  /// to avoid hitting the same error over and over again.
+  bool HasReachedMaxIncludeDepth = false;
+
 public:
   struct PreambleSkipInfo {
     SourceLocation HashTokenLoc;
@@ -392,19 +390,13 @@ private:
   /// The current top of the stack that we're lexing from if
   /// not expanding a macro and we are lexing directly from source code.
   ///
-  /// Only one of CurLexer, CurPTHLexer, or CurTokenLexer will be non-null.
+  /// Only one of CurLexer, or CurTokenLexer will be non-null.
   std::unique_ptr<Lexer> CurLexer;
-
-  /// The current top of stack that we're lexing from if
-  /// not expanding from a macro and we are lexing from a PTH cache.
-  ///
-  /// Only one of CurLexer, CurPTHLexer, or CurTokenLexer will be non-null.
-  std::unique_ptr<PTHLexer> CurPTHLexer;
 
   /// The current top of the stack what we're lexing from
   /// if not expanding a macro.
   ///
-  /// This is an alias for either CurLexer or  CurPTHLexer.
+  /// This is an alias for CurLexer.
   PreprocessorLexer *CurPPLexer = nullptr;
 
   /// Used to find the current FileEntry, if CurLexer is non-null
@@ -422,7 +414,6 @@ private:
   /// The kind of lexer we're currently working with.
   enum CurLexerKind {
     CLK_Lexer,
-    CLK_PTHLexer,
     CLK_TokenLexer,
     CLK_CachingLexer,
     CLK_LexAfterModuleImport
@@ -439,7 +430,6 @@ private:
     enum CurLexerKind           CurLexerKind;
     Module                     *TheSubmodule;
     std::unique_ptr<Lexer>      TheLexer;
-    std::unique_ptr<PTHLexer>   ThePTHLexer;
     PreprocessorLexer          *ThePPLexer;
     std::unique_ptr<TokenLexer> TheTokenLexer;
     const DirectoryLookup      *TheDirLookup;
@@ -448,13 +438,11 @@ private:
     // versions, only needed to pacify MSVC.
     IncludeStackInfo(enum CurLexerKind CurLexerKind, Module *TheSubmodule,
                      std::unique_ptr<Lexer> &&TheLexer,
-                     std::unique_ptr<PTHLexer> &&ThePTHLexer,
                      PreprocessorLexer *ThePPLexer,
                      std::unique_ptr<TokenLexer> &&TheTokenLexer,
                      const DirectoryLookup *TheDirLookup)
         : CurLexerKind(std::move(CurLexerKind)),
           TheSubmodule(std::move(TheSubmodule)), TheLexer(std::move(TheLexer)),
-          ThePTHLexer(std::move(ThePTHLexer)),
           ThePPLexer(std::move(ThePPLexer)),
           TheTokenLexer(std::move(TheTokenLexer)),
           TheDirLookup(std::move(TheDirLookup)) {}
@@ -789,7 +777,6 @@ private:
 public:
   Preprocessor(std::shared_ptr<PreprocessorOptions> PPOpts,
                DiagnosticsEngine &diags, LangOptions &opts, SourceManager &SM,
-               MemoryBufferCache &PCMCache,
                HeaderSearch &Headers, ModuleLoader &TheModuleLoader,
                IdentifierInfoLookup *IILookup = nullptr,
                bool OwnsHeaderSearch = false,
@@ -829,7 +816,6 @@ public:
   const TargetInfo *getAuxTargetInfo() const { return AuxTarget; }
   FileManager &getFileManager() const { return FileMgr; }
   SourceManager &getSourceManager() const { return SourceMgr; }
-  MemoryBufferCache &getPCMCache() const { return PCMCache; }
   HeaderSearch &getHeaderSearchInfo() const { return HeaderInfo; }
 
   IdentifierTable &getIdentifierTable() { return Identifiers; }
@@ -837,10 +823,6 @@ public:
   SelectorTable &getSelectorTable() { return Selectors; }
   Builtin::Context &getBuiltinInfo() { return BuiltinInfo; }
   llvm::BumpPtrAllocator &getPreprocessorAllocator() { return BP; }
-
-  void setPTHManager(PTHManager* pm);
-
-  PTHManager *getPTHManager() { return PTH.get(); }
 
   void setExternalSource(ExternalPreprocessorSource *Source) {
     ExternalSource = Source;
@@ -1456,7 +1438,7 @@ public:
       CachedTokens[CachedLexPos-1] = Tok;
   }
 
-  /// Recompute the current lexer kind based on the CurLexer/CurPTHLexer/
+  /// Recompute the current lexer kind based on the CurLexer/
   /// CurTokenLexer pointers.
   void recomputeCurLexerKind();
 
@@ -1832,8 +1814,8 @@ public:
   void CheckEndOfDirective(const char *DirType, bool EnableMacros = false);
 
   /// Read and discard all tokens remaining on the current line until
-  /// the tok::eod token is found.
-  void DiscardUntilEndOfDirective();
+  /// the tok::eod token is found. Returns the range of the skipped tokens.
+  SourceRange DiscardUntilEndOfDirective();
 
   /// Returns true if the preprocessor has seen a use of
   /// __DATE__ or __TIME__ in the file so far.
@@ -1871,7 +1853,8 @@ public:
                               SmallVectorImpl<char> *SearchPath,
                               SmallVectorImpl<char> *RelativePath,
                               ModuleMap::KnownHeader *SuggestedModule,
-                              bool *IsMapped, bool SkipCache = false);
+                              bool *IsMapped, bool *IsFrameworkFound,
+                              bool SkipCache = false);
 
   /// Get the DirectoryLookup structure used to find the current
   /// FileEntry, if CurLexer is non-null and if applicable.
@@ -1915,15 +1898,13 @@ private:
   void PushIncludeMacroStack() {
     assert(CurLexerKind != CLK_CachingLexer && "cannot push a caching lexer");
     IncludeMacroStack.emplace_back(CurLexerKind, CurLexerSubmodule,
-                                   std::move(CurLexer), std::move(CurPTHLexer),
-                                   CurPPLexer, std::move(CurTokenLexer),
-                                   CurDirLookup);
+                                   std::move(CurLexer), CurPPLexer,
+                                   std::move(CurTokenLexer), CurDirLookup);
     CurPPLexer = nullptr;
   }
 
   void PopIncludeMacroStack() {
     CurLexer = std::move(IncludeMacroStack.back().TheLexer);
-    CurPTHLexer = std::move(IncludeMacroStack.back().ThePTHLexer);
     CurPPLexer = IncludeMacroStack.back().ThePPLexer;
     CurTokenLexer = std::move(IncludeMacroStack.back().TheTokenLexer);
     CurDirLookup  = IncludeMacroStack.back().TheDirLookup;
@@ -1992,9 +1973,6 @@ private:
                                     bool FoundNonSkipPortion, bool FoundElse,
                                     SourceLocation ElseLoc = SourceLocation());
 
-  /// A fast PTH version of SkipExcludedConditionalBlock.
-  void PTHSkipExcludedConditionalBlock();
-
   /// Information about the result for evaluating an expression for a
   /// preprocessor directive.
   struct DirectiveEvalResult {
@@ -2003,6 +1981,9 @@ private:
 
     /// True if the expression contained identifiers that were undefined.
     bool IncludedUndefinedIds;
+
+    /// The source range for the expression.
+    SourceRange ExprRange;
   };
 
   /// Evaluate an integer constant expression that may occur after a
@@ -2060,10 +2041,6 @@ private:
   /// start lexing tokens from it instead of the current buffer.
   void EnterSourceFileWithLexer(Lexer *TheLexer, const DirectoryLookup *Dir);
 
-  /// Add a lexer to the top of the include stack and
-  /// start getting tokens from it using the PTH cache.
-  void EnterSourceFileWithPTH(PTHLexer *PL, const DirectoryLookup *Dir);
-
   /// Set the FileID for the preprocessor predefines.
   void setPredefinesFileID(FileID FID) {
     assert(PredefinesFileID.isInvalid() && "PredefinesFileID already set!");
@@ -2094,8 +2071,7 @@ private:
   bool InCachingLexMode() const {
     // If the Lexer pointers are 0 and IncludeMacroStack is empty, it means
     // that we are past EOF, not that we are in CachingLex mode.
-    return !CurPPLexer && !CurTokenLexer && !CurPTHLexer &&
-           !IncludeMacroStack.empty();
+    return !CurPPLexer && !CurTokenLexer && !IncludeMacroStack.empty();
   }
 
   void EnterCachingLexMode();

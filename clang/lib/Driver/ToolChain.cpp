@@ -1,9 +1,8 @@
 //===- ToolChain.cpp - Collections of tools for one platform --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -363,16 +362,27 @@ std::string ToolChain::getCompilerRTPath() const {
 }
 
 std::string ToolChain::getCompilerRT(const ArgList &Args, StringRef Component,
-                                     bool Shared) const {
+                                     FileType Type) const {
   const llvm::Triple &TT = getTriple();
   bool IsITANMSVCWindows =
       TT.isWindowsMSVCEnvironment() || TT.isWindowsItaniumEnvironment();
 
-  const char *Prefix = IsITANMSVCWindows ? "" : "lib";
-  const char *Suffix = Shared ? (Triple.isOSWindows() ? ".lib" : ".so")
-                              : (IsITANMSVCWindows ? ".lib" : ".a");
-  if (Shared && Triple.isWindowsGNUEnvironment())
-    Suffix = ".dll.a";
+  const char *Prefix =
+      IsITANMSVCWindows || Type == ToolChain::FT_Object ? "" : "lib";
+  const char *Suffix;
+  switch (Type) {
+  case ToolChain::FT_Object:
+    Suffix = IsITANMSVCWindows ? ".obj" : ".o";
+    break;
+  case ToolChain::FT_Static:
+    Suffix = IsITANMSVCWindows ? ".lib" : ".a";
+    break;
+  case ToolChain::FT_Shared:
+    Suffix = Triple.isOSWindows()
+                 ? (Triple.isWindowsGNUEnvironment() ? ".dll.a" : ".lib")
+                 : ".so";
+    break;
+  }
 
   for (const auto &LibPath : getLibraryPaths()) {
     SmallString<128> P(LibPath);
@@ -391,8 +401,8 @@ std::string ToolChain::getCompilerRT(const ArgList &Args, StringRef Component,
 
 const char *ToolChain::getCompilerRTArgString(const llvm::opt::ArgList &Args,
                                               StringRef Component,
-                                              bool Shared) const {
-  return Args.MakeArgString(getCompilerRT(Args, Component, Shared));
+                                              FileType Type) const {
+  return Args.MakeArgString(getCompilerRT(Args, Component, Type));
 }
 
 std::string ToolChain::getArchSpecificLibPath() const {
@@ -403,17 +413,24 @@ std::string ToolChain::getArchSpecificLibPath() const {
 }
 
 bool ToolChain::needsProfileRT(const ArgList &Args) {
-  if (Args.hasFlag(options::OPT_fprofile_arcs, options::OPT_fno_profile_arcs,
-                   false) ||
+  if (needsGCovInstrumentation(Args) ||
       Args.hasArg(options::OPT_fprofile_generate) ||
       Args.hasArg(options::OPT_fprofile_generate_EQ) ||
+      Args.hasArg(options::OPT_fcs_profile_generate) ||
+      Args.hasArg(options::OPT_fcs_profile_generate_EQ) ||
       Args.hasArg(options::OPT_fprofile_instr_generate) ||
       Args.hasArg(options::OPT_fprofile_instr_generate_EQ) ||
       Args.hasArg(options::OPT_fcreate_profile) ||
-      Args.hasArg(options::OPT_coverage))
+      Args.hasArg(options::OPT_forder_file_instrumentation)) 
     return true;
 
   return false;
+}
+
+bool ToolChain::needsGCovInstrumentation(const llvm::opt::ArgList &Args) {
+  return Args.hasFlag(options::OPT_fprofile_arcs, options::OPT_fno_profile_arcs,
+                      false) ||
+         Args.hasArg(options::OPT_coverage);
 }
 
 Tool *ToolChain::SelectTool(const JobAction &JA) const {
@@ -600,7 +617,7 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
 
     // Check to see if an explicit choice to use thumb has been made via
     // -mthumb. For assembler files we must check for -mthumb in the options
-    // passed to the assember via -Wa or -Xassembler.
+    // passed to the assembler via -Wa or -Xassembler.
     bool IsThumb = false;
     if (InputType != types::TY_PP_Asm)
       IsThumb = Args.hasFlag(options::OPT_mthumb, options::OPT_mno_thumb,
@@ -815,21 +832,23 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
   // Return sanitizers which don't require runtime support and are not
   // platform dependent.
 
-  using namespace SanitizerKind;
-
-  SanitizerMask Res = (Undefined & ~Vptr & ~Function) | (CFI & ~CFIICall) |
-                      CFICastStrict | UnsignedIntegerOverflow |
-                      ImplicitConversion | Nullability | LocalBounds;
+  SanitizerMask Res = (SanitizerKind::Undefined & ~SanitizerKind::Vptr &
+                       ~SanitizerKind::Function) |
+                      (SanitizerKind::CFI & ~SanitizerKind::CFIICall) |
+                      SanitizerKind::CFICastStrict |
+                      SanitizerKind::UnsignedIntegerOverflow |
+                      SanitizerKind::ImplicitConversion |
+                      SanitizerKind::Nullability | SanitizerKind::LocalBounds;
   if (getTriple().getArch() == llvm::Triple::x86 ||
       getTriple().getArch() == llvm::Triple::x86_64 ||
       getTriple().getArch() == llvm::Triple::arm ||
       getTriple().getArch() == llvm::Triple::aarch64 ||
       getTriple().getArch() == llvm::Triple::wasm32 ||
       getTriple().getArch() == llvm::Triple::wasm64)
-    Res |= CFIICall;
+    Res |= SanitizerKind::CFIICall;
   if (getTriple().getArch() == llvm::Triple::x86_64 ||
       getTriple().getArch() == llvm::Triple::aarch64)
-    Res |= ShadowCallStack;
+    Res |= SanitizerKind::ShadowCallStack;
   return Res;
 }
 

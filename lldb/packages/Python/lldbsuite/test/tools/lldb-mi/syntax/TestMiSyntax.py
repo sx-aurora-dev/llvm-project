@@ -53,7 +53,7 @@ class MiSyntaxTestCase(lldbmi_testcase.MiTestCaseBase):
         os.symlink(self.myexe, complicated_myexe)
         self.addTearDownHook(lambda: os.unlink(complicated_myexe))
 
-        self.spawnLldbMi(args="\"%s\"" % complicated_myexe)
+        self.spawnLldbMi(exe=complicated_myexe)
 
         # Test that the executable was loaded
         self.expect(
@@ -71,6 +71,7 @@ class MiSyntaxTestCase(lldbmi_testcase.MiTestCaseBase):
     @skipIfWindows  # llvm.org/pr24452: Get lldb-mi tests working on Windows
     @skipIfFreeBSD  # llvm.org/pr22411: Failure presumably due to known thread races
     @skipIfDarwin
+    @expectedFlakeyNetBSD
     @skipIfRemote   # We do not currently support remote debugging via the MI.
     def test_lldbmi_output_grammar(self):
         """Test that 'lldb-mi --interpreter' uses standard output syntax."""

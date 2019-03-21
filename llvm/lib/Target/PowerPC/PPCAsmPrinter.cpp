@@ -1,9 +1,8 @@
 //===-- PPCAsmPrinter.cpp - Print machine instrs to PowerPC assembly ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -97,6 +96,9 @@ public:
 
     void EmitInstruction(const MachineInstr *MI) override;
 
+    /// This function is for PrintAsmOperand and PrintAsmMemoryOperand,
+    /// invoked by EmitMSInlineAsmStr and EmitGCCInlineAsmStr only.
+    /// The \p MI would be INLINEASM ONLY.
     void printOperand(const MachineInstr *MI, unsigned OpNo, raw_ostream &O);
 
     bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
@@ -165,8 +167,9 @@ void PPCAsmPrinter::printOperand(const MachineInstr *MI, unsigned OpNo,
 
   switch (MO.getType()) {
   case MachineOperand::MO_Register: {
-    unsigned Reg = PPCInstrInfo::getRegNumForOperand(MI->getDesc(),
-                                                     MO.getReg(), OpNo);
+    // The MI is INLINEASM ONLY and UseVSXReg is always false.
+    unsigned Reg =
+        PPCInstrInfo::getRegNumForOperand(MI->getDesc(), MO.getReg(), OpNo);
 
     const char *RegName = PPCInstPrinter::getRegisterName(Reg);
 
@@ -473,8 +476,14 @@ void PPCAsmPrinter::EmitTlsCall(const MachineInstr *MI,
   if (!Subtarget->isPPC64() && !Subtarget->isDarwin() &&
       isPositionIndependent())
     Kind = MCSymbolRefExpr::VK_PLT;
-  const MCSymbolRefExpr *TlsRef =
+  const MCExpr *TlsRef =
     MCSymbolRefExpr::create(TlsGetAddr, Kind, OutContext);
+
+  // Add 32768 offset to the symbol so we follow up the latest GOT/PLT ABI.
+  if (Kind == MCSymbolRefExpr::VK_PLT && Subtarget->isSecurePlt())
+    TlsRef = MCBinaryExpr::createAdd(TlsRef,
+                                     MCConstantExpr::create(32768, OutContext),
+                                     OutContext);
   const MachineOperand &MO = MI->getOperand(2);
   const GlobalValue *GValue = MO.getGlobal();
   MCSymbol *MOSymbol = getSymbol(GValue);

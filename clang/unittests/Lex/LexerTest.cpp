@@ -1,9 +1,8 @@
 //===- unittests/Lex/LexerTest.cpp ------ Lexer tests ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +11,6 @@
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/LangOptions.h"
-#include "clang/Basic/MemoryBufferCache.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
@@ -49,12 +47,11 @@ protected:
         llvm::MemoryBuffer::getMemBuffer(Source);
     SourceMgr.setMainFileID(SourceMgr.createFileID(std::move(Buf)));
 
-    MemoryBufferCache PCMCache;
     HeaderSearch HeaderInfo(std::make_shared<HeaderSearchOptions>(), SourceMgr,
                             Diags, LangOpts, Target.get());
     std::unique_ptr<Preprocessor> PP = llvm::make_unique<Preprocessor>(
         std::make_shared<PreprocessorOptions>(), Diags, LangOpts, SourceMgr,
-        PCMCache, HeaderInfo, ModLoader,
+        HeaderInfo, ModLoader,
         /*IILookup =*/nullptr,
         /*OwnsHeaderSearch =*/false);
     PP->Initialize(*Target);

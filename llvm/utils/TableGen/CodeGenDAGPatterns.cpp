@@ -1,9 +1,8 @@
 //===- CodeGenDAGPatterns.cpp - Read DAG patterns from .td file -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +14,7 @@
 #include "CodeGenDAGPatterns.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
@@ -27,6 +27,7 @@
 #include "llvm/TableGen/Record.h"
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <set>
 using namespace llvm;
 
@@ -66,8 +67,10 @@ static bool berase_if(MachineValueTypeSet &S, Predicate P) {
 // inference will apply to each mode separately.
 
 TypeSetByHwMode::TypeSetByHwMode(ArrayRef<ValueTypeByHwMode> VTList) {
-  for (const ValueTypeByHwMode &VVT : VTList)
+  for (const ValueTypeByHwMode &VVT : VTList) {
     insert(VVT);
+    AddrSpaces.push_back(VVT.PtrAddrSpace);
+  }
 }
 
 bool TypeSetByHwMode::isValueTypeByHwMode(bool AllowEmpty) const {
@@ -84,9 +87,13 @@ ValueTypeByHwMode TypeSetByHwMode::getValueTypeByHwMode() const {
   assert(isValueTypeByHwMode(true) &&
          "The type set has multiple types for at least one HW mode");
   ValueTypeByHwMode VVT;
+  auto ASI = AddrSpaces.begin();
+
   for (const auto &I : *this) {
     MVT T = I.second.empty() ? MVT::Other : *I.second.begin();
     VVT.getOrCreateTypeForMode(I.first, T);
+    if (ASI != AddrSpaces.end())
+      VVT.PtrAddrSpace = *ASI++;
   }
   return VVT;
 }
@@ -1274,6 +1281,17 @@ std::string TreePredicateFn::getCodeToRunOnSDNode() const {
 // PatternToMatch implementation
 //
 
+static bool isImmAllOnesAllZerosMatch(const TreePatternNode *P) {
+  if (!P->isLeaf())
+    return false;
+  DefInit *DI = dyn_cast<DefInit>(P->getLeafValue());
+  if (!DI)
+    return false;
+
+  Record *R = DI->getDef();
+  return R->getName() == "immAllOnesV" || R->getName() == "immAllZerosV";
+}
+
 /// getPatternSize - Return the 'size' of this pattern.  We want to match large
 /// patterns before small ones.  This is used to determine the size of a
 /// pattern.
@@ -1313,6 +1331,8 @@ static unsigned getPatternSize(const TreePatternNode *P,
         Size += 5;  // Matches a ConstantSDNode (+3) and a specific value (+2).
       else if (Child->getComplexPatternInfo(CGP))
         Size += getPatternSize(Child, CGP);
+      else if (isImmAllOnesAllZerosMatch(Child))
+        Size += 4; // Matches a build_vector(+3) and a predicate (+1).
       else if (!Child->getPredicateCalls().empty())
         ++Size;
     }
@@ -1406,7 +1426,8 @@ SDTypeConstraint::SDTypeConstraint(Record *R, const CodeGenHwModes &CGH) {
     x.SDTCisSameSizeAs_Info.OtherOperandNum =
       R->getValueAsInt("OtherOperandNum");
   } else {
-    PrintFatalError("Unrecognized SDTypeConstraint '" + R->getName() + "'!\n");
+    PrintFatalError(R->getLoc(),
+                    "Unrecognized SDTypeConstraint '" + R->getName() + "'!\n");
   }
 }
 
@@ -1940,6 +1961,8 @@ void TreePatternNode::InlinePatternFragments(
       R->setTransformFn(getTransformFn());
       for (unsigned i = 0, e = getNumTypes(); i != e; ++i)
         R->setType(i, getExtType(i));
+      for (unsigned i = 0, e = getNumResults(); i != e; ++i)
+        R->setResultIndex(i, getResultIndex(i));
 
       // Register alternative.
       OutAlternatives.push_back(R);
@@ -2116,7 +2139,8 @@ static TypeSetByHwMode getImplicitType(Record *R, unsigned ResNo,
   }
 
   if (R->getName() == "node" || R->getName() == "srcvalue" ||
-      R->getName() == "zero_reg") {
+      R->getName() == "zero_reg" || R->getName() == "immAllOnesV" ||
+      R->getName() == "immAllZerosV") {
     // Placeholder.
     return TypeSetByHwMode(); // Unknown.
   }
@@ -3207,7 +3231,8 @@ static bool HandleUse(TreePattern &I, TreePatternNodePtr Pat,
 void CodeGenDAGPatterns::FindPatternInputsAndOutputs(
     TreePattern &I, TreePatternNodePtr Pat,
     std::map<std::string, TreePatternNodePtr> &InstInputs,
-    std::map<std::string, TreePatternNodePtr> &InstResults,
+    MapVector<std::string, TreePatternNodePtr, std::map<std::string, unsigned>>
+        &InstResults,
     std::vector<Record *> &InstImpResults) {
 
   // The instruction pattern still has unresolved fragments.  For *named*
@@ -3527,7 +3552,8 @@ void CodeGenDAGPatterns::parseInstructionPattern(
 
   // InstResults - Keep track of all the virtual registers that are 'set'
   // in the instruction, including what reg class they are.
-  std::map<std::string, TreePatternNodePtr> InstResults;
+  MapVector<std::string, TreePatternNodePtr, std::map<std::string, unsigned>>
+      InstResults;
 
   std::vector<Record*> InstImpResults;
 
@@ -3564,19 +3590,28 @@ void CodeGenDAGPatterns::parseInstructionPattern(
 
   // Check that all of the results occur first in the list.
   std::vector<Record*> Results;
+  std::vector<unsigned> ResultIndices;
   SmallVector<TreePatternNodePtr, 2> ResNodes;
   for (unsigned i = 0; i != NumResults; ++i) {
-    if (i == CGI.Operands.size())
-      I.error("'" + InstResults.begin()->first +
-               "' set but does not appear in operand list!");
+    if (i == CGI.Operands.size()) {
+      const std::string &OpName =
+          std::find_if(InstResults.begin(), InstResults.end(),
+                       [](const std::pair<std::string, TreePatternNodePtr> &P) {
+                         return P.second;
+                       })
+              ->first;
+
+      I.error("'" + OpName + "' set but does not appear in operand list!");
+    }
+
     const std::string &OpName = CGI.Operands[i].Name;
 
     // Check that it exists in InstResults.
-    TreePatternNodePtr RNode = InstResults[OpName];
-    if (!RNode)
+    auto InstResultIter = InstResults.find(OpName);
+    if (InstResultIter == InstResults.end() || !InstResultIter->second)
       I.error("Operand $" + OpName + " does not exist in operand list!");
 
-
+    TreePatternNodePtr RNode = InstResultIter->second;
     Record *R = cast<DefInit>(RNode->getLeafValue())->getDef();
     ResNodes.push_back(std::move(RNode));
     if (!R)
@@ -3589,8 +3624,11 @@ void CodeGenDAGPatterns::parseInstructionPattern(
     // Remember the return type.
     Results.push_back(CGI.Operands[i].Rec);
 
+    // Remember the result index.
+    ResultIndices.push_back(std::distance(InstResults.begin(), InstResultIter));
+
     // Okay, this one checks out.
-    InstResults.erase(OpName);
+    InstResultIter->second = nullptr;
   }
 
   // Loop over the inputs next.
@@ -3654,6 +3692,7 @@ void CodeGenDAGPatterns::parseInstructionPattern(
   for (unsigned i = 0; i != NumResults; ++i) {
     assert(ResNodes[i]->getNumTypes() == 1 && "FIXME: Unhandled");
     ResultPattern->setType(i, ResNodes[i]->getExtType(0));
+    ResultPattern->setResultIndex(i, ResultIndices[i]);
   }
 
   // FIXME: Assume only the first tree is the pattern. The others are clobber
@@ -4113,7 +4152,8 @@ void CodeGenDAGPatterns::ParsePatterns() {
 
     // Validate that the input pattern is correct.
     std::map<std::string, TreePatternNodePtr> InstInputs;
-    std::map<std::string, TreePatternNodePtr> InstResults;
+    MapVector<std::string, TreePatternNodePtr, std::map<std::string, unsigned>>
+        InstResults;
     std::vector<Record*> InstImpResults;
     for (unsigned j = 0, ee = Pattern.getNumTrees(); j != ee; ++j)
       FindPatternInputsAndOutputs(Pattern, Pattern.getTree(j), InstInputs,

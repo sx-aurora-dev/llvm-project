@@ -105,10 +105,6 @@ if (LIBCXXABI_USE_LLVM_UNWINDER)
 endif()
 
 # Setup flags.
-if (NOT WIN32)
-  add_flags_if_supported(-fPIC)
-endif()
-
 add_link_flags_if_supported(-nodefaultlibs)
 
 if (LIBCXX_TARGETING_MSVC)
@@ -148,80 +144,73 @@ if (LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS)
     endif()
   endif()
 
-  if ( CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "10.6" )
-    message(FATAL_ERROR "Mac OSX 10.6 is not supported anymore as a deployment "
-                        "target. If you need support for this, please contact "
-                        "the libc++ maintainers.")
+  if ("armv7" IN_LIST CMAKE_OSX_ARCHITECTURES)
+    set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++sjlj-abi.exp")
   else()
-    if ("armv7" IN_LIST CMAKE_OSX_ARCHITECTURES)
-      set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++sjlj-abi.exp")
-    else()
-      set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++abi${LIBCXX_LIBCPPABI_VERSION}.exp")
-    endif()
-    add_link_flags(
-      "-compatibility_version 1"
-      "-install_name /usr/lib/libc++.1.dylib"
-      "-Wl,-unexported_symbols_list,\"${CMAKE_CURRENT_SOURCE_DIR}/libc++unexp.exp\""
-      "-Wl,-reexported_symbols_list,\"${RE_EXPORT_LIST}\""
-      "-Wl,-force_symbols_not_weak_list,\"${CMAKE_CURRENT_SOURCE_DIR}/notweak.exp\""
-      "-Wl,-force_symbols_weak_list,\"${CMAKE_CURRENT_SOURCE_DIR}/weak.exp\"")
+    set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++abi${LIBCXX_LIBCPPABI_VERSION}.exp")
+  endif()
+  add_link_flags(
+    "-compatibility_version 1"
+    "-install_name /usr/lib/libc++.1.dylib"
+    "-Wl,-unexported_symbols_list,\"${CMAKE_CURRENT_SOURCE_DIR}/libc++unexp.exp\""
+    "-Wl,-reexported_symbols_list,\"${RE_EXPORT_LIST}\""
+    "-Wl,-force_symbols_not_weak_list,\"${CMAKE_CURRENT_SOURCE_DIR}/notweak.exp\""
+    "-Wl,-force_symbols_weak_list,\"${CMAKE_CURRENT_SOURCE_DIR}/weak.exp\"")
 
-    if (NOT LIBCXX_ENABLE_NEW_DELETE_DEFINITIONS)
-      add_link_flags("-Wl,-reexported_symbols_list,\"${CMAKE_CURRENT_SOURCE_DIR}/libc++abi-new-delete.exp\"")
-    endif()
+  if (NOT LIBCXX_ENABLE_NEW_DELETE_DEFINITIONS)
+    add_link_flags("-Wl,-reexported_symbols_list,\"${CMAKE_CURRENT_SOURCE_DIR}/libc++abi-new-delete.exp\"")
   endif()
 endif()
+
+function(cxx_set_common_defines name)
+  if(LIBCXX_CXX_ABI_HEADER_TARGET)
+    add_dependencies(${name} ${LIBCXX_CXX_ABI_HEADER_TARGET})
+  endif()
+  if(WIN32 AND NOT MINGW)
+    target_compile_definitions(${name}
+                               PRIVATE
+                                 # Ignore the -MSC_VER mismatch, as we may build
+                                 # with a different compatibility version.
+                                 _ALLOW_MSC_VER_MISMATCH
+                                 # Don't check the msvcprt iterator debug levels
+                                 # as we will define the iterator types; libc++
+                                 # uses a different macro to identify the debug
+                                 # level.
+                                 _ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH
+                                 # We are building the c++ runtime, don't pull in
+                                 # msvcprt.
+                                 _CRTBLD
+                                 # Don't warn on the use of "deprecated"
+                                 # "insecure" functions which are standards
+                                 # specified.
+                                 _CRT_SECURE_NO_WARNINGS
+                                 # Use the ISO conforming behaviour for conversion
+                                 # in printf, scanf.
+                                 _CRT_STDIO_ISO_WIDE_SPECIFIERS)
+  endif()
+endfunction()
 
 split_list(LIBCXX_COMPILE_FLAGS)
 split_list(LIBCXX_LINK_FLAGS)
 
-# Add an object library that contains the compiled source files.
-add_library(cxx_objects OBJECT ${exclude_from_all} ${LIBCXX_SOURCES} ${LIBCXX_HEADERS})
-if(LIBCXX_CXX_ABI_HEADER_TARGET)
-  add_dependencies(cxx_objects ${LIBCXX_CXX_ABI_HEADER_TARGET})
-endif()
-if(WIN32 AND NOT MINGW)
-  target_compile_definitions(cxx_objects
-                             PRIVATE
-                               # Ignore the -MSC_VER mismatch, as we may build
-                               # with a different compatibility version.
-                               _ALLOW_MSC_VER_MISMATCH
-                               # Don't check the msvcprt iterator debug levels
-                               # as we will define the iterator types; libc++
-                               # uses a different macro to identify the debug
-                               # level.
-                               _ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH
-                               # We are building the c++ runtime, don't pull in
-                               # msvcprt.
-                               _CRTBLD
-                               # Don't warn on the use of "deprecated"
-                               # "insecure" functions which are standards
-                               # specified.
-                               _CRT_SECURE_NO_WARNINGS
-                               # Use the ISO conforming behaviour for conversion
-                               # in printf, scanf.
-                               _CRT_STDIO_ISO_WIDE_SPECIFIERS)
-endif()
-
-set_target_properties(cxx_objects
-  PROPERTIES
-    COMPILE_FLAGS "${LIBCXX_COMPILE_FLAGS}"
-)
-
 # Build the shared library.
 if (LIBCXX_ENABLE_SHARED)
-  add_library(cxx_shared SHARED $<TARGET_OBJECTS:cxx_objects>)
+  add_library(cxx_shared SHARED ${exclude_from_all} ${LIBCXX_SOURCES} ${LIBCXX_HEADERS})
   if(COMMAND llvm_setup_rpath)
     llvm_setup_rpath(cxx_shared)
   endif()
-  target_link_libraries(cxx_shared ${LIBCXX_LIBRARIES})
+  target_link_libraries(cxx_shared PRIVATE ${LIBCXX_LIBRARIES})
   set_target_properties(cxx_shared
     PROPERTIES
+      COMPILE_FLAGS "${LIBCXX_COMPILE_FLAGS}"
       LINK_FLAGS    "${LIBCXX_LINK_FLAGS}"
       OUTPUT_NAME   "c++"
       VERSION       "${LIBCXX_ABI_VERSION}.0"
       SOVERSION     "${LIBCXX_ABI_VERSION}"
+      DEFINE_SYMBOL ""
   )
+  cxx_set_common_defines(cxx_shared)
+
   list(APPEND LIBCXX_BUILD_TARGETS "cxx_shared")
   if (LIBCXX_INSTALL_SHARED_LIBRARY)
     list(APPEND LIBCXX_INSTALL_TARGETS "cxx_shared")
@@ -237,14 +226,24 @@ endif()
 
 # Build the static library.
 if (LIBCXX_ENABLE_STATIC)
-  add_library(cxx_static STATIC $<TARGET_OBJECTS:cxx_objects>)
-  target_link_libraries(cxx_static ${LIBCXX_LIBRARIES})
+  add_library(cxx_static STATIC ${exclude_from_all} ${LIBCXX_SOURCES} ${LIBCXX_HEADERS})
+  target_link_libraries(cxx_static PRIVATE ${LIBCXX_LIBRARIES})
   set(CMAKE_STATIC_LIBRARY_PREFIX "lib")
   set_target_properties(cxx_static
     PROPERTIES
+      COMPILE_FLAGS "${LIBCXX_COMPILE_FLAGS}"
       LINK_FLAGS    "${LIBCXX_LINK_FLAGS}"
       OUTPUT_NAME   "c++"
   )
+  cxx_set_common_defines(cxx_static)
+
+  if (LIBCXX_HERMETIC_STATIC_LIBRARY)
+    append_flags_if_supported(CXX_STATIC_LIBRARY_FLAGS -fvisibility=hidden)
+    append_flags_if_supported(CXX_STATIC_LIBRARY_FLAGS -fvisibility-global-new-delete-hidden)
+    target_compile_options(cxx_static PRIVATE ${CXX_STATIC_LIBRARY_FLAGS})
+    target_compile_definitions(cxx_static PRIVATE _LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS)
+  endif()
+
   list(APPEND LIBCXX_BUILD_TARGETS "cxx_static")
   if (LIBCXX_INSTALL_STATIC_LIBRARY)
     list(APPEND LIBCXX_INSTALL_TARGETS "cxx_static")
@@ -301,7 +300,7 @@ if (LIBCXX_ENABLE_FILESYSTEM)
 
   set(filesystem_flags "${LIBCXX_COMPILE_FLAGS}")
   check_flag_supported(-std=c++14)
-  if (NOT MSVC AND LIBCXX_SUPPORTS_STD_EQ_CXX14_FLAG)
+  if (NOT MSVC AND LIBCXX_SUPPORTS_STD_EQ_CXX14_FLAG AND LIBCXX_STANDARD_VER STREQUAL "c++11")
     string(REPLACE "-std=c++11" "-std=c++14" filesystem_flags "${LIBCXX_COMPILE_FLAGS}")
   endif()
   set_target_properties(cxx_filesystem
@@ -434,3 +433,8 @@ if (NOT CMAKE_CONFIGURATION_TYPES AND (LIBCXX_INSTALL_LIBRARY OR
                       -P "${LIBCXX_BINARY_DIR}/cmake_install.cmake")
     add_custom_target(install-libcxx DEPENDS install-cxx)
 endif()
+
+# TODO: This is needed by cxx-benchmarks but this variable isn't
+# available outside of the scope of this file so we need to export
+# it. This is not necessarily the cleanest solution.
+set(LIBCXX_LIBRARIES ${LIBCXX_LIBRARIES} PARENT_SCOPE)

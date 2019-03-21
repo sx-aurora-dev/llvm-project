@@ -45,6 +45,7 @@ add_lldb_library(lldbUtility
   ArchSpec.cpp
   Args.cpp
   Baton.cpp
+  Broadcaster.cpp
   Connection.cpp
   ConstString.cpp
   CompletionRequest.cpp
@@ -53,17 +54,21 @@ add_lldb_library(lldbUtility
   DataEncoder.cpp
   DataExtractor.cpp
   Environment.cpp
+  FileCollector.cpp
+  Event.cpp
   FileSpec.cpp
   IOObject.cpp
   JSON.cpp
   LLDBAssert.cpp
+  Listener.cpp
   Log.cpp
   Logging.cpp
   NameMatches.cpp
-  Range.cpp
+  ProcessInfo.cpp
   RegisterValue.cpp
   RegularExpression.cpp
   Reproducer.cpp
+  ReproducerInstrumentation.cpp
   Scalar.cpp
   SelectHelper.cpp
   SharingPtr.cpp
@@ -81,6 +86,7 @@ add_lldb_library(lldbUtility
   TildeExpressionResolver.cpp
   Timer.cpp
   UserID.cpp
+  UserIDResolver.cpp
   UriParser.cpp
   UUID.cpp
   VASprintf.cpp

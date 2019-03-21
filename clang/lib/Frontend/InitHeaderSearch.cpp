@@ -1,9 +1,8 @@
 //===--- InitHeaderSearch.cpp - Initialize header search paths ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -433,14 +432,6 @@ void InitHeaderSearch::AddDefaultCPlusPlusIncludePaths(
   case llvm::Triple::DragonFly:
     AddPath("/usr/include/c++/5.0", CXXSystem, false);
     break;
-  case llvm::Triple::OpenBSD: {
-    std::string t = triple.getTriple();
-    if (t.substr(0, 6) == "x86_64")
-      t.replace(0, 6, "amd64");
-    AddGnuCPlusPlusIncludePaths("/usr/include/g++",
-                                t, "", "", triple);
-    break;
-  }
   case llvm::Triple::Minix:
     AddGnuCPlusPlusIncludePaths("/usr/gnu/include/c++/4.4.3",
                                 "", "", "", triple);
@@ -476,22 +467,6 @@ void InitHeaderSearch::AddDefaultIncludePaths(const LangOptions &Lang,
   if (Lang.CPlusPlus && !Lang.AsmPreprocessor &&
       HSOpts.UseStandardCXXIncludes && HSOpts.UseStandardSystemIncludes) {
     if (HSOpts.UseLibcxx) {
-      if (triple.isOSDarwin()) {
-        // On Darwin, libc++ may be installed alongside the compiler in
-        // include/c++/v1.
-        if (!HSOpts.ResourceDir.empty()) {
-          // Remove version from foo/lib/clang/version
-          StringRef NoVer = llvm::sys::path::parent_path(HSOpts.ResourceDir);
-          // Remove clang from foo/lib/clang
-          StringRef Lib = llvm::sys::path::parent_path(NoVer);
-          // Remove lib from foo/lib
-          SmallString<128> P = llvm::sys::path::parent_path(Lib);
-
-          // Get foo/include/c++/v1
-          llvm::sys::path::append(P, "include", "c++", "v1");
-          AddUnmappedPath(P, CXXSystem, false);
-        }
-      }
       AddPath("/usr/include/c++/v1", CXXSystem, false);
     } else {
       AddDefaultCPlusPlusIncludePaths(Lang, triple, HSOpts);

@@ -1,9 +1,8 @@
 //===- CommentVisitor.h - Visitor for Comment subclasses --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,14 +10,11 @@
 #define LLVM_CLANG_AST_COMMENTVISITOR_H
 
 #include "clang/AST/Comment.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 
 namespace clang {
 namespace comments {
-
-template <typename T> struct make_ptr { using type = T *; };
-template <typename T> struct make_const_ptr { using type = const T *; };
-
 template <template <typename> class Ptr, typename ImplClass,
           typename RetTy = void, class... ParamTys>
 class CommentVisitorBase {
@@ -59,13 +55,13 @@ public:
 };
 
 template <typename ImplClass, typename RetTy = void, class... ParamTys>
-class CommentVisitor
-    : public CommentVisitorBase<make_ptr, ImplClass, RetTy, ParamTys...> {};
+class CommentVisitor : public CommentVisitorBase<std::add_pointer, ImplClass,
+                                                 RetTy, ParamTys...> {};
 
 template <typename ImplClass, typename RetTy = void, class... ParamTys>
 class ConstCommentVisitor
-    : public CommentVisitorBase<make_const_ptr, ImplClass, RetTy, ParamTys...> {
-};
+    : public CommentVisitorBase<llvm::make_const_ptr, ImplClass, RetTy,
+                                ParamTys...> {};
 
 } // namespace comments
 } // namespace clang

@@ -1,9 +1,8 @@
 //===- TargetTransformInfo.h ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -209,18 +208,21 @@ public:
   /// This is the most basic query for estimating call cost: it only knows the
   /// function type and (potentially) the number of arguments at the call site.
   /// The latter is only interesting for varargs function types.
-  int getCallCost(FunctionType *FTy, int NumArgs = -1) const;
+  int getCallCost(FunctionType *FTy, int NumArgs = -1,
+                  const User *U = nullptr) const;
 
   /// Estimate the cost of calling a specific function when lowered.
   ///
   /// This overload adds the ability to reason about the particular function
   /// being called in the event it is a library call with special lowering.
-  int getCallCost(const Function *F, int NumArgs = -1) const;
+  int getCallCost(const Function *F, int NumArgs = -1,
+                  const User *U = nullptr) const;
 
   /// Estimate the cost of calling a specific function when lowered.
   ///
   /// This overload allows specifying a set of candidate argument values.
-  int getCallCost(const Function *F, ArrayRef<const Value *> Arguments) const;
+  int getCallCost(const Function *F, ArrayRef<const Value *> Arguments,
+                  const User *U = nullptr) const;
 
   /// \returns A value by which our inlining threshold should be multiplied.
   /// This is primarily used to bump up the inlining threshold wholesale on
@@ -234,13 +236,15 @@ public:
   ///
   /// Mirrors the \c getCallCost method but uses an intrinsic identifier.
   int getIntrinsicCost(Intrinsic::ID IID, Type *RetTy,
-                       ArrayRef<Type *> ParamTys) const;
+                       ArrayRef<Type *> ParamTys,
+                       const User *U = nullptr) const;
 
   /// Estimate the cost of an intrinsic when lowered.
   ///
   /// Mirrors the \c getCallCost method but uses an intrinsic identifier.
   int getIntrinsicCost(Intrinsic::ID IID, Type *RetTy,
-                       ArrayRef<const Value *> Arguments) const;
+                       ArrayRef<const Value *> Arguments,
+                       const User *U = nullptr) const;
 
   /// \return The estimated number of case clusters when lowering \p 'SI'.
   /// \p JTSize Set a jump table size only when \p SI is suitable for a jump
@@ -487,6 +491,10 @@ public:
   /// addressing mode expressions.
   bool shouldFavorPostInc() const;
 
+  /// Return true if LSR should make efforts to generate indexed addressing
+  /// modes that operate across loop iterations.
+  bool shouldFavorBackedgeIndex(const Loop *L) const;
+
   /// Return true if the target supports masked load/store
   /// AVX2 and AVX-512 targets allow masks for consecutive load and store
   bool isLegalMaskedStore(Type *DataType) const;
@@ -581,13 +589,17 @@ public:
   struct MemCmpExpansionOptions {
     // The list of available load sizes (in bytes), sorted in decreasing order.
     SmallVector<unsigned, 8> LoadSizes;
+    // Set to true to allow overlapping loads. For example, 7-byte compares can
+    // be done with two 4-byte compares instead of 4+2+1-byte compares. This
+    // requires all loads in LoadSizes to be doable in an unaligned way.
+    bool AllowOverlappingLoads = false;
   };
   const MemCmpExpansionOptions *enableMemCmpExpansion(bool IsZeroCmp) const;
 
   /// Enable matching of interleaved access groups.
   bool enableInterleavedAccessVectorization() const;
 
-  /// Enable matching of interleaved access groups that contain predicated 
+  /// Enable matching of interleaved access groups that contain predicated
   /// accesses or gaps and therefore vectorized using masked
   /// vector loads/stores.
   bool enableMaskedInterleavedAccessVectorization() const;
@@ -772,7 +784,7 @@ public:
   /// \return The cost of a shuffle instruction of kind Kind and of type Tp.
   /// The index and subtype parameters are used by the subvector insertion and
   /// extraction shuffle kinds to show the insert/extract point and the type of
-  /// the subvector being inserted/extracted. 
+  /// the subvector being inserted/extracted.
   /// NOTE: For subvector extractions Tp represents the source type.
   int getShuffleCost(ShuffleKind Kind, Type *Tp, int Index = 0,
                      Type *SubTp = nullptr) const;
@@ -930,6 +942,14 @@ public:
   bool areInlineCompatible(const Function *Caller,
                            const Function *Callee) const;
 
+  /// \returns True if the caller and callee agree on how \p Args will be passed
+  /// to the callee.
+  /// \param[out] Args The list of compatible arguments.  The implementation may
+  /// filter out any incompatible args from this list.
+  bool areFunctionArgsABICompatible(const Function *Caller,
+                                    const Function *Callee,
+                                    SmallPtrSetImpl<Argument *> &Args) const;
+
   /// The type of load/store indexing.
   enum MemIndexedMode {
     MIM_Unindexed,  ///< No indexing.
@@ -1023,15 +1043,16 @@ public:
   virtual int getGEPCost(Type *PointeeType, const Value *Ptr,
                          ArrayRef<const Value *> Operands) = 0;
   virtual int getExtCost(const Instruction *I, const Value *Src) = 0;
-  virtual int getCallCost(FunctionType *FTy, int NumArgs) = 0;
-  virtual int getCallCost(const Function *F, int NumArgs) = 0;
+  virtual int getCallCost(FunctionType *FTy, int NumArgs, const User *U) = 0;
+  virtual int getCallCost(const Function *F, int NumArgs, const User *U) = 0;
   virtual int getCallCost(const Function *F,
-                          ArrayRef<const Value *> Arguments) = 0;
+                          ArrayRef<const Value *> Arguments, const User *U) = 0;
   virtual unsigned getInliningThresholdMultiplier() = 0;
   virtual int getIntrinsicCost(Intrinsic::ID IID, Type *RetTy,
-                               ArrayRef<Type *> ParamTys) = 0;
+                               ArrayRef<Type *> ParamTys, const User *U) = 0;
   virtual int getIntrinsicCost(Intrinsic::ID IID, Type *RetTy,
-                               ArrayRef<const Value *> Arguments) = 0;
+                               ArrayRef<const Value *> Arguments,
+                               const User *U) = 0;
   virtual unsigned getEstimatedNumberOfCaseClusters(const SwitchInst &SI,
                                                     unsigned &JTSize) = 0;
   virtual int
@@ -1054,6 +1075,7 @@ public:
                              TargetTransformInfo::LSRCost &C2) = 0;
   virtual bool canMacroFuseCmp() = 0;
   virtual bool shouldFavorPostInc() const = 0;
+  virtual bool shouldFavorBackedgeIndex(const Loop *L) const = 0;
   virtual bool isLegalMaskedStore(Type *DataType) = 0;
   virtual bool isLegalMaskedLoad(Type *DataType) = 0;
   virtual bool isLegalMaskedScatter(Type *DataType) = 0;
@@ -1175,6 +1197,9 @@ public:
       unsigned RemainingBytes, unsigned SrcAlign, unsigned DestAlign) const = 0;
   virtual bool areInlineCompatible(const Function *Caller,
                                    const Function *Callee) const = 0;
+  virtual bool
+  areFunctionArgsABICompatible(const Function *Caller, const Function *Callee,
+                               SmallPtrSetImpl<Argument *> &Args) const = 0;
   virtual bool isIndexedLoadLegal(MemIndexedMode Mode, Type *Ty) const = 0;
   virtual bool isIndexedStoreLegal(MemIndexedMode Mode,Type *Ty) const = 0;
   virtual unsigned getLoadStoreVecRegBitWidth(unsigned AddrSpace) const = 0;
@@ -1220,26 +1245,27 @@ public:
   int getExtCost(const Instruction *I, const Value *Src) override {
     return Impl.getExtCost(I, Src);
   }
-  int getCallCost(FunctionType *FTy, int NumArgs) override {
-    return Impl.getCallCost(FTy, NumArgs);
+  int getCallCost(FunctionType *FTy, int NumArgs, const User *U) override {
+    return Impl.getCallCost(FTy, NumArgs, U);
   }
-  int getCallCost(const Function *F, int NumArgs) override {
-    return Impl.getCallCost(F, NumArgs);
+  int getCallCost(const Function *F, int NumArgs, const User *U) override {
+    return Impl.getCallCost(F, NumArgs, U);
   }
   int getCallCost(const Function *F,
-                  ArrayRef<const Value *> Arguments) override {
-    return Impl.getCallCost(F, Arguments);
+                  ArrayRef<const Value *> Arguments, const User *U) override {
+    return Impl.getCallCost(F, Arguments, U);
   }
   unsigned getInliningThresholdMultiplier() override {
     return Impl.getInliningThresholdMultiplier();
   }
   int getIntrinsicCost(Intrinsic::ID IID, Type *RetTy,
-                       ArrayRef<Type *> ParamTys) override {
-    return Impl.getIntrinsicCost(IID, RetTy, ParamTys);
+                       ArrayRef<Type *> ParamTys, const User *U = nullptr) override {
+    return Impl.getIntrinsicCost(IID, RetTy, ParamTys, U);
   }
   int getIntrinsicCost(Intrinsic::ID IID, Type *RetTy,
-                       ArrayRef<const Value *> Arguments) override {
-    return Impl.getIntrinsicCost(IID, RetTy, Arguments);
+                       ArrayRef<const Value *> Arguments,
+                       const User *U = nullptr) override {
+    return Impl.getIntrinsicCost(IID, RetTy, Arguments, U);
   }
   int getUserCost(const User *U, ArrayRef<const Value *> Operands) override {
     return Impl.getUserCost(U, Operands);
@@ -1286,6 +1312,9 @@ public:
   }
   bool shouldFavorPostInc() const override {
     return Impl.shouldFavorPostInc();
+  }
+  bool shouldFavorBackedgeIndex(const Loop *L) const override {
+    return Impl.shouldFavorBackedgeIndex(L);
   }
   bool isLegalMaskedStore(Type *DataType) override {
     return Impl.isLegalMaskedStore(DataType);
@@ -1552,6 +1581,11 @@ public:
   bool areInlineCompatible(const Function *Caller,
                            const Function *Callee) const override {
     return Impl.areInlineCompatible(Caller, Callee);
+  }
+  bool areFunctionArgsABICompatible(
+      const Function *Caller, const Function *Callee,
+      SmallPtrSetImpl<Argument *> &Args) const override {
+    return Impl.areFunctionArgsABICompatible(Caller, Callee, Args);
   }
   bool isIndexedLoadLegal(MemIndexedMode Mode, Type *Ty) const override {
     return Impl.isIndexedLoadLegal(Mode, Ty, getDataLayout());

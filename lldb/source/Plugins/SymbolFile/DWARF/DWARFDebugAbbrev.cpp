@@ -1,9 +1,8 @@
 //===-- DWARFDebugAbbrev.cpp ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,14 +25,22 @@ void DWARFAbbreviationDeclarationSet::Clear() {
 //----------------------------------------------------------------------
 // DWARFAbbreviationDeclarationSet::Extract()
 //----------------------------------------------------------------------
-bool DWARFAbbreviationDeclarationSet::Extract(const DWARFDataExtractor &data,
-                                              lldb::offset_t *offset_ptr) {
+llvm::Error
+DWARFAbbreviationDeclarationSet::extract(const DWARFDataExtractor &data,
+                                         lldb::offset_t *offset_ptr) {
   const lldb::offset_t begin_offset = *offset_ptr;
   m_offset = begin_offset;
   Clear();
   DWARFAbbreviationDeclaration abbrevDeclaration;
   dw_uleb128_t prev_abbr_code = 0;
-  while (abbrevDeclaration.Extract(data, offset_ptr)) {
+  DWARFEnumState state = DWARFEnumState::MoreItems;
+  while (state == DWARFEnumState::MoreItems) {
+    llvm::Expected<DWARFEnumState> es =
+        abbrevDeclaration.extract(data, offset_ptr);
+    if (!es)
+      return es.takeError();
+
+    state = *es;
     m_decls.push_back(abbrevDeclaration);
     if (m_idx_offset == 0)
       m_idx_offset = abbrevDeclaration.Code();
@@ -44,7 +51,7 @@ bool DWARFAbbreviationDeclarationSet::Extract(const DWARFDataExtractor &data,
     }
     prev_abbr_code = abbrevDeclaration.Code();
   }
-  return begin_offset != *offset_ptr;
+  return llvm::ErrorSuccess();
 }
 
 //----------------------------------------------------------------------
@@ -139,19 +146,21 @@ DWARFDebugAbbrev::DWARFDebugAbbrev()
 //----------------------------------------------------------------------
 // DWARFDebugAbbrev::Parse()
 //----------------------------------------------------------------------
-void DWARFDebugAbbrev::Parse(const DWARFDataExtractor &data) {
+llvm::Error DWARFDebugAbbrev::parse(const DWARFDataExtractor &data) {
   lldb::offset_t offset = 0;
 
   while (data.ValidOffset(offset)) {
     uint32_t initial_cu_offset = offset;
     DWARFAbbreviationDeclarationSet abbrevDeclSet;
 
-    if (abbrevDeclSet.Extract(data, &offset))
-      m_abbrevCollMap[initial_cu_offset] = abbrevDeclSet;
-    else
-      break;
+    llvm::Error error = abbrevDeclSet.extract(data, &offset);
+    if (error)
+      return error;
+
+    m_abbrevCollMap[initial_cu_offset] = abbrevDeclSet;
   }
   m_prev_abbr_offset_pos = m_abbrevCollMap.end();
+  return llvm::ErrorSuccess();
 }
 
 //----------------------------------------------------------------------

@@ -1,9 +1,8 @@
 //===- ASTContext.cpp - Context to hold long-lived AST nodes --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -94,19 +93,6 @@
 #include <utility>
 
 using namespace clang;
-
-unsigned ASTContext::NumImplicitDefaultConstructors;
-unsigned ASTContext::NumImplicitDefaultConstructorsDeclared;
-unsigned ASTContext::NumImplicitCopyConstructors;
-unsigned ASTContext::NumImplicitCopyConstructorsDeclared;
-unsigned ASTContext::NumImplicitMoveConstructors;
-unsigned ASTContext::NumImplicitMoveConstructorsDeclared;
-unsigned ASTContext::NumImplicitCopyAssignmentOperators;
-unsigned ASTContext::NumImplicitCopyAssignmentOperatorsDeclared;
-unsigned ASTContext::NumImplicitMoveAssignmentOperators;
-unsigned ASTContext::NumImplicitMoveAssignmentOperatorsDeclared;
-unsigned ASTContext::NumImplicitDestructors;
-unsigned ASTContext::NumImplicitDestructorsDeclared;
 
 enum FloatingRank {
   Float16Rank, HalfRank, FloatRank, DoubleRank, LongDoubleRank, Float128Rank
@@ -1916,8 +1902,16 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
       break;
     case BuiltinType::Float16:
     case BuiltinType::Half:
-      Width = Target->getHalfWidth();
-      Align = Target->getHalfAlign();
+      if (Target->hasFloat16Type() || !getLangOpts().OpenMP ||
+          !getLangOpts().OpenMPIsDevice) {
+        Width = Target->getHalfWidth();
+        Align = Target->getHalfAlign();
+      } else {
+        assert(getLangOpts().OpenMP && getLangOpts().OpenMPIsDevice &&
+               "Expected OpenMP device compilation.");
+        Width = AuxTarget->getHalfWidth();
+        Align = AuxTarget->getHalfAlign();
+      }
       break;
     case BuiltinType::Float:
       Width = Target->getFloatWidth();
@@ -1932,8 +1926,16 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
       Align = Target->getLongDoubleAlign();
       break;
     case BuiltinType::Float128:
-      Width = Target->getFloat128Width();
-      Align = Target->getFloat128Align();
+      if (Target->hasFloat128Type() || !getLangOpts().OpenMP ||
+          !getLangOpts().OpenMPIsDevice) {
+        Width = Target->getFloat128Width();
+        Align = Target->getFloat128Align();
+      } else {
+        assert(getLangOpts().OpenMP && getLangOpts().OpenMPIsDevice &&
+               "Expected OpenMP device compilation.");
+        Width = AuxTarget->getFloat128Width();
+        Align = AuxTarget->getFloat128Align();
+      }
       break;
     case BuiltinType::NullPtr:
       Width = Target->getPointerWidth(0); // C++ 3.9.1p11: sizeof(nullptr_t)
@@ -2772,7 +2774,7 @@ QualType ASTContext::getFunctionTypeWithExceptionSpec(
 
   // Anything else must be a function type. Rebuild it with the new exception
   // specification.
-  const auto *Proto = cast<FunctionProtoType>(Orig);
+  const auto *Proto = Orig->getAs<FunctionProtoType>();
   return getFunctionType(
       Proto->getReturnType(), Proto->getParamTypes(),
       Proto->getExtProtoInfo().withExceptionSpec(ESI));
@@ -3768,10 +3770,11 @@ QualType ASTContext::getFunctionTypeInternal(
   size_t Size = FunctionProtoType::totalSizeToAlloc<
       QualType, FunctionType::FunctionTypeExtraBitfields,
       FunctionType::ExceptionType, Expr *, FunctionDecl *,
-      FunctionProtoType::ExtParameterInfo>(
+      FunctionProtoType::ExtParameterInfo, Qualifiers>(
       NumArgs, FunctionProtoType::hasExtraBitfields(EPI.ExceptionSpec.Type),
       ESH.NumExceptionType, ESH.NumExprPtr, ESH.NumFunctionDeclPtr,
-      EPI.ExtParameterInfos ? NumArgs : 0);
+      EPI.ExtParameterInfos ? NumArgs : 0,
+      EPI.TypeQuals.hasNonFastQualifiers() ? 1 : 0);
 
   auto *FTP = (FunctionProtoType *)Allocate(Size, TypeAlignment);
   FunctionProtoType::ExtProtoInfo newEPI = EPI;
@@ -4319,7 +4322,7 @@ TemplateArgument ASTContext::getInjectedTemplateArg(NamedDecl *Param) {
     Arg = TemplateArgument(ArgType);
   } else if (auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(Param)) {
     Expr *E = new (*this) DeclRefExpr(
-        NTTP, /*enclosing*/false,
+        *this, NTTP, /*enclosing*/ false,
         NTTP->getType().getNonLValueExprType(*this),
         Expr::getValueKindForType(NTTP->getType()), NTTP->getLocation());
 
@@ -5606,6 +5609,12 @@ int ASTContext::getFloatingTypeOrder(QualType LHS, QualType RHS) const {
   if (LHSR > RHSR)
     return 1;
   return -1;
+}
+
+int ASTContext::getFloatingTypeSemanticOrder(QualType LHS, QualType RHS) const {
+  if (&getFloatTypeSemantics(LHS) == &getFloatTypeSemantics(RHS))
+    return 0;
+  return getFloatingTypeOrder(LHS, RHS);
 }
 
 /// getIntegerRank - Return an integer conversion rank (C99 6.3.1.1p1). This
@@ -8129,7 +8138,7 @@ void getIntersectionOfProtocols(ASTContext &Context,
   // Also add the protocols associated with the LHS interface.
   Context.CollectInheritedProtocols(LHS->getInterface(), LHSProtocolSet);
 
-  // Add all of the protocls for the RHS.
+  // Add all of the protocols for the RHS.
   llvm::SmallPtrSet<ObjCProtocolDecl *, 8> RHSProtocolSet;
 
   // Start with the protocol qualifiers.
@@ -8580,7 +8589,7 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
     if (lproto->isVariadic() != rproto->isVariadic())
       return {};
 
-    if (lproto->getTypeQuals() != rproto->getTypeQuals())
+    if (lproto->getMethodQuals() != rproto->getMethodQuals())
       return {};
 
     SmallVector<FunctionProtoType::ExtParameterInfo, 4> newParamInfos;
@@ -9517,6 +9526,10 @@ QualType ASTContext::GetBuiltinType(unsigned Id,
                                     GetBuiltinTypeError &Error,
                                     unsigned *IntegerConstantArgs) const {
   const char *TypeStr = BuiltinInfo.getTypeString(Id);
+  if (TypeStr[0] == '\0') {
+    Error = GE_Missing_type;
+    return {};
+  }
 
   SmallVector<QualType, 8> ArgTypes;
 
@@ -9552,10 +9565,12 @@ QualType ASTContext::GetBuiltinType(unsigned Id,
   assert((TypeStr[0] != '.' || TypeStr[1] == 0) &&
          "'.' should only occur at end of builtin type list!");
 
-  FunctionType::ExtInfo EI(CC_C);
+  bool Variadic = (TypeStr[0] == '.');
+
+  FunctionType::ExtInfo EI(
+      getDefaultCallingConvention(Variadic, /*IsCXXMethod=*/false));
   if (BuiltinInfo.isNoReturn(Id)) EI = EI.withNoReturn(true);
 
-  bool Variadic = (TypeStr[0] == '.');
 
   // We really shouldn't be making a no-proto type here.
   if (ArgTypes.empty() && Variadic && !getLangOpts().CPlusPlus)
@@ -9783,11 +9798,11 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
       return false;
   } else if (isa<PragmaCommentDecl>(D))
     return true;
-  else if (isa<OMPThreadPrivateDecl>(D))
-    return true;
   else if (isa<PragmaDetectMismatchDecl>(D))
     return true;
   else if (isa<OMPThreadPrivateDecl>(D))
+    return !D->getDeclContext()->isDependentContext();
+  else if (isa<OMPAllocateDecl>(D))
     return !D->getDeclContext()->isDependentContext();
   else if (isa<OMPDeclareReductionDecl>(D))
     return !D->getDeclContext()->isDependentContext();
@@ -9840,10 +9855,6 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
     return true;
 
   if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
-    // Multiversioned functions always have to be emitted, because they are used
-    // by the resolver.
-    if (FD->isMultiVersion())
-      return true;
     // Forward declarations aren't required.
     if (!FD->doesThisDeclarationHaveABody())
       return FD->doesDeclarationForceExternallyVisibleDefinition();
@@ -9981,8 +9992,10 @@ VTableContextBase *ASTContext::getVTableContext() {
   return VTContext.get();
 }
 
-MangleContext *ASTContext::createMangleContext() {
-  switch (Target->getCXXABI().getKind()) {
+MangleContext *ASTContext::createMangleContext(const TargetInfo *T) {
+  if (!T)
+    T = Target;
+  switch (T->getCXXABI().getKind()) {
   case TargetCXXABI::GenericAArch64:
   case TargetCXXABI::GenericItanium:
   case TargetCXXABI::GenericARM:
@@ -10488,7 +10501,13 @@ unsigned char ASTContext::getFixedPointIBits(QualType Ty) const {
 }
 
 FixedPointSemantics ASTContext::getFixedPointSemantics(QualType Ty) const {
-  assert(Ty->isFixedPointType());
+  assert((Ty->isFixedPointType() || Ty->isIntegerType()) &&
+         "Can only get the fixed point semantics for a "
+         "fixed point or integer type.");
+  if (Ty->isIntegerType())
+    return FixedPointSemantics::GetIntegerSemantics(getIntWidth(Ty),
+                                                    Ty->isSignedIntegerType());
+
   bool isSigned = Ty->isSignedFixedPointType();
   return FixedPointSemantics(
       static_cast<unsigned>(getTypeSize(Ty)), getFixedPointScale(Ty), isSigned,
@@ -10504,4 +10523,39 @@ APFixedPoint ASTContext::getFixedPointMax(QualType Ty) const {
 APFixedPoint ASTContext::getFixedPointMin(QualType Ty) const {
   assert(Ty->isFixedPointType());
   return APFixedPoint::getMin(getFixedPointSemantics(Ty));
+}
+
+QualType ASTContext::getCorrespondingSignedFixedPointType(QualType Ty) const {
+  assert(Ty->isUnsignedFixedPointType() &&
+         "Expected unsigned fixed point type");
+  const auto *BTy = Ty->getAs<BuiltinType>();
+
+  switch (BTy->getKind()) {
+  case BuiltinType::UShortAccum:
+    return ShortAccumTy;
+  case BuiltinType::UAccum:
+    return AccumTy;
+  case BuiltinType::ULongAccum:
+    return LongAccumTy;
+  case BuiltinType::SatUShortAccum:
+    return SatShortAccumTy;
+  case BuiltinType::SatUAccum:
+    return SatAccumTy;
+  case BuiltinType::SatULongAccum:
+    return SatLongAccumTy;
+  case BuiltinType::UShortFract:
+    return ShortFractTy;
+  case BuiltinType::UFract:
+    return FractTy;
+  case BuiltinType::ULongFract:
+    return LongFractTy;
+  case BuiltinType::SatUShortFract:
+    return SatShortFractTy;
+  case BuiltinType::SatUFract:
+    return SatFractTy;
+  case BuiltinType::SatULongFract:
+    return SatLongFractTy;
+  default:
+    llvm_unreachable("Unexpected unsigned fixed point type");
+  }
 }

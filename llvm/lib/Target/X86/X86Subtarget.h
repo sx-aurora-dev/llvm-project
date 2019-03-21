@@ -1,9 +1,8 @@
 //===-- X86Subtarget.h - Define Subtarget for the X86 ----------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -621,7 +620,7 @@ public:
   int getGatherOverhead() const { return GatherOverhead; }
   int getScatterOverhead() const { return ScatterOverhead; }
   bool hasSSEUnalignedMem() const { return HasSSEUnalignedMem; }
-  bool hasCmpxchg16b() const { return HasCmpxchg16b; }
+  bool hasCmpxchg16b() const { return HasCmpxchg16b && is64Bit(); }
   bool useLeaForSP() const { return UseLeaForSP; }
   bool hasPOPCNTFalseDeps() const { return HasPOPCNTFalseDeps; }
   bool hasLZCNTFalseDeps() const { return HasLZCNTFalseDeps; }
@@ -833,9 +832,6 @@ public:
 
   /// Enable the MachineScheduler pass for all X86 subtargets.
   bool enableMachineScheduler() const override { return true; }
-
-  // TODO: Update the regression tests and return true.
-  bool supportPrintSchedInfo() const override { return false; }
 
   bool enableEarlyIfConversion() const override;
 

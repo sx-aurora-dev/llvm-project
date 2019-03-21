@@ -1,9 +1,8 @@
 //===-- SBCommandInterpreter.h ----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -87,6 +86,8 @@ public:
   GetArgumentDescriptionAsCString(const lldb::CommandArgumentType arg_type);
 
   static bool EventIsCommandInterpreterEvent(const lldb::SBEvent &event);
+
+  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -207,10 +208,10 @@ public:
   /// terminal, so this function allows GUI programs to emulate this
   /// functionality.
   ///
-  /// @param[in] ch
+  /// \param[in] ch
   ///     The character that was typed along with the control key
   ///
-  /// @return
+  /// \return
   ///     The string that should be written into the file handle that is
   ///     feeding the input stream for the debugger, or nullptr if there is
   ///     no string for this control key.
@@ -256,8 +257,6 @@ protected:
 private:
   friend class SBDebugger;
 
-  static void InitializeSWIG();
-
   lldb_private::CommandInterpreter *m_opaque_ptr;
 };
 
@@ -274,6 +273,8 @@ public:
 class SBCommand {
 public:
   SBCommand();
+
+  explicit operator bool() const;
 
   bool IsValid();
 

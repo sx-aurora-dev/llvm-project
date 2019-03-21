@@ -1,9 +1,8 @@
 //===--- X86InstPrinterCommon.cpp - X86 assembly instruction printing -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -83,12 +82,22 @@ void X86InstPrinterCommon::printXOPCC(const MCInst *MI, unsigned Op,
 
 void X86InstPrinterCommon::printRoundingControl(const MCInst *MI, unsigned Op,
                                                 raw_ostream &O) {
-  int64_t Imm = MI->getOperand(Op).getImm() & 0x3;
+  int64_t Imm = MI->getOperand(Op).getImm();
   switch (Imm) {
-  case 0: O << "{rn-sae}"; break;
-  case 1: O << "{rd-sae}"; break;
-  case 2: O << "{ru-sae}"; break;
-  case 3: O << "{rz-sae}"; break;
+  default:
+    llvm_unreachable("Invalid rounding control!");
+  case X86::TO_NEAREST_INT:
+    O << "{rn-sae}";
+    break;
+  case X86::TO_NEG_INF:
+    O << "{rd-sae}";
+    break;
+  case X86::TO_POS_INF:
+    O << "{ru-sae}";
+    break;
+  case X86::TO_ZERO:
+    O << "{rz-sae}";
+    break;
   }
 }
 

@@ -1,9 +1,8 @@
 //===-- CommandObjectThread.cpp ---------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1552,14 +1551,13 @@ class CommandObjectThreadException : public CommandObjectIterateOverThreads {
       exception_object_sp->Dump(strm);
     }
 
-    /* TODO(kubamracek)
     ThreadSP exception_thread_sp = thread_sp->GetCurrentExceptionBacktrace();
     if (exception_thread_sp && exception_thread_sp->IsValid()) {
       const uint32_t num_frames_with_source = 0;
       const bool stop_format = false;
-      exception_thread_sp->GetStatus(strm, m_options.m_start, m_options.m_count,
+      exception_thread_sp->GetStatus(strm, 0, UINT32_MAX,
                                      num_frames_with_source, stop_format);
-    }*/
+    }
 
     return true;
   }

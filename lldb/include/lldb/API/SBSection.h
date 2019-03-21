@@ -1,9 +1,8 @@
 //===-- SBSection.h ---------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,6 +23,8 @@ public:
   ~SBSection();
 
   const lldb::SBSection &operator=(const lldb::SBSection &rhs);
+
+  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -62,7 +63,7 @@ public:
   /// i.e. for a section having read and execute permissions, the value
   /// returned is 6
   ///
-  /// @return
+  /// \return
   ///     Returns an unsigned value for Permissions for the section.
   //------------------------------------------------------------------
   uint32_t
@@ -74,7 +75,7 @@ public:
   /// varying minimum addressable unit (i.e. byte) size for their
   /// CODE or DATA buses.
   ///
-  /// @return
+  /// \return
   ///     The number of host (8-bit) bytes needed to hold a target byte
   //------------------------------------------------------------------
   uint32_t GetTargetByteSize();

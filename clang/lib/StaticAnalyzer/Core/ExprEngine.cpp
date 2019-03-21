@@ -1,9 +1,8 @@
 //===- ExprEngine.cpp - Path-Sensitive Expression-Level Dataflow ----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -138,9 +137,17 @@ public:
   const ConstructionContextItem &getItem() const { return Impl.first; }
   const LocationContext *getLocationContext() const { return Impl.second; }
 
+  ASTContext &getASTContext() const {
+    return getLocationContext()->getDecl()->getASTContext();
+  }
+
   void print(llvm::raw_ostream &OS, PrinterHelper *Helper, PrintingPolicy &PP) {
-    OS << '(' << getLocationContext() << ',' << getAnyASTNodePtr() << ','
-       << getItem().getKindAsString();
+    OS << "(LC" << getLocationContext()->getID() << ',';
+    if (const Stmt *S = getItem().getStmtOrNull())
+      OS << 'S' << S->getID(getASTContext());
+    else
+      OS << 'I' << getItem().getCXXCtorInitializer()->getID(getASTContext());
+    OS << ',' << getItem().getKindAsString();
     if (getItem().getKind() == ConstructionContextItem::ArgumentKind)
       OS << " #" << getItem().getIndex();
     OS << ") ";
@@ -190,12 +197,14 @@ ExprEngine::ExprEngine(cross_tu::CrossTranslationUnitContext &CTU,
                mgr.getConstraintManagerCreator(), G.getAllocator(),
                this),
       SymMgr(StateMgr.getSymbolManager()),
-      svalBuilder(StateMgr.getSValBuilder()), ObjCNoRet(mgr.getASTContext()),
+      MRMgr(StateMgr.getRegionManager()),
+      svalBuilder(StateMgr.getSValBuilder()),
+      ObjCNoRet(mgr.getASTContext()),
       BR(mgr, *this),
       VisitedCallees(VisitedCalleesIn), HowToInline(HowToInlineIn) {
   unsigned TrimInterval = mgr.options.GraphTrimInterval;
   if (TrimInterval != 0) {
-    // Enable eager node reclaimation when constructing the ExplodedGraph.
+    // Enable eager node reclamation when constructing the ExplodedGraph.
     G.enableNodeReclamation(TrimInterval);
   }
 }
@@ -1025,7 +1034,7 @@ void ExprEngine::ProcessTemporaryDtor(const CFGTemporaryDtor D,
     MR = V->getAsRegion();
   }
 
-  // If copy elision has occured, and the constructor corresponding to the
+  // If copy elision has occurred, and the constructor corresponding to the
   // destructor was elided, we need to skip the destructor as well.
   if (isDestructorElided(State, BTE, LC)) {
     State = cleanupElidedDestructor(State, BTE, LC);
@@ -2943,8 +2952,8 @@ struct DOTGraphTraits<ExplodedGraph*> : public DefaultDOTGraphTraits {
   DOTGraphTraits (bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
 
   static bool nodeHasBugReport(const ExplodedNode *N) {
-    BugReporter &BR = static_cast<ExprEngine *>(
-      N->getState()->getStateManager().getOwningEngine())->getBugReporter();
+    BugReporter &BR = static_cast<ExprEngine &>(
+      N->getState()->getStateManager().getOwningEngine()).getBugReporter();
 
     const auto EQClasses =
         llvm::make_range(BR.EQClasses_begin(), BR.EQClasses_end());

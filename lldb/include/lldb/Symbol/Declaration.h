@@ -1,9 +1,8 @@
 //===-- Declaration.h -------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +15,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class Declaration Declaration.h "lldb/Symbol/Declaration.h"
+/// \class Declaration Declaration.h "lldb/Symbol/Declaration.h"
 /// A class that describes the declaration location of a
 ///        lldb object.
 ///
@@ -41,15 +40,15 @@ public:
   //------------------------------------------------------------------
   /// Construct with file specification, and optional line and column.
   ///
-  /// @param[in] file_spec
+  /// \param[in] file_spec
   ///     The file specification that describes where this was
   ///     declared.
   ///
-  /// @param[in] line
+  /// \param[in] line
   ///     The line number that describes where this was declared. Set
   ///     to zero if there is no line number information.
   ///
-  /// @param[in] column
+  /// \param[in] column
   ///     The column number that describes where this was declared.
   ///     Set to zero if there is no column number information.
   //------------------------------------------------------------------
@@ -109,16 +108,16 @@ public:
   /// specifications are equal, then continue to compare the line number and
   /// column numbers respectively.
   ///
-  /// @param[in] lhs
+  /// \param[in] lhs
   ///     The Left Hand Side const Declaration object reference.
   ///
-  /// @param[in] rhs
+  /// \param[in] rhs
   ///     The Right Hand Side const Declaration object reference.
   ///
-  /// @return
-  ///     @li -1 if lhs < rhs
-  ///     @li 0 if lhs == rhs
-  ///     @li 1 if lhs > rhs
+  /// \return
+  ///     \li -1 if lhs < rhs
+  ///     \li 0 if lhs == rhs
+  ///     \li 1 if lhs > rhs
   //------------------------------------------------------------------
   static int Compare(const Declaration &lhs, const Declaration &rhs);
 
@@ -128,7 +127,7 @@ public:
   /// Dump a description of the contents of this object to the supplied stream
   /// \a s.
   ///
-  /// @param[in] s
+  /// \param[in] s
   ///     The stream to which to dump the object description.
   //------------------------------------------------------------------
   void Dump(Stream *s, bool show_fullpaths) const;
@@ -137,7 +136,7 @@ public:
   //------------------------------------------------------------------
   /// Get accessor for the declaration column number.
   ///
-  /// @return
+  /// \return
   ///     Non-zero indicates a valid column number, zero indicates no
   ///     column information is available.
   //------------------------------------------------------------------
@@ -152,7 +151,7 @@ public:
   //------------------------------------------------------------------
   /// Get accessor for file specification.
   ///
-  /// @return
+  /// \return
   ///     A reference to the file specification object.
   //------------------------------------------------------------------
   FileSpec &GetFile() { return m_file; }
@@ -160,7 +159,7 @@ public:
   //------------------------------------------------------------------
   /// Get const accessor for file specification.
   ///
-  /// @return
+  /// \return
   ///     A const reference to the file specification object.
   //------------------------------------------------------------------
   const FileSpec &GetFile() const { return m_file; }
@@ -168,7 +167,7 @@ public:
   //------------------------------------------------------------------
   /// Get accessor for the declaration line number.
   ///
-  /// @return
+  /// \return
   ///     Non-zero indicates a valid line number, zero indicates no
   ///     line information is available.
   //------------------------------------------------------------------
@@ -179,19 +178,19 @@ public:
   //------------------------------------------------------------------
   /// Get the memory cost of this object.
   ///
-  /// @return
+  /// \return
   ///     The number of bytes that this object occupies in memory.
   ///     The returned value does not include the bytes for any
   ///     shared string values.
   ///
-  /// @see ConstString::StaticMemorySize ()
+  /// \see ConstString::StaticMemorySize ()
   //------------------------------------------------------------------
   size_t MemorySize() const;
 
   //------------------------------------------------------------------
   /// Set accessor for the declaration column number.
   ///
-  /// @param[in] column
+  /// \param[in] column
   ///     Non-zero indicates a valid column number, zero indicates no
   ///     column information is available.
   //------------------------------------------------------------------
@@ -204,7 +203,7 @@ public:
   //------------------------------------------------------------------
   /// Set accessor for the declaration file specification.
   ///
-  /// @param[in] file_spec
+  /// \param[in] file_spec
   ///     The new declaration file specification.
   //------------------------------------------------------------------
   void SetFile(const FileSpec &file_spec) { m_file = file_spec; }
@@ -212,7 +211,7 @@ public:
   //------------------------------------------------------------------
   /// Set accessor for the declaration line number.
   ///
-  /// @param[in] line
+  /// \param[in] line
   ///     Non-zero indicates a valid line number, zero indicates no
   ///     line information is available.
   //------------------------------------------------------------------

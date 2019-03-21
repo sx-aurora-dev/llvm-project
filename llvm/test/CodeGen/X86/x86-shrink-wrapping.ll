@@ -73,7 +73,7 @@ declare i32 @doSomething(i32, i32*)
 ; CHECK-LABEL: freqSaveAndRestoreOutsideLoop:
 ;
 ; Shrink-wrapping allows to skip the prologue in the else case.
-; ENABLE: testl %edi, %edi  
+; ENABLE: testl %edi, %edi
 ; ENABLE: je [[ELSE_LABEL:LBB[0-9_]+]]
 ;
 ; Prologue code.
@@ -126,7 +126,7 @@ for.preheader:
 for.body:                                         ; preds = %entry, %for.body
   %i.05 = phi i32 [ %inc, %for.body ], [ 0, %for.preheader ]
   %sum.04 = phi i32 [ %add, %for.body ], [ 0, %for.preheader ]
-  %call = tail call i32 asm "movl $$1, $0", "=r,~{ebx}"()
+  %call = tail call i32 asm sideeffect "movl $$1, $0", "=r,~{ebx}"()
   %add = add nsw i32 %call, %sum.04
   %inc = add nuw nsw i32 %i.05, 1
   %exitcond = icmp eq i32 %inc, 10
@@ -178,7 +178,7 @@ for.preheader:
 for.body:                                         ; preds = %for.body, %entry
   %i.04 = phi i32 [ 0, %for.preheader ], [ %inc, %for.body ]
   %sum.03 = phi i32 [ 0, %for.preheader ], [ %add, %for.body ]
-  %call = tail call i32 asm "movl $$1, $0", "=r,~{ebx}"()
+  %call = tail call i32 asm sideeffect "movl $$1, $0", "=r,~{ebx}"()
   %add = add nsw i32 %call, %sum.03
   %inc = add nuw nsw i32 %i.04, 1
   %exitcond = icmp eq i32 %inc, 10
@@ -248,7 +248,7 @@ for.preheader:
 for.body:                                         ; preds = %entry, %for.body
   %i.05 = phi i32 [ %inc, %for.body ], [ 0, %for.preheader ]
   %sum.04 = phi i32 [ %add, %for.body ], [ 0, %for.preheader ]
-  %call = tail call i32 asm "movl $$1, $0", "=r,~{ebx}"()
+  %call = tail call i32 asm sideeffect "movl $$1, $0", "=r,~{ebx}"()
   %add = add nsw i32 %call, %sum.04
   %inc = add nuw nsw i32 %i.05, 1
   %exitcond = icmp eq i32 %inc, 10
@@ -324,7 +324,7 @@ if.then:                                          ; preds = %entry
 for.body:                                         ; preds = %for.body, %if.then
   %i.05 = phi i32 [ 0, %if.then ], [ %inc, %for.body ]
   %sum.04 = phi i32 [ 0, %if.then ], [ %add, %for.body ]
-  %call = tail call i32 asm "movl $$1, $0", "=r,~{ebx}"()
+  %call = tail call i32 asm sideeffect "movl $$1, $0", "=r,~{ebx}"()
   %add = add nsw i32 %call, %sum.04
   %inc = add nuw nsw i32 %i.05, 1
   %exitcond = icmp eq i32 %inc, 10
@@ -508,7 +508,7 @@ declare i32 @someVariadicFunc(i32, ...)
 declare hidden fastcc %struct.temp_slot* @find_temp_slot_from_address(%struct.rtx_def* readonly)
 
 ; CHECK-LABEL: useLEA:
-; DISABLE: pushq 
+; DISABLE: pushq
 ;
 ; CHECK: testq   %rdi, %rdi
 ; CHECK-NEXT: je      [[CLEANUP:LBB[0-9_]+]]
@@ -805,19 +805,9 @@ end:
 ; Create the zero value for the select assignment.
 ; CHECK: xorl [[CMOVE_VAL:%eax]], [[CMOVE_VAL]]
 ; CHECK-NEXT: cmpb $0, _b(%rip)
-; CHECK-NEXT: jne [[STOREC_LABEL:LBB[0-9_]+]]
-;
-; CHECK: movb $48, [[CMOVE_VAL:%al]]
-;
-; CHECK: [[STOREC_LABEL]]:
-;
-; ENABLE-NEXT: pushq
-; For the stack adjustment, we need to preserve the EFLAGS.
-; ENABLE-NEXT: leaq -16(%rsp), %rsp
-;
-; Technically, we should use CMOVE_VAL here or its subregister.
-; CHECK-NEXT: movb %al, _c(%rip)
-; testb set the EFLAGS read here.
+; CHECK-NEXT: movl $48, [[IMM_VAL:%ecx]]
+; CHECK-NEXT: cmovnel [[CMOVE_VAL]], [[IMM_VAL]]
+; CHECK-NEXT: movb %cl, _c(%rip)
 ; CHECK-NEXT: je [[VARFUNC_CALL:LBB[0-9_]+]]
 ;
 ; The code of the loop is not interesting.

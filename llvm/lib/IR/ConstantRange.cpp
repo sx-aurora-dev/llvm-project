@@ -1,9 +1,8 @@
 //===- ConstantRange.cpp - ConstantRange implementation -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1065,6 +1064,98 @@ ConstantRange ConstantRange::inverse() const {
   if (isEmptySet())
     return ConstantRange(getBitWidth(), /*isFullSet=*/true);
   return ConstantRange(Upper, Lower);
+}
+
+ConstantRange::OverflowResult ConstantRange::unsignedAddMayOverflow(
+    const ConstantRange &Other) const {
+  if (isEmptySet() || Other.isEmptySet())
+    return OverflowResult::MayOverflow;
+
+  APInt Min = getUnsignedMin(), Max = getUnsignedMax();
+  APInt OtherMin = Other.getUnsignedMin(), OtherMax = Other.getUnsignedMax();
+
+  // a u+ b overflows iff a u> ~b.
+  if (Min.ugt(~OtherMin))
+    return OverflowResult::AlwaysOverflows;
+  if (Max.ugt(~OtherMax))
+    return OverflowResult::MayOverflow;
+  return OverflowResult::NeverOverflows;
+}
+
+ConstantRange::OverflowResult ConstantRange::signedAddMayOverflow(
+    const ConstantRange &Other) const {
+  if (isEmptySet() || Other.isEmptySet())
+    return OverflowResult::MayOverflow;
+
+  APInt Min = getSignedMin(), Max = getSignedMax();
+  APInt OtherMin = Other.getSignedMin(), OtherMax = Other.getSignedMax();
+
+  APInt SignedMin = APInt::getSignedMinValue(getBitWidth());
+  APInt SignedMax = APInt::getSignedMaxValue(getBitWidth());
+
+  // a s+ b overflows high iff a s>=0 && b s>= 0 && a s> smax - b.
+  // a s+ b overflows low iff a s< 0 && b s< 0 && a s< smin - b.
+  if (Min.isNonNegative() && OtherMin.isNonNegative() &&
+      Min.sgt(SignedMax - OtherMin))
+    return OverflowResult::AlwaysOverflows;
+  if (Max.isNegative() && OtherMax.isNegative() &&
+      Max.slt(SignedMin - OtherMax))
+    return OverflowResult::AlwaysOverflows;
+
+  if (Max.isNonNegative() && OtherMax.isNonNegative() &&
+      Max.sgt(SignedMax - OtherMax))
+    return OverflowResult::MayOverflow;
+  if (Min.isNegative() && OtherMin.isNegative() &&
+      Min.slt(SignedMin - OtherMin))
+    return OverflowResult::MayOverflow;
+
+  return OverflowResult::NeverOverflows;
+}
+
+ConstantRange::OverflowResult ConstantRange::unsignedSubMayOverflow(
+    const ConstantRange &Other) const {
+  if (isEmptySet() || Other.isEmptySet())
+    return OverflowResult::MayOverflow;
+
+  APInt Min = getUnsignedMin(), Max = getUnsignedMax();
+  APInt OtherMin = Other.getUnsignedMin(), OtherMax = Other.getUnsignedMax();
+
+  // a u- b overflows iff a u< b.
+  if (Max.ult(OtherMin))
+    return OverflowResult::AlwaysOverflows;
+  if (Min.ult(OtherMax))
+    return OverflowResult::MayOverflow;
+  return OverflowResult::NeverOverflows;
+}
+
+ConstantRange::OverflowResult ConstantRange::signedSubMayOverflow(
+    const ConstantRange &Other) const {
+  if (isEmptySet() || Other.isEmptySet())
+    return OverflowResult::MayOverflow;
+
+  APInt Min = getSignedMin(), Max = getSignedMax();
+  APInt OtherMin = Other.getSignedMin(), OtherMax = Other.getSignedMax();
+
+  APInt SignedMin = APInt::getSignedMinValue(getBitWidth());
+  APInt SignedMax = APInt::getSignedMaxValue(getBitWidth());
+
+  // a s- b overflows high iff a s>=0 && b s< 0 && a s> smax + b.
+  // a s- b overflows low iff a s< 0 && b s>= 0 && a s< smin + b.
+  if (Min.isNonNegative() && OtherMax.isNegative() &&
+      Min.sgt(SignedMax + OtherMax))
+    return OverflowResult::AlwaysOverflows;
+  if (Max.isNegative() && OtherMin.isNonNegative() &&
+      Max.slt(SignedMin + OtherMin))
+    return OverflowResult::AlwaysOverflows;
+
+  if (Max.isNonNegative() && OtherMin.isNegative() &&
+      Max.sgt(SignedMax + OtherMin))
+    return OverflowResult::MayOverflow;
+  if (Min.isNegative() && OtherMax.isNonNegative() &&
+      Min.slt(SignedMin + OtherMax))
+    return OverflowResult::MayOverflow;
+
+  return OverflowResult::NeverOverflows;
 }
 
 void ConstantRange::print(raw_ostream &OS) const {

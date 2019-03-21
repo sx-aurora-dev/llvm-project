@@ -10,11 +10,11 @@
 
 # CHECK:      Relocations [
 # CHECK-NEXT:   Section ({{.*}}) .rela.plt {
-# CHECK-NEXT:     0x2018 R_X86_64_JUMP_SLOT foo
+# CHECK-NEXT:     0x3018 R_X86_64_JUMP_SLOT foo
 # CHECK-NEXT:   }
 # CHECK-NEXT: ]
 # CHECK:      Symbol {
-# CHECK:        Name: foo@
+# CHECK:        Name: foo
 # CHECK-NEXT:   Value: 0x0
 # CHECK-NEXT:   Size: 0
 # CHECK-NEXT:   Binding: Weak

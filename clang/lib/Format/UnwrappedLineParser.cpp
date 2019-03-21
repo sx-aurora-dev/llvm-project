@@ -1,9 +1,8 @@
 //===--- UnwrappedLineParser.cpp - Format C++ code ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -482,7 +481,7 @@ void UnwrappedLineParser::calculateBraceTypes(bool ExpectClassBody) {
       break;
     case tok::identifier:
       if (!Tok->is(TT_StatementMacro))
-          break;
+        break;
       LLVM_FALLTHROUGH;
     case tok::at:
     case tok::semi:
@@ -1167,8 +1166,8 @@ void UnwrappedLineParser::parseStructuralElement() {
       case tok::objc_synchronized:
         nextToken();
         if (FormatTok->Tok.is(tok::l_paren))
-           // Skip synchronization object
-           parseParens();
+          // Skip synchronization object
+          parseParens();
         if (FormatTok->Tok.is(tok::l_brace)) {
           if (Style.BraceWrapping.AfterControlStatement)
             addUnwrappedLine();
@@ -1402,6 +1401,8 @@ bool UnwrappedLineParser::tryToParseLambda() {
   if (!tryToParseLambdaIntroducer())
     return false;
 
+  bool SeenArrow = false;
+
   while (FormatTok->isNot(tok::l_brace)) {
     if (FormatTok->isSimpleTypeSpecifier()) {
       nextToken();
@@ -1423,10 +1424,50 @@ bool UnwrappedLineParser::tryToParseLambda() {
     case tok::numeric_constant:
     case tok::coloncolon:
     case tok::kw_mutable:
+    case tok::kw_noexcept:
       nextToken();
       break;
+    // Specialization of a template with an integer parameter can contain
+    // arithmetic, logical, comparison and ternary operators.
+    //
+    // FIXME: This also accepts sequences of operators that are not in the scope
+    // of a template argument list.
+    //
+    // In a C++ lambda a template type can only occur after an arrow. We use
+    // this as an heuristic to distinguish between Objective-C expressions
+    // followed by an `a->b` expression, such as:
+    // ([obj func:arg] + a->b)
+    // Otherwise the code below would parse as a lambda.
+    case tok::plus:
+    case tok::minus:
+    case tok::exclaim:
+    case tok::tilde:
+    case tok::slash:
+    case tok::percent:
+    case tok::lessless:
+    case tok::pipe:
+    case tok::pipepipe:
+    case tok::ampamp:
+    case tok::caret:
+    case tok::equalequal:
+    case tok::exclaimequal:
+    case tok::greaterequal:
+    case tok::lessequal:
+    case tok::question:
+    case tok::colon:
+    case tok::kw_true:
+    case tok::kw_false:
+      if (SeenArrow) {
+        nextToken();
+        break;
+      }
+      return true;
     case tok::arrow:
+      // This might or might not actually be a lambda arrow (this could be an
+      // ObjC method invocation followed by a dereferencing arrow). We might
+      // reset this back to TT_Unknown in TokenAnnotator.
       FormatTok->Type = TT_LambdaArrow;
+      SeenArrow = true;
       nextToken();
       break;
     default:
@@ -2347,8 +2388,7 @@ void UnwrappedLineParser::parseJavaScriptEs6ImportExport() {
   }
 }
 
-void UnwrappedLineParser::parseStatementMacro()
-{
+void UnwrappedLineParser::parseStatementMacro() {
   nextToken();
   if (FormatTok->is(tok::l_paren))
     parseParens();

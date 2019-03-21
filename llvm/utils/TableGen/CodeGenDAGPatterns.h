@@ -1,9 +1,8 @@
 //===- CodeGenDAGPatterns.h - Read DAG patterns from .td file ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,6 +18,7 @@
 #include "CodeGenIntrinsics.h"
 #include "CodeGenTarget.h"
 #include "SDNodeProperties.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
@@ -28,6 +28,7 @@
 #include <array>
 #include <functional>
 #include <map>
+#include <numeric>
 #include <set>
 #include <vector>
 
@@ -189,6 +190,7 @@ private:
 
 struct TypeSetByHwMode : public InfoByHwMode<MachineValueTypeSet> {
   using SetType = MachineValueTypeSet;
+  std::vector<unsigned> AddrSpaces;
 
   TypeSetByHwMode() = default;
   TypeSetByHwMode(const TypeSetByHwMode &VTS) = default;
@@ -225,6 +227,15 @@ struct TypeSetByHwMode : public InfoByHwMode<MachineValueTypeSet> {
     return Map.size() == 1 && Map.begin()->first == DefaultMode;
   }
 
+  bool isPointer() const {
+    return getValueTypeByHwMode().isPointer();
+  }
+
+  unsigned getPtrAddrSpace() const {
+    assert(isPointer());
+    return getValueTypeByHwMode().PtrAddrSpace;
+  }
+
   bool insert(const ValueTypeByHwMode &VVT);
   bool constrain(const TypeSetByHwMode &VTS);
   template <typename Predicate> bool constrain(Predicate P);
@@ -241,6 +252,7 @@ struct TypeSetByHwMode : public InfoByHwMode<MachineValueTypeSet> {
   bool validate() const;
 
 private:
+  unsigned PtrAddrSpace = std::numeric_limits<unsigned>::max();
   /// Intersect two sets. Return true if anything has changed.
   bool intersect(SetType &Out, const SetType &In);
 };
@@ -620,6 +632,9 @@ class TreePatternNode {
   /// each is a single concrete type.
   std::vector<TypeSetByHwMode> Types;
 
+  /// The index of each result in results of the pattern.
+  std::vector<unsigned> ResultPerm;
+
   /// Operator - The Record for the operator if this is an interior node (not
   /// a leaf).
   Record *Operator;
@@ -650,10 +665,14 @@ public:
       : Operator(Op), Val(nullptr), TransformFn(nullptr),
         Children(std::move(Ch)) {
     Types.resize(NumResults);
+    ResultPerm.resize(NumResults);
+    std::iota(ResultPerm.begin(), ResultPerm.end(), 0);
   }
   TreePatternNode(Init *val, unsigned NumResults)    // leaf ctor
     : Operator(nullptr), Val(val), TransformFn(nullptr) {
     Types.resize(NumResults);
+    ResultPerm.resize(NumResults);
+    std::iota(ResultPerm.begin(), ResultPerm.end(), 0);
   }
 
   bool hasName() const { return !Name.empty(); }
@@ -693,6 +712,10 @@ public:
   bool isTypeCompletelyUnknown(unsigned ResNo, TreePattern &TP) const {
     return Types[ResNo].empty();
   }
+
+  unsigned getNumResults() const { return ResultPerm.size(); }
+  unsigned getResultIndex(unsigned ResNo) const { return ResultPerm[ResNo]; }
+  void setResultIndex(unsigned ResNo, unsigned RI) { ResultPerm[ResNo] = RI; }
 
   Init *getLeafValue() const { assert(isLeaf()); return Val; }
   Record *getOperator() const { assert(!isLeaf()); return Operator; }
@@ -1281,7 +1304,8 @@ private:
   void FindPatternInputsAndOutputs(
       TreePattern &I, TreePatternNodePtr Pat,
       std::map<std::string, TreePatternNodePtr> &InstInputs,
-      std::map<std::string, TreePatternNodePtr> &InstResults,
+      MapVector<std::string, TreePatternNodePtr,
+                std::map<std::string, unsigned>> &InstResults,
       std::vector<Record *> &InstImpResults);
 };
 

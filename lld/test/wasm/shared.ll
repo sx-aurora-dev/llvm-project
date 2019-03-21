@@ -5,18 +5,18 @@
 target triple = "wasm32-unknown-unknown"
 
 @data = hidden global i32 2, align 4
-@indirect_func = local_unnamed_addr global void ()* @foo, align 4
+@indirect_func = local_unnamed_addr global i32 ()* @foo, align 4
 @indirect_func_external = local_unnamed_addr global void ()* @func_external, align 4
 
-define default void @foo() {
+define default i32 @foo() {
 entry:
   ; To ensure we use __stack_pointer
   %ptr = alloca i32
   %0 = load i32, i32* @data, align 4
   %1 = load i32, i32* @data_external, align 4
-  %2 = load void ()*, void ()** @indirect_func, align 4
-  call void %2()
-  ret void
+  %2 = load i32 ()*, i32 ()** @indirect_func, align 4
+  call i32 %2()
+  ret i32 %1
 }
 
 declare void @func_external()
@@ -33,6 +33,8 @@ declare void @func_external()
 ; CHECK-NEXT:     MemoryAlignment: 2
 ; CHECK-NEXT:     TableSize:       2
 ; CHECK-NEXT:     TableAlignment:  0
+; CHECK-NEXT:     Needed:          []
+; CHECK-NEXT:   - Type:            TYPE
 
 ; check for import of __table_base and __memory_base globals
 
@@ -42,11 +44,9 @@ declare void @func_external()
 ; CHECK-NEXT:         Field:           __indirect_function_table
 ; CHECK-NEXT:         Kind:            TABLE
 ; CHECK-NEXT:         Table:
-; CHECK-NEXT:           ElemType:        ANYFUNC
+; CHECK-NEXT:           ElemType:        FUNCREF
 ; CHECK-NEXT:           Limits:
-; CHECK-NEXT:             Flags:           [ HAS_MAX ]
 ; CHECK-NEXT:             Initial:         0x00000002
-; CHECK-NEXT:             Maximum:         0x00000002
 ; CHECK-NEXT:       - Module:          env
 ; CHECK-NEXT:         Field:           __stack_pointer
 ; CHECK-NEXT:         Kind:            GLOBAL
@@ -62,23 +62,32 @@ declare void @func_external()
 ; CHECK-NEXT:         Kind:            GLOBAL
 ; CHECK-NEXT:         GlobalType:      I32
 ; CHECK-NEXT:         GlobalMutable:   false
+; CHECK-NEXT:       - Module:          env
+; CHECK-NEXT:         Field:           data_external
+; CHECK-NEXT:         Kind:            GLOBAL
+; CHECK-NEXT:         GlobalType:      I32
+; CHECK-NEXT:         GlobalMutable:   true
+; CHECK-NEXT:       - Module:          env
+; CHECK-NEXT:         Field:           func_external
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         SigIndex:        1
 
 ; check for elem segment initialized with __table_base global as offset
 
 ; CHECK:        - Type:            ELEM
 ; CHECK-NEXT:     Segments:
 ; CHECK-NEXT:       - Offset:
-; CHECK-NEXT:           Opcode:          GET_GLOBAL
+; CHECK-NEXT:           Opcode:          GLOBAL_GET
 ; CHECK-NEXT:           Index:           2
-; CHECK-NEXT:         Functions:       [ 2, 0 ]
+; CHECK-NEXT:         Functions:       [ 1, 0 ]
 
 ; check the data segment initialized with __memory_base global as offset
 
 ; CHECK:        - Type:            DATA
 ; CHECK-NEXT:     Segments:
 ; CHECK-NEXT:       - SectionOffset:   6
-; CHECK-NEXT:         MemoryIndex:     0
+; CHECK-NEXT:         InitFlags:       0
 ; CHECK-NEXT:         Offset:
-; CHECK-NEXT:           Opcode:          GET_GLOBAL
+; CHECK-NEXT:           Opcode:          GLOBAL_GET
 ; CHECK-NEXT:           Index:           1
 ; CHECK-NEXT:         Content:         '0000000001000000'

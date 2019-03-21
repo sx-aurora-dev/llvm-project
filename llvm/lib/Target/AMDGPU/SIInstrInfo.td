@@ -1,9 +1,8 @@
 //===-- SIInstrInfo.td - SI Instruction Infos -------------*- tablegen -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 def isCI : Predicate<"Subtarget->getGeneration() "
@@ -45,6 +44,11 @@ def SIsbuffer_load : SDNode<"AMDGPUISD::SBUFFER_LOAD",
   [SDNPMayLoad, SDNPMemOperand]
 >;
 
+def SIds_ordered_count : SDNode<"AMDGPUISD::DS_ORDERED_COUNT",
+  SDTypeProfile<1, 2, [SDTCisVT<0, i32>, SDTCisVT<1, i32>, SDTCisVT<2, i16>]>,
+  [SDNPMayLoad, SDNPMayStore, SDNPMemOperand, SDNPHasChain, SDNPInGlue]
+>;
+
 def SIatomic_inc : SDNode<"AMDGPUISD::ATOMIC_INC", SDTAtomic2,
   [SDNPMayLoad, SDNPMayStore, SDNPMemOperand, SDNPHasChain]
 >;
@@ -57,10 +61,6 @@ def SDTAtomic2_f32 : SDTypeProfile<1, 2, [
   SDTCisSameAs<0,2>, SDTCisFP<0>, SDTCisPtrTy<1>
 ]>;
 
-def SIatomic_fadd : SDNode<"AMDGPUISD::ATOMIC_LOAD_FADD", SDTAtomic2_f32,
-  [SDNPMayLoad, SDNPMayStore, SDNPMemOperand, SDNPHasChain]
->;
-
 def SIatomic_fmin : SDNode<"AMDGPUISD::ATOMIC_LOAD_FMIN", SDTAtomic2_f32,
   [SDNPMayLoad, SDNPMayStore, SDNPMemOperand, SDNPHasChain]
 >;
@@ -68,6 +68,13 @@ def SIatomic_fmin : SDNode<"AMDGPUISD::ATOMIC_LOAD_FMIN", SDTAtomic2_f32,
 def SIatomic_fmax : SDNode<"AMDGPUISD::ATOMIC_LOAD_FMAX", SDTAtomic2_f32,
   [SDNPMayLoad, SDNPMayStore, SDNPMemOperand, SDNPHasChain]
 >;
+
+// load_d16_{lo|hi} ptr, tied_input
+def SIload_d16 : SDTypeProfile<1, 2, [
+  SDTCisPtrTy<1>,
+  SDTCisSameAs<0, 2>
+]>;
+
 
 def SDTtbuffer_load : SDTypeProfile<1, 8,
   [                     // vdata
@@ -147,9 +154,7 @@ def SIbuffer_store_format_d16 : SDNode <"AMDGPUISD::BUFFER_STORE_FORMAT_D16",
 
 class SDBufferAtomic<string opcode> : SDNode <opcode,
   SDTypeProfile<1, 8,
-      [SDTCisVT<0, i32>,   // dst
-       SDTCisVT<1, i32>,   // vdata
-       SDTCisVT<2, v4i32>, // rsrc
+       [SDTCisVT<2, v4i32>, // rsrc
        SDTCisVT<3, i32>,   // vindex(VGPR)
        SDTCisVT<4, i32>,   // voffset(VGPR)
        SDTCisVT<5, i32>,   // soffset(SGPR)
@@ -187,6 +192,36 @@ def SIbuffer_atomic_cmpswap : SDNode <"AMDGPUISD::BUFFER_ATOMIC_CMPSWAP",
 
 def SIpc_add_rel_offset : SDNode<"AMDGPUISD::PC_ADD_REL_OFFSET",
   SDTypeProfile<1, 2, [SDTCisVT<0, iPTR>, SDTCisSameAs<0,1>, SDTCisSameAs<0,2>]>
+>;
+
+def SIload_d16_lo : SDNode<"AMDGPUISD::LOAD_D16_LO",
+  SIload_d16,
+  [SDNPMayLoad, SDNPMemOperand, SDNPHasChain]
+>;
+
+def SIload_d16_lo_u8 : SDNode<"AMDGPUISD::LOAD_D16_LO_U8",
+  SIload_d16,
+  [SDNPMayLoad, SDNPMemOperand, SDNPHasChain]
+>;
+
+def SIload_d16_lo_i8 : SDNode<"AMDGPUISD::LOAD_D16_LO_I8",
+  SIload_d16,
+  [SDNPMayLoad, SDNPMemOperand, SDNPHasChain]
+>;
+
+def SIload_d16_hi : SDNode<"AMDGPUISD::LOAD_D16_HI",
+  SIload_d16,
+  [SDNPMayLoad, SDNPMemOperand, SDNPHasChain]
+>;
+
+def SIload_d16_hi_u8 : SDNode<"AMDGPUISD::LOAD_D16_HI_U8",
+  SIload_d16,
+  [SDNPMayLoad, SDNPMemOperand, SDNPHasChain]
+>;
+
+def SIload_d16_hi_i8 : SDNode<"AMDGPUISD::LOAD_D16_HI_I8",
+  SIload_d16,
+  [SDNPMayLoad, SDNPMemOperand, SDNPHasChain]
 >;
 
 //===----------------------------------------------------------------------===//
@@ -228,7 +263,7 @@ defm atomic_dec_global : global_binary_atomic_op<SIatomic_dec>;
 
 def atomic_inc_local : local_binary_atomic_op<SIatomic_inc>;
 def atomic_dec_local : local_binary_atomic_op<SIatomic_dec>;
-def atomic_load_fadd_local : local_binary_atomic_op<SIatomic_fadd>;
+def atomic_load_fadd_local : local_binary_atomic_op<atomic_load_fadd>;
 def atomic_load_fmin_local : local_binary_atomic_op<SIatomic_fmin>;
 def atomic_load_fmax_local : local_binary_atomic_op<SIatomic_fmax>;
 
@@ -386,6 +421,51 @@ def si_setcc_uniform : PatFrag <
   return true;
 }]>;
 
+//===----------------------------------------------------------------------===//
+// SDNodes PatFrags for d16 loads
+//===----------------------------------------------------------------------===//
+
+class LoadD16Frag <SDPatternOperator op> : PatFrag<(ops node:$ptr, node:$tied_in), (op node:$ptr, node:$tied_in)>;
+class LocalLoadD16 <SDPatternOperator op> : LoadD16Frag <op>, LocalAddress;
+class GlobalLoadD16 <SDPatternOperator op> : LoadD16Frag <op>, GlobalLoadAddress;
+class PrivateLoadD16 <SDPatternOperator op> : LoadD16Frag <op>, PrivateAddress;
+class FlatLoadD16 <SDPatternOperator op> : LoadD16Frag <op>, FlatLoadAddress;
+
+def load_d16_hi_local : LocalLoadD16 <SIload_d16_hi>;
+def az_extloadi8_d16_hi_local : LocalLoadD16 <SIload_d16_hi_u8>;
+def sextloadi8_d16_hi_local : LocalLoadD16 <SIload_d16_hi_i8>;
+
+def load_d16_hi_global : GlobalLoadD16 <SIload_d16_hi>;
+def az_extloadi8_d16_hi_global : GlobalLoadD16 <SIload_d16_hi_u8>;
+def sextloadi8_d16_hi_global : GlobalLoadD16 <SIload_d16_hi_i8>;
+
+def load_d16_hi_private : PrivateLoadD16 <SIload_d16_hi>;
+def az_extloadi8_d16_hi_private : PrivateLoadD16 <SIload_d16_hi_u8>;
+def sextloadi8_d16_hi_private : PrivateLoadD16 <SIload_d16_hi_i8>;
+
+def load_d16_hi_flat : FlatLoadD16 <SIload_d16_hi>;
+def az_extloadi8_d16_hi_flat : FlatLoadD16 <SIload_d16_hi_u8>;
+def sextloadi8_d16_hi_flat : FlatLoadD16 <SIload_d16_hi_i8>;
+
+
+def load_d16_lo_local : LocalLoadD16 <SIload_d16_lo>;
+def az_extloadi8_d16_lo_local : LocalLoadD16 <SIload_d16_lo_u8>;
+def sextloadi8_d16_lo_local : LocalLoadD16 <SIload_d16_lo_i8>;
+
+def load_d16_lo_global : GlobalLoadD16 <SIload_d16_lo>;
+def az_extloadi8_d16_lo_global : GlobalLoadD16 <SIload_d16_lo_u8>;
+def sextloadi8_d16_lo_global : GlobalLoadD16 <SIload_d16_lo_i8>;
+
+def load_d16_lo_private : PrivateLoadD16 <SIload_d16_lo>;
+def az_extloadi8_d16_lo_private : PrivateLoadD16 <SIload_d16_lo_u8>;
+def sextloadi8_d16_lo_private : PrivateLoadD16 <SIload_d16_lo_i8>;
+
+def load_d16_lo_flat : FlatLoadD16 <SIload_d16_lo>;
+def az_extloadi8_d16_lo_flat : FlatLoadD16 <SIload_d16_lo_u8>;
+def sextloadi8_d16_lo_flat : FlatLoadD16 <SIload_d16_lo_i8>;
+
+
+
 def lshr_rev : PatFrag <
   (ops node:$src1, node:$src0),
   (srl $src0, $src1)
@@ -424,7 +504,7 @@ defm atomic_load_xor : SIAtomicM0Glue2 <"LOAD_XOR">;
 defm atomic_load_umin : SIAtomicM0Glue2 <"LOAD_UMIN">;
 defm atomic_load_umax : SIAtomicM0Glue2 <"LOAD_UMAX">;
 defm atomic_swap : SIAtomicM0Glue2 <"SWAP">;
-defm atomic_load_fadd : SIAtomicM0Glue2 <"LOAD_FADD", 1, SDTAtomic2_f32>;
+defm atomic_load_fadd : SIAtomicM0Glue2 <"LOAD_FADD", 0, SDTAtomic2_f32>;
 defm atomic_load_fmin : SIAtomicM0Glue2 <"LOAD_FMIN", 1, SDTAtomic2_f32>;
 defm atomic_load_fmax : SIAtomicM0Glue2 <"LOAD_FMAX", 1, SDTAtomic2_f32>;
 
@@ -588,6 +668,14 @@ def SwizzleMatchClass : AsmOperandClass {
   let IsOptional = 1;
 }
 
+def EndpgmMatchClass : AsmOperandClass {
+  let Name = "EndpgmImm";
+  let PredicateMethod = "isEndpgm";
+  let ParserMethod = "parseEndpgmOp";
+  let RenderMethod = "addImmOperands";
+  let IsOptional = 1;
+}
+
 def ExpTgtMatchClass : AsmOperandClass {
   let Name = "ExpTgt";
   let PredicateMethod = "isExpTgt";
@@ -603,6 +691,11 @@ def SendMsgImm : Operand<i32> {
 def SwizzleImm : Operand<i16> {
   let PrintMethod = "printSwizzle";
   let ParserMatchClass = SwizzleMatchClass;
+}
+
+def EndpgmImm : Operand<i16> {
+  let PrintMethod = "printEndpgm";
+  let ParserMatchClass = EndpgmMatchClass;
 }
 
 def SWaitMatchClass : AsmOperandClass {
@@ -863,7 +956,7 @@ def FP32SDWAInputMods : FPSDWAInputMods<FP32SDWAInputModsMatchClass>;
 def FPVRegInputModsMatchClass : AsmOperandClass {
   let Name = "VRegWithFPInputMods";
   let ParserMethod = "parseRegWithFPInputMods";
-  let PredicateMethod = "isVReg";
+  let PredicateMethod = "isVReg32";
 }
 
 def FPVRegInputMods : InputMods <FPVRegInputModsMatchClass> {
@@ -890,7 +983,7 @@ def Int32SDWAInputMods : IntSDWAInputMods<Int32SDWAInputModsMatchClass>;
 def IntVRegInputModsMatchClass : AsmOperandClass {
   let Name = "VRegWithIntInputMods";
   let ParserMethod = "parseRegWithIntInputMods";
-  let PredicateMethod = "isVReg";
+  let PredicateMethod = "isVReg32";
 }
 
 def IntVRegInputMods : InputMods <IntVRegInputModsMatchClass> {

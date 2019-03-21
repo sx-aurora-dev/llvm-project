@@ -1,9 +1,8 @@
 //===- InputFiles.h ---------------------------------------------*- C++ -*-===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,12 +26,14 @@ class InputChunk;
 class InputFunction;
 class InputSegment;
 class InputGlobal;
+class InputEvent;
 class InputSection;
 
 class InputFile {
 public:
   enum Kind {
     ObjectKind,
+    SharedKind,
     ArchiveKind,
     BitcodeKind,
   };
@@ -98,6 +99,7 @@ public:
 
   const WasmSection *CodeSection = nullptr;
   const WasmSection *DataSection = nullptr;
+  const WasmSection *ProducersSection = nullptr;
 
   // Maps input type indices to output type indices
   std::vector<uint32_t> TypeMap;
@@ -108,6 +110,7 @@ public:
   std::vector<InputSegment *> Segments;
   std::vector<InputFunction *> Functions;
   std::vector<InputGlobal *> Globals;
+  std::vector<InputEvent *> Events;
   std::vector<InputSection *> CustomSections;
   llvm::DenseMap<uint32_t, InputSection *> CustomSectionsByIndex;
 
@@ -116,6 +119,7 @@ public:
   DataSymbol *getDataSymbol(uint32_t Index) const;
   GlobalSymbol *getGlobalSymbol(uint32_t Index) const;
   SectionSymbol *getSectionSymbol(uint32_t Index) const;
+  EventSymbol *getEventSymbol(uint32_t Index) const;
 
 private:
   Symbol *createDefined(const WasmSymbol &Sym);
@@ -126,6 +130,16 @@ private:
   std::unique_ptr<WasmObjectFile> WasmObj;
 };
 
+// .so file.
+class SharedFile : public InputFile {
+public:
+  explicit SharedFile(MemoryBufferRef M) : InputFile(SharedKind, M) {}
+  static bool classof(const InputFile *F) { return F->kind() == SharedKind; }
+
+  void parse() override {}
+};
+
+// .bc file
 class BitcodeFile : public InputFile {
 public:
   explicit BitcodeFile(MemoryBufferRef M) : InputFile(BitcodeKind, M) {}
@@ -136,7 +150,7 @@ public:
 };
 
 // Will report a fatal() error if the input buffer is not a valid bitcode
-// or was object file.
+// or wasm object file.
 InputFile *createObjectFile(MemoryBufferRef MB);
 
 // Opens a given file.

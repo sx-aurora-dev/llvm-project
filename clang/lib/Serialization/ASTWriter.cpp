@@ -1,9 +1,8 @@
 //===- ASTWriter.cpp - AST File Writer ------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -42,7 +41,6 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/Lambda.h"
 #include "clang/Basic/LangOptions.h"
-#include "clang/Basic/MemoryBufferCache.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/OpenCLOptions.h"
@@ -66,6 +64,7 @@
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Weak.h"
 #include "clang/Serialization/ASTReader.h"
+#include "clang/Serialization/InMemoryModuleCache.h"
 #include "clang/Serialization/Module.h"
 #include "clang/Serialization/ModuleFileExtension.h"
 #include "clang/Serialization/SerializationDiagnostic.h"
@@ -310,7 +309,7 @@ void ASTTypeWriter::VisitFunctionProtoType(const FunctionProtoType *T) {
 
   Record.push_back(T->isVariadic());
   Record.push_back(T->hasTrailingReturn());
-  Record.push_back(T->getTypeQuals());
+  Record.push_back(T->getMethodQuals().getAsOpaqueValue());
   Record.push_back(static_cast<unsigned>(T->getRefQualifier()));
   addExceptionSpec(T, Record);
 
@@ -323,7 +322,7 @@ void ASTTypeWriter::VisitFunctionProtoType(const FunctionProtoType *T) {
       Record.push_back(T->getExtParameterInfo(I).getOpaqueValue());
   }
 
-  if (T->isVariadic() || T->hasTrailingReturn() || T->getTypeQuals() ||
+  if (T->isVariadic() || T->hasTrailingReturn() || T->getMethodQuals() ||
       T->getRefQualifier() || T->getExceptionSpecType() != EST_None ||
       T->hasExtParameterInfos())
     AbbrevToUse = 0;
@@ -1299,6 +1298,7 @@ void ASTWriter::WriteBlockInfoBlock() {
   RECORD(DECL_PRAGMA_COMMENT);
   RECORD(DECL_PRAGMA_DETECT_MISMATCH);
   RECORD(DECL_OMP_DECLARE_REDUCTION);
+  RECORD(DECL_OMP_ALLOCATE);
 
   // Statements and Exprs can occur in the Decls and Types block.
   AddStmtsExprs(Stream, Record);
@@ -1695,7 +1695,6 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
   // Detailed record is important since it is used for the module cache hash.
   Record.push_back(PPOpts.DetailedRecord);
   AddString(PPOpts.ImplicitPCHInclude, Record);
-  AddString(PPOpts.ImplicitPTHInclude, Record);
   Record.push_back(static_cast<unsigned>(PPOpts.ObjCXXARCStandardLibrary));
   Stream.EmitRecord(PREPROCESSOR_OPTIONS, Record);
 
@@ -4569,10 +4568,11 @@ void ASTWriter::SetSelectorOffset(Selector Sel, uint32_t Offset) {
 }
 
 ASTWriter::ASTWriter(llvm::BitstreamWriter &Stream,
-                     SmallVectorImpl<char> &Buffer, MemoryBufferCache &PCMCache,
+                     SmallVectorImpl<char> &Buffer,
+                     InMemoryModuleCache &ModuleCache,
                      ArrayRef<std::shared_ptr<ModuleFileExtension>> Extensions,
                      bool IncludeTimestamps)
-    : Stream(Stream), Buffer(Buffer), PCMCache(PCMCache),
+    : Stream(Stream), Buffer(Buffer), ModuleCache(ModuleCache),
       IncludeTimestamps(IncludeTimestamps) {
   for (const auto &Ext : Extensions) {
     if (auto Writer = Ext->createExtensionWriter(*this))
@@ -4596,7 +4596,8 @@ time_t ASTWriter::getTimestampForOutput(const FileEntry *E) const {
 ASTFileSignature ASTWriter::WriteAST(Sema &SemaRef,
                                      const std::string &OutputFile,
                                      Module *WritingModule, StringRef isysroot,
-                                     bool hasErrors) {
+                                     bool hasErrors,
+                                     bool ShouldCacheASTInMemory) {
   WritingAST = true;
 
   ASTHasCompilerErrors = hasErrors;
@@ -4620,11 +4621,11 @@ ASTFileSignature ASTWriter::WriteAST(Sema &SemaRef,
   this->BaseDirectory.clear();
 
   WritingAST = false;
-  if (SemaRef.Context.getLangOpts().ImplicitModules && WritingModule) {
+  if (ShouldCacheASTInMemory) {
     // Construct MemoryBuffer and update buffer manager.
-    PCMCache.addBuffer(OutputFile,
-                       llvm::MemoryBuffer::getMemBufferCopy(
-                           StringRef(Buffer.begin(), Buffer.size())));
+    ModuleCache.addBuiltPCM(OutputFile,
+                            llvm::MemoryBuffer::getMemBufferCopy(
+                                StringRef(Buffer.begin(), Buffer.size())));
   }
   return Signature;
 }
@@ -5287,6 +5288,11 @@ void ASTWriter::WriteDeclUpdatesBlocks(RecordDataImpl &OffsetsRecord) {
       case UPD_DECL_MARKED_OPENMP_THREADPRIVATE:
         Record.AddSourceRange(
             D->getAttr<OMPThreadPrivateDeclAttr>()->getRange());
+        break;
+
+      case UPD_DECL_MARKED_OPENMP_ALLOCATE:
+        Record.AddStmt(D->getAttr<OMPAllocateDeclAttr>()->getAllocator());
+        Record.AddSourceRange(D->getAttr<OMPAllocateDeclAttr>()->getRange());
         break;
 
       case UPD_DECL_MARKED_OPENMP_DECLARETARGET:
@@ -6406,6 +6412,15 @@ void ASTWriter::DeclarationMarkedOpenMPThreadPrivate(const Decl *D) {
   DeclUpdates[D].push_back(DeclUpdate(UPD_DECL_MARKED_OPENMP_THREADPRIVATE));
 }
 
+void ASTWriter::DeclarationMarkedOpenMPAllocate(const Decl *D, const Attr *A) {
+  if (Chain && Chain->isProcessingUpdateRecords()) return;
+  assert(!WritingAST && "Already writing the AST!");
+  if (!D->isFromASTFile())
+    return;
+
+  DeclUpdates[D].push_back(DeclUpdate(UPD_DECL_MARKED_OPENMP_ALLOCATE, A));
+}
+
 void ASTWriter::DeclarationMarkedOpenMPDeclareTarget(const Decl *D,
                                                      const Attr *Attr) {
   if (Chain && Chain->isProcessingUpdateRecords()) return;
@@ -6517,6 +6532,11 @@ void OMPClauseWriter::VisitOMPSafelenClause(OMPSafelenClause *C) {
 
 void OMPClauseWriter::VisitOMPSimdlenClause(OMPSimdlenClause *C) {
   Record.AddStmt(C->getSimdlen());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
+void OMPClauseWriter::VisitOMPAllocatorClause(OMPAllocatorClause *C) {
+  Record.AddStmt(C->getAllocator());
   Record.AddSourceLocation(C->getLParenLoc());
 }
 
@@ -6783,11 +6803,18 @@ void OMPClauseWriter::VisitOMPMapClause(OMPMapClause *C) {
   Record.push_back(C->getTotalComponentListNum());
   Record.push_back(C->getTotalComponentsNum());
   Record.AddSourceLocation(C->getLParenLoc());
-  Record.push_back(C->getMapTypeModifier());
+  for (unsigned I = 0; I < OMPMapClause::NumberOfModifiers; ++I) {
+    Record.push_back(C->getMapTypeModifier(I));
+    Record.AddSourceLocation(C->getMapTypeModifierLoc(I));
+  }
+  Record.AddNestedNameSpecifierLoc(C->getMapperQualifierLoc());
+  Record.AddDeclarationNameInfo(C->getMapperIdInfo());
   Record.push_back(C->getMapType());
   Record.AddSourceLocation(C->getMapLoc());
   Record.AddSourceLocation(C->getColonLoc());
   for (auto *E : C->varlists())
+    Record.AddStmt(E);
+  for (auto *E : C->mapperlists())
     Record.AddStmt(E);
   for (auto *D : C->all_decls())
     Record.AddDeclRef(D);
@@ -6856,7 +6883,11 @@ void OMPClauseWriter::VisitOMPToClause(OMPToClause *C) {
   Record.push_back(C->getTotalComponentListNum());
   Record.push_back(C->getTotalComponentsNum());
   Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddNestedNameSpecifierLoc(C->getMapperQualifierLoc());
+  Record.AddDeclarationNameInfo(C->getMapperIdInfo());
   for (auto *E : C->varlists())
+    Record.AddStmt(E);
+  for (auto *E : C->mapperlists())
     Record.AddStmt(E);
   for (auto *D : C->all_decls())
     Record.AddDeclRef(D);
@@ -6876,7 +6907,11 @@ void OMPClauseWriter::VisitOMPFromClause(OMPFromClause *C) {
   Record.push_back(C->getTotalComponentListNum());
   Record.push_back(C->getTotalComponentsNum());
   Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddNestedNameSpecifierLoc(C->getMapperQualifierLoc());
+  Record.AddDeclarationNameInfo(C->getMapperIdInfo());
   for (auto *E : C->varlists())
+    Record.AddStmt(E);
+  for (auto *E : C->mapperlists())
     Record.AddStmt(E);
   for (auto *D : C->all_decls())
     Record.AddDeclRef(D);

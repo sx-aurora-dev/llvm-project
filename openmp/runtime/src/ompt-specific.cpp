@@ -4,10 +4,9 @@
 
 //===----------------------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -211,10 +210,10 @@ ompt_data_t *__ompt_get_thread_data_internal() {
 void __ompt_thread_assign_wait_id(void *variable) {
   kmp_info_t *ti = ompt_get_thread();
 
-  ti->th.ompt_thread_info.wait_id = (omp_wait_id_t)variable;
+  ti->th.ompt_thread_info.wait_id = (ompt_wait_id_t)variable;
 }
 
-omp_state_t __ompt_get_state_internal(omp_wait_id_t *omp_wait_id) {
+int __ompt_get_state_internal(ompt_wait_id_t *omp_wait_id) {
   kmp_info_t *ti = ompt_get_thread();
 
   if (ti) {
@@ -222,7 +221,7 @@ omp_state_t __ompt_get_state_internal(omp_wait_id_t *omp_wait_id) {
       *omp_wait_id = ti->th.ompt_thread_info.wait_id;
     return ti->th.ompt_thread_info.state;
   }
-  return omp_state_undefined;
+  return ompt_state_undefined;
 }
 
 //----------------------------------------------------------
@@ -259,8 +258,8 @@ void __ompt_lw_taskteam_init(ompt_lw_taskteam_t *lwt, kmp_info_t *thr, int gtid,
   lwt->ompt_team_info.parallel_data = *ompt_pid;
   lwt->ompt_team_info.master_return_address = codeptr;
   lwt->ompt_task_info.task_data.value = 0;
-  lwt->ompt_task_info.frame.enter_frame = NULL;
-  lwt->ompt_task_info.frame.exit_frame = NULL;
+  lwt->ompt_task_info.frame.enter_frame = ompt_data_none;
+  lwt->ompt_task_info.frame.exit_frame = ompt_data_none;
   lwt->ompt_task_info.scheduling_parent = NULL;
   lwt->ompt_task_info.deps = NULL;
   lwt->ompt_task_info.ndeps = 0;
@@ -328,7 +327,7 @@ void __ompt_lw_taskteam_unlink(kmp_info_t *thr) {
 
 int __ompt_get_task_info_internal(int ancestor_level, int *type,
                                   ompt_data_t **task_data,
-                                  omp_frame_t **task_frame,
+                                  ompt_frame_t **task_frame,
                                   ompt_data_t **parallel_data,
                                   int *thread_num) {
   if (__kmp_get_gtid() < 0)
@@ -448,4 +447,26 @@ static uint64_t __ompt_get_unique_id_internal() {
     ID = new_thread << (sizeof(uint64_t) * 8 - OMPT_THREAD_ID_BITS);
   }
   return ++ID;
+}
+
+ompt_sync_region_t __ompt_get_barrier_kind(enum barrier_type bt,
+                                           kmp_info_t *thr) {
+  if (bt == bs_forkjoin_barrier)
+    return ompt_sync_region_barrier_implicit;
+
+  if (bt != bs_plain_barrier)
+    return ompt_sync_region_barrier_implementation;
+
+  if (!thr->th.th_ident)
+    return ompt_sync_region_barrier;
+
+  kmp_int32 flags = thr->th.th_ident->flags;
+
+  if ((flags & KMP_IDENT_BARRIER_EXPL) != 0)
+    return ompt_sync_region_barrier_explicit;
+
+  if ((flags & KMP_IDENT_BARRIER_IMPL) != 0)
+    return ompt_sync_region_barrier_implicit;
+
+  return ompt_sync_region_barrier_implementation;
 }

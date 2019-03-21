@@ -1,9 +1,8 @@
 //===--- PPCallbacksTracker.cpp - Preprocessor tracker -*--*---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -295,6 +294,22 @@ void PPCallbacksTracker::PragmaWarningPush(clang::SourceLocation Loc,
 // Callback invoked when a #pragma warning(pop) directive is read.
 void PPCallbacksTracker::PragmaWarningPop(clang::SourceLocation Loc) {
   beginCallback("PragmaWarningPop");
+  appendArgument("Loc", Loc);
+}
+
+// Callback invoked when a #pragma execution_character_set(push) directive
+// is read.
+void PPCallbacksTracker::PragmaExecCharsetPush(clang::SourceLocation Loc,
+                                               clang::StringRef Str) {
+  beginCallback("PragmaExecCharsetPush");
+  appendArgument("Loc", Loc);
+  appendArgument("Charset", Str);
+}
+
+// Callback invoked when a #pragma execution_character_set(pop) directive
+// is read.
+void PPCallbacksTracker::PragmaExecCharsetPop(clang::SourceLocation Loc) {
+  beginCallback("PragmaExecCharsetPop");
   appendArgument("Loc", Loc);
 }
 

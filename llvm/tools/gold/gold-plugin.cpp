@@ -1,9 +1,8 @@
 //===-- gold-plugin.cpp - Plugin to gold for Link Time Optimization  ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -128,6 +127,7 @@ namespace options {
     OT_NORMAL,
     OT_DISABLE,
     OT_BC_ONLY,
+    OT_ASM_ONLY,
     OT_SAVE_TEMPS
   };
   static OutputType TheOutputType = OT_NORMAL;
@@ -205,9 +205,14 @@ namespace options {
   /// Statistics output filename.
   static std::string stats_file;
 
-  // Optimization remarks filename and hotness options
+  // Optimization remarks filename, accepted passes and hotness options
   static std::string OptRemarksFilename;
+  static std::string OptRemarksFilter;
   static bool OptRemarksWithHotness = false;
+
+  // Context sensitive PGO options.
+  static std::string cs_profile_path;
+  static bool cs_pgo_gen = false;
 
   static void process_plugin_option(const char *opt_)
   {
@@ -229,6 +234,8 @@ namespace options {
       TheOutputType = OT_SAVE_TEMPS;
     } else if (opt == "disable-output") {
       TheOutputType = OT_DISABLE;
+    } else if (opt == "emit-asm") {
+      TheOutputType = OT_ASM_ONLY;
     } else if (opt == "thinlto") {
       thinlto = true;
     } else if (opt == "thinlto-index-only") {
@@ -266,7 +273,11 @@ namespace options {
     } else if (opt == "disable-verify") {
       DisableVerify = true;
     } else if (opt.startswith("sample-profile=")) {
-      sample_profile= opt.substr(strlen("sample-profile="));
+      sample_profile = opt.substr(strlen("sample-profile="));
+    } else if (opt == "cs-profile-generate") {
+      cs_pgo_gen = true;
+    } else if (opt.startswith("cs-profile-path=")) {
+      cs_profile_path = opt.substr(strlen("cs-profile-path="));
     } else if (opt == "new-pass-manager") {
       new_pass_manager = true;
     } else if (opt == "debug-pass-manager") {
@@ -275,6 +286,8 @@ namespace options {
       dwo_dir = opt.substr(strlen("dwo_dir="));
     } else if (opt.startswith("opt-remarks-filename=")) {
       OptRemarksFilename = opt.substr(strlen("opt-remarks-filename="));
+    } else if (opt.startswith("opt-remarks-passes=")) {
+      OptRemarksFilter = opt.substr(strlen("opt-remarks-passes="));
     } else if (opt == "opt-remarks-with-hotness") {
       OptRemarksWithHotness = true;
     } else if (opt.startswith("stats-file=")) {
@@ -833,8 +846,10 @@ static std::unique_ptr<LTO> createLTO(IndexWriteCallback OnIndexWrite,
   Conf.Options.RelaxELFRelocations = false;
 
   // Toggle function/data sections.
-  Conf.Options.FunctionSections = SplitSections;
-  Conf.Options.DataSections = SplitSections;
+  if (FunctionSections.getNumOccurrences() == 0)
+    Conf.Options.FunctionSections = SplitSections;
+  if (DataSections.getNumOccurrences() == 0)
+    Conf.Options.DataSections = SplitSections;
 
   Conf.MAttrs = MAttrs;
   Conf.RelocModel = RelocationModel;
@@ -880,15 +895,23 @@ static std::unique_ptr<LTO> createLTO(IndexWriteCallback OnIndexWrite,
     check(Conf.addSaveTemps(output_name + ".",
                             /* UseInputModulePath */ true));
     break;
+  case options::OT_ASM_ONLY:
+    Conf.CGFileType = TargetMachine::CGFT_AssemblyFile;
+    break;
   }
 
   if (!options::sample_profile.empty())
     Conf.SampleProfile = options::sample_profile;
 
+  if (!options::cs_profile_path.empty())
+    Conf.CSIRProfile = options::cs_profile_path;
+  Conf.RunCSIRInstr = options::cs_pgo_gen;
+
   Conf.DwoDir = options::dwo_dir;
 
   // Set up optimization remarks handling.
   Conf.RemarksFilename = options::OptRemarksFilename;
+  Conf.RemarksPasses = options::OptRemarksFilter;
   Conf.RemarksWithHotness = options::OptRemarksWithHotness;
 
   // Use new pass manager if set in driver
@@ -1007,6 +1030,8 @@ static std::vector<std::pair<SmallString<128>, bool>> runLTO() {
     Filename = options::obj_path;
   else if (options::TheOutputType == options::OT_SAVE_TEMPS)
     Filename = output_name + ".o";
+  else if (options::TheOutputType == options::OT_ASM_ONLY)
+    Filename = output_name;
   bool SaveTemps = !Filename.empty();
 
   size_t MaxTasks = Lto->getMaxTasks();
@@ -1055,7 +1080,8 @@ static ld_plugin_status allSymbolsReadHook() {
   std::vector<std::pair<SmallString<128>, bool>> Files = runLTO();
 
   if (options::TheOutputType == options::OT_DISABLE ||
-      options::TheOutputType == options::OT_BC_ONLY)
+      options::TheOutputType == options::OT_BC_ONLY ||
+      options::TheOutputType == options::OT_ASM_ONLY)
     return LDPS_OK;
 
   if (options::thinlto_index_only) {
@@ -1080,6 +1106,7 @@ static ld_plugin_status all_symbols_read_hook(void) {
   llvm_shutdown();
 
   if (options::TheOutputType == options::OT_BC_ONLY ||
+      options::TheOutputType == options::OT_ASM_ONLY ||
       options::TheOutputType == options::OT_DISABLE) {
     if (options::TheOutputType == options::OT_DISABLE) {
       // Remove the output file here since ld.bfd creates the output file

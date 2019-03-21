@@ -61,7 +61,6 @@ set(TSAN_CXX_SOURCES
 if(APPLE)
   list(APPEND TSAN_SOURCES
     rtl/tsan_interceptors_mac.cc
-    rtl/tsan_libdispatch_mac.cc
     rtl/tsan_platform_mac.cc
     rtl/tsan_platform_posix.cc)
 elseif(UNIX)
@@ -69,6 +68,11 @@ elseif(UNIX)
   list(APPEND TSAN_SOURCES
     rtl/tsan_platform_linux.cc
     rtl/tsan_platform_posix.cc)
+endif()
+
+if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
+  list(APPEND TSAN_SOURCES rtl/tsan_libdispatch.cc)
+  list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_INTERCEPT_LIBDISPATCH_CFLAGS})
 endif()
 
 set(TSAN_HEADERS
@@ -220,11 +224,12 @@ else()
 endif()
 
 # Make sure that non-platform-specific files don't include any system headers.
-# FreeBSD does not install a number of Clang-provided headers for the compiler
-# in the base system due to incompatibilities between FreeBSD's and Clang's
-# versions. As a workaround do not use --sysroot=. on FreeBSD until this is
-# addressed.
-if(COMPILER_RT_HAS_SYSROOT_FLAG AND NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+# FreeBSD/NetBSD do not install a number of Clang-provided headers for the
+# compiler in the base system due to incompatibilities between FreeBSD/NetBSD's
+# and Clang's versions. As a workaround do not use --sysroot=. on FreeBSD/NetBSD
+# until this is addressed.
+if(COMPILER_RT_HAS_SYSROOT_FLAG AND NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD"
+   AND NOT CMAKE_SYSTEM_NAME MATCHES "NetBSD")
   file(GLOB _tsan_generic_sources rtl/tsan*)
   file(GLOB _tsan_platform_sources rtl/tsan*posix* rtl/tsan*mac*
                                    rtl/tsan*linux*)
@@ -235,6 +240,7 @@ endif()
 
 # Build libcxx instrumented with TSan.
 if(COMPILER_RT_LIBCXX_PATH AND
+   COMPILER_RT_LIBCXXABI_PATH AND
    COMPILER_RT_TEST_COMPILER_ID STREQUAL "Clang" AND
    NOT ANDROID)
   set(libcxx_tsan_deps)

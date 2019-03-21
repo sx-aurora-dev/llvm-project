@@ -1,9 +1,8 @@
 //===- TargetLoweringBase.cpp - Implement the TargetLoweringBase class ----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -583,6 +582,14 @@ void TargetLoweringBase::initActions() {
   std::fill(std::begin(TargetDAGCombineArray),
             std::end(TargetDAGCombineArray), 0);
 
+  for (MVT VT : MVT::fp_valuetypes()) {
+    MVT IntVT = MVT::getIntegerVT(VT.getSizeInBits());
+    if (IntVT.isValid()) {
+      setOperationAction(ISD::ATOMIC_SWAP, VT, Promote);
+      AddPromotedToType(ISD::ATOMIC_SWAP, VT, IntVT);
+    }
+  }
+
   // Set default actions for various operations.
   for (MVT VT : MVT::all_valuetypes()) {
     // Default all indexed load / store to expand.
@@ -610,10 +617,14 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::UMIN, VT, Expand);
     setOperationAction(ISD::UMAX, VT, Expand);
     setOperationAction(ISD::ABS, VT, Expand);
+    setOperationAction(ISD::FSHL, VT, Expand);
+    setOperationAction(ISD::FSHR, VT, Expand);
     setOperationAction(ISD::SADDSAT, VT, Expand);
     setOperationAction(ISD::UADDSAT, VT, Expand);
     setOperationAction(ISD::SSUBSAT, VT, Expand);
     setOperationAction(ISD::USUBSAT, VT, Expand);
+    setOperationAction(ISD::SMULFIX, VT, Expand);
+    setOperationAction(ISD::UMULFIX, VT, Expand);
 
     // Overflow operations default to expand
     setOperationAction(ISD::SADDO, VT, Expand);
@@ -654,6 +665,21 @@ void TargetLoweringBase::initActions() {
 
     // For most targets @llvm.get.dynamic.area.offset just returns 0.
     setOperationAction(ISD::GET_DYNAMIC_AREA_OFFSET, VT, Expand);
+
+    // Vector reduction default to expand.
+    setOperationAction(ISD::VECREDUCE_FADD, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_FMUL, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_ADD, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_MUL, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_AND, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_OR, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_XOR, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_SMAX, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_SMIN, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_UMAX, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_UMIN, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_FMAX, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_FMIN, VT, Expand);
   }
 
   // Most targets ignore the @llvm.prefetch intrinsic.
@@ -982,16 +1008,16 @@ TargetLoweringBase::emitPatchPoint(MachineInstr &InitialMI,
     // Add a new memory operand for this FI.
     assert(MFI.getObjectOffset(FI) != -1);
 
-    auto Flags = MachineMemOperand::MOLoad;
-    if (MI->getOpcode() == TargetOpcode::STATEPOINT) {
-      Flags |= MachineMemOperand::MOStore;
-      Flags |= MachineMemOperand::MOVolatile;
+    // Note: STATEPOINT MMOs are added during SelectionDAG.  STACKMAP, and
+    // PATCHPOINT should be updated to do the same. (TODO)
+    if (MI->getOpcode() != TargetOpcode::STATEPOINT) {
+      auto Flags = MachineMemOperand::MOLoad;
+      MachineMemOperand *MMO = MF.getMachineMemOperand(
+          MachinePointerInfo::getFixedStack(MF, FI), Flags,
+          MF.getDataLayout().getPointerSize(), MFI.getObjectAlignment(FI));
+      MIB->addMemOperand(MF, MMO);
     }
-    MachineMemOperand *MMO = MF.getMachineMemOperand(
-        MachinePointerInfo::getFixedStack(MF, FI), Flags,
-        MF.getDataLayout().getPointerSize(), MFI.getObjectAlignment(FI));
-    MIB->addMemOperand(MF, MMO);
-
+    
     // Replace the instruction and update the operand index.
     MBB->insert(MachineBasicBlock::iterator(MI), MIB);
     OperIdx += (MIB->getNumOperands() - MI->getNumOperands()) - 1;
@@ -1444,6 +1470,7 @@ int TargetLoweringBase::InstructionOpcodeToISD(unsigned Opcode) const {
   case Switch:         return 0;
   case IndirectBr:     return 0;
   case Invoke:         return 0;
+  case CallBr:         return 0;
   case Resume:         return 0;
   case Unreachable:    return 0;
   case CleanupRet:     return 0;
@@ -1577,8 +1604,8 @@ Value *TargetLoweringBase::getSafeStackPointerLocation(IRBuilder<> &IRB) const {
   // thread's unsafe stack pointer.
   Module *M = IRB.GetInsertBlock()->getParent()->getParent();
   Type *StackPtrTy = Type::getInt8PtrTy(M->getContext());
-  Value *Fn = M->getOrInsertFunction("__safestack_pointer_address",
-                                     StackPtrTy->getPointerTo(0));
+  FunctionCallee Fn = M->getOrInsertFunction("__safestack_pointer_address",
+                                             StackPtrTy->getPointerTo(0));
   return IRB.CreateCall(Fn);
 }
 
@@ -1653,7 +1680,7 @@ Value *TargetLoweringBase::getSDagStackGuard(const Module &M) const {
   return M.getNamedValue("__stack_chk_guard");
 }
 
-Value *TargetLoweringBase::getSSPStackGuardCheck(const Module &M) const {
+Function *TargetLoweringBase::getSSPStackGuardCheck(const Module &M) const {
   return nullptr;
 }
 

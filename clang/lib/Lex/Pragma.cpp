@@ -1,9 +1,8 @@
 //===- Pragma.cpp - Pragma registration and handling ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -31,7 +30,6 @@
 #include "clang/Lex/PPCallbacks.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorLexer.h"
-#include "clang/Lex/PTHLexer.h"
 #include "clang/Lex/Token.h"
 #include "clang/Lex/TokenLexer.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -404,10 +402,7 @@ void Preprocessor::HandlePragmaOnce(Token &OnceTok) {
 
 void Preprocessor::HandlePragmaMark() {
   assert(CurPPLexer && "No current lexer?");
-  if (CurLexer)
-    CurLexer->ReadToEndOfLine();
-  else
-    CurPTHLexer->DiscardToEndOfLine();
+  CurLexer->ReadToEndOfLine();
 }
 
 /// HandlePragmaPoison - Handle \#pragma GCC poison.  PoisonTok is the 'poison'.
@@ -511,7 +506,7 @@ void Preprocessor::HandlePragmaDependency(Token &DependencyTok) {
   const DirectoryLookup *CurDir;
   const FileEntry *File =
       LookupFile(FilenameTok.getLocation(), Filename, isAngled, nullptr,
-                 nullptr, CurDir, nullptr, nullptr, nullptr, nullptr);
+                 nullptr, CurDir, nullptr, nullptr, nullptr, nullptr, nullptr);
   if (!File) {
     if (!SuppressIncludeNotFoundError)
       Diag(FilenameTok, diag::err_pp_file_not_found) << Filename;
@@ -808,12 +803,6 @@ void Preprocessor::HandlePragmaModuleBuild(Token &Tok) {
   if (Tok.isNot(tok::eod)) {
     Diag(Tok, diag::ext_pp_extra_tokens_at_eol) << "pragma";
     DiscardUntilEndOfDirective();
-  }
-
-  if (CurPTHLexer) {
-    // FIXME: Support this somehow?
-    Diag(Loc, diag::err_pp_module_build_pth);
-    return;
   }
 
   CurLexer->LexingRawMode = true;
@@ -1379,6 +1368,70 @@ struct PragmaWarningHandler : public PragmaHandler {
   }
 };
 
+/// "\#pragma execution_character_set(...)". MSVC supports this pragma only
+/// for "UTF-8". We parse it and ignore it if UTF-8 is provided and warn
+/// otherwise to avoid -Wunknown-pragma warnings.
+struct PragmaExecCharsetHandler : public PragmaHandler {
+  PragmaExecCharsetHandler() : PragmaHandler("execution_character_set") {}
+
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    Token &Tok) override {
+    // Parse things like:
+    // execution_character_set(push, "UTF-8")
+    // execution_character_set(pop)
+    SourceLocation DiagLoc = Tok.getLocation();
+    PPCallbacks *Callbacks = PP.getPPCallbacks();
+
+    PP.Lex(Tok);
+    if (Tok.isNot(tok::l_paren)) {
+      PP.Diag(Tok, diag::warn_pragma_exec_charset_expected) << "(";
+      return;
+    }
+
+    PP.Lex(Tok);
+    IdentifierInfo *II = Tok.getIdentifierInfo();
+
+    if (II && II->isStr("push")) {
+      // #pragma execution_character_set( push[ , string ] )
+      PP.Lex(Tok);
+      if (Tok.is(tok::comma)) {
+        PP.Lex(Tok);
+
+        std::string ExecCharset;
+        if (!PP.FinishLexStringLiteral(Tok, ExecCharset,
+                                       "pragma execution_character_set",
+                                       /*MacroExpansion=*/false))
+          return;
+
+        // MSVC supports either of these, but nothing else.
+        if (ExecCharset != "UTF-8" && ExecCharset != "utf-8") {
+          PP.Diag(Tok, diag::warn_pragma_exec_charset_push_invalid) << ExecCharset;
+          return;
+        }
+      }
+      if (Callbacks)
+        Callbacks->PragmaExecCharsetPush(DiagLoc, "UTF-8");
+    } else if (II && II->isStr("pop")) {
+      // #pragma execution_character_set( pop )
+      PP.Lex(Tok);
+      if (Callbacks)
+        Callbacks->PragmaExecCharsetPop(DiagLoc);
+    } else {
+      PP.Diag(Tok, diag::warn_pragma_exec_charset_spec_invalid);
+      return;
+    }
+
+    if (Tok.isNot(tok::r_paren)) {
+      PP.Diag(Tok, diag::warn_pragma_exec_charset_expected) << ")";
+      return;
+    }
+
+    PP.Lex(Tok);
+    if (Tok.isNot(tok::eod))
+      PP.Diag(Tok, diag::ext_pp_extra_tokens_at_eol) << "pragma execution_character_set";
+  }
+};
+
 /// PragmaIncludeAliasHandler - "\#pragma include_alias("...")".
 struct PragmaIncludeAliasHandler : public PragmaHandler {
   PragmaIncludeAliasHandler() : PragmaHandler("include_alias") {}
@@ -1834,6 +1887,7 @@ void Preprocessor::RegisterBuiltinPragmas() {
   // MS extensions.
   if (LangOpts.MicrosoftExt) {
     AddPragmaHandler(new PragmaWarningHandler());
+    AddPragmaHandler(new PragmaExecCharsetHandler());
     AddPragmaHandler(new PragmaIncludeAliasHandler());
     AddPragmaHandler(new PragmaHdrstopHandler());
   }

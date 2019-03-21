@@ -1,9 +1,8 @@
 //===--- MemIndex.cpp - Dynamic in-memory symbol index. ----------*- C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===-------------------------------------------------------------------===//
 
@@ -12,8 +11,8 @@
 #include "Logger.h"
 #include "Quality.h"
 #include "Trace.h"
+#include "clang/Index/IndexSymbol.h"
 
-using namespace llvm;
 namespace clang {
 namespace clangd {
 
@@ -25,8 +24,9 @@ std::unique_ptr<SymbolIndex> MemIndex::build(SymbolSlab Slab, RefSlab Refs) {
                                      BackingDataSize);
 }
 
-bool MemIndex::fuzzyFind(const FuzzyFindRequest &Req,
-                         function_ref<void(const Symbol &)> Callback) const {
+bool MemIndex::fuzzyFind(
+    const FuzzyFindRequest &Req,
+    llvm::function_ref<void(const Symbol &)> Callback) const {
   assert(!StringRef(Req.Query).contains("::") &&
          "There must be no :: in query.");
   trace::Span Tracer("MemIndex fuzzyFind");
@@ -38,8 +38,17 @@ bool MemIndex::fuzzyFind(const FuzzyFindRequest &Req,
   for (const auto Pair : Index) {
     const Symbol *Sym = Pair.second;
 
+    // FIXME: Enable fuzzy find on template specializations once we start
+    // storing template arguments in the name. Currently we only store name for
+    // class template, which would cause duplication in the results.
+    if (Sym->SymInfo.Properties &
+        (static_cast<index::SymbolPropertySet>(
+             index::SymbolProperty::TemplateSpecialization) |
+         static_cast<index::SymbolPropertySet>(
+             index::SymbolProperty::TemplatePartialSpecialization)))
+      continue;
     // Exact match against all possible scopes.
-    if (!Req.AnyScope && !is_contained(Req.Scopes, Sym->Scope))
+    if (!Req.AnyScope && !llvm::is_contained(Req.Scopes, Sym->Scope))
       continue;
     if (Req.RestrictForCodeCompletion &&
         !(Sym->Flags & Symbol::IndexedForCodeCompletion))
@@ -57,7 +66,7 @@ bool MemIndex::fuzzyFind(const FuzzyFindRequest &Req,
 }
 
 void MemIndex::lookup(const LookupRequest &Req,
-                      function_ref<void(const Symbol &)> Callback) const {
+                      llvm::function_ref<void(const Symbol &)> Callback) const {
   trace::Span Tracer("MemIndex lookup");
   for (const auto &ID : Req.IDs) {
     auto I = Index.find(ID);
@@ -67,15 +76,20 @@ void MemIndex::lookup(const LookupRequest &Req,
 }
 
 void MemIndex::refs(const RefsRequest &Req,
-                    function_ref<void(const Ref &)> Callback) const {
+                    llvm::function_ref<void(const Ref &)> Callback) const {
   trace::Span Tracer("MemIndex refs");
+  uint32_t Remaining =
+      Req.Limit.getValueOr(std::numeric_limits<uint32_t>::max());
   for (const auto &ReqID : Req.IDs) {
     auto SymRefs = Refs.find(ReqID);
     if (SymRefs == Refs.end())
       continue;
-    for (const auto &O : SymRefs->second)
-      if (static_cast<int>(Req.Filter & O.Kind))
+    for (const auto &O : SymRefs->second) {
+      if (Remaining > 0 && static_cast<int>(Req.Filter & O.Kind)) {
+        --Remaining;
         Callback(O);
+      }
+    }
   }
 }
 

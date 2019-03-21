@@ -1,9 +1,8 @@
 //===- DWARFDebugFrame.h - Parsing of .debug_frame ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -225,7 +224,7 @@ void CFIProgram::printOperand(raw_ostream &OS, const MCRegisterInfo *MRI,
   switch (Type) {
   case OT_Unset: {
     OS << " Unsupported " << (OperandIdx ? "second" : "first") << " operand to";
-    auto OpcodeName = CallFrameString(Opcode);
+    auto OpcodeName = CallFrameString(Opcode, Arch);
     if (!OpcodeName.empty())
       OS << " " << OpcodeName;
     else
@@ -267,7 +266,7 @@ void CFIProgram::printOperand(raw_ostream &OS, const MCRegisterInfo *MRI,
   case OT_Expression:
     assert(Instr.Expression && "missing DWARFExpression object");
     OS << " ";
-    Instr.Expression->print(OS, MRI, IsEH);
+    Instr.Expression->print(OS, MRI, nullptr, IsEH);
     break;
   }
 }
@@ -279,7 +278,7 @@ void CFIProgram::dump(raw_ostream &OS, const MCRegisterInfo *MRI, bool IsEH,
     if (Opcode & DWARF_CFI_PRIMARY_OPCODE_MASK)
       Opcode &= DWARF_CFI_PRIMARY_OPCODE_MASK;
     OS.indent(2 * IndentLevel);
-    OS << CallFrameString(Opcode) << ":";
+    OS << CallFrameString(Opcode, Arch) << ":";
     for (unsigned i = 0; i < Instr.Ops.size(); ++i)
       printOperand(OS, MRI, IsEH, Instr, i, Instr.Ops[i]);
     OS << '\n';
@@ -301,7 +300,7 @@ void CIE::dump(raw_ostream &OS, const MCRegisterInfo *MRI, bool IsEH) const {
   OS << format("  Data alignment factor: %d\n", (int32_t)DataAlignmentFactor);
   OS << format("  Return address column: %d\n", (int32_t)ReturnAddressRegister);
   if (Personality)
-    OS << format("  Personality Address: %08x\n", *Personality);
+    OS << format("  Personality Address: %016" PRIx64 "\n", *Personality);
   if (!AugmentationData.empty()) {
     OS << "  Augmentation data:    ";
     for (uint8_t Byte : AugmentationData)
@@ -320,13 +319,14 @@ void FDE::dump(raw_ostream &OS, const MCRegisterInfo *MRI, bool IsEH) const {
                (uint32_t)InitialLocation,
                (uint32_t)InitialLocation + (uint32_t)AddressRange);
   if (LSDAAddress)
-    OS << format("  LSDA Address: %08x\n", *LSDAAddress);
+    OS << format("  LSDA Address: %016" PRIx64 "\n", *LSDAAddress);
   CFIs.dump(OS, MRI, IsEH);
   OS << "\n";
 }
 
-DWARFDebugFrame::DWARFDebugFrame(bool IsEH, uint64_t EHFrameAddress)
-    : IsEH(IsEH), EHFrameAddress(EHFrameAddress) {}
+DWARFDebugFrame::DWARFDebugFrame(Triple::ArchType Arch,
+    bool IsEH, uint64_t EHFrameAddress)
+    : Arch(Arch), IsEH(IsEH), EHFrameAddress(EHFrameAddress) {}
 
 DWARFDebugFrame::~DWARFDebugFrame() = default;
 
@@ -396,7 +396,8 @@ void DWARFDebugFrame::parse(DWARFDataExtractor Data) {
       uint8_t SegmentDescriptorSize = Version < 4 ? 0 : Data.getU8(&Offset);
       uint64_t CodeAlignmentFactor = Data.getULEB128(&Offset);
       int64_t DataAlignmentFactor = Data.getSLEB128(&Offset);
-      uint64_t ReturnAddressRegister = Data.getULEB128(&Offset);
+      uint64_t ReturnAddressRegister =
+          Version == 1 ? Data.getU8(&Offset) : Data.getULEB128(&Offset);
 
       // Parse the augmentation data for EH CIEs
       StringRef AugmentationData("");
@@ -444,6 +445,11 @@ void DWARFDebugFrame::parse(DWARFDataExtractor Data) {
               StartAugmentationOffset = Offset;
               EndAugmentationOffset = Offset +
                 static_cast<uint32_t>(*AugmentationLength);
+              break;
+            case 'B':
+              // B-Key is used for signing functions associated with this
+              // augmentation string
+              break;
           }
         }
 
@@ -460,7 +466,7 @@ void DWARFDebugFrame::parse(DWARFDataExtractor Data) {
           StartOffset, Length, Version, AugmentationString, AddressSize,
           SegmentDescriptorSize, CodeAlignmentFactor, DataAlignmentFactor,
           ReturnAddressRegister, AugmentationData, FDEPointerEncoding,
-          LSDAPointerEncoding, Personality, PersonalityEncoding);
+          LSDAPointerEncoding, Personality, PersonalityEncoding, Arch);
       CIEs[StartOffset] = Cie.get();
       Entries.emplace_back(std::move(Cie));
     } else {
@@ -512,7 +518,7 @@ void DWARFDebugFrame::parse(DWARFDataExtractor Data) {
 
       Entries.emplace_back(new FDE(StartOffset, Length, CIEPointer,
                                    InitialLocation, AddressRange,
-                                   Cie, LSDAAddress));
+                                   Cie, LSDAAddress, Arch));
     }
 
     if (Error E =

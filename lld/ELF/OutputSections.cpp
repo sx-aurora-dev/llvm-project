@@ -1,9 +1,8 @@
 //===- OutputSections.cpp -------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,6 +30,7 @@ using namespace llvm::ELF;
 using namespace lld;
 using namespace lld::elf;
 
+uint8_t *Out::BufferStart;
 uint8_t Out::First;
 PhdrEntry *Out::TlsPhdr;
 OutputSection *Out::ElfHeader;
@@ -69,9 +69,7 @@ void OutputSection::writeHeaderTo(typename ELFT::Shdr *Shdr) {
 OutputSection::OutputSection(StringRef Name, uint32_t Type, uint64_t Flags)
     : BaseCommand(OutputSectionKind),
       SectionBase(Output, Name, Flags, /*Entsize*/ 0, /*Alignment*/ 1, Type,
-                  /*Info*/ 0, /*Link*/ 0) {
-  Live = false;
-}
+                  /*Info*/ 0, /*Link*/ 0) {}
 
 // We allow sections of types listed below to merged into a
 // single progbits section. This is typically done by linker
@@ -95,7 +93,7 @@ void OutputSection::addSection(InputSection *IS) {
     Flags = IS->Flags;
   } else {
     // Otherwise, check if new type or flags are compatible with existing ones.
-    unsigned Mask = SHF_ALLOC | SHF_TLS | SHF_LINK_ORDER;
+    unsigned Mask = SHF_TLS | SHF_LINK_ORDER;
     if ((Flags & Mask) != (IS->Flags & Mask))
       error("incompatible section flags for " + Name + "\n>>> " + toString(IS) +
             ": 0x" + utohexstr(IS->Flags) + "\n>>> output section " + Name +
@@ -223,8 +221,6 @@ template <class ELFT> void OutputSection::writeTo(uint8_t *Buf) {
   if (Type == SHT_NOBITS)
     return;
 
-  Loc = Buf;
-
   // If -compress-debug-section is specified and if this is a debug seciton,
   // we've already compressed section contents. If that's the case,
   // just write it down.
@@ -265,7 +261,6 @@ template <class ELFT> void OutputSection::writeTo(uint8_t *Buf) {
       writeInt(Buf + Data->Offset, Data->Expression().getValue(), Data->Size);
 }
 
-template <class ELFT>
 static void finalizeShtGroup(OutputSection *OS,
                              InputSection *Section) {
   assert(Config->Relocatable);
@@ -276,12 +271,11 @@ static void finalizeShtGroup(OutputSection *OS,
 
   // sh_info then contain index of an entry in symbol table section which
   // provides signature of the section group.
-  ObjFile<ELFT> *Obj = Section->getFile<ELFT>();
-  ArrayRef<Symbol *> Symbols = Obj->getSymbols();
+  ArrayRef<Symbol *> Symbols = Section->File->getSymbols();
   OS->Info = In.SymTab->getSymbolIndex(Symbols[Section->Info]);
 }
 
-template <class ELFT> void OutputSection::finalize() {
+void OutputSection::finalize() {
   if (Type == SHT_NOBITS)
     for (BaseCommand *Base : SectionCommands)
       if (isa<ByteCommand>(Base))
@@ -300,7 +294,7 @@ template <class ELFT> void OutputSection::finalize() {
   }
 
   if (Type == SHT_GROUP) {
-    finalizeShtGroup<ELFT>(this, First);
+    finalizeShtGroup(this, First);
     return;
   }
 
@@ -430,8 +424,3 @@ template void OutputSection::maybeCompress<ELF32LE>();
 template void OutputSection::maybeCompress<ELF32BE>();
 template void OutputSection::maybeCompress<ELF64LE>();
 template void OutputSection::maybeCompress<ELF64BE>();
-
-template void OutputSection::finalize<ELF32LE>();
-template void OutputSection::finalize<ELF32BE>();
-template void OutputSection::finalize<ELF64LE>();
-template void OutputSection::finalize<ELF64BE>();

@@ -1,9 +1,8 @@
 //===- OutputSections.h -----------------------------------------*- C++ -*-===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,17 +22,8 @@ namespace lld {
 namespace elf {
 
 struct PhdrEntry;
-class Symbol;
-struct EhSectionPiece;
-class EhInputSection;
 class InputSection;
 class InputSectionBase;
-class MergeInputSection;
-class OutputSection;
-template <class ELFT> class ObjFile;
-template <class ELFT> class SharedFile;
-class SharedSymbol;
-class Defined;
 
 // This represents a section in an output file.
 // It is composed of multiple InputSections.
@@ -83,9 +73,6 @@ public:
 
   void addSection(InputSection *IS);
 
-  // Location in the output buffer.
-  uint8_t *Loc = nullptr;
-
   // The following members are normally only used in linker scripts.
   MemoryRegion *MemRegion = nullptr;
   MemoryRegion *LMARegion = nullptr;
@@ -105,7 +92,7 @@ public:
   bool ExpressionsUseSymbols = false;
   bool InOverlay = false;
 
-  template <class ELFT> void finalize();
+  void finalize();
   template <class ELFT> void writeTo(uint8_t *Buf);
   template <class ELFT> void maybeCompress();
 
@@ -129,6 +116,7 @@ std::vector<InputSection *> getInputSections(OutputSection* OS);
 // globally accessible. Writer initializes them, so don't use them
 // until Writer is initialized.
 struct Out {
+  static uint8_t *BufferStart;
   static uint8_t First;
   static PhdrEntry *TlsPhdr;
   static OutputSection *ElfHeader;

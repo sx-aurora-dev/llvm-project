@@ -1,9 +1,8 @@
 //===-- JITLoader.h ---------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +17,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class JITLoader JITLoader.h "lldb/Target/JITLoader.h"
+/// \class JITLoader JITLoader.h "lldb/Target/JITLoader.h"
 /// A plug-in interface definition class for JIT loaders.
 ///
 /// Plugins of this kind listen for code generated at runtime in the target.
@@ -35,7 +34,7 @@ public:
   /// Scans the installed DynamicLoader plug-ins and tries to find all
   /// applicable instances for the current process.
   ///
-  /// @param[in] process
+  /// \param[in] process
   ///     The process for which to try and locate a JIT loader
   ///     plug-in instance.
   ///

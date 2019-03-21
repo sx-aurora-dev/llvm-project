@@ -1,9 +1,8 @@
 //===-- HostProcess.h ------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,7 +13,7 @@
 #include "lldb/lldb-types.h"
 
 //----------------------------------------------------------------------
-/// @class HostInfo HostInfo.h "lldb/Host/HostProcess.h"
+/// \class HostInfo HostInfo.h "lldb/Host/HostProcess.h"
 /// A class that represents a running process on the host machine.
 ///
 /// HostProcess allows querying and manipulation of processes running on the

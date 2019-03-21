@@ -1,9 +1,8 @@
 //===-ThinLTOCodeGenerator.cpp - LLVM Link Time Optimizer -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,6 +32,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/LTO/LTO.h"
+#include "llvm/LTO/SummaryBasedOptimizations.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Object/IRObjectFile.h"
 #include "llvm/Support/CachePruning.h"
@@ -70,6 +70,7 @@ namespace llvm {
 // Flags -discard-value-names, defined in LTOCodeGenerator.cpp
 extern cl::opt<bool> LTODiscardValueNames;
 extern cl::opt<std::string> LTORemarksFilename;
+extern cl::opt<std::string> LTORemarksPasses;
 extern cl::opt<bool> LTOPassRemarksWithHotness;
 }
 
@@ -883,6 +884,9 @@ void ThinLTOCodeGenerator::run() {
   // Compute "dead" symbols, we don't want to import/export these!
   computeDeadSymbolsInIndex(*Index, GUIDPreservedSymbols);
 
+  // Synthesize entry counts for functions in the combined index.
+  computeSyntheticCounts(*Index);
+
   // Collect the import/export lists for all modules from the call-graph in the
   // combined index.
   StringMap<FunctionImporter::ImportMapTy> ImportLists(ModuleCount);
@@ -969,7 +973,8 @@ void ThinLTOCodeGenerator::run() {
         Context.setDiscardValueNames(LTODiscardValueNames);
         Context.enableDebugTypeODRUniquing();
         auto DiagFileOrErr = lto::setupOptimizationRemarks(
-            Context, LTORemarksFilename, LTOPassRemarksWithHotness, count);
+            Context, LTORemarksFilename, LTORemarksPasses,
+            LTOPassRemarksWithHotness, count);
         if (!DiagFileOrErr) {
           errs() << "Error: " << toString(DiagFileOrErr.takeError()) << "\n";
           report_fatal_error("ThinLTO: Can't get an output file for the "

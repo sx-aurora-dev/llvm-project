@@ -203,6 +203,14 @@
 // LINK_PG: -lgcrt1.o
 // LINK_PG: -no_new_main
 
+// RUN: %clang -target i386-apple-darwin13 -pg -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=LINK_PG_NO_SUPPORT_OSX %s < %t.log
+// LINK_PG_NO_SUPPORT_OSX: error: the clang compiler does not support -pg option on versions of OS X
+
+// RUN: %clang -target x86_64-apple-ios5.0 -pg -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=LINK_PG_NO_SUPPORT %s < %t.log
+// LINK_PG_NO_SUPPORT: error: the clang compiler does not support -pg option on Darwin
+
 // Check that clang links with libgcc_s.1 for iOS 4 and earlier, but not arm64.
 // RUN: %clang -target armv7-apple-ios4.0 -miphoneos-version-min=4.0 -### %t.o 2> %t.log
 // RUN: FileCheck -check-prefix=LINK_IOS_LIBGCC_S %s < %t.log
@@ -319,6 +327,10 @@
 // RUN: FileCheck -check-prefix=PASS_REMARKS_WITH_HOTNESS_THRESHOLD %s < %t.log
 // PASS_REMARKS_WITH_HOTNESS_THRESHOLD: "-mllvm" "-lto-pass-remarks-output" "-mllvm" "foo/bar.out.opt.yaml" "-mllvm" "-lto-pass-remarks-with-hotness" "-mllvm" "-lto-pass-remarks-hotness-threshold=100"
 
+// RUN: %clang -target x86_64-apple-darwin12 %t.o -fsave-optimization-record -foptimization-record-passes=inline -### -o foo/bar.out 2> %t.log
+// RUN: FileCheck -check-prefix=PASS_REMARKS_WITH_PASSES %s < %t.log
+// PASS_REMARKS_WITH_PASSES: "-mllvm" "-lto-pass-remarks-output" "-mllvm" "foo/bar.out.opt.yaml" "-mllvm" "-lto-pass-remarks-filter=inline"
+
 // RUN: %clang -target x86_64-apple-ios6.0 -miphoneos-version-min=6.0 -fprofile-instr-generate -### %t.o 2> %t.log
 // RUN: FileCheck -check-prefix=LINK_PROFILE_FIRST %s < %t.log
 // RUN: %clang -target x86_64-apple-darwin12 -fprofile-instr-generate -### %t.o 2> %t.log
@@ -341,9 +353,21 @@
 // RUN: FileCheck -check-prefix=PROFILE_EXPORT %s < %t.log
 // PROFILE_EXPORT: "-exported_symbol" "___llvm_profile_filename" "-exported_symbol" "___llvm_profile_raw_version" "-exported_symbol" "_lprofCurFilename"
 //
-// RUN: %clang -target x86_64-apple-darwin12 -fprofile-instr-generate -### %t.o 2> %t.log
+// RUN: %clang -target x86_64-apple-darwin12 -fprofile-instr-generate --coverage -### %t.o 2> %t.log
 // RUN: FileCheck -check-prefix=NO_PROFILE_EXPORT %s < %t.log
 // NO_PROFILE_EXPORT-NOT: "-exported_symbol"
+//
+// RUN: %clang -target x86_64-apple-darwin12 --coverage -exported_symbols_list /dev/null -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=GCOV_EXPORT %s < %t.log
+// RUN: %clang -target x86_64-apple-darwin12 -fprofile-arcs -Wl,-exported_symbols_list,/dev/null -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=GCOV_EXPORT %s < %t.log
+// RUN: %clang -target x86_64-apple-darwin12 -fprofile-arcs -Wl,-exported_symbol,foo -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=GCOV_EXPORT %s < %t.log
+// RUN: %clang -target x86_64-apple-darwin12 -fprofile-arcs -Xlinker -exported_symbol -Xlinker foo -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=GCOV_EXPORT %s < %t.log
+// RUN: %clang -target x86_64-apple-darwin12 -fprofile-arcs -Xlinker -exported_symbols_list -Xlinker /dev/null -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=GCOV_EXPORT %s < %t.log
+// GCOV_EXPORT: "-exported_symbol" "___gcov_flush"
 //
 // Check that we can pass the outliner down to the linker.
 // RUN: env IPHONEOS_DEPLOYMENT_TARGET=7.0 \

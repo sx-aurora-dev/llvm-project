@@ -1,9 +1,8 @@
 //===-- SystemZISelDAGToDAG.cpp - A dag to dag inst selector for SystemZ --===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "SystemZTargetMachine.h"
+#include "SystemZISelLowering.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/Support/Debug.h"
@@ -303,6 +303,9 @@ class SystemZDAGToDAGISel : public SelectionDAGISel {
   //   (Opcode (Opcode Op0 UpperVal) LowerVal)
   void splitLargeImmediate(unsigned Opcode, SDNode *Node, SDValue Op0,
                            uint64_t UpperVal, uint64_t LowerVal);
+
+  void loadVectorConstant(const SystemZVectorConstantInfo &VCI,
+                          SDNode *Node);
 
   // Try to use gather instruction Opcode to implement vector insertion N.
   bool tryGather(SDNode *N, unsigned Opcode);
@@ -728,8 +731,7 @@ bool SystemZDAGToDAGISel::detectOrAndInsertion(SDValue &Op,
   // The inner check covers all cases but is more expensive.
   uint64_t Used = allOnes(Op.getValueSizeInBits());
   if (Used != (AndMask | InsertMask)) {
-    KnownBits Known;
-    CurDAG->computeKnownBits(Op.getOperand(0), Known);
+    KnownBits Known = CurDAG->computeKnownBits(Op.getOperand(0));
     if (Used != (AndMask | InsertMask | Known.Zero.getZExtValue()))
       return false;
   }
@@ -787,8 +789,7 @@ bool SystemZDAGToDAGISel::expandRxSBG(RxSBGOperands &RxSBG) const {
       // If some bits of Input are already known zeros, those bits will have
       // been removed from the mask.  See if adding them back in makes the
       // mask suitable.
-      KnownBits Known;
-      CurDAG->computeKnownBits(Input, Known);
+      KnownBits Known = CurDAG->computeKnownBits(Input);
       Mask |= Known.Zero.getZExtValue();
       if (!refineRxSBGMask(RxSBG, Mask))
         return false;
@@ -811,8 +812,7 @@ bool SystemZDAGToDAGISel::expandRxSBG(RxSBGOperands &RxSBG) const {
       // If some bits of Input are already known ones, those bits will have
       // been removed from the mask.  See if adding them back in makes the
       // mask suitable.
-      KnownBits Known;
-      CurDAG->computeKnownBits(Input, Known);
+      KnownBits Known = CurDAG->computeKnownBits(Input);
       Mask &= ~Known.One.getZExtValue();
       if (!refineRxSBGMask(RxSBG, Mask))
         return false;
@@ -1135,6 +1135,35 @@ void SystemZDAGToDAGISel::splitLargeImmediate(unsigned Opcode, SDNode *Node,
   SelectCode(Or.getNode());
 }
 
+void SystemZDAGToDAGISel::loadVectorConstant(
+    const SystemZVectorConstantInfo &VCI, SDNode *Node) {
+  assert((VCI.Opcode == SystemZISD::BYTE_MASK ||
+          VCI.Opcode == SystemZISD::REPLICATE ||
+          VCI.Opcode == SystemZISD::ROTATE_MASK) &&
+         "Bad opcode!");
+  assert(VCI.VecVT.getSizeInBits() == 128 && "Expected a vector type");
+  EVT VT = Node->getValueType(0);
+  SDLoc DL(Node);
+  SmallVector<SDValue, 2> Ops;
+  for (unsigned OpVal : VCI.OpVals)
+    Ops.push_back(CurDAG->getConstant(OpVal, DL, MVT::i32));
+  SDValue Op = CurDAG->getNode(VCI.Opcode, DL, VCI.VecVT, Ops);
+
+  if (VCI.VecVT == VT.getSimpleVT())
+    ReplaceNode(Node, Op.getNode());
+  else if (VT.getSizeInBits() == 128) {
+    SDValue BitCast = CurDAG->getNode(ISD::BITCAST, DL, VT, Op);
+    ReplaceNode(Node, BitCast.getNode());
+    SelectCode(BitCast.getNode());
+  } else { // float or double
+    unsigned SubRegIdx =
+        (VT.getSizeInBits() == 32 ? SystemZ::subreg_h32 : SystemZ::subreg_h64);
+    ReplaceNode(
+        Node, CurDAG->getTargetExtractSubreg(SubRegIdx, DL, VT, Op).getNode());
+  }
+  SelectCode(Op.getNode());
+}
+
 bool SystemZDAGToDAGISel::tryGather(SDNode *N, unsigned Opcode) {
   SDValue ElemV = N->getOperand(2);
   auto *ElemN = dyn_cast<ConstantSDNode>(ElemV);
@@ -1147,7 +1176,7 @@ bool SystemZDAGToDAGISel::tryGather(SDNode *N, unsigned Opcode) {
     return false;
 
   auto *Load = dyn_cast<LoadSDNode>(N->getOperand(1));
-  if (!Load || !Load->hasOneUse())
+  if (!Load || !Load->hasNUsesOfValue(1, 0))
     return false;
   if (Load->getMemoryVT().getSizeInBits() !=
       Load->getValueType(0).getSizeInBits())
@@ -1528,6 +1557,27 @@ void SystemZDAGToDAGISel::Select(SDNode *Node) {
         return;
     }
     break;
+  }
+
+  case ISD::BUILD_VECTOR: {
+    auto *BVN = cast<BuildVectorSDNode>(Node);
+    SystemZVectorConstantInfo VCI(BVN);
+    if (VCI.isVectorConstantLegal(*Subtarget)) {
+      loadVectorConstant(VCI, Node);
+      return;
+    }
+    break;
+  }
+
+  case ISD::ConstantFP: {
+    APFloat Imm = cast<ConstantFPSDNode>(Node)->getValueAPF();
+    if (Imm.isZero() || Imm.isNegZero())
+      break;
+    SystemZVectorConstantInfo VCI(Imm);
+    bool Success = VCI.isVectorConstantLegal(*Subtarget); (void)Success;
+    assert(Success && "Expected legal FP immediate");
+    loadVectorConstant(VCI, Node);
+    return;
   }
 
   case ISD::STORE: {

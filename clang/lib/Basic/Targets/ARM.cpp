@@ -1,9 +1,8 @@
 //===--- ARM.cpp - Implement ARM target feature support -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -28,8 +27,8 @@ void ARMTargetInfo::setABIAAPCS() {
   DoubleAlign = LongLongAlign = LongDoubleAlign = SuitableAlign = 64;
   const llvm::Triple &T = getTriple();
 
-  bool IsNetBSD = T.getOS() == llvm::Triple::NetBSD;
-  bool IsOpenBSD = T.getOS() == llvm::Triple::OpenBSD;
+  bool IsNetBSD = T.isOSNetBSD();
+  bool IsOpenBSD = T.isOSOpenBSD();
   if (!T.isOSWindows() && !IsNetBSD && !IsOpenBSD)
     WCharType = UnsignedInt;
 
@@ -41,13 +40,14 @@ void ARMTargetInfo::setABIAAPCS() {
   // so set preferred for small types to 32.
   if (T.isOSBinFormatMachO()) {
     resetDataLayout(BigEndian
-                        ? "E-m:o-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64"
-                        : "e-m:o-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
+                        ? "E-m:o-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"
+                        : "e-m:o-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
   } else if (T.isOSWindows()) {
     assert(!BigEndian && "Windows on ARM does not support big endian");
     resetDataLayout("e"
                     "-m:w"
                     "-p:32:32"
+                    "-Fi8"
                     "-i64:64"
                     "-v128:64:128"
                     "-a:0:32"
@@ -55,11 +55,11 @@ void ARMTargetInfo::setABIAAPCS() {
                     "-S64");
   } else if (T.isOSNaCl()) {
     assert(!BigEndian && "NaCl on ARM does not support big endian");
-    resetDataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S128");
+    resetDataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S128");
   } else {
     resetDataLayout(BigEndian
-                        ? "E-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64"
-                        : "e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
+                        ? "E-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"
+                        : "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
   }
 
   // FIXME: Enumerated types are variable width in straight AAPCS.
@@ -88,17 +88,17 @@ void ARMTargetInfo::setABIAPCS(bool IsAAPCS16) {
 
   if (T.isOSBinFormatMachO() && IsAAPCS16) {
     assert(!BigEndian && "AAPCS16 does not support big-endian");
-    resetDataLayout("e-m:o-p:32:32-i64:64-a:0:32-n32-S128");
+    resetDataLayout("e-m:o-p:32:32-Fi8-i64:64-a:0:32-n32-S128");
   } else if (T.isOSBinFormatMachO())
     resetDataLayout(
         BigEndian
-            ? "E-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32"
-            : "e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+            ? "E-m:o-p:32:32-Fi8-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32"
+            : "e-m:o-p:32:32-Fi8-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
   else
     resetDataLayout(
         BigEndian
-            ? "E-m:e-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32"
-            : "e-m:e-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+            ? "E-m:e-p:32:32-Fi8-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32"
+            : "e-m:e-p:32:32-Fi8-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
 
   // FIXME: Override "preferred align" for double and long long.
 }
@@ -217,8 +217,8 @@ ARMTargetInfo::ARMTargetInfo(const llvm::Triple &Triple,
                              const TargetOptions &Opts)
     : TargetInfo(Triple), FPMath(FP_Default), IsAAPCS(true), LDREX(0),
       HW_FP(0) {
-  bool IsOpenBSD = Triple.getOS() == llvm::Triple::OpenBSD;
-  bool IsNetBSD = Triple.getOS() == llvm::Triple::NetBSD;
+  bool IsOpenBSD = Triple.isOSOpenBSD();
+  bool IsNetBSD = Triple.isOSNetBSD();
 
   // FIXME: the isOSBinFormatMachO is a workaround for identifying a Darwin-like
   // environment where size_t is `unsigned long` rather than `unsigned int`
@@ -282,9 +282,9 @@ ARMTargetInfo::ARMTargetInfo(const llvm::Triple &Triple,
       setABI("apcs-gnu");
       break;
     default:
-      if (Triple.getOS() == llvm::Triple::NetBSD)
+      if (IsNetBSD)
         setABI("apcs-gnu");
-      else if (Triple.getOS() == llvm::Triple::OpenBSD)
+      else if (IsOpenBSD)
         setABI("aapcs-linux");
       else
         setABI("aapcs");
@@ -397,6 +397,7 @@ bool ARMTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
   SoftFloat = SoftFloatABI = false;
   HWDiv = 0;
   DotProd = 0;
+  HasFloat16 = true;
 
   // This does not diagnose illegal cases like having both
   // "+vfpv2" and "+vfpv3" or having "+neon" and "+fp-only-sp".
@@ -651,6 +652,12 @@ void ARMTargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (SoftFloat)
     Builder.defineMacro("__SOFTFP__");
+
+  // ACLE position independent code macros.
+  if (Opts.ROPI)
+    Builder.defineMacro("__ARM_ROPI", "1");
+  if (Opts.RWPI)
+    Builder.defineMacro("__ARM_RWPI", "1");
 
   if (ArchKind == llvm::ARM::ArchKind::XSCALE)
     Builder.defineMacro("__XSCALE__");
@@ -996,6 +1003,7 @@ WindowsARMTargetInfo::checkCallingConvention(CallingConv CC) const {
   case CC_OpenCLKernel:
   case CC_PreserveMost:
   case CC_PreserveAll:
+  case CC_Swift:
     return CCCR_OK;
   default:
     return CCCR_Warning;
@@ -1048,7 +1056,7 @@ CygwinARMTargetInfo::CygwinARMTargetInfo(const llvm::Triple &Triple,
   this->WCharType = TargetInfo::UnsignedShort;
   TLSSupported = false;
   DoubleAlign = LongLongAlign = 64;
-  resetDataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
+  resetDataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
 }
 
 void CygwinARMTargetInfo::getTargetDefines(const LangOptions &Opts,

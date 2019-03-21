@@ -118,6 +118,7 @@ check_library_exists(dl dlopen "" COMPILER_RT_HAS_LIBDL)
 check_library_exists(rt shm_open "" COMPILER_RT_HAS_LIBRT)
 check_library_exists(m pow "" COMPILER_RT_HAS_LIBM)
 check_library_exists(pthread pthread_create "" COMPILER_RT_HAS_LIBPTHREAD)
+check_library_exists(execinfo backtrace "" COMPILER_RT_HAS_LIBEXECINFO)
 
 # Look for terminfo library, used in unittests that depend on LLVMSupport.
 if(LLVM_ENABLE_TERMINFO)
@@ -141,6 +142,8 @@ check_library_exists(c++ __cxa_throw "" COMPILER_RT_HAS_LIBCXX)
 check_library_exists(stdc++ __cxa_throw "" COMPILER_RT_HAS_LIBSTDCXX)
 
 # Linker flags.
+check_linker_flag("-Wl,-z,text" COMPILER_RT_HAS_Z_TEXT)
+
 if(ANDROID)
   check_linker_flag("-Wl,-z,global" COMPILER_RT_HAS_Z_GLOBAL)
   check_library_exists(log __android_log_write "" COMPILER_RT_HAS_LIBLOG)
@@ -243,14 +246,14 @@ set(ALL_UBSAN_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64}
     ${MIPS32} ${MIPS64} ${PPC64} ${S390X})
 set(ALL_SAFESTACK_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM64} ${MIPS32} ${MIPS64})
 set(ALL_CFI_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS64})
-set(ALL_ESAN_SUPPORTED_ARCH ${X86_64} ${MIPS64})
 set(ALL_SCUDO_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} ${PPC64})
+set(ALL_SCUDO_STANDALONE_SUPPORTED_ARCH ${X86} ${X86_64})
 if(APPLE)
 set(ALL_XRAY_SUPPORTED_ARCH ${X86_64})
 else()
 set(ALL_XRAY_SUPPORTED_ARCH ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} powerpc64le)
 endif()
-set(ALL_SHADOWCALLSTACK_SUPPORTED_ARCH ${X86_64} ${ARM64})
+set(ALL_SHADOWCALLSTACK_SUPPORTED_ARCH ${ARM64})
 
 if(APPLE)
   include(CompilerRTDarwinUtils)
@@ -317,13 +320,13 @@ if(APPLE)
 
   # We're setting the flag manually for each target OS
   set(CMAKE_OSX_DEPLOYMENT_TARGET "")
-  
+
   set(DARWIN_COMMON_CFLAGS -stdlib=libc++)
   set(DARWIN_COMMON_LINK_FLAGS
     -stdlib=libc++
     -lc++
     -lc++abi)
-  
+
   check_linker_flag("-fapplication-extension" COMPILER_RT_HAS_APP_EXTENSION)
   if(COMPILER_RT_HAS_APP_EXTENSION)
     list(APPEND DARWIN_COMMON_LINK_FLAGS "-fapplication-extension")
@@ -344,7 +347,7 @@ if(APPLE)
   # Figure out which arches to use for each OS
   darwin_get_toolchain_supported_archs(toolchain_arches)
   message(STATUS "Toolchain supported arches: ${toolchain_arches}")
-  
+
   if(NOT MACOSX_VERSION_MIN_FLAG)
     darwin_test_archs(osx
       DARWIN_osx_ARCHS
@@ -452,11 +455,11 @@ if(APPLE)
   list_intersect(CFI_SUPPORTED_ARCH
     ALL_CFI_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
-  list_intersect(ESAN_SUPPORTED_ARCH
-    ALL_ESAN_SUPPORTED_ARCH
-    SANITIZER_COMMON_SUPPORTED_ARCH)
   list_intersect(SCUDO_SUPPORTED_ARCH
     ALL_SCUDO_SUPPORTED_ARCH
+    SANITIZER_COMMON_SUPPORTED_ARCH)
+  list_intersect(SCUDO_STANDALONE_SUPPORTED_ARCH
+    ALL_SCUDO_STANDALONE_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
   list_intersect(FUZZER_SUPPORTED_ARCH
     ALL_FUZZER_SUPPORTED_ARCH
@@ -490,8 +493,8 @@ else()
   filter_available_targets(SAFESTACK_SUPPORTED_ARCH
     ${ALL_SAFESTACK_SUPPORTED_ARCH})
   filter_available_targets(CFI_SUPPORTED_ARCH ${ALL_CFI_SUPPORTED_ARCH})
-  filter_available_targets(ESAN_SUPPORTED_ARCH ${ALL_ESAN_SUPPORTED_ARCH})
   filter_available_targets(SCUDO_SUPPORTED_ARCH ${ALL_SCUDO_SUPPORTED_ARCH})
+  filter_available_targets(SCUDO_STANDALONE_SUPPORTED_ARCH ${ALL_SCUDO_STANDALONE_SUPPORTED_ARCH})
   filter_available_targets(XRAY_SUPPORTED_ARCH ${ALL_XRAY_SUPPORTED_ARCH})
   filter_available_targets(SHADOWCALLSTACK_SUPPORTED_ARCH
     ${ALL_SHADOWCALLSTACK_SUPPORTED_ARCH})
@@ -522,7 +525,7 @@ else()
   set(OS_NAME "${CMAKE_SYSTEM_NAME}")
 endif()
 
-set(ALL_SANITIZERS asan;dfsan;msan;hwasan;tsan;safestack;cfi;esan;scudo;ubsan_minimal)
+set(ALL_SANITIZERS asan;dfsan;msan;hwasan;tsan;safestack;cfi;scudo;ubsan_minimal)
 set(COMPILER_RT_SANITIZERS_TO_BUILD all CACHE STRING
     "sanitizers to build if supported on the target (all;${ALL_SANITIZERS})")
 list_replace(COMPILER_RT_SANITIZERS_TO_BUILD all "${ALL_SANITIZERS}")
@@ -565,7 +568,7 @@ else()
 endif()
 
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND LSAN_SUPPORTED_ARCH AND
-    OS_NAME MATCHES "Darwin|Linux|FreeBSD|NetBSD")
+    OS_NAME MATCHES "Darwin|Linux|FreeBSD")
   set(COMPILER_RT_HAS_LSAN TRUE)
 else()
   set(COMPILER_RT_HAS_LSAN FALSE)
@@ -586,7 +589,7 @@ else()
 endif()
 
 if (PROFILE_SUPPORTED_ARCH AND NOT LLVM_USE_SANITIZER AND
-    OS_NAME MATCHES "Darwin|Linux|FreeBSD|Windows|Android|Fuchsia|SunOS")
+    OS_NAME MATCHES "Darwin|Linux|FreeBSD|Windows|Android|Fuchsia|SunOS|NetBSD")
   set(COMPILER_RT_HAS_PROFILE TRUE)
 else()
   set(COMPILER_RT_HAS_PROFILE FALSE)
@@ -614,7 +617,7 @@ else()
 endif()
 
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND SAFESTACK_SUPPORTED_ARCH AND
-    OS_NAME MATCHES "Darwin|Linux|FreeBSD|NetBSD")
+    OS_NAME MATCHES "Linux|FreeBSD|NetBSD")
   set(COMPILER_RT_HAS_SAFESTACK TRUE)
 else()
   set(COMPILER_RT_HAS_SAFESTACK FALSE)
@@ -626,11 +629,11 @@ else()
   set(COMPILER_RT_HAS_CFI FALSE)
 endif()
 
-if (COMPILER_RT_HAS_SANITIZER_COMMON AND ESAN_SUPPORTED_ARCH AND
-    OS_NAME MATCHES "Linux|FreeBSD")
-  set(COMPILER_RT_HAS_ESAN TRUE)
+#TODO(kostyak): add back Android & Fuchsia when the code settles a bit.
+if (SCUDO_STANDALONE_SUPPORTED_ARCH AND OS_NAME MATCHES "Linux")
+  set(COMPILER_RT_HAS_SCUDO_STANDALONE TRUE)
 else()
-  set(COMPILER_RT_HAS_ESAN FALSE)
+  set(COMPILER_RT_HAS_SCUDO_STANDALONE FALSE)
 endif()
 
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND SCUDO_SUPPORTED_ARCH AND
@@ -648,10 +651,7 @@ else()
 endif()
 
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND FUZZER_SUPPORTED_ARCH AND
-    OS_NAME MATCHES "Android|Darwin|Linux|NetBSD|FreeBSD|OpenBSD|Fuchsia|Windows" AND
-    # TODO: Support builds with MSVC.
-    NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC" AND
-    NOT "${CMAKE_C_COMPILER_ID}" STREQUAL "MSVC")
+    OS_NAME MATCHES "Android|Darwin|Linux|NetBSD|FreeBSD|OpenBSD|Fuchsia|Windows")
   set(COMPILER_RT_HAS_FUZZER TRUE)
 else()
   set(COMPILER_RT_HAS_FUZZER FALSE)

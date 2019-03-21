@@ -1,9 +1,8 @@
 //===--- PPCallbacksTracker.h - Preprocessor tracking -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -135,6 +134,9 @@ public:
                      llvm::ArrayRef<int> Ids) override;
   void PragmaWarningPush(clang::SourceLocation Loc, int Level) override;
   void PragmaWarningPop(clang::SourceLocation Loc) override;
+  void PragmaExecCharsetPush(clang::SourceLocation Loc,
+                             clang::StringRef Str) override;
+  void PragmaExecCharsetPop(clang::SourceLocation Loc) override;
   void MacroExpands(const clang::Token &MacroNameTok,
                     const clang::MacroDefinition &MD, clang::SourceRange Range,
                     const clang::MacroArgs *Args) override;

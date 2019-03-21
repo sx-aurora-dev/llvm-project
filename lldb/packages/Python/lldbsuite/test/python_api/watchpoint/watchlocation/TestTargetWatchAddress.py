@@ -33,6 +33,7 @@ class TargetWatchAddressAPITestCase(TestBase):
     @expectedFailureAll(
         oslist=["windows"],
         bugnumber="llvm.org/pr24446: WINDOWS XFAIL TRIAGE - Watchpoints not supported on Windows")
+    @expectedFailureNetBSD
     def test_watch_address(self):
         """Exercise SBTarget.WatchAddress() API to set a watchpoint."""
         self.build()
@@ -108,7 +109,6 @@ class TargetWatchAddressAPITestCase(TestBase):
     # No size constraint on MIPS for watches
     @skipIf(archs=['mips', 'mipsel', 'mips64', 'mips64el'])
     @skipIf(archs=['s390x'])  # Likewise on SystemZ
-    @expectedFailureAll(oslist=["windows"])
     def test_watch_address_with_invalid_watch_size(self):
         """Exercise SBTarget.WatchAddress() API but pass an invalid watch_size."""
         self.build()

@@ -1,10 +1,9 @@
 // -*- C++ -*-
 //===------------------------------ vector --------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -260,6 +259,11 @@ template <class T, class Allocator> bool operator<=(const vector<T,Allocator>& x
 template <class T, class Allocator>
 void swap(vector<T,Allocator>& x, vector<T,Allocator>& y)
     noexcept(noexcept(x.swap(y)));
+
+template <class T, class Allocator, class U>
+    void erase(vector<T, Allocator>& c, const U& value);       // C++20
+template <class T, class Allocator, class Predicate>
+    void erase_if(vector<T, Allocator>& c, Predicate pred);    // C++20
 
 }  // std
 
@@ -660,27 +664,27 @@ public:
     void reserve(size_type __n);
     void shrink_to_fit() _NOEXCEPT;
 
-    _LIBCPP_INLINE_VISIBILITY reference       operator[](size_type __n);
-    _LIBCPP_INLINE_VISIBILITY const_reference operator[](size_type __n) const;
+    _LIBCPP_INLINE_VISIBILITY reference       operator[](size_type __n) _NOEXCEPT;
+    _LIBCPP_INLINE_VISIBILITY const_reference operator[](size_type __n) const _NOEXCEPT;
     reference       at(size_type __n);
     const_reference at(size_type __n) const;
 
-    _LIBCPP_INLINE_VISIBILITY reference       front()
+    _LIBCPP_INLINE_VISIBILITY reference       front() _NOEXCEPT
     {
         _LIBCPP_ASSERT(!empty(), "front() called for empty vector");
         return *this->__begin_;
     }
-    _LIBCPP_INLINE_VISIBILITY const_reference front() const
+    _LIBCPP_INLINE_VISIBILITY const_reference front() const _NOEXCEPT
     {
         _LIBCPP_ASSERT(!empty(), "front() called for empty vector");
         return *this->__begin_;
     }
-    _LIBCPP_INLINE_VISIBILITY reference       back()
+    _LIBCPP_INLINE_VISIBILITY reference       back() _NOEXCEPT
     {
         _LIBCPP_ASSERT(!empty(), "back() called for empty vector");
         return *(this->__end_ - 1);
     }
-    _LIBCPP_INLINE_VISIBILITY const_reference back()  const
+    _LIBCPP_INLINE_VISIBILITY const_reference back()  const _NOEXCEPT
     {
         _LIBCPP_ASSERT(!empty(), "back() called for empty vector");
         return *(this->__end_ - 1);
@@ -1533,7 +1537,7 @@ vector<_Tp, _Allocator>::end() const _NOEXCEPT
 template <class _Tp, class _Allocator>
 inline _LIBCPP_INLINE_VISIBILITY
 typename vector<_Tp, _Allocator>::reference
-vector<_Tp, _Allocator>::operator[](size_type __n)
+vector<_Tp, _Allocator>::operator[](size_type __n) _NOEXCEPT
 {
     _LIBCPP_ASSERT(__n < size(), "vector[] index out of bounds");
     return this->__begin_[__n];
@@ -1542,7 +1546,7 @@ vector<_Tp, _Allocator>::operator[](size_type __n)
 template <class _Tp, class _Allocator>
 inline _LIBCPP_INLINE_VISIBILITY
 typename vector<_Tp, _Allocator>::const_reference
-vector<_Tp, _Allocator>::operator[](size_type __n) const
+vector<_Tp, _Allocator>::operator[](size_type __n) const _NOEXCEPT
 {
     _LIBCPP_ASSERT(__n < size(), "vector[] index out of bounds");
     return this->__begin_[__n];
@@ -3407,6 +3411,18 @@ swap(vector<_Tp, _Allocator>& __x, vector<_Tp, _Allocator>& __y)
 {
     __x.swap(__y);
 }
+
+#if _LIBCPP_STD_VER > 17
+template <class _Tp, class _Allocator, class _Up>
+inline _LIBCPP_INLINE_VISIBILITY
+void erase(vector<_Tp, _Allocator>& __c, const _Up& __v)
+{ __c.erase(_VSTD::remove(__c.begin(), __c.end(), __v), __c.end()); }
+
+template <class _Tp, class _Allocator, class _Predicate>
+inline _LIBCPP_INLINE_VISIBILITY
+void erase_if(vector<_Tp, _Allocator>& __c, _Predicate __pred)
+{ __c.erase(_VSTD::remove_if(__c.begin(), __c.end(), __pred), __c.end()); }
+#endif
 
 _LIBCPP_END_NAMESPACE_STD
 

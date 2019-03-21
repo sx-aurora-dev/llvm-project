@@ -1,9 +1,8 @@
 //===---- SemaAccess.cpp - C++ Access Control -------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1896,8 +1895,6 @@ bool Sema::IsSimplyAccessible(NamedDecl *Target, CXXRecordDecl *NamingClass,
   if (Target->isCXXClassMember() && NamingClass) {
     if (!getLangOpts().CPlusPlus)
       return false;
-    if (Target->getAccess() == AS_public)
-      return true;
     // The unprivileged access is AS_none as we don't know how the member was
     // accessed, which is described by the access in DeclAccessPair.
     // `IsAccessible` will examine the actual access of Target (i.e.

@@ -1,22 +1,20 @@
 //===-- SymbolFileDWARFDebugMap.h ------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef SymbolFileDWARF_SymbolFileDWARFDebugMap_h_
 #define SymbolFileDWARF_SymbolFileDWARFDebugMap_h_
 
+#include "lldb/Symbol/SymbolFile.h"
+#include "lldb/Utility/RangeMap.h"
+#include "llvm/Support/Chrono.h"
 #include <bitset>
 #include <map>
 #include <vector>
-
-#include "lldb/Core/RangeMap.h"
-#include "lldb/Symbol/SymbolFile.h"
-#include "llvm/Support/Chrono.h"
 
 #include "UniqueDWARFASTType.h"
 
@@ -56,23 +54,25 @@ public:
   lldb::CompUnitSP ParseCompileUnitAtIndex(uint32_t index) override;
 
   lldb::LanguageType
-  ParseCompileUnitLanguage(const lldb_private::SymbolContext &sc) override;
-  size_t
-  ParseCompileUnitFunctions(const lldb_private::SymbolContext &sc) override;
-  bool
-  ParseCompileUnitLineTable(const lldb_private::SymbolContext &sc) override;
-  bool
-  ParseCompileUnitDebugMacros(const lldb_private::SymbolContext &sc) override;
-  bool ParseCompileUnitSupportFiles(
-      const lldb_private::SymbolContext &sc,
-      lldb_private::FileSpecList &support_files) override;
-  bool
-  ParseCompileUnitIsOptimized(const lldb_private::SymbolContext &sc) override;
+  ParseLanguage(lldb_private::CompileUnit &comp_unit) override;
+
+  size_t ParseFunctions(lldb_private::CompileUnit &comp_unit) override;
+
+  bool ParseLineTable(lldb_private::CompileUnit &comp_unit) override;
+
+  bool ParseDebugMacros(lldb_private::CompileUnit &comp_unit) override;
+
+  bool ParseSupportFiles(lldb_private::CompileUnit &comp_unit,
+                         lldb_private::FileSpecList &support_files) override;
+
+  bool ParseIsOptimized(lldb_private::CompileUnit &comp_unit) override;
+
+  size_t ParseTypes(lldb_private::CompileUnit &comp_unit) override;
+
   bool ParseImportedModules(
       const lldb_private::SymbolContext &sc,
-      std::vector<lldb_private::ConstString> &imported_modules) override;
-  size_t ParseFunctionBlocks(const lldb_private::SymbolContext &sc) override;
-  size_t ParseTypes(const lldb_private::SymbolContext &sc) override;
+      std::vector<lldb_private::SourceModule> &imported_modules) override;
+  size_t ParseBlocksRecursive(lldb_private::Function &func) override;
   size_t
   ParseVariablesForContext(const lldb_private::SymbolContext &sc) override;
 
@@ -98,7 +98,7 @@ public:
                        lldb::SymbolContextItem resolve_scope,
                        lldb_private::SymbolContextList &sc_list) override;
   uint32_t
-  FindGlobalVariables(const lldb_private::ConstString &name,
+  FindGlobalVariables(lldb_private::ConstString name,
                       const lldb_private::CompilerDeclContext *parent_decl_ctx,
                       uint32_t max_matches,
                       lldb_private::VariableList &variables) override;
@@ -106,7 +106,7 @@ public:
                                uint32_t max_matches,
                                lldb_private::VariableList &variables) override;
   uint32_t
-  FindFunctions(const lldb_private::ConstString &name,
+  FindFunctions(lldb_private::ConstString name,
                 const lldb_private::CompilerDeclContext *parent_decl_ctx,
                 lldb::FunctionNameType name_type_mask, bool include_inlines,
                 bool append, lldb_private::SymbolContextList &sc_list) override;
@@ -114,15 +114,13 @@ public:
                          bool include_inlines, bool append,
                          lldb_private::SymbolContextList &sc_list) override;
   uint32_t
-  FindTypes(const lldb_private::SymbolContext &sc,
-            const lldb_private::ConstString &name,
+  FindTypes(lldb_private::ConstString name,
             const lldb_private::CompilerDeclContext *parent_decl_ctx,
             bool append, uint32_t max_matches,
             llvm::DenseSet<lldb_private::SymbolFile *> &searched_symbol_files,
             lldb_private::TypeMap &types) override;
   lldb_private::CompilerDeclContext FindNamespace(
-      const lldb_private::SymbolContext &sc,
-      const lldb_private::ConstString &name,
+      lldb_private::ConstString name,
       const lldb_private::CompilerDeclContext *parent_decl_ctx) override;
   size_t GetTypes(lldb_private::SymbolContextScope *sc_scope,
                   lldb::TypeClass type_mask,
@@ -198,6 +196,7 @@ protected:
   bool GetFileSpecForSO(uint32_t oso_idx, lldb_private::FileSpec &file_spec);
 
   CompileUnitInfo *GetCompUnitInfo(const lldb_private::SymbolContext &sc);
+  CompileUnitInfo *GetCompUnitInfo(const lldb_private::CompileUnit &comp_unit);
 
   size_t GetCompUnitInfosForModule(const lldb_private::Module *oso_module,
                                    std::vector<CompileUnitInfo *> &cu_infos);
@@ -215,6 +214,7 @@ protected:
   uint32_t GetCompUnitInfoIndex(const CompileUnitInfo *comp_unit_info);
 
   SymbolFileDWARF *GetSymbolFile(const lldb_private::SymbolContext &sc);
+  SymbolFileDWARF *GetSymbolFile(const lldb_private::CompileUnit &comp_unit);
 
   SymbolFileDWARF *GetSymbolFileByCompUnitInfo(CompileUnitInfo *comp_unit_info);
 
@@ -246,7 +246,7 @@ protected:
                                         const CompileUnitInfo *comp_unit_info);
 
   uint32_t PrivateFindGlobalVariables(
-      const lldb_private::ConstString &name,
+      lldb_private::ConstString name,
       const lldb_private::CompilerDeclContext *parent_decl_ctx,
       const std::vector<uint32_t> &name_symbol_indexes, uint32_t max_matches,
       lldb_private::VariableList &variables);
@@ -264,7 +264,7 @@ protected:
   bool Supports_DW_AT_APPLE_objc_complete_type(SymbolFileDWARF *skip_dwarf_oso);
 
   lldb::TypeSP FindCompleteObjCDefinitionTypeForDIE(
-      const DWARFDIE &die, const lldb_private::ConstString &type_name,
+      const DWARFDIE &die, lldb_private::ConstString type_name,
       bool must_be_implementation);
 
   UniqueDWARFASTTypeMap &GetUniqueDWARFASTTypeMap() {
@@ -336,10 +336,10 @@ protected:
   //------------------------------------------------------------------
   /// Convert \a addr from a .o file address, to an executable address.
   ///
-  /// @param[in] addr
+  /// \param[in] addr
   ///     A section offset address from a .o file
   ///
-  /// @return
+  /// \return
   ///     Returns true if \a addr was converted to be an executable
   ///     section/offset address, false otherwise.
   //------------------------------------------------------------------
@@ -348,13 +348,13 @@ protected:
   //------------------------------------------------------------------
   /// Convert a .o file "file address" to an executable "file address".
   ///
-  /// @param[in] oso_symfile
+  /// \param[in] oso_symfile
   ///     The DWARF symbol file that contains \a oso_file_addr
   ///
-  /// @param[in] oso_file_addr
+  /// \param[in] oso_file_addr
   ///     A .o file "file address" to convert.
   ///
-  /// @return
+  /// \return
   ///     LLDB_INVALID_ADDRESS if \a oso_file_addr is not in the
   ///     linked executable, otherwise a valid "file address" from the
   ///     linked executable that contains the debug map.
@@ -367,13 +367,13 @@ protected:
   /// for a .o file represented by \a oso_symfile, link a new line table
   /// and return it.
   ///
-  /// @param[in] oso_symfile
+  /// \param[in] oso_symfile
   ///     The DWARF symbol file that produced the \a line_table
   ///
-  /// @param[in] addr
+  /// \param[in] addr
   ///     A section offset address from a .o file
   ///
-  /// @return
+  /// \return
   ///     Returns a valid line table full of linked addresses, or NULL
   ///     if none of the line table addresses exist in the main
   ///     executable.

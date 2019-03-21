@@ -1,9 +1,8 @@
 //===- IntrinsicsPowerPC.td - Defines PowerPC intrinsics ---*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -610,16 +609,16 @@ let TargetPrefix = "ppc" in {  // All PPC intrinsics start with "llvm.ppc.".
   // FP <-> integer conversion.
   def int_ppc_altivec_vcfsx : GCCBuiltin<"__builtin_altivec_vcfsx">,
               Intrinsic<[llvm_v4f32_ty], [llvm_v4i32_ty, llvm_i32_ty],
-                        [IntrNoMem]>;
+                        [IntrNoMem, ImmArg<1>]>;
   def int_ppc_altivec_vcfux : GCCBuiltin<"__builtin_altivec_vcfux">,
               Intrinsic<[llvm_v4f32_ty], [llvm_v4i32_ty, llvm_i32_ty],
-                        [IntrNoMem]>;
+                        [IntrNoMem, ImmArg<1>]>;
   def int_ppc_altivec_vctsxs : GCCBuiltin<"__builtin_altivec_vctsxs">,
               Intrinsic<[llvm_v4i32_ty], [llvm_v4f32_ty, llvm_i32_ty],
-                        [IntrNoMem]>;
+                        [IntrNoMem, ImmArg<1>]>;
   def int_ppc_altivec_vctuxs : GCCBuiltin<"__builtin_altivec_vctuxs">,
               Intrinsic<[llvm_v4i32_ty], [llvm_v4f32_ty, llvm_i32_ty],
-                        [IntrNoMem]>;
+                        [IntrNoMem, ImmArg<1>]>;
 
   def int_ppc_altivec_vrfim : GCCBuiltin<"__builtin_altivec_vrfim">,
               Intrinsic<[llvm_v4f32_ty], [llvm_v4f32_ty], [IntrNoMem]>;
@@ -716,11 +715,11 @@ let TargetPrefix = "ppc" in {  // All PPC intrinsics start with "llvm.ppc.".
 def int_ppc_altivec_crypto_vshasigmad :
             GCCBuiltin<"__builtin_altivec_crypto_vshasigmad">,
             Intrinsic<[llvm_v2i64_ty], [llvm_v2i64_ty,
-                       llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+                       llvm_i32_ty, llvm_i32_ty], [IntrNoMem, ImmArg<1>, ImmArg<2>]>;
 def int_ppc_altivec_crypto_vshasigmaw :
             GCCBuiltin<"__builtin_altivec_crypto_vshasigmaw">,
             Intrinsic<[llvm_v4i32_ty], [llvm_v4i32_ty,
-                       llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+                       llvm_i32_ty, llvm_i32_ty], [IntrNoMem, ImmArg<1>, ImmArg<2>]>;
 }
 def int_ppc_altivec_crypto_vcipher :
             PowerPC_Vec_DDD_Intrinsic<"crypto_vcipher">;
@@ -915,10 +914,10 @@ def int_ppc_vsx_xvxsigsp :
                             [llvm_v4f32_ty], [IntrNoMem]>;
 def int_ppc_vsx_xvtstdcdp :
       PowerPC_VSX_Intrinsic<"xvtstdcdp", [llvm_v2i64_ty],
-                            [llvm_v2f64_ty, llvm_i32_ty], [IntrNoMem]>;
+                            [llvm_v2f64_ty, llvm_i32_ty], [IntrNoMem, ImmArg<1>]>;
 def int_ppc_vsx_xvtstdcsp :
       PowerPC_VSX_Intrinsic<"xvtstdcsp", [llvm_v4i32_ty],
-                            [llvm_v4f32_ty,llvm_i32_ty], [IntrNoMem]>;
+                            [llvm_v4f32_ty,llvm_i32_ty], [IntrNoMem, ImmArg<1>]>;
 def int_ppc_vsx_xvcvhpsp :
       PowerPC_VSX_Intrinsic<"xvcvhpsp", [llvm_v4f32_ty],
                             [llvm_v8i16_ty],[IntrNoMem]>;
@@ -1113,9 +1112,9 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
 let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
 
 def int_ppc_tbegin : GCCBuiltin<"__builtin_tbegin">,
-      Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
+      Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [ImmArg<0>]>;
 def int_ppc_tend : GCCBuiltin<"__builtin_tend">,
-      Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
+      Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [ImmArg<0>]>;
 
 def int_ppc_tabort : GCCBuiltin<"__builtin_tabort">,
       Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;

@@ -19,6 +19,9 @@ static_library("Support") {
     # both Support and ADT.
     "//llvm/include/llvm/Config:abi-breaking",
     "//llvm/include/llvm/Config:llvm-config",
+
+    # public_dep because public header TargetSelect.h includes these .def files.
+    "//llvm/include/llvm/Config:write_target_def_files",
   ]
   include_dirs = [
     "Unix",
@@ -85,6 +88,7 @@ static_library("Support") {
     "MathExtras.cpp",
     "MemoryBuffer.cpp",
     "NativeFormatting.cpp",
+    "Optional.cpp",
     "Options.cpp",
     "Parallel.cpp",
     "PluginLoader.cpp",
@@ -94,6 +98,7 @@ static_library("Support") {
     "SHA1.cpp",
     "ScaledNumber.cpp",
     "ScopedPrinter.cpp",
+    "Signposts.cpp",
     "SmallPtrSet.cpp",
     "SmallVector.cpp",
     "SourceMgr.cpp",
@@ -152,7 +157,14 @@ static_library("Support") {
 
   libs = []
 
-  if (host_os == "linux") {
+  if (current_os == "linux" || current_os == "android") {
     libs += [ "dl" ]
+  } else if (current_os == "win") {
+    # Delay load shell32.dll if possible to speed up process startup.
+    libs += [ "delayimp.lib" ]
+    ldflags = [
+      "-delayload:ole32.dll",
+      "-delayload:shell32.dll",
+    ]
   }
 }

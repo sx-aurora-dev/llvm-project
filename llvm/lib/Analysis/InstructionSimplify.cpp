@@ -1,9 +1,8 @@
 //===- InstructionSimplify.cpp - Fold instruction operands ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -34,6 +33,8 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/GlobalAlias.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/ValueHandle.h"
@@ -672,8 +673,8 @@ static Constant *stripAndComputeConstantOffsets(const DataLayout &DL, Value *&V,
         break;
       V = GA->getAliasee();
     } else {
-      if (auto CS = CallSite(V))
-        if (Value *RV = CS.getReturnedArgOperand()) {
+      if (auto *Call = dyn_cast<CallBase>(V))
+        if (Value *RV = Call->getReturnedArgOperand()) {
           V = RV;
           continue;
         }
@@ -2472,164 +2473,6 @@ static Value *simplifyICmpWithZero(CmpInst::Predicate Pred, Value *LHS,
   return nullptr;
 }
 
-/// Many binary operators with a constant operand have an easy-to-compute
-/// range of outputs. This can be used to fold a comparison to always true or
-/// always false.
-static void setLimitsForBinOp(BinaryOperator &BO, APInt &Lower, APInt &Upper,
-                              const InstrInfoQuery &IIQ) {
-  unsigned Width = Lower.getBitWidth();
-  const APInt *C;
-  switch (BO.getOpcode()) {
-  case Instruction::Add:
-    if (match(BO.getOperand(1), m_APInt(C)) && !C->isNullValue()) {
-      // FIXME: If we have both nuw and nsw, we should reduce the range further.
-      if (IIQ.hasNoUnsignedWrap(cast<OverflowingBinaryOperator>(&BO))) {
-        // 'add nuw x, C' produces [C, UINT_MAX].
-        Lower = *C;
-      } else if (IIQ.hasNoSignedWrap(cast<OverflowingBinaryOperator>(&BO))) {
-        if (C->isNegative()) {
-          // 'add nsw x, -C' produces [SINT_MIN, SINT_MAX - C].
-          Lower = APInt::getSignedMinValue(Width);
-          Upper = APInt::getSignedMaxValue(Width) + *C + 1;
-        } else {
-          // 'add nsw x, +C' produces [SINT_MIN + C, SINT_MAX].
-          Lower = APInt::getSignedMinValue(Width) + *C;
-          Upper = APInt::getSignedMaxValue(Width) + 1;
-        }
-      }
-    }
-    break;
-
-  case Instruction::And:
-    if (match(BO.getOperand(1), m_APInt(C)))
-      // 'and x, C' produces [0, C].
-      Upper = *C + 1;
-    break;
-
-  case Instruction::Or:
-    if (match(BO.getOperand(1), m_APInt(C)))
-      // 'or x, C' produces [C, UINT_MAX].
-      Lower = *C;
-    break;
-
-  case Instruction::AShr:
-    if (match(BO.getOperand(1), m_APInt(C)) && C->ult(Width)) {
-      // 'ashr x, C' produces [INT_MIN >> C, INT_MAX >> C].
-      Lower = APInt::getSignedMinValue(Width).ashr(*C);
-      Upper = APInt::getSignedMaxValue(Width).ashr(*C) + 1;
-    } else if (match(BO.getOperand(0), m_APInt(C))) {
-      unsigned ShiftAmount = Width - 1;
-      if (!C->isNullValue() && IIQ.isExact(&BO))
-        ShiftAmount = C->countTrailingZeros();
-      if (C->isNegative()) {
-        // 'ashr C, x' produces [C, C >> (Width-1)]
-        Lower = *C;
-        Upper = C->ashr(ShiftAmount) + 1;
-      } else {
-        // 'ashr C, x' produces [C >> (Width-1), C]
-        Lower = C->ashr(ShiftAmount);
-        Upper = *C + 1;
-      }
-    }
-    break;
-
-  case Instruction::LShr:
-    if (match(BO.getOperand(1), m_APInt(C)) && C->ult(Width)) {
-      // 'lshr x, C' produces [0, UINT_MAX >> C].
-      Upper = APInt::getAllOnesValue(Width).lshr(*C) + 1;
-    } else if (match(BO.getOperand(0), m_APInt(C))) {
-      // 'lshr C, x' produces [C >> (Width-1), C].
-      unsigned ShiftAmount = Width - 1;
-      if (!C->isNullValue() && IIQ.isExact(&BO))
-        ShiftAmount = C->countTrailingZeros();
-      Lower = C->lshr(ShiftAmount);
-      Upper = *C + 1;
-    }
-    break;
-
-  case Instruction::Shl:
-    if (match(BO.getOperand(0), m_APInt(C))) {
-      if (IIQ.hasNoUnsignedWrap(&BO)) {
-        // 'shl nuw C, x' produces [C, C << CLZ(C)]
-        Lower = *C;
-        Upper = Lower.shl(Lower.countLeadingZeros()) + 1;
-      } else if (BO.hasNoSignedWrap()) { // TODO: What if both nuw+nsw?
-        if (C->isNegative()) {
-          // 'shl nsw C, x' produces [C << CLO(C)-1, C]
-          unsigned ShiftAmount = C->countLeadingOnes() - 1;
-          Lower = C->shl(ShiftAmount);
-          Upper = *C + 1;
-        } else {
-          // 'shl nsw C, x' produces [C, C << CLZ(C)-1]
-          unsigned ShiftAmount = C->countLeadingZeros() - 1;
-          Lower = *C;
-          Upper = C->shl(ShiftAmount) + 1;
-        }
-      }
-    }
-    break;
-
-  case Instruction::SDiv:
-    if (match(BO.getOperand(1), m_APInt(C))) {
-      APInt IntMin = APInt::getSignedMinValue(Width);
-      APInt IntMax = APInt::getSignedMaxValue(Width);
-      if (C->isAllOnesValue()) {
-        // 'sdiv x, -1' produces [INT_MIN + 1, INT_MAX]
-        //    where C != -1 and C != 0 and C != 1
-        Lower = IntMin + 1;
-        Upper = IntMax + 1;
-      } else if (C->countLeadingZeros() < Width - 1) {
-        // 'sdiv x, C' produces [INT_MIN / C, INT_MAX / C]
-        //    where C != -1 and C != 0 and C != 1
-        Lower = IntMin.sdiv(*C);
-        Upper = IntMax.sdiv(*C);
-        if (Lower.sgt(Upper))
-          std::swap(Lower, Upper);
-        Upper = Upper + 1;
-        assert(Upper != Lower && "Upper part of range has wrapped!");
-      }
-    } else if (match(BO.getOperand(0), m_APInt(C))) {
-      if (C->isMinSignedValue()) {
-        // 'sdiv INT_MIN, x' produces [INT_MIN, INT_MIN / -2].
-        Lower = *C;
-        Upper = Lower.lshr(1) + 1;
-      } else {
-        // 'sdiv C, x' produces [-|C|, |C|].
-        Upper = C->abs() + 1;
-        Lower = (-Upper) + 1;
-      }
-    }
-    break;
-
-  case Instruction::UDiv:
-    if (match(BO.getOperand(1), m_APInt(C)) && !C->isNullValue()) {
-      // 'udiv x, C' produces [0, UINT_MAX / C].
-      Upper = APInt::getMaxValue(Width).udiv(*C) + 1;
-    } else if (match(BO.getOperand(0), m_APInt(C))) {
-      // 'udiv C, x' produces [0, C].
-      Upper = *C + 1;
-    }
-    break;
-
-  case Instruction::SRem:
-    if (match(BO.getOperand(1), m_APInt(C))) {
-      // 'srem x, C' produces (-|C|, |C|).
-      Upper = C->abs();
-      Lower = (-Upper) + 1;
-    }
-    break;
-
-  case Instruction::URem:
-    if (match(BO.getOperand(1), m_APInt(C)))
-      // 'urem x, C' produces [0, C).
-      Upper = *C;
-    break;
-
-  default:
-    break;
-  }
-}
-
 static Value *simplifyICmpWithConstant(CmpInst::Predicate Pred, Value *LHS,
                                        Value *RHS, const InstrInfoQuery &IIQ) {
   Type *ITy = GetCompareTy(RHS); // The return type.
@@ -2657,20 +2500,7 @@ static Value *simplifyICmpWithConstant(CmpInst::Predicate Pred, Value *LHS,
   if (RHS_CR.isFullSet())
     return ConstantInt::getTrue(ITy);
 
-  // Find the range of possible values for binary operators.
-  unsigned Width = C->getBitWidth();
-  APInt Lower = APInt(Width, 0);
-  APInt Upper = APInt(Width, 0);
-  if (auto *BO = dyn_cast<BinaryOperator>(LHS))
-    setLimitsForBinOp(*BO, Lower, Upper, IIQ);
-
-  ConstantRange LHS_CR =
-      Lower != Upper ? ConstantRange(Lower, Upper) : ConstantRange(Width, true);
-
-  if (auto *I = dyn_cast<Instruction>(LHS))
-    if (auto *Ranges = IIQ.getMetadata(I, LLVMContext::MD_range))
-      LHS_CR = LHS_CR.intersectWith(getConstantRangeFromMetadata(*Ranges));
-
+  ConstantRange LHS_CR = computeConstantRange(LHS, IIQ.UseInstrInfo);
   if (!LHS_CR.isFullSet()) {
     if (RHS_CR.contains(LHS_CR))
       return ConstantInt::getTrue(ITy);
@@ -3581,6 +3411,8 @@ static Value *SimplifyFCmpInst(unsigned Predicate, Value *LHS, Value *RHS,
   }
 
   // Handle fcmp with constant RHS.
+  // TODO: Use match with a specific FP value, so these work with vectors with
+  // undef lanes.
   const APFloat *C;
   if (match(RHS, m_APFloat(C))) {
     // Check whether the constant is an infinity.
@@ -3609,28 +3441,7 @@ static Value *SimplifyFCmpInst(unsigned Predicate, Value *LHS, Value *RHS,
         }
       }
     }
-    if (C->isZero()) {
-      switch (Pred) {
-      case FCmpInst::FCMP_OGE:
-        if (FMF.noNaNs() && CannotBeOrderedLessThanZero(LHS, Q.TLI))
-          return getTrue(RetTy);
-        break;
-      case FCmpInst::FCMP_UGE:
-        if (CannotBeOrderedLessThanZero(LHS, Q.TLI))
-          return getTrue(RetTy);
-        break;
-      case FCmpInst::FCMP_ULT:
-        if (FMF.noNaNs() && CannotBeOrderedLessThanZero(LHS, Q.TLI))
-          return getFalse(RetTy);
-        break;
-      case FCmpInst::FCMP_OLT:
-        if (CannotBeOrderedLessThanZero(LHS, Q.TLI))
-          return getFalse(RetTy);
-        break;
-      default:
-        break;
-      }
-    } else if (C->isNegative()) {
+    if (C->isNegative() && !C->isNegZero()) {
       assert(!C->isNaN() && "Unexpected NaN constant!");
       // TODO: We can catch more cases by using a range check rather than
       //       relying on CannotBeOrderedLessThanZero.
@@ -3652,6 +3463,28 @@ static Value *SimplifyFCmpInst(unsigned Predicate, Value *LHS, Value *RHS,
       default:
         break;
       }
+    }
+  }
+  if (match(RHS, m_AnyZeroFP())) {
+    switch (Pred) {
+    case FCmpInst::FCMP_OGE:
+      if (FMF.noNaNs() && CannotBeOrderedLessThanZero(LHS, Q.TLI))
+        return getTrue(RetTy);
+      break;
+    case FCmpInst::FCMP_UGE:
+      if (CannotBeOrderedLessThanZero(LHS, Q.TLI))
+        return getTrue(RetTy);
+      break;
+    case FCmpInst::FCMP_ULT:
+      if (FMF.noNaNs() && CannotBeOrderedLessThanZero(LHS, Q.TLI))
+        return getFalse(RetTy);
+      break;
+    case FCmpInst::FCMP_OLT:
+      if (CannotBeOrderedLessThanZero(LHS, Q.TLI))
+        return getFalse(RetTy);
+      break;
+    default:
+      break;
     }
   }
 
@@ -3838,27 +3671,44 @@ static Value *simplifySelectWithICmpCond(Value *CondVal, Value *TrueVal,
                                            Pred == ICmpInst::ICMP_EQ))
         return V;
 
-    // Test for zero-shift-guard-ops around funnel shifts. These are used to
-    // avoid UB from oversized shifts in raw IR rotate patterns, but the
-    // intrinsics do not have that problem.
+    // Test for a bogus zero-shift-guard-op around funnel-shift or rotate.
     Value *ShAmt;
     auto isFsh = m_CombineOr(m_Intrinsic<Intrinsic::fshl>(m_Value(X), m_Value(),
                                                           m_Value(ShAmt)),
                              m_Intrinsic<Intrinsic::fshr>(m_Value(), m_Value(X),
                                                           m_Value(ShAmt)));
-    // (ShAmt != 0) ? fshl(X, *, ShAmt) : X --> fshl(X, *, ShAmt)
-    // (ShAmt != 0) ? fshr(*, X, ShAmt) : X --> fshr(*, X, ShAmt)
     // (ShAmt == 0) ? fshl(X, *, ShAmt) : X --> X
     // (ShAmt == 0) ? fshr(*, X, ShAmt) : X --> X
-    if (match(TrueVal, isFsh) && FalseVal == X && CmpLHS == ShAmt)
-      return Pred == ICmpInst::ICMP_NE ? TrueVal : X;
-
-    // (ShAmt == 0) ? X : fshl(X, *, ShAmt) --> fshl(X, *, ShAmt)
-    // (ShAmt == 0) ? X : fshr(*, X, ShAmt) --> fshr(*, X, ShAmt)
+    if (match(TrueVal, isFsh) && FalseVal == X && CmpLHS == ShAmt &&
+        Pred == ICmpInst::ICMP_EQ)
+      return X;
     // (ShAmt != 0) ? X : fshl(X, *, ShAmt) --> X
     // (ShAmt != 0) ? X : fshr(*, X, ShAmt) --> X
-    if (match(FalseVal, isFsh) && TrueVal == X && CmpLHS == ShAmt)
-      return Pred == ICmpInst::ICMP_EQ ? FalseVal : X;
+    if (match(FalseVal, isFsh) && TrueVal == X && CmpLHS == ShAmt &&
+        Pred == ICmpInst::ICMP_NE)
+      return X;
+
+    // Test for a zero-shift-guard-op around rotates. These are used to
+    // avoid UB from oversized shifts in raw IR rotate patterns, but the
+    // intrinsics do not have that problem.
+    // We do not allow this transform for the general funnel shift case because
+    // that would not preserve the poison safety of the original code.
+    auto isRotate = m_CombineOr(m_Intrinsic<Intrinsic::fshl>(m_Value(X),
+                                                             m_Deferred(X),
+                                                             m_Value(ShAmt)),
+                                m_Intrinsic<Intrinsic::fshr>(m_Value(X),
+                                                             m_Deferred(X),
+                                                             m_Value(ShAmt)));
+    // (ShAmt != 0) ? fshl(X, X, ShAmt) : X --> fshl(X, X, ShAmt)
+    // (ShAmt != 0) ? fshr(X, X, ShAmt) : X --> fshr(X, X, ShAmt)
+    if (match(TrueVal, isRotate) && FalseVal == X && CmpLHS == ShAmt &&
+        Pred == ICmpInst::ICMP_NE)
+      return TrueVal;
+    // (ShAmt == 0) ? X : fshl(X, X, ShAmt) --> fshl(X, X, ShAmt)
+    // (ShAmt == 0) ? X : fshr(X, X, ShAmt) --> fshr(X, X, ShAmt)
+    if (match(FalseVal, isRotate) && TrueVal == X && CmpLHS == ShAmt &&
+        Pred == ICmpInst::ICMP_EQ)
+      return FalseVal;
   }
 
   // Check for other compares that behave like bit test.
@@ -4875,7 +4725,15 @@ static Value *simplifyUnaryIntrinsic(Function *F, Value *Op0,
   case Intrinsic::log2:
     // log2(exp2(x)) -> x
     if (Q.CxtI->hasAllowReassoc() &&
-        match(Op0, m_Intrinsic<Intrinsic::exp2>(m_Value(X)))) return X;
+        (match(Op0, m_Intrinsic<Intrinsic::exp2>(m_Value(X))) ||
+         match(Op0, m_Intrinsic<Intrinsic::pow>(m_SpecificFP(2.0),
+                                                m_Value(X))))) return X;
+    break;
+  case Intrinsic::log10:
+    // log10(pow(10.0, x)) -> x
+    if (Q.CxtI->hasAllowReassoc() &&
+        match(Op0, m_Intrinsic<Intrinsic::pow>(m_SpecificFP(10.0),
+                                               m_Value(X)))) return X;
     break;
   default:
     break;
@@ -5059,7 +4917,6 @@ static Value *simplifyIntrinsic(Function *F, IterTy ArgBegin, IterTy ArgEnd,
     const APInt *ShAmtC;
     if (match(ShAmtArg, m_APInt(ShAmtC))) {
       // If there's effectively no shift, return the 1st arg or 2nd arg.
-      // TODO: For vectors, we could check each element of a non-splat constant.
       APInt BitWidth = APInt(ShAmtC->getBitWidth(), ShAmtC->getBitWidth());
       if (ShAmtC->urem(BitWidth).isNullValue())
         return ArgBegin[IID == Intrinsic::fshl ? 0 : 1];
@@ -5072,7 +4929,7 @@ static Value *simplifyIntrinsic(Function *F, IterTy ArgBegin, IterTy ArgEnd,
 }
 
 template <typename IterTy>
-static Value *SimplifyCall(ImmutableCallSite CS, Value *V, IterTy ArgBegin,
+static Value *SimplifyCall(CallBase *Call, Value *V, IterTy ArgBegin,
                            IterTy ArgEnd, const SimplifyQuery &Q,
                            unsigned MaxRecurse) {
   Type *Ty = V->getType();
@@ -5093,7 +4950,7 @@ static Value *SimplifyCall(ImmutableCallSite CS, Value *V, IterTy ArgBegin,
     if (Value *Ret = simplifyIntrinsic(F, ArgBegin, ArgEnd, Q))
       return Ret;
 
-  if (!canConstantFoldCallTo(CS, F))
+  if (!canConstantFoldCallTo(Call, F))
     return nullptr;
 
   SmallVector<Constant *, 4> ConstantArgs;
@@ -5105,24 +4962,22 @@ static Value *SimplifyCall(ImmutableCallSite CS, Value *V, IterTy ArgBegin,
     ConstantArgs.push_back(C);
   }
 
-  return ConstantFoldCall(CS, F, ConstantArgs, Q.TLI);
+  return ConstantFoldCall(Call, F, ConstantArgs, Q.TLI);
 }
 
-Value *llvm::SimplifyCall(ImmutableCallSite CS, Value *V,
-                          User::op_iterator ArgBegin, User::op_iterator ArgEnd,
+Value *llvm::SimplifyCall(CallBase *Call, Value *V, User::op_iterator ArgBegin,
+                          User::op_iterator ArgEnd, const SimplifyQuery &Q) {
+  return ::SimplifyCall(Call, V, ArgBegin, ArgEnd, Q, RecursionLimit);
+}
+
+Value *llvm::SimplifyCall(CallBase *Call, Value *V, ArrayRef<Value *> Args,
                           const SimplifyQuery &Q) {
-  return ::SimplifyCall(CS, V, ArgBegin, ArgEnd, Q, RecursionLimit);
+  return ::SimplifyCall(Call, V, Args.begin(), Args.end(), Q, RecursionLimit);
 }
 
-Value *llvm::SimplifyCall(ImmutableCallSite CS, Value *V,
-                          ArrayRef<Value *> Args, const SimplifyQuery &Q) {
-  return ::SimplifyCall(CS, V, Args.begin(), Args.end(), Q, RecursionLimit);
-}
-
-Value *llvm::SimplifyCall(ImmutableCallSite ICS, const SimplifyQuery &Q) {
-  CallSite CS(const_cast<Instruction*>(ICS.getInstruction()));
-  return ::SimplifyCall(CS, CS.getCalledValue(), CS.arg_begin(), CS.arg_end(),
-                        Q, RecursionLimit);
+Value *llvm::SimplifyCall(CallBase *Call, const SimplifyQuery &Q) {
+  return ::SimplifyCall(Call, Call->getCalledValue(), Call->arg_begin(),
+                        Call->arg_end(), Q, RecursionLimit);
 }
 
 /// See if we can compute a simplified version of this instruction.
@@ -5261,8 +5116,7 @@ Value *llvm::SimplifyInstruction(Instruction *I, const SimplifyQuery &SQ,
     Result = SimplifyPHINode(cast<PHINode>(I), Q);
     break;
   case Instruction::Call: {
-    CallSite CS(cast<CallInst>(I));
-    Result = SimplifyCall(CS, Q);
+    Result = SimplifyCall(cast<CallInst>(I), Q);
     break;
   }
 #define HANDLE_CAST_INST(num, opc, clas) case Instruction::opc:

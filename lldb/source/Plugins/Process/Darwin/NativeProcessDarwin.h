@@ -1,9 +1,8 @@
 //===-- NativeProcessDarwin.h --------------------------------- -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -41,7 +40,7 @@ class Scalar;
 
 namespace process_darwin {
 
-/// @class NativeProcessDarwin
+/// \class NativeProcessDarwin
 /// Manages communication with the inferior (debugee) process.
 ///
 /// Upon construction, this class prepares and launches an inferior process
@@ -209,15 +208,15 @@ private:
   /// listener to the inferior exception port, ptracing the process, and the
   /// like.
   ///
-  /// @param[in] launch_flavor
+  /// \param[in] launch_flavor
   ///     The launch flavor that was used to launch the process.
   ///
-  /// @param[in] main_loop
+  /// \param[in] main_loop
   ///     The main loop that will run the process monitor.  Work
   ///     that needs to be done (e.g. reading files) gets registered
   ///     here along with callbacks to process the work.
   ///
-  /// @return
+  /// \return
   ///     Any error that occurred during the aforementioned
   ///     operations.  Failure here will force termination of the
   ///     launched process and debugging session.
@@ -318,7 +317,7 @@ private:
   Status FixupBreakpointPCAsNeeded(NativeThreadDarwin &thread);
 
   /// Writes a siginfo_t structure corresponding to the given thread
-  /// ID to the memory region pointed to by @p siginfo.
+  /// ID to the memory region pointed to by \p siginfo.
   Status GetSignalInfo(lldb::tid_t tid, void *siginfo);
 
   /// Writes the raw event message code (vis-a-vis PTRACE_GETEVENTMSG)

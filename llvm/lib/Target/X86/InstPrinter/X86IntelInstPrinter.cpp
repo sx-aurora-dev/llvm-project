@@ -1,9 +1,8 @@
 //===-- X86IntelInstPrinter.cpp - Intel assembly instruction printing -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -29,6 +28,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
 
+// Include the auto-generated portion of the assembly writer.
+#define PRINT_ALIAS_INSTR
 #include "X86GenAsmWriter1.inc"
 
 void X86IntelInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
@@ -44,7 +45,7 @@ void X86IntelInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
   if (MI->getOpcode() == X86::DATA16_PREFIX &&
       STI.getFeatureBits()[X86::Mode16Bit]) {
     OS << "\tdata32";
-  } else
+  } else if (!printAliasInstr(MI, OS))
     printInstruction(MI, OS);
 
   // Next always print the annotation.
@@ -159,4 +160,15 @@ void X86IntelInstPrinter::printU8Imm(const MCInst *MI, unsigned Op,
     return MI->getOperand(Op).getExpr()->print(O, &MAI);
 
   O << formatImm(MI->getOperand(Op).getImm() & 0xff);
+}
+
+void X86IntelInstPrinter::printSTiRegOperand(const MCInst *MI, unsigned OpNo,
+                                            raw_ostream &OS) {
+  const MCOperand &Op = MI->getOperand(OpNo);
+  unsigned Reg = Op.getReg();
+  // Override the default printing to print st(0) instead st.
+  if (Reg == X86::ST0)
+    OS << "st(0)";
+  else
+    printRegName(OS, Reg);
 }

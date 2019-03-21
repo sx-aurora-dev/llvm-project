@@ -1,13 +1,13 @@
 //===--- DurationFactoryScaleCheck.cpp - clang-tidy -----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "DurationFactoryScaleCheck.h"
+#include "DurationRewriter.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Tooling/FixIt.h"
@@ -17,20 +17,6 @@ using namespace clang::ast_matchers;
 namespace clang {
 namespace tidy {
 namespace abseil {
-
-namespace {
-
-// Potential scales of our inputs.
-enum class DurationScale {
-  Hours,
-  Minutes,
-  Seconds,
-  Milliseconds,
-  Microseconds,
-  Nanoseconds,
-};
-
-} // namespace
 
 // Given the name of a duration factory function, return the appropriate
 // `DurationScale` for that factory.  If no factory can be found for
@@ -129,39 +115,18 @@ static llvm::Optional<DurationScale> GetNewScale(DurationScale OldScale,
   return llvm::None;
 }
 
-// Given a `Scale`, return the appropriate factory function call for
-// constructing a `Duration` for that scale.
-static llvm::StringRef GetFactoryForScale(DurationScale Scale) {
-  switch (Scale) {
-  case DurationScale::Hours:
-    return "absl::Hours";
-  case DurationScale::Minutes:
-    return "absl::Minutes";
-  case DurationScale::Seconds:
-    return "absl::Seconds";
-  case DurationScale::Milliseconds:
-    return "absl::Milliseconds";
-  case DurationScale::Microseconds:
-    return "absl::Microseconds";
-  case DurationScale::Nanoseconds:
-    return "absl::Nanoseconds";
-  }
-  llvm_unreachable("unknown scaling factor");
-}
-
 void DurationFactoryScaleCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       callExpr(
-          callee(functionDecl(
-                     hasAnyName("::absl::Nanoseconds", "::absl::Microseconds",
-                                "::absl::Milliseconds", "::absl::Seconds",
-                                "::absl::Minutes", "::absl::Hours"))
-                     .bind("call_decl")),
+          callee(functionDecl(DurationFactoryFunction()).bind("call_decl")),
           hasArgument(
               0,
               ignoringImpCasts(anyOf(
-                  integerLiteral(equals(0)).bind("zero"),
-                  floatLiteral(equals(0.0)).bind("zero"),
+                  cxxFunctionalCastExpr(
+                      hasDestinationType(
+                          anyOf(isInteger(), realFloatingPointType())),
+                      hasSourceExpression(initListExpr())),
+                  integerLiteral(equals(0)), floatLiteral(equals(0.0)),
                   binaryOperator(hasOperatorName("*"),
                                  hasEitherOperand(ignoringImpCasts(
                                      anyOf(integerLiteral(), floatLiteral()))))
@@ -185,7 +150,7 @@ void DurationFactoryScaleCheck::check(const MatchFinder::MatchResult &Result) {
     return;
 
   // We first handle the cases of literal zero (both float and integer).
-  if (Result.Nodes.getNodeAs<Stmt>("zero")) {
+  if (IsLiteralZero(Result, *Arg)) {
     diag(Call->getBeginLoc(),
          "use ZeroDuration() for zero-length time intervals")
         << FixItHint::CreateReplacement(Call->getSourceRange(),
@@ -244,7 +209,7 @@ void DurationFactoryScaleCheck::check(const MatchFinder::MatchResult &Result) {
       diag(Call->getBeginLoc(), "internal duration scaling can be removed")
           << FixItHint::CreateReplacement(
                  Call->getSourceRange(),
-                 (llvm::Twine(GetFactoryForScale(*NewScale)) + "(" +
+                 (llvm::Twine(getDurationFactoryForScale(*NewScale)) + "(" +
                   tooling::fixit::getText(*Remainder, *Result.Context) + ")")
                      .str());
     }
@@ -257,7 +222,7 @@ void DurationFactoryScaleCheck::check(const MatchFinder::MatchResult &Result) {
     diag(Call->getBeginLoc(), "internal duration scaling can be removed")
         << FixItHint::CreateReplacement(
                Call->getSourceRange(),
-               (llvm::Twine(GetFactoryForScale(*NewScale)) + "(" +
+               (llvm::Twine(getDurationFactoryForScale(*NewScale)) + "(" +
                 tooling::fixit::getText(*Remainder, *Result.Context) + ")")
                    .str());
   }

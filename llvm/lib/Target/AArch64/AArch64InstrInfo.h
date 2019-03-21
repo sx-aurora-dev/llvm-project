@@ -1,9 +1,8 @@
 //===- AArch64InstrInfo.h - AArch64 Instruction Information -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -122,6 +121,10 @@ public:
                         const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                         bool KillSrc, unsigned Opcode,
                         llvm::ArrayRef<unsigned> Indices) const;
+  void copyGPRRegTuple(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                       DebugLoc DL, unsigned DestReg, unsigned SrcReg,
+                       bool KillSrc, unsigned Opcode, unsigned ZeroReg,
+                       llvm::ArrayRef<unsigned> Indices) const;
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
@@ -241,15 +244,6 @@ public:
                      MachineBasicBlock::iterator &It, MachineFunction &MF,
                      const outliner::Candidate &C) const override;
   bool shouldOutlineFromFunctionByDefault(MachineFunction &MF) const override;
-  /// Returns true if the instruction sets a constant value that can be
-  /// executed more efficiently.
-  static bool isExynosResetFast(const MachineInstr &MI);
-  /// Returns true if the load or store has an extension that can be executed
-  /// more efficiently.
-  static bool isExynosLdStExtFast(const MachineInstr &MI);
-  /// Returns true if the instruction has a constant shift left or extension
-  /// that can be executed more efficiently.
-  static bool isExynosShiftExtFast(const MachineInstr &MI);
   /// Returns true if the instruction has a shift by immediate that can be
   /// executed in one cycle less.
   static bool isFalkorShiftExtFast(const MachineInstr &MI);

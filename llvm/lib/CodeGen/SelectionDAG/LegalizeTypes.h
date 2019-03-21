@@ -1,9 +1,8 @@
 //===-- LegalizeTypes.h - DAG Type Legalizer class definition ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -345,7 +344,9 @@ private:
   SDValue PromoteIntRes_VAARG(SDNode *N);
   SDValue PromoteIntRes_XMULO(SDNode *N, unsigned ResNo);
   SDValue PromoteIntRes_ADDSUBSAT(SDNode *N);
+  SDValue PromoteIntRes_MULFIX(SDNode *N);
   SDValue PromoteIntRes_FLT_ROUNDS(SDNode *N);
+  SDValue PromoteIntRes_VECREDUCE(SDNode *N);
 
   // Integer Operand Promotion.
   bool PromoteIntegerOperand(SDNode *N, unsigned OpNo);
@@ -378,6 +379,9 @@ private:
   SDValue PromoteIntOp_ADDSUBCARRY(SDNode *N, unsigned OpNo);
   SDValue PromoteIntOp_FRAMERETURNADDR(SDNode *N);
   SDValue PromoteIntOp_PREFETCH(SDNode *N, unsigned OpNo);
+  SDValue PromoteIntOp_MULFIX(SDNode *N);
+  SDValue PromoteIntOp_FPOWI(SDNode *N);
+  SDValue PromoteIntOp_VECREDUCE(SDNode *N);
 
   void PromoteSetCCOperands(SDValue &LHS,SDValue &RHS, ISD::CondCode Code);
 
@@ -433,8 +437,10 @@ private:
   void ExpandIntRes_UADDSUBO          (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_XMULO             (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_ADDSUBSAT         (SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandIntRes_MULFIX            (SDNode *N, SDValue &Lo, SDValue &Hi);
 
   void ExpandIntRes_ATOMIC_LOAD       (SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandIntRes_VECREDUCE         (SDNode *N, SDValue &Lo, SDValue &Hi);
 
   void ExpandShiftByConstant(SDNode *N, const APInt &Amt,
                              SDValue &Lo, SDValue &Hi);
@@ -637,6 +643,7 @@ private:
   SDValue PromoteFloatRes_SELECT_CC(SDNode *N);
   SDValue PromoteFloatRes_UnaryOp(SDNode *N);
   SDValue PromoteFloatRes_UNDEF(SDNode *N);
+  SDValue BitcastToInt_ATOMIC_SWAP(SDNode *N);
   SDValue PromoteFloatRes_XINT_TO_FP(SDNode *N);
 
   bool PromoteFloatOperand(SDNode *N, unsigned OpNo);
@@ -670,6 +677,7 @@ private:
   SDValue ScalarizeVecRes_TernaryOp(SDNode *N);
   SDValue ScalarizeVecRes_UnaryOp(SDNode *N);
   SDValue ScalarizeVecRes_StrictFPOp(SDNode *N);
+  SDValue ScalarizeVecRes_OverflowOp(SDNode *N, unsigned ResNo);
   SDValue ScalarizeVecRes_InregOp(SDNode *N);
   SDValue ScalarizeVecRes_VecInregOp(SDNode *N);
 
@@ -688,6 +696,8 @@ private:
   SDValue ScalarizeVecRes_UNDEF(SDNode *N);
   SDValue ScalarizeVecRes_VECTOR_SHUFFLE(SDNode *N);
 
+  SDValue ScalarizeVecRes_MULFIX(SDNode *N);
+
   // Vector Operand Scalarization: <1 x ty> -> ty.
   bool ScalarizeVectorOperand(SDNode *N, unsigned OpNo);
   SDValue ScalarizeVecOp_BITCAST(SDNode *N);
@@ -698,6 +708,7 @@ private:
   SDValue ScalarizeVecOp_VSETCC(SDNode *N);
   SDValue ScalarizeVecOp_STORE(StoreSDNode *N, unsigned OpNo);
   SDValue ScalarizeVecOp_FP_ROUND(SDNode *N, unsigned OpNo);
+  SDValue ScalarizeVecOp_VECREDUCE(SDNode *N);
 
   //===--------------------------------------------------------------------===//
   // Vector Splitting Support: LegalizeVectorTypes.cpp
@@ -722,6 +733,10 @@ private:
   void SplitVecRes_InregOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_ExtVecInRegOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_StrictFPOp(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_OverflowOp(SDNode *N, unsigned ResNo,
+                              SDValue &Lo, SDValue &Hi);
+
+  void SplitVecRes_MULFIX(SDNode *N, SDValue &Lo, SDValue &Hi);
 
   void SplitVecRes_BITCAST(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_BUILD_VECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
@@ -801,6 +816,7 @@ private:
   SDValue WidenVecRes_Binary(SDNode *N);
   SDValue WidenVecRes_BinaryCanTrap(SDNode *N);
   SDValue WidenVecRes_StrictFP(SDNode *N);
+  SDValue WidenVecRes_OverflowOp(SDNode *N, unsigned ResNo);
   SDValue WidenVecRes_Convert(SDNode *N);
   SDValue WidenVecRes_FCOPYSIGN(SDNode *N);
   SDValue WidenVecRes_POWI(SDNode *N);
@@ -823,6 +839,7 @@ private:
 
   SDValue WidenVecOp_Convert(SDNode *N);
   SDValue WidenVecOp_FCOPYSIGN(SDNode *N);
+  SDValue WidenVecOp_VECREDUCE(SDNode *N);
 
   //===--------------------------------------------------------------------===//
   // Vector Widening Utilities Support: LegalizeVectorTypes.cpp

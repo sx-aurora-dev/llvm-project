@@ -356,6 +356,14 @@ namespace compound_assign {
     if (a != 13) return false;
     a &= 14;
     if (a != 12) return false;
+    a += -1.2;
+    if (a != 10) return false;
+    a -= 3.1;
+    if (a != 6) return false;
+    a *= 2.2;
+    if (a != 13) return false;
+    if (&(a /= 1.5) != &a) return false;
+    if (a != 8) return false;
     return true;
   }
   static_assert(test_int(), "");
@@ -444,7 +452,7 @@ namespace compound_assign {
   static_assert(test_bounds("foo", 0)[0] == 'f', "");
   static_assert(test_bounds("foo", 3)[0] == 0, "");
   static_assert(test_bounds("foo", 4)[-3] == 'o', "");
-  static_assert(test_bounds("foo" + 4, -4)[0] == 'f', "");
+  static_assert(test_bounds(&"foo"[4], -4)[0] == 'f', "");
   static_assert(test_bounds("foo", 5) != 0, ""); // expected-error {{constant}} expected-note {{call}}
   static_assert(test_bounds("foo", -1) != 0, ""); // expected-error {{constant}} expected-note {{call}}
   static_assert(test_bounds("foo", 1000) != 0, ""); // expected-error {{constant}} expected-note {{call}}
@@ -1127,3 +1135,27 @@ constexpr bool indirect_builtin_constant_p(const char *__s) {
   return __builtin_constant_p(*__s);
 }
 constexpr bool n = indirect_builtin_constant_p("a");
+
+__attribute__((enable_if(indirect_builtin_constant_p("a") == n, "OK")))
+int test_in_enable_if() { return 0; }
+int n2 = test_in_enable_if();
+
+template <bool n = indirect_builtin_constant_p("a")>
+int test_in_template_param() { return 0; }
+int n3 = test_in_template_param();
+
+void test_in_case(int n) {
+  switch (n) {
+    case indirect_builtin_constant_p("abc"):
+    break;
+  }
+}
+enum InEnum1 {
+  ONE = indirect_builtin_constant_p("abc")
+};
+enum InEnum2 : int {
+  TWO = indirect_builtin_constant_p("abc")
+};
+enum class InEnum3 {
+  THREE = indirect_builtin_constant_p("abc")
+};
