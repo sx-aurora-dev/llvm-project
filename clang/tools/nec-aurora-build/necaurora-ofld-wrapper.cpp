@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
     rc = runStaticLinker(ObjectFiles, Args);
     if (rc != 0) {
       std::cerr << "necaurora-ofld-wrapper: static linking failed "
-                << "with code " << rc;
+                << "with code " << rc << "\n";
       return EXIT_FAILURE;
     }
   } else if (Mode == ToolMode::Passthrough) {
