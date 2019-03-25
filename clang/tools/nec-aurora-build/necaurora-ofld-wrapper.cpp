@@ -28,7 +28,9 @@
 #include "necaurora-ofld-wrapper.h"
 
 bool Verbose = false;
+const char *KeepTransformedFilesDir;
 bool SaveTemps = false;
+
 
 enum class ToolMode {
   Unknown,
@@ -95,6 +97,7 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     if (StaticLinkerFlag) {
       Mode = ToolMode::StaticLinker;
     } else {
+      Mode = ToolMode::Passthrough;
       if (SharedFlag) {
         ArgsStream << "-shared";
       }
@@ -129,6 +132,8 @@ int main(int argc, char **argv) {
   std::string Args;
   std::vector<const char *> ObjectFiles;
 
+  KeepTransformedFilesDir = std::getenv("NECAURORA_KEEP_FILES_DIR");
+
   rc = parseCmdline(argc, argv, Mode, SotocPath, InputFile, Args, Verbose,
                     SaveTemps, ObjectFiles);
   if (rc != 0) {
@@ -148,7 +153,6 @@ int main(int argc, char **argv) {
     }
 
     rc = runTargetCompiler(SotocOutputPath, Args);
-    std::remove(SotocOutputPath.c_str());
 
     if (rc != 0) {
       std::cerr << "necaurora-ofld-wrapper: "

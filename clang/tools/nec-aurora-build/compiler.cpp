@@ -40,7 +40,7 @@ int runSourceTransformation(const std::string &InputPath,
 
   // We create an empty temp file
   std::string Content = "";
-  std::string TmpFile = writeTmpFile(Content, InputFileNameWE, InputFileExt);
+  std::string TmpFile = writeTmpFile(Content, InputFileNameWE + ".sotoc-transformed", InputFileExt);
   if (TmpFile == "")
     return -1;
 
@@ -62,10 +62,15 @@ int runTargetCompiler(const std::string &InputPath, const std::string &Args) {
   CmdLine << getTargetCompiler() << " -c " << InputPath << " " << Args;
 
   if (Verbose) {
-    std::cout << "  \"" << CmdLine.str() << std::endl;
+    std::cout << "  \"" << CmdLine.str() << "\"" << std::endl;
   }
 
   int ret = system(CmdLine.str().c_str());
+
+  if (!KeepTransformedFilesDir) {
+    std::cout << "Removing tmpfil" << std::endl;
+    std::remove(InputPath.c_str());
+  }
 
   return ret;
 }

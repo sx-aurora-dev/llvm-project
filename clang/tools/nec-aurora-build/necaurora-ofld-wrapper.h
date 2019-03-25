@@ -7,6 +7,8 @@
 
 extern bool Verbose;
 
+extern const char *KeepTransformedFilesDir;
+
 int runSourceTransformation(const std::string &InputPath,
                             const std::string &SotocPath,
                             std::string &OutputPath,

@@ -36,7 +36,12 @@ const char *getTargetCompiler() {
 
 std::string writeTmpFile(const std::string &Content, const std::string &Prefix,
                          const std::string &Extension) {
-  std::string TmpPath = getTmpDir();
+  std::string TmpPath;
+  if (KeepTransformedFilesDir) {
+    TmpPath = KeepTransformedFilesDir;
+  } else  {
+    TmpPath = getTmpDir();
+  }
 
   // because mkstemp wants the last n chars to be 'X', we have to add the
   // extension laster
