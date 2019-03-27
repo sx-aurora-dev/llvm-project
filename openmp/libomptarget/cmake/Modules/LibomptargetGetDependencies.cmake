@@ -204,7 +204,6 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_FOUND
   LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS) 
  
-=======
 # Looking for CUDA libdevice subdirectory
 #
 # Special case for Debian/Ubuntu to have nvidia-cuda-toolkit work
