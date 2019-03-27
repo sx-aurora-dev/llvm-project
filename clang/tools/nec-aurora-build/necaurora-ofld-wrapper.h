@@ -17,7 +17,8 @@ int runSourceTransformation(const std::string &InputPath,
 int runTargetCompiler(const std::string &InputPath, const std::string &Args);
 
 int runStaticLinker(const std::vector<const char *> &ObjectFiles,
-                    const std::string &Args);
+                    const std::string &Args,
+                    const std::string &OutputFile);
 
 int runPassthrough(const std::string &Args);
 

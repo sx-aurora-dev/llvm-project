@@ -103,7 +103,7 @@ std::string generateSymTabCode(const std::vector<std::string> &symbols) {
 }
 
 int runStaticLinker(const std::vector<const char *> &ObjectFiles,
-                    const std::string &Args) {
+                    const std::string &Args, const std::string &OutputFile) {
 #ifndef LIBVEORUN_STATIC_PATH
   std::cerr << "necaurora-ofld-wrapper: Static linking not supported"
             << std::endl;
@@ -118,9 +118,13 @@ int runStaticLinker(const std::vector<const char *> &ObjectFiles,
 
   std::string SymTabPath = generateSymTabCode(SymbolNames);
 
-  CmdLine << getTargetCompiler() << " "
+  CmdLine << getTargetCompiler() << " ";
+  for (auto ObjFile: ObjectFiles) {
+    CmdLine << ObjFile << " ";
+  }
+  CmdLine << SymTabPath << " "
           << LIBVEORUN_STATIC_PATH
-          << " " << SymTabPath << " " << Args;
+          << " -fopenmp -o " << OutputFile;
   if (Verbose) {
     std::cerr << "  \"" << CmdLine.str() << "\"" << std::endl;
   }

@@ -42,7 +42,8 @@ enum class ToolMode {
 
 int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
                  std::string &InputFile, std::string &Args, bool &Verbose,
-                 bool &SaveTemps, std::vector<const char *> &ObjectFiles) {
+                 bool &SaveTemps, std::vector<const char *> &ObjectFiles,
+                 std::string &OutputFile) {
   std::stringstream ArgsStream;
   Mode = ToolMode::Unknown;
   bool StaticLinkerFlag = false;
@@ -86,6 +87,10 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else if (strcmp(argv[i] + strlen(argv[i] - 2), ".o") == 0) {
       ArgsStream << argv[i] << " ";
       ObjectFiles.push_back(argv[i]);
+      continue;
+    } else if (strcmp(argv[i], "-o") == 0) {
+      ArgsStream << argv[i] << " ";
+      OutputFile = std::string(argv[i+1]);
       continue;
     } else {
       ArgsStream << argv[i] << " ";
@@ -131,11 +136,12 @@ int main(int argc, char **argv) {
   std::string SotocOutputPath;
   std::string Args;
   std::vector<const char *> ObjectFiles;
+  std::string OutputFile;
 
   KeepTransformedFilesDir = std::getenv("NECAURORA_KEEP_FILES_DIR");
 
   rc = parseCmdline(argc, argv, Mode, SotocPath, InputFile, Args, Verbose,
-                    SaveTemps, ObjectFiles);
+                    SaveTemps, ObjectFiles, OutputFile);
   if (rc != 0) {
     std::cerr << "necaurora-ofld-cc1-wraper: failed parsing the command "
               << "line\n";
@@ -161,7 +167,7 @@ int main(int argc, char **argv) {
       return EXIT_FAILURE;
     }
   } else if (Mode == ToolMode::StaticLinker) {
-    rc = runStaticLinker(ObjectFiles, Args);
+    rc = runStaticLinker(ObjectFiles, Args, OutputFile);
     if (rc != 0) {
       std::cerr << "necaurora-ofld-wrapper: static linking failed "
                 << "with code " << rc << "\n";
