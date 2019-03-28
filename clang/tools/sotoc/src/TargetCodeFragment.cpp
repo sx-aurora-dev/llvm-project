@@ -174,6 +174,7 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
 
 std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
   std::stringstream Out;
+  std::set<std::string> Printed;
   for (auto C : OMPClauses) {
     if (C->getClauseKind() == clang::OpenMPClauseKind::OMPC_private) {
       auto PC = llvm::dyn_cast<clang::OMPPrivateClause>(C);
@@ -181,8 +182,12 @@ std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
         std::string PrettyStr = "";
         llvm::raw_string_ostream PrettyOS(PrettyStr);
         Var->printPretty(PrettyOS, NULL, PP);
-        Out << "  " << Var->getType().getAsString() << " " << PrettyOS.str()
-            << ";\n";
+        std::string VarName = PrettyOS.str();
+        if (!Printed.count(VarName)) {
+          Out << "  " << Var->getType().getAsString() << " " << VarName
+              << ";\n";
+          Printed.insert(VarName);
+        }
       }
     }
   }
