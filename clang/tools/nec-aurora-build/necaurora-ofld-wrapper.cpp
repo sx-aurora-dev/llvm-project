@@ -48,6 +48,7 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   Mode = ToolMode::Unknown;
   bool StaticLinkerFlag = false;
   bool SharedFlag = false;
+  bool SaveTempsFlag = false;
   SotocPath = "sotoc";
   // TODO make this more flexible
   InputFile = argv[1];
@@ -84,6 +85,9 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else if (strcmp(argv[i], "-shared") == 0) {
       SharedFlag = true;
       continue;
+    } else if (strcmp(argv[i], "-save-temps") == 0) {
+      SaveTempsFlag = true;
+      continue;
     } else if (strcmp(argv[i] + strlen(argv[i] - 2), ".o") == 0) {
       ArgsStream << argv[i] << " ";
       ObjectFiles.push_back(argv[i]);
@@ -95,6 +99,10 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else {
       ArgsStream << argv[i] << " ";
     }
+  }
+
+  if (SaveTempsFlag && !KeepTransformedFilesDir) {
+    KeepTransformedFilesDir = get_current_dir_name();
   }
 
   if (Mode == ToolMode::Unknown) {
@@ -114,6 +122,7 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   } else {
     Args = ArgsStream.str();
   }
+
   return 0;
 }
 
