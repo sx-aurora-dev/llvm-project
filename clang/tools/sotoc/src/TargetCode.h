@@ -67,11 +67,11 @@ private:
   /// Generates a function prologue for a target region.
   /// This prologue consists of a function declaration and code to copy local
   /// variables into scope.
-  void generateFunctionPrologue(TargetCodeRegion *TCR);
+  void generateFunctionPrologue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
   /// Generates a function epilogue for a target region.
   /// This prologue consists of a code to copy variables from the local scope
   /// back.
-  void generateFunctionEpilogue(TargetCodeRegion *TCR);
+  void generateFunctionEpilogue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
   /// Generate a function name for a target region.
   std::string generateFunctionName(TargetCodeRegion *TCR);
 

@@ -74,21 +74,15 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     std::shared_ptr<TargetCodeFragment> Frag = *i;
     auto *TCR = llvm::dyn_cast<TargetCodeRegion>(Frag.get());
 
-    auto PrettyCode = Frag->PrintPretty();
-
-    // This is a workaround, since "Decl::print" includes "pragma omp declare".
-    if (PrettyCode != "")
-      TargetCodeRewriter.ReplaceText(Frag->getSpellingRange(), PrettyCode);
+    if (TCR) {
+      generateFunctionPrologue(TCR, Out);
+    }
+    
+    Out << Frag->PrintPretty();
 
     if (TCR) {
-      generateFunctionPrologue(TCR);
+      generateFunctionEpilogue(TCR, Out);
     }
-
-    if (TCR) {
-      generateFunctionEpilogue(TCR);
-    }
-    Out << "\n";
-    Out << TargetCodeRewriter.getRewrittenText(Frag->getSpellingRange());
 
     if (Frag->NeedsSemicolon) {
       Out << ";";
@@ -97,12 +91,10 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
   }
 }
 
-void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
+void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
+                                          llvm::raw_ostream &Out) {
 
   std::string Prologue;
-  llvm::raw_string_ostream Out(Prologue);
-
-  auto tmpSL = TCR->getStartLoc();
 
   std::list<int> nDim;
   std::list<std::string> DimString;
@@ -204,15 +196,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR) {
     }
   }
   Out << "\n";
-
-  if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
-    llvm::errs() << "ERROR: Prologue was not written\n";
 }
 
-void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
-  std::stringstream Out;
-  auto tmpSL = TCR->getEndLoc();
-
+void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
+                                          llvm::raw_ostream &Out) {
   if (OmpPragma(TCR).needsStructuredBlock()) {
     Out << "\n}";
   }
@@ -244,8 +231,6 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR) {
   }
 
   Out << "\n}\n";
-  if (TargetCodeRewriter.InsertTextBefore(tmpSL, Out.str()) == true)
-    llvm::errs() << "ERROR: Epilogue was not written\n";
 }
 
 std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
