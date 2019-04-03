@@ -68,7 +68,6 @@ int runTargetCompiler(const std::string &InputPath, const std::string &Args) {
   int ret = system(CmdLine.str().c_str());
 
   if (!KeepTransformedFilesDir) {
-    std::cout << "Removing tmpfil" << std::endl;
     std::remove(InputPath.c_str());
   }
 
