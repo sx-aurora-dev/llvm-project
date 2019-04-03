@@ -34,5 +34,6 @@ let TargetPrefix = "ve" in {
 
 
 include "llvm/IR/IntrinsicsVE2.td"
+include "llvm/IR/IntrinsicsVEVP.td"
 
 // vim::set sw=2:

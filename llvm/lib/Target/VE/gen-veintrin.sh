@@ -13,6 +13,6 @@ python $F --veintrin > tmp/veintrin2.h
 python $F --decl > tmp/decl.h
 python $F -l > tmp/VEISelLoweringIntrinsic.inc
 
-python $F -t
+#python $F -t
 python $F -r > tmp/ref.cc
 python $F --html > tmp/intrinsics.html
