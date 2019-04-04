@@ -40,5 +40,6 @@ BUILTIN(__builtin_ve_insert_vm512l, "V8ULiV8ULiV4ULi", "n")
 // BUILTIN(__builtin_setps, "vUiUi", "n")
 
 #include "clang/Basic/BuiltinsVE2.def"
+#include "clang/Basic/BuiltinsVEVP.def"
 
 #undef BUILTIN

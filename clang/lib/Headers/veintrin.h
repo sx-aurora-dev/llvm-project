@@ -91,5 +91,6 @@ extern void __vec_exp(void);
 #define _ve_insert_vm512l(vm512, vm) __builtin_ve_insert_vm512l(vm512, vm)
 
 #include <veintrin2.h>
+#include <veintrin3.h>
 
 #endif
