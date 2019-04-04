@@ -5,7 +5,8 @@ import sys
 from functools import partial
 
 isVL = False
-prefix = "ve"
+funcPrefix = "ve"
+llvmIntrinsicPrefix = "ve"
 
 class Type:
     def __init__(self, ValueType, builtinCode, intrinDefType, ctype, elemType = None):
@@ -85,6 +86,7 @@ class Op(object):
     def isMask256(self): return self.kind == 'm'
     def isMask512(self): return self.kind == 'M'
     def isCC(self): return self.kind == 'c'
+    def isVL(self): return self.kind == 'l'
 
     def regName(self):
         return self.name_
@@ -188,50 +190,59 @@ class DummyInst:
         return self.inst_ != None
 
 # inst: instruction in the manual. VFAD
+# opc: op code (8bit)
 # asm: vfadd.$df, vfmk.$df.$cf, vst.$nc.$ot
 # llvmInst: Instruction in VEInstrVec.td. VFADdv
-# intrinsicName:
+# intrinsicName: function name without prefix(int_ve_)
 
-# code: 0xcc (8bit)
-# name: VFAD
-# asmName: vfadd, vfmk, vst
 # subcode: cx, cx2, ... (4bit)
 # subname: d, s, nc, ot, ...
-# llvmName(generate): x{name}{subname}{args}
-# intrinsic: {asm}
-# asm: {asm}.{subname}
 
 class Inst(object):
-    # opc: opecode like 0xcc
-    # ni: instruction name in LLVM, such as VMRGvm
-    #def __init__(self, opc, ni, asm, intrinsicName, outs, ins, packed = False, expr = None, appendVL = True):
-    def __init__(self, opc, ni, asm, intrinsicName, outs, ins, **kwargs):
+    def __init__(self, opc, llvmInst, asm, intrinsicName, outs, ins, **kwargs):
         self.kwargs = kwargs
         self.opc = opc
         self.outs = outs
         self.ins = ins
 
-        self.hasLLVMInst_ = True
-        self.instName_ = ni   # TODO: remove
+        self.llvmInst_ = llvmInst
+        self.inst_ = re.sub(r'[a-z]*[0-9]*m*$', '', llvmInst) if llvmInst else None
+
         self.asm_ = asm
         self.intrinsicName_ = intrinsicName
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
-        if isVL:
-            self.oldLowering_ = True
-        else:
-            self.oldLowering_ = False
+#        if isVL:
+#            self.oldLowering_ = True
+#        else:
+#            self.oldLowering_ = False
+        self.oldLowering_ = False
         self.hasMaskBaseReg_ = True
         self.hasPat_ = True
 
+        self.hasLLVMInstDefine_ = True
         if isVL:
+            # append dummyOp(pass through Op) and VL
             tmp = []
             if not self.hasDummyOp() and len(outs) > 0 and outs[0].kind == "v":
                 tmp.append(VD(outs[0].ty.elemType))
             self.ins = ins + tmp + [VL]
 
+            # when VL, we use different llvmInst
+            #self.oldllvmInst_ = self.llvmInst_ # TODO: remove
+            suffix = "".join([op.kind for op in self.outs + self.ins])
+            self.llvmInst_  = re.sub("\.", "", self.asm()) + suffix
+
+    def inst(self): return self.inst_
+    def llvmInst(self): return self.llvmInst_
+    def intrinsicName(self): return self.intrinsicName_
+    def asm(self): return self.asm_ if self.asm_ else ""
     def expr(self): return None if 'expr' not in self.kwargs else self.kwargs['expr']
+
+    # difference among dummy and pseudo
+    #   dummy: instructions to insert a entry into the manual
+    #   pseudo:  instructions without opcode, ie: no machine instruction
 
     # predicates
     def isDummy(self): return False
@@ -239,8 +250,9 @@ class Inst(object):
     def isPacked(self): return ('packed' in self.kwargs) and self.kwargs['packed']
     def isPseudo(self): return self.opc == None
 
-    def noLLVMInst(self): self.hasLLVMInst_ = False
-    def hasLLVMInst(self): return self.hasLLVMInst_ and (not self.isDummy()) and (not self.isPseudo())
+    def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False
+    def hasLLVMInstDefine(self): 
+        return self.hasLLVMInstDefine_ and (not self.isDummy()) and (not self.isPseudo())
 
     def hasDummyOp(self):
         return any([op.regName() == "vd" for op in self.ins])
@@ -250,36 +262,6 @@ class Inst(object):
 
     def noBuiltin(self):
         self.hasBuiltin_ = False
-
-    def asm(self):
-        if not self.asm_:
-            return ""
-        return self.asm_
-
-    def inst(self):
-        if not self.instName_:
-            return None
-        return re.sub(r'[a-z]*[0-9]*m*$', '', self.instName_)
-
-    def llvmInst(self):
-        if isVL:
-            suffix = "".join([op.kind for op in self.outs + self.ins])
-            instName = re.sub("\.", "", self.asm()) + suffix
-            return instName
-        return self.instName_
-
-#    def inst(self):
-#        #return self.opcode.name()
-#        if isVL:
-#            suffix = "".join([op.kind for op in self.outs + self.ins])
-#            instName = re.sub("\.", "", self.asm()) + suffix
-#            return instName
-#        if not self.instName:
-#            return None
-#        return re.sub(r'[a-z]*[0-9]*m*$', '', self.instName)
-
-    def intrinsicName(self):
-        return self.intrinsicName_
 
     def hasMask(self):
         if len(self.outs) > 0 and self.outs[0].isMask():
@@ -307,18 +289,13 @@ class Inst(object):
     def prop(self):
         return self.prop_
 
-    def hasInst(self):
-        return self.instName_ != None
+    def hasInst(self): return self.inst_ != None
 
     def hasBuiltin(self):
         return self.hasBuiltin_
 
     def instDefine(self):
-        print("// {} {}".format(self.instName_, self.asm()))
-        if self.instName_ in ["LVSf64r", "LVSf32r", "LSVi64r", "LSVr"]:
-            return ""
-        if self.asm() == "":
-            return ""
+        print("// {} {}".format(self.inst(), self.asm()))
 
         def fmtOps(ops):
             return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
@@ -329,10 +306,7 @@ class Inst(object):
         ins2 = fmtOps(tmp)
         asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
 
-        #suffix = "".join([op.kind for op in self.outs + self.ins])
-        #instName = re.sub("\.", "", self.asm()) + suffix
         instName = self.llvmInst()
-        #instName = self.inst()
 
         s = "def {} : RV<0x{:x}, (outs {}), (ins {}),\n".format(instName, self.opc, outs, ins)
         #s += "  : RV<0x{:x}, ({}), ({})\n".format(self.opc, outs, ins2)
@@ -361,8 +335,8 @@ class Inst(object):
 
         prop = ', '.join(self.prop())
 
-        intrinName = "int_{}_{}".format(prefix, self.intrinsicName())
-        builtinName = "GCCBuiltin<\"__builtin_{}_{}\"".format(prefix, self.intrinsicName())
+        intrinName = "int_{}_{}".format(llvmIntrinsicPrefix, self.intrinsicName())
+        builtinName = "GCCBuiltin<\"__builtin_{}_{}\"".format(llvmIntrinsicPrefix, self.intrinsicName())
 
         return "let TargetPrefix = \"ve\" in def {} : {}>, Intrinsic<[{}], [{}], [{}]>;".format(intrinName, builtinName, outs, ins, prop)
 
@@ -373,11 +347,11 @@ class Inst(object):
         else:
             tmp = "".join([i.builtinCode() for i in self.outs])
         tmp += "".join([i.builtinCode() for i in self.ins])
-        return "BUILTIN(__builtin_{}_{}, \"{}\", \"n\")".format(prefix, self.intrinsicName(), tmp)
+        return "BUILTIN(__builtin_{}_{}, \"{}\", \"n\")".format(llvmIntrinsicPrefix, self.intrinsicName(), tmp)
 
     # to be included from veintrin.h
     def veintrin(self):
-        return "#define _{}_{} __builtin_{}_{}".format(prefix, self.intrinsicName(), prefix, self.intrinsicName())
+        return "#define _{}_{} __builtin_{}_{}".format(funcPrefix, self.intrinsicName(), llvmIntrinsicPrefix, self.intrinsicName())
 
     def noTest(self):
         self.hasTest_ = False
@@ -406,6 +380,7 @@ class Inst(object):
 class InstVEL(Inst):
     def __init__(self, opc, ni, asm, intrinsicName, outs, ins, **kwargs):
         super(InstVEL, self).__init__(opc, ni, asm, intrinsicName, outs, ins, **kwargs)
+        self.oldLowering_ = True
 
 
 class TestFunc:
@@ -719,11 +694,13 @@ class ManualInstPrinter:
                 v.append("{}".format(op.regName()))
             elif op.isCC():
                 ins.append("int cc".format(op.ty.ctype))
+            elif op.isVL():
+                ins.append("int vl".format(op.ty.ctype))
             else:
                 raise Exception("unknown register kind: {}".format(op.kind))
         
         intrinsicName = re.sub(r'[IN]', 's', I.intrinsicName())
-        func = "{} _ve_{}({})".format(outType, intrinsicName, ", ".join(ins))
+        func = "{} _{}_{}({})".format(outType, funcPrefix, intrinsicName, ", ".join(ins))
 
         #if outType:
         #    func = "{} _ve_{}({})".format(outType, intrinsicName, ", ".join(ins))
@@ -795,7 +772,7 @@ class HtmlManualPrinter(ManualInstPrinter):
             idx += 1
 
 class InstList:
-    def __init__(self, clazz = Inst):
+    def __init__(self, clazz):
         self.a = []
         self.clazz = clazz
     def add(self, I):
@@ -827,11 +804,14 @@ class Section:
         return self.a
 
 class InstTable:
-    def __init__(self):
+    def __init__(self, isVL):
         self.currentSection = []
         self.sections = []
+        self.clazz = Inst
+        if isVL:
+            self.clazz = InstVEL
         #self.clazz = Inst
-        self.clazz = InstVEL
+        #self.clazz = InstVEL
         #self.a = []
 
     def Section(self, name, page):
@@ -869,7 +849,7 @@ class InstTable:
     def VSTm(self, opc, inst, asm):
         O_rr = [VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
-        L = InstList()
+        L = InstList(self.clazz)
         L.Inst(opc, inst+"rr", asm, asm+"_vss", [], O_rr)
         L.Inst(opc, inst+"ir", asm, asm+"_vss", [], O_ir)
         L.Inst(opc, inst+"otrr", asm+".ot", asm+"ot_vss",  [], O_rr).oldLowering()
@@ -880,20 +860,21 @@ class InstTable:
 
     def VBRDm(self, opc):
         expr = "{0} = {1}"
-        self.add(Inst(0x8C, "VBRDf64r",  "vbrd",  "vbrd_vs_f64",    [VX(T_f64)], [SY(T_f64)], expr=expr)).noLLVMInst()
-        self.add(Inst(0x8C, "VBRDf64rm", "vbrd",  "vbrd_vsmv_f64",  [VX(T_f64)], [SY(T_f64), VM, VD(T_f64)], expr=expr)).noLLVMInst()
-        self.add(Inst(0x8C, "VBRDr",     "vbrd",  "vbrd_vs_i64",    [VX(T_i64)], [SY(T_i64)], expr=expr))
-        self.add(Inst(0x8C, "VBRDrm",    "vbrd",  "vbrd_vsmv_i64",  [VX(T_i64)], [SY(T_i64), VM, VD(T_i64)], expr=expr))
-        self.add(Inst(0x8C, "VBRDi",     "vbrd",  "vbrd_vI_i64",    [VX(T_i64)], [ImmI(T_i64)], expr=expr))
-        self.add(Inst(0x8C, "VBRDim",    "vbrd",  "vbrd_vImv_i64",  [VX(T_i64)], [ImmI(T_i64), VM, VD(T_i64)], expr=expr))
-        self.add(Inst(0x8C, "VBRDf32r",  "vbrdu", "vbrdu_vs_f32",   [VX(T_f32)], [SY(T_f32)], expr=expr))
-        self.add(Inst(0x8C, "VBRDf32rm", "vbrdu", "vbrdu_vsmv_f32", [VX(T_f32)], [SY(T_f32), VM, VD(T_f32)], expr=expr))
-        self.add(Inst(0x8C, "VBRDi32r",  "vbrdl", "vbrdl_vs_i32",   [VX(T_i32)], [SY(T_i32)], expr=expr))
-        self.add(Inst(0x8C, "VBRDi32rm", "vbrdl", "vbrdl_vsmv_i32", [VX(T_i32)], [SY(T_i32), VM, VD(T_i32)], expr=expr))
-        self.add(Inst(0x8C, "VBRDi32i",  "vbrdl", "vbrdl_vI_i32",   [VX(T_i32)], [ImmI(T_i32)], expr=expr))
-        self.add(Inst(0x8C, "VBRDi32im", "vbrdl", "vbrdl_vImv_i32", [VX(T_i32)], [ImmI(T_i32), VM, VD(T_i32)], expr=expr))
-        self.add(Inst(0x8C, "VBRDp",     "pvbrd", "pvbrd_vs_i64",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr))
-        self.add(Inst(0x8C, "VBRDpm",    "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr))
+        I = self.clazz
+        self.add(I(0x8C, "VBRDf64r",  "vbrd",  "vbrd_vs_f64",    [VX(T_f64)], [SY(T_f64)], expr=expr)).noLLVMInstDefine()
+        self.add(I(0x8C, "VBRDf64rm", "vbrd",  "vbrd_vsmv_f64",  [VX(T_f64)], [SY(T_f64), VM, VD(T_f64)], expr=expr)).noLLVMInstDefine()
+        self.add(I(0x8C, "VBRDr",     "vbrd",  "vbrd_vs_i64",    [VX(T_i64)], [SY(T_i64)], expr=expr))
+        self.add(I(0x8C, "VBRDrm",    "vbrd",  "vbrd_vsmv_i64",  [VX(T_i64)], [SY(T_i64), VM, VD(T_i64)], expr=expr))
+        self.add(I(0x8C, "VBRDi",     "vbrd",  "vbrd_vI_i64",    [VX(T_i64)], [ImmI(T_i64)], expr=expr))
+        self.add(I(0x8C, "VBRDim",    "vbrd",  "vbrd_vImv_i64",  [VX(T_i64)], [ImmI(T_i64), VM, VD(T_i64)], expr=expr))
+        self.add(I(0x8C, "VBRDf32r",  "vbrdu", "vbrdu_vs_f32",   [VX(T_f32)], [SY(T_f32)], expr=expr))
+        self.add(I(0x8C, "VBRDf32rm", "vbrdu", "vbrdu_vsmv_f32", [VX(T_f32)], [SY(T_f32), VM, VD(T_f32)], expr=expr))
+        self.add(I(0x8C, "VBRDi32r",  "vbrdl", "vbrdl_vs_i32",   [VX(T_i32)], [SY(T_i32)], expr=expr))
+        self.add(I(0x8C, "VBRDi32rm", "vbrdl", "vbrdl_vsmv_i32", [VX(T_i32)], [SY(T_i32), VM, VD(T_i32)], expr=expr))
+        self.add(I(0x8C, "VBRDi32i",  "vbrdl", "vbrdl_vI_i32",   [VX(T_i32)], [ImmI(T_i32)], expr=expr))
+        self.add(I(0x8C, "VBRDi32im", "vbrdl", "vbrdl_vImv_i32", [VX(T_i32)], [ImmI(T_i32), VM, VD(T_i32)], expr=expr))
+        self.add(I(0x8C, "VBRDp",     "pvbrd", "pvbrd_vs_i64",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr))
+        self.add(I(0x8C, "VBRDpm",    "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr))
         return
 
         tmp = []
@@ -918,8 +899,8 @@ class InstTable:
 
     def LVSm(self, opc):
         self.add(Inst(opc, "LVSi64r", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSf64r", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest())
-        self.add(Inst(opc, "LVSf32r", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest())
+        self.add(Inst(opc, "LVSf64r", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest()).noLLVMInstDefine()
+        self.add(Inst(opc, "LVSf32r", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest()).noLLVMInstDefine()
 
 
     def args_to_func_suffix(self, args):
@@ -1018,7 +999,7 @@ class InstTable:
         baseIntrinName = re.sub(r'\.', '', asm)
         if opc == None: # pseudo
             asm = ""
-        IL = InstList()
+        IL = InstList(self.clazz)
         for args in ary:
             instName = None
             if baseInstName:
@@ -1181,7 +1162,7 @@ class InstTable:
 
         baseIntrinName = re.sub(r'\.', '', asm)
 
-        L = InstList()
+        L = InstList(self.clazz)
         for op in O:
             si = self.args_to_inst_suffix(op)
             sf = self.args_to_func_suffix(op)
@@ -1228,7 +1209,7 @@ def gen_test(insts, directory):
 
 def gen_inst_def(insts):
     for I in insts:
-        if I.hasLLVMInst():
+        if I.hasLLVMInstDefine():
             print I.instDefine()
 
 def gen_intrinsic_def(insts):
@@ -1242,7 +1223,7 @@ def gen_pattern(insts):
             argsL = ", ".join([op.dagOp() for op in I.ins])
             argsR = ", ".join([op.dagOp() for op in I.ins])
             ni = re.sub(r'[INZ]', 's', I.intrinsicName()) # replace Imm to s
-            l = "(int_{}_{} {})".format(prefix, ni, argsL)
+            l = "(int_{}_{} {})".format(llvmIntrinsicPrefix, ni, argsL)
             if isVL:
                 r = "({} {})".format(I.llvmInst(), argsR)
             else:
@@ -1281,8 +1262,8 @@ def gen_lowering(insts):
     for l in ary:
         print(l)
 
-def createInstructionTable():
-    T = InstTable()
+def createInstructionTable(isVL):
+    T = InstTable(isVL)
     
     #
     # Start of instruction definition
@@ -1305,7 +1286,7 @@ def createInstructionTable():
     T.VSTm(0xD3, "VSTL2D", "vstl2d")
     T.add(Inst(0x80, "PFCHVr", "pfchv", "pfchv", [], [SY(T_i64), SZ(T_voidcp)])).noTest().inaccessibleMemOrArgMemOnly()
     T.add(Inst(0x80, "PFCHVi", "pfchv", "pfchv", [], [ImmI(T_i64), SZ(T_voidcp)])).noTest().inaccessibleMemOrArgMemOnly()
-    T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
+    T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest().noLLVMInstDefine()
     #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
     T.LVSm(0x9E)
     T.InstX(0xB7, "LVMr", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
@@ -1540,11 +1521,13 @@ def main():
     
     global isVL
     isVL = args.vl
-    global prefix
+    global funcPrefix
+    global llvmIntrinsicPrefix
     if isVL:
-        prefix = "ve_vl"
+        funcPrefix = "vel"
+        llvmIntrinsicPrefix = "ve_vl"
     
-    T = createInstructionTable()
+    T = createInstructionTable(args.vl)
     insts = T.insts()
     
     test_dir = "../llvm-test/intrinsic/gen/tests"
