@@ -367,6 +367,8 @@ def pfchvssl : RV<0x80, (outs ), (ins I64:$sy, I64:$sz, VLS:$vl),
        "pfchv $sy,$sz", [], NoItinerary>
 {
   let cs = 1;
+  let cx = 1;
+  let cx2 = 1;
   let DecoderNamespace = "VEL";
   let DisableEncoding = "$vl";
 }
@@ -376,6 +378,8 @@ def pfchvIsl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, VLS:$vl),
        "pfchv $I,$sz", [], NoItinerary>
 {
   let cs = 1;
+  let cx = 1;
+  let cx2 = 1;
   let DecoderNamespace = "VEL";
   let DisableEncoding = "$vl";
 }
