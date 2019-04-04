@@ -868,7 +868,7 @@ class InstTable:
     #    return self.add(Inst(*args))
 
     def args_to_func_suffix(self, args):
-        return "_" + "".join([op.kind for op in args])
+        return "_" + "".join([op.kind for op in args if op])
 
     def args_to_inst_suffix(self, args):
         tbl = {
@@ -948,7 +948,7 @@ class InstTable:
                "vvsvMv" : "r2m", # VFMAD, etc
                }
 
-        tmp = "".join([op.kind for op in args])
+        tmp = "".join([op.kind for op in args if op])
         return tbl[tmp]
 
     def Dummy(self, inst, func, asm):
@@ -958,26 +958,23 @@ class InstTable:
         self.add(DummyInst(inst, "not yet implemented", ""))
 
     # intrinsic name is generated from asm and arguments
-    def InstX(self, opc, inst, asm, ary, expr = None):
+    def InstX(self, opc, baseLLVMInst, asm, ary, expr = None, **kwargs):
         isPacked = asm[0] == 'p'
         baseIntrinName = re.sub(r'\.', '', asm)
         if opc == None: # pseudo
             asm = ""
         IL = InstList(self.clazz)
         for args in ary:
-            instName = None
-            if inst:
-                instName = inst + self.args_to_inst_suffix(args)
+            llvmInst = None
+            if baseLLVMInst:
+                llvmInst = baseLLVMInst + self.args_to_inst_suffix(args)
             intrinsicName = baseIntrinName + self.args_to_func_suffix(args)
-            outs = [args[0]]
+            inst = re.sub(r'[a-z]*', '', baseLLVMInst) if baseLLVMInst else None
+            outs = [args[0]] if args[0] else []
             ins = args[1:]
-            inst0 = re.sub(r'[a-z]*', '', inst) if inst else None
-            #i = self.clazz(opc, inst0, instName, asm, intrinsicName, outs, ins, packed=isPacked, expr=expr)
-            kwargs = {
-                      'packed': isPacked,
-                      'expr': expr
-                      }
-            i = self.clazz(opc, inst0, instName, asm, intrinsicName, outs, ins, **kwargs)
+            kwargs['packed'] = isPacked
+            kwargs['expr'] = expr
+            i = self.clazz(opc, inst, llvmInst, asm, intrinsicName, outs, ins, **kwargs)
             self.add(i)
             IL.add(i)
         return IL
@@ -1003,13 +1000,19 @@ class InstTable:
         return self.InstX(opc, inst, asm, O).noTest().readMem()
 
     def VSTm(self, opc, inst, asm):
+        O_rr = [None, VX(T_u64), SY(T_u64), SZ(T_voidp)]
+        O_ir = [None, VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
+        self.InstX(opc, inst, asm, [O_rr, O_ir]).noTest().writeMem()
+        self.InstX(opc, inst+"ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
+
+        return
         O_rr = [VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
         L = InstList(self.clazz)
         L.Inst(opc, inst, inst+"rr", asm, asm+"_vss", [], O_rr)
         L.Inst(opc, inst, inst+"ir", asm, asm+"_vss", [], O_ir)
-        L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss",  [], O_rr).oldLowering()
-        L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss",  [], O_ir).oldLowering()
+        L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss", [], O_rr).oldLowering()
+        L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss", [], O_ir).oldLowering()
         #L.Inst(opc, inst+"rz", asm, asm, [], [VX(T_u64), SY(T_u64), ImmZ(T_voidp)])
         #L.Inst(opc, inst+"iz", asm, asm, [], [VX(T_u64), ImmI(T_u64), ImmZ(T_voidp)])
         self.addList(L).noTest().writeMem()
@@ -1166,10 +1169,17 @@ class InstTable:
         O_v = [VX(T_u64), VY(T_u64)]
         O_vm = [VX(T_u64), VY(T_u64), VM]
         O = [O_v, O_vm]
-
         self.InstX(opc, inst, asm, O).noTest().readMem()
 
     def VSCm(self, opc, inst0, inst, asm):
+        O_v = [None, VX(T_u64), VY(T_u64)]
+        O_vm = [None, VX(T_u64), VY(T_u64), VM]
+        #O_s = [VX(T_u64), SW(T_u64)]
+        O = [O_v, O_vm]
+        self.InstX(opc, inst0, asm, O).noTest().writeMem()
+        self.InstX(opc, inst0+"ot", asm+".ot", O).noTest().writeMem().oldLowering()
+        return
+
         O_v = [VX(T_u64), VY(T_u64)]
         O_vm = [VX(T_u64), VY(T_u64), VM]
         #O_s = [VX(T_u64), SW(T_u64)]
@@ -1378,9 +1388,9 @@ def createInstructionTable(isVL):
     T.Inst3f(0xDC, "vfsub", "VFSB", "{0} = {1} - {2}")
     T.Inst3f(0xCD, "vfmul", "VFMP", "{0} = {1} * {2}")
     T.Inst3f(0xDD, "vfdiv", "VFDV", "{0} = {1} / {2}", False)
-    T.add(I(None, None, None, None, "vfdivsA_vvv", [VX(T_f32)], [VY(T_f32), VZ(T_f32)], expr="{0} = {1} / {2}"))
-    T.add(I(None, None, None, None, "vfdivsA_vsv", [VX(T_f32)], [SY(T_f32), VZ(T_f32)], expr="{0} = {1} / {2}"))
-    T.add(I(None, None, None, None, "pvfdivA_vvv", [VX(T_f32)], [VY(T_f32), VZ(T_f32)], expr="{0} = {1} / {2}"))
+    T.InstX(None, None, "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}")
+    T.InstX(None, None, "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}")
+    T.InstX(None, None, "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}")
     T.Inst2f(0xED, "vfsqrt", "VFSQRT", "{0} = std::sqrt({1})", False)
     T.Inst3f(0xFC, "vfcmp", "VFCP", "{0} = compare({1}, {2})")
     T.Inst3f(0xBD, "vfmax", "VFCMa", "{0} = max({1}, {2})")
@@ -1406,8 +1416,8 @@ def createInstructionTable(isVL):
     T.InstX(0x9F, "VCVS", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
     
     T.Section("5.3.2.12. Vector Mask Arithmetic Instructions", 31)
-    T.add(I(0xD6, "VMRG", "VMRGvm", "vmrg", "vmrg_vvvm", [VX(T_u64)], [VY(T_u64), VZ(T_u64), VM]))
-    T.add(I(0xD6, "VMRG", "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], packed=True))
+    T.InstX(0xD6, "VMRG", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]])
+    T.add(I(0xD6, "VMRG", "VMRGpvm", "vmrg.w", "vmrgw_vvvM", [VX(T_u32)], [VY(T_u32), VZ(T_u32), VM512], packed=True)) # packed but not pvmrg
     T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
     T.InstX(0x8D, "VCP", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     T.InstX(0x9D, "VEX", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
@@ -1458,11 +1468,8 @@ def createInstructionTable(isVL):
     T.VGTm(0xA3, "VGTLsx", "vgtl.sx")
     T.VGTm(0xA3, "VGTLzx", "vgtl.zx")
     T.VSCm(0xB1, "VSC", "VSC", "vsc")
-    T.VSCm(0xB1, "VSC", "VSCot", "vsc.ot").oldLowering()
     T.VSCm(0xB2, "VSCU", "VSCU", "vscu")
-    T.VSCm(0xB2, "VSCU", "VSCUot", "vscu.ot").oldLowering()
     T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
-    T.VSCm(0xB3, "VSCL", "VSCLot", "vscl.ot").oldLowering()
     
     T.Section("5.3.2.15. Vector Mask Register Instructions", 34)
     T.InstX(0x84, "ANDM", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
