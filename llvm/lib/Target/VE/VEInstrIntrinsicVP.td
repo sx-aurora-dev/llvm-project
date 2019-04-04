@@ -17,6 +17,8 @@ def : Pat<(int_ve_vl_vstu2d_vssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl), (vstu2
 def : Pat<(int_ve_vl_vstu2dot_vssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl), (vstu2dotvssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_vstl2d_vssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl), (vstl2dvssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_vstl2dot_vssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl), (vstl2dotvssl v256f64:$vx, i64:$sy, i64:$sz, i32:$vl)>;
+def : Pat<(int_ve_vl_pfchv_ssl i64:$sy, i64:$sz, i32:$vl), (pfchvssl i64:$sy, i64:$sz, i32:$vl)>;
+def : Pat<(int_ve_vl_lsv_vvssl v256f64:$vd, i32:$sy, i64:$sz, i32:$vl), (lsvvvssl v256f64:$vd, i32:$sy, i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_vbrd_vs_f64vl f64:$sy, v256f64:$vd, i32:$vl), (vbrdvsvl f64:$sy, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vbrd_vs_i64vl i64:$sy, v256f64:$vd, i32:$vl), (vbrdvsvl i64:$sy, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vbrdu_vs_f32vl f32:$sy, v256f64:$vd, i32:$vl), (vbrduvsvl f32:$sy, v256f64:$vd, i32:$vl)>;
@@ -135,6 +137,7 @@ def : Pat<(int_ve_vl_pvsra_vvvvl v256f64:$vz, v256f64:$vy, v256f64:$vd, i32:$vl)
 def : Pat<(int_ve_vl_pvsra_vvsvl v256f64:$vz, i64:$sy, v256f64:$vd, i32:$vl), (pvsravvsvl v256f64:$vz, i64:$sy, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vsral_vvvvl v256f64:$vz, v256f64:$vy, v256f64:$vd, i32:$vl), (vsralvvvvl v256f64:$vz, v256f64:$vy, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vsral_vvsvl v256f64:$vz, i64:$sy, v256f64:$vd, i32:$vl), (vsralvvsvl v256f64:$vz, i64:$sy, v256f64:$vd, i32:$vl)>;
+def : Pat<(int_ve_vl_vsfa_vvssvl v256f64:$vz, i64:$sy, i64:$sz, v256f64:$vd, i32:$vl), (vsfavvssvl v256f64:$vz, i64:$sy, i64:$sz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfaddd_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfadddvvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfaddd_vsvvl f64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfadddvsvvl f64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfadds_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfaddsvvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
@@ -149,6 +152,8 @@ def : Pat<(int_ve_vl_pvfsub_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl
 def : Pat<(int_ve_vl_pvfsub_vsvvl i64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl), (pvfsubvsvvl i64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfmuld_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfmuldvvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfmuld_vsvvl f64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfmuldvsvvl f64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
+def : Pat<(int_ve_vl_vfmuls_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfmulsvvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
+def : Pat<(int_ve_vl_vfmuls_vsvvl f32:$sy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfmulsvsvvl f32:$sy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_pvfmul_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl), (pvfmulvvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfdivd_vvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfdivdvvvvl v256f64:$vy, v256f64:$vz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfdivd_vsvvl f64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl), (vfdivdvsvvl f64:$sy, v256f64:$vz, v256f64:$vd, i32:$vl)>;

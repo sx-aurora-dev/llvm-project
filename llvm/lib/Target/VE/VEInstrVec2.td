@@ -384,6 +384,16 @@ def pfchvIsl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
+// LSV lsv
+def lsvvvssl : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz, VLS:$vl),
+       "lsv $vx,$sy,$sz", [], NoItinerary>
+{
+  let cs = 1;
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
 // LVS lvs
 def lvssvsl : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy, VLS:$vl),
        "lvs $sx,$vx,$sy", [], NoItinerary>

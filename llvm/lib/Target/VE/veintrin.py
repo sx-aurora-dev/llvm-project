@@ -76,7 +76,7 @@ class Op(object):
 
     def isImm(self): return self.kind == 'I' or self.kind == 'N' or self.kind == "Z"
     def isReg(self): return self.kind == 'v' or self.kind == 's'
-    def isSReg(self): return self.kind == 's'
+    def isSReg(self): return self.kind == 's' or self.kind == 'f'
     def isVReg(self): return self.kind == 'v'
     def isMask(self): return self.kind == 'm' or self.kind == 'M'
     def isMask256(self): return self.kind == 'm'
@@ -1040,7 +1040,7 @@ class InstTable:
         I = self.clazz
         self.add(I(opc, "LVS", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSi64r").noTest())
         self.add(I(opc, "LVS", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSf64r").noTest()).noLLVMInstDefine()
-        self.add(I(opc, "LVS", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="LVSf32r").noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="LVSf32r").noTest()).noLLVMInstDefine() # FIXME
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True):
         self.InstX(opc, instName+"d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
@@ -1309,7 +1309,7 @@ def createInstructionTable(isVL):
     T.VSTm(0xD3, "VSTL2D", "vstl2d")
     T.InstX(0x80, "PFCHV", "pfchv", [[None, SY(T_i64), SZ(T_voidcp)]], llvmInst="PFCHVr").noTest().inaccessibleMemOrArgMemOnly()
     T.InstX(0x80, "PFCHV", "pfchv", [[None, ImmI(T_i64), SZ(T_voidcp)]], llvmInst="PFCHVi").noTest().inaccessibleMemOrArgMemOnly()
-    T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VX(T_u64), SY(T_u32), SZ(T_u64)]]).noTest().noLLVMInstDefine()
+    T.InstX(0x8E, "LSV", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]]).noTest()
     #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
     T.LVSm(0x9E)
     T.InstX(0xB7, "LVMr", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
