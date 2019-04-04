@@ -389,7 +389,9 @@ class InstVEL(Inst):
         tmp = []
         if not hasDummyOp and len(outs) > 0 and outs[0].kind == "v":
             tmp.append(VD(outs[0].ty.elemType))
+            intrinsicName += "v"
         ins = ins + tmp + [VL]
+        intrinsicName += "l"
 
         if asm:
             suffix = "".join([op.kind for op in outs + ins])
@@ -970,7 +972,12 @@ class InstTable:
             outs = [args[0]]
             ins = args[1:]
             inst0 = re.sub(r'[a-z]*', '', inst) if inst else None
-            i = self.clazz(opc, inst0, instName, asm, intrinsicName, outs, ins, packed=isPacked, expr=expr)
+            #i = self.clazz(opc, inst0, instName, asm, intrinsicName, outs, ins, packed=isPacked, expr=expr)
+            kwargs = {
+                      'packed': isPacked,
+                      'expr': expr
+                      }
+            i = self.clazz(opc, inst0, instName, asm, intrinsicName, outs, ins, **kwargs)
             self.add(i)
             IL.add(i)
         return IL
@@ -1024,35 +1031,12 @@ class InstTable:
         self.add(I(0x8C, "VBRD", "VBRDi32im", "vbrdl", "vbrdl_vImv_i32", [VX(T_i32)], [ImmI(T_i32), VM, VD(T_i32)], expr=expr))
         self.add(I(0x8C, "VBRD", "VBRDp",     "pvbrd", "pvbrd_vs_i64",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr))
         self.add(I(0x8C, "VBRD", "VBRDpm",    "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr))
-        return
-
-        tmp = []
-        tmp.append(["VBRDf64", "vbrd",  [VX(T_f64), SY(T_f64)], VM])
-        tmp.append(["VBRD",    "vbrd",  [VX(T_i64), SY(T_i64)], VM])
-        tmp.append(["VBRD",    "vbrd",  [VX(T_i64), ImmI(T_i64)], VM])
-        tmp.append(["VBRDf32", "vbrdu", [VX(T_f32), SY(T_f32)], VM])
-        tmp.append(["VBRDi32", "vbrdl", [VX(T_i32), SY(T_i32)], VM])
-        tmp.append(["VBRDi32", "vbrdl", [VX(T_i32), ImmI(T_i32)], VM])
-        tmp.append(["VBRDp",   "pvbrd", [VX(T_u32), SY(T_u64)], VM512])
-
-        for ary in tmp:
-            args = ary[2]
-            tmp2 = self.addMask([args], ary[3])
-
-            for args0 in tmp2:
-                inst = ary[0] + self.args_to_inst_suffix(args0)
-                func = ary[1] + self.args_to_func_suffix(args0) + "_" + args0[1].ty.ValueType
-                packed = func[0] == 'p'
-                i = Inst(opc, inst, ary[1], func, [args0[0]], args0[1:], packed=packed, expr="{0} = {1}")
-                self.add(i)
 
     def LVSm(self, opc):
         I = self.clazz
         self.add(I(opc, "LVS", "LVSi64r", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)]).noTest())
         self.add(I(opc, "LVS", "LVSf64r", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)]).noTest()).noLLVMInstDefine()
         self.add(I(opc, "LVS", "LVSf32r", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)]).noTest()).noLLVMInstDefine()
-
-
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True):
         self.InstX(opc, instName+"d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
