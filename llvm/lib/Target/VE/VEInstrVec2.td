@@ -445,10 +445,6 @@ def svmsMIl : RV<0xa7, (outs I64:$sx), (ins VM512:$vmz, simm7Op64:$N, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VBRDf64r vbrd
-
-// VBRDf64rm vbrd
-
 // VBRDr vbrd
 def vbrdvsvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, V64:$vd, VLS:$vl),
        "vbrd $vx,$sy", [], NoItinerary>
@@ -549,7 +545,7 @@ def vbrdlvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM:$vm, V64:$vd, VL
   let DisableEncoding = "$vl";
 }
 
-// VBRDpr pvbrd
+// VBRDp pvbrd
 def pvbrdvsvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, V64:$vd, VLS:$vl),
        "pvbrd $vx,$sy", [], NoItinerary>
 {
@@ -560,7 +556,7 @@ def pvbrdvsvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, V64:$vd, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VBRDprm pvbrd
+// VBRDpm pvbrd
 def pvbrdvsMvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM512:$vm, V64:$vd, VLS:$vl),
        "pvbrd $vx,$sy,$vm", [], NoItinerary>
 {
