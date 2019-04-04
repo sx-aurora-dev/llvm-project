@@ -18,7 +18,7 @@
 #define _vel_vstu2dot_vssl __builtin_ve_vl_vstu2dot_vssl
 #define _vel_vstl2d_vssl __builtin_ve_vl_vstl2d_vssl
 #define _vel_vstl2dot_vssl __builtin_ve_vl_vstl2dot_vssl
-#define _vel_pfchvl __builtin_ve_vl_pfchvl
+#define _vel_pfchv_ssl __builtin_ve_vl_pfchv_ssl
 #define _vel_lsv_vvssvl __builtin_ve_vl_lsv_vvssvl
 #define _vel_lvs_svs_u64l __builtin_ve_vl_lvs_svs_u64l
 #define _vel_lvs_svs_f64l __builtin_ve_vl_lvs_svs_f64l

@@ -18,7 +18,7 @@
 #define _ve_vstu2dot_vss __builtin_ve_vstu2dot_vss
 #define _ve_vstl2d_vss __builtin_ve_vstl2d_vss
 #define _ve_vstl2dot_vss __builtin_ve_vstl2dot_vss
-#define _ve_pfchv __builtin_ve_pfchv
+#define _ve_pfchv_ss __builtin_ve_pfchv_ss
 #define _ve_lsv_vvss __builtin_ve_lsv_vvss
 #define _ve_lvs_svs_u64 __builtin_ve_lvs_svs_u64
 #define _ve_lvs_svs_f64 __builtin_ve_lvs_svs_f64
