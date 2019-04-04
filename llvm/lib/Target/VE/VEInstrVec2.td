@@ -380,7 +380,7 @@ def pfchvIsl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
-// LVSi64 lvs
+// LVS lvs
 def lvssvsl : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy, VLS:$vl),
        "lvs $sx,$vx,$sy", [], NoItinerary>
 {
@@ -479,7 +479,7 @@ def vbrdvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM:$vm, V64:$vd, VLS
   let DisableEncoding = "$vl";
 }
 
-// VBRDf32 vbrdu
+// VBRD vbrdu
 def vbrduvsvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, V64:$vd, VLS:$vl),
        "vbrdu $vx,$sy", [], NoItinerary>
 {
@@ -488,7 +488,7 @@ def vbrduvsvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, V64:$vd, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VBRDf32 vbrdu
+// VBRD vbrdu
 def vbrduvsmvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, VM:$vm, V64:$vd, VLS:$vl),
        "vbrdu $vx,$sy,$vm", [], NoItinerary>
 {
@@ -499,7 +499,7 @@ def vbrduvsmvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, VM:$vm, V64:$vd, VLS:$vl
   let DisableEncoding = "$vl";
 }
 
-// VBRDi32 vbrdl
+// VBRD vbrdl
 def vbrdlvsvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, V64:$vd, VLS:$vl),
        "vbrdl $vx,$sy", [], NoItinerary>
 {
@@ -508,7 +508,7 @@ def vbrdlvsvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, V64:$vd, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VBRDi32 vbrdl
+// VBRD vbrdl
 def vbrdlvsmvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, VM:$vm, V64:$vd, VLS:$vl),
        "vbrdl $vx,$sy,$vm", [], NoItinerary>
 {
@@ -519,7 +519,7 @@ def vbrdlvsmvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, VM:$vm, V64:$vd, VLS:$vl
   let DisableEncoding = "$vl";
 }
 
-// VBRDi32 vbrdl
+// VBRD vbrdl
 def vbrdlvIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, V64:$vd, VLS:$vl),
        "vbrdl $vx,$I", [], NoItinerary>
 {
@@ -528,7 +528,7 @@ def vbrdlvIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, V64:$vd, VLS:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VBRDi32 vbrdl
+// VBRD vbrdl
 def vbrdlvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM:$vm, V64:$vd, VLS:$vl),
        "vbrdl $vx,$I,$vm", [], NoItinerary>
 {
