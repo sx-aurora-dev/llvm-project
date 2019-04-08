@@ -35,6 +35,8 @@ endif()
 
 set(SOTOC_LIT_ARGS -v --no-progress-bar)
 
+set(SOTOC_FILECHECK_EXE ${LLVM_FILECHECK_EXE})
+
 add_custom_target(check-sotoc
   COMMAND ${PYTHON_EXECUTABLE} ${SOTOC_LLVM_LIT_EXECUTABLE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
     DEPENDS sotoc

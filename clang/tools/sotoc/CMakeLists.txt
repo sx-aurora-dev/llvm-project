@@ -57,22 +57,8 @@ if (SOTOC_STANDALONE_BUILD)
 ################################################################################
 
 else()
-  #set(CLANG_CONFIG_HINT ${CMAKE_BINARY_DIR}/lib/cmake/clang)
-  #set(CLANG_LIBRARY_DIRS ${CMAKE_BINARY_DIR}/lib)
-  #set(CLANG_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tools/clang/include )
-  #libomptarget_say("_________A__________${CLANG_INCLUDE_DIRS}")
-  #libomptarget_say("_________B__________${CLANG_LIBRARY_DIRS}")
-  #libomptarget_say("_________C__________${LLVMCONFIG_FILE}")
   add_clang_executable(${SOTOC_PROJECT_NAME} ${SOTOC_SOURCES})
 endif()
-#  include_directories(${CLANG_INCLUDE_DIRS})
-#  link_directories(${CLANG_LIBRARY_DIRS})
-#  add_definitions(${CLANG_DEFINITIONS})
-  
-#  add_definitions(
-#  -D__STDC_LIMIT_MACROS
-#  -D__STDC_CONSTANT_MACROS
-#  )
 
 set(SOTOC_DEBUG_OUTPUT OFF CACHE BOOL "Compiles sotoc with possible debug output")
 if (SOTOC_DEBUG_OUTPUT)
