@@ -961,13 +961,13 @@ class InstTable:
 
     # intrinsic name is generated from asm and arguments
     def InstX(self, opc, baseLLVMInst, asm, ary, expr = None, **kwargs):
+        inst = re.sub(r'[a-z]*', '', baseLLVMInst) if baseLLVMInst else None
         isPacked = asm[0] == 'p'
         baseIntrinName = re.sub(r'\.', '', asm)
         if opc == None: # pseudo
             asm = ""
         IL = InstList(self.clazz)
         for args in ary:
-            inst = re.sub(r'[a-z]*', '', baseLLVMInst) if baseLLVMInst else None
             llvmInst = baseLLVMInst + self.args_to_inst_suffix(args) if baseLLVMInst else None
             intrinsicName = baseIntrinName + self.args_to_func_suffix(args)
             outs = [args[0]] if args[0] else []
