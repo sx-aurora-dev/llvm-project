@@ -30,8 +30,8 @@ let Namespace = "VE" in {
   def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
   def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
   def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
-  def sub_vm_even : SubRegIndex<256>;           // High 256 bit (0..255)
-  def sub_vm_odd  : SubRegIndex<256, 256>;      // Low 256 bit (256..511)
+  def sub_vm_even : SubRegIndex<256>;           // See below
+  def sub_vm_odd  : SubRegIndex<256, 256>;      // See below
 }
 
 // Registers are identified with 7-bit ID numbers.
@@ -57,6 +57,10 @@ class VR<bits<7> Enc, string n> : VEReg<Enc, n>;
 // VM - 256-bit wide mask registers
 class VM<bits<7> Enc, string n> : VEReg<Enc, n>;
 
+// Pseudo 512b mask register using two 256b physical mask register.
+// Two 256b mask register has to be sequential and start from even register
+// such as (VM2, VM3). Even register is used for upper(0:31) bit in packed
+// vector instructions, and odd register is used for lower(32:63).
 class VMp<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
   let SubRegs = subregs;
   let SubRegIndices = [sub_vm_even, sub_vm_odd];
