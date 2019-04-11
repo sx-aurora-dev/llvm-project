@@ -683,13 +683,13 @@ def : Pat<(i64 (int_ve_pack_f32a ADDRri:$addr)),
                       (HI32 (i64 0x0000000100000001)))))>;
 
 def : Pat<(v256i1 (INT_EXTMU v512i1:$vm)),
-          (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_odd))>;
-
-def : Pat<(v256i1 (INT_EXTML v512i1:$vm)),
           (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_even))>;
 
+def : Pat<(v256i1 (INT_EXTML v512i1:$vm)),
+          (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_odd))>;
+
 def : Pat<(v512i1 (INT_INSMU v512i1:$vmx, v256i1:$vmy)),
-          (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_odd))>;
+          (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_even))>;
 
 def : Pat<(v512i1 (INT_INSML v512i1:$vmx, v256i1:$vmy)),
-          (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_even))>;
+          (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_odd))>;
