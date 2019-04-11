@@ -7,7 +7,7 @@ int main(){
   int size=512;
   float A[2][size];
  
-  #pragma omp target map(tofrom:A[:size*2])
+  #pragma omp target map(tofrom:A[:2][:size])
   {
     int i;
     for(i=0; i< size; i++){
