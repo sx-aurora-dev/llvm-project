@@ -51,28 +51,25 @@ T_v8u64   = Type("v8i64",   "V8ULi",   "LLVMType<v8i64>", "unsigned int*", T_u64
 class Op(object):
     def __init__(self, kind, ty, name, regClass):
         self.kind = kind
-        self.ty = ty
+        self.ty_ = ty
         self.name_ = name
         self.regClass_ = regClass
 
     def regClass(self): return self.regClass_
-
-    def intrinDefType(self):
-        return self.ty.intrinDefType
-
-    def ValueType(self):
-        return self.ty.ValueType
-
-    def builtinCode(self):
-        return self.ty.builtinCode
+    def intrinDefType(self): return self.ty_.intrinDefType
+    def ValueType(self): return self.ty_.ValueType
+    def builtinCode(self): return self.ty_.builtinCode
+    def elemType(self): return self.ty_.elemType
+    def ctype(self): return self.ty_.ctype
+    def stride(self): return self.ty_.stride()
 
     def dagOp(self):
         if self.kind == 'I' or self.kind == 'Z':
-            return "({} {}:${})".format(self.ty.ValueType, self.immType, self.name_)
+            return "({} {}:${})".format(self.ty_.ValueType, self.immType, self.name_)
         elif self.kind == 'c':
-            return "({} uimm6:${})".format(self.ty.ValueType, self.name_)
+            return "({} uimm6:${})".format(self.ty_.ValueType, self.name_)
         else:
-            return "{}:${}".format(self.ty.ValueType, self.name_)
+            return "{}:${}".format(self.ty_.ValueType, self.name_)
 
     def isImm(self): return self.kind == 'I' or self.kind == 'N' or self.kind == "Z"
     def isReg(self): return self.kind == 'v' or self.kind == 's'
@@ -364,7 +361,7 @@ class Inst(object):
         if self.isPacked():
             return 8;
         else:
-            return op.ty.stride()
+            return op.stride()
 
     def hasExpr(self): return self.expr() != None
 
@@ -387,7 +384,7 @@ class InstVEL(Inst):
         hasDummyOp = any([op.regName() == "vd" for op in ins])
         tmp = []
         if not hasDummyOp and len(outs) > 0 and outs[0].kind == "v":
-            tmp.append(VD(outs[0].ty.elemType))
+            tmp.append(VD(outs[0].elemType()))
             intrinsicName += "v"
         ins = ins + tmp + [VL]
         intrinsicName += "l"
@@ -532,7 +529,7 @@ class TestGeneratorMask:
 class TestGenerator:
     def funcHeader(self, I):
         tmp = [i for i in (I.outs + I.ins) if not i.isImm()]
-        args = ["{} {}".format(i.ty.ctype, i.formalName()) for i in tmp]
+        args = ["{} {}".format(i.ctype(), i.formalName()) for i in tmp]
 
         return "void {name}({args}, int n)".format(name=I.intrinsicName(), args=", ".join(args))
 
@@ -540,10 +537,10 @@ class TestGenerator:
         vld = "vld_vss"
         vst = "vst_vss"
         if not I.isPacked():
-            if op.ty.elemType == T_f32:
+            if op.elemType() == T_f32:
                 vld = "vldu_vss"
                 vst = "vstu_vss"
-            elif op.ty.elemType == T_i32 or op.ty.elemType == T_u32:
+            elif op.elemType() == T_i32 or op.elemType() == T_u32:
                 vld = "vldlsx_vss"
                 vst = "vstl_vss"
         return [vld, vst]
@@ -654,7 +651,7 @@ class TestGenerator:
         for op in I.ins:
             if op.isSReg():
                 if I.isPacked():
-                    ctype = I.outs[0].ty.elemType.ctype
+                    ctype = I.outs[0].elemType().ctype
                     preprocess = '{} sy0 = *({}*)&sy;'.format(ctype, ctype)
                     body = re.sub('sy', "sy0", body)
 
@@ -705,7 +702,7 @@ class ManualInstPrinter:
                 outType = "__vm256"
                 v.append("{}[:]".format(out.regName()))
             elif out.isSReg():
-                outType = out.ty.ctype
+                outType = out.ctype()
             else:
                 raise Exception("unknown output operand type: {}".format(out.kind))
                 #v.append(out.regName())
@@ -716,7 +713,7 @@ class ManualInstPrinter:
                 ins.append("__vr " + op.regName())
                 v.append("{}[:]".format(op.regName()))
             elif op.isSReg():
-                ins.append("{} {}".format(op.ty.ctype, op.regName()))
+                ins.append("{} {}".format(op.ctype(), op.regName()))
                 v.append("{}".format(op.regName()))
             elif op.isMask512():
                 ins.append("__vm512 {}".format(op.regName()))
@@ -725,12 +722,12 @@ class ManualInstPrinter:
                 ins.append("__vm256 {}".format(op.regName()))
                 v.append("{}[:]".format(op.regName()))
             elif op.isImm():
-                ins.append("{} {}".format(op.ty.ctype, op.regName()))
+                ins.append("{} {}".format(op.ctype(), op.regName()))
                 v.append("{}".format(op.regName()))
             elif op.isCC():
-                ins.append("int cc".format(op.ty.ctype))
+                ins.append("int cc".format(op.ctype()))
             elif op.isVL():
-                ins.append("int vl".format(op.ty.ctype))
+                ins.append("int vl".format(op.ctype()))
             else:
                 raise Exception("unknown register kind: {}".format(op.kind))
         
@@ -988,7 +985,7 @@ class InstTable:
     def addMask(self, ary, MaskOp = VM):
         tmp = []
         for a in ary:
-            tmp.append(a + [MaskOp, VD(a[0].ty.elemType)])
+            tmp.append(a + [MaskOp, VD(a[0].elemType())])
         return ary + tmp
 
     def VLDm(self, opc, inst, asm):
