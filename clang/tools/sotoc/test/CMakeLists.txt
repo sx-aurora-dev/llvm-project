@@ -33,7 +33,7 @@ if(NOT SOTOC_LLVM_LIT_EXECUTABLE)
 endif()
 
 
-set(SOTOC_LIT_ARGS -v --no-progress-bar)
+set(SOTOC_LIT_ARGS "-v;--no-progress-bar;-j 4")
 
 set(SOTOC_FILECHECK_EXE ${LLVM_FILECHECK_EXE})
 
