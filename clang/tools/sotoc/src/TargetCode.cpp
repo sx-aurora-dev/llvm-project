@@ -77,7 +77,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     if (TCR) {
       generateFunctionPrologue(TCR, Out);
     }
-    
+
     Out << Frag->PrintPretty();
 
     if (TCR) {
@@ -116,13 +116,11 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       DEBUGP("Generating code for array type");
       int dim = 0;
 
-      auto *type_for_dim = t;
-      handleArrays(&type_for_dim, DimString, dim, TCR, elemType);
+      std::vector<int> VariableDimensions;
+      handleArrays(&t, DimString, dim, VariableDimensions, TCR, elemType);
 
-      if (llvm::dyn_cast<clang::VariableArrayType>(t)) {
-        for (int d = 0; d < dim; ++d) {
-          Out << "unsigned long long __sotoc_vla_dim" << d << "_" << (*i)->getDeclName().getAsString() << ", ";
-        }
+      for (int d : VariableDimensions) {
+        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << (*i)->getDeclName().getAsString() << ", ";
       }
 
       // set type to void* to avoid warnings from the compiler
@@ -260,7 +258,9 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
 
 void TargetCode::handleArrays(const clang::ArrayType **t,
                               std::list<std::string> &DimString, int &dim,
-                              TargetCodeRegion *TCR, std::string &elemType) {
+                              std::vector<int> &VariableDims,
+                              TargetCodeRegion *TCR,
+                              std::string &elemType) {
   auto OrigT = *t;
 
   if (!t) {
@@ -284,6 +284,7 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
     clang::PrintingPolicy PP(TCR->GetLangOpts());
     t1->getSizeExpr()->printPretty(PrettyOS, NULL, PP);
     DimString.push_back(PrettyOS.str());
+    VariableDims.push_back(dim);
     ++dim;
 
   } else {
@@ -297,6 +298,6 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
       OrigT->getElementType().getTypePtr());
   if (*t) {
     // Recursively handle all dimensions
-    handleArrays(t, DimString, dim, TCR, elemType);
+    handleArrays(t, DimString, dim, VariableDims, TCR, elemType);
   }
 }
