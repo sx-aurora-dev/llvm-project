@@ -121,7 +121,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
 
       if (llvm::dyn_cast<clang::VariableArrayType>(t)) {
         for (int d = 0; d < dim; ++d) {
-          Out << "unsgined long long __sotoc_vla_dim" << d << "_" << (*i)->getDeclName().getAsString() << ", ";
+          Out << "unsigned long long __sotoc_vla_dim" << d << "_" << (*i)->getDeclName().getAsString() << ", ";
         }
       }
 

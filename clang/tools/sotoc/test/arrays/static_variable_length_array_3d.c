@@ -9,6 +9,7 @@ int main(){
  
   #pragma omp target map(tofrom:A[:size][:2][:5])
   {
+    int k;
     int i;
     for(i=0; i< size; i++){
       for(k=0; k< 5; k++){
