@@ -20,7 +20,7 @@ int main(){
   }
 
   for (j = 0; j < size; j+=64) {
-    printf("%.2f %.2f",A[0][j][3],A[1][j][2]);
+    printf("%.2f %.2f ",A[0][j][3],A[1][j][2]);
   }
   return 0;
 }
