@@ -404,7 +404,7 @@ def lvssvsl : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy, I32:$vl),
 }
 
 // LVM lvm
-def lvmmmssl : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz, I32:$vl),
+def lvmmmssl : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, I64:$sy, I64:$sz, I32:$vl),
        "lvm $vmx,$vmd,$sy,$sz", [], NoItinerary>
 {
   let cs = 1;
@@ -413,7 +413,7 @@ def lvmmmssl : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz, I32:$vl)
 }
 
 // LVM lvm
-def lvmmmIsl : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, simm7Op64:$N, I64:$sz, I32:$vl),
+def lvmmmIsl : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, simm7Op64:$N, I64:$sz, I32:$vl),
        "lvm $vmx,$vmd,$N,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -421,7 +421,7 @@ def lvmmmIsl : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, simm7Op64:$N, I64:$sz, I32
 }
 
 // LVM lvm
-def lvmMMIsl : RV<0xb7, (outs VM512:$vmx), (ins VM512:$vmd, simm7Op64:$N, I64:$sz, I32:$vl),
+def lvmMMIsl : RV<0xb7, (outs VM512_:$vmx), (ins VM512_:$vmd, simm7Op64:$N, I64:$sz, I32:$vl),
        "lvm $vmx,$vmd,$N,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -429,7 +429,7 @@ def lvmMMIsl : RV<0xb7, (outs VM512:$vmx), (ins VM512:$vmd, simm7Op64:$N, I64:$s
 }
 
 // SVM svm
-def svmsmsl : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, I64:$sy, I32:$vl),
+def svmsmsl : RV<0xa7, (outs I64:$sx), (ins VM_:$vmz, I64:$sy, I32:$vl),
        "svm $sx,$vmz,$sy", [], NoItinerary>
 {
   let cs = 1;
@@ -438,7 +438,7 @@ def svmsmsl : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, I64:$sy, I32:$vl),
 }
 
 // SVM svm
-def svmsmIl : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, simm7Op64:$N, I32:$vl),
+def svmsmIl : RV<0xa7, (outs I64:$sx), (ins VM_:$vmz, simm7Op64:$N, I32:$vl),
        "svm $sx,$vmz,$N", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -446,7 +446,7 @@ def svmsmIl : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, simm7Op64:$N, I32:$vl),
 }
 
 // SVM svm
-def svmsMIl : RV<0xa7, (outs I64:$sx), (ins VM512:$vmz, simm7Op64:$N, I32:$vl),
+def svmsMIl : RV<0xa7, (outs I64:$sx), (ins VM512_:$vmz, simm7Op64:$N, I32:$vl),
        "svm $sx,$vmz,$N", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -463,7 +463,7 @@ def vbrdvsvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, V64:$vd, I32:$vl),
 }
 
 // VBRD vbrd
-def vbrdvsmvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vbrdvsmvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vbrd $vx,$sy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -483,7 +483,7 @@ def vbrdvIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, V64:$vd, I32:$vl),
 }
 
 // VBRD vbrd
-def vbrdvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vbrdvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vbrd $vx,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -503,7 +503,7 @@ def vbrduvsvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, V64:$vd, I32:$vl),
 }
 
 // VBRD vbrdu
-def vbrduvsmvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vbrduvsmvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vbrdu $vx,$sy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -523,7 +523,7 @@ def vbrdlvsvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, V64:$vd, I32:$vl),
 }
 
 // VBRD vbrdl
-def vbrdlvsmvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vbrdlvsmvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vbrdl $vx,$sy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -543,7 +543,7 @@ def vbrdlvIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, V64:$vd, I32:$vl),
 }
 
 // VBRD vbrdl
-def vbrdlvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vbrdlvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vbrdl $vx,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -565,7 +565,7 @@ def pvbrdvsvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, V64:$vd, I32:$vl),
 }
 
 // VBRD pvbrd
-def pvbrdvsMvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM512:$vm, V64:$vd, I32:$vl),
+def pvbrdvsMvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvbrd $vx,$sy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -623,7 +623,7 @@ def vaddulvIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VADD vaddu.l
-def vaddulvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddulvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vaddu.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -634,7 +634,7 @@ def vaddulvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VADD vaddu.l
-def vaddulvsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddulvsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vaddu.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -645,7 +645,7 @@ def vaddulvsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VADD vaddu.l
-def vaddulvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddulvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vaddu.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -683,7 +683,7 @@ def vadduwvIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VADD vaddu.w
-def vadduwvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vadduwvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vaddu.w $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -694,7 +694,7 @@ def vadduwvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VADD vaddu.w
-def vadduwvsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vadduwvsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vaddu.w $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -705,7 +705,7 @@ def vadduwvsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VADD vaddu.w
-def vadduwvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vadduwvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vaddu.w $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -738,7 +738,7 @@ def pvadduvsvvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VADD pvaddu
-def pvadduvvvMvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvadduvvvMvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvaddu $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -751,7 +751,7 @@ def pvadduvvvMvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VADD pvaddu
-def pvadduvsvMvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvadduvsvMvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvaddu $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -791,7 +791,7 @@ def vaddswsxvIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VADS vadds.w.sx
-def vaddswsxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswsxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -802,7 +802,7 @@ def vaddswsxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VADS vadds.w.sx
-def vaddswsxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswsxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -813,7 +813,7 @@ def vaddswsxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VADS vadds.w.sx
-def vaddswsxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswsxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -851,7 +851,7 @@ def vaddswzxvIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VADS vadds.w.zx
-def vaddswzxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswzxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -862,7 +862,7 @@ def vaddswzxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VADS vadds.w.zx
-def vaddswzxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswzxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -873,7 +873,7 @@ def vaddswzxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VADS vadds.w.zx
-def vaddswzxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswzxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -906,7 +906,7 @@ def pvaddsvsvvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VADS pvadds
-def pvaddsvvvMvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvaddsvvvMvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvadds $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -919,7 +919,7 @@ def pvaddsvvvMvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VADS pvadds
-def pvaddsvsvMvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvaddsvsvMvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvadds $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -959,7 +959,7 @@ def vaddslvIvvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VADX vadds.l
-def vaddslvvvmvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddslvvvmvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -970,7 +970,7 @@ def vaddslvvvmvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VADX vadds.l
-def vaddslvsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddslvsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -981,7 +981,7 @@ def vaddslvsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VADX vadds.l
-def vaddslvIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddslvIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vadds.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1019,7 +1019,7 @@ def vsubulvIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VSUB vsubu.l
-def vsubulvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubulvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubu.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1030,7 +1030,7 @@ def vsubulvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VSUB vsubu.l
-def vsubulvsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubulvsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubu.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1041,7 +1041,7 @@ def vsubulvsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VSUB vsubu.l
-def vsubulvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubulvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubu.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1079,7 +1079,7 @@ def vsubuwvIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VSUB vsubu.w
-def vsubuwvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubuwvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubu.w $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1090,7 +1090,7 @@ def vsubuwvvvmvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VSUB vsubu.w
-def vsubuwvsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubuwvsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubu.w $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1101,7 +1101,7 @@ def vsubuwvsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VSUB vsubu.w
-def vsubuwvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubuwvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubu.w $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1134,7 +1134,7 @@ def pvsubuvsvvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VSUB pvsubu
-def pvsubuvvvMvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvsubuvvvMvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsubu $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -1147,7 +1147,7 @@ def pvsubuvvvMvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VSUB pvsubu
-def pvsubuvsvMvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvsubuvsvMvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsubu $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -1187,7 +1187,7 @@ def vsubswsxvIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VSBS vsubs.w.sx
-def vsubswsxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswsxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1198,7 +1198,7 @@ def vsubswsxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VSBS vsubs.w.sx
-def vsubswsxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswsxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1209,7 +1209,7 @@ def vsubswsxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VSBS vsubs.w.sx
-def vsubswsxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswsxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1247,7 +1247,7 @@ def vsubswzxvIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VSBS vsubs.w.zx
-def vsubswzxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswzxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1258,7 +1258,7 @@ def vsubswzxvvvmvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VSBS vsubs.w.zx
-def vsubswzxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswzxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1269,7 +1269,7 @@ def vsubswzxvsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VSBS vsubs.w.zx
-def vsubswzxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswzxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1302,7 +1302,7 @@ def pvsubsvsvvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VSBS pvsubs
-def pvsubsvvvMvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvsubsvvvMvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsubs $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -1315,7 +1315,7 @@ def pvsubsvvvMvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VSBS pvsubs
-def pvsubsvsvMvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvsubsvsvMvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsubs $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -1355,7 +1355,7 @@ def vsubslvIvvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VSBX vsubs.l
-def vsubslvvvmvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubslvvvmvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1366,7 +1366,7 @@ def vsubslvvvmvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VSBX vsubs.l
-def vsubslvsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubslvsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1377,7 +1377,7 @@ def vsubslvsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VSBX vsubs.l
-def vsubslvIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubslvIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vsubs.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1415,7 +1415,7 @@ def vmululvIvvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VMPY vmulu.l
-def vmululvvvmvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmululvvvmvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmulu.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1426,7 +1426,7 @@ def vmululvvvmvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VMPY vmulu.l
-def vmululvsvmvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmululvsvmvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmulu.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1437,7 +1437,7 @@ def vmululvsvmvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VMPY vmulu.l
-def vmululvIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmululvIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmulu.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1475,7 +1475,7 @@ def vmuluwvIvvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VMPY vmulu.w
-def vmuluwvvvmvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmuluwvvvmvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmulu.w $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1486,7 +1486,7 @@ def vmuluwvvvmvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VMPY vmulu.w
-def vmuluwvsvmvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmuluwvsvmvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmulu.w $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1497,7 +1497,7 @@ def vmuluwvsvmvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VMPY vmulu.w
-def vmuluwvIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmuluwvIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmulu.w $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1535,7 +1535,7 @@ def vmulswsxvIvvl : RV<0xcb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VMPS vmuls.w.sx
-def vmulswsxvvvmvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswsxvvvmvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1546,7 +1546,7 @@ def vmulswsxvvvmvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VMPS vmuls.w.sx
-def vmulswsxvsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswsxvsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1557,7 +1557,7 @@ def vmulswsxvsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VMPS vmuls.w.sx
-def vmulswsxvIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswsxvIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1595,7 +1595,7 @@ def vmulswzxvIvvl : RV<0xcb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VMPS vmuls.w.zx
-def vmulswzxvvvmvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswzxvvvmvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1606,7 +1606,7 @@ def vmulswzxvvvmvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VMPS vmuls.w.zx
-def vmulswzxvsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswzxvsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1617,7 +1617,7 @@ def vmulswzxvsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VMPS vmuls.w.zx
-def vmulswzxvIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswzxvIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1655,7 +1655,7 @@ def vmulslvIvvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VMPX vmuls.l
-def vmulslvvvmvl : RV<0xdb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulslvvvmvl : RV<0xdb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1666,7 +1666,7 @@ def vmulslvvvmvl : RV<0xdb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VMPX vmuls.l
-def vmulslvsvmvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulslvsvmvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1677,7 +1677,7 @@ def vmulslvsvmvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VMPX vmuls.l
-def vmulslvIvmvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulslvIvmvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmuls.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1742,7 +1742,7 @@ def vdivulvIvvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VDIV vdivu.l
-def vdivulvvvmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivulvvvmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1753,7 +1753,7 @@ def vdivulvvvmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VDIV vdivu.l
-def vdivulvsvmvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivulvsvmvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1764,7 +1764,7 @@ def vdivulvsvmvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VDIV vdivu.l
-def vdivulvIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivulvIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1802,7 +1802,7 @@ def vdivuwvIvvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VDIV vdivu.w
-def vdivuwvvvmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivuwvvvmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1813,7 +1813,7 @@ def vdivuwvvvmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VDIV vdivu.w
-def vdivuwvsvmvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivuwvsvmvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1824,7 +1824,7 @@ def vdivuwvsvmvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VDIV vdivu.w
-def vdivuwvIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivuwvIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1854,7 +1854,7 @@ def vdivulvvIvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd, 
 }
 
 // VDIV vdivu.l
-def vdivulvvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vdivulvvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$vy,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -1866,7 +1866,7 @@ def vdivulvvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM:$vm, V64:$
 }
 
 // VDIV vdivu.l
-def vdivulvvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivulvvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$vy,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1896,7 +1896,7 @@ def vdivuwvvIvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd, 
 }
 
 // VDIV vdivu.w
-def vdivuwvvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vdivuwvvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -1908,7 +1908,7 @@ def vdivuwvvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64:$
 }
 
 // VDIV vdivu.w
-def vdivuwvvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivuwvvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1946,7 +1946,7 @@ def vdivswsxvIvvl : RV<0xeb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VDVS vdivs.w.sx
-def vdivswsxvvvmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsxvvvmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1957,7 +1957,7 @@ def vdivswsxvvvmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VDVS vdivs.w.sx
-def vdivswsxvsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsxvsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -1968,7 +1968,7 @@ def vdivswsxvsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VDVS vdivs.w.sx
-def vdivswsxvIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsxvIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2006,7 +2006,7 @@ def vdivswzxvIvvl : RV<0xeb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VDVS vdivs.w.zx
-def vdivswzxvvvmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzxvvvmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2017,7 +2017,7 @@ def vdivswzxvvvmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VDVS vdivs.w.zx
-def vdivswzxvsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzxvsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2028,7 +2028,7 @@ def vdivswzxvsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VDVS vdivs.w.zx
-def vdivswzxvIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzxvIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2058,7 +2058,7 @@ def vdivswsxvvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd
 }
 
 // VDVS vdivs.w.sx
-def vdivswsxvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsxvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -2070,7 +2070,7 @@ def vdivswsxvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64
 }
 
 // VDVS vdivs.w.sx
-def vdivswsxvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsxvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2100,7 +2100,7 @@ def vdivswzxvvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd
 }
 
 // VDVS vdivs.w.zx
-def vdivswzxvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzxvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -2112,7 +2112,7 @@ def vdivswzxvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64
 }
 
 // VDVS vdivs.w.zx
-def vdivswzxvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzxvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2150,7 +2150,7 @@ def vdivslvIvvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VDVX vdivs.l
-def vdivslvvvmvl : RV<0xfb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivslvvvmvl : RV<0xfb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2161,7 +2161,7 @@ def vdivslvvvmvl : RV<0xfb, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VDVX vdivs.l
-def vdivslvsvmvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivslvsvmvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2172,7 +2172,7 @@ def vdivslvsvmvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VDVX vdivs.l
-def vdivslvIvmvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivslvIvmvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2202,7 +2202,7 @@ def vdivslvvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd, 
 }
 
 // VDVX vdivs.l
-def vdivslvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vdivslvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -2214,7 +2214,7 @@ def vdivslvvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM:$vm, V64:$
 }
 
 // VDVX vdivs.l
-def vdivslvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivslvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$I,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2252,7 +2252,7 @@ def vcmpulvIvvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VCMP vcmpu.l
-def vcmpulvvvmvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpulvvvmvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2263,7 +2263,7 @@ def vcmpulvvvmvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMP vcmpu.l
-def vcmpulvsvmvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpulvsvmvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2274,7 +2274,7 @@ def vcmpulvsvmvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMP vcmpu.l
-def vcmpulvIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpulvIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2312,7 +2312,7 @@ def vcmpuwvIvvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VCMP vcmpu.w
-def vcmpuwvvvmvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpuwvvvmvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2323,7 +2323,7 @@ def vcmpuwvvvmvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMP vcmpu.w
-def vcmpuwvsvmvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpuwvsvmvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2334,7 +2334,7 @@ def vcmpuwvsvmvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMP vcmpu.w
-def vcmpuwvIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpuwvIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2367,7 +2367,7 @@ def pvcmpuvsvvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VCMP pvcmpu
-def pvcmpuvvvMvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvcmpuvvvMvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvcmpu $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2380,7 +2380,7 @@ def pvcmpuvvvMvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VCMP pvcmpu
-def pvcmpuvsvMvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvcmpuvsvMvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvcmpu $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2420,7 +2420,7 @@ def vcmpswsxvIvvl : RV<0xfa, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VCPS vcmps.w.sx
-def vcmpswsxvvvmvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswsxvvvmvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2431,7 +2431,7 @@ def vcmpswsxvvvmvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VCPS vcmps.w.sx
-def vcmpswsxvsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswsxvsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2442,7 +2442,7 @@ def vcmpswsxvsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VCPS vcmps.w.sx
-def vcmpswsxvIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswsxvIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2480,7 +2480,7 @@ def vcmpswzxvIvvl : RV<0xfa, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VCPS vcmps.w.zx
-def vcmpswzxvvvmvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswzxvvvmvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2491,7 +2491,7 @@ def vcmpswzxvvvmvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VCPS vcmps.w.zx
-def vcmpswzxvsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswzxvsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2502,7 +2502,7 @@ def vcmpswzxvsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VCPS vcmps.w.zx
-def vcmpswzxvIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswzxvIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2535,7 +2535,7 @@ def pvcmpsvsvvl : RV<0xfa, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VCPS pvcmps
-def pvcmpsvvvMvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvcmpsvvvMvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvcmps $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2548,7 +2548,7 @@ def pvcmpsvvvMvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VCPS pvcmps
-def pvcmpsvsvMvl : RV<0xfa, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvcmpsvsvMvl : RV<0xfa, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvcmps $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2588,7 +2588,7 @@ def vcmpslvIvvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VCPX vcmps.l
-def vcmpslvvvmvl : RV<0xba, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpslvvvmvl : RV<0xba, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2599,7 +2599,7 @@ def vcmpslvvvmvl : RV<0xba, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCPX vcmps.l
-def vcmpslvsvmvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpslvsvmvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2610,7 +2610,7 @@ def vcmpslvsvmvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCPX vcmps.l
-def vcmpslvIvmvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpslvIvmvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcmps.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2648,7 +2648,7 @@ def vmaxswsxvIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VCMS vmaxs.w.sx
-def vmaxswsxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswsxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2659,7 +2659,7 @@ def vmaxswsxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmaxs.w.sx
-def vmaxswsxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswsxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2670,7 +2670,7 @@ def vmaxswsxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmaxs.w.sx
-def vmaxswsxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswsxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2708,7 +2708,7 @@ def vmaxswzxvIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VCMS vmaxs.w.zx
-def vmaxswzxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswzxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2719,7 +2719,7 @@ def vmaxswzxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmaxs.w.zx
-def vmaxswzxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswzxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2730,7 +2730,7 @@ def vmaxswzxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmaxs.w.zx
-def vmaxswzxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswzxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2763,7 +2763,7 @@ def pvmaxsvsvvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VCMS pvmaxs
-def pvmaxsvvvMvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvmaxsvvvMvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvmaxs $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2776,7 +2776,7 @@ def pvmaxsvvvMvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VCMS pvmaxs
-def pvmaxsvsvMvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvmaxsvsvMvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvmaxs $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2816,7 +2816,7 @@ def vminswsxvIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VCMS vmins.w.sx
-def vminswsxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswsxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2827,7 +2827,7 @@ def vminswsxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmins.w.sx
-def vminswsxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswsxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2838,7 +2838,7 @@ def vminswsxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmins.w.sx
-def vminswsxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswsxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2876,7 +2876,7 @@ def vminswzxvIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd
 }
 
 // VCMS vmins.w.zx
-def vminswzxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswzxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2887,7 +2887,7 @@ def vminswzxvvvmvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmins.w.zx
-def vminswzxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswzxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2898,7 +2898,7 @@ def vminswzxvsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64
 }
 
 // VCMS vmins.w.zx
-def vminswzxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswzxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2931,7 +2931,7 @@ def pvminsvsvvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VCMS pvmins
-def pvminsvvvMvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvminsvvvMvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvmins $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2944,7 +2944,7 @@ def pvminsvvvMvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VCMS pvmins
-def pvminsvsvMvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvminsvsvMvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvmins $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -2984,7 +2984,7 @@ def vmaxslvIvvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VCMX vmaxs.l
-def vmaxslvvvmvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxslvvvmvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -2995,7 +2995,7 @@ def vmaxslvvvmvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMX vmaxs.l
-def vmaxslvsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxslvsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3006,7 +3006,7 @@ def vmaxslvsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMX vmaxs.l
-def vmaxslvIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxslvIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3044,7 +3044,7 @@ def vminslvIvvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, 
 }
 
 // VCMX vmins.l
-def vminslvvvmvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminslvvvmvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.l $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3055,7 +3055,7 @@ def vminslvvvmvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMX vmins.l
-def vminslvsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminslvsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.l $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3066,7 +3066,7 @@ def vminslvsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$
 }
 
 // VCMX vmins.l
-def vminslvIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminslvIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmins.l $vx,$I,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3095,7 +3095,7 @@ def vandvsvvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl
 }
 
 // VAND vand
-def vandvvvmvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vandvvvmvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vand $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3106,7 +3106,7 @@ def vandvvvmvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd
 }
 
 // VAND vand
-def vandvsvmvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vandvsvmvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vand $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3139,7 +3139,7 @@ def pvandvsvvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$v
 }
 
 // VAND pvand
-def pvandvvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvandvvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvand $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3152,7 +3152,7 @@ def pvandvvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64
 }
 
 // VAND pvand
-def pvandvsvMvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvandvsvMvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvand $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3183,7 +3183,7 @@ def vorvsvvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl)
 }
 
 // VOR vor
-def vorvvvmvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vorvvvmvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vor $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3194,7 +3194,7 @@ def vorvvvmvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd,
 }
 
 // VOR vor
-def vorvsvmvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vorvsvmvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vor $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3227,7 +3227,7 @@ def pvorvsvvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl
 }
 
 // VOR pvor
-def pvorvvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvorvvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvor $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3240,7 +3240,7 @@ def pvorvvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:
 }
 
 // VOR pvor
-def pvorvsvMvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvorvsvMvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvor $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3271,7 +3271,7 @@ def vxorvsvvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl
 }
 
 // VXOR vxor
-def vxorvvvmvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vxorvvvmvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vxor $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3282,7 +3282,7 @@ def vxorvvvmvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd
 }
 
 // VXOR vxor
-def vxorvsvmvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vxorvsvmvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vxor $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3315,7 +3315,7 @@ def pvxorvsvvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$v
 }
 
 // VXOR pvxor
-def pvxorvvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvxorvvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvxor $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3328,7 +3328,7 @@ def pvxorvvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64
 }
 
 // VXOR pvxor
-def pvxorvsvMvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvxorvsvMvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvxor $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3359,7 +3359,7 @@ def veqvvsvvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl
 }
 
 // VEQV veqv
-def veqvvvvmvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def veqvvvvmvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "veqv $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3370,7 +3370,7 @@ def veqvvvvmvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd
 }
 
 // VEQV veqv
-def veqvvsvmvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def veqvvsvmvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "veqv $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3403,7 +3403,7 @@ def pveqvvsvvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$v
 }
 
 // VEQV pveqv
-def pveqvvvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pveqvvvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pveqv $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3416,7 +3416,7 @@ def pveqvvvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64
 }
 
 // VEQV pveqv
-def pveqvvsvMvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pveqvvsvMvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pveqv $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3499,7 +3499,7 @@ def vsllvvIvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I3
 }
 
 // VSLL vsll
-def vsllvvvmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsllvvvmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3510,7 +3510,7 @@ def vsllvvvmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd
 }
 
 // VSLL vsll
-def vsllvvsmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vsllvvsmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3522,7 +3522,7 @@ def vsllvvsmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd
 }
 
 // VSLL vsll
-def vsllvvImvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsllvvImvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$N,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3556,7 +3556,7 @@ def pvsllvvsvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$v
 }
 
 // VSLL pvsll
-def pvsllvvvMvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+def pvsllvvvMvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsll $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3569,7 +3569,7 @@ def pvsllvvvMvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64
 }
 
 // VSLL pvsll
-def pvsllvvsMvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512:$vm, V64:$vd, I32:$vl),
+def pvsllvvsMvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsll $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3611,7 +3611,7 @@ def vsrlvvIvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I3
 }
 
 // VSRL vsrl
-def vsrlvvvmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsrlvvvmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3622,7 +3622,7 @@ def vsrlvvvmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd
 }
 
 // VSRL vsrl
-def vsrlvvsmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vsrlvvsmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3634,7 +3634,7 @@ def vsrlvvsmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd
 }
 
 // VSRL vsrl
-def vsrlvvImvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsrlvvImvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$N,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3668,7 +3668,7 @@ def pvsrlvvsvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$v
 }
 
 // VSRL pvsrl
-def pvsrlvvvMvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+def pvsrlvvvMvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsrl $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3681,7 +3681,7 @@ def pvsrlvvvMvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64
 }
 
 // VSRL pvsrl
-def pvsrlvvsMvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512:$vm, V64:$vd, I32:$vl),
+def pvsrlvvsMvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsrl $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3723,7 +3723,7 @@ def vslawvvIvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I
 }
 
 // VSLA vsla.w
-def vslawvvvmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vslawvvvmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3734,7 +3734,7 @@ def vslawvvvmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$v
 }
 
 // VSLA vsla.w
-def vslawvvsmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vslawvvsmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3746,7 +3746,7 @@ def vslawvvsmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$v
 }
 
 // VSLA vsla.w
-def vslawvvImvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vslawvvImvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$N,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3780,7 +3780,7 @@ def pvslavvsvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$v
 }
 
 // VSLA pvsla
-def pvslavvvMvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+def pvslavvvMvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsla $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3793,7 +3793,7 @@ def pvslavvvMvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64
 }
 
 // VSLA pvsla
-def pvslavvsMvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512:$vm, V64:$vd, I32:$vl),
+def pvslavvsMvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsla $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3835,7 +3835,7 @@ def vslalvvIvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I
 }
 
 // VSLAX vsla.l
-def vslalvvvmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vslalvvvmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3846,7 +3846,7 @@ def vslalvvvmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$v
 }
 
 // VSLAX vsla.l
-def vslalvvsmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vslalvvsmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3858,7 +3858,7 @@ def vslalvvsmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$v
 }
 
 // VSLAX vsla.l
-def vslalvvImvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vslalvvImvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$N,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3897,7 +3897,7 @@ def vsrawvvIvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I
 }
 
 // VSRA vsra.w
-def vsrawvvvmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsrawvvvmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3908,7 +3908,7 @@ def vsrawvvvmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$v
 }
 
 // VSRA vsra.w
-def vsrawvvsmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vsrawvvsmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -3920,7 +3920,7 @@ def vsrawvvsmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$v
 }
 
 // VSRA vsra.w
-def vsrawvvImvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsrawvvImvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$N,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -3954,7 +3954,7 @@ def pvsravvsvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$v
 }
 
 // VSRA pvsra
-def pvsravvvMvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+def pvsravvvMvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsra $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -3967,7 +3967,7 @@ def pvsravvvMvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM512:$vm, V64
 }
 
 // VSRA pvsra
-def pvsravvsMvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512:$vm, V64:$vd, I32:$vl),
+def pvsravvsMvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvsra $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -4009,7 +4009,7 @@ def vsralvvIvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I
 }
 
 // VSRAX vsra.l
-def vsralvvvmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsralvvvmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4020,7 +4020,7 @@ def vsralvvvmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, V64:$vy, VM:$vm, V64:$v
 }
 
 // VSRAX vsra.l
-def vsralvvsmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$vd, I32:$vl),
+def vsralvvsmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM_:$vm, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$sy,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -4032,7 +4032,7 @@ def vsralvvsmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$v
 }
 
 // VSRAX vsra.l
-def vsralvvImvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsralvvImvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$N,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4062,7 +4062,7 @@ def vsfavvIsvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, V
 }
 
 // VSFA vsfa
-def vsfavvssmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vsfavvssmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
        "vsfa $vx,$vz,$sy,$sz,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -4074,7 +4074,7 @@ def vsfavvssmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$v
 }
 
 // VSFA vsfa
-def vsfavvIsmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vsfavvIsmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
        "vsfa $vx,$vz,$I,$sz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4103,7 +4103,7 @@ def vfadddvsvvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFAD vfadd.d
-def vfadddvvvmvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfadddvvvmvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfadd.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4114,7 +4114,7 @@ def vfadddvvvmvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFAD vfadd.d
-def vfadddvsvmvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfadddvsvmvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfadd.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4143,7 +4143,7 @@ def vfaddsvsvvl : RV<0xcc, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFAD vfadd.s
-def vfaddsvvvmvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfaddsvvvmvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfadd.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4154,7 +4154,7 @@ def vfaddsvvvmvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFAD vfadd.s
-def vfaddsvsvmvl : RV<0xcc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfaddsvsvmvl : RV<0xcc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfadd.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4187,7 +4187,7 @@ def pvfaddvsvvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFAD pvfadd
-def pvfaddvvvMvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfaddvvvMvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfadd $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4200,7 +4200,7 @@ def pvfaddvvvMvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VFAD pvfadd
-def pvfaddvsvMvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfaddvsvMvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfadd $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4231,7 +4231,7 @@ def vfsubdvsvvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFSB vfsub.d
-def vfsubdvvvmvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfsubdvvvmvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfsub.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4242,7 +4242,7 @@ def vfsubdvvvmvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFSB vfsub.d
-def vfsubdvsvmvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfsubdvsvmvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfsub.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4271,7 +4271,7 @@ def vfsubsvsvvl : RV<0xdc, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFSB vfsub.s
-def vfsubsvvvmvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfsubsvvvmvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfsub.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4282,7 +4282,7 @@ def vfsubsvvvmvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFSB vfsub.s
-def vfsubsvsvmvl : RV<0xdc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfsubsvsvmvl : RV<0xdc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfsub.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4315,7 +4315,7 @@ def pvfsubvsvvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFSB pvfsub
-def pvfsubvvvMvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfsubvvvMvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfsub $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4328,7 +4328,7 @@ def pvfsubvvvMvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VFSB pvfsub
-def pvfsubvsvMvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfsubvsvMvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfsub $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4359,7 +4359,7 @@ def vfmuldvsvvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFMP vfmul.d
-def vfmuldvvvmvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmuldvvvmvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmul.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4370,7 +4370,7 @@ def vfmuldvvvmvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFMP vfmul.d
-def vfmuldvsvmvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmuldvsvmvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmul.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4399,7 +4399,7 @@ def vfmulsvsvvl : RV<0xcd, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFMP vfmul.s
-def vfmulsvvvmvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmulsvvvmvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmul.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4410,7 +4410,7 @@ def vfmulsvvvmvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFMP vfmul.s
-def vfmulsvsvmvl : RV<0xcd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmulsvsvmvl : RV<0xcd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmul.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4443,7 +4443,7 @@ def pvfmulvsvvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFMP pvfmul
-def pvfmulvvvMvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmulvvvMvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmul $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4456,7 +4456,7 @@ def pvfmulvvvMvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VFMP pvfmul
-def pvfmulvsvMvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmulvsvMvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmul $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4487,7 +4487,7 @@ def vfdivdvsvvl : RV<0xdd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFDV vfdiv.d
-def vfdivdvvvmvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfdivdvvvmvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfdiv.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4498,7 +4498,7 @@ def vfdivdvvvmvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFDV vfdiv.d
-def vfdivdvsvmvl : RV<0xdd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfdivdvsvmvl : RV<0xdd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfdiv.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4527,7 +4527,7 @@ def vfdivsvsvvl : RV<0xdd, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFDV vfdiv.s
-def vfdivsvvvmvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfdivsvvvmvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfdiv.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4538,7 +4538,7 @@ def vfdivsvvvmvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFDV vfdiv.s
-def vfdivsvsvmvl : RV<0xdd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfdivsvsvmvl : RV<0xdd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfdiv.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4585,7 +4585,7 @@ def vfcmpdvsvvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCP vfcmp.d
-def vfcmpdvvvmvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfcmpdvvvmvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfcmp.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4596,7 +4596,7 @@ def vfcmpdvvvmvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFCP vfcmp.d
-def vfcmpdvsvmvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfcmpdvsvmvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfcmp.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4625,7 +4625,7 @@ def vfcmpsvsvvl : RV<0xfc, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCP vfcmp.s
-def vfcmpsvvvmvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfcmpsvvvmvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfcmp.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4636,7 +4636,7 @@ def vfcmpsvvvmvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFCP vfcmp.s
-def vfcmpsvsvmvl : RV<0xfc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfcmpsvsvmvl : RV<0xfc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfcmp.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4669,7 +4669,7 @@ def pvfcmpvsvvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCP pvfcmp
-def pvfcmpvvvMvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfcmpvvvMvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfcmp $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4682,7 +4682,7 @@ def pvfcmpvvvMvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VFCP pvfcmp
-def pvfcmpvsvMvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfcmpvsvMvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfcmp $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4713,7 +4713,7 @@ def vfmaxdvsvvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCM vfmax.d
-def vfmaxdvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmaxdvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmax.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4724,7 +4724,7 @@ def vfmaxdvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFCM vfmax.d
-def vfmaxdvsvmvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmaxdvsvmvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmax.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4753,7 +4753,7 @@ def vfmaxsvsvvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCM vfmax.s
-def vfmaxsvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmaxsvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmax.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4764,7 +4764,7 @@ def vfmaxsvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFCM vfmax.s
-def vfmaxsvsvmvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmaxsvsvmvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmax.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4797,7 +4797,7 @@ def pvfmaxvsvvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCM pvfmax
-def pvfmaxvvvMvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmaxvvvMvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmax $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4810,7 +4810,7 @@ def pvfmaxvvvMvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VFCM pvfmax
-def pvfmaxvsvMvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmaxvsvMvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmax $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4841,7 +4841,7 @@ def vfmindvsvvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCM vfmin.d
-def vfmindvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmindvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmin.d $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4852,7 +4852,7 @@ def vfmindvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFCM vfmin.d
-def vfmindvsvmvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfmindvsvmvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmin.d $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4881,7 +4881,7 @@ def vfminsvsvvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCM vfmin.s
-def vfminsvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfminsvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmin.s $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4892,7 +4892,7 @@ def vfminsvvvmvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$
 }
 
 // VFCM vfmin.s
-def vfminsvsvmvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vfminsvsvmvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vfmin.s $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4925,7 +4925,7 @@ def pvfminvsvvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$
 }
 
 // VFCM pvfmin
-def pvfminvvvMvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfminvvvMvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmin $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4938,7 +4938,7 @@ def pvfminvvvMvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V6
 }
 
 // VFCM pvfmin
-def pvfminvsvMvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def pvfminvsvMvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmin $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -4979,7 +4979,7 @@ def vfmaddvvsvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64:
 }
 
 // VFMAD vfmad.d
-def vfmaddvvvvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmaddvvvvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmad.d $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -4990,7 +4990,7 @@ def vfmaddvvvvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMAD vfmad.d
-def vfmaddvsvvmvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmaddvsvvmvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmad.d $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5001,7 +5001,7 @@ def vfmaddvsvvmvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMAD vfmad.d
-def vfmaddvvsvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmaddvvsvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmad.d $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5041,7 +5041,7 @@ def vfmadsvvsvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, V64:
 }
 
 // VFMAD vfmad.s
-def vfmadsvvvvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmadsvvvvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmad.s $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5052,7 +5052,7 @@ def vfmadsvvvvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMAD vfmad.s
-def vfmadsvsvvmvl : RV<0xe2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmadsvsvvmvl : RV<0xe2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmad.s $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5063,7 +5063,7 @@ def vfmadsvsvvmvl : RV<0xe2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMAD vfmad.s
-def vfmadsvvsvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmadsvvsvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmad.s $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5109,7 +5109,7 @@ def pvfmadvvsvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64:
 }
 
 // VFMAD pvfmad
-def pvfmadvvvvMvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmadvvvvMvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmad $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5122,7 +5122,7 @@ def pvfmadvvvvMvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM5
 }
 
 // VFMAD pvfmad
-def pvfmadvsvvMvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmadvsvvMvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmad $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5135,7 +5135,7 @@ def pvfmadvsvvMvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM5
 }
 
 // VFMAD pvfmad
-def pvfmadvvsvMvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmadvvsvMvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmad $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5177,7 +5177,7 @@ def vfmsbdvvsvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64:
 }
 
 // VFMSB vfmsb.d
-def vfmsbdvvvvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmsbdvvvvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmsb.d $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5188,7 +5188,7 @@ def vfmsbdvvvvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMSB vfmsb.d
-def vfmsbdvsvvmvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmsbdvsvvmvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmsb.d $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5199,7 +5199,7 @@ def vfmsbdvsvvmvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMSB vfmsb.d
-def vfmsbdvvsvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmsbdvvsvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmsb.d $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5239,7 +5239,7 @@ def vfmsbsvvsvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, V64:
 }
 
 // VFMSB vfmsb.s
-def vfmsbsvvvvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmsbsvvvvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmsb.s $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5250,7 +5250,7 @@ def vfmsbsvvvvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMSB vfmsb.s
-def vfmsbsvsvvmvl : RV<0xf2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmsbsvsvvmvl : RV<0xf2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmsb.s $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5261,7 +5261,7 @@ def vfmsbsvsvvmvl : RV<0xf2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM:
 }
 
 // VFMSB vfmsb.s
-def vfmsbsvvsvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfmsbsvvsvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfmsb.s $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5307,7 +5307,7 @@ def pvfmsbvvsvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64:
 }
 
 // VFMSB pvfmsb
-def pvfmsbvvvvMvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmsbvvvvMvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmsb $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5320,7 +5320,7 @@ def pvfmsbvvvvMvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM5
 }
 
 // VFMSB pvfmsb
-def pvfmsbvsvvMvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmsbvsvvMvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmsb $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5333,7 +5333,7 @@ def pvfmsbvsvvMvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM5
 }
 
 // VFMSB pvfmsb
-def pvfmsbvvsvMvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfmsbvvsvMvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfmsb $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5375,7 +5375,7 @@ def vfnmaddvvsvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64
 }
 
 // VFNMAD vfnmad.d
-def vfnmaddvvvvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmaddvvvvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmad.d $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5386,7 +5386,7 @@ def vfnmaddvvvvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMAD vfnmad.d
-def vfnmaddvsvvmvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmaddvsvvmvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmad.d $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5397,7 +5397,7 @@ def vfnmaddvsvvmvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMAD vfnmad.d
-def vfnmaddvvsvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmaddvvsvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmad.d $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5437,7 +5437,7 @@ def vfnmadsvvsvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, V64
 }
 
 // VFNMAD vfnmad.s
-def vfnmadsvvvvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmadsvvvvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmad.s $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5448,7 +5448,7 @@ def vfnmadsvvvvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMAD vfnmad.s
-def vfnmadsvsvvmvl : RV<0xe3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmadsvsvvmvl : RV<0xe3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmad.s $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5459,7 +5459,7 @@ def vfnmadsvsvvmvl : RV<0xe3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMAD vfnmad.s
-def vfnmadsvvsvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmadsvvsvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmad.s $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5505,7 +5505,7 @@ def pvfnmadvvsvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64
 }
 
 // VFNMAD pvfnmad
-def pvfnmadvvvvMvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfnmadvvvvMvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfnmad $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5518,7 +5518,7 @@ def pvfnmadvvvvMvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMAD pvfnmad
-def pvfnmadvsvvMvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfnmadvsvvMvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfnmad $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5531,7 +5531,7 @@ def pvfnmadvsvvMvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMAD pvfnmad
-def pvfnmadvvsvMvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfnmadvvsvMvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfnmad $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5573,7 +5573,7 @@ def vfnmsbdvvsvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64
 }
 
 // VFNMSB vfnmsb.d
-def vfnmsbdvvvvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmsbdvvvvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmsb.d $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5584,7 +5584,7 @@ def vfnmsbdvvvvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMSB vfnmsb.d
-def vfnmsbdvsvvmvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmsbdvsvvmvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmsb.d $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5595,7 +5595,7 @@ def vfnmsbdvsvvmvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMSB vfnmsb.d
-def vfnmsbdvvsvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmsbdvvsvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmsb.d $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5635,7 +5635,7 @@ def vfnmsbsvvsvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, V64
 }
 
 // VFNMSB vfnmsb.s
-def vfnmsbsvvvvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmsbsvvvvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmsb.s $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5646,7 +5646,7 @@ def vfnmsbsvvvvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMSB vfnmsb.s
-def vfnmsbsvsvvmvl : RV<0xf3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmsbsvsvvmvl : RV<0xf3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmsb.s $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5657,7 +5657,7 @@ def vfnmsbsvsvvmvl : RV<0xf3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMSB vfnmsb.s
-def vfnmsbsvvsvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM:$vm, V64:$vd, I32:$vl),
+def vfnmsbsvvsvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM_:$vm, V64:$vd, I32:$vl),
        "vfnmsb.s $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5703,7 +5703,7 @@ def pvfnmsbvvsvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, V64
 }
 
 // VFNMSB pvfnmsb
-def pvfnmsbvvvvMvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfnmsbvvvvMvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfnmsb $vx,$vy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5716,7 +5716,7 @@ def pvfnmsbvvvvMvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMSB pvfnmsb
-def pvfnmsbvsvvMvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfnmsbvsvvMvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfnmsb $vx,$sy,$vz,$vw,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5729,7 +5729,7 @@ def pvfnmsbvsvvMvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, VM
 }
 
 // VFNMSB pvfnmsb
-def pvfnmsbvvsvMvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512:$vm, V64:$vd, I32:$vl),
+def pvfnmsbvvsvMvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM512_:$vm, V64:$vd, I32:$vl),
        "pvfnmsb $vx,$vy,$sy,$vw,$vm", [], NoItinerary>
 {
   let cs = 1;
@@ -5810,7 +5810,7 @@ def vcvtwdsxvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.d.sx
-def vcvtwdsxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwdsxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.d.sx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5830,7 +5830,7 @@ def vcvtwdsxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.d.sx.rz
-def vcvtwdsxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwdsxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.d.sx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5850,7 +5850,7 @@ def vcvtwdzxvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.d.zx
-def vcvtwdzxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwdzxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.d.zx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5870,7 +5870,7 @@ def vcvtwdzxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.d.zx.rz
-def vcvtwdzxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwdzxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.d.zx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5890,7 +5890,7 @@ def vcvtwssxvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.s.sx
-def vcvtwssxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwssxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.s.sx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5910,7 +5910,7 @@ def vcvtwssxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.s.sx.rz
-def vcvtwssxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwssxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.s.sx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5930,7 +5930,7 @@ def vcvtwszxvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.s.zx
-def vcvtwszxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwszxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.s.zx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5950,7 +5950,7 @@ def vcvtwszxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX vcvt.w.s.zx.rz
-def vcvtwszxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtwszxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.w.s.zx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -5972,7 +5972,7 @@ def pvcvtwsvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX pvcvt.w.s
-def pvcvtwsvvMvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+def pvcvtwsvvMvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvcvt.w.s $vx,$vy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -5996,7 +5996,7 @@ def pvcvtwsrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIX pvcvt.w.s.rz
-def pvcvtwsrzvvMvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+def pvcvtwsrzvvMvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM512_:$vm, V64:$vd, I32:$vl),
        "pvcvt.w.s.rz $vx,$vy,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -6018,7 +6018,7 @@ def vcvtldvvvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIXX vcvt.l.d
-def vcvtldvvmvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtldvvmvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.l.d $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6038,7 +6038,7 @@ def vcvtldrzvvvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFIXX vcvt.l.d.rz
-def vcvtldrzvvmvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vcvtldrzvvmvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vcvt.l.d.rz $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6105,7 +6105,7 @@ def vcvtsdvvvl : RV<0x9f, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VMRG vmrg
-def vmrgvvvmvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmrgvvvmvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmrg $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6116,7 +6116,7 @@ def vmrgvvvmvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd
 }
 
 // VMRG vmrg.w
-def vmrgwvvvMvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+def vmrgwvvvMvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "vmrg.w $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let cx = 1;
@@ -6147,7 +6147,7 @@ def vshfvvvIvl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7Op64:$N, V
 }
 
 // VCP vcp
-def vcpvvmvl : RV<0x8d, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcpvvmvl : RV<0x8d, (outs V64:$vx), (ins V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vcp $vx,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6158,7 +6158,7 @@ def vcpvvmvl : RV<0x8d, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd, I32:$vl),
 }
 
 // VEX vex
-def vexvvmvl : RV<0x9d, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vexvvmvl : RV<0x9d, (outs V64:$vx), (ins V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vex $vx,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6168,26 +6168,8 @@ def vexvvmvl : RV<0x9d, (outs V64:$vx), (ins V64:$vz, VM:$vm, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VFMK vfmk.l
-def vfmklmcvl : RV<0xb4, (outs VM:$vm), (ins CCOp:$cc, V64:$vz, I32:$vl),
-       "vfmk.l $vm,$cc,$vz", [], NoItinerary>
-{
-  let DecoderNamespace = "VEL";
-  let DisableEncoding = "$vl";
-}
-
-// VFMK vfmk.l
-def vfmklmcvml : RV<0xb4, (outs VM:$vmx), (ins CCOp:$cc, V64:$vz, VM:$vm, I32:$vl),
-       "vfmk.l $vmx,$cc,$vz,$vm", [], NoItinerary>
-{
-  bits<4> vm;
-  let m = vm;
-  let DecoderNamespace = "VEL";
-  let DisableEncoding = "$vl";
-}
-
 // VFMK vfmk.at
-def vfmkatml : RV<0xb4, (outs VM:$vm), (ins I32:$vl),
+def vfmkatml : RV<0xb4, (outs VM_:$vm), (ins I32:$vl),
        "vfmk.at $vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6195,42 +6177,24 @@ def vfmkatml : RV<0xb4, (outs VM:$vm), (ins I32:$vl),
 }
 
 // VFMK vfmk.af
-def vfmkafml : RV<0xb4, (outs VM:$vm), (ins I32:$vl),
+def vfmkafml : RV<0xb4, (outs VM_:$vm), (ins I32:$vl),
        "vfmk.af $vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let DisableEncoding = "$vl";
 }
 
-// VFMS vfmk.w
-def vfmkwmcvl : RV<0xb4, (outs VM:$vm), (ins CCOp:$cc, V64:$vz, I32:$vl),
-       "vfmk.w $vm,$cc,$vz", [], NoItinerary>
+// VFMK vfmk.l.gt
+def vfmklgtmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.gt $vm,$vz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let DisableEncoding = "$vl";
 }
 
-// VFMS vfmk.w
-def vfmkwmcvml : RV<0xb4, (outs VM:$vmx), (ins CCOp:$cc, V64:$vz, VM:$vm, I32:$vl),
-       "vfmk.w $vmx,$cc,$vz,$vm", [], NoItinerary>
-{
-  bits<4> vm;
-  let m = vm;
-  let DecoderNamespace = "VEL";
-  let DisableEncoding = "$vl";
-}
-
-// VFMF vfmk.d
-def vfmkdmcvl : RV<0xb4, (outs VM:$vm), (ins CCOp:$cc, V64:$vz, I32:$vl),
-       "vfmk.d $vm,$cc,$vz", [], NoItinerary>
-{
-  let DecoderNamespace = "VEL";
-  let DisableEncoding = "$vl";
-}
-
-// VFMF vfmk.d
-def vfmkdmcvml : RV<0xb4, (outs VM:$vmx), (ins CCOp:$cc, V64:$vz, VM:$vm, I32:$vl),
-       "vfmk.d $vmx,$cc,$vz,$vm", [], NoItinerary>
+// VFMK vfmk.l.gt
+def vfmklgtmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.gt $vmx,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
   let m = vm;
@@ -6238,17 +6202,845 @@ def vfmkdmcvml : RV<0xb4, (outs VM:$vmx), (ins CCOp:$cc, V64:$vz, VM:$vm, I32:$v
   let DisableEncoding = "$vl";
 }
 
-// VFMF vfmk.s
-def vfmksmcvl : RV<0xb4, (outs VM:$vm), (ins CCOp:$cc, V64:$vz, I32:$vl),
-       "vfmk.s $vm,$cc,$vz", [], NoItinerary>
+// VFMK vfmk.l.lt
+def vfmklltmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.lt $vm,$vz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let DisableEncoding = "$vl";
 }
 
-// VFMF vfmk.s
-def vfmksmcvml : RV<0xb4, (outs VM:$vmx), (ins CCOp:$cc, V64:$vz, VM:$vm, I32:$vl),
-       "vfmk.s $vmx,$cc,$vz,$vm", [], NoItinerary>
+// VFMK vfmk.l.lt
+def vfmklltmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.lt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.ne
+def vfmklnemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.ne $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.ne
+def vfmklnemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.ne $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.eq
+def vfmkleqmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.eq $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.eq
+def vfmkleqmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.eq $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.ge
+def vfmklgemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.ge $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.ge
+def vfmklgemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.ge $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.le
+def vfmkllemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.le $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.le
+def vfmkllemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.le $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.num
+def vfmklnummvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.num $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.num
+def vfmklnummvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.num $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.nan
+def vfmklnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.nan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.nan
+def vfmklnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.nan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.gtnan
+def vfmklgtnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.gtnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.gtnan
+def vfmklgtnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.gtnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.ltnan
+def vfmklltnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.ltnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.ltnan
+def vfmklltnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.ltnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.nenan
+def vfmklnenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.nenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.nenan
+def vfmklnenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.nenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.lenan
+def vfmkllenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.l.lenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMK vfmk.l.lenan
+def vfmkllenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.l.lenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.gt
+def vfmkwgtmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.gt $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.gt
+def vfmkwgtmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.gt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.lt
+def vfmkwltmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.lt $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.lt
+def vfmkwltmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.lt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.ne
+def vfmkwnemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.ne $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.ne
+def vfmkwnemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.ne $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.eq
+def vfmkweqmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.eq $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.eq
+def vfmkweqmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.eq $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.ge
+def vfmkwgemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.ge $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.ge
+def vfmkwgemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.ge $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.le
+def vfmkwlemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.le $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.le
+def vfmkwlemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.le $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.num
+def vfmkwnummvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.num $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.num
+def vfmkwnummvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.num $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.nan
+def vfmkwnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.nan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.nan
+def vfmkwnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.nan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.gtnan
+def vfmkwgtnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.gtnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.gtnan
+def vfmkwgtnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.gtnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.ltnan
+def vfmkwltnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.ltnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.ltnan
+def vfmkwltnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.ltnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.nenan
+def vfmkwnenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.nenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.nenan
+def vfmkwnenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.nenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.lenan
+def vfmkwlenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.w.lenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMS vfmk.w.lenan
+def vfmkwlenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.w.lenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.gt
+def vfmkdgtmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.gt $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.gt
+def vfmkdgtmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.gt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.lt
+def vfmkdltmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.lt $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.lt
+def vfmkdltmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.lt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.ne
+def vfmkdnemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.ne $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.ne
+def vfmkdnemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.ne $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.eq
+def vfmkdeqmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.eq $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.eq
+def vfmkdeqmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.eq $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.ge
+def vfmkdgemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.ge $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.ge
+def vfmkdgemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.ge $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.le
+def vfmkdlemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.le $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.le
+def vfmkdlemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.le $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.num
+def vfmkdnummvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.num $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.num
+def vfmkdnummvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.num $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.nan
+def vfmkdnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.nan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.nan
+def vfmkdnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.nan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.gtnan
+def vfmkdgtnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.gtnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.gtnan
+def vfmkdgtnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.gtnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.ltnan
+def vfmkdltnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.ltnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.ltnan
+def vfmkdltnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.ltnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.nenan
+def vfmkdnenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.nenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.nenan
+def vfmkdnenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.nenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.lenan
+def vfmkdlenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.d.lenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.d.lenan
+def vfmkdlenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.d.lenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.gt
+def vfmksgtmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.gt $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.gt
+def vfmksgtmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.gt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.lt
+def vfmksltmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.lt $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.lt
+def vfmksltmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.lt $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.ne
+def vfmksnemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.ne $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.ne
+def vfmksnemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.ne $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.eq
+def vfmkseqmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.eq $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.eq
+def vfmkseqmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.eq $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.ge
+def vfmksgemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.ge $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.ge
+def vfmksgemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.ge $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.le
+def vfmkslemvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.le $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.le
+def vfmkslemvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.le $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.num
+def vfmksnummvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.num $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.num
+def vfmksnummvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.num $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.nan
+def vfmksnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.nan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.nan
+def vfmksnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.nan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.gtnan
+def vfmksgtnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.gtnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.gtnan
+def vfmksgtnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.gtnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.ltnan
+def vfmksltnanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.ltnan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.ltnan
+def vfmksltnanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.ltnan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.nenan
+def vfmksnenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.nenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.nenan
+def vfmksnenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.nenan $vmx,$vz,$vm", [], NoItinerary>
+{
+  bits<4> vm;
+  let m = vm;
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.lenan
+def vfmkslenanmvl : RV<0xb4, (outs VM_:$vm), (ins V64:$vz, I32:$vl),
+       "vfmk.s.lenan $vm,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let DisableEncoding = "$vl";
+}
+
+// VFMF vfmk.s.lenan
+def vfmkslenanmvml : RV<0xb4, (outs VM_:$vmx), (ins V64:$vz, VM_:$vm, I32:$vl),
+       "vfmk.s.lenan $vmx,$vz,$vm", [], NoItinerary>
 {
   bits<4> vm;
   let m = vm;
@@ -6266,7 +7058,7 @@ def vsumwsxvvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VSUMS vsum.w.sx
-def vsumwsxvvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsumwsxvvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsum.w.sx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6286,7 +7078,7 @@ def vsumwzxvvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VSUMS vsum.w.zx
-def vsumwzxvvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsumwzxvvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsum.w.zx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6306,7 +7098,7 @@ def vsumlvvvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VSUMX vsum.l
-def vsumlvvmvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vsumlvvmvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vsum.l $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6326,7 +7118,7 @@ def vfsumdvvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFSUM vfsum.d
-def vfsumdvvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vfsumdvvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vfsum.d $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6346,7 +7138,7 @@ def vfsumsvvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VFSUM vfsum.s
-def vfsumsvvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vfsumsvvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vfsum.s $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6546,7 +7338,7 @@ def vgtvvvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VGT vgt
-def vgtvvmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vgtvvmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6566,7 +7358,7 @@ def vgtuvvvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VGTU vgtu
-def vgtuvvmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vgtuvvmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6586,7 +7378,7 @@ def vgtlsxvvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VGTL vgtl.sx
-def vgtlsxvvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsxvvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6606,7 +7398,7 @@ def vgtlzxvvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
 }
 
 // VGTL vgtl.zx
-def vgtlzxvvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzxvvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6625,7 +7417,7 @@ def vscvvl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I32:$vl),
 }
 
 // VSC vsc
-def vscvvml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
+def vscvvml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
        "vsc $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6643,7 +7435,7 @@ def vscotvvl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I32:$vl),
 }
 
 // VSC vsc.ot
-def vscotvvml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
+def vscotvvml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
        "vsc.ot $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6661,7 +7453,7 @@ def vscuvvl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I32:$vl),
 }
 
 // VSCU vscu
-def vscuvvml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
+def vscuvvml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
        "vscu $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6679,7 +7471,7 @@ def vscuotvvl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I32:$vl),
 }
 
 // VSCU vscu.ot
-def vscuotvvml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
+def vscuotvvml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
        "vscu.ot $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6697,7 +7489,7 @@ def vsclvvl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I32:$vl),
 }
 
 // VSCL vscl
-def vsclvvml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
+def vsclvvml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
        "vscl $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6715,7 +7507,7 @@ def vsclotvvl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I32:$vl),
 }
 
 // VSCL vscl.ot
-def vsclotvvml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
+def vsclotvvml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
        "vscl.ot $vx,$vy,$vm", [], NoItinerary>
 {
   bits<4> vm;
@@ -6725,7 +7517,7 @@ def vsclotvvml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, VM:$vm, I32:$vl),
 }
 
 // ANDM andm
-def andmmmml : RV<0x84, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
+def andmmmml : RV<0x84, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
        "andm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6733,7 +7525,7 @@ def andmmmml : RV<0x84, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
 }
 
 // ANDM andm
-def andmMMMl : RV<0x84, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl),
+def andmMMMl : RV<0x84, (outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
        "andm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6741,7 +7533,7 @@ def andmMMMl : RV<0x84, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl)
 }
 
 // ORM orm
-def ormmmml : RV<0x85, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
+def ormmmml : RV<0x85, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
        "orm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6749,7 +7541,7 @@ def ormmmml : RV<0x85, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
 }
 
 // ORM orm
-def ormMMMl : RV<0x85, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl),
+def ormMMMl : RV<0x85, (outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
        "orm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6757,7 +7549,7 @@ def ormMMMl : RV<0x85, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl),
 }
 
 // XORM xorm
-def xormmmml : RV<0x86, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
+def xormmmml : RV<0x86, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
        "xorm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6765,7 +7557,7 @@ def xormmmml : RV<0x86, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
 }
 
 // XORM xorm
-def xormMMMl : RV<0x86, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl),
+def xormMMMl : RV<0x86, (outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
        "xorm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6773,7 +7565,7 @@ def xormMMMl : RV<0x86, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl)
 }
 
 // EQVM eqvm
-def eqvmmmml : RV<0x87, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
+def eqvmmmml : RV<0x87, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
        "eqvm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6781,7 +7573,7 @@ def eqvmmmml : RV<0x87, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
 }
 
 // EQVM eqvm
-def eqvmMMMl : RV<0x87, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl),
+def eqvmMMMl : RV<0x87, (outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
        "eqvm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6789,7 +7581,7 @@ def eqvmMMMl : RV<0x87, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl)
 }
 
 // NNDM nndm
-def nndmmmml : RV<0x94, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
+def nndmmmml : RV<0x94, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
        "nndm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6797,7 +7589,7 @@ def nndmmmml : RV<0x94, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz, I32:$vl),
 }
 
 // NNDM nndm
-def nndmMMMl : RV<0x94, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl),
+def nndmMMMl : RV<0x94, (outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
        "nndm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6805,7 +7597,7 @@ def nndmMMMl : RV<0x94, (outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz, I32:$vl)
 }
 
 // NEGM negm
-def negmmml : RV<0x95, (outs VM:$vmx), (ins VM:$vmy, I32:$vl),
+def negmmml : RV<0x95, (outs VM_:$vmx), (ins VM_:$vmy, I32:$vl),
        "negm $vmx,$vmy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6813,7 +7605,7 @@ def negmmml : RV<0x95, (outs VM:$vmx), (ins VM:$vmy, I32:$vl),
 }
 
 // NEGM negm
-def negmMMl : RV<0x95, (outs VM512:$vmx), (ins VM512:$vmy, I32:$vl),
+def negmMMl : RV<0x95, (outs VM512_:$vmx), (ins VM512_:$vmy, I32:$vl),
        "negm $vmx,$vmy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6821,7 +7613,7 @@ def negmMMl : RV<0x95, (outs VM512:$vmx), (ins VM512:$vmy, I32:$vl),
 }
 
 // PCVM pcvm
-def pcvmsml : RV<0xa4, (outs I64:$sx), (ins VM:$vmy, I32:$vl),
+def pcvmsml : RV<0xa4, (outs I64:$sx), (ins VM_:$vmy, I32:$vl),
        "pcvm $sx,$vmy", [], NoItinerary>
 {
   let cx = 1;
@@ -6831,7 +7623,7 @@ def pcvmsml : RV<0xa4, (outs I64:$sx), (ins VM:$vmy, I32:$vl),
 }
 
 // LZVM lzvm
-def lzvmsml : RV<0xa5, (outs I64:$sx), (ins VM:$vmy, I32:$vl),
+def lzvmsml : RV<0xa5, (outs I64:$sx), (ins VM_:$vmy, I32:$vl),
        "lzvm $sx,$vmy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -6839,7 +7631,7 @@ def lzvmsml : RV<0xa5, (outs I64:$sx), (ins VM:$vmy, I32:$vl),
 }
 
 // TOVM tovm
-def tovmsml : RV<0xa6, (outs I64:$sx), (ins VM:$vmy, I32:$vl),
+def tovmsml : RV<0xa6, (outs I64:$sx), (ins VM_:$vmy, I32:$vl),
        "tovm $sx,$vmy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";

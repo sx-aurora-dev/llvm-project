@@ -10,7 +10,7 @@ class Type:
     def __init__(self, ValueType, builtinCode, intrinDefType, ctype, elemType = None):
         self.ValueType = ValueType  # v256f64, f64, f32, i64, ...
         self.builtinCode = builtinCode  # V256d, d, f, ...
-        self.intrinDefType = intrinDefType
+        self.intrinDefType = intrinDefType # LLVMType<f64>, ...
         self.ctype = ctype
         self.elemType = elemType
 
@@ -129,16 +129,16 @@ def VD(ty): return VOp(ty, "vd")
 
 #VL = Op("l", T_u32, "vl", "VLS")
 VL = Op("l", T_u32, "vl", "I32")
-VM = Op("m", T_v4u64, "vm", "VM")
-VMX = Op("m", T_v4u64, "vmx", "VM")
-VMY = Op("m", T_v4u64, "vmy", "VM")
-VMZ = Op("m", T_v4u64, "vmz", "VM")
-VMD = Op("m", T_v4u64, "vmd", "VM")
-VM512 = Op("M", T_v8u64, "vm", "VM512")
-VMX512 = Op("M", T_v8u64, "vmx", "VM512")
-VMY512 = Op("M", T_v8u64, "vmy", "VM512")
-VMZ512 = Op("M", T_v8u64, "vmz", "VM512")
-VMD512 = Op("M", T_v8u64, "vmd", "VM512")
+VM = Op("m", T_v4u64, "vm", "VM_")
+VMX = Op("m", T_v4u64, "vmx", "VM_")
+VMY = Op("m", T_v4u64, "vmy", "VM_")
+VMZ = Op("m", T_v4u64, "vmz", "VM_")
+VMD = Op("m", T_v4u64, "vmd", "VM_")
+VM512 = Op("M", T_v8u64, "vm", "VM512_")
+VMX512 = Op("M", T_v8u64, "vmx", "VM512_")
+VMY512 = Op("M", T_v8u64, "vmy", "VM512_")
+VMZ512 = Op("M", T_v8u64, "vmz", "VM512_")
+VMD512 = Op("M", T_v8u64, "vmd", "VM512_")
 CCOp = Op("c", T_u32, "cc", "CCOp")
 
 class ImmOp(Op):
@@ -150,15 +150,6 @@ def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
 def ImmN(ty): return ImmOp("I", ty, "N", "uimm6")
 def UImm7(ty): return ImmOp("I", ty, "N", "uimm7")
 def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7") # FIXME: simm7?
-
-#class OL(list):
-#    def __init__(self):
-#        super(OL, self).__init__(self)
-#
-#    def __init__(self, l):
-#        super(OL, self).__init__(self)
-#        for i in l:
-#            self.append(i)
 
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
 def Args_vsv(tyV, tyS = None): 
@@ -405,13 +396,13 @@ class InstVEL(Inst):
 
     def pattern(self):
         s = None
-        if self.hasInst()and self.hasPat():
+        if self.hasInst()and self.hasPat() and (not self.isPseudo()):
             argsL = ", ".join([op.dagOp() for op in self.ins])
             argsR = ", ".join([op.dagOp() for op in self.ins])
             tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
             l = "({} {})".format(tmp, argsL)
             r = "({} {})".format(self.llvmInst(), argsR)
-            if self.isOldLowering() and (not self.hasMask()):
+            if self.isOldLowering(): #and (not self.hasMask()):
                 s = "def : Pat<{}, {}>;".format(l, r)
         return s
 
@@ -931,6 +922,8 @@ class InstTable:
 
                "m"    : "", # VFMK at, af
                "M"    : "", # VFMKp at, af
+               "mv"   : "", # VFMKw when VL
+               "mvm"  : "", # VFMKw when VL
                "mcv"  : "v",
                "mcvm" : "vm",
                "Mcv"  : "v",
@@ -1420,18 +1413,43 @@ def createInstructionTable(isVL):
     T.InstX(0xBC, "VSHF", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
     T.InstX(0x8D, "VCP", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     T.InstX(0x9D, "VEX", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
-    T.VFMKm(0xB4, "VFMK", "vfmk.l")
-    T.InstX(0xB4, "VFMKat", "vfmk.at", [[VM]]).noTest()
-    T.InstX(0xB4, "VFMKaf", "vfmk.af", [[VM]]).noTest()
-    T.InstX(None, "VFMKpat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
-    T.InstX(None, "VFMKpaf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
-    T.VFMKm(0xB4, "VFMS", "vfmk.w")
-    T.InstX(None, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
-    T.InstX(None, "VFMSp", "pvfmk.w", [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
-    T.VFMKm(0xB4, "VFMFd", "vfmk.d")
-    T.VFMKm(0xB4, "VFMFs", "vfmk.s")
-    T.InstX(None, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
-    T.InstX(None, "VFMFp", "pvfmk.s", [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
+    if isVL:
+      tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "lenan"] 
+      T.InstX(0xB4, "VFMK", "vfmk.at", [[VM]]).noTest()
+      T.InstX(0xB4, "VFMK", "vfmk.af", [[VM]]).noTest()
+      T.InstX(None, "VFMKpat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
+      T.InstX(None, "VFMKpaf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
+      for cc in tmp:
+        T.InstX(0xB4, "VFMK", "vfmk.l."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.InstX(0xB4, "VFMK", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+      for cc in tmp:
+        T.InstX(0xB4, "VFMS", "vfmk.w."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.InstX(0xB4, "VFMS", "vfmk.w."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+      for cc in tmp:
+        T.InstX(None, "VFMSp", "pvfmk.w."+cc, [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
+        T.InstX(None, "VFMSp", "pvfmk.w."+cc, [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
+      for cc in tmp:
+        T.InstX(0xB4, "VFMFd", "vfmk.d."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.InstX(0xB4, "VFMFd", "vfmk.d."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+      for cc in tmp:
+        T.InstX(0xB4, "VFMFs", "vfmk.s."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.InstX(0xB4, "VFMFs", "vfmk.s."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+      for cc in tmp:
+        T.InstX(None, "VFMFp", "pvfmk.s."+cc, [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
+        T.InstX(None, "VFMFp", "pvfmk.s."+cc, [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
+    else:
+      T.VFMKm(0xB4, "VFMK", "vfmk.l")
+      T.InstX(0xB4, "VFMKat", "vfmk.at", [[VM]]).noTest()
+      T.InstX(0xB4, "VFMKaf", "vfmk.af", [[VM]]).noTest()
+      T.InstX(None, "VFMKpat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
+      T.InstX(None, "VFMKpaf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
+      T.VFMKm(0xB4, "VFMS", "vfmk.w")
+      T.InstX(None, "VFMSp", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
+      T.InstX(None, "VFMSp", "pvfmk.w", [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
+      T.VFMKm(0xB4, "VFMFd", "vfmk.d")
+      T.VFMKm(0xB4, "VFMFs", "vfmk.s")
+      T.InstX(None, "VFMFp", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
+      T.InstX(None, "VFMFp", "pvfmk.s", [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
     
     
     T.Section("5.3.2.13. Vector Recursive Relation Instructions", 32)
