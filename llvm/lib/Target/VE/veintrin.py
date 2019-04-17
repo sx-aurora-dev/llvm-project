@@ -802,10 +802,6 @@ class InstList:
     def add(self, I):
         self.a.append(I)
         return self
-    def Inst(self, opc, inst, ni, asm, intrinsicName, outs, ins, **kwargs):
-        I = self.clazz(opc, inst, ni, asm, intrinsicName, outs, ins, **kwargs)
-        self.add(I)
-        return I
     def __iter__(self):
         return self.a.__iter__()
     def __getattr__(self, attrname):
@@ -1170,23 +1166,6 @@ class InstTable:
         O = [O_v, O_vm]
         self.InstX(opc, inst0, asm, O).noTest().writeMem()
         self.InstX(opc, inst0+"ot", asm+".ot", O).noTest().writeMem().oldLowering()
-        return
-
-        O_v = [VX(T_u64), VY(T_u64)]
-        O_vm = [VX(T_u64), VY(T_u64), VM]
-        #O_s = [VX(T_u64), SW(T_u64)]
-        O = [O_v, O_vm]
-
-        baseIntrinName = re.sub(r'\.', '', asm)
-
-        L = InstList(self.clazz)
-        for op in O:
-            si = self.args_to_inst_suffix(op)
-            sf = self.args_to_func_suffix(op)
-            L.Inst(opc, inst0, inst+si, asm, baseIntrinName+sf, [], op).noTest().writeMem()
-            #self.add(Inst(opc, inst+si, asm, baseIntrinName+sf, [], op, False).noTest().writeMem()
-
-        return self.addList(L)
 
     def VSUM(self, opc, inst, asm, baseOps):
         OL = []
@@ -1507,8 +1486,9 @@ def createInstructionTable(isVL):
     
     
     T.Section("5.3.2.16. Vector Control Instructions", 34)
-    T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")
-    T.NoImpl("SVL")
+    if not isVL:
+      T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")
+      T.NoImpl("SVL")
     T.NoImpl("SMVL")
     T.NoImpl("LVIX")
     
