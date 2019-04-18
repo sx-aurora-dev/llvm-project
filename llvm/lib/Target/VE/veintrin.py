@@ -143,7 +143,9 @@ CCOp = Op("c", T_u32, "cc", "CCOp")
 
 class ImmOp(Op):
     def __init__(self, kind, ty, name, immType):
-        super(ImmOp, self).__init__(kind, ty, name, "simm7Op64") # FIXME: regClass
+        regClass = {T_u32:"simm7Op32", T_i32:"simm7Op32", 
+                    T_u64:"simm7Op64", T_i64:"simm7Op64"}[ty]
+        super(ImmOp, self).__init__(kind, ty, name, regClass) # FIXME: regClass
         self.immType = immType
 
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
