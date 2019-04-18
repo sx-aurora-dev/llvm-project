@@ -423,14 +423,13 @@ def pfchvIsl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // LSV lsv
-def lsvvvssl : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz, I32:$vl),
+def lsvvvss : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz),
        "lsv $vx,$sy,$sz", [], NoItinerary>
 {
   let cs = 1;
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
 // LVS lvs
@@ -450,63 +449,38 @@ def lvsssvs : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
 }
 
 // LVM lvm
-def lvmmmssl : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, I64:$sy, I64:$sz, I32:$vl),
+def lvmmmss : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, I64:$sy, I64:$sz),
        "lvm $vmx,$vmd,$sy,$sz", [], NoItinerary>
 {
   let cs = 1;
+  let Constraints = "$vmx = $vmd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
 // LVM lvm
-def lvmmmIsl : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, simm7Op64:$N, I64:$sz, I32:$vl),
+def lvmmmIs : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, simm7Op64:$N, I64:$sz),
        "lvm $vmx,$vmd,$N,$sz", [], NoItinerary>
 {
+  let Constraints = "$vmx = $vmd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// LVM lvm
-def lvmMMIsl : RV<0xb7, (outs VM512_:$vmx), (ins VM512_:$vmd, simm7Op64:$N, I64:$sz, I32:$vl),
-       "lvm $vmx,$vmd,$N,$sz", [], NoItinerary>
-{
-  let cx = 1;
-  let cx2 = 1;
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
 // SVM svm
-def svmsmsl : RV<0xa7, (outs I64:$sx), (ins VM_:$vmz, I64:$sy, I32:$vl),
+def svmsms : RV<0xa7, (outs I64:$sx), (ins VM_:$vmz, I64:$sy),
        "svm $sx,$vmz,$sy", [], NoItinerary>
 {
-  let cs = 1;
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
 // SVM svm
-def svmsmIl : RV<0xa7, (outs I64:$sx), (ins VM_:$vmz, simm7Op64:$N, I32:$vl),
+def svmsmI : RV<0xa7, (outs I64:$sx), (ins VM_:$vmz, simm7Op64:$N),
        "svm $sx,$vmz,$N", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// SVM svm
-def svmsMIl : RV<0xa7, (outs I64:$sx), (ins VM512_:$vmz, simm7Op64:$N, I32:$vl),
-       "svm $sx,$vmz,$N", [], NoItinerary>
-{
-  let cx = 1;
-  let cx2 = 1;
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
 // VBRD vbrd

@@ -234,6 +234,7 @@ class Inst(object):
         return self.hasLLVMInstDefine_ and (not self.isDummy()) and (not self.isPseudo())
 
     def hasDummyOp(self): return any([op.regName() == "vd" for op in self.ins])
+    def hasDummyMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
     def hasImmOp(self): return any([op.isImm() for op in self.ins])
     def hasVLOp(self): return any([op.isVL() for op in self.ins])
 
@@ -300,6 +301,8 @@ class Inst(object):
             s += '  let m = vm;\n'
         if self.hasDummyOp():
             s += '  let Constraints = "${} = $vd";\n'.format(self.outs[0].regName())
+        if self.hasDummyMaskOp():
+            s += '  let Constraints = "${} = $vmd";\n'.format(self.outs[0].regName())
         s += '  let DecoderNamespace = "VEL";\n'
         s += '  let isCodeGenOnly = 1;\n'
         if self.hasVLOp():
@@ -1315,14 +1318,13 @@ def createInstructionTable(isVL):
     T.InstX(0x80, "PFCHV", "", "pfchv", [[None, SY(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.InstX(0x80, "PFCHV", "", "pfchv", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.InstX(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest()
-    #T.InstX(0x9E, "LVS", "lvs", [[SX(T_u64), VX(T_u64), SY(T_u32)]]).noTest()
     T.LVSm(0x9E, isVL)
-    T.InstX(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]]).noTest()
-    T.InstX(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]]).noTest()
-    T.InstX(0xB7, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]]).noTest()
-    T.InstX(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]]).noTest()
-    T.InstX(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]]).noTest()
-    T.InstX(0xA7, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]]).noTest()
+    T.InstX(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.InstX(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.InstX(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.InstX(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest()
+    T.InstX(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
+    T.InstX(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
     T.VBRDm(0x8C, isVL)
     T.InstX(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
     T.InstX(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
