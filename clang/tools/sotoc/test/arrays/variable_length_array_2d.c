@@ -7,6 +7,7 @@ int main(){
   int sizeX=512;
   int sizeY=512;
   float A[sizeX][sizeY]; 
+  
   #pragma omp target map(tofrom:A[:sizeX][:sizeY])
   {
     int i;

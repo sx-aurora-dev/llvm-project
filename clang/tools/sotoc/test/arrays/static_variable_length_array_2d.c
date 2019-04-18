@@ -17,7 +17,11 @@ int main(){
   }
 
   for (j = 0; j < size; j+=64) {
+<<<<<<< HEAD
     printf("%.2f %.2f ",A[j][0],A[j][1]);
+=======
+    printf("%.2f %.2f",A[j][0],A[j][1]);
+>>>>>>> aurora_offloading_prototype
   }
   return 0;
 }
