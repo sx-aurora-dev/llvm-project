@@ -24,7 +24,9 @@
 #define _vel_lvsd_svs __builtin_ve_vl_lvsd_svs
 #define _vel_lvss_svs __builtin_ve_vl_lvss_svs
 #define _vel_lvm_mmss __builtin_ve_vl_lvm_mmss
+#define _vel_lvm_MMss __builtin_ve_vl_lvm_MMss
 #define _vel_svm_sms __builtin_ve_vl_svm_sms
+#define _vel_svm_sMs __builtin_ve_vl_svm_sMs
 #define _vel_vbrdd_vsvl __builtin_ve_vl_vbrdd_vsvl
 #define _vel_vbrdd_vsmvl __builtin_ve_vl_vbrdd_vsmvl
 #define _vel_vbrdl_vsvl __builtin_ve_vl_vbrdl_vsvl
