@@ -51,7 +51,10 @@ namespace {
   // FIXME: is this reasonable impl?
   bool hasVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
   {
-    if (MI.getOpcode() < VE::andmMMMl || MI.getOpcode() > VE::xormmmml)
+    unsigned opc = MI.getOpcode();
+    if (opc < VE::andmMMMl 
+            || (opc > VE::pvfmkwnumMcvl && opc < VE::andmmmml)
+            || opc > VE::xormmmml)
       return false;
 
     for (const MachineOperand &MO : MI.operands()) {

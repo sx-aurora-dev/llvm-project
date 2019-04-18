@@ -165,16 +165,12 @@ class DummyInst:
         self.inst_ = inst
         self.asm_ = asm
         self.func_ = func
-    def inst(self):
-        return self.inst_
-    def asm(self):
-        return self.asm_
-    def func(self):
-        return self.func_
-    def isDummy(self):
-        return True
-    def hasInst(self):
-        return self.inst_ != None
+    def opc(self): return None
+    def inst(self): return self.inst_
+    def asm(self): return self.asm_
+    def func(self): return self.func_
+    def isDummy(self): return True
+    def hasInst(self): return self.inst_ != None
 
 # inst: instruction in the manual. VFAD
 # opc: op code (8bit)
@@ -233,15 +229,15 @@ class Inst(object):
 
     def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False
     def hasLLVMInstDefine(self): 
-        return self.hasLLVMInstDefine_ and (not self.isDummy()) and (not self.isPseudo())
+        return self.hasLLVMInstDefine_ and (not self.isDummy()) #and (not self.isPseudo())
 
     def hasDummyOp(self): return any([op.regName() == "vd" for op in self.ins])
     def hasDummyMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
     def hasImmOp(self): return any([op.isImm() for op in self.ins])
     def hasVLOp(self): return any([op.isVL() for op in self.ins])
 
-    def noBuiltin(self):
-        self.hasBuiltin_ = False
+    def noBuiltin(self): self.hasBuiltin_ = False
+    def hasBuiltin(self): return self.hasBuiltin_
 
     def hasMask(self):
         if len(self.outs) > 0 and self.outs[0].isMask():
@@ -271,11 +267,9 @@ class Inst(object):
 
     def hasInst(self): return self.inst_ != None
 
-    def hasBuiltin(self):
-        return self.hasBuiltin_
 
     def instDefine(self):
-        print("// {} {}".format(self.inst(), self.asm()))
+        print("// {} {} {}".format(self.inst(), self.asm(), self.intrinsicName()))
 
         def fmtOps(ops):
             return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
@@ -288,19 +282,24 @@ class Inst(object):
 
         instName = self.llvmInst()
 
-        s = "def {} : RV<0x{:x}, (outs {}), (ins {}),\n".format(instName, self.opc, outs, ins)
-        #s += "  : RV<0x{:x}, ({}), ({})\n".format(self.opc, outs, ins2)
-        s += '       "{} {}",'.format(self.asm(), asmArgs) # asmstr
-        s += " [], NoItinerary>\n" # pattern
+        if self.opc:
+            s = "def {} : RV<0x{:x}, (outs {}), (ins {}),\n".format(instName, self.opc, outs, ins)
+            s += '       "{} {}",'.format(self.asm(), asmArgs) # asmstr
+            s += " [], NoItinerary>\n" # pattern
+        else:
+            s = "def {} : Pseudo<(outs {}), (ins {}),\n".format(instName, outs, ins)
+            s += '       "# {} {}",'.format(self.asm(), asmArgs) # asmstr
+            s += " []>\n" # pattern
         s += "{\n"
-        if len(self.ins) > 2 and self.ins[1].kind == "s":
-            s += '  let cs = 1;\n'
-        if self.isPacked():
-            s += '  let cx = 1;\n'
-            s += '  let cx2 = 1;\n'
-        if self.isMasked():
-            s += '  bits<4> vm;\n'
-            s += '  let m = vm;\n'
+        if self.opc:
+            if len(self.ins) > 2 and self.ins[1].kind == "s":
+                s += '  let cs = 1;\n'
+            if self.isPacked():
+                s += '  let cx = 1;\n'
+                s += '  let cx2 = 1;\n'
+            if self.isMasked():
+                s += '  bits<4> vm;\n'
+                s += '  let m = vm;\n'
         if self.hasDummyOp():
             s += '  let Constraints = "${} = $vd";\n'.format(self.outs[0].regName())
         if self.hasDummyMaskOp():
@@ -435,9 +434,11 @@ class InstVE(Inst):
                "MM" : "",
                "sms" : "",
                "smI" : "",
+               "sMs" : "",
                "sMI" : "",
                "mmss" : "",
                "mmIs" : "",
+               "MMss" : "",
                "MMIs" : "",
                "vvvm" : "v",
                "vvvM" : "v",
@@ -498,7 +499,7 @@ class InstVEL(Inst):
 
     def pattern(self):
         s = None
-        if self.hasInst()and self.hasPat() and (not self.isPseudo()):
+        if self.hasInst()and self.hasPat(): #and (not self.isPseudo()):
             argsL = ", ".join([op.dagOp() for op in self.ins])
             argsR = ", ".join([op.dagOp() for op in self.ins])
             tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
@@ -875,10 +876,11 @@ class HtmlManualPrinter(ManualInstPrinter):
                     rowspan[inst] += 1
                 else:
                     rowspan[inst] = 1
-                if opt_no_link:
-                    asm = "{}".format(I.asm())
-                else:
-                    asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, I.asm())
+                asm = I.asm() if I.opc else ""
+                if not opt_no_link:
+                    #asm = "{}".format(asm)
+                #else:
+                    asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, asm)
                 #tmp.append([inst, func, I.asm(), expr])
                 tmp.append([inst, func, asm, expr])
 
@@ -971,8 +973,8 @@ class InstTable:
         #if isPacked != (asm[0] == 'p'):
         #  print("subop={} asm={} isPacked={}".format(subop, asm, isPacked))
         baseIntrinName = re.sub(r'\.', '', asm)
-        if opc == None: # pseudo
-            asm = ""
+        #if opc == None: # pseudo
+        #    asm = ""
         IL = InstList(self.clazz)
         for args in ary:
             intrinsicName = baseIntrinName + self.args_to_func_suffix(args)
@@ -1323,9 +1325,11 @@ def createInstructionTable(isVL):
     T.LVSm(0x9E, isVL)
     T.InstX(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
     T.InstX(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.InstX(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
     T.InstX(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
     T.InstX(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest()
     T.InstX(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
+    T.InstX(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True).noTest()
     T.InstX(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
     T.VBRDm(0x8C, isVL)
     T.InstX(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
@@ -1398,9 +1402,9 @@ def createInstructionTable(isVL):
     T.Inst3f(0xDC, "vfsub", "VFSB", "", "{0} = {1} - {2}")
     T.Inst3f(0xCD, "vfmul", "VFMP", "", "{0} = {1} * {2}")
     T.Inst3f(0xDD, "vfdiv", "VFDV", "", "{0} = {1} / {2}", False)
-    T.InstX(None, None, "", "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}")
-    T.InstX(None, None, "", "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}")
-    T.InstX(None, None, "p", "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}")
+    T.InstX(None, None, "", "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+    T.InstX(None, None, "", "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+    T.InstX(None, None, "p", "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
     T.Inst2f(0xED, "vfsqrt", "VFSQRT", "{0} = std::sqrt({1})", False)
     T.Inst3f(0xFC, "vfcmp", "VFCP", "", "{0} = compare({1}, {2})")
     T.Inst3f(0xBD, "vfmax", "VFCM", "a", "{0} = max({1}, {2})")
@@ -1508,17 +1512,17 @@ def createInstructionTable(isVL):
     
     T.Section("5.3.2.15. Vector Mask Register Instructions", 34)
     T.InstX(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
-    T.InstX(0x84, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
+    T.InstX(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
     T.InstX(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
-    T.InstX(0x85, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}")
+    T.InstX(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}")
     T.InstX(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}")
-    T.InstX(0x86, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}")
+    T.InstX(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}")
     T.InstX(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})")
-    T.InstX(0x87, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})")
+    T.InstX(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})")
     T.InstX(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
-    T.InstX(0x94, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
+    T.InstX(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
     T.InstX(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}")
-    T.InstX(0x95, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
+    T.InstX(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
     T.InstX(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.InstX(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.InstX(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
@@ -1539,8 +1543,8 @@ def createInstructionTable(isVL):
     T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
     T.Dummy("", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
     
-    T.InstX(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin()
-    T.InstX(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin()
+    T.InstX(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine()
+    T.InstX(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine()
     T.Dummy("", "__vm _ve_extract_vm512u(__vm512 vm)", "")
     T.Dummy("", "__vm _ve_extract_vm512l(__vm512 vm)", "")
     T.Dummy("", "__vm512 _ve_insert_vm512u(__vm512 vmx, __vm vmy)", "")
