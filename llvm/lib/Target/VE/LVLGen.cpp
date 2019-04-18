@@ -47,8 +47,13 @@ namespace {
   };
   char LVLGen::ID = 0;
 
-  bool useVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
+  // if MI have vector length
+  // FIXME: is this reasonable impl?
+  bool hasVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
   {
+    if (MI.getOpcode() < VE::andmMMMl || MI.getOpcode() > VE::xormmmml)
+      return false;
+
     for (const MachineOperand &MO : MI.operands()) {
       //if (MO.isReg() && MRI->getRegClass(MO.getReg()) == &VE::V64RegClass)
       if (MO.isReg() && VE::V64RegClass.contains(MO.getReg()))
@@ -76,7 +81,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
   for (MachineBasicBlock::iterator I = MBB.begin(); I != MBB.end(); ) {
     MachineBasicBlock::iterator MI = I;
 
-    if (useVL(MRI, *MI)) {
+    if (hasVL(MRI, *MI)) {
       // Last operand is the register that holds vector length
       unsigned Reg = MI->getOperand(MI->getNumOperands() - 1).getReg();
 
