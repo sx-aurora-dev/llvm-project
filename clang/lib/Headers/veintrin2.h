@@ -24,7 +24,9 @@
 #define _ve_lvs_svs_f64 __builtin_ve_lvs_svs_f64
 #define _ve_lvs_svs_f32 __builtin_ve_lvs_svs_f32
 #define _ve_lvm_mmss __builtin_ve_lvm_mmss
+#define _ve_lvm_MMss __builtin_ve_lvm_MMss
 #define _ve_svm_sms __builtin_ve_svm_sms
+#define _ve_svm_sMs __builtin_ve_svm_sMs
 #define _ve_vbrd_vs_f64 __builtin_ve_vbrd_vs_f64
 #define _ve_vbrd_vsmv_f64 __builtin_ve_vbrd_vsmv_f64
 #define _ve_vbrd_vs_i64 __builtin_ve_vbrd_vs_i64
