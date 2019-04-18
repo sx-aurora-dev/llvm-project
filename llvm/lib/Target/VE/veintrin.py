@@ -161,11 +161,11 @@ def Args_vsv(tyV, tyS = None):
 def Args_vIv(ty): return [VX(ty), ImmI(ty), VZ(ty)]
 
 class DummyInst:
-    def __init__(self, inst, func, asm):
+    def __init__(self, opc, inst, func, asm):
+        self.opc = opc
         self.inst_ = inst
         self.asm_ = asm
         self.func_ = func
-    def opc(self): return None
     def inst(self): return self.inst_
     def asm(self): return self.asm_
     def func(self): return self.func_
@@ -225,11 +225,11 @@ class Inst(object):
     def isDummy(self): return False
     def isMasked(self): return any([op.regName() == "vm" for op in self.ins])
     def isPacked(self): return ('packed' in self.kwargs) and self.kwargs['packed']
-    def isPseudo(self): return self.opc == None
+    #def isPseudo(self): return self.opc == None
 
     def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False
     def hasLLVMInstDefine(self): 
-        return self.hasLLVMInstDefine_ and (not self.isDummy()) #and (not self.isPseudo())
+        return self.hasLLVMInstDefine_ and (not self.isDummy())
 
     def hasDummyOp(self): return any([op.regName() == "vd" for op in self.ins])
     def hasDummyMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
@@ -499,7 +499,7 @@ class InstVEL(Inst):
 
     def pattern(self):
         s = None
-        if self.hasInst()and self.hasPat(): #and (not self.isPseudo()):
+        if self.hasInst()and self.hasPat():
             argsL = ", ".join([op.dagOp() for op in self.ins])
             argsR = ", ".join([op.dagOp() for op in self.ins])
             tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
@@ -854,7 +854,7 @@ class ManualInstPrinter:
         print line
 
 class HtmlManualPrinter(ManualInstPrinter):
-    def printAll(self, T, opt_no_link):
+    def printAll(self, T, opt_no_link, isVL):
         idx = 0
         for s in T.sections:
             print("<a href=\"#sec{}\">{}</a><br>".format(idx, s.name))
@@ -878,9 +878,9 @@ class HtmlManualPrinter(ManualInstPrinter):
                     rowspan[inst] = 1
                 asm = I.asm() if I.opc else ""
                 if not opt_no_link:
-                    #asm = "{}".format(asm)
-                #else:
                     asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, asm)
+                if isVL and not I.opc:
+                    func = '<font color="darkgray">' + func + '</font>'
                 #tmp.append([inst, func, I.asm(), expr])
                 tmp.append([inst, func, asm, expr])
 
@@ -960,11 +960,11 @@ class InstTable:
         return "_" + "".join([op.kind for op in args if op])
 
 
-    def Dummy(self, inst, func, asm):
-        self.add(DummyInst(inst, func, asm))
+    def Dummy(self, opc, inst, func, asm):
+        self.add(DummyInst(opc, inst, func, asm))
 
     def NoImpl(self, inst):
-        self.add(DummyInst(inst, "not yet implemented", ""))
+        self.add(DummyInst(None, inst, "not yet implemented", ""))
 
     # intrinsic name is generated from asm and arguments
     def InstX(self, opc, inst, subop, asm, ary, expr = None, **kwargs):
@@ -1530,25 +1530,25 @@ def createInstructionTable(isVL):
     
     T.Section("5.3.2.16. Vector Control Instructions", 34)
     if not isVL:
-      T.Dummy("LVL", "void _ve_lvl(int vl)", "lvl")
+      T.Dummy(0xBF, "LVL", "void _ve_lvl(int vl)", "lvl")
       T.NoImpl("SVL")
     T.NoImpl("SMVL")
     T.NoImpl("LVIX")
     
     T.Section("5.3.2.17. Control Instructions", 35)
-    T.Dummy("SVOB", "void _ve_svob(void)", "svob");
+    T.Dummy(0x30, "SVOB", "void _ve_svob(void)", "svob");
     
     T.Section("Others", None)
-    T.Dummy("", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
-    T.Dummy("", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
-    T.Dummy("", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
+    T.Dummy(None, "", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
+    T.Dummy(None, "", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
+    T.Dummy(None, "", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
     
     T.InstX(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine()
     T.InstX(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine()
-    T.Dummy("", "__vm _ve_extract_vm512u(__vm512 vm)", "")
-    T.Dummy("", "__vm _ve_extract_vm512l(__vm512 vm)", "")
-    T.Dummy("", "__vm512 _ve_insert_vm512u(__vm512 vmx, __vm vmy)", "")
-    T.Dummy("", "__vm512 _ve_insert_vm512l(__vm512 vmx, __vm vmy)", "")
+    T.Dummy(None, "", "__vm _ve_extract_vm512u(__vm512 vm)", "")
+    T.Dummy(None, "", "__vm _ve_extract_vm512l(__vm512 vm)", "")
+    T.Dummy(None, "", "__vm512 _ve_insert_vm512u(__vm512 vmx, __vm vmy)", "")
+    T.Dummy(None, "", "__vm512 _ve_insert_vm512l(__vm512 vmx, __vm vmy)", "")
 
     return T
 
@@ -1640,9 +1640,9 @@ def main():
                 print TestGenerator().reference(i)
         print '}'
     if args.opt_html:
-        HtmlManualPrinter().printAll(T, False)
+        HtmlManualPrinter().printAll(T, False, args.vl)
     if args.html_no_link:
-        HtmlManualPrinter().printAll(T, True)
+        HtmlManualPrinter().printAll(T, True, args.vl)
     if args.opt_mktest:
         gen_mktest(insts)
     if args.opt_lowering:
