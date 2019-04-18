@@ -434,13 +434,19 @@ def lsvvvssl : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz, I32:$vl)
 }
 
 // LVS lvs
-def lvssvsl : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy, I32:$vl),
+def lvslsvs : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
        "lvs $sx,$vx,$sy", [], NoItinerary>
 {
-  let cs = 1;
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
+}
+
+// LVS lvs
+def lvsssvs : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
+       "lvs $sx,$vx,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
 }
 
 // LVM lvm

@@ -7,10 +7,10 @@ define void @test(float* %p) {
 ; CHECK:        pfchv 4,%s0
 entry:
   %0 = bitcast float* %p to i8*
-  tail call void @llvm.ve.pfchv(i64 4, i8* %0)
+  tail call void @llvm.ve.pfchv.ss(i64 4, i8* %0)
   ret void
 }
 
 ; Function Attrs: nounwind
-declare void @llvm.ve.pfchv(i64, i8*)
+declare void @llvm.ve.pfchv.ss(i64, i8*)
 
