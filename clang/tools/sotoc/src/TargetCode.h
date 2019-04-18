@@ -86,5 +86,6 @@ private:
   void handleArrays(const clang::ArrayType **t,
                     std::list<std::string> &DimString, int &dim,
                     std::vector<int> &VariableDimensions,
-                    TargetCodeRegion *TCR, std::string &elemType);
+                    TargetCodeRegion *TCR, std::string &elemType,
+                    const std::string &ArrayName);
 };
