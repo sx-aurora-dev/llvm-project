@@ -291,15 +291,15 @@ class Inst(object):
             s += '       "# {} {}",'.format(self.asm(), asmArgs) # asmstr
             s += " []>\n" # pattern
         s += "{\n"
-        if self.opc:
-            if len(self.ins) > 2 and self.ins[1].kind == "s":
-                s += '  let cs = 1;\n'
-            if self.isPacked():
-                s += '  let cx = 1;\n'
-                s += '  let cx2 = 1;\n'
-            if self.isMasked():
-                s += '  bits<4> vm;\n'
-                s += '  let m = vm;\n'
+#        if self.opc:
+#            if len(self.ins) > 2 and self.ins[1].kind == "s":
+#                s += '  let cs = 1;\n'
+#            if self.isPacked():
+#                s += '  let cx = 1;\n'
+#                s += '  let cx2 = 1;\n'
+#            if self.isMasked():
+#                s += '  bits<4> vm;\n'
+#                s += '  let m = vm;\n'
         if self.hasDummyOp():
             s += '  let Constraints = "${} = $vd";\n'.format(self.outs[0].regName())
         if self.hasDummyMaskOp():
