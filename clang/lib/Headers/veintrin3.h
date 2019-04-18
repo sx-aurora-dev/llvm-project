@@ -19,12 +19,12 @@
 #define _vel_vstl2d_vssl __builtin_ve_vl_vstl2d_vssl
 #define _vel_vstl2dot_vssl __builtin_ve_vl_vstl2dot_vssl
 #define _vel_pfchv_ssl __builtin_ve_vl_pfchv_ssl
-#define _vel_lsv_vvssl __builtin_ve_vl_lsv_vvssl
+#define _vel_lsv_vvss __builtin_ve_vl_lsv_vvss
 #define _vel_lvsl_svs __builtin_ve_vl_lvsl_svs
 #define _vel_lvsd_svs __builtin_ve_vl_lvsd_svs
 #define _vel_lvss_svs __builtin_ve_vl_lvss_svs
-#define _vel_lvm_mmssl __builtin_ve_vl_lvm_mmssl
-#define _vel_svm_smsl __builtin_ve_vl_svm_smsl
+#define _vel_lvm_mmss __builtin_ve_vl_lvm_mmss
+#define _vel_svm_sms __builtin_ve_vl_svm_sms
 #define _vel_vbrdd_vsvl __builtin_ve_vl_vbrdd_vsvl
 #define _vel_vbrdd_vsmvl __builtin_ve_vl_vbrdd_vsmvl
 #define _vel_vbrdl_vsvl __builtin_ve_vl_vbrdl_vsvl
