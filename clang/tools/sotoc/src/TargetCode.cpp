@@ -77,7 +77,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     if (TCR) {
       generateFunctionPrologue(TCR, Out);
     }
-    
+
     Out << Frag->PrintPretty();
 
     if (TCR) {
@@ -103,6 +103,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   Out << "void " << generateFunctionName(TCR) << "(";
   for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
        i != e; ++i) {
+    std::string VarName = (*i)->getDeclName().getAsString();
     auto C = TCR->GetReferredOMPClause(*i);
     if (!first) {
       Out << ", ";
@@ -116,7 +117,12 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       DEBUGP("Generating code for array type");
       int dim = 0;
 
-      handleArrays(&t, DimString, dim, TCR, elemType);
+      std::vector<int> VariableDimensions;
+      handleArrays(&t, DimString, dim, VariableDimensions, TCR, elemType, VarName);
+
+      for (int d : VariableDimensions) {
+        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << VarName << ", ";
+      }
 
       // set type to void* to avoid warnings from the compiler
       Out << "void *__sotoc_var_";
@@ -135,7 +141,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         }
       }
     }
-    Out << (*i)->getDeclName().getAsString();
+    Out << VarName;
   }
   Out << ")\n{\n";
 
@@ -253,7 +259,10 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
 
 void TargetCode::handleArrays(const clang::ArrayType **t,
                               std::list<std::string> &DimString, int &dim,
-                              TargetCodeRegion *TCR, std::string &elemType) {
+                              std::vector<int> &VariableDims,
+                              TargetCodeRegion *TCR,
+                              std::string &elemType,
+                              const std::string &ArrayName) {
   auto OrigT = *t;
 
   if (!t) {
@@ -274,9 +283,9 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
     DEBUGP("ArrayType VAT");
     std::string PrettyStr = "";
     llvm::raw_string_ostream PrettyOS(PrettyStr);
-    clang::PrintingPolicy PP(TCR->GetLangOpts());
-    t1->getSizeExpr()->printPretty(PrettyOS, NULL, PP);
+    PrettyOS << "__sotoc_vla_dim" << dim << "_" << ArrayName;
     DimString.push_back(PrettyOS.str());
+    VariableDims.push_back(dim);
     ++dim;
 
   } else {
@@ -290,6 +299,6 @@ void TargetCode::handleArrays(const clang::ArrayType **t,
       OrigT->getElementType().getTypePtr());
   if (*t) {
     // Recursively handle all dimensions
-    handleArrays(t, DimString, dim, TCR, elemType);
+    handleArrays(t, DimString, dim, VariableDims, TCR, elemType, ArrayName);
   }
 }

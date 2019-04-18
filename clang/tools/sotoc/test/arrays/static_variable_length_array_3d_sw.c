@@ -5,23 +5,22 @@
 int main(){
   int j;
   int size=512;
-  float A[size][2];
+  float A[2][size][5];
  
-  #pragma omp target map(tofrom:A[:size][:2])
+  #pragma omp target map(tofrom:A[:2][:size][:5])
   {
     int i;
+    int k;
     for(i=0; i< size; i++){
-      A[i][0]=i;
-      A[i][1]=i+1;
+      for(k=0; k< 5; k++){
+        A[0][i][k]=i;
+        A[1][i][k]=i+1;
+      }
     }
   }
 
   for (j = 0; j < size; j+=64) {
-<<<<<<< HEAD
-    printf("%.2f %.2f ",A[j][0],A[j][1]);
-=======
-    printf("%.2f %.2f",A[j][0],A[j][1]);
->>>>>>> aurora_offloading_prototype
+    printf("%.2f %.2f ",A[0][j][3],A[1][j][2]);
   }
   return 0;
 }
