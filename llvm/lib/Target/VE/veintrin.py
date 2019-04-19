@@ -967,7 +967,7 @@ class InstTable(object):
         self.add(DummyInst(None, inst, "not yet implemented", ""))
 
     # intrinsic name is generated from asm and arguments
-    def InstX(self, opc, inst, subop, asm, ary, expr = None, **kwargs):
+    def Def(self, opc, inst, subop, asm, ary, expr = None, **kwargs):
         #isPacked = asm[0] == 'p'
         isPacked = 'p' in subop
         #if isPacked != (asm[0] == 'p'):
@@ -988,10 +988,10 @@ class InstTable(object):
             IL.add(i)
         return IL
 
-    def InstXM(self, opc, baseInstName, subop, asm, OL, expr = None):
+    def DefM(self, opc, baseInstName, subop, asm, OL, expr = None):
         vm = VM512 if asm[0] == 'p' else VM
         OL = self.addMask(OL, vm)
-        return self.InstX(opc, baseInstName, subop, asm, OL, expr)
+        return self.Def(opc, baseInstName, subop, asm, OL, expr)
 
     def addMask(self, ary, MaskOp = VM):
         tmp = []
@@ -1006,13 +1006,13 @@ class InstTable(object):
         #O.append([VX(T_u64), SY(T_u64), ImmZ(T_voidcp)])
         #O.append([VX(T_u64), ImmI(T_u64), ImmZ(T_voidcp)])
 
-        return self.InstX(opc, inst, subop, asm, O).noTest().readMem()
+        return self.Def(opc, inst, subop, asm, O).noTest().readMem()
 
     def VSTm(self, opc, inst, asm):
         O_rr = [None, VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [None, VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
-        self.InstX(opc, inst, "", asm, [O_rr, O_ir]).noTest().writeMem()
-        self.InstX(opc, inst, "ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
+        self.Def(opc, inst, "", asm, [O_rr, O_ir]).noTest().writeMem()
+        self.Def(opc, inst, "ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
 
         return
         O_rr = [VX(T_u64), SY(T_u64), SZ(T_voidp)]
@@ -1072,10 +1072,10 @@ class InstTable(object):
           self.add(I(opc, "LVS", "lvs", "lvs_svs_f32", [SX(T_f32)], [VX(T_u64), SY(T_u32)], subop="f32r").noTest()).noLLVMInstDefine() # FIXME
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True):
-        self.InstX(opc, instName, "d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
-        self.InstX(opc, instName, "s", name+".s", [[VX(T_f32), VY(T_f32)]], expr)
+        self.Def(opc, instName, "d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
+        self.Def(opc, instName, "s", name+".s", [[VX(T_f32), VY(T_f32)]], expr)
         if hasPacked:
-            self.InstX(opc, instName, "p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr) 
+            self.Def(opc, instName, "p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr) 
 
     def Inst3f(self, opc, name, instName, subop, expr, hasPacked = True):
         O_f64 = [Args_vvv(T_f64), Args_vsv(T_f64)]
@@ -1086,10 +1086,10 @@ class InstTable(object):
         O_f32 = self.addMask(O_f32)
         O_pf32 = self.addMask(O_pf32, VM512)
 
-        self.InstX(opc, instName, subop+"d", name+".d", O_f64, expr)
-        self.InstX(opc, instName, subop+"s", name+".s", O_f32, expr)
+        self.Def(opc, instName, subop+"d", name+".d", O_f64, expr)
+        self.Def(opc, instName, subop+"s", name+".s", O_f32, expr)
         if hasPacked:
-            self.InstX(opc, instName, subop+"p", "p"+name, O_pf32, expr) 
+            self.Def(opc, instName, subop+"p", "p"+name, O_pf32, expr) 
 
     # 3 operands, u64/u32
     def Inst3u(self, opc, name, instName, expr, hasPacked = True):
@@ -1101,16 +1101,16 @@ class InstTable(object):
         O_u32 = self.addMask(O_u32)
         O_pu32 = self.addMask(O_pu32, VM512)
 
-        self.InstX(opc, instName, "l", name+".l", O_u64, expr)
-        self.InstX(opc, instName, "w", name+".w", O_u32, expr)
+        self.Def(opc, instName, "l", name+".l", O_u64, expr)
+        self.Def(opc, instName, "w", name+".w", O_u32, expr)
         if hasPacked:
-            self.InstX(opc, instName, "p", "p"+name, O_pu32, expr)
+            self.Def(opc, instName, "p", "p"+name, O_pu32, expr)
 
     # 3 operands, i64
     def Inst3l(self, opc, name, instName, subop, expr):
         O = [Args_vvv(T_i64), Args_vsv(T_i64), Args_vIv(T_i64)]
         O = self.addMask(O)
-        self.InstX(opc, instName, subop+"l", name+".l", O, expr)
+        self.Def(opc, instName, subop+"l", name+".l", O, expr)
 
     # 3 operands, i32
     def Inst3w(self, opc, name, instName, subop, expr, hasPacked = True):
@@ -1120,17 +1120,17 @@ class InstTable(object):
         O_i32 = self.addMask(O_i32)
         O_pi32 = self.addMask(O_pi32, VM512)
 
-        self.InstX(opc, instName, subop + "wsx", name+".w.sx", O_i32, expr)
-        self.InstX(opc, instName, subop + "wzx", name+".w.zx", O_i32, expr)
+        self.Def(opc, instName, subop + "wsx", name+".w.sx", O_i32, expr)
+        self.Def(opc, instName, subop + "wzx", name+".w.zx", O_i32, expr)
         if hasPacked:
-            self.InstX(opc, instName, subop + "p", "p"+name, O_pi32, expr)
+            self.Def(opc, instName, subop + "p", "p"+name, O_pi32, expr)
 
     def Inst3divbys(self, opc, name, instName, subop, ty):
         O_s = [VX(ty), VY(ty), SY(ty)]
         O_i = [VX(ty), VY(ty), ImmI(ty)]
         O = [O_s, O_i]
         O = self.addMask(O)
-        self.InstX(opc, instName, subop, name, O, "{0} = {1} / {2}")
+        self.Def(opc, instName, subop, name, O, "{0} = {1} / {2}")
 
     def Logical(self, opc, name, instName, expr):
         O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
@@ -1141,8 +1141,8 @@ class InstTable(object):
         ArgsP = [Args_vvv(T_u32), O_u32_vsv]
         ArgsP = self.addMask(ArgsP, VM512)
 
-        self.InstX(opc, instName, "", name, Args, expr)
-        self.InstX(opc, instName, "p", "p"+name, ArgsP, expr)
+        self.Def(opc, instName, "", name, Args, expr)
+        self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u64)]
@@ -1152,7 +1152,7 @@ class InstTable(object):
         OL = [O_vvv, O_vvs, O_vvN]
         OL = self.addMask(OL);
 
-        self.InstX(opc, instName, "", name, OL, expr)
+        self.Def(opc, instName, "", name, OL, expr)
 
     def ShiftPacked(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u32)]
@@ -1161,7 +1161,7 @@ class InstTable(object):
         OL = [O_vvv, O_vvs]
         OL = self.addMask(OL, VM512)
 
-        self.InstX(opc, instName, "p", "p"+name, OL, expr)
+        self.Def(opc, instName, "p", "p"+name, OL, expr)
 
     def Inst4f(self, opc, name, instName, expr):
         O_f64_vvvv = [VX(T_f64), VY(T_f64), VZ(T_f64), VW(T_f64)]
@@ -1183,44 +1183,44 @@ class InstTable(object):
         O_f32 = self.addMask(O_f32)
         O_pf32 = self.addMask(O_pf32, VM512)
 
-        self.InstX(opc, instName, "d", name+".d", O_f64, expr)
-        self.InstX(opc, instName, "s", name+".s", O_f32, expr)
-        self.InstX(opc, instName, "p", "p"+name, O_pf32, expr)
+        self.Def(opc, instName, "d", name+".d", O_f64, expr)
+        self.Def(opc, instName, "s", name+".s", O_f32, expr)
+        self.Def(opc, instName, "p", "p"+name, O_pf32, expr)
 
     def FLm(self, opc, inst, subop, asm, args):
-        self.InstX(opc, inst, subop.format(fl="f"), asm.format(fl=".fst"), args)
-        self.InstX(opc, inst, subop.format(fl="l"), asm.format(fl=".lst"), args).noTest()
+        self.Def(opc, inst, subop.format(fl="f"), asm.format(fl=".fst"), args)
+        self.Def(opc, inst, subop.format(fl="l"), asm.format(fl=".lst"), args).noTest()
 
     def VFMKm(self, opc, inst, subop, asm):
-        self.InstX(opc, inst, subop, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
-        self.InstX(opc, inst, subop, asm, [[VMX, CCOp, VZ(T_i64), VM]]).noTest()
+        self.Def(opc, inst, subop, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
+        self.Def(opc, inst, subop, asm, [[VMX, CCOp, VZ(T_i64), VM]]).noTest()
 
     def VGTm(self, opc, inst, subop, asm):
         O_v = [VX(T_u64), VY(T_u64)]
         O_vm = [VX(T_u64), VY(T_u64), VM]
         O = [O_v, O_vm]
-        self.InstX(opc, inst, subop, asm, O).noTest().readMem()
+        self.Def(opc, inst, subop, asm, O).noTest().readMem()
 
     def VSCm(self, opc, inst0, inst, asm):
         O_v = [None, VX(T_u64), VY(T_u64)]
         O_vm = [None, VX(T_u64), VY(T_u64), VM]
         #O_s = [VX(T_u64), SW(T_u64)]
         O = [O_v, O_vm]
-        self.InstX(opc, inst0, "", asm, O).noTest().writeMem()
-        self.InstX(opc, inst0, "ot", asm+".ot", O).noTest().writeMem().oldLowering()
+        self.Def(opc, inst0, "", asm, O).noTest().writeMem()
+        self.Def(opc, inst0, "ot", asm+".ot", O).noTest().writeMem().oldLowering()
 
     def VSUM(self, opc, inst, subop, asm, baseOps):
         OL = []
         for op in baseOps:
             OL.append(op)
             OL.append(op + [VM])
-        self.InstX(opc, inst, subop, asm, OL).noMaskBaseReg()
+        self.Def(opc, inst, subop, asm, OL).noMaskBaseReg()
 
     def VFIX(self, opc, inst, subop, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
-        self.InstXM(opc, inst, subop, asm, OL, expr)
+        self.DefM(opc, inst, subop, asm, OL, expr)
         expr = "{0} = (" + ty + ")({1})"
-        self.InstXM(opc, inst, subop + "rz", asm+".rz", OL, expr)
+        self.DefM(opc, inst, subop + "rz", asm+".rz", OL, expr)
 
 def cmpwrite(filename, data):
     need_write = True
@@ -1327,21 +1327,21 @@ def createInstructionTable(isVL):
     T.VSTm(0xD1, "VST2D", "vst2d")
     T.VSTm(0xD2, "VSTU2D", "vstu2d")
     T.VSTm(0xD3, "VSTL2D", "vstl2d")
-    T.InstX(0x80, "PFCHV", "", "pfchv", [[None, SY(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
-    T.InstX(0x80, "PFCHV", "", "pfchv", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
-    T.InstX(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest()
+    T.Def(0x80, "PFCHV", "", "pfchv", [[None, SY(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
+    T.Def(0x80, "PFCHV", "", "pfchv", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
+    T.Def(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest()
     T.LVSm(0x9E, isVL)
-    T.InstX(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
-    T.InstX(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
-    T.InstX(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
-    T.InstX(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
-    T.InstX(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest()
-    T.InstX(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
-    T.InstX(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True).noTest()
-    T.InstX(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
+    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.Def(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.Def(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.Def(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.Def(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest()
+    T.Def(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
+    T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True).noTest()
+    T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
     T.VBRDm(0x8C, isVL)
-    T.InstX(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
-    T.InstX(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
+    T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
+    T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
     
     O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
               [VX(T_i64), SY(T_i32), VZ(T_i32)], 
@@ -1357,7 +1357,7 @@ def createInstructionTable(isVL):
     T.Inst3u(0xC9, "vmulu", "VMPY", "{0} = {1} * {2}", False)
     T.Inst3w(0xCB, "vmuls", "VMPS", "", "{0} = {1} * {2}", False)
     T.Inst3l(0xDB, "vmuls", "VMPX", "", "{0} = {1} * {2}")
-    T.InstX(0xD9, "VMPD", "", "vmuls.l.w", O_VMPD, "{0} = {1} * {2}")
+    T.Def(0xD9, "VMPD", "", "vmuls.l.w", O_VMPD, "{0} = {1} * {2}")
     T.Inst3u(0xE9, "vdivu", "VDIV", "{0} = {1} / {2}", False)
     T.Inst3divbys(0xE9, "vdivu.l", "VDIV", "l", T_u64)
     T.Inst3divbys(0xE9, "vdivu.w", "VDIV", "w", T_u32)
@@ -1382,10 +1382,10 @@ def createInstructionTable(isVL):
     T.NoImpl("VLDZ")
     T.NoImpl("VPCNT")
     T.NoImpl("VBRV")
-    T.InstX(0x99, "VSEQ", "", "vseq", [[VX(T_u64)]], "{0} = i").noTest()
-    T.InstX(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
-    T.InstX(0x99, "VSEQ", "u", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
-    T.InstX(0x99, "VSEQ", "p", "pvseq", [[VX(T_u64)]], "{0} = i").noTest()
+    T.Def(0x99, "VSEQ", "", "vseq", [[VX(T_u64)]], "{0} = i").noTest()
+    T.Def(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
+    T.Def(0x99, "VSEQ", "u", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
+    T.Def(0x99, "VSEQ", "p", "pvseq", [[VX(T_u64)]], "{0} = i").noTest()
     
     T.Section("5.3.2.10. Vector Shift Instructions", 25)
     T.Shift(0xE5, "vsll", "VSLL", T_u64, "{0} = {1} << ({2} & 0x3f)")
@@ -1403,16 +1403,16 @@ def createInstructionTable(isVL):
     
     O_vsfa = [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), ImmI(T_u64), SZ(T_u64)]]
     O_vsfa = T.addMask(O_vsfa)
-    T.InstX(0xD7, "VSFA", "", "vsfa", O_vsfa, "{0} = ({1} << ({2} & 0x7)) + {3}")
+    T.Def(0xD7, "VSFA", "", "vsfa", O_vsfa, "{0} = ({1} << ({2} & 0x7)) + {3}")
     
     T.Section("5.3.2.11. Vector Floating-Point Operation Instructions", 26)
     T.Inst3f(0xCC, "vfadd", "VFAD", "", "{0} = {1} + {2}")
     T.Inst3f(0xDC, "vfsub", "VFSB", "", "{0} = {1} - {2}")
     T.Inst3f(0xCD, "vfmul", "VFMP", "", "{0} = {1} * {2}")
     T.Inst3f(0xDD, "vfdiv", "VFDV", "", "{0} = {1} / {2}", False)
-    T.InstX(None, None, "", "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
-    T.InstX(None, None, "", "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
-    T.InstX(None, None, "p", "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+    T.Def(None, None, "", "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+    T.Def(None, None, "", "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+    T.Def(None, None, "p", "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
     T.Inst2f(0xED, "vfsqrt", "VFSQRT", "{0} = std::sqrt({1})", False)
     T.Inst3f(0xFC, "vfcmp", "VFCP", "", "{0} = compare({1}, {2})")
     T.Inst3f(0xBD, "vfmax", "VFCM", "a", "{0} = max({1}, {2})")
@@ -1430,56 +1430,56 @@ def createInstructionTable(isVL):
     T.VFIX(0xE8, "VFIX", "szx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "unsigned int")
     T.VFIX(0xE8, "VFIX", "p", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "int")
     T.VFIX(0xA8, "VFIXX", "", "vcvt.l.d", [[VX(T_i64), VY(T_f64)]], "long long")
-    T.InstX(0xF8, "VFLT", "d", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
-    T.InstX(0xF8, "VFLT", "s", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
-    T.InstX(0xF8, "VFLT", "p", "pvcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
-    T.InstX(0xB8, "VFLTX", "", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}")
-    T.InstX(0x8F, "VCVD", "", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
-    T.InstX(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
+    T.Def(0xF8, "VFLT", "d", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
+    T.Def(0xF8, "VFLT", "s", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
+    T.Def(0xF8, "VFLT", "p", "pvcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
+    T.Def(0xB8, "VFLTX", "", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}")
+    T.Def(0x8F, "VCVD", "", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
+    T.Def(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
     
     T.Section("5.3.2.12. Vector Mask Arithmetic Instructions", 31)
-    T.InstX(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]])
-    T.InstX(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), VY(T_u32), VZ(T_u32), VM512]])
-    T.InstX(0xBC, "VSHF", "", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
-    T.InstX(0x8D, "VCP", "", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
-    T.InstX(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
+    T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]])
+    T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), VY(T_u32), VZ(T_u32), VM512]])
+    T.Def(0xBC, "VSHF", "", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
+    T.Def(0x8D, "VCP", "", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
+    T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     if isVL:
       tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "lenan"] 
-      T.InstX(0xB4, "VFMK", "", "vfmk.at", [[VM]]).noTest()
-      T.InstX(0xB4, "VFMK", "", "vfmk.af", [[VM]]).noTest()
-      T.InstX(None, "VFMK", "pat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
-      T.InstX(None, "VFMK", "paf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
+      T.Def(0xB4, "VFMK", "", "vfmk.at", [[VM]]).noTest()
+      T.Def(0xB4, "VFMK", "", "vfmk.af", [[VM]]).noTest()
+      T.Def(None, "VFMK", "pat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
+      T.Def(None, "VFMK", "paf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
       for cc in tmp:
-        T.InstX(0xB4, "VFMK", "", "vfmk.l."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.InstX(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
       for cc in tmp:
-        T.InstX(0xB4, "VFMS", "", "vfmk.w."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.InstX(0xB4, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(0xB4, "VFMS", "", "vfmk.w."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.Def(0xB4, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
       for cc in tmp:
-        T.InstX(None, "VFMS", "p", "pvfmk.w."+cc, [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
-        T.InstX(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
+        T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
+        T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
       for cc in tmp:
-        T.InstX(0xB4, "VFMF", "d", "vfmk.d."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.InstX(0xB4, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(0xB4, "VFMF", "d", "vfmk.d."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.Def(0xB4, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
       for cc in tmp:
-        T.InstX(0xB4, "VFMF", "s", "vfmk.s."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.InstX(0xB4, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(0xB4, "VFMF", "s", "vfmk.s."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.Def(0xB4, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
       for cc in tmp:
-        T.InstX(None, "VFMF", "p", "pvfmk.s."+cc, [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
-        T.InstX(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
+        T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
+        T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
     else:
       T.VFMKm(0xB4, "VFMK", "", "vfmk.l")
-      T.InstX(0xB4, "VFMK", "at", "vfmk.at", [[VM]]).noTest()
-      T.InstX(0xB4, "VFMK", "af", "vfmk.af", [[VM]]).noTest()
-      T.InstX(None, "VFMK", "pat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
-      T.InstX(None, "VFMK", "paf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
+      T.Def(0xB4, "VFMK", "at", "vfmk.at", [[VM]]).noTest()
+      T.Def(0xB4, "VFMK", "af", "vfmk.af", [[VM]]).noTest()
+      T.Def(None, "VFMK", "pat", "pvfmk.at", [[VM512]]).noTest() # Pseudo
+      T.Def(None, "VFMK", "paf", "pvfmk.af", [[VM512]]).noTest() # Pseudo
       T.VFMKm(0xB4, "VFMS", "", "vfmk.w")
-      T.InstX(None, "VFMS", "p", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
-      T.InstX(None, "VFMS", "p", "pvfmk.w", [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
+      T.Def(None, "VFMS", "p", "pvfmk.w", [[VM512, CCOp, VZ(T_i32)]]).noTest() # Pseudo
+      T.Def(None, "VFMS", "p", "pvfmk.w", [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest() # Pseudo
       T.VFMKm(0xB4, "VFMF", "d", "vfmk.d")
       T.VFMKm(0xB4, "VFMF", "s", "vfmk.s")
-      T.InstX(None, "VFMF", "p", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
-      T.InstX(None, "VFMF", "p", "pvfmk.s", [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
+      T.Def(None, "VFMF", "p", "pvfmk.s", [[VM512, CCOp, VZ(T_f32)]]).noTest() # Pseudo
+      T.Def(None, "VFMF", "p", "pvfmk.s", [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest() # Pseudo
     
     
     T.Section("5.3.2.13. Vector Recursive Relation Instructions", 32)
@@ -1519,21 +1519,21 @@ def createInstructionTable(isVL):
     T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
     
     T.Section("5.3.2.15. Vector Mask Register Instructions", 34)
-    T.InstX(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
-    T.InstX(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
-    T.InstX(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
-    T.InstX(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}")
-    T.InstX(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}")
-    T.InstX(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}")
-    T.InstX(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})")
-    T.InstX(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})")
-    T.InstX(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
-    T.InstX(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
-    T.InstX(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}")
-    T.InstX(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
-    T.InstX(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
-    T.InstX(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
-    T.InstX(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
+    T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
+    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
+    T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
+    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}")
+    T.Def(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}")
+    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}")
+    T.Def(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})")
+    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})")
+    T.Def(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
+    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
+    T.Def(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}")
+    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
+    T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
+    T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
+    T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
     
     
     T.Section("5.3.2.16. Vector Control Instructions", 34)
@@ -1551,8 +1551,8 @@ def createInstructionTable(isVL):
     T.Dummy(None, "", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
     T.Dummy(None, "", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
     
-    T.InstX(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine()
-    T.InstX(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine()
+    T.Def(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine()
+    T.Def(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine()
     T.Dummy(None, "", "__vm _ve_extract_vm512u(__vm512 vm)", "")
     T.Dummy(None, "", "__vm _ve_extract_vm512l(__vm512 vm)", "")
     T.Dummy(None, "", "__vm512 _ve_insert_vm512u(__vm512 vmx, __vm vmy)", "")
