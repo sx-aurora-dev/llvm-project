@@ -47,22 +47,26 @@ namespace {
   };
   char LVLGen::ID = 0;
 
-  // if MI have vector length
+  // returns a register holding a vector length. NoRegister is returned when
+  // this MI does not have a vector length.
+  //
   // FIXME: is this reasonable impl?
-  bool hasVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
+  unsigned getVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
   {
     unsigned opc = MI.getOpcode();
     if (opc < VE::andmMMMl 
-            || (opc > VE::pvfmkwnumMcvl && opc < VE::andmmmml)
+            || (opc > VE::xormMMMl && opc < VE::andmmmml)
             || opc > VE::xormmmml)
-      return false;
+      return VE::NoRegister;
 
     for (const MachineOperand &MO : MI.operands()) {
       //if (MO.isReg() && MRI->getRegClass(MO.getReg()) == &VE::V64RegClass)
-      if (MO.isReg() && VE::V64RegClass.contains(MO.getReg()))
-        return true;
+      if (MO.isReg() && VE::V64RegClass.contains(MO.getReg())) {
+        // last operand should be a vector length
+        return MI.getOperand(MI.getNumOperands() - 1).getReg();
+      }
     }
-    return false;
+    return VE::NoRegister;
   }
 
 } // end of anonymous namespace
@@ -84,10 +88,8 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
   for (MachineBasicBlock::iterator I = MBB.begin(); I != MBB.end(); ) {
     MachineBasicBlock::iterator MI = I;
 
-    if (hasVL(MRI, *MI)) {
-      // Last operand is the register that holds vector length
-      unsigned Reg = MI->getOperand(MI->getNumOperands() - 1).getReg();
-
+    unsigned Reg = getVL(MRI, *MI);
+    if (Reg != VE::NoRegister) {
       LLVM_DEBUG(dbgs() << "Vector instruction found: ");
       LLVM_DEBUG(MI->dump());
       LLVM_DEBUG(dbgs() << "Vector length is " << TRI->getName(Reg) << ". ");
