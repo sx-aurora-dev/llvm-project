@@ -190,7 +190,7 @@ class Inst(object):
         self.ins = ins
 
         self.inst_ = inst
-        self.subop_ = kwargs['subop'] if 'subop' in kwargs else None
+        #self.subop_ = kwargs['subop'] if 'subop' in kwargs else None
         self.llvmInst_ = kwargs['llvmInst']
         self.asm_ = asm
         self.intrinsicName_ = intrinsicName
@@ -473,23 +473,13 @@ class InstVE(Inst):
 class InstVEL(Inst):
     def __init__(self, opc, inst, asm, intrinsicName, outs, ins, **kwargs):
         #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
-        # append dummyOp(pass through Op) and VL
-        if ('noVL' not in kwargs) or (not kwargs['noVL']):
-          hasDummyOp = any([op.regName() == "vd" for op in ins])
-          tmp = []
-          if not hasDummyOp and len(outs) > 0 and outs[0].kind == "v":
-              tmp.append(VD(outs[0].elemType()))
-              intrinsicName += "v"
-          ins = ins + tmp + [VL]
-          intrinsicName += "l"
-
         if 'llvmInst' not in kwargs:
-          if asm:
-            suffix = "".join([op.kind for op in outs + ins])
-            llvmInst = re.sub("\.", "", asm) + suffix
-          else:
-            llvmInst = None
-          kwargs['llvmInst'] = llvmInst
+            if asm:
+                suffix = "".join([op.kind for op in outs + ins])
+                llvmInst = re.sub("\.", "", asm) + suffix
+            else:
+                llvmInst = None
+            kwargs['llvmInst'] = llvmInst
 
         super(InstVEL, self).__init__(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
 
@@ -953,13 +943,6 @@ class InstTable(object):
             self.add(I)
         return L
 
-    #def Inst(self, *args):
-    #    return self.add(Inst(*args))
-
-    def args_to_func_suffix(self, args):
-        return "_" + "".join([op.kind for op in args if op])
-
-
     def Dummy(self, opc, inst, func, asm):
         self.add(DummyInst(opc, inst, func, asm))
 
@@ -968,19 +951,15 @@ class InstTable(object):
 
     # intrinsic name is generated from asm and arguments
     def Def(self, opc, inst, subop, asm, ary, expr = None, **kwargs):
-        #isPacked = asm[0] == 'p'
-        isPacked = 'p' in subop
-        #if isPacked != (asm[0] == 'p'):
-        #  print("subop={} asm={} isPacked={}".format(subop, asm, isPacked))
-        baseIntrinName = re.sub(r'\.', '', asm)
-        #if opc == None: # pseudo
-        #    asm = ""
+        baseIntrinName = kwargs['baseIntrinName'] if 'baseIntrinName' in kwargs else re.sub(r'\.', '', asm)
+        #baseIntrinName = re.sub(r'\.', '', asm)
         IL = InstList(self.InstClass)
         for args in ary:
-            intrinsicName = baseIntrinName + self.args_to_func_suffix(args)
+            func_suffix = "_" + "".join([op.kind for op in args if op])
+            intrinsicName = baseIntrinName + func_suffix
             outs = [args[0]] if args[0] else []
             ins = args[1:]
-            kwargs['packed'] = isPacked
+            kwargs['packed'] = 'p' in subop
             kwargs['expr'] = expr
             kwargs['subop'] = subop
             i = self.InstClass(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
@@ -988,10 +967,10 @@ class InstTable(object):
             IL.add(i)
         return IL
 
-    def DefM(self, opc, baseInstName, subop, asm, OL, expr = None):
+    def DefM(self, opc, baseInstName, subop, asm, OL, expr = None, **kwargs):
         vm = VM512 if asm[0] == 'p' else VM
         OL = self.addMask(OL, vm)
-        return self.Def(opc, baseInstName, subop, asm, OL, expr)
+        return self.Def(opc, baseInstName, subop, asm, OL, expr, **kwargs)
 
     def addMask(self, ary, MaskOp = VM):
         tmp = []
@@ -1030,35 +1009,28 @@ class InstTable(object):
         expr = "{0} = {1}"
         I = self.InstClass
         if isVL:
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrdd_vs",   [VX(T_f64)], [SY(T_f64)], expr=expr)).noLLVMInstDefine()
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrdd_vsmv", [VX(T_f64)], [SY(T_f64), VM, VD(T_f64)], expr=expr)).noLLVMInstDefine()
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrdl_vs",   [VX(T_i64)], [SY(T_i64)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrdl_vsmv", [VX(T_i64)], [SY(T_i64), VM, VD(T_i64)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrdl_vI",   [VX(T_i64)], [ImmI(T_i64)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrdl_vImv", [VX(T_i64)], [ImmI(T_i64), VM, VD(T_i64)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrdu", "vbrds_vs",   [VX(T_f32)], [SY(T_f32)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrdu", "vbrds_vsmv", [VX(T_f32)], [SY(T_f32), VM, VD(T_f32)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdw_vs",   [VX(T_i32)], [SY(T_i32)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdw_vsmv", [VX(T_i32)], [SY(T_i32), VM, VD(T_i32)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdw_vI",   [VX(T_i32)], [ImmI(T_i32)], expr=expr))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdw_vImv", [VX(T_i32)], [ImmI(T_i32), VM, VD(T_i32)], expr=expr))
-          self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vs",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr))
-          self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vsMv", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr))
+            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_f64), SY(T_f64)]], expr, baseIntrinName="vbrdd").noLLVMInstDefine()
+            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_f64), SY(T_i64)]], expr, baseIntrinName="vbrdl")
+            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_f64), ImmI(T_i64)]], expr, baseIntrinName="vbrdl")
+            self.DefM(0x8C, "VBRD", "", "vbrdu", [[VX(T_f64), SY(T_f32)]], expr, baseIntrinName="vbrds")
+            self.DefM(0x8C, "VBRD", "", "vbrdl", [[VX(T_f64), SY(T_i32)]], expr, baseIntrinName="vbrdw")
+            self.DefM(0x8C, "VBRD", "", "vbrdl", [[VX(T_f64), ImmI(T_i32)]], expr, baseIntrinName="vbrdw")
+            self.DefM(0x8C, "VBRD", "p", "pvbrd", [[VX(T_u32), SY(T_u64)]], expr)
         else:
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vs_f64",    [VX(T_f64)], [SY(T_f64)], expr=expr, subop="f64r")).noLLVMInstDefine()
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vsmv_f64",  [VX(T_f64)], [SY(T_f64), VM, VD(T_f64)], expr=expr, subop="f64rm")).noLLVMInstDefine()
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vs_i64",    [VX(T_i64)], [SY(T_i64)], expr=expr, subop="r"))
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vsmv_i64",  [VX(T_i64)], [SY(T_i64), VM, VD(T_i64)], expr=expr, subop="rm"))
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vI_i64",    [VX(T_i64)], [ImmI(T_i64)], expr=expr, subop="i"))
-          self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vImv_i64",  [VX(T_i64)], [ImmI(T_i64), VM, VD(T_i64)], expr=expr, subop="im"))
-          self.add(I(0x8C, "VBRD", "vbrdu", "vbrdu_vs_f32",   [VX(T_f32)], [SY(T_f32)], expr=expr, subop="f32r"))
-          self.add(I(0x8C, "VBRD", "vbrdu", "vbrdu_vsmv_f32", [VX(T_f32)], [SY(T_f32), VM, VD(T_f32)], expr=expr, subop="f32rm"))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vs_i32",   [VX(T_i32)], [SY(T_i32)], expr=expr, subop="i32r"))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vsmv_i32", [VX(T_i32)], [SY(T_i32), VM, VD(T_i32)], expr=expr, subop="i32rm"))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vI_i32",   [VX(T_i32)], [ImmI(T_i32)], expr=expr, subop="i32i"))
-          self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vImv_i32", [VX(T_i32)], [ImmI(T_i32), VM, VD(T_i32)], expr=expr, subop="i32im"))
-          self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vs_i64",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr, subop="p"))
-          self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr, subop="pm"))
+            self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vs_f64",    [VX(T_f64)], [SY(T_f64)], expr=expr, subop="f64r")).noLLVMInstDefine()
+            self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vsmv_f64",  [VX(T_f64)], [SY(T_f64), VM, VD(T_f64)], expr=expr, subop="f64rm")).noLLVMInstDefine()
+            self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vs_i64",    [VX(T_i64)], [SY(T_i64)], expr=expr, subop="r"))
+            self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vsmv_i64",  [VX(T_i64)], [SY(T_i64), VM, VD(T_i64)], expr=expr, subop="rm"))
+            self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vI_i64",    [VX(T_i64)], [ImmI(T_i64)], expr=expr, subop="i"))
+            self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vImv_i64",  [VX(T_i64)], [ImmI(T_i64), VM, VD(T_i64)], expr=expr, subop="im"))
+            self.add(I(0x8C, "VBRD", "vbrdu", "vbrdu_vs_f32",   [VX(T_f32)], [SY(T_f32)], expr=expr, subop="f32r"))
+            self.add(I(0x8C, "VBRD", "vbrdu", "vbrdu_vsmv_f32", [VX(T_f32)], [SY(T_f32), VM, VD(T_f32)], expr=expr, subop="f32rm"))
+            self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vs_i32",   [VX(T_i32)], [SY(T_i32)], expr=expr, subop="i32r"))
+            self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vsmv_i32", [VX(T_i32)], [SY(T_i32), VM, VD(T_i32)], expr=expr, subop="i32rm"))
+            self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vI_i32",   [VX(T_i32)], [ImmI(T_i32)], expr=expr, subop="i32i"))
+            self.add(I(0x8C, "VBRD", "vbrdl", "vbrdl_vImv_i32", [VX(T_i32)], [ImmI(T_i32), VM, VD(T_i32)], expr=expr, subop="i32im"))
+            self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vs_i64",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr, subop="p"))
+            self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr, subop="pm"))
 
     def LVSm(self, opc, isVL):
         I = self.InstClass
@@ -1242,6 +1214,23 @@ class InstTableVE(InstTable):
 class InstTableVEL(InstTable):
     def __init__(self):
         super(InstTableVEL, self).__init__(InstVEL)
+
+    def Def(self, opc, inst, subop, asm, ary, expr = None, **kwargs):
+        # append dummyOp(pass through Op) and VL
+        newary = []
+        for args in ary:
+            #newary.append(args)
+            outs = [args[0]]
+            ins = args[1:]
+            if ('noVL' not in kwargs) or (not kwargs['noVL']):
+                hasDummyOp = any([op.regName() == "vd" for op in ins])
+                tmp = []
+                if not hasDummyOp and outs[0] and outs[0].kind == "v":
+                    tmp.append(VD(outs[0].elemType()))
+                ins = ins + tmp + [VL]
+            newary.append(outs + ins)
+
+        return super(InstTableVEL, self).Def(opc, inst, subop, asm, newary, expr, **kwargs)
 
 def gen_test(insts, directory):
     for I in insts:
