@@ -145,7 +145,7 @@ class ImmOp(Op):
     def __init__(self, kind, ty, name, immType):
         regClass = {T_u32:"simm7Op32", T_i32:"simm7Op32", 
                     T_u64:"simm7Op64", T_i64:"simm7Op64"}[ty]
-        super(ImmOp, self).__init__(kind, ty, name, regClass) # FIXME: regClass
+        super(ImmOp, self).__init__(kind, ty, name, regClass)
         self.immType = immType
 
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
@@ -927,11 +927,11 @@ class Section:
     def instsWithDummy(self):
         return self.a
 
-class InstTable:
+class InstTable(object):
     def __init__(self, InstClass):
         self.currentSection = []
         self.sections = []
-        self.clazz = InstClass
+        self.InstClass = InstClass
 
     def Section(self, name, page):
         s = Section(name, page)
@@ -975,7 +975,7 @@ class InstTable:
         baseIntrinName = re.sub(r'\.', '', asm)
         #if opc == None: # pseudo
         #    asm = ""
-        IL = InstList(self.clazz)
+        IL = InstList(self.InstClass)
         for args in ary:
             intrinsicName = baseIntrinName + self.args_to_func_suffix(args)
             outs = [args[0]] if args[0] else []
@@ -983,7 +983,7 @@ class InstTable:
             kwargs['packed'] = isPacked
             kwargs['expr'] = expr
             kwargs['subop'] = subop
-            i = self.clazz(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
+            i = self.InstClass(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
             self.add(i)
             IL.add(i)
         return IL
@@ -1017,7 +1017,7 @@ class InstTable:
         return
         O_rr = [VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
-        L = InstList(self.clazz)
+        L = InstList(self.InstClass)
         L.Inst(opc, inst, inst+"rr", asm, asm+"_vss", [], O_rr)
         L.Inst(opc, inst, inst+"ir", asm, asm+"_vss", [], O_ir)
         L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss", [], O_rr).oldLowering()
@@ -1028,7 +1028,7 @@ class InstTable:
 
     def VBRDm(self, opc, isVL):
         expr = "{0} = {1}"
-        I = self.clazz
+        I = self.InstClass
         if isVL:
           self.add(I(0x8C, "VBRD", "vbrd",  "vbrdd_vs",   [VX(T_f64)], [SY(T_f64)], expr=expr)).noLLVMInstDefine()
           self.add(I(0x8C, "VBRD", "vbrd",  "vbrdd_vsmv", [VX(T_f64)], [SY(T_f64), VM, VD(T_f64)], expr=expr)).noLLVMInstDefine()
@@ -1061,7 +1061,7 @@ class InstTable:
           self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr, subop="pm"))
 
     def LVSm(self, opc, isVL):
-        I = self.clazz
+        I = self.InstClass
         if isVL:
           self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="lvslsvs", noVL=True).noTest())
           self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="lvslsvs", noVL=True).noTest()).noLLVMInstDefine()
@@ -1235,6 +1235,14 @@ def cmpwrite(filename, data):
         with open(filename, "w") as f:
             f.write(data)
 
+class InstTableVE(InstTable):
+    def __init__(self):
+        super(InstTableVE, self).__init__(InstVE)
+
+class InstTableVEL(InstTable):
+    def __init__(self):
+        super(InstTableVEL, self).__init__(InstVEL)
+
 def gen_test(insts, directory):
     for I in insts:
         if I.hasTest():
@@ -1294,11 +1302,11 @@ def gen_lowering(insts):
         print(l)
 
 def createInstructionTable(isVL):
-    InstClass = InstVE
     if isVL:
-        InstClass = InstVEL
-    T = InstTable(InstClass)
-    I = InstClass # shortcut
+        T = InstTableVEL()
+    else:
+        T = InstTableVE()
+    I = T.InstClass
     
     #
     # Start of instruction definition
