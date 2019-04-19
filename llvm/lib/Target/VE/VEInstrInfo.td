@@ -2164,3 +2164,6 @@ include "VEInstrIntrinsic2.td"
 // generic vector instruction patterns
 include "VEInstrPatternsVec.td"
 
+// vevlintrin
+include "VEInstrVecVL.td"
+include "VEInstrIntrinsicVL.td"

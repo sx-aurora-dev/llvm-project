@@ -13,6 +13,7 @@ add_public_tablegen_target(VECommonTableGen)
 
 add_llvm_target(VECodeGen
   PromoteToI1.cpp
+  LVLGen.cpp
   VEAsmPrinter.cpp
   VEFrameLowering.cpp
   VEISelDAGToDAG.cpp

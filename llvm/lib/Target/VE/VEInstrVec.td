@@ -1444,6 +1444,9 @@ def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
 def LVL : RR<0xBF, (outs VLS:$vl), (ins I32:$sy), "lvl $sy", []>;
 
+let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 0, isCodeGenOnly = 1 in
+def LVL2 : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
+
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
 def SVL : RR<0x2F, (outs I32:$sx), (ins VLS:$vl), "svl $sx", []>;
 

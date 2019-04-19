@@ -135,6 +135,8 @@ void VEPassConfig::addPreRegAlloc() {
 }
 
 void VEPassConfig::addPreEmitPass(){
+  // LVLGen should be called after scheduling and register allocation
+  addPass(createLVLGenPass());
 #if 0
   addPass(createVEDelaySlotFillerPass());
 #endif
