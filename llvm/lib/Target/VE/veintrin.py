@@ -870,7 +870,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                 if not opt_no_link:
                     asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, asm)
                 if isVL and not I.opc:
-                    func = '<font color="darkgray">' + func + '</font>'
+                    func = '<font color="darkgray">' + func + '</font><a href="#ft1">[1]</a>'
                 #tmp.append([inst, func, I.asm(), expr])
                 tmp.append([inst, func, asm, expr])
 
@@ -888,6 +888,8 @@ class HtmlManualPrinter(ManualInstPrinter):
                 print("<td>{}</td><td>{}</td><td>{}</td></tr>".format(*a))
             print("</table>")
             idx += 1
+
+        print('<p"><a name="ft1">[1] Not yet implemented.</a></p>')
 
 class InstList:
     def __init__(self, clazz):
@@ -952,7 +954,6 @@ class InstTable(object):
     # intrinsic name is generated from asm and arguments
     def Def(self, opc, inst, subop, asm, ary, expr = None, **kwargs):
         baseIntrinName = kwargs['baseIntrinName'] if 'baseIntrinName' in kwargs else re.sub(r'\.', '', asm)
-        #baseIntrinName = re.sub(r'\.', '', asm)
         IL = InstList(self.InstClass)
         for args in ary:
             func_suffix = "_" + "".join([op.kind for op in args if op])
@@ -968,7 +969,7 @@ class InstTable(object):
         return IL
 
     def DefM(self, opc, baseInstName, subop, asm, OL, expr = None, **kwargs):
-        vm = VM512 if asm[0] == 'p' else VM
+        vm = VM512 if 'p' in subop else VM
         OL = self.addMask(OL, vm)
         return self.Def(opc, baseInstName, subop, asm, OL, expr, **kwargs)
 
@@ -1219,16 +1220,15 @@ class InstTableVEL(InstTable):
         # append dummyOp(pass through Op) and VL
         newary = []
         for args in ary:
-            #newary.append(args)
             outs = [args[0]]
             ins = args[1:]
             if ('noVL' not in kwargs) or (not kwargs['noVL']):
+                newary.append(outs + ins + [VL])
                 hasDummyOp = any([op.regName() == "vd" for op in ins])
-                tmp = []
                 if not hasDummyOp and outs[0] and outs[0].kind == "v":
-                    tmp.append(VD(outs[0].elemType()))
-                ins = ins + tmp + [VL]
-            newary.append(outs + ins)
+                    newary.append(outs + ins + [VD(outs[0].elemType()), VL])
+            else:
+                newary.append(args)
 
         return super(InstTableVEL, self).Def(opc, inst, subop, asm, newary, expr, **kwargs)
 
@@ -1533,7 +1533,10 @@ def createInstructionTable(isVL):
     T.NoImpl("LVIX")
     
     T.Section("5.3.2.17. Control Instructions", 35)
-    T.Dummy(0x30, "SVOB", "void _ve_svob(void)", "svob");
+    if isVL:
+        T.NoImpl("SVOB")
+    else:
+        T.Dummy(0x30, "SVOB", "void _ve_svob(void)", "svob");
     
     T.Section("Others", None)
     T.Dummy(None, "", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")

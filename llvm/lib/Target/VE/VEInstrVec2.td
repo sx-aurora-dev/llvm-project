@@ -1,8 +1,26 @@
+// VLD vld vld_vssl
+def vldvssl : RV<0x81, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vld $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLD vld vld_vssvl
 def vldvssvl : RV<0x81, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vld $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLD vld vld_vIsl
+def vldvIsl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vld $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -18,11 +36,29 @@ def vldvIsvl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VLDU vldu vldu_vssl
+def vlduvssl : RV<0x82, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vldu $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLDU vldu vldu_vssvl
 def vlduvssvl : RV<0x82, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vldu $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLDU vldu vldu_vIsl
+def vlduvIsl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vldu $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -38,11 +74,29 @@ def vlduvIsvl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I3
   let DisableEncoding = "$vl";
 }
 
+// VLDL vldl.sx vldlsx_vssl
+def vldlsxvssl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vldl.sx $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLDL vldl.sx vldlsx_vssvl
 def vldlsxvssvl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vldl.sx $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLDL vldl.sx vldlsx_vIsl
+def vldlsxvIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vldl.sx $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -58,11 +112,29 @@ def vldlsxvIsvl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, 
   let DisableEncoding = "$vl";
 }
 
+// VLDL vldl.zx vldlzx_vssl
+def vldlzxvssl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vldl.zx $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLDL vldl.zx vldlzx_vssvl
 def vldlzxvssvl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vldl.zx $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLDL vldl.zx vldlzx_vIsl
+def vldlzxvIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vldl.zx $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -78,11 +150,29 @@ def vldlzxvIsvl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, 
   let DisableEncoding = "$vl";
 }
 
+// VLD2D vld2d vld2d_vssl
+def vld2dvssl : RV<0xc1, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vld2d $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLD2D vld2d vld2d_vssvl
 def vld2dvssvl : RV<0xc1, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vld2d $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLD2D vld2d vld2d_vIsl
+def vld2dvIsl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vld2d $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -98,11 +188,29 @@ def vld2dvIsvl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I
   let DisableEncoding = "$vl";
 }
 
+// VLDU2D vldu2d vldu2d_vssl
+def vldu2dvssl : RV<0xc2, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vldu2d $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLDU2D vldu2d vldu2d_vssvl
 def vldu2dvssvl : RV<0xc2, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vldu2d $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLDU2D vldu2d vldu2d_vIsl
+def vldu2dvIsl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vldu2d $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -118,11 +226,29 @@ def vldu2dvIsvl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, 
   let DisableEncoding = "$vl";
 }
 
+// VLDL2D vldl2d.sx vldl2dsx_vssl
+def vldl2dsxvssl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vldl2d.sx $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLDL2D vldl2d.sx vldl2dsx_vssvl
 def vldl2dsxvssvl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vldl2d.sx $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLDL2D vldl2d.sx vldl2dsx_vIsl
+def vldl2dsxvIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vldl2d.sx $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -138,11 +264,29 @@ def vldl2dsxvIsvl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd
   let DisableEncoding = "$vl";
 }
 
+// VLDL2D vldl2d.zx vldl2dzx_vssl
+def vldl2dzxvssl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, I32:$vl),
+       "vldl2d.zx $vx,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VLDL2D vldl2d.zx vldl2dzx_vssvl
 def vldl2dzxvssvl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vldl2d.zx $vx,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VLDL2D vldl2d.zx vldl2dzx_vIsl
+def vldl2dzxvIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+       "vldl2d.zx $vx,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -485,6 +629,15 @@ def svmsMI : Pseudo<(outs I64:$sx), (ins VM512_:$vmz, simm7Op64:$N),
   let isCodeGenOnly = 1;
 }
 
+// VBRD vbrd vbrdl_vsl
+def vbrdvsl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, I32:$vl),
+       "vbrd $vx,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VBRD vbrd vbrdl_vsvl
 def vbrdvsvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, V64:$vd, I32:$vl),
        "vbrd $vx,$sy", [], NoItinerary>
@@ -500,6 +653,15 @@ def vbrdvsmvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM_:$vm, V64:$vd, I32:$vl
        "vbrd $vx,$sy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VBRD vbrd vbrdl_vIl
+def vbrdvIl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, I32:$vl),
+       "vbrd $vx,$I", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -525,6 +687,15 @@ def vbrdvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM_:$vm, V64:$vd, I3
   let DisableEncoding = "$vl";
 }
 
+// VBRD vbrdu vbrds_vsl
+def vbrduvsl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, I32:$vl),
+       "vbrdu $vx,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VBRD vbrdu vbrds_vsvl
 def vbrduvsvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, V64:$vd, I32:$vl),
        "vbrdu $vx,$sy", [], NoItinerary>
@@ -540,6 +711,15 @@ def vbrduvsmvl : RV<0x8c, (outs V64:$vx), (ins F32:$sy, VM_:$vm, V64:$vd, I32:$v
        "vbrdu $vx,$sy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VBRD vbrdl vbrdw_vsl
+def vbrdlvsl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, I32:$vl),
+       "vbrdl $vx,$sy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -565,6 +745,15 @@ def vbrdlvsmvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, VM_:$vm, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
+// VBRD vbrdl vbrdw_vIl
+def vbrdlvIl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, I32:$vl),
+       "vbrdl $vx,$I", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VBRD vbrdl vbrdw_vIvl
 def vbrdlvIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, V64:$vd, I32:$vl),
        "vbrdl $vx,$I", [], NoItinerary>
@@ -580,6 +769,15 @@ def vbrdlvImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, VM_:$vm, V64:$vd, I
        "vbrdl $vx,$I,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VBRD pvbrd pvbrd_vsl
+def pvbrdvsl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, I32:$vl),
+       "pvbrd $vx,$sy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -605,11 +803,29 @@ def pvbrdvsMvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM512_:$vm, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VMV vmv vmv_vsvl
+def vmvvsvl : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmv $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMV vmv vmv_vsvvl
 def vmvvsvvl : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmv $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMV vmv vmv_vIvl
+def vmvvIvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, I32:$vl),
+       "vmv $vx,$N,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -625,6 +841,15 @@ def vmvvIvvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VADD vaddu.l vaddul_vvvl
+def vaddulvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vaddu.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADD vaddu.l vaddul_vvvvl
 def vaddulvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vaddu.l $vx,$vy,$vz", [], NoItinerary>
@@ -635,11 +860,29 @@ def vaddulvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VADD vaddu.l vaddul_vsvl
+def vaddulvsvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vaddu.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADD vaddu.l vaddul_vsvvl
 def vaddulvsvvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vaddu.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADD vaddu.l vaddul_vIvl
+def vaddulvIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vaddu.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -685,6 +928,15 @@ def vaddulvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VADD vaddu.w vadduw_vvvl
+def vadduwvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vaddu.w $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADD vaddu.w vadduw_vvvvl
 def vadduwvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vaddu.w $vx,$vy,$vz", [], NoItinerary>
@@ -695,11 +947,29 @@ def vadduwvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VADD vaddu.w vadduw_vsvl
+def vadduwvsvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vaddu.w $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADD vaddu.w vadduw_vsvvl
 def vadduwvsvvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vaddu.w $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADD vaddu.w vadduw_vIvl
+def vadduwvIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vaddu.w $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -745,11 +1015,29 @@ def vadduwvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VADD pvaddu pvaddu_vvvl
+def pvadduvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvaddu $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADD pvaddu pvaddu_vvvvl
 def pvadduvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvaddu $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADD pvaddu pvaddu_vsvl
+def pvadduvsvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvaddu $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -785,6 +1073,15 @@ def pvadduvsvMvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VADS vadds.w.sx vaddswsx_vvvl
+def vaddswsxvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vadds.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADS vadds.w.sx vaddswsx_vvvvl
 def vaddswsxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -795,11 +1092,29 @@ def vaddswsxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VADS vadds.w.sx vaddswsx_vsvl
+def vaddswsxvsvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vadds.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADS vadds.w.sx vaddswsx_vsvvl
 def vaddswsxvsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADS vadds.w.sx vaddswsx_vIvl
+def vaddswsxvIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vadds.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -845,6 +1160,15 @@ def vaddswsxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VADS vadds.w.zx vaddswzx_vvvl
+def vaddswzxvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vadds.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADS vadds.w.zx vaddswzx_vvvvl
 def vaddswzxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -855,11 +1179,29 @@ def vaddswzxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VADS vadds.w.zx vaddswzx_vsvl
+def vaddswzxvsvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vadds.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADS vadds.w.zx vaddswzx_vsvvl
 def vaddswzxvsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADS vadds.w.zx vaddswzx_vIvl
+def vaddswzxvIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vadds.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -905,11 +1247,29 @@ def vaddswzxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VADS pvadds pvadds_vvvl
+def pvaddsvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvadds $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADS pvadds pvadds_vvvvl
 def pvaddsvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvadds $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADS pvadds pvadds_vsvl
+def pvaddsvsvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvadds $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -945,6 +1305,15 @@ def pvaddsvsvMvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VADX vadds.l vaddsl_vvvl
+def vaddslvvvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vadds.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADX vadds.l vaddsl_vvvvl
 def vaddslvvvvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vadds.l $vx,$vy,$vz", [], NoItinerary>
@@ -955,11 +1324,29 @@ def vaddslvvvvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VADX vadds.l vaddsl_vsvl
+def vaddslvsvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vadds.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADX vadds.l vaddsl_vsvvl
 def vaddslvsvvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vadds.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VADX vadds.l vaddsl_vIvl
+def vaddslvIvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vadds.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1005,6 +1392,15 @@ def vaddslvIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VSUB vsubu.l vsubul_vvvl
+def vsubulvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vsubu.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUB vsubu.l vsubul_vvvvl
 def vsubulvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vsubu.l $vx,$vy,$vz", [], NoItinerary>
@@ -1015,11 +1411,29 @@ def vsubulvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VSUB vsubu.l vsubul_vsvl
+def vsubulvsvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vsubu.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUB vsubu.l vsubul_vsvvl
 def vsubulvsvvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vsubu.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSUB vsubu.l vsubul_vIvl
+def vsubulvIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vsubu.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1065,6 +1479,15 @@ def vsubulvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VSUB vsubu.w vsubuw_vvvl
+def vsubuwvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vsubu.w $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUB vsubu.w vsubuw_vvvvl
 def vsubuwvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vsubu.w $vx,$vy,$vz", [], NoItinerary>
@@ -1075,11 +1498,29 @@ def vsubuwvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VSUB vsubu.w vsubuw_vsvl
+def vsubuwvsvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vsubu.w $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUB vsubu.w vsubuw_vsvvl
 def vsubuwvsvvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vsubu.w $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSUB vsubu.w vsubuw_vIvl
+def vsubuwvIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vsubu.w $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1125,11 +1566,29 @@ def vsubuwvIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VSUB pvsubu pvsubu_vvvl
+def pvsubuvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvsubu $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUB pvsubu pvsubu_vvvvl
 def pvsubuvvvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvsubu $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSUB pvsubu pvsubu_vsvl
+def pvsubuvsvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvsubu $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1165,6 +1624,15 @@ def pvsubuvsvMvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VSBS vsubs.w.sx vsubswsx_vvvl
+def vsubswsxvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vsubs.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBS vsubs.w.sx vsubswsx_vvvvl
 def vsubswsxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -1175,11 +1643,29 @@ def vsubswsxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VSBS vsubs.w.sx vsubswsx_vsvl
+def vsubswsxvsvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vsubs.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBS vsubs.w.sx vsubswsx_vsvvl
 def vsubswsxvsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSBS vsubs.w.sx vsubswsx_vIvl
+def vsubswsxvIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vsubs.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1225,6 +1711,15 @@ def vsubswsxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VSBS vsubs.w.zx vsubswzx_vvvl
+def vsubswzxvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vsubs.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBS vsubs.w.zx vsubswzx_vvvvl
 def vsubswzxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -1235,11 +1730,29 @@ def vsubswzxvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VSBS vsubs.w.zx vsubswzx_vsvl
+def vsubswzxvsvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vsubs.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBS vsubs.w.zx vsubswzx_vsvvl
 def vsubswzxvsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSBS vsubs.w.zx vsubswzx_vIvl
+def vsubswzxvIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vsubs.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1285,11 +1798,29 @@ def vsubswzxvIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VSBS pvsubs pvsubs_vvvl
+def pvsubsvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvsubs $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBS pvsubs pvsubs_vvvvl
 def pvsubsvvvvl : RV<0xca, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvsubs $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSBS pvsubs pvsubs_vsvl
+def pvsubsvsvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvsubs $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1325,6 +1856,15 @@ def pvsubsvsvMvl : RV<0xca, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VSBX vsubs.l vsubsl_vvvl
+def vsubslvvvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vsubs.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBX vsubs.l vsubsl_vvvvl
 def vsubslvvvvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.l $vx,$vy,$vz", [], NoItinerary>
@@ -1335,11 +1875,29 @@ def vsubslvvvvl : RV<0x8b, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VSBX vsubs.l vsubsl_vsvl
+def vsubslvsvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vsubs.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSBX vsubs.l vsubsl_vsvvl
 def vsubslvsvvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSBX vsubs.l vsubsl_vIvl
+def vsubslvIvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vsubs.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1385,6 +1943,15 @@ def vsubslvIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VMPY vmulu.l vmulul_vvvl
+def vmululvvvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmulu.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPY vmulu.l vmulul_vvvvl
 def vmululvvvvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmulu.l $vx,$vy,$vz", [], NoItinerary>
@@ -1395,11 +1962,29 @@ def vmululvvvvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VMPY vmulu.l vmulul_vsvl
+def vmululvsvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vmulu.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPY vmulu.l vmulul_vsvvl
 def vmululvsvvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmulu.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMPY vmulu.l vmulul_vIvl
+def vmululvIvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vmulu.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1445,6 +2030,15 @@ def vmululvIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VMPY vmulu.w vmuluw_vvvl
+def vmuluwvvvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmulu.w $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPY vmulu.w vmuluw_vvvvl
 def vmuluwvvvvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmulu.w $vx,$vy,$vz", [], NoItinerary>
@@ -1455,11 +2049,29 @@ def vmuluwvvvvl : RV<0xc9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VMPY vmulu.w vmuluw_vsvl
+def vmuluwvsvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmulu.w $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPY vmulu.w vmuluw_vsvvl
 def vmuluwvsvvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmulu.w $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMPY vmulu.w vmuluw_vIvl
+def vmuluwvIvl : RV<0xc9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmulu.w $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1505,6 +2117,15 @@ def vmuluwvIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VMPS vmuls.w.sx vmulswsx_vvvl
+def vmulswsxvvvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmuls.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPS vmuls.w.sx vmulswsx_vvvvl
 def vmulswsxvvvvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -1515,11 +2136,29 @@ def vmulswsxvvvvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VMPS vmuls.w.sx vmulswsx_vsvl
+def vmulswsxvsvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmuls.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPS vmuls.w.sx vmulswsx_vsvvl
 def vmulswsxvsvvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMPS vmuls.w.sx vmulswsx_vIvl
+def vmulswsxvIvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmuls.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1565,6 +2204,15 @@ def vmulswsxvIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VMPS vmuls.w.zx vmulswzx_vvvl
+def vmulswzxvvvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmuls.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPS vmuls.w.zx vmulswzx_vvvvl
 def vmulswzxvvvvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -1575,11 +2223,29 @@ def vmulswzxvvvvl : RV<0xcb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VMPS vmuls.w.zx vmulswzx_vsvl
+def vmulswzxvsvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmuls.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPS vmuls.w.zx vmulswzx_vsvvl
 def vmulswzxvsvvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMPS vmuls.w.zx vmulswzx_vIvl
+def vmulswzxvIvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmuls.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1625,6 +2291,15 @@ def vmulswzxvIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VMPX vmuls.l vmulsl_vvvl
+def vmulslvvvl : RV<0xdb, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmuls.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPX vmuls.l vmulsl_vvvvl
 def vmulslvvvvl : RV<0xdb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.l $vx,$vy,$vz", [], NoItinerary>
@@ -1635,11 +2310,29 @@ def vmulslvvvvl : RV<0xdb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VMPX vmuls.l vmulsl_vsvl
+def vmulslvsvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vmuls.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPX vmuls.l vmulsl_vsvvl
 def vmulslvsvvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMPX vmuls.l vmulsl_vIvl
+def vmulslvIvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vmuls.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1685,11 +2378,29 @@ def vmulslvIvmvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VMPD vmuls.l.w vmulslw_vvvl
+def vmulslwvvvl : RV<0xd9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmuls.l.w $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPD vmuls.l.w vmulslw_vvvvl
 def vmulslwvvvvl : RV<0xd9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.l.w $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMPD vmuls.l.w vmulslw_vsvl
+def vmulslwvsvl : RV<0xd9, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmuls.l.w $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1705,11 +2416,29 @@ def vmulslwvsvvl : RV<0xd9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:
   let DisableEncoding = "$vl";
 }
 
+// VMPD vmuls.l.w vmulslw_vIvl
+def vmulslwvIvl : RV<0xd9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmuls.l.w $vx,$I,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMPD vmuls.l.w vmulslw_vIvvl
 def vmulslwvIvvl : RV<0xd9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.l.w $vx,$I,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDIV vdivu.l vdivul_vvvl
+def vdivulvvvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vdivu.l $vx,$vy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1725,11 +2454,29 @@ def vdivulvvvvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VDIV vdivu.l vdivul_vsvl
+def vdivulvsvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vdivu.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDIV vdivu.l vdivul_vsvvl
 def vdivulvsvvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vdivu.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDIV vdivu.l vdivul_vIvl
+def vdivulvIvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vdivu.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1775,6 +2522,15 @@ def vdivulvIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VDIV vdivu.w vdivuw_vvvl
+def vdivuwvvvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vdivu.w $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDIV vdivu.w vdivuw_vvvvl
 def vdivuwvvvvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$vz", [], NoItinerary>
@@ -1785,11 +2541,29 @@ def vdivuwvvvvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VDIV vdivu.w vdivuw_vsvl
+def vdivuwvsvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vdivu.w $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDIV vdivu.w vdivuw_vsvvl
 def vdivuwvsvvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vdivu.w $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDIV vdivu.w vdivuw_vIvl
+def vdivuwvIvl : RV<0xe9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vdivu.w $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1835,11 +2609,29 @@ def vdivuwvIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VDIV vdivu.l vdivul_vvsl
+def vdivulvvsl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
+       "vdivu.l $vx,$vy,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDIV vdivu.l vdivul_vvsvl
 def vdivulvvsvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vd, I32:$vl),
        "vdivu.l $vx,$vy,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDIV vdivu.l vdivul_vvIl
+def vdivulvvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I32:$vl),
+       "vdivu.l $vx,$vy,$I", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1875,11 +2667,29 @@ def vdivulvvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VDIV vdivu.w vdivuw_vvsl
+def vdivuwvvsl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, I32:$vl),
+       "vdivu.w $vx,$vy,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDIV vdivu.w vdivuw_vvsvl
 def vdivuwvvsvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDIV vdivu.w vdivuw_vvIl
+def vdivuwvvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vdivu.w $vx,$vy,$I", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1915,6 +2725,15 @@ def vdivuwvvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VDVS vdivs.w.sx vdivswsx_vvvl
+def vdivswsxvvvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vdivs.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVS vdivs.w.sx vdivswsx_vvvvl
 def vdivswsxvvvvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -1925,11 +2744,29 @@ def vdivswsxvvvvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VDVS vdivs.w.sx vdivswsx_vsvl
+def vdivswsxvsvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vdivs.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVS vdivs.w.sx vdivswsx_vsvvl
 def vdivswsxvsvvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDVS vdivs.w.sx vdivswsx_vIvl
+def vdivswsxvIvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vdivs.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -1975,6 +2812,15 @@ def vdivswsxvIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VDVS vdivs.w.zx vdivswzx_vvvl
+def vdivswzxvvvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vdivs.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVS vdivs.w.zx vdivswzx_vvvvl
 def vdivswzxvvvvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -1985,11 +2831,29 @@ def vdivswzxvvvvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VDVS vdivs.w.zx vdivswzx_vsvl
+def vdivswzxvsvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vdivs.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVS vdivs.w.zx vdivswzx_vsvvl
 def vdivswzxvsvvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDVS vdivs.w.zx vdivswzx_vIvl
+def vdivswzxvIvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vdivs.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2035,11 +2899,29 @@ def vdivswzxvIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VDVS vdivs.w.sx vdivswsx_vvsl
+def vdivswsxvvsl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, I32:$vl),
+       "vdivs.w.sx $vx,$vy,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVS vdivs.w.sx vdivswsx_vvsvl
 def vdivswsxvvsvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDVS vdivs.w.sx vdivswsx_vvIl
+def vdivswsxvvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vdivs.w.sx $vx,$vy,$I", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2075,11 +2957,29 @@ def vdivswsxvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VDVS vdivs.w.zx vdivswzx_vvsl
+def vdivswzxvvsl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, I32:$vl),
+       "vdivs.w.zx $vx,$vy,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVS vdivs.w.zx vdivswzx_vvsvl
 def vdivswzxvvsvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDVS vdivs.w.zx vdivswzx_vvIl
+def vdivswzxvvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vdivs.w.zx $vx,$vy,$I", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2115,6 +3015,15 @@ def vdivswzxvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VDVX vdivs.l vdivsl_vvvl
+def vdivslvvvl : RV<0xfb, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vdivs.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVX vdivs.l vdivsl_vvvvl
 def vdivslvvvvl : RV<0xfb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$vz", [], NoItinerary>
@@ -2125,11 +3034,29 @@ def vdivslvvvvl : RV<0xfb, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VDVX vdivs.l vdivsl_vsvl
+def vdivslvsvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vdivs.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVX vdivs.l vdivsl_vsvvl
 def vdivslvsvvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDVX vdivs.l vdivsl_vIvl
+def vdivslvIvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vdivs.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2175,11 +3102,29 @@ def vdivslvIvmvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VDVX vdivs.l vdivsl_vvsl
+def vdivslvvsl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
+       "vdivs.l $vx,$vy,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VDVX vdivs.l vdivsl_vvsvl
 def vdivslvvsvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VDVX vdivs.l vdivsl_vvIl
+def vdivslvvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I32:$vl),
+       "vdivs.l $vx,$vy,$I", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2215,6 +3160,15 @@ def vdivslvvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VCMP vcmpu.l vcmpul_vvvl
+def vcmpulvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vcmpu.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMP vcmpu.l vcmpul_vvvvl
 def vcmpulvvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$vy,$vz", [], NoItinerary>
@@ -2225,11 +3179,29 @@ def vcmpulvvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VCMP vcmpu.l vcmpul_vsvl
+def vcmpulvsvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vcmpu.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMP vcmpu.l vcmpul_vsvvl
 def vcmpulvsvvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMP vcmpu.l vcmpul_vIvl
+def vcmpulvIvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vcmpu.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2275,6 +3247,15 @@ def vcmpulvIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VCMP vcmpu.w vcmpuw_vvvl
+def vcmpuwvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vcmpu.w $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMP vcmpu.w vcmpuw_vvvvl
 def vcmpuwvvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$vy,$vz", [], NoItinerary>
@@ -2285,11 +3266,29 @@ def vcmpuwvvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VCMP vcmpu.w vcmpuw_vsvl
+def vcmpuwvsvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vcmpu.w $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMP vcmpu.w vcmpuw_vsvvl
 def vcmpuwvsvvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMP vcmpu.w vcmpuw_vIvl
+def vcmpuwvIvl : RV<0xb9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vcmpu.w $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2335,11 +3334,29 @@ def vcmpuwvIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VCMP pvcmpu pvcmpu_vvvl
+def pvcmpuvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvcmpu $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMP pvcmpu pvcmpu_vvvvl
 def pvcmpuvvvvl : RV<0xb9, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvcmpu $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMP pvcmpu pvcmpu_vsvl
+def pvcmpuvsvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvcmpu $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2375,6 +3392,15 @@ def pvcmpuvsvMvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VCPS vcmps.w.sx vcmpswsx_vvvl
+def vcmpswsxvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vcmps.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPS vcmps.w.sx vcmpswsx_vvvvl
 def vcmpswsxvvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -2385,11 +3411,29 @@ def vcmpswsxvvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VCPS vcmps.w.sx vcmpswsx_vsvl
+def vcmpswsxvsvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vcmps.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPS vcmps.w.sx vcmpswsx_vsvvl
 def vcmpswsxvsvvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCPS vcmps.w.sx vcmpswsx_vIvl
+def vcmpswsxvIvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vcmps.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2435,6 +3479,15 @@ def vcmpswsxvIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VCPS vcmps.w.zx vcmpswzx_vvvl
+def vcmpswzxvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vcmps.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPS vcmps.w.zx vcmpswzx_vvvvl
 def vcmpswzxvvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -2445,11 +3498,29 @@ def vcmpswzxvvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VCPS vcmps.w.zx vcmpswzx_vsvl
+def vcmpswzxvsvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vcmps.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPS vcmps.w.zx vcmpswzx_vsvvl
 def vcmpswzxvsvvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCPS vcmps.w.zx vcmpswzx_vIvl
+def vcmpswzxvIvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vcmps.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2495,11 +3566,29 @@ def vcmpswzxvIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VCPS pvcmps pvcmps_vvvl
+def pvcmpsvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvcmps $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPS pvcmps pvcmps_vvvvl
 def pvcmpsvvvvl : RV<0xfa, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvcmps $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCPS pvcmps pvcmps_vsvl
+def pvcmpsvsvl : RV<0xfa, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvcmps $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2535,6 +3624,15 @@ def pvcmpsvsvMvl : RV<0xfa, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VCPX vcmps.l vcmpsl_vvvl
+def vcmpslvvvl : RV<0xba, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vcmps.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPX vcmps.l vcmpsl_vvvvl
 def vcmpslvvvvl : RV<0xba, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.l $vx,$vy,$vz", [], NoItinerary>
@@ -2545,11 +3643,29 @@ def vcmpslvvvvl : RV<0xba, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VCPX vcmps.l vcmpsl_vsvl
+def vcmpslvsvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vcmps.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCPX vcmps.l vcmpsl_vsvvl
 def vcmpslvsvvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCPX vcmps.l vcmpsl_vIvl
+def vcmpslvIvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vcmps.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2595,6 +3711,15 @@ def vcmpslvIvmvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmaxs.w.sx vmaxswsx_vvvl
+def vmaxswsxvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmaxs.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmaxs.w.sx vmaxswsx_vvvvl
 def vmaxswsxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -2605,11 +3730,29 @@ def vmaxswsxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmaxs.w.sx vmaxswsx_vsvl
+def vmaxswsxvsvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmaxs.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmaxs.w.sx vmaxswsx_vsvvl
 def vmaxswsxvsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMS vmaxs.w.sx vmaxswsx_vIvl
+def vmaxswsxvIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmaxs.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2655,6 +3798,15 @@ def vmaxswsxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmaxs.w.zx vmaxswzx_vvvl
+def vmaxswzxvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmaxs.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmaxs.w.zx vmaxswzx_vvvvl
 def vmaxswzxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -2665,11 +3817,29 @@ def vmaxswzxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmaxs.w.zx vmaxswzx_vsvl
+def vmaxswzxvsvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmaxs.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmaxs.w.zx vmaxswzx_vsvvl
 def vmaxswzxvsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMS vmaxs.w.zx vmaxswzx_vIvl
+def vmaxswzxvIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmaxs.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2715,11 +3885,29 @@ def vmaxswzxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VCMS pvmaxs pvmaxs_vvvl
+def pvmaxsvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvmaxs $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS pvmaxs pvmaxs_vvvvl
 def pvmaxsvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvmaxs $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMS pvmaxs pvmaxs_vsvl
+def pvmaxsvsvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvmaxs $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2755,6 +3943,15 @@ def pvmaxsvsvMvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmins.w.sx vminswsx_vvvl
+def vminswsxvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmins.w.sx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmins.w.sx vminswsx_vvvvl
 def vminswsxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$vy,$vz", [], NoItinerary>
@@ -2765,11 +3962,29 @@ def vminswsxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmins.w.sx vminswsx_vsvl
+def vminswsxvsvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmins.w.sx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmins.w.sx vminswsx_vsvvl
 def vminswsxvsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMS vmins.w.sx vminswsx_vIvl
+def vminswsxvIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmins.w.sx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2815,6 +4030,15 @@ def vminswsxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmins.w.zx vminswzx_vvvl
+def vminswzxvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmins.w.zx $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmins.w.zx vminswzx_vvvvl
 def vminswzxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$vy,$vz", [], NoItinerary>
@@ -2825,11 +4049,29 @@ def vminswzxvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VCMS vmins.w.zx vminswzx_vsvl
+def vminswzxvsvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl),
+       "vmins.w.zx $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS vmins.w.zx vminswzx_vsvvl
 def vminswzxvsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMS vmins.w.zx vminswzx_vIvl
+def vminswzxvIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+       "vmins.w.zx $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2875,11 +4117,29 @@ def vminswzxvIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
+// VCMS pvmins pvmins_vvvl
+def pvminsvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvmins $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMS pvmins pvmins_vvvvl
 def pvminsvvvvl : RV<0x8a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvmins $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMS pvmins pvmins_vsvl
+def pvminsvsvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvmins $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2915,6 +4175,15 @@ def pvminsvsvMvl : RV<0x8a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VCMX vmaxs.l vmaxsl_vvvl
+def vmaxslvvvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmaxs.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMX vmaxs.l vmaxsl_vvvvl
 def vmaxslvvvvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$vy,$vz", [], NoItinerary>
@@ -2925,11 +4194,29 @@ def vmaxslvvvvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VCMX vmaxs.l vmaxsl_vsvl
+def vmaxslvsvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vmaxs.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMX vmaxs.l vmaxsl_vsvvl
 def vmaxslvsvvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMX vmaxs.l vmaxsl_vIvl
+def vmaxslvIvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vmaxs.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -2975,6 +4262,15 @@ def vmaxslvIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VCMX vmins.l vminsl_vvvl
+def vminslvvvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vmins.l $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMX vmins.l vminsl_vvvvl
 def vminslvvvvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vmins.l $vx,$vy,$vz", [], NoItinerary>
@@ -2985,11 +4281,29 @@ def vminslvvvvl : RV<0x9a, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VCMX vmins.l vminsl_vsvl
+def vminslvsvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vmins.l $vx,$sy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCMX vmins.l vminsl_vsvvl
 def vminslvsvvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:$vl),
        "vmins.l $vx,$sy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCMX vmins.l vminsl_vIvl
+def vminslvIvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+       "vmins.l $vx,$I,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3035,11 +4349,29 @@ def vminslvIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm,
   let DisableEncoding = "$vl";
 }
 
+// VAND vand vand_vvvl
+def vandvvvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vand $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VAND vand vand_vvvvl
 def vandvvvvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vand $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VAND vand vand_vsvl
+def vandvsvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vand $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3075,11 +4407,29 @@ def vandvsvmvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$v
   let DisableEncoding = "$vl";
 }
 
+// VAND pvand pvand_vvvl
+def pvandvvvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvand $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VAND pvand pvand_vvvvl
 def pvandvvvvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvand $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VAND pvand pvand_vsvl
+def pvandvsvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvand $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3115,11 +4465,29 @@ def pvandvsvMvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VOR vor vor_vvvl
+def vorvvvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vor $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VOR vor vor_vvvvl
 def vorvvvvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vor $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VOR vor vor_vsvl
+def vorvsvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vor $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3155,11 +4523,29 @@ def vorvsvmvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd
   let DisableEncoding = "$vl";
 }
 
+// VOR pvor pvor_vvvl
+def pvorvvvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvor $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VOR pvor pvor_vvvvl
 def pvorvvvvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvor $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VOR pvor pvor_vsvl
+def pvorvsvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvor $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3195,11 +4581,29 @@ def pvorvsvMvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V64
   let DisableEncoding = "$vl";
 }
 
+// VXOR vxor vxor_vvvl
+def vxorvvvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vxor $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VXOR vxor vxor_vvvvl
 def vxorvvvvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vxor $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VXOR vxor vxor_vsvl
+def vxorvsvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vxor $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3235,11 +4639,29 @@ def vxorvsvmvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$v
   let DisableEncoding = "$vl";
 }
 
+// VXOR pvxor pvxor_vvvl
+def pvxorvvvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvxor $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VXOR pvxor pvxor_vvvvl
 def pvxorvvvvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvxor $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VXOR pvxor pvxor_vsvl
+def pvxorvsvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvxor $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3275,11 +4697,29 @@ def pvxorvsvMvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VEQV veqv veqv_vvvl
+def veqvvvvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "veqv $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VEQV veqv veqv_vvvvl
 def veqvvvvvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "veqv $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VEQV veqv veqv_vsvl
+def veqvvsvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "veqv $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3315,11 +4755,29 @@ def veqvvsvmvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$v
   let DisableEncoding = "$vl";
 }
 
+// VEQV pveqv pveqv_vvvl
+def pveqvvvvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pveqv $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VEQV pveqv pveqv_vvvvl
 def pveqvvvvvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pveqv $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VEQV pveqv pveqv_vsvl
+def pveqvvsvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pveqv $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3355,11 +4813,29 @@ def pveqvvsvMvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VSEQ vseq vseq_vl
+def vseqvl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
+       "vseq $vx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSEQ vseq vseq_vvl
 def vseqvvl : RV<0x99, (outs V64:$vx), (ins V64:$vd, I32:$vl),
        "vseq $vx", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSEQ pvseq.lo pvseqlo_vl
+def pvseqlovl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
+       "pvseq.lo $vx", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3375,11 +4851,29 @@ def pvseqlovvl : RV<0x99, (outs V64:$vx), (ins V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VSEQ pvseq.up pvsequp_vl
+def pvsequpvl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
+       "pvseq.up $vx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSEQ pvseq.up pvsequp_vvl
 def pvsequpvvl : RV<0x99, (outs V64:$vx), (ins V64:$vd, I32:$vl),
        "pvseq.up $vx", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSEQ pvseq pvseq_vl
+def pvseqvl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
+       "pvseq $vx", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3395,6 +4889,15 @@ def pvseqvvl : RV<0x99, (outs V64:$vx), (ins V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VSLL vsll vsll_vvvl
+def vsllvvvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "vsll $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLL vsll vsll_vvvvl
 def vsllvvvvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$vy", [], NoItinerary>
@@ -3405,11 +4908,29 @@ def vsllvvvvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl
   let DisableEncoding = "$vl";
 }
 
+// VSLL vsll vsll_vvsl
+def vsllvvsl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "vsll $vx,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLL vsll vsll_vvsvl
 def vsllvvsvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSLL vsll vsll_vvIl
+def vsllvvIl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+       "vsll $vx,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3455,11 +4976,29 @@ def vsllvvImvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VSLL pvsll pvsll_vvvl
+def pvsllvvvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "pvsll $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLL pvsll pvsll_vvvvl
 def pvsllvvvvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "pvsll $vx,$vz,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSLL pvsll pvsll_vvsl
+def pvsllvvsl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "pvsll $vx,$vz,$sy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3495,6 +5034,15 @@ def pvsllvvsMvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VSRL vsrl vsrl_vvvl
+def vsrlvvvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "vsrl $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRL vsrl vsrl_vvvvl
 def vsrlvvvvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$vy", [], NoItinerary>
@@ -3505,11 +5053,29 @@ def vsrlvvvvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl
   let DisableEncoding = "$vl";
 }
 
+// VSRL vsrl vsrl_vvsl
+def vsrlvvsl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "vsrl $vx,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRL vsrl vsrl_vvsvl
 def vsrlvvsvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSRL vsrl vsrl_vvIl
+def vsrlvvIl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+       "vsrl $vx,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3555,11 +5121,29 @@ def vsrlvvImvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VSRL pvsrl pvsrl_vvvl
+def pvsrlvvvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "pvsrl $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRL pvsrl pvsrl_vvvvl
 def pvsrlvvvvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "pvsrl $vx,$vz,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSRL pvsrl pvsrl_vvsl
+def pvsrlvvsl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "pvsrl $vx,$vz,$sy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3595,6 +5179,15 @@ def pvsrlvvsMvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VSLA vsla.w vslaw_vvvl
+def vslawvvvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "vsla.w $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLA vsla.w vslaw_vvvvl
 def vslawvvvvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$vy", [], NoItinerary>
@@ -3605,11 +5198,29 @@ def vslawvvvvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
+// VSLA vsla.w vslaw_vvsl
+def vslawvvsl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "vsla.w $vx,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLA vsla.w vslaw_vvsvl
 def vslawvvsvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSLA vsla.w vslaw_vvIl
+def vslawvvIl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+       "vsla.w $vx,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3655,11 +5266,29 @@ def vslawvvImvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, 
   let DisableEncoding = "$vl";
 }
 
+// VSLA pvsla pvsla_vvvl
+def pvslavvvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "pvsla $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLA pvsla pvsla_vvvvl
 def pvslavvvvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "pvsla $vx,$vz,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSLA pvsla pvsla_vvsl
+def pvslavvsl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "pvsla $vx,$vz,$sy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3695,6 +5324,15 @@ def pvslavvsMvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VSLAX vsla.l vslal_vvvl
+def vslalvvvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "vsla.l $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLAX vsla.l vslal_vvvvl
 def vslalvvvvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$vy", [], NoItinerary>
@@ -3705,11 +5343,29 @@ def vslalvvvvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
+// VSLAX vsla.l vslal_vvsl
+def vslalvvsl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "vsla.l $vx,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSLAX vsla.l vslal_vvsvl
 def vslalvvsvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSLAX vsla.l vslal_vvIl
+def vslalvvIl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+       "vsla.l $vx,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3755,6 +5411,15 @@ def vslalvvImvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, 
   let DisableEncoding = "$vl";
 }
 
+// VSRA vsra.w vsraw_vvvl
+def vsrawvvvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "vsra.w $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRA vsra.w vsraw_vvvvl
 def vsrawvvvvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$vy", [], NoItinerary>
@@ -3765,11 +5430,29 @@ def vsrawvvvvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
+// VSRA vsra.w vsraw_vvsl
+def vsrawvvsl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "vsra.w $vx,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRA vsra.w vsraw_vvsvl
 def vsrawvvsvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSRA vsra.w vsraw_vvIl
+def vsrawvvIl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+       "vsra.w $vx,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3815,11 +5498,29 @@ def vsrawvvImvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, 
   let DisableEncoding = "$vl";
 }
 
+// VSRA pvsra pvsra_vvvl
+def pvsravvvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "pvsra $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRA pvsra pvsra_vvvvl
 def pvsravvvvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "pvsra $vx,$vz,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSRA pvsra pvsra_vvsl
+def pvsravvsl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "pvsra $vx,$vz,$sy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3855,6 +5556,15 @@ def pvsravvsMvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VSRAX vsra.l vsral_vvvl
+def vsralvvvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, V64:$vy, I32:$vl),
+       "vsra.l $vx,$vz,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRAX vsra.l vsral_vvvvl
 def vsralvvvvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$vy", [], NoItinerary>
@@ -3865,11 +5575,29 @@ def vsralvvvvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, V64:$vy, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
+// VSRAX vsra.l vsral_vvsl
+def vsralvvsl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, I32:$vl),
+       "vsra.l $vx,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSRAX vsra.l vsral_vvsvl
 def vsralvvsvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSRAX vsra.l vsral_vvIl
+def vsralvvIl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+       "vsra.l $vx,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3915,11 +5643,29 @@ def vsralvvImvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM_:$vm, 
   let DisableEncoding = "$vl";
 }
 
+// VSFA vsfa vsfa_vvssl
+def vsfavvssl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, I32:$vl),
+       "vsfa $vx,$vz,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSFA vsfa vsfa_vvssvl
 def vsfavvssvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, V64:$vd, I32:$vl),
        "vsfa $vx,$vz,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSFA vsfa vsfa_vvIsl
+def vsfavvIsl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vsfa $vx,$vz,$I,$sz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3955,11 +5701,29 @@ def vsfavvIsmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, 
   let DisableEncoding = "$vl";
 }
 
+// VFAD vfadd.d vfaddd_vvvl
+def vfadddvvvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfadd.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFAD vfadd.d vfaddd_vvvvl
 def vfadddvvvvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfadd.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFAD vfadd.d vfaddd_vsvl
+def vfadddvsvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfadd.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -3995,11 +5759,29 @@ def vfadddvsvmvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFAD vfadd.s vfadds_vvvl
+def vfaddsvvvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfadd.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFAD vfadd.s vfadds_vvvvl
 def vfaddsvvvvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfadd.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFAD vfadd.s vfadds_vsvl
+def vfaddsvsvl : RV<0xcc, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfadd.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4035,11 +5817,29 @@ def vfaddsvsvmvl : RV<0xcc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFAD pvfadd pvfadd_vvvl
+def pvfaddvvvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvfadd $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFAD pvfadd pvfadd_vvvvl
 def pvfaddvvvvl : RV<0xcc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvfadd $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFAD pvfadd pvfadd_vsvl
+def pvfaddvsvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvfadd $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4075,11 +5875,29 @@ def pvfaddvsvMvl : RV<0xcc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VFSB vfsub.d vfsubd_vvvl
+def vfsubdvvvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfsub.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFSB vfsub.d vfsubd_vvvvl
 def vfsubdvvvvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfsub.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFSB vfsub.d vfsubd_vsvl
+def vfsubdvsvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfsub.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4115,11 +5933,29 @@ def vfsubdvsvmvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFSB vfsub.s vfsubs_vvvl
+def vfsubsvvvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfsub.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFSB vfsub.s vfsubs_vvvvl
 def vfsubsvvvvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfsub.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFSB vfsub.s vfsubs_vsvl
+def vfsubsvsvl : RV<0xdc, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfsub.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4155,11 +5991,29 @@ def vfsubsvsvmvl : RV<0xdc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFSB pvfsub pvfsub_vvvl
+def pvfsubvvvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvfsub $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFSB pvfsub pvfsub_vvvvl
 def pvfsubvvvvl : RV<0xdc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvfsub $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFSB pvfsub pvfsub_vsvl
+def pvfsubvsvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvfsub $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4195,11 +6049,29 @@ def pvfsubvsvMvl : RV<0xdc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VFMP vfmul.d vfmuld_vvvl
+def vfmuldvvvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfmul.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMP vfmul.d vfmuld_vvvvl
 def vfmuldvvvvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfmul.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMP vfmul.d vfmuld_vsvl
+def vfmuldvsvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfmul.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4235,11 +6107,29 @@ def vfmuldvsvmvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMP vfmul.s vfmuls_vvvl
+def vfmulsvvvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfmul.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMP vfmul.s vfmuls_vvvvl
 def vfmulsvvvvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfmul.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMP vfmul.s vfmuls_vsvl
+def vfmulsvsvl : RV<0xcd, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfmul.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4275,11 +6165,29 @@ def vfmulsvsvmvl : RV<0xcd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMP pvfmul pvfmul_vvvl
+def pvfmulvvvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvfmul $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMP pvfmul pvfmul_vvvvl
 def pvfmulvvvvl : RV<0xcd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvfmul $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMP pvfmul pvfmul_vsvl
+def pvfmulvsvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvfmul $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4315,11 +6223,29 @@ def pvfmulvsvMvl : RV<0xcd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VFDV vfdiv.d vfdivd_vvvl
+def vfdivdvvvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfdiv.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFDV vfdiv.d vfdivd_vvvvl
 def vfdivdvvvvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfdiv.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFDV vfdiv.d vfdivd_vsvl
+def vfdivdvsvl : RV<0xdd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfdiv.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4355,11 +6281,29 @@ def vfdivdvsvmvl : RV<0xdd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFDV vfdiv.s vfdivs_vvvl
+def vfdivsvvvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfdiv.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFDV vfdiv.s vfdivs_vvvvl
 def vfdivsvvvvl : RV<0xdd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfdiv.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFDV vfdiv.s vfdivs_vsvl
+def vfdivsvsvl : RV<0xdd, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfdiv.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4395,11 +6339,29 @@ def vfdivsvsvmvl : RV<0xdd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFSQRT vfsqrt.d vfsqrtd_vvl
+def vfsqrtdvvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfsqrt.d $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFSQRT vfsqrt.d vfsqrtd_vvvl
 def vfsqrtdvvvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfsqrt.d $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFSQRT vfsqrt.s vfsqrts_vvl
+def vfsqrtsvvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfsqrt.s $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4415,11 +6377,29 @@ def vfsqrtsvvvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VFCP vfcmp.d vfcmpd_vvvl
+def vfcmpdvvvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfcmp.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCP vfcmp.d vfcmpd_vvvvl
 def vfcmpdvvvvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfcmp.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCP vfcmp.d vfcmpd_vsvl
+def vfcmpdvsvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfcmp.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4455,11 +6435,29 @@ def vfcmpdvsvmvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFCP vfcmp.s vfcmps_vvvl
+def vfcmpsvvvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfcmp.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCP vfcmp.s vfcmps_vvvvl
 def vfcmpsvvvvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfcmp.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCP vfcmp.s vfcmps_vsvl
+def vfcmpsvsvl : RV<0xfc, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfcmp.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4495,11 +6493,29 @@ def vfcmpsvsvmvl : RV<0xfc, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFCP pvfcmp pvfcmp_vvvl
+def pvfcmpvvvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvfcmp $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCP pvfcmp pvfcmp_vvvvl
 def pvfcmpvvvvl : RV<0xfc, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvfcmp $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCP pvfcmp pvfcmp_vsvl
+def pvfcmpvsvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvfcmp $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4535,11 +6551,29 @@ def pvfcmpvsvMvl : RV<0xfc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VFCM vfmax.d vfmaxd_vvvl
+def vfmaxdvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfmax.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCM vfmax.d vfmaxd_vvvvl
 def vfmaxdvvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfmax.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCM vfmax.d vfmaxd_vsvl
+def vfmaxdvsvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfmax.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4575,11 +6609,29 @@ def vfmaxdvsvmvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFCM vfmax.s vfmaxs_vvvl
+def vfmaxsvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfmax.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCM vfmax.s vfmaxs_vvvvl
 def vfmaxsvvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfmax.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCM vfmax.s vfmaxs_vsvl
+def vfmaxsvsvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfmax.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4615,11 +6667,29 @@ def vfmaxsvsvmvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFCM pvfmax pvfmax_vvvl
+def pvfmaxvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvfmax $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCM pvfmax pvfmax_vvvvl
 def pvfmaxvvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvfmax $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCM pvfmax pvfmax_vsvl
+def pvfmaxvsvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvfmax $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4655,11 +6725,29 @@ def pvfmaxvsvMvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VFCM vfmin.d vfmind_vvvl
+def vfmindvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfmin.d $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCM vfmin.d vfmind_vvvvl
 def vfmindvvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfmin.d $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCM vfmin.d vfmind_vsvl
+def vfmindvsvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "vfmin.d $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4695,11 +6783,29 @@ def vfmindvsvmvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFCM vfmin.s vfmins_vvvl
+def vfminsvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "vfmin.s $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCM vfmin.s vfmins_vvvvl
 def vfminsvvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "vfmin.s $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCM vfmin.s vfmins_vsvl
+def vfminsvsvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, I32:$vl),
+       "vfmin.s $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4735,11 +6841,29 @@ def vfminsvsvmvl : RV<0xbd, (outs V64:$vx), (ins F32:$sy, V64:$vz, VM_:$vm, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFCM pvfmin pvfmin_vvvl
+def pvfminvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
+       "pvfmin $vx,$vy,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFCM pvfmin pvfmin_vvvvl
 def pvfminvvvvl : RV<0xbd, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vd, I32:$vl),
        "pvfmin $vx,$vy,$vz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFCM pvfmin pvfmin_vsvl
+def pvfminvsvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, I32:$vl),
+       "pvfmin $vx,$sy,$vz", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4775,6 +6899,15 @@ def pvfminvsvMvl : RV<0xbd, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512_:$vm, V
   let DisableEncoding = "$vl";
 }
 
+// VFMAD vfmad.d vfmadd_vvvvl
+def vfmaddvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmad.d $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAD vfmad.d vfmadd_vvvvvl
 def vfmaddvvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmad.d $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -4785,11 +6918,29 @@ def vfmaddvvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMAD vfmad.d vfmadd_vsvvl
+def vfmaddvsvvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmad.d $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAD vfmad.d vfmadd_vsvvvl
 def vfmaddvsvvvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmad.d $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAD vfmad.d vfmadd_vvsvl
+def vfmaddvvsvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "vfmad.d $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4835,6 +6986,15 @@ def vfmaddvvsvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM_
   let DisableEncoding = "$vl";
 }
 
+// VFMAD vfmad.s vfmads_vvvvl
+def vfmadsvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmad.s $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAD vfmad.s vfmads_vvvvvl
 def vfmadsvvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmad.s $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -4845,11 +7005,29 @@ def vfmadsvvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMAD vfmad.s vfmads_vsvvl
+def vfmadsvsvvl : RV<0xe2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmad.s $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAD vfmad.s vfmads_vsvvvl
 def vfmadsvsvvvl : RV<0xe2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmad.s $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAD vfmad.s vfmads_vvsvl
+def vfmadsvvsvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, I32:$vl),
+       "vfmad.s $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4895,6 +7073,15 @@ def vfmadsvvsvmvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM_
   let DisableEncoding = "$vl";
 }
 
+// VFMAD pvfmad pvfmad_vvvvl
+def pvfmadvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfmad $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAD pvfmad pvfmad_vvvvvl
 def pvfmadvvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfmad $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -4905,11 +7092,29 @@ def pvfmadvvvvvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMAD pvfmad pvfmad_vsvvl
+def pvfmadvsvvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfmad $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAD pvfmad pvfmad_vsvvvl
 def pvfmadvsvvvl : RV<0xe2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfmad $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAD pvfmad pvfmad_vvsvl
+def pvfmadvvsvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "pvfmad $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -4955,6 +7160,15 @@ def pvfmadvvsvMvl : RV<0xe2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM5
   let DisableEncoding = "$vl";
 }
 
+// VFMSB vfmsb.d vfmsbd_vvvvl
+def vfmsbdvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmsb.d $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMSB vfmsb.d vfmsbd_vvvvvl
 def vfmsbdvvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmsb.d $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -4965,11 +7179,29 @@ def vfmsbdvvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMSB vfmsb.d vfmsbd_vsvvl
+def vfmsbdvsvvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmsb.d $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMSB vfmsb.d vfmsbd_vsvvvl
 def vfmsbdvsvvvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmsb.d $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMSB vfmsb.d vfmsbd_vvsvl
+def vfmsbdvvsvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "vfmsb.d $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5015,6 +7247,15 @@ def vfmsbdvvsvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM_
   let DisableEncoding = "$vl";
 }
 
+// VFMSB vfmsb.s vfmsbs_vvvvl
+def vfmsbsvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmsb.s $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMSB vfmsb.s vfmsbs_vvvvvl
 def vfmsbsvvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmsb.s $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5025,11 +7266,29 @@ def vfmsbsvvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMSB vfmsb.s vfmsbs_vsvvl
+def vfmsbsvsvvl : RV<0xf2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfmsb.s $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMSB vfmsb.s vfmsbs_vsvvvl
 def vfmsbsvsvvvl : RV<0xf2, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfmsb.s $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMSB vfmsb.s vfmsbs_vvsvl
+def vfmsbsvvsvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, I32:$vl),
+       "vfmsb.s $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5075,6 +7334,15 @@ def vfmsbsvvsvmvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM_
   let DisableEncoding = "$vl";
 }
 
+// VFMSB pvfmsb pvfmsb_vvvvl
+def pvfmsbvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfmsb $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMSB pvfmsb pvfmsb_vvvvvl
 def pvfmsbvvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfmsb $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5085,11 +7353,29 @@ def pvfmsbvvvvvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:
   let DisableEncoding = "$vl";
 }
 
+// VFMSB pvfmsb pvfmsb_vsvvl
+def pvfmsbvsvvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfmsb $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMSB pvfmsb pvfmsb_vsvvvl
 def pvfmsbvsvvvl : RV<0xf2, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfmsb $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMSB pvfmsb pvfmsb_vvsvl
+def pvfmsbvvsvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "pvfmsb $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5135,6 +7421,15 @@ def pvfmsbvvsvMvl : RV<0xf2, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM5
   let DisableEncoding = "$vl";
 }
 
+// VFNMAD vfnmad.d vfnmadd_vvvvl
+def vfnmaddvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmad.d $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMAD vfnmad.d vfnmadd_vvvvvl
 def vfnmaddvvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmad.d $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5145,11 +7440,29 @@ def vfnmaddvvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64
   let DisableEncoding = "$vl";
 }
 
+// VFNMAD vfnmad.d vfnmadd_vsvvl
+def vfnmaddvsvvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmad.d $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMAD vfnmad.d vfnmadd_vsvvvl
 def vfnmaddvsvvvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmad.d $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFNMAD vfnmad.d vfnmadd_vvsvl
+def vfnmaddvvsvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "vfnmad.d $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5195,6 +7508,15 @@ def vfnmaddvvsvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM
   let DisableEncoding = "$vl";
 }
 
+// VFNMAD vfnmad.s vfnmads_vvvvl
+def vfnmadsvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmad.s $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMAD vfnmad.s vfnmads_vvvvvl
 def vfnmadsvvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmad.s $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5205,11 +7527,29 @@ def vfnmadsvvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64
   let DisableEncoding = "$vl";
 }
 
+// VFNMAD vfnmad.s vfnmads_vsvvl
+def vfnmadsvsvvl : RV<0xe3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmad.s $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMAD vfnmad.s vfnmads_vsvvvl
 def vfnmadsvsvvvl : RV<0xe3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmad.s $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFNMAD vfnmad.s vfnmads_vvsvl
+def vfnmadsvvsvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, I32:$vl),
+       "vfnmad.s $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5255,6 +7595,15 @@ def vfnmadsvvsvmvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM
   let DisableEncoding = "$vl";
 }
 
+// VFNMAD pvfnmad pvfnmad_vvvvl
+def pvfnmadvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfnmad $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMAD pvfnmad pvfnmad_vvvvvl
 def pvfnmadvvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfnmad $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5265,11 +7614,29 @@ def pvfnmadvvvvvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64
   let DisableEncoding = "$vl";
 }
 
+// VFNMAD pvfnmad pvfnmad_vsvvl
+def pvfnmadvsvvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfnmad $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMAD pvfnmad pvfnmad_vsvvvl
 def pvfnmadvsvvvl : RV<0xe3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfnmad $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFNMAD pvfnmad pvfnmad_vvsvl
+def pvfnmadvvsvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "pvfnmad $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5315,6 +7682,15 @@ def pvfnmadvvsvMvl : RV<0xe3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM
   let DisableEncoding = "$vl";
 }
 
+// VFNMSB vfnmsb.d vfnmsbd_vvvvl
+def vfnmsbdvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmsb.d $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMSB vfnmsb.d vfnmsbd_vvvvvl
 def vfnmsbdvvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmsb.d $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5325,11 +7701,29 @@ def vfnmsbdvvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64
   let DisableEncoding = "$vl";
 }
 
+// VFNMSB vfnmsb.d vfnmsbd_vsvvl
+def vfnmsbdvsvvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmsb.d $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMSB vfnmsb.d vfnmsbd_vsvvvl
 def vfnmsbdvsvvvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmsb.d $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFNMSB vfnmsb.d vfnmsbd_vvsvl
+def vfnmsbdvvsvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "vfnmsb.d $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5375,6 +7769,15 @@ def vfnmsbdvvsvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM
   let DisableEncoding = "$vl";
 }
 
+// VFNMSB vfnmsb.s vfnmsbs_vvvvl
+def vfnmsbsvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmsb.s $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMSB vfnmsb.s vfnmsbs_vvvvvl
 def vfnmsbsvvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmsb.s $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5385,11 +7788,29 @@ def vfnmsbsvvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64
   let DisableEncoding = "$vl";
 }
 
+// VFNMSB vfnmsb.s vfnmsbs_vsvvl
+def vfnmsbsvsvvl : RV<0xf3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "vfnmsb.s $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMSB vfnmsb.s vfnmsbs_vsvvvl
 def vfnmsbsvsvvvl : RV<0xf3, (outs V64:$vx), (ins F32:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "vfnmsb.s $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFNMSB vfnmsb.s vfnmsbs_vvsvl
+def vfnmsbsvvsvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, I32:$vl),
+       "vfnmsb.s $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5435,6 +7856,15 @@ def vfnmsbsvvsvmvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, F32:$sy, V64:$vw, VM
   let DisableEncoding = "$vl";
 }
 
+// VFNMSB pvfnmsb pvfnmsb_vvvvl
+def pvfnmsbvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfnmsb $vx,$vy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMSB pvfnmsb pvfnmsb_vvvvvl
 def pvfnmsbvvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfnmsb $vx,$vy,$vz,$vw", [], NoItinerary>
@@ -5445,11 +7875,29 @@ def pvfnmsbvvvvvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, V64:$vz, V64:$vw, V64
   let DisableEncoding = "$vl";
 }
 
+// VFNMSB pvfnmsb pvfnmsb_vsvvl
+def pvfnmsbvsvvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, I32:$vl),
+       "pvfnmsb $vx,$sy,$vz,$vw", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFNMSB pvfnmsb pvfnmsb_vsvvvl
 def pvfnmsbvsvvvl : RV<0xf3, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vw, V64:$vd, I32:$vl),
        "pvfnmsb $vx,$sy,$vz,$vw", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFNMSB pvfnmsb pvfnmsb_vvsvl
+def pvfnmsbvvsvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, I32:$vl),
+       "pvfnmsb $vx,$vy,$sy,$vw", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5495,11 +7943,29 @@ def pvfnmsbvvsvMvl : RV<0xf3, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vw, VM
   let DisableEncoding = "$vl";
 }
 
+// VRCP vrcp.d vrcpd_vvl
+def vrcpdvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrcp.d $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VRCP vrcp.d vrcpd_vvvl
 def vrcpdvvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrcp.d $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRCP vrcp.s vrcps_vvl
+def vrcpsvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrcp.s $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5515,11 +7981,29 @@ def vrcpsvvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VRCP pvrcp pvrcp_vvl
+def pvrcpvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "pvrcp $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VRCP pvrcp pvrcp_vvvl
 def pvrcpvvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "pvrcp $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRSQRT vrsqrt.d vrsqrtd_vvl
+def vrsqrtdvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrsqrt.d $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5535,6 +8019,15 @@ def vrsqrtdvvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VRSQRT vrsqrt.s vrsqrts_vvl
+def vrsqrtsvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrsqrt.s $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VRSQRT vrsqrt.s vrsqrts_vvvl
 def vrsqrtsvvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrsqrt.s $vx,$vy", [], NoItinerary>
@@ -5545,11 +8038,29 @@ def vrsqrtsvvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VRSQRT pvrsqrt pvrsqrt_vvl
+def pvrsqrtvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "pvrsqrt $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VRSQRT pvrsqrt pvrsqrt_vvvl
 def pvrsqrtvvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "pvrsqrt $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFIX vcvt.w.d.sx vcvtwdsx_vvl
+def vcvtwdsxvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.d.sx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5575,6 +8086,15 @@ def vcvtwdsxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VFIX vcvt.w.d.sx.rz vcvtwdsxrz_vvl
+def vcvtwdsxrzvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.d.sx.rz $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIX vcvt.w.d.sx.rz vcvtwdsxrz_vvvl
 def vcvtwdsxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.w.d.sx.rz $vx,$vy", [], NoItinerary>
@@ -5590,6 +8110,15 @@ def vcvtwdsxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I
        "vcvt.w.d.sx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFIX vcvt.w.d.zx vcvtwdzx_vvl
+def vcvtwdzxvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.d.zx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5615,6 +8144,15 @@ def vcvtwdzxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VFIX vcvt.w.d.zx.rz vcvtwdzxrz_vvl
+def vcvtwdzxrzvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.d.zx.rz $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIX vcvt.w.d.zx.rz vcvtwdzxrz_vvvl
 def vcvtwdzxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.w.d.zx.rz $vx,$vy", [], NoItinerary>
@@ -5630,6 +8168,15 @@ def vcvtwdzxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I
        "vcvt.w.d.zx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFIX vcvt.w.s.sx vcvtwssx_vvl
+def vcvtwssxvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.s.sx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5655,6 +8202,15 @@ def vcvtwssxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VFIX vcvt.w.s.sx.rz vcvtwssxrz_vvl
+def vcvtwssxrzvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.s.sx.rz $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIX vcvt.w.s.sx.rz vcvtwssxrz_vvvl
 def vcvtwssxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.w.s.sx.rz $vx,$vy", [], NoItinerary>
@@ -5670,6 +8226,15 @@ def vcvtwssxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I
        "vcvt.w.s.sx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFIX vcvt.w.s.zx vcvtwszx_vvl
+def vcvtwszxvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.s.zx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5695,6 +8260,15 @@ def vcvtwszxvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VFIX vcvt.w.s.zx.rz vcvtwszxrz_vvl
+def vcvtwszxrzvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.w.s.zx.rz $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIX vcvt.w.s.zx.rz vcvtwszxrz_vvvl
 def vcvtwszxrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.w.s.zx.rz $vx,$vy", [], NoItinerary>
@@ -5710,6 +8284,15 @@ def vcvtwszxrzvvmvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I
        "vcvt.w.s.zx.rz $vx,$vy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFIX pvcvt.w.s pvcvtws_vvl
+def pvcvtwsvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "pvcvt.w.s $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5735,6 +8318,15 @@ def pvcvtwsvvMvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM512_:$vm, V64:$vd, I
   let DisableEncoding = "$vl";
 }
 
+// VFIX pvcvt.w.s.rz pvcvtwsrz_vvl
+def pvcvtwsrzvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "pvcvt.w.s.rz $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIX pvcvt.w.s.rz pvcvtwsrz_vvvl
 def pvcvtwsrzvvvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "pvcvt.w.s.rz $vx,$vy", [], NoItinerary>
@@ -5750,6 +8342,15 @@ def pvcvtwsrzvvMvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, VM512_:$vm, V64:$vd,
        "pvcvt.w.s.rz $vx,$vy,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFIXX vcvt.l.d vcvtld_vvl
+def vcvtldvvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.l.d $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5775,6 +8376,15 @@ def vcvtldvvmvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VFIXX vcvt.l.d.rz vcvtldrz_vvl
+def vcvtldrzvvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.l.d.rz $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIXX vcvt.l.d.rz vcvtldrz_vvvl
 def vcvtldrzvvvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.l.d.rz $vx,$vy", [], NoItinerary>
@@ -5795,11 +8405,29 @@ def vcvtldrzvvmvl : RV<0xa8, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
+// VFLT vcvt.d.w vcvtdw_vvl
+def vcvtdwvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.d.w $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFLT vcvt.d.w vcvtdw_vvvl
 def vcvtdwvvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.d.w $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFLT vcvt.s.w vcvtsw_vvl
+def vcvtswvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.s.w $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5815,11 +8443,29 @@ def vcvtswvvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VFLT pvcvt.s.w pvcvtsw_vvl
+def pvcvtswvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "pvcvt.s.w $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFLT pvcvt.s.w pvcvtsw_vvvl
 def pvcvtswvvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "pvcvt.s.w $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFLTX vcvt.d.l vcvtdl_vvl
+def vcvtdlvvl : RV<0xb8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.d.l $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5835,11 +8481,29 @@ def vcvtdlvvvl : RV<0xb8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VCVD vcvt.d.s vcvtds_vvl
+def vcvtdsvvl : RV<0x8f, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.d.s $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VCVD vcvt.d.s vcvtds_vvvl
 def vcvtdsvvvl : RV<0x8f, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.d.s $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VCVS vcvt.s.d vcvtsd_vvl
+def vcvtsdvvl : RV<0x9f, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vcvt.s.d $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5855,11 +8519,29 @@ def vcvtsdvvvl : RV<0x9f, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VMRG vmrg vmrg_vvvml
+def vmrgvvvml : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, I32:$vl),
+       "vmrg $vx,$vy,$vz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMRG vmrg vmrg_vvvmvl
 def vmrgvvvmvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
        "vmrg $vx,$vy,$vz,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMRG vmrg.w vmrgw_vvvMl
+def vmrgwvvvMl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, I32:$vl),
+       "vmrg.w $vx,$vy,$vz,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -5875,11 +8557,29 @@ def vmrgwvvvMvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V6
   let DisableEncoding = "$vl";
 }
 
+// VSHF vshf vshf_vvvsl
+def vshfvvvsl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy, I32:$vl),
+       "vshf $vx,$vy,$vz,$sy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSHF vshf vshf_vvvsvl
 def vshfvvvsvl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy, V64:$vd, I32:$vl),
        "vshf $vx,$vy,$vz,$sy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSHF vshf vshf_vvvIl
+def vshfvvvIl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7Op64:$N, I32:$vl),
+       "vshf $vx,$vy,$vz,$N", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7247,11 +9947,29 @@ def pvfmkslenanMcvMl : Pseudo<(outs VM512_:$vmx), (ins CCOp:$cc, V64:$vz, VM512_
   let DisableEncoding = "$vl";
 }
 
+// VSUMS vsum.w.sx vsumwsx_vvl
+def vsumwsxvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vsum.w.sx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUMS vsum.w.sx vsumwsx_vvvl
 def vsumwsxvvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vsum.w.sx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSUMS vsum.w.sx vsumwsx_vvml
+def vsumwsxvvml : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vsum.w.sx $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7267,11 +9985,29 @@ def vsumwsxvvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:
   let DisableEncoding = "$vl";
 }
 
+// VSUMS vsum.w.zx vsumwzx_vvl
+def vsumwzxvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vsum.w.zx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUMS vsum.w.zx vsumwzx_vvvl
 def vsumwzxvvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vsum.w.zx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSUMS vsum.w.zx vsumwzx_vvml
+def vsumwzxvvml : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vsum.w.zx $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7287,11 +10023,29 @@ def vsumwzxvvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:
   let DisableEncoding = "$vl";
 }
 
+// VSUMX vsum.l vsuml_vvl
+def vsumlvvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vsum.l $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VSUMX vsum.l vsuml_vvvl
 def vsumlvvvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vsum.l $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VSUMX vsum.l vsuml_vvml
+def vsumlvvml : RV<0xaa, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vsum.l $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7307,11 +10061,29 @@ def vsumlvvmvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
+// VFSUM vfsum.d vfsumd_vvl
+def vfsumdvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfsum.d $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFSUM vfsum.d vfsumd_vvvl
 def vfsumdvvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfsum.d $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFSUM vfsum.d vfsumd_vvml
+def vfsumdvvml : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vfsum.d $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7327,11 +10099,29 @@ def vfsumdvvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VFSUM vfsum.s vfsums_vvl
+def vfsumsvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfsum.s $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFSUM vfsum.s vfsums_vvvl
 def vfsumsvvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfsum.s $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFSUM vfsum.s vfsums_vvml
+def vfsumsvvml : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vfsum.s $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7347,11 +10137,29 @@ def vfsumsvvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VMAXS vrmaxs.w.fst.sx vrmaxswfstsx_vvl
+def vrmaxswfstsxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmaxs.w.fst.sx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMAXS vrmaxs.w.fst.sx vrmaxswfstsx_vvvl
 def vrmaxswfstsxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrmaxs.w.fst.sx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMAXS vrmaxs.w.lst.sx vrmaxswlstsx_vvl
+def vrmaxswlstsxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmaxs.w.lst.sx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7367,11 +10175,29 @@ def vrmaxswlstsxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VMAXS vrmaxs.w.fst.zx vrmaxswfstzx_vvl
+def vrmaxswfstzxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmaxs.w.fst.zx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMAXS vrmaxs.w.fst.zx vrmaxswfstzx_vvvl
 def vrmaxswfstzxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrmaxs.w.fst.zx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMAXS vrmaxs.w.lst.zx vrmaxswlstzx_vvl
+def vrmaxswlstzxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmaxs.w.lst.zx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7387,11 +10213,29 @@ def vrmaxswlstzxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VMAXS vrmins.w.fst.sx vrminswfstsx_vvl
+def vrminswfstsxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmins.w.fst.sx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMAXS vrmins.w.fst.sx vrminswfstsx_vvvl
 def vrminswfstsxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrmins.w.fst.sx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMAXS vrmins.w.lst.sx vrminswlstsx_vvl
+def vrminswlstsxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmins.w.lst.sx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7407,11 +10251,29 @@ def vrminswlstsxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VMAXS vrmins.w.fst.zx vrminswfstzx_vvl
+def vrminswfstzxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmins.w.fst.zx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMAXS vrmins.w.fst.zx vrminswfstzx_vvvl
 def vrminswfstzxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrmins.w.fst.zx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMAXS vrmins.w.lst.zx vrminswlstzx_vvl
+def vrminswlstzxvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmins.w.lst.zx $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7427,11 +10289,29 @@ def vrminswlstzxvvvl : RV<0xbb, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VMAXX vrmaxs.l.fst vrmaxslfst_vvl
+def vrmaxslfstvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmaxs.l.fst $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMAXX vrmaxs.l.fst vrmaxslfst_vvvl
 def vrmaxslfstvvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrmaxs.l.fst $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMAXX vrmaxs.l.lst vrmaxsllst_vvl
+def vrmaxsllstvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmaxs.l.lst $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7447,11 +10327,29 @@ def vrmaxsllstvvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VMAXX vrmins.l.fst vrminslfst_vvl
+def vrminslfstvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmins.l.fst $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMAXX vrmins.l.fst vrminslfst_vvvl
 def vrminslfstvvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrmins.l.fst $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMAXX vrmins.l.lst vrminsllst_vvl
+def vrminsllstvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrmins.l.lst $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7467,11 +10365,29 @@ def vrminsllstvvvl : RV<0xab, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VFMAX vfrmax.d.fst vfrmaxdfst_vvl
+def vfrmaxdfstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmax.d.fst $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAX vfrmax.d.fst vfrmaxdfst_vvvl
 def vfrmaxdfstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfrmax.d.fst $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAX vfrmax.d.lst vfrmaxdlst_vvl
+def vfrmaxdlstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmax.d.lst $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7487,11 +10403,29 @@ def vfrmaxdlstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VFMAX vfrmax.s.fst vfrmaxsfst_vvl
+def vfrmaxsfstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmax.s.fst $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAX vfrmax.s.fst vfrmaxsfst_vvvl
 def vfrmaxsfstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfrmax.s.fst $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAX vfrmax.s.lst vfrmaxslst_vvl
+def vfrmaxslstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmax.s.lst $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7507,11 +10441,29 @@ def vfrmaxslstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VFMAX vfrmin.d.fst vfrmindfst_vvl
+def vfrmindfstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmin.d.fst $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAX vfrmin.d.fst vfrmindfst_vvvl
 def vfrmindfstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfrmin.d.fst $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAX vfrmin.d.lst vfrmindlst_vvl
+def vfrmindlstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmin.d.lst $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7527,11 +10479,29 @@ def vfrmindlstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VFMAX vfrmin.s.fst vfrminsfst_vvl
+def vfrminsfstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmin.s.fst $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFMAX vfrmin.s.fst vfrminsfst_vvvl
 def vfrminsfstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfrmin.s.fst $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMAX vfrmin.s.lst vfrminslst_vvl
+def vfrminslstvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vfrmin.s.lst $vx,$vy", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7547,11 +10517,29 @@ def vfrminslstvvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VGT vgt vgt_vvl
+def vgtvvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vgt $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VGT vgt vgt_vvvl
 def vgtvvvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vgt $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvml
+def vgtvvml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vgt $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7567,11 +10555,29 @@ def vgtvvmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl)
   let DisableEncoding = "$vl";
 }
 
+// VGTU vgtu vgtu_vvl
+def vgtuvvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vgtu $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VGTU vgtu vgtu_vvvl
 def vgtuvvvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vgtu $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvml
+def vgtuvvml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vgtu $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7587,11 +10593,29 @@ def vgtuvvmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl
   let DisableEncoding = "$vl";
 }
 
+// VGTL vgtl.sx vgtlsx_vvl
+def vgtlsxvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vgtl.sx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VGTL vgtl.sx vgtlsx_vvvl
 def vgtlsxvvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvml
+def vgtlsxvvml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vgtl.sx $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -7607,11 +10631,29 @@ def vgtlsxvvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$
   let DisableEncoding = "$vl";
 }
 
+// VGTL vgtl.zx vgtlzx_vvl
+def vgtlzxvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vgtl.zx $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VGTL vgtl.zx vgtlzx_vvvl
 def vgtlzxvvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvml
+def vgtlzxvvml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
+       "vgtl.zx $vx,$vy,$vm", [], NoItinerary>
+{
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
