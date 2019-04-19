@@ -476,7 +476,7 @@ class InstVEL(Inst):
         if 'llvmInst' not in kwargs:
             if asm:
                 suffix = "".join([op.kind for op in outs + ins])
-                llvmInst = re.sub("\.", "", asm) + suffix
+                llvmInst = re.sub("\.", "", asm) + "_" + suffix
             else:
                 llvmInst = None
             kwargs['llvmInst'] = llvmInst

@@ -54,9 +54,9 @@ namespace {
   unsigned getVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
   {
     unsigned opc = MI.getOpcode();
-    if (opc < VE::andmMMMl 
-            || (opc > VE::xormMMMl && opc < VE::andmmmml)
-            || opc > VE::xormmmml)
+    if (opc < VE::andm_MMMl 
+            || (opc > VE::xorm_MMMl && opc < VE::andm_mmml)
+            || opc > VE::xorm_mmml)
       return VE::NoRegister;
 
     for (const MachineOperand &MO : MI.operands()) {
