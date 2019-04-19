@@ -57,9 +57,9 @@ def : Pat<(int_ve_vl_vstl2dot_vssl v256f64:$vx, (i64 simm7:$I), i64:$sz, i32:$vl
 def : Pat<(int_ve_vl_pfchv_ssl i64:$sy, i64:$sz, i32:$vl), (pfchv_ssl i64:$sy, i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_pfchv_ssl (i64 simm7:$I), i64:$sz, i32:$vl), (pfchv_Isl (i64 simm7:$I), i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_lsv_vvss v256f64:$vd, i32:$sy, i64:$sz), (lsv_vvss v256f64:$vd, i32:$sy, i64:$sz)>;
-def : Pat<(int_ve_vl_lvsl_svs v256f64:$vx, i32:$sy), (lvslsvs v256f64:$vx, i32:$sy)>;
-def : Pat<(int_ve_vl_lvsd_svs v256f64:$vx, i32:$sy), (lvslsvs v256f64:$vx, i32:$sy)>;
-def : Pat<(int_ve_vl_lvss_svs v256f64:$vx, i32:$sy), (lvsssvs v256f64:$vx, i32:$sy)>;
+def : Pat<(int_ve_vl_lvsl_svs v256f64:$vx, i32:$sy), (lvsl_svs v256f64:$vx, i32:$sy)>;
+def : Pat<(int_ve_vl_lvsd_svs v256f64:$vx, i32:$sy), (lvsl_svs v256f64:$vx, i32:$sy)>;
+def : Pat<(int_ve_vl_lvss_svs v256f64:$vx, i32:$sy), (lvss_svs v256f64:$vx, i32:$sy)>;
 def : Pat<(int_ve_vl_lvm_mmss v4i64:$vmd, i64:$sy, i64:$sz), (lvm_mmss v4i64:$vmd, i64:$sy, i64:$sz)>;
 def : Pat<(int_ve_vl_lvm_mmss v4i64:$vmd, (i64 uimm6:$N), i64:$sz), (lvm_mmIs v4i64:$vmd, (i64 uimm6:$N), i64:$sz)>;
 def : Pat<(int_ve_vl_lvm_MMss v8i64:$vmd, i64:$sy, i64:$sz), (lvm_MMss v8i64:$vmd, i64:$sy, i64:$sz)>;

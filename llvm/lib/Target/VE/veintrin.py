@@ -940,11 +940,6 @@ class InstTable(object):
         self.currentSection.add(inst)
         return inst
 
-    def addList(self, L):
-        for I in L:
-            self.add(I)
-        return L
-
     def Dummy(self, opc, inst, func, asm):
         self.add(DummyInst(opc, inst, func, asm))
 
@@ -994,18 +989,6 @@ class InstTable(object):
         self.Def(opc, inst, "", asm, [O_rr, O_ir]).noTest().writeMem()
         self.Def(opc, inst, "ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
 
-        return
-        O_rr = [VX(T_u64), SY(T_u64), SZ(T_voidp)]
-        O_ir = [VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
-        L = InstList(self.InstClass)
-        L.Inst(opc, inst, inst+"rr", asm, asm+"_vss", [], O_rr)
-        L.Inst(opc, inst, inst+"ir", asm, asm+"_vss", [], O_ir)
-        L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss", [], O_rr).oldLowering()
-        L.Inst(opc, inst, inst+"otrr", asm+".ot", asm+"ot_vss", [], O_ir).oldLowering()
-        #L.Inst(opc, inst+"rz", asm, asm, [], [VX(T_u64), SY(T_u64), ImmZ(T_voidp)])
-        #L.Inst(opc, inst+"iz", asm, asm, [], [VX(T_u64), ImmI(T_u64), ImmZ(T_voidp)])
-        self.addList(L).noTest().writeMem()
-
     def VBRDm(self, opc, isVL):
         expr = "{0} = {1}"
         I = self.InstClass
@@ -1036,9 +1019,9 @@ class InstTable(object):
     def LVSm(self, opc, isVL):
         I = self.InstClass
         if isVL:
-          self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="lvslsvs", noVL=True).noTest())
-          self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="lvslsvs", noVL=True).noTest()).noLLVMInstDefine()
-          self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="lvsssvs", noVL=True).noTest())
+          self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest())
+          self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest()).noLLVMInstDefine()
+          self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="lvss_svs", noVL=True).noTest())
         else:
           self.add(I(opc, "LVS", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)], subop="i64r").noTest())
           self.add(I(opc, "LVS", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)], subop="f64r").noTest()).noLLVMInstDefine()
@@ -1236,7 +1219,7 @@ def gen_test(insts, directory):
     for I in insts:
         if I.hasTest():
             data = getTestGenerator(I).gen(I).definition()
-            if directory:
+            if directory and (directory != "-"):
                 filename = "{}/{}.c".format(directory, I.intrinsicName())
                 cmpwrite(filename, data)
             else:
@@ -1295,7 +1278,6 @@ def createInstructionTable(isVL):
         T = InstTableVEL()
     else:
         T = InstTableVE()
-    I = T.InstClass
     
     #
     # Start of instruction definition
@@ -1576,6 +1558,7 @@ def main():
     parser.add_argument('--mktest', dest="opt_mktest", action="store_true")
     parser.add_argument('-l', dest="opt_lowering", action="store_true")
     parser.add_argument('--vl', action="store_true")
+    parser.add_argument('--test-dir', default="../llvm-test/intrinsic/gen/tests")
     args, others = parser.parse_known_args()
     
     global llvmIntrinsicPrefix
@@ -1584,9 +1567,7 @@ def main():
     
     T = createInstructionTable(args.vl)
     insts = T.insts()
-    
-    test_dir = "../llvm-test/intrinsic/gen/tests"
-    
+
     if args.opt_filter:
         insts = [i for i in insts if re.search(args.opt_filter, i.intrinsicName())]
         print "filter: {} -> {}".format(args.opt_filter, len(insts))
@@ -1618,7 +1599,7 @@ def main():
             if I.hasTest():
                 print getTestGenerator(I).gen(I).decl()
     if args.opt_test:
-        gen_test(insts, test_dir)
+        gen_test(insts, args.test_dir)
     if args.opt_reference:
         print '#include <math.h>'
         print '#include <algorithm>'

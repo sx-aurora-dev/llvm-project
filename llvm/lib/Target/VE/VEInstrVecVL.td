@@ -546,7 +546,7 @@ def lsv_vvss : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz),
 }
 
 // LVS lvs lvsl_svs
-def lvslsvs : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
+def lvsl_svs : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
        "lvs $sx,$vx,$sy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -554,7 +554,7 @@ def lvslsvs : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
 }
 
 // LVS lvs lvss_svs
-def lvsssvs : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
+def lvss_svs : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
        "lvs $sx,$vx,$sy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
