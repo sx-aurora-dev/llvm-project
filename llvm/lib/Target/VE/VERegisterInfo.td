@@ -30,8 +30,8 @@ let Namespace = "VE" in {
   def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
   def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
   def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
-  def sub_vm_even : SubRegIndex<256>;           // See below
-  def sub_vm_odd  : SubRegIndex<256, 256>;      // See below
+  def sub_vm_even : SubRegIndex<256>;           // High 256 bit (0..255)
+  def sub_vm_odd  : SubRegIndex<256, 256>;      // Low 256 bit (256..511)
 }
 
 // Registers are identified with 7-bit ID numbers.
