@@ -210,39 +210,39 @@ define void @test2(i32*, i32*, i32) {
 ; CHECK-LABEL: test2:
 ; CHECK:       pvfmk.w.up.ne %vm2,%v2
 ; CHECK-NEXT:  vfmk.w.ne %vm3,%v2
-; CHECK-NEXT:  svm %s16,%vm2,0
-; CHECK-NEXT:  st %s16, -64(,%s9)
-; CHECK-NEXT:  svm %s16,%vm2,1
-; CHECK-NEXT:  st %s16, -56(,%s9)
-; CHECK-NEXT:  svm %s16,%vm2,2
-; CHECK-NEXT:  st %s16, -48(,%s9)
-; CHECK-NEXT:  svm %s16,%vm2,3
-; CHECK-NEXT:  st %s16, -40(,%s9)
 ; CHECK-NEXT:  svm %s16,%vm3,0
-; CHECK-NEXT:  st %s16, -32(,%s9)
+; CHECK-NEXT:  st %s16, -64(,%s9)
 ; CHECK-NEXT:  svm %s16,%vm3,1
-; CHECK-NEXT:  st %s16, -24(,%s9)
+; CHECK-NEXT:  st %s16, -56(,%s9)
 ; CHECK-NEXT:  svm %s16,%vm3,2
-; CHECK-NEXT:  st %s16, -16(,%s9)
+; CHECK-NEXT:  st %s16, -48(,%s9)
 ; CHECK-NEXT:  svm %s16,%vm3,3
+; CHECK-NEXT:  st %s16, -40(,%s9)
+; CHECK-NEXT:  svm %s16,%vm2,0
+; CHECK-NEXT:  st %s16, -32(,%s9)
+; CHECK-NEXT:  svm %s16,%vm2,1
+; CHECK-NEXT:  st %s16, -24(,%s9)
+; CHECK-NEXT:  svm %s16,%vm2,2
+; CHECK-NEXT:  st %s16, -16(,%s9)
+; CHECK-NEXT:  svm %s16,%vm2,3
 ; CHECK-NEXT:  st %s16, -8(,%s9)               # 64-byte Folded Spill
 ; CHECK:       # implicit-def: $vmp3
 ; CHECK-NEXT:  ld %s16, -64(,%s9)
-; CHECK-NEXT:  lvm %vm6,0,%s16
-; CHECK-NEXT:  ld %s16, -56(,%s9)
-; CHECK-NEXT:  lvm %vm6,1,%s16
-; CHECK-NEXT:  ld %s16, -48(,%s9)
-; CHECK-NEXT:  lvm %vm6,2,%s16
-; CHECK-NEXT:  ld %s16, -40(,%s9)
-; CHECK-NEXT:  lvm %vm6,3,%s16
-; CHECK-NEXT:  ld %s16, -32(,%s9)
 ; CHECK-NEXT:  lvm %vm7,0,%s16
-; CHECK-NEXT:  ld %s16, -24(,%s9)
+; CHECK-NEXT:  ld %s16, -56(,%s9)
 ; CHECK-NEXT:  lvm %vm7,1,%s16
-; CHECK-NEXT:  ld %s16, -16(,%s9)
+; CHECK-NEXT:  ld %s16, -48(,%s9)
 ; CHECK-NEXT:  lvm %vm7,2,%s16
-; CHECK-NEXT:  ld %s16, -8(,%s9)               # 64-byte Folded Reload
+; CHECK-NEXT:  ld %s16, -40(,%s9)
 ; CHECK-NEXT:  lvm %vm7,3,%s16
+; CHECK-NEXT:  ld %s16, -32(,%s9)
+; CHECK-NEXT:  lvm %vm6,0,%s16
+; CHECK-NEXT:  ld %s16, -24(,%s9)
+; CHECK-NEXT:  lvm %vm6,1,%s16
+; CHECK-NEXT:  ld %s16, -16(,%s9)
+; CHECK-NEXT:  lvm %vm6,2,%s16
+; CHECK-NEXT:  ld %s16, -8(,%s9)               # 64-byte Folded Reload
+; CHECK-NEXT:  lvm %vm6,3,%s16
 ; CHECK-NEXT:  vmrg.w %v2,%v2,%v3,%vm6
   %4 = shl nsw i32 %2, 1
   %5 = sext i32 %4 to i64

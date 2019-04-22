@@ -516,17 +516,17 @@ void VEAsmPrinter::LowerV2VMAndEmitMCInsts(
 void VEAsmPrinter::LowerVMP2VAndEmitMCInsts(
     const MachineInstr *MI, const MCSubtargetInfo &STI) {
   // FIXME: using sx16 as a temporary register.
-  // SVMi %sx16, $src, i
-  // LSVi $dest, $dest, i, %sx16        x 4
   // SVMi %sx16, $src+1, i
+  // LSVi $dest, $dest, i, %sx16        x 4
+  // SVMi %sx16, $src, i
   // LSVi $dest, $dest, i+4, %sx16      x 4
 
   unsigned DestReg = MI->getOperand(0).getReg();
   unsigned SrcReg = MI->getOperand(1).getReg();
   const MachineFunction &MF = *MI->getParent()->getParent();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-  unsigned SrcRegLo = TRI->getSubReg(SrcReg, VE::sub_vm_even);
-  unsigned SrcRegHi = TRI->getSubReg(SrcReg, VE::sub_vm_odd);
+  unsigned SrcRegLo = TRI->getSubReg(SrcReg, VE::sub_vm_odd);
+  unsigned SrcRegHi = TRI->getSubReg(SrcReg, VE::sub_vm_even);
 
   for (int i = 0; i < 4; ++i) {
     EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SVMi)
@@ -556,16 +556,16 @@ void VEAsmPrinter::LowerV2VMPAndEmitMCInsts(
     const MachineInstr *MI, const MCSubtargetInfo &STI) {
   // FIXME: using sx16 as a temporary register.
   // LVSi %sx16, $src, i
-  // LVMi $dest, $dest, i, %sx16        x 4
+  // LVMi $dest+1, $dest+1, i, %sx16        x 4
   // LVSi %sx16, $src, i+4
-  // LVMi $dest+1, $dest+1, i, %sx16    x 4
+  // LVMi $dest, $dest, i, %sx16    x 4
 
   unsigned DestReg = MI->getOperand(0).getReg();
   unsigned SrcReg = MI->getOperand(1).getReg();
   const MachineFunction &MF = *MI->getParent()->getParent();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-  unsigned DestRegLo = TRI->getSubReg(DestReg, VE::sub_vm_even);
-  unsigned DestRegHi = TRI->getSubReg(DestReg, VE::sub_vm_odd);
+  unsigned DestRegLo = TRI->getSubReg(DestReg, VE::sub_vm_odd);
+  unsigned DestRegHi = TRI->getSubReg(DestReg, VE::sub_vm_even);
 
   for (int i = 0; i < 4; ++i) {
     EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVSi)
