@@ -13,6 +13,7 @@ int main(){
   #pragma omp target
   {
     printf("%d\n", a);
+    fflush(0);
   }
 }
 
