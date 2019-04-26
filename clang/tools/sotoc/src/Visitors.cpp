@@ -197,6 +197,11 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
   for (const auto i : *FindLoopVisitor.getVarSet()) {
     DEBUGP("Iterating var set");
     // i->print(llvm::outs());
+    if (Context.getSourceManager().isBeforeInTranslationUnit(
+          S->getBeginLoc(),i->getSourceRange().getBegin())) {
+      tmpSet.insert(i);
+      continue;
+    }
     for (auto j : *TCR->getOMPClauses()) {
       for (auto CC : j->children()) {
         if (auto CC_DeclRefExpr =
