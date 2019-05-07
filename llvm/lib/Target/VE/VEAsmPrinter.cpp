@@ -63,11 +63,9 @@ namespace {
     }
 
     bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                         unsigned AsmVariant, const char *ExtraCode,
-                         raw_ostream &O) override;
+                         const char *ExtraCode, raw_ostream &O) override;
     bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                               unsigned AsmVariant, const char *ExtraCode,
-                               raw_ostream &O) override;
+                               const char *ExtraCode, raw_ostream &O) override;
 
     void LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                    const MCSubtargetInfo &STI);
@@ -796,16 +794,15 @@ void VEAsmPrinter::printMemASOperand(const MachineInstr *MI, int opNum,
 /// PrintAsmOperand - Print out an operand for an inline asm expression.
 ///
 bool VEAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                                      unsigned AsmVariant,
-                                      const char *ExtraCode,
-                                      raw_ostream &O) {
+                                   const char *ExtraCode,
+                                   raw_ostream &O) {
   if (ExtraCode && ExtraCode[0]) {
     if (ExtraCode[1] != 0) return true; // Unknown modifier.
 
     switch (ExtraCode[0]) {
     default:
       // See if this is a generic print operand
-      return AsmPrinter::PrintAsmOperand(MI, OpNo, AsmVariant, ExtraCode, O);
+      return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
     case 'f':
     case 'r':
      break;
@@ -817,10 +814,9 @@ bool VEAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
   return false;
 }
 
-bool VEAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
-                                            unsigned OpNo, unsigned AsmVariant,
-                                            const char *ExtraCode,
-                                            raw_ostream &O) {
+bool VEAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
+                                         const char *ExtraCode,
+                                         raw_ostream &O) {
   if (ExtraCode && ExtraCode[0])
     return true;  // Unknown modifier
 
