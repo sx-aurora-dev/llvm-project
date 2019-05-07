@@ -79,7 +79,14 @@ static const ProfileSummaryEntry &getEntryForPercentile(SummaryEntryVector &DS,
 bool ProfileSummaryInfo::computeSummary() {
   if (Summary)
     return true;
-  auto *SummaryMD = M.getProfileSummary();
+  // First try to get context sensitive ProfileSummary.
+  auto *SummaryMD = M.getProfileSummary(/* IsCS */ true);
+  if (SummaryMD) {
+    Summary.reset(ProfileSummary::getFromMD(SummaryMD));
+    return true;
+  }
+  // This will actually return PSK_Instr or PSK_Sample summary.
+  SummaryMD = M.getProfileSummary(/* IsCS */ false);
   if (!SummaryMD)
     return false;
   Summary.reset(ProfileSummary::getFromMD(SummaryMD));
@@ -88,7 +95,8 @@ bool ProfileSummaryInfo::computeSummary() {
 
 Optional<uint64_t>
 ProfileSummaryInfo::getProfileCount(const Instruction *Inst,
-                                    BlockFrequencyInfo *BFI) {
+                                    BlockFrequencyInfo *BFI,
+                                    bool AllowSynthetic) {
   if (!Inst)
     return None;
   assert((isa<CallInst>(Inst) || isa<InvokeInst>(Inst)) &&
@@ -104,7 +112,7 @@ ProfileSummaryInfo::getProfileCount(const Instruction *Inst,
     return None;
   }
   if (BFI)
-    return BFI->getBlockProfileCount(Inst->getParent());
+    return BFI->getBlockProfileCount(Inst->getParent(), AllowSynthetic);
   return None;
 }
 
