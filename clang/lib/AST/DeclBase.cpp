@@ -354,7 +354,8 @@ bool Decl::isInAnonymousNamespace() const {
 }
 
 bool Decl::isInStdNamespace() const {
-  return getDeclContext()->isStdNamespace();
+  const DeclContext *DC = getDeclContext();
+  return DC && DC->isStdNamespace();
 }
 
 TranslationUnitDecl *Decl::getTranslationUnitDecl() {
@@ -427,22 +428,6 @@ bool Decl::isReferenced() const {
     if (I->Referenced)
       return true;
 
-  return false;
-}
-
-bool Decl::isExported() const {
-  if (isModulePrivate())
-    return false;
-  // Namespaces are always exported.
-  if (isa<TranslationUnitDecl>(this) || isa<NamespaceDecl>(this))
-    return true;
-  // Otherwise, this is a strictly lexical check.
-  for (auto *DC = getLexicalDeclContext(); DC; DC = DC->getLexicalParent()) {
-    if (cast<Decl>(DC)->isModulePrivate())
-      return false;
-    if (isa<ExportDecl>(DC))
-      return true;
-  }
   return false;
 }
 
@@ -812,6 +797,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case ObjCCategoryImpl:
     case Import:
     case OMPThreadPrivate:
+    case OMPAllocate:
     case OMPRequires:
     case OMPCapturedExpr:
     case Empty:
@@ -1056,6 +1042,18 @@ DeclContext *DeclContext::getLookupParent() {
   return getParent();
 }
 
+const BlockDecl *DeclContext::getInnermostBlockDecl() const {
+  const DeclContext *Ctx = this;
+
+  do {
+    if (Ctx->isClosure())
+      return cast<BlockDecl>(Ctx);
+    Ctx = Ctx->getParent();
+  } while (Ctx);
+
+  return nullptr;
+}
+
 bool DeclContext::isInlineNamespace() const {
   return isNamespace() &&
          cast<NamespaceDecl>(this)->isInline();
@@ -1178,13 +1176,15 @@ DeclContext *DeclContext::getPrimaryContext() {
     return this;
 
   case Decl::ObjCInterface:
-    if (auto *Def = cast<ObjCInterfaceDecl>(this)->getDefinition())
-      return Def;
+    if (auto *OID = dyn_cast<ObjCInterfaceDecl>(this))
+      if (auto *Def = OID->getDefinition())
+        return Def;
     return this;
 
   case Decl::ObjCProtocol:
-    if (auto *Def = cast<ObjCProtocolDecl>(this)->getDefinition())
-      return Def;
+    if (auto *OPD = dyn_cast<ObjCProtocolDecl>(this))
+      if (auto *Def = OPD->getDefinition())
+        return Def;
     return this;
 
   case Decl::ObjCCategory:
