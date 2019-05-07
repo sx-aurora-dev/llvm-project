@@ -428,6 +428,13 @@ public:
 
     RegSubRegPair(unsigned Reg = 0, unsigned SubReg = 0)
         : Reg(Reg), SubReg(SubReg) {}
+
+    bool operator==(const RegSubRegPair& P) const {
+      return Reg == P.Reg && SubReg == P.SubReg;
+    }
+    bool operator!=(const RegSubRegPair& P) const {
+      return !(*this == P);
+    }
   };
 
   /// A pair composed of a pair of a register and a sub-register index,
@@ -1137,8 +1144,9 @@ public:
 
   /// Get the base operand and byte offset of an instruction that reads/writes
   /// memory.
-  virtual bool getMemOperandWithOffset(MachineInstr &MI,
-                                       MachineOperand *&BaseOp, int64_t &Offset,
+  virtual bool getMemOperandWithOffset(const MachineInstr &MI,
+                                       const MachineOperand *&BaseOp,
+                                       int64_t &Offset,
                                        const TargetRegisterInfo *TRI) const {
     return false;
   }
@@ -1163,8 +1171,8 @@ public:
   /// or
   ///   DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   /// to TargetPassConfig::createMachineScheduler() to have an effect.
-  virtual bool shouldClusterMemOps(MachineOperand &BaseOp1,
-                                   MachineOperand &BaseOp2,
+  virtual bool shouldClusterMemOps(const MachineOperand &BaseOp1,
+                                   const MachineOperand &BaseOp2,
                                    unsigned NumLoads) const {
     llvm_unreachable("target did not implement shouldClusterMemOps()");
   }
@@ -1541,7 +1549,8 @@ public:
   /// See also MachineInstr::mayAlias, which is implemented on top of this
   /// function.
   virtual bool
-  areMemAccessesTriviallyDisjoint(MachineInstr &MIa, MachineInstr &MIb,
+  areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                  const MachineInstr &MIb,
                                   AliasAnalysis *AA = nullptr) const {
     assert((MIa.mayLoad() || MIa.mayStore()) &&
            "MIa must load from or modify a memory location");

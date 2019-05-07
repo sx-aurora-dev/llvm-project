@@ -13,7 +13,6 @@
 
 #include <string_view>
 #include <cassert>
-#include <iostream>
 
 #include "test_macros.h"
 
@@ -47,7 +46,7 @@ constexpr size_t test_ce ( size_t n, size_t k ) {
 }
 #endif
 
-int main () {
+int main(int, char**) {
     test ( "ABCDE", 5 );
     test ( "a", 1 );
     test ( "", 0 );
@@ -74,4 +73,6 @@ int main () {
     static_assert ( test_ce ( 9, 3 ) == 6, "" );
     }
 #endif
+
+  return 0;
 }

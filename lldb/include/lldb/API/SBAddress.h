@@ -29,6 +29,12 @@ public:
 
   const lldb::SBAddress &operator=(const lldb::SBAddress &rhs);
 
+  explicit operator bool() const;
+
+  // operator== is a free function
+
+  bool operator!=(const SBAddress &rhs) const;
+
   bool IsValid() const;
 
   void Clear();
@@ -114,7 +120,7 @@ protected:
   void SetAddress(const lldb_private::Address *lldb_object_ptr);
 
 private:
-  std::unique_ptr<lldb_private::Address> m_opaque_ap;
+  std::unique_ptr<lldb_private::Address> m_opaque_up;
 };
 
 bool LLDB_API operator==(const SBAddress &lhs, const SBAddress &rhs);

@@ -54,7 +54,7 @@ public:
       llvm::unique_function<BackgroundIndexStorage *(llvm::StringRef)>;
 
   // Creates an Index Storage that saves shards into disk. Index storage uses
-  // CDBDirectory + ".clangd-index/" as the folder to save shards.
+  // CDBDirectory + ".clangd/index/" as the folder to save shards.
   static Factory createDiskBackedStorageFactory();
 };
 
@@ -67,11 +67,12 @@ public:
   /// If BuildIndexPeriodMs is greater than 0, the symbol index will only be
   /// rebuilt periodically (one per \p BuildIndexPeriodMs); otherwise, index is
   /// rebuilt for each indexed file.
-  BackgroundIndex(Context BackgroundContext, const FileSystemProvider &,
-                  const GlobalCompilationDatabase &CDB,
-                  BackgroundIndexStorage::Factory IndexStorageFactory,
-                  size_t BuildIndexPeriodMs = 0,
-                  size_t ThreadPoolSize = llvm::hardware_concurrency());
+  BackgroundIndex(
+      Context BackgroundContext, const FileSystemProvider &,
+      const GlobalCompilationDatabase &CDB,
+      BackgroundIndexStorage::Factory IndexStorageFactory,
+      size_t BuildIndexPeriodMs = 0,
+      size_t ThreadPoolSize = llvm::heavyweight_hardware_concurrency());
   ~BackgroundIndex(); // Blocks while the current task finishes.
 
   // Enqueue translation units for indexing.
@@ -86,6 +87,10 @@ public:
   // Wait until the queue is empty, to allow deterministic testing.
   LLVM_NODISCARD bool
   blockUntilIdleForTest(llvm::Optional<double> TimeoutSeconds = 10);
+
+  // Disables thread priority lowering in background index to make sure it can
+  // progress on loaded systems. Only affects tasks that run after the call.
+  static void preventThreadStarvationInTests();
 
 private:
   /// Given index results from a TU, only update symbols coming from files with
@@ -133,14 +138,14 @@ private:
   // queue management
   using Task = std::function<void()>;
   void run(); // Main loop executed by Thread. Runs tasks from Queue.
-  void enqueueTask(Task T, ThreadPriority Prioirty);
+  void enqueueTask(Task T, llvm::ThreadPriority Prioirty);
   void enqueueLocked(tooling::CompileCommand Cmd,
                      BackgroundIndexStorage *IndexStorage);
   std::mutex QueueMu;
   unsigned NumActiveTasks = 0; // Only idle when queue is empty *and* no tasks.
   std::condition_variable QueueCV;
   bool ShouldStop = false;
-  std::deque<std::pair<Task, ThreadPriority>> Queue;
+  std::deque<std::pair<Task, llvm::ThreadPriority>> Queue;
   std::vector<std::thread> ThreadPool; // FIXME: Abstract this away.
   GlobalCompilationDatabase::CommandChanged::Subscription CommandsChanged;
 };

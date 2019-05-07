@@ -146,7 +146,7 @@ lldb::addr_t AppleGetPendingItemsHandler::SetupGetPendingItemsFunction(
 
     // First stage is to make the ClangUtility to hold our injected function:
 
-    if (!m_get_pending_items_impl_code.get()) {
+    if (!m_get_pending_items_impl_code) {
       if (g_get_pending_items_function_code != NULL) {
         Status error;
         m_get_pending_items_impl_code.reset(
@@ -342,7 +342,7 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
   options.SetUnwindOnError(true);
   options.SetIgnoreBreakpoints(true);
   options.SetStopOthers(true);
-  options.SetTimeout(std::chrono::milliseconds(500));
+  options.SetTimeout(process_sp->GetUtilityExpressionTimeout());
   options.SetTryAllThreads(false);
   options.SetIsForUtilityExpr(true);
   thread.CalculateExecutionContext(exe_ctx);

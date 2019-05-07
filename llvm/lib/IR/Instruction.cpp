@@ -301,6 +301,7 @@ const char *Instruction::getOpcodeName(unsigned OpCode) {
   case CatchRet: return "catchret";
   case CatchPad: return "catchpad";
   case CatchSwitch: return "catchswitch";
+  case CallBr: return "callbr";
 
   // Standard unary operators...
   case FNeg: return "fneg";
@@ -405,6 +406,10 @@ static bool haveSameSpecialState(const Instruction *I1, const Instruction *I2,
     return CI->getCallingConv() == cast<InvokeInst>(I2)->getCallingConv() &&
            CI->getAttributes() == cast<InvokeInst>(I2)->getAttributes() &&
            CI->hasIdenticalOperandBundleSchema(*cast<InvokeInst>(I2));
+  if (const CallBrInst *CI = dyn_cast<CallBrInst>(I1))
+    return CI->getCallingConv() == cast<CallBrInst>(I2)->getCallingConv() &&
+           CI->getAttributes() == cast<CallBrInst>(I2)->getAttributes() &&
+           CI->hasIdenticalOperandBundleSchema(*cast<CallBrInst>(I2));
   if (const InsertValueInst *IVI = dyn_cast<InsertValueInst>(I1))
     return IVI->getIndices() == cast<InsertValueInst>(I2)->getIndices();
   if (const ExtractValueInst *EVI = dyn_cast<ExtractValueInst>(I1))
@@ -516,6 +521,7 @@ bool Instruction::mayReadFromMemory() const {
     return true;
   case Instruction::Call:
   case Instruction::Invoke:
+  case Instruction::CallBr:
     return !cast<CallBase>(this)->doesNotAccessMemory();
   case Instruction::Store:
     return !cast<StoreInst>(this)->isUnordered();
@@ -535,6 +541,7 @@ bool Instruction::mayWriteToMemory() const {
     return true;
   case Instruction::Call:
   case Instruction::Invoke:
+  case Instruction::CallBr:
     return !cast<CallBase>(this)->onlyReadsMemory();
   case Instruction::Load:
     return !cast<LoadInst>(this)->isUnordered();
@@ -728,52 +735,9 @@ Instruction *Instruction::clone() const {
   return New;
 }
 
-void Instruction::updateProfWeight(uint64_t S, uint64_t T) {
-  auto *ProfileData = getMetadata(LLVMContext::MD_prof);
-  if (ProfileData == nullptr)
-    return;
-
-  auto *ProfDataName = dyn_cast<MDString>(ProfileData->getOperand(0));
-  if (!ProfDataName || (!ProfDataName->getString().equals("branch_weights") &&
-                        !ProfDataName->getString().equals("VP")))
-    return;
-
-  MDBuilder MDB(getContext());
-  SmallVector<Metadata *, 3> Vals;
-  Vals.push_back(ProfileData->getOperand(0));
-  APInt APS(128, S), APT(128, T);
-  if (ProfDataName->getString().equals("branch_weights"))
-    for (unsigned i = 1; i < ProfileData->getNumOperands(); i++) {
-      // Using APInt::div may be expensive, but most cases should fit 64 bits.
-      APInt Val(128,
-                mdconst::dyn_extract<ConstantInt>(ProfileData->getOperand(i))
-                    ->getValue()
-                    .getZExtValue());
-      Val *= APS;
-      Vals.push_back(MDB.createConstant(
-          ConstantInt::get(Type::getInt64Ty(getContext()),
-                           Val.udiv(APT).getLimitedValue())));
-    }
-  else if (ProfDataName->getString().equals("VP"))
-    for (unsigned i = 1; i < ProfileData->getNumOperands(); i += 2) {
-      // The first value is the key of the value profile, which will not change.
-      Vals.push_back(ProfileData->getOperand(i));
-      // Using APInt::div may be expensive, but most cases should fit 64 bits.
-      APInt Val(128,
-                mdconst::dyn_extract<ConstantInt>(ProfileData->getOperand(i + 1))
-                    ->getValue()
-                    .getZExtValue());
-      Val *= APS;
-      Vals.push_back(MDB.createConstant(
-          ConstantInt::get(Type::getInt64Ty(getContext()),
-                           Val.udiv(APT).getLimitedValue())));
-    }
-  setMetadata(LLVMContext::MD_prof, MDNode::get(getContext(), Vals));
-}
-
 void Instruction::setProfWeight(uint64_t W) {
-  assert((isa<CallInst>(this) || isa<InvokeInst>(this)) &&
-         "Can only set weights for call and invoke instrucitons");
+  assert(isa<CallBase>(this) &&
+         "Can only set weights for call like instructions");
   SmallVector<uint32_t, 1> Weights;
   Weights.push_back(W);
   MDBuilder MDB(getContext());

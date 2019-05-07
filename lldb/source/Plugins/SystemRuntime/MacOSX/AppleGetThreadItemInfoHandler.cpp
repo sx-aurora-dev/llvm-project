@@ -152,7 +152,7 @@ lldb::addr_t AppleGetThreadItemInfoHandler::SetupGetThreadItemInfoFunction(
 
     // First stage is to make the ClangUtility to hold our injected function:
 
-    if (!m_get_thread_item_info_impl_code.get()) {
+    if (!m_get_thread_item_info_impl_code) {
       Status error;
       if (g_get_thread_item_info_function_code != NULL) {
         m_get_thread_item_info_impl_code.reset(
@@ -344,7 +344,7 @@ AppleGetThreadItemInfoHandler::GetThreadItemInfo(Thread &thread,
   options.SetUnwindOnError(true);
   options.SetIgnoreBreakpoints(true);
   options.SetStopOthers(true);
-  options.SetTimeout(std::chrono::milliseconds(500));
+  options.SetTimeout(process_sp->GetUtilityExpressionTimeout());
   options.SetTryAllThreads(false);
   options.SetIsForUtilityExpr(true);
   thread.CalculateExecutionContext(exe_ctx);

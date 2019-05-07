@@ -17,9 +17,9 @@
 template <class T, class U>
 void test_add_const_imp()
 {
-    static_assert((std::is_same<typename std::add_const<T>::type, const U>::value), "");
+    ASSERT_SAME_TYPE(const U, typename std::add_const<T>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::add_const_t<T>, U>::value), "");
+    ASSERT_SAME_TYPE(const U,        std::add_const_t<T>);
 #endif
 }
 
@@ -32,7 +32,7 @@ void test_add_const()
     test_add_const_imp<const volatile T, const volatile T>();
 }
 
-int main()
+int main(int, char**)
 {
     test_add_const<void>();
     test_add_const<int>();
@@ -41,4 +41,6 @@ int main()
     test_add_const<const int&>();
     test_add_const<int*>();
     test_add_const<const int*>();
+
+  return 0;
 }

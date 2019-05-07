@@ -31,11 +31,11 @@ test(const Allocator& a)
 
     SM m1(std::move(m0));
     assert(m1.size() == 0);
-    assert(m1.str() == std::basic_string<CharT>());
+    assert(!m1.ready());
     assert(m1.get_allocator() == a);
 }
 
-int main()
+int main(int, char**)
 {
     test<char>   (std::allocator<std::sub_match<const char *> >());
     test<wchar_t>(std::allocator<std::sub_match<const wchar_t *> >());
@@ -44,4 +44,6 @@ int main()
     assert(test_alloc_base::moved == 1);
     test<wchar_t>(test_allocator<std::sub_match<const wchar_t*> >(3));
     assert(test_alloc_base::moved == 2);
+
+  return 0;
 }

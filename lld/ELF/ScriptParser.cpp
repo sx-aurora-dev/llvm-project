@@ -329,7 +329,7 @@ void ScriptParser::readEntry() {
 void ScriptParser::readExtern() {
   expect("(");
   while (!errorCount() && !consume(")"))
-    Config->Undefined.push_back(next());
+    Config->Undefined.push_back(unquote(next()));
 }
 
 void ScriptParser::readGroup() {
@@ -391,10 +391,11 @@ static std::pair<ELFKind, uint16_t> parseBfdName(StringRef S) {
       .Case("elf32-x86-64", {ELF32LEKind, EM_X86_64})
       .Case("elf64-aarch64", {ELF64LEKind, EM_AARCH64})
       .Case("elf64-littleaarch64", {ELF64LEKind, EM_AARCH64})
+      .Case("elf32-powerpc", {ELF32BEKind, EM_PPC})
       .Case("elf64-powerpc", {ELF64BEKind, EM_PPC64})
       .Case("elf64-powerpcle", {ELF64LEKind, EM_PPC64})
       .Case("elf64-x86-64", {ELF64LEKind, EM_X86_64})
-      .Case("elf32-tradbigmips", {ELF32BEKind, EM_MIPS})
+      .Cases("elf32-tradbigmips", "elf32-bigmips", {ELF32BEKind, EM_MIPS})
       .Case("elf32-ntradbigmips", {ELF32BEKind, EM_MIPS})
       .Case("elf32-tradlittlemips", {ELF32LEKind, EM_MIPS})
       .Case("elf32-ntradlittlemips", {ELF32LEKind, EM_MIPS})
@@ -635,7 +636,7 @@ std::vector<SectionPattern> ScriptParser::readInputSectionsList() {
 
     std::vector<StringRef> V;
     while (!errorCount() && peek() != ")" && peek() != "EXCLUDE_FILE")
-      V.push_back(next());
+      V.push_back(unquote(next()));
 
     if (!V.empty())
       Ret.push_back({std::move(ExcludeFilePat), StringMatcher(V)});
@@ -1153,6 +1154,7 @@ Expr ScriptParser::readPrimary() {
   if (Tok == "ADDR") {
     StringRef Name = readParenLiteral();
     OutputSection *Sec = Script->getOrCreateOutputSection(Name);
+    Sec->UsedInExpression = true;
     return [=]() -> ExprValue {
       checkIfExists(Sec, Location);
       return {Sec, false, 0, Location};
@@ -1229,6 +1231,7 @@ Expr ScriptParser::readPrimary() {
   if (Tok == "LOADADDR") {
     StringRef Name = readParenLiteral();
     OutputSection *Cmd = Script->getOrCreateOutputSection(Name);
+    Cmd->UsedInExpression = true;
     return [=] {
       checkIfExists(Cmd, Location);
       return Cmd->getLMA();

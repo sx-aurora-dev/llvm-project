@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "SymbolFileSymtab.h"
+
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Symbol/CompileUnit.h"
@@ -18,6 +19,8 @@
 #include "lldb/Symbol/TypeList.h"
 #include "lldb/Utility/RegularExpression.h"
 #include "lldb/Utility/Timer.h"
+
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -61,11 +64,9 @@ uint32_t SymbolFileSymtab::CalculateAbilities() {
   if (m_obj_file) {
     const Symtab *symtab = m_obj_file->GetSymtab();
     if (symtab) {
-      //----------------------------------------------------------------------
       // The snippet of code below will get the indexes the module symbol table
       // entries that are code, data, or function related (debug info), sort
       // them by value (address) and dump the sorted symbols.
-      //----------------------------------------------------------------------
       if (symtab->AppendSymbolIndexesWithType(eSymbolTypeSourceFile,
                                               m_source_indexes)) {
         abilities |= CompileUnits;
@@ -123,9 +124,9 @@ CompUnitSP SymbolFileSymtab::ParseCompileUnitAtIndex(uint32_t idx) {
     const Symbol *cu_symbol =
         m_obj_file->GetSymtab()->SymbolAtIndex(m_source_indexes[idx]);
     if (cu_symbol)
-      cu_sp.reset(new CompileUnit(m_obj_file->GetModule(), NULL,
+      cu_sp = std::make_shared<CompileUnit>(m_obj_file->GetModule(), nullptr,
                                   cu_symbol->GetName().AsCString(), 0,
-                                  eLanguageTypeUnknown, eLazyBoolNo));
+                                            eLanguageTypeUnknown, eLazyBoolNo);
   }
   return cu_sp;
 }
@@ -218,7 +219,7 @@ bool SymbolFileSymtab::ParseSupportFiles(CompileUnit &comp_unit,
 }
 
 bool SymbolFileSymtab::ParseImportedModules(
-    const SymbolContext &sc, std::vector<ConstString> &imported_modules) {
+    const SymbolContext &sc, std::vector<SourceModule> &imported_modules) {
   return false;
 }
 
@@ -258,9 +259,7 @@ uint32_t SymbolFileSymtab::ResolveSymbolContext(const Address &so_addr,
   return resolved_flags;
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 lldb_private::ConstString SymbolFileSymtab::GetPluginName() {
   return GetPluginNameStatic();
 }

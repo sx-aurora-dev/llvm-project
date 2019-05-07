@@ -1009,9 +1009,7 @@ ABISysV_hexagon::GetRegisterInfoArray(uint32_t &count) {
 */
 size_t ABISysV_hexagon::GetRedZoneSize() const { return 0; }
 
-//------------------------------------------------------------------
 // Static Functions
-//------------------------------------------------------------------
 
 ABISP
 ABISysV_hexagon::CreateInstance(lldb::ProcessSP process_sp, const ArchSpec &arch) {
@@ -1103,7 +1101,7 @@ bool ABISysV_hexagon::PrepareTrivialCall(
     sp -= argSize;
 
     // write this argument onto the stack of the host process
-    proc->WriteMemory(sp, arg.data_ap.get(), arg.size, error);
+    proc->WriteMemory(sp, arg.data_up.get(), arg.size, error);
     if (error.Fail())
       return false;
 
@@ -1294,9 +1292,7 @@ lldb_private::ConstString ABISysV_hexagon::GetPluginNameStatic() {
   return g_name;
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 
 lldb_private::ConstString ABISysV_hexagon::GetPluginName() {
   return GetPluginNameStatic();

@@ -8,12 +8,12 @@
 // Mutate a test input.
 //===----------------------------------------------------------------------===//
 
-#include "FuzzerMutate.h"
-#include "FuzzerCorpus.h"
 #include "FuzzerDefs.h"
 #include "FuzzerExtFunctions.h"
 #include "FuzzerIO.h"
+#include "FuzzerMutate.h"
 #include "FuzzerOptions.h"
+#include "FuzzerTracePC.h"
 
 namespace fuzzer {
 
@@ -72,10 +72,10 @@ size_t MutationDispatcher::Mutate_Custom(uint8_t *Data, size_t Size,
 
 size_t MutationDispatcher::Mutate_CustomCrossOver(uint8_t *Data, size_t Size,
                                                   size_t MaxSize) {
-  if (!Corpus || Corpus->size() < 2 || Size == 0)
+  if (Size == 0)
     return 0;
-  size_t Idx = Rand(Corpus->size());
-  const Unit &Other = (*Corpus)[Idx];
+  if (!CrossOverWith) return 0;
+  const Unit &Other = *CrossOverWith;
   if (Other.empty())
     return 0;
   CustomCrossOverInPlaceHere.resize(MaxSize);
@@ -421,9 +421,9 @@ size_t MutationDispatcher::Mutate_ChangeBinaryInteger(uint8_t *Data,
 size_t MutationDispatcher::Mutate_CrossOver(uint8_t *Data, size_t Size,
                                             size_t MaxSize) {
   if (Size > MaxSize) return 0;
-  if (!Corpus || Corpus->size() < 2 || Size == 0) return 0;
-  size_t Idx = Rand(Corpus->size());
-  const Unit &O = (*Corpus)[Idx];
+  if (Size == 0) return 0;
+  if (!CrossOverWith) return 0;
+  const Unit &O = *CrossOverWith;
   if (O.empty()) return 0;
   MutateInPlaceHere.resize(MaxSize);
   auto &U = MutateInPlaceHere;
@@ -529,7 +529,7 @@ size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
 size_t MutationDispatcher::MutateWithMask(uint8_t *Data, size_t Size,
                                           size_t MaxSize,
                                           const Vector<uint8_t> &Mask) {
-  assert(Size <= Mask.size());
+  size_t MaskedSize = std::min(Size, Mask.size());
   // * Copy the worthy bytes into a temporary array T
   // * Mutate T
   // * Copy T back.
@@ -538,16 +538,17 @@ size_t MutationDispatcher::MutateWithMask(uint8_t *Data, size_t Size,
   if (T.size() < Size)
     T.resize(Size);
   size_t OneBits = 0;
-  for (size_t I = 0; I < Size; I++)
+  for (size_t I = 0; I < MaskedSize; I++)
     if (Mask[I])
       T[OneBits++] = Data[I];
 
+  if (!OneBits) return 0;
   assert(!T.empty());
   size_t NewSize = Mutate(T.data(), OneBits, OneBits);
   assert(NewSize <= OneBits);
   (void)NewSize;
   // Even if NewSize < OneBits we still use all OneBits bytes.
-  for (size_t I = 0, J = 0; I < Size; I++)
+  for (size_t I = 0, J = 0; I < MaskedSize; I++)
     if (Mask[I])
       Data[I] = T[J++];
   return Size;

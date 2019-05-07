@@ -69,7 +69,7 @@ public:
   void link(llvm::ArrayRef<const char *> Args);
 
   // Used by the resolver to parse .drectve section contents.
-  void parseDirectives(StringRef S);
+  void parseDirectives(InputFile *File);
 
   // Used by ArchiveFile to enqueue members.
   void enqueueArchiveMember(const Archive::Child &C, StringRef SymName,
@@ -96,6 +96,8 @@ private:
   // Library search path. The first element is always "" (current directory).
   std::vector<StringRef> SearchPaths;
 
+  void maybeExportMinGWSymbols(const llvm::opt::InputArgList &Args);
+
   // We don't want to add the same file more than once.
   // Files are uniquified by their filesystem and file number.
   std::set<llvm::sys::fs::UniqueID> VisitedFiles;
@@ -116,7 +118,7 @@ private:
 
   void addBuffer(std::unique_ptr<MemoryBuffer> MB, bool WholeArchive);
   void addArchiveBuffer(MemoryBufferRef MBRef, StringRef SymName,
-                        StringRef ParentName);
+                        StringRef ParentName, uint64_t OffsetInArchive);
 
   void enqueuePath(StringRef Path, bool WholeArchive);
 
@@ -156,11 +158,17 @@ void parseMerge(StringRef);
 void parseSection(StringRef);
 void parseAligncomm(StringRef);
 
+// Parses a string in the form of "[:<integer>]"
+void parseFunctionPadMin(llvm::opt::Arg *A, llvm::COFF::MachineTypes Machine);
+
 // Parses a string in the form of "EMBED[,=<integer>]|NO".
 void parseManifest(StringRef Arg);
 
 // Parses a string in the form of "level=<string>|uiAccess=<string>"
 void parseManifestUAC(StringRef Arg);
+
+// Parses a string in the form of "cd|net[,(cd|net)]*"
+void parseSwaprun(StringRef Arg);
 
 // Create a resource file containing a manifest XML.
 std::unique_ptr<MemoryBuffer> createManifestRes();
@@ -175,7 +183,7 @@ void assignExportOrdinals();
 // if value matches previous values for the key.
 // This feature used in the directive section to reject
 // incompatible objects.
-void checkFailIfMismatch(StringRef Arg);
+void checkFailIfMismatch(StringRef Arg, InputFile *Source);
 
 // Convert Windows resource files (.res files) to a .obj file.
 MemoryBufferRef convertResToCOFF(ArrayRef<MemoryBufferRef> MBs);

@@ -17,6 +17,7 @@
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
+#include "lldb/Host/Socket.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/Timer.h"
@@ -41,8 +42,7 @@ SystemInitializerCommon::SystemInitializerCommon() {}
 
 SystemInitializerCommon::~SystemInitializerCommon() {}
 
-llvm::Error
-SystemInitializerCommon::Initialize(const InitializerOptions &options) {
+llvm::Error SystemInitializerCommon::Initialize() {
 #if defined(_MSC_VER)
   const char *disable_crash_dialog_var = getenv("LLDB_DISABLE_CRASH_DIALOG");
   if (disable_crash_dialog_var &&
@@ -65,15 +65,12 @@ SystemInitializerCommon::Initialize(const InitializerOptions &options) {
   }
 #endif
 
-  // Initialize the reproducer.
-  ReproducerMode mode = ReproducerMode::Off;
-  if (options.reproducer_capture)
-    mode = ReproducerMode::Capture;
-  if (options.reproducer_replay)
-    mode = ReproducerMode::Replay;
-
-  if (auto e = Reproducer::Initialize(mode, FileSpec(options.reproducer_path)))
-    return e;
+  // If the reproducer wasn't initialized before, we can safely assume it's
+  // off.
+  if (!Reproducer::Initialized()) {
+    if (auto e = Reproducer::Initialize(ReproducerMode::Off, llvm::None))
+      return e;
+  }
 
   // Initialize the file system.
   auto &r = repro::Reproducer::Instance();
@@ -94,6 +91,11 @@ SystemInitializerCommon::Initialize(const InitializerOptions &options) {
 
   Log::Initialize();
   HostInfo::Initialize();
+
+  llvm::Error error = Socket::Initialize();
+  if (error)
+    return error;
+
   static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
   Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
 
@@ -106,9 +108,7 @@ SystemInitializerCommon::Initialize(const InitializerOptions &options) {
   EmulateInstructionMIPS::Initialize();
   EmulateInstructionMIPS64::Initialize();
 
-  //----------------------------------------------------------------------
   // Apple/Darwin hosted plugins
-  //----------------------------------------------------------------------
   ObjectContainerUniversalMachO::Initialize();
 
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
@@ -136,6 +136,7 @@ void SystemInitializerCommon::Terminate() {
   ProcessWindowsLog::Terminate();
 #endif
 
+  Socket::Terminate();
   HostInfo::Terminate();
   Log::DisableAllLogChannels();
   FileSystem::Terminate();

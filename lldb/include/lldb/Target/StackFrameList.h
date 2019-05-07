@@ -19,9 +19,7 @@ namespace lldb_private {
 
 class StackFrameList {
 public:
-  //------------------------------------------------------------------
   // Constructors and Destructors
-  //------------------------------------------------------------------
   StackFrameList(Thread &thread, const lldb::StackFrameListSP &prev_frames_sp,
                  bool show_inline_frames);
 
@@ -91,7 +89,7 @@ protected:
 
   bool SetFrameAtIndex(uint32_t idx, lldb::StackFrameSP &frame_sp);
 
-  static void Merge(std::unique_ptr<StackFrameList> &curr_ap,
+  static void Merge(std::unique_ptr<StackFrameList> &curr_up,
                     lldb::StackFrameListSP &prev_sp);
 
   void GetFramesUpTo(uint32_t end_idx);

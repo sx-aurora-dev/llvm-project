@@ -14,13 +14,11 @@
 //   format(const char_type* fmt,
 //          regex_constants::match_flag_type flags = regex_constants::format_default) const;
 
-#include <iostream>
-
 #include <regex>
 #include <cassert>
 #include "test_macros.h"
 
-int main()
+int main(int, char**)
 {
     {
         std::match_results<const char*> m;
@@ -77,4 +75,6 @@ int main()
         std::wstring out = m.format(fmt, std::regex_constants::format_sed);
         assert(out == L"match: cdefghi, m[1]: efg, m[2]: e");
     }
+
+  return 0;
 }

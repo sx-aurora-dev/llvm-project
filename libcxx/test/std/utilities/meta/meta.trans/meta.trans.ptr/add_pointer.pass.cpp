@@ -19,33 +19,33 @@
 template <class T, class U>
 void test_add_pointer()
 {
-    static_assert((std::is_same<typename std::add_pointer<T>::type, U>::value), "");
+    ASSERT_SAME_TYPE(U, typename std::add_pointer<T>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::add_pointer_t<T>,     U>::value), "");
+    ASSERT_SAME_TYPE(U, std::add_pointer_t<T>);
 #endif
 }
 
 template <class F>
 void test_function0()
 {
-    static_assert((std::is_same<typename std::add_pointer<F>::type, F*>::value), "");
+    ASSERT_SAME_TYPE(F*, typename std::add_pointer<F>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::add_pointer_t<F>, F*>::value), "");
+    ASSERT_SAME_TYPE(F*, std::add_pointer_t<F>);
 #endif
 }
 
 template <class F>
 void test_function1()
 {
-    static_assert((std::is_same<typename std::add_pointer<F>::type, F>::value), "");
+    ASSERT_SAME_TYPE(F, typename std::add_pointer<F>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::add_pointer_t<F>, F>::value), "");
+    ASSERT_SAME_TYPE(F, std::add_pointer_t<F>);
 #endif
 }
 
 struct Foo {};
 
-int main()
+int main(int, char**)
 {
     test_add_pointer<void, void*>();
     test_add_pointer<int, int*>();
@@ -76,4 +76,6 @@ int main()
     test_function0<void (Foo::*)() const &>();
     test_function0<void (Foo::*)() const &&>();
 #endif
+
+  return 0;
 }

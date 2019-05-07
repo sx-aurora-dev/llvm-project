@@ -1,14 +1,12 @@
 //===- MachOWriter.cpp ------------------------------------------*- C++ -*-===//
 //
-//                      The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "MachOWriter.h"
-#include "../llvm-objcopy.h"
 #include "Object.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/BinaryFormat/MachO.h"
@@ -343,9 +341,7 @@ Error MachOWriter::write() {
   writeLoadCommands();
   writeSections();
   writeTail();
-  if (auto E = B.commit())
-    return E;
-  return Error::success();
+  return B.commit();
 }
 
 } // end namespace macho

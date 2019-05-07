@@ -27,8 +27,8 @@ void UniqueMachineInstr::Profile(FoldingSetNodeID &ID) {
 }
 /// -----------------------------------------
 
-/// --------- CSEConfig ---------- ///
-bool CSEConfig::shouldCSEOpc(unsigned Opc) {
+/// --------- CSEConfigFull ---------- ///
+bool CSEConfigFull::shouldCSEOpc(unsigned Opc) {
   switch (Opc) {
   default:
     break;
@@ -60,6 +60,17 @@ bool CSEConfig::shouldCSEOpc(unsigned Opc) {
 bool CSEConfigConstantOnly::shouldCSEOpc(unsigned Opc) {
   return Opc == TargetOpcode::G_CONSTANT;
 }
+
+std::unique_ptr<CSEConfigBase>
+llvm::getStandardCSEConfigForOpt(CodeGenOpt::Level Level) {
+  std::unique_ptr<CSEConfigBase> Config;
+  if (Level == CodeGenOpt::None)
+    Config = make_unique<CSEConfigConstantOnly>();
+  else
+    Config = make_unique<CSEConfigFull>();
+  return Config;
+}
+
 /// -----------------------------------------
 
 /// -------- GISelCSEInfo -------------//
@@ -138,7 +149,7 @@ MachineInstr *GISelCSEInfo::getMachineInstrIfExists(FoldingSetNodeID &ID,
                                                     void *&InsertPos) {
   handleRecordedInsts();
   if (auto *Inst = getNodeIfExists(ID, MBB, InsertPos)) {
-    LLVM_DEBUG(dbgs() << "CSEInfo: Found Instr " << *Inst->MI << "\n";);
+    LLVM_DEBUG(dbgs() << "CSEInfo::Found Instr " << *Inst->MI;);
     return const_cast<MachineInstr *>(Inst->MI);
   }
   return nullptr;
@@ -157,14 +168,14 @@ void GISelCSEInfo::countOpcodeHit(unsigned Opc) {
 void GISelCSEInfo::recordNewInstruction(MachineInstr *MI) {
   if (shouldCSE(MI->getOpcode())) {
     TemporaryInsts.insert(MI);
-    LLVM_DEBUG(dbgs() << "CSEInfo: Recording new MI" << *MI << "\n";);
+    LLVM_DEBUG(dbgs() << "CSEInfo::Recording new MI " << *MI);
   }
 }
 
 void GISelCSEInfo::handleRecordedInst(MachineInstr *MI) {
   assert(shouldCSE(MI->getOpcode()) && "Invalid instruction for CSE");
   auto *UMI = InstrMapping.lookup(MI);
-  LLVM_DEBUG(dbgs() << "CSEInfo: Handling recorded MI" << *MI << "\n";);
+  LLVM_DEBUG(dbgs() << "CSEInfo::Handling recorded MI " << *MI);
   if (UMI) {
     // Invalidate this MI.
     invalidateUniqueMachineInstr(UMI);
@@ -223,14 +234,14 @@ void GISelCSEInfo::analyze(MachineFunction &MF) {
     for (MachineInstr &MI : MBB) {
       if (!shouldCSE(MI.getOpcode()))
         continue;
-      LLVM_DEBUG(dbgs() << "CSEInfo::Add MI: " << MI << "\n";);
+      LLVM_DEBUG(dbgs() << "CSEInfo::Add MI: " << MI);
       insertInstr(&MI);
     }
   }
 }
 
 void GISelCSEInfo::releaseMemory() {
-  // print();
+  print();
   CSEMap.clear();
   InstrMapping.clear();
   UniqueInstrAllocator.Reset();
@@ -244,11 +255,11 @@ void GISelCSEInfo::releaseMemory() {
 }
 
 void GISelCSEInfo::print() {
-#ifndef NDEBUG
-  for (auto &It : OpcodeHitTable) {
-    dbgs() << "CSE Count for Opc " << It.first << " : " << It.second << "\n";
-  };
-#endif
+  LLVM_DEBUG(for (auto &It
+                  : OpcodeHitTable) {
+    dbgs() << "CSEInfo::CSE Hit for Opc " << It.first << " : " << It.second
+           << "\n";
+  };);
 }
 /// -----------------------------------------
 // ---- Profiling methods for FoldingSetNode --- //
@@ -348,8 +359,9 @@ const GISelInstProfileBuilder &GISelInstProfileBuilder::addNodeIDMachineOperand(
   return *this;
 }
 
-GISelCSEInfo &GISelCSEAnalysisWrapper::get(std::unique_ptr<CSEConfig> CSEOpt,
-                                           bool Recompute) {
+GISelCSEInfo &
+GISelCSEAnalysisWrapper::get(std::unique_ptr<CSEConfigBase> CSEOpt,
+                             bool Recompute) {
   if (!AlreadyComputed || Recompute) {
     Info.setCSEConfig(std::move(CSEOpt));
     Info.analyze(*MF);

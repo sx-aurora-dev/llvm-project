@@ -45,13 +45,11 @@
 using namespace lldb;
 using namespace lldb_private;
 
-static constexpr std::chrono::seconds g_po_function_timeout(15);
-
 AppleObjCRuntime::~AppleObjCRuntime() {}
 
 AppleObjCRuntime::AppleObjCRuntime(Process *process)
     : ObjCLanguageRuntime(process), m_read_objc_library(false),
-      m_objc_trampoline_handler_ap(), m_Foundation_major() {
+      m_objc_trampoline_handler_up(), m_Foundation_major() {
   ReadObjCLibraryIfNeeded(process->GetTarget().GetImages());
 }
 
@@ -171,7 +169,7 @@ bool AppleObjCRuntime::GetObjectDescription(Stream &strm, Value &value,
   options.SetTryAllThreads(true);
   options.SetStopOthers(true);
   options.SetIgnoreBreakpoints(true);
-  options.SetTimeout(g_po_function_timeout);
+  options.SetTimeout(process->GetUtilityExpressionTimeout());
   options.SetIsForUtilityExpr(true);
 
   ExpressionResults results = m_print_object_caller_up->ExecuteFunction(
@@ -217,7 +215,7 @@ lldb::ModuleSP AppleObjCRuntime::GetObjCModule() {
 }
 
 Address *AppleObjCRuntime::GetPrintForDebuggerAddr() {
-  if (!m_PrintForDebugger_addr.get()) {
+  if (!m_PrintForDebugger_addr) {
     const ModuleList &modules = m_process->GetTarget().GetImages();
 
     SymbolContextList contexts;
@@ -327,9 +325,9 @@ bool AppleObjCRuntime::ReadObjCLibrary(const ModuleSP &module_sp) {
   // Maybe check here and if we have a handler already, and the UUID of this
   // module is the same as the one in the current module, then we don't have to
   // reread it?
-  m_objc_trampoline_handler_ap.reset(
+  m_objc_trampoline_handler_up.reset(
       new AppleObjCTrampolineHandler(m_process->shared_from_this(), module_sp));
-  if (m_objc_trampoline_handler_ap.get() != NULL) {
+  if (m_objc_trampoline_handler_up != NULL) {
     m_read_objc_library = true;
     return true;
   } else
@@ -339,15 +337,13 @@ bool AppleObjCRuntime::ReadObjCLibrary(const ModuleSP &module_sp) {
 ThreadPlanSP AppleObjCRuntime::GetStepThroughTrampolinePlan(Thread &thread,
                                                             bool stop_others) {
   ThreadPlanSP thread_plan_sp;
-  if (m_objc_trampoline_handler_ap.get())
-    thread_plan_sp = m_objc_trampoline_handler_ap->GetStepThroughDispatchPlan(
+  if (m_objc_trampoline_handler_up)
+    thread_plan_sp = m_objc_trampoline_handler_up->GetStepThroughDispatchPlan(
         thread, stop_others);
   return thread_plan_sp;
 }
 
-//------------------------------------------------------------------
 // Static Functions
-//------------------------------------------------------------------
 ObjCLanguageRuntime::ObjCRuntimeVersions
 AppleObjCRuntime::GetObjCVersion(Process *process, ModuleSP &objc_module_sp) {
   if (!process)
@@ -470,13 +466,14 @@ ValueObjectSP AppleObjCRuntime::GetExceptionObjectForThread(
   if (!cpp_runtime) return ValueObjectSP();
   auto cpp_exception = cpp_runtime->GetExceptionObjectForThread(thread_sp);
   if (!cpp_exception) return ValueObjectSP();
-  
-  auto descriptor = GetClassDescriptor(*cpp_exception.get());
+
+  auto descriptor = GetClassDescriptor(*cpp_exception);
   if (!descriptor || !descriptor->IsValid()) return ValueObjectSP();
   
   while (descriptor) {
     ConstString class_name(descriptor->GetClassName());
-    if (class_name == ConstString("NSException")) return cpp_exception;
+    if (class_name == "NSException")
+      return cpp_exception;
     descriptor = descriptor->GetSuperclass();
   }
 

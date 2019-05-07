@@ -11,9 +11,8 @@
 // template <class... Types> class tuple;
 
 // template <size_t I, class... Types>
-// class tuple_element<I, tuple<Types...> >
+// struct tuple_element<I, tuple<Types...> >
 // {
-// public:
 //     typedef Ti type;
 // };
 
@@ -39,7 +38,7 @@ void test()
 #endif
 }
 
-int main()
+int main(int, char**)
 {
     test<std::tuple<int>, 0, int>();
     test<std::tuple<char, int>, 0, char>();
@@ -47,4 +46,6 @@ int main()
     test<std::tuple<int*, char, int>, 0, int*>();
     test<std::tuple<int*, char, int>, 1, char>();
     test<std::tuple<int*, char, int>, 2, int>();
+
+  return 0;
 }

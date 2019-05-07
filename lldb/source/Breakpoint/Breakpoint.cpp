@@ -29,11 +29,13 @@
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
 
+#include <memory>
+
 using namespace lldb;
 using namespace lldb_private;
 using namespace llvm;
 
-const ConstString &Breakpoint::GetEventIdentifier() {
+ConstString Breakpoint::GetEventIdentifier() {
   static ConstString g_identifier("event-identifier.breakpoint.changed");
   return g_identifier;
 }
@@ -41,9 +43,7 @@ const ConstString &Breakpoint::GetEventIdentifier() {
 const char *Breakpoint::g_option_names[static_cast<uint32_t>(
     Breakpoint::OptionNames::LastOptionName)]{"Names", "Hardware"};
 
-//----------------------------------------------------------------------
 // Breakpoint constructor
-//----------------------------------------------------------------------
 Breakpoint::Breakpoint(Target &target, SearchFilterSP &filter_sp,
                        BreakpointResolverSP &resolver_sp, bool hardware,
                        bool resolve_indirect_symbols)
@@ -57,7 +57,7 @@ Breakpoint::Breakpoint(Target &target, SearchFilterSP &filter_sp,
 Breakpoint::Breakpoint(Target &new_target, Breakpoint &source_bp)
     : m_being_created(true), m_hardware(source_bp.m_hardware),
       m_target(new_target), m_name_list(source_bp.m_name_list),
-      m_options_up(new BreakpointOptions(*source_bp.m_options_up.get())),
+      m_options_up(new BreakpointOptions(*source_bp.m_options_up)),
       m_locations(*this),
       m_resolve_indirect_symbols(source_bp.m_resolve_indirect_symbols),
       m_hit_count(0) {
@@ -66,14 +66,10 @@ Breakpoint::Breakpoint(Target &new_target, Breakpoint &source_bp)
   m_filter_sp = source_bp.m_filter_sp->CopyForBreakpoint(*this);
 }
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 Breakpoint::~Breakpoint() = default;
 
-//----------------------------------------------------------------------
 // Serialization
-//----------------------------------------------------------------------
 StructuredData::ObjectSP Breakpoint::SerializeToStructuredData() {
   // Serialize the resolver:
   StructuredData::DictionarySP breakpoint_dict_sp(
@@ -158,8 +154,8 @@ lldb::BreakpointSP Breakpoint::CreateFromStructuredData(
       SearchFilter::GetSerializationKey(), filter_dict);
   SearchFilterSP filter_sp;
   if (!success)
-    filter_sp.reset(
-        new SearchFilterForUnconstrainedSearches(target.shared_from_this()));
+    filter_sp = std::make_shared<SearchFilterForUnconstrainedSearches>(
+        target.shared_from_this());
   else {
     filter_sp = SearchFilter::CreateFromStructuredData(target, *filter_dict,
                                                        create_error);
@@ -494,9 +490,7 @@ void Breakpoint::ClearAllBreakpointSites() {
   m_locations.ClearAllBreakpointSites();
 }
 
-//----------------------------------------------------------------------
 // ModulesChanged: Pass in a list of new modules, and
-//----------------------------------------------------------------------
 
 void Breakpoint::ModulesChanged(ModuleList &module_list, bool load,
                                 bool delete_locations) {
@@ -970,7 +964,7 @@ void Breakpoint::GetResolverDescription(Stream *s) {
     m_resolver_sp->GetDescription(s);
 }
 
-bool Breakpoint::GetMatchingFileLine(const ConstString &filename,
+bool Breakpoint::GetMatchingFileLine(ConstString filename,
                                      uint32_t line_number,
                                      BreakpointLocationCollection &loc_coll) {
   // TODO: To be correct, this method needs to fill the breakpoint location
@@ -1046,12 +1040,12 @@ Breakpoint::BreakpointEventData::BreakpointEventData(
 
 Breakpoint::BreakpointEventData::~BreakpointEventData() = default;
 
-const ConstString &Breakpoint::BreakpointEventData::GetFlavorString() {
+ConstString Breakpoint::BreakpointEventData::GetFlavorString() {
   static ConstString g_flavor("Breakpoint::BreakpointEventData");
   return g_flavor;
 }
 
-const ConstString &Breakpoint::BreakpointEventData::GetFlavor() const {
+ConstString Breakpoint::BreakpointEventData::GetFlavor() const {
   return BreakpointEventData::GetFlavorString();
 }
 

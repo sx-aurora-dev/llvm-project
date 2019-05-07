@@ -31,6 +31,8 @@
 #include "lldb/Utility/Stream.h"
 #include <ctype.h>
 
+#include <memory>
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -129,7 +131,7 @@ StructuredData::ObjectSP UndefinedBehaviorSanitizerRuntime::RetrieveReportData(
   options.SetTryAllThreads(true);
   options.SetStopOthers(true);
   options.SetIgnoreBreakpoints(true);
-  options.SetTimeout(std::chrono::seconds(2));
+  options.SetTimeout(process_sp->GetUtilityExpressionTimeout());
   options.SetPrefix(ub_sanitizer_retrieve_report_data_prefix);
   options.SetAutoApplyFixIts(false);
   options.SetLanguage(eLanguageTypeObjC_plus_plus);
@@ -303,7 +305,7 @@ lldb::ThreadCollectionSP
 UndefinedBehaviorSanitizerRuntime::GetBacktracesFromExtendedStopInfo(
     StructuredData::ObjectSP info) {
   ThreadCollectionSP threads;
-  threads.reset(new ThreadCollection());
+  threads = std::make_shared<ThreadCollection>();
 
   ProcessSP process_sp = GetProcessSP();
 

@@ -13,7 +13,6 @@
 #include <vector>
 #include <algorithm>
 #include <cassert>
-#include <iostream>
 #include "test_macros.h"
 #include "min_allocator.h"
 #include "asan_testing.h"
@@ -69,7 +68,9 @@ void test_emplaceable_concept() {
 
 
 
-int main()
+int main(int, char**)
 {
     test_emplaceable_concept();
+
+  return 0;
 }

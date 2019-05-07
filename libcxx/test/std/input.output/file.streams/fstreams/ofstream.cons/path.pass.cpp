@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
+// XFAIL: dylib-has-no-filesystem
 
 // <fstream>
 
@@ -22,7 +23,7 @@
 
 namespace fs = std::filesystem;
 
-int main() {
+int main(int, char**) {
   fs::path p = get_temp_file_name();
   {
     static_assert(!std::is_convertible<fs::path, std::ofstream>::value,
@@ -65,4 +66,6 @@ int main() {
     assert(x == 3.25);
   }
   std::remove(p.c_str());
+
+  return 0;
 }

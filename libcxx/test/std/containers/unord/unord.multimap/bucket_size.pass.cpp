@@ -25,7 +25,7 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-int main()
+int main(int, char**)
 {
     {
         typedef std::unordered_multimap<int, std::string> C;
@@ -78,8 +78,10 @@ int main()
     {
         typedef std::unordered_multimap<int, std::string> C;
         C c;
-        C::size_type i = c.bucket_size(3);
+        (void) c.bucket_size(3);
         assert(false);
     }
 #endif
+
+  return 0;
 }

@@ -64,7 +64,6 @@ UnixSignalsSP &GetFreeBSDSignals() {
 }
 }
 
-//------------------------------------------------------------------------------
 // Static functions.
 
 lldb::ProcessSP
@@ -96,7 +95,6 @@ const char *ProcessFreeBSD::GetPluginDescriptionStatic() {
   return "Process plugin for FreeBSD";
 }
 
-//------------------------------------------------------------------------------
 // ProcessInterface protocol.
 
 lldb_private::ConstString ProcessFreeBSD::GetPluginName() {
@@ -250,7 +248,6 @@ void ProcessFreeBSD::SendMessage(const ProcessMessage &message) {
   m_message_queue.push(message);
 }
 
-//------------------------------------------------------------------------------
 // Constructors and destructors.
 
 ProcessFreeBSD::ProcessFreeBSD(lldb::TargetSP target_sp,
@@ -269,7 +266,6 @@ ProcessFreeBSD::ProcessFreeBSD(lldb::TargetSP target_sp,
 
 ProcessFreeBSD::~ProcessFreeBSD() { delete m_monitor; }
 
-//------------------------------------------------------------------------------
 // Process protocol.
 void ProcessFreeBSD::Finalize() {
   Process::Finalize();
@@ -835,7 +831,6 @@ size_t ProcessFreeBSD::PutSTDIN(const char *buf, size_t len, Status &error) {
   return status;
 }
 
-//------------------------------------------------------------------------------
 // Utility functions.
 
 bool ProcessFreeBSD::HasExited() {
@@ -1035,11 +1030,11 @@ bool ProcessFreeBSD::SupportHardwareSingleStepping() const {
 }
 
 Status ProcessFreeBSD::SetupSoftwareSingleStepping(lldb::tid_t tid) {
-  std::unique_ptr<EmulateInstruction> emulator_ap(
+  std::unique_ptr<EmulateInstruction> emulator_up(
       EmulateInstruction::FindPlugin(GetTarget().GetArchitecture(),
                                      eInstructionTypePCModifying, nullptr));
 
-  if (emulator_ap == nullptr)
+  if (emulator_up == nullptr)
     return Status("Instruction emulator not found!");
 
   FreeBSDThread *thread = static_cast<FreeBSDThread *>(
@@ -1050,17 +1045,17 @@ Status ProcessFreeBSD::SetupSoftwareSingleStepping(lldb::tid_t tid) {
   lldb::RegisterContextSP register_context_sp = thread->GetRegisterContext();
 
   EmulatorBaton baton(this, register_context_sp.get());
-  emulator_ap->SetBaton(&baton);
-  emulator_ap->SetReadMemCallback(&ReadMemoryCallback);
-  emulator_ap->SetReadRegCallback(&ReadRegisterCallback);
-  emulator_ap->SetWriteMemCallback(&WriteMemoryCallback);
-  emulator_ap->SetWriteRegCallback(&WriteRegisterCallback);
+  emulator_up->SetBaton(&baton);
+  emulator_up->SetReadMemCallback(&ReadMemoryCallback);
+  emulator_up->SetReadRegCallback(&ReadRegisterCallback);
+  emulator_up->SetWriteMemCallback(&WriteMemoryCallback);
+  emulator_up->SetWriteRegCallback(&WriteRegisterCallback);
 
-  if (!emulator_ap->ReadInstruction())
+  if (!emulator_up->ReadInstruction())
     return Status("Read instruction failed!");
 
   bool emulation_result =
-      emulator_ap->EvaluateInstruction(eEmulateInstructionOptionAutoAdvancePC);
+      emulator_up->EvaluateInstruction(eEmulateInstructionOptionAutoAdvancePC);
   const RegisterInfo *reg_info_pc = register_context_sp->GetRegisterInfo(
       eRegisterKindGeneric, LLDB_REGNUM_GENERIC_PC);
   auto pc_it =
@@ -1077,7 +1072,7 @@ Status ProcessFreeBSD::SetupSoftwareSingleStepping(lldb::tid_t tid) {
     // PC modifying instruction should be successful. The failure most
     // likely caused by a not supported instruction which don't modify PC.
     next_pc =
-        register_context_sp->GetPC() + emulator_ap->GetOpcode().GetByteSize();
+        register_context_sp->GetPC() + emulator_up->GetOpcode().GetByteSize();
   } else {
     // The instruction emulation failed after it modified the PC. It is an
     // unknown error where we can't continue because the next instruction is

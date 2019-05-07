@@ -8,10 +8,6 @@
 
 #include "CommandObjectType.h"
 
-#include <algorithm>
-#include <cctype>
-#include <functional>
-
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/IOHandler.h"
 #include "lldb/DataFormatters/DataVisualization.h"
@@ -39,6 +35,11 @@
 
 #include "llvm/ADT/STLExtras.h"
 
+#include <algorithm>
+#include <cctype>
+#include <functional>
+#include <memory>
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -51,7 +52,7 @@ public:
   std::string m_category;
 
   ScriptAddOptions(const TypeSummaryImpl::Flags &flags, bool regx,
-                   const ConstString &name, std::string catg)
+                   ConstString name, std::string catg)
       : m_flags(flags), m_regex(regx), m_name(name), m_category(catg) {}
 
   typedef std::shared_ptr<ScriptAddOptions> SharedPointer;
@@ -159,7 +160,7 @@ public:
 
   ~CommandObjectTypeSummaryAdd() override = default;
 
-  void IOHandlerActivated(IOHandler &io_handler) override {
+  void IOHandlerActivated(IOHandler &io_handler, bool interactive) override {
     static const char *g_summary_addreader_instructions =
         "Enter your Python command(s). Type 'DONE' to end.\n"
         "def function (valobj,internal_dict):\n"
@@ -168,7 +169,7 @@ public:
         "        internal_dict: an LLDB support object not to be used\"\"\"\n";
 
     StreamFileSP output_sp(io_handler.GetOutputStreamFile());
-    if (output_sp) {
+    if (output_sp && interactive) {
       output_sp->PutCString(g_summary_addreader_instructions);
       output_sp->Flush();
     }
@@ -179,7 +180,7 @@ public:
     StreamFileSP error_sp = io_handler.GetErrorStreamFile();
 
 #ifndef LLDB_DISABLE_PYTHON
-    ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+    ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
     if (interpreter) {
       StringList lines;
       lines.SplitIntoLines(data);
@@ -191,7 +192,7 @@ public:
               options_ptr); // this will ensure that we get rid of the pointer
                             // when going out of scope
 
-          ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+          ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
           if (interpreter) {
             std::string funct_name_str;
             if (interpreter->GenerateTypeScriptFunction(lines,
@@ -205,9 +206,9 @@ public:
                 // for every type in the list
 
                 TypeSummaryImplSP script_format;
-                script_format.reset(new ScriptSummaryFormat(
+                script_format = std::make_shared<ScriptSummaryFormat>(
                     options->m_flags, funct_name_str.c_str(),
-                    lines.CopyList("    ").c_str()));
+                    lines.CopyList("    ").c_str());
 
                 Status error;
 
@@ -411,9 +412,9 @@ protected:
     }
   }
 
-  void IOHandlerActivated(IOHandler &io_handler) override {
+  void IOHandlerActivated(IOHandler &io_handler, bool interactive) override {
     StreamFileSP output_sp(io_handler.GetOutputStreamFile());
-    if (output_sp) {
+    if (output_sp && interactive) {
       output_sp->PutCString(g_synth_addreader_instructions);
       output_sp->Flush();
     }
@@ -424,7 +425,7 @@ protected:
     StreamFileSP error_sp = io_handler.GetErrorStreamFile();
 
 #ifndef LLDB_DISABLE_PYTHON
-    ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+    ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
     if (interpreter) {
       StringList lines;
       lines.SplitIntoLines(data);
@@ -436,7 +437,7 @@ protected:
               options_ptr); // this will ensure that we get rid of the pointer
                             // when going out of scope
 
-          ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+          ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
           if (interpreter) {
             std::string class_name_str;
             if (interpreter->GenerateTypeSynthClass(lines, class_name_str)) {
@@ -449,12 +450,12 @@ protected:
                 // class
 
                 SyntheticChildrenSP synth_provider;
-                synth_provider.reset(new ScriptedSyntheticChildren(
+                synth_provider = std::make_shared<ScriptedSyntheticChildren>(
                     SyntheticChildren::Flags()
                         .SetCascades(options->m_cascade)
                         .SetSkipPointers(options->m_skip_pointers)
                         .SetSkipReferences(options->m_skip_references),
-                    class_name_str.c_str()));
+                    class_name_str.c_str());
 
                 lldb::TypeCategoryImplSP category;
                 DataVisualization::Categories::GetCategory(
@@ -522,9 +523,7 @@ public:
                        Status *error);
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFormatAdd
-//-------------------------------------------------------------------------
 
 static constexpr OptionDefinition g_type_format_add_options[] = {
     // clang-format off
@@ -699,18 +698,18 @@ protected:
     TypeFormatImplSP entry;
 
     if (m_command_options.m_custom_type_name.empty())
-      entry.reset(new TypeFormatImpl_Format(
+      entry = std::make_shared<TypeFormatImpl_Format>(
           format, TypeFormatImpl::Flags()
                       .SetCascades(m_command_options.m_cascade)
                       .SetSkipPointers(m_command_options.m_skip_pointers)
-                      .SetSkipReferences(m_command_options.m_skip_references)));
+                      .SetSkipReferences(m_command_options.m_skip_references));
     else
-      entry.reset(new TypeFormatImpl_EnumType(
+      entry = std::make_shared<TypeFormatImpl_EnumType>(
           ConstString(m_command_options.m_custom_type_name.c_str()),
           TypeFormatImpl::Flags()
               .SetCascades(m_command_options.m_cascade)
               .SetSkipPointers(m_command_options.m_skip_pointers)
-              .SetSkipReferences(m_command_options.m_skip_references)));
+              .SetSkipReferences(m_command_options.m_skip_references));
 
     // now I have a valid format, let's add it to every type
 
@@ -979,9 +978,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFormatDelete
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeFormatDelete : public CommandObjectTypeFormatterDelete {
 public:
@@ -995,9 +992,7 @@ public:
   ~CommandObjectTypeFormatDelete() override = default;
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFormatClear
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeFormatClear : public CommandObjectTypeFormatterClear {
 public:
@@ -1221,9 +1216,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFormatList
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeFormatList
     : public CommandObjectTypeFormatterList<TypeFormatImpl> {
@@ -1235,9 +1228,7 @@ public:
 
 #ifndef LLDB_DISABLE_PYTHON
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeSummaryAdd
-//-------------------------------------------------------------------------
 
 #endif // LLDB_DISABLE_PYTHON
 
@@ -1352,10 +1343,10 @@ bool CommandObjectTypeSummaryAdd::Execute_ScriptSummary(
     std::string code =
         ("    " + m_options.m_python_function + "(valobj,internal_dict)");
 
-    script_format.reset(
-        new ScriptSummaryFormat(m_options.m_flags, funct_name, code.c_str()));
+    script_format = std::make_shared<ScriptSummaryFormat>(
+        m_options.m_flags, funct_name, code.c_str());
 
-    ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+    ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
 
     if (interpreter && !interpreter->CheckObjectExists(funct_name))
       result.AppendWarningWithFormat(
@@ -1365,7 +1356,7 @@ bool CommandObjectTypeSummaryAdd::Execute_ScriptSummary(
   } else if (!m_options.m_python_script
                   .empty()) // we have a quick 1-line script, just use it
   {
-    ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+    ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
     if (!interpreter) {
       result.AppendError("script interpreter missing - unable to generate "
                          "function wrapper.\n");
@@ -1389,8 +1380,8 @@ bool CommandObjectTypeSummaryAdd::Execute_ScriptSummary(
 
     std::string code = "    " + m_options.m_python_script;
 
-    script_format.reset(new ScriptSummaryFormat(
-        m_options.m_flags, funct_name_str.c_str(), code.c_str()));
+    script_format = std::make_shared<ScriptSummaryFormat>(
+        m_options.m_flags, funct_name_str.c_str(), code.c_str());
   } else {
     // Use an IOHandler to grab Python code from the user
     ScriptAddOptions *options =
@@ -1712,9 +1703,7 @@ bool CommandObjectTypeSummaryAdd::AddSummary(ConstString type_name,
   }
 }
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeSummaryDelete
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeSummaryDelete : public CommandObjectTypeFormatterDelete {
 public:
@@ -1748,9 +1737,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeSummaryList
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeSummaryList
     : public CommandObjectTypeFormatterList<TypeSummaryImpl> {
@@ -1777,9 +1764,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeCategoryDefine
-//-------------------------------------------------------------------------
 
 static constexpr OptionDefinition g_type_category_define_options[] = {
     // clang-format off
@@ -1884,9 +1869,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeCategoryEnable
-//-------------------------------------------------------------------------
 
 static constexpr OptionDefinition g_type_category_enable_options[] = {
     // clang-format off
@@ -2001,9 +1984,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeCategoryDelete
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeCategoryDelete : public CommandObjectParsed {
 public:
@@ -2061,9 +2042,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeCategoryDisable
-//-------------------------------------------------------------------------
 
 OptionDefinition constexpr g_type_category_disable_options[] = {
     // clang-format off
@@ -2173,9 +2152,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeCategoryList
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeCategoryList : public CommandObjectParsed {
 public:
@@ -2244,9 +2221,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFilterList
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeFilterList
     : public CommandObjectTypeFormatterList<TypeFilterImpl> {
@@ -2258,9 +2233,7 @@ public:
 
 #ifndef LLDB_DISABLE_PYTHON
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeSynthList
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeSynthList
     : public CommandObjectTypeFormatterList<SyntheticChildren> {
@@ -2273,9 +2246,7 @@ public:
 
 #endif // LLDB_DISABLE_PYTHON
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFilterDelete
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeFilterDelete : public CommandObjectTypeFormatterDelete {
 public:
@@ -2290,9 +2261,7 @@ public:
 
 #ifndef LLDB_DISABLE_PYTHON
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeSynthDelete
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeSynthDelete : public CommandObjectTypeFormatterDelete {
 public:
@@ -2308,9 +2277,7 @@ public:
 
 #endif // LLDB_DISABLE_PYTHON
 
-//-------------------------------------------------------------------------
 // CommandObjectTypeFilterClear
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeFilterClear : public CommandObjectTypeFormatterClear {
 public:
@@ -2322,9 +2289,7 @@ public:
 };
 
 #ifndef LLDB_DISABLE_PYTHON
-//-------------------------------------------------------------------------
 // CommandObjectTypeSynthClear
-//-------------------------------------------------------------------------
 
 class CommandObjectTypeSynthClear : public CommandObjectTypeFormatterClear {
 public:
@@ -2392,7 +2357,7 @@ bool CommandObjectTypeSynthAdd::Execute_PythonClass(
 
   entry.reset(impl);
 
-  ScriptInterpreter *interpreter = m_interpreter.GetScriptInterpreter();
+  ScriptInterpreter *interpreter = GetDebugger().GetScriptInterpreter();
 
   if (interpreter &&
       !interpreter->CheckObjectExists(impl->GetPythonClassName()))
@@ -2741,9 +2706,7 @@ protected:
   }
 };
 
-//----------------------------------------------------------------------
 // "type lookup"
-//----------------------------------------------------------------------
 static constexpr OptionDefinition g_type_lookup_options[] = {
     // clang-format off
   { LLDB_OPT_SET_ALL, false, "show-help", 'h', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,     "Display available help for types" },
@@ -2993,7 +2956,7 @@ public:
 protected:
   bool DoExecute(llvm::StringRef command,
                  CommandReturnObject &result) override {
-    TargetSP target_sp = m_interpreter.GetDebugger().GetSelectedTarget();
+    TargetSP target_sp = GetDebugger().GetSelectedTarget();
     Thread *thread = GetDefaultThread();
     if (!thread) {
       result.AppendError("no default thread");
@@ -3167,9 +3130,7 @@ public:
   ~CommandObjectTypeSummary() override = default;
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectType
-//-------------------------------------------------------------------------
 
 CommandObjectType::CommandObjectType(CommandInterpreter &interpreter)
     : CommandObjectMultiword(interpreter, "type",

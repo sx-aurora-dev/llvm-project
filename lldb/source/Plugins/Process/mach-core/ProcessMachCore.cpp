@@ -12,7 +12,6 @@
 
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Threading.h"
-#include <mutex>
 
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
@@ -38,6 +37,9 @@
 #include "Plugins/DynamicLoader/Darwin-Kernel/DynamicLoaderDarwinKernel.h"
 #include "Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOSXDYLD.h"
 #include "Plugins/ObjectFile/Mach-O/ObjectFileMachO.h"
+
+#include <memory>
+#include <mutex>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -70,8 +72,8 @@ lldb::ProcessSP ProcessMachCore::CreateInstance(lldb::TargetSP target_sp,
       llvm::MachO::mach_header mach_header;
       if (ObjectFileMachO::ParseHeader(data, &data_offset, mach_header)) {
         if (mach_header.filetype == llvm::MachO::MH_CORE)
-          process_sp.reset(
-              new ProcessMachCore(target_sp, listener_sp, *crash_file));
+          process_sp = std::make_shared<ProcessMachCore>(target_sp, listener_sp,
+                                                         *crash_file);
       }
     }
   }
@@ -102,9 +104,7 @@ bool ProcessMachCore::CanDebug(lldb::TargetSP target_sp,
   return false;
 }
 
-//----------------------------------------------------------------------
 // ProcessMachCore constructor
-//----------------------------------------------------------------------
 ProcessMachCore::ProcessMachCore(lldb::TargetSP target_sp,
                                  ListenerSP listener_sp,
                                  const FileSpec &core_file)
@@ -113,9 +113,7 @@ ProcessMachCore::ProcessMachCore(lldb::TargetSP target_sp,
       m_dyld_addr(LLDB_INVALID_ADDRESS),
       m_mach_kernel_addr(LLDB_INVALID_ADDRESS), m_dyld_plugin_name() {}
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 ProcessMachCore::~ProcessMachCore() {
   Clear();
   // We need to call finalize on the process before destroying ourselves to
@@ -125,9 +123,7 @@ ProcessMachCore::~ProcessMachCore() {
   Finalize();
 }
 
-//----------------------------------------------------------------------
 // PluginInterface
-//----------------------------------------------------------------------
 ConstString ProcessMachCore::GetPluginName() { return GetPluginNameStatic(); }
 
 uint32_t ProcessMachCore::GetPluginVersion() { return 1; }
@@ -189,9 +185,7 @@ bool ProcessMachCore::GetDynamicLoaderAddress(lldb::addr_t addr) {
   return false;
 }
 
-//----------------------------------------------------------------------
 // Process Control
-//----------------------------------------------------------------------
 Status ProcessMachCore::DoLoadCore() {
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER |
                                                   LIBLLDB_LOG_PROCESS));
@@ -453,11 +447,11 @@ Status ProcessMachCore::DoLoadCore() {
 }
 
 lldb_private::DynamicLoader *ProcessMachCore::GetDynamicLoader() {
-  if (m_dyld_ap.get() == NULL)
-    m_dyld_ap.reset(DynamicLoader::FindPlugin(
+  if (m_dyld_up.get() == NULL)
+    m_dyld_up.reset(DynamicLoader::FindPlugin(
         this,
         m_dyld_plugin_name.IsEmpty() ? NULL : m_dyld_plugin_name.GetCString()));
-  return m_dyld_ap.get();
+  return m_dyld_up.get();
 }
 
 bool ProcessMachCore::UpdateThreadList(ThreadList &old_thread_list,
@@ -491,17 +485,13 @@ void ProcessMachCore::RefreshStateAfterStop() {
 
 Status ProcessMachCore::DoDestroy() { return Status(); }
 
-//------------------------------------------------------------------
 // Process Queries
-//------------------------------------------------------------------
 
 bool ProcessMachCore::IsAlive() { return true; }
 
 bool ProcessMachCore::WarnBeforeDetach() const { return false; }
 
-//------------------------------------------------------------------
 // Process Memory
-//------------------------------------------------------------------
 size_t ProcessMachCore::ReadMemory(addr_t addr, void *buf, size_t size,
                                    Status &error) {
   // Don't allow the caching that lldb_private::Process::ReadMemory does since
@@ -515,7 +505,6 @@ size_t ProcessMachCore::DoReadMemory(addr_t addr, void *buf, size_t size,
   size_t bytes_read = 0;
 
   if (core_objfile) {
-    //----------------------------------------------------------------------
     // Segments are not always contiguous in mach-o core files. We have core
     // files that have segments like:
     //            Address    Size       File off   File size
@@ -532,7 +521,6 @@ size_t ProcessMachCore::DoReadMemory(addr_t addr, void *buf, size_t size,
     // We would attempt to read 32 bytes from 0xf6ff0 but would only get 16
     // unless we loop through consecutive memory ranges that are contiguous in
     // the address space, but not in the file data.
-    //----------------------------------------------------------------------
     while (bytes_read < size) {
       const addr_t curr_addr = addr + bytes_read;
       const VMRangeToFileOffset::Entry *core_memory_entry =

@@ -9,7 +9,7 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_BUGPRONE_ARGUMENTCOMMENTCHECK_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_BUGPRONE_ARGUMENTCOMMENTCHECK_H
 
-#include "../ClangTidy.h"
+#include "../ClangTidyCheck.h"
 #include "llvm/Support/Regex.h"
 
 namespace clang {
@@ -26,7 +26,8 @@ namespace bugprone {
 ///
 ///   ...
 ///   f(/*bar=*/true);
-///   // warning: argument name 'bar' in comment does not match parameter name 'foo'
+///   // warning: argument name 'bar' in comment does not match parameter name
+///   'foo'
 /// \endcode
 ///
 /// The check tries to detect typos and suggest automated fixes for them.
@@ -39,12 +40,21 @@ public:
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
 
 private:
-  const bool StrictMode;
+  const unsigned StrictMode : 1;
+  const unsigned CommentBoolLiterals : 1;
+  const unsigned CommentIntegerLiterals : 1;
+  const unsigned CommentFloatLiterals : 1;
+  const unsigned CommentStringLiterals : 1;
+  const unsigned CommentUserDefinedLiterals : 1;
+  const unsigned CommentCharacterLiterals : 1;
+  const unsigned CommentNullPtrs : 1;
   llvm::Regex IdentRE;
 
   void checkCallArgs(ASTContext *Ctx, const FunctionDecl *Callee,
                      SourceLocation ArgBeginLoc,
                      llvm::ArrayRef<const Expr *> Args);
+
+  bool shouldAddComment(const Expr *Arg) const;
 };
 
 } // namespace bugprone

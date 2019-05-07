@@ -3,11 +3,11 @@
 
 # RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -o %t.o %s
 # RUN: ld.lld -shared -o %t.so %t.o
-# RUN: llvm-readobj -t -mips-plt-got %t.so | FileCheck %s
+# RUN: llvm-readobj --symbols --mips-plt-got %t.so | FileCheck %s
 
 # CHECK:      Symbol {
 # CHECK:        Name: $.str
-# CHECK-NEXT:   Value: 0x1B1
+# CHECK-NEXT:   Value: 0x1F1
 # CHECK:      }
 
 # CHECK:      Local entries [

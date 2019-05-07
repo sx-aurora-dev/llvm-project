@@ -26,15 +26,17 @@ test(const Allocator& a)
     SM m1(m0);
 
     assert(m1.size()          == m0.size());
-    assert(m1.str()           == m0.str());
+    assert(m1.ready()         == m0.ready());
     assert(m1.get_allocator() == m0.get_allocator());
 }
 
-int main()
+int main(int, char**)
 {
     test<char>   (std::allocator<std::sub_match<const char *> >());
     test<wchar_t>(std::allocator<std::sub_match<const wchar_t *> >());
 
     test<char>   (test_allocator<std::sub_match<const char*> >(3));
     test<wchar_t>(test_allocator<std::sub_match<const wchar_t*> >(3));
+
+  return 0;
 }

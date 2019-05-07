@@ -52,6 +52,8 @@ bool llvm::isTriviallyVectorizable(Intrinsic::ID ID) {
   case Intrinsic::ssub_sat:
   case Intrinsic::uadd_sat:
   case Intrinsic::usub_sat:
+  case Intrinsic::smul_fix:
+  case Intrinsic::umul_fix:
   case Intrinsic::sqrt: // Begin floating-point.
   case Intrinsic::sin:
   case Intrinsic::cos:
@@ -92,6 +94,9 @@ bool llvm::hasVectorInstrinsicScalarOpd(Intrinsic::ID ID,
   case Intrinsic::cttz:
   case Intrinsic::powi:
     return (ScalarOpdIdx == 1);
+  case Intrinsic::smul_fix:
+  case Intrinsic::umul_fix:
+    return (ScalarOpdIdx == 2);
   default:
     return false;
   }
@@ -710,6 +715,52 @@ Value *llvm::concatenateVectors(IRBuilder<> &Builder, ArrayRef<Value *> Vecs) {
   return ResList[0];
 }
 
+bool llvm::maskIsAllZeroOrUndef(Value *Mask) {
+  auto *ConstMask = dyn_cast<Constant>(Mask);
+  if (!ConstMask)
+    return false;
+  if (ConstMask->isNullValue() || isa<UndefValue>(ConstMask))
+    return true;
+  for (unsigned I = 0, E = ConstMask->getType()->getVectorNumElements(); I != E;
+       ++I) {
+    if (auto *MaskElt = ConstMask->getAggregateElement(I))
+      if (MaskElt->isNullValue() || isa<UndefValue>(MaskElt))
+        continue;
+    return false;
+  }
+  return true;
+}
+
+
+bool llvm::maskIsAllOneOrUndef(Value *Mask) {
+  auto *ConstMask = dyn_cast<Constant>(Mask);
+  if (!ConstMask)
+    return false;
+  if (ConstMask->isAllOnesValue() || isa<UndefValue>(ConstMask))
+    return true;
+  for (unsigned I = 0, E = ConstMask->getType()->getVectorNumElements(); I != E;
+       ++I) {
+    if (auto *MaskElt = ConstMask->getAggregateElement(I))
+      if (MaskElt->isAllOnesValue() || isa<UndefValue>(MaskElt))
+        continue;
+    return false;
+  }
+  return true;
+}
+
+/// TODO: This is a lot like known bits, but for
+/// vectors.  Is there something we can common this with?
+APInt llvm::possiblyDemandedEltsInMask(Value *Mask) {
+
+  const unsigned VWidth = cast<VectorType>(Mask->getType())->getNumElements();
+  APInt DemandedElts = APInt::getAllOnesValue(VWidth);
+  if (auto *CV = dyn_cast<ConstantVector>(Mask))
+    for (unsigned i = 0; i < VWidth; i++)
+      if (CV->getAggregateElement(i)->isNullValue())
+        DemandedElts.clearBit(i);
+  return DemandedElts;
+}
+
 bool InterleavedAccessInfo::isStrided(int Stride) {
   unsigned Factor = std::abs(Stride);
   return Factor >= 2 && Factor <= MaxInterleaveGroupFactor;
@@ -991,7 +1042,7 @@ void InterleavedAccessInfo::analyzeInterleaving(
     // that all the pointers in the group don't wrap.
     // So we check only group member 0 (which is always guaranteed to exist),
     // and group member Factor - 1; If the latter doesn't exist we rely on
-    // peeling (if it is a non-reveresed accsess -- see Case 3).
+    // peeling (if it is a non-reversed accsess -- see Case 3).
     Value *FirstMemberPtr = getLoadStorePointerOperand(Group->getMember(0));
     if (!getPtrStride(PSE, FirstMemberPtr, TheLoop, Strides, /*Assume=*/false,
                       /*ShouldCheckWrap=*/true)) {

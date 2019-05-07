@@ -19,7 +19,6 @@
 #include <cassert>
 #include <streambuf>
 #include <sstream>
-#include <iostream>
 #include "test_iterators.h"
 #include "test_macros.h"
 
@@ -148,7 +147,7 @@ void test_negate() {
     }
 }
 
-int main()
+int main(int, char**)
 {
     test_neg_one<long>();
     test_neg_one<long long>();
@@ -161,4 +160,6 @@ int main()
     test_negate<unsigned int>();
     test_negate<unsigned long>();
     test_negate<unsigned long long>();
+
+  return 0;
 }

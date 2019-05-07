@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
+// XFAIL: dylib-has-no-filesystem
 
 // <fstream>
 
@@ -20,7 +21,7 @@
 #include <cassert>
 #include "platform_support.h"
 
-int main() {
+int main(int, char**) {
   std::filesystem::path p = get_temp_file_name();
   {
     std::fstream stream;
@@ -48,4 +49,6 @@ int main() {
     assert(x == 3.25);
   }
   std::remove(p.c_str());
+
+  return 0;
 }

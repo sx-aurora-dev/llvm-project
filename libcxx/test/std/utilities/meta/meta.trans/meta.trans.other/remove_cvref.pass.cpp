@@ -19,11 +19,11 @@
 template <class T, class U>
 void test_remove_cvref()
 {
-    static_assert((std::is_same<typename std::remove_cvref<T>::type, U>::value), "");
-    static_assert((std::is_same<         std::remove_cvref_t<T>,     U>::value), "");
+    ASSERT_SAME_TYPE(U, typename std::remove_cvref<T>::type);
+    ASSERT_SAME_TYPE(U,        std::remove_cvref_t<T>);
 }
 
-int main()
+int main(int, char**)
 {
     test_remove_cvref<void, void>();
     test_remove_cvref<int, int>();
@@ -48,4 +48,6 @@ int main()
     test_remove_cvref<int(int) volatile, int(int) volatile>();
     test_remove_cvref<int(int)  &, int(int)  &>();
     test_remove_cvref<int(int) &&, int(int) &&>();
+
+  return 0;
 }

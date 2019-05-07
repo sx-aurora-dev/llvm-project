@@ -187,9 +187,10 @@ unwind_phase2(struct _Unwind_Exception *exception_object) {
 
     // check for no more frames
     if (c == NULL) {
-      _LIBUNWIND_TRACE_UNWINDING("unwind_phase2(ex_ojb=%p): unw_step() reached "
-                                 "bottom => _URC_END_OF_STACK",
-                                 (void *)exception_object);
+      _LIBUNWIND_TRACE_UNWINDING(
+          "unwind_phase2(ex_ojb=%p): __unw_step() reached "
+          "bottom => _URC_END_OF_STACK",
+          (void *)exception_object);
       return _URC_END_OF_STACK;
     }
 
@@ -225,7 +226,7 @@ unwind_phase2(struct _Unwind_Exception *exception_object) {
         // we may get control back if landing pad calls _Unwind_Resume()
         __Unwind_SjLj_SetTopOfFunctionStack(c);
         __builtin_longjmp(c->jbuf, 1);
-        // unw_resume() only returns if there was an error
+        // __unw_resume() only returns if there was an error
         return _URC_FATAL_PHASE2_ERROR;
       default:
         // something went wrong
@@ -252,9 +253,10 @@ unwind_phase2_forced(struct _Unwind_Exception *exception_object,
 
     // get next frame (skip over first which is _Unwind_RaiseException)
     if (c == NULL) {
-      _LIBUNWIND_TRACE_UNWINDING("unwind_phase2(ex_ojb=%p): unw_step() reached "
-                                 "bottom => _URC_END_OF_STACK",
-                                 (void *)exception_object);
+      _LIBUNWIND_TRACE_UNWINDING(
+          "unwind_phase2(ex_ojb=%p): __unw_step() reached "
+          "bottom => _URC_END_OF_STACK",
+          (void *)exception_object);
       return _URC_END_OF_STACK;
     }
 

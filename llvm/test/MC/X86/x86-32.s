@@ -262,28 +262,28 @@ cmovnae	%bx,%bx
 // CHECK:  encoding: [0x0f,0x44,0xd0]
         	cmovzl	%eax,%edx
 
-// CHECK: cmpps	$0, %xmm0, %xmm1
+// CHECK: cmpeqps	%xmm0, %xmm1
 // CHECK: encoding: [0x0f,0xc2,0xc8,0x00]
         cmpps $0, %xmm0, %xmm1
-// CHECK:	cmpps	$0, (%eax), %xmm1
+// CHECK:	cmpeqps	(%eax), %xmm1
 // CHECK: encoding: [0x0f,0xc2,0x08,0x00]
         cmpps $0, 0(%eax), %xmm1
-// CHECK:	cmppd	$0, %xmm0, %xmm1
+// CHECK:	cmpeqpd	%xmm0, %xmm1
 // CHECK: encoding: [0x66,0x0f,0xc2,0xc8,0x00]
         cmppd $0, %xmm0, %xmm1
-// CHECK:	cmppd	$0, (%eax), %xmm1
+// CHECK:	cmpeqpd	(%eax), %xmm1
 // CHECK: encoding: [0x66,0x0f,0xc2,0x08,0x00]
         cmppd $0, 0(%eax), %xmm1
-// CHECK:	cmpss	$0, %xmm0, %xmm1
+// CHECK:	cmpeqss	%xmm0, %xmm1
 // CHECK: encoding: [0xf3,0x0f,0xc2,0xc8,0x00]
         cmpss $0, %xmm0, %xmm1
-// CHECK:	cmpss	$0, (%eax), %xmm1
+// CHECK:	cmpeqss	(%eax), %xmm1
 // CHECK: encoding: [0xf3,0x0f,0xc2,0x08,0x00]
         cmpss $0, 0(%eax), %xmm1
-// CHECK:	cmpsd	$0, %xmm0, %xmm1
+// CHECK:	cmpeqsd	%xmm0, %xmm1
 // CHECK: encoding: [0xf2,0x0f,0xc2,0xc8,0x00]
         cmpsd $0, %xmm0, %xmm1
-// CHECK:	cmpsd	$0, (%eax), %xmm1
+// CHECK:	cmpeqsd	(%eax), %xmm1
 // CHECK: encoding: [0xf2,0x0f,0xc2,0x08,0x00]
         cmpsd $0, 0(%eax), %xmm1
 
@@ -322,29 +322,29 @@ cmovnae	%bx,%bx
         cmpordsd %xmm0, %xmm1
 
 // rdar://7995856
-// CHECK: fmul	%st
+// CHECK: fmul	%st(0)
 // CHECK:  encoding: [0xd8,0xc8]
-        fmul %st, %st
+        fmul %st(0), %st
 
-// CHECK: fadd	%st
+// CHECK: fadd	%st(0)
 // CHECK:  encoding: [0xd8,0xc0]
-        fadd %st, %st
+        fadd %st(0), %st
 
-// CHECK: fsub	%st
+// CHECK: fsub	%st(0)
 // CHECK:  encoding: [0xd8,0xe0]
-        fsub %st, %st
+        fsub %st(0), %st
 
-// CHECK: fsubr	%st
+// CHECK: fsubr	%st(0)
 // CHECK:  encoding: [0xd8,0xe8]
-        fsubr %st, %st
+        fsubr %st(0), %st
 
-// CHECK: fdivr	%st
+// CHECK: fdivr	%st(0)
 // CHECK:  encoding: [0xd8,0xf8]
-        fdivr %st, %st
+        fdivr %st(0), %st
 
-// CHECK: fdiv	%st
+// CHECK: fdiv	%st(0)
 // CHECK:  encoding: [0xd8,0xf0]
-        fdiv %st, %st
+        fdiv %st(0), %st
 
 // radr://8017519
 // CHECK: movl	%cs, %eax
@@ -1055,7 +1055,7 @@ pshufw $90, %mm4, %mm0
 fsubp %st,%st(1)
 
 // PR9164
-// CHECK: fsubp	%st(2)
+// CHECK: fsubp %st, %st(2)
 // CHECK: encoding: [0xde,0xe2]
 fsubp   %st, %st(2)
 

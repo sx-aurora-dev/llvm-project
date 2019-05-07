@@ -291,6 +291,7 @@ static const char *GetCodeName(unsigned CodeID, unsigned BlockID,
       STRINGIFY_CODE(FUNC_CODE, INST_LOADATOMIC)
       STRINGIFY_CODE(FUNC_CODE, INST_STOREATOMIC)
       STRINGIFY_CODE(FUNC_CODE, INST_CMPXCHG)
+      STRINGIFY_CODE(FUNC_CODE, INST_CALLBR)
     }
   case bitc::VALUE_SYMTAB_BLOCK_ID:
     switch (CodeID) {
@@ -955,7 +956,7 @@ static int AnalyzeBitcode() {
       for (unsigned i = 0, e = Stats.CodeFreq.size(); i != e; ++i)
         if (unsigned Freq = Stats.CodeFreq[i].NumInstances)
           FreqPairs.push_back(std::make_pair(Freq, i));
-      std::stable_sort(FreqPairs.begin(), FreqPairs.end());
+      llvm::stable_sort(FreqPairs);
       std::reverse(FreqPairs.begin(), FreqPairs.end());
 
       outs() << "\tRecord Histogram:\n";

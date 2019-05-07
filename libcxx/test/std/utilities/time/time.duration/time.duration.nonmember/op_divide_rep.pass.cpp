@@ -19,11 +19,14 @@
 #include <cassert>
 
 #include "test_macros.h"
+#include "../../rep.h"
 
-int main()
+int main(int, char**)
 {
     {
-    std::chrono::nanoseconds ns(15);
+    typedef std::chrono::nanoseconds Dur;
+    Dur ns(15);
+    ASSERT_SAME_TYPE(Dur, decltype(ns / 5));
     ns = ns / 5;
     assert(ns.count() == 3);
     }
@@ -34,4 +37,17 @@ int main()
     static_assert(ns2.count() == 3, "");
     }
 #endif
+
+#if TEST_STD_VER >= 11
+    { // This is PR#41130
+    typedef std::chrono::nanoseconds Duration;
+    Duration d(5);
+    NotARep n;
+    ASSERT_SAME_TYPE(Duration, decltype(d / n));
+    d = d / n;
+    assert(d.count() == 5);
+    }
+#endif
+
+  return 0;
 }

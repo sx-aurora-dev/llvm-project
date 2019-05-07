@@ -73,8 +73,8 @@ static cl::opt<unsigned> MinimumJumpTableEntries
    cl::desc("Set minimum number of entries to use a jump table."));
 
 static cl::opt<unsigned> MaximumJumpTableSize
-  ("max-jump-table-size", cl::init(0), cl::Hidden,
-   cl::desc("Set maximum size of jump tables; zero for no limit."));
+  ("max-jump-table-size", cl::init(UINT_MAX), cl::Hidden,
+   cl::desc("Set maximum size of jump tables."));
 
 /// Minimum jump table density for normal functions.
 static cl::opt<unsigned>
@@ -545,7 +545,6 @@ TargetLoweringBase::TargetLoweringBase(const TargetMachine &tm) : TM(tm) {
   JumpIsExpensive = JumpIsExpensiveOverride;
   PredictableSelectIsExpensive = false;
   EnableExtLdPromotion = false;
-  HasFloatingPointExceptions = true;
   StackPointerRegisterToSaveRestore = 0;
   BooleanContents = UndefinedBooleanContent;
   BooleanFloatContents = UndefinedBooleanContent;
@@ -624,6 +623,7 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::SSUBSAT, VT, Expand);
     setOperationAction(ISD::USUBSAT, VT, Expand);
     setOperationAction(ISD::SMULFIX, VT, Expand);
+    setOperationAction(ISD::UMULFIX, VT, Expand);
 
     // Overflow operations default to expand
     setOperationAction(ISD::SADDO, VT, Expand);
@@ -664,6 +664,21 @@ void TargetLoweringBase::initActions() {
 
     // For most targets @llvm.get.dynamic.area.offset just returns 0.
     setOperationAction(ISD::GET_DYNAMIC_AREA_OFFSET, VT, Expand);
+
+    // Vector reduction default to expand.
+    setOperationAction(ISD::VECREDUCE_FADD, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_FMUL, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_ADD, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_MUL, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_AND, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_OR, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_XOR, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_SMAX, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_SMIN, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_UMAX, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_UMIN, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_FMAX, VT, Expand);
+    setOperationAction(ISD::VECREDUCE_FMIN, VT, Expand);
   }
 
   // Most targets ignore the @llvm.prefetch intrinsic.
@@ -992,16 +1007,16 @@ TargetLoweringBase::emitPatchPoint(MachineInstr &InitialMI,
     // Add a new memory operand for this FI.
     assert(MFI.getObjectOffset(FI) != -1);
 
-    auto Flags = MachineMemOperand::MOLoad;
-    if (MI->getOpcode() == TargetOpcode::STATEPOINT) {
-      Flags |= MachineMemOperand::MOStore;
-      Flags |= MachineMemOperand::MOVolatile;
+    // Note: STATEPOINT MMOs are added during SelectionDAG.  STACKMAP, and
+    // PATCHPOINT should be updated to do the same. (TODO)
+    if (MI->getOpcode() != TargetOpcode::STATEPOINT) {
+      auto Flags = MachineMemOperand::MOLoad;
+      MachineMemOperand *MMO = MF.getMachineMemOperand(
+          MachinePointerInfo::getFixedStack(MF, FI), Flags,
+          MF.getDataLayout().getPointerSize(), MFI.getObjectAlignment(FI));
+      MIB->addMemOperand(MF, MMO);
     }
-    MachineMemOperand *MMO = MF.getMachineMemOperand(
-        MachinePointerInfo::getFixedStack(MF, FI), Flags,
-        MF.getDataLayout().getPointerSize(), MFI.getObjectAlignment(FI));
-    MIB->addMemOperand(MF, MMO);
-
+    
     // Replace the instruction and update the operand index.
     MBB->insert(MachineBasicBlock::iterator(MI), MIB);
     OperIdx += (MIB->getNumOperands() - MI->getNumOperands()) - 1;
@@ -1454,6 +1469,7 @@ int TargetLoweringBase::InstructionOpcodeToISD(unsigned Opcode) const {
   case Switch:         return 0;
   case IndirectBr:     return 0;
   case Invoke:         return 0;
+  case CallBr:         return 0;
   case Resume:         return 0;
   case Unreachable:    return 0;
   case CleanupRet:     return 0;

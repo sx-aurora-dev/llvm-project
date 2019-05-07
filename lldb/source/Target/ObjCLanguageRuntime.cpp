@@ -27,9 +27,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 ObjCLanguageRuntime::~ObjCLanguageRuntime() {}
 
 ObjCLanguageRuntime::ObjCLanguageRuntime(Process *process)
@@ -153,7 +151,7 @@ bool ObjCLanguageRuntime::ClassDescriptor::IsPointerValid(
 }
 
 ObjCLanguageRuntime::ObjCISA
-ObjCLanguageRuntime::GetISA(const ConstString &name) {
+ObjCLanguageRuntime::GetISA(ConstString name) {
   ISAToDescriptorIterator pos = GetDescriptorIterator(name);
   if (pos != m_isa_to_descriptor.end())
     return pos->first;
@@ -161,7 +159,7 @@ ObjCLanguageRuntime::GetISA(const ConstString &name) {
 }
 
 ObjCLanguageRuntime::ISAToDescriptorIterator
-ObjCLanguageRuntime::GetDescriptorIterator(const ConstString &name) {
+ObjCLanguageRuntime::GetDescriptorIterator(ConstString name) {
   ISAToDescriptorIterator end = m_isa_to_descriptor.end();
 
   if (name) {
@@ -226,7 +224,7 @@ ObjCLanguageRuntime::GetActualTypeName(ObjCLanguageRuntime::ObjCISA isa) {
 
 ObjCLanguageRuntime::ClassDescriptorSP
 ObjCLanguageRuntime::GetClassDescriptorFromClassName(
-    const ConstString &class_name) {
+    ConstString class_name) {
   ISAToDescriptorIterator pos = GetDescriptorIterator(class_name);
   if (pos != m_isa_to_descriptor.end())
     return pos->second;
@@ -302,8 +300,8 @@ ObjCLanguageRuntime::GetNonKVOClassDescriptor(ObjCISA isa) {
 CompilerType
 ObjCLanguageRuntime::EncodingToType::RealizeType(const char *name,
                                                  bool for_expression) {
-  if (m_scratch_ast_ctx_ap)
-    return RealizeType(*m_scratch_ast_ctx_ap, name, for_expression);
+  if (m_scratch_ast_ctx_up)
+    return RealizeType(*m_scratch_ast_ctx_up, name, for_expression);
   return CompilerType();
 }
 
@@ -355,9 +353,7 @@ bool ObjCLanguageRuntime::GetTypeBitSize(const CompilerType &compiler_type,
   return found;
 }
 
-//------------------------------------------------------------------
 // Exception breakpoint Precondition class for ObjC:
-//------------------------------------------------------------------
 void ObjCLanguageRuntime::ObjCExceptionPrecondition::AddClassName(
     const char *class_name) {
   m_class_names.insert(class_name);

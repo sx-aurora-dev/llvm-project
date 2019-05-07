@@ -75,6 +75,11 @@ STATISTIC(NumDSE,      "Number of trivial dead stores removed");
 DEBUG_COUNTER(CSECounter, "early-cse",
               "Controls which instructions are removed");
 
+static cl::opt<unsigned> EarlyCSEMssaOptCap(
+    "earlycse-mssa-optimization-cap", cl::init(500), cl::Hidden,
+    cl::desc("Enable imprecision in EarlyCSE in pathological cases, in exchange "
+             "for faster compile. Caps the MemorySSA clobbering calls."));
+
 //===----------------------------------------------------------------------===//
 // SimpleValue
 //===----------------------------------------------------------------------===//
@@ -125,6 +130,21 @@ template <> struct DenseMapInfo<SimpleValue> {
 
 } // end namespace llvm
 
+/// Match a 'select' including an optional 'not' of the condition.
+static bool matchSelectWithOptionalNotCond(Value *V, Value *&Cond,
+                                           Value *&T, Value *&F) {
+  if (match(V, m_Select(m_Value(Cond), m_Value(T), m_Value(F)))) {
+    // Look through a 'not' of the condition operand by swapping true/false.
+    Value *CondNot;
+    if (match(Cond, m_Not(m_Value(CondNot)))) {
+      Cond = CondNot;
+      std::swap(T, F);
+    }
+    return true;
+  }
+  return false;
+}
+
 unsigned DenseMapInfo<SimpleValue>::getHashValue(SimpleValue Val) {
   Instruction *Inst = Val.Inst;
   // Hash in all of the operands as pointers.
@@ -166,6 +186,24 @@ unsigned DenseMapInfo<SimpleValue>::getHashValue(SimpleValue Val) {
     return hash_combine(Inst->getOpcode(), SPF, A, B);
   }
 
+  // Hash general selects to allow matching commuted true/false operands.
+  Value *Cond, *TVal, *FVal;
+  if (matchSelectWithOptionalNotCond(Inst, Cond, TVal, FVal)) {
+    // If we do not have a compare as the condition, just hash in the condition.
+    CmpInst::Predicate Pred;
+    Value *X, *Y;
+    if (!match(Cond, m_Cmp(Pred, m_Value(X), m_Value(Y))))
+      return hash_combine(Inst->getOpcode(), Cond, TVal, FVal);
+
+    // Similar to cmp normalization (above) - canonicalize the predicate value:
+    // select (icmp Pred, X, Y), T, F --> select (icmp InvPred, X, Y), F, T
+    if (CmpInst::getInversePredicate(Pred) < Pred) {
+      Pred = CmpInst::getInversePredicate(Pred);
+      std::swap(TVal, FVal);
+    }
+    return hash_combine(Inst->getOpcode(), Pred, X, Y, TVal, FVal);
+  }
+
   if (CastInst *CI = dyn_cast<CastInst>(Inst))
     return hash_combine(CI->getOpcode(), CI->getType(), CI->getOperand(0));
 
@@ -178,8 +216,7 @@ unsigned DenseMapInfo<SimpleValue>::getHashValue(SimpleValue Val) {
                         IVI->getOperand(1),
                         hash_combine_range(IVI->idx_begin(), IVI->idx_end()));
 
-  assert((isa<CallInst>(Inst) || isa<BinaryOperator>(Inst) ||
-          isa<GetElementPtrInst>(Inst) || isa<SelectInst>(Inst) ||
+  assert((isa<CallInst>(Inst) || isa<GetElementPtrInst>(Inst) ||
           isa<ExtractElementInst>(Inst) || isa<InsertElementInst>(Inst) ||
           isa<ShuffleVectorInst>(Inst)) &&
          "Invalid/unknown instruction");
@@ -240,6 +277,31 @@ bool DenseMapInfo<SimpleValue>::isEqual(SimpleValue LHS, SimpleValue RHS) {
         return LHSA == RHSA && LHSB == RHSB;
       return ((LHSA == RHSA && LHSB == RHSB) ||
               (LHSA == RHSB && LHSB == RHSA));
+    }
+  }
+
+  // Selects can be non-trivially equivalent via inverted conditions and swaps.
+  Value *CondL, *CondR, *TrueL, *TrueR, *FalseL, *FalseR;
+  if (matchSelectWithOptionalNotCond(LHSI, CondL, TrueL, FalseL) &&
+      matchSelectWithOptionalNotCond(RHSI, CondR, TrueR, FalseR)) {
+    // select Cond, T, F <--> select not(Cond), F, T
+    if (CondL == CondR && TrueL == TrueR && FalseL == FalseR)
+      return true;
+
+    // If the true/false operands are swapped and the conditions are compares
+    // with inverted predicates, the selects are equal:
+    // select (icmp Pred, X, Y), T, F <--> select (icmp InvPred, X, Y), F, T
+    //
+    // This also handles patterns with a double-negation because we looked
+    // through a 'not' in the matching function and swapped T/F:
+    // select (cmp Pred, X, Y), T, F <--> select (not (cmp InvPred, X, Y)), T, F
+    if (TrueL == FalseR && FalseL == TrueR) {
+      CmpInst::Predicate PredL, PredR;
+      Value *X, *Y;
+      if (match(CondL, m_Cmp(PredL, m_Value(X), m_Value(Y))) &&
+          match(CondR, m_Cmp(PredR, m_Specific(X), m_Specific(Y))) &&
+          CmpInst::getInversePredicate(PredL) == PredR)
+        return true;
     }
   }
 
@@ -418,6 +480,7 @@ public:
   bool run();
 
 private:
+  unsigned ClobberCounter = 0;
   // Almost a POD, but needs to call the constructors for the scoped hash
   // tables so that a new scope gets pushed on. These are RAII so that the
   // scope gets popped when the NodeScope is destroyed.
@@ -662,8 +725,13 @@ bool EarlyCSE::isSameMemGeneration(unsigned EarlierGeneration,
   // LaterInst, if LaterDef dominates EarlierInst then it can't occur between
   // EarlierInst and LaterInst and neither can any other write that potentially
   // clobbers LaterInst.
-  MemoryAccess *LaterDef =
-      MSSA->getWalker()->getClobberingMemoryAccess(LaterInst);
+  MemoryAccess *LaterDef;
+  if (ClobberCounter < EarlyCSEMssaOptCap) {
+    LaterDef = MSSA->getWalker()->getClobberingMemoryAccess(LaterInst);
+    ClobberCounter++;
+  } else
+    LaterDef = LaterMA->getDefiningAccess();
+
   return MSSA->dominates(LaterDef, EarlierMA);
 }
 
@@ -1091,7 +1159,7 @@ bool EarlyCSE::processNode(DomTreeNode *Node) {
         // At the moment, we don't remove ordered stores, but do remove
         // unordered atomic stores.  There's no special requirement (for
         // unordered atomics) about removing atomic stores only in favor of
-        // other atomic stores since we we're going to execute the non-atomic
+        // other atomic stores since we were going to execute the non-atomic
         // one anyway and the atomic one might never have become visible.
         if (LastStore) {
           ParseMemoryInst LastStoreMemInst(LastStore, TTI);
@@ -1158,8 +1226,7 @@ bool EarlyCSE::run() {
       CurrentGeneration, DT.getRootNode(),
       DT.getRootNode()->begin(), DT.getRootNode()->end()));
 
-  // Save the current generation.
-  unsigned LiveOutGeneration = CurrentGeneration;
+  assert(!CurrentGeneration && "Create a new EarlyCSE instance to rerun it.");
 
   // Process the stack.
   while (!nodesToProcess.empty()) {
@@ -1190,9 +1257,6 @@ bool EarlyCSE::run() {
       nodesToProcess.pop_back();
     }
   } // while (!nodes...)
-
-  // Reset the current generation.
-  CurrentGeneration = LiveOutGeneration;
 
   return Changed;
 }

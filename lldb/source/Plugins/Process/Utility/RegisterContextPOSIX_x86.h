@@ -50,9 +50,7 @@ public:
   uint32_t ConvertRegisterKindToRegisterNumber(lldb::RegisterKind kind,
                                                uint32_t num) override;
 
-  //---------------------------------------------------------------------------
   // Note: prefer kernel definitions over user-land
-  //---------------------------------------------------------------------------
   enum FPRType {
     eNotValid = 0,
     eFSAVE, // TODO
@@ -148,7 +146,7 @@ protected:
                                // register sets.
   lldb_private::YMM m_ymm_set; // copy of ymmh and xmm register halves.
   std::unique_ptr<lldb_private::RegisterInfoInterface>
-      m_register_info_ap; // Register Info Interface (FreeBSD or Linux)
+      m_register_info_up; // Register Info Interface (FreeBSD or Linux)
 
   // Determines if an extended register set is supported on the processor
   // running the inferior process.

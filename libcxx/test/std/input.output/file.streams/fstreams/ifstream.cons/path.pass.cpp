@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
+// XFAIL: dylib-has-no-filesystem
 
 // <fstream>
 
@@ -22,7 +23,7 @@
 
 namespace fs = std::filesystem;
 
-int main() {
+int main(int, char**) {
   {
     fs::path p;
     static_assert(!std::is_convertible<fs::path, std::ifstream>::value,
@@ -49,4 +50,6 @@ int main() {
   // std::wifstream(const fs::path&, std::ios_base::openmode) is tested in
   // test/std/input.output/file.streams/fstreams/ofstream.cons/string.pass.cpp
   // which creates writable files.
+
+  return 0;
 }

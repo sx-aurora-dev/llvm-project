@@ -271,12 +271,12 @@ namespace ISD {
     /// resulting value is this minimum value.
     SSUBSAT, USUBSAT,
 
-    /// RESULT = SMULFIX(LHS, RHS, SCALE) - Perform fixed point multiplication on
+    /// RESULT = [US]MULFIX(LHS, RHS, SCALE) - Perform fixed point multiplication on
     /// 2 integers with the same width and scale. SCALE represents the scale of
     /// both operands as fixed point numbers. This SCALE parameter must be a
     /// constant integer. A scale of zero is effectively performing
     /// multiplication on 2 integers.
-    SMULFIX,
+    SMULFIX, UMULFIX,
 
     /// Simple binary floating point operators.
     FADD, FSUB, FMUL, FDIV, FREM,
@@ -667,6 +667,9 @@ namespace ISD {
     /// SDOperands.
     INLINEASM,
 
+    /// INLINEASM_BR - Terminator version of inline asm. Used by asm-goto.
+    INLINEASM_BR,
+
     /// EH_LABEL - Represents a label in mid basic block used to track
     /// locations needed for debug and exception handling tables.  These nodes
     /// take a chain as input and return a chain.
@@ -869,11 +872,14 @@ namespace ISD {
     VECREDUCE_STRICT_FADD, VECREDUCE_STRICT_FMUL,
     /// These reductions are non-strict, and have a single vector operand.
     VECREDUCE_FADD, VECREDUCE_FMUL,
+    /// FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.
+    VECREDUCE_FMAX, VECREDUCE_FMIN,
+    /// Integer reductions may have a result type larger than the vector element
+    /// type. However, the reduction is performed using the vector element type
+    /// and the value in the top bits is unspecified.
     VECREDUCE_ADD, VECREDUCE_MUL,
     VECREDUCE_AND, VECREDUCE_OR, VECREDUCE_XOR,
     VECREDUCE_SMAX, VECREDUCE_SMIN, VECREDUCE_UMAX, VECREDUCE_UMIN,
-    /// FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.
-    VECREDUCE_FMAX, VECREDUCE_FMIN,
 
     /// BUILTIN_OP_END - This must be the last enum value in this list.
     /// The target-specific pre-isel opcode values start here.

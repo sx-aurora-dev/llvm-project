@@ -17,16 +17,12 @@
 
 class SymbolFileSymtab : public lldb_private::SymbolFile {
 public:
-  //------------------------------------------------------------------
   // Constructors and Destructors
-  //------------------------------------------------------------------
   SymbolFileSymtab(lldb_private::ObjectFile *obj_file);
 
   ~SymbolFileSymtab() override;
 
-  //------------------------------------------------------------------
   // Static Functions
-  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -40,9 +36,7 @@ public:
 
   uint32_t CalculateAbilities() override;
 
-  //------------------------------------------------------------------
   // Compile Unit function calls
-  //------------------------------------------------------------------
   uint32_t GetNumCompileUnits() override;
 
   lldb::CompUnitSP ParseCompileUnitAtIndex(uint32_t index) override;
@@ -63,7 +57,7 @@ public:
 
   bool ParseImportedModules(
       const lldb_private::SymbolContext &sc,
-      std::vector<lldb_private::ConstString> &imported_modules) override;
+      std::vector<lldb_private::SourceModule> &imported_modules) override;
 
   size_t ParseBlocksRecursive(lldb_private::Function &func) override;
 
@@ -85,9 +79,7 @@ public:
                   lldb::TypeClass type_mask,
                   lldb_private::TypeList &type_list) override;
 
-  //------------------------------------------------------------------
   // PluginInterface protocol
-  //------------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;

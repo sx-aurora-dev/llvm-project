@@ -8,6 +8,7 @@
 //
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++98, c++03, c++11
+// XFAIL: dylib-has-no-shared_mutex
 
 // <shared_mutex>
 
@@ -20,7 +21,7 @@
 
 std::shared_timed_mutex m;
 
-int main()
+int main(int, char**)
 {
     std::shared_lock<std::shared_timed_mutex> lk0;
     assert(lk0.owns_lock() == false);
@@ -29,4 +30,6 @@ int main()
     lk1.unlock();
     assert(lk1.owns_lock() == false);
     static_assert(noexcept(lk0.owns_lock()), "owns_lock must be noexcept");
+
+  return 0;
 }

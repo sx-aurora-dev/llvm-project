@@ -1041,11 +1041,10 @@ static void AddAliasScopeMetadata(CallSite CS, ValueToValueMapTy &VMap,
 
       SmallSetVector<const Argument *, 4> NAPtrArgs;
       for (const Value *V : PtrArgs) {
-        SmallVector<Value *, 4> Objects;
-        GetUnderlyingObjects(const_cast<Value*>(V),
-                             Objects, DL, /* LI = */ nullptr);
+        SmallVector<const Value *, 4> Objects;
+        GetUnderlyingObjects(V, Objects, DL, /* LI = */ nullptr);
 
-        for (Value *O : Objects)
+        for (const Value *O : Objects)
           ObjSet.insert(O);
       }
 
@@ -1215,14 +1214,14 @@ static void UpdateCallGraphAfterInlining(CallSite CS,
 
     // If the call was inlined, but then constant folded, there is no edge to
     // add.  Check for this case.
-    Instruction *NewCall = dyn_cast<Instruction>(VMI->second);
+    auto *NewCall = dyn_cast<CallBase>(VMI->second);
     if (!NewCall)
       continue;
 
     // We do not treat intrinsic calls like real function calls because we
     // expect them to become inline code; do not add an edge for an intrinsic.
-    CallSite CS = CallSite(NewCall);
-    if (CS && CS.getCalledFunction() && CS.getCalledFunction()->isIntrinsic())
+    if (NewCall->getCalledFunction() &&
+        NewCall->getCalledFunction()->isIntrinsic())
       continue;
 
     // Remember that this call site got inlined for the client of
@@ -1235,19 +1234,19 @@ static void UpdateCallGraphAfterInlining(CallSite CS,
     // destination.  This can also happen if the call graph node of the caller
     // was just unnecessarily imprecise.
     if (!I->second->getFunction())
-      if (Function *F = CallSite(NewCall).getCalledFunction()) {
+      if (Function *F = NewCall->getCalledFunction()) {
         // Indirect call site resolved to direct call.
-        CallerNode->addCalledFunction(CallSite(NewCall), CG[F]);
+        CallerNode->addCalledFunction(NewCall, CG[F]);
 
         continue;
       }
 
-    CallerNode->addCalledFunction(CallSite(NewCall), I->second);
+    CallerNode->addCalledFunction(NewCall, I->second);
   }
 
   // Update the call graph by deleting the edge from Callee to Caller.  We must
   // do this after the loop above in case Caller and Callee are the same.
-  CallerNode->removeCallEdgeFor(CS);
+  CallerNode->removeCallEdgeFor(*cast<CallBase>(CS.getInstruction()));
 }
 
 static void HandleByValArgumentInit(Value *Dst, Value *Src, Module *M,
@@ -1504,6 +1503,10 @@ llvm::InlineResult llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
   assert(TheCall->getParent() && TheCall->getFunction()
          && "Instruction not in function!");
 
+  // FIXME: we don't inline callbr yet.
+  if (isa<CallBrInst>(TheCall))
+    return false;
+
   // If IFI has any state in it, zap it before we fill it in.
   IFI.reset();
 
@@ -1729,6 +1732,8 @@ llvm::InlineResult llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
         Instruction *NewI = nullptr;
         if (isa<CallInst>(I))
           NewI = CallInst::Create(cast<CallInst>(I), OpDefs, I);
+        else if (isa<CallBrInst>(I))
+          NewI = CallBrInst::Create(cast<CallBrInst>(I), OpDefs, I);
         else
           NewI = InvokeInst::Create(cast<InvokeInst>(I), OpDefs, I);
 
@@ -2031,6 +2036,8 @@ llvm::InlineResult llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
         Instruction *NewInst;
         if (CS.isCall())
           NewInst = CallInst::Create(cast<CallInst>(I), OpBundles, I);
+        else if (CS.isCallBr())
+          NewInst = CallBrInst::Create(cast<CallBrInst>(I), OpBundles, I);
         else
           NewInst = InvokeInst::Create(cast<InvokeInst>(I), OpBundles, I);
         NewInst->takeName(I);

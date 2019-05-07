@@ -303,6 +303,8 @@ public:
     // those.
     FAM.registerPass([&] { return AAManager(); });
     FAM.registerPass([&] { return AssumptionAnalysis(); });
+    if (EnableMSSALoopDependency)
+      FAM.registerPass([&] { return MemorySSAAnalysis(); });
     FAM.registerPass([&] { return ScalarEvolutionAnalysis(); });
     FAM.registerPass([&] { return TargetLibraryAnalysis(); });
     FAM.registerPass([&] { return TargetIRAnalysis(); });
@@ -570,7 +572,6 @@ TEST_F(LoopPassManagerTest, InvalidationOfBundledAnalyses) {
   // invalidation and running.
   EXPECT_CALL(MFPHandle, run(HasName("f"), _))
       .WillOnce(Return(getLoopPassPreservedAnalyses()));
-  EXPECT_CALL(MLAHandle, invalidate(_, _, _)).Times(3);
   EXPECT_CALL(MLAHandle, run(HasName("loop.0.0"), _, _));
   EXPECT_CALL(MLAHandle, run(HasName("loop.0.1"), _, _));
   EXPECT_CALL(MLAHandle, run(HasName("loop.0"), _, _));
