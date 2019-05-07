@@ -1016,6 +1016,8 @@ public:
            getOpcode() == TargetOpcode::INLINEASM_BR;
   }
 
+  /// FIXME: Seems like a layering violation that the AsmDialect, which is X86
+  /// specific, be attached to a generic MachineInstr.
   bool isMSInlineAsm() const {
     return isInlineAsm() && getInlineAsmDialect() == InlineAsm::AD_Intel;
   }
@@ -1199,10 +1201,20 @@ public:
 
   /// Wrapper for findRegisterDefOperandIdx, it returns
   /// a pointer to the MachineOperand rather than an index.
-  MachineOperand *findRegisterDefOperand(unsigned Reg, bool isDead = false,
-                                      const TargetRegisterInfo *TRI = nullptr) {
-    int Idx = findRegisterDefOperandIdx(Reg, isDead, false, TRI);
+  MachineOperand *
+  findRegisterDefOperand(unsigned Reg, bool isDead = false,
+                         bool Overlap = false,
+                         const TargetRegisterInfo *TRI = nullptr) {
+    int Idx = findRegisterDefOperandIdx(Reg, isDead, Overlap, TRI);
     return (Idx == -1) ? nullptr : &getOperand(Idx);
+  }
+
+  const MachineOperand *
+  findRegisterDefOperand(unsigned Reg, bool isDead = false,
+                         bool Overlap = false,
+                         const TargetRegisterInfo *TRI = nullptr) const {
+    return const_cast<MachineInstr *>(this)->findRegisterDefOperand(
+        Reg, isDead, Overlap, TRI);
   }
 
   /// Find the index of the first operand in the
@@ -1366,7 +1378,7 @@ public:
   /// @param AA Optional alias analysis, used to compare memory operands.
   /// @param Other MachineInstr to check aliasing against.
   /// @param UseTBAA Whether to pass TBAA information to alias analysis.
-  bool mayAlias(AliasAnalysis *AA, MachineInstr &Other, bool UseTBAA);
+  bool mayAlias(AliasAnalysis *AA, const MachineInstr &Other, bool UseTBAA) const;
 
   /// Return true if this instruction may have an ordered
   /// or volatile memory reference, or if the information describing the memory
@@ -1535,6 +1547,10 @@ public:
   ///
   /// FIXME: This is not fully implemented yet.
   void setPostInstrSymbol(MachineFunction &MF, MCSymbol *Symbol);
+
+  /// Clone another MachineInstr's pre- and post- instruction symbols and
+  /// replace ours with it.
+  void cloneInstrSymbols(MachineFunction &MF, const MachineInstr &MI);
 
   /// Return the MIFlags which represent both MachineInstrs. This
   /// should be used when merging two MachineInstrs into one. This routine does

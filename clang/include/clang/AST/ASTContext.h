@@ -265,11 +265,6 @@ private:
   /// Mapping from __block VarDecls to BlockVarCopyInit.
   llvm::DenseMap<const VarDecl *, BlockVarCopyInit> BlockVarCopyInits;
 
-  /// Mapping from class scope functions specialization to their
-  /// template patterns.
-  llvm::DenseMap<const FunctionDecl*, FunctionDecl*>
-    ClassScopeSpecializationPattern;
-
   /// Mapping from materialized temporaries with static storage duration
   /// that appear in constant initializers to their evaluated values.  These are
   /// allocated in a std::map because their address must be stable.
@@ -890,11 +885,6 @@ public:
 
   TemplateOrSpecializationInfo
   getTemplateOrSpecializationInfo(const VarDecl *Var);
-
-  FunctionDecl *getClassScopeSpecializationPattern(const FunctionDecl *FD);
-
-  void setClassScopeSpecializationPattern(FunctionDecl *FD,
-                                          FunctionDecl *Pattern);
 
   /// Note that the static data member \p Inst is an instantiation of
   /// the static data member template \p Tmpl of a class template.
@@ -2701,7 +2691,7 @@ public:
   /// otherwise returns null.
   const ObjCInterfaceDecl *getObjContainingInterface(const NamedDecl *ND) const;
 
-  /// Set the copy inialization expression of a block var decl. \p CanThrow
+  /// Set the copy initialization expression of a block var decl. \p CanThrow
   /// indicates whether the copy expression can throw or not.
   void setBlockVarCopyInit(const VarDecl* VD, Expr *CopyExpr, bool CanThrow);
 
@@ -2809,46 +2799,46 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// The number of implicitly-declared default constructors.
-  static unsigned NumImplicitDefaultConstructors;
+  unsigned NumImplicitDefaultConstructors = 0;
 
   /// The number of implicitly-declared default constructors for
   /// which declarations were built.
-  static unsigned NumImplicitDefaultConstructorsDeclared;
+  unsigned NumImplicitDefaultConstructorsDeclared = 0;
 
   /// The number of implicitly-declared copy constructors.
-  static unsigned NumImplicitCopyConstructors;
+  unsigned NumImplicitCopyConstructors = 0;
 
   /// The number of implicitly-declared copy constructors for
   /// which declarations were built.
-  static unsigned NumImplicitCopyConstructorsDeclared;
+  unsigned NumImplicitCopyConstructorsDeclared = 0;
 
   /// The number of implicitly-declared move constructors.
-  static unsigned NumImplicitMoveConstructors;
+  unsigned NumImplicitMoveConstructors = 0;
 
   /// The number of implicitly-declared move constructors for
   /// which declarations were built.
-  static unsigned NumImplicitMoveConstructorsDeclared;
+  unsigned NumImplicitMoveConstructorsDeclared = 0;
 
   /// The number of implicitly-declared copy assignment operators.
-  static unsigned NumImplicitCopyAssignmentOperators;
+  unsigned NumImplicitCopyAssignmentOperators = 0;
 
   /// The number of implicitly-declared copy assignment operators for
   /// which declarations were built.
-  static unsigned NumImplicitCopyAssignmentOperatorsDeclared;
+  unsigned NumImplicitCopyAssignmentOperatorsDeclared = 0;
 
   /// The number of implicitly-declared move assignment operators.
-  static unsigned NumImplicitMoveAssignmentOperators;
+  unsigned NumImplicitMoveAssignmentOperators = 0;
 
   /// The number of implicitly-declared move assignment operators for
   /// which declarations were built.
-  static unsigned NumImplicitMoveAssignmentOperatorsDeclared;
+  unsigned NumImplicitMoveAssignmentOperatorsDeclared = 0;
 
   /// The number of implicitly-declared destructors.
-  static unsigned NumImplicitDestructors;
+  unsigned NumImplicitDestructors = 0;
 
   /// The number of implicitly-declared destructors for which
   /// declarations were built.
-  static unsigned NumImplicitDestructorsDeclared;
+  unsigned NumImplicitDestructorsDeclared = 0;
 
 public:
   /// Initialize built-in types.

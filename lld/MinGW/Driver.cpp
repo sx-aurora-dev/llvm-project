@@ -176,12 +176,16 @@ bool mingw::link(ArrayRef<const char *> ArgsArr, raw_ostream &Diag) {
     Add("-dll");
   if (Args.hasArg(OPT_verbose))
     Add("-verbose");
+  if (Args.hasArg(OPT_exclude_all_symbols))
+    Add("-exclude-all-symbols");
   if (Args.hasArg(OPT_export_all_symbols))
     Add("-export-all-symbols");
   if (Args.hasArg(OPT_large_address_aware))
     Add("-largeaddressaware");
   if (Args.hasArg(OPT_kill_at))
     Add("-kill-at");
+  if (Args.hasArg(OPT_appcontainer))
+    Add("-appcontainer");
 
   if (Args.getLastArgValue(OPT_m) != "thumb2pe" &&
       Args.getLastArgValue(OPT_m) != "arm64pe" && !Args.hasArg(OPT_dynamicbase))

@@ -237,6 +237,10 @@ public:
     return *State.MF;
   }
 
+  const DataLayout &getDataLayout() const {
+    return getMF().getFunction().getParent()->getDataLayout();
+  }
+
   /// Getter for DebugLoc
   const DebugLoc &getDL() { return State.DL; }
 
@@ -417,6 +421,21 @@ public:
   MachineInstrBuilder buildPtrMask(unsigned Res, unsigned Op0,
                                    uint32_t NumBits);
 
+  /// Build and insert \p Res, \p CarryOut = G_UADDO \p Op0, \p Op1
+  ///
+  /// G_UADDO sets \p Res to \p Op0 + \p Op1 (truncated to the bit width) and
+  /// sets \p CarryOut to 1 if the result overflowed in unsigned arithmetic.
+  ///
+  /// \pre setBasicBlock or setMI must have been called.
+  /// \pre \p Res, \p Op0 and \p Op1 must be generic virtual registers with the
+  /// same scalar type.
+  ////\pre \p CarryOut must be generic virtual register with scalar type
+  ///(typically s1)
+  ///
+  /// \return The newly created instruction.
+  MachineInstrBuilder buildUAddo(const DstOp &Res, const DstOp &CarryOut,
+                                 const SrcOp &Op0, const SrcOp &Op1);
+
   /// Build and insert \p Res, \p CarryOut = G_UADDE \p Op0,
   /// \p Op1, \p CarryIn
   ///
@@ -464,6 +483,16 @@ public:
   ///
   /// \return The newly created instruction.
   MachineInstrBuilder buildSExt(const DstOp &Res, const SrcOp &Op);
+
+  /// Build and insert a G_PTRTOINT instruction.
+  MachineInstrBuilder buildPtrToInt(const DstOp &Dst, const SrcOp &Src) {
+    return buildInstr(TargetOpcode::G_PTRTOINT, {Dst}, {Src});
+  }
+
+  /// Build and insert \p Dst = G_BITCAST \p Src
+  MachineInstrBuilder buildBitcast(const DstOp &Dst, const SrcOp &Src) {
+    return buildInstr(TargetOpcode::G_BITCAST, {Dst}, {Src});
+  }
 
   /// \return The opcode of the extension the target wants to use for boolean
   /// values.
@@ -655,7 +684,7 @@ public:
   /// \pre \p Res and \p Src must be generic virtual registers.
   ///
   /// \return a MachineInstrBuilder for the newly created instruction.
-  MachineInstrBuilder buildExtract(unsigned Res, unsigned Src, uint64_t Index);
+  MachineInstrBuilder buildExtract(const DstOp &Res, const SrcOp &Src, uint64_t Index);
 
   /// Build and insert \p Res = IMPLICIT_DEF.
   MachineInstrBuilder buildUndef(const DstOp &Res);
@@ -701,6 +730,9 @@ public:
   /// \return a MachineInstrBuilder for the newly created instruction.
   MachineInstrBuilder buildUnmerge(ArrayRef<LLT> Res, const SrcOp &Op);
   MachineInstrBuilder buildUnmerge(ArrayRef<unsigned> Res, const SrcOp &Op);
+
+  /// Build and insert an unmerge of \p Res sized pieces to cover \p Op
+  MachineInstrBuilder buildUnmerge(LLT Res, const SrcOp &Op);
 
   /// Build and insert \p Res = G_BUILD_VECTOR \p Op0, ...
   ///
@@ -762,7 +794,7 @@ public:
   /// \pre setBasicBlock or setMI must have been called.
   ///
   /// \return a MachineInstrBuilder for the newly created instruction.
-  MachineInstrBuilder buildIntrinsic(Intrinsic::ID ID, unsigned Res,
+  MachineInstrBuilder buildIntrinsic(Intrinsic::ID ID, ArrayRef<unsigned> Res,
                                      bool HasSideEffects);
 
   /// Build and insert \p Res = G_FPTRUNC \p Op

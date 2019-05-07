@@ -50,12 +50,6 @@
 #include <SpringBoardServices/SBSWatchdogAssertion.h>
 #include <SpringBoardServices/SpringBoardServer.h>
 
-static bool IsSBProcess(nub_process_t pid) {
-  CFReleaser<CFArrayRef> appIdsForPID(
-      ::SBSCopyDisplayIdentifiersForProcessID(pid));
-  return appIdsForPID.get() != NULL;
-}
-
 #endif // WITH_SPRINGBOARD
 
 #if defined(WITH_SPRINGBOARD) || defined(WITH_BKS) || defined(WITH_FBS)
@@ -333,7 +327,7 @@ static bool IsFBSProcess(nub_process_t pid) {
 #else
 static bool IsFBSProcess(nub_process_t pid) {
   // FIXME: What is the FBS equivalent of BKSApplicationStateMonitor
-  return true;
+  return false;
 }
 #endif
 
@@ -1296,9 +1290,11 @@ bool MachProcess::Kill(const struct timespec *timeout_abstime) {
   ::ptrace(PT_KILL, m_pid, 0, 0);
   DNBError err;
   err.SetErrorToErrno();
-  DNBLogThreadedIf(LOG_PROCESS, "MachProcess::Kill() DoSIGSTOP() ::ptrace "
-                                "(PT_KILL, pid=%u, 0, 0) => 0x%8.8x (%s)",
-                   m_pid, err.Status(), err.AsString());
+  if (DNBLogCheckLogBit(LOG_PROCESS) || err.Fail()) {
+    err.LogThreaded("MachProcess::Kill() DoSIGSTOP() ::ptrace "
+            "(PT_KILL, pid=%u, 0, 0) => 0x%8.8x (%s)",
+            m_pid, err.Status(), err.AsString());
+  }
   m_thread_actions = DNBThreadResumeActions(eStateRunning, 0);
   PrivateResume();
 
@@ -3918,18 +3914,23 @@ void MachProcess::CalculateBoardStatus()
   if (m_pid == 0)
     return;
 
+#if defined (WITH_FBS) || defined (WITH_BKS)
     bool found_app_flavor = false;
+#endif
+
 #if defined(WITH_FBS)
     if (!found_app_flavor && IsFBSProcess(m_pid)) {
       found_app_flavor = true;
       m_flags |= eMachProcessFlagsUsingFBS;
     }
-#elif defined(WITH_BKS)
+#endif
+#if defined(WITH_BKS)
     if (!found_app_flavor && IsBKSProcess(m_pid)) {
       found_app_flavor = true;
       m_flags |= eMachProcessFlagsUsingBKS;
     }
 #endif
+
     m_flags |= eMachProcessFlagsBoardCalculated;
 }
 

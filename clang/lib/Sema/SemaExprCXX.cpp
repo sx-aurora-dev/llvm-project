@@ -750,12 +750,9 @@ ExprResult Sema::BuildCXXThrow(SourceLocation OpLoc, Expr *Ex,
                                bool IsThrownVarInScope) {
   // Don't report an error if 'throw' is used in system headers.
   if (!getLangOpts().CXXExceptions &&
-      !getSourceManager().isInSystemHeader(OpLoc)) {
+      !getSourceManager().isInSystemHeader(OpLoc) && !getLangOpts().CUDA) {
     // Delay error emission for the OpenMP device code.
-    if (LangOpts.OpenMP && LangOpts.OpenMPIsDevice)
-      diagIfOpenMPDeviceCode(OpLoc, diag::err_exceptions_disabled) << "throw";
-    else
-      Diag(OpLoc, diag::err_exceptions_disabled) << "throw";
+    targetDiag(OpLoc, diag::err_exceptions_disabled) << "throw";
   }
 
   // Exceptions aren't allowed in CUDA device code.
@@ -1873,11 +1870,12 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     if (Braced && !getLangOpts().CPlusPlus17)
       Diag(Initializer->getBeginLoc(), diag::ext_auto_new_list_init)
           << AllocType << TypeRange;
+    Expr *Deduce = Inits[0];
     QualType DeducedType;
-    if (DeduceAutoType(AllocTypeInfo, Inits[0], DeducedType) == DAR_Failed)
+    if (DeduceAutoType(AllocTypeInfo, Deduce, DeducedType) == DAR_Failed)
       return ExprError(Diag(StartLoc, diag::err_auto_new_deduction_failure)
-                       << AllocType << Inits[0]->getType()
-                       << TypeRange << Inits[0]->getSourceRange());
+                       << AllocType << Deduce->getType()
+                       << TypeRange << Deduce->getSourceRange());
     if (DeducedType.isNull())
       return ExprError();
     AllocType = DeducedType;
@@ -2303,8 +2301,8 @@ static bool resolveAllocationOverload(
     }
 
     if (Diagnose) {
-      S.Diag(R.getNameLoc(), diag::err_ovl_no_viable_function_in_call)
-          << R.getLookupName() << Range;
+      PartialDiagnosticAt PD(R.getNameLoc(), S.PDiag(diag::err_ovl_no_viable_function_in_call)
+          << R.getLookupName() << Range);
 
       // If we have aligned candidates, only note the align_val_t candidates
       // from AlignedCandidates and the non-align_val_t candidates from
@@ -2319,31 +2317,34 @@ static bool resolveAllocationOverload(
         // This was an overaligned allocation, so list the aligned candidates
         // first.
         Args.insert(Args.begin() + 1, AlignArg);
-        AlignedCandidates->NoteCandidates(S, OCD_AllCandidates, Args, "",
+        AlignedCandidates->NoteCandidates(PD, S, OCD_AllCandidates, Args, "",
                                           R.getNameLoc(), IsAligned);
         Args.erase(Args.begin() + 1);
-        Candidates.NoteCandidates(S, OCD_AllCandidates, Args, "", R.getNameLoc(),
+        Candidates.NoteCandidates(PD, S, OCD_AllCandidates, Args, "", R.getNameLoc(),
                                   IsUnaligned);
       } else {
-        Candidates.NoteCandidates(S, OCD_AllCandidates, Args);
+        Candidates.NoteCandidates(PD, S, OCD_AllCandidates, Args);
       }
     }
     return true;
 
   case OR_Ambiguous:
     if (Diagnose) {
-      S.Diag(R.getNameLoc(), diag::err_ovl_ambiguous_call)
-          << R.getLookupName() << Range;
-      Candidates.NoteCandidates(S, OCD_ViableCandidates, Args);
+      Candidates.NoteCandidates(
+          PartialDiagnosticAt(R.getNameLoc(),
+                              S.PDiag(diag::err_ovl_ambiguous_call)
+                                  << R.getLookupName() << Range),
+          S, OCD_ViableCandidates, Args);
     }
     return true;
 
   case OR_Deleted: {
     if (Diagnose) {
-      S.Diag(R.getNameLoc(), diag::err_ovl_deleted_call)
-          << Best->Function->isDeleted() << R.getLookupName()
-          << S.getDeletedOrUnavailableSuffix(Best->Function) << Range;
-      Candidates.NoteCandidates(S, OCD_AllCandidates, Args);
+      Candidates.NoteCandidates(
+          PartialDiagnosticAt(R.getNameLoc(),
+                              S.PDiag(diag::err_ovl_deleted_call)
+                                  << R.getLookupName() << Range),
+          S, OCD_AllCandidates, Args);
     }
     return true;
   }
@@ -2798,7 +2799,8 @@ void Sema::DeclareGlobalAllocationFunction(DeclarationName Name,
     }
   }
 
-  FunctionProtoType::ExtProtoInfo EPI;
+  FunctionProtoType::ExtProtoInfo EPI(Context.getDefaultCallingConvention(
+      /*IsVariadic=*/false, /*IsCXXMethod=*/false));
 
   QualType BadAllocType;
   bool HasBadAllocExceptionSpec
@@ -3506,22 +3508,26 @@ static bool resolveBuiltinNewDeleteOverload(Sema &S, CallExpr *TheCall,
   }
 
   case OR_No_Viable_Function:
-    S.Diag(R.getNameLoc(), diag::err_ovl_no_viable_function_in_call)
-        << R.getLookupName() << Range;
-    Candidates.NoteCandidates(S, OCD_AllCandidates, Args);
+    Candidates.NoteCandidates(
+        PartialDiagnosticAt(R.getNameLoc(),
+                            S.PDiag(diag::err_ovl_no_viable_function_in_call)
+                                << R.getLookupName() << Range),
+        S, OCD_AllCandidates, Args);
     return true;
 
   case OR_Ambiguous:
-    S.Diag(R.getNameLoc(), diag::err_ovl_ambiguous_call)
-        << R.getLookupName() << Range;
-    Candidates.NoteCandidates(S, OCD_ViableCandidates, Args);
+    Candidates.NoteCandidates(
+        PartialDiagnosticAt(R.getNameLoc(),
+                            S.PDiag(diag::err_ovl_ambiguous_call)
+                                << R.getLookupName() << Range),
+        S, OCD_ViableCandidates, Args);
     return true;
 
   case OR_Deleted: {
-    S.Diag(R.getNameLoc(), diag::err_ovl_deleted_call)
-        << Best->Function->isDeleted() << R.getLookupName()
-        << S.getDeletedOrUnavailableSuffix(Best->Function) << Range;
-    Candidates.NoteCandidates(S, OCD_AllCandidates, Args);
+    Candidates.NoteCandidates(
+        PartialDiagnosticAt(R.getNameLoc(), S.PDiag(diag::err_ovl_deleted_call)
+                                                << R.getLookupName() << Range),
+        S, OCD_AllCandidates, Args);
     return true;
   }
   }

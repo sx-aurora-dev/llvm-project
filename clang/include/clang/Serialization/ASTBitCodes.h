@@ -1438,9 +1438,6 @@ namespace serialization {
       /// A CXXConstructorDecl record.
       DECL_CXX_CONSTRUCTOR,
 
-      /// A CXXConstructorDecl record for an inherited constructor.
-      DECL_CXX_INHERITED_CONSTRUCTOR,
-
       /// A CXXDestructorDecl record.
       DECL_CXX_DESTRUCTOR,
 
@@ -1521,7 +1518,10 @@ namespace serialization {
 
       /// An OMPRequiresDecl record.
       DECL_OMP_REQUIRES,
-	 
+
+      /// An OMPAllocateDcl record.
+      DECL_OMP_ALLOCATE,
+
       /// An EmptyDecl record.
       DECL_EMPTY,
 
