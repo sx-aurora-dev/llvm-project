@@ -37,10 +37,13 @@ void Scheduler::dump() const {
 }
 #endif
 
-Scheduler::Status Scheduler::isAvailable(const InstRef &IR) const {
+Scheduler::Status Scheduler::isAvailable(const InstRef &IR) {
   const InstrDesc &Desc = IR.getInstruction()->getDesc();
 
-  switch (Resources->canBeDispatched(Desc.Buffers)) {
+  ResourceStateEvent RSE = Resources->canBeDispatched(Desc.Buffers);
+  HadTokenStall = RSE != RS_BUFFER_AVAILABLE;
+
+  switch (RSE) {
   case ResourceStateEvent::RS_BUFFER_UNAVAILABLE:
     return Scheduler::SC_BUFFERS_FULL;
   case ResourceStateEvent::RS_RESERVED:
@@ -50,7 +53,10 @@ Scheduler::Status Scheduler::isAvailable(const InstRef &IR) const {
   }
 
   // Give lower priority to LSUnit stall events.
-  switch (LSU.isAvailable(IR)) {
+  LSUnit::Status LSS = LSU.isAvailable(IR);
+  HadTokenStall = LSS != LSUnit::LSU_AVAILABLE;
+
+  switch (LSS) {
   case LSUnit::LSU_LQUEUE_FULL:
     return Scheduler::SC_LOAD_QUEUE_FULL;
   case LSUnit::LSU_SQUEUE_FULL:
@@ -86,6 +92,7 @@ void Scheduler::issueInstructionImpl(
 void Scheduler::issueInstruction(
     InstRef &IR,
     SmallVectorImpl<std::pair<ResourceRef, ResourceCycles>> &UsedResources,
+    SmallVectorImpl<InstRef> &PendingInstructions,
     SmallVectorImpl<InstRef> &ReadyInstructions) {
   const Instruction &Inst = *IR.getInstruction();
   bool HasDependentUsers = Inst.hasDependentUsers();
@@ -96,7 +103,7 @@ void Scheduler::issueInstruction(
   // other dependent instructions. Dependent instructions may be issued during
   // this same cycle if operands have ReadAdvance entries.  Promote those
   // instructions to the ReadySet and notify the caller that those are ready.
-  if (HasDependentUsers && promoteToPendingSet())
+  if (HasDependentUsers && promoteToPendingSet(PendingInstructions))
     promoteToReadySet(ReadyInstructions);
 }
 
@@ -141,7 +148,7 @@ bool Scheduler::promoteToReadySet(SmallVectorImpl<InstRef> &Ready) {
   return PromotedElements;
 }
 
-bool Scheduler::promoteToPendingSet() {
+bool Scheduler::promoteToPendingSet(SmallVectorImpl<InstRef> &Pending) {
   // Scan the set of waiting instructions and promote them to the
   // pending set if operands are all ready.
   unsigned RemovedElements = 0;
@@ -160,6 +167,7 @@ bool Scheduler::promoteToPendingSet() {
     LLVM_DEBUG(dbgs() << "[SCHEDULER]: Instruction #" << IR
                       << " promoted to the PENDING set.\n");
 
+    Pending.emplace_back(IR);
     PendingSet.emplace_back(IR);
 
     IR.invalidate();
@@ -177,9 +185,9 @@ InstRef Scheduler::select() {
     InstRef &IR = ReadySet[I];
     if (QueueIndex == ReadySet.size() ||
         Strategy->compare(IR, ReadySet[QueueIndex])) {
-      const InstrDesc &D = IR.getInstruction()->getDesc();
-      uint64_t BusyResourceMask = Resources->checkAvailability(D);
-      IR.getInstruction()->updateCriticalResourceMask(BusyResourceMask);
+      Instruction &IS = *IR.getInstruction();
+      uint64_t BusyResourceMask = Resources->checkAvailability(IS.getDesc());
+      IS.setCriticalResourceMask(BusyResourceMask);
       BusyResourceUnits |= BusyResourceMask;
       if (!BusyResourceMask)
         QueueIndex = I;
@@ -221,8 +229,31 @@ void Scheduler::updateIssuedSet(SmallVectorImpl<InstRef> &Executed) {
   IssuedSet.resize(IssuedSet.size() - RemovedElements);
 }
 
+uint64_t Scheduler::analyzeResourcePressure(SmallVectorImpl<InstRef> &Insts) {
+  Insts.insert(Insts.end(), ReadySet.begin(), ReadySet.end());
+  return BusyResourceUnits;
+}
+
+void Scheduler::analyzeDataDependencies(SmallVectorImpl<InstRef> &RegDeps,
+                                        SmallVectorImpl<InstRef> &MemDeps) {
+  const auto EndIt = PendingSet.end() - NumDispatchedToThePendingSet;
+  for (InstRef &IR : make_range(PendingSet.begin(), EndIt)) {
+    Instruction &IS = *IR.getInstruction();
+    if (Resources->checkAvailability(IS.getDesc()))
+      continue;
+
+    if (IS.isReady() ||
+        (IS.isMemOp() && LSU.isReady(IR) != IR.getSourceIndex())) {
+      MemDeps.emplace_back(IR);
+    } else {
+      RegDeps.emplace_back(IR);
+    }
+  }
+}
+
 void Scheduler::cycleEvent(SmallVectorImpl<ResourceRef> &Freed,
                            SmallVectorImpl<InstRef> &Executed,
+                           SmallVectorImpl<InstRef> &Pending,
                            SmallVectorImpl<InstRef> &Ready) {
   // Release consumed resources.
   Resources->cycleEvent(Freed);
@@ -237,7 +268,7 @@ void Scheduler::cycleEvent(SmallVectorImpl<ResourceRef> &Freed,
   for (InstRef &IR : WaitSet)
     IR.getInstruction()->cycleEvent();
 
-  promoteToPendingSet();
+  promoteToPendingSet(Pending);
   promoteToReadySet(Ready);
 
   NumDispatchedToThePendingSet = 0;
@@ -271,6 +302,8 @@ bool Scheduler::dispatch(const InstRef &IR) {
     return false;
   }
 
+  // Memory operations that are not in a ready state are initially assigned to
+  // the WaitSet. 
   if (!IS.isReady() ||
       (IS.isMemOp() && LSU.isReady(IR) != IR.getSourceIndex())) {
     LLVM_DEBUG(dbgs() << "[SCHEDULER] Adding #" << IR << " to the WaitSet\n");

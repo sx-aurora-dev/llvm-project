@@ -5,11 +5,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+
 #include "Quality.h"
 #include "AST.h"
 #include "FileDistance.h"
 #include "URI.h"
-#include "index/Index.h"
+#include "index/Symbol.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -335,6 +336,15 @@ static float scopeBoost(ScopeDistance &Distance,
   return std::max(0.65, 2.0 * std::pow(0.6, D / 2.0));
 }
 
+static llvm::Optional<llvm::StringRef>
+wordMatching(llvm::StringRef Name, const llvm::StringSet<> *ContextWords) {
+  if (ContextWords)
+    for (const auto& Word : ContextWords->keys())
+      if (Name.contains_lower(Word))
+        return Word;
+  return llvm::None;
+}
+
 float SymbolRelevanceSignals::evaluate() const {
   float Score = 1;
 
@@ -355,6 +365,9 @@ float SymbolRelevanceSignals::evaluate() const {
     // always in the accessible scope.
     Score *=
         SemaSaysInScope ? 2.0 : scopeBoost(*ScopeProximityMatch, SymbolScope);
+
+  if (wordMatching(Name, ContextWords))
+    Score *= 1.5;
 
   // Symbols like local variables may only be referenced within their scope.
   // Conversely if we're in that scope, it's likely we'll reference them.
@@ -412,7 +425,12 @@ float SymbolRelevanceSignals::evaluate() const {
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS,
                               const SymbolRelevanceSignals &S) {
   OS << llvm::formatv("=== Symbol relevance: {0}\n", S.evaluate());
+  OS << llvm::formatv("\tName: {0}\n", S.Name);
   OS << llvm::formatv("\tName match: {0}\n", S.NameMatch);
+  if (S.ContextWords)
+    OS << llvm::formatv(
+        "\tMatching context word: {0}\n",
+        wordMatching(S.Name, S.ContextWords).getValueOr("<none>"));
   OS << llvm::formatv("\tForbidden: {0}\n", S.Forbidden);
   OS << llvm::formatv("\tNeedsFixIts: {0}\n", S.NeedsFixIts);
   OS << llvm::formatv("\tIsInstanceMember: {0}\n", S.IsInstanceMember);

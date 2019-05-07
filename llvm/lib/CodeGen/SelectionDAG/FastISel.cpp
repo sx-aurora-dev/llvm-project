@@ -1234,6 +1234,12 @@ bool FastISel::lowerCallTo(CallLoweringInfo &CLI) {
   if (CLI.NumResultRegs && CLI.CS)
     updateValueMap(CLI.CS->getInstruction(), CLI.ResultReg, CLI.NumResultRegs);
 
+  // Set labels for heapallocsite call.
+  if (CLI.CS && CLI.CS->getInstruction()->getMetadata("heapallocsite")) {
+    MDNode *MD = CLI.CS->getInstruction()->getMetadata("heapallocsite");
+    MF->addCodeViewHeapAllocSite(CLI.Call, MD);
+  }
+
   return true;
 }
 
@@ -1713,7 +1719,7 @@ bool FastISel::selectFNeg(const User *I) {
   unsigned OpReg = getRegForValue(X);
   if (!OpReg)
     return false;
-  bool OpRegIsKill = hasTrivialKill(I);
+  bool OpRegIsKill = hasTrivialKill(X);
 
   // If the target has ISD::FNEG, use it.
   EVT VT = TLI.getValueType(DL, I->getType());

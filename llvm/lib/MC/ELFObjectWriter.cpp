@@ -577,6 +577,10 @@ bool ELFWriter::isInSymtab(const MCAsmLayout &Layout, const MCSymbolELF &Symbol,
                            bool Used, bool Renamed) {
   if (Symbol.isVariable()) {
     const MCExpr *Expr = Symbol.getVariableValue();
+    // Target Expressions that are always inlined do not appear in the symtab
+    if (const auto *T = dyn_cast<MCTargetExpr>(Expr))
+      if (T->inlineAssignedExpr())
+        return false;
     if (const MCSymbolRefExpr *Ref = dyn_cast<MCSymbolRefExpr>(Expr)) {
       if (Ref->getKind() == MCSymbolRefExpr::VK_WEAKREF)
         return false;
@@ -710,7 +714,7 @@ void ELFWriter::computeSymbolTable(
 
   if (HasLargeSectionIndex) {
     MCSectionELF *SymtabShndxSection =
-        Ctx.getELFSection(".symtab_shndxr", ELF::SHT_SYMTAB_SHNDX, 0, 4, "");
+        Ctx.getELFSection(".symtab_shndx", ELF::SHT_SYMTAB_SHNDX, 0, 4, "");
     SymtabShndxSectionIndex = addToSectionTable(SymtabShndxSection);
     SymtabShndxSection->setAlignment(4);
   }
@@ -882,12 +886,16 @@ void ELFWriter::writeSectionData(const MCAssembler &Asm, MCSection &Sec,
     return;
   }
 
-  if (ZlibStyle)
+  if (ZlibStyle) {
     // Set the compressed flag. That is zlib style.
     Section.setFlags(Section.getFlags() | ELF::SHF_COMPRESSED);
-  else
+    // Alignment field should reflect the requirements of
+    // the compressed section header.
+    Section.setAlignment(is64Bit() ? 8 : 4);
+  } else {
     // Add "z" prefix to section name. This is zlib-gnu style.
     MC.renameELFSection(&Section, (".z" + SectionName.drop_front(1)).str());
+  }
   W.OS << CompressedContents;
 }
 

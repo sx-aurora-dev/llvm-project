@@ -2208,7 +2208,7 @@ namespace {
 
 // Callback to only accept typo corrections that are for field members of
 // the given struct or union.
-class FieldInitializerValidatorCCC : public CorrectionCandidateCallback {
+class FieldInitializerValidatorCCC final : public CorrectionCandidateCallback {
  public:
   explicit FieldInitializerValidatorCCC(RecordDecl *RD)
       : Record(RD) {}
@@ -2216,6 +2216,10 @@ class FieldInitializerValidatorCCC : public CorrectionCandidateCallback {
   bool ValidateCandidate(const TypoCorrection &candidate) override {
     FieldDecl *FD = candidate.getCorrectionDeclAs<FieldDecl>();
     return FD && FD->getDeclContext()->getRedeclContext()->Equals(Record);
+  }
+
+  std::unique_ptr<CorrectionCandidateCallback> clone() override {
+    return llvm::make_unique<FieldInitializerValidatorCCC>(*this);
   }
 
  private:
@@ -2420,10 +2424,10 @@ InitListChecker::CheckDesignatedInitializer(const InitializedEntity &Entity,
 
         // Name lookup didn't find anything.
         // Determine whether this was a typo for another field name.
+        FieldInitializerValidatorCCC CCC(RT->getDecl());
         if (TypoCorrection Corrected = SemaRef.CorrectTypo(
                 DeclarationNameInfo(FieldName, D->getFieldLoc()),
-                Sema::LookupMemberName, /*Scope=*/nullptr, /*SS=*/nullptr,
-                llvm::make_unique<FieldInitializerValidatorCCC>(RT->getDecl()),
+                Sema::LookupMemberName, /*Scope=*/nullptr, /*SS=*/nullptr, CCC,
                 Sema::CTK_ErrorRecovery, RT->getDecl())) {
           SemaRef.diagnoseTypo(
               Corrected,
@@ -4760,7 +4764,15 @@ static void TryReferenceInitializationCore(Sema &S,
   //        copy-initialization (8.5). The reference is then bound to the
   //        temporary. [...]
 
-  InitializedEntity TempEntity = InitializedEntity::InitializeTemporary(cv1T1);
+  // Ignore address space of reference type at this point and perform address
+  // space conversion after the reference binding step.
+  QualType cv1T1IgnoreAS =
+      T1Quals.hasAddressSpace()
+          ? S.Context.getQualifiedType(T1, T1Quals.withoutAddressSpace())
+          : cv1T1;
+
+  InitializedEntity TempEntity =
+      InitializedEntity::InitializeTemporary(cv1T1IgnoreAS);
 
   // FIXME: Why do we use an implicit conversion here rather than trying
   // copy-initialization?
@@ -4795,8 +4807,9 @@ static void TryReferenceInitializationCore(Sema &S,
   //        than, cv2; otherwise, the program is ill-formed.
   unsigned T1CVRQuals = T1Quals.getCVRQualifiers();
   unsigned T2CVRQuals = T2Quals.getCVRQualifiers();
-  if (RefRelationship == Sema::Ref_Related &&
-      (T1CVRQuals | T2CVRQuals) != T1CVRQuals) {
+  if ((RefRelationship == Sema::Ref_Related &&
+       (T1CVRQuals | T2CVRQuals) != T1CVRQuals) ||
+      !T1Quals.isAddressSpaceSupersetOf(T2Quals)) {
     Sequence.SetFailed(InitializationSequence::FK_ReferenceInitDropsQualifiers);
     return;
   }
@@ -4810,7 +4823,11 @@ static void TryReferenceInitializationCore(Sema &S,
     return;
   }
 
-  Sequence.AddReferenceBindingStep(cv1T1, /*bindingTemporary=*/true);
+  Sequence.AddReferenceBindingStep(cv1T1IgnoreAS, /*bindingTemporary=*/true);
+
+  if (T1Quals.hasAddressSpace())
+    Sequence.AddQualificationConversionStep(cv1T1, isLValueRef ? VK_LValue
+                                                               : VK_XValue);
 }
 
 /// Attempt character array initialization from a string literal
@@ -5954,21 +5971,25 @@ static ExprResult CopyObject(Sema &S,
     break;
 
   case OR_No_Viable_Function:
-    S.Diag(Loc, IsExtraneousCopy && !S.isSFINAEContext()
-           ? diag::ext_rvalue_to_reference_temp_copy_no_viable
-           : diag::err_temp_copy_no_viable)
-      << (int)Entity.getKind() << CurInitExpr->getType()
-      << CurInitExpr->getSourceRange();
-    CandidateSet.NoteCandidates(S, OCD_AllCandidates, CurInitExpr);
+    CandidateSet.NoteCandidates(
+        PartialDiagnosticAt(
+            Loc, S.PDiag(IsExtraneousCopy && !S.isSFINAEContext()
+                             ? diag::ext_rvalue_to_reference_temp_copy_no_viable
+                             : diag::err_temp_copy_no_viable)
+                     << (int)Entity.getKind() << CurInitExpr->getType()
+                     << CurInitExpr->getSourceRange()),
+        S, OCD_AllCandidates, CurInitExpr);
     if (!IsExtraneousCopy || S.isSFINAEContext())
       return ExprError();
     return CurInit;
 
   case OR_Ambiguous:
-    S.Diag(Loc, diag::err_temp_copy_ambiguous)
-      << (int)Entity.getKind() << CurInitExpr->getType()
-      << CurInitExpr->getSourceRange();
-    CandidateSet.NoteCandidates(S, OCD_ViableCandidates, CurInitExpr);
+    CandidateSet.NoteCandidates(
+        PartialDiagnosticAt(Loc, S.PDiag(diag::err_temp_copy_ambiguous)
+                                     << (int)Entity.getKind()
+                                     << CurInitExpr->getType()
+                                     << CurInitExpr->getSourceRange()),
+        S, OCD_ViableCandidates, CurInitExpr);
     return ExprError();
 
   case OR_Deleted:
@@ -6103,13 +6124,13 @@ static void CheckCXX98CompatAccessibleCopy(Sema &S,
     break;
 
   case OR_No_Viable_Function:
-    S.Diag(Loc, Diag);
-    CandidateSet.NoteCandidates(S, OCD_AllCandidates, CurInitExpr);
+    CandidateSet.NoteCandidates(PartialDiagnosticAt(Loc, Diag), S,
+                                OCD_AllCandidates, CurInitExpr);
     break;
 
   case OR_Ambiguous:
-    S.Diag(Loc, Diag);
-    CandidateSet.NoteCandidates(S, OCD_ViableCandidates, CurInitExpr);
+    CandidateSet.NoteCandidates(PartialDiagnosticAt(Loc, Diag), S,
+                                OCD_ViableCandidates, CurInitExpr);
     break;
 
   case OR_Deleted:
@@ -7304,9 +7325,19 @@ ExprResult Sema::TemporaryMaterializationConversion(Expr *E) {
 ExprResult Sema::PerformQualificationConversion(Expr *E, QualType Ty,
                                                 ExprValueKind VK,
                                                 CheckedConversionKind CCK) {
-  CastKind CK = (Ty.getAddressSpace() != E->getType().getAddressSpace())
-                    ? CK_AddressSpaceConversion
-                    : CK_NoOp;
+
+  CastKind CK = CK_NoOp;
+
+  if (VK == VK_RValue) {
+    auto PointeeTy = Ty->getPointeeType();
+    auto ExprPointeeTy = E->getType()->getPointeeType();
+    if (!PointeeTy.isNull() &&
+        PointeeTy.getAddressSpace() != ExprPointeeTy.getAddressSpace())
+      CK = CK_AddressSpaceConversion;
+  } else if (Ty.getAddressSpace() != E->getType().getAddressSpace()) {
+    CK = CK_AddressSpaceConversion;
+  }
+
   return ImpCastExprToType(E, Ty, CK, VK, /*BasePath=*/nullptr, CCK);
 }
 
@@ -8372,19 +8403,22 @@ bool InitializationSequence::Diagnose(Sema &S,
   case FK_UserConversionOverloadFailed:
     switch (FailedOverloadResult) {
     case OR_Ambiguous:
-      if (Failure == FK_UserConversionOverloadFailed)
-        S.Diag(Kind.getLocation(), diag::err_typecheck_ambiguous_condition)
-          << OnlyArg->getType() << DestType
-          << Args[0]->getSourceRange();
-      else
-        S.Diag(Kind.getLocation(), diag::err_ref_init_ambiguous)
-          << DestType << OnlyArg->getType()
-          << Args[0]->getSourceRange();
 
-      FailedCandidateSet.NoteCandidates(S, OCD_ViableCandidates, Args);
+      FailedCandidateSet.NoteCandidates(
+          PartialDiagnosticAt(
+              Kind.getLocation(),
+              Failure == FK_UserConversionOverloadFailed
+                  ? (S.PDiag(diag::err_typecheck_ambiguous_condition)
+                     << OnlyArg->getType() << DestType
+                     << Args[0]->getSourceRange())
+                  : (S.PDiag(diag::err_ref_init_ambiguous)
+                     << DestType << OnlyArg->getType()
+                     << Args[0]->getSourceRange())),
+          S, OCD_ViableCandidates, Args);
       break;
 
-    case OR_No_Viable_Function:
+    case OR_No_Viable_Function: {
+      auto Cands = FailedCandidateSet.CompleteCandidates(S, OCD_AllCandidates, Args);
       if (!S.RequireCompleteType(Kind.getLocation(),
                                  DestType.getNonReferenceType(),
                           diag::err_typecheck_nonviable_condition_incomplete,
@@ -8394,9 +8428,9 @@ bool InitializationSequence::Diagnose(Sema &S,
           << OnlyArg->getType() << Args[0]->getSourceRange()
           << DestType.getNonReferenceType();
 
-      FailedCandidateSet.NoteCandidates(S, OCD_AllCandidates, Args);
+      FailedCandidateSet.NoteCandidates(S, Args, Cands);
       break;
-
+    }
     case OR_Deleted: {
       S.Diag(Kind.getLocation(), diag::err_typecheck_deleted_function)
         << OnlyArg->getType() << DestType.getNonReferenceType()
@@ -8560,9 +8594,11 @@ bool InitializationSequence::Diagnose(Sema &S,
     // bad.
     switch (FailedOverloadResult) {
       case OR_Ambiguous:
-        S.Diag(Kind.getLocation(), diag::err_ovl_ambiguous_init)
-          << DestType << ArgsRange;
-        FailedCandidateSet.NoteCandidates(S, OCD_ViableCandidates, Args);
+        FailedCandidateSet.NoteCandidates(
+            PartialDiagnosticAt(Kind.getLocation(),
+                                S.PDiag(diag::err_ovl_ambiguous_init)
+                                    << DestType << ArgsRange),
+            S, OCD_ViableCandidates, Args);
         break;
 
       case OR_No_Viable_Function:
@@ -8611,9 +8647,12 @@ bool InitializationSequence::Diagnose(Sema &S,
           break;
         }
 
-        S.Diag(Kind.getLocation(), diag::err_ovl_no_viable_function_in_init)
-          << DestType << ArgsRange;
-        FailedCandidateSet.NoteCandidates(S, OCD_AllCandidates, Args);
+        FailedCandidateSet.NoteCandidates(
+            PartialDiagnosticAt(
+                Kind.getLocation(),
+                S.PDiag(diag::err_ovl_no_viable_function_in_init)
+                    << DestType << ArgsRange),
+            S, OCD_AllCandidates, Args);
         break;
 
       case OR_Deleted: {
@@ -8622,7 +8661,7 @@ bool InitializationSequence::Diagnose(Sema &S,
           = FailedCandidateSet.BestViableFunction(S, Kind.getLocation(), Best);
         if (Ovl != OR_Deleted) {
           S.Diag(Kind.getLocation(), diag::err_ovl_deleted_init)
-            << true << DestType << ArgsRange;
+              << DestType << ArgsRange;
           llvm_unreachable("Inconsistent overload resolution?");
           break;
         }
@@ -8636,7 +8675,7 @@ bool InitializationSequence::Diagnose(Sema &S,
             << DestType << ArgsRange;
         else
           S.Diag(Kind.getLocation(), diag::err_ovl_deleted_init)
-            << true << DestType << ArgsRange;
+              << DestType << ArgsRange;
 
         S.NoteDeletedFunction(Best->Function);
         break;
@@ -9411,12 +9450,15 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
 
   switch (Result) {
   case OR_Ambiguous:
-    Diag(Kind.getLocation(), diag::err_deduced_class_template_ctor_ambiguous)
-      << TemplateName;
     // FIXME: For list-initialization candidates, it'd usually be better to
     // list why they were not viable when given the initializer list itself as
     // an argument.
-    Candidates.NoteCandidates(*this, OCD_ViableCandidates, Inits);
+    Candidates.NoteCandidates(
+        PartialDiagnosticAt(
+            Kind.getLocation(),
+            PDiag(diag::err_deduced_class_template_ctor_ambiguous)
+                << TemplateName),
+        *this, OCD_ViableCandidates, Inits);
     return QualType();
 
   case OR_No_Viable_Function: {
@@ -9424,11 +9466,13 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
         cast<ClassTemplateDecl>(Template)->getTemplatedDecl();
     bool Complete =
         isCompleteType(Kind.getLocation(), Context.getTypeDeclType(Primary));
-    Diag(Kind.getLocation(),
-         Complete ? diag::err_deduced_class_template_ctor_no_viable
-                  : diag::err_deduced_class_template_incomplete)
-      << TemplateName << !Guides.empty();
-    Candidates.NoteCandidates(*this, OCD_AllCandidates, Inits);
+    Candidates.NoteCandidates(
+        PartialDiagnosticAt(
+            Kind.getLocation(),
+            PDiag(Complete ? diag::err_deduced_class_template_ctor_no_viable
+                           : diag::err_deduced_class_template_incomplete)
+                << TemplateName << !Guides.empty()),
+        *this, OCD_AllCandidates, Inits);
     return QualType();
   }
 

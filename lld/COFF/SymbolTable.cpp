@@ -50,12 +50,7 @@ void SymbolTable::addFile(InputFile *File) {
     ImportFile::Instances.push_back(F);
   }
 
-  StringRef S = File->getDirectives();
-  if (S.empty())
-    return;
-
-  log("Directives: " + toString(File) + ": " + S);
-  Driver->parseDirectives(S);
+  Driver->parseDirectives(File);
 }
 
 static void errorOrWarn(const Twine &S) {
@@ -94,7 +89,7 @@ std::string getSymbolLocations(ObjFile *File, uint32_t SymIndex) {
     auto *SC = dyn_cast<SectionChunk>(C);
     if (!SC)
       continue;
-    for (const coff_relocation &R : SC->Relocs) {
+    for (const coff_relocation &R : SC->getRelocs()) {
       if (R.SymbolTableIndex != SymIndex)
         continue;
       std::pair<StringRef, uint32_t> FileLine =
@@ -188,7 +183,7 @@ bool SymbolTable::handleMinGWAutomaticImport(Symbol *Sym, StringRef Name) {
       dyn_cast_or_null<DefinedRegular>(find((".refptr." + Name).str()));
   if (Refptr && Refptr->getChunk()->getSize() == Config->Wordsize) {
     SectionChunk *SC = dyn_cast_or_null<SectionChunk>(Refptr->getChunk());
-    if (SC && SC->Relocs.size() == 1 && *SC->symbols().begin() == Sym) {
+    if (SC && SC->getRelocs().size() == 1 && *SC->symbols().begin() == Sym) {
       log("Replacing .refptr." + Name + " with " + Imp->getName());
       Refptr->getChunk()->Live = false;
       Refptr->replaceKeepingName(Imp, ImpSize);

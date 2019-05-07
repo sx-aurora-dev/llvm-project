@@ -92,7 +92,7 @@ enum {
 
 class ThreadOptionValueProperties : public OptionValueProperties {
 public:
-  ThreadOptionValueProperties(const ConstString &name)
+  ThreadOptionValueProperties(ConstString name)
       : OptionValueProperties(name) {}
 
   // This constructor is used when creating ThreadOptionValueProperties when it
@@ -138,9 +138,9 @@ const RegularExpression *ThreadProperties::GetSymbolsToAvoidRegexp() {
   return m_collection_sp->GetPropertyAtIndexAsOptionValueRegex(nullptr, idx);
 }
 
-FileSpecList &ThreadProperties::GetLibrariesToAvoid() const {
+FileSpecList ThreadProperties::GetLibrariesToAvoid() const {
   const uint32_t idx = ePropertyStepAvoidLibraries;
-  OptionValueFileSpecList *option_value =
+  const OptionValueFileSpecList *option_value =
       m_collection_sp->GetPropertyAtIndexAsOptionValueFileSpecList(nullptr,
                                                                    false, idx);
   assert(option_value);
@@ -171,11 +171,9 @@ uint64_t ThreadProperties::GetMaxBacktraceDepth() const {
       nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
-//------------------------------------------------------------------
 // Thread Event Data
-//------------------------------------------------------------------
 
-const ConstString &Thread::ThreadEventData::GetFlavorString() {
+ConstString Thread::ThreadEventData::GetFlavorString() {
   static ConstString g_flavor("Thread::ThreadEventData");
   return g_flavor;
 }
@@ -234,9 +232,7 @@ Thread::ThreadEventData::GetStackFrameFromEvent(const Event *event_ptr) {
   return frame_sp;
 }
 
-//------------------------------------------------------------------
 // Thread class
-//------------------------------------------------------------------
 
 ConstString &Thread::GetStaticBroadcasterClass() {
   static ConstString class_name("lldb.thread");
@@ -1399,10 +1395,12 @@ ThreadPlanSP Thread::QueueThreadPlanForStepOverRange(
     bool abort_other_plans, const LineEntry &line_entry,
     const SymbolContext &addr_context, lldb::RunMode stop_other_threads,
     Status &status, LazyBool step_out_avoids_code_withoug_debug_info) {
+  const bool include_inlined_functions = true;
+  auto address_range =
+      line_entry.GetSameLineContiguousAddressRange(include_inlined_functions);
   return QueueThreadPlanForStepOverRange(
-      abort_other_plans, line_entry.GetSameLineContiguousAddressRange(),
-      addr_context, stop_other_threads, status,
-      step_out_avoids_code_withoug_debug_info);
+      abort_other_plans, address_range, addr_context, stop_other_threads,
+      status, step_out_avoids_code_withoug_debug_info);
 }
 
 ThreadPlanSP Thread::QueueThreadPlanForStepInRange(
@@ -1432,8 +1430,10 @@ ThreadPlanSP Thread::QueueThreadPlanForStepInRange(
     lldb::RunMode stop_other_threads, Status &status,
     LazyBool step_in_avoids_code_without_debug_info,
     LazyBool step_out_avoids_code_without_debug_info) {
+  const bool include_inlined_functions = false;
   return QueueThreadPlanForStepInRange(
-      abort_other_plans, line_entry.GetSameLineContiguousAddressRange(),
+      abort_other_plans,
+      line_entry.GetSameLineContiguousAddressRange(include_inlined_functions),
       addr_context, step_in_target, stop_other_threads, status,
       step_in_avoids_code_without_debug_info,
       step_out_avoids_code_without_debug_info);
