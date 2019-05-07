@@ -432,19 +432,20 @@ void WhitespaceManager::alignConsecutiveAssignments() {
   if (!Style.AlignConsecutiveAssignments)
     return;
 
-  AlignTokens(Style,
-              [&](const Change &C) {
-                // Do not align on equal signs that are first on a line.
-                if (C.NewlinesBefore > 0)
-                  return false;
+  AlignTokens(
+      Style,
+      [&](const Change &C) {
+        // Do not align on equal signs that are first on a line.
+        if (C.NewlinesBefore > 0)
+          return false;
 
-                // Do not align on equal signs that are last on a line.
-                if (&C != &Changes.back() && (&C + 1)->NewlinesBefore > 0)
-                  return false;
+        // Do not align on equal signs that are last on a line.
+        if (&C != &Changes.back() && (&C + 1)->NewlinesBefore > 0)
+          return false;
 
-                return C.Tok->is(tok::equal);
-              },
-              Changes, /*StartAt=*/0);
+        return C.Tok->is(tok::equal);
+      },
+      Changes, /*StartAt=*/0);
 }
 
 void WhitespaceManager::alignConsecutiveDeclarations() {
@@ -457,15 +458,28 @@ void WhitespaceManager::alignConsecutiveDeclarations() {
   //   const char* const* v1;
   //   float const* v2;
   //   SomeVeryLongType const& v3;
-  AlignTokens(Style,
-              [](Change const &C) {
-                // tok::kw_operator is necessary for aligning operator overload
-                // definitions.
-                return C.Tok->is(TT_StartOfName) ||
-                       C.Tok->is(TT_FunctionDeclarationName) ||
-                       C.Tok->is(tok::kw_operator);
-              },
-              Changes, /*StartAt=*/0);
+  AlignTokens(
+      Style,
+      [](Change const &C) {
+        // tok::kw_operator is necessary for aligning operator overload
+        // definitions.
+        if (C.Tok->isOneOf(TT_FunctionDeclarationName, tok::kw_operator))
+          return true;
+        if (C.Tok->isNot(TT_StartOfName))
+          return false;
+        // Check if there is a subsequent name that starts the same declaration.
+        for (FormatToken *Next = C.Tok->Next; Next; Next = Next->Next) {
+          if (Next->is(tok::comment))
+            continue;
+          if (!Next->Tok.getIdentifierInfo())
+            break;
+          if (Next->isOneOf(TT_StartOfName, TT_FunctionDeclarationName,
+                            tok::kw_operator))
+            return false;
+        }
+        return true;
+      },
+      Changes, /*StartAt=*/0);
 }
 
 void WhitespaceManager::alignTrailingComments() {
@@ -541,11 +555,10 @@ void WhitespaceManager::alignTrailingComments() {
       MinColumn = std::max(MinColumn, ChangeMinColumn);
       MaxColumn = std::min(MaxColumn, ChangeMaxColumn);
     }
-    BreakBeforeNext =
-        (i == 0) || (Changes[i].NewlinesBefore > 1) ||
-        // Never start a sequence with a comment at the beginning of
-        // the line.
-        (Changes[i].NewlinesBefore == 1 && StartOfSequence == i);
+    BreakBeforeNext = (i == 0) || (Changes[i].NewlinesBefore > 1) ||
+                      // Never start a sequence with a comment at the beginning
+                      // of the line.
+                      (Changes[i].NewlinesBefore == 1 && StartOfSequence == i);
     Newlines = 0;
   }
   alignTrailingComments(StartOfSequence, Changes.size(), MinColumn);

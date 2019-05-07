@@ -20,12 +20,14 @@ string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} LLDB_DOTEST_ARGS "${LLDB_D
 list(APPEND LLDB_TEST_DEPS
   LLDBUnitTests
   dsymutil
+  lit-cpuid
   llc
   lldb
   lldb-test
   llvm-config
   llvm-mc
   llvm-objcopy
+  llvm-readobj
   )
 
 if(TARGET lld)

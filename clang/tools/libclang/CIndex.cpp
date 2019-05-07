@@ -171,7 +171,6 @@ CXSourceRange cxloc::translateSourceRange(const SourceManager &SM,
 static SourceRange getRawCursorExtent(CXCursor C);
 static SourceRange getFullCursorExtent(CXCursor C, SourceManager &SrcMgr);
 
-
 RangeComparisonResult CursorVisitor::CompareRegionOfInterest(SourceRange R) {
   return RangeCompare(AU->getSourceManager(), R, RegionOfInterest);
 }
@@ -2130,7 +2129,6 @@ public:
   OMPClauseEnqueue(EnqueueVisitor *Visitor) : Visitor(Visitor) { }
 #define OPENMP_CLAUSE(Name, Class)                                             \
   void Visit##Class(const Class *C);
-  OPENMP_CLAUSE(flush, OMPFlushClause)
 #include "clang/Basic/OpenMPKinds.def"
   void VisitOMPClauseWithPreInit(const OMPClauseWithPreInit *C);
   void VisitOMPClauseWithPostUpdate(const OMPClauseWithPostUpdate *C);
@@ -2167,6 +2165,10 @@ void OMPClauseEnqueue::VisitOMPSafelenClause(const OMPSafelenClause *C) {
 
 void OMPClauseEnqueue::VisitOMPSimdlenClause(const OMPSimdlenClause *C) {
   Visitor->AddStmt(C->getSimdlen());
+}
+
+void OMPClauseEnqueue::VisitOMPAllocatorClause(const OMPAllocatorClause *C) {
+  Visitor->AddStmt(C->getAllocator());
 }
 
 void OMPClauseEnqueue::VisitOMPCollapseClause(const OMPCollapseClause *C) {
@@ -2260,6 +2262,10 @@ void OMPClauseEnqueue::VisitOMPClauseList(T *Node) {
   }
 }
 
+void OMPClauseEnqueue::VisitOMPAllocateClause(const OMPAllocateClause *C) {
+  VisitOMPClauseList(C);
+  Visitor->AddStmt(C->getAllocator());
+}
 void OMPClauseEnqueue::VisitOMPPrivateClause(const OMPPrivateClause *C) {
   VisitOMPClauseList(C);
   for (const auto *E : C->private_copies()) {
@@ -2473,7 +2479,7 @@ void EnqueueVisitor::VisitCXXNewExpr(const CXXNewExpr *E) {
   // Enqueue the initializer , if any.
   AddStmt(E->getInitializer());
   // Enqueue the array size, if any.
-  AddStmt(E->getArraySize());
+  AddStmt(E->getArraySize().getValueOr(nullptr));
   // Enqueue the allocated type.
   AddTypeLoc(E->getAllocatedTypeSourceInfo());
   // Enqueue the placement arguments.
@@ -3409,7 +3415,7 @@ clang_parseTranslationUnit_Impl(CXIndex CIdx, const char *source_filename,
     Diags(CompilerInstance::createDiagnostics(new DiagnosticOptions));
 
   if (options & CXTranslationUnit_KeepGoing)
-    Diags->setSuppressAfterFatalError(false);
+    Diags->setFatalsAsError(true);
 
   // Recover resources if we crash before exiting this function.
   llvm::CrashRecoveryContextCleanupRegistrar<DiagnosticsEngine,
@@ -4221,7 +4227,7 @@ const char *clang_getFileContents(CXTranslationUnit TU, CXFile file,
   const SourceManager &SM = cxtu::getASTUnit(TU)->getSourceManager();
   FileID fid = SM.translateFile(static_cast<FileEntry *>(file));
   bool Invalid = true;
-  llvm::MemoryBuffer *buf = SM.getBuffer(fid, &Invalid);
+  const llvm::MemoryBuffer *buf = SM.getBuffer(fid, &Invalid);
   if (Invalid) {
     if (size)
       *size = 0;
@@ -5477,6 +5483,12 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
       return cxstring::createRef("FriendDecl");
   case CXCursor_ConvergentAttr:
       return cxstring::createRef("attribute(convergent)");
+  case CXCursor_WarnUnusedAttr:
+      return cxstring::createRef("attribute(warn_unused)");
+  case CXCursor_WarnUnusedResultAttr:
+      return cxstring::createRef("attribute(warn_unused_result)");
+  case CXCursor_AlignedAttr:
+      return cxstring::createRef("attribute(aligned)");
   }
 
   llvm_unreachable("Unhandled CXCursorKind");
@@ -6230,6 +6242,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::CXXDeductionGuide:
   case Decl::Import:
   case Decl::OMPThreadPrivate:
+  case Decl::OMPAllocate:
   case Decl::OMPDeclareReduction:
   case Decl::OMPDeclareMapper:
   case Decl::OMPRequires:
@@ -8709,8 +8722,8 @@ void clang::setThreadBackgroundPriority() {
   if (getenv("LIBCLANG_BGPRIO_DISABLE"))
     return;
 
-#ifdef USE_DARWIN_THREADS
-  setpriority(PRIO_DARWIN_THREAD, 0, PRIO_DARWIN_BG);
+#if LLVM_ENABLE_THREADS
+  llvm::set_thread_priority(llvm::ThreadPriority::Background);
 #endif
 }
 
