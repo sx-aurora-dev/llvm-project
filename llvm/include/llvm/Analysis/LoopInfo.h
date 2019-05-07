@@ -470,7 +470,7 @@ public:
 
   public:
     LocRange() {}
-    LocRange(DebugLoc Start) : Start(std::move(Start)), End(std::move(Start)) {}
+    LocRange(DebugLoc Start) : Start(Start), End(Start) {}
     LocRange(DebugLoc Start, DebugLoc End)
         : Start(std::move(Start)), End(std::move(End)) {}
 
@@ -520,6 +520,11 @@ public:
   /// variable.
   ///
   PHINode *getCanonicalInductionVariable() const;
+
+  /// Obtain the unique incoming and back edge. Return false if they are
+  /// non-unique or the loop is dead; otherwise, return true.
+  bool getIncomingAndBackEdge(BasicBlock *&Incoming,
+                              BasicBlock *&Backedge) const;
 
   /// Return true if the Loop is in LCSSA form.
   bool isLCSSAForm(DominatorTree &DT) const;

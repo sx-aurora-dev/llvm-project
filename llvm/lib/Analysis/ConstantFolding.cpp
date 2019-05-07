@@ -999,7 +999,9 @@ Constant *ConstantFoldInstOperandsImpl(const Value *InstOrCE, unsigned Opcode,
                                        const TargetLibraryInfo *TLI) {
   Type *DestTy = InstOrCE->getType();
 
-  // Handle easy binops first.
+  if (Instruction::isUnaryOp(Opcode))
+    return ConstantFoldUnaryOpOperand(Opcode, Ops[0], DL);
+
   if (Instruction::isBinaryOp(Opcode))
     return ConstantFoldBinaryOpOperands(Opcode, Ops[0], Ops[1], DL);
 
@@ -1262,6 +1264,13 @@ Constant *llvm::ConstantFoldCompareInstOperands(unsigned Predicate,
   return ConstantExpr::getCompare(Predicate, Ops0, Ops1);
 }
 
+Constant *llvm::ConstantFoldUnaryOpOperand(unsigned Opcode, Constant *Op,
+                                           const DataLayout &DL) {
+  assert(Instruction::isUnaryOp(Opcode));
+
+  return ConstantExpr::get(Opcode, Op);
+}
+
 Constant *llvm::ConstantFoldBinaryOpOperands(unsigned Opcode, Constant *LHS,
                                              Constant *RHS,
                                              const DataLayout &DL) {
@@ -1517,14 +1526,12 @@ bool llvm::canConstantFoldCallTo(const CallBase *Call, const Function *F) {
 namespace {
 
 Constant *GetConstantFoldFPValue(double V, Type *Ty) {
-  if (Ty->isHalfTy()) {
+  if (Ty->isHalfTy() || Ty->isFloatTy()) {
     APFloat APF(V);
     bool unused;
-    APF.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven, &unused);
+    APF.convert(Ty->getFltSemantics(), APFloat::rmNearestTiesToEven, &unused);
     return ConstantFP::get(Ty->getContext(), APF);
   }
-  if (Ty->isFloatTy())
-    return ConstantFP::get(Ty->getContext(), APFloat((float)V));
   if (Ty->isDoubleTy())
     return ConstantFP::get(Ty->getContext(), APFloat(V));
   llvm_unreachable("Can only constant fold half/float/double");

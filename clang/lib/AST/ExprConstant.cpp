@@ -716,6 +716,10 @@ namespace {
           EvaluatingObject(Decl, {CallIndex, Version}));
     }
 
+    /// If we're currently speculatively evaluating, the outermost call stack
+    /// depth at which we can mutate state, otherwise 0.
+    unsigned SpeculativeEvaluationDepth = 0;
+
     /// The current array initialization index, if we're performing array
     /// initialization.
     uint64_t ArrayInitIndex = -1;
@@ -727,9 +731,6 @@ namespace {
     /// Have we emitted a diagnostic explaining why we couldn't constant
     /// fold (not just why it's not strictly a constant expression)?
     bool HasFoldFailureDiagnostic;
-
-    /// Whether or not we're currently speculatively evaluating.
-    bool IsSpeculativelyEvaluating;
 
     /// Whether or not we're in a context where the front end requires a
     /// constant value.
@@ -795,7 +796,7 @@ namespace {
         BottomFrame(*this, SourceLocation(), nullptr, nullptr, nullptr),
         EvaluatingDecl((const ValueDecl *)nullptr),
         EvaluatingDeclValue(nullptr), HasActiveDiagnostic(false),
-        HasFoldFailureDiagnostic(false), IsSpeculativelyEvaluating(false),
+        HasFoldFailureDiagnostic(false),
         InConstantContext(false), EvalMode(Mode) {}
 
     void setEvaluatingDecl(APValue::LValueBase Base, APValue &Value) {
@@ -823,14 +824,20 @@ namespace {
       return false;
     }
 
-    CallStackFrame *getCallFrame(unsigned CallIndex) {
-      assert(CallIndex && "no call index in getCallFrame");
+    std::pair<CallStackFrame *, unsigned>
+    getCallFrameAndDepth(unsigned CallIndex) {
+      assert(CallIndex && "no call index in getCallFrameAndDepth");
       // We will eventually hit BottomFrame, which has Index 1, so Frame can't
       // be null in this loop.
+      unsigned Depth = CallStackDepth;
       CallStackFrame *Frame = CurrentCall;
-      while (Frame->Index > CallIndex)
+      while (Frame->Index > CallIndex) {
         Frame = Frame->Caller;
-      return (Frame->Index == CallIndex) ? Frame : nullptr;
+        --Depth;
+      }
+      if (Frame->Index == CallIndex)
+        return {Frame, Depth};
+      return {nullptr, 0};
     }
 
     bool nextStep(const Stmt *S) {
@@ -1111,12 +1118,12 @@ namespace {
   class SpeculativeEvaluationRAII {
     EvalInfo *Info = nullptr;
     Expr::EvalStatus OldStatus;
-    bool OldIsSpeculativelyEvaluating;
+    unsigned OldSpeculativeEvaluationDepth;
 
     void moveFromAndCancel(SpeculativeEvaluationRAII &&Other) {
       Info = Other.Info;
       OldStatus = Other.OldStatus;
-      OldIsSpeculativelyEvaluating = Other.OldIsSpeculativelyEvaluating;
+      OldSpeculativeEvaluationDepth = Other.OldSpeculativeEvaluationDepth;
       Other.Info = nullptr;
     }
 
@@ -1125,7 +1132,7 @@ namespace {
         return;
 
       Info->EvalStatus = OldStatus;
-      Info->IsSpeculativelyEvaluating = OldIsSpeculativelyEvaluating;
+      Info->SpeculativeEvaluationDepth = OldSpeculativeEvaluationDepth;
     }
 
   public:
@@ -1134,9 +1141,9 @@ namespace {
     SpeculativeEvaluationRAII(
         EvalInfo &Info, SmallVectorImpl<PartialDiagnosticAt> *NewDiag = nullptr)
         : Info(&Info), OldStatus(Info.EvalStatus),
-          OldIsSpeculativelyEvaluating(Info.IsSpeculativelyEvaluating) {
+          OldSpeculativeEvaluationDepth(Info.SpeculativeEvaluationDepth) {
       Info.EvalStatus.Diag = NewDiag;
-      Info.IsSpeculativelyEvaluating = true;
+      Info.SpeculativeEvaluationDepth = Info.CallStackDepth + 1;
     }
 
     SpeculativeEvaluationRAII(const SpeculativeEvaluationRAII &Other) = delete;
@@ -1743,6 +1750,8 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
   case Expr::CXXTypeidExprClass:
   case Expr::CXXUuidofExprClass:
     return true;
+  case Expr::ObjCBoxedExprClass:
+    return cast<ObjCBoxedExpr>(E)->isExpressibleAsConstantInitializer();
   case Expr::CallExprClass:
     return IsStringLiteralCall(cast<CallExpr>(E));
   // For GCC compatibility, &&label has static storage duration.
@@ -3136,8 +3145,10 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
   }
 
   CallStackFrame *Frame = nullptr;
+  unsigned Depth = 0;
   if (LVal.getLValueCallIndex()) {
-    Frame = Info.getCallFrame(LVal.getLValueCallIndex());
+    std::tie(Frame, Depth) =
+        Info.getCallFrameAndDepth(LVal.getLValueCallIndex());
     if (!Frame) {
       Info.FFDiag(E, diag::note_constexpr_lifetime_ended, 1)
         << AK << LVal.Base.is<const ValueDecl*>();
@@ -3328,7 +3339,7 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
   // to be read here (but take care with 'mutable' fields).
   if ((Frame && Info.getLangOpts().CPlusPlus14 &&
        Info.EvalStatus.HasSideEffects) ||
-      (AK != AK_Read && Info.IsSpeculativelyEvaluating))
+      (AK != AK_Read && Depth < Info.SpeculativeEvaluationDepth))
     return CompleteObject();
 
   return CompleteObject(BaseVal, BaseType, LifetimeStartedInEvaluation);
@@ -5794,6 +5805,8 @@ public:
   bool VisitObjCStringLiteral(const ObjCStringLiteral *E)
       { return Success(E); }
   bool VisitObjCBoxedExpr(const ObjCBoxedExpr *E) {
+    if (E->isExpressibleAsConstantInitializer())
+      return Success(E);
     if (Info.noteFailure())
       EvaluateIgnoredValue(Info, E->getSubExpr());
     return Error(E);
@@ -7797,19 +7810,37 @@ EvaluateBuiltinClassifyType(const CallExpr *E, const LangOptions &LangOpts) {
 }
 
 /// EvaluateBuiltinConstantPForLValue - Determine the result of
-/// __builtin_constant_p when applied to the given lvalue.
+/// __builtin_constant_p when applied to the given pointer.
 ///
-/// An lvalue is only "constant" if it is a pointer or reference to the first
-/// character of a string literal.
-template<typename LValue>
-static bool EvaluateBuiltinConstantPForLValue(const LValue &LV) {
-  const Expr *E = LV.getLValueBase().template dyn_cast<const Expr*>();
-  return E && isa<StringLiteral>(E) && LV.getLValueOffset().isZero();
+/// A pointer is only "constant" if it is null (or a pointer cast to integer)
+/// or it points to the first character of a string literal.
+static bool EvaluateBuiltinConstantPForLValue(const APValue &LV) {
+  APValue::LValueBase Base = LV.getLValueBase();
+  if (Base.isNull()) {
+    // A null base is acceptable.
+    return true;
+  } else if (const Expr *E = Base.dyn_cast<const Expr *>()) {
+    if (!isa<StringLiteral>(E))
+      return false;
+    return LV.getLValueOffset().isZero();
+  } else {
+    // Any other base is not constant enough for GCC.
+    return false;
+  }
 }
 
 /// EvaluateBuiltinConstantP - Evaluate __builtin_constant_p as similarly to
 /// GCC as we can manage.
-static bool EvaluateBuiltinConstantP(ASTContext &Ctx, const Expr *Arg) {
+static bool EvaluateBuiltinConstantP(EvalInfo &Info, const Expr *Arg) {
+  // This evaluation is not permitted to have side-effects, so evaluate it in
+  // a speculative evaluation context.
+  SpeculativeEvaluationRAII SpeculativeEval(Info);
+
+  // Constant-folding is always enabled for the operand of __builtin_constant_p
+  // (even when the enclosing evaluation context otherwise requires a strict
+  // language-specific constant expression).
+  FoldConstant Fold(Info, true);
+
   QualType ArgType = Arg->getType();
 
   // __builtin_constant_p always has one operand. The rules which gcc follows
@@ -7817,34 +7848,30 @@ static bool EvaluateBuiltinConstantP(ASTContext &Ctx, const Expr *Arg) {
   //
   //  - If the operand is of integral, floating, complex or enumeration type,
   //    and can be folded to a known value of that type, it returns 1.
-  //  - If the operand and can be folded to a pointer to the first character
-  //    of a string literal (or such a pointer cast to an integral type), it
-  //    returns 1.
+  //  - If the operand can be folded to a pointer to the first character
+  //    of a string literal (or such a pointer cast to an integral type)
+  //    or to a null pointer or an integer cast to a pointer, it returns 1.
   //
   // Otherwise, it returns 0.
   //
   // FIXME: GCC also intends to return 1 for literals of aggregate types, but
-  // its support for this does not currently work.
-  if (ArgType->isIntegralOrEnumerationType()) {
-    Expr::EvalResult Result;
-    if (!Arg->EvaluateAsRValue(Result, Ctx) || Result.HasSideEffects)
+  // its support for this did not work prior to GCC 9 and is not yet well
+  // understood.
+  if (ArgType->isIntegralOrEnumerationType() || ArgType->isFloatingType() ||
+      ArgType->isAnyComplexType() || ArgType->isPointerType() ||
+      ArgType->isNullPtrType()) {
+    APValue V;
+    if (!::EvaluateAsRValue(Info, Arg, V)) {
+      Fold.keepDiagnostics();
       return false;
+    }
 
-    APValue &V = Result.Val;
-    if (V.getKind() == APValue::Int)
-      return true;
+    // For a pointer (possibly cast to integer), there are special rules.
     if (V.getKind() == APValue::LValue)
       return EvaluateBuiltinConstantPForLValue(V);
-  } else if (ArgType->isFloatingType() || ArgType->isAnyComplexType()) {
-    return Arg->isEvaluatable(Ctx);
-  } else if (ArgType->isPointerType() || Arg->isGLValue()) {
-    LValue LV;
-    Expr::EvalStatus Status;
-    EvalInfo Info(Ctx, Status, EvalInfo::EM_ConstantFold);
-    if ((Arg->isGLValue() ? EvaluateLValue(Arg, LV, Info)
-                          : EvaluatePointer(Arg, LV, Info)) &&
-        !Status.HasSideEffects)
-      return EvaluateBuiltinConstantPForLValue(LV);
+
+    // Otherwise, any constant value is good enough.
+    return V.getKind() != APValue::Uninitialized;
   }
 
   // Anything else isn't considered to be sufficiently constant.
@@ -8254,19 +8281,21 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
   }
 
   case Builtin::BI__builtin_constant_p: {
-    auto Arg = E->getArg(0);
-    if (EvaluateBuiltinConstantP(Info.Ctx, Arg))
+    const Expr *Arg = E->getArg(0);
+    if (EvaluateBuiltinConstantP(Info, Arg))
       return Success(true, E);
-    auto ArgTy = Arg->IgnoreImplicit()->getType();
-    if (!Info.InConstantContext && !Arg->HasSideEffects(Info.Ctx) &&
-        !ArgTy->isAggregateType() && !ArgTy->isPointerType()) {
-      // We can delay calculation of __builtin_constant_p until after
-      // inlining. Note: This diagnostic won't be shown to the user.
-      Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
-      return false;
+    if (Info.InConstantContext || Arg->HasSideEffects(Info.Ctx)) {
+      // Outside a constant context, eagerly evaluate to false in the presence
+      // of side-effects in order to avoid -Wunsequenced false-positives in
+      // a branch on __builtin_constant_p(expr).
+      return Success(false, E);
     }
-    return Success(false, E);
+    Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
+    return false;
   }
+
+  case Builtin::BI__builtin_is_constant_evaluated:
+    return Success(Info.InConstantContext, E);
 
   case Builtin::BI__builtin_ctz:
   case Builtin::BI__builtin_ctzl:
@@ -9144,6 +9173,22 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     return Success(CCR::Equal, E);
   }
 
+  if (LHSTy->isFixedPointType() || RHSTy->isFixedPointType()) {
+    APFixedPoint LHSFX(Info.Ctx.getFixedPointSemantics(LHSTy));
+    APFixedPoint RHSFX(Info.Ctx.getFixedPointSemantics(RHSTy));
+
+    bool LHSOK = EvaluateFixedPointOrInteger(E->getLHS(), LHSFX, Info);
+    if (!LHSOK && !Info.noteFailure())
+      return false;
+    if (!EvaluateFixedPointOrInteger(E->getRHS(), RHSFX, Info) || !LHSOK)
+      return false;
+    if (LHSFX < RHSFX)
+      return Success(CCR::Less, E);
+    if (LHSFX > RHSFX)
+      return Success(CCR::Greater, E);
+    return Success(CCR::Equal, E);
+  }
+
   if (LHSTy->isAnyComplexType() || RHSTy->isAnyComplexType()) {
     ComplexValue LHS, RHS;
     bool LHSOK;
@@ -9760,6 +9805,7 @@ bool IntExprEvaluator::VisitCastExpr(const CastExpr *E) {
   case CK_AddressSpaceConversion:
   case CK_IntToOCLSampler:
   case CK_FixedPointCast:
+  case CK_IntegralToFixedPoint:
     llvm_unreachable("invalid cast kind for integral value");
 
   case CK_BitCast:
@@ -9792,6 +9838,19 @@ bool IntExprEvaluator::VisitCastExpr(const CastExpr *E) {
     if (BoolResult && E->getCastKind() == CK_BooleanToSignedIntegral)
       IntResult = (uint64_t)-1;
     return Success(IntResult, E);
+  }
+
+  case CK_FixedPointToIntegral: {
+    APFixedPoint Src(Info.Ctx.getFixedPointSemantics(SrcType));
+    if (!EvaluateFixedPoint(SubExpr, Src, Info))
+      return false;
+    bool Overflowed;
+    llvm::APSInt Result = Src.convertToInt(
+        Info.Ctx.getIntWidth(DestType),
+        DestType->isSignedIntegerOrEnumerationType(), &Overflowed);
+    if (Overflowed && !HandleOverflow(Info, E, Result, DestType))
+      return false;
+    return Success(Result, E);
   }
 
   case CK_FixedPointToBoolean: {
@@ -9842,13 +9901,12 @@ bool IntExprEvaluator::VisitCastExpr(const CastExpr *E) {
       return true;
     }
 
-    uint64_t V;
-    if (LV.isNullPointer())
-      V = Info.Ctx.getTargetNullPointerValue(SrcType);
-    else
-      V = LV.getLValueOffset().getQuantity();
+    APSInt AsInt;
+    APValue V;
+    LV.moveInto(V);
+    if (!V.toIntegralConstant(AsInt, SrcType, Info.Ctx))
+      llvm_unreachable("Can't cast this!");
 
-    APSInt AsInt = Info.Ctx.MakeIntValue(V, SrcType);
     return Success(HandleIntToIntCast(Info, E, DestType, SrcType, AsInt), E);
   }
 
@@ -9953,6 +10011,20 @@ bool FixedPointExprEvaluator::VisitCastExpr(const CastExpr *E) {
     if (Overflowed && !HandleOverflow(Info, E, Result, DestType))
       return false;
     return Success(Result, E);
+  }
+  case CK_IntegralToFixedPoint: {
+    APSInt Src;
+    if (!EvaluateInteger(SubExpr, Src, Info))
+      return false;
+
+    bool Overflowed;
+    APFixedPoint IntResult = APFixedPoint::getFromIntValue(
+        Src, Info.Ctx.getFixedPointSemantics(DestType), &Overflowed);
+
+    if (Overflowed && !HandleOverflow(Info, E, IntResult, DestType))
+      return false;
+
+    return Success(IntResult, E);
   }
   case CK_NoOp:
   case CK_LValueToRValue:
@@ -10355,6 +10427,8 @@ bool ComplexExprEvaluator::VisitCastExpr(const CastExpr *E) {
   case CK_IntToOCLSampler:
   case CK_FixedPointCast:
   case CK_FixedPointToBoolean:
+  case CK_FixedPointToIntegral:
+  case CK_IntegralToFixedPoint:
     llvm_unreachable("invalid cast kind for complex value");
 
   case CK_LValueToRValue:
@@ -11082,6 +11156,8 @@ bool Expr::EvaluateAsConstantExpr(EvalResult &Result, ConstExprUsage Usage,
                                   const ASTContext &Ctx) const {
   EvalInfo::EvaluationMode EM = EvalInfo::EM_ConstantExpression;
   EvalInfo Info(Ctx, Result, EM);
+  Info.InConstantContext = true;
+
   if (!::Evaluate(Result.Val, Info, this))
     return false;
 
@@ -11722,6 +11798,7 @@ bool Expr::EvaluateWithSubstitution(APValue &Value, ASTContext &Ctx,
                                     const Expr *This) const {
   Expr::EvalStatus Status;
   EvalInfo Info(Ctx, Status, EvalInfo::EM_ConstantExpressionUnevaluated);
+  Info.InConstantContext = true;
 
   LValue ThisVal;
   const LValue *ThisPtr = nullptr;
@@ -11805,6 +11882,7 @@ bool Expr::isPotentialConstantExprUnevaluated(Expr *E,
 
   EvalInfo Info(FD->getASTContext(), Status,
                 EvalInfo::EM_PotentialConstantExpressionUnevaluated);
+  Info.InConstantContext = true;
 
   // Fabricate a call stack frame to give the arguments a plausible cover story.
   ArrayRef<const Expr*> Args;

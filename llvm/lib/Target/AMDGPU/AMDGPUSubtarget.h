@@ -55,7 +55,8 @@ public:
     SOUTHERN_ISLANDS = 4,
     SEA_ISLANDS = 5,
     VOLCANIC_ISLANDS = 6,
-    GFX9 = 7
+    GFX9 = 7,
+    GFX10 = 8
   };
 
 private:
@@ -286,7 +287,6 @@ protected:
 
   // Dynamially set bits that enable features.
   bool FP64FP16Denormals;
-  bool DX10Clamp;
   bool FlatForGlobal;
   bool AutoWaitcntBeforeBarrier;
   bool CodeObjectV3;
@@ -294,9 +294,8 @@ protected:
   bool UnalignedBufferAccess;
   bool HasApertureRegs;
   bool EnableXNACK;
+  bool EnableCuMode;
   bool TrapHandler;
-  bool DebuggerInsertNops;
-  bool DebuggerEmitPrologue;
 
   // Used as options.
   bool EnableHugePrivateBuffer;
@@ -314,8 +313,10 @@ protected:
   bool IsGCN;
   bool GCN3Encoding;
   bool CIInsts;
-  bool VIInsts;
+  bool GFX8Insts;
   bool GFX9Insts;
+  bool GFX10Insts;
+  bool GFX7GFX8GFX9Insts;
   bool SGPRInitBug;
   bool HasSMemRealTime;
   bool HasIntClamp;
@@ -331,22 +332,40 @@ protected:
   bool HasSDWAOutModsVOPC;
   bool HasDPP;
   bool HasR128A16;
+  bool HasNSAEncoding;
   bool HasDLInsts;
   bool HasDot1Insts;
   bool HasDot2Insts;
   bool EnableSRAMECC;
+  bool DoesNotSupportSRAMECC;
+  bool HasNoSdstCMPX;
+  bool HasVscnt;
+  bool HasRegisterBanking;
+  bool HasVOP3Literal;
+  bool HasNoDataDepHazard;
   bool FlatAddressSpace;
   bool FlatInstOffsets;
   bool FlatGlobalInsts;
   bool FlatScratchInsts;
+  bool ScalarFlatScratchInsts;
   bool AddNoCarryInsts;
   bool HasUnpackedD16VMem;
   bool R600ALUInst;
   bool CaymanISA;
   bool CFALUBug;
+  bool LDSMisalignedBug;
   bool HasVertexCache;
   short TexVTXClauseSize;
   bool ScalarizeGlobal;
+
+  bool HasVcmpxPermlaneHazard;
+  bool HasVMEMtoScalarWriteHazard;
+  bool HasSMEMtoVectorWriteHazard;
+  bool HasInstFwdPrefetchBug;
+  bool HasVcmpxExecWARHazard;
+  bool HasLdsBranchVmemWARHazard;
+  bool HasNSAtoVMEMBug;
+  bool HasFlatSegmentOffsetBug;
 
   // Dummy feature to use for assembler in tablegen.
   bool FeatureDisable;
@@ -423,6 +442,8 @@ public:
   unsigned getMaxPrivateElementSize() const {
     return MaxPrivateElementSize;
   }
+
+  unsigned getConstantBusLimit(unsigned Opcode) const;
 
   bool hasIntClamp() const {
     return HasIntClamp;
@@ -533,14 +554,6 @@ public:
     return getGeneration() >= AMDGPUSubtarget::GFX9;
   }
 
-  bool enableDX10Clamp() const {
-    return DX10Clamp;
-  }
-
-  bool enableIEEEBit(const MachineFunction &MF) const {
-    return AMDGPU::isCompute(MF.getFunction().getCallingConv());
-  }
-
   bool useFlatForGlobal() const {
     return FlatForGlobal;
   }
@@ -592,6 +605,10 @@ public:
     return EnableXNACK;
   }
 
+  bool isCuModeEnabled() const {
+    return EnableCuMode;
+  }
+
   bool hasFlatAddressSpace() const {
     return FlatAddressSpace;
   }
@@ -608,12 +625,24 @@ public:
     return FlatScratchInsts;
   }
 
+  bool hasScalarFlatScratchInsts() const {
+    return ScalarFlatScratchInsts;
+  }
+
+  bool hasFlatSegmentOffsetBug() const {
+    return HasFlatSegmentOffsetBug;
+  }
+
   bool hasFlatLgkmVMemCountInOrder() const {
     return getGeneration() > GFX9;
   }
 
   bool hasD16LoadStore() const {
     return getGeneration() >= GFX9;
+  }
+
+  bool d16PreservesUnusedBits() const {
+    return hasD16LoadStore() && !isSRAMECCEnabled();
   }
 
   /// Return if most LDS instructions have an m0 use that require m0 to be
@@ -659,10 +688,6 @@ public:
     return HasSDWAOutModsVOPC;
   }
 
-  bool vmemWriteNeedsExpWaitcnt() const {
-    return getGeneration() < SEA_ISLANDS;
-  }
-
   bool hasDLInsts() const {
     return HasDLInsts;
   }
@@ -677,6 +702,30 @@ public:
 
   bool isSRAMECCEnabled() const {
     return EnableSRAMECC;
+  }
+
+  bool hasNoSdstCMPX() const {
+    return HasNoSdstCMPX;
+  }
+
+  bool hasVscnt() const {
+    return HasVscnt;
+  }
+
+  bool hasRegisterBanking() const {
+    return HasRegisterBanking;
+  }
+
+  bool hasVOP3Literal() const {
+    return HasVOP3Literal;
+  }
+
+  bool hasNoDataDepHazard() const {
+    return HasNoDataDepHazard;
+  }
+
+  bool vmemWriteNeedsExpWaitcnt() const {
+    return getGeneration() < SEA_ISLANDS;
   }
 
   // Scratch is allocated in 256 dword per wave blocks for the entire
@@ -776,7 +825,7 @@ public:
   }
 
   bool hasLDSFPAtomics() const {
-    return VIInsts;
+    return GFX8Insts;
   }
 
   bool hasDPP() const {
@@ -787,20 +836,14 @@ public:
     return HasR128A16;
   }
 
+  bool hasNSAEncoding() const {
+    return HasNSAEncoding;
+  }
+
+  bool hasMadF16() const;
+
   bool enableSIScheduler() const {
     return EnableSIScheduler;
-  }
-
-  bool debuggerSupported() const {
-    return debuggerInsertNops() && debuggerEmitPrologue();
-  }
-
-  bool debuggerInsertNops() const {
-    return DebuggerInsertNops;
-  }
-
-  bool debuggerEmitPrologue() const {
-    return DebuggerEmitPrologue;
   }
 
   bool loadStoreOptEnabled() const {
@@ -821,15 +864,48 @@ public:
   }
 
   bool hasSMovFedHazard() const {
-    return getGeneration() >= AMDGPUSubtarget::GFX9;
+    return getGeneration() == AMDGPUSubtarget::GFX9;
   }
 
   bool hasReadM0MovRelInterpHazard() const {
-    return getGeneration() >= AMDGPUSubtarget::GFX9;
+    return getGeneration() == AMDGPUSubtarget::GFX9;
   }
 
   bool hasReadM0SendMsgHazard() const {
-    return getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS;
+    return getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS &&
+           getGeneration() <= AMDGPUSubtarget::GFX9;
+  }
+
+  bool hasVcmpxPermlaneHazard() const {
+    return HasVcmpxPermlaneHazard;
+  }
+
+  bool hasVMEMtoScalarWriteHazard() const {
+    return HasVMEMtoScalarWriteHazard;
+  }
+
+  bool hasSMEMtoVectorWriteHazard() const {
+    return HasSMEMtoVectorWriteHazard;
+  }
+
+  bool hasLDSMisalignedBug() const {
+    return LDSMisalignedBug && !EnableCuMode;
+  }
+
+  bool hasInstFwdPrefetchBug() const {
+    return HasInstFwdPrefetchBug;
+  }
+
+  bool hasVcmpxExecWARHazard() const {
+    return HasVcmpxExecWARHazard;
+  }
+
+  bool hasLdsBranchVmemWARHazard() const {
+    return HasLdsBranchVmemWARHazard;
+  }
+
+  bool hasNSAtoVMEMBug() const {
+    return HasNSAtoVMEMBug;
   }
 
   /// Return the maximum number of waves per SIMD for kernels using \p SGPRs
@@ -980,7 +1056,6 @@ private:
   bool FMA;
   bool CaymanISA;
   bool CFALUBug;
-  bool DX10Clamp;
   bool HasVertexCache;
   bool R600ALUInst;
   bool FP64;
