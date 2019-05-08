@@ -1,4 +1,4 @@
-//===--- SymbolYAML.cpp ------------------------------------------*- C++-*-===//
+//===-- YAMLSerialization.cpp ------------------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,6 +14,8 @@
 
 #include "Index.h"
 #include "Serialization.h"
+#include "SymbolLocation.h"
+#include "SymbolOrigin.h"
 #include "Trace.h"
 #include "dex/Dex.h"
 #include "llvm/ADT/Optional.h"
@@ -191,6 +193,8 @@ template <> struct MappingTraits<Symbol> {
     IO.mapOptional("Origin", NSymbolOrigin->Origin);
     IO.mapOptional("Flags", NSymbolFlag->Flag);
     IO.mapOptional("Signature", Sym.Signature);
+    IO.mapOptional("TemplateSpecializationArgs",
+                   Sym.TemplateSpecializationArgs);
     IO.mapOptional("CompletionSnippetSuffix", Sym.CompletionSnippetSuffix);
     IO.mapOptional("Documentation", Sym.Documentation);
     IO.mapOptional("ReturnType", Sym.ReturnType);

@@ -18,6 +18,8 @@ Clang-Tidy Checks
    abseil-redundant-strcat-calls
    abseil-str-cat-append
    abseil-string-find-startswith
+   abseil-time-comparison
+   abseil-time-subtraction
    abseil-upgrade-duration-conversions
    android-cloexec-accept
    android-cloexec-accept4
@@ -98,6 +100,7 @@ Clang-Tidy Checks
    cppcoreguidelines-avoid-goto
    cppcoreguidelines-avoid-magic-numbers (redirects to readability-magic-numbers) <cppcoreguidelines-avoid-magic-numbers>
    cppcoreguidelines-c-copy-assignment-signature (redirects to misc-unconventional-assign-operator) <cppcoreguidelines-c-copy-assignment-signature>
+   cppcoreguidelines-explicit-virtual-functions (redirects to modernize-use-override) <cppcoreguidelines-explicit-virtual-functions>
    cppcoreguidelines-interfaces-global-init
    cppcoreguidelines-macro-usage
    cppcoreguidelines-narrowing-conversions
@@ -175,6 +178,7 @@ Clang-Tidy Checks
    llvm-header-guard
    llvm-include-order
    llvm-namespace-comment
+   llvm-prefer-isa-or-dyn-cast-in-conditionals
    llvm-twine-local
    misc-definitions-in-headers
    misc-misplaced-const
@@ -224,6 +228,9 @@ Clang-Tidy Checks
    objc-avoid-spinlock
    objc-forbidden-subclassing
    objc-property-declaration
+   objc-super-self
+   openmp-exception-escape
+   openmp-use-default-none
    performance-faster-string-find
    performance-for-range-copy
    performance-implicit-conversion-in-loop

@@ -190,6 +190,30 @@ def bare_symbol : Operand<XLenVT> {
   let ParserMatchClass = BareSymbol;
 }
 
+def CallSymbol : AsmOperandClass {
+  let Name = "CallSymbol";
+  let RenderMethod = "addImmOperands";
+  let DiagnosticType = "InvalidCallSymbol";
+  let ParserMethod = "parseCallSymbol";
+}
+
+// A bare symbol used in call/tail only.
+def call_symbol : Operand<XLenVT> {
+  let ParserMatchClass = CallSymbol;
+}
+
+def TPRelAddSymbol : AsmOperandClass {
+  let Name = "TPRelAddSymbol";
+  let RenderMethod = "addImmOperands";
+  let DiagnosticType = "InvalidTPRelAddSymbol";
+  let ParserMethod = "parseOperandWithModifier";
+}
+
+// A bare symbol with the %tprel_add variant.
+def tprel_add_symbol : Operand<XLenVT> {
+  let ParserMatchClass = TPRelAddSymbol;
+}
+
 def CSRSystemRegister : AsmOperandClass {
   let Name = "CSRSystemRegister";
   let ParserMethod = "parseCSRSystemRegister";
@@ -619,6 +643,24 @@ def : InstAlias<"sfence.vma",     (SFENCE_VMA      X0, X0)>;
 def : InstAlias<"sfence.vma $rs", (SFENCE_VMA GPR:$rs, X0)>;
 
 let EmitPriority = 0 in {
+def : InstAlias<"lb $rd, (${rs1})",
+                (LB  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"lh $rd, (${rs1})",
+                (LH  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"lw $rd, (${rs1})",
+                (LW  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"lbu $rd, (${rs1})",
+                (LBU  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"lhu $rd, (${rs1})",
+                (LHU  GPR:$rd, GPR:$rs1, 0)>;
+
+def : InstAlias<"sb $rs2, (${rs1})",
+                (SB  GPR:$rs2, GPR:$rs1, 0)>;
+def : InstAlias<"sh $rs2, (${rs1})",
+                (SH  GPR:$rs2, GPR:$rs1, 0)>;
+def : InstAlias<"sw $rs2, (${rs1})",
+                (SW  GPR:$rs2, GPR:$rs1, 0)>;
+
 def : InstAlias<"add $rd, $rs1, $imm12",
                 (ADDI  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
 def : InstAlias<"and $rd, $rs1, $imm12",
@@ -634,6 +676,13 @@ def : InstAlias<"srl $rd, $rs1, $shamt",
 def : InstAlias<"sra $rd, $rs1, $shamt",
                 (SRAI  GPR:$rd, GPR:$rs1, uimmlog2xlen:$shamt)>;
 let Predicates = [IsRV64] in {
+def : InstAlias<"lwu $rd, (${rs1})",
+                (LWU  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"ld $rd, (${rs1})",
+                (LD  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"sd $rs2, (${rs1})",
+                (SD  GPR:$rs2, GPR:$rs1, 0)>;
+
 def : InstAlias<"addw $rd, $rs1, $imm12",
                 (ADDIW  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
 def : InstAlias<"sllw $rd, $rs1, $shamt",
@@ -728,6 +777,15 @@ def : PatGprGpr<shiftop<shl>, SLL>;
 def : PatGprGpr<shiftop<srl>, SRL>;
 def : PatGprGpr<shiftop<sra>, SRA>;
 
+// This is a special case of the ADD instruction used to facilitate the use of a
+// fourth operand to emit a relocation on a symbol relating to this instruction.
+// The relocation does not affect any bits of the instruction itself but is used
+// as a hint to the linker.
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 0 in
+def PseudoAddTPRel : Pseudo<(outs GPR:$rd),
+                            (ins GPR:$rs1, GPR:$rs2, tprel_add_symbol:$src), [],
+                            "add", "$rd, $rs1, $rs2, $src">;
+
 /// FrameIndex calculations
 
 def : Pat<(add (i32 AddrFI:$Rs), simm12:$imm12),
@@ -746,8 +804,12 @@ def : PatGprSimm12<setult, SLTIU>;
 // handled by a RISC-V instruction.
 def : Pat<(seteq GPR:$rs1, 0), (SLTIU GPR:$rs1, 1)>;
 def : Pat<(seteq GPR:$rs1, GPR:$rs2), (SLTIU (XOR GPR:$rs1, GPR:$rs2), 1)>;
+def : Pat<(seteq GPR:$rs1, simm12:$imm12),
+          (SLTIU (XORI GPR:$rs1, simm12:$imm12), 1)>;
 def : Pat<(setne GPR:$rs1, 0), (SLTU X0, GPR:$rs1)>;
 def : Pat<(setne GPR:$rs1, GPR:$rs2), (SLTU X0, (XOR GPR:$rs1, GPR:$rs2))>;
+def : Pat<(setne GPR:$rs1, simm12:$imm12),
+          (SLTU X0, (XORI GPR:$rs1, simm12:$imm12))>;
 def : Pat<(setugt GPR:$rs1, GPR:$rs2), (SLTU GPR:$rs2, GPR:$rs1)>;
 def : Pat<(setuge GPR:$rs1, GPR:$rs2), (XORI (SLTU GPR:$rs1, GPR:$rs2), 1)>;
 def : Pat<(setule GPR:$rs1, GPR:$rs2), (XORI (SLTU GPR:$rs2, GPR:$rs1), 1)>;
@@ -815,7 +877,7 @@ def : Pat<(brind (add GPR:$rs1, simm12:$imm12)),
 // Define AsmString to print "call" when compile with -S flag.
 // Define isCodeGenOnly = 0 to support parsing assembly "call" instruction.
 let isCall = 1, Defs = [X1], isCodeGenOnly = 0 in
-def PseudoCALL : Pseudo<(outs), (ins bare_symbol:$func),
+def PseudoCALL : Pseudo<(outs), (ins call_symbol:$func),
                         [(riscv_call tglobaladdr:$func)]> {
   let AsmString = "call\t$func";
 }
@@ -840,7 +902,7 @@ def PseudoRET : Pseudo<(outs), (ins), [(riscv_ret_flag)]>,
 // Define AsmString to print "tail" when compile with -S flag.
 let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1, Uses = [X2],
     isCodeGenOnly = 0 in
-def PseudoTAIL : Pseudo<(outs), (ins bare_symbol:$dst), []> {
+def PseudoTAIL : Pseudo<(outs), (ins call_symbol:$dst), []> {
   let AsmString = "tail\t$dst";
 }
 

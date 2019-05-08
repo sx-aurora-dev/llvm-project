@@ -998,7 +998,8 @@ static bool DiagnoseUninitializedUse(Sema &S, const VarDecl *VD,
     if (VD->getType()->isBlockPointerType() && !VD->hasAttr<BlocksAttr>())
       S.Diag(BE->getBeginLoc(),
              diag::warn_uninit_byref_blockvar_captured_by_block)
-          << VD->getDeclName();
+          << VD->getDeclName()
+          << VD->getType().getQualifiers().hasObjCLifetime();
     else
       DiagUninitUse(S, VD, Use, true);
   }
@@ -1642,6 +1643,13 @@ class ThreadSafetyReporter : public clang::threadSafety::ThreadSafetyHandler {
     return ONS;
   }
 
+  OptionalNotes makeLockedHereNote(SourceLocation LocLocked, StringRef Kind) {
+    return LocLocked.isValid()
+               ? getNotes(PartialDiagnosticAt(
+                     LocLocked, S.PDiag(diag::note_locked_here) << Kind))
+               : getNotes();
+  }
+
  public:
   ThreadSafetyReporter(Sema &S, SourceLocation FL, SourceLocation FEL)
     : S(S), FunLocation(FL), FunEndLocation(FEL),
@@ -1679,27 +1687,25 @@ class ThreadSafetyReporter : public clang::threadSafety::ThreadSafetyHandler {
 
   void handleIncorrectUnlockKind(StringRef Kind, Name LockName,
                                  LockKind Expected, LockKind Received,
-                                 SourceLocation Loc) override {
-    if (Loc.isInvalid())
-      Loc = FunLocation;
-    PartialDiagnosticAt Warning(Loc, S.PDiag(diag::warn_unlock_kind_mismatch)
-                                         << Kind << LockName << Received
-                                         << Expected);
-    Warnings.emplace_back(std::move(Warning), getNotes());
+                                 SourceLocation LocLocked,
+                                 SourceLocation LocUnlock) override {
+    if (LocUnlock.isInvalid())
+      LocUnlock = FunLocation;
+    PartialDiagnosticAt Warning(
+        LocUnlock, S.PDiag(diag::warn_unlock_kind_mismatch)
+                       << Kind << LockName << Received << Expected);
+    Warnings.emplace_back(std::move(Warning),
+                          makeLockedHereNote(LocLocked, Kind));
   }
 
   void handleDoubleLock(StringRef Kind, Name LockName, SourceLocation LocLocked,
-                        SourceLocation Loc) override {
-    if (Loc.isInvalid())
-      Loc = FunLocation;
-    PartialDiagnosticAt Warning(Loc, S.PDiag(diag::warn_double_lock)
-                                         << Kind << LockName);
-    OptionalNotes Notes =
-        LocLocked.isValid()
-            ? getNotes(PartialDiagnosticAt(
-                  LocLocked, S.PDiag(diag::note_locked_here) << Kind))
-            : getNotes();
-    Warnings.emplace_back(std::move(Warning), std::move(Notes));
+                        SourceLocation LocDoubleLock) override {
+    if (LocDoubleLock.isInvalid())
+      LocDoubleLock = FunLocation;
+    PartialDiagnosticAt Warning(LocDoubleLock, S.PDiag(diag::warn_double_lock)
+                                                   << Kind << LockName);
+    Warnings.emplace_back(std::move(Warning),
+                          makeLockedHereNote(LocLocked, Kind));
   }
 
   void handleMutexHeldEndOfScope(StringRef Kind, Name LockName,
@@ -1726,13 +1732,8 @@ class ThreadSafetyReporter : public clang::threadSafety::ThreadSafetyHandler {
 
     PartialDiagnosticAt Warning(LocEndOfScope, S.PDiag(DiagID) << Kind
                                                                << LockName);
-    if (LocLocked.isValid()) {
-      PartialDiagnosticAt Note(LocLocked, S.PDiag(diag::note_locked_here)
-                                              << Kind);
-      Warnings.emplace_back(std::move(Warning), getNotes(Note));
-      return;
-    }
-    Warnings.emplace_back(std::move(Warning), getNotes());
+    Warnings.emplace_back(std::move(Warning),
+                          makeLockedHereNote(LocLocked, Kind));
   }
 
   void handleExclusiveAndShared(StringRef Kind, Name LockName,
@@ -2088,16 +2089,16 @@ AnalysisBasedWarnings::IssueWarnings(sema::AnalysisBasedWarnings::Policy P,
 
     // Register the expressions with the CFGBuilder.
     for (const auto &D : fscope->PossiblyUnreachableDiags) {
-      if (D.stmt)
-        AC.registerForcedBlockExpression(D.stmt);
+      for (const Stmt *S : D.Stmts)
+        AC.registerForcedBlockExpression(S);
     }
 
     if (AC.getCFG()) {
       analyzed = true;
       for (const auto &D : fscope->PossiblyUnreachableDiags) {
-        bool processed = false;
-        if (D.stmt) {
-          const CFGBlock *block = AC.getBlockForRegisteredExpression(D.stmt);
+        bool AllReachable = true;
+        for (const Stmt *S : D.Stmts) {
+          const CFGBlock *block = AC.getBlockForRegisteredExpression(S);
           CFGReverseBlockReachabilityAnalysis *cra =
               AC.getCFGReachablityAnalysis();
           // FIXME: We should be able to assert that block is non-null, but
@@ -2105,15 +2106,17 @@ AnalysisBasedWarnings::IssueWarnings(sema::AnalysisBasedWarnings::Policy P,
           // edge cases; see test/Sema/vla-2.c.
           if (block && cra) {
             // Can this block be reached from the entrance?
-            if (cra->isReachable(&AC.getCFG()->getEntry(), block))
-              S.Diag(D.Loc, D.PD);
-            processed = true;
+            if (!cra->isReachable(&AC.getCFG()->getEntry(), block)) {
+              AllReachable = false;
+              break;
+            }
           }
+          // If we cannot map to a basic block, assume the statement is
+          // reachable.
         }
-        if (!processed) {
-          // Emit the warning anyway if we cannot map to a basic block.
+
+        if (AllReachable)
           S.Diag(D.Loc, D.PD);
-        }
       }
     }
 

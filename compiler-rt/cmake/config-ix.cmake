@@ -100,6 +100,7 @@ check_cxx_compiler_flag("-Werror -Wnon-virtual-dtor"   COMPILER_RT_HAS_WNON_VIRT
 check_cxx_compiler_flag("-Werror -Wvariadic-macros"    COMPILER_RT_HAS_WVARIADIC_MACROS_FLAG)
 check_cxx_compiler_flag("-Werror -Wunused-parameter"   COMPILER_RT_HAS_WUNUSED_PARAMETER_FLAG)
 check_cxx_compiler_flag("-Werror -Wcovered-switch-default" COMPILER_RT_HAS_WCOVERED_SWITCH_DEFAULT_FLAG)
+check_cxx_compiler_flag(-Wno-pedantic COMPILER_RT_HAS_WNO_PEDANTIC)
 
 check_cxx_compiler_flag(/W4 COMPILER_RT_HAS_W4_FLAG)
 check_cxx_compiler_flag(/WX COMPILER_RT_HAS_WX_FLAG)
@@ -142,6 +143,8 @@ check_library_exists(c++ __cxa_throw "" COMPILER_RT_HAS_LIBCXX)
 check_library_exists(stdc++ __cxa_throw "" COMPILER_RT_HAS_LIBSTDCXX)
 
 # Linker flags.
+check_linker_flag("-Wl,-z,text" COMPILER_RT_HAS_Z_TEXT)
+
 if(ANDROID)
   check_linker_flag("-Wl,-z,global" COMPILER_RT_HAS_Z_GLOBAL)
   check_library_exists(log __android_log_write "" COMPILER_RT_HAS_LIBLOG)
@@ -225,35 +228,46 @@ if(APPLE)
 endif()
 
 set(ALL_SANITIZER_COMMON_SUPPORTED_ARCH ${X86} ${X86_64} ${PPC64}
-    ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} ${S390X} ${VE})
+    ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} ${S390X})
 set(ALL_ASAN_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64}
-    ${MIPS32} ${MIPS64} ${PPC64} ${S390X} ${VE})
-set(ALL_DFSAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${ARM64} ${VE})
-set(ALL_FUZZER_SUPPORTED_ARCH ${X86_64} ${ARM64} ${VE})
+    ${MIPS32} ${MIPS64} ${PPC64} ${S390X})
+set(ALL_CRT_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${VE})
+set(ALL_DFSAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${ARM64})
+
+if(ANDROID)
+  set(OS_NAME "Android")
+else()
+  set(OS_NAME "${CMAKE_SYSTEM_NAME}")
+endif()
+
+if(OS_NAME MATCHES "Linux")
+  set(ALL_FUZZER_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM64})
+else()
+  set(ALL_FUZZER_SUPPORTED_ARCH ${X86_64} ${ARM64})
+endif()
 
 if(APPLE)
   set(ALL_LSAN_SUPPORTED_ARCH ${X86} ${X86_64} ${MIPS64} ${ARM64})
 else()
-  set(ALL_LSAN_SUPPORTED_ARCH ${X86} ${X86_64} ${MIPS64} ${ARM64} ${ARM32} ${PPC64} ${VE})
+  set(ALL_LSAN_SUPPORTED_ARCH ${X86} ${X86_64} ${MIPS64} ${ARM64} ${ARM32} ${PPC64})
 endif()
-set(ALL_MSAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${ARM64} ${PPC64} ${VE})
-set(ALL_HWASAN_SUPPORTED_ARCH ${X86_64} ${ARM64} ${VE})
+set(ALL_MSAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${ARM64} ${PPC64})
+set(ALL_HWASAN_SUPPORTED_ARCH ${X86_64} ${ARM64})
 set(ALL_PROFILE_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${PPC64}
-    ${MIPS32} ${MIPS64} ${S390X} ${VE})
-set(ALL_TSAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${ARM64} ${PPC64} ${VE})
+    ${MIPS32} ${MIPS64} ${S390X})
+set(ALL_TSAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${ARM64} ${PPC64})
 set(ALL_UBSAN_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64}
-    ${MIPS32} ${MIPS64} ${PPC64} ${S390X} ${VE})
-set(ALL_SAFESTACK_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM64} ${MIPS32} ${MIPS64} ${VE})
-set(ALL_CFI_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS64} ${VE})
-set(ALL_ESAN_SUPPORTED_ARCH ${X86_64} ${MIPS64} ${VE})
-set(ALL_SCUDO_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} ${PPC64} ${VE})
-set(ALL_SCUDO_STANDALONE_SUPPORTED_ARCH ${X86} ${X86_64} ${VE})
+    ${MIPS32} ${MIPS64} ${PPC64} ${S390X})
+set(ALL_SAFESTACK_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM64} ${MIPS32} ${MIPS64})
+set(ALL_CFI_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS64})
+set(ALL_SCUDO_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} ${PPC64})
+set(ALL_SCUDO_STANDALONE_SUPPORTED_ARCH ${X86} ${X86_64})
 if(APPLE)
 set(ALL_XRAY_SUPPORTED_ARCH ${X86_64})
 else()
-set(ALL_XRAY_SUPPORTED_ARCH ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} powerpc64le ${VE})
+set(ALL_XRAY_SUPPORTED_ARCH ${X86_64} ${ARM32} ${ARM64} ${MIPS32} ${MIPS64} powerpc64le)
 endif()
-set(ALL_SHADOWCALLSTACK_SUPPORTED_ARCH ${X86_64} ${ARM64} ${VE})
+set(ALL_SHADOWCALLSTACK_SUPPORTED_ARCH ${ARM64})
 
 if(APPLE)
   include(CompilerRTDarwinUtils)
@@ -455,9 +469,6 @@ if(APPLE)
   list_intersect(CFI_SUPPORTED_ARCH
     ALL_CFI_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
-  list_intersect(ESAN_SUPPORTED_ARCH
-    ALL_ESAN_SUPPORTED_ARCH
-    SANITIZER_COMMON_SUPPORTED_ARCH)
   list_intersect(SCUDO_SUPPORTED_ARCH
     ALL_SCUDO_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
@@ -475,6 +486,7 @@ if(APPLE)
     SANITIZER_COMMON_SUPPORTED_ARCH)
 
 else()
+  filter_available_targets(CRT_SUPPORTED_ARCH ${ALL_CRT_SUPPORTED_ARCH})
   # Architectures supported by compiler-rt libraries.
   filter_available_targets(SANITIZER_COMMON_SUPPORTED_ARCH
     ${ALL_SANITIZER_COMMON_SUPPORTED_ARCH})
@@ -496,7 +508,6 @@ else()
   filter_available_targets(SAFESTACK_SUPPORTED_ARCH
     ${ALL_SAFESTACK_SUPPORTED_ARCH})
   filter_available_targets(CFI_SUPPORTED_ARCH ${ALL_CFI_SUPPORTED_ARCH})
-  filter_available_targets(ESAN_SUPPORTED_ARCH ${ALL_ESAN_SUPPORTED_ARCH})
   filter_available_targets(SCUDO_SUPPORTED_ARCH ${ALL_SCUDO_SUPPORTED_ARCH})
   filter_available_targets(SCUDO_STANDALONE_SUPPORTED_ARCH ${ALL_SCUDO_STANDALONE_SUPPORTED_ARCH})
   filter_available_targets(XRAY_SUPPORTED_ARCH ${ALL_XRAY_SUPPORTED_ARCH})
@@ -523,13 +534,7 @@ if(COMPILER_RT_SUPPORTED_ARCH)
 endif()
 message(STATUS "Compiler-RT supported architectures: ${COMPILER_RT_SUPPORTED_ARCH}")
 
-if(ANDROID)
-  set(OS_NAME "Android")
-else()
-  set(OS_NAME "${CMAKE_SYSTEM_NAME}")
-endif()
-
-set(ALL_SANITIZERS asan;dfsan;msan;hwasan;tsan;safestack;cfi;esan;scudo;ubsan_minimal)
+set(ALL_SANITIZERS asan;dfsan;msan;hwasan;tsan;safestack;cfi;scudo;ubsan_minimal)
 set(COMPILER_RT_SANITIZERS_TO_BUILD all CACHE STRING
     "sanitizers to build if supported on the target (all;${ALL_SANITIZERS})")
 list_replace(COMPILER_RT_SANITIZERS_TO_BUILD all "${ALL_SANITIZERS}")
@@ -564,6 +569,12 @@ endif()
 
 # TODO: Add builtins support.
 
+if (CRT_SUPPORTED_ARCH AND OS_NAME MATCHES "Linux")
+  set(COMPILER_RT_HAS_CRT TRUE)
+else()
+  set(COMPILER_RT_HAS_CRT FALSE)
+endif()
+
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND DFSAN_SUPPORTED_ARCH AND
     OS_NAME MATCHES "Linux")
   set(COMPILER_RT_HAS_DFSAN TRUE)
@@ -572,7 +583,7 @@ else()
 endif()
 
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND LSAN_SUPPORTED_ARCH AND
-    OS_NAME MATCHES "Darwin|Linux|FreeBSD")
+    OS_NAME MATCHES "Darwin|Linux")
   set(COMPILER_RT_HAS_LSAN TRUE)
 else()
   set(COMPILER_RT_HAS_LSAN FALSE)
@@ -631,13 +642,6 @@ if (COMPILER_RT_HAS_SANITIZER_COMMON AND CFI_SUPPORTED_ARCH)
   set(COMPILER_RT_HAS_CFI TRUE)
 else()
   set(COMPILER_RT_HAS_CFI FALSE)
-endif()
-
-if (COMPILER_RT_HAS_SANITIZER_COMMON AND ESAN_SUPPORTED_ARCH AND
-    OS_NAME MATCHES "Linux|FreeBSD")
-  set(COMPILER_RT_HAS_ESAN TRUE)
-else()
-  set(COMPILER_RT_HAS_ESAN FALSE)
 endif()
 
 #TODO(kostyak): add back Android & Fuchsia when the code settles a bit.

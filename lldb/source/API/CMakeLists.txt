@@ -9,6 +9,10 @@ if(NOT LLDB_DISABLE_PYTHON)
   set(lldb_python_wrapper ${lldb_scripts_dir}/LLDBWrapPython.cpp)
 endif()
 
+if(LLDB_BUILD_FRAMEWORK AND LLVM_EXTERNALIZE_DEBUGINFO)
+  set(LLVM_EXTERNALIZE_DEBUGINFO_EXTENSION framework.dSYM)
+endif()
+
 add_lldb_library(liblldb SHARED
   SBAddress.cpp
   SBAttachInfo.cpp
@@ -34,7 +38,6 @@ add_lldb_library(liblldb SHARED
   SBFrame.cpp
   SBFunction.cpp
   SBHostOS.cpp
-  SBInitializerOptions.cpp
   SBInstruction.cpp
   SBInstructionList.cpp
   SBLanguageRuntime.cpp
@@ -98,6 +101,10 @@ add_lldb_library(liblldb SHARED
     Support
   )
 
+if (MSVC)
+  set_source_files_properties(SBReproducer.cpp PROPERTIES COMPILE_FLAGS /bigobj)
+endif()
+
 if(lldb_python_wrapper)
   add_dependencies(liblldb swig_wrapper)
 
@@ -150,6 +157,10 @@ else()
     PROPERTIES
     OUTPUT_NAME lldb
   )
+endif()
+
+if (NOT LLDB_BUILT_STANDALONE)
+  add_dependencies(liblldb clang-resource-headers)
 endif()
 
 if(LLDB_BUILD_FRAMEWORK)
