@@ -26,38 +26,6 @@ using namespace lld::wasm;
 
 SymbolTable *lld::wasm::Symtab;
 
-static char encodeValType(ValType Type) {
-  switch (Type) {
-  case ValType::I32:
-    return 'i';
-  case ValType::I64:
-    return 'j';
-  case ValType::F32:
-    return 'f';
-  case ValType::F64:
-    return 'd';
-  case ValType::V128:
-    return 'V';
-  case ValType::EXCEPT_REF:
-    return 'e';
-  }
-  llvm_unreachable("invalid wasm type");
-}
-
-static std::string encodeSignature(const WasmSignature &Sig) {
-  std::string S = ":";
-  for (ValType Type : Sig.Returns)
-    S += encodeValType(Type);
-  S += ':';
-  for (ValType Type : Sig.Params)
-    S += encodeValType(Type);
-  return S;
-}
-
-static StringRef getVariantName(StringRef BaseName, const WasmSignature &Sig) {
-  return Saver.save(BaseName + encodeSignature(Sig));
-}
-
 void SymbolTable::addFile(InputFile *File) {
   log("Processing: " + toString(File));
   if (Config->Trace)
@@ -69,6 +37,8 @@ void SymbolTable::addFile(InputFile *File) {
     BitcodeFiles.push_back(F);
   else if (auto *F = dyn_cast<ObjFile>(File))
     ObjectFiles.push_back(F);
+  else if (auto *F = dyn_cast<SharedFile>(File))
+    SharedFiles.push_back(F);
 }
 
 // This function is where all the optimizations of link-time
@@ -88,7 +58,7 @@ void SymbolTable::addCombinedLTOObject() {
     LTO->add(*F);
 
   for (StringRef Filename : LTO->compile()) {
-    auto *Obj = make<ObjFile>(MemoryBufferRef(Filename, "lto.tmp"));
+    auto *Obj = make<ObjFile>(MemoryBufferRef(Filename, "lto.tmp"), "");
     Obj->parse();
     ObjectFiles.push_back(Obj);
   }
@@ -162,7 +132,8 @@ static void reportTypeError(const Symbol *Existing, const InputFile *File,
 // Check the type of new symbol matches that of the symbol is replacing.
 // Returns true if the function types match, false is there is a singature
 // mismatch.
-bool signatureMatches(FunctionSymbol *Existing, const WasmSignature *NewSig) {
+static bool signatureMatches(FunctionSymbol *Existing,
+                             const WasmSignature *NewSig) {
   if (!NewSig)
     return true;
 
@@ -223,7 +194,7 @@ DefinedFunction *SymbolTable::addSyntheticFunction(StringRef Name,
   LLVM_DEBUG(dbgs() << "addSyntheticFunction: " << Name << "\n");
   assert(!find(Name));
   SyntheticFunctions.emplace_back(Function);
-  return replaceSymbol<DefinedFunction>(insert(Name, nullptr).first, Name,
+  return replaceSymbol<DefinedFunction>(insertName(Name).first, Name,
                                         Flags, nullptr, Function);
 }
 
@@ -231,7 +202,7 @@ DefinedData *SymbolTable::addSyntheticDataSymbol(StringRef Name,
                                                  uint32_t Flags) {
   LLVM_DEBUG(dbgs() << "addSyntheticDataSymbol: " << Name << "\n");
   assert(!find(Name));
-  return replaceSymbol<DefinedData>(insert(Name, nullptr).first, Name, Flags);
+  return replaceSymbol<DefinedData>(insertName(Name).first, Name, Flags);
 }
 
 DefinedGlobal *SymbolTable::addSyntheticGlobal(StringRef Name, uint32_t Flags,
@@ -240,7 +211,7 @@ DefinedGlobal *SymbolTable::addSyntheticGlobal(StringRef Name, uint32_t Flags,
                     << "\n");
   assert(!find(Name));
   SyntheticGlobals.emplace_back(Global);
-  return replaceSymbol<DefinedGlobal>(insert(Name, nullptr).first, Name, Flags,
+  return replaceSymbol<DefinedGlobal>(insertName(Name).first, Name, Flags,
                                       nullptr, Global);
 }
 
@@ -474,7 +445,7 @@ void SymbolTable::addLazy(ArchiveFile *File, const Archive::Symbol *Sym) {
 
   Symbol *S;
   bool WasInserted;
-  std::tie(S, WasInserted) = insert(Name, nullptr);
+  std::tie(S, WasInserted) = insertName(Name);
 
   if (WasInserted) {
     replaceSymbol<LazySymbol>(S, Name, 0, File, *Sym);
@@ -514,14 +485,13 @@ bool SymbolTable::addComdat(StringRef Name) {
 bool SymbolTable::getFunctionVariant(Symbol* Sym, const WasmSignature *Sig,
                                      const InputFile *File, Symbol **Out) {
   LLVM_DEBUG(dbgs() << "getFunctionVariant: " << Sym->getName() << " -> "
-                    << getVariantName(Sym->getName(), *Sig)
                     << " " << toString(*Sig) << "\n");
   Symbol *Variant = nullptr;
 
   // Linear search through symbol variants.  Should never be more than two
   // or three entries here.
   auto &Variants = SymVariants[CachedHashStringRef(Sym->getName())];
-  if (Variants.size() == 0)
+  if (Variants.empty())
     Variants.push_back(Sym);
 
   for (Symbol* V : Variants) {
@@ -626,11 +596,12 @@ void SymbolTable::handleSymbolVariants() {
     std::vector<Symbol *> &Variants = Pair.second;
 
 #ifndef NDEBUG
-    dbgs() << "symbol with (" << Variants.size()
-                      << ") variants: " << SymName << "\n";
+    LLVM_DEBUG(dbgs() << "symbol with (" << Variants.size()
+                      << ") variants: " << SymName << "\n");
     for (auto *S: Variants) {
       auto *F = cast<FunctionSymbol>(S);
-      dbgs() << " variant: " + F->getName() << " " << toString(*F->Signature) << "\n";
+      LLVM_DEBUG(dbgs() << " variant: " + F->getName() << " "
+                        << toString(*F->Signature) << "\n");
     }
 #endif
 

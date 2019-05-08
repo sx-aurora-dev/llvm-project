@@ -1730,6 +1730,9 @@ public:
     return isa<Instruction>(V) && classof(cast<Instruction>(V));
   }
 
+  /// Updates profile metadata by scaling it by \p S / \p T.
+  void updateProfWeight(uint64_t S, uint64_t T);
+
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
@@ -2042,6 +2045,10 @@ public:
   void *operator new(size_t s) {
     return User::operator new(s, 3);
   }
+
+  /// Swap the first 2 operands and adjust the mask to preserve the semantics
+  /// of the instruction.
+  void commute();
 
   /// Return true if a shufflevector instruction can be
   /// formed with the specified operands.
@@ -2729,6 +2736,14 @@ public:
   void setIncomingBlock(unsigned i, BasicBlock *BB) {
     assert(BB && "PHI node got a null basic block!");
     block_begin()[i] = BB;
+  }
+
+  /// Replace every incoming basic block \p Old to basic block \p New.
+  void replaceIncomingBlockWith(BasicBlock *Old, BasicBlock *New) {
+    assert(New && Old && "PHI node got a null basic block!");
+    for (unsigned Op = 0, NumOps = getNumOperands(); Op != NumOps; ++Op)
+      if (getIncomingBlock(Op) == Old)
+        setIncomingBlock(Op, New);
   }
 
   /// Add an incoming value to the end of the PHI list

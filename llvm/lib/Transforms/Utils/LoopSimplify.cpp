@@ -48,6 +48,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/DependenceAnalysis.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
@@ -317,7 +318,7 @@ static Loop *separateNestedLoop(Loop *L, BasicBlock *Preheader,
 
   // Split edges to exit blocks from the inner loop, if they emerged in the
   // process of separating the outer one.
-  formDedicatedExitBlocks(L, DT, LI, PreserveLCSSA);
+  formDedicatedExitBlocks(L, DT, LI, nullptr, PreserveLCSSA);
 
   if (PreserveLCSSA) {
     // Fix LCSSA form for L. Some values, which previously were only used inside
@@ -442,9 +443,7 @@ static BasicBlock *insertUniqueBackedgeBlock(Loop *L, BasicBlock *Preheader,
     if (!LoopMD)
       LoopMD = TI->getMetadata(LoopMDKind);
     TI->setMetadata(LoopMDKind, nullptr);
-    for (unsigned Op = 0, e = TI->getNumSuccessors(); Op != e; ++Op)
-      if (TI->getSuccessor(Op) == Header)
-        TI->setSuccessor(Op, BEBlock);
+    TI->replaceSuccessorWith(Header, BEBlock);
   }
   BEBlock->getTerminator()->setMetadata(LoopMDKind, LoopMD);
 
@@ -530,7 +529,7 @@ ReprocessLoop:
   // predecessors that are inside of the loop.  This check guarantees that the
   // loop preheader/header will dominate the exit blocks.  If the exit block has
   // predecessors from outside of the loop, split the edge now.
-  if (formDedicatedExitBlocks(L, DT, LI, PreserveLCSSA))
+  if (formDedicatedExitBlocks(L, DT, LI, nullptr, PreserveLCSSA))
     Changed = true;
 
   // If the header has more than two predecessors at this point (from the
@@ -740,6 +739,7 @@ namespace {
       AU.addPreservedID(LCSSAID);
       AU.addPreserved<DependenceAnalysisWrapperPass>();
       AU.addPreservedID(BreakCriticalEdgesID);  // No critical edges added.
+      AU.addPreserved<BranchProbabilityInfoWrapperPass>();
     }
 
     /// verifyAnalysis() - Verify LoopSimplifyForm's guarantees.
@@ -812,6 +812,12 @@ PreservedAnalyses LoopSimplifyPass::run(Function &F,
   PA.preserve<SCEVAA>();
   PA.preserve<ScalarEvolutionAnalysis>();
   PA.preserve<DependenceAnalysis>();
+  // BPI maps conditional terminators to probabilities, LoopSimplify can insert
+  // blocks, but it does so only by splitting existing blocks and edges. This
+  // results in the interesting property that all new terminators inserted are
+  // unconditional branches which do not appear in BPI. All deletions are
+  // handled via ValueHandle callbacks w/in BPI. 
+  PA.preserve<BranchProbabilityAnalysis>();
   return PA;
 }
 

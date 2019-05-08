@@ -109,19 +109,17 @@ public:
 
     /// Keep track if the entity related to this 'ExceptionInfo' can in princple
     /// throw, if it's unknown or if it won't throw.
-    enum State Behaviour : 2;
+    State Behaviour;
 
     /// Keep track if the entity contains any unknown elements to keep track
     /// of the certainty of decisions and/or correct 'Behaviour' transition
     /// after filtering.
-    bool ContainsUnknown : 1;
+    bool ContainsUnknown;
 
     /// 'ThrownException' is empty if the 'Behaviour' is either 'NotThrowing' or
     /// 'Unknown'.
     Throwables ThrownExceptions;
   };
-  static_assert(sizeof(ExceptionInfo) <= 64u,
-                "size of exceptioninfo shall be at max one cache line");
 
   ExceptionAnalyzer() = default;
 
@@ -131,6 +129,7 @@ public:
   }
 
   ExceptionInfo analyze(const FunctionDecl *Func);
+  ExceptionInfo analyze(const Stmt *Stmt);
 
 private:
   ExceptionInfo
@@ -140,10 +139,16 @@ private:
   throwsException(const Stmt *St, const ExceptionInfo::Throwables &Caught,
                   llvm::SmallSet<const FunctionDecl *, 32> &CallStack);
 
+  ExceptionInfo analyzeImpl(const FunctionDecl *Func);
+  ExceptionInfo analyzeImpl(const Stmt *Stmt);
+
+  template <typename T> ExceptionInfo analyzeDispatch(const T *Node);
+
   bool IgnoreBadAlloc = true;
   llvm::StringSet<> IgnoredExceptions;
   std::map<const FunctionDecl *, ExceptionInfo> FunctionCache;
 };
+
 } // namespace utils
 } // namespace tidy
 } // namespace clang

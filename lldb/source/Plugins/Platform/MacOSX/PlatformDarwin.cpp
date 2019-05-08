@@ -21,9 +21,9 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
-#include "lldb/Host/Symbols.h"
 #include "lldb/Host/XML.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
+#include "lldb/Symbol/LocateSymbolFile.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolFile.h"
 #include "lldb/Symbol/SymbolVendor.h"
@@ -31,6 +31,7 @@
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/ProcessInfo.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/Timer.h"
 #include "llvm/ADT/STLExtras.h"
@@ -45,19 +46,15 @@
 using namespace lldb;
 using namespace lldb_private;
 
-//------------------------------------------------------------------
 /// Default Constructor
-//------------------------------------------------------------------
 PlatformDarwin::PlatformDarwin(bool is_host)
     : PlatformPOSIX(is_host), // This is the local host platform
       m_developer_directory() {}
 
-//------------------------------------------------------------------
 /// Destructor.
 ///
 /// The destructor is virtual since this class is designed to be
 /// inherited from by the plug-in instance.
-//------------------------------------------------------------------
 PlatformDarwin::~PlatformDarwin() {}
 
 FileSpecList PlatformDarwin::LocateExecutableScriptingResources(
@@ -71,8 +68,6 @@ FileSpecList PlatformDarwin::LocateExecutableScriptingResources(
     // precisely that. Ideally, we should have a per-platform list of
     // extensions (".exe", ".app", ".dSYM", ".framework") which should be
     // stripped while leaving "this.binary.file" as-is.
-    ScriptInterpreter *script_interpreter =
-        target->GetDebugger().GetCommandInterpreter().GetScriptInterpreter();
 
     FileSpec module_spec = module.GetFileSpec();
 
@@ -84,7 +79,10 @@ FileSpecList PlatformDarwin::LocateExecutableScriptingResources(
           ObjectFile *objfile = symfile->GetObjectFile();
           if (objfile) {
             FileSpec symfile_spec(objfile->GetFileSpec());
-            if (symfile_spec && FileSystem::Instance().Exists(symfile_spec)) {
+            if (symfile_spec && 
+                strcasestr (symfile_spec.GetPath().c_str(), 
+                        ".dSYM/Contents/Resources/DWARF") != nullptr &&
+                FileSystem::Instance().Exists(symfile_spec)) {
               while (module_spec.GetFilename()) {
                 std::string module_basename(
                     module_spec.GetFilename().GetCString());
@@ -106,6 +104,8 @@ FileSpecList PlatformDarwin::LocateExecutableScriptingResources(
                              ' ', '_');
                 std::replace(module_basename.begin(), module_basename.end(),
                              '-', '_');
+                ScriptInterpreter *script_interpreter =
+                    target->GetDebugger().GetScriptInterpreter();
                 if (script_interpreter &&
                     script_interpreter->IsReservedWord(
                         module_basename.c_str())) {

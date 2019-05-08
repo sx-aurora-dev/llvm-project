@@ -150,10 +150,14 @@ class Parser : public CodeCompletionHandler {
   IdentifierInfo *Ident_language, *Ident_defined_in,
       *Ident_generated_declaration;
 
-  /// C++0x contextual keywords.
+  /// C++11 contextual keywords.
   mutable IdentifierInfo *Ident_final;
   mutable IdentifierInfo *Ident_GNU_final;
   mutable IdentifierInfo *Ident_override;
+
+  // C++2a contextual keywords.
+  mutable IdentifierInfo *Ident_import;
+  mutable IdentifierInfo *Ident_module;
 
   // C++ type trait keywords that can be reverted to identifiers and still be
   // used as type traits.
@@ -246,7 +250,13 @@ class Parser : public CodeCompletionHandler {
       Depth += D;
       AddedLevels += D;
     }
+    void setAddedDepth(unsigned D) {
+      Depth = Depth - AddedLevels + D;
+      AddedLevels = D;
+    }
+  
     unsigned getDepth() const { return Depth; }
+    unsigned getOriginalDepth() const { return Depth - AddedLevels; }
   };
 
   /// Factory object for creating ParsedAttr objects.
@@ -424,7 +434,7 @@ public:
 
   /// ParseTopLevelDecl - Parse one top-level declaration. Returns true if
   /// the EOF was encountered.
-  bool ParseTopLevelDecl(DeclGroupPtrTy &Result);
+  bool ParseTopLevelDecl(DeclGroupPtrTy &Result, bool IsFirstDecl = false);
   bool ParseTopLevelDecl() {
     DeclGroupPtrTy Result;
     return ParseTopLevelDecl(Result);
@@ -789,9 +799,8 @@ private:
     /// Annotation was successful.
     ANK_Success
   };
-  AnnotatedNameKind
-  TryAnnotateName(bool IsAddressOfOperand,
-                  std::unique_ptr<CorrectionCandidateCallback> CCC = nullptr);
+  AnnotatedNameKind TryAnnotateName(bool IsAddressOfOperand,
+                                    CorrectionCandidateCallback *CCC = nullptr);
 
   /// Push a tok::annot_cxxscope token onto the token stream.
   void AnnotateScopeToken(CXXScopeSpec &SS, bool IsNewAnnotation);
@@ -1574,7 +1583,8 @@ private:
   ObjCImplParsingDataRAII *CurParsedObjCImpl;
   void StashAwayMethodOrFunctionBodyTokens(Decl *MDecl);
 
-  DeclGroupPtrTy ParseObjCAtImplementationDeclaration(SourceLocation AtLoc);
+  DeclGroupPtrTy ParseObjCAtImplementationDeclaration(SourceLocation AtLoc,
+                                                      ParsedAttributes &Attrs);
   DeclGroupPtrTy ParseObjCAtEndDeclaration(SourceRange atEnd);
   Decl *ParseObjCAtAliasDeclaration(SourceLocation atLoc);
   Decl *ParseObjCPropertySynthesize(SourceLocation atLoc);
@@ -1680,10 +1690,10 @@ private:
   typedef SmallVector<SourceLocation, 20> CommaLocsTy;
 
   /// ParseExpressionList - Used for C/C++ (argument-)expression-list.
-  bool ParseExpressionList(
-      SmallVectorImpl<Expr *> &Exprs,
-      SmallVectorImpl<SourceLocation> &CommaLocs,
-      llvm::function_ref<void()> Completer = llvm::function_ref<void()>());
+  bool ParseExpressionList(SmallVectorImpl<Expr *> &Exprs,
+                           SmallVectorImpl<SourceLocation> &CommaLocs,
+                           llvm::function_ref<void()> ExpressionStarts =
+                               llvm::function_ref<void()>());
 
   /// ParseSimpleExpressionList - A simple comma-separated list of expressions,
   /// used for misc language extensions.
@@ -2925,6 +2935,8 @@ public:
                           ParsedType ObjectType,
                           SourceLocation *TemplateKWLoc,
                           UnqualifiedId &Result);
+  /// Parses the mapper modifier in map, to, and from clauses.
+  bool parseMapperModifier(OpenMPVarListDataTy &Data);
   /// Parses map-type-modifiers in map clause.
   /// map([ [map-type-modifier[,] [map-type-modifier[,] ...] map-type : ] list)
   /// where, map-type-modifier ::= always | close | mapper(mapper-identifier)
@@ -2994,7 +3006,7 @@ private:
 
   //===--------------------------------------------------------------------===//
   // Modules
-  DeclGroupPtrTy ParseModuleDecl();
+  DeclGroupPtrTy ParseModuleDecl(bool IsFirstDecl);
   Decl *ParseModuleImport(SourceLocation AtLoc);
   bool parseMisplacedModuleImport();
   bool tryParseMisplacedModuleImport() {
