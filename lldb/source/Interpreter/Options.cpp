@@ -24,9 +24,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-//-------------------------------------------------------------------------
 // Options
-//-------------------------------------------------------------------------
 Options::Options() : m_getopt_table() { BuildValidOptionSets(); }
 
 Options::~Options() {}
@@ -1436,9 +1434,10 @@ llvm::Expected<Args> Options::Parse(const Args &args,
     } else {
       error.SetErrorStringWithFormat("invalid option with value '%i'", val);
     }
-    if (error.Fail())
-      return error.ToError();
   }
+
+  if (error.Fail())
+    return error.ToError();
 
   argv.erase(argv.begin(), argv.begin() + OptionParser::GetOptionIndex());
   return ReconstituteArgsAfterParsing(argv, args);

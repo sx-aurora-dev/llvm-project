@@ -143,6 +143,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
@@ -247,6 +248,13 @@ static cl::opt<bool> ClHandleICmpExact("msan-handle-icmp-exact",
        cl::desc("exact handling of relational integer ICmp"),
        cl::Hidden, cl::init(false));
 
+static cl::opt<bool> ClHandleLifetimeIntrinsics(
+    "msan-handle-lifetime-intrinsics",
+    cl::desc(
+        "when possible, poison scoped variables at the beginning of the scope "
+        "(slower, but more precise)"),
+    cl::Hidden, cl::init(true));
+
 // When compiling the Linux kernel, we sometimes see false positives related to
 // MSan being unable to understand that inline assembly calls may initialize
 // local variables.
@@ -304,21 +312,21 @@ static cl::opt<bool> ClWithComdat("msan-with-comdat",
 
 // These options allow to specify custom memory map parameters
 // See MemoryMapParams for details.
-static cl::opt<unsigned long long> ClAndMask("msan-and-mask",
-       cl::desc("Define custom MSan AndMask"),
-       cl::Hidden, cl::init(0));
+static cl::opt<uint64_t> ClAndMask("msan-and-mask",
+                                   cl::desc("Define custom MSan AndMask"),
+                                   cl::Hidden, cl::init(0));
 
-static cl::opt<unsigned long long> ClXorMask("msan-xor-mask",
-       cl::desc("Define custom MSan XorMask"),
-       cl::Hidden, cl::init(0));
+static cl::opt<uint64_t> ClXorMask("msan-xor-mask",
+                                   cl::desc("Define custom MSan XorMask"),
+                                   cl::Hidden, cl::init(0));
 
-static cl::opt<unsigned long long> ClShadowBase("msan-shadow-base",
-       cl::desc("Define custom MSan ShadowBase"),
-       cl::Hidden, cl::init(0));
+static cl::opt<uint64_t> ClShadowBase("msan-shadow-base",
+                                      cl::desc("Define custom MSan ShadowBase"),
+                                      cl::Hidden, cl::init(0));
 
-static cl::opt<unsigned long long> ClOriginBase("msan-origin-base",
-       cl::desc("Define custom MSan OriginBase"),
-       cl::Hidden, cl::init(0));
+static cl::opt<uint64_t> ClOriginBase("msan-origin-base",
+                                      cl::desc("Define custom MSan OriginBase"),
+                                      cl::Hidden, cl::init(0));
 
 static const char *const kMsanModuleCtorName = "msan.module_ctor";
 static const char *const kMsanInitName = "__msan_init";
@@ -1023,6 +1031,9 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       : Shadow(S), Origin(O), OrigIns(I) {}
   };
   SmallVector<ShadowOriginAndInsertPoint, 16> InstrumentationList;
+  bool InstrumentLifetimeStart = ClHandleLifetimeIntrinsics;
+  SmallSet<AllocaInst *, 16> AllocaSet;
+  SmallVector<std::pair<IntrinsicInst *, AllocaInst *>, 16> LifetimeStartList;
   SmallVector<StoreInst *, 16> StoreList;
 
   MemorySanitizerVisitor(Function &F, MemorySanitizer &MS,
@@ -1278,6 +1289,19 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
 
     VAHelper->finalizeInstrumentation();
+
+    // Poison llvm.lifetime.start intrinsics, if we haven't fallen back to
+    // instrumenting only allocas.
+    if (InstrumentLifetimeStart) {
+      for (auto Item : LifetimeStartList) {
+        instrumentAlloca(*Item.second, Item.first);
+        AllocaSet.erase(Item.second);
+      }
+    }
+    // Poison the allocas for which we didn't instrument the corresponding
+    // lifetime intrinsics.
+    for (AllocaInst *AI : AllocaSet)
+      instrumentAlloca(*AI);
 
     bool InstrumentWithCalls = ClInstrumentationWithCallThreshold >= 0 &&
                                InstrumentationList.size() + StoreList.size() >
@@ -2536,6 +2560,17 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     return false;
   }
 
+  void handleLifetimeStart(IntrinsicInst &I) {
+    if (!PoisonStack)
+      return;
+    DenseMap<Value *, AllocaInst *> AllocaForValue;
+    AllocaInst *AI =
+        llvm::findAllocaForValue(I.getArgOperand(1), AllocaForValue);
+    if (!AI)
+      InstrumentLifetimeStart = false;
+    LifetimeStartList.push_back(std::make_pair(&I, AI));
+  }
+
   void handleBswap(IntrinsicInst &I) {
     IRBuilder<> IRB(&I);
     Value *Op = I.getArgOperand(0);
@@ -2928,9 +2963,32 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     return true;
   }
 
+  // Instrument BMI / BMI2 intrinsics.
+  // All of these intrinsics are Z = I(X, Y)
+  // where the types of all operands and the result match, and are either i32 or i64.
+  // The following instrumentation happens to work for all of them:
+  //   Sz = I(Sx, Y) | (sext (Sy != 0))
+  void handleBmiIntrinsic(IntrinsicInst &I) {
+    IRBuilder<> IRB(&I);
+    Type *ShadowTy = getShadowTy(&I);
+
+    // If any bit of the mask operand is poisoned, then the whole thing is.
+    Value *SMask = getShadow(&I, 1);
+    SMask = IRB.CreateSExt(IRB.CreateICmpNE(SMask, getCleanShadow(ShadowTy)),
+                           ShadowTy);
+    // Apply the same intrinsic to the shadow of the first operand.
+    Value *S = IRB.CreateCall(I.getCalledFunction(),
+                              {getShadow(&I, 0), I.getOperand(1)});
+    S = IRB.CreateOr(SMask, S);
+    setShadow(&I, S);
+    setOriginForNaryOp(I);
+  }
 
   void visitIntrinsicInst(IntrinsicInst &I) {
     switch (I.getIntrinsicID()) {
+    case Intrinsic::lifetime_start:
+      handleLifetimeStart(I);
+      break;
     case Intrinsic::bswap:
       handleBswap(I);
       break;
@@ -3144,6 +3202,17 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       handleVectorComparePackedIntrinsic(I);
       break;
 
+    case Intrinsic::x86_bmi_bextr_32:
+    case Intrinsic::x86_bmi_bextr_64:
+    case Intrinsic::x86_bmi_bzhi_32:
+    case Intrinsic::x86_bmi_bzhi_64:
+    case Intrinsic::x86_bmi_pdep_32:
+    case Intrinsic::x86_bmi_pdep_64:
+    case Intrinsic::x86_bmi_pext_32:
+    case Intrinsic::x86_bmi_pext_64:
+      handleBmiIntrinsic(I);
+      break;
+
     case Intrinsic::is_constant:
       // The result of llvm.is.constant() is always defined.
       setShadow(&I, getCleanShadow(&I));
@@ -3348,7 +3417,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
                                                 StackDescription.str());
   }
 
-  void instrumentAllocaUserspace(AllocaInst &I, IRBuilder<> &IRB, Value *Len) {
+  void poisonAllocaUserspace(AllocaInst &I, IRBuilder<> &IRB, Value *Len) {
     if (PoisonStack && ClPoisonStackWithCall) {
       IRB.CreateCall(MS.MsanPoisonStackFn,
                      {IRB.CreatePointerCast(&I, IRB.getInt8PtrTy()), Len});
@@ -3370,7 +3439,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
   }
 
-  void instrumentAllocaKmsan(AllocaInst &I, IRBuilder<> &IRB, Value *Len) {
+  void poisonAllocaKmsan(AllocaInst &I, IRBuilder<> &IRB, Value *Len) {
     Value *Descr = getLocalVarDescription(I);
     if (PoisonStack) {
       IRB.CreateCall(MS.MsanPoisonAllocaFn,
@@ -3382,10 +3451,10 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
   }
 
-  void visitAllocaInst(AllocaInst &I) {
-    setShadow(&I, getCleanShadow(&I));
-    setOrigin(&I, getCleanOrigin());
-    IRBuilder<> IRB(I.getNextNode());
+  void instrumentAlloca(AllocaInst &I, Instruction *InsPoint = nullptr) {
+    if (!InsPoint)
+      InsPoint = &I;
+    IRBuilder<> IRB(InsPoint->getNextNode());
     const DataLayout &DL = F.getParent()->getDataLayout();
     uint64_t TypeSize = DL.getTypeAllocSize(I.getAllocatedType());
     Value *Len = ConstantInt::get(MS.IntptrTy, TypeSize);
@@ -3393,9 +3462,17 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       Len = IRB.CreateMul(Len, I.getArraySize());
 
     if (MS.CompileKernel)
-      instrumentAllocaKmsan(I, IRB, Len);
+      poisonAllocaKmsan(I, IRB, Len);
     else
-      instrumentAllocaUserspace(I, IRB, Len);
+      poisonAllocaUserspace(I, IRB, Len);
+  }
+
+  void visitAllocaInst(AllocaInst &I) {
+    setShadow(&I, getCleanShadow(&I));
+    setOrigin(&I, getCleanOrigin());
+    // We'll get to this alloca later unless it's poisoned at the corresponding
+    // llvm.lifetime.start.
+    AllocaSet.insert(&I);
   }
 
   void visitSelectInst(SelectInst& I) {

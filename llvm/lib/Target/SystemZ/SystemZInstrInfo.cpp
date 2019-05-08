@@ -1188,7 +1188,7 @@ MachineInstr *SystemZInstrInfo::foldMemoryOperandImpl(
   // MVCs that turn out to be redundant.
   if (OpNum == 0 && MI.hasOneMemOperand()) {
     MachineMemOperand *MMO = *MI.memoperands_begin();
-    if (MMO->getSize() == Size && !MMO->isVolatile()) {
+    if (MMO->getSize() == Size && !MMO->isVolatile() && !MMO->isAtomic()) {
       // Handle conversion of loads.
       if (isSimpleBD12Move(&MI, SystemZII::SimpleBDXLoad)) {
         return BuildMI(*InsertPt->getParent(), InsertPt, MI.getDebugLoc(),
@@ -1782,7 +1782,8 @@ void SystemZInstrInfo::loadImmediate(MachineBasicBlock &MBB,
 }
 
 bool SystemZInstrInfo::
-areMemAccessesTriviallyDisjoint(MachineInstr &MIa, MachineInstr &MIb,
+areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                const MachineInstr &MIb,
                                 AliasAnalysis *AA) const {
 
   if (!MIa.hasOneMemOperand() || !MIb.hasOneMemOperand())

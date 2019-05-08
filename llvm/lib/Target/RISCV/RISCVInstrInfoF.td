@@ -206,6 +206,9 @@ def           : FPUnaryOpDynFrmAlias<FCVT_S_LU, "fcvt.s.lu", FPR32, GPR>;
 //===----------------------------------------------------------------------===//
 
 let Predicates = [HasStdExtF] in {
+def : InstAlias<"flw $rd, (${rs1})",  (FLW FPR32:$rd,  GPR:$rs1, 0), 0>;
+def : InstAlias<"fsw $rs2, (${rs1})", (FSW FPR32:$rs2, GPR:$rs1, 0), 0>;
+
 def : InstAlias<"fmv.s $rd, $rs",  (FSGNJ_S  FPR32:$rd, FPR32:$rs, FPR32:$rs)>;
 def : InstAlias<"fabs.s $rd, $rs", (FSGNJX_S FPR32:$rd, FPR32:$rs, FPR32:$rs)>;
 def : InstAlias<"fneg.s $rd, $rs", (FSGNJN_S FPR32:$rd, FPR32:$rs, FPR32:$rs)>;
@@ -320,6 +323,10 @@ def : PatFpr32Fpr32<setole, FLE_S>;
 // Define pattern expansions for setcc operations which aren't directly
 // handled by a RISC-V instruction and aren't expanded in the SelectionDAG
 // Legalizer.
+
+def : Pat<(seto FPR32:$rs1, FPR32:$rs2),
+          (AND (FEQ_S FPR32:$rs1, FPR32:$rs1),
+               (FEQ_S FPR32:$rs2, FPR32:$rs2))>;
 
 def : Pat<(setuo FPR32:$rs1, FPR32:$rs2),
           (SLTIU (AND (FEQ_S FPR32:$rs1, FPR32:$rs1),

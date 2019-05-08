@@ -30,10 +30,16 @@ namespace lld {
 namespace coff {
 
 SectionChunk::SectionChunk(ObjFile *F, const coff_section *H)
-    : Chunk(SectionKind), Repl(this), Header(H), File(F),
-      Relocs(File->getCOFFObj()->getRelocations(Header)) {
+    : Chunk(SectionKind), File(F), Header(H), Repl(this) {
+  // Initialize Relocs.
+  setRelocs(File->getCOFFObj()->getRelocations(Header));
+
   // Initialize SectionName.
-  File->getCOFFObj()->getSectionName(Header, SectionName);
+  StringRef SectionName;
+  if (Expected<StringRef> E = File->getCOFFObj()->getSectionName(Header))
+    SectionName = *E;
+  SectionNameData = SectionName.data();
+  SectionNameSize = SectionName.size();
 
   Alignment = Header->getAlignment();
 
@@ -44,21 +50,10 @@ SectionChunk::SectionChunk(ObjFile *F, const coff_section *H)
   Live = !Config->DoGC || !isCOMDAT();
 }
 
-// Initialize the RelocTargets vector, to allow redirecting certain relocations
-// to a thunk instead of the actual symbol the relocation's symbol table index
-// indicates.
-void SectionChunk::readRelocTargets() {
-  assert(RelocTargets.empty());
-  RelocTargets.reserve(Relocs.size());
-  for (const coff_relocation &Rel : Relocs)
-    RelocTargets.push_back(File->getSymbol(Rel.SymbolTableIndex));
-}
-
-// Reset RelocTargets to their original targets before thunks were added.
-void SectionChunk::resetRelocTargets() {
-  for (size_t I = 0, E = Relocs.size(); I < E; ++I)
-    RelocTargets[I] = File->getSymbol(Relocs[I].SymbolTableIndex);
-}
+// SectionChunk is one of the most frequently allocated classes, so it is
+// important to keep it as compact as possible. As of this writing, the number
+// below is the size of this class on x64 platforms.
+static_assert(sizeof(SectionChunk) <= 120, "SectionChunk grew unexpectedly");
 
 static void add16(uint8_t *P, int16_t V) { write16le(P, read16le(P) + V); }
 static void add32(uint8_t *P, int32_t V) { write32le(P, read32le(P) + V); }
@@ -353,8 +348,8 @@ void SectionChunk::writeTo(uint8_t *Buf) const {
 
   // Apply relocations.
   size_t InputSize = getSize();
-  for (size_t I = 0, E = Relocs.size(); I < E; I++) {
-    const coff_relocation &Rel = Relocs[I];
+  for (size_t I = 0, E = RelocsSize; I < E; I++) {
+    const coff_relocation &Rel = RelocsData[I];
 
     // Check for an invalid relocation offset. This check isn't perfect, because
     // we don't have the relocation size, which is only known after checking the
@@ -367,9 +362,8 @@ void SectionChunk::writeTo(uint8_t *Buf) const {
 
     uint8_t *Off = Buf + OutputSectionOff + Rel.VirtualAddress;
 
-    // Use the potentially remapped Symbol instead of the one that the
-    // relocation points to.
-    auto *Sym = dyn_cast_or_null<Defined>(RelocTargets[I]);
+    auto *Sym =
+        dyn_cast_or_null<Defined>(File->getSymbol(Rel.SymbolTableIndex));
 
     // Get the output section of the symbol for this relocation.  The output
     // section is needed to compute SECREL and SECTION relocations used in debug
@@ -411,7 +405,11 @@ void SectionChunk::writeTo(uint8_t *Buf) const {
 }
 
 void SectionChunk::addAssociative(SectionChunk *Child) {
-  AssocChildren.push_back(Child);
+  // Insert this child at the head of the list.
+  assert(Child->AssocChildren == nullptr &&
+         "associated sections cannot have their own associated children");
+  Child->AssocChildren = AssocChildren;
+  AssocChildren = Child;
 }
 
 static uint8_t getBaserelType(const coff_relocation &Rel) {
@@ -444,14 +442,12 @@ static uint8_t getBaserelType(const coff_relocation &Rel) {
 // fixed by the loader if load-time relocation is needed.
 // Only called when base relocation is enabled.
 void SectionChunk::getBaserels(std::vector<Baserel> *Res) {
-  for (size_t I = 0, E = Relocs.size(); I < E; I++) {
-    const coff_relocation &Rel = Relocs[I];
+  for (size_t I = 0, E = RelocsSize; I < E; I++) {
+    const coff_relocation &Rel = RelocsData[I];
     uint8_t Ty = getBaserelType(Rel);
     if (Ty == IMAGE_REL_BASED_ABSOLUTE)
       continue;
-    // Use the potentially remapped Symbol instead of the one that the
-    // relocation points to.
-    Symbol *Target = RelocTargets[I];
+    Symbol *Target = File->getSymbol(Rel.SymbolTableIndex);
     if (!Target || isa<DefinedAbsolute>(Target))
       continue;
     Res->emplace_back(RVA + Rel.VirtualAddress, Ty);
@@ -543,7 +539,7 @@ static int getRuntimePseudoRelocSize(uint16_t Type) {
 // imported from another DLL).
 void SectionChunk::getRuntimePseudoRelocs(
     std::vector<RuntimePseudoReloc> &Res) {
-  for (const coff_relocation &Rel : Relocs) {
+  for (const coff_relocation &Rel : getRelocs()) {
     auto *Target =
         dyn_cast_or_null<Defined>(File->getSymbol(Rel.SymbolTableIndex));
     if (!Target || !Target->IsRuntimePseudoReloc)
@@ -592,6 +588,40 @@ ArrayRef<uint8_t> SectionChunk::getContents() const {
   ArrayRef<uint8_t> A;
   File->getCOFFObj()->getSectionContents(Header, A);
   return A;
+}
+
+ArrayRef<uint8_t> SectionChunk::consumeDebugMagic() {
+  assert(isCodeView());
+  return consumeDebugMagic(getContents(), getSectionName());
+}
+
+ArrayRef<uint8_t> SectionChunk::consumeDebugMagic(ArrayRef<uint8_t> Data,
+                                                  StringRef SectionName) {
+  if (Data.empty())
+    return {};
+
+  // First 4 bytes are section magic.
+  if (Data.size() < 4)
+    fatal("the section is too short: " + SectionName);
+
+  if (!SectionName.startswith(".debug$"))
+    fatal("invalid section: " + SectionName);
+
+  unsigned Magic = support::endian::read32le(Data.data());
+  unsigned ExpectedMagic = SectionName == ".debug$H"
+                               ? DEBUG_HASHES_SECTION_MAGIC
+                               : DEBUG_SECTION_MAGIC;
+  if (Magic != ExpectedMagic)
+    fatal("section: " + SectionName + " has an invalid magic: " + Twine(Magic));
+  return Data.slice(4);
+}
+
+SectionChunk *SectionChunk::findByName(ArrayRef<SectionChunk *> Sections,
+                                       StringRef Name) {
+  for (SectionChunk *C : Sections)
+    if (C->getSectionName() == Name)
+      return C;
+  return nullptr;
 }
 
 void SectionChunk::replace(SectionChunk *Other) {
