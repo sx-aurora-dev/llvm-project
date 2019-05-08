@@ -540,6 +540,8 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_template_template_args", "201611L");
 
   // C++20 features.
+  if (LangOpts.CPlusPlus2a)
+    Builder.defineMacro("__cpp_conditional_explicit", "201806L");
   if (LangOpts.Char8)
     Builder.defineMacro("__cpp_char8_t", "201811L");
   Builder.defineMacro("__cpp_impl_destroying_delete", "201806L");
@@ -547,7 +549,7 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
   // TS features.
   if (LangOpts.ConceptsTS)
     Builder.defineMacro("__cpp_experimental_concepts", "1L");
-  if (LangOpts.CoroutinesTS)
+  if (LangOpts.Coroutines)
     Builder.defineMacro("__cpp_coroutines", "201703L");
 }
 
@@ -830,7 +832,8 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   DefineFmt("__UINTPTR", TI.getUIntPtrType(), TI, Builder);
   DefineTypeWidth("__UINTPTR_WIDTH__", TI.getUIntPtrType(), TI, Builder);
 
-  DefineFloatMacros(Builder, "FLT16", &TI.getHalfFormat(), "F16");
+  if (TI.hasFloat16Type())
+    DefineFloatMacros(Builder, "FLT16", &TI.getHalfFormat(), "F16");
   DefineFloatMacros(Builder, "FLT", &TI.getFloatFormat(), "F");
   DefineFloatMacros(Builder, "DBL", &TI.getDoubleFormat(), "");
   DefineFloatMacros(Builder, "LDBL", &TI.getLongDoubleFormat(), "L");
@@ -1054,6 +1057,12 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   // informs the proper CUDA headers of this choice.
   if (LangOpts.CUDADeviceApproxTranscendentals || LangOpts.FastMath) {
     Builder.defineMacro("__CLANG_CUDA_APPROX_TRANSCENDENTALS__");
+  }
+
+  // Define a macro indicating that the source file is being compiled with a
+  // SYCL device compiler which doesn't produce host binary.
+  if (LangOpts.SYCLIsDevice) {
+    Builder.defineMacro("__SYCL_DEVICE_ONLY__", "1");
   }
 
   // OpenCL definitions.

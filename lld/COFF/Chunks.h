@@ -50,7 +50,7 @@ const uint32_t TypeMask = 0x000000E0;
 // doesn't even have actual data (if common or bss).
 class Chunk {
 public:
-  enum Kind { SectionKind, OtherKind };
+  enum Kind : uint8_t { SectionKind, OtherKind };
   Kind kind() const { return ChunkKind; }
   virtual ~Chunk() = default;
 
@@ -62,13 +62,6 @@ public:
   // of other chunks for relocations, you need to set them properly
   // before calling this function.
   virtual void writeTo(uint8_t *Buf) const {}
-
-  // Called by the writer once before assigning addresses and writing
-  // the output.
-  virtual void readRelocTargets() {}
-
-  // Called if restarting thunk addition.
-  virtual void resetRelocTargets() {}
 
   // Called by the writer after an RVA is assigned, but before calling
   // getSize().
@@ -108,10 +101,18 @@ public:
   // The alignment of this chunk. The writer uses the value.
   uint32_t Alignment = 1;
 
+  virtual bool isHotPatchable() const { return false; }
+
 protected:
   Chunk(Kind K = OtherKind) : ChunkKind(K) {}
   const Kind ChunkKind;
 
+public:
+  // Whether this section needs to be kept distinct from other sections during
+  // ICF. This is set by the driver using address-significance tables.
+  bool KeepUnique = false;
+
+protected:
   // The RVA of this chunk in the output. The writer sets a value.
   uint64_t RVA = 0;
 
@@ -121,10 +122,6 @@ protected:
 public:
   // The offset from beginning of the output section. The writer sets a value.
   uint64_t OutputSectionOff = 0;
-
-  // Whether this section needs to be kept distinct from other sections during
-  // ICF. This is set by the driver using address-significance tables.
-  bool KeepUnique = false;
 };
 
 // A chunk corresponding a section of an input file.
@@ -151,14 +148,14 @@ public:
 
   SectionChunk(ObjFile *File, const coff_section *Header);
   static bool classof(const Chunk *C) { return C->kind() == SectionKind; }
-  void readRelocTargets() override;
-  void resetRelocTargets() override;
   size_t getSize() const override { return Header->SizeOfRawData; }
   ArrayRef<uint8_t> getContents() const;
   void writeTo(uint8_t *Buf) const override;
   bool hasData() const override;
   uint32_t getOutputCharacteristics() const override;
-  StringRef getSectionName() const override { return SectionName; }
+  StringRef getSectionName() const override {
+    return StringRef(SectionNameData, SectionNameSize);
+  }
   void getBaserels(std::vector<Baserel> *Res) override;
   bool isCOMDAT() const;
   void applyRelX64(uint8_t *Off, uint16_t Type, OutputSection *OS, uint64_t S,
@@ -185,25 +182,91 @@ public:
   // True if this is a codeview debug info chunk. These will not be laid out in
   // the image. Instead they will end up in the PDB, if one is requested.
   bool isCodeView() const {
-    return SectionName == ".debug" || SectionName.startswith(".debug$");
+    return getSectionName() == ".debug" || getSectionName().startswith(".debug$");
   }
 
   // True if this is a DWARF debug info or exception handling chunk.
   bool isDWARF() const {
-    return SectionName.startswith(".debug_") || SectionName == ".eh_frame";
+    return getSectionName().startswith(".debug_") || getSectionName() == ".eh_frame";
   }
 
   // Allow iteration over the bodies of this chunk's relocated symbols.
   llvm::iterator_range<symbol_iterator> symbols() const {
-    return llvm::make_range(symbol_iterator(File, Relocs.begin()),
-                            symbol_iterator(File, Relocs.end()));
+    return llvm::make_range(symbol_iterator(File, RelocsData),
+                            symbol_iterator(File, RelocsData + RelocsSize));
   }
 
+  ArrayRef<coff_relocation> getRelocs() const {
+    return llvm::makeArrayRef(RelocsData, RelocsSize);
+  }
+
+  // Reloc setter used by ARM range extension thunk insertion.
+  void setRelocs(ArrayRef<coff_relocation> NewRelocs) {
+    RelocsData = NewRelocs.data();
+    RelocsSize = NewRelocs.size();
+    assert(RelocsSize == NewRelocs.size() && "reloc size truncation");
+  }
+
+  // Single linked list iterator for associated comdat children.
+  class AssociatedIterator
+      : public llvm::iterator_facade_base<
+            AssociatedIterator, std::forward_iterator_tag, SectionChunk> {
+  public:
+    AssociatedIterator() = default;
+    AssociatedIterator(SectionChunk *Head) : Cur(Head) {}
+    AssociatedIterator &operator=(const AssociatedIterator &R) {
+      Cur = R.Cur;
+      return *this;
+    }
+    bool operator==(const AssociatedIterator &R) const { return Cur == R.Cur; }
+    const SectionChunk &operator*() const { return *Cur; }
+    SectionChunk &operator*() { return *Cur; }
+    AssociatedIterator &operator++() {
+      Cur = Cur->AssocChildren;
+      return *this;
+    }
+
+  private:
+    SectionChunk *Cur = nullptr;
+  };
+
   // Allow iteration over the associated child chunks for this section.
-  ArrayRef<SectionChunk *> children() const { return AssocChildren; }
+  llvm::iterator_range<AssociatedIterator> children() const {
+    return llvm::make_range(AssociatedIterator(AssocChildren),
+                            AssociatedIterator(nullptr));
+  }
 
   // The section ID this chunk belongs to in its Obj.
   uint32_t getSectionNumber() const;
+
+  ArrayRef<uint8_t> consumeDebugMagic();
+
+  static ArrayRef<uint8_t> consumeDebugMagic(ArrayRef<uint8_t> Data,
+                                             StringRef SectionName);
+
+  static SectionChunk *findByName(ArrayRef<SectionChunk *> Sections,
+                                  StringRef Name);
+
+  bool isHotPatchable() const override { return File->HotPatchable; }
+
+  // The file that this chunk was created from.
+  ObjFile *File;
+
+  // Pointer to the COFF section header in the input file.
+  const coff_section *Header;
+
+  // The COMDAT leader symbol if this is a COMDAT chunk.
+  DefinedRegular *Sym = nullptr;
+
+  // The CRC of the contents as described in the COFF spec 4.5.5.
+  // Auxiliary Format 5: Section Definitions. Used for ICF.
+  uint32_t Checksum = 0;
+
+  // Used by the garbage collector.
+  bool Live;
+
+  // The COMDAT selection if this is a COMDAT chunk.
+  llvm::COFF::COMDATType Selection = (llvm::COFF::COMDATType)0;
 
   // A pointer pointing to a replacement for this chunk.
   // Initially it points to "this" object. If this chunk is merged
@@ -211,37 +274,21 @@ public:
   // and this chunk is considered as dead.
   SectionChunk *Repl;
 
-  // The CRC of the contents as described in the COFF spec 4.5.5.
-  // Auxiliary Format 5: Section Definitions. Used for ICF.
-  uint32_t Checksum = 0;
-
-  const coff_section *Header;
-
-  // The file that this chunk was created from.
-  ObjFile *File;
-
-  // The COMDAT leader symbol if this is a COMDAT chunk.
-  DefinedRegular *Sym = nullptr;
-
-  // The COMDAT selection if this is a COMDAT chunk.
-  llvm::COFF::COMDATType Selection = (llvm::COFF::COMDATType)0;
-
-  ArrayRef<coff_relocation> Relocs;
-
-  // Used by the garbage collector.
-  bool Live;
-
-  // When inserting a thunk, we need to adjust a relocation to point to
-  // the thunk instead of the actual original target Symbol.
-  std::vector<Symbol *> RelocTargets;
-
 private:
-  StringRef SectionName;
-  std::vector<SectionChunk *> AssocChildren;
+  SectionChunk *AssocChildren = nullptr;
 
   // Used for ICF (Identical COMDAT Folding)
   void replace(SectionChunk *Other);
   uint32_t Class[2] = {0, 0};
+
+  // Relocations for this section. Size is stored below.
+  const coff_relocation *RelocsData;
+
+  // Section name string. Size is stored below.
+  const char *SectionNameData;
+
+  uint32_t RelocsSize = 0;
+  uint32_t SectionNameSize = 0;
 };
 
 // This class is used to implement an lld-specific feature (not implemented in
@@ -321,6 +368,8 @@ public:
   size_t getSize() const override { return sizeof(ImportThunkX86); }
   void writeTo(uint8_t *Buf) const override;
 
+  bool isHotPatchable() const override { return true; }
+
 private:
   Defined *ImpSymbol;
 };
@@ -331,6 +380,8 @@ public:
   size_t getSize() const override { return sizeof(ImportThunkX86); }
   void getBaserels(std::vector<Baserel> *Res) override;
   void writeTo(uint8_t *Buf) const override;
+
+  bool isHotPatchable() const override { return true; }
 
 private:
   Defined *ImpSymbol;
@@ -343,6 +394,8 @@ public:
   void getBaserels(std::vector<Baserel> *Res) override;
   void writeTo(uint8_t *Buf) const override;
 
+  bool isHotPatchable() const override { return true; }
+
 private:
   Defined *ImpSymbol;
 };
@@ -352,6 +405,8 @@ public:
   explicit ImportThunkChunkARM64(Defined *S) : ImpSymbol(S) {}
   size_t getSize() const override { return sizeof(ImportThunkARM64); }
   void writeTo(uint8_t *Buf) const override;
+
+  bool isHotPatchable() const override { return true; }
 
 private:
   Defined *ImpSymbol;

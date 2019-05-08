@@ -92,11 +92,10 @@ add_llvm_target(AMDGPUCodeGen
   R600RegisterInfo.cpp
   SIAddIMGInit.cpp
   SIAnnotateControlFlow.cpp
-  SIDebuggerInsertNops.cpp
   SIFixSGPRCopies.cpp
   SIFixupVectorISel.cpp
   SIFixVGPRCopies.cpp
-  SIFixWWMLiveness.cpp
+  SIPreAllocateWWMRegs.cpp
   SIFoldOperands.cpp
   SIFormMemoryClauses.cpp
   SIFrameLowering.cpp
@@ -117,6 +116,8 @@ add_llvm_target(AMDGPUCodeGen
   SIShrinkInstructions.cpp
   SIWholeQuadMode.cpp
   GCNILPSched.cpp
+  GCNRegBankReassign.cpp
+  GCNNSAReassign.cpp
   GCNDPPCombine.cpp
   SIModeRegister.cpp
   )

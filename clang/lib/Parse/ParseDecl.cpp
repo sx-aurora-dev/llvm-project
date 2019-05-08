@@ -1734,7 +1734,8 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
 /// [C++11] attribute-specifier-seq decl-specifier-seq[opt]
 ///             init-declarator-list ';'
 ///[C90/C++]init-declarator-list ';'                             [TODO]
-/// [OMP]   threadprivate-directive                              [TODO]
+/// [OMP]   threadprivate-directive
+/// [OMP]   allocate-directive                                   [TODO]
 ///
 ///       for-range-declaration: [C++11 6.5p1: stmt.ranged]
 ///         attribute-specifier-seq[opt] type-specifier-seq declarator
@@ -2332,25 +2333,27 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
 
     InitializerScopeRAII InitScope(*this, D, ThisDecl);
 
-    llvm::function_ref<void()> ExprListCompleter;
     auto ThisVarDecl = dyn_cast_or_null<VarDecl>(ThisDecl);
-    auto ConstructorCompleter = [&, ThisVarDecl] {
+    auto RunSignatureHelp = [&]() {
       QualType PreferredType = Actions.ProduceConstructorSignatureHelp(
           getCurScope(), ThisVarDecl->getType()->getCanonicalTypeInternal(),
           ThisDecl->getLocation(), Exprs, T.getOpenLocation());
       CalledSignatureHelp = true;
-      Actions.CodeCompleteExpression(getCurScope(), PreferredType);
+      return PreferredType;
     };
+    auto SetPreferredType = [&] {
+      PreferredType.enterFunctionArgument(Tok.getLocation(), RunSignatureHelp);
+    };
+
+    llvm::function_ref<void()> ExpressionStarts;
     if (ThisVarDecl) {
       // ParseExpressionList can sometimes succeed even when ThisDecl is not
       // VarDecl. This is an error and it is reported in a call to
       // Actions.ActOnInitializerError(). However, we call
-      // ProduceConstructorSignatureHelp only on VarDecls, falling back to
-      // default completer in other cases.
-      ExprListCompleter = ConstructorCompleter;
+      // ProduceConstructorSignatureHelp only on VarDecls.
+      ExpressionStarts = SetPreferredType;
     }
-
-    if (ParseExpressionList(Exprs, CommaLocs, ExprListCompleter)) {
+    if (ParseExpressionList(Exprs, CommaLocs, ExpressionStarts)) {
       if (ThisVarDecl && PP.isCodeCompletionReached() && !CalledSignatureHelp) {
         Actions.ProduceConstructorSignatureHelp(
             getCurScope(), ThisVarDecl->getType()->getCanonicalTypeInternal(),
@@ -2439,12 +2442,12 @@ void Parser::ParseSpecifierQualifierList(DeclSpec &DS, AccessSpecifier AS,
       Diag(DS.getInlineSpecLoc(), diag::err_typename_invalid_functionspec);
     if (DS.isVirtualSpecified())
       Diag(DS.getVirtualSpecLoc(), diag::err_typename_invalid_functionspec);
-    if (DS.isExplicitSpecified())
+    if (DS.hasExplicitSpecifier())
       Diag(DS.getExplicitSpecLoc(), diag::err_typename_invalid_functionspec);
     DS.ClearFunctionSpecs();
   }
 
-  // Issue diagnostic and remove constexpr specfier if present.
+  // Issue diagnostic and remove constexpr specifier if present.
   if (DS.isConstexprSpecified() && DSC != DeclSpecContext::DSC_condition) {
     Diag(DS.getConstexprSpecLoc(), diag::err_typename_invalid_constexpr);
     DS.ClearConstexprSpec();
@@ -2646,6 +2649,9 @@ bool Parser::ParseImplicitInt(DeclSpec &DS, CXXScopeSpec *SS,
     case tok::semi:
       // This looks like a variable or function declaration. The type is
       // probably missing. We're done parsing decl-specifiers.
+      // But only if we are not in a function prototype scope.
+      if (getCurScope()->isFunctionPrototypeScope())
+        break;
       if (SS)
         AnnotateScopeToken(*SS, /*IsNewAnnotation*/false);
       return false;
@@ -2851,7 +2857,7 @@ Parser::DiagnoseMissingSemiAfterTagDefinition(DeclSpec &DS, AccessSpecifier AS,
       IdentifierInfo *Name = AfterScope.getIdentifierInfo();
       Sema::NameClassification Classification = Actions.ClassifyName(
           getCurScope(), SS, Name, AfterScope.getLocation(), Next,
-          /*IsAddressOfOperand*/false);
+          /*IsAddressOfOperand=*/false, /*CCC=*/nullptr);
       switch (Classification.getKind()) {
       case Sema::NC_Error:
         SkipMalformedDecl();
@@ -2959,8 +2965,12 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
   while (1) {
     bool isInvalid = false;
     bool isStorageClass = false;
+    bool isAlreadyConsumed = false;
     const char *PrevSpec = nullptr;
     unsigned DiagID = 0;
+
+    // This value need to be set when isAlreadyConsumed is set to true.
+    SourceLocation RangeEnd;
 
     // HACK: MSVC doesn't consider _Atomic to be a keyword and its STL
     // implementation for VS2013 uses _Atomic as an identifier for one of the
@@ -3512,9 +3522,34 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
         isInvalid = DS.setFunctionSpecVirtual(Loc, PrevSpec, DiagID);
       }
       break;
-    case tok::kw_explicit:
-      isInvalid = DS.setFunctionSpecExplicit(Loc, PrevSpec, DiagID);
+    case tok::kw_explicit: {
+      SourceLocation ExplicitLoc = Loc;
+      SourceLocation CloseParenLoc;
+      ExplicitSpecifier ExplicitSpec(nullptr, ExplicitSpecKind::ResolvedTrue);
+      isAlreadyConsumed = true;
+      RangeEnd = ExplicitLoc;
+      ConsumeToken(); // kw_explicit
+      if (Tok.is(tok::l_paren)) {
+        if (getLangOpts().CPlusPlus2a) {
+          ExprResult ExplicitExpr(static_cast<Expr *>(nullptr));
+          BalancedDelimiterTracker Tracker(*this, tok::l_paren);
+          Tracker.consumeOpen();
+          ExplicitExpr = ParseConstantExpression();
+          RangeEnd = Tok.getLocation();
+          if (ExplicitExpr.isUsable()) {
+            CloseParenLoc = Tok.getLocation();
+            Tracker.consumeClose();
+            ExplicitSpec =
+                Actions.ActOnExplicitBoolSpecifier(ExplicitExpr.get());
+          } else
+            Tracker.skipToEnd();
+        } else
+          Diag(Tok.getLocation(), diag::warn_cxx2a_compat_explicit_bool);
+      }
+      isInvalid = DS.setFunctionSpecExplicit(ExplicitLoc, PrevSpec, DiagID,
+                                             ExplicitSpec, CloseParenLoc);
       break;
+    }
     case tok::kw__Noreturn:
       if (!getLangOpts().C11)
         Diag(Loc, diag::ext_c11_noreturn);
@@ -3821,6 +3856,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
         break;
       };
       LLVM_FALLTHROUGH;
+    case tok::kw_private:
     case tok::kw___private:
     case tok::kw___global:
     case tok::kw___local:
@@ -3857,25 +3893,32 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       // If a type specifier follows, it will be diagnosed elsewhere.
       continue;
     }
+
+    assert((!isAlreadyConsumed || RangeEnd != SourceLocation()) &&
+                                     "both or neither of isAlreadyConsumed and "
+                                     "RangeEnd needs to be set");
+    DS.SetRangeEnd(isAlreadyConsumed ? RangeEnd : Tok.getLocation());
+
     // If the specifier wasn't legal, issue a diagnostic.
     if (isInvalid) {
       assert(PrevSpec && "Method did not return previous specifier!");
       assert(DiagID);
 
       if (DiagID == diag::ext_duplicate_declspec ||
-          DiagID == diag::ext_warn_duplicate_declspec)
-        Diag(Tok, DiagID)
-          << PrevSpec << FixItHint::CreateRemoval(Tok.getLocation());
+          DiagID == diag::ext_warn_duplicate_declspec ||
+          DiagID == diag::err_duplicate_declspec)
+        Diag(Loc, DiagID) << PrevSpec
+                          << FixItHint::CreateRemoval(
+                                 SourceRange(Loc, DS.getEndLoc()));
       else if (DiagID == diag::err_opencl_unknown_type_specifier) {
-        Diag(Tok, DiagID) << getLangOpts().OpenCLCPlusPlus
-            << getLangOpts().getOpenCLVersionTuple().getAsString()
-            << PrevSpec << isStorageClass;
+        Diag(Loc, DiagID) << getLangOpts().OpenCLCPlusPlus
+                          << getLangOpts().getOpenCLVersionTuple().getAsString()
+                          << PrevSpec << isStorageClass;
       } else
-        Diag(Tok, DiagID) << PrevSpec;
+        Diag(Loc, DiagID) << PrevSpec;
     }
 
-    DS.SetRangeEnd(Tok.getLocation());
-    if (DiagID != diag::err_bool_redeclaration)
+    if (DiagID != diag::err_bool_redeclaration && !isAlreadyConsumed)
       // After an error the next token can be an annotation token.
       ConsumeAnyToken();
 
@@ -3885,6 +3928,9 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
 
 /// ParseStructDeclaration - Parse a struct declaration without the terminating
 /// semicolon.
+///
+/// Note that a struct declaration refers to a declaration in a struct,
+/// not to the declaration of a struct.
 ///
 ///       struct-declaration:
 /// [C2x]   attributes-specifier-seq[opt]
@@ -4792,8 +4838,10 @@ bool Parser::isTypeSpecifierQualifier() {
   case tok::kw___read_only:
   case tok::kw___read_write:
   case tok::kw___write_only:
-
     return true;
+
+  case tok::kw_private:
+    return getLangOpts().OpenCL;
 
   // C11 _Atomic
   case tok::kw__Atomic:
@@ -4986,6 +5034,9 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
 #include "clang/Basic/OpenCLImageTypes.def"
 
     return true;
+
+  case tok::kw_private:
+    return getLangOpts().OpenCL;
   }
 }
 
@@ -5186,6 +5237,10 @@ void Parser::ParseTypeQualifierListOpt(
       break;
 
     // OpenCL qualifiers:
+    case tok::kw_private:
+      if (!getLangOpts().OpenCL)
+        goto DoneWithTypeQuals;
+      LLVM_FALLTHROUGH;
     case tok::kw___private:
     case tok::kw___global:
     case tok::kw___local:

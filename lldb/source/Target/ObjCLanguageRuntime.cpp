@@ -16,6 +16,7 @@
 #include "lldb/Symbol/SymbolFile.h"
 #include "lldb/Symbol/Type.h"
 #include "lldb/Symbol/TypeList.h"
+#include "lldb/Symbol/Variable.h"
 #include "lldb/Target/ObjCLanguageRuntime.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/Log.h"
@@ -27,9 +28,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 ObjCLanguageRuntime::~ObjCLanguageRuntime() {}
 
 ObjCLanguageRuntime::ObjCLanguageRuntime(Process *process)
@@ -38,6 +37,25 @@ ObjCLanguageRuntime::ObjCLanguageRuntime(Process *process)
       m_isa_to_descriptor(), m_hash_to_isa_map(), m_type_size_cache(),
       m_isa_to_descriptor_stop_id(UINT32_MAX), m_complete_class_cache(),
       m_negative_complete_class_cache() {}
+
+bool ObjCLanguageRuntime::IsWhitelistedRuntimeValue(ConstString name) {
+  static ConstString g_self = ConstString("self");
+  static ConstString g_cmd = ConstString("_cmd");
+  return name == g_self || name == g_cmd;
+}
+
+bool ObjCLanguageRuntime::IsRuntimeSupportValue(ValueObject &valobj) {
+  // All runtime support values have to be marked as artificial by the
+  // compiler. But not all artificial variables should be hidden from
+  // the user.
+  if (!valobj.GetVariable())
+    return false;
+  if (!valobj.GetVariable()->IsArtificial())
+    return false;
+
+  // Whitelist "self" and "_cmd".
+  return !IsWhitelistedRuntimeValue(valobj.GetName());
+}
 
 bool ObjCLanguageRuntime::AddClass(ObjCISA isa,
                                    const ClassDescriptorSP &descriptor_sp,
@@ -153,7 +171,7 @@ bool ObjCLanguageRuntime::ClassDescriptor::IsPointerValid(
 }
 
 ObjCLanguageRuntime::ObjCISA
-ObjCLanguageRuntime::GetISA(const ConstString &name) {
+ObjCLanguageRuntime::GetISA(ConstString name) {
   ISAToDescriptorIterator pos = GetDescriptorIterator(name);
   if (pos != m_isa_to_descriptor.end())
     return pos->first;
@@ -161,7 +179,7 @@ ObjCLanguageRuntime::GetISA(const ConstString &name) {
 }
 
 ObjCLanguageRuntime::ISAToDescriptorIterator
-ObjCLanguageRuntime::GetDescriptorIterator(const ConstString &name) {
+ObjCLanguageRuntime::GetDescriptorIterator(ConstString name) {
   ISAToDescriptorIterator end = m_isa_to_descriptor.end();
 
   if (name) {
@@ -226,7 +244,7 @@ ObjCLanguageRuntime::GetActualTypeName(ObjCLanguageRuntime::ObjCISA isa) {
 
 ObjCLanguageRuntime::ClassDescriptorSP
 ObjCLanguageRuntime::GetClassDescriptorFromClassName(
-    const ConstString &class_name) {
+    ConstString class_name) {
   ISAToDescriptorIterator pos = GetDescriptorIterator(class_name);
   if (pos != m_isa_to_descriptor.end())
     return pos->second;
@@ -355,9 +373,7 @@ bool ObjCLanguageRuntime::GetTypeBitSize(const CompilerType &compiler_type,
   return found;
 }
 
-//------------------------------------------------------------------
 // Exception breakpoint Precondition class for ObjC:
-//------------------------------------------------------------------
 void ObjCLanguageRuntime::ObjCExceptionPrecondition::AddClassName(
     const char *class_name) {
   m_class_names.insert(class_name);

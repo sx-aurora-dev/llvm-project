@@ -444,6 +444,7 @@ namespace clang {
     void VisitObjCPropertyDecl(ObjCPropertyDecl *D);
     void VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D);
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
+    void VisitOMPAllocateDecl(OMPAllocateDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
     void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPRequiresDecl(OMPRequiresDecl *D);
@@ -857,7 +858,6 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
   FD->setStorageClass(static_cast<StorageClass>(Record.readInt()));
   FD->setInlineSpecified(Record.readInt());
   FD->setImplicitlyInline(Record.readInt());
-  FD->setExplicitSpecified(Record.readInt());
   FD->setVirtualAsWritten(Record.readInt());
   FD->setPure(Record.readInt());
   FD->setHasInheritedPrototype(Record.readInt());
@@ -927,12 +927,22 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
     TemplateArgumentListInfo TemplArgsInfo(LAngleLoc, RAngleLoc);
     for (unsigned i = 0, e = TemplArgLocs.size(); i != e; ++i)
       TemplArgsInfo.addArgument(TemplArgLocs[i]);
-    FunctionTemplateSpecializationInfo *FTInfo
-        = FunctionTemplateSpecializationInfo::Create(C, FD, Template, TSK,
-                                                     TemplArgList,
-                             HasTemplateArgumentsAsWritten ? &TemplArgsInfo
-                                                           : nullptr,
-                                                     POI);
+
+    MemberSpecializationInfo *MSInfo = nullptr;
+    if (Record.readInt()) {
+      auto *FD = ReadDeclAs<FunctionDecl>();
+      auto TSK = (TemplateSpecializationKind)Record.readInt();
+      SourceLocation POI = ReadSourceLocation();
+
+      MSInfo = new (C) MemberSpecializationInfo(FD, TSK);
+      MSInfo->setPointOfInstantiation(POI);
+    }
+
+    FunctionTemplateSpecializationInfo *FTInfo =
+        FunctionTemplateSpecializationInfo::Create(
+            C, FD, Template, TSK, TemplArgList,
+            HasTemplateArgumentsAsWritten ? &TemplArgsInfo : nullptr, POI,
+            MSInfo);
     FD->TemplateOrSpecialization = FTInfo;
 
     if (FD->isCanonicalDecl()) { // if canonical add to template's set.
@@ -955,7 +965,7 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
       else {
         assert(Reader.getContext().getLangOpts().Modules &&
                "already deserialized this template specialization");
-        mergeRedeclarable(FD, ExistingInfo->Function, Redecl);
+        mergeRedeclarable(FD, ExistingInfo->getFunction(), Redecl);
       }
     }
     break;
@@ -1479,6 +1489,7 @@ void ASTDeclReader::VisitBlockDecl(BlockDecl *BD) {
   BD->setBlockMissingReturnType(Record.readInt());
   BD->setIsConversionFromLambda(Record.readInt());
   BD->setDoesNotEscape(Record.readInt());
+  BD->setCanAvoidCopyToHeap(Record.readInt());
 
   bool capturesCXXThis = Record.readInt();
   unsigned numCaptures = Record.readInt();
@@ -1965,6 +1976,7 @@ ASTDeclReader::VisitCXXRecordDeclImpl(CXXRecordDecl *D) {
 }
 
 void ASTDeclReader::VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D) {
+  D->setExplicitSpecifier(Record.readExplicitSpec());
   VisitFunctionDecl(D);
   D->setIsCopyDeductionCandidate(Record.readInt());
 }
@@ -1990,6 +2002,7 @@ void ASTDeclReader::VisitCXXMethodDecl(CXXMethodDecl *D) {
 void ASTDeclReader::VisitCXXConstructorDecl(CXXConstructorDecl *D) {
   // We need the inherited constructor information to merge the declaration,
   // so we have to read it before we call VisitCXXMethodDecl.
+  D->setExplicitSpecifier(Record.readExplicitSpec());
   if (D->isInheritingConstructor()) {
     auto *Shadow = ReadDeclAs<ConstructorUsingShadowDecl>();
     auto *Ctor = ReadDeclAs<CXXConstructorDecl>();
@@ -2015,6 +2028,7 @@ void ASTDeclReader::VisitCXXDestructorDecl(CXXDestructorDecl *D) {
 }
 
 void ASTDeclReader::VisitCXXConversionDecl(CXXConversionDecl *D) {
+  D->setExplicitSpecifier(Record.readExplicitSpec());
   VisitCXXMethodDecl(D);
 }
 
@@ -2242,6 +2256,8 @@ void ASTDeclReader::VisitClassScopeFunctionSpecializationDecl(
                                     ClassScopeFunctionSpecializationDecl *D) {
   VisitDecl(D);
   D->Specialization = ReadDeclAs<CXXMethodDecl>();
+  if (Record.readInt())
+    D->TemplateArgs = Record.readASTTemplateArgumentListInfo();
 }
 
 void ASTDeclReader::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
@@ -2632,6 +2648,24 @@ void ASTDeclReader::VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D) {
   D->setVars(Vars);
 }
 
+void ASTDeclReader::VisitOMPAllocateDecl(OMPAllocateDecl *D) {
+  VisitDecl(D);
+  unsigned NumVars = D->varlist_size();
+  unsigned NumClauses = D->clauselist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i) {
+    Vars.push_back(Record.readExpr());
+  }
+  D->setVars(Vars);
+  SmallVector<OMPClause *, 8> Clauses;
+  Clauses.reserve(NumClauses);
+  OMPClauseReader ClauseReader(Record);
+  for (unsigned I = 0; I != NumClauses; ++I)
+    Clauses.push_back(ClauseReader.readClause());
+  D->setClauses(Clauses);
+}
+
 void ASTDeclReader::VisitOMPRequiresDecl(OMPRequiresDecl * D) {
   VisitDecl(D);
   unsigned NumClauses = D->clauselist_size();
@@ -2794,7 +2828,7 @@ static bool isConsumerInterestedIn(ASTContext &Ctx, Decl *D, bool HasBody) {
       isa<PragmaDetectMismatchDecl>(D))
     return true;
   if (isa<OMPThreadPrivateDecl>(D) || isa<OMPDeclareReductionDecl>(D) ||
-      isa<OMPDeclareMapperDecl>(D))
+      isa<OMPDeclareMapperDecl>(D) || isa<OMPAllocateDecl>(D))
     return !D->getDeclContext()->isFunctionOrMethod();
   if (const auto *Var = dyn_cast<VarDecl>(D))
     return Var->isFileVarDecl() &&
@@ -3718,10 +3752,7 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
     D = CXXMethodDecl::CreateDeserialized(Context, ID);
     break;
   case DECL_CXX_CONSTRUCTOR:
-    D = CXXConstructorDecl::CreateDeserialized(Context, ID, false);
-    break;
-  case DECL_CXX_INHERITED_CONSTRUCTOR:
-    D = CXXConstructorDecl::CreateDeserialized(Context, ID, true);
+    D = CXXConstructorDecl::CreateDeserialized(Context, ID, Record.readInt());
     break;
   case DECL_CXX_DESTRUCTOR:
     D = CXXDestructorDecl::CreateDeserialized(Context, ID);
@@ -3865,6 +3896,12 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
   case DECL_OMP_THREADPRIVATE:
     D = OMPThreadPrivateDecl::CreateDeserialized(Context, ID, Record.readInt());
     break;
+  case DECL_OMP_ALLOCATE: {
+    unsigned NumVars = Record.readInt();
+    unsigned NumClauses = Record.readInt();
+    D = OMPAllocateDecl::CreateDeserialized(Context, ID, NumVars, NumClauses);
+    break;
+  }
   case DECL_OMP_REQUIRES:
     D = OMPRequiresDecl::CreateDeserialized(Context, ID, Record.readInt());
     break;
@@ -4463,6 +4500,16 @@ void ASTDeclReader::UpdateDecl(Decl *D,
       D->addAttr(OMPThreadPrivateDeclAttr::CreateImplicit(Reader.getContext(),
                                                           ReadSourceRange()));
       break;
+
+    case UPD_DECL_MARKED_OPENMP_ALLOCATE: {
+      auto AllocatorKind =
+          static_cast<OMPAllocateDeclAttr::AllocatorTypeTy>(Record.readInt());
+      Expr *Allocator = Record.readExpr();
+      SourceRange SR = ReadSourceRange();
+      D->addAttr(OMPAllocateDeclAttr::CreateImplicit(
+          Reader.getContext(), AllocatorKind, Allocator, SR));
+      break;
+    }
 
     case UPD_DECL_EXPORTED: {
       unsigned SubmoduleID = readSubmoduleID();

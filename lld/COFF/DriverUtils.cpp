@@ -249,6 +249,27 @@ void parseAligncomm(StringRef S) {
   Config->AlignComm[Name] = std::max(Config->AlignComm[Name], 1 << V);
 }
 
+// Parses /functionpadmin option argument.
+void parseFunctionPadMin(llvm::opt::Arg *A, llvm::COFF::MachineTypes Machine) {
+  StringRef Arg = A->getNumValues() ? A->getValue() : "";
+  if (!Arg.empty()) {
+    // Optional padding in bytes is given.
+    if (Arg.getAsInteger(0, Config->FunctionPadMin))
+      error("/functionpadmin: invalid argument: " + Arg);
+    return;
+  }
+  // No optional argument given.
+  // Set default padding based on machine, similar to link.exe.
+  // There is no default padding for ARM platforms.
+  if (Machine == I386) {
+    Config->FunctionPadMin = 5;
+  } else if (Machine == AMD64) {
+    Config->FunctionPadMin = 6;
+  } else {
+    error("/functionpadmin: invalid argument for this machine: " + Arg);
+  }
+}
+
 // Parses a string in the form of "EMBED[,=<integer>]|NO".
 // Results are directly written to Config.
 void parseManifest(StringRef Arg) {
@@ -292,6 +313,27 @@ void parseManifestUAC(StringRef Arg) {
     }
     fatal("invalid option " + Arg);
   }
+}
+
+// Parses a string in the form of "cd|net[,(cd|net)]*"
+// Results are directly written to Config.
+void parseSwaprun(StringRef Arg) {
+  do {
+    StringRef Swaprun, NewArg;
+    std::tie(Swaprun, NewArg) = Arg.split(',');
+    if (Swaprun.equals_lower("cd"))
+      Config->SwaprunCD = true;
+    else if (Swaprun.equals_lower("net"))
+      Config->SwaprunNet = true;
+    else if (Swaprun.empty())
+      error("/swaprun: missing argument");
+    else
+      error("/swaprun: invalid argument: " + Swaprun);
+    // To catch trailing commas, e.g. `/spawrun:cd,`
+    if (NewArg.empty() && Arg.endswith(","))
+      error("/swaprun: missing argument");
+    Arg = NewArg;
+  } while (!Arg.empty());
 }
 
 // An RAII temporary file class that automatically removes a temporary file.
@@ -677,16 +719,21 @@ void assignExportOrdinals() {
 
 // Parses a string in the form of "key=value" and check
 // if value matches previous values for the same key.
-void checkFailIfMismatch(StringRef Arg) {
+void checkFailIfMismatch(StringRef Arg, InputFile *Source) {
   StringRef K, V;
   std::tie(K, V) = Arg.split('=');
   if (K.empty() || V.empty())
     fatal("/failifmismatch: invalid argument: " + Arg);
-  StringRef Existing = Config->MustMatch[K];
-  if (!Existing.empty() && V != Existing)
-    fatal("/failifmismatch: mismatch detected: " + Existing + " and " + V +
-          " for key " + K);
-  Config->MustMatch[K] = V;
+  std::pair<StringRef, InputFile *> Existing = Config->MustMatch[K];
+  if (!Existing.first.empty() && V != Existing.first) {
+    std::string SourceStr = Source ? toString(Source) : "cmd-line";
+    std::string ExistingStr =
+        Existing.second ? toString(Existing.second) : "cmd-line";
+    fatal("/failifmismatch: mismatch detected for '" + K + "':\n>>> " +
+          ExistingStr + " has value " + Existing.first + "\n>>> " + SourceStr +
+          " has value " + V);
+  }
+  Config->MustMatch[K] = {V, Source};
 }
 
 // Convert Windows resource files (.res files) to a .obj file.
@@ -698,8 +745,16 @@ MemoryBufferRef convertResToCOFF(ArrayRef<MemoryBufferRef> MBs) {
     object::WindowsResource *RF = dyn_cast<object::WindowsResource>(Bin.get());
     if (!RF)
       fatal("cannot compile non-resource file as resource");
-    if (auto EC = Parser.parse(RF))
-      fatal("failed to parse .res file: " + toString(std::move(EC)));
+
+    std::vector<std::string> Duplicates;
+    if (auto EC = Parser.parse(RF, Duplicates))
+      fatal(toString(std::move(EC)));
+
+    for (const auto &DupeDiag : Duplicates)
+      if (Config->ForceMultipleRes)
+        warn(DupeDiag);
+      else
+        error(DupeDiag);
   }
 
   Expected<std::unique_ptr<MemoryBuffer>> E =
