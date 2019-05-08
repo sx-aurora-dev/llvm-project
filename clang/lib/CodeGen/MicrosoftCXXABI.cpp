@@ -205,7 +205,7 @@ public:
   // delegate to or alias the base destructor.
 
   AddedStructorArgs
-  buildStructorSignature(const CXXMethodDecl *MD, StructorType T,
+  buildStructorSignature(GlobalDecl GD,
                          SmallVectorImpl<CanQualType> &ArgTys) override;
 
   /// Non-base dtors should be emitted as delegating thunks in this ABI.
@@ -673,7 +673,7 @@ public:
                                   llvm::Value *MemPtr,
                                   const MemberPointerType *MPT) override;
 
-  void emitCXXStructor(const CXXMethodDecl *MD, StructorType Type) override;
+  void emitCXXStructor(GlobalDecl GD) override;
 
   llvm::StructType *getCatchableTypeType() {
     if (CatchableTypeType)
@@ -735,7 +735,7 @@ public:
         CGM.CreateRuntimeFunction(FTy, "_CxxThrowException");
     // _CxxThrowException is stdcall on 32-bit x86 platforms.
     if (CGM.getTarget().getTriple().getArch() == llvm::Triple::x86) {
-      if (auto *Fn = cast<llvm::Function>(Throw.getCallee()))
+      if (auto *Fn = dyn_cast<llvm::Function>(Throw.getCallee()))
         Fn->setCallingConv(llvm::CallingConv::X86_StdCall);
     }
     return Throw;
@@ -811,7 +811,7 @@ MicrosoftCXXABI::getRecordArgABI(const CXXRecordDecl *RD) const {
     // Use the simple Itanium rules for now.
     // FIXME: This is incompatible with MSVC for arguments with a dtor and no
     // copy ctor.
-    return !canCopyArgument(RD) ? RAA_Indirect : RAA_Default;
+    return !RD->canPassInRegisters() ? RAA_Indirect : RAA_Default;
 
   case llvm::Triple::x86:
     // All record arguments are passed in memory on x86.  Decide whether to
@@ -820,7 +820,7 @@ MicrosoftCXXABI::getRecordArgABI(const CXXRecordDecl *RD) const {
 
     // If C++ prohibits us from making a copy, construct the arguments directly
     // into argument memory.
-    if (!canCopyArgument(RD))
+    if (!RD->canPassInRegisters())
       return RAA_DirectInMemory;
 
     // Otherwise, construct the argument into a temporary and copy the bytes
@@ -829,7 +829,7 @@ MicrosoftCXXABI::getRecordArgABI(const CXXRecordDecl *RD) const {
 
   case llvm::Triple::x86_64:
   case llvm::Triple::aarch64:
-    return !canCopyArgument(RD) ? RAA_Indirect : RAA_Default;
+    return !RD->canPassInRegisters() ? RAA_Indirect : RAA_Default;
   }
 
   llvm_unreachable("invalid enum");
@@ -1051,33 +1051,55 @@ bool MicrosoftCXXABI::hasMostDerivedReturn(GlobalDecl GD) const {
   return isDeletingDtor(GD);
 }
 
+static bool IsSizeGreaterThan128(const CXXRecordDecl *RD) {
+  return RD->getASTContext().getTypeSize(RD->getTypeForDecl()) > 128;
+}
+
+static bool hasMicrosoftABIRestrictions(const CXXRecordDecl *RD) {
+  // For AArch64, we use the C++14 definition of an aggregate, so we also
+  // check for:
+  //   No private or protected non static data members.
+  //   No base classes
+  //   No virtual functions
+  // Additionally, we need to ensure that there is a trivial copy assignment
+  // operator, a trivial destructor and no user-provided constructors.
+  if (RD->hasProtectedFields() || RD->hasPrivateFields())
+    return true;
+  if (RD->getNumBases() > 0)
+    return true;
+  if (RD->isPolymorphic())
+    return true;
+  if (RD->hasNonTrivialCopyAssignment())
+    return true;
+  for (const CXXConstructorDecl *Ctor : RD->ctors())
+    if (Ctor->isUserProvided())
+      return true;
+  if (RD->hasNonTrivialDestructor())
+    return true;
+  return false;
+}
+
 bool MicrosoftCXXABI::classifyReturnType(CGFunctionInfo &FI) const {
   const CXXRecordDecl *RD = FI.getReturnType()->getAsCXXRecordDecl();
   if (!RD)
     return false;
 
-  CharUnits Align = CGM.getContext().getTypeAlignInChars(FI.getReturnType());
-  if (FI.isInstanceMethod()) {
-    // If it's an instance method, aggregates are always returned indirectly via
-    // the second parameter.
-    FI.getReturnInfo() = ABIArgInfo::getIndirect(Align, /*ByVal=*/false);
-    FI.getReturnInfo().setSRetAfterThis(FI.isInstanceMethod());
+  bool isAArch64 = CGM.getTarget().getTriple().isAArch64();
+  bool isSimple = !isAArch64 || !hasMicrosoftABIRestrictions(RD);
+  bool isIndirectReturn =
+      isAArch64 ? (!RD->canPassInRegisters() ||
+                   IsSizeGreaterThan128(RD))
+                : !RD->isPOD();
+  bool isInstanceMethod = FI.isInstanceMethod();
 
-    // aarch64-windows requires that instance methods use X1 for the return
-    // address. So for aarch64-windows we do not mark the
-    // return as SRet.
-    FI.getReturnInfo().setSuppressSRet(CGM.getTarget().getTriple().getArch() ==
-                                       llvm::Triple::aarch64);
-    return true;
-  } else if (!RD->isPOD()) {
-    // If it's a free function, non-POD types are returned indirectly.
+  if (isIndirectReturn || !isSimple || isInstanceMethod) {
+    CharUnits Align = CGM.getContext().getTypeAlignInChars(FI.getReturnType());
     FI.getReturnInfo() = ABIArgInfo::getIndirect(Align, /*ByVal=*/false);
+    FI.getReturnInfo().setSRetAfterThis(isInstanceMethod);
 
-    // aarch64-windows requires that non-POD, non-instance returns use X0 for
-    // the return address. So for aarch64-windows we do not mark the return as
-    // SRet.
-    FI.getReturnInfo().setSuppressSRet(CGM.getTarget().getTriple().getArch() ==
-                                       llvm::Triple::aarch64);
+    FI.getReturnInfo().setInReg(isAArch64 &&
+                                !(isSimple && IsSizeGreaterThan128(RD)));
+
     return true;
   }
 
@@ -1234,16 +1256,17 @@ void MicrosoftCXXABI::EmitVBPtrStores(CodeGenFunction &CGF,
 }
 
 CGCXXABI::AddedStructorArgs
-MicrosoftCXXABI::buildStructorSignature(const CXXMethodDecl *MD, StructorType T,
+MicrosoftCXXABI::buildStructorSignature(GlobalDecl GD,
                                         SmallVectorImpl<CanQualType> &ArgTys) {
   AddedStructorArgs Added;
   // TODO: 'for base' flag
-  if (T == StructorType::Deleting) {
+  if (isa<CXXDestructorDecl>(GD.getDecl()) &&
+      GD.getDtorType() == Dtor_Deleting) {
     // The scalar deleting destructor takes an implicit int parameter.
     ArgTys.push_back(getContext().IntTy);
     ++Added.Suffix;
   }
-  auto *CD = dyn_cast<CXXConstructorDecl>(MD);
+  auto *CD = dyn_cast<CXXConstructorDecl>(GD.getDecl());
   if (!CD)
     return Added;
 
@@ -1553,9 +1576,8 @@ void MicrosoftCXXABI::EmitDestructorCall(CodeGenFunction &CGF,
   if (Type == Dtor_Complete && DD->getParent()->getNumVBases() == 0)
     Type = Dtor_Base;
 
-  CGCallee Callee =
-      CGCallee::forDirect(CGM.getAddrOfCXXStructor(DD, getFromDtorType(Type)),
-                          GlobalDecl(DD, Type));
+  GlobalDecl GD(DD, Type);
+  CGCallee Callee = CGCallee::forDirect(CGM.getAddrOfCXXStructor(GD), GD);
 
   if (DD->isVirtual()) {
     assert(Type != CXXDtorType::Dtor_Deleting &&
@@ -1569,10 +1591,9 @@ void MicrosoftCXXABI::EmitDestructorCall(CodeGenFunction &CGF,
     BaseDtorEndBB = EmitDtorCompleteObjectHandler(CGF);
   }
 
-  CGF.EmitCXXDestructorCall(DD, Callee, This.getPointer(),
+  CGF.EmitCXXDestructorCall(GD, Callee, This.getPointer(),
                             /*ImplicitParam=*/nullptr,
-                            /*ImplicitParamTy=*/QualType(), nullptr,
-                            getFromDtorType(Type));
+                            /*ImplicitParamTy=*/QualType(), nullptr);
   if (BaseDtorEndBB) {
     // Complete object handler should continue to be the remaining
     CGF.Builder.CreateBr(BaseDtorEndBB);
@@ -1886,8 +1907,8 @@ llvm::Value *MicrosoftCXXABI::EmitVirtualDestructorCall(
   // We have only one destructor in the vftable but can get both behaviors
   // by passing an implicit int parameter.
   GlobalDecl GD(Dtor, Dtor_Deleting);
-  const CGFunctionInfo *FInfo = &CGM.getTypes().arrangeCXXStructorDeclaration(
-      Dtor, StructorType::Deleting);
+  const CGFunctionInfo *FInfo =
+      &CGM.getTypes().arrangeCXXStructorDeclaration(GD);
   llvm::FunctionType *Ty = CGF.CGM.getTypes().GetFunctionType(*FInfo);
   CGCallee Callee = CGCallee::forVirtual(CE, GD, This, Ty);
 
@@ -1897,9 +1918,8 @@ llvm::Value *MicrosoftCXXABI::EmitVirtualDestructorCall(
       DtorType == Dtor_Deleting);
 
   This = adjustThisArgumentForVirtualFunctionCall(CGF, GD, This, true);
-  RValue RV =
-      CGF.EmitCXXDestructorCall(Dtor, Callee, This.getPointer(), ImplicitParam,
-                                Context.IntTy, CE, StructorType::Deleting);
+  RValue RV = CGF.EmitCXXDestructorCall(GD, Callee, This.getPointer(),
+                                        ImplicitParam, Context.IntTy, CE);
   return RV.getScalarVal();
 }
 
@@ -3818,42 +3838,34 @@ MicrosoftCXXABI::getMSCompleteObjectLocator(const CXXRecordDecl *RD,
   return MSRTTIBuilder(*this, RD).getCompleteObjectLocator(Info);
 }
 
-static void emitCXXConstructor(CodeGenModule &CGM,
-                               const CXXConstructorDecl *ctor,
-                               StructorType ctorType) {
-  // There are no constructor variants, always emit the complete destructor.
-  llvm::Function *Fn = CGM.codegenCXXStructor(ctor, StructorType::Complete);
-  CGM.maybeSetTrivialComdat(*ctor, *Fn);
-}
+void MicrosoftCXXABI::emitCXXStructor(GlobalDecl GD) {
+  if (auto *ctor = dyn_cast<CXXConstructorDecl>(GD.getDecl())) {
+    // There are no constructor variants, always emit the complete destructor.
+    llvm::Function *Fn =
+        CGM.codegenCXXStructor(GD.getWithCtorType(Ctor_Complete));
+    CGM.maybeSetTrivialComdat(*ctor, *Fn);
+    return;
+  }
 
-static void emitCXXDestructor(CodeGenModule &CGM, const CXXDestructorDecl *dtor,
-                              StructorType dtorType) {
+  auto *dtor = cast<CXXDestructorDecl>(GD.getDecl());
+
   // Emit the base destructor if the base and complete (vbase) destructors are
   // equivalent. This effectively implements -mconstructor-aliases as part of
   // the ABI.
-  if (dtorType == StructorType::Complete &&
+  if (GD.getDtorType() == Dtor_Complete &&
       dtor->getParent()->getNumVBases() == 0)
-    dtorType = StructorType::Base;
+    GD = GD.getWithDtorType(Dtor_Base);
 
   // The base destructor is equivalent to the base destructor of its
   // base class if there is exactly one non-virtual base class with a
   // non-trivial destructor, there are no fields with a non-trivial
   // destructor, and the body of the destructor is trivial.
-  if (dtorType == StructorType::Base && !CGM.TryEmitBaseDestructorAsAlias(dtor))
+  if (GD.getDtorType() == Dtor_Base && !CGM.TryEmitBaseDestructorAsAlias(dtor))
     return;
 
-  llvm::Function *Fn = CGM.codegenCXXStructor(dtor, dtorType);
+  llvm::Function *Fn = CGM.codegenCXXStructor(GD);
   if (Fn->isWeakForLinker())
     Fn->setComdat(CGM.getModule().getOrInsertComdat(Fn->getName()));
-}
-
-void MicrosoftCXXABI::emitCXXStructor(const CXXMethodDecl *MD,
-                                      StructorType Type) {
-  if (auto *CD = dyn_cast<CXXConstructorDecl>(MD)) {
-    emitCXXConstructor(CGM, CD, Type);
-    return;
-  }
-  emitCXXDestructor(CGM, cast<CXXDestructorDecl>(MD), Type);
 }
 
 llvm::Function *
@@ -3957,7 +3969,7 @@ MicrosoftCXXABI::getAddrOfCXXCtorClosure(const CXXConstructorDecl *CD,
                                  /*Delegating=*/false, Args);
   // Call the destructor with our arguments.
   llvm::Constant *CalleePtr =
-    CGM.getAddrOfCXXStructor(CD, StructorType::Complete);
+      CGM.getAddrOfCXXStructor(GlobalDecl(CD, Ctor_Complete));
   CGCallee Callee =
       CGCallee::forDirect(CalleePtr, GlobalDecl(CD, Ctor_Complete));
   const CGFunctionInfo &CalleeInfo = CGM.getTypes().arrangeCXXConstructorCall(
@@ -4008,7 +4020,7 @@ llvm::Constant *MicrosoftCXXABI::getCatchableType(QualType T,
     if (CT == Ctor_CopyingClosure)
       CopyCtor = getAddrOfCXXCtorClosure(CD, Ctor_CopyingClosure);
     else
-      CopyCtor = CGM.getAddrOfCXXStructor(CD, StructorType::Complete);
+      CopyCtor = CGM.getAddrOfCXXStructor(GlobalDecl(CD, Ctor_Complete));
 
     CopyCtor = llvm::ConstantExpr::getBitCast(CopyCtor, CGM.Int8PtrTy);
   } else {
@@ -4221,7 +4233,7 @@ llvm::GlobalVariable *MicrosoftCXXABI::getThrowInfo(QualType T) {
     if (CXXDestructorDecl *DtorD = RD->getDestructor())
       if (!DtorD->isTrivial())
         CleanupFn = llvm::ConstantExpr::getBitCast(
-            CGM.getAddrOfCXXStructor(DtorD, StructorType::Complete),
+            CGM.getAddrOfCXXStructor(GlobalDecl(DtorD, Dtor_Complete)),
             CGM.Int8PtrTy);
   // This is unused as far as we can tell, initialize it to null.
   llvm::Constant *ForwardCompat =

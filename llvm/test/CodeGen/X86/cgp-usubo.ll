@@ -121,7 +121,7 @@ define i1 @usubo_ne_constant0_op1_i32(i32 %x, i32* %p) {
   ret i1 %ov
 }
 
-; Verify insertion point for multi-BB.
+; This used to verify insertion point for multi-BB, but now we just bail out.
 
 declare void @call(i1)
 
@@ -131,14 +131,17 @@ define i1 @usubo_ult_sub_dominates_i64(i64 %x, i64 %y, i64* %p, i1 %cond) nounwi
 ; CHECK-NEXT:    testb $1, %cl
 ; CHECK-NEXT:    je .LBB8_2
 ; CHECK-NEXT:  # %bb.1: # %t
-; CHECK-NEXT:    subq %rsi, %rdi
-; CHECK-NEXT:    setb %al
-; CHECK-NEXT:    movq %rdi, (%rdx)
+; CHECK-NEXT:    movq %rdi, %rax
+; CHECK-NEXT:    subq %rsi, %rax
+; CHECK-NEXT:    movq %rax, (%rdx)
 ; CHECK-NEXT:    testb $1, %cl
-; CHECK-NEXT:    jne .LBB8_3
+; CHECK-NEXT:    je .LBB8_2
+; CHECK-NEXT:  # %bb.3: # %end
+; CHECK-NEXT:    cmpq %rsi, %rdi
+; CHECK-NEXT:    setb %al
+; CHECK-NEXT:    retq
 ; CHECK-NEXT:  .LBB8_2: # %f
 ; CHECK-NEXT:    movl %ecx, %eax
-; CHECK-NEXT:  .LBB8_3: # %end
 ; CHECK-NEXT:    retq
 entry:
   br i1 %cond, label %t, label %f
@@ -207,3 +210,35 @@ end:
   ret i1 %ov
 }
 
+define void @PR41129(i64* %p64) {
+; CHECK-LABEL: PR41129:
+; CHECK:       # %bb.0: # %entry
+; CHECK-NEXT:    movq (%rdi), %rax
+; CHECK-NEXT:    testq %rax, %rax
+; CHECK-NEXT:    je .LBB10_2
+; CHECK-NEXT:  # %bb.1: # %false
+; CHECK-NEXT:    andl $7, %eax
+; CHECK-NEXT:    movq %rax, (%rdi)
+; CHECK-NEXT:    retq
+; CHECK-NEXT:  .LBB10_2: # %true
+; CHECK-NEXT:    decq %rax
+; CHECK-NEXT:    movq %rax, (%rdi)
+; CHECK-NEXT:    retq
+entry:
+  %key = load i64, i64* %p64, align 8
+  %cond17 = icmp eq i64 %key, 0
+  br i1 %cond17, label %true, label %false
+
+false:
+  %andval = and i64 %key, 7
+  store i64 %andval, i64* %p64
+  br label %exit
+
+true:
+  %svalue = add i64 %key, -1
+  store i64 %svalue, i64* %p64
+  br label %exit
+
+exit:
+  ret void
+}

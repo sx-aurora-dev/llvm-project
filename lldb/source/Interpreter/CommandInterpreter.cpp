@@ -122,7 +122,6 @@ ConstString &CommandInterpreter::GetStaticBroadcasterClass() {
 }
 
 CommandInterpreter::CommandInterpreter(Debugger &debugger,
-                                       ScriptLanguage script_language,
                                        bool synchronous_execution)
     : Broadcaster(debugger.GetBroadcasterManager(),
                   CommandInterpreter::GetStaticBroadcasterClass().AsCString()),
@@ -131,11 +130,10 @@ CommandInterpreter::CommandInterpreter(Debugger &debugger,
       IOHandlerDelegate(IOHandlerDelegate::Completion::LLDBCommand),
       m_debugger(debugger), m_synchronous_execution(synchronous_execution),
       m_skip_lldbinit_files(false), m_skip_app_init_files(false),
-      m_script_interpreter_sp(), m_command_io_handler_sp(), m_comment_char('#'),
+      m_command_io_handler_sp(), m_comment_char('#'),
       m_batch_command_mode(false), m_truncation_warning(eNoTruncation),
       m_command_source_depth(0), m_num_errors(0), m_quit_requested(false),
       m_stopped_for_crash(false) {
-  debugger.SetScriptLanguage(script_language);
   SetEventName(eBroadcastBitThreadShouldExit, "thread-should-exit");
   SetEventName(eBroadcastBitResetPrompt, "reset-prompt");
   SetEventName(eBroadcastBitQuitCommandReceived, "quit");
@@ -431,13 +429,15 @@ void CommandInterpreter::Initialize() {
     AddAlias("var", cmd_obj_sp);
     AddAlias("vo", cmd_obj_sp, "--object-description");
   }
+
+  cmd_obj_sp = GetCommandSPExact("register", false);
+  if (cmd_obj_sp) {
+    AddAlias("re", cmd_obj_sp);
+  }
 }
 
 void CommandInterpreter::Clear() {
   m_command_io_handler_sp.reset();
-
-  if (m_script_interpreter_sp)
-    m_script_interpreter_sp->Clear();
 }
 
 const char *CommandInterpreter::ProcessEmbeddedScriptCommands(const char *arg) {
@@ -749,7 +749,9 @@ void CommandInterpreter::LoadCommandDictionary() {
           *this, "_regexp-bt",
           "Show the current thread's call stack.  Any numeric argument "
           "displays at most that many "
-          "frames.  The argument 'all' displays all threads.",
+          "frames.  The argument 'all' displays all threads.  Use 'settings"
+          " set frame-format' to customize the printing of individual frames "
+          "and 'settings set thread-format' to customize the thread header.",
           "bt [<digit> | all]", 2, 0, false));
   if (bt_regex_cmd_up) {
     // accept but don't document "bt -c <number>" -- before bt was a regex
@@ -2093,16 +2095,14 @@ void CommandInterpreter::SourceInitFile(bool in_cwd,
                                         CommandReturnObject &result) {
   FileSpec init_file;
   if (in_cwd) {
-    ExecutionContext exe_ctx(GetExecutionContext());
-    Target *target = exe_ctx.GetTargetPtr();
-    if (target) {
+    lldb::TargetPropertiesSP properties = Target::GetGlobalProperties();
+    if (properties) {
       // In the current working directory we don't load any program specific
       // .lldbinit files, we only look for a ".lldbinit" file.
       if (m_skip_lldbinit_files)
         return;
 
-      LoadCWDlldbinitFile should_load =
-          target->TargetProperties::GetLoadCWDlldbinitFile();
+      LoadCWDlldbinitFile should_load = properties->GetLoadCWDlldbinitFile();
       if (should_load == eLoadCWDlldbinitWarn) {
         FileSpec dot_lldb(".lldbinit");
         FileSystem::Instance().Resolve(dot_lldb);
@@ -2483,7 +2483,7 @@ void CommandInterpreter::HandleCommandsFromFile(
                // or written
       debugger.GetPrompt(), llvm::StringRef(),
       false, // Not multi-line
-      debugger.GetUseColor(), 0, *this));
+      debugger.GetUseColor(), 0, *this, nullptr));
   const bool old_async_execution = debugger.GetAsyncExecution();
 
   // Set synchronous execution if we are not stopping on continue
@@ -2498,18 +2498,6 @@ void CommandInterpreter::HandleCommandsFromFile(
   m_command_source_depth--;
   result.SetStatus(eReturnStatusSuccessFinishNoResult);
   debugger.SetAsyncExecution(old_async_execution);
-}
-
-ScriptInterpreter *CommandInterpreter::GetScriptInterpreter(bool can_create) {
-  std::lock_guard<std::recursive_mutex> locker(m_script_interpreter_mutex);
-  if (!m_script_interpreter_sp) {
-    if (!can_create)
-      return nullptr;
-    lldb::ScriptLanguage script_lang = GetDebugger().GetScriptLanguage();
-    m_script_interpreter_sp =
-        PluginManager::GetScriptInterpreterForLanguage(script_lang, *this);
-  }
-  return m_script_interpreter_sp.get();
 }
 
 bool CommandInterpreter::GetSynchronous() { return m_synchronous_execution; }
@@ -2589,7 +2577,7 @@ void CommandInterpreter::OutputHelpText(Stream &strm, llvm::StringRef word_text,
   uint32_t chars_left = max_columns;
 
   auto nextWordLength = [](llvm::StringRef S) {
-    size_t pos = S.find_first_of(' ');
+    size_t pos = S.find(' ');
     return pos == llvm::StringRef::npos ? S.size() : pos;
   };
 
@@ -2886,7 +2874,8 @@ bool CommandInterpreter::IOHandlerInterrupt(IOHandler &io_handler) {
     }
   }
 
-  ScriptInterpreter *script_interpreter = GetScriptInterpreter(false);
+  ScriptInterpreter *script_interpreter =
+      m_debugger.GetScriptInterpreter(false);
   if (script_interpreter) {
     if (script_interpreter->Interrupt())
       return true;
@@ -2905,8 +2894,9 @@ void CommandInterpreter::GetLLDBCommandsFromIOHandler(
                             llvm::StringRef(), // Continuation prompt
                             true,              // Get multiple lines
                             debugger.GetUseColor(),
-                            0,          // Don't show line numbers
-                            delegate)); // IOHandlerDelegate
+                            0,         // Don't show line numbers
+                            delegate,  // IOHandlerDelegate
+                            nullptr)); // FileShadowCollector
 
   if (io_handler_sp) {
     io_handler_sp->SetUserData(baton);
@@ -2928,8 +2918,9 @@ void CommandInterpreter::GetPythonCommandsFromIOHandler(
                             llvm::StringRef(), // Continuation prompt
                             true,              // Get multiple lines
                             debugger.GetUseColor(),
-                            0,          // Don't show line numbers
-                            delegate)); // IOHandlerDelegate
+                            0,         // Don't show line numbers
+                            delegate,  // IOHandlerDelegate
+                            nullptr)); // FileShadowCollector
 
   if (io_handler_sp) {
     io_handler_sp->SetUserData(baton);
@@ -2980,8 +2971,9 @@ CommandInterpreter::GetIOHandler(bool force_create,
         llvm::StringRef(), // Continuation prompt
         false, // Don't enable multiple line input, just single line commands
         m_debugger.GetUseColor(),
-        0, // Don't show line numbers
-        *this);
+        0,     // Don't show line numbers
+        *this, // IOHandlerDelegate
+        GetDebugger().GetInputRecorder());
   }
   return m_command_io_handler_sp;
 }

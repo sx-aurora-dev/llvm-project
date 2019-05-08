@@ -399,7 +399,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define signext i8 @test_atomic_compare_exchange_1() {
+define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-LABEL: test_atomic_compare_exchange_1:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:  fencem 3
@@ -407,35 +407,38 @@ define signext i8 @test_atomic_compare_exchange_1() {
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
 ; CHECK-NEXT:  and %s34, -4, %s34
-; CHECK-NEXT:  ldl.sx %s35, (,%s34)
-; CHECK-NEXT:  lea %s36, -256
-; CHECK-NEXT:  and %s38, %s35, %s36
+; CHECK-NEXT:  ldl.sx %s38, (,%s34)
+; CHECK-NEXT:  and %s35, %s1, (56)0
+; CHECK-NEXT:  and %s36, %s0, (56)0
+; CHECK-NEXT:  lea %s37, -256
+; CHECK-NEXT:  and %s41, %s38, %s37
 ; CHECK-NEXT:  or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  or %s35, 0, %s38
-; CHECK-NEXT:  or %s37, 0, %s38
-; CHECK-NEXT:  cas.w %s37, (%s34), %s38
-; CHECK-NEXT:  breq.w %s37, %s38, .LBB{{[0-9]+}}_3
+; CHECK-NEXT:  or %s38, %s41, %s35
+; CHECK-NEXT:  or %s39, %s41, %s36
+; CHECK-NEXT:  cas.w %s38, (%s34), %s39
+; CHECK-NEXT:  breq.w %s38, %s39, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %partword.cmpxchg.failure
 ; CHECK-NEXT:  #   in Loop: Header=BB25_1 Depth=1
-; CHECK-NEXT:  and %s38, %s37, %s36
-; CHECK-NEXT:  brne.w %s35, %s38, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:  or %s40, 0, %s41
+; CHECK-NEXT:  and %s41, %s38, %s37
+; CHECK-NEXT:  brne.w %s40, %s41, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmps.w.sx %s34, %s37, %s35
+; CHECK-NEXT:  cmps.w.sx %s34, %s38, %s39
 ; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i8* @c, i8 undef, i8 undef seq_cst seq_cst
-  %1 = extractvalue { i8, i1 } %0, 1
-  %frombool = zext i1 %1 to i8
+  %2 = cmpxchg i8* @c, i8 %0, i8 %1 seq_cst seq_cst
+  %3 = extractvalue { i8, i1 } %2, 1
+  %frombool = zext i1 %3 to i8
   ret i8 %frombool
 }
 
 ; Function Attrs: norecurse nounwind
-define signext i16 @test_atomic_compare_exchange_2() {
+define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-LABEL: test_atomic_compare_exchange_2:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:  fencem 3
@@ -445,77 +448,81 @@ define signext i16 @test_atomic_compare_exchange_2() {
 ; CHECK-NEXT:  and %s34, -4, %s34
 ; CHECK-NEXT:  or %s35, 2, %s34
 ; FIXME: following ld2b.zx should be ldl.sx...
-; CHECK-NEXT:  ld2b.zx %s35, (,%s35)
-; CHECK-NEXT:  sla.w.sx %s38, %s35, 16
+; CHECK-NEXT:  ld2b.zx %s37, (,%s35)
+; CHECK-NEXT:  and %s35, %s1, (48)0
+; CHECK-NEXT:  and %s36, %s0, (48)0
+; CHECK-NEXT:  sla.w.sx %s41, %s37, 16
 ; CHECK-NEXT:  or %s0, 0, (0)1
-; CHECK-NEXT:  lea %s37, -65536
+; CHECK-NEXT:  lea %s39, -65536
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  or %s35, 0, %s38
-; CHECK-NEXT:  or %s36, 0, %s38
-; CHECK-NEXT:  cas.w %s36, (%s34), %s38
-; CHECK-NEXT:  breq.w %s36, %s38, .LBB{{[0-9]+}}_3
+; CHECK-NEXT:  or %s37, %s41, %s35
+; CHECK-NEXT:  or %s38, %s41, %s36
+; CHECK-NEXT:  cas.w %s37, (%s34), %s38
+; CHECK-NEXT:  breq.w %s37, %s38, .LBB26_3
 ; CHECK-NEXT:  # %partword.cmpxchg.failure
 ; CHECK-NEXT:  #   in Loop: Header=BB{{[0-9]+}}_1 Depth=1
-; CHECK-NEXT:  and %s38, %s36, %s37
-; CHECK-NEXT:  brne.w %s35, %s38, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:  or %s40, 0, %s41
+; CHECK-NEXT:  and %s41, %s37, %s39
+; CHECK-NEXT:  brne.w %s40, %s41, .LBB26_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmps.w.sx %s34, %s36, %s35
+; CHECK-NEXT:  cmps.w.sx %s34, %s37, %s38
 ; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i16* @s, i16 undef, i16 undef seq_cst seq_cst
-  %1 = extractvalue { i16, i1 } %0, 1
-  %conv = zext i1 %1 to i16
+  %2 = cmpxchg i16* @s, i16 %0, i16 %1 seq_cst seq_cst
+  %3 = extractvalue { i16, i1 } %2, 1
+  %conv = zext i1 %3 to i16
   ret i16 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i32 @test_atomic_compare_exchange_4() {
+define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-LABEL: test_atomic_compare_exchange_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  cas.w %s34, i@lo(%s34), %s34
-; CHECK-NEXT:  cmps.w.sx %s34, %s34, %s34
+; CHECK-NEXT:  cas.w %s1, i@lo(%s34), %s0
+; CHECK-NEXT:  cmps.w.sx %s34, %s1, %s0
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s0, 0, (0)1
 ; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i32* @i, i32 undef, i32 undef seq_cst seq_cst
-  %1 = extractvalue { i32, i1 } %0, 1
-  %conv = zext i1 %1 to i32
+  %2 = cmpxchg i32* @i, i32 %0, i32 %1 seq_cst seq_cst
+  %3 = extractvalue { i32, i1 } %2, 1
+  %conv = zext i1 %3 to i32
   ret i32 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8() {
+define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg i64* @l, i64 undef, i64 undef seq_cst seq_cst
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16() {
+define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-LABEL: test_atomic_compare_exchange_16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  st %s1, -8(,%s9)
+; CHECK-NEXT:  st %s0, -16(,%s9)
 ; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
@@ -530,559 +537,220 @@ define i128 @test_atomic_compare_exchange_16() {
 ; CHECK-NEXT:  or %s1, 0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i128* @it, i128 undef, i128 undef seq_cst seq_cst
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
+  %2 = cmpxchg i128* @it, i128 %0, i128 %1 seq_cst seq_cst
+  %3 = extractvalue { i128, i1 } %2, 1
+  %conv = zext i1 %3 to i128
   ret i128 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_relaxed() {
+define i64 @test_atomic_compare_exchange_8_relaxed(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i64* @l, i64 undef, i64 undef monotonic monotonic
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg i64* @l, i64 %0, i64 %1 monotonic monotonic
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_relaxed() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_relaxed:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 0, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg i128* @it, i128 undef, i128 undef monotonic monotonic
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_consume() {
+define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i64* @l, i64 undef, i64 undef acquire acquire
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_consume() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_consume:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 2, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg i128* @it, i128 undef, i128 undef acquire acquire
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_acquire() {
+define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i64* @l, i64 undef, i64 undef acquire acquire
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_acquire() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_acquire:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 2, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg i128* @it, i128 undef, i128 undef acquire acquire
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_release() {
+define i64 @test_atomic_compare_exchange_8_release(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i64* @l, i64 undef, i64 undef release monotonic
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg i64* @l, i64 %0, i64 %1 release monotonic
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_release() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_release:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 3, (0)1
-; CHECK-NEXT:  or %s5, 0, (0)1
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg i128* @it, i128 undef, i128 undef release monotonic
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_acq_rel() {
+define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg i64* @l, i64 undef, i64 undef acq_rel acquire
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg i64* @l, i64 %0, i64 %1 acq_rel acquire
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_acq_rel() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_acq_rel:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 4, (0)1
-; CHECK-NEXT:  or %s5, 2, (0)1
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg i128* @it, i128 undef, i128 undef acq_rel acquire
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define signext i8 @test_atomic_compare_exchange_1_weak() {
-; CHECK-LABEL: test_atomic_compare_exchange_1_weak:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea %s34, c@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
-; CHECK-NEXT:  and %s34, -4, %s34
-; CHECK-NEXT:  ldl.sx %s35, (,%s34)
-; CHECK-NEXT:  lea %s36, -256
-; CHECK-NEXT:  and %s35, %s35, %s36
-; CHECK-NEXT:  or %s36, 0, %s35
-; CHECK-NEXT:  cas.w %s36, (%s34), %s35
-; CHECK-NEXT:  cmps.w.sx %s34, %s36, %s35
-; CHECK-NEXT:  or %s0, 0, (0)1
-; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
-; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i8* @c, i8 undef, i8 undef seq_cst seq_cst
-  %1 = extractvalue { i8, i1 } %0, 1
-  %frombool = zext i1 %1 to i8
-  ret i8 %frombool
-}
-
-; Function Attrs: norecurse nounwind
-define signext i16 @test_atomic_compare_exchange_2_weak() {
-; CHECK-LABEL: test_atomic_compare_exchange_2_weak:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea %s34, s@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
-; CHECK-NEXT:  and %s34, -4, %s34
-; CHECK-NEXT:  or %s35, 2, %s34
-; FIXME: following ld2b.zx should be ldl.sx...
-; CHECK-NEXT:  ld2b.zx %s35, (,%s35)
-; CHECK-NEXT:  sla.w.sx %s35, %s35, 16
-; CHECK-NEXT:  or %s36, 0, %s35
-; CHECK-NEXT:  cas.w %s36, (%s34), %s35
-; CHECK-NEXT:  cmps.w.sx %s34, %s36, %s35
-; CHECK-NEXT:  or %s0, 0, (0)1
-; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
-; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i16* @s, i16 undef, i16 undef seq_cst seq_cst
-  %1 = extractvalue { i16, i1 } %0, 1
-  %conv = zext i1 %1 to i16
-  ret i16 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i32 @test_atomic_compare_exchange_4_weak() {
-; CHECK-LABEL: test_atomic_compare_exchange_4_weak:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  cas.w %s34, i@lo(%s34), %s34
-; CHECK-NEXT:  cmps.w.sx %s34, %s34, %s34
-; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  or %s0, 0, (0)1
-; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
-; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i32* @i, i32 undef, i32 undef seq_cst seq_cst
-  %1 = extractvalue { i32, i1 } %0, 1
-  %conv = zext i1 %1 to i32
-  ret i32 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_weak() {
+define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg weak i64* @l, i64 undef, i64 undef seq_cst seq_cst
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 seq_cst seq_cst
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_weak() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_weak:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 5, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i128* @it, i128 undef, i128 undef seq_cst seq_cst
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_weak_relaxed() {
+define i64 @test_atomic_compare_exchange_8_weak_relaxed(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg weak i64* @l, i64 undef, i64 undef monotonic monotonic
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 monotonic monotonic
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_weak_relaxed() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_weak_relaxed:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 0, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i128* @it, i128 undef, i128 undef monotonic monotonic
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_weak_consume() {
+define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg weak i64* @l, i64 undef, i64 undef acquire acquire
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_weak_consume() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_weak_consume:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 2, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i128* @it, i128 undef, i128 undef acquire acquire
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_weak_acquire() {
+define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg weak i64* @l, i64 undef, i64 undef acquire acquire
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_weak_acquire() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_weak_acquire:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 2, (0)1
-; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i128* @it, i128 undef, i128 undef acquire acquire
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_weak_release() {
+define i64 @test_atomic_compare_exchange_8_weak_release(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg weak i64* @l, i64 undef, i64 undef release monotonic
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 release monotonic
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
 }
 
 ; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_weak_release() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_weak_release:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 3, (0)1
-; CHECK-NEXT:  or %s5, 0, (0)1
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i128* @it, i128 undef, i128 undef release monotonic
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8_weak_acq_rel() {
+define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
 ; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s34, l@lo(%s34), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = cmpxchg weak i64* @l, i64 undef, i64 undef acq_rel acquire
-  %1 = extractvalue { i64, i1 } %0, 1
-  %conv = zext i1 %1 to i64
+  %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acq_rel acquire
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
   ret i64 %conv
-}
-
-; Function Attrs: norecurse nounwind
-define i128 @test_atomic_compare_exchange_16_weak_acq_rel() {
-; CHECK-LABEL: test_atomic_compare_exchange_16_weak_acq_rel:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, __atomic_compare_exchange_16@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, __atomic_compare_exchange_16@hi(%s34)
-; CHECK-NEXT:  lea %s34, it@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, it@hi(%s34)
-; CHECK-NEXT:  lea %s1,-16(,%s9)
-; CHECK-NEXT:  or %s4, 4, (0)1
-; CHECK-NEXT:  or %s5, 2, (0)1
-; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  or %s11, 0, %s9
-entry:
-  %0 = cmpxchg weak i128* @it, i128 undef, i128 undef acq_rel acquire
-  %1 = extractvalue { i128, i1 } %0, 1
-  %conv = zext i1 %1 to i128
-  ret i128 %conv
 }
 
 ; Function Attrs: norecurse nounwind readnone
@@ -2040,22 +1708,22 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define i64 @test_atomic_compare_exchange_8stk() {
+define i64 @test_atomic_compare_exchange_8stk(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cas.l %s34, 192(%s11), %s34
-; CHECK-NEXT:  cmps.l %s34, %s34, %s34
+; CHECK-NEXT:  cas.l %s1, 192(%s11), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
-  %0 = alloca i64, align 32
-  %1 = cmpxchg i64* %0, i64 undef, i64 undef seq_cst seq_cst
-  %2 = extractvalue { i64, i1 } %1, 1
-  %conv = zext i1 %2 to i64
+  %2 = alloca i64, align 32
+  %3 = cmpxchg i64* %2, i64 %0, i64 %1 seq_cst seq_cst
+  %4 = extractvalue { i64, i1 } %3, 1
+  %conv = zext i1 %4 to i64
   ret i64 %conv
 }
 

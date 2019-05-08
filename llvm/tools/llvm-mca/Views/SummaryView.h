@@ -45,6 +45,7 @@ class SummaryView : public View {
   unsigned TotalCycles;
   // The total number of micro opcodes contributed by a block of instructions.
   unsigned NumMicroOps;
+
   // For each processor resource, this vector stores the cumulative number of
   // resource cycles consumed by the analyzed code block.
   llvm::SmallVector<unsigned, 8> ProcResourceUsage;
@@ -70,9 +71,9 @@ public:
 
   void onCycleEnd() override { ++TotalCycles; }
   void onEvent(const HWInstructionEvent &Event) override;
-
   void printView(llvm::raw_ostream &OS) const override;
 };
+
 } // namespace mca
 } // namespace llvm
 

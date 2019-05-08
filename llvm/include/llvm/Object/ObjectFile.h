@@ -135,6 +135,30 @@ public:
   const ObjectFile *getObject() const;
 };
 
+struct SectionedAddress {
+  // TODO: constructors could be removed when C++14 would be adopted.
+  SectionedAddress() {}
+  SectionedAddress(uint64_t Addr, uint64_t SectIdx)
+      : Address(Addr), SectionIndex(SectIdx) {}
+
+  const static uint64_t UndefSection = UINT64_MAX;
+
+  uint64_t Address = 0;
+  uint64_t SectionIndex = UndefSection;
+};
+
+inline bool operator<(const SectionedAddress &LHS,
+                      const SectionedAddress &RHS) {
+  return std::tie(LHS.SectionIndex, LHS.Address) <
+         std::tie(RHS.SectionIndex, RHS.Address);
+}
+
+inline bool operator==(const SectionedAddress &LHS,
+                       const SectionedAddress &RHS) {
+  return std::tie(LHS.SectionIndex, LHS.Address) ==
+         std::tie(RHS.SectionIndex, RHS.Address);
+}
+
 /// This is a value type class that represents a single symbol in the list of
 /// symbols in the object file.
 class SymbolRef : public BasicSymbolRef {
@@ -233,8 +257,7 @@ protected:
   friend class SectionRef;
 
   virtual void moveSectionNext(DataRefImpl &Sec) const = 0;
-  virtual std::error_code getSectionName(DataRefImpl Sec,
-                                         StringRef &Res) const = 0;
+  virtual Expected<StringRef> getSectionName(DataRefImpl Sec) const = 0;
   virtual uint64_t getSectionAddress(DataRefImpl Sec) const = 0;
   virtual uint64_t getSectionIndex(DataRefImpl Sec) const = 0;
   virtual uint64_t getSectionSize(DataRefImpl Sec) const = 0;
@@ -340,6 +363,9 @@ public:
   createCOFFObjectFile(MemoryBufferRef Object);
 
   static Expected<std::unique_ptr<ObjectFile>>
+  createXCOFFObjectFile(MemoryBufferRef Object);
+
+  static Expected<std::unique_ptr<ObjectFile>>
   createELFObjectFile(MemoryBufferRef Object);
 
   static Expected<std::unique_ptr<MachOObjectFile>>
@@ -411,7 +437,11 @@ inline void SectionRef::moveNext() {
 }
 
 inline std::error_code SectionRef::getName(StringRef &Result) const {
-  return OwningObject->getSectionName(SectionPimpl, Result);
+  Expected<StringRef> NameOrErr = OwningObject->getSectionName(SectionPimpl);
+  if (!NameOrErr)
+    return errorToErrorCode(NameOrErr.takeError());
+  Result = *NameOrErr;
+  return std::error_code();
 }
 
 inline uint64_t SectionRef::getAddress() const {

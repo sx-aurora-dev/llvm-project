@@ -8,7 +8,6 @@
 
 #include "lldb/Breakpoint/BreakpointResolverName.h"
 
-#include "Plugins/Language/CPlusPlus/CPlusPlusLanguage.h"
 #include "Plugins/Language/ObjC/ObjCLanguage.h"
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Architecture.h"
@@ -217,7 +216,7 @@ StructuredData::ObjectSP BreakpointResolverName::SerializeToStructuredData() {
   return WrapOptionsDict(options_dict_sp);
 }
 
-void BreakpointResolverName::AddNameLookup(const ConstString &name,
+void BreakpointResolverName::AddNameLookup(ConstString name,
                                            FunctionNameType name_type_mask) {
   ObjCLanguage::MethodName objc_method(name.GetCString(), false);
   if (objc_method.IsValid(false)) {
