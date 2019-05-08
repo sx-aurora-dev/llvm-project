@@ -28,6 +28,7 @@ class DefinedAbsolute;
 class DefinedRelative;
 class StringChunk;
 class Symbol;
+class InputFile;
 
 // Short aliases.
 static const auto AMD64 = llvm::COFF::IMAGE_FILE_MACHINE_AMD64;
@@ -90,17 +91,20 @@ struct Configuration {
   bool NoEntry = false;
   std::string OutputFile;
   std::string ImportName;
+  bool Demangle = true;
   bool DoGC = true;
   bool DoICF = true;
   bool TailMerge;
   bool Relocatable = true;
   bool ForceMultiple = false;
+  bool ForceMultipleRes = false;
   bool ForceUnresolved = false;
   bool Debug = false;
   bool DebugDwarf = false;
   bool DebugGHashes = false;
   bool DebugSymtab = false;
   bool ShowTiming = false;
+  bool ShowSummary = false;
   unsigned DebugTypes = static_cast<unsigned>(DebugType::None);
   std::vector<std::string> NatvisFiles;
   llvm::SmallString<128> PDBAltPath;
@@ -164,7 +168,7 @@ struct Configuration {
   std::map<std::string, int> AlignComm;
 
   // Used for /failifmismatch.
-  std::map<StringRef, StringRef> MustMatch;
+  std::map<StringRef, std::pair<StringRef, InputFile *>> MustMatch;
 
   // Used for /alternatename.
   std::map<StringRef, StringRef> AlternateNames;
@@ -185,6 +189,7 @@ struct Configuration {
   uint32_t MajorOSVersion = 6;
   uint32_t MinorOSVersion = 0;
   uint32_t Timestamp = 0;
+  uint32_t FunctionPadMin = 0;
   bool DynamicBase = true;
   bool AllowBind = true;
   bool NxCompat = true;
@@ -201,6 +206,8 @@ struct Configuration {
   bool IntegrityCheck = false;
   bool KillAt = false;
   bool Repro = false;
+  bool SwaprunCD = false;
+  bool SwaprunNet = false;
 };
 
 extern Configuration *Config;
