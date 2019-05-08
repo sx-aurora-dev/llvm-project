@@ -20,16 +20,14 @@ SystemRuntime *SystemRuntime::FindPlugin(Process *process) {
        (create_callback = PluginManager::GetSystemRuntimeCreateCallbackAtIndex(
             idx)) != nullptr;
        ++idx) {
-    std::unique_ptr<SystemRuntime> instance_ap(create_callback(process));
-    if (instance_ap)
-      return instance_ap.release();
+    std::unique_ptr<SystemRuntime> instance_up(create_callback(process));
+    if (instance_up)
+      return instance_up.release();
   }
   return nullptr;
 }
 
-//----------------------------------------------------------------------
 // SystemRuntime constructor
-//----------------------------------------------------------------------
 SystemRuntime::SystemRuntime(Process *process)
     : m_process(process), m_types() {}
 

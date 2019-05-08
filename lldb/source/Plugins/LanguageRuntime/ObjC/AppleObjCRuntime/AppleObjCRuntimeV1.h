@@ -19,9 +19,7 @@ class AppleObjCRuntimeV1 : public AppleObjCRuntime {
 public:
   ~AppleObjCRuntimeV1() override = default;
 
-  //------------------------------------------------------------------
   // Static Functions
-  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -99,9 +97,7 @@ public:
 
   UtilityFunction *CreateObjectChecker(const char *) override;
 
-  //------------------------------------------------------------------
   // PluginInterface protocol
-  //------------------------------------------------------------------
   ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;
@@ -147,7 +143,7 @@ protected:
 
   HashTableSignature m_hash_signature;
   lldb::addr_t m_isa_hash_table_ptr;
-  std::unique_ptr<DeclVendor> m_decl_vendor_ap;
+  std::unique_ptr<DeclVendor> m_decl_vendor_up;
 
 private:
   AppleObjCRuntimeV1(Process *process);

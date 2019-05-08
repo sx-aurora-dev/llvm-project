@@ -907,7 +907,6 @@ public:
     typedef value_type&                              reference;
     typedef const value_type&                        const_reference;
 
-    static_assert(sizeof(__diagnose_non_const_comparator<_Key, _Compare>()), "");
     static_assert((is_same<typename allocator_type::value_type, value_type>::value),
                   "Allocator::value_type must be same type as value_type");
 
@@ -1084,6 +1083,11 @@ public:
         {
             insert(__m.begin(), __m.end());
         }
+
+    _LIBCPP_INLINE_VISIBILITY
+    ~map() {
+        static_assert(sizeof(__diagnose_non_const_comparator<_Key, _Compare>()), "");
+    }
 
     _LIBCPP_INLINE_VISIBILITY
           iterator begin() _NOEXCEPT {return __tree_.begin();}
@@ -1535,10 +1539,8 @@ map<_Key, _Tp, _Compare, _Allocator>::at(const key_type& __k)
 {
     __parent_pointer __parent;
     __node_base_pointer& __child = __tree_.__find_equal(__parent, __k);
-#ifndef _LIBCPP_NO_EXCEPTIONS
     if (__child == nullptr)
-        throw out_of_range("map::at:  key not found");
-#endif  // _LIBCPP_NO_EXCEPTIONS
+        __throw_out_of_range("map::at:  key not found");
     return static_cast<__node_pointer>(__child)->__value_.__get_value().second;
 }
 
@@ -1548,10 +1550,8 @@ map<_Key, _Tp, _Compare, _Allocator>::at(const key_type& __k) const
 {
     __parent_pointer __parent;
     __node_base_pointer __child = __tree_.__find_equal(__parent, __k);
-#ifndef _LIBCPP_NO_EXCEPTIONS
     if (__child == nullptr)
-        throw out_of_range("map::at:  key not found");
-#endif  // _LIBCPP_NO_EXCEPTIONS
+        __throw_out_of_range("map::at:  key not found");
     return static_cast<__node_pointer>(__child)->__value_.__get_value().second;
 }
 
@@ -1642,7 +1642,6 @@ public:
     typedef value_type&                              reference;
     typedef const value_type&                        const_reference;
 
-    static_assert(sizeof(__diagnose_non_const_comparator<_Key, _Compare>()), "");
     static_assert((is_same<typename allocator_type::value_type, value_type>::value),
                   "Allocator::value_type must be same type as value_type");
 
@@ -1820,6 +1819,11 @@ public:
         {
             insert(__m.begin(), __m.end());
         }
+
+    _LIBCPP_INLINE_VISIBILITY
+    ~multimap() {
+        static_assert(sizeof(__diagnose_non_const_comparator<_Key, _Compare>()), "");
+    }
 
     _LIBCPP_INLINE_VISIBILITY
           iterator begin() _NOEXCEPT {return __tree_.begin();}

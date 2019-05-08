@@ -46,14 +46,17 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
+#include "llvm/Analysis/LazyBlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/Analysis/TargetFolder.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -921,8 +924,8 @@ Instruction *InstCombiner::foldOpIntoPhi(Instruction &I, PHINode *PN) {
 
     // If the InVal is an invoke at the end of the pred block, then we can't
     // insert a computation after it without breaking the edge.
-    if (InvokeInst *II = dyn_cast<InvokeInst>(InVal))
-      if (II->getParent() == NonConstBB)
+    if (isa<InvokeInst>(InVal))
+      if (cast<Instruction>(InVal)->getParent() == NonConstBB)
         return nullptr;
 
     // If the incoming non-constant value is in I's block, we will remove one
@@ -1375,7 +1378,8 @@ Instruction *InstCombiner::foldVectorBinop(BinaryOperator &Inst) {
   if (match(LHS, m_ShuffleVector(m_Value(L0), m_Value(L1), m_Constant(Mask))) &&
       match(RHS, m_ShuffleVector(m_Value(R0), m_Value(R1), m_Specific(Mask))) &&
       LHS->hasOneUse() && RHS->hasOneUse() &&
-      cast<ShuffleVectorInst>(LHS)->isConcat()) {
+      cast<ShuffleVectorInst>(LHS)->isConcat() &&
+      cast<ShuffleVectorInst>(RHS)->isConcat()) {
     // This transform does not have the speculative execution constraint as
     // below because the shuffle is a concatenation. The new binops are
     // operating on exactly the same elements as the existing binop.
@@ -1412,6 +1416,30 @@ Instruction *InstCombiner::foldVectorBinop(BinaryOperator &Inst) {
       (LHS->hasOneUse() || RHS->hasOneUse() || LHS == RHS)) {
     // Op(shuffle(V1, Mask), shuffle(V2, Mask)) -> shuffle(Op(V1, V2), Mask)
     return createBinOpShuffle(V1, V2, Mask);
+  }
+
+  // If both arguments of a commutative binop are select-shuffles that use the
+  // same mask with commuted operands, the shuffles are unnecessary.
+  if (Inst.isCommutative() &&
+      match(LHS, m_ShuffleVector(m_Value(V1), m_Value(V2), m_Constant(Mask))) &&
+      match(RHS, m_ShuffleVector(m_Specific(V2), m_Specific(V1),
+                                 m_Specific(Mask)))) {
+    auto *LShuf = cast<ShuffleVectorInst>(LHS);
+    auto *RShuf = cast<ShuffleVectorInst>(RHS);
+    // TODO: Allow shuffles that contain undefs in the mask?
+    //       That is legal, but it reduces undef knowledge.
+    // TODO: Allow arbitrary shuffles by shuffling after binop?
+    //       That might be legal, but we have to deal with poison.
+    if (LShuf->isSelect() && !LShuf->getMask()->containsUndefElement() &&
+        RShuf->isSelect() && !RShuf->getMask()->containsUndefElement()) {
+      // Example:
+      // LHS = shuffle V1, V2, <0, 5, 6, 3>
+      // RHS = shuffle V2, V1, <0, 5, 6, 3>
+      // LHS + RHS --> (V10+V20, V21+V11, V22+V12, V13+V23) --> V1 + V2
+      Instruction *NewBO = BinaryOperator::Create(Opcode, V1, V2);
+      NewBO->copyIRFlags(&Inst);
+      return NewBO;
+    }
   }
 
   // If one argument is a shuffle within one vector and the other is a constant,
@@ -1555,6 +1583,23 @@ Instruction *InstCombiner::visitGetElementPtrInst(GetElementPtrInst &GEP) {
   Type *GEPEltType = GEP.getSourceElementType();
   if (Value *V = SimplifyGEPInst(GEPEltType, Ops, SQ.getWithInstruction(&GEP)))
     return replaceInstUsesWith(GEP, V);
+
+  // For vector geps, use the generic demanded vector support.
+  if (GEP.getType()->isVectorTy()) {
+    auto VWidth = GEP.getType()->getVectorNumElements();
+    APInt UndefElts(VWidth, 0);
+    APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
+    if (Value *V = SimplifyDemandedVectorElts(&GEP, AllOnesEltMask,
+                                              UndefElts)) {
+      if (V != &GEP)
+        return replaceInstUsesWith(GEP, V);
+      return &GEP;
+    }
+
+    // TODO: 1) Scalarize splat operands, 2) scalarize entire instruction if
+    // possible (decide on canonical form for pointer broadcast), 3) exploit
+    // undef elements to decrease demanded bits  
+  }
 
   Value *PtrOp = GEP.getOperand(0);
 
@@ -2430,9 +2475,8 @@ Instruction *InstCombiner::visitFree(CallInst &FI) {
 
   // free undef -> unreachable.
   if (isa<UndefValue>(Op)) {
-    // Insert a new store to null because we cannot modify the CFG here.
-    Builder.CreateStore(ConstantInt::getTrue(FI.getContext()),
-                        UndefValue::get(Type::getInt1PtrTy(FI.getContext())));
+    // Leave a marker since we can't modify the CFG here.
+    CreateNonTerminatorUnreachable(&FI);
     return eraseInstFromFunction(FI);
   }
 
@@ -2622,53 +2666,28 @@ Instruction *InstCombiner::visitExtractValueInst(ExtractValueInst &EV) {
       return ExtractValueInst::Create(IV->getInsertedValueOperand(),
                                       makeArrayRef(exti, exte));
   }
-  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(Agg)) {
-    // We're extracting from an intrinsic, see if we're the only user, which
-    // allows us to simplify multiple result intrinsics to simpler things that
-    // just get one value.
-    if (II->hasOneUse()) {
-      // Check if we're grabbing the overflow bit or the result of a 'with
-      // overflow' intrinsic.  If it's the latter we can remove the intrinsic
+  if (WithOverflowInst *WO = dyn_cast<WithOverflowInst>(Agg)) {
+    // We're extracting from an overflow intrinsic, see if we're the only user,
+    // which allows us to simplify multiple result intrinsics to simpler
+    // things that just get one value.
+    if (WO->hasOneUse()) {
+      // Check if we're grabbing only the result of a 'with overflow' intrinsic
       // and replace it with a traditional binary instruction.
-      switch (II->getIntrinsicID()) {
-      case Intrinsic::uadd_with_overflow:
-      case Intrinsic::sadd_with_overflow:
-        if (*EV.idx_begin() == 0) {  // Normal result.
-          Value *LHS = II->getArgOperand(0), *RHS = II->getArgOperand(1);
-          replaceInstUsesWith(*II, UndefValue::get(II->getType()));
-          eraseInstFromFunction(*II);
-          return BinaryOperator::CreateAdd(LHS, RHS);
-        }
-
-        // If the normal result of the add is dead, and the RHS is a constant,
-        // we can transform this into a range comparison.
-        // overflow = uadd a, -4  -->  overflow = icmp ugt a, 3
-        if (II->getIntrinsicID() == Intrinsic::uadd_with_overflow)
-          if (ConstantInt *CI = dyn_cast<ConstantInt>(II->getArgOperand(1)))
-            return new ICmpInst(ICmpInst::ICMP_UGT, II->getArgOperand(0),
-                                ConstantExpr::getNot(CI));
-        break;
-      case Intrinsic::usub_with_overflow:
-      case Intrinsic::ssub_with_overflow:
-        if (*EV.idx_begin() == 0) {  // Normal result.
-          Value *LHS = II->getArgOperand(0), *RHS = II->getArgOperand(1);
-          replaceInstUsesWith(*II, UndefValue::get(II->getType()));
-          eraseInstFromFunction(*II);
-          return BinaryOperator::CreateSub(LHS, RHS);
-        }
-        break;
-      case Intrinsic::umul_with_overflow:
-      case Intrinsic::smul_with_overflow:
-        if (*EV.idx_begin() == 0) {  // Normal result.
-          Value *LHS = II->getArgOperand(0), *RHS = II->getArgOperand(1);
-          replaceInstUsesWith(*II, UndefValue::get(II->getType()));
-          eraseInstFromFunction(*II);
-          return BinaryOperator::CreateMul(LHS, RHS);
-        }
-        break;
-      default:
-        break;
+      if (*EV.idx_begin() == 0) {
+        Instruction::BinaryOps BinOp = WO->getBinaryOp();
+        Value *LHS = WO->getLHS(), *RHS = WO->getRHS();
+        replaceInstUsesWith(*WO, UndefValue::get(WO->getType()));
+        eraseInstFromFunction(*WO);
+        return BinaryOperator::Create(BinOp, LHS, RHS);
       }
+
+      // If the normal result of the add is dead, and the RHS is a constant,
+      // we can transform this into a range comparison.
+      // overflow = uadd a, -4  -->  overflow = icmp ugt a, 3
+      if (WO->getIntrinsicID() == Intrinsic::uadd_with_overflow)
+        if (ConstantInt *CI = dyn_cast<ConstantInt>(WO->getRHS()))
+          return new ICmpInst(ICmpInst::ICMP_UGT, WO->getLHS(),
+                              ConstantExpr::getNot(CI));
     }
   }
   if (LoadInst *L = dyn_cast<LoadInst>(Agg))
@@ -3099,13 +3118,35 @@ static bool TryToSinkInstruction(Instruction *I, BasicBlock *DestBlock) {
   ++NumSunkInst;
 
   // Also sink all related debug uses from the source basic block. Otherwise we
-  // get debug use before the def.
-  SmallVector<DbgVariableIntrinsic *, 1> DbgUsers;
+  // get debug use before the def. Attempt to salvage debug uses first, to
+  // maximise the range variables have location for. If we cannot salvage, then
+  // mark the location undef: we know it was supposed to receive a new location
+  // here, but that computation has been sunk.
+  SmallVector<DbgVariableIntrinsic *, 2> DbgUsers;
   findDbgUsers(DbgUsers, I);
-  for (auto *DII : DbgUsers) {
+  for (auto *DII : reverse(DbgUsers)) {
     if (DII->getParent() == SrcBlock) {
-      DII->moveBefore(&*InsertPos);
-      LLVM_DEBUG(dbgs() << "SINK: " << *DII << '\n');
+      // dbg.value is in the same basic block as the sunk inst, see if we can
+      // salvage it. Clone a new copy of the instruction: on success we need
+      // both salvaged and unsalvaged copies.
+      SmallVector<DbgVariableIntrinsic *, 1> TmpUser{
+          cast<DbgVariableIntrinsic>(DII->clone())};
+
+      if (!salvageDebugInfoForDbgValues(*I, TmpUser)) {
+        // We are unable to salvage: sink the cloned dbg.value, and mark the
+        // original as undef, terminating any earlier variable location.
+        LLVM_DEBUG(dbgs() << "SINK: " << *DII << '\n');
+        TmpUser[0]->insertBefore(&*InsertPos);
+        Value *Undef = UndefValue::get(I->getType());
+        DII->setOperand(0, MetadataAsValue::get(DII->getContext(),
+                                                ValueAsMetadata::get(Undef)));
+      } else {
+        // We successfully salvaged: place the salvaged dbg.value in the
+        // original location, and move the unmodified dbg.value to sink with
+        // the sunk inst.
+        TmpUser[0]->insertBefore(DII);
+        DII->moveBefore(&*InsertPos);
+      }
     }
   }
   return true;
@@ -3300,7 +3341,8 @@ static bool AddReachableCodeToWorklist(BasicBlock *BB, const DataLayout &DL,
       if (isInstructionTriviallyDead(Inst, TLI)) {
         ++NumDeadInst;
         LLVM_DEBUG(dbgs() << "IC: DCE: " << *Inst << '\n');
-        salvageDebugInfo(*Inst);
+        if (!salvageDebugInfo(*Inst))
+          replaceDbgUsesWithUndef(Inst);
         Inst->eraseFromParent();
         MadeIRChange = true;
         continue;
@@ -3413,7 +3455,8 @@ static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
 static bool combineInstructionsOverFunction(
     Function &F, InstCombineWorklist &Worklist, AliasAnalysis *AA,
     AssumptionCache &AC, TargetLibraryInfo &TLI, DominatorTree &DT,
-    OptimizationRemarkEmitter &ORE, bool ExpensiveCombines = true,
+    OptimizationRemarkEmitter &ORE, BlockFrequencyInfo *BFI,
+    ProfileSummaryInfo *PSI, bool ExpensiveCombines = true,
     LoopInfo *LI = nullptr) {
   auto &DL = F.getParent()->getDataLayout();
   ExpensiveCombines |= EnableExpensiveCombines;
@@ -3443,8 +3486,8 @@ static bool combineInstructionsOverFunction(
 
     MadeIRChange |= prepareICWorklistFromFunction(F, DL, &TLI, Worklist);
 
-    InstCombiner IC(Worklist, Builder, F.optForMinSize(), ExpensiveCombines, AA,
-                    AC, TLI, DT, ORE, DL, LI);
+    InstCombiner IC(Worklist, Builder, F.hasMinSize(), ExpensiveCombines, AA,
+                    AC, TLI, DT, ORE, BFI, PSI, DL, LI);
     IC.MaxArraySizeForCombine = MaxArraySize;
 
     if (!IC.run())
@@ -3464,8 +3507,15 @@ PreservedAnalyses InstCombinePass::run(Function &F,
   auto *LI = AM.getCachedResult<LoopAnalysis>(F);
 
   auto *AA = &AM.getResult<AAManager>(F);
+  const ModuleAnalysisManager &MAM =
+      AM.getResult<ModuleAnalysisManagerFunctionProxy>(F).getManager();
+  ProfileSummaryInfo *PSI =
+      MAM.getCachedResult<ProfileSummaryAnalysis>(*F.getParent());
+  auto *BFI = (PSI && PSI->hasProfileSummary()) ?
+      &AM.getResult<BlockFrequencyAnalysis>(F) : nullptr;
+
   if (!combineInstructionsOverFunction(F, Worklist, AA, AC, TLI, DT, ORE,
-                                       ExpensiveCombines, LI))
+                                       BFI, PSI, ExpensiveCombines, LI))
     // No changes, all analyses are preserved.
     return PreservedAnalyses::all();
 
@@ -3489,6 +3539,8 @@ void InstructionCombiningPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<AAResultsWrapperPass>();
   AU.addPreserved<BasicAAWrapperPass>();
   AU.addPreserved<GlobalsAAWrapperPass>();
+  AU.addRequired<ProfileSummaryInfoWrapperPass>();
+  LazyBlockFrequencyInfoPass::getLazyBFIAnalysisUsage(AU);
 }
 
 bool InstructionCombiningPass::runOnFunction(Function &F) {
@@ -3505,9 +3557,15 @@ bool InstructionCombiningPass::runOnFunction(Function &F) {
   // Optional analyses.
   auto *LIWP = getAnalysisIfAvailable<LoopInfoWrapperPass>();
   auto *LI = LIWP ? &LIWP->getLoopInfo() : nullptr;
+  ProfileSummaryInfo *PSI =
+      &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
+  BlockFrequencyInfo *BFI =
+      (PSI && PSI->hasProfileSummary()) ?
+      &getAnalysis<LazyBlockFrequencyInfoPass>().getBFI() :
+      nullptr;
 
   return combineInstructionsOverFunction(F, Worklist, AA, AC, TLI, DT, ORE,
-                                         ExpensiveCombines, LI);
+                                         BFI, PSI, ExpensiveCombines, LI);
 }
 
 char InstructionCombiningPass::ID = 0;
@@ -3520,6 +3578,8 @@ INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(GlobalsAAWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(LazyBlockFrequencyInfoPass)
+INITIALIZE_PASS_DEPENDENCY(ProfileSummaryInfoWrapperPass)
 INITIALIZE_PASS_END(InstructionCombiningPass, "instcombine",
                     "Combine redundant instructions", false, false)
 

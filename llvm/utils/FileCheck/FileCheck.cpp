@@ -21,6 +21,7 @@
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FileCheck.h"
+#include <cmath>
 using namespace llvm;
 
 static cl::opt<std::string>
@@ -50,9 +51,10 @@ static cl::list<std::string> ImplicitCheckNot(
              "this pattern occur which are not matched by a positive pattern"),
     cl::value_desc("pattern"));
 
-static cl::list<std::string> GlobalDefines("D", cl::Prefix,
-    cl::desc("Define a variable to be used in capture patterns."),
-    cl::value_desc("VAR=VALUE"));
+static cl::list<std::string>
+    GlobalDefines("D", cl::AlwaysPrefix,
+                  cl::desc("Define a variable to be used in capture patterns."),
+                  cl::value_desc("VAR=VALUE"));
 
 static cl::opt<bool> AllowEmptyInput(
     "allow-empty", cl::init(false),
@@ -404,7 +406,7 @@ static void DumpAnnotatedInput(raw_ostream &OS, const FileCheckRequest &Req,
   unsigned LineCount = InputFileText.count('\n');
   if (InputFileEnd[-1] != '\n')
     ++LineCount;
-  unsigned LineNoWidth = log10(LineCount) + 1;
+  unsigned LineNoWidth = std::log10(LineCount) + 1;
   // +3 below adds spaces (1) to the left of the (right-aligned) line numbers
   // on input lines and (2) to the right of the (left-aligned) labels on
   // annotation lines so that input lines and annotation lines are more
@@ -525,8 +527,25 @@ int main(int argc, char **argv) {
   for (auto CheckNot : ImplicitCheckNot)
     Req.ImplicitCheckNot.push_back(CheckNot);
 
-  for (auto G : GlobalDefines)
+  bool GlobalDefineError = false;
+  for (auto G : GlobalDefines) {
+    size_t EqIdx = G.find('=');
+    if (EqIdx == std::string::npos) {
+      errs() << "Missing equal sign in command-line definition '-D" << G
+             << "'\n";
+      GlobalDefineError = true;
+      continue;
+    }
+    if (EqIdx == 0) {
+      errs() << "Missing pattern variable name in command-line definition '-D"
+             << G << "'\n";
+      GlobalDefineError = true;
+      continue;
+    }
     Req.GlobalDefines.push_back(G);
+  }
+  if (GlobalDefineError)
+    return 2;
 
   Req.AllowEmptyInput = AllowEmptyInput;
   Req.EnableVarScope = EnableVarScope;

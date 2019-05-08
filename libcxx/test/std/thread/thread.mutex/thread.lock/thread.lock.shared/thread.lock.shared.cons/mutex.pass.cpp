@@ -8,6 +8,7 @@
 //
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++98, c++03, c++11
+// XFAIL: dylib-has-no-shared_mutex
 
 // FLAKY_TEST.
 
@@ -71,7 +72,7 @@ void g()
     assert(d < Tolerance);  // within tolerance
 }
 
-int main()
+int main(int, char**)
 {
     std::vector<std::thread> v;
     {
@@ -99,4 +100,6 @@ int main()
     std::shared_lock sl(m);
     static_assert((std::is_same<decltype(sl), std::shared_lock<decltype(m)>>::value), "" );
 #endif
+
+  return 0;
 }

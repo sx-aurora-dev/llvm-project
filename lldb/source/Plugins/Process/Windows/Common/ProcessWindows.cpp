@@ -136,7 +136,6 @@ const char *ProcessWindows::GetPluginDescriptionStatic() {
   return "Process plugin for Windows";
 }
 
-//------------------------------------------------------------------------------
 // Constructors and destructors.
 
 ProcessWindows::ProcessWindows(lldb::TargetSP target_sp,
@@ -161,7 +160,6 @@ size_t ProcessWindows::PutSTDIN(const char *buf, size_t buf_size,
   return 0;
 }
 
-//------------------------------------------------------------------------------
 // ProcessInterface protocol.
 
 lldb_private::ConstString ProcessWindows::GetPluginName() {
@@ -476,6 +474,74 @@ void ProcessWindows::DidAttach(ArchSpec &arch_spec) {
     RefreshStateAfterStop();
 }
 
+static void
+DumpAdditionalExceptionInformation(llvm::raw_ostream &stream,
+                                   const ExceptionRecordSP &exception) {
+  // Decode additional exception information for specific exception types based
+  // on
+  // https://docs.microsoft.com/en-us/windows/desktop/api/winnt/ns-winnt-_exception_record
+
+  const int addr_min_width = 2 + 8; // "0x" + 4 address bytes
+
+  const std::vector<ULONG_PTR> &args = exception->GetExceptionArguments();
+  switch (exception->GetExceptionCode()) {
+  case EXCEPTION_ACCESS_VIOLATION: {
+    if (args.size() < 2)
+      break;
+
+    stream << ": ";
+    const int access_violation_code = args[0];
+    const lldb::addr_t access_violation_address = args[1];
+    switch (access_violation_code) {
+    case 0:
+      stream << "Access violation reading";
+      break;
+    case 1:
+      stream << "Access violation writing";
+      break;
+    case 8:
+      stream << "User-mode data execution prevention (DEP) violation at";
+      break;
+    default:
+      stream << "Unknown access violation (code " << access_violation_code
+             << ") at";
+      break;
+    }
+    stream << " location "
+           << llvm::format_hex(access_violation_address, addr_min_width);
+    break;
+  }
+  case EXCEPTION_IN_PAGE_ERROR: {
+    if (args.size() < 3)
+      break;
+
+    stream << ": ";
+    const int page_load_error_code = args[0];
+    const lldb::addr_t page_load_error_address = args[1];
+    const DWORD underlying_code = args[2];
+    switch (page_load_error_code) {
+    case 0:
+      stream << "In page error reading";
+      break;
+    case 1:
+      stream << "In page error writing";
+      break;
+    case 8:
+      stream << "User-mode data execution prevention (DEP) violation at";
+      break;
+    default:
+      stream << "Unknown page loading error (code " << page_load_error_code
+             << ") at";
+      break;
+    }
+    stream << " location "
+           << llvm::format_hex(page_load_error_address, addr_min_width)
+           << " (status code " << llvm::format_hex(underlying_code, 8) << ")";
+    break;
+  }
+  }
+}
+
 void ProcessWindows::RefreshStateAfterStop() {
   Log *log = ProcessWindowsLog::GetLogIfAny(WINDOWS_LOG_EXCEPTION);
   llvm::sys::ScopedLock lock(m_mutex);
@@ -575,6 +641,8 @@ void ProcessWindows::RefreshStateAfterStop() {
                 << llvm::format_hex(active_exception->GetExceptionCode(), 8)
                 << " encountered at address "
                 << llvm::format_hex(active_exception->GetExceptionAddress(), 8);
+    DumpAdditionalExceptionInformation(desc_stream, active_exception);
+
     stop_info = StopInfo::CreateStopReasonWithException(
         *stop_thread, desc_stream.str().c_str());
     stop_thread->SetStopInfo(stop_info);
@@ -864,6 +932,13 @@ lldb::addr_t ProcessWindows::GetImageInfoAddress() {
     return LLDB_INVALID_ADDRESS;
 }
 
+DynamicLoaderWindowsDYLD *ProcessWindows::GetDynamicLoader() {
+  if (m_dyld_up.get() == NULL)
+    m_dyld_up.reset(DynamicLoader::FindPlugin(
+        this, DynamicLoaderWindowsDYLD::GetPluginNameStatic().GetCString()));
+  return static_cast<DynamicLoaderWindowsDYLD *>(m_dyld_up.get());
+}
+
 void ProcessWindows::OnExitProcess(uint32_t exit_code) {
   // No need to acquire the lock since m_session_data isn't accessed.
   Log *log = ProcessWindowsLog::GetLogIfAny(WINDOWS_LOG_PROCESS);
@@ -908,7 +983,8 @@ void ProcessWindows::OnDebuggerConnected(lldb::addr_t image_base) {
     FileSystem::Instance().Resolve(executable_file);
     ModuleSpec module_spec(executable_file);
     Status error;
-    module = GetTarget().GetSharedModule(module_spec, &error);
+    module = GetTarget().GetOrCreateModule(module_spec, 
+                                           true /* notify */, &error);
     if (!module) {
       return;
     }
@@ -916,12 +992,8 @@ void ProcessWindows::OnDebuggerConnected(lldb::addr_t image_base) {
     GetTarget().SetExecutableModule(module, eLoadDependentsNo);
   }
 
-  bool load_addr_changed;
-  module->SetLoadAddress(GetTarget(), image_base, false, load_addr_changed);
-
-  ModuleList loaded_modules;
-  loaded_modules.Append(module);
-  GetTarget().ModulesDidLoad(loaded_modules);
+  if (auto dyld = GetDynamicLoader())
+    dyld->OnLoadModule(module, ModuleSpec(), image_base);
 
   // Add the main executable module to the list of pending module loads.  We
   // can't call GetTarget().ModulesDidLoad() here because we still haven't
@@ -1027,29 +1099,13 @@ void ProcessWindows::OnExitThread(lldb::tid_t thread_id, uint32_t exit_code) {
 
 void ProcessWindows::OnLoadDll(const ModuleSpec &module_spec,
                                lldb::addr_t module_addr) {
-  // Confusingly, there is no Target::AddSharedModule.  Instead, calling
-  // GetSharedModule() with a new module will add it to the module list and
-  // return a corresponding ModuleSP.
-  Status error;
-  ModuleSP module = GetTarget().GetSharedModule(module_spec, &error);
-  bool load_addr_changed = false;
-  module->SetLoadAddress(GetTarget(), module_addr, false, load_addr_changed);
-
-  ModuleList loaded_modules;
-  loaded_modules.Append(module);
-  GetTarget().ModulesDidLoad(loaded_modules);
+  if (auto dyld = GetDynamicLoader())
+    dyld->OnLoadModule(nullptr, module_spec, module_addr);
 }
 
 void ProcessWindows::OnUnloadDll(lldb::addr_t module_addr) {
-  Address resolved_addr;
-  if (GetTarget().ResolveLoadAddress(module_addr, resolved_addr)) {
-    ModuleSP module = resolved_addr.GetModule();
-    if (module) {
-      ModuleList unloaded_modules;
-      unloaded_modules.Append(module);
-      GetTarget().ModulesDidUnload(unloaded_modules, false);
-    }
-  }
+  if (auto dyld = GetDynamicLoader())
+    dyld->OnUnloadModule(module_addr);
 }
 
 void ProcessWindows::OnDebugString(const std::string &string) {}

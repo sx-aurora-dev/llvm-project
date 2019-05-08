@@ -22,7 +22,6 @@
 
 #include "test_macros.h"
 
-#include <iostream>
 
 constexpr bool testConstexprYears(std::chrono::year_month_weekday_last ym)
 {
@@ -40,7 +39,7 @@ constexpr bool testConstexprMonths(std::chrono::year_month_weekday_last ym)
     return true;
 }
 
-int main()
+int main(int, char**)
 {
     using year                    = std::chrono::year;
     using month                   = std::chrono::month;
@@ -89,4 +88,6 @@ int main()
     }
     }
 
+
+  return 0;
 }

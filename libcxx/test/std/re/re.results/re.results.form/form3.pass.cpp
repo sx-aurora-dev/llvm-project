@@ -15,15 +15,13 @@
 //   format(const basic_string<char_type, ST, SA>& fmt,
 //          regex_constants::match_flag_type flags = regex_constants::format_default) const;
 
-#include <iostream>
-
 #include <regex>
 #include <cassert>
 
 #include "test_macros.h"
 #include "test_allocator.h"
 
-int main()
+int main(int, char**)
 {
     typedef std::basic_string<char, std::char_traits<char>, test_allocator<char> > nstr;
     typedef std::basic_string<wchar_t, std::char_traits<wchar_t>, test_allocator<wchar_t> > wstr;
@@ -82,4 +80,6 @@ int main()
         wstr out = m.format(fmt, std::regex_constants::format_sed);
         assert(out == L"match: cdefghi, m[1]: efg, m[2]: e");
     }
+
+  return 0;
 }

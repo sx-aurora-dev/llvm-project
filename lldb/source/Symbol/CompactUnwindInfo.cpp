@@ -17,9 +17,11 @@
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
-#include <algorithm>
 
 #include "llvm/Support/MathExtras.h"
+
+#include <algorithm>
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -155,9 +157,7 @@ FLAGS_ANONYMOUS_ENUM(){
     llvm::countTrailingZeros(static_cast<uint32_t>(mask), llvm::ZB_Width)) &   \
    (((1 << llvm::countPopulation(static_cast<uint32_t>(mask)))) - 1))
 
-//----------------------
 // constructor
-//----------------------
 
 CompactUnwindInfo::CompactUnwindInfo(ObjectFile &objfile, SectionSP &section_sp)
     : m_objfile(objfile), m_section_sp(section_sp),
@@ -165,9 +165,7 @@ CompactUnwindInfo::CompactUnwindInfo(ObjectFile &objfile, SectionSP &section_sp)
       m_indexes_computed(eLazyBoolCalculate), m_unwindinfo_data(),
       m_unwindinfo_data_computed(false), m_unwind_header() {}
 
-//----------------------
 // destructor
-//----------------------
 
 CompactUnwindInfo::~CompactUnwindInfo() {}
 
@@ -263,8 +261,8 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
       // have a live process and can read them out of memory.
       if (process_sp.get() == nullptr)
         return;
-      m_section_contents_if_encrypted.reset(
-          new DataBufferHeap(m_section_sp->GetByteSize(), 0));
+      m_section_contents_if_encrypted =
+          std::make_shared<DataBufferHeap>(m_section_sp->GetByteSize(), 0);
       Status error;
       if (process_sp->ReadMemory(
               m_section_sp->GetLoadBaseAddress(&process_sp->GetTarget()),

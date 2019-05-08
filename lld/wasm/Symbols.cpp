@@ -24,6 +24,7 @@ using namespace lld;
 using namespace lld::wasm;
 
 DefinedFunction *WasmSym::CallCtors;
+DefinedFunction *WasmSym::ApplyRelocs;
 DefinedData *WasmSym::DsoHandle;
 DefinedData *WasmSym::DataEnd;
 DefinedData *WasmSym::HeapBase;
@@ -43,6 +44,14 @@ WasmSymbolType Symbol::getWasmType() const {
   if (isa<SectionSymbol>(this))
     return WASM_SYMBOL_TYPE_SECTION;
   llvm_unreachable("invalid symbol kind");
+}
+
+const WasmSignature *Symbol::getSignature() const {
+  if (auto* F = dyn_cast<FunctionSymbol>(this))
+    return F->Signature;
+  if (auto *L = dyn_cast<LazySymbol>(this))
+    return L->Signature;
+  return nullptr;
 }
 
 InputChunk *Symbol::getChunk() const {
@@ -85,6 +94,15 @@ void Symbol::setOutputSymbolIndex(uint32_t Index) {
   OutputSymbolIndex = Index;
 }
 
+void Symbol::setGOTIndex(uint32_t Index) {
+  LLVM_DEBUG(dbgs() << "setGOTIndex " << Name << " -> " << Index << "\n");
+  assert(GOTIndex == INVALID_INDEX);
+  // Any symbol that is assigned a GOT entry must be exported othewise the
+  // dynamic linker won't be able create the entry that contains it.
+  ForceExport = true;
+  GOTIndex = Index;
+}
+
 bool Symbol::isWeak() const {
   return (Flags & WASM_SYMBOL_BINDING_MASK) == WASM_SYMBOL_BINDING_WEAK;
 }
@@ -116,7 +134,7 @@ bool Symbol::isExported() const {
   if (Config->ExportDynamic && !isHidden())
     return true;
 
-  return false;
+  return Flags & WASM_SYMBOL_EXPORTED;
 }
 
 uint32_t FunctionSymbol::getFunctionIndex() const {
@@ -292,4 +310,17 @@ std::string lld::toString(wasm::Symbol::Kind Kind) {
     return "SectionKind";
   }
   llvm_unreachable("invalid symbol kind");
+}
+
+// Print out a log message for --trace-symbol.
+void lld::wasm::printTraceSymbol(Symbol *Sym) {
+  std::string S;
+  if (Sym->isUndefined())
+    S = ": reference to ";
+  else if (Sym->isLazy())
+    S = ": lazy definition of ";
+  else
+    S = ": definition of ";
+
+  message(toString(Sym->getFile()) + S + Sym->getName());
 }

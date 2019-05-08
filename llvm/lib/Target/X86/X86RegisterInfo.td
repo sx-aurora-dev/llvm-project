@@ -287,7 +287,10 @@ def ST6 : X86Reg<"st(6)", 6>, DwarfRegNum<[39, 18, 17]>;
 def ST7 : X86Reg<"st(7)", 7>, DwarfRegNum<[40, 19, 18]>;
 
 // Floating-point status word
-def FPSW : X86Reg<"fpsw", 0>;
+def FPSW : X86Reg<"fpsr", 0>;
+
+// Floating-point control word
+def FPCW : X86Reg<"fpcr", 0>;
 
 // Status flags register.
 //
@@ -538,6 +541,9 @@ def RST : RegisterClass<"X86", [f80, f64, f32], 32, (sequence "ST%u", 0, 7)> {
   let isAllocatable = 0;
 }
 
+// Helper to allow %st to print as %st(0) when its encoded in the instruction.
+def RSTi : RegisterOperand<RST, "printSTiRegOperand">;
+
 // Generic vector registers: VR64 and VR128.
 // Ensure that float types are declared first - only float is legal on SSE1.
 def VR64: RegisterClass<"X86", [x86mmx], 64, (sequence "MM%u", 0, 7)>;
@@ -545,17 +551,6 @@ def VR128 : RegisterClass<"X86", [v4f32, v2f64, v16i8, v8i16, v4i32, v2i64, f128
                           128, (add FR32)>;
 def VR256 : RegisterClass<"X86", [v8f32, v4f64, v32i8, v16i16, v8i32, v4i64],
                           256, (sequence "YMM%u", 0, 15)>;
-
-// Special classes that help the assembly parser choose some alternate
-// instructions to favor 2-byte VEX encodings.
-def VR128L : RegisterClass<"X86", [v4f32, v2f64, v16i8, v8i16, v4i32, v2i64, f128],
-                           128, (sequence "XMM%u", 0, 7)>;
-def VR128H : RegisterClass<"X86", [v4f32, v2f64, v16i8, v8i16, v4i32, v2i64, f128],
-                           128, (sequence "XMM%u", 8, 15)>;
-def VR256L : RegisterClass<"X86", [v8f32, v4f64, v32i8, v16i16, v8i32, v4i64],
-                           256, (sequence "YMM%u", 0, 7)>;
-def VR256H : RegisterClass<"X86", [v8f32, v4f64, v32i8, v16i16, v8i32, v4i64],
-                           256, (sequence "YMM%u", 8, 15)>;
 
 // Status flags registers.
 def CCR : RegisterClass<"X86", [i32], 32, (add EFLAGS)> {
@@ -574,6 +569,10 @@ def DFCCR : RegisterClass<"X86", [i32], 32, (add DF)> {
 // AVX-512 vector/mask registers.
 def VR512 : RegisterClass<"X86", [v16f32, v8f64, v64i8, v32i16, v16i32, v8i64],
                           512, (sequence "ZMM%u", 0, 31)>;
+
+// Represents the lower 16 registers that have VEX/legacy encodable subregs.
+def VR512_0_15 : RegisterClass<"X86", [v16f32, v8f64, v64i8, v32i16, v16i32, v8i64],
+                               512, (sequence "ZMM%u", 0, 15)>;
 
 // Scalar AVX-512 floating point registers.
 def FR32X : RegisterClass<"X86", [f32], 32, (sequence "XMM%u", 0, 31)>;

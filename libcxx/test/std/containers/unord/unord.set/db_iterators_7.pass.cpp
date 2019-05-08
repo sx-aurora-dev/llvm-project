@@ -22,7 +22,7 @@
 
 #include "min_allocator.h"
 
-int main()
+int main(int, char**)
 {
     {
     typedef int T;
@@ -37,7 +37,7 @@ int main()
 #if TEST_STD_VER >= 11
     {
     typedef int T;
-    typedef std::unordered_set<T, min_allocator<T>> C;
+    typedef std::unordered_set<T, std::hash<T>, std::equal_to<T>, min_allocator<T>> C;
     C c(1);
     C::iterator i = c.begin();
     ++i;
@@ -50,8 +50,10 @@ int main()
 
 #else
 
-int main()
+int main(int, char**)
 {
+
+  return 0;
 }
 
 #endif

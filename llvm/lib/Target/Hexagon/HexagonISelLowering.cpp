@@ -578,7 +578,8 @@ HexagonTargetLowering::LowerINLINEASM(SDValue Op, SelectionDAG &DAG) const {
   const HexagonRegisterInfo &HRI = *Subtarget.getRegisterInfo();
   unsigned LR = HRI.getRARegister();
 
-  if (Op.getOpcode() != ISD::INLINEASM || HMFI.hasClobberLR())
+  if ((Op.getOpcode() != ISD::INLINEASM &&
+       Op.getOpcode() != ISD::INLINEASM_BR) || HMFI.hasClobberLR())
     return Op;
 
   unsigned NumOps = Op.getNumOperands();
@@ -1291,6 +1292,7 @@ HexagonTargetLowering::HexagonTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BUILD_PAIR,           MVT::i64,   Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG,    MVT::i1,    Expand);
   setOperationAction(ISD::INLINEASM,            MVT::Other, Custom);
+  setOperationAction(ISD::INLINEASM_BR,         MVT::Other, Custom);
   setOperationAction(ISD::PREFETCH,             MVT::Other, Custom);
   setOperationAction(ISD::READCYCLECOUNTER,     MVT::i64,   Custom);
   setOperationAction(ISD::INTRINSIC_VOID,       MVT::Other, Custom);
@@ -2740,7 +2742,7 @@ HexagonTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   unsigned Opc = Op.getOpcode();
 
   // Handle INLINEASM first.
-  if (Opc == ISD::INLINEASM)
+  if (Opc == ISD::INLINEASM || Opc == ISD::INLINEASM_BR)
     return LowerINLINEASM(Op, DAG);
 
   if (isHvxOperation(Op)) {
@@ -2922,7 +2924,8 @@ HexagonTargetLowering::getRegForInlineAsmConstraint(
 /// isFPImmLegal - Returns true if the target can instruction select the
 /// specified FP immediate natively. If false, the legalizer will
 /// materialize the FP immediate as a load from a constant pool.
-bool HexagonTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT) const {
+bool HexagonTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
+                                         bool ForCodeSize) const {
   return true;
 }
 
@@ -3046,7 +3049,7 @@ bool HexagonTargetLowering::IsEligibleForTailCallOptimization(
 /// determined using generic target-independent logic.
 EVT HexagonTargetLowering::getOptimalMemOpType(uint64_t Size,
       unsigned DstAlign, unsigned SrcAlign, bool IsMemset, bool ZeroMemset,
-      bool MemcpyStrSrc, MachineFunction &MF) const {
+      bool MemcpyStrSrc, const AttributeList &FuncAttributes) const {
 
   auto Aligned = [](unsigned GivenA, unsigned MinA) -> bool {
     return (GivenA % MinA) == 0;

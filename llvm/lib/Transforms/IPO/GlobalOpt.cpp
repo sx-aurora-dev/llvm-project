@@ -2090,21 +2090,21 @@ static void ChangeCalleesToFastCall(Function *F) {
   }
 }
 
-static AttributeList StripNest(LLVMContext &C, AttributeList Attrs) {
-  // There can be at most one attribute set with a nest attribute.
-  unsigned NestIndex;
-  if (Attrs.hasAttrSomewhere(Attribute::Nest, &NestIndex))
-    return Attrs.removeAttribute(C, NestIndex, Attribute::Nest);
+static AttributeList StripAttr(LLVMContext &C, AttributeList Attrs,
+                               Attribute::AttrKind A) {
+  unsigned AttrIndex;
+  if (Attrs.hasAttrSomewhere(A, &AttrIndex))
+    return Attrs.removeAttribute(C, AttrIndex, A);
   return Attrs;
 }
 
-static void RemoveNestAttribute(Function *F) {
-  F->setAttributes(StripNest(F->getContext(), F->getAttributes()));
+static void RemoveAttribute(Function *F, Attribute::AttrKind A) {
+  F->setAttributes(StripAttr(F->getContext(), F->getAttributes(), A));
   for (User *U : F->users()) {
     if (isa<BlockAddress>(U))
       continue;
     CallSite CS(cast<Instruction>(U));
-    CS.setAttributes(StripNest(F->getContext(), CS.getAttributes()));
+    CS.setAttributes(StripAttr(F->getContext(), CS.getAttributes(), A));
   }
 }
 
@@ -2117,13 +2117,6 @@ static bool hasChangeableCC(Function *F) {
 
   // FIXME: Is it worth transforming x86_stdcallcc and x86_fastcallcc?
   if (CC != CallingConv::C && CC != CallingConv::X86_ThisCall)
-    return false;
-
-  // Don't break the invariant that the inalloca parameter is the only parameter
-  // passed in memory.
-  // FIXME: GlobalOpt should remove inalloca when possible and hoist the dynamic
-  // alloca it uses to the entry block if possible.
-  if (F->getAttributes().hasAttrSomewhere(Attribute::InAlloca))
     return false;
 
   // FIXME: Change CC for the whole chain of musttail calls when possible.
@@ -2287,6 +2280,17 @@ OptimizeFunctions(Module &M, TargetLibraryInfo *TLI,
     if (!F->hasLocalLinkage())
       continue;
 
+    // If we have an inalloca parameter that we can safely remove the
+    // inalloca attribute from, do so. This unlocks optimizations that
+    // wouldn't be safe in the presence of inalloca.
+    // FIXME: We should also hoist alloca affected by this to the entry
+    // block if possible.
+    if (F->getAttributes().hasAttrSomewhere(Attribute::InAlloca) &&
+        !F->hasAddressTaken()) {
+      RemoveAttribute(F, Attribute::InAlloca);
+      Changed = true;
+    }
+
     if (hasChangeableCC(F) && !F->isVarArg() && !F->hasAddressTaken()) {
       NumInternalFunc++;
       TargetTransformInfo &TTI = GetTTI(*F);
@@ -2295,8 +2299,8 @@ OptimizeFunctions(Module &M, TargetLibraryInfo *TLI,
       // cold at all call sites and the callers contain no other non coldcc
       // calls.
       if (EnableColdCCStressTest ||
-          (isValidCandidateForColdCC(*F, GetBFI, AllCallsCold) &&
-           TTI.useColdCCForColdCall(*F))) {
+          (TTI.useColdCCForColdCall(*F) &&
+           isValidCandidateForColdCC(*F, GetBFI, AllCallsCold))) {
         F->setCallingConv(CallingConv::Cold);
         changeCallSitesToColdCC(F);
         Changed = true;
@@ -2319,7 +2323,7 @@ OptimizeFunctions(Module &M, TargetLibraryInfo *TLI,
         !F->hasAddressTaken()) {
       // The function is not used by a trampoline intrinsic, so it is safe
       // to remove the 'nest' attribute.
-      RemoveNestAttribute(F);
+      RemoveAttribute(F, Attribute::Nest);
       ++NumNestRemoved;
       Changed = true;
     }
@@ -2814,46 +2818,20 @@ static Function *FindCXAAtExit(Module &M, TargetLibraryInfo *TLI) {
 /// Returns whether the given function is an empty C++ destructor and can
 /// therefore be eliminated.
 /// Note that we assume that other optimization passes have already simplified
-/// the code so we only look for a function with a single basic block, where
-/// the only allowed instructions are 'ret', 'call' to an empty C++ dtor and
-/// other side-effect free instructions.
-static bool cxxDtorIsEmpty(const Function &Fn,
-                           SmallPtrSet<const Function *, 8> &CalledFunctions) {
+/// the code so we simply check for 'ret'.
+static bool cxxDtorIsEmpty(const Function &Fn) {
   // FIXME: We could eliminate C++ destructors if they're readonly/readnone and
   // nounwind, but that doesn't seem worth doing.
   if (Fn.isDeclaration())
     return false;
 
-  if (++Fn.begin() != Fn.end())
-    return false;
-
-  const BasicBlock &EntryBlock = Fn.getEntryBlock();
-  for (BasicBlock::const_iterator I = EntryBlock.begin(), E = EntryBlock.end();
-       I != E; ++I) {
-    if (const CallInst *CI = dyn_cast<CallInst>(I)) {
-      // Ignore debug intrinsics.
-      if (isa<DbgInfoIntrinsic>(CI))
-        continue;
-
-      const Function *CalledFn = CI->getCalledFunction();
-
-      if (!CalledFn)
-        return false;
-
-      SmallPtrSet<const Function *, 8> NewCalledFunctions(CalledFunctions);
-
-      // Don't treat recursive functions as empty.
-      if (!NewCalledFunctions.insert(CalledFn).second)
-        return false;
-
-      if (!cxxDtorIsEmpty(*CalledFn, NewCalledFunctions))
-        return false;
-    } else if (isa<ReturnInst>(*I))
-      return true; // We're done.
-    else if (I->mayHaveSideEffects())
-      return false; // Destructor with side effects, bail.
+  for (auto &I : Fn.getEntryBlock()) {
+    if (isa<DbgInfoIntrinsic>(I))
+      continue;
+    if (isa<ReturnInst>(I))
+      return true;
+    break;
   }
-
   return false;
 }
 
@@ -2885,11 +2863,7 @@ static bool OptimizeEmptyGlobalCXXDtors(Function *CXAAtExitFn) {
 
     Function *DtorFn =
       dyn_cast<Function>(CI->getArgOperand(0)->stripPointerCasts());
-    if (!DtorFn)
-      continue;
-
-    SmallPtrSet<const Function *, 8> CalledFunctions;
-    if (!cxxDtorIsEmpty(*DtorFn, CalledFunctions))
+    if (!DtorFn || !cxxDtorIsEmpty(*DtorFn))
       continue;
 
     // Just remove the call.

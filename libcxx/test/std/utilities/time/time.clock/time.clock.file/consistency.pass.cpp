@@ -7,9 +7,10 @@
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: c++98, c++03, c++11, c++14, c++17
-//
-// TODO: Remove this when filesystem gets integrated into the dylib
-// REQUIRES: c++filesystem
+
+// Due to C++17 inline variables ASAN flags this test as containing an ODR
+// violation because Clock::is_steady is defined in both the dylib and this TU.
+// UNSUPPORTED: asan
 
 // <chrono>
 
@@ -22,7 +23,7 @@
 template <class T>
 void test(const T &) {}
 
-int main()
+int main(int, char**)
 {
     typedef std::chrono::file_clock C;
     static_assert((std::is_same<C::rep, C::duration::rep>::value), "");
@@ -31,4 +32,6 @@ int main()
     static_assert((std::is_same<C::time_point::clock, C>::value), "");
     static_assert(!C::is_steady, "");
     test(std::chrono::file_clock::is_steady);
+
+  return 0;
 }

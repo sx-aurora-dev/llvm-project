@@ -14,11 +14,11 @@
 #include "llvm-objdump.h"
 #include "llvm/Object/Wasm.h"
 
-using namespace llvm;
-using namespace object;
+using namespace llvm::object;
 
-void llvm::printWasmFileHeader(const object::ObjectFile *Obj) {
-  const WasmObjectFile *File = dyn_cast<const WasmObjectFile>(Obj);
+namespace llvm {
+void printWasmFileHeader(const object::ObjectFile *Obj) {
+  const auto *File = dyn_cast<const WasmObjectFile>(Obj);
 
   outs() << "Program Header:\n";
   outs() << "Version: 0x";
@@ -26,27 +26,27 @@ void llvm::printWasmFileHeader(const object::ObjectFile *Obj) {
   outs() << "\n";
 }
 
-std::error_code
-llvm::getWasmRelocationValueString(const WasmObjectFile *Obj,
-                                   const RelocationRef &RelRef,
-                                   SmallVectorImpl<char> &Result) {
+Error getWasmRelocationValueString(const WasmObjectFile *Obj,
+                                         const RelocationRef &RelRef,
+                                         SmallVectorImpl<char> &Result) {
   const wasm::WasmRelocation &Rel = Obj->getWasmRelocation(RelRef);
   symbol_iterator SI = RelRef.getSymbol();
   std::string FmtBuf;
   raw_string_ostream Fmt(FmtBuf);
   if (SI == Obj->symbol_end()) {
     // Not all wasm relocations have symbols associated with them.
-    // In particular R_WEBASSEMBLY_TYPE_INDEX_LEB.
+    // In particular R_WASM_TYPE_INDEX_LEB.
     Fmt << Rel.Index;
   } else {
     Expected<StringRef> SymNameOrErr = SI->getName();
     if (!SymNameOrErr)
-      return errorToErrorCode(SymNameOrErr.takeError());
+      return SymNameOrErr.takeError();
     StringRef SymName = *SymNameOrErr;
     Result.append(SymName.begin(), SymName.end());
   }
   Fmt << (Rel.Addend < 0 ? "" : "+") << Rel.Addend;
   Fmt.flush();
   Result.append(FmtBuf.begin(), FmtBuf.end());
-  return std::error_code();
+  return Error::success();
 }
+} // namespace llvm

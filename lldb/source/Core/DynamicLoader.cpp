@@ -38,10 +38,10 @@ DynamicLoader *DynamicLoader::FindPlugin(Process *process,
         PluginManager::GetDynamicLoaderCreateCallbackForPluginName(
             const_plugin_name);
     if (create_callback) {
-      std::unique_ptr<DynamicLoader> instance_ap(
+      std::unique_ptr<DynamicLoader> instance_up(
           create_callback(process, true));
-      if (instance_ap)
-        return instance_ap.release();
+      if (instance_up)
+        return instance_up.release();
     }
   } else {
     for (uint32_t idx = 0;
@@ -49,10 +49,10 @@ DynamicLoader *DynamicLoader::FindPlugin(Process *process,
               PluginManager::GetDynamicLoaderCreateCallbackAtIndex(idx)) !=
          nullptr;
          ++idx) {
-      std::unique_ptr<DynamicLoader> instance_ap(
+      std::unique_ptr<DynamicLoader> instance_up(
           create_callback(process, false));
-      if (instance_ap)
-        return instance_ap.release();
+      if (instance_up)
+        return instance_up.release();
     }
   }
   return nullptr;
@@ -62,10 +62,8 @@ DynamicLoader::DynamicLoader(Process *process) : m_process(process) {}
 
 DynamicLoader::~DynamicLoader() = default;
 
-//----------------------------------------------------------------------
 // Accessosors to the global setting as to whether to stop at image (shared
 // library) loading/unloading.
-//----------------------------------------------------------------------
 
 bool DynamicLoader::GetStopWhenImagesChange() const {
   return m_process->GetStopOnSharedLibraryEvents();
@@ -96,7 +94,7 @@ ModuleSP DynamicLoader::GetTargetExecutable() {
       }
 
       if (!executable) {
-        executable = target.GetSharedModule(module_spec);
+        executable = target.GetOrCreateModule(module_spec, true /* notify */);
         if (executable.get() != target.GetExecutableModulePointer()) {
           // Don't load dependent images since we are in dyld where we will
           // know and find out about all images that are loaded
@@ -166,7 +164,8 @@ ModuleSP DynamicLoader::LoadModuleAtAddress(const FileSpec &file,
     return module_sp;
   }
 
-  if ((module_sp = target.GetSharedModule(module_spec))) {
+  if ((module_sp = target.GetOrCreateModule(module_spec, 
+                                            true /* notify */))) {
     UpdateLoadedSections(module_sp, link_map_addr, base_addr,
                          base_addr_is_offset);
     return module_sp;
@@ -202,7 +201,8 @@ ModuleSP DynamicLoader::LoadModuleAtAddress(const FileSpec &file,
         return module_sp;
       }
 
-      if ((module_sp = target.GetSharedModule(new_module_spec))) {
+      if ((module_sp = target.GetOrCreateModule(new_module_spec, 
+                                                true /* notify */))) {
         UpdateLoadedSections(module_sp, link_map_addr, base_addr, false);
         return module_sp;
       }

@@ -13,7 +13,6 @@
 #include <vector>
 #include <algorithm>
 #include <cassert>
-#include <iostream>
 
 #include "min_allocator.h"
 #include "asan_testing.h"
@@ -29,7 +28,7 @@ void test ( Vec &v )
     assert(std::all_of(v.begin(), v.end(), is6));
 }
 
-int main()
+int main(int, char**)
 {
     {
     typedef std::vector<int> V;
@@ -50,4 +49,6 @@ int main()
     test(d2);
     }
 #endif
+
+  return 0;
 }

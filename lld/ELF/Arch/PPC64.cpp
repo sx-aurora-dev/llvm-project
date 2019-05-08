@@ -98,19 +98,16 @@ unsigned elf::getPPC64GlobalEntryToLocalEntryOffset(uint8_t StOther) {
   return 0;
 }
 
-bool elf::isPPC64SmallCodeModelReloc(RelType Type) {
-  // List is not yet complete, at the very least the got based tls related
-  // relocations need to be added, and we need to determine how the section
-  // sorting interacts with the thread pointer and dynamic thread pointer
-  // relative tls relocations.
-  return Type == R_PPC64_GOT16 || Type == R_PPC64_TOC16 ||
-         Type == R_PPC64_TOC16_DS;
+bool elf::isPPC64SmallCodeModelTocReloc(RelType Type) {
+  // The only small code model relocations that access the .toc section.
+  return Type == R_PPC64_TOC16 || Type == R_PPC64_TOC16_DS;
 }
 
 namespace {
 class PPC64 final : public TargetInfo {
 public:
   PPC64();
+  int getTlsGdRelaxSkip(RelType Type) const override;
   uint32_t calcEFlags() const override;
   RelExpr getRelExpr(RelType Type, const Symbol &S,
                      const uint8_t *Loc) const override;
@@ -211,7 +208,6 @@ PPC64::PPC64() {
   PltEntrySize = 4;
   GotPltEntrySize = 8;
   GotBaseSymInGotPlt = false;
-  GotBaseSymOff = 0x8000;
   GotHeaderEntriesNum = 1;
   GotPltHeaderEntriesNum = 2;
   PltHeaderSize = 60;
@@ -239,6 +235,20 @@ PPC64::PPC64() {
   DefaultImageBase = 0x10000000;
 
   write32(TrapInstr.data(), 0x7fe00008);
+}
+
+int PPC64::getTlsGdRelaxSkip(RelType Type) const {
+  // A __tls_get_addr call instruction is marked with 2 relocations:
+  //
+  //   R_PPC64_TLSGD / R_PPC64_TLSLD: marker relocation
+  //   R_PPC64_REL24: __tls_get_addr
+  //
+  // After the relaxation we no longer call __tls_get_addr and should skip both
+  // relocations to not create a false dependence on __tls_get_addr being
+  // defined.
+  if (Type == R_PPC64_TLSGD || Type == R_PPC64_TLSLD)
+    return 2;
+  return 1;
 }
 
 static uint32_t getEFlags(InputFile *File) {
@@ -486,7 +496,7 @@ RelExpr PPC64::getRelExpr(RelType Type, const Symbol &S,
   case R_PPC64_DTPREL16_LO:
   case R_PPC64_DTPREL16_LO_DS:
   case R_PPC64_DTPREL64:
-    return R_ABS;
+    return R_DTPREL;
   case R_PPC64_TLSGD:
     return R_TLSDESC_CALL;
   case R_PPC64_TLSLD:
@@ -764,7 +774,10 @@ bool PPC64::needsThunk(RelExpr Expr, RelType Type, const InputFile *File,
 
   // If the offset exceeds the range of the branch type then it will need
   // a range-extending thunk.
-  return !inBranchRange(Type, BranchAddr, S.getVA());
+  // See the comment in getRelocTargetVA() about R_PPC64_CALL.
+  return !inBranchRange(Type, BranchAddr,
+                        S.getVA() +
+                            getPPC64GlobalEntryToLocalEntryOffset(S.StOther));
 }
 
 bool PPC64::inBranchRange(RelType Type, uint64_t Src, uint64_t Dst) const {

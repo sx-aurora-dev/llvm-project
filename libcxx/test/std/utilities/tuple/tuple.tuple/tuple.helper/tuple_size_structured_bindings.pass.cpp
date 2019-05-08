@@ -116,8 +116,7 @@ template <size_t N>
 int get(Test const&) { static_assert(N == 0, ""); return -1; }
 
 template <>
-class std::tuple_element<0, Test> {
-public:
+struct std::tuple_element<0, Test> {
   typedef int type;
 };
 
@@ -139,11 +138,13 @@ void test_after_tuple_size_specialization() {
   assert(p == -1);
 }
 
-int main() {
+int main(int, char**) {
   test_decomp_user_type();
   test_decomp_tuple();
   test_decomp_pair();
   test_decomp_array();
   test_before_tuple_size_specialization();
   test_after_tuple_size_specialization();
+
+  return 0;
 }

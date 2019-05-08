@@ -16,13 +16,13 @@
 template <class T, class U>
 void test_remove_pointer()
 {
-    static_assert((std::is_same<typename std::remove_pointer<T>::type, U>::value), "");
+    ASSERT_SAME_TYPE(U, typename std::remove_pointer<T>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::remove_pointer_t<T>,     U>::value), "");
+    ASSERT_SAME_TYPE(U, std::remove_pointer_t<T>);
 #endif
 }
 
-int main()
+int main(int, char**)
 {
     test_remove_pointer<void, void>();
     test_remove_pointer<int, int>();
@@ -40,4 +40,6 @@ int main()
     test_remove_pointer<int(*)[3], int[3]>();
     test_remove_pointer<int*&, int*&>();
     test_remove_pointer<const int*&, const int*&>();
+
+  return 0;
 }

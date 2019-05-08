@@ -17,9 +17,9 @@
 template <class T, class U>
 void test_add_volatile_imp()
 {
-    static_assert((std::is_same<typename std::add_volatile<T>::type, volatile U>::value), "");
+    ASSERT_SAME_TYPE(volatile U, typename std::add_volatile<T>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::add_volatile_t<T>, U>::value), "");
+    ASSERT_SAME_TYPE(volatile U,        std::add_volatile_t<T>);
 #endif
 }
 
@@ -32,7 +32,7 @@ void test_add_volatile()
     test_add_volatile_imp<const volatile T, const volatile T>();
 }
 
-int main()
+int main(int, char**)
 {
     test_add_volatile<void>();
     test_add_volatile<int>();
@@ -41,4 +41,6 @@ int main()
     test_add_volatile<const int&>();
     test_add_volatile<int*>();
     test_add_volatile<const int*>();
+
+  return 0;
 }

@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <type_traits>
+#include <cassert>
 
 #include "test_macros.h"
 
@@ -63,7 +64,53 @@
 #error RAND_MAX not defined
 #endif
 
-int main()
+template <class T, class = decltype(::abs(std::declval<T>()))>
+std::true_type has_abs_imp(int);
+template <class T>
+std::false_type has_abs_imp(...);
+
+template <class T>
+struct has_abs : decltype(has_abs_imp<T>(0)) {};
+
+void test_abs() {
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wabsolute-value"
+#endif
+  static_assert((std::is_same<decltype(abs((float)0)), float>::value), "");
+  static_assert((std::is_same<decltype(abs((double)0)), double>::value), "");
+  static_assert(
+      (std::is_same<decltype(abs((long double)0)), long double>::value), "");
+  static_assert((std::is_same<decltype(abs((int)0)), int>::value), "");
+  static_assert((std::is_same<decltype(abs((long)0)), long>::value), "");
+  static_assert((std::is_same<decltype(abs((long long)0)), long long>::value),
+                "");
+  static_assert((std::is_same<decltype(abs((unsigned char)0)), int>::value),
+                "");
+  static_assert((std::is_same<decltype(abs((unsigned short)0)), int>::value),
+                "");
+  static_assert((std::is_same<decltype(abs((signed char)0)), int>::value),
+                "");
+  static_assert((std::is_same<decltype(abs((short)0)), int>::value),
+                "");
+  static_assert((std::is_same<decltype(abs((unsigned char)0)), int>::value),
+                "");
+  static_assert((std::is_same<decltype(abs((char)0)), int>::value),
+                "");
+
+  static_assert(!has_abs<unsigned>::value, "");
+  static_assert(!has_abs<unsigned long>::value, "");
+  static_assert(!has_abs<unsigned long long>::value, "");
+  static_assert(!has_abs<size_t>::value, "");
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
+  assert(abs(-1.) == 1);
+}
+
+int main(int, char**)
 {
     size_t s = 0; ((void)s);
     div_t d; ((void)d);
@@ -116,4 +163,8 @@ int main()
     static_assert((std::is_same<decltype(wctomb(pc,L' ')), int>::value), "");
     static_assert((std::is_same<decltype(mbstowcs(pw,"",0)), size_t>::value), "");
     static_assert((std::is_same<decltype(wcstombs(pc,pwc,0)), size_t>::value), "");
+
+    test_abs();
+
+    return 0;
 }

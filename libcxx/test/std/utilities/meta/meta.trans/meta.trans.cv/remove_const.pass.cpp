@@ -17,9 +17,9 @@
 template <class T, class U>
 void test_remove_const_imp()
 {
-    static_assert((std::is_same<typename std::remove_const<T>::type, U>::value), "");
+    ASSERT_SAME_TYPE(U, typename std::remove_const<T>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::remove_const_t<T>, U>::value), "");
+    ASSERT_SAME_TYPE(U,        std::remove_const_t<T>);
 #endif
 }
 
@@ -32,7 +32,7 @@ void test_remove_const()
     test_remove_const_imp<const volatile T, volatile T>();
 }
 
-int main()
+int main(int, char**)
 {
     test_remove_const<void>();
     test_remove_const<int>();
@@ -41,4 +41,6 @@ int main()
     test_remove_const<const int&>();
     test_remove_const<int*>();
     test_remove_const<const int*>();
+
+  return 0;
 }

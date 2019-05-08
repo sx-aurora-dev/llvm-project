@@ -56,9 +56,8 @@
 #include "lldb/Host/ConnectionFileDescriptor.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
+#include "lldb/Host/ProcessLaunchInfo.h"
 #include "lldb/Host/ThreadLauncher.h"
-#include "lldb/Target/Process.h"
-#include "lldb/Target/ProcessLaunchInfo.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/CleanUp.h"
 #include "lldb/Utility/DataBufferHeap.h"
@@ -67,6 +66,7 @@
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/NameMatches.h"
+#include "lldb/Utility/ProcessInfo.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/StructuredData.h"
 #include "lldb/lldb-defines.h"
@@ -1364,8 +1364,11 @@ Status Host::ShellExpandArguments(ProcessLaunchInfo &launch_info) {
         launch_info.SetWorkingDirectory(working_dir);
       }
     }
+    bool run_in_default_shell = true;
+    bool hide_stderr = true;
     RunShellCommand(expand_command, cwd, &status, nullptr, &output,
-                    std::chrono::seconds(10));
+                    std::chrono::seconds(10), run_in_default_shell,
+                    hide_stderr);
 
     if (status != 0) {
       error.SetErrorStringWithFormat("lldb-argdumper exited with error %d",

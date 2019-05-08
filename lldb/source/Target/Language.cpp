@@ -390,7 +390,7 @@ bool Language::ImageListTypeScavenger::Find_Impl(
     images.FindTypes(nullptr, cs_key, false, UINT32_MAX, searched_sym_files,
                      matches);
     for (const auto &match : matches.Types()) {
-      if (match.get()) {
+      if (match) {
         CompilerType compiler_type(match->GetFullCompilerType());
         compiler_type = AdjustForInclusion(compiler_type);
         if (!compiler_type)
@@ -443,12 +443,8 @@ void Language::GetDefaultExceptionResolverDescription(bool catch_on,
   s.Printf("Exception breakpoint (catch: %s throw: %s)",
            catch_on ? "on" : "off", throw_on ? "on" : "off");
 }
-//----------------------------------------------------------------------
 // Constructor
-//----------------------------------------------------------------------
 Language::Language() {}
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 Language::~Language() {}

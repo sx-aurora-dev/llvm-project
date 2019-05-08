@@ -15,8 +15,6 @@
 
 // template<class _URNG> result_type operator()(_URNG& g);
 
-#include <iostream>
-
 #include <random>
 #include <algorithm>
 #include <vector>
@@ -354,7 +352,7 @@ test6()
     }
 }
 
-int main()
+int main(int, char**)
 {
     test1();
     test2();
@@ -362,4 +360,6 @@ int main()
     test4();
     test5();
     test6();
+
+  return 0;
 }

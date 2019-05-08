@@ -27,29 +27,28 @@ enum E { V = INT_MIN };
 enum F { W = UINT_MAX };
 #endif // TEST_UNSIGNED_UNDERLYING_TYPE
 
-int main()
+int main(int, char**)
 {
-    static_assert((std::is_same<std::underlying_type<E>::type, int>::value),
-                  "E has the wrong underlying type");
+    ASSERT_SAME_TYPE(int, std::underlying_type<E>::type);
 #if TEST_UNSIGNED_UNDERLYING_TYPE
-    static_assert((std::is_same<std::underlying_type<F>::type, unsigned>::value),
-                  "F has the wrong underlying type");
+    ASSERT_SAME_TYPE(unsigned, std::underlying_type<F>::type);
 #endif // TEST_UNSIGNED_UNDERLYING_TYPE
 
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::underlying_type_t<E>, int>::value), "");
+    ASSERT_SAME_TYPE(int, std::underlying_type_t<E>);
 #if TEST_UNSIGNED_UNDERLYING_TYPE
-    static_assert((std::is_same<std::underlying_type_t<F>, unsigned>::value), "");
+    ASSERT_SAME_TYPE(unsigned, std::underlying_type_t<F>);
 #endif // TEST_UNSIGNED_UNDERLYING_TYPE
 #endif // TEST_STD_VER > 11
 
 #if TEST_STD_VER >= 11
     enum G : char { };
 
-    static_assert((std::is_same<std::underlying_type<G>::type, char>::value),
-                  "G has the wrong underlying type");
+    ASSERT_SAME_TYPE(char,   std::underlying_type<G>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::underlying_type_t<G>, char>::value), "");
+    ASSERT_SAME_TYPE(char, std::underlying_type_t<G>);
 #endif // TEST_STD_VER > 11
 #endif // TEST_STD_VER >= 11
+
+  return 0;
 }

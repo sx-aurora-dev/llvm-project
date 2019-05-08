@@ -566,7 +566,7 @@ public:
     JumpDest RethrowDest;
 
     /// A function to call to enter the catch.
-    llvm::Constant *BeginCatchFn;
+    llvm::FunctionCallee BeginCatchFn;
 
     /// An i1 variable indicating whether or not the @finally is
     /// running for an exception.
@@ -578,8 +578,8 @@ public:
 
   public:
     void enter(CodeGenFunction &CGF, const Stmt *Finally,
-               llvm::Constant *beginCatchFn, llvm::Constant *endCatchFn,
-               llvm::Constant *rethrowFn);
+               llvm::FunctionCallee beginCatchFn,
+               llvm::FunctionCallee endCatchFn, llvm::FunctionCallee rethrowFn);
     void exit(CodeGenFunction &CGF);
   };
 
@@ -1852,14 +1852,14 @@ public:
   void StartThunk(llvm::Function *Fn, GlobalDecl GD,
                   const CGFunctionInfo &FnInfo, bool IsUnprototyped);
 
-  void EmitCallAndReturnForThunk(llvm::Constant *Callee, const ThunkInfo *Thunk,
-                                 bool IsUnprototyped);
+  void EmitCallAndReturnForThunk(llvm::FunctionCallee Callee,
+                                 const ThunkInfo *Thunk, bool IsUnprototyped);
 
   void FinishThunk();
 
   /// Emit a musttail call for a thunk with a potentially adjusted this pointer.
   void EmitMustTailThunk(GlobalDecl GD, llvm::Value *AdjustedThisPtr,
-                         llvm::Value *Callee);
+                         llvm::FunctionCallee Callee);
 
   /// Generate a thunk for the given method.
   void generateThunk(llvm::Function *Fn, const CGFunctionInfo &FnInfo,
@@ -2503,16 +2503,13 @@ public:
 
   void EmitCXXConstructorCall(const CXXConstructorDecl *D, CXXCtorType Type,
                               bool ForVirtualBase, bool Delegating,
-                              Address This, const CXXConstructExpr *E,
-                              AggValueSlot::Overlap_t Overlap,
-                              bool NewPointerIsChecked);
+                              AggValueSlot ThisAVS, const CXXConstructExpr *E);
 
   void EmitCXXConstructorCall(const CXXConstructorDecl *D, CXXCtorType Type,
                               bool ForVirtualBase, bool Delegating,
                               Address This, CallArgList &Args,
                               AggValueSlot::Overlap_t Overlap,
-                              SourceLocation Loc,
-                              bool NewPointerIsChecked);
+                              SourceLocation Loc, bool NewPointerIsChecked);
 
   /// Emit assumption load for all bases. Requires to be be called only on
   /// most-derived class and not under construction of the object.
@@ -3087,7 +3084,7 @@ public:
   bool EmitOMPLinearClauseInit(const OMPLoopDirective &D);
 
   typedef const llvm::function_ref<void(CodeGenFunction & /*CGF*/,
-                                        llvm::Value * /*OutlinedFn*/,
+                                        llvm::Function * /*OutlinedFn*/,
                                         const OMPTaskDataTy & /*Data*/)>
       TaskGenTy;
   void EmitOMPTaskBasedDirective(const OMPExecutableDirective &S,
@@ -3598,30 +3595,30 @@ public:
 
   void checkTargetFeatures(const CallExpr *E, const FunctionDecl *TargetDecl);
 
-  llvm::CallInst *EmitRuntimeCall(llvm::Value *callee,
+  llvm::CallInst *EmitRuntimeCall(llvm::FunctionCallee callee,
                                   const Twine &name = "");
-  llvm::CallInst *EmitRuntimeCall(llvm::Value *callee,
-                                  ArrayRef<llvm::Value*> args,
+  llvm::CallInst *EmitRuntimeCall(llvm::FunctionCallee callee,
+                                  ArrayRef<llvm::Value *> args,
                                   const Twine &name = "");
-  llvm::CallInst *EmitNounwindRuntimeCall(llvm::Value *callee,
+  llvm::CallInst *EmitNounwindRuntimeCall(llvm::FunctionCallee callee,
                                           const Twine &name = "");
-  llvm::CallInst *EmitNounwindRuntimeCall(llvm::Value *callee,
-                                          ArrayRef<llvm::Value*> args,
+  llvm::CallInst *EmitNounwindRuntimeCall(llvm::FunctionCallee callee,
+                                          ArrayRef<llvm::Value *> args,
                                           const Twine &name = "");
 
   SmallVector<llvm::OperandBundleDef, 1>
   getBundlesForFunclet(llvm::Value *Callee);
 
-  llvm::CallBase *EmitCallOrInvoke(llvm::Value *Callee,
+  llvm::CallBase *EmitCallOrInvoke(llvm::FunctionCallee Callee,
                                    ArrayRef<llvm::Value *> Args,
                                    const Twine &Name = "");
-  llvm::CallBase *EmitRuntimeCallOrInvoke(llvm::Value *callee,
+  llvm::CallBase *EmitRuntimeCallOrInvoke(llvm::FunctionCallee callee,
                                           ArrayRef<llvm::Value *> args,
                                           const Twine &name = "");
-  llvm::CallBase *EmitRuntimeCallOrInvoke(llvm::Value *callee,
+  llvm::CallBase *EmitRuntimeCallOrInvoke(llvm::FunctionCallee callee,
                                           const Twine &name = "");
-  void EmitNoreturnRuntimeCallOrInvoke(llvm::Value *callee,
-                                       ArrayRef<llvm::Value*> args);
+  void EmitNoreturnRuntimeCallOrInvoke(llvm::FunctionCallee callee,
+                                       ArrayRef<llvm::Value *> args);
 
   CGCallee BuildAppleKextVirtualCall(const CXXMethodDecl *MD,
                                      NestedNameSpecifier *Qual,
@@ -3661,11 +3658,10 @@ public:
                               llvm::Value *ImplicitParam,
                               QualType ImplicitParamTy, const CallExpr *E,
                               CallArgList *RtlArgs);
-  RValue EmitCXXDestructorCall(const CXXDestructorDecl *DD,
+  RValue EmitCXXDestructorCall(GlobalDecl Dtor,
                                const CGCallee &Callee,
                                llvm::Value *This, llvm::Value *ImplicitParam,
-                               QualType ImplicitParamTy, const CallExpr *E,
-                               StructorType Type);
+                               QualType ImplicitParamTy, const CallExpr *E);
   RValue EmitCXXMemberCallExpr(const CXXMemberCallExpr *E,
                                ReturnValueSlot ReturnValue);
   RValue EmitCXXMemberOrOperatorMemberCallExpr(const CallExpr *CE,
@@ -3728,9 +3724,6 @@ public:
                                          SmallVectorImpl<llvm::Value *> &Ops,
                                          Address PtrOp0, Address PtrOp1,
                                          llvm::Triple::ArchType Arch);
-
-  llvm::Value *EmitISOVolatileLoad(const CallExpr *E);
-  llvm::Value *EmitISOVolatileStore(const CallExpr *E);
 
   llvm::Function *LookupNeonLLVMIntrinsic(unsigned IntrinsicID,
                                           unsigned Modifier, llvm::Type *ArgTy,
@@ -3827,6 +3820,8 @@ public:
                              llvm::Type *returnType);
   llvm::Value *EmitObjCAllocWithZone(llvm::Value *value,
                                      llvm::Type *returnType);
+  llvm::Value *EmitObjCAllocInit(llvm::Value *value, llvm::Type *resultType);
+
   llvm::Value *EmitObjCThrowOperand(const Expr *expr);
   llvm::Value *EmitObjCConsumeObject(QualType T, llvm::Value *Ptr);
   llvm::Value *EmitObjCExtendObjectLifetime(QualType T, llvm::Value *Ptr);
@@ -3924,12 +3919,12 @@ public:
   void EmitCXXGlobalVarDeclInit(const VarDecl &D, llvm::Constant *DeclPtr,
                                 bool PerformInit);
 
-  llvm::Constant *createAtExitStub(const VarDecl &VD, llvm::Constant *Dtor,
+  llvm::Function *createAtExitStub(const VarDecl &VD, llvm::FunctionCallee Dtor,
                                    llvm::Constant *Addr);
 
   /// Call atexit() with a function that passes the given argument to
   /// the given function.
-  void registerGlobalDtorWithAtExit(const VarDecl &D, llvm::Constant *fn,
+  void registerGlobalDtorWithAtExit(const VarDecl &D, llvm::FunctionCallee fn,
                                     llvm::Constant *addr);
 
   /// Call atexit() with function dtorStub.
@@ -3962,8 +3957,8 @@ public:
   /// variables.
   void GenerateCXXGlobalDtorsFunc(
       llvm::Function *Fn,
-      const std::vector<std::pair<llvm::WeakTrackingVH, llvm::Constant *>>
-          &DtorsAndObjects);
+      const std::vector<std::tuple<llvm::FunctionType *, llvm::WeakTrackingVH,
+                                   llvm::Constant *>> &DtorsAndObjects);
 
   void GenerateCXXGlobalVarDeclInitFunc(llvm::Function *Fn,
                                         const VarDecl *D,

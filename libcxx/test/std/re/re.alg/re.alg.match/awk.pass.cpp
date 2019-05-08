@@ -19,6 +19,7 @@
 // TODO: investigation needed
 // TODO(netbsd): incomplete support for locales
 // XFAIL: linux-gnu, netbsd
+// REQUIRES: locale.cs_CZ.ISO8859-2
 
 #include <regex>
 #include <cassert>
@@ -27,7 +28,7 @@
 
 #include "platform_support.h" // locale name macros
 
-int main()
+int main(int, char**)
 {
     {
         std::cmatch m;
@@ -1391,4 +1392,5 @@ int main()
         assert(m.position(0) == 0);
         assert(m.str(0) == s);
     }
+    return 0;
 }

@@ -36,13 +36,13 @@ enum HugeEnum : __uint128_t
 template <class T, class U>
 void test_make_signed()
 {
-    static_assert((std::is_same<typename std::make_signed<T>::type, U>::value), "");
+    ASSERT_SAME_TYPE(U, typename std::make_signed<T>::type);
 #if TEST_STD_VER > 11
-    static_assert((std::is_same<std::make_signed_t<T>, U>::value), "");
+    ASSERT_SAME_TYPE(U, std::make_signed_t<T>);
 #endif
 }
 
-int main()
+int main(int, char**)
 {
     test_make_signed< signed char, signed char >();
     test_make_signed< unsigned char, signed char >();
@@ -66,4 +66,6 @@ int main()
     test_make_signed< HugeEnum, __int128_t >();
 # endif
 #endif
+
+  return 0;
 }

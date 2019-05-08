@@ -29,14 +29,14 @@
 
 #include "SystemRuntimeMacOSX.h"
 
+#include <memory>
+
 using namespace lldb;
 using namespace lldb_private;
 
-//----------------------------------------------------------------------
 // Create an instance of this class. This function is filled into the plugin
 // info class that gets handed out by the plugin factory and allows the lldb to
 // instantiate an instance of this class.
-//----------------------------------------------------------------------
 SystemRuntime *SystemRuntimeMacOSX::CreateInstance(Process *process) {
   bool create = false;
   if (!create) {
@@ -73,9 +73,7 @@ SystemRuntime *SystemRuntimeMacOSX::CreateInstance(Process *process) {
   return NULL;
 }
 
-//----------------------------------------------------------------------
 // Constructor
-//----------------------------------------------------------------------
 SystemRuntimeMacOSX::SystemRuntimeMacOSX(Process *process)
     : SystemRuntime(process), m_break_id(LLDB_INVALID_BREAK_ID), m_mutex(),
       m_get_queues_handler(process), m_get_pending_items_handler(process),
@@ -90,9 +88,7 @@ SystemRuntimeMacOSX::SystemRuntimeMacOSX(Process *process)
       m_dispatch_voucher_offsets_addr(LLDB_INVALID_ADDRESS),
       m_libdispatch_voucher_offsets() {}
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 SystemRuntimeMacOSX::~SystemRuntimeMacOSX() { Clear(true); }
 
 void SystemRuntimeMacOSX::Detach() {
@@ -102,9 +98,7 @@ void SystemRuntimeMacOSX::Detach() {
   m_get_thread_item_info_handler.Detach();
 }
 
-//----------------------------------------------------------------------
 // Clear out the state of this class.
-//----------------------------------------------------------------------
 void SystemRuntimeMacOSX::Clear(bool clear_process) {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
 
@@ -460,8 +454,7 @@ void SystemRuntimeMacOSX::ReadLibdispatchTSDIndexes() {
 ThreadSP SystemRuntimeMacOSX::GetExtendedBacktraceThread(ThreadSP real_thread,
                                                          ConstString type) {
   ThreadSP originating_thread_sp;
-  if (BacktraceRecordingHeadersInitialized() &&
-      type == ConstString("libdispatch")) {
+  if (BacktraceRecordingHeadersInitialized() && type == "libdispatch") {
     Status error;
 
     // real_thread is either an actual, live thread (in which case we need to
@@ -495,9 +488,9 @@ ThreadSP SystemRuntimeMacOSX::GetExtendedBacktraceThread(ThreadSP real_thread,
           bool stop_id_is_valid = true;
           if (item.stop_id == 0)
             stop_id_is_valid = false;
-          originating_thread_sp.reset(new HistoryThread(
+          originating_thread_sp = std::make_shared<HistoryThread>(
               *m_process, item.enqueuing_thread_id, item.enqueuing_callstack,
-              item.stop_id, stop_id_is_valid));
+              item.stop_id, stop_id_is_valid);
           originating_thread_sp->SetExtendedBacktraceToken(
               item.item_that_enqueued_this);
           originating_thread_sp->SetQueueName(
@@ -540,9 +533,9 @@ SystemRuntimeMacOSX::GetExtendedBacktraceFromItemRef(lldb::addr_t item_ref) {
       bool stop_id_is_valid = true;
       if (item.stop_id == 0)
         stop_id_is_valid = false;
-      return_thread_sp.reset(new HistoryThread(
+      return_thread_sp = std::make_shared<HistoryThread>(
           *m_process, item.enqueuing_thread_id, item.enqueuing_callstack,
-          item.stop_id, stop_id_is_valid));
+          item.stop_id, stop_id_is_valid);
       return_thread_sp->SetExtendedBacktraceToken(item.item_that_enqueued_this);
       return_thread_sp->SetQueueName(item.enqueuing_queue_label.c_str());
       return_thread_sp->SetQueueID(item.enqueuing_queue_serialnum);
@@ -560,17 +553,17 @@ ThreadSP
 SystemRuntimeMacOSX::GetExtendedBacktraceForQueueItem(QueueItemSP queue_item_sp,
                                                       ConstString type) {
   ThreadSP extended_thread_sp;
-  if (type != ConstString("libdispatch"))
+  if (type != "libdispatch")
     return extended_thread_sp;
 
   bool stop_id_is_valid = true;
   if (queue_item_sp->GetStopID() == 0)
     stop_id_is_valid = false;
 
-  extended_thread_sp.reset(
-      new HistoryThread(*m_process, queue_item_sp->GetEnqueueingThreadID(),
-                        queue_item_sp->GetEnqueueingBacktrace(),
-                        queue_item_sp->GetStopID(), stop_id_is_valid));
+  extended_thread_sp = std::make_shared<HistoryThread>(
+      *m_process, queue_item_sp->GetEnqueueingThreadID(),
+      queue_item_sp->GetEnqueueingBacktrace(), queue_item_sp->GetStopID(),
+      stop_id_is_valid);
   extended_thread_sp->SetExtendedBacktraceToken(
       queue_item_sp->GetItemThatEnqueuedThis());
   extended_thread_sp->SetQueueName(queue_item_sp->GetQueueLabel().c_str());
@@ -1010,9 +1003,7 @@ const char *SystemRuntimeMacOSX::GetPluginDescriptionStatic() {
   return "System runtime plugin for Mac OS X native libraries.";
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 lldb_private::ConstString SystemRuntimeMacOSX::GetPluginName() {
   return GetPluginNameStatic();
 }

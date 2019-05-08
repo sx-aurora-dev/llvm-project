@@ -34,6 +34,8 @@ class LLVM_LIBRARY_VISIBILITY WebAssemblyTargetInfo : public TargetInfo {
   bool HasSignExt = false;
   bool HasExceptionHandling = false;
   bool HasBulkMemory = false;
+  bool HasAtomics = false;
+  bool HasMutableGlobals = false;
 
 public:
   explicit WebAssemblyTargetInfo(const llvm::Triple &T, const TargetOptions &)

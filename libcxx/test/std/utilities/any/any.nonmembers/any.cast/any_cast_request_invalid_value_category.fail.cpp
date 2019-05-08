@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
+// UNSUPPORTED: dylib-has-no-bad_any_cast
 
 // <any>
 
@@ -20,10 +21,6 @@
 struct TestType {};
 using std::any;
 using std::any_cast;
-
-// On platforms that do not support any_cast, an additional availability error
-// is triggered by these tests.
-// expected-error@any_cast_request_invalid_value_category.fail.cpp:* 0+ {{call to unavailable function 'any_cast': introduced in macOS 10.14}}
 
 void test_const_lvalue_cast_request_non_const_lvalue()
 {
@@ -61,9 +58,11 @@ void test_rvalue_any_cast_request_lvalue()
     any_cast<int&>(42);
 }
 
-int main()
+int main(int, char**)
 {
     test_const_lvalue_cast_request_non_const_lvalue();
     test_lvalue_any_cast_request_rvalue();
     test_rvalue_any_cast_request_lvalue();
+
+  return 0;
 }

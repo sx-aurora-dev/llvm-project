@@ -8,9 +8,9 @@ function(add_python_test_target name test_script args comment)
   add_custom_target(${name}
     COMMAND ${PYTHON_TEST_COMMAND} ${ARG_DEFAULT_ARGS}
     COMMENT "${comment}"
-    DEPENDS ${LLDB_TEST_DEPS}
     USES_TERMINAL
     )
+  add_dependencies(${name} ${LLDB_TEST_DEPS})
 endfunction()
 
 # The default architecture with which to compile test executables is the default LLVM target
@@ -114,6 +114,9 @@ add_python_test_target(check-lldb-single
 # If tests crash cause LLDB to crash, or things are otherwise unstable, or if machine-parsable
 # output is desired (i.e. in continuous integration contexts) check-lldb-single is a better target.
 add_custom_target(check-lldb)
+
+# Make check-lldb depend on all test dependencies.
+add_dependencies(check-lldb lldb-test-deps)
 
 # If we're building with an in-tree clang, then list clang as a dependency
 # to run tests.

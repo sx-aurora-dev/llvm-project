@@ -1,5 +1,4 @@
 //===-- CPPLanguageRuntime.cpp
-//-------------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,6 +9,8 @@
 #include "lldb/Target/CPPLanguageRuntime.h"
 
 #include <string.h>
+
+#include <memory>
 
 #include "llvm/ADT/StringRef.h"
 
@@ -30,9 +31,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 CPPLanguageRuntime::~CPPLanguageRuntime() {}
 
 CPPLanguageRuntime::CPPLanguageRuntime(Process *process)
@@ -168,7 +167,7 @@ CPPLanguageRuntime::FindLibCppStdFunctionCallableInfo(
   //
   // This covers the case of the lambda known at compile time.
   size_t first_open_angle_bracket = vtable_name.find('<') + 1;
-  size_t first_comma = vtable_name.find_first_of(',');
+  size_t first_comma = vtable_name.find(',');
 
   llvm::StringRef first_template_parameter =
       vtable_name.slice(first_open_angle_bracket, first_comma);
@@ -327,16 +326,16 @@ CPPLanguageRuntime::GetStepThroughTrampolinePlan(Thread &thread,
         value_sp->GetValueIsValid()) {
       // We found the std::function wrapped callable and we have its address.
       // We now create a ThreadPlan to run to the callable.
-      ret_plan_sp.reset(new ThreadPlanRunToAddress(
-          thread, callable_info.callable_address, stop_others));
+      ret_plan_sp = std::make_shared<ThreadPlanRunToAddress>(
+          thread, callable_info.callable_address, stop_others);
       return ret_plan_sp;
     } else {
       // We are in std::function but we could not obtain the callable.
       // We create a ThreadPlan to keep stepping through using the address range
       // of the current function.
-      ret_plan_sp.reset(new ThreadPlanStepInRange(thread, range_of_curr_func,
-                                                  sc, eOnlyThisThread,
-                                                  eLazyBoolYes, eLazyBoolYes));
+      ret_plan_sp = std::make_shared<ThreadPlanStepInRange>(
+          thread, range_of_curr_func, sc, eOnlyThisThread, eLazyBoolYes,
+          eLazyBoolYes);
       return ret_plan_sp;
     }
   }

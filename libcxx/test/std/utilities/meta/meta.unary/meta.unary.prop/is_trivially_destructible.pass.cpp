@@ -87,7 +87,7 @@ struct A
     ~A();
 };
 
-int main()
+int main(int, char**)
 {
     test_is_not_trivially_destructible<void>();
     test_is_not_trivially_destructible<A>();
@@ -115,4 +115,12 @@ int main()
     test_is_not_trivially_destructible<PureProtectedDestructor>();
     test_is_not_trivially_destructible<PurePrivateDestructor>();
 #endif
+
+#if TEST_HAS_BUILTIN_IDENTIFIER(_Atomic)
+    test_is_trivially_destructible<_Atomic int>();
+    test_is_trivially_destructible<_Atomic float>();
+    test_is_trivially_destructible<_Atomic int*>();
+#endif
+
+  return 0;
 }

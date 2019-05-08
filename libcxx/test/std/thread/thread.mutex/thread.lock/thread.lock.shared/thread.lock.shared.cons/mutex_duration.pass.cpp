@@ -8,6 +8,7 @@
 //
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++98, c++03, c++11
+// XFAIL: dylib-has-no-shared_mutex
 
 // FLAKY_TEST.
 
@@ -66,7 +67,7 @@ void f2()
     assert(d < Tolerance);  // within 50ms
 }
 
-int main()
+int main(int, char**)
 {
     {
         m.lock();
@@ -88,4 +89,6 @@ int main()
         for (auto& t : v)
             t.join();
     }
+
+  return 0;
 }

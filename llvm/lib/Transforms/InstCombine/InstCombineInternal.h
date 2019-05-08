@@ -52,12 +52,14 @@ namespace llvm {
 
 class APInt;
 class AssumptionCache;
+class BlockFrequencyInfo;
 class DataLayout;
 class DominatorTree;
 class GEPOperator;
 class GlobalVariable;
 class LoopInfo;
 class OptimizationRemarkEmitter;
+class ProfileSummaryInfo;
 class TargetLibraryInfo;
 class User;
 
@@ -304,6 +306,8 @@ private:
   const DataLayout &DL;
   const SimplifyQuery SQ;
   OptimizationRemarkEmitter &ORE;
+  BlockFrequencyInfo *BFI;
+  ProfileSummaryInfo *PSI;
 
   // Optional analyses. When non-null, these can both be used to do better
   // combining and will be updated to reflect any changes.
@@ -315,11 +319,11 @@ public:
   InstCombiner(InstCombineWorklist &Worklist, BuilderTy &Builder,
                bool MinimizeSize, bool ExpensiveCombines, AliasAnalysis *AA,
                AssumptionCache &AC, TargetLibraryInfo &TLI, DominatorTree &DT,
-               OptimizationRemarkEmitter &ORE, const DataLayout &DL,
-               LoopInfo *LI)
+               OptimizationRemarkEmitter &ORE, BlockFrequencyInfo *BFI,
+               ProfileSummaryInfo *PSI, const DataLayout &DL, LoopInfo *LI)
       : Worklist(Worklist), Builder(Builder), MinimizeSize(MinimizeSize),
         ExpensiveCombines(ExpensiveCombines), AA(AA), AC(AC), TLI(TLI), DT(DT),
-        DL(DL), SQ(DL, &TLI, &DT, &AC), ORE(ORE), LI(LI) {}
+        DL(DL), SQ(DL, &TLI, &DT, &AC), ORE(ORE), BFI(BFI), PSI(PSI), LI(LI) {}
 
   /// Run the combiner over the entire worklist until it is empty.
   ///
@@ -392,6 +396,7 @@ public:
   Instruction *visitSelectInst(SelectInst &SI);
   Instruction *visitCallInst(CallInst &CI);
   Instruction *visitInvokeInst(InvokeInst &II);
+  Instruction *visitCallBrInst(CallBrInst &CBI);
 
   Instruction *SliceUpIllegalIntegerPHI(PHINode &PN);
   Instruction *visitPHINode(PHINode &PN);
@@ -401,6 +406,7 @@ public:
   Instruction *visitFree(CallInst &FI);
   Instruction *visitLoadInst(LoadInst &LI);
   Instruction *visitStoreInst(StoreInst &SI);
+  Instruction *visitAtomicRMWInst(AtomicRMWInst &SI);
   Instruction *visitBranchInst(BranchInst &BI);
   Instruction *visitFenceInst(FenceInst &FI);
   Instruction *visitSwitchInst(SwitchInst &SI);
@@ -472,6 +478,11 @@ private:
   Instruction *transformCallThroughTrampoline(CallBase &Call,
                                               IntrinsicInst &Tramp);
 
+  Value *simplifyMaskedLoad(IntrinsicInst &II);
+  Instruction *simplifyMaskedStore(IntrinsicInst &II);
+  Instruction *simplifyMaskedGather(IntrinsicInst &II);
+  Instruction *simplifyMaskedScatter(IntrinsicInst &II);
+  
   /// Transform (zext icmp) to bitwise / integer operations in order to
   /// eliminate it.
   ///
@@ -590,6 +601,8 @@ private:
   Value *matchSelectFromAndOr(Value *A, Value *B, Value *C, Value *D);
   Value *getSelectCondition(Value *A, Value *B);
 
+  Instruction *foldIntrinsicWithOverflowCommon(IntrinsicInst *II);
+
 public:
   /// Inserts an instruction \p New before instruction \p Old
   ///
@@ -644,6 +657,16 @@ public:
     Constant *Struct = ConstantStruct::get(ST, V);
     return InsertValueInst::Create(Struct, Result, 0);
   }
+
+  /// Create and insert the idiom we use to indicate a block is unreachable
+  /// without having to rewrite the CFG from within InstCombine.
+  void CreateNonTerminatorUnreachable(Instruction *InsertAt) {
+    auto &Ctx = InsertAt->getContext();
+    new StoreInst(ConstantInt::getTrue(Ctx),
+                  UndefValue::get(Type::getInt1PtrTy(Ctx)),
+                  InsertAt);
+  }
+
 
   /// Combiner aware instruction erasure.
   ///
@@ -800,8 +823,7 @@ private:
 
   Value *simplifyAMDGCNMemoryIntrinsicDemanded(IntrinsicInst *II,
                                                APInt DemandedElts,
-                                               int DmaskIdx = -1,
-                                               int TFCIdx = -1);
+                                               int DmaskIdx = -1);
 
   Value *SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
                                     APInt &UndefElts, unsigned Depth = 0);
@@ -866,8 +888,6 @@ private:
 
   Instruction *foldICmpSelectConstant(ICmpInst &Cmp, SelectInst *Select,
                                       ConstantInt *C);
-  Instruction *foldICmpBitCastConstant(ICmpInst &Cmp, BitCastInst *Bitcast,
-                                       const APInt &C);
   Instruction *foldICmpTruncConstant(ICmpInst &Cmp, TruncInst *Trunc,
                                      const APInt &C);
   Instruction *foldICmpAndConstant(ICmpInst &Cmp, BinaryOperator *And,

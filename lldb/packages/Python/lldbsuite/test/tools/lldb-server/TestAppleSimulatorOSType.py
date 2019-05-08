@@ -15,7 +15,7 @@ class TestAppleSimulatorOSType(gdbremote_testcase.GdbRemoteTestCaseBase):
 
     def check_simulator_ostype(self, sdk, platform, arch='x86_64'):
         sim_devices_str = subprocess.check_output(['xcrun', 'simctl', 'list',
-                                                   '-j', 'devices'])
+                                                   '-j', 'devices']).decode("utf-8")
         sim_devices = json.loads(sim_devices_str)['devices']
         # Find an available simulator for the requested platform
         deviceUDID = None
@@ -29,7 +29,9 @@ class TestAppleSimulatorOSType(gdbremote_testcase.GdbRemoteTestCaseBase):
             if not platform in runtime.lower():
                 continue
             for device in devices:
-                if device['availability'] != '(available)':
+                if 'availability' in device and device['availability'] != '(available)':
+                    continue
+                if 'isAvailable' in device and device['isAvailable'] != True:
                     continue
                 deviceUDID = device['udid']
                 break

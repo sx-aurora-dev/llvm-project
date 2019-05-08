@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <inttypes.h>
-
 #include "clang/AST/Decl.h"
 
 #include "CommandObjectMemory.h"
@@ -41,6 +39,9 @@
 #include "lldb/Utility/StreamString.h"
 
 #include "lldb/lldb-private.h"
+
+#include <cinttypes>
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -286,9 +287,7 @@ public:
   OptionValueUInt64 m_offset;
 };
 
-//----------------------------------------------------------------------
 // Read memory from the inferior process
-//----------------------------------------------------------------------
 class CommandObjectMemoryRead : public CommandObjectParsed {
 public:
   CommandObjectMemoryRead(CommandInterpreter &interpreter)
@@ -652,7 +651,7 @@ protected:
         addr = addr + (*size * m_memory_options.m_offset.GetCurrentValue());
     } else if (m_format_options.GetFormatValue().GetCurrentValue() !=
                eFormatCString) {
-      data_sp.reset(new DataBufferHeap(total_byte_size, '\0'));
+      data_sp = std::make_shared<DataBufferHeap>(total_byte_size, '\0');
       if (data_sp->GetBytes() == nullptr) {
         result.AppendErrorWithFormat(
             "can't allocate 0x%" PRIx32
@@ -692,8 +691,9 @@ protected:
         item_byte_size = target->GetMaximumSizeOfStringSummary();
       if (!m_format_options.GetCountValue().OptionWasSet())
         item_count = 1;
-      data_sp.reset(new DataBufferHeap((item_byte_size + 1) * item_count,
-                                       '\0')); // account for NULLs as necessary
+      data_sp = std::make_shared<DataBufferHeap>(
+          (item_byte_size + 1) * item_count,
+          '\0'); // account for NULLs as necessary
       if (data_sp->GetBytes() == nullptr) {
         result.AppendErrorWithFormat(
             "can't allocate 0x%" PRIx64
@@ -740,7 +740,8 @@ protected:
         if (break_on_no_NULL)
           break;
       }
-      data_sp.reset(new DataBufferHeap(data_sp->GetBytes(), bytes_read + 1));
+      data_sp =
+          std::make_shared<DataBufferHeap>(data_sp->GetBytes(), bytes_read + 1);
     }
 
     m_next_addr = addr + bytes_read;
@@ -888,9 +889,7 @@ static constexpr OptionDefinition g_memory_find_option_table[] = {
     // clang-format on
 };
 
-//----------------------------------------------------------------------
 // Find the specified data in memory
-//----------------------------------------------------------------------
 class CommandObjectMemoryFind : public CommandObjectParsed {
 public:
   class OptionGroupFindMemory : public OptionGroup {
@@ -1185,9 +1184,7 @@ static constexpr OptionDefinition g_memory_write_option_table[] = {
     // clang-format on
 };
 
-//----------------------------------------------------------------------
 // Write memory to the inferior process
-//----------------------------------------------------------------------
 class CommandObjectMemoryWrite : public CommandObjectParsed {
 public:
   class OptionGroupWriteMemory : public OptionGroup {
@@ -1594,9 +1591,7 @@ protected:
   OptionGroupWriteMemory m_memory_options;
 };
 
-//----------------------------------------------------------------------
 // Get malloc/free history of a memory address.
-//----------------------------------------------------------------------
 class CommandObjectMemoryHistory : public CommandObjectParsed {
 public:
   CommandObjectMemoryHistory(CommandInterpreter &interpreter)
@@ -1676,9 +1671,7 @@ protected:
   }
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectMemoryRegion
-//-------------------------------------------------------------------------
 #pragma mark CommandObjectMemoryRegion
 
 class CommandObjectMemoryRegion : public CommandObjectParsed {
@@ -1769,9 +1762,7 @@ protected:
   lldb::addr_t m_prev_end_addr;
 };
 
-//-------------------------------------------------------------------------
 // CommandObjectMemory
-//-------------------------------------------------------------------------
 
 CommandObjectMemory::CommandObjectMemory(CommandInterpreter &interpreter)
     : CommandObjectMultiword(

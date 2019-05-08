@@ -19,8 +19,6 @@
 //   Otherwise the value returned is unspecified.
 //   [Example: January - February == months{11}. —end example]
 
-extern "C" int printf(const char *, ...);
-
 #include <chrono>
 #include <type_traits>
 #include <cassert>
@@ -42,9 +40,7 @@ constexpr bool testConstexpr()
     return true;
 }
 
-#include <iostream>
-
-int main()
+int main(int, char**)
 {
     using month  = std::chrono::month;
     using months = std::chrono::months;
@@ -68,4 +64,6 @@ static_assert(testConstexpr<month, months>(), "");
         assert(static_cast<unsigned>(m1) == static_cast<unsigned>(exp));
 //          assert(off.count()               == static_cast<unsigned>(exp));
     }
+
+  return 0;
 }

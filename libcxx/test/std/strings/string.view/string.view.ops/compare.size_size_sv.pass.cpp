@@ -354,7 +354,7 @@ void test2()
 }
 
 
-int main () {
+int main(int, char**) {
     test0();
     test1();
     test2();
@@ -395,7 +395,9 @@ int main () {
     constexpr SV  sv1 { "abcde", 5 };
     constexpr SV  sv2 { "abcde", 0 };
     static_assert ( sv1.compare(5, 1, sv2) == 0, "" );
-    static_assert ( sv1.compare(2, 4, sv2) == 1, "" );
+    static_assert ( sv1.compare(2, 4, sv2) > 0, "" );
     }
 #endif
+
+  return 0;
 }

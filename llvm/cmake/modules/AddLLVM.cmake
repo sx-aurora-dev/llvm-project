@@ -221,13 +221,19 @@ function(add_link_opts target_name)
       elseif(${CMAKE_SYSTEM_NAME} MATCHES "SunOS")
         set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                      LINK_FLAGS " -Wl,-z -Wl,discard-unused=sections")
-      elseif(NOT WIN32 AND NOT LLVM_LINKER_IS_GOLD AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD")
+      elseif(NOT WIN32 AND NOT LLVM_LINKER_IS_GOLD AND
+             NOT ${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD|AIX")
         # Object files are compiled with -ffunction-data-sections.
         # Versions of bfd ld < 2.23.1 have a bug in --gc-sections that breaks
         # tools that use plugins. Always pass --gc-sections once we require
         # a newer linker.
         set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                      LINK_FLAGS " -Wl,--gc-sections")
+      endif()
+    else() #LLVM_NO_DEAD_STRIP
+      if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+        set_property(TARGET ${target_name} APPEND_STRING PROPERTY
+                     LINK_FLAGS " -Wl,-bnogc")
       endif()
     endif()
   endif()
@@ -597,21 +603,35 @@ function(add_llvm_install_targets target)
     set(prefix_option -DCMAKE_INSTALL_PREFIX="${ARG_PREFIX}")
   endif()
 
+  set(file_dependencies)
+  set(target_dependencies)
+  foreach(dependency ${ARG_DEPENDS})
+    if(TARGET ${dependency})
+      list(APPEND target_dependencies ${dependency})
+    else()
+      list(APPEND file_dependencies ${dependency})
+    endif()
+  endforeach()
+
   add_custom_target(${target}
-                    DEPENDS ${ARG_DEPENDS}
+                    DEPENDS ${file_dependencies}
                     COMMAND "${CMAKE_COMMAND}"
                             ${component_option}
                             ${prefix_option}
                             -P "${CMAKE_BINARY_DIR}/cmake_install.cmake"
                     USES_TERMINAL)
   add_custom_target(${target}-stripped
-                    DEPENDS ${ARG_DEPENDS}
+                    DEPENDS ${file_dependencies}
                     COMMAND "${CMAKE_COMMAND}"
                             ${component_option}
                             ${prefix_option}
                             -DCMAKE_INSTALL_DO_STRIP=1
                             -P "${CMAKE_BINARY_DIR}/cmake_install.cmake"
                     USES_TERMINAL)
+  if(target_dependencies)
+    add_dependencies(${target} ${target_dependencies})
+    add_dependencies(${target}-stripped ${target_dependencies})
+  endif()
 endfunction()
 
 macro(add_llvm_library name)
@@ -633,6 +653,7 @@ macro(add_llvm_library name)
   # config file.
   if (NOT ARG_BUILDTREE_ONLY AND NOT ARG_MODULE)
     set_property( GLOBAL APPEND PROPERTY LLVM_LIBS ${name} )
+    set(in_llvm_libs YES)
   endif()
 
   if (ARG_MODULE AND NOT TARGET ${name})
@@ -644,7 +665,7 @@ macro(add_llvm_library name)
     set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS_BUILDTREE_ONLY ${name})
   else()
     if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY OR ${name} STREQUAL "LTO" OR
-        ${name} STREQUAL "OptRemarks" OR
+        ${name} STREQUAL "Remarks" OR
         (LLVM_LINK_LLVM_DYLIB AND ${name} STREQUAL "LLVM"))
       set(install_dir lib${LLVM_LIBDIR_SUFFIX})
       if(ARG_MODULE OR ARG_SHARED OR BUILD_SHARED_LIBS)
@@ -662,7 +683,9 @@ macro(add_llvm_library name)
         set(install_type LIBRARY)
       endif()
 
+      set(export_to_llvmexports)
       if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
+          (in_llvm_libs AND "llvm-libraries" IN_LIST LLVM_DISTRIBUTION_COMPONENTS) OR
           NOT LLVM_DISTRIBUTION_COMPONENTS)
         set(export_to_llvmexports EXPORT LLVMExports)
         set_property(GLOBAL PROPERTY LLVM_HAS_EXPORTS True)
@@ -855,6 +878,7 @@ if(NOT LLVM_TOOLCHAIN_TOOLS)
     llvm-lib
     llvm-objdump
     llvm-rc
+    llvm-profdata
     )
 endif()
 
@@ -866,6 +890,7 @@ macro(add_llvm_tool name)
 
   if ( ${name} IN_LIST LLVM_TOOLCHAIN_TOOLS OR NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     if( LLVM_BUILD_TOOLS )
+      set(export_to_llvmexports)
       if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
           NOT LLVM_DISTRIBUTION_COMPONENTS)
         set(export_to_llvmexports EXPORT LLVMExports)
@@ -913,6 +938,7 @@ macro(add_llvm_utility name)
   set_target_properties(${name} PROPERTIES FOLDER "Utils")
   if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     if (LLVM_INSTALL_UTILS AND LLVM_BUILD_UTILS)
+      set(export_to_llvmexports)
       if (${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
           NOT LLVM_DISTRIBUTION_COMPONENTS)
         set(export_to_llvmexports EXPORT LLVMExports)
@@ -1303,7 +1329,7 @@ function(get_llvm_lit_path base_dir file_name)
         set(${base_dir} ${LIT_BASE_DIR} PARENT_SCOPE)
         return()
       else()
-        message(WARN "LLVM_EXTERNAL_LIT set to ${LLVM_EXTERNAL_LIT}, but the path does not exist.")
+        message(WARNING "LLVM_EXTERNAL_LIT set to ${LLVM_EXTERNAL_LIT}, but the path does not exist.")
       endif()
     endif()
   endif()
@@ -1593,14 +1619,21 @@ function(llvm_externalize_debuginfo name)
     endif()
   endif()
 
-  if(LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR)
-    if(APPLE)
-      set(output_name "$<TARGET_FILE_NAME:${name}>.dSYM")
-      set(output_path "-o=${LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR}/${output_name}")
-    endif()
-  endif()
-
   if(APPLE)
+    if(LLVM_EXTERNALIZE_DEBUGINFO_EXTENSION)
+      set(file_ext ${LLVM_EXTERNALIZE_DEBUGINFO_EXTENSION})
+    else()
+      set(file_ext dSYM)
+    endif()
+
+    set(output_name "$<TARGET_FILE_NAME:${name}>.${file_ext}")
+
+    if(LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR)
+      set(output_path "-o=${LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR}/${output_name}")
+    else()
+      set(output_path "-o=${output_name}")
+    endif()
+
     if(CMAKE_CXX_FLAGS MATCHES "-flto"
       OR CMAKE_CXX_FLAGS_${uppercase_CMAKE_BUILD_TYPE} MATCHES "-flto")
 
@@ -1717,35 +1750,38 @@ function(setup_dependency_debugging name)
   set_target_properties(${name} PROPERTIES RULE_LAUNCH_COMPILE ${sandbox_command})
 endfunction()
 
-# Figure out if we can track VC revisions.
-function(find_first_existing_file out_var)
-  foreach(file ${ARGN})
-    if(EXISTS "${file}")
-      set(${out_var} "${file}" PARENT_SCOPE)
-      return()
-    endif()
-  endforeach()
-endfunction()
-
-macro(find_first_existing_vc_file out_var path)
-    find_program(git_executable NAMES git git.exe git.cmd)
-    # Run from a subdirectory to force git to print an absolute path.
-    execute_process(COMMAND ${git_executable} rev-parse --git-dir
-      WORKING_DIRECTORY ${path}/cmake
-      RESULT_VARIABLE git_result
-      OUTPUT_VARIABLE git_dir
-      ERROR_QUIET)
-    if(git_result EQUAL 0)
-      string(STRIP "${git_dir}" git_dir)
-      set(${out_var} "${git_dir}/logs/HEAD")
-      # some branchless cases (e.g. 'repo') may not yet have .git/logs/HEAD
-      if (NOT EXISTS "${git_dir}/logs/HEAD")
-        file(WRITE "${git_dir}/logs/HEAD" "")
+function(find_first_existing_vc_file path out_var)
+  if(NOT EXISTS "${path}")
+    return()
+  endif()
+  if(EXISTS "${path}/.svn")
+    set(svn_files
+      "${path}/.svn/wc.db"   # SVN 1.7
+      "${path}/.svn/entries" # SVN 1.6
+    )
+    foreach(file IN LISTS svn_files)
+      if(EXISTS "${file}")
+        set(${out_var} "${file}" PARENT_SCOPE)
+        return()
       endif()
-    else()
-      find_first_existing_file(${out_var}
-        "${path}/.svn/wc.db"   # SVN 1.7
-        "${path}/.svn/entries" # SVN 1.6
-      )
+    endforeach()
+  else()
+    find_package(Git)
+    if(GIT_FOUND)
+      execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --git-dir
+        WORKING_DIRECTORY ${path}
+        RESULT_VARIABLE git_result
+        OUTPUT_VARIABLE git_output
+        ERROR_QUIET)
+      if(git_result EQUAL 0)
+        string(STRIP "${git_output}" git_output)
+        get_filename_component(git_dir ${git_output} ABSOLUTE BASE_DIR ${path})
+        # Some branchless cases (e.g. 'repo') may not yet have .git/logs/HEAD
+        if (NOT EXISTS "${git_dir}/logs/HEAD")
+          file(WRITE "${git_dir}/logs/HEAD" "")
+        endif()
+        set(${out_var} "${git_dir}/logs/HEAD" PARENT_SCOPE)
+      endif()
     endif()
-endmacro()
+  endif()
+endfunction()

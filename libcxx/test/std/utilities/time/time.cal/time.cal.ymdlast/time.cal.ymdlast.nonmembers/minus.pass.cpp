@@ -27,8 +27,6 @@
 
 #include "test_macros.h"
 
-#include <iostream>
-
 constexpr bool testConstexprYears (std::chrono::year_month_day_last ymdl)
 {
     std::chrono::year_month_day_last ym1 = ymdl - std::chrono::years{10};
@@ -47,7 +45,7 @@ constexpr bool testConstexprMonths (std::chrono::year_month_day_last ymdl)
         ;
 }
 
-int main()
+int main(int, char**)
 {
     using year                = std::chrono::year;
     using month               = std::chrono::month;
@@ -87,4 +85,6 @@ int main()
     }
     }
 
+
+  return 0;
 }

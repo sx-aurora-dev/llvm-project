@@ -22,13 +22,13 @@
 
 #include "min_allocator.h"
 
-int main()
+int main(int, char**)
 {
     {
     typedef std::string C;
     C c(1, '\0');
     C::iterator i = c.end();
-    char j = *i;
+    (void) *i;
     assert(false);
     }
 #if TEST_STD_VER >= 11
@@ -36,7 +36,7 @@ int main()
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> C;
     C c(1, '\0');
     C::iterator i = c.end();
-    char j = *i;
+    (void) *i;
     assert(false);
     }
 #endif
@@ -44,8 +44,10 @@ int main()
 
 #else
 
-int main()
+int main(int, char**)
 {
+
+  return 0;
 }
 
 #endif
