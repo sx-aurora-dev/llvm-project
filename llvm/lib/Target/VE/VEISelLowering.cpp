@@ -1227,8 +1227,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         VT.getVectorNumElements() == 128) {
       // VE uses vXi1 types but has no generic operations.
       // VE doesn't support vXi8 and vXi16 value types.
-      // LLVM doesn't support whole types (i32/i64/f32/f64) of
-      // each length (16/32/64/128).
+      // LLVM for VE doesn't support whole types (i32/i64/f32/f64) of
+      // each length (16/32/64/128) yet.
       // So, we mark them all as expanded.
 
       // Expand all vector-i8/i16-vector truncstore and extload
@@ -1240,6 +1240,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       }
       setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
       setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+
+      // STORE for vXi1 needs to be custom lowered to expand multiple
+      // instructions.
+      if (VT.getVectorElementType() == MVT::i1)
+        setOperationAction(ISD::STORE, VT, Custom);
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
       setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
@@ -2321,6 +2326,66 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
+// Lower a vXi1 store into following instructions
+//   SVMi  %1, %vm, 0
+//   STSri %1, (,%addr)
+//   SVMi  %2, %vm, 1
+//   STSri %2, 8(,%addr)
+//   ...
+static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
+  SDLoc dl(Op);
+  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
+  assert(StNode && StNode->getOffset().isUndef()
+         && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
+    // For the case of frame index, expanding it here cause dependency
+    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
+    return Op;
+  }
+
+  unsigned alignment = StNode->getAlignment();
+  if (alignment > 8)
+    alignment = 8;
+  EVT addrVT = BasePtr.getValueType();
+  EVT MemVT = StNode->getMemoryVT();
+  if (MemVT == MVT::v256i1) {
+    SDValue OutChains[4];
+    for (int i = 0; i < 4; ++i) {
+      SDNode *V = DAG.getMachineNode(VE::SVMi, dl, MVT::i64,
+                                     StNode->getValue(),
+                                     DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                              MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  } else if (MemVT == MVT::v512i1) {
+    SDValue OutChains[8];
+    for (int i = 0; i < 8; ++i) {
+      SDNode *V = DAG.getMachineNode(VE::SVMpi, dl, MVT::i64,
+                                     StNode->getValue(),
+                                     DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                              MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  } else {
+    // Otherwise, ask llvm to expand it.
+    return SDValue();
+  }
+}
+
 static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
 {
   SDLoc dl(Op);
@@ -2329,7 +2394,10 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
   EVT MemVT = St->getMemoryVT();
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
+    return LowerI1Store(Op, DAG);
 
+  // Otherwise, ask llvm to expand it.
   return SDValue();
 }
 

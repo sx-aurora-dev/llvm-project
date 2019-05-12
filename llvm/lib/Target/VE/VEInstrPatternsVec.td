@@ -151,6 +151,38 @@ defm : store_for_vector_length<8>;
 defm : store_for_vector_length<4>;
 defm : store_for_vector_length<2>;
 
+// Load for
+// v256i1, v512i1
+
+def : Pat<(v256i1 (load ADDRri:$addr)),
+          (v256i1 (LVMi (LVMi (LVMi (LVMi (v256i1 (IMPLICIT_DEF)), 
+                      0, (LDSri ADDRri:$addr)),
+                      1, (LDSri (LEAasx ADDRri:$addr), 8)),
+                      2, (LDSri (LEAasx ADDRri:$addr), 16)),
+                      3, (LDSri (LEAasx ADDRri:$addr), 24)))>;
+
+def : Pat<(v512i1 (load ADDRri:$addr)),
+          (v512i1 (LVMpi (LVMpi (LVMpi (LVMpi
+                  (LVMpi (LVMpi (LVMpi (LVMpi (v512i1 (IMPLICIT_DEF)), 
+                      0, (LDSri ADDRri:$addr)),
+                      1, (LDSri (LEAasx ADDRri:$addr), 8)),
+                      2, (LDSri (LEAasx ADDRri:$addr), 16)),
+                      3, (LDSri (LEAasx ADDRri:$addr), 24)),
+                      4, (LDSri (LEAasx ADDRri:$addr), 32)),
+                      5, (LDSri (LEAasx ADDRri:$addr), 40)),
+                      6, (LDSri (LEAasx ADDRri:$addr), 48)),
+                      7, (LDSri (LEAasx ADDRri:$addr), 56)))>;
+
+// Store for v256i1, v512i1 are implemented in 2 ways.  These STVM/STVM512
+// pseudo instruction is used for frameindex related load/store instructions.
+// Custom Lowering is used for other load/store instructions.
+
+def : Pat<(store v256i1:$vx, ADDRri:$addr),
+          (STVMri ADDRri:$addr, $vx)>;
+
+def : Pat<(store v512i1:$vx, ADDRri:$addr),
+          (STVM512ri ADDRri:$addr, $vx)>;
+
 // Format Conversions
 
 // sint -> floating-point
