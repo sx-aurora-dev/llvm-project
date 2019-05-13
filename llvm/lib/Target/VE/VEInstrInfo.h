@@ -84,6 +84,11 @@ public:
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
+  void copyPhysSubRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                       const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
+                       bool KillSrc, const MCInstrDesc &MCID,
+                       unsigned int numSubRegs,
+                       const unsigned* subRegIdx) const;
 
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI,

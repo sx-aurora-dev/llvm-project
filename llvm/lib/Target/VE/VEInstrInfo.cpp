@@ -348,23 +348,45 @@ bool VEInstrInfo::reverseBranchCondition(
   return false;
 }
 
-void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
-                                 MachineBasicBlock::iterator I,
-                                 const DebugLoc &DL, unsigned DestReg,
-                                 unsigned SrcReg, bool KillSrc) const {
-#if 0
-  unsigned numSubRegs = 0;
-  unsigned movOpc     = 0;
-  const unsigned *subRegIdx = nullptr;
-  bool ExtraG0 = false;
+void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator I,
+                                  const DebugLoc &DL, unsigned DestReg,
+                                  unsigned SrcReg, bool KillSrc,
+                                  const MCInstrDesc &MCID,
+                                  unsigned int numSubRegs,
+                                  const unsigned* subRegIdx) const {
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  MachineInstr *MovMI = nullptr;
 
-  const unsigned DW_SubRegsIdx[]  = { SP::sub_even, SP::sub_odd };
-  const unsigned DFP_FP_SubRegsIdx[]  = { SP::sub_even, SP::sub_odd };
-  const unsigned QFP_DFP_SubRegsIdx[] = { SP::sub_even64, SP::sub_odd64 };
-  const unsigned QFP_FP_SubRegsIdx[]  = { SP::sub_even, SP::sub_odd,
-                                          SP::sub_odd64_then_sub_even,
-                                          SP::sub_odd64_then_sub_odd };
-#endif
+  for (unsigned i = 0; i != numSubRegs; ++i) {
+    unsigned SubDest = TRI->getSubReg(DestReg, subRegIdx[i]);
+    unsigned SubSrc  = TRI->getSubReg(SrcReg,  subRegIdx[i]);
+    assert(SubDest && SubSrc && "Bad sub-register");
+
+    if (MCID.getOpcode() == VE::ORri) {
+      // generate "ORri, dest, src, 0" instruction.
+      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
+          .addReg(SubSrc).addImm(0);
+      MovMI = MIB.getInstr();
+    } else if (MCID.getOpcode() == VE::ANDM) {
+      // generate "ANDM, dest, vm0, src" instruction.
+      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
+          .addReg(VE::VM0).addReg(SubSrc);
+      MovMI = MIB.getInstr();
+    } else {
+      llvm_unreachable("Unexpected reg-to-reg copy instruction");
+    }
+  }
+  // Add implicit super-register defs and kills to the last MovMI.
+  MovMI->addRegisterDefined(DestReg, TRI);
+  if (KillSrc)
+    MovMI->addRegisterKilled(SrcReg, TRI);
+}
+
+void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I,
+                              const DebugLoc &DL, unsigned DestReg,
+                              unsigned SrcReg, bool KillSrc) const {
 
   // For the case of VE, I32, I64, and F32 uses the identical
   // registers %s0-%s63, so no need to check other register classes
@@ -389,27 +411,18 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     BuildMI(MBB, I, DL, get(VE::ANDM), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
-  else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
-    // Use two FMOVD instructions.
+  else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
+    // Use two instructions.
+    const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
+    unsigned int numSubRegs = 2;
+    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDM),
+                    numSubRegs, subRegIdx);
+  } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
+    // Use two instructions.
     const unsigned subRegIdx[] = { VE::sub_even, VE::sub_odd };
     unsigned int numSubRegs = 2;
-
-    const TargetRegisterInfo *TRI = &getRegisterInfo();
-    MachineInstr *MovMI = nullptr;
-
-    for (unsigned i = 0; i != numSubRegs; ++i) {
-      unsigned Dst = TRI->getSubReg(DestReg, subRegIdx[i]);
-      unsigned Src = TRI->getSubReg(SrcReg,  subRegIdx[i]);
-      assert(Dst && Src && "Bad sub-register");
-  
-      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::ORri), Dst).
-        addReg(Src).addImm(0);
-      MovMI = MIB.getInstr();
-    }
-    // Add implicit super-register defs and kills to the last MovMI.
-    MovMI->addRegisterDefined(DestReg, TRI);
-    if (KillSrc)
-      MovMI->addRegisterKilled(SrcReg, TRI);
+    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ORri),
+                    numSubRegs, subRegIdx);
   } else if (VE::VLSRegClass.contains(DestReg, SrcReg)) {
     // FIXME: use SX16 as a temporary register
     unsigned TmpReg = VE::SX16;
@@ -428,56 +441,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
     llvm_unreachable("Impossible reg-to-reg copy");
   }
-#if 0
-  else if (SP::IntPairRegClass.contains(DestReg, SrcReg)) {
-    subRegIdx  = DW_SubRegsIdx;
-    numSubRegs = 2;
-    movOpc     = SP::ORrr;
-    ExtraG0 = true;
-  } else if (SP::DFPRegsRegClass.contains(DestReg, SrcReg)) {
-    if (Subtarget.isV9()) {
-      BuildMI(MBB, I, DL, get(SP::FMOVD), DestReg)
-        .addReg(SrcReg, getKillRegState(KillSrc));
-    } else {
-      // Use two FMOVS instructions.
-      subRegIdx  = DFP_FP_SubRegsIdx;
-      numSubRegs = 2;
-      movOpc     = SP::FMOVS;
-    }
-  } else if (SP::ASRRegsRegClass.contains(DestReg) &&
-             SP::IntRegsRegClass.contains(SrcReg)) {
-    BuildMI(MBB, I, DL, get(SP::WRASRrr), DestReg)
-        .addReg(SP::G0)
-        .addReg(SrcReg, getKillRegState(KillSrc));
-  } else if (SP::IntRegsRegClass.contains(DestReg) &&
-             SP::ASRRegsRegClass.contains(SrcReg)) {
-    BuildMI(MBB, I, DL, get(SP::RDASR), DestReg)
-        .addReg(SrcReg, getKillRegState(KillSrc));
-  } else
-    llvm_unreachable("Impossible reg-to-reg copy");
-
-  if (numSubRegs == 0 || subRegIdx == nullptr || movOpc == 0)
-    return;
-
-  const TargetRegisterInfo *TRI = &getRegisterInfo();
-  MachineInstr *MovMI = nullptr;
-
-  for (unsigned i = 0; i != numSubRegs; ++i) {
-    unsigned Dst = TRI->getSubReg(DestReg, subRegIdx[i]);
-    unsigned Src = TRI->getSubReg(SrcReg,  subRegIdx[i]);
-    assert(Dst && Src && "Bad sub-register");
-
-    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(movOpc), Dst);
-    if (ExtraG0)
-      MIB.addReg(SP::G0);
-    MIB.addReg(Src);
-    MovMI = MIB.getInstr();
-  }
-  // Add implicit super-register defs and kills to the last MovMI.
-  MovMI->addRegisterDefined(DestReg, TRI);
-  if (KillSrc)
-    MovMI->addRegisterKilled(SrcReg, TRI);
-#endif
 }
 
 void VEInstrInfo::
