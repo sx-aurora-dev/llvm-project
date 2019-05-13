@@ -42,9 +42,6 @@ define x86_regcallcc void @storev256i1stk(<256 x i1>) {
 define x86_regcallcc void @storev256i1com(<256 x i1>) {
 ; CHECK-LABEL: storev256i1com:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  svm %s34,%vm1,0
-; CHECK-NEXT:  lea.sl %s35, v256i1@hi
-; CHECK-NEXT:  st %s34, v256i1@lo(,%s35)
 ; CHECK-NEXT:  svm %s34,%vm1,3
 ; CHECK-NEXT:  lea %s35, v256i1@lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
@@ -54,6 +51,8 @@ define x86_regcallcc void @storev256i1com(<256 x i1>) {
 ; CHECK-NEXT:  st %s34, 16(,%s35)
 ; CHECK-NEXT:  svm %s34,%vm1,1
 ; CHECK-NEXT:  st %s34, 8(,%s35)
+; CHECK-NEXT:  svm %s34,%vm1,0
+; CHECK-NEXT:  st %s34, (,%s35)
 ; CHECK-NEXT:  or %s11, 0, %s9
   store <256 x i1> %0, <256 x i1>* @v256i1, align 16
   ret void
@@ -114,9 +113,6 @@ define x86_regcallcc void @storev512i1stk(<512 x i1>) {
 define x86_regcallcc void @storev512i1com(<512 x i1>) {
 ; CHECK-LABEL: storev512i1com:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  svm %s34,%vm3,0
-; CHECK-NEXT:  lea.sl %s35, v512i1@hi
-; CHECK-NEXT:  st %s34, v512i1@lo(,%s35)
 ; CHECK-NEXT:  svm %s34,%vm2,3
 ; CHECK-NEXT:  lea %s35, v512i1@lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
@@ -134,6 +130,8 @@ define x86_regcallcc void @storev512i1com(<512 x i1>) {
 ; CHECK-NEXT:  st %s34, 16(,%s35)
 ; CHECK-NEXT:  svm %s34,%vm3,1
 ; CHECK-NEXT:  st %s34, 8(,%s35)
+; CHECK-NEXT:  svm %s34,%vm3,0
+; CHECK-NEXT:  st %s34, (,%s35)
 ; CHECK-NEXT:  or %s11, 0, %s9
   store <512 x i1> %0, <512 x i1>* @v512i1, align 16
   ret void

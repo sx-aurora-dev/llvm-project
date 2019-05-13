@@ -12,9 +12,11 @@ define void @test_atomic_store_1() {
 ; CHECK-LABEL: test_atomic_store_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, c@hi
+; CHECK-NEXT:  lea %s34, c@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  st1b %s35, c@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   store atomic i8 12, i8* @c release, align 32
@@ -26,9 +28,11 @@ define void @test_atomic_store_1seq() {
 ; CHECK-LABEL: test_atomic_store_1seq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, c@hi
+; CHECK-NEXT:  lea %s34, c@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  st1b %s35, c@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -41,9 +45,11 @@ define void @test_atomic_store_2() {
 ; CHECK-LABEL: test_atomic_store_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, s@hi
+; CHECK-NEXT:  lea %s34, s@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  st2b %s35, s@lo(,%s34)
+; CHECK-NEXT:  st2b %s35, (,%s34)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   store atomic i16 12, i16* @s release, align 32
@@ -55,9 +61,11 @@ define void @test_atomic_store_2seq() {
 ; CHECK-LABEL: test_atomic_store_2seq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, s@hi
+; CHECK-NEXT:  lea %s34, s@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  st2b %s35, s@lo(,%s34)
+; CHECK-NEXT:  st2b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -70,9 +78,11 @@ define void @test_atomic_store_4() {
 ; CHECK-LABEL: test_atomic_store_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, i@hi
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  stl %s35, i@lo(,%s34)
+; CHECK-NEXT:  stl %s35, (,%s34)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   store atomic i32 12, i32* @i release, align 32
@@ -84,9 +94,11 @@ define void @test_atomic_store_4cst() {
 ; CHECK-LABEL: test_atomic_store_4cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  stl %s35, i@lo(,%s34)
+; CHECK-NEXT:  stl %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -99,9 +111,11 @@ define void @test_atomic_store_8() {
 ; CHECK-LABEL: test_atomic_store_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, l@hi
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  st %s35, l@lo(,%s34)
+; CHECK-NEXT:  st %s35, (,%s34)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   store atomic i64 12, i64* @l release, align 32
@@ -113,9 +127,11 @@ define void @test_atomic_store_8cst() {
 ; CHECK-LABEL: test_atomic_store_8cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
 ; CHECK-NEXT:  or %s35, 12, (0)1
-; CHECK-NEXT:  st %s35, l@lo(,%s34)
+; CHECK-NEXT:  st %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -167,8 +183,10 @@ entry:
 define signext i8 @test_atomic_load_1() {
 ; CHECK-LABEL: test_atomic_load_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, c@hi
-; CHECK-NEXT:  ld1b.zx %s34, c@lo(,%s34)
+; CHECK-NEXT:  lea %s34, c@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
+; CHECK-NEXT:  ld1b.zx %s34, (,%s34)
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
@@ -182,8 +200,10 @@ entry:
 define signext i8 @test_atomic_load_1cst() {
 ; CHECK-LABEL: test_atomic_load_1cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, c@hi
-; CHECK-NEXT:  ld1b.zx %s34, c@lo(,%s34)
+; CHECK-NEXT:  lea %s34, c@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
+; CHECK-NEXT:  ld1b.zx %s34, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
@@ -197,8 +217,10 @@ entry:
 define signext i16 @test_atomic_load_2() {
 ; CHECK-LABEL: test_atomic_load_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, s@hi
-; CHECK-NEXT:  ld2b.zx %s34, s@lo(,%s34)
+; CHECK-NEXT:  lea %s34, s@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
+; CHECK-NEXT:  ld2b.zx %s34, (,%s34)
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  sla.w.sx %s34, %s34, 16
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 16
@@ -212,8 +234,10 @@ entry:
 define signext i16 @test_atomic_load_2cst() {
 ; CHECK-LABEL: test_atomic_load_2cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, s@hi
-; CHECK-NEXT:  ld2b.zx %s34, s@lo(,%s34)
+; CHECK-NEXT:  lea %s34, s@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
+; CHECK-NEXT:  ld2b.zx %s34, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s34, 16
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 16
@@ -227,8 +251,10 @@ entry:
 define i32 @test_atomic_load_4() {
 ; CHECK-LABEL: test_atomic_load_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.zx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.zx %s0, (,%s34)
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -240,8 +266,10 @@ entry:
 define i32 @test_atomic_load_4cst() {
 ; CHECK-LABEL: test_atomic_load_4cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.zx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.zx %s0, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -253,8 +281,10 @@ entry:
 define i64 @test_atomic_load_8() {
 ; CHECK-LABEL: test_atomic_load_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -266,8 +296,10 @@ entry:
 define i64 @test_atomic_load_8cst() {
 ; CHECK-LABEL: test_atomic_load_8cst:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -316,9 +348,11 @@ define signext i8 @test_atomic_exchange_1() {
 ; CHECK-LABEL: test_atomic_exchange_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, c@hi
+; CHECK-NEXT:  lea %s34, c@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
 ; CHECK-NEXT:  or %s35, 10, (0)1
-; CHECK-NEXT:  ts1am.w %s35, c@lo(%s34), 1
+; CHECK-NEXT:  ts1am.w %s35, (%s34), 1
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s35, 24
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
@@ -333,9 +367,11 @@ define signext i16 @test_atomic_exchange_2() {
 ; CHECK-LABEL: test_atomic_exchange_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, s@hi
+; CHECK-NEXT:  lea %s34, s@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
 ; CHECK-NEXT:  lea %s35, 28672
-; CHECK-NEXT:  ts1am.w %s35, s@lo(%s34), 3
+; CHECK-NEXT:  ts1am.w %s35, (%s34), 3
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s35, 16
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 16
@@ -350,9 +386,11 @@ define i32 @test_atomic_exchange_4() {
 ; CHECK-LABEL: test_atomic_exchange_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
 ; CHECK-NEXT:  lea %s0, 1886417008
-; CHECK-NEXT:  ts1am.w %s0, i@lo(%s34), 15
+; CHECK-NEXT:  ts1am.w %s0, (%s34), 15
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -364,11 +402,13 @@ entry:
 define i64 @test_atomic_exchange_8() {
 ; CHECK-LABEL: test_atomic_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
 ; CHECK-NEXT:  lea %s35, 1886417008
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s0, 1886417008(%s35)
-; CHECK-NEXT:  ts1am.l %s0, l@lo(%s34), 127
+; CHECK-NEXT:  ts1am.l %s0, (%s34), 127
 ; CHECK-NEXT:  fencem 2
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -483,8 +523,10 @@ define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-LABEL: test_atomic_compare_exchange_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  cas.w %s1, i@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  cas.w %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.w.sx %s34, %s1, %s0
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s0, 0, (0)1
@@ -503,8 +545,10 @@ define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 3
@@ -547,8 +591,10 @@ entry:
 define i64 @test_atomic_compare_exchange_8_relaxed(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
@@ -565,8 +611,10 @@ entry:
 define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
@@ -584,8 +632,10 @@ entry:
 define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
@@ -604,8 +654,10 @@ define i64 @test_atomic_compare_exchange_8_release(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
@@ -623,8 +675,10 @@ define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
@@ -643,8 +697,10 @@ define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 3
@@ -662,8 +718,10 @@ entry:
 define i64 @test_atomic_compare_exchange_8_weak_relaxed(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_relaxed:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
@@ -680,8 +738,10 @@ entry:
 define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_consume:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
@@ -699,8 +759,10 @@ entry:
 define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acquire:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
@@ -719,8 +781,10 @@ define i64 @test_atomic_compare_exchange_8_weak_release(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_release:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
@@ -738,8 +802,10 @@ define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acq_rel:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 1
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  cas.l %s1, l@lo(%s34), %s0
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  cas.l %s1, (%s34), %s0
 ; CHECK-NEXT:  cmps.l %s34, %s1, %s0
 ; CHECK-NEXT:  or %s35, 0, (0)1
 ; CHECK-NEXT:  fencem 2
@@ -882,13 +948,15 @@ define i32 @test_atomic_fetch_add_4() {
 ; CHECK-LABEL: test_atomic_fetch_add_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  lea %s0, 1(%s0)
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s35
+; CHECK-NEXT:  cas.w %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.w %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -903,13 +971,15 @@ define i64 @test_atomic_fetch_add_8() {
 ; CHECK-LABEL: test_atomic_fetch_add_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  lea %s0, 1(%s0)
-; CHECK-NEXT:  cas.l %s0, l@lo(%s34), %s35
+; CHECK-NEXT:  cas.l %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.l %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1004,13 +1074,15 @@ define i32 @test_atomic_fetch_sub_4() {
 ; CHECK-LABEL: test_atomic_fetch_sub_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  lea %s0, -1(%s0)
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s35
+; CHECK-NEXT:  cas.w %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.w %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1025,13 +1097,15 @@ define i64 @test_atomic_fetch_sub_8() {
 ; CHECK-LABEL: test_atomic_fetch_sub_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  lea %s0, -1(%s0)
-; CHECK-NEXT:  cas.l %s0, l@lo(%s34), %s35
+; CHECK-NEXT:  cas.l %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.l %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1120,13 +1194,15 @@ define i32 @test_atomic_fetch_and_4() {
 ; CHECK-LABEL: test_atomic_fetch_and_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  and %s0, 1, %s0
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s35
+; CHECK-NEXT:  cas.w %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.w %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1141,13 +1217,15 @@ define i64 @test_atomic_fetch_and_8() {
 ; CHECK-LABEL: test_atomic_fetch_and_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  and %s0, 1, %s0
-; CHECK-NEXT:  cas.l %s0, l@lo(%s34), %s35
+; CHECK-NEXT:  cas.l %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.l %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1234,13 +1312,15 @@ define i32 @test_atomic_fetch_or_4() {
 ; CHECK-LABEL: test_atomic_fetch_or_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  or %s0, 1, %s0
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s35
+; CHECK-NEXT:  cas.w %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.w %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1255,13 +1335,15 @@ define i64 @test_atomic_fetch_or_8() {
 ; CHECK-LABEL: test_atomic_fetch_or_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  or %s0, 1, %s0
-; CHECK-NEXT:  cas.l %s0, l@lo(%s34), %s35
+; CHECK-NEXT:  cas.l %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.l %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1348,13 +1430,15 @@ define i32 @test_atomic_fetch_xor_4() {
 ; CHECK-LABEL: test_atomic_fetch_xor_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  xor %s0, 1, %s0
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s35
+; CHECK-NEXT:  cas.w %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.w %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1369,13 +1453,15 @@ define i64 @test_atomic_fetch_xor_8() {
 ; CHECK-LABEL: test_atomic_fetch_xor_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  xor %s0, 1, %s0
-; CHECK-NEXT:  cas.l %s0, l@lo(%s34), %s35
+; CHECK-NEXT:  cas.l %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.l %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1474,14 +1560,16 @@ define i32 @test_atomic_fetch_nand_4() {
 ; CHECK-LABEL: test_atomic_fetch_nand_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  xor %s36, -1, %s0
 ; CHECK-NEXT:  or %s0, -2, %s36
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s35
+; CHECK-NEXT:  cas.w %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.w %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1496,14 +1584,16 @@ define i64 @test_atomic_fetch_nand_8() {
 ; CHECK-LABEL: test_atomic_fetch_nand_8:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
-; CHECK-NEXT:  ld %s0, l@lo(,%s34)
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
+; CHECK-NEXT:  ld %s0, (,%s34)
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s35, 0, %s0
 ; CHECK-NEXT:  xor %s36, -1, %s0
 ; CHECK-NEXT:  or %s0, -2, %s36
-; CHECK-NEXT:  cas.l %s0, l@lo(%s34), %s35
+; CHECK-NEXT:  cas.l %s0, (%s34), %s35
 ; CHECK-NEXT:  brne.l %s0, %s35, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1538,14 +1628,16 @@ define i32 @test_atomic_fetch_max_4() {
 ; CHECK-LABEL: test_atomic_fetch_max_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  or %s35, 1, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s36, 0, %s0
 ; CHECK-NEXT:  maxs.w.zx %s0, %s0, %s35
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s36
+; CHECK-NEXT:  cas.w %s0, (%s34), %s36
 ; CHECK-NEXT:  brne.w %s0, %s36, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1560,8 +1652,10 @@ define i32 @test_atomic_fetch_min_4() {
 ; CHECK-LABEL: test_atomic_fetch_min_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
-; CHECK-NEXT:  ldl.sx %s0, i@lo(,%s34)
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  or %s35, 1, (0)1
 ; CHECK-NEXT:  or %s36, 2, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
@@ -1570,7 +1664,7 @@ define i32 @test_atomic_fetch_min_4() {
 ; CHECK-NEXT:  cmps.w.sx %s38, %s0, %s36
 ; CHECK-NEXT:  or %s0, 0, %s35
 ; CHECK-NEXT:  cmov.w.lt %s0, %s37, %s38
-; CHECK-NEXT:  cas.w %s0, i@lo(%s34), %s37
+; CHECK-NEXT:  cas.w %s0, (%s34), %s37
 ; CHECK-NEXT:  brne.w %s0, %s37, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1586,8 +1680,10 @@ define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-LABEL: test_atomic_fetch_umax_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, ui@hi
-; CHECK-NEXT:  ldl.sx %s0, ui@lo(,%s34)
+; CHECK-NEXT:  lea %s34, ui@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, ui@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  or %s35, 1, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
@@ -1595,7 +1691,7 @@ define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-NEXT:  cmpu.w %s37, %s0, %s35
 ; CHECK-NEXT:  or %s0, 0, %s35
 ; CHECK-NEXT:  cmov.w.gt %s0, %s36, %s37
-; CHECK-NEXT:  cas.w %s0, ui@lo(%s34), %s36
+; CHECK-NEXT:  cas.w %s0, (%s34), %s36
 ; CHECK-NEXT:  brne.w %s0, %s36, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1611,8 +1707,10 @@ define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-LABEL: test_atomic_fetch_umin_4:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, ui@hi
-; CHECK-NEXT:  ldl.sx %s0, ui@lo(,%s34)
+; CHECK-NEXT:  lea %s34, ui@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, ui@hi(%s34)
+; CHECK-NEXT:  ldl.sx %s0, (,%s34)
 ; CHECK-NEXT:  or %s35, 1, (0)1
 ; CHECK-NEXT:  or %s36, 2, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
@@ -1621,7 +1719,7 @@ define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-NEXT:  cmpu.w %s38, %s0, %s36
 ; CHECK-NEXT:  or %s0, 0, %s35
 ; CHECK-NEXT:  cmov.w.lt %s0, %s37, %s38
-; CHECK-NEXT:  cas.w %s0, ui@lo(%s34), %s37
+; CHECK-NEXT:  cas.w %s0, (%s34), %s37
 ; CHECK-NEXT:  brne.w %s0, %s37, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
@@ -1637,9 +1735,11 @@ define void @test_atomic_clear_1() {
 ; CHECK-LABEL: test_atomic_clear_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, c@hi
+; CHECK-NEXT:  lea %s34, c@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
 ; CHECK-NEXT:  or %s35, 0, (0)1
-; CHECK-NEXT:  st1b %s35, c@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -1652,9 +1752,11 @@ define void @test_atomic_clear_2() {
 ; CHECK-LABEL: test_atomic_clear_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, s@hi
+; CHECK-NEXT:  lea %s34, s@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
 ; CHECK-NEXT:  or %s35, 0, (0)1
-; CHECK-NEXT:  st1b %s35, s@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -1667,9 +1769,11 @@ define void @test_atomic_clear_4() {
 ; CHECK-LABEL: test_atomic_clear_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, i@hi
+; CHECK-NEXT:  lea %s34, i@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, i@hi(%s34)
 ; CHECK-NEXT:  or %s35, 0, (0)1
-; CHECK-NEXT:  st1b %s35, i@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -1682,9 +1786,11 @@ define void @test_atomic_clear_8() {
 ; CHECK-LABEL: test_atomic_clear_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, l@hi
+; CHECK-NEXT:  lea %s34, l@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, l@hi(%s34)
 ; CHECK-NEXT:  or %s35, 0, (0)1
-; CHECK-NEXT:  st1b %s35, l@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
@@ -1697,9 +1803,11 @@ define void @test_atomic_clear_16() {
 ; CHECK-LABEL: test_atomic_clear_16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  lea.sl %s34, it@hi
+; CHECK-NEXT:  lea %s34, it@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, it@hi(%s34)
 ; CHECK-NEXT:  or %s35, 0, (0)1
-; CHECK-NEXT:  st1b %s35, it@lo(,%s34)
+; CHECK-NEXT:  st1b %s35, (,%s34)
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:

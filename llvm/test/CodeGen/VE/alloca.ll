@@ -18,8 +18,10 @@ define void @test(i32) {
 ; CHECK-NEXT:    and %s13, %s13, (32)0
 ; CHECK-NEXT:    lea.sl %s11, 0(%s11, %s13)
 ; CHECK-NEXT:    lea %s1, 176(%s11)
-; CHECK-NEXT:    lea.sl %s34, buf@hi
-; CHECK-NEXT:    ld %s0, buf@lo(,%s34)
+; CHECK-NEXT:    lea %s34, buf@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s34, buf@hi(%s34)
+; CHECK-NEXT:    ld %s0, (,%s34)
 ; CHECK-NEXT:    adds.l %s11, -64, %s11
 ; CHECK-NEXT:    lea %s34, memcpy@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0

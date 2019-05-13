@@ -8,11 +8,10 @@
 define i32 @t_setjmp() {
 ; CHECK-LABEL: t_setjmp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, buf@hi
-; CHECK-NEXT:  st %s9, buf@lo(,%s34)
 ; CHECK-NEXT:  lea %s34, buf@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, buf@hi(%s34)
+; CHECK-NEXT:  st %s9, (,%s34)
 ; CHECK-NEXT:  st %s11, 16(,%s34)
 ; CHECK-NEXT:  sic %s0
 ; CHECK-NEXT:  lea %s0, 32(%s0)

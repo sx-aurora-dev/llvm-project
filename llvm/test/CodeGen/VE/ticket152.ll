@@ -95,8 +95,10 @@ define i32 @caller3() {
 ; CHECK-NEXT:  lea %s34, callee3@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s12, callee3@hi(%s34)
-; CHECK-NEXT:  lea.sl %s34, .LCPI2_0@hi
-; CHECK-NEXT:  ld %s3, .LCPI2_0@lo(,%s34)
+; CHECK-NEXT:  lea %s34, .LCPI2_0@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, .LCPI2_0@hi(%s34)
+; CHECK-NEXT:  ld %s3, (,%s34)
 ; CHECK-NEXT:  lea %s34, 0
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, 1074790400(%s34)
@@ -119,8 +121,10 @@ define i32 @caller4() {
 ; CHECK-NEXT:  lea %s35, callee4@lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s12, callee4@hi(%s35)
-; CHECK-NEXT:  lea.sl %s35, .LCPI3_0@hi
-; CHECK-NEXT:  ld %s3, .LCPI3_0@lo(,%s35)
+; CHECK-NEXT:  lea %s35, .LCPI3_0@lo
+; CHECK-NEXT:  and %s35, %s35, (32)0
+; CHECK-NEXT:  lea.sl %s35, .LCPI3_0@hi(%s35)
+; CHECK-NEXT:  ld %s3, (,%s35)
 ; CHECK-NEXT:  or %s0, 1, (0)1
 ; CHECK-NEXT:  or %s1, 2, (0)1
 ; CHECK-NEXT:  or %s2, 3, (0)1
