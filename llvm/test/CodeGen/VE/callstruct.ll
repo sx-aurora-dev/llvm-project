@@ -30,11 +30,10 @@ define void @caller() {
 ; CHECK-NEXT:    or %s2, 4, (0)1
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    ld %s34, -8(,%s9)
-; CHECK-NEXT:    lea.sl %s35, A@hi
-; CHECK-NEXT:    stl %s34, A@lo(,%s35)
 ; CHECK-NEXT:    lea %s35, A@lo
 ; CHECK-NEXT:    and %s35, %s35, (32)0
 ; CHECK-NEXT:    lea.sl %s35, A@hi(%s35)
+; CHECK-NEXT:    stl %s34, (,%s35)
 ; CHECK-NEXT:    srl %s34, %s34, 32
 ; CHECK-NEXT:    stl %s34, 4(,%s35)
 ; CHECK-NEXT:    or %s11, 0, %s9

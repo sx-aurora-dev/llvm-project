@@ -225,8 +225,10 @@ define double @ul2d(i64 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 32
 ; CHECK-NEXT:  lea %s35, 0
-; CHECK-NEXT:  lea.sl %s36, .LCPI{{[0-9]+}}_0@hi
-; CHECK-NEXT:  ld %s36, .LCPI{{[0-9]+}}_0@lo(,%s36)
+; CHECK-NEXT:  lea %s36, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:  and %s36, %s36, (32)0
+; CHECK-NEXT:  lea.sl %s36, .LCPI{{[0-9]+}}_0@hi(%s36)
+; CHECK-NEXT:  ld %s36, (,%s36)
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s37, 1160773632(%s35)
 ; CHECK-NEXT:  or %s34, %s34, %s37

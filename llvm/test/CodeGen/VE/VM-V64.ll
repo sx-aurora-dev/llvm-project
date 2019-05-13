@@ -7,8 +7,10 @@
 define void @VM256V64_test1() {
 ; ENABLE-LABEL:   VM256V64_test1:
 ; ENABLE:         .LBB{{[0-9]+}}_2:
-; ENABLE-NEXT:      lea.sl %s34, pIn@hi
-; ENABLE-NEXT:      ld %s34, pIn@lo(,%s34)
+; ENABLE-NEXT:      lea %s34, pIn@lo
+; ENABLE-NEXT:      and %s34, %s34, (32)0
+; ENABLE-NEXT:      lea.sl %s34, pIn@hi(%s34)
+; ENABLE-NEXT:      ld %s34, (,%s34)
 ; ENABLE-NEXT:      vldu %v0,4,%s34
 ; ENABLE-NEXT:      vfmk.s.eq %vm1,%v0
 ; ENABLE-NEXT:      nndm %vm1,%vm1,%vm1
@@ -16,8 +18,10 @@ define void @VM256V64_test1() {
 ; ENABLE-NEXT:      vstl %v0,4,%s34
 ; DISABLE-LABEL:  VM256V64_test1:
 ; DISABLE:        .LBB{{[0-9]+}}_2:
-; DISABLE-NEXT:     lea.sl %s34, pIn@hi
-; DISABLE-NEXT:     ld %s34, pIn@lo(,%s34)
+; DISABLE-NEXT:     lea %s34, pIn@lo
+; DISABLE-NEXT:     and %s34, %s34, (32)0
+; DISABLE-NEXT:     lea.sl %s34, pIn@hi(%s34)
+; DISABLE-NEXT:     ld %s34, (,%s34)
 ; DISABLE-NEXT:     vldu %v0,4,%s34
 ; DISABLE-NEXT:     vfmk.s.eq %vm1,%v0
 ; DISABLE-NEXT:     nndm %vm1,%vm1,%vm1
@@ -51,8 +55,10 @@ declare void @llvm.ve.vstl.vss(<256 x double>, i64, i8*)
 define void @VM256V64_test2(i32) {
 ; ENABLE-LABEL:   VM256V64_test2:
 ; ENABLE:         .LBB{{[0-9]+}}_6:
-; ENABLE-NEXT:      lea.sl %s34, pIn@hi
-; ENABLE-NEXT:      ld %s34, pIn@lo(,%s34)
+; ENABLE-NEXT:      lea %s34, pIn@lo
+; ENABLE-NEXT:      and %s34, %s34, (32)0
+; ENABLE-NEXT:      lea.sl %s34, pIn@hi(%s34)
+; ENABLE-NEXT:      ld %s34, (,%s34)
 ; ENABLE-NEXT:      vldu %v0,4,%s34
 ; ENABLE-NEXT:      lea %s35, -1(%s0)
 ; ENABLE-NEXT:      or %s36, 1, (0)1
@@ -69,8 +75,10 @@ define void @VM256V64_test2(i32) {
 ; ENABLE-NEXT:      vstl %v0,4,%s34
 ; DISABLE-LABEL:  VM256V64_test2:
 ; DISABLE:        .LBB{{[0-9]+}}_6:
-; DISABLE-NEXT:     lea.sl %s34, pIn@hi
-; DISABLE-NEXT:     ld %s34, pIn@lo(,%s34)
+; DISABLE-NEXT:     lea %s34, pIn@lo
+; DISABLE-NEXT:     and %s34, %s34, (32)0
+; DISABLE-NEXT:     lea.sl %s34, pIn@hi(%s34)
+; DISABLE-NEXT:     ld %s34, (,%s34)
 ; DISABLE-NEXT:     vldu %v0,4,%s34
 ; DISABLE-NEXT:     vfmk.s.eq %vm1,%v0
 ; DISABLE-NEXT:     lea %s35, -1(%s0)
@@ -148,8 +156,10 @@ define void @VM256V64_test2(i32) {
 define void @VM512V64_test1() {
 ; ENABLE-LABEL:   VM512V64_test1:
 ; ENABLE:         .LBB{{[0-9]+}}_2:
-; ENABLE-NEXT:      lea.sl %s34, pIn@hi
-; ENABLE-NEXT:      ld %s34, pIn@lo(,%s34)
+; ENABLE-NEXT:      lea %s34, pIn@lo
+; ENABLE-NEXT:      and %s34, %s34, (32)0
+; ENABLE-NEXT:      lea.sl %s34, pIn@hi(%s34)
+; ENABLE-NEXT:      ld %s34, (,%s34)
 ; ENABLE-NEXT:      vldu %v0,4,%s34
 ; ENABLE-NEXT:      vfmk.s.eq %vm2,%v0
 ; ENABLE-NEXT:      pvfmk.s.lo.eq %vm3,%v0
@@ -159,8 +169,10 @@ define void @VM512V64_test1() {
 ; ENABLE-NEXT:      vstl %v0,4,%s34
 ; DISABLE-LABEL:  VM512V64_test1:
 ; DISABLE:        .LBB{{[0-9]+}}_2:
-; DISABLE-NEXT:     lea.sl %s34, pIn@hi
-; DISABLE-NEXT:     ld %s34, pIn@lo(,%s34)
+; DISABLE-NEXT:     lea %s34, pIn@lo
+; DISABLE-NEXT:     and %s34, %s34, (32)0
+; DISABLE-NEXT:     lea.sl %s34, pIn@hi(%s34)
+; DISABLE-NEXT:     ld %s34, (,%s34)
 ; DISABLE-NEXT:     vldu %v0,4,%s34
 ; DISABLE-NEXT:     vfmk.s.eq %vm2,%v0
 ; DISABLE-NEXT:     pvfmk.s.lo.eq %vm3,%v0
@@ -190,8 +202,10 @@ declare <256 x double> @llvm.ve.pvadds.vvvMv(<256 x double>, <256 x double>, <8 
 define void @VM512V64_test2(i32) {
 ; ENABLE-LABEL:   VM512V64_test2:
 ; ENABLE:         .LBB{{[0-9]+}}_4:
-; ENABLE-NEXT:      lea.sl %s34, pIn@hi
-; ENABLE-NEXT:      ld %s34, pIn@lo(,%s34)
+; ENABLE-NEXT:      lea %s34, pIn@lo
+; ENABLE-NEXT:      and %s34, %s34, (32)0
+; ENABLE-NEXT:      lea.sl %s34, pIn@hi(%s34)
+; ENABLE-NEXT:      ld %s34, (,%s34)
 ; ENABLE-NEXT:      vldu %v0,4,%s34
 ; ENABLE-NEXT:      vfmk.s.eq %vm4,%v0
 ; ENABLE-NEXT:      pvfmk.s.lo.eq %vm5,%v0
@@ -208,8 +222,10 @@ define void @VM512V64_test2(i32) {
 ; ENABLE-NEXT:      vstl %v0,4,%s34
 ; DISABLE-LABEL:  VM512V64_test2:
 ; DISABLE:        .LBB{{[0-9]+}}_5:
-; DISABLE-NEXT:     lea.sl %s34, pIn@hi
-; DISABLE-NEXT:     ld %s34, pIn@lo(,%s34)
+; DISABLE-NEXT:     lea %s34, pIn@lo
+; DISABLE-NEXT:     and %s34, %s34, (32)0
+; DISABLE-NEXT:     lea.sl %s34, pIn@hi(%s34)
+; DISABLE-NEXT:     ld %s34, (,%s34)
 ; DISABLE-NEXT:     vldu %v0,4,%s34
 ; DISABLE-NEXT:     vfmk.s.eq %vm2,%v0
 ; DISABLE-NEXT:     pvfmk.s.lo.eq %vm3,%v0

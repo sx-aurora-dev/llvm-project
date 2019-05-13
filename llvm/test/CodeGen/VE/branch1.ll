@@ -153,8 +153,10 @@ define i32 @func9(double, double) {
 define i32 @func10(double, double) {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
-; CHECK-NEXT:    ld %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
+; CHECK-NEXT:    lea %s34, .LCPI9_0@lo
+; CHECK-NEXT:    and %s34, %s34, (32)0
+; CHECK-NEXT:    lea.sl %s34, .LCPI9_0@hi(%s34)
+; CHECK-NEXT:    ld %s34, (,%s34)
 ; CHECK-NEXT:    brlenan.d %s0, %s34, .LBB{{[0-9]+}}_1
   %3 = fcmp ogt double %0, 5.000000e+00
   br i1 %3, label %4, label %6

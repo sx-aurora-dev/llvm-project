@@ -97,8 +97,10 @@ entry:
 define i64 @f2ul(float %a) {
 ; CHECK-LABEL: f2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
-; CHECK-NEXT:  ldu %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
+; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
+; CHECK-NEXT:  ldu %s34, (,%s34)
 ; CHECK-NEXT:  fcmp.s %s35, %s0, %s34
 ; CHECK-NEXT:  fsub.s %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.d.s %s34, %s34
@@ -225,8 +227,10 @@ entry:
 define i64 @d2ul(double %a) {
 ; CHECK-LABEL: d2ul
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi
-; CHECK-NEXT:  ld %s34, .LCPI{{[0-9]+}}_0@lo(,%s34)
+; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
+; CHECK-NEXT:  ld %s34, (,%s34)
 ; CHECK-NEXT:  fcmp.d %s35, %s0, %s34
 ; CHECK-NEXT:  fsub.d %s34, %s0, %s34
 ; CHECK-NEXT:  cvt.l.d.rz %s34, %s34
@@ -361,20 +365,19 @@ define i64 @q2ul(fp128 %a) {
 ; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:  ld %s34, 8(,%s34)
-; CHECK-NEXT:  lea.sl %s36, .LCPI{{[0-9]+}}_0@hi
-; CHECK-NEXT:  ld %s35, .LCPI{{[0-9]+}}_0@lo(,%s36)
-; CHECK-NEXT:  fcmp.q %s36, %s0, %s34
-; CHECK-NEXT:  fsub.q %s34, %s0, %s34
-; CHECK-NEXT:  cvt.d.q %s34, %s34
+; CHECK-NEXT:  ld %s36, 8(,%s34)
+; CHECK-NEXT:  ld %s37, (,%s34)
+; CHECK-NEXT:  fcmp.q %s35, %s0, %s36
+; CHECK-NEXT:  fsub.q %s36, %s0, %s36
+; CHECK-NEXT:  cvt.d.q %s34, %s36
 ; CHECK-NEXT:  cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:  lea %s35, 0
-; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s35, -2147483648(%s35)
-; CHECK-NEXT:  xor %s34, %s34, %s35
-; CHECK-NEXT:  cvt.d.q %s35, %s0
-; CHECK-NEXT:  cvt.l.d.rz %s35, %s35
-; CHECK-NEXT:  cmov.d.lt %s34, %s35, %s36
+; CHECK-NEXT:  lea %s36, 0
+; CHECK-NEXT:  and %s36, %s36, (32)0
+; CHECK-NEXT:  lea.sl %s36, -2147483648(%s36)
+; CHECK-NEXT:  xor %s34, %s34, %s36
+; CHECK-NEXT:  cvt.d.q %s36, %s0
+; CHECK-NEXT:  cvt.l.d.rz %s36, %s36
+; CHECK-NEXT:  cmov.d.lt %s34, %s36, %s35
 ; CHECK-NEXT:  or %s0, 0, %s34
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:

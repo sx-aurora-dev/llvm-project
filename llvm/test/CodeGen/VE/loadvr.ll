@@ -35,8 +35,10 @@ define x86_regcallcc <256 x i64> @loadv256i64com() {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  lea.sl %s34, v256i64@hi
-; CHECK-NEXT:  lea %s34,v256i64@lo(,%s34)
+; CHECK-NEXT:  lea %s34, v256i64@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, v256i64@hi(%s34)
+; CHECK-NEXT:  lea %s34,(,%s34)
 ; CHECK-NEXT:  vld %v0,8,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = load <256 x i64>, <256 x i64>* @v256i64, align 16
