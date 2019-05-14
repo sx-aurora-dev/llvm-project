@@ -21,8 +21,7 @@ define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 ; CHECK-NEXT:  lea %s34,1456(,%s11)
 ; CHECK-NEXT:  vldl.sx %v1,4,%s34
 ; CHECK-NEXT:  vadds.w.sx %v0,%v1,%v0
-; CHECK-NEXT:  lea %s34,(,%s0)
-; CHECK-NEXT:  vstl %v0,4,%s34
+; CHECK-NEXT:  vstl %v0,4,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %3 = add <256 x i32> %1, %0
   ret <256 x i32> %3
