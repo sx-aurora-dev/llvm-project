@@ -19,6 +19,7 @@
 #include <list>
 #include <stdlib.h>
 #include <string>
+#include <sys/stat.h>
 #include <ve_offload.h>
 #include <vector>
 
@@ -289,28 +290,36 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   }
 
   fwrite(Image->ImageStart, ImageSize, 1, ftmp);
+
+  // at least for the static case we need to change the permissions
+  chmod(tmp_name, 0700);
+
   DP("Wrote target image to %s. ImageSize=%zu\n", tmp_name, ImageSize);
+
   fclose(ftmp);
 
   // See comment in "__tgt_rtl_init_device"
 #if 1
   struct veo_proc_handle *proc_handle;
+  bool is_dyn = elf_is_dynamic(Image);
   // If we have a dynamically linked image, we create the process handle, then
   // the thread, and then load the image.
   // If we have a statically linked image, we need to create the process handle
   // and load the image at the same time with veo_proc_create_static().
-  if (elf_is_dynamic(Image)) {
+  if (is_dyn) {
     proc_handle = veo_proc_create(ID);
+    if (!proc_handle) {
+      DP("veo_proc_create() failed for device %d\n", ID);
+      return NULL;
+    }
   } else {
     proc_handle = veo_proc_create_static(ID, tmp_name);
+    if (!proc_handle) {
+      DP("veo_proc_create_static() failed for device %d, image=%s\n", ID, tmp_name);
+      return NULL;
+    }
   }
 
-  if (!proc_handle) {
-    // TODO: errno does not seem to be set by VEO
-    // DP("veo_proc_create() failed: %s\n", std::strerror(errno));
-    DP("veo_proc_create() failed for device %d\n", ID);
-    return NULL;
-  }
 
   struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
   if (!ctx) {
@@ -327,7 +336,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 #endif
 
   uint64_t LibHandle = 0UL;
-  if (elf_is_dynamic(Image)) {
+  if (is_dyn) {
     LibHandle = veo_load_library(DeviceInfo.ProcHandles[ID], tmp_name);
 
     if (!LibHandle) {

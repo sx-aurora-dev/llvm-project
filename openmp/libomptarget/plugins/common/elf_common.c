@@ -116,5 +116,6 @@ static inline int32_t elf_is_dynamic(__tgt_device_image *image) {
   }
 
   elf_end(e);
+  DP("ELF Type: %d\n", Type);
   return Type == ET_DYN;
 }
