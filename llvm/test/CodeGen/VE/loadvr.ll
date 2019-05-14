@@ -8,8 +8,7 @@ define x86_regcallcc <256 x i64> @loadv256i64(<256 x i64>* nocapture readonly) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  lea %s34,(,%s0)
-; CHECK-NEXT:  vld %v0,8,%s34
+; CHECK-NEXT:  vld %v0,8,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %2 = load <256 x i64>, <256 x i64>* %0, align 16
   ret <256 x i64> %2
@@ -38,7 +37,6 @@ define x86_regcallcc <256 x i64> @loadv256i64com() {
 ; CHECK-NEXT:  lea %s34, v256i64@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, v256i64@hi(%s34)
-; CHECK-NEXT:  lea %s34,(,%s34)
 ; CHECK-NEXT:  vld %v0,8,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = load <256 x i64>, <256 x i64>* @v256i64, align 16

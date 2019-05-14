@@ -62,46 +62,37 @@ def truncstorev2i32 : PatFrag<(ops node:$val, node:$ptr),
 // Load and store for
 // v256i32, v256i64, v512i32, v256f32, v256f64, v512f32.
 
-def : Pat<(v512i32 (load ADDRri:$addr)),
-          (v512i32 (VLDir 8, (LEAasx ADDRri:$addr),
-                          (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
+def : Pat<(v512i32 (load I64:$addr)),
+          (v512i32 (VLDir 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
 
-def : Pat<(v512f32 (load ADDRri:$addr)),
-          (v512f32 (VLDir 8, (LEAasx ADDRri:$addr),
-                          (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
+def : Pat<(v512f32 (load I64:$addr)),
+          (v512f32 (VLDir 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
 
 multiclass load_for_vector_length<int length> {
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
-              (load ADDRri:$addr)),
-            (VLDLsxir 4, (LEAasx ADDRri:$addr),
-                         (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+              (load I64:$addr)),
+            (VLDLsxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
-              (load ADDRri:$addr)),
-            (VLDUir 4, (LEAasx ADDRri:$addr),
-                       (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+              (load I64:$addr)),
+            (VLDUir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
-              (load ADDRri:$addr)),
-            (VLDir 8, (LEAasx ADDRri:$addr),
-                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+              (load I64:$addr)),
+            (VLDir 8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (load ADDRri:$addr)),
-            (VLDir 8, (LEAasx ADDRri:$addr),
-                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+              (load I64:$addr)),
+            (VLDir 8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
               (!cast<PatFrag>("extloadv" # !cast<string>(length) # "i32")
-                 ADDRri:$addr)),
-            (VLDLzxir 4, (LEAasx ADDRri:$addr),
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                 I64:$addr)),
+            (VLDLzxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
               (!cast<PatFrag>("sextloadv" # !cast<string>(length) # "i32")
-                 ADDRri:$addr)),
-            (VLDLsxir 4, (LEAasx ADDRri:$addr),
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                 I64:$addr)),
+            (VLDLsxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
               (!cast<PatFrag>("zextloadv" # !cast<string>(length) # "i32")
-                 ADDRri:$addr)),
-            (VLDLzxir 4, (LEAasx ADDRri:$addr),
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                 I64:$addr)),
+            (VLDLzxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
 defm : load_for_vector_length<256>;
@@ -109,41 +100,33 @@ defm : load_for_vector_length<8>;
 defm : load_for_vector_length<4>;
 defm : load_for_vector_length<2>;
 
-def : Pat<(store v512i32:$vx, ADDRri:$addr),
-          (VSTir v512i32:$vx, 8, (LEAasx ADDRri:$addr),
-                 (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(store v512i32:$vx, I64:$addr),
+          (VSTir v512i32:$vx, 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(store v512f32:$vx, ADDRri:$addr),
-          (VSTir v512f32:$vx, 8, (LEAasx ADDRri:$addr),
-                 (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(store v512f32:$vx, I64:$addr),
+          (VSTir v512f32:$vx, 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 multiclass store_for_vector_length<int length> {
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-                   ADDRri:$addr),
+                   I64:$addr),
             (VSTLir !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-                    4, (LEAasx ADDRri:$addr),
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                    4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                   ADDRri:$addr),
+                   I64:$addr),
             (VSTUir !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                    4, (LEAasx ADDRri:$addr),
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                    4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                   ADDRri:$addr),
+                   I64:$addr),
             (VSTir !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                    8, (LEAasx ADDRri:$addr),
-                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                    8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                   ADDRri:$addr),
+                   I64:$addr),
             (VSTir !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                    8, (LEAasx ADDRri:$addr),
-                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+                    8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(!cast<PatFrag>("truncstorev" # !cast<string>(length) # "i32")
                !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-               ADDRri:$addr),
-            (VSTLir $vx, 4, (LEAasx ADDRri:$addr),
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-
+               I64:$addr),
+            (VSTLir $vx, 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
 defm : store_for_vector_length<256>;

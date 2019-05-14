@@ -14,13 +14,12 @@ define dso_local <16 x i32> @insert_test(<16 x i32>) local_unnamed_addr #0 {
 ; CHECK-NEXT:    vstl %v0,4,%s34
 ; CHECK-NEXT:    lea %s35, 8
 ; CHECK-NEXT:    lvl %s35
-; CHECK-NEXT:    lea %s35,-1008(,%s9)
+; CHECK-NEXT:    lea %s35, 32(%s34)
 ; CHECK-NEXT:    vldl.sx %v0,4,%s35
-; CHECK-NEXT:    lea %s35,32(,%s0)
+; CHECK-NEXT:    lea %s35, 32(%s0)
 ; CHECK-NEXT:    vstl %v0,4,%s35
 ; CHECK-NEXT:    vldl.sx %v0,4,%s34
-; CHECK-NEXT:    lea %s34,(,%s0)
-; CHECK-NEXT:    vstl %v0,4,%s34
+; CHECK-NEXT:    vstl %v0,4,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = insertelement <16 x i32> %0, i32 2, i32 0
   ret <16 x i32> %2
