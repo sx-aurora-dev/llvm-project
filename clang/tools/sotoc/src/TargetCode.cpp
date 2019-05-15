@@ -69,6 +69,10 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     Out << "#include <" << Header << ">\n";
   }
 
+  //override omp_is_initial_device()
+
+  Out << "static inline int omp_is_initial_device(void) {return 0;}\n";
+
   for (auto i = CodeFragments.begin(), e = CodeFragments.end(); i != e; ++i) {
 
     std::shared_ptr<TargetCodeFragment> Frag = *i;
