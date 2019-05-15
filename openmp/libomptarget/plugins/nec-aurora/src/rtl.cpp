@@ -45,7 +45,7 @@ static int DebugLevel = 0;
 
 #include "../../common/elf_common.c"
 
-#define NUMBER_OF_DEVICES 1 // TODO: find out how many nodes we can have
+#define NUMBER_OF_DEVICES 8 // TODO: find out how many nodes we can have
 
 #define VEO_MIN_VERSION 4
 #define VEO_MAX_VERSION 4
