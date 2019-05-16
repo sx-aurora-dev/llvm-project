@@ -403,10 +403,30 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
             VE::I64RegClass.contains(DestReg)))
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
-  else if (VE::V64RegClass.contains(DestReg, SrcReg))
+  else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
+    // Generate following instructions
+    //   svl %s16               ; save VL to s16
+    //   lea %s12, 256          ; retrieve MVL to s12
+    //   lvl %s12               ; set VL to MVL
+    //   vor %dest, (0)1, %src  ; copy vector register using MVL
+    //   lvl %s16               ; restore VL
+    // FIXME: using SX16 and SX12 as a temporary register
+    unsigned VLReg = VE::VL;
+    unsigned SaveReg = VE::SX16;
+    unsigned TmpReg = VE::SX12;
+    BuildMI(MBB, I, DL, get(VE::SVL), SaveReg)
+      .addReg(VLReg, getKillRegState(KillSrc));
+    BuildMI(MBB, I, DL, get(VE::LEAzzi), TmpReg)
+      .addImm(256);
+    BuildMI(MBB, I, DL, get(VE::LVL), VLReg)
+      .addReg(TmpReg, getKillRegState(true));
     BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
         .addImm(0)
-        .addReg(SrcReg, getKillRegState(KillSrc));
+        .addReg(SrcReg, getKillRegState(KillSrc))
+        .addReg(VLReg, getKillRegState(true));
+    BuildMI(MBB, I, DL, get(VE::LVL), VLReg)
+      .addReg(SaveReg, getKillRegState(true));
+  }
   else if (VE::VMRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::ANDM), DestReg)
         .addReg(VE::VM0)
