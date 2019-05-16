@@ -1,28 +1,9 @@
-//===-- PromoteToI1.cpp - Promote to vector mask register -----------------===//
+//===-- LVLGen.cpp - LVL instruction generator ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
-//
-// This is a simple local pass that tries to promote vector registers to
-// expected vector mask registers if and only if those vector registers
-// defined as vector mask registers.  As you know, C/clang doesn't support
-// i1 type natively, so vector mask registers are declared as v4i64 in C
-// instead of v256i1.  This involves cast between v4i64 and v256i1.
-// Unfortunately, SX-Aurora Tsubasa has penalties for such casts.
-// This pass promotes all vector register which is used as vector mask
-// registers into expacted vector mask registers to avoid cast penalties.
-//
-// Input:
-//   v4i64 m = (v4i64)create_mask(...);
-//   v256i64 v = vadd_mask(..., (v256i1)m);
-//
-// Output:
-//   v256i1 m = create_mask(...);
-//   v256i64 v = vadd_mask(..., m);
 //===----------------------------------------------------------------------===//
 
 #include "VE.h"
