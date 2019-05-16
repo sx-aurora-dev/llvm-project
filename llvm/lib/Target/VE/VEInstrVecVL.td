@@ -10517,37 +10517,18 @@ def vfrminslst_vvvl : RV<0xad, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VGT vgt vgt_vvl
-def vgt_vvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
-       "vgt $vx,$vy", [], NoItinerary>
+// VGT vgt vgt_vvssl
+def vgt_vvssl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vgt $vx,$vy,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VGT vgt vgt_vvvl
-def vgt_vvvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vgt $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VGT vgt vgt_vvml
-def vgt_vvml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
-       "vgt $vx,$vy,$vm", [], NoItinerary>
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VGT vgt vgt_vvmvl
-def vgt_vvmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vgt $vx,$vy,$vm", [], NoItinerary>
+// VGT vgt vgt_vvssvl
+def vgt_vvssvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$sy,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -10555,37 +10536,18 @@ def vgt_vvmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl
   let DisableEncoding = "$vl";
 }
 
-// VGTU vgtu vgtu_vvl
-def vgtu_vvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I32:$vl),
-       "vgtu $vx,$vy", [], NoItinerary>
+// VGT vgt vgt_vvsZl
+def vgt_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vgt $vx,$vy,$sy,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VGTU vgtu vgtu_vvvl
-def vgtu_vvvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vgtu $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VGTU vgtu vgtu_vvml
-def vgtu_vvml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
-       "vgtu $vx,$vy,$vm", [], NoItinerary>
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VGTU vgtu vgtu_vvmvl
-def vgtu_vvmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vgtu $vx,$vy,$vm", [], NoItinerary>
+// VGT vgt vgt_vvsZvl
+def vgt_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$sy,$Z", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -10593,37 +10555,18 @@ def vgtu_vvmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$v
   let DisableEncoding = "$vl";
 }
 
-// VGTL vgtl.sx vgtlsx_vvl
-def vgtlsx_vvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I32:$vl),
-       "vgtl.sx $vx,$vy", [], NoItinerary>
+// VGT vgt vgt_vvIsl
+def vgt_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vgt $vx,$vy,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VGTL vgtl.sx vgtlsx_vvvl
-def vgtlsx_vvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vgtl.sx $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VGTL vgtl.sx vgtlsx_vvml
-def vgtlsx_vvml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
-       "vgtl.sx $vx,$vy,$vm", [], NoItinerary>
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VGTL vgtl.sx vgtlsx_vvmvl
-def vgtlsx_vvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vgtl.sx $vx,$vy,$vm", [], NoItinerary>
+// VGT vgt vgt_vvIsvl
+def vgt_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$I,$sz", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -10631,18 +10574,18 @@ def vgtlsx_vvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:
   let DisableEncoding = "$vl";
 }
 
-// VGTL vgtl.zx vgtlzx_vvl
-def vgtlzx_vvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I32:$vl),
-       "vgtl.zx $vx,$vy", [], NoItinerary>
+// VGT vgt vgt_vvIZl
+def vgt_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vgt $vx,$vy,$I,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VGTL vgtl.zx vgtlzx_vvvl
-def vgtlzx_vvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vgtl.zx $vx,$vy", [], NoItinerary>
+// VGT vgt vgt_vvIZvl
+def vgt_vvIZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$I,$Z", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -10650,18 +10593,531 @@ def vgtlzx_vvvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VGTL vgtl.zx vgtlzx_vvml
-def vgtlzx_vvml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
-       "vgtl.zx $vx,$vy,$vm", [], NoItinerary>
+// VGT vgt vgt_vvssml
+def vgt_vvssml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vgt $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VGTL vgtl.zx vgtlzx_vvmvl
-def vgtlzx_vvmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vgtl.zx $vx,$vy,$vm", [], NoItinerary>
+// VGT vgt vgt_vvssmvl
+def vgt_vvssmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvsZml
+def vgt_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgt $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvsZmvl
+def vgt_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvIsml
+def vgt_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vgt $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvIsmvl
+def vgt_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvIZml
+def vgt_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgt $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGT vgt vgt_vvIZmvl
+def vgt_vvIZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgt $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvssl
+def vgtu_vvssl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vgtu $vx,$vy,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvssvl
+def vgtu_vvssvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$sy,$sz", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvsZl
+def vgtu_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vgtu $vx,$vy,$sy,$Z", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvsZvl
+def vgtu_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$sy,$Z", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIsl
+def vgtu_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vgtu $vx,$vy,$I,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIsvl
+def vgtu_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$I,$sz", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIZl
+def vgtu_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vgtu $vx,$vy,$I,$Z", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIZvl
+def vgtu_vvIZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$I,$Z", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvssml
+def vgtu_vvssml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vgtu $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvssmvl
+def vgtu_vvssmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvsZml
+def vgtu_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgtu $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvsZmvl
+def vgtu_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIsml
+def vgtu_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vgtu $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIsmvl
+def vgtu_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIZml
+def vgtu_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgtu $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTU vgtu vgtu_vvIZmvl
+def vgtu_vvIZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtu $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvssl
+def vgtlsx_vvssl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvssvl
+def vgtlsx_vvssvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$sz", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvsZl
+def vgtlsx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$Z", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvsZvl
+def vgtlsx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$Z", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIsl
+def vgtlsx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIsvl
+def vgtlsx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$sz", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIZl
+def vgtlsx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$Z", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIZvl
+def vgtlsx_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$Z", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvssml
+def vgtlsx_vvssml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvssmvl
+def vgtlsx_vvssmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvsZml
+def vgtlsx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvsZmvl
+def vgtlsx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIsml
+def vgtlsx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIsmvl
+def vgtlsx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIZml
+def vgtlsx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.sx vgtlsx_vvIZmvl
+def vgtlsx_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.sx $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvssl
+def vgtlzx_vvssl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvssvl
+def vgtlzx_vvssvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$sz", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvsZl
+def vgtlzx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$Z", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvsZvl
+def vgtlzx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$Z", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIsl
+def vgtlzx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$sz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIsvl
+def vgtlzx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$sz", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIZl
+def vgtlzx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$Z", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIZvl
+def vgtlzx_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$Z", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvssml
+def vgtlzx_vvssml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvssmvl
+def vgtlzx_vvssmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvsZml
+def vgtlzx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvsZmvl
+def vgtlzx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIsml
+def vgtlzx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIsmvl
+def vgtlzx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIZml
+def vgtlzx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VGTL vgtl.zx vgtlzx_vvIZmvl
+def vgtlzx_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, V64:$vd, I32:$vl),
+       "vgtl.zx $vx,$vy,$I,$Z,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
