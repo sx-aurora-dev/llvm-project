@@ -969,10 +969,13 @@ class InstTable(object):
         OL = self.addMask(OL, vm)
         return self.Def(opc, baseInstName, subop, asm, OL, expr, **kwargs)
 
-    def addMask(self, ary, MaskOp = VM):
+    def addMask(self, ary, MaskOp = VM, addVD = True):
         tmp = []
         for a in ary:
-            tmp.append(a + [MaskOp, VD(a[0].elemType())])
+            if addVD:
+                tmp.append(a + [MaskOp, VD(a[0].elemType())])
+            else:
+                tmp.append(a + [MaskOp])
         return ary + tmp
 
     def VLDm(self, opc, inst, subop, asm):
@@ -1152,10 +1155,18 @@ class InstTable(object):
         self.Def(opc, inst, subop, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
         self.Def(opc, inst, subop, asm, [[VMX, CCOp, VZ(T_i64), VM]]).noTest()
 
-    def VGTm(self, opc, inst, subop, asm):
-        O_v = [VX(T_u64), VY(T_u64)]
-        O_vm = [VX(T_u64), VY(T_u64), VM]
-        O = [O_v, O_vm]
+    def VGTm(self, opc, inst, subop, asm, isVL):
+        if isVL:
+            O = []
+            O.append([VX(T_u64), VY(T_u64), SY(T_u64), SZ(T_u64)])
+            O.append([VX(T_u64), VY(T_u64), SY(T_u64), ImmZ(T_u64)])
+            O.append([VX(T_u64), VY(T_u64), ImmI(T_u64), SZ(T_u64)])
+            O.append([VX(T_u64), VY(T_u64), ImmI(T_u64), ImmZ(T_u64)])
+            O = self.addMask(O, VM, False)
+        else:
+            O_v = [VX(T_u64), VY(T_u64)]
+            O_vm = [VX(T_u64), VY(T_u64), VM]
+            O = [O_v, O_vm]
         self.Def(opc, inst, subop, asm, O).noTest().readMem()
 
     def VSCm(self, opc, inst0, inst, asm):
@@ -1481,10 +1492,10 @@ def createInstructionTable(isVL):
     T.NoImpl("VFIMS")
     
     T.Section("Table 3-22 Vector Gathering/Scattering Instructions", 36)
-    T.VGTm(0xA1, "VGT", "", "vgt")
-    T.VGTm(0xA2, "VGTU", "", "vgtu")
-    T.VGTm(0xA3, "VGTL", "sx", "vgtl.sx")
-    T.VGTm(0xA3, "VGTL", "zx", "vgtl.zx")
+    T.VGTm(0xA1, "VGT", "", "vgt", isVL)
+    T.VGTm(0xA2, "VGTU", "", "vgtu", isVL)
+    T.VGTm(0xA3, "VGTL", "sx", "vgtl.sx", isVL)
+    T.VGTm(0xA3, "VGTL", "zx", "vgtl.zx", isVL)
     T.VSCm(0xB1, "VSC", "VSC", "vsc")
     T.VSCm(0xB2, "VSCU", "VSCU", "vscu")
     T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
