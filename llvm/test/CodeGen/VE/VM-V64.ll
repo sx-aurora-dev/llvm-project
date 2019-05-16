@@ -121,7 +121,11 @@ define void @VM256V64_test2(i32) {
 ; DISABLE-NEXT:     brgt.w %s35, %s36, .LBB1_3
 ; DISABLE-NEXT:     br.l .LBB1_4
 ; DISABLE:        .LBB{{[0-9]+}}_1:
+; DISABLE-NEXT:     svl %s16
+; DISABLE-NEXT:     lea %s12, 256
+; DISABLE-NEXT:     lvl %s12
 ; DISABLE-NEXT:     vor %v2,(0)1,%v1
+; DISABLE-NEXT:     lvl %s16
 ; DISABLE:        .LBB{{[0-9]+}}_4:
 ; DISABLE-NEXT:     lvs %s16,%v2(0)
 ; DISABLE-NEXT:     lvm %vm1,0,%s16
