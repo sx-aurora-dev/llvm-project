@@ -75,6 +75,28 @@ define i32 @loadi32(i32* nocapture readonly) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
+define i64 @loadi32sext(i32* nocapture readonly) {
+; CHECK-LABEL: loadi32sext:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  ldl.sx %s0, (,%s0)
+; CHECK-NEXT:  or %s11, 0, %s9
+  %2 = load i32, i32* %0, align 16
+  %3 = sext i32 %2 to i64
+  ret i64 %3
+}
+
+; Function Attrs: norecurse nounwind readonly
+define i64 @loadi32zext(i32* nocapture readonly) {
+; CHECK-LABEL: loadi32zext:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  ldl.zx %s0, (,%s0)
+; CHECK-NEXT:  or %s11, 0, %s9
+  %2 = load i32, i32* %0, align 16
+  %3 = zext i32 %2 to i64
+  ret i64 %3
+}
+
+; Function Attrs: norecurse nounwind readonly
 define i16 @loadi16(i16* nocapture readonly) {
 ; CHECK-LABEL: loadi16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -85,6 +107,28 @@ define i16 @loadi16(i16* nocapture readonly) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
+define i64 @loadi16sext(i16* nocapture readonly) {
+; CHECK-LABEL: loadi16sext:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  ld2b.sx %s0, (,%s0)
+; CHECK-NEXT:  or %s11, 0, %s9
+  %2 = load i16, i16* %0, align 16
+  %3 = sext i16 %2 to i64
+  ret i64 %3
+}
+
+; Function Attrs: norecurse nounwind readonly
+define i64 @loadi16zext(i16* nocapture readonly) {
+; CHECK-LABEL: loadi16zext:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  ld2b.zx %s0, (,%s0)
+; CHECK-NEXT:  or %s11, 0, %s9
+  %2 = load i16, i16* %0, align 16
+  %3 = zext i16 %2 to i64
+  ret i64 %3
+}
+
+; Function Attrs: norecurse nounwind readonly
 define i8 @loadi8(i8* nocapture readonly) {
 ; CHECK-LABEL: loadi8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -92,6 +136,28 @@ define i8 @loadi8(i8* nocapture readonly) {
 ; CHECK-NEXT:  or %s11, 0, %s9
   %2 = load i8, i8* %0, align 16
   ret i8 %2
+}
+
+; Function Attrs: norecurse nounwind readonly
+define i64 @loadi8sext(i8* nocapture readonly) {
+; CHECK-LABEL: loadi8sext:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  ld1b.sx %s0, (,%s0)
+; CHECK-NEXT:  or %s11, 0, %s9
+  %2 = load i8, i8* %0, align 16
+  %3 = sext i8 %2 to i64
+  ret i64 %3
+}
+
+; Function Attrs: norecurse nounwind readonly
+define i64 @loadi8zext(i8* nocapture readonly) {
+; CHECK-LABEL: loadi8zext:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  ld1b.zx %s0, (,%s0)
+; CHECK-NEXT:  or %s11, 0, %s9
+  %2 = load i8, i8* %0, align 16
+  %3 = zext i8 %2 to i64
+  ret i64 %3
 }
 
 ; Function Attrs: norecurse nounwind readonly
