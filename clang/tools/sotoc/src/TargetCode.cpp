@@ -69,9 +69,11 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     Out << "#include <" << Header << ">\n";
   }
 
-  //override omp_is_initial_device()
-
-  Out << "static inline int omp_is_initial_device(void) {return 0;}\n";
+  // Override omp_is_initial_device() with macro, becuse this
+  //   Out << "static inline int omp_is_initial_device(void) {return 0;}\n";
+  // fails with the clang compiler. This still might cause problems, if
+  // someone tries to include the omp.h header after the prolouge.
+  Out << "#define omp_is_initial_device() 0\n";
 
   for (auto i = CodeFragments.begin(), e = CodeFragments.end(); i != e; ++i) {
 
@@ -93,6 +95,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     }
     Out << "\n";
   }
+  Out << "#undef omp_is_initial_device\n";
 }
 
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
