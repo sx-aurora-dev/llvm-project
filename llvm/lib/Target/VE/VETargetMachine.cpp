@@ -49,7 +49,7 @@ static std::string computeDataLayout(const Triple &T) {
   Ret += "-v256:64:64";
   Ret += "-v512:64:64";
   Ret += "-v1024:64:64";
-  Ret += "-v2014:64:64";
+  Ret += "-v2048:64:64";
   Ret += "-v4096:64:64";
   Ret += "-v8192:64:64";
   Ret += "-v16384:64:64";       // for v256f64
