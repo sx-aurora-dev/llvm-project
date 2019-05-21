@@ -53,6 +53,10 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   // TODO make this more flexible
   InputFile = argv[1];
 
+  if (strcmp(argv[1] + strlen(argv[1] -2), ".o") == 0) {
+    ObjectFiles.push_back(argv[1]);
+  }
+
   for (int i = 2; i < argc; ++i) {
     if (strcmp(argv[i], "-c") == 0) {
       if (Mode != ToolMode::Unknown) {
