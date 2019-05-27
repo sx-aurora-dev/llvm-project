@@ -144,7 +144,11 @@ static constexpr PropertyDefinition g_properties[] = {
          "stepping and variable availability may not behave as expected."},
     {"stop-on-exec", OptionValue::eTypeBoolean, true, true,
      nullptr, {},
-     "If true, stop when a shared library is loaded or unloaded."}};
+     "If true, stop when a shared library is loaded or unloaded."},
+    {"utility-expression-timeout", OptionValue::eTypeUInt64, false, 15,
+     nullptr, {},
+     "The time in seconds to wait for LLDB-internal utility expressions."}
+};
 
 enum {
   ePropertyDisableMemCache,
@@ -156,7 +160,8 @@ enum {
   ePropertyDetachKeepsStopped,
   ePropertyMemCacheLineSize,
   ePropertyWarningOptimization,
-  ePropertyStopOnExec
+  ePropertyStopOnExec,
+  ePropertyUtilityExpressionTimeout,
 };
 
 ProcessProperties::ProcessProperties(lldb_private::Process *process)
@@ -277,6 +282,13 @@ bool ProcessProperties::GetStopOnExec() const {
   const uint32_t idx = ePropertyStopOnExec;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
       nullptr, idx, g_properties[idx].default_uint_value != 0);
+}
+
+std::chrono::seconds ProcessProperties::GetUtilityExpressionTimeout() const {
+  const uint32_t idx = ePropertyUtilityExpressionTimeout;
+  uint64_t value = m_collection_sp->GetPropertyAtIndexAsUInt64(
+     nullptr, idx, g_properties[idx].default_uint_value);
+  return std::chrono::seconds(value);
 }
 
 Status ProcessLaunchCommandOptions::SetOptionValue(
@@ -648,7 +660,10 @@ void Process::Finalize() {
   m_image_tokens.clear();
   m_memory_cache.Clear();
   m_allocated_memory_cache.Clear();
-  m_language_runtimes.clear();
+  {
+    std::lock_guard<std::recursive_mutex> guard(m_language_runtimes_mutex);
+    m_language_runtimes.clear();
+  }
   m_instrumentation_runtimes.clear();
   m_next_event_action_up.reset();
   // Clear the last natural stop ID since it has a strong reference to this
@@ -1410,7 +1425,7 @@ Status Process::ResumeSynchronous(Stream *stream) {
   Status error = PrivateResume();
   if (error.Success()) {
     StateType state =
-        WaitForProcessToStop(llvm::None, NULL, true, listener_sp, stream);
+        WaitForProcessToStop(llvm::None, nullptr, true, listener_sp, stream);
     const bool must_be_alive =
         false; // eStateExited is ok, so this must be false
     if (!StateIsStoppedState(state, must_be_alive))
@@ -1537,6 +1552,7 @@ LanguageRuntime *Process::GetLanguageRuntime(lldb::LanguageType language,
   if (m_finalizing)
     return nullptr;
 
+  std::lock_guard<std::recursive_mutex> guard(m_language_runtimes_mutex);
   LanguageRuntimeCollection::iterator pos;
   pos = m_language_runtimes.find(language);
   if (pos == m_language_runtimes.end() || (retry_if_null && !(*pos).second)) {
@@ -1550,6 +1566,7 @@ LanguageRuntime *Process::GetLanguageRuntime(lldb::LanguageType language,
 }
 
 CPPLanguageRuntime *Process::GetCPPLanguageRuntime(bool retry_if_null) {
+  std::lock_guard<std::recursive_mutex> guard(m_language_runtimes_mutex);
   LanguageRuntime *runtime =
       GetLanguageRuntime(eLanguageTypeC_plus_plus, retry_if_null);
   if (runtime != nullptr &&
@@ -1559,6 +1576,7 @@ CPPLanguageRuntime *Process::GetCPPLanguageRuntime(bool retry_if_null) {
 }
 
 ObjCLanguageRuntime *Process::GetObjCLanguageRuntime(bool retry_if_null) {
+  std::lock_guard<std::recursive_mutex> guard(m_language_runtimes_mutex);
   LanguageRuntime *runtime =
       GetLanguageRuntime(eLanguageTypeObjC, retry_if_null);
   if (runtime != nullptr && runtime->GetLanguageType() == eLanguageTypeObjC)
@@ -2209,67 +2227,64 @@ size_t Process::WriteMemory(addr_t addr, const void *buf, size_t size,
   // may have placed in our tasks memory.
 
   BreakpointSiteList bp_sites_in_range;
-
-  if (m_breakpoint_site_list.FindInRange(addr, addr + size,
-                                         bp_sites_in_range)) {
-    // No breakpoint sites overlap
-    if (bp_sites_in_range.IsEmpty())
-      return WriteMemoryPrivate(addr, buf, size, error);
-    else {
-      const uint8_t *ubuf = (const uint8_t *)buf;
-      uint64_t bytes_written = 0;
-
-      bp_sites_in_range.ForEach([this, addr, size, &bytes_written, &ubuf,
-                                 &error](BreakpointSite *bp) -> void {
-
-        if (error.Success()) {
-          addr_t intersect_addr;
-          size_t intersect_size;
-          size_t opcode_offset;
-          const bool intersects = bp->IntersectsRange(
-              addr, size, &intersect_addr, &intersect_size, &opcode_offset);
-          UNUSED_IF_ASSERT_DISABLED(intersects);
-          assert(intersects);
-          assert(addr <= intersect_addr && intersect_addr < addr + size);
-          assert(addr < intersect_addr + intersect_size &&
-                 intersect_addr + intersect_size <= addr + size);
-          assert(opcode_offset + intersect_size <= bp->GetByteSize());
-
-          // Check for bytes before this breakpoint
-          const addr_t curr_addr = addr + bytes_written;
-          if (intersect_addr > curr_addr) {
-            // There are some bytes before this breakpoint that we need to just
-            // write to memory
-            size_t curr_size = intersect_addr - curr_addr;
-            size_t curr_bytes_written = WriteMemoryPrivate(
-                curr_addr, ubuf + bytes_written, curr_size, error);
-            bytes_written += curr_bytes_written;
-            if (curr_bytes_written != curr_size) {
-              // We weren't able to write all of the requested bytes, we are
-              // done looping and will return the number of bytes that we have
-              // written so far.
-              if (error.Success())
-                error.SetErrorToGenericError();
-            }
-          }
-          // Now write any bytes that would cover up any software breakpoints
-          // directly into the breakpoint opcode buffer
-          ::memcpy(bp->GetSavedOpcodeBytes() + opcode_offset,
-                   ubuf + bytes_written, intersect_size);
-          bytes_written += intersect_size;
-        }
-      });
-
-      if (bytes_written < size)
-        WriteMemoryPrivate(addr + bytes_written, ubuf + bytes_written,
-                           size - bytes_written, error);
-    }
-  } else {
+  if (!m_breakpoint_site_list.FindInRange(addr, addr + size, bp_sites_in_range))
     return WriteMemoryPrivate(addr, buf, size, error);
-  }
+
+  // No breakpoint sites overlap
+  if (bp_sites_in_range.IsEmpty())
+    return WriteMemoryPrivate(addr, buf, size, error);
+
+  const uint8_t *ubuf = (const uint8_t *)buf;
+  uint64_t bytes_written = 0;
+
+  bp_sites_in_range.ForEach([this, addr, size, &bytes_written, &ubuf,
+                             &error](BreakpointSite *bp) -> void {
+    if (error.Fail())
+      return;
+
+    addr_t intersect_addr;
+    size_t intersect_size;
+    size_t opcode_offset;
+    const bool intersects = bp->IntersectsRange(
+        addr, size, &intersect_addr, &intersect_size, &opcode_offset);
+    UNUSED_IF_ASSERT_DISABLED(intersects);
+    assert(intersects);
+    assert(addr <= intersect_addr && intersect_addr < addr + size);
+    assert(addr < intersect_addr + intersect_size &&
+           intersect_addr + intersect_size <= addr + size);
+    assert(opcode_offset + intersect_size <= bp->GetByteSize());
+
+    // Check for bytes before this breakpoint
+    const addr_t curr_addr = addr + bytes_written;
+    if (intersect_addr > curr_addr) {
+      // There are some bytes before this breakpoint that we need to just
+      // write to memory
+      size_t curr_size = intersect_addr - curr_addr;
+      size_t curr_bytes_written =
+          WriteMemoryPrivate(curr_addr, ubuf + bytes_written, curr_size, error);
+      bytes_written += curr_bytes_written;
+      if (curr_bytes_written != curr_size) {
+        // We weren't able to write all of the requested bytes, we are
+        // done looping and will return the number of bytes that we have
+        // written so far.
+        if (error.Success())
+          error.SetErrorToGenericError();
+      }
+    }
+    // Now write any bytes that would cover up any software breakpoints
+    // directly into the breakpoint opcode buffer
+    ::memcpy(bp->GetSavedOpcodeBytes() + opcode_offset, ubuf + bytes_written,
+             intersect_size);
+    bytes_written += intersect_size;
+  });
 
   // Write any remaining bytes after the last breakpoint if we have any left
-  return 0; // bytes_written;
+  if (bytes_written < size)
+    bytes_written +=
+        WriteMemoryPrivate(addr + bytes_written, ubuf + bytes_written,
+                           size - bytes_written, error);
+
+  return bytes_written;
 }
 
 size_t Process::WriteScalarToMemory(addr_t addr, const Scalar &scalar,
@@ -3609,10 +3624,10 @@ void Process::ControlPrivateStateThread(uint32_t signal) {
     bool receipt_received = false;
     if (PrivateStateThreadIsValid()) {
       while (!receipt_received) {
-        // Check for a receipt for 2 seconds and then check if the private
+        // Check for a receipt for n seconds and then check if the private
         // state thread is still around.
         receipt_received =
-            event_receipt_sp->WaitForEventReceived(std::chrono::seconds(2));
+          event_receipt_sp->WaitForEventReceived(GetUtilityExpressionTimeout());
         if (!receipt_received) {
           // Check if the private state thread is still around. If it isn't
           // then we are done waiting
@@ -3623,7 +3638,7 @@ void Process::ControlPrivateStateThread(uint32_t signal) {
     }
 
     if (signal == eBroadcastInternalStateControlStop) {
-      thread_result_t result = NULL;
+      thread_result_t result = {};
       m_private_state_thread.Join(&result);
       m_private_state_thread.Reset();
     }
@@ -3898,12 +3913,10 @@ thread_result_t Process::RunPrivateStateThread(bool is_secondary_thread) {
   // it was doing yet, so don't try to change it on the way out.
   if (!is_secondary_thread)
     m_public_run_lock.SetStopped();
-  return NULL;
+  return {};
 }
 
-//------------------------------------------------------------------
 // Process Event Data
-//------------------------------------------------------------------
 
 Process::ProcessEventData::ProcessEventData()
     : EventData(), m_process_wp(), m_state(eStateInvalid), m_restarted(false),
@@ -4059,15 +4072,15 @@ void Process::ProcessEventData::DoOnRemoval(Event *event_ptr) {
         // public resume.
         process_sp->PrivateResume();
       } else {
-        bool hijacked = 
-          process_sp->IsHijackedForEvent(eBroadcastBitStateChanged)
-          && !process_sp->StateChangedIsHijackedForSynchronousResume();
+        bool hijacked =
+            process_sp->IsHijackedForEvent(eBroadcastBitStateChanged) &&
+            !process_sp->StateChangedIsHijackedForSynchronousResume();
 
         if (!hijacked) {
           // If we didn't restart, run the Stop Hooks here.
           // Don't do that if state changed events aren't hooked up to the
-          // public (or SyncResume) broadcasters.  StopHooks are just for 
-          // real public stops.  They might also restart the target, 
+          // public (or SyncResume) broadcasters.  StopHooks are just for
+          // real public stops.  They might also restart the target,
           // so watch for that.
           process_sp->GetTarget().RunStopHooks();
           if (process_sp->GetPrivateState() == eStateRunning)
@@ -4279,9 +4292,7 @@ size_t Process::GetAsyncProfileData(char *buf, size_t buf_size, Status &error) {
   return bytes_available;
 }
 
-//------------------------------------------------------------------
 // Process STDIO
-//------------------------------------------------------------------
 
 size_t Process::GetSTDOUT(char *buf, size_t buf_size, Status &error) {
   std::lock_guard<std::recursive_mutex> guard(m_stdio_communication_mutex);
@@ -4905,7 +4916,7 @@ Process::RunThreadPlan(ExecutionContext &exe_ctx,
         }
 
         got_event =
-            listener_sp->GetEvent(event_sp, std::chrono::milliseconds(500));
+            listener_sp->GetEvent(event_sp, GetUtilityExpressionTimeout());
         if (!got_event) {
           if (log)
             log->Printf("Process::RunThreadPlan(): didn't get any event after "
@@ -5136,7 +5147,7 @@ Process::RunThreadPlan(ExecutionContext &exe_ctx,
               log->PutCString("Process::RunThreadPlan(): Halt succeeded.");
 
             got_event =
-                listener_sp->GetEvent(event_sp, std::chrono::milliseconds(500));
+                listener_sp->GetEvent(event_sp, GetUtilityExpressionTimeout());
 
             if (got_event) {
               stop_state =
@@ -5339,7 +5350,7 @@ Process::RunThreadPlan(ExecutionContext &exe_ctx,
 
             event_explanation = ts.GetData();
           }
-        } while (0);
+        } while (false);
 
         if (event_explanation)
           log->Printf("Process::RunThreadPlan(): execution interrupted: %s %s",
@@ -5599,7 +5610,10 @@ void Process::DidExec() {
   m_jit_loaders_up.reset();
   m_image_tokens.clear();
   m_allocated_memory_cache.Clear();
-  m_language_runtimes.clear();
+  {
+    std::lock_guard<std::recursive_mutex> guard(m_language_runtimes_mutex);
+    m_language_runtimes.clear();
+  }
   m_instrumentation_runtimes.clear();
   m_thread_list.DiscardThreadPlans();
   m_memory_cache.Clear(true);
@@ -5668,14 +5682,17 @@ void Process::ModulesDidLoad(ModuleList &module_list) {
   // Iterate over a copy of this language runtime list in case the language
   // runtime ModulesDidLoad somehow causes the language runtime to be
   // unloaded.
-  LanguageRuntimeCollection language_runtimes(m_language_runtimes);
-  for (const auto &pair : language_runtimes) {
-    // We must check language_runtime_sp to make sure it is not nullptr as we
-    // might cache the fact that we didn't have a language runtime for a
-    // language.
-    LanguageRuntimeSP language_runtime_sp = pair.second;
-    if (language_runtime_sp)
-      language_runtime_sp->ModulesDidLoad(module_list);
+  {
+    std::lock_guard<std::recursive_mutex> guard(m_language_runtimes_mutex);
+    LanguageRuntimeCollection language_runtimes(m_language_runtimes);
+    for (const auto &pair : language_runtimes) {
+      // We must check language_runtime_sp to make sure it is not nullptr as we
+      // might cache the fact that we didn't have a language runtime for a
+      // language.
+      LanguageRuntimeSP language_runtime_sp = pair.second;
+      if (language_runtime_sp)
+        language_runtime_sp->ModulesDidLoad(module_list);
+    }
   }
 
   // If we don't have an operating system plug-in, try to load one since
@@ -5827,7 +5844,8 @@ Process::AdvanceAddressToNextBranchInstruction(Address default_stop_addr,
   }
 
   uint32_t branch_index =
-      insn_list->GetIndexOfNextBranchInstruction(insn_offset, target);
+      insn_list->GetIndexOfNextBranchInstruction(insn_offset, target,
+                                                 false /* ignore_calls*/);
   if (branch_index == UINT32_MAX) {
     return retval;
   }

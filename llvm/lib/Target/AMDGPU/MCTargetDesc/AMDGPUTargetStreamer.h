@@ -10,6 +10,7 @@
 #define LLVM_LIB_TARGET_AMDGPU_MCTARGETDESC_AMDGPUTARGETSTREAMER_H
 
 #include "AMDKernelCodeT.h"
+#include "Utils/AMDGPUPALMetadata.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -28,11 +29,15 @@ class Module;
 class Type;
 
 class AMDGPUTargetStreamer : public MCTargetStreamer {
+  AMDGPUPALMetadata PALMetadata;
+
 protected:
   MCContext &getContext() const { return Streamer.getContext(); }
 
 public:
   AMDGPUTargetStreamer(MCStreamer &S) : MCTargetStreamer(S) {}
+
+  AMDGPUPALMetadata *getPALMetadata() { return &PALMetadata; }
 
   virtual void EmitDirectiveAMDGCNTarget(StringRef Target) = 0;
 
@@ -70,7 +75,7 @@ public:
   virtual bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) = 0;
 
   /// \returns True on success, false on failure.
-  virtual bool EmitPALMetadata(const AMDGPU::PALMD::Metadata &PALMetadata) = 0;
+  virtual bool EmitCodeEnd() = 0;
 
   virtual void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,
@@ -86,6 +91,8 @@ class AMDGPUTargetAsmStreamer final : public AMDGPUTargetStreamer {
   formatted_raw_ostream &OS;
 public:
   AMDGPUTargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
+
+  void finish() override;
 
   void EmitDirectiveAMDGCNTarget(StringRef Target) override;
 
@@ -110,7 +117,7 @@ public:
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
 
   /// \returns True on success, false on failure.
-  bool EmitPALMetadata(const AMDGPU::PALMD::Metadata &PALMetadata) override;
+  bool EmitCodeEnd() override;
 
   void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,
@@ -130,6 +137,8 @@ public:
 
   MCELFStreamer &getStreamer();
 
+  void finish() override;
+
   void EmitDirectiveAMDGCNTarget(StringRef Target) override;
 
   void EmitDirectiveHSACodeObjectVersion(uint32_t Major,
@@ -153,7 +162,7 @@ public:
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
 
   /// \returns True on success, false on failure.
-  bool EmitPALMetadata(const AMDGPU::PALMD::Metadata &PALMetadata) override;
+  bool EmitCodeEnd() override;
 
   void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,

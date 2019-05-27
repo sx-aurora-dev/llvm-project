@@ -92,7 +92,7 @@ bool SBValueList::IsValid() const {
 SBValueList::operator bool() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBValueList, operator bool);
 
-  return (m_opaque_up != NULL);
+  return (m_opaque_up != nullptr);
 }
 
 void SBValueList::Clear() {
@@ -111,7 +111,7 @@ const SBValueList &SBValueList::operator=(const SBValueList &rhs) {
     else
       m_opaque_up.reset();
   }
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 ValueListImpl *SBValueList::operator->() { return m_opaque_up.get(); }
@@ -172,7 +172,7 @@ uint32_t SBValueList::GetSize() const {
 }
 
 void SBValueList::CreateIfNeeded() {
-  if (m_opaque_up == NULL)
+  if (m_opaque_up == nullptr)
     m_opaque_up.reset(new ValueListImpl());
 }
 
@@ -201,4 +201,31 @@ void *SBValueList::opaque_ptr() { return m_opaque_up.get(); }
 ValueListImpl &SBValueList::ref() {
   CreateIfNeeded();
   return *m_opaque_up;
+}
+
+namespace lldb_private {
+namespace repro {
+
+template <>
+void RegisterMethods<SBValueList>(Registry &R) {
+  LLDB_REGISTER_CONSTRUCTOR(SBValueList, ());
+  LLDB_REGISTER_CONSTRUCTOR(SBValueList, (const lldb::SBValueList &));
+  LLDB_REGISTER_METHOD_CONST(bool, SBValueList, IsValid, ());
+  LLDB_REGISTER_METHOD_CONST(bool, SBValueList, operator bool, ());
+  LLDB_REGISTER_METHOD(void, SBValueList, Clear, ());
+  LLDB_REGISTER_METHOD(const lldb::SBValueList &,
+                       SBValueList, operator=,(const lldb::SBValueList &));
+  LLDB_REGISTER_METHOD(void, SBValueList, Append, (const lldb::SBValue &));
+  LLDB_REGISTER_METHOD(void, SBValueList, Append,
+                       (const lldb::SBValueList &));
+  LLDB_REGISTER_METHOD_CONST(lldb::SBValue, SBValueList, GetValueAtIndex,
+                             (uint32_t));
+  LLDB_REGISTER_METHOD_CONST(uint32_t, SBValueList, GetSize, ());
+  LLDB_REGISTER_METHOD(lldb::SBValue, SBValueList, FindValueObjectByUID,
+                       (lldb::user_id_t));
+  LLDB_REGISTER_METHOD_CONST(lldb::SBValue, SBValueList, GetFirstValueByName,
+                             (const char *));
+}
+
+}
 }

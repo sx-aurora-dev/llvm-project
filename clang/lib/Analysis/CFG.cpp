@@ -1378,6 +1378,15 @@ void CFGBuilder::findConstructionContexts(
     findConstructionContexts(Layer, CO->getRHS());
     break;
   }
+  case Stmt::InitListExprClass: {
+    auto *ILE = cast<InitListExpr>(Child);
+    if (ILE->isTransparent()) {
+      findConstructionContexts(Layer, ILE->getInit(0));
+      break;
+    }
+    // TODO: Handle other cases. For now, fail to find construction contexts.
+    break;
+  }
   default:
     break;
   }
@@ -1947,7 +1956,7 @@ void CFGBuilder::prependAutomaticObjDtorsWithTerminator(CFGBlock *Blk,
     = Blk->beginAutomaticObjDtorsInsert(Blk->end(), B.distance(E), C);
   for (LocalScope::const_iterator I = B; I != E; ++I)
     InsertPos = Blk->insertAutomaticObjDtor(InsertPos, *I,
-                                            Blk->getTerminator());
+                                            Blk->getTerminatorStmt());
 }
 
 /// prependAutomaticObjLifetimeWithTerminator - Prepend lifetime CFGElements for
@@ -1962,8 +1971,10 @@ void CFGBuilder::prependAutomaticObjLifetimeWithTerminator(
   BumpVectorContext &C = cfg->getBumpVectorContext();
   CFGBlock::iterator InsertPos =
       Blk->beginLifetimeEndsInsert(Blk->end(), B.distance(E), C);
-  for (LocalScope::const_iterator I = B; I != E; ++I)
-    InsertPos = Blk->insertLifetimeEnds(InsertPos, *I, Blk->getTerminator());
+  for (LocalScope::const_iterator I = B; I != E; ++I) {
+    InsertPos =
+        Blk->insertLifetimeEnds(InsertPos, *I, Blk->getTerminatorStmt());
+  }
 }
 
 /// prependAutomaticObjScopeEndWithTerminator - Prepend scope end CFGElements for
@@ -1982,7 +1993,7 @@ CFGBuilder::prependAutomaticObjScopeEndWithTerminator(
   LocalScope::const_iterator PlaceToInsert = B;
   for (LocalScope::const_iterator I = B; I != E; ++I)
     PlaceToInsert = I;
-  Blk->insertScopeEnd(InsertPos, *PlaceToInsert, Blk->getTerminator());
+  Blk->insertScopeEnd(InsertPos, *PlaceToInsert, Blk->getTerminatorStmt());
   return *PlaceToInsert;
 }
 
@@ -4330,8 +4341,8 @@ CFGBlock *CFGBuilder::VisitCXXNewExpr(CXXNewExpr *NE,
   if (BuildOpts.AddCXXNewAllocator)
     appendNewAllocator(Block, NE);
 
-  if (NE->isArray())
-    Block = Visit(NE->getArraySize());
+  if (NE->isArray() && *NE->getArraySize())
+    Block = Visit(*NE->getArraySize());
 
   for (CXXNewExpr::arg_iterator I = NE->placement_arg_begin(),
        E = NE->placement_arg_end(); I != E; ++I)
@@ -4603,7 +4614,8 @@ void CFGBuilder::InsertTempDtorDecisionBlock(const TempDtorContext &Context,
   }
   assert(Context.TerminatorExpr);
   CFGBlock *Decision = createBlock(false);
-  Decision->setTerminator(CFGTerminator(Context.TerminatorExpr, true));
+  Decision->setTerminator(CFGTerminator(Context.TerminatorExpr,
+                                        CFGTerminator::TemporaryDtorsBranch));
   addSuccessor(Decision, Block, !Context.KnownExecuted.isFalse());
   addSuccessor(Decision, FalseSucc ? FalseSucc : Context.Succ,
                !Context.KnownExecuted.isTrue());
@@ -4666,6 +4678,51 @@ std::unique_ptr<CFG> CFG::buildCFG(const Decl *D, Stmt *Statement,
                                    ASTContext *C, const BuildOptions &BO) {
   CFGBuilder Builder(C, BO);
   return Builder.buildCFG(D, Statement);
+}
+
+bool CFG::isLinear() const {
+  // Quick path: if we only have the ENTRY block, the EXIT block, and some code
+  // in between, then we have no room for control flow.
+  if (size() <= 3)
+    return true;
+
+  // Traverse the CFG until we find a branch.
+  // TODO: While this should still be very fast,
+  // maybe we should cache the answer.
+  llvm::SmallPtrSet<const CFGBlock *, 4> Visited;
+  const CFGBlock *B = Entry;
+  while (B != Exit) {
+    auto IteratorAndFlag = Visited.insert(B);
+    if (!IteratorAndFlag.second) {
+      // We looped back to a block that we've already visited. Not linear.
+      return false;
+    }
+
+    // Iterate over reachable successors.
+    const CFGBlock *FirstReachableB = nullptr;
+    for (const CFGBlock::AdjacentBlock &AB : B->succs()) {
+      if (!AB.isReachable())
+        continue;
+
+      if (FirstReachableB == nullptr) {
+        FirstReachableB = &*AB;
+      } else {
+        // We've encountered a branch. It's not a linear CFG.
+        return false;
+      }
+    }
+
+    if (!FirstReachableB) {
+      // We reached a dead end. EXIT is unreachable. This is linear enough.
+      return true;
+    }
+
+    // There's only one way to move forward. Proceed.
+    B = FirstReachableB;
+  }
+
+  // We reached EXIT and found no branches.
+  return true;
 }
 
 const CXXDestructorDecl *
@@ -4766,7 +4823,7 @@ bool CFGBlock::FilterEdge(const CFGBlock::FilterOptions &F,
     // If the 'To' has no label or is labeled but the label isn't a
     // CaseStmt then filter this edge.
     if (const SwitchStmt *S =
-        dyn_cast_or_null<SwitchStmt>(From->getTerminator().getStmt())) {
+        dyn_cast_or_null<SwitchStmt>(From->getTerminatorStmt())) {
       if (S->isAllEnumCasesCovered()) {
         const Stmt *L = To->getLabel();
         if (!L || !isa<CaseStmt>(L))
@@ -5001,9 +5058,15 @@ public:
 
 public:
   void print(CFGTerminator T) {
-    if (T.isTemporaryDtorsBranch())
+    switch (T.getKind()) {
+    case CFGTerminator::StmtBranch:
+      Visit(T.getStmt());
+      break;
+    case CFGTerminator::TemporaryDtorsBranch:
       OS << "(Temp Dtor) ";
-    Visit(T.getStmt());
+      Visit(T.getStmt());
+      break;
+    }
   }
 };
 
@@ -5312,7 +5375,7 @@ static void print_block(raw_ostream &OS, const CFG* cfg,
   }
 
   // Print the terminator of this block.
-  if (B.getTerminator()) {
+  if (B.getTerminator().isValid()) {
     if (ShowColors)
       OS.changeColor(raw_ostream::GREEN);
 
@@ -5465,7 +5528,7 @@ void CFGBlock::printTerminator(raw_ostream &OS,
 }
 
 Stmt *CFGBlock::getTerminatorCondition(bool StripParens) {
-  Stmt *Terminator = this->Terminator;
+  Stmt *Terminator = getTerminatorStmt();
   if (!Terminator)
     return nullptr;
 

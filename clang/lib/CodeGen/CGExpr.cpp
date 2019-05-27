@@ -339,8 +339,8 @@ pushTemporaryCleanup(CodeGenFunction &CGF, const MaterializeTemporaryExpr *M,
           dyn_cast_or_null<VarDecl>(M->getExtendingDecl()));
       CleanupArg = llvm::Constant::getNullValue(CGF.Int8PtrTy);
     } else {
-      CleanupFn = CGF.CGM.getAddrAndTypeOfCXXStructor(ReferenceTemporaryDtor,
-                                                      StructorType::Complete);
+      CleanupFn = CGF.CGM.getAddrAndTypeOfCXXStructor(
+          GlobalDecl(ReferenceTemporaryDtor, Dtor_Complete));
       CleanupArg = cast<llvm::Constant>(ReferenceTemporary.getPointer());
     }
     CGF.CGM.getCXXABI().registerGlobalDtor(
@@ -1294,6 +1294,8 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
     return EmitCXXBindTemporaryLValue(cast<CXXBindTemporaryExpr>(E));
   case Expr::CXXUuidofExprClass:
     return EmitCXXUuidofLValue(cast<CXXUuidofExpr>(E));
+  case Expr::LambdaExprClass:
+    return EmitAggExprToLValue(E);
 
   case Expr::ExprWithCleanupsClass: {
     const auto *cleanups = cast<ExprWithCleanups>(E);
@@ -1313,11 +1315,15 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
     return LV;
   }
 
-  case Expr::CXXDefaultArgExprClass:
-    return EmitLValue(cast<CXXDefaultArgExpr>(E)->getExpr());
+  case Expr::CXXDefaultArgExprClass: {
+    auto *DAE = cast<CXXDefaultArgExpr>(E);
+    CXXDefaultArgExprScope Scope(*this, DAE);
+    return EmitLValue(DAE->getExpr());
+  }
   case Expr::CXXDefaultInitExprClass: {
-    CXXDefaultInitExprScope Scope(*this);
-    return EmitLValue(cast<CXXDefaultInitExpr>(E)->getExpr());
+    auto *DIE = cast<CXXDefaultInitExpr>(E);
+    CXXDefaultInitExprScope Scope(*this, DIE);
+    return EmitLValue(DIE->getExpr());
   }
   case Expr::CXXTypeidExprClass:
     return EmitCXXTypeidLValue(cast<CXXTypeidExpr>(E));
@@ -4670,7 +4676,8 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType, const CGCallee &OrigCallee
       llvm::Constant *StaticData[] = {EmitCheckSourceLocation(E->getBeginLoc()),
                                       EmitCheckTypeDescriptor(CalleeType)};
       EmitCheck(std::make_pair(CalleeRTTIMatch, SanitizerKind::Function),
-                SanitizerHandler::FunctionTypeMismatch, StaticData, CalleePtr);
+                SanitizerHandler::FunctionTypeMismatch, StaticData,
+                {CalleePtr, CalleeRTTI, FTRTTIConst});
 
       Builder.CreateBr(Cont);
       EmitBlock(Cont);

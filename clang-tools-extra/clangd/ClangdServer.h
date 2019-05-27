@@ -36,8 +36,6 @@
 #include <utility>
 
 namespace clang {
-class PCHContainerOperations;
-
 namespace clangd {
 
 // FIXME: find a better name.
@@ -51,6 +49,12 @@ public:
   /// Called whenever the file status is updated.
   virtual void onFileUpdated(PathRef File, const TUStatus &Status){};
 };
+
+/// When set, used by ClangdServer to get clang-tidy options for each particular
+/// file. Must be thread-safe. We use this instead of ClangTidyOptionsProvider
+/// to allow reading tidy configs from the VFS used for parsing.
+using ClangTidyOptionsBuilder = std::function<tidy::ClangTidyOptions(
+    llvm::vfs::FileSystem &, llvm::StringRef /*File*/)>;
 
 /// Manages a collection of source files and derived data (ASTs, indexes),
 /// and provides language-aware features such as code completion.
@@ -96,12 +100,12 @@ public:
     /// If set, use this index to augment code completion results.
     SymbolIndex *StaticIndex = nullptr;
 
-    /// If set, enable clang-tidy in clangd, used to get clang-tidy
+    /// If set, enable clang-tidy in clangd and use to it get clang-tidy
     /// configurations for a particular file.
     /// Clangd supports only a small subset of ClangTidyOptions, these options
     /// (Checks, CheckOptions) are about which clang-tidy checks will be
     /// enabled.
-    tidy::ClangTidyOptionsProvider *ClangTidyOptProvider = nullptr;
+    ClangTidyOptionsBuilder GetClangTidyOptions;
 
     /// Clangd's workspace root. Relevant for "workspace" operations not bound
     /// to a particular file.
@@ -184,6 +188,11 @@ public:
   void findHover(PathRef File, Position Pos,
                  Callback<llvm::Optional<Hover>> CB);
 
+  /// Get information about type hierarchy for a given position.
+  void typeHierarchy(PathRef File, Position Pos, int Resolve,
+                     TypeHierarchyDirection Direction,
+                     Callback<llvm::Optional<TypeHierarchyItem>> CB);
+
   /// Retrieve the top symbols from the workspace matching a query.
   void workspaceSymbols(StringRef Query, int Limit,
                         Callback<std::vector<SymbolInformation>> CB);
@@ -212,7 +221,7 @@ public:
   /// Rename all occurrences of the symbol at the \p Pos in \p File to
   /// \p NewName.
   void rename(PathRef File, Position Pos, llvm::StringRef NewName,
-              Callback<std::vector<tooling::Replacement>> CB);
+              Callback<std::vector<TextEdit>> CB);
 
   struct TweakRef {
     std::string ID;    /// ID to pass for applyTweak.
@@ -247,10 +256,6 @@ public:
   /// FIXME: those metrics might be useful too, we should add them.
   std::vector<std::pair<Path, std::size_t>> getUsedBytesPerFile() const;
 
-  /// Returns the active dynamic index if one was built.
-  /// This can be useful for testing, debugging, or observing memory usage.
-  const SymbolIndex *dynamicIndex() const { return DynamicIdx.get(); }
-
   // Blocks the main thread until the server is idle. Only for use in tests.
   // Returns false if the timeout expires.
   LLVM_NODISCARD bool
@@ -263,9 +268,6 @@ private:
   formatCode(llvm::StringRef Code, PathRef File,
              ArrayRef<tooling::Range> Ranges);
 
-  tooling::CompileCommand getCompileCommand(PathRef File);
-
-  const GlobalCompilationDatabase &CDB;
   const FileSystemProvider &FSProvider;
 
   Path ResourceDir;
@@ -282,8 +284,8 @@ private:
   // Storage for merged views of the various indexes.
   std::vector<std::unique_ptr<SymbolIndex>> MergedIdx;
 
-  // The provider used to provide a clang-tidy option for a specific file.
-  tidy::ClangTidyOptionsProvider *ClangTidyOptProvider = nullptr;
+  // When set, provides clang-tidy options for a specific file.
+  ClangTidyOptionsBuilder GetClangTidyOptions;
 
   // If this is true, suggest include insertion fixes for diagnostic errors that
   // can be caused by missing includes (e.g. member access in incomplete type).
@@ -295,7 +297,6 @@ private:
   mutable std::mutex CachedCompletionFuzzyFindRequestMutex;
 
   llvm::Optional<std::string> WorkspaceRoot;
-  std::shared_ptr<PCHContainerOperations> PCHs;
   // WorkScheduler has to be the last member, because its destructor has to be
   // called before all other members to stop the worker thread that references
   // ClangdServer.

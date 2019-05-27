@@ -130,7 +130,7 @@ static void dumpLocation(raw_ostream &OS, DWARFFormValue &FormValue,
 
       if (LL)
         LL->dump(OS, BaseAddr, Ctx.isLittleEndian(), Obj.getAddressSize(), MRI,
-                 Indent);
+                 U, Indent);
       else
         OS << "error extracting location list.";
     }
@@ -396,6 +396,7 @@ DWARFDie::findRecursively(ArrayRef<dwarf::Attribute> Attrs) const {
   // DWARF. This corresponds to following the DW_AT_abstract_origin and
   // DW_AT_specification just once.
   SmallSet<DWARFDie, 3> Seen;
+  Seen.insert(*this);
 
   while (!Worklist.empty()) {
     DWARFDie Die = Worklist.back();
@@ -404,19 +405,16 @@ DWARFDie::findRecursively(ArrayRef<dwarf::Attribute> Attrs) const {
     if (!Die.isValid())
       continue;
 
-    if (Seen.count(Die))
-      continue;
-
-    Seen.insert(Die);
-
     if (auto Value = Die.find(Attrs))
       return Value;
 
     if (auto D = Die.getAttributeValueAsReferencedDie(DW_AT_abstract_origin))
-      Worklist.push_back(D);
+      if (Seen.insert(D).second)
+        Worklist.push_back(D);
 
     if (auto D = Die.getAttributeValueAsReferencedDie(DW_AT_specification))
-      Worklist.push_back(D);
+      if (Seen.insert(D).second)
+        Worklist.push_back(D);
   }
 
   return None;
@@ -431,9 +429,11 @@ DWARFDie::getAttributeValueAsReferencedDie(dwarf::Attribute Attr) const {
 
 DWARFDie
 DWARFDie::getAttributeValueAsReferencedDie(const DWARFFormValue &V) const {
-  if (auto SpecRef = toReference(V)) {
-    if (auto SpecUnit = U->getUnitVector().getUnitForOffset(*SpecRef))
-      return SpecUnit->getDIEForOffset(*SpecRef);
+  if (auto SpecRef = V.getAsRelativeReference()) {
+    if (SpecRef->Unit)
+      return SpecRef->Unit->getDIEForOffset(SpecRef->Unit->getOffset() + SpecRef->Offset);
+    if (auto SpecUnit = U->getUnitVector().getUnitForOffset(SpecRef->Offset))
+      return SpecUnit->getDIEForOffset(SpecRef->Offset);
   }
   return DWARFDie();
 }

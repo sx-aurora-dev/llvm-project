@@ -16,15 +16,18 @@
 #include "lld/Common/Args.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
+#include "lld/Common/Reproduce.h"
 #include "lld/Common/Strings.h"
 #include "lld/Common/Threads.h"
 #include "lld/Common/Version.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Object/Wasm.h"
+#include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/TarWriter.h"
 #include "llvm/Support/TargetSelect.h"
 
 #define DEBUG_TYPE "lld"
@@ -225,7 +228,7 @@ void LinkerDriver::addFile(StringRef Path) {
     // Handle -whole-archive.
     if (InWholeArchive) {
       for (MemoryBufferRef &M : getArchiveMembers(MBRef))
-        Files.push_back(createObjectFile(M));
+        Files.push_back(createObjectFile(M, Path));
       return;
     }
 
@@ -277,25 +280,30 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
   }
 }
 
-static StringRef getEntry(opt::InputArgList &Args, StringRef Default) {
+static StringRef getEntry(opt::InputArgList &Args) {
   auto *Arg = Args.getLastArg(OPT_entry, OPT_no_entry);
-  if (!Arg)
-    return Default;
+  if (!Arg) {
+    if (Args.hasArg(OPT_relocatable))
+      return "";
+    if (Args.hasArg(OPT_shared))
+      return "__wasm_call_ctors";
+    return "_start";
+  }
   if (Arg->getOption().getID() == OPT_no_entry)
     return "";
   return Arg->getValue();
 }
 
-// Some Config members do not directly correspond to any particular
-// command line options, but computed based on other Config values.
-// This function initialize such members. See Config.h for the details
-// of these values.
-static void setConfigs(opt::InputArgList &Args) {
+// Initializes Config members by the command line options.
+static void readConfigs(opt::InputArgList &Args) {
   Config->AllowUndefined = Args.hasArg(OPT_allow_undefined);
+  Config->CheckFeatures =
+      Args.hasFlag(OPT_check_features, OPT_no_check_features, true);
   Config->CompressRelocations = Args.hasArg(OPT_compress_relocations);
   Config->Demangle = Args.hasFlag(OPT_demangle, OPT_no_demangle, true);
   Config->DisableVerify = Args.hasArg(OPT_disable_verify);
-  Config->Entry = getEntry(Args, Args.hasArg(OPT_relocatable) ? "" : "_start");
+  Config->EmitRelocs = Args.hasArg(OPT_emit_relocs);
+  Config->Entry = getEntry(Args);
   Config->ExportAll = Args.hasArg(OPT_export_all);
   Config->ExportDynamic = Args.hasFlag(OPT_export_dynamic,
       OPT_no_export_dynamic, false);
@@ -339,6 +347,33 @@ static void setConfigs(opt::InputArgList &Args) {
   Config->MaxMemory = args::getInteger(Args, OPT_max_memory, 0);
   Config->ZStackSize =
       args::getZOptionValue(Args, OPT_z, "stack-size", WasmPageSize);
+
+  if (auto *Arg = Args.getLastArg(OPT_features)) {
+    Config->Features =
+        llvm::Optional<std::vector<std::string>>(std::vector<std::string>());
+    for (StringRef S : Arg->getValues())
+      Config->Features->push_back(S);
+  }
+}
+
+// Some Config members do not directly correspond to any particular
+// command line options, but computed based on other Config values.
+// This function initialize such members. See Config.h for the details
+// of these values.
+static void setConfigs() {
+  Config->Pic = Config->Pie || Config->Shared;
+
+  if (Config->Pic) {
+    if (Config->ExportTable)
+      error("-shared/-pie is incompatible with --export-table");
+    Config->ImportTable = true;
+  }
+
+  if (Config->Shared) {
+    Config->ImportMemory = true;
+    Config->ExportDynamic = true;
+    Config->AllowUndefined = true;
+  }
 }
 
 // Some command line options or some combinations of them are not allowed.
@@ -412,10 +447,20 @@ static void createSyntheticSymbols() {
   static llvm::wasm::WasmGlobalType MutableGlobalTypeI32 = {WASM_TYPE_I32,
                                                             true};
 
-  if (!Config->Relocatable)
+  if (!Config->Relocatable) {
     WasmSym::CallCtors = Symtab->addSyntheticFunction(
         "__wasm_call_ctors", WASM_SYMBOL_VISIBILITY_HIDDEN,
         make<SyntheticFunction>(NullSignature, "__wasm_call_ctors"));
+
+    if (Config->Pic) {
+      // For PIC code we create a synthetic function call __wasm_apply_relocs
+      // and add this as the first call in __wasm_call_ctors.
+      // We also unconditionally export 
+      WasmSym::ApplyRelocs = Symtab->addSyntheticFunction(
+          "__wasm_apply_relocs", WASM_SYMBOL_VISIBILITY_HIDDEN,
+          make<SyntheticFunction>(NullSignature, "__wasm_apply_relocs"));
+    }
+  }
 
   // The __stack_pointer is imported in the shared library case, and exported
   // in the non-shared (executable) case.
@@ -462,6 +507,34 @@ static void createSyntheticSymbols() {
       "__dso_handle", WASM_SYMBOL_VISIBILITY_HIDDEN);
 }
 
+// Reconstructs command line arguments so that so that you can re-run
+// the same command with the same inputs. This is for --reproduce.
+static std::string createResponseFile(const opt::InputArgList &Args) {
+  SmallString<0> Data;
+  raw_svector_ostream OS(Data);
+
+  // Copy the command line to the output while rewriting paths.
+  for (auto *Arg : Args) {
+    switch (Arg->getOption().getUnaliasedOption().getID()) {
+    case OPT_reproduce:
+      break;
+    case OPT_INPUT:
+      OS << quote(relativeToRoot(Arg->getValue())) << "\n";
+      break;
+    case OPT_o:
+      // If -o path contains directories, "lld @response.txt" will likely
+      // fail because the archive we are creating doesn't contain empty
+      // directories for the output path (-o doesn't create directories).
+      // Strip directories to prevent the issue.
+      OS << "-o " << quote(sys::path::filename(Arg->getValue())) << "\n";
+      break;
+    default:
+      OS << toString(*Arg) << "\n";
+    }
+  }
+  return Data.str();
+}
+
 void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   WasmOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
@@ -480,6 +553,20 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     return;
   }
 
+  // Handle --reproduce
+  if (auto *Arg = Args.getLastArg(OPT_reproduce)) {
+    StringRef Path = Arg->getValue();
+    Expected<std::unique_ptr<TarWriter>> ErrOrWriter =
+        TarWriter::create(Path, path::stem(Path));
+    if (ErrOrWriter) {
+      Tar = std::move(*ErrOrWriter);
+      Tar->append("response.txt", createResponseFile(Args));
+      Tar->append("version.txt", getLLDVersion() + "\n");
+    } else {
+      error("--reproduce: " + toString(ErrOrWriter.takeError()));
+    }
+  }
+
   // Parse and evaluate -mllvm options.
   std::vector<const char *> V;
   V.push_back("wasm-ld (LLVM option parsing)");
@@ -489,7 +576,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   errorHandler().ErrorLimit = args::getInteger(Args, OPT_error_limit, 20);
 
-  setConfigs(Args);
+  readConfigs(Args);
+  setConfigs();
   checkOptions(Args);
 
   if (auto *Arg = Args.getLastArg(OPT_allow_undefined_file))
@@ -498,19 +586,6 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   if (!Args.hasArg(OPT_INPUT)) {
     error("no input files");
     return;
-  }
-
-  Config->Pic = Config->Pie || Config->Shared;
-
-  if (Config->Pic) {
-    if (Config->ExportTable)
-      error("-shared/-pie is incompatible with --export-table");
-    Config->ImportTable = true;
-  }
-
-  if (Config->Shared) {
-    Config->ExportDynamic = true;
-    Config->AllowUndefined = true;
   }
 
   // Handle --trace-symbol.
@@ -536,15 +611,13 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     handleUndefined(Arg->getValue());
 
   Symbol *EntrySym = nullptr;
-  if (!Config->Relocatable) {
-    if (!Config->Shared && !Config->Entry.empty()) {
-      EntrySym = handleUndefined(Config->Entry);
-      if (EntrySym && EntrySym->isDefined())
-        EntrySym->ForceExport = true;
-      else
-        error("entry symbol not defined (pass --no-entry to supress): " +
-              Config->Entry);
-    }
+  if (!Config->Relocatable && !Config->Entry.empty()) {
+    EntrySym = handleUndefined(Config->Entry);
+    if (EntrySym && EntrySym->isDefined())
+      EntrySym->ForceExport = true;
+    else
+      error("entry symbol not defined (pass --no-entry to supress): " +
+            Config->Entry);
   }
 
   if (errorCount())
@@ -580,10 +653,6 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     // Add synthetic dummies for weak undefined functions.  Must happen
     // after LTO otherwise functions may not yet have signatures.
     Symtab->handleWeakUndefines();
-
-    // Make sure we have resolved all symbols.
-    if (!Config->AllowUndefined)
-      Symtab->reportRemainingUndefines();
   }
 
   if (EntrySym)

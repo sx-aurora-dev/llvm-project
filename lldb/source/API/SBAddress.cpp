@@ -60,13 +60,20 @@ const SBAddress &SBAddress::operator=(const SBAddress &rhs) {
 
   if (this != &rhs)
     m_opaque_up = clone(rhs.m_opaque_up);
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 bool lldb::operator==(const SBAddress &lhs, const SBAddress &rhs) {
   if (lhs.IsValid() && rhs.IsValid())
     return lhs.ref() == rhs.ref();
   return false;
+}
+
+bool SBAddress::operator!=(const SBAddress &rhs) const {
+  LLDB_RECORD_METHOD_CONST(bool, SBAddress, operator!=,(const SBAddress &),
+                           &rhs);
+
+  return !(*this == rhs);
 }
 
 bool SBAddress::IsValid() const {
@@ -76,7 +83,7 @@ bool SBAddress::IsValid() const {
 SBAddress::operator bool() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBAddress, operator bool);
 
-  return m_opaque_up != NULL && m_opaque_up->IsValid();
+  return m_opaque_up != nullptr && m_opaque_up->IsValid();
 }
 
 void SBAddress::Clear() {
@@ -179,7 +186,7 @@ Address *SBAddress::operator->() { return m_opaque_up.get(); }
 const Address *SBAddress::operator->() const { return m_opaque_up.get(); }
 
 Address &SBAddress::ref() {
-  if (m_opaque_up == NULL)
+  if (m_opaque_up == nullptr)
     m_opaque_up.reset(new Address());
   return *m_opaque_up;
 }
@@ -201,7 +208,7 @@ bool SBAddress::GetDescription(SBStream &description) {
   // case there isn't one already...
   Stream &strm = description.ref();
   if (m_opaque_up->IsValid()) {
-    m_opaque_up->Dump(&strm, NULL, Address::DumpStyleResolvedDescription,
+    m_opaque_up->Dump(&strm, nullptr, Address::DumpStyleResolvedDescription,
                       Address::DumpStyleModuleWithFileAddress, 4);
     StreamString sstrm;
     //        m_opaque_up->Dump (&sstrm, NULL,
@@ -281,4 +288,44 @@ SBLineEntry SBAddress::GetLineEntry() {
       sb_line_entry.SetLineEntry(line_entry);
   }
   return LLDB_RECORD_RESULT(sb_line_entry);
+}
+
+namespace lldb_private {
+namespace repro {
+
+template <>
+void RegisterMethods<SBAddress>(Registry &R) {
+  LLDB_REGISTER_CONSTRUCTOR(SBAddress, ());
+  LLDB_REGISTER_CONSTRUCTOR(SBAddress, (const lldb::SBAddress &));
+  LLDB_REGISTER_CONSTRUCTOR(SBAddress, (lldb::SBSection, lldb::addr_t));
+  LLDB_REGISTER_CONSTRUCTOR(SBAddress, (lldb::addr_t, lldb::SBTarget &));
+  LLDB_REGISTER_METHOD(const lldb::SBAddress &,
+                       SBAddress, operator=,(const lldb::SBAddress &));
+  LLDB_REGISTER_METHOD_CONST(bool,
+                             SBAddress, operator!=,(const lldb::SBAddress &));
+  LLDB_REGISTER_METHOD_CONST(bool, SBAddress, IsValid, ());
+  LLDB_REGISTER_METHOD_CONST(bool, SBAddress, operator bool, ());
+  LLDB_REGISTER_METHOD(void, SBAddress, Clear, ());
+  LLDB_REGISTER_METHOD(void, SBAddress, SetAddress,
+                       (lldb::SBSection, lldb::addr_t));
+  LLDB_REGISTER_METHOD_CONST(lldb::addr_t, SBAddress, GetFileAddress, ());
+  LLDB_REGISTER_METHOD_CONST(lldb::addr_t, SBAddress, GetLoadAddress,
+                             (const lldb::SBTarget &));
+  LLDB_REGISTER_METHOD(void, SBAddress, SetLoadAddress,
+                       (lldb::addr_t, lldb::SBTarget &));
+  LLDB_REGISTER_METHOD(bool, SBAddress, OffsetAddress, (lldb::addr_t));
+  LLDB_REGISTER_METHOD(lldb::SBSection, SBAddress, GetSection, ());
+  LLDB_REGISTER_METHOD(lldb::addr_t, SBAddress, GetOffset, ());
+  LLDB_REGISTER_METHOD(bool, SBAddress, GetDescription, (lldb::SBStream &));
+  LLDB_REGISTER_METHOD(lldb::SBModule, SBAddress, GetModule, ());
+  LLDB_REGISTER_METHOD(lldb::SBSymbolContext, SBAddress, GetSymbolContext,
+                       (uint32_t));
+  LLDB_REGISTER_METHOD(lldb::SBCompileUnit, SBAddress, GetCompileUnit, ());
+  LLDB_REGISTER_METHOD(lldb::SBFunction, SBAddress, GetFunction, ());
+  LLDB_REGISTER_METHOD(lldb::SBBlock, SBAddress, GetBlock, ());
+  LLDB_REGISTER_METHOD(lldb::SBSymbol, SBAddress, GetSymbol, ());
+  LLDB_REGISTER_METHOD(lldb::SBLineEntry, SBAddress, GetLineEntry, ());
+}
+
+}
 }

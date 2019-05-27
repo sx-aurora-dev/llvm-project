@@ -1120,7 +1120,7 @@ void Module::ReportError(const char *format, ...) {
     const int format_len = strlen(format);
     if (format_len > 0) {
       const char last_char = format[format_len - 1];
-      if (last_char != '\n' || last_char != '\r')
+      if (last_char != '\n' && last_char != '\r')
         strm.EOL();
     }
     Host::SystemLog(Host::eSystemLogError, "%s", strm.GetData());
@@ -1152,7 +1152,7 @@ void Module::ReportErrorIfModifyDetected(const char *format, ...) {
         const int format_len = strlen(format);
         if (format_len > 0) {
           const char last_char = format[format_len - 1];
-          if (last_char != '\n' || last_char != '\r')
+          if (last_char != '\n' && last_char != '\r')
             strm.EOL();
         }
         strm.PutCString("The debug session should be aborted as the original "
@@ -1178,7 +1178,7 @@ void Module::ReportWarning(const char *format, ...) {
     const int format_len = strlen(format);
     if (format_len > 0) {
       const char last_char = format[format_len - 1];
-      if (last_char != '\n' || last_char != '\r')
+      if (last_char != '\n' && last_char != '\r')
         strm.EOL();
     }
     Host::SystemLog(Host::eSystemLogWarning, "%s", strm.GetData());
@@ -1298,6 +1298,12 @@ void Module::SectionFileAddressesChanged() {
   SymbolVendor *sym_vendor = GetSymbolVendor();
   if (sym_vendor != nullptr)
     sym_vendor->SectionFileAddressesChanged();
+}
+
+UnwindTable &Module::GetUnwindTable() {
+  if (!m_unwind_table)
+    m_unwind_table.emplace(*this);
+  return *m_unwind_table;
 }
 
 SectionList *Module::GetUnifiedSectionList() {
@@ -1446,6 +1452,10 @@ void Module::SetSymbolFileFileSpec(const FileSpec &file) {
         // one
         obj_file->ClearSymtab();
 
+        // Clear the unwind table too, as that may also be affected by the
+        // symbol file information.
+        m_unwind_table.reset();
+
         // The symbol file might be a directory bundle ("/tmp/a.out.dSYM")
         // instead of a full path to the symbol file within the bundle
         // ("/tmp/a.out.dSYM/Contents/Resources/DWARF/a.out"). So we need to
@@ -1535,8 +1545,7 @@ bool Module::LoadScriptingResourceInTarget(Target *target, Status &error,
 
     const uint32_t num_specs = file_specs.GetSize();
     if (num_specs) {
-      ScriptInterpreter *script_interpreter =
-          debugger.GetCommandInterpreter().GetScriptInterpreter();
+      ScriptInterpreter *script_interpreter = debugger.GetScriptInterpreter();
       if (script_interpreter) {
         for (uint32_t i = 0; i < num_specs; ++i) {
           FileSpec scripting_fspec(file_specs.GetFileSpecAtIndex(i));

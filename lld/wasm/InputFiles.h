@@ -19,6 +19,10 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include <vector>
 
+namespace llvm {
+class TarWriter;
+}
+
 namespace lld {
 namespace wasm {
 
@@ -28,6 +32,10 @@ class InputSegment;
 class InputGlobal;
 class InputEvent;
 class InputSection;
+
+// If --reproduce option is given, all input files are written
+// to this tar archive.
+extern std::unique_ptr<llvm::TarWriter> Tar;
 
 class InputFile {
 public:
@@ -44,7 +52,7 @@ public:
   StringRef getName() const { return MB.getBufferIdentifier(); }
 
   // Reads a file (the constructor doesn't do that).
-  virtual void parse() = 0;
+  virtual void parse(bool IgnoreComdats = false) = 0;
 
   Kind kind() const { return FileKind; }
 
@@ -72,7 +80,7 @@ public:
 
   void addMember(const llvm::object::Archive::Symbol *Sym);
 
-  void parse() override;
+  void parse(bool IgnoreComdats) override;
 
 private:
   std::unique_ptr<llvm::object::Archive> File;
@@ -82,10 +90,13 @@ private:
 // .o file (wasm object file)
 class ObjFile : public InputFile {
 public:
-  explicit ObjFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
+  explicit ObjFile(MemoryBufferRef M, StringRef ArchiveName)
+      : InputFile(ObjectKind, M) {
+    this->ArchiveName = ArchiveName;
+  }
   static bool classof(const InputFile *F) { return F->kind() == ObjectKind; }
 
-  void parse() override;
+  void parse(bool IgnoreComdats) override;
 
   // Returns the underlying wasm file.
   const WasmObjectFile *getWasmObj() const { return WasmObj.get(); }
@@ -96,17 +107,19 @@ public:
   uint32_t calcNewValue(const WasmRelocation &Reloc) const;
   uint32_t calcNewAddend(const WasmRelocation &Reloc) const;
   uint32_t calcExpectedValue(const WasmRelocation &Reloc) const;
+  Symbol *getSymbol(const WasmRelocation &Reloc) const {
+    return Symbols[Reloc.Index];
+  };
 
   const WasmSection *CodeSection = nullptr;
   const WasmSection *DataSection = nullptr;
-  const WasmSection *ProducersSection = nullptr;
 
   // Maps input type indices to output type indices
   std::vector<uint32_t> TypeMap;
   std::vector<bool> TypeIsUsed;
   // Maps function indices to table indices
   std::vector<uint32_t> TableEntries;
-  std::vector<bool> UsedComdats;
+  std::vector<bool> KeptComdats;
   std::vector<InputSegment *> Segments;
   std::vector<InputFunction *> Functions;
   std::vector<InputGlobal *> Globals;
@@ -136,22 +149,25 @@ public:
   explicit SharedFile(MemoryBufferRef M) : InputFile(SharedKind, M) {}
   static bool classof(const InputFile *F) { return F->kind() == SharedKind; }
 
-  void parse() override {}
+  void parse(bool IgnoreComdats) override {}
 };
 
 // .bc file
 class BitcodeFile : public InputFile {
 public:
-  explicit BitcodeFile(MemoryBufferRef M) : InputFile(BitcodeKind, M) {}
+  explicit BitcodeFile(MemoryBufferRef M, StringRef ArchiveName)
+      : InputFile(BitcodeKind, M) {
+    this->ArchiveName = ArchiveName;
+  }
   static bool classof(const InputFile *F) { return F->kind() == BitcodeKind; }
 
-  void parse() override;
+  void parse(bool IgnoreComdats) override;
   std::unique_ptr<llvm::lto::InputFile> Obj;
 };
 
 // Will report a fatal() error if the input buffer is not a valid bitcode
 // or wasm object file.
-InputFile *createObjectFile(MemoryBufferRef MB);
+InputFile *createObjectFile(MemoryBufferRef MB, StringRef ArchiveName = "");
 
 // Opens a given file.
 llvm::Optional<MemoryBufferRef> readFile(StringRef Path);

@@ -61,12 +61,10 @@ public:
   bool operator==(const DWARFDebugInfoEntry &rhs) const;
   bool operator!=(const DWARFDebugInfoEntry &rhs) const;
 
-  void BuildAddressRangeTable(SymbolFileDWARF *dwarf2Data,
-                              const DWARFUnit *cu,
+  void BuildAddressRangeTable(const DWARFUnit *cu,
                               DWARFDebugAranges *debug_aranges) const;
 
-  void BuildFunctionAddressRangeTable(SymbolFileDWARF *dwarf2Data,
-                                      const DWARFUnit *cu,
+  void BuildFunctionAddressRangeTable(const DWARFUnit *cu,
                                       DWARFDebugAranges *debug_aranges) const;
 
   bool FastExtract(const lldb_private::DWARFDataExtractor &debug_info_data,
@@ -74,11 +72,9 @@ public:
                    const DWARFFormValue::FixedFormSizes &fixed_form_sizes,
                    lldb::offset_t *offset_ptr);
 
-  bool Extract(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-               lldb::offset_t *offset_ptr);
+  bool Extract(const DWARFUnit *cu, lldb::offset_t *offset_ptr);
 
-  bool LookupAddress(const dw_addr_t address, SymbolFileDWARF *dwarf2Data,
-                     const DWARFUnit *cu,
+  bool LookupAddress(const dw_addr_t address, const DWARFUnit *cu,
                      DWARFDebugInfoEntry **function_die,
                      DWARFDebugInfoEntry **block_die);
 
@@ -89,109 +85,72 @@ public:
       const; // "curr_depth" for internal use only, don't set this yourself!!!
 
   dw_offset_t
-  GetAttributeValue(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-                    const dw_attr_t attr, DWARFFormValue &formValue,
+  GetAttributeValue(const DWARFUnit *cu, const dw_attr_t attr,
+                    DWARFFormValue &formValue,
                     dw_offset_t *end_attr_offset_ptr = nullptr,
                     bool check_specification_or_abstract_origin = false) const;
 
   const char *GetAttributeValueAsString(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      const dw_attr_t attr, const char *fail_value,
+      const DWARFUnit *cu, const dw_attr_t attr, const char *fail_value,
       bool check_specification_or_abstract_origin = false) const;
 
   uint64_t GetAttributeValueAsUnsigned(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      const dw_attr_t attr, uint64_t fail_value,
+      const DWARFUnit *cu, const dw_attr_t attr, uint64_t fail_value,
       bool check_specification_or_abstract_origin = false) const;
 
-  uint64_t GetAttributeValueAsReference(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      const dw_attr_t attr, uint64_t fail_value,
-      bool check_specification_or_abstract_origin = false) const;
-
-  int64_t GetAttributeValueAsSigned(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      const dw_attr_t attr, int64_t fail_value,
+  DWARFDIE GetAttributeValueAsReference(
+      const DWARFUnit *cu, const dw_attr_t attr,
       bool check_specification_or_abstract_origin = false) const;
 
   uint64_t GetAttributeValueAsAddress(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      const dw_attr_t attr, uint64_t fail_value,
+      const DWARFUnit *cu, const dw_attr_t attr, uint64_t fail_value,
       bool check_specification_or_abstract_origin = false) const;
 
   dw_addr_t
-  GetAttributeHighPC(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-                     dw_addr_t lo_pc, uint64_t fail_value,
+  GetAttributeHighPC(const DWARFUnit *cu, dw_addr_t lo_pc, uint64_t fail_value,
                      bool check_specification_or_abstract_origin = false) const;
 
   bool GetAttributeAddressRange(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu, dw_addr_t &lo_pc,
-      dw_addr_t &hi_pc, uint64_t fail_value,
+      const DWARFUnit *cu, dw_addr_t &lo_pc, dw_addr_t &hi_pc,
+      uint64_t fail_value,
       bool check_specification_or_abstract_origin = false) const;
 
   size_t GetAttributeAddressRanges(
-      SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-      DWARFRangeList &ranges, bool check_hi_lo_pc,
+      const DWARFUnit *cu, DWARFRangeList &ranges, bool check_hi_lo_pc,
       bool check_specification_or_abstract_origin = false) const;
 
-  const char *GetName(SymbolFileDWARF *dwarf2Data,
-                      const DWARFUnit *cu) const;
+  const char *GetName(const DWARFUnit *cu) const;
 
-  const char *GetMangledName(SymbolFileDWARF *dwarf2Data,
-                             const DWARFUnit *cu,
+  const char *GetMangledName(const DWARFUnit *cu,
                              bool substitute_name_allowed = true) const;
 
-  const char *GetPubname(SymbolFileDWARF *dwarf2Data,
-                         const DWARFUnit *cu) const;
+  const char *GetPubname(const DWARFUnit *cu) const;
 
-  static bool GetName(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-                      const dw_offset_t die_offset, lldb_private::Stream &s);
+  const char *GetQualifiedName(DWARFUnit *cu, std::string &storage) const;
 
-  static bool AppendTypeName(SymbolFileDWARF *dwarf2Data,
-                             const DWARFUnit *cu,
-                             const dw_offset_t die_offset,
-                             lldb_private::Stream &s);
-
-  const char *GetQualifiedName(SymbolFileDWARF *dwarf2Data,
-                               DWARFUnit *cu,
-                               std::string &storage) const;
-
-  const char *GetQualifiedName(SymbolFileDWARF *dwarf2Data,
-                               DWARFUnit *cu,
-                               const DWARFAttributes &attributes,
+  const char *GetQualifiedName(DWARFUnit *cu, const DWARFAttributes &attributes,
                                std::string &storage) const;
 
   static bool OffsetLessThan(const DWARFDebugInfoEntry &a,
                              const DWARFDebugInfoEntry &b);
 
-  void Dump(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-            lldb_private::Stream &s, uint32_t recurse_depth) const;
-
-  void DumpAncestry(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-                    const DWARFDebugInfoEntry *oldest, lldb_private::Stream &s,
-                    uint32_t recurse_depth) const;
+  void Dump(const DWARFUnit *cu, lldb_private::Stream &s,
+            uint32_t recurse_depth) const;
 
   static void
-  DumpAttribute(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
+  DumpAttribute(const DWARFUnit *cu,
                 const lldb_private::DWARFDataExtractor &debug_info_data,
                 lldb::offset_t *offset_ptr, lldb_private::Stream &s,
                 dw_attr_t attr, DWARFFormValue &form_value);
-  // This one dumps the comp unit name, objfile name and die offset for this die
-  // so the stream S.
-  void DumpLocation(SymbolFileDWARF *dwarf2Data, DWARFUnit *cu,
-                    lldb_private::Stream &s) const;
 
-  bool
-  GetDIENamesAndRanges(SymbolFileDWARF *dwarf2Data, const DWARFUnit *cu,
-                       const char *&name, const char *&mangled,
-                       DWARFRangeList &rangeList, int &decl_file,
-                       int &decl_line, int &decl_column, int &call_file,
-                       int &call_line, int &call_column,
-                       lldb_private::DWARFExpression *frame_base = NULL) const;
+  bool GetDIENamesAndRanges(
+      const DWARFUnit *cu, const char *&name, const char *&mangled,
+      DWARFRangeList &rangeList, int &decl_file, int &decl_line,
+      int &decl_column, int &call_file, int &call_line, int &call_column,
+      lldb_private::DWARFExpression *frame_base = nullptr) const;
 
   const DWARFAbbreviationDeclaration *
-  GetAbbreviationDeclarationPtr(SymbolFileDWARF *dwarf2Data,
-                                const DWARFUnit *cu,
+  GetAbbreviationDeclarationPtr(const DWARFUnit *cu,
                                 lldb::offset_t &offset) const;
 
   dw_tag_t Tag() const { return m_tag; }
@@ -207,42 +166,39 @@ public:
   // We know we are kept in a vector of contiguous entries, so we know
   // our parent will be some index behind "this".
   DWARFDebugInfoEntry *GetParent() {
-    return m_parent_idx > 0 ? this - m_parent_idx : NULL;
+    return m_parent_idx > 0 ? this - m_parent_idx : nullptr;
   }
   const DWARFDebugInfoEntry *GetParent() const {
-    return m_parent_idx > 0 ? this - m_parent_idx : NULL;
+    return m_parent_idx > 0 ? this - m_parent_idx : nullptr;
   }
   // We know we are kept in a vector of contiguous entries, so we know
   // our sibling will be some index after "this".
   DWARFDebugInfoEntry *GetSibling() {
-    return m_sibling_idx > 0 ? this + m_sibling_idx : NULL;
+    return m_sibling_idx > 0 ? this + m_sibling_idx : nullptr;
   }
   const DWARFDebugInfoEntry *GetSibling() const {
-    return m_sibling_idx > 0 ? this + m_sibling_idx : NULL;
+    return m_sibling_idx > 0 ? this + m_sibling_idx : nullptr;
   }
   // We know we are kept in a vector of contiguous entries, so we know
   // we don't need to store our child pointer, if we have a child it will
   // be the next entry in the list...
   DWARFDebugInfoEntry *GetFirstChild() {
-    return HasChildren() ? this + 1 : NULL;
+    return HasChildren() ? this + 1 : nullptr;
   }
   const DWARFDebugInfoEntry *GetFirstChild() const {
-    return HasChildren() ? this + 1 : NULL;
+    return HasChildren() ? this + 1 : nullptr;
   }
 
   std::vector<DWARFDIE> GetDeclContextDIEs(DWARFUnit *cu) const;
 
-  void GetDWARFDeclContext(SymbolFileDWARF *dwarf2Data, DWARFUnit *cu,
+  void GetDWARFDeclContext(DWARFUnit *cu,
                            DWARFDeclContext &dwarf_decl_ctx) const;
 
-  bool MatchesDWARFDeclContext(SymbolFileDWARF *dwarf2Data,
-                               DWARFUnit *cu,
+  bool MatchesDWARFDeclContext(DWARFUnit *cu,
                                const DWARFDeclContext &dwarf_decl_ctx) const;
 
-  DWARFDIE GetParentDeclContextDIE(SymbolFileDWARF *dwarf2Data,
-                                   DWARFUnit *cu) const;
-  DWARFDIE GetParentDeclContextDIE(SymbolFileDWARF *dwarf2Data,
-                                   DWARFUnit *cu,
+  DWARFDIE GetParentDeclContextDIE(DWARFUnit *cu) const;
+  DWARFDIE GetParentDeclContextDIE(DWARFUnit *cu,
                                    const DWARFAttributes &attributes) const;
 
   void SetParent(DWARFDebugInfoEntry *parent) {
@@ -266,10 +222,6 @@ public:
   void SetSiblingIndex(uint32_t idx) { m_sibling_idx = idx; }
 
   void SetParentIndex(uint32_t idx) { m_parent_idx = idx; }
-
-  static void
-  DumpDIECollection(lldb_private::Stream &strm,
-                    DWARFDebugInfoEntry::collection &die_collection);
 
 protected:
   dw_offset_t

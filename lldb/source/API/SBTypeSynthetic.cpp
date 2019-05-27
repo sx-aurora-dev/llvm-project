@@ -17,8 +17,6 @@
 using namespace lldb;
 using namespace lldb_private;
 
-#ifndef LLDB_DISABLE_PYTHON
-
 SBTypeSynthetic::SBTypeSynthetic() : m_opaque_sp() {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBTypeSynthetic);
 }
@@ -62,7 +60,7 @@ bool SBTypeSynthetic::IsValid() const {
 SBTypeSynthetic::operator bool() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBTypeSynthetic, operator bool);
 
-  return m_opaque_sp.get() != NULL;
+  return m_opaque_sp.get() != nullptr;
 }
 
 bool SBTypeSynthetic::IsClassCode() {
@@ -86,7 +84,7 @@ const char *SBTypeSynthetic::GetData() {
   LLDB_RECORD_METHOD_NO_ARGS(const char *, SBTypeSynthetic, GetData);
 
   if (!IsValid())
-    return NULL;
+    return nullptr;
   if (IsClassCode())
     return m_opaque_sp->GetPythonCode();
   else
@@ -145,7 +143,7 @@ operator=(const lldb::SBTypeSynthetic &rhs) {
   if (this != &rhs) {
     m_opaque_sp = rhs.m_opaque_sp;
   }
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 bool SBTypeSynthetic::operator==(lldb::SBTypeSynthetic &rhs) {
@@ -213,4 +211,38 @@ bool SBTypeSynthetic::CopyOnWrite_Impl() {
   return true;
 }
 
-#endif // LLDB_DISABLE_PYTHON
+namespace lldb_private {
+namespace repro {
+
+template <>
+void RegisterMethods<SBTypeSynthetic>(Registry &R) {
+  LLDB_REGISTER_CONSTRUCTOR(SBTypeSynthetic, ());
+  LLDB_REGISTER_STATIC_METHOD(lldb::SBTypeSynthetic, SBTypeSynthetic,
+                              CreateWithClassName, (const char *, uint32_t));
+  LLDB_REGISTER_STATIC_METHOD(lldb::SBTypeSynthetic, SBTypeSynthetic,
+                              CreateWithScriptCode, (const char *, uint32_t));
+  LLDB_REGISTER_CONSTRUCTOR(SBTypeSynthetic, (const lldb::SBTypeSynthetic &));
+  LLDB_REGISTER_METHOD_CONST(bool, SBTypeSynthetic, IsValid, ());
+  LLDB_REGISTER_METHOD_CONST(bool, SBTypeSynthetic, operator bool, ());
+  LLDB_REGISTER_METHOD(bool, SBTypeSynthetic, IsClassCode, ());
+  LLDB_REGISTER_METHOD(bool, SBTypeSynthetic, IsClassName, ());
+  LLDB_REGISTER_METHOD(const char *, SBTypeSynthetic, GetData, ());
+  LLDB_REGISTER_METHOD(void, SBTypeSynthetic, SetClassName, (const char *));
+  LLDB_REGISTER_METHOD(void, SBTypeSynthetic, SetClassCode, (const char *));
+  LLDB_REGISTER_METHOD(uint32_t, SBTypeSynthetic, GetOptions, ());
+  LLDB_REGISTER_METHOD(void, SBTypeSynthetic, SetOptions, (uint32_t));
+  LLDB_REGISTER_METHOD(bool, SBTypeSynthetic, GetDescription,
+                       (lldb::SBStream &, lldb::DescriptionLevel));
+  LLDB_REGISTER_METHOD(
+      lldb::SBTypeSynthetic &,
+      SBTypeSynthetic, operator=,(const lldb::SBTypeSynthetic &));
+  LLDB_REGISTER_METHOD(bool,
+                       SBTypeSynthetic, operator==,(lldb::SBTypeSynthetic &));
+  LLDB_REGISTER_METHOD(bool, SBTypeSynthetic, IsEqualTo,
+                       (lldb::SBTypeSynthetic &));
+  LLDB_REGISTER_METHOD(bool,
+                       SBTypeSynthetic, operator!=,(lldb::SBTypeSynthetic &));
+}
+
+}
+}

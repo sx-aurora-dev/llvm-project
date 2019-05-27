@@ -58,8 +58,8 @@ void SymbolTable::addCombinedLTOObject() {
     LTO->add(*F);
 
   for (StringRef Filename : LTO->compile()) {
-    auto *Obj = make<ObjFile>(MemoryBufferRef(Filename, "lto.tmp"));
-    Obj->parse();
+    auto *Obj = make<ObjFile>(MemoryBufferRef(Filename, "lto.tmp"), "");
+    Obj->parse(true);
     ObjectFiles.push_back(Obj);
   }
 }
@@ -132,7 +132,8 @@ static void reportTypeError(const Symbol *Existing, const InputFile *File,
 // Check the type of new symbol matches that of the symbol is replacing.
 // Returns true if the function types match, false is there is a singature
 // mismatch.
-bool signatureMatches(FunctionSymbol *Existing, const WasmSignature *NewSig) {
+static bool signatureMatches(FunctionSymbol *Existing,
+                             const WasmSignature *NewSig) {
   if (!NewSig)
     return true;
 
@@ -195,6 +196,17 @@ DefinedFunction *SymbolTable::addSyntheticFunction(StringRef Name,
   SyntheticFunctions.emplace_back(Function);
   return replaceSymbol<DefinedFunction>(insertName(Name).first, Name,
                                         Flags, nullptr, Function);
+}
+
+DefinedData *SymbolTable::addOptionalDataSymbol(StringRef Name, uint32_t Value,
+                                                uint32_t Flags) {
+  Symbol *S = find(Name);
+  if (!S || S->isDefined())
+    return nullptr;
+  LLVM_DEBUG(dbgs() << "addOptionalDataSymbol: " << Name << "\n");
+  auto *rtn = replaceSymbol<DefinedData>(S, Name, Flags);
+  rtn->setVirtualAddress(Value);
+  return rtn;
 }
 
 DefinedData *SymbolTable::addSyntheticDataSymbol(StringRef Name,
@@ -377,6 +389,8 @@ Symbol *SymbolTable::addUndefinedFunction(StringRef Name, StringRef ImportName,
   Symbol *S;
   bool WasInserted;
   std::tie(S, WasInserted) = insert(Name, File);
+  if (S->Traced)
+    printTraceSymbolUndefined(Name, File);
 
   auto Replace = [&]() {
     replaceSymbol<UndefinedFunction>(S, Name, ImportName, ImportModule, Flags,
@@ -408,6 +422,8 @@ Symbol *SymbolTable::addUndefinedData(StringRef Name, uint32_t Flags,
   Symbol *S;
   bool WasInserted;
   std::tie(S, WasInserted) = insert(Name, File);
+  if (S->Traced)
+    printTraceSymbolUndefined(Name, File);
 
   if (WasInserted)
     replaceSymbol<UndefinedData>(S, Name, Flags, File);
@@ -427,6 +443,8 @@ Symbol *SymbolTable::addUndefinedGlobal(StringRef Name, StringRef ImportName,
   Symbol *S;
   bool WasInserted;
   std::tie(S, WasInserted) = insert(Name, File);
+  if (S->Traced)
+    printTraceSymbolUndefined(Name, File);
 
   if (WasInserted)
     replaceSymbol<UndefinedGlobal>(S, Name, ImportName, ImportModule, Flags,
@@ -475,7 +493,7 @@ void SymbolTable::addLazy(ArchiveFile *File, const Archive::Symbol *Sym) {
 }
 
 bool SymbolTable::addComdat(StringRef Name) {
-  return Comdats.insert(CachedHashStringRef(Name)).second;
+  return ComdatGroups.insert(CachedHashStringRef(Name)).second;
 }
 
 // The new signature doesn't match.  Create a variant to the symbol with the
@@ -490,7 +508,7 @@ bool SymbolTable::getFunctionVariant(Symbol* Sym, const WasmSignature *Sig,
   // Linear search through symbol variants.  Should never be more than two
   // or three entries here.
   auto &Variants = SymVariants[CachedHashStringRef(Sym->getName())];
-  if (Variants.size() == 0)
+  if (Variants.empty())
     Variants.push_back(Sym);
 
   for (Symbol* V : Variants) {

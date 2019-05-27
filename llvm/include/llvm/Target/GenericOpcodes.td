@@ -308,6 +308,38 @@ def G_PTR_MASK : GenericInstruction {
   let hasSideEffects = 0;
 }
 
+// Generic signed integer minimum.
+def G_SMIN : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src1, type0:$src2);
+  let hasSideEffects = 0;
+  let isCommutable = 1;
+}
+
+// Generic signed integer maximum.
+def G_SMAX : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src1, type0:$src2);
+  let hasSideEffects = 0;
+  let isCommutable = 1;
+}
+
+// Generic unsigned integer minimum.
+def G_UMIN : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src1, type0:$src2);
+  let hasSideEffects = 0;
+  let isCommutable = 1;
+}
+
+// Generic unsigned integer maximum.
+def G_UMAX : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src1, type0:$src2);
+  let hasSideEffects = 0;
+  let isCommutable = 1;
+}
+
 //------------------------------------------------------------------------------
 // Overflow ops
 //------------------------------------------------------------------------------
@@ -455,6 +487,12 @@ def G_FABS : GenericInstruction {
   let hasSideEffects = 0;
 }
 
+def G_FCOPYSIGN : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src0, type1:$src1);
+  let hasSideEffects = 0;
+}
+
 def G_FCANONICALIZE : GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src);
@@ -587,6 +625,20 @@ def G_FSQRT : GenericInstruction {
 
 // Floating point floor of a value.
 def G_FFLOOR : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src1);
+  let hasSideEffects = 0;
+}
+
+// Floating point round to next integer.
+def G_FRINT : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src1);
+  let hasSideEffects = 0;
+}
+
+// Floating point round to the nearest integer.
+def G_FNEARBYINT : GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src1);
   let hasSideEffects = 0;

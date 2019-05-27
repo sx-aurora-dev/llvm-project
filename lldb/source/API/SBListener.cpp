@@ -20,7 +20,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-SBListener::SBListener() : m_opaque_sp(), m_unused_ptr(NULL) {
+SBListener::SBListener() : m_opaque_sp(), m_unused_ptr(nullptr) {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBListener);
 }
 
@@ -42,7 +42,7 @@ const lldb::SBListener &SBListener::operator=(const lldb::SBListener &rhs) {
     m_opaque_sp = rhs.m_opaque_sp;
     m_unused_ptr = nullptr;
   }
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 SBListener::SBListener(const lldb::ListenerSP &listener_sp)
@@ -160,7 +160,7 @@ bool SBListener::WaitForEvent(uint32_t timeout_secs, SBEvent &event) {
   }
 
   if (!success)
-    event.reset(NULL);
+    event.reset(nullptr);
   return success;
 }
 
@@ -182,7 +182,7 @@ bool SBListener::WaitForEventForBroadcaster(uint32_t num_seconds,
       return true;
     }
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -205,7 +205,7 @@ bool SBListener::WaitForEventForBroadcasterWithType(
       return true;
     }
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -217,7 +217,7 @@ bool SBListener::PeekAtNextEvent(SBEvent &event) {
     event.reset(m_opaque_sp->PeekAtNextEvent());
     return event.IsValid();
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -231,7 +231,7 @@ bool SBListener::PeekAtNextEventForBroadcaster(const SBBroadcaster &broadcaster,
     event.reset(m_opaque_sp->PeekAtNextEventForBroadcaster(broadcaster.get()));
     return event.IsValid();
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -247,7 +247,7 @@ bool SBListener::PeekAtNextEventForBroadcasterWithType(
         broadcaster.get(), event_type_mask));
     return event.IsValid();
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -261,7 +261,7 @@ bool SBListener::GetNextEvent(SBEvent &event) {
       return true;
     }
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -279,7 +279,7 @@ bool SBListener::GetNextEventForBroadcaster(const SBBroadcaster &broadcaster,
       return true;
     }
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -299,7 +299,7 @@ bool SBListener::GetNextEventForBroadcasterWithType(
       return true;
     }
   }
-  event.reset(NULL);
+  event.reset(nullptr);
   return false;
 }
 
@@ -321,4 +321,53 @@ Listener *SBListener::get() const { return m_opaque_sp.get(); }
 void SBListener::reset(ListenerSP listener_sp) {
   m_opaque_sp = listener_sp;
   m_unused_ptr = nullptr;
+}
+
+namespace lldb_private {
+namespace repro {
+
+template <>
+void RegisterMethods<SBListener>(Registry &R) {
+  LLDB_REGISTER_CONSTRUCTOR(SBListener, ());
+  LLDB_REGISTER_CONSTRUCTOR(SBListener, (const char *));
+  LLDB_REGISTER_CONSTRUCTOR(SBListener, (const lldb::SBListener &));
+  LLDB_REGISTER_METHOD(const lldb::SBListener &,
+                       SBListener, operator=,(const lldb::SBListener &));
+  LLDB_REGISTER_METHOD_CONST(bool, SBListener, IsValid, ());
+  LLDB_REGISTER_METHOD_CONST(bool, SBListener, operator bool, ());
+  LLDB_REGISTER_METHOD(void, SBListener, AddEvent, (const lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(void, SBListener, Clear, ());
+  LLDB_REGISTER_METHOD(uint32_t, SBListener, StartListeningForEventClass,
+                       (lldb::SBDebugger &, const char *, uint32_t));
+  LLDB_REGISTER_METHOD(bool, SBListener, StopListeningForEventClass,
+                       (lldb::SBDebugger &, const char *, uint32_t));
+  LLDB_REGISTER_METHOD(uint32_t, SBListener, StartListeningForEvents,
+                       (const lldb::SBBroadcaster &, uint32_t));
+  LLDB_REGISTER_METHOD(bool, SBListener, StopListeningForEvents,
+                       (const lldb::SBBroadcaster &, uint32_t));
+  LLDB_REGISTER_METHOD(bool, SBListener, WaitForEvent,
+                       (uint32_t, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(
+      bool, SBListener, WaitForEventForBroadcaster,
+      (uint32_t, const lldb::SBBroadcaster &, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(
+      bool, SBListener, WaitForEventForBroadcasterWithType,
+      (uint32_t, const lldb::SBBroadcaster &, uint32_t, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(bool, SBListener, PeekAtNextEvent, (lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(bool, SBListener, PeekAtNextEventForBroadcaster,
+                       (const lldb::SBBroadcaster &, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(
+      bool, SBListener, PeekAtNextEventForBroadcasterWithType,
+      (const lldb::SBBroadcaster &, uint32_t, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(bool, SBListener, GetNextEvent, (lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(bool, SBListener, GetNextEventForBroadcaster,
+                       (const lldb::SBBroadcaster &, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(
+      bool, SBListener, GetNextEventForBroadcasterWithType,
+      (const lldb::SBBroadcaster &, uint32_t, lldb::SBEvent &));
+  LLDB_REGISTER_METHOD(bool, SBListener, HandleBroadcastEvent,
+                       (const lldb::SBEvent &));
+}
+
+}
 }

@@ -53,6 +53,7 @@ class LLVM_LIBRARY_VISIBILITY PPCTargetInfo : public TargetInfo {
   static const char *const GCCRegNames[];
   static const TargetInfo::GCCRegAlias GCCRegAliases[];
   std::string CPU;
+  enum PPCFloatABI { HardFloat, SoftFloat } FloatABI;
 
   // Target cpu features.
   bool HasAltivec = false;
@@ -183,8 +184,12 @@ public:
       return false;
     case 'O': // Zero
       break;
-    case 'b': // Base register
     case 'f': // Floating point register
+      // Don't use floating point registers on soft float ABI.
+      if (FloatABI == SoftFloat)
+        return false;
+      LLVM_FALLTHROUGH;
+    case 'b': // Base register
       Info.setAllowsRegister();
       break;
     // FIXME: The following are added to allow parsing.
@@ -192,6 +197,10 @@ public:
     // Also, is more specific checking needed?  I.e. specific registers?
     case 'd': // Floating point register (containing 64-bit value)
     case 'v': // Altivec vector register
+      // Don't use floating point and altivec vector registers
+      // on soft float ABI
+      if (FloatABI == SoftFloat)
+        return false;
       Info.setAllowsRegister();
       break;
     case 'w':
@@ -373,10 +382,10 @@ public:
       ABI = "elfv2";
     } else {
       resetDataLayout("E-m:e-i64:64-n32:64");
-      ABI = "elfv1";
+      ABI = Triple.getEnvironment() == llvm::Triple::ELFv2 ? "elfv2" : "elfv1";
     }
 
-    switch (getTriple().getOS()) {
+    switch (Triple.getOS()) {
     case llvm::Triple::FreeBSD:
       LongDoubleWidth = LongDoubleAlign = 64;
       LongDoubleFormat = &llvm::APFloat::IEEEdouble();

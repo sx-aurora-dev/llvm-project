@@ -43,6 +43,12 @@ import sys
 import time
 import uuid
 
+def read_plist(s):
+    if sys.version_info.major == 3:
+        return plistlib.loads(s)
+    else:
+        return plistlib.readPlistFromString(s)
+
 try:
     # Just try for LLDB in case PYTHONPATH is already correctly setup
     import lldb
@@ -221,11 +227,11 @@ class CrashLog(symbolication.Symbolicator):
 
     class DarwinImage(symbolication.Image):
         """Class that represents a binary images in a darwin crash log"""
-        dsymForUUIDBinary = os.path.expanduser('~rc/bin/dsymForUUID')
+        dsymForUUIDBinary = '/usr/local/bin/dsymForUUID'
         if not os.path.exists(dsymForUUIDBinary):
             try:
                 dsymForUUIDBinary = subprocess.check_output('which dsymForUUID',
-                                                            shell=True)
+                                                            shell=True).rstrip('\n')
             except:
                 dsymForUUIDBinary = ""
 
@@ -282,9 +288,9 @@ class CrashLog(symbolication.Symbolicator):
                 s = subprocess.check_output(dsym_for_uuid_command, shell=True)
                 if s:
                     try:
-                        plist_root = plistlib.readPlistFromString(s)
+                        plist_root = read_plist(s)
                     except:
-                        print(("Got exception: ", sys.exc_value, " handling dsymForUUID output: \n", s)) 
+                        print(("Got exception: ", sys.exc_info()[1], " handling dsymForUUID output: \n", s))
                         raise
                     if plist_root:
                         plist = plist_root[uuid_str]
@@ -303,7 +309,6 @@ class CrashLog(symbolication.Symbolicator):
                     return False
             if not self.resolved_path and not os.path.exists(self.path):
                 try:
-                    import subprocess
                     dsym = subprocess.check_output(
                         ["/usr/bin/mdfind",
                          "com_apple_xcode_dsym_uuids == %s"%uuid_str])[:-1]
@@ -321,10 +326,6 @@ class CrashLog(symbolication.Symbolicator):
             if (self.resolved_path and os.path.exists(self.resolved_path)) or (
                     self.path and os.path.exists(self.path)):
                 print('ok')
-                # if self.resolved_path:
-                #     print '  exe = "%s"' % self.resolved_path
-                # if self.symfile:
-                #     print ' dsym = "%s"' % self.symfile
                 return True
             else:
                 self.unavailable = True

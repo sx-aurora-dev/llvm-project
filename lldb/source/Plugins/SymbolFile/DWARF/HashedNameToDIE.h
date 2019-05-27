@@ -48,14 +48,15 @@ public:
   };
 
   struct DIEInfo {
-    dw_offset_t cu_offset;
-    dw_offset_t offset; // The DIE offset
+    DIERef die_ref;
     dw_tag_t tag;
     uint32_t type_flags;          // Any flags for this DIEInfo
     uint32_t qualified_name_hash; // A 32 bit hash of the fully qualified name
 
     DIEInfo();
     DIEInfo(dw_offset_t c, dw_offset_t o, dw_tag_t t, uint32_t f, uint32_t h);
+
+    explicit operator DIERef() const { return die_ref; }
   };
 
   struct Atom {
@@ -104,8 +105,6 @@ public:
 
     bool Read(const lldb_private::DWARFDataExtractor &data,
               lldb::offset_t *offset_ptr, DIEInfo &hash_data) const;
-
-    void Dump(lldb_private::Stream &strm, const DIEInfo &hash_data) const;
   };
 
   // A class for reading and using a saved hash table from a block of data

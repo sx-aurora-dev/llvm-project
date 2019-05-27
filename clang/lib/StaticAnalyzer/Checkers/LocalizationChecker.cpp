@@ -1140,7 +1140,7 @@ void EmptyLocalizationContextChecker::MethodCrawler::VisitObjCMessageExpr(
   }
 
   bool Invalid = false;
-  llvm::MemoryBuffer *BF =
+  const llvm::MemoryBuffer *BF =
       Mgr.getSourceManager().getBuffer(SLInfo.first, SL, &Invalid);
   if (Invalid)
     return;
@@ -1398,7 +1398,7 @@ void ento::registerNonLocalizedStringChecker(CheckerManager &mgr) {
       mgr.registerChecker<NonLocalizedStringChecker>();
   checker->IsAggressive =
       mgr.getAnalyzerOptions().getCheckerBooleanOption(
-          checker, "AggressiveReport", false);
+          checker, "AggressiveReport");
 }
 
 bool ento::shouldRegisterNonLocalizedStringChecker(const LangOptions &LO) {

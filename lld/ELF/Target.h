@@ -81,13 +81,11 @@ public:
 
   virtual ~TargetInfo();
 
-  unsigned PageSize = 4096;
+  unsigned DefaultCommonPageSize = 4096;
   unsigned DefaultMaxPageSize = 4096;
 
-  uint64_t getImageBase();
+  uint64_t getImageBase() const;
 
-  // Offset of _GLOBAL_OFFSET_TABLE_ from base of .got or .got.plt section.
-  uint64_t GotBaseSymOff = 0;
   // True if _GLOBAL_OFFSET_TABLE_ is relative to .got.plt, false if .got.
   bool GotBaseSymInGotPlt = true;
 
@@ -126,7 +124,7 @@ public:
 
   virtual RelExpr adjustRelaxExpr(RelType Type, const uint8_t *Data,
                                   RelExpr Expr) const;
-  virtual void relaxGot(uint8_t *Loc, uint64_t Val) const;
+  virtual void relaxGot(uint8_t *Loc, RelType Type, uint64_t Val) const;
   virtual void relaxTlsGdToIe(uint8_t *Loc, RelType Type, uint64_t Val) const;
   virtual void relaxTlsGdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const;
   virtual void relaxTlsIeToLe(uint8_t *Loc, RelType Type, uint64_t Val) const;
@@ -150,7 +148,6 @@ TargetInfo *getPPC64TargetInfo();
 TargetInfo *getPPCTargetInfo();
 TargetInfo *getRISCVTargetInfo();
 TargetInfo *getSPARCV9TargetInfo();
-TargetInfo *getX32TargetInfo();
 TargetInfo *getX86TargetInfo();
 TargetInfo *getX86_64TargetInfo();
 template <class ELFT> TargetInfo *getMipsTargetInfo();
@@ -167,8 +164,11 @@ static inline std::string getErrorLocation(const uint8_t *Loc) {
   return getErrorPlace(Loc).Loc;
 }
 
-// In the PowerPC64 Elf V2 abi a function can have 2 entry points.  The first is
-// a global entry point (GEP) which typically is used to intiailzie the TOC
+bool tryRelaxPPC64TocIndirection(RelType Type, const Relocation &Rel,
+                                 uint8_t *BufLoc);
+
+// In the PowerPC64 Elf V2 abi a function can have 2 entry points.  The first
+// is a global entry point (GEP) which typically is used to initialize the TOC
 // pointer in general purpose register 2.  The second is a local entry
 // point (LEP) which bypasses the TOC pointer initialization code. The
 // offset between GEP and LEP is encoded in a function's st_other flags.
@@ -183,7 +183,7 @@ bool isPPC64SmallCodeModelTocReloc(RelType Type);
 uint64_t getPPC64TocBase();
 uint64_t getAArch64Page(uint64_t Expr);
 
-extern TargetInfo *Target;
+extern const TargetInfo *Target;
 TargetInfo *getTarget();
 
 template <class ELFT> bool isMipsPIC(const Defined *Sym);
@@ -199,10 +199,6 @@ static inline void reportRangeError(uint8_t *Loc, RelType Type, const Twine &V,
   errorOrWarn(ErrPlace.Loc + "relocation " + lld::toString(Type) +
               " out of range: " + V.str() + " is not in [" + Twine(Min).str() +
               ", " + Twine(Max).str() + "]" + Hint);
-}
-
-inline unsigned getPltEntryOffset(unsigned Idx) {
-  return Target->PltHeaderSize + Target->PltEntrySize * Idx;
 }
 
 // Make sure that V can be represented as an N bit signed integer.

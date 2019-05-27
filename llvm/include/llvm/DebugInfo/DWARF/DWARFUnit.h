@@ -48,7 +48,7 @@ class DWARFUnitHeader {
   uint32_t Offset = 0;
   // Version, address size, and DWARF format.
   dwarf::FormParams FormParams;
-  uint32_t Length = 0;
+  uint64_t Length = 0;
   uint64_t AbbrOffset = 0;
 
   // For DWO units only.
@@ -82,7 +82,7 @@ public:
   uint8_t getDwarfOffsetByteSize() const {
     return FormParams.getDwarfOffsetByteSize();
   }
-  uint32_t getLength() const { return Length; }
+  uint64_t getLength() const { return Length; }
   uint64_t getAbbrOffset() const { return AbbrOffset; }
   Optional<uint64_t> getDWOId() const { return DWOId; }
   void setDWOId(uint64_t Id) {
@@ -97,8 +97,11 @@ public:
     return UnitType == dwarf::DW_UT_type || UnitType == dwarf::DW_UT_split_type;
   }
   uint8_t getSize() const { return Size; }
-  // FIXME: Support DWARF64.
-  uint32_t getNextUnitOffset() const { return Offset + Length + 4; }
+  uint32_t getNextUnitOffset() const {
+    return Offset + Length +
+           (FormParams.Format == llvm::dwarf::DwarfFormat::DWARF64 ? 4 : 0) +
+           FormParams.getDwarfOffsetByteSize();
+  }
 };
 
 const DWARFUnitIndex &getDWARFUnitIndex(DWARFContext &Context,
@@ -385,6 +388,13 @@ public:
     return DWARFDie(this, &DieArray[0]);
   }
 
+  DWARFDie getNonSkeletonUnitDIE(bool ExtractUnitDIEOnly = true) {
+    parseDWO();
+    if (DWO)
+      return DWO->getUnitDIE(ExtractUnitDIEOnly);
+    return getUnitDIE(ExtractUnitDIEOnly);
+  }
+
   const char *getCompilationDir();
   Optional<uint64_t> getDWOId() {
     extractDIEsIfNeeded(/*CUDieOnly*/ true);
@@ -462,13 +472,11 @@ public:
   DWARFDie getDIEForOffset(uint32_t Offset) {
     extractDIEsIfNeeded(false);
     assert(!DieArray.empty());
-    auto it = std::lower_bound(
-        DieArray.begin(), DieArray.end(), Offset,
-        [](const DWARFDebugInfoEntry &LHS, uint32_t Offset) {
-          return LHS.getOffset() < Offset;
-        });
-    if (it != DieArray.end() && it->getOffset() == Offset)
-      return DWARFDie(this, &*it);
+    auto It = llvm::bsearch(DieArray, [=](const DWARFDebugInfoEntry &LHS) {
+      return Offset <= LHS.getOffset();
+    });
+    if (It != DieArray.end() && It->getOffset() == Offset)
+      return DWARFDie(this, &*It);
     return DWARFDie();
   }
 

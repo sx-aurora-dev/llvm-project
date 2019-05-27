@@ -125,7 +125,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   size_t NumBlocks = (NumBytes + Granularity - 1) / Granularity;
 
   uintptr_t Start = NearBlock ? reinterpret_cast<uintptr_t>(NearBlock->base()) +
-                                NearBlock->size()
+                                NearBlock->allocatedSize()
                            : 0;
 
   // If the requested address is not aligned to the allocation granularity,
@@ -135,8 +135,9 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
 
   DWORD Protect = getWindowsProtectionFlags(Flags);
 
+  size_t AllocSize = NumBlocks * Granularity;
   void *PA = ::VirtualAlloc(reinterpret_cast<void *>(Start),
-                            NumBlocks * Granularity, AllocType, Protect);
+                            AllocSize, AllocType, Protect);
   if (PA == NULL) {
     if (NearBlock || HugePages) {
       // Try again without the NearBlock hint and without large memory pages
@@ -148,41 +149,41 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
 
   MemoryBlock Result;
   Result.Address = PA;
-  Result.Size = NumBlocks*Granularity;
+  Result.AllocatedSize = AllocSize;
   Result.Flags = (Flags & ~MF_HUGE_HINT) | (HugePages ? MF_HUGE_HINT : 0);
 
   if (Flags & MF_EXEC)
-    Memory::InvalidateInstructionCache(Result.Address, Result.Size);
+    Memory::InvalidateInstructionCache(Result.Address, AllocSize);
 
   return Result;
 }
 
   std::error_code Memory::releaseMappedMemory(MemoryBlock &M) {
-  if (M.Address == 0 || M.Size == 0)
+  if (M.Address == 0 || M.AllocatedSize == 0)
     return std::error_code();
 
   if (!VirtualFree(M.Address, 0, MEM_RELEASE))
     return mapWindowsError(::GetLastError());
 
   M.Address = 0;
-  M.Size = 0;
+  M.AllocatedSize = 0;
 
   return std::error_code();
 }
 
   std::error_code Memory::protectMappedMemory(const MemoryBlock &M,
                                        unsigned Flags) {
-  if (M.Address == 0 || M.Size == 0)
+  if (M.Address == 0 || M.AllocatedSize == 0)
     return std::error_code();
 
   DWORD Protect = getWindowsProtectionFlags(Flags);
 
   DWORD OldFlags;
-  if (!VirtualProtect(M.Address, M.Size, Protect, &OldFlags))
+  if (!VirtualProtect(M.Address, M.AllocatedSize, Protect, &OldFlags))
     return mapWindowsError(::GetLastError());
 
   if (Flags & MF_EXEC)
-    Memory::InvalidateInstructionCache(M.Address, M.Size);
+    Memory::InvalidateInstructionCache(M.Address, M.AllocatedSize);
 
   return std::error_code();
 }

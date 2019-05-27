@@ -716,6 +716,11 @@ void OMPClauseProfiler::VisitOMPDeviceClause(const OMPDeviceClause *C) {
 void OMPClauseProfiler::VisitOMPMapClause(const OMPMapClause *C) {
   VisitOMPClauseList(C);
 }
+void OMPClauseProfiler::VisitOMPAllocateClause(const OMPAllocateClause *C) {
+  if (Expr *Allocator = C->getAllocator())
+    Profiler->VisitStmt(Allocator);
+  VisitOMPClauseList(C);
+}
 void OMPClauseProfiler::VisitOMPNumTeamsClause(const OMPNumTeamsClause *C) {
   VistOMPClauseWithPreInit(C);
   if (C->getNumTeams())
@@ -1874,6 +1879,10 @@ void StmtProfiler::VisitOpaqueValueExpr(const OpaqueValueExpr *E) {
 }
 
 void StmtProfiler::VisitTypoExpr(const TypoExpr *E) {
+  VisitExpr(E);
+}
+
+void StmtProfiler::VisitSourceLocExpr(const SourceLocExpr *E) {
   VisitExpr(E);
 }
 

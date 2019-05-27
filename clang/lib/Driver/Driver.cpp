@@ -38,6 +38,7 @@
 #include "ToolChains/NetBSD.h"
 #include "ToolChains/OpenBSD.h"
 #include "ToolChains/PS4CPU.h"
+#include "ToolChains/PPCLinux.h"
 #include "ToolChains/RISCVToolchain.h"
 #include "ToolChains/Solaris.h"
 #include "ToolChains/TCE.h"
@@ -246,8 +247,9 @@ InputArgList Driver::ParseArgStrings(ArrayRef<const char *> ArgStrings,
                           : diag::err_drv_unknown_argument;
       Diags.Report(DiagID) << ArgString;
     } else {
-      DiagID = IsCLMode() ? diag::warn_drv_unknown_argument_clang_cl_with_suggestion
-                          : diag::err_drv_unknown_argument_with_suggestion;
+      DiagID = IsCLMode()
+                   ? diag::warn_drv_unknown_argument_clang_cl_with_suggestion
+                   : diag::err_drv_unknown_argument_with_suggestion;
       Diags.Report(DiagID) << ArgString << Nearest;
     }
     ContainsError |= Diags.getDiagnosticLevel(DiagID, SourceLocation()) >
@@ -1417,11 +1419,13 @@ void Driver::generateCompilationDiagnostics(
 }
 
 void Driver::setUpResponseFiles(Compilation &C, Command &Cmd) {
-  // Since commandLineFitsWithinSystemLimits() may underestimate system's capacity
-  // if the tool does not support response files, there is a chance/ that things
-  // will just work without a response file, so we silently just skip it.
+  // Since commandLineFitsWithinSystemLimits() may underestimate system's
+  // capacity if the tool does not support response files, there is a chance/
+  // that things will just work without a response file, so we silently just
+  // skip it.
   if (Cmd.getCreator().getResponseFilesSupport() == Tool::RF_None ||
-      llvm::sys::commandLineFitsWithinSystemLimits(Cmd.getExecutable(), Cmd.getArguments()))
+      llvm::sys::commandLineFitsWithinSystemLimits(Cmd.getExecutable(),
+                                                   Cmd.getArguments()))
     return;
 
   std::string TmpName = GetTemporaryPath("response", "txt");
@@ -1640,11 +1644,7 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
   if (C.getArgs().hasArg(options::OPT_dumpversion)) {
     // Since -dumpversion is only implemented for pedantic GCC compatibility, we
     // return an answer which matches our definition of __VERSION__.
-    //
-    // If we want to return a more correct answer some day, then we should
-    // introduce a non-pedantically GCC compatible mode to Clang in which we
-    // provide sensible definitions for -dumpversion, __VERSION__, etc.
-    llvm::outs() << "4.2.1\n";
+    llvm::outs() << CLANG_VERSION_STRING << "\n";
     return false;
   }
 
@@ -1695,7 +1695,7 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
     bool separator = false;
     for (const std::string &Path : TC.getProgramPaths()) {
       if (separator)
-        llvm::outs() << ':';
+        llvm::outs() << llvm::sys::EnvPathSeparator;
       llvm::outs() << Path;
       separator = true;
     }
@@ -1706,7 +1706,7 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
 
     for (const std::string &Path : TC.getFilePaths()) {
       // Always print a separator. ResourceDir was the first item shown.
-      llvm::outs() << ':';
+      llvm::outs() << llvm::sys::EnvPathSeparator;
       // Interpretation of leading '=' is needed only for NetBSD.
       if (Path[0] == '=')
         llvm::outs() << sysroot << Path.substr(1);
@@ -1975,11 +1975,9 @@ void Driver::BuildUniversalActions(Compilation &C, const ToolChain &TC,
   }
 }
 
-/// Check that the file referenced by Value exists. If it doesn't,
-/// issue a diagnostic and return false.
-static bool DiagnoseInputExistence(const Driver &D, const DerivedArgList &Args,
-                                   StringRef Value, types::ID Ty) {
-  if (!D.getCheckInputsExist())
+bool Driver::DiagnoseInputExistence(const DerivedArgList &Args, StringRef Value,
+                                    types::ID Ty, bool TypoCorrect) const {
+  if (!getCheckInputsExist())
     return true;
 
   // stdin always exists.
@@ -1995,10 +1993,10 @@ static bool DiagnoseInputExistence(const Driver &D, const DerivedArgList &Args,
     }
   }
 
-  if (D.getVFS().exists(Path))
+  if (getVFS().exists(Path))
     return true;
 
-  if (D.IsCLMode()) {
+  if (IsCLMode()) {
     if (!llvm::sys::path::is_absolute(Twine(Path)) &&
         llvm::sys::Process::FindInEnvPath("LIB", Value))
       return true;
@@ -2011,7 +2009,26 @@ static bool DiagnoseInputExistence(const Driver &D, const DerivedArgList &Args,
     }
   }
 
-  D.Diag(clang::diag::err_drv_no_such_file) << Path;
+  if (TypoCorrect) {
+    // Check if the filename is a typo for an option flag. OptTable thinks
+    // that all args that are not known options and that start with / are
+    // filenames, but e.g. `/diagnostic:caret` is more likely a typo for
+    // the option `/diagnostics:caret` than a reference to a file in the root
+    // directory.
+    unsigned IncludedFlagsBitmask;
+    unsigned ExcludedFlagsBitmask;
+    std::tie(IncludedFlagsBitmask, ExcludedFlagsBitmask) =
+        getIncludeExcludeOptionFlagMasks(IsCLMode());
+    std::string Nearest;
+    if (getOpts().findNearest(Value, Nearest, IncludedFlagsBitmask,
+                              ExcludedFlagsBitmask) <= 1) {
+      Diag(clang::diag::err_drv_no_such_file_with_suggestion)
+          << Path << Nearest;
+      return false;
+    }
+  }
+
+  Diag(clang::diag::err_drv_no_such_file) << Path;
   return false;
 }
 
@@ -2034,7 +2051,8 @@ void Driver::BuildInputs(const ToolChain &TC, DerivedArgList &Args,
 
     Arg *Previous = nullptr;
     bool ShowNote = false;
-    for (Arg *A : Args.filtered(options::OPT__SLASH_TC, options::OPT__SLASH_TP)) {
+    for (Arg *A :
+         Args.filtered(options::OPT__SLASH_TC, options::OPT__SLASH_TP)) {
       if (Previous) {
         Diag(clang::diag::warn_drv_overriding_flag_option)
           << Previous->getSpelling() << A->getSpelling();
@@ -2127,19 +2145,21 @@ void Driver::BuildInputs(const ToolChain &TC, DerivedArgList &Args,
         }
       }
 
-      if (DiagnoseInputExistence(*this, Args, Value, Ty))
+      if (DiagnoseInputExistence(Args, Value, Ty, /*TypoCorrect=*/true))
         Inputs.push_back(std::make_pair(Ty, A));
 
     } else if (A->getOption().matches(options::OPT__SLASH_Tc)) {
       StringRef Value = A->getValue();
-      if (DiagnoseInputExistence(*this, Args, Value, types::TY_C)) {
+      if (DiagnoseInputExistence(Args, Value, types::TY_C,
+                                 /*TypoCorrect=*/false)) {
         Arg *InputArg = MakeInputArg(Args, *Opts, A->getValue());
         Inputs.push_back(std::make_pair(types::TY_C, InputArg));
       }
       A->claim();
     } else if (A->getOption().matches(options::OPT__SLASH_Tp)) {
       StringRef Value = A->getValue();
-      if (DiagnoseInputExistence(*this, Args, Value, types::TY_CXX)) {
+      if (DiagnoseInputExistence(Args, Value, types::TY_CXX,
+                                 /*TypoCorrect=*/false)) {
         Arg *InputArg = MakeInputArg(Args, *Opts, A->getValue());
         Inputs.push_back(std::make_pair(types::TY_CXX, InputArg));
       }
@@ -4262,10 +4282,12 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
     Arg *A = C.getArgs().getLastArg(options::OPT_fcrash_diagnostics_dir);
     if (CCGenDiagnostics && A) {
       SmallString<128> CrashDirectory(A->getValue());
+      if (!getVFS().exists(CrashDirectory))
+        llvm::sys::fs::create_directories(CrashDirectory);
       llvm::sys::path::append(CrashDirectory, Split.first);
       const char *Middle = Suffix ? "-%%%%%%." : "-%%%%%%";
-      std::error_code EC =
-          llvm::sys::fs::createUniqueFile(CrashDirectory + Middle + Suffix, TmpName);
+      std::error_code EC = llvm::sys::fs::createUniqueFile(
+          CrashDirectory + Middle + Suffix, TmpName);
       if (EC) {
         Diag(clang::diag::err_unable_to_make_temp) << EC.message();
         return "";
@@ -4576,6 +4598,11 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
                !Target.hasEnvironment())
         TC = llvm::make_unique<toolchains::MipsLLVMToolChain>(*this, Target,
                                                               Args);
+      else if (Target.getArch() == llvm::Triple::ppc ||
+               Target.getArch() == llvm::Triple::ppc64 ||
+               Target.getArch() == llvm::Triple::ppc64le)
+        TC = llvm::make_unique<toolchains::PPCLinuxToolChain>(*this, Target,
+                                                              Args);
       else
         TC = llvm::make_unique<toolchains::Linux>(*this, Target, Args);
       break;
@@ -4768,7 +4795,8 @@ bool Driver::GetReleaseVersion(StringRef Str,
   return false;
 }
 
-std::pair<unsigned, unsigned> Driver::getIncludeExcludeOptionFlagMasks(bool IsClCompatMode) const {
+std::pair<unsigned, unsigned>
+Driver::getIncludeExcludeOptionFlagMasks(bool IsClCompatMode) const {
   unsigned IncludedFlagsBitmask = 0;
   unsigned ExcludedFlagsBitmask = options::NoDriverOption;
 

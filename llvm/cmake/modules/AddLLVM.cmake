@@ -21,6 +21,10 @@ function(llvm_update_compile_flags name)
   else()
     if(LLVM_COMPILER_IS_GCC_COMPATIBLE)
       list(APPEND LLVM_COMPILE_FLAGS "-fno-exceptions")
+      if(NOT LLVM_ENABLE_UNWIND_TABLES)
+        list(APPEND LLVM_COMPILE_FLAGS "-fno-unwind-tables")
+        list(APPEND LLVM_COMPILE_FLAGS "-fno-asynchronous-unwind-tables")
+      endif()
     elseif(MSVC)
       list(APPEND LLVM_COMPILE_DEFINITIONS _HAS_EXCEPTIONS=0)
       list(APPEND LLVM_COMPILE_FLAGS "/EHs-c-")
@@ -592,6 +596,18 @@ function(llvm_add_library name)
     llvm_externalize_debuginfo(${name})
     llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})
   endif()
+  # clang and newer versions of ninja use high-resolutions timestamps,
+  # but older versions of libtool on Darwin don't, so the archive will
+  # often get an older timestamp than the last object that was added
+  # or updated.  To fix this, we add a custom command to touch archive
+  # after it's been built so that ninja won't rebuild it unnecessarily
+  # the next time it's run.
+  if(ARG_STATIC AND LLVM_TOUCH_STATIC_LIBRARIES)
+    add_custom_command(TARGET ${name}
+      POST_BUILD
+      COMMAND touch ${LLVM_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${name}${CMAKE_STATIC_LIBRARY_SUFFIX}
+      )
+  endif()
 endfunction()
 
 function(add_llvm_install_targets target)
@@ -603,21 +619,35 @@ function(add_llvm_install_targets target)
     set(prefix_option -DCMAKE_INSTALL_PREFIX="${ARG_PREFIX}")
   endif()
 
+  set(file_dependencies)
+  set(target_dependencies)
+  foreach(dependency ${ARG_DEPENDS})
+    if(TARGET ${dependency})
+      list(APPEND target_dependencies ${dependency})
+    else()
+      list(APPEND file_dependencies ${dependency})
+    endif()
+  endforeach()
+
   add_custom_target(${target}
-                    DEPENDS ${ARG_DEPENDS}
+                    DEPENDS ${file_dependencies}
                     COMMAND "${CMAKE_COMMAND}"
                             ${component_option}
                             ${prefix_option}
                             -P "${CMAKE_BINARY_DIR}/cmake_install.cmake"
                     USES_TERMINAL)
   add_custom_target(${target}-stripped
-                    DEPENDS ${ARG_DEPENDS}
+                    DEPENDS ${file_dependencies}
                     COMMAND "${CMAKE_COMMAND}"
                             ${component_option}
                             ${prefix_option}
                             -DCMAKE_INSTALL_DO_STRIP=1
                             -P "${CMAKE_BINARY_DIR}/cmake_install.cmake"
                     USES_TERMINAL)
+  if(target_dependencies)
+    add_dependencies(${target} ${target_dependencies})
+    add_dependencies(${target}-stripped ${target_dependencies})
+  endif()
 endfunction()
 
 macro(add_llvm_library name)
@@ -653,22 +683,8 @@ macro(add_llvm_library name)
     if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY OR ${name} STREQUAL "LTO" OR
         ${name} STREQUAL "Remarks" OR
         (LLVM_LINK_LLVM_DYLIB AND ${name} STREQUAL "LLVM"))
-      set(install_dir lib${LLVM_LIBDIR_SUFFIX})
-      if(ARG_MODULE OR ARG_SHARED OR BUILD_SHARED_LIBS)
-        if(WIN32 OR CYGWIN OR MINGW)
-          set(install_type RUNTIME)
-          set(install_dir bin)
-        else()
-          set(install_type LIBRARY)
-        endif()
-      else()
-        set(install_type ARCHIVE)
-      endif()
 
-      if (ARG_MODULE)
-        set(install_type LIBRARY)
-      endif()
-
+      set(export_to_llvmexports)
       if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
           (in_llvm_libs AND "llvm-libraries" IN_LIST LLVM_DISTRIBUTION_COMPONENTS) OR
           NOT LLVM_DISTRIBUTION_COMPONENTS)
@@ -678,8 +694,9 @@ macro(add_llvm_library name)
 
       install(TARGETS ${name}
               ${export_to_llvmexports}
-              ${install_type} DESTINATION ${install_dir}
-              COMPONENT ${name})
+              LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX} COMPONENT ${name}
+              ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX} COMPONENT ${name}
+              RUNTIME DESTINATION bin COMPONENT ${name})
 
       if (NOT LLVM_ENABLE_IDE)
         add_llvm_install_targets(install-${name}
@@ -863,6 +880,7 @@ if(NOT LLVM_TOOLCHAIN_TOOLS)
     llvm-lib
     llvm-objdump
     llvm-rc
+    llvm-profdata
     )
 endif()
 
@@ -874,6 +892,7 @@ macro(add_llvm_tool name)
 
   if ( ${name} IN_LIST LLVM_TOOLCHAIN_TOOLS OR NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     if( LLVM_BUILD_TOOLS )
+      set(export_to_llvmexports)
       if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
           NOT LLVM_DISTRIBUTION_COMPONENTS)
         set(export_to_llvmexports EXPORT LLVMExports)
@@ -921,6 +940,7 @@ macro(add_llvm_utility name)
   set_target_properties(${name} PROPERTIES FOLDER "Utils")
   if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     if (LLVM_INSTALL_UTILS AND LLVM_BUILD_UTILS)
+      set(export_to_llvmexports)
       if (${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
           NOT LLVM_DISTRIBUTION_COMPONENTS)
         set(export_to_llvmexports EXPORT LLVMExports)
@@ -1601,14 +1621,21 @@ function(llvm_externalize_debuginfo name)
     endif()
   endif()
 
-  if(LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR)
-    if(APPLE)
-      set(output_name "$<TARGET_FILE_NAME:${name}>.dSYM")
-      set(output_path "-o=${LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR}/${output_name}")
-    endif()
-  endif()
-
   if(APPLE)
+    if(LLVM_EXTERNALIZE_DEBUGINFO_EXTENSION)
+      set(file_ext ${LLVM_EXTERNALIZE_DEBUGINFO_EXTENSION})
+    else()
+      set(file_ext dSYM)
+    endif()
+
+    set(output_name "$<TARGET_FILE_NAME:${name}>.${file_ext}")
+
+    if(LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR)
+      set(output_path "-o=${LLVM_EXTERNALIZE_DEBUGINFO_OUTPUT_DIR}/${output_name}")
+    else()
+      set(output_path "-o=${output_name}")
+    endif()
+
     if(CMAKE_CXX_FLAGS MATCHES "-flto"
       OR CMAKE_CXX_FLAGS_${uppercase_CMAKE_BUILD_TYPE} MATCHES "-flto")
 

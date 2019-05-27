@@ -29,9 +29,9 @@ define dso_local i32 @foo() local_unnamed_addr #0 !dbg !2 {
 ; CHECK-NEXT:        .byte   0
 ; CHECK-NEXT:        .long   24
 ; CHECK-NEXT:        .long   0
-; CHECK-NEXT:        .long   96
-; CHECK-NEXT:        .long   96
-; CHECK-NEXT:        .long   63
+; CHECK-NEXT:        .long   164
+; CHECK-NEXT:        .long   164
+; CHECK-NEXT:        .long   76
 ; CHECK-NEXT:        .long   0                       # BTF_KIND_FUNC_PROTO(id = 1)
 ; CHECK-NEXT:        .long   218103808               # 0xd000000
 ; CHECK-NEXT:        .long   2
@@ -49,13 +49,30 @@ define dso_local i32 @foo() local_unnamed_addr #0 !dbg !2 {
 ; CHECK-NEXT:        .long   16777216                # 0x1000000
 ; CHECK-NEXT:        .long   2
 ; CHECK-NEXT:        .long   16777232                # 0x1000010
-; CHECK-NEXT:        .long   0                       # BTF_KIND_VOLATILE(id = 6)
+; CHECK-NEXT:        .long   58                      # BTF_KIND_VAR(id = 6)
+; CHECK-NEXT:        .long   234881024               # 0xe000000
+; CHECK-NEXT:        .long   4
+; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   0                       # BTF_KIND_VOLATILE(id = 7)
 ; CHECK-NEXT:        .long   150994944               # 0x9000000
-; CHECK-NEXT:        .long   7
-; CHECK-NEXT:        .long   58                      # BTF_KIND_INT(id = 7)
+; CHECK-NEXT:        .long   8
+; CHECK-NEXT:        .long   64                      # BTF_KIND_INT(id = 8)
 ; CHECK-NEXT:        .long   16777216                # 0x1000000
 ; CHECK-NEXT:        .long   1
 ; CHECK-NEXT:        .long   16777224                # 0x1000008
+; CHECK-NEXT:        .long   69                      # BTF_KIND_VAR(id = 9)
+; CHECK-NEXT:        .long   234881024               # 0xe000000
+; CHECK-NEXT:        .long   7
+; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   71                      # BTF_KIND_DATASEC(id = 10)
+; CHECK-NEXT:        .long   251658242               # 0xf000002
+; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   6
+; CHECK-NEXT:        .long   foo.b
+; CHECK-NEXT:        .long   2
+; CHECK-NEXT:        .long   9
+; CHECK-NEXT:        .long   a
+; CHECK-NEXT:        .long   1
 ; CHECK-NEXT:        .byte   0                       # string offset=0
 ; CHECK-NEXT:        .ascii  ".text"                 # string offset=1
 ; CHECK-NEXT:        .byte   0
@@ -67,7 +84,13 @@ define dso_local i32 @foo() local_unnamed_addr #0 !dbg !2 {
 ; CHECK-NEXT:        .byte   0
 ; CHECK-NEXT:        .ascii  "short"                 # string offset=52
 ; CHECK-NEXT:        .byte   0
-; CHECK-NEXT:        .ascii  "char"                  # string offset=58
+; CHECK-NEXT:        .ascii  "foo.b"                 # string offset=58
+; CHECK-NEXT:        .byte   0
+; CHECK-NEXT:        .ascii  "char"                  # string offset=64
+; CHECK-NEXT:        .byte   0
+; CHECK-NEXT:        .byte   97                      # string offset=69
+; CHECK-NEXT:        .byte   0
+; CHECK-NEXT:        .ascii  ".bss"                  # string offset=71
 ; CHECK-NEXT:        .byte   0
 
 attributes #0 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }

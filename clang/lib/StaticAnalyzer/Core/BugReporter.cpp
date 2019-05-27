@@ -678,7 +678,7 @@ void generateMinimalDiagForBlockEdge(const ExplodedNode *N, BlockEdge BE,
   const LocationContext *LC = N->getLocationContext();
   const CFGBlock *Src = BE.getSrc();
   const CFGBlock *Dst = BE.getDst();
-  const Stmt *T = Src->getTerminator();
+  const Stmt *T = Src->getTerminatorStmt();
   if (!T)
     return;
 
@@ -1203,7 +1203,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
     const CFGBlock *BSrc = BE->getSrc();
     ParentMap &PM = PDB.getParentMap();
 
-    if (const Stmt *Term = BSrc->getTerminator()) {
+    if (const Stmt *Term = BSrc->getTerminatorStmt()) {
       // Are we jumping past the loop body without ever executing the
       // loop (because the condition was false)?
       if (isLoop(Term)) {
@@ -1369,8 +1369,7 @@ static void addContextEdges(PathPieces &pieces, SourceManager &SM,
         break;
 
       // If the source is in the same context, we're already good.
-      if (std::find(SrcContexts.begin(), SrcContexts.end(), DstContext) !=
-          SrcContexts.end())
+      if (llvm::find(SrcContexts, DstContext) != SrcContexts.end())
         break;
 
       // Update the subexpression node to point to the context edge.
@@ -2612,6 +2611,7 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
     R->addVisitor(llvm::make_unique<NilReceiverBRVisitor>());
     R->addVisitor(llvm::make_unique<ConditionBRVisitor>());
     R->addVisitor(llvm::make_unique<CXXSelfAssignmentBRVisitor>());
+    R->addVisitor(llvm::make_unique<TagVisitor>());
 
     BugReporterContext BRC(Reporter, ErrorGraph.BackMap);
 

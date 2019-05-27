@@ -22,6 +22,7 @@
 #include "EHScopeStack.h"
 #include "VarBypassDetector.h"
 #include "clang/AST/CharUnits.h"
+#include "clang/AST/CurrentSourceLocExprScope.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
@@ -1393,6 +1394,12 @@ private:
   SourceLocation LastStopPoint;
 
 public:
+  /// Source location information about the default argument or member
+  /// initializer expression we're evaluating, if any.
+  CurrentSourceLocExprScope CurSourceLocExprScope;
+  using SourceLocExprScopeGuard =
+      CurrentSourceLocExprScope::SourceLocExprScopeGuard;
+
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
@@ -1413,11 +1420,12 @@ public:
 
   /// The scope of a CXXDefaultInitExpr. Within this scope, the value of 'this'
   /// is overridden to be the object under construction.
-  class CXXDefaultInitExprScope {
+  class CXXDefaultInitExprScope  {
   public:
-    CXXDefaultInitExprScope(CodeGenFunction &CGF)
-      : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
-        OldCXXThisAlignment(CGF.CXXThisAlignment) {
+    CXXDefaultInitExprScope(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
+        : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
+          OldCXXThisAlignment(CGF.CXXThisAlignment),
+          SourceLocScope(E, CGF.CurSourceLocExprScope) {
       CGF.CXXThisValue = CGF.CXXDefaultInitExprThis.getPointer();
       CGF.CXXThisAlignment = CGF.CXXDefaultInitExprThis.getAlignment();
     }
@@ -1430,6 +1438,12 @@ public:
     CodeGenFunction &CGF;
     llvm::Value *OldCXXThisValue;
     CharUnits OldCXXThisAlignment;
+    SourceLocExprScopeGuard SourceLocScope;
+  };
+
+  struct CXXDefaultArgExprScope : SourceLocExprScopeGuard {
+    CXXDefaultArgExprScope(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
+        : SourceLocExprScopeGuard(E, CGF.CurSourceLocExprScope) {}
   };
 
   /// The scope of an ArrayInitLoopExpr. Within this scope, the value of the
@@ -2503,16 +2517,13 @@ public:
 
   void EmitCXXConstructorCall(const CXXConstructorDecl *D, CXXCtorType Type,
                               bool ForVirtualBase, bool Delegating,
-                              Address This, const CXXConstructExpr *E,
-                              AggValueSlot::Overlap_t Overlap,
-                              bool NewPointerIsChecked);
+                              AggValueSlot ThisAVS, const CXXConstructExpr *E);
 
   void EmitCXXConstructorCall(const CXXConstructorDecl *D, CXXCtorType Type,
                               bool ForVirtualBase, bool Delegating,
                               Address This, CallArgList &Args,
                               AggValueSlot::Overlap_t Overlap,
-                              SourceLocation Loc,
-                              bool NewPointerIsChecked);
+                              SourceLocation Loc, bool NewPointerIsChecked);
 
   /// Emit assumption load for all bases. Requires to be be called only on
   /// most-derived class and not under construction of the object.
@@ -3661,11 +3672,10 @@ public:
                               llvm::Value *ImplicitParam,
                               QualType ImplicitParamTy, const CallExpr *E,
                               CallArgList *RtlArgs);
-  RValue EmitCXXDestructorCall(const CXXDestructorDecl *DD,
+  RValue EmitCXXDestructorCall(GlobalDecl Dtor,
                                const CGCallee &Callee,
                                llvm::Value *This, llvm::Value *ImplicitParam,
-                               QualType ImplicitParamTy, const CallExpr *E,
-                               StructorType Type);
+                               QualType ImplicitParamTy, const CallExpr *E);
   RValue EmitCXXMemberCallExpr(const CXXMemberCallExpr *E,
                                ReturnValueSlot ReturnValue);
   RValue EmitCXXMemberOrOperatorMemberCallExpr(const CallExpr *CE,
@@ -3728,9 +3738,6 @@ public:
                                          SmallVectorImpl<llvm::Value *> &Ops,
                                          Address PtrOp0, Address PtrOp1,
                                          llvm::Triple::ArchType Arch);
-
-  llvm::Value *EmitISOVolatileLoad(const CallExpr *E);
-  llvm::Value *EmitISOVolatileStore(const CallExpr *E);
 
   llvm::Function *LookupNeonLLVMIntrinsic(unsigned IntrinsicID,
                                           unsigned Modifier, llvm::Type *ArgTy,

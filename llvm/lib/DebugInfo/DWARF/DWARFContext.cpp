@@ -36,7 +36,7 @@
 #include "llvm/Object/Decompressor.h"
 #include "llvm/Object/MachO.h"
 #include "llvm/Object/ObjectFile.h"
-#include "llvm/Object/RelocVisitor.h"
+#include "llvm/Object/RelocationResolver.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Error.h"
@@ -925,6 +925,9 @@ DWARFContext::DIEsForAddress DWARFContext::getDIEsForAddress(uint64_t Address) {
     DWARFDie DIE = Worklist.back();
     Worklist.pop_back();
 
+    if (!DIE.isValid())
+      continue;
+
     if (DIE.getTag() == DW_TAG_lexical_block &&
         DIE.addressRangeContainsAddress(Address)) {
       Result.BlockDIE = DIE;
@@ -1407,8 +1410,14 @@ public:
       // Try to obtain an already relocated version of this section.
       // Else use the unrelocated section from the object file. We'll have to
       // apply relocations ourselves later.
-      if (!L || !L->getLoadedSectionContents(*RelocatedSection, Data))
-        Section.getContents(Data);
+      if (!L || !L->getLoadedSectionContents(*RelocatedSection, Data)) {
+        Expected<StringRef> E = Section.getContents();
+        if (E)
+          Data = *E;
+        else
+          // maybeDecompress below will error.
+          consumeError(E.takeError());
+      }
 
       if (auto Err = maybeDecompress(Section, Name, Data)) {
         ErrorPolicy EP = HandleError(createError(
@@ -1500,6 +1509,9 @@ public:
 
       // Symbol to [address, section index] cache mapping.
       std::map<SymbolRef, SymInfo> AddrCache;
+      bool (*Supports)(uint64_t);
+      RelocationResolver Resolver;
+      std::tie(Supports, Resolver) = getRelocationResolver(Obj);
       for (const RelocationRef &Reloc : Section.relocations()) {
         // FIXME: it's not clear how to correctly handle scattered
         // relocations.
@@ -1514,9 +1526,15 @@ public:
           continue;
         }
 
-        object::RelocVisitor V(Obj);
-        uint64_t Val = V.visit(Reloc.getType(), Reloc, SymInfoOrErr->Address);
-        if (V.error()) {
+        // Check if Resolver can handle this relocation type early so as not to
+        // handle invalid cases in DWARFDataExtractor.
+        //
+        // TODO Don't store Resolver in every RelocAddrEntry.
+        if (Supports && Supports(Reloc.getType())) {
+          Map->try_emplace(Reloc.getOffset(),
+                           RelocAddrEntry{SymInfoOrErr->SectionIndex, Reloc,
+                                          Resolver, SymInfoOrErr->Address});
+        } else {
           SmallString<32> Type;
           Reloc.getTypeName(Type);
           ErrorPolicy EP = HandleError(
@@ -1524,10 +1542,7 @@ public:
                           errorCodeToError(object_error::parse_failed)));
           if (EP == ErrorPolicy::Halt)
             return;
-          continue;
         }
-        RelocAddrEntry Rel = {SymInfoOrErr->SectionIndex, Val};
-        Map->insert({Reloc.getOffset(), Rel});
       }
     }
 

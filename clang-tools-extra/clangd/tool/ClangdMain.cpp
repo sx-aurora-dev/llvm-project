@@ -6,13 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Features.inc"
 #include "ClangdLSPServer.h"
+#include "CodeComplete.h"
+#include "Features.inc"
 #include "Path.h"
+#include "Protocol.h"
 #include "Trace.h"
 #include "Transport.h"
+#include "index/Background.h"
 #include "index/Serialization.h"
 #include "clang/Basic/Version.h"
+#include "clang/Format/Format.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -22,6 +28,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -90,7 +97,7 @@ static llvm::cl::opt<Logger::Level> LogLevel(
 static llvm::cl::opt<bool>
     Test("lit-test",
          llvm::cl::desc("Abbreviation for -input-style=delimited -pretty "
-                        "-run-synchronously -enable-test-scheme. "
+                        "-run-synchronously -enable-test-scheme -log=verbose. "
                         "Intended to simplify lit tests."),
          llvm::cl::init(false), llvm::cl::Hidden);
 
@@ -112,7 +119,7 @@ static llvm::cl::opt<PCHStorageFlag> PCHStorage(
 static llvm::cl::opt<int> LimitResults(
     "limit-results",
     llvm::cl::desc("Limit the number of results returned by clangd. "
-                   "0 means no limit."),
+                   "0 means no limit. (default=100)"),
     llvm::cl::init(100));
 
 static llvm::cl::opt<bool> RunSynchronously(
@@ -151,6 +158,20 @@ static llvm::cl::opt<bool> AllScopesCompletion(
 static llvm::cl::opt<bool> ShowOrigins(
     "debug-origin", llvm::cl::desc("Show origins of completion items"),
     llvm::cl::init(CodeCompleteOptions().ShowOrigins), llvm::cl::Hidden);
+
+static llvm::cl::opt<CodeCompleteOptions::IncludeInsertion> HeaderInsertion(
+    "header-insertion",
+    llvm::cl::desc("Add #include directives when accepting code completions"),
+    llvm::cl::init(CodeCompleteOptions().InsertIncludes),
+    llvm::cl::values(
+        clEnumValN(CodeCompleteOptions::IWYU, "iwyu",
+                   "Include what you use. "
+                   "Insert the owning header for top-level symbols, unless the "
+                   "header is already directly included or the symbol is "
+                   "forward-declared."),
+        clEnumValN(
+            CodeCompleteOptions::NeverInsert, "never",
+            "Never insert #include directives as part of code completion")));
 
 static llvm::cl::opt<bool> HeaderInsertionDecorators(
     "header-insertion-decorators",
@@ -211,13 +232,42 @@ static llvm::cl::opt<std::string> ClangTidyChecks(
 static llvm::cl::opt<bool> EnableClangTidy(
     "clang-tidy",
     llvm::cl::desc("Enable clang-tidy diagnostics."),
-    llvm::cl::init(false));
+    llvm::cl::init(true));
+
+static llvm::cl::opt<std::string>
+    FallbackStyle("fallback-style",
+                  llvm::cl::desc("clang-format style to apply by default when "
+                                 "no .clang-format file is found"),
+                  llvm::cl::init(clang::format::DefaultFallbackStyle));
 
 static llvm::cl::opt<bool> SuggestMissingIncludes(
     "suggest-missing-includes",
     llvm::cl::desc("Attempts to fix diagnostic errors caused by missing "
                    "includes using index."),
     llvm::cl::init(true));
+
+static llvm::cl::opt<OffsetEncoding> ForceOffsetEncoding(
+    "offset-encoding",
+    llvm::cl::desc("Force the offsetEncoding used for character positions. "
+                   "This bypasses negotiation via client capabilities."),
+    llvm::cl::values(clEnumValN(OffsetEncoding::UTF8, "utf-8",
+                                "Offsets are in UTF-8 bytes"),
+                     clEnumValN(OffsetEncoding::UTF16, "utf-16",
+                                "Offsets are in UTF-16 code units")),
+    llvm::cl::init(OffsetEncoding::UnsupportedEncoding));
+
+static llvm::cl::opt<CodeCompleteOptions::CodeCompletionParse>
+    CodeCompletionParse(
+        "completion-parse",
+        llvm::cl::desc("Whether the clang-parser is used for code-completion"),
+        llvm::cl::values(clEnumValN(CodeCompleteOptions::AlwaysParse, "always",
+                                    "Block until the parser can be used"),
+                         clEnumValN(CodeCompleteOptions::ParseIfReady, "auto",
+                                    "Use text-based completion if the parser "
+                                    "is not ready"),
+                         clEnumValN(CodeCompleteOptions::NeverParse, "never",
+                                    "Always used text-based completion")),
+        llvm::cl::init(CodeCompleteOptions().RunParser), llvm::cl::Hidden);
 
 namespace {
 
@@ -295,8 +345,10 @@ int main(int argc, char *argv[]) {
   if (Test) {
     RunSynchronously = true;
     InputStyle = JSONStreamStyle::Delimited;
+    LogLevel = Logger::Verbose;
     PrettyPrint = true;
-    preventThreadStarvationInTests(); // Ensure background index makes progress.
+    // Ensure background index makes progress.
+    BackgroundIndex::preventThreadStarvationInTests();
   }
   if (Test || EnableTestScheme) {
     static URISchemeRegistry::Add<TestScheme> X(
@@ -314,6 +366,8 @@ int main(int argc, char *argv[]) {
       llvm::errs() << "Ignoring -j because -run-synchronously is set.\n";
     WorkerThreadsCount = 0;
   }
+  if (FallbackStyle.getNumOccurrences())
+    clang::format::DefaultFallbackStyle = FallbackStyle.c_str();
 
   // Validate command line arguments.
   llvm::Optional<llvm::raw_fd_ostream> InputMirrorStream;
@@ -418,6 +472,7 @@ int main(int argc, char *argv[]) {
   CCOpts.Limit = LimitResults;
   CCOpts.BundleOverloads = CompletionStyle != Detailed;
   CCOpts.ShowOrigins = ShowOrigins;
+  CCOpts.InsertIncludes = HeaderInsertion;
   if (!HeaderInsertionDecorators) {
     CCOpts.IncludeIndicator.Insert.clear();
     CCOpts.IncludeIndicator.NoInsert.clear();
@@ -425,6 +480,7 @@ int main(int argc, char *argv[]) {
   CCOpts.SpeculativeIndexRequest = Opts.StaticIndex;
   CCOpts.EnableFunctionArgSnippets = EnableFunctionArgSnippets;
   CCOpts.AllScopes = AllScopesCompletion;
+  CCOpts.RunParser = CodeCompletionParse;
 
   RealFileSystemProvider FSProvider;
   // Initialize and run ClangdLSPServer.
@@ -447,7 +503,9 @@ int main(int argc, char *argv[]) {
   }
 
   // Create an empty clang-tidy option.
-  std::unique_ptr<tidy::ClangTidyOptionsProvider> ClangTidyOptProvider;
+  std::mutex ClangTidyOptMu;
+  std::unique_ptr<tidy::ClangTidyOptionsProvider>
+      ClangTidyOptProvider; /*GUARDED_BY(ClangTidyOptMu)*/
   if (EnableClangTidy) {
     auto OverrideClangTidyOptions = tidy::ClangTidyOptions::getDefaults();
     OverrideClangTidyOptions.Checks = ClangTidyChecks;
@@ -456,11 +514,21 @@ int main(int argc, char *argv[]) {
         /* Default */ tidy::ClangTidyOptions::getDefaults(),
         /* Override */ OverrideClangTidyOptions, FSProvider.getFileSystem());
   }
-  Opts.ClangTidyOptProvider = ClangTidyOptProvider.get();
+  Opts.GetClangTidyOptions = [&](llvm::vfs::FileSystem &,
+                                 llvm::StringRef File) {
+    // This function must be thread-safe and tidy option providers are not.
+    std::lock_guard<std::mutex> Lock(ClangTidyOptMu);
+    // FIXME: use the FS provided to the function.
+    return ClangTidyOptProvider->getOptions(File);
+  };
   Opts.SuggestMissingIncludes = SuggestMissingIncludes;
+  llvm::Optional<OffsetEncoding> OffsetEncodingFromFlag;
+  if (ForceOffsetEncoding != OffsetEncoding::UnsupportedEncoding)
+    OffsetEncodingFromFlag = ForceOffsetEncoding;
   ClangdLSPServer LSPServer(
       *TransportLayer, FSProvider, CCOpts, CompileCommandsDirPath,
-      /*UseDirBasedCDB=*/CompileArgsFrom == FilesystemCompileArgs, Opts);
+      /*UseDirBasedCDB=*/CompileArgsFrom == FilesystemCompileArgs,
+      OffsetEncodingFromFlag, Opts);
   llvm::set_thread_name("clangd.main");
   return LSPServer.run() ? 0
                          : static_cast<int>(ErrorResultCode::NoShutdownRequest);

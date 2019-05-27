@@ -75,6 +75,18 @@ ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
       CachedRTTIMode(CalculateRTTIMode(Args, Triple, CachedRTTIArg)) {
   SmallString<128> P;
 
+  if (D.CCCIsCXX()) {
+    P.assign(D.Dir);
+    llvm::sys::path::append(P, "..", "lib", D.getTargetTriple(), "c++");
+    if (getVFS().exists(P))
+      getLibraryPaths().push_back(P.str());
+
+    P.assign(D.Dir);
+    llvm::sys::path::append(P, "..", "lib", Triple.str(), "c++");
+    if (getVFS().exists(P))
+      getLibraryPaths().push_back(P.str());
+  }
+
   P.assign(D.ResourceDir);
   llvm::sys::path::append(P, D.getTargetTriple(), "lib");
   if (getVFS().exists(P))
@@ -110,6 +122,10 @@ bool ToolChain::useIntegratedAs() const {
 
 bool ToolChain::useRelaxRelocations() const {
   return ENABLE_X86_RELAX_RELOCATIONS;
+}
+
+bool ToolChain::isNoExecStackDefault() const {
+    return false;
 }
 
 const SanitizerArgs& ToolChain::getSanitizerArgs() const {
@@ -421,7 +437,7 @@ bool ToolChain::needsProfileRT(const ArgList &Args) {
       Args.hasArg(options::OPT_fprofile_instr_generate) ||
       Args.hasArg(options::OPT_fprofile_instr_generate_EQ) ||
       Args.hasArg(options::OPT_fcreate_profile) ||
-      Args.hasArg(options::OPT_forder_file_instrumentation)) 
+      Args.hasArg(options::OPT_forder_file_instrumentation))
     return true;
 
   return false;
@@ -691,6 +707,33 @@ ToolChain::RuntimeLibType ToolChain::GetRuntimeLibType(
     getDriver().Diag(diag::err_drv_invalid_rtlib_name) << A->getAsString(Args);
 
   return GetDefaultRuntimeLibType();
+}
+
+ToolChain::UnwindLibType ToolChain::GetUnwindLibType(
+    const ArgList &Args) const {
+  const Arg *A = Args.getLastArg(options::OPT_unwindlib_EQ);
+  StringRef LibName = A ? A->getValue() : CLANG_DEFAULT_UNWINDLIB;
+
+  if (LibName == "none")
+    return ToolChain::UNW_None;
+  else if (LibName == "platform" || LibName == "") {
+    ToolChain::RuntimeLibType RtLibType = GetRuntimeLibType(Args);
+    if (RtLibType == ToolChain::RLT_CompilerRT)
+      return ToolChain::UNW_None;
+    else if (RtLibType == ToolChain::RLT_Libgcc)
+      return ToolChain::UNW_Libgcc;
+  } else if (LibName == "libunwind") {
+    if (GetRuntimeLibType(Args) == RLT_Libgcc)
+      getDriver().Diag(diag::err_drv_incompatible_unwindlib);
+    return ToolChain::UNW_CompilerRT;
+  } else if (LibName == "libgcc")
+    return ToolChain::UNW_Libgcc;
+
+  if (A)
+    getDriver().Diag(diag::err_drv_invalid_unwindlib_name)
+        << A->getAsString(Args);
+
+  return GetDefaultUnwindLibType();
 }
 
 ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
