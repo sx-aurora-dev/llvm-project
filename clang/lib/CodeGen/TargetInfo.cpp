@@ -462,8 +462,11 @@ TargetCodeGenInfo::performAddrSpaceCast(CodeGenModule &CGM, llvm::Constant *Src,
 }
 
 llvm::SyncScope::ID
-TargetCodeGenInfo::getLLVMSyncScopeID(SyncScope S, llvm::LLVMContext &C) const {
-  return C.getOrInsertSyncScopeID(""); /* default sync scope */
+TargetCodeGenInfo::getLLVMSyncScopeID(const LangOptions &LangOpts,
+                                      SyncScope Scope,
+                                      llvm::AtomicOrdering Ordering,
+                                      llvm::LLVMContext &Ctx) const {
+  return Ctx.getOrInsertSyncScopeID(""); /* default sync scope */
 }
 
 static bool isEmptyRecord(ASTContext &Context, QualType T, bool AllowArrays);
@@ -2268,6 +2271,12 @@ public:
     return static_cast<const X86_64ABIInfo&>(TargetCodeGenInfo::getABIInfo());
   }
 
+  /// Disable tail call on x86-64. The epilogue code before the tail jump blocks
+  /// the autoreleaseRV/retainRV optimization.
+  bool shouldSuppressTailCallsOfRetainAutoreleasedReturnValue() const override {
+    return true;
+  }
+
   int getDwarfEHStackPointer(CodeGen::CodeGenModule &CGM) const override {
     return 7;
   }
@@ -2336,22 +2345,6 @@ public:
         Fn->setCallingConv(llvm::CallingConv::X86_INTR);
       }
     }
-  }
-};
-
-class PS4TargetCodeGenInfo : public X86_64TargetCodeGenInfo {
-public:
-  PS4TargetCodeGenInfo(CodeGen::CodeGenTypes &CGT, X86AVXABILevel AVXLevel)
-    : X86_64TargetCodeGenInfo(CGT, AVXLevel) {}
-
-  void getDependentLibraryOption(llvm::StringRef Lib,
-                                 llvm::SmallString<24> &Opt) const override {
-    Opt = "\01";
-    // If the argument contains a space, enclose it in quotes.
-    if (Lib.find(" ") != StringRef::npos)
-      Opt += "\"" + Lib.str() + "\"";
-    else
-      Opt += Lib;
   }
 };
 
@@ -5285,13 +5278,13 @@ Address AArch64ABIInfo::EmitAAPCSVAArg(Address VAListAddr,
   llvm::BasicBlock *OnStackBlock = CGF.createBasicBlock("vaarg.on_stack");
   llvm::BasicBlock *ContBlock = CGF.createBasicBlock("vaarg.end");
 
-  auto TyInfo = getContext().getTypeInfoInChars(Ty);
-  CharUnits TyAlign = TyInfo.second;
+  CharUnits TySize = getContext().getTypeSizeInChars(Ty);
+  CharUnits TyAlign = getContext().getTypeUnadjustedAlignInChars(Ty);
 
   Address reg_offs_p = Address::invalid();
   llvm::Value *reg_offs = nullptr;
   int reg_top_index;
-  int RegSize = IsIndirect ? 8 : TyInfo.first.getQuantity();
+  int RegSize = IsIndirect ? 8 : TySize.getQuantity();
   if (!IsFPR) {
     // 3 is the field number of __gr_offs
     reg_offs_p = CGF.Builder.CreateStructGEP(VAListAddr, 3, "gr_offs_p");
@@ -5419,8 +5412,8 @@ Address AArch64ABIInfo::EmitAAPCSVAArg(Address VAListAddr,
     CharUnits SlotSize = BaseAddr.getAlignment();
     if (CGF.CGM.getDataLayout().isBigEndian() && !IsIndirect &&
         (IsHFA || !isAggregateTypeForABI(Ty)) &&
-        TyInfo.first < SlotSize) {
-      CharUnits Offset = SlotSize - TyInfo.first;
+        TySize < SlotSize) {
+      CharUnits Offset = SlotSize - TySize;
       BaseAddr = CGF.Builder.CreateConstInBoundsByteGEP(BaseAddr, Offset);
     }
 
@@ -5462,7 +5455,7 @@ Address AArch64ABIInfo::EmitAAPCSVAArg(Address VAListAddr,
   if (IsIndirect)
     StackSize = StackSlotSize;
   else
-    StackSize = TyInfo.first.alignTo(StackSlotSize);
+    StackSize = TySize.alignTo(StackSlotSize);
 
   llvm::Value *StackSizeC = CGF.Builder.getSize(StackSize);
   llvm::Value *NewStack =
@@ -5472,8 +5465,8 @@ Address AArch64ABIInfo::EmitAAPCSVAArg(Address VAListAddr,
   CGF.Builder.CreateStore(NewStack, stack_p);
 
   if (CGF.CGM.getDataLayout().isBigEndian() && !isAggregateTypeForABI(Ty) &&
-      TyInfo.first < StackSlotSize) {
-    CharUnits Offset = StackSlotSize - TyInfo.first;
+      TySize < StackSlotSize) {
+    CharUnits Offset = StackSlotSize - TySize;
     OnStackAddr = CGF.Builder.CreateConstInBoundsByteGEP(OnStackAddr, Offset);
   }
 
@@ -5491,7 +5484,7 @@ Address AArch64ABIInfo::EmitAAPCSVAArg(Address VAListAddr,
 
   if (IsIndirect)
     return Address(CGF.Builder.CreateLoad(ResAddr, "vaarg.addr"),
-                   TyInfo.second);
+                   TyAlign);
 
   return ResAddr;
 }
@@ -5591,8 +5584,10 @@ public:
   ABIKind getABIKind() const { return Kind; }
 
 private:
-  ABIArgInfo classifyReturnType(QualType RetTy, bool isVariadic) const;
-  ABIArgInfo classifyArgumentType(QualType RetTy, bool isVariadic) const;
+  ABIArgInfo classifyReturnType(QualType RetTy, bool isVariadic,
+                                unsigned functionCallConv) const;
+  ABIArgInfo classifyArgumentType(QualType RetTy, bool isVariadic,
+                                  unsigned functionCallConv) const;
   ABIArgInfo classifyHomogeneousAggregate(QualType Ty, const Type *Base,
                                           uint64_t Members) const;
   ABIArgInfo coerceIllegalVector(QualType Ty) const;
@@ -5601,6 +5596,8 @@ private:
   bool isHomogeneousAggregateBaseType(QualType Ty) const override;
   bool isHomogeneousAggregateSmallEnough(const Type *Ty,
                                          uint64_t Members) const override;
+
+  bool isEffectivelyAAPCS_VFP(unsigned callConvention, bool acceptHalf) const;
 
   void computeInfo(CGFunctionInfo &FI) const override;
 
@@ -5722,11 +5719,13 @@ void WindowsARMTargetCodeGenInfo::setTargetAttributes(
 
 void ARMABIInfo::computeInfo(CGFunctionInfo &FI) const {
   if (!::classifyReturnType(getCXXABI(), FI, *this))
-    FI.getReturnInfo() =
-        classifyReturnType(FI.getReturnType(), FI.isVariadic());
+    FI.getReturnInfo() = classifyReturnType(FI.getReturnType(), FI.isVariadic(),
+                                            FI.getCallingConvention());
 
   for (auto &I : FI.arguments())
-    I.info = classifyArgumentType(I.type, FI.isVariadic());
+    I.info = classifyArgumentType(I.type, FI.isVariadic(),
+                                  FI.getCallingConvention());
+
 
   // Always honor user-specified calling convention.
   if (FI.getCallingConvention() != llvm::CallingConv::C)
@@ -5805,8 +5804,8 @@ ABIArgInfo ARMABIInfo::classifyHomogeneousAggregate(QualType Ty,
   return ABIArgInfo::getDirect(nullptr, 0, nullptr, false);
 }
 
-ABIArgInfo ARMABIInfo::classifyArgumentType(QualType Ty,
-                                            bool isVariadic) const {
+ABIArgInfo ARMABIInfo::classifyArgumentType(QualType Ty, bool isVariadic,
+                                            unsigned functionCallConv) const {
   // 6.1.2.1 The following argument types are VFP CPRCs:
   //   A single-precision floating-point type (including promoted
   //   half-precision types); A double-precision floating-point type;
@@ -5814,7 +5813,9 @@ ABIArgInfo ARMABIInfo::classifyArgumentType(QualType Ty,
   //   with a Base Type of a single- or double-precision floating-point type,
   //   64-bit containerized vectors or 128-bit containerized vectors with one
   //   to four Elements.
-  bool IsEffectivelyAAPCS_VFP = getABIKind() == AAPCS_VFP && !isVariadic;
+  // Variadic functions should always marshal to the base standard.
+  bool IsAAPCS_VFP =
+      !isVariadic && isEffectivelyAAPCS_VFP(functionCallConv, /* AAPCS16 */ false);
 
   Ty = useFirstFieldIfTransparentUnion(Ty);
 
@@ -5827,7 +5828,7 @@ ABIArgInfo ARMABIInfo::classifyArgumentType(QualType Ty,
   // half type natively, and does not need to interwork with AAPCS code.
   if ((Ty->isFloat16Type() || Ty->isHalfType()) &&
       !getContext().getLangOpts().NativeHalfArgsAndReturns) {
-    llvm::Type *ResType = IsEffectivelyAAPCS_VFP ?
+    llvm::Type *ResType = IsAAPCS_VFP ?
       llvm::Type::getFloatTy(getVMContext()) :
       llvm::Type::getInt32Ty(getVMContext());
     return ABIArgInfo::getDirect(ResType);
@@ -5851,7 +5852,7 @@ ABIArgInfo ARMABIInfo::classifyArgumentType(QualType Ty,
   if (isEmptyRecord(getContext(), Ty, true))
     return ABIArgInfo::getIgnore();
 
-  if (IsEffectivelyAAPCS_VFP) {
+  if (IsAAPCS_VFP) {
     // Homogeneous Aggregates need to be expanded when we can fit the aggregate
     // into VFP registers.
     const Type *Base = nullptr;
@@ -6008,10 +6009,12 @@ static bool isIntegerLikeType(QualType Ty, ASTContext &Context,
   return true;
 }
 
-ABIArgInfo ARMABIInfo::classifyReturnType(QualType RetTy,
-                                          bool isVariadic) const {
-  bool IsEffectivelyAAPCS_VFP =
-      (getABIKind() == AAPCS_VFP || getABIKind() == AAPCS16_VFP) && !isVariadic;
+ABIArgInfo ARMABIInfo::classifyReturnType(QualType RetTy, bool isVariadic,
+                                          unsigned functionCallConv) const {
+
+  // Variadic functions should always marshal to the base standard.
+  bool IsAAPCS_VFP =
+      !isVariadic && isEffectivelyAAPCS_VFP(functionCallConv, /* AAPCS16 */ true);
 
   if (RetTy->isVoidType())
     return ABIArgInfo::getIgnore();
@@ -6032,7 +6035,7 @@ ABIArgInfo ARMABIInfo::classifyReturnType(QualType RetTy,
   // half type natively, and does not need to interwork with AAPCS code.
   if ((RetTy->isFloat16Type() || RetTy->isHalfType()) &&
       !getContext().getLangOpts().NativeHalfArgsAndReturns) {
-    llvm::Type *ResType = IsEffectivelyAAPCS_VFP ?
+    llvm::Type *ResType = IsAAPCS_VFP ?
       llvm::Type::getFloatTy(getVMContext()) :
       llvm::Type::getInt32Ty(getVMContext());
     return ABIArgInfo::getDirect(ResType);
@@ -6081,7 +6084,7 @@ ABIArgInfo ARMABIInfo::classifyReturnType(QualType RetTy,
     return ABIArgInfo::getIgnore();
 
   // Check for homogeneous aggregates with AAPCS-VFP.
-  if (IsEffectivelyAAPCS_VFP) {
+  if (IsAAPCS_VFP) {
     const Type *Base = nullptr;
     uint64_t Members = 0;
     if (isHomogeneousAggregate(RetTy, Base, Members))
@@ -6186,6 +6189,16 @@ bool ARMABIInfo::isHomogeneousAggregateSmallEnough(const Type *Base,
   return Members <= 4;
 }
 
+bool ARMABIInfo::isEffectivelyAAPCS_VFP(unsigned callConvention,
+                                        bool acceptHalf) const {
+  // Give precedence to user-specified calling conventions.
+  if (callConvention != llvm::CallingConv::C)
+    return (callConvention == llvm::CallingConv::ARM_AAPCS_VFP);
+  else
+    return (getABIKind() == AAPCS_VFP) ||
+           (acceptHalf && (getABIKind() == AAPCS16_VFP));
+}
+
 Address ARMABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
                               QualType Ty) const {
   CharUnits SlotSize = CharUnits::fromQuantity(4);
@@ -6197,19 +6210,19 @@ Address ARMABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
     return Addr;
   }
 
-  auto TyInfo = getContext().getTypeInfoInChars(Ty);
-  CharUnits TyAlignForABI = TyInfo.second;
+  CharUnits TySize = getContext().getTypeSizeInChars(Ty);
+  CharUnits TyAlignForABI = getContext().getTypeUnadjustedAlignInChars(Ty);
 
   // Use indirect if size of the illegal vector is bigger than 16 bytes.
   bool IsIndirect = false;
   const Type *Base = nullptr;
   uint64_t Members = 0;
-  if (TyInfo.first > CharUnits::fromQuantity(16) && isIllegalVectorType(Ty)) {
+  if (TySize > CharUnits::fromQuantity(16) && isIllegalVectorType(Ty)) {
     IsIndirect = true;
 
   // ARMv7k passes structs bigger than 16 bytes indirectly, in space
   // allocated by the caller.
-  } else if (TyInfo.first > CharUnits::fromQuantity(16) &&
+  } else if (TySize > CharUnits::fromQuantity(16) &&
              getABIKind() == ARMABIInfo::AAPCS16_VFP &&
              !isHomogeneousAggregate(Ty, Base, Members)) {
     IsIndirect = true;
@@ -6229,8 +6242,8 @@ Address ARMABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
   } else {
     TyAlignForABI = CharUnits::fromQuantity(4);
   }
-  TyInfo.second = TyAlignForABI;
 
+  std::pair<CharUnits, CharUnits> TyInfo = { TySize, TyAlignForABI };
   return emitVoidPtrVAArg(CGF, VAListAddr, Ty, IsIndirect, TyInfo,
                           SlotSize, /*AllowHigherAlign*/ true);
 }
@@ -7798,8 +7811,10 @@ public:
   }
   LangAS getGlobalVarAddressSpace(CodeGenModule &CGM,
                                   const VarDecl *D) const override;
-  llvm::SyncScope::ID getLLVMSyncScopeID(SyncScope S,
-                                         llvm::LLVMContext &C) const override;
+  llvm::SyncScope::ID getLLVMSyncScopeID(const LangOptions &LangOpts,
+                                         SyncScope Scope,
+                                         llvm::AtomicOrdering Ordering,
+                                         llvm::LLVMContext &Ctx) const override;
   llvm::Function *
   createEnqueuedBlockKernel(CodeGenFunction &CGF,
                             llvm::Function *BlockInvokeFunc,
@@ -7816,7 +7831,8 @@ static bool requiresAMDGPUProtectedVisibility(const Decl *D,
 
   return D->hasAttr<OpenCLKernelAttr>() ||
          (isa<FunctionDecl>(D) && D->hasAttr<CUDAGlobalAttr>()) ||
-         (isa<VarDecl>(D) && D->hasAttr<CUDADeviceAttr>());
+         (isa<VarDecl>(D) &&
+          (D->hasAttr<CUDADeviceAttr>() || D->hasAttr<CUDAConstantAttr>()));
 }
 
 void AMDGPUTargetCodeGenInfo::setTargetAttributes(
@@ -7945,10 +7961,12 @@ AMDGPUTargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
 }
 
 llvm::SyncScope::ID
-AMDGPUTargetCodeGenInfo::getLLVMSyncScopeID(SyncScope S,
-                                            llvm::LLVMContext &C) const {
-  StringRef Name;
-  switch (S) {
+AMDGPUTargetCodeGenInfo::getLLVMSyncScopeID(const LangOptions &LangOpts,
+                                            SyncScope Scope,
+                                            llvm::AtomicOrdering Ordering,
+                                            llvm::LLVMContext &Ctx) const {
+  std::string Name;
+  switch (Scope) {
   case SyncScope::OpenCLWorkGroup:
     Name = "workgroup";
     break;
@@ -7961,7 +7979,15 @@ AMDGPUTargetCodeGenInfo::getLLVMSyncScopeID(SyncScope S,
   case SyncScope::OpenCLSubGroup:
     Name = "wavefront";
   }
-  return C.getOrInsertSyncScopeID(Name);
+
+  if (Ordering != llvm::AtomicOrdering::SequentiallyConsistent) {
+    if (!Name.empty())
+      Name = Twine(Twine(Name) + Twine("-")).str();
+
+    Name = Twine(Twine(Name) + Twine("one-as")).str();
+  }
+
+  return Ctx.getOrInsertSyncScopeID(Name);
 }
 
 bool AMDGPUTargetCodeGenInfo::shouldEmitStaticExternCAliases() const {
@@ -9451,8 +9477,6 @@ const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
     switch (Triple.getOS()) {
     case llvm::Triple::Win32:
       return SetCGInfo(new WinX86_64TargetCodeGenInfo(Types, AVXLevel));
-    case llvm::Triple::PS4:
-      return SetCGInfo(new PS4TargetCodeGenInfo(Types, AVXLevel));
     default:
       return SetCGInfo(new X86_64TargetCodeGenInfo(Types, AVXLevel));
     }

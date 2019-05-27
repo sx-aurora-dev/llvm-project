@@ -15,7 +15,8 @@ define amdgpu_kernel void @dpp_test(i32 addrspace(1)* %out, i32 %in1, i32 %in2) 
 }
 
 ; VI-LABEL: {{^}}dpp_test1:
-; VI: v_add_u32_e32 [[REG:v[0-9]+]], vcc, v{{[0-9]+}}, v{{[0-9]+}}
+; VI-OPT: v_add_u32_e32 [[REG:v[0-9]+]], vcc, v{{[0-9]+}}, v{{[0-9]+}}
+; VI-NOOPT: v_add_u32_e64 [[REG:v[0-9]+]], s{{\[[0-9]+:[0-9]+\]}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; VI-NOOPT: v_mov_b32_e32 v{{[0-9]+}}, 0
 ; VI-NEXT: s_nop 0
 ; VI-NEXT: s_nop 0
@@ -27,9 +28,9 @@ bb:
   %tmp1 = zext i32 %tmp to i64
   %tmp2 = getelementptr inbounds [448 x i32], [448 x i32] addrspace(3)* @0, i32 0, i32 %tmp
   %tmp3 = load i32, i32 addrspace(3)* %tmp2, align 4
-  fence syncscope("workgroup") release
+  fence syncscope("workgroup-one-as") release
   tail call void @llvm.amdgcn.s.barrier()
-  fence syncscope("workgroup") acquire
+  fence syncscope("workgroup-one-as") acquire
   %tmp4 = add nsw i32 %tmp3, %tmp3
   %tmp5 = tail call i32 @llvm.amdgcn.update.dpp.i32(i32 0, i32 %tmp4, i32 177, i32 15, i32 15, i1 zeroext false)
   %tmp6 = add nsw i32 %tmp5, %tmp4

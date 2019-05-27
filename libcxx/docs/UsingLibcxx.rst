@@ -49,6 +49,16 @@ An example of using ``LD_LIBRARY_PATH``:
   $ export LD_LIBRARY_PATH=<libcxx-install-prefix>/lib
   $ ./a.out # Searches for libc++ along LD_LIBRARY_PATH
 
+Using ``<filesystem>``
+======================
+
+Prior to LLVM 9.0, libc++ provides the implementation of the filesystem library
+in a separate static library. Users of ``<filesystem>`` and ``<experimental/filesystem>``
+are required to link ``-lc++fs``. Prior to libc++ 7.0, users of
+``<experimental/filesystem>`` were required to link libc++experimental.
+
+Starting with LLVM 9.0, support for ``<filesystem>`` is provided in the main
+library and nothing special is required to use ``<filesystem>``.
 
 Using libc++experimental and ``<experimental/...>``
 =====================================================
@@ -294,4 +304,41 @@ Entities declared with ``_LIBCPP_NODISCARD_EXT``
 This section lists all extended applications of ``[[nodiscard]]`` to entities
 which no dialect declares as such (See the second form described above).
 
+* ``adjacent_find``
+* ``all_of``
+* ``any_of``
+* ``binary_search``
+* ``clamp``
+* ``count_if``
+* ``count``
+* ``equal_range``
+* ``equal``
+* ``find_end``
+* ``find_first_of``
+* ``find_if_not``
+* ``find_if``
+* ``find``
 * ``get_temporary_buffer``
+* ``includes``
+* ``is_heap_until``
+* ``is_heap``
+* ``is_partitioned``
+* ``is_permutation``
+* ``is_sorted_until``
+* ``is_sorted``
+* ``lexicographical_compare``
+* ``lower_bound``
+* ``max_element``
+* ``max``
+* ``min_element``
+* ``min``
+* ``minmax_element``
+* ``minmax``
+* ``mismatch``
+* ``none_of``
+* ``remove_if``
+* ``remove``
+* ``search_n``
+* ``search``
+* ``unique``
+* ``upper_bound``

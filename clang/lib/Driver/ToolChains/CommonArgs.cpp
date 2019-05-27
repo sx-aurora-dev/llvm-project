@@ -570,40 +570,6 @@ static bool addSanitizerDynamicList(const ToolChain &TC, const ArgList &Args,
   return false;
 }
 
-static void addSanitizerLibPath(const ToolChain &TC, const ArgList &Args,
-                                ArgStringList &CmdArgs, StringRef Name) {
-  for (const auto &LibPath : TC.getLibraryPaths()) {
-    if (!LibPath.empty()) {
-      SmallString<128> P(LibPath);
-      llvm::sys::path::append(P, Name);
-      if (TC.getVFS().exists(P))
-        CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + P));
-    }
-  }
-}
-
-void tools::addSanitizerPathLibArgs(const ToolChain &TC, const ArgList &Args,
-                                    ArgStringList &CmdArgs) {
-  const SanitizerArgs &SanArgs = TC.getSanitizerArgs();
-  if (SanArgs.needsAsanRt()) {
-    addSanitizerLibPath(TC, Args, CmdArgs, "asan");
-  }
-  if (SanArgs.needsHwasanRt()) {
-    addSanitizerLibPath(TC, Args, CmdArgs, "hwasan");
-  }
-  if (SanArgs.needsLsanRt()) {
-    addSanitizerLibPath(TC, Args, CmdArgs, "lsan");
-  }
-  if (SanArgs.needsMsanRt()) {
-    addSanitizerLibPath(TC, Args, CmdArgs, "msan");
-  }
-  if (SanArgs.needsTsanRt()) {
-    addSanitizerLibPath(TC, Args, CmdArgs, "tsan");
-  }
-}
-
-
-
 void tools::linkSanitizerRuntimeDeps(const ToolChain &TC,
                                      ArgStringList &CmdArgs) {
   // Force linking against the system libraries sanitizers depends on
@@ -816,18 +782,26 @@ bool tools::areOptimizationsEnabled(const ArgList &Args) {
   return false;
 }
 
-const char *tools::SplitDebugName(const ArgList &Args,
+const char *tools::SplitDebugName(const ArgList &Args, const InputInfo &Input,
                                   const InputInfo &Output) {
-  SmallString<128> F(Output.isFilename()
-                         ? Output.getFilename()
-                         : llvm::sys::path::stem(Output.getBaseInput()));
-
   if (Arg *A = Args.getLastArg(options::OPT_gsplit_dwarf_EQ))
     if (StringRef(A->getValue()) == "single")
-      return Args.MakeArgString(F);
+      return Args.MakeArgString(Output.getFilename());
 
-  llvm::sys::path::replace_extension(F, "dwo");
-  return Args.MakeArgString(F);
+  Arg *FinalOutput = Args.getLastArg(options::OPT_o);
+  if (FinalOutput && Args.hasArg(options::OPT_c)) {
+    SmallString<128> T(FinalOutput->getValue());
+    llvm::sys::path::replace_extension(T, "dwo");
+    return Args.MakeArgString(T);
+  } else {
+    // Use the compilation dir.
+    SmallString<128> T(
+        Args.getLastArgValue(options::OPT_fdebug_compilation_dir));
+    SmallString<128> F(llvm::sys::path::stem(Input.getBaseInput()));
+    llvm::sys::path::replace_extension(F, "dwo");
+    T += F;
+    return Args.MakeArgString(F);
+  }
 }
 
 void tools::SplitDebugInfo(const ToolChain &TC, Compilation &C, const Tool &T,
@@ -1526,4 +1500,9 @@ SmallString<128> tools::getStatsFileName(const llvm::opt::ArgList &Args,
   llvm::sys::path::append(StatsFile, BaseName);
   llvm::sys::path::replace_extension(StatsFile, "stats");
   return StatsFile;
+}
+
+void tools::addMultilibFlag(bool Enabled, const char *const Flag,
+                            Multilib::flags_list &Flags) {
+  Flags.push_back(std::string(Enabled ? "+" : "-") + Flag);
 }

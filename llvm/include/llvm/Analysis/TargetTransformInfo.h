@@ -80,7 +80,7 @@ public:
   /// API below.
   ///
   /// This is used by targets to construct a TTI wrapping their target-specific
-  /// implementaion that encodes appropriate costs for their target.
+  /// implementation that encodes appropriate costs for their target.
   template <typename T> TargetTransformInfo(T Impl);
 
   /// Construct a baseline TTI object using a minimal implementation of
@@ -246,7 +246,7 @@ public:
                        ArrayRef<const Value *> Arguments,
                        const User *U = nullptr) const;
 
-  /// \Return the expected cost of a memcpy, which could e.g. depend on the
+  /// \return the expected cost of a memcpy, which could e.g. depend on the
   /// source/destination type and alignment and the number of bytes copied.
   int getMemcpyCost(const Instruction *I) const;
 
@@ -304,7 +304,7 @@ public:
 
   // Returns true for the target specific
   // set of operations which produce uniform result
-  // even taking non-unform arguments
+  // even taking non-uniform arguments
   bool isAlwaysUniform(const Value *V) const;
 
   /// Returns the address space ID for a target's 'flat' address space. Note
@@ -499,16 +499,20 @@ public:
   /// modes that operate across loop iterations.
   bool shouldFavorBackedgeIndex(const Loop *L) const;
 
-  /// Return true if the target supports masked load/store
-  /// AVX2 and AVX-512 targets allow masks for consecutive load and store
+  /// Return true if the target supports masked load.
   bool isLegalMaskedStore(Type *DataType) const;
+  /// Return true if the target supports masked store.
   bool isLegalMaskedLoad(Type *DataType) const;
 
-  /// Return true if the target supports masked gather/scatter
-  /// AVX-512 fully supports gather and scatter for vectors with 32 and 64
-  /// bits scalar type.
+  /// Return true if the target supports masked scatter.
   bool isLegalMaskedScatter(Type *DataType) const;
+  /// Return true if the target supports masked gather.
   bool isLegalMaskedGather(Type *DataType) const;
+
+  /// Return true if the target supports masked compress store.
+  bool isLegalMaskedCompressStore(Type *DataType) const;
+  /// Return true if the target supports masked expand load.
+  bool isLegalMaskedExpandLoad(Type *DataType) const;
 
   /// Return true if the target has a unified operation to calculate division
   /// and remainder. If so, the additional implicit multiplication and
@@ -712,7 +716,7 @@ public:
   bool shouldMaximizeVectorBandwidth(bool OptSize) const;
 
   /// \return The minimum vectorization factor for types of given element
-  /// bit width, or 0 if there is no mimimum VF. The returned value only
+  /// bit width, or 0 if there is no minimum VF. The returned value only
   /// applies when shouldMaximizeVectorBandwidth returns true.
   unsigned getMinimumVF(unsigned ElemWidth) const;
 
@@ -1085,6 +1089,8 @@ public:
   virtual bool isLegalMaskedLoad(Type *DataType) = 0;
   virtual bool isLegalMaskedScatter(Type *DataType) = 0;
   virtual bool isLegalMaskedGather(Type *DataType) = 0;
+  virtual bool isLegalMaskedCompressStore(Type *DataType) = 0;
+  virtual bool isLegalMaskedExpandLoad(Type *DataType) = 0;
   virtual bool hasDivRemOp(Type *DataType, bool IsSigned) = 0;
   virtual bool hasVolatileVariant(Instruction *I, unsigned AddrSpace) = 0;
   virtual bool prefersVectorizedAddressing() = 0;
@@ -1335,6 +1341,12 @@ public:
   }
   bool isLegalMaskedGather(Type *DataType) override {
     return Impl.isLegalMaskedGather(DataType);
+  }
+  bool isLegalMaskedCompressStore(Type *DataType) override {
+    return Impl.isLegalMaskedCompressStore(DataType);
+  }
+  bool isLegalMaskedExpandLoad(Type *DataType) override {
+    return Impl.isLegalMaskedExpandLoad(DataType);
   }
   bool hasDivRemOp(Type *DataType, bool IsSigned) override {
     return Impl.hasDivRemOp(DataType, IsSigned);

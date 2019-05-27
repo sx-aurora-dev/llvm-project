@@ -297,6 +297,9 @@ public:
 
     /// The node N that was updated.
     virtual void NodeUpdated(SDNode *N);
+
+    /// The node N that was inserted.
+    virtual void NodeInserted(SDNode *N);
   };
 
   struct DAGNodeDeletedListener : public DAGUpdateListener {
@@ -403,6 +406,7 @@ public:
   const TargetLowering &getTargetLoweringInfo() const { return *TLI; }
   const TargetLibraryInfo &getLibInfo() const { return *LibInfo; }
   const SelectionDAGTargetInfo &getSelectionDAGInfo() const { return *TSI; }
+  const LegacyDivergenceAnalysis *getDivergenceAnalysis() const { return DA; }
   LLVMContext *getContext() const {return Context; }
   OptimizationRemarkEmitter &getORE() const { return *ORE; }
 
@@ -791,6 +795,16 @@ public:
   /// value assuming it was the smaller SrcTy value.
   SDValue getZeroExtendInReg(SDValue Op, const SDLoc &DL, EVT VT);
 
+  /// Convert Op, which must be of integer type, to the integer type VT, by
+  /// either truncating it or performing either zero or sign extension as
+  /// appropriate extension for the pointer's semantics.
+  SDValue getPtrExtOrTrunc(SDValue Op, const SDLoc &DL, EVT VT);
+
+  /// Return the expression required to extend the Op as a pointer value
+  /// assuming it was the smaller SrcTy value. This may be either a zero extend
+  /// or a sign extend.
+  SDValue getPtrExtendInReg(SDValue Op, const SDLoc &DL, EVT VT);
+
   /// Convert Op, which must be of integer type, to the integer type VT,
   /// by using an extension appropriate for the target's
   /// BooleanContent for type OpVT or truncating it.
@@ -972,6 +986,10 @@ public:
 
   /// Try to simplify a shift into 1 of its operands or a constant.
   SDValue simplifyShift(SDValue X, SDValue Y);
+
+  /// Try to simplify a floating-point binary operation into 1 of its operands
+  /// or a constant.
+  SDValue simplifyFPBinop(unsigned Opcode, SDValue X, SDValue Y);
 
   /// VAArg produces a result and token chain, and takes a pointer
   /// and a source value as input.
@@ -1431,8 +1449,14 @@ public:
   /// Return true if 'Op & Mask' is known to be zero.  We
   /// use this predicate to simplify operations downstream.  Op and Mask are
   /// known to be the same type.
-  bool MaskedValueIsZero(SDValue Op, const APInt &Mask, unsigned Depth = 0)
-    const;
+  bool MaskedValueIsZero(SDValue Op, const APInt &Mask,
+                         unsigned Depth = 0) const;
+
+  /// Return true if 'Op & Mask' is known to be zero in DemandedElts.  We
+  /// use this predicate to simplify operations downstream.  Op and Mask are
+  /// known to be the same type.
+  bool MaskedValueIsZero(SDValue Op, const APInt &Mask,
+                         const APInt &DemandedElts, unsigned Depth = 0) const;
 
   /// Determine which bits of Op are known to be either zero or one and return
   /// them in Known. For vectors, the known bits are those that are shared by
@@ -1531,6 +1555,13 @@ public:
 
   /// Test whether \p V has a splatted value.
   bool isSplatValue(SDValue V, bool AllowUndefs = false);
+
+  /// If V is a splatted value, return the source vector and its splat index.
+  SDValue getSplatSourceVector(SDValue V, int &SplatIndex);
+
+  /// If V is a splat vector, return its scalar source operand by extracting
+  /// that element from the source vector.
+  SDValue getSplatValue(SDValue V);
 
   /// Match a binop + shuffle pyramid that represents a horizontal reduction
   /// over the elements of a vector starting from the EXTRACT_VECTOR_ELT node /p

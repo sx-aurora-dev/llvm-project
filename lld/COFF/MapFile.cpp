@@ -32,8 +32,8 @@ using namespace llvm::object;
 using namespace lld;
 using namespace lld::coff;
 
-typedef DenseMap<const SectionChunk *, SmallVector<DefinedRegular *, 4>>
-    SymbolMapTy;
+using SymbolMapTy =
+    DenseMap<const SectionChunk *, SmallVector<DefinedRegular *, 4>>;
 
 static const std::string Indent8 = "        ";          // 8 spaces
 static const std::string Indent16 = "                "; // 16 spaces
@@ -114,7 +114,7 @@ void coff::writeMapFile(ArrayRef<OutputSection *> OutputSections) {
       if (!SC)
         continue;
 
-      writeHeader(OS, SC->getRVA(), SC->getSize(), SC->Alignment);
+      writeHeader(OS, SC->getRVA(), SC->getSize(), SC->getAlignment());
       OS << Indent8 << SC->File->getName() << ":(" << SC->getSectionName()
          << ")\n";
       for (DefinedRegular *Sym : SectionSyms[SC])

@@ -28,6 +28,7 @@
 #include "clang/Index/IndexSymbol.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/raw_ostream.h"
 #include <bitset>
 #include <string>
 #include <vector>
@@ -205,11 +206,10 @@ struct TextEdit {
   /// The string to be inserted. For delete operations use an
   /// empty string.
   std::string newText;
-
-  bool operator==(const TextEdit &rhs) const {
-    return newText == rhs.newText && range == rhs.range;
-  }
 };
+inline bool operator==(const TextEdit &L, const TextEdit &R) {
+  return std::tie(L.newText, L.range) == std::tie(R.newText, R.range);
+}
 bool fromJSON(const llvm::json::Value &, TextEdit &);
 llvm::json::Value toJSON(const TextEdit &);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const TextEdit &);
@@ -293,7 +293,7 @@ using CompletionItemKindBitset = std::bitset<CompletionItemKindMax + 1>;
 bool fromJSON(const llvm::json::Value &, CompletionItemKindBitset &);
 CompletionItemKind
 adjustKindToCapability(CompletionItemKind Kind,
-                       CompletionItemKindBitset &supportedCompletionItemKinds);
+                       CompletionItemKindBitset &SupportedCompletionItemKinds);
 
 /// A symbol kind.
 enum class SymbolKind {
@@ -338,6 +338,21 @@ SymbolKind adjustKindToCapability(SymbolKind Kind,
 // https://github.com/Microsoft/language-server-protocol/issues/344
 SymbolKind indexSymbolKindToSymbolKind(index::SymbolKind Kind);
 
+// Determines the encoding used to measure offsets and lengths of source in LSP.
+enum class OffsetEncoding {
+  // Any string is legal on the wire. Unrecognized encodings parse as this.
+  UnsupportedEncoding,
+  // Length counts code units of UTF-16 encoded text. (Standard LSP behavior).
+  UTF16,
+  // Length counts bytes of UTF-8 encoded text. (Clangd extension).
+  UTF8,
+  // Length counts codepoints in unicode text. (Clangd extension).
+  UTF32,
+};
+llvm::json::Value toJSON(const OffsetEncoding &);
+bool fromJSON(const llvm::json::Value &, OffsetEncoding &);
+llvm::raw_ostream &operator<<(llvm::raw_ostream &, OffsetEncoding);
+
 // This struct doesn't mirror LSP!
 // The protocol defines deeply nested structures for client capabilities.
 // Instead of mapping them all, this just parses out the bits we care about.
@@ -349,6 +364,10 @@ struct ClientCapabilities {
   /// Whether the client accepts diagnostics with codeActions attached inline.
   /// textDocument.publishDiagnostics.codeActionsInline.
   bool DiagnosticFixes = false;
+
+  /// Whether the client accepts diagnostics with related locations.
+  /// textDocument.publishDiagnostics.relatedInformation.
+  bool DiagnosticRelatedInformation = false;
 
   /// Whether the client accepts diagnostics with category attached to it
   /// using the "category" extension.
@@ -369,6 +388,9 @@ struct ClientCapabilities {
   /// Client supports CodeAction return value for textDocument/codeAction.
   /// textDocument.codeAction.codeActionLiteralSupport.
   bool CodeActionStructure = false;
+
+  /// Supported encodings for LSP character offsets. (clangd extension).
+  llvm::Optional<std::vector<OffsetEncoding>> offsetEncoding;
 };
 bool fromJSON(const llvm::json::Value &, ClientCapabilities &);
 
@@ -563,6 +585,18 @@ struct DocumentSymbolParams {
 };
 bool fromJSON(const llvm::json::Value &, DocumentSymbolParams &);
 
+
+/// Represents a related message and source code location for a diagnostic.
+/// This should be used to point to code locations that cause or related to a
+/// diagnostics, e.g when duplicating a symbol in a scope.
+struct DiagnosticRelatedInformation {
+  /// The location of this related diagnostic information.
+  Location location;
+  /// The message of this related diagnostic information.
+  std::string message;
+};
+llvm::json::Value toJSON(const DiagnosticRelatedInformation &);
+
 struct CodeAction;
 struct Diagnostic {
   /// The range at which the message applies.
@@ -573,16 +607,18 @@ struct Diagnostic {
   int severity = 0;
 
   /// The diagnostic's code. Can be omitted.
-  /// Note: Not currently used by clangd
-  // std::string code;
+  std::string code;
 
   /// A human-readable string describing the source of this
   /// diagnostic, e.g. 'typescript' or 'super lint'.
-  /// Note: Not currently used by clangd
-  // std::string source;
+  std::string source;
 
   /// The diagnostic's message.
   std::string message;
+
+  /// An array of related diagnostic information, e.g. when symbol-names within
+  /// a scope collide all definitions can be marked via this property.
+  llvm::Optional<std::vector<DiagnosticRelatedInformation>> relatedInformation;
 
   /// The diagnostic's category. Can be omitted.
   /// An LSP extension that's used to send the name of the category over to the

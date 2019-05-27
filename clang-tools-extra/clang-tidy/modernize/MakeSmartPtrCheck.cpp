@@ -65,11 +65,13 @@ bool MakeSmartPtrCheck::isLanguageVersionSupported(
   return LangOpts.CPlusPlus11;
 }
 
-void MakeSmartPtrCheck::registerPPCallbacks(CompilerInstance &Compiler) {
+void MakeSmartPtrCheck::registerPPCallbacks(const SourceManager &SM,
+                                            Preprocessor *PP,
+                                            Preprocessor *ModuleExpanderPP) {
   if (isLanguageVersionSupported(getLangOpts())) {
-    Inserter = llvm::make_unique<utils::IncludeInserter>(
-        Compiler.getSourceManager(), Compiler.getLangOpts(), IncludeStyle);
-    Compiler.getPreprocessor().addPPCallbacks(Inserter->CreatePPCallbacks());
+    Inserter = llvm::make_unique<utils::IncludeInserter>(SM, getLangOpts(),
+                                                         IncludeStyle);
+    PP->addPPCallbacks(Inserter->CreatePPCallbacks());
   }
 }
 
@@ -276,7 +278,7 @@ bool MakeSmartPtrCheck::replaceNew(DiagnosticBuilder &Diag,
     return false;
 
   std::string ArraySizeExpr;
-  if (const auto* ArraySize = New->getArraySize()) {
+  if (const auto* ArraySize = New->getArraySize().getValueOr(nullptr)) {
     ArraySizeExpr = Lexer::getSourceText(CharSourceRange::getTokenRange(
                                              ArraySize->getSourceRange()),
                                          SM, getLangOpts())
@@ -290,12 +292,13 @@ bool MakeSmartPtrCheck::replaceNew(DiagnosticBuilder &Diag,
   //   Foo{1} => false
   auto HasListIntializedArgument = [](const CXXConstructExpr *CE) {
     for (const auto *Arg : CE->arguments()) {
+      Arg = Arg->IgnoreImplicit();
+
       if (isa<CXXStdInitializerListExpr>(Arg) || isa<InitListExpr>(Arg))
         return true;
       // Check whether we implicitly construct a class from a
       // std::initializer_list.
-      if (const auto *ImplicitCE =
-              dyn_cast<CXXConstructExpr>(Arg->IgnoreImplicit())) {
+      if (const auto *ImplicitCE = dyn_cast<CXXConstructExpr>(Arg)) {
         if (ImplicitCE->isStdInitListInitialization())
           return true;
       }

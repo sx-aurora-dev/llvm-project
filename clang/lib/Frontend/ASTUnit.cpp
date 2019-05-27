@@ -1078,28 +1078,29 @@ bool ASTUnit::Parse(std::shared_ptr<PCHContainerOperations> PCHContainerOps,
   if (!Invocation)
     return true;
 
+  if (VFS && FileMgr)
+    assert(VFS == &FileMgr->getVirtualFileSystem() &&
+           "VFS passed to Parse and VFS in FileMgr are different");
+
   auto CCInvocation = std::make_shared<CompilerInvocation>(*Invocation);
   if (OverrideMainBuffer) {
     assert(Preamble &&
            "No preamble was built, but OverrideMainBuffer is not null");
-    IntrusiveRefCntPtr<llvm::vfs::FileSystem> OldVFS = VFS;
     Preamble->AddImplicitPreamble(*CCInvocation, VFS, OverrideMainBuffer.get());
-    if (OldVFS != VFS && FileMgr) {
-      assert(OldVFS == FileMgr->getVirtualFileSystem() &&
-             "VFS passed to Parse and VFS in FileMgr are different");
-      FileMgr = new FileManager(FileMgr->getFileSystemOpts(), VFS);
-    }
+    // VFS may have changed...
   }
 
   // Create the compiler instance to use for building the AST.
   std::unique_ptr<CompilerInstance> Clang(
       new CompilerInstance(std::move(PCHContainerOps)));
-  if (FileMgr && VFS) {
-    assert(VFS == FileMgr->getVirtualFileSystem() &&
-           "VFS passed to Parse and VFS in FileMgr are different");
-  } else if (VFS) {
-    Clang->setVirtualFileSystem(VFS);
-  }
+
+  // Ensure that Clang has a FileManager with the right VFS, which may have
+  // changed above in AddImplicitPreamble.  If VFS is nullptr, rely on
+  // createFileManager to create one.
+  if (VFS && FileMgr && &FileMgr->getVirtualFileSystem() == VFS)
+    Clang->setFileManager(&*FileMgr);
+  else
+    FileMgr = Clang->createFileManager(std::move(VFS));
 
   // Recover resources if we crash before exiting this method.
   llvm::CrashRecoveryContextCleanupRegistrar<CompilerInstance>
@@ -1136,10 +1137,6 @@ bool ASTUnit::Parse(std::shared_ptr<PCHContainerOperations> PCHContainerOps,
   // Configure the various subsystems.
   LangOpts = Clang->getInvocation().LangOpts;
   FileSystemOpts = Clang->getFileSystemOpts();
-  if (!FileMgr) {
-    Clang->createFileManager();
-    FileMgr = &Clang->getFileManager();
-  }
 
   ResetForParse();
 
@@ -1307,22 +1304,22 @@ ASTUnit::getMainBufferWithPrecompiledPreamble(
                             PreambleInvocationIn.getDiagnosticOpts());
       getDiagnostics().setNumWarnings(NumWarningsInPreamble);
 
-      PreambleRebuildCounter = 1;
+      PreambleRebuildCountdown = 1;
       return MainFileBuffer;
     } else {
       Preamble.reset();
       PreambleDiagnostics.clear();
       TopLevelDeclsInPreamble.clear();
       PreambleSrcLocCache.clear();
-      PreambleRebuildCounter = 1;
+      PreambleRebuildCountdown = 1;
     }
   }
 
   // If the preamble rebuild counter > 1, it's because we previously
   // failed to build a preamble and we're not yet ready to try
   // again. Decrement the counter and return a failure.
-  if (PreambleRebuildCounter > 1) {
-    --PreambleRebuildCounter;
+  if (PreambleRebuildCountdown > 1) {
+    --PreambleRebuildCountdown;
     return nullptr;
   }
 
@@ -1331,6 +1328,8 @@ ASTUnit::getMainBufferWithPrecompiledPreamble(
   // return now.
   if (!AllowRebuild)
     return nullptr;
+
+  ++PreambleCounter;
 
   SmallVector<StandaloneDiagnostic, 4> NewPreambleDiagsStandalone;
   SmallVector<StoredDiagnostic, 4> NewPreambleDiags;
@@ -1359,18 +1358,19 @@ ASTUnit::getMainBufferWithPrecompiledPreamble(
 
     if (NewPreamble) {
       Preamble = std::move(*NewPreamble);
-      PreambleRebuildCounter = 1;
+      PreambleRebuildCountdown = 1;
     } else {
       switch (static_cast<BuildPreambleError>(NewPreamble.getError().value())) {
       case BuildPreambleError::CouldntCreateTempFile:
         // Try again next time.
-        PreambleRebuildCounter = 1;
+        PreambleRebuildCountdown = 1;
         return nullptr;
       case BuildPreambleError::CouldntCreateTargetInfo:
       case BuildPreambleError::BeginSourceFileFailed:
       case BuildPreambleError::CouldntEmitPCH:
+      case BuildPreambleError::BadInputs:
         // These erros are more likely to repeat, retry after some period.
-        PreambleRebuildCounter = DefaultPreambleRebuildInterval;
+        PreambleRebuildCountdown = DefaultPreambleRebuildInterval;
         return nullptr;
       }
       llvm_unreachable("unexpected BuildPreambleError");
@@ -1510,7 +1510,7 @@ ASTUnit *ASTUnit::LoadFromCompilerInvocationAction(
   AST->OnlyLocalDecls = OnlyLocalDecls;
   AST->CaptureDiagnostics = CaptureDiagnostics;
   if (PrecompilePreambleAfterNParses > 0)
-    AST->PreambleRebuildCounter = PrecompilePreambleAfterNParses;
+    AST->PreambleRebuildCountdown = PrecompilePreambleAfterNParses;
   AST->TUKind = Action ? Action->getTranslationUnitKind() : TU_Complete;
   AST->ShouldCacheCodeCompletionResults = CacheCodeCompletionResults;
   AST->IncludeBriefCommentsInCodeCompletion
@@ -1644,7 +1644,7 @@ bool ASTUnit::LoadFromCompilerInvocation(
 
   std::unique_ptr<llvm::MemoryBuffer> OverrideMainBuffer;
   if (PrecompilePreambleAfterNParses > 0) {
-    PreambleRebuildCounter = PrecompilePreambleAfterNParses;
+    PreambleRebuildCountdown = PrecompilePreambleAfterNParses;
     OverrideMainBuffer =
         getMainBufferWithPrecompiledPreamble(PCHContainerOps, *Invocation, VFS);
     getDiagnostics().Reset();
@@ -1693,7 +1693,7 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromCompilerInvocation(
 
   if (AST->LoadFromCompilerInvocation(std::move(PCHContainerOps),
                                       PrecompilePreambleAfterNParses,
-                                      AST->FileMgr->getVirtualFileSystem()))
+                                      &AST->FileMgr->getVirtualFileSystem()))
     return nullptr;
   return AST;
 }
@@ -1800,7 +1800,7 @@ bool ASTUnit::Reparse(std::shared_ptr<PCHContainerOperations> PCHContainerOps,
 
   if (!VFS) {
     assert(FileMgr && "FileMgr is null on Reparse call");
-    VFS = FileMgr->getVirtualFileSystem();
+    VFS = &FileMgr->getVirtualFileSystem();
   }
 
   clearFileLevelDecls();
@@ -1822,7 +1822,7 @@ bool ASTUnit::Reparse(std::shared_ptr<PCHContainerOperations> PCHContainerOps,
   // If we have a preamble file lying around, or if we might try to
   // build a precompiled preamble, do so now.
   std::unique_ptr<llvm::MemoryBuffer> OverrideMainBuffer;
-  if (Preamble || PreambleRebuildCounter > 0)
+  if (Preamble || PreambleRebuildCountdown > 0)
     OverrideMainBuffer =
         getMainBufferWithPrecompiledPreamble(PCHContainerOps, *Invocation, VFS);
 
@@ -1880,8 +1880,7 @@ namespace {
   public:
     AugmentedCodeCompleteConsumer(ASTUnit &AST, CodeCompleteConsumer &Next,
                                   const CodeCompleteOptions &CodeCompleteOpts)
-        : CodeCompleteConsumer(CodeCompleteOpts, Next.isOutputBinary()),
-          AST(AST), Next(Next) {
+        : CodeCompleteConsumer(CodeCompleteOpts), AST(AST), Next(Next) {
       // Compute the set of contexts in which we will look when we don't have
       // any information about the specific context.
       NormalContexts
@@ -2214,18 +2213,18 @@ void ASTUnit::CodeComplete(
   if (Preamble) {
     std::string CompleteFilePath(File);
 
-    auto VFS = FileMgr.getVirtualFileSystem();
-    auto CompleteFileStatus = VFS->status(CompleteFilePath);
+    auto &VFS = FileMgr.getVirtualFileSystem();
+    auto CompleteFileStatus = VFS.status(CompleteFilePath);
     if (CompleteFileStatus) {
       llvm::sys::fs::UniqueID CompleteFileID = CompleteFileStatus->getUniqueID();
 
       std::string MainPath(OriginalSourceFile);
-      auto MainStatus = VFS->status(MainPath);
+      auto MainStatus = VFS.status(MainPath);
       if (MainStatus) {
         llvm::sys::fs::UniqueID MainID = MainStatus->getUniqueID();
         if (CompleteFileID == MainID && Line > 1)
           OverrideMainBuffer = getMainBufferWithPrecompiledPreamble(
-              PCHContainerOps, Inv, VFS, false, Line - 1);
+              PCHContainerOps, Inv, &VFS, false, Line - 1);
       }
     }
   }
@@ -2236,7 +2235,8 @@ void ASTUnit::CodeComplete(
     assert(Preamble &&
            "No preamble was built, but OverrideMainBuffer is not null");
 
-    auto VFS = FileMgr.getVirtualFileSystem();
+    IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS =
+        &FileMgr.getVirtualFileSystem();
     Preamble->AddImplicitPreamble(Clang->getInvocation(), VFS,
                                   OverrideMainBuffer.get());
     // FIXME: there is no way to update VFS if it was changed by

@@ -17,6 +17,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
@@ -76,6 +77,7 @@ class ResumeInst;
 class ReturnInst;
 class SDDbgValue;
 class StoreInst;
+class SwiftErrorValueTracking;
 class SwitchInst;
 class TargetLibraryInfo;
 class TargetMachine;
@@ -121,7 +123,7 @@ class SelectionDAGBuilder {
 
   /// Keeps track of dbg_values for which we have not yet seen the referent.
   /// We defer handling these until we do see it.
-  DenseMap<const Value*, DanglingDebugInfoVector> DanglingDebugInfoMap;
+  MapVector<const Value*, DanglingDebugInfoVector> DanglingDebugInfoMap;
 
 public:
   /// Loads are not emitted to the program immediately.  We bunch them up and
@@ -225,6 +227,8 @@ private:
   /// multi-case switch statements.
   struct CaseBlock {
     // The condition code to use for the case block's setcc node.
+    // Besides the integer condition codes, this can also be SETTRUE, in which
+    // case no comparison gets emitted.
     ISD::CondCode CC;
 
     // The LHS/MHS/RHS of the comparison to emit.
@@ -277,11 +281,12 @@ private:
     const Value *SValue;
     MachineBasicBlock *HeaderBB;
     bool Emitted;
+    bool OmitRangeCheck;
 
     JumpTableHeader(APInt F, APInt L, const Value *SV, MachineBasicBlock *H,
                     bool E = false)
         : First(std::move(F)), Last(std::move(L)), SValue(SV), HeaderBB(H),
-          Emitted(E) {}
+          Emitted(E), OmitRangeCheck(false) {}
   };
   using JumpTableBlock = std::pair<JumpTableHeader, JumpTable>;
 
@@ -609,6 +614,9 @@ public:
   /// Information about the function as a whole.
   FunctionLoweringInfo &FuncInfo;
 
+  /// Information about the swifterror values used throughout the function.
+  SwiftErrorValueTracking &SwiftError;
+
   /// Garbage collection metadata for the function.
   GCFunctionInfo *GFI;
 
@@ -622,9 +630,9 @@ public:
   LLVMContext *Context;
 
   SelectionDAGBuilder(SelectionDAG &dag, FunctionLoweringInfo &funcinfo,
-                      CodeGenOpt::Level ol)
-    : SDNodeOrder(LowestSDNodeOrder), TM(dag.getTarget()), DAG(dag),
-      FuncInfo(funcinfo) {}
+                      SwiftErrorValueTracking &swifterror, CodeGenOpt::Level ol)
+      : SDNodeOrder(LowestSDNodeOrder), TM(dag.getTarget()), DAG(dag),
+        FuncInfo(funcinfo), SwiftError(swifterror) {}
 
   void init(GCFunctionInfo *gfi, AliasAnalysis *AA,
             const TargetLibraryInfo *li);
@@ -943,7 +951,7 @@ private:
   void visitStoreToSwiftError(const StoreInst &I);
 
   void visitInlineAsm(ImmutableCallSite CS);
-  const char *visitIntrinsicCall(const CallInst &I, unsigned Intrinsic);
+  void visitIntrinsicCall(const CallInst &I, unsigned Intrinsic);
   void visitTargetIntrinsic(const CallInst &I, unsigned Intrinsic);
   void visitConstrainedFPIntrinsic(const ConstrainedFPIntrinsic &FPI);
 
@@ -993,6 +1001,9 @@ private:
   SDDbgValue *getDbgValue(SDValue N, DILocalVariable *Variable,
                           DIExpression *Expr, const DebugLoc &dl,
                           unsigned DbgSDNodeOrder);
+
+  /// Lowers CallInst to an external symbol.
+  void lowerCallToExternalSymbol(const CallInst &I, const char *FunctionName);
 };
 
 /// This struct represents the registers (physical or virtual)

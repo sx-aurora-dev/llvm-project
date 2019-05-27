@@ -52,28 +52,50 @@ def vfp_f16imm : Operand<f16>,
   let ParserMatchClass = FPImmOperand;
 }
 
-def vfp_f32imm : Operand<f32>,
-                 PatLeaf<(f32 fpimm), [{
-      return ARM_AM::getFP32Imm(N->getValueAPF()) != -1;
-    }], SDNodeXForm<fpimm, [{
+def vfp_f32imm_xform : SDNodeXForm<fpimm, [{
       APFloat InVal = N->getValueAPF();
       uint32_t enc = ARM_AM::getFP32Imm(InVal);
       return CurDAG->getTargetConstant(enc, SDLoc(N), MVT::i32);
-    }]>> {
+    }]>;
+
+def gi_vfp_f32imm : GICustomOperandRenderer<"renderVFPF32Imm">,
+                    GISDNodeXFormEquiv<vfp_f32imm_xform>;
+
+def vfp_f32imm : Operand<f32>,
+                 PatLeaf<(f32 fpimm), [{
+      return ARM_AM::getFP32Imm(N->getValueAPF()) != -1;
+    }], vfp_f32imm_xform> {
   let PrintMethod = "printFPImmOperand";
   let ParserMatchClass = FPImmOperand;
+  let GISelPredicateCode = [{
+      const auto &MO = MI.getOperand(1);
+      if (!MO.isFPImm())
+        return false;
+      return ARM_AM::getFP32Imm(MO.getFPImm()->getValueAPF()) != -1;
+    }];
 }
+
+def vfp_f64imm_xform : SDNodeXForm<fpimm, [{
+      APFloat InVal = N->getValueAPF();
+      uint32_t enc = ARM_AM::getFP64Imm(InVal);
+      return CurDAG->getTargetConstant(enc, SDLoc(N), MVT::i32);
+    }]>;
+
+def gi_vfp_f64imm : GICustomOperandRenderer<"renderVFPF64Imm">,
+                    GISDNodeXFormEquiv<vfp_f64imm_xform>;
 
 def vfp_f64imm : Operand<f64>,
                  PatLeaf<(f64 fpimm), [{
       return ARM_AM::getFP64Imm(N->getValueAPF()) != -1;
-    }], SDNodeXForm<fpimm, [{
-      APFloat InVal = N->getValueAPF();
-      uint32_t enc = ARM_AM::getFP64Imm(InVal);
-      return CurDAG->getTargetConstant(enc, SDLoc(N), MVT::i32);
-    }]>> {
+    }], vfp_f64imm_xform> {
   let PrintMethod = "printFPImmOperand";
   let ParserMatchClass = FPImmOperand;
+  let GISelPredicateCode = [{
+      const auto &MO = MI.getOperand(1);
+      if (!MO.isFPImm())
+        return false;
+      return ARM_AM::getFP64Imm(MO.getFPImm()->getValueAPF()) != -1;
+    }];
 }
 
 def alignedload16 : PatFrag<(ops node:$ptr), (load node:$ptr), [{
@@ -573,9 +595,9 @@ def VABSS  : ASuIn<0b11101, 0b11, 0b0000, 0b11, 0,
 }
 
 def VABSH  : AHuI<0b11101, 0b11, 0b0000, 0b11, 0,
-                   (outs SPR:$Sd), (ins SPR:$Sm),
+                   (outs HPR:$Sd), (ins HPR:$Sm),
                    IIC_fpUNA16, "vabs", ".f16\t$Sd, $Sm",
-                   []>;
+                   [(set HPR:$Sd, (fabs (f16 HPR:$Sm)))]>;
 
 let Defs = [FPSCR_NZCV] in {
 def VCMPEZD : ADuI<0b11101, 0b11, 0b0101, 0b11, 0,
@@ -908,9 +930,9 @@ def VNEGH  : AHuI<0b11101, 0b11, 0b0001, 0b01, 0,
 
 multiclass vrint_inst_zrx<string opc, bit op, bit op2, SDPatternOperator node> {
   def H : AHuI<0b11101, 0b11, 0b0110, 0b11, 0,
-               (outs SPR:$Sd), (ins SPR:$Sm),
+               (outs HPR:$Sd), (ins HPR:$Sm),
                NoItinerary, !strconcat("vrint", opc), ".f16\t$Sd, $Sm",
-               []>,
+               [(set (f16 HPR:$Sd), (node (f16 HPR:$Sm)))]>,
                Requires<[HasFullFP16]> {
     let Inst{7} = op2;
     let Inst{16} = op;
@@ -953,9 +975,9 @@ multiclass vrint_inst_anpm<string opc, bits<2> rm,
   let PostEncoderMethod = "", DecoderNamespace = "VFPV8",
       isUnpredicable = 1 in {
     def H : AHuInp<0b11101, 0b11, 0b1000, 0b01, 0,
-                   (outs SPR:$Sd), (ins SPR:$Sm),
+                   (outs HPR:$Sd), (ins HPR:$Sm),
                    NoItinerary, !strconcat("vrint", opc, ".f16\t$Sd, $Sm"),
-                   []>,
+                   [(set (f16 HPR:$Sd), (node (f16 HPR:$Sm)))]>,
                    Requires<[HasFullFP16]> {
       let Inst{17-16} = rm;
     }
@@ -1001,9 +1023,9 @@ def VSQRTS : ASuI<0b11101, 0b11, 0b0001, 0b11, 0,
              Sched<[WriteFPSQRT32]>;
 
 def VSQRTH : AHuI<0b11101, 0b11, 0b0001, 0b11, 0,
-                  (outs SPR:$Sd), (ins SPR:$Sm),
+                  (outs HPR:$Sd), (ins HPR:$Sm),
                   IIC_fpSQRT16, "vsqrt", ".f16\t$Sd, $Sm",
-                  []>;
+                  [(set HPR:$Sd, (fsqrt (f16 HPR:$Sm)))]>;
 
 let hasSideEffects = 0 in {
 let isMoveReg = 1 in {
@@ -2051,6 +2073,9 @@ def : Pat<(f64 (fma DPR:$Dn, DPR:$Dm, DPR:$Ddin)),
 def : Pat<(f32 (fma SPR:$Sn, SPR:$Sm, SPR:$Sdin)),
           (VFMAS SPR:$Sdin, SPR:$Sn, SPR:$Sm)>,
       Requires<[HasVFP4]>;
+def : Pat<(f16 (fma HPR:$Sn, HPR:$Sm, HPR:$Sdin)),
+          (VFMAH HPR:$Sdin, HPR:$Sn, HPR:$Sm)>,
+      Requires<[HasFullFP16]>;
 
 def VFMSD : ADbI<0b11101, 0b10, 1, 0,
                  (outs DPR:$Dd), (ins DPR:$Ddin, DPR:$Dn, DPR:$Dm),

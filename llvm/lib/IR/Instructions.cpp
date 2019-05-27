@@ -28,6 +28,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
@@ -456,6 +457,58 @@ CallInst *CallInst::Create(CallInst *CI, ArrayRef<OperandBundleDef> OpB,
   NewCI->setAttributes(CI->getAttributes());
   NewCI->setDebugLoc(CI->getDebugLoc());
   return NewCI;
+}
+
+// Update profile weight for call instruction by scaling it using the ratio
+// of S/T. The meaning of "branch_weights" meta data for call instruction is
+// transfered to represent call count.
+void CallInst::updateProfWeight(uint64_t S, uint64_t T) {
+  auto *ProfileData = getMetadata(LLVMContext::MD_prof);
+  if (ProfileData == nullptr)
+    return;
+
+  auto *ProfDataName = dyn_cast<MDString>(ProfileData->getOperand(0));
+  if (!ProfDataName || (!ProfDataName->getString().equals("branch_weights") &&
+                        !ProfDataName->getString().equals("VP")))
+    return;
+
+  if (T == 0) {
+    LLVM_DEBUG(dbgs() << "Attempting to update profile weights will result in "
+                         "div by 0. Ignoring. Likely the function "
+                      << getParent()->getParent()->getName()
+                      << " has 0 entry count, and contains call instructions "
+                         "with non-zero prof info.");
+    return;
+  }
+
+  MDBuilder MDB(getContext());
+  SmallVector<Metadata *, 3> Vals;
+  Vals.push_back(ProfileData->getOperand(0));
+  APInt APS(128, S), APT(128, T);
+  if (ProfDataName->getString().equals("branch_weights") &&
+      ProfileData->getNumOperands() > 0) {
+    // Using APInt::div may be expensive, but most cases should fit 64 bits.
+    APInt Val(128, mdconst::dyn_extract<ConstantInt>(ProfileData->getOperand(1))
+                       ->getValue()
+                       .getZExtValue());
+    Val *= APS;
+    Vals.push_back(MDB.createConstant(ConstantInt::get(
+        Type::getInt64Ty(getContext()), Val.udiv(APT).getLimitedValue())));
+  } else if (ProfDataName->getString().equals("VP"))
+    for (unsigned i = 1; i < ProfileData->getNumOperands(); i += 2) {
+      // The first value is the key of the value profile, which will not change.
+      Vals.push_back(ProfileData->getOperand(i));
+      // Using APInt::div may be expensive, but most cases should fit 64 bits.
+      APInt Val(128,
+                mdconst::dyn_extract<ConstantInt>(ProfileData->getOperand(i + 1))
+                    ->getValue()
+                    .getZExtValue());
+      Val *= APS;
+      Vals.push_back(MDB.createConstant(
+          ConstantInt::get(Type::getInt64Ty(getContext()),
+                           Val.udiv(APT).getLimitedValue())));
+    }
+  setMetadata(LLVMContext::MD_prof, MDNode::get(getContext(), Vals));
 }
 
 /// IsConstantOne - Return true only if val is constant int 1
@@ -1748,6 +1801,25 @@ ShuffleVectorInst::ShuffleVectorInst(Value *V1, Value *V2, Value *Mask,
   Op<1>() = V2;
   Op<2>() = Mask;
   setName(Name);
+}
+
+void ShuffleVectorInst::commute() {
+  int NumOpElts = Op<0>()->getType()->getVectorNumElements();
+  int NumMaskElts = getMask()->getType()->getVectorNumElements();
+  SmallVector<Constant*, 16> NewMask(NumMaskElts);
+  Type *Int32Ty = Type::getInt32Ty(getContext());
+  for (int i = 0; i != NumMaskElts; ++i) {
+    int MaskElt = getMaskValue(i);
+    if (MaskElt == -1) {
+      NewMask[i] = UndefValue::get(Int32Ty);
+      continue;
+    }
+    assert(MaskElt >= 0 && MaskElt < 2 * NumOpElts && "Out-of-range mask");
+    MaskElt = (MaskElt < NumOpElts) ? MaskElt + NumOpElts : MaskElt - NumOpElts;
+    NewMask[i] = ConstantInt::get(Int32Ty, MaskElt);
+  }
+  Op<2>() = ConstantVector::get(NewMask);
+  Op<0>().swap(Op<1>());
 }
 
 bool ShuffleVectorInst::isValidOperands(const Value *V1, const Value *V2,
@@ -3796,6 +3868,126 @@ void SwitchInst::growOperands() {
 
   ReservedSpace = NumOps;
   growHungoffUses(ReservedSpace);
+}
+
+MDNode *
+SwitchInstProfUpdateWrapper::getProfBranchWeightsMD(const SwitchInst &SI) {
+  if (MDNode *ProfileData = SI.getMetadata(LLVMContext::MD_prof))
+    if (auto *MDName = dyn_cast<MDString>(ProfileData->getOperand(0)))
+      if (MDName->getString() == "branch_weights")
+        return ProfileData;
+  return nullptr;
+}
+
+MDNode *SwitchInstProfUpdateWrapper::buildProfBranchWeightsMD() {
+  assert(Changed && "called only if metadata has changed");
+
+  if (!Weights)
+    return nullptr;
+
+  assert(SI.getNumSuccessors() == Weights->size() &&
+         "num of prof branch_weights must accord with num of successors");
+
+  bool AllZeroes =
+      all_of(Weights.getValue(), [](uint32_t W) { return W == 0; });
+
+  if (AllZeroes || Weights.getValue().size() < 2)
+    return nullptr;
+
+  return MDBuilder(SI.getParent()->getContext()).createBranchWeights(*Weights);
+}
+
+Optional<SmallVector<uint32_t, 8> >
+SwitchInstProfUpdateWrapper::getProfBranchWeights() {
+  MDNode *ProfileData = getProfBranchWeightsMD(SI);
+  if (!ProfileData)
+    return None;
+
+  SmallVector<uint32_t, 8> Weights;
+  for (unsigned CI = 1, CE = SI.getNumSuccessors(); CI <= CE; ++CI) {
+    ConstantInt *C = mdconst::extract<ConstantInt>(ProfileData->getOperand(CI));
+    uint32_t CW = C->getValue().getZExtValue();
+    Weights.push_back(CW);
+  }
+  return Weights;
+}
+
+SwitchInst::CaseIt
+SwitchInstProfUpdateWrapper::removeCase(SwitchInst::CaseIt I) {
+  if (Weights) {
+    assert(SI.getNumSuccessors() == Weights->size() &&
+           "num of prof branch_weights must accord with num of successors");
+    Changed = true;
+    // Copy the last case to the place of the removed one and shrink.
+    // This is tightly coupled with the way SwitchInst::removeCase() removes
+    // the cases in SwitchInst::removeCase(CaseIt).
+    Weights.getValue()[I->getCaseIndex() + 1] = Weights.getValue().back();
+    Weights.getValue().pop_back();
+  }
+  return SI.removeCase(I);
+}
+
+void SwitchInstProfUpdateWrapper::addCase(
+    ConstantInt *OnVal, BasicBlock *Dest,
+    SwitchInstProfUpdateWrapper::CaseWeightOpt W) {
+  SI.addCase(OnVal, Dest);
+
+  if (!Weights && W && *W) {
+    Changed = true;
+    Weights = SmallVector<uint32_t, 8>(SI.getNumSuccessors(), 0);
+    Weights.getValue()[SI.getNumSuccessors() - 1] = *W;
+  } else if (Weights) {
+    Changed = true;
+    Weights.getValue().push_back(W ? *W : 0);
+  }
+  if (Weights)
+    assert(SI.getNumSuccessors() == Weights->size() &&
+           "num of prof branch_weights must accord with num of successors");
+}
+
+SymbolTableList<Instruction>::iterator
+SwitchInstProfUpdateWrapper::eraseFromParent() {
+  // Instruction is erased. Mark as unchanged to not touch it in the destructor.
+  Changed = false;
+
+  if (Weights)
+    Weights->resize(0);
+  return SI.eraseFromParent();
+}
+
+SwitchInstProfUpdateWrapper::CaseWeightOpt
+SwitchInstProfUpdateWrapper::getSuccessorWeight(unsigned idx) {
+  if (!Weights)
+    return None;
+  return Weights.getValue()[idx];
+}
+
+void SwitchInstProfUpdateWrapper::setSuccessorWeight(
+    unsigned idx, SwitchInstProfUpdateWrapper::CaseWeightOpt W) {
+  if (!W)
+    return;
+
+  if (!Weights && *W)
+    Weights = SmallVector<uint32_t, 8>(SI.getNumSuccessors(), 0);
+
+  if (Weights) {
+    auto &OldW = Weights.getValue()[idx];
+    if (*W != OldW) {
+      Changed = true;
+      OldW = *W;
+    }
+  }
+}
+
+SwitchInstProfUpdateWrapper::CaseWeightOpt
+SwitchInstProfUpdateWrapper::getSuccessorWeight(const SwitchInst &SI,
+                                                unsigned idx) {
+  if (MDNode *ProfileData = getProfBranchWeightsMD(SI))
+    return mdconst::extract<ConstantInt>(ProfileData->getOperand(idx + 1))
+        ->getValue()
+        .getZExtValue();
+
+  return None;
 }
 
 //===----------------------------------------------------------------------===//

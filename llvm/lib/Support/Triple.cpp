@@ -22,6 +22,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
 
   case aarch64:        return "aarch64";
   case aarch64_be:     return "aarch64_be";
+  case aarch64_32:     return "aarch64_32";
   case aurora:         return "aurora";
   case arm:            return "arm";
   case armeb:          return "armeb";
@@ -81,7 +82,8 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
     return StringRef();
 
   case aarch64:
-  case aarch64_be:  return "aarch64";
+  case aarch64_be:
+  case aarch64_32:  return "aarch64";
 
   case aurora: return "aurora";
 
@@ -213,6 +215,7 @@ StringRef Triple::getOSTypeName(OSType Kind) {
   case HermitCore: return "hermit";
   case Hurd: return "hurd";
   case WASI: return "wasi";
+  case Emscripten: return "emscripten";
   }
 
   llvm_unreachable("Invalid OSType");
@@ -230,6 +233,8 @@ StringRef Triple::getEnvironmentTypeName(EnvironmentType Kind) {
   case CODE16: return "code16";
   case EABI: return "eabi";
   case EABIHF: return "eabihf";
+  case ELFv1: return "elfv1";
+  case ELFv2: return "elfv2";
   case Android: return "android";
   case Musl: return "musl";
   case MuslEABI: return "musleabi";
@@ -264,8 +269,10 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
   return StringSwitch<Triple::ArchType>(Name)
     .Case("aarch64", aarch64)
     .Case("aarch64_be", aarch64_be)
+    .Case("aarch64_32", aarch64_32)
     .Case("arc", arc)
     .Case("arm64", aarch64) // "arm64" is an alias for "aarch64"
+    .Case("arm64_32", aarch64_32)
     .Case("arm", arm)
     .Case("armeb", armeb)
     .Case("aurora", aurora)
@@ -394,8 +401,10 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("xscaleeb", Triple::armeb)
     .Case("aarch64", Triple::aarch64)
     .Case("aarch64_be", Triple::aarch64_be)
+    .Case("aarch64_32", Triple::aarch64_32)
     .Case("arc", Triple::arc)
     .Case("arm64", Triple::aarch64)
+    .Case("arm64_32", Triple::aarch64_32)
     .Case("arm", Triple::arm)
     .Case("armeb", Triple::armeb)
     .Case("aurora", Triple::aurora)
@@ -515,6 +524,7 @@ static Triple::OSType parseOS(StringRef OSName) {
     .StartsWith("hermit", Triple::HermitCore)
     .StartsWith("hurd", Triple::Hurd)
     .StartsWith("wasi", Triple::WASI)
+    .StartsWith("emscripten", Triple::Emscripten)
     .Default(Triple::UnknownOS);
 }
 
@@ -522,6 +532,8 @@ static Triple::EnvironmentType parseEnvironment(StringRef EnvironmentName) {
   return StringSwitch<Triple::EnvironmentType>(EnvironmentName)
     .StartsWith("eabihf", Triple::EABIHF)
     .StartsWith("eabi", Triple::EABI)
+    .StartsWith("elfv1", Triple::ELFv1)
+    .StartsWith("elfv2", Triple::ELFv2)
     .StartsWith("gnuabin32", Triple::GNUABIN32)
     .StartsWith("gnuabi64", Triple::GNUABI64)
     .StartsWith("gnueabihf", Triple::GNUEABIHF)
@@ -643,6 +655,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   switch (T.getArch()) {
   case Triple::UnknownArch:
   case Triple::aarch64:
+  case Triple::aarch64_32:
   case Triple::arm:
   case Triple::thumb:
   case Triple::x86:
@@ -1227,6 +1240,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::msp430:
     return 16;
 
+  case llvm::Triple::aarch64_32:
   case llvm::Triple::arc:
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
@@ -1309,6 +1323,7 @@ Triple Triple::get32BitArchVariant() const {
     T.setArch(UnknownArch);
     break;
 
+  case Triple::aarch64_32:
   case Triple::amdil:
   case Triple::hsail:
   case Triple::spir:
@@ -1401,6 +1416,7 @@ Triple Triple::get64BitArchVariant() const {
     // Already 64-bit.
     break;
 
+  case Triple::aarch64_32:      T.setArch(Triple::aarch64);    break;
   case Triple::arm:             T.setArch(Triple::aarch64);    break;
   case Triple::armeb:           T.setArch(Triple::aarch64_be); break;
   case Triple::le32:            T.setArch(Triple::le64);       break;
@@ -1512,6 +1528,7 @@ Triple Triple::getLittleEndianArchVariant() const {
 bool Triple::isLittleEndian() const {
   switch (getArch()) {
   case Triple::aarch64:
+  case Triple::aarch64_32:
   case Triple::amdgcn:
   case Triple::amdil64:
   case Triple::amdil:

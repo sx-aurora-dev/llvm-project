@@ -94,6 +94,12 @@ private:
                               SelectionDAG &DAG, ArrayRef<SDValue> Ops,
                               bool IsIntrinsic = false) const;
 
+  // Call DAG.getMemIntrinsicNode for a load, but first widen a dwordx3 type to
+  // dwordx4 if on SI.
+  SDValue getMemIntrinsicNode(unsigned Opcode, const SDLoc &DL, SDVTList VTList,
+                              ArrayRef<SDValue> Ops, EVT MemVT,
+                              MachineMemOperand *MMO, SelectionDAG &DAG) const;
+
   SDValue handleD16VData(SDValue VData, SelectionDAG &DAG) const;
 
   /// Converts \p Op, which must be of floating point type, to the
@@ -235,7 +241,7 @@ public:
                           unsigned SrcAlign, bool IsMemset,
                           bool ZeroMemset,
                           bool MemcpyStrSrc,
-                          MachineFunction &MF) const override;
+                          const AttributeList &FuncAttributes) const override;
 
   bool isMemOpUniform(const SDNode *N) const;
   bool isMemOpHasNoClobberedMemOperand(const SDNode *N) const;
@@ -361,6 +367,11 @@ public:
                                     bool SNaN = false,
                                     unsigned Depth = 0) const override;
   AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *) const override;
+  virtual const TargetRegisterClass *
+  getRegClassFor(MVT VT, bool isDivergent) const override;
+  virtual bool requiresUniformRegister(MachineFunction &MF,
+                                       const Value *V) const override;
+  unsigned getPrefLoopAlignment(MachineLoop *ML) const override;
 };
 
 } // End namespace llvm

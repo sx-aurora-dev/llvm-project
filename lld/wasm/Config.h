@@ -17,11 +17,17 @@
 namespace lld {
 namespace wasm {
 
+// This struct contains the global configuration for the linker.
+// Most fields are direct mapping from the command line options
+// and such fields have the same name as the corresponding options.
+// Most fields are initialized by the driver.
 struct Configuration {
   bool AllowUndefined;
+  bool CheckFeatures;
   bool CompressRelocations;
   bool Demangle;
   bool DisableVerify;
+  bool EmitRelocs;
   bool ExportAll;
   bool ExportDynamic;
   bool ExportTable;
@@ -47,6 +53,7 @@ struct Configuration {
   unsigned LTOO;
   unsigned Optimize;
   unsigned ThinLTOJobs;
+
   llvm::StringRef Entry;
   llvm::StringRef OutputFile;
   llvm::StringRef ThinLTOCacheDir;
@@ -54,6 +61,10 @@ struct Configuration {
   llvm::StringSet<> AllowUndefinedSymbols;
   std::vector<llvm::StringRef> SearchPaths;
   llvm::CachePruningPolicy ThinLTOCachePolicy;
+  llvm::Optional<std::vector<std::string>> Features;
+
+  // The following config options do not directly correspond to any
+  // particualr command line options.
 
   // True if we are creating position-independent code.
   bool Pic;

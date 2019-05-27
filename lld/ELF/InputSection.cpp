@@ -74,7 +74,7 @@ InputSectionBase::InputSectionBase(InputFile *File, uint64_t Flags,
 
   // The ELF spec states that a value of 0 means the section has
   // no alignment constraits.
-  uint32_t V = std::max<uint64_t>(Alignment, 1);
+  uint32_t V = std::max<uint32_t>(Alignment, 1);
   if (!isPowerOf2_64(V))
     fatal(toString(this) + ": sh_addralign is not a power of 2");
   this->Alignment = V;
@@ -210,8 +210,8 @@ OutputSection *SectionBase::getOutputSection() {
 // by zlib-compressed data. This function parses a header to initialize
 // `UncompressedSize` member and remove the header from `RawData`.
 void InputSectionBase::parseCompressedHeader() {
-  typedef typename ELF64LE::Chdr Chdr64;
-  typedef typename ELF32LE::Chdr Chdr32;
+  using Chdr64 = typename ELF64LE::Chdr;
+  using Chdr32 = typename ELF32LE::Chdr;
 
   // Old-style header
   if (Name.startswith(".zdebug")) {
@@ -252,6 +252,7 @@ void InputSectionBase::parseCompressedHeader() {
     }
 
     UncompressedSize = Hdr->ch_size;
+    Alignment = std::max<uint32_t>(Hdr->ch_addralign, 1);
     RawData = RawData.slice(sizeof(*Hdr));
     return;
   }
@@ -269,6 +270,7 @@ void InputSectionBase::parseCompressedHeader() {
   }
 
   UncompressedSize = Hdr->ch_size;
+  Alignment = std::max<uint32_t>(Hdr->ch_addralign, 1);
   RawData = RawData.slice(sizeof(*Hdr));
 }
 
@@ -380,7 +382,7 @@ OutputSection *InputSection::getParent() const {
 // Copy SHT_GROUP section contents. Used only for the -r option.
 template <class ELFT> void InputSection::copyShtGroup(uint8_t *Buf) {
   // ELFT::Word is the 32-bit integral type in the target endianness.
-  typedef typename ELFT::Word u32;
+  using u32 = typename ELFT::Word;
   ArrayRef<u32> From = getDataAs<u32>();
   auto *To = reinterpret_cast<u32 *>(Buf);
 
@@ -468,7 +470,7 @@ void InputSection::copyRelocations(uint8_t *Buf, ArrayRef<RelTy> Rels) {
 
       if (RelTy::IsRela)
         P->r_addend = Sym.getVA(Addend) - Section->getOutputSection()->Addr;
-      else if (Config->Relocatable)
+      else if (Config->Relocatable && Type != Target->NoneRel)
         Sec->Relocations.push_back({R_ABS, Type, Rel.r_offset, Addend, &Sym});
     }
   }
@@ -588,15 +590,11 @@ static int64_t getTlsTpOffset() {
     // Variant 1. The thread pointer points to a TCB with a fixed 2-word size,
     // followed by a variable amount of alignment padding, followed by the TLS
     // segment.
-    //
-    // NB: While the ARM/AArch64 ABI formally has a 2-word TCB size, lld
-    // effectively increases the TCB size to 8 words for Android compatibility.
-    // It accomplishes this by increasing the segment's alignment.
     return alignTo(Config->Wordsize * 2, Out::TlsPhdr->p_align);
   case EM_386:
   case EM_X86_64:
     // Variant 2. The TLS segment is located just before the thread pointer.
-    return -Out::TlsPhdr->p_memsz;
+    return -alignTo(Out::TlsPhdr->p_memsz, Out::TlsPhdr->p_align);
   case EM_PPC64:
     // The thread pointer points to a fixed offset from the start of the
     // executable's TLS segment. An offset of 0x7000 allows a signed 16-bit
@@ -612,6 +610,7 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
                                  uint64_t P, const Symbol &Sym, RelExpr Expr) {
   switch (Expr) {
   case R_ABS:
+  case R_DTPREL:
   case R_RELAX_TLS_LD_TO_LE_ABS:
   case R_RELAX_GOT_PC_NOPIC:
     return Sym.getVA(A);
@@ -624,15 +623,16 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
     return Sym.getGotVA() + A;
   case R_GOTONLY_PC:
     return In.Got->getVA() + A - P;
-  case R_GOTONLY_PC_FROM_END:
-    return In.Got->getVA() + A - P + In.Got->getSize();
+  case R_GOTPLTONLY_PC:
+    return In.GotPlt->getVA() + A - P;
   case R_GOTREL:
+  case R_PPC64_RELAX_TOC:
     return Sym.getVA(A) - In.Got->getVA();
-  case R_GOTREL_FROM_END:
-    return Sym.getVA(A) - In.Got->getVA() - In.Got->getSize();
-  case R_GOT_FROM_END:
-  case R_RELAX_TLS_GD_TO_IE_END:
-    return Sym.getGotOffset() + A - In.Got->getSize();
+  case R_GOTPLTREL:
+    return Sym.getVA(A) - In.GotPlt->getVA();
+  case R_GOTPLT:
+  case R_RELAX_TLS_GD_TO_IE_GOTPLT:
+    return Sym.getGotVA() + A - In.GotPlt->getVA();
   case R_TLSLD_GOT_OFF:
   case R_GOT_OFF:
   case R_RELAX_TLS_GD_TO_IE_GOT_OFF:
@@ -738,17 +738,18 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
   case R_RELAX_TLS_IE_TO_LE:
   case R_RELAX_TLS_LD_TO_LE:
   case R_TLS:
-    // A weak undefined TLS symbol resolves to the base of the TLS
-    // block, i.e. gets a value of zero. If we pass --gc-sections to
-    // lld and .tbss is not referenced, it gets reclaimed and we don't
-    // create a TLS program header. Therefore, we resolve this
-    // statically to zero.
-    if (Sym.isTls() && Sym.isUndefWeak())
-      return 0;
+    // It is not very clear what to return if the symbol is undefined. With
+    // --noinhibit-exec, even a non-weak undefined reference may reach here.
+    // Just return A, which matches R_ABS, and the behavior of some dynamic
+    // loaders.
+    if (Sym.isUndefined())
+      return A;
     return Sym.getVA(A) + getTlsTpOffset();
   case R_RELAX_TLS_GD_TO_LE_NEG:
   case R_NEG_TLS:
-    return Out::TlsPhdr->p_memsz - Sym.getVA(A);
+    if (Sym.isUndefined())
+      return A;
+    return -Sym.getVA(0) - getTlsTpOffset() + A;
   case R_SIZE:
     return Sym.getSize() + A;
   case R_TLSDESC:
@@ -758,12 +759,12 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
            getAArch64Page(P);
   case R_TLSGD_GOT:
     return In.Got->getGlobalDynOffset(Sym) + A;
-  case R_TLSGD_GOT_FROM_END:
-    return In.Got->getGlobalDynOffset(Sym) + A - In.Got->getSize();
+  case R_TLSGD_GOTPLT:
+    return In.Got->getVA() + In.Got->getGlobalDynOffset(Sym) + A - In.GotPlt->getVA();
   case R_TLSGD_PC:
     return In.Got->getGlobalDynAddr(Sym) + A - P;
-  case R_TLSLD_GOT_FROM_END:
-    return In.Got->getTlsIndexOff() + A - In.Got->getSize();
+  case R_TLSLD_GOTPLT:
+    return In.Got->getVA() + In.Got->getTlsIndexOff() + A - In.GotPlt->getVA();
   case R_TLSLD_GOT:
     return In.Got->getTlsIndexOff() + A;
   case R_TLSLD_PC:
@@ -805,7 +806,7 @@ void InputSection::relocateNonAlloc(uint8_t *Buf, ArrayRef<RelTy> Rels) {
     if (Expr == R_NONE)
       continue;
 
-    if (Expr != R_ABS) {
+    if (Expr != R_ABS && Expr != R_DTPREL) {
       std::string Msg = getLocation<ELFT>(Offset) +
                         ": has non-ABS relocation " + toString(Type) +
                         " against symbol '" + toString(Sym) + "'";
@@ -890,7 +891,11 @@ void InputSectionBase::relocateAlloc(uint8_t *Buf, uint8_t *BufEnd) {
     switch (Expr) {
     case R_RELAX_GOT_PC:
     case R_RELAX_GOT_PC_NOPIC:
-      Target->relaxGot(BufLoc, TargetVA);
+      Target->relaxGot(BufLoc, Type, TargetVA);
+      break;
+    case R_PPC64_RELAX_TOC:
+      if (!tryRelaxPPC64TocIndirection(Type, Rel, BufLoc))
+        Target->relocateOne(BufLoc, Type, TargetVA);
       break;
     case R_RELAX_TLS_IE_TO_LE:
       Target->relaxTlsIeToLe(BufLoc, Type, TargetVA);
@@ -907,7 +912,7 @@ void InputSectionBase::relocateAlloc(uint8_t *Buf, uint8_t *BufEnd) {
     case R_RELAX_TLS_GD_TO_IE:
     case R_RELAX_TLS_GD_TO_IE_ABS:
     case R_RELAX_TLS_GD_TO_IE_GOT_OFF:
-    case R_RELAX_TLS_GD_TO_IE_END:
+    case R_RELAX_TLS_GD_TO_IE_GOTPLT:
       Target->relaxTlsGdToIe(BufLoc, Type, TargetVA);
       break;
     case R_PPC_CALL:
@@ -1223,11 +1228,9 @@ SectionPiece *MergeInputSection::getSectionPiece(uint64_t Offset) {
 
   // If Offset is not at beginning of a section piece, it is not in the map.
   // In that case we need to  do a binary search of the original section piece vector.
-  auto It2 =
-      llvm::upper_bound(Pieces, Offset, [](uint64_t Offset, SectionPiece P) {
-        return Offset < P.InputOff;
-      });
-  return &It2[-1];
+  auto It = llvm::bsearch(Pieces,
+                          [=](SectionPiece P) { return Offset < P.InputOff; });
+  return &It[-1];
 }
 
 // Returns the offset in an output section for a given input offset.

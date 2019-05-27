@@ -32,7 +32,7 @@ operator=(const SBThreadCollection &rhs) {
 
   if (this != &rhs)
     m_opaque_sp = rhs.m_opaque_sp;
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 SBThreadCollection::SBThreadCollection(const ThreadCollectionSP &threads)
@@ -67,7 +67,7 @@ bool SBThreadCollection::IsValid() const {
 SBThreadCollection::operator bool() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBThreadCollection, operator bool);
 
-  return m_opaque_sp.get() != NULL;
+  return m_opaque_sp.get() != nullptr;
 }
 
 size_t SBThreadCollection::GetSize() {

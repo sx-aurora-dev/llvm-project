@@ -389,6 +389,12 @@ public:
   getCompilerRTArgString(const llvm::opt::ArgList &Args, StringRef Component,
                          FileType Type = ToolChain::FT_Static) const;
 
+  // Returns target specific runtime path if it exists.
+  virtual Optional<std::string> getRuntimePath() const;
+
+  // Returns target specific C++ library path if it exists.
+  virtual Optional<std::string> getCXXStdlibPath() const;
+
   // Returns <ResourceDir>/lib/<OSName>/<arch>.  This is used by runtimes (such
   // as OpenMP) to find arch-specific libraries.
   std::string getArchSpecificLibPath() const;
@@ -411,6 +417,9 @@ public:
 
   /// Test whether this toolchain defaults to PIE.
   virtual bool isPIEDefault() const = 0;
+
+  /// Test whether this toolchaind defaults to non-executable stacks.
+  virtual bool isNoExecStackDefault() const;
 
   /// Tests whether this toolchain forces its default for PIC, PIE or
   /// non-PIC.  If this returns true, any PIC related flags should be ignored

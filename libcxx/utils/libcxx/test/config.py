@@ -818,7 +818,11 @@ class Configuration(object):
         elif cxx_abi == 'libsupc++':
             self.cxx.link_flags += ['-lsupc++']
         elif cxx_abi == 'libcxxabi':
-            if self.target_info.allow_cxxabi_link():
+            # If the C++ library requires explicitly linking to libc++abi, or
+            # if we're testing libc++abi itself (the test configs are shared),
+            # then link it.
+            testing_libcxxabi = self.get_lit_conf('name', '') == 'libc++abi'
+            if self.target_info.allow_cxxabi_link() or testing_libcxxabi:
                 libcxxabi_shared = self.get_lit_bool('libcxxabi_shared', default=True)
                 if libcxxabi_shared:
                     self.cxx.link_flags += ['-lc++abi']
@@ -1145,6 +1149,10 @@ class Configuration(object):
         # features are enabled/disabled. Otherwise, disable availability markup,
         # which is not relevant for non-shipped flavors of libc++.
         if self.use_system_cxx_lib:
+            # Dylib support for shared_mutex was added in macosx10.12.
+            if name == 'macosx' and version in ('10.%s' % v for v in range(7, 12)):
+                self.config.available_features.add('dylib-has-no-shared_mutex')
+                self.lit_config.note("shared_mutex is not supported by the deployment target")
             # Throwing bad_optional_access, bad_variant_access and bad_any_cast is
             # supported starting in macosx10.14.
             if name == 'macosx' and version in ('10.%s' % v for v in range(7, 14)):

@@ -40,7 +40,7 @@ bool SBTypeFilter::IsValid() const {
 SBTypeFilter::operator bool() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBTypeFilter, operator bool);
 
-  return m_opaque_sp.get() != NULL;
+  return m_opaque_sp.get() != nullptr;
 }
 
 uint32_t SBTypeFilter::GetOptions() {
@@ -98,7 +98,7 @@ const char *SBTypeFilter::GetExpressionPathAtIndex(uint32_t i) {
       item++;
     return item;
   }
-  return NULL;
+  return nullptr;
 }
 
 bool SBTypeFilter::ReplaceExpressionPathAtIndex(uint32_t i, const char *item) {
@@ -126,7 +126,7 @@ lldb::SBTypeFilter &SBTypeFilter::operator=(const lldb::SBTypeFilter &rhs) {
   if (this != &rhs) {
     m_opaque_sp = rhs.m_opaque_sp;
   }
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 bool SBTypeFilter::operator==(lldb::SBTypeFilter &rhs) {

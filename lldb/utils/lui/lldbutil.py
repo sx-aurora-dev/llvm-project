@@ -12,10 +12,12 @@ Some of the test suite takes advantage of the utility functions defined here.
 They can also be useful for general purpose lldb scripting.
 """
 
+from __future__ import print_function
+
 import lldb
 import os
 import sys
-import StringIO
+import io
 
 # ===================================================
 # Utilities for locating/checking executable programs
@@ -50,10 +52,10 @@ def disassemble(target, function_or_symbol):
 
     It returns the disassembly content in a string object.
     """
-    buf = StringIO.StringIO()
+    buf = io.StringIO()
     insts = function_or_symbol.GetInstructions(target)
     for i in insts:
-        print >> buf, i
+        print(i, file=buf)
     return buf.getvalue()
 
 # ==========================================================
@@ -774,7 +776,7 @@ def get_stack_frames(thread):
 def print_stacktrace(thread, string_buffer=False):
     """Prints a simple stack trace of this thread."""
 
-    output = StringIO.StringIO() if string_buffer else sys.stdout
+    output = io.StringIO() if string_buffer else sys.stdout
     target = thread.GetProcess().GetTarget()
 
     depth = thread.GetNumFrames()
@@ -790,8 +792,8 @@ def print_stacktrace(thread, string_buffer=False):
         desc = "stop reason=" + stop_reason_to_str(thread.GetStopReason())
     else:
         desc = ""
-    print >> output, "Stack trace for thread id={0:#x} name={1} queue={2} ".format(
-        thread.GetThreadID(), thread.GetName(), thread.GetQueueName()) + desc
+    print("Stack trace for thread id={0:#x} name={1} queue={2} ".format(
+        thread.GetThreadID(), thread.GetName(), thread.GetQueueName()) + desc, file=output)
 
     for i in range(depth):
         frame = thread.GetFrameAtIndex(i)
@@ -802,13 +804,13 @@ def print_stacktrace(thread, string_buffer=False):
             file_addr = addrs[i].GetFileAddress()
             start_addr = frame.GetSymbol().GetStartAddress().GetFileAddress()
             symbol_offset = file_addr - start_addr
-            print >> output, "  frame #{num}: {addr:#016x} {mod}`{symbol} + {offset}".format(
-                num=i, addr=load_addr, mod=mods[i], symbol=symbols[i], offset=symbol_offset)
+            print("  frame #{num}: {addr:#016x} {mod}`{symbol} + {offset}".format(
+                num=i, addr=load_addr, mod=mods[i], symbol=symbols[i], offset=symbol_offset), file=output)
         else:
-            print >> output, "  frame #{num}: {addr:#016x} {mod}`{func} at {file}:{line} {args}".format(
+            print("  frame #{num}: {addr:#016x} {mod}`{func} at {file}:{line} {args}".format(
                 num=i, addr=load_addr, mod=mods[i], func='%s [inlined]' %
                 funcs[i] if frame.IsInlined() else funcs[i], file=files[i], line=lines[i], args=get_args_as_string(
-                    frame, showFuncName=False) if not frame.IsInlined() else '()')
+                    frame, showFuncName=False) if not frame.IsInlined() else '()'), file=output)
 
     if string_buffer:
         return output.getvalue()
@@ -817,12 +819,12 @@ def print_stacktrace(thread, string_buffer=False):
 def print_stacktraces(process, string_buffer=False):
     """Prints the stack traces of all the threads."""
 
-    output = StringIO.StringIO() if string_buffer else sys.stdout
+    output = io.StringIO() if string_buffer else sys.stdout
 
-    print >> output, "Stack traces for " + str(process)
+    print("Stack traces for " + str(process), file=output)
 
     for thread in process:
-        print >> output, print_stacktrace(thread, string_buffer=True)
+        print(print_stacktrace(thread, string_buffer=True), file=output)
 
     if string_buffer:
         return output.getvalue()
@@ -877,20 +879,20 @@ def get_args_as_string(frame, showFuncName=True):
 def print_registers(frame, string_buffer=False):
     """Prints all the register sets of the frame."""
 
-    output = StringIO.StringIO() if string_buffer else sys.stdout
+    output = io.StringIO() if string_buffer else sys.stdout
 
-    print >> output, "Register sets for " + str(frame)
+    print("Register sets for " + str(frame), file=output)
 
     registerSet = frame.GetRegisters()  # Return type of SBValueList.
-    print >> output, "Frame registers (size of register set = %d):" % registerSet.GetSize(
-    )
+    print("Frame registers (size of register set = %d):" % registerSet.GetSize(
+    ), file=output)
     for value in registerSet:
         #print >> output, value
-        print >> output, "%s (number of children = %d):" % (
-            value.GetName(), value.GetNumChildren())
+        print("%s (number of children = %d):" % (
+            value.GetName(), value.GetNumChildren()), file=output)
         for child in value:
-            print >> output, "Name: %s, Value: %s" % (
-                child.GetName(), child.GetValue())
+            print("Name: %s, Value: %s" % (
+                child.GetName(), child.GetValue()), file=output)
 
     if string_buffer:
         return output.getvalue()
@@ -960,7 +962,7 @@ class BasicFormatter(object):
 
     def format(self, value, buffer=None, indent=0):
         if not buffer:
-            output = StringIO.StringIO()
+            output = io.StringIO()
         else:
             output = buffer
         # If there is a summary, it suffices.
@@ -970,11 +972,11 @@ class BasicFormatter(object):
             val = value.GetValue()
         if val is None and value.GetNumChildren() > 0:
             val = "%s (location)" % value.GetLocation()
-        print >> output, "{indentation}({type}) {name} = {value}".format(
+        print("{indentation}({type}) {name} = {value}".format(
             indentation=' ' * indent,
             type=value.GetTypeName(),
             name=value.GetName(),
-            value=val)
+            value=val), file=output)
         return output.getvalue()
 
 
@@ -990,7 +992,7 @@ class ChildVisitingFormatter(BasicFormatter):
 
     def format(self, value, buffer=None):
         if not buffer:
-            output = StringIO.StringIO()
+            output = io.StringIO()
         else:
             output = buffer
 
@@ -1017,7 +1019,7 @@ class RecursiveDecentFormatter(BasicFormatter):
 
     def format(self, value, buffer=None):
         if not buffer:
-            output = StringIO.StringIO()
+            output = io.StringIO()
         else:
             output = buffer
 

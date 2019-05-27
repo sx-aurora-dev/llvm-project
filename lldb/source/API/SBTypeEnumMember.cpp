@@ -40,12 +40,13 @@ SBTypeEnumMember::SBTypeEnumMember(const SBTypeEnumMember &rhs)
 }
 
 SBTypeEnumMember &SBTypeEnumMember::operator=(const SBTypeEnumMember &rhs) {
-  LLDB_RECORD_CONSTRUCTOR(SBTypeEnumMember, (const lldb::SBTypeEnumMember &),
-                          rhs);
+  LLDB_RECORD_METHOD(
+      SBTypeEnumMember &,
+      SBTypeEnumMember, operator=,(const lldb::SBTypeEnumMember &), rhs);
 
   if (this != &rhs)
     m_opaque_sp = clone(rhs.m_opaque_sp);
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 bool SBTypeEnumMember::IsValid() const {
@@ -63,7 +64,7 @@ const char *SBTypeEnumMember::GetName() {
 
   if (m_opaque_sp.get())
     return m_opaque_sp->GetName().GetCString();
-  return NULL;
+  return nullptr;
 }
 
 int64_t SBTypeEnumMember::GetValueAsSigned() {
@@ -97,7 +98,7 @@ void SBTypeEnumMember::reset(TypeEnumMemberImpl *type_member_impl) {
 }
 
 TypeEnumMemberImpl &SBTypeEnumMember::ref() {
-  if (m_opaque_sp.get() == NULL)
+  if (m_opaque_sp.get() == nullptr)
     m_opaque_sp = std::make_shared<TypeEnumMemberImpl>();
   return *m_opaque_sp.get();
 }
@@ -129,7 +130,7 @@ bool SBTypeEnumMemberList::IsValid() {
 SBTypeEnumMemberList::operator bool() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBTypeEnumMemberList, operator bool);
 
-  return (m_opaque_up != NULL);
+  return (m_opaque_up != nullptr);
 }
 
 SBTypeEnumMemberList &SBTypeEnumMemberList::
@@ -147,7 +148,7 @@ operator=(const SBTypeEnumMemberList &rhs) {
       Append(
           const_cast<SBTypeEnumMemberList &>(rhs).GetTypeEnumMemberAtIndex(i));
   }
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 void SBTypeEnumMemberList::Append(SBTypeEnumMember enum_member) {

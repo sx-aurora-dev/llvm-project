@@ -91,12 +91,22 @@ static std::string getOutputPath(StringRef Path) {
   return (S.substr(0, S.rfind('.')) + E).str();
 }
 
+// Returns true if S matches /crtend.?\.o$/.
+static bool isCrtend(StringRef S) {
+  if (!S.endswith(".o"))
+    return false;
+  S = S.drop_back(2);
+  if (S.endswith("crtend"))
+    return true;
+  return !S.empty() && S.drop_back().endswith("crtend");
+}
+
 // ErrorOr is not default constructible, so it cannot be used as the type
 // parameter of a future.
 // FIXME: We could open the file in createFutureForFile and avoid needing to
 // return an error here, but for the moment that would cost us a file descriptor
 // (a limited resource on Windows) for the duration that the future is pending.
-typedef std::pair<std::unique_ptr<MemoryBuffer>, std::error_code> MBErrPair;
+using MBErrPair = std::pair<std::unique_ptr<MemoryBuffer>, std::error_code>;
 
 // Create a std::future that opens and maps a file using the best strategy for
 // the host platform.
@@ -159,13 +169,13 @@ void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> MB,
           CHECK(Archive::create(MBRef), Filename + ": failed to parse archive");
 
       for (MemoryBufferRef M : getArchiveMembers(File.get()))
-        addArchiveBuffer(M, "<whole-archive>", Filename);
+        addArchiveBuffer(M, "<whole-archive>", Filename, 0);
       return;
     }
     Symtab->addFile(make<ArchiveFile>(MBRef));
     break;
   case file_magic::bitcode:
-    Symtab->addFile(make<BitcodeFile>(MBRef));
+    Symtab->addFile(make<BitcodeFile>(MBRef, "", 0));
     break;
   case file_magic::coff_object:
   case file_magic::coff_import_library:
@@ -193,18 +203,32 @@ void LinkerDriver::enqueuePath(StringRef Path, bool WholeArchive) {
   std::string PathStr = Path;
   enqueueTask([=]() {
     auto MBOrErr = Future->get();
-    if (MBOrErr.second)
-      error("could not open " + PathStr + ": " + MBOrErr.second.message());
-    else
+    if (MBOrErr.second) {
+      std::string Error =
+          "could not open '" + PathStr + "': " + MBOrErr.second.message();
+      // Check if the filename is a typo for an option flag. OptTable thinks
+      // that all args that are not known options and that start with / are
+      // filenames, but e.g. `/nodefaultlibs` is more likely a typo for
+      // the option `/nodefaultlib` than a reference to a file in the root
+      // directory.
+      std::string Nearest;
+      if (COFFOptTable().findNearest(PathStr, Nearest) > 1)
+        error(Error);
+      else
+        error(Error + "; did you mean '" + Nearest + "'");
+    } else
       Driver->addBuffer(std::move(MBOrErr.first), WholeArchive);
   });
 }
 
 void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
-                                    StringRef ParentName) {
+                                    StringRef ParentName,
+                                    uint64_t OffsetInArchive) {
   file_magic Magic = identify_magic(MB.getBuffer());
   if (Magic == file_magic::coff_import_library) {
-    Symtab->addFile(make<ImportFile>(MB));
+    InputFile *Imp = make<ImportFile>(MB);
+    Imp->ParentName = ParentName;
+    Symtab->addFile(Imp);
     return;
   }
 
@@ -212,7 +236,7 @@ void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
   if (Magic == file_magic::coff_object) {
     Obj = make<ObjFile>(MB);
   } else if (Magic == file_magic::bitcode) {
-    Obj = make<BitcodeFile>(MB);
+    Obj = make<BitcodeFile>(MB, ParentName, OffsetInArchive);
   } else {
     error("unknown file type: " + MB.getBufferIdentifier());
     return;
@@ -235,11 +259,14 @@ void LinkerDriver::enqueueArchiveMember(const Archive::Child &C,
   };
 
   if (!C.getParent()->isThin()) {
+    uint64_t OffsetInArchive = C.getChildOffset();
     Expected<MemoryBufferRef> MBOrErr = C.getMemoryBufferRef();
     if (!MBOrErr)
       ReportBufferError(MBOrErr.takeError(), check(C.getFullName()));
     MemoryBufferRef MB = MBOrErr.get();
-    enqueueTask([=]() { Driver->addArchiveBuffer(MB, SymName, ParentName); });
+    enqueueTask([=]() {
+      Driver->addArchiveBuffer(MB, SymName, ParentName, OffsetInArchive);
+    });
     return;
   }
 
@@ -254,7 +281,7 @@ void LinkerDriver::enqueueArchiveMember(const Archive::Child &C,
     if (MBOrErr.second)
       ReportBufferError(errorCodeToError(MBOrErr.second), ChildName);
     Driver->addArchiveBuffer(takeBuffer(std::move(MBOrErr.first)), SymName,
-                             ParentName);
+                             ParentName, /* OffsetInArchive */ 0);
   });
 }
 
@@ -314,7 +341,7 @@ void LinkerDriver::parseDirectives(InputFile *File) {
       Config->Entry = addUndefined(mangle(Arg->getValue()));
       break;
     case OPT_failifmismatch:
-      checkFailIfMismatch(Arg->getValue(), toString(File));
+      checkFailIfMismatch(Arg->getValue(), File);
       break;
     case OPT_incl:
       addUndefined(Arg->getValue());
@@ -534,6 +561,11 @@ static std::string createResponseFile(const opt::InputArgList &Args,
     case OPT_manifestfile:
     case OPT_manifestinput:
     case OPT_manifestuac:
+      break;
+    case OPT_implib:
+    case OPT_pdb:
+    case OPT_out:
+      OS << Arg->getSpelling() << sys::path::filename(Arg->getValue()) << "\n";
       break;
     default:
       OS << toString(*Arg) << "\n";
@@ -826,7 +858,7 @@ static void parseOrderFile(StringRef Arg) {
 
 static void markAddrsig(Symbol *S) {
   if (auto *D = dyn_cast_or_null<Defined>(S))
-    if (Chunk *C = D->getChunk())
+    if (SectionChunk *C = dyn_cast_or_null<SectionChunk>(D->getChunk()))
       C->KeepUnique = true;
 }
 
@@ -842,7 +874,8 @@ static void findKeepUniqueSections() {
     ArrayRef<Symbol *> Syms = Obj->getSymbols();
     if (Obj->AddrsigSec) {
       ArrayRef<uint8_t> Contents;
-      Obj->getCOFFObj()->getSectionContents(Obj->AddrsigSec, Contents);
+      cantFail(
+          Obj->getCOFFObj()->getSectionContents(Obj->AddrsigSec, Contents));
       const uint8_t *Cur = Contents.begin();
       while (Cur != Contents.end()) {
         unsigned Size;
@@ -954,6 +987,13 @@ void LinkerDriver::maybeExportMinGWSymbols(const opt::InputArgList &Args) {
 }
 
 void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
+  // Needed for LTO.
+  InitializeAllTargetInfos();
+  InitializeAllTargets();
+  InitializeAllTargetMCs();
+  InitializeAllAsmParsers();
+  InitializeAllAsmPrinters();
+
   // If the first command line argument is "/lib", link.exe acts like lib.exe.
   // We call our own implementation of lib.exe that understands bitcode files.
   if (ArgsArr.size() > 1 && StringRef(ArgsArr[1]).equals_lower("/lib")) {
@@ -961,13 +1001,6 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
       fatal("lib failed");
     return;
   }
-
-  // Needed for LTO.
-  InitializeAllTargetInfos();
-  InitializeAllTargets();
-  InitializeAllTargetMCs();
-  InitializeAllAsmParsers();
-  InitializeAllAsmPrinters();
 
   // Parse command line options.
   ArgParser Parser;
@@ -1075,6 +1108,10 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   if (Args.hasArg(OPT_force, OPT_force_multiple))
     Config->ForceMultiple = true;
 
+  // Handle /force or /force:multipleres
+  if (Args.hasArg(OPT_force, OPT_force_multipleres))
+    Config->ForceMultipleRes = true;
+
   // Handle /debug
   DebugKind Debug = parseDebugKind(Args);
   if (Debug == DebugKind::Full || Debug == DebugKind::Dwarf ||
@@ -1159,6 +1196,13 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /base
   if (auto *Arg = Args.getLastArg(OPT_base))
     parseNumbers(Arg->getValue(), &Config->ImageBase);
+
+  // Handle /filealign
+  if (auto *Arg = Args.getLastArg(OPT_filealign)) {
+    parseNumbers(Arg->getValue(), &Config->FileAlign);
+    if (!isPowerOf2_64(Config->FileAlign))
+      error("/filealign: not a power of two: " + Twine(Config->FileAlign));
+  }
 
   // Handle /stack
   if (auto *Arg = Args.getLastArg(OPT_stack))
@@ -1283,7 +1327,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   // Handle /failifmismatch
   for (auto *Arg : Args.filtered(OPT_failifmismatch))
-    checkFailIfMismatch(Arg->getValue(), "cmd-line");
+    checkFailIfMismatch(Arg->getValue(), nullptr);
 
   // Handle /merge
   for (auto *Arg : Args.filtered(OPT_merge))
@@ -1354,6 +1398,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->IntegrityCheck =
       Args.hasFlag(OPT_integritycheck, OPT_integritycheck_no, false);
   Config->NxCompat = Args.hasFlag(OPT_nxcompat, OPT_nxcompat_no, true);
+  for (auto *Arg : Args.filtered(OPT_swaprun))
+    parseSwaprun(Arg->getValue());
   Config->TerminalServerAware =
       !Config->DLL && Args.hasFlag(OPT_tsaware, OPT_tsaware_no, true);
   Config->DebugDwarf = Debug == DebugKind::Dwarf;
@@ -1663,10 +1709,27 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
       return;
   }
 
-  // In MinGW, all symbols are automatically exported if no symbols
-  // are chosen to be exported.
-  if (Config->MinGW)
+  if (Config->MinGW) {
+    // In MinGW, all symbols are automatically exported if no symbols
+    // are chosen to be exported.
     maybeExportMinGWSymbols(Args);
+
+    // Make sure the crtend.o object is the last object file. This object
+    // file can contain terminating section chunks that need to be placed
+    // last. GNU ld processes files and static libraries explicitly in the
+    // order provided on the command line, while lld will pull in needed
+    // files from static libraries only after the last object file on the
+    // command line.
+    for (auto I = ObjFile::Instances.begin(), E = ObjFile::Instances.end();
+         I != E; I++) {
+      ObjFile *File = *I;
+      if (isCrtend(File->getName())) {
+        ObjFile::Instances.erase(I);
+        ObjFile::Instances.push_back(File);
+        break;
+      }
+    }
+  }
 
   // Windows specific -- when we are creating a .dll file, we also
   // need to create a .lib file.
@@ -1698,7 +1761,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
       continue;
 
     CommonChunk *C = DC->getChunk();
-    C->Alignment = std::max(C->Alignment, Alignment);
+    C->setAlignment(std::max(C->getAlignment(), Alignment));
   }
 
   // Windows specific -- Create a side-by-side manifest file.

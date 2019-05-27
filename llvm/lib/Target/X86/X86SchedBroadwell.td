@@ -160,7 +160,6 @@ defm : BWWriteResPair<WriteCRC32, [BWPort1],   3>;
 def : WriteRes<WriteLEA, [BWPort15]>; // LEA instructions can't fold loads.
 
 defm : BWWriteResPair<WriteCMOV,  [BWPort06], 1>; // Conditional move.
-defm : BWWriteResPair<WriteCMOV2, [BWPort06,BWPort0156], 2, [1,1], 2>; // // Conditional (CF + ZF flag) move.
 defm : X86WriteRes<WriteFCMOV, [BWPort1], 3, [1], 1>; // x87 conditional move.
 
 def  : WriteRes<WriteSETCC, [BWPort06]>; // Setcc.
@@ -737,7 +736,6 @@ def: InstRW<[BWWriteResGroup20], (instrs CWD,
                                          ADC16i16, SBB16i16,
                                          ADC32i32, SBB32i32,
                                          ADC64i32, SBB64i32)>;
-def: InstRW<[BWWriteResGroup20], (instregex "SET(A|BE)r")>;
 
 def BWWriteResGroup22 : SchedWriteRes<[BWPort4,BWPort6,BWPort237]> {
   let Latency = 2;
@@ -816,7 +814,6 @@ def BWWriteResGroup38 : SchedWriteRes<[BWPort4,BWPort237,BWPort06,BWPort0156]> {
   let ResourceCycles = [1,1,1,1];
 }
 def: InstRW<[BWWriteResGroup38], (instrs CALL64pcrel32)>;
-def: InstRW<[BWWriteResGroup38], (instregex "SET(A|BE)m")>;
 
 def BWWriteResGroup39 : SchedWriteRes<[BWPort0,BWPort1]> {
   let Latency = 4;
@@ -892,8 +889,7 @@ def BWWriteResGroup47 : SchedWriteRes<[BWPort0]> {
   let NumMicroOps = 1;
   let ResourceCycles = [1];
 }
-def: InstRW<[BWWriteResGroup47], (instregex "(V?)PCMPGTQ(Y?)rr",
-                                            "MUL_(FPrST0|FST0r|FrST0)")>;
+def: InstRW<[BWWriteResGroup47], (instregex "MUL_(FPrST0|FST0r|FrST0)")>;
 
 def BWWriteResGroup49 : SchedWriteRes<[BWPort23]> {
   let Latency = 5;
@@ -967,6 +963,7 @@ def BWWriteResGroup59 : SchedWriteRes<[BWPort0,BWPort23]> {
 }
 def: InstRW<[BWWriteResGroup59], (instrs CVTPS2PDrm, VCVTPS2PDrm,
                                          CVTSS2SDrm, VCVTSS2SDrm,
+                                         CVTSS2SDrm_Int, VCVTSS2SDrm_Int,
                                          VPSLLVQrm,
                                          VPSRLVQrm)>;
 
@@ -1601,5 +1598,141 @@ def BWWriteResGroup202 : SchedWriteRes<[BWPort0,BWPort1,BWPort4,BWPort5,BWPort6,
 def: InstRW<[BWWriteResGroup202], (instrs FSTENVm)>;
 
 def: InstRW<[WriteZero], (instrs CLC)>;
+
+
+// Intruction variants handled by the renamer. These might not need execution
+// ports in certain conditions.
+// See Agner's Fog "The microarchitecture of Intel, AMD and VIA CPUs",
+// section "Haswell and Broadwell Pipeline" > "Register allocation and
+// renaming".
+// These can be investigated with llvm-exegesis, e.g.
+// echo 'pxor %mm0, %mm0' | /tmp/llvm-exegesis -mode=uops -snippets-file=-
+// echo 'vxorpd %xmm0, %xmm0, %xmm1' | /tmp/llvm-exegesis -mode=uops -snippets-file=-
+
+def BWWriteZeroLatency : SchedWriteRes<[]> {
+  let Latency = 0;
+}
+
+def BWWriteZeroIdiom : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteALU]>
+]>;
+def : InstRW<[BWWriteZeroIdiom], (instrs SUB32rr, SUB64rr,
+                                         XOR32rr, XOR64rr)>;
+
+def BWWriteFZeroIdiom : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteFLogic]>
+]>;
+def : InstRW<[BWWriteFZeroIdiom], (instrs XORPSrr, VXORPSrr, XORPDrr,
+                                          VXORPDrr)>;
+
+def BWWriteFZeroIdiomY : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteFLogicY]>
+]>;
+def : InstRW<[BWWriteFZeroIdiomY], (instrs VXORPSYrr, VXORPDYrr)>;
+
+def BWWriteVZeroIdiomLogicX : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteVecLogicX]>
+]>;
+def : InstRW<[BWWriteVZeroIdiomLogicX], (instrs PXORrr, VPXORrr)>;
+
+def BWWriteVZeroIdiomLogicY : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteVecLogicY]>
+]>;
+def : InstRW<[BWWriteVZeroIdiomLogicY], (instrs VPXORYrr)>;
+
+def BWWriteVZeroIdiomALUX : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteVecALUX]>
+]>;
+def : InstRW<[BWWriteVZeroIdiomALUX], (instrs PSUBBrr, VPSUBBrr,
+                                              PSUBDrr, VPSUBDrr,
+                                              PSUBQrr, VPSUBQrr,
+                                              PSUBWrr, VPSUBWrr,
+                                              PCMPGTBrr, VPCMPGTBrr,
+                                              PCMPGTDrr, VPCMPGTDrr,
+                                              PCMPGTWrr, VPCMPGTWrr)>;
+
+def BWWriteVZeroIdiomALUY : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [WriteVecALUY]>
+]>;
+def : InstRW<[BWWriteVZeroIdiomALUY], (instrs VPSUBBYrr,
+                                              VPSUBDYrr,
+                                              VPSUBQYrr,
+                                              VPSUBWYrr,
+                                              VPCMPGTBYrr,
+                                              VPCMPGTDYrr,
+                                              VPCMPGTWYrr)>;
+
+def BWWritePCMPGTQ : SchedWriteRes<[BWPort0]> {
+  let Latency = 5;
+  let NumMicroOps = 1;
+  let ResourceCycles = [1];
+}
+
+def BWWriteVZeroIdiomPCMPGTQ : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [BWWriteZeroLatency]>,
+    SchedVar<NoSchedPred,                          [BWWritePCMPGTQ]>
+]>;
+def : InstRW<[BWWriteVZeroIdiomPCMPGTQ], (instrs PCMPGTQrr, VPCMPGTQrr,
+                                                 VPCMPGTQYrr)>;
+
+
+// CMOVs that use both Z and C flag require an extra uop.
+def BWWriteCMOVA_CMOVBErr : SchedWriteRes<[BWPort06,BWPort0156]> {
+  let Latency = 2;
+  let ResourceCycles = [1,1];
+  let NumMicroOps = 2;
+}
+
+def BWWriteCMOVA_CMOVBErm : SchedWriteRes<[BWPort23,BWPort06,BWPort0156]> {
+  let Latency = 7;
+  let ResourceCycles = [1,1,1];
+  let NumMicroOps = 3;
+}
+
+def BWCMOVA_CMOVBErr :  SchedWriteVariant<[
+  SchedVar<MCSchedPredicate<IsCMOVArr_Or_CMOVBErr>, [BWWriteCMOVA_CMOVBErr]>,
+  SchedVar<NoSchedPred,                             [WriteCMOV]>
+]>;
+
+def BWCMOVA_CMOVBErm :  SchedWriteVariant<[
+  SchedVar<MCSchedPredicate<IsCMOVArm_Or_CMOVBErm>, [BWWriteCMOVA_CMOVBErm]>,
+  SchedVar<NoSchedPred,                             [WriteCMOV.Folded]>
+]>;
+
+def : InstRW<[BWCMOVA_CMOVBErr], (instrs CMOV16rr, CMOV32rr, CMOV64rr)>;
+def : InstRW<[BWCMOVA_CMOVBErm], (instrs CMOV16rm, CMOV32rm, CMOV64rm)>;
+
+// SETCCs that use both Z and C flag require an extra uop.
+def BWWriteSETA_SETBEr : SchedWriteRes<[BWPort06,BWPort0156]> {
+  let Latency = 2;
+  let ResourceCycles = [1,1];
+  let NumMicroOps = 2;
+}
+
+def BWWriteSETA_SETBEm : SchedWriteRes<[BWPort4,BWPort237,BWPort06,BWPort0156]> {
+  let Latency = 3;
+  let ResourceCycles = [1,1,1,1];
+  let NumMicroOps = 4;
+}
+
+def BWSETA_SETBErr :  SchedWriteVariant<[
+  SchedVar<MCSchedPredicate<IsSETAr_Or_SETBEr>, [BWWriteSETA_SETBEr]>,
+  SchedVar<NoSchedPred,                         [WriteSETCC]>
+]>;
+
+def BWSETA_SETBErm :  SchedWriteVariant<[
+  SchedVar<MCSchedPredicate<IsSETAm_Or_SETBEm>, [BWWriteSETA_SETBEm]>,
+  SchedVar<NoSchedPred,                         [WriteSETCCStore]>
+]>;
+
+def : InstRW<[BWSETA_SETBErr], (instrs SETCCr)>;
+def : InstRW<[BWSETA_SETBErm], (instrs SETCCm)>;
 
 } // SchedModel

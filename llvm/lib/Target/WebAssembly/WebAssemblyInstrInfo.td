@@ -15,6 +15,9 @@
 // WebAssembly Instruction Predicate Definitions.
 //===----------------------------------------------------------------------===//
 
+def IsPIC     : Predicate<"TM.isPositionIndependent()">;
+def IsNotPIC  : Predicate<"!TM.isPositionIndependent()">;
+
 def HasAddr32 : Predicate<"!Subtarget->hasAddr64()">;
 
 def HasAddr64 : Predicate<"Subtarget->hasAddr64()">;
@@ -31,6 +34,10 @@ def HasAtomics :
     Predicate<"Subtarget->hasAtomics()">,
     AssemblerPredicate<"FeatureAtomics", "atomics">;
 
+def HasMultivalue :
+    Predicate<"Subtarget->hasMultivalue()">,
+    AssemblerPredicate<"FeatureMultivalue", "multivalue">;
+
 def HasNontrappingFPToInt :
     Predicate<"Subtarget->hasNontrappingFPToInt()">,
     AssemblerPredicate<"FeatureNontrappingFPToInt", "nontrapping-fptoint">;
@@ -43,17 +50,13 @@ def HasSignExt :
     Predicate<"Subtarget->hasSignExt()">,
     AssemblerPredicate<"FeatureSignExt", "sign-ext">;
 
-def NotHasSignExt :
-    Predicate<"!Subtarget->hasSignExt()">,
-    AssemblerPredicate<"!FeatureSignExt", "sign-ext">;
+def HasTailCall :
+    Predicate<"Subtarget->hasTailCall()">,
+    AssemblerPredicate<"FeatureTailCall", "tail-call">;
 
 def HasExceptionHandling :
     Predicate<"Subtarget->hasExceptionHandling()">,
     AssemblerPredicate<"FeatureExceptionHandling", "exception-handling">;
-
-def NotHasExceptionHandling :
-    Predicate<"!Subtarget->hasExceptionHandling()">,
-    AssemblerPredicate<"!FeatureExceptionHandling", "exception-handling">;
 
 def HasBulkMemory :
     Predicate<"Subtarget->hasBulkMemory()">,
@@ -67,14 +70,16 @@ def SDT_WebAssemblyCallSeqStart : SDCallSeqStart<[SDTCisVT<0, iPTR>,
                                                   SDTCisVT<1, iPTR>]>;
 def SDT_WebAssemblyCallSeqEnd :
     SDCallSeqEnd<[SDTCisVT<0, iPTR>, SDTCisVT<1, iPTR>]>;
-def SDT_WebAssemblyCall0    : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
-def SDT_WebAssemblyCall1    : SDTypeProfile<1, -1, [SDTCisPtrTy<1>]>;
-def SDT_WebAssemblyBrTable  : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
-def SDT_WebAssemblyArgument : SDTypeProfile<1, 1, [SDTCisVT<1, i32>]>;
-def SDT_WebAssemblyReturn   : SDTypeProfile<0, -1, []>;
-def SDT_WebAssemblyWrapper  : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
-                                                   SDTCisPtrTy<0>]>;
-def SDT_WebAssemblyThrow    : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
+def SDT_WebAssemblyCall0      : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
+def SDT_WebAssemblyCall1      : SDTypeProfile<1, -1, [SDTCisPtrTy<1>]>;
+def SDT_WebAssemblyBrTable    : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
+def SDT_WebAssemblyArgument   : SDTypeProfile<1, 1, [SDTCisVT<1, i32>]>;
+def SDT_WebAssemblyReturn     : SDTypeProfile<0, -1, []>;
+def SDT_WebAssemblyWrapper    : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
+                                                     SDTCisPtrTy<0>]>;
+def SDT_WebAssemblyWrapperPIC : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
+                                                     SDTCisPtrTy<0>]>;
+def SDT_WebAssemblyThrow      : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
 
 //===----------------------------------------------------------------------===//
 // WebAssembly-specific DAG Nodes.
@@ -101,6 +106,8 @@ def WebAssemblyreturn   : SDNode<"WebAssemblyISD::RETURN",
                                  SDT_WebAssemblyReturn, [SDNPHasChain]>;
 def WebAssemblywrapper  : SDNode<"WebAssemblyISD::Wrapper",
                                  SDT_WebAssemblyWrapper>;
+def WebAssemblywrapperPIC  : SDNode<"WebAssemblyISD::WrapperPIC",
+                                     SDT_WebAssemblyWrapperPIC>;
 def WebAssemblythrow : SDNode<"WebAssemblyISD::THROW", SDT_WebAssemblyThrow,
                               [SDNPHasChain, SDNPVariadic]>;
 
@@ -295,9 +302,20 @@ defm CONST_F64 : I<(outs F64:$res), (ins f64imm_op:$imm),
 } // isMoveImm = 1, isAsCheapAsAMove = 1, isReMaterializable = 1
 
 def : Pat<(i32 (WebAssemblywrapper tglobaladdr:$addr)),
-          (CONST_I32 tglobaladdr:$addr)>;
+          (CONST_I32 tglobaladdr:$addr)>, Requires<[IsNotPIC]>;
+
+def : Pat<(i32 (WebAssemblywrapper tglobaladdr:$addr)),
+          (GLOBAL_GET_I32 tglobaladdr:$addr)>, Requires<[IsPIC]>;
+
+def : Pat<(i32 (WebAssemblywrapperPIC tglobaladdr:$addr)),
+          (CONST_I32 tglobaladdr:$addr)>, Requires<[IsPIC]>;
+
 def : Pat<(i32 (WebAssemblywrapper texternalsym:$addr)),
-          (CONST_I32 texternalsym:$addr)>;
+          (GLOBAL_GET_I32 texternalsym:$addr)>, Requires<[IsPIC]>;
+
+def : Pat<(i32 (WebAssemblywrapper texternalsym:$addr)),
+          (CONST_I32 texternalsym:$addr)>, Requires<[IsNotPIC]>;
+
 def : Pat<(i32 (WebAssemblywrapper mcsym:$sym)), (CONST_I32 mcsym:$sym)>;
 def : Pat<(i64 (WebAssemblywrapper mcsym:$sym)), (CONST_I64 mcsym:$sym)>;
 

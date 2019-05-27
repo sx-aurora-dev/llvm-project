@@ -45,8 +45,6 @@
 using namespace lldb;
 using namespace lldb_private;
 
-static constexpr std::chrono::seconds g_po_function_timeout(15);
-
 AppleObjCRuntime::~AppleObjCRuntime() {}
 
 AppleObjCRuntime::AppleObjCRuntime(Process *process)
@@ -130,9 +128,9 @@ bool AppleObjCRuntime::GetObjectDescription(Stream &strm, Value &value,
   //    ret.SetContext(Value::eContextTypeClangType, return_compiler_type);
   ret.SetCompilerType(return_compiler_type);
 
-  if (exe_ctx.GetFramePtr() == NULL) {
+  if (exe_ctx.GetFramePtr() == nullptr) {
     Thread *thread = exe_ctx.GetThreadPtr();
-    if (thread == NULL) {
+    if (thread == nullptr) {
       exe_ctx.SetThreadSP(process->GetThreadList().GetSelectedThread());
       thread = exe_ctx.GetThreadPtr();
     }
@@ -171,7 +169,7 @@ bool AppleObjCRuntime::GetObjectDescription(Stream &strm, Value &value,
   options.SetTryAllThreads(true);
   options.SetStopOthers(true);
   options.SetIgnoreBreakpoints(true);
-  options.SetTimeout(g_po_function_timeout);
+  options.SetTimeout(process->GetUtilityExpressionTimeout());
   options.SetIsForUtilityExpr(true);
 
   ExpressionResults results = m_print_object_caller_up->ExecuteFunction(
@@ -227,7 +225,7 @@ Address *AppleObjCRuntime::GetPrintForDebuggerAddr() {
                                              eSymbolTypeCode, contexts)) &&
         (!modules.FindSymbolsWithNameAndType(ConstString("_CFPrintForDebugger"),
                                              eSymbolTypeCode, contexts)))
-      return NULL;
+      return nullptr;
 
     contexts.GetContextAtIndex(0, context);
 
@@ -239,7 +237,7 @@ Address *AppleObjCRuntime::GetPrintForDebuggerAddr() {
 
 bool AppleObjCRuntime::CouldHaveDynamicValue(ValueObject &in_value) {
   return in_value.GetCompilerType().IsPossibleDynamicType(
-      NULL,
+      nullptr,
       false, // do not check C++
       true); // check ObjC
 }
@@ -329,7 +327,7 @@ bool AppleObjCRuntime::ReadObjCLibrary(const ModuleSP &module_sp) {
   // reread it?
   m_objc_trampoline_handler_up.reset(
       new AppleObjCTrampolineHandler(m_process->shared_from_this(), module_sp));
-  if (m_objc_trampoline_handler_up != NULL) {
+  if (m_objc_trampoline_handler_up != nullptr) {
     m_read_objc_library = true;
     return true;
   } else
@@ -345,9 +343,7 @@ ThreadPlanSP AppleObjCRuntime::GetStepThroughTrampolinePlan(Thread &thread,
   return thread_plan_sp;
 }
 
-//------------------------------------------------------------------
 // Static Functions
-//------------------------------------------------------------------
 ObjCLanguageRuntime::ObjCRuntimeVersions
 AppleObjCRuntime::GetObjCVersion(Process *process, ModuleSP &objc_module_sp) {
   if (!process)
@@ -476,7 +472,8 @@ ValueObjectSP AppleObjCRuntime::GetExceptionObjectForThread(
   
   while (descriptor) {
     ConstString class_name(descriptor->GetClassName());
-    if (class_name == ConstString("NSException")) return cpp_exception;
+    if (class_name == "NSException")
+      return cpp_exception;
     descriptor = descriptor->GetSuperclass();
   }
 

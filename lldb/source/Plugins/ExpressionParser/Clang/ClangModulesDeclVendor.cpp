@@ -608,7 +608,7 @@ ClangModulesDeclVendor::Create(Target &target) {
     compiler_invocation_arguments.push_back(module_cache_argument);
   }
 
-  FileSpecList &module_search_paths = target.GetClangModuleSearchPaths();
+  FileSpecList module_search_paths = target.GetClangModuleSearchPaths();
 
   for (size_t spi = 0, spe = module_search_paths.GetSize(); spi < spe; ++spi) {
     const FileSpec &search_path = module_search_paths.GetFileSpecAtIndex(spi);
@@ -679,7 +679,7 @@ ClangModulesDeclVendor::Create(Target &target) {
   }
 
   // Make sure clang uses the same VFS as LLDB.
-  instance->setVirtualFileSystem(FileSystem::Instance().GetVirtualFileSystem());
+  instance->createFileManager(FileSystem::Instance().GetVirtualFileSystem());
   instance->setDiagnostics(diagnostics_engine.get());
   instance->setInvocation(invocation);
 

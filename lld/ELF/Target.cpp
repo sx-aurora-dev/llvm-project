@@ -37,7 +37,7 @@ using namespace llvm::ELF;
 using namespace lld;
 using namespace lld::elf;
 
-TargetInfo *elf::Target;
+const TargetInfo *elf::Target;
 
 std::string lld::toString(RelType Type) {
   StringRef S = getELFRelocationTypeName(elf::Config->EMachine, Type);
@@ -85,8 +85,6 @@ TargetInfo *elf::getTarget() {
   case EM_SPARCV9:
     return getSPARCV9TargetInfo();
   case EM_X86_64:
-    if (Config->EKind == ELF32LEKind)
-      return getX32TargetInfo();
     return getX86_64TargetInfo();
   }
   llvm_unreachable("unknown target machine");
@@ -151,7 +149,7 @@ RelExpr TargetInfo::adjustRelaxExpr(RelType Type, const uint8_t *Data,
   return Expr;
 }
 
-void TargetInfo::relaxGot(uint8_t *Loc, uint64_t Val) const {
+void TargetInfo::relaxGot(uint8_t *Loc, RelType Type, uint64_t Val) const {
   llvm_unreachable("Should not have claimed to be relaxable");
 }
 
@@ -175,7 +173,7 @@ void TargetInfo::relaxTlsLdToLe(uint8_t *Loc, RelType Type,
   llvm_unreachable("Should not have claimed to be relaxable");
 }
 
-uint64_t TargetInfo::getImageBase() {
+uint64_t TargetInfo::getImageBase() const {
   // Use -image-base if set. Fall back to the target default if not.
   if (Config->ImageBase)
     return *Config->ImageBase;

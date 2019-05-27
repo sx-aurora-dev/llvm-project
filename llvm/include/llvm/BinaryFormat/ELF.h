@@ -703,14 +703,17 @@ enum : unsigned {
   EF_AMDGPU_MACH_AMDGCN_GFX904 = 0x02e,
   EF_AMDGPU_MACH_AMDGCN_GFX906 = 0x02f,
   EF_AMDGPU_MACH_AMDGCN_GFX909 = 0x031,
+  // AMDGCN GFX10.
+  EF_AMDGPU_MACH_AMDGCN_GFX1010 = 0x033,
 
   // Reserved for AMDGCN-based processors.
   EF_AMDGPU_MACH_AMDGCN_RESERVED0 = 0x027,
   EF_AMDGPU_MACH_AMDGCN_RESERVED1 = 0x030,
+  EF_AMDGPU_MACH_AMDGCN_RESERVED2 = 0x032,
 
   // First/last AMDGCN-based processors.
   EF_AMDGPU_MACH_AMDGCN_FIRST = EF_AMDGPU_MACH_AMDGCN_GFX600,
-  EF_AMDGPU_MACH_AMDGCN_LAST = EF_AMDGPU_MACH_AMDGCN_GFX909,
+  EF_AMDGPU_MACH_AMDGCN_LAST = EF_AMDGPU_MACH_AMDGCN_GFX1010,
 
   // Indicates if the "xnack" target feature is enabled for all code contained
   // in the object.
@@ -838,6 +841,7 @@ enum : unsigned {
   SHT_LLVM_CALL_GRAPH_PROFILE = 0x6fff4c02, // LLVM Call Graph Profile.
   SHT_LLVM_ADDRSIG = 0x6fff4c03,        // List of address-significant symbols
                                         // for safe ICF.
+  SHT_LLVM_DEPENDENT_LIBRARIES = 0x6fff4c04, // LLVM Dependent Library Specifiers.
   // Android's experimental support for SHT_RELR sections.
   // https://android.googlesource.com/platform/bionic/+/b7feec74547f84559a1467aca02708ff61346d2a/libc/include/elf.h#512
   SHT_ANDROID_RELR = 0x6fffff00,        // Relocation entries; only offsets.
@@ -1337,6 +1341,14 @@ enum {
   NT_FREEBSD_PROCSTAT_OSREL = 14,
   NT_FREEBSD_PROCSTAT_PSSTRINGS = 15,
   NT_FREEBSD_PROCSTAT_AUXV = 16,
+};
+
+// Generic note types
+enum : unsigned {
+  NT_VERSION = 1,
+  NT_ARCH = 2,
+  NT_GNU_BUILD_ATTRIBUTE_OPEN = 0x100,
+  NT_GNU_BUILD_ATTRIBUTE_FUNC = 0x101,
 };
 
 enum {

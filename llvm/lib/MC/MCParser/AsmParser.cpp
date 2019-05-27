@@ -165,6 +165,9 @@ private:
   };
   CppHashInfoTy CppHashInfo;
 
+  /// The filename from the first cpp hash file line comment, if any.
+  StringRef FirstCppHashFilename;
+
   /// List of forward directional labels for diagnosis at the end.
   SmallVector<std::tuple<SMLoc, CppHashInfoTy, MCSymbol *>, 4> DirLabels;
 
@@ -849,6 +852,13 @@ bool AsmParser::enabledGenDwarfForAssembly() {
   // the assembler source was produced with debug info already) then emit one
   // describing the assembler source file itself.
   if (getContext().getGenDwarfFileNumber() == 0) {
+    // Use the first #line directive for this, if any. It's preprocessed, so
+    // there is no checksum, and of course no source directive.
+    if (!FirstCppHashFilename.empty())
+      getContext().setMCLineTableRootFile(/*CUID=*/0,
+                                          getContext().getCompilationDir(),
+                                          FirstCppHashFilename,
+                                          /*Cksum=*/None, /*Source=*/None);
     const MCDwarfFile &RootFile =
         getContext().getMCDwarfLineTable(/*CUID=*/0).getRootFile();
     getContext().setGenDwarfFileNumber(getStreamer().EmitDwarfFileDirective(
@@ -2285,11 +2295,14 @@ bool AsmParser::parseCppHashLineFilenameComment(SMLoc L) {
   // Get rid of the enclosing quotes.
   Filename = Filename.substr(1, Filename.size() - 2);
 
-  // Save the SMLoc, Filename and LineNumber for later use by diagnostics.
+  // Save the SMLoc, Filename and LineNumber for later use by diagnostics
+  // and possibly DWARF file info.
   CppHashInfo.Loc = L;
   CppHashInfo.Filename = Filename;
   CppHashInfo.LineNumber = LineNumber;
   CppHashInfo.Buf = CurBuffer;
+  if (FirstCppHashFilename.empty())
+    FirstCppHashFilename = Filename;
   return false;
 }
 
@@ -3388,13 +3401,14 @@ bool AsmParser::parseDirectiveFile(SMLoc DirectiveLoc) {
       Ctx.setGenDwarfForAssembly(false);
     }
 
-    MD5::MD5Result *CKMem = nullptr;
+    Optional<MD5::MD5Result> CKMem;
     if (HasMD5) {
-      CKMem = (MD5::MD5Result *)Ctx.allocate(sizeof(MD5::MD5Result), 1);
+      MD5::MD5Result Sum;
       for (unsigned i = 0; i != 8; ++i) {
-        CKMem->Bytes[i] = uint8_t(MD5Hi >> ((7 - i) * 8));
-        CKMem->Bytes[i + 8] = uint8_t(MD5Lo >> ((7 - i) * 8));
+        Sum.Bytes[i] = uint8_t(MD5Hi >> ((7 - i) * 8));
+        Sum.Bytes[i + 8] = uint8_t(MD5Lo >> ((7 - i) * 8));
       }
+      CKMem = Sum;
     }
     if (HasSource) {
       char *SourceBuf = static_cast<char *>(Ctx.allocate(SourceString.size()));

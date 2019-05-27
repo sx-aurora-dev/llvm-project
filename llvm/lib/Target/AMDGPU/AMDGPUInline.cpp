@@ -123,10 +123,11 @@ unsigned AMDGPUInliner::getInlineThreshold(CallSite CS) const {
   uint64_t AllocaSize = 0;
   SmallPtrSet<const AllocaInst *, 8> AIVisited;
   for (Value *PtrArg : CS.args()) {
-    Type *Ty = PtrArg->getType();
-    if (!Ty->isPointerTy() ||
-        Ty->getPointerAddressSpace() != AMDGPUAS::PRIVATE_ADDRESS)
+    PointerType *Ty = dyn_cast<PointerType>(PtrArg->getType());
+    if (!Ty || (Ty->getAddressSpace() != AMDGPUAS::PRIVATE_ADDRESS &&
+                Ty->getAddressSpace() != AMDGPUAS::FLAT_ADDRESS))
       continue;
+
     PtrArg = GetUnderlyingObject(PtrArg, DL);
     if (const AllocaInst *AI = dyn_cast<AllocaInst>(PtrArg)) {
       if (!AI->isStaticAlloca() || !AIVisited.insert(AI).second)
@@ -169,7 +170,6 @@ static bool isWrapperOnlyCall(CallSite CS) {
 InlineCost AMDGPUInliner::getInlineCost(CallSite CS) {
   Function *Callee = CS.getCalledFunction();
   Function *Caller = CS.getCaller();
-  TargetTransformInfo &TTI = TTIWP->getTTI(*Callee);
 
   if (!Callee || Callee->isDeclaration())
     return llvm::InlineCost::getNever("undefined callee");
@@ -177,6 +177,7 @@ InlineCost AMDGPUInliner::getInlineCost(CallSite CS) {
   if (CS.isNoInline())
     return llvm::InlineCost::getNever("noinline");
 
+  TargetTransformInfo &TTI = TTIWP->getTTI(*Callee);
   if (!TTI.areInlineCompatible(Caller, Callee))
     return llvm::InlineCost::getNever("incompatible");
 
@@ -206,6 +207,7 @@ InlineCost AMDGPUInliner::getInlineCost(CallSite CS) {
     return ACT->getAssumptionCache(F);
   };
 
-  return llvm::getInlineCost(CS, Callee, LocalParams, TTI, GetAssumptionCache,
-                             None, PSI, RemarksEnabled ? &ORE : nullptr);
+  return llvm::getInlineCost(cast<CallBase>(*CS.getInstruction()), Callee,
+                             LocalParams, TTI, GetAssumptionCache, None, PSI,
+                             RemarksEnabled ? &ORE : nullptr);
 }
