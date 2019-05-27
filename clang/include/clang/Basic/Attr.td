@@ -16,6 +16,8 @@ def DocCatFunction : DocumentationCategory<"Function Attributes">;
 def DocCatVariable : DocumentationCategory<"Variable Attributes">;
 def DocCatType : DocumentationCategory<"Type Attributes">;
 def DocCatStmt : DocumentationCategory<"Statement Attributes">;
+def DocCatDecl : DocumentationCategory<"Declaration Attributes">;
+
 // Attributes listed under the Undocumented category do not generate any public
 // documentation. Ideally, this category should be used for internal-only
 // attributes which contain no spellings.
@@ -297,6 +299,9 @@ def ObjC : LangOpt<"ObjC">;
 def BlocksSupported : LangOpt<"Blocks">;
 def ObjCAutoRefCount : LangOpt<"ObjCAutoRefCount">;
 
+// Language option for CMSE extensions
+def Cmse : LangOpt<"Cmse">;
+
 // Defines targets for target-specific attributes. Empty lists are unchecked.
 class TargetSpec {
   // Specifies Architectures for which the target applies, based off the
@@ -415,6 +420,10 @@ def SubjectMatcherForObjCProtocol : AttrSubjectMatcherRule<"objc_protocol",
 }
 def SubjectMatcherForObjCCategory : AttrSubjectMatcherRule<"objc_category",
                                                            [ObjCCategory]> {
+  let LangOpts = [ObjC];
+}
+def SubjectMatcherForObjCImplementation :
+    AttrSubjectMatcherRule<"objc_implementation", [ObjCImpl]> {
   let LangOpts = [ObjC];
 }
 def SubjectMatcherForObjCMethod : AttrSubjectMatcherRule<"objc_method",
@@ -1761,7 +1770,7 @@ def ObjCRootClass : InheritableAttr {
 
 def ObjCNonLazyClass : Attr {
   let Spellings = [Clang<"objc_nonlazy_class">];
-  let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
+  let Subjects = SubjectList<[ObjCInterface, ObjCImpl], ErrorDiag>;
   let LangOpts = [ObjC];
   let Documentation = [ObjCNonLazyClassDocs];
 }
@@ -2755,6 +2764,12 @@ def MSNoVTable : InheritableAttr, TargetSpecificAttr<TargetMicrosoftCXXABI> {
 
 def : IgnoredAttr {
   let Spellings = [Declspec<"property">];
+}
+
+def MSAllocator : InheritableAttr {
+  let Spellings = [Declspec<"allocator">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [MSAllocatorDocs];
 }
 
 def MSStruct : InheritableAttr {

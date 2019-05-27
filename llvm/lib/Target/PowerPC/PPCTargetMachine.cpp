@@ -13,9 +13,11 @@
 #include "PPCTargetMachine.h"
 #include "MCTargetDesc/PPCMCTargetDesc.h"
 #include "PPC.h"
+#include "PPCMachineScheduler.h"
 #include "PPCSubtarget.h"
 #include "PPCTargetObjectFile.h"
 #include "PPCTargetTransformInfo.h"
+#include "TargetInfo/PowerPCTargetInfo.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -99,6 +101,20 @@ extern "C" void LLVMInitializePowerPCTarget() {
   RegisterTargetMachine<PPCTargetMachine> C(getThePPC64LETarget());
 
   PassRegistry &PR = *PassRegistry::getPassRegistry();
+  initializePPCCTRLoopsPass(PR);
+#ifndef NDEBUG
+  initializePPCCTRLoopsVerifyPass(PR);
+#endif
+  initializePPCLoopPreIncPrepPass(PR);
+  initializePPCTOCRegDepsPass(PR);
+  initializePPCEarlyReturnPass(PR);
+  initializePPCVSXCopyPass(PR);
+  initializePPCVSXFMAMutatePass(PR);
+  initializePPCVSXSwapRemovalPass(PR);
+  initializePPCReduceCRLogicalsPass(PR);
+  initializePPCBSelPass(PR);
+  initializePPCBranchCoalescingPass(PR);
+  initializePPCQPXLoadSplatPass(PR);
   initializePPCBoolRetToIntPass(PR);
   initializePPCExpandISELPass(PR);
   initializePPCPreEmitPeepholePass(PR);
@@ -198,6 +214,8 @@ static PPCTargetMachine::PPCABI computeTargetABI(const Triple &TT,
   case Triple::ppc64le:
     return PPCTargetMachine::PPC_ABI_ELFv2;
   case Triple::ppc64:
+    if (TT.getEnvironment() == llvm::Triple::ELFv2)
+      return PPCTargetMachine::PPC_ABI_ELFv2;
     return PPCTargetMachine::PPC_ABI_ELFv1;
   default:
     return PPCTargetMachine::PPC_ABI_UNKNOWN;
@@ -226,15 +244,32 @@ static CodeModel::Model getEffectivePPCCodeModel(const Triple &TT,
                                                  bool JIT) {
   if (CM) {
     if (*CM == CodeModel::Tiny)
-      report_fatal_error("Target does not support the tiny CodeModel");
+      report_fatal_error("Target does not support the tiny CodeModel", false);
     if (*CM == CodeModel::Kernel)
-      report_fatal_error("Target does not support the kernel CodeModel");
+      report_fatal_error("Target does not support the kernel CodeModel", false);
     return *CM;
   }
   if (!TT.isOSDarwin() && !JIT &&
       (TT.getArch() == Triple::ppc64 || TT.getArch() == Triple::ppc64le))
     return CodeModel::Medium;
   return CodeModel::Small;
+}
+
+
+static ScheduleDAGInstrs *createPPCMachineScheduler(MachineSchedContext *C) {
+  ScheduleDAGMILive *DAG =
+    new ScheduleDAGMILive(C, llvm::make_unique<PPCPreRASchedStrategy>(C));
+  // add DAG Mutations here.
+  DAG->addMutation(createCopyConstrainDAGMutation(DAG->TII, DAG->TRI));
+  return DAG;
+}
+
+static ScheduleDAGInstrs *createPPCPostMachineScheduler(
+  MachineSchedContext *C) {
+  ScheduleDAGMI *DAG =
+    new ScheduleDAGMI(C, llvm::make_unique<PPCPostRASchedStrategy>(C), true);
+  // add DAG Mutations here.
+  return DAG;
 }
 
 // The FeatureString here is a little subtle. We are modifying the feature
@@ -330,6 +365,20 @@ public:
   void addPreRegAlloc() override;
   void addPreSched2() override;
   void addPreEmitPass() override;
+  ScheduleDAGInstrs *
+  createMachineScheduler(MachineSchedContext *C) const override {
+    const PPCSubtarget &ST = C->MF->getSubtarget<PPCSubtarget>();
+    if (ST.usePPCPreRASchedStrategy())
+      return createPPCMachineScheduler(C);
+    return nullptr;
+  }
+  ScheduleDAGInstrs *
+  createPostMachineScheduler(MachineSchedContext *C) const override {
+    const PPCSubtarget &ST = C->MF->getSubtarget<PPCSubtarget>();
+    if (ST.usePPCPostRASchedStrategy())
+      return createPPCPostMachineScheduler(C);
+    return nullptr;
+  }
 };
 
 } // end anonymous namespace
@@ -468,3 +517,13 @@ TargetTransformInfo
 PPCTargetMachine::getTargetTransformInfo(const Function &F) {
   return TargetTransformInfo(PPCTTIImpl(this, F));
 }
+
+static MachineSchedRegistry
+PPCPreRASchedRegistry("ppc-prera",
+                      "Run PowerPC PreRA specific scheduler",
+                      createPPCMachineScheduler);
+
+static MachineSchedRegistry
+PPCPostRASchedRegistry("ppc-postra",
+                       "Run PowerPC PostRA specific scheduler",
+                       createPPCPostMachineScheduler);

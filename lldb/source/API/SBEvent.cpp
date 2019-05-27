@@ -22,7 +22,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-SBEvent::SBEvent() : m_event_sp(), m_opaque_ptr(NULL) {
+SBEvent::SBEvent() : m_event_sp(), m_opaque_ptr(nullptr) {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBEvent);
 }
 
@@ -55,7 +55,7 @@ const SBEvent &SBEvent::operator=(const SBEvent &rhs) {
     m_event_sp = rhs.m_event_sp;
     m_opaque_ptr = rhs.m_opaque_ptr;
   }
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 SBEvent::~SBEvent() {}
@@ -69,7 +69,7 @@ const char *SBEvent::GetDataFlavor() {
     if (event_data)
       return lldb_event->GetData()->GetFlavor().AsCString();
   }
-  return NULL;
+  return nullptr;
 }
 
 uint32_t SBEvent::GetType() const {
@@ -168,7 +168,7 @@ SBEvent::operator bool() const {
 
   // Do NOT use m_opaque_ptr directly!!! Must use the SBEvent::get() accessor.
   // See comments in SBEvent::get()....
-  return SBEvent::get() != NULL;
+  return SBEvent::get() != nullptr;
 }
 
 const char *SBEvent::GetCStringFromEvent(const SBEvent &event) {

@@ -9,7 +9,7 @@ target triple = "wasm32-unknown-unknown"
 @foo = global %union.u1 zeroinitializer, align 1
 @bar = global %union.u1 zeroinitializer, align 1
 
-; CHECK:        - Type:            DATA
+; CHECK:        - Type:            DATA{{$}}
 ; CHECK-NEXT:     Segments:
 ; CHECK-NEXT:       - SectionOffset:   6
 ; CHECK-NEXT:         InitFlags:       0
@@ -78,9 +78,4 @@ target triple = "wasm32-unknown-unknown"
 ; CHECK-NEXT:         Name:            .bss.bar
 ; CHECK-NEXT:         Alignment:       0
 ; CHECK-NEXT:         Flags:           [ ]
-; CHECK-NEXT:   - Type:            CUSTOM
-; CHECK-NEXT:     Name:            target_features
-; CHECK-NEXT:     Features:
-; CHECK-NEXT:       - Prefix:          DISALLOWED
-; CHECK-NEXT:         Name:            atomics
 ; CHECK-NEXT: ...

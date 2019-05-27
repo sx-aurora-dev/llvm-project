@@ -14,9 +14,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "WebAssemblyAsmPrinter.h"
-#include "InstPrinter/WebAssemblyInstPrinter.h"
+#include "MCTargetDesc/WebAssemblyInstPrinter.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "MCTargetDesc/WebAssemblyTargetStreamer.h"
+#include "TargetInfo/WebAssemblyTargetInfo.h"
 #include "WebAssembly.h"
 #include "WebAssemblyMCInstLower.h"
 #include "WebAssemblyMachineFunctionInfo.h"
@@ -33,6 +34,7 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCStreamer.h"
@@ -161,7 +163,7 @@ void WebAssemblyAsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 
   EmitProducerInfo(M);
-  EmitTargetFeatures();
+  EmitTargetFeatures(M);
 }
 
 void WebAssemblyAsmPrinter::EmitProducerInfo(Module &M) {
@@ -215,45 +217,39 @@ void WebAssemblyAsmPrinter::EmitProducerInfo(Module &M) {
   }
 }
 
-void WebAssemblyAsmPrinter::EmitTargetFeatures() {
-  static const std::pair<unsigned, const char *> FeaturePairs[] = {
-      {WebAssembly::FeatureAtomics, "atomics"},
-      {WebAssembly::FeatureBulkMemory, "bulk-memory"},
-      {WebAssembly::FeatureExceptionHandling, "exception-handling"},
-      {WebAssembly::FeatureNontrappingFPToInt, "nontrapping-fptoint"},
-      {WebAssembly::FeatureSignExt, "sign-ext"},
-      {WebAssembly::FeatureSIMD128, "simd128"},
-  };
-
+void WebAssemblyAsmPrinter::EmitTargetFeatures(Module &M) {
   struct FeatureEntry {
     uint8_t Prefix;
     StringRef Name;
   };
 
-  FeatureBitset UsedFeatures =
-      static_cast<WebAssemblyTargetMachine &>(TM).getUsedFeatures();
-
-  // Calculate the features and linkage policies to emit
+  // Read target features and linkage policies from module metadata
   SmallVector<FeatureEntry, 4> EmittedFeatures;
-  for (auto &F : FeaturePairs) {
+  for (const SubtargetFeatureKV &KV : WebAssemblyFeatureKV) {
+    std::string MDKey = (StringRef("wasm-feature-") + KV.Key).str();
+    Metadata *Policy = M.getModuleFlag(MDKey);
+    if (Policy == nullptr)
+      continue;
+
     FeatureEntry Entry;
-    Entry.Name = F.second;
-    if (F.first == WebAssembly::FeatureAtomics) {
-      // "atomics" is special: code compiled without atomics may have had its
-      // atomics lowered to nonatomic operations. Such code would be dangerous
-      // to mix with proper atomics, so it is always Required or Disallowed.
-      Entry.Prefix = UsedFeatures[F.first]
-                         ? wasm::WASM_FEATURE_PREFIX_REQUIRED
-                         : wasm::WASM_FEATURE_PREFIX_DISALLOWED;
-      EmittedFeatures.push_back(Entry);
-    } else {
-      // Other features are marked Used or not mentioned
-      if (UsedFeatures[F.first]) {
-        Entry.Prefix = wasm::WASM_FEATURE_PREFIX_USED;
-        EmittedFeatures.push_back(Entry);
-      }
-    }
+    Entry.Prefix = 0;
+    Entry.Name = KV.Key;
+
+    if (auto *MD = cast<ConstantAsMetadata>(Policy))
+      if (auto *I = cast<ConstantInt>(MD->getValue()))
+        Entry.Prefix = I->getZExtValue();
+
+    // Silently ignore invalid metadata
+    if (Entry.Prefix != wasm::WASM_FEATURE_PREFIX_USED &&
+        Entry.Prefix != wasm::WASM_FEATURE_PREFIX_REQUIRED &&
+        Entry.Prefix != wasm::WASM_FEATURE_PREFIX_DISALLOWED)
+      continue;
+
+    EmittedFeatures.push_back(Entry);
   }
+
+  if (EmittedFeatures.size() == 0)
+    return;
 
   // Emit features and linkage policies into the "target_features" section
   MCSectionWasm *FeaturesSection = OutContext.getWasmSection(
@@ -392,14 +388,11 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 }
 
 bool WebAssemblyAsmPrinter::PrintAsmOperand(const MachineInstr *MI,
-                                            unsigned OpNo, unsigned AsmVariant,
+                                            unsigned OpNo,
                                             const char *ExtraCode,
                                             raw_ostream &OS) {
-  if (AsmVariant != 0)
-    report_fatal_error("There are no defined alternate asm variants");
-
   // First try the generic code, which knows about modifiers like 'c' and 'n'.
-  if (!AsmPrinter::PrintAsmOperand(MI, OpNo, AsmVariant, ExtraCode, OS))
+  if (!AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, OS))
     return false;
 
   if (!ExtraCode) {
@@ -415,8 +408,7 @@ bool WebAssemblyAsmPrinter::PrintAsmOperand(const MachineInstr *MI,
       OS << regToString(MO);
       return false;
     case MachineOperand::MO_GlobalAddress:
-      getSymbol(MO.getGlobal())->print(OS, MAI);
-      printOffset(MO.getOffset(), OS);
+      PrintSymbolOperand(MO, OS);
       return false;
     case MachineOperand::MO_ExternalSymbol:
       GetExternalSymbolSymbol(MO.getSymbolName())->print(OS, MAI);
@@ -435,19 +427,15 @@ bool WebAssemblyAsmPrinter::PrintAsmOperand(const MachineInstr *MI,
 
 bool WebAssemblyAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
                                                   unsigned OpNo,
-                                                  unsigned AsmVariant,
                                                   const char *ExtraCode,
                                                   raw_ostream &OS) {
-  if (AsmVariant != 0)
-    report_fatal_error("There are no defined alternate asm variants");
-
   // The current approach to inline asm is that "r" constraints are expressed
   // as local indices, rather than values on the operand stack. This simplifies
   // using "r" as it eliminates the need to push and pop the values in a
   // particular order, however it also makes it impossible to have an "m"
   // constraint. So we don't support it.
 
-  return AsmPrinter::PrintAsmMemoryOperand(MI, OpNo, AsmVariant, ExtraCode, OS);
+  return AsmPrinter::PrintAsmMemoryOperand(MI, OpNo, ExtraCode, OS);
 }
 
 // Force static initialization.

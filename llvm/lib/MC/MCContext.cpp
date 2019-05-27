@@ -572,19 +572,31 @@ void MCContext::RemapDebugPaths() {
 void MCContext::setGenDwarfRootFile(StringRef InputFileName, StringRef Buffer) {
   // MCDwarf needs the root file as well as the compilation directory.
   // If we find a '.file 0' directive that will supersede these values.
-  MD5::MD5Result *Cksum = nullptr;
+  Optional<MD5::MD5Result> Cksum;
   if (getDwarfVersion() >= 5) {
     MD5 Hash;
-    Cksum = (MD5::MD5Result *)allocate(sizeof(MD5::MD5Result), 1);
+    MD5::MD5Result Sum;
     Hash.update(Buffer);
-    Hash.final(*Cksum);
+    Hash.final(Sum);
+    Cksum = Sum;
   }
   // Canonicalize the root filename. It cannot be empty, and should not
   // repeat the compilation dir.
-  StringRef FileName =
-      !getMainFileName().empty() ? StringRef(getMainFileName()) : InputFileName;
-  if (FileName.empty() || FileName == "-")
-    FileName = "<stdin>";
+  // The MCContext ctor initializes MainFileName to the name associated with
+  // the SrcMgr's main file ID, which might be the same as InputFileName (and
+  // possibly include directory components).
+  // Or, MainFileName might have been overridden by a -main-file-name option,
+  // which is supposed to be just a base filename with no directory component.
+  // So, if the InputFileName and MainFileName are not equal, assume
+  // MainFileName is a substitute basename and replace the last component.
+  SmallString<1024> FileNameBuf = InputFileName;
+  if (FileNameBuf.empty() || FileNameBuf == "-")
+    FileNameBuf = "<stdin>";
+  if (!getMainFileName().empty() && FileNameBuf != getMainFileName()) {
+    llvm::sys::path::remove_filename(FileNameBuf);
+    llvm::sys::path::append(FileNameBuf, getMainFileName());
+  }
+  StringRef FileName = FileNameBuf;
   if (FileName.consume_front(getCompilationDir()))
     if (llvm::sys::path::is_separator(FileName.front()))
       FileName = FileName.drop_front();
@@ -600,11 +612,12 @@ void MCContext::setGenDwarfRootFile(StringRef InputFileName, StringRef Buffer) {
 Expected<unsigned> MCContext::getDwarfFile(StringRef Directory,
                                            StringRef FileName,
                                            unsigned FileNumber,
-                                           MD5::MD5Result *Checksum,
+                                           Optional<MD5::MD5Result> Checksum,
                                            Optional<StringRef> Source,
                                            unsigned CUID) {
   MCDwarfLineTable &Table = MCDwarfLineTablesCUMap[CUID];
-  return Table.tryGetFile(Directory, FileName, Checksum, Source, FileNumber);
+  return Table.tryGetFile(Directory, FileName, Checksum, Source, DwarfVersion,
+                          FileNumber);
 }
 
 /// isValidDwarfFileNumber - takes a dwarf file number and returns true if it
@@ -612,7 +625,7 @@ Expected<unsigned> MCContext::getDwarfFile(StringRef Directory,
 bool MCContext::isValidDwarfFileNumber(unsigned FileNumber, unsigned CUID) {
   const MCDwarfLineTable &LineTable = getMCDwarfLineTable(CUID);
   if (FileNumber == 0)
-    return getDwarfVersion() >= 5 && LineTable.hasRootFile();
+    return getDwarfVersion() >= 5;
   if (FileNumber >= LineTable.getMCDwarfFiles().size())
     return false;
 

@@ -11,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "InstPrinter/X86ATTInstPrinter.h"
-#include "InstPrinter/X86InstComments.h"
+#include "MCTargetDesc/X86ATTInstPrinter.h"
 #include "MCTargetDesc/X86BaseInfo.h"
+#include "MCTargetDesc/X86InstComments.h"
 #include "MCTargetDesc/X86TargetStreamer.h"
 #include "Utils/X86ShuffleDecode.h"
 #include "X86AsmPrinter.h"
@@ -550,11 +550,6 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
     case X86::TAILJMPd64:
       Opcode = X86::JMP_1;
       goto SetTailJmpOpcode;
-    case X86::TAILJMPd_CC:
-    case X86::TAILJMPd64_CC:
-      Opcode = X86::GetCondBranchFromCond(
-          static_cast<X86::CondCode>(MI->getOperand(1).getImm()));
-      goto SetTailJmpOpcode;
 
     SetTailJmpOpcode:
       MCOperand Saved = OutMI.getOperand(0);
@@ -563,6 +558,17 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
       OutMI.addOperand(Saved);
       break;
     }
+
+  case X86::TAILJMPd_CC:
+  case X86::TAILJMPd64_CC: {
+    MCOperand Saved = OutMI.getOperand(0);
+    MCOperand Saved2 = OutMI.getOperand(1);
+    OutMI = MCInst();
+    OutMI.setOpcode(X86::JCC_1);
+    OutMI.addOperand(Saved);
+    OutMI.addOperand(Saved2);
+    break;
+  }
 
   case X86::DEC16r:
   case X86::DEC32r:
@@ -677,16 +683,9 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 
 void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
                                  const MachineInstr &MI) {
-
-  bool is64Bits = MI.getOpcode() == X86::TLS_addr64 ||
+  bool Is64Bits = MI.getOpcode() == X86::TLS_addr64 ||
                   MI.getOpcode() == X86::TLS_base_addr64;
-
-  bool needsPadding = MI.getOpcode() == X86::TLS_addr64;
-
-  MCContext &context = OutStreamer->getContext();
-
-  if (needsPadding)
-    EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
+  MCContext &Ctx = OutStreamer->getContext();
 
   MCSymbolRefExpr::VariantKind SRVK;
   switch (MI.getOpcode()) {
@@ -704,51 +703,79 @@ void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
     llvm_unreachable("unexpected opcode");
   }
 
-  MCSymbol *sym = MCInstLowering.GetSymbolFromOperand(MI.getOperand(3));
-  const MCSymbolRefExpr *symRef = MCSymbolRefExpr::create(sym, SRVK, context);
+  const MCSymbolRefExpr *Sym = MCSymbolRefExpr::create(
+      MCInstLowering.GetSymbolFromOperand(MI.getOperand(3)), SRVK, Ctx);
+  bool UseGot = MMI->getModule()->getRtLibUseGOT();
 
-  MCInst LEA;
-  if (is64Bits) {
-    LEA.setOpcode(X86::LEA64r);
-    LEA.addOperand(MCOperand::createReg(X86::RDI)); // dest
-    LEA.addOperand(MCOperand::createReg(X86::RIP)); // base
-    LEA.addOperand(MCOperand::createImm(1));        // scale
-    LEA.addOperand(MCOperand::createReg(0));        // index
-    LEA.addOperand(MCOperand::createExpr(symRef));  // disp
-    LEA.addOperand(MCOperand::createReg(0));        // seg
-  } else if (SRVK == MCSymbolRefExpr::VK_TLSLDM) {
-    LEA.setOpcode(X86::LEA32r);
-    LEA.addOperand(MCOperand::createReg(X86::EAX)); // dest
-    LEA.addOperand(MCOperand::createReg(X86::EBX)); // base
-    LEA.addOperand(MCOperand::createImm(1));        // scale
-    LEA.addOperand(MCOperand::createReg(0));        // index
-    LEA.addOperand(MCOperand::createExpr(symRef));  // disp
-    LEA.addOperand(MCOperand::createReg(0));        // seg
+  if (Is64Bits) {
+    bool NeedsPadding = SRVK == MCSymbolRefExpr::VK_TLSGD;
+    if (NeedsPadding)
+      EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
+    EmitAndCountInstruction(MCInstBuilder(X86::LEA64r)
+                                .addReg(X86::RDI)
+                                .addReg(X86::RIP)
+                                .addImm(1)
+                                .addReg(0)
+                                .addExpr(Sym)
+                                .addReg(0));
+    const MCSymbol *TlsGetAddr = Ctx.getOrCreateSymbol("__tls_get_addr");
+    if (NeedsPadding) {
+      if (!UseGot)
+        EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
+      EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
+      EmitAndCountInstruction(MCInstBuilder(X86::REX64_PREFIX));
+    }
+    if (UseGot) {
+      const MCExpr *Expr = MCSymbolRefExpr::create(
+          TlsGetAddr, MCSymbolRefExpr::VK_GOTPCREL, Ctx);
+      EmitAndCountInstruction(MCInstBuilder(X86::CALL64m)
+                                  .addReg(X86::RIP)
+                                  .addImm(1)
+                                  .addReg(0)
+                                  .addExpr(Expr)
+                                  .addReg(0));
+    } else {
+      EmitAndCountInstruction(
+          MCInstBuilder(X86::CALL64pcrel32)
+              .addExpr(MCSymbolRefExpr::create(TlsGetAddr,
+                                               MCSymbolRefExpr::VK_PLT, Ctx)));
+    }
   } else {
-    LEA.setOpcode(X86::LEA32r);
-    LEA.addOperand(MCOperand::createReg(X86::EAX)); // dest
-    LEA.addOperand(MCOperand::createReg(0));        // base
-    LEA.addOperand(MCOperand::createImm(1));        // scale
-    LEA.addOperand(MCOperand::createReg(X86::EBX)); // index
-    LEA.addOperand(MCOperand::createExpr(symRef));  // disp
-    LEA.addOperand(MCOperand::createReg(0));        // seg
+    if (SRVK == MCSymbolRefExpr::VK_TLSGD && !UseGot) {
+      EmitAndCountInstruction(MCInstBuilder(X86::LEA32r)
+                                  .addReg(X86::EAX)
+                                  .addReg(0)
+                                  .addImm(1)
+                                  .addReg(X86::EBX)
+                                  .addExpr(Sym)
+                                  .addReg(0));
+    } else {
+      EmitAndCountInstruction(MCInstBuilder(X86::LEA32r)
+                                  .addReg(X86::EAX)
+                                  .addReg(X86::EBX)
+                                  .addImm(1)
+                                  .addReg(0)
+                                  .addExpr(Sym)
+                                  .addReg(0));
+    }
+
+    const MCSymbol *TlsGetAddr = Ctx.getOrCreateSymbol("___tls_get_addr");
+    if (UseGot) {
+      const MCExpr *Expr =
+          MCSymbolRefExpr::create(TlsGetAddr, MCSymbolRefExpr::VK_GOT, Ctx);
+      EmitAndCountInstruction(MCInstBuilder(X86::CALL32m)
+                                  .addReg(X86::EBX)
+                                  .addImm(1)
+                                  .addReg(0)
+                                  .addExpr(Expr)
+                                  .addReg(0));
+    } else {
+      EmitAndCountInstruction(
+          MCInstBuilder(X86::CALLpcrel32)
+              .addExpr(MCSymbolRefExpr::create(TlsGetAddr,
+                                               MCSymbolRefExpr::VK_PLT, Ctx)));
+    }
   }
-  EmitAndCountInstruction(LEA);
-
-  if (needsPadding) {
-    EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
-    EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
-    EmitAndCountInstruction(MCInstBuilder(X86::REX64_PREFIX));
-  }
-
-  StringRef name = is64Bits ? "__tls_get_addr" : "___tls_get_addr";
-  MCSymbol *tlsGetAddr = context.getOrCreateSymbol(name);
-  const MCSymbolRefExpr *tlsRef =
-      MCSymbolRefExpr::create(tlsGetAddr, MCSymbolRefExpr::VK_PLT, context);
-
-  EmitAndCountInstruction(
-      MCInstBuilder(is64Bits ? X86::CALL64pcrel32 : X86::CALLpcrel32)
-          .addExpr(tlsRef));
 }
 
 /// Emit the largest nop instruction smaller than or equal to \p NumBytes
@@ -761,7 +788,7 @@ static unsigned EmitNop(MCStreamer &OS, unsigned NumBytes, bool Is64Bit,
 
   unsigned NopSize;
   unsigned Opc, BaseReg, ScaleVal, IndexReg, Displacement, SegmentReg;
-  Opc = IndexReg = Displacement = SegmentReg = 0;
+  IndexReg = Displacement = SegmentReg = 0;
   BaseReg = X86::RAX;
   ScaleVal = 1;
   switch (NumBytes) {
@@ -1358,7 +1385,8 @@ PrevCrossBBInst(MachineBasicBlock::const_iterator MBBI) {
     MBB = MBB->getPrevNode();
     MBBI = MBB->end();
   }
-  return --MBBI;
+  --MBBI;
+  return MBBI;
 }
 
 static const Constant *getConstantFromPool(const MachineInstr &MI,

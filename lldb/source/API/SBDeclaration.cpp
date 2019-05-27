@@ -42,7 +42,7 @@ const SBDeclaration &SBDeclaration::operator=(const SBDeclaration &rhs) {
 
   if (this != &rhs)
     m_opaque_up = clone(rhs.m_opaque_up);
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 void SBDeclaration::SetDeclaration(
@@ -147,7 +147,7 @@ const lldb_private::Declaration *SBDeclaration::operator->() const {
 }
 
 lldb_private::Declaration &SBDeclaration::ref() {
-  if (m_opaque_up == NULL)
+  if (m_opaque_up == nullptr)
     m_opaque_up.reset(new lldb_private::Declaration());
   return *m_opaque_up;
 }

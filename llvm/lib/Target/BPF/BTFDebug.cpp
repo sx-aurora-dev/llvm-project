@@ -18,8 +18,7 @@
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
-#include <fstream>
-#include <sstream>
+#include "llvm/Support/LineIterator.h"
 
 using namespace llvm;
 
@@ -66,7 +65,7 @@ void BTFTypeDerived::completeType(BTFDebug &BDebug) {
   BTFType.NameOff = BDebug.addString(DTy->getName());
 
   // The base type for PTR/CONST/VOLATILE could be void.
-  const DIType *ResolvedType = DTy->getBaseType().resolve();
+  const DIType *ResolvedType = DTy->getBaseType();
   if (!ResolvedType) {
     assert((Kind == BTF::BTF_KIND_PTR || Kind == BTF::BTF_KIND_CONST ||
             Kind == BTF::BTF_KIND_VOLATILE) &&
@@ -158,45 +157,24 @@ void BTFTypeEnum::emitType(MCStreamer &OS) {
   }
 }
 
-BTFTypeArray::BTFTypeArray(const DICompositeType *ATy) : ATy(ATy) {
+BTFTypeArray::BTFTypeArray(uint32_t ElemTypeId, uint32_t NumElems) {
   Kind = BTF::BTF_KIND_ARRAY;
+  BTFType.NameOff = 0;
   BTFType.Info = Kind << 24;
-}
-
-/// Represent a BTF array. BTF does not record array dimensions,
-/// so conceptually a BTF array is a one-dimensional array.
-void BTFTypeArray::completeType(BTFDebug &BDebug) {
-  BTFType.NameOff = BDebug.addString(ATy->getName());
   BTFType.Size = 0;
 
-  auto *BaseType = ATy->getBaseType().resolve();
-  ArrayInfo.ElemType = BDebug.getTypeId(BaseType);
+  ArrayInfo.ElemType = ElemTypeId;
+  ArrayInfo.Nelems = NumElems;
+}
+
+/// Represent a BTF array.
+void BTFTypeArray::completeType(BTFDebug &BDebug) {
 
   // The IR does not really have a type for the index.
   // A special type for array index should have been
   // created during initial type traversal. Just
   // retrieve that type id.
   ArrayInfo.IndexType = BDebug.getArrayIndexTypeId();
-
-  // Get the number of array elements.
-  // If the array size is 0, set the number of elements as 0.
-  // Otherwise, recursively traverse the base types to
-  // find the element size. The number of elements is
-  // the totoal array size in bits divided by
-  // element size in bits.
-  uint64_t ArraySizeInBits = ATy->getSizeInBits();
-  if (!ArraySizeInBits) {
-    ArrayInfo.Nelems = 0;
-  } else {
-    uint32_t BaseTypeSize = BaseType->getSizeInBits();
-    while (!BaseTypeSize) {
-      const auto *DDTy = cast<DIDerivedType>(BaseType);
-      BaseType = DDTy->getBaseType().resolve();
-      assert(BaseType);
-      BaseTypeSize = BaseType->getSizeInBits();
-    }
-    ArrayInfo.Nelems = ATy->getSizeInBits() / BaseTypeSize;
-  }
 }
 
 void BTFTypeArray::emitType(MCStreamer &OS) {
@@ -231,7 +209,7 @@ void BTFTypeStruct::completeType(BTFDebug &BDebug) {
     } else {
       BTFMember.Offset = DDTy->getOffsetInBits();
     }
-    BTFMember.Type = BDebug.getTypeId(DDTy->getBaseType().resolve());
+    BTFMember.Type = BDebug.getTypeId(DDTy->getBaseType());
     Members.push_back(BTFMember);
   }
 }
@@ -261,7 +239,7 @@ BTFTypeFuncProto::BTFTypeFuncProto(
 
 void BTFTypeFuncProto::completeType(BTFDebug &BDebug) {
   DITypeRefArray Elements = STy->getTypeArray();
-  auto RetType = Elements[0].resolve();
+  auto RetType = Elements[0];
   BTFType.Type = RetType ? BDebug.getTypeId(RetType) : 0;
   BTFType.NameOff = 0;
 
@@ -269,7 +247,7 @@ void BTFTypeFuncProto::completeType(BTFDebug &BDebug) {
   // to represent the vararg, encode the NameOff/Type to be 0.
   for (unsigned I = 1, N = Elements.size(); I < N; ++I) {
     struct BTF::BTFParam Param;
-    auto Element = Elements[I].resolve();
+    auto Element = Elements[I];
     if (Element) {
       Param.NameOff = BDebug.addString(FuncArgNames[I]);
       Param.Type = BDebug.getTypeId(Element);
@@ -415,7 +393,7 @@ void BTFDebug::visitSubroutineType(
 
   // Visit return type and func arg types.
   for (const auto Element : Elements) {
-    visitTypeEntry(Element.resolve());
+    visitTypeEntry(Element);
   }
 }
 
@@ -447,8 +425,34 @@ void BTFDebug::visitStructType(const DICompositeType *CTy, bool IsStruct,
 }
 
 void BTFDebug::visitArrayType(const DICompositeType *CTy, uint32_t &TypeId) {
-  auto TypeEntry = llvm::make_unique<BTFTypeArray>(CTy);
-  TypeId = addType(std::move(TypeEntry), CTy);
+  // Visit array element type.
+  uint32_t ElemTypeId;
+  visitTypeEntry(CTy->getBaseType(), ElemTypeId);
+
+  if (!CTy->getSizeInBits()) {
+    auto TypeEntry = llvm::make_unique<BTFTypeArray>(ElemTypeId, 0);
+    ElemTypeId = addType(std::move(TypeEntry), CTy);
+  } else {
+    // Visit array dimensions.
+    DINodeArray Elements = CTy->getElements();
+    for (int I = Elements.size() - 1; I >= 0; --I) {
+      if (auto *Element = dyn_cast_or_null<DINode>(Elements[I]))
+        if (Element->getTag() == dwarf::DW_TAG_subrange_type) {
+          const DISubrange *SR = cast<DISubrange>(Element);
+          auto *CI = SR->getCount().dyn_cast<ConstantInt *>();
+          int64_t Count = CI->getSExtValue();
+
+          auto TypeEntry = llvm::make_unique<BTFTypeArray>(ElemTypeId, Count);
+          if (I == 0)
+            ElemTypeId = addType(std::move(TypeEntry), CTy);
+          else
+            ElemTypeId = addType(std::move(TypeEntry));
+        }
+    }
+  }
+
+  // The array TypeId is the type id of the outermost dimension.
+  TypeId = ElemTypeId;
 
   // The IR does not have a type for array index while BTF wants one.
   // So create an array index type if there is none.
@@ -457,9 +461,6 @@ void BTFDebug::visitArrayType(const DICompositeType *CTy, uint32_t &TypeId) {
                                                    0, "__ARRAY_SIZE_TYPE__");
     ArrayIndexTypeId = addType(std::move(TypeEntry));
   }
-
-  // Visit array element type.
-  visitTypeEntry(CTy->getBaseType().resolve());
 }
 
 void BTFDebug::visitEnumType(const DICompositeType *CTy, uint32_t &TypeId) {
@@ -511,7 +512,8 @@ void BTFDebug::visitDerivedType(const DIDerivedType *DTy, uint32_t &TypeId) {
 
   // Visit base type of pointer, typedef, const, volatile, restrict or
   // struct/union member.
-  visitTypeEntry(DTy->getBaseType().resolve(), TypeId);
+  uint32_t TempTypeId = 0;
+  visitTypeEntry(DTy->getBaseType(), TempTypeId);
 }
 
 void BTFDebug::visitTypeEntry(const DIType *Ty, uint32_t &TypeId) {
@@ -556,16 +558,16 @@ std::string BTFDebug::populateFileContent(const DISubprogram *SP) {
   std::string Line;
   Content.push_back(Line); // Line 0 for empty string
 
+  std::unique_ptr<MemoryBuffer> Buf;
   auto Source = File->getSource();
-  if (Source) {
-    std::istringstream InputString(Source.getValue());
-    while (std::getline(InputString, Line))
-      Content.push_back(Line);
-  } else {
-    std::ifstream InputFile(FileName);
-    while (std::getline(InputFile, Line))
-      Content.push_back(Line);
-  }
+  if (Source)
+    Buf = MemoryBuffer::getMemBufferCopy(*Source);
+  else if (ErrorOr<std::unique_ptr<MemoryBuffer>> BufOrErr =
+               MemoryBuffer::getFile(FileName))
+    Buf = std::move(*BufOrErr);
+  if (Buf)
+    for (line_iterator I(*Buf, false), E; I != E; ++I)
+      Content.push_back(*I);
 
   FileContent[FileName] = Content;
   return FileName;
@@ -711,7 +713,7 @@ void BTFDebug::beginFunctionImpl(const MachineFunction *MF) {
       // Collect function arguments for subprogram func type.
       uint32_t Arg = DV->getArg();
       if (Arg) {
-        visitTypeEntry(DV->getType().resolve());
+        visitTypeEntry(DV->getType());
         FuncArgNames[Arg] = DV->getName();
       }
     }
@@ -808,7 +810,7 @@ void BTFDebug::processGlobals() {
     Global.getDebugInfo(GVs);
     uint32_t GVTypeId = 0;
     for (auto *GVE : GVs) {
-      visitTypeEntry(GVE->getVariable()->getType().resolve(), GVTypeId);
+      visitTypeEntry(GVE->getVariable()->getType(), GVTypeId);
       break;
     }
 

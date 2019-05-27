@@ -3524,13 +3524,16 @@ INTERCEPTOR(SIZE_T, wcrtomb, char *dest, wchar_t src, void *ps) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, wcrtomb, dest, src, ps);
   if (ps) COMMON_INTERCEPTOR_READ_RANGE(ctx, ps, mbstate_t_sz);
-  // FIXME: under ASan the call below may write to freed memory and corrupt
-  // its metadata. See
-  // https://github.com/google/sanitizers/issues/321.
-  SIZE_T res = REAL(wcrtomb)(dest, src, ps);
-  if (res != ((SIZE_T)-1) && dest) {
-    SIZE_T write_cnt = res;
-    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, dest, write_cnt);
+
+  if (!dest)
+    return REAL(wcrtomb)(dest, src, ps);
+
+  char local_dest[32];
+  SIZE_T res = REAL(wcrtomb)(local_dest, src, ps);
+  if (res != ((SIZE_T)-1)) {
+    CHECK_LE(res, sizeof(local_dest));
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, dest, res);
+    REAL(memcpy)(dest, local_dest, res);
   }
   return res;
 }
@@ -3538,6 +3541,28 @@ INTERCEPTOR(SIZE_T, wcrtomb, char *dest, wchar_t src, void *ps) {
 #define INIT_WCRTOMB COMMON_INTERCEPT_FUNCTION(wcrtomb);
 #else
 #define INIT_WCRTOMB
+#endif
+
+#if SANITIZER_INTERCEPT_WCTOMB
+INTERCEPTOR(int, wctomb, char *dest, wchar_t src) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, wctomb, dest, src);
+  if (!dest)
+    return REAL(wctomb)(dest, src);
+
+  char local_dest[32];
+  int res = REAL(wctomb)(local_dest, src);
+  if (res != -1) {
+    CHECK_LE(res, sizeof(local_dest));
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, dest, res);
+    REAL(memcpy)(dest, local_dest, res);
+  }
+  return res;
+}
+
+#define INIT_WCTOMB COMMON_INTERCEPT_FUNCTION(wctomb);
+#else
+#define INIT_WCTOMB
 #endif
 
 #if SANITIZER_INTERCEPT_TCGETATTR
@@ -6709,6 +6734,23 @@ INTERCEPTOR(wchar_t *, wcsncat, wchar_t *dst, const wchar_t *src, SIZE_T n) {
 #define INIT_WCSCAT
 #endif
 
+#if SANITIZER_INTERCEPT_WCSDUP
+INTERCEPTOR(wchar_t *, wcsdup, wchar_t *s) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, wcsdup, s);
+  SIZE_T len = REAL(wcslen)(s);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, s, sizeof(wchar_t) * (len + 1));
+  wchar_t *result = REAL(wcsdup)(s);
+  if (result)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, result, sizeof(wchar_t) * (len + 1));
+  return result;
+}
+
+#define INIT_WCSDUP COMMON_INTERCEPT_FUNCTION(wcsdup);
+#else
+#define INIT_WCSDUP
+#endif
+
 #if SANITIZER_INTERCEPT_STRXFRM
 static SIZE_T RealStrLen(const char *str) { return REAL(strlen)(str); }
 
@@ -9616,6 +9658,7 @@ static void InitializeCommonInterceptors() {
   INIT_WCSTOMBS;
   INIT_WCSNRTOMBS;
   INIT_WCRTOMB;
+  INIT_WCTOMB;
   INIT_TCGETATTR;
   INIT_REALPATH;
   INIT_CANONICALIZE_FILE_NAME;
@@ -9739,6 +9782,7 @@ static void InitializeCommonInterceptors() {
   INIT_GETLOADAVG;
   INIT_WCSLEN;
   INIT_WCSCAT;
+  INIT_WCSDUP;
   INIT_WCSXFRM;
   INIT___WCSXFRM_L;
   INIT_ACCT;

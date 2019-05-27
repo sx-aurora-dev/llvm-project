@@ -39,7 +39,7 @@ write_lit_config("lit_site_cfg") {
   output = clang_lit_site_cfg_file
 
   extra_values = [
-    "CLANG_ANALYZER_WITH_Z3=",  # Must be empty, not 0.
+    "LLVM_WITH_Z3=",  # Must be empty, not 0.
     "CLANG_BUILD_EXAMPLES=0",
     "CLANG_DEFAULT_CXX_STDLIB=",  # Empty string means "default value" here.
     "CLANG_TOOLS_DIR=" + rebase_path("$root_out_dir/bin"),
@@ -79,6 +79,8 @@ write_lit_config("lit_site_cfg") {
 
   if (host_cpu == "x64") {
     extra_values += [ "HOST_ARCH=x86_64" ]
+  } else if (host_cpu == "ppc64") {
+    extra_values += [ "HOST_ARCH=powerpc64le" ]
   } else {
     assert(false, "unimplemented host_cpu " + host_cpu)
   }
@@ -89,6 +91,12 @@ write_lit_config("lit_site_cfg") {
     extra_values += [ "LLVM_PLUGIN_EXT=.dll" ]
   } else {
     extra_values += [ "LLVM_PLUGIN_EXT=.so" ]
+  }
+
+  if (host_os == "win") {
+    extra_values += [ "LLVM_ENABLE_PLUGINS=0" ]
+  } else {
+    extra_values += [ "LLVM_ENABLE_PLUGINS=1" ]
   }
 }
 

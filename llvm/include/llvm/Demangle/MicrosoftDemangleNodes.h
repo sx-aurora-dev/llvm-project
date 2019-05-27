@@ -170,8 +170,8 @@ enum class IntrinsicFunctionKind : uint8_t {
   VectorCopyCtorIter,         // ?__G vector copy constructor iterator
   VectorVbaseCopyCtorIter,    // ?__H vector vbase copy constructor iterator
   ManVectorVbaseCopyCtorIter, // ?__I managed vector vbase copy constructor
-  CoAwait,                    // ?__L co_await
-  Spaceship,                  // operator<=>
+  CoAwait,                    // ?__L operator co_await
+  Spaceship,                  // ?__M operator<=>
   MaxIntrinsic
 };
 
@@ -513,7 +513,7 @@ struct NodeArrayNode : public Node {
 
   void output(OutputStream &OS, OutputFlags Flags, StringView Separator) const;
 
-  Node **Nodes = 0;
+  Node **Nodes = nullptr;
   size_t Count = 0;
 };
 

@@ -315,6 +315,27 @@ void parseManifestUAC(StringRef Arg) {
   }
 }
 
+// Parses a string in the form of "cd|net[,(cd|net)]*"
+// Results are directly written to Config.
+void parseSwaprun(StringRef Arg) {
+  do {
+    StringRef Swaprun, NewArg;
+    std::tie(Swaprun, NewArg) = Arg.split(',');
+    if (Swaprun.equals_lower("cd"))
+      Config->SwaprunCD = true;
+    else if (Swaprun.equals_lower("net"))
+      Config->SwaprunNet = true;
+    else if (Swaprun.empty())
+      error("/swaprun: missing argument");
+    else
+      error("/swaprun: invalid argument: " + Swaprun);
+    // To catch trailing commas, e.g. `/spawrun:cd,`
+    if (NewArg.empty() && Arg.endswith(","))
+      error("/swaprun: missing argument");
+    Arg = NewArg;
+  } while (!Arg.empty());
+}
+
 // An RAII temporary file class that automatically removes a temporary file.
 namespace {
 class TemporaryFile {
@@ -698,16 +719,19 @@ void assignExportOrdinals() {
 
 // Parses a string in the form of "key=value" and check
 // if value matches previous values for the same key.
-void checkFailIfMismatch(StringRef Arg, StringRef Source) {
+void checkFailIfMismatch(StringRef Arg, InputFile *Source) {
   StringRef K, V;
   std::tie(K, V) = Arg.split('=');
   if (K.empty() || V.empty())
     fatal("/failifmismatch: invalid argument: " + Arg);
-  std::pair<StringRef, StringRef> Existing = Config->MustMatch[K];
+  std::pair<StringRef, InputFile *> Existing = Config->MustMatch[K];
   if (!Existing.first.empty() && V != Existing.first) {
+    std::string SourceStr = Source ? toString(Source) : "cmd-line";
+    std::string ExistingStr =
+        Existing.second ? toString(Existing.second) : "cmd-line";
     fatal("/failifmismatch: mismatch detected for '" + K + "':\n>>> " +
-          Existing.second + " has value " + Existing.first + "\n>>> " +
-          Source + " has value " + V);
+          ExistingStr + " has value " + Existing.first + "\n>>> " + SourceStr +
+          " has value " + V);
   }
   Config->MustMatch[K] = {V, Source};
 }
@@ -721,8 +745,16 @@ MemoryBufferRef convertResToCOFF(ArrayRef<MemoryBufferRef> MBs) {
     object::WindowsResource *RF = dyn_cast<object::WindowsResource>(Bin.get());
     if (!RF)
       fatal("cannot compile non-resource file as resource");
-    if (auto EC = Parser.parse(RF))
-      fatal("failed to parse .res file: " + toString(std::move(EC)));
+
+    std::vector<std::string> Duplicates;
+    if (auto EC = Parser.parse(RF, Duplicates))
+      fatal(toString(std::move(EC)));
+
+    for (const auto &DupeDiag : Duplicates)
+      if (Config->ForceMultipleRes)
+        warn(DupeDiag);
+      else
+        error(DupeDiag);
   }
 
   Expected<std::unique_ptr<MemoryBuffer>> E =
@@ -801,7 +833,8 @@ opt::InputArgList ArgParser::parse(ArrayRef<const char *> Argv) {
 
   // Expand response files (arguments in the form of @<filename>)
   // and then parse the argument again.
-  SmallVector<const char *, 256> ExpandedArgv(Argv.data(), Argv.data() + Argv.size());
+  SmallVector<const char *, 256> ExpandedArgv(Argv.data(),
+                                              Argv.data() + Argv.size());
   cl::ExpandResponseFiles(Saver, getQuotingStyle(Args), ExpandedArgv);
   Args = Table.ParseArgs(makeArrayRef(ExpandedArgv).drop_front(), MissingIndex,
                          MissingCount);
@@ -826,8 +859,14 @@ opt::InputArgList ArgParser::parse(ArrayRef<const char *> Argv) {
 
   handleColorDiagnostics(Args);
 
-  for (auto *Arg : Args.filtered(OPT_UNKNOWN))
-    warn("ignoring unknown argument: " + Arg->getSpelling());
+  for (auto *Arg : Args.filtered(OPT_UNKNOWN)) {
+    std::string Nearest;
+    if (Table.findNearest(Arg->getAsString(Args), Nearest) > 1)
+      warn("ignoring unknown argument '" + Arg->getSpelling() + "'");
+    else
+      warn("ignoring unknown argument '" + Arg->getSpelling() +
+           "', did you mean '" + Nearest + "'");
+  }
 
   if (Args.hasArg(OPT_lib))
     warn("ignoring /lib since it's not the first argument");

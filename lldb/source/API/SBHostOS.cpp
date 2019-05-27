@@ -6,10 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_DISABLE_PYTHON
-#include "Plugins/ScriptInterpreter/Python/lldb-python.h"
-#endif
-
 #include "SBReproducerPrivate.h"
 #include "lldb/API/SBError.h"
 #include "lldb/API/SBHostOS.h"
@@ -111,8 +107,9 @@ lldb::thread_t SBHostOS::ThreadCreate(const char *name,
   LLDB_RECORD_DUMMY(lldb::thread_t, SBHostOS, ThreadCreate,
                     (lldb::thread_func_t, void *, SBError *), name,
                     thread_function, thread_arg, error_ptr);
-  HostThread thread(ThreadLauncher::LaunchThread(
-      name, thread_function, thread_arg, error_ptr ? error_ptr->get() : NULL));
+  HostThread thread(
+      ThreadLauncher::LaunchThread(name, thread_function, thread_arg,
+                                   error_ptr ? error_ptr->get() : nullptr));
   return thread.Release();
 }
 

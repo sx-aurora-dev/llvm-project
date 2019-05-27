@@ -115,6 +115,7 @@ static void initializeUsedResources(InstrDesc &ID,
     } else {
       // Remove the leading 1 from the resource group mask.
       NormalizedMask ^= PowerOf2Floor(NormalizedMask);
+      UsedResourceGroups |= (A.first ^ NormalizedMask);
     }
 
     for (unsigned J = I + 1; J < E; ++J) {
@@ -579,7 +580,6 @@ InstrBuilder::createInstrDescImpl(const MCInst &MCI) {
     return std::move(Err);
 
   // Now add the new descriptor.
-  SchedClassID = MCDesc.getSchedClass();
   bool IsVariadic = MCDesc.isVariadic();
   if (!IsVariadic && !IsVariant) {
     Descriptors[MCI.getOpcode()] = std::move(ID);

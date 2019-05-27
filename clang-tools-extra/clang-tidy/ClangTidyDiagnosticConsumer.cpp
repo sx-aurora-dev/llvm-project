@@ -18,8 +18,10 @@
 #include "ClangTidyDiagnosticConsumer.h"
 #include "ClangTidyOptions.h"
 #include "clang/AST/ASTDiagnostic.h"
+#include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Frontend/DiagnosticRenderer.h"
+#include "clang/Tooling/Core/Diagnostic.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include <tuple>
@@ -68,6 +70,9 @@ protected:
                        SmallVectorImpl<CharSourceRange> &Ranges,
                        ArrayRef<FixItHint> Hints) override {
     assert(Loc.isValid());
+    tooling::DiagnosticMessage *DiagWithFix =
+        Level == DiagnosticsEngine::Note ? &Error.Notes.back() : &Error.Message;
+
     for (const auto &FixIt : Hints) {
       CharSourceRange Range = FixIt.RemoveRange;
       assert(Range.getBegin().isValid() && Range.getEnd().isValid() &&
@@ -77,7 +82,8 @@ protected:
 
       tooling::Replacement Replacement(Loc.getManager(), Range,
                                        FixIt.CodeToInsert);
-      llvm::Error Err = Error.Fix[Replacement.getFilePath()].add(Replacement);
+      llvm::Error Err =
+          DiagWithFix->Fix[Replacement.getFilePath()].add(Replacement);
       // FIXME: better error handling (at least, don't let other replacements be
       // applied).
       if (Err) {
@@ -160,11 +166,13 @@ public:
 
   bool contains(StringRef S) {
     switch (auto &Result = Cache[S]) {
-      case Yes: return true;
-      case No: return false;
-      case None:
-        Result = Globs.contains(S) ? Yes : No;
-        return Result == Yes;
+    case Yes:
+      return true;
+    case No:
+      return false;
+    case None:
+      Result = Globs.contains(S) ? Yes : No;
+      return Result == Yes;
     }
     llvm_unreachable("invalid enum");
   }
@@ -381,16 +389,30 @@ static bool LineIsMarkedWithNOLINTinMacro(const SourceManager &SM,
   return false;
 }
 
+namespace clang {
+namespace tidy {
+
+bool ShouldSuppressDiagnostic(DiagnosticsEngine::Level DiagLevel,
+                              const Diagnostic &Info, ClangTidyContext &Context,
+                              bool CheckMacroExpansion) {
+  return Info.getLocation().isValid() &&
+         DiagLevel != DiagnosticsEngine::Error &&
+         DiagLevel != DiagnosticsEngine::Fatal &&
+         (CheckMacroExpansion ? LineIsMarkedWithNOLINTinMacro
+                              : LineIsMarkedWithNOLINT)(Info.getSourceManager(),
+                                                        Info.getLocation(),
+                                                        Info.getID(), Context);
+}
+
+} // namespace tidy
+} // namespace clang
+
 void ClangTidyDiagnosticConsumer::HandleDiagnostic(
     DiagnosticsEngine::Level DiagLevel, const Diagnostic &Info) {
   if (LastErrorWasIgnored && DiagLevel == DiagnosticsEngine::Note)
     return;
 
-  if (Info.getLocation().isValid() && DiagLevel != DiagnosticsEngine::Error &&
-      DiagLevel != DiagnosticsEngine::Fatal &&
-      LineIsMarkedWithNOLINTinMacro(Info.getSourceManager(),
-                                    Info.getLocation(), Info.getID(),
-                                    Context)) {
+  if (ShouldSuppressDiagnostic(DiagLevel, Info, Context)) {
     ++Context.Stats.ErrorsIgnoredNOLINT;
     // Ignored a warning, should ignore related notes as well
     LastErrorWasIgnored = true;
@@ -581,9 +603,17 @@ void ClangTidyDiagnosticConsumer::removeIncompatibleErrors() {
 
   // Compute error sizes.
   std::vector<int> Sizes;
-  for (const auto &Error : Errors) {
+  std::vector<
+      std::pair<ClangTidyError *, llvm::StringMap<tooling::Replacements> *>>
+      ErrorFixes;
+  for (auto &Error : Errors) {
+    if (const auto *Fix = tooling::selectFirstFix(Error))
+      ErrorFixes.emplace_back(
+          &Error, const_cast<llvm::StringMap<tooling::Replacements> *>(Fix));
+  }
+  for (const auto &ErrorAndFix : ErrorFixes) {
     int Size = 0;
-    for (const auto &FileAndReplaces : Error.Fix) {
+    for (const auto &FileAndReplaces : *ErrorAndFix.second) {
       for (const auto &Replace : FileAndReplaces.second)
         Size += Replace.getLength();
     }
@@ -592,8 +622,8 @@ void ClangTidyDiagnosticConsumer::removeIncompatibleErrors() {
 
   // Build events from error intervals.
   std::map<std::string, std::vector<Event>> FileEvents;
-  for (unsigned I = 0; I < Errors.size(); ++I) {
-    for (const auto &FileAndReplace : Errors[I].Fix) {
+  for (unsigned I = 0; I < ErrorFixes.size(); ++I) {
+    for (const auto &FileAndReplace : *ErrorFixes[I].second) {
       for (const auto &Replace : FileAndReplace.second) {
         unsigned Begin = Replace.getOffset();
         unsigned End = Begin + Replace.getLength();
@@ -608,7 +638,7 @@ void ClangTidyDiagnosticConsumer::removeIncompatibleErrors() {
     }
   }
 
-  std::vector<bool> Apply(Errors.size(), true);
+  std::vector<bool> Apply(ErrorFixes.size(), true);
   for (auto &FileAndEvents : FileEvents) {
     std::vector<Event> &Events = FileAndEvents.second;
     // Sweep.
@@ -627,10 +657,10 @@ void ClangTidyDiagnosticConsumer::removeIncompatibleErrors() {
     assert(OpenIntervals == 0 && "Amount of begin/end points doesn't match");
   }
 
-  for (unsigned I = 0; I < Errors.size(); ++I) {
+  for (unsigned I = 0; I < ErrorFixes.size(); ++I) {
     if (!Apply[I]) {
-      Errors[I].Fix.clear();
-      Errors[I].Notes.emplace_back(
+      ErrorFixes[I].second->clear();
+      ErrorFixes[I].first->Notes.emplace_back(
           "this fix will not be applied because it overlaps with another fix");
     }
   }

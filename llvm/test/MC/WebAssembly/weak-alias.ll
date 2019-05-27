@@ -73,6 +73,8 @@ entry:
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           1
 ; CHECK-NEXT:         Functions:       [ 0 ]
+; CHECK-NEXT:   - Type:            DATACOUNT
+; CHECK-NEXT:     Count:           3
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Relocations:
 ; CHECK-NEXT:       - Type:            R_WASM_FUNCTION_INDEX_LEB
@@ -207,11 +209,6 @@ entry:
 ; CHECK-NEXT:         Name:            .data.alias_address
 ; CHECK-NEXT:         Alignment:       3
 ; CHECK-NEXT:         Flags:           [ ]
-; CHECK-NEXT:   - Type:            CUSTOM
-; CHECK-NEXT:     Name:            target_features
-; CHECK-NEXT:     Features:
-; CHECK-NEXT:       - Prefix:          DISALLOWED
-; CHECK-NEXT:         Name:            atomics
 ; CHECK-NEXT: ...
 
 ; CHECK-SYMS: SYMBOL TABLE:

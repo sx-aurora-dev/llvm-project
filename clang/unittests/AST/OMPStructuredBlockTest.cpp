@@ -14,6 +14,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
+#include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/SmallString.h"
 #include "gmock/gmock.h"
@@ -25,12 +26,6 @@ using namespace tooling;
 
 namespace {
 
-AST_MATCHER(Stmt, isOMPStructuredBlock) { return Node.isOMPStructuredBlock(); }
-
-const ast_matchers::internal::VariadicDynCastAllOfMatcher<
-    Stmt, OMPExecutableDirective>
-    ompExecutableDirective;
-
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<
     OMPExecutableDirective, OMPTargetDirective>
     ompTargetDirective;
@@ -39,10 +34,6 @@ StatementMatcher OMPInnermostStructuredBlockMatcher() {
   return stmt(isOMPStructuredBlock(),
               unless(hasDescendant(stmt(isOMPStructuredBlock()))))
       .bind("id");
-}
-
-AST_MATCHER(OMPExecutableDirective, isStandaloneDirective) {
-  return Node.isStandaloneDirective();
 }
 
 StatementMatcher OMPStandaloneDirectiveMatcher() {
@@ -111,11 +102,12 @@ void test() {
     #pragma omp cancel parallel
 }
 })";
-  ASSERT_TRUE(
-      PrintedOMPStmtMatches(Source, OMPInnermostStructuredBlockMatcher(), R"({
+  const char *Expected = R"({
     #pragma omp cancel parallel
 }
-)"));
+)";
+  ASSERT_TRUE(PrintedOMPStmtMatches(
+      Source, OMPInnermostStructuredBlockMatcher(), Expected));
   ASSERT_TRUE(PrintedOMPStmtMatches(Source, OMPStandaloneDirectiveMatcher(),
                                     "#pragma omp cancel parallel\n"));
 }
@@ -126,14 +118,15 @@ TEST(OMPStructuredBlock, TestCancellationPoint) {
 void test() {
 #pragma omp parallel
 {
-#pragma omp cancellation point parallel
-}
-})";
-  ASSERT_TRUE(
-      PrintedOMPStmtMatches(Source, OMPInnermostStructuredBlockMatcher(), R"({
     #pragma omp cancellation point parallel
 }
-)"));
+})";
+  const char *Expected = R"({
+    #pragma omp cancellation point parallel
+}
+)";
+  ASSERT_TRUE(PrintedOMPStmtMatches(
+      Source, OMPInnermostStructuredBlockMatcher(), Expected));
   ASSERT_TRUE(
       PrintedOMPStmtMatches(Source, OMPStandaloneDirectiveMatcher(),
                             "#pragma omp cancellation point parallel\n"));

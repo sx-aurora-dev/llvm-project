@@ -71,6 +71,33 @@
 // PTHREAD:#define __wasm_atomics__ 1{{$}}
 
 // RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     -target wasm32-unknown-unknown -mmutable-globals \
+// RUN:   | FileCheck %s -check-prefix=MUTABLE-GLOBALS
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     -target wasm64-unknown-unknown -mmutable-globals \
+// RUN:   | FileCheck %s -check-prefix=MUTABLE-GLOBALS
+//
+// MUTABLE-GLOBALS:#define __wasm_mutable_globals__ 1{{$}}
+
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     -target wasm32-unknown-unknown -mmultivalue \
+// RUN:   | FileCheck %s -check-prefix=MULTIVALUE
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     -target wasm64-unknown-unknown -mmultivalue \
+// RUN:   | FileCheck %s -check-prefix=MULTIVALUE
+//
+// MULTIVALUE:#define __wasm_multivalue__ 1{{$}}
+
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     -target wasm32-unknown-unknown -mtail-call \
+// RUN:   | FileCheck %s -check-prefix=TAIL-CALL
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     -target wasm64-unknown-unknown -mtail-call \
+// RUN:   | FileCheck %s -check-prefix=TAIL-CALL
+//
+// TAIL-CALL:#define __wasm_tail_call__ 1{{$}}
+
+// RUN: %clang -E -dM %s -o - 2>&1 \
 // RUN:     -target wasm32-unknown-unknown -mcpu=mvp \
 // RUN:   | FileCheck %s -check-prefix=MVP
 // RUN: %clang -E -dM %s -o - 2>&1 \
@@ -84,6 +111,9 @@
 // MVP-NOT:#define __wasm_exception_handling__
 // MVP-NOT:#define __wasm_bulk_memory__
 // MVP-NOT:#define __wasm_atomics__
+// MVP-NOT:#define __wasm_mutable_globals__
+// MVP-NOT:#define __wasm_multivalue__
+// MVP-NOT:#define __wasm_tail_call__
 
 // RUN: %clang -E -dM %s -o - 2>&1 \
 // RUN:     -target wasm32-unknown-unknown -mcpu=bleeding-edge \
@@ -96,7 +126,10 @@
 // BLEEDING-EDGE-DAG:#define __wasm_sign_ext__ 1{{$}}
 // BLEEDING-EDGE-DAG:#define __wasm_simd128__ 1{{$}}
 // BLEEDING-EDGE-DAG:#define __wasm_atomics__ 1{{$}}
+// BLEEDING-EDGE-DAG:#define __wasm_mutable_globals__ 1{{$}}
 // BLEEDING-EDGE-NOT:#define __wasm_unimplemented_simd128__ 1{{$}}
+// BLEEDING-EDGE-NOT:#define __wasm_multivalue__ 1{{$}}
+// BLEEDING-EDGE-NOT:#define __wasm_tail_call__ 1{{$}}
 
 // RUN: %clang -E -dM %s -o - 2>&1 \
 // RUN:     -target wasm32-unknown-unknown -mcpu=bleeding-edge -mno-simd128 \

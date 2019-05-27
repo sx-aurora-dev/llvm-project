@@ -255,7 +255,7 @@ WasmObjectFile::WasmObjectFile(MemoryBufferRef Buffer, Error &Err)
   }
 
   ReadContext Ctx;
-  Ctx.Start = reinterpret_cast<const uint8_t *>(getData().data());
+  Ctx.Start = getData().bytes_begin();
   Ctx.Ptr = Ctx.Start + 4;
   Ctx.End = Ctx.Start + getData().size();
 
@@ -316,9 +316,11 @@ Error WasmObjectFile::parseSection(WasmSection &Sec) {
     return parseCodeSection(Ctx);
   case wasm::WASM_SEC_DATA:
     return parseDataSection(Ctx);
+  case wasm::WASM_SEC_DATACOUNT:
+    return parseDataCountSection(Ctx);
   default:
-    return make_error<GenericBinaryError>("Bad section type",
-                                          object_error::parse_failed);
+    return make_error<GenericBinaryError>(
+        "Invalid section type: " + Twine(Sec.Type), object_error::parse_failed);
   }
 }
 
@@ -767,6 +769,7 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
     case wasm::R_WASM_FUNCTION_INDEX_LEB:
     case wasm::R_WASM_TABLE_INDEX_SLEB:
     case wasm::R_WASM_TABLE_INDEX_I32:
+    case wasm::R_WASM_TABLE_INDEX_REL_SLEB:
       if (!isValidFunctionSymbol(Reloc.Index))
         return make_error<GenericBinaryError>("Bad relocation function index",
                                               object_error::parse_failed);
@@ -777,7 +780,11 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
                                               object_error::parse_failed);
       break;
     case wasm::R_WASM_GLOBAL_INDEX_LEB:
-      if (!isValidGlobalSymbol(Reloc.Index))
+      // R_WASM_GLOBAL_INDEX_LEB are can be used against function and data
+      // symbols to refer to thier GOT enties.
+      if (!isValidGlobalSymbol(Reloc.Index) &&
+          !isValidDataSymbol(Reloc.Index) &&
+          !isValidFunctionSymbol(Reloc.Index))
         return make_error<GenericBinaryError>("Bad relocation global index",
                                               object_error::parse_failed);
       break;
@@ -789,6 +796,7 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
     case wasm::R_WASM_MEMORY_ADDR_LEB:
     case wasm::R_WASM_MEMORY_ADDR_SLEB:
     case wasm::R_WASM_MEMORY_ADDR_I32:
+    case wasm::R_WASM_MEMORY_ADDR_REL_SLEB:
       if (!isValidDataSymbol(Reloc.Index))
         return make_error<GenericBinaryError>("Bad relocation data index",
                                               object_error::parse_failed);
@@ -1195,6 +1203,9 @@ Error WasmObjectFile::parseElemSection(ReadContext &Ctx) {
 Error WasmObjectFile::parseDataSection(ReadContext &Ctx) {
   DataSection = Sections.size();
   uint32_t Count = readVaruint32(Ctx);
+  if (DataCount && Count != DataCount.getValue())
+    return make_error<GenericBinaryError>(
+        "Number of data segments does not match DataCount section");
   DataSegments.reserve(Count);
   while (Count--) {
     WasmSegment Segment;
@@ -1225,6 +1236,11 @@ Error WasmObjectFile::parseDataSection(ReadContext &Ctx) {
   if (Ctx.Ptr != Ctx.End)
     return make_error<GenericBinaryError>("Data section ended prematurely",
                                           object_error::parse_failed);
+  return Error::success();
+}
+
+Error WasmObjectFile::parseDataCountSection(ReadContext &Ctx) {
+  DataCount = readVaruint32(Ctx);
   return Error::success();
 }
 
@@ -1373,13 +1389,11 @@ WasmObjectFile::getSymbolSection(DataRefImpl Symb) const {
 
 void WasmObjectFile::moveSectionNext(DataRefImpl &Sec) const { Sec.d.a++; }
 
-std::error_code WasmObjectFile::getSectionName(DataRefImpl Sec,
-                                               StringRef &Res) const {
+Expected<StringRef> WasmObjectFile::getSectionName(DataRefImpl Sec) const {
   const WasmSection &S = Sections[Sec.d.a];
 #define ECase(X)                                                               \
   case wasm::WASM_SEC_##X:                                                     \
-    Res = #X;                                                                  \
-    break
+    return #X;
   switch (S.Type) {
     ECase(TYPE);
     ECase(IMPORT);
@@ -1393,14 +1407,13 @@ std::error_code WasmObjectFile::getSectionName(DataRefImpl Sec,
     ECase(ELEM);
     ECase(CODE);
     ECase(DATA);
+    ECase(DATACOUNT);
   case wasm::WASM_SEC_CUSTOM:
-    Res = S.Name;
-    break;
+    return S.Name;
   default:
-    return object_error::invalid_section_index;
+    return createStringError(object_error::invalid_section_index, "");
   }
 #undef ECase
-  return std::error_code();
 }
 
 uint64_t WasmObjectFile::getSectionAddress(DataRefImpl Sec) const { return 0; }
@@ -1414,14 +1427,12 @@ uint64_t WasmObjectFile::getSectionSize(DataRefImpl Sec) const {
   return S.Content.size();
 }
 
-std::error_code WasmObjectFile::getSectionContents(DataRefImpl Sec,
-                                                   StringRef &Res) const {
+Expected<ArrayRef<uint8_t>>
+WasmObjectFile::getSectionContents(DataRefImpl Sec) const {
   const WasmSection &S = Sections[Sec.d.a];
   // This will never fail since wasm sections can never be empty (user-sections
   // must have a name and non-user sections each have a defined structure).
-  Res = StringRef(reinterpret_cast<const char *>(S.Content.data()),
-                  S.Content.size());
-  return std::error_code();
+  return S.Content;
 }
 
 uint64_t WasmObjectFile::getSectionAlignment(DataRefImpl Sec) const {
@@ -1590,7 +1601,7 @@ int WasmSectionOrderChecker::getSectionOrder(unsigned ID,
   case wasm::WASM_SEC_EVENT:
     return WASM_SEC_ORDER_EVENT;
   default:
-    llvm_unreachable("invalid section");
+    return WASM_SEC_ORDER_NONE;
   }
 }
 

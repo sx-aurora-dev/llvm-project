@@ -101,7 +101,7 @@ operator=(const lldb::SBSourceManager &rhs) {
                      rhs);
 
   m_opaque_up.reset(new SourceManagerImpl(*(rhs.m_opaque_up.get())));
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
 SBSourceManager::~SBSourceManager() {}
@@ -131,7 +131,7 @@ size_t SBSourceManager::DisplaySourceLinesWithLineNumbersAndColumn(
        const char *, lldb::SBStream &),
       file, line, column, context_before, context_after, current_line_cstr, s);
 
-  if (m_opaque_up == NULL)
+  if (m_opaque_up == nullptr)
     return 0;
 
   return m_opaque_up->DisplaySourceLinesWithLineNumbers(

@@ -229,7 +229,7 @@ handleTlsRelocation(RelType Type, Symbol &Sym, InputSectionBase &C,
     return 1;
   }
 
-  if (oneof<R_TLSLD_GOT, R_TLSLD_GOT_FROM_END, R_TLSLD_PC, R_TLSLD_HINT>(
+  if (oneof<R_TLSLD_GOT, R_TLSLD_GOTPLT, R_TLSLD_PC, R_TLSLD_HINT>(
           Expr)) {
     // Local-Dynamic relocs can be relaxed to Local-Exec.
     if (!Config->Shared) {
@@ -248,7 +248,7 @@ handleTlsRelocation(RelType Type, Symbol &Sym, InputSectionBase &C,
   }
 
   // Local-Dynamic relocs can be relaxed to Local-Exec.
-  if (Expr == R_ABS && !Config->Shared) {
+  if (Expr == R_DTPREL && !Config->Shared) {
     C.Relocations.push_back(
         {Target->adjustRelaxExpr(Type, nullptr, R_RELAX_TLS_LD_TO_LE), Type,
          Offset, Addend, &Sym});
@@ -274,7 +274,7 @@ handleTlsRelocation(RelType Type, Symbol &Sym, InputSectionBase &C,
   }
 
   if (oneof<R_TLSDESC, R_AARCH64_TLSDESC_PAGE, R_TLSDESC_CALL, R_TLSGD_GOT,
-            R_TLSGD_GOT_FROM_END, R_TLSGD_PC>(Expr)) {
+            R_TLSGD_GOTPLT, R_TLSGD_PC>(Expr)) {
     if (Config->Shared) {
       if (In.Got->addDynTlsEntry(Sym)) {
         uint64_t Off = In.Got->getGlobalDynOffset(Sym);
@@ -314,7 +314,7 @@ handleTlsRelocation(RelType Type, Symbol &Sym, InputSectionBase &C,
 
   // Initial-Exec relocs can be relaxed to Local-Exec if the symbol is locally
   // defined.
-  if (oneof<R_GOT, R_GOT_FROM_END, R_GOT_PC, R_AARCH64_GOT_PAGE_PC, R_GOT_OFF,
+  if (oneof<R_GOT, R_GOTPLT, R_GOT_PC, R_AARCH64_GOT_PAGE_PC, R_GOT_OFF,
             R_TLSIE_HINT>(Expr) &&
       !Config->Shared && !Sym.IsPreemptible) {
     C.Relocations.push_back({R_RELAX_TLS_IE_TO_LE, Type, Offset, Addend, &Sym});
@@ -376,14 +376,14 @@ static bool needsPlt(RelExpr Expr) {
 static bool needsGot(RelExpr Expr) {
   return oneof<R_GOT, R_GOT_OFF, R_HEXAGON_GOT, R_MIPS_GOT_LOCAL_PAGE,
                R_MIPS_GOT_OFF, R_MIPS_GOT_OFF32, R_AARCH64_GOT_PAGE_PC,
-               R_GOT_PC, R_GOT_FROM_END>(Expr);
+               R_GOT_PC, R_GOTPLT>(Expr);
 }
 
 // True if this expression is of the form Sym - X, where X is a position in the
 // file (PC, or GOT for example).
 static bool isRelExpr(RelExpr Expr) {
-  return oneof<R_PC, R_GOTREL, R_GOTREL_FROM_END, R_MIPS_GOTREL, R_PPC_CALL,
-               R_PPC_CALL_PLT, R_AARCH64_PAGE_PC, R_RELAX_GOT_PC>(Expr);
+  return oneof<R_PC, R_GOTREL, R_GOTPLTREL, R_MIPS_GOTREL, R_PPC_CALL,
+               R_PPC64_RELAX_TOC, R_PPC_CALL_PLT, R_AARCH64_PAGE_PC, R_RELAX_GOT_PC>(Expr);
 }
 
 // Returns true if a given relocation can be computed at link-time.
@@ -398,13 +398,13 @@ static bool isRelExpr(RelExpr Expr) {
 static bool isStaticLinkTimeConstant(RelExpr E, RelType Type, const Symbol &Sym,
                                      InputSectionBase &S, uint64_t RelOff) {
   // These expressions always compute a constant
-  if (oneof<R_GOT_FROM_END, R_GOT_OFF, R_HEXAGON_GOT, R_TLSLD_GOT_OFF,
+  if (oneof<R_DTPREL, R_GOTPLT, R_GOT_OFF, R_HEXAGON_GOT, R_TLSLD_GOT_OFF,
             R_MIPS_GOT_LOCAL_PAGE, R_MIPS_GOTREL, R_MIPS_GOT_OFF,
             R_MIPS_GOT_OFF32, R_MIPS_GOT_GP_PC, R_MIPS_TLSGD,
-            R_AARCH64_GOT_PAGE_PC, R_GOT_PC, R_GOTONLY_PC,
-            R_GOTONLY_PC_FROM_END, R_PLT_PC, R_TLSGD_GOT, R_TLSGD_GOT_FROM_END,
-            R_TLSGD_PC, R_PPC_CALL_PLT, R_TLSDESC_CALL, R_AARCH64_TLSDESC_PAGE,
-            R_HINT, R_TLSLD_HINT, R_TLSIE_HINT>(E))
+            R_AARCH64_GOT_PAGE_PC, R_GOT_PC, R_GOTONLY_PC, R_GOTPLTONLY_PC,
+            R_PLT_PC, R_TLSGD_GOT, R_TLSGD_GOTPLT, R_TLSGD_PC, R_PPC_CALL_PLT,
+            R_PPC64_RELAX_TOC, R_TLSDESC_CALL, R_AARCH64_TLSDESC_PAGE, R_HINT, R_TLSLD_HINT,
+            R_TLSIE_HINT>(E))
     return true;
 
   // These never do, except if the entire file is position dependent or if
@@ -444,6 +444,11 @@ static bool isStaticLinkTimeConstant(RelExpr E, RelType Type, const Symbol &Sym,
   if (Sym.isUndefWeak())
     return true;
 
+  // We set the final symbols values for linker script defined symbols later.
+  // They always can be computed as a link time constant.
+  if (Sym.ScriptDefined)
+      return true;
+
   error("relocation " + toString(Type) + " cannot refer to absolute symbol: " +
         toString(Sym) + getLocation(S, Sym, RelOff));
   return true;
@@ -479,11 +484,12 @@ static RelExpr fromPlt(RelExpr Expr) {
 
 // Returns true if a given shared symbol is in a read-only segment in a DSO.
 template <class ELFT> static bool isReadOnly(SharedSymbol &SS) {
-  typedef typename ELFT::Phdr Elf_Phdr;
+  using Elf_Phdr = typename ELFT::Phdr;
 
   // Determine if the symbol is read-only by scanning the DSO's program headers.
-  const SharedFile<ELFT> &File = SS.getFile<ELFT>();
-  for (const Elf_Phdr &Phdr : check(File.getObj().program_headers()))
+  const SharedFile &File = SS.getFile();
+  for (const Elf_Phdr &Phdr :
+       check(File.template getObj<ELFT>().program_headers()))
     if ((Phdr.p_type == ELF::PT_LOAD || Phdr.p_type == ELF::PT_GNU_RELRO) &&
         !(Phdr.p_flags & ELF::PF_W) && SS.Value >= Phdr.p_vaddr &&
         SS.Value < Phdr.p_vaddr + Phdr.p_memsz)
@@ -498,12 +504,12 @@ template <class ELFT> static bool isReadOnly(SharedSymbol &SS) {
 // Otherwise, they would refer to different places at runtime.
 template <class ELFT>
 static SmallSet<SharedSymbol *, 4> getSymbolsAt(SharedSymbol &SS) {
-  typedef typename ELFT::Sym Elf_Sym;
+  using Elf_Sym = typename ELFT::Sym;
 
-  SharedFile<ELFT> &File = SS.getFile<ELFT>();
+  SharedFile &File = SS.getFile();
 
   SmallSet<SharedSymbol *, 4> Ret;
-  for (const Elf_Sym &S : File.getGlobalELFSyms()) {
+  for (const Elf_Sym &S : File.template getGlobalELFSyms<ELFT>()) {
     if (S.st_shndx == SHN_UNDEF || S.st_shndx == SHN_ABS ||
         S.getType() == STT_TLS || S.st_value != SS.Value)
       continue;
@@ -523,8 +529,10 @@ static SmallSet<SharedSymbol *, 4> getSymbolsAt(SharedSymbol &SS) {
 static void replaceWithDefined(Symbol &Sym, SectionBase *Sec, uint64_t Value,
                                uint64_t Size) {
   Symbol Old = Sym;
-  replaceSymbol<Defined>(&Sym, Sym.File, Sym.getName(), Sym.Binding,
-                         Sym.StOther, Sym.Type, Value, Size, Sec);
+
+  Sym.replace(Defined{Sym.File, Sym.getName(), Sym.Binding, Sym.StOther,
+                      Sym.Type, Value, Size, Sec});
+
   Sym.PltIndex = Old.PltIndex;
   Sym.GotIndex = Old.GotIndex;
   Sym.VerdefIndex = Old.VerdefIndex;
@@ -663,27 +671,65 @@ static int64_t computeAddend(const RelTy &Rel, const RelTy *End,
   return Addend;
 }
 
+// Custom error message if Sym is defined in a discarded section.
+template <class ELFT>
+static std::string maybeReportDiscarded(Undefined &Sym, InputSectionBase &Sec,
+                                        uint64_t Offset) {
+  auto *File = dyn_cast_or_null<ObjFile<ELFT>>(Sym.File);
+  if (!File || !Sym.DiscardedSecIdx ||
+      File->getSections()[Sym.DiscardedSecIdx] != &InputSection::Discarded)
+    return "";
+  ArrayRef<Elf_Shdr_Impl<ELFT>> ObjSections =
+      CHECK(File->getObj().sections(), File);
+  std::string Msg =
+      "relocation refers to a symbol in a discarded section: " + toString(Sym) +
+      "\n>>> defined in " + toString(File);
+
+  Elf_Shdr_Impl<ELFT> ELFSec = ObjSections[Sym.DiscardedSecIdx - 1];
+  if (ELFSec.sh_type != SHT_GROUP)
+    return Msg;
+
+  // If the discarded section is a COMDAT.
+  StringRef Signature = File->getShtGroupSignature(ObjSections, ELFSec);
+  if (const InputFile *Prevailing =
+          Symtab->ComdatGroups.lookup(CachedHashStringRef(Signature)))
+    Msg += "\n>>> section group signature: " + Signature.str() +
+           "\n>>> prevailing definition is in " + toString(Prevailing);
+  return Msg;
+}
+
 // Report an undefined symbol if necessary.
 // Returns true if this function printed out an error message.
+template <class ELFT>
 static bool maybeReportUndefined(Symbol &Sym, InputSectionBase &Sec,
                                  uint64_t Offset) {
-  if (Sym.isLocal() || !Sym.isUndefined() || Sym.isWeak())
+  if (!Sym.isUndefined() || Sym.isWeak())
     return false;
 
-  bool CanBeExternal =
-      Sym.computeBinding() != STB_LOCAL && Sym.Visibility == STV_DEFAULT;
+  bool CanBeExternal = !Sym.isLocal() && Sym.computeBinding() != STB_LOCAL &&
+                       Sym.Visibility == STV_DEFAULT;
   if (Config->UnresolvedSymbols == UnresolvedPolicy::Ignore && CanBeExternal)
     return false;
 
-  std::string Msg = "undefined ";
-  if (Sym.Visibility == STV_INTERNAL)
-    Msg += "internal ";
-  else if (Sym.Visibility == STV_HIDDEN)
-    Msg += "hidden ";
-  else if (Sym.Visibility == STV_PROTECTED)
-    Msg += "protected ";
-  Msg += "symbol: " + toString(Sym) + "\n>>> referenced by ";
+  auto Visibility = [&]() -> std::string {
+    switch (Sym.Visibility) {
+    case STV_INTERNAL:
+      return "internal ";
+    case STV_HIDDEN:
+      return "hidden ";
+    case STV_PROTECTED:
+      return "protected ";
+    default:
+      return "";
+    }
+  };
 
+  std::string Msg =
+      maybeReportDiscarded<ELFT>(cast<Undefined>(Sym), Sec, Offset);
+  if (Msg.empty())
+    Msg = "undefined " + Visibility() + "symbol: " + toString(Sym);
+
+  Msg += "\n>>> referenced by ";
   std::string Src = Sec.getSrcMsg(Sym, Offset);
   if (!Src.empty())
     Msg += Src + "\n>>>               ";
@@ -979,7 +1025,9 @@ static void processRelocAux(InputSectionBase &Sec, RelExpr Expr, RelType Type,
     if (!Sym.isInPlt())
       addPltEntry<ELFT>(In.Plt, In.GotPlt, In.RelaPlt, Target->PltRel, Sym);
     if (!Sym.isDefined())
-      replaceWithDefined(Sym, In.Plt, getPltEntryOffset(Sym.PltIndex), 0);
+      replaceWithDefined(
+          Sym, In.Plt,
+          Target->PltHeaderSize + Target->PltEntrySize * Sym.PltIndex, 0);
     Sym.NeedsPltAddr = true;
     Sec.Relocations.push_back({Expr, Type, Offset, Addend, &Sym});
     return;
@@ -1002,7 +1050,8 @@ template <class ELFT, class RelTy>
 static void scanReloc(InputSectionBase &Sec, OffsetGetter &GetOffset, RelTy *&I,
                       RelTy *End) {
   const RelTy &Rel = *I;
-  Symbol &Sym = Sec.getFile<ELFT>()->getRelocTargetSym(Rel);
+  uint32_t SymIndex = Rel.getSymbol(Config->IsMips64EL);
+  Symbol &Sym = Sec.getFile<ELFT>()->getSymbol(SymIndex);
   RelType Type;
 
   // Deal with MIPS oddity.
@@ -1018,8 +1067,9 @@ static void scanReloc(InputSectionBase &Sec, OffsetGetter &GetOffset, RelTy *&I,
   if (Offset == uint64_t(-1))
     return;
 
-  // Skip if the target symbol is an erroneous undefined symbol.
-  if (maybeReportUndefined(Sym, Sec, Rel.r_offset))
+  // Error if the target symbol is undefined. Symbol index 0 may be used by
+  // marker relocations, e.g. R_*_NONE and R_ARM_V4BX. Don't error on them.
+  if (SymIndex != 0 && maybeReportUndefined<ELFT>(Sym, Sec, Rel.r_offset))
     return;
 
   const uint8_t *RelocatedAddr = Sec.data().begin() + Rel.r_offset;
@@ -1058,18 +1108,22 @@ static void scanReloc(InputSectionBase &Sec, OffsetGetter &GetOffset, RelTy *&I,
   // be resolved within the executable will actually be resolved that way at
   // runtime, because the main exectuable is always at the beginning of a search
   // list. We can leverage that fact.
-  if (!Sym.IsPreemptible && !Sym.isGnuIFunc()) {
+  if (!Sym.IsPreemptible && (!Sym.isGnuIFunc() || Config->ZIfuncNoplt)) {
     if (Expr == R_GOT_PC && !isAbsoluteValue(Sym))
       Expr = Target->adjustRelaxExpr(Type, RelocatedAddr, Expr);
     else
       Expr = fromPlt(Expr);
   }
 
-  // This relocation does not require got entry, but it is relative to got and
-  // needs it to be created. Here we request for that.
-  if (oneof<R_GOTONLY_PC, R_GOTONLY_PC_FROM_END, R_GOTREL, R_GOTREL_FROM_END,
-            R_PPC_TOC>(Expr))
+  // If the relocation does not emit a GOT or GOTPLT entry but its computation
+  // uses their addresses, we need GOT or GOTPLT to be created.
+  //
+  // The 4 types that relative GOTPLT are all x86 and x86-64 specific.
+  if (oneof<R_GOTPLTONLY_PC, R_GOTPLTREL, R_GOTPLT, R_TLSGD_GOTPLT>(Expr)) {
+    In.GotPlt->HasGotPltOffRel = true;
+  } else if (oneof<R_GOTONLY_PC, R_GOTREL, R_PPC_TOC, R_PPC64_RELAX_TOC>(Expr)) {
     In.Got->HasGotOffRel = true;
+  }
 
   // Read an addend.
   int64_t Addend = computeAddend<ELFT>(Rel, End, Sec, Expr, Sym.isLocal());
@@ -1079,6 +1133,14 @@ static void scanReloc(InputSectionBase &Sec, OffsetGetter &GetOffset, RelTy *&I,
   if (unsigned Processed =
           handleTlsRelocation<ELFT>(Type, Sym, Sec, Offset, Addend, Expr)) {
     I += (Processed - 1);
+    return;
+  }
+
+  // We were asked not to generate PLT entries for ifuncs. Instead, pass the
+  // direct relocation on through.
+  if (Sym.isGnuIFunc() && Config->ZIfuncNoplt) {
+    Sym.ExportDynamic = true;
+    In.RelaDyn->addReloc(Type, &Sec, Offset, &Sym, Addend, R_ADDEND, Type);
     return;
   }
 
@@ -1228,12 +1290,14 @@ static void scanRelocs(InputSectionBase &Sec, ArrayRef<RelTy> Rels) {
   for (auto I = Rels.begin(), End = Rels.end(); I != End;)
     scanReloc<ELFT>(Sec, GetOffset, I, End);
 
-  // Sort relocations by offset to binary search for R_RISCV_PCREL_HI20
-  if (Config->EMachine == EM_RISCV)
-    std::stable_sort(Sec.Relocations.begin(), Sec.Relocations.end(),
-                     [](const Relocation &LHS, const Relocation &RHS) {
-                       return LHS.Offset < RHS.Offset;
-                     });
+  // Sort relocations by offset for more efficient searching for
+  // R_RISCV_PCREL_HI20 and R_PPC64_ADDR64.
+  if (Config->EMachine == EM_RISCV ||
+      (Config->EMachine == EM_PPC64 && Sec.Name == ".toc"))
+    llvm::stable_sort(Sec.Relocations,
+                      [](const Relocation &LHS, const Relocation &RHS) {
+                        return LHS.Offset < RHS.Offset;
+                      });
 }
 
 template <class ELFT> void elf::scanRelocations(InputSectionBase &S) {
@@ -1405,10 +1469,10 @@ void ThunkCreator::mergeThunks(ArrayRef<OutputSection *> OutputSections) {
         for (const std::pair<ThunkSection *, uint32_t> TS : ISD->ThunkSections)
           if (TS.second == Pass)
             NewThunks.push_back(TS.first);
-        std::stable_sort(NewThunks.begin(), NewThunks.end(),
-                         [](const ThunkSection *A, const ThunkSection *B) {
-                           return A->OutSecOff < B->OutSecOff;
-                         });
+        llvm::stable_sort(NewThunks,
+                          [](const ThunkSection *A, const ThunkSection *B) {
+                            return A->OutSecOff < B->OutSecOff;
+                          });
 
         // Merge sorted vectors of Thunks and InputSections by OutSecOff
         std::vector<InputSection *> Tmp;

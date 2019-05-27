@@ -16,6 +16,7 @@
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
@@ -276,6 +277,8 @@ bool fromJSON(const llvm::json::Value &Params, ClientCapabilities &R) {
         R.DiagnosticCategory = *CategorySupport;
       if (auto CodeActions = Diagnostics->getBoolean("codeActionsInline"))
         R.DiagnosticFixes = *CodeActions;
+      if (auto RelatedInfo = Diagnostics->getBoolean("relatedInformation"))
+        R.DiagnosticRelatedInformation = *RelatedInfo;
     }
     if (auto *Completion = TextDocument->getObject("completion")) {
       if (auto *Item = Completion->getObject("completionItem")) {
@@ -310,6 +313,11 @@ bool fromJSON(const llvm::json::Value &Params, ClientCapabilities &R) {
         }
       }
     }
+  }
+  if (auto *OffsetEncoding = O->get("offsetEncoding")) {
+    R.offsetEncoding.emplace();
+    if (!fromJSON(*OffsetEncoding, *R.offsetEncoding))
+      return false;
   }
   return true;
 }
@@ -413,6 +421,13 @@ bool fromJSON(const llvm::json::Value &Params, DocumentSymbolParams &R) {
   return O && O.map("textDocument", R.textDocument);
 }
 
+llvm::json::Value toJSON(const DiagnosticRelatedInformation &DRI) {
+  return llvm::json::Object{
+    {"location", DRI.location},
+    {"message", DRI.message},
+  };
+}
+
 llvm::json::Value toJSON(const Diagnostic &D) {
   llvm::json::Object Diag{
       {"range", D.range},
@@ -423,6 +438,12 @@ llvm::json::Value toJSON(const Diagnostic &D) {
     Diag["category"] = *D.category;
   if (D.codeActions)
     Diag["codeActions"] = D.codeActions;
+  if (!D.code.empty())
+    Diag["code"] = D.code;
+  if (!D.source.empty())
+    Diag["source"] = D.source;
+  if (D.relatedInformation)
+    Diag["relatedInformation"] = *D.relatedInformation;
   return std::move(Diag);
 }
 
@@ -432,6 +453,8 @@ bool fromJSON(const llvm::json::Value &Params, Diagnostic &R) {
     return false;
   O.map("severity", R.severity);
   O.map("category", R.category);
+  O.map("code", R.code);
+  O.map("source", R.source);
   return true;
 }
 
@@ -930,6 +953,35 @@ bool fromJSON(const llvm::json::Value &Params, TypeHierarchyItem &I) {
 bool fromJSON(const llvm::json::Value &Params, ReferenceParams &R) {
   TextDocumentPositionParams &Base = R;
   return fromJSON(Params, Base);
+}
+
+static const char *toString(OffsetEncoding OE) {
+  switch (OE) {
+  case OffsetEncoding::UTF8:
+    return "utf-8";
+  case OffsetEncoding::UTF16:
+    return "utf-16";
+  case OffsetEncoding::UTF32:
+    return "utf-32";
+  case OffsetEncoding::UnsupportedEncoding:
+    return "unknown";
+  }
+  llvm_unreachable("Unknown clang.clangd.OffsetEncoding");
+}
+llvm::json::Value toJSON(const OffsetEncoding &OE) { return toString(OE); }
+bool fromJSON(const llvm::json::Value &V, OffsetEncoding &OE) {
+  auto Str = V.getAsString();
+  if (!Str)
+    return false;
+  OE = llvm::StringSwitch<OffsetEncoding>(*Str)
+           .Case("utf-8", OffsetEncoding::UTF8)
+           .Case("utf-16", OffsetEncoding::UTF16)
+           .Case("utf-32", OffsetEncoding::UTF32)
+           .Default(OffsetEncoding::UnsupportedEncoding);
+  return true;
+}
+llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, OffsetEncoding Enc) {
+  return OS << toString(Enc);
 }
 
 } // namespace clangd

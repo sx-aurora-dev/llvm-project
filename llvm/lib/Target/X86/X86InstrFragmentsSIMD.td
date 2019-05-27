@@ -101,6 +101,8 @@ def X86vzmovl  : SDNode<"X86ISD::VZEXT_MOVL",
 
 def X86vzload  : SDNode<"X86ISD::VZEXT_LOAD", SDTLoad,
                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def X86vextractstore  : SDNode<"X86ISD::VEXTRACT_STORE", SDTStore,
+                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 def SDTVtrunc    : SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>,
                                         SDTCisInt<0>, SDTCisInt<1>,
@@ -363,11 +365,23 @@ def X86Movddup  : SDNode<"X86ISD::MOVDDUP", SDTShuff1Op>;
 def X86Movshdup : SDNode<"X86ISD::MOVSHDUP", SDTShuff1Op>;
 def X86Movsldup : SDNode<"X86ISD::MOVSLDUP", SDTShuff1Op>;
 
-def X86Movsd : SDNode<"X86ISD::MOVSD", SDTShuff2OpFP>;
-def X86Movss : SDNode<"X86ISD::MOVSS", SDTShuff2OpFP>;
+def X86Movsd : SDNode<"X86ISD::MOVSD",
+                      SDTypeProfile<1, 2, [SDTCisVT<0, v2f64>,
+                                           SDTCisVT<1, v2f64>,
+                                           SDTCisVT<2, v2f64>]>>;
+def X86Movss : SDNode<"X86ISD::MOVSS",
+                      SDTypeProfile<1, 2, [SDTCisVT<0, v4f32>,
+                                           SDTCisVT<1, v4f32>,
+                                           SDTCisVT<2, v4f32>]>>;
 
-def X86Movlhps : SDNode<"X86ISD::MOVLHPS", SDTShuff2OpFP>;
-def X86Movhlps : SDNode<"X86ISD::MOVHLPS", SDTShuff2OpFP>;
+def X86Movlhps : SDNode<"X86ISD::MOVLHPS",
+                        SDTypeProfile<1, 2, [SDTCisVT<0, v4f32>,
+                                             SDTCisVT<1, v4f32>,
+                                             SDTCisVT<2, v4f32>]>>;
+def X86Movhlps : SDNode<"X86ISD::MOVHLPS",
+                        SDTypeProfile<1, 2, [SDTCisVT<0, v4f32>,
+                                             SDTCisVT<1, v4f32>,
+                                             SDTCisVT<2, v4f32>]>>;
 
 def SDTPack : SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCisInt<0>,
                                    SDTCisVec<1>, SDTCisInt<1>,
@@ -662,6 +676,25 @@ def X86vfproundRnd: SDNode<"X86ISD::VFPROUND_RND",
                                              SDTCisOpSmallerThanOp<0, 1>,
                                              SDTCisVT<2, i32>]>>;
 
+// cvt fp to bfloat16
+def X86cvtne2ps2bf16 : SDNode<"X86ISD::CVTNE2PS2BF16",
+                       SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCisVec<1>,
+                                            SDTCisSameAs<1,2>]>>;
+def X86mcvtneps2bf16 : SDNode<"X86ISD::MCVTNEPS2BF16",
+                       SDTypeProfile<1, 3, [SDTCVecEltisVT<0, i16>,
+                                            SDTCVecEltisVT<1, f32>,
+                                            SDTCisSameAs<0, 2>,
+                                            SDTCVecEltisVT<3, i1>,
+                                            SDTCisSameNumEltsAs<1, 3>]>>;
+def X86cvtneps2bf16 :  SDNode<"X86ISD::CVTNEPS2BF16",
+                       SDTypeProfile<1, 1, [SDTCVecEltisVT<0, i16>,
+                                            SDTCVecEltisVT<1, f32>]>>;
+def X86dpbf16ps :      SDNode<"X86ISD::DPBF16PS",
+                       SDTypeProfile<1, 3, [SDTCVecEltisVT<0, f32>,
+                                            SDTCisSameAs<0,1>,
+                                            SDTCVecEltisVT<2, i32>,
+                                            SDTCisSameAs<2,3>]>>;
+
 // galois field arithmetic
 def X86GF2P8affineinvqb : SDNode<"X86ISD::GF2P8AFFINEINVQB", SDTBlend>;
 def X86GF2P8affineqb    : SDNode<"X86ISD::GF2P8AFFINEQB", SDTBlend>;
@@ -681,18 +714,8 @@ def sse_load_f64 : ComplexPattern<v2f64, 5, "selectScalarSSELoad", [],
                                   [SDNPHasChain, SDNPMayLoad, SDNPMemOperand,
                                    SDNPWantRoot, SDNPWantParent]>;
 
-def ssmem : Operand<v4f32> {
-  let PrintMethod = "printdwordmem";
-  let MIOperandInfo = (ops ptr_rc, i8imm, ptr_rc_nosp, i32imm, SEGMENT_REG);
-  let ParserMatchClass = X86Mem32AsmOperand;
-  let OperandType = "OPERAND_MEMORY";
-}
-def sdmem : Operand<v2f64> {
-  let PrintMethod = "printqwordmem";
-  let MIOperandInfo = (ops ptr_rc, i8imm, ptr_rc_nosp, i32imm, SEGMENT_REG);
-  let ParserMatchClass = X86Mem64AsmOperand;
-  let OperandType = "OPERAND_MEMORY";
-}
+def ssmem : X86MemOperand<"printdwordmem", X86Mem32AsmOperand>;
+def sdmem : X86MemOperand<"printqwordmem", X86Mem64AsmOperand>;
 
 //===----------------------------------------------------------------------===//
 // SSE pattern fragments
@@ -931,17 +954,6 @@ def fp64imm0 : PatLeaf<(f64 fpimm), [{
   return N->isExactlyValue(+0.0);
 }]>;
 
-def I8Imm : SDNodeXForm<imm, [{
-  // Transformation function: get the low 8 bits.
-  return getI8Imm((uint8_t)N->getZExtValue(), SDLoc(N));
-}]>;
-
-// BYTE_imm - Transform bit immediates into byte immediates.
-def BYTE_imm  : SDNodeXForm<imm, [{
-  // Transformation function: imm >> 3
-  return getI32Imm(N->getZExtValue() >> 3, SDLoc(N));
-}]>;
-
 // EXTRACT_get_vextract128_imm xform function: convert extract_subvector index
 // to VEXTRACTF128/VEXTRACTI128 imm.
 def EXTRACT_get_vextract128_imm : SDNodeXForm<extract_subvector, [{
@@ -968,8 +980,10 @@ def INSERT_get_vinsert256_imm : SDNodeXForm<insert_subvector, [{
 
 def vextract128_extract : PatFrag<(ops node:$bigvec, node:$index),
                                    (extract_subvector node:$bigvec,
-                                                      node:$index), [{}],
-                                  EXTRACT_get_vextract128_imm>;
+                                                      node:$index), [{
+  // Index 0 can be handled via extract_subreg.
+  return !isNullConstant(N->getOperand(1));
+}], EXTRACT_get_vextract128_imm>;
 
 def vinsert128_insert : PatFrag<(ops node:$bigvec, node:$smallvec,
                                       node:$index),
@@ -979,8 +993,10 @@ def vinsert128_insert : PatFrag<(ops node:$bigvec, node:$smallvec,
 
 def vextract256_extract : PatFrag<(ops node:$bigvec, node:$index),
                                    (extract_subvector node:$bigvec,
-                                                      node:$index), [{}],
-                                  EXTRACT_get_vextract256_imm>;
+                                                      node:$index), [{
+  // Index 0 can be handled via extract_subreg.
+  return !isNullConstant(N->getOperand(1));
+}], EXTRACT_get_vextract256_imm>;
 
 def vinsert256_insert : PatFrag<(ops node:$bigvec, node:$smallvec,
                                       node:$index),
