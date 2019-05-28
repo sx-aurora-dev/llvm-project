@@ -1527,7 +1527,7 @@ def createInstructionTable(isVL):
     
     T.Section("Table 3-25 Control Instructions", 37)
     if isVL:
-        T.NoImpl("SVOB")
+        T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
     else:
         T.Dummy(0x30, "SVOB", "void _ve_svob(void)", "svob");
     
