@@ -18,6 +18,7 @@
 
 BUILTIN(__builtin_ve_lvl, "vUi", "n")
 BUILTIN(__builtin_ve_svob, "v", "n")
+BUILTIN(__builtin_ve_vl_svob, "v", "n")
 //BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "n")
 
 BUILTIN(__builtin_ve_pack_f32p, "ULifC*fC*", "n")
