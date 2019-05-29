@@ -6,7 +6,7 @@
 
 #define _vel_svob() __builtin_ve_vl_svob()
 
-__vr _vel_vfdivdA_vsvl(double s0, __vr v0, int l)
+static inline __vr _vel_vfdivdA_vsvl(double s0, __vr v0, int l)
 {
     __vr v1, v2, v3;
     v2 = _vel_vrcpd_vvl(v0, l);
