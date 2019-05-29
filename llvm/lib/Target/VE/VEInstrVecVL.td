@@ -9956,30 +9956,10 @@ def vsumwsx_vvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VSUMS vsum.w.sx vsumwsx_vvvl
-def vsumwsx_vvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vsum.w.sx $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // VSUMS vsum.w.sx vsumwsx_vvml
 def vsumwsx_vvml : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
        "vsum.w.sx $vx,$vy,$vm", [], NoItinerary>
 {
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VSUMS vsum.w.sx vsumwsx_vvmvl
-def vsumwsx_vvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vsum.w.sx $vx,$vy,$vm", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -9994,30 +9974,10 @@ def vsumwzx_vvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VSUMS vsum.w.zx vsumwzx_vvvl
-def vsumwzx_vvvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vsum.w.zx $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // VSUMS vsum.w.zx vsumwzx_vvml
 def vsumwzx_vvml : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
        "vsum.w.zx $vx,$vy,$vm", [], NoItinerary>
 {
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VSUMS vsum.w.zx vsumwzx_vvmvl
-def vsumwzx_vvmvl : RV<0xea, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vsum.w.zx $vx,$vy,$vm", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -10032,30 +9992,10 @@ def vsuml_vvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VSUMX vsum.l vsuml_vvvl
-def vsuml_vvvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vsum.l $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // VSUMX vsum.l vsuml_vvml
 def vsuml_vvml : RV<0xaa, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
        "vsum.l $vx,$vy,$vm", [], NoItinerary>
 {
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VSUMX vsum.l vsuml_vvmvl
-def vsuml_vvmvl : RV<0xaa, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vsum.l $vx,$vy,$vm", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -10070,30 +10010,10 @@ def vfsumd_vvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VFSUM vfsum.d vfsumd_vvvl
-def vfsumd_vvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vfsum.d $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // VFSUM vfsum.d vfsumd_vvml
 def vfsumd_vvml : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
        "vfsum.d $vx,$vy,$vm", [], NoItinerary>
 {
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VFSUM vfsum.d vfsumd_vvmvl
-def vfsumd_vvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vfsum.d $vx,$vy,$vm", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
@@ -10108,30 +10028,10 @@ def vfsums_vvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// VFSUM vfsum.s vfsums_vvvl
-def vfsums_vvvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
-       "vfsum.s $vx,$vy", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // VFSUM vfsum.s vfsums_vvml
 def vfsums_vvml : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, I32:$vl),
        "vfsum.s $vx,$vy,$vm", [], NoItinerary>
 {
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// VFSUM vfsum.s vfsums_vvmvl
-def vfsums_vvmvl : RV<0xec, (outs V64:$vx), (ins V64:$vy, VM_:$vm, V64:$vd, I32:$vl),
-       "vfsum.s $vx,$vy,$vm", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";

@@ -529,34 +529,42 @@ class TestGeneratorVMRG:
     def gen(self, I):
 
         p = {'type' : 'unsigned long int*',
-             'stride' : 256, 'vm' : '__vm', 'vfmk' : '_ve_vfmkw_mcv',
-             'vld' : '_ve_vldlzx_vss(4, pm)' }
-        p['lvl'] = '_ve_lvl(n - i < 256 ? n - i : 256)'
+             'stride' : 256, 'vm' : '__vm', 'vfmk' : '_vel_vfmkwgt_mvl',
+             'vld' : '_vel_vldlzx_vssl(4, pvm, l)' }
+        p['lvl'] = 'n - i < 256 ? n - i : 256'
         if I.ins[2].isMask512():
             p = {'type' : 'unsigned int*',
                  'stride': 512, 'vm' : '__vm512',
-                 'vfmk' : '_ve_pvfmkw_Mcv', 'vld' : '_ve_vld_vss(8, pm)'}
-            p['lvl'] = '_ve_lvl(n - i < 512 ? (n - i) / 2UL : 256)'
+                 'vfmk' : '_vel_pvfmkw_Mvl', 'vld' : '_vel_vld_vssl(8, pvm, l)'}
+            p['lvl'] = 'n - i < 512 ? (n - i) / 2UL : 256'
 
-        header = "void {f}({ty} px, {ty} py, {ty} pz, unsigned int* pm, int n)".format(f=I.intrinsicName(), ty=p['type'])
+        args = ", ".join(["{} p{}".format(op.ctype(), op.regName()) for op in I.outs + I.ins if not op.isVL()])
 
-        func = '''#include <veintrin.h>
+        #header = "void {f}({ty} px, {ty} py, {ty} pz, unsigned int* pm, int n)".format(f=I.intrinsicName(), ty=p['type'], args=args)
+        header = "void {f}({args}, int n)".format(f=I.intrinsicName(), args=args)
+
+        load = ""
+        for op in I.ins:
+            if not op.isMask() and not op.isVL():
+                load += "        __vr {} = _vel_vld_vssl(8, p{}, l);\n".format(op.regName(), op.regName())
+
+        args = ", ".join([op.regName() for op in I.ins if not op.isVL()])
+        func = '''#include <velintrin.h>
 {header}
 {{
     for (int i = 0; i < n; i += {stride}) {{
-        {lvl};
-        __vr vy = _ve_vld_vss(8, py);
-        __vr vz = _ve_vld_vss(8, pz);
+        int l = {lvl};
+{load}
         __vr tmp = {vld};
-        {vm} vm = {vfmk}(VECC_G, tmp);
-        __vr vx = _ve_{intrin}(vy, vz, vm);
-        _ve_vst_vss(vx, 8, px);
-        px += {stride};
-        py += {stride};
-        pz += {stride};
-        pm += {stride};
+        {vm} vm = {vfmk}(tmp, l);
+        __vr vx = _vel_{intrin}({args}, l);
+        _vel_vst_vssl(vx, 8, pvx, l);
+        pvx += {stride};
+        pvy += {stride};
+        pvz += {stride};
+        pvm += {stride};
     }}
-}}'''.format(header=header, vm=p['vm'], vfmk=p['vfmk'], vld=p['vld'], stride=p['stride'], lvl=p['lvl'], intrin=I.intrinsicName())
+}}'''.format(header=header, vm=p['vm'], vfmk=p['vfmk'], vld=p['vld'], stride=p['stride'], lvl=p['lvl'], intrin=I.intrinsicName(), args=args, load=load)
 
         ref = '''{header}
 {{
@@ -588,16 +596,17 @@ class TestGeneratorMask:
         lvm = ""
         svm = ""
         for i in range(l):
-            lvm += "    vmy = _ve_lvm_{m}{m}ss(vmy, {i}, py[{i}]);\n".format(m=m, i=i)
-            lvm += "    vmz = _ve_lvm_{m}{m}ss(vmz, {i}, pz[{i}]);\n".format(m=m, i=i)
-            svm += "    px[{i}] = _ve_svm_s{m}s(vmx, {i});\n".format(m=m, i=i)
+            lvm += "    vmy = _vel_lvm_{m}{m}ss(vmy, {i}, py[{i}]);\n".format(m=m, i=i)
+            lvm += "    vmz = _vel_lvm_{m}{m}ss(vmz, {i}, pz[{i}]);\n".format(m=m, i=i)
+            svm += "    px[{i}] = _vel_svm_s{m}s(vmx, {i});\n".format(m=m, i=i)
 
-        func = '''#include <veintrin.h>
+        func = '''#include <velintrin.h>
 {header}
 {{
     {vm} vmx, vmy, vmz;
 {lvm}
-    vmx = _ve_{inst}({args});
+    int vl = 256;
+    vmx = _vel_{inst}({args});
 
 {svm}
 }}
@@ -620,21 +629,21 @@ class TestGeneratorMask:
 
 class TestGenerator:
     def funcHeader(self, I):
-        tmp = [i for i in (I.outs + I.ins) if not i.isImm()]
+        tmp = [i for i in (I.outs + I.ins) if (not i.isImm()) and (not i.isVL())]
         args = ["{} {}".format(i.ctype(), i.formalName()) for i in tmp]
 
         return "void {name}({args}, int n)".format(name=I.intrinsicName(), args=", ".join(args))
 
     def get_vld_vst_inst(self, I, op):
-        vld = "vld_vss"
-        vst = "vst_vss"
+        vld = "vld_vssl"
+        vst = "vst_vssl"
         if not I.isPacked():
             if op.elemType() == T_f32:
-                vld = "vldu_vss"
-                vst = "vstu_vss"
+                vld = "vldu_vssl"
+                vst = "vstu_vssl"
             elif op.elemType() == T_i32 or op.elemType() == T_u32:
-                vld = "vldlsx_vss"
-                vst = "vstl_vss"
+                vld = "vldlsx_vssl"
+                vst = "vstl_vssl"
         return [vld, vst]
 
     def test_(self, I):
@@ -655,7 +664,7 @@ class TestGenerator:
             step = 256
             body += indent + "int l = n - i < 256 ? n - i : 256;\n"
     
-        body += indent + "_ve_lvl(l);\n"
+        #body += indent + "_ve_lvl(l);\n"
     
         cond = "VECC_G"
     
@@ -669,8 +678,9 @@ class TestGenerator:
             if op.isVReg():
                 stride = I.stride(op)
                 vld, vst = self.get_vld_vst_inst(I, op)
-                body += indent + "__vr {} = _ve_{}({}, p{});\n".format(op.regName(), vld, stride, op.regName())
+                body += indent + "__vr {} = _vel_{}({}, p{}, l);\n".format(op.regName(), vld, stride, op.regName())
             if op.isMask512():
+                # FIXME
                 stride = I.stride(op)
                 #vld, vst = self.get_vld_vst_inst(I, op)
                 body += indent + "__vr {}0 = _ve_vld_vss({}, p{});\n".format(op.regName(), stride, op.regName())
@@ -678,8 +688,8 @@ class TestGenerator:
             elif op.isMask():
                 stride = I.stride(op)
                 #vld, vst = self.get_vld_vst_inst(I, op)
-                body += indent + "__vr {}0 = _ve_vldlzx_vss(4, p{});\n".format(op.regName(), op.regName(), stride)
-                body += indent + "__vm {} = _ve_vfmkw_mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
+                body += indent + "__vr {}0 = _vel_vldlzx_vssl(4, p{}, l);\n".format(op.regName(), op.regName(), stride)
+                body += indent + "__vm {} = _vel_vfmkwgt_mvl({}0, l);\n".format(op.regName(), op.regName())
             if op.isReg() or op.isMask():
                 args.append(op.regName())
             elif op.isImm():
@@ -693,18 +703,19 @@ class TestGenerator:
             op = I.outs[0]
             vld, vst = self.get_vld_vst_inst(I, op)
             stride = I.stride(op)
-            body += indent + "__vr {} = _ve_{}({}, p{});\n".format(op.regName(), vld, stride, op.regName())
-            if I.hasMaskBaseReg():
-                body += indent + "{} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args + [op.regName()]))
-            else:
-                body += indent + "{} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args))
+            body += indent + "__vr {} = _vel_{}({}, p{}, l);\n".format(op.regName(), vld, stride, op.regName())
+            body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
+            #if I.hasMaskBaseReg():
+            #    body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args + [op.regName()]))
+            #else:
+            #    body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
         else:
-            body += indent + "__vr {} = _ve_{}({});\n".format(out.regName(), intrinsicName, ', '.join(args))
+            body += indent + "__vr {} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
     
         if out.isVReg():
             stride = I.stride(out)
             vld, vst = self.get_vld_vst_inst(I, out)
-            body += indent + "_ve_{}({}, {}, {});\n".format(vst, out.regName(), stride, out.formalName())
+            body += indent + "_vel_{}({}, {}, {}, l);\n".format(vst, out.regName(), stride, out.formalName())
     
         tmp = []
         for op in (I.outs + ins):
@@ -713,7 +724,7 @@ class TestGenerator:
     
         body += "\n".join(tmp)
     
-        func = '''#include "veintrin.h"
+        func = '''#include "velintrin.h"
 {} {{
     for (int i = 0; i < n; i += {}) {{
 {}
@@ -732,6 +743,8 @@ class TestGenerator:
         for op in I.outs + I.ins:
             if op.isVReg():
                 tmp.append("p{}[i]".format(op.regName()))
+            elif op.isVL():
+                pass
             elif op.isReg():
                 tmp.append(op.regName())
             elif op.isImm():
@@ -1005,11 +1018,11 @@ class InstTable(object):
         I = self.InstClass
         if isVL:
             self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_f64), SY(T_f64)]], expr, baseIntrinName="vbrdd").noLLVMInstDefine()
-            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_f64), SY(T_i64)]], expr, baseIntrinName="vbrdl")
-            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_f64), ImmI(T_i64)]], expr, baseIntrinName="vbrdl")
-            self.DefM(0x8C, "VBRD", "", "vbrdu", [[VX(T_f64), SY(T_f32)]], expr, baseIntrinName="vbrds")
-            self.DefM(0x8C, "VBRD", "", "vbrdl", [[VX(T_f64), SY(T_i32)]], expr, baseIntrinName="vbrdw")
-            self.DefM(0x8C, "VBRD", "", "vbrdl", [[VX(T_f64), ImmI(T_i32)]], expr, baseIntrinName="vbrdw")
+            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_i64), SY(T_i64)]], expr, baseIntrinName="vbrdl")
+            self.DefM(0x8C, "VBRD", "", "vbrd", [[VX(T_i64), ImmI(T_i64)]], expr, baseIntrinName="vbrdl")
+            self.DefM(0x8C, "VBRD", "", "vbrdu", [[VX(T_f32), SY(T_f32)]], expr, baseIntrinName="vbrds")
+            self.DefM(0x8C, "VBRD", "", "vbrdl", [[VX(T_i32), SY(T_i32)]], expr, baseIntrinName="vbrdw")
+            self.DefM(0x8C, "VBRD", "", "vbrdl", [[VX(T_i32), ImmI(T_i32)]], expr, baseIntrinName="vbrdw")
             self.DefM(0x8C, "VBRD", "p", "pvbrd", [[VX(T_u32), SY(T_u64)]], expr)
         else:
             self.add(I(0x8C, "VBRD", "vbrd",  "vbrd_vs_f64",    [VX(T_f64)], [SY(T_f64)], expr=expr, subop="f64r")).noLLVMInstDefine()
@@ -1189,7 +1202,7 @@ class InstTable(object):
         for op in baseOps:
             OL.append(op)
             OL.append(op + [VM])
-        self.Def(opc, inst, subop, asm, OL).noMaskBaseReg()
+        self.Def(opc, inst, subop, asm, OL, noBase=True).noMaskBaseReg()
 
     def VFIX(self, opc, inst, subop, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
@@ -1226,16 +1239,21 @@ class InstTableVEL(InstTable):
             ins = args[1:]
             if ('noVL' not in kwargs) or (not kwargs['noVL']):
                 newary.append(outs + ins + [VL])
+                noBase = ('noBase' in kwargs) and (kwargs['noBase'])
                 hasDummyOp = any([op.regName() == "vd" for op in ins])
-                if not hasDummyOp and outs[0] and outs[0].kind == "v":
+                if (not noBase) and (not hasDummyOp) and (outs[0] and outs[0].kind == "v"):
                     newary.append(outs + ins + [VD(outs[0].elemType()), VL])
             else:
                 newary.append(args)
 
         return super(InstTableVEL, self).Def(opc, inst, subop, asm, newary, expr, **kwargs)
 
-def gen_test(insts, directory):
+def gen_test(insts, directory, isVL):
     for I in insts:
+        if I.isNotYetImplemented():
+            continue
+        if isVL and I.hasDummyOp() and (not I.hasMask()):
+            continue
         if I.hasTest():
             data = getTestGenerator(I).gen(I).definition()
             if directory and (directory != "-"):
@@ -1619,7 +1637,7 @@ def main():
             if I.hasTest():
                 print getTestGenerator(I).gen(I).decl()
     if args.opt_test:
-        gen_test(insts, args.test_dir)
+        gen_test(insts, args.test_dir, args.vl)
     if args.opt_reference:
         print '#include <math.h>'
         print '#include <algorithm>'
@@ -1627,6 +1645,8 @@ def main():
         print '#include "../refutils.h"'
         print 'namespace ref {'
         for I in insts:
+            if I.isNotYetImplemented():
+                continue
             if I.hasTest():
                 f = getTestGenerator(I).gen(I).reference()
                 if f:
