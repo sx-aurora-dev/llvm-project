@@ -45,78 +45,42 @@ define dso_local float @fma_f_2(float, float, float) local_unnamed_addr #0 {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local <256 x double> @fma_v256d_1(<256 x double>, <256 x double>, <256 x double>) {
+define x86_regcallcc <256 x double> @__regcall3__fma_v256d_1(<256 x double>, <256 x double>, <256 x double>) {
 ; CHECK-LABEL: fma_v256d_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  lea %s34,4528(,%s11)
-; CHECK-NEXT:  lea %s35,2480(,%s11)
-; CHECK-NEXT:  vld %v0,8,%s35
-; CHECK-NEXT:  lea %s35,432(,%s11)
-; CHECK-NEXT:  vld %v1,8,%s35
-; CHECK-NEXT:  vld %v2,8,%s34
-; CHECK-NEXT:  vfmul.d %v0,%v1,%v0
+; CHECK:  vfmul.d %v0,%v0,%v1
 ; CHECK-NEXT:  vfadd.d %v0,%v0,%v2
-; CHECK-NEXT:  vst %v0,8,%s0
   %4 = fmul <256 x double> %0, %1
   %5 = fadd <256 x double> %4, %2
   ret <256 x double> %5
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local <256 x double> @fma_v256d_2(<256 x double>, <256 x double>, <256 x double>) {
+define x86_regcallcc <256 x double> @__regcall3__fma_v256d_2(<256 x double>, <256 x double>, <256 x double>) {
 ; CHECK-LABEL: fma_v256d_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  lea %s34,2480(,%s11)
-; CHECK-NEXT:  vld %v0,8,%s34
-; CHECK-NEXT:  lea %s34,432(,%s11)
-; CHECK-NEXT:  vld %v1,8,%s34
-; CHECK-NEXT:  lea %s34,4528(,%s11)
-; CHECK-NEXT:  vld %v2,8,%s34
-; CHECK-NEXT:  vfmad.d %v0,%v2,%v1,%v0
-; CHECK-NEXT:  vst %v0,8,%s0
+; CHECK:  vfmad.d %v0,%v2,%v0,%v1
   %4 = fmul fast <256 x double> %0, %1
   %5 = fadd fast <256 x double> %4, %2
   ret <256 x double> %5
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local <256 x float> @fma_v256f_1(<256 x float>, <256 x float>, <256 x float>) {
+define x86_regcallcc <256 x float> @__regcall3__fma_v256f_1(<256 x float>, <256 x float>, <256 x float>) {
 ; CHECK-LABEL: fma_v256f_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  lea %s34,2480(,%s11)
-; CHECK-NEXT:  lea %s35,1456(,%s11)
-; CHECK-NEXT:  vldu %v0,4,%s35
-; CHECK-NEXT:  lea %s35,432(,%s11)
-; CHECK-NEXT:  vldu %v1,4,%s35
-; CHECK-NEXT:  vldu %v2,4,%s34
-; CHECK-NEXT:  vfmul.s %v0,%v1,%v0
+; CHECK:  vfmul.s %v0,%v0,%v1
 ; CHECK-NEXT:  vfadd.s %v0,%v0,%v2
-; CHECK-NEXT:  vstu %v0,4,%s0
   %4 = fmul <256 x float> %0, %1
   %5 = fadd <256 x float> %4, %2
   ret <256 x float> %5
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define dso_local <256 x float> @fma_v256f_2(<256 x float>, <256 x float>, <256 x float>) {
+define x86_regcallcc <256 x float> @__regcall3__fma_v256f_2(<256 x float>, <256 x float>, <256 x float>) {
 ; CHECK-LABEL: fma_v256f_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  lea %s34,1456(,%s11)
-; CHECK-NEXT:  vldu %v0,4,%s34
-; CHECK-NEXT:  lea %s34,432(,%s11)
-; CHECK-NEXT:  vldu %v1,4,%s34
-; CHECK-NEXT:  lea %s34,2480(,%s11)
-; CHECK-NEXT:  vldu %v2,4,%s34
-; CHECK-NEXT:  pvfmad %v0,%v2,%v1,%v0
-; CHECK-NEXT:  vstu %v0,4,%s0
+; CHECK:  pvfmad %v0,%v2,%v0,%v1
   %4 = fmul fast <256 x float> %0, %1
   %5 = fadd fast <256 x float> %4, %2
   ret <256 x float> %5
