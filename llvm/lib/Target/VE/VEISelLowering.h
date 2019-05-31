@@ -629,7 +629,8 @@ namespace llvm {
     void finalizeLowering(MachineFunction &MF) const override;
 
   private:
-    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return true; }
+    // VE supports only vector FMA
+    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return VT.isVector() ? true : false; }
   };
 } // end namespace llvm
 
