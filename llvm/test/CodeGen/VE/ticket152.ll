@@ -86,23 +86,18 @@ define i32 @caller3() {
 ; CHECK-NEXT:  stl %s5, 216(,%s11)
 ; CHECK-NEXT:  or %s4, 5, (0)1
 ; CHECK-NEXT:  stl %s4, 208(,%s11)
+; CHECK-NEXT:  lea.sl %s34, 1074790400
+; CHECK-NEXT:  st %s34, 200(,%s11)
 ; CHECK-NEXT:  or %s2, 3, (0)1
 ; CHECK-NEXT:  stl %s2, 192(,%s11)
 ; CHECK-NEXT:  or %s1, 2, (0)1
 ; CHECK-NEXT:  stl %s1, 184(,%s11)
 ; CHECK-NEXT:  or %s0, 1, (0)1
-; CHECK-NEXT:  stl %s0, 176(,%s11)
 ; CHECK-NEXT:  lea %s34, callee3@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s12, callee3@hi(%s34)
-; CHECK-NEXT:  lea %s34, .LCPI2_0@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, .LCPI2_0@hi(%s34)
-; CHECK-NEXT:  ld %s3, (,%s34)
-; CHECK-NEXT:  lea %s34, 0
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, 1074790400(%s34)
-; CHECK-NEXT:  st %s34, 200(,%s11)
+; CHECK-NEXT:  lea.sl %s3, 1074790400
+; CHECK-NEXT:  stl %s0, 176(,%s11)
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 (i32, ...) @callee3(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
@@ -121,13 +116,10 @@ define i32 @caller4() {
 ; CHECK-NEXT:  lea %s35, callee4@lo
 ; CHECK-NEXT:  and %s35, %s35, (32)0
 ; CHECK-NEXT:  lea.sl %s12, callee4@hi(%s35)
-; CHECK-NEXT:  lea %s35, .LCPI3_0@lo
-; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s35, .LCPI3_0@hi(%s35)
-; CHECK-NEXT:  ld %s3, (,%s35)
 ; CHECK-NEXT:  or %s0, 1, (0)1
 ; CHECK-NEXT:  or %s1, 2, (0)1
 ; CHECK-NEXT:  or %s2, 3, (0)1
+; CHECK-NEXT:  lea.sl %s3, 1074790400
 ; CHECK-NEXT:  or %s4, 5, (0)1
 ; CHECK-NEXT:  or %s5, 6, (0)1
 ; CHECK-NEXT:  or %s6, 7, (0)1

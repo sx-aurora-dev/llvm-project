@@ -136,10 +136,8 @@ define zeroext i8 @divu8(i8 zeroext, i8 zeroext) {
 define double @divf64ri(double, double) {
 ; CHECK-LABEL: divf64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ld %s34, (,%s34)
+; CHECK-NEXT:    lea %s34, 858993459
+; CHECK-NEXT:    lea.sl %s34, 1072902963(%s34)
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv double %0, 1.200000e+00
@@ -150,10 +148,8 @@ define double @divf64ri(double, double) {
 define float @divf32ri(float, float) {
 ; CHECK-LABEL: divf32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 1067030938
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s34
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv float %0, 0x3FF3333340000000
@@ -244,10 +240,8 @@ define i32 @divu32ri(i32, i32) {
 define double @divf64li(double, double) {
 ; CHECK-LABEL: divf64li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ld %s34, (,%s34)
+; CHECK-NEXT:    lea %s34, 858993459
+; CHECK-NEXT:    lea.sl %s34, 1072902963(%s34)
 ; CHECK-NEXT:    fdiv.d %s0, %s34, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv double 1.200000e+00, %1
@@ -258,10 +252,8 @@ define double @divf64li(double, double) {
 define float @divf32li(float, float) {
 ; CHECK-LABEL: divf32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 1067030938
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fdiv.s %s0, %s34, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv float 0x3FF3333340000000, %1

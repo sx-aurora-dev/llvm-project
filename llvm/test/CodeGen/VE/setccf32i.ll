@@ -19,10 +19,8 @@ define zeroext i1 @setccat(float, float) {
 define zeroext i1 @setccoeq(float, float) {
 ; CHECK-LABEL: setccoeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.eq %s0, (63)0, %s34
@@ -33,10 +31,8 @@ define zeroext i1 @setccoeq(float, float) {
 define zeroext i1 @setccone(float, float) {
 ; CHECK-LABEL: setccone:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.ne %s0, (63)0, %s34
@@ -47,10 +43,8 @@ define zeroext i1 @setccone(float, float) {
 define zeroext i1 @setccogt(float, float) {
 ; CHECK-LABEL: setccogt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.gt %s0, (63)0, %s34
@@ -61,10 +55,8 @@ define zeroext i1 @setccogt(float, float) {
 define zeroext i1 @setccoge(float, float) {
 ; CHECK-LABEL: setccoge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.ge %s0, (63)0, %s34
@@ -75,10 +67,8 @@ define zeroext i1 @setccoge(float, float) {
 define zeroext i1 @setccolt(float, float) {
 ; CHECK-LABEL: setccolt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.lt %s0, (63)0, %s34
@@ -89,10 +79,8 @@ define zeroext i1 @setccolt(float, float) {
 define zeroext i1 @setccole(float, float) {
 ; CHECK-LABEL: setccole:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.le %s0, (63)0, %s34
@@ -123,10 +111,8 @@ define zeroext i1 @setccuno(float, float) {
 define zeroext i1 @setccueq(float, float) {
 ; CHECK-LABEL: setccueq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.eqnan %s0, (63)0, %s34
@@ -137,10 +123,8 @@ define zeroext i1 @setccueq(float, float) {
 define zeroext i1 @setccune(float, float) {
 ; CHECK-LABEL: setccune:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.nenan %s0, (63)0, %s34
@@ -151,10 +135,8 @@ define zeroext i1 @setccune(float, float) {
 define zeroext i1 @setccugt(float, float) {
 ; CHECK-LABEL: setccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.gtnan %s0, (63)0, %s34
@@ -165,10 +147,8 @@ define zeroext i1 @setccugt(float, float) {
 define zeroext i1 @setccuge(float, float) {
 ; CHECK-LABEL: setccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.genan %s0, (63)0, %s34
@@ -179,10 +159,8 @@ define zeroext i1 @setccuge(float, float) {
 define zeroext i1 @setccult(float, float) {
 ; CHECK-LABEL: setccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.ltnan %s0, (63)0, %s34
@@ -193,10 +171,8 @@ define zeroext i1 @setccult(float, float) {
 define zeroext i1 @setccule(float, float) {
 ; CHECK-LABEL: setccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 0
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fcmp.s %s34, %s0, %s34
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.s.lenan %s0, (63)0, %s34
