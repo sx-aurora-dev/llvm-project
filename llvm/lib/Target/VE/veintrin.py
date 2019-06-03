@@ -836,7 +836,7 @@ class ManualInstPrinter:
             else:
                 raise Exception("unknown register kind: {}".format(op.kind))
         
-        funcName = re.sub(r'[IN]', 's', I.funcName())
+        funcName = re.sub(r'[INZ]', 's', I.funcName())
         func = "{} {}({})".format(outType, funcName, ", ".join(ins))
 
         #if outType:
@@ -1559,9 +1559,14 @@ def createInstructionTable(isVL):
         T.Dummy(0x30, "SVOB", "void _ve_svob(void)", "svob");
     
     T.Section("Others", None)
-    T.Dummy(None, "", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or").NYI(isVL)
-    T.Dummy(None, "", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul").NYI(isVL)
-    T.Dummy(None, "", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or").NYI(isVL)
+    if isVL:
+        T.Dummy(None, "", "unsigned long int _vel_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
+        T.Dummy(None, "", "unsigned long int _vel_pack_f32a(float const* p)", "load and mul")
+        T.Dummy(None, "", "unsigned long int _vel_pack_i32(int a, int b)", "sll,add,or")
+    else:
+        T.Dummy(None, "", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
+        T.Dummy(None, "", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
+        T.Dummy(None, "", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
     
     T.Def(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine().NYI(isVL)
     T.Def(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine().NYI(isVL)
