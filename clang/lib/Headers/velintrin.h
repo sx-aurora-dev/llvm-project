@@ -6,6 +6,18 @@
 
 #define _vel_svob() __builtin_ve_vl_svob()
 
+// pack
+
+#define _vel_pack_f32p __builtin_ve_vl_pack_f32p
+#define _vel_pack_f32a __builtin_ve_vl_pack_f32a
+
+static inline unsigned long int _vel_pack_i32(int a, int b)
+{
+    return (((unsigned long int)a) << 32) | (unsigned int)b;
+}
+
+// approx
+
 static inline __vr _vel_vfdivdA_vsvl(double s0, __vr v0, int l)
 {
     __vr v1, v2, v3;
