@@ -940,6 +940,14 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 // TargetLowering Implementation
 //===----------------------------------------------------------------------===//
 
+/// isFPImmLegal - Returns true if the target can instruction select the
+/// specified FP immediate natively. If false, the legalizer will
+/// materialize the FP immediate as a load from a constant pool.
+bool VETargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
+                                     bool ForCodeSize) const {
+  return VT == MVT::f32 || VT == MVT::f64;
+}
+
 TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   if (AI->getOperation() == AtomicRMWInst::Xchg)
     return AtomicExpansionKind::None; // Uses ts1am instruction
