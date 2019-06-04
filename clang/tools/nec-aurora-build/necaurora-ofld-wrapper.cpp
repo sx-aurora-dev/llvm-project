@@ -52,8 +52,7 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   SotocPath = "sotoc";
   // TODO make this more flexible
   InputFile = argv[1];
-
-  if (strcmp(argv[1] + strlen(argv[1] -2), ".o") == 0) {
+  if (strcmp(argv[1] + strlen(argv[1]) -2, ".o") == 0) {
     ObjectFiles.push_back(argv[1]);
   }
 
@@ -86,13 +85,18 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else if (strcmp(argv[i], "-Xlinker -fopenmp-static") == 0) {
       StaticLinkerFlag = true;
       continue;
+    // if the wrapper is not called by the clang driver this might
+    // be a separated argument, which we also want to accept
+    } else if (strcmp(argv[i], "-fopenmp-static") == 0) {
+      StaticLinkerFlag = true;
+      continue;
     } else if (strcmp(argv[i], "-shared") == 0) {
       SharedFlag = true;
       continue;
     } else if (strcmp(argv[i], "-save-temps") == 0) {
       SaveTempsFlag = true;
       continue;
-    } else if (strcmp(argv[i] + strlen(argv[i] - 2), ".o") == 0) {
+    } else if (strcmp(argv[i] + strlen(argv[i]) - 2, ".o") == 0) {
       ArgsStream << argv[i] << " ";
       ObjectFiles.push_back(argv[i]);
       continue;

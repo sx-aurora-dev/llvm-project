@@ -18,6 +18,10 @@ void getSymsFromELFObj(char *elfObject, std::vector<std::string> &symbols) {
   GElf_Shdr shdr;
   Elf_Data *data;
 
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    err(EXIT_FAILURE, "ELF library too old");
+  }
+
   if ((fd = open(elfObject, O_RDONLY, 0)) < 0) {
     err(EXIT_FAILURE, "Open %s failed", elfObject);
   }
