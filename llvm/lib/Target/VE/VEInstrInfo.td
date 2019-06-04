@@ -1321,6 +1321,90 @@ def STQri : Pseudo<
 def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
 def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, $sx)>;
 
+// Patterns for unaligned load
+
+def unaligned4load : PatFrag<(ops node:$ptr), (load node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 4;
+}]>;
+def unaligned8load : PatFrag<(ops node:$ptr), (load node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 8;
+}]>;
+def : Pat<(i32 (unaligned4load ADDRri:$addr)),
+          (LDLri MEMri:$addr)>;
+def : Pat<(f32 (unaligned4load ADDRri:$addr)),
+          (LDUri MEMri:$addr)>;
+def : Pat<(i64 (unaligned8load ADDRri:$addr)),
+          (LDSri ADDRri:$addr)>;
+def : Pat<(f64 (unaligned8load ADDRri:$addr)),
+          (LDSri ADDRri:$addr)>;
+
+// Patterns for unaligned store
+
+def unaligned4store : PatFrag<(ops node:$val, node:$ptr),
+                              (store node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getAlignment() < 4;
+}]>;
+def unaligned8store : PatFrag<(ops node:$val, node:$ptr),
+                              (store node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getAlignment() < 8;
+}]>;
+def : Pat<(unaligned4store i32:$sx, ADDRri:$addr),
+          (STLri ADDRri:$addr, $sx)>;
+def : Pat<(unaligned4store f32:$sx, ADDRri:$addr),
+          (STUri ADDRri:$addr, $sx)>;
+def : Pat<(unaligned8store i64:$sx, ADDRri:$addr),
+          (STSri ADDRri:$addr, $sx)>;
+def : Pat<(unaligned8store f64:$sx, ADDRri:$addr),
+          (STSri ADDRri:$addr, $sx)>;
+
+// Patterns for unaligned sextload/zextload/extload
+
+def unaligned2extloadi16 : PatFrag<(ops node:$ptr), (extloadi16 node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 2;
+}]>;
+def unaligned2sextloadi16 : PatFrag<(ops node:$ptr), (sextloadi16 node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 2;
+}]>;
+def unaligned2zextloadi16 : PatFrag<(ops node:$ptr), (zextloadi16 node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 2;
+}]>;
+def unaligned4extloadi32 : PatFrag<(ops node:$ptr), (extloadi32 node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 4;
+}]>;
+def unaligned4sextloadi32 : PatFrag<(ops node:$ptr), (sextloadi32 node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 4;
+}]>;
+def unaligned4zextloadi32 : PatFrag<(ops node:$ptr), (zextloadi32 node:$ptr), [{
+  return cast<LoadSDNode>(N)->getAlignment() < 4;
+}]>;
+def : Pat<(i64 (unaligned2sextloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2Bri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (unaligned2zextloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (unaligned2extloadi16 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (unaligned4sextloadi32 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (unaligned4zextloadi32 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (unaligned4extloadi32 ADDRri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
+
+// Patterns for unaligned truncstore
+
+def unaligned4truncstorei16 : PatFrag<(ops node:$val, node:$ptr),
+                                   (truncstorei16 node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getAlignment() < 4;
+}]>;
+def unaligned8truncstorei32 : PatFrag<(ops node:$val, node:$ptr),
+                                   (truncstorei32 node:$val, node:$ptr), [{
+  return cast<StoreSDNode>(N)->getAlignment() < 8;
+}]>;
+def : Pat<(unaligned4truncstorei16 i64:$sx, ADDRri:$addr),
+          (ST2Bri ADDRri:$addr, (EXTRACT_SUBREG $sx, sub_i32))>;
+def : Pat<(unaligned8truncstorei32 i64:$sx, ADDRri:$addr),
+          (STLri ADDRri:$addr, (EXTRACT_SUBREG $sx, sub_i32))>;
+
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
     isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
