@@ -4,6 +4,7 @@
 #include <sstream>
 #include <unistd.h>
 #include <vector>
+#include <string.h>
 
 #include "necaurora-ofld-wrapper.h"
 

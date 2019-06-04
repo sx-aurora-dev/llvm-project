@@ -2,6 +2,7 @@
 #define NECAURORA_OFLD_WRAPPER_H
 
 #include <string>
+#include <vector>
 
 #include "config.h"
 
