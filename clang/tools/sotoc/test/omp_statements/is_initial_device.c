@@ -1,8 +1,8 @@
 // RUN: %sotoc-transform-compile
 // RUN: %run-on-host | %filecheck %s
 
-#include<omp.h>
-#include<stdio.h>
+#include <omp.h>
+#include <stdio.h>
 
 int main() {
   int isOfld;
