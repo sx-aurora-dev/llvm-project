@@ -27,6 +27,6 @@ const char *getTmpDir();
 const char *getTargetCompiler();
 
 std::string writeTmpFile(const std::string &Content, const std::string &Prefix,
-                         const std::string &Extension);
+                         const std::string &Extension, bool RealTmpfile=true);
 
 #endif /*NECAURORA_OFLD_WRAPPER_H*/

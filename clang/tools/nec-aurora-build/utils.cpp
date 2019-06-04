@@ -35,7 +35,7 @@ const char *getTargetCompiler() {
 }
 
 std::string writeTmpFile(const std::string &Content, const std::string &Prefix,
-                         const std::string &Extension) {
+                         const std::string &Extension, bool RealTmpfile) {
   std::string TmpPath;
   if (KeepTransformedFilesDir) {
     TmpPath = KeepTransformedFilesDir;
@@ -46,7 +46,11 @@ std::string writeTmpFile(const std::string &Content, const std::string &Prefix,
   // because mkstemp wants the last n chars to be 'X', we have to add the
   // extension laster
   std::stringstream TmpFilePathTemplate;
-  TmpFilePathTemplate << TmpPath << "/" << Prefix << "-XXXXXX" << Extension;
+  TmpFilePathTemplate << TmpPath << "/" << Prefix;
+  if (RealTmpfile) {
+    TmpFilePathTemplate << "-XXXXXX";
+  }
+  TmpFilePathTemplate  << Extension;
 
   std::string TmpFilePathTemplateStr = TmpFilePathTemplate.str();
 
@@ -54,8 +58,13 @@ std::string writeTmpFile(const std::string &Content, const std::string &Prefix,
                                 TmpFilePathTemplateStr.end());
   TmpFilePath.push_back('\0');
 
-  // generate tmp name
-  int fd = mkstemps(&TmpFilePath[0], Extension.length());
+  int fd;
+  if (RealTmpfile) {
+    // generate tmp name
+    fd = mkstemps(&TmpFilePath[0], Extension.length());
+  } else {
+    fd = open(&TmpFilePath[0], O_RDWR);
+  }
 
   if (fd < 0) {
     std::cerr << "necaurora-ofld-cc1-wrapper: mkstemp(" << &TmpFilePath[0]
