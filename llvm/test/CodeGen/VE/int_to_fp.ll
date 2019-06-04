@@ -224,20 +224,16 @@ define double @ul2d(i64 %a) {
 ; CHECK-LABEL: ul2d
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:  srl %s34, %s0, 32
-; CHECK-NEXT:  lea %s35, 0
-; CHECK-NEXT:  lea %s36, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:  and %s36, %s36, (32)0
-; CHECK-NEXT:  lea.sl %s36, .LCPI{{[0-9]+}}_0@hi(%s36)
-; CHECK-NEXT:  ld %s36, (,%s36)
+; CHECK-NEXT:  lea.sl %s35, 1160773632
+; CHECK-NEXT:  or %s34, %s34, %s35
+; CHECK-NEXT:  lea %s35, 1048576
+; CHECK-NEXT:  lea.sl %s35, -986710016(%s35)
+; CHECK-NEXT:  fadd.d %s34, %s34, %s35
+; CHECK-NEXT:  lea %s35, -1
 ; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s37, 1160773632(%s35)
-; CHECK-NEXT:  or %s34, %s34, %s37
-; CHECK-NEXT:  fsub.d %s34, %s34, %s36
-; CHECK-NEXT:  lea %s36, -1
-; CHECK-NEXT:  and %s36, %s36, (32)0
-; CHECK-NEXT:  and %s36, %s0, %s36
-; CHECK-NEXT:  lea.sl %s35, 1127219200(%s35)
-; CHECK-NEXT:  or %s35, %s36, %s35
+; CHECK-NEXT:  and %s35, %s0, %s35
+; CHECK-NEXT:  lea.sl %s36, 1127219200
+; CHECK-NEXT:  or %s35, %s35, %s36
 ; CHECK-NEXT:  fadd.d %s0, %s35, %s34
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:

@@ -209,10 +209,8 @@ define i128 @func22(i128) {
 define float @func23(float) {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 1084227584
+; CHECK-NEXT:    or %s34, 0, %s34
 ; CHECK-NEXT:    fadd.s %s0, %s0, %s34
   %2 = fadd float %0, 5.000000e+00
   ret float %2
@@ -221,10 +219,7 @@ define float @func23(float) {
 define double @func24(double) {
 ; CHECK-LABEL: func24:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ld %s34, (,%s34)
+; CHECK-NEXT:    lea.sl %s34, 1075052544
 ; CHECK-NEXT:    fadd.d %s0, %s0, %s34
   %2 = fadd double %0, 5.000000e+00
   ret double %2

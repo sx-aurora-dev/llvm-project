@@ -100,21 +100,16 @@ define i64 @d2ll(double) {
 define i64 @d2ull(double) {
 ; CHECK-LABEL: d2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI11_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI11_0@hi(%s34)
-; CHECK-NEXT:    ld %s34, (,%s34)
-; CHECK-NEXT:    fcmp.d %s35, %s0, %s34
-; CHECK-NEXT:    fsub.d %s34, %s0, %s34
-; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:    lea %s36, 0
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    lea.sl %s36, -2147483648(%s36)
-; CHECK-NEXT:    xor %s34, %s34, %s36
-; CHECK-NEXT:    cvt.l.d.rz %s36, %s0
-; CHECK-NEXT:    cmov.d.lt %s34, %s36, %s35
-; CHECK-NEXT:    or %s0, 0, %s34
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:  lea.sl %s34, 1138753536
+; CHECK-NEXT:  fcmp.d %s35, %s0, %s34
+; CHECK-NEXT:  fsub.d %s34, %s0, %s34
+; CHECK-NEXT:  cvt.l.d.rz %s34, %s34
+; CHECK-NEXT:  lea.sl %s36, -2147483648
+; CHECK-NEXT:  xor %s34, %s34, %s36
+; CHECK-NEXT:  cvt.l.d.rz %s36, %s0
+; CHECK-NEXT:  cmov.d.lt %s34, %s36, %s35
+; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  or %s11, 0, %s9
   %2 = fptoui double %0 to i64
   ret i64 %2
 }
@@ -227,9 +222,7 @@ define i64 @q2ull(fp128) {
 ; CHECK-NEXT:    fsub.q %s36, %s0, %s36
 ; CHECK-NEXT:    cvt.d.q %s34, %s36
 ; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:    lea %s36, 0
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    lea.sl %s36, -2147483648(%s36)
+; CHECK-NEXT:    lea.sl %s36, -2147483648
 ; CHECK-NEXT:    xor %s34, %s34, %s36
 ; CHECK-NEXT:    cvt.d.q %s36, %s0
 ; CHECK-NEXT:    cvt.l.d.rz %s36, %s36
@@ -334,23 +327,19 @@ define i64 @f2ll(float) {
 define i64 @f2ull(float) {
 ; CHECK-LABEL: f2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI33_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI33_0@hi(%s34)
-; CHECK-NEXT:    ldu %s34, (,%s34)
-; CHECK-NEXT:    fcmp.s %s35, %s0, %s34
-; CHECK-NEXT:    fsub.s %s34, %s0, %s34
-; CHECK-NEXT:    cvt.d.s %s34, %s34
-; CHECK-NEXT:    cvt.l.d.rz %s34, %s34
-; CHECK-NEXT:    lea %s36, 0
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    lea.sl %s36, -2147483648(%s36)
-; CHECK-NEXT:    xor %s34, %s34, %s36
-; CHECK-NEXT:    cvt.d.s %s36, %s0
-; CHECK-NEXT:    cvt.l.d.rz %s36, %s36
-; CHECK-NEXT:    cmov.s.lt %s34, %s36, %s35
-; CHECK-NEXT:    or %s0, 0, %s34
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:  lea.sl %s34, 1593835520
+; CHECK-NEXT:  or %s34, 0, %s34
+; CHECK-NEXT:  fcmp.s %s35, %s0, %s34
+; CHECK-NEXT:  fsub.s %s34, %s0, %s34
+; CHECK-NEXT:  cvt.d.s %s34, %s34
+; CHECK-NEXT:  cvt.l.d.rz %s34, %s34
+; CHECK-NEXT:  lea.sl %s36, -2147483648
+; CHECK-NEXT:  xor %s34, %s34, %s36
+; CHECK-NEXT:  cvt.d.s %s36, %s0
+; CHECK-NEXT:  cvt.l.d.rz %s36, %s36
+; CHECK-NEXT:  cmov.s.lt %s34, %s36, %s35
+; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  or %s11, 0, %s9
   %2 = fptoui float %0 to i64
   ret i64 %2
 }
@@ -578,23 +567,19 @@ define float @ull2f(i64) {
 define double @ull2d(i64) {
 ; CHECK-LABEL: ull2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    srl %s34, %s0, 32
-; CHECK-NEXT:    lea %s35, 0
-; CHECK-NEXT:    lea %s36, .LCPI57_0@lo
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    lea.sl %s36, .LCPI57_0@hi(%s36)
-; CHECK-NEXT:    ld %s36, (,%s36)
-; CHECK-NEXT:    and %s35, %s35, (32)0
-; CHECK-NEXT:    lea.sl %s37, 1160773632(%s35)
-; CHECK-NEXT:    or %s34, %s34, %s37
-; CHECK-NEXT:    fsub.d %s34, %s34, %s36
-; CHECK-NEXT:    lea %s36, -1
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    and %s36, %s0, %s36
-; CHECK-NEXT:    lea.sl %s35, 1127219200(%s35)
-; CHECK-NEXT:    or %s35, %s36, %s35
-; CHECK-NEXT:    fadd.d %s0, %s35, %s34
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:  srl %s34, %s0, 32
+; CHECK-NEXT:  lea.sl %s35, 1160773632
+; CHECK-NEXT:  or %s34, %s34, %s35
+; CHECK-NEXT:  lea %s35, 1048576
+; CHECK-NEXT:  lea.sl %s35, -986710016(%s35)
+; CHECK-NEXT:  fadd.d %s34, %s34, %s35
+; CHECK-NEXT:  lea %s35, -1
+; CHECK-NEXT:  and %s35, %s35, (32)0
+; CHECK-NEXT:  and %s35, %s0, %s35
+; CHECK-NEXT:  lea.sl %s36, 1127219200
+; CHECK-NEXT:  or %s35, %s35, %s36
+; CHECK-NEXT:  fadd.d %s0, %s35, %s34
+; CHECK-NEXT:  or %s11, 0, %s9
   %2 = uitofp i64 %0 to double
   ret double %2
 }

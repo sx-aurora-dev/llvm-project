@@ -587,6 +587,9 @@ namespace llvm {
     SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
+    bool isFPImmLegal(const APFloat &Imm, EVT VT,
+                      bool ForCodeSize) const override;
+
     bool ShouldShrinkFPConstant(EVT VT) const override {
       // Do not shrink FP constpool if VT == MVT::f128.
       // (ldd, call _Q_fdtoq) is more expensive than two ldds.

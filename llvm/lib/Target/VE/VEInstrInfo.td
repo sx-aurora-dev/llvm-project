@@ -24,12 +24,20 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
-def simm7   : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
-def simm32  : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
-def uimm32  : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
-def uimm6   : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
-def uimm7   : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
-def zero    : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
+def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
+def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
+def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
+def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
+def uimm7       : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
+def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
+def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
+                                      == 0; }]>;
+def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
+                                      == 0; }]>;
+def fplomsbzero : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
+                                      .getZExtValue() & 0x80000000) == 0; }]>;
+def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
+                                      .getZExtValue() & 0xffffffff) == 0; }]>;
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {
@@ -58,6 +66,19 @@ def GetVL : SDNodeXForm<imm, [{
   return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg, MVT::i32);
 }]>;
 
+def LOFP32 : SDNodeXForm<fpimm, [{
+  // Get a integer immediate from fpimm
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  return CurDAG->getTargetConstant((unsigned)(imm.getZExtValue() & 0xffffffff),
+                                   SDLoc(N), MVT::i64);
+}]>;
+
+def HIFP32 : SDNodeXForm<fpimm, [{
+  // Get a integer immediate from fpimm
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  return CurDAG->getTargetConstant((unsigned)(imm.getZExtValue() >> 32),
+                                   SDLoc(N), MVT::i64);
+}]>;
 
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((unsigned)(N->getZExtValue() & 0xffffffff),
@@ -1553,9 +1574,24 @@ def : Pat<(i32 simm32:$val), (LEA32zzi imm:$val)>;
 def : Pat<(i64 simm32:$val), (LEAzzi imm:$val)>;
 def : Pat<(i64 uimm32:$val), (ANDrm0 (LEAzzi imm:$val), 32)>;
 // Arbitrary immediates.
+def : Pat<(i64 lozero:$val),
+          (LEASLzzi (HI32 imm:$val))>;
+def : Pat<(i64 lomsbzero:$val),
+          (LEASLrzi (LEAzzi (LO32 imm:$val)), (HI32 imm:$val))>;
 def : Pat<(i64 imm:$val),
           (LEASLrzi (ANDrm0 (LEAzzi (LO32 imm:$val)), 32),
                     (HI32 imm:$val))>;
+
+// floating point
+def : Pat<(f32 fpimm:$val),
+          (COPY_TO_REGCLASS (LEASLzzi (LOFP32 $val)), F32)>;
+def : Pat<(f64 fplozero:$val),
+          (LEASLzzi (HIFP32 $val))>;
+def : Pat<(f64 fplomsbzero:$val),
+          (LEASLrzi (LEAzzi (LOFP32 $val)), (HIFP32 $val))>;
+def : Pat<(f64 fpimm:$val),
+          (LEASLrzi (ANDrm0 (LEAzzi (LOFP32 $val)), 32),
+                    (HIFP32 $val))>;
 
 // The same integer registers are used for i32 and i64 values.
 // When registers hold i32 values, the high bits are don't care.
