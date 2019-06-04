@@ -7,15 +7,15 @@ int main(){
   int sizeX=512;
   int sizeY=512;
   int sizeZ = 4;
-  float A[512][512][sizeZ]; 
+  float A[sizeX][sizeY][sizeZ]; 
   
-  #pragma omp target map(tofrom:A[:][0:512:2][:2])
+  #pragma omp target map(tofrom:A[:][:][:])
   {
     int i;
     int j;
     int k;
-    for(i=0; i< sizeX; i++){
-      for(j=0 ; j< sizeY; j+=2){
+    for(i=0; i< 512; i++){
+      for(j=0 ; j< 256; j+=2){
         for(k=0; k < (sizeZ - 2); ++k) {
           A[i][j][k]=i-j;
         }
