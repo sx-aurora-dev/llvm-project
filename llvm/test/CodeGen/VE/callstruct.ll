@@ -33,9 +33,7 @@ define void @caller() {
 ; CHECK-NEXT:    lea %s35, A@lo
 ; CHECK-NEXT:    and %s35, %s35, (32)0
 ; CHECK-NEXT:    lea.sl %s35, A@hi(%s35)
-; CHECK-NEXT:    stl %s34, (,%s35)
-; CHECK-NEXT:    srl %s34, %s34, 32
-; CHECK-NEXT:    stl %s34, 4(,%s35)
+; CHECK-NEXT:    st %s34, (,%s35)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = alloca i64, align 8
   %2 = bitcast i64* %1 to %struct.a*
