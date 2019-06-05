@@ -1,3 +1,4 @@
+// RUN: %sotoc-transform-compile
 #include <stdlib.h>
 
 typedef struct node {
