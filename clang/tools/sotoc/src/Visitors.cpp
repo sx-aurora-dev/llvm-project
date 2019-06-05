@@ -317,6 +317,9 @@ bool DiscoverTypesInDeclVisitor::VisitExpr(clang::Expr *E) {
     }
   }
   if (const clang::Type *TP = E->getType().getTypePtrOrNull()) {
+    if (TP->isPointerType()) {
+      TP = TP->getPointeeOrArrayElementType();
+    }
     processType(TP);
   }
   return true;
