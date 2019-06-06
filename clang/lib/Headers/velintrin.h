@@ -1,5 +1,5 @@
-#ifndef __VE_INTRIN_H__
-#define __VE_INTRIN_H__
+#ifndef __VEL_INTRIN_H__
+#define __VEL_INTRIN_H__
 
 #include <veintrin_common.h>
 #include <velintrin_gen.h>
