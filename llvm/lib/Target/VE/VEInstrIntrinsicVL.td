@@ -1096,6 +1096,12 @@ def : Pat<(int_ve_vl_vfrminsfst_vvl v256f64:$vy, i32:$vl), (vfrminsfst_vvl v256f
 def : Pat<(int_ve_vl_vfrminsfst_vvvl v256f64:$vy, v256f64:$vd, i32:$vl), (vfrminsfst_vvvl v256f64:$vy, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vfrminslst_vvl v256f64:$vy, i32:$vl), (vfrminslst_vvl v256f64:$vy, i32:$vl)>;
 def : Pat<(int_ve_vl_vfrminslst_vvvl v256f64:$vy, v256f64:$vd, i32:$vl), (vfrminslst_vvvl v256f64:$vy, v256f64:$vd, i32:$vl)>;
+def : Pat<(int_ve_vl_vrand_vvl v256f64:$vy, i32:$vl), (vrand_vvl v256f64:$vy, i32:$vl)>;
+def : Pat<(int_ve_vl_vrand_vvml v256f64:$vy, v4i64:$vm, i32:$vl), (vrand_vvml v256f64:$vy, v4i64:$vm, i32:$vl)>;
+def : Pat<(int_ve_vl_vror_vvl v256f64:$vy, i32:$vl), (vror_vvl v256f64:$vy, i32:$vl)>;
+def : Pat<(int_ve_vl_vror_vvml v256f64:$vy, v4i64:$vm, i32:$vl), (vror_vvml v256f64:$vy, v4i64:$vm, i32:$vl)>;
+def : Pat<(int_ve_vl_vrxor_vvl v256f64:$vy, i32:$vl), (vrxor_vvl v256f64:$vy, i32:$vl)>;
+def : Pat<(int_ve_vl_vrxor_vvml v256f64:$vy, v4i64:$vm, i32:$vl), (vrxor_vvml v256f64:$vy, v4i64:$vm, i32:$vl)>;
 def : Pat<(int_ve_vl_vgt_vvssl v256f64:$vy, i64:$sy, i64:$sz, i32:$vl), (vgt_vvssl v256f64:$vy, i64:$sy, i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_vgt_vvssvl v256f64:$vy, i64:$sy, i64:$sz, v256f64:$vd, i32:$vl), (vgt_vvssvl v256f64:$vy, i64:$sy, i64:$sz, v256f64:$vd, i32:$vl)>;
 def : Pat<(int_ve_vl_vgt_vvssl v256f64:$vy, i64:$sy, (i64 simm7:$Z), i32:$vl), (vgt_vvsZl v256f64:$vy, i64:$sy, (i64 simm7:$Z), i32:$vl)>;

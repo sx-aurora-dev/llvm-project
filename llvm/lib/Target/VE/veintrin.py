@@ -260,7 +260,6 @@ class Inst(object):
 
     def hasInst(self): return self.inst_ != None
 
-
     def instDefine(self):
         print("// {} {} {}".format(self.inst(), self.asm(), self.intrinsicName()))
 
@@ -269,7 +268,7 @@ class Inst(object):
 
         outs = fmtOps(self.outs)
         ins = fmtOps(self.ins)
-        tmp = [op for op in self.ins if op.regName() not in ["vd", "vl"]]
+        tmp = [op for op in self.ins if op.regName() not in ["vd", "vl", "vmd"]]
         ins2 = fmtOps(tmp)
         asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
 
@@ -861,7 +860,7 @@ class ManualInstPrinter:
 
         func, expr = self.make(I)
         line = "    {:<80} // {}".format(func, expr)
-        print line
+        print(line)
 
 class HtmlManualPrinter(ManualInstPrinter):
     def printAll(self, T, opt_no_link, isVL):
@@ -1043,9 +1042,10 @@ class InstTable(object):
     def LVSm(self, opc, isVL):
         I = self.InstClass
         if isVL:
-          self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest())
+          # Manual LLVMInstDefine
+          self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest()).noLLVMInstDefine()
           self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest()).noLLVMInstDefine()
-          self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="lvss_svs", noVL=True).noTest())
+          self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="lvss_svs", noVL=True).noTest()).noLLVMInstDefine()
         else:
           self.add(I(opc, "LVS", "lvs", "lvs_svs_u64", [SX(T_u64)], [VX(T_u64), SY(T_u32)], subop="i64r").noTest())
           self.add(I(opc, "LVS", "lvs", "lvs_svs_f64", [SX(T_f64)], [VX(T_u64), SY(T_u32)], subop="f64r").noTest()).noLLVMInstDefine()
@@ -1260,34 +1260,34 @@ def gen_test(insts, directory, isVL):
                 filename = "{}/{}.c".format(directory, I.intrinsicName())
                 cmpwrite(filename, data)
             else:
-                print data 
+                print(data)
 
 def gen_inst_def(insts):
     for I in insts:
         if I.hasLLVMInstDefine():
-            print I.instDefine()
+            print(I.instDefine())
 
 def gen_intrinsic_def(insts):
     for I in insts:
         if not I.hasImmOp():
-            print I.intrinsicDefine()
+            print(I.intrinsicDefine())
 
 def gen_pattern(insts):
     for I in insts:
         if I.hasInst()and I.hasPat():
             s = I.pattern()
             if s:
-                print s
+                print(s)
 
 def gen_bulitin(insts):
     for I in insts:
         if (not I.hasImmOp()) and I.hasBuiltin():
-            print I.builtin()
+            print(I.builtin())
 
 def gen_veintrin_h(insts):
     for I in insts:
         if (not I.hasImmOp()) and I.hasBuiltin():
-            print I.veintrin()
+            print(I.veintrin())
 
 def gen_mktest(insts):
     for I in insts:
@@ -1507,9 +1507,9 @@ def createInstructionTable(isVL):
     T.FLm(0xAD, "VFMAX", "as{fl}", "vfrmax.s{fl}", [[VX(T_f32), VY(T_f32)]])
     T.FLm(0xAD, "VFMAX", "id{fl}", "vfrmin.d{fl}", [[VX(T_f64), VY(T_f64)]])
     T.FLm(0xAD, "VFMAX", "is{fl}", "vfrmin.s{fl}", [[VX(T_f32), VY(T_f32)]])
-    T.NoImpl("VRAND")
-    T.NoImpl("VROR")
-    T.NoImpl("VRXOR")
+    T.VSUM(0x88, "VRAND", "", "vrand", [[VX(T_u64), VY(T_u64)]])
+    T.VSUM(0x98, "VROR",  "", "vror",  [[VX(T_u64), VY(T_u64)]])
+    T.VSUM(0x89, "VRXOR", "", "vrxor", [[VX(T_u64), VY(T_u64)]])
     T.NoImpl("VFIA")
     T.NoImpl("VFIS")
     T.NoImpl("VFIM")
@@ -1613,7 +1613,7 @@ def main():
 
     if args.opt_filter:
         insts = [i for i in insts if re.search(args.opt_filter, i.intrinsicName())]
-        print "filter: {} -> {}".format(args.opt_filter, len(insts))
+        print("filter: {} -> {}".format(args.opt_filter, len(insts)))
     
     if args.opt_all:
         args.opt_inst = True
@@ -1640,31 +1640,31 @@ def main():
     if args.opt_decl:
         for I in insts:
             if I.hasTest():
-                print getTestGenerator(I).gen(I).decl()
+                print(getTestGenerator(I).gen(I).decl())
     if args.opt_test:
         gen_test(insts, args.test_dir, args.vl)
     if args.opt_reference:
-        print '#include <math.h>'
-        print '#include <algorithm>'
-        print 'using namespace std;'
-        print '#include "../refutils.h"'
-        print 'namespace ref {'
+        print('#include <math.h>')
+        print('#include <algorithm>')
+        print('using namespace std;')
+        print('#include "../refutils.h"')
+        print('namespace ref {')
         for I in insts:
             if I.isNotYetImplemented():
                 continue
             if I.hasTest():
                 f = getTestGenerator(I).gen(I).reference()
                 if f:
-                    print f
+                    print(f)
             continue
             
             if len(i.outs) > 0 and i.outs[0].isMask() and i.hasExpr():
                 f = TestGeneratorMask().gen(i)
-                print f.reference()
+                print(f.reference())
                 continue
             if i.hasTest() and i.hasExpr():
-                print TestGenerator().reference(i)
-        print '}'
+                print(TestGenerator().reference(i))
+        print('}')
     if args.opt_html:
         HtmlManualPrinter().printAll(T, False, args.vl)
     if args.html_no_link:
