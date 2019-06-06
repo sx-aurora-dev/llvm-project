@@ -928,6 +928,12 @@
 #define _vel_vfrminsfst_vvvl __builtin_ve_vl_vfrminsfst_vvvl
 #define _vel_vfrminslst_vvl __builtin_ve_vl_vfrminslst_vvl
 #define _vel_vfrminslst_vvvl __builtin_ve_vl_vfrminslst_vvvl
+#define _vel_vrand_vvl __builtin_ve_vl_vrand_vvl
+#define _vel_vrand_vvml __builtin_ve_vl_vrand_vvml
+#define _vel_vror_vvl __builtin_ve_vl_vror_vvl
+#define _vel_vror_vvml __builtin_ve_vl_vror_vvml
+#define _vel_vrxor_vvl __builtin_ve_vl_vrxor_vvl
+#define _vel_vrxor_vvml __builtin_ve_vl_vrxor_vvml
 #define _vel_vgt_vvssl __builtin_ve_vl_vgt_vvssl
 #define _vel_vgt_vvssvl __builtin_ve_vl_vgt_vvssvl
 #define _vel_vgt_vvssml __builtin_ve_vl_vgt_vvssml
