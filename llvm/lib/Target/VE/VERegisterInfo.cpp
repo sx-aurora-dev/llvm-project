@@ -186,10 +186,24 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(VE::PMC13);
   Reserved.set(VE::PMC14);
 
+  // reserve constant registers
+  Reserved.set(VE::VM0);
+  Reserved.set(VE::VMP0);
+
   // sx18-sx33 are callee-saved registers
   // sx34-sx63 are temporary registers
 
   return Reserved;
+}
+
+bool VERegisterInfo::isConstantPhysReg(unsigned PhysReg) const {
+  switch (PhysReg) {
+  case VE::VM0:
+  case VE::VMP0:
+    return true;
+  default:
+    return false;
+  }
 }
 
 const TargetRegisterClass*
