@@ -202,6 +202,11 @@ namespace llvm {
       return isSimple() ? V.is2048BitVector() : isExtended2048BitVector();
     }
 
+    /// Return true if this is a 4096-bit vector type.
+    bool is4096BitVector() const {
+      return isSimple() ? V.is4096BitVector() : isExtended4096BitVector();
+    }
+
     /// Return true if this is a 8192-bit vector type.
     bool is8192BitVector() const {
       return isSimple() ? V.is8192BitVector() : isExtended8192BitVector();
@@ -436,6 +441,7 @@ namespace llvm {
     bool isExtended512BitVector() const LLVM_READONLY;
     bool isExtended1024BitVector() const LLVM_READONLY;
     bool isExtended2048BitVector() const LLVM_READONLY;
+    bool isExtended4096BitVector() const LLVM_READONLY;
     bool isExtended8192BitVector() const LLVM_READONLY;
     bool isExtended16384BitVector() const LLVM_READONLY;
     EVT getExtendedVectorElementType() const;
