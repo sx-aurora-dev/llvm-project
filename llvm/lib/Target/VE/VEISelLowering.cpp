@@ -419,8 +419,19 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
     }
   }
 
-  // Otherwise, ask llvm to expand it to multiple INSERT_VECTOR_ELT insns.
-  return SDValue();
+  // Otherwise, generate element-wise insertions.
+  SDValue newVector = SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
+                                                 DL, Op.getSimpleValueType()),
+                              0);
+
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    newVector = DAG.getNode(
+        ISD::INSERT_VECTOR_ELT, DL, Op.getSimpleValueType(),
+        newVector, BVN->getOperand(i),
+        DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64))
+    );
+  }
+  return newVector;
 }
 
 SDValue
@@ -3190,6 +3201,7 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
 // Should we expand the build vector with shuffles?
 bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   EVT VT, unsigned DefinedValues) const {
+#if 1
   // FIXME: Change this to true or expression once we implement custom
   // expansion of VECTOR_SHUFFLE completely.
 
@@ -3197,6 +3209,9 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   // infinity expand loop between both instructions since VECTOR_SHUFFLE
   // is not implemented completely yet.
   return false;
+#else
+  return DefinedValues < 3;
+#endif
 }
 
 SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
@@ -3206,17 +3221,62 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
 
   // Special treatements for packed V64 types.
   if (VT == MVT::v512i32 || VT == MVT::v512f32) {
-    // FIXME: needs special treatements for packed V64 types,
-    //        but those are not implemented yet.
-    //
     // Example of codes:
     //   %packed_v = extractelt %vr, %idx / 2
-    //   %packed_v &= 0xffffffff << ((%idx / 2 + 1) * 32)
-    //   %packed_v |= %val << (%idx / 2 * 32)
-    //   %vr = insertelt %vr, %packed_v, %idx
-    //
-    // For now, we ask llvm to expand to more generic slower code by default.
-    return SDValue();
+    //   %packed_v &= 0xffffffff << ((%idx % 2) ? 0 : 32)
+    //   %packed_v |= %val << (%idx % 2 * 32)
+    //   %vr = insertelt %vr, %packed_v, %idx / 2
+
+    SDValue Vec = Op.getOperand(0);
+    SDValue Val = Op.getOperand(1);
+    SDValue Idx = Op.getOperand(2);
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+    SDLoc dl(Op);
+    // In v512i32 and v512f32, both i32 and f32 values are placed from Low32,
+    // therefore convert f32 to i32 first.
+    SDValue I32Val = Val;
+    if (VT == MVT::v512f32) {
+      I32Val = DAG.getBitcast(i32, Val);
+    }
+    SDValue Result = Op;
+    if (0 /* Idx->isConstant()*/) {
+      // FIXME: optimized implementation using constant values
+    } else {
+      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
+      // SDValue CcEq = DAG.getConstant(VECC::CC_IEQ, dl, i64);
+      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
+      SDValue OneConst = DAG.getConstant(1, dl, i64);
+      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
+      SDValue HighMask = DAG.getConstant(0xFFFFFFFF00000000, dl, i64);
+      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64,
+        { Idx, OneConst });
+      SDValue PackedVal = SDValue(DAG.getMachineNode(VE::LVSi, dl, i64,
+        { Vec, HalfIdx }), 0);
+      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64,
+        { Idx, OneConst });
+      SDValue ShiftIdx = DAG.getNode(ISD::SELECT_CC, dl, i64,
+        { IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq });
+      SDValue Mask = DAG.getNode(ISD::SRL, dl, i64,
+        { HighMask, ShiftIdx });
+      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64,
+        { PackedVal, Mask });
+      SDValue BaseVal = SDValue(DAG.getMachineNode(
+          TargetOpcode::IMPLICIT_DEF, dl, MVT::i64), 0);
+      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
+      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+      SDValue I64Val = SDValue(DAG.getMachineNode(
+          TargetOpcode::INSERT_SUBREG, dl, MVT::i64, BaseVal,
+          I32Val, SubLow32), 0);
+      SDValue ShiftedVal = DAG.getNode(ISD::SHL, dl, i64,
+        { I64Val, ShiftIdx });
+      SDValue CombinedVal = DAG.getNode(ISD::OR, dl, i64,
+        { ShiftedVal, MaskedVal });
+      Result = SDValue(DAG.getMachineNode(VE::LSVi, dl,
+        Vec.getSimpleValueType(),
+        { Vec, HalfIdx, CombinedVal }), 0);
+    }
+    return Result;
   }
 
   // Insertion is legal for other V64 types.
@@ -3315,11 +3375,19 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
   else
     secondrot = 256 - secondrot;
 
-  SDValue firstrotated = firstrot % 256 != 0 ? DAG.getNode(VEISD::VEC_VMV, dl, firstVec.getSimpleValueType(), {DAG.getConstant(firstrot % 256, dl, EVT::getIntegerVT(*DAG.getContext(), 32)), firstVec}) : firstVec;
-  SDValue secondrotated = secondrot % 256 != 0 ? DAG.getNode(VEISD::VEC_VMV, dl, secondVec.getSimpleValueType(), {DAG.getConstant(secondrot % 256, dl, EVT::getIntegerVT(*DAG.getContext(), 32)), secondVec}) : secondVec;
-
+  EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
   EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
   EVT v256i1 = EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 1), 256);
+
+  // Initialize vector length register by 256
+  SDValue RC = DAG.getTargetConstant(VE::VLSRegClass.getID(), dl, MVT::i64);
+  SDValue resultSizeVal =
+      SDValue(DAG.getMachineNode(TargetOpcode::COPY_TO_REGCLASS,
+                                 dl, i64, DAG.getConstant(resultSize, dl, i64),
+                                 RC), 0);
+
+  SDValue firstrotated = firstrot % 256 != 0 ? SDValue(DAG.getMachineNode(VE::VMVi, dl, firstVec.getSimpleValueType(), {DAG.getConstant(firstrot % 256, dl, i32), firstVec, resultSizeVal}), 0) : firstVec;
+  SDValue secondrotated = secondrot % 256 != 0 ? SDValue(DAG.getMachineNode(VE::VMVi, dl, secondVec.getSimpleValueType(), {DAG.getConstant(secondrot % 256, dl, i32), secondVec, resultSizeVal}), 0) : secondVec;
 
   //TODO: use LVM and SVM instructions!
   int block = firstsecond / 64;
@@ -3348,8 +3416,7 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
     Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, index, mask});
   }
 
-  SDValue resultSizeConst = DAG.getConstant(256, dl, i64);
-  SDValue returnValue = DAG.getNode(VEISD::INT_VMRG_M, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask, resultSizeConst});
+  SDValue returnValue = SDValue(DAG.getMachineNode(VE::VMRGvm, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask, resultSizeVal}), 0);
   return returnValue;
 }
 
@@ -3360,15 +3427,48 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
 
   // Special treatements for packed V64 types.
   if (VT == MVT::v512i32 || VT == MVT::v512f32) {
-    // FIXME: needs special treatements for packed V64 types,
-    //        but those are not implemented yet.
-    //
     // Example of codes:
     //   %packed_v = extractelt %vr, %idx / 2
-    //   %res = %packed_v & 0xffffffff << (%idx / 2 * 32)
-    //
-    // For now, we ask llvm to expand to more generic slower code by default.
-    return SDValue();
+    //   %v = %packed_v >> (%idx % 2 * 32)
+    //   %res = %v & 0xffffffff
+
+    SDValue Vec = Op.getOperand(0);
+    SDValue Idx = Op.getOperand(1);
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+    EVT f32 = EVT::getFloatingPointVT(32);
+    SDLoc dl(Op);
+    SDValue Result = Op;
+    if (0 /* Idx->isConstant() */) {
+      // FIXME: optimized implementation using constant values
+    } else {
+      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
+      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
+      SDValue OneConst = DAG.getConstant(1, dl, i64);
+      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
+      SDValue LowBits = DAG.getConstant(0xFFFFFFFF, dl, i64);
+      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64,
+        { Idx, OneConst });
+      SDValue PackedVal = SDValue(DAG.getMachineNode(VE::LVSi, dl, i64,
+        { Vec, HalfIdx }), 0);
+      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64,
+        { Idx, OneConst });
+      SDValue ShiftIdx = DAG.getNode(ISD::SELECT_CC, dl, i64,
+        { IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq });
+      SDValue ShiftedVal = DAG.getNode(ISD::SRL, dl, i64,
+        { PackedVal, ShiftIdx });
+      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64,
+        { ShiftedVal, LowBits });
+      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
+      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+      Result = SDValue(DAG.getMachineNode(
+          TargetOpcode::EXTRACT_SUBREG, dl, i32,
+          MaskedVal, SubLow32), 0);
+      if (VT == MVT::v512f32) {
+        Result = DAG.getBitcast(f32, Result);
+      }
+    }
+    return Result;
   }
 
   // Extraction is legal for other V64 types.
