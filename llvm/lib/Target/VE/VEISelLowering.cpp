@@ -1004,6 +1004,22 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v256i64, &VE::V64RegClass);
   addRegisterClass(MVT::v256f32, &VE::V64RegClass);
   addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f64, &VE::V64RegClass);
   addRegisterClass(MVT::v8i32, &VE::V64RegClass);
   addRegisterClass(MVT::v8i64, &VE::V64RegClass);
   addRegisterClass(MVT::v8f32, &VE::V64RegClass);
@@ -1251,15 +1267,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   for (MVT VT : MVT::vector_valuetypes()) {
     if (VT.getVectorElementType() == MVT::i1 ||
         VT.getVectorElementType() == MVT::i8 ||
-        VT.getVectorElementType() == MVT::i16 ||
-        VT.getVectorNumElements() == 16 ||
-        VT.getVectorNumElements() == 32 ||
-        VT.getVectorNumElements() == 64 ||
-        VT.getVectorNumElements() == 128) {
+        VT.getVectorElementType() == MVT::i16) {
       // VE uses vXi1 types but has no generic operations.
       // VE doesn't support vXi8 and vXi16 value types.
-      // LLVM for VE doesn't support whole types (i32/i64/f32/f64) of
-      // each length (16/32/64/128) yet.
       // So, we mark them all as expanded.
 
       // Expand all vector-i8/i16-vector truncstore and extload
@@ -1314,6 +1324,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         // unknown "vtInt:  (vt:{ *:[Other] })" errors.
         setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
         setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+        setOperationAction(ISD::SINT_TO_FP, VT, Expand);
       }
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
@@ -3158,11 +3169,6 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
   EVT VT = Op.getOperand(0).getValueType();
 
-  // Insertion/extraction are legal for unpacked V64 types.
-  if (VT == MVT::v256i32 || VT == MVT::v256f32 ||
-      VT == MVT::v256i64 || VT == MVT::v256f64)
-    return Op;
-
   // Special treatements for packed V64 types.
   if (VT == MVT::v512i32 || VT == MVT::v512f32) {
     // FIXME: needs special treatements for packed V64 types,
@@ -3178,8 +3184,8 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
     return SDValue();
   }
 
-  // May need to support v4i64 and v8i64, but just ask llvm to expand them.
-  return SDValue();
+  // Insertion is legal for other V64 types.
+  return Op;
 }
 
 SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const {
@@ -3317,11 +3323,6 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
   assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
   EVT VT = Op.getOperand(0).getValueType();
 
-  // Insertion/extraction are legal for unpacked V64 types.
-  if (VT == MVT::v256i32 || VT == MVT::v256f32 ||
-      VT == MVT::v256i64 || VT == MVT::v256f64)
-    return Op;
-
   // Special treatements for packed V64 types.
   if (VT == MVT::v512i32 || VT == MVT::v512f32) {
     // FIXME: needs special treatements for packed V64 types,
@@ -3335,8 +3336,8 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
     return SDValue();
   }
 
-  // May need to support v4i64 and v8i64, but just ask llvm to expand them.
-  return SDValue();
+  // Extraction is legal for other V64 types.
+  return Op;
 }
 
 SDValue VETargetLowering::
