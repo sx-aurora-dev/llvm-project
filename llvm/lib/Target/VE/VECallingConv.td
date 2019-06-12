@@ -89,10 +89,19 @@ def CC_VE : CallingConv<[
   CCDelegateTo<CC_VE_C_Stack>
 ]>;
 
+// All arguments get passed in stack for varargs function or non-prototyped
+// function.
 def CC_VE2 : CallingConv<[
-  // All arguments get passed in stack for varargs function or non-prototyped
-  // function.
+  // F128 are assigned to the stack in 16-byte aligned units
   CCIfType<[f128], CCAssignToStack<16, 16>>,
+
+  // float --> need special handling like below.
+  //    0      4
+  //    +------+------+
+  //    | empty| float|
+  //    +------+------+
+  CCIfType<[f32], CCCustom<"allocateFloat">>,
+
   CCAssignToStack<0, 8>
 ]>;
 

@@ -2144,6 +2144,19 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
     // Increment the pointer, VAList, by 16 to the next vaarg.
     NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
                           DAG.getIntPtrConstant(16, DL));
+  } else if (VT == MVT::f32) {
+    // float --> need special handling like below.
+    //    0      4
+    //    +------+------+
+    //    | empty| float|
+    //    +------+------+
+    // Increment the pointer, VAList, by 8 to the next vaarg.
+    NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
+                          DAG.getIntPtrConstant(8, DL));
+    // Then, adjust VAList.
+    unsigned InternalOffset = 4;
+    VAList = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
+                         DAG.getConstant(InternalOffset, DL, PtrVT));
   } else {
     // Increment the pointer, VAList, by 8 to the next vaarg.
     NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
