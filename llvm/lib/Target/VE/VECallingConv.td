@@ -18,6 +18,13 @@ def CC_VE_C_Stack: CallingConv<[
   // F128 are assigned to the stack in 16-byte aligned units
   CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
 
+  // float --> need special handling like below.
+  //    0      4
+  //    +------+------+
+  //    | empty| float|
+  //    +------+------+
+  CCIfType<[f32], CCCustom<"allocateFloat">>,
+
   // All of the rest are assigned to the stack in 8-byte aligned units.
   CCAssignToStack<0, 8>
 ]>;

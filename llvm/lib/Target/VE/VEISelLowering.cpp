@@ -43,6 +43,28 @@ using namespace llvm;
 // Calling Convention Implementation
 //===----------------------------------------------------------------------===//
 
+static bool allocateFloat(unsigned ValNo, MVT ValVT, MVT LocVT,
+                          CCValAssign::LocInfo LocInfo,
+                          ISD::ArgFlagsTy ArgFlags, CCState &State) {
+  switch (LocVT.SimpleTy) {
+  case MVT::f32: {
+    // Allocate stack like below
+    //    0      4
+    //    +------+------+
+    //    | empty| float|
+    //    +------+------+
+    // Use align=8 for dummy area to align the beginning of these 2 area.
+    State.AllocateStack(4, 8);                      // for empty area
+    // Use align=4 for value to place it at just after the dummy area.
+    unsigned Offset = State.AllocateStack(4, 4);    // for float value area
+    State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
+    return true;
+  }
+  default:
+    return false;
+  }
+}
+
 #include "VEGenCallingConv.inc"
 
 bool
