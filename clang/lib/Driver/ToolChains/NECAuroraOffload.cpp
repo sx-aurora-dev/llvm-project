@@ -69,6 +69,10 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
         continue;
       }
 
+      if (A->getOption().getName() == "X" && std::string(A->getValue(0)).compare(0,13,"openmp-target") == 0) {
+        continue;
+      }
+
       A->render(Args, CmdArgs);
     }
   }

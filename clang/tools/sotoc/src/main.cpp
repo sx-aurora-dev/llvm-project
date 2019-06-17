@@ -72,7 +72,7 @@ public:
     // std::error_code error_code;
     // llvm::raw_fd_ostream outFile("output.txt", error_code,
     // llvm::sys::fs::F_Append);
-    DEBUGP("Generating Code§");
+    DEBUGP("Generating Code");
     Code->generateCode(llvm::outs());
     // outFile.close();
     delete Code;
