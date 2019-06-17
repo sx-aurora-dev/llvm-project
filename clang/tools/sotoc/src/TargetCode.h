@@ -85,7 +85,6 @@ private:
   /// \param returns the last element type (i.e., the type of the array)
   void handleArrays(const clang::ArrayType **t,
                     std::list<std::string> &DimString, int &dim,
-                    std::vector<int> &VariableDimensions,
-                    TargetCodeRegion *TCR, std::string &elemType,
-                    const std::string &ArrayName);
+                    std::vector<int> &VariableDimensions, TargetCodeRegion *TCR,
+                    std::string &elemType, const std::string &ArrayName);
 };

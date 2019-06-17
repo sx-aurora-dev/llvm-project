@@ -19,8 +19,8 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
-#include "clang/AST/Stmt.h"
 #include "clang/AST/ExprOpenMP.h"
+#include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
@@ -120,11 +120,12 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   return true;
 }
 
-class CollectOMPClausesVisitor : public clang::RecursiveASTVisitor<CollectOMPClausesVisitor> {
+class CollectOMPClausesVisitor
+    : public clang::RecursiveASTVisitor<CollectOMPClausesVisitor> {
   std::shared_ptr<TargetCodeRegion> TCR;
+
 public:
-  CollectOMPClausesVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
-      :  TCR(TCR) {};
+  CollectOMPClausesVisitor(std::shared_ptr<TargetCodeRegion> &TCR) : TCR(TCR){};
   bool VisitStmt(clang::Stmt *S) {
     if (auto *OED = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
       for (auto *Clause : OED->clauses()) {
@@ -202,7 +203,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
     DEBUGP("Iterating var set");
     // i->print(llvm::outs());
     if (Context.getSourceManager().isBeforeInTranslationUnit(
-          S->getBeginLoc(),i->getSourceRange().getBegin())) {
+            S->getBeginLoc(), i->getSourceRange().getBegin())) {
       tmpSet.insert(i);
       continue;
     }
@@ -389,13 +390,13 @@ bool FindArraySectionVisitor::VisitExpr(clang::Expr *E) {
           return true;
         }
 
-        if (auto *IntegerLiteral = llvm::dyn_cast<clang::IntegerLiteral>(LowerBound)) {
+        if (auto *IntegerLiteral =
+                llvm::dyn_cast<clang::IntegerLiteral>(LowerBound)) {
           if (IntegerLiteral->getValue() == 0) {
             return true;
           }
         }
         LowerBoundsMap.emplace(VarDecl, LowerBound);
-
       }
     }
   }
