@@ -159,6 +159,12 @@ public:
   /// location of the first pragma of the target region to compose the name of
   ///  the function generated for that region)
   clang::SourceLocation getTargetDirectiveLocation();
+  /// Lower bounds of mapped array slices (if lower then 0).
+  /// If the captured variable is an array, of which only a slice is mapped
+  /// (by a map() clause), the incoming pointer argument will need to be
+  /// shifted to the right if the lower bound of that slice is not 0.
+  /// If this is the case, the lower bound is saved into this map.
+  std::map<clang::VarDecl *, clang::Expr *> CapturedLowerBounds;
 };
 
 /// This class represents a declaration, i.e. a function, global varialbe, or

@@ -149,3 +149,15 @@ private:
   void addTargetRegionArgs(clang::CapturedStmt *S,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
+
+class FindArraySectionVisitor
+    : public clang::RecursiveASTVisitor<FindArraySectionVisitor> {
+
+  std::map<clang::VarDecl *, clang::Expr *> &LowerBoundsMap;
+
+public:
+  FindArraySectionVisitor(
+      std::map<clang::VarDecl *, clang::Expr *> &LowerBoundsMap)
+      : LowerBoundsMap(LowerBoundsMap) {}
+  bool VisitExpr(clang::Expr *E);
+};

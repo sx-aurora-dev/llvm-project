@@ -20,6 +20,7 @@
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
+#include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
@@ -152,6 +153,9 @@ bool FindTargetCodeVisitor::processTargetRegion(
           CS, TargetDirective, LastVisitedFuncDecl, Context);
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
+
+        FindArraySectionVisitor ArraySectionVisitor(TCR->CapturedLowerBounds);
+        ArraySectionVisitor.TraverseStmt(TargetDirective);
 
         // look for nested clause
         CollectOMPClausesVisitor(TCR).TraverseStmt(CS);
@@ -360,6 +364,38 @@ bool DiscoverFunctionsInDeclVisitor::VisitExpr(clang::Expr *E) {
         if (FDDefinition != FD && FDDefinition != NULL) {
           OnEachFuncRef(FDDefinition);
         }
+      }
+    }
+  }
+  return true;
+}
+
+bool FindArraySectionVisitor::VisitExpr(clang::Expr *E) {
+  if (auto *ASE = llvm::dyn_cast<clang::OMPArraySectionExpr>(E)) {
+    clang::Expr *Base = ASE->getBase();
+    if (llvm::isa<clang::OMPArraySectionExpr>(Base)) {
+      return true;
+    }
+    if (auto *CastBase = llvm::dyn_cast<clang::CastExpr>(Base)) {
+      Base = CastBase->getSubExpr();
+      if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(Base)) {
+        auto *VarDecl = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl());
+        if (!VarDecl) {
+          llvm::errs() << "VALDECL != VARDECL\n";
+          return true;
+        }
+        clang::Expr *LowerBound = ASE->getLowerBound();
+        if (!LowerBound) {
+          return true;
+        }
+
+        if (auto *IntegerLiteral = llvm::dyn_cast<clang::IntegerLiteral>(LowerBound)) {
+          if (IntegerLiteral->getValue() == 0) {
+            return true;
+          }
+        }
+        LowerBoundsMap.emplace(VarDecl, LowerBound);
+
       }
     }
   }

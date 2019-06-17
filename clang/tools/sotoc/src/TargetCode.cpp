@@ -178,6 +178,13 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
 
       Out << " = __sotoc_var_" << VarName << ";\n";
 
+      auto LowerBound = TCR->CapturedLowerBounds.find(*I);
+      if (LowerBound != TCR->CapturedLowerBounds.end()) {
+        Out << VarName << " = " << VarName << " - (";
+        LowerBound->second->printPretty(Out, NULL, TCR->getPP());
+        Out << ");\n";
+      }
+
     } else {
       if (!(*I)->getType().getTypePtr()->isPointerType()) {
         if (C) {
