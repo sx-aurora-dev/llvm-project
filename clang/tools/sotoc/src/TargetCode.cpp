@@ -125,10 +125,12 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       int dim = 0;
 
       std::vector<int> VariableDimensions;
-      handleArrays(&t, DimString, dim, VariableDimensions, TCR, elemType, VarName);
+      handleArrays(&t, DimString, dim, VariableDimensions, TCR, elemType,
+                   VarName);
 
       for (int d : VariableDimensions) {
-        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << VarName << ", ";
+        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << VarName
+            << ", ";
       }
 
       // set type to void* to avoid warnings from the compiler
@@ -177,6 +179,13 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       nDim.pop_front();      // remove number of dimensions of last variable
 
       Out << " = __sotoc_var_" << VarName << ";\n";
+
+      auto LowerBound = TCR->CapturedLowerBounds.find(*I);
+      if (LowerBound != TCR->CapturedLowerBounds.end()) {
+        Out << VarName << " = " << VarName << " - (";
+        LowerBound->second->printPretty(Out, NULL, TCR->getPP());
+        Out << ");\n";
+      }
 
     } else {
       if (!(*I)->getType().getTypePtr()->isPointerType()) {
@@ -267,8 +276,7 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
 void TargetCode::handleArrays(const clang::ArrayType **t,
                               std::list<std::string> &DimString, int &dim,
                               std::vector<int> &VariableDims,
-                              TargetCodeRegion *TCR,
-                              std::string &elemType,
+                              TargetCodeRegion *TCR, std::string &elemType,
                               const std::string &ArrayName) {
   auto OrigT = *t;
 

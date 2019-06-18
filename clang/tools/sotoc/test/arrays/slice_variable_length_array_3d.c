@@ -15,7 +15,7 @@ int main(){
     int j;
     int k;
     for(i=0; i< 512; i++){
-      for(j=0 ; j< 256; j+=2){
+      for(j=0 ; j< 512; j+=1){
         for(k=0; k < (sizeZ - 2); ++k) {
           A[i][j][k]=i-j;
         }

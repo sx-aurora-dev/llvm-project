@@ -182,7 +182,7 @@ void TypeDeclResolver::runOwnVisitor(clang::Decl *D,
 
 void FunctionDeclResolver::runOwnVisitor(
     clang::Decl *D, std::function<void(clang::Decl *Dep)> Fn) {
-  DEBUGPDECL(D, "Searching for referred decls in function " );
+  DEBUGPDECL(D, "Searching for referred decls in function ");
   DiscoverFunctionsInDeclVisitor Visitor(Fn);
   Visitor.TraverseDecl(D);
 }

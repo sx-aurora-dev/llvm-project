@@ -1,5 +1,5 @@
 // RUN: %sotoc-transform-compile
-// #RUN#: %run-on-host | %filecheck %s
+// RUN: %run-on-host | %filecheck %s
 
 #include <stdio.h>
 int main(){
@@ -8,7 +8,7 @@ int main(){
   int sizeY=512;
   float A[sizeX][sizeY]; 
   
-  #pragma omp target map(tofrom:A[:sizeX/2][:sizeY])
+  #pragma omp target map(tofrom:A[0:sizeX/2][:sizeY])
   {
     int i;
     int j;
