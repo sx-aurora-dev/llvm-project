@@ -459,10 +459,18 @@ def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
 
 // Broadcast
 
-// def : Pat<(v512f32 (vec_broadcast f32:$sy)),
-//           (VBRDpr f32:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v512i32 (vec_broadcast i64:$sy)),
-          (VBRDpr i64:$sy, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def: Pat<(v512i32 (vec_broadcast i32:$val)),
+         (VBRDpr
+            (ORrr
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
+              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32)),
+            (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def: Pat<(v512f32 (vec_broadcast f32:$val)),
+         (VBRDpr 
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+            (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                   ValueType vf32, ValueType vf64> {
