@@ -270,7 +270,25 @@ std::string TargetCodeDecl::PrintPretty() {
 
   TargetRegionPrinterHelper Helper(PP);
 
+  // This hack removes the 'static' keyword from globalVarDecls, because we
+  // cannot find variables from the host if they are static.
+  bool HasStaticKeyword = false;
+  if (auto *VarDeclNode = llvm::dyn_cast<clang::VarDecl>(DeclNode)) {
+    if (VarDeclNode->getStorageClass() == clang::SC_Static) {
+      HasStaticKeyword = true;
+      VarDeclNode->setStorageClass(clang::SC_None);
+    }
+  }
+
   DeclNode->print(PrettyOS, LocalPP, 0, false, &Helper);
+
+  // Add static storage class back so (hopefully) this doesnt break anyting
+  // (but it totally will).
+  if (auto *VarDeclNode = llvm::dyn_cast<clang::VarDecl>(DeclNode)) {
+    if (HasStaticKeyword) {
+      VarDeclNode->setStorageClass(clang::SC_Static);
+    }
+  }
 
   // This hack removes '#pragma omp declare target' from the output
   std::string outString = PrettyOS.str();
