@@ -305,12 +305,14 @@ def : Pat<(v8i64 (bitconvert v512i1:$vmp)),
 
 // Series of SCALAR_TO_VECTOR for all VE vector types,
 //
-// NOTE: Need to use sub_f32 for v512i32 since v512i32 uses
-//       upper 32 bits (0..31) first.
+// NOTE: Need to shift i32 for v512i32 since v512i32 uses
+//       high 32 bits (0..31) first.
 
 def: Pat<(v512i32 (scalar_to_vector i32:$val)),
          (v512i32 (LSVi (v512i32 (IMPLICIT_DEF)), 0,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
+                        (SLLri
+                           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                           32)))>;
 def: Pat<(v512f32 (scalar_to_vector f32:$val)),
          (v512f32 (LSVi (v512f32 (IMPLICIT_DEF)), 0,
                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
