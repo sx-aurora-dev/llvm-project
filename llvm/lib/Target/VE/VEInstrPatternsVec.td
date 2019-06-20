@@ -562,18 +562,30 @@ def : Pat<(fdiv v512f32:$vy, v512f32:$vz),
           (VFDVpv v512f32:$vy, v512f32:$vz,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
-def : Pat<(fadd (vec_broadcast i64:$sy), v512f32:$vz),
-          (VFADpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fsub (vec_broadcast i64:$sy), v512f32:$vz),
-          (VFSBpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fmul (vec_broadcast i64:$sy), v512f32:$vz),
-          (VFMPpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(fdiv (v512f32 (vec_broadcast i64:$sy)), v512f32:$vz),
-          (VFDVpr i64:$sy, v512f32:$vz,
-                  (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fadd (vec_broadcast f32:$val), v512f32:$vz),
+          (VFADpr
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+            v512f32:$vz, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fsub (vec_broadcast f32:$val), v512f32:$vz),
+          (VFSBpr
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+            v512f32:$vz, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fmul (vec_broadcast f32:$val), v512f32:$vz),
+          (VFMPpr
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+            v512f32:$vz, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+def : Pat<(fdiv (vec_broadcast f32:$val), v512f32:$vz),
+          (VFDVpr
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+            v512f32:$vz, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 multiclass farith_for_vector_length<int length, ValueType vf32,
                                     ValueType vf64> {
