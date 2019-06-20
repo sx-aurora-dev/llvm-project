@@ -60,21 +60,42 @@ public:
   unsigned getMinVectorRegisterBitWidth() const { return 256*64; }
 
   bool isLegalMaskedLoad(Type *DataType) {
+#if 1
+    // Enabling masked load causes "Cannot select ...masked_load..."
+    // error in test-suite/SingleSource/Benchmarks/BenchmarkGame/fannkuch.c.
+    // So, disable this temporary.
+    return false;
+#else
     return true;
+#endif
   }
 
   bool isLegalMaskedGather(Type *DataType) {
       //if (DataType->getVectorNumElements() != 256) {
       //  return false;
       //}
+#if 1
+      // Enabling masked gather causes "Cannot select ...masked_gather..."
+      // error in test-suite/SingleSource/Benchmarks/Misc/ReedSolomon.c.  So,
+      // disable this temporary.
+      return false;
+#else
       return true;
+#endif
   };
 
   bool isLegalMaskedScatter(Type *DataType) {
       //if (DataType->getVectorNumElements() != 256) {
       //  return false;
       //}
+#if 1
+      // Enabling masked scatter causes "Cannot select ...masked_scatter..."
+      // error in test-suite/SingleSource/Regression/C/bigstack.c.  So,
+      // disable this temporary.
+      return false;
+#else
       return true;
+#endif
   };
 
 };
