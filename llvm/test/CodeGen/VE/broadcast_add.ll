@@ -50,6 +50,20 @@ define x86_regcallcc <256 x i64> @addbrdv256i64(<256 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
+define x86_regcallcc <256 x i64> @addbrdv256i64s(<256 x i64>, i64) {
+; CHECK-LABEL: addbrdv256i64s:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  vadds.l %v0,%s0,%v0
+; CHECK-NEXT:  or %s11, 0, %s9
+  %vec0 = insertelement <256 x i64> undef, i64 %1, i32 0
+  %vec = shufflevector <256 x i64> %vec0, <256 x i64> undef, <256 x i32> zeroinitializer
+  %ret = add <256 x i64> %0, %vec
+  ret <256 x i64> %ret
+}
+
+; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i32> @addbrdv256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: addbrdv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
