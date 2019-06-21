@@ -889,14 +889,23 @@ defm : logic_for_vector_length<2, v2i32, v2i64>;
 // shl, srl, and sra for v512i32
 // shl, srl, and sra for other integer vector types.
 
-def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i64:$sy))),
-          (VSLLpr2 v512i32:$vx, i64:$sy,
+def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
+          (VSLLpr2 v512i32:$vx,
+                   (ORrr
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
+              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)),
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(srl v512i32:$vx, (v512i32 (vec_broadcast i64:$sy))),
-          (VSRLpr2 v512i32:$vx, i64:$sy,
+def : Pat<(srl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
+          (VSRLpr2 v512i32:$vx,
+                   (ORrr
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
+              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)),
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(sra v512i32:$vx, (v512i32 (vec_broadcast i64:$sy))),
-          (VSRApr2 v512i32:$vx, i64:$sy,
+def : Pat<(sra v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
+          (VSRApr2 v512i32:$vx,
+                   (ORrr
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
+              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)),
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 def : Pat<(shl v512i32:$vx, v512i32:$vy),
@@ -928,14 +937,17 @@ multiclass shift_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(sra vi64:$vx, vi64:$vy),
             (VSRAXv vi64:$vx, vi64:$vy,
                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(shl vi32:$vx, (vi32 (vec_broadcast i64:$sy))),
-            (VSLAlr2 vi32:$vx, i64:$sy,
+  def : Pat<(shl vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
+            (VSLAlr2 vi32:$vx,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(srl vi32:$vx, (vi32 (vec_broadcast i64:$sy))),
-            (VSRLlr2 vi32:$vx, i64:$sy,
+  def : Pat<(srl vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
+            (VSRLlr2 vi32:$vx,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(sra vi32:$vx, (vi32 (vec_broadcast i64:$sy))),
-            (VSRAlr2 vi32:$vx, i64:$sy,
+  def : Pat<(sra vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
+            (VSRAlr2 vi32:$vx,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(shl vi32:$vx, vi32:$vy),
             (VSLAlv vi32:$vx, vi32:$vy,
