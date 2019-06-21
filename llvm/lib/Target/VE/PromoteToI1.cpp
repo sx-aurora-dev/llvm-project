@@ -164,6 +164,11 @@ namespace {
 
       for (MachineFunction::iterator FI = F.begin(), FE = F.end();
            FI != FE; ++FI)
+        removeVecCandidates(*FI);
+      LLVM_DEBUG(dump());
+
+      for (MachineFunction::iterator FI = F.begin(), FE = F.end();
+           FI != FE; ++FI)
         Changed |= runOnMachineBasicBlock(*FI);
       LLVM_DEBUG(F.dump());
       Candidates.clear();
@@ -249,18 +254,36 @@ void Promoter::removeVecCandidates(MachineBasicBlock &MBB) {
     ++I;
 
     for (auto &v : Candidates) {
+      // Touching registers may cause trouble, so check them here.
+      //   e.g.  %1 = VM2V %vm
+      //         vst %1
+      // Removing VM2V changes the program, so invalidate VM2V->COPY
+      // conversion for %1.
       auto result = MI->readsWritesVirtualRegister(v.first);
       if (result.first || result.second) {
         if (MI->isPHI() || MI->isCopy() || MI->isImplicitDef()) {
-          // it's OK, so nothing to do here
+          // These may touch registers and it's OK, so nothing to do here
         } else if (MI->getOpcode() == VE::VM2V
-                   || MI->getOpcode() == VE::VMP2V) {
-        } else if (MI->getOpcode() == VE::V2VM
+                   || MI->getOpcode() == VE::VMP2V
+                   || MI->getOpcode() == VE::V2VM
                    || MI->getOpcode() == VE::V2VMP) {
+          // These instructions must touch registers to convert them,
+          // so ignore it.
         } else {
+          // If any other instructions touch candidate virtual register,
+          //   e.g.  %1 = VM2V %vm
+          //         vst %1
+          // invalidate all registers belong to the same graph of a given
+          // candidate.
           LLVM_DEBUG(dbgs() << "invalidating " << printReg(v.first, TRI) \
-                       << " because of "; MI->dump());
+                     << " and graph containing it, because of "; MI->dump());
           v.second.Valid = false;
+          // Invalidate all registers in the same graph
+          unsigned graph = v.second.GraphNo;
+          for (auto &v : Candidates) {
+            if (v.second.GraphNo == graph)
+                v.second.Valid = false;
+          }
         }
       }
     }
