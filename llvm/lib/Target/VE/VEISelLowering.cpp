@@ -221,10 +221,11 @@ VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   return merge;
 }
 
-static bool isBroadCast(BuildVectorSDNode *BVN,
-                        bool &AllUndef, unsigned &FirstDef) {
+static bool isBroadCastOrS2V(BuildVectorSDNode *BVN,
+                             bool &AllUndef, bool &S2V, unsigned &FirstDef) {
   // Check UNDEF or FirstDef
   AllUndef = true;
+  S2V = false;
   FirstDef = 0;
   for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
     if (!BVN->getOperand(i).isUndef()) {
@@ -235,6 +236,18 @@ static bool isBroadCast(BuildVectorSDNode *BVN,
   }
   if (AllUndef)
     return true;
+  // Check scalar_to_vector (single def at first, and the rests are undef)
+  if (FirstDef == 0) {
+      S2V = true;
+      for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
+        if (!BVN->getOperand(i).isUndef()) {
+          S2V = false;
+          break;
+        }
+      }
+      if (S2V)
+        return true;
+  }
   // Check boradcast
   for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
     if (BVN->getOperand(FirstDef) != BVN->getOperand(i) &&
@@ -254,13 +267,19 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 
   // match VEC_BROADCAST
   bool AllUndef;
+  bool S2V;
   unsigned FirstDef;
-  if (isBroadCast(BVN, AllUndef, FirstDef)) {
+  if (isBroadCastOrS2V(BVN, AllUndef, S2V, FirstDef)) {
     if (AllUndef) {
       LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(0)->dump());
       return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
                          BVN->getOperand(0));
+    } else if (S2V) {
+      LLVM_DEBUG(dbgs() << "isS2V: scalar_to_vector ");
+      LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+      return DAG.getNode(ISD::SCALAR_TO_VECTOR, DL, Op.getSimpleValueType(),
+                         BVN->getOperand(FirstDef));
     } else {
       LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
