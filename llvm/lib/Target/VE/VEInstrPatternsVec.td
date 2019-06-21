@@ -295,13 +295,13 @@ def : Pat<(v256i1 (bitconvert v4i64:$v)),
           (v256i1 (V2VM (COPY_TO_REGCLASS $v, V64)))>;
 
 def : Pat<(v4i64 (bitconvert v256i1:$vm)),
-          (v4i64 (COPY_TO_REGCLASS (VM2V $vm), V64))>;
+          (v4i64 (COPY_TO_REGCLASS (v4i64 (VM2V $vm)), V64))>;
 
 def : Pat<(v512i1 (bitconvert v8i64:$v)),
           (v512i1 (V2VMP (COPY_TO_REGCLASS $v, V64)))>;
 
 def : Pat<(v8i64 (bitconvert v512i1:$vmp)),
-          (v8i64 (COPY_TO_REGCLASS (VMP2V $vmp), V64))>;
+          (v8i64 (COPY_TO_REGCLASS (v8i64 (VMP2V $vmp)), V64))>;
 
 // Series of SCALAR_TO_VECTOR for all VE vector types,
 //
