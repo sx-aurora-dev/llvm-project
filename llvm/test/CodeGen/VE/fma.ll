@@ -80,7 +80,7 @@ define x86_regcallcc <256 x float> @__regcall3__fma_v256f_1(<256 x float>, <256 
 define x86_regcallcc <256 x float> @__regcall3__fma_v256f_2(<256 x float>, <256 x float>, <256 x float>) {
 ; CHECK-LABEL: fma_v256f_2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:  pvfmad %v0,%v2,%v0,%v1
+; CHECK:  vfmad.s %v0,%v2,%v0,%v1
   %4 = fmul fast <256 x float> %0, %1
   %5 = fadd fast <256 x float> %4, %2
   ret <256 x float> %5
