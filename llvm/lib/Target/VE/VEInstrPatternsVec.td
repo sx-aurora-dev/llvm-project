@@ -277,14 +277,28 @@ defm : ext_for_vector_length<4, v4i32, v4i64>;
 // possible to fix erros at the moment.
 // defm : ext_for_vector_length<2, v2i32, v2i64>;
 
-// Bitconvert for mask registers between
-// v256i64 and v256f64.
+// Bitconvert for vector registers
 
-def : Pat<(v256f64 (bitconvert v256i64:$vi)),
-          (COPY_TO_REGCLASS $vi, V64)>;
+multiclass bitconv_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                     ValueType vf32, ValueType vf64> {
+  def : Pat<(vf64 (bitconvert vi64:$vi)),
+            (COPY_TO_REGCLASS $vi, V64)>;
+  def : Pat<(vi64 (bitconvert vf64:$vf)),
+            (COPY_TO_REGCLASS $vf, V64)>;
+  def : Pat<(vf32 (bitconvert vi32:$vi)),
+            (vf32 (VSLLi2 $vi, 32, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+  def : Pat<(vi32 (bitconvert vf32:$vi)),
+            (vi32 (VSRLi2 $vi, 32, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+}
 
-def : Pat<(v256i64 (bitconvert v256f64:$vf)),
-          (COPY_TO_REGCLASS $vf, V64)>;
+defm : bitconv_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : bitconv_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
+defm : bitconv_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
+defm : bitconv_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
+defm : bitconv_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
+defm : bitconv_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : bitconv_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : bitconv_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Bitconvert from i64 to v2i32/v2f32
 def : Pat<(v2i32 (bitconvert i64:$v)),
