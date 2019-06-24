@@ -1085,6 +1085,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2f32, &VE::V64RegClass);
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v128i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v64i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v32i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v16i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v8i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v4i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v2i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
   // FIXME:
