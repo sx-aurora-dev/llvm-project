@@ -1376,7 +1376,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         // unknown "vtInt:  (vt:{ *:[Other] })" errors.
         setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
         setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
-        setOperationAction(ISD::SINT_TO_FP, VT, Expand);
       }
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);

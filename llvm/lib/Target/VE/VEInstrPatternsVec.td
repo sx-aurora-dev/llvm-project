@@ -254,9 +254,7 @@ defm : i2f_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
 defm : i2f_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
 defm : i2f_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
 defm : i2f_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-// FIXME: tblgen produces errors on following pattern.  It is not
-// possible to fix erros at the moment.
-// defm : i2f_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+defm : i2f_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // sext and zext
 // FIXME: we may need anyext too.
