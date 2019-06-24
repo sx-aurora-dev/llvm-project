@@ -33,7 +33,39 @@ void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
 }
 
 void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause) {
+  addClauseVars(Clause);
   OMPClauses.push_back(Clause);
+
+}
+
+void TargetCodeRegion::addClauseVars(clang::OMPClause *Clause){
+  // If an Clause uses an variable then find them and add
+  for (auto *C : Clause->children()) {
+    if (strcmp(C->getStmtClassName(), "ImplicitCastExpr") == 0) {
+      for (auto *Cc : C->children()) {
+        auto *Ce =
+            llvm::dyn_cast_or_null<clang::VarDecl>(
+                llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cc)->getDecl())
+                ->getInit();
+        for (auto *Cec : Ce->children()) {
+          if (strcmp(Cec->getStmtClassName(), "DeclRefExpr") == 0) {
+            addCapturedVar(llvm::dyn_cast_or_null<clang::VarDecl>(
+                llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cec)->getDecl()));
+          }
+          for (auto *Cecc : Cec->children()) {
+            if (strcmp(Cecc->getStmtClassName(), "ImplicitCastExpr") == 0) {
+              for (auto *Ceccc : Cecc->children()) {
+                addCapturedVar(llvm::dyn_cast_or_null<clang::VarDecl>(
+                    llvm::dyn_cast_or_null<clang::DeclRefExpr>(Ceccc)
+                        ->getDecl()));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
 }
 
 static bool hasRegionCompoundStmt(const clang::Stmt *S) {

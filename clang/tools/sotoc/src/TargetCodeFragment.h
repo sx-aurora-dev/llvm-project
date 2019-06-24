@@ -127,6 +127,7 @@ public:
 
   void addCapturedVar(clang::VarDecl *Var);
   void addOpenMPClause(clang::OMPClause *Clause);
+  void addClauseVars(clang::OMPClause *Clause);
   std::vector<clang::VarDecl *>::const_iterator getCapturedVarsBegin() {
     return CapturedVars.begin();
   };
