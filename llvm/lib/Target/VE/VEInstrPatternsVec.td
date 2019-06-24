@@ -286,6 +286,14 @@ def : Pat<(v256f64 (bitconvert v256i64:$vi)),
 def : Pat<(v256i64 (bitconvert v256f64:$vf)),
           (COPY_TO_REGCLASS $vf, V64)>;
 
+// Bitconvert from i64 to v2i32/v2f32
+def : Pat<(v2i32 (bitconvert i64:$v)),
+          (LSVi (LSVi (v2i32 (IMPLICIT_DEF)), 0, (ANDrm0 $v, 32)),
+                1, (SRLri $v, 32))>;
+def : Pat<(v2f32 (bitconvert i64:$v)),
+          (LSVi (LSVi (v2i32 (IMPLICIT_DEF)), 0, (SLLri $v, 32)),
+                1, (ANDrm1 $v, 32))>;
+
 // Bitconvert for mask registers between
 // v4i64 or v8i64 and v256i1 or v512i1 respectively
 
@@ -966,3 +974,22 @@ defm : shift_for_vector_length<16, v16i32, v16i64>;
 defm : shift_for_vector_length<8, v8i32, v8i64>;
 defm : shift_for_vector_length<4, v4i32, v4i64>;
 defm : shift_for_vector_length<2, v2i32, v2i64>;
+
+// Truncate
+//
+// trunc from vXi64 to vXi32.
+
+multiclass trunc_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+  def : Pat<(vi32 (trunc vi64:$val)),
+            (VANDli0 32, $val, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+}
+
+defm : trunc_for_vector_length<256, v256i32, v256i64>;
+defm : trunc_for_vector_length<128, v128i32, v128i64>;
+defm : trunc_for_vector_length<64, v64i32, v64i64>;
+defm : trunc_for_vector_length<32, v32i32, v32i64>;
+defm : trunc_for_vector_length<16, v16i32, v16i64>;
+defm : trunc_for_vector_length<8, v8i32, v8i64>;
+defm : trunc_for_vector_length<4, v4i32, v4i64>;
+defm : trunc_for_vector_length<2, v2i32, v2i64>;
+
