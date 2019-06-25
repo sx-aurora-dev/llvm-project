@@ -1386,14 +1386,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
       setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
     } else {
-      if (VT.getVectorNumElements() == 2) {
-        // FIXME: it is not possible to write 
-        // "Pat<(v2i64 (sext v2i32:$vx)), ...>;" patterns because of
-        // unknown "vtInt:  (vt:{ *:[Other] })" errors.
-        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
-        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
-      }
-
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
       setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
       setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);

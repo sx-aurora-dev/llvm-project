@@ -370,9 +370,7 @@ defm : ext_for_vector_length<32, v32i32, v32i64, v32i1>;
 defm : ext_for_vector_length<16, v16i32, v16i64, v16i1>;
 defm : ext_for_vector_length<8, v8i32, v8i64, v8i1>;
 defm : ext_for_vector_length<4, v4i32, v4i64, v4i1>;
-// FIXME: tblgen produces errors on following pattern.  It is not
-// possible to fix erros at the moment.
-// defm : ext_for_vector_length<2, v2i32, v2i64, v2i1>;
+defm : ext_for_vector_length<2, v2i32, v2i64, v2i1>;
 
 // Bitconvert for vector registers
 
@@ -1335,6 +1333,4 @@ defm : trunc_for_vector_length<32, v32i32, v32i64>;
 defm : trunc_for_vector_length<16, v16i32, v16i64>;
 defm : trunc_for_vector_length<8, v8i32, v8i64>;
 defm : trunc_for_vector_length<4, v4i32, v4i64>;
-// FIXME: tblgen produces errors on following pattern.  It is not
-// possible to fix erros at the moment.
-// defm : trunc_for_vector_length<2, v2i32, v2i64>;
+defm : trunc_for_vector_length<2, v2i32, v2i64>;
