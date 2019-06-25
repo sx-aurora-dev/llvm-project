@@ -1339,9 +1339,16 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
       }
       // SExt i1 and ZExt i1 are legal.
-      if (VT.getVectorElementType() != MVT::i1) {
+      if (VT.getVectorElementType() == MVT::i1) {
+        setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
+        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+      } else {
         setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
         setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
       }
 
       // STORE for vXi1 needs to be custom lowered to expand multiple
@@ -1350,8 +1357,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setOperationAction(ISD::STORE, VT, Custom);
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
-      setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
-      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
       setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
       setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
@@ -3525,6 +3530,32 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
       }
     }
     return Result;
+  } else if (VT.getVectorElementType() == MVT::i1) {
+    //   (EXTRACT_SUBREG
+    //       (SRLrr
+    //           (SVMr vi1:$vm, (SRLri $idx, 6)),
+    //           (EXTRACT_SUBREG (ANDrm0 $idx, 58), sub_i32)),
+    //       sub_i32)>;
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    SDLoc dl(Op);
+    SDValue Vec = Op.getOperand(0);
+    SDValue Idx = Op.getOperand(1);
+    SDValue SixConst = DAG.getConstant(6, dl, i64);
+    SDValue SixMask = DAG.getConstant(0x3F, dl, i64);
+    SDValue SubRegI32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+    SDValue ShiftIdx = DAG.getNode(ISD::SRL, dl, i64,
+      { Idx, SixConst });
+    SDValue V = SDValue(DAG.getMachineNode(VE::SVMr, dl, MVT::i64,
+                               Vec, ShiftIdx), 0);
+    SDValue LowIdx = DAG.getNode(ISD::AND, dl, i64,
+      { Idx, SixMask });
+    LowIdx = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl,
+                                        MVT::i32, LowIdx, SubRegI32), 0);
+    V = DAG.getNode(ISD::SRL, dl, i64,
+      { V, LowIdx });
+    V = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl,
+                                   MVT::i32, V, SubRegI32), 0);
+    return V;
   }
 
   // Extraction is legal for other V64 types.
