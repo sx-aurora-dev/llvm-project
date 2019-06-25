@@ -243,6 +243,9 @@ multiclass i2f_for_vector_length<int length, ValueType vi32, ValueType vi64,
             (VFLTXv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(vf64 (sint_to_fp vi32:$vx)),
             (VFLTdv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+  def : Pat<(vf32 (sint_to_fp vi64:$vx)),
+            (VCVSv (VFLTXv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS)),
+                   (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(vf32 (sint_to_fp vi32:$vx)),
             (VFLTsv $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
@@ -255,6 +258,28 @@ defm : i2f_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
 defm : i2f_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
 defm : i2f_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
 defm : i2f_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+
+multiclass f2i_for_vector_length<int length, ValueType vi32, ValueType vi64,
+                                 ValueType vf32, ValueType vf64> {
+  def : Pat<(vi64 (fp_to_sint vf64:$val)),
+            (vi64 (VFIXXv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+  def : Pat<(vi64 (fp_to_sint vf32:$val)),
+            (vi64 (VFIXXv (VCVDv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)),
+                          (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+  def : Pat<(vi32 (fp_to_sint vf64:$val)),
+            (vi32 (VFIXdsxv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+  def : Pat<(vi32 (fp_to_sint vf32:$val)),
+            (vi32 (VFIXssxv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+}
+
+defm : f2i_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+defm : f2i_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
+defm : f2i_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
+defm : f2i_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
+defm : f2i_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
+defm : f2i_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+defm : f2i_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : f2i_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // sext and zext
 
