@@ -1358,6 +1358,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
       setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
 
+      setOperationAction(ISD::FP_EXTEND, VT, Expand);
+      setOperationAction(ISD::FP_ROUND,  VT, Expand);
+
       setOperationAction(ISD::FABS,  VT, Expand);
       setOperationAction(ISD::FNEG,  VT, Expand);
       setOperationAction(ISD::FADD,  VT, Expand);
@@ -1399,6 +1402,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
       setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
       setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
+
+      setOperationAction(ISD::FP_EXTEND, VT, Legal);
+      setOperationAction(ISD::FP_ROUND,  VT, Legal);
 
       // currently unsupported math functions
       setOperationAction(ISD::FABS,  VT, Expand);

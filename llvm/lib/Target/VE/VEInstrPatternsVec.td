@@ -259,6 +259,11 @@ defm : i2f_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
 defm : i2f_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
 defm : i2f_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
+// floating-point -> sint
+
+def : Pat<(v512i32 (fp_to_sint v512f32:$val)),
+          (VFIXpv $val, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+
 multiclass f2i_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def : Pat<(vi64 (fp_to_sint vf64:$val)),
@@ -280,6 +285,24 @@ defm : f2i_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
 defm : f2i_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
 defm : f2i_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
 defm : f2i_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+
+// fpround and fpextend for vector types.
+
+multiclass f2f_for_vector_length<int length, ValueType vf32, ValueType vf64> {
+  def : Pat<(vf32 (fpround vf64:$val)),
+            (vf32 (VCVSv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+  def : Pat<(vf64 (fpextend vf32:$val)),
+            (vf64 (VCVDv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+}
+
+defm : f2f_for_vector_length<256, v256f32, v256f64>;
+defm : f2f_for_vector_length<128, v128f32, v128f64>;
+defm : f2f_for_vector_length<64, v64f32, v64f64>;
+defm : f2f_for_vector_length<32, v32f32, v32f64>;
+defm : f2f_for_vector_length<16, v16f32, v16f64>;
+defm : f2f_for_vector_length<8, v8f32, v8f64>;
+defm : f2f_for_vector_length<4, v4f32, v4f64>;
+defm : f2f_for_vector_length<2, v2f32, v2f64>;
 
 // sext and zext
 
