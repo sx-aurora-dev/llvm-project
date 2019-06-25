@@ -1338,8 +1338,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
         setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
       }
-      setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
-      setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+      // SExt i1 and ZExt i1 are legal.
+      if (VT.getVectorElementType() != MVT::i1) {
+        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+      }
 
       // STORE for vXi1 needs to be custom lowered to expand multiple
       // instructions.
@@ -1372,6 +1375,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::MSCATTER, VT, Expand);
       setOperationAction(ISD::MGATHER,  VT, Expand);
       setOperationAction(ISD::MLOAD,    VT, Expand);
+
+      // VE vector unit supports only setcc and vselect
+      setOperationAction(ISD::SELECT_CC, VT, Expand);
 
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
       setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
@@ -1413,8 +1419,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       setOperationAction(ISD::MSCATTER,   VT, Custom);
       setOperationAction(ISD::MGATHER,   VT, Custom);
-
       setOperationAction(ISD::MLOAD, VT, Custom);
+
+      // VE vector unit supports only setcc and vselect
+      setOperationAction(ISD::SELECT_CC, VT, Expand);
 
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
       if (VT.getVectorElementType() == MVT::i32) {
