@@ -12,10 +12,8 @@ int main() {
 #pragma omp target teams distribute parallel for map(tofrom                    \
                                                      : num_threads)            \
     num_threads(t)
-    {
-      for (int i = 0; i < 1024; i++) {
-        num_threads[i] = omp_get_num_threads();
-      }
+    for (int i = 0; i < 1024; i++) {
+      num_threads[i] = omp_get_num_threads();
     }
   }
 
@@ -24,10 +22,8 @@ int main() {
 #pragma omp target teams distribute parallel for map(tofrom                    \
                                                      : num_threads)            \
     num_threads(num_threads_array[nt])
-    {
-      for (int i = 0; i < 1024; i++) {
-        num_threads[i] = omp_get_num_threads();
-      }
+    for (int i = 0; i < 1024; i++) {
+      num_threads[i] = omp_get_num_threads();
     }
   }
 }

@@ -38,32 +38,39 @@ void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause) {
 
 }
 
-void TargetCodeRegion::addClauseVars(clang::OMPClause *Clause){
+void TargetCodeRegion::hAddClauseVars(std::set<clang::VarDecl *> *tmpSet, clang::Stmt* Cc) {
+  if (llvm::isa<clang::DeclRefExpr>(Cc)) {
+    tmpSet->insert(llvm::dyn_cast_or_null<clang::VarDecl>(llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cc)->getDecl()));
+  }
+  for (auto *Ccc : Cc->children()) {
+    if (llvm::isa<clang::ImplicitCastExpr>(Ccc)) {
+      for (auto *Cccc : Ccc->children()) {
+        hAddClauseVars(tmpSet,Cccc);
+      }
+    }
+  }
+}
+
+void TargetCodeRegion::addClauseVars(clang::OMPClause *Clause) {
+  std::set<clang::VarDecl *> tmpSet;
+
   // If an Clause uses an variable then find them and add
   for (auto *C : Clause->children()) {
-    if (strcmp(C->getStmtClassName(), "ImplicitCastExpr") == 0) {
+    if (llvm::isa<clang::ImplicitCastExpr>(C)) {
       for (auto *Cc : C->children()) {
-        auto *Ce =
-            llvm::dyn_cast_or_null<clang::VarDecl>(
-                llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cc)->getDecl())
-                ->getInit();
-        for (auto *Cec : Ce->children()) {
-          if (strcmp(Cec->getStmtClassName(), "DeclRefExpr") == 0) {
-            addCapturedVar(llvm::dyn_cast_or_null<clang::VarDecl>(
-                llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cec)->getDecl()));
-          }
-          for (auto *Cecc : Cec->children()) {
-            if (strcmp(Cecc->getStmtClassName(), "ImplicitCastExpr") == 0) {
-              for (auto *Ceccc : Cecc->children()) {
-                addCapturedVar(llvm::dyn_cast_or_null<clang::VarDecl>(
-                    llvm::dyn_cast_or_null<clang::DeclRefExpr>(Ceccc)
-                        ->getDecl()));
-              }
-            }
-          }
+        for (auto *Ccc : llvm::dyn_cast_or_null<clang::VarDecl>(llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cc)->getDecl())->getInit()->children()){
+          hAddClauseVars(&tmpSet,Ccc);
         }
       }
     }
+  }
+
+  for (auto v : CapturedVars) {
+    tmpSet.erase(tmpSet.find(v));
+  }
+
+  for (auto v: tmpSet) {
+    addCapturedVar(v);
   }
 
 }
