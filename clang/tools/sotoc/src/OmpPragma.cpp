@@ -56,6 +56,18 @@ void OmpPragma::printReplacement(llvm::raw_ostream &Out) {
   printClauses(Out);
 }
 
+bool OmpPragma::isReplaceable(clang::OMPExecutableDirective *Directive) {
+  if (llvm::isa<clang::OMPTeamsDirective>(Directive) ||
+      llvm::isa<clang::OMPTeamsDistributeDirective>(Directive) ||
+      llvm::isa<clang::OMPTeamsDistributeSimdDirective>(Directive) ||
+      llvm::isa<clang::OMPTeamsDistributeParallelForDirective>(Directive) ||
+      llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(Directive) ||
+      llvm::isa<clang::OMPDistributeDirective>(Directive)) {
+    return true;
+  }
+  return false;
+}
+
 bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
   switch (Kind) {
   case clang::OpenMPDirectiveKind::OMPD_target: {

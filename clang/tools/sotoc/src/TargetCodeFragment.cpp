@@ -245,17 +245,13 @@ class TargetRegionPrinterHelper : public clang::PrinterHelper {
 public:
   TargetRegionPrinterHelper(clang::PrintingPolicy PP) : PP(PP){};
   bool handledStmt(clang::Stmt *E, llvm::raw_ostream &OS) {
-    if (llvm::isa<clang::OMPTeamsDirective>(E) ||
-        llvm::isa<clang::OMPTeamsDistributeDirective>(E) ||
-        llvm::isa<clang::OMPTeamsDistributeSimdDirective>(E) ||
-        llvm::isa<clang::OMPTeamsDistributeParallelForDirective>(E) ||
-        llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(E) ||
-        llvm::isa<clang::OMPDistributeDirective>(E)) {
-      auto *Directive = llvm::cast<clang::OMPExecutableDirective>(E);
-      OmpPragma(Directive, PP).printReplacement(OS);
-      OS << "\n";
-      Directive->child_begin()->printPretty(OS, this, PP);
-      return true;
+    if (auto *Directive = llvm::dyn_cast<clang::OMPExecutableDirective(e)) {
+      if (OmpPragma::isReplaceable(Directive)) {
+        OmpPragma(Directive, PP).printReplacement(OS);
+        OS << "\n";
+        Directive->child_begin()->printPretty(OS, this, PP);
+        return true;
+      }
     }
     return false;
   }

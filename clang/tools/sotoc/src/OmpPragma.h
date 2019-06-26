@@ -47,7 +47,7 @@ public:
   bool needsStructuredBlock();
   /// Prints a replacement omp pragma for the encapsulated pragma onto \p Out.
   void printReplacement(llvm::raw_ostream &Out);
-
+  static bool isReplaceable(clang::OMPExecutableDirective *Directive);
 private:
   bool isClausePrintable(clang::OMPClause *Clause);
   void printClauses(llvm::raw_ostream &Out);
