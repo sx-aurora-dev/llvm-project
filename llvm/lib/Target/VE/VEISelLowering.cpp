@@ -1085,6 +1085,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2f32, &VE::V64RegClass);
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v128i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v64i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v32i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v16i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v8i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v4i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v2i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
   // FIXME:
@@ -1331,8 +1338,18 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
         setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
       }
-      setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
-      setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+      // SExt i1 and ZExt i1 are legal.
+      if (VT.getVectorElementType() == MVT::i1) {
+        setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
+        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+      } else {
+        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
+      }
 
       // STORE for vXi1 needs to be custom lowered to expand multiple
       // instructions.
@@ -1340,13 +1357,14 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setOperationAction(ISD::STORE, VT, Custom);
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
-      setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
-      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
       setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
       setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
       setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
       setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
+
+      setOperationAction(ISD::FP_EXTEND, VT, Expand);
+      setOperationAction(ISD::FP_ROUND,  VT, Expand);
 
       setOperationAction(ISD::FABS,  VT, Expand);
       setOperationAction(ISD::FNEG,  VT, Expand);
@@ -1366,19 +1384,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::MGATHER,  VT, Expand);
       setOperationAction(ISD::MLOAD,    VT, Expand);
 
+      // VE vector unit supports only setcc and vselect
+      setOperationAction(ISD::SELECT_CC, VT, Expand);
+
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
       setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
       setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
     } else {
-      if (VT.getVectorNumElements() == 2) {
-        // FIXME: it is not possible to write 
-        // "Pat<(v2i64 (sext v2i32:$vx)), ...>;" patterns because of
-        // unknown "vtInt:  (vt:{ *:[Other] })" errors.
-        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
-        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
-        setOperationAction(ISD::SINT_TO_FP, VT, Expand);
-      }
-
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
       setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
       setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
@@ -1387,6 +1399,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
       setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
       setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
+
+      setOperationAction(ISD::FP_EXTEND, VT, Legal);
+      setOperationAction(ISD::FP_ROUND,  VT, Legal);
 
       // currently unsupported math functions
       setOperationAction(ISD::FABS,  VT, Expand);
@@ -1407,8 +1422,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       setOperationAction(ISD::MSCATTER,   VT, Custom);
       setOperationAction(ISD::MGATHER,   VT, Custom);
-
       setOperationAction(ISD::MLOAD, VT, Custom);
+
+      // VE vector unit supports only setcc and vselect
+      setOperationAction(ISD::SELECT_CC, VT, Expand);
 
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
       if (VT.getVectorElementType() == MVT::i32) {
@@ -1466,6 +1483,31 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::FMA, VT, Legal);
     //setOperationAction(ISD::FMAD, VT, Legal);
+    setOperationAction(ISD::FMAD, VT, Expand);
+    setOperationAction(ISD::FREM, VT, Expand);
+    setOperationAction(ISD::FNEG, VT, Expand);
+    setOperationAction(ISD::FABS, VT, Expand);
+    setOperationAction(ISD::FSQRT, VT, Expand);
+    setOperationAction(ISD::FSIN, VT, Expand);
+    setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FPOWI, VT, Expand);
+    setOperationAction(ISD::FPOW, VT, Expand);
+    setOperationAction(ISD::FLOG, VT, Expand);
+    setOperationAction(ISD::FLOG2, VT, Expand);
+    setOperationAction(ISD::FLOG10, VT, Expand);
+    setOperationAction(ISD::FEXP, VT, Expand);
+    setOperationAction(ISD::FEXP2, VT, Expand);
+    setOperationAction(ISD::FCEIL, VT, Expand);
+    setOperationAction(ISD::FTRUNC, VT, Expand);
+    setOperationAction(ISD::FRINT, VT, Expand);
+    setOperationAction(ISD::FNEARBYINT, VT, Expand);
+    setOperationAction(ISD::FROUND, VT, Expand);
+    setOperationAction(ISD::FFLOOR, VT, Expand);
+    setOperationAction(ISD::FMINNUM, VT, Expand);
+    setOperationAction(ISD::FMAXNUM, VT, Expand);
+    setOperationAction(ISD::FMINIMUM, VT, Expand);
+    setOperationAction(ISD::FMAXIMUM, VT, Expand);
+    setOperationAction(ISD::FSINCOS, VT, Expand);
   }
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
@@ -3488,6 +3530,32 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
       }
     }
     return Result;
+  } else if (VT.getVectorElementType() == MVT::i1) {
+    //   (EXTRACT_SUBREG
+    //       (SRLrr
+    //           (SVMr vi1:$vm, (SRLri $idx, 6)),
+    //           (EXTRACT_SUBREG (ANDrm0 $idx, 58), sub_i32)),
+    //       sub_i32)>;
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    SDLoc dl(Op);
+    SDValue Vec = Op.getOperand(0);
+    SDValue Idx = Op.getOperand(1);
+    SDValue SixConst = DAG.getConstant(6, dl, i64);
+    SDValue SixMask = DAG.getConstant(0x3F, dl, i64);
+    SDValue SubRegI32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+    SDValue ShiftIdx = DAG.getNode(ISD::SRL, dl, i64,
+      { Idx, SixConst });
+    SDValue V = SDValue(DAG.getMachineNode(VE::SVMr, dl, MVT::i64,
+                               Vec, ShiftIdx), 0);
+    SDValue LowIdx = DAG.getNode(ISD::AND, dl, i64,
+      { Idx, SixMask });
+    LowIdx = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl,
+                                        MVT::i32, LowIdx, SubRegI32), 0);
+    V = DAG.getNode(ISD::SRL, dl, i64,
+      { V, LowIdx });
+    V = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl,
+                                   MVT::i32, V, SubRegI32), 0);
+    return V;
   }
 
   // Extraction is legal for other V64 types.

@@ -1701,7 +1701,7 @@ def : Pat<(sext_inreg I32:$src, i16),
           (SRAri (SLAri $src, 16), 16)>;
 def : Pat<(sext_inreg I64:$src, i16),
           (SRAXri (SLLri $src, 48), 48)>;
-def : Pat<(sext_inreg (trunc i64:$src), i16),
+def : Pat<(sext_inreg (i32 (trunc i64:$src)), i16),
           (EXTRACT_SUBREG (SRAXri (SLLri $src, 48), 48), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xffff),
           (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 48)>;

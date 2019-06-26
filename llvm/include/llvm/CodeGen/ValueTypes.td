@@ -127,8 +127,8 @@ def v2f16  : ValueType<32 , 94>;   //  2 x f16 vector value
 def v4f16  : ValueType<64 , 95>;   //  4 x f16 vector value
 def v8f16  : ValueType<128, 96>;   //  8 x f16 vector value
 def v1f32  : ValueType<32 , 97>;   //  1 x f32 vector value
-def v3f32  : ValueType<96 , 98>;   //  3 x f32 vector value
-def v2f32  : ValueType<64 , 99>;   //  2 x f32 vector value
+def v2f32  : ValueType<64 , 98>;   //  2 x f32 vector value
+def v3f32  : ValueType<96 , 99>;   //  3 x f32 vector value
 def v4f32  : ValueType<128, 100>;  //  4 x f32 vector value
 def v5f32  : ValueType<160, 101>;  //  5 x f32 vector value
 def v8f32  : ValueType<256, 102>;  //  8 x f32 vector value
