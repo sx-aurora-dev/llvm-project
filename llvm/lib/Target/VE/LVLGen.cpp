@@ -47,6 +47,16 @@ namespace {
         return MI.getOperand(MI.getNumOperands() - 1).getReg();
       }
     }
+
+    if (opc == VE::vfmklat_ml
+            || opc == VE::vfmklaf_ml
+            || opc == VE::pvfmkwloat_ml
+            || opc == VE::pvfmkwupat_ml
+            || opc == VE::pvfmkwloaf_ml
+            || opc == VE::pvfmkwupaf_ml) {
+        return MI.getOperand(MI.getNumOperands() - 1).getReg();
+    }
+
     return VE::NoRegister;
   }
 

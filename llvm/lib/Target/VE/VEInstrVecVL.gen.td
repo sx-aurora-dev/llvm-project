@@ -8599,18 +8599,54 @@ def vex_vvmvl : RV<0x9d, (outs V64:$vx), (ins V64:$vz, VM_:$vm, V64:$vd, I32:$vl
   let DisableEncoding = "$vl";
 }
 
-// VFMK vfmk.at vfmkat_ml
-def vfmkat_ml : RV<0xb4, (outs VM_:$vmx), (ins I32:$vl),
-       "vfmk.at $vmx", [], NoItinerary>
+// VFMK vfmk.l.at vfmklat_ml
+def vfmklat_ml : RV<0xb4, (outs VM_:$vmx), (ins I32:$vl),
+       "vfmk.l.at $vmx", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VFMK vfmk.af vfmkaf_ml
-def vfmkaf_ml : RV<0xb4, (outs VM_:$vmx), (ins I32:$vl),
-       "vfmk.af $vmx", [], NoItinerary>
+// VFMK vfmk.l.af vfmklaf_ml
+def vfmklaf_ml : RV<0xb4, (outs VM_:$vmx), (ins I32:$vl),
+       "vfmk.l.af $vmx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMK pvfmk.w.lo.at pvfmkwloat_ml
+def pvfmkwloat_ml : RV<0xb5, (outs VM_:$vmx), (ins I32:$vl),
+       "pvfmk.w.lo.at $vmx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMK pvfmk.w.up.at pvfmkwupat_ml
+def pvfmkwupat_ml : RV<0xb5, (outs VM_:$vmx), (ins I32:$vl),
+       "pvfmk.w.up.at $vmx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMK pvfmk.w.lo.af pvfmkwloaf_ml
+def pvfmkwloaf_ml : RV<0xb5, (outs VM_:$vmx), (ins I32:$vl),
+       "pvfmk.w.lo.af $vmx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VFMK pvfmk.w.up.af pvfmkwupaf_ml
+def pvfmkwupaf_ml : RV<0xb5, (outs VM_:$vmx), (ins I32:$vl),
+       "pvfmk.w.up.af $vmx", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;

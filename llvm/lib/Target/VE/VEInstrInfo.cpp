@@ -740,6 +740,8 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     // replace to pvfmk.s.up and pvfmk.s.lo
 
     std::map<int, std::vector<int>> map = {
+      {VE::pvfmkat_Ml, {VE::pvfmkwupat_ml, VE::pvfmkwloat_ml}},
+      {VE::pvfmkaf_Ml, {VE::pvfmkwupaf_ml, VE::pvfmkwloaf_ml}},
       {VE::pvfmkwgt_Mvl, {VE::pvfmkwupgt_mvl, VE::pvfmkwlogt_mvl}},
       {VE::pvfmkwlt_Mvl, {VE::pvfmkwuplt_mvl, VE::pvfmkwlolt_mvl}},
       {VE::pvfmkwne_Mvl, {VE::pvfmkwupne_mvl, VE::pvfmkwlone_mvl}},
@@ -823,7 +825,11 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     Bu.addReg(MI.getOperand(1).getReg());
     Bl.addReg(MI.getOperand(1).getReg());
 
-    if (MI.getNumOperands() == 3) { // mvl: VM, VR, VL
+    if (MI.getNumOperands() == 2) { // ml: VM, VL
+      // VL
+      Bu.addReg(MI.getOperand(1).getReg());
+      Bl.addReg(MI.getOperand(1).getReg());
+    } else if (MI.getNumOperands() == 3) { // mvl: VM, VR, VL
       // VL
       Bu.addReg(MI.getOperand(2).getReg());
       Bl.addReg(MI.getOperand(2).getReg());
@@ -986,6 +992,8 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     MI.eraseFromParent();
     return true;
                     }
+  case VE::pvfmkat_Ml:
+  case VE::pvfmkaf_Ml:
   case VE::pvfmkwgt_Mvl: case VE::pvfmkwgt_MvMl:
   case VE::pvfmkwlt_Mvl: case VE::pvfmkwlt_MvMl:
   case VE::pvfmkwne_Mvl: case VE::pvfmkwne_MvMl:

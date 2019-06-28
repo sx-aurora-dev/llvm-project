@@ -1455,10 +1455,14 @@ def createInstructionTable(isVL):
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     if isVL:
       tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "eqnan", "genan", "lenan"] 
-      T.Def(0xB4, "VFMK", "", "vfmk.at", [[VMX]]).noTest()
-      T.Def(0xB4, "VFMK", "", "vfmk.af", [[VMX]]).noTest()
-      T.Def(None, "VFMK", "pat", "pvfmk.at", [[VMX512]]).noTest().NYI(isVL) # Pseudo
-      T.Def(None, "VFMK", "paf", "pvfmk.af", [[VMX512]]).noTest().NYI(isVL) # Pseudo
+      T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]]).noTest()
+      T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.at", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.up.at", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.af", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.up.af", [[VMX]]).noTest()
+      T.Def(None, "VFMK", "pat", "pvfmk.at", [[VMX512]]).noTest() # Pseudo
+      T.Def(None, "VFMK", "paf", "pvfmk.af", [[VMX512]]).noTest() # Pseudo
       for cc in tmp:
         T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64)]]).noTest()
         T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
