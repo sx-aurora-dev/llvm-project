@@ -1346,7 +1346,7 @@ def createInstructionTable(isVL):
     T.Def(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest()
     T.Def(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
     T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True).noTest().NYI(isVL)
-    T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest().NYI(isVL)
+    T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
     T.VBRDm(0x8C, isVL)
     T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
     T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
@@ -1454,29 +1454,43 @@ def createInstructionTable(isVL):
     T.Def(0x8D, "VCP", "", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     if isVL:
-      tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "lenan"] 
-      T.Def(0xB4, "VFMK", "", "vfmk.at", [[VM]]).noTest()
-      T.Def(0xB4, "VFMK", "", "vfmk.af", [[VM]]).noTest()
-      T.Def(None, "VFMK", "pat", "pvfmk.at", [[VM512]]).noTest().NYI(isVL) # Pseudo
-      T.Def(None, "VFMK", "paf", "pvfmk.af", [[VM512]]).noTest().NYI(isVL) # Pseudo
+      tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "eqnan", "genan", "lenan"] 
+      T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]]).noTest()
+      T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.at", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.up.at", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.af", [[VMX]]).noTest()
+      T.Def(0xB5, "VFMK", "", "pvfmk.w.up.af", [[VMX]]).noTest()
+      T.Def(None, "VFMK", "pat", "pvfmk.at", [[VMX512]]).noTest() # Pseudo
+      T.Def(None, "VFMK", "paf", "pvfmk.af", [[VMX512]]).noTest() # Pseudo
       for cc in tmp:
-        T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VM, VZ(T_i64)]]).noTest()
+        T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64)]]).noTest()
         T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
       for cc in tmp:
-        T.Def(0xB4, "VFMS", "", "vfmk.w."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.Def(0xB4, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32)]]).noTest()
+        T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32), VM]]).noTest()
       for cc in tmp:
-        T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VM512, CCOp, VZ(T_i32)]]).noTest().NYI(isVL) # Pseudo
-        T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, CCOp, VZ(T_i32), VM512]]).noTest().NYI(isVL) # Pseudo
+        T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32)]]).noTest()
+        T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32)]]).noTest()
+        T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32), VM]]).noTest()
+        T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32), VM]]).noTest()
       for cc in tmp:
-        T.Def(0xB4, "VFMF", "d", "vfmk.d."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.Def(0xB4, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32)]]).noTest() # Pseudo
+        T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32), VM512]]).noTest() # Pseudo
       for cc in tmp:
-        T.Def(0xB4, "VFMF", "s", "vfmk.s."+cc, [[VM, VZ(T_i64)]]).noTest()
-        T.Def(0xB4, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+        T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64)]]).noTest()
+        T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64), VM]]).noTest()
       for cc in tmp:
-        T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VM512, CCOp, VZ(T_f32)]]).noTest().NYI(isVL) # Pseudo
-        T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, CCOp, VZ(T_f32), VM512]]).noTest().NYI(isVL) # Pseudo
+        T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32)]]).noTest()
+        T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32), VM]]).noTest()
+      for cc in tmp:
+        T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32)]]).noTest()
+        T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32)]]).noTest()
+        T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32), VM]]).noTest()
+        T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32), VM]]).noTest()
+      for cc in tmp:
+        T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32)]]).noTest() # Pseudo
+        T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32), VM512]]).noTest() # Pseudo
     else:
       T.VFMKm(0xB4, "VFMK", "", "vfmk.l")
       T.Def(0xB4, "VFMK", "at", "vfmk.at", [[VM]]).noTest()
