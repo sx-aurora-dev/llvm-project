@@ -682,8 +682,8 @@ class TestGenerator:
                 # FIXME
                 stride = I.stride(op)
                 #vld, vst = self.get_vld_vst_inst(I, op)
-                body += indent + "__vr {}0 = _ve_vld_vss({}, p{});\n".format(op.regName(), stride, op.regName())
-                body += indent + "__vm512 {} = _ve_pvfmkw_Mcv({}, {}0);\n".format(op.regName(), cond, op.regName())
+                body += indent + "__vr {}0 = _vel_vld_vssl({}, p{}, l);\n".format(op.regName(), stride, op.regName())
+                body += indent + "__vm512 {} = _vel_pvfmkwgt_Mvl({}0, l);\n".format(op.regName(), op.regName())
             elif op.isMask():
                 stride = I.stride(op)
                 #vld, vst = self.get_vld_vst_inst(I, op)
