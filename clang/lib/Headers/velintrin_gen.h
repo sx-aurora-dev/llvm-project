@@ -730,8 +730,12 @@
 #define _vel_vshf_vvvsvl __builtin_ve_vl_vshf_vvvsvl
 #define _vel_vcp_vvmvl __builtin_ve_vl_vcp_vvmvl
 #define _vel_vex_vvmvl __builtin_ve_vl_vex_vvmvl
-#define _vel_vfmkat_ml __builtin_ve_vl_vfmkat_ml
-#define _vel_vfmkaf_ml __builtin_ve_vl_vfmkaf_ml
+#define _vel_vfmklat_ml __builtin_ve_vl_vfmklat_ml
+#define _vel_vfmklaf_ml __builtin_ve_vl_vfmklaf_ml
+#define _vel_pvfmkwloat_ml __builtin_ve_vl_pvfmkwloat_ml
+#define _vel_pvfmkwupat_ml __builtin_ve_vl_pvfmkwupat_ml
+#define _vel_pvfmkwloaf_ml __builtin_ve_vl_pvfmkwloaf_ml
+#define _vel_pvfmkwupaf_ml __builtin_ve_vl_pvfmkwupaf_ml
 #define _vel_pvfmkat_Ml __builtin_ve_vl_pvfmkat_Ml
 #define _vel_pvfmkaf_Ml __builtin_ve_vl_pvfmkaf_Ml
 #define _vel_vfmklgt_mvl __builtin_ve_vl_vfmklgt_mvl
