@@ -16,6 +16,11 @@ static inline unsigned long int _vel_pack_i32(int a, int b)
     return (((unsigned long int)a) << 32) | (unsigned int)b;
 }
 
+#define _vel_extract_vm512u(vm) __builtin_ve_vl_extract_vm512u(vm)
+#define _vel_extract_vm512l(vm) __builtin_ve_vl_extract_vm512l(vm)
+#define _vel_insert_vm512u(vm512, vm) __builtin_ve_vl_insert_vm512u(vm512, vm)
+#define _vel_insert_vm512l(vm512, vm) __builtin_ve_vl_insert_vm512l(vm512, vm)
+
 // approx
 
 static inline __vr _vel_vfdivdA_vsvl(double s0, __vr v0, int l)
