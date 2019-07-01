@@ -818,23 +818,26 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper));
     MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower));
 
-    // VM
+    // VM512
     Bu.addReg(GetVM512Upper(MI.getOperand(0).getReg()));
     Bl.addReg(GetVM512Lower(MI.getOperand(0).getReg()));
-    // VR
-    Bu.addReg(MI.getOperand(1).getReg());
-    Bl.addReg(MI.getOperand(1).getReg());
 
-    if (MI.getNumOperands() == 2) { // ml: VM, VL
+    if (MI.getNumOperands() == 2) { // _Ml: VM512, VL
       // VL
       Bu.addReg(MI.getOperand(1).getReg());
       Bl.addReg(MI.getOperand(1).getReg());
-    } else if (MI.getNumOperands() == 3) { // mvl: VM, VR, VL
+    } else if (MI.getNumOperands() == 3) { // _Mvl: VM512, VR, VL
+      // VR
+      Bu.addReg(MI.getOperand(1).getReg());
+      Bl.addReg(MI.getOperand(1).getReg());
       // VL
       Bu.addReg(MI.getOperand(2).getReg());
       Bl.addReg(MI.getOperand(2).getReg());
-    } else if (MI.getNumOperands() == 4) { // mvml: VM, VR, VM, VL
-      // VM
+    } else if (MI.getNumOperands() == 4) { // _MvMl: VM512, VR, VM512, VL
+      // VR
+      Bu.addReg(MI.getOperand(1).getReg());
+      Bl.addReg(MI.getOperand(1).getReg());
+      // VM512
       Bu.addReg(GetVM512Upper(MI.getOperand(2).getReg()));
       Bl.addReg(GetVM512Lower(MI.getOperand(2).getReg()));
       // VL
