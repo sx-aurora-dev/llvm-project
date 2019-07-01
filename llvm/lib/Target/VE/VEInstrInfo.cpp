@@ -664,6 +664,33 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   MI.eraseFromParent();
 }
 
+static void buildVMRInst_VL(MachineInstr& MI, const MCInstrDesc& MCID) {
+  MachineBasicBlock* MBB = MI.getParent();
+  DebugLoc dl = MI.getDebugLoc();
+
+  unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
+  unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
+  unsigned VMYu = GetVM512Upper(MI.getOperand(1).getReg());
+  unsigned VMYl = GetVM512Lower(MI.getOperand(1).getReg());
+
+  unsigned VL = MI.getOperand(MI.getNumOperands() - 1).getReg();
+
+  switch (MI.getOpcode()) {
+  default: {
+      unsigned VMZu = GetVM512Upper(MI.getOperand(2).getReg());
+      unsigned VMZl = GetVM512Lower(MI.getOperand(2).getReg());
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu).addUse(VL);
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl).addUse(VL);
+      break;
+  }
+  case VE::NEGMp:
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VL);
+      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VL);
+      break;
+  }
+  MI.eraseFromParent();
+}
+
 static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
 {
     // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
@@ -952,6 +979,13 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::EQVMp: buildVMRInst(MI, get(VE::EQVM)); return true;
   case VE::NNDMp: buildVMRInst(MI, get(VE::NNDM)); return true;
   case VE::NEGMp: buildVMRInst(MI, get(VE::NEGM)); return true;
+
+  case VE::andm_MMMl: buildVMRInst_VL(MI, get(VE::andm_mmml)); return true;
+  case VE::orm_MMMl:  buildVMRInst_VL(MI, get(VE::orm_mmml)); return true;
+  case VE::xorm_MMMl: buildVMRInst_VL(MI, get(VE::xorm_mmml)); return true;
+  case VE::eqvm_MMMl: buildVMRInst_VL(MI, get(VE::eqvm_mmml)); return true;
+  case VE::nndm_MMMl: buildVMRInst_VL(MI, get(VE::nndm_mmml)); return true;
+  case VE::negm_MMl: buildVMRInst_VL(MI, get(VE::negm_mml)); return true;
 
   case VE::lvm_MMIs: {
     unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
