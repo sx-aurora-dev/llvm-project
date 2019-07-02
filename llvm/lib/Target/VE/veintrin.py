@@ -1310,6 +1310,13 @@ def gen_lowering(insts):
     for l in ary:
         print(l)
 
+def gen_vl_index(insts):
+    print("default: return -1;")
+    for I in insts:
+        if I.hasLLVMInstDefine() and I.hasVLOp():
+            index = len(I.outs) + I.ins.index(VL)
+            print("case VE::{}: return {};".format(I.llvmInst(), index))
+
 def createInstructionTable(isVL):
     if isVL:
         T = InstTableVEL()
@@ -1542,18 +1549,18 @@ def createInstructionTable(isVL):
     T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
     
     T.Section("Table 3-23 Vector Mask Register Instructions", 36)
-    T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}")
-    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}")
-    T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}")
-    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}")
-    T.Def(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}")
-    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}")
-    T.Def(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})")
-    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})")
-    T.Def(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}")
-    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}")
-    T.Def(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}")
-    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}")
+    T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
+    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True)
+    T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}", noVL=True)
+    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True)
+    T.Def(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}", noVL=True)
+    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True)
+    T.Def(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})", noVL=True)
+    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True)
+    T.Def(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}", noVL=True)
+    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True)
+    T.Def(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}", noVL=True)
+    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True)
     T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
@@ -1616,6 +1623,7 @@ def main():
     parser.add_argument('-l', dest="opt_lowering", action="store_true")
     parser.add_argument('--vl', action="store_true")
     parser.add_argument('--test-dir', default="../llvm-test/intrinsic/gen/tests")
+    parser.add_argument('--vl-index', action="store_true");
     args, others = parser.parse_known_args()
     
     global llvmIntrinsicPrefix
@@ -1687,6 +1695,8 @@ def main():
         gen_mktest(insts)
     if args.opt_lowering:
         gen_lowering(insts)
+    if args.vl_index:
+        gen_vl_index(insts)
     
     if args.opt_manual:
         ManualInstPrinter().printAll(insts)

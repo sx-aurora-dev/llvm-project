@@ -1,8 +1,12 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; ModuleID = 'gen/tests/xorm_mmm.c'
+source_filename = "gen/tests/xorm_mmm.c"
+target datalayout = "e-m:e-i64:64-n32:64-S64-v64:64:64-v128:64:64-v256:64:64-v512:64:64-v1024:64:64-v2048:64:64-v4096:64:64-v8192:64:64-v16384:64:64"
+target triple = "ve"
 
 ; Function Attrs: nounwind
-define void @orm_mmml(i64* nocapture, i64* nocapture readonly, i64* nocapture readonly, i32) {
-; CHECK: orm %vm1,%vm1,%vm2
+define dso_local void @xorm_mmm(i64* nocapture, i64* nocapture readonly, i64* nocapture readonly, i32) local_unnamed_addr #0 {
+; CHECK: xorm %vm1,%vm1,%vm2
   %5 = load i64, i64* %1, align 8, !tbaa !2
   %6 = tail call <4 x i64> @llvm.ve.vl.lvm.mmss(<4 x i64> undef, i64 0, i64 %5)
   %7 = load i64, i64* %2, align 8, !tbaa !2
@@ -25,7 +29,7 @@ define void @orm_mmml(i64* nocapture, i64* nocapture readonly, i64* nocapture re
   %24 = getelementptr inbounds i64, i64* %2, i64 3
   %25 = load i64, i64* %24, align 8, !tbaa !2
   %26 = tail call <4 x i64> @llvm.ve.vl.lvm.mmss(<4 x i64> %20, i64 3, i64 %25)
-  %27 = tail call <4 x i64> @llvm.ve.vl.orm.mmml(<4 x i64> %23, <4 x i64> %26, i32 256)
+  %27 = tail call <4 x i64> @llvm.ve.vl.xorm.mmm(<4 x i64> %23, <4 x i64> %26)
   %28 = tail call i64 @llvm.ve.vl.svm.sms(<4 x i64> %27, i64 0)
   store i64 %28, i64* %0, align 8, !tbaa !2
   %29 = tail call i64 @llvm.ve.vl.svm.sms(<4 x i64> %27, i64 1)
@@ -41,14 +45,22 @@ define void @orm_mmml(i64* nocapture, i64* nocapture readonly, i64* nocapture re
 }
 
 ; Function Attrs: nounwind readnone
-declare <4 x i64> @llvm.ve.vl.lvm.mmss(<4 x i64>, i64, i64)
+declare <4 x i64> @llvm.ve.vl.lvm.mmss(<4 x i64>, i64, i64) #1
 
 ; Function Attrs: nounwind readnone
-declare <4 x i64> @llvm.ve.vl.orm.mmml(<4 x i64>, <4 x i64>, i32)
+declare <4 x i64> @llvm.ve.vl.xorm.mmm(<4 x i64>, <4 x i64>) #1
 
 ; Function Attrs: nounwind readnone
-declare i64 @llvm.ve.vl.svm.sms(<4 x i64>, i64)
+declare i64 @llvm.ve.vl.svm.sms(<4 x i64>, i64) #1
 
+attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { nounwind readnone }
+
+!llvm.module.flags = !{!0}
+!llvm.ident = !{!1}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{!"clang version 9.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 166ce7eaa48ef1c8891ad1012b2f5819d7674e19) (llvm/llvm.git 538e6ca3317a129b1e492a725935d84bb0a64c7f)"}
 !2 = !{!3, !3, i64 0}
 !3 = !{!"long", !4, i64 0}
 !4 = !{!"omnipotent char", !5, i64 0}

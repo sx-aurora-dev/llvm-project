@@ -12431,112 +12431,100 @@ def vsclot_vvml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, VM_:$vm, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// ANDM andm andm_mmml
-def andm_mmml : RV<0x84, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
+// ANDM andm andm_mmm
+def andm_mmm : RV<0x84, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz),
        "andm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// ANDM andm andm_MMMl
-def andm_MMMl : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
+// ANDM andm andm_MMM
+def andm_MMM : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz),
        "# andm $vmx,$vmy,$vmz", []>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// ORM orm orm_mmml
-def orm_mmml : RV<0x85, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
+// ORM orm orm_mmm
+def orm_mmm : RV<0x85, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz),
        "orm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// ORM orm orm_MMMl
-def orm_MMMl : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
+// ORM orm orm_MMM
+def orm_MMM : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz),
        "# orm $vmx,$vmy,$vmz", []>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// XORM xorm xorm_mmml
-def xorm_mmml : RV<0x86, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
+// XORM xorm xorm_mmm
+def xorm_mmm : RV<0x86, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz),
        "xorm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// XORM xorm xorm_MMMl
-def xorm_MMMl : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
+// XORM xorm xorm_MMM
+def xorm_MMM : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz),
        "# xorm $vmx,$vmy,$vmz", []>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// EQVM eqvm eqvm_mmml
-def eqvm_mmml : RV<0x87, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
+// EQVM eqvm eqvm_mmm
+def eqvm_mmm : RV<0x87, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz),
        "eqvm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// EQVM eqvm eqvm_MMMl
-def eqvm_MMMl : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
+// EQVM eqvm eqvm_MMM
+def eqvm_MMM : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz),
        "# eqvm $vmx,$vmy,$vmz", []>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// NNDM nndm nndm_mmml
-def nndm_mmml : RV<0x94, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz, I32:$vl),
+// NNDM nndm nndm_mmm
+def nndm_mmm : RV<0x94, (outs VM_:$vmx), (ins VM_:$vmy, VM_:$vmz),
        "nndm $vmx,$vmy,$vmz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// NNDM nndm nndm_MMMl
-def nndm_MMMl : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz, I32:$vl),
+// NNDM nndm nndm_MMM
+def nndm_MMM : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, VM512_:$vmz),
        "# nndm $vmx,$vmy,$vmz", []>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// NEGM negm negm_mml
-def negm_mml : RV<0x95, (outs VM_:$vmx), (ins VM_:$vmy, I32:$vl),
+// NEGM negm negm_mm
+def negm_mm : RV<0x95, (outs VM_:$vmx), (ins VM_:$vmy),
        "negm $vmx,$vmy", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
-// NEGM negm negm_MMl
-def negm_MMl : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy, I32:$vl),
+// NEGM negm negm_MM
+def negm_MM : Pseudo<(outs VM512_:$vmx), (ins VM512_:$vmy),
        "# negm $vmx,$vmy", []>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
 }
 
 // PCVM pcvm pcvm_sml
