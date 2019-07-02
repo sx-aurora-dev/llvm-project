@@ -657,6 +657,7 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
       break;
   }
   case VE::NEGMp:
+  case VE::negm_MM:
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
       break;
@@ -664,6 +665,7 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   MI.eraseFromParent();
 }
 
+#if 0
 static void buildVMRInst_VL(MachineInstr& MI, const MCInstrDesc& MCID) {
   MachineBasicBlock* MBB = MI.getParent();
   DebugLoc dl = MI.getDebugLoc();
@@ -690,6 +692,7 @@ static void buildVMRInst_VL(MachineInstr& MI, const MCInstrDesc& MCID) {
   }
   MI.eraseFromParent();
 }
+#endif
 
 static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
 {
@@ -980,12 +983,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::NNDMp: buildVMRInst(MI, get(VE::NNDM)); return true;
   case VE::NEGMp: buildVMRInst(MI, get(VE::NEGM)); return true;
 
-  case VE::andm_MMMl: buildVMRInst_VL(MI, get(VE::andm_mmml)); return true;
-  case VE::orm_MMMl:  buildVMRInst_VL(MI, get(VE::orm_mmml)); return true;
-  case VE::xorm_MMMl: buildVMRInst_VL(MI, get(VE::xorm_mmml)); return true;
-  case VE::eqvm_MMMl: buildVMRInst_VL(MI, get(VE::eqvm_mmml)); return true;
-  case VE::nndm_MMMl: buildVMRInst_VL(MI, get(VE::nndm_mmml)); return true;
-  case VE::negm_MMl: buildVMRInst_VL(MI, get(VE::negm_mml)); return true;
+  case VE::andm_MMM: buildVMRInst(MI, get(VE::andm_mmm)); return true;
+  case VE::orm_MMM:  buildVMRInst(MI, get(VE::orm_mmm)); return true;
+  case VE::xorm_MMM: buildVMRInst(MI, get(VE::xorm_mmm)); return true;
+  case VE::eqvm_MMM: buildVMRInst(MI, get(VE::eqvm_mmm)); return true;
+  case VE::nndm_MMM: buildVMRInst(MI, get(VE::nndm_mmm)); return true;
+  case VE::negm_MM: buildVMRInst(MI, get(VE::negm_mm)); return true;
 
   case VE::lvm_MMIs: {
     unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());

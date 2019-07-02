@@ -19,6 +19,12 @@ using namespace llvm;
 #define DEBUG_TYPE "lvl-gen"
 
 namespace {
+  int getVLIndex(unsigned op) {
+    switch (op) {
+#include "vl-index.inc"
+    }
+  }
+
   struct LVLGen : public MachineFunctionPass {
     const MachineRegisterInfo *MRI;
     static char ID;
@@ -34,28 +40,9 @@ namespace {
   // FIXME: is this reasonable impl?
   unsigned getVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
   {
-    unsigned opc = MI.getOpcode();
-    if (opc < VE::andm_MMMl 
-            || (opc > VE::xorm_MMMl && opc < VE::andm_mmml)
-            || opc > VE::xorm_mmml)
-      return VE::NoRegister;
-
-    for (const MachineOperand &MO : MI.operands()) {
-      //if (MO.isReg() && MRI->getRegClass(MO.getReg()) == &VE::V64RegClass)
-      if (MO.isReg() && VE::V64RegClass.contains(MO.getReg())) {
-        // last operand should be a vector length
-        return MI.getOperand(MI.getNumOperands() - 1).getReg();
-      }
-    }
-
-    if (opc == VE::vfmklat_ml
-            || opc == VE::vfmklaf_ml
-            || opc == VE::pvfmkwloat_ml
-            || opc == VE::pvfmkwupat_ml
-            || opc == VE::pvfmkwloaf_ml
-            || opc == VE::pvfmkwupaf_ml) {
-        return MI.getOperand(MI.getNumOperands() - 1).getReg();
-    }
+    int index = getVLIndex(MI.getOpcode());
+    if (index >= 0)
+      return MI.getOperand(index).getReg();
 
     return VE::NoRegister;
   }
@@ -71,7 +58,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
   bool Changed = false;
   const VESubtarget *Subtarget = &MBB.getParent()->getSubtarget<VESubtarget>();
   const TargetInstrInfo *TII = Subtarget->getInstrInfo();
-  const TargetRegisterInfo* TRI = Subtarget->getRegisterInfo();
+  //const TargetRegisterInfo* TRI = Subtarget->getRegisterInfo();
 
   bool hasRegForVL = false;
   unsigned RegForVL;
