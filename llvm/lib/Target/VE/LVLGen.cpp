@@ -58,6 +58,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
   bool Changed = false;
   const VESubtarget *Subtarget = &MBB.getParent()->getSubtarget<VESubtarget>();
   const TargetInstrInfo *TII = Subtarget->getInstrInfo();
+#define TRI (Subtarget->getRegisterInfo())
   //const TargetRegisterInfo* TRI = Subtarget->getRegisterInfo();
 
   bool hasRegForVL = false;
