@@ -3,6 +3,7 @@
 
 #include <veintrin_common.h>
 #include <velintrin_gen.h>
+#include <velintrin_approx.h>
 
 #define _vel_svob() __builtin_ve_vl_svob()
 
