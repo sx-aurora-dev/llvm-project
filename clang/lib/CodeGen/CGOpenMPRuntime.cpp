@@ -3884,7 +3884,7 @@ CGOpenMPRuntime::createOffloadingBinaryDescriptorRegistration() {
 
   // We should be creating an offloading descriptor only if there are devices
   // specified.
-  assert(!Devices.empty() && "No OpenMP offloading devices??");
+  //assert(!Devices.empty() && "No OpenMP offloading devices??");
 
   // Create the external variables that will point to the begin and end of the
   // host entries section. These will be defined by the linker.
