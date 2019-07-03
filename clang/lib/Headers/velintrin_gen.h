@@ -490,12 +490,6 @@
 #define _vel_vfdivs_vsvvl __builtin_ve_vl_vfdivs_vsvvl
 #define _vel_vfdivs_vvvmvl __builtin_ve_vl_vfdivs_vvvmvl
 #define _vel_vfdivs_vsvmvl __builtin_ve_vl_vfdivs_vsvmvl
-#define _vel_vfdivsA_vvvl __builtin_ve_vl_vfdivsA_vvvl
-#define _vel_vfdivsA_vvvvl __builtin_ve_vl_vfdivsA_vvvvl
-#define _vel_vfdivsA_vsvl __builtin_ve_vl_vfdivsA_vsvl
-#define _vel_vfdivsA_vsvvl __builtin_ve_vl_vfdivsA_vsvvl
-#define _vel_pvfdivA_vvvl __builtin_ve_vl_pvfdivA_vvvl
-#define _vel_pvfdivA_vvvvl __builtin_ve_vl_pvfdivA_vvvvl
 #define _vel_vfsqrtd_vvl __builtin_ve_vl_vfsqrtd_vvl
 #define _vel_vfsqrtd_vvvl __builtin_ve_vl_vfsqrtd_vvvl
 #define _vel_vfsqrts_vvl __builtin_ve_vl_vfsqrts_vvl
