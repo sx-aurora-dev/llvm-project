@@ -31,14 +31,14 @@ void OmpPragma::printReplacement(llvm::raw_ostream &Out) {
   }
   case clang::OpenMPDirectiveKind::OMPD_teams_distribute_parallel_for_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd ";
+    Out << "  #pragma _NEC ivdep\n  #pragma omp parallel for simd ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_distribute_simd:
   case clang::OpenMPDirectiveKind::OMPD_teams_distribute_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_simd:
   case clang::OpenMPDirectiveKind::OMPD_target_simd: {
-    Out << "  #pragma omp simd ";
+    Out << "  #pragma _NEC ivdep\n  #pragma omp simd ";
     break;
   }
   case clang::OpenMPDirectiveKind::OMPD_target_teams_distribute_parallel_for: {
@@ -47,13 +47,17 @@ void OmpPragma::printReplacement(llvm::raw_ostream &Out) {
   }
   case clang::OpenMPDirectiveKind::
       OMPD_target_teams_distribute_parallel_for_simd: {
-    Out << "  #pragma omp parallel for simd ";
+    Out << "  #pragma _NEC ivdep\n  #pragma omp parallel for simd ";
     break;
   }
   default:
     return;
   }
   printClauses(Out);
+}
+
+void OmpPragma::printAddition(llvm::raw_ostream &Out) {
+  Out << "  #pragma _NEC ivdep ";
 }
 
 bool OmpPragma::isReplaceable(clang::OMPExecutableDirective *Directive) {
@@ -63,6 +67,16 @@ bool OmpPragma::isReplaceable(clang::OMPExecutableDirective *Directive) {
       llvm::isa<clang::OMPTeamsDistributeParallelForDirective>(Directive) ||
       llvm::isa<clang::OMPTeamsDistributeParallelForSimdDirective>(Directive) ||
       llvm::isa<clang::OMPDistributeDirective>(Directive)) {
+    return true;
+  }
+  return false;
+}
+
+bool OmpPragma::needsAdditionalPragma(clang::OMPExecutableDirective *Directive) {
+  if (llvm::isa<clang::OMPForSimdDirective>(Directive) ||
+      llvm::isa<clang::OMPParallelForSimdDirective>(Directive) ||
+      llvm::isa<clang::OMPSimdDirective>(Directive) ||
+      llvm::isa<clang::OMPTaskLoopSimdDirective>(Directive)) {
     return true;
   }
   return false;

@@ -245,12 +245,18 @@ class TargetRegionPrinterHelper : public clang::PrinterHelper {
 public:
   TargetRegionPrinterHelper(clang::PrintingPolicy PP) : PP(PP){};
   bool handledStmt(clang::Stmt *E, llvm::raw_ostream &OS) {
-    if (auto *Directive = llvm::dyn_cast<clang::OMPExecutableDirective(e)) {
+    if (auto *Directive = llvm::dyn_cast<clang::OMPExecutableDirective>(E)) {
       if (OmpPragma::isReplaceable(Directive)) {
         OmpPragma(Directive, PP).printReplacement(OS);
         OS << "\n";
         Directive->child_begin()->printPretty(OS, this, PP);
         return true;
+      }
+
+      if (OmpPragma::needsAdditionalPragma(Directive)) {
+        OmpPragma(Directive, PP).printAddition(OS);
+        OS << "\n";
+        return false;
       }
     }
     return false;
