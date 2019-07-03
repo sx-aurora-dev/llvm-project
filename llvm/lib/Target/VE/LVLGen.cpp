@@ -26,7 +26,7 @@ namespace {
   }
 
   struct LVLGen : public MachineFunctionPass {
-    const MachineRegisterInfo *MRI;
+    MCInstrDesc LVLInstDesc;
     static char ID;
     LVLGen() : MachineFunctionPass(ID) {}
     bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
@@ -36,9 +36,7 @@ namespace {
 
   // returns a register holding a vector length. NoRegister is returned when
   // this MI does not have a vector length.
-  //
-  // FIXME: is this reasonable impl?
-  unsigned getVL(const MachineRegisterInfo *MRI, const MachineInstr &MI)
+  unsigned getVL(const MachineInstr &MI)
   {
     int index = getVLIndex(MI.getOpcode());
     if (index >= 0)
@@ -55,29 +53,28 @@ FunctionPass *llvm::createLVLGenPass() {
 
 bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
 {
-  bool Changed = false;
-  const VESubtarget *Subtarget = &MBB.getParent()->getSubtarget<VESubtarget>();
-  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
-#define TRI (Subtarget->getRegisterInfo())
-  //const TargetRegisterInfo* TRI = Subtarget->getRegisterInfo();
+#define RegName(no) \
+  (MBB.getParent()->getSubtarget<VESubtarget>().getRegisterInfo()->getName(no))
 
+  bool Changed = false;
   bool hasRegForVL = false;
   unsigned RegForVL;
 
   for (MachineBasicBlock::iterator I = MBB.begin(); I != MBB.end(); ) {
     MachineBasicBlock::iterator MI = I;
 
-    unsigned Reg = getVL(MRI, *MI);
+    unsigned Reg = getVL(*MI);
     if (Reg != VE::NoRegister) {
       LLVM_DEBUG(dbgs() << "Vector instruction found: ");
       LLVM_DEBUG(MI->dump());
-      LLVM_DEBUG(dbgs() << "Vector length is " << TRI->getName(Reg) << ". ");
+      LLVM_DEBUG(dbgs() << "Vector length is " << RegName(Reg) << ". ");
       LLVM_DEBUG(dbgs() << "Current VL is " 
-                 << (hasRegForVL ? TRI->getName(RegForVL) : "unknown") << ". ");
+                 << (hasRegForVL ? RegName(RegForVL) : "unknown") << ". ");
 
       if (!hasRegForVL || RegForVL != Reg) {
-        LLVM_DEBUG(dbgs() << "Generate a LVL instruction to load " << TRI->getName(Reg) << ".\n");
-        BuildMI(MBB, I, MI->getDebugLoc(), TII->get(VE::LVL2)).addReg(Reg);
+        LLVM_DEBUG(dbgs() << "Generate a LVL instruction to load "
+                << RegName(Reg) << ".\n");
+        BuildMI(MBB, I, MI->getDebugLoc(), LVLInstDesc).addReg(Reg);
         hasRegForVL = true;
         RegForVL = Reg;
         Changed = true;
@@ -87,7 +84,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
     } else if (hasRegForVL) {
       for (const MachineOperand &MO : MI->defs()) {
         if (MO.isReg() && MO.getReg() == RegForVL) {
-          LLVM_DEBUG(dbgs() << TRI->getName(RegForVL) << " is killed: ");
+          LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
           LLVM_DEBUG(MI->dump());
           hasRegForVL = false;
           break;
@@ -104,12 +101,13 @@ bool LVLGen::runOnMachineFunction(MachineFunction &F)
 {
   LLVM_DEBUG(dbgs() << "********** Begin LVLGen **********\n");
   LLVM_DEBUG(dbgs() << "********** Function: " << F.getName() << '\n');
+  LLVM_DEBUG(F.dump());
 
   bool Changed = false;
 
-  MRI = &F.getRegInfo();
-
-  LLVM_DEBUG(F.dump());
+  const VESubtarget& Subtarget = F.getSubtarget<VESubtarget>();
+  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
+  LVLInstDesc = TII->get(VE::LVL2);
 
   for (MachineFunction::iterator FI = F.begin(), FE = F.end();
        FI != FE; ++FI)
@@ -122,5 +120,4 @@ bool LVLGen::runOnMachineFunction(MachineFunction &F)
   LLVM_DEBUG(dbgs() << "********** End LVLGen **********\n");
   return Changed;
 }
-
 
