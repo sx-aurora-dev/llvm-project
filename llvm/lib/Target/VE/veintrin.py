@@ -192,7 +192,9 @@ class Inst(object):
         self.hasMaskBaseReg_ = True
         self.hasPat_ = True
         self.hasLLVMInstDefine_ = True
+        self.hasIntrinsicDef_ = True
         self.notYetImplemented = False
+        self.Obsolete_ = False
 
     def inst(self): return self.inst_
     def llvmInst(self): return self.llvmInst_
@@ -209,6 +211,8 @@ class Inst(object):
     def NYI(self, flag = True): 
         self.notYetImplemented = flag
         return self
+    def Obsolete(self): self.Obsolete_ = True
+    def isObsolete(self): return self.Obsolete_
 
     # difference among dummy and pseudo
     #   dummy: instructions to insert a entry into the manual
@@ -223,6 +227,15 @@ class Inst(object):
     def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False
     def hasLLVMInstDefine(self): 
         return self.hasLLVMInstDefine_ and (not self.isDummy())
+
+    def hasIntrinsicDef(self): return self.hasIntrinsicDef_
+
+    def noLLVM(self):
+        self.hasLLVMInstDefine_ = False
+        self.hasPat_ = False
+        self.hasIntrinsicDef_ = False
+        self.hasBuiltin_ = False
+        return self
 
     def hasDummyOp(self): return any([op.regName() == "vd" for op in self.ins])
     def hasDummyMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
@@ -891,6 +904,8 @@ class HtmlManualPrinter(ManualInstPrinter):
                     #asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, asm)
                 if I.isNotYetImplemented():
                     func = '<font color="darkgray">' + func + '</font><a href="#ft1">[1]</a>'
+                if I.isObsolete():
+                    func = '<font color="darkgray">' + func + '</font><a href="#ft2">[2]</a>'
                 #tmp.append([inst, func, I.asm(), expr])
                 tmp.append([inst, func, asm, expr])
 
@@ -909,7 +924,8 @@ class HtmlManualPrinter(ManualInstPrinter):
             print("</table>")
             idx += 1
 
-        print('<p"><a name="ft1">[1] Not yet implemented.</a></p>')
+        print('<p><a name="ft1">[1] Not yet implemented.</a></p>')
+        print('<p><a name="ft2">[2] Obsolete.</a></p>')
 
 class InstList:
     def __init__(self, clazz):
@@ -1269,7 +1285,7 @@ def gen_inst_def(insts):
 
 def gen_intrinsic_def(insts):
     for I in insts:
-        if not I.hasImmOp():
+        if not I.hasImmOp() and I.hasIntrinsicDef():
             print(I.intrinsicDefine())
 
 def gen_pattern(insts):
@@ -1425,11 +1441,13 @@ def createInstructionTable(isVL):
     T.Inst3f(0xDC, "vfsub", "VFSB", "", "{0} = {1} - {2}")
     T.Inst3f(0xCD, "vfmul", "VFMP", "", "{0} = {1} * {2}")
     T.Inst3f(0xDD, "vfdiv", "VFDV", "", "{0} = {1} / {2}", False)
-    T.Def(None, None, "", "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine().NYI(isVL)
-    T.Def(None, None, "", "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine().NYI(isVL)
-    T.Def(None, None, "p", "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine().NYI(isVL)
+    if not isVL:
+        T.Def(None, None, "", "vfdivsA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+        T.Def(None, None, "", "vfdivsA", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
+        T.Def(None, None, "p", "pvfdivA", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVMInstDefine()
     if isVL:
-        T.Dummy(None, None, "__vr _vel_vfdivdA_vsvl(double sy, __vr vz, int vl)", None);
+        T.Def(None, None, "", "vfdivdA", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}").noLLVM().Obsolete()
+        #T.Dummy(None, None, "__vr _vel_vfdivdA_vsvl(double sy, __vr vz, int vl)", None);
     T.Inst2f(0xED, "vfsqrt", "VFSQRT", "{0} = std::sqrt({1})", False)
     T.Inst3f(0xFC, "vfcmp", "VFCP", "", "{0} = compare({1}, {2})")
     T.Inst3f(0xBD, "vfmax", "VFCM", "a", "{0} = max({1}, {2})")
@@ -1578,6 +1596,14 @@ def createInstructionTable(isVL):
         T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
     else:
         T.Dummy(0x30, "SVOB", "void _ve_svob(void)", "svob");
+
+    T.Section("Approximate Operations", None)
+    if isVL:
+        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
+        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
+        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), SZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
+        T.Def(None, None, "", "approx_vfdivd", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}").noLLVM()
+        T.Def(None, None, "", "approx_pvfdiv", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
     
     T.Section("Others", None)
     if isVL:
@@ -1588,7 +1614,7 @@ def createInstructionTable(isVL):
         T.Dummy(None, "", "unsigned long int _ve_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
         T.Dummy(None, "", "unsigned long int _ve_pack_f32a(float const* p)", "load and mul")
         T.Dummy(None, "", "unsigned long int _ve_pack_i32(int a, int b)", "sll,add,or")
-    
+ 
     T.Def(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine().NYI(isVL)
     T.Def(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine().NYI(isVL)
     T.Dummy(None, "", "__vm _vel_extract_vm512u(__vm512 vm)", "")
