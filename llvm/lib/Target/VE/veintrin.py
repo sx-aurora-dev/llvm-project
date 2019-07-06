@@ -1205,11 +1205,19 @@ class InstTable(object):
             O = [O_v, O_vm]
         self.Def(opc, inst, subop, asm, O).noTest().readMem()
 
-    def VSCm(self, opc, inst0, inst, asm):
-        O_v = [None, VX(T_u64), VY(T_u64)]
-        O_vm = [None, VX(T_u64), VY(T_u64), VM]
-        #O_s = [VX(T_u64), SW(T_u64)]
-        O = [O_v, O_vm]
+    def VSCm(self, opc, inst0, inst, asm, isVL):
+        if isVL:
+            O = []
+            O.append([None, VX(T_u64), VY(T_u64), SY(T_u64), SZ(T_u64)])
+            O.append([None, VX(T_u64), VY(T_u64), SY(T_u64), ImmZ(T_u64)])
+            O.append([None, VX(T_u64), VY(T_u64), ImmI(T_u64), SZ(T_u64)])
+            O.append([None, VX(T_u64), VY(T_u64), ImmI(T_u64), ImmZ(T_u64)])
+            O = self.addMask(O, VM, False)
+        else:
+            O_v = [None, VX(T_u64), VY(T_u64)]
+            O_vm = [None, VX(T_u64), VY(T_u64), VM]
+            #O_s = [VX(T_u64), SW(T_u64)]
+            O = [O_v, O_vm]
         self.Def(opc, inst0, "", asm, O).noTest().writeMem()
         self.Def(opc, inst0, "ot", asm+".ot", O).noTest().writeMem().oldLowering()
 
@@ -1562,9 +1570,9 @@ def createInstructionTable(isVL):
     T.VGTm(0xA2, "VGTU", "", "vgtu", isVL)
     T.VGTm(0xA3, "VGTL", "sx", "vgtl.sx", isVL)
     T.VGTm(0xA3, "VGTL", "zx", "vgtl.zx", isVL)
-    T.VSCm(0xB1, "VSC", "VSC", "vsc")
-    T.VSCm(0xB2, "VSCU", "VSCU", "vscu")
-    T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
+    T.VSCm(0xB1, "VSC", "VSC", "vsc", isVL)
+    T.VSCm(0xB2, "VSCU", "VSCU", "vscu", isVL)
+    T.VSCm(0xB3, "VSCL", "VSCL", "vscl", isVL)
     
     T.Section("Table 3-23 Vector Mask Register Instructions", 36)
     T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
