@@ -1094,6 +1094,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
+#if 0
   // FIXME:
   // Need to add a register class for these types to make those types
   // leagal in something like following IR.  VE doesn't have v4i64 hardware
@@ -1104,6 +1105,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   //                          ^^^^^ this requires adding register classes here.
   addRegisterClass(MVT::v4i64, &VE::V64RegClass);
   addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+#else
+  // FIXME:
+  // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
+  // v256i1/v512i1.
+  addRegisterClass(MVT::v4i64, &VE::VM_RegClass);
+  addRegisterClass(MVT::v8i64, &VE::VM512_RegClass);
+#endif
 
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {
