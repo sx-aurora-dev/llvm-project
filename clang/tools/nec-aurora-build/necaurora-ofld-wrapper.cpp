@@ -41,10 +41,10 @@ enum class ToolMode {
 };
 
 int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
-                 std::string &InputFile, std::string &Args, bool &Verbose,
+                 std::string &InputFile, std::string &cArgs, std::string &sArgs, bool &Verbose,
                  bool &SaveTemps, std::vector<const char *> &ObjectFiles,
                  std::string &OutputFile) {
-  std::stringstream ArgsStream;
+  std::stringstream cArgsStream, sArgsStream;
   Mode = ToolMode::Unknown;
   bool StaticLinkerFlag = false;
   bool SharedFlag = false;
@@ -97,15 +97,20 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
       SaveTempsFlag = true;
       continue;
     } else if (strcmp(argv[i] + strlen(argv[i]) - 2, ".o") == 0) {
-      ArgsStream << argv[i] << " ";
+      cArgsStream << argv[i] << " ";
       ObjectFiles.push_back(argv[i]);
       continue;
     } else if (strcmp(argv[i], "-o") == 0) {
-      ArgsStream << argv[i] << " ";
+      cArgsStream << argv[i] << " ";
       OutputFile = std::string(argv[i+1]);
+      cArgsStream << OutputFile << " ";
+      i += 2;
       continue;
+    } else if (strcmp(argv[i], "-fopenmp") == 0) {
+      cArgsStream << argv[i] << " ";
+      sArgsStream << argv[i] << " ";
     } else {
-      ArgsStream << argv[i] << " ";
+      cArgsStream << argv[i] << " ";
     }
   }
 
@@ -120,15 +125,17 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else {
       Mode = ToolMode::Passthrough;
       if (SharedFlag) {
-        ArgsStream << "-shared";
+        cArgsStream << "-shared";
       }
     }
   }
 
   if (Mode == ToolMode::Passthrough || Mode == ToolMode::StaticLinker) {
-    Args = InputFile + " " + ArgsStream.str();
+    sArgs = InputFile + " " + sArgsStream.str();
+    cArgs = InputFile + " " + cArgsStream.str();
   } else {
-    Args = ArgsStream.str();
+    sArgs = sArgsStream.str();
+    cArgs = cArgsStream.str();
   }
 
   return 0;
@@ -151,13 +158,13 @@ int main(int argc, char **argv) {
   std::string SotocPath;
   std::string InputFile;
   std::string SotocOutputPath;
-  std::string Args;
+  std::string cArgs, sArgs;
   std::vector<const char *> ObjectFiles;
   std::string OutputFile;
 
   KeepTransformedFilesDir = std::getenv("NECAURORA_KEEP_FILES_DIR");
 
-  rc = parseCmdline(argc, argv, Mode, SotocPath, InputFile, Args, Verbose,
+  rc = parseCmdline(argc, argv, Mode, SotocPath, InputFile, cArgs, sArgs, Verbose,
                     SaveTemps, ObjectFiles, OutputFile);
   if (rc != 0) {
     std::cerr << "necaurora-ofld-cc1-wraper: failed parsing the command "
@@ -168,14 +175,14 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
     // rc = runPreprocessor(InputFile, Args);
   } else if (Mode == ToolMode::Compiler) {
-    rc = runSourceTransformation(InputFile, SotocPath, SotocOutputPath, Args);
+    rc = runSourceTransformation(InputFile, SotocPath, SotocOutputPath, sArgs);
     if (rc != 0) {
       std::cerr << "necaurora-ofld-cc1-wrapper: "
                 << "source code transformation failed\n";
       return EXIT_FAILURE;
     }
 
-    rc = runTargetCompiler(SotocOutputPath, Args);
+    rc = runTargetCompiler(SotocOutputPath, cArgs);
 
     if (rc != 0) {
       std::cerr << "necaurora-ofld-wrapper: "
@@ -184,14 +191,14 @@ int main(int argc, char **argv) {
       return EXIT_FAILURE;
     }
   } else if (Mode == ToolMode::StaticLinker) {
-    rc = runStaticLinker(ObjectFiles, Args, OutputFile);
+    rc = runStaticLinker(ObjectFiles, cArgs, OutputFile);
     if (rc != 0) {
       std::cerr << "necaurora-ofld-wrapper: static linking failed "
                 << "with code " << rc << "\n";
       return EXIT_FAILURE;
     }
   } else if (Mode == ToolMode::Passthrough) {
-    rc = runPassthrough(Args);
+    rc = runPassthrough(cArgs);
     if (rc != 0) {
       std::cerr << "necaurora-ofld-wrapper: execution of target compiler "
                 << "failed with code " << rc << "\n";

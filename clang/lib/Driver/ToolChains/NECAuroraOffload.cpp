@@ -70,8 +70,7 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
       }
 
       if (A->getOption().getName() == "X") {
-        A->claim();
-        continue;
+         A->claim();
       }
 
       A->render(Args, CmdArgs);
