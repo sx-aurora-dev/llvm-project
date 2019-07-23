@@ -8041,6 +8041,63 @@ def pvrsqrt_vvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// VRSQRT vrsqrt.d.nex vrsqrtdnex_vvl
+def vrsqrtdnex_vvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrsqrt.d.nex $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRSQRT vrsqrt.d.nex vrsqrtdnex_vvvl
+def vrsqrtdnex_vvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
+       "vrsqrt.d.nex $vx,$vy", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRSQRT vrsqrt.s.nex vrsqrtsnex_vvl
+def vrsqrtsnex_vvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "vrsqrt.s.nex $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRSQRT vrsqrt.s.nex vrsqrtsnex_vvvl
+def vrsqrtsnex_vvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
+       "vrsqrt.s.nex $vx,$vy", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRSQRT pvrsqrt.nex pvrsqrtnex_vvl
+def pvrsqrtnex_vvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
+       "pvrsqrt.nex $vx,$vy", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VRSQRT pvrsqrt.nex pvrsqrtnex_vvvl
+def pvrsqrtnex_vvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
+       "pvrsqrt.nex $vx,$vy", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VFIX vcvt.w.d.sx vcvtwdsx_vvl
 def vcvtwdsx_vvl : RV<0xe8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
        "vcvt.w.d.sx $vx,$vy", [], NoItinerary>

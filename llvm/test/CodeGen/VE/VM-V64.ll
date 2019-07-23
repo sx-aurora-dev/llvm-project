@@ -1,5 +1,4 @@
 ; RUN: llc -mtriple ve < %s | FileCheck %s -check-prefix=ENABLE
-; RUN: llc -mtriple ve -disable-promote-to-i1 < %s | FileCheck %s -check-prefix=DISABLE
 
 @pIn = common global i8* null, align 8
 
