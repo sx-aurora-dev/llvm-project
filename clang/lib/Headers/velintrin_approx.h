@@ -74,6 +74,24 @@ static inline __vr _vel_approx_vfdivd_vsvl(double s0, __vr v0, int l)
   return v0;
 }
 
+static inline __vr _vel_approx_vfsqrtd_vvl(__vr v0, int l)
+{
+  double s0, s1;
+  __vr v1, v2, v3;
+  v2 = _vel_vrsqrtdnex_vvl(v0, l);
+  v1 = _vel_vfmuld_vvvl(v0, v2, l);
+  s0 = 1.0;
+  s1 = 0.5;
+  v3 = _vel_vfnmsbd_vsvvl(s0, v1, v2, l);
+  v3 = _vel_vfmuld_vsvl(s1, v3, l);
+  v2 = _vel_vfmadd_vvvvl(v2, v2, v3, l);
+  v1 = _vel_vfmuld_vvvl(v0, v2, l);
+  v3 = _vel_vfnmsbd_vsvvl(s0, v1, v2, l);
+  v3 = _vel_vfmuld_vsvl(s1, v3, l);
+  v0 = _vel_vfmadd_vvvvl(v1, v1, v3, l);
+  return v0;
+}
+
 static inline __vr _vel_approx_vfsqrts_vvl(__vr v0, int l)
 {
   float s0, s1;
