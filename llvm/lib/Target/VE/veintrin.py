@@ -1471,7 +1471,6 @@ def createInstructionTable(isVL):
     T.Inst4f(0xF3, "vfnmsb", "VFNMSB", "{0} =  - ({2} * {3} - {1})")
     T.Inst2f(0xE1, "vrcp", "VRCP", "{0} = 1.0f / {1}")
     T.Inst2f(0xF1, "vrsqrt", "VRSQRT", "{0} = 1.0f / std::sqrt({1})", True, True)
-    T.NoImpl("VRSQRTnex")
     T.VFIX(0xE8, "VFIX", "dsx", "vcvt.w.d.sx", [[VX(T_i32), VY(T_f64)]], "int")
     T.VFIX(0xE8, "VFIX", "dzx", "vcvt.w.d.zx", [[VX(T_i32), VY(T_f64)]], "unsigned int")
     T.VFIX(0xE8, "VFIX", "ssx", "vcvt.w.s.sx", [[VX(T_i32), VY(T_f32)]], "int")
@@ -1612,12 +1611,13 @@ def createInstructionTable(isVL):
 
     T.Section("Approximate Operations", None)
     if isVL:
-        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
-        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
-        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), SZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
-        T.Def(None, None, "", "approx_vfdivd", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}").noLLVM()
-        T.Def(None, None, "", "approx_pvfdiv", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}").noLLVM()
-        T.Def(None, None, "", "approx_vfsqrts", [[VX(T_f32), VY(T_f32)]], expr="{0} = sqrtf({1})").noLLVM()
+        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
+        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
+        T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), SZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
+        T.Def(None, None, "", "approx_vfdivd", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
+        T.Def(None, None, "", "approx_pvfdiv", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
+        T.Def(None, None, "", "approx_vfsqrtd", [[VX(T_f64), VY(T_f64)]], expr="{0} = sqrtf({1})", noBase=True).noLLVM()
+        T.Def(None, None, "", "approx_vfsqrts", [[VX(T_f32), VY(T_f32)]], expr="{0} = sqrtf({1})", noBase=True).noLLVM()
     
     T.Section("Others", None)
     if isVL:
