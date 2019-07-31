@@ -218,6 +218,14 @@ std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
     if (C->getClauseKind() == clang::OpenMPClauseKind::OMPC_private) {
       auto PC = llvm::dyn_cast<clang::OMPPrivateClause>(C);
       for (auto Var : PC->varlists()) {
+
+        // If the variable is already captured -> do not print
+        if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(Var)) {
+          auto *VarDecl = DRE->getDecl();
+          if(std::find(CapturedVars.begin(), CapturedVars.end(), VarDecl) != CapturedVars.end()) {
+            continue;
+          }
+        }
         std::string PrettyStr = "";
         llvm::raw_string_ostream PrettyOS(PrettyStr);
         Var->printPretty(PrettyOS, NULL, PP);
