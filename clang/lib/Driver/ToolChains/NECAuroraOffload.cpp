@@ -19,6 +19,7 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
                                           const char *LinkingOutput) const {
   ArgStringList CmdArgs;
   std::vector<llvm::opt::Arg *> PPargs;
+  std::vector<llvm::opt::Arg *> XOTargs;
 
   // We need to pass the input source, one file at a time, as first argument to
   // the compiler wrapper.
@@ -50,10 +51,6 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
         !A->getOption().hasFlag(options::DriverOption) &&
         !A->getOption().hasFlag(options::LinkerInput)) {
 
-      // MR_MARKER: because we are the offloading compiler, we dont have to
-      // claim(?)
-      // A->claim();
-
       // Don't forward any -g arguments to assembly steps.
       if (isa<AssembleJobAction>(JA) &&
           A->getOption().matches(options::OPT_g_Group))
@@ -64,17 +61,37 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
           A->getOption().matches(options::OPT_W_Group))
         continue;
 
+      // Handle Preprocessor Args seperatly
       if (A->getOption().matches(options::OPT_Preprocessor_Group)) {
         PPargs.push_back(A);
         continue;
       }
 
-      if (A->getOption().getName() == "X") {
-         A->claim();
+      // Mark and claim Xopenmp-target
+      if (A->getOption().getName() == "Xopenmp-target") {
+        XOTargs.push_back(A);
+        A->claim();
+        continue;
       }
 
       A->render(Args, CmdArgs);
     }
+  }
+
+  for (auto &A : XOTargs) {
+    std::string mark = "XOT";
+    for (uint i = 0; i < A->getNumValues(); ++i) {
+      std::string arg = mark;
+      for (const char* c = A->getValue(i); *c != NULL; c++) {
+        if (strncmp(c, " ", 1) != 0) {
+          arg.push_back(*c);
+        } else {
+          CmdArgs.push_back(Args.MakeArgString(arg));
+          arg = mark;
+        }
+      }
+      CmdArgs.push_back(Args.MakeArgString(arg));
+     }
   }
 
   for (auto &A : PPargs) {
@@ -84,6 +101,7 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
               .c_str()));
     }
   }
+
 
   RenderExtraToolArgs(JA, CmdArgs);
 

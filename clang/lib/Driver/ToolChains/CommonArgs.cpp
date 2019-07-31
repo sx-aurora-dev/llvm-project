@@ -838,12 +838,6 @@ void tools::claimNoWarnArgs(const ArgList &Args) {
   Args.ClaimAllArgs(options::OPT_flto_EQ);
   Args.ClaimAllArgs(options::OPT_flto);
   Args.ClaimAllArgs(options::OPT_fno_lto);
-
-  for(auto A : Args) {
-    if(A->getOption().getName() == "X" && std::string(A->getValue(0)).compare(0,13,"openmp-target") == 0){
-      A->claim();
-    }
-  }
 }
 
 Arg *tools::getLastProfileUseArg(const ArgList &Args) {

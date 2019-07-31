@@ -49,6 +49,7 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   bool StaticLinkerFlag = false;
   bool SharedFlag = false;
   bool SaveTempsFlag = false;
+  bool OFlag = false;
   SotocPath = "sotoc";
   // TODO make this more flexible
   InputFile = argv[1];
@@ -82,14 +83,6 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
                0) {
       SotocPath = argv[i] + strlen("--sotoc-path=");
       continue;
-    } else if (strcmp(argv[i], "-Xlinker -fopenmp-static") == 0) {
-      StaticLinkerFlag = true;
-      continue;
-    // if the wrapper is not called by the clang driver this might
-    // be a separated argument, which we also want to accept
-    } else if (strcmp(argv[i], "-fopenmp-static") == 0) {
-      StaticLinkerFlag = true;
-      continue;
     } else if (strcmp(argv[i], "-shared") == 0) {
       SharedFlag = true;
       continue;
@@ -109,8 +102,33 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
     } else if (strcmp(argv[i], "-fopenmp") == 0) {
       cArgsStream << argv[i] << " ";
       sArgsStream << argv[i] << " ";
-    } else {
+      continue;
+    } else if (strncmp(argv[i], "-D", 2) == 0) {
       cArgsStream << argv[i] << " ";
+      sArgsStream << argv[i] << " ";
+      continue;
+      // check for Xopenmp-target args and strip marker
+    } else if (strncmp(argv[i], "XOT", 3) == 0) {
+      argv[i] = (argv[i]+3);
+      cArgsStream << argv[i] << " ";
+      if (strncmp(argv[i], "-O", 2) == 0) {
+        OFlag = true;
+      } else if (strcmp(argv[i], "-Xlinker") == 0
+                 && strcmp(argv[i+1]+3, "-fopenmp-static") == 0) {
+        StaticLinkerFlag = true;
+      } else if (strcmp(argv[i], "-v") == 0) {
+        Verbose = true;
+        continue;
+      }
+      continue;
+    } else if (strncmp(argv[i], "-O", 2) == 0) {
+      if (!OFlag) {
+        cArgsStream << argv[i] << " ";
+      }
+      sArgsStream << argv[i] << " ";
+      continue;
+    } else {
+      sArgsStream << argv[i] << " ";
     }
   }
 
