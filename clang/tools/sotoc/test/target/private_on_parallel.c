@@ -5,7 +5,7 @@ int main() {
   double ux  = 0;
   double tx  = 0;
   double tmp = 0;
-  #pragma omp target map(tofrom: tmp) device(0)
+  #pragma omp target map(tofrom: tmp)
   {
     // It works with firstprivate
 #ifdef NOBUG

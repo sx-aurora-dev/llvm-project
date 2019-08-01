@@ -3,7 +3,7 @@
 int main(void) {
   int j = 0;
 
-  #pragma omp target device(0) 
+  #pragma omp target
   {    
     #pragma omp teams
     {

@@ -5,7 +5,7 @@ int main(void) {
 
   //CHECK-NOT: teams
   //CHECK-NOT: distribute
-  #pragma omp target device(0) 
+  #pragma omp target
   #pragma omp teams distribute num_teams(1)
     for(int i = 0; i < 10; i++) {
       j++;

@@ -12,7 +12,7 @@ int X, Y, Z;
 int main(void) {
   int h = 0;
 
-#pragma omp target device(0) map(tofrom: h)
+#pragma omp target  map(tofrom: h)
   {
     X = 2*23;
     Y = 23;

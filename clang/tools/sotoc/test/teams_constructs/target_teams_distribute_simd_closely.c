@@ -7,7 +7,7 @@ int main(void) {
   //CHECK-NOT: distribute
   //CHECK: #pragma _NEC ivdep
   //CHECK: #pragma omp simd
-  #pragma omp target device(0)
+  #pragma omp target
   #pragma omp teams distribute simd
     for(int i = 0; i < 10; i++) {
       j++;

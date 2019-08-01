@@ -6,13 +6,13 @@
 int main(void) {
   int h = 0, j = 1, i = 1;
 
-  #pragma omp target data device(0) map(to: h,j,i)
+  #pragma omp target data  map(to: h,j,i)
   {
-    #pragma omp target device(0) map(to: j,i) map(from: h)
+    #pragma omp target  map(to: j,i) map(from: h)
     {
       h = j + i;
     }
-    #pragma omp target update device(0) from(h)
+    #pragma omp target update  from(h)
   }
 
   printf("%d\n", h);

@@ -15,7 +15,7 @@ void foo(){
 
 int main(void) {
 
-#pragma omp target device(0)
+#pragma omp target
   {
     execfunc(&foo);
   }

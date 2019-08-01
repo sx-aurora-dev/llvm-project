@@ -31,7 +31,7 @@ int main(void) {
   int a = 5;
   int z[2][5][10];
 
-#pragma omp target parallel for simd device(0) map(tofrom                      \
+#pragma omp target parallel for simd  map(tofrom                      \
                                                    : x, y) map(from            \
                                                                : z)            \
     map(to                                                                     \

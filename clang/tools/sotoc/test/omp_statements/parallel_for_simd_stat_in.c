@@ -2,7 +2,7 @@
 
 int main(void) {
 
-  #pragma omp target device(0)
+  #pragma omp target
   {
     int i;
     int x[10] = {2,3,5,7,11,13,17,23,29,31};
