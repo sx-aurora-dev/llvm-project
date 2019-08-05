@@ -125,7 +125,7 @@ class FindTargetCodeVisitor
 
   /// The last function the visitor traversed. This is stored to be able to
   /// later compute the function name for the target region.
-  clang::FunctionDecl *LastVisitedFuncDecl;
+  std::stack<clang::FunctionDecl *> LastVisitedFuncDecl;
   /// Function with 'omp declare target' pragma, for which the visitor has not
   /// yet found a body.
   std::unordered_set<std::string> FuncDeclWithoutBody;
@@ -136,6 +136,7 @@ public:
                         clang::ASTContext &Context)
       : Context(Context), TargetCodeInfo(Code), DiscoverTypeVisitor(Types),
         DiscoverFunctionVisitor(Functions), Functions(Functions){};
+  bool TraverseDecl(clang::Decl *D);
   bool VisitStmt(clang::Stmt *S);
   bool VisitDecl(clang::Decl *D);
 

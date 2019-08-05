@@ -84,6 +84,17 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
       std::string(SM.getFilename(SM.getLocForStartOfFile(IncludedFile))));
 }
 
+bool FindTargetCodeVisitor::TraverseDecl(clang::Decl *D) {
+  if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
+    LastVisitedFuncDecl.push(FD);
+  } 
+  bool ret = clang::RecursiveASTVisitor<FindTargetCodeVisitor>::TraverseDecl(D);
+  if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
+    LastVisitedFuncDecl.pop();
+  }
+  return ret;
+}
+
 bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   if (auto *TD = llvm::dyn_cast<clang::OMPTargetDirective>(S)) {
     processTargetRegion(TD);
@@ -151,7 +162,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
       }
 
       auto TCR = std::make_shared<TargetCodeRegion>(
-          CS, TargetDirective, LastVisitedFuncDecl, Context);
+          CS, TargetDirective, LastVisitedFuncDecl.top(), Context);
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
@@ -245,8 +256,6 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
 bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
   auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D);
   if (FD) {
-    LastVisitedFuncDecl = FD;
-
     auto search = FuncDeclWithoutBody.find(FD->getNameAsString());
     if (search != FuncDeclWithoutBody.end()) {
       Functions.addDecl(D);
