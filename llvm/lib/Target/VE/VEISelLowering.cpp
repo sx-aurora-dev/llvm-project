@@ -1094,24 +1094,26 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
-#if 0
-  // FIXME:
-  // Need to add a register class for these types to make those types
-  // leagal in something like following IR.  VE doesn't have v4i64 hardware
-  // register, but C requires it.  Without this, llvm causes "Do not know
-  // how to widen the result of this operator!" errors.
-  //
-  //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
-  //                          ^^^^^ this requires adding register classes here.
-  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
-#else
-  // FIXME:
-  // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
-  // v256i1/v512i1.
-  addRegisterClass(MVT::v4i64, &VE::VM_RegClass);
-  addRegisterClass(MVT::v8i64, &VE::VM512_RegClass);
-#endif
+  if (Subtarget->vectorize()) {
+    // We want to use any of vectorization oppotunities in llvm.
+    // So, try to use llvm's SIMD style vectorizations here.
+    //
+    // However, this requires intrinsics with vector mask to use
+    // following bitcast in order to convert between v4i64/v8i64 and
+    // v256i1/v512i1 respectively since C doesn't have 1 bit data types.
+    //
+    //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
+    //                ^^^^^^^^^^^^^^^ this bitcast is needed
+    //
+    addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+    addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  } else {
+    // FIXME:
+    // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
+    // v256i1/v512i1.
+    addRegisterClass(MVT::v4i64, &VE::VM_RegClass);
+    addRegisterClass(MVT::v8i64, &VE::VM512_RegClass);
+  }
 
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {
