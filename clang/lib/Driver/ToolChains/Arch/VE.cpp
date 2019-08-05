@@ -64,4 +64,17 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   ve::FloatABI FloatABI = ve::getVEFloatABI(D, Args);
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
+
+  // -mno-vevec is default, unless -mvevec is specified.
+  bool VEVec = false;
+  if (auto *A = Args.getLastArg(options::OPT_mvevec, options::OPT_mno_vevec)) {
+    if (A->getOption().matches(options::OPT_mvevec)) {
+      VEVec = true;
+      Features.push_back("+vec");
+    }
+  }
+
+  if (!VEVec) {
+    Features.push_back("-vec");
+  }
 }
