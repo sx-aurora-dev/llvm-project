@@ -152,6 +152,8 @@ def m_x86_Features_Group : OptionGroup<"<x86 features group>">,
                            Group<m_Group>, Flags<[CoreOption]>, DocName<"X86">;
 def m_riscv_Features_Group : OptionGroup<"<riscv features group>">,
                              Group<m_Group>, DocName<"RISCV">;
+def m_ve_Features_Group : OptionGroup<"<ve features group>">,
+                             Group<m_Group>, DocName<"VE">;
 
 def m_libc_Group : OptionGroup<"<m libc group>">, Group<m_mips_Features_Group>,
                    Flags<[HelpHidden]>;
@@ -2978,6 +2980,11 @@ def mshstk : Flag<["-"], "mshstk">, Group<m_x86_Features_Group>;
 def mno_shstk : Flag<["-"], "mno-shstk">, Group<m_x86_Features_Group>;
 def mretpoline_external_thunk : Flag<["-"], "mretpoline-external-thunk">, Group<m_x86_Features_Group>;
 def mno_retpoline_external_thunk : Flag<["-"], "mno-retpoline-external-thunk">, Group<m_x86_Features_Group>;
+
+def mvevec : Flag<["-"], "mvevec">, Group<m_ve_Features_Group>,
+  HelpText<"Enable vectorization for VE">;
+def mno_vevec : Flag<["-"], "mno-vevec">, Group<m_ve_Features_Group>,
+  HelpText<"Disable vectorization for VE">;
 
 // These are legacy user-facing driver-level option spellings. They are always
 // aliases for options that are spelled using the more common Unix / GNU flag
