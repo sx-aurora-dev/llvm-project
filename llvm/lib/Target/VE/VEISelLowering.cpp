@@ -1024,6 +1024,28 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
   return true;
 }
 
+bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
+                                        const SelectionDAG &DAG) const {
+  // VE's vectorization is experimental, so disable to use vector stores
+  // if vectorize feature is disabled.
+  if (!Subtarget->vectorize()) {
+    if (MemVT.isVector()) {
+      return false;
+    }
+  }
+
+  // Do not merge to float value size (128 bytes) if no implicit
+  // float attribute is set.
+  bool NoFloat = DAG.getMachineFunction().getFunction().hasFnAttribute(
+      Attribute::NoImplicitFloat);
+
+  if (NoFloat) {
+    unsigned MaxIntSize = 64;
+    return (MemVT.getSizeInBits() <= MaxIntSize);
+  }
+  return true;
+}
+
 TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   if (AI->getOperation() == AtomicRMWInst::Xchg)
     return AtomicExpansionKind::None; // Uses ts1am instruction
