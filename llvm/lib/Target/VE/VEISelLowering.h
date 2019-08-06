@@ -594,6 +594,11 @@ namespace llvm {
                                         unsigned Align,
                                         bool *Fast) const override;
 
+    bool mergeStoresAfterLegalization() const override { return true; }
+
+    bool canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
+                          const SelectionDAG &DAG) const override;
+
     unsigned getJumpTableEncoding() const override;
 
     const MCExpr *
