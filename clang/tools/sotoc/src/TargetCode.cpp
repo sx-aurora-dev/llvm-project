@@ -137,14 +137,15 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       Out << "void *__sotoc_var_";
       nDim.push_back(dim); // push total number of dimensions
     } else {
-      DEBUGP("Generating code for non-array type");
       Out << (*i)->getType().getAsString() << " ";
       if (!(*i)->getType().getTypePtr()->isPointerType()) {
         if (C) {
           // Parameters which are not first private (e.g., explicit mapped vars)
           // are passed by reference, all others by value.
-          if (!(C->getClauseKind() ==
-                clang::OpenMPClauseKind::OMPC_firstprivate)) {
+          if (C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_firstprivate &&
+              C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_private) {
             Out << "*__sotoc_var_";
           }
         }
@@ -192,8 +193,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         if (C) {
           // Parameters which are not first private (e.g., explicit mapped vars)
           // are passed by reference, all others by value.
-          if (!(C->getClauseKind() ==
-                clang::OpenMPClauseKind::OMPC_firstprivate)) {
+          if (C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_firstprivate &&
+              C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_private) {
             auto VarName = (*I)->getDeclName().getAsString();
             Out << "  " << (*I)->getType().getAsString() << " " << VarName
                 << " = "
@@ -242,8 +245,10 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
         if (C) {
           // Parameters which are not first private (e.g., explicit mapped vars)
           // are passed by reference, all others by value.
-          if (!(C->getClauseKind() ==
-                clang::OpenMPClauseKind::OMPC_firstprivate)) {
+          if (C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_firstprivate &&
+              C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_private) {
             auto VarName = (*I)->getDeclName().getAsString();
             Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
           }
