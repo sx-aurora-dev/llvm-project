@@ -14,7 +14,7 @@ int main() {
     #pragma omp parallel for private(j)
     for(i=0; i<42; i++)
     {
-      for(i=0; i<42; i++){}    
+      for(j=0; j<42; j++){}
     }
 
     #pragma omp parallel for
