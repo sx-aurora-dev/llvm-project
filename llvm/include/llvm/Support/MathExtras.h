@@ -51,14 +51,14 @@ enum ZeroBehavior {
 
 namespace detail {
 template <typename T, std::size_t SizeOfT> struct TrailingZerosCounter {
-  static std::size_t count(T Val, ZeroBehavior) {
+  static unsigned count(T Val, ZeroBehavior) {
     if (!Val)
       return std::numeric_limits<T>::digits;
     if (Val & 0x1)
       return 0;
 
     // Bisection method.
-    std::size_t ZeroBits = 0;
+    unsigned ZeroBits = 0;
     T Shift = std::numeric_limits<T>::digits >> 1;
     T Mask = std::numeric_limits<T>::max() >> Shift;
     while (Shift) {
@@ -75,7 +75,7 @@ template <typename T, std::size_t SizeOfT> struct TrailingZerosCounter {
 
 #if __GNUC__ >= 4 || defined(_MSC_VER)
 template <typename T> struct TrailingZerosCounter<T, 4> {
-  static std::size_t count(T Val, ZeroBehavior ZB) {
+  static unsigned count(T Val, ZeroBehavior ZB) {
     if (ZB != ZB_Undefined && Val == 0)
       return 32;
 
@@ -91,7 +91,7 @@ template <typename T> struct TrailingZerosCounter<T, 4> {
 
 #if !defined(_MSC_VER) || defined(_M_X64)
 template <typename T> struct TrailingZerosCounter<T, 8> {
-  static std::size_t count(T Val, ZeroBehavior ZB) {
+  static unsigned count(T Val, ZeroBehavior ZB) {
     if (ZB != ZB_Undefined && Val == 0)
       return 64;
 
@@ -116,7 +116,7 @@ template <typename T> struct TrailingZerosCounter<T, 8> {
 /// \param ZB the behavior on an input of 0. Only ZB_Width and ZB_Undefined are
 ///   valid arguments.
 template <typename T>
-std::size_t countTrailingZeros(T Val, ZeroBehavior ZB = ZB_Width) {
+unsigned countTrailingZeros(T Val, ZeroBehavior ZB = ZB_Width) {
   static_assert(std::numeric_limits<T>::is_integer &&
                     !std::numeric_limits<T>::is_signed,
                 "Only unsigned integral types are allowed.");
@@ -125,12 +125,12 @@ std::size_t countTrailingZeros(T Val, ZeroBehavior ZB = ZB_Width) {
 
 namespace detail {
 template <typename T, std::size_t SizeOfT> struct LeadingZerosCounter {
-  static std::size_t count(T Val, ZeroBehavior) {
+  static unsigned count(T Val, ZeroBehavior) {
     if (!Val)
       return std::numeric_limits<T>::digits;
 
     // Bisection method.
-    std::size_t ZeroBits = 0;
+    unsigned ZeroBits = 0;
     for (T Shift = std::numeric_limits<T>::digits >> 1; Shift; Shift >>= 1) {
       T Tmp = Val >> Shift;
       if (Tmp)
@@ -144,7 +144,7 @@ template <typename T, std::size_t SizeOfT> struct LeadingZerosCounter {
 
 #if __GNUC__ >= 4 || defined(_MSC_VER)
 template <typename T> struct LeadingZerosCounter<T, 4> {
-  static std::size_t count(T Val, ZeroBehavior ZB) {
+  static unsigned count(T Val, ZeroBehavior ZB) {
     if (ZB != ZB_Undefined && Val == 0)
       return 32;
 
@@ -160,7 +160,7 @@ template <typename T> struct LeadingZerosCounter<T, 4> {
 
 #if !defined(_MSC_VER) || defined(_M_X64)
 template <typename T> struct LeadingZerosCounter<T, 8> {
-  static std::size_t count(T Val, ZeroBehavior ZB) {
+  static unsigned count(T Val, ZeroBehavior ZB) {
     if (ZB != ZB_Undefined && Val == 0)
       return 64;
 
@@ -185,7 +185,7 @@ template <typename T> struct LeadingZerosCounter<T, 8> {
 /// \param ZB the behavior on an input of 0. Only ZB_Width and ZB_Undefined are
 ///   valid arguments.
 template <typename T>
-std::size_t countLeadingZeros(T Val, ZeroBehavior ZB = ZB_Width) {
+unsigned countLeadingZeros(T Val, ZeroBehavior ZB = ZB_Width) {
   static_assert(std::numeric_limits<T>::is_integer &&
                     !std::numeric_limits<T>::is_signed,
                 "Only unsigned integral types are allowed.");
@@ -458,7 +458,7 @@ inline uint64_t ByteSwap_64(uint64_t Value) {
 /// \param ZB the behavior on an input of all ones. Only ZB_Width and
 /// ZB_Undefined are valid arguments.
 template <typename T>
-std::size_t countLeadingOnes(T Value, ZeroBehavior ZB = ZB_Width) {
+unsigned countLeadingOnes(T Value, ZeroBehavior ZB = ZB_Width) {
   static_assert(std::numeric_limits<T>::is_integer &&
                     !std::numeric_limits<T>::is_signed,
                 "Only unsigned integral types are allowed.");
@@ -474,7 +474,7 @@ std::size_t countLeadingOnes(T Value, ZeroBehavior ZB = ZB_Width) {
 /// \param ZB the behavior on an input of all ones. Only ZB_Width and
 /// ZB_Undefined are valid arguments.
 template <typename T>
-std::size_t countTrailingOnes(T Value, ZeroBehavior ZB = ZB_Width) {
+unsigned countTrailingOnes(T Value, ZeroBehavior ZB = ZB_Width) {
   static_assert(std::numeric_limits<T>::is_integer &&
                     !std::numeric_limits<T>::is_signed,
                 "Only unsigned integral types are allowed.");
@@ -559,13 +559,18 @@ inline unsigned Log2_64_Ceil(uint64_t Value) {
 }
 
 /// Return the greatest common divisor of the values using Euclid's algorithm.
-inline uint64_t GreatestCommonDivisor64(uint64_t A, uint64_t B) {
+template <typename T>
+inline T greatestCommonDivisor(T A, T B) {
   while (B) {
-    uint64_t T = B;
+    T Tmp = B;
     B = A % B;
-    A = T;
+    A = Tmp;
   }
   return A;
+}
+
+inline uint64_t GreatestCommonDivisor64(uint64_t A, uint64_t B) {
+  return greatestCommonDivisor<uint64_t>(A, B);
 }
 
 /// This function takes a 64-bit integer and returns the bit equivalent double.
@@ -848,6 +853,95 @@ SaturatingMultiplyAdd(T X, T Y, T A, bool *ResultOverflowed = nullptr) {
 
 /// Use this rather than HUGE_VALF; the latter causes warnings on MSVC.
 extern const float huge_valf;
+
+
+/// Add two signed integers, computing the two's complement truncated result,
+/// returning true if overflow occured.
+template <typename T>
+typename std::enable_if<std::is_signed<T>::value, T>::type
+AddOverflow(T X, T Y, T &Result) {
+#if __has_builtin(__builtin_add_overflow)
+  return __builtin_add_overflow(X, Y, &Result);
+#else
+  // Perform the unsigned addition.
+  using U = typename std::make_unsigned<T>::type;
+  const U UX = static_cast<U>(X);
+  const U UY = static_cast<U>(Y);
+  const U UResult = UX + UY;
+
+  // Convert to signed.
+  Result = static_cast<T>(UResult);
+
+  // Adding two positive numbers should result in a positive number.
+  if (X > 0 && Y > 0)
+    return Result <= 0;
+  // Adding two negatives should result in a negative number.
+  if (X < 0 && Y < 0)
+    return Result >= 0;
+  return false;
+#endif
+}
+
+/// Subtract two signed integers, computing the two's complement truncated
+/// result, returning true if an overflow ocurred.
+template <typename T>
+typename std::enable_if<std::is_signed<T>::value, T>::type
+SubOverflow(T X, T Y, T &Result) {
+#if __has_builtin(__builtin_sub_overflow)
+  return __builtin_sub_overflow(X, Y, &Result);
+#else
+  // Perform the unsigned addition.
+  using U = typename std::make_unsigned<T>::type;
+  const U UX = static_cast<U>(X);
+  const U UY = static_cast<U>(Y);
+  const U UResult = UX - UY;
+
+  // Convert to signed.
+  Result = static_cast<T>(UResult);
+
+  // Subtracting a positive number from a negative results in a negative number.
+  if (X <= 0 && Y > 0)
+    return Result >= 0;
+  // Subtracting a negative number from a positive results in a positive number.
+  if (X >= 0 && Y < 0)
+    return Result <= 0;
+  return false;
+#endif
+}
+
+
+/// Multiply two signed integers, computing the two's complement truncated
+/// result, returning true if an overflow ocurred.
+template <typename T>
+typename std::enable_if<std::is_signed<T>::value, T>::type
+MulOverflow(T X, T Y, T &Result) {
+#if __has_builtin(__builtin_mul_overflow)
+  return __builtin_mul_overflow(X, Y, &Result);
+#else
+  // Perform the unsigned multiplication on absolute values.
+  using U = typename std::make_unsigned<T>::type;
+  const U UX = X < 0 ? (0 - static_cast<U>(X)) : static_cast<U>(X);
+  const U UY = Y < 0 ? (0 - static_cast<U>(Y)) : static_cast<U>(Y);
+  const U UResult = UX * UY;
+
+  // Convert to signed.
+  const bool IsNegative = (X < 0) ^ (Y < 0);
+  Result = IsNegative ? (0 - UResult) : UResult;
+
+  // If any of the args was 0, result is 0 and no overflow occurs.
+  if (UX == 0 || UY == 0)
+    return false;
+
+  // UX and UY are in [1, 2^n], where n is the number of digits.
+  // Check how the max allowed absolute value (2^n for negative, 2^(n-1) for
+  // positive) divided by an argument compares to the other.
+  if (IsNegative)
+    return UX > (static_cast<U>(std::numeric_limits<T>::max()) + U(1)) / UY;
+  else
+    return UX > (static_cast<U>(std::numeric_limits<T>::max())) / UY;
+#endif
+}
+
 } // End llvm namespace
 
 #endif

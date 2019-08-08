@@ -16,6 +16,7 @@
 #include "ARMTargetObjectFile.h"
 #include "ARMTargetTransformInfo.h"
 #include "MCTargetDesc/ARMMCTargetDesc.h"
+#include "TargetInfo/ARMTargetInfo.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -94,6 +95,8 @@ extern "C" void LLVMInitializeARMTarget() {
   initializeARMExecutionDomainFixPass(Registry);
   initializeARMExpandPseudoPass(Registry);
   initializeThumb2SizeReducePass(Registry);
+  initializeMVEVPTBlockPass(Registry);
+  initializeARMLowOverheadLoopsPass(Registry);
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
@@ -444,6 +447,9 @@ bool ARMPassConfig::addPreISel() {
                                   MergeExternalByDefault));
   }
 
+  if (TM->getOptLevel() != CodeGenOpt::None)
+    addPass(createHardwareLoopsPass());
+
   return false;
 }
 
@@ -507,6 +513,7 @@ void ARMPassConfig::addPreSched2() {
       return !MF.getSubtarget<ARMSubtarget>().isThumb1Only();
     }));
   }
+  addPass(createMVEVPTBlockPass());
   addPass(createThumb2ITBlockPass());
 }
 
@@ -523,4 +530,5 @@ void ARMPassConfig::addPreEmitPass() {
     addPass(createARMOptimizeBarriersPass());
 
   addPass(createARMConstantIslandPass());
+  addPass(createARMLowOverheadLoopsPass());
 }

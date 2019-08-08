@@ -13,7 +13,7 @@ def h : Flag<["-"], "h">, Alias<help>;
 def allow_broken_links
     : Flag<["--"], "allow-broken-links">,
       HelpText<"Allow llvm-objcopy to remove sections even if it would leave "
-               "invalid section references. The appropriate sh_link fields"
+               "invalid section references. The appropriate sh_link fields "
                "will be set to zero.">;
 
 defm binary_architecture
@@ -145,6 +145,13 @@ def extract_dwo
       HelpText<
           "Remove all sections that are not DWARF .dwo sections from file">;
 
+defm extract_partition
+    : Eq<"extract-partition", "Extract named partition from input file">,
+      MetaVarName<"name">;
+def extract_main_partition
+    : Flag<["--"], "extract-main-partition">,
+      HelpText<"Extract main partition from the input file">;
+
 def localize_hidden
     : Flag<["--"], "localize-hidden">,
       HelpText<
@@ -236,6 +243,10 @@ defm dump_section
       MetaVarName<"section=file">;
 defm prefix_symbols
     : Eq<"prefix-symbols", "Add <prefix> to the start of every symbol name">,
+      MetaVarName<"prefix">;
+
+defm prefix_alloc_sections
+    : Eq<"prefix-alloc-sections", "Add <prefix> to the start of every allocated section name">,
       MetaVarName<"prefix">;
 
 def version : Flag<["--"], "version">,

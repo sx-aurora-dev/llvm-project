@@ -599,9 +599,11 @@ public:
     return *Float128Format;
   }
 
-  /// Return true if the 'long double' type should be mangled like
-  /// __float128.
-  virtual bool useFloat128ManglingForLongDouble() const { return false; }
+  /// Return the mangled code of long double.
+  virtual const char *getLongDoubleMangling() const { return "e"; }
+
+  /// Return the mangled code of __float128.
+  virtual const char *getFloat128Mangling() const { return "g"; }
 
   /// Return the value for the C99 FLT_EVAL_METHOD macro.
   virtual unsigned getFloatEvalMethod() const { return 0; }
@@ -636,6 +638,21 @@ public:
   /// value is type-specific, but this alignment can be used for most of the
   /// types for the given target.
   unsigned getSimdDefaultAlign() const { return SimdDefaultAlign; }
+
+  /// Return the alignment (in bits) of the thrown exception object. This is
+  /// only meaningful for targets that allocate C++ exceptions in a system
+  /// runtime, such as those using the Itanium C++ ABI.
+  virtual unsigned getExnObjectAlignment() const {
+    // Itanium says that an _Unwind_Exception has to be "double-word"
+    // aligned (and thus the end of it is also so-aligned), meaning 16
+    // bytes.  Of course, that was written for the actual Itanium,
+    // which is a 64-bit platform.  Classically, the ABI doesn't really
+    // specify the alignment on other platforms, but in practice
+    // libUnwind declares the struct with __attribute__((aligned)), so
+    // we assume that alignment here.  (It's generally 16 bytes, but
+    // some targets overwrite it.)
+    return getDefaultAlignForAttributeAligned();
+  }
 
   /// Return the size of intmax_t and uintmax_t for this target, in bits.
   unsigned getIntMaxTWidth() const {
@@ -1232,15 +1249,9 @@ public:
   bool isBigEndian() const { return BigEndian; }
   bool isLittleEndian() const { return !BigEndian; }
 
-  enum CallingConvMethodType {
-    CCMT_Unknown,
-    CCMT_Member,
-    CCMT_NonMember
-  };
-
   /// Gets the default calling convention for the given target and
   /// declaration context.
-  virtual CallingConv getDefaultCallingConv(CallingConvMethodType MT) const {
+  virtual CallingConv getDefaultCallingConv() const {
     // Not all targets will specify an explicit calling convention that we can
     // express.  This will always do the right thing, even though it's not
     // an explicit calling convention.
@@ -1251,6 +1262,7 @@ public:
     CCCR_OK,
     CCCR_Warning,
     CCCR_Ignore,
+    CCCR_Error,
   };
 
   /// Determines whether a given calling convention is valid for the

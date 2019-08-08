@@ -233,11 +233,7 @@ GDBRemoteCommunicationServerCommon::Handle_qHostInfo(
   if (host_arch.GetMachine() == llvm::Triple::aarch64 ||
       host_arch.GetMachine() == llvm::Triple::aarch64_be ||
       host_arch.GetMachine() == llvm::Triple::arm ||
-      host_arch.GetMachine() == llvm::Triple::armeb ||
-      host_arch.GetMachine() == llvm::Triple::mips64 ||
-      host_arch.GetMachine() == llvm::Triple::mips64el ||
-      host_arch.GetMachine() == llvm::Triple::mips ||
-      host_arch.GetMachine() == llvm::Triple::mipsel)
+      host_arch.GetMachine() == llvm::Triple::armeb || host_arch.IsMIPS())
     response.Printf("watchpoint_exceptions_received:before;");
   else
     response.Printf("watchpoint_exceptions_received:after;");
@@ -425,8 +421,7 @@ GDBRemoteCommunicationServerCommon::Handle_qUserName(
     StringExtractorGDBRemote &packet) {
 #if !defined(LLDB_DISABLE_POSIX)
   Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_PROCESS));
-  if (log)
-    log->Printf("GDBRemoteCommunicationServerCommon::%s begin", __FUNCTION__);
+  LLDB_LOGF(log, "GDBRemoteCommunicationServerCommon::%s begin", __FUNCTION__);
 
   // Packet format: "qUserName:%i" where %i is the uid
   packet.SetFilePos(::strlen("qUserName:"));
@@ -439,8 +434,7 @@ GDBRemoteCommunicationServerCommon::Handle_qUserName(
       return SendPacketNoLock(response.GetString());
     }
   }
-  if (log)
-    log->Printf("GDBRemoteCommunicationServerCommon::%s end", __FUNCTION__);
+  LLDB_LOGF(log, "GDBRemoteCommunicationServerCommon::%s end", __FUNCTION__);
 #endif
   return SendErrorResponse(5);
 }
@@ -829,6 +823,7 @@ GDBRemoteCommunicationServerCommon::Handle_qSupported(
 #if defined(__linux__) || defined(__NetBSD__)
   response.PutCString(";QPassSignals+");
   response.PutCString(";qXfer:auxv:read+");
+  response.PutCString(";qXfer:libraries-svr4:read+");
 #endif
 
   return SendPacketNoLock(response.GetString());
@@ -1020,9 +1015,8 @@ GDBRemoteCommunicationServerCommon::Handle_A(StringExtractorGDBRemote &packet) {
                   m_process_launch_info.GetExecutableFile().SetFile(
                       arg, FileSpec::Style::native);
                 m_process_launch_info.GetArguments().AppendArgument(arg);
-                if (log)
-                  log->Printf("LLGSPacketHandler::%s added arg %d: \"%s\"",
-                              __FUNCTION__, actual_arg_index, arg.c_str());
+                LLDB_LOGF(log, "LLGSPacketHandler::%s added arg %d: \"%s\"",
+                          __FUNCTION__, actual_arg_index, arg.c_str());
                 ++actual_arg_index;
               }
             }
