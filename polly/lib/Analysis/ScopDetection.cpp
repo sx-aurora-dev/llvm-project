@@ -468,7 +468,8 @@ bool ScopDetection::onlyValidRequiredInvariantLoads(
 
     for (auto NonAffineRegion : Context.NonAffineSubRegionSet) {
       if (isSafeToLoadUnconditionally(Load->getPointerOperand(),
-                                      Load->getAlignment(), DL))
+                                      Load->getType(), Load->getAlignment(),
+                                      DL))
         continue;
 
       if (NonAffineRegion->contains(Load) &&
@@ -913,7 +914,9 @@ bool ScopDetection::hasValidArraySizes(DetectionContext &Context,
   Value *BaseValue = BasePointer->getValue();
   Region &CurRegion = Context.CurRegion;
   for (const SCEV *DelinearizedSize : Sizes) {
-    if (!isAffine(DelinearizedSize, Scope, Context)) {
+    // Don't pass down the scope to isAfffine; array dimensions must be
+    // invariant across the entire scop.
+    if (!isAffine(DelinearizedSize, nullptr, Context)) {
       Sizes.clear();
       break;
     }

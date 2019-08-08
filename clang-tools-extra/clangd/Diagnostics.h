@@ -128,17 +128,27 @@ public:
 
   using DiagFixer = std::function<std::vector<Fix>(DiagnosticsEngine::Level,
                                                    const clang::Diagnostic &)>;
+  using LevelAdjuster = std::function<DiagnosticsEngine::Level(
+      DiagnosticsEngine::Level, const clang::Diagnostic &)>;
   /// If set, possibly adds fixes for diagnostics using \p Fixer.
   void contributeFixes(DiagFixer Fixer) { this->Fixer = Fixer; }
+  /// If set, this allows the client of this class to adjust the level of
+  /// diagnostics, such as promoting warnings to errors, or ignoring
+  /// diagnostics.
+  void setLevelAdjuster(LevelAdjuster Adjuster) { this->Adjuster = Adjuster; }
 
 private:
   void flushLastDiag();
 
   DiagFixer Fixer = nullptr;
+  LevelAdjuster Adjuster = nullptr;
   std::vector<Diag> Output;
   llvm::Optional<LangOptions> LangOpts;
   llvm::Optional<Diag> LastDiag;
+  /// Set iff adjustDiagFromHeader resulted in changes to LastDiag.
+  bool LastDiagWasAdjusted = false;
   llvm::DenseSet<int> IncludeLinesWithErrors;
+  bool LastPrimaryDiagnosticWasSuppressed = false;
 };
 
 } // namespace clangd

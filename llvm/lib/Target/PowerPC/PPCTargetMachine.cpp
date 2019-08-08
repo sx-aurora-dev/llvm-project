@@ -17,6 +17,7 @@
 #include "PPCSubtarget.h"
 #include "PPCTargetObjectFile.h"
 #include "PPCTargetTransformInfo.h"
+#include "TargetInfo/PowerPCTargetInfo.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -100,7 +101,6 @@ extern "C" void LLVMInitializePowerPCTarget() {
   RegisterTargetMachine<PPCTargetMachine> C(getThePPC64LETarget());
 
   PassRegistry &PR = *PassRegistry::getPassRegistry();
-  initializePPCCTRLoopsPass(PR);
 #ifndef NDEBUG
   initializePPCCTRLoopsVerifyPass(PR);
 #endif
@@ -185,10 +185,11 @@ static std::string computeFSAdditions(StringRef FS, CodeGenOpt::Level OL,
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
-  // If it isn't a Mach-O file then it's going to be a linux ELF
-  // object file.
   if (TT.isOSDarwin())
     return llvm::make_unique<TargetLoweringObjectFileMachO>();
+
+  if (TT.isOSAIX())
+    return llvm::make_unique<TargetLoweringObjectFileXCOFF>();
 
   return llvm::make_unique<PPC64LinuxTargetObjectFile>();
 }
@@ -213,6 +214,8 @@ static PPCTargetMachine::PPCABI computeTargetABI(const Triple &TT,
   case Triple::ppc64le:
     return PPCTargetMachine::PPC_ABI_ELFv2;
   case Triple::ppc64:
+    if (TT.getEnvironment() == llvm::Triple::ELFv2)
+      return PPCTargetMachine::PPC_ABI_ELFv2;
     return PPCTargetMachine::PPC_ABI_ELFv1;
   default:
     return PPCTargetMachine::PPC_ABI_UNKNOWN;
@@ -241,9 +244,9 @@ static CodeModel::Model getEffectivePPCCodeModel(const Triple &TT,
                                                  bool JIT) {
   if (CM) {
     if (*CM == CodeModel::Tiny)
-      report_fatal_error("Target does not support the tiny CodeModel");
+      report_fatal_error("Target does not support the tiny CodeModel", false);
     if (*CM == CodeModel::Kernel)
-      report_fatal_error("Target does not support the kernel CodeModel");
+      report_fatal_error("Target does not support the kernel CodeModel", false);
     return *CM;
   }
   if (!TT.isOSDarwin() && !JIT &&
@@ -254,8 +257,11 @@ static CodeModel::Model getEffectivePPCCodeModel(const Triple &TT,
 
 
 static ScheduleDAGInstrs *createPPCMachineScheduler(MachineSchedContext *C) {
+  const PPCSubtarget &ST = C->MF->getSubtarget<PPCSubtarget>();
   ScheduleDAGMILive *DAG =
-    new ScheduleDAGMILive(C, llvm::make_unique<PPCPreRASchedStrategy>(C));
+    new ScheduleDAGMILive(C, ST.usePPCPreRASchedStrategy() ?
+                          llvm::make_unique<PPCPreRASchedStrategy>(C) :
+                          llvm::make_unique<GenericScheduler>(C));
   // add DAG Mutations here.
   DAG->addMutation(createCopyConstrainDAGMutation(DAG->TII, DAG->TRI));
   return DAG;
@@ -263,8 +269,11 @@ static ScheduleDAGInstrs *createPPCMachineScheduler(MachineSchedContext *C) {
 
 static ScheduleDAGInstrs *createPPCPostMachineScheduler(
   MachineSchedContext *C) {
+  const PPCSubtarget &ST = C->MF->getSubtarget<PPCSubtarget>();
   ScheduleDAGMI *DAG =
-    new ScheduleDAGMI(C, llvm::make_unique<PPCPostRASchedStrategy>(C), true);
+    new ScheduleDAGMI(C, ST.usePPCPostRASchedStrategy() ?
+                      llvm::make_unique<PPCPostRASchedStrategy>(C) :
+                      llvm::make_unique<PostGenericScheduler>(C), true);
   // add DAG Mutations here.
   return DAG;
 }
@@ -364,17 +373,11 @@ public:
   void addPreEmitPass() override;
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const override {
-    const PPCSubtarget &ST = C->MF->getSubtarget<PPCSubtarget>();
-    if (ST.usePPCPreRASchedStrategy())
-      return createPPCMachineScheduler(C);
-    return nullptr;
+    return createPPCMachineScheduler(C);
   }
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const override {
-    const PPCSubtarget &ST = C->MF->getSubtarget<PPCSubtarget>();
-    if (ST.usePPCPostRASchedStrategy())
-      return createPPCPostMachineScheduler(C);
-    return nullptr;
+    return createPPCPostMachineScheduler(C);
   }
 };
 
@@ -419,7 +422,7 @@ bool PPCPassConfig::addPreISel() {
     addPass(createPPCLoopPreIncPrepPass(getPPCTargetMachine()));
 
   if (!DisableCTRLoops && getOptLevel() != CodeGenOpt::None)
-    addPass(createPPCCTRLoops());
+    addPass(createHardwareLoopsPass());
 
   return false;
 }
@@ -486,6 +489,9 @@ void PPCPassConfig::addPreRegAlloc() {
   }
   if (EnableExtraTOCRegDeps)
     addPass(createPPCTOCRegDepsPass());
+
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(&MachinePipelinerID);
 }
 
 void PPCPassConfig::addPreSched2() {
