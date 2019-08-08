@@ -171,6 +171,10 @@ public:
 
   unsigned getInitialCFARegister(const MachineFunction &MF) const override;
 
+  /// Return true if the function has a redzone (accessible bytes past the
+  /// frame of the top of stack function) as part of it's ABI.  
+  bool has128ByteRedZone(const MachineFunction& MF) const;
+
 private:
   uint64_t calculateMaxStackAlign(const MachineFunction &MF) const;
 
@@ -213,6 +217,10 @@ private:
   void emitCatchRetReturnValue(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator MBBI,
                                MachineInstr *CatchRet) const;
+
+  /// Select the best opcode for the subtarget when funclet XMM CSRs
+  /// save/restore.
+  unsigned getXMMAlignedLoadStoreOp(const bool IsLoad) const;
 };
 
 } // End llvm namespace

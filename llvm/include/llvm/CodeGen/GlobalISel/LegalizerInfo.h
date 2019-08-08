@@ -640,6 +640,10 @@ public:
     return actionIf(LegalizeAction::Unsupported,
                     LegalityPredicates::memSizeInBytesNotPow2(0));
   }
+  LegalizeRuleSet &lowerIfMemSizeNotPow2() {
+    return actionIf(LegalizeAction::Lower,
+                    LegalityPredicates::memSizeInBytesNotPow2(0));
+  }
 
   LegalizeRuleSet &customIf(LegalityPredicate Predicate) {
     // We have no choice but conservatively assume that a custom action with a
@@ -650,6 +654,13 @@ public:
   LegalizeRuleSet &customFor(std::initializer_list<LLT> Types) {
     return actionFor(LegalizeAction::Custom, Types);
   }
+
+  /// The instruction is custom when type indexes 0 and 1 is any type pair in the
+  /// given list.
+  LegalizeRuleSet &customFor(std::initializer_list<std::pair<LLT, LLT>> Types) {
+    return actionFor(LegalizeAction::Custom, Types);
+  }
+
   LegalizeRuleSet &customForCartesianProduct(std::initializer_list<LLT> Types) {
     return actionForCartesianProduct(LegalizeAction::Custom, Types);
   }
@@ -1106,6 +1117,11 @@ public:
   virtual bool legalizeCustom(MachineInstr &MI, MachineRegisterInfo &MRI,
                               MachineIRBuilder &MIRBuilder,
                               GISelChangeObserver &Observer) const;
+
+  /// Return true if MI is either legal or has been legalized and false
+  /// if not legal.
+  virtual bool legalizeIntrinsic(MachineInstr &MI, MachineRegisterInfo &MRI,
+                                 MachineIRBuilder &MIRBuilder) const;
 
 private:
   /// Determine what action should be taken to legalize the given generic

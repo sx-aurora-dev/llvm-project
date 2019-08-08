@@ -21,6 +21,7 @@ configure_file(
 
 set(LLVM_LINK_COMPONENTS
   Support
+  AllTargetsInfos
   )
 
 if(CLANG_BUILT_STANDALONE)
@@ -48,8 +49,10 @@ add_clang_library(clangDaemon
   ExpectedTypes.cpp
   FindSymbols.cpp
   FileDistance.cpp
+  Format.cpp
   FS.cpp
   FSProvider.cpp
+  FormattedString.cpp
   FuzzyMatch.cpp
   GlobalCompilationDatabase.cpp
   Headers.cpp
@@ -60,7 +63,9 @@ add_clang_library(clangDaemon
   Quality.cpp
   RIFF.cpp
   Selection.cpp
+  SemanticHighlighting.cpp
   SourceCode.cpp
+  QueryDriverDatabase.cpp
   Threading.cpp
   Trace.cpp
   TUScheduler.cpp
@@ -68,7 +73,10 @@ add_clang_library(clangDaemon
   XRefs.cpp
 
   index/Background.cpp
+  index/BackgroundIndexLoader.cpp
   index/BackgroundIndexStorage.cpp
+  index/BackgroundQueue.cpp
+  index/BackgroundRebuild.cpp
   index/CanonicalIncludes.cpp
   index/FileIndex.cpp
   index/Index.cpp
@@ -76,6 +84,7 @@ add_clang_library(clangDaemon
   index/MemIndex.cpp
   index/Merge.cpp
   index/Ref.cpp
+  index/Relation.cpp
   index/Serialization.cpp
   index/Symbol.cpp
   index/SymbolCollector.cpp
@@ -89,6 +98,7 @@ add_clang_library(clangDaemon
   index/dex/PostingList.cpp
   index/dex/Trigram.cpp
 
+  refactor/Rename.cpp
   refactor/Tweak.cpp
 
   LINK_LIBS
@@ -123,7 +133,8 @@ add_clang_library(clangDaemon
   clangTooling
   clangToolingCore
   clangToolingInclusions
-  clangToolingRefactor
+  clangToolingRefactoring
+  clangToolingSyntax
   ${LLVM_PTHREAD_LIB}
   ${CLANGD_ATOMIC_LIB}
   )

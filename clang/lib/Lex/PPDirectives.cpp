@@ -33,6 +33,7 @@
 #include "clang/Lex/Token.h"
 #include "clang/Lex/VariadicMacroSupport.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -715,7 +716,7 @@ const FileEntry *Preprocessor::LookupFile(
         BuildSystemModule = getCurrentModule()->IsSystem;
       } else if ((FileEnt =
                     SourceMgr.getFileEntryForID(SourceMgr.getMainFileID())))
-        Includers.push_back(std::make_pair(FileEnt, FileMgr.getDirectory(".")));
+        Includers.push_back(std::make_pair(FileEnt, *FileMgr.getDirectory(".")));
     } else {
       Includers.push_back(std::make_pair(FileEnt, FileEnt->getDir()));
     }
@@ -982,7 +983,7 @@ void Preprocessor::HandleDirective(Token &Result) {
 
     // C99 6.10.6 - Pragma Directive.
     case tok::pp_pragma:
-      return HandlePragmaDirective(SavedHash.getLocation(), PIK_HashPragma);
+      return HandlePragmaDirective({PIK_HashPragma, SavedHash.getLocation()});
 
     // GNU Extensions.
     case tok::pp_import:
@@ -1035,7 +1036,7 @@ void Preprocessor::HandleDirective(Token &Result) {
     // Enter this token stream so that we re-lex the tokens.  Make sure to
     // enable macro expansion, in case the token after the # is an identifier
     // that is expanded.
-    EnterTokenStream(std::move(Toks), 2, false);
+    EnterTokenStream(std::move(Toks), 2, false, /*IsReinject*/false);
     return;
   }
 
@@ -1419,7 +1420,7 @@ void Preprocessor::HandleMacroPublicDirective(Token &Tok) {
 
   // Note that this macro has now been exported.
   appendMacroDirective(II, AllocateVisibilityMacroDirective(
-                                MacroNameTok.getLocation(), /*IsPublic=*/true));
+                                MacroNameTok.getLocation(), /*isPublic=*/true));
 }
 
 /// Handle a #private directive.
@@ -1446,7 +1447,7 @@ void Preprocessor::HandleMacroPrivateDirective() {
 
   // Note that this macro has now been marked private.
   appendMacroDirective(II, AllocateVisibilityMacroDirective(
-                               MacroNameTok.getLocation(), /*IsPublic=*/false));
+                               MacroNameTok.getLocation(), /*isPublic=*/false));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1518,7 +1519,7 @@ void Preprocessor::EnterAnnotationToken(SourceRange Range,
   Tok[0].setLocation(Range.getBegin());
   Tok[0].setAnnotationEndLoc(Range.getEnd());
   Tok[0].setAnnotationValue(AnnotationVal);
-  EnterTokenStream(std::move(Tok), 1, true);
+  EnterTokenStream(std::move(Tok), 1, true, /*IsReinject*/ false);
 }
 
 /// Produce a diagnostic informing the user that a #include or similar
@@ -1764,9 +1765,9 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
       // Give the clients a chance to recover.
       SmallString<128> RecoveryPath;
       if (Callbacks->FileNotFound(Filename, RecoveryPath)) {
-        if (const DirectoryEntry *DE = FileMgr.getDirectory(RecoveryPath)) {
+        if (auto DE = FileMgr.getDirectory(RecoveryPath)) {
           // Add the recovery path to the list of search paths.
-          DirectoryLookup DL(DE, SrcMgr::C_User, false);
+          DirectoryLookup DL(*DE, SrcMgr::C_User, false);
           HeaderInfo.AddSearchPath(DL, isAngled);
 
           // Try the lookup again, skipping the cache.
@@ -1871,6 +1872,18 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
     return {ImportAction::None};
   }
 
+  // Check for circular inclusion of the main file.
+  // We can't generate a consistent preamble with regard to the conditional
+  // stack if the main file is included again as due to the preamble bounds
+  // some directives (e.g. #endif of a header guard) will never be seen.
+  // Since this will lead to confusing errors, avoid the inclusion.
+  if (File && PreambleConditionalStack.isRecording() &&
+      SourceMgr.translateFile(File) == SourceMgr.getMainFileID()) {
+    Diag(FilenameTok.getLocation(),
+         diag::err_pp_including_mainfile_in_preamble);
+    return {ImportAction::None};
+  }
+
   // Should we enter the source file? Set to Skip if either the source file is
   // known to have no effect beyond its effect on module visibility -- that is,
   // if it's got an include guard that is already defined, set to Import if it
@@ -1925,7 +1938,7 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
     // and making the module loader convert it back again.
     ModuleLoadResult Imported = TheModuleLoader.loadModule(
         IncludeTok.getLocation(), Path, Module::Hidden,
-        /*IsIncludeDirective=*/true);
+        /*IsInclusionDirective=*/true);
     assert((Imported == nullptr || Imported == SuggestedModule.getModule()) &&
            "the imported module is different than the suggested one");
 
@@ -2387,6 +2400,13 @@ MacroInfo *Preprocessor::ReadOptionalMacroParameterListAndBody(
   Token Tok;
   LexUnexpandedToken(Tok);
 
+  // Ensure we consume the rest of the macro body if errors occur.
+  auto _ = llvm::make_scope_exit([&]() {
+    // The flag indicates if we are still waiting for 'eod'.
+    if (CurLexer->ParsingPreprocessorDirective)
+      DiscardUntilEndOfDirective();
+  });
+
   // Used to un-poison and then re-poison identifiers of the __VA_ARGS__ ilk
   // within their appropriate context.
   VariadicMacroScopeGuard VariadicMacroScopeGuard(*this);
@@ -2408,12 +2428,8 @@ MacroInfo *Preprocessor::ReadOptionalMacroParameterListAndBody(
   } else if (Tok.is(tok::l_paren)) {
     // This is a function-like macro definition.  Read the argument list.
     MI->setIsFunctionLike();
-    if (ReadMacroParameterList(MI, LastTok)) {
-      // Throw away the rest of the line.
-      if (CurPPLexer->ParsingPreprocessorDirective)
-        DiscardUntilEndOfDirective();
+    if (ReadMacroParameterList(MI, LastTok))
       return nullptr;
-    }
 
     // If this is a definition of an ISO C/C++ variadic function-like macro (not
     // using the GNU named varargs extension) inform our variadic scope guard

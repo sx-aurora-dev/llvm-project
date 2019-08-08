@@ -29,6 +29,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Alignment.h"
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -120,10 +121,10 @@ private:
   bool BigEndian;
 
   unsigned AllocaAddrSpace;
-  unsigned StackNaturalAlign;
+  MaybeAlign StackNaturalAlign;
   unsigned ProgramAddrSpace;
 
-  unsigned FunctionPtrAlign;
+  MaybeAlign FunctionPtrAlign;
   FunctionPtrAlignType TheFunctionPtrAlignType;
 
   enum ManglingModeT {
@@ -261,17 +262,17 @@ public:
   bool isIllegalInteger(uint64_t Width) const { return !isLegalInteger(Width); }
 
   /// Returns true if the given alignment exceeds the natural stack alignment.
-  bool exceedsNaturalStackAlignment(unsigned Align) const {
-    return (StackNaturalAlign != 0) && (Align > StackNaturalAlign);
+  bool exceedsNaturalStackAlignment(llvm::Align Align) const {
+    return StackNaturalAlign && (Align > StackNaturalAlign);
   }
 
-  unsigned getStackAlignment() const { return StackNaturalAlign; }
+  unsigned getStackAlignment() const { return StackNaturalAlign ? StackNaturalAlign->value() : 0; }
   unsigned getAllocaAddrSpace() const { return AllocaAddrSpace; }
 
   /// Returns the alignment of function pointers, which may or may not be
   /// related to the alignment of functions.
   /// \see getFunctionPtrAlignType
-  unsigned getFunctionPtrAlign() const { return FunctionPtrAlign; }
+  MaybeAlign getFunctionPtrAlign() const { return FunctionPtrAlign; }
 
   /// Return the type of function pointer alignment.
   /// \see getFunctionPtrAlign
@@ -451,6 +452,14 @@ public:
   /// For example, returns 40 for i36 and 80 for x86_fp80.
   uint64_t getTypeStoreSizeInBits(Type *Ty) const {
     return 8 * getTypeStoreSize(Ty);
+  }
+
+  /// Returns true if no extra padding bits are needed when storing the
+  /// specified type.
+  ///
+  /// For example, returns false for i19 that has a 24-bit store size.
+  bool typeSizeEqualsStoreSize(Type *Ty) const {
+    return getTypeSizeInBits(Ty) == getTypeStoreSizeInBits(Ty);
   }
 
   /// Returns the offset in bytes between successive objects of the

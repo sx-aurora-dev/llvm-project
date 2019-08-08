@@ -51,15 +51,24 @@ public:
   /// Returns a reference to the JITDylib representing the JIT'd main program.
   JITDylib &getMainJITDylib() { return Main; }
 
+  /// Returns the JITDylib with the given name, or nullptr if no JITDylib with
+  /// that name exists.
+  JITDylib *getJITDylibByName(StringRef Name) {
+    return ES->getJITDylibByName(Name);
+  }
+
   /// Create a new JITDylib with the given name and return a reference to it.
+  ///
+  /// JITDylib names must be unique. If the given name is derived from user
+  /// input or elsewhere in the environment then the client should check
+  /// (e.g. by calling getJITDylibByName) that the given name is not already in
+  /// use.
   JITDylib &createJITDylib(std::string Name) {
     return ES->createJITDylib(std::move(Name));
   }
 
   /// Convenience method for defining an absolute symbol.
   Error defineAbsolute(StringRef Name, JITEvaluatedSymbol Address);
-
-  /// Convenience method for defining an
 
   /// Adds an IR module to the given JITDylib.
   Error addIRModule(JITDylib &JD, ThreadSafeModule TSM);
@@ -111,6 +120,9 @@ public:
 protected:
   static std::unique_ptr<ObjectLayer>
   createObjectLinkingLayer(LLJITBuilderState &S, ExecutionSession &ES);
+
+  static Expected<IRCompileLayer::CompileFunction>
+  createCompileFunction(LLJITBuilderState &S, JITTargetMachineBuilder JTMB);
 
   /// Create an LLJIT instance with a single compile thread.
   LLJIT(LLJITBuilderState &S, Error &Err);
@@ -172,12 +184,17 @@ private:
 
 class LLJITBuilderState {
 public:
-  using CreateObjectLinkingLayerFunction =
-      std::function<std::unique_ptr<ObjectLayer>(ExecutionSession &)>;
+  using ObjectLinkingLayerCreator = std::function<std::unique_ptr<ObjectLayer>(
+      ExecutionSession &, const Triple &TT)>;
+
+  using CompileFunctionCreator =
+      std::function<Expected<IRCompileLayer::CompileFunction>(
+          JITTargetMachineBuilder JTMB)>;
 
   std::unique_ptr<ExecutionSession> ES;
   Optional<JITTargetMachineBuilder> JTMB;
-  CreateObjectLinkingLayerFunction CreateObjectLinkingLayer;
+  ObjectLinkingLayerCreator CreateObjectLinkingLayer;
+  CompileFunctionCreator CreateCompileFunction;
   unsigned NumCompileThreads = 0;
 
   /// Called prior to JIT class construcion to fix up defaults.
@@ -206,10 +223,21 @@ public:
   ///
   /// If this method is not called, a default creation function will be used
   /// that will construct an RTDyldObjectLinkingLayer.
-  SetterImpl &setCreateObjectLinkingLayer(
-      LLJITBuilderState::CreateObjectLinkingLayerFunction
-          CreateObjectLinkingLayer) {
+  SetterImpl &setObjectLinkingLayerCreator(
+      LLJITBuilderState::ObjectLinkingLayerCreator CreateObjectLinkingLayer) {
     impl().CreateObjectLinkingLayer = std::move(CreateObjectLinkingLayer);
+    return impl();
+  }
+
+  /// Set a CompileFunctionCreator.
+  ///
+  /// If this method is not called, a default creation function wil be used
+  /// that will construct a basic IR compile function that is compatible with
+  /// the selected number of threads (SimpleCompiler for '0' compile threads,
+  /// ConcurrentIRCompiler otherwise).
+  SetterImpl &setCompileFunctionCreator(
+      LLJITBuilderState::CompileFunctionCreator CreateCompileFunction) {
+    impl().CreateCompileFunction = std::move(CreateCompileFunction);
     return impl();
   }
 

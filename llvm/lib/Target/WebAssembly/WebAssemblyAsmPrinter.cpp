@@ -14,9 +14,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "WebAssemblyAsmPrinter.h"
-#include "InstPrinter/WebAssemblyInstPrinter.h"
+#include "MCTargetDesc/WebAssemblyInstPrinter.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "MCTargetDesc/WebAssemblyTargetStreamer.h"
+#include "TargetInfo/WebAssemblyTargetInfo.h"
 #include "WebAssembly.h"
 #include "WebAssemblyMCInstLower.h"
 #include "WebAssemblyMachineFunctionInfo.h"
@@ -67,7 +68,7 @@ MVT WebAssemblyAsmPrinter::getRegType(unsigned RegNo) const {
 
 std::string WebAssemblyAsmPrinter::regToString(const MachineOperand &MO) {
   unsigned RegNo = MO.getReg();
-  assert(TargetRegisterInfo::isVirtualRegister(RegNo) &&
+  assert(Register::isVirtualRegister(RegNo) &&
          "Unlowered physical register encountered during assembly printing");
   assert(!MFI->isVRegStackified(RegNo));
   unsigned WAReg = MFI->getWAReg(RegNo);
@@ -367,6 +368,10 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
       OutStreamer->AddComment("fallthrough-return-void");
       OutStreamer->AddBlankLine();
     }
+    break;
+  case WebAssembly::COMPILER_FENCE:
+    // This is a compiler barrier that prevents instruction reordering during
+    // backend compilation, and should not be emitted.
     break;
   case WebAssembly::EXTRACT_EXCEPTION_I32:
   case WebAssembly::EXTRACT_EXCEPTION_I32_S:

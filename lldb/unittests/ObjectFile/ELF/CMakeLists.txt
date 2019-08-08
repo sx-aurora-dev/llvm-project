@@ -3,13 +3,11 @@ add_lldb_unittest(ObjectFileELFTests
 
   LINK_LIBS
     lldbPluginObjectFileELF
-    lldbPluginSymbolVendorELF
+    lldbPluginSymbolFileSymtab
     lldbCore
     lldbUtilityHelpers
+    LLVMTestingSupport
   )
-
-add_dependencies(ObjectFileELFTests yaml2obj)
-add_definitions(-DYAML2OBJ="$<TARGET_FILE:yaml2obj>")
 
 set(test_inputs
   early-section-headers.so

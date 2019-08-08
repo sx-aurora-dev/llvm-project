@@ -124,7 +124,7 @@ static bool isAddConstantOp(const MachineInstr &MI, int64_t &Amount) {
   switch (MI.getOpcode()) {
   case ARC::SUB_rru6:
     Sign = -1;
-    // LLVM_FALLTHROUGH
+    LLVM_FALLTHROUGH;
   case ARC::ADD_rru6:
     assert(MI.getOperand(2).isImm() && "Expected immediate operand");
     Amount = Sign * MI.getOperand(2).getImm();
@@ -139,8 +139,7 @@ static bool dominatesAllUsesOf(const MachineInstr *MI, unsigned VReg,
                                MachineDominatorTree *MDT,
                                MachineRegisterInfo *MRI) {
 
-  assert(TargetRegisterInfo::isVirtualRegister(VReg) &&
-         "Expected virtual register!");
+  assert(Register::isVirtualRegister(VReg) && "Expected virtual register!");
 
   for (auto it = MRI->use_nodbg_begin(VReg), end = MRI->use_nodbg_end();
        it != end; ++it) {
@@ -206,8 +205,7 @@ MachineInstr *ARCOptAddrMode::tryToCombine(MachineInstr &Ldst) {
   }
 
   unsigned B = Base.getReg();
-  if (TargetRegisterInfo::isStackSlot(B) ||
-      !TargetRegisterInfo::isVirtualRegister(B)) {
+  if (Register::isStackSlot(B) || !Register::isVirtualRegister(B)) {
     LLVM_DEBUG(dbgs() << "[ABAW] Base is not VReg\n");
     return nullptr;
   }
@@ -424,7 +422,7 @@ bool ARCOptAddrMode::canSinkLoadStoreTo(MachineInstr *Ldst, MachineInstr *To) {
   bool IsStore = Ldst->mayStore();
   bool IsLoad = Ldst->mayLoad();
 
-  unsigned ValReg = IsLoad ? Ldst->getOperand(0).getReg() : 0;
+  Register ValReg = IsLoad ? Ldst->getOperand(0).getReg() : Register();
   for (; MI != ME && MI != End; ++MI) {
     if (MI->isDebugValue())
       continue;

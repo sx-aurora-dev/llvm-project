@@ -60,6 +60,7 @@ define i8 @uaddtest3(i8 %A, i8 %B, i1* %overflowPtr) {
 
 define i8 @uaddtest4(i8 %A, i1* %overflowPtr) {
 ; CHECK-LABEL: @uaddtest4(
+; CHECK-NEXT:    store i1 false, i1* [[OVERFLOWPTR:%.*]], align 1
 ; CHECK-NEXT:    ret i8 undef
 ;
   %x = call { i8, i1 } @llvm.uadd.with.overflow.i8(i8 undef, i8 %A)
@@ -531,10 +532,9 @@ define { i32, i1 } @umul_canonicalize_constant_arg0(i32 %x) nounwind {
 
 define { i8, i1 } @uadd_always_overflow(i8 %x) nounwind {
 ; CHECK-LABEL: @uadd_always_overflow(
-; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], -64
-; CHECK-NEXT:    [[A:%.*]] = add nsw i8 [[Y]], 64
-; CHECK-NEXT:    [[TMP1:%.*]] = insertvalue { i8, i1 } { i8 undef, i1 true }, i8 [[A]], 0
-; CHECK-NEXT:    ret { i8, i1 } [[TMP1]]
+; CHECK-NEXT:    [[TMP1:%.*]] = and i8 [[X:%.*]], 63
+; CHECK-NEXT:    [[TMP2:%.*]] = insertvalue { i8, i1 } { i8 undef, i1 true }, i8 [[TMP1]], 0
+; CHECK-NEXT:    ret { i8, i1 } [[TMP2]]
 ;
   %y = or i8 %x, 192
   %a = call { i8, i1 } @llvm.uadd.with.overflow.i8(i8 %y, i8 64)
