@@ -32,12 +32,15 @@ Clang-Tidy Checks
    android-cloexec-inotify-init1
    android-cloexec-memfd-create
    android-cloexec-open
+   android-cloexec-pipe
+   android-cloexec-pipe2
    android-cloexec-socket
    android-comparison-in-temp-failure-retry
    boost-use-to-string
    bugprone-argument-comment
    bugprone-assert-side-effect
    bugprone-bool-pointer-implicit-conversion
+   bugprone-branch-clone
    bugprone-copy-constructor-init
    bugprone-dangling-handle
    bugprone-exception-escape
@@ -55,6 +58,7 @@ Clang-Tidy Checks
    bugprone-move-forwarding-reference
    bugprone-multiple-statement-macro
    bugprone-parent-virtual-call
+   bugprone-posix-return
    bugprone-sizeof-container
    bugprone-sizeof-expression
    bugprone-string-constructor
@@ -71,6 +75,7 @@ Clang-Tidy Checks
    bugprone-too-small-loop-variable
    bugprone-undefined-memory-manipulation
    bugprone-undelegated-constructor
+   bugprone-unhandled-self-assignment
    bugprone-unused-raii
    bugprone-unused-return-value
    bugprone-use-after-move
@@ -96,6 +101,7 @@ Clang-Tidy Checks
    cert-msc50-cpp
    cert-msc51-cpp
    cert-oop11-cpp (redirects to performance-move-constructor-init) <cert-oop11-cpp>
+   cert-oop54-cpp (redirects to bugprone-unhandled-self-assignment) <cert-oop54-cpp>
    cppcoreguidelines-avoid-c-arrays (redirects to modernize-avoid-c-arrays) <cppcoreguidelines-avoid-c-arrays>
    cppcoreguidelines-avoid-goto
    cppcoreguidelines-avoid-magic-numbers (redirects to readability-magic-numbers) <cppcoreguidelines-avoid-magic-numbers>
@@ -119,7 +125,8 @@ Clang-Tidy Checks
    cppcoreguidelines-pro-type-vararg
    cppcoreguidelines-slicing
    cppcoreguidelines-special-member-functions
-   fuchsia-default-arguments
+   fuchsia-default-arguments-calls
+   fuchsia-default-arguments-declarations
    fuchsia-header-anon-namespaces (redirects to google-build-namespaces) <fuchsia-header-anon-namespaces>
    fuchsia-multiple-inheritance
    fuchsia-overloaded-operator
@@ -133,6 +140,7 @@ Clang-Tidy Checks
    google-default-arguments
    google-explicit-constructor
    google-global-names-in-headers
+   google-objc-avoid-nsobject-new
    google-objc-avoid-throwing-exception
    google-objc-function-naming
    google-objc-global-variable-declaration
@@ -219,6 +227,7 @@ Clang-Tidy Checks
    modernize-use-noexcept
    modernize-use-nullptr
    modernize-use-override
+   modernize-use-trailing-return-type
    modernize-use-transparent-functors
    modernize-use-uncaught-exceptions
    modernize-use-using
@@ -248,6 +257,7 @@ Clang-Tidy Checks
    readability-braces-around-statements
    readability-const-return-type
    readability-container-size-empty
+   readability-convert-member-functions-to-static
    readability-delete-null-pointer
    readability-deleted-default
    readability-else-after-return

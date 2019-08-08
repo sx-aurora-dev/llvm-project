@@ -17,7 +17,7 @@ define void @insert_v7i8_v2i16_2(<7 x i8> *%a0, <2 x i16> *%a1) nounwind {
 ; SSE2-NEXT:    punpcklbw {{.*#+}} xmm1 = xmm1[0],xmm0[0],xmm1[1],xmm0[1],xmm1[2],xmm0[2],xmm1[3],xmm0[3],xmm1[4],xmm0[4],xmm1[5],xmm0[5],xmm1[6],xmm0[6],xmm1[7],xmm0[7]
 ; SSE2-NEXT:    shufps {{.*#+}} xmm0 = xmm0[0,1],xmm1[0,3]
 ; SSE2-NEXT:    shufps {{.*#+}} xmm0 = xmm0[2,0,1,3]
-; SSE2-NEXT:    movaps {{.*#+}} xmm1 = [255,255,255,255,255,255,255,255]
+; SSE2-NEXT:    movaps {{.*#+}} xmm1 = [255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0]
 ; SSE2-NEXT:    andps %xmm0, %xmm1
 ; SSE2-NEXT:    packuswb %xmm1, %xmm1
 ; SSE2-NEXT:    movaps %xmm0, -{{[0-9]+}}(%rsp)
@@ -116,13 +116,14 @@ define void @PR40815(%struct.Mat4* nocapture readonly dereferenceable(64), %stru
 ;
 ; AVX-LABEL: PR40815:
 ; AVX:       # %bb.0:
-; AVX-NEXT:    vmovaps 16(%rdi), %xmm0
-; AVX-NEXT:    vmovaps 48(%rdi), %xmm1
-; AVX-NEXT:    vinsertf128 $1, 32(%rdi), %ymm1, %ymm1
-; AVX-NEXT:    vinsertf128 $1, (%rdi), %ymm0, %ymm0
-; AVX-NEXT:    vmovups %ymm1, (%rsi)
-; AVX-NEXT:    vmovups %ymm0, 32(%rsi)
-; AVX-NEXT:    vzeroupper
+; AVX-NEXT:    vmovaps (%rdi), %xmm0
+; AVX-NEXT:    vmovaps 16(%rdi), %xmm1
+; AVX-NEXT:    vmovaps 32(%rdi), %xmm2
+; AVX-NEXT:    vmovaps 48(%rdi), %xmm3
+; AVX-NEXT:    vmovaps %xmm2, 16(%rsi)
+; AVX-NEXT:    vmovaps %xmm3, (%rsi)
+; AVX-NEXT:    vmovaps %xmm0, 48(%rsi)
+; AVX-NEXT:    vmovaps %xmm1, 32(%rsi)
 ; AVX-NEXT:    retq
 ;
 ; AVX512-LABEL: PR40815:

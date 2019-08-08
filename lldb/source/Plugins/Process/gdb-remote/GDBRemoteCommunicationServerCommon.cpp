@@ -28,12 +28,12 @@
 #include "lldb/Interpreter/OptionArgParser.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Platform.h"
-#include "lldb/Target/Process.h"
 #include "lldb/Utility/Endian.h"
 #include "lldb/Utility/JSON.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamGDBRemote.h"
 #include "lldb/Utility/StreamString.h"
+#include "lldb/Utility/StructuredData.h"
 #include "llvm/ADT/Triple.h"
 
 #include "ProcessGDBRemoteLog.h"
@@ -233,11 +233,7 @@ GDBRemoteCommunicationServerCommon::Handle_qHostInfo(
   if (host_arch.GetMachine() == llvm::Triple::aarch64 ||
       host_arch.GetMachine() == llvm::Triple::aarch64_be ||
       host_arch.GetMachine() == llvm::Triple::arm ||
-      host_arch.GetMachine() == llvm::Triple::armeb ||
-      host_arch.GetMachine() == llvm::Triple::mips64 ||
-      host_arch.GetMachine() == llvm::Triple::mips64el ||
-      host_arch.GetMachine() == llvm::Triple::mips ||
-      host_arch.GetMachine() == llvm::Triple::mipsel)
+      host_arch.GetMachine() == llvm::Triple::armeb || host_arch.IsMIPS())
     response.Printf("watchpoint_exceptions_received:before;");
   else
     response.Printf("watchpoint_exceptions_received:after;");

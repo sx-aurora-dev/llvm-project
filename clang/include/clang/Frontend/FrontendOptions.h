@@ -9,6 +9,7 @@
 #ifndef LLVM_CLANG_FRONTEND_FRONTENDOPTIONS_H
 #define LLVM_CLANG_FRONTEND_FRONTENDOPTIONS_H
 
+#include "clang/AST/ASTDumperUtils.h"
 #include "clang/Frontend/CommandLineSourceLoc.h"
 #include "clang/Serialization/ModuleFileExtension.h"
 #include "clang/Sema/CodeCompleteOptions.h"
@@ -87,6 +88,10 @@ enum ActionKind {
   /// Generate pre-compiled header.
   GeneratePCH,
 
+  /// Generate Interface Stub Files.
+  GenerateInterfaceYAMLExpV1,
+  GenerateInterfaceTBEExpV1,
+
   /// Only execute frontend initialization.
   InitOnly,
 
@@ -127,7 +132,10 @@ enum ActionKind {
   MigrateSource,
 
   /// Just lex, no output.
-  RunPreprocessorOnly
+  RunPreprocessorOnly,
+
+  /// Print the output of the dependency directives source minimizer.
+  PrintDependencyDirectivesSourceMinimizerOutput
 };
 
 } // namespace frontend
@@ -256,6 +264,9 @@ public:
   /// Show timers for individual actions.
   unsigned ShowTimers : 1;
 
+  /// print the supported cpus for the current target
+  unsigned PrintSupportedCPUs : 1;
+
   /// Output time trace profile.
   unsigned TimeTrace : 1;
 
@@ -306,6 +317,9 @@ public:
   unsigned IncludeTimestamps : 1;
 
   CodeCompleteOptions CodeCompleteOpts;
+
+  /// Specifies the output format of the AST.
+  ASTDumpOutputFormat ASTDumpFormat = ADOF_Default;
 
   enum {
     ARCMT_None,

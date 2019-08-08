@@ -876,7 +876,7 @@ bool ProcessFreeBSD::IsAThreadRunning() {
   return is_running;
 }
 
-const DataBufferSP ProcessFreeBSD::GetAuxvData() {
+lldb_private::DataExtractor ProcessFreeBSD::GetAuxvData() {
   // If we're the local platform, we can ask the host for auxv data.
   PlatformSP platform_sp = GetTarget().GetPlatform();
   assert(platform_sp && platform_sp->IsHost());
@@ -890,7 +890,7 @@ const DataBufferSP ProcessFreeBSD::GetAuxvData() {
     buf_sp.reset();
   }
 
-  return buf_sp;
+  return DataExtractor(buf_sp, GetByteOrder(), GetAddressByteSize());
 }
 
 struct EmulatorBaton {
@@ -1020,11 +1020,7 @@ bool ProcessFreeBSD::IsSoftwareStepBreakpoint(lldb::tid_t tid) {
 
 bool ProcessFreeBSD::SupportHardwareSingleStepping() const {
   lldb_private::ArchSpec arch = GetTarget().GetArchitecture();
-  if (arch.GetMachine() == llvm::Triple::arm ||
-      arch.GetMachine() == llvm::Triple::mips64 ||
-      arch.GetMachine() == llvm::Triple::mips64el ||
-      arch.GetMachine() == llvm::Triple::mips ||
-      arch.GetMachine() == llvm::Triple::mipsel)
+  if (arch.GetMachine() == llvm::Triple::arm || arch.IsMIPS())
     return false;
   return true;
 }

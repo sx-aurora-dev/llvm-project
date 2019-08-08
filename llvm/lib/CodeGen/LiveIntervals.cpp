@@ -900,8 +900,7 @@ bool LiveIntervals::checkRegMaskInterference(LiveInterval &LI,
 
   // We are going to enumerate all the register mask slots contained in LI.
   // Start with a binary search of RegMaskSlots to find a starting point.
-  ArrayRef<SlotIndex>::iterator SlotI =
-    std::lower_bound(Slots.begin(), Slots.end(), LiveI->start);
+  ArrayRef<SlotIndex>::iterator SlotI = llvm::lower_bound(Slots, LiveI->start);
   ArrayRef<SlotIndex>::iterator SlotE = Slots.end();
 
   // No slots in range, LI begins after the last call.
@@ -1370,8 +1369,7 @@ private:
 
   void updateRegMaskSlots() {
     SmallVectorImpl<SlotIndex>::iterator RI =
-      std::lower_bound(LIS.RegMaskSlots.begin(), LIS.RegMaskSlots.end(),
-                       OldIdx);
+        llvm::lower_bound(LIS.RegMaskSlots, OldIdx);
     assert(RI != LIS.RegMaskSlots.end() && *RI == OldIdx.getRegSlot() &&
            "No RegMask at OldIdx.");
     *RI = NewIdx.getRegSlot();
@@ -1441,7 +1439,10 @@ private:
 };
 
 void LiveIntervals::handleMove(MachineInstr &MI, bool UpdateFlags) {
-  assert(!MI.isBundled() && "Can't handle bundled instructions yet.");
+  // It is fine to move a bundle as a whole, but not an individual instruction
+  // inside it.
+  assert((!MI.isBundled() || MI.getOpcode() == TargetOpcode::BUNDLE) &&
+         "Cannot move instruction in bundle");
   SlotIndex OldIndex = Indexes->getInstructionIndex(MI);
   Indexes->removeMachineInstrFromMaps(MI);
   SlotIndex NewIndex = Indexes->insertMachineInstrInMaps(MI);

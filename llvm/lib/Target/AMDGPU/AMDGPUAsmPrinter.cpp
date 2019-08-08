@@ -19,7 +19,7 @@
 #include "AMDGPU.h"
 #include "AMDGPUSubtarget.h"
 #include "AMDGPUTargetMachine.h"
-#include "InstPrinter/AMDGPUInstPrinter.h"
+#include "MCTargetDesc/AMDGPUInstPrinter.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "MCTargetDesc/AMDGPUTargetStreamer.h"
 #include "R600AsmPrinter.h"
@@ -30,10 +30,12 @@
 #include "SIInstrInfo.h"
 #include "SIMachineFunctionInfo.h"
 #include "SIRegisterInfo.h"
+#include "TargetInfo/AMDGPUTargetInfo.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
@@ -261,7 +263,7 @@ void AMDGPUAsmPrinter::EmitFunctionEntryLabel() {
     getTargetStreamer()->EmitAMDGPUSymbolType(
         SymbolName, ELF::STT_AMDGPU_HSA_KERNEL);
   }
-  if (STM.dumpCode()) {
+  if (DumpCodeInstEmitter) {
     // Disassemble function name label to text.
     DisasmLines.push_back(MF->getName().str() + ":");
     DisasmLineMaxLen = std::max(DisasmLineMaxLen, DisasmLines.back().size());
@@ -272,8 +274,7 @@ void AMDGPUAsmPrinter::EmitFunctionEntryLabel() {
 }
 
 void AMDGPUAsmPrinter::EmitBasicBlockStart(const MachineBasicBlock &MBB) const {
-  const GCNSubtarget &STI = MBB.getParent()->getSubtarget<GCNSubtarget>();
-  if (STI.dumpCode() && !isBlockOnlyReachableByFallthrough(&MBB)) {
+  if (DumpCodeInstEmitter && !isBlockOnlyReachableByFallthrough(&MBB)) {
     // Write a line for the basic block label if it is not only fallthrough.
     DisasmLines.push_back(
         (Twine("BB") + Twine(getFunctionNumber())
@@ -285,16 +286,56 @@ void AMDGPUAsmPrinter::EmitBasicBlockStart(const MachineBasicBlock &MBB) const {
 }
 
 void AMDGPUAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
+  if (GV->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS) {
+    if (GV->hasInitializer() && !isa<UndefValue>(GV->getInitializer())) {
+      OutContext.reportError({},
+                             Twine(GV->getName()) +
+                                 ": unsupported initializer for address space");
+      return;
+    }
 
-  // Group segment variables aren't emitted in HSA.
-  if (AMDGPU::isGroupSegment(GV))
+    // LDS variables aren't emitted in HSA or PAL yet.
+    const Triple::OSType OS = TM.getTargetTriple().getOS();
+    if (OS == Triple::AMDHSA || OS == Triple::AMDPAL)
+      return;
+
+    MCSymbol *GVSym = getSymbol(GV);
+
+    GVSym->redefineIfPossible();
+    if (GVSym->isDefined() || GVSym->isVariable())
+      report_fatal_error("symbol '" + Twine(GVSym->getName()) +
+                         "' is already defined");
+
+    const DataLayout &DL = GV->getParent()->getDataLayout();
+    uint64_t Size = DL.getTypeAllocSize(GV->getValueType());
+    unsigned Align = GV->getAlignment();
+    if (!Align)
+      Align = 4;
+
+    EmitVisibility(GVSym, GV->getVisibility(), !GV->isDeclaration());
+    EmitLinkage(GV, GVSym);
+    if (auto TS = getTargetStreamer())
+      TS->emitAMDGPULDS(GVSym, Size, Align);
     return;
+  }
 
   AsmPrinter::EmitGlobalVariable(GV);
 }
 
 bool AMDGPUAsmPrinter::doFinalization(Module &M) {
   CallGraphResourceInfo.clear();
+
+  // Pad with s_code_end to help tools and guard against instruction prefetch
+  // causing stale data in caches. Arguably this should be done by the linker,
+  // which is why this isn't done for Mesa.
+  const MCSubtargetInfo &STI = *getGlobalSTI();
+  if (AMDGPU::isGFX10(STI) &&
+      (STI.getTargetTriple().getOS() == Triple::AMDHSA ||
+       STI.getTargetTriple().getOS() == Triple::AMDPAL)) {
+    OutStreamer->SwitchSection(getObjFileLowering().getTextSection());
+    getTargetStreamer()->EmitCodeEnd();
+  }
+
   return AsmPrinter::doFinalization(M);
 }
 
@@ -341,6 +382,10 @@ uint16_t AMDGPUAsmPrinter::getAmdhsaKernelCodeProperties(
   if (MFI.hasFlatScratchInit()) {
     KernelCodeProperties |=
         amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_FLAT_SCRATCH_INIT;
+  }
+  if (MF.getSubtarget<GCNSubtarget>().isWave32()) {
+    KernelCodeProperties |=
+        amdhsa::KERNEL_CODE_PROPERTY_ENABLE_WAVEFRONT_SIZE32;
   }
 
   return KernelCodeProperties;
@@ -399,6 +444,18 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
     EmitPALMetadata(MF, CurrentProgramInfo);
   else if (!STM.isAmdHsaOS()) {
     EmitProgramInfoSI(MF, CurrentProgramInfo);
+  }
+
+  DumpCodeInstEmitter = nullptr;
+  if (STM.dumpCode()) {
+    // For -dumpcode, get the assembler out of the streamer, even if it does
+    // not really want to let us have it. This only works with -filetype=obj.
+    bool SaveFlag = OutStreamer->getUseAssemblerInfoForParsing();
+    OutStreamer->setUseAssemblerInfoForParsing(true);
+    MCAssembler *Assembler = OutStreamer->getAssemblerPtr();
+    OutStreamer->setUseAssemblerInfoForParsing(SaveFlag);
+    if (Assembler)
+      DumpCodeInstEmitter = Assembler->getEmitterPtr();
   }
 
   DisasmLines.clear();
@@ -473,7 +530,7 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
       false);
   }
 
-  if (STM.dumpCode()) {
+  if (DumpCodeInstEmitter) {
 
     OutStreamer->SwitchSection(
         Context.getELFSection(".AMDGPU.disasm", ELF::SHT_NOTE, 0));
@@ -577,6 +634,11 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         HighestVGPRReg = Reg;
         break;
       }
+      MCPhysReg AReg = AMDGPU::AGPR0 + TRI.getHWRegIndex(Reg);
+      if (MRI.isPhysRegUsed(AReg)) {
+        HighestVGPRReg = AReg;
+        break;
+      }
     }
 
     MCPhysReg HighestSGPRReg = AMDGPU::NoRegister;
@@ -659,6 +721,15 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         case AMDGPU::TMA_HI:
           llvm_unreachable("trap handler registers should not be used");
 
+        case AMDGPU::SRC_VCCZ:
+          llvm_unreachable("src_vccz register should not be used");
+
+        case AMDGPU::SRC_EXECZ:
+          llvm_unreachable("src_execz register should not be used");
+
+        case AMDGPU::SRC_SCC:
+          llvm_unreachable("src_scc register should not be used");
+
         default:
           break;
         }
@@ -671,6 +742,9 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         } else if (AMDGPU::VGPR_32RegClass.contains(Reg)) {
           IsSGPR = false;
           Width = 1;
+        } else if (AMDGPU::AGPR_32RegClass.contains(Reg)) {
+          IsSGPR = false;
+          Width = 1;
         } else if (AMDGPU::SReg_64RegClass.contains(Reg)) {
           assert(!AMDGPU::TTMP_64RegClass.contains(Reg) &&
                  "trap handler registers should not be used");
@@ -679,8 +753,13 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         } else if (AMDGPU::VReg_64RegClass.contains(Reg)) {
           IsSGPR = false;
           Width = 2;
+        } else if (AMDGPU::AReg_64RegClass.contains(Reg)) {
+          IsSGPR = false;
+          Width = 2;
         } else if (AMDGPU::VReg_96RegClass.contains(Reg)) {
           IsSGPR = false;
+          Width = 3;
+        } else if (AMDGPU::SReg_96RegClass.contains(Reg)) {
           Width = 3;
         } else if (AMDGPU::SReg_128RegClass.contains(Reg)) {
           assert(!AMDGPU::TTMP_128RegClass.contains(Reg) &&
@@ -688,6 +767,9 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
           IsSGPR = true;
           Width = 4;
         } else if (AMDGPU::VReg_128RegClass.contains(Reg)) {
+          IsSGPR = false;
+          Width = 4;
+        } else if (AMDGPU::AReg_128RegClass.contains(Reg)) {
           IsSGPR = false;
           Width = 4;
         } else if (AMDGPU::SReg_256RegClass.contains(Reg)) {
@@ -706,9 +788,18 @@ AMDGPUAsmPrinter::SIFunctionResourceInfo AMDGPUAsmPrinter::analyzeResourceUsage(
         } else if (AMDGPU::VReg_512RegClass.contains(Reg)) {
           IsSGPR = false;
           Width = 16;
-        } else if (AMDGPU::SReg_96RegClass.contains(Reg)) {
+        } else if (AMDGPU::AReg_512RegClass.contains(Reg)) {
+          IsSGPR = false;
+          Width = 16;
+        } else if (AMDGPU::SReg_1024RegClass.contains(Reg)) {
           IsSGPR = true;
-          Width = 3;
+          Width = 32;
+        } else if (AMDGPU::VReg_1024RegClass.contains(Reg)) {
+          IsSGPR = false;
+          Width = 32;
+        } else if (AMDGPU::AReg_1024RegClass.contains(Reg)) {
+          IsSGPR = false;
+          Width = 32;
         } else {
           llvm_unreachable("Unknown register class");
         }
@@ -928,6 +1019,11 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
               1ULL << ScratchAlignShift) >>
       ScratchAlignShift;
 
+  if (getIsaVersion(getGlobalSTI()->getCPU()).Major >= 10) {
+    ProgInfo.WgpMode = STM.isCuModeEnabled() ? 0 : 1;
+    ProgInfo.MemOrdered = 1;
+  }
+
   ProgInfo.ComputePGMRSrc1 =
       S_00B848_VGPRS(ProgInfo.VGPRBlocks) |
       S_00B848_SGPRS(ProgInfo.SGPRBlocks) |
@@ -936,7 +1032,9 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
       S_00B848_PRIV(ProgInfo.Priv) |
       S_00B848_DX10_CLAMP(ProgInfo.DX10Clamp) |
       S_00B848_DEBUG_MODE(ProgInfo.DebugMode) |
-      S_00B848_IEEE_MODE(ProgInfo.IEEEMode);
+      S_00B848_IEEE_MODE(ProgInfo.IEEEMode) |
+      S_00B848_WGP_MODE(ProgInfo.WgpMode) |
+      S_00B848_MEM_ORDERED(ProgInfo.MemOrdered);
 
   // 0 = X, 1 = XY, 2 = XYZ
   unsigned TIDIGCompCnt = 0;
@@ -1046,6 +1144,10 @@ void AMDGPUAsmPrinter::EmitPALMetadata(const MachineFunction &MF,
     MD->setSpiPsInputEna(MFI->getPSInputEnable());
     MD->setSpiPsInputAddr(MFI->getPSInputAddr());
   }
+
+  const GCNSubtarget &STM = MF.getSubtarget<GCNSubtarget>();
+  if (STM.isWave32())
+    MD->setWave32(MF.getFunction().getCallingConv());
 }
 
 // This is supposed to be log2(Size)
@@ -1077,7 +1179,7 @@ void AMDGPUAsmPrinter::getAmdKernelCode(amd_kernel_code_t &Out,
   Out.compute_pgm_resource_registers =
       CurrentProgramInfo.ComputePGMRSrc1 |
       (CurrentProgramInfo.ComputePGMRSrc2 << 32);
-  Out.code_properties = AMD_CODE_PROPERTY_IS_PTR64;
+  Out.code_properties |= AMD_CODE_PROPERTY_IS_PTR64;
 
   if (CurrentProgramInfo.DynamicCallStack)
     Out.code_properties |= AMD_CODE_PROPERTY_IS_DYNAMIC_CALLSTACK;
@@ -1121,7 +1223,7 @@ void AMDGPUAsmPrinter::getAmdKernelCode(amd_kernel_code_t &Out,
 
   // These alignment values are specified in powers of two, so alignment =
   // 2^n.  The minimum alignment is 2^4 = 16.
-  Out.kernarg_segment_alignment = std::max((size_t)4,
+  Out.kernarg_segment_alignment = std::max<size_t>(4,
       countTrailingZeros(MaxKernArgAlign));
 }
 

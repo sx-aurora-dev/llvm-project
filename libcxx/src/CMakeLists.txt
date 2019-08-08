@@ -8,6 +8,7 @@ set(LIBCXX_SOURCES
   charconv.cpp
   chrono.cpp
   condition_variable.cpp
+  condition_variable_destructor.cpp
   debug.cpp
   exception.cpp
   functional.cpp
@@ -22,6 +23,7 @@ set(LIBCXX_SOURCES
   locale.cpp
   memory.cpp
   mutex.cpp
+  mutex_destructor.cpp
   new.cpp
   optional.cpp
   random.cpp
@@ -139,6 +141,10 @@ function(cxx_link_system_libraries target)
   target_add_link_flags_if_supported(${target} PRIVATE "-nodefaultlibs")
   target_add_compile_flags_if_supported(${target} PRIVATE "/Zl")
   target_add_link_flags_if_supported(${target} PRIVATE "/nodefaultlib")
+
+  if (LIBCXX_HAS_SYSTEM_LIB)
+    target_link_libraries(${target} PUBLIC System)
+  endif()
 
   if (LIBCXX_HAS_PTHREAD_LIB)
     target_link_libraries(${target} PUBLIC pthread)
@@ -317,9 +323,6 @@ if (LIBCXX_ENABLE_SHARED)
   endif()
 
   list(APPEND LIBCXX_BUILD_TARGETS "cxx_shared")
-  if (LIBCXX_INSTALL_SHARED_LIBRARY)
-    list(APPEND LIBCXX_INSTALL_TARGETS "cxx_shared")
-  endif()
   if(WIN32 AND NOT MINGW AND NOT "${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     # Since we most likely do not have a mt.exe replacement, disable the
     # manifest bundling.  This allows a normal cmake invocation to pass which
@@ -345,15 +348,17 @@ if (LIBCXX_ENABLE_STATIC)
 
   if (LIBCXX_HERMETIC_STATIC_LIBRARY)
     append_flags_if_supported(CXX_STATIC_LIBRARY_FLAGS -fvisibility=hidden)
-    append_flags_if_supported(CXX_STATIC_LIBRARY_FLAGS -fvisibility-global-new-delete-hidden)
+    # If the hermetic library doesn't define the operator new/delete functions
+    # then its code shouldn't declare them with hidden visibility.  They might
+    # actually be provided by a shared library at link time.
+    if (LIBCXX_ENABLE_NEW_DELETE_DEFINITIONS)
+      append_flags_if_supported(CXX_STATIC_LIBRARY_FLAGS -fvisibility-global-new-delete-hidden)
+    endif()
     target_compile_options(cxx_static PRIVATE ${CXX_STATIC_LIBRARY_FLAGS})
     target_compile_definitions(cxx_static PRIVATE _LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS)
   endif()
 
   list(APPEND LIBCXX_BUILD_TARGETS "cxx_static")
-  if (LIBCXX_INSTALL_STATIC_LIBRARY)
-    list(APPEND LIBCXX_INSTALL_TARGETS "cxx_static")
-  endif()
   # Attempt to merge the libc++.a archive and the ABI library archive into one.
   if (LIBCXX_STATICALLY_LINK_ABI_IN_STATIC_LIBRARY)
     set(MERGE_ARCHIVES_SEARCH_PATHS "")
@@ -366,12 +371,16 @@ if (LIBCXX_ENABLE_STATIC)
       set(MERGE_ARCHIVES_ABI_TARGET
         "${CMAKE_STATIC_LIBRARY_PREFIX}${LIBCXX_CXX_STATIC_ABI_LIBRARY}${CMAKE_STATIC_LIBRARY_SUFFIX}")
     endif()
+    if (APPLE)
+      set(MERGE_ARCHIVES_LIBTOOL "--use-libtool" "--libtool" "${CMAKE_LIBTOOL}")
+    endif()
     add_custom_command(TARGET cxx_static POST_BUILD
     COMMAND
       ${PYTHON_EXECUTABLE} ${LIBCXX_SOURCE_DIR}/utils/merge_archives.py
     ARGS
       -o $<TARGET_LINKER_FILE:cxx_static>
       --ar "${CMAKE_AR}"
+      ${MERGE_ARCHIVES_LIBTOOL}
       "$<TARGET_LINKER_FILE:cxx_static>"
       "${MERGE_ARCHIVES_ABI_TARGET}"
       "${MERGE_ARCHIVES_SEARCH_PATHS}"
@@ -424,20 +433,34 @@ if (LIBCXX_BUILD_EXTERNAL_THREAD_LIBRARY)
 endif()
 
 if (LIBCXX_INSTALL_LIBRARY)
-  if (LIBCXX_INSTALL_EXPERIMENTAL_LIBRARY)
-    set(experimental_lib cxx_experimental)
+  if (LIBCXX_INSTALL_SHARED_LIBRARY)
+    install(TARGETS cxx_shared
+      ARCHIVE DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR} COMPONENT cxx
+      LIBRARY DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR} COMPONENT cxx
+      RUNTIME DESTINATION ${LIBCXX_INSTALL_PREFIX}bin COMPONENT cxx)
   endif()
-  install(TARGETS ${LIBCXX_INSTALL_TARGETS} ${experimental_lib}
-    LIBRARY DESTINATION ${LIBCXX_INSTALL_PREFIX}lib${LIBCXX_LIBDIR_SUFFIX} COMPONENT cxx
-    ARCHIVE DESTINATION ${LIBCXX_INSTALL_PREFIX}lib${LIBCXX_LIBDIR_SUFFIX} COMPONENT cxx
-    )
+
+  if (LIBCXX_INSTALL_STATIC_LIBRARY)
+    install(TARGETS cxx_static
+      ARCHIVE DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR} COMPONENT cxx
+      LIBRARY DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR} COMPONENT cxx
+      RUNTIME DESTINATION ${LIBCXX_INSTALL_PREFIX}bin COMPONENT cxx)
+  endif()
+
+  if(LIBCXX_INSTALL_EXPERIMENTAL_LIBRARY)
+    install(TARGETS ${LIBCXX_INSTALL_TARGETS} ${experimental_lib}
+      LIBRARY DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR} COMPONENT cxx
+      ARCHIVE DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR} COMPONENT cxx
+      RUNTIME DESTINATION ${LIBCXX_INSTALL_PREFIX}bin COMPONENT cxx)
+  endif()
+
   # NOTE: This install command must go after the cxx install command otherwise
   # it will not be executed after the library symlinks are installed.
   if (LIBCXX_ENABLE_SHARED AND LIBCXX_ENABLE_ABI_LINKER_SCRIPT)
     # Replace the libc++ filename with $<TARGET_LINKER_FILE:cxx>
     # after we required CMake 3.0.
     install(FILES "${LIBCXX_LIBRARY_DIR}/libc++${CMAKE_SHARED_LIBRARY_SUFFIX}"
-      DESTINATION ${LIBCXX_INSTALL_PREFIX}lib${LIBCXX_LIBDIR_SUFFIX}
+      DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR}
       COMPONENT libcxx)
   endif()
 endif()

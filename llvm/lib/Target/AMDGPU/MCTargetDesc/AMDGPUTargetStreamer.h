@@ -53,6 +53,9 @@ public:
 
   virtual void EmitAMDGPUSymbolType(StringRef SymbolName, unsigned Type) = 0;
 
+  virtual void emitAMDGPULDS(MCSymbol *Symbol, unsigned Size,
+                             unsigned Align) = 0;
+
   /// \returns True on success, false on failure.
   virtual bool EmitISAVersion(StringRef IsaVersionString) = 0;
 
@@ -73,6 +76,9 @@ public:
 
   /// \returns True on success, false on failure.
   virtual bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) = 0;
+
+  /// \returns True on success, false on failure.
+  virtual bool EmitCodeEnd() = 0;
 
   virtual void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,
@@ -104,6 +110,8 @@ public:
 
   void EmitAMDGPUSymbolType(StringRef SymbolName, unsigned Type) override;
 
+  void emitAMDGPULDS(MCSymbol *Sym, unsigned Size, unsigned Align) override;
+
   /// \returns True on success, false on failure.
   bool EmitISAVersion(StringRef IsaVersionString) override;
 
@@ -112,6 +120,9 @@ public:
 
   /// \returns True on success, false on failure.
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
+
+  /// \returns True on success, false on failure.
+  bool EmitCodeEnd() override;
 
   void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,
@@ -146,6 +157,8 @@ public:
 
   void EmitAMDGPUSymbolType(StringRef SymbolName, unsigned Type) override;
 
+  void emitAMDGPULDS(MCSymbol *Sym, unsigned Size, unsigned Align) override;
+
   /// \returns True on success, false on failure.
   bool EmitISAVersion(StringRef IsaVersionString) override;
 
@@ -154,6 +167,9 @@ public:
 
   /// \returns True on success, false on failure.
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
+
+  /// \returns True on success, false on failure.
+  bool EmitCodeEnd() override;
 
   void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,

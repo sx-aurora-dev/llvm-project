@@ -388,6 +388,10 @@ private:
   bool isCpp11AttributeSpecifier(const FormatToken &Tok) {
     if (!Style.isCpp() || !Tok.startsSequence(tok::l_square, tok::l_square))
       return false;
+    // The first square bracket is part of an ObjC array literal
+    if (Tok.Previous && Tok.Previous->is(tok::at)) {
+      return false;
+    }
     const FormatToken *AttrTok = Tok.Next->Next;
     if (!AttrTok)
       return false;
@@ -400,7 +404,7 @@ private:
     while (AttrTok && !AttrTok->startsSequence(tok::r_square, tok::r_square)) {
       // ObjC message send. We assume nobody will use : in a C++11 attribute
       // specifier parameter, although this is technically valid:
-      // [[foo(:)]]
+      // [[foo(:)]].
       if (AttrTok->is(tok::colon) ||
           AttrTok->startsSequence(tok::identifier, tok::identifier) ||
           AttrTok->startsSequence(tok::r_paren, tok::identifier))
@@ -1119,10 +1123,10 @@ public:
       return LT_ImportStatement;
     }
 
-    // In .proto files, top-level options are very similar to import statements
-    // and should not be line-wrapped.
+    // In .proto files, top-level options and package statements are very
+    // similar to import statements and should not be line-wrapped.
     if (Style.Language == FormatStyle::LK_Proto && Line.Level == 0 &&
-        CurrentToken->is(Keywords.kw_option)) {
+        CurrentToken->isOneOf(Keywords.kw_option, Keywords.kw_package)) {
       next();
       if (CurrentToken && CurrentToken->is(tok::identifier)) {
         while (CurrentToken)
@@ -1196,9 +1200,10 @@ private:
     // recovered from an error (e.g. failure to find the matching >).
     if (!CurrentToken->isOneOf(
             TT_LambdaLSquare, TT_LambdaLBrace, TT_ForEachMacro,
-            TT_FunctionLBrace, TT_ImplicitStringLiteral, TT_InlineASMBrace,
-            TT_JsFatArrow, TT_LambdaArrow, TT_OverloadedOperator,
-            TT_RegexLiteral, TT_TemplateString, TT_ObjCStringLiteral))
+            TT_TypenameMacro, TT_FunctionLBrace, TT_ImplicitStringLiteral,
+            TT_InlineASMBrace, TT_JsFatArrow, TT_LambdaArrow, TT_NamespaceMacro,
+            TT_OverloadedOperator, TT_RegexLiteral, TT_TemplateString,
+            TT_ObjCStringLiteral))
       CurrentToken->Type = TT_Unknown;
     CurrentToken->Role.reset();
     CurrentToken->MatchingParen = nullptr;
@@ -1416,6 +1421,7 @@ private:
           if (AfterParen->Tok.isNot(tok::caret)) {
             if (FormatToken *BeforeParen = Current.MatchingParen->Previous)
               if (BeforeParen->is(tok::identifier) &&
+                  !BeforeParen->is(TT_TypenameMacro) &&
                   BeforeParen->TokenText == BeforeParen->TokenText.upper() &&
                   (!BeforeParen->Previous ||
                    BeforeParen->Previous->ClosesTemplateDeclaration))
@@ -1667,7 +1673,8 @@ private:
       FormatToken *TokenBeforeMatchingParen =
           PrevToken->MatchingParen->getPreviousNonComment();
       if (TokenBeforeMatchingParen &&
-          TokenBeforeMatchingParen->isOneOf(tok::kw_typeof, tok::kw_decltype))
+          TokenBeforeMatchingParen->isOneOf(tok::kw_typeof, tok::kw_decltype,
+                                            TT_TypenameMacro))
         return TT_PointerOrReference;
     }
 
@@ -2422,6 +2429,8 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
   if (Left.is(TT_JavaAnnotation))
     return 50;
 
+  if (Left.is(TT_UnaryOperator))
+    return 60;
   if (Left.isOneOf(tok::plus, tok::comma) && Left.Previous &&
       Left.Previous->isLabelString() &&
       (Left.NextOperator || Left.OperatorIndex != 0))
@@ -2527,7 +2536,8 @@ bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
       FormatToken *TokenBeforeMatchingParen =
           Left.MatchingParen->getPreviousNonComment();
       if (!TokenBeforeMatchingParen ||
-          !TokenBeforeMatchingParen->isOneOf(tok::kw_typeof, tok::kw_decltype))
+          !TokenBeforeMatchingParen->isOneOf(tok::kw_typeof, tok::kw_decltype,
+                                             TT_TypenameMacro))
         return true;
     }
     return (Left.Tok.isLiteral() ||

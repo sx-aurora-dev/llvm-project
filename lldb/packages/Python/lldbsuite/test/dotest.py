@@ -270,6 +270,9 @@ def parseOptionsAndInitTestdirs():
             else:
                 os.environ[parts[0]] = parts[1]
 
+    if args.set_inferior_env_vars:
+        lldbtest_config.inferior_env = ' '.join(args.set_inferior_env_vars)
+
     # only print the args if being verbose (and parsable is off)
     if args.v and not args.q:
         print(sys.argv)
@@ -690,16 +693,11 @@ def setupSysPath():
     os.environ["LLDB_SRC"] = lldbsuite.lldb_root
 
     pluginPath = os.path.join(scriptPath, 'plugins')
-    toolsLLDBMIPath = os.path.join(scriptPath, 'tools', 'lldb-mi')
     toolsLLDBVSCode = os.path.join(scriptPath, 'tools', 'lldb-vscode')
     toolsLLDBServerPath = os.path.join(scriptPath, 'tools', 'lldb-server')
 
-    # Insert script dir, plugin dir, lldb-mi dir and lldb-server dir to the
-    # sys.path.
+    # Insert script dir, plugin dir and lldb-server dir to the sys.path.
     sys.path.insert(0, pluginPath)
-    # Adding test/tools/lldb-mi to the path makes it easy
-    sys.path.insert(0, toolsLLDBMIPath)
-    # to "import lldbmi_testcase" from the MI tests
     # Adding test/tools/lldb-vscode to the path makes it easy to
     # "import lldb_vscode_testcase" from the VSCode tests
     sys.path.insert(0, toolsLLDBVSCode)
@@ -758,19 +756,7 @@ def setupSysPath():
     print("LLDB import library dir:", os.environ["LLDB_IMPLIB_DIR"])
     os.system('%s -v' % lldbtest_config.lldbExec)
 
-    # Assume lldb-mi is in same place as lldb
-    # If not found, disable the lldb-mi tests
-    # TODO: Append .exe on Windows
-    #   - this will be in a separate commit in case the mi tests fail horribly
     lldbDir = os.path.dirname(lldbtest_config.lldbExec)
-    lldbMiExec = os.path.join(lldbDir, "lldb-mi")
-    if is_exe(lldbMiExec):
-        os.environ["LLDBMI_EXEC"] = lldbMiExec
-    else:
-        if not configuration.shouldSkipBecauseOfCategories(["lldb-mi"]):
-            print(
-                "The 'lldb-mi' executable cannot be located.  The lldb-mi tests can not be run as a result.")
-            configuration.skipCategories.append("lldb-mi")
 
     lldbVSCodeExec = os.path.join(lldbDir, "lldb-vscode")
     if is_exe(lldbVSCodeExec):
@@ -1181,6 +1167,32 @@ def checkLibstdcxxSupport():
     print("libstdcxx tests will not be run because: " + reason)
     configuration.skipCategories.append("libstdcxx")
 
+def canRunWatchpointTests():
+    from lldbsuite.test import lldbplatformutil
+
+    platform = lldbplatformutil.getPlatform()
+    if platform == "netbsd":
+      if os.geteuid() == 0:
+        return True, "root can always write dbregs"
+      try:
+        output = subprocess.check_output(["/sbin/sysctl", "-n",
+          "security.models.extensions.user_set_dbregs"]).decode().strip()
+        if output == "1":
+          return True, "security.models.extensions.user_set_dbregs enabled"
+      except subprocess.CalledProcessError:
+        pass
+      return False, "security.models.extensions.user_set_dbregs disabled"
+    return True, "watchpoint support available"
+
+def checkWatchpointSupport():
+    result, reason = canRunWatchpointTests()
+    if result:
+        return # watchpoints supported
+    if "watchpoint" in configuration.categoriesList:
+        return # watchpoint category explicitly requested, let it run.
+    print("watchpoint tests will not be run because: " + reason)
+    configuration.skipCategories.append("watchpoint")
+
 def checkDebugInfoSupport():
     import lldb
 
@@ -1305,6 +1317,7 @@ def run_suite():
 
     checkLibcxxSupport()
     checkLibstdcxxSupport()
+    checkWatchpointSupport()
     checkDebugInfoSupport()
 
     # Don't do debugserver tests on anything except OS X.

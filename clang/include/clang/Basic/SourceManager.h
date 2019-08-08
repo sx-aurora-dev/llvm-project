@@ -679,7 +679,7 @@ class SourceManager : public RefCountedBase<SourceManager> {
   /// Holds information for \#line directives.
   ///
   /// This is referenced by indices from SLocEntryTable.
-  LineTableInfo *LineTable = nullptr;
+  std::unique_ptr<LineTableInfo> LineTable;
 
   /// These ivars serve as a cache used in the getLineNumber
   /// method which is used to speedup getLineNumber calls to nearby locations.
@@ -1466,8 +1466,13 @@ public:
 
     // This happens when the macro is the result of a paste, in that case
     // its spelling is the scratch memory, so we take the parent context.
-    if (isWrittenInScratchSpace(getSpellingLoc(loc)))
-      return isInSystemHeader(getSpellingLoc(getImmediateMacroCallerLoc(loc)));
+    // There can be several level of token pasting.
+    if (isWrittenInScratchSpace(getSpellingLoc(loc))) {
+      do {
+        loc = getImmediateMacroCallerLoc(loc);
+      } while (isWrittenInScratchSpace(getSpellingLoc(loc)));
+      return isInSystemMacro(loc);
+    }
 
     return isInSystemHeader(getSpellingLoc(loc));
   }

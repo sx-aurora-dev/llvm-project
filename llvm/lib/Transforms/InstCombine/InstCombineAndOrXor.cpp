@@ -160,16 +160,14 @@ Instruction *InstCombiner::OptAndOp(BinaryOperator *Op,
 }
 
 /// Emit a computation of: (V >= Lo && V < Hi) if Inside is true, otherwise
-/// (V < Lo || V >= Hi). This method expects that Lo <= Hi. IsSigned indicates
+/// (V < Lo || V >= Hi). This method expects that Lo < Hi. IsSigned indicates
 /// whether to treat V, Lo, and Hi as signed or not.
 Value *InstCombiner::insertRangeTest(Value *V, const APInt &Lo, const APInt &Hi,
                                      bool isSigned, bool Inside) {
-  assert((isSigned ? Lo.sle(Hi) : Lo.ule(Hi)) &&
-         "Lo is not <= Hi in range emission code!");
+  assert((isSigned ? Lo.slt(Hi) : Lo.ult(Hi)) &&
+         "Lo is not < Hi in range emission code!");
 
   Type *Ty = V->getType();
-  if (Lo == Hi)
-    return Inside ? ConstantInt::getFalse(Ty) : ConstantInt::getTrue(Ty);
 
   // V >= Min && V <  Hi --> V <  Hi
   // V <  Min || V >= Hi --> V >= Hi
@@ -967,7 +965,7 @@ static Value *foldSignedTruncationCheck(ICmpInst *ICmp0, ICmpInst *ICmp1,
     // Can it be decomposed into  icmp eq (X & Mask), 0  ?
     if (llvm::decomposeBitTestICmp(ICmp->getOperand(0), ICmp->getOperand(1),
                                    Pred, X, UnsetBitsMask,
-                                   /*LookThruTrunc=*/false) &&
+                                   /*LookThroughTrunc=*/false) &&
         Pred == ICmpInst::ICMP_EQ)
       return true;
     // Is it  icmp eq (X & Mask), 0  already?
@@ -1021,6 +1019,36 @@ static Value *foldSignedTruncationCheck(ICmpInst *ICmp0, ICmpInst *ICmp1,
                                CxtI.getName() + ".simplified");
 }
 
+/// Reduce a pair of compares that check if a value has exactly 1 bit set.
+static Value *foldIsPowerOf2(ICmpInst *Cmp0, ICmpInst *Cmp1, bool JoinedByAnd,
+                             InstCombiner::BuilderTy &Builder) {
+  // Handle 'and' / 'or' commutation: make the equality check the first operand.
+  if (JoinedByAnd && Cmp1->getPredicate() == ICmpInst::ICMP_NE)
+    std::swap(Cmp0, Cmp1);
+  else if (!JoinedByAnd && Cmp1->getPredicate() == ICmpInst::ICMP_EQ)
+    std::swap(Cmp0, Cmp1);
+
+  // (X != 0) && (ctpop(X) u< 2) --> ctpop(X) == 1
+  CmpInst::Predicate Pred0, Pred1;
+  Value *X;
+  if (JoinedByAnd && match(Cmp0, m_ICmp(Pred0, m_Value(X), m_ZeroInt())) &&
+      match(Cmp1, m_ICmp(Pred1, m_Intrinsic<Intrinsic::ctpop>(m_Specific(X)),
+                         m_SpecificInt(2))) &&
+      Pred0 == ICmpInst::ICMP_NE && Pred1 == ICmpInst::ICMP_ULT) {
+    Value *CtPop = Cmp1->getOperand(0);
+    return Builder.CreateICmpEQ(CtPop, ConstantInt::get(CtPop->getType(), 1));
+  }
+  // (X == 0) || (ctpop(X) u> 1) --> ctpop(X) != 1
+  if (!JoinedByAnd && match(Cmp0, m_ICmp(Pred0, m_Value(X), m_ZeroInt())) &&
+      match(Cmp1, m_ICmp(Pred1, m_Intrinsic<Intrinsic::ctpop>(m_Specific(X)),
+                         m_SpecificInt(1))) &&
+      Pred0 == ICmpInst::ICMP_EQ && Pred1 == ICmpInst::ICMP_UGT) {
+    Value *CtPop = Cmp1->getOperand(0);
+    return Builder.CreateICmpNE(CtPop, ConstantInt::get(CtPop->getType(), 1));
+  }
+  return nullptr;
+}
+
 /// Fold (icmp)&(icmp) if possible.
 Value *InstCombiner::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
                                     Instruction &CxtI) {
@@ -1061,6 +1089,9 @@ Value *InstCombiner::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
     return V;
 
   if (Value *V = foldSignedTruncationCheck(LHS, RHS, CxtI, Builder))
+    return V;
+
+  if (Value *V = foldIsPowerOf2(LHS, RHS, true /* JoinedByAnd */, Builder))
     return V;
 
   // This only handles icmp of constants: (icmp1 A, C1) & (icmp2 B, C2).
@@ -1163,14 +1194,16 @@ Value *InstCombiner::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
     default:
       llvm_unreachable("Unknown integer condition code!");
     case ICmpInst::ICMP_ULT:
-      if (LHSC == SubOne(RHSC)) // (X != 13 & X u< 14) -> X < 13
+      // (X != 13 & X u< 14) -> X < 13
+      if (LHSC->getValue() == (RHSC->getValue() - 1))
         return Builder.CreateICmpULT(LHS0, LHSC);
-      if (LHSC->isZero()) // (X !=  0 & X u< 14) -> X-1 u< 13
+      if (LHSC->isZero()) // (X != 0 & X u< 14) -> X-1 u< 13
         return insertRangeTest(LHS0, LHSC->getValue() + 1, RHSC->getValue(),
                                false, true);
       break; // (X != 13 & X u< 15) -> no change
     case ICmpInst::ICMP_SLT:
-      if (LHSC == SubOne(RHSC)) // (X != 13 & X s< 14) -> X < 13
+      // (X != 13 & X s< 14) -> X < 13
+      if (LHSC->getValue() == (RHSC->getValue() - 1))
         return Builder.CreateICmpSLT(LHS0, LHSC);
       break;                 // (X != 13 & X s< 15) -> no change
     case ICmpInst::ICMP_NE:
@@ -1183,7 +1216,8 @@ Value *InstCombiner::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
     default:
       llvm_unreachable("Unknown integer condition code!");
     case ICmpInst::ICMP_NE:
-      if (RHSC == AddOne(LHSC)) // (X u> 13 & X != 14) -> X u> 14
+      // (X u> 13 & X != 14) -> X u> 14
+      if (RHSC->getValue() == (LHSC->getValue() + 1))
         return Builder.CreateICmp(PredL, LHS0, RHSC);
       break;                 // (X u> 13 & X != 15) -> no change
     case ICmpInst::ICMP_ULT: // (X u> 13 & X u< 15) -> (X-14) <u 1
@@ -1196,7 +1230,8 @@ Value *InstCombiner::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
     default:
       llvm_unreachable("Unknown integer condition code!");
     case ICmpInst::ICMP_NE:
-      if (RHSC == AddOne(LHSC)) // (X s> 13 & X != 14) -> X s> 14
+      // (X s> 13 & X != 14) -> X s> 14
+      if (RHSC->getValue() == (LHSC->getValue() + 1))
         return Builder.CreateICmp(PredL, LHS0, RHSC);
       break;                 // (X s> 13 & X != 15) -> no change
     case ICmpInst::ICMP_SLT: // (X s> 13 & X s< 15) -> (X-14) s< 1
@@ -1898,6 +1933,13 @@ static Instruction *matchRotate(Instruction &Or) {
         match(R, m_And(m_Neg(m_Specific(X)), m_SpecificInt(Mask))))
       return X;
 
+    // Similar to above, but the shift amount may be extended after masking,
+    // so return the extended value as the parameter for the intrinsic.
+    if (match(L, m_ZExt(m_And(m_Value(X), m_SpecificInt(Mask)))) &&
+        match(R, m_And(m_Neg(m_ZExt(m_And(m_Specific(X), m_SpecificInt(Mask)))),
+                       m_SpecificInt(Mask))))
+      return L;
+
     return nullptr;
   };
 
@@ -2137,6 +2179,9 @@ Value *InstCombiner::foldOrOfICmps(ICmpInst *LHS, ICmpInst *RHS,
     return V;
 
   if (Value *V = foldAndOrOfEqualityCmpsWithConstants(LHS, RHS, false, Builder))
+    return V;
+
+  if (Value *V = foldIsPowerOf2(LHS, RHS, false /* JoinedByAnd */, Builder))
     return V;
 
   // This only handles icmp of constants: (icmp1 A, C1) | (icmp2 B, C2).
