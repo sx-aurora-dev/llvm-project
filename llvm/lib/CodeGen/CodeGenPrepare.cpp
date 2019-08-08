@@ -32,6 +32,7 @@
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Analysis/VectorUtils.h"
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
@@ -363,6 +364,7 @@ class TypePromotionTransaction;
     bool optimizeExt(Instruction *&I);
     bool optimizeExtUses(Instruction *I);
     bool optimizeLoadExt(LoadInst *Load);
+    bool optimizeShiftInst(BinaryOperator *BO);
     bool optimizeSelectInst(SelectInst *SI);
     bool optimizeShuffleVectorInst(ShuffleVectorInst *SVI);
     bool optimizeSwitchInst(SwitchInst *SI);
@@ -1140,8 +1142,8 @@ static bool OptimizeNoopCopyExpression(CastInst *CI, const TargetLowering &TLI,
   // Sink only "cheap" (or nop) address-space casts.  This is a weaker condition
   // than sinking only nop casts, but is helpful on some platforms.
   if (auto *ASC = dyn_cast<AddrSpaceCastInst>(CI)) {
-    if (!TLI.isCheapAddrSpaceCast(ASC->getSrcAddressSpace(),
-                                  ASC->getDestAddressSpace()))
+    if (!TLI.isFreeAddrSpaceCast(ASC->getSrcAddressSpace(),
+                                 ASC->getDestAddressSpace()))
       return false;
   }
 
@@ -2022,17 +2024,18 @@ bool CodeGenPrepare::dupRetToEnableTailCallOpts(BasicBlock *BB, bool &ModifiedDT
   /// Only dup the ReturnInst if the CallInst is likely to be emitted as a tail
   /// call.
   const Function *F = BB->getParent();
-  SmallVector<CallInst*, 4> TailCalls;
+  SmallVector<BasicBlock*, 4> TailCallBBs;
   if (PN) {
     for (unsigned I = 0, E = PN->getNumIncomingValues(); I != E; ++I) {
       // Look through bitcasts.
       Value *IncomingVal = PN->getIncomingValue(I)->stripPointerCasts();
       CallInst *CI = dyn_cast<CallInst>(IncomingVal);
+      BasicBlock *PredBB = PN->getIncomingBlock(I);
       // Make sure the phi value is indeed produced by the tail call.
-      if (CI && CI->hasOneUse() && CI->getParent() == PN->getIncomingBlock(I) &&
+      if (CI && CI->hasOneUse() && CI->getParent() == PredBB &&
           TLI->mayBeEmittedAsTailCall(CI) &&
           attributesPermitTailCall(F, CI, RetI, *TLI))
-        TailCalls.push_back(CI);
+        TailCallBBs.push_back(PredBB);
     }
   } else {
     SmallPtrSet<BasicBlock*, 4> VisitedBBs;
@@ -2050,24 +2053,20 @@ bool CodeGenPrepare::dupRetToEnableTailCallOpts(BasicBlock *BB, bool &ModifiedDT
       CallInst *CI = dyn_cast<CallInst>(&*RI);
       if (CI && CI->use_empty() && TLI->mayBeEmittedAsTailCall(CI) &&
           attributesPermitTailCall(F, CI, RetI, *TLI))
-        TailCalls.push_back(CI);
+        TailCallBBs.push_back(*PI);
     }
   }
 
   bool Changed = false;
-  for (unsigned i = 0, e = TailCalls.size(); i != e; ++i) {
-    CallInst *CI = TailCalls[i];
-    CallSite CS(CI);
-
+  for (auto const &TailCallBB : TailCallBBs) {
     // Make sure the call instruction is followed by an unconditional branch to
     // the return block.
-    BasicBlock *CallBB = CI->getParent();
-    BranchInst *BI = dyn_cast<BranchInst>(CallBB->getTerminator());
+    BranchInst *BI = dyn_cast<BranchInst>(TailCallBB->getTerminator());
     if (!BI || !BI->isUnconditional() || BI->getSuccessor(0) != BB)
       continue;
 
-    // Duplicate the return into CallBB.
-    (void)FoldReturnIntoUncondBranch(RetI, BB, CallBB);
+    // Duplicate the return into TailCallBB.
+    (void)FoldReturnIntoUncondBranch(RetI, BB, TailCallBB);
     ModifiedDT = Changed = true;
     ++NumRetsDup;
   }
@@ -4200,15 +4199,11 @@ bool AddressingModeMatcher::matchOperationAddr(User *AddrInst, unsigned Opcode,
         if (isa<Argument>(Base) || isa<GlobalValue>(Base) ||
             (BaseI && !isa<CastInst>(BaseI) &&
              !isa<GetElementPtrInst>(BaseI))) {
-          // If the base is an instruction, make sure the GEP is not in the same
-          // basic block as the base. If the base is an argument or global
-          // value, make sure the GEP is not in the entry block.  Otherwise,
-          // instruction selection can undo the split.  Also make sure the
-          // parent block allows inserting non-PHI instructions before the
-          // terminator.
+          // Make sure the parent block allows inserting non-PHI instructions
+          // before the terminator.
           BasicBlock *Parent =
               BaseI ? BaseI->getParent() : &GEP->getFunction()->getEntryBlock();
-          if (GEP->getParent() != Parent && !Parent->getTerminator()->isEHPad())
+          if (!Parent->getTerminator()->isEHPad())
             LargeOffsetGEP = std::make_pair(GEP, ConstantOffset);
         }
       }
@@ -4738,8 +4733,7 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
         InsertedInsts, PromotedInsts, TPT, LargeOffsetGEP);
 
     GetElementPtrInst *GEP = LargeOffsetGEP.first;
-    if (GEP && GEP->getParent() != MemoryInst->getParent() &&
-        !NewGEPBases.count(GEP)) {
+    if (GEP && !NewGEPBases.count(GEP)) {
       // If splitting the underlying data structure can reduce the offset of a
       // GEP, collect the GEP.  Skip the GEPs that are the new bases of
       // previously split data structures.
@@ -5904,7 +5898,7 @@ static bool isFormingBranchFromSelectProfitable(const TargetTransformInfo *TTI,
 static Value *getTrueOrFalseValue(
     SelectInst *SI, bool isTrue,
     const SmallPtrSet<const Instruction *, 2> &Selects) {
-  Value *V;
+  Value *V = nullptr;
 
   for (SelectInst *DefSI = SI; DefSI != nullptr && Selects.count(DefSI);
        DefSI = dyn_cast<SelectInst>(V)) {
@@ -5912,7 +5906,42 @@ static Value *getTrueOrFalseValue(
            "The condition of DefSI does not match with SI");
     V = (isTrue ? DefSI->getTrueValue() : DefSI->getFalseValue());
   }
+
+  assert(V && "Failed to get select true/false value");
   return V;
+}
+
+bool CodeGenPrepare::optimizeShiftInst(BinaryOperator *Shift) {
+  assert(Shift->isShift() && "Expected a shift");
+
+  // If this is (1) a vector shift, (2) shifts by scalars are cheaper than
+  // general vector shifts, and (3) the shift amount is a select-of-splatted
+  // values, hoist the shifts before the select:
+  //   shift Op0, (select Cond, TVal, FVal) -->
+  //   select Cond, (shift Op0, TVal), (shift Op0, FVal)
+  //
+  // This is inverting a generic IR transform when we know that the cost of a
+  // general vector shift is more than the cost of 2 shift-by-scalars.
+  // We can't do this effectively in SDAG because we may not be able to
+  // determine if the select operands are splats from within a basic block.
+  Type *Ty = Shift->getType();
+  if (!Ty->isVectorTy() || !TLI->isVectorShiftByScalarCheap(Ty))
+    return false;
+  Value *Cond, *TVal, *FVal;
+  if (!match(Shift->getOperand(1),
+             m_OneUse(m_Select(m_Value(Cond), m_Value(TVal), m_Value(FVal)))))
+    return false;
+  if (!isSplatValue(TVal) || !isSplatValue(FVal))
+    return false;
+
+  IRBuilder<> Builder(Shift);
+  BinaryOperator::BinaryOps Opcode = Shift->getOpcode();
+  Value *NewTVal = Builder.CreateBinOp(Opcode, Shift->getOperand(0), TVal);
+  Value *NewFVal = Builder.CreateBinOp(Opcode, Shift->getOperand(0), FVal);
+  Value *NewSel = Builder.CreateSelect(Cond, NewTVal, NewFVal);
+  Shift->replaceAllUsesWith(NewSel);
+  Shift->eraseFromParent();
+  return true;
 }
 
 /// If we have a SelectInst that will likely profit from branch prediction,
@@ -6136,6 +6165,7 @@ bool CodeGenPrepare::optimizeShuffleVectorInst(ShuffleVectorInst *SVI) {
       InsertedShuffle =
           new ShuffleVectorInst(SVI->getOperand(0), SVI->getOperand(1),
                                 SVI->getOperand(2), "", &*InsertPt);
+      InsertedShuffle->setDebugLoc(SVI->getDebugLoc());
     }
 
     UI->replaceUsesOfWith(SVI, InsertedShuffle);
@@ -6647,14 +6677,17 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
                                 const TargetLowering &TLI) {
   // Handle simple but common cases only.
   Type *StoreType = SI.getValueOperand()->getType();
-  if (DL.getTypeStoreSizeInBits(StoreType) != DL.getTypeSizeInBits(StoreType) ||
+  if (!DL.typeSizeEqualsStoreSize(StoreType) ||
       DL.getTypeSizeInBits(StoreType) == 0)
     return false;
 
   unsigned HalfValBitSize = DL.getTypeSizeInBits(StoreType) / 2;
   Type *SplitStoreType = Type::getIntNTy(SI.getContext(), HalfValBitSize);
-  if (DL.getTypeStoreSizeInBits(SplitStoreType) !=
-      DL.getTypeSizeInBits(SplitStoreType))
+  if (!DL.typeSizeEqualsStoreSize(SplitStoreType))
+    return false;
+
+  // Don't split the store if it is volatile.
+  if (SI.isVolatile())
     return false;
 
   // Match the following patterns:
@@ -6982,13 +7015,13 @@ bool CodeGenPrepare::optimizeInst(Instruction *I, bool &ModifiedDT) {
       EnableAndCmpSinking && TLI)
     return sinkAndCmp0Expression(BinOp, *TLI, InsertedInsts);
 
+  // TODO: Move this into the switch on opcode - it handles shifts already.
   if (BinOp && (BinOp->getOpcode() == Instruction::AShr ||
                 BinOp->getOpcode() == Instruction::LShr)) {
     ConstantInt *CI = dyn_cast<ConstantInt>(BinOp->getOperand(1));
     if (TLI && CI && TLI->hasExtractBitsInsn())
-      return OptimizeExtractBits(BinOp, CI, *TLI, *DL);
-
-    return false;
+      if (OptimizeExtractBits(BinOp, CI, *TLI, *DL))
+        return true;
   }
 
   if (GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(I)) {
@@ -7013,6 +7046,10 @@ bool CodeGenPrepare::optimizeInst(Instruction *I, bool &ModifiedDT) {
     return true;
 
   switch (I->getOpcode()) {
+  case Instruction::Shl:
+  case Instruction::LShr:
+  case Instruction::AShr:
+    return optimizeShiftInst(cast<BinaryOperator>(I));
   case Instruction::Call:
     return optimizeCallInst(cast<CallInst>(I), ModifiedDT);
   case Instruction::Select:

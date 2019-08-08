@@ -147,7 +147,7 @@ cl::alias ReverseSortr("r", cl::desc("Alias for --reverse-sort"),
                        cl::aliasopt(ReverseSort), cl::Grouping);
 
 cl::opt<bool> PrintSize("print-size",
-                        cl::desc("Show symbol size instead of address"),
+                        cl::desc("Show symbol size as well as address"),
                         cl::cat(NMCat));
 cl::alias PrintSizeS("S", cl::desc("Alias for --print-size"),
                      cl::aliasopt(PrintSize), cl::Grouping);
@@ -183,12 +183,7 @@ cl::alias JustSymbolNames("j", cl::desc("Alias for --just-symbol-name"),
 cl::opt<bool> SpecialSyms("special-syms",
                           cl::desc("No-op. Used for GNU compatibility only"));
 
-// FIXME: This option takes exactly two strings and should be allowed anywhere
-// on the command line.  Such that "llvm-nm -s __TEXT __text foo.o" would work.
-// But that does not as the CommandLine Library does not have a way to make
-// this work.  For now the "-s __TEXT __text" has to be last on the command
-// line.
-cl::list<std::string> SegSect("s", cl::Positional, cl::ZeroOrMore,
+cl::list<std::string> SegSect("s", cl::multi_val(2), cl::ZeroOrMore,
                               cl::value_desc("segment section"), cl::Hidden,
                               cl::desc("Dump only symbols from this segment "
                                        "and section name, Mach-O only"),
@@ -899,45 +894,35 @@ static char getSymbolNMTypeChar(ELFObjectFileBase &Obj,
     return '?';
   }
 
+  uint8_t Binding = SymI->getBinding();
+  if (Binding == ELF::STB_GNU_UNIQUE)
+    return 'u';
+
+  assert(Binding != ELF::STB_WEAK && "STB_WEAK not tested in calling function");
+  if (Binding != ELF::STB_GLOBAL && Binding != ELF::STB_LOCAL)
+    return '?';
+
   elf_section_iterator SecI = *SecIOrErr;
   if (SecI != Obj.section_end()) {
-    switch (SecI->getType()) {
-    case ELF::SHT_PROGBITS:
-    case ELF::SHT_DYNAMIC:
-      switch (SecI->getFlags()) {
-      case (ELF::SHF_ALLOC | ELF::SHF_EXECINSTR):
-        return 't';
-      case (ELF::SHF_TLS | ELF::SHF_ALLOC | ELF::SHF_WRITE):
-      case (ELF::SHF_ALLOC | ELF::SHF_WRITE):
-        return 'd';
-      case ELF::SHF_ALLOC:
-      case (ELF::SHF_ALLOC | ELF::SHF_MERGE):
-      case (ELF::SHF_ALLOC | ELF::SHF_MERGE | ELF::SHF_STRINGS):
-        return 'r';
-      }
-      break;
-    case ELF::SHT_NOBITS:
-      return 'b';
-    case ELF::SHT_INIT_ARRAY:
-    case ELF::SHT_FINI_ARRAY:
+    uint32_t Type = SecI->getType();
+    uint64_t Flags = SecI->getFlags();
+    if (Flags & ELF::SHF_EXECINSTR)
       return 't';
-    }
-  }
+    if (Type == ELF::SHT_NOBITS)
+      return 'b';
+    if (Flags & ELF::SHF_ALLOC)
+      return Flags & ELF::SHF_WRITE ? 'd' : 'r';
 
-  if (SymI->getELFType() == ELF::STT_SECTION) {
-    Expected<StringRef> Name = SymI->getName();
-    if (!Name) {
-      consumeError(Name.takeError());
+    StringRef SecName;
+    if (SecI->getName(SecName))
       return '?';
-    }
-    return StringSwitch<char>(*Name)
-        .StartsWith(".debug", 'N')
-        .StartsWith(".note", 'n')
-        .StartsWith(".comment", 'n')
-        .Default('?');
+    if (SecName.startswith(".debug"))
+      return 'N';
+    if (!(Flags & ELF::SHF_WRITE))
+      return 'n';
   }
 
-  return 'n';
+  return '?';
 }
 
 static char getSymbolNMTypeChar(COFFObjectFile &Obj, symbol_iterator I) {
@@ -1137,10 +1122,13 @@ static char getNMSectionTagAndName(SymbolicFile &Obj, basic_symbol_iterator I,
   else
     Ret = getSymbolNMTypeChar(cast<ELFObjectFileBase>(Obj), I);
 
-  if (Symflags & object::SymbolRef::SF_Global)
-    Ret = toupper(Ret);
+  if (!(Symflags & object::SymbolRef::SF_Global))
+    return Ret;
 
-  return Ret;
+  if (Obj.isELF() && ELFSymbolRef(*I).getBinding() == ELF::STB_GNU_UNIQUE)
+    return Ret;
+
+  return toupper(Ret);
 }
 
 // getNsectForSegSect() is used to implement the Mach-O "-s segname sectname"
@@ -1232,11 +1220,13 @@ dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
       }
       S.TypeName = getNMTypeName(Obj, Sym);
       S.TypeChar = getNMSectionTagAndName(Obj, Sym, S.SectionName);
-      std::error_code EC = Sym.printName(OS);
-      if (EC && MachO)
-        OS << "bad string index";
-      else
-        error(EC);
+      if (Error E = Sym.printName(OS)) {
+        if (MachO) {
+          OS << "bad string index";
+          consumeError(std::move(E));
+        } else
+          error(std::move(E), Obj.getFileName());
+      }
       OS << '\0';
       S.Sym = Sym;
       SymbolList.push_back(S);

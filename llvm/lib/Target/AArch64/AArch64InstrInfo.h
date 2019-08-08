@@ -15,6 +15,7 @@
 
 #include "AArch64.h"
 #include "AArch64RegisterInfo.h"
+#include "AArch64StackOffset.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/CodeGen/MachineCombinerPattern.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -162,7 +163,8 @@ public:
   foldMemoryOperandImpl(MachineFunction &MF, MachineInstr &MI,
                         ArrayRef<unsigned> Ops,
                         MachineBasicBlock::iterator InsertPt, int FrameIndex,
-                        LiveIntervals *LIS = nullptr) const override;
+                        LiveIntervals *LIS = nullptr,
+                        VirtRegMap *VRM = nullptr) const override;
 
   /// \returns true if a branch from an instruction with opcode \p BranchOpc
   ///  bytes is capable of jumping to a position \p BrOffset bytes away.
@@ -267,6 +269,13 @@ public:
 #define GET_INSTRINFO_HELPER_DECLS
 #include "AArch64GenInstrInfo.inc"
 
+protected:
+  /// If the specific machine instruction is a instruction that moves/copies
+  /// value from one register to another register return true along with
+  /// @Source machine operand and @Destination machine operand.
+  bool isCopyInstrImpl(const MachineInstr &MI, const MachineOperand *&Source,
+                       const MachineOperand *&Destination) const override;
+
 private:
   /// Sets the offsets on outlined instructions in \p MBB which use SP
   /// so that they will be valid post-outlining.
@@ -291,15 +300,16 @@ private:
 /// if necessary, to be replaced by the scavenger at the end of PEI.
 void emitFrameOffset(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                      const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
-                     int Offset, const TargetInstrInfo *TII,
+                     StackOffset Offset, const TargetInstrInfo *TII,
                      MachineInstr::MIFlag = MachineInstr::NoFlags,
-                     bool SetNZCV = false,  bool NeedsWinCFI = false);
+                     bool SetNZCV = false, bool NeedsWinCFI = false,
+                     bool *HasWinCFI = nullptr);
 
 /// rewriteAArch64FrameIndex - Rewrite MI to access 'Offset' bytes from the
 /// FP. Return false if the offset could not be handled directly in MI, and
 /// return the left-over portion by reference.
 bool rewriteAArch64FrameIndex(MachineInstr &MI, unsigned FrameRegIdx,
-                              unsigned FrameReg, int &Offset,
+                              unsigned FrameReg, StackOffset &Offset,
                               const AArch64InstrInfo *TII);
 
 /// Use to report the frame offset status in isAArch64FrameOffsetLegal.
@@ -323,7 +333,7 @@ enum AArch64FrameOffsetStatus {
 /// If set, @p EmittableOffset contains the amount that can be set in @p MI
 /// (possibly with @p OutUnscaledOp if OutUseUnscaledOp is true) and that
 /// is a legal offset.
-int isAArch64FrameOffsetLegal(const MachineInstr &MI, int &Offset,
+int isAArch64FrameOffsetLegal(const MachineInstr &MI, StackOffset &Offset,
                               bool *OutUseUnscaledOp = nullptr,
                               unsigned *OutUnscaledOp = nullptr,
                               int *EmittableOffset = nullptr);

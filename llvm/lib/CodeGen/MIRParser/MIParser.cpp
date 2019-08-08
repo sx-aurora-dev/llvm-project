@@ -176,7 +176,7 @@ void PerTargetMIParsingState::initNames2SubRegIndices() {
   const TargetRegisterInfo *TRI = Subtarget.getRegisterInfo();
   for (unsigned I = 1, E = TRI->getNumSubRegIndices(); I < E; ++I)
     Names2SubRegIndices.insert(
-        std::make_pair(StringRef(TRI->getSubRegIndexName(I)).lower(), I));
+        std::make_pair(TRI->getSubRegIndexName(I), I));
 }
 
 unsigned PerTargetMIParsingState::getSubRegIndex(StringRef Name) {
@@ -1078,7 +1078,7 @@ static const char *printImplicitRegisterFlag(const MachineOperand &MO) {
 
 static std::string getRegisterName(const TargetRegisterInfo *TRI,
                                    unsigned Reg) {
-  assert(TargetRegisterInfo::isPhysicalRegister(Reg) && "expected phys reg");
+  assert(Register::isPhysicalRegister(Reg) && "expected phys reg");
   return StringRef(TRI->getName(Reg)).lower();
 }
 
@@ -1136,7 +1136,8 @@ bool MIParser::parseInstruction(unsigned &OpCode, unsigned &Flags) {
          Token.is(MIToken::kw_reassoc) ||
          Token.is(MIToken::kw_nuw) ||
          Token.is(MIToken::kw_nsw) ||
-         Token.is(MIToken::kw_exact)) {
+         Token.is(MIToken::kw_exact) ||
+         Token.is(MIToken::kw_fpexcept)) {
     // Mine frame and fast math flags
     if (Token.is(MIToken::kw_frame_setup))
       Flags |= MachineInstr::FrameSetup;
@@ -1162,6 +1163,8 @@ bool MIParser::parseInstruction(unsigned &OpCode, unsigned &Flags) {
       Flags |= MachineInstr::NoSWrap;
     if (Token.is(MIToken::kw_exact))
       Flags |= MachineInstr::IsExact;
+    if (Token.is(MIToken::kw_fpexcept))
+      Flags |= MachineInstr::FPExcept;
 
     lex();
   }
@@ -1405,11 +1408,11 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
   if (Token.is(MIToken::dot)) {
     if (parseSubRegisterIndex(SubReg))
       return true;
-    if (!TargetRegisterInfo::isVirtualRegister(Reg))
+    if (!Register::isVirtualRegister(Reg))
       return error("subregister index expects a virtual register");
   }
   if (Token.is(MIToken::colon)) {
-    if (!TargetRegisterInfo::isVirtualRegister(Reg))
+    if (!Register::isVirtualRegister(Reg))
       return error("register class specification expects a virtual register");
     lex();
     if (parseRegisterClassOrBank(*RegInfo))
@@ -1438,7 +1441,7 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
     }
   } else if (consumeIfPresent(MIToken::lparen)) {
     // Virtual registers may have a tpe with GlobalISel.
-    if (!TargetRegisterInfo::isVirtualRegister(Reg))
+    if (!Register::isVirtualRegister(Reg))
       return error("unexpected type on physical register");
 
     LLT Ty;
@@ -1452,7 +1455,7 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
       return error("inconsistent type for generic virtual register");
 
     MRI.setType(Reg, Ty);
-  } else if (TargetRegisterInfo::isVirtualRegister(Reg)) {
+  } else if (Register::isVirtualRegister(Reg)) {
     // Generic virtual registers must have a type.
     // If we end up here this means the type hasn't been specified and
     // this is bad!

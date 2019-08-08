@@ -68,8 +68,9 @@ static cl::opt<std::string> OutputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"));
 
 static cl::opt<std::string>
-    ArchName("march", cl::desc("Target architecture. "
-                               "See -version for available targets"),
+    ArchName("march",
+             cl::desc("Target architecture. "
+                      "See -version for available targets"),
              cl::cat(ToolOptions));
 
 static cl::opt<std::string>
@@ -86,6 +87,10 @@ static cl::opt<int>
     OutputAsmVariant("output-asm-variant",
                      cl::desc("Syntax variant to use for output printing"),
                      cl::cat(ToolOptions), cl::init(-1));
+
+static cl::opt<bool>
+    PrintImmHex("print-imm-hex", cl::cat(ToolOptions), cl::init(false),
+                cl::desc("Prefer hex format when printing immediate values"));
 
 static cl::opt<unsigned> Iterations("iterations",
                                     cl::desc("Number of iterations to run"),
@@ -217,7 +222,7 @@ ErrorOr<std::unique_ptr<ToolOutputFile>> getOutputStream() {
     OutputFilename = "-";
   std::error_code EC;
   auto Out =
-      llvm::make_unique<ToolOutputFile>(OutputFilename, EC, sys::fs::F_None);
+      llvm::make_unique<ToolOutputFile>(OutputFilename, EC, sys::fs::OF_None);
   if (!EC)
     return std::move(Out);
   return EC;
@@ -236,6 +241,7 @@ static void processViewOptions() {
 
   if (EnableAllViews.getNumOccurrences()) {
     processOptionImpl(PrintSummaryView, EnableAllViews);
+    processOptionImpl(EnableBottleneckAnalysis, EnableAllViews);
     processOptionImpl(PrintResourcePressureView, EnableAllViews);
     processOptionImpl(PrintTimelineView, EnableAllViews);
     processOptionImpl(PrintInstructionInfoView, EnableAllViews);
@@ -364,6 +370,11 @@ int main(int argc, char **argv) {
     return 1;
   }
   const mca::CodeRegions &Regions = *RegionsOrErr;
+
+  // Early exit if errors were found by the code region parsing logic.
+  if (!Regions.isValid())
+    return 1;
+
   if (Regions.empty()) {
     WithColor::error() << "no assembly instructions found.\n";
     return 1;
@@ -388,6 +399,9 @@ int main(int argc, char **argv) {
         << AssemblerDialect << ".\n";
     return 1;
   }
+
+  // Set the display preference for hex vs. decimal immediates.
+  IP->setPrintImmHex(PrintImmHex);
 
   std::unique_ptr<ToolOutputFile> TOF = std::move(*OF);
 
@@ -436,8 +450,8 @@ int main(int argc, char **argv) {
                   WithColor::error() << IE.Message << '\n';
                   IP->printInst(&IE.Inst, SS, "", *STI);
                   SS.flush();
-                  WithColor::note() << "instruction: " << InstructionStr
-                                    << '\n';
+                  WithColor::note()
+                      << "instruction: " << InstructionStr << '\n';
                 })) {
           // Default case.
           WithColor::error() << toString(std::move(NewE));
@@ -477,11 +491,13 @@ int main(int argc, char **argv) {
     mca::PipelinePrinter Printer(*P);
 
     if (PrintSummaryView)
-      Printer.addView(llvm::make_unique<mca::SummaryView>(
-          SM, Insts, DispatchWidth));
+      Printer.addView(
+          llvm::make_unique<mca::SummaryView>(SM, Insts, DispatchWidth));
 
-    if (EnableBottleneckAnalysis)
-      Printer.addView(llvm::make_unique<mca::BottleneckAnalysis>(SM));
+    if (EnableBottleneckAnalysis) {
+      Printer.addView(llvm::make_unique<mca::BottleneckAnalysis>(
+          *STI, *IP, Insts, S.getNumIterations()));
+    }
 
     if (PrintInstructionInfoView)
       Printer.addView(

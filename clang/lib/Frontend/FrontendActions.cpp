@@ -9,11 +9,13 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Basic/LangStandard.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Lex/DependencyDirectivesSourceMinimizer.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
@@ -23,8 +25,8 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/YAMLTraits.h"
+#include "llvm/Support/raw_ostream.h"
 #include <memory>
 #include <system_error>
 
@@ -73,11 +75,10 @@ ASTPrintAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
 std::unique_ptr<ASTConsumer>
 ASTDumpAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
-  return CreateASTDumper(nullptr /*Dump to stdout.*/,
-                         CI.getFrontendOpts().ASTDumpFilter,
-                         CI.getFrontendOpts().ASTDumpDecls,
-                         CI.getFrontendOpts().ASTDumpAll,
-                         CI.getFrontendOpts().ASTDumpLookups);
+  const FrontendOptions &Opts = CI.getFrontendOpts();
+  return CreateASTDumper(nullptr /*Dump to stdout.*/, Opts.ASTDumpFilter,
+                         Opts.ASTDumpDecls, Opts.ASTDumpAll,
+                         Opts.ASTDumpLookups, Opts.ASTDumpFormat);
 }
 
 std::unique_ptr<ASTConsumer>
@@ -139,7 +140,7 @@ GeneratePCHAction::CreateOutputFile(CompilerInstance &CI, StringRef InFile,
   std::unique_ptr<raw_pwrite_stream> OS =
       CI.createOutputFile(CI.getFrontendOpts().OutputFile, /*Binary=*/true,
                           /*RemoveFileOnSignal=*/false, InFile,
-                          /*Extension=*/"", /*useTemporary=*/true);
+                          /*Extension=*/"", /*UseTemporary=*/true);
   if (!OS)
     return nullptr;
 
@@ -215,7 +216,7 @@ GenerateModuleFromModuleMapAction::CreateOutputFile(CompilerInstance &CI,
   // We use a temporary to avoid race conditions.
   return CI.createOutputFile(CI.getFrontendOpts().OutputFile, /*Binary=*/true,
                              /*RemoveFileOnSignal=*/false, InFile,
-                             /*Extension=*/"", /*useTemporary=*/true,
+                             /*Extension=*/"", /*UseTemporary=*/true,
                              /*CreateMissingDirectories=*/true);
 }
 
@@ -695,7 +696,7 @@ void DumpModuleInfoAction::ExecuteAction() {
   if (!OutputFileName.empty() && OutputFileName != "-") {
     std::error_code EC;
     OutFile.reset(new llvm::raw_fd_ostream(OutputFileName.str(), EC,
-                                           llvm::sys::fs::F_Text));
+                                           llvm::sys::fs::OF_Text));
   }
   llvm::raw_ostream &Out = OutFile.get()? *OutFile.get() : llvm::outs();
 
@@ -832,19 +833,19 @@ void PrintPreprocessedAction::ExecuteAction() {
 
 void PrintPreambleAction::ExecuteAction() {
   switch (getCurrentFileKind().getLanguage()) {
-  case InputKind::C:
-  case InputKind::CXX:
-  case InputKind::ObjC:
-  case InputKind::ObjCXX:
-  case InputKind::OpenCL:
-  case InputKind::CUDA:
-  case InputKind::HIP:
+  case Language::C:
+  case Language::CXX:
+  case Language::ObjC:
+  case Language::ObjCXX:
+  case Language::OpenCL:
+  case Language::CUDA:
+  case Language::HIP:
     break;
 
-  case InputKind::Unknown:
-  case InputKind::Asm:
-  case InputKind::LLVM_IR:
-  case InputKind::RenderScript:
+  case Language::Unknown:
+  case Language::Asm:
+  case Language::LLVM_IR:
+  case Language::RenderScript:
     // We can't do anything with these.
     return;
   }
@@ -908,4 +909,34 @@ void DumpCompilerOptionsAction::ExecuteAction() {
   OS << "\n]\n";
 
   OS << "}";
+}
+
+void PrintDependencyDirectivesSourceMinimizerAction::ExecuteAction() {
+  CompilerInstance &CI = getCompilerInstance();
+  SourceManager &SM = CI.getPreprocessor().getSourceManager();
+  const llvm::MemoryBuffer *FromFile = SM.getBuffer(SM.getMainFileID());
+
+  llvm::SmallString<1024> Output;
+  llvm::SmallVector<minimize_source_to_dependency_directives::Token, 32> Toks;
+  if (minimizeSourceToDependencyDirectives(
+          FromFile->getBuffer(), Output, Toks, &CI.getDiagnostics(),
+          SM.getLocForStartOfFile(SM.getMainFileID()))) {
+    assert(CI.getDiagnostics().hasErrorOccurred() &&
+           "no errors reported for failure");
+
+    // Preprocess the source when verifying the diagnostics to capture the
+    // 'expected' comments.
+    if (CI.getDiagnosticOpts().VerifyDiagnostics) {
+      // Make sure we don't emit new diagnostics!
+      CI.getDiagnostics().setSuppressAllDiagnostics();
+      Preprocessor &PP = getCompilerInstance().getPreprocessor();
+      PP.EnterMainSourceFile();
+      Token Tok;
+      do {
+        PP.Lex(Tok);
+      } while (Tok.isNot(tok::eof));
+    }
+    return;
+  }
+  llvm::outs() << Output;
 }

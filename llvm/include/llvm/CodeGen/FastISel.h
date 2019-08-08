@@ -93,9 +93,9 @@ public:
 
     SmallVector<Value *, 16> OutVals;
     SmallVector<ISD::ArgFlagsTy, 16> OutFlags;
-    SmallVector<unsigned, 16> OutRegs;
+    SmallVector<Register, 16> OutRegs;
     SmallVector<ISD::InputArg, 4> Ins;
-    SmallVector<unsigned, 4> InRegs;
+    SmallVector<Register, 4> InRegs;
 
     CallLoweringInfo()
         : RetSExt(false), RetZExt(false), IsVarArg(false), IsInReg(false),
@@ -527,7 +527,7 @@ protected:
   /// Select and emit code for a binary operator instruction, which has
   /// an opcode which directly corresponds to the given ISD opcode.
   bool selectBinaryOp(const User *I, unsigned ISDOpcode);
-  bool selectFNeg(const User *I);
+  bool selectFNeg(const User *I, const Value *In);
   bool selectGetElementPtr(const User *I);
   bool selectStackmap(const CallInst *I);
   bool selectPatchpoint(const CallInst *I);
