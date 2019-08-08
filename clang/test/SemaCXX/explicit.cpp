@@ -36,6 +36,21 @@ B &&b3(0); // expected-error {{could not bind}}
 B b4{0};
 B &&b5 = {0}; // expected-error {{chosen constructor is explicit}}
 B &&b6{0};
+
+struct S {
+  template <bool b = true>
+  explicit S();
+};
+
+struct T : S {
+  //  T();
+};
+
+struct U : T {
+  U();
+};
+U::U() {}
+
 }
 
 namespace Conversion {

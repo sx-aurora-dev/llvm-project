@@ -312,7 +312,7 @@ int opts::breakpoint::evaluateBreakpoints(Debugger &Dbg) {
   while (!Rest.empty()) {
     StringRef Line;
     std::tie(Line, Rest) = Rest.split('\n');
-    Line = Line.ltrim();
+    Line = Line.ltrim().rtrim();
     if (Line.empty() || Line[0] == '#')
       continue;
 
@@ -364,8 +364,10 @@ Error opts::symbols::findFunctions(lldb_private::Module &Module) {
       cu_sp->FindLineEntry(0, Line, &src_file, false, &le);
       if (!le.IsValid())
         continue;
-
-      auto addr = le.GetSameLineContiguousAddressRange().GetBaseAddress();
+      const bool include_inlined_functions = false;
+      auto addr =
+          le.GetSameLineContiguousAddressRange(include_inlined_functions)
+              .GetBaseAddress();
       if (!addr.IsValid())
         continue;
 
@@ -414,8 +416,9 @@ Error opts::symbols::findBlocks(lldb_private::Module &Module) {
     cu_sp->FindLineEntry(0, Line, &src_file, false, &le);
     if (!le.IsValid())
       continue;
-
-    auto addr = le.GetSameLineContiguousAddressRange().GetBaseAddress();
+    const bool include_inlined_functions = false;
+    auto addr = le.GetSameLineContiguousAddressRange(include_inlined_functions)
+                    .GetBaseAddress();
     if (!addr.IsValid())
       continue;
 
@@ -525,10 +528,15 @@ Error opts::symbols::dumpAST(lldb_private::Module &Module) {
   if (!symfile)
     return make_string_error("Module has no symbol file.");
 
-  auto clang_ast_ctx = llvm::dyn_cast_or_null<ClangASTContext>(
-      symfile->GetTypeSystemForLanguage(eLanguageTypeC_plus_plus));
+  auto type_system_or_err =
+      symfile->GetTypeSystemForLanguage(eLanguageTypeC_plus_plus);
+  if (!type_system_or_err)
+    return make_string_error("Can't retrieve ClangASTContext");
+
+  auto *clang_ast_ctx =
+      llvm::dyn_cast_or_null<ClangASTContext>(&type_system_or_err.get());
   if (!clang_ast_ctx)
-    return make_string_error("Can't retrieve Clang AST context.");
+    return make_string_error("Retrieved TypeSystem was not a ClangASTContext");
 
   auto ast_ctx = clang_ast_ctx->getASTContext();
   if (!ast_ctx)
@@ -555,7 +563,7 @@ Error opts::symbols::verify(lldb_private::Module &Module) {
   outs() << "Found " << comp_units_count << " compile units.\n";
 
   for (uint32_t i = 0; i < comp_units_count; i++) {
-    lldb::CompUnitSP comp_unit = symfile->ParseCompileUnitAtIndex(i);
+    lldb::CompUnitSP comp_unit = symfile->GetCompileUnitAtIndex(i);
     if (!comp_unit)
       return make_string_error("Connot parse compile unit {0}.", i);
 
@@ -736,7 +744,7 @@ static void dumpSectionList(LinePrinter &Printer, const SectionList &List, bool 
     Printer.formatLine("File size: {0}", S->GetFileSize());
 
     if (opts::object::SectionContents) {
-      DataExtractor Data;
+      lldb_private::DataExtractor Data;
       S->GetSectionData(Data);
       ArrayRef<uint8_t> Bytes = {Data.GetDataStart(), Data.GetDataEnd()};
       Printer.formatBinary("Data: ", Bytes, 0);
@@ -936,7 +944,7 @@ int opts::irmemorymap::evaluateMemoryMapCommands(Debugger &Dbg) {
   while (!Rest.empty()) {
     StringRef Line;
     std::tie(Line, Rest) = Rest.split('\n');
-    Line = Line.ltrim();
+    Line = Line.ltrim().rtrim();
 
     if (Line.empty() || Line[0] == '#')
       continue;
@@ -972,6 +980,11 @@ int main(int argc, const char *argv[]) {
   CleanUp TerminateDebugger([&] { DebuggerLifetime.Terminate(); });
 
   auto Dbg = lldb_private::Debugger::CreateInstance();
+  ModuleList::GetGlobalModuleListProperties().SetEnableExternalLookup(false);
+  CommandReturnObject Result;
+  Dbg->GetCommandInterpreter().HandleCommand(
+      "settings set plugin.process.gdb-remote.packet-timeout 60",
+      /*add_to_history*/ eLazyBoolNo, Result);
 
   if (!opts::Log.empty())
     Dbg->EnableLog("lldb", {"all"}, opts::Log, 0, errs());

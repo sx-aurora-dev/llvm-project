@@ -77,43 +77,24 @@ using namespace lldb_private;
 
 static const char *k_white_space = " \t\v";
 
-static constexpr bool NoGlobalSetting = true;
-static constexpr uintptr_t DefaultValueTrue = true;
-static constexpr uintptr_t DefaultValueFalse = false;
-static constexpr const char *NoCStrDefault = nullptr;
+static constexpr const char *InitFileWarning =
+    "There is a .lldbinit file in the current directory which is not being "
+    "read.\n"
+    "To silence this warning without sourcing in the local .lldbinit,\n"
+    "add the following to the lldbinit file in your home directory:\n"
+    "    settings set target.load-cwd-lldbinit false\n"
+    "To allow lldb to source .lldbinit files in the current working "
+    "directory,\n"
+    "set the value of this variable to true.  Only do so if you understand "
+    "and\n"
+    "accept the security risk.";
 
-static constexpr PropertyDefinition g_properties[] = {
-    {"expand-regex-aliases", OptionValue::eTypeBoolean, NoGlobalSetting,
-     DefaultValueFalse, NoCStrDefault, {},
-     "If true, regular expression alias commands will show the "
-     "expanded command that will be executed. This can be used to "
-     "debug new regular expression alias commands."},
-    {"prompt-on-quit", OptionValue::eTypeBoolean, NoGlobalSetting,
-     DefaultValueTrue, NoCStrDefault, {},
-     "If true, LLDB will prompt you before quitting if there are any live "
-     "processes being debugged. If false, LLDB will quit without asking in any "
-     "case."},
-    {"stop-command-source-on-error", OptionValue::eTypeBoolean, NoGlobalSetting,
-     DefaultValueTrue, NoCStrDefault, {},
-     "If true, LLDB will stop running a 'command source' "
-     "script upon encountering an error."},
-    {"space-repl-prompts", OptionValue::eTypeBoolean, NoGlobalSetting,
-     DefaultValueFalse, NoCStrDefault, {},
-     "If true, blank lines will be printed between between REPL submissions."},
-    {"echo-commands", OptionValue::eTypeBoolean, NoGlobalSetting,
-     DefaultValueTrue, NoCStrDefault, {},
-     "If true, commands will be echoed before they are evaluated."},
-    {"echo-comment-commands", OptionValue::eTypeBoolean, NoGlobalSetting,
-     DefaultValueTrue, NoCStrDefault, {},
-     "If true, commands will be echoed even if they are pure comment lines."}};
+#define LLDB_PROPERTIES_interpreter
+#include "InterpreterProperties.inc"
 
 enum {
-  ePropertyExpandRegexAliases = 0,
-  ePropertyPromptOnQuit = 1,
-  ePropertyStopCmdSourceOnError = 2,
-  eSpaceReplPrompts = 3,
-  eEchoCommands = 4,
-  eEchoCommentCommands = 5
+#define LLDB_PROPERTIES_interpreter
+#include "InterpreterPropertiesEnum.inc"
 };
 
 ConstString &CommandInterpreter::GetStaticBroadcasterClass() {
@@ -128,7 +109,7 @@ CommandInterpreter::CommandInterpreter(Debugger &debugger,
       Properties(OptionValuePropertiesSP(
           new OptionValueProperties(ConstString("interpreter")))),
       IOHandlerDelegate(IOHandlerDelegate::Completion::LLDBCommand),
-      m_debugger(debugger), m_synchronous_execution(synchronous_execution),
+      m_debugger(debugger), m_synchronous_execution(true),
       m_skip_lldbinit_files(false), m_skip_app_init_files(false),
       m_command_io_handler_sp(), m_comment_char('#'),
       m_batch_command_mode(false), m_truncation_warning(eNoTruncation),
@@ -137,20 +118,21 @@ CommandInterpreter::CommandInterpreter(Debugger &debugger,
   SetEventName(eBroadcastBitThreadShouldExit, "thread-should-exit");
   SetEventName(eBroadcastBitResetPrompt, "reset-prompt");
   SetEventName(eBroadcastBitQuitCommandReceived, "quit");
+  SetSynchronous(synchronous_execution);
   CheckInWithManager();
-  m_collection_sp->Initialize(g_properties);
+  m_collection_sp->Initialize(g_interpreter_properties);
 }
 
 bool CommandInterpreter::GetExpandRegexAliases() const {
   const uint32_t idx = ePropertyExpandRegexAliases;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
 }
 
 bool CommandInterpreter::GetPromptOnQuit() const {
   const uint32_t idx = ePropertyPromptOnQuit;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
 }
 
 void CommandInterpreter::SetPromptOnQuit(bool b) {
@@ -159,24 +141,24 @@ void CommandInterpreter::SetPromptOnQuit(bool b) {
 }
 
 bool CommandInterpreter::GetEchoCommands() const {
-  const uint32_t idx = eEchoCommands;
+  const uint32_t idx = ePropertyEchoCommands;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
 }
 
 void CommandInterpreter::SetEchoCommands(bool b) {
-  const uint32_t idx = eEchoCommands;
+  const uint32_t idx = ePropertyEchoCommands;
   m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
 }
 
 bool CommandInterpreter::GetEchoCommentCommands() const {
-  const uint32_t idx = eEchoCommentCommands;
+  const uint32_t idx = ePropertyEchoCommentCommands;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
 }
 
 void CommandInterpreter::SetEchoCommentCommands(bool b) {
-  const uint32_t idx = eEchoCommentCommands;
+  const uint32_t idx = ePropertyEchoCommentCommands;
   m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
 }
 
@@ -212,13 +194,13 @@ void CommandInterpreter::ResolveCommand(const char *command_line,
 bool CommandInterpreter::GetStopCmdSourceOnError() const {
   const uint32_t idx = ePropertyStopCmdSourceOnError;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
 }
 
 bool CommandInterpreter::GetSpaceReplPrompts() const {
-  const uint32_t idx = eSpaceReplPrompts;
+  const uint32_t idx = ePropertySpaceReplPrompts;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
 }
 
 void CommandInterpreter::Initialize() {
@@ -758,12 +740,12 @@ void CommandInterpreter::LoadCommandDictionary() {
     // command if you wanted to backtrace three frames you would do "bt -c 3"
     // but the intention is to have this emulate the gdb "bt" command and so
     // now "bt 3" is the preferred form, in line with gdb.
-    if (bt_regex_cmd_up->AddRegexCommand("^([[:digit:]]+)$",
+    if (bt_regex_cmd_up->AddRegexCommand("^([[:digit:]]+)[[:space:]]*$",
                                          "thread backtrace -c %1") &&
-        bt_regex_cmd_up->AddRegexCommand("^-c ([[:digit:]]+)$",
+        bt_regex_cmd_up->AddRegexCommand("^-c ([[:digit:]]+)[[:space:]]*$",
                                          "thread backtrace -c %1") &&
-        bt_regex_cmd_up->AddRegexCommand("^all$", "thread backtrace all") &&
-        bt_regex_cmd_up->AddRegexCommand("^$", "thread backtrace")) {
+        bt_regex_cmd_up->AddRegexCommand("^all[[:space:]]*$", "thread backtrace all") &&
+        bt_regex_cmd_up->AddRegexCommand("^[[:space:]]*$", "thread backtrace")) {
       CommandObjectSP command_sp(bt_regex_cmd_up.release());
       m_command_dict[command_sp->GetCommandName()] = command_sp;
     }
@@ -810,7 +792,7 @@ void CommandInterpreter::LoadCommandDictionary() {
           *this, "_regexp-env",
           "Shorthand for viewing and setting environment variables.",
           "\n"
-          "_regexp-env                  // Show enrivonment\n"
+          "_regexp-env                  // Show environment\n"
           "_regexp-env <name>=<value>   // Set an environment variable",
           2, 0, false));
   if (env_regex_cmd_up) {
@@ -1617,8 +1599,7 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
   llvm::PrettyStackTraceFormat stack_trace("HandleCommand(command = \"%s\")",
                                    command_line);
 
-  if (log)
-    log->Printf("Processing command: %s", command_line);
+  LLDB_LOGF(log, "Processing command: %s", command_line);
 
   static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
   Timer scoped_timer(func_cat, "Handling command: %s.", command_line);
@@ -1724,13 +1705,13 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
   // "br s -n main", command_string is now "breakpoint set -n main".
   if (log) {
     llvm::StringRef command_name = cmd_obj ? cmd_obj->GetCommandName() : "<not found>";
-    log->Printf("HandleCommand, cmd_obj : '%s'", command_name.str().c_str());
-    log->Printf("HandleCommand, (revised) command_string: '%s'",
-                command_string.c_str());
+    LLDB_LOGF(log, "HandleCommand, cmd_obj : '%s'", command_name.str().c_str());
+    LLDB_LOGF(log, "HandleCommand, (revised) command_string: '%s'",
+              command_string.c_str());
     const bool wants_raw_input =
-        (cmd_obj != NULL) ? cmd_obj->WantsRawCommandString() : false;
-    log->Printf("HandleCommand, wants_raw_input:'%s'",
-                wants_raw_input ? "True" : "False");
+        (cmd_obj != nullptr) ? cmd_obj->WantsRawCommandString() : false;
+    LLDB_LOGF(log, "HandleCommand, wants_raw_input:'%s'",
+              wants_raw_input ? "True" : "False");
   }
 
   // Phase 2.
@@ -1760,17 +1741,15 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
     if (pos != 0 && pos != std::string::npos)
       remainder.erase(0, pos);
 
-    if (log)
-      log->Printf(
-          "HandleCommand, command line after removing command name(s): '%s'",
-          remainder.c_str());
+    LLDB_LOGF(
+        log, "HandleCommand, command line after removing command name(s): '%s'",
+        remainder.c_str());
 
     cmd_obj->Execute(remainder.c_str(), result);
   }
 
-  if (log)
-    log->Printf("HandleCommand, command %s",
-                (result.Succeeded() ? "succeeded" : "did not succeed"));
+  LLDB_LOGF(log, "HandleCommand, command %s",
+            (result.Succeeded() ? "succeeded" : "did not succeed"));
 
   return result.Succeeded();
 }
@@ -1835,15 +1814,15 @@ int CommandInterpreter::HandleCompletionMatches(CompletionRequest &request) {
   return num_command_matches;
 }
 
-int CommandInterpreter::HandleCompletion(
-    const char *current_line, const char *cursor, const char *last_char,
-    int match_start_point, int max_return_elements, StringList &matches,
-    StringList &descriptions) {
+int CommandInterpreter::HandleCompletion(const char *current_line,
+                                         const char *cursor,
+                                         const char *last_char,
+                                         StringList &matches,
+                                         StringList &descriptions) {
 
   llvm::StringRef command_line(current_line, last_char - current_line);
   CompletionResult result;
-  CompletionRequest request(command_line, cursor - current_line,
-                            match_start_point, max_return_elements, result);
+  CompletionRequest request(command_line, cursor - current_line, result);
   // Don't complete comments, and if the line we are completing is just the
   // history repeat character, substitute the appropriate history line.
   const char *first_arg = request.GetParsedLine().GetArgumentAtIndex(0);
@@ -1859,9 +1838,6 @@ int CommandInterpreter::HandleCompletion(
         return 0;
     }
   }
-
-  // Only max_return_elements == -1 is supported at present:
-  lldbassert(max_return_elements == -1);
 
   int num_command_matches = HandleCompletionMatches(request);
   result.GetMatches(matches);
@@ -1879,8 +1855,7 @@ int CommandInterpreter::HandleCompletion(
     // element 0, otherwise put an empty string in element 0.
     std::string command_partial_str = request.GetCursorArgumentPrefix().str();
 
-    std::string common_prefix;
-    matches.LongestCommonPrefix(common_prefix);
+    std::string common_prefix = matches.LongestCommonPrefix();
     const size_t partial_name_len = command_partial_str.size();
     common_prefix.erase(0, partial_name_len);
 
@@ -2091,106 +2066,119 @@ int CommandInterpreter::GetOptionArgumentPosition(const char *in_string) {
   return position;
 }
 
-void CommandInterpreter::SourceInitFile(bool in_cwd,
+static void GetHomeInitFile(llvm::SmallVectorImpl<char> &init_file,
+                            llvm::StringRef suffix = {}) {
+  std::string init_file_name = ".lldbinit";
+  if (!suffix.empty()) {
+    init_file_name.append("-");
+    init_file_name.append(suffix.str());
+  }
+
+  llvm::sys::path::home_directory(init_file);
+  llvm::sys::path::append(init_file, init_file_name);
+
+  FileSystem::Instance().Resolve(init_file);
+}
+
+static void GetCwdInitFile(llvm::SmallVectorImpl<char> &init_file) {
+  llvm::StringRef s = ".lldbinit";
+  init_file.assign(s.begin(), s.end());
+  FileSystem::Instance().Resolve(init_file);
+}
+
+static LoadCWDlldbinitFile ShouldLoadCwdInitFile() {
+  lldb::TargetPropertiesSP properties = Target::GetGlobalProperties();
+  if (!properties)
+    return eLoadCWDlldbinitFalse;
+  return properties->GetLoadCWDlldbinitFile();
+}
+
+void CommandInterpreter::SourceInitFile(FileSpec file,
                                         CommandReturnObject &result) {
-  FileSpec init_file;
-  if (in_cwd) {
-    ExecutionContext exe_ctx(GetExecutionContext());
-    Target *target = exe_ctx.GetTargetPtr();
-    if (target) {
-      // In the current working directory we don't load any program specific
-      // .lldbinit files, we only look for a ".lldbinit" file.
-      if (m_skip_lldbinit_files)
-        return;
+  assert(!m_skip_lldbinit_files);
 
-      LoadCWDlldbinitFile should_load =
-          target->TargetProperties::GetLoadCWDlldbinitFile();
-      if (should_load == eLoadCWDlldbinitWarn) {
-        FileSpec dot_lldb(".lldbinit");
-        FileSystem::Instance().Resolve(dot_lldb);
-        llvm::SmallString<64> home_dir_path;
-        llvm::sys::path::home_directory(home_dir_path);
-        FileSpec homedir_dot_lldb(home_dir_path.c_str());
-        homedir_dot_lldb.AppendPathComponent(".lldbinit");
-        FileSystem::Instance().Resolve(homedir_dot_lldb);
-        if (FileSystem::Instance().Exists(dot_lldb) &&
-            dot_lldb.GetDirectory() != homedir_dot_lldb.GetDirectory()) {
-          result.AppendErrorWithFormat(
-              "There is a .lldbinit file in the current directory which is not "
-              "being read.\n"
-              "To silence this warning without sourcing in the local "
-              ".lldbinit,\n"
-              "add the following to the lldbinit file in your home directory:\n"
-              "    settings set target.load-cwd-lldbinit false\n"
-              "To allow lldb to source .lldbinit files in the current working "
-              "directory,\n"
-              "set the value of this variable to true.  Only do so if you "
-              "understand and\n"
-              "accept the security risk.");
-          result.SetStatus(eReturnStatusFailed);
-          return;
-        }
-      } else if (should_load == eLoadCWDlldbinitTrue) {
-        init_file.SetFile("./.lldbinit", FileSpec::Style::native);
-        FileSystem::Instance().Resolve(init_file);
-      }
-    }
-  } else {
-    // If we aren't looking in the current working directory we are looking in
-    // the home directory. We will first see if there is an application
-    // specific ".lldbinit" file whose name is "~/.lldbinit" followed by a "-"
-    // and the name of the program. If this file doesn't exist, we fall back to
-    // just the "~/.lldbinit" file. We also obey any requests to not load the
-    // init files.
-    llvm::SmallString<64> home_dir_path;
-    llvm::sys::path::home_directory(home_dir_path);
-    FileSpec profilePath(home_dir_path.c_str());
-    profilePath.AppendPathComponent(".lldbinit");
-    std::string init_file_path = profilePath.GetPath();
-
-    if (!m_skip_app_init_files) {
-      FileSpec program_file_spec(HostInfo::GetProgramFileSpec());
-      const char *program_name = program_file_spec.GetFilename().AsCString();
-
-      if (program_name) {
-        char program_init_file_name[PATH_MAX];
-        ::snprintf(program_init_file_name, sizeof(program_init_file_name),
-                   "%s-%s", init_file_path.c_str(), program_name);
-        init_file.SetFile(program_init_file_name, FileSpec::Style::native);
-        FileSystem::Instance().Resolve(init_file);
-        if (!FileSystem::Instance().Exists(init_file))
-          init_file.Clear();
-      }
-    }
-
-    if (!init_file && !m_skip_lldbinit_files)
-      init_file.SetFile(init_file_path, FileSpec::Style::native);
-  }
-
-  // If the file exists, tell HandleCommand to 'source' it; this will do the
-  // actual broadcasting of the commands back to any appropriate listener (see
-  // CommandObjectSource::Execute for more details).
-
-  if (FileSystem::Instance().Exists(init_file)) {
-    const bool saved_batch = SetBatchCommandMode(true);
-    CommandInterpreterRunOptions options;
-    options.SetSilent(true);
-    options.SetStopOnError(false);
-    options.SetStopOnContinue(true);
-
-    HandleCommandsFromFile(init_file,
-                           nullptr, // Execution context
-                           options, result);
-    SetBatchCommandMode(saved_batch);
-  } else {
-    // nothing to be done if the file doesn't exist
+  if (!FileSystem::Instance().Exists(file)) {
     result.SetStatus(eReturnStatusSuccessFinishNoResult);
+    return;
   }
+
+  // Use HandleCommand to 'source' the given file; this will do the actual
+  // broadcasting of the commands back to any appropriate listener (see
+  // CommandObjectSource::Execute for more details).
+  const bool saved_batch = SetBatchCommandMode(true);
+  ExecutionContext *ctx = nullptr;
+  CommandInterpreterRunOptions options;
+  options.SetSilent(true);
+  options.SetPrintErrors(true);
+  options.SetStopOnError(false);
+  options.SetStopOnContinue(true);
+  HandleCommandsFromFile(file, ctx, options, result);
+  SetBatchCommandMode(saved_batch);
+}
+
+void CommandInterpreter::SourceInitFileCwd(CommandReturnObject &result) {
+  if (m_skip_lldbinit_files) {
+    result.SetStatus(eReturnStatusSuccessFinishNoResult);
+    return;
+  }
+
+  llvm::SmallString<128> init_file;
+  GetCwdInitFile(init_file);
+  if (!FileSystem::Instance().Exists(init_file)) {
+    result.SetStatus(eReturnStatusSuccessFinishNoResult);
+    return;
+  }
+
+  LoadCWDlldbinitFile should_load = ShouldLoadCwdInitFile();
+
+  switch (should_load) {
+  case eLoadCWDlldbinitFalse:
+    result.SetStatus(eReturnStatusSuccessFinishNoResult);
+    break;
+  case eLoadCWDlldbinitTrue:
+    SourceInitFile(FileSpec(init_file.str()), result);
+    break;
+  case eLoadCWDlldbinitWarn: {
+    llvm::SmallString<128> home_init_file;
+    GetHomeInitFile(home_init_file);
+    if (llvm::sys::path::parent_path(init_file) ==
+        llvm::sys::path::parent_path(home_init_file)) {
+      result.SetStatus(eReturnStatusSuccessFinishNoResult);
+    } else {
+      result.AppendErrorWithFormat(InitFileWarning);
+      result.SetStatus(eReturnStatusFailed);
+    }
+  }
+  }
+}
+
+/// We will first see if there is an application specific ".lldbinit" file
+/// whose name is "~/.lldbinit" followed by a "-" and the name of the program.
+/// If this file doesn't exist, we fall back to just the "~/.lldbinit" file.
+void CommandInterpreter::SourceInitFileHome(CommandReturnObject &result) {
+  if (m_skip_lldbinit_files) {
+    result.SetStatus(eReturnStatusSuccessFinishNoResult);
+    return;
+  }
+
+  llvm::SmallString<128> init_file;
+  GetHomeInitFile(init_file);
+
+  if (!m_skip_app_init_files) {
+    llvm::StringRef program_name =
+        HostInfo::GetProgramFileSpec().GetFilename().GetStringRef();
+    llvm::SmallString<128> program_init_file;
+    GetHomeInitFile(program_init_file, program_name);
+    if (FileSystem::Instance().Exists(program_init_file))
+      init_file = program_init_file;
+  }
+
+  SourceInitFile(FileSpec(init_file.str()), result);
 }
 
 const char *CommandInterpreter::GetCommandPrefix() {
   const char *prefix = GetDebugger().GetIOHandlerCommandPrefix();
-  return prefix == NULL ? "" : prefix;
+  return prefix == nullptr ? "" : prefix;
 }
 
 PlatformSP CommandInterpreter::GetPlatform(bool prefer_target_platform) {
@@ -2366,7 +2354,8 @@ enum {
   eHandleCommandFlagEchoCommand = (1u << 2),
   eHandleCommandFlagEchoCommentCommand = (1u << 3),
   eHandleCommandFlagPrintResult = (1u << 4),
-  eHandleCommandFlagStopOnCrash = (1u << 5)
+  eHandleCommandFlagPrintErrors = (1u << 5),
+  eHandleCommandFlagStopOnCrash = (1u << 6)
 };
 
 void CommandInterpreter::HandleCommandsFromFile(
@@ -2465,6 +2454,17 @@ void CommandInterpreter::HandleCommandsFromFile(
     flags |= eHandleCommandFlagPrintResult;
   }
 
+  if (options.m_print_errors == eLazyBoolCalculate) {
+    if (m_command_source_flags.empty()) {
+      // Print output by default
+      flags |= eHandleCommandFlagPrintErrors;
+    } else if (m_command_source_flags.back() & eHandleCommandFlagPrintErrors) {
+      flags |= eHandleCommandFlagPrintErrors;
+    }
+  } else if (options.m_print_errors == eLazyBoolYes) {
+    flags |= eHandleCommandFlagPrintErrors;
+  }
+
   if (flags & eHandleCommandFlagPrintResult) {
     debugger.GetOutputFile()->Printf("Executing commands in '%s'.\n",
                                      cmd_file_path.c_str());
@@ -2505,6 +2505,9 @@ void CommandInterpreter::HandleCommandsFromFile(
 bool CommandInterpreter::GetSynchronous() { return m_synchronous_execution; }
 
 void CommandInterpreter::SetSynchronous(bool value) {
+  // Asynchronous mode is not supported during reproducer replay.
+  if (repro::Reproducer::Instance().GetLoader())
+    return;
   m_synchronous_execution = value;
 }
 
@@ -2665,32 +2668,14 @@ void CommandInterpreter::UpdateExecutionContext(
   }
 }
 
-size_t CommandInterpreter::GetProcessOutput() {
-  //  The process has stuff waiting for stderr; get it and write it out to the
-  //  appropriate place.
-  char stdio_buffer[1024];
-  size_t len;
-  size_t total_bytes = 0;
-  Status error;
+void CommandInterpreter::GetProcessOutput() {
   TargetSP target_sp(m_debugger.GetTargetList().GetSelectedTarget());
-  if (target_sp) {
-    ProcessSP process_sp(target_sp->GetProcessSP());
-    if (process_sp) {
-      while ((len = process_sp->GetSTDOUT(stdio_buffer, sizeof(stdio_buffer),
-                                          error)) > 0) {
-        size_t bytes_written = len;
-        m_debugger.GetOutputFile()->Write(stdio_buffer, bytes_written);
-        total_bytes += len;
-      }
-      while ((len = process_sp->GetSTDERR(stdio_buffer, sizeof(stdio_buffer),
-                                          error)) > 0) {
-        size_t bytes_written = len;
-        m_debugger.GetErrorFile()->Write(stdio_buffer, bytes_written);
-        total_bytes += len;
-      }
-    }
-  }
-  return total_bytes;
+  if (!target_sp)
+    return;
+
+  if (ProcessSP process_sp = target_sp->GetProcessSP())
+    m_debugger.FlushProcessOutput(*process_sp, /*flush_stdout*/ true,
+                                  /*flush_stderr*/ true);
 }
 
 void CommandInterpreter::StartHandlingCommand() {
@@ -2792,7 +2777,9 @@ void CommandInterpreter::IOHandlerInputComplete(IOHandler &io_handler,
   HandleCommand(line.c_str(), eLazyBoolCalculate, result);
 
   // Now emit the command output text from the command we just executed
-  if (io_handler.GetFlags().Test(eHandleCommandFlagPrintResult)) {
+  if ((result.Succeeded() &&
+       io_handler.GetFlags().Test(eHandleCommandFlagPrintResult)) ||
+      io_handler.GetFlags().Test(eHandleCommandFlagPrintErrors)) {
     // Display any STDOUT/STDERR _prior_ to emitting the command result text
     GetProcessOutput();
 
@@ -2962,8 +2949,11 @@ CommandInterpreter::GetIOHandler(bool force_create,
         flags |= eHandleCommandFlagEchoCommentCommand;
       if (options->m_print_results != eLazyBoolNo)
         flags |= eHandleCommandFlagPrintResult;
+      if (options->m_print_errors != eLazyBoolNo)
+        flags |= eHandleCommandFlagPrintErrors;
     } else {
-      flags = eHandleCommandFlagEchoCommand | eHandleCommandFlagPrintResult;
+      flags = eHandleCommandFlagEchoCommand | eHandleCommandFlagPrintResult |
+              eHandleCommandFlagPrintErrors;
     }
 
     m_command_io_handler_sp = std::make_shared<IOHandlerEditline>(
@@ -3165,7 +3155,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
   if (!scratch_command.empty())
     revised_command_line.Printf(" %s", scratch_command.c_str());
 
-  if (cmd_obj != NULL)
+  if (cmd_obj != nullptr)
     command_line = revised_command_line.GetString();
 
   return cmd_obj;

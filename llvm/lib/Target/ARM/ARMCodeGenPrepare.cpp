@@ -123,9 +123,10 @@ class IRPromoter {
   SmallPtrSetImpl<Value*> *Sources;
   SmallPtrSetImpl<Instruction*> *Sinks;
   SmallPtrSetImpl<Instruction*> *SafeToPromote;
+  SmallPtrSetImpl<Instruction*> *SafeWrap;
 
   void ReplaceAllUsersOfWith(Value *From, Value *To);
-  void PrepareConstants(void);
+  void PrepareWrappingAdds(void);
   void ExtendSources(void);
   void ConvertTruncs(void);
   void PromoteTree(void);
@@ -141,7 +142,8 @@ public:
               SetVector<Value*> &Visited,
               SmallPtrSetImpl<Value*> &Sources,
               SmallPtrSetImpl<Instruction*> &Sinks,
-              SmallPtrSetImpl<Instruction*> &SafeToPromote);
+              SmallPtrSetImpl<Instruction*> &SafeToPromote,
+              SmallPtrSetImpl<Instruction*> &SafeWrap);
 };
 
 class ARMCodeGenPrepare : public FunctionPass {
@@ -149,8 +151,9 @@ class ARMCodeGenPrepare : public FunctionPass {
   IRPromoter *Promoter = nullptr;
   std::set<Value*> AllVisited;
   SmallPtrSet<Instruction*, 8> SafeToPromote;
+  SmallPtrSet<Instruction*, 4> SafeWrap;
 
-  bool isSafeOverflow(Instruction *I);
+  bool isSafeWrap(Instruction *I);
   bool isSupportedValue(Value *V);
   bool isLegalToPromote(Value *V);
   bool TryToPromote(Value *V);
@@ -175,13 +178,16 @@ public:
 
 }
 
-static bool generateSignBits(Value *V) {
+static bool GenerateSignBits(Value *V) {
+  if (auto *Arg = dyn_cast<Argument>(V))
+    return Arg->hasSExtAttr();
+
   if (!isa<Instruction>(V))
     return false;
 
   unsigned Opc = cast<Instruction>(V)->getOpcode();
   return Opc == Instruction::AShr || Opc == Instruction::SDiv ||
-         Opc == Instruction::SRem;
+         Opc == Instruction::SRem || Opc == Instruction::SExt;
 }
 
 static bool EqualTypeSize(Value *V) {
@@ -274,19 +280,14 @@ static bool isSink(Value *V) {
   return isa<CallInst>(V);
 }
 
-/// Return whether the instruction can be promoted within any modifications to
-/// its operands or result.
-bool ARMCodeGenPrepare::isSafeOverflow(Instruction *I) {
-  // FIXME Do we need NSW too?
-  if (isa<OverflowingBinaryOperator>(I) && I->hasNoUnsignedWrap())
-    return true;
-
-  // We can support a, potentially, overflowing instruction (I) if:
+/// Return whether this instruction can safely wrap.
+bool ARMCodeGenPrepare::isSafeWrap(Instruction *I) {
+  // We can support a, potentially, wrapping instruction (I) if:
   // - It is only used by an unsigned icmp.
   // - The icmp uses a constant.
-  // - The overflowing value (I) is decreasing, i.e would underflow - wrapping
+  // - The wrapping value (I) is decreasing, i.e would underflow - wrapping
   //   around zero to become a larger number than before.
-  // - The underflowing instruction (I) also uses a constant.
+  // - The wrapping instruction (I) also uses a constant.
   //
   // We can then use the two constants to calculate whether the result would
   // wrap in respect to itself in the original bitwidth. If it doesn't wrap,
@@ -388,6 +389,7 @@ bool ARMCodeGenPrepare::isSafeOverflow(Instruction *I) {
     return false;
 
   LLVM_DEBUG(dbgs() << "ARM CGP: Allowing safe overflow for " << *I << "\n");
+  SafeWrap.insert(I);
   return true;
 }
 
@@ -411,13 +413,16 @@ static bool shouldPromote(Value *V) {
 /// Return whether we can safely mutate V's type to ExtTy without having to be
 /// concerned with zero extending or truncation.
 static bool isPromotedResultSafe(Value *V) {
+  if (GenerateSignBits(V))
+    return false;
+
   if (!isa<Instruction>(V))
     return true;
 
-  if (generateSignBits(V))
-    return false;
+  if (!isa<OverflowingBinaryOperator>(V))
+    return true;
 
-  return !isa<OverflowingBinaryOperator>(V);
+  return cast<Instruction>(V)->hasNoUnsignedWrap();
 }
 
 /// Return the intrinsic for the instruction that can perform the same
@@ -465,61 +470,34 @@ void IRPromoter::ReplaceAllUsersOfWith(Value *From, Value *To) {
       InstsToRemove.insert(I);
 }
 
-void IRPromoter::PrepareConstants() {
+void IRPromoter::PrepareWrappingAdds() {
+  LLVM_DEBUG(dbgs() << "ARM CGP: Prepare underflowing adds.\n");
   IRBuilder<> Builder{Ctx};
-  // First step is to prepare the instructions for mutation. Most constants
-  // just need to be zero extended into their new type, but complications arise
-  // because:
-  // - For nuw binary operators, negative immediates would need sign extending;
-  //   however, instead we'll change them to positive and zext them. We can do
-  //   this because:
-  //   > The operators that can wrap are: add, sub, mul and shl.
-  //   > shl interprets its second operand as unsigned and if the first operand
-  //     is an immediate, it will need zext to be nuw.
-  //   > I'm assuming mul has to interpret immediates as unsigned for nuw.
-  //   > Which leaves the nuw add and sub to be handled; as with shl, if an
-  //     immediate is used as operand 0, it will need zext to be nuw.
-  // - We also allow add and sub to safely overflow in certain circumstances
-  //   and only when the value (operand 0) is being decreased.
-  //
-  // For adds and subs, that are either nuw or safely wrap and use a negative
-  // immediate as operand 1, we create an equivalent instruction using a
-  // positive immediate. That positive immediate can then be zext along with
-  // all the other immediates later.
-  for (auto *V : *Visited) {
-    if (!isa<Instruction>(V))
+
+  // For adds that safely wrap and use a negative immediate as operand 1, we
+  // create an equivalent instruction using a positive immediate.
+  // That positive immediate can then be zext along with all the other
+  // immediates later.
+  for (auto *I : *SafeWrap) {
+    if (I->getOpcode() != Instruction::Add)
       continue;
 
-    auto *I = cast<Instruction>(V);
-    if (SafeToPromote->count(I)) {
+    LLVM_DEBUG(dbgs() << "ARM CGP: Adjusting " << *I << "\n");
+    assert((isa<ConstantInt>(I->getOperand(1)) &&
+            cast<ConstantInt>(I->getOperand(1))->isNegative()) &&
+           "Wrapping should have a negative immediate as the second operand");
 
-      if (!isa<OverflowingBinaryOperator>(I))
-        continue;
-
-      if (auto *Const = dyn_cast<ConstantInt>(I->getOperand(1))) {
-        if (!Const->isNegative())
-          continue;
-
-        unsigned Opc = I->getOpcode();
-        if (Opc != Instruction::Add && Opc != Instruction::Sub)
-          continue;
-
-        LLVM_DEBUG(dbgs() << "ARM CGP: Adjusting " << *I << "\n");
-        auto *NewConst = ConstantInt::get(Ctx, Const->getValue().abs());
-        Builder.SetInsertPoint(I);
-        Value *NewVal = Opc == Instruction::Sub ?
-          Builder.CreateAdd(I->getOperand(0), NewConst) :
-          Builder.CreateSub(I->getOperand(0), NewConst);
-        LLVM_DEBUG(dbgs() << "ARM CGP: New equivalent: " << *NewVal << "\n");
-
-        if (auto *NewInst = dyn_cast<Instruction>(NewVal)) {
-          NewInst->copyIRFlags(I);
-          NewInsts.insert(NewInst);
-        }
-        InstsToRemove.insert(I);
-        I->replaceAllUsesWith(NewVal);
-      }
+    auto Const = cast<ConstantInt>(I->getOperand(1));
+    auto *NewConst = ConstantInt::get(Ctx, Const->getValue().abs());
+    Builder.SetInsertPoint(I);
+    Value *NewVal = Builder.CreateSub(I->getOperand(0), NewConst);
+    if (auto *NewInst = dyn_cast<Instruction>(NewVal)) {
+      NewInst->copyIRFlags(I);
+      NewInsts.insert(NewInst);
     }
+    InstsToRemove.insert(I);
+    I->replaceAllUsesWith(NewVal);
+    LLVM_DEBUG(dbgs() << "ARM CGP: New equivalent: " << *NewVal << "\n");
   }
   for (auto *I : NewInsts)
     Visited->insert(I);
@@ -727,6 +705,8 @@ void IRPromoter::Cleanup() {
   NewInsts.clear();
   TruncTysMap.clear();
   Promoted.clear();
+  SafeToPromote->clear();
+  SafeWrap->clear();
 }
 
 void IRPromoter::ConvertTruncs() {
@@ -758,7 +738,8 @@ void IRPromoter::Mutate(Type *OrigTy,
                         SetVector<Value*> &Visited,
                         SmallPtrSetImpl<Value*> &Sources,
                         SmallPtrSetImpl<Instruction*> &Sinks,
-                        SmallPtrSetImpl<Instruction*> &SafeToPromote) {
+                        SmallPtrSetImpl<Instruction*> &SafeToPromote,
+                        SmallPtrSetImpl<Instruction*> &SafeWrap) {
   LLVM_DEBUG(dbgs() << "ARM CGP: Promoting use-def chains to from "
              << ARMCodeGenPrepare::TypeSize << " to 32-bits\n");
 
@@ -771,6 +752,7 @@ void IRPromoter::Mutate(Type *OrigTy,
   this->Sources = &Sources;
   this->Sinks = &Sinks;
   this->SafeToPromote = &SafeToPromote;
+  this->SafeWrap = &SafeWrap;
 
   // Cache original types of the values that will likely need truncating
   for (auto *I : Sinks) {
@@ -793,9 +775,9 @@ void IRPromoter::Mutate(Type *OrigTy,
     TruncTysMap[Trunc].push_back(Trunc->getDestTy());
   }
 
-  // Convert adds and subs using negative immediates to equivalent instructions
-  // that use positive constants.
-  PrepareConstants();
+  // Convert adds using negative immediates to equivalent instructions that use
+  // positive constants.
+  PrepareWrappingAdds();
 
   // Insert zext instructions between sources and their users.
   ExtendSources();
@@ -823,56 +805,48 @@ void IRPromoter::Mutate(Type *OrigTy,
 /// return value is zeroext. We don't allow opcodes that can introduce sign
 /// bits.
 bool ARMCodeGenPrepare::isSupportedValue(Value *V) {
-  if (auto *I = dyn_cast<ICmpInst>(V)) {
-    // Now that we allow small types than TypeSize, only allow icmp of
-    // TypeSize because they will require a trunc to be legalised.
-    // TODO: Allow icmp of smaller types, and calculate at the end
-    // whether the transform would be beneficial.
-    if (isa<PointerType>(I->getOperand(0)->getType()))
+  if (auto *I = dyn_cast<Instruction>(V)) {
+    switch (I->getOpcode()) {
+    default:
+      return isa<BinaryOperator>(I) && isSupportedType(I) &&
+             !GenerateSignBits(I);
+    case Instruction::GetElementPtr:
+    case Instruction::Store:
+    case Instruction::Br:
+    case Instruction::Switch:
       return true;
-    return EqualTypeSize(I->getOperand(0));
-  }
-
-  // Memory instructions
-  if (isa<StoreInst>(V) || isa<GetElementPtrInst>(V))
-    return true;
-
-  // Branches and targets.
-  if( isa<BranchInst>(V) || isa<SwitchInst>(V) || isa<BasicBlock>(V))
-    return true;
-
-  // Non-instruction values that we can handle.
-  if ((isa<Constant>(V) && !isa<ConstantExpr>(V)) || isa<Argument>(V))
+    case Instruction::PHI:
+    case Instruction::Select:
+    case Instruction::Ret:
+    case Instruction::Load:
+    case Instruction::Trunc:
+    case Instruction::BitCast:
+      return isSupportedType(I);
+    case Instruction::ZExt:
+      return isSupportedType(I->getOperand(0));
+    case Instruction::ICmp:
+      // Now that we allow small types than TypeSize, only allow icmp of
+      // TypeSize because they will require a trunc to be legalised.
+      // TODO: Allow icmp of smaller types, and calculate at the end
+      // whether the transform would be beneficial.
+      if (isa<PointerType>(I->getOperand(0)->getType()))
+        return true;
+      return EqualTypeSize(I->getOperand(0));
+    case Instruction::Call: {
+      // Special cases for calls as we need to check for zeroext
+      // TODO We should accept calls even if they don't have zeroext, as they
+      // can still be sinks.
+      auto *Call = cast<CallInst>(I);
+      return isSupportedType(Call) &&
+             Call->hasRetAttr(Attribute::AttrKind::ZExt);
+    }
+    }
+  } else if (isa<Constant>(V) && !isa<ConstantExpr>(V)) {
     return isSupportedType(V);
+  } else if (auto *Arg = dyn_cast<Argument>(V))
+    return isSupportedType(V) && !Arg->hasSExtAttr();
 
-  if (isa<PHINode>(V) || isa<SelectInst>(V) || isa<ReturnInst>(V) ||
-      isa<LoadInst>(V))
-    return isSupportedType(V);
-
-  if (isa<SExtInst>(V))
-    return false;
-
-  if (auto *Cast = dyn_cast<CastInst>(V))
-    return isSupportedType(Cast) || isSupportedType(Cast->getOperand(0));
-
-  // Special cases for calls as we need to check for zeroext
-  // TODO We should accept calls even if they don't have zeroext, as they can
-  // still be sinks.
-  if (auto *Call = dyn_cast<CallInst>(V))
-    return isSupportedType(Call) &&
-           Call->hasRetAttr(Attribute::AttrKind::ZExt);
-
-  if (!isa<BinaryOperator>(V))
-    return false;
-
-  if (!isSupportedType(V))
-    return false;
-
-  if (generateSignBits(V)) {
-    LLVM_DEBUG(dbgs() << "ARM CGP: No, instruction can generate sign bits.\n");
-    return false;
-  }
-  return true;
+  return isa<BasicBlock>(V);
 }
 
 /// Check that the type of V would be promoted and that the original type is
@@ -887,7 +861,7 @@ bool ARMCodeGenPrepare::isLegalToPromote(Value *V) {
   if (SafeToPromote.count(I))
    return true;
 
-  if (isPromotedResultSafe(V) || isSafeOverflow(I)) {
+  if (isPromotedResultSafe(V) || isSafeWrap(I)) {
     SafeToPromote.insert(I);
     return true;
   }
@@ -925,6 +899,7 @@ bool ARMCodeGenPrepare::TryToPromote(Value *V) {
     return false;
 
   SafeToPromote.clear();
+  SafeWrap.clear();
 
   if (!isSupportedValue(V) || !shouldPromote(V) || !isLegalToPromote(V))
     return false;
@@ -1023,7 +998,8 @@ bool ARMCodeGenPrepare::TryToPromote(Value *V) {
   if (ToPromote < 2)
     return false;
 
-  Promoter->Mutate(OrigTy, CurrentVisited, Sources, Sinks, SafeToPromote);
+  Promoter->Mutate(OrigTy, CurrentVisited, Sources, Sinks, SafeToPromote,
+                   SafeWrap);
   return true;
 }
 

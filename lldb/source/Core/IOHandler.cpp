@@ -172,8 +172,7 @@ IOHandlerConfirm::~IOHandlerConfirm() = default;
 
 int IOHandlerConfirm::IOHandlerComplete(
     IOHandler &io_handler, const char *current_line, const char *cursor,
-    const char *last_char, int skip_first_n_matches, int max_matches,
-    StringList &matches, StringList &descriptions) {
+    const char *last_char, StringList &matches, StringList &descriptions) {
   if (current_line == cursor) {
     if (m_default_response) {
       matches.AppendString("y");
@@ -221,20 +220,17 @@ void IOHandlerConfirm::IOHandlerInputComplete(IOHandler &io_handler,
 
 int IOHandlerDelegate::IOHandlerComplete(
     IOHandler &io_handler, const char *current_line, const char *cursor,
-    const char *last_char, int skip_first_n_matches, int max_matches,
-    StringList &matches, StringList &descriptions) {
+    const char *last_char, StringList &matches, StringList &descriptions) {
   switch (m_completion) {
   case Completion::None:
     break;
 
   case Completion::LLDBCommand:
     return io_handler.GetDebugger().GetCommandInterpreter().HandleCompletion(
-        current_line, cursor, last_char, skip_first_n_matches, max_matches,
-        matches, descriptions);
+        current_line, cursor, last_char, matches, descriptions);
   case Completion::Expression: {
     CompletionResult result;
-    CompletionRequest request(current_line, current_line - cursor,
-                              skip_first_n_matches, max_matches, result);
+    CompletionRequest request(current_line, cursor - current_line, result);
     CommandCompletions::InvokeCommonCompletionCallbacks(
         io_handler.GetDebugger().GetCommandInterpreter(),
         CommandCompletions::eVariablePathCompletion, request, nullptr);
@@ -243,8 +239,7 @@ int IOHandlerDelegate::IOHandlerComplete(
 
     size_t num_matches = request.GetNumberOfMatches();
     if (num_matches > 0) {
-      std::string common_prefix;
-      matches.LongestCommonPrefix(common_prefix);
+      std::string common_prefix = matches.LongestCommonPrefix();
       const size_t partial_name_len = request.GetCursorArgumentPrefix().size();
 
       // If we matched a unique single command, add a space... Only do this if
@@ -374,7 +369,21 @@ bool IOHandlerEditline::GetLine(std::string &line, bool &interrupted) {
       bool got_line = false;
       m_editing = true;
       while (!done) {
+#ifdef _WIN32
+        // ReadFile on Windows is supposed to set ERROR_OPERATION_ABORTED
+        // according to the docs on MSDN. However, this has evidently been a
+        // known bug since Windows 8. Therefore, we can't detect if a signal
+        // interrupted in the fgets. So pressing ctrl-c causes the repl to end
+        // and the process to exit. A temporary workaround is just to attempt to
+        // fgets twice until this bug is fixed.
+        if (fgets(buffer, sizeof(buffer), in) == nullptr &&
+            fgets(buffer, sizeof(buffer), in) == nullptr) {
+          // this is the equivalent of EINTR for Windows
+          if (GetLastError() == ERROR_OPERATION_ABORTED)
+            continue;
+#else
         if (fgets(buffer, sizeof(buffer), in) == nullptr) {
+#endif
           const int saved_errno = errno;
           if (feof(in))
             done = true;
@@ -436,13 +445,12 @@ int IOHandlerEditline::FixIndentationCallback(Editline *editline,
 
 int IOHandlerEditline::AutoCompleteCallback(
     const char *current_line, const char *cursor, const char *last_char,
-    int skip_first_n_matches, int max_matches, StringList &matches,
-    StringList &descriptions, void *baton) {
+    StringList &matches, StringList &descriptions, void *baton) {
   IOHandlerEditline *editline_reader = (IOHandlerEditline *)baton;
   if (editline_reader)
     return editline_reader->m_delegate.IOHandlerComplete(
-        *editline_reader, current_line, cursor, last_char, skip_first_n_matches,
-        max_matches, matches, descriptions);
+        *editline_reader, current_line, cursor, last_char, matches,
+        descriptions);
   return 0;
 }
 #endif

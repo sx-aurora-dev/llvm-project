@@ -18,9 +18,6 @@
 
 namespace lldb_private {
 class Stream;
-}
-
-namespace lldb_private {
 
 /// \class FileSpecList FileSpecList.h "lldb/Core/FileSpecList.h"
 /// A file collection class.
@@ -78,6 +75,15 @@ public:
   /// \return
   ///     \b true if the file was appended, \b false otherwise.
   bool AppendIfUnique(const FileSpec &file);
+
+  /// Inserts a new FileSpec into the FileSpecList constructed in-place with
+  /// the given arguments.
+  ///
+  /// \param[in] args
+  ///     Arguments to create the FileSpec
+  template <class... Args> void EmplaceBack(Args &&... args) {
+    m_files.emplace_back(std::forward<Args>(args)...);
+  }
 
   /// Clears the file list.
   void Clear();

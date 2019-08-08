@@ -13,6 +13,7 @@
 #include "lldb/Core/FileSpecList.h"
 #include "lldb/Symbol/LineTable.h"
 #include "lldb/Symbol/SymbolFile.h"
+#include "lldb/Symbol/UnwindPlan.h"
 
 namespace lldb_private {
 
@@ -30,12 +31,13 @@ public:
     return "Breakpad debug symbol file reader.";
   }
 
-  static SymbolFile *CreateInstance(ObjectFile *obj_file) {
-    return new SymbolFileBreakpad(obj_file);
+  static SymbolFile *CreateInstance(lldb::ObjectFileSP objfile_sp) {
+    return new SymbolFileBreakpad(std::move(objfile_sp));
   }
 
   // Constructors and Destructors
-  SymbolFileBreakpad(ObjectFile *object_file) : SymbolFile(object_file) {}
+  SymbolFileBreakpad(lldb::ObjectFileSP objfile_sp)
+      : SymbolFile(std::move(objfile_sp)) {}
 
   ~SymbolFileBreakpad() override {}
 
@@ -44,10 +46,6 @@ public:
   void InitializeObject() override {}
 
   // Compile Unit function calls
-
-  uint32_t GetNumCompileUnits() override;
-
-  lldb::CompUnitSP ParseCompileUnitAtIndex(uint32_t index) override;
 
   lldb::LanguageType ParseLanguage(CompileUnit &comp_unit) override {
     return lldb::eLanguageTypeUnknown;
@@ -121,8 +119,11 @@ public:
   size_t FindTypes(const std::vector<CompilerContext> &context, bool append,
                    TypeMap &types) override;
 
-  TypeSystem *GetTypeSystemForLanguage(lldb::LanguageType language) override {
-    return nullptr;
+  llvm::Expected<TypeSystem &>
+  GetTypeSystemForLanguage(lldb::LanguageType language) override {
+    return llvm::make_error<llvm::StringError>(
+        "SymbolFileBreakpad does not support GetTypeSystemForLanguage",
+        llvm::inconvertibleErrorCode());
   }
 
   CompilerDeclContext
@@ -132,6 +133,10 @@ public:
   }
 
   void AddSymbols(Symtab &symtab) override;
+
+  lldb::UnwindPlanSP
+  GetUnwindPlan(const Address &address,
+                const RegisterInfoResolver &resolver) override;
 
   ConstString GetPluginName() override { return GetPluginNameStatic(); }
   uint32_t GetPluginVersion() override { return 1; }
@@ -144,6 +149,11 @@ private:
   struct Bookmark {
     uint32_t section;
     size_t offset;
+
+    friend bool operator<(const Bookmark &lhs, const Bookmark &rhs) {
+      return std::tie(lhs.section, lhs.offset) <
+             std::tie(rhs.section, rhs.offset);
+    }
   };
 
   // At iterator class for simplifying algorithms reading data from the breakpad
@@ -177,8 +187,7 @@ private:
       return *this;
     }
     friend bool operator<(const CompUnitData &lhs, const CompUnitData &rhs) {
-      return std::tie(lhs.bookmark.section, lhs.bookmark.offset) <
-             std::tie(rhs.bookmark.section, rhs.bookmark.offset);
+      return lhs.bookmark < rhs.bookmark;
     }
 
     Bookmark bookmark;
@@ -187,16 +196,26 @@ private:
 
   };
 
-  SymbolVendor &GetSymbolVendor();
+  uint32_t CalculateNumCompileUnits() override;
+  lldb::CompUnitSP ParseCompileUnitAtIndex(uint32_t index) override;
+
   lldb::addr_t GetBaseFileAddress();
   void ParseFileRecords();
   void ParseCUData();
   void ParseLineTableAndSupportFiles(CompileUnit &cu, CompUnitData &data);
+  void ParseUnwindData();
+  bool ParseUnwindRow(llvm::StringRef unwind_rules,
+                      const RegisterInfoResolver &resolver,
+                      UnwindPlan::Row &row);
 
   using CompUnitMap = RangeDataVector<lldb::addr_t, lldb::addr_t, CompUnitData>;
 
   llvm::Optional<std::vector<FileSpec>> m_files;
   llvm::Optional<CompUnitMap> m_cu_data;
+
+  using UnwindMap = RangeDataVector<lldb::addr_t, lldb::addr_t, Bookmark>;
+  llvm::Optional<UnwindMap> m_unwind_data;
+  llvm::BumpPtrAllocator m_allocator;
 };
 
 } // namespace breakpad

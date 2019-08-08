@@ -127,6 +127,8 @@ public:
   /// the mappings are kept in DwarfDebug.
   void insertDIE(const DINode *Desc, DIE *D);
 
+  void insertDIE(DIE *D);
+
   /// Add a flag that is true to the DIE.
   void addFlag(DIE &Die, dwarf::Attribute Attribute);
 
@@ -198,6 +200,7 @@ public:
   void addConstantValue(DIE &Die, const ConstantInt *CI, const DIType *Ty);
   void addConstantValue(DIE &Die, const APInt &Val, const DIType *Ty);
   void addConstantValue(DIE &Die, const APInt &Val, bool Unsigned);
+  void addConstantValue(DIE &Die, uint64_t Val, const DIType *Ty);
   void addConstantValue(DIE &Die, bool Unsigned, uint64_t Val);
 
   /// Add constant value entry in variable DIE.
@@ -310,12 +313,6 @@ protected:
   /// Look up the source ID for the given file. If none currently exists,
   /// create a new ID and insert it in the line table.
   virtual unsigned getOrCreateSourceID(const DIFile *File) = 0;
-
-  /// Look in the DwarfDebug map for the MDNode that corresponds to the
-  /// reference.
-  template <typename T> T *resolve(TypedDINodeRef<T> Ref) const {
-    return Ref.resolve();
-  }
 
   /// Emit the common part of the header for this unit.
   void emitCommonHeader(bool UseOffsets, dwarf::UnitType UT);

@@ -5,7 +5,6 @@ Test the use of setjmp/longjmp for non-local goto operations in a single-threade
 from __future__ import print_function
 
 
-import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -33,7 +32,7 @@ class LongjmpTestCase(TestBase):
     @skipIfFreeBSD  # llvm.org/pr17214
     @expectedFailureAll(oslist=["linux"], bugnumber="llvm.org/pr20231")
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24778")
-    @expectedFlakeyNetBSD
+    @skipIfNetBSD
     def test_step_over(self):
         """Test stepping when the inferior calls setjmp/longjmp, in particular, thread step-over a longjmp."""
         self.build()

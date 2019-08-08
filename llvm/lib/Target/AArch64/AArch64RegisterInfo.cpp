@@ -120,6 +120,8 @@ AArch64RegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                : CSR_AArch64_CXX_TLS_Darwin_RegMask;
   if (CC == CallingConv::AArch64_VectorCall)
     return SCS ? CSR_AArch64_AAVPCS_SCS_RegMask : CSR_AArch64_AAVPCS_RegMask;
+  if (CC == CallingConv::AArch64_SVE_VectorCall)
+    return CSR_AArch64_SVE_AAPCS_RegMask;
   if (MF.getSubtarget<AArch64Subtarget>().getTargetLowering()
           ->supportSwiftError() &&
       MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
@@ -279,7 +281,7 @@ bool AArch64RegisterInfo::hasBasePointer(const MachineFunction &MF) const {
   return false;
 }
 
-unsigned
+Register
 AArch64RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const AArch64FrameLowering *TFI = getFrameLowering(MF);
   return TFI->hasFP(MF) ? AArch64::FP : AArch64::SP;
@@ -453,7 +455,8 @@ void AArch64RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   if (MI.isDebugValue() || MI.getOpcode() == TargetOpcode::STACKMAP ||
       MI.getOpcode() == TargetOpcode::PATCHPOINT) {
     Offset = TFI->resolveFrameIndexReference(MF, FrameIndex, FrameReg,
-                                             /*PreferFP=*/true);
+                                             /*PreferFP=*/true,
+                                             /*ForSimm=*/false);
     Offset += MI.getOperand(FIOperandNum + 1).getImm();
     MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false /*isDef*/);
     MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
@@ -467,9 +470,19 @@ void AArch64RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     return;
   }
 
-  // Modify MI as necessary to handle as much of 'Offset' as possible
-  Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
+  if (MI.getOpcode() == AArch64::TAGPstack) {
+    // TAGPstack must use the virtual frame register in its 3rd operand.
+    const MachineFrameInfo &MFI = MF.getFrameInfo();
+    const AArch64FunctionInfo *AFI = MF.getInfo<AArch64FunctionInfo>();
+    FrameReg = MI.getOperand(3).getReg();
+    Offset =
+        MFI.getObjectOffset(FrameIndex) + AFI->getTaggedBasePointerOffset();
+  } else {
+    Offset = TFI->resolveFrameIndexReference(
+        MF, FrameIndex, FrameReg, /*PreferFP=*/false, /*ForSimm=*/true);
+  }
 
+  // Modify MI as necessary to handle as much of 'Offset' as possible
   if (rewriteAArch64FrameIndex(MI, FIOperandNum, FrameReg, Offset, TII))
     return;
 

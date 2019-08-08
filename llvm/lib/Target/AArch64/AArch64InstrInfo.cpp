@@ -76,8 +76,11 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   const MachineFunction *MF = MBB.getParent();
   const MCAsmInfo *MAI = MF->getTarget().getMCAsmInfo();
 
-  if (MI.getOpcode() == AArch64::INLINEASM)
-    return getInlineAsmLength(MI.getOperand(0).getSymbolName(), *MAI);
+  {
+    auto Op = MI.getOpcode();
+    if (Op == AArch64::INLINEASM || Op == AArch64::INLINEASM_BR)
+      return getInlineAsmLength(MI.getOperand(0).getSymbolName(), *MAI);
+  }
 
   // FIXME: We currently only handle pseudoinstructions that don't get expanded
   //        before the assembly printer.
@@ -413,7 +416,7 @@ unsigned AArch64InstrInfo::insertBranch(
 
 // Find the original register that VReg is copied from.
 static unsigned removeCopies(const MachineRegisterInfo &MRI, unsigned VReg) {
-  while (TargetRegisterInfo::isVirtualRegister(VReg)) {
+  while (Register::isVirtualRegister(VReg)) {
     const MachineInstr *DefMI = MRI.getVRegDef(VReg);
     if (!DefMI->isFullCopy())
       return VReg;
@@ -428,7 +431,7 @@ static unsigned removeCopies(const MachineRegisterInfo &MRI, unsigned VReg) {
 static unsigned canFoldIntoCSel(const MachineRegisterInfo &MRI, unsigned VReg,
                                 unsigned *NewVReg = nullptr) {
   VReg = removeCopies(MRI, VReg);
-  if (!TargetRegisterInfo::isVirtualRegister(VReg))
+  if (!Register::isVirtualRegister(VReg))
     return 0;
 
   bool Is64Bit = AArch64::GPR64allRegClass.hasSubClassEq(MRI.getRegClass(VReg));
@@ -1069,7 +1072,7 @@ static bool UpdateOperandRegClass(MachineInstr &Instr) {
            "Operand has register constraints without being a register!");
 
     unsigned Reg = MO.getReg();
-    if (TargetRegisterInfo::isPhysicalRegister(Reg)) {
+    if (Register::isPhysicalRegister(Reg)) {
       if (!OpRegCstraints->contains(Reg))
         return false;
     } else if (!OpRegCstraints->hasSubClassEq(MRI->getRegClass(Reg)) &&
@@ -1498,7 +1501,7 @@ bool AArch64InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   const GlobalValue *GV =
       cast<GlobalValue>((*MI.memoperands_begin())->getValue());
   const TargetMachine &TM = MBB.getParent()->getTarget();
-  unsigned char OpFlags = Subtarget.ClassifyGlobalReference(GV, TM);
+  unsigned OpFlags = Subtarget.ClassifyGlobalReference(GV, TM);
   const unsigned char MO_NC = AArch64II::MO_NC;
 
   if ((OpFlags & AArch64II::MO_GOT) != 0) {
@@ -1769,6 +1772,7 @@ unsigned AArch64InstrInfo::getLoadStoreImmIdx(unsigned Opc) {
   case AArch64::STNPWi:
   case AArch64::STNPSi:
   case AArch64::LDG:
+  case AArch64::STGPi:
     return 3;
   case AArch64::ADDG:
   case AArch64::STGOffset:
@@ -2148,6 +2152,7 @@ bool AArch64InstrInfo::getMemOpInfo(unsigned Opcode, unsigned &Scale,
     MaxOffset = 4095;
     break;
   case AArch64::ADDG:
+  case AArch64::TAGPstack:
     Scale = 16;
     Width = 0;
     MinOffset = 0;
@@ -2155,9 +2160,22 @@ bool AArch64InstrInfo::getMemOpInfo(unsigned Opcode, unsigned &Scale,
     break;
   case AArch64::LDG:
   case AArch64::STGOffset:
+  case AArch64::STZGOffset:
     Scale = Width = 16;
     MinOffset = -256;
     MaxOffset = 255;
+    break;
+  case AArch64::ST2GOffset:
+  case AArch64::STZ2GOffset:
+    Scale = 16;
+    Width = 32;
+    MinOffset = -256;
+    MaxOffset = 255;
+    break;
+  case AArch64::STGPi:
+    Scale = Width = 16;
+    MinOffset = -64;
+    MaxOffset = 63;
     break;
   }
 
@@ -2332,7 +2350,7 @@ static const MachineInstrBuilder &AddSubReg(const MachineInstrBuilder &MIB,
   if (!SubIdx)
     return MIB.addReg(Reg, State);
 
-  if (TargetRegisterInfo::isPhysicalRegister(Reg))
+  if (Register::isPhysicalRegister(Reg))
     return MIB.addReg(TRI->getSubReg(Reg, SubIdx), State);
   return MIB.addReg(Reg, State, SubIdx);
 }
@@ -2704,7 +2722,7 @@ static void storeRegPairToStackSlot(const TargetRegisterInfo &TRI,
                                     MachineMemOperand *MMO) {
   unsigned SrcReg0 = SrcReg;
   unsigned SrcReg1 = SrcReg;
-  if (TargetRegisterInfo::isPhysicalRegister(SrcReg)) {
+  if (Register::isPhysicalRegister(SrcReg)) {
     SrcReg0 = TRI.getSubReg(SrcReg, SubIdx0);
     SubIdx0 = 0;
     SrcReg1 = TRI.getSubReg(SrcReg, SubIdx1);
@@ -2743,7 +2761,7 @@ void AArch64InstrInfo::storeRegToStackSlot(
   case 4:
     if (AArch64::GPR32allRegClass.hasSubClassEq(RC)) {
       Opc = AArch64::STRWui;
-      if (TargetRegisterInfo::isVirtualRegister(SrcReg))
+      if (Register::isVirtualRegister(SrcReg))
         MF.getRegInfo().constrainRegClass(SrcReg, &AArch64::GPR32RegClass);
       else
         assert(SrcReg != AArch64::WSP);
@@ -2753,7 +2771,7 @@ void AArch64InstrInfo::storeRegToStackSlot(
   case 8:
     if (AArch64::GPR64allRegClass.hasSubClassEq(RC)) {
       Opc = AArch64::STRXui;
-      if (TargetRegisterInfo::isVirtualRegister(SrcReg))
+      if (Register::isVirtualRegister(SrcReg))
         MF.getRegInfo().constrainRegClass(SrcReg, &AArch64::GPR64RegClass);
       else
         assert(SrcReg != AArch64::SP);
@@ -2834,7 +2852,7 @@ static void loadRegPairFromStackSlot(const TargetRegisterInfo &TRI,
   unsigned DestReg0 = DestReg;
   unsigned DestReg1 = DestReg;
   bool IsUndef = true;
-  if (TargetRegisterInfo::isPhysicalRegister(DestReg)) {
+  if (Register::isPhysicalRegister(DestReg)) {
     DestReg0 = TRI.getSubReg(DestReg, SubIdx0);
     SubIdx0 = 0;
     DestReg1 = TRI.getSubReg(DestReg, SubIdx1);
@@ -2874,7 +2892,7 @@ void AArch64InstrInfo::loadRegFromStackSlot(
   case 4:
     if (AArch64::GPR32allRegClass.hasSubClassEq(RC)) {
       Opc = AArch64::LDRWui;
-      if (TargetRegisterInfo::isVirtualRegister(DestReg))
+      if (Register::isVirtualRegister(DestReg))
         MF.getRegInfo().constrainRegClass(DestReg, &AArch64::GPR32RegClass);
       else
         assert(DestReg != AArch64::WSP);
@@ -2884,7 +2902,7 @@ void AArch64InstrInfo::loadRegFromStackSlot(
   case 8:
     if (AArch64::GPR64allRegClass.hasSubClassEq(RC)) {
       Opc = AArch64::LDRXui;
-      if (TargetRegisterInfo::isVirtualRegister(DestReg))
+      if (Register::isVirtualRegister(DestReg))
         MF.getRegInfo().constrainRegClass(DestReg, &AArch64::GPR64RegClass);
       else
         assert(DestReg != AArch64::SP);
@@ -2959,7 +2977,7 @@ void llvm::emitFrameOffset(MachineBasicBlock &MBB,
                            unsigned DestReg, unsigned SrcReg, int Offset,
                            const TargetInstrInfo *TII,
                            MachineInstr::MIFlag Flag, bool SetNZCV,
-                           bool NeedsWinCFI) {
+                           bool NeedsWinCFI, bool *HasWinCFI) {
   if (DestReg == SrcReg && Offset == 0)
     return;
 
@@ -3004,10 +3022,13 @@ void llvm::emitFrameOffset(MachineBasicBlock &MBB,
         .addImm(AArch64_AM::getShifterImm(AArch64_AM::LSL, ShiftSize))
         .setMIFlag(Flag);
 
-   if (NeedsWinCFI && SrcReg == AArch64::SP && DestReg == AArch64::SP)
-     BuildMI(MBB, MBBI, DL, TII->get(AArch64::SEH_StackAlloc))
-         .addImm(ThisVal)
-         .setMIFlag(Flag);
+    if (NeedsWinCFI && SrcReg == AArch64::SP && DestReg == AArch64::SP) {
+      if (HasWinCFI)
+        *HasWinCFI = true;
+      BuildMI(MBB, MBBI, DL, TII->get(AArch64::SEH_StackAlloc))
+          .addImm(ThisVal)
+          .setMIFlag(Flag);
+    }
 
     SrcReg = DestReg;
     Offset -= ThisVal;
@@ -3023,6 +3044,8 @@ void llvm::emitFrameOffset(MachineBasicBlock &MBB,
   if (NeedsWinCFI) {
     if ((DestReg == AArch64::FP && SrcReg == AArch64::SP) ||
         (SrcReg == AArch64::FP && DestReg == AArch64::SP)) {
+      if (HasWinCFI)
+        *HasWinCFI = true;
       if (Offset == 0)
         BuildMI(MBB, MBBI, DL, TII->get(AArch64::SEH_SetFP)).
                 setMIFlag(Flag);
@@ -3030,6 +3053,8 @@ void llvm::emitFrameOffset(MachineBasicBlock &MBB,
         BuildMI(MBB, MBBI, DL, TII->get(AArch64::SEH_AddFP)).
                 addImm(Offset).setMIFlag(Flag);
     } else if (DestReg == AArch64::SP) {
+      if (HasWinCFI)
+        *HasWinCFI = true;
       BuildMI(MBB, MBBI, DL, TII->get(AArch64::SEH_StackAlloc)).
               addImm(Offset).setMIFlag(Flag);
     }
@@ -3039,7 +3064,7 @@ void llvm::emitFrameOffset(MachineBasicBlock &MBB,
 MachineInstr *AArch64InstrInfo::foldMemoryOperandImpl(
     MachineFunction &MF, MachineInstr &MI, ArrayRef<unsigned> Ops,
     MachineBasicBlock::iterator InsertPt, int FrameIndex,
-    LiveIntervals *LIS) const {
+    LiveIntervals *LIS, VirtRegMap *VRM) const {
   // This is a bit of a hack. Consider this instruction:
   //
   //   %0 = COPY %sp; GPR64all:%0
@@ -3056,13 +3081,11 @@ MachineInstr *AArch64InstrInfo::foldMemoryOperandImpl(
   if (MI.isFullCopy()) {
     unsigned DstReg = MI.getOperand(0).getReg();
     unsigned SrcReg = MI.getOperand(1).getReg();
-    if (SrcReg == AArch64::SP &&
-        TargetRegisterInfo::isVirtualRegister(DstReg)) {
+    if (SrcReg == AArch64::SP && Register::isVirtualRegister(DstReg)) {
       MF.getRegInfo().constrainRegClass(DstReg, &AArch64::GPR64RegClass);
       return nullptr;
     }
-    if (DstReg == AArch64::SP &&
-        TargetRegisterInfo::isVirtualRegister(SrcReg)) {
+    if (DstReg == AArch64::SP && Register::isVirtualRegister(SrcReg)) {
       MF.getRegInfo().constrainRegClass(SrcReg, &AArch64::GPR64RegClass);
       return nullptr;
     }
@@ -3107,9 +3130,8 @@ MachineInstr *AArch64InstrInfo::foldMemoryOperandImpl(
     // This is slightly expensive to compute for physical regs since
     // getMinimalPhysRegClass is slow.
     auto getRegClass = [&](unsigned Reg) {
-      return TargetRegisterInfo::isVirtualRegister(Reg)
-                 ? MRI.getRegClass(Reg)
-                 : TRI.getMinimalPhysRegClass(Reg);
+      return Register::isVirtualRegister(Reg) ? MRI.getRegClass(Reg)
+                                              : TRI.getMinimalPhysRegClass(Reg);
     };
 
     if (DstMO.getSubReg() == 0 && SrcMO.getSubReg() == 0) {
@@ -3134,8 +3156,7 @@ MachineInstr *AArch64InstrInfo::foldMemoryOperandImpl(
     //
     //   STRXui %xzr, %stack.0
     //
-    if (IsSpill && DstMO.isUndef() &&
-        TargetRegisterInfo::isPhysicalRegister(SrcReg)) {
+    if (IsSpill && DstMO.isUndef() && Register::isPhysicalRegister(SrcReg)) {
       assert(SrcMO.getSubReg() == 0 &&
              "Unexpected subreg on physical register");
       const TargetRegisterClass *SpillRC;
@@ -3247,6 +3268,8 @@ int llvm::isAArch64FrameOffsetLegal(const MachineInstr &MI, int &Offset,
   case AArch64::ST1Twov1d:
   case AArch64::ST1Threev1d:
   case AArch64::ST1Fourv1d:
+  case AArch64::IRG:
+  case AArch64::IRGstack:
     return AArch64FrameOffsetCannotUpdate;
   }
 
@@ -3432,7 +3455,7 @@ static bool canCombine(MachineBasicBlock &MBB, MachineOperand &MO,
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   MachineInstr *MI = nullptr;
 
-  if (MO.isReg() && TargetRegisterInfo::isVirtualRegister(MO.getReg()))
+  if (MO.isReg() && Register::isVirtualRegister(MO.getReg()))
     MI = MRI.getUniqueVRegDef(MO.getReg());
   // And it needs to be in the trace (otherwise, it won't have a depth).
   if (!MI || MI->getParent() != &MBB || (unsigned)MI->getOpcode() != CombineOpc)
@@ -3928,13 +3951,13 @@ genFusedMultiply(MachineFunction &MF, MachineRegisterInfo &MRI,
     Src2IsKill = Root.getOperand(IdxOtherOpd).isKill();
   }
 
-  if (TargetRegisterInfo::isVirtualRegister(ResultReg))
+  if (Register::isVirtualRegister(ResultReg))
     MRI.constrainRegClass(ResultReg, RC);
-  if (TargetRegisterInfo::isVirtualRegister(SrcReg0))
+  if (Register::isVirtualRegister(SrcReg0))
     MRI.constrainRegClass(SrcReg0, RC);
-  if (TargetRegisterInfo::isVirtualRegister(SrcReg1))
+  if (Register::isVirtualRegister(SrcReg1))
     MRI.constrainRegClass(SrcReg1, RC);
-  if (TargetRegisterInfo::isVirtualRegister(SrcReg2))
+  if (Register::isVirtualRegister(SrcReg2))
     MRI.constrainRegClass(SrcReg2, RC);
 
   MachineInstrBuilder MIB;
@@ -3994,13 +4017,13 @@ static MachineInstr *genMaddR(MachineFunction &MF, MachineRegisterInfo &MRI,
   unsigned SrcReg1 = MUL->getOperand(2).getReg();
   bool Src1IsKill = MUL->getOperand(2).isKill();
 
-  if (TargetRegisterInfo::isVirtualRegister(ResultReg))
+  if (Register::isVirtualRegister(ResultReg))
     MRI.constrainRegClass(ResultReg, RC);
-  if (TargetRegisterInfo::isVirtualRegister(SrcReg0))
+  if (Register::isVirtualRegister(SrcReg0))
     MRI.constrainRegClass(SrcReg0, RC);
-  if (TargetRegisterInfo::isVirtualRegister(SrcReg1))
+  if (Register::isVirtualRegister(SrcReg1))
     MRI.constrainRegClass(SrcReg1, RC);
-  if (TargetRegisterInfo::isVirtualRegister(VR))
+  if (Register::isVirtualRegister(VR))
     MRI.constrainRegClass(VR, RC);
 
   MachineInstrBuilder MIB =
@@ -4591,7 +4614,7 @@ bool AArch64InstrInfo::optimizeCondBranch(MachineInstr &MI) const {
   MachineFunction *MF = MBB->getParent();
   MachineRegisterInfo *MRI = &MF->getRegInfo();
   unsigned VReg = MI.getOperand(0).getReg();
-  if (!TargetRegisterInfo::isVirtualRegister(VReg))
+  if (!Register::isVirtualRegister(VReg))
     return false;
 
   MachineInstr *DefMI = MRI->getVRegDef(VReg);
@@ -4627,7 +4650,7 @@ bool AArch64InstrInfo::optimizeCondBranch(MachineInstr &MI) const {
 
     MachineOperand &MO = DefMI->getOperand(1);
     unsigned NewReg = MO.getReg();
-    if (!TargetRegisterInfo::isVirtualRegister(NewReg))
+    if (!Register::isVirtualRegister(NewReg))
       return false;
 
     assert(!MRI->def_empty(NewReg) && "Register must be defined.");
@@ -4712,7 +4735,8 @@ AArch64InstrInfo::getSerializableBitmaskMachineOperandTargetFlags() const {
       {MO_COFFSTUB, "aarch64-coffstub"},
       {MO_GOT, "aarch64-got"},   {MO_NC, "aarch64-nc"},
       {MO_S, "aarch64-s"},       {MO_TLS, "aarch64-tls"},
-      {MO_DLLIMPORT, "aarch64-dllimport"}};
+      {MO_DLLIMPORT, "aarch64-dllimport"},
+      {MO_PREL, "aarch64-prel"}};
   return makeArrayRef(TargetFlags);
 }
 
@@ -5503,6 +5527,31 @@ MachineBasicBlock::iterator AArch64InstrInfo::insertOutlinedCall(
 bool AArch64InstrInfo::shouldOutlineFromFunctionByDefault(
   MachineFunction &MF) const {
   return MF.getFunction().hasMinSize();
+}
+
+bool AArch64InstrInfo::isCopyInstrImpl(
+    const MachineInstr &MI, const MachineOperand *&Source,
+    const MachineOperand *&Destination) const {
+
+  // AArch64::ORRWrs and AArch64::ORRXrs with WZR/XZR reg
+  // and zero immediate operands used as an alias for mov instruction.
+  if (MI.getOpcode() == AArch64::ORRWrs &&
+      MI.getOperand(1).getReg() == AArch64::WZR &&
+      MI.getOperand(3).getImm() == 0x0) {
+    Destination = &MI.getOperand(0);
+    Source = &MI.getOperand(2);
+    return true;
+  }
+
+  if (MI.getOpcode() == AArch64::ORRXrs &&
+      MI.getOperand(1).getReg() == AArch64::XZR &&
+      MI.getOperand(3).getImm() == 0x0) {
+    Destination = &MI.getOperand(0);
+    Source = &MI.getOperand(2);
+    return true;
+  }
+
+  return false;
 }
 
 #define GET_INSTRINFO_HELPERS

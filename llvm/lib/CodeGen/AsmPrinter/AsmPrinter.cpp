@@ -100,6 +100,8 @@
 #include "llvm/MC/SectionKind.h"
 #include "llvm/Pass.h"
 #include "llvm/Remarks/Remark.h"
+#include "llvm/Remarks/RemarkFormat.h"
+#include "llvm/Remarks/RemarkStringTable.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
@@ -494,7 +496,7 @@ void AsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   SectionKind GVKind = TargetLoweringObjectFile::getKindForGlobal(GV, TM);
 
   const DataLayout &DL = GV->getParent()->getDataLayout();
-  uint64_t Size = DL.getTypeAllocSize(GV->getType()->getElementType());
+  uint64_t Size = DL.getTypeAllocSize(GV->getValueType());
 
   // If the alignment is specified, we *must* obey it.  Overaligning a global
   // with a specified alignment is a prompt way to break globals emitted to
@@ -1073,6 +1075,7 @@ void AsmPrinter::EmitFunctionBody() {
       case TargetOpcode::LOCAL_ESCAPE:
         emitFrameAlloc(MI);
         break;
+      case TargetOpcode::ANNOTATION_LABEL:
       case TargetOpcode::EH_LABEL:
       case TargetOpcode::GC_LABEL:
         OutStreamer->EmitLabel(MI.getOperand(0).getMCSymbol());
@@ -1298,7 +1301,7 @@ void AsmPrinter::emitGlobalIndirectSymbol(Module &M,
   else
     assert(GIS.hasLocalLinkage() && "Invalid alias or ifunc linkage");
 
-  bool IsFunction = GIS.getType()->getPointerElementType()->isFunctionTy();
+  bool IsFunction = GIS.getValueType()->isFunctionTy();
 
   // Treat bitcasts of functions as functions also. This is important at least
   // on WebAssembly where object and function addresses can't alias each other.
@@ -1346,55 +1349,25 @@ void AsmPrinter::emitRemarksSection(Module &M) {
   RemarkStreamer *RS = M.getContext().getRemarkStreamer();
   if (!RS)
     return;
+  remarks::RemarkSerializer &RemarkSerializer = RS->getSerializer();
+
+  StringRef FilenameRef = RS->getFilename();
+  SmallString<128> Filename = FilenameRef;
+  sys::fs::make_absolute(Filename);
+  assert(!Filename.empty() && "The filename can't be empty.");
+
+  std::string Buf;
+  raw_string_ostream OS(Buf);
+  std::unique_ptr<remarks::MetaSerializer> MetaSerializer =
+      RemarkSerializer.metaSerializer(OS, StringRef(Filename));
+  MetaSerializer->emit();
 
   // Switch to the right section: .remarks/__remarks.
   MCSection *RemarksSection =
       OutContext.getObjectFileInfo()->getRemarksSection();
   OutStreamer->SwitchSection(RemarksSection);
 
-  // Emit the magic number.
-  OutStreamer->EmitBytes(remarks::Magic);
-  // Explicitly emit a '\0'.
-  OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
-
-  // Emit the version number: little-endian uint64_t.
-  // The version number is located at the offset 0x0 in the section.
-  std::array<char, 8> Version;
-  support::endian::write64le(Version.data(), remarks::Version);
-  OutStreamer->EmitBinaryData(StringRef(Version.data(), Version.size()));
-
-  // Emit the string table in the section.
-  // Note: we need to use the streamer here to emit it in the section. We can't
-  // just use the serialize function with a raw_ostream because of the way
-  // MCStreamers work.
-  const remarks::StringTable &StrTab = RS->getStringTable();
-  std::vector<StringRef> StrTabStrings = StrTab.serialize();
-  uint64_t StrTabSize = StrTab.SerializedSize;
-  // Emit the total size of the string table (the size itself excluded):
-  // little-endian uint64_t.
-  // The total size is located after the version number.
-  std::array<char, 8> StrTabSizeBuf;
-  support::endian::write64le(StrTabSizeBuf.data(), StrTabSize);
-  OutStreamer->EmitBinaryData(
-      StringRef(StrTabSizeBuf.data(), StrTabSizeBuf.size()));
-  // Emit a list of null-terminated strings.
-  // Note: the order is important here: the ID used in the remarks corresponds
-  // to the position of the string in the section.
-  for (StringRef Str : StrTabStrings) {
-    OutStreamer->EmitBytes(Str);
-    // Explicitly emit a '\0'.
-    OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
-  }
-
-  // Emit the null-terminated absolute path to the remark file.
-  // The path is located at the offset 0x4 in the section.
-  StringRef FilenameRef = RS->getFilename();
-  SmallString<128> Filename = FilenameRef;
-  sys::fs::make_absolute(Filename);
-  assert(!Filename.empty() && "The filename can't be empty.");
-  OutStreamer->EmitBytes(Filename);
-  // Explicitly emit a '\0'.
-  OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
+  OutStreamer->EmitBinaryData(OS.str());
 }
 
 bool AsmPrinter::doFinalization(Module &M) {
@@ -1629,6 +1602,24 @@ bool AsmPrinter::doFinalization(Module &M) {
           !GV.hasDLLImportStorageClass() && !GV.getName().startswith("llvm.") &&
           !GV.hasAtLeastLocalUnnamedAddr())
         OutStreamer->EmitAddrsigSym(getSymbol(&GV));
+  }
+
+  // Emit symbol partition specifications (ELF only).
+  if (TM.getTargetTriple().isOSBinFormatELF()) {
+    unsigned UniqueID = 0;
+    for (const GlobalValue &GV : M.global_values()) {
+      if (!GV.hasPartition() || GV.isDeclarationForLinker() ||
+          GV.getVisibility() != GlobalValue::DefaultVisibility)
+        continue;
+
+      OutStreamer->SwitchSection(OutContext.getELFSection(
+          ".llvm_sympart", ELF::SHT_LLVM_SYMPART, 0, 0, "", ++UniqueID));
+      OutStreamer->EmitBytes(GV.getPartition());
+      OutStreamer->EmitZeros(1);
+      OutStreamer->EmitValue(
+          MCSymbolRefExpr::create(getSymbol(&GV), OutContext),
+          MAI->getCodePointerSize());
+    }
   }
 
   // Allow the target to emit any magic that it wants at the end of the file,
@@ -1966,7 +1957,7 @@ struct Structor {
 /// priority.
 void AsmPrinter::EmitXXStructorList(const DataLayout &DL, const Constant *List,
                                     bool isCtor) {
-  // Should be an array of '{ int, void ()* }' structs.  The first value is the
+  // Should be an array of '{ i32, void ()*, i8* }' structs.  The first value is the
   // init priority.
   if (!isa<ConstantArray>(List)) return;
 
@@ -1974,12 +1965,10 @@ void AsmPrinter::EmitXXStructorList(const DataLayout &DL, const Constant *List,
   const ConstantArray *InitList = dyn_cast<ConstantArray>(List);
   if (!InitList) return; // Not an array!
   StructType *ETy = dyn_cast<StructType>(InitList->getType()->getElementType());
-  // FIXME: Only allow the 3-field form in LLVM 4.0.
-  if (!ETy || ETy->getNumElements() < 2 || ETy->getNumElements() > 3)
-    return; // Not an array of two or three elements!
-  if (!isa<IntegerType>(ETy->getTypeAtIndex(0U)) ||
-      !isa<PointerType>(ETy->getTypeAtIndex(1U))) return; // Not (int, ptr).
-  if (ETy->getNumElements() == 3 && !isa<PointerType>(ETy->getTypeAtIndex(2U)))
+  if (!ETy || ETy->getNumElements() != 3 ||
+      !isa<IntegerType>(ETy->getTypeAtIndex(0U)) ||
+      !isa<PointerType>(ETy->getTypeAtIndex(1U)) ||
+      !isa<PointerType>(ETy->getTypeAtIndex(2U)))
     return; // Not (int, ptr, ptr).
 
   // Gather the structors in a form that's convenient for sorting by priority.
@@ -1995,7 +1984,7 @@ void AsmPrinter::EmitXXStructorList(const DataLayout &DL, const Constant *List,
     Structor &S = Structors.back();
     S.Priority = Priority->getLimitedValue(65535);
     S.Func = CS->getOperand(1);
-    if (ETy->getNumElements() == 3 && !CS->getOperand(2)->isNullValue())
+    if (!CS->getOperand(2)->isNullValue())
       S.ComdatKey =
           dyn_cast<GlobalValue>(CS->getOperand(2)->stripPointerCasts());
   }
@@ -2232,7 +2221,10 @@ const MCExpr *AsmPrinter::lowerConstant(const Constant *CV) {
 
     // We can emit the pointer value into this slot if the slot is an
     // integer slot equal to the size of the pointer.
-    if (DL.getTypeAllocSize(Ty) == DL.getTypeAllocSize(Op->getType()))
+    //
+    // If the pointer is larger than the resultant integer, then
+    // as with Trunc just depend on the assembler to truncate it.
+    if (DL.getTypeAllocSize(Ty) <= DL.getTypeAllocSize(Op->getType()))
       return OpExpr;
 
     // Otherwise the pointer is smaller than the resultant integer, mask off
@@ -2773,7 +2765,7 @@ MCSymbol *AsmPrinter::GetBlockAddressSymbol(const BasicBlock *BB) const {
 
 /// GetCPISymbol - Return the symbol for the specified constant pool entry.
 MCSymbol *AsmPrinter::GetCPISymbol(unsigned CPID) const {
-  if (getSubtargetInfo().getTargetTriple().isKnownWindowsMSVCEnvironment()) {
+  if (getSubtargetInfo().getTargetTriple().isWindowsMSVCEnvironment()) {
     const MachineConstantPoolEntry &CPE =
         MF->getConstantPool()->getConstants()[CPID];
     if (!CPE.isMachineConstantPoolEntry()) {

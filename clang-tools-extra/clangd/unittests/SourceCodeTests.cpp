@@ -9,6 +9,8 @@
 #include "Context.h"
 #include "Protocol.h"
 #include "SourceCode.h"
+#include "TestTU.h"
+#include "clang/Basic/LangOptions.h"
 #include "clang/Format/Format.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_os_ostream.h"
@@ -22,10 +24,13 @@ namespace {
 
 using llvm::Failed;
 using llvm::HasValue;
+using ::testing::UnorderedElementsAreArray;
 
 MATCHER_P2(Pos, Line, Col, "") {
   return arg.line == int(Line) && arg.character == int(Col);
 }
+
+MATCHER_P(MacroName, Name, "") { return arg.Name == Name; }
 
 /// A helper to make tests easier to read.
 Position position(int line, int character) {
@@ -322,6 +327,19 @@ TEST(SourceCodeTests, CollectIdentifiers) {
   EXPECT_EQ(IDs["foo"], 2u);
 }
 
+TEST(SourceCodeTests, CollectWords) {
+  auto Words = collectWords(R"cpp(
+  #define FIZZ_BUZZ
+  // this is a comment
+  std::string getSomeText() { return "magic word"; }
+  )cpp");
+  std::set<std::string> ActualWords(Words.keys().begin(), Words.keys().end());
+  std::set<std::string> ExpectedWords = {"define",  "fizz",    "buzz",  "this",
+                                         "comment", "string", "some", "text",
+                                         "return",  "magic",  "word"};
+  EXPECT_EQ(ActualWords, ExpectedWords);
+}
+
 TEST(SourceCodeTests, VisibleNamespaces) {
   std::vector<std::pair<const char *, std::vector<std::string>>> Cases = {
       {
@@ -388,6 +406,95 @@ TEST(SourceCodeTests, VisibleNamespaces) {
               visibleNamespaces(Case.first, format::getLLVMStyle()))
         << Case.first;
   }
+}
+
+TEST(SourceCodeTests, GetMacros) {
+  Annotations Code(R"cpp(
+     #define MACRO 123
+     int abc = MA^CRO;
+   )cpp");
+  TestTU TU = TestTU::withCode(Code.code());
+  auto AST = TU.build();
+  auto Loc = getBeginningOfIdentifier(AST, Code.point(),
+                                      AST.getSourceManager().getMainFileID());
+  auto Result = locateMacroAt(Loc, AST.getPreprocessor());
+  ASSERT_TRUE(Result);
+  EXPECT_THAT(*Result, MacroName("MACRO"));
+}
+
+TEST(SourceCodeTests, IsInsideMainFile){
+  TestTU TU;
+  TU.HeaderCode = R"cpp(
+    #define DEFINE_CLASS(X) class X {};
+    #define DEFINE_YY DEFINE_CLASS(YY)
+
+    class Header1 {};
+    DEFINE_CLASS(Header2)
+    class Header {};
+  )cpp";
+  TU.Code = R"cpp(
+    class Main1 {};
+    DEFINE_CLASS(Main2)
+    DEFINE_YY
+    class Main {};
+  )cpp";
+  TU.ExtraArgs.push_back("-DHeader=Header3");
+  TU.ExtraArgs.push_back("-DMain=Main3");
+  auto AST = TU.build();
+  const auto& SM = AST.getSourceManager();
+  auto DeclLoc = [&AST](llvm::StringRef Name) {
+    return findDecl(AST, Name).getLocation();
+  };
+  for (const auto *HeaderDecl : {"Header1", "Header2", "Header3"})
+    EXPECT_FALSE(isInsideMainFile(DeclLoc(HeaderDecl), SM));
+
+  for (const auto *MainDecl : {"Main1", "Main2", "Main3", "YY"})
+    EXPECT_TRUE(isInsideMainFile(DeclLoc(MainDecl), SM));
+}
+
+// Test for functions toHalfOpenFileRange and getHalfOpenFileRange
+TEST(SourceCodeTests, HalfOpenFileRange) {
+  // Each marked range should be the file range of the decl with the same name
+  // and each name should be unique.
+  Annotations Test(R"cpp(
+    #define FOO(X, Y) int Y = ++X
+    #define BAR(X) X + 1
+    #define ECHO(X) X
+    template<typename T>
+    class P {};
+    void f() {
+      $a[[P<P<P<P<P<int>>>>> a]];
+      $b[[int b = 1]];
+      $c[[FOO(b, c)]]; 
+      $d[[FOO(BAR(BAR(b)), d)]];
+      // FIXME: We might want to select everything inside the outer ECHO.
+      ECHO(ECHO($e[[int) ECHO(e]]));
+    }
+  )cpp");
+
+  ParsedAST AST = TestTU::withCode(Test.code()).build();
+  llvm::errs() << Test.code();
+  const SourceManager &SM = AST.getSourceManager();
+  const LangOptions &LangOpts = AST.getASTContext().getLangOpts();
+  // Turn a SourceLocation into a pair of positions
+  auto SourceRangeToRange = [&SM](SourceRange SrcRange) {
+    return Range{sourceLocToPosition(SM, SrcRange.getBegin()),
+                 sourceLocToPosition(SM, SrcRange.getEnd())};
+  };
+  auto CheckRange = [&](llvm::StringRef Name) {
+    const NamedDecl &Decl = findUnqualifiedDecl(AST, Name);
+    auto FileRange = toHalfOpenFileRange(SM, LangOpts, Decl.getSourceRange());
+    SCOPED_TRACE("Checking range: " + Name);
+    ASSERT_NE(FileRange, llvm::None);
+    Range HalfOpenRange = SourceRangeToRange(*FileRange);
+    EXPECT_EQ(HalfOpenRange, Test.ranges(Name)[0]);
+  };
+
+  CheckRange("a");
+  CheckRange("b");
+  CheckRange("c");
+  CheckRange("d");
+  CheckRange("e");
 }
 
 } // namespace

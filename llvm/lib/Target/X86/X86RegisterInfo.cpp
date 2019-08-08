@@ -216,6 +216,21 @@ X86RegisterInfo::getPointerRegClass(const MachineFunction &MF,
   }
 }
 
+bool X86RegisterInfo::shouldRewriteCopySrc(const TargetRegisterClass *DefRC,
+                                           unsigned DefSubReg,
+                                           const TargetRegisterClass *SrcRC,
+                                           unsigned SrcSubReg) const {
+  // Prevent rewriting a copy where the destination size is larger than the
+  // input size. See PR41619.
+  // FIXME: Should this be factored into the base implementation somehow.
+  if (DefRC->hasSuperClassEq(&X86::GR64RegClass) && DefSubReg == 0 &&
+      SrcRC->hasSuperClassEq(&X86::GR64RegClass) && SrcSubReg == X86::sub_32bit)
+    return false;
+
+  return TargetRegisterInfo::shouldRewriteCopySrc(DefRC, DefSubReg,
+                                                  SrcRC, SrcSubReg);
+}
+
 const TargetRegisterClass *
 X86RegisterInfo::getGPRsForTailCall(const MachineFunction &MF) const {
   const Function &F = MF.getFunction();
@@ -750,7 +765,7 @@ X86RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   }
 }
 
-unsigned X86RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
+Register X86RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const X86FrameLowering *TFI = getFrameLowering(MF);
   return TFI->hasFP(MF) ? FramePtr : StackPtr;
 }

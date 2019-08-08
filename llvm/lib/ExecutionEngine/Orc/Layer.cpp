@@ -29,15 +29,17 @@ IRMaterializationUnit::IRMaterializationUnit(ExecutionSession &ES,
 
   assert(this->TSM && "Module must not be null");
 
-  MangleAndInterner Mangle(ES, this->TSM.getModule()->getDataLayout());
-  for (auto &G : this->TSM.getModule()->global_values()) {
-    if (G.hasName() && !G.isDeclaration() && !G.hasLocalLinkage() &&
-        !G.hasAvailableExternallyLinkage() && !G.hasAppendingLinkage()) {
-      auto MangledName = Mangle(G.getName());
-      SymbolFlags[MangledName] = JITSymbolFlags::fromGlobalValue(G);
-      SymbolToDefinition[MangledName] = &G;
+  MangleAndInterner Mangle(ES, this->TSM.getModuleUnlocked()->getDataLayout());
+  this->TSM.withModuleDo([&](Module &M) {
+    for (auto &G : M.global_values()) {
+      if (G.hasName() && !G.isDeclaration() && !G.hasLocalLinkage() &&
+          !G.hasAvailableExternallyLinkage() && !G.hasAppendingLinkage()) {
+        auto MangledName = Mangle(G.getName());
+        SymbolFlags[MangledName] = JITSymbolFlags::fromGlobalValue(G);
+        SymbolToDefinition[MangledName] = &G;
+      }
     }
-  }
+  });
 }
 
 IRMaterializationUnit::IRMaterializationUnit(
@@ -47,8 +49,9 @@ IRMaterializationUnit::IRMaterializationUnit(
       TSM(std::move(TSM)), SymbolToDefinition(std::move(SymbolToDefinition)) {}
 
 StringRef IRMaterializationUnit::getName() const {
-  if (TSM.getModule())
-    return TSM.getModule()->getModuleIdentifier();
+  if (TSM)
+    return TSM.withModuleDo(
+        [](const Module &M) { return M.getModuleIdentifier(); });
   return "<null module>";
 }
 
@@ -87,17 +90,14 @@ void BasicIRLayerMaterializationUnit::materialize(
 
 #ifndef NDEBUG
   auto &ES = R.getTargetJITDylib().getExecutionSession();
+  auto &N = R.getTargetJITDylib().getName();
 #endif // NDEBUG
 
-  auto Lock = TSM.getContextLock();
-  LLVM_DEBUG(ES.runSessionLocked([&]() {
-    dbgs() << "Emitting, for " << R.getTargetJITDylib().getName() << ", "
-           << *this << "\n";
-  }););
+  LLVM_DEBUG(ES.runSessionLocked(
+      [&]() { dbgs() << "Emitting, for " << N << ", " << *this << "\n"; }););
   L.emit(std::move(R), std::move(TSM));
   LLVM_DEBUG(ES.runSessionLocked([&]() {
-    dbgs() << "Finished emitting, for " << R.getTargetJITDylib().getName()
-           << ", " << *this << "\n";
+    dbgs() << "Finished emitting, for " << N << ", " << *this << "\n";
   }););
 }
 

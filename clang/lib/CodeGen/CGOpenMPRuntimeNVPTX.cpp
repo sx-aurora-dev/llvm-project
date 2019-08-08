@@ -1929,6 +1929,11 @@ llvm::Function *CGOpenMPRuntimeNVPTX::emitParallelOutlinedFunction(
   auto *OutlinedFun =
       cast<llvm::Function>(CGOpenMPRuntime::emitParallelOutlinedFunction(
           D, ThreadIDVar, InnermostKind, CodeGen));
+  if (CGM.getLangOpts().Optimize) {
+    OutlinedFun->removeFnAttr(llvm::Attribute::NoInline);
+    OutlinedFun->removeFnAttr(llvm::Attribute::OptimizeNone);
+    OutlinedFun->addFnAttr(llvm::Attribute::AlwaysInline);
+  }
   IsInTargetMasterThreadRegion = PrevIsInTargetMasterThreadRegion;
   IsInTTDRegion = PrevIsInTTDRegion;
   if (getExecutionMode() != CGOpenMPRuntimeNVPTX::EM_SPMD &&
@@ -2045,9 +2050,11 @@ llvm::Function *CGOpenMPRuntimeNVPTX::emitTeamsOutlinedFunction(
   CodeGen.setAction(Action);
   llvm::Function *OutlinedFun = CGOpenMPRuntime::emitTeamsOutlinedFunction(
       D, ThreadIDVar, InnermostKind, CodeGen);
-  OutlinedFun->removeFnAttr(llvm::Attribute::NoInline);
-  OutlinedFun->removeFnAttr(llvm::Attribute::OptimizeNone);
-  OutlinedFun->addFnAttr(llvm::Attribute::AlwaysInline);
+  if (CGM.getLangOpts().Optimize) {
+    OutlinedFun->removeFnAttr(llvm::Attribute::NoInline);
+    OutlinedFun->removeFnAttr(llvm::Attribute::OptimizeNone);
+    OutlinedFun->addFnAttr(llvm::Attribute::AlwaysInline);
+  }
 
   return OutlinedFun;
 }
@@ -2662,8 +2669,9 @@ void CGOpenMPRuntimeNVPTX::syncCTAThreads(CodeGenFunction &CGF) {
       llvm::ConstantPointerNull::get(
           cast<llvm::PointerType>(getIdentTyPointerTy())),
       llvm::ConstantInt::get(CGF.Int32Ty, /*V=*/0, /*isSigned=*/true)};
-  CGF.EmitRuntimeCall(
+  llvm::CallInst *Call = CGF.EmitRuntimeCall(
       createNVPTXRuntimeFunction(OMPRTL__kmpc_barrier_simple_spmd), Args);
+  Call->setConvergent();
 }
 
 void CGOpenMPRuntimeNVPTX::emitBarrierCall(CodeGenFunction &CGF,
@@ -2677,7 +2685,9 @@ void CGOpenMPRuntimeNVPTX::emitBarrierCall(CodeGenFunction &CGF,
   unsigned Flags = getDefaultFlagsForBarriers(Kind);
   llvm::Value *Args[] = {emitUpdateLocation(CGF, Loc, Flags),
                          getThreadID(CGF, Loc)};
-  CGF.EmitRuntimeCall(createNVPTXRuntimeFunction(OMPRTL__kmpc_barrier), Args);
+  llvm::CallInst *Call = CGF.EmitRuntimeCall(
+      createNVPTXRuntimeFunction(OMPRTL__kmpc_barrier), Args);
+  Call->setConvergent();
 }
 
 void CGOpenMPRuntimeNVPTX::emitCriticalRegion(
@@ -3422,6 +3432,12 @@ static llvm::Function *emitShuffleAndReduceFunction(
       "_omp_reduction_shuffle_and_reduce_func", &CGM.getModule());
   CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, CGFI);
   Fn->setDoesNotRecurse();
+  if (CGM.getLangOpts().Optimize) {
+    Fn->removeFnAttr(llvm::Attribute::NoInline);
+    Fn->removeFnAttr(llvm::Attribute::OptimizeNone);
+    Fn->addFnAttr(llvm::Attribute::AlwaysInline);
+  }
+
   CodeGenFunction CGF(CGM);
   CGF.StartFunction(GlobalDecl(), C.VoidTy, Fn, CGFI, Args, Loc, Loc);
 
@@ -4878,7 +4894,7 @@ static CudaArch getCudaArch(CodeGenModule &CGM) {
 /// Check to see if target architecture supports unified addressing which is
 /// a restriction for OpenMP requires clause "unified_shared_memory".
 void CGOpenMPRuntimeNVPTX::checkArchForUnifiedAddressing(
-    const OMPRequiresDecl *D) const {
+    const OMPRequiresDecl *D) {
   for (const OMPClause *Clause : D->clauselists()) {
     if (Clause->getClauseKind() == OMPC_unified_shared_memory) {
       switch (getCudaArch(CGM)) {
@@ -4915,7 +4931,11 @@ void CGOpenMPRuntimeNVPTX::checkArchForUnifiedAddressing(
       case CudaArch::GFX902:
       case CudaArch::GFX904:
       case CudaArch::GFX906:
+      case CudaArch::GFX908:
       case CudaArch::GFX909:
+      case CudaArch::GFX1010:
+      case CudaArch::GFX1011:
+      case CudaArch::GFX1012:
       case CudaArch::UNKNOWN:
         break;
       case CudaArch::LAST:
@@ -4923,6 +4943,7 @@ void CGOpenMPRuntimeNVPTX::checkArchForUnifiedAddressing(
       }
     }
   }
+  CGOpenMPRuntime::checkArchForUnifiedAddressing(D);
 }
 
 /// Get number of SMs and number of blocks per SM.
@@ -4968,7 +4989,11 @@ static std::pair<unsigned, unsigned> getSMsBlocksPerSM(CodeGenModule &CGM) {
   case CudaArch::GFX902:
   case CudaArch::GFX904:
   case CudaArch::GFX906:
+  case CudaArch::GFX908:
   case CudaArch::GFX909:
+  case CudaArch::GFX1010:
+  case CudaArch::GFX1011:
+  case CudaArch::GFX1012:
   case CudaArch::UNKNOWN:
     break;
   case CudaArch::LAST:

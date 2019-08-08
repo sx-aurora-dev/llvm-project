@@ -21,6 +21,7 @@
 #include "clang/Format/Format.h"
 #include "clang/Tooling/Core/Replacement.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/SHA1.h"
 
 namespace clang {
@@ -31,7 +32,7 @@ namespace clangd {
 // We tend to generate digests for source codes in a lot of different places.
 // This represents the type for those digests to prevent us hard coding details
 // of hashing function at every place that needs to store this information.
-using FileDigest = decltype(llvm::SHA1::hash({}));
+using FileDigest = std::array<uint8_t, 8>;
 FileDigest digest(StringRef Content);
 Optional<FileDigest> digestFile(const SourceManager &SM, FileID FID);
 
@@ -64,10 +65,23 @@ Position offsetToPosition(llvm::StringRef Code, size_t Offset);
 /// FIXME: This should return an error if the location is invalid.
 Position sourceLocToPosition(const SourceManager &SM, SourceLocation Loc);
 
+/// Returns the taken range at \p TokLoc.
+llvm::Optional<Range> getTokenRange(const SourceManager &SM,
+                                    const LangOptions &LangOpts,
+                                    SourceLocation TokLoc);
+
 /// Return the file location, corresponding to \p P. Note that one should take
 /// care to avoid comparing the result with expansion locations.
 llvm::Expected<SourceLocation> sourceLocationInMainFile(const SourceManager &SM,
                                                         Position P);
+
+/// Returns true iff \p Loc is inside the main file. This function handles
+/// file & macro locations. For macro locations, returns iff the macro is being
+/// expanded inside the main file.
+///
+/// The function is usually used to check whether a declaration is inside the
+/// the main file.
+bool isInsideMainFile(SourceLocation Loc, const SourceManager &SM);
 
 /// Turns a token range into a half-open range and checks its correctness.
 /// The resulting range will have only valid source location on both sides, both
@@ -147,6 +161,11 @@ llvm::Optional<std::string> getCanonicalPath(const FileEntry *F,
 
 bool isRangeConsecutive(const Range &Left, const Range &Right);
 
+/// Choose the clang-format style we should apply to a certain file.
+/// This will usually use FS to look for .clang-format directories.
+/// FIXME: should we be caching the .clang-format file search?
+/// This uses format::DefaultFormatStyle and format::DefaultFallbackStyle,
+/// though the latter may have been overridden in main()!
 format::FormatStyle getFormatStyleForFile(llvm::StringRef File,
                                           llvm::StringRef Content,
                                           llvm::vfs::FileSystem *FS);
@@ -159,6 +178,13 @@ cleanupAndFormat(StringRef Code, const tooling::Replacements &Replaces,
 /// Collects identifiers with counts in the source code.
 llvm::StringMap<unsigned> collectIdentifiers(llvm::StringRef Content,
                                              const format::FormatStyle &Style);
+
+/// Collects words from the source code.
+/// Unlike collectIdentifiers:
+/// - also finds text in comments:
+/// - splits text into words
+/// - drops stopwords like "get" and "for"
+llvm::StringSet<> collectWords(llvm::StringRef Content);
 
 /// Heuristically determine namespaces visible at a point, without parsing Code.
 /// This considers using-directives and enclosing namespace-declarations that
@@ -182,6 +208,14 @@ llvm::StringMap<unsigned> collectIdentifiers(llvm::StringRef Content,
 /// visibleNamespaces are {"foo::", "", "a::", "b::", "foo::b::"}, not "a::b::".
 std::vector<std::string> visibleNamespaces(llvm::StringRef Code,
                                            const format::FormatStyle &Style);
+
+struct DefinedMacro {
+  llvm::StringRef Name;
+  const MacroInfo *Info;
+};
+// Gets the macro at a specified \p Loc.
+llvm::Optional<DefinedMacro> locateMacroAt(SourceLocation Loc,
+                                           Preprocessor &PP);
 
 } // namespace clangd
 } // namespace clang
