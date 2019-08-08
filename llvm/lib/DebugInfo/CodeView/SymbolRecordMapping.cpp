@@ -229,7 +229,7 @@ Error SymbolRecordMapping::visitKnownRecord(CVSymbol &CVR, DataSym &Data) {
 Error SymbolRecordMapping::visitKnownRecord(
     CVSymbol &CVR, DefRangeFramePointerRelSym &DefRangeFramePointerRel) {
 
-  error(IO.mapInteger(DefRangeFramePointerRel.Offset));
+  error(IO.mapObject(DefRangeFramePointerRel.Hdr.Offset));
   error(mapLocalVariableAddrRange(IO, DefRangeFramePointerRel.Range));
   error(IO.mapVectorTail(DefRangeFramePointerRel.Gaps, MapGap()));
 
@@ -467,6 +467,18 @@ Error SymbolRecordMapping::visitKnownRecord(CVSymbol &CVR,
                                             UsingNamespaceSym &UN) {
 
   error(IO.mapStringZ(UN.Name));
+
+  return Error::success();
+}
+
+Error SymbolRecordMapping::visitKnownRecord(CVSymbol &CVR,
+                                            AnnotationSym &Annot) {
+
+  error(IO.mapInteger(Annot.CodeOffset));
+  error(IO.mapInteger(Annot.Segment));
+  error(IO.mapVectorN<uint16_t>(
+      Annot.Strings,
+      [](CodeViewRecordIO &IO, StringRef &S) { return IO.mapStringZ(S); }));
 
   return Error::success();
 }

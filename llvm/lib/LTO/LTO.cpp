@@ -44,6 +44,7 @@
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/IPO/WholeProgramDevirt.h"
 #include "llvm/Transforms/Utils/FunctionImportUtils.h"
 #include "llvm/Transforms/Utils/SplitModule.h"
 
@@ -187,12 +188,15 @@ void llvm::computeLTOCacheKey(
   auto AddUsedThings = [&](GlobalValueSummary *GS) {
     if (!GS) return;
     AddUnsigned(GS->isLive());
+    AddUnsigned(GS->canAutoHide());
     for (const ValueInfo &VI : GS->refs()) {
       AddUnsigned(VI.isDSOLocal());
       AddUsedCfiGlobal(VI.getGUID());
     }
-    if (auto *GVS = dyn_cast<GlobalVarSummary>(GS))
-      AddUnsigned(GVS->isReadOnly());
+    if (auto *GVS = dyn_cast<GlobalVarSummary>(GS)) {
+      AddUnsigned(GVS->maybeReadOnly());
+      AddUnsigned(GVS->maybeWriteOnly());
+    }
     if (auto *FS = dyn_cast<FunctionSummary>(GS)) {
       for (auto &TT : FS->type_tests())
         UsedTypeIds.insert(TT);
@@ -295,13 +299,13 @@ void llvm::computeLTOCacheKey(
 }
 
 static void thinLTOResolvePrevailingGUID(
-    GlobalValueSummaryList &GVSummaryList, GlobalValue::GUID GUID,
-    DenseSet<GlobalValueSummary *> &GlobalInvolvedWithAlias,
+    ValueInfo VI, DenseSet<GlobalValueSummary *> &GlobalInvolvedWithAlias,
     function_ref<bool(GlobalValue::GUID, const GlobalValueSummary *)>
         isPrevailing,
     function_ref<void(StringRef, GlobalValue::GUID, GlobalValue::LinkageTypes)>
-        recordNewLinkage) {
-  for (auto &S : GVSummaryList) {
+        recordNewLinkage,
+    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
+  for (auto &S : VI.getSummaryList()) {
     GlobalValue::LinkageTypes OriginalLinkage = S->linkage();
     // Ignore local and appending linkage values since the linker
     // doesn't resolve them.
@@ -316,17 +320,29 @@ static void thinLTOResolvePrevailingGUID(
     // ensure a copy is kept to satisfy the exported reference.
     // FIXME: We may want to split the compile time and correctness
     // aspects into separate routines.
-    if (isPrevailing(GUID, S.get())) {
-      if (GlobalValue::isLinkOnceLinkage(OriginalLinkage))
+    if (isPrevailing(VI.getGUID(), S.get())) {
+      if (GlobalValue::isLinkOnceLinkage(OriginalLinkage)) {
         S->setLinkage(GlobalValue::getWeakLinkage(
             GlobalValue::isLinkOnceODRLinkage(OriginalLinkage)));
+        // The kept copy is eligible for auto-hiding (hidden visibility) if all
+        // copies were (i.e. they were all linkonce_odr global unnamed addr).
+        // If any copy is not (e.g. it was originally weak_odr), then the symbol
+        // must remain externally available (e.g. a weak_odr from an explicitly
+        // instantiated template). Additionally, if it is in the
+        // GUIDPreservedSymbols set, that means that it is visibile outside
+        // the summary (e.g. in a native object or a bitcode file without
+        // summary), and in that case we cannot hide it as it isn't possible to
+        // check all copies.
+        S->setCanAutoHide(VI.canAutoHide() &&
+                          !GUIDPreservedSymbols.count(VI.getGUID()));
+      }
     }
     // Alias and aliasee can't be turned into available_externally.
     else if (!isa<AliasSummary>(S.get()) &&
              !GlobalInvolvedWithAlias.count(S.get()))
       S->setLinkage(GlobalValue::AvailableExternallyLinkage);
     if (S->linkage() != OriginalLinkage)
-      recordNewLinkage(S->modulePath(), GUID, S->linkage());
+      recordNewLinkage(S->modulePath(), VI.getGUID(), S->linkage());
   }
 }
 
@@ -341,7 +357,8 @@ void llvm::thinLTOResolvePrevailingInIndex(
     function_ref<bool(GlobalValue::GUID, const GlobalValueSummary *)>
         isPrevailing,
     function_ref<void(StringRef, GlobalValue::GUID, GlobalValue::LinkageTypes)>
-        recordNewLinkage) {
+        recordNewLinkage,
+    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
   // We won't optimize the globals that are referenced by an alias for now
   // Ideally we should turn the alias into a global and duplicate the definition
   // when needed.
@@ -352,9 +369,17 @@ void llvm::thinLTOResolvePrevailingInIndex(
         GlobalInvolvedWithAlias.insert(&AS->getAliasee());
 
   for (auto &I : Index)
-    thinLTOResolvePrevailingGUID(I.second.SummaryList, I.first,
-                                 GlobalInvolvedWithAlias, isPrevailing,
-                                 recordNewLinkage);
+    thinLTOResolvePrevailingGUID(Index.getValueInfo(I), GlobalInvolvedWithAlias,
+                                 isPrevailing, recordNewLinkage,
+                                 GUIDPreservedSymbols);
+}
+
+static bool isWeakObjectWithRWAccess(GlobalValueSummary *GVS) {
+  if (auto *VarSummary = dyn_cast<GlobalVarSummary>(GVS->getBaseObject()))
+    return !VarSummary->maybeReadOnly() && !VarSummary->maybeWriteOnly() &&
+           (VarSummary->linkage() == GlobalValue::WeakODRLinkage ||
+            VarSummary->linkage() == GlobalValue::LinkOnceODRLinkage);
+  return false;
 }
 
 static void thinLTOInternalizeAndPromoteGUID(
@@ -371,7 +396,13 @@ static void thinLTOInternalizeAndPromoteGUID(
                S->linkage() != GlobalValue::AppendingLinkage &&
                // We can't internalize available_externally globals because this
                // can break function pointer equality.
-               S->linkage() != GlobalValue::AvailableExternallyLinkage)
+               S->linkage() != GlobalValue::AvailableExternallyLinkage &&
+               // Functions and read-only variables with linkonce_odr and
+               // weak_odr linkage can be internalized. We can't internalize
+               // linkonce_odr and weak_odr variables which are both modified
+               // and read somewhere in the program because reads and writes
+               // will become inconsistent.
+               !isWeakObjectWithRWAccess(S.get()))
       S->setLinkage(GlobalValue::InternalLinkage);
   }
 }
@@ -398,6 +429,7 @@ Expected<std::unique_ptr<InputFile>> InputFile::create(MemoryBufferRef Object) {
   File->TargetTriple = FOrErr->TheReader.getTargetTriple();
   File->SourceFileName = FOrErr->TheReader.getSourceFileName();
   File->COFFLinkerOpts = FOrErr->TheReader.getCOFFLinkerOpts();
+  File->DependentLibraries = FOrErr->TheReader.getDependentLibraries();
   File->ComdatTable = FOrErr->TheReader.getComdatTable();
 
   for (unsigned I = 0; I != FOrErr->Mods.size(); ++I) {
@@ -903,7 +935,7 @@ Error LTO::run(AddStreamFn AddStream, NativeObjectCache Cache) {
 
   Error Result = runRegularLTO(AddStream);
   if (!Result)
-    Result = runThinLTO(AddStream, Cache);
+    Result = runThinLTO(AddStream, Cache, GUIDPreservedSymbols);
 
   if (StatsFile)
     PrintStatisticsJSON(StatsFile->os());
@@ -1173,7 +1205,7 @@ public:
 
     std::error_code EC;
     raw_fd_ostream OS(NewModulePath + ".thinlto.bc", EC,
-                      sys::fs::OpenFlags::F_None);
+                      sys::fs::OpenFlags::OF_None);
     if (EC)
       return errorCodeToError(EC);
     WriteIndexToFile(CombinedIndex, OS, &ModuleToSummariesForIndex);
@@ -1206,7 +1238,8 @@ ThinBackend lto::createWriteIndexesThinBackend(
   };
 }
 
-Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache) {
+Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache,
+                      const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
   if (ThinLTO.ModuleMap.empty())
     return Error::success();
 
@@ -1242,15 +1275,28 @@ Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache) {
   if (DumpThinCGSCCs)
     ThinLTO.CombinedIndex.dumpSCCs(outs());
 
+  std::set<GlobalValue::GUID> ExportedGUIDs;
+
+  // Perform index-based WPD. This will return immediately if there are
+  // no index entries in the typeIdMetadata map (e.g. if we are instead
+  // performing IR-based WPD in hybrid regular/thin LTO mode).
+  std::map<ValueInfo, std::vector<VTableSlotSummary>> LocalWPDTargetsMap;
+  runWholeProgramDevirtOnIndex(ThinLTO.CombinedIndex, ExportedGUIDs,
+                               LocalWPDTargetsMap);
+
   if (Conf.OptLevel > 0)
     ComputeCrossModuleImport(ThinLTO.CombinedIndex, ModuleToDefinedGVSummaries,
                              ImportLists, ExportLists);
+
+  // Update local devirtualized targets that were exported by cross-module
+  // importing
+  updateIndexWPDForExports(ThinLTO.CombinedIndex, ExportLists,
+                           LocalWPDTargetsMap);
 
   // Figure out which symbols need to be internalized. This also needs to happen
   // at -O0 because summary-based DCE is implemented using internalization, and
   // we must apply DCE consistently with the full LTO module in order to avoid
   // undefined references during the final link.
-  std::set<GlobalValue::GUID> ExportedGUIDs;
   for (auto &Res : GlobalResolutions) {
     // If the symbol does not have external references or it is not prevailing,
     // then not need to mark it as exported from a ThinLTO partition.
@@ -1288,7 +1334,7 @@ Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache) {
     ResolvedODR[ModuleIdentifier][GUID] = NewLinkage;
   };
   thinLTOResolvePrevailingInIndex(ThinLTO.CombinedIndex, isPrevailing,
-                                  recordNewLinkage);
+                                  recordNewLinkage, GUIDPreservedSymbols);
 
   std::unique_ptr<ThinBackendProc> BackendProc =
       ThinLTO.Backend(Conf, ThinLTO.CombinedIndex, ModuleToDefinedGVSummaries,
@@ -1309,33 +1355,22 @@ Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache) {
 }
 
 Expected<std::unique_ptr<ToolOutputFile>>
-lto::setupOptimizationRemarks(LLVMContext &Context,
-                              StringRef LTORemarksFilename,
-                              StringRef LTORemarksPasses,
-                              bool LTOPassRemarksWithHotness, int Count) {
-  if (LTOPassRemarksWithHotness)
-    Context.setDiagnosticsHotnessRequested(true);
-  if (LTORemarksFilename.empty())
-    return nullptr;
-
-  std::string Filename = LTORemarksFilename;
-  if (Count != -1)
+lto::setupOptimizationRemarks(LLVMContext &Context, StringRef RemarksFilename,
+                              StringRef RemarksPasses, StringRef RemarksFormat,
+                              bool RemarksWithHotness, int Count) {
+  std::string Filename = RemarksFilename;
+  if (!Filename.empty() && Count != -1)
     Filename += ".thin." + llvm::utostr(Count) + ".yaml";
 
-  std::error_code EC;
-  auto DiagnosticFile =
-      llvm::make_unique<ToolOutputFile>(Filename, EC, sys::fs::F_None);
-  if (EC)
-    return errorCodeToError(EC);
-  Context.setRemarkStreamer(
-      llvm::make_unique<RemarkStreamer>(Filename, DiagnosticFile->os()));
+  auto ResultOrErr = llvm::setupOptimizationRemarks(
+      Context, Filename, RemarksPasses, RemarksFormat, RemarksWithHotness);
+  if (Error E = ResultOrErr.takeError())
+    return std::move(E);
 
-  if (!LTORemarksPasses.empty())
-    if (Error E = Context.getRemarkStreamer()->setFilter(LTORemarksPasses))
-      return std::move(E);
+  if (*ResultOrErr)
+    (*ResultOrErr)->keep();
 
-  DiagnosticFile->keep();
-  return std::move(DiagnosticFile);
+  return ResultOrErr;
 }
 
 Expected<std::unique_ptr<ToolOutputFile>>
@@ -1347,7 +1382,7 @@ lto::setupStatsFile(StringRef StatsFilename) {
   llvm::EnableStatistics(false);
   std::error_code EC;
   auto StatsFile =
-      llvm::make_unique<ToolOutputFile>(StatsFilename, EC, sys::fs::F_None);
+      llvm::make_unique<ToolOutputFile>(StatsFilename, EC, sys::fs::OF_None);
   if (EC)
     return errorCodeToError(EC);
 

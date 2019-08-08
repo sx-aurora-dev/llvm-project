@@ -20,6 +20,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -209,11 +210,11 @@ class SCCPSolver : public InstVisitor<SCCPSolver> {
   /// TrackedRetVals - If we are tracking arguments into and the return
   /// value out of a function, it will have an entry in this map, indicating
   /// what the known return value for the function is.
-  DenseMap<Function *, LatticeVal> TrackedRetVals;
+  MapVector<Function *, LatticeVal> TrackedRetVals;
 
   /// TrackedMultipleRetVals - Same as TrackedRetVals, but used for functions
   /// that return multiple values.
-  DenseMap<std::pair<Function *, unsigned>, LatticeVal> TrackedMultipleRetVals;
+  MapVector<std::pair<Function *, unsigned>, LatticeVal> TrackedMultipleRetVals;
 
   /// MRVFunctionsTracked - Each function in TrackedMultipleRetVals is
   /// represented here for efficient lookup.
@@ -371,7 +372,7 @@ public:
   }
 
   /// getTrackedRetVals - Get the inferred return value map.
-  const DenseMap<Function*, LatticeVal> &getTrackedRetVals() {
+  const MapVector<Function*, LatticeVal> &getTrackedRetVals() {
     return TrackedRetVals;
   }
 
@@ -613,6 +614,7 @@ private:
 
   void visitCastInst(CastInst &I);
   void visitSelectInst(SelectInst &I);
+  void visitUnaryOperator(Instruction &I);
   void visitBinaryOperator(Instruction &I);
   void visitCmpInst(CmpInst &I);
   void visitExtractValueInst(ExtractValueInst &EVI);
@@ -836,7 +838,7 @@ void SCCPSolver::visitReturnInst(ReturnInst &I) {
 
   // If we are tracking the return value of this function, merge it in.
   if (!TrackedRetVals.empty() && !ResultOp->getType()->isStructTy()) {
-    DenseMap<Function*, LatticeVal>::iterator TFRVI =
+    MapVector<Function*, LatticeVal>::iterator TFRVI =
       TrackedRetVals.find(F);
     if (TFRVI != TrackedRetVals.end()) {
       mergeInValue(TFRVI->second, F, getValueState(ResultOp));
@@ -966,6 +968,29 @@ void SCCPSolver::visitSelectInst(SelectInst &I) {
     return (void)mergeInValue(&I, FVal);
   if (FVal.isUnknown())   // select ?, X, undef -> X.
     return (void)mergeInValue(&I, TVal);
+  markOverdefined(&I);
+}
+
+// Handle Unary Operators.
+void SCCPSolver::visitUnaryOperator(Instruction &I) {
+  LatticeVal V0State = getValueState(I.getOperand(0));
+
+  LatticeVal &IV = ValueState[&I];
+  if (IV.isOverdefined()) return;
+
+  if (V0State.isConstant()) {
+    Constant *C = ConstantExpr::get(I.getOpcode(), V0State.getConstant());
+
+    // op Y -> undef.
+    if (isa<UndefValue>(C))
+      return;
+    return (void)markConstant(IV, &I, C);
+  }
+
+  // If something is undef, wait for it to resolve.
+  if (!V0State.isOverdefined())
+    return;
+
   markOverdefined(&I);
 }
 
@@ -1327,7 +1352,7 @@ CallOverdefined:
       mergeInValue(getStructValueState(I, i), I,
                    TrackedMultipleRetVals[std::make_pair(F, i)]);
   } else {
-    DenseMap<Function*, LatticeVal>::iterator TFRVI = TrackedRetVals.find(F);
+    MapVector<Function*, LatticeVal>::iterator TFRVI = TrackedRetVals.find(F);
     if (TFRVI == TrackedRetVals.end())
       goto CallOverdefined;  // Not tracking this callee.
 
@@ -1440,7 +1465,24 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       }
 
       LatticeVal &LV = getValueState(&I);
-      if (!LV.isUnknown()) continue;
+      if (!LV.isUnknown())
+        continue;
+
+      // There are two reasons a call can have an undef result
+      // 1. It could be tracked.
+      // 2. It could be constant-foldable.
+      // Because of the way we solve return values, tracked calls must
+      // never be marked overdefined in ResolvedUndefsIn.
+      if (CallSite CS = CallSite(&I)) {
+        if (Function *F = CS.getCalledFunction())
+          if (TrackedRetVals.count(F))
+            continue;
+
+        // If the call is constant-foldable, we mark it overdefined because
+        // we do not know what return values are valid.
+        markOverdefined(&I);
+        return true;
+      }
 
       // extractvalue is safe; check here because the argument is a struct.
       if (isa<ExtractValueInst>(I))
@@ -1484,6 +1526,8 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
         else
           markOverdefined(&I);
         return true;
+      case Instruction::FNeg:
+        break; // fneg undef -> undef
       case Instruction::ZExt:
       case Instruction::SExt:
       case Instruction::FPToUI:
@@ -1611,19 +1655,7 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       case Instruction::Call:
       case Instruction::Invoke:
       case Instruction::CallBr:
-        // There are two reasons a call can have an undef result
-        // 1. It could be tracked.
-        // 2. It could be constant-foldable.
-        // Because of the way we solve return values, tracked calls must
-        // never be marked overdefined in ResolvedUndefsIn.
-        if (Function *F = CallSite(&I).getCalledFunction())
-          if (TrackedRetVals.count(F))
-            break;
-
-        // If the call is constant-foldable, we mark it overdefined because
-        // we do not know what return values are valid.
-        markOverdefined(&I);
-        return true;
+        llvm_unreachable("Call-like instructions should have be handled early");
       default:
         // If we don't know what should happen here, conservatively mark it
         // overdefined.
@@ -1897,6 +1929,27 @@ static void findReturnsToZap(Function &F,
     return;
   }
 
+  assert(
+      all_of(F.users(),
+             [&Solver](User *U) {
+               if (isa<Instruction>(U) &&
+                   !Solver.isBlockExecutable(cast<Instruction>(U)->getParent()))
+                 return true;
+               // Non-callsite uses are not impacted by zapping. Also, constant
+               // uses (like blockaddresses) could stuck around, without being
+               // used in the underlying IR, meaning we do not have lattice
+               // values for them.
+               if (!CallSite(U))
+                 return true;
+               if (U->getType()->isStructTy()) {
+                 return all_of(
+                     Solver.getStructLatticeValueFor(U),
+                     [](const LatticeVal &LV) { return !LV.isOverdefined(); });
+               }
+               return !Solver.getLatticeValueFor(U).isOverdefined();
+             }) &&
+      "We can only zap functions where all live users have a concrete value");
+
   for (BasicBlock &BB : F) {
     if (CallInst *CI = BB.getTerminatingMustTailCall()) {
       LLVM_DEBUG(dbgs() << "Can't zap return of the block due to present "
@@ -2083,12 +2136,22 @@ bool llvm::runIPSCCP(
         // If we have forced an edge for an indeterminate value, then force the
         // terminator to fold to that edge.
         forceIndeterminateEdge(I, Solver);
-        bool Folded = ConstantFoldTerminator(I->getParent(),
+        BasicBlock *InstBB = I->getParent();
+        bool Folded = ConstantFoldTerminator(InstBB,
                                              /*DeleteDeadConditions=*/false,
                                              /*TLI=*/nullptr, &DTU);
         assert(Folded &&
               "Expect TermInst on constantint or blockaddress to be folded");
         (void) Folded;
+        // If we folded the terminator to an unconditional branch to another
+        // dead block, replace it with Unreachable, to avoid trying to fold that
+        // branch again.
+        BranchInst *BI = cast<BranchInst>(InstBB->getTerminator());
+        if (BI && BI->isUnconditional() &&
+            !Solver.isBlockExecutable(BI->getSuccessor(0))) {
+          InstBB->getTerminator()->eraseFromParent();
+          new UnreachableInst(InstBB->getContext(), InstBB);
+        }
       }
       // Mark dead BB for deletion.
       DTU.deleteBB(DeadBB);
@@ -2122,7 +2185,7 @@ bool llvm::runIPSCCP(
   // whether other functions are optimizable.
   SmallVector<ReturnInst*, 8> ReturnsToZap;
 
-  const DenseMap<Function*, LatticeVal> &RV = Solver.getTrackedRetVals();
+  const MapVector<Function*, LatticeVal> &RV = Solver.getTrackedRetVals();
   for (const auto &I : RV) {
     Function *F = I.first;
     if (I.second.isOverdefined() || F->getReturnType()->isVoidTy())

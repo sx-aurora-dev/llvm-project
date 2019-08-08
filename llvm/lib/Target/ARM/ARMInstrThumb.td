@@ -592,6 +592,7 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in {
                       [(ARMbrjt tGPR:$target, tjumptable:$jt)]>,
                       Sched<[WriteBrTbl]> {
     let Size = 2;
+    let isNotDuplicable = 1;
     list<Predicate> Predicates = [IsThumb, IsThumb1Only];
   }
 }
@@ -663,7 +664,7 @@ let canFoldAsLoad = 1, isReMaterializable = 1, AddedComplexity = 10 in
 def tLDRpci : T1pIs<(outs tGPR:$Rt), (ins t_addrmode_pc:$addr), IIC_iLoad_i,
                   "ldr", "\t$Rt, $addr",
                   [(set tGPR:$Rt, (load (ARMWrapper tconstpool:$addr)))]>,
-              T1Encoding<{0,1,0,0,1,?}> {
+              T1Encoding<{0,1,0,0,1,?}>, Sched<[WriteLd]> {
   // A6.2 & A8.6.59
   bits<3> Rt;
   bits<8> addr;
@@ -677,7 +678,7 @@ let canFoldAsLoad = 1 in
 def tLDRspi : T1pIs<(outs tGPR:$Rt), (ins t_addrmode_sp:$addr), IIC_iLoad_i,
                     "ldr", "\t$Rt, $addr",
                     [(set tGPR:$Rt, (load t_addrmode_sp:$addr))]>,
-              T1LdStSP<{1,?,?}> {
+              T1LdStSP<{1,?,?}>, Sched<[WriteLd]> {
   bits<3> Rt;
   bits<8> addr;
   let Inst{10-8} = Rt;
@@ -728,39 +729,39 @@ multiclass thumb_st_rr_ri_enc<bits<3> reg_opc, bits<4> imm_opc,
 defm tLDR  : thumb_ld_rr_ri_enc<0b100, 0b0110, t_addrmode_rr,
                                 t_addrmode_is4, AddrModeT1_4,
                                 IIC_iLoad_r, IIC_iLoad_i, "ldr",
-                                load>;
+                                load>, Sched<[WriteLd]>;
 
 // A8.6.64 & A8.6.61
 defm tLDRB : thumb_ld_rr_ri_enc<0b110, 0b0111, t_addrmode_rr,
                                 t_addrmode_is1, AddrModeT1_1,
                                 IIC_iLoad_bh_r, IIC_iLoad_bh_i, "ldrb",
-                                zextloadi8>;
+                                zextloadi8>, Sched<[WriteLd]>;
 
 // A8.6.76 & A8.6.73
 defm tLDRH : thumb_ld_rr_ri_enc<0b101, 0b1000, t_addrmode_rr,
                                 t_addrmode_is2, AddrModeT1_2,
                                 IIC_iLoad_bh_r, IIC_iLoad_bh_i, "ldrh",
-                                zextloadi16>;
+                                zextloadi16>, Sched<[WriteLd]>;
 
 let AddedComplexity = 10 in
 def tLDRSB :                    // A8.6.80
   T1pILdStEncode<0b011, (outs tGPR:$Rt), (ins t_addrmode_rr_sext:$addr),
                  AddrModeT1_1, IIC_iLoad_bh_r,
                  "ldrsb", "\t$Rt, $addr",
-                 [(set tGPR:$Rt, (sextloadi8 t_addrmode_rr_sext:$addr))]>;
+                 [(set tGPR:$Rt, (sextloadi8 t_addrmode_rr_sext:$addr))]>, Sched<[WriteLd]>;
 
 let AddedComplexity = 10 in
 def tLDRSH :                    // A8.6.84
   T1pILdStEncode<0b111, (outs tGPR:$Rt), (ins t_addrmode_rr_sext:$addr),
                  AddrModeT1_2, IIC_iLoad_bh_r,
                  "ldrsh", "\t$Rt, $addr",
-                 [(set tGPR:$Rt, (sextloadi16 t_addrmode_rr_sext:$addr))]>;
+                 [(set tGPR:$Rt, (sextloadi16 t_addrmode_rr_sext:$addr))]>, Sched<[WriteLd]>;
 
 
 def tSTRspi : T1pIs<(outs), (ins tGPR:$Rt, t_addrmode_sp:$addr), IIC_iStore_i,
                     "str", "\t$Rt, $addr",
                     [(store tGPR:$Rt, t_addrmode_sp:$addr)]>,
-              T1LdStSP<{0,?,?}> {
+              T1LdStSP<{0,?,?}>, Sched<[WriteST]> {
   bits<3> Rt;
   bits<8> addr;
   let Inst{10-8} = Rt;
@@ -771,19 +772,19 @@ def tSTRspi : T1pIs<(outs), (ins tGPR:$Rt, t_addrmode_sp:$addr), IIC_iStore_i,
 defm tSTR  : thumb_st_rr_ri_enc<0b000, 0b0110, t_addrmode_rr,
                                 t_addrmode_is4, AddrModeT1_4,
                                 IIC_iStore_r, IIC_iStore_i, "str",
-                                store>;
+                                store>, Sched<[WriteST]>;
 
 // A8.6.197 & A8.6.195
 defm tSTRB : thumb_st_rr_ri_enc<0b010, 0b0111, t_addrmode_rr,
                                 t_addrmode_is1, AddrModeT1_1,
                                 IIC_iStore_bh_r, IIC_iStore_bh_i, "strb",
-                                truncstorei8>;
+                                truncstorei8>, Sched<[WriteST]>;
 
 // A8.6.207 & A8.6.205
 defm tSTRH : thumb_st_rr_ri_enc<0b001, 0b1000, t_addrmode_rr,
                                t_addrmode_is2, AddrModeT1_2,
                                IIC_iStore_bh_r, IIC_iStore_bh_i, "strh",
-                               truncstorei16>;
+                               truncstorei16>, Sched<[WriteST]>;
 
 
 //===----------------------------------------------------------------------===//
@@ -843,7 +844,7 @@ let mayLoad = 1, Uses = [SP], Defs = [SP], hasExtraDefRegAllocReq = 1,
 def tPOP : T1I<(outs), (ins pred:$p, reglist:$regs, variable_ops),
                IIC_iPop,
                "pop${p}\t$regs", []>,
-           T1Misc<{1,1,0,?,?,?,?}> {
+           T1Misc<{1,1,0,?,?,?,?}>, Sched<[WriteLd]> {
   bits<16> regs;
   let Inst{8}   = regs{15};
   let Inst{7-0} = regs{7-0};
@@ -853,7 +854,7 @@ let mayStore = 1, Uses = [SP], Defs = [SP], hasExtraSrcRegAllocReq = 1 in
 def tPUSH : T1I<(outs), (ins pred:$p, reglist:$regs, variable_ops),
                 IIC_iStore_m,
                 "push${p}\t$regs", []>,
-            T1Misc<{0,1,0,?,?,?,?}> {
+            T1Misc<{0,1,0,?,?,?,?}>, Sched<[WriteST]> {
   bits<16> regs;
   let Inst{8}   = regs{14};
   let Inst{7-0} = regs{7-0};
@@ -1214,7 +1215,7 @@ def tMUL :                      // A8.6.105 T1
   Thumb1sI<(outs tGPR:$Rd), (ins tGPR:$Rn, tGPR:$Rm), AddrModeNone, 2,
            IIC_iMUL32, "mul", "\t$Rd, $Rn, $Rm", "$Rm = $Rd",
            [(set tGPR:$Rd, (mul tGPR:$Rn, tGPR:$Rm))]>,
-      T1DataProcessing<0b1101> {
+      T1DataProcessing<0b1101>, Sched<[WriteMUL32, ReadMUL, ReadMUL]> {
   bits<3> Rd;
   bits<3> Rn;
   let Inst{5-3} = Rn;
@@ -1362,6 +1363,12 @@ let hasPostISelHook = 1, Defs = [CPSR] in {
                             [(set tGPR:$Rd, CPSR, (ARMsubc 0, tGPR:$Rn))]>,
                 Requires<[IsThumb1Only]>,
                 Sched<[WriteALU]>;
+
+  def tLSLSri : tPseudoInst<(outs tGPR:$Rd), (ins tGPR:$Rn, imm0_31:$imm5),
+                            2, IIC_iALUr,
+                            [(set tGPR:$Rd, CPSR, (ARMlsls tGPR:$Rn, imm0_31:$imm5))]>,
+                Requires<[IsThumb1Only]>,
+                Sched<[WriteALU]>;
 }
 
 
@@ -1465,7 +1472,7 @@ def tLEApcrelJT : tPseudoInst<(outs tGPR:$Rd),
 // Thumb-1 doesn't have the TBB or TBH instructions, but we can synthesize them
 // and make use of the same compressed jump table format as Thumb-2.
 let Size = 2, isBranch = 1, isTerminator = 1, isBarrier = 1,
-    isIndirectBranch = 1 in {
+    isIndirectBranch = 1, isNotDuplicable = 1 in {
 def tTBB_JT : tPseudoInst<(outs),
         (ins tGPRwithpc:$base, tGPR:$index, i32imm:$jt, i32imm:$pclbl), 0,
          IIC_Br, []>, Sched<[WriteBr]>;

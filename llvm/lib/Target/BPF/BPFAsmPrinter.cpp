@@ -16,7 +16,8 @@
 #include "BPFMCInstLower.h"
 #include "BPFTargetMachine.h"
 #include "BTFDebug.h"
-#include "InstPrinter/BPFInstPrinter.h"
+#include "MCTargetDesc/BPFInstPrinter.h"
+#include "TargetInfo/BPFTargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -37,7 +38,7 @@ class BPFAsmPrinter : public AsmPrinter {
 public:
   explicit BPFAsmPrinter(TargetMachine &TM,
                          std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)) {}
+      : AsmPrinter(TM, std::move(Streamer)), BTF(nullptr) {}
 
   StringRef getPassName() const override { return "BPF Assembly Printer"; }
   bool doInitialization(Module &M) override;
@@ -48,15 +49,21 @@ public:
                              const char *ExtraCode, raw_ostream &O) override;
 
   void EmitInstruction(const MachineInstr *MI) override;
+
+private:
+  BTFDebug *BTF;
 };
 } // namespace
 
 bool BPFAsmPrinter::doInitialization(Module &M) {
   AsmPrinter::doInitialization(M);
 
-  if (MAI->doesSupportDebugInformation()) {
-    Handlers.emplace_back(llvm::make_unique<BTFDebug>(this), "emit",
-                          "Debug Info Emission", "BTF", "BTF Emission");
+  // Only emit BTF when debuginfo available.
+  if (MAI->doesSupportDebugInformation() && !empty(M.debug_compile_units())) {
+    BTF = new BTFDebug(this);
+    Handlers.push_back(HandlerInfo(std::unique_ptr<BTFDebug>(BTF), "emit",
+                                   "Debug Info Emission", "BTF",
+                                   "BTF Emission"));
   }
 
   return false;
@@ -131,11 +138,12 @@ bool BPFAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
 }
 
 void BPFAsmPrinter::EmitInstruction(const MachineInstr *MI) {
-
-  BPFMCInstLower MCInstLowering(OutContext, *this);
-
   MCInst TmpInst;
-  MCInstLowering.Lower(MI, TmpInst);
+
+  if (!BTF || !BTF->InstLower(MI, TmpInst)) {
+    BPFMCInstLower MCInstLowering(OutContext, *this);
+    MCInstLowering.Lower(MI, TmpInst);
+  }
   EmitToStreamer(*OutStreamer, TmpInst);
 }
 

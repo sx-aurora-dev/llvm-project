@@ -503,7 +503,7 @@ unsigned VERegisterInfo::getRegPressureSetLimit(const MachineFunction &MF,
   return VEGenRegisterInfo::getRegPressureSetLimit(MF, Idx);
 }
 
-unsigned VERegisterInfo::getFrameRegister(const MachineFunction &MF) const {
+Register VERegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   return VE::SX9;
 }
 

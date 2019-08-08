@@ -590,11 +590,12 @@ namespace llvm {
 
     /// Returns true if the target allows unaligned memory accesses of the
     /// specified type.
-    bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AddrSpace,
+    bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS,
                                         unsigned Align,
+                                        MachineMemOperand::Flags Flags,
                                         bool *Fast) const override;
 
-    bool mergeStoresAfterLegalization() const override { return true; }
+    bool mergeStoresAfterLegalization(EVT) const override { return true; }
 
     bool canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                           const SelectionDAG &DAG) const override;

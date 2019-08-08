@@ -8,11 +8,16 @@
 
 #include "ClangdLSPServer.h"
 #include "Diagnostics.h"
+#include "FormattedString.h"
+#include "GlobalCompilationDatabase.h"
 #include "Protocol.h"
+#include "SemanticHighlighting.h"
 #include "SourceCode.h"
 #include "Trace.h"
 #include "URI.h"
+#include "refactor/Tweak.h"
 #include "clang/Tooling/Core/Replacement.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Errc.h"
@@ -24,23 +29,20 @@
 namespace clang {
 namespace clangd {
 namespace {
-class IgnoreCompletionError : public llvm::ErrorInfo<CancelledError> {
-public:
-  void log(llvm::raw_ostream &OS) const override {
-    OS << "ignored auto-triggered completion, preceding char did not match";
-  }
-  std::error_code convertToErrorCode() const override {
-    return std::make_error_code(std::errc::operation_canceled);
-  }
-};
-
 /// Transforms a tweak into a code action that would apply it if executed.
 /// EXPECTS: T.prepare() was called and returned true.
 CodeAction toCodeAction(const ClangdServer::TweakRef &T, const URIForFile &File,
                         Range Selection) {
   CodeAction CA;
   CA.title = T.Title;
-  CA.kind = CodeAction::REFACTOR_KIND;
+  switch (T.Intent) {
+  case Tweak::Refactor:
+    CA.kind = CodeAction::REFACTOR_KIND;
+    break;
+  case Tweak::Info:
+    CA.kind = CodeAction::INFO_KIND;
+    break;
+  }
   // This tweak may have an expensive second stage, we only run it if the user
   // actually chooses it in the UI. We reply with a command that would run the
   // corresponding tweak.
@@ -78,6 +80,17 @@ CompletionItemKindBitset defaultCompletionItemKinds() {
        I <= static_cast<size_t>(CompletionItemKind::Reference); ++I)
     Defaults.set(I);
   return Defaults;
+}
+
+// Build a lookup table (HighlightingKind => {TextMate Scopes}), which is sent
+// to the LSP client.
+std::vector<std::vector<std::string>> buildHighlightScopeLookupTable() {
+  std::vector<std::vector<std::string>> LookupTable;
+  // HighlightingKind is using as the index.
+  for (int KindValue = 0; KindValue < (int)HighlightingKind::NumKinds;
+       ++KindValue)
+    LookupTable.push_back({toTextMateScope((HighlightingKind)(KindValue))});
+  return LookupTable;
 }
 
 } // namespace
@@ -133,11 +146,39 @@ public:
   bool onReply(llvm::json::Value ID,
                llvm::Expected<llvm::json::Value> Result) override {
     WithContext HandlerContext(handlerContext());
-    // We ignore replies, just log them.
-    if (Result)
+
+    Callback<llvm::json::Value> ReplyHandler = nullptr;
+    if (auto IntID = ID.getAsInteger()) {
+      std::lock_guard<std::mutex> Mutex(CallMutex);
+      // Find a corresponding callback for the request ID;
+      for (size_t Index = 0; Index < ReplyCallbacks.size(); ++Index) {
+        if (ReplyCallbacks[Index].first == *IntID) {
+          ReplyHandler = std::move(ReplyCallbacks[Index].second);
+          ReplyCallbacks.erase(ReplyCallbacks.begin() +
+                               Index); // remove the entry
+          break;
+        }
+      }
+    }
+
+    if (!ReplyHandler) {
+      // No callback being found, use a default log callback.
+      ReplyHandler = [&ID](llvm::Expected<llvm::json::Value> Result) {
+        elog("received a reply with ID {0}, but there was no such call", ID);
+        if (!Result)
+          llvm::consumeError(Result.takeError());
+      };
+    }
+
+    // Log and run the reply handler.
+    if (Result) {
       log("<-- reply({0})", ID);
-    else
-      log("<-- reply({0}) error: {1}", ID, llvm::toString(Result.takeError()));
+      ReplyHandler(std::move(Result));
+    } else {
+      auto Err = Result.takeError();
+      log("<-- reply({0}) error: {1}", ID, Err);
+      ReplyHandler(std::move(Err));
+    }
     return true;
   }
 
@@ -156,6 +197,35 @@ public:
                                          ErrorCode::InvalidRequest));
       }
     };
+  }
+
+  // Bind a reply callback to a request. The callback will be invoked when
+  // clangd receives the reply from the LSP client.
+  // Return a call id of the request.
+  llvm::json::Value bindReply(Callback<llvm::json::Value> Reply) {
+    llvm::Optional<std::pair<int, Callback<llvm::json::Value>>> OldestCB;
+    int ID;
+    {
+      std::lock_guard<std::mutex> Mutex(CallMutex);
+      ID = NextCallID++;
+      ReplyCallbacks.emplace_back(ID, std::move(Reply));
+
+      // If the queue overflows, we assume that the client didn't reply the
+      // oldest request, and run the corresponding callback which replies an
+      // error to the client.
+      if (ReplyCallbacks.size() > MaxReplayCallbacks) {
+        elog("more than {0} outstanding LSP calls, forgetting about {1}",
+             MaxReplayCallbacks, ReplyCallbacks.front().first);
+        OldestCB = std::move(ReplyCallbacks.front());
+        ReplyCallbacks.pop_front();
+      }
+    }
+    if (OldestCB)
+      OldestCB->second(llvm::createStringError(
+          llvm::inconvertibleErrorCode(),
+          llvm::formatv("failed to receive a client reply for request ({0})",
+                        OldestCB->first)));
+    return ID;
   }
 
   // Bind an LSP method name to a notification.
@@ -207,7 +277,13 @@ private:
     ReplyOnce &operator=(const ReplyOnce &) = delete;
 
     ~ReplyOnce() {
-      if (Server && !Replied) {
+      // There's one legitimate reason to never reply to a request: clangd's
+      // request handler send a call to the client (e.g. applyEdit) and the
+      // client never replied. In this case, the ReplyOnce is owned by
+      // ClangdLSPServer's reply callback table and is destroyed along with the
+      // server. We don't attempt to send a reply in this case, there's little
+      // to be gained from doing so.
+      if (Server && !Server->IsBeingDestroyed && !Replied) {
         elog("No reply to message {0}({1})", Method, ID);
         assert(false && "must reply to all calls!");
         (*this)(llvm::make_error<LSPError>("server failed to reply",
@@ -242,6 +318,16 @@ private:
 
   llvm::StringMap<std::function<void(llvm::json::Value)>> Notifications;
   llvm::StringMap<std::function<void(llvm::json::Value, ReplyOnce)>> Calls;
+  // The maximum number of callbacks held in clangd.
+  //
+  // We bound the maximum size to the pending map to prevent memory leakage
+  // for cases where LSP clients don't reply for the request.
+  static constexpr int MaxReplayCallbacks = 100;
+  mutable std::mutex CallMutex;
+  int NextCallID = 0; /* GUARDED_BY(CallMutex) */
+  std::deque<std::pair</*RequestID*/ int,
+                       /*ReplyHandler*/ Callback<llvm::json::Value>>>
+      ReplyCallbacks; /* GUARDED_BY(CallMutex) */
 
   // Method calls may be cancelled by ID, so keep track of their state.
   // This needs a mutex: handlers may finish on a different thread, and that's
@@ -295,12 +381,13 @@ private:
 
   ClangdLSPServer &Server;
 };
+constexpr int ClangdLSPServer::MessageHandler::MaxReplayCallbacks;
 
 // call(), notify(), and reply() wrap the Transport, adding logging and locking.
-void ClangdLSPServer::call(llvm::StringRef Method, llvm::json::Value Params) {
-  auto ID = NextCallID++;
+void ClangdLSPServer::callRaw(StringRef Method, llvm::json::Value Params,
+                              Callback<llvm::json::Value> CB) {
+  auto ID = MsgHandler->bindReply(std::move(CB));
   log("--> {0}({1})", Method, ID);
-  // We currently don't handle responses, so no need to store ID anywhere.
   std::lock_guard<std::mutex> Lock(TranspWriter);
   Transp.call(Method, std::move(Params), ID);
 }
@@ -327,6 +414,8 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
     WithOffsetEncoding.emplace(kCurrentOffsetEncoding,
                                *NegotiatedOffsetEncoding);
 
+  ClangdServerOpts.SemanticHighlighting =
+      Params.capabilities.SemanticHighlighting;
   if (Params.rootUri && *Params.rootUri)
     ClangdServerOpts.WorkspaceRoot = Params.rootUri->file();
   else if (Params.rootPath && !Params.rootPath->empty())
@@ -336,9 +425,13 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
                                             ErrorCode::InvalidRequest));
   if (const auto &Dir = Params.initializationOptions.compilationDatabasePath)
     CompileCommandsDir = Dir;
-  if (UseDirBasedCDB)
+  if (UseDirBasedCDB) {
     BaseCDB = llvm::make_unique<DirectoryBasedGlobalCompilationDatabase>(
         CompileCommandsDir);
+    BaseCDB = getQueryDriverDatabase(
+        llvm::makeArrayRef(ClangdServerOpts.QueryDriverGlobs),
+        std::move(BaseCDB));
+  }
   CDB.emplace(BaseCDB.get(), Params.initializationOptions.fallbackFlags,
               ClangdServerOpts.ResourceDir);
   Server.emplace(*CDB, FSProvider, static_cast<DiagnosticsConsumer &>(*this),
@@ -346,6 +439,9 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   applyConfiguration(Params.initializationOptions.ConfigSettings);
 
   CCOpts.EnableSnippets = Params.capabilities.CompletionSnippets;
+  CCOpts.IncludeFixIts = Params.capabilities.CompletionFixes;
+  if (!CCOpts.BundleOverloads.hasValue())
+    CCOpts.BundleOverloads = Params.capabilities.HasSignatureHelp;
   DiagOpts.EmbedFixesInDiagnostics = Params.capabilities.DiagnosticFixes;
   DiagOpts.SendDiagnosticCategory = Params.capabilities.DiagnosticCategory;
   DiagOpts.EmitRelatedLocations =
@@ -358,6 +454,16 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   SupportsHierarchicalDocumentSymbol =
       Params.capabilities.HierarchicalDocumentSymbol;
   SupportFileStatus = Params.initializationOptions.FileStatus;
+  HoverContentFormat = Params.capabilities.HoverContentFormat;
+  SupportsOffsetsInSignatureHelp = Params.capabilities.OffsetsInSignatureHelp;
+
+  // Per LSP, renameProvider can be either boolean or RenameOptions.
+  // RenameOptions will be specified if the client states it supports prepare.
+  llvm::json::Value RenameProvider =
+      llvm::json::Object{{"prepareProvider", true}};
+  if (!Params.capabilities.RenamePrepareSupport) // Only boolean allowed per LSP
+    RenameProvider = true;
+
   llvm::json::Object Result{
       {{"capabilities",
         llvm::json::Object{
@@ -366,7 +472,7 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
             {"documentRangeFormattingProvider", true},
             {"documentOnTypeFormattingProvider",
              llvm::json::Object{
-                 {"firstTriggerCharacter", "}"},
+                 {"firstTriggerCharacter", "\n"},
                  {"moreTriggerCharacter", {}},
              }},
             {"codeActionProvider", true},
@@ -385,7 +491,7 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
             {"definitionProvider", true},
             {"documentHighlightProvider", true},
             {"hoverProvider", true},
-            {"renameProvider", true},
+            {"renameProvider", std::move(RenameProvider)},
             {"documentSymbolProvider", true},
             {"workspaceSymbolProvider", true},
             {"referencesProvider", true},
@@ -399,6 +505,11 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
         }}}};
   if (NegotiatedOffsetEncoding)
     Result["offsetEncoding"] = *NegotiatedOffsetEncoding;
+  if (Params.capabilities.SemanticHighlighting)
+    Result.getObject("capabilities")
+        ->insert(
+            {"semanticHighlighting",
+             llvm::json::Object{{"scopes", buildHighlightScopeLookupTable()}}});
   Reply(std::move(Result));
 }
 
@@ -459,13 +570,28 @@ void ClangdLSPServer::onFileEvent(const DidChangeWatchedFilesParams &Params) {
 
 void ClangdLSPServer::onCommand(const ExecuteCommandParams &Params,
                                 Callback<llvm::json::Value> Reply) {
-  auto ApplyEdit = [this](WorkspaceEdit WE) {
+  auto ApplyEdit = [this](WorkspaceEdit WE,
+                          Callback<ApplyWorkspaceEditResponse> Reply) {
     ApplyWorkspaceEditParams Edit;
     Edit.edit = std::move(WE);
-    // Ideally, we would wait for the response and if there is no error, we
-    // would reply success/failure to the original RPC.
-    call("workspace/applyEdit", Edit);
+    call("workspace/applyEdit", std::move(Edit), std::move(Reply));
   };
+  // FIXME: this lambda is tangled and confusing, refactor it.
+  auto ReplyAfterApplyingEdit =
+      [](decltype(Reply) Reply, std::string SuccessMessage,
+         llvm::Expected<ApplyWorkspaceEditResponse> Response) {
+        if (!Response)
+          return Reply(Response.takeError());
+        if (!Response->applied) {
+          std::string Reason = Response->failureReason
+                                   ? *Response->failureReason
+                                   : "unknown reason";
+          return Reply(llvm::createStringError(
+              llvm::inconvertibleErrorCode(),
+              ("edits were not applied: " + Reason).c_str()));
+        }
+        return Reply(SuccessMessage);
+      };
   if (Params.command == ExecuteCommandParams::CLANGD_APPLY_FIX_COMMAND &&
       Params.workspaceEdit) {
     // The flow for "apply-fix" :
@@ -474,11 +600,11 @@ void ClangdLSPServer::onCommand(const ExecuteCommandParams &Params,
     // 3. We send code actions, with the fixit embedded as context
     // 4. The user selects the fixit, the editor asks us to apply it
     // 5. We unwrap the changes and send them back to the editor
-    // 6. The editor applies the changes (applyEdit), and sends us a reply (but
-    // we ignore it)
-
-    Reply("Fix applied.");
-    ApplyEdit(*Params.workspaceEdit);
+    // 6. The editor applies the changes (applyEdit), and sends us a reply
+    // 7. We unwrap the reply and send a reply to the editor.
+    ApplyEdit(*Params.workspaceEdit,
+              Bind(ReplyAfterApplyingEdit, std::move(Reply),
+                   std::string("Fix applied.")));
   } else if (Params.command == ExecuteCommandParams::CLANGD_APPLY_TWEAK &&
              Params.tweakArgs) {
     auto Code = DraftMgr.getDraft(Params.tweakArgs->file.file());
@@ -487,18 +613,26 @@ void ClangdLSPServer::onCommand(const ExecuteCommandParams &Params,
           llvm::inconvertibleErrorCode(),
           "trying to apply a code action for a non-added file"));
 
-    auto Action = [ApplyEdit](decltype(Reply) Reply, URIForFile File,
-                              std::string Code,
-                              llvm::Expected<tooling::Replacements> R) {
+    auto Action = [this, ApplyEdit, ReplyAfterApplyingEdit](
+                      decltype(Reply) Reply, URIForFile File, std::string Code,
+                      llvm::Expected<Tweak::Effect> R) {
       if (!R)
         return Reply(R.takeError());
 
-      WorkspaceEdit WE;
-      WE.changes.emplace();
-      (*WE.changes)[File.uri()] = replacementsToEdits(Code, *R);
-
-      Reply("Fix applied.");
-      ApplyEdit(std::move(WE));
+      if (R->ApplyEdit) {
+        WorkspaceEdit WE;
+        WE.changes.emplace();
+        (*WE.changes)[File.uri()] = replacementsToEdits(Code, *R->ApplyEdit);
+        ApplyEdit(std::move(WE), Bind(ReplyAfterApplyingEdit, std::move(Reply),
+                                      std::string("Tweak applied.")));
+      }
+      if (R->ShowMessage) {
+        ShowMessageParams Msg;
+        Msg.message = *R->ShowMessage;
+        Msg.type = MessageType::Info;
+        notify("window/showMessage", Msg);
+        Reply("Tweak applied.");
+      }
     };
     Server->applyTweak(Params.tweakArgs->file.file(),
                        Params.tweakArgs->selection, Params.tweakArgs->tweakID,
@@ -532,6 +666,12 @@ void ClangdLSPServer::onWorkspaceSymbol(
           std::move(Reply)));
 }
 
+void ClangdLSPServer::onPrepareRename(const TextDocumentPositionParams &Params,
+                                      Callback<llvm::Optional<Range>> Reply) {
+  Server->prepareRename(Params.textDocument.uri.file(), Params.position,
+                        std::move(Reply));
+}
+
 void ClangdLSPServer::onRename(const RenameParams &Params,
                                Callback<WorkspaceEdit> Reply) {
   Path File = Params.textDocument.uri.file();
@@ -541,7 +681,7 @@ void ClangdLSPServer::onRename(const RenameParams &Params,
         "onRename called for non-added file", ErrorCode::InvalidParams));
 
   Server->rename(
-      File, Params.position, Params.newName,
+      File, Params.position, Params.newName, /*WantFormat=*/true,
       Bind(
           [File, Code, Params](decltype(Reply) Reply,
                                llvm::Expected<std::vector<TextEdit>> Edits) {
@@ -565,6 +705,10 @@ void ClangdLSPServer::onDocumentDidClose(
     std::lock_guard<std::mutex> Lock(FixItsMutex);
     FixItsMap.erase(File);
   }
+  {
+    std::lock_guard<std::mutex> HLock(HighlightingsMutex);
+    FileToHighlightings.erase(File);
+  }
   // clangd will not send updates for this file anymore, so we empty out the
   // list of diagnostics shown on the client (e.g. in the "Problems" pane of
   // VSCode). Note that this cannot race with actual diagnostics responses
@@ -583,11 +727,7 @@ void ClangdLSPServer::onDocumentOnTypeFormatting(
         "onDocumentOnTypeFormatting called for non-added file",
         ErrorCode::InvalidParams));
 
-  auto ReplacementsOrError = Server->formatOnType(*Code, File, Params.position);
-  if (ReplacementsOrError)
-    Reply(replacementsToEdits(*Code, ReplacementsOrError.get()));
-  else
-    Reply(ReplacementsOrError.takeError());
+  Reply(Server->formatOnType(*Code, File, Params.position, Params.ch));
 }
 
 void ClangdLSPServer::onDocumentRangeFormatting(
@@ -735,8 +875,12 @@ void ClangdLSPServer::onCodeAction(const CodeActionParams &Params,
 
 void ClangdLSPServer::onCompletion(const CompletionParams &Params,
                                    Callback<CompletionList> Reply) {
-  if (!shouldRunCompletion(Params))
-    return Reply(llvm::make_error<IgnoreCompletionError>());
+  if (!shouldRunCompletion(Params)) {
+    // Clients sometimes auto-trigger completions in undesired places (e.g.
+    // 'a >^ '), we return empty results in those cases.
+    vlog("ignored auto-triggered completion, preceding char did not match");
+    return Reply(CompletionList());
+  }
   Server->codeComplete(Params.textDocument.uri.file(), Params.position, CCOpts,
                        Bind(
                            [this](decltype(Reply) Reply,
@@ -759,7 +903,22 @@ void ClangdLSPServer::onCompletion(const CompletionParams &Params,
 void ClangdLSPServer::onSignatureHelp(const TextDocumentPositionParams &Params,
                                       Callback<SignatureHelp> Reply) {
   Server->signatureHelp(Params.textDocument.uri.file(), Params.position,
-                        std::move(Reply));
+                        Bind(
+                            [this](decltype(Reply) Reply,
+                                   llvm::Expected<SignatureHelp> Signature) {
+                              if (!Signature)
+                                return Reply(Signature.takeError());
+                              if (SupportsOffsetsInSignatureHelp)
+                                return Reply(std::move(*Signature));
+                              // Strip out the offsets from signature help for
+                              // clients that only support string labels.
+                              for (auto &SigInfo : Signature->signatures) {
+                                for (auto &Param : SigInfo.parameters)
+                                  Param.labelOffsets.reset();
+                              }
+                              return Reply(std::move(*Signature));
+                            },
+                            std::move(Reply)));
 }
 
 // Go to definition has a toggle function: if def and decl are distinct, then
@@ -823,10 +982,13 @@ void ClangdLSPServer::onGoToDeclaration(
           std::move(Reply)));
 }
 
-void ClangdLSPServer::onSwitchSourceHeader(const TextDocumentIdentifier &Params,
-                                           Callback<std::string> Reply) {
-  llvm::Optional<Path> Result = Server->switchSourceHeader(Params.uri.file());
-  Reply(Result ? URI::createFile(*Result).toString() : "");
+void ClangdLSPServer::onSwitchSourceHeader(
+    const TextDocumentIdentifier &Params,
+    Callback<llvm::Optional<URIForFile>> Reply) {
+  if (auto Result = Server->switchSourceHeader(Params.uri.file()))
+    Reply(URIForFile::canonicalize(*Result, Params.uri.file()));
+  else
+    Reply(llvm::None);
 }
 
 void ClangdLSPServer::onDocumentHighlight(
@@ -839,7 +1001,30 @@ void ClangdLSPServer::onDocumentHighlight(
 void ClangdLSPServer::onHover(const TextDocumentPositionParams &Params,
                               Callback<llvm::Optional<Hover>> Reply) {
   Server->findHover(Params.textDocument.uri.file(), Params.position,
-                    std::move(Reply));
+                    Bind(
+                        [this](decltype(Reply) Reply,
+                               llvm::Expected<llvm::Optional<HoverInfo>> H) {
+                          if (!H)
+                            return Reply(H.takeError());
+                          if (!*H)
+                            return Reply(llvm::None);
+
+                          Hover R;
+                          R.contents.kind = HoverContentFormat;
+                          R.range = (*H)->SymRange;
+                          switch (HoverContentFormat) {
+                          case MarkupKind::PlainText:
+                            R.contents.value =
+                                (*H)->present().renderAsPlainText();
+                            return Reply(std::move(R));
+                          case MarkupKind::Markdown:
+                            R.contents.value =
+                                (*H)->present().renderAsMarkdown();
+                            return Reply(std::move(R));
+                          };
+                          llvm_unreachable("unhandled MarkupKind");
+                        },
+                        std::move(Reply)));
 }
 
 void ClangdLSPServer::onTypeHierarchy(
@@ -847,6 +1032,13 @@ void ClangdLSPServer::onTypeHierarchy(
     Callback<Optional<TypeHierarchyItem>> Reply) {
   Server->typeHierarchy(Params.textDocument.uri.file(), Params.position,
                         Params.resolve, Params.direction, std::move(Reply));
+}
+
+void ClangdLSPServer::onResolveTypeHierarchy(
+    const ResolveTypeHierarchyItemParams &Params,
+    Callback<Optional<TypeHierarchyItem>> Reply) {
+  Server->resolveTypeHierarchy(Params.item, Params.resolve, Params.direction,
+                               std::move(Reply));
 }
 
 void ClangdLSPServer::applyConfiguration(
@@ -869,6 +1061,11 @@ void ClangdLSPServer::applyConfiguration(
   }
   if (ShouldReparseOpenFiles)
     reparseOpenedFiles();
+}
+
+void ClangdLSPServer::publishSemanticHighlighting(
+    SemanticHighlightingParams Params) {
+  notify("textDocument/semanticHighlighting", Params);
 }
 
 void ClangdLSPServer::publishDiagnostics(
@@ -926,6 +1123,7 @@ ClangdLSPServer::ClangdLSPServer(
   MsgHandler->bind("textDocument/declaration", &ClangdLSPServer::onGoToDeclaration);
   MsgHandler->bind("textDocument/references", &ClangdLSPServer::onReference);
   MsgHandler->bind("textDocument/switchSourceHeader", &ClangdLSPServer::onSwitchSourceHeader);
+  MsgHandler->bind("textDocument/prepareRename", &ClangdLSPServer::onPrepareRename);
   MsgHandler->bind("textDocument/rename", &ClangdLSPServer::onRename);
   MsgHandler->bind("textDocument/hover", &ClangdLSPServer::onHover);
   MsgHandler->bind("textDocument/documentSymbol", &ClangdLSPServer::onDocumentSymbol);
@@ -939,10 +1137,11 @@ ClangdLSPServer::ClangdLSPServer(
   MsgHandler->bind("workspace/didChangeConfiguration", &ClangdLSPServer::onChangeConfiguration);
   MsgHandler->bind("textDocument/symbolInfo", &ClangdLSPServer::onSymbolInfo);
   MsgHandler->bind("textDocument/typeHierarchy", &ClangdLSPServer::onTypeHierarchy);
+  MsgHandler->bind("typeHierarchy/resolve", &ClangdLSPServer::onResolveTypeHierarchy);
   // clang-format on
 }
 
-ClangdLSPServer::~ClangdLSPServer() = default;
+ClangdLSPServer::~ClangdLSPServer() { IsBeingDestroyed = true; }
 
 bool ClangdLSPServer::run() {
   // Run the Language Server loop.
@@ -1005,6 +1204,24 @@ bool ClangdLSPServer::shouldRunCompletion(
     return (*Code)[*Offset - 2] == ':'; // trigger only on '::'.
   assert(false && "unhandled trigger character");
   return true;
+}
+
+void ClangdLSPServer::onHighlightingsReady(
+    PathRef File, std::vector<HighlightingToken> Highlightings, int NumLines) {
+  std::vector<HighlightingToken> Old;
+  std::vector<HighlightingToken> HighlightingsCopy = Highlightings;
+  {
+    std::lock_guard<std::mutex> Lock(HighlightingsMutex);
+    Old = std::move(FileToHighlightings[File]);
+    FileToHighlightings[File] = std::move(HighlightingsCopy);
+  }
+  // LSP allows us to send incremental edits of highlightings. Also need to diff
+  // to remove highlightings from tokens that should no longer have them.
+  std::vector<LineHighlightings> Diffed =
+      diffHighlightings(Highlightings, Old, NumLines);
+  publishSemanticHighlighting(
+      {{URIForFile::canonicalize(File, /*TUPath=*/File)},
+       toSemanticHighlightingInformation(Diffed)});
 }
 
 void ClangdLSPServer::onDiagnosticsReady(PathRef File,

@@ -53,6 +53,7 @@ void TokenLexer::Init(Token &Tok, SourceLocation ELEnd, MacroInfo *MI,
   Tokens = &*Macro->tokens_begin();
   OwnsTokens = false;
   DisableMacroExpansion = false;
+  IsReinject = false;
   NumTokens = Macro->tokens_end()-Macro->tokens_begin();
   MacroExpansionStart = SourceLocation();
 
@@ -91,7 +92,9 @@ void TokenLexer::Init(Token &Tok, SourceLocation ELEnd, MacroInfo *MI,
 /// Create a TokenLexer for the specified token stream.  This does not
 /// take ownership of the specified token vector.
 void TokenLexer::Init(const Token *TokArray, unsigned NumToks,
-                      bool disableMacroExpansion, bool ownsTokens) {
+                      bool disableMacroExpansion, bool ownsTokens,
+                      bool isReinject) {
+  assert(!isReinject || disableMacroExpansion);
   // If the client is reusing a TokenLexer, make sure to free any memory
   // associated with it.
   destroy();
@@ -101,6 +104,7 @@ void TokenLexer::Init(const Token *TokArray, unsigned NumToks,
   Tokens = TokArray;
   OwnsTokens = ownsTokens;
   DisableMacroExpansion = disableMacroExpansion;
+  IsReinject = isReinject;
   NumTokens = NumToks;
   CurTokenIdx = 0;
   ExpandLocStart = ExpandLocEnd = SourceLocation();
@@ -379,18 +383,10 @@ void TokenLexer::ExpandFunctionArguments() {
       SourceLocation ExpansionLocEnd =
           getExpansionLocForMacroDefLoc(Tokens[I+1].getLocation());
 
-      Token Res;
-      if (CurTok.is(tok::hash))  // Stringify
-        Res = ActualArgs->getStringifiedArgument(ArgNo, PP,
-                                                 ExpansionLocStart,
-                                                 ExpansionLocEnd);
-      else {
-        // 'charify': don't bother caching these.
-        Res = MacroArgs::StringifyArgument(ActualArgs->getUnexpArgument(ArgNo),
-                                           PP, true,
-                                           ExpansionLocStart,
-                                           ExpansionLocEnd);
-      }
+      bool Charify = CurTok.is(tok::hashat);
+      const Token *UnexpArg = ActualArgs->getUnexpArgument(ArgNo);
+      Token Res = MacroArgs::StringifyArgument(
+          UnexpArg, PP, Charify, ExpansionLocStart, ExpansionLocEnd);
       Res.setFlag(Token::StringifiedInMacro);
 
       // The stringified/charified string leading space flag gets set to match
@@ -647,6 +643,8 @@ bool TokenLexer::Lex(Token &Tok) {
 
   // Get the next token to return.
   Tok = Tokens[CurTokenIdx++];
+  if (IsReinject)
+    Tok.setFlag(Token::IsReinjected);
 
   bool TokenIsFromPaste = false;
 

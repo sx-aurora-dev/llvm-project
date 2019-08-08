@@ -117,6 +117,8 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v128i32:  return "MVT::v128i32";
   case MVT::v256i32:  return "MVT::v256i32";
   case MVT::v512i32:  return "MVT::v512i32";
+  case MVT::v1024i32: return "MVT::v1024i32";
+  case MVT::v2048i32: return "MVT::v2048i32";
   case MVT::v1i64:    return "MVT::v1i64";
   case MVT::v2i64:    return "MVT::v2i64";
   case MVT::v4i64:    return "MVT::v4i64";
@@ -142,6 +144,8 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v128f32:  return "MVT::v128f32";
   case MVT::v256f32:  return "MVT::v256f32";
   case MVT::v512f32:  return "MVT::v512f32";
+  case MVT::v1024f32: return "MVT::v1024f32";
+  case MVT::v2048f32: return "MVT::v2048f32";
   case MVT::v1f64:    return "MVT::v1f64";
   case MVT::v2f64:    return "MVT::v2f64";
   case MVT::v4f64:    return "MVT::v4f64";
@@ -196,7 +200,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::iPTR:     return "MVT::iPTR";
   case MVT::iPTRAny:  return "MVT::iPTRAny";
   case MVT::Untyped:  return "MVT::Untyped";
-  case MVT::ExceptRef: return "MVT::ExceptRef";
+  case MVT::exnref:   return "MVT::exnref";
   default: llvm_unreachable("ILLEGAL VALUE TYPE!");
   }
 }
@@ -562,6 +566,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
   isCommutative = false;
   canThrow = false;
   isNoReturn = false;
+  isWillReturn = false;
   isCold = false;
   isNoDuplicate = false;
   isConvergent = false;
@@ -608,9 +613,29 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
                                   TargetPrefix + ".'!");
   }
 
-  // Parse the list of return types.
+  ListInit *RetTypes = R->getValueAsListInit("RetTypes");
+  ListInit *ParamTypes = R->getValueAsListInit("ParamTypes");
+
+  // First collate a list of overloaded types.
   std::vector<MVT::SimpleValueType> OverloadedVTs;
-  ListInit *TypeList = R->getValueAsListInit("RetTypes");
+  for (ListInit *TypeList : {RetTypes, ParamTypes}) {
+    for (unsigned i = 0, e = TypeList->size(); i != e; ++i) {
+      Record *TyEl = TypeList->getElementAsRecord(i);
+      assert(TyEl->isSubClassOf("LLVMType") && "Expected a type!");
+
+      if (TyEl->isSubClassOf("LLVMMatchType"))
+        continue;
+
+      MVT::SimpleValueType VT = getValueType(TyEl->getValueAsDef("VT"));
+      if (MVT(VT).isOverloaded()) {
+        OverloadedVTs.push_back(VT);
+        isOverloaded = true;
+      }
+    }
+  }
+
+  // Parse the list of return types.
+  ListInit *TypeList = RetTypes;
   for (unsigned i = 0, e = TypeList->size(); i != e; ++i) {
     Record *TyEl = TypeList->getElementAsRecord(i);
     assert(TyEl->isSubClassOf("LLVMType") && "Expected a type!");
@@ -630,10 +655,6 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
     } else {
       VT = getValueType(TyEl->getValueAsDef("VT"));
     }
-    if (MVT(VT).isOverloaded()) {
-      OverloadedVTs.push_back(VT);
-      isOverloaded = true;
-    }
 
     // Reject invalid types.
     if (VT == MVT::isVoid)
@@ -645,7 +666,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
   }
 
   // Parse the list of parameter types.
-  TypeList = R->getValueAsListInit("ParamTypes");
+  TypeList = ParamTypes;
   for (unsigned i = 0, e = TypeList->size(); i != e; ++i) {
     Record *TyEl = TypeList->getElementAsRecord(i);
     assert(TyEl->isSubClassOf("LLVMType") && "Expected a type!");
@@ -670,11 +691,6 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
              "Expected iAny or vAny type");
     } else
       VT = getValueType(TyEl->getValueAsDef("VT"));
-
-    if (MVT(VT).isOverloaded()) {
-      OverloadedVTs.push_back(VT);
-      isOverloaded = true;
-    }
 
     // Reject invalid types.
     if (VT == MVT::isVoid && i != e-1 /*void at end means varargs*/)
@@ -715,6 +731,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
       isConvergent = true;
     else if (Property->getName() == "IntrNoReturn")
       isNoReturn = true;
+    else if (Property->getName() == "IntrWillReturn")
+      isWillReturn = true;
     else if (Property->getName() == "IntrCold")
       isCold = true;
     else if (Property->getName() == "IntrSpeculatable")

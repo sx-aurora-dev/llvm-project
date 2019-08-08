@@ -144,7 +144,7 @@ bool CompilerType::IsBlockPointerType(
     CompilerType *function_pointer_type_ptr) const {
   if (IsValid())
     return m_type_system->IsBlockPointerType(m_type, function_pointer_type_ptr);
-  return 0;
+  return false;
 }
 
 bool CompilerType::IsIntegerType(bool &is_signed) const {
@@ -729,13 +729,6 @@ CompilerType::GetIndexOfChildWithName(const char *name,
   return UINT32_MAX;
 }
 
-size_t CompilerType::ConvertStringToFloatValue(const char *s, uint8_t *dst,
-                                               size_t dst_size) const {
-  if (IsValid())
-    return m_type_system->ConvertStringToFloatValue(m_type, s, dst, dst_size);
-  return 0;
-}
-
 // Dumping types
 #define DEPTH_INCREMENT 2
 
@@ -995,7 +988,7 @@ bool CompilerType::ReadFromMemory(lldb_private::ExecutionContext *exe_ctx,
     return false;
 
   auto byte_size =
-      GetByteSize(exe_ctx ? exe_ctx->GetBestExecutionContextScope() : NULL);
+      GetByteSize(exe_ctx ? exe_ctx->GetBestExecutionContextScope() : nullptr);
   if (!byte_size)
     return false;
 
@@ -1040,7 +1033,7 @@ bool CompilerType::WriteToMemory(lldb_private::ExecutionContext *exe_ctx,
     return false;
 
   auto byte_size =
-      GetByteSize(exe_ctx ? exe_ctx->GetBestExecutionContextScope() : NULL);
+      GetByteSize(exe_ctx ? exe_ctx->GetBestExecutionContextScope() : nullptr);
   if (!byte_size)
     return false;
 
