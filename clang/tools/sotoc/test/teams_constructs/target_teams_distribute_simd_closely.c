@@ -5,6 +5,7 @@ int main(void) {
 
   //CHECK-NOT: teams
   //CHECK-NOT: distribute
+  //CHECK: #pragma _NEC ivdep
   //CHECK: #pragma omp simd
   #pragma omp target device(0)
   #pragma omp teams distribute simd
