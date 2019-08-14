@@ -5,7 +5,7 @@
 int main(void) {
   int h = 0, j = 0, i = 0;
 
-  #pragma omp target device(0)
+  #pragma omp target
   {
     h += 1;
     j += 1;
@@ -25,7 +25,7 @@ int main(void) {
     j += 1;
     i += 1;
   }
-  
+
   #pragma omp target device(3)
   {
     h += 1;
@@ -33,7 +33,6 @@ int main(void) {
     i += 1;
   }
 
-  
   #pragma omp target device(4)
   {
     h += 1;

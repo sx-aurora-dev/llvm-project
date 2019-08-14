@@ -14,7 +14,7 @@ int Z = 23-4;
 int main(void) {
   int h = 0;
 
-#pragma omp target device(0) map(tofrom: h)
+#pragma omp target  map(tofrom: h)
   {
     h = X - Y + Z;
   }

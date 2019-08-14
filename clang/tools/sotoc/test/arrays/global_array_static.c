@@ -13,7 +13,7 @@
  int tmp = 0;
 
  #pragma omp target update to(X[:10])
- #pragma omp target device(0)
+ #pragma omp target
  {
   for(int i = 0; i < 10; ++i){
    X[i] = 1;
@@ -31,4 +31,3 @@
 }
 
 // CHECK: 10
-               

@@ -6,7 +6,7 @@ int main(void) {
   double *j = calloc(100, sizeof(double));
 
 
-  #pragma omp target device(0) map(tofrom:j[0:100])
+  #pragma omp target  map(tofrom:j[0:100])
   {
     h += 1;
     i += 1;

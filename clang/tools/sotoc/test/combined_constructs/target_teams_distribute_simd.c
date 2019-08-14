@@ -2,8 +2,8 @@
 
 int main(void) {
   int j = 0;
-    
-  #pragma omp target teams distribute simd device(0)
+
+  #pragma omp target teams distribute simd
     for(int i = 0; i < 10; i++) {
       j++;
     }

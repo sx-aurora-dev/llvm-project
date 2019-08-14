@@ -3,7 +3,7 @@
 int main(void) {
   int h = 0;
 
-  #pragma omp target device(0)
+  #pragma omp target
   h += 1;
 
 
