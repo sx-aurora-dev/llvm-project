@@ -13,6 +13,7 @@ set(SOTOC_TEST_COMPILER ${CMAKE_BINARY_DIR}/bin/clang CACHE STRING
 set(SOTOC_LIBOMP_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
 set(SOTOC_OMP_HEADER_DIR ${CMAKE_BINARY_DIR}/projects/openmp/runtime/src)
 
+
 find_package(PythonInterp REQUIRED)
 
 if(NOT PYTHONINTERP_FOUND)
@@ -20,6 +21,7 @@ if(NOT PYTHONINTERP_FOUND)
   message(WARNING "The check-sotoc target will not be available!")
   return()
 endif()
+
 
 find_program(SOTOC_LLVM_LIT_EXECUTABLE
   NAMES llvm-lit lit.py lit
@@ -32,8 +34,10 @@ if(NOT SOTOC_LLVM_LIT_EXECUTABLE)
     return()
 endif()
 
-
 set(SOTOC_LIT_ARGS "-v;--no-progress-bar;-j 1")
+
+
+set(SOTOC_FILECHECK_EXE ${LLVM_TOOLS_BINARY_DIR}/FileCheck${CMAKE_EXECUTABLE_SUFFIX} CACHE FILEPATH "Path to FileCheck utility. Should be built together with other LLVM utilities")
 
 add_custom_target(check-sotoc
   COMMAND ${PYTHON_EXECUTABLE} ${SOTOC_LLVM_LIT_EXECUTABLE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
