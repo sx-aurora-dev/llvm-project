@@ -208,8 +208,8 @@ bool Decl::isTemplateParameterPack() const {
 }
 
 bool Decl::isParameterPack() const {
-  if (const auto *Parm = dyn_cast<ParmVarDecl>(this))
-    return Parm->isParameterPack();
+  if (const auto *Var = dyn_cast<VarDecl>(this))
+    return Var->isParameterPack();
 
   return isTemplateParameterPack();
 }
@@ -710,6 +710,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case Binding:
     case NonTypeTemplateParm:
     case VarTemplate:
+    case Concept:
       // These (C++-only) declarations are found by redeclaration lookup for
       // tag types, so we include them in the tag namespace.
       return IDNS_Ordinary | IDNS_Tag;
@@ -920,6 +921,7 @@ bool Decl::AccessDeclContextSanity() const {
   if (isa<TranslationUnitDecl>(this) ||
       isa<TemplateTypeParmDecl>(this) ||
       isa<NonTypeTemplateParmDecl>(this) ||
+      !getDeclContext() ||
       !isa<CXXRecordDecl>(getDeclContext()) ||
       isInvalidDecl() ||
       isa<StaticAssertDecl>(this) ||
@@ -957,6 +959,8 @@ const FunctionType *Decl::getFunctionType(bool BlocksToo) const {
 
   if (Ty->isFunctionPointerType())
     Ty = Ty->getAs<PointerType>()->getPointeeType();
+  else if (Ty->isFunctionReferenceType())
+    Ty = Ty->getAs<ReferenceType>()->getPointeeType();
   else if (BlocksToo && Ty->isBlockPointerType())
     Ty = Ty->getAs<BlockPointerType>()->getPointeeType();
 

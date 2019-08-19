@@ -468,6 +468,8 @@ template <> struct DenseMapInfo<ExitLimitQuery> {
 /// can't do much with the SCEV objects directly, they must ask this class
 /// for services.
 class ScalarEvolution {
+  friend class ScalarEvolutionsTest;
+
 public:
   /// An enum describing the relationship between a SCEV and a loop.
   enum LoopDisposition {
@@ -598,6 +600,8 @@ public:
   /// \p IndexExprs The expressions for the indices.
   const SCEV *getGEPExpr(GEPOperator *GEP,
                          const SmallVectorImpl<const SCEV *> &IndexExprs);
+  const SCEV *getMinMaxExpr(unsigned Kind,
+                            SmallVectorImpl<const SCEV *> &Operands);
   const SCEV *getSMaxExpr(const SCEV *LHS, const SCEV *RHS);
   const SCEV *getSMaxExpr(SmallVectorImpl<const SCEV *> &Operands);
   const SCEV *getUMaxExpr(const SCEV *LHS, const SCEV *RHS);
@@ -744,9 +748,12 @@ public:
   unsigned getSmallConstantTripMultiple(const Loop *L,
                                         BasicBlock *ExitingBlock);
 
-  /// Get the expression for the number of loop iterations for which this loop
-  /// is guaranteed not to exit via ExitingBlock. Otherwise return
-  /// SCEVCouldNotCompute.
+  /// Return the number of times the backedge executes before the given exit
+  /// would be taken; if not exactly computable, return SCEVCouldNotCompute. 
+  /// For a single exit loop, this value is equivelent to the result of
+  /// getBackedgeTakenCount.  The loop is guaranteed to exit (via *some* exit)
+  /// before the backedge is executed (ExitCount + 1) times.  Note that there
+  /// is no guarantee about *which* exit is taken on the exiting iteration.  
   const SCEV *getExitCount(const Loop *L, BasicBlock *ExitingBlock);
 
   /// If the specified loop has a predictable backedge-taken count, return it,

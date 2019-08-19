@@ -11,6 +11,7 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/DataExtractor.h"
+#include "lldb/Utility/Log.h"
 #include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -137,15 +138,6 @@ Type::Type()
   m_flags.compiler_type_resolve_state = eResolveStateUnresolved;
   m_flags.is_complete_objc_class = false;
 }
-
-Type::Type(const Type &rhs)
-    : std::enable_shared_from_this<Type>(rhs), UserID(rhs), m_name(rhs.m_name),
-      m_symbol_file(rhs.m_symbol_file), m_context(rhs.m_context),
-      m_encoding_type(rhs.m_encoding_type), m_encoding_uid(rhs.m_encoding_uid),
-      m_encoding_uid_type(rhs.m_encoding_uid_type),
-      m_byte_size(rhs.m_byte_size),
-      m_byte_size_has_value(rhs.m_byte_size_has_value), m_decl(rhs.m_decl),
-      m_compiler_type(rhs.m_compiler_type), m_flags(rhs.m_flags) {}
 
 void Type::GetDescription(Stream *s, lldb::DescriptionLevel level,
                           bool show_name) {
@@ -434,8 +426,6 @@ bool Type::WriteToMemory(ExecutionContext *exe_ctx, lldb::addr_t addr,
   return false;
 }
 
-TypeList *Type::GetTypeList() { return GetSymbolFile()->GetTypeList(); }
-
 const Declaration &Type::GetDeclaration() const { return m_decl; }
 
 bool Type::ResolveClangType(ResolveState compiler_type_resolve_state) {
@@ -497,47 +487,54 @@ bool Type::ResolveClangType(ResolveState compiler_type_resolve_state) {
       }
     } else {
       // We have no encoding type, return void?
-      TypeSystem *type_system =
+      auto type_system_or_err =
           m_symbol_file->GetTypeSystemForLanguage(eLanguageTypeC);
-      CompilerType void_compiler_type =
-          type_system->GetBasicTypeFromAST(eBasicTypeVoid);
-      switch (m_encoding_uid_type) {
-      case eEncodingIsUID:
-        m_compiler_type = void_compiler_type;
-        break;
+      if (auto err = type_system_or_err.takeError()) {
+        LLDB_LOG_ERROR(
+            lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_SYMBOLS),
+            std::move(err),
+            "Unable to construct void type from ClangASTContext");
+      } else {
+        CompilerType void_compiler_type =
+            type_system_or_err->GetBasicTypeFromAST(eBasicTypeVoid);
+        switch (m_encoding_uid_type) {
+        case eEncodingIsUID:
+          m_compiler_type = void_compiler_type;
+          break;
 
-      case eEncodingIsConstUID:
-        m_compiler_type = void_compiler_type.AddConstModifier();
-        break;
+        case eEncodingIsConstUID:
+          m_compiler_type = void_compiler_type.AddConstModifier();
+          break;
 
-      case eEncodingIsRestrictUID:
-        m_compiler_type = void_compiler_type.AddRestrictModifier();
-        break;
+        case eEncodingIsRestrictUID:
+          m_compiler_type = void_compiler_type.AddRestrictModifier();
+          break;
 
-      case eEncodingIsVolatileUID:
-        m_compiler_type = void_compiler_type.AddVolatileModifier();
-        break;
+        case eEncodingIsVolatileUID:
+          m_compiler_type = void_compiler_type.AddVolatileModifier();
+          break;
 
-      case eEncodingIsTypedefUID:
-        m_compiler_type = void_compiler_type.CreateTypedef(
-            m_name.AsCString("__lldb_invalid_typedef_name"),
-            GetSymbolFile()->GetDeclContextContainingUID(GetID()));
-        break;
+        case eEncodingIsTypedefUID:
+          m_compiler_type = void_compiler_type.CreateTypedef(
+              m_name.AsCString("__lldb_invalid_typedef_name"),
+              GetSymbolFile()->GetDeclContextContainingUID(GetID()));
+          break;
 
-      case eEncodingIsPointerUID:
-        m_compiler_type = void_compiler_type.GetPointerType();
-        break;
+        case eEncodingIsPointerUID:
+          m_compiler_type = void_compiler_type.GetPointerType();
+          break;
 
-      case eEncodingIsLValueReferenceUID:
-        m_compiler_type = void_compiler_type.GetLValueReferenceType();
-        break;
+        case eEncodingIsLValueReferenceUID:
+          m_compiler_type = void_compiler_type.GetLValueReferenceType();
+          break;
 
-      case eEncodingIsRValueReferenceUID:
-        m_compiler_type = void_compiler_type.GetRValueReferenceType();
-        break;
+        case eEncodingIsRValueReferenceUID:
+          m_compiler_type = void_compiler_type.GetRValueReferenceType();
+          break;
 
-      default:
-        llvm_unreachable("Unhandled encoding_data_type.");
+        default:
+          llvm_unreachable("Unhandled encoding_data_type.");
+        }
       }
     }
 
@@ -760,12 +757,6 @@ bool TypeAndOrName::HasCompilerType() const {
   return m_compiler_type.IsValid();
 }
 
-TypeImpl::TypeImpl() : m_module_wp(), m_static_type(), m_dynamic_type() {}
-
-TypeImpl::TypeImpl(const TypeImpl &rhs)
-    : m_module_wp(rhs.m_module_wp), m_static_type(rhs.m_static_type),
-      m_dynamic_type(rhs.m_dynamic_type) {}
-
 TypeImpl::TypeImpl(const lldb::TypeSP &type_sp)
     : m_module_wp(), m_static_type(), m_dynamic_type() {
   SetType(type_sp);
@@ -813,15 +804,6 @@ void TypeImpl::SetType(const CompilerType &compiler_type,
   m_module_wp = lldb::ModuleWP();
   m_static_type = compiler_type;
   m_dynamic_type = dynamic;
-}
-
-TypeImpl &TypeImpl::operator=(const TypeImpl &rhs) {
-  if (rhs != *this) {
-    m_module_wp = rhs.m_module_wp;
-    m_static_type = rhs.m_static_type;
-    m_dynamic_type = rhs.m_dynamic_type;
-  }
-  return *this;
 }
 
 bool TypeImpl::CheckModule(lldb::ModuleSP &module_sp) const {
@@ -1002,7 +984,7 @@ TypeSystem *TypeImpl::GetTypeSystem(bool prefer_dynamic) {
     }
     return m_static_type.GetTypeSystem();
   }
-  return NULL;
+  return nullptr;
 }
 
 bool TypeImpl::GetDescription(lldb_private::Stream &strm,

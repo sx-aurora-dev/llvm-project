@@ -1,63 +1,96 @@
-; RUN: llc -O0 < %s | FileCheck %s
-; FIXME: Add test for llc with optimizations once it is implemented.
+; RUN: llc < %s | FileCheck --check-prefixes=DAG,CHECK %s
+; RUN: llc -O0 < %s | FileCheck --check-prefixes=FAST,CHECK %s
 
 ; Source to regenerate:
-; $ clang --target=x86_64-windows-msvc -S heapallocsite.c  -g -gcodeview -o t.ll \
-;      -emit-llvm -O0 -Xclang -disable-llvm-passes -fms-extensions
-; __declspec(allocator) char *myalloc(void);
-; void f() {
-;   myalloc()
-; }
+; $ clang -cc1 -triple x86_64-windows-msvc t.cpp -debug-info-kind=limited \
+;      -gcodeview -O2 -fms-extensions -emit-llvm -o t.ll
 ;
-; struct Foo {
+; extern "C" struct Foo {
 ;   __declspec(allocator) virtual void *alloc();
 ; };
-; void use_alloc(void*);
-; void do_alloc(Foo *p) {
-;   use_alloc(p->alloc());
+; extern "C" __declspec(allocator) Foo *alloc_foo();
+; extern "C" void use_result(void *);
+; extern "C" Foo *call_tail() {
+;   return alloc_foo();
+; }
+; extern "C" int call_virtual(Foo *p) {
+;   use_result(p->alloc());
+;   return 0;
+; }
+; extern "C" int call_multiple() {
+;   use_result(alloc_foo());
+;   use_result(alloc_foo());
+;   return 0;
 ; }
 
+; ModuleID = 't.cpp'
+source_filename = "t.cpp"
 target datalayout = "e-m:w-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-windows-msvc"
 
 %struct.Foo = type { i32 (...)** }
 
-; Function Attrs: noinline optnone uwtable
-define dso_local void @f() #0 !dbg !8 {
+; Function Attrs: nounwind
+define dso_local %struct.Foo* @call_tail() local_unnamed_addr #0 !dbg !7 {
 entry:
-  %call = call i8* @myalloc(), !dbg !11, !heapallocsite !2
-  ret void, !dbg !12
+  %call = tail call %struct.Foo* @alloc_foo() #3, !dbg !13, !heapallocsite !12
+  ret %struct.Foo* %call, !dbg !13
 }
 
-; CHECK-LABEL: f: # @f
+declare dso_local %struct.Foo* @alloc_foo() local_unnamed_addr #1
+
+; Function Attrs: nounwind
+define dso_local i32 @call_virtual(%struct.Foo* %p) local_unnamed_addr #0 !dbg !14 {
+entry:
+  call void @llvm.dbg.value(metadata %struct.Foo* %p, metadata !19, metadata !DIExpression()), !dbg !20
+  %0 = bitcast %struct.Foo* %p to i8* (%struct.Foo*)***, !dbg !21
+  %vtable = load i8* (%struct.Foo*)**, i8* (%struct.Foo*)*** %0, align 8, !dbg !21, !tbaa !22
+  %1 = load i8* (%struct.Foo*)*, i8* (%struct.Foo*)** %vtable, align 8, !dbg !21
+  %call = tail call i8* %1(%struct.Foo* %p) #3, !dbg !21, !heapallocsite !2
+  tail call void @use_result(i8* %call) #3, !dbg !21
+  ret i32 0, !dbg !25
+}
+
+declare dso_local void @use_result(i8*) local_unnamed_addr #1
+
+; Function Attrs: nounwind
+define dso_local i32 @call_multiple() local_unnamed_addr #0 !dbg !26 {
+entry:
+  %call = tail call %struct.Foo* @alloc_foo() #3, !dbg !29, !heapallocsite !12
+  %0 = bitcast %struct.Foo* %call to i8*, !dbg !29
+  tail call void @use_result(i8* %0) #3, !dbg !29
+  %call1 = tail call %struct.Foo* @alloc_foo() #3, !dbg !30, !heapallocsite !12
+  %1 = bitcast %struct.Foo* %call1 to i8*, !dbg !30
+  tail call void @use_result(i8* %1) #3, !dbg !30
+  ret i32 0, !dbg !31
+}
+
+; Function Attrs: nounwind readnone speculatable willreturn
+declare void @llvm.dbg.value(metadata, metadata, metadata) #2
+
+
+; Don't emit metadata for tail calls.
+; CHECK-LABEL: call_tail:         # @call_tail
+; CHECK-NOT: .Lheapallocsite
+; CHECK: jmp alloc_foo
+
+; CHECK-LABEL: call_virtual:      # @call_virtual
 ; CHECK: .Lheapallocsite0:
-; CHECK: callq myalloc
+; CHECK: callq *{{.*}}%rax{{.*}}
 ; CHECK: .Lheapallocsite1:
-; CHECK: retq
 
-declare dso_local i8* @myalloc() #1
-
-; Function Attrs: noinline optnone uwtable
-define dso_local void @do_alloc(%struct.Foo* %p) #0 !dbg !13 {
-entry:
-  %p.addr = alloca %struct.Foo*, align 8
-  store %struct.Foo* %p, %struct.Foo** %p.addr, align 8
-  call void @llvm.dbg.declare(metadata %struct.Foo** %p.addr, metadata !18, metadata !DIExpression()), !dbg !19
-  %0 = load %struct.Foo*, %struct.Foo** %p.addr, align 8, !dbg !20
-  %1 = bitcast %struct.Foo* %0 to i8* (%struct.Foo*)***, !dbg !20
-  %vtable = load i8* (%struct.Foo*)**, i8* (%struct.Foo*)*** %1, align 8, !dbg !20
-  %vfn = getelementptr inbounds i8* (%struct.Foo*)*, i8* (%struct.Foo*)** %vtable, i64 0, !dbg !20
-  %2 = load i8* (%struct.Foo*)*, i8* (%struct.Foo*)** %vfn, align 8, !dbg !20
-  %call = call i8* %2(%struct.Foo* %0), !dbg !20, !heapallocsite !2
-  call void @use_alloc(i8* %call), !dbg !20
-  ret void, !dbg !21
-}
-
-; CHECK-LABEL: do_alloc: # @do_alloc
-; CHECK: .Lheapallocsite2:
-; CHECK: callq *(%rax)
-; CHECK: .Lheapallocsite3:
-; CHECK: retq
+; CHECK-LABEL: call_multiple:     # @call_multiple
+; FastISel emits instructions in a different order.
+; DAG:   .Lheapallocsite2:
+; FAST:  .Lheapallocsite4:
+; CHECK: callq alloc_foo
+; DAG:   .Lheapallocsite3:
+; FAST:  .Lheapallocsite5:
+; DAG:   .Lheapallocsite4:
+; FAST:  .Lheapallocsite2:
+; CHECK: callq alloc_foo
+; DAG:   .Lheapallocsite5:
+; FAST:  .Lheapallocsite3:
 
 ; CHECK-LABEL: .short  4423                    # Record kind: S_GPROC32_ID
 ; CHECK:       .short  4446                    # Record kind: S_HEAPALLOCSITE
@@ -65,47 +98,55 @@ entry:
 ; CHECK-NEXT:  .secidx .Lheapallocsite0
 ; CHECK-NEXT:  .short .Lheapallocsite1-.Lheapallocsite0
 ; CHECK-NEXT:  .long 3
-; CHECK-NEXT:  .p2align 2
-; CHECK-LABEL: .short  4431                    # Record kind: S_PROC_ID_END
-
-; CHECK-LABEL: .short  4423                    # Record kind: S_GPROC32_ID
 ; CHECK:       .short  4446                    # Record kind: S_HEAPALLOCSITE
 ; CHECK-NEXT:  .secrel32 .Lheapallocsite2
 ; CHECK-NEXT:  .secidx .Lheapallocsite2
 ; CHECK-NEXT:  .short .Lheapallocsite3-.Lheapallocsite2
-; CHECK-NEXT:  .long 3
-; CHECK-NEXT:  .p2align 2
-; CHECK-LABEL: .short  4431                    # Record kind: S_PROC_ID_END
+; CHECK-NEXT:  .long 4096
+; CHECK:       .short  4446                    # Record kind: S_HEAPALLOCSITE
+; CHECK-NEXT:  .secrel32 .Lheapallocsite4
+; CHECK-NEXT:  .secidx .Lheapallocsite4
+; CHECK-NEXT:  .short .Lheapallocsite5-.Lheapallocsite4
+; CHECK-NEXT:  .long 4096
 
-; Function Attrs: nounwind readnone speculatable
-declare void @llvm.dbg.declare(metadata, metadata, metadata) #2
-
-declare dso_local void @use_alloc(i8*) #1
+attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #2 = { nounwind readnone speculatable willreturn }
+attributes #3 = { nounwind }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!3, !4, !5, !6}
-!llvm.ident = !{!7}
+!llvm.module.flags = !{!3, !4, !5}
+!llvm.ident = !{!6}
 
-!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang version 9.0.0 (https://github.com/llvm/llvm-project.git 4eff3de99423a62fd6e833e29c71c1e62ba6140b)", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !2, nameTableKind: None)
-!1 = !DIFile(filename: "heapallocsite.cpp", directory: "C:\5Csrc\5Ctest", checksumkind: CSK_MD5, checksum: "6d758cfa3834154a04ce8a55102772a9")
+!0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "clang version 10.0.0 (https://github.com/llvm/llvm-project.git fa686ea7650235c6dff988cc8cba49e130b3d5f8)", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !2, nameTableKind: None)
+!1 = !DIFile(filename: "<stdin>", directory: "/usr/local/google/home/akhuang/testing/heapallocsite", checksumkind: CSK_MD5, checksum: "e0a04508b4229fc4aee0baa364e25987")
 !2 = !{}
 !3 = !{i32 2, !"CodeView", i32 1}
 !4 = !{i32 2, !"Debug Info Version", i32 3}
 !5 = !{i32 1, !"wchar_size", i32 2}
-!6 = !{i32 7, !"PIC Level", i32 2}
-!7 = !{!"clang version 9.0.0 (https://github.com/llvm/llvm-project.git 4eff3de99423a62fd6e833e29c71c1e62ba6140b)"}
-!8 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 3, type: !9, scopeLine: 3, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !2)
+!6 = !{!"clang version 10.0.0 (https://github.com/llvm/llvm-project.git fa686ea7650235c6dff988cc8cba49e130b3d5f8)"}
+!7 = distinct !DISubprogram(name: "call_tail", scope: !8, file: !8, line: 6, type: !9, scopeLine: 6, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !2)
+!8 = !DIFile(filename: "t.cpp", directory: "/usr/local/google/home/akhuang/testing/heapallocsite", checksumkind: CSK_MD5, checksum: "e0a04508b4229fc4aee0baa364e25987")
 !9 = !DISubroutineType(types: !10)
-!10 = !{null}
-!11 = !DILocation(line: 4, scope: !8)
-!12 = !DILocation(line: 5, scope: !8)
-!13 = distinct !DISubprogram(name: "do_alloc", scope: !1, file: !1, line: 11, type: !14, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !2)
-!14 = !DISubroutineType(types: !15)
-!15 = !{null, !16}
-!16 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !17, size: 64)
-!17 = !DICompositeType(tag: DW_TAG_structure_type, name: "Foo", file: !1, line: 7, flags: DIFlagFwdDecl)
-!18 = !DILocalVariable(name: "p", arg: 1, scope: !13, file: !1, line: 11, type: !16)
-!19 = !DILocation(line: 11, scope: !13)
-!20 = !DILocation(line: 12, scope: !13)
-!21 = !DILocation(line: 13, scope: !13)
-
+!10 = !{!11}
+!11 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !12, size: 64)
+!12 = !DICompositeType(tag: DW_TAG_structure_type, name: "Foo", file: !8, line: 1, flags: DIFlagFwdDecl, identifier: ".?AUFoo@@")
+!13 = !DILocation(line: 7, scope: !7)
+!14 = distinct !DISubprogram(name: "call_virtual", scope: !8, file: !8, line: 9, type: !15, scopeLine: 9, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !18)
+!15 = !DISubroutineType(types: !16)
+!16 = !{!17, !11}
+!17 = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
+!18 = !{!19}
+!19 = !DILocalVariable(name: "p", arg: 1, scope: !14, file: !8, line: 9, type: !11)
+!20 = !DILocation(line: 0, scope: !14)
+!21 = !DILocation(line: 10, scope: !14)
+!22 = !{!23, !23, i64 0}
+!23 = !{!"vtable pointer", !24, i64 0}
+!24 = !{!"Simple C++ TBAA"}
+!25 = !DILocation(line: 11, scope: !14)
+!26 = distinct !DISubprogram(name: "call_multiple", scope: !8, file: !8, line: 13, type: !27, scopeLine: 13, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !2)
+!27 = !DISubroutineType(types: !28)
+!28 = !{!17}
+!29 = !DILocation(line: 14, scope: !26)
+!30 = !DILocation(line: 15, scope: !26)
+!31 = !DILocation(line: 16, scope: !26)

@@ -553,10 +553,17 @@ static Value *cloneConstantExprWithNewAddressSpace(
     if (Value *NewOperand = ValueWithNewAddrSpace.lookup(Operand)) {
       IsNew = true;
       NewOperands.push_back(cast<Constant>(NewOperand));
-    } else {
-      // Otherwise, reuses the old operand.
-      NewOperands.push_back(Operand);
+      continue;
     }
+    if (auto CExpr = dyn_cast<ConstantExpr>(Operand))
+      if (Value *NewOperand = cloneConstantExprWithNewAddressSpace(
+              CExpr, NewAddrSpace, ValueWithNewAddrSpace)) {
+        IsNew = true;
+        NewOperands.push_back(cast<Constant>(NewOperand));
+        continue;
+      }
+    // Otherwise, reuses the old operand.
+    NewOperands.push_back(Operand);
   }
 
   // If !IsNew, we will replace the Value with itself. However, replaced values
@@ -999,8 +1006,12 @@ bool InferAddressSpaces::rewriteWithNewAddressSpaces(
         }
 
         // Otherwise, replaces the use with flat(NewV).
-        if (Instruction *I = dyn_cast<Instruction>(V)) {
-          BasicBlock::iterator InsertPos = std::next(I->getIterator());
+        if (Instruction *Inst = dyn_cast<Instruction>(V)) {
+          // Don't create a copy of the original addrspacecast.
+          if (U == V && isa<AddrSpaceCastInst>(V))
+            continue;
+
+          BasicBlock::iterator InsertPos = std::next(Inst->getIterator());
           while (isa<PHINode>(InsertPos))
             ++InsertPos;
           U.set(new AddrSpaceCastInst(NewV, V->getType(), "", &*InsertPos));

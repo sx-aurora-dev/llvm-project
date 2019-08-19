@@ -26,30 +26,22 @@
 
 namespace lldb_private {
 class Address;
-}
-namespace lldb_private {
 class DataExtractor;
-}
-namespace lldb_private {
 class ObjectFile;
-}
-namespace lldb_private {
 class Section;
-}
-namespace lldb_private {
 class Stream;
-}
-namespace lldb_private {
 class Target;
-}
-
-namespace lldb_private {
 
 class SectionList {
 public:
   typedef std::vector<lldb::SectionSP> collection;
   typedef collection::iterator iterator;
   typedef collection::const_iterator const_iterator;
+
+  const_iterator begin() const { return m_sections.begin(); }
+  const_iterator end() const { return m_sections.end(); }
+  const_iterator begin() { return m_sections.begin(); }
+  const_iterator end() { return m_sections.end(); }
 
   SectionList();
 

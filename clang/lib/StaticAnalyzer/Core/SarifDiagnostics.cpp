@@ -43,10 +43,10 @@ public:
 };
 } // end anonymous namespace
 
-void ento::createSarifDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
-                                         PathDiagnosticConsumers &C,
-                                         const std::string &Output,
-                                         const Preprocessor &) {
+void ento::createSarifDiagnosticConsumer(
+    AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
+    const std::string &Output, const Preprocessor &,
+    const cross_tu::CrossTranslationUnitContext &) {
   C.push_back(new SarifDiagnostics(AnalyzerOpts, Output));
 }
 
@@ -191,15 +191,16 @@ static json::Object createLocation(json::Object &&PhysicalLocation,
 
 static Importance calculateImportance(const PathDiagnosticPiece &Piece) {
   switch (Piece.getKind()) {
-  case PathDiagnosticPiece::Kind::Call:
-  case PathDiagnosticPiece::Kind::Macro:
-  case PathDiagnosticPiece::Kind::Note:
+  case PathDiagnosticPiece::Call:
+  case PathDiagnosticPiece::Macro:
+  case PathDiagnosticPiece::Note:
+  case PathDiagnosticPiece::PopUp:
     // FIXME: What should be reported here?
     break;
-  case PathDiagnosticPiece::Kind::Event:
+  case PathDiagnosticPiece::Event:
     return Piece.getTagStr() == "ConditionBRVisitor" ? Importance::Important
                                                      : Importance::Essential;
-  case PathDiagnosticPiece::Kind::ControlFlow:
+  case PathDiagnosticPiece::ControlFlow:
     return Importance::Unimportant;
   }
   return Importance::Unimportant;
@@ -334,7 +335,7 @@ void SarifDiagnostics::FlushDiagnosticsImpl(
   // file can become large very quickly, so decoding into JSON to append a run
   // may be an expensive operation.
   std::error_code EC;
-  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::F_Text);
+  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::OF_Text);
   if (EC) {
     llvm::errs() << "warning: could not create file: " << EC.message() << '\n';
     return;
@@ -344,5 +345,5 @@ void SarifDiagnostics::FlushDiagnosticsImpl(
        "http://json.schemastore.org/sarif-2.0.0-csd.2.beta.2018-11-28"},
       {"version", "2.0.0-csd.2.beta.2018-11-28"},
       {"runs", json::Array{createRun(Diags)}}};
-  OS << llvm::formatv("{0:2}", json::Value(std::move(Sarif)));
+  OS << llvm::formatv("{0:2}\n", json::Value(std::move(Sarif)));
 }

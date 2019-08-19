@@ -462,13 +462,16 @@ public:
     // TODO: Instead of copying the input file as is, deactivate the section
     // that is no longer needed.
 
-    StringRef Content;
-    CurrentSection->getContents(Content);
+    Expected<StringRef> Content = CurrentSection->getContents();
+    if (!Content) {
+      consumeError(Content.takeError());
+      return;
+    }
 
-    if (Content.size() < 2)
+    if (Content->size() < 2)
       OS.write(Input.getBufferStart(), Input.getBufferSize());
     else
-      OS.write(Content.data(), Content.size());
+      OS.write(Content->data(), Content->size());
   }
 
   void WriteHeader(raw_fd_ostream &OS,
@@ -556,7 +559,7 @@ public:
       // Write the bitcode contents to the temporary file.
       {
         std::error_code EC;
-        raw_fd_ostream BitcodeFile(BitcodeFileName, EC, sys::fs::F_None);
+        raw_fd_ostream BitcodeFile(BitcodeFileName, EC, sys::fs::OF_None);
         if (EC) {
           errs() << "error: unable to open temporary file.\n";
           return true;
@@ -761,7 +764,7 @@ static bool BundleFiles() {
   std::error_code EC;
 
   // Create output file.
-  raw_fd_ostream OutputFile(OutputFileNames.front(), EC, sys::fs::F_None);
+  raw_fd_ostream OutputFile(OutputFileNames.front(), EC, sys::fs::OF_None);
 
   if (EC) {
     errs() << "error: Can't open file " << OutputFileNames.front() << ".\n";
@@ -859,7 +862,7 @@ static bool UnbundleFiles() {
 
     // Check if the output file can be opened and copy the bundle to it.
     std::error_code EC;
-    raw_fd_ostream OutputFile(Output->second, EC, sys::fs::F_None);
+    raw_fd_ostream OutputFile(Output->second, EC, sys::fs::OF_None);
     if (EC) {
       errs() << "error: Can't open file " << Output->second << ": "
              << EC.message() << "\n";
@@ -879,7 +882,7 @@ static bool UnbundleFiles() {
   if (Worklist.size() == TargetNames.size()) {
     for (auto &E : Worklist) {
       std::error_code EC;
-      raw_fd_ostream OutputFile(E.second, EC, sys::fs::F_None);
+      raw_fd_ostream OutputFile(E.second, EC, sys::fs::OF_None);
       if (EC) {
         errs() << "error: Can't open file " << E.second << ": " << EC.message()
                << "\n";
@@ -902,7 +905,7 @@ static bool UnbundleFiles() {
   // If we still have any elements in the worklist, create empty files for them.
   for (auto &E : Worklist) {
     std::error_code EC;
-    raw_fd_ostream OutputFile(E.second, EC, sys::fs::F_None);
+    raw_fd_ostream OutputFile(E.second, EC, sys::fs::OF_None);
     if (EC) {
       errs() << "error: Can't open file " << E.second << ": "  << EC.message()
              << "\n";
