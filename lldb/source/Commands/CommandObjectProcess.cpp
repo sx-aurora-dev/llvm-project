@@ -193,7 +193,10 @@ protected:
     if (target->GetDisableSTDIO())
       m_options.launch_info.GetFlags().Set(eLaunchFlagDisableSTDIO);
 
-    m_options.launch_info.GetEnvironment() = target->GetEnvironment();
+    // Merge the launch info environment with the target environment.
+    Environment target_env = target->GetEnvironment();
+    m_options.launch_info.GetEnvironment().insert(target_env.begin(),
+                                                  target_env.end());
 
     if (!target_settings_argv0.empty()) {
       m_options.launch_info.GetArguments().AppendArgument(
@@ -252,59 +255,8 @@ protected:
   ProcessLaunchCommandOptions m_options;
 };
 
-//#define SET1 LLDB_OPT_SET_1
-//#define SET2 LLDB_OPT_SET_2
-//#define SET3 LLDB_OPT_SET_3
-//
-// OptionDefinition
-// CommandObjectProcessLaunch::CommandOptions::g_option_table[] =
-//{
-//  // clang-format off
-//  {SET1 | SET2 | SET3, false, "stop-at-entry", 's', OptionParser::eNoArgument,
-//  nullptr, 0, eArgTypeNone,          "Stop at the entry point of the program
-//  when launching a process."},
-//  {SET1,               false, "stdin",         'i',
-//  OptionParser::eRequiredArgument, nullptr, 0, eArgTypeDirectoryName,
-//  "Redirect stdin for the process to <path>."},
-//  {SET1,               false, "stdout",        'o',
-//  OptionParser::eRequiredArgument, nullptr, 0, eArgTypeDirectoryName,
-//  "Redirect stdout for the process to <path>."},
-//  {SET1,               false, "stderr",        'e',
-//  OptionParser::eRequiredArgument, nullptr, 0, eArgTypeDirectoryName,
-//  "Redirect stderr for the process to <path>."},
-//  {SET1 | SET2 | SET3, false, "plugin",        'p',
-//  OptionParser::eRequiredArgument, nullptr, 0, eArgTypePlugin,        "Name of
-//  the process plugin you want to use."},
-//  {       SET2,        false, "tty",           't',
-//  OptionParser::eOptionalArgument, nullptr, 0, eArgTypeDirectoryName, "Start
-//  the process in a terminal. If <path> is specified, look for a terminal whose
-//  name contains <path>, else start the process in a new terminal."},
-//  {              SET3, false, "no-stdio",      'n', OptionParser::eNoArgument,
-//  nullptr, 0, eArgTypeNone,          "Do not set up for terminal I/O to go to
-//  running process."},
-//  {SET1 | SET2 | SET3, false, "working-dir",   'w',
-//  OptionParser::eRequiredArgument, nullptr, 0, eArgTypeDirectoryName, "Set the
-//  current working directory to <path> when running the inferior."},
-//  {0, false, nullptr, 0, 0, nullptr, 0, eArgTypeNone, nullptr}
-//  // clang-format on
-//};
-//
-//#undef SET1
-//#undef SET2
-//#undef SET3
-
-// CommandObjectProcessAttach
-
-static constexpr OptionDefinition g_process_attach_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "continue",         'c', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,         "Immediately continue the process once attached." },
-  { LLDB_OPT_SET_ALL, false, "plugin",           'P', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypePlugin,       "Name of the process plugin you want to use." },
-  { LLDB_OPT_SET_1,   false, "pid",              'p', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypePid,          "The process ID of an existing process to attach to." },
-  { LLDB_OPT_SET_2,   false, "name",             'n', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeProcessName,  "The name of the process to attach to." },
-  { LLDB_OPT_SET_2,   false, "include-existing", 'i', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,         "Include existing processes when doing attach -w." },
-  { LLDB_OPT_SET_2,   false, "waitfor",          'w', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,         "Wait for the process with <process-name> to launch." },
-    // clang-format on
-};
+#define LLDB_OPTIONS_process_attach
+#include "CommandOptions.inc"
 
 #pragma mark CommandObjectProcessAttach
 class CommandObjectProcessAttach : public CommandObjectProcessLaunchOrAttach {
@@ -545,11 +497,8 @@ protected:
 
 // CommandObjectProcessContinue
 
-static constexpr OptionDefinition g_process_continue_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "ignore-count",'i', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeUnsignedInteger, "Ignore <N> crossings of the breakpoint (if it exists) for the currently selected thread." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_process_continue
+#include "CommandOptions.inc"
 
 #pragma mark CommandObjectProcessContinue
 
@@ -706,11 +655,8 @@ protected:
 };
 
 // CommandObjectProcessDetach
-static constexpr OptionDefinition g_process_detach_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_1, false, "keep-stopped", 's', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean, "Whether or not the process should be kept stopped on detach (if possible)." },
-    // clang-format on
-};
+#define LLDB_OPTIONS_process_detach
+#include "CommandOptions.inc"
 
 #pragma mark CommandObjectProcessDetach
 
@@ -802,12 +748,8 @@ protected:
 };
 
 // CommandObjectProcessConnect
-
-static constexpr OptionDefinition g_process_connect_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "plugin", 'p', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypePlugin, "Name of the process plugin you want to use." },
-    // clang-format on
-};
+#define LLDB_OPTIONS_process_connect
+#include "CommandOptions.inc"
 
 #pragma mark CommandObjectProcessConnect
 
@@ -927,12 +869,8 @@ public:
 };
 
 // CommandObjectProcessLoad
-
-static constexpr OptionDefinition g_process_load_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "install", 'i', OptionParser::eOptionalArgument, nullptr, {}, 0, eArgTypePath, "Install the shared library to the target. If specified without an argument then the library will installed in the current working directory." },
-    // clang-format on
-};
+#define LLDB_OPTIONS_process_load
+#include "CommandOptions.inc"
 
 #pragma mark CommandObjectProcessLoad
 
@@ -1311,14 +1249,8 @@ public:
 };
 
 // CommandObjectProcessHandle
-
-static constexpr OptionDefinition g_process_handle_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_1, false, "stop",   's', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean, "Whether or not the process should be stopped if the signal is received." },
-  { LLDB_OPT_SET_1, false, "notify", 'n', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean, "Whether or not the debugger should notify the user if the signal is received." },
-  { LLDB_OPT_SET_1, false, "pass",   'p', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean, "Whether or not the signal should be passed to the process." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_process_handle
+#include "CommandOptions.inc"
 
 #pragma mark CommandObjectProcessHandle
 

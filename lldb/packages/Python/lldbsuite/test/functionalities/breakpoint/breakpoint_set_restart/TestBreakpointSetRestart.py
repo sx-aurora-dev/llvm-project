@@ -2,7 +2,6 @@
 Test inferior restart when breakpoint is set on running target.
 """
 
-import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -13,7 +12,7 @@ class BreakpointSetRestart(TestBase):
     mydir = TestBase.compute_mydir(__file__)
     BREAKPOINT_TEXT = 'Set a breakpoint here'
 
-    @expectedFlakeyNetBSD
+    @skipIfNetBSD
     def test_breakpoint_set_restart(self):
         self.build()
 

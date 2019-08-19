@@ -29,13 +29,12 @@ RegularExpression::RegularExpression() : m_re(), m_comp_err(1), m_preg() {
 // Constructor that compiles "re" using "flags" and stores the resulting
 // compiled regular expression into this object.
 RegularExpression::RegularExpression(llvm::StringRef str)
-    : m_re(), m_comp_err(1), m_preg() {
-  memset(&m_preg, 0, sizeof(m_preg));
+    : RegularExpression() {
   Compile(str);
 }
 
-RegularExpression::RegularExpression(const RegularExpression &rhs) {
-  memset(&m_preg, 0, sizeof(m_preg));
+RegularExpression::RegularExpression(const RegularExpression &rhs)
+    : RegularExpression() {
   Compile(rhs.GetText());
 }
 
@@ -121,23 +120,6 @@ bool RegularExpression::Match::GetMatchAtIndex(
     } else if (m_matches[idx].rm_eo > m_matches[idx].rm_so) {
       match_str = s.substr(m_matches[idx].rm_so,
                            m_matches[idx].rm_eo - m_matches[idx].rm_so);
-      return true;
-    }
-  }
-  return false;
-}
-
-bool RegularExpression::Match::GetMatchSpanningIndices(
-    llvm::StringRef s, uint32_t idx1, uint32_t idx2,
-    llvm::StringRef &match_str) const {
-  if (idx1 < m_matches.size() && idx2 < m_matches.size()) {
-    if (m_matches[idx1].rm_so == m_matches[idx2].rm_eo) {
-      // Matched the empty string...
-      match_str = llvm::StringRef();
-      return true;
-    } else if (m_matches[idx1].rm_so < m_matches[idx2].rm_eo) {
-      match_str = s.substr(m_matches[idx1].rm_so,
-                           m_matches[idx2].rm_eo - m_matches[idx1].rm_so);
       return true;
     }
   }

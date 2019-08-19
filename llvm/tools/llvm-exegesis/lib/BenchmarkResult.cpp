@@ -9,6 +9,7 @@
 #include "BenchmarkResult.h"
 #include "BenchmarkRunner.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/bit.h"
@@ -374,6 +375,7 @@ InstructionBenchmark::readYamls(const LLVMState &State,
 
 llvm::Error InstructionBenchmark::writeYamlTo(const LLVMState &State,
                                               llvm::raw_ostream &OS) {
+  auto Cleanup = make_scope_exit([&] { OS.flush(); });
   llvm::yaml::Output Yout(OS, nullptr /*Ctx*/, 200 /*WrapColumn*/);
   YamlContext Context(State);
   Yout.beginDocuments();
@@ -404,7 +406,7 @@ llvm::Error InstructionBenchmark::writeYaml(const LLVMState &State,
     int ResultFD = 0;
     if (auto E = llvm::errorCodeToError(
             openFileForWrite(Filename, ResultFD, llvm::sys::fs::CD_CreateAlways,
-                             llvm::sys::fs::F_Text))) {
+                             llvm::sys::fs::OF_Text))) {
       return E;
     }
     llvm::raw_fd_ostream Ostr(ResultFD, true /*shouldClose*/);

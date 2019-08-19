@@ -44,24 +44,6 @@ using __sanitizer::atomic_load;
 using __sanitizer::atomic_store;
 using __sanitizer::atomic_uintptr_t;
 
-bool IsInInterceptorScope() {
-  Thread *t = GetCurrentThread();
-  return t && t->InInterceptorScope();
-}
-
-struct InterceptorScope {
-  InterceptorScope() {
-    Thread *t = GetCurrentThread();
-    if (t)
-      t->EnterInterceptorScope();
-  }
-  ~InterceptorScope() {
-    Thread *t = GetCurrentThread();
-    if (t)
-      t->LeaveInterceptorScope();
-  }
-};
-
 static uptr allocated_for_dlsym;
 static const uptr kDlsymAllocPoolSize = 1024;
 static uptr alloc_memory_for_dlsym[kDlsymAllocPoolSize];
@@ -234,8 +216,8 @@ INTERCEPTOR(int, pthread_create, void *th, void *attr,
 #endif
 
 #if HWASAN_WITH_INTERCEPTORS
-DEFINE_REAL(int, vfork);
-DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork);
+DEFINE_REAL(int, vfork)
+DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork)
 #endif
 
 static void BeforeFork() {
@@ -253,11 +235,6 @@ INTERCEPTOR(int, fork, void) {
   AfterFork();
   return pid;
 }
-
-
-struct HwasanInterceptorContext {
-  bool in_interceptor_scope;
-};
 
 namespace __hwasan {
 

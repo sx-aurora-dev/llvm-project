@@ -781,7 +781,7 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
       break;
     case wasm::R_WASM_GLOBAL_INDEX_LEB:
       // R_WASM_GLOBAL_INDEX_LEB are can be used against function and data
-      // symbols to refer to thier GOT enties.
+      // symbols to refer to their GOT entries.
       if (!isValidGlobalSymbol(Reloc.Index) &&
           !isValidDataSymbol(Reloc.Index) &&
           !isValidFunctionSymbol(Reloc.Index))
@@ -1427,14 +1427,12 @@ uint64_t WasmObjectFile::getSectionSize(DataRefImpl Sec) const {
   return S.Content.size();
 }
 
-std::error_code WasmObjectFile::getSectionContents(DataRefImpl Sec,
-                                                   StringRef &Res) const {
+Expected<ArrayRef<uint8_t>>
+WasmObjectFile::getSectionContents(DataRefImpl Sec) const {
   const WasmSection &S = Sections[Sec.d.a];
   // This will never fail since wasm sections can never be empty (user-sections
   // must have a name and non-user sections each have a defined structure).
-  Res = StringRef(reinterpret_cast<const char *>(S.Content.data()),
-                  S.Content.size());
-  return std::error_code();
+  return S.Content;
 }
 
 uint64_t WasmObjectFile::getSectionAlignment(DataRefImpl Sec) const {

@@ -286,12 +286,12 @@ CIAndOrigins BuildIndirect(CIAndOrigins &CI) {
 llvm::Error ParseSource(const std::string &Path, CompilerInstance &CI,
                         ASTConsumer &Consumer) {
   SourceManager &SM = CI.getSourceManager();
-  const FileEntry *FE = CI.getFileManager().getFile(Path);
+  auto FE = CI.getFileManager().getFile(Path);
   if (!FE) {
     return llvm::make_error<llvm::StringError>(
         llvm::Twine("Couldn't open ", Path), std::error_code());
   }
-  SM.setMainFileID(SM.createFileID(FE, SourceLocation(), SrcMgr::C_User));
+  SM.setMainFileID(SM.createFileID(*FE, SourceLocation(), SrcMgr::C_User));
   ParseAST(CI.getPreprocessor(), &Consumer, CI.getASTContext());
   return llvm::Error::success();
 }
@@ -316,8 +316,9 @@ llvm::Expected<CIAndOrigins> Parse(const std::string &Path,
   auto &CG = *static_cast<CodeGenerator *>(ASTConsumers.back().get());
 
   if (ShouldDumpAST)
-    ASTConsumers.push_back(CreateASTDumper(nullptr /*Dump to stdout.*/,
-                                           "", true, false, false));
+    ASTConsumers.push_back(
+        CreateASTDumper(nullptr /*Dump to stdout.*/, "", true, false, false,
+                        clang::ADOF_Default));
 
   CI.getDiagnosticClient().BeginSourceFile(
       CI.getCompilerInstance().getLangOpts(),
