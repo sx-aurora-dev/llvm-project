@@ -100,7 +100,7 @@ bool DWARFVerifier::DieRangeInfo::intersects(const DieRangeInfo &RHS) const {
 bool DWARFVerifier::verifyUnitHeader(const DWARFDataExtractor DebugInfoData,
                                      uint32_t *Offset, unsigned UnitIndex,
                                      uint8_t &UnitType, bool &isUnitDWARF64) {
-  uint32_t AbbrOffset, Length;
+  uint64_t AbbrOffset, Length;
   uint8_t AddrSize = 0;
   uint16_t Version;
   bool Success = true;
@@ -113,23 +113,20 @@ bool DWARFVerifier::verifyUnitHeader(const DWARFDataExtractor DebugInfoData,
 
   uint32_t OffsetStart = *Offset;
   Length = DebugInfoData.getU32(Offset);
-  if (Length == UINT32_MAX) {
+  if (Length == dwarf::DW_LENGTH_DWARF64) {
+    Length = DebugInfoData.getU64(Offset);
     isUnitDWARF64 = true;
-    OS << format(
-        "Unit[%d] is in 64-bit DWARF format; cannot verify from this point.\n",
-        UnitIndex);
-    return false;
   }
   Version = DebugInfoData.getU16(Offset);
 
   if (Version >= 5) {
     UnitType = DebugInfoData.getU8(Offset);
     AddrSize = DebugInfoData.getU8(Offset);
-    AbbrOffset = DebugInfoData.getU32(Offset);
+    AbbrOffset = isUnitDWARF64 ? DebugInfoData.getU64(Offset) : DebugInfoData.getU32(Offset);
     ValidType = dwarf::isUnitType(UnitType);
   } else {
     UnitType = 0;
-    AbbrOffset = DebugInfoData.getU32(Offset);
+    AbbrOffset = isUnitDWARF64 ? DebugInfoData.getU64(Offset) : DebugInfoData.getU32(Offset);
     AddrSize = DebugInfoData.getU8(Offset);
   }
 
@@ -157,7 +154,7 @@ bool DWARFVerifier::verifyUnitHeader(const DWARFDataExtractor DebugInfoData,
     if (!ValidAddrSize)
       note() << "The address size is unsupported.\n";
   }
-  *Offset = OffsetStart + Length + 4;
+  *Offset = OffsetStart + Length + (isUnitDWARF64 ? 12 : 4);
   return Success;
 }
 
@@ -488,7 +485,7 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
       if (auto DebugLoc = DCtx.getDebugLoc())
         if (auto LocList = DebugLoc->getLocationListAtOffset(*LocOffset))
           for (const auto &Entry : LocList->Entries)
-            VerifyLocationExpr({Entry.Loc.data(), Entry.Loc.size()});
+            VerifyLocationExpr(Entry.Loc);
     }
     break;
   }
@@ -1300,7 +1297,7 @@ static bool isVariableIndexable(const DWARFDie &Die, DWARFContext &DCtx) {
       if (const DWARFDebugLoc::LocationList *LocList =
               DebugLoc->getLocationListAtOffset(*Offset)) {
         if (any_of(LocList->Entries, [&](const DWARFDebugLoc::Entry &E) {
-              return ContainsInterestingOperators({E.Loc.data(), E.Loc.size()});
+              return ContainsInterestingOperators(E.Loc);
             }))
           return true;
       }

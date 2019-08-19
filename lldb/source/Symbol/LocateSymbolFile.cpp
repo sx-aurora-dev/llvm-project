@@ -1,4 +1,4 @@
-//===-- Symbols.cpp ---------------------------------------------*- C++ -*-===//
+//===-- LocateSymbolFile.cpp ------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -55,9 +55,10 @@ static bool FileAtPathContainsArchAndUUID(const FileSpec &file_fspec,
       bool got_spec = module_specs.GetModuleSpecAtIndex(i, spec);
       UNUSED_IF_ASSERT_DISABLED(got_spec);
       assert(got_spec);
-      if ((uuid == NULL || (spec.GetUUIDPtr() && spec.GetUUID() == *uuid)) &&
-          (arch == NULL || (spec.GetArchitecturePtr() &&
-                            spec.GetArchitecture().IsCompatibleMatch(*arch)))) {
+      if ((uuid == nullptr || (spec.GetUUIDPtr() && spec.GetUUID() == *uuid)) &&
+          (arch == nullptr ||
+           (spec.GetArchitecturePtr() &&
+            spec.GetArchitecture().IsCompatibleMatch(*arch)))) {
         return true;
       }
     }
@@ -156,8 +157,8 @@ static bool LocateDSYMInVincinityOfExecutable(const ModuleSpec &module_spec,
     if (::LookForDsymNextToExecutablePath(module_spec, exec_fspec,
                                           dsym_fspec)) {
       if (log) {
-        log->Printf("dSYM with matching UUID & arch found at %s",
-                    dsym_fspec.GetPath().c_str());
+        LLDB_LOGF(log, "dSYM with matching UUID & arch found at %s",
+                  dsym_fspec.GetPath().c_str());
       }
       return true;
     } else {
@@ -188,8 +189,8 @@ static bool LocateDSYMInVincinityOfExecutable(const ModuleSpec &module_spec,
           if (::LookForDsymNextToExecutablePath(module_spec, parent_dirs,
                                                 dsym_fspec)) {
             if (log) {
-              log->Printf("dSYM with matching UUID & arch found at %s",
-                          dsym_fspec.GetPath().c_str());
+              LLDB_LOGF(log, "dSYM with matching UUID & arch found at %s",
+                        dsym_fspec.GetPath().c_str());
             }
             return true;
           }

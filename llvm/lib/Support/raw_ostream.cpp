@@ -612,7 +612,7 @@ raw_fd_ostream::~raw_fd_ostream() {
   // destructing raw_ostream objects which may have errors.
   if (has_error())
     report_fatal_error("IO failure on output stream: " + error().message(),
-                       /*GenCrashDiag=*/false);
+                       /*gen_crash_diag=*/false);
 }
 
 #if defined(_WIN32)
@@ -843,7 +843,7 @@ void raw_fd_ostream::anchor() {}
 raw_ostream &llvm::outs() {
   // Set buffer settings to model stdout behavior.
   std::error_code EC;
-  static raw_fd_ostream S("-", EC, sys::fs::F_None);
+  static raw_fd_ostream S("-", EC, sys::fs::OF_None);
   assert(!EC);
   return S;
 }

@@ -196,6 +196,12 @@ std::pair<ProgramStateRef, SVal> ExprEngine::prepareForObjectConstruction(
           // able to find construction context at all.
           break;
         }
+        if (isa<BlockInvocationContext>(CallerLCtx)) {
+          // Unwrap block invocation contexts. They're mostly part of
+          // the current stack frame.
+          CallerLCtx = CallerLCtx->getParent();
+          assert(!isa<BlockInvocationContext>(CallerLCtx));
+        }
         return prepareForObjectConstruction(
             cast<Expr>(SFC->getCallSite()), State, CallerLCtx,
             RTC->getConstructionContext(), CallOpts);
@@ -317,7 +323,8 @@ std::pair<ProgramStateRef, SVal> ExprEngine::prepareForObjectConstruction(
       CallEventManager &CEMgr = getStateManager().getCallEventManager();
       SVal V = UnknownVal();
       auto getArgLoc = [&](CallEventRef<> Caller) -> Optional<SVal> {
-        const LocationContext *FutureSFC = Caller->getCalleeStackFrame();
+        const LocationContext *FutureSFC =
+            Caller->getCalleeStackFrame(currBldrCtx->blockCount());
         // Return early if we are unable to reliably foresee
         // the future stack frame.
         if (!FutureSFC)
@@ -336,7 +343,7 @@ std::pair<ProgramStateRef, SVal> ExprEngine::prepareForObjectConstruction(
         // because this-argument is implemented as a normal argument in
         // operator call expressions but not in operator declarations.
         const VarRegion *VR = Caller->getParameterLocation(
-            *Caller->getAdjustedParameterIndex(Idx));
+            *Caller->getAdjustedParameterIndex(Idx), currBldrCtx->blockCount());
         if (!VR)
           return None;
 
@@ -422,25 +429,20 @@ void ExprEngine::VisitCXXConstructExpr(const CXXConstructExpr *CE,
         prepareForObjectConstruction(CE, State, LCtx, CC, CallOpts);
     break;
   }
-  case CXXConstructExpr::CK_VirtualBase:
+  case CXXConstructExpr::CK_VirtualBase: {
     // Make sure we are not calling virtual base class initializers twice.
     // Only the most-derived object should initialize virtual base classes.
-    if (const Stmt *Outer = LCtx->getStackFrame()->getCallSite()) {
-      const CXXConstructExpr *OuterCtor = dyn_cast<CXXConstructExpr>(Outer);
-      if (OuterCtor) {
-        switch (OuterCtor->getConstructionKind()) {
-        case CXXConstructExpr::CK_NonVirtualBase:
-        case CXXConstructExpr::CK_VirtualBase:
-          // Bail out!
-          destNodes.Add(Pred);
-          return;
-        case CXXConstructExpr::CK_Complete:
-        case CXXConstructExpr::CK_Delegating:
-          break;
-        }
-      }
-    }
+    const auto *OuterCtor = dyn_cast_or_null<CXXConstructExpr>(
+        LCtx->getStackFrame()->getCallSite());
+    assert(
+        (!OuterCtor ||
+         OuterCtor->getConstructionKind() == CXXConstructExpr::CK_Complete ||
+         OuterCtor->getConstructionKind() == CXXConstructExpr::CK_Delegating) &&
+        ("This virtual base should have already been initialized by "
+         "the most derived class!"));
+    (void)OuterCtor;
     LLVM_FALLTHROUGH;
+  }
   case CXXConstructExpr::CK_NonVirtualBase:
     // In C++17, classes with non-virtual bases may be aggregates, so they would
     // be initialized as aggregates without a constructor call, so we may have

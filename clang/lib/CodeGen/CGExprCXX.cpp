@@ -10,12 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CodeGenFunction.h"
 #include "CGCUDARuntime.h"
 #include "CGCXXABI.h"
 #include "CGDebugInfo.h"
 #include "CGObjCRuntime.h"
+#include "CodeGenFunction.h"
 #include "ConstantEmitter.h"
+#include "TargetInfo.h"
 #include "clang/Basic/CodeGenOptions.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "llvm/IR/Intrinsics.h"
@@ -90,12 +91,26 @@ RValue CodeGenFunction::EmitCXXMemberOrOperatorCall(
 }
 
 RValue CodeGenFunction::EmitCXXDestructorCall(
-    GlobalDecl Dtor, const CGCallee &Callee, llvm::Value *This,
+    GlobalDecl Dtor, const CGCallee &Callee, llvm::Value *This, QualType ThisTy,
     llvm::Value *ImplicitParam, QualType ImplicitParamTy, const CallExpr *CE) {
+  const CXXMethodDecl *DtorDecl = cast<CXXMethodDecl>(Dtor.getDecl());
+
+  assert(!ThisTy.isNull());
+  assert(ThisTy->getAsCXXRecordDecl() == DtorDecl->getParent() &&
+         "Pointer/Object mixup");
+
+  LangAS SrcAS = ThisTy.getAddressSpace();
+  LangAS DstAS = DtorDecl->getMethodQualifiers().getAddressSpace();
+  if (SrcAS != DstAS) {
+    QualType DstTy = DtorDecl->getThisType();
+    llvm::Type *NewType = CGM.getTypes().ConvertType(DstTy);
+    This = getTargetHooks().performAddrSpaceCast(*this, This, SrcAS, DstAS,
+                                                 NewType);
+  }
+
   CallArgList Args;
-  commonEmitCXXMemberOrOperatorCall(*this, cast<CXXMethodDecl>(Dtor.getDecl()),
-                                    This, ImplicitParam, ImplicitParamTy, CE,
-                                    Args, nullptr);
+  commonEmitCXXMemberOrOperatorCall(*this, DtorDecl, This, ImplicitParam,
+                                    ImplicitParamTy, CE, Args, nullptr);
   return EmitCall(CGM.getTypes().arrangeCXXStructorDeclaration(Dtor), Callee,
                   ReturnValueSlot(), Args);
 }
@@ -345,7 +360,9 @@ RValue CodeGenFunction::EmitCXXMemberOrOperatorMemberCallExpr(
         Callee = CGCallee::forDirect(CGM.GetAddrOfFunction(GD, Ty), GD);
       }
 
-      EmitCXXDestructorCall(GD, Callee, This.getPointer(),
+      QualType ThisTy =
+          IsArrow ? Base->getType()->getPointeeType() : Base->getType();
+      EmitCXXDestructorCall(GD, Callee, This.getPointer(), ThisTy,
                             /*ImplicitParam=*/nullptr,
                             /*ImplicitParamTy=*/QualType(), nullptr);
     }
@@ -681,9 +698,9 @@ static llvm::Value *EmitCXXNewAllocSize(CodeGenFunction &CGF,
   // We multiply the size of all dimensions for NumElements.
   // e.g for 'int[2][3]', ElemType is 'int' and NumElements is 6.
   numElements =
-    ConstantEmitter(CGF).tryEmitAbstract(e->getArraySize(), e->getType());
+    ConstantEmitter(CGF).tryEmitAbstract(*e->getArraySize(), e->getType());
   if (!numElements)
-    numElements = CGF.EmitScalarExpr(e->getArraySize());
+    numElements = CGF.EmitScalarExpr(*e->getArraySize());
   assert(isa<llvm::IntegerType>(numElements->getType()));
 
   // The number of elements can be have an arbitrary integer type;
@@ -693,7 +710,7 @@ static llvm::Value *EmitCXXNewAllocSize(CodeGenFunction &CGF,
   // important way: if the count is negative, it's an error even if
   // the cookie size would bring the total size >= 0.
   bool isSigned
-    = e->getArraySize()->getType()->isSignedIntegerOrEnumerationType();
+    = (*e->getArraySize())->getType()->isSignedIntegerOrEnumerationType();
   llvm::IntegerType *numElementsType
     = cast<llvm::IntegerType>(numElements->getType());
   unsigned numElementsWidth = numElementsType->getBitWidth();
@@ -1277,7 +1294,7 @@ static RValue EmitNewDeleteCall(CodeGenFunction &CGF,
   CGCallee Callee = CGCallee::forDirect(CalleePtr, GlobalDecl(CalleeDecl));
   RValue RV =
       CGF.EmitCall(CGF.CGM.getTypes().arrangeFreeFunctionCall(
-                       Args, CalleeType, /*chainCall=*/false),
+                       Args, CalleeType, /*ChainCall=*/false),
                    Callee, ReturnValueSlot(), Args, &CallOrInvoke);
 
   /// C++1y [expr.new]p10:
@@ -1883,7 +1900,7 @@ static void EmitObjectDelete(CodeGenFunction &CGF,
     CGF.EmitCXXDestructorCall(Dtor, Dtor_Complete,
                               /*ForVirtualBase=*/false,
                               /*Delegating=*/false,
-                              Ptr);
+                              Ptr, ElementType);
   else if (auto Lifetime = ElementType.getObjCLifetime()) {
     switch (Lifetime) {
     case Qualifiers::OCL_None:

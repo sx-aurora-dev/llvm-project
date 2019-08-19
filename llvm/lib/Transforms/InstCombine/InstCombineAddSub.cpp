@@ -872,7 +872,14 @@ Instruction *InstCombiner::foldAddWithConstant(BinaryOperator &Add) {
   if (Instruction *NV = foldBinOpIntoSelectOrPhi(Add))
     return NV;
 
-  Value *X, *Y;
+  Value *X;
+  Constant *Op00C;
+
+  // add (sub C1, X), C2 --> sub (add C1, C2), X
+  if (match(Op0, m_Sub(m_Constant(Op00C), m_Value(X))))
+    return BinaryOperator::CreateSub(ConstantExpr::getAdd(Op00C, Op1C), X);
+
+  Value *Y;
 
   // add (sub X, Y), -1 --> add (not Y), X
   if (match(Op0, m_OneUse(m_Sub(m_Value(X), m_Value(Y)))) &&
@@ -892,6 +899,11 @@ Instruction *InstCombiner::foldAddWithConstant(BinaryOperator &Add) {
   if (!match(Op1, m_APInt(C)))
     return nullptr;
 
+  // (X | C2) + C --> (X | C2) ^ C2 iff (C2 == -C)
+  const APInt *C2;
+  if (match(Op0, m_Or(m_Value(), m_APInt(C2))) && *C2 == -*C)
+    return BinaryOperator::CreateXor(Op0, ConstantInt::get(Add.getType(), *C2));
+
   if (C->isSignMask()) {
     // If wrapping is not allowed, then the addition must set the sign bit:
     // X + (signmask) --> X | signmask
@@ -906,7 +918,6 @@ Instruction *InstCombiner::foldAddWithConstant(BinaryOperator &Add) {
   // Is this add the last step in a convoluted sext?
   // add(zext(xor i16 X, -32768), -32768) --> sext X
   Type *Ty = Add.getType();
-  const APInt *C2;
   if (match(Op0, m_ZExt(m_Xor(m_Value(X), m_APInt(C2)))) &&
       C2->isMinSignedValue() && C2->sext(Ty->getScalarSizeInBits()) == *C)
     return CastInst::Create(Instruction::SExt, X, Ty);
@@ -1191,7 +1202,10 @@ Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
 
   // (A + 1) + ~B --> A - B
   // ~B + (A + 1) --> A - B
-  if (match(&I, m_c_BinOp(m_Add(m_Value(A), m_One()), m_Not(m_Value(B)))))
+  // (~B + A) + 1 --> A - B
+  // (A + ~B) + 1 --> A - B
+  if (match(&I, m_c_BinOp(m_Add(m_Value(A), m_One()), m_Not(m_Value(B)))) ||
+      match(&I, m_BinOp(m_c_Add(m_Not(m_Value(B)), m_Value(A)), m_One())))
     return BinaryOperator::CreateSub(A, B);
 
   // X % C0 + (( X / C0 ) % C1) * C0 => X % (C0 * C1)
@@ -1294,6 +1308,22 @@ Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
   return Changed ? &I : nullptr;
 }
 
+/// Eliminate an op from a linear interpolation (lerp) pattern.
+static Instruction *factorizeLerp(BinaryOperator &I,
+                                  InstCombiner::BuilderTy &Builder) {
+  Value *X, *Y, *Z;
+  if (!match(&I, m_c_FAdd(m_OneUse(m_c_FMul(m_Value(Y),
+                                            m_OneUse(m_FSub(m_FPOne(),
+                                                            m_Value(Z))))),
+                          m_OneUse(m_c_FMul(m_Value(X), m_Deferred(Z))))))
+    return nullptr;
+
+  // (Y * (1.0 - Z)) + (X * Z) --> Y + Z * (X - Y) [8 commuted variants]
+  Value *XY = Builder.CreateFSubFMF(X, Y, &I);
+  Value *MulZ = Builder.CreateFMulFMF(Z, XY, &I);
+  return BinaryOperator::CreateFAddFMF(Y, MulZ, &I);
+}
+
 /// Factor a common operand out of fadd/fsub of fmul/fdiv.
 static Instruction *factorizeFAddFSub(BinaryOperator &I,
                                       InstCombiner::BuilderTy &Builder) {
@@ -1301,6 +1331,10 @@ static Instruction *factorizeFAddFSub(BinaryOperator &I,
           I.getOpcode() == Instruction::FSub) && "Expecting fadd/fsub");
   assert(I.hasAllowReassoc() && I.hasNoSignedZeros() &&
          "FP factorization requires FMF");
+
+  if (Instruction *Lerp = factorizeLerp(I, Builder))
+    return Lerp;
+
   Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
   Value *X, *Y, *Z;
   bool IsFMul;
@@ -1348,17 +1382,32 @@ Instruction *InstCombiner::visitFAdd(BinaryOperator &I) {
   if (Instruction *FoldedFAdd = foldBinOpIntoSelectOrPhi(I))
     return FoldedFAdd;
 
-  Value *LHS = I.getOperand(0), *RHS = I.getOperand(1);
-  Value *X;
   // (-X) + Y --> Y - X
-  if (match(LHS, m_FNeg(m_Value(X))))
-    return BinaryOperator::CreateFSubFMF(RHS, X, &I);
-  // Y + (-X) --> Y - X
-  if (match(RHS, m_FNeg(m_Value(X))))
-    return BinaryOperator::CreateFSubFMF(LHS, X, &I);
+  Value *X, *Y;
+  if (match(&I, m_c_FAdd(m_FNeg(m_Value(X)), m_Value(Y))))
+    return BinaryOperator::CreateFSubFMF(Y, X, &I);
+
+  // Similar to above, but look through fmul/fdiv for the negated term.
+  // (-X * Y) + Z --> Z - (X * Y) [4 commuted variants]
+  Value *Z;
+  if (match(&I, m_c_FAdd(m_OneUse(m_c_FMul(m_FNeg(m_Value(X)), m_Value(Y))),
+                         m_Value(Z)))) {
+    Value *XY = Builder.CreateFMulFMF(X, Y, &I);
+    return BinaryOperator::CreateFSubFMF(Z, XY, &I);
+  }
+  // (-X / Y) + Z --> Z - (X / Y) [2 commuted variants]
+  // (X / -Y) + Z --> Z - (X / Y) [2 commuted variants]
+  if (match(&I, m_c_FAdd(m_OneUse(m_FDiv(m_FNeg(m_Value(X)), m_Value(Y))),
+                         m_Value(Z))) ||
+      match(&I, m_c_FAdd(m_OneUse(m_FDiv(m_Value(X), m_FNeg(m_Value(Y)))),
+                         m_Value(Z)))) {
+    Value *XY = Builder.CreateFDivFMF(X, Y, &I);
+    return BinaryOperator::CreateFSubFMF(Z, XY, &I);
+  }
 
   // Check for (fadd double (sitofp x), y), see if we can merge this into an
   // integer add followed by a promotion.
+  Value *LHS = I.getOperand(0), *RHS = I.getOperand(1);
   if (SIToFPInst *LHSConv = dyn_cast<SIToFPInst>(LHS)) {
     Value *LHSIntVal = LHSConv->getOperand(0);
     Type *FPType = LHSConv->getType();
@@ -1566,6 +1615,12 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
   if (match(Op1, m_OneUse(m_Add(m_Value(X), m_One()))))
     return BinaryOperator::CreateAdd(Builder.CreateNot(X), Op0);
 
+  // Y - ~X --> (X + 1) + Y
+  if (match(Op1, m_OneUse(m_Not(m_Value(X))))) {
+    return BinaryOperator::CreateAdd(
+        Builder.CreateAdd(Op0, ConstantInt::get(I.getType(), 1)), X);
+  }
+
   if (Constant *C = dyn_cast<Constant>(Op0)) {
     bool IsNegate = match(C, m_ZeroInt());
     Value *X;
@@ -1598,8 +1653,13 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
       if (Instruction *R = foldOpIntoPhi(I, PN))
         return R;
 
-    // C-(X+C2) --> (C-C2)-X
     Constant *C2;
+
+    // C-(C2-X) --> X+(C-C2)
+    if (match(Op1, m_Sub(m_Constant(C2), m_Value(X))))
+      return BinaryOperator::CreateAdd(X, ConstantExpr::getSub(C, C2));
+
+    // C-(X+C2) --> (C-C2)-X
     if (match(Op1, m_Add(m_Value(X), m_Constant(C2))))
       return BinaryOperator::CreateSub(ConstantExpr::getSub(C, C2), X);
   }
@@ -1630,13 +1690,9 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
         if (SPF == SPF_ABS || SPF == SPF_NABS) {
           // This is a negate of an ABS/NABS pattern. Just swap the operands
           // of the select.
-          SelectInst *SI = cast<SelectInst>(Op1);
-          Value *TrueVal = SI->getTrueValue();
-          Value *FalseVal = SI->getFalseValue();
-          SI->setTrueValue(FalseVal);
-          SI->setFalseValue(TrueVal);
+          cast<SelectInst>(Op1)->swapValues();
           // Don't swap prof metadata, we didn't change the branch behavior.
-          return replaceInstUsesWith(I, SI);
+          return replaceInstUsesWith(I, Op1);
         }
       }
     }
@@ -1817,6 +1873,68 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
   return Changed ? &I : nullptr;
 }
 
+/// This eliminates floating-point negation in either 'fneg(X)' or
+/// 'fsub(-0.0, X)' form by combining into a constant operand.
+static Instruction *foldFNegIntoConstant(Instruction &I) {
+  Value *X;
+  Constant *C;
+
+  // Fold negation into constant operand. This is limited with one-use because
+  // fneg is assumed better for analysis and cheaper in codegen than fmul/fdiv.
+  // -(X * C) --> X * (-C)
+  // FIXME: It's arguable whether these should be m_OneUse or not. The current
+  // belief is that the FNeg allows for better reassociation opportunities.
+  if (match(&I, m_FNeg(m_OneUse(m_FMul(m_Value(X), m_Constant(C))))))
+    return BinaryOperator::CreateFMulFMF(X, ConstantExpr::getFNeg(C), &I);
+  // -(X / C) --> X / (-C)
+  if (match(&I, m_FNeg(m_OneUse(m_FDiv(m_Value(X), m_Constant(C))))))
+    return BinaryOperator::CreateFDivFMF(X, ConstantExpr::getFNeg(C), &I);
+  // -(C / X) --> (-C) / X
+  if (match(&I, m_FNeg(m_OneUse(m_FDiv(m_Constant(C), m_Value(X))))))
+    return BinaryOperator::CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
+
+  return nullptr;
+}
+
+static Instruction *hoistFNegAboveFMulFDiv(Instruction &I,
+                                           InstCombiner::BuilderTy &Builder) {
+  Value *FNeg;
+  if (!match(&I, m_FNeg(m_Value(FNeg))))
+    return nullptr;
+
+  Value *X, *Y;
+  if (match(FNeg, m_OneUse(m_FMul(m_Value(X), m_Value(Y)))))
+    return BinaryOperator::CreateFMulFMF(Builder.CreateFNegFMF(X, &I), Y, &I);
+
+  if (match(FNeg, m_OneUse(m_FDiv(m_Value(X), m_Value(Y)))))
+    return BinaryOperator::CreateFDivFMF(Builder.CreateFNegFMF(X, &I), Y, &I);
+
+  return nullptr;
+}
+
+Instruction *InstCombiner::visitFNeg(UnaryOperator &I) {
+  Value *Op = I.getOperand(0);
+
+  if (Value *V = SimplifyFNegInst(Op, I.getFastMathFlags(),
+                                  SQ.getWithInstruction(&I)))
+    return replaceInstUsesWith(I, V);
+
+  if (Instruction *X = foldFNegIntoConstant(I))
+    return X;
+
+  Value *X, *Y;
+
+  // If we can ignore the sign of zeros: -(X - Y) --> (Y - X)
+  if (I.hasNoSignedZeros() &&
+      match(Op, m_OneUse(m_FSub(m_Value(X), m_Value(Y)))))
+    return BinaryOperator::CreateFSubFMF(Y, X, &I);
+
+  if (Instruction *R = hoistFNegAboveFMulFDiv(I, Builder))
+    return R;
+
+  return nullptr;
+}
+
 Instruction *InstCombiner::visitFSub(BinaryOperator &I) {
   if (Value *V = SimplifyFSubInst(I.getOperand(0), I.getOperand(1),
                                   I.getFastMathFlags(),
@@ -1832,20 +1950,14 @@ Instruction *InstCombiner::visitFSub(BinaryOperator &I) {
   if (I.hasNoSignedZeros() && match(Op0, m_PosZeroFP()))
     return BinaryOperator::CreateFNegFMF(Op1, &I);
 
+  if (Instruction *X = foldFNegIntoConstant(I))
+    return X;
+
+  if (Instruction *R = hoistFNegAboveFMulFDiv(I, Builder))
+    return R;
+
   Value *X, *Y;
   Constant *C;
-
-  // Fold negation into constant operand. This is limited with one-use because
-  // fneg is assumed better for analysis and cheaper in codegen than fmul/fdiv.
-  // -(X * C) --> X * (-C)
-  if (match(&I, m_FNeg(m_OneUse(m_FMul(m_Value(X), m_Constant(C))))))
-    return BinaryOperator::CreateFMulFMF(X, ConstantExpr::getFNeg(C), &I);
-  // -(X / C) --> X / (-C)
-  if (match(&I, m_FNeg(m_OneUse(m_FDiv(m_Value(X), m_Constant(C))))))
-    return BinaryOperator::CreateFDivFMF(X, ConstantExpr::getFNeg(C), &I);
-  // -(C / X) --> (-C) / X
-  if (match(&I, m_FNeg(m_OneUse(m_FDiv(m_Constant(C), m_Value(X))))))
-    return BinaryOperator::CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
 
   // If Op0 is not -0.0 or we can ignore -0.0: Z - (X - Y) --> Z + (Y - X)
   // Canonicalize to fadd to make analysis easier.
@@ -1884,6 +1996,21 @@ Instruction *InstCombiner::visitFSub(BinaryOperator &I) {
   // X - (fpext(-Y)) --> X + fpext(Y)
   if (match(Op1, m_OneUse(m_FPExt(m_FNeg(m_Value(Y))))))
     return BinaryOperator::CreateFAddFMF(Op0, Builder.CreateFPExt(Y, Ty), &I);
+
+  // Similar to above, but look through fmul/fdiv of the negated value:
+  // Op0 - (-X * Y) --> Op0 + (X * Y)
+  // Op0 - (Y * -X) --> Op0 + (X * Y)
+  if (match(Op1, m_OneUse(m_c_FMul(m_FNeg(m_Value(X)), m_Value(Y))))) {
+    Value *FMul = Builder.CreateFMulFMF(X, Y, &I);
+    return BinaryOperator::CreateFAddFMF(Op0, FMul, &I);
+  }
+  // Op0 - (-X / Y) --> Op0 + (X / Y)
+  // Op0 - (X / -Y) --> Op0 + (X / Y)
+  if (match(Op1, m_OneUse(m_FDiv(m_FNeg(m_Value(X)), m_Value(Y)))) ||
+      match(Op1, m_OneUse(m_FDiv(m_Value(X), m_FNeg(m_Value(Y)))))) {
+    Value *FDiv = Builder.CreateFDivFMF(X, Y, &I);
+    return BinaryOperator::CreateFAddFMF(Op0, FDiv, &I);
+  }
 
   // Handle special cases for FSub with selects feeding the operation
   if (Value *V = SimplifySelectsFeedingBinaryOp(I, Op0, Op1))

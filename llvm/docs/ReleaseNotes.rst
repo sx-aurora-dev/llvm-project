@@ -1,12 +1,12 @@
-========================
-LLVM 9.0.0 Release Notes
-========================
+=========================
+LLVM 10.0.0 Release Notes
+=========================
 
 .. contents::
     :local:
 
 .. warning::
-   These are in-progress notes for the upcoming LLVM 9 release.
+   These are in-progress notes for the upcoming LLVM 10 release.
    Release notes for previous releases can be found on
    `the Download Page <https://releases.llvm.org/download.html>`_.
 
@@ -15,7 +15,7 @@ Introduction
 ============
 
 This document contains the release notes for the LLVM Compiler Infrastructure,
-release 9.0.0.  Here we describe the status of LLVM, including major improvements
+release 10.0.0.  Here we describe the status of LLVM, including major improvements
 from the previous release, improvements in various subprojects of LLVM, and
 some of the current users of the code.  All LLVM releases may be downloaded
 from the `LLVM releases web site <https://llvm.org/releases/>`_.
@@ -40,11 +40,6 @@ Non-comprehensive list of changes in this release
    functionality, or simply have a lot to talk about), see the `NOTE` below
    for adding a new subsection.
 
-* The optimizer will now convert calls to ``memcmp`` into a calls to ``bcmp`` in
-  some circumstances. Users who are building freestanding code (not depending on
-  the platform's libc) without specifying ``-ffreestanding`` may need to either
-  pass ``-fno-builtin-bcmp``, or provide a ``bcmp`` function.
-
 .. NOTE
    If you would like to document a larger change, then you can add a
    subsection about it right here. You can copy the following boilerplate
@@ -58,10 +53,15 @@ Non-comprehensive list of changes in this release
 Changes to the LLVM IR
 ----------------------
 
-* Added ``immarg`` parameter attribute. This indicates an intrinsic
-  parameter is required to be a simple constant. This annotation must
-  be accurate to avoid possible miscompiles.
+* Unnamed function arguments now get printed with their automatically
+  generated name (e.g. "i32 %0") in definitions. This may require front-ends
+  to update their tests; if so there is a script utils/add_argument_names.py
+  that correctly converted 80-90% of Clang tests. Some manual work will almost
+  certainly still be needed.
 
+
+Changes to building LLVM
+------------------------
 
 Changes to the ARM Backend
 --------------------------
@@ -88,8 +88,6 @@ Changes to the X86 Target
 Changes to the AMDGPU Target
 -----------------------------
 
- During this release ...
-
 Changes to the AVR Target
 -----------------------------
 
@@ -113,8 +111,11 @@ Changes to the C API
 Changes to the DAG infrastructure
 ---------------------------------
 
-External Open Source Projects Using LLVM 9
-==========================================
+Changes to LLDB
+===============
+
+External Open Source Projects Using LLVM 10
+===========================================
 
 * A project...
 
