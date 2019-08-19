@@ -138,7 +138,9 @@ void Instruction::dropPoisonGeneratingFlags() {
     cast<GetElementPtrInst>(this)->setIsInBounds(false);
     break;
   }
+  // TODO: FastMathFlags!
 }
+
 
 bool Instruction::isExact() const {
   return cast<PossiblyExactOperator>(this)->isExact();
@@ -673,6 +675,13 @@ void Instruction::setSuccessor(unsigned idx, BasicBlock *B) {
     break;
   }
   llvm_unreachable("not a terminator");
+}
+
+void Instruction::replaceSuccessorWith(BasicBlock *OldBB, BasicBlock *NewBB) {
+  for (unsigned Idx = 0, NumSuccessors = Instruction::getNumSuccessors();
+       Idx != NumSuccessors; ++Idx)
+    if (getSuccessor(Idx) == OldBB)
+      setSuccessor(Idx, NewBB);
 }
 
 Instruction *Instruction::cloneImpl() const {

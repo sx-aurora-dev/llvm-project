@@ -65,6 +65,8 @@ BUILTIN(__builtin_arm_dmb, "vUi", "nc")
 BUILTIN(__builtin_arm_dsb, "vUi", "nc")
 BUILTIN(__builtin_arm_isb, "vUi", "nc")
 
+BUILTIN(__builtin_arm_jcvt, "Zid", "nc")
+
 // Prefetch
 BUILTIN(__builtin_arm_prefetch, "vvC*UiUiUiUi", "nc")
 
@@ -85,6 +87,9 @@ LANGBUILTIN(__wfe,   "v", "",   ALL_MS_LANGUAGES)
 LANGBUILTIN(__wfi,   "v", "",   ALL_MS_LANGUAGES)
 LANGBUILTIN(__sev,   "v", "",   ALL_MS_LANGUAGES)
 LANGBUILTIN(__sevl,  "v", "",   ALL_MS_LANGUAGES)
+
+// Misc
+BUILTIN(__builtin_sponentry, "v*", "c")
 
 TARGET_HEADER_BUILTIN(_BitScanForward, "UcUNi*UNi", "nh", "intrin.h", ALL_MS_LANGUAGES, "")
 TARGET_HEADER_BUILTIN(_BitScanReverse, "UcUNi*UNi", "nh", "intrin.h", ALL_MS_LANGUAGES, "")

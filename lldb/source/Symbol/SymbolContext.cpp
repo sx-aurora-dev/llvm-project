@@ -13,7 +13,6 @@
 #include "lldb/Host/Host.h"
 #include "lldb/Host/StringConvert.h"
 #include "lldb/Symbol/Block.h"
-#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/Symbol.h"
@@ -22,6 +21,7 @@
 #include "lldb/Symbol/Variable.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -46,11 +46,6 @@ SymbolContext::SymbolContext(const TargetSP &t, const ModuleSP &m,
   if (le)
     line_entry = *le;
 }
-
-SymbolContext::SymbolContext(const SymbolContext &rhs)
-    : target_sp(rhs.target_sp), module_sp(rhs.module_sp),
-      comp_unit(rhs.comp_unit), function(rhs.function), block(rhs.block),
-      line_entry(rhs.line_entry), symbol(rhs.symbol), variable(rhs.variable) {}
 
 SymbolContext::SymbolContext(SymbolContextScope *sc_scope)
     : target_sp(), module_sp(), comp_unit(nullptr), function(nullptr),
@@ -506,7 +501,7 @@ bool SymbolContext::GetParentOfInlinedScope(const Address &curr_frame_pc,
         }
 #ifdef LLDB_CONFIGURATION_DEBUG
         else {
-          ObjectFile *objfile = NULL;
+          ObjectFile *objfile = nullptr;
           if (module_sp) {
             SymbolVendor *symbol_vendor = module_sp->GetSymbolVendor();
             if (symbol_vendor) {
@@ -734,7 +729,7 @@ bool SymbolContext::GetAddressRangeFromHereToEndLine(uint32_t end_line,
 
   uint32_t line_index = 0;
   bool found = false;
-  while (1) {
+  while (true) {
     LineEntry this_line;
     line_index = comp_unit->FindLineEntry(line_index, line_entry.line, nullptr,
                                           false, &this_line);

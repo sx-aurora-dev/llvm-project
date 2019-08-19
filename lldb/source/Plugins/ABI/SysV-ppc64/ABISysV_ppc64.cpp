@@ -69,10 +69,8 @@ lldb::ByteOrder ABISysV_ppc64::GetByteOrder() const {
 ABISP
 ABISysV_ppc64::CreateInstance(lldb::ProcessSP process_sp,
                               const ArchSpec &arch) {
-  if (arch.GetTriple().getArch() == llvm::Triple::ppc64 ||
-      arch.GetTriple().getArch() == llvm::Triple::ppc64le) {
+  if (arch.GetTriple().isPPC64())
     return ABISP(new ABISysV_ppc64(process_sp));
-  }
   return ABISP();
 }
 
@@ -1019,6 +1017,7 @@ bool ABISysV_ppc64::CreateDefaultUnwindPlan(UnwindPlan &unwind_plan) {
   unwind_plan.SetSourceName("ppc64 default unwind plan");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolNo);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
+  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetReturnAddressRegister(pc_reg_num);
   return true;
 }

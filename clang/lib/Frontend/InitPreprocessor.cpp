@@ -122,10 +122,10 @@ static void DefineFloatMacros(MacroBuilder &Builder, StringRef Prefix,
                    "4.94065645841246544176568792868221e-324",
                    "1.92592994438723585305597794258492732e-34");
   int MantissaDigits = PickFP(Sem, 11, 24, 53, 64, 106, 113);
-  int Min10Exp = PickFP(Sem, -13, -37, -307, -4931, -291, -4931);
+  int Min10Exp = PickFP(Sem, -4, -37, -307, -4931, -291, -4931);
   int Max10Exp = PickFP(Sem, 4, 38, 308, 4932, 308, 4932);
-  int MinExp = PickFP(Sem, -14, -125, -1021, -16381, -968, -16381);
-  int MaxExp = PickFP(Sem, 15, 128, 1024, 16384, 1024, 16384);
+  int MinExp = PickFP(Sem, -13, -125, -1021, -16381, -968, -16381);
+  int MaxExp = PickFP(Sem, 16, 128, 1024, 16384, 1024, 16384);
   Min = PickFP(Sem, "6.103515625e-5", "1.17549435e-38", "2.2250738585072014e-308",
                "3.36210314311209350626e-4932",
                "2.00416836000897277799610805135016e-292",
@@ -411,7 +411,7 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
       if (LangOpts.OpenCLCPlusPlusVersion == 100)
         Builder.defineMacro("__OPENCL_CPP_VERSION__", "100");
       else
-        llvm_unreachable("Unsupported OpenCL C++ version");
+        llvm_unreachable("Unsupported C++ version for OpenCL");
       Builder.defineMacro("__CL_CPP_VERSION_1_0__", "100");
     } else {
       // OpenCL v1.0 and v1.1 do not have a predefined macro to indicate the
@@ -540,6 +540,8 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_template_template_args", "201611L");
 
   // C++20 features.
+  if (LangOpts.CPlusPlus2a)
+    Builder.defineMacro("__cpp_conditional_explicit", "201806L");
   if (LangOpts.Char8)
     Builder.defineMacro("__cpp_char8_t", "201811L");
   Builder.defineMacro("__cpp_impl_destroying_delete", "201806L");
@@ -602,10 +604,9 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   // Support for #pragma redefine_extname (Sun compatibility)
   Builder.defineMacro("__PRAGMA_REDEFINE_EXTNAME", "1");
 
-  // As sad as it is, enough software depends on the __VERSION__ for version
-  // checks that it is necessary to report 4.2.1 (the base GCC version we claim
-  // compatibility with) first.
-  Builder.defineMacro("__VERSION__", "\"4.2.1 Compatible " +
+  // Previously this macro was set to a string aiming to achieve compatibility
+  // with GCC 4.2.1. Now, just return the full Clang version
+  Builder.defineMacro("__VERSION__", "\"" +
                       Twine(getClangFullCPPVersion()) + "\"");
 
   // Initialize language-specific preprocessor defines.
@@ -1070,8 +1071,7 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro(#Ext);
 #include "clang/Basic/OpenCLExtensions.def"
 
-    auto Arch = TI.getTriple().getArch();
-    if (Arch == llvm::Triple::spir || Arch == llvm::Triple::spir64)
+    if (TI.getTriple().isSPIR())
       Builder.defineMacro("__IMAGE_SUPPORT__");
   }
 

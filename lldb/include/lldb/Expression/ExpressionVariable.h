@@ -20,8 +20,6 @@
 
 namespace lldb_private {
 
-class ClangExpressionVariable;
-
 class ExpressionVariable
     : public std::enable_shared_from_this<ExpressionVariable> {
 public:
@@ -233,6 +231,9 @@ public:
 
   virtual void
   RemovePersistentVariable(lldb::ExpressionVariableSP variable) = 0;
+
+  virtual llvm::Optional<CompilerType>
+  GetCompilerTypeFromPersistentDecl(ConstString type_name) = 0;
 
   virtual lldb::addr_t LookupSymbol(ConstString name);
 

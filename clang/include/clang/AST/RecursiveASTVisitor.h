@@ -1065,6 +1065,9 @@ DEF_TRAVERSE_TYPE(AttributedType,
 
 DEF_TRAVERSE_TYPE(ParenType, { TRY_TO(TraverseType(T->getInnerType())); })
 
+DEF_TRAVERSE_TYPE(MacroQualifiedType,
+                  { TRY_TO(TraverseType(T->getUnderlyingType())); })
+
 DEF_TRAVERSE_TYPE(ElaboratedType, {
   if (T->getQualifier()) {
     TRY_TO(TraverseNestedNameSpecifier(T->getQualifier()));
@@ -1307,6 +1310,9 @@ DEF_TRAVERSE_TYPELOC(TemplateSpecializationType, {
 DEF_TRAVERSE_TYPELOC(InjectedClassNameType, {})
 
 DEF_TRAVERSE_TYPELOC(ParenType, { TRY_TO(TraverseTypeLoc(TL.getInnerLoc())); })
+
+DEF_TRAVERSE_TYPELOC(MacroQualifiedType,
+                     { TRY_TO(TraverseTypeLoc(TL.getInnerLoc())); })
 
 DEF_TRAVERSE_TYPELOC(AttributedType,
                      { TRY_TO(TraverseTypeLoc(TL.getModifiedLoc())); })
@@ -1794,6 +1800,11 @@ DEF_TRAVERSE_DECL(TypeAliasTemplateDecl, {
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
 })
 
+DEF_TRAVERSE_DECL(ConceptDecl, {
+  TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
+  TRY_TO(TraverseStmt(D->getConstraintExpr()));
+})
+
 DEF_TRAVERSE_DECL(UnresolvedUsingTypenameDecl, {
   // A dependent using declaration which was marked with 'typename'.
   //   template<class T> class A : public B<T> { using typename B<T>::foo; };
@@ -2276,6 +2287,10 @@ DEF_TRAVERSE_STMT(CXXStaticCastExpr, {
   TRY_TO(TraverseTypeLoc(S->getTypeInfoAsWritten()->getTypeLoc()));
 })
 
+DEF_TRAVERSE_STMT(BuiltinBitCastExpr, {
+  TRY_TO(TraverseTypeLoc(S->getTypeInfoAsWritten()->getTypeLoc()));
+})
+
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseSynOrSemInitListExpr(
     InitListExpr *S, DataRecursionQueue *Queue) {
@@ -2293,19 +2308,30 @@ bool RecursiveASTVisitor<Derived>::TraverseSynOrSemInitListExpr(
   return true;
 }
 
-// This method is called once for each pair of syntactic and semantic
-// InitListExpr, and it traverses the subtrees defined by the two forms. This
-// may cause some of the children to be visited twice, if they appear both in
-// the syntactic and the semantic form.
+// If shouldVisitImplicitCode() returns false, this method traverses only the
+// syntactic form of InitListExpr.
+// If shouldVisitImplicitCode() return true, this method is called once for
+// each pair of syntactic and semantic InitListExpr, and it traverses the
+// subtrees defined by the two forms. This may cause some of the children to be
+// visited twice, if they appear both in the syntactic and the semantic form.
 //
 // There is no guarantee about which form \p S takes when this method is called.
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseInitListExpr(
     InitListExpr *S, DataRecursionQueue *Queue) {
+  if (S->isSemanticForm() && S->isSyntacticForm()) {
+    // `S` does not have alternative forms, traverse only once.
+    TRY_TO(TraverseSynOrSemInitListExpr(S, Queue));
+    return true;
+  }
   TRY_TO(TraverseSynOrSemInitListExpr(
       S->isSemanticForm() ? S->getSyntacticForm() : S, Queue));
-  TRY_TO(TraverseSynOrSemInitListExpr(
-      S->isSemanticForm() ? S : S->getSemanticForm(), Queue));
+  if (getDerived().shouldVisitImplicitCode()) {
+    // Only visit the semantic form if the clients are interested in implicit
+    // compiler-generated.
+    TRY_TO(TraverseSynOrSemInitListExpr(
+        S->isSemanticForm() ? S : S->getSemanticForm(), Queue));
+  }
   return true;
 }
 
@@ -2423,6 +2449,10 @@ DEF_TRAVERSE_STMT(LambdaExpr, {
     TypeLoc TL = S->getCallOperator()->getTypeSourceInfo()->getTypeLoc();
     FunctionProtoTypeLoc Proto = TL.getAsAdjusted<FunctionProtoTypeLoc>();
 
+    for (Decl *D : S->getExplicitTemplateParameters()) {
+      // Visit explicit template parameters.
+      TRY_TO(TraverseDecl(D));
+    }
     if (S->hasExplicitParameters()) {
       // Visit parameters.
       for (unsigned I = 0, N = Proto.getNumParams(); I != N; ++I)
@@ -2540,6 +2570,8 @@ DEF_TRAVERSE_STMT(PredefinedExpr, {})
 DEF_TRAVERSE_STMT(ShuffleVectorExpr, {})
 DEF_TRAVERSE_STMT(ConvertVectorExpr, {})
 DEF_TRAVERSE_STMT(StmtExpr, {})
+DEF_TRAVERSE_STMT(SourceLocExpr, {})
+
 DEF_TRAVERSE_STMT(UnresolvedLookupExpr, {
   TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
   if (S->hasExplicitTemplateArgs()) {

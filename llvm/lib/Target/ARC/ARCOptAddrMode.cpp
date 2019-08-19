@@ -124,7 +124,7 @@ static bool isAddConstantOp(const MachineInstr &MI, int64_t &Amount) {
   switch (MI.getOpcode()) {
   case ARC::SUB_rru6:
     Sign = -1;
-    // LLVM_FALLTHROUGH
+    LLVM_FALLTHROUGH;
   case ARC::ADD_rru6:
     assert(MI.getOperand(2).isImm() && "Expected immediate operand");
     Amount = Sign * MI.getOperand(2).getImm();
@@ -424,7 +424,7 @@ bool ARCOptAddrMode::canSinkLoadStoreTo(MachineInstr *Ldst, MachineInstr *To) {
   bool IsStore = Ldst->mayStore();
   bool IsLoad = Ldst->mayLoad();
 
-  unsigned ValReg = IsLoad ? Ldst->getOperand(0).getReg() : 0;
+  Register ValReg = IsLoad ? Ldst->getOperand(0).getReg() : Register();
   for (; MI != ME && MI != End; ++MI) {
     if (MI->isDebugValue())
       continue;

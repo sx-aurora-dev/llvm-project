@@ -292,6 +292,8 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
     return nullptr;
 
   // If this is a cast from the same type, merge.
+  Value *Cond = SI.getCondition();
+  Type *CondTy = Cond->getType();
   if (TI->getNumOperands() == 1 && TI->isCast()) {
     Type *FIOpndTy = FI->getOperand(0)->getType();
     if (TI->getOperand(0)->getType() != FIOpndTy)
@@ -299,7 +301,6 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
 
     // The select condition may be a vector. We may only change the operand
     // type if the vector width remains the same (and matches the condition).
-    Type *CondTy = SI.getCondition()->getType();
     if (CondTy->isVectorTy()) {
       if (!FIOpndTy->isVectorTy())
         return nullptr;
@@ -326,10 +327,22 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
 
     // Fold this by inserting a select from the input values.
     Value *NewSI =
-        Builder.CreateSelect(SI.getCondition(), TI->getOperand(0),
-                             FI->getOperand(0), SI.getName() + ".v", &SI);
+        Builder.CreateSelect(Cond, TI->getOperand(0), FI->getOperand(0),
+                             SI.getName() + ".v", &SI);
     return CastInst::Create(Instruction::CastOps(TI->getOpcode()), NewSI,
                             TI->getType());
+  }
+
+  // Cond ? -X : -Y --> -(Cond ? X : Y)
+  Value *X, *Y;
+  if (match(TI, m_FNeg(m_Value(X))) && match(FI, m_FNeg(m_Value(Y))) &&
+      (TI->hasOneUse() || FI->hasOneUse())) {
+    Value *NewSel = Builder.CreateSelect(Cond, X, Y, SI.getName() + ".v", &SI);
+    // TODO: Remove the hack for the binop form when the unary op is optimized
+    //       properly with all IR passes.
+    if (TI->getOpcode() != Instruction::FNeg)
+      return BinaryOperator::CreateFNegFMF(NewSel, cast<BinaryOperator>(TI));
+    return UnaryOperator::CreateFNeg(NewSel);
   }
 
   // Only handle binary operators (including two-operand getelementptr) with
@@ -373,13 +386,12 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
   // If the select condition is a vector, the operands of the original select's
   // operands also must be vectors. This may not be the case for getelementptr
   // for example.
-  if (SI.getCondition()->getType()->isVectorTy() &&
-      (!OtherOpT->getType()->isVectorTy() ||
-       !OtherOpF->getType()->isVectorTy()))
+  if (CondTy->isVectorTy() && (!OtherOpT->getType()->isVectorTy() ||
+                               !OtherOpF->getType()->isVectorTy()))
     return nullptr;
 
   // If we reach here, they do have operations in common.
-  Value *NewSI = Builder.CreateSelect(SI.getCondition(), OtherOpT, OtherOpF,
+  Value *NewSI = Builder.CreateSelect(Cond, OtherOpT, OtherOpF,
                                       SI.getName() + ".v", &SI);
   Value *Op0 = MatchIsOpZero ? MatchOp : NewSI;
   Value *Op1 = MatchIsOpZero ? NewSI : MatchOp;
@@ -517,6 +529,46 @@ static Instruction *foldSelectICmpAndAnd(Type *SelType, const ICmpInst *Cmp,
   Value *MaskedX = Builder.CreateAnd(X, FullMask);
   Value *ICmpNeZero = Builder.CreateIsNotNull(MaskedX);
   return new ZExtInst(ICmpNeZero, SelType);
+}
+
+/// We want to turn:
+///   (select (icmp sgt x, C), lshr (X, Y), ashr (X, Y)); iff C s>= -1
+///   (select (icmp slt x, C), ashr (X, Y), lshr (X, Y)); iff C s>= 0
+/// into:
+///   ashr (X, Y)
+static Value *foldSelectICmpLshrAshr(const ICmpInst *IC, Value *TrueVal,
+                                     Value *FalseVal,
+                                     InstCombiner::BuilderTy &Builder) {
+  ICmpInst::Predicate Pred = IC->getPredicate();
+  Value *CmpLHS = IC->getOperand(0);
+  Value *CmpRHS = IC->getOperand(1);
+  if (!CmpRHS->getType()->isIntOrIntVectorTy())
+    return nullptr;
+
+  Value *X, *Y;
+  unsigned Bitwidth = CmpRHS->getType()->getScalarSizeInBits();
+  if ((Pred != ICmpInst::ICMP_SGT ||
+       !match(CmpRHS,
+              m_SpecificInt_ICMP(ICmpInst::ICMP_SGE, APInt(Bitwidth, -1)))) &&
+      (Pred != ICmpInst::ICMP_SLT ||
+       !match(CmpRHS,
+              m_SpecificInt_ICMP(ICmpInst::ICMP_SGE, APInt(Bitwidth, 0)))))
+    return nullptr;
+
+  // Canonicalize so that ashr is in FalseVal.
+  if (Pred == ICmpInst::ICMP_SLT)
+    std::swap(TrueVal, FalseVal);
+
+  if (match(TrueVal, m_LShr(m_Value(X), m_Value(Y))) &&
+      match(FalseVal, m_AShr(m_Specific(X), m_Specific(Y))) &&
+      match(CmpLHS, m_Specific(X))) {
+    const auto *Ashr = cast<Instruction>(FalseVal);
+    // if lshr is not exact and ashr is, this new ashr must not be exact.
+    bool IsExact = Ashr->isExact() && cast<Instruction>(TrueVal)->isExact();
+    return Builder.CreateAShr(X, Y, IC->getName(), IsExact);
+  }
+
+  return nullptr;
 }
 
 /// We want to turn:
@@ -1098,6 +1150,9 @@ Instruction *InstCombiner::foldSelectInstWithICmp(SelectInst &SI,
     return V;
 
   if (Value *V = foldSelectICmpAndOr(ICI, TrueVal, FalseVal, Builder))
+    return replaceInstUsesWith(SI, V);
+
+  if (Value *V = foldSelectICmpLshrAshr(ICI, TrueVal, FalseVal, Builder))
     return replaceInstUsesWith(SI, V);
 
   if (Value *V = foldSelectCttzCtlz(ICI, TrueVal, FalseVal, Builder))
@@ -1854,37 +1909,55 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
 
       // NOTE: if we wanted to, this is where to detect MIN/MAX
     }
+  }
 
-    // Canonicalize select with fcmp to fabs(). -0.0 makes this tricky. We need
-    // fast-math-flags (nsz) or fsub with +0.0 (not fneg) for this to work. We
-    // also require nnan because we do not want to unintentionally change the
-    // sign of a NaN value.
-    Value *X = FCI->getOperand(0);
-    FCmpInst::Predicate Pred = FCI->getPredicate();
-    if (match(FCI->getOperand(1), m_AnyZeroFP()) && FCI->hasNoNaNs()) {
-      // (X <= +/-0.0) ? (0.0 - X) : X --> fabs(X)
-      // (X >  +/-0.0) ? X : (0.0 - X) --> fabs(X)
-      if ((X == FalseVal && Pred == FCmpInst::FCMP_OLE &&
-           match(TrueVal, m_FSub(m_PosZeroFP(), m_Specific(X)))) ||
-          (X == TrueVal && Pred == FCmpInst::FCMP_OGT &&
-           match(FalseVal, m_FSub(m_PosZeroFP(), m_Specific(X))))) {
-        Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, X, FCI);
-        return replaceInstUsesWith(SI, Fabs);
-      }
-      // With nsz:
-      // (X <  +/-0.0) ? -X : X --> fabs(X)
-      // (X <= +/-0.0) ? -X : X --> fabs(X)
-      // (X >  +/-0.0) ? X : -X --> fabs(X)
-      // (X >= +/-0.0) ? X : -X --> fabs(X)
-      if (FCI->hasNoSignedZeros() &&
-          ((X == FalseVal && match(TrueVal, m_FNeg(m_Specific(X))) &&
-            (Pred == FCmpInst::FCMP_OLT || Pred == FCmpInst::FCMP_OLE)) ||
-           (X == TrueVal && match(FalseVal, m_FNeg(m_Specific(X))) &&
-            (Pred == FCmpInst::FCMP_OGT || Pred == FCmpInst::FCMP_OGE)))) {
-        Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, X, FCI);
-        return replaceInstUsesWith(SI, Fabs);
-      }
-    }
+  // Canonicalize select with fcmp to fabs(). -0.0 makes this tricky. We need
+  // fast-math-flags (nsz) or fsub with +0.0 (not fneg) for this to work. We
+  // also require nnan because we do not want to unintentionally change the
+  // sign of a NaN value.
+  // FIXME: These folds should test/propagate FMF from the select, not the
+  //        fsub or fneg.
+  // (X <= +/-0.0) ? (0.0 - X) : X --> fabs(X)
+  Instruction *FSub;
+  if (match(CondVal, m_FCmp(Pred, m_Specific(FalseVal), m_AnyZeroFP())) &&
+      match(TrueVal, m_FSub(m_PosZeroFP(), m_Specific(FalseVal))) &&
+      match(TrueVal, m_Instruction(FSub)) && FSub->hasNoNaNs() &&
+      (Pred == FCmpInst::FCMP_OLE || Pred == FCmpInst::FCMP_ULE)) {
+    Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, FalseVal, FSub);
+    return replaceInstUsesWith(SI, Fabs);
+  }
+  // (X >  +/-0.0) ? X : (0.0 - X) --> fabs(X)
+  if (match(CondVal, m_FCmp(Pred, m_Specific(TrueVal), m_AnyZeroFP())) &&
+      match(FalseVal, m_FSub(m_PosZeroFP(), m_Specific(TrueVal))) &&
+      match(FalseVal, m_Instruction(FSub)) && FSub->hasNoNaNs() &&
+      (Pred == FCmpInst::FCMP_OGT || Pred == FCmpInst::FCMP_UGT)) {
+    Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, TrueVal, FSub);
+    return replaceInstUsesWith(SI, Fabs);
+  }
+  // With nnan and nsz:
+  // (X <  +/-0.0) ? -X : X --> fabs(X)
+  // (X <= +/-0.0) ? -X : X --> fabs(X)
+  Instruction *FNeg;
+  if (match(CondVal, m_FCmp(Pred, m_Specific(FalseVal), m_AnyZeroFP())) &&
+      match(TrueVal, m_FNeg(m_Specific(FalseVal))) &&
+      match(TrueVal, m_Instruction(FNeg)) &&
+      FNeg->hasNoNaNs() && FNeg->hasNoSignedZeros() &&
+      (Pred == FCmpInst::FCMP_OLT || Pred == FCmpInst::FCMP_OLE ||
+       Pred == FCmpInst::FCMP_ULT || Pred == FCmpInst::FCMP_ULE)) {
+    Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, FalseVal, FNeg);
+    return replaceInstUsesWith(SI, Fabs);
+  }
+  // With nnan and nsz:
+  // (X >  +/-0.0) ? X : -X --> fabs(X)
+  // (X >= +/-0.0) ? X : -X --> fabs(X)
+  if (match(CondVal, m_FCmp(Pred, m_Specific(TrueVal), m_AnyZeroFP())) &&
+      match(FalseVal, m_FNeg(m_Specific(TrueVal))) &&
+      match(FalseVal, m_Instruction(FNeg)) &&
+      FNeg->hasNoNaNs() && FNeg->hasNoSignedZeros() &&
+      (Pred == FCmpInst::FCMP_OGT || Pred == FCmpInst::FCMP_OGE ||
+       Pred == FCmpInst::FCMP_UGT || Pred == FCmpInst::FCMP_UGE)) {
+    Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, TrueVal, FNeg);
+    return replaceInstUsesWith(SI, Fabs);
   }
 
   // See if we are selecting two values based on a comparison of the two values.
@@ -1998,6 +2071,19 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
       if (Instruction *I = factorizeMinMaxTree(SPF, LHS, RHS, Builder))
         return I;
     }
+  }
+
+  // Canonicalize select of FP values where NaN and -0.0 are not valid as
+  // minnum/maxnum intrinsics.
+  if (isa<FPMathOperator>(SI) && SI.hasNoNaNs() && SI.hasNoSignedZeros()) {
+    Value *X, *Y;
+    if (match(&SI, m_OrdFMax(m_Value(X), m_Value(Y))))
+      return replaceInstUsesWith(
+          SI, Builder.CreateBinaryIntrinsic(Intrinsic::maxnum, X, Y, &SI));
+
+    if (match(&SI, m_OrdFMin(m_Value(X), m_Value(Y))))
+      return replaceInstUsesWith(
+          SI, Builder.CreateBinaryIntrinsic(Intrinsic::minnum, X, Y, &SI));
   }
 
   // See if we can fold the select into a phi node if the condition is a select.

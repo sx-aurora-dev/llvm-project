@@ -2245,10 +2245,14 @@ void VarDecl::setInit(Expr *I) {
   Init = I;
 }
 
-bool VarDecl::isUsableInConstantExpressions(ASTContext &C) const {
+bool VarDecl::mightBeUsableInConstantExpressions(ASTContext &C) const {
   const LangOptions &Lang = C.getLangOpts();
 
   if (!Lang.CPlusPlus)
+    return false;
+
+  // Function parameters are never usable in constant expressions.
+  if (isa<ParmVarDecl>(this))
     return false;
 
   // In C++11, any variable of reference type can be used in a constant
@@ -2270,6 +2274,22 @@ bool VarDecl::isUsableInConstantExpressions(ASTContext &C) const {
   // Additionally, in C++11, non-volatile constexpr variables can be used in
   // constant expressions.
   return Lang.CPlusPlus11 && isConstexpr();
+}
+
+bool VarDecl::isUsableInConstantExpressions(ASTContext &Context) const {
+  // C++2a [expr.const]p3:
+  //   A variable is usable in constant expressions after its initializing
+  //   declaration is encountered...
+  const VarDecl *DefVD = nullptr;
+  const Expr *Init = getAnyInitializer(DefVD);
+  if (!Init || Init->isValueDependent() || getType()->isDependentType())
+    return false;
+  //   ... if it is a constexpr variable, or it is of reference type or of
+  //   const-qualified integral or enumeration type, ...
+  if (!DefVD->mightBeUsableInConstantExpressions(Context))
+    return false;
+  //   ... and its initializer is a constant initializer.
+  return DefVD->checkInitIsICE();
 }
 
 /// Convert the initializer for this declaration to the elaborated EvaluatedStmt
@@ -2302,7 +2322,7 @@ APValue *VarDecl::evaluateValue(
   // first time it is evaluated. FIXME: The notes won't always be emitted the
   // first time we try evaluation, so might not be produced at all.
   if (Eval->WasEvaluated)
-    return Eval->Evaluated.isUninit() ? nullptr : &Eval->Evaluated;
+    return Eval->Evaluated.isAbsent() ? nullptr : &Eval->Evaluated;
 
   const auto *Init = cast<Expr>(Eval->Value);
   assert(!Init->isValueDependent());
@@ -2397,6 +2417,10 @@ bool VarDecl::checkInitIsICE() const {
   return Eval->IsICE;
 }
 
+bool VarDecl::isParameterPack() const {
+  return isa<PackExpansionType>(getType());
+}
+
 template<typename DeclT>
 static DeclT *getDefinitionOrSelf(DeclT *D) {
   assert(D);
@@ -2414,48 +2438,61 @@ bool VarDecl::isNonEscapingByref() const {
 }
 
 VarDecl *VarDecl::getTemplateInstantiationPattern() const {
-  // If it's a variable template specialization, find the template or partial
-  // specialization from which it was instantiated.
-  if (auto *VDTemplSpec = dyn_cast<VarTemplateSpecializationDecl>(this)) {
-    auto From = VDTemplSpec->getInstantiatedFrom();
-    if (auto *VTD = From.dyn_cast<VarTemplateDecl *>()) {
-      while (auto *NewVTD = VTD->getInstantiatedFromMemberTemplate()) {
-        if (NewVTD->isMemberSpecialization())
-          break;
-        VTD = NewVTD;
-      }
-      return getDefinitionOrSelf(VTD->getTemplatedDecl());
-    }
-    if (auto *VTPSD =
-            From.dyn_cast<VarTemplatePartialSpecializationDecl *>()) {
-      while (auto *NewVTPSD = VTPSD->getInstantiatedFromMember()) {
-        if (NewVTPSD->isMemberSpecialization())
-          break;
-        VTPSD = NewVTPSD;
-      }
-      return getDefinitionOrSelf<VarDecl>(VTPSD);
-    }
-  }
+  const VarDecl *VD = this;
 
-  if (MemberSpecializationInfo *MSInfo = getMemberSpecializationInfo()) {
+  // If this is an instantiated member, walk back to the template from which
+  // it was instantiated.
+  if (MemberSpecializationInfo *MSInfo = VD->getMemberSpecializationInfo()) {
     if (isTemplateInstantiation(MSInfo->getTemplateSpecializationKind())) {
-      VarDecl *VD = getInstantiatedFromStaticDataMember();
+      VD = VD->getInstantiatedFromStaticDataMember();
       while (auto *NewVD = VD->getInstantiatedFromStaticDataMember())
         VD = NewVD;
-      return getDefinitionOrSelf(VD);
     }
   }
 
-  if (VarTemplateDecl *VarTemplate = getDescribedVarTemplate()) {
-    while (VarTemplate->getInstantiatedFromMemberTemplate()) {
-      if (VarTemplate->isMemberSpecialization())
+  // If it's an instantiated variable template specialization, find the
+  // template or partial specialization from which it was instantiated.
+  if (auto *VDTemplSpec = dyn_cast<VarTemplateSpecializationDecl>(VD)) {
+    if (isTemplateInstantiation(VDTemplSpec->getTemplateSpecializationKind())) {
+      auto From = VDTemplSpec->getInstantiatedFrom();
+      if (auto *VTD = From.dyn_cast<VarTemplateDecl *>()) {
+        while (!VTD->isMemberSpecialization()) {
+          auto *NewVTD = VTD->getInstantiatedFromMemberTemplate();
+          if (!NewVTD)
+            break;
+          VTD = NewVTD;
+        }
+        return getDefinitionOrSelf(VTD->getTemplatedDecl());
+      }
+      if (auto *VTPSD =
+              From.dyn_cast<VarTemplatePartialSpecializationDecl *>()) {
+        while (!VTPSD->isMemberSpecialization()) {
+          auto *NewVTPSD = VTPSD->getInstantiatedFromMember();
+          if (!NewVTPSD)
+            break;
+          VTPSD = NewVTPSD;
+        }
+        return getDefinitionOrSelf<VarDecl>(VTPSD);
+      }
+    }
+  }
+
+  // If this is the pattern of a variable template, find where it was
+  // instantiated from. FIXME: Is this necessary?
+  if (VarTemplateDecl *VarTemplate = VD->getDescribedVarTemplate()) {
+    while (!VarTemplate->isMemberSpecialization()) {
+      auto *NewVT = VarTemplate->getInstantiatedFromMemberTemplate();
+      if (!NewVT)
         break;
-      VarTemplate = VarTemplate->getInstantiatedFromMemberTemplate();
+      VarTemplate = NewVT;
     }
 
     return getDefinitionOrSelf(VarTemplate->getTemplatedDecl());
   }
-  return nullptr;
+
+  if (VD == this)
+    return nullptr;
+  return getDefinitionOrSelf(const_cast<VarDecl*>(VD));
 }
 
 VarDecl *VarDecl::getInstantiatedFromStaticDataMember() const {
@@ -2471,6 +2508,17 @@ TemplateSpecializationKind VarDecl::getTemplateSpecializationKind() const {
 
   if (MemberSpecializationInfo *MSI = getMemberSpecializationInfo())
     return MSI->getTemplateSpecializationKind();
+
+  return TSK_Undeclared;
+}
+
+TemplateSpecializationKind
+VarDecl::getTemplateSpecializationKindForInstantiation() const {
+  if (MemberSpecializationInfo *MSI = getMemberSpecializationInfo())
+    return MSI->getTemplateSpecializationKind();
+
+  if (const auto *Spec = dyn_cast<VarTemplateSpecializationDecl>(this))
+    return Spec->getSpecializationKind();
 
   return TSK_Undeclared;
 }
@@ -2535,15 +2583,14 @@ void VarDecl::setTemplateSpecializationKind(TemplateSpecializationKind TSK,
   if (VarTemplateSpecializationDecl *Spec =
           dyn_cast<VarTemplateSpecializationDecl>(this)) {
     Spec->setSpecializationKind(TSK);
-    if (TSK != TSK_ExplicitSpecialization && PointOfInstantiation.isValid() &&
+    if (TSK != TSK_ExplicitSpecialization &&
+        PointOfInstantiation.isValid() &&
         Spec->getPointOfInstantiation().isInvalid()) {
       Spec->setPointOfInstantiation(PointOfInstantiation);
       if (ASTMutationListener *L = getASTContext().getASTMutationListener())
         L->InstantiationRequested(this);
     }
-  }
-
-  if (MemberSpecializationInfo *MSI = getMemberSpecializationInfo()) {
+  } else if (MemberSpecializationInfo *MSI = getMemberSpecializationInfo()) {
     MSI->setTemplateSpecializationKind(TSK);
     if (TSK != TSK_ExplicitSpecialization && PointOfInstantiation.isValid() &&
         MSI->getPointOfInstantiation().isInvalid()) {
@@ -2660,10 +2707,6 @@ bool ParmVarDecl::hasDefaultArg() const {
          !Init.isNull();
 }
 
-bool ParmVarDecl::isParameterPack() const {
-  return isa<PackExpansionType>(getType());
-}
-
 void ParmVarDecl::setParameterIndexLarge(unsigned parameterIndex) {
   getASTContext().setParameterIndex(this, parameterIndex);
   ParmVarDeclBits.ParameterIndex = ParameterIndexSentinel;
@@ -2681,7 +2724,8 @@ FunctionDecl::FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC,
                            SourceLocation StartLoc,
                            const DeclarationNameInfo &NameInfo, QualType T,
                            TypeSourceInfo *TInfo, StorageClass S,
-                           bool isInlineSpecified, bool isConstexprSpecified)
+                           bool isInlineSpecified,
+                           ConstexprSpecKind ConstexprKind)
     : DeclaratorDecl(DK, DC, NameInfo.getLoc(), NameInfo.getName(), T, TInfo,
                      StartLoc),
       DeclContext(DK), redeclarable_base(C), ODRHash(0),
@@ -2690,7 +2734,6 @@ FunctionDecl::FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC,
   FunctionDeclBits.SClass = S;
   FunctionDeclBits.IsInline = isInlineSpecified;
   FunctionDeclBits.IsInlineSpecified = isInlineSpecified;
-  FunctionDeclBits.IsExplicitSpecified = false;
   FunctionDeclBits.IsVirtualAsWritten = false;
   FunctionDeclBits.IsPure = false;
   FunctionDeclBits.HasInheritedPrototype = false;
@@ -2702,7 +2745,7 @@ FunctionDecl::FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC,
   FunctionDeclBits.IsExplicitlyDefaulted = false;
   FunctionDeclBits.HasImplicitReturnZero = false;
   FunctionDeclBits.IsLateTemplateParsed = false;
-  FunctionDeclBits.IsConstexpr = isConstexprSpecified;
+  FunctionDeclBits.ConstexprKind = ConstexprKind;
   FunctionDeclBits.InstantiationIsPending = false;
   FunctionDeclBits.UsesSEHTry = false;
   FunctionDeclBits.HasSkippedBody = false;
@@ -2938,6 +2981,8 @@ bool FunctionDecl::isExternC() const {
 }
 
 bool FunctionDecl::isInExternCContext() const {
+  if (hasAttr<OpenCLKernelAttr>())
+    return true;
   return getLexicalDeclContext()->isExternCContext();
 }
 
@@ -3472,12 +3517,13 @@ FunctionDecl *FunctionDecl::getTemplateInstantiationPattern() const {
     return nullptr;
 
   if (FunctionTemplateDecl *Primary = getPrimaryTemplate()) {
-    while (Primary->getInstantiatedFromMemberTemplate()) {
-      // If we have hit a point where the user provided a specialization of
-      // this template, we're done looking.
-      if (Primary->isMemberSpecialization())
+    // If we hit a point where the user provided a specialization of this
+    // template, we're done looking.
+    while (!Primary->isMemberSpecialization()) {
+      auto *NewPrimary = Primary->getInstantiatedFromMemberTemplate();
+      if (!NewPrimary)
         break;
-      Primary = Primary->getInstantiatedFromMemberTemplate();
+      Primary = NewPrimary;
     }
 
     return getDefinitionOrSelf(Primary->getTemplatedDecl());
@@ -3867,6 +3913,39 @@ bool FieldDecl::isZeroLengthBitField(const ASTContext &Ctx) const {
          getBitWidthValue(Ctx) == 0;
 }
 
+bool FieldDecl::isZeroSize(const ASTContext &Ctx) const {
+  if (isZeroLengthBitField(Ctx))
+    return true;
+
+  // C++2a [intro.object]p7:
+  //   An object has nonzero size if it
+  //     -- is not a potentially-overlapping subobject, or
+  if (!hasAttr<NoUniqueAddressAttr>())
+    return false;
+
+  //     -- is not of class type, or
+  const auto *RT = getType()->getAs<RecordType>();
+  if (!RT)
+    return false;
+  const RecordDecl *RD = RT->getDecl()->getDefinition();
+  if (!RD) {
+    assert(isInvalidDecl() && "valid field has incomplete type");
+    return false;
+  }
+
+  //     -- [has] virtual member functions or virtual base classes, or
+  //     -- has subobjects of nonzero size or bit-fields of nonzero length
+  const auto *CXXRD = cast<CXXRecordDecl>(RD);
+  if (!CXXRD->isEmpty())
+    return false;
+
+  // Otherwise, [...] the circumstances under which the object has zero size
+  // are implementation-defined.
+  // FIXME: This might be Itanium ABI specific; we don't yet know what the MS
+  // ABI will do.
+  return true;
+}
+
 unsigned FieldDecl::getFieldIndex() const {
   const FieldDecl *Canonical = getCanonicalDecl();
   if (Canonical != this)
@@ -4173,6 +4252,9 @@ RecordDecl::RecordDecl(Kind DK, TagKind TK, const ASTContext &C,
   setNonTrivialToPrimitiveDefaultInitialize(false);
   setNonTrivialToPrimitiveCopy(false);
   setNonTrivialToPrimitiveDestroy(false);
+  setHasNonTrivialToPrimitiveDefaultInitializeCUnion(false);
+  setHasNonTrivialToPrimitiveDestructCUnion(false);
+  setHasNonTrivialToPrimitiveCopyCUnion(false);
   setParamDestroyedInCallee(false);
   setArgPassingRestrictions(APK_CanPassInRegs);
 }
@@ -4496,13 +4578,12 @@ FunctionDecl *FunctionDecl::Create(ASTContext &C, DeclContext *DC,
                                    SourceLocation StartLoc,
                                    const DeclarationNameInfo &NameInfo,
                                    QualType T, TypeSourceInfo *TInfo,
-                                   StorageClass SC,
-                                   bool isInlineSpecified,
+                                   StorageClass SC, bool isInlineSpecified,
                                    bool hasWrittenPrototype,
-                                   bool isConstexprSpecified) {
+                                   ConstexprSpecKind ConstexprKind) {
   FunctionDecl *New =
       new (C, DC) FunctionDecl(Function, C, DC, StartLoc, NameInfo, T, TInfo,
-                               SC, isInlineSpecified, isConstexprSpecified);
+                               SC, isInlineSpecified, ConstexprKind);
   New->setHasWrittenPrototype(hasWrittenPrototype);
   return New;
 }
@@ -4510,7 +4591,7 @@ FunctionDecl *FunctionDecl::Create(ASTContext &C, DeclContext *DC,
 FunctionDecl *FunctionDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
   return new (C, ID) FunctionDecl(Function, C, nullptr, SourceLocation(),
                                   DeclarationNameInfo(), QualType(), nullptr,
-                                  SC_None, false, false);
+                                  SC_None, false, CSK_unspecified);
 }
 
 BlockDecl *BlockDecl::Create(ASTContext &C, DeclContext *DC, SourceLocation L) {

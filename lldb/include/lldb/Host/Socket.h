@@ -39,12 +39,12 @@ typedef int NativeSocket;
 
 class Socket : public IOObject {
 public:
-  typedef enum {
+  enum SocketProtocol {
     ProtocolTcp,
     ProtocolUdp,
     ProtocolUnixDomain,
     ProtocolUnixAbstract
-  } SocketProtocol;
+  };
 
   static const NativeSocket kInvalidSocketValue;
 
@@ -101,6 +101,9 @@ public:
   static bool DecodeHostAndPort(llvm::StringRef host_and_port,
                                 std::string &host_str, std::string &port_str,
                                 int32_t &port, Status *error_ptr);
+
+  // If this Socket is connected then return the URI used to connect.
+  virtual std::string GetRemoteConnectionURI() const { return ""; };
 
 protected:
   Socket(SocketProtocol protocol, bool should_close,

@@ -584,23 +584,23 @@ void X86FrameLowering::emitStackProbeInline(MachineFunction &MF,
   // registers. For the prolog expansion we use RAX, RCX and RDX.
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetRegisterClass *RegClass = &X86::GR64RegClass;
-  const unsigned SizeReg = InProlog ? (unsigned)X86::RAX
+  const Register SizeReg = InProlog ? X86::RAX
                                     : MRI.createVirtualRegister(RegClass),
-                 ZeroReg = InProlog ? (unsigned)X86::RCX
+                 ZeroReg = InProlog ? X86::RCX
                                     : MRI.createVirtualRegister(RegClass),
-                 CopyReg = InProlog ? (unsigned)X86::RDX
+                 CopyReg = InProlog ? X86::RDX
                                     : MRI.createVirtualRegister(RegClass),
-                 TestReg = InProlog ? (unsigned)X86::RDX
+                 TestReg = InProlog ? X86::RDX
                                     : MRI.createVirtualRegister(RegClass),
-                 FinalReg = InProlog ? (unsigned)X86::RDX
+                 FinalReg = InProlog ? X86::RDX
                                      : MRI.createVirtualRegister(RegClass),
-                 RoundedReg = InProlog ? (unsigned)X86::RDX
+                 RoundedReg = InProlog ? X86::RDX
                                        : MRI.createVirtualRegister(RegClass),
-                 LimitReg = InProlog ? (unsigned)X86::RCX
+                 LimitReg = InProlog ? X86::RCX
                                      : MRI.createVirtualRegister(RegClass),
-                 JoinReg = InProlog ? (unsigned)X86::RCX
+                 JoinReg = InProlog ? X86::RCX
                                     : MRI.createVirtualRegister(RegClass),
-                 ProbeReg = InProlog ? (unsigned)X86::RCX
+                 ProbeReg = InProlog ? X86::RCX
                                      : MRI.createVirtualRegister(RegClass);
 
   // SP-relative offsets where we can save RCX and RDX.
@@ -872,6 +872,17 @@ void X86FrameLowering::BuildStackAlignAND(MachineBasicBlock &MBB,
   MI->getOperand(3).setIsDead();
 }
 
+bool X86FrameLowering::has128ByteRedZone(const MachineFunction& MF) const {
+  // x86-64 (non Win64) has a 128 byte red zone which is guaranteed not to be
+  // clobbered by any interrupt handler.
+  assert(&STI == &MF.getSubtarget<X86Subtarget>() &&
+         "MF used frame lowering for wrong subtarget");
+  const Function &Fn = MF.getFunction();
+  const bool IsWin64CC = STI.isCallingConvWin64(Fn.getCallingConv());
+  return Is64Bit && !IsWin64CC && !Fn.hasFnAttribute(Attribute::NoRedZone);
+}
+
+
 /// emitPrologue - Push callee-saved registers onto the stack, which
 /// automatically adjust the stack pointer. Adjust the stack pointer to allocate
 /// space for local variables. Also emit labels used by the exception handler to
@@ -976,7 +987,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR;
   bool IsClrFunclet = IsFunclet && FnHasClrFunclet;
   bool HasFP = hasFP(MF);
-  bool IsWin64CC = STI.isCallingConvWin64(Fn.getCallingConv());
   bool IsWin64Prologue = MF.getTarget().getMCAsmInfo()->usesWindowsCFI();
   bool NeedsWin64CFI = IsWin64Prologue && Fn.needsUnwindTableEntry();
   // FIXME: Emit FPO data for EH funclets.
@@ -1030,12 +1040,11 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // pointer, calls, or dynamic alloca then we do not need to adjust the
   // stack pointer (we fit in the Red Zone). We also check that we don't
   // push and pop from the stack.
-  if (Is64Bit && !Fn.hasFnAttribute(Attribute::NoRedZone) &&
+  if (has128ByteRedZone(MF) &&
       !TRI->needsStackRealignment(MF) &&
       !MFI.hasVarSizedObjects() &&             // No dynamic alloca.
       !MFI.adjustsStack() &&                   // No calls.
       !UseStackProbe &&                        // No stack probes.
-      !IsWin64CC &&                            // Win64 has no Red Zone
       !MFI.hasCopyImplyingStackAdjustment() && // Don't push and pop.
       !MF.shouldSplitStack()) {                // Regular stack
     uint64_t MinSize = X86FI->getCalleeSavedFrameSize();
@@ -1897,8 +1906,7 @@ X86FrameLowering::getFrameIndexReferencePreferSP(const MachineFunction &MF,
   // If !hasReservedCallFrame the function might have SP adjustement in the
   // body.  So, even though the offset is statically known, it depends on where
   // we are in the function.
-  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
-  if (!IgnoreSPUpdates && !TFI->hasReservedCallFrame(MF))
+  if (!IgnoreSPUpdates && !hasReservedCallFrame(MF))
     return getFrameIndexReference(MF, FI, FrameReg);
 
   // We don't handle tail calls, and shouldn't be seeing them either.
@@ -2204,7 +2212,7 @@ HasNestArgument(const MachineFunction *MF) {
   const Function &F = MF->getFunction();
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();
        I != E; I++) {
-    if (I->hasNestAttr())
+    if (I->hasNestAttr() && !I->use_empty())
       return true;
   }
   return false;
@@ -3162,7 +3170,7 @@ void X86FrameLowering::processFunctionBeforeFrameFinalized(
   MinFixedObjOffset -= std::abs(MinFixedObjOffset) % 8;
   int64_t UnwindHelpOffset = MinFixedObjOffset - SlotSize;
   int UnwindHelpFI =
-      MFI.CreateFixedObject(SlotSize, UnwindHelpOffset, /*Immutable=*/false);
+      MFI.CreateFixedObject(SlotSize, UnwindHelpOffset, /*IsImmutable=*/false);
   EHInfo.UnwindHelpFrameIdx = UnwindHelpFI;
 
   // Store -2 into UnwindHelp on function entry. We have to scan forwards past

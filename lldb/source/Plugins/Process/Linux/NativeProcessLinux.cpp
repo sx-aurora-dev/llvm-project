@@ -288,7 +288,7 @@ NativeProcessLinux::NativeProcessLinux(::pid_t pid, int terminal_fd,
                                        NativeDelegate &delegate,
                                        const ArchSpec &arch, MainLoop &mainloop,
                                        llvm::ArrayRef<::pid_t> tids)
-    : NativeProcessProtocol(pid, terminal_fd, delegate), m_arch(arch) {
+    : NativeProcessELF(pid, terminal_fd, delegate), m_arch(arch) {
   if (m_terminal_fd != -1) {
     Status status = EnsureFDFlags(m_terminal_fd, O_NONBLOCK);
     assert(status.Success());
@@ -1007,11 +1007,7 @@ NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
       // Arm mode
       error = SetSoftwareBreakpoint(next_pc, 4);
     }
-  } else if (m_arch.GetMachine() == llvm::Triple::mips64 ||
-             m_arch.GetMachine() == llvm::Triple::mips64el ||
-             m_arch.GetMachine() == llvm::Triple::mips ||
-             m_arch.GetMachine() == llvm::Triple::mipsel ||
-             m_arch.GetMachine() == llvm::Triple::ppc64le)
+  } else if (m_arch.IsMIPS() || m_arch.GetTriple().isPPC64())
     error = SetSoftwareBreakpoint(next_pc, 4);
   else {
     // No size hint is given for the next breakpoint
@@ -1031,11 +1027,7 @@ NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
 }
 
 bool NativeProcessLinux::SupportHardwareSingleStepping() const {
-  if (m_arch.GetMachine() == llvm::Triple::arm ||
-      m_arch.GetMachine() == llvm::Triple::mips64 ||
-      m_arch.GetMachine() == llvm::Triple::mips64el ||
-      m_arch.GetMachine() == llvm::Triple::mips ||
-      m_arch.GetMachine() == llvm::Triple::mipsel)
+  if (m_arch.GetMachine() == llvm::Triple::arm || m_arch.IsMIPS())
     return false;
   return true;
 }
@@ -1395,11 +1387,6 @@ Status NativeProcessLinux::DeallocateMemory(lldb::addr_t addr) {
   // FIXME see comments in AllocateMemory - required lower-level
   // bits not in place yet (ThreadPlans)
   return Status("not implemented");
-}
-
-lldb::addr_t NativeProcessLinux::GetSharedLibraryInfoAddress() {
-  // punt on this for now
-  return LLDB_INVALID_ADDRESS;
 }
 
 size_t NativeProcessLinux::UpdateThreads() {

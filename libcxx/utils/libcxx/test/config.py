@@ -524,6 +524,7 @@ class Configuration(object):
                 maj_v = int(maj_v)
                 if maj_v < 7:
                     possible_stds.remove('c++1z')
+                    possible_stds.remove('c++17')
                 # FIXME: How many C++14 tests actually fail under GCC 5 and 6?
                 # Should we XFAIL them individually instead?
                 if maj_v <= 6:
@@ -1164,10 +1165,10 @@ class Configuration(object):
 
                 self.config.available_features.add('dylib-has-no-bad_any_cast')
                 self.lit_config.note("throwing bad_any_cast is not supported by the deployment target")
-            # Filesystem is not supported on Apple platforms yet
-            if name == 'macosx':
+            # Filesystem is support on Apple platforms starting with macosx10.15.
+            if name == 'macosx' and version in ('10.%s' % v for v in range(7, 15)):
                 self.config.available_features.add('dylib-has-no-filesystem')
-                self.lit_config.note("the deployment target does not support the dylib parts of <filesystem>")
+                self.lit_config.note("the deployment target does not support <filesystem>")
         else:
             self.cxx.flags += ['-D_LIBCPP_DISABLE_AVAILABILITY']
 

@@ -502,22 +502,34 @@ bool Constant::needsRelocation() const {
   if (const BlockAddress *BA = dyn_cast<BlockAddress>(this))
     return BA->getFunction()->needsRelocation();
 
-  // While raw uses of blockaddress need to be relocated, differences between
-  // two of them don't when they are for labels in the same function.  This is a
-  // common idiom when creating a table for the indirect goto extension, so we
-  // handle it efficiently here.
-  if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(this))
+  if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(this)) {
     if (CE->getOpcode() == Instruction::Sub) {
       ConstantExpr *LHS = dyn_cast<ConstantExpr>(CE->getOperand(0));
       ConstantExpr *RHS = dyn_cast<ConstantExpr>(CE->getOperand(1));
       if (LHS && RHS && LHS->getOpcode() == Instruction::PtrToInt &&
-          RHS->getOpcode() == Instruction::PtrToInt &&
-          isa<BlockAddress>(LHS->getOperand(0)) &&
-          isa<BlockAddress>(RHS->getOperand(0)) &&
-          cast<BlockAddress>(LHS->getOperand(0))->getFunction() ==
-              cast<BlockAddress>(RHS->getOperand(0))->getFunction())
-        return false;
+          RHS->getOpcode() == Instruction::PtrToInt) {
+        Constant *LHSOp0 = LHS->getOperand(0);
+        Constant *RHSOp0 = RHS->getOperand(0);
+
+        // While raw uses of blockaddress need to be relocated, differences
+        // between two of them don't when they are for labels in the same
+        // function.  This is a common idiom when creating a table for the
+        // indirect goto extension, so we handle it efficiently here.
+        if (isa<BlockAddress>(LHSOp0) && isa<BlockAddress>(RHSOp0) &&
+            cast<BlockAddress>(LHSOp0)->getFunction() ==
+                cast<BlockAddress>(RHSOp0)->getFunction())
+          return false;
+
+        // Relative pointers do not need to be dynamically relocated.
+        if (auto *LHSGV = dyn_cast<GlobalValue>(
+                LHSOp0->stripPointerCastsNoFollowAliases()))
+          if (auto *RHSGV = dyn_cast<GlobalValue>(
+                  RHSOp0->stripPointerCastsNoFollowAliases()))
+            if (LHSGV->isDSOLocal() && RHSGV->isDSOLocal())
+              return false;
+      }
     }
+  }
 
   bool Result = false;
   for (unsigned i = 0, e = getNumOperands(); i != e; ++i)
@@ -1830,7 +1842,8 @@ Constant *ConstantExpr::get(unsigned Opcode, Constant *C, unsigned Flags,
   }
 #endif
 
-  // TODO: Try to constant fold operation.
+  if (Constant *FC = ConstantFoldUnaryInstruction(Opcode, C))
+    return FC;
 
   if (OnlyIfReducedTy == C->getType())
     return nullptr;
@@ -1855,51 +1868,31 @@ Constant *ConstantExpr::get(unsigned Opcode, Constant *C1, Constant *C2,
   case Instruction::Add:
   case Instruction::Sub:
   case Instruction::Mul:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
+  case Instruction::UDiv:
+  case Instruction::SDiv:
+  case Instruction::URem:
+  case Instruction::SRem:
     assert(C1->getType()->isIntOrIntVectorTy() &&
            "Tried to create an integer operation on a non-integer type!");
     break;
   case Instruction::FAdd:
   case Instruction::FSub:
   case Instruction::FMul:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
+  case Instruction::FDiv:
+  case Instruction::FRem:
     assert(C1->getType()->isFPOrFPVectorTy() &&
            "Tried to create a floating-point operation on a "
            "non-floating-point type!");
     break;
-  case Instruction::UDiv:
-  case Instruction::SDiv:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
-    assert(C1->getType()->isIntOrIntVectorTy() &&
-           "Tried to create an arithmetic operation on a non-arithmetic type!");
-    break;
-  case Instruction::FDiv:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
-    assert(C1->getType()->isFPOrFPVectorTy() &&
-           "Tried to create an arithmetic operation on a non-arithmetic type!");
-    break;
-  case Instruction::URem:
-  case Instruction::SRem:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
-    assert(C1->getType()->isIntOrIntVectorTy() &&
-           "Tried to create an arithmetic operation on a non-arithmetic type!");
-    break;
-  case Instruction::FRem:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
-    assert(C1->getType()->isFPOrFPVectorTy() &&
-           "Tried to create an arithmetic operation on a non-arithmetic type!");
-    break;
   case Instruction::And:
   case Instruction::Or:
   case Instruction::Xor:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
     assert(C1->getType()->isIntOrIntVectorTy() &&
            "Tried to create a logical operation on a non-integral type!");
     break;
   case Instruction::Shl:
   case Instruction::LShr:
   case Instruction::AShr:
-    assert(C1->getType() == C2->getType() && "Op types should be identical!");
     assert(C1->getType()->isIntOrIntVectorTy() &&
            "Tried to create a shift operation on a non-integer type!");
     break;
@@ -1909,7 +1902,7 @@ Constant *ConstantExpr::get(unsigned Opcode, Constant *C1, Constant *C2,
 #endif
 
   if (Constant *FC = ConstantFoldBinaryInstruction(Opcode, C1, C2))
-    return FC;          // Fold a few common cases.
+    return FC;
 
   if (OnlyIfReducedTy == C1->getType())
     return nullptr;
@@ -2235,7 +2228,7 @@ Constant *ConstantExpr::getNeg(Constant *C, bool HasNUW, bool HasNSW) {
 Constant *ConstantExpr::getFNeg(Constant *C) {
   assert(C->getType()->isFPOrFPVectorTy() &&
          "Cannot FNEG a non-floating-point value!");
-  return getFSub(ConstantFP::getZeroValueForNegation(C->getType()), C);
+  return get(Instruction::FNeg, C);
 }
 
 Constant *ConstantExpr::getNot(Constant *C) {
@@ -3024,7 +3017,8 @@ Instruction *ConstantExpr::getAsInstruction() {
   case Instruction::FCmp:
     return CmpInst::Create((Instruction::OtherOps)getOpcode(),
                            (CmpInst::Predicate)getPredicate(), Ops[0], Ops[1]);
-
+  case Instruction::FNeg:
+    return UnaryOperator::Create((Instruction::UnaryOps)getOpcode(), Ops[0]);
   default:
     assert(getNumOperands() == 2 && "Must be binary operator?");
     BinaryOperator *BO =

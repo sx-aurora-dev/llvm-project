@@ -21,6 +21,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/Basic/Builtins.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/ModuleLoader.h"
@@ -45,6 +46,8 @@
 #include <set>
 #include <utility>
 #include <vector>
+
+#include "OpenCLBuiltins.inc"
 
 using namespace clang;
 using namespace sema;
@@ -670,6 +673,79 @@ LLVM_DUMP_METHOD void LookupResult::dump() {
     D->dump();
 }
 
+/// When trying to resolve a function name, if the isOpenCLBuiltin function
+/// defined in "OpenCLBuiltins.inc" returns a non-null <Index, Len>, then the
+/// identifier is referencing an OpenCL builtin function. Thus, all its
+/// prototypes are added to the LookUpResult.
+///
+/// \param S The Sema instance
+/// \param LR  The LookupResult instance
+/// \param II  The identifier being resolved
+/// \param Index  The list of prototypes starts at Index in OpenCLBuiltins[]
+/// \param Len  The list of prototypes has Len elements
+static void InsertOCLBuiltinDeclarations(Sema &S, LookupResult &LR,
+                                         IdentifierInfo *II, unsigned Index,
+                                         unsigned Len) {
+
+  for (unsigned i = 0; i < Len; ++i) {
+    const OpenCLBuiltinDecl &Decl = OpenCLBuiltins[Index - 1 + i];
+    ASTContext &Context = S.Context;
+
+    // Ignore this BIF if the version is incorrect.
+    if (Context.getLangOpts().OpenCLVersion < Decl.Version)
+      continue;
+
+    FunctionProtoType::ExtProtoInfo PI;
+    PI.Variadic = false;
+
+    // Defined in "OpenCLBuiltins.inc"
+    QualType RT = OCL2Qual(Context, OpenCLSignature[Decl.ArgTableIndex]);
+
+    SmallVector<QualType, 5> ArgTypes;
+    for (unsigned I = 1; I < Decl.NumArgs; I++) {
+      QualType Ty = OCL2Qual(Context, OpenCLSignature[Decl.ArgTableIndex + I]);
+      ArgTypes.push_back(Ty);
+    }
+
+    QualType R = Context.getFunctionType(RT, ArgTypes, PI);
+    SourceLocation Loc = LR.getNameLoc();
+
+    // TODO: This part is taken from Sema::LazilyCreateBuiltin,
+    // maybe refactor it.
+    DeclContext *Parent = Context.getTranslationUnitDecl();
+    FunctionDecl *New = FunctionDecl::Create(Context, Parent, Loc, Loc, II, R,
+                                             /*TInfo=*/nullptr, SC_Extern,
+                                             false, R->isFunctionProtoType());
+    New->setImplicit();
+
+    // Create Decl objects for each parameter, adding them to the
+    // FunctionDecl.
+    if (const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(R)) {
+      SmallVector<ParmVarDecl *, 16> Params;
+      for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i) {
+        ParmVarDecl *Parm =
+            ParmVarDecl::Create(Context, New, SourceLocation(),
+                                SourceLocation(), nullptr, FT->getParamType(i),
+                                /*TInfo=*/nullptr, SC_None, nullptr);
+        Parm->setScopeInfo(0, i);
+        Params.push_back(Parm);
+      }
+      New->setParams(Params);
+    }
+
+    New->addAttr(OverloadableAttr::CreateImplicit(Context));
+
+    if (strlen(Decl.Extension))
+      S.setOpenCLExtensionForDecl(New, Decl.Extension);
+
+    LR.addDecl(New);
+  }
+
+  // If we added overloads, need to resolve the lookup result.
+  if (Len > 1)
+    LR.resolveKind();
+}
+
 /// Lookup a builtin function, when name lookup would otherwise
 /// fail.
 static bool LookupBuiltin(Sema &S, LookupResult &R) {
@@ -688,6 +764,15 @@ static bool LookupBuiltin(Sema &S, LookupResult &R) {
           return true;
         } else if (II == S.getASTContext().getTypePackElementName()) {
           R.addDecl(S.getASTContext().getTypePackElementDecl());
+          return true;
+        }
+      }
+
+      // Check if this is an OpenCL Builtin, and if so, insert its overloads.
+      if (S.getLangOpts().OpenCL && S.getLangOpts().DeclareOpenCLBuiltins) {
+        auto Index = isOpenCLBuiltin(II->getName());
+        if (Index.first) {
+          InsertOCLBuiltinDeclarations(S, R, II, Index.first, Index.second);
           return true;
         }
       }
@@ -3041,10 +3126,11 @@ Sema::SpecialMemberOverloadResult Sema::LookupSpecialMember(CXXRecordDecl *RD,
                            llvm::makeArrayRef(&Arg, NumArgs), OCS, true);
       else if (CtorInfo)
         AddOverloadCandidate(CtorInfo.Constructor, CtorInfo.FoundDecl,
-                             llvm::makeArrayRef(&Arg, NumArgs), OCS, true);
+                             llvm::makeArrayRef(&Arg, NumArgs), OCS,
+                             /*SuppressUserConversions*/ true);
       else
         AddOverloadCandidate(M, Cand, llvm::makeArrayRef(&Arg, NumArgs), OCS,
-                             true);
+                             /*SuppressUserConversions*/ true);
     } else if (FunctionTemplateDecl *Tmpl =
                  dyn_cast<FunctionTemplateDecl>(Cand->getUnderlyingDecl())) {
       if (SM == CXXCopyAssignment || SM == CXXMoveAssignment)
@@ -4996,7 +5082,9 @@ FunctionCallFilterCCC::FunctionCallFilterCCC(Sema &SemaRef, unsigned NumArgs,
     : NumArgs(NumArgs), HasExplicitTemplateArgs(HasExplicitTemplateArgs),
       CurContext(SemaRef.CurContext), MemberFn(ME) {
   WantTypeSpecifiers = false;
-  WantFunctionLikeCasts = SemaRef.getLangOpts().CPlusPlus && NumArgs == 1;
+  WantFunctionLikeCasts = SemaRef.getLangOpts().CPlusPlus &&
+                          !HasExplicitTemplateArgs && NumArgs == 1;
+  WantCXXNamedCasts = HasExplicitTemplateArgs && NumArgs == 1;
   WantRemainingKeywords = false;
 }
 
@@ -5024,6 +5112,13 @@ bool FunctionCallFilterCCC::ValidateCandidate(const TypoCorrection &candidate) {
             return true;
       }
     }
+
+    // A typo for a function-style cast can look like a function call in C++.
+    if ((HasExplicitTemplateArgs ? getAsTypeTemplateDecl(ND) != nullptr
+                                 : isa<TypeDecl>(ND)) &&
+        CurContext->getParentASTContext().getLangOpts().CPlusPlus)
+      // Only a class or class template can take two or more arguments.
+      return NumArgs <= 1 || HasExplicitTemplateArgs || isa<CXXRecordDecl>(ND);
 
     // Skip the current candidate if it is not a FunctionDecl or does not accept
     // the current number of arguments.
@@ -5074,7 +5169,8 @@ static NamedDecl *getDefinitionToImport(NamedDecl *D) {
   if (ObjCProtocolDecl *PD = dyn_cast<ObjCProtocolDecl>(D))
     return PD->getDefinition();
   if (TemplateDecl *TD = dyn_cast<TemplateDecl>(D))
-    return getDefinitionToImport(TD->getTemplatedDecl());
+    if (NamedDecl *TTD = TD->getTemplatedDecl())
+      return getDefinitionToImport(TTD);
   return nullptr;
 }
 
@@ -5101,10 +5197,11 @@ void Sema::diagnoseMissingImport(SourceLocation Loc, NamedDecl *Decl,
 /// Get a "quoted.h" or <angled.h> include path to use in a diagnostic
 /// suggesting the addition of a #include of the specified file.
 static std::string getIncludeStringForHeader(Preprocessor &PP,
-                                             const FileEntry *E) {
-  bool IsSystem;
-  auto Path =
-      PP.getHeaderSearchInfo().suggestPathToFileForDiagnostics(E, &IsSystem);
+                                             const FileEntry *E,
+                                             llvm::StringRef IncludingFile) {
+  bool IsSystem = false;
+  auto Path = PP.getHeaderSearchInfo().suggestPathToFileForDiagnostics(
+      E, IncludingFile, &IsSystem);
   return (IsSystem ? '<' : '"') + Path + (IsSystem ? '>' : '"');
 }
 
@@ -5146,6 +5243,11 @@ void Sema::diagnoseMissingImport(SourceLocation UseLoc, NamedDecl *Decl,
       UniqueModules.push_back(M);
   }
 
+  llvm::StringRef IncludingFile;
+  if (const FileEntry *FE =
+          SourceMgr.getFileEntryForID(SourceMgr.getFileID(UseLoc)))
+    IncludingFile = FE->tryGetRealPathName();
+
   if (UniqueModules.empty()) {
     // All candidates were global module fragments. Try to suggest a #include.
     const FileEntry *E =
@@ -5154,7 +5256,7 @@ void Sema::diagnoseMissingImport(SourceLocation UseLoc, NamedDecl *Decl,
     // a FixItHint there.
     Diag(UseLoc, diag::err_module_unimported_use_global_module_fragment)
         << (int)MIK << Decl << !!E
-        << (E ? getIncludeStringForHeader(PP, E) : "");
+        << (E ? getIncludeStringForHeader(PP, E, IncludingFile) : "");
     // Produce a "previous" note if it will point to a header rather than some
     // random global module fragment.
     // FIXME: Suppress the note backtrace even under
@@ -5190,8 +5292,8 @@ void Sema::diagnoseMissingImport(SourceLocation UseLoc, NamedDecl *Decl,
     // FIXME: Find a smart place to suggest inserting a #include, and add
     // a FixItHint there.
     Diag(UseLoc, diag::err_module_unimported_use_header)
-      << (int)MIK << Decl << Modules[0]->getFullModuleName()
-      << getIncludeStringForHeader(PP, E);
+        << (int)MIK << Decl << Modules[0]->getFullModuleName()
+        << getIncludeStringForHeader(PP, E, IncludingFile);
   } else {
     // FIXME: Add a FixItHint that imports the corresponding module.
     Diag(UseLoc, diag::err_module_unimported_use)
