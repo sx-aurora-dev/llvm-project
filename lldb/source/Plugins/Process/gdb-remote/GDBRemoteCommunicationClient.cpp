@@ -386,14 +386,14 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
         std::vector<std::string> supported_compressions;
         compressions += sizeof("SupportedCompressions=") - 1;
         const char *end_of_compressions = strchr(compressions, ';');
-        if (end_of_compressions == NULL) {
+        if (end_of_compressions == nullptr) {
           end_of_compressions = strchr(compressions, '\0');
         }
         const char *current_compression = compressions;
         while (current_compression < end_of_compressions) {
           const char *next_compression_name = strchr(current_compression, ',');
           const char *end_of_this_word = next_compression_name;
-          if (next_compression_name == NULL ||
+          if (next_compression_name == nullptr ||
               end_of_compressions < next_compression_name) {
             end_of_this_word = end_of_compressions;
           }
@@ -439,8 +439,7 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
         m_max_packet_size = UINT64_MAX; // Must have been a garbled response
         Log *log(
             ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS));
-        if (log)
-          log->Printf("Garbled PacketSize spec in qSupported response");
+        LLDB_LOGF(log, "Garbled PacketSize spec in qSupported response");
       }
     }
   }
@@ -525,9 +524,10 @@ GDBRemoteCommunicationClient::SendThreadSpecificPacketAndWaitForResponse(
   if (!lock) {
     if (Log *log = ProcessGDBRemoteLog::GetLogIfAnyCategoryIsSet(
             GDBR_LOG_PROCESS | GDBR_LOG_PACKETS))
-      log->Printf("GDBRemoteCommunicationClient::%s: Didn't get sequence mutex "
-                  "for %s packet.",
-                  __FUNCTION__, payload.GetData());
+      LLDB_LOGF(log,
+                "GDBRemoteCommunicationClient::%s: Didn't get sequence mutex "
+                "for %s packet.",
+                __FUNCTION__, payload.GetData());
     return PacketResult::ErrorNoSequenceLock;
   }
 
@@ -660,10 +660,10 @@ GDBRemoteCommunicationClient::SendPacketsAndConcatenateResponses(
   if (!lock) {
     Log *log(ProcessGDBRemoteLog::GetLogIfAnyCategoryIsSet(GDBR_LOG_PROCESS |
                                                            GDBR_LOG_PACKETS));
-    if (log)
-      log->Printf("error: failed to get packet sequence mutex, not sending "
-                  "packets with prefix '%s'",
-                  payload_prefix);
+    LLDB_LOGF(log,
+              "error: failed to get packet sequence mutex, not sending "
+              "packets with prefix '%s'",
+              payload_prefix);
     return PacketResult::ErrorNoSequenceLock;
   }
 
@@ -775,7 +775,7 @@ int GDBRemoteCommunicationClient::SendArgumentsPacket(
   std::vector<const char *> argv;
   FileSpec exe_file = launch_info.GetExecutableFile();
   std::string exe_path;
-  const char *arg = NULL;
+  const char *arg = nullptr;
   const Args &launch_args = launch_info.GetArguments();
   if (exe_file)
     exe_path = exe_file.GetPath(false);
@@ -786,7 +786,7 @@ int GDBRemoteCommunicationClient::SendArgumentsPacket(
   }
   if (!exe_path.empty()) {
     argv.push_back(exe_path.c_str());
-    for (uint32_t i = 1; (arg = launch_args.GetArgumentAtIndex(i)) != NULL;
+    for (uint32_t i = 1; (arg = launch_args.GetArgumentAtIndex(i)) != nullptr;
          ++i) {
       if (arg)
         argv.push_back(arg);
@@ -1094,7 +1094,7 @@ const char *GDBRemoteCommunicationClient::GetGDBServerProgramName() {
     if (!m_gdb_server_name.empty())
       return m_gdb_server_name.c_str();
   }
-  return NULL;
+  return nullptr;
 }
 
 uint32_t GDBRemoteCommunicationClient::GetGDBServerProgramVersion() {
@@ -1284,14 +1284,15 @@ bool GDBRemoteCommunicationClient::GetHostInfo(bool force) {
             assert(byte_order == m_host_arch.GetByteOrder());
           }
 
-          if (log)
-            log->Printf("GDBRemoteCommunicationClient::%s parsed host "
-                        "architecture as %s, triple as %s from triple text %s",
-                        __FUNCTION__, m_host_arch.GetArchitectureName()
-                                          ? m_host_arch.GetArchitectureName()
-                                          : "<null-arch-name>",
-                        m_host_arch.GetTriple().getTriple().c_str(),
-                        triple.c_str());
+          LLDB_LOGF(log,
+                    "GDBRemoteCommunicationClient::%s parsed host "
+                    "architecture as %s, triple as %s from triple text %s",
+                    __FUNCTION__,
+                    m_host_arch.GetArchitectureName()
+                        ? m_host_arch.GetArchitectureName()
+                        : "<null-arch-name>",
+                    m_host_arch.GetTriple().getTriple().c_str(),
+                    triple.c_str());
         }
         if (!distribution_id.empty())
           m_host_arch.SetDistributionId(distribution_id.c_str());
@@ -1711,28 +1712,22 @@ lldb_private::Status
 GDBRemoteCommunicationClient::GetWatchpointsTriggerAfterInstruction(
     bool &after, const ArchSpec &arch) {
   Status error;
-  llvm::Triple::ArchType atype = arch.GetMachine();
+  llvm::Triple triple = arch.GetTriple();
 
   // we assume watchpoints will happen after running the relevant opcode and we
   // only want to override this behavior if we have explicitly received a
   // qHostInfo telling us otherwise
   if (m_qHostInfo_is_valid != eLazyBoolYes) {
-    // On targets like MIPS and ppc64le, watchpoint exceptions are always
+    // On targets like MIPS and ppc64, watchpoint exceptions are always
     // generated before the instruction is executed. The connected target may
     // not support qHostInfo or qWatchpointSupportInfo packets.
-    after =
-        !(atype == llvm::Triple::mips || atype == llvm::Triple::mipsel ||
-          atype == llvm::Triple::mips64 || atype == llvm::Triple::mips64el ||
-          atype == llvm::Triple::ppc64le);
+    after = !(triple.isMIPS() || triple.isPPC64());
   } else {
-    // For MIPS and ppc64le, set m_watchpoints_trigger_after_instruction to
+    // For MIPS and ppc64, set m_watchpoints_trigger_after_instruction to
     // eLazyBoolNo if it is not calculated before.
-    if ((m_watchpoints_trigger_after_instruction == eLazyBoolCalculate &&
-         (atype == llvm::Triple::mips || atype == llvm::Triple::mipsel ||
-          atype == llvm::Triple::mips64 || atype == llvm::Triple::mips64el)) ||
-        atype == llvm::Triple::ppc64le) {
+    if (m_watchpoints_trigger_after_instruction == eLazyBoolCalculate &&
+        (triple.isMIPS() || triple.isPPC64()))
       m_watchpoints_trigger_after_instruction = eLazyBoolNo;
-    }
 
     after = (m_watchpoints_trigger_after_instruction != eLazyBoolNo);
   }
@@ -2070,12 +2065,10 @@ bool GDBRemoteCommunicationClient::GetCurrentProcessInfo(bool allow_lazy) {
           break;
         case llvm::Triple::Wasm:
         case llvm::Triple::XCOFF:
-          if (log)
-            log->Printf("error: not supported target architecture");
+          LLDB_LOGF(log, "error: not supported target architecture");
           return false;
         case llvm::Triple::UnknownObjectFormat:
-          if (log)
-            log->Printf("error: failed to determine target architecture");
+          LLDB_LOGF(log, "error: failed to determine target architecture");
           return false;
         }
 
@@ -2647,9 +2640,8 @@ bool GDBRemoteCommunicationClient::GetThreadStopInfo(
 uint8_t GDBRemoteCommunicationClient::SendGDBStoppointTypePacket(
     GDBStoppointType type, bool insert, addr_t addr, uint32_t length) {
   Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
-  if (log)
-    log->Printf("GDBRemoteCommunicationClient::%s() %s at addr = 0x%" PRIx64,
-                __FUNCTION__, insert ? "add" : "remove", addr);
+  LLDB_LOGF(log, "GDBRemoteCommunicationClient::%s() %s at addr = 0x%" PRIx64,
+            __FUNCTION__, insert ? "add" : "remove", addr);
 
   // Check if the stub is known not to support this breakpoint type
   if (!SupportsGDBStoppointPacket(type))
@@ -2751,9 +2743,8 @@ size_t GDBRemoteCommunicationClient::GetCurrentThreadIDs(
 #if !defined(LLDB_CONFIGURATION_DEBUG)
     Log *log(ProcessGDBRemoteLog::GetLogIfAnyCategoryIsSet(GDBR_LOG_PROCESS |
                                                            GDBR_LOG_PACKETS));
-    if (log)
-      log->Printf("error: failed to get packet sequence mutex, not sending "
-                  "packet 'qfThreadInfo'");
+    LLDB_LOGF(log, "error: failed to get packet sequence mutex, not sending "
+                   "packet 'qfThreadInfo'");
 #endif
     sequence_mutex_unavailable = true;
   }
@@ -3879,9 +3870,9 @@ void GDBRemoteCommunicationClient::ServeSymbolLookups(
 
     } else if (Log *log = ProcessGDBRemoteLog::GetLogIfAnyCategoryIsSet(
                    GDBR_LOG_PROCESS | GDBR_LOG_PACKETS)) {
-      log->Printf(
-          "GDBRemoteCommunicationClient::%s: Didn't get sequence mutex.",
-          __FUNCTION__);
+      LLDB_LOGF(log,
+                "GDBRemoteCommunicationClient::%s: Didn't get sequence mutex.",
+                __FUNCTION__);
     }
   }
 }
@@ -3905,26 +3896,27 @@ GDBRemoteCommunicationClient::GetSupportedStructuredDataPlugins() {
           !m_supported_async_json_packets_sp->GetAsArray()) {
         // We were returned something other than a JSON array.  This is
         // invalid.  Clear it out.
-        if (log)
-          log->Printf("GDBRemoteCommunicationClient::%s(): "
-                      "QSupportedAsyncJSONPackets returned invalid "
-                      "result: %s",
-                      __FUNCTION__, response.GetStringRef().c_str());
+        LLDB_LOGF(log,
+                  "GDBRemoteCommunicationClient::%s(): "
+                  "QSupportedAsyncJSONPackets returned invalid "
+                  "result: %s",
+                  __FUNCTION__, response.GetStringRef().c_str());
         m_supported_async_json_packets_sp.reset();
       }
     } else {
-      if (log)
-        log->Printf("GDBRemoteCommunicationClient::%s(): "
-                    "QSupportedAsyncJSONPackets unsupported",
-                    __FUNCTION__);
+      LLDB_LOGF(log,
+                "GDBRemoteCommunicationClient::%s(): "
+                "QSupportedAsyncJSONPackets unsupported",
+                __FUNCTION__);
     }
 
     if (log && m_supported_async_json_packets_sp) {
       StreamString stream;
       m_supported_async_json_packets_sp->Dump(stream);
-      log->Printf("GDBRemoteCommunicationClient::%s(): supported async "
-                  "JSON packets: %s",
-                  __FUNCTION__, stream.GetData());
+      LLDB_LOGF(log,
+                "GDBRemoteCommunicationClient::%s(): supported async "
+                "JSON packets: %s",
+                __FUNCTION__, stream.GetData());
     }
   }
 

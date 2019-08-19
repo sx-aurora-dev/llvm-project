@@ -20,7 +20,10 @@ struct Literal {
 };
 
 struct S {
-  virtual int ImplicitlyVirtual() const = 0; // expected-note {{overridden virtual function}}
+  virtual int ImplicitlyVirtual() const = 0;
+#if __cplusplus <= 201703L
+  // expected-note@-2 {{overridden virtual function}}
+#endif
 };
 struct SS : S {
   int ImplicitlyVirtual() const;
@@ -32,12 +35,21 @@ struct T : SS, NonLiteral {
   constexpr T();
   constexpr int f() const;
 
-  //  - it shall not be virtual;
-  virtual constexpr int ExplicitlyVirtual() const { return 0; } // expected-error {{virtual function cannot be constexpr}}
+  //  - it shall not be virtual; [until C++20]
+  virtual constexpr int ExplicitlyVirtual() const { return 0; }
+#if __cplusplus <= 201703L
+  // expected-error@-2 {{virtual function cannot be constexpr}}
+#endif
 
-  constexpr int ImplicitlyVirtual() const { return 0; } // expected-error {{virtual function cannot be constexpr}}
+  constexpr int ImplicitlyVirtual() const { return 0; }
+#if __cplusplus <= 201703L
+  // expected-error@-2 {{virtual function cannot be constexpr}}
+#endif
 
-  virtual constexpr int OutOfLineVirtual() const; // expected-error {{virtual function cannot be constexpr}}
+  virtual constexpr int OutOfLineVirtual() const;
+#if __cplusplus <= 201703L
+  // expected-error@-2 {{virtual function cannot be constexpr}}
+#endif
 
   //  - its return type shall be a literal type;
   constexpr NonLiteral NonLiteralReturn() const { return {}; } // expected-error {{constexpr function's return type 'NonLiteral' is not a literal type}}
@@ -145,11 +157,8 @@ constexpr int DisallowedStmtsCXX1Y_2_1() {
 constexpr int DisallowedStmtsCXX1Y_3() {
   //  - a try-block,
   try {} catch (...) {}
-#ifndef CXX2A
+#if !defined(CXX2A)
   // expected-error@-2 {{use of this statement in a constexpr function is a C++2a extension}}
-#ifndef CXX1Y
-  // expected-error@-4 {{use of this statement in a constexpr function is a C++14 extension}}
-#endif
 #endif
   return 0;
 }

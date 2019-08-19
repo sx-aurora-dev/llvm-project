@@ -1012,6 +1012,7 @@ bool VETargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
 bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
                                                       unsigned AddrSpace,
                                                       unsigned Align,
+                                                      MachineMemOperand::Flags,
                                                       bool *Fast) const {
   // VE requires aligned accesses for vector accesses
   if (VT.isVector())

@@ -36,7 +36,9 @@ else()
 endif()
 
 if (LIBCXXABI_ENABLE_THREADS AND (UNIX OR FUCHSIA) AND NOT (APPLE OR CYGWIN))
-  list(APPEND LIBCXXABI_SOURCES cxa_thread_atexit.cpp)
+  list(APPEND LIBCXXABI_SOURCES
+    cxa_thread_atexit.cpp
+  )
 endif()
 
 set(LIBCXXABI_HEADERS
@@ -145,6 +147,16 @@ if (LLVM_ENABLE_MODULES)
   string(REPLACE "-Wl,-z,defs" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 endif()
 
+if (NOT TARGET pstl::ParallelSTL)
+  message(STATUS "Could not find ParallelSTL, libc++abi will not attempt to use it but the build may fail if the libc++ in use needs it to be available.")
+endif()
+
+if ("${CMAKE_OSX_ARCHITECTURES}" MATCHES "^(armv6|armv7|armv7s)$")
+  set(LIBCXXABI_USE_SJLJ_EXCEPTIONS ON)
+else()
+  set(LIBCXXABI_USE_SJLJ_EXCEPTIONS OFF)
+endif()
+
 # Build the shared library.
 if (LIBCXXABI_ENABLE_SHARED)
   add_library(cxxabi_shared SHARED ${LIBCXXABI_SOURCES} ${LIBCXXABI_HEADERS})
@@ -152,6 +164,9 @@ if (LIBCXXABI_ENABLE_SHARED)
     llvm_setup_rpath(cxxabi_shared)
   endif()
   target_link_libraries(cxxabi_shared PRIVATE ${LIBCXXABI_SHARED_LIBRARIES} ${LIBCXXABI_LIBRARIES})
+  if (TARGET pstl::ParallelSTL)
+    target_link_libraries(cxxabi_shared PUBLIC pstl::ParallelSTL)
+  endif()
   set_target_properties(cxxabi_shared
                         PROPERTIES
                           CXX_EXTENSIONS
@@ -179,12 +194,30 @@ if (LIBCXXABI_ENABLE_SHARED)
   if (LIBCXXABI_INSTALL_SHARED_LIBRARY)
     list(APPEND LIBCXXABI_INSTALL_TARGETS "cxxabi_shared")
   endif()
+
+  # -exported_symbols_list is only available on Apple platforms
+  if (APPLE)
+    target_link_libraries(cxxabi_shared PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/../lib/itanium-base.exp")
+
+    if (LIBCXXABI_ENABLE_NEW_DELETE_DEFINITIONS)
+      target_link_libraries(cxxabi_shared PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/../lib/new-delete.exp")
+    endif()
+
+    if (LIBCXXABI_USE_SJLJ_EXCEPTIONS)
+      target_link_libraries(cxxabi_shared PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/../lib/personality-sjlj.exp")
+    else()
+      target_link_libraries(cxxabi_shared PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/../lib/personality-v0.exp")
+    endif()
+  endif()
 endif()
 
 # Build the static library.
 if (LIBCXXABI_ENABLE_STATIC)
   add_library(cxxabi_static STATIC ${LIBCXXABI_SOURCES} ${LIBCXXABI_HEADERS})
   target_link_libraries(cxxabi_static PRIVATE ${LIBCXXABI_STATIC_LIBRARIES} ${LIBCXXABI_LIBRARIES})
+  if (TARGET pstl::ParallelSTL)
+    target_link_libraries(cxxabi_static PUBLIC pstl::ParallelSTL)
+  endif()
   set_target_properties(cxxabi_static
                         PROPERTIES
                           CXX_EXTENSIONS
@@ -224,6 +257,10 @@ if (LIBCXXABI_ENABLE_STATIC)
     list(APPEND LIBCXXABI_INSTALL_TARGETS "cxxabi_static")
   endif()
 
+  if (APPLE)
+    set(MERGE_ARCHIVES_LIBTOOL "--use-libtool" "--libtool" "${CMAKE_LIBTOOL}")
+  endif()
+
   # Merge the the libc++abi.a and libunwind.a into one.
   if(LIBCXXABI_USE_LLVM_UNWINDER AND LIBCXXABI_STATICALLY_LINK_UNWINDER_IN_STATIC_LIBRARY)
     add_custom_command(TARGET cxxabi_static POST_BUILD
@@ -231,6 +268,7 @@ if (LIBCXXABI_ENABLE_STATIC)
       ARGS
         -o "$<TARGET_LINKER_FILE:cxxabi_static>"
         --ar "${CMAKE_AR}"
+        ${MERGE_ARCHIVES_LIBTOOL}
         "$<TARGET_LINKER_FILE:cxxabi_static>"
         "$<TARGET_LINKER_FILE:unwind_static>"
       WORKING_DIRECTORY ${LIBCXXABI_BUILD_DIR}
@@ -243,8 +281,8 @@ add_custom_target(cxxabi DEPENDS ${LIBCXXABI_BUILD_TARGETS})
 
 if (LIBCXXABI_INSTALL_LIBRARY)
   install(TARGETS ${LIBCXXABI_INSTALL_TARGETS}
-    LIBRARY DESTINATION ${LIBCXXABI_INSTALL_PREFIX}lib${LIBCXXABI_LIBDIR_SUFFIX} COMPONENT cxxabi
-    ARCHIVE DESTINATION ${LIBCXXABI_INSTALL_PREFIX}lib${LIBCXXABI_LIBDIR_SUFFIX} COMPONENT cxxabi
+    LIBRARY DESTINATION ${LIBCXXABI_INSTALL_PREFIX}${LIBCXXABI_INSTALL_LIBRARY_DIR} COMPONENT cxxabi
+    ARCHIVE DESTINATION ${LIBCXXABI_INSTALL_PREFIX}${LIBCXXABI_INSTALL_LIBRARY_DIR} COMPONENT cxxabi
     )
 endif()
 

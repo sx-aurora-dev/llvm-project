@@ -199,7 +199,7 @@ void Promoter::gatherVecCandidates(MachineBasicBlock &MBB) {
               "one of VM*2V operands is not a register.");
       unsigned VR = MI->getOperand(0).getReg();
       unsigned VMR = MI->getOperand(1).getReg();
-      assert (TargetRegisterInfo::isVirtualRegister(VMR) &&
+      assert (Register::isVirtualRegister(VMR) &&
               "one of VM*2V operands is not a virtual register.");
       new_vec(VR, MRI->getRegClass(VMR));
       continue;

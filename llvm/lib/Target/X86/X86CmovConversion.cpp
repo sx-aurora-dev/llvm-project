@@ -101,9 +101,7 @@ namespace {
 /// Converts X86 cmov instructions into branches when profitable.
 class X86CmovConverterPass : public MachineFunctionPass {
 public:
-  X86CmovConverterPass() : MachineFunctionPass(ID) {
-    initializeX86CmovConverterPassPass(*PassRegistry::getPassRegistry());
-  }
+  X86CmovConverterPass() : MachineFunctionPass(ID) { }
 
   StringRef getPassName() const override { return "X86 cmov Conversion"; }
   bool runOnMachineFunction(MachineFunction &MF) override;
@@ -280,7 +278,8 @@ bool X86CmovConverterPass::collectCmovCandidates(
     Group.clear();
     // Condition code of first CMOV instruction current processed range and its
     // opposite condition code.
-    X86::CondCode FirstCC, FirstOppCC, MemOpCC;
+    X86::CondCode FirstCC = X86::COND_INVALID, FirstOppCC = X86::COND_INVALID,
+                  MemOpCC = X86::COND_INVALID;
     // Indicator of a non CMOVrr instruction in the current processed range.
     bool FoundNonCMOVInst = false;
     // Indicator for current processed CMOV-group if it should be skipped.
@@ -438,7 +437,7 @@ bool X86CmovConverterPass::checkForProfitableCmovCandidates(
           if (!MO.isReg() || !MO.isUse())
             continue;
           unsigned Reg = MO.getReg();
-          auto &RDM = RegDefMaps[TargetRegisterInfo::isVirtualRegister(Reg)];
+          auto &RDM = RegDefMaps[Register::isVirtualRegister(Reg)];
           if (MachineInstr *DefMI = RDM.lookup(Reg)) {
             OperandToDefMap[&MO] = DefMI;
             DepthInfo Info = DepthMap.lookup(DefMI);
@@ -458,7 +457,7 @@ bool X86CmovConverterPass::checkForProfitableCmovCandidates(
           if (!MO.isReg() || !MO.isDef())
             continue;
           unsigned Reg = MO.getReg();
-          RegDefMaps[TargetRegisterInfo::isVirtualRegister(Reg)][Reg] = &MI;
+          RegDefMaps[Register::isVirtualRegister(Reg)][Reg] = &MI;
         }
 
         unsigned Latency = TSchedModel.computeInstrLatency(&MI);

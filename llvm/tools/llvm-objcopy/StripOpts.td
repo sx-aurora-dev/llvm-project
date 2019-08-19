@@ -13,7 +13,7 @@ def h : Flag<["-"], "h">, Alias<help>;
 def allow_broken_links
     : Flag<["--"], "allow-broken-links">,
       HelpText<"Allow llvm-strip to remove sections even if it would leave "
-               "invalid section references. The appropriate sh_link fields"
+               "invalid section references. The appropriate sh_link fields "
                "will be set to zero.">;
 
 def enable_deterministic_archives
@@ -52,6 +52,9 @@ def strip_debug : Flag<["--"], "strip-debug">,
 def d : Flag<["-"], "d">, Alias<strip_debug>;
 def g : Flag<["-"], "g">, Alias<strip_debug>;
 def S : Flag<["-"], "S">, Alias<strip_debug>;
+def strip_sections
+    : Flag<["--"], "strip-sections">,
+      HelpText<"Remove all section headers and all sections not in segments">;
 def strip_unneeded : Flag<["--"], "strip-unneeded">,
                      HelpText<"Remove all symbols not needed by relocations">;
 

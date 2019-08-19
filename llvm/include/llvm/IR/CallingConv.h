@@ -222,6 +222,14 @@ namespace CallingConv {
     // Calling convention between AArch64 Advanced SIMD functions
     AArch64_VectorCall = 97,
 
+    /// Calling convention between AArch64 SVE functions
+    AArch64_SVE_VectorCall = 98,
+
+    /// Calling convention for emscripten __invoke_* functions. The first
+    /// argument is required to be the function ptr being indirectly called.
+    /// The remainder matches the regular calling convention.
+    WASM_EmscriptenInvoke = 99,
+
     /// Calling convention used for NEC SX-Aurora VE vec_expf intrinsic
     /// function.
     VE_VEC_EXPF = 150,

@@ -61,7 +61,7 @@ class ObjectFile : public std::enable_shared_from_this<ObjectFile>,
   friend class lldb_private::Module;
 
 public:
-  typedef enum {
+  enum Type {
     eTypeInvalid = 0,
     eTypeCoreFile,      /// A core file that has a checkpoint of a program's
                         /// execution state
@@ -74,16 +74,16 @@ public:
                       /// execution
     eTypeJIT, /// JIT code that has symbols, sections and possibly debug info
     eTypeUnknown
-  } Type;
+  };
 
-  typedef enum {
+  enum Strata {
     eStrataInvalid = 0,
     eStrataUnknown,
     eStrataUser,
     eStrataKernel,
     eStrataRawImage,
     eStrataJIT
-  } Strata;
+  };
 
   struct LoadableData {
     lldb::addr_t Dest;
@@ -203,6 +203,10 @@ public:
   static bool SplitArchivePathWithObject(
       const char *path_with_object, lldb_private::FileSpec &archive_file,
       lldb_private::ConstString &archive_object, bool must_exist);
+
+  // LLVM RTTI support
+  static char ID;
+  virtual bool isA(const void *ClassID) const { return ClassID == &ID; }
 
   /// Gets the address size in bytes for the current object file.
   ///
@@ -365,17 +369,6 @@ public:
   ///     The object file's UUID. In case of an error, an empty UUID is
   ///     returned.
   virtual UUID GetUUID() = 0;
-
-  /// Gets the symbol file spec list for this object file.
-  ///
-  /// If the object file format contains a debug symbol file link, the values
-  /// will be returned in the FileSpecList.
-  ///
-  /// \return
-  ///     Returns filespeclist.
-  virtual lldb_private::FileSpecList GetDebugSymbolFilePaths() {
-    return FileSpecList();
-  }
 
   /// Gets the file spec list of libraries re-exported by this object file.
   ///
@@ -578,15 +571,11 @@ public:
 
   /// Get the SDK OS version this object file was built with.
   ///
-  /// The versions arguments and returns values are the same as the
-  /// GetMinimumOSVersion()
-  virtual uint32_t GetSDKVersion(uint32_t *versions, uint32_t num_versions) {
-    if (versions && num_versions) {
-      for (uint32_t i = 0; i < num_versions; ++i)
-        versions[i] = UINT32_MAX;
-    }
-    return 0;
-  }
+  /// \return
+  ///     This function returns extracted version numbers as a
+  ///     llvm::VersionTuple. In case of error an empty VersionTuple is
+  ///     returned.
+  virtual llvm::VersionTuple GetSDKVersion() { return llvm::VersionTuple(); }
 
   /// Return true if this file is a dynamic link editor (dyld)
   ///

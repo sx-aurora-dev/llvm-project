@@ -26,6 +26,7 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineOutliner.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
+#include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -59,6 +60,8 @@ class TargetSubtargetInfo;
 
 template <class T> class SmallVectorImpl;
 
+using ParamLoadedValue = std::pair<const MachineOperand*, DIExpression*>;
+
 //---------------------------------------------------------------------------
 ///
 /// TargetInstrInfo - Interface to description of machine instruction set
@@ -80,6 +83,7 @@ public:
 
   /// Given a machine instruction descriptor, returns the register
   /// class constraint for OpNum, or NULL.
+  virtual
   const TargetRegisterClass *getRegClass(const MCInstrDesc &MCID, unsigned OpNum,
                                          const TargetRegisterInfo *TRI,
                                          const MachineFunction &MF) const;
@@ -669,8 +673,9 @@ public:
   /// is finished.  Return the value/register of the new loop count.  We need
   /// this function when peeling off one or more iterations of a loop. This
   /// function assumes the nth iteration is peeled first.
-  virtual unsigned reduceLoopCount(MachineBasicBlock &MBB, MachineInstr *IndVar,
-                                   MachineInstr &Cmp,
+  virtual unsigned reduceLoopCount(MachineBasicBlock &MBB,
+                                   MachineBasicBlock &PreHeader,
+                                   MachineInstr *IndVar, MachineInstr &Cmp,
                                    SmallVectorImpl<MachineOperand> &Cond,
                                    SmallVectorImpl<MachineInstr *> &PrevInsts,
                                    unsigned Iter, unsigned MaxIter) const {
@@ -932,9 +937,12 @@ public:
   /// operand folded, otherwise NULL is returned.
   /// The new instruction is inserted before MI, and the client is responsible
   /// for removing the old instruction.
+  /// If VRM is passed, the assigned physregs can be inspected by target to
+  /// decide on using an opcode (note that those assignments can still change).
   MachineInstr *foldMemoryOperand(MachineInstr &MI, ArrayRef<unsigned> Ops,
                                   int FI,
-                                  LiveIntervals *LIS = nullptr) const;
+                                  LiveIntervals *LIS = nullptr,
+                                  VirtRegMap *VRM = nullptr) const;
 
   /// Same as the previous version except it allows folding of any load and
   /// store from / to any address, not just from a specific stack slot.
@@ -1024,7 +1032,8 @@ protected:
   foldMemoryOperandImpl(MachineFunction &MF, MachineInstr &MI,
                         ArrayRef<unsigned> Ops,
                         MachineBasicBlock::iterator InsertPt, int FrameIndex,
-                        LiveIntervals *LIS = nullptr) const {
+                        LiveIntervals *LIS = nullptr,
+                        VirtRegMap *VRM = nullptr) const {
     return nullptr;
   }
 
@@ -1260,8 +1269,9 @@ public:
 
   /// Measure the specified inline asm to determine an approximation of its
   /// length.
-  virtual unsigned getInlineAsmLength(const char *Str,
-                                      const MCAsmInfo &MAI) const;
+  virtual unsigned getInlineAsmLength(
+    const char *Str, const MCAsmInfo &MAI,
+    const TargetSubtargetInfo *STI = nullptr) const;
 
   /// Allocate and return a hazard recognizer to use for this target when
   /// scheduling the machine instructions before register allocation.
@@ -1682,6 +1692,11 @@ public:
   virtual bool shouldOutlineFromFunctionByDefault(MachineFunction &MF) const {
     return false;
   }
+
+  /// Produce the expression describing the \p MI loading a value into
+  /// the parameter's forwarding register.
+  virtual Optional<ParamLoadedValue>
+  describeLoadedValue(const MachineInstr &MI) const;
 
 private:
   unsigned CallFrameSetupOpcode, CallFrameDestroyOpcode;

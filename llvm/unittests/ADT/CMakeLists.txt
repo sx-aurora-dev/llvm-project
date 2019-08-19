@@ -17,6 +17,7 @@ add_llvm_unittest(ADTTests
   DenseMapTest.cpp
   DenseSetTest.cpp
   DepthFirstIteratorTest.cpp
+  DirectedGraphTest.cpp
   EquivalenceClassesTest.cpp
   FallibleIteratorTest.cpp
   FoldingSet.cpp
@@ -65,6 +66,7 @@ add_llvm_unittest(ADTTests
   StringExtrasTest.cpp
   StringMapTest.cpp
   StringRefTest.cpp
+  StringSetTest.cpp
   StringSwitchTest.cpp
   TinyPtrVectorTest.cpp
   TripleTest.cpp

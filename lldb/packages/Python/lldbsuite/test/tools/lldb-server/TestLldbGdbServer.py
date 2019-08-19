@@ -16,8 +16,6 @@ from __future__ import division, print_function
 import unittest2
 import gdbremote_testcase
 import lldbgdbserverutils
-import platform
-import signal
 from lldbsuite.support import seven
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -558,9 +556,7 @@ class LldbGdbServerTestCase(gdbremote_testcase.GdbRemoteTestCaseBase, DwarfOpcod
         self.assertIsNotNone(reg_infos)
         self.assertTrue(len(reg_infos) > 0)
 
-        inferior_exe_path = self.getBuildArtifact("a.out")
-        Target = self.dbg.CreateTarget(inferior_exe_path)
-        byte_order = Target.GetByteOrder()
+        byte_order = self.get_target_byte_order()
 
         # Read value for each register.
         reg_index = 0
@@ -1281,7 +1277,6 @@ class LldbGdbServerTestCase(gdbremote_testcase.GdbRemoteTestCaseBase, DwarfOpcod
 
     @llgs_test
     @skipUnlessPlatform(oslist=['linux'])
-    @expectedFailureAndroid
     @skipIf(archs=no_match(['arm', 'aarch64']))
     def test_hardware_breakpoint_set_and_remove_work_llgs(self):
         self.init_llgs_test()

@@ -29,7 +29,8 @@ class DWARFDebugLine {
 public:
   // FileNameEntry
   struct FileNameEntry {
-    FileNameEntry() : name(nullptr), dir_idx(0), mod_time(0), length(0) {}
+    FileNameEntry()
+        : name(nullptr), dir_idx(0), mod_time(0), length(0), checksum() {}
 
     const char *name;
     dw_sleb128_t dir_idx;
@@ -205,9 +206,6 @@ public:
                       DWARFUnit *dwarf_cu);
   static void Parse(const lldb_private::DWARFDataExtractor &debug_line_data,
                     DWARFDebugLine::State::Callback callback, void *userData);
-  //  static void AppendLineTableData(const DWARFDebugLine::Prologue* prologue,
-  //  const DWARFDebugLine::Row::collection& state_coll, const uint32_t
-  //  addr_size, BinaryStreamBuf &debug_line_data);
 
   DWARFDebugLine() : m_lineTableMap() {}
 

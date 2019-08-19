@@ -1,4 +1,6 @@
 ; RUN: llc -O0 < %s -mtriple=ve-unknown-unknown | FileCheck %s
+;
+; This TP checks spill/restore for fp128 registers.
 
 @.str = private unnamed_addr constant [4 x i8] c"%Lf\00", align 1
 @.str.1 = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
@@ -7,31 +9,23 @@
 define void @test(fp128) {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, 0, %s0
-; CHECK-NEXT:    or %s35, 0, %s1
-; CHECK-NEXT:    st %s1, -16(,%s9)
-; CHECK-NEXT:    st %s0, -8(,%s9)
-; CHECK-NEXT:    st %s1, -32(,%s9)
-; CHECK-NEXT:    st %s0, -24(,%s9)
-; CHECK-NEXT:    or %s36, 0, %s0
-; CHECK-NEXT:    st %s36, 200(,%s11)
-; CHECK-NEXT:    or %s36, 0, %s1
-; CHECK-NEXT:    st %s36, 192(,%s11)
-; CHECK-NEXT:    lea %s36, .L.str@lo
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    lea.sl %s36, .L.str@hi(%s36)
-; CHECK-NEXT:    st %s36, 176(,%s11)
-; CHECK-NEXT:    lea %s37, printf@lo
-; CHECK-NEXT:    and %s37, %s37, (32)0
-; CHECK-NEXT:    lea.sl %s37, printf@hi(%s37)
-; CHECK-NEXT:    or %s12, 0, %s37
-; CHECK-NEXT:    st %s1, -48(,%s9)
-; CHECK-NEXT:    st %s0, -40(,%s9)               # 16-byte Folded Spill
-; CHECK-NEXT:    or %s0, 0, %s36
-; CHECK-NEXT:    ld %s3, -48(,%s9)
-; CHECK-NEXT:    ld %s2, -40(,%s9)               # 16-byte Folded Reload
-; CHECK-NEXT:    st %s35, -64(,%s9)
-; CHECK-NEXT:    st %s34, -56(,%s9)              # 16-byte Folded Spill
+; CHECK-NEXT:  st %s1, -16(,%s9)
+; CHECK-NEXT:  st %s0, -8(,%s9)
+; CHECK-NEXT:  st %s1, -32(,%s9)
+; CHECK-NEXT:  st %s0, -24(,%s9)
+; CHECK:       st %s1, -48(,%s9)
+; CHECK-NEXT:  st %s0, -40(,%s9)               # 16-byte Folded Spill
+; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  ld %s3, -48(,%s9)
+; CHECK-NEXT:  ld %s2, -40(,%s9)               # 16-byte Folded Reload
+; CHECK-NEXT:  bsic %lr, (,%s12)
+; CHECK-NEXT:  ld %s37, -16(,%s9)
+; CHECK-NEXT:  ld %s36, -8(,%s9)
+; CHECK:       or %s0, 0, %s36
+; CHECK-NEXT:  or %s1, 0, %s37
+; CHECK-NEXT:  bsic %lr, (,%s12)
+; CHECK-NEXT:  ld %s3, -32(,%s9)
+; CHECK-NEXT:  ld %s2, -24(,%s9)
 
   %2 = alloca fp128, align 16
   %3 = alloca fp128, align 16
