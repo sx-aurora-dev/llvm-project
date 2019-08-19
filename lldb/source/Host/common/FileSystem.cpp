@@ -49,7 +49,7 @@ void FileSystem::Initialize() {
   InstanceImpl().emplace();
 }
 
-void FileSystem::Initialize(FileCollector &collector) {
+void FileSystem::Initialize(std::shared_ptr<FileCollector> collector) {
   lldbassert(!InstanceImpl() && "Already initialized.");
   InstanceImpl().emplace(collector);
 }
@@ -63,8 +63,9 @@ llvm::Error FileSystem::Initialize(const FileSpec &mapping) {
   if (!buffer)
     return llvm::errorCodeToError(buffer.getError());
 
-  InstanceImpl().emplace(
-      llvm::vfs::getVFSFromYAML(std::move(buffer.get()), nullptr, ""), true);
+  InstanceImpl().emplace(llvm::vfs::getVFSFromYAML(std::move(buffer.get()),
+                                                   nullptr, mapping.GetPath()),
+                         true);
 
   return llvm::Error::success();
 }
@@ -241,17 +242,21 @@ void FileSystem::Resolve(SmallVectorImpl<char> &path) {
   if (path.empty())
     return;
 
-  // Resolve tilde.
-  SmallString<128> original_path(path.begin(), path.end());
+  // Resolve tilde in path.
+  SmallString<128> resolved(path.begin(), path.end());
   StandardTildeExpressionResolver Resolver;
-  Resolver.ResolveFullPath(original_path, path);
+  Resolver.ResolveFullPath(llvm::StringRef(path.begin(), path.size()),
+                           resolved);
 
   // Try making the path absolute if it exists.
-  SmallString<128> absolute_path(path.begin(), path.end());
-  MakeAbsolute(path);
-  if (!Exists(path)) {
-    path.clear();
-    path.append(original_path.begin(), original_path.end());
+  SmallString<128> absolute(resolved.begin(), resolved.end());
+  MakeAbsolute(absolute);
+
+  path.clear();
+  if (Exists(absolute)) {
+    path.append(absolute.begin(), absolute.end());
+  } else {
+    path.append(resolved.begin(), resolved.end());
   }
 }
 
@@ -275,7 +280,7 @@ std::shared_ptr<DataBufferLLVM>
 FileSystem::CreateDataBuffer(const llvm::Twine &path, uint64_t size,
                              uint64_t offset) {
   if (m_collector)
-    m_collector->AddFile(path);
+    m_collector->addFile(path);
 
   const bool is_volatile = !IsLocal(path);
   const ErrorOr<std::string> external_path = GetExternalPath(path);
@@ -413,7 +418,7 @@ static mode_t GetOpenMode(uint32_t permissions) {
 Status FileSystem::Open(File &File, const FileSpec &file_spec, uint32_t options,
                         uint32_t permissions, bool should_close_fd) {
   if (m_collector)
-    m_collector->AddFile(file_spec);
+    m_collector->addFile(file_spec.GetPath());
 
   if (File.IsValid())
     File.Close();

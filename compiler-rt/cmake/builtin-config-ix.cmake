@@ -33,6 +33,8 @@ set(MIPS64 mips64 mips64el)
 set(PPC64 powerpc64 powerpc64le)
 set(RISCV32 riscv32)
 set(RISCV64 riscv64)
+set(SPARC sparc)
+set(SPARCV9 sparcv9)
 set(WASM32 wasm32)
 set(WASM64 wasm64)
 set(VE ve)
@@ -44,7 +46,7 @@ if(APPLE)
 endif()
 
 set(ALL_BUILTIN_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64}
-    ${HEXAGON} ${MIPS32} ${MIPS64} ${PPC64} ${RISCV32} ${RISCV64} ${WASM32} ${WASM64} ${VE})
+    ${HEXAGON} ${MIPS32} ${MIPS64} ${PPC64} ${RISCV32} ${RISCV64} ${SPARC} ${SPARCV9} ${WASM32} ${WASM64} ${VE})
 
 include(CompilerRTUtils)
 include(CompilerRTDarwinUtils)

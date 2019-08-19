@@ -26,7 +26,7 @@ class GCNSubtarget;
 /// and the GenericScheduler is that GCNSchedStrategy uses different
 /// heuristics to determine excess/critical pressure sets.  Its goal is to
 /// maximize kernel occupancy (i.e. maximum number of waves per simd).
-class GCNMaxOccupancySchedStrategy : public GenericScheduler {
+class GCNMaxOccupancySchedStrategy final : public GenericScheduler {
   friend class GCNScheduleDAGMILive;
 
   SUnit *pickNodeBidirectional(bool &IsTopNode);
@@ -59,7 +59,7 @@ public:
   void setTargetOccupancy(unsigned Occ) { TargetOccupancy = Occ; }
 };
 
-class GCNScheduleDAGMILive : public ScheduleDAGMILive {
+class GCNScheduleDAGMILive final : public ScheduleDAGMILive {
 
   const GCNSubtarget &ST;
 
@@ -89,6 +89,9 @@ class GCNScheduleDAGMILive : public ScheduleDAGMILive {
 
   // Temporary basic block live-in cache.
   DenseMap<const MachineBasicBlock*, GCNRPTracker::LiveRegSet> MBBLiveIns;
+
+  DenseMap<MachineInstr *, GCNRPTracker::LiveRegSet> BBLiveInMap;
+  DenseMap<MachineInstr *, GCNRPTracker::LiveRegSet> getBBLiveInMap() const;
 
   // Return current region pressure.
   GCNRegPressure getRealRegPressure() const;

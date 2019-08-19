@@ -70,6 +70,9 @@ template <typename T, typename Ptr, typename Ref> struct __vector_iterator {
     return ptr -= n;
   }
 
+  template<typename U, typename Ptr2, typename Ref2>
+  difference_type operator-(const __vector_iterator<U, Ptr2, Ref2> &rhs);
+
   Ref operator*() const { return *ptr; }
   Ptr operator->() const { return *ptr; }
 
@@ -845,4 +848,65 @@ namespace std {
 
   template<class BidirIt, class UnaryPredicate>
   BidirIt stable_partition(BidirIt first, BidirIt last, UnaryPredicate p);
+}
+
+namespace std {
+
+template< class T = void >
+struct less;
+
+template< class T >
+struct allocator;
+
+template< class Key >
+struct hash;
+
+template<
+  class Key,
+  class Compare = std::less<Key>,
+  class Alloc = std::allocator<Key>
+> class set {
+  public:
+    set(initializer_list<Key> __list) {}
+
+    class iterator {
+    public:
+      iterator(Key *key): ptr(key) {}
+      iterator operator++() { ++ptr; return *this; }
+      bool operator!=(const iterator &other) const { return ptr != other.ptr; }
+      const Key &operator*() const { return *ptr; }
+    private:
+      Key *ptr;
+    };
+
+  public:
+    Key *val;
+    iterator begin() const { return iterator(val); }
+    iterator end() const { return iterator(val + 1); }
+};
+
+template<
+  class Key,
+  class Hash = std::hash<Key>,
+  class Compare = std::less<Key>,
+  class Alloc = std::allocator<Key>
+> class unordered_set {
+  public:
+    unordered_set(initializer_list<Key> __list) {}
+
+    class iterator {
+    public:
+      iterator(Key *key): ptr(key) {}
+      iterator operator++() { ++ptr; return *this; }
+      bool operator!=(const iterator &other) const { return ptr != other.ptr; }
+      const Key &operator*() const { return *ptr; }
+    private:
+      Key *ptr;
+    };
+
+  public:
+    Key *val;
+    iterator begin() const { return iterator(val); }
+    iterator end() const { return iterator(val + 1); }
+};
 }

@@ -56,13 +56,12 @@ uint64_t ObjectFile::getSymbolValue(DataRefImpl Ref) const {
   return getSymbolValueImpl(Ref);
 }
 
-std::error_code ObjectFile::printSymbolName(raw_ostream &OS,
-                                            DataRefImpl Symb) const {
+Error ObjectFile::printSymbolName(raw_ostream &OS, DataRefImpl Symb) const {
   Expected<StringRef> Name = getSymbolName(Symb);
   if (!Name)
-    return errorToErrorCode(Name.takeError());
+    return Name.takeError();
   OS << *Name;
-  return std::error_code();
+  return Error::success();
 }
 
 uint32_t ObjectFile::getSymbolAlignment(DataRefImpl DRI) const { return 0; }
@@ -151,7 +150,9 @@ ObjectFile::createObjectFile(MemoryBufferRef Object, file_magic Type) {
   case file_magic::pecoff_executable:
     return createCOFFObjectFile(Object);
   case file_magic::xcoff_object_32:
-    return createXCOFFObjectFile(Object);
+    return createXCOFFObjectFile(Object, Binary::ID_XCOFF32);
+  case file_magic::xcoff_object_64:
+    return createXCOFFObjectFile(Object, Binary::ID_XCOFF64);
   case file_magic::wasm_object:
     return createWasmObjectFile(Object);
   }

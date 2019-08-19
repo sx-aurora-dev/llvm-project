@@ -34,6 +34,7 @@
 #include "Plugins/ABI/SysV-ppc64/ABISysV_ppc64.h"
 #include "Plugins/ABI/SysV-s390x/ABISysV_s390x.h"
 #include "Plugins/ABI/SysV-x86_64/ABISysV_x86_64.h"
+#include "Plugins/ABI/Windows-x86_64/ABIWindows_x86_64.h"
 #include "Plugins/Architecture/Arm/ArchitectureArm.h"
 #include "Plugins/Architecture/Mips/ArchitectureMips.h"
 #include "Plugins/Architecture/PPC64/ArchitecturePPC64.h"
@@ -43,7 +44,10 @@
 #include "Plugins/DynamicLoader/POSIX-DYLD/DynamicLoaderPOSIXDYLD.h"
 #include "Plugins/DynamicLoader/Static/DynamicLoaderStatic.h"
 #include "Plugins/DynamicLoader/Windows-DYLD/DynamicLoaderWindowsDYLD.h"
+#include "Plugins/Instruction/ARM/EmulateInstructionARM.h"
 #include "Plugins/Instruction/ARM64/EmulateInstructionARM64.h"
+#include "Plugins/Instruction/MIPS/EmulateInstructionMIPS.h"
+#include "Plugins/Instruction/MIPS64/EmulateInstructionMIPS64.h"
 #include "Plugins/Instruction/PPC64/EmulateInstructionPPC64.h"
 #include "Plugins/InstrumentationRuntime/ASan/ASanRuntime.h"
 #include "Plugins/InstrumentationRuntime/MainThreadChecker/MainThreadCheckerRuntime.h"
@@ -183,6 +187,7 @@ llvm::Error SystemInitializerFull::Initialize() {
   ABISysV_mips::Initialize();
   ABISysV_mips64::Initialize();
   ABISysV_s390x::Initialize();
+  ABIWindows_x86_64::Initialize();
 
   ArchitectureArm::Initialize();
   ArchitectureMips::Initialize();
@@ -207,8 +212,13 @@ llvm::Error SystemInitializerFull::Initialize() {
   SymbolFileSymtab::Initialize();
   UnwindAssemblyInstEmulation::Initialize();
   UnwindAssembly_x86::Initialize();
+
+  EmulateInstructionARM::Initialize();
   EmulateInstructionARM64::Initialize();
+  EmulateInstructionMIPS::Initialize();
+  EmulateInstructionMIPS64::Initialize();
   EmulateInstructionPPC64::Initialize();
+
   SymbolFileDWARFDebugMap::Initialize();
   ItaniumABILanguageRuntime::Initialize();
   AppleObjCRuntimeV2::Initialize();
@@ -291,6 +301,7 @@ void SystemInitializerFull::Terminate() {
   ABISysV_mips::Terminate();
   ABISysV_mips64::Terminate();
   ABISysV_s390x::Terminate();
+  ABIWindows_x86_64::Terminate();
   DisassemblerLLVMC::Terminate();
 
   JITLoaderGDB::Terminate();
@@ -309,8 +320,13 @@ void SystemInitializerFull::Terminate() {
   SymbolFileSymtab::Terminate();
   UnwindAssembly_x86::Terminate();
   UnwindAssemblyInstEmulation::Terminate();
+
+  EmulateInstructionARM::Terminate();
   EmulateInstructionARM64::Terminate();
+  EmulateInstructionMIPS::Terminate();
+  EmulateInstructionMIPS64::Terminate();
   EmulateInstructionPPC64::Terminate();
+
   SymbolFileDWARFDebugMap::Terminate();
   ItaniumABILanguageRuntime::Terminate();
   AppleObjCRuntimeV2::Terminate();

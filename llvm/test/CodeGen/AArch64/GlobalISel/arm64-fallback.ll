@@ -54,26 +54,6 @@ false:
 
 }
 
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %3:_(s32) = G_LOAD %1:_(p0) :: (load 3 from `i24* undef`, align 1) (in function: odd_type_load)
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_type_load
-; FALLBACK-WITH-REPORT-OUT-LABEL: odd_type_load
-define i32 @odd_type_load() {
-entry:
-  %ld = load i24, i24* undef, align 1
-  %cst = zext i24 %ld to i32
-  ret i32 %cst
-}
-
-  ; General legalizer inability to handle types whose size wasn't a power of 2.
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: G_STORE %1:_(s42), %0:_(p0) :: (store 6 into %ir.addr, align 8) (in function: odd_type)
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_type
-; FALLBACK-WITH-REPORT-OUT-LABEL: odd_type:
-define void @odd_type(i42* %addr) {
-  %val42 = load i42, i42* %addr
-  store i42 %val42, i42* %addr
-  ret void
-}
-
 ; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: G_STORE %1:_(<7 x s32>), %0:_(p0) :: (store 28 into %ir.addr, align 32) (in function: odd_vector)
 ; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_vector
 ; FALLBACK-WITH-REPORT-OUT-LABEL: odd_vector:
@@ -205,7 +185,7 @@ define void @nonpow2_load_narrowing() {
   ret void
 }
 
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %4:_(s64) = G_EXTRACT %3:_(s96), 0 (in function: nonpow2_store_narrowing)
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: cannot select: %5:fpr32(s32) = G_EXTRACT %21:fpr(s128), 64 (in function: nonpow2_store_narrowing)
 ; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_store_narrowing
 ; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_store_narrowing:
 define void @nonpow2_store_narrowing(i96* %c) {
@@ -227,26 +207,3 @@ define void @nonpow2_vector_add_fewerelements() {
   store i64 %ex, i64* undef
   ret void
 }
-
-%swift_error = type {i64, i8}
-
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to lower arguments due to swifterror/swiftself: void (%swift_error**)* (in function: swifterror_param)
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for swifterror_param
-define void @swifterror_param(%swift_error** swifterror %error_ptr_ref) {
-  ret void
-}
-
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to translate instruction: alloca: '  %error_ptr_ref = alloca swifterror %swift_error*' (in function: swifterror_alloca)
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for swifterror_alloca
-; We can't currently test the call parameters being swifterror because the value
-; must come from a swifterror alloca or parameter, at which point we already
-; fallback. As long as those cases work however we should be fine.
-define void @swifterror_alloca(i8* %error_ref) {
-entry:
-  %error_ptr_ref = alloca swifterror %swift_error*
-  store %swift_error* null, %swift_error** %error_ptr_ref
-  call void @swifterror_param(%swift_error** swifterror %error_ptr_ref)
-  ret void
-}
-
-

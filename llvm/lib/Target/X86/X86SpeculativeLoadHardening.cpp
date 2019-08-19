@@ -122,10 +122,7 @@ namespace {
 
 class X86SpeculativeLoadHardeningPass : public MachineFunctionPass {
 public:
-  X86SpeculativeLoadHardeningPass() : MachineFunctionPass(ID) {
-    initializeX86SpeculativeLoadHardeningPassPass(
-        *PassRegistry::getPassRegistry());
-  }
+  X86SpeculativeLoadHardeningPass() : MachineFunctionPass(ID) { }
 
   StringRef getPassName() const override {
     return "X86 speculative load hardening";
@@ -1964,6 +1961,14 @@ void X86SpeculativeLoadHardeningPass::hardenLoadAddr(
     LLVM_DEBUG(
         dbgs() << "  Skipping hardening base of explicit stack frame load: ";
         MI.dump(); dbgs() << "\n");
+  } else if (BaseMO.getReg() == X86::RSP) {
+    // Some idempotent atomic operations are lowered directly to a locked
+    // OR with 0 to the top of stack(or slightly offset from top) which uses an
+    // explicit RSP register as the base.
+    assert(IndexMO.getReg() == X86::NoRegister &&
+           "Explicit RSP access with dynamic index!");
+    LLVM_DEBUG(
+        dbgs() << "  Cannot harden base of explicit RSP offset in a load!");
   } else if (BaseMO.getReg() == X86::RIP ||
              BaseMO.getReg() == X86::NoRegister) {
     // For both RIP-relative addressed loads or absolute loads, we cannot
@@ -2206,7 +2211,7 @@ MachineInstr *X86SpeculativeLoadHardeningPass::sinkPostLoadHardenedInst(
       // just bail. Also check that its register class is one of the ones we
       // can harden.
       unsigned UseDefReg = UseMI.getOperand(0).getReg();
-      if (!TRI->isVirtualRegister(UseDefReg) ||
+      if (!Register::isVirtualRegister(UseDefReg) ||
           !canHardenRegister(UseDefReg))
         return {};
 
@@ -2273,7 +2278,7 @@ unsigned X86SpeculativeLoadHardeningPass::hardenValueInRegister(
     unsigned Reg, MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
     DebugLoc Loc) {
   assert(canHardenRegister(Reg) && "Cannot harden this register!");
-  assert(TRI->isVirtualRegister(Reg) && "Cannot harden a physical register!");
+  assert(Register::isVirtualRegister(Reg) && "Cannot harden a physical register!");
 
   auto *RC = MRI->getRegClass(Reg);
   int Bytes = TRI->getRegSizeInBits(*RC) / 8;
@@ -2465,7 +2470,7 @@ void X86SpeculativeLoadHardeningPass::tracePredStateThroughCall(
   // If we have no red zones or if the function returns twice (possibly without
   // using the `ret` instruction) like setjmp, we need to save the expected
   // return address prior to the call.
-  if (MF.getFunction().hasFnAttribute(Attribute::NoRedZone) ||
+  if (!Subtarget->getFrameLowering()->has128ByteRedZone(MF) ||
       MF.exposesReturnsTwice()) {
     // If we don't have red zones, we need to compute the expected return
     // address prior to the call and store it in a register that lives across

@@ -20,7 +20,7 @@
 #include "llvm/Support/MSVCErrorWorkarounds.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/MutexGuard.h"
+#include <mutex>
 
 #include <future>
 
@@ -120,7 +120,7 @@ static void dumpSectionMemory(const SectionEntry &S, StringRef State) {
 
 // Resolve the relocations for all symbols we currently know about.
 void RuntimeDyldImpl::resolveRelocations() {
-  MutexGuard locked(lock);
+  std::lock_guard<sys::Mutex> locked(lock);
 
   // Print out the sections prior to relocation.
   LLVM_DEBUG(for (int i = 0, e = Sections.size(); i != e; ++i)
@@ -156,7 +156,7 @@ void RuntimeDyldImpl::resolveLocalRelocations() {
 
 void RuntimeDyldImpl::mapSectionAddress(const void *LocalAddress,
                                         uint64_t TargetAddress) {
-  MutexGuard locked(lock);
+  std::lock_guard<sys::Mutex> locked(lock);
   for (unsigned i = 0, e = Sections.size(); i != e; ++i) {
     if (Sections[i].getAddress() == LocalAddress) {
       reassignSectionAddress(i, TargetAddress);
@@ -177,7 +177,7 @@ static Error getOffset(const SymbolRef &Sym, SectionRef Sec,
 
 Expected<RuntimeDyldImpl::ObjSectionToIDMap>
 RuntimeDyldImpl::loadObjectImpl(const object::ObjectFile &Obj) {
-  MutexGuard locked(lock);
+  std::lock_guard<sys::Mutex> locked(lock);
 
   // Save information about our target
   Arch = (Triple::ArchType)Obj.getArch();
@@ -540,7 +540,14 @@ Error RuntimeDyldImpl::computeTotalAllocSize(const ObjectFile &Obj,
         return errorCodeToError(EC);
 
       uint64_t StubBufSize = computeSectionStubBufSize(Obj, Section);
-      uint64_t SectionSize = DataSize + StubBufSize;
+
+      uint64_t PaddingSize = 0;
+      if (Name == ".eh_frame")
+        PaddingSize += 4;
+      if (StubBufSize != 0)
+        PaddingSize += getStubAlignment() - 1;
+
+      uint64_t SectionSize = DataSize + PaddingSize + StubBufSize;
 
       // The .eh_frame section (at least on Linux) needs an extra four bytes
       // padded
@@ -792,18 +799,19 @@ RuntimeDyldImpl::emitSection(const ObjectFile &Obj,
   if (!IsVirtual && !IsZeroInit) {
     // In either case, set the location of the unrelocated section in memory,
     // since we still process relocations for it even if we're not applying them.
-    if (auto EC = Section.getContents(data))
-      return errorCodeToError(EC);
+    if (Expected<StringRef> E = Section.getContents())
+      data = *E;
+    else
+      return E.takeError();
     pData = data.data();
   }
 
-  // Code section alignment needs to be at least as high as stub alignment or
-  // padding calculations may by incorrect when the section is remapped to a
-  // higher alignment.
-  if (IsCode) {
+  // If there are any stubs then the section alignment needs to be at least as
+  // high as stub alignment or padding calculations may by incorrect when the
+  // section is remapped.
+  if (StubBufSize != 0) {
     Alignment = std::max(Alignment, getStubAlignment());
-    if (StubBufSize > 0)
-      PaddingSize += getStubAlignment() - 1;
+    PaddingSize += getStubAlignment() - 1;
   }
 
   // Some sections, such as debug info, don't need to be loaded for execution.
@@ -834,7 +842,7 @@ RuntimeDyldImpl::emitSection(const ObjectFile &Obj,
       // Align DataSize to stub alignment if we have any stubs (PaddingSize will
       // have been increased above to account for this).
       if (StubBufSize > 0)
-        DataSize &= ~(getStubAlignment() - 1);
+        DataSize &= -(uint64_t)getStubAlignment();
     }
 
     LLVM_DEBUG(dbgs() << "emitSection SectionID: " << SectionID << " Name: "
