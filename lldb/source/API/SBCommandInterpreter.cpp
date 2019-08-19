@@ -372,8 +372,7 @@ int SBCommandInterpreter::HandleCompletionWithDescriptions(
   if (IsValid()) {
     lldb_private::StringList lldb_matches, lldb_descriptions;
     num_completions = m_opaque_ptr->HandleCompletion(
-        current_line, cursor, last_char, match_start_point, max_return_elements,
-        lldb_matches, lldb_descriptions);
+        current_line, cursor, last_char, lldb_matches, lldb_descriptions);
 
     SBStringList temp_matches_list(&lldb_matches);
     matches.AppendList(temp_matches_list);
@@ -540,7 +539,7 @@ void SBCommandInterpreter::SourceInitFileInHomeDirectory(
     std::unique_lock<std::recursive_mutex> lock;
     if (target_sp)
       lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
-    m_opaque_ptr->SourceInitFile(false, result.ref());
+    m_opaque_ptr->SourceInitFileHome(result.ref());
   } else {
     result->AppendError("SBCommandInterpreter is not valid");
     result->SetStatus(eReturnStatusFailed);
@@ -559,7 +558,7 @@ void SBCommandInterpreter::SourceInitFileInCurrentWorkingDirectory(
     std::unique_lock<std::recursive_mutex> lock;
     if (target_sp)
       lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
-    m_opaque_ptr->SourceInitFile(true, result.ref());
+    m_opaque_ptr->SourceInitFileCwd(result.ref());
   } else {
     result->AppendError("SBCommandInterpreter is not valid");
     result->SetStatus(eReturnStatusFailed);

@@ -46,7 +46,7 @@ extern "C" int proc_set_wakemon_params(pid_t, int,
 nub_process_t g_pid = INVALID_NUB_PROCESS;
 
 // Run loop modes which determine which run loop function will be called
-typedef enum {
+enum RNBRunLoopMode {
   eRNBRunLoopModeInvalid = 0,
   eRNBRunLoopModeGetStartModeFromRemoteProtocol,
   eRNBRunLoopModeInferiorAttaching,
@@ -54,7 +54,7 @@ typedef enum {
   eRNBRunLoopModeInferiorExecuting,
   eRNBRunLoopModePlatformMode,
   eRNBRunLoopModeExit
-} RNBRunLoopMode;
+};
 
 // Global Variables
 RNBRemoteSP g_remoteSP;
@@ -96,7 +96,7 @@ RNBRunLoopMode RNBRunLoopGetStartModeFromRemote(RNBRemote *remote) {
                           RNBContext::event_read_thread_exiting;
 
     // Spin waiting to get the A packet.
-    while (1) {
+    while (true) {
       DNBLogThreadedIf(LOG_RNB_MAX,
                        "%s ctx.Events().WaitForSetEvents( 0x%08x ) ...",
                        __FUNCTION__, event_mask);
@@ -490,6 +490,7 @@ RNBRunLoopMode HandleProcessStateChange(RNBRemote *remote, bool initialize) {
   // Catch all...
   return eRNBRunLoopModeExit;
 }
+
 // This function handles the case where our inferior program is stopped and
 // we are waiting for gdb remote protocol packets. When a packet occurs that
 // makes the inferior run, we need to leave this function with a new state

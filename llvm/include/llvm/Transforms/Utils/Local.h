@@ -231,7 +231,8 @@ bool FlattenCFG(BasicBlock *BB, AliasAnalysis *AA = nullptr);
 /// If this basic block is ONLY a setcc and a branch, and if a predecessor
 /// branches to us and one of our successors, fold the setcc into the
 /// predecessor and use logical operations to pick the right destination.
-bool FoldBranchToCommonDest(BranchInst *BI, unsigned BonusInstThreshold = 1);
+bool FoldBranchToCommonDest(BranchInst *BI, MemorySSAUpdater *MSSAU = nullptr,
+                            unsigned BonusInstThreshold = 1);
 
 /// This function takes a virtual register computed by an Instruction and
 /// replaces it with a slot in the stack frame, allocated via alloca.
@@ -269,6 +270,15 @@ inline unsigned getKnownAlignment(Value *V, const DataLayout &DL,
                                   const DominatorTree *DT = nullptr) {
   return getOrEnforceKnownAlignment(V, 0, DL, CxtI, AC, DT);
 }
+
+/// Create a call that matches the invoke \p II in terms of arguments,
+/// attributes, debug information, etc. The call is not placed in a block and it
+/// will not have a name. The invoke instruction is not removed, nor are the
+/// uses replaced by the new call.
+CallInst *createCallMatchingInvoke(InvokeInst *II);
+
+/// This function converts the specified invoek into a normall call.
+void changeToCall(InvokeInst *II, DomTreeUpdater *DTU = nullptr);
 
 ///===---------------------------------------------------------------------===//
 ///  Dbg Intrinsic utilities
@@ -315,7 +325,7 @@ void findDbgUsers(SmallVectorImpl<DbgVariableIntrinsic *> &DbgInsts, Value *V);
 /// (between the optional Deref operations). Offset can be negative.
 bool replaceDbgDeclare(Value *Address, Value *NewAddress,
                        Instruction *InsertBefore, DIBuilder &Builder,
-                       bool DerefBefore, int Offset, bool DerefAfter);
+                       uint8_t DIExprFlags, int Offset);
 
 /// Replaces llvm.dbg.declare instruction when the alloca it describes
 /// is replaced with a new value. If Deref is true, an additional
@@ -324,8 +334,8 @@ bool replaceDbgDeclare(Value *Address, Value *NewAddress,
 /// optional Deref operations). Offset can be negative. The new
 /// llvm.dbg.declare is inserted immediately after AI.
 bool replaceDbgDeclareForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
-                                DIBuilder &Builder, bool DerefBefore,
-                                int Offset, bool DerefAfter);
+                                DIBuilder &Builder, uint8_t DIExprFlags,
+                                int Offset);
 
 /// Replaces multiple llvm.dbg.value instructions when the alloca it describes
 /// is replaced with a new value. If Offset is non-zero, a constant displacement
@@ -381,7 +391,8 @@ unsigned removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB);
 /// instruction, making it and the rest of the code in the block dead.
 unsigned changeToUnreachable(Instruction *I, bool UseLLVMTrap,
                              bool PreserveLCSSA = false,
-                             DomTreeUpdater *DTU = nullptr);
+                             DomTreeUpdater *DTU = nullptr,
+                             MemorySSAUpdater *MSSAU = nullptr);
 
 /// Convert the CallInst to InvokeInst with the specified unwind edge basic
 /// block.  This also splits the basic block where CI is located, because
@@ -421,6 +432,10 @@ void combineMetadata(Instruction *K, const Instruction *J,
 /// Unknown metadata is removed.
 void combineMetadataForCSE(Instruction *K, const Instruction *J,
                            bool DoesKMove);
+
+/// Copy the metadata from the source instruction to the destination (the
+/// replacement for the source instruction).
+void copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source);
 
 /// Patch the replacement so that it is not more restrictive than the value
 /// being replaced. It assumes that the replacement does not get moved from

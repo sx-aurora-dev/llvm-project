@@ -147,7 +147,7 @@ void ScalarEnumerationTraits<CPUType>::enumeration(IO &io, CPUType &Cpu) {
 }
 
 void ScalarEnumerationTraits<RegisterId>::enumeration(IO &io, RegisterId &Reg) {
-  auto RegNames = getRegisterNames();
+  auto RegNames = getRegisterNames(CPUType::X64);
   for (const auto &E : RegNames) {
     io.enumCase(Reg, E.Name.str().c_str(), static_cast<RegisterId>(E.Value));
   }
@@ -391,7 +391,7 @@ template <> void SymbolRecordImpl<DefRangeRegisterSym>::map(IO &IO) {
 }
 
 template <> void SymbolRecordImpl<DefRangeFramePointerRelSym>::map(IO &IO) {
-  IO.mapRequired("Offset", Symbol.Offset);
+  IO.mapRequired("Offset", Symbol.Hdr.Offset);
   IO.mapRequired("Range", Symbol.Range);
   IO.mapRequired("Gaps", Symbol.Gaps);
 }
@@ -551,6 +551,12 @@ template <> void SymbolRecordImpl<ThreadLocalDataSym>::map(IO &IO) {
 
 template <> void SymbolRecordImpl<UsingNamespaceSym>::map(IO &IO) {
   IO.mapRequired("Namespace", Symbol.Name);
+}
+
+template <> void SymbolRecordImpl<AnnotationSym>::map(IO &IO) {
+  IO.mapOptional("Offset", Symbol.CodeOffset, 0U);
+  IO.mapOptional("Segment", Symbol.Segment, uint16_t(0));
+  IO.mapRequired("Strings", Symbol.Strings);
 }
 
 } // end namespace detail

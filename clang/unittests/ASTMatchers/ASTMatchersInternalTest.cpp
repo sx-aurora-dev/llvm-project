@@ -32,13 +32,6 @@ TEST(HasNameDeathTest, DiesOnEmptyPattern) {
       EXPECT_TRUE(notMatches("class X {};", HasEmptyName));
     }, "");
 }
-
-TEST(IsDerivedFromDeathTest, DiesOnEmptyBaseName) {
-  ASSERT_DEBUG_DEATH({
-    DeclarationMatcher IsDerivedFromEmpty = cxxRecordDecl(isDerivedFrom(""));
-    EXPECT_TRUE(notMatches("class X {};", IsDerivedFromEmpty));
-  }, "");
-}
 #endif
 
 TEST(ConstructVariadic, MismatchedTypes_Regression) {
@@ -76,7 +69,7 @@ AST_POLYMORPHIC_MATCHER_P(polymorphicHas,
                           internal::Matcher<Decl>, AMatcher) {
   return Finder->matchesChildOf(
       Node, AMatcher, Builder,
-      ASTMatchFinder::TK_IgnoreImplicitCastsAndParentheses,
+      ast_type_traits::TraversalKind::TK_IgnoreImplicitCastsAndParentheses,
       ASTMatchFinder::BK_First);
 }
 

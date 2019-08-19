@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/LiveRegMatrix.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
@@ -72,7 +73,7 @@ void RegAllocBase::seedLiveRegs() {
   NamedRegionTimer T("seed", "Seed Live Regs", TimerGroupName,
                      TimerGroupDescription, TimePassesIsEnabled);
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
-    unsigned Reg = TargetRegisterInfo::index2VirtReg(i);
+    unsigned Reg = Register::index2VirtReg(i);
     if (MRI->reg_nodbg_empty(Reg))
       continue;
     enqueue(&LIS->getInterval(Reg));
@@ -118,16 +119,19 @@ void RegAllocBase::allocatePhysRegs() {
       for (MachineRegisterInfo::reg_instr_iterator
            I = MRI->reg_instr_begin(VirtReg->reg), E = MRI->reg_instr_end();
            I != E; ) {
-        MachineInstr *TmpMI = &*(I++);
-        if (TmpMI->isInlineAsm()) {
-          MI = TmpMI;
+        MI = &*(I++);
+        if (MI->isInlineAsm())
           break;
-        }
       }
-      if (MI)
+      if (MI && MI->isInlineAsm()) {
         MI->emitError("inline assembly requires more registers than available");
-      else
+      } else if (MI) {
+        LLVMContext &Context =
+            MI->getParent()->getParent()->getMMI().getModule()->getContext();
+        Context.emitError("ran out of registers during register allocation");
+      } else {
         report_fatal_error("ran out of registers during register allocation");
+      }
       // Keep going after reporting the error.
       VRM->assignVirt2Phys(VirtReg->reg,
                  RegClassInfo.getOrder(MRI->getRegClass(VirtReg->reg)).front());
@@ -150,7 +154,7 @@ void RegAllocBase::allocatePhysRegs() {
         continue;
       }
       LLVM_DEBUG(dbgs() << "queuing new interval: " << *SplitVirtReg << "\n");
-      assert(TargetRegisterInfo::isVirtualRegister(SplitVirtReg->reg) &&
+      assert(Register::isVirtualRegister(SplitVirtReg->reg) &&
              "expect split value in virtual register");
       enqueue(SplitVirtReg);
       ++NumNewQueued;

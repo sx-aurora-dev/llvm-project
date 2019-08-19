@@ -19,7 +19,7 @@ let TargetPrefix = "arm" in {  // All intrinsics start with "llvm.arm.".
 // A space-consuming intrinsic primarily for testing ARMConstantIslands. The
 // first argument is the number of bytes this "instruction" takes up, the second
 // and return value are essentially chains, used to force ordering during ISel.
-def int_arm_space : Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], []>;
+def int_arm_space : Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [ImmArg<0>]>;
 
 // 16-bit multiplications
 def int_arm_smulbb : GCCBuiltin<"__builtin_arm_smulbb">,
@@ -331,6 +331,18 @@ def int_arm_crc32w  : Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
     [IntrNoMem]>;
 def int_arm_crc32cw : Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
     [IntrNoMem]>;
+
+//===----------------------------------------------------------------------===//
+// CMSE
+
+def int_arm_cmse_tt : GCCBuiltin<"__builtin_arm_cmse_TT">,
+    Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrNoMem]>;
+def int_arm_cmse_ttt : GCCBuiltin<"__builtin_arm_cmse_TTT">,
+    Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrNoMem]>;
+def int_arm_cmse_tta : GCCBuiltin<"__builtin_arm_cmse_TTA">,
+    Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrNoMem]>;
+def int_arm_cmse_ttat : GCCBuiltin<"__builtin_arm_cmse_TTAT">,
+    Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrNoMem]>;
 
 //===----------------------------------------------------------------------===//
 // HINT

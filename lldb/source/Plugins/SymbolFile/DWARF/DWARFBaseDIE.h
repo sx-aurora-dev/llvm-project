@@ -12,7 +12,9 @@
 #include "lldb/Core/dwarf.h"
 #include "lldb/lldb-types.h"
 
-struct DIERef;
+#include "llvm/Support/Error.h"
+
+class DIERef;
 class DWARFASTParser;
 class DWARFAttributes;
 class DWARFUnit;
@@ -53,9 +55,9 @@ public:
 
   DWARFDebugInfoEntry *GetDIE() const { return m_die; }
 
-  DIERef GetDIERef() const;
+  llvm::Optional<DIERef> GetDIERef() const;
 
-  lldb_private::TypeSystem *GetTypeSystem() const;
+  llvm::Expected<lldb_private::TypeSystem &> GetTypeSystem() const;
 
   DWARFASTParser *GetDWARFParser() const;
 
@@ -100,8 +102,6 @@ public:
 
   lldb::ModuleSP GetModule() const;
 
-  lldb_private::CompileUnit *GetLLDBCompileUnit() const;
-
   // Getting attribute values from the DIE.
   //
   // GetAttributeValueAsXXX() functions should only be used if you are
@@ -112,9 +112,6 @@ public:
 
   uint64_t GetAttributeValueAsUnsigned(const dw_attr_t attr,
                                        uint64_t fail_value) const;
-
-  uint64_t GetAttributeValueAsReference(const dw_attr_t attr,
-                                        uint64_t fail_value) const;
 
   uint64_t GetAttributeValueAsAddress(const dw_attr_t attr,
                                       uint64_t fail_value) const;

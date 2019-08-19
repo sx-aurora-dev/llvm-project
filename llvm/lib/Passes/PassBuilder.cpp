@@ -65,6 +65,7 @@
 #include "llvm/Transforms/AggressiveInstCombine/AggressiveInstCombine.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/ArgumentPromotion.h"
+#include "llvm/Transforms/IPO/Attributor.h"
 #include "llvm/Transforms/IPO/CalledValuePropagation.h"
 #include "llvm/Transforms/IPO/ConstantMerge.h"
 #include "llvm/Transforms/IPO/CrossDSOCFI.h"
@@ -94,10 +95,13 @@
 #include "llvm/Transforms/Instrumentation/CGProfile.h"
 #include "llvm/Transforms/Instrumentation/ControlHeightReduction.h"
 #include "llvm/Transforms/Instrumentation/GCOVProfiler.h"
+#include "llvm/Transforms/Instrumentation/HWAddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/InstrOrderFile.h"
 #include "llvm/Transforms/Instrumentation/InstrProfiling.h"
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
 #include "llvm/Transforms/Instrumentation/PGOInstrumentation.h"
+#include "llvm/Transforms/Instrumentation/PoisonChecking.h"
+#include "llvm/Transforms/Instrumentation/SanitizerCoverage.h"
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
 #include "llvm/Transforms/Scalar/ADCE.h"
 #include "llvm/Transforms/Scalar/AlignmentFromAssumptions.h"
@@ -140,6 +144,7 @@
 #include "llvm/Transforms/Scalar/LowerWidenableCondition.h"
 #include "llvm/Transforms/Scalar/MakeGuardsExplicit.h"
 #include "llvm/Transforms/Scalar/MemCpyOptimizer.h"
+#include "llvm/Transforms/Scalar/MergeICmps.h"
 #include "llvm/Transforms/Scalar/MergedLoadStoreMotion.h"
 #include "llvm/Transforms/Scalar/NaryReassociate.h"
 #include "llvm/Transforms/Scalar/NewGVN.h"
@@ -214,6 +219,9 @@ static cl::opt<bool>
 PipelineTuningOptions::PipelineTuningOptions() {
   LoopInterleaving = EnableLoopInterleaving;
   LoopVectorization = EnableLoopVectorization;
+  SLPVectorization = RunSLPVectorization;
+  LoopUnrolling = true;
+  ForgetAllSCEVInLoopUnroll = ForgetSCEVInLoopUnroll;
   LicmMssaOptCap = SetLicmMssaOptCap;
   LicmMssaNoAccForPromotionCap = SetLicmMssaNoAccForPromotionCap;
 }
@@ -456,9 +464,11 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   // Do not enable unrolling in PreLinkThinLTO phase during sample PGO
   // because it changes IR to makes profile annotation in back compile
   // inaccurate.
-  if (Phase != ThinLTOPhase::PreLink || !PGOOpt ||
-      PGOOpt->Action != PGOOptions::SampleUse)
-    LPM2.addPass(LoopFullUnrollPass(Level));
+  if ((Phase != ThinLTOPhase::PreLink || !PGOOpt ||
+       PGOOpt->Action != PGOOptions::SampleUse) &&
+      PTO.LoopUnrolling)
+    LPM2.addPass(
+        LoopFullUnrollPass(Level, false, PTO.ForgetAllSCEVInLoopUnroll));
 
   for (auto &C : LoopOptimizerEndEPCallbacks)
     C(LPM2, Level);
@@ -531,6 +541,7 @@ void PassBuilder::addPGOInstrPasses(ModulePassManager &MPM, bool DebugLogging,
                                     bool RunProfileGen, bool IsCS,
                                     std::string ProfileFile,
                                     std::string ProfileRemappingFile) {
+  assert(Level != O0 && "Not expecting O0 here!");
   // Generally running simplification passes and the inliner with an high
   // threshold results in smaller executables, but there may be cases where
   // the size grows, so let's be conservative here and skip this simplification
@@ -561,34 +572,62 @@ void PassBuilder::addPGOInstrPasses(ModulePassManager &MPM, bool DebugLogging,
     CGPipeline.addPass(createCGSCCToFunctionPassAdaptor(std::move(FPM)));
 
     MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CGPipeline)));
+
+    // Delete anything that is now dead to make sure that we don't instrument
+    // dead code. Instrumentation can end up keeping dead code around and
+    // dramatically increase code size.
+    MPM.addPass(GlobalDCEPass());
   }
 
-  // Delete anything that is now dead to make sure that we don't instrument
-  // dead code. Instrumentation can end up keeping dead code around and
-  // dramatically increase code size.
-  MPM.addPass(GlobalDCEPass());
-
-  if (RunProfileGen) {
-    MPM.addPass(PGOInstrumentationGen(IsCS));
-
-    FunctionPassManager FPM;
-    FPM.addPass(
-        createFunctionToLoopPassAdaptor(LoopRotatePass(), DebugLogging));
-    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
-
-    // Add the profile lowering pass.
-    InstrProfOptions Options;
-    if (!ProfileFile.empty())
-      Options.InstrProfileOutput = ProfileFile;
-    Options.DoCounterPromotion = true;
-    Options.UseBFIInPromotion = IsCS;
-    MPM.addPass(InstrProfiling(Options, IsCS));
-  } else if (!ProfileFile.empty()) {
+  if (!RunProfileGen) {
+    assert(!ProfileFile.empty() && "Profile use expecting a profile file!");
     MPM.addPass(PGOInstrumentationUse(ProfileFile, ProfileRemappingFile, IsCS));
     // Cache ProfileSummaryAnalysis once to avoid the potential need to insert
     // RequireAnalysisPass for PSI before subsequent non-module passes.
     MPM.addPass(RequireAnalysisPass<ProfileSummaryAnalysis, Module>());
+    return;
   }
+
+  // Perform PGO instrumentation.
+  MPM.addPass(PGOInstrumentationGen(IsCS));
+
+  FunctionPassManager FPM;
+  FPM.addPass(createFunctionToLoopPassAdaptor(LoopRotatePass(), DebugLogging));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+  // Add the profile lowering pass.
+  InstrProfOptions Options;
+  if (!ProfileFile.empty())
+    Options.InstrProfileOutput = ProfileFile;
+  // Do counter promotion at Level greater than O0.
+  Options.DoCounterPromotion = true;
+  Options.UseBFIInPromotion = IsCS;
+  MPM.addPass(InstrProfiling(Options, IsCS));
+}
+
+void PassBuilder::addPGOInstrPassesForO0(ModulePassManager &MPM,
+                                         bool DebugLogging, bool RunProfileGen,
+                                         bool IsCS, std::string ProfileFile,
+                                         std::string ProfileRemappingFile) {
+  if (!RunProfileGen) {
+    assert(!ProfileFile.empty() && "Profile use expecting a profile file!");
+    MPM.addPass(PGOInstrumentationUse(ProfileFile, ProfileRemappingFile, IsCS));
+    // Cache ProfileSummaryAnalysis once to avoid the potential need to insert
+    // RequireAnalysisPass for PSI before subsequent non-module passes.
+    MPM.addPass(RequireAnalysisPass<ProfileSummaryAnalysis, Module>());
+    return;
+  }
+
+  // Perform PGO instrumentation.
+  MPM.addPass(PGOInstrumentationGen(IsCS));
+  // Add the profile lowering pass.
+  InstrProfOptions Options;
+  if (!ProfileFile.empty())
+    Options.InstrProfileOutput = ProfileFile;
+  // Do not do counter promotion at O0.
+  Options.DoCounterPromotion = false;
+  Options.UseBFIInPromotion = IsCS;
+  MPM.addPass(InstrProfiling(Options, IsCS));
 }
 
 static InlineParams
@@ -804,8 +843,10 @@ ModulePassManager PassBuilder::buildModuleOptimizationPipeline(
   // available externally globals. Eventually they will be suppressed during
   // codegen, but eliminating here enables more opportunity for GlobalDCE as it
   // may make globals referenced by available external functions dead and saves
-  // running remaining passes on the eliminated functions.
-  MPM.addPass(EliminateAvailableExternallyPass());
+  // running remaining passes on the eliminated functions. These should be
+  // preserved during prelinking for link-time inlining decisions.
+  if (!LTOPreLink)
+    MPM.addPass(EliminateAvailableExternallyPass());
 
   if (EnableOrderFileInstrumentation)
     MPM.addPass(InstrOrderFilePass());
@@ -888,7 +929,8 @@ ModulePassManager PassBuilder::buildModuleOptimizationPipeline(
                                      sinkCommonInsts(true)));
 
   // Optimize parallel scalar instruction chains into SIMD instructions.
-  OptimizePM.addPass(SLPVectorizerPass());
+  if (PTO.SLPVectorization)
+    OptimizePM.addPass(SLPVectorizerPass());
 
   OptimizePM.addPass(InstCombinePass());
 
@@ -903,7 +945,9 @@ ModulePassManager PassBuilder::buildModuleOptimizationPipeline(
     OptimizePM.addPass(
         createFunctionToLoopPassAdaptor(LoopUnrollAndJamPass(Level)));
   }
-  OptimizePM.addPass(LoopUnrollPass(LoopUnrollOptions(Level)));
+  if (PTO.LoopUnrolling)
+    OptimizePM.addPass(LoopUnrollPass(
+        LoopUnrollOptions(Level, false, PTO.ForgetAllSCEVInLoopUnroll)));
   OptimizePM.addPass(WarnMissedTransformationsPass());
   OptimizePM.addPass(InstCombinePass());
   OptimizePM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
@@ -941,7 +985,7 @@ ModulePassManager PassBuilder::buildModuleOptimizationPipeline(
 
   // Optimize PHIs by speculating around them when profitable. Note that this
   // pass needs to be run after any PRE or similar pass as it is essentially
-  // inserting redudnancies into the progrem. This even includes SimplifyCFG.
+  // inserting redundancies into the program. This even includes SimplifyCFG.
   OptimizePM.addPass(SpeculateAroundPHIsPass());
 
   for (auto &C : OptimizerLastEPCallbacks)
@@ -1414,6 +1458,8 @@ Expected<LoopUnrollOptions> parseLoopUnrollOptions(StringRef Params) {
       UnrollOpts.setPartial(Enable);
     } else if (ParamName == "peeling") {
       UnrollOpts.setPeeling(Enable);
+    } else if (ParamName == "profile-peeling") {
+      UnrollOpts.setProfileBasedPeeling(Enable);
     } else if (ParamName == "runtime") {
       UnrollOpts.setRuntime(Enable);
     } else if (ParamName == "upperbound") {
@@ -1786,9 +1832,19 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
                               .Case("O3", O3)
                               .Case("Os", Os)
                               .Case("Oz", Oz);
-    if (L == O0)
-      // At O0 we do nothing at all!
+    if (L == O0) {
+      // Add instrumentation PGO passes -- at O0 we can still do PGO.
+      if (PGOOpt && Matches[1] != "thinlto" &&
+          (PGOOpt->Action == PGOOptions::IRInstr ||
+           PGOOpt->Action == PGOOptions::IRUse))
+        addPGOInstrPassesForO0(
+            MPM, DebugLogging,
+            /* RunProfileGen */ (PGOOpt->Action == PGOOptions::IRInstr),
+            /* IsCS */ false, PGOOpt->ProfileFile,
+            PGOOpt->ProfileRemappingFile);
+      // Do nothing else at all!
       return Error::success();
+    }
 
     if (Matches[1] == "default") {
       MPM.addPass(buildPerModuleDefaultPipeline(L, DebugLogging));

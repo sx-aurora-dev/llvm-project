@@ -27,12 +27,12 @@
 #include "SysSignal.h"
 
 // Run loop modes which determine which run loop function will be called
-typedef enum {
+enum RNBRunLoopMode {
   eRNBRunLoopModeInvalid = 0,
   eRNBRunLoopModeGetStartModeFromRemoteProtocol,
   eRNBRunLoopModeInferiorExecuting,
   eRNBRunLoopModeExit
-} RNBRunLoopMode;
+};
 
 // Global Variables
 RNBRemoteSP g_remoteSP;
@@ -69,7 +69,7 @@ RNBRunLoopMode RNBRunLoopGetStartModeFromRemote(RNBRemoteSP &remoteSP) {
     uint32_t event_mask = RNBContext::event_read_packet_available;
 
     // Spin waiting to get the A packet.
-    while (1) {
+    while (true) {
       DNBLogThreadedIf(LOG_RNB_MAX,
                        "%s ctx.Events().WaitForSetEvents( 0x%08x ) ...",
                        __FUNCTION__, event_mask);

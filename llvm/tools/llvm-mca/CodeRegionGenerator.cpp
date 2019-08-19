@@ -86,7 +86,11 @@ void MCACommentConsumer::HandleComment(SMLoc Loc, StringRef CommentText) {
 
   Comment = Comment.drop_front(Position);
   if (Comment.consume_front("LLVM-MCA-END")) {
-    Regions.endRegion(Loc);
+    // Skip spaces and tabs.
+    Position = Comment.find_first_not_of(" \t");
+    if (Position < Comment.size())
+      Comment = Comment.drop_front(Position);
+    Regions.endRegion(Comment, Loc);
     return;
   }
 
@@ -114,8 +118,9 @@ Expected<const CodeRegions &> AsmCodeRegionGenerator::parseCodeRegions() {
   MCAsmLexer &Lexer = Parser->getLexer();
   MCACommentConsumer CC(Regions);
   Lexer.setCommentConsumer(&CC);
+  // Enable support for MASM literal numbers (example: 05h, 101b).
+  Lexer.setLexMasmIntegers(true);
 
-  // Create a target-specific parser and perform the parse.
   std::unique_ptr<MCTargetAsmParser> TAP(
       TheTarget.createMCAsmParser(STI, *Parser, MCII, Opts));
   if (!TAP)
@@ -125,7 +130,7 @@ Expected<const CodeRegions &> AsmCodeRegionGenerator::parseCodeRegions() {
   Parser->setTargetParser(*TAP);
   Parser->Run(false);
 
-  // Get the assembler dialect from the input.  llvm-mca will use this as the
+  // Set the assembler dialect from the input. llvm-mca will use this as the
   // default dialect when printing reports.
   AssemblerDialect = Parser->getAssemblerDialect();
   return Regions;

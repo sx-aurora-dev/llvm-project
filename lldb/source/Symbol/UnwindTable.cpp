@@ -18,6 +18,7 @@
 #include "lldb/Symbol/FuncUnwinders.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolContext.h"
+#include "lldb/Symbol/SymbolVendor.h"
 
 // There is one UnwindTable object per ObjectFile. It contains a list of Unwind
 // objects -- one per function, populated lazily -- for the ObjectFile. Each
@@ -180,6 +181,8 @@ ArmUnwindInfo *UnwindTable::GetArmUnwindInfo() {
   Initialize();
   return m_arm_unwind_up.get();
 }
+
+SymbolFile *UnwindTable::GetSymbolFile() { return m_module.GetSymbolFile(); }
 
 ArchSpec UnwindTable::GetArchitecture() { return m_module.GetArchitecture(); }
 
