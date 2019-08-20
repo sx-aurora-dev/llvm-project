@@ -73,6 +73,12 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
       DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
 
+  if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
+    SmallString<128> P(getDriver().ResourceDir);
+    llvm::sys::path::append(P, "include");
+    addSystemInclude(DriverArgs, CC1Args, P);
+  }
+
   if (!DriverArgs.hasArg(options::OPT_nostdlibinc)) {
     if (const char *cl_include_dir = getenv("NCC_C_INCLUDE_PATH")) {
       SmallVector<StringRef, 4> Dirs;
@@ -88,12 +94,6 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
         addSystemInclude(DriverArgs, CC1Args,
                          getDriver().SysRoot + "/opt/nec/ve/include");
     }
-  }
-
-  if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
-    SmallString<128> P(getDriver().ResourceDir);
-    llvm::sys::path::append(P, "include");
-    addSystemInclude(DriverArgs, CC1Args, P);
   }
 }
 
