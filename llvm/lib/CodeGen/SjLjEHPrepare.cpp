@@ -49,10 +49,12 @@ class SjLjEHPrepare : public FunctionPass {
   Function *CallSiteFn;
   Function *FuncCtxFn;
   AllocaInst *FuncCtx;
+  bool Use64BitsData;
 
 public:
   static char ID; // Pass identification, replacement for typeid
-  explicit SjLjEHPrepare() : FunctionPass(ID) {}
+  explicit SjLjEHPrepare(bool use64 = false)
+      : FunctionPass(ID), Use64BitsData(use64) {}
   bool doInitialization(Module &M) override;
   bool runOnFunction(Function &F) override;
 
@@ -76,18 +78,22 @@ INITIALIZE_PASS(SjLjEHPrepare, DEBUG_TYPE, "Prepare SjLj exceptions",
                 false, false)
 
 // Public Interface To the SjLjEHPrepare pass.
-FunctionPass *llvm::createSjLjEHPreparePass() { return new SjLjEHPrepare(); }
+FunctionPass *llvm::createSjLjEHPreparePass(bool Use64BitsData) {
+  return new SjLjEHPrepare(Use64BitsData);
+}
+
 // doInitialization - Set up decalarations and types needed to process
 // exceptions.
 bool SjLjEHPrepare::doInitialization(Module &M) {
   // Build the function context structure.
   // builtin_setjmp uses a five word jbuf
   Type *VoidPtrTy = Type::getInt8PtrTy(M.getContext());
-  Type *Int32Ty = Type::getInt32Ty(M.getContext());
-  doubleUnderDataTy = ArrayType::get(Int32Ty, 4);
+  Type *DataTy = Use64BitsData ?
+    Type::getInt64Ty(M.getContext()) : Type::getInt32Ty(M.getContext());
+  doubleUnderDataTy = ArrayType::get(DataTy, 4);
   doubleUnderJBufTy = ArrayType::get(VoidPtrTy, 5);
   FunctionContextTy = StructType::get(VoidPtrTy,         // __prev
-                                      Int32Ty,           // call_site
+                                      DataTy,            // call_site
                                       doubleUnderDataTy, // __data
                                       VoidPtrTy,         // __personality
                                       VoidPtrTy,         // __lsda
@@ -111,8 +117,10 @@ void SjLjEHPrepare::insertCallSiteStore(Instruction *I, int Number) {
       Builder.CreateGEP(FunctionContextTy, FuncCtx, Idxs, "call_site");
 
   // Insert a store of the call-site number
+  IntegerType *DataTy = Use64BitsData ?
+      Type::getInt64Ty(I->getContext()) : Type::getInt32Ty(I->getContext());
   ConstantInt *CallSiteNoC =
-      ConstantInt::get(Type::getInt32Ty(I->getContext()), Number);
+      ConstantInt::get(DataTy, Number);
   Builder.CreateStore(CallSiteNoC, CallSite, true /*volatile*/);
 }
 
@@ -189,16 +197,21 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
         Builder.CreateConstGEP2_32(FunctionContextTy, FuncCtx, 0, 2, "__data");
 
     // The exception values come back in context->__data[0].
-    Type *Int32Ty = Type::getInt32Ty(F.getContext());
+    IntegerType *DataTy = Use64BitsData ?
+        Type::getInt64Ty(F.getContext()) : Type::getInt32Ty(F.getContext());
     Value *ExceptionAddr = Builder.CreateConstGEP2_32(doubleUnderDataTy, FCData,
                                                       0, 0, "exception_gep");
-    Value *ExnVal = Builder.CreateLoad(Int32Ty, ExceptionAddr, true, "exn_val");
+    Value *ExnVal = Builder.CreateLoad(DataTy, ExceptionAddr, true, "exn_val");
     ExnVal = Builder.CreateIntToPtr(ExnVal, Builder.getInt8PtrTy());
 
     Value *SelectorAddr = Builder.CreateConstGEP2_32(doubleUnderDataTy, FCData,
                                                      0, 1, "exn_selector_gep");
     Value *SelVal =
-        Builder.CreateLoad(Int32Ty, SelectorAddr, true, "exn_selector_val");
+        Builder.CreateLoad(DataTy, SelectorAddr, true, "exn_selector_val");
+
+    // SelVal must be Int32Ty, so trunc it
+    if (Use64BitsData)
+      SelVal = Builder.CreateTrunc(SelVal, Type::getInt32Ty(F.getContext()));
 
     substituteLPadValues(LPI, ExnVal, SelVal);
   }

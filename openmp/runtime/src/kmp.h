@@ -987,6 +987,9 @@ extern void __kmp_fini_memkind();
 #elif KMP_ARCH_X86_64
 #define KMP_DEFAULT_STKSIZE ((size_t)(4 * 1024 * 1024))
 #define KMP_BACKUP_STKSIZE ((size_t)(2 * 1024 * 1024))
+#elif KMP_ARCH_VE
+// Minimum stack size for pthread for VE is 4MB.
+#define KMP_DEFAULT_STKSIZE ((size_t)(4 * 1024 * 1024))
 #else
 #define KMP_DEFAULT_STKSIZE ((size_t)(1024 * 1024))
 #endif

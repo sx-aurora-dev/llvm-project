@@ -26,10 +26,15 @@
 #include <fcntl.h> /* values for fchmodat */
 
 #if defined(__linux__)
+#if defined(__ve__)
+#include <sys/sendfile.h>
+#define _LIBCPP_USE_SENDFILE
+#else
 #include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33)
 #include <sys/sendfile.h>
 #define _LIBCPP_USE_SENDFILE
+#endif
 #endif
 #elif defined(__APPLE__) || __has_include(<copyfile.h>)
 #include <copyfile.h>

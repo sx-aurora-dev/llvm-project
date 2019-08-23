@@ -32,11 +32,21 @@ struct _Unwind_FunctionContext {
   // next function in stack of handlers
   struct _Unwind_FunctionContext *prev;
 
+#if defined(__ve__)
+  // VE requires to store 64 bit pointers as a part of these data.
+
+  // set by calling function before registering to be the landing pad
+  uintptr_t                       resumeLocation;
+
+  // set by personality handler to be parameters passed to landing pad function
+  uintptr_t                       resumeParameters[4];
+#else
   // set by calling function before registering to be the landing pad
   uint32_t                        resumeLocation;
 
   // set by personality handler to be parameters passed to landing pad function
   uint32_t                        resumeParameters[4];
+#endif
 
   // set by calling function before registering
   __personality_routine           personality; // arm offset=24
