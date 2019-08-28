@@ -34,7 +34,7 @@ or available from a site (https://sx-aurora.com/repos/veos/common/x86_64/).
 RPM package contents
 ====================
 
-We will release an RPM package of LLVM for VE soon.  It contains
+We are releasing an RPM package of LLVM for VE.  It contains
 following pre-compiled programs and libraries.
 
  - clang (C compiler)
@@ -54,7 +54,7 @@ Use llvm-dev tool.  This tool retrieves source files, configures not
 only host programs but also cross-compiling libraries, compiles all of them,
 and installs all under ./install directory.
 
-    $ git clone https://github.com/SXAuroraTSUBASAResearch/llvm-dev.git
+    $ git clone https://github.com/sx-aurora-dev/llvm-dev.git
     $ cd llvm-dev
     $ make shallow    # perform shallow copies of all source code
     $ make            # compile clang/llvm and cross-compile libraries
@@ -66,16 +66,10 @@ How to use clang/llvm for VE
 
 Use clang like below.  Clang++ is also available.
 
-    $ clang -target ve-linux -O3 -fno-vectorize -fno-slp-vectorize \
-      -fno-crash-diagnostics -frtlib-add-rapth ...
+    $ clang -target ve-linux -O3 -fno-crash-diagnostics ...
 
- - Clang with -O3 may vectorize programs, but llvm backend for VE doesn't
-   support vector instructions yet.  So, add "-fno-vectorize 
-   -fno-slp-vectorize" options to not vectorize programs.
  - -fno-crash-diagnostics avoid generating diagnostics which contain
    compiling source codes under /tmp.
- - -frtlib-add-rpath passes default runtime libraries path to to linker.
-   This solves "cannot open shared object file" error at run-time.
 
 Please see the documentation provided in docs/ for further
 assistance with LLVM.
