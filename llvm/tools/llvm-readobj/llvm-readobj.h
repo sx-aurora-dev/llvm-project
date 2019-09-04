@@ -21,40 +21,13 @@ namespace llvm {
   }
 
   // Various helper functions.
-  LLVM_ATTRIBUTE_NORETURN void reportError(Twine Msg);
-  void reportError(StringRef Input, Error Err); 
-  void reportWarning(Twine Msg);
-  void reportWarning(StringRef Input, Error Err);
-  void warn(llvm::Error Err);
-  void error(std::error_code EC);
-  void error(llvm::Error EC);
-  template <typename T> T error(llvm::Expected<T> &&E) {
-    error(E.takeError());
-    return std::move(*E);
-  }
-
-  template <class T> T unwrapOrError(ErrorOr<T> EO) {
-    if (EO)
-      return *EO;
-    reportError(EO.getError().message());
-  }
-
-  // TODO: This one is deprecated. Use one with a Input name below.
-  template <class T> T unwrapOrError(Expected<T> EO) {
-    if (EO)
-      return *EO;
-    std::string Buf;
-    raw_string_ostream OS(Buf);
-    logAllUnhandledErrors(EO.takeError(), OS);
-    OS.flush();
-    reportError(Buf);
-  }
+  LLVM_ATTRIBUTE_NORETURN void reportError(Error Err, StringRef Input); 
+  void reportWarning(Error Err, StringRef Input);
 
   template <class T> T unwrapOrError(StringRef Input, Expected<T> EO) {
     if (EO)
       return *EO;
-    reportError(Input, EO.takeError());
-    llvm_unreachable("reportError shouldn't return in this case");
+    reportError(EO.takeError(), Input);
   }
 } // namespace llvm
 

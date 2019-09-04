@@ -78,6 +78,7 @@ protected:
   SDValue performLoadCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performStoreCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performAssertSZExtCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue performIntrinsicWOChainCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   SDValue splitBinaryBitConstantOpImpl(DAGCombinerInfo &DCI, const SDLoc &SL,
                                        unsigned Opc, SDValue LHS,
@@ -480,8 +481,6 @@ enum NodeType : unsigned {
   CONST_DATA_PTR,
   INIT_EXEC,
   INIT_EXEC_FROM_INPUT,
-  SENDMSG,
-  SENDMSGHALT,
   INTERP_MOV,
   INTERP_P1,
   INTERP_P2,

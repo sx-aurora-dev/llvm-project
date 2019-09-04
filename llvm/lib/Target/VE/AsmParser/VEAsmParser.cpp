@@ -371,7 +371,7 @@ public:
   }
 
   static std::unique_ptr<VEOperand> CreateToken(StringRef Str, SMLoc S) {
-    auto Op = make_unique<VEOperand>(k_Token);
+    auto Op = std::make_unique<VEOperand>(k_Token);
     Op->Tok.Data = Str.data();
     Op->Tok.Length = Str.size();
     Op->StartLoc = S;
@@ -381,7 +381,7 @@ public:
 
   static std::unique_ptr<VEOperand> CreateReg(unsigned RegNum, unsigned Kind,
                                                  SMLoc S, SMLoc E) {
-    auto Op = make_unique<VEOperand>(k_Register);
+    auto Op = std::make_unique<VEOperand>(k_Register);
     Op->Reg.RegNum = RegNum;
     Op->Reg.Kind   = (VEOperand::RegisterKind)Kind;
     Op->StartLoc = S;
@@ -391,7 +391,7 @@ public:
 
   static std::unique_ptr<VEOperand> CreateImm(const MCExpr *Val, SMLoc S,
                                                  SMLoc E) {
-    auto Op = make_unique<VEOperand>(k_Immediate);
+    auto Op = std::make_unique<VEOperand>(k_Immediate);
     Op->Imm.Val = Val;
     Op->StartLoc = S;
     Op->EndLoc = E;
@@ -478,7 +478,7 @@ public:
 
   static std::unique_ptr<VEOperand>
   CreateMEMr(unsigned Base, SMLoc S, SMLoc E) {
-    auto Op = make_unique<VEOperand>(k_MemoryReg);
+    auto Op = std::make_unique<VEOperand>(k_MemoryReg);
     Op->Mem.Base = Base;
     Op->Mem.OffsetReg = 0;  // always 0
     Op->Mem.Off = nullptr;

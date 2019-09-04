@@ -47,7 +47,7 @@ static inline ConstString GetValidTypeName_Impl(ConstString type) {
     return type;
 
   std::string type_cstr(type.AsCString());
-  lldb_utility::StringLexer type_lexer(type_cstr);
+  StringLexer type_lexer(type_cstr);
 
   type_lexer.AdvanceIf("class ");
   type_lexer.AdvanceIf("enum ");
@@ -89,7 +89,7 @@ public:
     MapIterator iter = m_map.find(name);
     if (iter == m_map.end())
       return false;
-    m_map.erase(name);
+    m_map.erase(iter);
     if (listener)
       listener->Changed();
     return true;

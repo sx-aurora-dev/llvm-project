@@ -73,13 +73,13 @@ template <typename T, std::size_t SizeOfT> struct TrailingZerosCounter {
   }
 };
 
-#if __GNUC__ >= 4 || defined(_MSC_VER)
+#if defined(__GNUC__) || defined(_MSC_VER)
 template <typename T> struct TrailingZerosCounter<T, 4> {
   static unsigned count(T Val, ZeroBehavior ZB) {
     if (ZB != ZB_Undefined && Val == 0)
       return 32;
 
-#if __has_builtin(__builtin_ctz) || LLVM_GNUC_PREREQ(4, 0, 0)
+#if __has_builtin(__builtin_ctz) || defined(__GNUC__)
     return __builtin_ctz(Val);
 #elif defined(_MSC_VER)
     unsigned long Index;
@@ -95,7 +95,7 @@ template <typename T> struct TrailingZerosCounter<T, 8> {
     if (ZB != ZB_Undefined && Val == 0)
       return 64;
 
-#if __has_builtin(__builtin_ctzll) || LLVM_GNUC_PREREQ(4, 0, 0)
+#if __has_builtin(__builtin_ctzll) || defined(__GNUC__)
     return __builtin_ctzll(Val);
 #elif defined(_MSC_VER)
     unsigned long Index;
@@ -142,13 +142,13 @@ template <typename T, std::size_t SizeOfT> struct LeadingZerosCounter {
   }
 };
 
-#if __GNUC__ >= 4 || defined(_MSC_VER)
+#if defined(__GNUC__) || defined(_MSC_VER)
 template <typename T> struct LeadingZerosCounter<T, 4> {
   static unsigned count(T Val, ZeroBehavior ZB) {
     if (ZB != ZB_Undefined && Val == 0)
       return 32;
 
-#if __has_builtin(__builtin_clz) || LLVM_GNUC_PREREQ(4, 0, 0)
+#if __has_builtin(__builtin_clz) || defined(__GNUC__)
     return __builtin_clz(Val);
 #elif defined(_MSC_VER)
     unsigned long Index;
@@ -164,7 +164,7 @@ template <typename T> struct LeadingZerosCounter<T, 8> {
     if (ZB != ZB_Undefined && Val == 0)
       return 64;
 
-#if __has_builtin(__builtin_clzll) || LLVM_GNUC_PREREQ(4, 0, 0)
+#if __has_builtin(__builtin_clzll) || defined(__GNUC__)
     return __builtin_clzll(Val);
 #elif defined(_MSC_VER)
     unsigned long Index;
@@ -486,7 +486,7 @@ template <typename T, std::size_t SizeOfT> struct PopulationCounter {
   static unsigned count(T Value) {
     // Generic version, forward to 32 bits.
     static_assert(SizeOfT <= 4, "Not implemented!");
-#if __GNUC__ >= 4
+#if defined(__GNUC__)
     return __builtin_popcount(Value);
 #else
     uint32_t v = Value;
@@ -499,7 +499,7 @@ template <typename T, std::size_t SizeOfT> struct PopulationCounter {
 
 template <typename T> struct PopulationCounter<T, 8> {
   static unsigned count(T Value) {
-#if __GNUC__ >= 4
+#if defined(__GNUC__)
     return __builtin_popcountll(Value);
 #else
     uint64_t v = Value;
@@ -704,19 +704,6 @@ inline uint64_t divideCeil(uint64_t Numerator, uint64_t Denominator) {
   return alignTo(Numerator, Denominator) / Denominator;
 }
 
-/// \c alignTo for contexts where a constant expression is required.
-/// \sa alignTo
-///
-/// \todo FIXME: remove when \c constexpr becomes really \c constexpr
-template <uint64_t Align>
-struct AlignTo {
-  static_assert(Align != 0u, "Align must be non-zero");
-  template <uint64_t Value>
-  struct from_value {
-    static const uint64_t value = (Value + Align - 1) / Align * Align;
-  };
-};
-
 /// Returns the largest uint64_t less than or equal to \p Value and is
 /// \p Skew mod \p Align. \p Align must be non-zero
 inline uint64_t alignDown(uint64_t Value, uint64_t Align, uint64_t Skew = 0) {
@@ -915,9 +902,6 @@ SubOverflow(T X, T Y, T &Result) {
 template <typename T>
 typename std::enable_if<std::is_signed<T>::value, T>::type
 MulOverflow(T X, T Y, T &Result) {
-#if __has_builtin(__builtin_mul_overflow)
-  return __builtin_mul_overflow(X, Y, &Result);
-#else
   // Perform the unsigned multiplication on absolute values.
   using U = typename std::make_unsigned<T>::type;
   const U UX = X < 0 ? (0 - static_cast<U>(X)) : static_cast<U>(X);
@@ -939,7 +923,6 @@ MulOverflow(T X, T Y, T &Result) {
     return UX > (static_cast<U>(std::numeric_limits<T>::max()) + U(1)) / UY;
   else
     return UX > (static_cast<U>(std::numeric_limits<T>::max())) / UY;
-#endif
 }
 
 } // End llvm namespace

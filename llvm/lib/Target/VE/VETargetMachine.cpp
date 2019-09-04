@@ -72,7 +72,7 @@ class VEELFTargetObjectFile : public TargetLoweringObjectFileELF {
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF()
 {
-    return llvm::make_unique<VEELFTargetObjectFile>();
+    return std::make_unique<VEELFTargetObjectFile>();
 }
 
 /// Create an Aurora VE architecture model

@@ -1088,9 +1088,14 @@ void MemorySSA::renameSuccessorPhis(BasicBlock *BB, MemoryAccess *IncomingVal,
     AccessList *Accesses = It->second.get();
     auto *Phi = cast<MemoryPhi>(&Accesses->front());
     if (RenameAllUses) {
-      int PhiIndex = Phi->getBasicBlockIndex(BB);
-      assert(PhiIndex != -1 && "Incomplete phi during partial rename");
-      Phi->setIncomingValue(PhiIndex, IncomingVal);
+      bool ReplacementDone = false;
+      for (unsigned I = 0, E = Phi->getNumIncomingValues(); I != E; ++I)
+        if (Phi->getIncomingBlock(I) == BB) {
+          Phi->setIncomingValue(I, IncomingVal);
+          ReplacementDone = true;
+        }
+      (void) ReplacementDone;
+      assert(ReplacementDone && "Incomplete phi during partial rename");
     } else
       Phi->addIncoming(IncomingVal, BB);
   }
@@ -1238,7 +1243,7 @@ MemorySSA::AccessList *MemorySSA::getOrCreateAccessList(const BasicBlock *BB) {
   auto Res = PerBlockAccesses.insert(std::make_pair(BB, nullptr));
 
   if (Res.second)
-    Res.first->second = llvm::make_unique<AccessList>();
+    Res.first->second = std::make_unique<AccessList>();
   return Res.first->second.get();
 }
 
@@ -1246,7 +1251,7 @@ MemorySSA::DefsList *MemorySSA::getOrCreateDefsList(const BasicBlock *BB) {
   auto Res = PerBlockDefs.insert(std::make_pair(BB, nullptr));
 
   if (Res.second)
-    Res.first->second = llvm::make_unique<DefsList>();
+    Res.first->second = std::make_unique<DefsList>();
   return Res.first->second.get();
 }
 
@@ -1555,10 +1560,10 @@ MemorySSA::CachingWalker<AliasAnalysis> *MemorySSA::getWalkerImpl() {
 
   if (!WalkerBase)
     WalkerBase =
-        llvm::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
+        std::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
 
   Walker =
-      llvm::make_unique<CachingWalker<AliasAnalysis>>(this, WalkerBase.get());
+      std::make_unique<CachingWalker<AliasAnalysis>>(this, WalkerBase.get());
   return Walker.get();
 }
 
@@ -1568,10 +1573,10 @@ MemorySSAWalker *MemorySSA::getSkipSelfWalker() {
 
   if (!WalkerBase)
     WalkerBase =
-        llvm::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
+        std::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
 
   SkipWalker =
-      llvm::make_unique<SkipSelfWalker<AliasAnalysis>>(this, WalkerBase.get());
+      std::make_unique<SkipSelfWalker<AliasAnalysis>>(this, WalkerBase.get());
   return SkipWalker.get();
  }
 
@@ -1867,7 +1872,7 @@ void MemorySSA::verifyMemorySSA() const {
 }
 
 void MemorySSA::verifyPrevDefInPhis(Function &F) const {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && defined(EXPENSIVE_CHECKS)
   for (const BasicBlock &BB : F) {
     if (MemoryPhi *Phi = getMemoryAccess(&BB)) {
       for (unsigned I = 0, E = Phi->getNumIncomingValues(); I != E; ++I) {
@@ -1875,7 +1880,7 @@ void MemorySSA::verifyPrevDefInPhis(Function &F) const {
         auto *IncAcc = Phi->getIncomingValue(I);
         // If Pred has no unreachable predecessors, get last def looking at
         // IDoms. If, while walkings IDoms, any of these has an unreachable
-        // predecessor, then the expected incoming def is LoE.
+        // predecessor, then the incoming def can be any access.
         if (auto *DTNode = DT->getNode(Pred)) {
           while (DTNode) {
             if (auto *DefList = getBlockDefs(DTNode->getBlock())) {
@@ -1886,19 +1891,13 @@ void MemorySSA::verifyPrevDefInPhis(Function &F) const {
             }
             DTNode = DTNode->getIDom();
           }
-          assert((DTNode || IncAcc == getLiveOnEntryDef()) &&
-                 "Expected LoE inc");
-        } else if (auto *DefList = getBlockDefs(Pred)) {
+        } else {
           // If Pred has unreachable predecessors, but has at least a Def, the
           // incoming access can be the last Def in Pred, or it could have been
-          // optimized to LoE.
-          auto *LastAcc = &*(--DefList->end());
-          assert((LastAcc == IncAcc || IncAcc == getLiveOnEntryDef()) &&
-                 "Incorrect incoming access into phi.");
-        } else {
+          // optimized to LoE. After an update, though, the LoE may have been
+          // replaced by another access, so IncAcc may be any access.
           // If Pred has unreachable predecessors and no Defs, incoming access
-          // should be LoE.
-          assert(IncAcc == getLiveOnEntryDef() && "Expected LoE inc");
+          // should be LoE; However, after an update, it may be any access.
         }
       }
     }
@@ -2049,7 +2048,7 @@ void MemorySSA::verifyUseInDefs(MemoryAccess *Def, MemoryAccess *Use) const {
 /// accesses and verifying that, for each use, it appears in the
 /// appropriate def's use list
 void MemorySSA::verifyDefUses(Function &F) const {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && defined(EXPENSIVE_CHECKS)
   for (BasicBlock &B : F) {
     // Phi nodes are attached to basic blocks
     if (MemoryPhi *Phi = getMemoryAccess(&B)) {
@@ -2256,7 +2255,7 @@ MemorySSAAnalysis::Result MemorySSAAnalysis::run(Function &F,
                                                  FunctionAnalysisManager &AM) {
   auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
   auto &AA = AM.getResult<AAManager>(F);
-  return MemorySSAAnalysis::Result(llvm::make_unique<MemorySSA>(F, &AA, &DT));
+  return MemorySSAAnalysis::Result(std::make_unique<MemorySSA>(F, &AA, &DT));
 }
 
 bool MemorySSAAnalysis::Result::invalidate(

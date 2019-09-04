@@ -240,6 +240,11 @@ class VectorType;
       // instructions.
       MEMCPY,
 
+      // V8.1MMainline condition select
+      CSINV, // Conditional select invert.
+      CSNEG, // Conditional select negate.
+      CSINC, // Conditional select increment.
+
       // Vector load N-element structure to all lanes:
       VLD1DUP = ISD::FIRST_TARGET_MEMORY_OPCODE,
       VLD2DUP,
@@ -536,7 +541,7 @@ class VectorType;
     Instruction *emitTrailingFence(IRBuilder<> &Builder, Instruction *Inst,
                                    AtomicOrdering Ord) const override;
 
-    unsigned getMaxSupportedInterleaveFactor() const override { return 4; }
+    unsigned getMaxSupportedInterleaveFactor() const override;
 
     bool lowerInterleavedLoad(LoadInst *LI,
                               ArrayRef<ShuffleVectorInst *> Shuffles,
@@ -667,6 +672,8 @@ class VectorType;
     SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG,
+                                    const ARMSubtarget *Subtarget) const;
     SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG,
                                     const ARMSubtarget *Subtarget) const;
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;

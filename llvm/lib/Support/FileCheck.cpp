@@ -15,47 +15,21 @@
 
 #include "llvm/Support/FileCheck.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormatVariadic.h"
 #include <cstdint>
 #include <list>
-#include <map>
 #include <tuple>
 #include <utility>
 
 using namespace llvm;
-
-bool FileCheckNumericVariable::isValueKnownAtMatchTime() const {
-  if (Value)
-    return true;
-
-  return ExpressionAST != nullptr;
-}
-
-void FileCheckNumericVariable::setValue(uint64_t NewValue) {
-  if (ExpressionAST != nullptr) {
-    // Caller is expected to call setValue only if substitution was successful.
-    assert(NewValue == cantFail(ExpressionAST->eval(),
-                                "Failed to evaluate associated expression when "
-                                "sanity checking value") &&
-           "Value being set to different from variable evaluation");
-  }
-  Value = NewValue;
-  // Clear pointer to AST to ensure it is not used after the numeric
-  // substitution defining this variable is processed since it's the
-  // substitution that owns the pointer.
-  ExpressionAST = nullptr;
-}
 
 Expected<uint64_t> FileCheckNumericVariableUse::eval() const {
   Optional<uint64_t> Value = NumericVariable->getValue();
   if (Value)
     return *Value;
 
-  FileCheckExpressionAST *ExpressionAST = NumericVariable->getExpressionAST();
-  if (!ExpressionAST)
-    return make_error<FileCheckUndefVarError>(Name);
-
-  return ExpressionAST->eval();
+  return make_error<FileCheckUndefVarError>(Name);
 }
 
 Expected<uint64_t> FileCheckASTBinop::eval() const {
@@ -125,7 +99,7 @@ FileCheckPattern::parseVariable(StringRef &Str, const SourceMgr &SM) {
 
 // StringRef holding all characters considered as horizontal whitespaces by
 // FileCheck input canonicalization.
-StringRef SpaceChars = " \t";
+constexpr StringLiteral SpaceChars = " \t";
 
 // Parsing helper function that strips the first character in S and returns it.
 static char popFront(StringRef &S) {
@@ -141,8 +115,7 @@ char FileCheckNotFoundError::ID = 0;
 Expected<FileCheckNumericVariable *>
 FileCheckPattern::parseNumericVariableDefinition(
     StringRef &Expr, FileCheckPatternContext *Context,
-    Optional<size_t> LineNumber, FileCheckExpressionAST *ExpressionAST,
-    const SourceMgr &SM) {
+    Optional<size_t> LineNumber, const SourceMgr &SM) {
   Expected<VariableProperties> ParseVarResult = parseVariable(Expr, SM);
   if (!ParseVarResult)
     return ParseVarResult.takeError();
@@ -169,8 +142,7 @@ FileCheckPattern::parseNumericVariableDefinition(
   if (VarTableIter != Context->GlobalNumericVariableTable.end())
     DefinedNumericVariable = VarTableIter->second;
   else
-    DefinedNumericVariable =
-        Context->makeNumericVariable(Name, LineNumber, ExpressionAST);
+    DefinedNumericVariable = Context->makeNumericVariable(Name, LineNumber);
 
   return DefinedNumericVariable;
 }
@@ -202,14 +174,13 @@ FileCheckPattern::parseNumericVariableUse(StringRef Name, bool IsPseudo,
   }
 
   Optional<size_t> DefLineNumber = NumericVariable->getDefLineNumber();
-  if (DefLineNumber && LineNumber && *DefLineNumber == *LineNumber &&
-      !NumericVariable->isValueKnownAtMatchTime())
+  if (DefLineNumber && LineNumber && *DefLineNumber == *LineNumber)
     return FileCheckErrorDiagnostic::get(
         SM, Name,
         "numeric variable '" + Name +
-            "' defined from input on the same line as used");
+            "' defined earlier in the same CHECK directive");
 
-  return llvm::make_unique<FileCheckNumericVariableUse>(Name, NumericVariable);
+  return std::make_unique<FileCheckNumericVariableUse>(Name, NumericVariable);
 }
 
 Expected<std::unique_ptr<FileCheckExpressionAST>>
@@ -234,7 +205,7 @@ FileCheckPattern::parseNumericOperand(StringRef &Expr, AllowedOperand AO,
   // Otherwise, parse it as a literal.
   uint64_t LiteralValue;
   if (!Expr.consumeInteger(/*Radix=*/10, LiteralValue))
-    return llvm::make_unique<FileCheckExpressionLiteral>(LiteralValue);
+    return std::make_unique<FileCheckExpressionLiteral>(LiteralValue);
 
   return FileCheckErrorDiagnostic::get(SM, Expr,
                                        "invalid operand format '" + Expr + "'");
@@ -287,7 +258,7 @@ Expected<std::unique_ptr<FileCheckExpressionAST>> FileCheckPattern::parseBinop(
     return RightOpResult;
 
   Expr = Expr.ltrim(SpaceChars);
-  return llvm::make_unique<FileCheckASTBinop>(EvalBinop, std::move(LeftOp),
+  return std::make_unique<FileCheckASTBinop>(EvalBinop, std::move(LeftOp),
                                               std::move(*RightOpResult));
 }
 
@@ -334,8 +305,7 @@ FileCheckPattern::parseNumericSubstitutionBlock(
   if (DefEnd != StringRef::npos) {
     DefExpr = DefExpr.ltrim(SpaceChars);
     Expected<FileCheckNumericVariable *> ParseResult =
-        parseNumericVariableDefinition(DefExpr, Context, LineNumber,
-                                       ExpressionAST.get(), SM);
+        parseNumericVariableDefinition(DefExpr, Context, LineNumber, SM);
 
     if (!ParseResult)
       return ParseResult.takeError();
@@ -862,7 +832,7 @@ template <class... Types>
 FileCheckNumericVariable *
 FileCheckPatternContext::makeNumericVariable(Types... args) {
   NumericVariables.push_back(
-      llvm::make_unique<FileCheckNumericVariable>(args...));
+      std::make_unique<FileCheckNumericVariable>(args...));
   return NumericVariables.back().get();
 }
 
@@ -870,14 +840,14 @@ FileCheckSubstitution *
 FileCheckPatternContext::makeStringSubstitution(StringRef VarName,
                                                 size_t InsertIdx) {
   Substitutions.push_back(
-      llvm::make_unique<FileCheckStringSubstitution>(this, VarName, InsertIdx));
+      std::make_unique<FileCheckStringSubstitution>(this, VarName, InsertIdx));
   return Substitutions.back().get();
 }
 
 FileCheckSubstitution *FileCheckPatternContext::makeNumericSubstitution(
     StringRef ExpressionStr,
     std::unique_ptr<FileCheckExpressionAST> ExpressionAST, size_t InsertIdx) {
-  Substitutions.push_back(llvm::make_unique<FileCheckNumericSubstitution>(
+  Substitutions.push_back(std::make_unique<FileCheckNumericSubstitution>(
       this, ExpressionStr, std::move(ExpressionAST), InsertIdx));
   return Substitutions.back().get();
 }

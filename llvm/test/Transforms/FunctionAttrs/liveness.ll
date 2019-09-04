@@ -1,4 +1,4 @@
-; RUN: opt -attributor --attributor-disable=false -S < %s | FileCheck %s
+; RUN: opt -attributor --attributor-disable=false -attributor-max-iterations-verify -attributor-max-iterations=4 -S < %s | FileCheck %s
 
 declare void @no_return_call() nofree noreturn nounwind readnone
 
@@ -12,6 +12,27 @@ declare i32 @foo_noreturn() noreturn
 
 declare i32 @bar() nosync readnone
 
+; This internal function has no live call sites, so all its BBs are considered dead,
+; and nothing should be deduced for it.
+
+; CHECK-NOT: define internal i32 @dead_internal_func(i32 %0)
+define internal i32 @dead_internal_func(i32 %0) {
+  %2 = icmp slt i32 %0, 1
+  br i1 %2, label %3, label %5
+
+; <label>:3:                                      ; preds = %5, %1
+  %4 = phi i32 [ 1, %1 ], [ %8, %5 ]
+  ret i32 %4
+
+; <label>:5:                                      ; preds = %1, %5
+  %6 = phi i32 [ %9, %5 ], [ 1, %1 ]
+  %7 = phi i32 [ %8, %5 ], [ 1, %1 ]
+  %8 = mul nsw i32 %6, %7
+  %9 = add nuw nsw i32 %6, 1
+  %10 = icmp eq i32 %6, %0
+  br i1 %10, label %3, label %5
+}
+
 ; CHECK: Function Attrs: nofree norecurse nounwind uwtable willreturn
 define i32 @volatile_load(i32*) norecurse nounwind uwtable {
   %2 = load volatile i32, i32* %0, align 4
@@ -19,7 +40,7 @@ define i32 @volatile_load(i32*) norecurse nounwind uwtable {
 }
 
 ; CHECK: Function Attrs: nofree norecurse nosync nounwind uwtable willreturn
-; CHECK-NEXT: define internal i32 @internal_load(i32* nonnull %0)
+; CHECK-NEXT: define internal i32 @internal_load(i32* nocapture nonnull %0)
 define internal i32 @internal_load(i32*) norecurse nounwind uwtable {
   %2 = load i32, i32* %0, align 4
   ret i32 %2
@@ -27,20 +48,21 @@ define internal i32 @internal_load(i32*) norecurse nounwind uwtable {
 ; TEST 1: Only first block is live.
 
 ; CHECK: Function Attrs: nofree noreturn nosync nounwind
-; CHECK-NEXT: define i32 @first_block_no_return(i32 %a, i32* nonnull %ptr1, i32* %ptr2)
+; CHECK-NEXT: define i32 @first_block_no_return(i32 %a, i32* nocapture nonnull %ptr1, i32* nocapture %ptr2)
 define i32 @first_block_no_return(i32 %a, i32* nonnull %ptr1, i32* %ptr2) #0 {
 entry:
   call i32 @internal_load(i32* %ptr1)
-  ; CHECK: call i32 @internal_load(i32* nonnull %ptr1)
+  ; CHECK: call i32 @internal_load(i32* nocapture nonnull %ptr1)
   call void @no_return_call()
   ; CHECK: call void @no_return_call()
   ; CHECK-NEXT: unreachable
+  ; CHECK-NEXT: }
+  call i32 @dead_internal_func(i32 10)
   %cmp = icmp eq i32 %a, 0
   br i1 %cmp, label %cond.true, label %cond.false
 
 cond.true:                                        ; preds = %entry
   call i32 @internal_load(i32* %ptr2)
-  ; CHECK: call i32 @internal_load(i32* %ptr2)
   %load = call i32 @volatile_load(i32* %ptr1)
   call void @normal_call()
   %call = call i32 @foo()
@@ -62,7 +84,7 @@ cond.end:                                         ; preds = %cond.false, %cond.t
 ; dead block and check if it is deduced.
 
 ; CHECK: Function Attrs: nosync
-; CHECK-NEXT: define i32 @dead_block_present(i32 %a, i32* %ptr1)
+; CHECK-NEXT: define i32 @dead_block_present(i32 %a, i32* nocapture %ptr1)
 define i32 @dead_block_present(i32 %a, i32* %ptr1) #0 {
 entry:
   %cmp = icmp eq i32 %a, 0
@@ -81,6 +103,8 @@ cond.false:                                       ; preds = %entry
   br label %cond.end
 
 cond.end:                                         ; preds = %cond.false, %cond.true
+; CHECK:      cond.end:
+; CHECK-NEXT:   ret i32 %call1
   %cond = phi i32 [ %call, %cond.true ], [ %call1, %cond.false ]
   ret i32 %cond
 }
@@ -96,6 +120,8 @@ cond.true:                                        ; preds = %entry
   call void @no_return_call()
   ; CHECK: call void @no_return_call()
   ; CHECK-NEXT: unreachable
+  call i32 @dead_internal_func(i32 10)
+  ; CHECK-NOT: call
   %call = call i32 @foo()
   br label %cond.end
 
@@ -103,6 +129,8 @@ cond.false:                                       ; preds = %entry
   call void @no_return_call()
   ; CHECK: call void @no_return_call()
   ; CHECK-NEXT: unreachable
+  call i32 @dead_internal_func(i32 10)
+  ; CHECK-NEXT: }
   %call1 = call i32 @bar()
   br label %cond.end
 
@@ -188,9 +216,7 @@ cond.true:                                        ; preds = %entry
   ; CHECK-NEXT: call i32 @foo_noreturn_nounwind()
   ; CHECK-NEXT: unreachable
 
-  ; We keep the invoke around as other attributes might have references to it.
-  ; CHECK:       cond.true.split:                                  ; No predecessors!
-  ; CHECK-NEXT:      invoke i32 @foo_noreturn_nounwind()
+  ; CHECK-NOT:      @foo_noreturn_nounwind()
 
 cond.false:                                       ; preds = %entry
   call void @normal_call()
@@ -213,7 +239,7 @@ cleanup:
 ; TEST 6: Undefined behvior, taken from LangRef.
 ; FIXME: Should be able to detect undefined behavior.
 
-; CHECK: define void @ub(i32* %0)
+; CHECK: define void @ub(i32* nocapture %0)
 define void @ub(i32* %0) {
   %poison = sub nuw i32 0, 1           ; Results in a poison value.
   %still_poison = and i32 %poison, 0   ; 0, but also poison.
@@ -311,3 +337,83 @@ cond.end:                                               ; preds = %cond.if, %con
   %8 = phi i32 [ %1, %cond.elseif ], [ 0, %cond.else ], [ 0, %cond.if ]
   ret i32 %8
 }
+
+; SCC test
+;
+; char a1 __attribute__((aligned(8)));
+; char a2 __attribute__((aligned(16)));
+;
+; char* f1(char* a ){
+;     return a?a:f2(&a1);
+; }
+; char* f2(char* a){
+;     return a?f1(a):f3(&a2);
+; }
+;
+; char* f3(char* a){
+;     return a?&a1: f1(&a2);
+; }
+
+@a1 = common global i8 0, align 8
+@a2 = common global i8 0, align 16
+
+define internal i8* @f1(i8* readnone %0) local_unnamed_addr #0 {
+; ATTRIBUTOR: define internal i8* @f1(i8* readnone %0)
+  %2 = icmp eq i8* %0, null
+  br i1 %2, label %3, label %5
+
+; <label>:3:                                      ; preds = %1
+; ATTRIBUTOR: %4 = tail call i8* undef(i8* nonnull align 8 @a1)
+  %4 = tail call i8* @f2(i8* nonnull @a1)
+  br label %5
+
+; <label>:5:                                      ; preds = %1, %3
+  %6 = phi i8* [ %4, %3 ], [ %0, %1 ]
+  ret i8* %6
+}
+
+define internal i8* @f2(i8* readnone %0) local_unnamed_addr #0 {
+; ATTRIBUTOR: define internal i8* @f2(i8* readnone %0)
+  %2 = icmp eq i8* %0, null
+  br i1 %2, label %5, label %3
+
+; <label>:3:                                      ; preds = %1
+
+; ATTRIBUTOR: %4 = tail call i8* undef(i8* nonnull align 8 %0)
+  %4 = tail call i8* @f1(i8* nonnull %0)
+  br label %7
+
+; <label>:5:                                      ; preds = %1
+; ATTRIBUTOR: %6 = tail call i8* undef(i8* nonnull align 16 @a2)
+  %6 = tail call i8* @f3(i8* nonnull @a2)
+  br label %7
+
+; <label>:7:                                      ; preds = %5, %3
+  %8 = phi i8* [ %4, %3 ], [ %6, %5 ]
+  ret i8* %8
+}
+
+define internal i8* @f3(i8* readnone %0) local_unnamed_addr #0 {
+; ATTRIBUTOR: define internal i8* @f3(i8* readnone %0)
+  %2 = icmp eq i8* %0, null
+  br i1 %2, label %3, label %5
+
+; <label>:3:                                      ; preds = %1
+; ATTRIBUTOR: %4 = tail call i8* undef(i8* nonnull align 16 @a2)
+  %4 = tail call i8* @f1(i8* nonnull @a2)
+  br label %5
+
+; <label>:5:                                      ; preds = %1, %3
+  %6 = phi i8* [ %4, %3 ], [ @a1, %1 ]
+  ret i8* %6
+}
+
+define void @test_unreachable() {
+; CHECK:       define void @test_unreachable()
+; CHECK-NEXT:    call void @test_unreachable()
+; CHECK-NEXT:    unreachable
+; CHECK-NEXT:  }
+  call void @test_unreachable()
+  unreachable
+}
+

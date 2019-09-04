@@ -314,6 +314,9 @@ static void checkOptions() {
   if (!config->relocatable && !config->defineCommon)
     error("-no-define-common not supported in non relocatable output");
 
+  if (config->strip == StripPolicy::All && config->emitRelocs)
+    error("--strip-all and --emit-relocs may not be used together");
+
   if (config->zText && config->zIfuncNoplt)
     error("-z text and -z ifunc-noplt may not be used together");
 
@@ -1027,20 +1030,17 @@ static void readConfigs(opt::InputArgList &args) {
             {s, /*isExternCpp=*/false, /*hasWildcard=*/false});
   }
 
-  bool hasExportDynamic =
-      args.hasFlag(OPT_export_dynamic, OPT_no_export_dynamic, false);
-
   // Parses -dynamic-list and -export-dynamic-symbol. They make some
   // symbols private. Note that -export-dynamic takes precedence over them
   // as it says all symbols should be exported.
-  if (!hasExportDynamic) {
+  if (!config->exportDynamic) {
     for (auto *arg : args.filtered(OPT_dynamic_list))
       if (Optional<MemoryBufferRef> buffer = readFile(arg->getValue()))
         readDynamicList(*buffer);
 
     for (auto *arg : args.filtered(OPT_export_dynamic_symbol))
       config->dynamicList.push_back(
-          {arg->getValue(), /*IsExternCpp*/ false, /*HasWildcard*/ false});
+          {arg->getValue(), /*isExternCpp=*/false, /*hasWildcard=*/false});
   }
 
   // If --export-dynamic-symbol=foo is given and symbol foo is defined in
@@ -1901,6 +1901,26 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   markLive<ELFT>();
   demoteSharedSymbols();
   mergeSections();
+
+  // Make copies of any input sections that need to be copied into each
+  // partition.
+  copySectionsIntoPartitions();
+
+  // Create synthesized sections such as .got and .plt. This is called before
+  // processSectionCommands() so that they can be placed by SECTIONS commands.
+  createSyntheticSections<ELFT>();
+
+  // Some input sections that are used for exception handling need to be moved
+  // into synthetic sections. Do that now so that they aren't assigned to
+  // output sections in the usual way.
+  if (!config->relocatable)
+    combineEhSections();
+
+  // Create output sections described by SECTIONS commands.
+  script->processSectionCommands();
+
+  // Two input sections with different output sections should not be folded.
+  // ICF runs after processSectionCommands() so that we know the output sections.
   if (config->icf != ICFLevel::None) {
     findKeepUniqueSections<ELFT>(args);
     doIcf<ELFT>();
